@@ -1,12 +1,20 @@
 ---
 title: Log
 type: schema
-updated: 2026-09-22
+updated: 2026-09-25
 ---
 
 # Log
 
 Append-only. Newest first. One entry per operation, prefixed so it can be parsed.
+
+## [2026-09-25] ingest | harness diversity, pre-registered
+
+Issue #12's question leaves the open questions on combining models for a concept page of its
+own, at standing `claimed`. The page states the claim, three arrangements with the same model on
+the same harness as the control, the measures and controls of issue #9, the confounds each run
+records, how the result decides the diversity rule in `[team]`, and a cheap trial to run first.
+Nothing bears on it yet.
 
 ## [2026-09-23] lint | workhorse replaces arm
 

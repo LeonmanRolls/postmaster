@@ -1,7 +1,7 @@
 ---
 title: postmaster wiki
 type: schema
-updated: 2026-09-22
+updated: 2026-09-25
 ---
 
 # postmaster wiki
@@ -21,8 +21,11 @@ can open it and check. [How the wiki is kept](schema.md) defines the standings i
 Does implementing one ticket with several models, each unable to see the others' work,
 produce better software than one good model? If so, how?
 
-- [Combining models](concepts/combining-models.md): three hypotheses and five open questions,
+- [Combining models](concepts/combining-models.md): three hypotheses and four open questions,
   all **claimed**, since no runs have been recorded yet.
+- [Harness diversity](concepts/harness-diversity.md): **claimed**. Whether two lanes on one
+  model through different harnesses add diversity the synthesis and the reviews can use.
+  Pre-registered, with its controls, its decision rule and a cheap trial to run first.
 
 ## Harnesses
 

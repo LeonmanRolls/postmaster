@@ -3,7 +3,7 @@ title: Combining models
 type: concept
 standing: claimed
 sources: []
-updated: 2026-09-22
+updated: 2026-09-25
 ---
 
 # Combining models
@@ -58,15 +58,13 @@ These have no claim yet, only a measurement waiting for runs.
 - **Does vendor diversity matter?** Two lanes from different vendors against two models from
   one vendor: do the complementary contributions of H1 and the corroboration of H2 depend
   on it?
-- **Does harness diversity matter, independent of the model?** A harness sets the system
-  prompt, the tool set, the permission model, which context files are read and how context
-  is compacted, so one model under two harnesses is not quite the same agent. Three
-  arrangements to compare, cheapest first: same model same harness (the control), same model
-  different harness, different vendor.
 - **Do blinkers matter?** Lanes that cannot see each other's work are the architecture's
   premise. A run where they could would test it, and would need a deliberate design.
 - **What does it cost?** Tokens and wall-clock per shipped ticket, against a single-lane
   baseline on the same ticket.
+
+Whether harness diversity matters, independent of the model, has left this list: it now has a
+claim, a design and a decision rule of its own in [harness diversity](harness-diversity.md).
 
 ## Evidence
 
