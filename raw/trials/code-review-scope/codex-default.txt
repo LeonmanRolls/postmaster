@@ -1,0 +1,18 @@
+run: codex-default
+form: codex exec review
+model asked for: gpt-6-luna, level low
+versions: claude 2.1.283 (Claude Code); codex codex-cli 0.157.1; mimo 0.1.15; git version 2.43.0
+BASE 49731104a2f0b4ccf4c9da1622c3a678dc3939af, HEAD~1 a58e725828b66d6e94a530bda45c0b3060936c31, SNAP (HEAD) 543471775e9220d84ecf5d32c7ef24ab7d99342a
+planted: src/page.js:8:  return all().slice(start, start + size + 1);
+scratch: a worktree detached at SNAP, checked by cut-scratch.sh --check; uncommitted files before the run: 0
+exit: 1, stderr bytes: 86
+stderr: Error: Specify --uncommitted, --base, --commit, or provide custom review instructions
+tool calls: none
+git commands run, with the files each one's output showed a diff for:
+  (none)
+files any git output showed a diff for: none
+end: none recorded
+planted line src/page.js:8 cited by the report: no
+scratch after the run: 0 uncommitted, tracked files changed since SNAP: none
+--- the report ---
+(empty)
