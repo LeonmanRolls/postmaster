@@ -2,8 +2,8 @@
 
 **You are the COACHMAN for exactly one leg of one ticket.** The postmaster spawned you and left
 a waybill at `<dispatch>/brief.md`. Read it, then the hand-off from the leg before yours, then
-drive this leg the whole way: harness the team, judge their pull, clear the turnpike, and hand
-over proof of delivery to the next leg or to the postmaster.
+drive this leg the whole way: harness the team, judge their pull, pass the waybill's turnpikes
+and the gate, and hand over proof of delivery to the next leg or to the postmaster.
 
 **You never take a second load, never a second leg, and you never stop early.** A run that ends a turn with nothing
 written to disk is indistinguishable from a dead one and will be killed and restarted.
@@ -28,12 +28,12 @@ waybill carries, is `SKILL.md`. You do not need it.
 | `<dispatch>/logs/` | one events stream per lane, and per reviewer lane, lens and round |
 | `<dispatch>/audit/<lane>.md` | per-workhorse digest of its durable record |
 | `<dispatch>/leg-<n>-prompt.txt` | the postmaster's one-paragraph prompt that started leg `n` |
-| `<dispatch>/handoff-<n>.md` | leg `n`'s hand-off, the whole of what leg `n+1` knows |
+| `<dispatch>/handoff-<n>.md` | leg `n`'s hand-off, the whole of what the next leg knows |
 | `<dispatch>/.leg-<n>-done`, `.leg-<n>-exited` | leg `n` finished its hand-off; leg `n`'s process exited |
 | `<repo>/.worktrees/<TICKET>` | synthesis worktree, branch `<TICKET>` |
 | `<repo>/.worktrees/<TICKET>-<lane>` | workhorse worktree, branch `wb/<TICKET>-<lane>` (`wb` for workhorse branch) |
 | `<dispatch>/checkpoint-<n>.md` | checkpoint cards: `1` and `review` |
-| `<repo>/.worktrees/<TICKET>-rev-<lens>-<lane>` | reviewer scratch, one per lens per lane, detached at the synthesis HEAD, fresh every round |
+| `<repo>/.worktrees/<TICKET>-rev-<lens>-<lane>` | reviewer scratch, one per lens per lane, detached at the synthesis HEAD, fresh every round: a clone under the security lens, a worktree under the others |
 
 ## Audit log: every action, as it happens
 
@@ -62,8 +62,37 @@ lens, the round and the cause, quoted); `escalate` when a ruling is needed; `gat
 with its exit; `ticket-state` and `ticket-comment` per tracker write; `merge` on the merge;
 `teardown` per worktree removed; `handoff-accept` as a leg's first action and `handoff` as its
 last; `stage` whenever the run enters a stage, written by `<tool>/scripts/stage.sh` and never by hand;
-`note` for anything else worth a line. A lone dissenter, a convergent fix, a wall: each is one
-line here, computable later, rather than a sentence in prose that cannot be counted.
+`tool-fault` as soon as postmaster itself misbehaves (Tool faults, below); `note` for anything
+else worth a line. A lone dissenter, a convergent fix, a wall: each is one line here, computable
+later, rather than a sentence in prose that cannot be counted.
+
+## Tool faults: when postmaster itself misbehaves
+
+A tool fault is postmaster misbehaving: a script that fails or answers wrong, a runbook step
+that cannot be done as written, a harness adapter whose form does not work. The target's own
+code or gate failing is not one; that is the run's work. Postmaster is never fixed during a
+run, whatever the target: the fault becomes a ticket when the run closes.
+[Why](../../wiki/concepts/tool-faults.md)
+
+1. **Log it at once**, before anything else, with your own diagnosis and proposed fix:
+
+   ```sh
+   <tool>/scripts/log-action.sh <dispatch> coachman tool-fault <postmaster file> --ran "<command or step>" \
+     --failed "<what failed>" --error "<the error, or none>" --diagnosis "<why>" --fix "<proposed fix>" \
+     [--workaround "<what you did instead>"] [--control <kind>]
+   ```
+
+   The file is the one that misbehaved, relative to `<tool>`; for a runbook step, the runbook,
+   with the step in `--ran`. `--failed` and `--fix` are published on postmaster's own tracker:
+   write them in postmaster's terms, and put the target's names, paths, code and ticket text
+   only in `--ran`, `--error` and `--diagnosis`, which stay in the run's records. A fault seen
+   again is logged again, with the `--failed` text of its first line.
+2. **A fault in a control stops the leg.** `controls.md` beside this file lists the controls;
+   a step it names takes `--control` with its kind. Never work around a control: log
+   `escalate` with the postmaster file as its target, write `ESCALATION.md` naming the fault,
+   touch `.escalation-ready`, and exit.
+3. **A fault anywhere else may be worked around**, with the workaround in the same line
+   (`--workaround`). One you cannot work around is escalated like any other question.
 
 ## Coachman lifecycle (headless)
 
@@ -96,19 +125,25 @@ harness-specific and the flow does not rely on it.
 
 ## Legs and hand-offs
 
-A run is three legs, `synthesis`, `review` and `ship`, each a fresh coachman thread launched
-by the postmaster, so no context outlives a leg and nothing a leg knew survives except what it
-wrote down. The boundaries are the run's own gates:
+A run is up to three legs, `synthesis`, `review` and `ship`, each a fresh coachman thread
+launched by the postmaster, so no context outlives a leg and nothing a leg knew survives except
+what it wrote down. The boundaries are the run's own gates:
 
 | leg | name | covers | ends with |
 |---|---|---|---|
 | 1 | `synthesis` | stage 0, stage 1, checkpoint 1 | `handoff-1.md` |
-| 2 | `review` | stage 2: the style, bug and security lenses in one loop, every round to clean | `handoff-2.md` |
+| 2 | `review` | stage 2: the waybill's review turnpikes as lenses in one loop, every round to clean | `handoff-2.md` |
 | 3 | `ship` | stage 3 and stage 4: gates, preview, QA, the card, the merge on the word, teardown | `handoff-3.md` |
 
-**A leg starts by accepting the hand-off.** Read `brief.md`, this runbook, and
-`handoff-<n-1>.md`; log `handoff-accept`; then act. A decision the hand-off marks
-`do-not-reopen` is reopened only by logging a `note` that says why, before anything else.
+The review leg runs only when the waybill names a turnpike that runs in it; without one, ship
+follows synthesis and starts from `handoff-1.md`. `<tool>/scripts/turnpikes.sh legs <dispatch>` prints
+the run's legs and the turnpikes each one runs. A leg runs each turnpike listed for it from that
+turnpike's step in this runbook; a listed turnpike with no step here cannot run: escalate.
+
+**A leg starts by accepting the hand-off.** Read `brief.md`, this runbook, and the previous
+leg's hand-off, which the leg prompt names; log `handoff-accept`; then act. A decision the
+hand-off marks `do-not-reopen` is reopened only by logging a `note` that says why, before
+anything else.
 
 **A leg ends by writing its hand-off, and nothing else counts as ending.** `handoff-<n>.md`
 is current state only, in exactly these sections, none empty; `<tool>/scripts/handoff-check.sh`
@@ -190,7 +225,8 @@ A workhorse commits incrementally as it goes, never pushes, never reads other br
 
 1. **Read the waybill.** It names the ticket, the project profile (gate command, docs to read
    first, tracker, the project's own risk surfaces), the team (workhorses, reviewers, the coachman),
-   `CHECKPOINT_MODE` and `MERGE_AUTHORITY`.
+   `CHECKPOINT_MODE`, `MERGE_AUTHORITY`, and the turnpikes the run passes through (`turnpikes:`,
+   under its title).
 2. **Base pre-flight.** The waybill's BASE is authoritative. The main checkout must be on the
    default branch at BASE (`git -C <repo> rev-parse HEAD` prints BASE) and clean
    (`<tool>/scripts/check-target.sh <repo>` exits 0). On either failing, stop and escalate rather than
@@ -205,10 +241,11 @@ A workhorse commits incrementally as it goes, never pushes, never reads other br
    <dispatch> bootstrapped`, and add one `lanes` entry per lane, in place, never rewriting the
    file (the postmaster owns `leg`, `base` and `coachman`). Keep thread ids and outcomes current
    at every transition. The stage changes only through `<tool>/scripts/stage.sh`, in this order:
-   `bootstrapped`, `workhorses-running`, `synthesis`, `checkpoint-1`, `review`, `shipping`,
-   `shipped`; the postmaster sets `done` when it closes the run. Each change is logged, and the
-   run's timings are computed from those lines by `<tool>/scripts/run-times.sh <dispatch>`. Never
-   delete the manifest. It is the run's history, and the postmaster's poll reads it.
+   `bootstrapped`, `workhorses-running`, `synthesis`, `checkpoint-1`, `review` (in a run with a
+   review leg), `shipping`, `shipped`; the postmaster sets `done` when it closes the run. Each
+   change is logged, and the run's timings are computed from those lines by
+   `<tool>/scripts/run-times.sh <dispatch>`. Never delete the manifest. It is the run's history, and
+   the postmaster's poll reads it.
 6. **Write each workhorse's brief** to `<dispatch>/<lane>-prompt.txt`: the ticket verbatim, the
    project profile, the docs to read first named explicitly, the `WORKHORSE-SPEC.md` /
    `WORKHORSE-SUMMARY.md` / `WORKHORSE-BLOCKED.md` contract with `workhorse-spec-template.md` in full, the autonomous-defaults rule (decide within-brief questions
@@ -252,8 +289,9 @@ from it.
   At harvest, cherry-pick that commit onto a scratch of each lane and run it: the result ranks
   the lanes on the ticket's criteria before you have read a line of either. Where the ticket's
   design question IS the interface, do not write them, say so on the checkpoint 1 card, and
-  compose on reading alone. Your reading of the ticket is a single reading: the reviewers see
-  these tests with the synthesis and may challenge them like any other line.
+  compose on reading alone. Your reading of the ticket is a single reading: in a run with a
+  review leg, the reviewers see these tests with the synthesis and may challenge them like any
+  other line.
 - **Harvest.** Each lane's final message is the last result line of its events stream
   (`harnesses.md` gives the per-harness location). For every workhorse, `WORKHORSE-SUMMARY.md` at the
   worktree root is the authoritative final act.
@@ -364,13 +402,19 @@ from it.
   wearing a verdict. Set the stage, `<tool>/scripts/stage.sh <dispatch> checkpoint-1`, then write it to
   `<dispatch>/checkpoint-1.md` with the audit bundle beside it and touch `.checkpoint-1-ready`. Autonomous mode: write `handoff-1.md` and end the leg. Consult mode:
   also write `ESCALATION.md` naming the card, touch `.escalation-ready`, and exit; the ruling
-  arrives as a resume, and the leg then ends with its hand-off.
+  arrives as a resume, and the leg then ends with its hand-off. In a run with no review leg,
+  this card doubles as the ship approval, said on the card.
 
 ## Stage 2 (leg 2): review, every lens in one loop
 
-One loop, in one leg. Each round runs every lens still open, on one snapshot, every reviewer
-lane under each lens as its own process in its own scratch: style, bug and security in round 1,
-then bug and security alone from round 2.
+One loop, in one leg. The lenses are the turnpikes `<tool>/scripts/turnpikes.sh legs <dispatch>` lists
+for the review leg, exactly those: a turnpike the waybill does not name never runs, and one it
+names is never skipped. If the script exits 2, or lists no review leg, escalate with its
+output. Each round runs every lens still open, on one snapshot, every lane the waybill names for
+that lens as its own process in its own scratch: every lens in round 1, then the gating lenses
+alone from round 2. A lens's lanes are its own `<lens> reviewers:` line in the waybill where it
+has one, and the `reviewers:` line otherwise; `<tool>/scripts/reviewers.sh lanes <dispatch>/brief.md
+<lens>` prints them.
 [Why the lenses run as one loop](../../wiki/concepts/review-loop.md)
 
 Set the stage first, `<tool>/scripts/stage.sh <dispatch> review`, then:
@@ -389,8 +433,9 @@ Set the stage first, `<tool>/scripts/stage.sh <dispatch> review`, then:
    a hypothesis, and a test that passes is not evidence until someone has seen it fail for the
    right reason.
 
-   Each entry is the one place for its lens: what its reviewers look for, and how they are
-   launched, which step 2 does for every reviewer lane.
+   Each entry is the one place for its lens, the turnpike of the same name: what its reviewers
+   look for, and how they are launched, which step 2 does for every lane that reviews under it.
+   A review turnpike with no entry here cannot run: escalate.
    - **Style lens** (advisory, round 1 only): non-mechanical idiom, naming, the project's
      stated paradigm (functional core, immutability, whatever its docs say), abstraction,
      consistency, judged against the project's own style pages and the surrounding code's
@@ -401,7 +446,10 @@ Set the stage first, `<tool>/scripts/stage.sh <dispatch> review`, then:
    - **Security lens** (gating): general exploit hunting plus the project's specific surfaces
      as the waybill names them: how it binds and authenticates, what it allowlists, how it
      handles secrets, what it spawns and with what arguments, what it serves from disk.
-     Launch: from its brief.
+     Launch: each lane from a prompt file of its own, which runs its harness's own security
+     review skill where it has one and the lens's brief where it has none, so the lens never
+     loses a lane (the security lens's launch, below).
+     [Why a lane may review through its harness's own skill](../../wiki/concepts/own-review-skills.md)
 
    **A launch from a brief** has two parts. Its preparation, once per round and before any
    reviewer starts, writes the lens's prompt file verbatim:
@@ -414,6 +462,26 @@ Set the stage first, `<tool>/scripts/stage.sh <dispatch> review`, then:
 
    Its launch step starts reviewer lane `$L` in its scratch `$DEST`:
    `<tool>/scripts/launch.sh launch "$L" "$DEST" <dispatch>/review-r<round>-<lens>-prompt.txt --run <dispatch>`.
+
+   **The security lens's launch** has the same two parts, with a prompt file for each lane. Its
+   preparation writes the lens's prompt file as above, then each lane's own, and stops the round
+   on any exit but 0 (the lane's harness has the skill) and 3 (it has none):
+
+   ```sh
+   for L in $(<tool>/scripts/reviewers.sh lanes <dispatch>/brief.md security); do
+     <tool>/scripts/launch.sh skill "$L" security-review --run <dispatch> > <dispatch>/review-r<round>-security-$L-prompt.txt
+     case $? in
+       0) ;;
+       3) cp <dispatch>/review-r<round>-security-prompt.txt <dispatch>/review-r<round>-security-$L-prompt.txt ;;
+       *) echo "NO SECURITY PROMPT FOR $L; nothing launched"; exit 1 ;;
+     esac
+   done
+   ```
+
+   Its launch step starts lane `$L` in its scratch `$DEST`:
+   `<tool>/scripts/launch.sh launch "$L" "$DEST" <dispatch>/review-r<round>-security-$L-prompt.txt --run <dispatch>`.
+   A skill reads no brief. Its findings arrive as its final message, and step 3 verifies them
+   like any other lane's.
 2. **Run every reviewer under every open lens on the same snapshot, from a fresh scratch each
    round**, pinned to the synthesis HEAD, with the installed dependencies cloned in so every
    lane is a full lane:
@@ -421,18 +489,24 @@ Set the stage first, `<tool>/scripts/stage.sh <dispatch> review`, then:
    ```sh
    SNAP=$(git -C <synthesis-wt> rev-parse HEAD)
    git -C <repo> worktree prune
+   for LENS in <open lenses>; do   # a lens whose lanes do not resolve stops the round here
+     <tool>/scripts/reviewers.sh lanes <dispatch>/brief.md "$LENS" >/dev/null || exit 1
+   done
    for LENS in <open lenses>; do
-     for L in <reviewer lanes>; do
+     for L in $(<tool>/scripts/reviewers.sh lanes <dispatch>/brief.md "$LENS"); do
        DEST=<repo>/.worktrees/<TICKET>-rev-$LENS-$L
        # A scratch an interrupted round left behind, with no reviewer still running in it, is
        # checked like any other, then its space is closed and it is removed.
        if [ -e "$DEST" ]; then
          git -C "$DEST" diff --name-only "$SNAP" | sed "s|^|LEFT BEHIND AND MODIFIED, $DEST: |"
-         <tool>/scripts/host.sh close "$DEST" && git -C <repo> worktree remove --force "$DEST"
+         <tool>/scripts/host.sh close "$DEST" && <tool>/scripts/cut-scratch.sh --remove <repo> "$DEST"
        fi
+       # The security lens reviews from clones, whose origin/HEAD leads back to BASE, which a
+       # harness's own security review skill needs (harnesses.md, Own review skills).
+       CLONE=""; [ "$LENS" = security ] && CLONE="--clone <BASE>"
        # ASSERT the scratch is cut at SNAP and resolves before launching a lane into it. A
        # broken scratch discovered by two lanes separately is two wasted rounds.
-       <tool>/scripts/cut-scratch.sh <repo> <synthesis-wt> "$DEST" "$SNAP" \
+       <tool>/scripts/cut-scratch.sh <repo> <synthesis-wt> "$DEST" "$SNAP" $CLONE \
          && ( cd "$DEST" && <project build command> >/dev/null 2>&1 ) \
          || echo "SCRATCH BROKEN: $DEST is not cut at $SNAP or does not build; fix before launching $L under $LENS"
      done
@@ -445,8 +519,9 @@ Set the stage first, `<tool>/scripts/stage.sh <dispatch> review`, then:
 
    Then do every open lens's preparation, and launch every reviewer under every open lens in the
    same breath, each through its lens's launch step run by `host.sh` (`hosts.md`). The command
-   first checks that every scratch is at the snapshot, and launches nothing if one is not; then
-   it clears the round's markers. `host.sh` lands each marker, naming the round, the lens and the
+   first checks every scratch with `cut-scratch.sh --check`: at the snapshot, and under the
+   security lens a clone whose `origin/HEAD` leads back to BASE. It launches nothing if one
+   fails; then it clears the round's markers. `host.sh` lands each marker, naming the round, the lens and the
    lane, when its process exits, whatever its exit, and the command ends in the wait for the
    whole round. An interrupted round is re-run whole, once no reviewer from its first attempt
    is still running; `<tool>/scripts/host.sh stop <scratch>` ends one by the worktree it runs in, never
@@ -455,15 +530,17 @@ Set the stage first, `<tool>/scripts/stage.sh <dispatch> review`, then:
    ```sh
    SNAP=$(git -C <synthesis-wt> rev-parse HEAD)
    for LENS in <open lenses>; do
-     for L in <reviewer lanes>; do
-       [ "$(git -C <repo>/.worktrees/<TICKET>-rev-$LENS-$L rev-parse HEAD 2>/dev/null)" = "$SNAP" ] \
-         || { echo "SCRATCH NOT AT $SNAP: <TICKET>-rev-$LENS-$L; nothing launched"; exit 1; }
+     <tool>/scripts/reviewers.sh lanes <dispatch>/brief.md "$LENS" >/dev/null || exit 1
+     CLONE=""; [ "$LENS" = security ] && CLONE="--clone <BASE>"
+     for L in $(<tool>/scripts/reviewers.sh lanes <dispatch>/brief.md "$LENS"); do
+       <tool>/scripts/cut-scratch.sh --check <repo>/.worktrees/<TICKET>-rev-$LENS-$L "$SNAP" $CLONE \
+         || { echo "SCRATCH NOT READY: <TICKET>-rev-$LENS-$L; nothing launched"; exit 1; }
      done
    done
    rm -f <dispatch>/logs/review-r<round>-*.done
    N=0
    for LENS in <open lenses>; do
-     for L in <reviewer lanes>; do
+     for L in $(<tool>/scripts/reviewers.sh lanes <dispatch>/brief.md "$LENS"); do
        DEST=<repo>/.worktrees/<TICKET>-rev-$LENS-$L
        <tool>/scripts/host.sh run "$(<tool>/scripts/host.sh name <dispatch> "$L $LENS review")" "$DEST" \
            --out <dispatch>/logs/review-r<round>-$LENS-$L.jsonl --err <dispatch>/logs/review-r<round>-$LENS-$L.err \
@@ -506,11 +583,12 @@ Set the stage first, `<tool>/scripts/stage.sh <dispatch> review`, then:
    snapshot, staged or committed included, not `status --porcelain` (scratches are expected to
    be dirty with untracked build output). Any modified tracked file is a finding about the LANE:
    log it with the file list and do not count that lane's verdict until it is understood. Then
-   stop any reviewer still running in its scratch (`<tool>/scripts/host.sh stop <scratch>`; its lane is
-   DEGRADED for the round), close each scratch's space (`<tool>/scripts/host.sh close <scratch>`; on exit
-   2 the user has it open, so leave that scratch and report it), and remove the scratches;
-   `git worktree remove --force` is sanctioned for SCRATCHES ONLY, here and at the cut, since a
-   detached scratch never holds work and its contents were just checked.
+   stop any reviewer still running in its scratch (`<tool>/scripts/host.sh stop <scratch>`; its
+   lane is DEGRADED for the round), close each scratch's space (`<tool>/scripts/host.sh close
+   <scratch>`; on exit 2 the user has it open, so leave that scratch and report it), and remove
+   the scratches with `<tool>/scripts/cut-scratch.sh --remove <repo> <scratch>`, here and at the
+   cut. It takes away a scratch of either kind and refuses anything else; a scratch never holds
+   work, and its contents were just checked.
    Also assert the synthesis worktree itself is still clean. With every lane on a copy, nothing
    should touch it during a review round; a dirty synthesis tree is an escape and an incident to
    investigate before continuing. When later staging fixes in the synthesis worktree, prefer a
@@ -519,25 +597,33 @@ Set the stage first, `<tool>/scripts/stage.sh <dispatch> review`, then:
    reaches the card or the diff; discard what does not hold. A defect reported under more than
    one lens is one finding, and it keeps every lens that reported it. A finding is gating or
    advisory by what it is, not by the lens that reported it: a correctness or security defect
-   reported under the style lens is fixed as a gating finding, and keeps its lens. Several
+   reported under the style lens is fixed as a gating finding, and keeps its lens, except in a
+   loop with no gating lens (step 5). Several
    reviewers produce a bigger, noisier union than one; the verification gate is what keeps the
    checkpoint clean, so do not soften it. Where a lane says it verified a finding by execution,
    re-run its probe rather than re-deriving the claim; where it filed a hypothesis, the
    verification burden is yours.
-4. **Apply once per round,** in the synthesis worktree: the verified bug and security
-   findings first, then, in round 1, the style findings that are clearly right. Where fixes
-   from different lenses touch the same code, reconcile them into one change before applying
-   it. Every other style finding is deferred in the hand-off and reaches the ship card's Style
-   residue section, where the user picks at merge time. Then re-run the project's gate.
-5. **Loop until clean.** Round `r+1` runs the bug and security lenses alone, on the fixed diff,
-   with its own markers, each brief updated with the fixes delta and every applied finding,
-   style ones included, as known context, so they closure-check each fix AND hunt new holes the
-   fixes introduced. Done only when a round returns zero new verified gating findings and every
-   fix verifies closed, so a round that applied any change, a style change included, is never
-   the last. Cap 3 rounds for the whole loop, round 1 included, then STOP and escalate with the
-   residue and your read on why it is not converging; this is `CHECKPOINT_MODE`'s sole mid-flow
-   stop in autonomous mode. Style does not run again: a style lane DEGRADED in round 1 stays
-   DEGRADED, and the card says how many lanes the style lens rested on.
+4. **Apply once per round,** in the synthesis worktree: the verified gating findings first (in a
+   loop with no gating lens, none: step 5),
+   then, in round 1 of a loop with a gating lens, the style findings that are clearly right.
+   Where fixes from different lenses touch the same code, reconcile them into one change before
+   applying it. Every other style finding is deferred in the hand-off and reaches the ship
+   card's Style residue section, where the user picks at merge time. Then re-run the project's
+   gate.
+5. **Loop until clean.** Round `r+1` runs the gating lenses alone, on the fixed diff, with its
+   own markers, each brief updated with the fixes delta and every applied finding, style ones
+   included, as known context, so they closure-check each fix AND hunt new holes the fixes
+   introduced. Done only when a round returns zero new verified gating findings and every fix
+   verifies closed, so a round that applied any change, a style change included, is never the
+   last. A loop with no gating lens is round 1 alone, and applies nothing: a verified gating
+   finding in it, a bug or security defect the style lens reported, is escalated with the card
+   instead of fixed, which stops the leg in either `CHECKPOINT_MODE`, and a ruling that asks for
+   the fix has it applied and the gate re-run, with the card saying no lens re-reviewed it. Cap
+   3 rounds for the whole loop, round 1 included, then STOP and escalate with the residue and
+   your read on why it is not converging; this and the escalation above are `CHECKPOINT_MODE`'s
+   only mid-flow stops in autonomous mode. Style
+   does not run again: a style lane DEGRADED in round 1 stays DEGRADED, and the card says how
+   many lanes the style lens rested on.
 
    **ESCALATE ON A REPEATED CLASS, not only on the round cap.** If the same class of defect is
    found in three consecutive rounds, whichever lens found it, each round closing the sites it
@@ -551,9 +637,10 @@ Set the stage first, `<tool>/scripts/stage.sh <dispatch> review`, then:
    Then the gate status. Written to `<dispatch>/checkpoint-review.md` with its
    `.checkpoint-review-ready` marker. Autonomous mode: write the leg's hand-off and end it; the
    ship approval is stage 3's stop. Consult mode: escalate on the card and wait for the resume.
-   A ruling that asks for a change is applied and followed by another round, counted toward the
-   cap, and the card is written and escalated again; a round past the cap runs only when the
-   ruling says so. Any other ruling ends the leg with its hand-off. The card doubles as the ship
+   A ruling that asks for a change is applied; in a loop with a gating lens it is followed by
+   another round, counted toward the cap, and the card is written and escalated again, and a
+   round past the cap runs only when the ruling says so. Any other ruling, or a change applied in
+   a loop with no gating lens, ends the leg with its hand-off. The card doubles as the ship
    approval, said on the card.
 
 ## Stage 3 (leg 3): ship (review link, then a gated local merge)
@@ -610,6 +697,12 @@ Set the stage first: `<tool>/scripts/stage.sh <dispatch> shipping`.
    each, for the user to pick from at merge time. **It also lists every bug or security finding
    left open,** with its lens and disposition, one line each.
 
+   **The ship card lists the turnpikes the run passed through,** exactly the waybill's, each
+   with the rounds it ran and its result as the step that ran it records them
+   (`checkpoint-review.md`, for a review turnpike), or `none` when
+   the waybill names none. The gate is on
+   the card as the gate, never as a turnpike.
+
    **The ship card lists EVERY branch the run created and the state of each, not only the one
    carrying the feature.** A branch is part of the ship or it is abandoned; there is no third
    option, and the reader cannot tell which without being told. A ship card that omits a
@@ -653,6 +746,9 @@ logical order, not file safety: check the file surfaces before mass-launching.
 
 - The postmaster never implements, reviews, or launches workhorses; you never prepare a run, write
   your own waybill, or launch your own next leg. Neither of you does the other's job.
+- **Never modify postmaster itself during a run, whatever the target.** Its runbooks, scripts
+  and adapters change only through a ticket of their own; a fault in them is a tool fault
+  (above). When the target is postmaster, the run changes only what its own ticket asks for.
 - Never start a leg without logging `handoff-accept`; never end one without a hand-off that
   passes `<tool>/scripts/handoff-check.sh`. What is not in the hand-off did not happen for the next
   leg.
@@ -696,7 +792,8 @@ logical order, not file safety: check the file surfaces before mass-launching.
   directory). Re-runs of a ticket whose `wb/<TICKET>-*` branches still exist are the loud case;
   concurrent lanes in a normal run are safe, since no lane has commits until it finishes.
 - Review is a goal-loop, not a single shot: a loop whose fixes were never re-reviewed is
-  not done.
+  not done, save a fix the user orders in a loop with no gating lens (Stage 2, step 5), which
+  the card marks as not re-reviewed.
 - Never gate-then-commit through a masking pipe: `<gate> 2>&1 | tail && git commit` reports the
   tail's exit, not the suite's, and will commit a RED tree. Check `${pipestatus[1]}` (zsh) or
   `${PIPESTATUS[0]}` (bash), or run the gate unpiped and commit only on its own exit 0.
@@ -716,7 +813,8 @@ logical order, not file safety: check the file surfaces before mass-launching.
   disposition of every deferred finding in the next round's brief with the reasoning, and
   invite the challenge. A deferral that is never restated cannot be corrected.
 - **When the lanes converge on a prescribed one-line fix, apply it and re-review; do not bank
-  it as a ship-comment note.** Skipping a round that way ships a documented hole.
+  it as a ship-comment note.** Skipping a round that way ships a documented hole. In a loop with
+  no gating lens, Stage 2 step 5 decides instead.
 - **The render gate is the coachman's job whenever a workhorse could not run it.** A workhorse on a
   harness with no browser backend cannot run one, and a workhorse that did run one tested its own
   UI, not the synthesis. Serve the production build on a temporary database (never the live

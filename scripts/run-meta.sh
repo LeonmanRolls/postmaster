@@ -14,7 +14,7 @@
 #   exit 0  written, or already there
 #   exit 1  usage, no such dispatch directory or repo, no config, or the file could not be written
 set -uo pipefail
-HERE=$(cd "$(dirname "$0")" && pwd -P)
+HERE=$(CDPATH= cd -P -- "$(dirname -- "$0")" && pwd -P)
 TOOL=$(dirname "$HERE")
 CONFIG=${POSTMASTER_CONFIG:-$HOME/.postmaster/config.toml}
 
@@ -77,7 +77,7 @@ fi
 
 # --- self-test ----------------------------------------------------------------------------
 tmp=$(mktemp -d) || exit 1
-trap 'rm -r -- "$tmp" 2>/dev/null' EXIT
+trap 'rm -r -- "$tmp" </dev/null 2>/dev/null' EXIT
 d="$tmp/project/RUN-1"; repo="$tmp/target"; mkdir -p "$d" "$repo"
 git -C "$repo" init -q -b main && git -C "$repo" -c user.name=t -c user.email=t@t commit -q --allow-empty -m first
 cat > "$tmp/config.toml" <<'EOF'

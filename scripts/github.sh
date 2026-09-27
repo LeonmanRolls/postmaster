@@ -9,6 +9,7 @@
 #   github.sh <repo> board init [title]            create a board named after the repo and
 #                                                  link it; idempotent
 #   github.sh <repo> create <title> <body-file>    new issue on the board in Todo; prints its number
+#                                                  (exit 5: created, but not put on the board)
 #   github.sh <repo> read <n> [--body]             title, state, labels, body, comments; with
 #                                                  --body, only the body, exactly as stored
 #   github.sh <repo> edit <n> <body-file> <base-file>
@@ -16,7 +17,14 @@
 #   github.sh <repo> state <n> <state>             todo | in-progress | blocked | done | cancelled
 #   github.sh <repo> comment <n> <actor> <text>    one comment, dated to the minute, actor first
 #   github.sh <repo> list [state]                  one line per issue: number, state, title
-#   github.sh --self-test                          read and edit against a stub gh, offline
+#   github.sh <repo> access                        the user's permission on the repository:
+#                                                  ADMIN, MAINTAIN, WRITE, TRIAGE or READ
+#   github.sh <repo> search <text>                 one line per issue holding the text in its
+#                                                  title, body or comments: number, open or
+#                                                  closed, title (GitHub's index, not exact; a
+#                                                  colon or a quote in the text counts as a space)
+#   github.sh --self-test                          read, edit, create, access and search against a
+#                                                  stub gh, offline
 #
 # <repo> is a local checkout; the GitHub repository is read from its origin remote. Everything
 # goes through the gh CLI, which must be logged in with the `project` scope
@@ -31,11 +39,12 @@
 #   exit 2  invalid state
 #   exit 3  the repo has no linked board (run: github.sh <repo> board init)
 #   exit 4  the issue changed since the base was read
+#   exit 5  create made the issue, and printed its number, but could not put it on the board
 set -uo pipefail
 die() { echo "github: $*" >&2; exit 1; }
 if [ "${1:-}" != --self-test ]; then
-  REPO=${1:?usage: github.sh <repo> board|create|edit|read|state|comment|list ... | --self-test}
-  [ $# -ge 2 ] || die "usage: github.sh <repo> board|create|edit|read|state|comment|list ... | --self-test"
+  REPO=${1:?usage: github.sh <repo> board|create|edit|read|state|comment|list|access ... | --self-test}
+  [ $# -ge 2 ] || die "usage: github.sh <repo> board|create|edit|read|state|comment|list|access ... | --self-test"
   [ -d "$REPO" ] || die "no such directory: $REPO"
   command -v gh >/dev/null 2>&1 || die "gh is not on PATH"
   gh auth status >/dev/null 2>&1 || die "gh is not logged in; the user runs: gh auth login"
@@ -223,9 +232,16 @@ elif cmd == "create":
     if len(args) != 3: usage("create <title> <body-file>")
     body_file(args[2])
     b = board()
+    if COLUMN["todo"] not in status_field(b)[1]:
+        die("board #%s has no Status column for todo; nothing was created" % b["number"])
     url = gh("issue", "create", "-R", NWO, "--title", args[1], "--body-file", args[2]).strip().splitlines()[-1]
     number = int(url.rstrip("/").rsplit("/", 1)[-1])
-    set_column(b, number, url, "todo")
+    try:
+        set_column(b, number, url, "todo")
+    except SystemExit:
+        print(number)
+        print("github: #%d was created, but is not on the board" % number, file=sys.stderr)
+        sys.exit(5)
     print(number)
 
 elif cmd == "edit":
@@ -305,17 +321,33 @@ elif cmd == "list":
         if want is None or st == want:
             print("#%d\t%s\t%s" % (iss["number"], st, iss.get("title", "")))
 
+elif cmd == "access":
+    if len(args) != 1: usage("access")
+    q = "query($owner:String!,$name:String!){repository(owner:$owner,name:$name){viewerPermission}}"
+    data = ghj("api", "graphql", "-f", "query=" + q, "-F", "owner=" + OWNER, "-F", "name=" + NAME)
+    perm = ((data.get("data") or {}).get("repository") or {}).get("viewerPermission")
+    if not perm:
+        die("no permission on %s could be read" % NWO)
+    print(perm)
+
+elif cmd == "search":
+    if len(args) != 2: usage("search <text>")
+    hits = ghj("search", "issues", '"%s"' % re.sub(r'[":]', " ", args[1]).strip(), "--repo", NWO,
+               "--json", "number,title,state", "--limit", "100")
+    for h in sorted(hits, key=lambda h: h["number"]):
+        print("#%d\t%s\t%s" % (h["number"], str(h.get("state", "")).lower(), h.get("title", "")))
+
 else:
-    usage("board|create|edit|read|state|comment|list ...")
+    usage("board|create|edit|read|state|comment|list|access|search ...")
 PY
 fi
 
 # --- self-test ----------------------------------------------------------------------------
 # read and edit run for real, against a stub gh first on PATH: it answers the queries from
 # canned files and records every issue edit, so nothing reaches GitHub.
-SELF="$(cd "$(dirname "$0")" && pwd -P)/$(basename "$0")"
+SELF="$(CDPATH= cd -P -- "$(dirname -- "$0")" && pwd -P)/$(basename -- "$0")"
 tmp=$(mktemp -d) || exit 1
-trap 'rm -r -- "$tmp" 2>/dev/null' EXIT
+trap 'rm -r -- "$tmp" </dev/null 2>/dev/null' EXIT
 S="$tmp/stub"; mkdir -p "$tmp/bin" "$S" || exit 1
 cat > "$tmp/bin/gh" <<'GH'
 #!/usr/bin/env bash
@@ -327,12 +359,18 @@ case "$1 $2" in
     for a in "$@"; do case $a in query=*) q=$a ;; number=*) n=${a#number=} ;; esac; done
     case $q in
       *projectsV2*) cat "$d/boards.json" ;;
+      *viewerPermission*) cat "$d/access.json" ;;
       *"issue(number:"*) if [ -f "$d/issue-$n.json" ]; then cat "$d/issue-$n.json"
                          else echo '{"data": {"repository": {"issue": null}}}'; fi ;;
       *) echo "stub gh: unexpected query" >&2; exit 1 ;;
     esac ;;
   "project item-list") cat "$d/items.json" ;;
   "project field-list") cat "$d/fields.json" ;;
+  "project item-add") if [ -f "$d/no-item-add" ]; then echo "stub gh: item-add refused" >&2; exit 1; fi
+                      echo '{"id": "PVTI_new"}' ;;
+  "project item-edit") exit 0 ;;
+  "issue create") printf 'create\n' >> "$d/creates.log"; echo "https://github.com/o/r/issues/60" ;;
+  "search issues") printf '%s\n' "$*" >> "$d/searches.log"; cat "$d/search.json" ;;
   "issue edit")
     f="" prev=""
     for a in "$@"; do [ "$prev" = --body-file ] && f=$a; prev=$a; done
@@ -414,6 +452,42 @@ refused "no linked board exits 3" 3 "no linked board" 7 "$tmp/new.md" "$tmp/base
 gh_sh read 7 --body > /dev/null 2>&1; rc=$?
 [ $rc -eq 3 ] && ok "read --body without a linked board exits 3" || fail "read --body without a linked board exits 3 (exit $rc)"
 printf '%s\n' "$BOARD" > "$S/boards.json"
+
+echo "access"
+printf '%s\n' '{"data": {"repository": {"viewerPermission": "ADMIN"}}}' > "$S/access.json"
+out=$(gh_sh access 2>&1); rc=$?
+[ $rc -eq 0 ] && [ "$out" = ADMIN ] && ok "access prints the user's permission" || fail "access prints the user's permission (exit $rc)" "$out"
+printf '%s\n' '{"data": {"repository": {"viewerPermission": "READ"}}}' > "$S/access.json"
+out=$(gh_sh access 2>&1); rc=$?
+[ $rc -eq 0 ] && [ "$out" = READ ] && ok "a repository the user only reads says READ" || fail "a repository the user only reads says READ (exit $rc)" "$out"
+printf '%s\n' '{"data": {"repository": null}}' > "$S/access.json"
+out=$(gh_sh access 2>&1); rc=$?
+[ $rc -eq 1 ] && printf '%s\n' "$out" | grep -qF "no permission on o/r" && ok "a repository gh cannot see exits 1" \
+  || fail "a repository gh cannot see exits 1 (exit $rc)" "$out"
+
+echo "create and search"
+creates() { grep -c . "$S/creates.log" 2>/dev/null || true; }
+: > "$S/creates.log"
+out=$(gh_sh create "A title" "$tmp/new.md" 2>&1); rc=$?
+[ $rc -eq 0 ] && [ "$out" = 60 ] && [ "$(creates)" -eq 1 ] && ok "create files the issue and prints its number" \
+  || fail "create files the issue and prints its number (exit $rc)" "$out"
+: > "$S/creates.log"; : > "$S/no-item-add"
+out=$(gh_sh create "A title" "$tmp/new.md" 2>"$tmp/err"); rc=$?
+[ $rc -eq 5 ] && [ "$out" = 60 ] && [ "$(creates)" -eq 1 ] && grep -qF "#60 was created, but is not on the board" "$tmp/err" \
+  && ok "an issue that misses the board still prints its number, and exits 5" || fail "an issue that misses the board still prints its number, and exits 5 (exit $rc)" "$out$(cat "$tmp/err")"
+mv -- "$S/no-item-add" "$tmp/no-item-add.was"; : > "$S/creates.log"; cp "$S/fields.json" "$tmp/fields.json"
+printf '%s\n' '{"fields": [{"id": "F1", "name": "Status", "options": [{"id": "o1", "name": "Backlog"}, {"id": "o3", "name": "Done"}]}]}' > "$S/fields.json"
+out=$(gh_sh create "A title" "$tmp/new.md" 2>&1); rc=$?
+[ $rc -eq 1 ] && [ "$(creates)" -eq 0 ] && printf '%s\n' "$out" | grep -qF "nothing was created" \
+  && ok "a board with no Todo column is refused before anything is created" || fail "a board with no Todo column is refused before anything is created (exit $rc)" "$out"
+cp "$tmp/fields.json" "$S/fields.json"
+printf '%s\n' '[{"number": 9, "title": "Later", "state": "CLOSED"}, {"number": 4, "title": "Earlier", "state": "OPEN"}]' > "$S/search.json"
+out=$(gh_sh search 'tf-0a1b2c3d' 2>&1); rc=$?
+[ $rc -eq 0 ] && [ "$out" = "$(printf '#4\topen\tEarlier\n#9\tclosed\tLater')" ] && grep -qF -- '"tf-0a1b2c3d" --repo o/r' "$S/searches.log" \
+  && ok "search asks for the phrase in this repository, and prints number, state and title" || fail "search asks for the phrase in this repository, and prints number, state and title (exit $rc)" "$out"
+gh_sh search 'Tool fault in scripts/x.sh:' >/dev/null 2>&1
+tail -1 "$S/searches.log" | grep -qF -- '"Tool fault in scripts/x.sh" --repo o/r' \
+  && ok "a colon in the text is searched as a space, which GitHub's query accepts" || fail "a colon in the text is searched as a space, which GitHub's query accepts" "$(tail -1 "$S/searches.log")"
 
 echo
 [ "$fails" -eq 0 ] && { echo "self-test: all controls behaved"; exit 0; }

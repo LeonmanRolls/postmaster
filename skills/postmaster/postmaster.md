@@ -31,28 +31,37 @@ ledger. `note` is the action for anything without its own verb.
 
 ## Stage A: the stream becomes tickets
 
-0. **The tracker is reachable first:** `<tool>/scripts/github.sh <repo> board` or
-   `<tool>/scripts/plane.sh projects` per the config's kind, before any read or write. A github
-   target with no board (exit 3) gets one only when the user says so: `board init`.
+0. **The tracker is reachable first:** `<tool>/scripts/github.sh <repo> board`,
+   `<tool>/scripts/plane.sh projects` or `<tool>/scripts/local.sh <repo> store`, per the kind
+   `<tool>/scripts/discover-project.sh <repo>` names as `tracker`, before any read or write. A
+   github target with no board, or a local one with no store (exit 3), gets one only when the
+   user says so: `board init` or `store init`. A github target with no origin remote can have no
+   board; propose `store init` to the user instead.
 1. **Read what exists.** List the tracker's open tickets (`trackers.md`) and read the ones the
    stream touches. The stream may already be ticketed in part.
 2. **Decompose.** One ticket per independently shippable change, in the ticket shape
    (`trackers.md`): a title, the problem or feature, numbered acceptance criteria each
-   answerable yes or no, the direction, and notes. A ticket that changes something a person
-   uses carries a `User journey`. The direction is the user's: take it from the stream or the
-   ticket's own text, or ask the user for it, and never write one yourself, not even "None". A
-   ticket is dispatchable when its criteria can be tested at the ticket's own interface and its
-   scope names what is out. Anything else is not yet a ticket; it is a question for the user.
+   answerable yes or no, the direction, the turnpikes, and notes. A ticket that changes
+   something a person uses carries a `User journey`. The direction is the user's: take it from
+   the stream or the ticket's own text, or ask the user for it, and never write one yourself,
+   not even "None". The turnpikes are the user's too: take them from the stream or the ticket,
+   or propose `default`, and never write fewer turnpikes than `default`, or `none`, on your own
+   judgment, even where `tracker.postmaster_may_create` lets you create the ticket. A ticket is
+   dispatchable when its criteria can be tested at the ticket's
+   own interface and its scope names what is out. Anything else is not yet a ticket; it is a
+   question for the user.
 3. **Check every ticket's shape** before you accept it or propose it:
    `<tool>/scripts/ticket-check.sh <repo> <id>` for a ticket in the tracker, and
    `<tool>/scripts/ticket-check.sh --body <file> --title "<title>"` for one you drafted. Log
    `ticket-check` with the ticket's id, or the draft's file, as the target, and the exit and
-   the parts named as the detail. Exit 0 means the shape is complete; whether the ticket is
-   dispatchable is still step 2's test. Exit 1 means it could not be read, and the message
-   says why. Exit 2 names each missing or malformed part on its own line: save the ticket's
-   body as your base with the adapter's `read <id> --body` (a draft is its own base), draft
-   each part from the stream and the ticket's own text, and put the ticket, the check's lines
-   and your drafts to the user together.
+   the parts named, or the `turnpikes:` line it prints, as the detail. Exit 0 means the shape
+   is complete; whether the ticket is dispatchable is still step 2's test. Exit 1 means it
+   could not be read, and the message says why. Exit 2 names each missing or malformed part on
+   its own line: save the ticket's body as your base with the adapter's `read <id> --body` (a
+   draft is its own base), draft each part from the stream and the ticket's own text, and put
+   the ticket, the check's lines and your drafts to the user together. A missing
+   `## Turnpikes` is proposed as `default`, with what `<tool>/scripts/turnpikes.sh --list` says it
+   stands for; the user may name fewer, others, or `none`.
 4. **Write back the user's answer and nothing else.** Write the parts as the user gave or
    approved them, each under its `##` heading, to a sections file, and splice them into the
    base: `<tool>/scripts/ticket-check.sh --splice <base> <sections> > <new>` changes those sections
@@ -65,9 +74,13 @@ ledger. `note` is the action for anything without its own verb.
    plan, and `plan.md` says what it waits on.
    [Why a ticket is checked, and only the user's answer written back](../../wiki/concepts/ticket-shape.md)
 5. **Propose before creating** unless `tracker.postmaster_may_create` is true. Show the
-   user each ticket's title, priority, direction and one-line rationale, then create the ones
-   they approve through the tracker adapter, logging `ticket-create` per ticket, and check each
-   one again by its new id. Never create a ticket on your own initiative.
+   user each ticket's title, priority, direction, turnpikes and one-line rationale, then create
+   the ones they approve through the tracker adapter, logging `ticket-create` per ticket, and
+   check each one again by its new id. Never create a ticket on your own initiative. A ticket
+   whose turnpikes leave out a default one, which `<tool>/scripts/turnpikes.sh short '<its
+   turnpikes: line>'` names, is shown to the user before it is created whatever
+   `tracker.postmaster_may_create` says, and their word on its turnpikes is logged as a `note`
+   naming the ticket and the line.
 6. **Order them.** Dependencies first; then the file surfaces. Two tickets touching the same
    route table, transport interface or shared module do not run at the same time. Record the
    order and the reason in `<runs>/postmaster/plan.md`, current state only.
@@ -78,14 +91,19 @@ For the next ticket in order, when the run ceiling (`team.max_runs`) has room:
 
 1. **Check the ticket once more:** `<tool>/scripts/ticket-check.sh <repo> <id>` exits 0, logged as
    `ticket-check`. On exit 2 it goes back to Stage A, step 3, and the next ticket in order is
-   taken instead.
+   taken instead. When `<tool>/scripts/turnpikes.sh short '<the turnpikes: line it printed>'`
+   names any default turnpike, the ledger must hold the user's word on this ticket's turnpikes
+   (Stage A, step 5); if it does not, ask them, and log their word, before going on.
 2. **Base pre-flight.** `<tool>/scripts/check-target.sh <repo>` exits 0 and the main checkout is on
    the default branch. On 2, the dirty-tree question goes to the user (`SKILL.md`); you
-   never stash, reset or discard anything. The config is checked too: `<tool>/scripts/launch.sh form
-   coachman --leg <leg>` for each of `synthesis`, `review` and `ship`, `<tool>/scripts/launch.sh form
-   coachman_fallback`, and `<tool>/scripts/launch.sh form <lane>` for each lane in `team.workhorses`
-   and `team.reviewers`, each exit 0. A refusal names what the config must change: it goes to
-   the user, and nothing is dispatched.
+   never stash, reset or discard anything. The config is checked too, for the legs this run
+   will have, `<tool>/scripts/turnpikes.sh legs --line '<the turnpikes: line step 1 printed>'`:
+   `<tool>/scripts/launch.sh form coachman --leg <leg>` for each of those legs,
+   `<tool>/scripts/launch.sh form coachman_fallback`, `<tool>/scripts/launch.sh form <lane>` for
+   each lane in `team.workhorses`, and, when the legs include `review`,
+   `<tool>/scripts/reviewers.sh lines` and `<tool>/scripts/launch.sh form <lane>` for each lane in
+   `team.reviewers` and `team.lens_reviewers`, each exit 0. A refusal names what the config must
+   change: it goes to the user, and nothing is dispatched.
 3. **Exclude worktrees without a commit,** before any is cut, or the next pre-flight reads
    them as dirt: `grep -qxF '.worktrees/' <repo>/.git/info/exclude || echo '.worktrees/' >>
    <repo>/.git/info/exclude`.
@@ -100,31 +118,37 @@ For the next ticket in order, when the run ceiling (`team.max_runs`) has room:
    HEAD` on the default branch: `git -C <repo> worktree add .worktrees/<TICKET> -b <TICKET>
    <sha>`. The coachman's cwd is that worktree from its first leg, so the project's ambient
    context loads for it.
-6. **Write `brief.md`** from the template in `SKILL.md`: the ticket verbatim, the project
-   profile (gate, build, browser suite, docs to read first, tracker, risk surfaces), the team
-   from the config, `CHECKPOINT_MODE` from `ship.checkpoint_mode` and `MERGE_AUTHORITY` from
-   `ship.merge_authority`, either overridden only where the user said so for this run,
-   the dispatch path and `<tool>`. The config here is the one in `run.json`.
+6. **Write `brief.md`** from the template in `SKILL.md`: the `turnpikes:` line step 1's check
+   printed, whole, under the waybill's title, then the ticket verbatim, the project profile (gate,
+   build, browser suite, docs to read first, tracker, risk surfaces), the team from the config
+   with its reviewer lines as `<tool>/scripts/reviewers.sh lines` prints them, `CHECKPOINT_MODE`
+   from `ship.checkpoint_mode` and `MERGE_AUTHORITY` from `ship.merge_authority`, either
+   overridden only where the user said so for this run, the dispatch path and `<tool>`. The
+   config here is the one in `run.json`. Then
+   `<tool>/scripts/turnpikes.sh legs <dispatch> --expect '<that turnpikes: line>'` exits 0 and
+   prints the legs step 2 checked, before anything is launched.
 7. **Move the ticket to in-progress** through the tracker adapter and log `ticket-state`. The
    coachman never touches the ticket's state before stage 3.
 
 ## Stage C: dispatch a leg
 
-A run is three legs, `synthesis`, `review` and `ship` (`coachman.md`, Legs). Each leg is a
-fresh coachman thread, launched the same way; the first is launched after the waybill, every
-later one when the previous leg's marker appears. Every launch and resume in a run passes
-`--run <dispatch>`, so it runs on the config in the run's `run.json`, never the live one.
+A run's legs are the lines `<tool>/scripts/turnpikes.sh legs <dispatch>` prints: `synthesis` and
+`ship`, with `review` between them when the waybill names a turnpike it runs (`coachman.md`,
+Legs). Each leg is a fresh coachman thread, launched the same way; the first is launched after
+the waybill, every later one when the previous leg's marker appears. Every launch and resume in
+a run passes `--run <dispatch>`, so it runs on the config in the run's `run.json`, never the
+live one. Below, `<p>` is the leg before leg `<n>` in that list.
 [Why a run keeps the config it started with](../../wiki/concepts/run-config.md)
 
 1. **Write the leg prompt** to `<runs>/<TICKET>/leg-<n>-prompt.txt`: "You are the coachman
    for leg <n> of <TICKET>. Read `<dispatch>/brief.md`, then `<tool>/skills/postmaster/coachman.md`,
-   then `<dispatch>/handoff-<n-1>.md`" (omit the hand-off for leg 1), plus the one line naming
+   then `<dispatch>/handoff-<p>.md`" (omit the hand-off for leg 1), plus the one line naming
    the leg's job from the legs table. Nothing else: the runbook and the files carry the rest.
 2. **From leg 2 on, verify the hand-off before dispatching on it:** `<tool>/scripts/handoff-check.sh
-   <dispatch>/handoff-<n-1>.md` exits 0. If it exits 2, leg `n-1` is not finished: remove
-   its `.leg-<n-1>-done` marker and resume leg `n-1` (step 5, with `n-1` in place of `n`),
-   the prompt naming the missing sections and saying "Complete the hand-off and end the leg
-   as `coachman.md` says." Then wait for its done marker.
+   <dispatch>/handoff-<p>.md` exits 0. If it exits 2, leg `p` is not finished: remove its
+   `.leg-<p>-done` marker and resume leg `p` (step 5, with `p` in place of `n`), the prompt
+   naming the missing sections and saying "Complete the hand-off and end the leg as
+   `coachman.md` says." Then wait for its done marker.
 3. **Launch** through the host, which shows the leg in the synthesis worktree's space
    (`hosts.md`), stream to the leg's events file, marker on exit; `host.sh` clears the leg's
    exited marker first:
@@ -177,8 +201,10 @@ Act on the `NEXT` column, run by run, and log every action:
   otherwise nothing to do until they answer.
 - **RULE:** an escalation is waiting. Stage E.
 - **GATE:** the ship card is complete. Stage F.
-- **DISPATCH:** the leg's `.leg-<n>-done` marker is present. Stage C for leg `n+1`; after leg
-  3, Stage G.
+- **DISPATCH:** the leg's `.leg-<n>-done` marker is present. Stage C for the leg after `n` in
+  `<tool>/scripts/turnpikes.sh legs <dispatch>`, logging a `note` that names any leg the list leaves
+  out; after the ship leg, Stage G. If the script exits other than 0, nothing is dispatched:
+  its message goes to the user as Stage E step 3 says.
 - **REMOUNT:** the leg's process exited (`.leg-<n>-exited`) with no hand-off, escalation or
   card. Read the leg's `.err` file and the stream tail. A `.err` that opens with a `launch:`
   line is a refusal from `<tool>/scripts/launch.sh`: it goes to the user (Stage E step 3), and nothing
@@ -199,7 +225,7 @@ Act on the `NEXT` column, run by run, and log every action:
 
 **The takeover prompt** for a fallback coachman, written to `<dispatch>/leg-<n>-takeover.txt`:
 "You take over leg <n> of <TICKET> mid-way. Read `<dispatch>/brief.md`,
-`<tool>/skills/postmaster/coachman.md`, `<dispatch>/handoff-<n-1>.md`, then `run-log.md` and
+`<tool>/skills/postmaster/coachman.md`, `<dispatch>/handoff-<p>.md` (none for leg 1), then `run-log.md` and
 `actions.jsonl` for what this leg did before you, then the synthesis worktree's `git log` and
 `git status`. Treat every uncommitted change as unverified. Log `handoff-accept` and finish
 the leg." Move the leg's stream to `<dispatch>/logs/coachman-leg-<n>-walled-events.jsonl`, then
@@ -220,11 +246,13 @@ never the record.
    work: a within-brief ambiguity, a scope call the ticket's own criteria answer, a lane to
    drop as DEGRADED, a round to stop at the cap. Log `escalate` with your ruling.
 3. **Send it up** when it is genuinely destructive, changes the ticket's scope, touches
-   anything outside the repo, or the user asked to see it: write the question to the run's
-   `.waiting-on-user`, add the run and the question to `<runs>/postmaster/ESCALATION.md`, tell
-   the user in the session, and wait. Never pass a postmaster grant up as if it needed the
-   user's word, and never take the user's word for something the config gives you. On the
-   user's answer, remove `.waiting-on-user` and the run's entry, and the file once it is empty.
+   anything outside the repo, is a fault in a control (Tool faults), asks whether to fix a
+   gating finding in a loop with no gating lens (`coachman.md`, Stage 2 step 5), or the user
+   asked to see it: write the question to the run's `.waiting-on-user`, add the run and the
+   question to `<runs>/postmaster/ESCALATION.md`, tell the user in the session, and wait. Never
+   pass a postmaster grant up as if it needed the user's word, and never take the user's word
+   for something the config gives you. On the user's answer, remove `.waiting-on-user` and the
+   run's entry, and the file once it is empty.
 4. **Deliver the ruling:** remove `.escalation-ready`, then resume the current leg (Stage C,
    step 5) with the ruling as the prompt. The ruling is a prompt to a resumed thread, never
    text typed into anything.
@@ -237,9 +265,12 @@ On `.card-ready`, read `<dispatch>/card.md` and `<dispatch>/handoff-3.md`:
    worktree: the gate command exits 0 unpiped (log `gate` with its exit); every branch the
    card lists exists and is in the state the card says; the SYNTHESIS line in `run-log.md`
    names a contribution or a reason for every lane; every DEGRADED lane on the card matches
-   the `degrade` lines in `actions.jsonl`; the blind acceptance tests are the first commit on
-   the branch, or the Decisions section of `handoff-3.md` carries leg 1's reason for not
-   writing them.
+   the `degrade` lines in `actions.jsonl`; the turnpikes on the card are the waybill's, and
+   `actions.jsonl` has `review-launch` lines under each one the review leg runs and under no
+   other lens, and each other turnpike's result on the card is in the record its step writes;
+   when `<tool>/scripts/turnpikes.sh short '<the waybill's turnpikes: line>'` names any default
+   turnpike, the ledger holds the user's word on this ticket's turnpikes; the blind acceptance tests are the first commit on the branch, or the Decisions
+   section of `handoff-3.md` carries leg 1's reason for not writing them.
 2. **Grant or withhold.** Every word is delivered by resuming leg 3 (Stage C, step 5), and
    `.card-ready` is removed before it is; the coachman touches it afresh when the card changes.
    `MERGE_AUTHORITY: postmaster` and every check above holds: deliver "MERGE GRANTED" and log
@@ -263,13 +294,49 @@ On `.card-ready`, read `<dispatch>/card.md` and `<dispatch>/handoff-3.md`:
    same way after preserving any stray file into `<dispatch>/stray/`.
 3. **Close the run** with `<tool>/scripts/stage.sh <dispatch> done postmaster`, and never delete the
    dispatch directory.
-4. **Dispatch the next ticket** in order, Stage B.
+4. **Put the run's tool faults to the user**, as its aftercare ends (Tool faults, below).
+5. **Dispatch the next ticket** in order, Stage B.
 
 **Abandoning a run** happens only on the user's word for that run: log `note` with the
 word, set the stage with `<tool>/scripts/stage.sh <dispatch> abandoned postmaster`, stop what still
 runs in each worktree the run created (`<tool>/scripts/host.sh stop <wt>`), then remove each one after
 preserving stray files and closing its space (`<tool>/scripts/host.sh close <wt>`), and move the ticket back to todo or to cancelled as the user
-says. The dispatch directory stays.
+says. The dispatch directory stays. Then put the run's tool faults to the user (Tool faults).
+
+## Tool faults
+
+**A fault you meet in postmaster itself** is logged at once, as `coachman.md` says (Tool
+faults), with `postmaster` as the actor: in the run you were acting on, or in
+`<runs>/postmaster` when you were acting on none. A fault in a control stops what you were
+doing: log `escalate` with the postmaster file as its target, and send it up (Stage E, step
+3). Anything else may be worked around, with the workaround in the same line.
+
+**Their tickets are shown to the user once, when a run's aftercare ends:** after the merge
+(Stage G) or on abandon. Nothing else puts them to the user.
+
+1. **Harvest them:** `<tool>/scripts/tool-faults.sh harvest <dispatch>`, then the same for
+   `<runs>/postmaster`. Each groups the `tool-fault` lines into distinct faults, drafts a
+   ticket for each, and looks each up on postmaster's own tracker. Act on the state each line
+   gives.
+2. **known:** `<tool>/scripts/tool-faults.sh comment <dispatch> <id>` adds the dated comment that it
+   was seen again.
+3. **new:** show the user the draft its line names, with the `.title` beside it and any ticket
+   the line says it is like, and carry on with the stream. On their word, run
+   `<tool>/scripts/tool-faults.sh file <dispatch> <id>`; when they say a ticket already holds it,
+   `comment <dispatch> <id> <ticket>`; on their no, `decline <dispatch> <id> "<their word>"`.
+   With `tracker.postmaster_may_create` true, file each at once and show the user what was
+   filed. A draft changes only on the user's word, and `file` refuses one that is no longer
+   safe to publish.
+4. **asked:** shown at an earlier harvest of the same run; nothing to do until the user
+   answers.
+5. **unchecked:** the tracker could not be read. Tell the user, and harvest the run again
+   when they say.
+6. **kept:** postmaster has no tracker of its own that the script can reach, and the line
+   says why. Tell the user, and where the drafts are.
+7. **A fault in a harness adapter** is also put to the user as a claim for the wiki's harness
+   pages, under the wiki's rules for evidence (`skills/wiki`).
+
+[Why faults become tickets, not fixes made during the run](../../wiki/concepts/tool-faults.md)
 
 ## Talking to the user
 
@@ -290,7 +357,7 @@ only with the user's word for that specific thing, and the word is logged.
 - Never trust a card, a summary or a hand-off over the code; verify before every grant.
 - Never launch more runs than `team.max_runs`, and never two runs on overlapping file
   surfaces.
-- Never edit `coachman.md`, `harnesses.md` or `trackers.md` while a leg is running; a leg
-  reads its runbook when it starts and a contract changed mid-run breaks the hand-off.
+- Never modify postmaster itself, whatever the target: a fault you meet in it is a tool fault
+  (Tool faults), and a fault in a control is never worked around.
 - Every action is a `log-action` line at the moment it happens. If it is not in the ledger,
   it did not happen.

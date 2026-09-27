@@ -112,6 +112,9 @@ pane. `spawn`, `send`, `wait` and `read` exit 3 on `none`.
   there. Otherwise `herdr worktree open --workspace <repository's space> --path <worktree>
   --label <name>` opens it, which is what nests it under the repository's space. A detached
   reviewer scratch opens the same way. The repository's own checkout gets a tab in its own space.
+  A reviewer's scratch clone (`cut-scratch.sh --clone`) is a repository of its own to Herdr, so
+  it opens as a space of the launch's own, as a directory outside any repository does;
+  `cut-scratch.sh --kind` is what tells it from a repository the user works in.
 - **The tree today** is one level deep, by worktree: the repository's space holds the
   postmaster; under it, the synthesis worktree's space holds each coachman leg as a tab, and each
   workhorse's and each reviewer's worktree has a space of its own. Workhorses sit beside their
@@ -119,8 +122,9 @@ pane. `spawn`, `send`, `wait` and `read` exit 3 on `none`.
 - **Ownership.** `host.sh` marks what it opens with Herdr metadata tokens: a space
   `postmaster=opened`, a pane `postmaster=launch`. `host.sh close` closes a space only when it
   carries the token and every pane in it does, and nothing registered runs there. It never
-  closes a repository's own space, never uses `workspace close --group`, and never runs `herdr
-  worktree remove`, which deletes the checkout. Close a space before removing its worktree.
+  closes a repository's own space, a scratch clone's aside, never uses `workspace close
+  --group`, and never runs `herdr worktree remove`, which deletes the checkout. Close a space
+  before removing its worktree.
 - **State.** The pane reports its launch `working` as it starts, under the agent label
   `headless`, and releases it (`pane release-agent`, same label) when the launch exits. Left to
   itself Herdr shows a headless harness as idle. A closing `idle` report does not work: Herdr
@@ -154,9 +158,10 @@ with `herdr agent start`. It is a pane whose agent `host.sh` reports. So when it
 ## tmux
 
 - One session per repository, `postmaster-<repo>` (the repository's basename, with `.` and `:`
-  replaced), created detached on first use. Each launch is a window named `<name>`, with the
-  window option `@postmaster_cwd` set to its worktree and `@postmaster_state` to `running`, then
-  `done`. After the launch a shell stays in the window.
+  replaced), created detached on first use; a scratch clone's windows go in the session of the
+  repository it was cut from. Each launch is a window named `<name>`, with the window option
+  `@postmaster_cwd` set to its worktree and `@postmaster_state` to `running`, then `done`. After
+  the launch a shell stays in the window.
 - A window's command starts with the tmux server's environment; `host.sh` hands the caller's
   across the same way as for Herdr, and `spawn` passes the caller's `POSTMASTER_*` settings.
 - `host.sh close <worktree>` kills that worktree's windows once nothing registered runs there.
@@ -187,5 +192,6 @@ with `herdr agent start`. It is a pane whose agent `host.sh` reports. So when it
 holds nothing else, and never reaches a live server. `<tool>/scripts/host.sh --live-test` runs the
 ticket's controls against the hosts on this machine, in a scratch repository it creates: a launch
 that lands in its worktree's space, nested under its repository's space, with its marker landing;
-the same launch with no host, backgrounded, with its marker landing; and the same on tmux. It
-opens only its own spaces and tmux session, and closes them.
+a reviewer's scratch clone opening as a space of its own, which `close` shuts; the same launch
+with no host, backgrounded, with its marker landing; and the same on tmux. It opens only its own
+spaces and tmux session, and closes them.

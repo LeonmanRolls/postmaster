@@ -20,7 +20,7 @@
 #   exit 1  faults, one per line on stdout: <file>:<line>: <reason>: <reference>
 #   exit 2  usage, or a file that cannot be read
 set -uo pipefail
-HERE=$(cd "$(dirname "$0")" && pwd -P)
+HERE=$(CDPATH= cd -P -- "$(dirname -- "$0")" && pwd -P)
 ROOT=$(dirname "$HERE")
 
 refs() {  # refs <root> check|fix <file>...
@@ -74,7 +74,7 @@ case ${1:-} in
 esac
 if [ "$MODE" != self-test ]; then
   if [ $# -eq 0 ]; then
-    cd "$ROOT" || exit 2
+    CDPATH= cd -- "$ROOT" || exit 2
     set -- skills/postmaster/*.md
     [ -f "$1" ] || { echo "skill-refs: no skills/postmaster/*.md in $ROOT" >&2; exit 2; }
   fi
@@ -83,7 +83,7 @@ fi
 
 # --- self-test ----------------------------------------------------------------------------
 tmp=$(mktemp -d) || exit 1
-trap 'rm -r -- "$tmp" 2>/dev/null' EXIT
+trap 'rm -r -- "$tmp" </dev/null 2>/dev/null' EXIT
 mkdir -p "$tmp/root/scripts" && : > "$tmp/root/scripts/stage.sh" && : > "$tmp/root/scripts/launch.sh"
 fails=0
 ok()   { printf '  ok   %s\n' "$1"; }

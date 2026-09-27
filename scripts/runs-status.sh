@@ -75,14 +75,14 @@ PY
 
 if [ "${1:-}" != --self-test ]; then
   [ $# -eq 1 ] || { echo "usage: runs-status.sh <project-run-root> | --self-test" >&2; exit 1; }
-  ROOT=$(cd "$1" 2>/dev/null && pwd -P) || { echo "runs-status: no such root: $1" >&2; exit 1; }
+  ROOT=$(CDPATH= cd -P -- "$1" 2>/dev/null && pwd -P) || { echo "runs-status: no such root: $1" >&2; exit 1; }
   status "$ROOT"; exit $?
 fi
 
 # --- self-test ----------------------------------------------------------------------------
 # Every NEXT state from a run built to show it, and the cases that must not be taken for one.
 tmp=$(mktemp -d) || exit 1
-trap 'rm -r -- "$tmp" 2>/dev/null' EXIT
+trap 'rm -r -- "$tmp" </dev/null 2>/dev/null' EXIT
 fails=0
 ok()   { printf '  ok   %s\n' "$1"; }
 fail() { printf '  FAIL %s\n' "$1"; fails=$((fails+1)); }

@@ -29,7 +29,8 @@
 # directory the launch belongs to, usually its worktree: in Herdr the launch runs in a new tab of
 # that worktree's space, opened with `herdr worktree open` under the repository's space if it is
 # not open yet; in tmux in a window of session postmaster-<repo>; with no host, detached from
-# the caller. <name> labels the space when host.sh opens it, the tab or window and the pane's
+# the caller. A reviewer's scratch clone (cut-scratch.sh --clone) opens as a space of its own in
+# Herdr, and in tmux joins the session of the repository it was cut from. <name> labels the space when host.sh opens it, the tab or window and the pane's
 # title, and names the thread where the harness can (POSTMASTER_LAUNCH_NAME, read by launch.sh).
 # Pass it as "$(host.sh name <dispatch> <role>)", so a ticket's title never passes through a
 # shell. A pane shows the stream through view-stream.sh. A launch carries its own pane's
@@ -48,7 +49,7 @@
 #   exit 3  spawn, send, wait or read with no host that keeps an interactive session; or a send
 #           or wait that did not settle, stopped at an approval or a question, or showed no turn
 set -uo pipefail
-HERE=$(cd "$(dirname "$0")" && pwd -P)
+HERE=$(CDPATH= cd -P -- "$(dirname -- "$0")" && pwd -P)
 SELF=$HERE/$(basename "$0")
 SOURCE=custom:postmaster        # Herdr source for a launch's agent state
 META=custom:postmaster-meta     # Herdr source for its name and ownership tokens
@@ -92,8 +93,12 @@ detect() {
   echo none
 }
 
-repo_of() {  # repo_of <dir>: the main checkout's path, or nothing outside a repository
+clone_origin() {  # clone_origin <dir>: for a reviewer's scratch clone, the repository it was cut from
+  local k; k=$("$HERE/cut-scratch.sh" --kind "$1" 2>/dev/null) && [ "${k%% *}" = clone ] && printf '%s\n' "${k#clone }"
+}
+repo_of() {  # repo_of <dir>: the main checkout's path, a scratch clone's origin, or nothing outside a repository
   local common
+  clone_origin "$1" && return 0
   common=$(git -C "$1" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return 1
   case $common in */.git) dirname "$common" ;; *) printf '%s\n' "$common" ;; esac
 }
@@ -170,8 +175,9 @@ print("\t".join([s.get("source_workspace_id") or "-", s.get("repo_root") or "-",
                  w.get("open_workspace_id") or "-"]))' "$top")
     [ "$src" = - ] && src=""; [ "$root" = - ] && root=""; [ "${wopen:-}" = - ] && wopen=""
   fi
-  if [ -z "$root" ] || [ "${wpath:--}" = - ]; then
-    # Not a checkout Herdr can read: a space of the launch's own.
+  if [ -z "$root" ] || [ "${wpath:--}" = - ] || { [ -z "${wopen:-}" ] && clone_origin "$top" >/dev/null; }; then
+    # Not a checkout Herdr can read, or a reviewer's scratch clone, which Herdr reads as a
+    # repository of its own: a space of the launch's own.
     out=$(herdr workspace create --cwd "$cwd" --label "$name" --no-focus ${PLACE_ENV[@]+"${PLACE_ENV[@]}"}) || return 1
     space=$(printf '%s' "$out" | json 'd["result"]["workspace"]["workspace_id"]')
     tab=$(printf '%s' "$out" | json 'd["result"]["tab"]["tab_id"]')
@@ -343,7 +349,7 @@ run_cmd() {
   [ -d "$cwd" ] || launch_failed "no such directory: $cwd"
   local claim_wait
   claim_wait=$(count "${POSTMASTER_HOST_CLAIM_WAIT:-20}" POSTMASTER_HOST_CLAIM_WAIT) || launch_failed "no launch: POSTMASTER_HOST_CLAIM_WAIT"
-  cwd=$(cd "$cwd" && pwd -P); name=$(clean "$name")
+  cwd=$(CDPATH= cd -P -- "$cwd" && pwd -P); name=$(clean "$name")
   [ -n "$pidfile" ] && rm -f -- "$pidfile"          # never an earlier launch's pid
   [ -n "$marker" ] && rm -f -- "$marker"            # or its marker
 
@@ -467,7 +473,7 @@ runner() {
   [ -n "$err" ] && { e=$err; : > "$err"; }
   [ "$append" = 1 ] && [ -f "$out" ] && from=$(wc -c < "$out" | tr -d ' ')
   t0=$(date +%s)
-  ( cd "$rundir" && exec python3 -c "$START_CHILD" "${argv[@]}" 3< <(printf '%s\0' "${childenv[@]}") ) \
+  ( CDPATH= cd -- "$rundir" && exec python3 -c "$START_CHILD" "${argv[@]}" 3< <(printf '%s\0' "${childenv[@]}") ) \
     >> "$o" 2>> "$e" < /dev/null &
   cpid=$!
   [ -n "$pidfile" ] && printf '%s\n' "$cpid" > "$pidfile"
@@ -507,7 +513,7 @@ runner() {
 worktree_arg() {  # worktree_arg <dir> <what>: its real path, or die
   [ -n "${1:-}" ] || die "usage: host.sh $2 <worktree>"
   [ -d "$1" ] || die "no such directory: $1"
-  (cd "$1" && pwd -P)
+  (CDPATH= cd -P -- "$1" && pwd -P)
 }
 
 stop_cmd() {  # stop <worktree>: every launch still running in it, whatever its host
@@ -562,7 +568,8 @@ p = os.path.realpath(sys.argv[1])
 w = next((w for w in d.get("worktrees") or [] if os.path.realpath(w["path"]) == p), {})
 print(w.get("open_workspace_id") or "-", "linked" if w.get("is_linked_worktree") else "main")' "$1")
   [ "$space" = - ] && return 0
-  [ "$kind" = main ] && { warn "$1 is a repository's own checkout; its space is never closed"; return 2; }
+  [ "$kind" = main ] && ! clone_origin "$1" >/dev/null \
+    && { warn "$1 is a repository's own checkout; its space is never closed"; return 2; }
   verdict=$(python3 -c '
 import json, sys
 ws = json.loads(sys.argv[1])["result"]["workspace"]
@@ -604,7 +611,7 @@ spawn_cmd() {
   done
   [ $# -gt 0 ] || die "spawn needs a command after --"
   [ -d "$cwd" ] || die "no such directory: $cwd"
-  cwd=$(cd "$cwd" && pwd -P); label=$(clean "${label:-$handle}"); handle=$(handle_of "$handle")
+  cwd=$(CDPATH= cd -P -- "$cwd" && pwd -P); label=$(clean "${label:-$handle}"); handle=$(handle_of "$handle")
   # The caller's own settings for the flow reach the session, as they reach every launch.
   local tmux_env=()
   PLACE_ENV=()
@@ -728,7 +735,9 @@ test_setup() {  # a scratch repository with worktrees, and the commands the test
   git init -q -b main "$repo" && git -C "$repo" -c user.name=t -c user.email=t@t commit -q --allow-empty -m first || exit 1
   local w; for w in T-1-luna T-1-sol; do git -C "$repo" worktree add -q ".worktrees/$w" -b "wb/$w" || exit 1; done
   git -C "$repo" worktree add -q --detach .worktrees/T-1-rev-luna || exit 1
-  repo=$(cd "$repo" && pwd -P); rname=$(basename "$repo")
+  repo=$(CDPATH= cd -P -- "$repo" && pwd -P); rname=$(basename "$repo")
+  clone=$repo/.worktrees/T-1-rev-security-opus   # a reviewer's scratch clone
+  "$HERE/cut-scratch.sh" "$repo" "$repo" "$clone" "$(git -C "$repo" rev-parse HEAD)" --clone main >/dev/null 2>&1 || exit 1
   mkdir -p "$tmp/caller" "$tmp/logs" "$tmp/run-1"
   cat > "$tmp/caller/fixed.sh" <<'EOF'
 #!/usr/bin/env bash
@@ -781,7 +790,7 @@ self_test() {
   # pane or window runs what it is given with only a server's environment, never the caller's,
   # so the environment a launch sees has to have come through host.sh.
   test_setup
-  trap 'rm -r -- "$tmp" 2>/dev/null' EXIT
+  trap 'rm -r -- "$tmp" </dev/null 2>/dev/null' EXIT
   mkdir -p "$tmp/bin" "$tmp/sys" "$tmp/stub"
   local t p
   for t in bash sh python3 git env cat mkdir rmdir rm mkfifo mktemp sleep date touch wc tr sed awk \
@@ -1045,6 +1054,27 @@ PY
   check "stop ends it, and its marker lands" 'marker "$tmp/logs/s1.done" 10'
   check "then close closes the space" 'hs "$STUBS" -- close "$repo/.worktrees/T-1-sol" >/dev/null'
 
+  echo "a reviewer's scratch clone, Herdr (stub): a space of its own, which close shuts"
+  reset
+  got=$(cd "$tmp/caller" && hs "$STUBS" -- run "$NAME" "$clone" --marker ../logs/c1.done -- ./fixed.sh)
+  space=${got#*space=}; space=${space%% *}
+  check "it opens as a space of the launch's own, labelled with its name, and no other" \
+    'calls herdr | grep -qxF "workspace${T}create${T}--cwd${T}$clone${T}--label${T}$NAME${T}--no-focus" && [ "$(calls herdr | grep -c "^workspace${T}create")" -eq 1 ]' "$(calls herdr)"
+  check "host.sh marks that space as its own" 'python3 -c "import json,sys; sys.exit(json.load(open(\"$tmp/stub/herdr.json\"))[\"spaces\"][\"$space\"][\"tokens\"] != {\"postmaster\": \"opened\"})"'
+  marker "$tmp/logs/c1.done"
+  got2=$(cd "$tmp/caller" && hs "$STUBS" -- run "$NAME" "$clone" --marker ../logs/c2.done -- ./fixed.sh)
+  check "a second launch there is a new tab in the same space" \
+    '[ "$(calls herdr | grep -c "^workspace${T}create")" -eq 1 ] && calls herdr | grep -q "^tab${T}create${T}--workspace${T}$space${T}"' "$got2"
+  marker "$tmp/logs/c2.done"
+  check "close shuts it" 'hs "$STUBS" -- close "$clone" >/dev/null && calls herdr | grep -qx "workspace${T}close${T}$space"'
+  git clone -q "$repo" "$tmp/plain" >/dev/null 2>&1
+  got=$(cd "$tmp/caller" && hs "$STUBS" -- run "$NAME" "$tmp/plain" --marker ../logs/c3.done -- ./fixed.sh)
+  space=${got#*space=}; space=${space%% *}
+  marker "$tmp/logs/c3.done"
+  hs "$STUBS" -- close "$tmp/plain" >/dev/null 2>&1; rc=$?
+  check "a plain clone is no scratch: it opens as a repository, and close refuses its space" \
+    'calls herdr | grep -qxF "workspace${T}create${T}--cwd${T}$tmp/plain${T}--label${T}plain${T}--no-focus" && [ $rc -eq 2 ] && ! calls herdr | grep -qx "workspace${T}close${T}$space"' "$(calls herdr)"
+
   echo "run, stop and close, tmux (stub)"
   reset
   got=$(cd "$tmp/caller" && hs "$STUBS" POSTMASTER_HOST=tmux CALLER_VAR=v -- run "$NAME" "$repo/.worktrees/T-1-sol" --out ../logs/t1.out --marker ../logs/t1.done -- ./probe.sh)
@@ -1059,6 +1089,12 @@ PY
   hs "$STUBS" POSTMASTER_HOST=tmux -- stop "$repo/.worktrees/T-1-sol" >/dev/null; marker "$tmp/logs/t2.done" 10
   check "once it is stopped, close kills that worktree's windows" \
     'hs "$STUBS" POSTMASTER_HOST=tmux -- close "$repo/.worktrees/T-1-sol" >/dev/null && [ "$(calls tmux | grep -c "^kill-window")" -eq 2 ]'
+  (cd "$tmp/caller" && hs "$STUBS" POSTMASTER_HOST=tmux -- run "$NAME" "$clone" --marker ../logs/t3.done -- ./fixed.sh >/dev/null)
+  marker "$tmp/logs/t3.done"
+  check "a reviewer's scratch clone gets a window in the session of the repository it was cut from" \
+    'python3 -c "import json,sys; st = json.load(open(\"$tmp/stub/tmux.json\")); sys.exit(not any(w[\"session\"] == \"postmaster-$rname\" and w[\"opts\"].get(\"@postmaster_cwd\") == \"$clone\" for w in st[\"windows\"].values()) or len(st[\"sessions\"]) != 1)"'
+  check "and close kills it" \
+    'hs "$STUBS" POSTMASTER_HOST=tmux -- close "$clone" >/dev/null && [ "$(calls tmux | grep -c "^kill-window")" -eq 3 ]'
 
   echo "interactive sessions"
   hs "$SYS" -- spawn postmaster-repo "$repo" -- claude >/dev/null 2>&1; a=$?
@@ -1114,11 +1150,11 @@ live_test() {
   opened=() tsession=""
   trap 'for (( i=${#opened[@]}-1; i>=0; i-- )); do herdr workspace close "${opened[i]}" >/dev/null 2>&1; done
         [ -n "$tsession" ] && tmux kill-session -t "=$tsession" >/dev/null 2>&1
-        rm -r -- "$tmp" 2>/dev/null' EXIT
+        rm -r -- "$tmp" </dev/null 2>/dev/null' EXIT
   openspace() { herdr worktree list --cwd "$1" 2>/dev/null | python3 -c 'import json, sys
 d = json.load(sys.stdin)
 print(([w.get("open_workspace_id") for w in d["result"]["worktrees"] if w["path"] == sys.argv[1]] or [None])[0] or "")' "$1" 2>/dev/null; }
-  local got wt rs space pane tab info seen i screen rev rspace before
+  local got wt rs space pane tab info seen i screen rev rspace cspace before
   ( cd "$tmp/caller" && ./fixed.sh > "$tmp/direct.out" 2> "$tmp/direct.err" )
   echo "detected here: $(detect)"
 
@@ -1162,6 +1198,11 @@ print(([w.get("open_workspace_id") for w in d["result"]["worktrees"] if w["path"
     got=$(cd "$tmp/caller" && "$SELF" run "$NAME review" "$rev" --marker ../logs/l2.done -- ./fixed.sh)
     rspace=$(printf '%s' "$got" | sed -n 's/.*space=\([^ ]*\).*/\1/p'); [ -n "$rspace" ] && opened+=("$rspace")
     check "a detached reviewer scratch opens as a space too" '[ -n "$rspace" ] && [ "$(openspace "$rev")" = "$rspace" ] && marker "$tmp/logs/l2.done" 60' "$got"
+    got=$(cd "$tmp/caller" && "$SELF" run "$NAME security review" "$clone" --marker ../logs/l7.done -- ./fixed.sh)
+    cspace=$(printf '%s' "$got" | sed -n 's/.*space=\([^ ]*\).*/\1/p'); [ -n "$cspace" ] && opened+=("$cspace")
+    check "a reviewer's scratch clone opens as a space of its own" \
+      '[ -n "$cspace" ] && [ "$(openspace "$clone")" = "$cspace" ] && [ "$(herdr workspace get "$cspace" | json "d[\"result\"][\"workspace\"][\"label\"]")" = "$NAME security review" ] && marker "$tmp/logs/l7.done" 60' "$got"
+    check "and close shuts it" '"$SELF" close "$clone" >/dev/null && [ -z "$(openspace "$clone")" ]'
     "$SELF" close "$repo" >/dev/null 2>&1; i=$?
     check "close refuses the repository's own space" '[ $i -eq 2 ]'
     check "close shuts the worktree's space, and only that" '"$SELF" close "$wt" >/dev/null && [ -z "$(openspace "$wt")" ] && [ "$(openspace "$rev")" = "$rspace" ]'

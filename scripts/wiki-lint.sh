@@ -12,7 +12,7 @@
 #   exit 1  faults found, one per line on stdout
 #   exit 2  usage, or no wiki to check
 set -uo pipefail
-HERE=$(cd "$(dirname "$0")" && pwd -P)
+HERE=$(CDPATH= cd -P -- "$(dirname -- "$0")" && pwd -P)
 SELFTEST=0
 case ${1:-} in
   --self-test) SELFTEST=1; REPO=$(dirname "$HERE") ;;
@@ -155,10 +155,10 @@ fi
 # and one positive control per check, each asserting it failed for its own reason rather
 # than for some other fault the fixture happened to introduce.
 tmp=$(mktemp -d) || exit 2
-trap 'rm -r -- "$tmp" 2>/dev/null' EXIT
+trap 'rm -r -- "$tmp" </dev/null 2>/dev/null' EXIT
 
 fresh() {  # reset the scratch copy to the repo's current wiki and raw
-  rm -r -- "$tmp/wiki" "$tmp/raw" 2>/dev/null
+  rm -r -- "$tmp/wiki" "$tmp/raw" </dev/null 2>/dev/null
   cp -r "$REPO/wiki" "$tmp/wiki"
   if [ -d "$REPO/raw" ]; then cp -r "$REPO/raw" "$tmp/raw"; else mkdir "$tmp/raw"; fi
 }

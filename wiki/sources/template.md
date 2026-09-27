@@ -24,6 +24,7 @@ than implying the record is complete.
 - Ticket: `<id>`, one line on what it asked for
 - Lanes: `<name>` (`<harness>`, `<model>`), one per line; which were workhorses, which reviewers
 - Coachman: `<harness>`, `<model>`
+- Turnpikes: the waybill's `turnpikes:` line, and the legs the run had
 - Outcome: shipped, abandoned or still open, and the date
 
 ## What the synthesis took (bears on H1)

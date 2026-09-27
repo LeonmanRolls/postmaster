@@ -5,7 +5,7 @@
 #
 #   exit 0 always; the table is the result
 set -uo pipefail
-HERE=$(cd "$(dirname "$0")" && pwd -P)
+HERE=$(CDPATH= cd -P -- "$(dirname -- "$0")" && pwd -P)
 CONFIG=${POSTMASTER_CONFIG:-$HOME/.postmaster/config.toml}
 row() { printf '  %-12s %-12s %s\n' "$1" "$2" "$3"; }
 row TRACKER AVAILABLE "HOW IT IS REACHED"
@@ -38,6 +38,12 @@ else
   row plane no "$(printf '%s' "$out" | head -1)"
 fi
 
+# Local: tickets in each repository's own git directory, through scripts/local.sh. There is
+# nothing to reach and no login; it needs only git and python3 with the modules it imports.
+if command -v git >/dev/null 2>&1 && python3 -c 'import fcntl, json' 2>/dev/null; then
+  row local yes "no service, no login; a repo's store is made with: scripts/local.sh <repo> store init"
+else row local no "needs git and python3"; fi
+
 # Hosted and self-hosted trackers are reached through whatever tooling the user's agent
 # provides (an MCP server, a CLI). That is a property of their agent setup, not of this
 # machine, and this script deliberately does not read any one harness's config to guess at it.
@@ -46,4 +52,5 @@ echo
 echo "  GitHub Issues is the default: the tickets sit on a GitHub Projects board the user"
 echo "  can open. \"partial\" names the one command the user runs to finish it. \"ask\""
 echo "  means this script cannot tell, so the user must say: an MCP being registered is"
-echo "  not the same as the service being up."
+echo "  not the same as the service being up. A repo whose local store exists uses local,"
+echo "  whatever the config names."

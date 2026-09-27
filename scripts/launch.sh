@@ -6,6 +6,7 @@
 #   launch.sh form   <name> [--leg <leg>] [--run <dispatch>]
 #   launch.sh launch <name> <cwd> <prompt-file> [--leg <leg>] [--last <file>] [--run <dispatch>]
 #   launch.sh resume <name> <cwd> <thread-id> <prompt-file> [--leg <leg>] [--run <dispatch>]
+#   launch.sh skill  <name> <skill> [--run <dispatch>]
 #   launch.sh --self-test
 #
 # The config is the live one, ~/.postmaster/config.toml (POSTMASTER_CONFIG overrides the path),
@@ -27,13 +28,17 @@
 # sourced last, once the command, its directory and its stdin are fixed, so its assignments
 # reach the harness and not this script's choices; it runs as code, and is the user's to write.
 # The events stream goes to stdout; the caller redirects and backgrounds. --last names the file
-# a harness writes its final message to, where the harness supports it (codex -o).
+# a harness writes its final message to, where the harness supports it (codex -o). `skill`
+# prints the prompt that invokes the lane's harness's own skill (harnesses.md, Own review
+# skills); `launch` runs it like any other prompt. The one skill is security-review.
 #
-#   exit 0  the form was printed, or the harness exited 0
+#   exit 0  the form or the skill's prompt was printed, or the harness exited 0
 #   exit 1  usage, config or run.json missing or unreadable, unknown name, a leg that is not
 #           synthesis, review or ship, the coachman launched or resumed with no --leg, a
-#           coachman or fallback on a lane's model, harness not on PATH, env_file missing, or a
-#           form this script does not have (muse; agy resume)
+#           coachman or fallback on a lane's model, harness not on PATH, env_file missing, a
+#           form this script does not have (muse; agy resume), or a skill that is not
+#           security-review
+#   exit 3  skill: the lane's harness has no such skill recorded
 #   else    the harness's own exit code
 set -uo pipefail
 CONFIG=${POSTMASTER_CONFIG:-$HOME/.postmaster/config.toml}
@@ -42,17 +47,17 @@ if [ "${1:-}" = --self-test ]; then
   # Each control runs this script on a fixture config, with stub harnesses first on PATH.
   # `form` only prints, so nothing is launched. A run's record is written from a fixture by
   # run-meta.sh, as at dispatch, so what this script reads is what that one writes.
-  self=$(cd "$(dirname "$0")" && pwd -P)/$(basename "$0")
+  self=$(CDPATH= cd -P -- "$(dirname -- "$0")" && pwd -P)/$(basename -- "$0")
   here=$(dirname "$self")
   tmp=$(mktemp -d) || exit 1
-  trap 'rm -r -- "$tmp" 2>/dev/null' EXIT
+  trap 'rm -r -- "$tmp" </dev/null 2>/dev/null' EXIT
   # A stub prints its arguments and PROBE, which an env file may set, so a launch or a resume
   # shows the harness, model, effort and env file it would run on.
   mkdir "$tmp/bin" "$tmp/wt"
-  for h in claude pi; do
+  for h in claude pi codex; do
     printf '#!/bin/sh\necho "$@ probe=${PROBE:-}"\n' > "$tmp/bin/$h" && chmod +x "$tmp/bin/$h"
   done
-  [ -x "$tmp/bin/claude" ] && [ -x "$tmp/bin/pi" ] || { echo "self-test: cannot write the stub harnesses"; exit 1; }
+  [ -x "$tmp/bin/claude" ] && [ -x "$tmp/bin/pi" ] && [ -x "$tmp/bin/codex" ] || { echo "self-test: cannot write the stub harnesses"; exit 1; }
   printf 'Continue.\n' > "$tmp/prompt.txt"
   fixture() {  # fixture <name> [<key>...]; each key in [team.coachman_legs] runs on <key>-model
     local name=$1 k; shift
@@ -230,13 +235,22 @@ PY
     && ok "no launch or resume in coachman.md or postmaster.md lacks --run <dispatch>" \
     || fail "no launch or resume in coachman.md or postmaster.md lacks --run <dispatch>"
 
+  echo "skills"
+  printf '[lanes.one]\nharness = "claude"\nmodel = "lane-model"\n\n[lanes.two]\nharness = "codex"\nmodel = "other-model"\n' > "$tmp/skills.toml"
+  run skills skill one security-review
+  [ $rc -eq 0 ] && [ "$out" = /security-review ] && ok "a claude lane's security review skill is /security-review" || fail "a claude lane's security review skill is /security-review"
+  run skills skill two security-review
+  [ $rc -eq 3 ] && [ -z "$out" ] && case $err in *"no security review skill"*) true ;; *) false ;; esac \
+    && ok "a harness with no security review skill is exit 3, never a prompt" || fail "a harness with no security review skill is exit 3, never a prompt"
+  refused "a skill that is not recorded is refused" skills "no such skill: code-review" skill one code-review
+
   echo
   [ "$fails" -eq 0 ] && { echo "self-test: all controls behaved"; exit 0; }
   echo "self-test: $fails control(s) misbehaved"; exit 1
 fi
 
 die() { echo "launch: $*" >&2; exit 1; }
-[ $# -ge 2 ] || die "usage: launch.sh form|launch|resume <name> ... | --self-test"
+[ $# -ge 2 ] || die "usage: launch.sh form|launch|resume|skill <name> ... | --self-test"
 CMD=$1; NAME=$2; shift 2
 LEG=""; LAST=""; RUN=""; STDIN_FILE=""; args=()
 while [ $# -gt 0 ]; do
@@ -327,8 +341,17 @@ eval "$spec"
 command -v "$HARNESS" >/dev/null 2>&1 || die "harness '$HARNESS' is not on PATH"
 if [ -n "${ENV_FILE:-}" ]; then
   ENV_FILE=${ENV_FILE/#\~/$HOME}
-  case $ENV_FILE in /*) ;; *) ENV_FILE=$(cd "$(dirname "$CONFIG")" && pwd -P)/$ENV_FILE ;; esac
+  case $ENV_FILE in /*) ;; *) ENV_FILE=$(CDPATH= cd -P -- "$(dirname -- "$CONFIG")" && pwd -P)/$ENV_FILE ;; esac
   [ -f "$ENV_FILE" ] && [ -r "$ENV_FILE" ] || die "env_file for $NAME not found or not readable: $ENV_FILE"
+fi
+
+if [ "$CMD" = skill ]; then  # the prompt that invokes the lane's harness's own skill
+  [ ${#args[@]} -eq 1 ] || die "skill needs <skill>"
+  case $HARNESS:${args[0]} in
+    claude:security-review) echo /security-review; exit 0 ;;
+    *:security-review) echo "launch: $NAME runs on $HARNESS, which has no security review skill recorded in harnesses.md" >&2; exit 3 ;;
+    *) die "no such skill: ${args[0]}; the one skill is security-review" ;;
+  esac
 fi
 
 prompt_text() {  # the prompt file's text; a missing, unreadable or empty file is refused
@@ -348,7 +371,7 @@ case $CMD in
 esac
 [ "$CMD" = form ] || [ -d "$CWD" ] || die "no such directory: $CWD"
 if [ "$HARNESS" = pi ] && [ "$CMD" != form ]; then
-  prompt_dir=$(cd "$(dirname "$PROMPT")" && pwd -P) || die "cannot resolve prompt file: $PROMPT"
+  prompt_dir=$(CDPATH= cd -P -- "$(dirname -- "$PROMPT")" && pwd -P) || die "cannot resolve prompt file: $PROMPT"
   PROMPT=$prompt_dir/$(basename "$PROMPT")
 fi
 
@@ -418,7 +441,7 @@ if [ "$HARNESS" = codex ] && [ "$CMD" = launch ]; then
   grep -qF "[projects.\"$CWD\"]" "$HOME/.codex/config.toml" \
     || printf '\n[projects."%s"]\ntrust_level = "trusted"\n' "$CWD" >> "$HOME/.codex/config.toml"
 fi
-cd "$CWD" || die "cannot enter $CWD"
+CDPATH= cd -- "$CWD" || die "cannot enter $CWD"
 # A harness whose prompt arrives on stdin reads it from the file, never from an inherited pipe.
 if [ -n "$STDIN_FILE" ]; then exec < "$STDIN_FILE" || die "cannot read $STDIN_FILE"; fi
 # The env file reaches the harness's environment only: the command above is already built.

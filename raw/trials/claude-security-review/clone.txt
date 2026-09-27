@@ -1,0 +1,22 @@
+arm: clone
+prompt file: /security-review
+planted: src/archive.js:5:  exec(`tar czf /tmp/${name}.tgz data`, (err) => done(err, `/tmp/${name}.tgz`));
+git: git version 2.43.0
+diff against origin/HEAD in the scratch: src/archive.js src/server.js
+claude_code_version: 2.1.283
+model: claude-opus-5-5
+security-review offered: True
+exit: 0, stderr bytes: 0
+tool calls: Agent 3, Bash (subagent) 3, Read (subagent) 2
+result lines: 1
+result 1: subtype=success is_error=False num_turns=4 duration_ms=71942 terminal_reason=completed
+  starts: # Vuln 1: Command Injection: `src/archive.js:5`
+--- the last result line's text ---
+# Vuln 1: Command Injection: `src/archive.js:5`
+
+* Severity: High
+* Category: `command_injection`
+* Confidence: 9/10
+* Description: The new `/archive` handler (`src/server.js:12`) passes `url.searchParams.get("name")` to `archive()` without any checks. `archive()` then puts that value into a shell command string, `` exec(`tar czf /tmp/${name}.tgz data`) ``. `exec` runs the string through `/bin/sh -c`. `URLSearchParams` decodes the value before it is used, so shell characters such as `;`, `|`, `$()`, backticks, spaces and newlines all reach the shell. The existing `src/report.js` avoids this by calling `execFile("du", ["-sh", dir])` with no shell. The new code breaks that pattern.
+* Exploit Scenario: A request to `GET /archive?name=x;id>/tmp/pwned;` makes the shell run `tar czf /tmp/x`, then `id>/tmp/pwned`. The injected command runs as the server's user. The server listens on `127.0.0.1:8080` with no authentication, so any local user or process can send this request. A web page open in the user's browser may also be able to trigger it with a plain cross-site GET, for example `<img src="http://127.0.0.1:8080/archive?name=...">`. The command runs even though the page cannot read the response. Some browsers may block this route with their private network access checks.
+* Recommendation: Stop using a shell. Call `execFile("tar", ["czf", outPath, "data"])` as `report.js` already does. Also check `name` against a strict allowlist such as `/^[A-Za-z0-9_-]{1,64}$/`, or generate the file name on the server. Removing the shell alone still lets `../` in `name` choose where the archive is written, so the allowlist is needed as well.

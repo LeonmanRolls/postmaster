@@ -21,7 +21,7 @@
 #   exit 0  every link is in place, or would be (--dry-run), or is removed (--remove)
 #   exit 1  usage, no skills in the checkout, a bare main checkout, or something in the way
 set -uo pipefail
-HERE=$(cd "$(dirname "$0")" && pwd -P)
+HERE=$(CDPATH= cd -P -- "$(dirname -- "$0")" && pwd -P)
 HARNESSES="claude codex grok agy muse pi mimo"
 
 skills_folder() {  # skills_folder <harness>: the user-level folder its skills are linked into; nothing if none
@@ -45,7 +45,7 @@ checkout_root() {  # checkout_root <tree>: the checkout whose skills are linked,
   (cd -P "$(printf '%s\n' "$list" | sed -n '1s/^worktree //p')" && pwd)
 }
 
-same_dir() { [ -d "$1" ] && [ -d "$2" ] && [ "$(cd -P "$1" && pwd)" = "$(cd -P "$2" && pwd)" ]; }
+same_dir() { [ -d "$1" ] && [ -d "$2" ] && [ "$(CDPATH= cd -P -- "$1" && pwd)" = "$(CDPATH= cd -P -- "$2" && pwd)" ]; }
 
 plan() {  # plan <root>: one tab-separated line per path, first field the verdict
   local root=$1 h folder key seen="" skill name path target
@@ -57,7 +57,7 @@ plan() {  # plan <root>: one tab-separated line per path, first field the verdic
     [ -n "$folder" ] || { printf 'no-folder\t%s\t%s\n' "$h" "$root/skills/postmaster/SKILL.md"; continue; }
     if [ -L "$folder" ] && [ ! -d "$folder" ]; then printf 'in-the-way\t%s\ta link to %s\n' "$folder" "$(readlink "$folder")"; continue; fi
     if [ -e "$folder" ] && [ ! -d "$folder" ]; then printf 'in-the-way\t%s\ta file\n' "$folder"; continue; fi
-    key=$folder; [ -d "$folder" ] && key=$(cd -P "$folder" && pwd)
+    key=$folder; [ -d "$folder" ] && key=$(CDPATH= cd -P -- "$folder" && pwd)
     case $seen in *"<$key>"*) printf 'shared\t%s\t%s\n' "$h" "$folder"; continue ;; esac
     seen="$seen<$key>"
     for skill in "$@"; do
@@ -136,7 +136,7 @@ esac
 # the scripts use, so no real skills folder, harness or network is touched. The checkout under
 # test is linked directly; which checkout a real run links is tested last, on fixtures.
 tmp=$(mktemp -d) || exit 1
-trap 'rm -r -- "$tmp" 2>/dev/null' EXIT
+trap 'rm -r -- "$tmp" </dev/null 2>/dev/null' EXIT
 TOOL=$(dirname "$HERE")
 mkdir -p "$tmp/bin" "$tmp/home" "$tmp/elsewhere" || exit 1
 for t in bash sh env git python3 readlink dirname basename mkdir ln rm sed grep cat mktemp cmp sort awk head tr ls cut chmod cp; do

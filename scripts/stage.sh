@@ -21,7 +21,7 @@
 #   exit 3  the run is done or abandoned, and only the postmaster moves it on
 #   exit 4  a terminal stage set by any actor but the postmaster
 set -uo pipefail
-HERE=$(cd "$(dirname "$0")" && pwd -P)
+HERE=$(CDPATH= cd -P -- "$(dirname -- "$0")" && pwd -P)
 STAGES="dispatched bootstrapped workhorses-running synthesis checkpoint-1 review shipping shipped done abandoned"
 
 set_stage() {  # set_stage <dispatch> <stage> <actor>
@@ -97,7 +97,7 @@ esac
 
 # --- self-test ----------------------------------------------------------------------------
 tmp=$(mktemp -d) || exit 1
-trap 'rm -r -- "$tmp" 2>/dev/null' EXIT
+trap 'rm -r -- "$tmp" </dev/null 2>/dev/null' EXIT
 d="$tmp/project/RUN-1"; mkdir -p "$d"
 fails=0
 ok()   { printf '  ok   %s\n' "$1"; }

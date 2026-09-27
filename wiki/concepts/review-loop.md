@@ -11,8 +11,8 @@ updated: 2026-09-27
 **Claim.** Style, bug and security review work better as one loop in one leg than as three
 passes in three legs. Each round runs every lens still open on one snapshot: all three in round
 1, then bug and security until clean. It should take fewer rounds, it needs one leg start-up
-instead of three, and every fix is re-reviewed by both gating lenses unless the loop stops at
-its round cap.
+instead of three, and every fix is re-reviewed by the gating lenses a ticket names unless the
+loop stops at its round cap.
 
 **Standing: claimed.** This is a decision taken on reasoning. No run has been recorded under
 either design, so neither the time saved nor the coverage gained is measured yet. The change is
@@ -20,7 +20,7 @@ either design, so neither the time saved nor the coverage gained is measured yet
 
 ## The reasoning
 
-- **Each round's fixes are re-reviewed by both gating lenses.** When the passes ran in sequence,
+- **Each round's fixes are re-reviewed by the gating lenses.** When the passes ran in sequence,
   style, then bug, then security, a fix made in the security pass was re-checked only by
   security reviewers. No bug reviewer ever saw it. In the loop, every round after the first runs
   the bug and security lenses on the code as fixed so far, so both see each fix in the next
@@ -93,3 +93,14 @@ reports.
 On 2026-09-27, with #59 reported, the user chose one round of bug review for now, to be
 revisited if many bugs reach production ([when a review loop should stop](review-convergence.md)).
 `coachman.md` still says three rounds until the ticket that changes it lands.
+
+Each lens may have its own reviewer lanes (#63). With one list, a lane chosen for one lens, a
+Claude lane for Claude Code's `/security-review` say, would review style and bugs as well, and
+the choice of a lane for what its harness does well would cost a lane in every lens. A lens
+that names no lanes of its own is reviewed by the reviewer list, as before. The waybill carries
+each lens's lanes, so a run keeps the reviewers it was dispatched with. A lane that reviews
+through its harness's own skill has [a page of its own](own-review-skills.md).
+
+The lenses are now the turnpikes a ticket names, all three by default, and a run whose ticket
+names none has no review leg:
+[a ticket names the turnpikes its run passes through](turnpikes.md).

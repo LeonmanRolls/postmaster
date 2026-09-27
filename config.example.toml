@@ -48,6 +48,13 @@ max_runs = 2                                    # concurrent runs per project
 # [team.coachman_legs]
 # synthesis = { harness = "codex", model = "gpt-6-astra", effort = "max" }
 
+# Optional: a lens's own reviewer lanes, where they differ from `reviewers`, such as a lane
+# whose harness has a skill for that lens alone. A lens not named here is reviewed by
+# `reviewers`. The lenses are the review stage's: `scripts/reviewers.sh lenses` lists them, and
+# `scripts/reviewers.sh lines` refuses any other name, or a lane not defined above.
+# [team.lens_reviewers]
+# security = ["luna", "deepseek", "sentinel"]   # sentinel: a third lane, defined under [lanes]
+
 [postmaster]
 poll_seconds = 120
 
@@ -55,6 +62,9 @@ poll_seconds = 120
 #   github  GitHub Issues on a GitHub Projects board, through the gh CLI (the default; needs
 #           gh logged in with the project scope, nothing else)
 #   plane   Plane work items through its REST API; url and workspace here, the key in env_file
+#   local   tickets in each repository's own git directory, through scripts/local.sh; no
+#           service, no login, nothing more here. A repository whose store exists uses it
+#           whatever this kind is.
 #   other   a tracker the agent reaches through its own tooling, named here and described in
 #           ~/.postmaster/trackers/<name>.md
 [tracker]

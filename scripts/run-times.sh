@@ -87,7 +87,7 @@ PY
 
 # --- self-test ----------------------------------------------------------------------------
 tmp=$(mktemp -d) || exit 1
-trap 'rm -r -- "$tmp" 2>/dev/null' EXIT
+trap 'rm -r -- "$tmp" </dev/null 2>/dev/null' EXIT
 line() { printf '{"ts":"2026-01-01T%s:00Z","project":"p","run":"r","actor":"coachman","action":"%s","target":"%s","detail":""}\n' "$1" "$2" "${3:-}"; }
 fails=0
 check() {  # check <label> <expected exit> [<text the output must contain>...]

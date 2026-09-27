@@ -63,3 +63,6 @@ Stage B runs it again before a ticket is dispatched. Only the user's answer is w
 `ticket-check.sh --splice` changes the sections the user approved and no other line, and the
 `edit` command added to each tracker adapter replaces the body alone, never the title, and
 writes nothing if the ticket changed since it was read.
+
+The shape later gained `## Turnpikes` after `## Direction`:
+[a ticket names the turnpikes its run passes through](turnpikes.md).

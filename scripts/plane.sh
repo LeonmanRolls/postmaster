@@ -561,6 +561,7 @@ def self_test():
         "\n"
         "   So does an indented paragraph after a blank line.",
         "## Direction\n<!-- a template comment is not read: TBD -->\nNone: any approach that meets the criteria.",
+        "## Turnpikes\n<!-- default, none, or turnpike names -->\n`default`",
         "## Notes\nA heading inside a fenced block is not a section:\n\n```\n## Direction\n```"]) + "\n"
     editor = ('<h2 class="editor-heading-block">Acceptance criteria</h2>'
               '<ol class="list-decimal pl-7 space-y-[--list-spacing-y] tight" data-tight="true">'

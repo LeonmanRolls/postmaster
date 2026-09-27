@@ -11,7 +11,8 @@ watch it, and lands its marker on exit (`hosts.md`); that is what makes one wrap
 runbooks correct for every harness and every host.
 
 **`<tool>/scripts/launch.sh` is the executable form of this file.** `launch.sh form <name>` prints the
-exact command for a configured lane or role; `launch` and `resume` run it. The script and this
+exact command for a configured lane or role; `launch` and `resume` run it; `skill` prints the
+prompt that invokes a harness's own review skill (Own review skills, below). The script and this
 file change together, and a form the script refuses (muse; agy resume) is a form this file has
 not recorded yet.
 
@@ -210,6 +211,38 @@ cd <wt> && pi --mode json --approve --model <provider/model> \
   its thread id appears and its resume form.** Fill those in from `muse --help` and a trial
   run before configuring a lane on it; the probe lists it so the gap is visible, not so it is
   chosen.
+
+## Own review skills
+
+Under the security lens, a lane whose harness has its own security review skill runs it in place
+of postmaster's brief (`coachman.md`, Security lens). `<tool>/scripts/launch.sh skill <lane>
+security-review` prints the prompt that invokes it, and exits 3 when the lane's harness has none.
+The prompt goes in the lane's prompt file, and the launch is the ordinary launch form.
+
+| harness | security review skill | source |
+|---|---|---|
+| claude | `/security-review` | a trial, 2.1.283 (`raw/trials/claude-security-review/`) |
+| codex | none: `codex exec review` takes `--uncommitted`, `--base <branch>`, `--commit <sha>` or a prompt of its own, and has no security preset | its help, 0.157.1 |
+| pi | none: its help lists no review command, and its skills come from files (`--skill <path>`) | its help, 0.87.0 |
+| muse | none among its built-in skills | `muse skills list`, 1.4.0 |
+| grok | none: its slash commands have no review command; skills, plugins and workflows could add one | its documentation (docs.x.ai, Modes and Commands), 2026-09 |
+| agy | none: its slash commands have no security review; Google's security extension (`/security:analyze`) is for Gemini CLI only | its documentation (antigravity.google, CLI Reference), 2026-09 |
+
+MiMo Code, which has no adapter here yet, has none either: its `/review` is a general code
+review (its commands, 0.1.15). OpenAI's Codex Security is a CLI of its own
+(`@openai/codex-security`), not a codex skill, and would need an adapter of its own.
+
+**claude's `/security-review`** reviews the change from the merge base of `origin/HEAD` and
+`HEAD`, reading it with `git diff origin/HEAD...`. Where `origin/HEAD` does not resolve, it exits
+0 with an empty result after no turns, having reviewed nothing. A worktree scratch cannot give it
+one: `refs/remotes/origin/HEAD` is shared by every worktree of a repository, and git 2.43
+resolves no per-worktree copy. So the security lens reviews from scratch clones, cut with
+`<tool>/scripts/cut-scratch.sh ... --clone <BASE>`, whose `origin/HEAD` is the branch the repository has
+checked out. The cut, and the check before each launch, refuse a clone where that does not lead
+back to BASE. When it verifies its findings
+in background agents, a headless run ends with one result line per turn, and an earlier one can
+say the agents are still running. Its report is the last result line, which is where the harvest
+reads a lane's final message.
 
 ## Interactive form: the postmaster
 

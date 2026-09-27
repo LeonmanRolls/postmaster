@@ -25,7 +25,7 @@ your harness loaded this file from, or `skills/postmaster` when `AGENTS.md` sent
 the repo here.
 
 ```sh
-t=$(cd -P -- "<skill>/../.." 2>/dev/null && pwd) && test -f "$t/scripts/link-skills.sh" && echo "$t" || { echo "postmaster: <skill> is not a link into a postmaster checkout" >&2; false; }
+t=$(CDPATH= cd -P -- "<skill>/../.." 2>/dev/null && pwd) && test -f "$t/scripts/link-skills.sh" && echo "$t" || { echo "postmaster: <skill> is not a link into a postmaster checkout" >&2; false; }
 ```
 
 It prints `<tool>`. Write that absolute path wherever these runbooks say `<tool>`, and give it to
@@ -116,15 +116,20 @@ The flow is general and carries no assumptions about build tools, docs layout or
 config file before it runs on a plain git repo is a tool nobody adopts.
 
 ```sh
-<tool>/scripts/discover-project.sh "$TARGET"   # gate=… docs=… tracker_prefix=… ambient_context=…
+<tool>/scripts/discover-project.sh "$TARGET"   # gate=… docs=… tracker=… tracker_prefix=… ambient_context=…
 ```
 
+The target's tracker is the kind `tracker` names: `local` when the target's own ticket store
+exists, whatever the config names, and the config's kind otherwise (`trackers.md`, local).
 A github tracker needs the target's board: `<tool>/scripts/github.sh "$TARGET" board` names it, and
 exit 3 means there is none yet, so propose `board init` to the user and hand them the URL
 it prints. A plane tracker needs the target's project identifier: the discovered
 `tracker_prefix` when the target has shipped a ticket, otherwise `<tool>/scripts/plane.sh projects`
-lists the candidates and the user picks. Report what you found on the launch card, and
-ask only about what you could not determine.
+lists the candidates and the user picks. A local tracker needs its store: exit 3 from
+`<tool>/scripts/local.sh "$TARGET" store` means there is none yet, so propose `store init` to the
+user. A github target with no origin remote can have no board, and `discover-project.sh` warns
+of it: propose `<tool>/scripts/local.sh "$TARGET" store init` to the user instead. Report what
+you found on the launch card, and ask only about what you could not determine.
 **If the project has no `AGENTS.md` or equivalent, say so.** Lanes that read no ambient
 context start blind, and that has silently handicapped a lane before. Ask the user for
 the project's risk surfaces (what it binds, allowlists, spawns and serves) where the docs do
@@ -177,9 +182,10 @@ everything the coachman needs and nothing it must go and find:
 
 ```
 # Waybill: <TICKET>
+<the turnpikes: line <tool>/scripts/ticket-check.sh printed for the ticket, whole: turnpikes: <names> or turnpikes: none>
 
 ## Ticket
-<the ticket verbatim: problem, acceptance criteria, direction, notes, User journey if it has one>
+<the ticket verbatim: problem, acceptance criteria, direction, turnpikes, notes, User journey if it has one>
 
 ## Project profile
 repo: <abs path>          default branch: <name>       BASE: <sha>
@@ -191,6 +197,7 @@ risk surfaces: <what the project binds, allowlists, spawns, serves; from its doc
 ## Team
 workhorses: <lane>=<harness>/<model>/<effort>, <lane>=…
 reviewers: <lane>, <lane>
+<lens> reviewers: <lane>, <lane>          (one line for each lens the config gives its own lanes)
 coachman: <harness>/<model>/<effort>      (never a lane's model)
 CHECKPOINT_MODE and MERGE_AUTHORITY come from ship.checkpoint_mode and ship.merge_authority, overridden only where the user says so for this run
 

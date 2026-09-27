@@ -19,7 +19,7 @@ GLOB=${2:?}
 COUNT=${3:?}
 TIMEOUT=${4:?}
 
-DIR=$(cd "$DIR" 2>/dev/null && pwd -P) || { echo "wait-for-markers: no such dir: $1" >&2; exit 1; }
+DIR=$(CDPATH= cd -P -- "$DIR" 2>/dev/null && pwd -P) || { echo "wait-for-markers: no such dir: $1" >&2; exit 1; }
 count() { find "$DIR" -maxdepth 1 -name "$1" 2>/dev/null | wc -l | tr -d ' '; }
 
 probe="$DIR/.wait-for-markers-control.$$"
