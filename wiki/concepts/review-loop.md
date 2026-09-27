@@ -90,10 +90,6 @@ The cap was five rounds when the loop was introduced. On 2026-09-26 the user set
 after #39's own review ran four rounds without a clean one and stopped on the repeated-class
 rule. It stays at three until #59, the research on what should end an AI review loop,
 reports.
-On 2026-09-27, with #59 reported, the user chose one round of bug review for now, to be
-revisited if many bugs reach production ([when a review loop should stop](review-convergence.md)).
-`coachman.md` still says three rounds until the ticket that changes it lands.
-
 Each lens may have its own reviewer lanes (#63). With one list, a lane chosen for one lens, a
 Claude lane for Claude Code's `/security-review` say, would review style and bugs as well, and
 the choice of a lane for what its harness does well would cost a lane in every lens. A lens
@@ -104,3 +100,7 @@ through its harness's own skill has [a page of its own](own-review-skills.md).
 The lenses are now the turnpikes a ticket names, all three by default, and a run whose ticket
 names none has no review leg:
 [a ticket names the turnpikes its run passes through](turnpikes.md).
+
+On 2026-09-27, with #59 reported, the user chose one round of bug review for now, to be
+revisited if many bugs reach production ([when a review loop should stop](review-convergence.md)).
+`coachman.md` still says three rounds until the ticket that changes it lands.
