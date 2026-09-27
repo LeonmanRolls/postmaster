@@ -63,26 +63,40 @@ def task_files(ev):
             and e.get("subtype") == "task_notification" and e.get("output_file")]
 
 
+def paragraph(lines, i):
+    """The lines from i to the next blank one."""
+    para = []
+    for l in lines[i:]:
+        if not l.strip():
+            break
+        para.append(l)
+    return para
+
+
 def skill_prompt(text):
     """The passages of a skill's prompt that choose what it reviews: the target it was given, the
-    level's tag line, and the paragraph that says which diff to read."""
-    out, lines = [], text.splitlines()
+    level's tag line, and the paragraph that says which diff to read, under its heading where the
+    level's prompt has one."""
+    out, lines, told = [], text.splitlines(), False
     for i, line in enumerate(lines):
-        if line.startswith("Review target:") or (line.startswith("`") and "effort →" in line):
+        if line.startswith("Review target:") or (line.startswith("`") and line.endswith("`") and "\u2192" in line):
             out.append(line)
         elif line.startswith("## Turn 1") or line.startswith("## Phase 0"):
-            para = []
-            for l in lines[i + 2:]:
-                if not l.strip():
-                    break
-                para.append(l)
+            para = paragraph(lines, i + 2)
             out.append("%s: %s" % (line[3:], " ".join(para)))
+            told = told or any("@{upstream}" in l for l in para)
+    if not told:  # a level with no such heading says it in the paragraph that names @{upstream}
+        i = next((i for i, l in enumerate(lines) if "@{upstream}" in l), None)
+        if i is not None:
+            while i > 0 and lines[i - 1].strip():
+                i -= 1
+            out.append("diff rule: %s" % " ".join(paragraph(lines, i)))
     return out
 
 
 def claude(ev, tasks):
     init = next((e for e in ev if e.get("type") == "system" and e.get("subtype") == "init"), {})
-    uses, results, tools, prompt = {}, {}, {}, []
+    uses, results, tools, prompt, reported = {}, {}, {}, [], []
     for evs, tag in [(ev, "")] + [(events(t), " (forked task)") for t in tasks]:
         for e in evs:
             msg = e.get("message") or {}
@@ -94,6 +108,8 @@ def claude(ev, tasks):
                     key = c["name"] + (" (subagent)" if e.get("parent_tool_use_id") else "") + tag
                     tools[key] = tools.get(key, 0) + 1
                     uses[c["id"]] = c
+                    if c["name"] == "ReportFindings":
+                        reported.append(c.get("input") or {})
                 elif c.get("type") == "tool_result":
                     results[c.get("tool_use_id")] = text_of(c.get("content"))
     commands = [(u["input"].get("command", ""), results.get(i, "")) for i, u in uses.items()
@@ -108,6 +124,16 @@ def claude(ev, tasks):
     head += ["ran as: a %s task, %s, subagent_type %s; its transcript read: %s" % (
         s.get("task_type"), s.get("description"), s.get("subagent_type"), "yes" if tasks else "no") for s in started]
     head += ["skill prompt: %s" % l for l in prompt]
+    # A level whose prompt reports through the findings tool: each call's findings, as the tool got them.
+    for call in reported:
+        found = call.get("findings") or []
+        head.append("findings tool call: level %s, %d finding(s), fields %s" % (
+            call.get("level"), len(found), ", ".join(sorted({k for f in found for k in f})) or "none"))
+        for f in found:
+            head.append("  %s:%s | severity %s | %s" % (f.get("file"), f.get("line"), f.get("severity"),
+                        " ".join(str(f.get("summary") or f.get("comment") or "").split())[:160]))
+        hit = any(str(f.get("file", "")).endswith(PLANTED_FILE) and str(f.get("line")) == str(PLANTED_LINE) for f in found)
+        head.append("planted line %s:%d in the findings tool call: %s" % (PLANTED_FILE, PLANTED_LINE, "yes" if hit else "no"))
     report = (res[-1].get("result") if res else "") or ""
     return head, commands, tools, ends, report
 

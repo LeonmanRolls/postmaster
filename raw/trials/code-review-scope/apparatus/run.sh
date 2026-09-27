@@ -13,10 +13,11 @@
 # config. codex and MiMo Code have no review form in launch.sh, so their commands are built here.
 # MIMO_ENV_FILE names the file that sets MiMo Code's key; it is sourced into the MiMo process
 # alone and never printed. CLAUDE_MODEL, CODEX_MODEL and MIMO_MODEL choose the models, LEVEL the
-# effort (default low). KEEP names a directory to keep each run's raw stream in, with the
-# transcript of any task or session the review ran in, so the record can be made again with
-# record.py; none of them is ever published, since claude's init event lists the machine's own
-# tools and connectors. Each record keeps only the fields record.py names.
+# effort (default low); a run at another level is recorded as <run>-<level>. KEEP names a
+# directory to keep each run's raw stream in, with the transcript of any task or session the
+# review ran in, so the record can be made again with record.py; none of them is ever published,
+# since claude's init event lists the machine's own tools and connectors. Each record keeps only
+# the fields record.py names.
 set -uo pipefail
 usage="usage: run.sh <postmaster-checkout> <out-dir> [<run>...]"
 ROOT=$(cd "${1:?$usage}" && pwd -P) || exit 1
@@ -96,11 +97,12 @@ versions=$(printf 'claude %s; codex %s; mimo %s' "$(claude --version 2>/dev/null
   "$(codex --version 2>/dev/null | head -1)" "$(mimo --version 2>/dev/null < /dev/null | head -1)")
 
 for run in $RUNS; do
-  dest=$tmp/target/.worktrees/T-1-rev-bug-$run
+  name=$run; [ "$LEVEL" = low ] || name=$run-$LEVEL   # a run at another level is recorded under its own name
+  dest=$tmp/target/.worktrees/T-1-rev-bug-$name
   "$ROOT/scripts/cut-scratch.sh" "$tmp/target" "$tmp/synthesis" "$dest" "$SNAP" >/dev/null 2>&1 || { echo "run.sh: cannot cut $dest" >&2; exit 1; }
   "$ROOT/scripts/cut-scratch.sh" --check "$dest" "$SNAP" || exit 1
   before=$(git -C "$dest" status --porcelain | wc -l)
-  : > "$KEEP/$run.last"; touch "$KEEP/$run.start"
+  : > "$KEEP/$name.last"; touch "$KEEP/$name.start"
   case $run in
     claude-default) form="/code-review $LEVEL" ;;
     claude-range)   form="/code-review $LEVEL $BASE...HEAD" ;;
@@ -112,34 +114,34 @@ for run in $RUNS; do
   esac
   case $run in
     claude-*)
-      printf '%s\n' "$form" > "$tmp/$run-prompt.txt"
-      POSTMASTER_CONFIG=$tmp/config.toml "$ROOT/scripts/launch.sh" launch sentinel "$dest" "$tmp/$run-prompt.txt" \
-        > "$KEEP/$run.jsonl" 2> "$KEEP/$run.err" ;;
+      printf '%s\n' "$form" > "$tmp/$name-prompt.txt"
+      POSTMASTER_CONFIG=$tmp/config.toml "$ROOT/scripts/launch.sh" launch sentinel "$dest" "$tmp/$name-prompt.txt" \
+        > "$KEEP/$name.jsonl" 2> "$KEEP/$name.err" ;;
     codex-*)
       target=(); [ "$run" = codex-base ] && target=(--base "$BASE")
-      (cd "$dest" && exec codex exec review "${target[@]}" --json -o "$KEEP/$run.last" -m "$CODEX_MODEL" \
+      (cd "$dest" && exec codex exec review "${target[@]}" --json -o "$KEEP/$name.last" -m "$CODEX_MODEL" \
         -c "model_reasoning_effort=\"$LEVEL\"" --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check) \
-        < /dev/null > "$KEEP/$run.jsonl" 2> "$KEEP/$run.err" ;;
+        < /dev/null > "$KEEP/$name.jsonl" 2> "$KEEP/$name.err" ;;
     mimo-*)
       target=(); [ "$run" = mimo-range ] && target=("$BASE...HEAD")
       (cd "$dest" && set -a && . "$MIMO_ENV_FILE" && set +a \
         && exec mimo run --command review --format json -m "$MIMO_MODEL" --variant "$LEVEL" --dangerously-skip-permissions "${target[@]}") \
-        < /dev/null > "$KEEP/$run.jsonl" 2> "$KEEP/$run.err" ;;
+        < /dev/null > "$KEEP/$name.jsonl" 2> "$KEEP/$name.err" ;;
   esac
   rc=$?
   # claude runs the skill as a forked task, whose tool calls are not in the stream but in the
   # task's output file, which the stream names. MiMo Code's subtask streams its own inline.
   if [ "${run%%-*}" = claude ]; then
-    python3 "$HERE/record.py" --task-files "$KEEP/$run.jsonl" | while IFS= read -r f; do
-      cp -- "$f" "$KEEP/$run.task-$(basename "$f" .output).jsonl"
+    python3 "$HERE/record.py" --task-files "$KEEP/$name.jsonl" | while IFS= read -r f; do
+      cp -- "$f" "$KEEP/$name.task-$(basename "$f" .output).jsonl"
     done
   fi
   # codex keeps each thread's model and effort in its rollout: record.py reads those written since
   # the start whose working directory is this scratch.
   rollouts=""
-  [ "${run%%-*}" = codex ] && rollouts=$(find "$HOME/.codex/sessions" -name 'rollout-*.jsonl' -newer "$KEEP/$run.start" 2>/dev/null | tr '\n' ' ')
+  [ "${run%%-*}" = codex ] && rollouts=$(find "$HOME/.codex/sessions" -name 'rollout-*.jsonl' -newer "$KEEP/$name.start" 2>/dev/null | tr '\n' ' ')
   case ${run%%-*} in claude) model=$CLAUDE_MODEL ;; codex) model=$CODEX_MODEL ;; mimo) model=$MIMO_MODEL ;; esac
-  python3 - "$KEEP/$run.meta.json" run="$run" form="$form" level="$LEVEL" exit="$rc" tmp="$tmp" dest="$dest" \
+  python3 - "$KEEP/$name.meta.json" run="$name" form="$form" level="$LEVEL" exit="$rc" tmp="$tmp" dest="$dest" \
     base="$BASE" snap="$SNAP" head_1="$(git -C "$dest" rev-parse HEAD~1)" planted="$PLANTED" versions="$versions" \
     git="$(git --version)" model="$model" dirty_before="$before" dirty_after="$(git -C "$dest" status --porcelain | wc -l)" \
     changed_since_snap="$(git -C "$dest" diff --name-only "$SNAP" | tr '\n' ' ')" rollouts="$rollouts" <<'EOF'
@@ -148,6 +150,6 @@ meta = dict(a.split("=", 1) for a in sys.argv[2:])
 meta["rollouts"] = meta["rollouts"].split()
 json.dump(meta, open(sys.argv[1], "w"), indent=1)
 EOF
-  python3 "$HERE/record.py" "$KEEP" "$run" > "$OUT/$run.txt" || exit 1
-  echo "recorded $OUT/$run.txt"
+  python3 "$HERE/record.py" "$KEEP" "$name" > "$OUT/$name.txt" || exit 1
+  echo "recorded $OUT/$name.txt"
 done

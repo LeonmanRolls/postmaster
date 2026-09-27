@@ -48,16 +48,21 @@ and MiMo Code have no review form in `launch.sh`, so `run.sh` builds theirs: cod
 `/dev/null`, and its key sourced from a file into its process alone. Each runs from inside its
 scratch, at `low`, the lowest level each offers.
 
+One run more, `claude-default-medium`, is claude's form with no target at `medium`. claude's prompt
+above `low` names `HEAD~1` as the fallback where there is no upstream, and its prompt at `low`
+does not.
+
 **What is recorded.** `apparatus/record.py` writes each record from the run's stream and the few
 facts `run.sh` kept. Per run: the form; the model and level asked for; the versions; BASE, HEAD~1
 and SNAP; the planted line; the scratch before and after. For claude, the version and model from
 the init event, whether `/code-review` was offered, how the skill ran, and the passages of the
 skill's prompt that choose the diff. For codex, the model and effort of each thread in the
 scratch from its rollout, the review prompt, the review target and the review's structured
-findings. For MiMo Code, each subtask it launched. Then for every run: each git command the
-reviewer ran, with the files that command's output showed a diff for; the tool counts; how the
-run ended; whether the report cites `src/page.js:8`; and the report. The check for that citation
-is run on three citations and three misses before any record is written.
+findings. For MiMo Code, each subtask it launched. Where claude's prompt has the review report
+through its findings tool, each finding that call carried. Then for every run: each git command
+the reviewer ran, with the files that command's output showed a diff for; the tool counts; how
+the run ended; whether the report cites `src/page.js:8`; and the report. The check for that
+citation is run on three citations and three misses before any record is written.
 
 The streams are not kept. claude's init event lists this machine's own tools and connectors, and
 codex's rollout carries this machine's own instructions. `record.py` writes the scratch's path as
@@ -76,7 +81,11 @@ inline, under the parent's session id.
 `claude-default-first.txt` and `claude-range-first.txt` are an earlier invocation, with the same
 fixture and forms, made before `run.sh` copied the forked task's transcript. The transcript was
 copied afterwards from the path the stream names, and the record made with the same `record.py`.
-codex-default ran in that invocation too, with the same result.
+codex-default ran in that invocation too, with the same result. `claude-default-medium.txt` is a
+fourth invocation, with `LEVEL=medium`, made after `run.sh` learned to name a record for its
+level and `record.py` to record a prompt with no `Turn 1` or `Phase 0` heading and a call to the
+findings tool. Both were checked against every record above first: made again from the kept
+streams, each came out byte for byte the same.
 
 # Results
 
@@ -91,6 +100,16 @@ codex-default ran in that invocation too, with the same result.
   <BASE>...HEAD`. In both runs it ran one command, `git diff <BASE>...HEAD` then `git diff HEAD`,
   once with pathspecs leaving out test files, which showed both files, and reported the planted
   bug at `src/page.js:8`.
+- **claude, no target, at `medium`.** The skill's prompt was a single paragraph: run
+  `git diff @{upstream}...HEAD`, or `git diff main...HEAD` or `git diff HEAD~1` if there is no
+  upstream. Its first command tried `@{upstream}` and `main` and failed with exit code 128. Its
+  second listed the branches and ran `git diff HEAD~1`, the prompted fallback, which showed the
+  last commit only. Its third, having seen `trunk`, ran `git diff trunk...HEAD --stat`, which named
+  both files, and read every source file. It reported the planted bug at `src/page.js:8` twice:
+  in one call to the findings tool, whose finding has the fields `file`, `line`, `summary`,
+  `short_summary`, `failure_scenario` and `category`, and no severity; and in its final message, as
+  a bullet, `` - `src/page.js:8`: ... ``. The call is in the forked task's transcript, not the
+  stream. The report says the review was made against `trunk` because there is no `main`.
 - **codex, no target.** `codex exec review` exited 1 before any model call: `Specify
   --uncommitted, --base, --commit, or provide custom review instructions`.
 - **codex, `--base <BASE>`.** codex took a commit as the base, found the merge base itself, and
@@ -111,12 +130,15 @@ codex-default ran in that invocation too, with the same result.
 
 # What it settles
 
-Facts about three tools at one version each, at their lowest level, in a worktree detached at
-the snapshot of a target whose default branch is `trunk`:
+Facts about three tools at one version each, at their lowest level and for claude also at
+`medium`, in a worktree detached at the snapshot of a target whose default branch is `trunk`:
 
 - claude 2.1.283's `/code-review low <BASE>...HEAD` reviews exactly the change from BASE, in one
-  command. Given no target, it saw the last commit alone first, and reached `trunk...HEAD` in both
-  runs only because the branch list showed `trunk`: the model's judgment, not the skill's rule.
+  command. Given no target, it saw the last commit alone first, at `medium` through the prompted
+  `HEAD~1` fallback, and in all three runs went on to `trunk...HEAD` only because the branch list
+  showed `trunk`: the model's judgment, not the skill's rule. At `low` it reports in its final
+  message, one line per finding; at `medium` through its findings tool, in the forked task, and
+  again in its final message, in a shape of its own choosing.
 - codex-cli 0.157.1's `codex exec review` has no default target, takes a commit as `--base`,
   and in a detached scratch reviews the diff from the merge base it computes.
 - MiMo Code 0.1.15's `/review` reviews uncommitted changes when given no target, which in a
@@ -124,7 +146,8 @@ the snapshot of a target whose default branch is `trunk`:
   which its rules do not name, it reviewed that range. Its subtask launch fails on an invalid
   subagent type, and the review runs because the model recovers.
 
-It does not show how often claude's default reaches the whole change, what any skill does above
-`low` (claude's prompt above `low` names `HEAD~1` as the fallback, read from the 2.1.283 binary
-and not run here), or how well any of them finds bugs against postmaster's brief: one
-planted bug, and one or two runs of each form.
+It does not show how often claude's default reaches the whole change, where no branch names the
+base; what the range forms do above `low`, or codex and MiMo Code above `low`; what claude reports
+at `high`, `xhigh` or `max`, where its prompt at `xhigh` and `max` asks for a JSON array in the
+final message (read from the 2.1.283 binary, not run here); or how well any of them finds bugs
+against postmaster's brief: one planted bug, and one to three runs of each form.
