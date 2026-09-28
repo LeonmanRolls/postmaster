@@ -1,0 +1,9 @@
+# Shared project facts for postmaster. Local role choices and run records stay ignored.
+
+[project]
+default_turnpikes = ["style", "bug", "security"]
+risk_surfaces = "Spawns agent CLIs in bypass modes in isolated worktrees. Reads repository and tracker content through Git and the configured tracker adapter. Writes project settings, run records, worktrees, branches and pull requests; merge authority remains configured for the machine. Serves GitHub Pages and binds no port."
+
+[checks.gate]
+command = '''bash -c 'for f in scripts/*.sh; do bash -n "$f" || exit 1; done && scripts/skill-refs.sh && scripts/wiki-lint.sh && for n in cut-scratch fixture front-door front-door-acceptance github host launch link-skills local log-action plane review-round reviewers run-log run-meta run-times runs-status setup skill-refs stage style-findings ticket-check tool-faults turnpikes verify verify-examples verify-journey verify-library view-stream wait-for-markers wiki-lint; do scripts/$n.sh --self-test || exit 1; done''''
+shows = "Every script parses, the runbook references and wiki lint clean, and the 31 baseline script self-tests pass."

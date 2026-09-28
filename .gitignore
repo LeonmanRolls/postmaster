@@ -6,5 +6,7 @@ config.toml
 # raw/ is committed: it is the wiki's evidence and a citation nobody can follow is not a
 # citation. What must never be committed is a run's automatic record, which lives in each
 # project's own .postmaster/ and is ignored there. Promotion from one to the other is a
-# deliberate, scrubbed decision to publish (raw/README.md is the contract).
-.postmaster/
+# deliberate, scrubbed decision to publish (raw/README.md is the contract). Keep only that
+# folder's ignore rule visible so it works in a fresh checkout too.
+/.postmaster/*
+!/.postmaster/.gitignore

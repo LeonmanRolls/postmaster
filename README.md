@@ -58,8 +58,11 @@ what the services the flow depends on actually do, why the design is shaped as i
 what happens when several models implement one ticket. That last is the founding question,
 not the only subject.
 
-Every run writes its full record — ledger, narrative, harness logs — to its own project's
-`.postmaster/`, which is gitignored: that is the instance's business, not the tool's.
+Every run writes its full record — ledger, narrative, cards, harness event streams and exported
+sessions — to `<project>/.postmaster/runs/`. The folder's `.gitignore` keeps one checkout's
+records and local choices out of another checkout. The optional shared
+`.postmaster/project.toml` is ignored too and is committed only when maintainers deliberately add
+that file. The machine's `~/.postmaster/` remains machine state.
 Promoting one into [`raw/`](raw/README.md) is a separate decision, and a decision to publish:
 it happens after a scrub, only for a target that may be published, and only with what may
 lawfully be redistributed. `raw/` is committed, so any claim can be followed to the record
@@ -87,6 +90,7 @@ scripts/skill-refs.sh [--fix]                                      # every scrip
 scripts/find-projects.sh        # your git projects, most recent first
 scripts/check-target.sh  <path> # 0 usable · 1 not a repo · 2 dirty
 scripts/discover-project.sh <path>                                # gate, docs, tracker and its prefix, and the checks
+scripts/project-settings.sh inspect|report|ensure|write …        # optional project settings and their source
 scripts/front-door.sh <harness> <model> <cwd> <yes|no> <target>   # self or spawn: who runs the stream
 scripts/verify.sh checks|record|arm|run|results|summary …          # the checks a change is verified by
 scripts/verify-examples.sh | verify-journey.sh | verify-library.sh # the defaults beyond the gate
@@ -116,10 +120,19 @@ scripts/wiki-lint.sh [--self-test]                                 # the wiki's 
 scripts/fixture.sh new|score|hidden …                              # a run on a fixture app, scored against a known outcome
 ```
 
-A project may declare how a change to it is verified in `.postmaster/project.toml`, the one
-settings file it commits, in the shape of `project.example.toml`. One that declares nothing gets
-defaults: the gate, and by what discovery finds, a command-line app's ticket examples, a web
-app's browser suite and User journey, or a library's tests through its package name.
+A project may declare shared requirements in `.postmaster/project.toml`, in the shape of
+`project.example.toml`: its default turnpikes, tracker binding by name, risk surfaces and checks.
+Local `.postmaster/settings.toml`, in the shape of `settings.example.toml`, holds this checkout's
+role choices and any local corrections. Both are optional. The shared file cannot contain role
+assignments, credentials or machine paths, and the local file can only select machine-defined
+roles. Precedence is discovery defaults, shared project declaration, local settings, then
+machine configuration for machine-specific values. Local role choices may select only the
+machine-defined lanes and coach roles; project files cannot replace their harnesses, models or
+credentials.
+A ticket names its own turnpikes; project settings say only what `default` means. A project with
+no declarations gets the defaults: its gate, and by what discovery finds, a command-line app's
+ticket examples, a web app's browser suite and User journey, or a library's tests through its
+package name.
 
 ## What it needs
 
@@ -161,8 +174,10 @@ service and no login, the local kind keeps a repo's tickets in its own git direc
 through its own tooling is described once, outside this repo.
 The adapters are in `skills/postmaster/trackers.md`.
 
-**Nothing about a target project has to be configured.** The flow discovers the gate
-command, the docs and the ticket convention. Ask only what discovery cannot answer.
+**Nothing about a target project has to be configured to run.** The flow discovers the gate,
+docs and ticket convention. When a conversation settles a project decision that discovery cannot
+answer, the agent offers the local settings file or the shared declaration and writes it only
+with agreement. A missing file is never a prompt to create an empty one.
 
 ## Native sessions
 
@@ -187,8 +202,9 @@ watched: the pane is a window onto a headless process that exits when it is done
 
 ## Design rules
 
-Nothing repo-specific in the flow. Nothing harness-specific outside an adapter. Anything
-deterministic lives in `scripts/`, because prose is re-derived, and mis-derived, on every
+Project files are optional and discovery remains the default; they record only project decisions
+discovery cannot infer. Nothing harness-specific outside an adapter. Anything deterministic lives
+in `scripts/`, because prose is re-derived, and mis-derived, on every
 run. Every count carries a control that could have come out otherwise. Every action a run
 takes on a project is logged as a structured event, so what the flow did can be audited and
 improved from the record rather than from the narrative.

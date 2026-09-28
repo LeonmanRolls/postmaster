@@ -1,0 +1,20 @@
+# <project>/.postmaster/settings.toml
+#
+# This ignored file holds this checkout's choices. Role names must already exist in the
+# machine's ~/.postmaster/config.toml; harnesses, models and credentials stay there.
+# Copy only the sections you need. This file is an example, not a file to commit into a project.
+
+[roles]
+workhorses = ["alpha", "beta"]
+reviewers = ["alpha", "beta"]
+coachman = "coachman" # or "coachman_fallback"
+
+[roles.lens_reviewers]
+security = ["alpha", "beta"]
+
+[project]
+default_turnpikes = ["style", "bug", "security"]
+risk_surfaces = "Processes, network bindings, credentials and data stores the security lens should inspect."
+
+[tracker]
+binding = "the board, workspace or team name for this checkout"

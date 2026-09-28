@@ -118,6 +118,7 @@ config file before it runs on a plain git repo is a tool nobody adopts.
 
 ```sh
 <tool>/scripts/discover-project.sh "$TARGET"   # gate=… docs=… tracker=… tracker_prefix=… ambient_context=… check.<name>=…
+<tool>/scripts/project-settings.sh inspect "$TARGET" # optional project facts and their source
 ```
 
 The target's tracker is the kind `tracker` names: `local` when the target's own ticket store
@@ -135,6 +136,29 @@ you found on the launch card, and ask only about what you could not determine.
 context start blind, and that has silently handicapped a lane before. Ask the user for
 the project's risk surfaces (what it binds, allowlists, spawns and serves) where the docs do
 not say; the security lens reviews against them.
+
+### Optional project settings
+
+`.postmaster/project.toml` is the one shared file a project may choose to commit. It can declare
+what `default` means for its tickets, the tracker binding by name, risk surfaces, and checks. It
+cannot assign roles or name credentials, machine paths or machines. `.postmaster/settings.toml`
+holds this person's choices on this checkout, including which machine-defined lanes fill local
+roles. It cannot set harnesses, models, env files, credentials or paths. Both are optional; a
+missing file is normal and is never a reason to create an empty one or pause discovery.
+
+Follow the resolved values and source labels from `discover-project.sh` and
+`project-settings.sh inspect` when composing the launch card and waybill. Mark each fact as
+discovered, shared or local. A ticket still names its own turnpikes: project settings define only
+the meaning of `default`.
+
+When the conversation settles a project decision that should stay on this checkout, offer
+`.postmaster/settings.toml` and show its contents before writing it. When maintainers should set
+the same requirement for everyone, offer `.postmaster/project.toml` instead and say that is the
+shared file being proposed. Wait for agreement, then write the agreed file with
+`<tool>/scripts/project-settings.sh write "$TARGET" local <file>` or `project <file>`.
+The script validates the file and keeps `.postmaster/` ignored. A shared file is ignored by
+default too; commit only that file deliberately with `git add -f .postmaster/project.toml`.
+Never put paths or credentials in either file.
 
 ## Stage 0: scope, confirm, start
 
@@ -167,17 +191,20 @@ not say; the security lens reviews against them.
    the merge word (`ship.merge_authority`), the session host the fleet will run on
    (`<tool>/scripts/host.sh detect`), and the project facts above. Launch nothing before the user
    picks.
-5. **Create the run root** `~/.postmaster/runs/<project>/` (the repo's basename) and keep it
-   in one variable for the steps below:
+5. **Create the project-local run root** and keep it in one variable for the steps below. The
+   project path, not its basename, identifies this run root:
 
    ```sh
-   RUNS=~/.postmaster/runs/"<project>"   # <project> is the repo's basename
+   TARGET_ROOT=$(git -C "$TARGET" rev-parse --show-toplevel)
+   RUNS=$TARGET_ROOT/.postmaster/runs
    mkdir -p "$RUNS/postmaster"
+   <tool>/scripts/project-settings.sh ensure "$TARGET_ROOT"
    ```
 
    `<tool>/scripts/log-action.sh` needs the directory to exist, so the postmaster's own
    actions go under `$RUNS/postmaster/`. Log from your first action there. A postmaster
-   that is this session keeps the same records as one you spawn.
+   that is this session keeps the same records as one you spawn. `ensure` creates the folder's
+   ignore rule only; it never creates settings.
 6. **Write the brief** to `$RUNS/postmaster/brief.md`: "You are the postmaster for <project>.
    Read `<tool>/skills/postmaster/postmaster.md` first", then the stream paragraph, the project
    profile, the configured team, who says the merge word, the session host, `<tool>` and the
@@ -218,7 +245,7 @@ not say; the security lens reviews against them.
 
 ## The waybill
 
-The postmaster writes one per ticket at `~/.postmaster/runs/<project>/<TICKET>/brief.md`.
+The postmaster writes one per ticket at `<repo>/.postmaster/runs/<TICKET>/brief.md`.
 It is the only thing that travels between the postmaster and a coachman, so it carries
 everything the coachman needs and nothing it must go and find:
 

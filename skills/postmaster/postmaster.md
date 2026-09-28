@@ -16,7 +16,7 @@ cards, and you never do its job.
 
 | Path | What |
 |---|---|
-| `<runs>` = `~/.postmaster/runs/<project>/` | the project's run root; `<project>` is the repo's basename |
+| `<runs>` = `<repo>/.postmaster/runs/` | the project's run root, identified by its path |
 | `<runs>/ledger.jsonl` | every action of every run, appended by `<tool>/scripts/log-action.sh` |
 | `<runs>/postmaster/` | your own dispatch directory: `brief.md`, `actions.jsonl`, `ESCALATION.md` to the user |
 | `<runs>/<TICKET>/` | one run: the waybill, manifest, logs, cards, hand-offs (`coachman.md`, Where things live) |
@@ -50,14 +50,15 @@ the action for anything without its own verb.
    something a person uses carries a `User journey`. The direction is the user's: take it from
    the stream or the ticket's own text, or ask the user for it, and never write one yourself,
    not even "None". The turnpikes are the user's too: take them from the stream or the ticket,
-   or propose `default`, and never write fewer turnpikes than `default`, or `none`, on your own
-   judgment, even where `tracker.postmaster_may_create` lets you create the ticket. A ticket is
+   or propose `default`; the ticket names the turnpikes for its run and may name fewer than the
+   project's defaults, other turnpikes, or `none` when the user says so. Project settings only
+   define what `default` means. A ticket is
    dispatchable when its criteria can be tested at the ticket's
    own interface and its scope names what is out. Anything else is not yet a ticket; it is a
    question for the user.
 3. **Check every ticket's shape** before you accept it or propose it:
    `<tool>/scripts/ticket-check.sh <repo> <id>` for a ticket in the tracker, and
-   `<tool>/scripts/ticket-check.sh --body <file> --title "<title>"` for one you drafted. Log
+   `<tool>/scripts/ticket-check.sh --body <file> --title "<title>" --project <repo>` for one you drafted. Log
    `ticket-check` with the ticket's id, or the draft's file, as the target, and the exit and
    the parts named, or the `turnpikes:` line it prints, as the detail. Exit 0 means the shape
    is complete; whether the ticket is dispatchable is still step 2's test. Exit 1 means it
@@ -65,12 +66,13 @@ the action for anything without its own verb.
    its own line: save the ticket's body as your base with the adapter's `read <id> --body` (a
    draft is its own base), draft each part from the stream and the ticket's own text, and put
    the ticket, the check's lines and your drafts to the user together. A missing
-   `## Turnpikes` is proposed as `default`, with what `<tool>/scripts/turnpikes.sh --list` says it
-   stands for; the user may name fewer, others, or `none`.
+   `## Turnpikes` is proposed as `default`, with what the target project's
+   `<tool>/scripts/turnpikes.sh resolve --project <repo> default` says it stands for; the user
+   may name fewer, others, or `none`.
 4. **Write back the user's answer and nothing else.** Write the parts as the user gave or
    approved them, each under its `##` heading, to a sections file, and splice them into the
    base: `<tool>/scripts/ticket-check.sh --splice <base> <sections> > <new>` changes those sections
-   and no other line. Check `<new>` with `<tool>/scripts/ticket-check.sh --body <new>`. Write it with
+   and no other line. Check `<new>` with `<tool>/scripts/ticket-check.sh --body <new> --project <repo>`. Write it with
    the adapter's `edit <id> <new> <base>` (`trackers.md`), log `ticket-edit`, and check the
    ticket again by its id; a draft's `<new>` replaces its file. `edit` never changes a title,
    so a missing one is the user's to set in the tracker. On exit 4 the ticket changed after
@@ -82,8 +84,8 @@ the action for anything without its own verb.
    user each ticket's title, priority, direction, turnpikes and one-line rationale, then create
    the ones they approve through the tracker adapter, logging `ticket-create` per ticket, and
    check each one again by its new id. Never create a ticket on your own initiative. A ticket
-   whose turnpikes leave out a default one, which `<tool>/scripts/turnpikes.sh short '<its
-   turnpikes: line>'` names, is shown to the user before it is created whatever
+   whose turnpikes leave out a project default, which `<tool>/scripts/turnpikes.sh short --project
+   <repo> '<its turnpikes: line>'` names, is shown to the user before it is created whatever
    `tracker.postmaster_may_create` says, and their word on its turnpikes is logged as a `note`
    naming the ticket and the line.
 6. **Order them.** Dependencies first; then the file surfaces. Two tickets touching the same
@@ -96,17 +98,17 @@ For the next ticket in order, when the run ceiling (`team.max_runs`) has room:
 
 1. **Check the ticket once more:** `<tool>/scripts/ticket-check.sh <repo> <id>` exits 0, logged as
    `ticket-check`. On exit 2 it goes back to Stage A, step 3, and the next ticket in order is
-   taken instead. When `<tool>/scripts/turnpikes.sh short '<the turnpikes: line it printed>'`
-   names any default turnpike, the ledger must hold the user's word on this ticket's turnpikes
+   taken instead. When `<tool>/scripts/turnpikes.sh short --project <repo> '<the turnpikes: line it printed>'`
+   names any project default, the ledger must hold the user's word on this ticket's turnpikes
    (Stage A, step 5); if it does not, ask them, and log their word, before going on.
 2. **Base pre-flight.** `<tool>/scripts/check-target.sh <repo>` exits 0 and the main checkout is on
    the default branch. On 2, the dirty-tree question goes to the user (`SKILL.md`); you
    never stash, reset or discard anything. The config is checked too, for the legs this run
    will have, `<tool>/scripts/turnpikes.sh legs --line '<the turnpikes: line step 1 printed>'`:
-   `<tool>/scripts/launch.sh form coachman --leg <leg>` for each of those legs,
-   `<tool>/scripts/launch.sh form coachman_fallback`, `<tool>/scripts/launch.sh form <lane>` for
+   `<tool>/scripts/launch.sh form coachman --leg <leg> --project <repo>` for each of those legs,
+   `<tool>/scripts/launch.sh form coachman_fallback --project <repo>`, `<tool>/scripts/launch.sh form <lane> --project <repo>` for
    each lane in `team.workhorses`, and, when the legs include `review`,
-   `<tool>/scripts/reviewers.sh lines` and `<tool>/scripts/launch.sh form <lane>` for each lane in
+   `<tool>/scripts/reviewers.sh lines --project <repo>` and `<tool>/scripts/launch.sh form <lane> --project <repo>` for each lane in
    `team.reviewers` and `team.lens_reviewers`, each exit 0. A refusal names what the config must
    change: it goes to the user, and nothing is dispatched. The project's declared checks are
    checked too: `<tool>/scripts/verify.sh checks <repo>` exits 0, and a refusal, naming what
@@ -120,7 +122,8 @@ For the next ticket in order, when the run ceiling (`team.max_runs`) has room:
    `abandoned`; the coachman owns `lanes` and every stage before those; both update fields in
    place and neither rewrites the file. Then record what the run starts from, once:
    `<tool>/scripts/run-meta.sh <dispatch> <repo>` writes `run.json` with the postmaster commit, the
-   config and the harness versions, and nothing edits it afterwards. `<tool>/scripts/verify.sh record
+   resolved machine config, project settings and their sources, and harness versions; nothing edits
+   it afterwards. `<tool>/scripts/verify.sh record
    <repo> <dispatch> --gate '<gate>'` writes `checks.json`, the checks the run is held to, and
    prints them for the waybill; a gate the project declares wins over the launch card's, and
    `record` says so.
@@ -131,8 +134,9 @@ For the next ticket in order, when the run ceiling (`team.max_runs`) has room:
 6. **Write `brief.md`** from the template in `SKILL.md`: the `turnpikes:` line step 1's check
    printed, whole, under the waybill's title, then the ticket verbatim, the project profile (gate,
    build, browser suite, the checks as `verify.sh record` printed them, docs to read first,
-   tracker, risk surfaces), the team from the config
-   with its reviewer lines as `<tool>/scripts/reviewers.sh lines` prints them, `CHECKPOINT_MODE`
+   tracker, risk surfaces), the team from the resolved machine config with its reviewer lines as
+   `<tool>/scripts/reviewers.sh lines --project <repo>` prints them, each project's facts sourced
+   as discovered, shared or local, `CHECKPOINT_MODE`
    from `ship.checkpoint_mode` and `MERGE_AUTHORITY` from `ship.merge_authority`, either
    overridden only where the user said so for this run, the dispatch path and `<tool>`. The
    config here is the one in `run.json`. Then
@@ -279,7 +283,7 @@ On `.card-ready`, read `<dispatch>/card.md` and `<dispatch>/handoff-3.md`:
    the `degrade` lines in `actions.jsonl`; the turnpikes on the card are the waybill's, and
    `actions.jsonl` has `review-launch` lines under each one the review leg runs and under no
    other lens, and each other turnpike's result on the card is in the record its step writes;
-   when `<tool>/scripts/turnpikes.sh short '<the waybill's turnpikes: line>'` names any default
+   when `<tool>/scripts/turnpikes.sh short --project <repo> '<the waybill's turnpikes: line>'` names any project default
    turnpike, the ledger holds the user's word on this ticket's turnpikes; the blind acceptance tests are the first commit on the branch, or the Decisions
    section of `handoff-3.md` carries leg 1's reason for not writing them;
    `<tool>/scripts/verify.sh results <dispatch> <synthesis-wt>` gives a result for every check at
@@ -320,7 +324,7 @@ On `.card-ready`, read `<dispatch>/card.md` and `<dispatch>/handoff-3.md`:
    draft the ticket it would become in `<dispatch>/style-drafts/`, in the ticket shape (Stage A,
    step 2), with the direction the proposal gives for the user to approve or change and
    `default` as its turnpikes; check each draft with `<tool>/scripts/ticket-check.sh --body
-   <draft> --title "<title>"`, and log `ticket-check`. Show the user every line of
+   <draft> --title "<title>" --project <repo>`, and log `ticket-check`. Show the user every line of
    `<dispatch>/style-sort.md` with its reason, the drafts, and the proposals the ledger already
    marks; log a `note` with `style proposal asked: <proposal>` for each draft shown; and carry on
    with the stream. On the user's word for a proposal, create its ticket as Stage A, step 5

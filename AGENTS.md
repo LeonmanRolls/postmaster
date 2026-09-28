@@ -187,8 +187,12 @@ whole system.
 
 ## Design rules for the tool itself
 
-1. **Nothing repo-specific.** No hardcoded paths, hosts, trackers, build tools or user
-   names. The flow discovers what a project needs; it does not demand configuration.
+1. **No project setup is required.** No hardcoded paths, hosts, trackers, build tools or user
+   names. The flow discovers what it can and runs without project files. A project may optionally
+   use `.postmaster/project.toml` for shared requirements and ignored `.postmaster/settings.toml`
+   for local choices that discovery cannot infer or correct; neither may name machine paths or
+   credentials. This softens the original "nothing repo-specific" rule because a correction must
+   survive the run that made it, while discovery remains the normal path.
 2. **Nothing harness-specific in the flow.** Every harness has its own flags and its own
    event format. That belongs behind an adapter (`skills/postmaster/harnesses.md`), not in
    prose telling a reader not to confuse them. Trackers likewise (`skills/postmaster/trackers.md`),
