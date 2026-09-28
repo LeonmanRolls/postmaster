@@ -75,8 +75,8 @@ Clone this repo and open your agent in it. There is no command to memorise and n
 run: `AGENTS.md` tells the agent what to do, and the first time that is setting the machine
 up with you, one question at a time (which agent CLIs fill which role, where tickets live,
 where your projects are, who says the merge word), and linking the skills into your agent CLIs
-so you can start from any project afterwards. After that it helps you choose a project and
-launches a postmaster.
+so you can start from any project afterwards. After that it helps you choose a project and is
+the postmaster in the session you opened, or launches one when it cannot be.
 
 ```sh
 scripts/probe-harnesses.sh      # which agent CLIs are installed
@@ -87,6 +87,7 @@ scripts/skill-refs.sh [--fix]                                      # every scrip
 scripts/find-projects.sh        # your git projects, most recent first
 scripts/check-target.sh  <path> # 0 usable · 1 not a repo · 2 dirty
 scripts/discover-project.sh <path>
+scripts/front-door.sh <harness> <model> <cwd> <yes|no> <target>   # self or spawn: who runs the stream
 scripts/cut-scratch.sh <repo> <source-worktree> <dest> <commit> [--clone <base>]  # reviewer scratch; --kind, --remove
 scripts/wait-for-markers.sh <dir> <glob> <count> <timeout>       # block until a round is in
 scripts/log-action.sh <dispatch> <actor> <action> <target> …     # one JSON line per action
