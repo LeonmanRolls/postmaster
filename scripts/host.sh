@@ -1306,7 +1306,7 @@ print(([w.get("open_workspace_id") for w in d["result"]["worktrees"] if w["path"
     check "its marker lands" 'marker "$tmp/logs/l1.done" 60'
     check "its stream and errors are what a direct run writes" 'cmp -s "$tmp/direct.out" "$tmp/logs/l1.out" && cmp -s "$tmp/direct.err" "$tmp/logs/l1.err"'
     sleep 1; screen=$(herdr pane read "$pane" --source recent-unwrapped --lines 40 2>/dev/null)
-    check "the pane shows one line per event, not raw JSON" \
+    check "the pane shows rendered events, not raw JSON" \
       'printf "%s" "$screen" | grep -q "says: step one" && printf "%s" "$screen" | grep -q "result: success" && ! printf "%s" "$screen" | grep -qF "{\"type\""' "$screen"
     check "and the launch is released when it ends" \
       '[ "$(herdr pane get "$pane" | json "d[\"result\"][\"pane\"].get(\"agent_status\")")" != working ]'

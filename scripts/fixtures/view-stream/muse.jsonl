@@ -1,0 +1,2 @@
+{"payload_type":"tool.result","payload":{"correlation_facts":{"outcome":"success","tool_name":"bash"},"text":"{\n  \"chunk_id\": \"exec-1-1\",\n  \"command\": \"printf 'MUSE_COMMAND_SAMPLE'\",\n  \"description\": \"Print command sample marker\",\n  \"exit_code\": 0,\n  \"terminal_status\": \"completed\",\n  \"output\": \"MUSE_COMMAND_SAMPLE\",\n  \"original_output_bytes\": 19,\n  \"original_output_tokens\": 5,\n  \"truncated\": false\n}"}}
+{"payload_type":"run.terminal.completed","payload":{"terminal":"completed","text":"MUSE_MESSAGE_FIRST_LINE\nMUSE_MESSAGE_SECOND_LINE"}}

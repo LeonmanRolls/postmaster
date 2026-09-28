@@ -22,20 +22,21 @@ Render every agent message and command in full, wrapping it to the pane width, a
 ## Structure
 
 - Change `scripts/view-stream.sh` to preserve and wrap message and command content, render Muse Code text and commands, and extend its self-test.
+- Add the focused recorded Muse Code stream fixture at `scripts/fixtures/view-stream/muse.jsonl`; update the pane-view descriptions in `README.md`, `scripts/host.sh`, `skills/postmaster/hosts.md`, and `skills/postmaster/harnesses.md`.
 - Add this spec and a final `WORKHORSE-SUMMARY.md` at the worktree root.
 
 ## Decisions
 
 - Use Python's standard library to wrap output at the terminal width available to the follower, leaving room for its timestamp; non-follow output keeps a fixed display width.
 - Keep compact summaries for errors and run metadata; full-text treatment applies to messages and commands.
-- The committed Muse trial records event summaries rather than a complete stream. Build the self-test stream only from event types and payload fields established by the Muse adapter and trial notes; do not claim a raw trial contains JSONL it does not preserve.
+- The committed Muse trial records event summaries rather than a complete stream. Capture focused events from a constrained local `muse exec --json` run for the self-test fixture; do not claim a raw trial contains JSONL it does not preserve.
 - The live Herdr pane check belongs to the coachman after synthesis; this lane will verify the follower's output and document that limit.
 
 ## Tasks
 
-- [ ] T001 [P] [AC1] Wrap every message in full, preserving all its lines, in `scripts/view-stream.sh`.
-- [ ] T002 [P] [AC2] Wrap every command in full, preserving all its lines, in `scripts/view-stream.sh`.
-- [ ] T003 [AC3] Render Muse Code messages and command text from its established event records in `scripts/view-stream.sh`.
-- [ ] T004 [AC4] Keep tool output out of the pane and retain its negative control in `scripts/view-stream.sh`.
-- [ ] T005 [AC5] Add multiline, over-width and Muse Code stream controls to `scripts/view-stream.sh --self-test`, and show each fails against the baseline behavior.
-- [ ] T006 [AC6] Keep the `--follow` pane path using the full-text renderer and verify it with a growing stream in `scripts/view-stream.sh --self-test`.
+- [x] T001 [P] [AC1] Wrap every message in full, preserving all its lines, in `scripts/view-stream.sh`.
+- [x] T002 [P] [AC2] Wrap every command in full, preserving all its lines, in `scripts/view-stream.sh`.
+- [x] T003 [AC3] Render Muse Code messages and command text from its established event records in `scripts/view-stream.sh`.
+- [x] T004 [AC4] Keep tool output out of the pane and retain its negative control in `scripts/view-stream.sh`.
+- [x] T005 [AC5] Add multiline, over-width and Muse Code stream controls to `scripts/view-stream.sh --self-test`, and show each fails against the baseline behavior.
+- [x] T006 [AC6] Keep the `--follow` pane path using the full-text renderer and verify it with a growing stream in `scripts/view-stream.sh --self-test`.

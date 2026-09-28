@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Show a harness's event stream readably: one line per event of interest, never raw JSON. This is
-# what a session host's pane shows while a launch runs (scripts/host.sh). Event formats are
-# harness-specific, so this script belongs to the harness adapter beside launch.sh, and
-# harnesses.md says which harness's events it knows.
+# Show a harness's event stream readably, never raw JSON. Messages and commands wrap to the
+# display width. This is what a session host's pane shows while a launch runs
+# (scripts/host.sh). Event formats are harness-specific, so this script belongs to the adapter
+# beside launch.sh, and harnesses.md says which harness's events it knows.
 #
 #   view-stream.sh < <events-file>                           render a stream, then stop
 #   view-stream.sh --follow <file> --pid <pid> [--from <byte>] render the file as it grows,
@@ -10,8 +10,8 @@
 #                                                           and everything it wrote is shown
 #   view-stream.sh --self-test
 #
-# Each event of interest is one line: a session starting, with its thread id; a tool call, with
-# what it was called on; what the model said; an error; the result. Tool output, thinking,
+# Each event of interest is a readable step: a session starting, with its thread id; a tool call,
+# with what it was called on; what the model said; an error; the result. Tool output, thinking,
 # hooks and streaming deltas are left out. A JSON event it does not know is shown by its type,
 # once per run of the same type, so an unknown harness still reads as a sequence of steps. A
 # line that is not JSON is shown as it is, less any control characters, which never reach the
@@ -24,7 +24,7 @@ HERE=$(CDPATH= cd -P -- "$(dirname -- "$0")" && pwd -P)
 
 # The program is passed with -c, not on stdin: stdin is the stream it renders.
 read -r -d '' PROG <<'PY'
-import json, os, re, shutil, sys, time
+import json, os, re, shutil, sys, textwrap, time
 
 args = sys.argv[1:]
 follow = pid = None
@@ -39,7 +39,7 @@ while args:
 if follow and pid is None:
     print("view-stream: --follow needs --pid", file=sys.stderr); sys.exit(1)
 
-width = max(40, shutil.get_terminal_size((170, 24)).columns - 10) if follow else 160
+width = max(1, shutil.get_terminal_size((170, 24)).columns) if follow else 160
 
 def short(s, n=None):
     s = " ".join(str(s).strip().splitlines()[:1]) if s is not None else ""
@@ -48,17 +48,30 @@ def short(s, n=None):
 
 def tool_line(name, inp):
     inp = inp if isinstance(inp, dict) else {}
+    pending = [inp]
+    raw_result = inp.get("text")
+    if isinstance(raw_result, str):
+        try:
+            result = json.loads(raw_result)
+            if isinstance(result, dict):
+                pending.append(result)
+        except ValueError:
+            pass
     for key in ("command", "cmd", "file_path", "path", "pattern", "url", "query", "description", "prompt"):
-        v = inp.get(key)
-        if isinstance(v, str) and v.strip():
-            return "%s: %s" % (name, short(v))
+        queue = list(pending)
+        while queue:
+            item = queue.pop(0)
+            v = item.get(key)
+            if isinstance(v, str) and v.strip():
+                return "%s: %s" % (name, v)
+            queue.extend(child for child in item.values() if isinstance(child, dict))
     return str(name)
 
 def text_of(content):
     if isinstance(content, str):
         return content
     if isinstance(content, list):
-        return " ".join(b.get("text", "") for b in content if isinstance(b, dict))
+        return "\n".join(b.get("text", "") for b in content if isinstance(b, dict))
     return ""
 
 QUIET = {
@@ -71,21 +84,31 @@ QUIET = {
     "tool_execution_update", "auto_compaction_end", "auto_retry_end",
 }
 
+muse_deltas = []
+
 def muse(e):
     # muse (muse exec --json): each record names its payload_type, and its stream is the session
     pt, p = str(e.get("payload_type")), e.get("payload") or {}
     if pt == "run.model.configured":
         return "session %s · %s" % ((e.get("stream") or {}).get("id"), p.get("model_id"))
+    if pt == "run.output.delta":
+        delta = p.get("text")
+        if isinstance(delta, str):
+            muse_deltas.append(delta)
+        return None
     if pt == "tool.result":
         facts = p.get("correlation_facts") or {}
         name = facts.get("tool_name") or "tool"
         if facts.get("outcome") not in (None, "success"):
-            return "tool error: %s" % name
-        return tool_line(name, p.get("edit_facts") or {})
+            return "tool error: %s" % tool_line(name, p)
+        return tool_line(name, p)
     if pt.startswith("run.terminal."):
-        said = str(p.get("text") or "").strip()
-        return "result: %s%s" % (p.get("terminal") or pt.split(".")[-1], " · " + short(said) if said else "")
-    return None      # streaming deltas, task lifecycle and bookkeeping: the result carries the text
+        said = p.get("text")
+        if not isinstance(said, str) or not said:
+            said = "".join(muse_deltas)
+        muse_deltas.clear()
+        return "result: %s%s" % (p.get("terminal") or pt.split(".")[-1], " · " + said if said else "")
+    return None      # task lifecycle and bookkeeping are not pane output
 
 mimo_sessions = set()
 
@@ -98,7 +121,7 @@ def mimo(e):
         mimo_sessions.add(sid)
         out.append("session %s" % sid)
     if t == "text" and str(part.get("text", "")).strip():
-        out.append("says: " + short(part.get("text")))
+        out.append("says: " + str(part.get("text")))
     elif t == "tool_use":
         state = part.get("state") or {}
         out.append("tool error: %s" % part.get("tool") if state.get("status") == "error"
@@ -133,7 +156,7 @@ def render(e):
                 continue
             k = b.get("type")
             if t == "assistant" and k == "text" and str(b.get("text", "")).strip():
-                lines.append("says: " + short(b["text"]))
+                lines.append("says: " + str(b["text"]))
             elif t == "assistant" and k == "tool_use":
                 lines.append(tool_line(b.get("name"), b.get("input")))
             elif t == "user" and k == "tool_result" and b.get("is_error"):
@@ -146,7 +169,7 @@ def render(e):
         if isinstance(e.get("total_cost_usd"), (int, float)):
             parts.append("$%.2f" % e["total_cost_usd"])
         if e.get("result"):
-            parts.append(short(e["result"], 100))
+            parts.append(str(e["result"]))
         return "result: " + " · ".join(parts)
     if t == "rate_limit_event":
         status = (e.get("rate_limit_info") or {}).get("status")
@@ -158,12 +181,12 @@ def render(e):
         it = e.get("item") or {}
         k = it.get("type")
         if t == "item.started":
-            return "shell: " + short(it.get("command")) if k == "command_execution" else None
+            return "shell: " + str(it.get("command") or "") if k == "command_execution" else None
         if k == "agent_message":
-            return "says: " + short(it.get("text"))
+            return "says: " + str(it.get("text") or "")
         if k == "command_execution":
             code = it.get("exit_code")
-            return None if code in (0, None) else "shell exit %s: %s" % (code, short(it.get("command")))
+            return None if code in (0, None) else "shell exit %s: %s" % (code, it.get("command") or "")
         if k == "file_change":
             return "edit: " + ", ".join(str(c.get("path")) for c in it.get("changes") or [] if isinstance(c, dict))
         if k == "mcp_tool_call":
@@ -192,7 +215,7 @@ def render(e):
         if m.get("role") != "assistant":
             return None
         said = text_of([b for b in m.get("content") or [] if isinstance(b, dict) and b.get("type") == "text"])
-        return "says: " + short(said) if said.strip() else None
+        return "says: " + said if said.strip() else None
     if t == "agent_end":
         return "done"
     if t == "auto_retry_start":
@@ -215,7 +238,25 @@ def generic(e):
             return "%s: %s" % (t, short(v))
     return t
 
-CONTROL = re.compile(r"[\x00-\x1f\x7f-\x9f]")    # nothing a stream says reaches the terminal as a control
+CONTROL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]")  # preserve line breaks, strip terminal controls
+
+def visible_text(s):
+    s = str(s).replace("\r\n", "\n").replace("\r", "").replace("\t", "    ")
+    return CONTROL.sub("", s)
+
+def wrapped(s, stamp):
+    prefix = time.strftime("%H:%M:%S ") if stamp else ""
+    wrapper = textwrap.TextWrapper(
+        width=width, initial_indent=prefix,
+        subsequent_indent=prefix + "  ",
+        replace_whitespace=False, drop_whitespace=False,
+        break_long_words=True, break_on_hyphens=False,
+    )
+    lines = []
+    for source_line in visible_text(s).split("\n"):
+        parts = wrapper.wrap(source_line)
+        lines.extend(parts if parts else [prefix.rstrip()])
+    return lines
 
 def show(line, stamp):
     line = line.rstrip("\r\n")
@@ -234,7 +275,8 @@ def show(line, stamp):
     else:
         out = short(line)
     for one in (out if isinstance(out, list) else [out] if out else []):
-        print((time.strftime("%H:%M:%S ") if stamp else "") + CONTROL.sub("", one), flush=True)
+        for line in wrapped(one, stamp):
+            print(line, flush=True)
 
 if not follow:
     for line in sys.stdin:
@@ -296,7 +338,7 @@ silent() {  # silent <label> <event>
   [ -z "$got" ] && ok "$1" || fail "$1" "got: $got"
 }
 
-echo "positive controls: each event of interest is one readable line"
+echo "positive controls: event text is readable and complete"
 # claude events, trimmed from a recorded claude -p --output-format stream-json run
 shows "claude: a session starts, with its thread id and model" \
   '{"type":"system","subtype":"init","session_id":"a99db1c7-9178","model":"claude-haiku-4-5","tools":["Bash"]}' \
@@ -304,9 +346,9 @@ shows "claude: a session starts, with its thread id and model" \
 shows "claude: a tool call, with what it ran" \
   '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"ls -a","description":"List files"}}]}}' \
   'Bash: ls -a'
-shows "claude: what the model said, first line only" \
+shows "claude: every line of what the model said" \
   '{"type":"assistant","message":{"content":[{"type":"text","text":"The command printed 3 entries.\nMore detail."}]}}' \
-  'says: The command printed 3 entries.'
+  "$(printf 'says: The command printed 3 entries.\nMore detail.')"
 shows "claude: a failed tool call" \
   '{"type":"user","message":{"content":[{"type":"tool_result","is_error":true,"content":"No such file"}]}}' \
   'tool error: No such file'
@@ -317,6 +359,10 @@ shows "codex: a session starts" '{"type":"thread.started","thread_id":"0199a213-
 shows "codex: a shell command" \
   '{"type":"item.started","item":{"id":"item_1","type":"command_execution","command":"bash -lc ls","status":"in_progress"}}' \
   'shell: bash -lc ls'
+long=$(printf '%200s' '' | tr ' ' x)
+long_command=$(printf '{"type":"item.started","item":{"type":"command_execution","command":"%s"}}' "$long")
+long_expected=$(printf 'shell: %s\n  %s' "${long:0:153}" "${long:153}")
+shows "codex: a command longer than the display width wraps without losing text" "$long_command" "$long_expected"
 shows "codex: what the model said" '{"type":"item.completed","item":{"id":"item_3","type":"agent_message","text":"Done."}}' 'says: Done.'
 shows "pi: a session starts" '{"type":"session","version":3,"id":"01a0c7e8-5863","cwd":"/w"}' 'session 01a0c7e8-5863'
 shows "pi: a tool call" '{"type":"tool_execution_start","toolCallId":"t1","toolName":"bash","args":{"command":"ls"}}' 'bash: ls'
@@ -335,6 +381,11 @@ shows "muse: the result, with what the model said" \
   '{"stream":{"kind":"session","id":"s1"},"payload_type":"run.terminal.completed","payload":{"terminal":"completed","text":"DONE"}}' \
   'result: completed · DONE'
 shows "muse: a failed run" '{"stream":{"kind":"session","id":"s1"},"payload_type":"run.terminal.failed","payload":{"terminal":"failed","text":""}}' 'result: failed'
+recorded_muse=$(cat "$HERE/fixtures/view-stream/muse.jsonl")
+got=$(printf '%s\n' "$recorded_muse" | view)
+wanted=$(printf "bash: printf 'MUSE_COMMAND_SAMPLE'\nresult: completed · MUSE_MESSAGE_FIRST_LINE\nMUSE_MESSAGE_SECOND_LINE")
+[ "$got" = "$wanted" ] && ok "muse: a recorded stream shows its full command and message, not tool output" \
+  || fail "muse: a recorded stream shows its full command and message, not tool output" "wanted: $wanted"$'\n'"got:    $got"
 shows "mimo: a session starts, with its thread id, and a first step says nothing more" \
   '{"type":"step_start","sessionID":"ses_ffe5f1e2","part":{"type":"step-start"}}' 'session ses_ffe5f1e2'
 shows "mimo: a tool call, with what it touched" \
@@ -389,6 +440,16 @@ printf 'old line\n' > "$tmp/append.jsonl"; from=$(wc -c < "$tmp/append.jsonl" | 
 out=$(view --follow "$tmp/append.jsonl" --pid "$w" --from "$from")
 case $out in *"old line"*) fail "--from skips what was there before" "$out" ;;
   *"new line"*) ok "--from skips what was there before" ;; *) fail "--from skips what was there before" "$out" ;; esac
+long=$(printf '%200s' '' | tr ' ' x)
+printf '{"type":"item.started","item":{"type":"command_execution","command":"%s"}}\n' "$long" > "$tmp/long.jsonl"
+( : ) & w=$!
+out=$(COLUMNS=60 view --follow "$tmp/long.jsonl" --pid "$w")
+wait "$w"
+plain=$(printf '%s\n' "$out" | sed -E 's/^[0-9]{2}:[0-9]{2}:[0-9]{2} //; s/^  //')
+actual=$(printf '%s' "$plain" | tr -d '\n')
+too_wide=$(printf '%s\n' "$out" | awk 'length($0) > 60 { print; exit }')
+[ "$actual" = "shell: $long" ] && [ -z "$too_wide" ] && ok "a command longer than a live pane wraps fully to its width" \
+  || fail "a command longer than a live pane wraps fully to its width" "$out"
 
 echo
 [ "$fails" -eq 0 ] && { echo "self-test: all controls behaved"; exit 0; }

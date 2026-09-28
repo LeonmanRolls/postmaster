@@ -248,7 +248,9 @@ cd <wt> && env XDG_DATA_HOME=<harness-data>/muse/<key> muse exec --json \
 - The model: `run.model.configured` carries `model_id`, with `source` `startup` on a launch and
   `replay` on a resume. No record carries the effort.
 - Tool calls: each ends in a `tool.result`, whose `correlation_facts` name the tool and its
-  outcome.
+  outcome. For `bash`, `payload.text` is JSON text with the command and its output; the pane
+  shows the command and leaves the output out. The full response is in `payload.text` on the
+  last `run.terminal.*` record.
 - **Its data, per lane and per leg.** Muse Code keeps its sessions under `XDG_DATA_HOME`, and a
   memory that outlives them (`add_memory`, `read_memory`): a fresh session there recalled a word
   an earlier one had been asked to remember. So `launch.sh` gives each lane and each coachman leg
@@ -373,8 +375,9 @@ the headless form above; run it once before relying on it.
 ## The pane view
 
 `<tool>/scripts/view-stream.sh` is the other executable half of this file: it renders an events
-stream one line per event of interest, for a host's pane (`hosts.md`) and for anyone reading a
-stream by hand. It knows claude's, muse's and mimo's events, checked against recorded streams; codex's
+stream as readable steps, wrapping long messages and commands to the pane width, for a host's
+pane (`hosts.md`) and for anyone reading a stream by hand. It knows claude's, muse's and mimo's
+events, checked against recorded streams; codex's
 and pi's, written from the event names this file records and not yet checked against a recorded
 stream;
 any other harness shows by event type, once per run of the same type. A harness whose events it
