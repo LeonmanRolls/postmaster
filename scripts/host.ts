@@ -30,6 +30,7 @@ import {
   openSync,
   readFileSync,
   readdirSync,
+  renameSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -45,7 +46,8 @@ const HERE = scriptsDir(import.meta);
 const SELF = join(HERE, "host.sh");
 const SOURCE = "custom:postmaster";
 const META = "custom:postmaster-meta";
-const STATE = process.env["POSTMASTER_HOST_STATE"] ?? join(process.env["HOME"] ?? "", ".postmaster/host");
+// Where running launches are registered: a runner takes its spec's, and a self-test its fixture.
+let STATE = process.env["POSTMASTER_HOST_STATE"] ?? join(process.env["HOME"] ?? "", ".postmaster/host");
 const PANE_IDS = ["HERDR_PANE_ID", "HERDR_TAB_ID", "HERDR_WORKSPACE_ID", "TMUX_PANE"];
 
 function die(msg: string): never {
@@ -179,33 +181,184 @@ function pgSig(pg: number, signal: NodeJS.Signals): void {
   }
 }
 
-function regAdd(pg: string, cwd: string, name: string): void {
-  mkdirSync(join(STATE, "launches"), { recursive: true });
-  writeFileSync(join(STATE, "launches", pg), `${cwd}\n${name}\n`);
+// --- the registry of running launches ------------------------------------------------------
+// One file per launch, named for its process group: the directory it was placed in, its name,
+// `start <t>` for its group leader's start time (field 22 of /proc/<pid>/stat) and `boot <id>`
+// for the boot it started in. A pid is reused, after a reboot and within one, so a record stands
+// for a launch only while that same leader is alive in that same boot. Once the leader has
+// exited, the runner writes `member <pid> <t>` for each process still in its group, and the
+// record stands for those that still match. A record that stands for nothing is removed by
+// whoever reads it next. One written before the start and boot lines existed is kept only if it
+// was written in this boot by a leader that had already started, and it is then rewritten.
+interface RegRecord {
+  dir: string;
+  name: string;
+  start: string | null;
+  boot: string | null;
+  members: Array<[number, string]>;
+}
+interface Root {
+  kind: "group" | "tree";
+  pid: number;
+  start: string;
 }
 
-function regLive(dir: string): Array<{ pg: string; name: string }> {
-  const result: Array<{ pg: string; name: string }> = [];
-  const dir_path = join(STATE, "launches");
+function fixtureGuard(): void {  // while a self-test runs, the registry is its fixture and never the live one
+  const fixture = process.env["POSTMASTER_HOST_FIXTURE"];
+  if (fixture && !`${STATE}/`.startsWith(`${fixture}/`)) {
+    die(`refusing the registry at ${STATE}: a self-test uses only its fixture, ${fixture}`);
+  }
+}
+
+function bootId(): string {
+  try {
+    return readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim();
+  } catch {
+    return "";
+  }
+}
+
+function bootTime(): number | null {  // when this boot started, in seconds since the epoch
+  try {
+    for (const line of readFileSync("/proc/stat", "utf8").split("\n")) {
+      if (line.startsWith("btime ")) return Number(line.split(/\s+/)[1]);
+    }
+  } catch {
+    /* no /proc */
+  }
+  return null;
+}
+
+function startOf(pid: number): string | null {  // a live process's start time, as the registry records it
+  try {
+    const raw = readFileSync(`/proc/${pid}/stat`, "utf8");
+    const f = raw.slice(raw.lastIndexOf(")") + 2).split(/\s+/);
+    return f[0] === "Z" ? null : (f[19] ?? null);
+  } catch {
+    return null;
+  }
+}
+
+function startedAt(start: string): number | null {  // when a process with this start started
+  const booted = bootTime();
+  if (!/^\d+$/.test(start) || booted === null) return null;
+  const hz = Number(run("getconf", ["CLK_TCK"]).out.trim()) || 100;
+  return booted + Number(start) / hz;
+}
+
+function regLoad(path: string): RegRecord {
+  const lines = readFileSync(path, "utf8").split("\n");
+  const rec: RegRecord = { dir: lines[0] ?? "", name: lines[1] ?? "", start: null, boot: null, members: [] };
+  for (const line of lines.slice(2)) {
+    const sp = line.indexOf(" ");
+    const key = sp < 0 ? line : line.slice(0, sp);
+    const value = sp < 0 ? "" : line.slice(sp + 1);
+    if (key === "start") rec.start = value;
+    else if (key === "boot") rec.boot = value;
+    else if (key === "member") {
+      const sp2 = value.indexOf(" ");
+      const pid = sp2 < 0 ? "" : value.slice(0, sp2);
+      const st = sp2 < 0 ? "" : value.slice(sp2 + 1);
+      if (/^\d+$/.test(pid) && st) rec.members.push([Number(pid), st]);
+    }
+  }
+  return rec;
+}
+
+function regSave(path: string, rec: RegRecord): void {
+  let text = `${rec.dir}\n${rec.name}\nstart ${rec.start ?? ""}\nboot ${rec.boot ?? ""}\n`;
+  for (const [pid, st] of rec.members) text += `member ${pid} ${st}\n`;
+  writeFileSync(`${path}.new`, text);
+  renameSync(`${path}.new`, path);
+}
+
+function regAdd(pg: string, cwd: string, name: string): void {
+  fixtureGuard();
+  mkdirSync(join(STATE, "launches"), { recursive: true });
+  regSave(join(STATE, "launches", pg), { dir: cwd, name, start: startOf(Number(pg)) ?? "", boot: bootId(), members: [] });
+}
+
+function regMembers(pg: number): void {  // its leader has exited: note what is left of its group, or drop it
+  fixtureGuard();
+  const path = join(STATE, "launches", String(pg));
+  let rec: RegRecord;
+  try {
+    rec = regLoad(path);
+  } catch {
+    return;
+  }
+  rec.members = [...buildProcTable()]
+    .filter(([, v]) => v.pgid === pg && !v.zombie)
+    .map(([p, v]): [number, string] => [p, v.start])
+    .sort((a, b) => a[0] - b[0]);
+  if (rec.members.length > 0) regSave(path, rec);
+  else rmSync(path, { force: true });
+}
+
+function regRoots(path: string, pg: number, rec: RegRecord, table: Map<number, ProcInfo>, boot: string): Root[] | null {
+  const leader = table.get(pg);
+  if (rec.start === null && rec.boot === null) {  // written before start and boot were
+    const booted = bootTime();
+    let written: number;
+    try {
+      written = statSync(path).mtimeMs / 1000;
+    } catch {
+      return null;
+    }
+    if (!leader || leader.zombie || booted === null || written < booted) return null;
+    const began = startedAt(leader.start);
+    if (began === null || began > written + 2) return null;  // the pid is newer than the record
+    rec.start = leader.start;
+    rec.boot = boot;
+    regSave(path, rec);
+  }
+  if (!rec.boot || rec.boot !== boot) return null;
+  if (leader && !leader.zombie && rec.start && leader.start === rec.start) {
+    return [{ kind: "group", pid: pg, start: rec.start }];
+  }
+  const roots = rec.members
+    .filter(([p, st]) => {
+      const v = table.get(p);
+      return !!v && !v.zombie && v.start === st;
+    })
+    .map(([p, st]): Root => ({ kind: "tree", pid: p, start: st }));
+  return roots.length > 0 ? roots : null;
+}
+
+// regScan: each launch placed in <dir> that checks out, with its roots; stale records are removed.
+function regScan(dir: string): Array<{ pg: string; name: string; roots: Root[] }> {
+  fixtureGuard();
+  const result: Array<{ pg: string; name: string; roots: Root[] }> = [];
+  const regDir = join(STATE, "launches");
   let files: string[] = [];
   try {
-    files = readdirSync(dir_path);
+    files = readdirSync(regDir).sort();
   } catch {
     return result;
   }
+  const boot = bootId();
+  const table = buildProcTable();
   for (const f of files) {
-    const pg = f;
-    if (!/^\d+$/.test(pg)) continue;
-    if (!pgAlive(Number(pg))) {
-      rmSync(join(dir_path, f), { force: true });
+    if (!/^\d+$/.test(f)) continue;
+    const path = join(regDir, f);
+    let rec: RegRecord;
+    try {
+      rec = regLoad(path);
+    } catch {
       continue;
     }
-    const content = readFileSync(join(dir_path, f), "utf8").split("\n");
-    const cwd = content[0] ?? "";
-    const name = content[1] ?? "";
-    if (cwd === dir) result.push({ pg, name });
+    const roots = regRoots(path, Number(f), rec, table, boot);
+    if (roots === null) {
+      rmSync(path, { force: true });
+      continue;
+    }
+    if (rec.dir === dir) result.push({ pg: f, name: rec.name, roots });
   }
   return result;
+}
+
+function regLive(dir: string): Array<{ pg: string; name: string }> {
+  return regScan(dir).map(({ pg, name }) => ({ pg, name }));
 }
 
 // --- run -----------------------------------------------------------------------------------
@@ -369,6 +522,7 @@ function runner(mode: string, spec: string): void {
   const cwd = readFileSync(join(spec, "cwd"), "utf8");
   const rundir = readFileSync(join(spec, "rundir"), "utf8");
   const state = readFileSync(join(spec, "state"), "utf8");
+  STATE = state;  // the registry this launch's caller uses, never this pane's default
   const out = readFileSync(join(spec, "out"), "utf8");
   const err = readFileSync(join(spec, "err"), "utf8");
   const marker = readFileSync(join(spec, "marker"), "utf8");
@@ -421,8 +575,10 @@ function runner(mode: string, spec: string): void {
   }
 
   const cpid = child.pid ?? 0;
-  if (pidfile) writeFileSync(pidfile, `${cpid}\n`);
+  // The registry record comes before the pidfile, since run returns to its caller the moment the
+  // pidfile holds a pid: a caller that stops the launch then finds it registered.
   regAdd(String(cpid), cwd, name);
+  if (pidfile) writeFileSync(pidfile, `${cpid}\n`);
 
   // Watch for exit and touch marker.
   if (marker) {
@@ -437,11 +593,9 @@ function runner(mode: string, spec: string): void {
 
   child.on("exit", () => {
     try {
-      // Only drop the registry entry once the whole process group is gone, matching the
-      // bash runner: a child left running in the group keeps the launch registered.
-      if (!pgAlive(cpid)) {
-        rmSync(join(state, "launches", String(cpid)), { force: true });
-      }
+      // The leader has exited: note what is left of its group by pid and start time, or drop
+      // the record once the whole group is gone.
+      regMembers(cpid);
     } catch {
       /* ignore */
     }
@@ -471,18 +625,21 @@ function stopCmd(dir: string): number {
     die(`not stopping the launches in ${path} from inside it: that stops this session too`);
   }
   const patience = countVal(process.env["POSTMASTER_HOST_STOP_WAIT"] ?? "20", "POSTMASTER_HOST_STOP_WAIT");
-  const live = regLive(path);
+  const most = countVal(process.env["POSTMASTER_HOST_STOP_MAX"] ?? "512", "POSTMASTER_HOST_STOP_MAX");
+  const live = regScan(path);
   if (live.length === 0) {
     console.log(`no launch is running in ${path}`);
     return 0;
   }
-  const groups = live.map((l) => l.pg);
-  const stopResult = stopTree(patience, groups);
+  const stopResult = stopTree(patience, most, live.flatMap((l) => l.roots));
   if (stopResult.code === 0) {
     console.log(`stopped ${live.length} launch(es) in ${path}: ${stopResult.processes} process(es)`);
     return 0;
   } else if (stopResult.code === 2) {
     warn(`stopped ${live.length} launch(es) in ${path}, but these still run: ${stopResult.survivors}`);
+    return 2;
+  } else if (stopResult.code === 3) {
+    warn(`refused to stop the launches in ${path}, and left them running: ${stopResult.survivors}`);
     return 2;
   } else {
     warn(`could not stop the launches in ${path}: ${stopResult.survivors}`);
@@ -490,8 +647,33 @@ function stopCmd(dir: string): number {
   }
 }
 
-function stopTree(grace: number, groups: string[]): { code: number; processes: number; survivors: string } {
-  const groupSet = new Set(groups.map(Number));
+function argsOf(pid: number): string {  // a process's command line, to recognise what must never be signalled
+  try {
+    return readFileSync(`/proc/${pid}/cmdline`, "utf8").replace(/\0/g, " ").trim();
+  } catch {
+    return "";
+  }
+}
+
+function protectedAs(pid: number, name: string): string | null {  // what a process is, when stop must never signal it
+  const words = argsOf(pid).split(/\s+/).filter((w) => w);
+  const tail = words.slice(1);
+  if (pid === 1) return "the init process";
+  if (name === "systemd") return "a systemd manager";
+  if (name === "herdr" && (tail.length === 0 || tail.includes("server") || tail.some((w) => w.startsWith("--session")))) {
+    return "the Herdr server or a Herdr client";
+  }
+  if (name === "moshi-hook" && tail.includes("serve")) return "the moshi-hook daemon";
+  if (words.some((w) => w.includes("code-server"))) return "code-server";
+  if (name.startsWith("tmux") && (name.includes("server") || tail.length === 0)) return "the tmux server";
+  if (name === "sshd") return "sshd";
+  return null;
+}
+
+// stopTree: each root is a launch whose leader lives (its group) or a process its leader left, as
+// regScan gives them. Code 2 if anything survives; code 3, having signalled none of it, when the
+// set it would signal holds something it must never touch, with the reason in `survivors`.
+function stopTree(grace: number, most: number, roots: Root[]): { code: number; processes: number; survivors: string } {
   const table = buildProcTable();
   const spare = new Set<number>([0, 1, process.pid]);
   {
@@ -501,6 +683,23 @@ function stopTree(grace: number, groups: string[]): { code: number; processes: n
       p = table.get(p)!.ppid;
     }
   }
+  // A root counts only if its process is still the one the registry recorded: same pid, same start.
+  const ok = roots.filter((r) => {
+    const v = table.get(r.pid);
+    return !!v && !v.zombie && v.start === r.start;
+  });
+  const groupSet = new Set(ok.filter((r) => r.kind === "group").map((r) => r.pid));
+  const seeds = new Set(ok.map((r) => r.pid));
+  const belongs = (p: number): boolean => {
+    const seen = new Set<number>();
+    let q = p;
+    while (table.has(q) && !seen.has(q) && q !== 0 && q !== 1) {
+      if (seeds.has(q) || groupSet.has(table.get(q)!.pgid)) return true;
+      seen.add(q);
+      q = table.get(q)!.ppid;
+    }
+    return false;
+  };
   const treeOf = (): Set<number> => {
     const live = new Set<number>();
     for (const [pid, v] of table) {
@@ -508,7 +707,7 @@ function stopTree(grace: number, groups: string[]): { code: number; processes: n
     }
     const hit = new Set<number>();
     for (const pid of live) {
-      if (groupSet.has(table.get(pid)!.pgid)) hit.add(pid);
+      if (groupSet.has(table.get(pid)!.pgid) || seeds.has(pid)) hit.add(pid);
     }
     const kids = new Map<number, number[]>();
     for (const [pid, v] of table) {
@@ -529,10 +728,31 @@ function stopTree(grace: number, groups: string[]): { code: number; processes: n
   };
   // Freeze the tree iteratively: stopping a parent can reveal children.
   const frozen = new Set<number>();
+  // Refuse the whole stop, before any of a batch is signalled, if it is not only ours.
+  const refusal = (fresh: number[]): string | null => {
+    if (frozen.size + fresh.length > most) {
+      return `${frozen.size + fresh.length} processes, more than POSTMASTER_HOST_STOP_MAX (${most})`;
+    }
+    for (const p of [...fresh].sort((a, b) => a - b)) {
+      const name = table.get(p)?.name ?? "?";
+      const what = protectedAs(p, name);
+      if (what) return `${p}/${name} is ${what}`;
+      if (!belongs(p)) return `${p}/${name} is not a process of these launches`;
+    }
+    return null;
+  };
   for (let i = 0; i < 20; i++) {
     refreshProcTable(table);
     const fresh = [...treeOf()].filter((p) => !frozen.has(p));
     if (fresh.length === 0) break;
+    const why = refusal(fresh);
+    if (why) {
+      for (const p of frozen) {  // found only after the first freeze: undo it
+        try { process.kill(p, "SIGCONT"); } catch { /* gone */ }
+      }
+      const undone = frozen.size > 0 ? `; the ${frozen.size} processes frozen before it was found were resumed` : "";
+      return { code: 3, processes: 0, survivors: `${why}${undone}` };
+    }
     for (const p of fresh) {
       try { process.kill(p, "SIGSTOP"); } catch { /* gone */ }
       frozen.add(p);
@@ -760,6 +980,11 @@ function selfTest(): void {
   // Stub hosts on a curated PATH, so no control can reach a live Herdr or tmux server.
   const tmpRaw = run("bash", ["-c", "mktemp -d"]).out.trim();
   const tmp = run("bash", ["-c", `cd "$1" && pwd -P`, "_", tmpRaw]).out.trim() || tmpRaw;
+  // A fixture registry, and a guard that refuses any other, so no control ever reads, prunes or
+  // stops from the live one.
+  STATE = join(tmp, "state");
+  process.env["POSTMASTER_HOST_STATE"] = STATE;
+  process.env["POSTMASTER_HOST_FIXTURE"] = tmp;
   process.on("exit", () => {
     try {
       rmSync(tmp, { recursive: true, force: true });
@@ -1045,6 +1270,7 @@ if (a[0] === "has-session") {
       STUB: join(tmp, "stub"),
       TMPDIR: tmp,
       POSTMASTER_HOST_STATE: join(tmp, "state"),
+      POSTMASTER_HOST_FIXTURE: tmp,
       POSTMASTER_HOST_CLAIM_WAIT: "3",
       POSTMASTER_HOST_CLOSE_WAIT: "1",
       ...vars,
@@ -1121,6 +1347,7 @@ if (a[0] === "has-session") {
       STUB: join(tmp, "stub"),
       TMPDIR: tmp,
       POSTMASTER_HOST_STATE: join(tmp, "state"),
+      POSTMASTER_HOST_FIXTURE: tmp,
       POSTMASTER_HOST_CLAIM_WAIT: "3",
       POSTMASTER_HOST_CLOSE_WAIT: "1",
       POSTMASTER_HOST: "none",
@@ -1166,6 +1393,7 @@ sleep 120 & wait
       STUB: join(tmp, "stub"),
       TMPDIR: tmp,
       POSTMASTER_HOST_STATE: join(tmp, "state"),
+      POSTMASTER_HOST_FIXTURE: tmp,
       POSTMASTER_HOST_CLAIM_WAIT: "3",
       POSTMASTER_HOST_CLOSE_WAIT: "1",
       POSTMASTER_HOST: "none",
@@ -1190,6 +1418,7 @@ sleep 120 & wait
       STUB: join(tmp, "stub"),
       TMPDIR: tmp,
       POSTMASTER_HOST_STATE: join(tmp, "state"),
+      POSTMASTER_HOST_FIXTURE: tmp,
       POSTMASTER_HOST_STOP_WAIT: "2",
       POSTMASTER_HOST: "none",
     },
