@@ -120,11 +120,12 @@ function makeRepo(dest: string): boolean {
 
 function makeAndFile(dest: string, ticket: string): number {
   if (!isTicket(ticket)) return 1;
+  const home = process.env.HOME || homedir();
   // bare name goes under ~/Code/fixtures or $POSTMASTER_FIXTURES
   if (!dest.includes("/")) {
-    dest = join(process.env.POSTMASTER_FIXTURES || join(homedir(), "Code", "fixtures"), dest);
+    dest = join(process.env.POSTMASTER_FIXTURES || join(home, "Code", "fixtures"), dest);
   }
-  dest = resolve(dest.replace(/^~(?=\/|$)/, homedir()));
+  dest = resolve(dest.replace(/^~(?=\/|$)/, home));
   if (existsSync(dest)) {
     console.error(`fixture: ${dest} already exists; a run starts from a fresh repo`);
     return 1;
@@ -139,7 +140,7 @@ function makeAndFile(dest: string, ticket: string): number {
     return 1;
   }
   // refuse a name that already has runs
-  const runsDir = join(homedir(), ".postmaster", "runs", basename(dest));
+  const runsDir = join(home, ".postmaster", "runs", basename(dest));
   if (existsSync(runsDir)) {
     console.error(`fixture: ${runsDir} already holds runs of a project named ${basename(dest)}; choose another name`);
     return 1;
@@ -162,17 +163,20 @@ function makeAndFile(dest: string, ticket: string): number {
     return 1;
   }
   // make ticket store
-  const localSh = join(HERE, "local.sh");
+  const localSh = process.env.LOCAL_SH || join(HERE, "local.sh");
   const storeR = run("bash", [localSh, dest, "store", "init"]);
   if (storeR.code !== 0) {
     unmake();
     console.error(`fixture: could not make the ticket store in ${dest}`);
     return 1;
   }
-  // file the ticket
+  // file the ticket: local.sh create takes a body file, not the body text
   const body = ticketBody(ticket);
   const title = ticketTitle(ticket);
-  const createR = run("bash", [localSh, dest, "create", title, body]);
+  const bodyFile = join(makeTmpDir(), `fixture-body-${Date.now()}.md`);
+  writeFileSync(bodyFile, body);
+  const createR = run("bash", [localSh, dest, "create", title, bodyFile]);
+  rmSync(bodyFile, { force: true });
   const number = createR.out.trim().split("\n").pop() ?? "";
   if (createR.code !== 0 || !/^\d+$/.test(number)) {
     unmake();
@@ -247,20 +251,21 @@ function hidden(ticket: string, app: string): { passed: boolean; detail: string;
   return { passed: r.code === 0 && passed > 0 && failed === 0, detail, out: r.out ?? "" };
 }
 
-function score(dispatch: string, repo: string): number {
+function score(dispatch: string, repo: string): { code: number; out: string } {
   const mainR = sh(["git", "-C", repo, "rev-parse", "--verify", "-q", "refs/heads/main^{commit}"]);
   const main = (mainR.out ?? "").trim();
   if (mainR.code !== 0 || !main) {
-    console.error(`fixture: ${repo} has no main branch`);
-    return 1;
+    return { code: 1, out: `fixture: ${repo} has no main branch\n` };
   }
   const manifest = tryJsonFile<Record<string, unknown>>(join(dispatch, "manifest.json"));
   const base = manifest?.["base"];
   if (typeof base === "string" && base) {
     const anc = sh(["git", "-C", repo, "merge-base", "--is-ancestor", base, main]);
     if (anc.code !== 0) {
-      console.error(`fixture: the manifest's base ${base.slice(0, 12)} is not on main in ${repo}; is this the run's repo?`);
-      return 1;
+      return {
+        code: 1,
+        out: `fixture: the manifest's base ${base.slice(0, 12)} is not on main in ${repo}; is this the run's repo?\n`,
+      };
     }
   }
   const meta = tryJsonFile<Record<string, unknown>>(join(dispatch, "run.json"));
@@ -278,9 +283,8 @@ function score(dispatch: string, repo: string): number {
   mkdirSync(app);
   const exp = sh(["bash", "-o", "pipefail", "-c", `git -C "$1" archive --format=tar "$2" | tar -x -C "$3"`, "export", repo, main, app]);
   if (exp.code !== 0) {
-    console.error(`fixture: could not export main from ${repo}: ${tail(exp.out ?? "", 3)}`);
     rmSync(scratch, { recursive: true, force: true });
-    return 1;
+    return { code: 1, out: `fixture: could not export main from ${repo}: ${tail(exp.out ?? "", 3)}\n` };
   }
   const legs = legsOf(dispatch, manifest);
   const results: CheckResult[] = [
@@ -457,14 +461,15 @@ function checkCard(dispatch: string): { ok: boolean; detail: string } {
   return { ok: true, detail: `card.md, ${lines.length} lines` };
 }
 
-function report(results: CheckResult[]): number {
+function report(results: CheckResult[]): { code: number; out: string } {
+  const lines: string[] = [];
   for (const r of results) {
-    console.log(`${r.ok ? "ok  " : "FAIL"} ${r.name.padEnd(12)} ${r.detail}`);
+    lines.push(`${r.ok ? "ok  " : "FAIL"} ${r.name.padEnd(12)} ${r.detail}`);
     if (!r.ok && r.out.trim()) {
       console.error(`--- ${r.name}\n${tail(r.out)}`);
     }
   }
-  return results.every((r) => r.ok) ? 0 : 2;
+  return { code: results.every((r) => r.ok) ? 0 : 2, out: lines.join("\n") + "\n" };
 }
 
 // --- entry -----------------------------------------------------------------------------------
@@ -488,7 +493,9 @@ if (argv[0] === "--self-test") {
   if (gitCheck.code !== 0) {
     die(`fixture: not a git repo: ${repo}`, 1);
   }
-  process.exit(score(resolve(dispatch), resolve(repo)));
+  const sr = score(resolve(dispatch), resolve(repo));
+  process.stdout.write(sr.out);
+  process.exit(sr.code);
 } else if (argv[0] === "hidden") {
   if (argv.length !== 3) usage();
   need("bun");
@@ -531,10 +538,10 @@ kind = "github"
 
   // Background runner
   const bgResults = new Map<string, { code: number; out: string }>();
-  const background = (name: string, fn: () => number): void => {
-    // Run synchronously for reliability (bash backgrounded these but we collect results)
-    const code = fn();
-    bgResults.set(name, { code, out: "" });
+  const background = (name: string, fn: () => number | { code: number; out: string }): void => {
+    const r = fn();
+    if (typeof r === "number") bgResults.set(name, { code: r, out: "" });
+    else bgResults.set(name, r);
   };
   const rcOf = (name: string): number | "none" => {
     return bgResults.has(name) ? bgResults.get(name)!.code : "none";
@@ -661,7 +668,7 @@ kind = "github"
     }
   };
 
-  const recorded = (name: string, t: string, shipped: "reference" | "app" | "broken"): number => {
+  const recorded = (name: string, t: string, shipped: "reference" | "app" | "broken"): number | { code: number; out: string } => {
     const rc = record(name, t, shipped);
     if (rc !== 0) {
       console.log(`the record could not be built for ${name}`);
@@ -915,16 +922,8 @@ case \$2 in store) exec "${join(HERE, "local.sh")}" "\$@" ;; *) exit 1 ;; esac
 
   const expectScore = (label: string, name: string, failing: string, failText?: string): void => {
     const result = bgResults.get(name);
-    const rc = result ? result.code : "none";
-    // We need to capture the score output; re-run score to get it
-    const scoreDir = name.startsWith("break-")
-      ? join(tmp, name, "runs", name, "7")
-      : join(tmp, name, "runs", name, "7");
-    const scoreRepo = name.startsWith("break-")
-      ? join(tmp, `clean-${first}`, "repo")
-      : join(tmp, name, "repo");
-    const scoreR = run("bash", [join(HERE, "fixture.sh"), "score", scoreDir, scoreRepo], { input: "" });
-    const out = scoreR.out + scoreR.err;
+    const rc = result ? result.code : -1;
+    const out = result ? result.out : "";
     const failLines = out.split("\n").filter((l) => l.startsWith("FAIL")).map((l) => l.split(/\s+/)[1] ?? "");
     const failingChecks = failLines.join(",") || "none";
     const lines = out.split("\n").filter((l) => l.trim()).length;
@@ -932,8 +931,8 @@ case \$2 in store) exec "${join(HERE, "local.sh")}" "\$@" ;; *) exit 1 ;; esac
     const wantFailing = failing;
     const hasText = !failText || out.split("\n").filter((l) => l.startsWith("FAIL")).some((l) => l.includes(failText));
     st.check(label,
-      scoreR.code === wantExit && failingChecks === wantFailing && lines === 7 && hasText,
-      `wanted exit ${wantExit} with ${wantFailing} failing${failText ? ` ("${failText}")` : ""}, got exit ${scoreR.code} with ${failingChecks} failing\n${out}`);
+      rc === wantExit && failingChecks === wantFailing && lines === 7 && hasText,
+      `wanted exit ${wantExit} with ${wantFailing} failing${failText ? ` ("${failText}")` : ""}, got exit ${rc} with ${failingChecks} failing\n${out}`);
   };
 
   for (const t of tickets()) {

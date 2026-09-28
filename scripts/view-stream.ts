@@ -308,6 +308,15 @@ function show(line: string, stamp: boolean): void {
 }
 
 function alive(p: number): boolean {
+  // A zombie has exited; nothing has reaped it yet. It is not alive for follow's purposes.
+  try {
+    const stat = readFileSync(`/proc/${p}/stat`, "utf8");
+    const state = stat.split(") ")[1]?.[0];
+    if (state === "Z") return false;
+  } catch {
+    // no /proc entry: the process is gone
+    return false;
+  }
   try {
     process.kill(p, 0);
     return true;
@@ -383,9 +392,11 @@ function view(args: string[]): number {
       if (n > 0) {
         pos += n;
         buf += chunk.toString("utf8", 0, n);
-        if (buf.endsWith("\n")) {
-          show(buf, true);
-          buf = "";
+        for (;;) {
+          const nl = buf.indexOf("\n");
+          if (nl < 0) break;
+          show(buf.slice(0, nl + 1), true);
+          buf = buf.slice(nl + 1);
         }
         continue;
       }
@@ -630,17 +641,23 @@ withTempDir((tmp) => {
   {
     const f = join(tmp, "events.jsonl");
     writeFileSync(f, "");
-    // The writer runs as a background process like the bash original.
-    const writer = spawn(
-      "bash",
-      [
-        "-c",
-        `for i in 1 2 3; do printf '{"type":"assistant","message":{"content":[{"type":"text","text":"step %d"}]}}\\n' "$i" >> "${f}"; sleep 0.3; done; printf '{"type":"result","subtype":"success"}' >> "${f}"`,
-      ],
-      { stdio: "ignore", detached: true },
+    // Orphan the writer so it is not our child: spawnSync would block reaping and leave a
+    // zombie that follow would read as still running.
+    const wscript = join(tmp, "writer.sh");
+    writeFileSync(
+      wscript,
+      `#!/usr/bin/env bash
+for i in 1 2 3; do
+  printf '{"type":"assistant","message":{"content":[{"type":"text","text":"step %d"}]}}\\n' "$i" >> "$1"
+  sleep 0.3
+done
+printf '{"type":"result","subtype":"success"}' >> "$1"
+`,
     );
-    writer.unref();
-    const r = spawnSync(self, ["--follow", f, "--pid", String(writer.pid)], {
+    run("chmod", ["+x", wscript]);
+    const wr = run("bash", ["-c", `"${wscript}" "${f}" & echo $!`]);
+    const writerPid = parseInt(wr.out.trim(), 10);
+    const r = spawnSync(self, ["--follow", f, "--pid", String(writerPid)], {
       encoding: "utf8",
       timeout: 30000,
     });
@@ -656,12 +673,12 @@ withTempDir((tmp) => {
     const f = join(tmp, "append.jsonl");
     writeFileSync(f, "old line\n");
     const from = Buffer.byteLength("old line\n");
-    const writer = spawn("bash", ["-c", `printf 'new line\\n' >> "${f}"`], {
-      stdio: "ignore",
-      detached: true,
-    });
-    writer.unref();
-    const r = spawnSync(self, ["--follow", f, "--pid", String(writer.pid), "--from", String(from)], {
+    const wscript2 = join(tmp, "writer2.sh");
+    writeFileSync(wscript2, `#!/usr/bin/env bash\nprintf 'new line\\n' >> "$1"\n`);
+    run("chmod", ["+x", wscript2]);
+    const wr = run("bash", ["-c", `"${wscript2}" "${f}" & echo $!`]);
+    const writerPid = parseInt(wr.out.trim(), 10);
+    const r = spawnSync(self, ["--follow", f, "--pid", String(writerPid), "--from", String(from)], {
       encoding: "utf8",
       timeout: 30000,
     });

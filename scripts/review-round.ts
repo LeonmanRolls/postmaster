@@ -282,6 +282,7 @@ if (argv[0] !== "--self-test") {
   process.chdir("/");
 
   const record = (text: string, ...logArgs: string[]): void => {
+    console.log(text);
     const rl = run(join(HERE, "run-log.sh"), [D, text]);
     if (rl.code !== 0) {
       console.log(`NOT RECORDED in run-log.md: ${text}`);
