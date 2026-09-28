@@ -327,6 +327,7 @@ cut()   { git -C "$repo" worktree add -q --detach "$repo/.worktrees/T-1-rev-$1-$
 launch() {  # launch <round> <lens> <lane> <fast|slow|leaves>: through host.sh, as the round does
   n=$((n + 1))
   ( cd "$tmp" && "$HERE/host.sh" run "T-1 · $3 $2 review" "$repo/.worktrees/T-1-rev-$2-$3" \
+      --role reviewer --run "$d" \
       --marker "$d/logs/review-r$1-$2-$3.done" --pidfile "$tmp/pids/launch.$n" -- "$tmp/reviewer.sh" "$4" "$tmp/pids/child.$n" ) >/dev/null \
     || { echo "  (could not launch $2 $3)"; return 1; }
   [ "$4" = fast ] && return 0

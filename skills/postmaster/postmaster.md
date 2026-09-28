@@ -166,6 +166,7 @@ live one. Below, `<p>` is the leg before leg `<n>` in that list.
 
    ```sh
    <tool>/scripts/host.sh run "$(<tool>/scripts/host.sh name <dispatch> coachman)" <repo>/.worktrees/<TICKET> \
+       --role coachman --run <dispatch> \
        --out <dispatch>/logs/coachman-leg-<n>-events.jsonl --err <dispatch>/logs/coachman-leg-<n>.err \
        --marker <dispatch>/.leg-<n>-exited \
        -- <tool>/scripts/launch.sh launch coachman <repo>/.worktrees/<TICKET> <dispatch>/leg-<n>-prompt.txt --leg <leg-name> \
@@ -186,7 +187,8 @@ live one. Below, `<p>` is the leg before leg `<n>` in that list.
    this process's errors, and `host.sh` clears the leg's exited marker:
 
    ```sh
-   <tool>/scripts/host.sh run "$(<tool>/scripts/host.sh name <dispatch> coachman)" <repo>/.worktrees/<TICKET> --append \
+   <tool>/scripts/host.sh run "$(<tool>/scripts/host.sh name <dispatch> coachman)" <repo>/.worktrees/<TICKET> \
+       --role coachman --run <dispatch> --append \
        --out <dispatch>/logs/coachman-leg-<n>-events.jsonl --err <dispatch>/logs/coachman-leg-<n>.err \
        --marker <dispatch>/.leg-<n>-exited \
        -- <tool>/scripts/launch.sh resume <name> <repo>/.worktrees/<TICKET> <thread-id> <dispatch>/leg-<n>-resume-<time>.txt --leg <leg-name> \

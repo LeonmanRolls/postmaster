@@ -41,6 +41,7 @@ if [ "${1:-}" = --self-test ]; then
   }
   run() { "$0" --answers "$tmp/$1.answers" --config "$tmp/$1.toml" >"$tmp/$1.out" 2>&1; }
   team() { python3 -c 'import json, sys, tomllib; print(json.dumps(tomllib.load(open(sys.argv[1], "rb"))["team"].get(sys.argv[2])))' "$tmp/$1.toml" "$2"; }
+  limit() { python3 -c 'import sys, tomllib; c=tomllib.load(open(sys.argv[1], "rb")).get("limits", {}); r=c.get(sys.argv[2], {}); print(r.get(sys.argv[3], c.get(sys.argv[3], "")))' "$tmp/$1.toml" "$2" "$3"; }
 
   echo "positive controls"
   answers lens "reviewers.security=alpha, beta, sentinel"
@@ -65,6 +66,27 @@ postmaster.env_file=~/.postmaster/lanes/pm.env"; run roles; rc=$?
     || fail "the coachman, the fallback and the postmaster each get their env file (exit $rc)" "$(cat "$tmp/roles.out")"
   [ "$(team plain coachman)" = '{"harness": "bash", "model": "judge"}' ] \
     && ok "a role with no env file answer gets no env_file key" || fail "a role with no env file answer gets no env_file key" "$(team plain coachman)"
+
+  [ "$(limit plain default memory_max)" = 4G ] && [ "$(limit plain default tasks_max)" = 256 ] \
+    && ok "launch memory and process caps default to 4G and 256" \
+    || fail "launch memory and process caps default to 4G and 256" "$(limit plain default memory_max) $(limit plain default tasks_max)"
+  answers caps "limits.memory_max=8G
+limits.tasks_max=384
+limits.lane.memory_max=2G
+limits.reviewer.tasks_max=96"; run caps; rc=$?
+  [ $rc -eq 0 ] && [ "$(limit caps default memory_max)" = 8G ] && [ "$(limit caps default tasks_max)" = 384 ] \
+    && [ "$(limit caps lane memory_max)" = 2G ] && [ "$(limit caps lane tasks_max)" = 384 ] \
+    && [ "$(limit caps reviewer memory_max)" = 8G ] && [ "$(limit caps reviewer tasks_max)" = 96 ] \
+    && ok "a role can override either cap and inherit the other" \
+    || fail "a role can override either cap and inherit the other (exit $rc)" "$(cat "$tmp/caps.out")"
+  answers badmemory "limits.memory_max=4.5G"; run badmemory; rc=$?
+  [ $rc -eq 1 ] && [ ! -e "$tmp/badmemory.toml" ] && grep -q "memory_max must be" "$tmp/badmemory.out" \
+    && ok "a malformed default memory cap is refused, and nothing is written" \
+    || fail "a malformed default memory cap is refused, and nothing is written (exit $rc)" "$(cat "$tmp/badmemory.out")"
+  answers badtasks "limits.reviewer.tasks_max=0"; run badtasks; rc=$?
+  [ $rc -eq 1 ] && [ ! -e "$tmp/badtasks.toml" ] && grep -q "reviewer.tasks_max must be" "$tmp/badtasks.out" \
+    && ok "a zero role process cap is refused, and nothing is written" \
+    || fail "a zero role process cap is refused, and nothing is written (exit $rc)" "$(cat "$tmp/badtasks.out")"
 
   limit() { python3 -c 'import sys, tomllib; print(tomllib.load(open(sys.argv[1], "rb"))["review"]["round_timeout_seconds"])' "$tmp/$1.toml" 2>&1; }
   [ "$(limit plain)" = 2400 ] && ok "a review round's time limit defaults to 2400 seconds, under [review]" \
@@ -128,6 +150,14 @@ postmaster.effort?         (none)
 postmaster.env_file?       (none)
 max_runs                   2                  concurrent runs per project
 poll_seconds               120                postmaster poll interval
+limits.memory_max          4G                 default memory cap per launch (K, M, G or T)
+limits.tasks_max           256                default process cap per launch
+limits.lane.memory_max?    (default)          lane memory cap override
+limits.lane.tasks_max?     (default)          lane process cap override
+limits.coachman.memory_max? (default)         coachman memory cap override
+limits.coachman.tasks_max? (default)          coachman process cap override
+limits.reviewer.memory_max? (default)         reviewer memory cap override
+limits.reviewer.tasks_max? (default)          reviewer process cap override
 tracker                    github             github, plane, local or other
 plane.url                  https://api.plane.so   plane only
 plane.workspace                               plane only; the slug in the workspace's web URL
@@ -259,6 +289,34 @@ ask MR "  concurrent runs per project" "2" "max_runs"
 ask PS "  postmaster poll interval, seconds" "120" "poll_seconds"
 
 echo
+echo "== Launch limits: per-launch memory and process caps when the host supports them. =="
+ask LM "  default memory cap (number plus K, M, G or T)" "4G" "limits.memory_max"
+[[ "$LM" =~ ^[1-9][0-9]*[KMGT]$ ]] \
+  || { echo "setup: memory_max must be a positive whole number followed by K, M, G or T" >&2; exit 1; }
+ask LT "  default process cap (whole number)" "256" "limits.tasks_max"
+case $LT in ''|0|0*|*[!0-9]*) LT_VALID=0 ;; *) [ ${#LT} -le 10 ] && [ "$LT" -le 2147483647 ] 2>/dev/null && LT_VALID=1 || LT_VALID=0 ;; esac
+[ "${LT_VALID:-0}" -eq 1 ] \
+  || { echo "setup: tasks_max must be a whole number from 1 to 2147483647" >&2; exit 1; }
+LIMIT_ROLE_TABLES=""
+for limit_role in lane coachman reviewer; do
+  ask LR_MEM "  $limit_role memory cap override (blank inherits the default)" "" "limits.$limit_role.memory_max?"
+  if [ -n "$LR_MEM" ] && ! [[ "$LR_MEM" =~ ^[1-9][0-9]*[KMGT]$ ]]; then
+    echo "setup: limits.$limit_role.memory_max must be a positive whole number followed by K, M, G or T" >&2; exit 1
+  fi
+  ask LR_TASKS "  $limit_role process cap override (blank inherits the default)" "" "limits.$limit_role.tasks_max?"
+  if [ -n "$LR_TASKS" ]; then
+    case $LR_TASKS in ''|0|0*|*[!0-9]*) LR_TASKS_VALID=0 ;; *) [ ${#LR_TASKS} -le 10 ] && [ "$LR_TASKS" -le 2147483647 ] 2>/dev/null && LR_TASKS_VALID=1 || LR_TASKS_VALID=0 ;; esac
+    [ "${LR_TASKS_VALID:-0}" -eq 1 ] \
+      || { echo "setup: limits.$limit_role.tasks_max must be a whole number from 1 to 2147483647" >&2; exit 1; }
+  fi
+  if [ -n "$LR_MEM" ] || [ -n "$LR_TASKS" ]; then
+    LIMIT_ROLE_TABLES="${LIMIT_ROLE_TABLES}"$'\n'"[limits.$limit_role]"$'\n'
+    [ -z "$LR_MEM" ] || LIMIT_ROLE_TABLES="${LIMIT_ROLE_TABLES}memory_max = \"$LR_MEM\""$'\n'
+    [ -z "$LR_TASKS" ] || LIMIT_ROLE_TABLES="${LIMIT_ROLE_TABLES}tasks_max = $LR_TASKS"$'\n'
+  fi
+done
+
+echo
 echo "== Tickets: GitHub Issues on a Projects board by default; Plane; local, kept in each repo; or another tracker. =="
 ask TK "How are tickets tracked (github, plane, local, other)" "github" "tracker"
 PURL=""; PWS=""; PENV=""; OTHER=""
@@ -308,6 +366,12 @@ coachman_fallback = { harness = "$FH", model = "$FM"$(role_extra "$FE" "$FEF") }
 postmaster = { harness = "$PH", model = "$PM"$(role_extra "$PE" "$PEF") }
 max_runs = $MR
 ${LENS_TABLE}
+
+[limits]
+memory_max = "$LM"
+tasks_max = $LT
+${LIMIT_ROLE_TABLES}
+
 [postmaster]
 poll_seconds = $PS
 

@@ -43,7 +43,7 @@ way on every row, only less visibly on the last.
 ```sh
 <tool>/scripts/host.sh detect
 <tool>/scripts/host.sh name <dispatch> [<role or lane>]
-<tool>/scripts/host.sh run <name> <cwd> [--out <file>] [--err <file>] [--append] [--marker <file>] [--pidfile <file>] -- <command...>
+<tool>/scripts/host.sh run <name> <cwd> [--role lane|coachman|reviewer] [--run <dispatch>] [--out <file>] [--err <file>] [--append] [--marker <file>] [--pidfile <file>] -- <command...>
 <tool>/scripts/host.sh stop <worktree>
 <tool>/scripts/host.sh close <worktree>
 <tool>/scripts/host.sh spawn <handle> <cwd> [--label <name>] -- <interactive form>
@@ -80,6 +80,20 @@ pane. `spawn`, `send`, `wait` and `read` exit 3 on `none`.
   it. `host.sh run` returns as soon as the launch has started. The wait still goes in the same
   command as the launch, as `<tool>/scripts/wait-for-markers.sh`, or for a review round
   `<tool>/scripts/review-round.sh wait`.
+- **`--role` selects per-role limits; `--run` selects the dispatch's recorded config.** Use
+  `lane` for a workhorse, `coachman` for a leg, and `reviewer` for a review launch. Direct host
+  launches use the default limits. With `--run <dispatch>`, the limits come from the config in
+  `<dispatch>/run.json`, so an edit to the live config does not change an in-flight run.
+- **A Linux user scope contains each launch and its descendants.** When systemd can verify a
+  cgroup v2 memory controller, pids controller and the requested scope properties, `host.sh`
+  applies `MemoryMax` (default `4G`), `MemorySwapMax=0` and `TasksMax` (default `256`). Systemd
+  kills the scope on memory exhaustion; when the pids controller records a refused fork,
+  `host.sh` kills that scope. `.err` says `host: memory cap reached (MemoryMax=<value>)` or
+  `host: process cap reached (TasksMax=<value>)`. The notice also appears in the pane's stderr.
+  A machine without a working per-launch cgroup backend still runs the command and records
+  `host: launch running uncapped (no supported per-launch limits available)` in `.err`, with a
+  warning to the caller. The limits live under `[limits]` in `config.toml`; `[limits.lane]`,
+  `[limits.coachman]` and `[limits.reviewer]` can override either setting.
 - **A launch outlives its caller.** It belongs to the host's server, or with no host to a session
   of its own, so a caller's background-task cap or its exit does not reach it.
 - **A launch carries its own pane's identity, never its caller's**: `HERDR_PANE_ID`, the tab and
@@ -192,7 +206,10 @@ with `herdr agent start`. It is a pane whose agent `host.sh` reports. So when it
 ## Tests
 
 `<tool>/scripts/host.sh --self-test` runs every form against stub `herdr` and `tmux` on a PATH that
-holds nothing else, and never reaches a live server. `<tool>/scripts/host.sh --live-test` runs the
+holds nothing else, and never reaches a live server. Where a working systemd user scope exists, it
+also checks that a bounded fork and allocation launch are stopped at their caps while a healthy
+launch completes. Without that backend it checks the uncapped notice and successful launch.
+`<tool>/scripts/host.sh --live-test` runs the
 ticket's controls against the hosts on this machine, in a scratch repository it creates: a launch
 that lands in its worktree's space, nested under its repository's space, with its marker landing;
 a reviewer's scratch clone opening as a space of its own, which `close` shuts; the same launch

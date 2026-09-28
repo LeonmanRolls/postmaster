@@ -276,7 +276,8 @@ same breath, through the host script and the launch script so no form is ever co
 
 ```sh
 <tool>/scripts/host.sh run "$(<tool>/scripts/host.sh name <dispatch> <lane>)" <workhorse-wt> \
-    --out <dispatch>/logs/<lane>-events.jsonl --err <dispatch>/logs/<lane>.err --marker <dispatch>/logs/<lane>.done \
+    --role lane --run <dispatch> --out <dispatch>/logs/<lane>-events.jsonl \
+    --err <dispatch>/logs/<lane>.err --marker <dispatch>/logs/<lane>.done \
     -- <tool>/scripts/launch.sh launch <lane> <workhorse-wt> <dispatch>/<lane>-prompt.txt --last <dispatch>/logs/<lane>-last.md \
        --run <dispatch>
 ```
@@ -341,7 +342,8 @@ from it.
   first walk the ticket's User journey on that branch, in the format
   `<tool>/scripts/verify-journey.sh --format` gives, to the path `<tool>/scripts/verify.sh
   journey-path <workhorse-wt> <dispatch>` prints. A `verify.sh run` that can outlast your harness's
-  command cap (`harnesses.md`) runs through `<tool>/scripts/host.sh run` with `--out`, `--err` and
+  command cap (`harnesses.md`) runs through `<tool>/scripts/host.sh run` with `--role coachman`,
+  `--run <dispatch>`, `--out`, `--err` and
   `--marker`, as a lane does, and you wait for its marker with `<tool>/scripts/wait-for-markers.sh`. Then hold its
   summary to your run: `<tool>/scripts/verify.sh summary <workhorse-wt>/WORKHORSE-SUMMARY.md
   <dispatch> <workhorse-wt>`. Exit 2 names each check the summary does not give, which makes the
@@ -578,6 +580,7 @@ Set the stage first, `<tool>/scripts/stage.sh <dispatch> review`, then:
      for L in $(<tool>/scripts/reviewers.sh lanes <dispatch>/brief.md "$LENS"); do
        DEST=<repo>/.worktrees/<TICKET>-rev-$LENS-$L
        <tool>/scripts/host.sh run "$(<tool>/scripts/host.sh name <dispatch> "$L $LENS review")" "$DEST" \
+           --role reviewer --run <dispatch> \
            --out <dispatch>/logs/review-r<round>-$LENS-$L.jsonl --err <dispatch>/logs/review-r<round>-$LENS-$L.err \
            --marker <dispatch>/logs/review-r<round>-$LENS-$L.done \
            -- <the launch step of $LENS, for "$L" in "$DEST">
@@ -725,7 +728,8 @@ Set the stage first: `<tool>/scripts/stage.sh <dispatch> shipping`.
 3. **Preview build, always, on a project with a UI.** Serve the branch's production build on
    the loopback interface at a throwaway port with a THROWAWAY database seeded from the
    project's own fixtures, never the live database and never the app's real port. Run the
-   server through `<tool>/scripts/host.sh run` with `--pidfile <dispatch>/render/preview.pid`, which
+   server through `<tool>/scripts/host.sh run` with `--role coachman`, `--run <dispatch>` and
+   `--pidfile <dispatch>/render/preview.pid`, which
    keeps it alive past a harness turn and in the user's view, and put stopping it on the
    teardown checklist: `kill -- -$(cat <dispatch>/render/preview.pid)`, its whole process group,
    so no child of a package script survives. The preview link goes on the ship card and the
