@@ -275,14 +275,16 @@ same breath, through the host script and the launch script so no form is ever co
 `host.sh` runs each where the user can watch it (`hosts.md`) and returns at once:
 
 ```sh
-<tool>/scripts/host.sh run "$(<tool>/scripts/host.sh name <dispatch> <lane>)" <workhorse-wt> \
+<tool>/scripts/host.sh run "$(<tool>/scripts/host.sh name <dispatch> workhorse <lane>)" <workhorse-wt> \
+    --dispatch <dispatch> \
     --out <dispatch>/logs/<lane>-events.jsonl --err <dispatch>/logs/<lane>.err --marker <dispatch>/logs/<lane>.done \
     -- <tool>/scripts/launch.sh launch <lane> <workhorse-wt> <dispatch>/<lane>-prompt.txt --last <dispatch>/logs/<lane>-last.md \
        --run <dispatch>
 ```
 
-The name comes from the waybill through `host.sh name`, never typed: a ticket's title can hold
-anything a shell would run. A resume runs the same way with `--append`, and the command
+The tab name comes from the lane and its recorded model through `host.sh name`; the dispatch
+makes its synthesis worktree space carry the ticket name. Neither name is typed into a shell.
+A resume runs the same way with `--append`, and the command
 `<tool>/scripts/launch.sh resume <lane> <workhorse-wt> <thread-id> <prompt-file>
 --last <dispatch>/logs/<lane>-last.md --run <dispatch>`;
 `host.sh` clears the old marker itself. Resume a lane only once its marker has landed: until
@@ -577,7 +579,8 @@ Set the stage first, `<tool>/scripts/stage.sh <dispatch> review`, then:
    for LENS in <open lenses>; do
      for L in $(<tool>/scripts/reviewers.sh lanes <dispatch>/brief.md "$LENS"); do
        DEST=<repo>/.worktrees/<TICKET>-rev-$LENS-$L
-       <tool>/scripts/host.sh run "$(<tool>/scripts/host.sh name <dispatch> "$L $LENS review")" "$DEST" \
+       <tool>/scripts/host.sh run "$(<tool>/scripts/host.sh name <dispatch> review "$L" "$LENS" <round>)" "$DEST" \
+           --dispatch <dispatch> \
            --out <dispatch>/logs/review-r<round>-$LENS-$L.jsonl --err <dispatch>/logs/review-r<round>-$LENS-$L.err \
            --marker <dispatch>/logs/review-r<round>-$LENS-$L.done \
            -- <the launch step of $LENS, for "$L" in "$DEST">

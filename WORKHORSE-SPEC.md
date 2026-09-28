@@ -17,7 +17,7 @@ Each tree level adds one identity: the project space keeps the project name, the
 
 ## Structure
 
-- Change `scripts/host.sh` to build concise launch labels, associate a launch with its dispatch, place every run launch in the run's Herdr space, and strengthen its self-test and live-test.
+- Change `scripts/host.sh` to build concise launch labels, associate a launch with its dispatch, place every run launch in the run's Herdr space, close recorded launch tabs with their worktrees, and strengthen its self-test and live-test.
 - Change `skills/postmaster/hosts.md` to document the updated `name` and `run` forms, the run-space tree, and postmaster label.
 - Change `skills/postmaster/coachman.md` and `skills/postmaster/postmaster.md` to pass the run identity and role details at all host launch sites.
 - Change `skills/postmaster/SKILL.md` so the project-level postmaster launch label is just its role.
@@ -25,6 +25,7 @@ Each tree level adds one identity: the project space keeps the project name, the
 ## Decisions
 
 - Use the synthesis worktree's Herdr workspace as the run level, labeled from `Dispatch.name`; place coachman, workhorse, and reviewer launch tabs there, each with its actual working directory. This matches the existing runbook's one synthesis worktree per ticket and keeps the ticket visible once above the launches.
+- Remember each dispatch launch's Herdr tab in host state so review teardown can close that checkout's tabs while leaving the shared run space open.
 - Use the immutable config in `run.json` for launch model names. Workhorses and reviewers get their lane first; a coachman gets its role first. Add the leg number or review round last where applicable.
 - Place a security-review clone in a tab under its run's workspace. Do not open the clone as a separate workspace.
 - Reuse the root tab and pane returned when `host.sh` opens a project or run workspace, and rename the tab to the launch label before starting the launch.
@@ -33,8 +34,8 @@ Each tree level adds one identity: the project space keeps the project name, the
 
 ## Tasks
 
-- [ ] T001 [AC1] [P] Update `scripts/host.sh` name construction to use the recorded lane or role model and explicit leg or review-round identity, without ticket text in launch labels.
-- [ ] T002 [AC2] [AC3] [AC4] Update `scripts/host.sh` Herdr placement so a dispatch's synthesis worktree is the ticket-labeled run space, all launch tabs including security clones sit under it, and the first tab is used by a launch rather than left empty.
-- [ ] T003 [AC5] Add `scripts/host.sh --self-test` controls for coachman legs, workhorses, style/bug/security review rounds, postmaster labels, and the ticket-bearing run space.
-- [ ] T004 [AC6] Extend `scripts/host.sh --live-test` to verify role-first labels and run nesting end to end on this machine.
-- [ ] T005 [AC1] [AC2] [AC3] [AC4] Update `skills/postmaster/hosts.md`, `skills/postmaster/coachman.md`, `skills/postmaster/postmaster.md`, and `skills/postmaster/SKILL.md` to document and call the new forms.
+- [x] T001 [AC1] [P] Update `scripts/host.sh` name construction to use the recorded lane or role model and explicit leg or review-round identity, without ticket text in launch labels.
+- [x] T002 [AC2] [AC3] [AC4] Update `scripts/host.sh` Herdr placement so a dispatch's synthesis worktree is the ticket-labeled run space, all launch tabs including security clones sit under it, the first tab is used by a launch rather than left empty, and `close` cleans up each owned launch tab.
+- [x] T003 [AC5] Add `scripts/host.sh --self-test` controls for coachman legs, workhorses, style/bug/security review rounds, postmaster labels, and the ticket-bearing run space.
+- [x] T004 [AC6] Extend `scripts/host.sh --live-test` to verify role-first labels and run nesting end to end on this machine.
+- [x] T005 [AC1] [AC2] [AC3] [AC4] Update `skills/postmaster/hosts.md`, `skills/postmaster/coachman.md`, `skills/postmaster/postmaster.md`, and `skills/postmaster/SKILL.md` to document and call the new forms.

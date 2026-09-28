@@ -165,15 +165,16 @@ live one. Below, `<p>` is the leg before leg `<n>` in that list.
    exited marker first:
 
    ```sh
-   <tool>/scripts/host.sh run "$(<tool>/scripts/host.sh name <dispatch> coachman)" <repo>/.worktrees/<TICKET> \
+   <tool>/scripts/host.sh run "$(<tool>/scripts/host.sh name <dispatch> coachman <leg-name> <n>)" <repo>/.worktrees/<TICKET> \
+       --dispatch <dispatch> \
        --out <dispatch>/logs/coachman-leg-<n>-events.jsonl --err <dispatch>/logs/coachman-leg-<n>.err \
        --marker <dispatch>/.leg-<n>-exited \
        -- <tool>/scripts/launch.sh launch coachman <repo>/.worktrees/<TICKET> <dispatch>/leg-<n>-prompt.txt --leg <leg-name> \
        --run <dispatch>
    ```
 
-   The name comes from the waybill through `host.sh name`, never typed: a ticket's title can
-   hold anything a shell would run.
+   The tab name comes from the run config and leg identity through `host.sh name`; the dispatch
+   makes the synthesis worktree space carry the ticket name. Neither name is typed into a shell.
 
    Record the thread id from the stream (`harnesses.md`) in the manifest as
    `coachman.legs.<n>.thread_id`, and `coachman` as `coachman.legs.<n>.name`, set `leg` to
@@ -186,7 +187,8 @@ live one. Below, `<p>` is the leg before leg `<n>` in that list.
    this process's errors, and `host.sh` clears the leg's exited marker:
 
    ```sh
-   <tool>/scripts/host.sh run "$(<tool>/scripts/host.sh name <dispatch> coachman)" <repo>/.worktrees/<TICKET> --append \
+   <tool>/scripts/host.sh run "$(<tool>/scripts/host.sh name <dispatch> coachman <leg-name> <n>)" <repo>/.worktrees/<TICKET> --append \
+       --dispatch <dispatch> \
        --out <dispatch>/logs/coachman-leg-<n>-events.jsonl --err <dispatch>/logs/coachman-leg-<n>.err \
        --marker <dispatch>/.leg-<n>-exited \
        -- <tool>/scripts/launch.sh resume <name> <repo>/.worktrees/<TICKET> <thread-id> <dispatch>/leg-<n>-resume-<time>.txt --leg <leg-name> \

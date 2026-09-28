@@ -196,11 +196,11 @@ not say; the security lens reviews against them.
 8. **`spawn`: start a new postmaster session** on the session host (`hosts.md`). Start a new
    interactive session of the postmaster's harness (`team.postmaster` in the config), rooted
    in the target repo, in the harness's interactive form from `harnesses.md`: its bypass mode,
-   named `<project> · postmaster`. Hand it a one-line prompt file that says to read the brief
+   named `postmaster`. Hand it a one-line prompt file that says to read the brief
    at `$RUNS/postmaster/brief.md` first:
 
    ```sh
-   <tool>/scripts/host.sh spawn postmaster-<project> <repo> --label "<project> · postmaster" -- <interactive form>
+   <tool>/scripts/host.sh spawn postmaster-<project> <repo> --label "postmaster" -- <interactive form>
    <tool>/scripts/host.sh send postmaster-<project> <prompt-file>
    <tool>/scripts/host.sh read postmaster-<project>      # it took the message: a new session can drop one
    ```
