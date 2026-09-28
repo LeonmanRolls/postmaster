@@ -1,0 +1,26 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/package.json",
+  "root": true,
+  "files": {
+    "includes": ["scripts/**", "types/**", "package.json", "tsconfig.json", "biome.json"]
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended"
+    }
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100
+  },
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
+    }
+  }
+}

@@ -8,3 +8,6 @@ config.toml
 # project's own .postmaster/ and is ignored there. Promotion from one to the other is a
 # deliberate, scrubbed decision to publish (raw/README.md is the contract).
 .postmaster/
+
+# TypeScript toolchain (dev dependencies only; the scripts need only Bun at run time)
+node_modules/

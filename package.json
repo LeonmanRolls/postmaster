@@ -1,0 +1,12 @@
+{
+  "name": "postmaster",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "tsc --noEmit && biome check . && for n in cut-scratch fixture front-door front-door-acceptance github host launch link-skills local log-action plane review-round reviewers run-log run-meta run-times runs-status setup skill-refs stage style-findings ticket-check tool-faults turnpikes verify verify-examples verify-journey verify-library view-stream wait-for-markers wiki-lint; do ./scripts/$n.sh --self-test || exit 1; done"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.14",
+    "typescript": "^7.0.2"
+  }
+}
