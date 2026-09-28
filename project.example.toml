@@ -2,10 +2,54 @@
 #
 # What a project requires of every run against it, declared once for everyone who works on it.
 # It is the one file in a project's .postmaster/ that is committed, so it names no credential, no
-# path on anyone's machine and no role assignment. A project without it is discovered, and that
-# is the normal case. Where the project ignores .postmaster/, commit this file with `git add -f`;
-# once it is tracked, git keeps it. For now it holds the checks and nothing else.
+# path on anyone's machine, no machine name and no role assignment. A project without it is
+# discovered, and that is the normal case: a missing settings file is never an error and never a
+# prompt to create one. Where the project ignores .postmaster/, commit this file with
+# `git add -f`; once it is tracked, git keeps it. The folder's own .gitignore covers the rest.
 #
+# What it may hold, and nothing else: the project's default turnpikes, the tracker binding by
+# name, the project's risk surfaces, and the checks. This person's machine-specific choices —
+# which lanes fill the roles — are in settings.toml beside this file and are never committed.
+# scripts/project-settings.sh reads both and refuses a credential or a filesystem path in either.
+#
+# Precedence, stated once and followed everywhere: discovery supplies defaults; this file
+# declares what the project requires; local settings.toml are this person's choices on this
+# machine; ~/.postmaster/config.toml supplies what is machine-specific and is never overridden
+# by a project. None of these sets a floor of turnpikes: a ticket names the turnpikes its run
+# passes through, and this file only says what `default` means for this project.
+#
+# ----------------------------------------------------------------------------
+# Default turnpikes: what `default` means in a ticket's `## Turnpikes` section.
+# A list of turnpike names from `scripts/turnpikes.sh --list`, in any order. Omitted,
+# `default` stands for every turnpike that list marks default. A ticket always names its
+# own turnpikes; this is only the expansion of the one word.
+#
+# [turnpikes]
+# default = ["style", "bug", "security"]
+#
+# ----------------------------------------------------------------------------
+# Tracker binding: which board, workspace or team this repo maps to, by name only.
+# The machine config still names the tracker kind and any URL. One of:
+#   board      the GitHub Projects board name
+#   workspace  the Plane workspace slug
+#   team       the team or board name for any other tracker
+#
+# [tracker]
+# board = "postmaster"
+#
+# ----------------------------------------------------------------------------
+# Risk surfaces: what the project binds, allowlists, spawns and serves. The security
+# lens reviews against these; the waybill carries them. Short lines, not prose.
+#
+# [risk]
+# surfaces = [
+#   "spawns agent CLIs in their bypass modes, in Herdr over its socket or in tmux",
+#   "uses the user's gh login",
+#   "reads PLANE_API_KEY and lane env files under ~/.postmaster",
+#   "writes ~/.postmaster, skill links into each harness's skills folder, and worktrees",
+# ]
+#
+# ----------------------------------------------------------------------------
 # The checks say how a change to the project is shown to work. A project that declares none gets
 # defaults (scripts/verify.sh): the gate, always, and by what discovery finds, a command-line
 # app's ticket examples run through its command, a web app's browser suite and a walk of the

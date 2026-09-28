@@ -1,0 +1,37 @@
+# <project>/.postmaster/settings.toml
+#
+# This person's choices on this machine, for this project. Never committed: the folder's own
+# .gitignore covers the whole of .postmaster/, and this file is one of the things that must not
+# travel with a checkout. It names no credential and no filesystem path; it refers to lanes and
+# roles the machine config already defines. scripts/project-settings.sh writes it when a setup
+# conversation settles a choice that belongs to the project rather than the machine.
+#
+# Precedence: discovery supplies defaults; the shared project.toml declares what the project
+# requires; this file are this person's choices; ~/.postmaster/config.toml supplies what is
+# machine-specific and is never overridden by a project.
+#
+# ----------------------------------------------------------------------------
+# Role assignments: which of this machine's lanes fill which role for this project.
+# Lane names come from [lanes] in ~/.postmaster/config.toml. A coachman or fallback may be
+# named by harness and model (and effort), as the machine config names them; never an env_file
+# or any other path. Omitted, the machine config's team is used as it stands.
+#
+# [roles]
+# workhorses = ["luna", "deepseek"]
+# reviewers = ["luna", "deepseek"]
+# # coachman = { harness = "grok", model = "grok-4.6", effort = "xhigh" }
+# # coachman_fallback = { harness = "codex", model = "gpt-6-astra", effort = "max" }
+# # [roles.lens_reviewers]
+# # security = ["luna", "deepseek", "sentinel"]
+#
+# ----------------------------------------------------------------------------
+# Local overrides of what project.toml declares. Same shapes, this person's answer.
+#
+# [turnpikes]
+# default = ["style", "bug"]
+#
+# [tracker]
+# board = "my-board"
+#
+# [risk]
+# surfaces = ["binds no port", "serves only the GitHub Pages site"]
