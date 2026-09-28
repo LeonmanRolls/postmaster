@@ -188,7 +188,7 @@ elif cmd == "legs":
         sys.exit(2)
     legs(found[0])
 PY
-core() { POSTMASTER_PROJECT_SETTINGS=${POSTMASTER_PROJECT_SETTINGS:-$HERE/project-settings.sh} python3 -c "$CORE" "$HERE" "$@"; }  # core <table> list | resolve [<text>...] | short <line> | legs <waybill> [<expect>] | legs --line <line>
+core() { POSTMASTER_PROJECT_SETTINGS=${POSTMASTER_PROJECT_SETTINGS:-$HERE/project-settings.sh} python3 -I -c "$CORE" "$HERE" "$@"; }  # core <table> list | resolve [<text>...] | short <line> | legs <waybill> [<expect>] | legs --line <line>
 
 case ${1:-} in
   --list) [ $# -eq 1 ] || usage; core "$TABLE" list; exit $? ;;
@@ -350,13 +350,13 @@ next=$("$self" legs "$d" | awk '$1 > 1 {print $1 " " $2; exit}')
 prev=$("$self" legs "$d" | awk '$1 < 3 {p = $1} END {print p}')
 "$HERE/handoff-check.sh" "$d/handoff-$prev.md" >/dev/null 2>&1 && [ "$prev" = 1 ] \
   && ok "the ship leg starts from synthesis's hand-off, which passes its check" || fail "the ship leg starts from synthesis's hand-off, which passes its check" "handoff-$prev.md"
-python3 -c 'import json, sys; p = sys.argv[1]; m = json.load(open(p)); m["leg"] = 3; open(p, "w").write(json.dumps(m))' "$d/manifest.json"
+python3 -I -c 'import json, sys; p = sys.argv[1]; m = json.load(open(p)); m["leg"] = 3; open(p, "w").write(json.dumps(m))' "$d/manifest.json"
 "$HERE/stage.sh" "$d" shipping >/dev/null && "$HERE/stage.sh" "$d" shipped >/dev/null && touch "$d/.leg-3-done" "$d/.leg-3-exited"
 after=$("$self" legs "$d" | awk '$1 > 3')
 [ "$(poll)" = DISPATCH ] && [ -z "$after" ] && ok "after ship the poll says DISPATCH, and no leg follows: Stage G" \
   || fail "after ship the poll says DISPATCH, and no leg follows: Stage G" "$(poll) / $after"
 "$HERE/stage.sh" "$d" done postmaster >/dev/null
-stages=$(python3 -c 'import json, sys; print(" ".join(json.loads(l)["target"] for l in open(sys.argv[1]) if json.loads(l)["action"] == "stage"))' "$d/actions.jsonl")
+stages=$(python3 -I -c 'import json, sys; print(" ".join(json.loads(l)["target"] for l in open(sys.argv[1]) if json.loads(l)["action"] == "stage"))' "$d/actions.jsonl")
 [ "$stages" = "shipping shipped done" ] && [ "$(poll)" = - ] && ok "it closes with no review stage" || fail "it closes with no review stage" "$stages"
 
 echo

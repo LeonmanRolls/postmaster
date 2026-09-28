@@ -17,7 +17,8 @@
 set -uo pipefail
 HERE=$(CDPATH= cd -P -- "$(dirname -- "$0")" && pwd -P)
 
-python3 - "$HERE" "$@" <<'PY'
+# A caller may be in the target repo, so do not import modules from that repo by accident.
+python3 -I - "$HERE" "$@" <<'PY'
 import json
 import os
 import pathlib
@@ -368,6 +369,15 @@ def self_test():
         assert not missing["shared_present"] and not missing["local_present"]
         assert missing["sources"]["project.default_turnpikes"] == "discovery"
         print("  ok   missing profiles are normal and retain discovery defaults")
+        shadow = tmp / "shadow"; shadow.mkdir()
+        (shadow / "json").mkdir()
+        (shadow / "json" / "__init__.py").write_text('raise SystemExit("target module imported")\n', encoding="utf-8")
+        isolated = subprocess.run(
+            ["timeout", "10", str(here / "project-settings.sh"), "inspect", str(shadow)],
+            capture_output=True, text=True, cwd=shadow,
+        )
+        assert isolated.returncode == 0, "target modules were imported: %s" % isolated.stderr
+        print("  ok   project modules cannot shadow the settings reader's standard library imports")
         ensure_ignore(repo)
         assert (repo / ".postmaster" / ".gitignore").read_text().endswith("*\n!.gitignore\n")
         assert not (repo / ".postmaster" / "settings.toml").exists()
