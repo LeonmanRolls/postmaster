@@ -19,13 +19,22 @@
 //   exit 2  not one of the stages
 //   exit 3  the run is done or abandoned, and only the postmaster moves it on
 //   exit 4  a terminal stage set by any actor but the postmaster
-import { appendFileSync, existsSync, readFileSync, writeFileSync, renameSync, mkdirSync, rmSync } from "node:fs";
-import { join, basename } from "node:path";
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { join } from "node:path";
+import { scriptsDir } from "./lib/paths.ts";
 import { run, withTempDir } from "./lib/proc.ts";
 import { SelfTest } from "./lib/selftest.ts";
-import { scriptsDir, toolRoot } from "./lib/paths.ts";
 
-const STAGES = "dispatched bootstrapped workhorses-running synthesis checkpoint-1 review shipping shipped done abandoned";
+const STAGES =
+  "dispatched bootstrapped workhorses-running synthesis checkpoint-1 review shipping shipped done abandoned";
 const STAGE_LIST = STAGES.split(" ");
 
 function setStage(d: string, newStage: string, actor: string): number {
@@ -74,30 +83,42 @@ function setStage(d: string, newStage: string, actor: string): number {
       if (!line.trim()) continue;
       try {
         const e = JSON.parse(line);
-        if ((e.action === "stage" && e.target === old) || (e.action === "dispatch" && since === null)) {
+        if (
+          (e.action === "stage" && e.target === old) ||
+          (e.action === "dispatch" && since === null)
+        ) {
           since = e.ts;
         }
-      } catch {
-        continue;
-      }
+      } catch {}
     }
   }
 
   let took = "";
   if (since) {
     const now = Math.floor(Date.now() / 1000);
-    const sinceSec = Math.floor(new Date(since.replace(" ", "T") + "Z").getTime() / 1000);
+    const sinceSec = Math.floor(new Date(`${since.replace(" ", "T")}Z`).getTime() / 1000);
     const sec = Math.max(0, now - sinceSec);
     const h = Math.floor(sec / 3600);
     const rem = sec % 3600;
     const m = Math.floor(rem / 60);
     const s = rem % 60;
-    const dur = h ? `${h}h ${String(m).padStart(2, "0")}m` : m ? `${m}m ${String(s).padStart(2, "0")}s` : `${s}s`;
+    const dur = h
+      ? `${h}h ${String(m).padStart(2, "0")}m`
+      : m
+        ? `${m}m ${String(s).padStart(2, "0")}s`
+        : `${s}s`;
     took = ` after ${dur}`;
   }
 
   // Log the change first
-  const logResult = run("bash", [join(HERE, "log-action.sh"), d, actor, "stage", newStage, `from ${old ?? "none"}${took}`]);
+  const logResult = run("bash", [
+    join(HERE, "log-action.sh"),
+    d,
+    actor,
+    "stage",
+    newStage,
+    `from ${old ?? "none"}${took}`,
+  ]);
   if (logResult.code !== 0) {
     console.error("stage: could not log the change");
     return 1;
@@ -108,7 +129,7 @@ function setStage(d: string, newStage: string, actor: string): number {
     const m = JSON.parse(readFileSync(manifestPath, "utf8"));
     m.stage = newStage;
     const tmp = join(d, `.manifest.json.tmp.${process.pid}`);
-    writeFileSync(tmp, JSON.stringify(m, null, 2) + "\n");
+    writeFileSync(tmp, `${JSON.stringify(m, null, 2)}\n`);
     renameSync(tmp, manifestPath);
   } catch {
     console.error("stage: logged, but could not write the manifest");
@@ -160,8 +181,10 @@ withTempDir((tmp) => {
   const st = new SelfTest();
 
   const fresh = (): void => {
-    writeFileSync(join(d, "manifest.json"),
-      '{"stage": "dispatched", "leg": 1, "base": "abc123", "lanes": {"luna": {"outcome": "running"}}, "coachman": {"legs": {}}}\n');
+    writeFileSync(
+      join(d, "manifest.json"),
+      '{"stage": "dispatched", "leg": 1, "base": "abc123", "lanes": {"luna": {"outcome": "running"}}, "coachman": {"legs": {}}}\n',
+    );
     writeFileSync(join(d, "actions.jsonl"), "");
     writeFileSync(join(d, "run-log.md"), "");
     run("bash", [join(HERE, "log-action.sh"), d, "postmaster", "dispatch", "RUN-1", "test"]);
@@ -169,7 +192,9 @@ withTempDir((tmp) => {
 
   const count = (): number => {
     try {
-      return readFileSync(join(d, "actions.jsonl"), "utf8").split("\n").filter((l) => l.includes('"action":"stage"')).length;
+      return readFileSync(join(d, "actions.jsonl"), "utf8")
+        .split("\n")
+        .filter((l) => l.includes('"action":"stage"')).length;
     } catch {
       return 0;
     }
@@ -191,8 +216,15 @@ withTempDir((tmp) => {
 
   try {
     const m = JSON.parse(readFileSync(join(d, "manifest.json"), "utf8"));
-    const expected = { stage: "bootstrapped", leg: 1, base: "abc123", lanes: { luna: { outcome: "running" } }, coachman: { legs: {} } };
-    if (JSON.stringify(m) === JSON.stringify(expected)) st.ok("only the manifest's stage field changes");
+    const expected = {
+      stage: "bootstrapped",
+      leg: 1,
+      base: "abc123",
+      lanes: { luna: { outcome: "running" } },
+      coachman: { legs: {} },
+    };
+    if (JSON.stringify(m) === JSON.stringify(expected))
+      st.ok("only the manifest's stage field changes");
     else st.fail("only the manifest's stage field changes");
   } catch {
     st.fail("only the manifest's stage field changes");
@@ -200,7 +232,8 @@ withTempDir((tmp) => {
 
   try {
     const log = readFileSync(join(d, "run-log.md"), "utf8");
-    if (log.includes("stage bootstrapped, from dispatched after")) st.ok("run-log.md records the change and how long the last stage took");
+    if (log.includes("stage bootstrapped, from dispatched after"))
+      st.ok("run-log.md records the change and how long the last stage took");
     else st.fail("run-log.md records the change and how long the last stage took");
   } catch {
     st.fail("run-log.md records the change and how long the last stage took");
@@ -209,7 +242,8 @@ withTempDir((tmp) => {
   setStage(d, "done", "postmaster");
   try {
     const log = readFileSync(join(d, "run-log.md"), "utf8");
-    if (log.includes("Stage timings, from actions.jsonl") && log.includes("bootstrapped ")) st.ok("the postmaster's terminal stage appends the run's timings");
+    if (log.includes("Stage timings, from actions.jsonl") && log.includes("bootstrapped "))
+      st.ok("the postmaster's terminal stage appends the run's timings");
     else st.fail("the postmaster's terminal stage appends the run's timings");
   } catch {
     st.fail("the postmaster's terminal stage appends the run's timings");
@@ -217,7 +251,8 @@ withTempDir((tmp) => {
 
   fresh();
   rc = setStage(d, "abandoned", "postmaster");
-  if (rc === 0 && count() === 1 && manifestStage() === "abandoned") st.ok("the postmaster abandons a run");
+  if (rc === 0 && count() === 1 && manifestStage() === "abandoned")
+    st.ok("the postmaster abandons a run");
   else st.fail(`the postmaster abandons a run (exit ${rc}, lines ${count()})`);
 
   fresh();
@@ -235,7 +270,11 @@ withTempDir((tmp) => {
   fresh();
   const beforeManifest = readFileSync(join(d, "manifest.json"), "utf8");
   rc = setStage(d, "reviewing", "coachman");
-  if (rc === 2 && count() === 0 && readFileSync(join(d, "manifest.json"), "utf8") === beforeManifest)
+  if (
+    rc === 2 &&
+    count() === 0 &&
+    readFileSync(join(d, "manifest.json"), "utf8") === beforeManifest
+  )
     st.ok("an unknown stage is refused, and nothing changes");
   else st.fail(`an unknown stage is refused, and nothing changes (exit ${rc})`);
 

@@ -94,9 +94,7 @@ const verified = run(beside(import.meta, "verify.sh"), ["checks", ".", "--gate",
 const fields = (line: string): number => (line === "" ? 0 : line.split("\t").length);
 let checks: string[] = [];
 if (verified.code === 0) {
-  checks = (verified.out + verified.err)
-    .split("\n")
-    .filter((l) => fields(l) >= 4);
+  checks = (verified.out + verified.err).split("\n").filter((l) => fields(l) >= 4);
   const gateLine = checks.find((l) => l.split("\t")[0] === "gate");
   if (gateLine !== undefined) gate = gateLine.split("\t")[2] ?? "";
   for (const l of (verified.out + verified.err).split("\n")) {

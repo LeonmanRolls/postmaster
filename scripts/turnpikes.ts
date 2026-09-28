@@ -51,7 +51,7 @@ function parseTable(table: string): { rows: Row[]; faults: string[] } {
   for (let n = 0; n < lines.length; n++) {
     const line = lines[n] ?? "";
     if (!line.trim() || line.trimStart().startsWith("#")) continue;
-    const f = line.split(/\s+/).slice(0, 4);
+    const _f = line.split(/\s+/).slice(0, 4);
     // actually need up to 4 fields: name, mark, leg, what (what may have spaces)
     const parts = line.trim().split(/\s+/);
     if (parts.length < 4 || !/[^\W_]/.test(parts.slice(3).join(" "))) {
@@ -89,7 +89,7 @@ function wordsOf(text: string): string[] {
   // remove Cf (format) characters
   const cleaned = [...text]
     .filter((ch) => {
-      const cp = ch.codePointAt(0) ?? 0;
+      const _cp = ch.codePointAt(0) ?? 0;
       // Cf category approx: ZWSP U+200B, ZWNJ U+200C, ZWJ U+200D, LRM U+200E, RLM U+200F, etc.
       // We'll use a simpler check for common ones plus a regex
       return !/[\u200B-\u200F\u202A-\u202E\u2060-\u2064\uFEFF]/.test(ch);
@@ -138,7 +138,7 @@ function resolve(table: string, text: string): { names: string[] | null; faults:
     const which =
       unknown.length === 1
         ? unknown[0]
-        : unknown.slice(0, -1).join(", ") + " and " + unknown[unknown.length - 1];
+        : `${unknown.slice(0, -1).join(", ")} and ${unknown[unknown.length - 1]}`;
     out.push(
       `${which} ${unknown.length === 1 ? "is not a turnpike" : "are not turnpikes"}; ${holds}`,
     );
@@ -157,7 +157,7 @@ function named(table: string, line: string): string[] | null {
     console.log(`"${line.replace(/\n/g, "\\n")}" is not a turnpikes: line`);
     process.exit(2);
   }
-  const value = line.replace(LINE, "").replace(/^([ \t]*turnpikes[ \t]*:)/, "");
+  const _value = line.replace(LINE, "").replace(/^([ \t]*turnpikes[ \t]*:)/, "");
   // LINE.sub("", line, count=1) removes the matched prefix
   const value2 = line.replace(/^[ \t]*turnpikes[ \t]*:/, "");
   if (wordsOf(value2).includes("default")) {

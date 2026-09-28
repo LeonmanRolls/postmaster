@@ -18,15 +18,7 @@
 // count a marker this script plants (positive control) and count zero for a pattern that cannot
 // match (negative control). A poller that can only ever say 0 is indistinguishable from lanes
 // that are still working, so it reads as patience rather than as a broken instrument.
-import {
-  chmodSync,
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  rmSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
+import { chmodSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { scriptsDir } from "./lib/paths.ts";
 import { run, withTempDir } from "./lib/proc.ts";
@@ -152,7 +144,7 @@ if (argv[0] === "--self-test") {
     else fail("markers already in are collected at once");
 
     // A marker that lands during the wait (background write after 1s)
-    const bg = run("bash", ["-c", `( sleep 1; touch "${join(d, "review-r2-bug-one.done")}" ) &`]);
+    const _bg = run("bash", ["-c", `( sleep 1; touch "${join(d, "review-r2-bug-one.done")}" ) &`]);
     invoke(d, "review-r2-*.done", "1", "3");
     if (rc === 0 && out.trim() === "all 1 markers present")
       ok("a marker that lands during the wait is collected by the timeout");

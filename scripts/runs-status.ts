@@ -25,10 +25,8 @@
 //   exit 0  listed (an empty root lists nothing)
 //   exit 1  usage, or no such root
 import {
-  closeSync,
   existsSync,
   mkdirSync,
-  openSync,
   readdirSync,
   readFileSync,
   statSync,
@@ -208,7 +206,7 @@ withTempDir((tmp) => {
     const origLog = console.log;
     let out = "";
     console.log = (s: string) => {
-      out += s + "\n";
+      out += `${s}\n`;
     };
     try {
       status(root);

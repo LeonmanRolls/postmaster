@@ -14,7 +14,7 @@
 //   exit 0  printed
 //   exit 1  usage, or the log is missing or unreadable
 //   exit 3  the log has no stage changes to time
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { withTempDir } from "./lib/proc.ts";
 import { SelfTest } from "./lib/selftest.ts";
@@ -29,7 +29,7 @@ function parseTs(s: string): Date | null {
   // BASE format is %Y-%m-%dT%H:%M:%SZ; accept that form, and the space-separated one too.
   const iso = s.endsWith("Z") ? s : `${s.replace(" ", "T")}Z`;
   const d = new Date(iso);
-  return isNaN(d.getTime()) ? null : d;
+  return Number.isNaN(d.getTime()) ? null : d;
 }
 
 function fmt(sec: number): string {
@@ -76,14 +76,14 @@ function times(dispatch: string): number {
     .filter((e) => e.action === "stage")
     .map((e) => [e.ts, e.target] as [Date, string]);
   const dispatchEv = events.find((e) => e.action === "dispatch");
-  if (dispatchEv && (starts.length === 0 || dispatchEv.ts <= starts[0]![0])) {
+  if (dispatchEv && (starts.length === 0 || dispatchEv.ts <= starts[0]?.[0])) {
     starts.unshift([dispatchEv.ts, "dispatched"]);
   }
   if (starts.length < 2 && !events.some((e) => e.action === "stage")) {
     console.log(`no stage changes logged in ${log}`);
     return 3;
   }
-  const last = events[events.length - 1]!.ts;
+  const last = events[events.length - 1]?.ts;
 
   // leg working spans: each handoff-accept to the next handoff
   const legs: Array<[Date, Date]> = [];
@@ -115,7 +115,7 @@ function times(dispatch: string): number {
       rows.push([stage, t, "-", "-"]);
       continue;
     }
-    const end = i + 1 < starts.length ? starts[i + 1]![0] : last;
+    const end = i + 1 < starts.length ? starts[i + 1]?.[0] : last;
     const note = i + 1 < starts.length ? "" : " (open)";
     const span = (end.getTime() - t.getTime()) / 1000;
     total += span;
@@ -166,7 +166,7 @@ withTempDir((tmp) => {
     });
 
   const writeLog = (lines: string[]): void => {
-    writeFileSync(join(tmp, "actions.jsonl"), lines.join("\n") + "\n");
+    writeFileSync(join(tmp, "actions.jsonl"), `${lines.join("\n")}\n`);
   };
 
   const check = (label: string, wantExit: number, ...texts: string[]): void => {
@@ -174,10 +174,10 @@ withTempDir((tmp) => {
     const origErr = console.error;
     let out = "";
     console.log = (s: string) => {
-      out += s + "\n";
+      out += `${s}\n`;
     };
     console.error = (s: string) => {
-      out += s + "\n";
+      out += `${s}\n`;
     };
     let rc: number;
     try {

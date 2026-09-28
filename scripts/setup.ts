@@ -21,10 +21,10 @@
 // Control: the written file is parsed back as TOML where a parser is available, and its reviewer
 // lanes are resolved through scripts/reviewers.sh, so a config that would fail to load is never
 // left on disk as if it were fine.
-import { existsSync, mkdirSync, readFileSync, readSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { readTomlFile, tryTomlFile } from "./lib/data.ts";
-import { scriptsDir, toolRoot } from "./lib/paths.ts";
+import { scriptsDir } from "./lib/paths.ts";
 import { die, run, withTempDir } from "./lib/proc.ts";
 import { SelfTest } from "./lib/selftest.ts";
 
@@ -73,7 +73,7 @@ function ask(prompt: string, def: string, key: string, opts: AskOpts): string {
       const text = readFileSync(opts.answers, "utf8");
       const lines = text.split("\n");
       for (const line of lines) {
-        if (line.startsWith(k + "=")) {
+        if (line.startsWith(`${k}=`)) {
           answer = line.slice(k.length + 1);
           break;
         }
@@ -114,7 +114,7 @@ function ask(prompt: string, def: string, key: string, opts: AskOpts): string {
 function hasKey(file: string, key: string): boolean {
   try {
     const text = readFileSync(file, "utf8");
-    return text.split("\n").some((l) => l.startsWith(key + "="));
+    return text.split("\n").some((l) => l.startsWith(`${key}=`));
   } catch {
     return false;
   }
@@ -447,7 +447,7 @@ review_link = "${RL}"
   }
   mkdirSync(dirname(CONFIG), { recursive: true });
   // BASE's $(heredoc) stripped trailing newlines and printf '%s\n' added exactly one back.
-  writeFileSync(CONFIG, OUT.replace(/\n+$/, "") + "\n", "utf8");
+  writeFileSync(CONFIG, `${OUT.replace(/\n+$/, "")}\n`, "utf8");
   // parse back as TOML
   try {
     readTomlFile(CONFIG);
@@ -488,7 +488,7 @@ withTempDir((tmp) => {
       "postmaster.model=pm",
     ];
     if (extra) lines.push(extra);
-    writeFileSync(join(tmp, `${name}.answers`), lines.join("\n") + "\n", "utf8");
+    writeFileSync(join(tmp, `${name}.answers`), `${lines.join("\n")}\n`, "utf8");
   }
 
   function runSetup(name: string): number {
@@ -503,10 +503,10 @@ withTempDir((tmp) => {
     return r.code;
   }
 
-  function team(name: string, key: string): string {
+  function _team(name: string, key: string): string {
     const cfg = tryTomlFile(join(tmp, `${name}.toml`));
     if (!cfg) return "null";
-    const t = cfg["team"] as Record<string, unknown> | undefined;
+    const t = cfg.team as Record<string, unknown> | undefined;
     const v = t?.[key];
     return JSON.stringify(v ?? null);
   }
@@ -514,8 +514,8 @@ withTempDir((tmp) => {
   function limit(name: string): string {
     const cfg = tryTomlFile(join(tmp, `${name}.toml`));
     if (!cfg) return "error";
-    const r = cfg["review"] as Record<string, unknown> | undefined;
-    return String(r?.["round_timeout_seconds"] ?? "error");
+    const r = cfg.review as Record<string, unknown> | undefined;
+    return String(r?.round_timeout_seconds ?? "error");
   }
 
   console.log("positive controls");
@@ -527,7 +527,7 @@ withTempDir((tmp) => {
       "a lens given its own lanes is written to [team.lens_reviewers]",
       lensRc === 0 &&
         cfg !== null &&
-        JSON.stringify((cfg["team"] as Record<string, unknown>)?.["lens_reviewers"]) ===
+        JSON.stringify((cfg.team as Record<string, unknown>)?.lens_reviewers) ===
           '{"security":["alpha","beta","sentinel"]}',
       `exit ${lensRc}`,
     );
@@ -554,9 +554,8 @@ withTempDir((tmp) => {
       "without lens answers there is no table, as before",
       plainRc === 0 &&
         cfg !== null &&
-        (cfg["team"] as Record<string, unknown>)?.["lens_reviewers"] === undefined &&
-        JSON.stringify((cfg["team"] as Record<string, unknown>)?.["reviewers"]) ===
-          '["alpha","beta"]',
+        (cfg.team as Record<string, unknown>)?.lens_reviewers === undefined &&
+        JSON.stringify((cfg.team as Record<string, unknown>)?.reviewers) === '["alpha","beta"]',
       `exit ${plainRc}`,
     );
   }
@@ -567,26 +566,26 @@ withTempDir((tmp) => {
   const rolesRc = runSetup("roles");
   {
     const cfg = tryTomlFile(join(tmp, "roles.toml"));
-    const t = cfg?.["team"] as Record<string, unknown> | undefined;
+    const t = cfg?.team as Record<string, unknown> | undefined;
     st.check(
       "the coachman, the fallback and the postmaster each get their env file, with or without an effort",
       rolesRc === 0 &&
         cfg !== null &&
-        JSON.stringify(t?.["coachman"]) ===
+        JSON.stringify(t?.coachman) ===
           '{"harness":"bash","model":"judge","effort":"max","env_file":"~/.postmaster/lanes/judge.env"}' &&
-        JSON.stringify(t?.["coachman_fallback"]) ===
+        JSON.stringify(t?.coachman_fallback) ===
           '{"harness":"bash","model":"spare","env_file":"spare.env"}' &&
-        JSON.stringify(t?.["postmaster"]) ===
+        JSON.stringify(t?.postmaster) ===
           '{"harness":"bash","model":"pm","env_file":"~/.postmaster/lanes/pm.env"}',
       `exit ${rolesRc}`,
     );
   }
   {
     const cfg = tryTomlFile(join(tmp, "plain.toml"));
-    const t = cfg?.["team"] as Record<string, unknown> | undefined;
+    const t = cfg?.team as Record<string, unknown> | undefined;
     st.check(
       "a role with no env file answer gets no env_file key",
-      JSON.stringify(t?.["coachman"]) === '{"harness":"bash","model":"judge"}',
+      JSON.stringify(t?.coachman) === '{"harness":"bash","model":"judge"}',
     );
   }
 
@@ -597,7 +596,11 @@ withTempDir((tmp) => {
   );
   answers("limit", "round_timeout_seconds=86400");
   const limitRc = runSetup("limit");
-  st.check("an answer sets it, up to 86400", limitRc === 0 && limit("limit") === "86400", `exit ${limitRc} limit=${limit("limit")}`);
+  st.check(
+    "an answer sets it, up to 86400",
+    limitRc === 0 && limit("limit") === "86400",
+    `exit ${limitRc} limit=${limit("limit")}`,
+  );
 
   console.log("negative controls");
   const badLimits = [
@@ -618,7 +621,9 @@ withTempDir((tmp) => {
     const out = readFileSync(join(tmp, `${name}.out`), "utf8");
     st.check(
       `a round time limit of '${v}' is refused, and nothing is written`,
-      rc === 1 && !existsSync(join(tmp, `${name}.toml`)) && out.includes("round_timeout_seconds must be"),
+      rc === 1 &&
+        !existsSync(join(tmp, `${name}.toml`)) &&
+        out.includes("round_timeout_seconds must be"),
       out,
     );
   }
@@ -646,7 +651,9 @@ withTempDir((tmp) => {
     const out = readFileSync(join(tmp, "shared.out"), "utf8");
     st.check(
       "a coachman on a lane's model is refused",
-      sharedRc === 1 && !existsSync(join(tmp, "shared.toml")) && out.includes("cannot run on a lane's model"),
+      sharedRc === 1 &&
+        !existsSync(join(tmp, "shared.toml")) &&
+        out.includes("cannot run on a lane's model"),
       out,
     );
   }
@@ -662,7 +669,9 @@ withTempDir((tmp) => {
     const out = readFileSync(join(tmp, "missing.out"), "utf8");
     st.check(
       "a missing answer is refused, naming it",
-      missingRc === 1 && !existsSync(join(tmp, "missing.toml")) && out.includes("no answer for fallback.model"),
+      missingRc === 1 &&
+        !existsSync(join(tmp, "missing.toml")) &&
+        out.includes("no answer for fallback.model"),
       out,
     );
   }

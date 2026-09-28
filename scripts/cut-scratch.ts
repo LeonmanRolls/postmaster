@@ -42,17 +42,17 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
   statSync,
   writeFileSync,
-  realpathSync,
 } from "node:fs";
 import { basename, dirname, join } from "node:path";
+import { scriptsDir } from "./lib/paths.ts";
 import { run, withTempDir } from "./lib/proc.ts";
 import { SelfTest } from "./lib/selftest.ts";
-import { scriptsDir } from "./lib/paths.ts";
 
-const DEPS = process.env["DEPS_DIRS"] ?? "node_modules";
+const DEPS = process.env.DEPS_DIRS ?? "node_modules";
 
 interface CmdResult {
   code: number;
@@ -93,7 +93,12 @@ function cloneDir(src: string, dest: string): boolean {
   }
   mkdirSync(dirname(dest), { recursive: true });
   try {
-    cpSync(src, dest, { recursive: true, verbatimSymlinks: true, force: true, errorOnExist: false });
+    cpSync(src, dest, {
+      recursive: true,
+      verbatimSymlinks: true,
+      force: true,
+      errorOnExist: false,
+    });
     return true;
   } catch {
     return false;
@@ -139,21 +144,21 @@ function verify(dest: string, snap: string, base = ""): CmdResult {
   const k = kind(dest);
   if (!k) {
     err.push(`cut-scratch: ${dest} is no scratch`);
-    return { code: 1, out: "", err: err.join("\n") + "\n" };
+    return { code: 1, out: "", err: `${err.join("\n")}\n` };
   }
   const atR = run("git", ["-C", dest, "rev-parse", "--verify", "-q", `${snap}^{commit}`]);
   const headR = run("git", ["-C", dest, "rev-parse", "HEAD"]);
   const at = atR.code === 0 ? atR.out.trim() : "";
   if (!at || headR.out.trim() !== at) {
     err.push(`cut-scratch: ${dest} is not at ${snap}`);
-    return { code: 1, out: "", err: err.join("\n") + "\n" };
+    return { code: 1, out: "", err: `${err.join("\n")}\n` };
   }
   if (!base) return { code: 0, out: "", err: "" };
   if (!k.startsWith("clone ")) {
     err.push(
       `cut-scratch: ${dest} is a worktree, where a skill that diffs against origin/HEAD needs a clone`,
     );
-    return { code: 1, out: "", err: err.join("\n") + "\n" };
+    return { code: 1, out: "", err: `${err.join("\n")}\n` };
   }
   const wantR = run("git", ["-C", dest, "rev-parse", "--verify", "-q", `${base}^{commit}`]);
   const want = wantR.code === 0 ? wantR.out.trim() : "";
@@ -163,7 +168,7 @@ function verify(dest: string, snap: string, base = ""): CmdResult {
   err.push(
     `cut-scratch: in ${dest}, origin/HEAD does not lead back to ${base} (merge base ${mb || "none"}), so a skill that diffs against it would review the wrong change`,
   );
-  return { code: 1, out: "", err: err.join("\n") + "\n" };
+  return { code: 1, out: "", err: `${err.join("\n")}\n` };
 }
 
 function cut(repo: string, src: string, dest: string, snap: string, base = ""): CmdResult {
@@ -171,20 +176,20 @@ function cut(repo: string, src: string, dest: string, snap: string, base = ""): 
   const err: string[] = [];
   if (existsSync(dest)) {
     err.push(`cut-scratch: ${dest} already exists; a scratch is cut fresh`);
-    return { code: 1, out: "", err: err.join("\n") + "\n" };
+    return { code: 1, out: "", err: `${err.join("\n")}\n` };
   }
   let want = "";
   if (!base) {
     const r = run("git", ["-C", repo, "worktree", "add", "--detach", dest, snap]);
     if (r.code !== 0) {
       err.push(`cut-scratch: git could not create ${dest} at ${snap}`);
-      return { code: 1, out: "", err: err.join("\n") + "\n" };
+      return { code: 1, out: "", err: `${err.join("\n")}\n` };
     }
   } else {
     const wantR = run("git", ["-C", repo, "rev-parse", "--verify", "-q", `${base}^{commit}`]);
     if (wantR.code !== 0) {
       err.push(`cut-scratch: no such base in ${repo}: ${base}`);
-      return { code: 1, out: "", err: err.join("\n") + "\n" };
+      return { code: 1, out: "", err: `${err.join("\n")}\n` };
     }
     want = wantR.out.trim();
     const cloneR = run("git", ["clone", "-q", "--shared", "--no-checkout", repo, dest]);
@@ -195,12 +200,12 @@ function cut(repo: string, src: string, dest: string, snap: string, base = ""): 
     if (cloneR.code !== 0 || checkoutR.code !== 0) {
       err.push(`cut-scratch: git could not clone ${repo} to ${dest} at ${snap}`);
       if (existsSync(dest)) rmSync(dest, { recursive: true, force: true });
-      return { code: 1, out: "", err: err.join("\n") + "\n" };
+      return { code: 1, out: "", err: `${err.join("\n")}\n` };
     }
     const v = verify(dest, snap, want);
     if (v.code !== 0) {
       rmSync(dest, { recursive: true, force: true });
-      return { code: 1, out: "", err: v.err + `cut-scratch: removed ${dest}\n` };
+      return { code: 1, out: "", err: `${v.err}cut-scratch: removed ${dest}\n` };
     }
   }
   let cloned = 0;
@@ -243,7 +248,7 @@ function cut(repo: string, src: string, dest: string, snap: string, base = ""): 
       `cut-scratch: no dependency directory found under ${src}; if the project has one, install it there first`,
     );
   }
-  return { code: 0, out: out.join("\n") + "\n", err: err.join("\n") + "\n" };
+  return { code: 0, out: `${out.join("\n")}\n`, err: `${err.join("\n")}\n` };
 }
 
 function remove(repoArg: string, dest: string): CmdResult {
@@ -251,7 +256,7 @@ function remove(repoArg: string, dest: string): CmdResult {
   const common = commonOf(repoArg);
   if (!common) {
     err.push(`cut-scratch: not a repository: ${repoArg}`);
-    return { code: 1, out: "", err: err.join("\n") + "\n" };
+    return { code: 1, out: "", err: `${err.join("\n")}\n` };
   }
   const repo = mainOf(common);
   const k = kind(dest);
@@ -259,12 +264,12 @@ function remove(repoArg: string, dest: string): CmdResult {
     err.push(
       `cut-scratch: ${dest} is neither a detached worktree nor a shared clone, so no scratch; left alone`,
     );
-    return { code: 1, out: "", err: err.join("\n") + "\n" };
+    return { code: 1, out: "", err: `${err.join("\n")}\n` };
   }
   const kRepo = k.slice(k.indexOf(" ") + 1);
   if (kRepo !== repo) {
     err.push(`cut-scratch: ${dest} is a scratch of ${kRepo}, not of ${repo}; left alone`);
-    return { code: 1, out: "", err: err.join("\n") + "\n" };
+    return { code: 1, out: "", err: `${err.join("\n")}\n` };
   }
   if (k.startsWith("worktree ")) {
     const r = run("git", ["-C", repo, "worktree", "remove", "--force", dest]);
@@ -314,15 +319,15 @@ if (argv[0] === "--check") {
 const self = join(scriptsDir(import.meta), "cut-scratch.sh");
 withTempDir((tmpRaw) => {
   const tmp = phys(tmpRaw) || tmpRaw;
-  process.env["GIT_AUTHOR_NAME"] = "t";
-  process.env["GIT_AUTHOR_EMAIL"] = "t@t";
-  process.env["GIT_COMMITTER_NAME"] = "t";
-  process.env["GIT_COMMITTER_EMAIL"] = "t@t";
+  process.env.GIT_AUTHOR_NAME = "t";
+  process.env.GIT_AUTHOR_EMAIL = "t@t";
+  process.env.GIT_COMMITTER_NAME = "t";
+  process.env.GIT_COMMITTER_EMAIL = "t@t";
   const st = new SelfTest();
 
   const git = (...args: string[]): CmdResult => run("git", args);
   const commit = (repoDir: string, file: string, content: string): CmdResult => {
-    writeFileSync(join(repoDir, file), content + "\n");
+    writeFileSync(join(repoDir, file), `${content}\n`);
     const a = git("-C", repoDir, "add", file);
     if (a.code !== 0) return a;
     return git("-C", repoDir, "commit", "-qm", content);
@@ -362,7 +367,9 @@ withTempDir((tmpRaw) => {
   tryRun(repo, synth, join(tmp, "wt"), snap);
   check(
     "a worktree scratch is cut at the snapshot, with its dependencies cloned",
-    rc === 0 && headOf(join(tmp, "wt")) === snap && exists(join(tmp, "wt", "node_modules/dep/index.js")),
+    rc === 0 &&
+      headOf(join(tmp, "wt")) === snap &&
+      exists(join(tmp, "wt", "node_modules/dep/index.js")),
     out,
   );
   tryRun(repo, synth, join(tmp, "clone"), snap, "--clone", base);
@@ -401,7 +408,11 @@ withTempDir((tmpRaw) => {
       return ["?"];
     }
   })();
-  check("and it copied no objects", altSize > 0 && loose.length === 0, `loose=${JSON.stringify(loose)}`);
+  check(
+    "and it copied no objects",
+    altSize > 0 && loose.length === 0,
+    `loose=${JSON.stringify(loose)}`,
+  );
   const kwt = run(self, ["--kind", join(tmp, "wt")]);
   const kcl = run(self, ["--kind", join(tmp, "clone")]);
   check(

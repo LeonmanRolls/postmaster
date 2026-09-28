@@ -48,7 +48,7 @@ let roots = process.argv.slice(2);
 if (roots.length === 0 && existsSync(CONFIG)) {
   const parsed = tryTomlFile(CONFIG);
   if (parsed !== null) {
-    const list = parsed["projects_roots"];
+    const list = parsed.projects_roots;
     if (Array.isArray(list)) roots = list.map((r) => String(r));
   }
 }

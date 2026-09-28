@@ -111,8 +111,8 @@ function lint(repo: string): number {
       if (!(key in fm)) fault(p, `front matter has no ${key}`);
     }
 
-    if (fm["type"] === "concept") {
-      const st = fm["standing"];
+    if (fm.type === "concept") {
+      const st = fm.standing;
       if (st === undefined) {
         fault(p, "concept with no standing");
       } else if (!STANDINGS.has(st)) {
@@ -120,7 +120,7 @@ function lint(repo: string): number {
       }
       const sources: Array<[string, string]> = [];
       // parse sources like python's re.findall(r"([a-z]+)/([^,\]\s]+)", fm.get("sources",""))
-      for (const m of (fm["sources"] ?? "").matchAll(/([a-z]+)\/([^,\]\s]+)/g)) {
+      for (const m of (fm.sources ?? "").matchAll(/([a-z]+)\/([^,\]\s]+)/g)) {
         sources.push([m[1] ?? "", m[2] ?? ""]);
       }
       for (const [kind, ident] of sources) {
@@ -129,7 +129,7 @@ function lint(repo: string): number {
         }
       }
       const own = sources.filter(([k]) => OWN_EVIDENCE.includes(k));
-      const stArr = st === undefined ? "" : st;
+      const _stArr = st === undefined ? "" : st;
       if (st !== undefined && STANDINGS.has(st) && st !== "claimed" && own.length === 0) {
         fault(
           p,
@@ -290,7 +290,7 @@ function expect(passOrFail: "pass" | "fail", label: string, wantIn?: string): vo
   }
 }
 
-const currentLint: { code: number; out: string } = { code: 0, out: "" };
+const _currentLint: { code: number; out: string } = { code: 0, out: "" };
 function lintCapture(): { code: number; out: string } {
   // capture console.log output of lint
   const logs: string[] = [];
@@ -333,7 +333,7 @@ withTempDir((tmp) => {
     );
     // link from the index
     const idx = join(tmp, "wiki", "index.md");
-    writeFileSync(idx, readFileSync(idx, "utf8") + `\n- [${name}](concepts/${name}.md)\n`, "utf8");
+    writeFileSync(idx, `${readFileSync(idx, "utf8")}\n- [${name}](concepts/${name}.md)\n`, "utf8");
   };
   const concept = (name: string, standing: string, sources: string): void => {
     page(
@@ -365,7 +365,7 @@ withTempDir((tmp) => {
   writeFileSync(join(tmp, "wiki", "concepts", "bare.md"), "# no front matter\n", "utf8");
   {
     const idx = join(tmp, "wiki", "index.md");
-    writeFileSync(idx, readFileSync(idx, "utf8") + "\n- [bare](concepts/bare.md)\n", "utf8");
+    writeFileSync(idx, `${readFileSync(idx, "utf8")}\n- [bare](concepts/bare.md)\n`, "utf8");
   }
   expect("fail", "a page without front matter", "no front matter");
 
@@ -395,7 +395,7 @@ withTempDir((tmp) => {
   concept("cites", "claimed", "");
   writeFileSync(
     join(tmp, "wiki", "concepts", "cites.md"),
-    readFileSync(join(tmp, "wiki", "concepts", "cites.md"), "utf8") + "See [@runs/no-such-run].\n",
+    `${readFileSync(join(tmp, "wiki", "concepts", "cites.md"), "utf8")}See [@runs/no-such-run].\n`,
     "utf8",
   );
   expect("fail", "a citation that does not resolve", "does not resolve under raw/");
@@ -404,7 +404,7 @@ withTempDir((tmp) => {
   concept("wl", "claimed", "");
   writeFileSync(
     join(tmp, "wiki", "concepts", "wl.md"),
-    readFileSync(join(tmp, "wiki", "concepts", "wl.md"), "utf8") + "See [[no-such-page]].\n",
+    `${readFileSync(join(tmp, "wiki", "concepts", "wl.md"), "utf8")}See [[no-such-page]].\n`,
     "utf8",
   );
   expect("fail", "a wikilink with no page", "has no page");
@@ -412,7 +412,7 @@ withTempDir((tmp) => {
   fresh();
   {
     const idx = join(tmp, "wiki", "index.md");
-    writeFileSync(idx, readFileSync(idx, "utf8") + "\n[a dangling link](nowhere.md)\n", "utf8");
+    writeFileSync(idx, `${readFileSync(idx, "utf8")}\n[a dangling link](nowhere.md)\n`, "utf8");
   }
   expect("fail", "a relative link that does not resolve", "link to nowhere.md");
 

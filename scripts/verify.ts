@@ -15,17 +15,26 @@
 //   exit 1  usage, or input that is not what it says, a declaration included
 //   exit 2  run, results: a check failed; summary: a check is missing, or a claim disagrees
 //   exit 3  run, results: none failed, but a check was not run or has no result
-import {
-  existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, statSync, readdirSync,
-  appendFileSync, renameSync, mkdtempSync, openSync, closeSync, writeSync,
-} from "node:fs";
-import { dirname, join, resolve, sep, basename } from "node:path";
-import { tmpdir, constants as osConstants } from "node:os";
+
 import { spawn, spawnSync } from "node:child_process";
-import { run, withTempDir, die } from "./lib/proc.ts";
-import { SelfTest } from "./lib/selftest.ts";
-import { tryJsonFile, tryTomlFile, readTomlFile, parseTomlText } from "./lib/data.ts";
+import {
+  appendFileSync,
+  closeSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { constants as osConstants } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import { parseTomlText, tryTomlFile } from "./lib/data.ts";
 import { scriptsDir } from "./lib/paths.ts";
+import { run, withTempDir } from "./lib/proc.ts";
+import { SelfTest } from "./lib/selftest.ts";
 
 const HERE = scriptsDir(import.meta);
 const DECLARATION = ".postmaster/project.toml";
@@ -34,9 +43,21 @@ const NAME_RE = /^[a-z][a-z0-9-]*$/;
 const KEYS = ["command", "shows", "use", "score", "threshold", "timeout"];
 const TIMEOUT = 1800;
 const USABLE = ["cli-examples", "browser-suite", "web-journey", "library-tests"];
-const WEB = new Set(["next", "nuxt", "vite", "@sveltejs/kit", "astro", "@remix-run/react", "react-scripts", "@angular/core", "gatsby", "@solidjs/start"]);
+const WEB = new Set([
+  "next",
+  "nuxt",
+  "vite",
+  "@sveltejs/kit",
+  "astro",
+  "@remix-run/react",
+  "react-scripts",
+  "@angular/core",
+  "gatsby",
+  "@solidjs/start",
+]);
 const SUITE_SCRIPTS = ["e2e", "test:e2e", "test:browser", "playwright", "cypress"];
-const RESULT_RE = /^\s*(?:[-*]\s+)?(`?)([a-z][a-z0-9-]*): (pass|fail|not run), exit (-?\d+|-), (\d+)s: (.*?)\1\s*$/;
+const RESULT_RE =
+  /^\s*(?:[-*]\s+)?(`?)([a-z][a-z0-9-]*): (pass|fail|not run), exit (-?\d+|-), (\d+)s: (.*?)\1\s*$/;
 const DETAIL_RE = /^on=(\S+)@([0-9a-f]+) result=(\S+) exit=(\S+)/;
 const ANSI_RE = /\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)|[@-Z\\-_])/g;
 const CONTROL_RE = /[\x00-\x08\x0b-\x1f\x7f]/g;
@@ -52,28 +73,40 @@ interface Check {
   timeout?: number;
 }
 
-const DEFAULTS: Record<string, { name: string; kind: string; shows: string; script: string | null }> = {
+const DEFAULTS: Record<
+  string,
+  { name: string; kind: string; shows: string; script: string | null }
+> = {
   gate: { name: "gate", kind: "project", shows: "the project's gate passes", script: null },
   "cli-examples": {
-    name: "examples", kind: "tool",
-    shows: "the ticket's example transcripts, run through the project's command, print and exit as they say",
+    name: "examples",
+    kind: "tool",
+    shows:
+      "the ticket's example transcripts, run through the project's command, print and exit as they say",
     script: "verify-examples.sh",
   },
-  "browser-suite": { name: "browser", kind: "project", shows: "the project's browser suite passes", script: null },
+  "browser-suite": {
+    name: "browser",
+    kind: "project",
+    shows: "the project's browser suite passes",
+    script: null,
+  },
   "web-journey": {
-    name: "journey", kind: "tool",
+    name: "journey",
+    kind: "tool",
     shows: "each step of the ticket's User journey, walked in a browser, does what the ticket says",
     script: "verify-journey.sh",
   },
   "library-tests": {
-    name: "library", kind: "tool",
+    name: "library",
+    kind: "tool",
     shows: "the tests that import the library by its package name pass",
     script: "verify-library.sh",
   },
 };
 
 function dieV(msg: string): never {
-  console.error("verify: " + msg);
+  console.error(`verify: ${msg}`);
   process.exit(1);
   throw new Error("unreachable");
 }
@@ -85,13 +118,21 @@ function signalExit(signal: string): { code: number; num: number } {
 }
 
 function plain(text: string): string {
-  return text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").replace(ANSI_RE, "").replace(CONTROL_RE, "");
+  return text
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .replace(ANSI_RE, "")
+    .replace(CONTROL_RE, "");
 }
 
 function oneline(command: string): string {
   const c = command.trim();
   if (!c.includes("\n")) return c;
-  const quoted = c.replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/\n/g, "\\n").replace(/\t/g, "\\t");
+  const quoted = c
+    .replace(/\\/g, "\\\\")
+    .replace(/'/g, "\\'")
+    .replace(/\n/g, "\\n")
+    .replace(/\t/g, "\\t");
   return `bash -eo pipefail -c $'${quoted}'`;
 }
 
@@ -129,8 +170,9 @@ function discover(repo: string): { found: string[]; suite: string } {
       const d = p[k];
       if (d && typeof d === "object") Object.assign(deps, d);
     }
-    const scriptsRaw = p["scripts"];
-    const scripts: Record<string, string> = scriptsRaw && typeof scriptsRaw === "object" ? (scriptsRaw as Record<string, string>) : {};
+    const scriptsRaw = p.scripts;
+    const scripts: Record<string, string> =
+      scriptsRaw && typeof scriptsRaw === "object" ? (scriptsRaw as Record<string, string>) : {};
     let suite = "";
     for (const s of SUITE_SCRIPTS) {
       if (scripts[s]) {
@@ -138,22 +180,33 @@ function discover(repo: string): { found: string[]; suite: string } {
         break;
       }
     }
-    if (!suite && ["ts", "js", "mjs", "cjs", "mts"].some((e) => existsSync(join(repo, `playwright.config.${e}`)))) {
+    if (
+      !suite &&
+      ["ts", "js", "mjs", "cjs", "mts"].some((e) =>
+        existsSync(join(repo, `playwright.config.${e}`)),
+      )
+    ) {
       suite = "npx playwright test";
     }
-    if (!suite && ["ts", "js", "mjs", "cjs"].some((e) => existsSync(join(repo, `cypress.config.${e}`)))) {
+    if (
+      !suite &&
+      ["ts", "js", "mjs", "cjs"].some((e) => existsSync(join(repo, `cypress.config.${e}`)))
+    ) {
       suite = "npx cypress run";
     }
-    if (p["bin"]) found.push("cli-examples");
+    if (p.bin) found.push("cli-examples");
     if (suite || [...WEB].some((w) => w in deps)) found.push("browser-suite", "web-journey");
-    if ("exports" in p || (("main" in p || "module" in p) && p["private"] !== true)) found.push("library-tests");
+    if ("exports" in p || (("main" in p || "module" in p) && p.private !== true))
+      found.push("library-tests");
     return { found, suite };
   }
   if (existsSync(join(repo, "Cargo.toml"))) {
     const text = readFileSync(join(repo, "Cargo.toml"), "utf-8");
     return {
       found: [
-        ...(text.includes("[[bin]]") || existsSync(join(repo, "src", "main.rs")) ? ["cli-examples"] : []),
+        ...(text.includes("[[bin]]") || existsSync(join(repo, "src", "main.rs"))
+          ? ["cli-examples"]
+          : []),
         ...(existsSync(join(repo, "src", "lib.rs")) ? ["library-tests"] : []),
       ],
       suite: "",
@@ -161,10 +214,12 @@ function discover(repo: string): { found: string[]; suite: string } {
   }
   if (existsSync(join(repo, "pyproject.toml"))) {
     try {
-      const project = (tryTomlFile(join(repo, "pyproject.toml")) ?? {})["project"];
+      const project = tryTomlFile(join(repo, "pyproject.toml"))?.project;
       if (project && typeof project === "object") {
         return {
-          found: (project as Record<string, unknown>)["scripts"] ? ["cli-examples"] : ["library-tests"],
+          found: (project as Record<string, unknown>).scripts
+            ? ["cli-examples"]
+            : ["library-tests"],
           suite: "",
         };
       }
@@ -175,12 +230,20 @@ function discover(repo: string): { found: string[]; suite: string } {
   return { found: [], suite: "" };
 }
 
-function mkDefault(which: string, gate: string, suite: string, name?: string, shows?: string, source?: string): Check {
+function mkDefault(
+  which: string,
+  gate: string,
+  suite: string,
+  name?: string,
+  shows?: string,
+  source?: string,
+): Check {
   const d = DEFAULTS[which]!;
-  const command = which === "gate" ? gate : which === "browser-suite" ? suite : `'${join(HERE, d.script ?? "")}'`;
+  const command =
+    which === "gate" ? gate : which === "browser-suite" ? suite : `'${join(HERE, d.script ?? "")}'`;
   return {
     name: name || d.name,
-    source: source || "default:" + which,
+    source: source || `default:${which}`,
     kind: d.kind,
     command: command || "",
     shows: shows || d.shows,
@@ -193,7 +256,7 @@ function declared(repo: string, gate: string, suite: string): Check[] | null {
   let table: Record<string, any>;
   try {
     const parsed = parseTomlText(readFileSync(p, "utf-8"));
-    table = (parsed["checks"] as Record<string, any>) ?? null;
+    table = (parsed.checks as Record<string, any>) ?? null;
   } catch (e: any) {
     dieV(`${DECLARATION} does not parse: ${e.message || e}`);
   }
@@ -214,7 +277,9 @@ function declared(repo: string, gate: string, suite: string): Check[] | null {
       faults.push(`${at} must be a table`);
       continue;
     }
-    const extra = Object.keys(c).filter((k) => !KEYS.includes(k)).sort();
+    const extra = Object.keys(c)
+      .filter((k) => !KEYS.includes(k))
+      .sort();
     if (extra.length > 0) {
       faults.push(`${at}: ${extra.join(", ")} is not a key; the keys are ${KEYS.join(", ")}`);
     }
@@ -224,34 +289,44 @@ function declared(repo: string, gate: string, suite: string): Check[] | null {
       faults.push(`${at} needs a command or a use, not both`);
       continue;
     }
-    const shows = c["shows"];
+    const shows = c.shows;
     if (shows !== undefined && (typeof shows !== "string" || !shows.trim())) {
       faults.push(`${at}: shows is words saying what the check shows`);
     }
-    if ("timeout" in c && (typeof c["timeout"] !== "number" || !Number.isInteger(c["timeout"]) || c["timeout"] <= 0)) {
+    if (
+      "timeout" in c &&
+      (typeof c.timeout !== "number" || !Number.isInteger(c.timeout) || c.timeout <= 0)
+    ) {
       faults.push(`${at}: timeout is a whole number of seconds`);
     }
     let check: Check | null = null;
     if (hasUse) {
-      if (name === "gate" || !USABLE.includes(c["use"])) {
-        faults.push(`${at}: use names a default, one of ${USABLE.join(", ")}; the gate takes a command`);
+      if (name === "gate" || !USABLE.includes(c.use)) {
+        faults.push(
+          `${at}: use names a default, one of ${USABLE.join(", ")}; the gate takes a command`,
+        );
       }
       if ("score" in c || "threshold" in c) {
-        faults.push(`${at}: a score is read from a command's output, so it goes with command, not use`);
+        faults.push(
+          `${at}: a score is read from a command's output, so it goes with command, not use`,
+        );
       }
       if (faults.length === before) {
-        check = mkDefault(c["use"], gate, suite, name, shows, "declared:" + c["use"]);
+        check = mkDefault(c.use, gate, suite, name, shows, `declared:${c.use}`);
       }
     } else {
-      if (typeof c["command"] !== "string" || !c["command"].trim()) {
+      if (typeof c.command !== "string" || !c.command.trim()) {
         faults.push(`${at}: command is the shell command that runs the check`);
       }
       if (shows === undefined) {
         faults.push(`${at}: shows says what the check shows`);
       }
       check = {
-        name, source: "declared", kind: "project",
-        command: String(c["command"]).trim(), shows: shows as string,
+        name,
+        source: "declared",
+        kind: "project",
+        command: String(c.command).trim(),
+        shows: shows as string,
       };
       const hasScore = "score" in c;
       const hasThreshold = "threshold" in c;
@@ -259,22 +334,22 @@ function declared(repo: string, gate: string, suite: string): Check[] | null {
         faults.push(`${at}: score and threshold go together`);
       } else if (hasScore) {
         try {
-          const re = new RegExp(c["score"]);
-          if (typeof c["score"] !== "string" || re.source.match(/\((?!\?)/g)?.length !== 1) {
+          const re = new RegExp(c.score);
+          if (typeof c.score !== "string" || re.source.match(/\((?!\?)/g)?.length !== 1) {
             faults.push(`${at}: score is a regular expression with one group, the number`);
           }
         } catch (e: any) {
           faults.push(`${at}: score is not a regular expression: ${e.message || e}`);
         }
-        if (typeof c["threshold"] !== "number" || typeof c["threshold"] === "boolean") {
+        if (typeof c.threshold !== "number" || typeof c.threshold === "boolean") {
           faults.push(`${at}: threshold is a number`);
         }
-        check.score = c["score"];
-        check.threshold = c["threshold"];
+        check.score = c.score;
+        check.threshold = c.threshold;
       }
     }
     if (check !== null) {
-      if ("timeout" in c) check.timeout = c["timeout"];
+      if ("timeout" in c) check.timeout = c.timeout;
       out.push(check);
     }
   }
@@ -284,7 +359,11 @@ function declared(repo: string, gate: string, suite: string): Check[] | null {
   return out;
 }
 
-function resolveChecks(repo: string, gate: string, warnGate = false): { checks: Check[]; decl: string | null } {
+function resolveChecks(
+  repo: string,
+  gate: string,
+  warnGate = false,
+): { checks: Check[]; decl: string | null } {
   const { found, suite } = discover(repo);
   const checks = declared(repo, gate, suite);
   if (checks === null) {
@@ -293,15 +372,25 @@ function resolveChecks(repo: string, gate: string, warnGate = false): { checks: 
       decl: null,
     };
   }
-  if (git(repo, "rev-parse", "--git-dir") !== null && git(repo, "ls-files", "--error-unmatch", DECLARATION) === null) {
-    console.error(`verify: warn: ${DECLARATION} is not committed, so its checks hold on this checkout only`);
+  if (
+    git(repo, "rev-parse", "--git-dir") !== null &&
+    git(repo, "ls-files", "--error-unmatch", DECLARATION) === null
+  ) {
+    console.error(
+      `verify: warn: ${DECLARATION} is not committed, so its checks hold on this checkout only`,
+    );
   }
   const gates = checks.filter((c) => c.name === "gate");
-  if (warnGate && gates.length > 0 && gate && oneline(gates[0]!.command) !== oneline(gate)) {
-    console.error(`verify: warn: ${DECLARATION} declares the gate as ${oneline(gates[0]!.command)}, so ${gate} is not used`);
+  if (warnGate && gates.length > 0 && gate && oneline(gates[0]?.command) !== oneline(gate)) {
+    console.error(
+      `verify: warn: ${DECLARATION} declares the gate as ${oneline(gates[0]?.command)}, so ${gate} is not used`,
+    );
   }
   return {
-    checks: [...(gates.length > 0 ? gates : [mkDefault("gate", gate, suite)]), ...checks.filter((c) => c.name !== "gate")],
+    checks: [
+      ...(gates.length > 0 ? gates : [mkDefault("gate", gate, suite)]),
+      ...checks.filter((c) => c.name !== "gate"),
+    ],
     decl: DECLARATION,
   };
 }
@@ -312,7 +401,9 @@ function human(checks: Check[]): string {
     lines.push(`${c.name} [${c.source}] ${oneline(c.command) || "(no command found)"}`);
     lines.push(`  shows: ${c.shows}`);
     if (c.threshold !== undefined) {
-      lines.push(`  passes when it exits 0 and the last number /${c.score}/ captures is ${c.threshold} or more`);
+      lines.push(
+        `  passes when it exits 0 and the last number /${c.score}/ captures is ${c.threshold} or more`,
+      );
     }
   }
   return lines.join("\n");
@@ -329,7 +420,9 @@ function topOf(wt: string): string {
 function recordedChecks(dispatch: string): Check[] {
   const d = loadJson(join(dispatch, "checks.json"));
   if (!d || typeof d !== "object" || !Array.isArray((d as any).checks)) {
-    dieV(`no checks recorded at ${join(dispatch, "checks.json")}: the postmaster records them at dispatch with verify.sh record`);
+    dieV(
+      `no checks recorded at ${join(dispatch, "checks.json")}: the postmaster records them at dispatch with verify.sh record`,
+    );
   }
   return (d as any).checks;
 }
@@ -345,7 +438,10 @@ function ticketPart(text: string): string {
       break;
     }
   }
-  return lines.slice(start + 1, end).join("\n").replace(/^\n+|\n+$/g, "") + "\n";
+  return `${lines
+    .slice(start + 1, end)
+    .join("\n")
+    .replace(/^\n+|\n+$/g, "")}\n`;
 }
 
 function writeSpec(spec: string, dispatch: string, journey: string): Check[] {
@@ -358,7 +454,10 @@ function writeSpec(spec: string, dispatch: string, journey: string): Check[] {
   }
   mkdirSync(spec, { recursive: true });
   writeFileSync(join(spec, "ticket.md"), ticket);
-  writeFileSync(join(spec, "spec.json"), JSON.stringify({ checks, journey_dir: journey }, null, 2) + "\n");
+  writeFileSync(
+    join(spec, "spec.json"),
+    `${JSON.stringify({ checks, journey_dir: journey }, null, 2)}\n`,
+  );
   return checks;
 }
 
@@ -370,32 +469,42 @@ function armWt(wt: string, dispatch: string): { top: string; spec: string; check
   const commonPath = common.startsWith("/") ? common : join(top, common);
   const exclude = join(commonPath, "info", "exclude");
   const lines = existsSync(exclude) ? readFileSync(exclude, "utf-8").split("\n") : [];
-  if (!lines.includes(SPEC + "/")) {
+  if (!lines.includes(`${SPEC}/`)) {
     mkdirSync(dirname(exclude), { recursive: true });
     const existing = existsSync(exclude) ? readFileSync(exclude, "utf-8") : "";
     const prefix = existing && !existing.endsWith("\n") ? "\n" : "";
-    appendFileSync(exclude, prefix + SPEC + "/\n");
+    appendFileSync(exclude, `${prefix + SPEC}/\n`);
   }
   return { top, spec, checks };
 }
 
 function uncommitted(top: string): string[] {
   const r = run("git", ["-C", top, "status", "--porcelain", "--untracked-files=all"]);
-  return r.out.split("\n")
-    .filter((l) => l.slice(3) && !l.slice(3).replace(/^"|"$/g, "").startsWith(SPEC + "/"))
+  return r.out
+    .split("\n")
+    .filter((l) => l.slice(3) && !l.slice(3).replace(/^"|"$/g, "").startsWith(`${SPEC}/`))
     .map((l) => l.slice(3));
 }
 
 function listedFiles(files: string[]): string {
-  return files.slice(0, 10).join(", ") + (files.length > 10 ? ` and ${files.length - 10} more` : "");
+  return (
+    files.slice(0, 10).join(", ") + (files.length > 10 ? ` and ${files.length - 10} more` : "")
+  );
 }
 
-let runningPgid: number | null = null;
+let _runningPgid: number | null = null;
 
-function runOne(c: Check, top: string, env: Record<string, string>, log: string): { result: string; code: number | null; secs: number; why: string } {
+function _runOne(
+  c: Check,
+  top: string,
+  env: Record<string, string>,
+  log: string,
+): { result: string; code: number | null; secs: number; why: string } {
   if (!c.command) {
     return {
-      result: "not run", code: null, secs: 0,
+      result: "not run",
+      code: null,
+      secs: 0,
       why: `no command: discovery found none for ${c.source}; declare the check in ${DECLARATION}`,
     };
   }
@@ -403,9 +512,12 @@ function runOne(c: Check, top: string, env: Record<string, string>, log: string)
   const t0 = Date.now();
   const fd = openSync(log, "w");
   const child = spawn("bash", ["-e", "-o", "pipefail", "-c", c.command], {
-    cwd: top, env, stdio: ["ignore", fd, fd], detached: true,
+    cwd: top,
+    env,
+    stdio: ["ignore", fd, fd],
+    detached: true,
   });
-  runningPgid = child.pid!;
+  _runningPgid = child.pid!;
   let timedOut = false;
   const deadline = t0 + timeout * 1000;
 
@@ -413,37 +525,58 @@ function runOne(c: Check, top: string, env: Record<string, string>, log: string)
     const timer = setInterval(() => {
       if (Date.now() > deadline) {
         timedOut = true;
-        try { process.kill(-child.pid!, "SIGKILL"); } catch { /* empty */ }
+        try {
+          process.kill(-child.pid!, "SIGKILL");
+        } catch {
+          /* empty */
+        }
       }
     }, 100);
 
     child.on("exit", (code, signal) => {
       clearInterval(timer);
-      try { process.kill(-child.pid!, "SIGKILL"); } catch { /* empty */ }
+      try {
+        process.kill(-child.pid!, "SIGKILL");
+      } catch {
+        /* empty */
+      }
       closeSync(fd);
-      runningPgid = null;
+      _runningPgid = null;
       const secs = Math.round((Date.now() - t0) / 1000);
       let out: string;
-      try { out = plain(readFileSync(log, "utf-8")); } catch { out = ""; }
+      try {
+        out = plain(readFileSync(log, "utf-8"));
+      } catch {
+        out = "";
+      }
       const outLines = out.split("\n").filter((l) => l.trim());
-      const last = (outLines.length > 0 ? outLines[outLines.length - 1]! : "(no output)").slice(0, 300);
+      const last = (outLines.length > 0 ? outLines[outLines.length - 1]! : "(no output)").slice(
+        0,
+        300,
+      );
 
       let result: string;
       let why: string;
       let exitCode: number | null;
 
       if (timedOut) {
-        result = "fail"; exitCode = null; why = `timed out after ${timeout}s`;
+        result = "fail";
+        exitCode = null;
+        why = `timed out after ${timeout}s`;
       } else if (signal) {
-        const k = signalExit(signal);
-        result = "fail"; exitCode = k.code; why = `killed by signal ${k.num}: ${last}`;
+        const k = signalExit(signal ?? "");
+        result = "fail";
+        exitCode = k.code;
+        why = `killed by signal ${k.num}: ${last}`;
       } else {
         exitCode = code;
         if (code === 126 || code === 127) {
-          result = "not run"; why = "bash could not start it: " + last;
+          result = "not run";
+          why = `bash could not start it: ${last}`;
         } else if (c.kind === "tool") {
           if (code === 0) {
-            result = "pass"; why = "";
+            result = "pass";
+            why = "";
           } else {
             result = code === 3 ? "not run" : "fail";
             why = last.replace(/^not run: /, "");
@@ -459,7 +592,7 @@ function runOne(c: Check, top: string, env: Record<string, string>, log: string)
             why = `no score in its output: nothing matches /${c.score}/`;
           } else {
             const scoreVal = parseFloat(found[found.length - 1]!);
-            if (isNaN(scoreVal)) {
+            if (Number.isNaN(scoreVal)) {
               result = "fail";
               why = `its score, '${found[found.length - 1]}', is not a number`;
             } else if (scoreVal >= c.threshold) {
@@ -481,10 +614,17 @@ function runOne(c: Check, top: string, env: Record<string, string>, log: string)
 }
 
 // Synchronous version using spawnSync with a timeout
-function runOneSync(c: Check, top: string, env: Record<string, string>, log: string): { result: string; code: number | null; secs: number; why: string } {
+function runOneSync(
+  c: Check,
+  top: string,
+  env: Record<string, string>,
+  log: string,
+): { result: string; code: number | null; secs: number; why: string } {
   if (!c.command) {
     return {
-      result: "not run", code: null, secs: 0,
+      result: "not run",
+      code: null,
+      secs: 0,
       why: `no command: discovery found none for ${c.source}; declare the check in ${DECLARATION}`,
     };
   }
@@ -499,7 +639,10 @@ function runOneSync(c: Check, top: string, env: Record<string, string>, log: str
   let r;
   try {
     r = spawnSync("bash", ["-e", "-o", "pipefail", "-c", c.command], {
-      cwd: top, env, stdio: ["ignore", fd, fd], detached: true,
+      cwd: top,
+      env,
+      stdio: ["ignore", fd, fd],
+      detached: true,
       timeout: timeout * 1000,
       killSignal: "SIGKILL",
     });
@@ -518,7 +661,7 @@ function runOneSync(c: Check, top: string, env: Record<string, string>, log: str
   } catch {
     rawOut = "";
   }
-  let out = plain(rawOut);
+  const out = plain(rawOut);
   const outLines = out.split("\n").filter((l) => l.trim());
   const last = (outLines.length > 0 ? outLines[outLines.length - 1]! : "(no output)").slice(0, 300);
 
@@ -532,18 +675,24 @@ function runOneSync(c: Check, top: string, env: Record<string, string>, log: str
   let exitCode: number | null;
 
   if (timedOut) {
-    result = "fail"; exitCode = null; why = `timed out after ${timeout}s`;
+    result = "fail";
+    exitCode = null;
+    why = `timed out after ${timeout}s`;
   } else if (r.signal) {
-    const k = signalExit(r.signal);
-    result = "fail"; exitCode = k.code; why = `killed by signal ${k.num}: ${last}`;
+    const k = signalExit(r.signal ?? "");
+    result = "fail";
+    exitCode = k.code;
+    why = `killed by signal ${k.num}: ${last}`;
   } else {
     exitCode = r.status;
     const code = r.status!;
     if (code === 126 || code === 127) {
-      result = "not run"; why = "bash could not start it: " + last;
+      result = "not run";
+      why = `bash could not start it: ${last}`;
     } else if (c.kind === "tool") {
       if (code === 0) {
-        result = "pass"; why = "";
+        result = "pass";
+        why = "";
       } else {
         result = code === 3 ? "not run" : "fail";
         why = last.replace(/^not run: /, "");
@@ -559,7 +708,7 @@ function runOneSync(c: Check, top: string, env: Record<string, string>, log: str
         why = `no score in its output: nothing matches /${c.score}/`;
       } else {
         const scoreVal = parseFloat(found[found.length - 1]!);
-        if (isNaN(scoreVal)) {
+        if (Number.isNaN(scoreVal)) {
           result = "fail";
           why = `its score, '${found[found.length - 1]}', is not a number`;
         } else if (scoreVal >= c.threshold) {
@@ -589,15 +738,20 @@ function runChecks(wt: string, dispatch: string | null): never {
     spec = join(top, SPEC);
     const d = loadJson(join(spec, "spec.json"));
     if (!d || typeof d !== "object" || !Array.isArray((d as any).checks)) {
-      dieV(`${top} is not armed: ${join(spec, "spec.json")} is missing; the coachman arms each workhorse worktree with verify.sh arm`);
+      dieV(
+        `${top} is not armed: ${join(spec, "spec.json")} is missing; the coachman arms each workhorse worktree with verify.sh arm`,
+      );
     }
     checks = (d as any).checks;
   }
   const dirt = uncommitted(top);
   if (dirt.length > 0) {
-    dieV(`${top} has files git sees that its commit does not hold, so no result would belong to a commit: ${listedFiles(dirt)}. ` +
-      `Commit what belongs to the change and keep what a tool wrote out of git's sight` +
-      (dispatch ? ", or run on a scratch cut at the branch's HEAD with cut-scratch.sh" : "") + ", then run again.");
+    dieV(
+      `${top} has files git sees that its commit does not hold, so no result would belong to a commit: ${listedFiles(dirt)}. ` +
+        `Commit what belongs to the change and keep what a tool wrote out of git's sight` +
+        (dispatch ? ", or run on a scratch cut at the branch's HEAD with cut-scratch.sh" : "") +
+        ", then run again.",
+    );
   }
   const sha = git(top, "rev-parse", "HEAD")!;
   const branch = git(top, "symbolic-ref", "--short", "-q", "HEAD") || "detached";
@@ -609,17 +763,22 @@ function runChecks(wt: string, dispatch: string | null): never {
   let spoiled: string | null = null;
 
   for (const c of checks) {
-    const log = join(logs, c.name + ".log");
+    const log = join(logs, `${c.name}.log`);
     let result: string;
     let code: number | null;
     let secs: number;
     let why: string;
     if (spoiled) {
-      result = "not run"; code = null; secs = 0;
+      result = "not run";
+      code = null;
+      secs = 0;
       why = `${spoiled} changed files git sees, so the worktree is no longer its commit`;
     } else {
       const r = runOneSync(c, top, env, log);
-      result = r.result; code = r.code; secs = r.secs; why = r.why;
+      result = r.result;
+      code = r.code;
+      secs = r.secs;
+      why = r.why;
       const dirt2 = uncommitted(top);
       if (dirt2.length > 0) {
         spoiled = c.name;
@@ -628,7 +787,9 @@ function runChecks(wt: string, dispatch: string | null): never {
       }
     }
     results.push(result);
-    console.log(`${c.name}: ${result}, exit ${code === null ? "-" : code}, ${secs}s: ${oneline(c.command) || "(no command)"}`);
+    console.log(
+      `${c.name}: ${result}, exit ${code === null ? "-" : code}, ${secs}s: ${oneline(c.command) || "(no command)"}`,
+    );
     if (why) console.log(`  ${why}`);
     if (result !== "pass" && c.command && existsSync(log)) {
       console.log(`  log: ${log}`);
@@ -637,7 +798,14 @@ function runChecks(wt: string, dispatch: string | null): never {
       const detail = `on=${branch}@${sha.slice(0, 12)} result=${result.replace(" /g", "-")} exit=${code === null ? "-" : code} secs=${secs}`;
       let detailFull = detail;
       if (why) detailFull += (result === "pass" ? " score=" : " reason=") + why;
-      const lr = run("bash", [join(HERE, "log-action.sh"), dispatch, "coachman", "verify", c.name, detailFull]);
+      const lr = run("bash", [
+        join(HERE, "log-action.sh"),
+        dispatch,
+        "coachman",
+        "verify",
+        c.name,
+        detailFull,
+      ]);
       if (lr.code !== 0) {
         unlogged.push(`${c.name}: ${lr.err.trim()}`);
       }
@@ -683,7 +851,8 @@ function logged(dispatch: string): Array<{ target: string; ts: string; m: RegExp
 
 // --- entry -----------------------------------------------------------------------------------
 const argv = process.argv.slice(2);
-const usage = "usage: verify.sh checks <repo> [--gate <command>] [--lines | --json] | record <repo> <dispatch> [--gate <command>] | arm <worktree> <dispatch> | run <worktree> [<dispatch>] | journey-path <worktree> [<dispatch>] | results <dispatch> <worktree> | summary <summary-file> <dispatch> <worktree> | --self-test";
+const usage =
+  "usage: verify.sh checks <repo> [--gate <command>] [--lines | --json] | record <repo> <dispatch> [--gate <command>] | arm <worktree> <dispatch> | run <worktree> [<dispatch>] | journey-path <worktree> [<dispatch>] | results <dispatch> <worktree> | summary <summary-file> <dispatch> <worktree> | --self-test";
 
 if (argv[0] === "--self-test") {
   // fall through
@@ -732,11 +901,14 @@ if (argv[0] === "--self-test") {
     const { checks, decl } = resolveChecks(repo, gate, true);
     const record = {
       written: new Date().toISOString().replace(/\.\d+Z$/, "Z"),
-      repo, head: git(repo, "rev-parse", "HEAD"), declaration: decl,
-      gate_given: gate || null, checks,
+      repo,
+      head: git(repo, "rev-parse", "HEAD"),
+      declaration: decl,
+      gate_given: gate || null,
+      checks,
     };
-    const tmpF = f + ".tmp." + process.pid;
-    writeFileSync(tmpF, JSON.stringify(record, null, 2) + "\n");
+    const tmpF = `${f}.tmp.${process.pid}`;
+    writeFileSync(tmpF, `${JSON.stringify(record, null, 2)}\n`);
     renameSync(tmpF, f);
     console.log(human(checks));
     process.exit(0);
@@ -746,7 +918,11 @@ if (argv[0] === "--self-test") {
     console.log(JSON.stringify(checks, null, 2));
   } else if (form === "lines") {
     const clean = (s: string) => String(s).replace(/[\t\r\n]+/g, " ");
-    console.log(checks.map((c) => [c.name, c.source, clean(oneline(c.command)), clean(c.shows)].join("\t")).join("\n"));
+    console.log(
+      checks
+        .map((c) => [c.name, c.source, clean(oneline(c.command)), clean(c.shows)].join("\t"))
+        .join("\n"),
+    );
   } else {
     console.log(human(checks));
   }
@@ -763,7 +939,7 @@ if (argv[0] === "--self-test") {
   if (argv.length !== 3) dieV(usage);
   const dispatch = resolve(argv[1]!);
   const top = topOf(argv[2]!);
-  const sha = git(top, "rev-parse", "HEAD")!.slice(0, 12);
+  const sha = git(top, "rev-parse", "HEAD")?.slice(0, 12);
   const allLogged = logged(dispatch);
   const latest = new Map<string, { ts: string; m: RegExpExecArray }>();
   for (const { target, ts, m } of allLogged) {
@@ -773,7 +949,7 @@ if (argv[0] === "--self-test") {
   for (const c of recordedChecks(dispatch)) {
     const got = latest.get(c.name);
     if (got) {
-      const result = got.m[3]!.replace(/-/g, " ");
+      const result = got.m[3]?.replace(/-/g, " ");
       states.push(got.m[3]!);
       console.log(`${c.name}: ${result}, exit ${got.m[4]}, at ${got.ts}`);
     } else {
@@ -798,7 +974,7 @@ if (argv[0] === "--self-test") {
     const m = RESULT_RE.exec(line);
     if (m) claims.set(m[2]!, m);
   }
-  const sha = git(top, "rev-parse", "HEAD")!.slice(0, 12);
+  const sha = git(top, "rev-parse", "HEAD")?.slice(0, 12);
   const coach = new Map<string, RegExpExecArray>();
   for (const { target, m } of logged(dispatch)) {
     if (m[2] === sha) coach.set(target, m);
@@ -812,19 +988,27 @@ if (argv[0] === "--self-test") {
       continue;
     }
     if (oneline(m[6]!) !== want) {
-      problems.push(`unverified: the summary says ${c.name} ran ${oneline(m[6]!)}; the run's check is ${want}`);
+      problems.push(
+        `unverified: the summary says ${c.name} ran ${oneline(m[6]!)}; the run's check is ${want}`,
+      );
       continue;
     }
     const k = coach.get(c.name);
-    if (k && k[3] !== m[3]!.replace(/ /g, "-")) {
-      problems.push(`${c.name}: the summary says ${m[3]}; the coachman's run at ${sha} says ${k[3]!.replace(/-/g, " ")}`);
+    if (k && k[3] !== m[3]?.replace(/ /g, "-")) {
+      problems.push(
+        `${c.name}: the summary says ${m[3]}; the coachman's run at ${sha} says ${k[3]?.replace(/-/g, " ")}`,
+      );
     }
   }
   if (problems.length > 0) console.log(problems.join("\n"));
   if (coach.size === 0) console.log(`no coachman run at ${sha} to hold the claims against`);
-  console.log(`the summary ${problems.length === 0
-    ? `gives every check's command and exit${coach.size > 0 ? ", and agrees with the coachman's run" : ""}`
-    : `is unverified or disagrees: ${problems.length} problem(s)`}`);
+  console.log(
+    `the summary ${
+      problems.length === 0
+        ? `gives every check's command and exit${coach.size > 0 ? ", and agrees with the coachman's run" : ""}`
+        : `is unverified or disagrees: ${problems.length} problem(s)`
+    }`,
+  );
   process.exit(problems.length > 0 ? 2 : 0);
 } else if (argv[0] === "journey-path") {
   if (argv.length < 2 || argv.length > 3) dieV(usage);
@@ -886,12 +1070,18 @@ withTempDir((tmp) => {
   mkdirSync(join(tmp, "cli"), { recursive: true });
   writeFileSync(join(tmp, "cli", "package.json"), '{"name": "c", "bin": {"c": "c.sh"}}\n');
   mkdirSync(join(tmp, "web"), { recursive: true });
-  writeFileSync(join(tmp, "web", "package.json"), '{"name": "w", "private": true, "main": "x.js", "scripts": {"e2e": "true"}, "devDependencies": {"next": "1"}}\n');
+  writeFileSync(
+    join(tmp, "web", "package.json"),
+    '{"name": "w", "private": true, "main": "x.js", "scripts": {"e2e": "true"}, "devDependencies": {"next": "1"}}\n',
+  );
   mkdirSync(join(tmp, "pw"), { recursive: true });
   writeFileSync(join(tmp, "pw", "package.json"), '{"name": "p"}\n');
   writeFileSync(join(tmp, "pw", "playwright.config.ts"), "");
   mkdirSync(join(tmp, "nosuite"), { recursive: true });
-  writeFileSync(join(tmp, "nosuite", "package.json"), '{"name": "n", "dependencies": {"vite": "1"}}\n');
+  writeFileSync(
+    join(tmp, "nosuite", "package.json"),
+    '{"name": "n", "dependencies": {"vite": "1"}}\n',
+  );
   mkdirSync(join(tmp, "lib"), { recursive: true });
   writeFileSync(join(tmp, "lib", "package.json"), '{"name": "l", "exports": "./i.js"}\n');
   mkdirSync(join(tmp, "rust", "src"), { recursive: true });
@@ -899,43 +1089,93 @@ withTempDir((tmp) => {
   writeFileSync(join(tmp, "rust", "src", "main.rs"), "");
   writeFileSync(join(tmp, "rust", "src", "lib.rs"), "");
   mkdirSync(join(tmp, "py"), { recursive: true });
-  writeFileSync(join(tmp, "py", "pyproject.toml"), '[project]\nname = "p"\n[project.scripts]\np = "p:main"\n');
+  writeFileSync(
+    join(tmp, "py", "pyproject.toml"),
+    '[project]\nname = "p"\n[project.scripts]\np = "p:main"\n',
+  );
   mkdirSync(join(tmp, "pylib"), { recursive: true });
   writeFileSync(join(tmp, "pylib", "pyproject.toml"), '[project]\nname = "p"\n');
   for (const d of ["plain", "cli", "web", "pw", "nosuite", "lib", "rust", "py", "pylib"]) {
     mkRepo(join(tmp, d));
   }
 
-  expectLines("a project discovery knows nothing of gets the gate alone", "plain", "gate default:gate");
-  expectLines("a command-line app gets its examples", "cli", "gate default:gate,examples default:cli-examples");
+  expectLines(
+    "a project discovery knows nothing of gets the gate alone",
+    "plain",
+    "gate default:gate",
+  );
+  expectLines(
+    "a command-line app gets its examples",
+    "cli",
+    "gate default:gate,examples default:cli-examples",
+  );
   expectLines(
     "a web app gets its suite and its journey, and a private package with a main is no library",
     "web",
     "gate default:gate,browser default:browser-suite,journey default:web-journey",
   );
-  expectLines("a playwright config is a browser suite", "pw", "gate default:gate,browser default:browser-suite,journey default:web-journey");
-  expectLines("a library gets its tests through its name", "lib", "gate default:gate,library default:library-tests");
-  expectLines("a Cargo project with a main and a lib gets both", "rust", "gate default:gate,examples default:cli-examples,library default:library-tests");
-  expectLines("a pyproject with scripts is a command-line app", "py", "gate default:gate,examples default:cli-examples");
-  expectLines("a pyproject without is a library", "pylib", "gate default:gate,library default:library-tests");
+  expectLines(
+    "a playwright config is a browser suite",
+    "pw",
+    "gate default:gate,browser default:browser-suite,journey default:web-journey",
+  );
+  expectLines(
+    "a library gets its tests through its name",
+    "lib",
+    "gate default:gate,library default:library-tests",
+  );
+  expectLines(
+    "a Cargo project with a main and a lib gets both",
+    "rust",
+    "gate default:gate,examples default:cli-examples,library default:library-tests",
+  );
+  expectLines(
+    "a pyproject with scripts is a command-line app",
+    "py",
+    "gate default:gate,examples default:cli-examples",
+  );
+  expectLines(
+    "a pyproject without is a library",
+    "pylib",
+    "gate default:gate,library default:library-tests",
+  );
   {
     const r = run("bash", [SELF, "checks", join(tmp, "web"), "--gate", "npm run check", "--lines"]);
-    st.check("the suite's command is the project's own script", r.out.includes("browser\tdefault:browser-suite\tnpm run e2e\t"), r.out);
-    st.check("the gate is the one it was given", r.out.includes("gate\tdefault:gate\tnpm run check\t"), r.out);
+    st.check(
+      "the suite's command is the project's own script",
+      r.out.includes("browser\tdefault:browser-suite\tnpm run e2e\t"),
+      r.out,
+    );
+    st.check(
+      "the gate is the one it was given",
+      r.out.includes("gate\tdefault:gate\tnpm run check\t"),
+      r.out,
+    );
   }
   {
     const r = run("bash", [SELF, "checks", join(tmp, "pw"), "--lines"]);
-    st.check("and a playwright config's is playwright's", r.out.includes("browser\tdefault:browser-suite\tnpx playwright test\t"), r.out);
+    st.check(
+      "and a playwright config's is playwright's",
+      r.out.includes("browser\tdefault:browser-suite\tnpx playwright test\t"),
+      r.out,
+    );
   }
   {
     const r = run("bash", [SELF, "checks", join(tmp, "nosuite"), "--lines"]);
-    st.check("a web app with no suite has a browser check with no command", r.out.includes("browser\tdefault:browser-suite\t\t"), r.out);
+    st.check(
+      "a web app with no suite has a browser check with no command",
+      r.out.includes("browser\tdefault:browser-suite\t\t"),
+      r.out,
+    );
   }
 
   // Declaration controls
   console.log("declaration");
   mkdirSync(join(tmp, "decl", ".postmaster"), { recursive: true });
-  writeFileSync(join(tmp, "decl", "package.json"), '{"name": "d", "exports": "./i.js", "bin": {"d": "d.sh"}}\n');
+  writeFileSync(
+    join(tmp, "decl", "package.json"),
+    '{"name": "d", "exports": "./i.js", "bin": {"d": "d.sh"}}\n',
+  );
   writeFileSync(
     join(tmp, "decl", ".postmaster", "project.toml"),
     `[checks.unit]
@@ -958,12 +1198,31 @@ timeout = 120
 `,
   );
   mkRepo(join(tmp, "decl"));
-  expectLines("a declaration replaces the defaults, keeps its order, and puts the gate first", "decl", "gate declared,unit declared,answers declared,try declared:cli-examples");
+  expectLines(
+    "a declaration replaces the defaults, keeps its order, and puts the gate first",
+    "decl",
+    "gate declared,unit declared,answers declared,try declared:cli-examples",
+  );
   {
     const r = run("bash", [SELF, "checks", join(tmp, "decl"), "--gate", "make check"]);
-    st.check("a declared gate wins over the one discovery gave", r.out.includes("gate [declared] npm run check"), r.out);
-    st.check("a scored check says what passes", r.out.includes("passes when it exits 0 and the last number /score: ([0-9.]+)/ captures is 0.85 or more"), r.out);
-    st.check("a check that uses a default runs its script and says what it shows", r.out.includes("verify-examples.sh") && r.out.includes("shows: the ticket's example transcripts"), r.out);
+    st.check(
+      "a declared gate wins over the one discovery gave",
+      r.out.includes("gate [declared] npm run check"),
+      r.out,
+    );
+    st.check(
+      "a scored check says what passes",
+      r.out.includes(
+        "passes when it exits 0 and the last number /score: ([0-9.]+)/ captures is 0.85 or more",
+      ),
+      r.out,
+    );
+    st.check(
+      "a check that uses a default runs its script and says what it shows",
+      r.out.includes("verify-examples.sh") &&
+        r.out.includes("shows: the ticket's example transcripts"),
+      r.out,
+    );
     st.check("a committed declaration raises no warning", !r.out.includes("warn"), r.out);
   }
   {
@@ -975,18 +1234,31 @@ timeout = 120
   {
     mkdirSync(join(tmp, "runs/decl/T-0"), { recursive: true });
     writeFileSync(join(tmp, "runs/decl/T-0/brief.md"), "## Ticket\nx\n");
-    const r = run("bash", [SELF, "record", join(tmp, "decl"), join(tmp, "runs/decl/T-0"), "--gate", "make ci"]);
+    const r = run("bash", [
+      SELF,
+      "record",
+      join(tmp, "decl"),
+      join(tmp, "runs/decl/T-0"),
+      "--gate",
+      "make ci",
+    ]);
     const stderr = r.err;
-    st.check("record says when the project's declared gate overrides the one it was given",
-      stderr.includes("declares the gate as npm run check, so make ci is not used"), stderr);
+    st.check(
+      "record says when the project's declared gate overrides the one it was given",
+      stderr.includes("declares the gate as npm run check, so make ci is not used"),
+      stderr,
+    );
   }
   {
-    const r = run("bash", [SELF, "checks", join(tmp, "decl"), "--gate", "make check"]);
+    const _r = run("bash", [SELF, "checks", join(tmp, "decl"), "--gate", "make check"]);
     st.check("a check that uses a default keeps its timeout", true, "covered above");
     st.check("an uncommitted declaration is warned of", true, "covered below");
   }
   mkdirSync(join(tmp, "local", ".postmaster"), { recursive: true });
-  writeFileSync(join(tmp, "local", ".postmaster", "project.toml"), '[checks.unit]\ncommand = "true"\nshows = "x"\n');
+  writeFileSync(
+    join(tmp, "local", ".postmaster", "project.toml"),
+    '[checks.unit]\ncommand = "true"\nshows = "x"\n',
+  );
   run("git", ["-C", join(tmp, "local"), "init", "-q", "-b", "main"]);
   {
     const r = run("bash", [SELF, "checks", join(tmp, "local")]);
@@ -996,32 +1268,74 @@ timeout = 120
   writeFileSync(join(tmp, "empty", "package.json"), '{"name": "e", "bin": "e.sh"}\n');
   writeFileSync(join(tmp, "empty", ".postmaster", "project.toml"), "[checks]\n");
   mkRepo(join(tmp, "empty"));
-  expectLines("an empty [checks] declares nothing, so the defaults apply", "empty", "gate default:gate,examples default:cli-examples");
+  expectLines(
+    "an empty [checks] declares nothing, so the defaults apply",
+    "empty",
+    "gate default:gate,examples default:cli-examples",
+  );
 
   function bad(label: string, toml: string, mustHold: string): void {
     mkdirSync(join(tmp, "bad", ".postmaster"), { recursive: true });
-    writeFileSync(join(tmp, "bad", ".postmaster", "project.toml"), toml + "\n");
+    writeFileSync(join(tmp, "bad", ".postmaster", "project.toml"), `${toml}\n`);
     const r = run("bash", [SELF, "checks", join(tmp, "bad")]);
     const out = r.out + r.err;
     st.check(label, r.code === 1 && out.includes(mustHold), `exit ${r.code}\n${out}`);
   }
-  bad("a key that is not one is refused", '[checks.u]\ncommand = "t"\nshows = "x"\ntreshold = 1', "treshold is not a key");
-  bad("a check with neither command nor use", '[checks.u]\nshows = "x"', "needs a command or a use");
-  bad("a check with both", '[checks.u]\ncommand = "t"\nuse = "cli-examples"', "needs a command or a use");
-  bad("a command that does not say what it shows", '[checks.u]\ncommand = "t"', "shows says what the check shows");
-  bad("a name that is not a lowercase word", '[checks.Unit]\ncommand = "t"\nshows = "x"', "lowercase word");
-  bad("a score without a threshold", '[checks.u]\ncommand = "t"\nshows = "x"\nscore = "s (\\\\d+)"', "score and threshold go together");
-  bad("a score with no group", '[checks.u]\ncommand = "t"\nshows = "x"\nscore = "s"\nthreshold = 1', "one group");
-  bad("a threshold that is not a number", '[checks.u]\ncommand = "t"\nshows = "x"\nscore = "(1)"\nthreshold = "high"', "threshold is a number");
+  bad(
+    "a key that is not one is refused",
+    '[checks.u]\ncommand = "t"\nshows = "x"\ntreshold = 1',
+    "treshold is not a key",
+  );
+  bad(
+    "a check with neither command nor use",
+    '[checks.u]\nshows = "x"',
+    "needs a command or a use",
+  );
+  bad(
+    "a check with both",
+    '[checks.u]\ncommand = "t"\nuse = "cli-examples"',
+    "needs a command or a use",
+  );
+  bad(
+    "a command that does not say what it shows",
+    '[checks.u]\ncommand = "t"',
+    "shows says what the check shows",
+  );
+  bad(
+    "a name that is not a lowercase word",
+    '[checks.Unit]\ncommand = "t"\nshows = "x"',
+    "lowercase word",
+  );
+  bad(
+    "a score without a threshold",
+    '[checks.u]\ncommand = "t"\nshows = "x"\nscore = "s (\\\\d+)"',
+    "score and threshold go together",
+  );
+  bad(
+    "a score with no group",
+    '[checks.u]\ncommand = "t"\nshows = "x"\nscore = "s"\nthreshold = 1',
+    "one group",
+  );
+  bad(
+    "a threshold that is not a number",
+    '[checks.u]\ncommand = "t"\nshows = "x"\nscore = "(1)"\nthreshold = "high"',
+    "threshold is a number",
+  );
   bad("a use that names no default", '[checks.u]\nuse = "lint"', "use names a default");
-  bad("a timeout that is not seconds", '[checks.u]\ncommand = "t"\nshows = "x"\ntimeout = 0', "whole number of seconds");
+  bad(
+    "a timeout that is not seconds",
+    '[checks.u]\ncommand = "t"\nshows = "x"\ntimeout = 0',
+    "whole number of seconds",
+  );
   bad("a declaration that does not parse", '[checks.u\ncommand = "t"', "does not parse");
 
   // Record, arm and run
   console.log("record, arm and run");
   const p = join(tmp, "proj");
   mkdirSync(join(p, ".postmaster"), { recursive: true });
-  writeFileSync(join(p, ".postmaster", "project.toml"), `[checks.gate]
+  writeFileSync(
+    join(p, ".postmaster", "project.toml"),
+    `[checks.gate]
 command = "true"
 shows = "the gate"
 [checks.red]
@@ -1046,10 +1360,10 @@ shows = "a scored check killed after a score"
 score = 'score: ([0-9.]+)'
 threshold = 0.85
 [checks.masked]
-command = \"\"\"
+command = """
 false
 true
-\"\"\"
+"""
 shows = "a failing line followed by a passing one"
 [checks.piped]
 command = "false | cat"
@@ -1076,29 +1390,46 @@ shows = "a check that outlives its timeout"
 timeout = 1
 [checks.try]
 use = "cli-examples"
-`);
+`,
+  );
   mkRepo(p);
   const d = join(tmp, "runs/proj/T-1");
   mkdirSync(d, { recursive: true });
-  writeFileSync(join(d, "brief.md"), `# Waybill: T-1\n\n## Ticket\n## Problem / feature\nA thing.\n\n## Project profile\nrepo: ${p}\n`);
+  writeFileSync(
+    join(d, "brief.md"),
+    `# Waybill: T-1\n\n## Ticket\n## Problem / feature\nA thing.\n\n## Project profile\nrepo: ${p}\n`,
+  );
   let r = run("bash", [SELF, "record", p, d, "--gate", "make check"]);
   let out = r.out + r.err;
-  st.check("record writes checks.json and prints the checks",
-    r.code === 0 && existsSync(join(d, "checks.json")) && out.includes("red [declared] echo broke; false"),
-    `exit ${r.code}\n${out}`);
+  st.check(
+    "record writes checks.json and prints the checks",
+    r.code === 0 &&
+      existsSync(join(d, "checks.json")) &&
+      out.includes("red [declared] echo broke; false"),
+    `exit ${r.code}\n${out}`,
+  );
   const beforeJson = readFileSync(join(d, "checks.json"), "utf-8");
   run("bash", [SELF, "record", p, d]);
-  st.check("a second record leaves checks.json alone", readFileSync(join(d, "checks.json"), "utf-8") === beforeJson);
+  st.check(
+    "a second record leaves checks.json alone",
+    readFileSync(join(d, "checks.json"), "utf-8") === beforeJson,
+  );
 
   G(p, "worktree", "add", "-q", join(p, ".worktrees/T-1-a"), "-b", "wb/T-1-a");
   const wt = join(p, ".worktrees/T-1-a");
   r = run("bash", [SELF, "arm", wt, d]);
-  st.check("arm copies the checks into the worktree",
-    r.code === 0 && existsSync(join(wt, ".postmaster/verify/spec.json")), r.out + r.err);
+  st.check(
+    "arm copies the checks into the worktree",
+    r.code === 0 && existsSync(join(wt, ".postmaster/verify/spec.json")),
+    r.out + r.err,
+  );
   {
     const ticket = readFileSync(join(wt, ".postmaster/verify/ticket.md"), "utf-8");
-    st.check("and the ticket, without the rest of the waybill",
-      ticket.includes("A thing.") && !ticket.includes("Project profile"), ticket);
+    st.check(
+      "and the ticket, without the rest of the waybill",
+      ticket.includes("A thing.") && !ticket.includes("Project profile"),
+      ticket,
+    );
   }
   {
     const status = run("git", ["-C", wt, "status", "--porcelain"]).out.trim();
@@ -1115,11 +1446,17 @@ use = "cli-examples"
   wantIn("a command bash cannot start is not run", "absent: not run, exit 127,");
   wantIn("a score at or above its threshold passes", "good-score: pass, exit 0,");
   wantIn("and the last score is the one read", "score 0.91, threshold 0.85");
-  wantIn("a scored check that exits other than 0 fails, whatever it printed", "crash-score: fail, exit 1,");
+  wantIn(
+    "a scored check that exits other than 0 fails, whatever it printed",
+    "crash-score: fail, exit 1,",
+  );
   wantIn("a scored check killed by a signal fails", "killed-score: fail, exit -9,");
   wantIn("a failing line is not hidden by a passing one after it", "masked: fail, exit 1,");
   wantIn("a failure is not hidden by a pipe", "piped: fail, exit 1,");
-  wantIn("a multi-line command prints as one line that runs the same", "masked: fail, exit 1, 0s: bash -eo pipefail -c $'false\\ntrue'");
+  wantIn(
+    "a multi-line command prints as one line that runs the same",
+    "masked: fail, exit 1, 0s: bash -eo pipefail -c $'false\\ntrue'",
+  );
   st.check("colour codes are taken out of the reasons", !out.includes("\x1b"), out.slice(0, 200));
   wantIn("and the reason is what a reader sees", "  1 test failed");
   wantIn("a score below it fails", "score 0.5, below the threshold 0.85");
@@ -1140,33 +1477,46 @@ use = "cli-examples"
   }
   r = run("bash", [SELF, "run", wt, d]);
   out = r.out + r.err;
-  st.check("the coachman runs the run's checks, not what the worktree holds",
+  st.check(
+    "the coachman runs the run's checks, not what the worktree holds",
     r.code === 2 && out.includes("red: fail, exit 1,"),
-    `exit ${r.code}\n${out}`);
+    `exit ${r.code}\n${out}`,
+  );
   {
     const logContent = readFileSync(join(d, "actions.jsonl"), "utf-8");
-    const verifyCount = logContent.split("\n").filter((l) => l.includes('"action":"verify"')).length;
+    const verifyCount = logContent
+      .split("\n")
+      .filter((l) => l.includes('"action":"verify"')).length;
     st.check("and logs one verify line per check", verifyCount === 14, `${verifyCount} lines`);
   }
   {
     const logContent = readFileSync(join(d, "actions.jsonl"), "utf-8");
     let allParse = true;
     for (const line of logContent.split("\n").filter(Boolean)) {
-      try { JSON.parse(line); } catch { allParse = false; }
+      try {
+        JSON.parse(line);
+      } catch {
+        allParse = false;
+      }
     }
     st.check("every line it logs parses, colour codes and all", allParse);
   }
   {
     const spec = JSON.parse(readFileSync(join(wt, ".postmaster/verify/spec.json"), "utf-8"));
-    st.check("and leaves the workhorse's own copy as the workhorse left it",
+    st.check(
+      "and leaves the workhorse's own copy as the workhorse left it",
       spec.journey_dir === join(wt, ".postmaster/verify/journey") &&
-      !spec.checks.some((c: any) => c.name === "red"));
+        !spec.checks.some((c: any) => c.name === "red"),
+    );
   }
   {
     const sha = run("git", ["-C", wt, "rev-parse", "HEAD"]).out.trim().slice(0, 12);
     const logContent = readFileSync(join(d, "actions.jsonl"), "utf-8");
-    st.check("each naming the branch, the commit and the result",
-      logContent.includes(`"target":"red","detail":"on=wb/T-1-a@${sha} result=fail exit=1`), logContent.slice(-500));
+    st.check(
+      "each naming the branch, the commit and the result",
+      logContent.includes(`"target":"red","detail":"on=wb/T-1-a@${sha} result=fail exit=1`),
+      logContent.slice(-500),
+    );
   }
   {
     const sha = run("git", ["-C", wt, "rev-parse", "HEAD"]).out.trim().slice(0, 12);
@@ -1175,96 +1525,151 @@ use = "cli-examples"
   {
     const fullSha = run("git", ["-C", wt, "rev-parse", "HEAD"]).out.trim();
     const r2 = run("bash", [SELF, "journey-path", wt, d]);
-    st.check("the coachman's journey report goes in the run",
-      r2.out.trim() === join(d, "journey", fullSha + ".md"), r2.out);
+    st.check(
+      "the coachman's journey report goes in the run",
+      r2.out.trim() === join(d, "journey", `${fullSha}.md`),
+      r2.out,
+    );
   }
   {
     const fullSha = run("git", ["-C", wt, "rev-parse", "HEAD"]).out.trim();
     const r2 = run("bash", [SELF, "journey-path", wt]);
-    st.check("a workhorse's in its worktree",
-      r2.out.trim() === join(wt, ".postmaster/verify/journey", fullSha + ".md"), r2.out);
+    st.check(
+      "a workhorse's in its worktree",
+      r2.out.trim() === join(wt, ".postmaster/verify/journey", `${fullSha}.md`),
+      r2.out,
+    );
   }
 
   // Results and summaries
   console.log("results and summaries");
   r = run("bash", [SELF, "results", d, wt]);
   out = r.out + r.err;
-  st.check("results give each check's latest result at HEAD",
+  st.check(
+    "results give each check's latest result at HEAD",
     r.code === 2 && out.includes("red: fail, exit 1, at") && out.includes("gate: pass, exit 0, at"),
-    `exit ${r.code}\n${out}`);
+    `exit ${r.code}\n${out}`,
+  );
   {
     const brokenDir = join(tmp, "runs/proj/T-1-broken");
     run("cp", ["-r", d, brokenDir]);
-    appendFileSync(join(brokenDir, "actions.jsonl"), '{"action":"verify","target":"red","detail":"on=x\n');
+    appendFileSync(
+      join(brokenDir, "actions.jsonl"),
+      '{"action":"verify","target":"red","detail":"on=x\n',
+    );
     r = run("bash", [SELF, "results", brokenDir, wt]);
-    st.check("a log line that does not parse stops results rather than being skipped", r.code === 1, `exit ${r.code}`);
+    st.check(
+      "a log line that does not parse stops results rather than being skipped",
+      r.code === 1,
+      `exit ${r.code}`,
+    );
   }
   writeFileSync(join(tmp, "summary.md"), `# Summary\n\n## Checks\n${laneOut}\n`);
   r = run("bash", [SELF, "summary", join(tmp, "summary.md"), d, wt]);
   out = r.out + r.err;
-  st.check("a summary that pastes the run's lines holds, signals, backticks and several lines included",
-    r.code === 0 && out.includes("agrees with the coachman's run"), `exit ${r.code}\n${out}`);
+  st.check(
+    "a summary that pastes the run's lines holds, signals, backticks and several lines included",
+    r.code === 0 && out.includes("agrees with the coachman's run"),
+    `exit ${r.code}\n${out}`,
+  );
   {
-    const missing = readFileSync(join(tmp, "summary.md"), "utf-8").split("\n").filter((l) => !l.startsWith("slow:")).join("\n");
+    const missing = readFileSync(join(tmp, "summary.md"), "utf-8")
+      .split("\n")
+      .filter((l) => !l.startsWith("slow:"))
+      .join("\n");
     writeFileSync(join(tmp, "missing.md"), missing);
     r = run("bash", [SELF, "summary", join(tmp, "missing.md"), d, wt]);
     out = r.out + r.err;
-    st.check("a summary missing a check is unverified",
+    st.check(
+      "a summary missing a check is unverified",
       r.code === 2 && out.includes("unverified: the summary does not give slow's command and exit"),
-      `exit ${r.code}\n${out}`);
+      `exit ${r.code}\n${out}`,
+    );
   }
   {
-    const claims = readFileSync(join(tmp, "summary.md"), "utf-8").replace(/^red: fail, exit 1/m, "red: pass, exit 0");
+    const claims = readFileSync(join(tmp, "summary.md"), "utf-8").replace(
+      /^red: fail, exit 1/m,
+      "red: pass, exit 0",
+    );
     writeFileSync(join(tmp, "claims.md"), claims);
     r = run("bash", [SELF, "summary", join(tmp, "claims.md"), d, wt]);
     out = r.out + r.err;
     const sha = run("git", ["-C", wt, "rev-parse", "HEAD"]).out.trim().slice(0, 12);
-    st.check("a claim the coachman's run contradicts is named",
-      r.code === 2 && out.includes(`red: the summary says pass; the coachman's run at ${sha} says fail`),
-      `exit ${r.code}\n${out}`);
+    st.check(
+      "a claim the coachman's run contradicts is named",
+      r.code === 2 &&
+        out.includes(`red: the summary says pass; the coachman's run at ${sha} says fail`),
+      `exit ${r.code}\n${out}`,
+    );
   }
   {
-    const other = readFileSync(join(tmp, "summary.md"), "utf-8")
-      .replace(/^gate: pass, exit 0, (\d+)s: true/m, "gate: pass, exit 0, $1s: make");
+    const other = readFileSync(join(tmp, "summary.md"), "utf-8").replace(
+      /^gate: pass, exit 0, (\d+)s: true/m,
+      "gate: pass, exit 0, $1s: make",
+    );
     writeFileSync(join(tmp, "other.md"), other);
     r = run("bash", [SELF, "summary", join(tmp, "other.md"), d, wt]);
     out = r.out + r.err;
-    st.check("a check run with another command is unverified",
+    st.check(
+      "a check run with another command is unverified",
       r.code === 2 && out.includes("unverified: the summary says gate ran make"),
-      `exit ${r.code}\n${out}`);
+      `exit ${r.code}\n${out}`,
+    );
   }
   G(wt, "commit", "-q", "--allow-empty", "-m", "later");
   r = run("bash", [SELF, "results", d, wt]);
   out = r.out + r.err;
-  st.check("a later commit has no results until the checks run on it",
-    r.code === 3 && out.includes("no result logged at"), `exit ${r.code}\n${out}`);
+  st.check(
+    "a later commit has no results until the checks run on it",
+    r.code === 3 && out.includes("no result logged at"),
+    `exit ${r.code}\n${out}`,
+  );
 
   // Gate and browser suite defaults
   console.log("the gate and the browser suite, the defaults the runner runs itself");
   function defaultRun(project: string, gate: string, e2e: string): string {
     mkdirSync(join(tmp, project), { recursive: true });
-    writeFileSync(join(tmp, project, "package.json"),
-      `{"name": "w", "private": true, "scripts": {"e2e": "${e2e}"}, "devDependencies": {"next": "1"}}\n`);
+    writeFileSync(
+      join(tmp, project, "package.json"),
+      `{"name": "w", "private": true, "scripts": {"e2e": "${e2e}"}, "devDependencies": {"next": "1"}}\n`,
+    );
     mkRepo(join(tmp, project));
     mkdirSync(join(tmp, `runs/${project}/T-5`), { recursive: true });
     writeFileSync(join(tmp, `runs/${project}/T-5/brief.md`), "## Ticket\nx\n");
-    run("bash", [SELF, "record", join(tmp, project), join(tmp, `runs/${project}/T-5`), "--gate", gate]);
+    run("bash", [
+      SELF,
+      "record",
+      join(tmp, project),
+      join(tmp, `runs/${project}/T-5`),
+      "--gate",
+      gate,
+    ]);
     const r = run("bash", [SELF, "run", join(tmp, project), join(tmp, `runs/${project}/T-5`)]);
     return r.out + r.err;
   }
   out = defaultRun("webpass", "true", "echo suite ran");
-  st.check("a gate and a suite that pass, pass, and a journey the ticket lacks is not run",
-    out.includes("gate: pass, exit 0,") && out.includes("browser: pass, exit 0, ") && out.includes("journey: not run, exit 3,"),
-    out);
+  st.check(
+    "a gate and a suite that pass, pass, and a journey the ticket lacks is not run",
+    out.includes("gate: pass, exit 0,") &&
+      out.includes("browser: pass, exit 0, ") &&
+      out.includes("journey: not run, exit 3,"),
+    out,
+  );
   out = defaultRun("webfail", "false", "exit 1");
-  st.check("a gate and a suite that fail, fail",
-    out.includes("gate: fail, exit 1,") && out.includes("browser: fail, exit 1, "), out);
+  st.check(
+    "a gate and a suite that fail, fail",
+    out.includes("gate: fail, exit 1,") && out.includes("browser: fail, exit 1, "),
+    out,
+  );
 
   // Exits
   console.log("exits");
   const q = join(tmp, "green");
   mkdirSync(join(q, ".postmaster"), { recursive: true });
-  writeFileSync(join(q, ".postmaster", "project.toml"), '[checks.gate]\ncommand = "true"\nshows = "x"\n');
+  writeFileSync(
+    join(q, ".postmaster", "project.toml"),
+    '[checks.gate]\ncommand = "true"\nshows = "x"\n',
+  );
   mkRepo(q);
   const e = join(tmp, "runs/green/T-2");
   mkdirSync(e, { recursive: true });
@@ -1274,7 +1679,10 @@ use = "cli-examples"
   st.check("a run whose every check passed exits 0", r.code === 0, `exit ${r.code}`);
   const rg = join(tmp, "grey");
   mkdirSync(join(rg, ".postmaster"), { recursive: true });
-  writeFileSync(join(rg, ".postmaster", "project.toml"), '[checks.gate]\ncommand = "true"\nshows = "x"\n[checks.try]\nuse = "library-tests"\n');
+  writeFileSync(
+    join(rg, ".postmaster", "project.toml"),
+    '[checks.gate]\ncommand = "true"\nshows = "x"\n[checks.try]\nuse = "library-tests"\n',
+  );
   mkRepo(rg);
   const f = join(tmp, "runs/grey/T-3");
   mkdirSync(f, { recursive: true });
@@ -1294,27 +1702,36 @@ use = "cli-examples"
   writeFileSync(join(q, "new.txt"), "new\n");
   r = run("bash", [SELF, "run", q, e]);
   out = r.out + r.err;
-  st.check("a new file the commit lacks is refused, and named",
-    r.code === 1 && out.includes("new.txt"), `exit ${r.code}\n${out}`);
+  st.check(
+    "a new file the commit lacks is refused, and named",
+    r.code === 1 && out.includes("new.txt"),
+    `exit ${r.code}\n${out}`,
+  );
   rmSync(join(q, "new.txt"), { force: true });
   run("bash", [SELF, "arm", q, e]);
   appendFileSync(join(q, ".postmaster", "project.toml"), "# changed\n");
   r = run("bash", [SELF, "run", q]);
   out = r.out + r.err;
-  st.check("so is a changed file, in a workhorse's run too",
-    r.code === 1 && out.includes("files git sees that its commit does not hold"), `exit ${r.code}\n${out}`);
+  st.check(
+    "so is a changed file, in a workhorse's run too",
+    r.code === 1 && out.includes("files git sees that its commit does not hold"),
+    `exit ${r.code}\n${out}`,
+  );
   G(q, "commit", "-qam", "a change");
 
   const sp = join(tmp, "spoil");
   mkdirSync(join(sp, ".postmaster"), { recursive: true });
   writeFileSync(join(sp, "src.txt"), "broken\n");
-  writeFileSync(join(sp, ".postmaster", "project.toml"), `[checks.gate]
+  writeFileSync(
+    join(sp, ".postmaster", "project.toml"),
+    `[checks.gate]
 command = "sed -i.orig s/broken/fixed/ src.txt && rm -f src.txt.orig"
 shows = "a gate that fixes what it should only check"
 [checks.unit]
 command = "grep -q fixed src.txt"
 shows = "passes only on what the gate rewrote"
-`);
+`,
+  );
   mkRepo(sp);
   const sd = join(tmp, "runs/spoil/T-9");
   mkdirSync(sd, { recursive: true });
@@ -1322,20 +1739,29 @@ shows = "passes only on what the gate rewrote"
   run("bash", [SELF, "record", sp, sd]);
   r = run("bash", [SELF, "run", sp, sd]);
   out = r.out + r.err;
-  st.check("a check that rewrites a tracked file fails, and names it",
-    r.code === 2 && out.includes("gate: fail, exit 0,") && out.includes("it changed files git sees, so its result is not its commit's: src.txt"),
-    `exit ${r.code}\n${out}`);
+  st.check(
+    "a check that rewrites a tracked file fails, and names it",
+    r.code === 2 &&
+      out.includes("gate: fail, exit 0,") &&
+      out.includes("it changed files git sees, so its result is not its commit's: src.txt"),
+    `exit ${r.code}\n${out}`,
+  );
   st.check("and the checks after it do not run", out.includes("unit: not run, exit -, 0s:"), out);
   {
     const resultsR = run("bash", [SELF, "results", sd, sp]);
-    const passCount = (resultsR.out + resultsR.err).split("\n").filter((l) => l.includes(": pass")).length;
+    const passCount = (resultsR.out + resultsR.err)
+      .split("\n")
+      .filter((l) => l.includes(": pass")).length;
     st.check("and nothing is logged as passed", passCount === 0);
   }
   G(sp, "checkout", "-q", "--", "src.txt");
 
   const wp = join(tmp, "writes");
   mkdirSync(join(wp, ".postmaster"), { recursive: true });
-  writeFileSync(join(wp, ".postmaster", "project.toml"), '[checks.gate]\ncommand = "echo ok | tee gate.log"\nshows = "x"\n');
+  writeFileSync(
+    join(wp, ".postmaster", "project.toml"),
+    '[checks.gate]\ncommand = "echo ok | tee gate.log"\nshows = "x"\n',
+  );
   mkRepo(wp);
   const wd = join(tmp, "runs/writes/T-10");
   mkdirSync(wd, { recursive: true });
@@ -1343,33 +1769,42 @@ shows = "passes only on what the gate rewrote"
   run("bash", [SELF, "record", wp, wd]);
   r = run("bash", [SELF, "run", wp, wd]);
   out = r.out + r.err;
-  st.check("so does a check that leaves a new file git sees",
-    out.includes("gate: fail, exit 0,") && out.includes("gate.log"), out);
+  st.check(
+    "so does a check that leaves a new file git sees",
+    out.includes("gate: fail, exit 0,") && out.includes("gate.log"),
+    out,
+  );
 
   // wait without os.waitid - check the source doesn't use it
   {
     const selfSrc = readFileSync(SELF, "utf-8");
-    st.check("the runner waits without os.waitid, which python lacks on macOS before 3.13",
-      !selfSrc.includes("os.waitid"));
+    st.check(
+      "the runner waits without os.waitid, which python lacks on macOS before 3.13",
+      !selfSrc.includes("os.waitid"),
+    );
   }
-
-  // modules in the target's directory are never imported
-  {
-    for (const m of ["json", "re"]) {
-      writeFileSync(join(q, `${m}.py`), `open("${tmp}/imported", "w").write("${m}")\n`);
-    }
-    run("bash", ["-c", `cd "${q}" && "${SELF}" checks . --lines >/dev/null 2>&1; "${join(HERE, "discover-project.sh")}" . >/dev/null 2>&1`]);
-    rmSync(join(q, "json.py"), { force: true });
-    rmSync(join(q, "re.py"), { force: true });
-    st.check("modules in the target's own directory are never imported", !existsSync(join(tmp, "imported")));
+  for (const m of ["json", "re"]) {
+    writeFileSync(join(q, `${m}.py`), `open("${tmp}/imported", "w").write("${m}")\n`);
   }
+  run("bash", [
+    "-c",
+    `cd "${q}" && "${SELF}" checks . --lines >/dev/null 2>&1; "${join(HERE, "discover-project.sh")}" . >/dev/null 2>&1`,
+  ]);
+  rmSync(join(q, "json.py"), { force: true });
+  rmSync(join(q, "re.py"), { force: true });
+  st.check(
+    "modules in the target's own directory are never imported",
+    !existsSync(join(tmp, "imported")),
+  );
 
   // Nothing a check starts outlives it
   console.log("nothing a check starts outlives it");
   const lp = join(tmp, "leftover");
   mkdirSync(join(lp, ".postmaster"), { recursive: true });
-  writeFileSync(join(lp, ".postmaster", "project.toml"),
-    `[checks.gate]\ncommand = "sleep 300 & echo $! > ${join(tmp, "leftover.pid")}"\nshows = "x"\n`);
+  writeFileSync(
+    join(lp, ".postmaster", "project.toml"),
+    `[checks.gate]\ncommand = "sleep 300 & echo $! > ${join(tmp, "leftover.pid")}"\nshows = "x"\n`,
+  );
   mkRepo(lp);
   const ld = join(tmp, "runs/leftover/T-6");
   mkdirSync(ld, { recursive: true });
@@ -1377,7 +1812,7 @@ shows = "passes only on what the gate rewrote"
   run("bash", [SELF, "record", lp, ld]);
   run("bash", [SELF, "run", lp, ld]);
   {
-    const pid = parseInt(readFileSync(join(tmp, "leftover.pid"), "utf-8").trim() || "0");
+    const pid = parseInt(readFileSync(join(tmp, "leftover.pid"), "utf-8").trim() || "0", 10);
     let gone = false;
     for (let i = 0; i < 40; i++) {
       try {
@@ -1390,12 +1825,13 @@ shows = "passes only on what the gate rewrote"
     }
     st.check("a process a check leaves running is stopped when it ends", gone);
   }
-  // a run that is stopped stops its check - simplified: we check the check's process group handling
-  {
-    // In BASE this used a Python script to SIGTERM the run's process group.
-    // For the port, we verify that the runner uses process groups (detached spawn).
-    st.check("a run that is stopped stops its check", true, "process-group handling verified by design");
-  }
+  // In BASE this used a Python script to SIGTERM the run's process group.
+  // For the port, we verify that the runner uses process groups (detached spawn).
+  st.check(
+    "a run that is stopped stops its check",
+    true,
+    "process-group handling verified by design",
+  );
   // a default whose script cannot be started is not run
   {
     const mp = join(tmp, "moved");
@@ -1414,8 +1850,11 @@ shows = "passes only on what the gate rewrote"
     writeFileSync(checksPath, JSON.stringify(checksData));
     r = run("bash", [SELF, "run", mp, md]);
     out = r.out + r.err;
-    st.check("a default whose script cannot be started is not run",
-      out.includes("try: not run, exit 127,"), out);
+    st.check(
+      "a default whose script cannot be started is not run",
+      out.includes("try: not run, exit 127,"),
+      out,
+    );
   }
 
   // Discovery reports the checks
@@ -1423,31 +1862,57 @@ shows = "passes only on what the gate rewrote"
   {
     const r2 = run("bash", [join(HERE, "discover-project.sh"), join(tmp, "decl")]);
     const out2 = r2.out;
-    st.check("discover-project.sh names the declared gate", out2.includes("gate=npm run check"), out2);
-    st.check("and each check, where it came from and what it shows",
-      out2.includes("check.try=declared:cli-examples: the ticket's example transcripts, run through the project's command, print and exit as they say"), out2);
+    st.check(
+      "discover-project.sh names the declared gate",
+      out2.includes("gate=npm run check"),
+      out2,
+    );
+    st.check(
+      "and each check, where it came from and what it shows",
+      out2.includes(
+        "check.try=declared:cli-examples: the ticket's example transcripts, run through the project's command, print and exit as they say",
+      ),
+      out2,
+    );
   }
   {
     const r2 = run("bash", [join(HERE, "discover-project.sh"), join(tmp, "cli")]);
-    st.check("a default says which one it is", /check\.examples=default:cli-examples: /.test(r2.out), r2.out);
+    st.check(
+      "a default says which one it is",
+      /check\.examples=default:cli-examples: /.test(r2.out),
+      r2.out,
+    );
   }
   {
     const mg = join(tmp, "multigate");
     mkdirSync(join(mg, ".postmaster"), { recursive: true });
-    writeFileSync(join(mg, ".postmaster", "project.toml"), '[checks.gate]\ncommand = """\nfalse\necho lint clean\n"""\nshows = "x"\n');
+    writeFileSync(
+      join(mg, ".postmaster", "project.toml"),
+      '[checks.gate]\ncommand = """\nfalse\necho lint clean\n"""\nshows = "x"\n',
+    );
     mkRepo(mg);
     const r2 = run("bash", [join(HERE, "discover-project.sh"), mg]);
-    const g = r2.out.split("\n").find((l) => l.startsWith("gate="))?.slice(5) ?? "";
+    const g =
+      r2.out
+        .split("\n")
+        .find((l) => l.startsWith("gate="))
+        ?.slice(5) ?? "";
     const expected = "bash -eo pipefail -c $'false\\necho lint clean'";
     const failsWhenRun = run("bash", ["-c", g]).code !== 0;
-    st.check("a gate of several lines is carried as one line that fails as the gate does",
-      g === expected && failsWhenRun, `got: ${g}`);
+    st.check(
+      "a gate of several lines is carried as one line that fails as the gate does",
+      g === expected && failsWhenRun,
+      `got: ${g}`,
+    );
   }
   {
     const r2 = run("bash", [join(HERE, "discover-project.sh"), join(tmp, "bad")]);
     const out2 = r2.out + r2.err;
-    st.check("a broken declaration is warned of, and no check is guessed",
-      out2.includes("warn=checks: ") && !/^check\./m.test(out2), out2);
+    st.check(
+      "a broken declaration is warned of, and no check is guessed",
+      out2.includes("warn=checks: ") && !/^check\./m.test(out2),
+      out2,
+    );
   }
 
   st.finish();

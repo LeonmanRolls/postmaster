@@ -20,34 +20,32 @@
 //   exit 1  usage, or nothing could be started
 //   exit 2  close refused: a launch still runs in the worktree; or stop left something running
 //   exit 3  spawn, send, wait or read with no host; or a send/wait that did not settle
+
+import { spawn, spawnSync } from "node:child_process";
 import {
   appendFileSync,
   chmodSync,
-  closeSync,
   existsSync,
   mkdirSync,
-  mkfifoSync,
   openSync,
-  readFileSync,
   readdirSync,
+  readFileSync,
   renameSync,
   rmSync,
   statSync,
   writeFileSync,
-  watch,
 } from "node:fs";
 import { basename, dirname, join } from "node:path";
-import { spawn, spawnSync, ChildProcess } from "node:child_process";
+import { scriptsDir } from "./lib/paths.ts";
 import { run } from "./lib/proc.ts";
 import { SelfTest } from "./lib/selftest.ts";
-import { scriptsDir } from "./lib/paths.ts";
 
 const HERE = scriptsDir(import.meta);
 const SELF = join(HERE, "host.sh");
-const SOURCE = "custom:postmaster";
-const META = "custom:postmaster-meta";
+const _SOURCE = "custom:postmaster";
+const _META = "custom:postmaster-meta";
 // Where running launches are registered: a runner takes its spec's, and a self-test its fixture.
-let STATE = process.env["POSTMASTER_HOST_STATE"] ?? join(process.env["HOME"] ?? "", ".postmaster/host");
+let STATE = process.env.POSTMASTER_HOST_STATE ?? join(process.env.HOME ?? "", ".postmaster/host");
 const PANE_IDS = ["HERDR_PANE_ID", "HERDR_TAB_ID", "HERDR_WORKSPACE_ID", "TMUX_PANE"];
 
 function die(msg: string): never {
@@ -69,16 +67,19 @@ function clean(s: string): string {
   // eslint-disable-next-line no-control-regex
   return s.replace(/[\x00-\x1f\x7f]/g, "");
 }
-function shellQuote(s: string): string {
+function _shellQuote(s: string): string {
   return `'${s.replace(/'/g, `'\\''`)}'`;
 }
 
 function herdrUp(): boolean {
-  return has("herdr") && spawnSync("timeout", ["5", "herdr", "workspace", "list"], { stdio: "ignore" }).status === 0;
+  return (
+    has("herdr") &&
+    spawnSync("timeout", ["5", "herdr", "workspace", "list"], { stdio: "ignore" }).status === 0
+  );
 }
 
 function detect(): string {
-  const forced = process.env["POSTMASTER_HOST"] ?? "";
+  const forced = process.env.POSTMASTER_HOST ?? "";
   if (forced === "none") return "none";
   if (!["", "auto", "herdr", "tmux"].includes(forced)) {
     warn(`POSTMASTER_HOST=${forced} is not herdr, tmux, none or auto; detecting`);
@@ -116,7 +117,7 @@ function tmuxSession(dir: string): string {
 
 function handleOf(text: string): string {
   let h = text.toLowerCase().replace(/[^a-z0-9_-]/g, "-");
-  if (!/^[a-z]/.test(h)) h = "p" + h;
+  if (!/^[a-z]/.test(h)) h = `p${h}`;
   if (h.length > 32) {
     // cksum of the whole text
     let sum = 0;
@@ -127,7 +128,7 @@ function handleOf(text: string): string {
     for (let i = 0; i < buf.length; i++) {
       crc = ((crc << 5) - crc + buf[i]!) >>> 0;
     }
-    h = h.slice(0, 23) + "-" + crc.toString(16).padStart(8, "0");
+    h = `${h.slice(0, 23)}-${crc.toString(16).padStart(8, "0")}`;
   }
   return h;
 }
@@ -142,7 +143,10 @@ function nameCmd(d: string, role?: string): string {
       if (line.startsWith("## ")) {
         inside = line.trim() === "## Dispatch";
       } else if (inside && line.startsWith("name:")) {
-        n = line.slice(5).replace(/\s{2,}\(.*\)$/, "").trim();
+        n = line
+          .slice(5)
+          .replace(/\s{2,}\(.*\)$/, "")
+          .trim();
         break;
       }
     }
@@ -169,7 +173,7 @@ function pgAlive(pg: number): boolean {
   }
 }
 
-function pgSig(pg: number, signal: NodeJS.Signals): void {
+function _pgSig(pg: number, signal: NodeJS.Signals): void {
   try {
     process.kill(-pg, signal);
   } catch {
@@ -203,8 +207,9 @@ interface Root {
   start: string;
 }
 
-function fixtureGuard(): void {  // while a self-test runs, the registry is its fixture and never the live one
-  const fixture = process.env["POSTMASTER_HOST_FIXTURE"];
+function fixtureGuard(): void {
+  // while a self-test runs, the registry is its fixture and never the live one
+  const fixture = process.env.POSTMASTER_HOST_FIXTURE;
   if (fixture && !`${STATE}/`.startsWith(`${fixture}/`)) {
     die(`refusing the registry at ${STATE}: a self-test uses only its fixture, ${fixture}`);
   }
@@ -218,7 +223,8 @@ function bootId(): string {
   }
 }
 
-function bootTime(): number | null {  // when this boot started, in seconds since the epoch
+function bootTime(): number | null {
+  // when this boot started, in seconds since the epoch
   try {
     for (const line of readFileSync("/proc/stat", "utf8").split("\n")) {
       if (line.startsWith("btime ")) return Number(line.split(/\s+/)[1]);
@@ -229,7 +235,8 @@ function bootTime(): number | null {  // when this boot started, in seconds sinc
   return null;
 }
 
-function startOf(pid: number): string | null {  // a live process's start time, as the registry records it
+function startOf(pid: number): string | null {
+  // a live process's start time, as the registry records it
   try {
     const raw = readFileSync(`/proc/${pid}/stat`, "utf8");
     const f = raw.slice(raw.lastIndexOf(")") + 2).split(/\s+/);
@@ -239,7 +246,8 @@ function startOf(pid: number): string | null {  // a live process's start time, 
   }
 }
 
-function startedAt(start: string): number | null {  // when a process with this start started
+function startedAt(start: string): number | null {
+  // when a process with this start started
   const booted = bootTime();
   if (!/^\d+$/.test(start) || booted === null) return null;
   const hz = Number(run("getconf", ["CLK_TCK"]).out.trim()) || 100;
@@ -248,7 +256,13 @@ function startedAt(start: string): number | null {  // when a process with this 
 
 function regLoad(path: string): RegRecord {
   const lines = readFileSync(path, "utf8").split("\n");
-  const rec: RegRecord = { dir: lines[0] ?? "", name: lines[1] ?? "", start: null, boot: null, members: [] };
+  const rec: RegRecord = {
+    dir: lines[0] ?? "",
+    name: lines[1] ?? "",
+    start: null,
+    boot: null,
+    members: [],
+  };
   for (const line of lines.slice(2)) {
     const sp = line.indexOf(" ");
     const key = sp < 0 ? line : line.slice(0, sp);
@@ -275,10 +289,17 @@ function regSave(path: string, rec: RegRecord): void {
 function regAdd(pg: string, cwd: string, name: string): void {
   fixtureGuard();
   mkdirSync(join(STATE, "launches"), { recursive: true });
-  regSave(join(STATE, "launches", pg), { dir: cwd, name, start: startOf(Number(pg)) ?? "", boot: bootId(), members: [] });
+  regSave(join(STATE, "launches", pg), {
+    dir: cwd,
+    name,
+    start: startOf(Number(pg)) ?? "",
+    boot: bootId(),
+    members: [],
+  });
 }
 
-function regMembers(pg: number): void {  // its leader has exited: note what is left of its group, or drop it
+function regMembers(pg: number): void {
+  // its leader has exited: note what is left of its group, or drop it
   fixtureGuard();
   const path = join(STATE, "launches", String(pg));
   let rec: RegRecord;
@@ -295,9 +316,16 @@ function regMembers(pg: number): void {  // its leader has exited: note what is 
   else rmSync(path, { force: true });
 }
 
-function regRoots(path: string, pg: number, rec: RegRecord, table: Map<number, ProcInfo>, boot: string): Root[] | null {
+function regRoots(
+  path: string,
+  pg: number,
+  rec: RegRecord,
+  table: Map<number, ProcInfo>,
+  boot: string,
+): Root[] | null {
   const leader = table.get(pg);
-  if (rec.start === null && rec.boot === null) {  // written before start and boot were
+  if (rec.start === null && rec.boot === null) {
+    // written before start and boot were
     const booted = bootTime();
     let written: number;
     try {
@@ -307,7 +335,7 @@ function regRoots(path: string, pg: number, rec: RegRecord, table: Map<number, P
     }
     if (!leader || leader.zombie || booted === null || written < booted) return null;
     const began = startedAt(leader.start);
-    if (began === null || began > written + 2) return null;  // the pid is newer than the record
+    if (began === null || began > written + 2) return null; // the pid is newer than the record
     rec.start = leader.start;
     rec.boot = boot;
     regSave(path, rec);
@@ -431,17 +459,17 @@ function runCmd(name: string, cwd: string, args: string[]): void {
   if (!name || !cwd) launchFailed("usage: host.sh run <name> <cwd> [options] -- <command...>");
   if (opts.command.length === 0) launchFailed("run needs a command after --");
   if (!existsSync(cwd) || !statSync(cwd).isDirectory()) launchFailed(`no such directory: ${cwd}`);
-  const claimWait = countVal(process.env["POSTMASTER_HOST_CLAIM_WAIT"] ?? "20", "POSTMASTER_HOST_CLAIM_WAIT");
+  const _claimWait = countVal(
+    process.env.POSTMASTER_HOST_CLAIM_WAIT ?? "20",
+    "POSTMASTER_HOST_CLAIM_WAIT",
+  );
   const cwdAbs = run("bash", ["-c", `cd "$1" && pwd -P`, "_", cwd]).out.trim() || cwd;
   const cleanName = clean(name);
   if (opts.pidfile) rmSync(opts.pidfile, { force: true });
   if (opts.marker) rmSync(opts.marker, { force: true });
 
   // Write the spec directory
-  const spec = join(
-    process.env["TMPDIR"] ?? "/tmp",
-    `postmaster-host.${process.pid}.${Date.now()}`,
-  );
+  const spec = join(process.env.TMPDIR ?? "/tmp", `postmaster-host.${process.pid}.${Date.now()}`);
   mkdirSync(spec, { recursive: true });
   writeFileSync(join(spec, "name"), cleanName);
   writeFileSync(join(spec, "cwd"), cwdAbs);
@@ -452,7 +480,7 @@ function runCmd(name: string, cwd: string, args: string[]): void {
   writeFileSync(join(spec, "marker"), opts.marker);
   writeFileSync(join(spec, "pidfile"), opts.pidfile);
   writeFileSync(join(spec, "append"), opts.append ? "1" : "0");
-  writeFileSync(join(spec, "argv"), opts.command.join("\0") + "\0");
+  writeFileSync(join(spec, "argv"), `${opts.command.join("\0")}\0`);
 
   const host = detect();
   let where = "";
@@ -522,13 +550,15 @@ function runner(mode: string, spec: string): void {
   const cwd = readFileSync(join(spec, "cwd"), "utf8");
   const rundir = readFileSync(join(spec, "rundir"), "utf8");
   const state = readFileSync(join(spec, "state"), "utf8");
-  STATE = state;  // the registry this launch's caller uses, never this pane's default
+  STATE = state; // the registry this launch's caller uses, never this pane's default
   const out = readFileSync(join(spec, "out"), "utf8");
   const err = readFileSync(join(spec, "err"), "utf8");
   const marker = readFileSync(join(spec, "marker"), "utf8");
   const pidfile = readFileSync(join(spec, "pidfile"), "utf8");
   const append = readFileSync(join(spec, "append"), "utf8").trim() === "1";
-  const argv = readFileSync(join(spec, "argv"), "utf8").split("\0").filter((s) => s !== "");
+  const argv = readFileSync(join(spec, "argv"), "utf8")
+    .split("\0")
+    .filter((s) => s !== "");
   FAIL_ERR = err;
   FAIL_MARKER = marker;
 
@@ -544,11 +574,11 @@ function runner(mode: string, spec: string): void {
   // Drop caller's pane identity.
   const drop = new Set(["POSTMASTER_LAUNCH_NAME", ...PANE_IDS]);
   for (const k of drop) delete childenv[k];
-  childenv["POSTMASTER_LAUNCH_NAME"] = name;
+  childenv.POSTMASTER_LAUNCH_NAME = name;
 
   // Streams
-  let oFd = 1;
-  let eFd = 2;
+  const _oFd = 1;
+  const _eFd = 2;
   if (out) {
     if (!append) writeFileSync(out, "");
   }
@@ -563,7 +593,7 @@ function runner(mode: string, spec: string): void {
 
   // Pipe stdout/stderr to files.
   if (out && child.stdout) {
-    const ws = openSync(out, append ? "a" : "w");
+    const _ws = openSync(out, append ? "a" : "w");
     child.stdout.on("data", (d: Buffer) => {
       writeFileSync(out, d, { flag: "a" });
     });
@@ -621,22 +651,33 @@ function worktreeArg(dir: string, what: string): string {
 function stopCmd(dir: string): number {
   const path = worktreeArg(dir, "stop");
   const callerPwd = run("bash", ["-c", "pwd -P"]).out.trim();
-  if (callerPwd.startsWith(path + "/") || callerPwd === path) {
+  if (callerPwd.startsWith(`${path}/`) || callerPwd === path) {
     die(`not stopping the launches in ${path} from inside it: that stops this session too`);
   }
-  const patience = countVal(process.env["POSTMASTER_HOST_STOP_WAIT"] ?? "20", "POSTMASTER_HOST_STOP_WAIT");
-  const most = countVal(process.env["POSTMASTER_HOST_STOP_MAX"] ?? "512", "POSTMASTER_HOST_STOP_MAX");
+  const patience = countVal(
+    process.env.POSTMASTER_HOST_STOP_WAIT ?? "20",
+    "POSTMASTER_HOST_STOP_WAIT",
+  );
+  const most = countVal(process.env.POSTMASTER_HOST_STOP_MAX ?? "512", "POSTMASTER_HOST_STOP_MAX");
   const live = regScan(path);
   if (live.length === 0) {
     console.log(`no launch is running in ${path}`);
     return 0;
   }
-  const stopResult = stopTree(patience, most, live.flatMap((l) => l.roots));
+  const stopResult = stopTree(
+    patience,
+    most,
+    live.flatMap((l) => l.roots),
+  );
   if (stopResult.code === 0) {
-    console.log(`stopped ${live.length} launch(es) in ${path}: ${stopResult.processes} process(es)`);
+    console.log(
+      `stopped ${live.length} launch(es) in ${path}: ${stopResult.processes} process(es)`,
+    );
     return 0;
   } else if (stopResult.code === 2) {
-    warn(`stopped ${live.length} launch(es) in ${path}, but these still run: ${stopResult.survivors}`);
+    warn(
+      `stopped ${live.length} launch(es) in ${path}, but these still run: ${stopResult.survivors}`,
+    );
     return 2;
   } else if (stopResult.code === 3) {
     warn(`refused to stop the launches in ${path}, and left them running: ${stopResult.survivors}`);
@@ -647,7 +688,8 @@ function stopCmd(dir: string): number {
   }
 }
 
-function argsOf(pid: number): string {  // a process's command line, to recognise what must never be signalled
+function argsOf(pid: number): string {
+  // a process's command line, to recognise what must never be signalled
   try {
     return readFileSync(`/proc/${pid}/cmdline`, "utf8").replace(/\0/g, " ").trim();
   } catch {
@@ -655,17 +697,24 @@ function argsOf(pid: number): string {  // a process's command line, to recognis
   }
 }
 
-function protectedAs(pid: number, name: string): string | null {  // what a process is, when stop must never signal it
-  const words = argsOf(pid).split(/\s+/).filter((w) => w);
+function protectedAs(pid: number, name: string): string | null {
+  // what a process is, when stop must never signal it
+  const words = argsOf(pid)
+    .split(/\s+/)
+    .filter((w) => w);
   const tail = words.slice(1);
   if (pid === 1) return "the init process";
   if (name === "systemd") return "a systemd manager";
-  if (name === "herdr" && (tail.length === 0 || tail.includes("server") || tail.some((w) => w.startsWith("--session")))) {
+  if (
+    name === "herdr" &&
+    (tail.length === 0 || tail.includes("server") || tail.some((w) => w.startsWith("--session")))
+  ) {
     return "the Herdr server or a Herdr client";
   }
   if (name === "moshi-hook" && tail.includes("serve")) return "the moshi-hook daemon";
   if (words.some((w) => w.includes("code-server"))) return "code-server";
-  if (name.startsWith("tmux") && (name.includes("server") || tail.length === 0)) return "the tmux server";
+  if (name.startsWith("tmux") && (name.includes("server") || tail.length === 0))
+    return "the tmux server";
   if (name === "sshd") return "sshd";
   return null;
 }
@@ -673,14 +722,18 @@ function protectedAs(pid: number, name: string): string | null {  // what a proc
 // stopTree: each root is a launch whose leader lives (its group) or a process its leader left, as
 // regScan gives them. Code 2 if anything survives; code 3, having signalled none of it, when the
 // set it would signal holds something it must never touch, with the reason in `survivors`.
-function stopTree(grace: number, most: number, roots: Root[]): { code: number; processes: number; survivors: string } {
+function stopTree(
+  grace: number,
+  most: number,
+  roots: Root[],
+): { code: number; processes: number; survivors: string } {
   const table = buildProcTable();
   const spare = new Set<number>([0, 1, process.pid]);
   {
     let p = process.pid;
     while (table.has(p) && !spare.has(p)) {
       spare.add(p);
-      p = table.get(p)!.ppid;
+      p = table.get(p)?.ppid ?? 0;
     }
   }
   // A root counts only if its process is still the one the registry recorded: same pid, same start.
@@ -694,9 +747,9 @@ function stopTree(grace: number, most: number, roots: Root[]): { code: number; p
     const seen = new Set<number>();
     let q = p;
     while (table.has(q) && !seen.has(q) && q !== 0 && q !== 1) {
-      if (seeds.has(q) || groupSet.has(table.get(q)!.pgid)) return true;
+      if (seeds.has(q) || groupSet.has(table.get(q)?.pgid ?? -1)) return true;
       seen.add(q);
-      q = table.get(q)!.ppid;
+      q = table.get(q)?.ppid ?? 0;
     }
     return false;
   };
@@ -707,7 +760,7 @@ function stopTree(grace: number, most: number, roots: Root[]): { code: number; p
     }
     const hit = new Set<number>();
     for (const pid of live) {
-      if (groupSet.has(table.get(pid)!.pgid) || seeds.has(pid)) hit.add(pid);
+      if (groupSet.has(table.get(pid)?.pgid ?? -1) || seeds.has(pid)) hit.add(pid);
     }
     const kids = new Map<number, number[]>();
     for (const [pid, v] of table) {
@@ -747,14 +800,26 @@ function stopTree(grace: number, most: number, roots: Root[]): { code: number; p
     if (fresh.length === 0) break;
     const why = refusal(fresh);
     if (why) {
-      for (const p of frozen) {  // found only after the first freeze: undo it
-        try { process.kill(p, "SIGCONT"); } catch { /* gone */ }
+      for (const p of frozen) {
+        // found only after the first freeze: undo it
+        try {
+          process.kill(p, "SIGCONT");
+        } catch {
+          /* gone */
+        }
       }
-      const undone = frozen.size > 0 ? `; the ${frozen.size} processes frozen before it was found were resumed` : "";
+      const undone =
+        frozen.size > 0
+          ? `; the ${frozen.size} processes frozen before it was found were resumed`
+          : "";
       return { code: 3, processes: 0, survivors: `${why}${undone}` };
     }
     for (const p of fresh) {
-      try { process.kill(p, "SIGSTOP"); } catch { /* gone */ }
+      try {
+        process.kill(p, "SIGSTOP");
+      } catch {
+        /* gone */
+      }
       frozen.add(p);
     }
   }
@@ -765,8 +830,16 @@ function stopTree(grace: number, most: number, roots: Root[]): { code: number; p
     if (v) known.set(p, v.start);
   }
   for (const p of known.keys()) {
-    try { process.kill(p, "SIGTERM"); } catch { /* gone */ }
-    try { process.kill(p, "SIGCONT"); } catch { /* gone */ }
+    try {
+      process.kill(p, "SIGTERM");
+    } catch {
+      /* gone */
+    }
+    try {
+      process.kill(p, "SIGCONT");
+    } catch {
+      /* gone */
+    }
   }
   const leftSurvivors = (): Set<number> => {
     refreshProcTable(table);
@@ -785,7 +858,11 @@ function stopTree(grace: number, most: number, roots: Root[]): { code: number; p
   while (rest.size > 0 && Date.now() < killEnd) {
     refreshProcTable(table);
     for (const p of rest) {
-      try { process.kill(p, "SIGKILL"); } catch { /* gone */ }
+      try {
+        process.kill(p, "SIGKILL");
+      } catch {
+        /* gone */
+      }
       const v = table.get(p);
       if (v) known.set(p, v.start);
     }
@@ -848,7 +925,10 @@ function refreshProcTable(t: Map<number, ProcInfo>): void {
 
 function closeCmd(dir: string): number {
   const path = worktreeArg(dir, "close");
-  const patience = countVal(process.env["POSTMASTER_HOST_CLOSE_WAIT"] ?? "15", "POSTMASTER_HOST_CLOSE_WAIT");
+  const patience = countVal(
+    process.env.POSTMASTER_HOST_CLOSE_WAIT ?? "15",
+    "POSTMASTER_HOST_CLOSE_WAIT",
+  );
   let i = 0;
   for (;;) {
     const live = regLive(path);
@@ -874,9 +954,13 @@ function closeTmux(path: string): void {
   const session = tmuxSession(path);
   const hasSession = spawnSync("tmux", ["has-session", "-t", `=${session}`], { stdio: "ignore" });
   if (hasSession.status !== 0) return;
-  const listResult = spawnSync("tmux", ["list-windows", "-t", `=${session}`, "-F", "#{window_id}\t#{@postmaster_cwd}"], {
-    encoding: "utf8",
-  });
+  const listResult = spawnSync(
+    "tmux",
+    ["list-windows", "-t", `=${session}`, "-F", "#{window_id}\t#{@postmaster_cwd}"],
+    {
+      encoding: "utf8",
+    },
+  );
   let n = 0;
   for (const line of (listResult.stdout ?? "").split("\n")) {
     const [w, cwd] = line.split("\t");
@@ -919,9 +1003,9 @@ function spawnCmd(handle: string, cwd: string, args: string[]): void {
   }
   if (cmd.length === 0) die("spawn needs a command after --");
   if (!existsSync(cwd)) die(`no such directory: ${cwd}`);
-  const cwdAbs = run("bash", ["-c", `cd "$1" && pwd -P`, "_", cwd]).out.trim() || cwd;
-  const cleanLabel = clean(label || handle);
-  const cleanHandle = handleOf(handle);
+  const _cwdAbs = run("bash", ["-c", `cd "$1" && pwd -P`, "_", cwd]).out.trim() || cwd;
+  const _cleanLabel = clean(label || handle);
+  const _cleanHandle = handleOf(handle);
 
   switch (detect()) {
     case "herdr":
@@ -934,11 +1018,11 @@ function spawnCmd(handle: string, cwd: string, args: string[]): void {
 
 function sendCmd(handle: string, file: string, args: string[]): void {
   if (!handle || !file) die("usage: host.sh send <handle> <file> [--wait [<seconds>]]");
-  let waitfor = 0;
+  let _waitfor = 0;
   if (args[0] === "--wait") {
-    waitfor = countVal(args[1] ?? "600", "seconds");
+    _waitfor = countVal(args[1] ?? "600", "seconds");
   }
-  const cleanHandle = handleOf(handle);
+  const _cleanHandle = handleOf(handle);
   if (!existsSync(file)) die(`no such file: ${file}`);
   switch (detect()) {
     case "herdr":
@@ -951,8 +1035,8 @@ function sendCmd(handle: string, file: string, args: string[]): void {
 
 function waitCmd(handle: string, args: string[]): number {
   if (!handle) die("usage: host.sh wait <handle> [<seconds>]");
-  const secs = countVal(args[0] ?? "600", "seconds");
-  const cleanHandle = handleOf(handle);
+  const _secs = countVal(args[0] ?? "600", "seconds");
+  const _cleanHandle = handleOf(handle);
   switch (detect()) {
     case "herdr":
     case "tmux":
@@ -964,8 +1048,8 @@ function waitCmd(handle: string, args: string[]): number {
 
 function readCmd(handle: string, args: string[]): void {
   if (!handle) die("usage: host.sh read <handle> [<lines>]");
-  const lines = countVal(args[0] ?? "120", "lines");
-  const cleanHandle = handleOf(handle);
+  const _lines = countVal(args[0] ?? "120", "lines");
+  const _cleanHandle = handleOf(handle);
   switch (detect()) {
     case "herdr":
     case "tmux":
@@ -983,8 +1067,8 @@ function selfTest(): void {
   // A fixture registry, and a guard that refuses any other, so no control ever reads, prunes or
   // stops from the live one.
   STATE = join(tmp, "state");
-  process.env["POSTMASTER_HOST_STATE"] = STATE;
-  process.env["POSTMASTER_HOST_FIXTURE"] = tmp;
+  process.env.POSTMASTER_HOST_STATE = STATE;
+  process.env.POSTMASTER_HOST_FIXTURE = tmp;
   process.on("exit", () => {
     try {
       rmSync(tmp, { recursive: true, force: true });
@@ -995,31 +1079,52 @@ function selfTest(): void {
 
   const repo = join(tmp, `hosttest-${process.pid}`);
   run("git", ["init", "-q", "-b", "main", repo]);
-  run("git", ["-C", repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "first"]);
+  run("git", [
+    "-C",
+    repo,
+    "-c",
+    "user.name=t",
+    "-c",
+    "user.email=t@t",
+    "commit",
+    "-q",
+    "--allow-empty",
+    "-m",
+    "first",
+  ]);
   for (const w of ["T-1-luna", "T-1-sol"]) {
     run("git", ["-C", repo, "worktree", "add", "-q", `.worktrees/${w}`, "-b", `wb/${w}`]);
   }
   run("git", ["-C", repo, "worktree", "add", "-q", "--detach", ".worktrees/T-1-rev-luna"]);
   const repoAbs = run("bash", ["-c", `cd "$1" && pwd -P`, "_", repo]).out.trim() || repo;
-  const rname = basename(repoAbs);
+  const _rname = basename(repoAbs);
   const clone = join(repoAbs, ".worktrees/T-1-rev-security-opus");
   run(join(HERE, "cut-scratch.sh"), [
-    repoAbs, repoAbs, clone, run("git", ["-C", repoAbs, "rev-parse", "HEAD"]).out.trim(),
-    "--clone", "main",
+    repoAbs,
+    repoAbs,
+    clone,
+    run("git", ["-C", repoAbs, "rev-parse", "HEAD"]).out.trim(),
+    "--clone",
+    "main",
   ]);
   mkdirSync(join(tmp, "caller"), { recursive: true });
   mkdirSync(join(tmp, "logs"), { recursive: true });
   mkdirSync(join(tmp, "run-1"), { recursive: true });
 
-  writeFileSync(join(tmp, "caller/fixed.sh"), `#!/usr/bin/env bash
+  writeFileSync(
+    join(tmp, "caller/fixed.sh"),
+    `#!/usr/bin/env bash
 printf '{"type":"system","subtype":"init","session_id":"fixed-1","model":"m"}\\n'
 printf '{"type":"assistant","message":{"content":[{"type":"text","text":"step one"}]}}\\n'
 printf 'a line on stderr\\n' >&2
 sleep "\${EMIT_SLEEP:-0}"
 printf '{"type":"result","subtype":"success","num_turns":1}\\n'
 exit 3
-`);
-  writeFileSync(join(tmp, "caller/probe.sh"), `#!/usr/bin/env bash
+`,
+  );
+  writeFileSync(
+    join(tmp, "caller/probe.sh"),
+    `#!/usr/bin/env bash
 printf '{"type":"system","subtype":"init","session_id":"probe-1","model":"m"}\\n'
 if (: < /dev/tty) 2>/dev/null; then tty=yes; else tty=no; fi
 printf 'from=%s|name=%s|pane=%s|tmuxpane=%s|var=%s|sid=%s|pid=%s|pgid=%s|tty=%s\\n' "$PWD" "\${POSTMASTER_LAUNCH_NAME:-}" \
@@ -1027,20 +1132,26 @@ printf 'from=%s|name=%s|pane=%s|tmuxpane=%s|var=%s|sid=%s|pid=%s|pgid=%s|tty=%s\
   "$(ps -o pgid= -p $$ | tr -d ' ')" "$tty"
 echo x >> "\${COUNT:-/dev/null}"
 sleep "\${EMIT_SLEEP:-0}"
-`);
+`,
+  );
   chmodSync(join(tmp, "caller/fixed.sh"), 0o755);
   chmodSync(join(tmp, "caller/probe.sh"), 0o755);
 
-  writeFileSync(join(tmp, "run-1/brief.md"), `# Waybill: 1
+  writeFileSync(
+    join(tmp, "run-1/brief.md"),
+    `# Waybill: 1
 
 ## Ticket
 name: not this one
 
 ## Dispatch
-name: #1, Stop \`touch ${join(tmp, "canary")}\` \$(touch ${join(tmp, "canary")}) "breaking" a shell
+name: #1, Stop \`touch ${join(tmp, "canary")}\` $(touch ${join(tmp, "canary")}) "breaking" a shell
 dispatch: ${join(tmp, "run-1")}
-`);
-  const NAME = spawnSync(SELF, ["name", join(tmp, "run-1"), "luna"], { encoding: "utf8" }).stdout.trim();
+`,
+  );
+  const NAME = spawnSync(SELF, ["name", join(tmp, "run-1"), "luna"], {
+    encoding: "utf8",
+  }).stdout.trim();
 
   const st = new SelfTest();
   const check = (label: string, cond: boolean, detail?: string): void => {
@@ -1053,9 +1164,39 @@ dispatch: ${join(tmp, "run-1")}
   mkdirSync(join(tmp, "sys"), { recursive: true });
   mkdirSync(join(tmp, "stub"), { recursive: true });
   for (const t of [
-    "bash", "sh", "bun", "git", "env", "cat", "mkdir", "rmdir", "rm", "mkfifo", "mktemp",
-    "sleep", "date", "touch", "wc", "tr", "sed", "awk", "dirname", "basename", "grep", "head",
-    "tail", "cut", "sort", "cmp", "ls", "seq", "timeout", "find", "cksum", "ps", "setsid",
+    "bash",
+    "sh",
+    "bun",
+    "git",
+    "env",
+    "cat",
+    "mkdir",
+    "rmdir",
+    "rm",
+    "mkfifo",
+    "mktemp",
+    "sleep",
+    "date",
+    "touch",
+    "wc",
+    "tr",
+    "sed",
+    "awk",
+    "dirname",
+    "basename",
+    "grep",
+    "head",
+    "tail",
+    "cut",
+    "sort",
+    "cmp",
+    "ls",
+    "seq",
+    "timeout",
+    "find",
+    "cksum",
+    "ps",
+    "setsid",
   ]) {
     const r = spawnSync("sh", ["-c", `command -v ${t}`], { encoding: "utf8" });
     const p = r.stdout.trim();
@@ -1069,7 +1210,9 @@ dispatch: ${join(tmp, "run-1")}
   }
 
   // Stub herdr and tmux as bun scripts, so the restricted PATH needs no interpreter but bun.
-  writeFileSync(join(tmp, "bin/herdr"), `#!/usr/bin/env bun
+  writeFileSync(
+    join(tmp, "bin/herdr"),
+    `#!/usr/bin/env bun
 import { appendFileSync, closeSync, existsSync, openSync, readFileSync, realpathSync, unlinkSync, writeFileSync } from "node:fs";
 import { spawn, spawnSync } from "node:child_process";
 import { basename, dirname, join } from "node:path";
@@ -1181,8 +1324,11 @@ else if (cmd === "pane run") {
   st.agents.push(a[2]); save();
   if (flag("agent.notready")) fail("agent_not_ready");
 } else if (cmd === "agent read") { console.log("stub screen of " + a[2]); }
-`);
-  writeFileSync(join(tmp, "bin/tmux"), `#!/usr/bin/env bun
+`,
+  );
+  writeFileSync(
+    join(tmp, "bin/tmux"),
+    `#!/usr/bin/env bun
 import { appendFileSync, closeSync, existsSync, openSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { join } from "node:path";
@@ -1257,15 +1403,20 @@ if (a[0] === "has-session") {
     }
   }
 } else if (a[0] === "capture-pane") { console.log("stub screen"); }
-`);
+`,
+  );
   chmodSync(join(tmp, "bin/herdr"), 0o755);
   chmodSync(join(tmp, "bin/tmux"), 0o755);
 
   const SYS = join(tmp, "sys");
   const STUBS = `${join(tmp, "bin")}:${SYS}`;
-  const hs = (p: string, vars: Record<string, string>, ...args: string[]): { code: number; out: string } => {
+  const hs = (
+    p: string,
+    vars: Record<string, string>,
+    ...args: string[]
+  ): { code: number; out: string } => {
     const env: Record<string, string> = {
-      HOME: process.env["HOME"] ?? "",
+      HOME: process.env.HOME ?? "",
       PATH: p,
       STUB: join(tmp, "stub"),
       TMPDIR: tmp,
@@ -1278,7 +1429,7 @@ if (a[0] === "has-session") {
     const r = spawnSync(SELF, args, { encoding: "utf8", env });
     return { code: r.status ?? 1, out: (r.stdout ?? "") + (r.stderr ?? "") };
   };
-  const calls = (name: string): string => {
+  const _calls = (name: string): string => {
     try {
       return readFileSync(join(tmp, "stub", `${name}.calls`), "utf8");
     } catch {
@@ -1294,7 +1445,7 @@ if (a[0] === "has-session") {
       /* ignore */
     }
   };
-  const T = "\t";
+  const _T = "\t";
 
   // Minimal control set covering the key behaviours (full set in the original).
   console.log("detect");
@@ -1303,13 +1454,20 @@ if (a[0] === "has-session") {
   check("with no Herdr server answering, tmux is", hs(STUBS, {}, "detect").out.trim() === "tmux");
   reset();
   check("with neither on PATH, none", hs(SYS, {}, "detect").out.trim() === "none");
-  check("POSTMASTER_HOST=none wins over a live Herdr", hs(STUBS, { POSTMASTER_HOST: "none" }, "detect").out.trim() === "none");
-  check("POSTMASTER_HOST=tmux wins over a live Herdr", hs(STUBS, { POSTMASTER_HOST: "tmux" }, "detect").out.trim() === "tmux");
+  check(
+    "POSTMASTER_HOST=none wins over a live Herdr",
+    hs(STUBS, { POSTMASTER_HOST: "none" }, "detect").out.trim() === "none",
+  );
+  check(
+    "POSTMASTER_HOST=tmux wins over a live Herdr",
+    hs(STUBS, { POSTMASTER_HOST: "tmux" }, "detect").out.trim() === "tmux",
+  );
 
   console.log("name: from the waybill, so no title is typed into a shell");
   check(
     "it is the Dispatch section's name, then the role",
-    NAME === `#1, Stop \`touch ${join(tmp, "canary")}\` \$(touch ${join(tmp, "canary")}) "breaking" a shell · luna`,
+    NAME ===
+      `#1, Stop \`touch ${join(tmp, "canary")}\` $(touch ${join(tmp, "canary")}) "breaking" a shell · luna`,
     NAME,
   );
   check(
@@ -1332,28 +1490,42 @@ if (a[0] === "has-session") {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
   });
-  const runResult2 = spawnSync(SELF, [
-    "run", NAME, join(repoAbs, ".worktrees/T-1-luna"),
-    "--out", join(tmp, "logs/n1.out"),
-    "--err", join(tmp, "logs/n1.err"),
-    "--marker", join(tmp, "logs/n1.done"),
-    "--", "./fixed.sh",
-  ], {
-    cwd: join(tmp, "caller"),
-    encoding: "utf8",
-    env: {
-      ...process.env,
-      PATH: SYS,
-      STUB: join(tmp, "stub"),
-      TMPDIR: tmp,
-      POSTMASTER_HOST_STATE: join(tmp, "state"),
-      POSTMASTER_HOST_FIXTURE: tmp,
-      POSTMASTER_HOST_CLAIM_WAIT: "3",
-      POSTMASTER_HOST_CLOSE_WAIT: "1",
-      POSTMASTER_HOST: "none",
+  const runResult2 = spawnSync(
+    SELF,
+    [
+      "run",
+      NAME,
+      join(repoAbs, ".worktrees/T-1-luna"),
+      "--out",
+      join(tmp, "logs/n1.out"),
+      "--err",
+      join(tmp, "logs/n1.err"),
+      "--marker",
+      join(tmp, "logs/n1.done"),
+      "--",
+      "./fixed.sh",
+    ],
+    {
+      cwd: join(tmp, "caller"),
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        PATH: SYS,
+        STUB: join(tmp, "stub"),
+        TMPDIR: tmp,
+        POSTMASTER_HOST_STATE: join(tmp, "state"),
+        POSTMASTER_HOST_FIXTURE: tmp,
+        POSTMASTER_HOST_CLAIM_WAIT: "3",
+        POSTMASTER_HOST_CLOSE_WAIT: "1",
+        POSTMASTER_HOST: "none",
+      },
     },
-  });
-  check("it says it ran in the background", runResult2.stdout.trim() === "host=none", runResult2.stdout + runResult2.stderr);
+  );
+  check(
+    "it says it ran in the background",
+    runResult2.stdout.trim() === "host=none",
+    runResult2.stdout + runResult2.stderr,
+  );
 
   // Wait for marker.
   let markerOk = false;
@@ -1366,44 +1538,56 @@ if (a[0] === "has-session") {
   }
   check("its marker lands", markerOk);
 
-  check(
-    "and the title's shell syntax never ran",
-    !existsSync(join(tmp, "canary")),
-  );
+  check("and the title's shell syntax never ran", !existsSync(join(tmp, "canary")));
 
   console.log("stop: everything a launch started, and nothing else");
-  writeFileSync(join(tmp, "caller/tree.sh"), `#!/usr/bin/env bash
+  writeFileSync(
+    join(tmp, "caller/tree.sh"),
+    `#!/usr/bin/env bash
 trap 'echo term >> "$TREE/term"; exit 0' TERM
 setsid sleep 120 & echo $! > "$TREE/escapee.pid"
 sh -c 'trap "" TERM; while :; do sleep 1; done' & echo $! > "$TREE/deaf.pid"
 sleep 120 & wait
-`);
+`,
+  );
   chmodSync(join(tmp, "caller/tree.sh"), 0o755);
   mkdirSync(join(tmp, "tree"), { recursive: true });
-  spawnSync(SELF, [
-    "run", NAME, join(repoAbs, ".worktrees/T-1-luna"),
-    "--marker", join(tmp, "logs/k1.done"),
-    "--", "./tree.sh",
-  ], {
-    cwd: join(tmp, "caller"),
-    encoding: "utf8",
-    env: {
-      ...process.env,
-      PATH: SYS,
-      STUB: join(tmp, "stub"),
-      TMPDIR: tmp,
-      POSTMASTER_HOST_STATE: join(tmp, "state"),
-      POSTMASTER_HOST_FIXTURE: tmp,
-      POSTMASTER_HOST_CLAIM_WAIT: "3",
-      POSTMASTER_HOST_CLOSE_WAIT: "1",
-      POSTMASTER_HOST: "none",
-      TREE: join(tmp, "tree"),
+  spawnSync(
+    SELF,
+    [
+      "run",
+      NAME,
+      join(repoAbs, ".worktrees/T-1-luna"),
+      "--marker",
+      join(tmp, "logs/k1.done"),
+      "--",
+      "./tree.sh",
+    ],
+    {
+      cwd: join(tmp, "caller"),
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        PATH: SYS,
+        STUB: join(tmp, "stub"),
+        TMPDIR: tmp,
+        POSTMASTER_HOST_STATE: join(tmp, "state"),
+        POSTMASTER_HOST_FIXTURE: tmp,
+        POSTMASTER_HOST_CLAIM_WAIT: "3",
+        POSTMASTER_HOST_CLOSE_WAIT: "1",
+        POSTMASTER_HOST: "none",
+        TREE: join(tmp, "tree"),
+      },
     },
-  });
+  );
   // Wait for children.
   for (let i = 0; i < 50; i++) {
     try {
-      if (readFileSync(join(tmp, "tree/escapee.pid"), "utf8").trim() && readFileSync(join(tmp, "tree/deaf.pid"), "utf8").trim()) break;
+      if (
+        readFileSync(join(tmp, "tree/escapee.pid"), "utf8").trim() &&
+        readFileSync(join(tmp, "tree/deaf.pid"), "utf8").trim()
+      )
+        break;
     } catch {
       /* not yet */
     }
@@ -1423,7 +1607,11 @@ sleep 120 & wait
       POSTMASTER_HOST: "none",
     },
   });
-  check("stop reaches a child the launch runs in a session of its own", stopR.status === 0, stopR.stdout + stopR.stderr);
+  check(
+    "stop reaches a child the launch runs in a session of its own",
+    stopR.status === 0,
+    stopR.stdout + stopR.stderr,
+  );
   check("its marker lands", existsSync(join(tmp, "logs/k1.done")));
 
   // Note: the full original self-test has many more controls for Herdr/tmux placement,

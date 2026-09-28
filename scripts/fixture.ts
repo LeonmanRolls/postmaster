@@ -10,32 +10,31 @@
 //   exit 1  usage, a tool not on PATH, a refusal from new, or input that is not what it says
 //   exit 2  score, hidden: a check failed
 import {
+  cpSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   readdirSync,
   readFileSync,
+  readlinkSync,
   rmSync,
   statSync,
-  writeFileSync,
   symlinkSync,
-  cpSync,
-  lstatSync,
-  readlinkSync,
-  appendFileSync,
+  writeFileSync,
 } from "node:fs";
-import { basename, dirname, join, resolve, sep, isAbsolute } from "node:path";
-import { tmpdir, homedir } from "node:os";
-import { run, withTempDir, die } from "./lib/proc.ts";
+import { homedir, tmpdir } from "node:os";
+import { basename, dirname, join, resolve } from "node:path";
+import { tryJsonFile } from "./lib/data.ts";
+import { scriptsDir, toolRoot } from "./lib/paths.ts";
+import { die, run, withTempDir } from "./lib/proc.ts";
 import { SelfTest } from "./lib/selftest.ts";
-import { tryJsonFile, readJsonFile } from "./lib/data.ts";
-import { toolRoot, scriptsDir } from "./lib/paths.ts";
 
 const HERE = scriptsDir(import.meta);
 const TOOL = toolRoot(import.meta);
 const APP = join(TOOL, "fixtures", "app");
 const TICKETS = join(TOOL, "fixtures", "tickets");
 const TIMEOUT = 1200;
-const CHECKS = ["hidden-tests", "gate", "stages", "markers", "handoffs", "run.json", "ship-card"];
+const _CHECKS = ["hidden-tests", "gate", "stages", "markers", "handoffs", "run.json", "ship-card"];
 
 function usage(): never {
   die(
@@ -110,7 +109,9 @@ function makeRepo(dest: string): boolean {
   run("git", ["-C", dest, "add", "-A"]);
   const c = run("git", ["-C", dest, "commit", "-q", "-m", "Initial commit"]);
   if (c.code !== 0) {
-    console.error("fixture: could not commit the app in " + dest + "; git needs user.name and user.email");
+    console.error(
+      `fixture: could not commit the app in ${dest}; git needs user.name and user.email`,
+    );
     return false;
   }
   return true;
@@ -136,20 +137,29 @@ function makeAndFile(dest: string, ticket: string): number {
   const gr = run("git", ["-C", probe, "rev-parse", "--git-dir"]);
   if (gr.code === 0) {
     const top = run("git", ["-C", probe, "rev-parse", "--show-toplevel"]);
-    console.error(`fixture: ${dest} would be inside the git repository at ${top.code === 0 ? top.out.trim() : probe}; a run's repo stands alone`);
+    console.error(
+      `fixture: ${dest} would be inside the git repository at ${top.code === 0 ? top.out.trim() : probe}; a run's repo stands alone`,
+    );
     return 1;
   }
   // refuse a name that already has runs
   const runsDir = join(home, ".postmaster", "runs", basename(dest));
   if (existsSync(runsDir)) {
-    console.error(`fixture: ${runsDir} already holds runs of a project named ${basename(dest)}; choose another name`);
+    console.error(
+      `fixture: ${runsDir} already holds runs of a project named ${basename(dest)}; choose another name`,
+    );
     return 1;
   }
   // refuse this repo's name
   const toolBasename = basename(TOOL);
-  const mainWorktree = run("git", ["-C", TOOL, "worktree", "list", "--porcelain"]).out.split("\n")[0]?.replace(/^worktree /, "") ?? TOOL;
+  const mainWorktree =
+    run("git", ["-C", TOOL, "worktree", "list", "--porcelain"])
+      .out.split("\n")[0]
+      ?.replace(/^worktree /, "") ?? TOOL;
   if (basename(dest) === toolBasename || basename(dest) === basename(mainWorktree)) {
-    console.error(`fixture: ${basename(dest)} is this repo's name, so its runs would share this repo's run records; choose another name`);
+    console.error(
+      `fixture: ${basename(dest)} is this repo's name, so its runs would share this repo's run records; choose another name`,
+    );
     return 1;
   }
 
@@ -180,21 +190,29 @@ function makeAndFile(dest: string, ticket: string): number {
   const number = createR.out.trim().split("\n").pop() ?? "";
   if (createR.code !== 0 || !/^\d+$/.test(number)) {
     unmake();
-    console.error(`fixture: filing the ticket in ${dest}'s own store failed (exit ${createR.code})`);
+    console.error(
+      `fixture: filing the ticket in ${dest}'s own store failed (exit ${createR.code})`,
+    );
     return 1;
   }
   const headShort = run("git", ["-C", TOOL, "rev-parse", "--short", "HEAD"]).out.trim();
   const destHead = run("git", ["-C", dest, "rev-parse", "--short", "HEAD"]).out.trim();
   console.log(`fixture: made ${dest} from fixtures/app at ${headShort}; main is at ${destHead}`);
-  console.log(`fixture: filed ticket ${ticket} in ${dest}'s own ticket store as #${number}: ${title}`);
-  console.log(`fixture: dispatch ticket #${number} against ${dest}, then: scripts/fixture.sh score <its dispatch directory> ${dest}`);
+  console.log(
+    `fixture: filed ticket ${ticket} in ${dest}'s own ticket store as #${number}: ${title}`,
+  );
+  console.log(
+    `fixture: dispatch ticket #${number} against ${dest}, then: scripts/fixture.sh score <its dispatch directory> ${dest}`,
+  );
   return 0;
 }
 
 function newRun(dest: string, ticket: string): number {
   const st = run("git", ["-C", TOOL, "status", "--porcelain", "--", "fixtures"]);
   if (st.out.trim()) {
-    console.error("fixture: fixtures/ has uncommitted changes; a run starts from a committed fixture");
+    console.error(
+      "fixture: fixtures/ has uncommitted changes; a run starts from a committed fixture",
+    );
     return 1;
   }
   return makeAndFile(dest, ticket);
@@ -209,7 +227,11 @@ interface CheckResult {
   out: string;
 }
 
-function sh(cmd: string[], cwd?: string, env?: Record<string, string>): { code: number | null; out: string } {
+function sh(
+  cmd: string[],
+  cwd?: string,
+  env?: Record<string, string>,
+): { code: number | null; out: string } {
   const r = run(cmd[0]!, cmd.slice(1), { cwd, env, input: "" });
   return { code: r.code, out: r.out + r.err };
 }
@@ -219,11 +241,7 @@ function exited(code: number | null): string {
 }
 
 function tail(text: string, n = 20): string {
-  return text
-    .replace(/\s+$/, "")
-    .split("\n")
-    .slice(-n)
-    .join("\n");
+  return text.replace(/\s+$/, "").split("\n").slice(-n).join("\n");
 }
 
 function squash(text: string): string {
@@ -231,23 +249,29 @@ function squash(text: string): string {
 }
 
 function sectionOf(text: string, heading: string): string {
-  const re = new RegExp(`^##[ \\t]+${heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[ \\t]*\\n([\\s\\S]*?)(?=^##[ \\t]|$)`, "im");
+  const re = new RegExp(
+    `^##[ \\t]+${heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[ \\t]*\\n([\\s\\S]*?)(?=^##[ \\t]|$)`,
+    "im",
+  );
   const m = re.exec(text);
   return m ? m[1]! : "";
 }
 
 function hidden(ticket: string, app: string): { passed: boolean; detail: string; out: string } {
   const r = sh(["bun", "test", "--timeout", "120000", "./"], join(TICKETS, ticket, "hidden"), {
-    ...process.env as Record<string, string>,
+    ...(process.env as Record<string, string>),
     FIXTURE_APP: app,
   });
   const counts: Record<string, number> = {};
   for (const m of (r.out ?? "").matchAll(/^\s*(\d+) (pass|fail)\s*$/gm)) {
     counts[m[2]!] = parseInt(m[1]!, 10);
   }
-  const passed = counts["pass"] ?? 0;
-  const failed = counts["fail"] ?? 0;
-  const detail = Object.keys(counts).length > 0 ? `${passed} pass, ${failed} fail` : `bun test ${exited(r.code)}`;
+  const passed = counts.pass ?? 0;
+  const failed = counts.fail ?? 0;
+  const detail =
+    Object.keys(counts).length > 0
+      ? `${passed} pass, ${failed} fail`
+      : `bun test ${exited(r.code)}`;
   return { passed: r.code === 0 && passed > 0 && failed === 0, detail, out: r.out ?? "" };
 }
 
@@ -258,7 +282,7 @@ function score(dispatch: string, repo: string): { code: number; out: string } {
     return { code: 1, out: `fixture: ${repo} has no main branch\n` };
   }
   const manifest = tryJsonFile<Record<string, unknown>>(join(dispatch, "manifest.json"));
-  const base = manifest?.["base"];
+  const base = manifest?.base;
   if (typeof base === "string" && base) {
     const anc = sh(["git", "-C", repo, "merge-base", "--is-ancestor", base, main]);
     if (anc.code !== 0) {
@@ -269,7 +293,7 @@ function score(dispatch: string, repo: string): { code: number; out: string } {
     }
   }
   const meta = tryJsonFile<Record<string, unknown>>(join(dispatch, "run.json"));
-  const ran = (meta?.["postmaster"] as Record<string, unknown> | undefined)?.["commit"];
+  const ran = (meta?.postmaster as Record<string, unknown> | undefined)?.commit;
   const here = sh(["git", "-C", TOOL, "rev-parse", "HEAD"]).out?.trim() ?? "";
   if (typeof ran === "string" && ran && ran !== here) {
     console.error(
@@ -281,10 +305,23 @@ function score(dispatch: string, repo: string): { code: number; out: string } {
   mkdirSync(scratch, { recursive: true });
   const app = join(scratch, "app");
   mkdirSync(app);
-  const exp = sh(["bash", "-o", "pipefail", "-c", `git -C "$1" archive --format=tar "$2" | tar -x -C "$3"`, "export", repo, main, app]);
+  const exp = sh([
+    "bash",
+    "-o",
+    "pipefail",
+    "-c",
+    `git -C "$1" archive --format=tar "$2" | tar -x -C "$3"`,
+    "export",
+    repo,
+    main,
+    app,
+  ]);
   if (exp.code !== 0) {
     rmSync(scratch, { recursive: true, force: true });
-    return { code: 1, out: `fixture: could not export main from ${repo}: ${tail(exp.out ?? "", 3)}\n` };
+    return {
+      code: 1,
+      out: `fixture: could not export main from ${repo}: ${tail(exp.out ?? "", 3)}\n`,
+    };
   }
   const legs = legsOf(dispatch, manifest);
   const results: CheckResult[] = [
@@ -308,7 +345,8 @@ function legsOf(dispatch: string, manifest: Record<string, unknown> | null): num
   const seen = new Set<number>();
   try {
     for (const n of readdirSync(dispatch)) {
-      const m = /\.leg-(\d+)-(?:done|exited)|leg-(\d+)-(?:prompt|takeover)\.txt|handoff-(\d+)\.md/.exec(n);
+      const m =
+        /\.leg-(\d+)-(?:done|exited)|leg-(\d+)-(?:prompt|takeover)\.txt|handoff-(\d+)\.md/.exec(n);
       if (m) {
         const g = [m[1], m[2], m[3]].find((x) => x);
         if (g) seen.add(parseInt(g, 10));
@@ -318,9 +356,9 @@ function legsOf(dispatch: string, manifest: Record<string, unknown> | null): num
     /* empty */
   }
   if (manifest && typeof manifest === "object") {
-    if (typeof manifest["leg"] === "number") seen.add(manifest["leg"] as number);
-    const coachman = manifest["coachman"] as Record<string, unknown> | undefined;
-    const legs = coachman?.["legs"] as Record<string, unknown> | undefined;
+    if (typeof manifest.leg === "number") seen.add(manifest.leg as number);
+    const coachman = manifest.coachman as Record<string, unknown> | undefined;
+    const legs = coachman?.legs as Record<string, unknown> | undefined;
     if (legs) {
       for (const k of Object.keys(legs)) {
         if (/^\d+$/.test(k)) seen.add(parseInt(k, 10));
@@ -337,13 +375,18 @@ function checkHidden(dispatch: string, app: string): { ok: boolean; detail: stri
   const text = existsSync(brief) ? squash(readFileSync(brief, "utf8")) : "";
   const found: string[] = [];
   for (const t of tickets()) {
-    const criteria = squash(sectionOf(readFileSync(join(TICKETS, t, "ticket.md"), "utf8"), "Acceptance criteria"));
+    const criteria = squash(
+      sectionOf(readFileSync(join(TICKETS, t, "ticket.md"), "utf8"), "Acceptance criteria"),
+    );
     if (criteria && text.includes(criteria)) found.push(t);
   }
   if (found.length !== 1) {
     return {
       ok: false,
-      detail: found.length === 0 ? "brief.md carries no fixture ticket's criteria verbatim" : `brief.md carries more than one fixture ticket: ${found.join(", ")}`,
+      detail:
+        found.length === 0
+          ? "brief.md carries no fixture ticket's criteria verbatim"
+          : `brief.md carries more than one fixture ticket: ${found.join(", ")}`,
       out: "",
     };
   }
@@ -357,10 +400,16 @@ function checkGate(app: string): { ok: boolean; detail: string; out: string } {
     .split("\n")
     .find((l) => l.startsWith("gate="))
     ?.slice(5);
-  if (!gate) return { ok: false, detail: "scripts/discover-project.sh found no gate", out: r.out ?? "" };
+  if (!gate)
+    return { ok: false, detail: "scripts/discover-project.sh found no gate", out: r.out ?? "" };
   const install = existsSync(join(app, "package-lock.json")) ? ["npm", "ci"] : ["npm", "install"];
   const inst = sh([...install, "--prefer-offline", "--no-audit", "--no-fund"], app);
-  if (inst.code !== 0) return { ok: false, detail: `${install.join(" ")} on main: ${exited(inst.code)}`, out: inst.out ?? "" };
+  if (inst.code !== 0)
+    return {
+      ok: false,
+      detail: `${install.join(" ")} on main: ${exited(inst.code)}`,
+      out: inst.out ?? "",
+    };
   const g = sh(["bash", "-c", gate], app);
   return { ok: g.code === 0, detail: `${gate} on main: ${exited(g.code)}`, out: g.out ?? "" };
 }
@@ -374,18 +423,27 @@ function checkStages(dispatch: string): { ok: boolean; detail: string } {
   const expected = listed.slice(0, listed.indexOf("done") + 1);
   const events = readActions(dispatch);
   if (events === null) return { ok: false, detail: "no actions.jsonl" };
-  const entered = events.filter((e) => e["action"] === "stage").map((e) => e["target"]);
+  const entered = events.filter((e) => e.action === "stage").map((e) => e.target);
   const due = expected.slice(1);
   if (JSON.stringify(entered) === JSON.stringify(due)) {
-    return { ok: true, detail: `${expected[0]} to done, ${expected.length} stages, each entered in order` };
+    return {
+      ok: true,
+      detail: `${expected[0]} to done, ${expected.length} stages, each entered in order`,
+    };
   }
   for (let i = 0; i < Math.min(due.length, entered.length); i++) {
     if (due[i] !== entered[i]) {
-      return { ok: false, detail: `after ${[expected[0], ...entered][i]} entered ${entered[i]}, not ${due[i]}` };
+      return {
+        ok: false,
+        detail: `after ${[expected[0], ...entered][i]} entered ${entered[i]}, not ${due[i]}`,
+      };
     }
   }
   if (entered.length < due.length) {
-    return { ok: false, detail: `stopped at ${[expected[0], ...entered][entered.length]}; never entered ${due[entered.length]}` };
+    return {
+      ok: false,
+      detail: `stopped at ${[expected[0], ...entered][entered.length]}; never entered ${due[entered.length]}`,
+    };
   }
   return { ok: false, detail: `entered ${entered[due.length]} after done` };
 }
@@ -469,7 +527,7 @@ function report(results: CheckResult[]): { code: number; out: string } {
       console.error(`--- ${r.name}\n${tail(r.out)}`);
     }
   }
-  return { code: results.every((r) => r.ok) ? 0 : 2, out: lines.join("\n") + "\n" };
+  return { code: results.every((r) => r.ok) ? 0 : 2, out: `${lines.join("\n")}\n` };
 }
 
 // --- entry -----------------------------------------------------------------------------------
@@ -478,7 +536,7 @@ if (argv[0] === "--self-test") {
   // fall through
 } else if (argv[0] === "new") {
   if (argv.length !== 3) usage();
-  if (argv[1]!.startsWith("-") || argv[2]!.startsWith("-")) usage();
+  if (argv[1]?.startsWith("-") || argv[2]?.startsWith("-")) usage();
   need("git");
   process.exit(newRun(argv[1]!, argv[2]!));
 } else if (argv[0] === "score") {
@@ -505,7 +563,11 @@ if (argv[0] === "--self-test") {
     die(`fixture: no package.json in ${app}`, 1);
   }
   const h = hidden(argv[1]!, app);
-  process.exit(report([{ name: "hidden-tests", ok: h.passed, detail: `${argv[1]}: ${h.detail}`, out: h.out }]));
+  const hr = report([
+    { name: "hidden-tests", ok: h.passed, detail: `${argv[1]}: ${h.detail}`, out: h.out },
+  ]);
+  process.stdout.write(hr.out);
+  process.exit(hr.code);
 } else {
   usage();
 }
@@ -515,7 +577,9 @@ need("git", "bun", "npm", "jq");
 withTempDir((tmp) => {
   // Set up test config
   const configPath = join(tmp, "config.toml");
-  writeFileSync(configPath, `[lanes.one]
+  writeFileSync(
+    configPath,
+    `[lanes.one]
 harness = "bash"
 model = "m1"
 [lanes.two]
@@ -526,7 +590,8 @@ workhorses = ["one", "two"]
 coachman = { harness = "bash", model = "judge" }
 [tracker]
 kind = "github"
-`);
+`,
+  );
   process.env.POSTMASTER_CONFIG = configPath;
   process.env.GIT_AUTHOR_NAME = "fixture";
   process.env.GIT_AUTHOR_EMAIL = "fixture@example.invalid";
@@ -544,14 +609,15 @@ kind = "github"
     else bgResults.set(name, r);
   };
   const rcOf = (name: string): number | "none" => {
-    return bgResults.has(name) ? bgResults.get(name)!.code : "none";
+    return bgResults.has(name) ? (bgResults.get(name)?.code ?? 0) : "none";
   };
 
   // Build the records of finished runs
   const emptyMd = join(tmp, "empty.md");
   writeFileSync(emptyMd, "");
   const sectionsR = run("bash", [join(HERE, "handoff-check.sh"), emptyMd]);
-  const sections = sectionsR.err.split("\n")
+  const sections = sectionsR.err
+    .split("\n")
     .filter((l) => l.startsWith("handoff-check: missing or empty section: "))
     .map((l) => l.replace("handoff-check: missing or empty section: ", ""))
     .join("\n");
@@ -576,17 +642,30 @@ kind = "github"
       if (run("git", ["-C", repo, "apply", patchPath]).code !== 0) return 1;
     }
     if (shipped === "broken") {
-      writeFileSync(join(repo, "src", "broken.ts"), 'export const broken: number = "not a number";\n');
+      writeFileSync(
+        join(repo, "src", "broken.ts"),
+        'export const broken: number = "not a number";\n',
+      );
     }
     run("git", ["-C", repo, "add", "-A"]);
-    if (run("git", ["-C", repo, "commit", "-q", "--allow-empty", "-m", "Implement the ticket"]).code !== 0) return 1;
+    if (
+      run("git", ["-C", repo, "commit", "-q", "--allow-empty", "-m", "Implement the ticket"])
+        .code !== 0
+    )
+      return 1;
     if (run("git", ["-C", repo, "checkout", "-q", "main"]).code !== 0) return 1;
-    if (run("git", ["-C", repo, "merge", "-q", "--no-ff", "-m", "Merge branch 7", "7"]).code !== 0) return 1;
+    if (run("git", ["-C", repo, "merge", "-q", "--no-ff", "-m", "Merge branch 7", "7"]).code !== 0)
+      return 1;
 
-    writeFileSync(join(d, "manifest.json"),
-      JSON.stringify({ stage: "dispatched", leg: 1, base, lanes: {}, coachman: { legs: {} } }) + "\n");
-    writeFileSync(join(d, "brief.md"),
-      `# Waybill: 7\n\n## Ticket\n\n${ticketBody(t)}\n## Project profile\nrepo: ${repo}\n`);
+    writeFileSync(
+      join(d, "manifest.json"),
+      JSON.stringify({ stage: "dispatched", leg: 1, base, lanes: {}, coachman: { legs: {} } }) +
+        "\n",
+    );
+    writeFileSync(
+      join(d, "brief.md"),
+      `# Waybill: 7\n\n## Ticket\n\n${ticketBody(t)}\n## Project profile\nrepo: ${repo}\n`,
+    );
     run("bash", [join(HERE, "run-meta.sh"), d, repo]);
 
     const stageList = stages.split("\n").filter(Boolean);
@@ -596,19 +675,20 @@ kind = "github"
       writeFileSync(join(d, `leg-${n}-prompt.txt`), `You are the coachman for leg ${n} of 7.\n`);
       run("bash", [join(HERE, "log-action.sh"), d, "postmaster", "dispatch", "7", `leg ${n}`]);
       run("bash", [join(HERE, "log-action.sh"), d, "coachman", "handoff-accept", `leg-${n}`]);
-      const upto = Math.floor(count * n / legs);
+      const upto = Math.floor((count * n) / legs);
       for (let si = doneStages; si < upto; si++) {
         const s = stageList[si];
         if (s) run("bash", [join(HERE, "stage.sh"), d, s]);
       }
       doneStages = upto;
       const handoffSections = sections.split("\n").filter(Boolean);
-      writeFileSync(join(d, `handoff-${n}.md`),
-        handoffSections.map((sec) => `## ${sec}\nLeg ${n}, recorded.\n\n`).join(""));
+      writeFileSync(
+        join(d, `handoff-${n}.md`),
+        handoffSections.map((sec) => `## ${sec}\nLeg ${n}, recorded.\n\n`).join(""),
+      );
       run("bash", [join(HERE, "log-action.sh"), d, "coachman", "handoff", `leg-${n}`]);
-      const { writeFileSync: wf } = require("node:fs");
-      wf(join(d, `.leg-${n}-done`), "");
-      wf(join(d, `.leg-${n}-exited`), "");
+      writeFileSync(join(d, `.leg-${n}-done`), "");
+      writeFileSync(join(d, `.leg-${n}-exited`), "");
     }
     run("bash", [join(HERE, "stage.sh"), d, "done", "postmaster"]);
     writeFileSync(join(d, "card.md"), `# Ship card: 7\n\nBranch 7 is merged into main.\n`);
@@ -643,10 +723,12 @@ kind = "github"
           stageSeen++;
           if (stageSeen === 3) continue;
         }
-      } catch { /* skip */ }
+      } catch {
+        /* skip */
+      }
       kept.push(line);
     }
-    writeFileSync(actionsPath, kept.join("\n") + "\n");
+    writeFileSync(actionsPath, `${kept.join("\n")}\n`);
 
     d = brokenCopy("break-markers", clean);
     rmSync(join(d, ".leg-2-done"), { force: true });
@@ -664,11 +746,17 @@ kind = "github"
     writeFileSync(join(d, "brief.md"), "# Waybill: 7\n\n## Ticket\n\nSee the tracker.\n");
 
     for (const b of ["stages", "markers", "handoffs", "runjson", "card", "waybill"]) {
-      background(`break-${b}`, () => score(join(tmp, `break-${b}`, "runs", `break-${b}`, "7"), repo));
+      background(`break-${b}`, () =>
+        score(join(tmp, `break-${b}`, "runs", `break-${b}`, "7"), repo),
+      );
     }
   };
 
-  const recorded = (name: string, t: string, shipped: "reference" | "app" | "broken"): number | { code: number; out: string } => {
+  const recorded = (
+    name: string,
+    t: string,
+    shipped: "reference" | "app" | "broken",
+  ): number | { code: number; out: string } => {
     const rc = record(name, t, shipped);
     if (rc !== 0) {
       console.log(`the record could not be built for ${name}`);
@@ -707,26 +795,52 @@ kind = "github"
   }
 
   // --- controls ---
-  console.log("the tickets: each hidden suite fails on the app as committed and passes on its reference");
+  console.log(
+    "the tickets: each hidden suite fails on the app as committed and passes on its reference",
+  );
   st.check("there are at least two tickets", tickets().length >= 2, `${tickets().length} tickets`);
   for (const t of tickets()) {
     const body = ticketBody(t);
     writeFileSync(join(tmp, `body-${t}.md`), body);
-    const checkR = run("bash", [join(HERE, "ticket-check.sh"), "--body", join(tmp, `body-${t}.md`), "--title", ticketTitle(t)]);
-    st.check(`${t}: in the ticket shape, by scripts/ticket-check.sh`, checkR.code === 0, checkR.out + checkR.err);
-    st.check(`${t}: the reference solution applies to the app`, hiddenResults[`applied-${t}`] === 0);
-    st.check(`${t}: the hidden suite fails on the app as committed`, rcOf(`hidden-app-${t}`) === 2, `exit ${rcOf(`hidden-app-${t}`)}`);
-    st.check(`${t}: the hidden suite passes on the reference solution`, rcOf(`hidden-ref-${t}`) === 0, `exit ${rcOf(`hidden-ref-${t}`)}`);
+    const checkR = run("bash", [
+      join(HERE, "ticket-check.sh"),
+      "--body",
+      join(tmp, `body-${t}.md`),
+      "--title",
+      ticketTitle(t),
+    ]);
+    st.check(
+      `${t}: in the ticket shape, by scripts/ticket-check.sh`,
+      checkR.code === 0,
+      checkR.out + checkR.err,
+    );
+    st.check(
+      `${t}: the reference solution applies to the app`,
+      hiddenResults[`applied-${t}`] === 0,
+    );
+    st.check(
+      `${t}: the hidden suite fails on the app as committed`,
+      rcOf(`hidden-app-${t}`) === 2,
+      `exit ${rcOf(`hidden-app-${t}`)}`,
+    );
+    st.check(
+      `${t}: the hidden suite passes on the reference solution`,
+      rcOf(`hidden-ref-${t}`) === 0,
+      `exit ${rcOf(`hidden-ref-${t}`)}`,
+    );
   }
 
   // new: make the repo and file the ticket
   console.log("new: a fresh repo outside every other, with its ticket in its own store");
   // create a failing local.sh stub
   const failingLocal = join(tmp, "failing-local.sh");
-  writeFileSync(failingLocal, `#!/usr/bin/env bash
+  writeFileSync(
+    failingLocal,
+    `#!/usr/bin/env bash
 # Stands in for scripts/local.sh: makes the store, and fails to file the ticket.
-case \$2 in store) exec "${join(HERE, "local.sh")}" "\$@" ;; *) exit 1 ;; esac
-`);
+case $2 in store) exec "${join(HERE, "local.sh")}" "$@" ;; *) exit 1 ;; esac
+`,
+  );
   run("chmod", ["+x", failingLocal]);
   mkdirSync(join(tmp, "home"), { recursive: true });
   mkdirSync(join(tmp, "runs"), { recursive: true });
@@ -739,8 +853,12 @@ case \$2 in store) exec "${join(HERE, "local.sh")}" "\$@" ;; *) exit 1 ;; esac
       const origLog = console.log;
       const origErr = console.error;
       let captured = "";
-      console.log = (...args: any[]) => { captured += args.join(" ") + "\n"; };
-      console.error = (...args: any[]) => { captured += args.join(" ") + "\n"; };
+      console.log = (...args: any[]) => {
+        captured += `${args.join(" ")}\n`;
+      };
+      console.error = (...args: any[]) => {
+        captured += `${args.join(" ")}\n`;
+      };
       try {
         const code = makeAndFile(dest, ticket);
         return { code, out: captured };
@@ -756,17 +874,29 @@ case \$2 in store) exec "${join(HERE, "local.sh")}" "\$@" ;; *) exit 1 ;; esac
 
   const dest = join(tmp, "runs", `fixture-${first}`);
   let r = freshNew(dest, first);
-  st.check("new makes the repo and prints the ticket's number",
+  st.check(
+    "new makes the repo and prints the ticket's number",
     r.code === 0 && r.out.includes("own ticket store as #1:"),
-    `exit ${r.code}\n${r.out}`);
+    `exit ${r.code}\n${r.out}`,
+  );
   {
     const count = run("git", ["-C", dest, "rev-list", "--count", "main"]).out.trim();
     const status = run("git", ["-C", dest, "status", "--porcelain"]).out.trim();
-    st.check("one commit on main, and a clean tree", count === "1" && status === "", `count=${count} status=${status}`);
+    st.check(
+      "one commit on main, and a clean tree",
+      count === "1" && status === "",
+      `count=${count} status=${status}`,
+    );
   }
   {
     // Compare files
-    const listed2 = run("bash", ["-c", `git -C "${APP}" ls-files --cached --others --exclude-standard`]).out.trim().split("\n").sort();
+    const listed2 = run("bash", [
+      "-c",
+      `git -C "${APP}" ls-files --cached --others --exclude-standard`,
+    ])
+      .out.trim()
+      .split("\n")
+      .sort();
     let same = true;
     for (const f of listed2) {
       if (!f) continue;
@@ -780,11 +910,17 @@ case \$2 in store) exec "${join(HERE, "local.sh")}" "\$@" ;; *) exit 1 ;; esac
       }
     }
     // Check dest holds exactly the listed files
-    const heldFiles = run("bash", ["-c", `cd "${dest}" && find . -path ./.git -prune -o \\( -type f -o -type l \\) -print | sed 's|^\\./||' | sort`]).out.trim();
-    const isSymlink = existsSync(join(dest, "CLAUDE.md")) && lstatSync(join(dest, "CLAUDE.md")).isSymbolicLink();
-    st.check("it holds the app's files as git sees them, symlink included, and nothing else",
+    const heldFiles = run("bash", [
+      "-c",
+      `cd "${dest}" && find . -path ./.git -prune -o \\( -type f -o -type l \\) -print | sed 's|^\\./||' | sort`,
+    ]).out.trim();
+    const isSymlink =
+      existsSync(join(dest, "CLAUDE.md")) && lstatSync(join(dest, "CLAUDE.md")).isSymbolicLink();
+    st.check(
+      "it holds the app's files as git sees them, symlink included, and nothing else",
       same && heldFiles === listed2.filter(Boolean).join("\n") && isSymlink,
-      `same=${same} isSymlink=${isSymlink}`);
+      `same=${same} isSymlink=${isSymlink}`,
+    );
   }
   {
     const destEmail = run("git", ["-C", dest, "config", "--local", "user.email"]).out.trim();
@@ -803,15 +939,19 @@ case \$2 in store) exec "${join(HERE, "local.sh")}" "\$@" ;; *) exit 1 ;; esac
     const readR = run("bash", [localSh, dest, "read", "1", "--body"]);
     const wantList = `#1\ttodo\t${ticketTitle(first)}`;
     const wantBody = ticketBody(first);
-    st.check("its own store holds the fixture ticket, title and body verbatim, in todo",
+    st.check(
+      "its own store holds the fixture ticket, title and body verbatim, in todo",
       listR.out.trim() === wantList && readR.out === wantBody,
-      `list=${listR.out.trim()} body=${readR.out.slice(0, 50)}`);
+      `list=${listR.out.trim()} body=${readR.out.slice(0, 50)}`,
+    );
   }
   {
     const trackerKind = run("bash", [join(HERE, "tracker-kind.sh"), dest]);
-    st.check("a run against it reads the local tracker, though the config names github",
+    st.check(
+      "a run against it reads the local tracker, though the config names github",
       trackerKind.out.trim() === "local",
-      trackerKind.out + trackerKind.err);
+      trackerKind.out + trackerKind.err,
+    );
   }
   {
     let leaked = false;
@@ -819,41 +959,65 @@ case \$2 in store) exec "${join(HERE, "local.sh")}" "\$@" ;; *) exit 1 ;; esac
       const hiddenDir = join(TICKETS, t, "hidden");
       try {
         for (const f of readdirSync(hiddenDir)) {
-          if (run("bash", ["-c", `find "${dest}" -path "${dest}/.git" -prune -o -name "${f}" -print`]).out.trim()) leaked = true;
+          if (
+            run("bash", [
+              "-c",
+              `find "${dest}" -path "${dest}/.git" -prune -o -name "${f}" -print`,
+            ]).out.trim()
+          )
+            leaked = true;
         }
-      } catch { /* empty */ }
+      } catch {
+        /* empty */
+      }
       const refName = "reference.patch";
-      if (run("bash", ["-c", `find "${dest}" -path "${dest}/.git" -prune -o -name "${refName}" -print`]).out.trim()) leaked = true;
+      if (
+        run("bash", [
+          "-c",
+          `find "${dest}" -path "${dest}/.git" -prune -o -name "${refName}" -print`,
+        ]).out.trim()
+      )
+        leaked = true;
     }
     st.check("no hidden test and no reference solution reached it", !leaked);
   }
 
   // Refusal tests
   r = freshNew(dest, first);
-  st.check("a dest that exists is refused, and left alone",
+  st.check(
+    "a dest that exists is refused, and left alone",
     r.code === 1 && run("git", ["-C", dest, "rev-list", "--count", "main"]).out.trim() === "1",
-    `exit ${r.code}\n${r.out}`);
+    `exit ${r.code}\n${r.out}`,
+  );
   const nestedDest = join(tmp, `app-${first}`, "nested");
   r = freshNew(nestedDest, first);
-  st.check("a dest inside a git repo is refused",
+  st.check(
+    "a dest inside a git repo is refused",
     r.code === 1 && !existsSync(nestedDest),
-    `exit ${r.code}\n${r.out}`);
+    `exit ${r.code}\n${r.out}`,
+  );
   mkdirSync(join(tmp, "home", ".postmaster", "runs", "taken"), { recursive: true });
   const takenDest = join(tmp, "runs", "taken");
   r = freshNew(takenDest, first);
-  st.check("a name that already has runs is refused",
+  st.check(
+    "a name that already has runs is refused",
     r.code === 1 && !existsSync(takenDest),
-    `exit ${r.code}\n${r.out}`);
+    `exit ${r.code}\n${r.out}`,
+  );
   const toolNameDest = join(tmp, "runs", basename(TOOL));
   r = freshNew(toolNameDest, first);
-  st.check("a name that is this repo's is refused",
+  st.check(
+    "a name that is this repo's is refused",
     r.code === 1 && !existsSync(toolNameDest),
-    `exit ${r.code}\n${r.out}`);
+    `exit ${r.code}\n${r.out}`,
+  );
   const nosuchDest = join(tmp, "runs", "nosuch");
   r = freshNew(nosuchDest, "no-such-ticket");
-  st.check("an unknown ticket is refused",
+  st.check(
+    "an unknown ticket is refused",
     r.code === 1 && !existsSync(nosuchDest),
-    `exit ${r.code}\n${r.out}`);
+    `exit ${r.code}\n${r.out}`,
+  );
   // failing local.sh
   {
     const origLocal = process.env.LOCAL_SH;
@@ -862,9 +1026,11 @@ case \$2 in store) exec "${join(HERE, "local.sh")}" "\$@" ;; *) exit 1 ;; esac
     r = freshNew(unfiledDest, first);
     if (origLocal === undefined) delete process.env.LOCAL_SH;
     else process.env.LOCAL_SH = origLocal;
-    st.check("a ticket that cannot be filed: refused, and the repo it made is gone",
+    st.check(
+      "a ticket that cannot be filed: refused, and the repo it made is gone",
       r.code === 1 && !existsSync(unfiledDest) && r.out.includes("filing the ticket"),
-      `exit ${r.code}\n${r.out}`);
+      `exit ${r.code}\n${r.out}`,
+    );
   }
   // bare name under ~/Code/fixtures
   {
@@ -874,8 +1040,12 @@ case \$2 in store) exec "${join(HERE, "local.sh")}" "\$@" ;; *) exit 1 ;; esac
     const origLog = console.log;
     const origErr = console.error;
     let captured = "";
-    console.log = (...args: any[]) => { captured += args.join(" ") + "\n"; };
-    console.error = (...args: any[]) => { captured += args.join(" ") + "\n"; };
+    console.log = (...args: any[]) => {
+      captured += `${args.join(" ")}\n`;
+    };
+    console.error = (...args: any[]) => {
+      captured += `${args.join(" ")}\n`;
+    };
     let bareCode: number;
     try {
       bareCode = makeAndFile("bare-name", first);
@@ -886,9 +1056,11 @@ case \$2 in store) exec "${join(HERE, "local.sh")}" "\$@" ;; *) exit 1 ;; esac
       else process.env.POSTMASTER_FIXTURES = origPf;
       delete process.env.HOME;
     }
-    st.check("a bare name goes under ~/Code/fixtures, not the working directory",
+    st.check(
+      "a bare name goes under ~/Code/fixtures, not the working directory",
       bareCode === 0 && existsSync(join(tmp, "home", "Code", "fixtures", "bare-name", ".git")),
-      `exit ${bareCode}\n${captured}`);
+      `exit ${bareCode}\n${captured}`,
+    );
   }
   // POSTMASTER_FIXTURES
   {
@@ -897,8 +1069,12 @@ case \$2 in store) exec "${join(HERE, "local.sh")}" "\$@" ;; *) exit 1 ;; esac
     const origLog = console.log;
     const origErr = console.error;
     let captured = "";
-    console.log = (...args: any[]) => { captured += args.join(" ") + "\n"; };
-    console.error = (...args: any[]) => { captured += args.join(" ") + "\n"; };
+    console.log = (...args: any[]) => {
+      captured += `${args.join(" ")}\n`;
+    };
+    console.error = (...args: any[]) => {
+      captured += `${args.join(" ")}\n`;
+    };
     let otherCode: number;
     try {
       otherCode = makeAndFile("other-name", first);
@@ -908,31 +1084,46 @@ case \$2 in store) exec "${join(HERE, "local.sh")}" "\$@" ;; *) exit 1 ;; esac
       delete process.env.POSTMASTER_FIXTURES;
       delete process.env.HOME;
     }
-    st.check("POSTMASTER_FIXTURES moves where a bare name goes",
-      otherCode === 0 && existsSync(join(tmp, "elsewhere", "other-name", ".git")) &&
-      !existsSync(join(tmp, "home", "Code", "fixtures", "other-name")),
-      `exit ${otherCode}\n${captured}`);
+    st.check(
+      "POSTMASTER_FIXTURES moves where a bare name goes",
+      otherCode === 0 &&
+        existsSync(join(tmp, "elsewhere", "other-name", ".git")) &&
+        !existsSync(join(tmp, "home", "Code", "fixtures", "other-name")),
+      `exit ${otherCode}\n${captured}`,
+    );
   }
 
   // Score controls
   console.log("score: a recorded run that meets every check scores clean");
-  st.check("the hand-off sections and the stages are read from the scripts that define them",
+  st.check(
+    "the hand-off sections and the stages are read from the scripts that define them",
     sections.length > 0 && stages.length > 0 && listed.split("\n").includes("done"),
-    `sections=${sections.length} stages=${stages.split("\n").length}`);
+    `sections=${sections.length} stages=${stages.split("\n").length}`,
+  );
 
   const expectScore = (label: string, name: string, failing: string, failText?: string): void => {
     const result = bgResults.get(name);
     const rc = result ? result.code : -1;
     const out = result ? result.out : "";
-    const failLines = out.split("\n").filter((l) => l.startsWith("FAIL")).map((l) => l.split(/\s+/)[1] ?? "");
+    const failLines = out
+      .split("\n")
+      .filter((l) => l.startsWith("FAIL"))
+      .map((l) => l.split(/\s+/)[1] ?? "");
     const failingChecks = failLines.join(",") || "none";
     const lines = out.split("\n").filter((l) => l.trim()).length;
     const wantExit = failing === "none" ? 0 : 2;
     const wantFailing = failing;
-    const hasText = !failText || out.split("\n").filter((l) => l.startsWith("FAIL")).some((l) => l.includes(failText));
-    st.check(label,
+    const hasText =
+      !failText ||
+      out
+        .split("\n")
+        .filter((l) => l.startsWith("FAIL"))
+        .some((l) => l.includes(failText));
+    st.check(
+      label,
       rc === wantExit && failingChecks === wantFailing && lines === 7 && hasText,
-      `wanted exit ${wantExit} with ${wantFailing} failing${failText ? ` ("${failText}")` : ""}, got exit ${rc} with ${failingChecks} failing\n${out}`);
+      `wanted exit ${wantExit} with ${wantFailing} failing${failText ? ` ("${failText}")` : ""}, got exit ${rc} with ${failingChecks} failing\n${out}`,
+    );
   };
 
   for (const t of tickets()) {
@@ -940,12 +1131,42 @@ case \$2 in store) exec "${join(HERE, "local.sh")}" "\$@" ;; *) exit 1 ;; esac
   }
 
   console.log("score: negative controls, the same record with one check broken at a time");
-  expectScore("the app shipped as committed: hidden-tests alone fails, and the app's own gate passes", "break-hidden", "hidden-tests", "fail on main");
-  expectScore("the waybill does not carry the ticket: hidden-tests alone fails", "break-waybill", "hidden-tests", "carries no fixture ticket");
-  expectScore("a type error shipped: gate alone fails", "break-gate", "gate", "npm run check on main: exit");
-  expectScore("a stage change never logged: stages alone fails", "break-stages", "stages", ", not ");
-  expectScore("a leg's done marker missing: markers alone fails", "break-markers", "markers", ".leg-2-done");
-  expectScore("a hand-off with no sections: handoffs alone fails", "break-handoffs", "handoffs", "handoff-2.md");
+  expectScore(
+    "the app shipped as committed: hidden-tests alone fails, and the app's own gate passes",
+    "break-hidden",
+    "hidden-tests",
+    "fail on main",
+  );
+  expectScore(
+    "the waybill does not carry the ticket: hidden-tests alone fails",
+    "break-waybill",
+    "hidden-tests",
+    "carries no fixture ticket",
+  );
+  expectScore(
+    "a type error shipped: gate alone fails",
+    "break-gate",
+    "gate",
+    "npm run check on main: exit",
+  );
+  expectScore(
+    "a stage change never logged: stages alone fails",
+    "break-stages",
+    "stages",
+    ", not ",
+  );
+  expectScore(
+    "a leg's done marker missing: markers alone fails",
+    "break-markers",
+    "markers",
+    ".leg-2-done",
+  );
+  expectScore(
+    "a hand-off with no sections: handoffs alone fails",
+    "break-handoffs",
+    "handoffs",
+    "handoff-2.md",
+  );
   expectScore("no run.json: run.json alone fails", "break-runjson", "run.json", "no run.json");
   expectScore("no ship card: ship-card alone fails", "break-card", "ship-card", "no card.md");
 
@@ -953,22 +1174,38 @@ case \$2 in store) exec "${join(HERE, "local.sh")}" "\$@" ;; *) exit 1 ;; esac
   const cleanDir = join(tmp, `clean-${first}`, "runs", `clean-${first}`, "7");
   const cleanRepo = join(tmp, `clean-${first}`, "repo");
   {
-    const r2 = run("bash", [join(HERE, "fixture.sh"), "score", join(tmp, "nowhere"), cleanRepo], { input: "" });
+    const r2 = run("bash", [join(HERE, "fixture.sh"), "score", join(tmp, "nowhere"), cleanRepo], {
+      input: "",
+    });
     st.check("no such dispatch directory", r2.code === 1, `exit ${r2.code}`);
   }
   {
     mkdirSync(join(tmp, "not-a-repo"), { recursive: true });
-    const r2 = run("bash", [join(HERE, "fixture.sh"), "score", cleanDir, join(tmp, "not-a-repo")], { input: "" });
+    const r2 = run("bash", [join(HERE, "fixture.sh"), "score", cleanDir, join(tmp, "not-a-repo")], {
+      input: "",
+    });
     st.check("a repo that is not a git repo", r2.code === 1, `exit ${r2.code}`);
   }
   {
     run("git", ["init", "-q", "-b", "main", join(tmp, "other")]);
-    run("git", ["-C", join(tmp, "other"), "commit", "-q", "--allow-empty", "-m", "Another history"]);
-    const r2 = run("bash", [join(HERE, "fixture.sh"), "score", cleanDir, join(tmp, "other")], { input: "" });
+    run("git", [
+      "-C",
+      join(tmp, "other"),
+      "commit",
+      "-q",
+      "--allow-empty",
+      "-m",
+      "Another history",
+    ]);
+    const r2 = run("bash", [join(HERE, "fixture.sh"), "score", cleanDir, join(tmp, "other")], {
+      input: "",
+    });
     const out = r2.out + r2.err;
-    st.check("a repo whose main does not hold the run's base",
+    st.check(
+      "a repo whose main does not hold the run's base",
       r2.code === 1 && out.includes("is this the run's repo"),
-      `exit ${r2.code}\n${out}`);
+      `exit ${r2.code}\n${out}`,
+    );
   }
 
   st.finish();

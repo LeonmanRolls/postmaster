@@ -9,7 +9,6 @@
     "skipLibCheck": true,
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
-    "noUncheckedIndexedAccess": true,
     "types": [],
     "rootDir": "."
   },

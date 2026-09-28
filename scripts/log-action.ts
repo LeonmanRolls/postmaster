@@ -41,7 +41,7 @@ import {
   realpathSync,
   statSync,
 } from "node:fs";
-import { basename, dirname, join, posix, relative, resolve } from "node:path";
+import { basename, dirname, join, relative, resolve } from "node:path";
 import { scriptsDir, toolRoot } from "./lib/paths.ts";
 import { run, withTempDir } from "./lib/proc.ts";
 import { SelfTest } from "./lib/selftest.ts";
@@ -152,7 +152,7 @@ function toolFault(
   } catch {
     t = "";
   }
-  if (t.startsWith(TOOL + "/")) {
+  if (t.startsWith(`${TOOL}/`)) {
     t = t.slice(TOOL.length + 1);
   } else {
     t = "";
@@ -169,7 +169,7 @@ function toolFault(
     const text = readFileSync(CONTROLS, "utf8");
     for (const line of text.split("\n")) {
       const m = /^\s*\|\s*`([^`]*)`\s*\|\s*(\S+)\s*\|/.exec(line);
-      if (m && m[2]) kinds.push(m[2].trim());
+      if (m?.[2]) kinds.push(m[2].trim());
     }
   } catch {
     /* ignore */
@@ -265,13 +265,13 @@ function logAction(
   const line = `{"ts":"${ts}","project":"${jsonStr(project)}","run":"${jsonStr(runName)}","actor":"${jsonStr(actor)}","action":"${jsonStr(action)}","target":"${jsonStr(finalTarget)}","detail":"${jsonStr(finalDetail)}"${faultJson}}`;
 
   try {
-    appendFileSync(join(dispatchReal, "actions.jsonl"), line + "\n");
+    appendFileSync(join(dispatchReal, "actions.jsonl"), `${line}\n`);
   } catch {
     console.error(`log-action: cannot append to ${dispatchReal}/actions.jsonl`);
     return 1;
   }
   try {
-    appendFileSync(join(dirname(dispatchReal), "ledger.jsonl"), line + "\n");
+    appendFileSync(join(dirname(dispatchReal), "ledger.jsonl"), `${line}\n`);
   } catch {
     console.error("log-action: cannot append to the project ledger");
     return 1;
@@ -433,7 +433,8 @@ withTempDir((tmp) => {
   } else {
     st.fail("as a control of its kind, relative to the checkout", JSON.stringify(last3));
   }
-  if (lastErr.includes("scripts/log-action.sh is a control (action-log): stop the leg")) st.ok("and the message says to stop");
+  if (lastErr.includes("scripts/log-action.sh is a control (action-log): stop the leg"))
+    st.ok("and the message says to stop");
   else st.fail("and the message says to stop", lastErr);
 
   wrote(

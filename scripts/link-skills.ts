@@ -10,27 +10,28 @@
 //
 //   exit 0  every link is in place, or would be (--dry-run), or is removed (--remove)
 //   exit 1  usage, no skills in the checkout, a bare main checkout, or something in the way
+
+import { spawnSync } from "node:child_process";
 import {
+  chmodSync,
   existsSync,
   lstatSync,
-  statSync,
   mkdirSync,
   readdirSync,
   readFileSync,
   readlinkSync,
   realpathSync,
   rmSync,
+  statSync,
   symlinkSync,
   writeFileSync,
-  chmodSync,
 } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
-import { spawnSync } from "node:child_process";
 import { scriptsDir, toolRoot } from "./lib/paths.ts";
-import { run, withTempDir, die } from "./lib/proc.ts";
+import { die, run, withTempDir } from "./lib/proc.ts";
 import { SelfTest } from "./lib/selftest.ts";
 
-const HERE = scriptsDir(import.meta);
+const _HERE = scriptsDir(import.meta);
 const HARNESSES = ["claude", "codex", "grok", "agy", "muse", "pi", "mimo"];
 
 function skillsFolder(h: string): string | null {
@@ -61,7 +62,9 @@ function checkoutRoot(tree: string): string | null {
   }
   const lines = list.out.trim().split("\n");
   if (lines[1] === "bare") {
-    console.error(`link-skills: the main checkout of ${tree} is bare; run this from a checkout with files`);
+    console.error(
+      `link-skills: the main checkout of ${tree} is bare; run this from a checkout with files`,
+    );
     return null;
   }
   const first = lines[0]?.replace(/^worktree /, "") ?? tree;
@@ -195,7 +198,9 @@ function makeLinks(root: string, dry: number): number {
   if (p === null) return 1;
   for (const line of p) console.log(report(line));
   if (p.some((l) => l.startsWith("in-the-way"))) {
-    console.error("link-skills: nothing was changed; move what is in the way, or ask the user to, then run this again");
+    console.error(
+      "link-skills: nothing was changed; move what is in the way, or ask the user to, then run this again",
+    );
     return 1;
   }
   if (dry === 1) return 0;
@@ -286,12 +291,34 @@ withTempDir((tmp) => {
   // The tools the controls shell out to, so the restricted PATH is self-sufficient and no
   // control can reach the machine's own harnesses or skills folders.
   for (const t of [
-    "bash", "sh", "env", "git", "bun", "readlink", "dirname", "basename", "mkdir", "ln", "rm",
-    "sed", "grep", "cat", "mktemp", "cmp", "sort", "awk", "head", "tr", "ls", "cut", "chmod", "cp",
+    "bash",
+    "sh",
+    "env",
+    "git",
+    "bun",
+    "readlink",
+    "dirname",
+    "basename",
+    "mkdir",
+    "ln",
+    "rm",
+    "sed",
+    "grep",
+    "cat",
+    "mktemp",
+    "cmp",
+    "sort",
+    "awk",
+    "head",
+    "tr",
+    "ls",
+    "cut",
+    "chmod",
+    "cp",
   ]) {
     const r = spawnSync("sh", ["-c", `command -v ${t}`], { encoding: "utf8" });
     const p = r.stdout.trim().split("\n").pop() ?? "";
-    if (!p || !p.startsWith("/")) {
+    if (!p?.startsWith("/")) {
       console.error(`self-test: ${t} is not on PATH`);
       process.exit(1);
     }
@@ -345,10 +372,10 @@ withTempDir((tmp) => {
   const origErr = console.error;
   let outBuf = "";
   console.log = (...args: unknown[]) => {
-    outBuf += args.map(String).join(" ") + "\n";
+    outBuf += `${args.map(String).join(" ")}\n`;
   };
   console.error = (...args: unknown[]) => {
-    outBuf += args.map(String).join(" ") + "\n";
+    outBuf += `${args.map(String).join(" ")}\n`;
   };
   const rc1 = makeLinks(TOOL, 0);
   console.log = origLog;
@@ -378,7 +405,9 @@ withTempDir((tmp) => {
   );
   st.check(
     "a harness with no skills folder is named with the absolute path its brief gives",
-    outBuf.includes(`no skills folder agy: its brief names ${join(TOOL, "skills", "postmaster", "SKILL.md")} by absolute path`),
+    outBuf.includes(
+      `no skills folder agy: its brief names ${join(TOOL, "skills", "postmaster", "SKILL.md")} by absolute path`,
+    ),
     outBuf,
   );
   {
@@ -387,7 +416,7 @@ withTempDir((tmp) => {
       try {
         for (const n of readdirSync(dir)) {
           const p = join(dir, n);
-          if (!isLink(p)) copies += p + "\n";
+          if (!isLink(p)) copies += `${p}\n`;
         }
       } catch {
         /* empty */
@@ -398,53 +427,53 @@ withTempDir((tmp) => {
   const before = state();
   outBuf = "";
   console.log = (...args: unknown[]) => {
-    outBuf += args.map(String).join(" ") + "\n";
+    outBuf += `${args.map(String).join(" ")}\n`;
   };
   console.error = (...args: unknown[]) => {
-    outBuf += args.map(String).join(" ") + "\n";
+    outBuf += `${args.map(String).join(" ")}\n`;
   };
   const rc2 = makeLinks(TOOL, 0);
   console.log = origLog;
   console.error = origErr;
   st.check(
     "running it again changes nothing",
-    rc2 === 0 &&
-      state() === before &&
-      !outBuf.split("\n").some((l) => l.startsWith("linked ")),
+    rc2 === 0 && state() === before && !outBuf.split("\n").some((l) => l.startsWith("linked ")),
     outBuf,
   );
-  {
-    process.env.CLAUDE_CONFIG_DIR = join(tmp, "cfg");
-    outBuf = "";
-    console.log = (...args: unknown[]) => {
-      outBuf += args.map(String).join(" ") + "\n";
-    };
-    console.error = (...args: unknown[]) => {
-      outBuf += args.map(String).join(" ") + "\n";
-    };
-    makeLinks(TOOL, 0);
-    console.log = origLog;
-    console.error = origErr;
-    delete process.env.CLAUDE_CONFIG_DIR;
-    st.check(
-      "claude's folder moves with CLAUDE_CONFIG_DIR",
-      linksTo(join(tmp, "cfg", "skills", "postmaster"), join(TOOL, "skills", "postmaster")),
-    );
-  }
+  process.env.CLAUDE_CONFIG_DIR = join(tmp, "cfg");
+  outBuf = "";
+  console.log = (...args: unknown[]) => {
+    outBuf += `${args.map(String).join(" ")}\n`;
+  };
+  console.error = (...args: unknown[]) => {
+    outBuf += `${args.map(String).join(" ")}\n`;
+  };
+  makeLinks(TOOL, 0);
+  console.log = origLog;
+  console.error = origErr;
+  delete process.env.CLAUDE_CONFIG_DIR;
+  st.check(
+    "claude's folder moves with CLAUDE_CONFIG_DIR",
+    linksTo(join(tmp, "cfg", "skills", "postmaster"), join(TOOL, "skills", "postmaster")),
+  );
 
-  console.log("positive control: from an unrelated directory, a documented command resolves through the link and runs");
+  console.log(
+    "positive control: from an unrelated directory, a documented command resolves through the link and runs",
+  );
   const skillMd = join(TOOL, "skills", "postmaster", "SKILL.md");
   const trackersMd = join(TOOL, "skills", "postmaster", "trackers.md");
   let resolver = "";
   let documented = "";
   try {
-    resolver = readFileSync(skillMd, "utf8")
-      .split("\n")
-      .find((l) => l.includes('test -f "$t/scripts/link-skills.sh"')) ?? "";
-    documented = readFileSync(trackersMd, "utf8")
-      .split("\n")
-      .find((l) => /^<tool>\/scripts\/github\.sh <repo> board +#/.test(l))
-      ?.replace(/ *#.*$/, "") ?? "";
+    resolver =
+      readFileSync(skillMd, "utf8")
+        .split("\n")
+        .find((l) => l.includes('test -f "$t/scripts/link-skills.sh"')) ?? "";
+    documented =
+      readFileSync(trackersMd, "utf8")
+        .split("\n")
+        .find((l) => /^<tool>\/scripts\/github\.sh <repo> board +#/.test(l))
+        ?.replace(/ *#.*$/, "") ?? "";
   } catch {
     /* files not found */
   }
@@ -472,7 +501,11 @@ esac
   function through(skillDir: string): { code: number; out: string } {
     const findTool = resolver.replace(/<skill>/g, skillDir);
     const command = documented.replace(/<repo>/g, join(tmp, "target")).replace(/<tool>/g, "$tool");
-    return run("bash", ["-c", `tool=$(${findTool}) && ${command}`], { cwd: elsewhere, env: { ...process.env, PATH: bin, HOME: home } });
+    const r = run("bash", ["-c", `tool=$(${findTool}) && ${command}`], {
+      cwd: elsewhere,
+      env: { ...process.env, PATH: bin, HOME: home },
+    });
+    return { code: r.code, out: r.out + r.err };
   }
 
   {
@@ -506,12 +539,18 @@ esac
     );
   }
 
-  console.log("negative controls: the same command fails, naming the link, never a bare 'no such file'");
+  console.log(
+    "negative controls: the same command fails, naming the link, never a bare 'no such file'",
+  );
   const link = join(C, "postmaster");
   function namedFailure(label: string): void {
     const r = through(link);
-    const out = r.out + r.err;
-    const ok1 = r.code !== 0 && out.includes(link) && !out.toLowerCase().includes("no such file") && !out.includes("projects/1");
+    const out = r.out;
+    const ok1 =
+      r.code !== 0 &&
+      out.includes(link) &&
+      !out.toLowerCase().includes("no such file") &&
+      !out.includes("projects/1");
     st.check(label, ok1, `exit ${r.code}\n${out}`);
   }
   rmSync(link, { force: true });
@@ -531,15 +570,19 @@ esac
     const before = state();
     outBuf = "";
     console.log = (...args: unknown[]) => {
-      outBuf += args.map(String).join(" ") + "\n";
+      outBuf += `${args.map(String).join(" ")}\n`;
     };
     console.error = (...args: unknown[]) => {
-      outBuf += args.map(String).join(" ") + "\n";
+      outBuf += `${args.map(String).join(" ")}\n`;
     };
     const rc = makeLinks(TOOL, 0);
     console.log = origLog;
     console.error = origErr;
-    st.check(label, rc === 1 && outBuf.includes(`IN THE WAY      ${path}`) && state() === before, `exit ${rc}\n${outBuf}`);
+    st.check(
+      label,
+      rc === 1 && outBuf.includes(`IN THE WAY      ${path}`) && state() === before,
+      `exit ${rc}\n${outBuf}`,
+    );
   }
   rmSync(join(A, "wiki"), { force: true });
   rmSync(link, { force: true });
@@ -558,17 +601,20 @@ esac
   rmSync(link, { force: true });
   outBuf = "";
   console.log = (...args: unknown[]) => {
-    outBuf += args.map(String).join(" ") + "\n";
+    outBuf += `${args.map(String).join(" ")}\n`;
   };
   console.error = (...args: unknown[]) => {
-    outBuf += args.map(String).join(" ") + "\n";
+    outBuf += `${args.map(String).join(" ")}\n`;
   };
   const rcDry = makeLinks(TOOL, 1);
   console.log = origLog;
   console.error = origErr;
   st.check(
     "--dry-run names the links it would make, and makes none",
-    rcDry === 0 && !isLink(link) && !isLink(join(A, "wiki")) && outBuf.includes(`to link         ${link}`),
+    rcDry === 0 &&
+      !isLink(link) &&
+      !isLink(join(A, "wiki")) &&
+      outBuf.includes(`to link         ${link}`),
     `exit ${rcDry}\n${outBuf}`,
   );
 
@@ -579,9 +625,13 @@ esac
   const fixture = join(tmp, "fixture");
   mkdirSync(join(fixture, "skills", "postmaster"), { recursive: true });
   mkdirSync(join(fixture, "skills", "wiki"), { recursive: true });
-  writeFileSync(join(fixture, "skills", "postmaster", "SKILL.md"), "---\nname: postmaster\n---\n", "utf8");
+  writeFileSync(
+    join(fixture, "skills", "postmaster", "SKILL.md"),
+    "---\nname: postmaster\n---\n",
+    "utf8",
+  );
   writeFileSync(join(fixture, "skills", "wiki", "SKILL.md"), "---\nname: wiki\n---\n", "utf8");
-  const fixtureReal = resolve(fixture);
+  const _fixtureReal = resolve(fixture);
   const fHome = join(tmp, "fhome");
   mkdirSync(join(fHome, ".claude"), { recursive: true });
   mkdirSync(join(fHome, ".agents", "skills"), { recursive: true });
@@ -591,10 +641,10 @@ esac
     process.env.HOME = fHome;
     outBuf = "";
     console.log = (...args: unknown[]) => {
-      outBuf += args.map(String).join(" ") + "\n";
+      outBuf += `${args.map(String).join(" ")}\n`;
     };
     console.error = (...args: unknown[]) => {
-      outBuf += args.map(String).join(" ") + "\n";
+      outBuf += `${args.map(String).join(" ")}\n`;
     };
     const rc = makeLinks(fixture, 0);
     console.log = origLog;
@@ -602,16 +652,17 @@ esac
     process.env.HOME = origHome;
     st.check(
       "counts as linked, and nothing is written into the checkout",
-      rc === 0 && outBuf.includes(`already linked  ${join(fHome, ".claude", "skills", "postmaster")}`),
+      rc === 0 &&
+        outBuf.includes(`already linked  ${join(fHome, ".claude", "skills", "postmaster")}`),
       `exit ${rc}\n${outBuf}`,
     );
     process.env.HOME = fHome;
     outBuf = "";
     console.log = (...args: unknown[]) => {
-      outBuf += args.map(String).join(" ") + "\n";
+      outBuf += `${args.map(String).join(" ")}\n`;
     };
     console.error = (...args: unknown[]) => {
-      outBuf += args.map(String).join(" ") + "\n";
+      outBuf += `${args.map(String).join(" ")}\n`;
     };
     removeLinks(fixture);
     console.log = origLog;
@@ -630,10 +681,10 @@ esac
   mkdirSync(join(A, "wiki"), { recursive: true });
   outBuf = "";
   console.log = (...args: unknown[]) => {
-    outBuf += args.map(String).join(" ") + "\n";
+    outBuf += `${args.map(String).join(" ")}\n`;
   };
   console.error = (...args: unknown[]) => {
-    outBuf += args.map(String).join(" ") + "\n";
+    outBuf += `${args.map(String).join(" ")}\n`;
   };
   removeLinks(TOOL);
   console.log = origLog;
@@ -651,12 +702,28 @@ esac
   console.log("which checkout is linked");
   const repo = join(tmp, "repo");
   run("git", ["init", "-q", "-b", "main", repo]);
-  run("git", ["-C", repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "first"]);
+  run("git", [
+    "-C",
+    repo,
+    "-c",
+    "user.name=t",
+    "-c",
+    "user.email=t@t",
+    "commit",
+    "-q",
+    "--allow-empty",
+    "-m",
+    "first",
+  ]);
   run("git", ["-C", repo, "worktree", "add", "-q", join(repo, ".worktrees", "wt"), "-b", "wt"]);
   const repoReal = resolve(repo);
   {
     const cr = checkoutRoot(join(repo, ".worktrees", "wt"));
-    st.check("from a worktree: the main checkout, never the worktree", cr === repoReal, cr ?? "null");
+    st.check(
+      "from a worktree: the main checkout, never the worktree",
+      cr === repoReal,
+      cr ?? "null",
+    );
   }
   {
     const cr = checkoutRoot(repo);
@@ -669,11 +736,19 @@ esac
   const nestedReal = resolve(join(repo, "node_modules", "pkg"));
   {
     const cr = checkoutRoot(pkg);
-    st.check("from a tree outside git, such as an installed package: itself", cr === pkgReal, cr ?? "null");
+    st.check(
+      "from a tree outside git, such as an installed package: itself",
+      cr === pkgReal,
+      cr ?? "null",
+    );
   }
   {
     const cr = checkoutRoot(nestedReal);
-    st.check("from a package inside another project's checkout: the package, not the project", cr === nestedReal, cr ?? "null");
+    st.check(
+      "from a package inside another project's checkout: the package, not the project",
+      cr === nestedReal,
+      cr ?? "null",
+    );
   }
   run("git", ["clone", "-q", "--bare", repo, join(tmp, "bare.git")]);
   run("git", ["-C", join(tmp, "bare.git"), "worktree", "add", "-q", join(tmp, "bare-wt"), "main"]);
@@ -681,7 +756,7 @@ esac
     const origErr2 = console.error;
     let errBuf = "";
     console.error = (...args: unknown[]) => {
-      errBuf += args.map(String).join(" ") + "\n";
+      errBuf += `${args.map(String).join(" ")}\n`;
     };
     const cr = checkoutRoot(resolve(join(tmp, "bare-wt")));
     console.error = origErr2;
@@ -701,7 +776,7 @@ esac
         continue;
       }
       if (on && /^## /.test(l)) break;
-      if (on && /^\| [a-z]+ \|/.test(l)) table += l + "\n";
+      if (on && /^\| [a-z]+ \|/.test(l)) table += `${l}\n`;
     }
   } catch {
     /* no harnesses.md */
@@ -717,7 +792,11 @@ esac
     let want = wantMatch ? (wantMatch[1] ?? "") : "";
     if (want.startsWith("~")) want = (process.env.HOME ?? "~") + want.slice(1);
     const scriptSays = skillsFolder(h) ?? "";
-    st.check(`${h}: ${want || "no skills folder"}`, cell !== "" && scriptSays === want, `script says '${scriptSays}', harnesses.md says '${cell || "no row"}'`);
+    st.check(
+      `${h}: ${want || "no skills folder"}`,
+      cell !== "" && scriptSays === want,
+      `script says '${scriptSays}', harnesses.md says '${cell || "no row"}'`,
+    );
   }
 
   st.finish();

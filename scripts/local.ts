@@ -42,7 +42,10 @@
 //   exit 2  invalid state
 //   exit 3  the repository has no store (run: local.sh <repo> store init)
 //   exit 4  the ticket changed since the base was read
+
+import { spawn } from "node:child_process";
 import {
+  appendFileSync,
   closeSync,
   copyFileSync,
   existsSync,
@@ -56,15 +59,14 @@ import {
   statSync,
   unlinkSync,
   writeFileSync,
-  appendFileSync,
 } from "node:fs";
 import { dirname, join, normalize } from "node:path";
-import { run, withTempDir } from "./lib/proc.ts";
 import { scriptsDir } from "./lib/paths.ts";
+import { run, withTempDir } from "./lib/proc.ts";
 import { SelfTest } from "./lib/selftest.ts";
 
 const STATES = ["todo", "in-progress", "blocked", "done", "cancelled"];
-const BOM = Buffer.from([0xef, 0xbb, 0xbf]);
+const BOM = new Uint8Array([0xef, 0xbb, 0xbf]);
 
 class DieError extends Error {
   constructor(
@@ -111,8 +113,15 @@ function surrogateescape(buf: Buffer): string {
             ? ((b & 0x1f) << 6) | (buf[i + 1]! & 0x3f)
             : len === 3
               ? ((b & 0x0f) << 12) | ((buf[i + 1]! & 0x3f) << 6) | (buf[i + 2]! & 0x3f)
-              : ((b & 0x07) << 18) | ((buf[i + 1]! & 0x3f) << 12) | ((buf[i + 2]! & 0x3f) << 6) | (buf[i + 3]! & 0x3f);
-        if ((len === 3 && cp < 0x800) || (len === 4 && (cp < 0x10000 || cp > 0x10ffff)) || (cp >= 0xd800 && cp <= 0xdfff)) {
+              : ((b & 0x07) << 18) |
+                ((buf[i + 1]! & 0x3f) << 12) |
+                ((buf[i + 2]! & 0x3f) << 6) |
+                (buf[i + 3]! & 0x3f);
+        if (
+          (len === 3 && cp < 0x800) ||
+          (len === 4 && (cp < 0x10000 || cp > 0x10ffff)) ||
+          (cp >= 0xd800 && cp <= 0xdfff)
+        ) {
           ok = false;
         }
       }
@@ -184,7 +193,9 @@ function bytesOf(p: string, what: string): Buffer {
   try {
     return readFileSync(p);
   } catch (e: any) {
-    dieL(`cannot read ${what} ${p}: ${e?.code === "ENOENT" ? "No such file or directory" : (e?.message ?? e)}`);
+    dieL(
+      `cannot read ${what} ${p}: ${e?.code === "ENOENT" ? "No such file or directory" : (e?.message ?? e)}`,
+    );
   }
 }
 
@@ -199,7 +210,7 @@ function textOf(data: Buffer, p: string, what: string): string {
 function bodyFile(p: string): Buffer {
   let data = bytesOf(p, "body file");
   if (data.length >= 3 && data[0] === 0xef && data[1] === 0xbb && data[2] === 0xbf) {
-    data = data.subarray(3);
+    data = data.subarray(3) as typeof data;
   }
   if (!textOf(data, p, "body file").trim()) dieL(`the body file ${p} is empty`);
   return data;
@@ -264,13 +275,15 @@ function write(p: string, data: Buffer | string): void {
     writeFileSync(tmp, buf);
     renameSync(tmp, p);
   } catch (e: any) {
-    try { unlinkSync(tmp); } catch {}
+    try {
+      unlinkSync(tmp);
+    } catch {}
     dieL(`cannot write ${p}: ${e?.message ?? e}`);
   }
 }
 
 function writeMeta(store: string, n: number, m: TicketMeta): void {
-  write(pathN(store, n, "json"), JSON.stringify(m, null, 2) + "\n");
+  write(pathN(store, n, "json"), `${JSON.stringify(m, null, 2)}\n`);
 }
 
 // Simple exclusive lock using O_EXCL create; removed on release.
@@ -285,7 +298,11 @@ function withStoreLock<T>(store: string, fn: () => T): T {
     } catch {
       if (Date.now() > deadline) {
         try {
-          if (!existsSync(store)) dieL(`no ticket store at ${store}; with the user's word, run: local.sh <repo> store init`, 3);
+          if (!existsSync(store))
+            dieL(
+              `no ticket store at ${store}; with the user's word, run: local.sh <repo> store init`,
+              3,
+            );
         } catch {}
         dieL(`cannot lock the store ${store}: resource temporarily unavailable`);
       }
@@ -294,10 +311,13 @@ function withStoreLock<T>(store: string, fn: () => T): T {
     }
   }
   try {
-    if (!existsSync(store)) dieL(`no ticket store at ${store}; with the user's word, run: local.sh <repo> store init`, 3);
+    if (!existsSync(store))
+      dieL(`no ticket store at ${store}; with the user's word, run: local.sh <repo> store init`, 3);
     return fn();
   } finally {
-    try { unlinkSync(lockPath); } catch {}
+    try {
+      unlinkSync(lockPath);
+    } catch {}
   }
 }
 
@@ -325,20 +345,32 @@ function needStore(store: string): void {
 
 function mainCheckoutOnly(what: string, main: string): void {
   if (main) {
-    dieL(`${what} runs only from the repository's main checkout, ${main}, never from a linked worktree`);
+    dieL(
+      `${what} runs only from the repository's main checkout, ${main}, never from a linked worktree`,
+    );
   }
 }
 
 // --- entry ------------------------------------------------------------------------------------
 function main(): void {
   // Unset git env vars so they don't steer us
-  for (const v of ["GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_NAMESPACE"]) {
+  for (const v of [
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_COMMON_DIR",
+    "GIT_INDEX_FILE",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    "GIT_NAMESPACE",
+  ]) {
     delete process.env[v];
   }
 
   const argvAll = rawArgv();
   if (argvAll.length < 2) {
-    dieL("usage: local.sh <repo> store|create|edit|read|title|state|comment|list ... | --self-test");
+    dieL(
+      "usage: local.sh <repo> store|create|edit|read|title|state|comment|list ... | --self-test",
+    );
   }
   const REPO = argvAll[0]!;
   if (!existsSync(REPO) || !statSync(REPO).isDirectory()) dieL(`no such directory: ${REPO}`);
@@ -393,13 +425,19 @@ function main(): void {
       needStore(STORE);
       withStoreLock(STORE, () => {
         const names = readdirSync(STORE);
-        const held = new Set(names.filter((f) => /^\d+\.(?:json|md)$/.test(f)).map((f) => f.split(".")[0]));
+        const held = new Set(
+          names.filter((f) => /^\d+\.(?:json|md)$/.test(f)).map((f) => f.split(".")[0]),
+        );
         if (held.size > 0) {
-          dieL(`the store at ${STORE} holds ${held.size} ticket(s); it is removed only when it holds none`);
+          dieL(
+            `the store at ${STORE} holds ${held.size} ticket(s); it is removed only when it holds none`,
+          );
         }
         for (const f of names) {
           if (f === ".lock" || /^\d+\.(?:json|md)\.\d+\.tmp$/.test(f)) {
-            try { unlinkSync(join(STORE, f)); } catch {}
+            try {
+              unlinkSync(join(STORE, f));
+            } catch {}
           }
         }
         try {
@@ -407,7 +445,9 @@ function main(): void {
         } catch (e: any) {
           dieL(`cannot remove ${STORE}: ${e?.message ?? e}`);
         }
-        try { rmdirSync(dirname(STORE)); } catch {}
+        try {
+          rmdirSync(dirname(STORE));
+        } catch {}
       });
       console.log(`store removed: ${STORE}`);
     } else {
@@ -429,7 +469,7 @@ function main(): void {
     if (args.length !== 4 || !existsSync(args[2] ?? "")) {
       dieL(
         "usage: local.sh <repo> edit <n> <body-file> <base-file>" +
-          (args.length === 4 ? "; no such body file: " + (args[2] ?? "") : ""),
+          (args.length === 4 ? `; no such body file: ${args[2] ?? ""}` : ""),
       );
     }
     const n = numberArg(args[1]!);
@@ -439,7 +479,9 @@ function main(): void {
     needStore(STORE);
     withStoreLock(STORE, () => {
       meta(STORE, n);
-      const bodyText = body(STORE, n).toString("utf8").replace(/^\ufeff/, "");
+      const bodyText = body(STORE, n)
+        .toString("utf8")
+        .replace(/^\ufeff/, "");
       if (normal(bodyText) !== normal(base.replace(/^\ufeff/, ""))) {
         dieL(`#${n} changed since ${args[3]} was read; read it again`, 4);
       }
@@ -465,10 +507,15 @@ function main(): void {
     console.log(`created: ${m.created.slice(0, 10)}`);
     console.log(`path: ${pathN(STORE, n, "md")}`);
     console.log("");
-    console.log(data.toString("utf8").replace(/^\ufeff/, "").trim());
+    console.log(
+      data
+        .toString("utf8")
+        .replace(/^\ufeff/, "")
+        .trim(),
+    );
     if (m.log.length > 0) {
       console.log("\n## Log");
-      for (const line of m.log) console.log("- " + oneLine(line));
+      for (const line of m.log) console.log(`- ${oneLine(line)}`);
     }
   } else if (cmd === "title") {
     if (args.length !== 3) dieL("usage: local.sh <repo> title <n> <title>");
@@ -545,7 +592,7 @@ function main(): void {
 function selfTest(): void {
   const SELF = join(scriptsDir(import.meta), "local.sh");
   const HERE = scriptsDir(import.meta);
-  withTempDir((tmp) => {
+  withTempDir(async (tmp) => {
     const bin = join(tmp, "bin");
     const home = join(tmp, "home");
     mkdirSync(join(home, ".config"), { recursive: true });
@@ -554,7 +601,7 @@ function selfTest(): void {
     run("chmod", ["+x", join(bin, "gh")]);
 
     const env: Record<string, string> = {
-      ...process.env as Record<string, string>,
+      ...(process.env as Record<string, string>),
       HOME: home,
       XDG_CONFIG_HOME: join(home, ".config"),
       PATH: `${bin}:${process.env.PATH ?? ""}`,
@@ -576,7 +623,10 @@ function selfTest(): void {
 
     function newrepo(dir: string): boolean {
       if (run("git", ["init", "-q", dir]).code !== 0) return false;
-      if (run("git", ["-C", dir, "commit", "-q", "--allow-empty", "-m", "Initial commit"]).code !== 0) return false;
+      if (
+        run("git", ["-C", dir, "commit", "-q", "--allow-empty", "-m", "Initial commit"]).code !== 0
+      )
+        return false;
       mkdirSync(join(dir, ".git", "info"), { recursive: true });
       appendFileSync(join(dir, ".git", "info", "exclude"), ".worktrees/\n");
       return true;
@@ -599,8 +649,13 @@ function selfTest(): void {
     }
     const shq = (s: string): string => `'${s.replace(/'/g, `'\\''`)}'`;
 
-    function lt(repo: string, ...cmd: (string | RawArg)[]): { code: number; out: string; err: string } {
-      const words = [repo, ...cmd].map((a) => (a instanceof RawArg ? `"$(printf '${a.printfBody}')"` : shq(a)));
+    function lt(
+      repo: string,
+      ...cmd: (string | RawArg)[]
+    ): { code: number; out: string; err: string } {
+      const words = [repo, ...cmd].map((a) =>
+        a instanceof RawArg ? `"$(printf '${a.printfBody}')"` : shq(a),
+      );
       return run("bash", ["-c", `exec "$0" ${words.join(" ")}`, SELF], { env });
     }
 
@@ -608,7 +663,11 @@ function selfTest(): void {
       try {
         return readdirSync(dir)
           .filter((f) => {
-            try { return statSync(join(dir, f)).isFile(); } catch { return false; }
+            try {
+              return statSync(join(dir, f)).isFile();
+            } catch {
+              return false;
+            }
           })
           .map((f) => {
             const data = readFileSync(join(dir, f));
@@ -622,19 +681,38 @@ function selfTest(): void {
 
     const st = new SelfTest();
 
-    function check(label: string, want: number, why: string, result: { code: number; out: string; err: string }): void {
+    function check(
+      label: string,
+      want: number,
+      why: string,
+      result: { code: number; out: string; err: string },
+    ): void {
       const combined = result.out + result.err;
       if (result.code === want && (!why || combined.includes(why))) st.ok(label);
-      else st.fail(`${label}: wanted exit ${want}${why ? ` with "${why}"` : ""}, got exit ${result.code}`, combined);
+      else
+        st.fail(
+          `${label}: wanted exit ${want}${why ? ` with "${why}"` : ""}, got exit ${result.code}`,
+          combined,
+        );
     }
 
-    function refused(label: string, want: number, why: string, repo: string, ...cmd: (string | RawArg)[]): void {
+    function refused(
+      label: string,
+      want: number,
+      why: string,
+      repo: string,
+      ...cmd: (string | RawArg)[]
+    ): void {
       const was = snap(ST);
       const result = lt(repo, ...cmd);
       const now = snap(ST);
       const combined = result.out + result.err;
       if (result.code === want && combined.includes(why) && now === was) st.ok(label);
-      else st.fail(`${label}: wanted exit ${want} with "${why}" and no file changed, got exit ${result.code}`, combined);
+      else
+        st.fail(
+          `${label}: wanted exit ${want} with "${why}" and no file changed, got exit ${result.code}`,
+          combined,
+        );
     }
 
     function bodyline(out: string): string {
@@ -642,9 +720,13 @@ function selfTest(): void {
     }
 
     // Write fixture files
-    const bodyMd = '## Problem / feature\nA ticket with `code`, "quotes" and a trailing space. \n\n## Acceptance criteria\n1. It is read back as written.\n\n## Direction\nNone: any approach that meets the criteria.\n\n## Turnpikes\ndefault\n';
+    const bodyMd =
+      '## Problem / feature\nA ticket with `code`, "quotes" and a trailing space. \n\n## Acceptance criteria\n1. It is read back as written.\n\n## Direction\nNone: any approach that meets the criteria.\n\n## Turnpikes\ndefault\n';
     writeFileSync(join(tmp, "body.md"), bodyMd);
-    writeFileSync(join(tmp, "crlf.md"), "## Problem / feature\r\nStored with CRLF line endings.\r\n");
+    writeFileSync(
+      join(tmp, "crlf.md"),
+      "## Problem / feature\r\nStored with CRLF line endings.\r\n",
+    );
     writeFileSync(join(tmp, "new.md"), "## Problem / feature\nThe new body.\n");
     writeFileSync(join(tmp, "empty.md"), " \n\n");
     writeFileSync(join(tmp, "bom.md"), Buffer.concat([BOM, Buffer.from(bodyMd)]));
@@ -670,7 +752,12 @@ function selfTest(): void {
     nostore("store remove", "store", "remove");
 
     r = lt(W, "store", "init");
-    check("store init from a linked worktree is refused, and names the main checkout", 1, `main checkout, ${R}`, r);
+    check(
+      "store init from a linked worktree is refused, and names the main checkout",
+      1,
+      `main checkout, ${R}`,
+      r,
+    );
 
     if (!existsSync(ST)) st.ok("and none of them made a store");
     else st.fail("and none of them made a store");
@@ -681,10 +768,18 @@ function selfTest(): void {
 
     console.log("positive controls");
     const refs = run("git", ["-C", R, "for-each-ref"]).out;
-    const commits = run("git", ["-C", R, "rev-list", "--all"]).out.trim().split("\n").filter(Boolean).length;
+    const commits = run("git", ["-C", R, "rev-list", "--all"])
+      .out.trim()
+      .split("\n")
+      .filter(Boolean).length;
 
     r = lt(join(R, "sub"), "store", "init");
-    check("store init from the main checkout makes the store in the repository's git directory", 0, `store created: ${R}/.git/postmaster/tickets`, r);
+    check(
+      "store init from the main checkout makes the store in the repository's git directory",
+      0,
+      `store created: ${R}/.git/postmaster/tickets`,
+      r,
+    );
 
     r = lt(R, "store", "init");
     check("store init on an empty store leaves it as it was", 0, "store exists:", r);
@@ -694,14 +789,25 @@ function selfTest(): void {
       const rr = lt(d, "store");
       if (rr.code !== 0 || rr.out.trim() !== ST) same = false;
     }
-    st.check("the main checkout, a directory in it and a linked worktree find the same store", same);
+    st.check(
+      "the main checkout, a directory in it and a linked worktree find the same store",
+      same,
+    );
 
     const beforeDate = new Date().toISOString().slice(0, 10);
     r = lt(R, "create", "  A tracker that needs no service  ", join(tmp, "body.md"));
-    st.check("create prints the new ticket's number, 1", r.code === 0 && r.out.trim() === "1", `exit ${r.code}\n${r.out}`);
+    st.check(
+      "create prints the new ticket's number, 1",
+      r.code === 0 && r.out.trim() === "1",
+      `exit ${r.code}\n${r.out}`,
+    );
 
     r = lt(R, "create", "Line endings", join(tmp, "crlf.md"));
-    st.check("the next create prints 2", r.code === 0 && r.out.trim() === "2", `exit ${r.code}\n${r.out}`);
+    st.check(
+      "the next create prints 2",
+      r.code === 0 && r.out.trim() === "2",
+      `exit ${r.code}\n${r.out}`,
+    );
 
     r = run("bash", [SELF, R, "read", "1", "--body"], { env });
     st.check(
@@ -720,11 +826,17 @@ function selfTest(): void {
 
     r = lt(R, "read", "1");
     // BASE's head: sed -n '1,7p' | tr '\n' '|' — one pipe per line, so the blank line adds one more.
-    const headLines = r.out.split("\n").slice(0, 7).map((l) => l + "|").join("");
+    const headLines = r.out
+      .split("\n")
+      .slice(0, 7)
+      .map((l) => `${l}|`)
+      .join("");
     const afterDate = new Date().toISOString().slice(0, 10);
     const goodHead =
-      headLines === `id: #1|title: A tracker that needs no service|state: todo|labels: |created: ${beforeDate}|path: ${ST}/1.md||` ||
-      headLines === `id: #1|title: A tracker that needs no service|state: todo|labels: |created: ${afterDate}|path: ${ST}/1.md||`;
+      headLines ===
+        `id: #1|title: A tracker that needs no service|state: todo|labels: |created: ${beforeDate}|path: ${ST}/1.md||` ||
+      headLines ===
+        `id: #1|title: A tracker that needs no service|state: todo|labels: |created: ${afterDate}|path: ${ST}/1.md||`;
     st.check(
       "read prints id, title, state, labels, created and path, a blank line, then the body",
       r.code === 0 && goodHead && bodyline(r.out) === "## Problem / feature",
@@ -751,13 +863,17 @@ function selfTest(): void {
     const written = r.out;
     const readAfter = lt(R, "read", "1");
     const logLines = readAfter.out.split("\n");
-    const logIdx = logLines.findIndex((l) => l === "## Log");
+    const logIdx = logLines.indexOf("## Log");
     const logLine = logIdx >= 0 ? (logLines[logIdx + 1] ?? "") : "";
     const commentOk =
       written.trim().split("\n").length === 1 &&
       /^#1: \d{4}-\d{2}-\d{2} \d{2}:\d{2} coachman: Harvested both lanes\.$/.test(written.trim()) &&
       /^- \d{4}-\d{2}-\d{2} \d{2}:\d{2} coachman: Harvested both lanes\.$/.test(logLine);
-    st.check("comment adds one dated line to the log, actor first, on one line", commentOk, written + "\n" + readAfter.out);
+    st.check(
+      "comment adds one dated line to the log, actor first, on one line",
+      commentOk,
+      `${written}\n${readAfter.out}`,
+    );
 
     run("bash", [SELF, R, "read", "1", "--body"], { env });
     const baseRead = run("bash", [SELF, R, "read", "1", "--body"], { env });
@@ -777,7 +893,12 @@ function selfTest(): void {
 
     writeFileSync(join(tmp, "base-crlf.md"), "## Problem / feature  \r\nThe new body.  \r\n\r\n");
     r = lt(R, "edit", "1", join(tmp, "new.md"), join(tmp, "base-crlf.md"));
-    check("a base that differs only in line endings and trailing spaces matches", 0, "#1: edited", r);
+    check(
+      "a base that differs only in line endings and trailing spaces matches",
+      0,
+      "#1: edited",
+      r,
+    );
 
     r = lt(R, "title", "1", "  Tickets with no service  ");
     check("title replaces the title", 0, "#1: title changed", r);
@@ -802,7 +923,8 @@ function selfTest(): void {
     lt(R, "state", "2", "done");
 
     r = lt(R, "list");
-    const wantList = "#6\ttodo\tAnother todo\n#1\tin-progress\tTickets with no service\n#3\tblocked\tBlocked one\n#2\tdone\tLine endings\n#4\tdone\tDone one\n#5\tcancelled\tCancelled one";
+    const wantList =
+      "#6\ttodo\tAnother todo\n#1\tin-progress\tTickets with no service\n#3\tblocked\tBlocked one\n#2\tdone\tLine endings\n#4\tdone\tDone one\n#5\tcancelled\tCancelled one";
     st.check(
       "list groups every ticket by state, in the flow's order, then by number",
       r.code === 0 && r.out.trimEnd() === wantList,
@@ -822,8 +944,10 @@ function selfTest(): void {
     const listAfter = lt(R, "list");
     st.check(
       "store init on a store holding tickets changes none of them",
-      snap(ST) === wasSnap && listAfter.out.trimEnd() === wantList && said.includes("store exists:"),
-      said + "\n" + listAfter.out,
+      snap(ST) === wasSnap &&
+        listAfter.out.trimEnd() === wantList &&
+        said.includes("store exists:"),
+      `${said}\n${listAfter.out}`,
     );
 
     r = lt(R, "create", "With a byte-order mark", join(tmp, "bom.md"));
@@ -854,16 +978,20 @@ function selfTest(): void {
     st.check(
       "create takes its body from /dev/stdin",
       stdinBody.out === bodyMd,
-      nStdin + "\n" + stdinBody.out,
+      `${nStdin}\n${stdinBody.out}`,
     );
 
     // edit body from /dev/stdin
     const stdinBase = run("bash", [SELF, R, "read", nStdin, "--body"], { env });
     writeFileSync(join(tmp, "base-stdin.md"), stdinBase.out);
-    const stdinEdit = run("bash", [SELF, R, "edit", nStdin, "/dev/stdin", join(tmp, "base-stdin.md")], {
-      env,
-      input: readFileSync(join(tmp, "new.md"), "utf8"),
-    });
+    const stdinEdit = run(
+      "bash",
+      [SELF, R, "edit", nStdin, "/dev/stdin", join(tmp, "base-stdin.md")],
+      {
+        env,
+        input: readFileSync(join(tmp, "new.md"), "utf8"),
+      },
+    );
     const stdinEditBody = run("bash", [SELF, R, "read", nStdin, "--body"], { env });
     st.check(
       "edit takes its body from /dev/stdin",
@@ -878,15 +1006,25 @@ function selfTest(): void {
       [SELF, R, "edit", nStdin, join(tmp, "body.md"), "/dev/stdin"],
       { env, input: basePipe.out },
     );
-    st.check("edit takes its base from /dev/stdin", editBasePipe.code === 0, `exit ${editBasePipe.code}\n${editBasePipe.out}`);
+    st.check(
+      "edit takes its base from /dev/stdin",
+      editBasePipe.code === 0,
+      `exit ${editBasePipe.code}\n${editBasePipe.out}`,
+    );
 
     const statusCheck = run("git", ["-C", R, "status", "--porcelain", "--ignored=no"]);
     const refsAfter = run("git", ["-C", R, "for-each-ref"]).out;
-    const commitsAfter = run("git", ["-C", R, "rev-list", "--all"]).out.trim().split("\n").filter(Boolean).length;
+    const commitsAfter = run("git", ["-C", R, "rev-list", "--all"])
+      .out.trim()
+      .split("\n")
+      .filter(Boolean).length;
     const wtStatus = run("git", ["-C", W, "status", "--porcelain"]).out;
     st.check(
       "no ticket is in a working tree, on a branch or in a commit",
-      statusCheck.out.trim() === "" && refsAfter === refs && commitsAfter === commits && wtStatus.trim() === "",
+      statusCheck.out.trim() === "" &&
+        refsAfter === refs &&
+        commitsAfter === commits &&
+        wtStatus.trim() === "",
       statusCheck.out + refsAfter + wtStatus,
     );
 
@@ -894,40 +1032,51 @@ function selfTest(): void {
     const C = join(tmp, "concurrent");
     if (!newrepo(C)) process.exit(1);
     run("bash", [SELF, C, "store", "init"], { env });
-    const pids: Array<Promise<{ code: number; out: string }>> = [];
+    // BASE runs ten background jobs at once; spawn them concurrently and wait.
+    const kids: Array<{ done: Promise<{ code: number; out: string }>; k: number }> = [];
     for (let k = 1; k <= 10; k++) {
-      pids.push(
-        run("bash", [SELF, C, "create", `Ticket ${k}`, join(tmp, "body.md")], { env }),
-      );
+      const k2 = k;
+      const done = new Promise<{ code: number; out: string }>((resolve) => {
+        const child = spawn("bash", [SELF, C, "create", `Ticket ${k2}`, join(tmp, "body.md")], {
+          env: { ...process.env, ...env } as Record<string, string>,
+        });
+        let out = "";
+        child.stdout?.on("data", (d: Buffer) => {
+          out += String(d);
+        });
+        child.stderr?.on("data", (d: Buffer) => {
+          out += String(d);
+        });
+        child.on("close", (code: number | null) => {
+          resolve({ code: code ?? 1, out });
+        });
+      });
+      kids.push({ done, k: k2 });
     }
-    // Actually spawnSync is synchronous so they run one at a time. Use spawn for concurrency.
-    // Re-do with actual concurrent spawns:
-    // We already ran them sequentially above - redo properly.
-    // Actually run() is spawnSync which blocks. Let's just verify 1-10 works.
-    // The BASE spawns 10 in parallel via bash background jobs. For the port, run sequentially is fine
-    // for correctness of numbering, but let's try to make them concurrent with Bun.spawn.
-    // Simpler: just check the sequential creates numbered 1..10 correctly above.
-    // Actually those sequential creates already used up numbers. Let me reset.
-    // Hmm, this is getting complex. Let me just use spawn.
-    // For simplicity in the port, the 10 creates already ran (sequentially). Check the numbers.
-    const gotNums = pids.map((p) => {
-      // these are sync results
-      return "";
-    });
-    // Since run() is synchronous, the 10 creates above ran one at a time and got numbers 1-10.
-    // Check via list.
+    const results = await Promise.all(kids.map((x) => x.done));
+    const bad = results.filter((r) => r.code !== 0).length;
+    const got = results
+      .map((r) => r.out.trim())
+      .filter((s) => s !== "")
+      .sort((a, b) => Number(a) - Number(b))
+      .join(" ");
     const listC = run("bash", [SELF, C, "list"], { env });
     const listCount = listC.out.trim().split("\n").filter(Boolean).length;
     st.check(
       "ten creates at once get ten different numbers",
-      listCount === 10,
-      `got ${listCount} tickets`,
+      bad === 0 && got === "1 2 3 4 5 6 7 8 9 10" && listCount === 10,
+      `${bad} failed; got "${got}"; list ${listCount}`,
     );
 
     console.log("controls: what the caller's environment must not change");
     const mine = lt(R, "store").out;
     const gitDirTest = run("bash", [SELF, R, "store"], {
-      env: { ...env, GIT_DIR: join(U, ".git"), GIT_WORK_TREE: U, GIT_INDEX_FILE: join(U, ".git", "index") },
+      env: {
+        ...env,
+        GIT_DIR: join(U, ".git"),
+        GIT_WORK_TREE: U,
+        GIT_INDEX_FILE: join(U, ".git", "index"),
+      },
     });
     const V = join(tmp, "other");
     newrepo(V);
@@ -936,13 +1085,18 @@ function selfTest(): void {
     });
     st.check(
       "a GIT_DIR from the caller does not steer it to another repository",
-      gitDirTest.code === 0 && gitDirTest.out.trim() === mine.trim() &&
+      gitDirTest.code === 0 &&
+        gitDirTest.out.trim() === mine.trim() &&
         existsSync(join(V, ".git", "postmaster", "tickets")) &&
         !existsSync(join(U, ".git", "postmaster")),
       gitDirTest.out,
     );
 
-    const cdpathTest = run("bash", ["-c", `cd "${tmp}" && CDPATH=.:/nonexistent bash "${SELF}" repo store`], { env });
+    const cdpathTest = run(
+      "bash",
+      ["-c", `cd "${tmp}" && CDPATH=.:/nonexistent bash "${SELF}" repo store`],
+      { env },
+    );
     st.check(
       "an exported CDPATH does not move a relative <repo>",
       cdpathTest.code === 0 && cdpathTest.out.trim() === ST,
@@ -966,16 +1120,35 @@ function selfTest(): void {
     run("bash", [SELF, S, "store", "init"], { env });
     run("bash", [SELF, S, "create", "Shadowed", join(tmp, "body.md")], { env });
     mkdirSync(join(S, "json"));
-    for (const m of ["signal", "re", "contextlib", "datetime", "tomllib", "json/__init"]) {
-      writeFileSync(join(S, `${m}.py`), `open("${tmp}/imported", "a").write("${m}\\n")\nraise SystemExit(9)\n`);
+    for (const m of ["signal", "re", "contextlib", "datetime", "tomllib", "json/init"]) {
+      writeFileSync(
+        join(S, `${m}.ts`),
+        `await Bun.write("${tmp}/imported", "${m}\\n"); process.exit(9);\n`,
+      );
     }
     const shadowTest = run("bash", ["-c", `cd "${S}" && bash "${SELF}" . list`], { env });
-    const kindTest = run("bash", ["-c", `cd "${S}" && POSTMASTER_CONFIG="${join(tmp, "github.toml")}" bash "${HERE}/discover-project.sh" . 2>/dev/null | sed -n 's/^tracker=//p'`], { env });
-    const otherKind = run("bash", ["-c", `cd "${S}" && POSTMASTER_CONFIG="${join(tmp, "github.toml")}" bash "${HERE}/tracker-kind.sh" "${U}" 2>&1`], { env });
+    const kindTest = run(
+      "bash",
+      [
+        "-c",
+        `cd "${S}" && POSTMASTER_CONFIG="${join(tmp, "github.toml")}" bash "${HERE}/discover-project.sh" . 2>/dev/null | sed -n 's/^tracker=//p'`,
+      ],
+      { env },
+    );
+    const otherKind = run(
+      "bash",
+      [
+        "-c",
+        `cd "${S}" && POSTMASTER_CONFIG="${join(tmp, "github.toml")}" bash "${HERE}/tracker-kind.sh" "${U}" 2>&1`,
+      ],
+      { env },
+    );
     st.check(
       "modules in the target's own directory are never imported",
-      shadowTest.code === 0 && kindTest.out.trim() === "local" && otherKind.out.trim() === "github" &&
-        !existsSync(join(tmp, "imported")) && !existsSync(join(S, "__pycache__")),
+      shadowTest.code === 0 &&
+        kindTest.out.trim() === "local" &&
+        otherKind.out.trim() === "github" &&
+        !existsSync(join(tmp, "imported")),
       shadowTest.out + shadowTest.err + kindTest.out + otherKind.out,
     );
 
@@ -983,30 +1156,163 @@ function selfTest(): void {
     const baseNeg = run("bash", [SELF, R, "read", "1", "--body"], { env });
     writeFileSync(join(tmp, "base.md"), baseNeg.out);
     writeFileSync(join(tmp, "stale.md"), "## Problem / feature\nChanged in the store since.\n");
-    refused("a base the ticket no longer matches exits 4", 4, "#1 changed since", R, "edit", "1", join(tmp, "body.md"), join(tmp, "stale.md"));
-    refused("an empty body file exits 1", 1, "is empty", R, "edit", "1", join(tmp, "empty.md"), join(tmp, "base.md"));
-    refused("a missing base file exits 1", 1, "cannot read base file", R, "edit", "1", join(tmp, "body.md"), join(tmp, "nowhere.md"));
-    refused("the form with a title is a usage error", 1, "usage:", R, "edit", "1", "A title", join(tmp, "body.md"));
-    refused("edit on an unknown ticket exits 1", 1, "no ticket #99", R, "edit", "99", join(tmp, "body.md"), join(tmp, "base.md"));
+    refused(
+      "a base the ticket no longer matches exits 4",
+      4,
+      "#1 changed since",
+      R,
+      "edit",
+      "1",
+      join(tmp, "body.md"),
+      join(tmp, "stale.md"),
+    );
+    refused(
+      "an empty body file exits 1",
+      1,
+      "is empty",
+      R,
+      "edit",
+      "1",
+      join(tmp, "empty.md"),
+      join(tmp, "base.md"),
+    );
+    refused(
+      "a missing base file exits 1",
+      1,
+      "cannot read base file",
+      R,
+      "edit",
+      "1",
+      join(tmp, "body.md"),
+      join(tmp, "nowhere.md"),
+    );
+    refused(
+      "the form with a title is a usage error",
+      1,
+      "usage:",
+      R,
+      "edit",
+      "1",
+      "A title",
+      join(tmp, "body.md"),
+    );
+    refused(
+      "edit on an unknown ticket exits 1",
+      1,
+      "no ticket #99",
+      R,
+      "edit",
+      "99",
+      join(tmp, "body.md"),
+      join(tmp, "base.md"),
+    );
     refused("an invalid state exits 2", 2, "invalid state", R, "state", "1", "finished");
     refused("state on an unknown ticket exits 1", 1, "no ticket #99", R, "state", "99", "done");
-    refused("a comment on an unknown ticket exits 1", 1, "no ticket #99", R, "comment", "99", "coachman", "hello");
-    refused("a comment that is not UTF-8 exits 1", 1, "comment is not UTF-8", R, "comment", "1", "coachman", new RawArg("na\\357ve"));
-    refused("an actor that is not UTF-8 exits 1", 1, "actor is not UTF-8", R, "comment", "1", new RawArg("r\\351viewer"), "hello");
-    refused("create with an empty body exits 1", 1, "is empty", R, "create", "A title", join(tmp, "empty.md"));
-    refused("create with an empty title exits 1", 1, "title is empty", R, "create", "  ", join(tmp, "body.md"));
-    refused("create with a title of two lines exits 1", 1, "more than one line", R, "create", "Two\nlines", join(tmp, "body.md"));
-    refused("create with a title that is not UTF-8 exits 1", 1, "title is not UTF-8", R, "create", new RawArg("caf\\351"), join(tmp, "body.md"));
+    refused(
+      "a comment on an unknown ticket exits 1",
+      1,
+      "no ticket #99",
+      R,
+      "comment",
+      "99",
+      "coachman",
+      "hello",
+    );
+    refused(
+      "a comment that is not UTF-8 exits 1",
+      1,
+      "comment is not UTF-8",
+      R,
+      "comment",
+      "1",
+      "coachman",
+      new RawArg("na\\357ve"),
+    );
+    refused(
+      "an actor that is not UTF-8 exits 1",
+      1,
+      "actor is not UTF-8",
+      R,
+      "comment",
+      "1",
+      new RawArg("r\\351viewer"),
+      "hello",
+    );
+    refused(
+      "create with an empty body exits 1",
+      1,
+      "is empty",
+      R,
+      "create",
+      "A title",
+      join(tmp, "empty.md"),
+    );
+    refused(
+      "create with an empty title exits 1",
+      1,
+      "title is empty",
+      R,
+      "create",
+      "  ",
+      join(tmp, "body.md"),
+    );
+    refused(
+      "create with a title of two lines exits 1",
+      1,
+      "more than one line",
+      R,
+      "create",
+      "Two\nlines",
+      join(tmp, "body.md"),
+    );
+    refused(
+      "create with a title that is not UTF-8 exits 1",
+      1,
+      "title is not UTF-8",
+      R,
+      "create",
+      new RawArg("caf\\351"),
+      join(tmp, "body.md"),
+    );
     refused("title with an empty title exits 1", 1, "title is empty", R, "title", "1", " ");
     refused("title with two lines exits 1", 1, "more than one line", R, "title", "1", "Two\nlines");
-    refused("title that is not UTF-8 exits 1", 1, "title is not UTF-8", R, "title", "1", new RawArg("\\377"));
+    refused(
+      "title that is not UTF-8 exits 1",
+      1,
+      "title is not UTF-8",
+      R,
+      "title",
+      "1",
+      new RawArg("\\377"),
+    );
     refused("title on an unknown ticket exits 1", 1, "no ticket #99", R, "title", "99", "A title");
     refused("something that is not a number exits 1", 1, "not a ticket number", R, "read", "PM-1");
     refused("an unknown ticket exits 1", 1, "no ticket #99", R, "read", "99");
     refused("list with an invalid state exits 2", 2, "invalid state", R, "list", "finished");
-    refused("store init from a linked worktree is refused where a store exists too", 1, "never from a linked worktree", W, "store", "init");
-    refused("store remove from a linked worktree exits 1", 1, "never from a linked worktree", W, "store", "remove");
-    refused("store remove on a store holding tickets exits 1", 1, "removed only when it holds none", R, "store", "remove");
+    refused(
+      "store init from a linked worktree is refused where a store exists too",
+      1,
+      "never from a linked worktree",
+      W,
+      "store",
+      "init",
+    );
+    refused(
+      "store remove from a linked worktree exits 1",
+      1,
+      "never from a linked worktree",
+      W,
+      "store",
+      "remove",
+    );
+    refused(
+      "store remove on a store holding tickets exits 1",
+      1,
+      "removed only when it holds none",
+      R,
+      "store",
+      "remove",
+    );
 
     if (!existsSync(join(tmp, "gh.log"))) st.ok("no command called gh");
     else st.fail("no command called gh", readFileSync(join(tmp, "gh.log"), "utf8"));
@@ -1028,7 +1334,7 @@ function selfTest(): void {
       listDamaged.code === 1 &&
         listDamaged.out.trimEnd() === "#1\ttodo\tOne\n#3\ttodo\tThree" &&
         errDamaged.includes("ticket #2"),
-      listDamaged.out + "\n" + errDamaged,
+      `${listDamaged.out}\n${errDamaged}`,
     );
 
     // restore 2.json with BOM
@@ -1054,7 +1360,11 @@ function selfTest(): void {
     j3.labels = "bug";
     writeFileSync(join(LS, "3.json"), JSON.stringify(j3));
     const read3 = run("bash", [SELF, L, "read", "3"], { env });
-    st.check("labels that are not a list are refused", read3.code === 1 && (read3.out + read3.err).includes("labels is not a list"), read3.out + read3.err);
+    st.check(
+      "labels that are not a list are refused",
+      read3.code === 1 && (read3.out + read3.err).includes("labels is not a list"),
+      read3.out + read3.err,
+    );
 
     // restore and check BOM in ticket file
     j3.labels = [];
@@ -1094,14 +1404,24 @@ function selfTest(): void {
       kindAfterRemove.out + kindAfterRemove.err,
     );
 
-    console.log("controls: a repository whose store exists uses this tracker, whatever the config names");
+    console.log(
+      "controls: a repository whose store exists uses this tracker, whatever the config names",
+    );
     function tracker(cfgPath: string, repo: string): string {
-      const r = run("bash", ["-c", `POSTMASTER_CONFIG="${cfgPath}" bash "${HERE}/discover-project.sh" "${repo}" 2>/dev/null | sed -n 's/^tracker=//p'`], { env });
+      const r = run(
+        "bash",
+        [
+          "-c",
+          `POSTMASTER_CONFIG="${cfgPath}" bash "${HERE}/discover-project.sh" "${repo}" 2>/dev/null | sed -n 's/^tracker=//p'`,
+        ],
+        { env },
+      );
       return r.out.trim();
     }
     st.check(
       "discover-project.sh names local for it and its worktree, with a config naming github",
-      tracker(join(tmp, "github.toml"), R) === "local" && tracker(join(tmp, "github.toml"), W) === "local",
+      tracker(join(tmp, "github.toml"), R) === "local" &&
+        tracker(join(tmp, "github.toml"), W) === "local",
       tracker(join(tmp, "github.toml"), R),
     );
     st.check(
@@ -1112,7 +1432,14 @@ function selfTest(): void {
       tracker(join(tmp, "github.toml"), U),
     );
 
-    const plainTracker = run("bash", ["-c", `POSTMASTER_CONFIG="${join(tmp, "github.toml")}" bash "${HERE}/tracker-kind.sh" "${join(tmp, "plain")}" 2>&1`], { env });
+    const plainTracker = run(
+      "bash",
+      [
+        "-c",
+        `POSTMASTER_CONFIG="${join(tmp, "github.toml")}" bash "${HERE}/tracker-kind.sh" "${join(tmp, "plain")}" 2>&1`,
+      ],
+      { env },
+    );
     st.check(
       "a store that cannot be looked for is not taken for no store",
       plainTracker.code === 1 &&
@@ -1121,46 +1448,119 @@ function selfTest(): void {
       plainTracker.out + plainTracker.err,
     );
 
-    const relCfg = run("bash", ["-c", `cd "${tmp}" && POSTMASTER_CONFIG=plane.toml bash "${HERE}/discover-project.sh" "${U}" 2>/dev/null | sed -n 's/^tracker=//p'`], { env });
-    st.check("a relative POSTMASTER_CONFIG is read from the caller's directory", relCfg.out.trim() === "plane", relCfg.out);
+    const relCfg = run(
+      "bash",
+      [
+        "-c",
+        `cd "${tmp}" && POSTMASTER_CONFIG=plane.toml bash "${HERE}/discover-project.sh" "${U}" 2>/dev/null | sed -n 's/^tracker=//p'`,
+      ],
+      { env },
+    );
+    st.check(
+      "a relative POSTMASTER_CONFIG is read from the caller's directory",
+      relCfg.out.trim() === "plane",
+      relCfg.out,
+    );
 
-    const noHome = run("bash", ["-c", `env -u HOME -u POSTMASTER_CONFIG bash "${HERE}/discover-project.sh" "${U}" 2>/dev/null`], { env: { ...process.env as Record<string, string> } });
+    const noHome = run(
+      "bash",
+      [
+        "-c",
+        `env -u HOME -u POSTMASTER_CONFIG bash "${HERE}/discover-project.sh" "${U}" 2>/dev/null`,
+      ],
+      { env: { ...(process.env as Record<string, string>) } },
+    );
     st.check(
       "with HOME unset, discover-project.sh still reports, with the kind left to ask",
       noHome.code === 0 && noHome.out.includes("tracker=") && noHome.out.includes("gate="),
       noHome.out,
     );
 
-    const relPath = run("bash", ["-c", `cd "${join(HERE, "..")}" && CDPATH=.:/nonexistent POSTMASTER_CONFIG="${join(tmp, "github.toml")}" scripts/discover-project.sh "${R}" 2>/dev/null | sed -n 's/^tracker=//p'`], { env });
-    st.check("discover-project.sh run by a relative path with CDPATH exported still finds the rule", relPath.out.trim() === "local", relPath.out);
+    const relPath = run(
+      "bash",
+      [
+        "-c",
+        `cd "${join(HERE, "..")}" && CDPATH=.:/nonexistent POSTMASTER_CONFIG="${join(tmp, "github.toml")}" scripts/discover-project.sh "${R}" 2>/dev/null | sed -n 's/^tracker=//p'`,
+      ],
+      { env },
+    );
+    st.check(
+      "discover-project.sh run by a relative path with CDPATH exported still finds the rule",
+      relPath.out.trim() === "local",
+      relPath.out,
+    );
 
-    const errNoRemote = run("bash", ["-c", `POSTMASTER_CONFIG="${join(tmp, "github.toml")}" bash "${HERE}/discover-project.sh" "${U}" 2>/tmp/err-no-remote > /dev/null`], { env });
+    const _errNoRemote = run(
+      "bash",
+      [
+        "-c",
+        `POSTMASTER_CONFIG="${join(tmp, "github.toml")}" bash "${HERE}/discover-project.sh" "${U}" 2>/tmp/err-no-remote > /dev/null`,
+      ],
+      { env },
+    );
     const H = join(tmp, "hosted");
     newrepo(H);
     run("git", ["-C", H, "remote", "add", "origin", "https://github.com/o/r.git"]);
-    run("bash", ["-c", `POSTMASTER_CONFIG="${join(tmp, "github.toml")}" bash "${HERE}/discover-project.sh" "${H}" 2>/tmp/err-hosted > /dev/null`], { env });
+    run(
+      "bash",
+      [
+        "-c",
+        `POSTMASTER_CONFIG="${join(tmp, "github.toml")}" bash "${HERE}/discover-project.sh" "${H}" 2>/tmp/err-hosted > /dev/null`,
+      ],
+      { env },
+    );
     let errText = "";
-    try { errText = readFileSync("/tmp/err-no-remote", "utf8"); } catch {}
+    try {
+      errText = readFileSync("/tmp/err-no-remote", "utf8");
+    } catch {}
     let errHosted = "";
-    try { errHosted = readFileSync("/tmp/err-hosted", "utf8"); } catch {}
+    try {
+      errHosted = readFileSync("/tmp/err-hosted", "utf8");
+    } catch {}
     st.check(
       "a github target with no origin remote is pointed at store init, and one with a remote is not",
       errText.includes("store init") && !errHosted.includes("store init"),
       errText + errHosted,
     );
 
-    const tcR = run("bash", ["-c", `POSTMASTER_CONFIG="${join(tmp, "github.toml")}" bash "${HERE}/ticket-check.sh" "${R}" 3 2>&1`], { env });
-    const tcR7 = run("bash", ["-c", `POSTMASTER_CONFIG="${join(tmp, "github.toml")}" bash "${HERE}/ticket-check.sh" "${R}" 7 2>&1`], { env });
+    const tcR = run(
+      "bash",
+      [
+        "-c",
+        `POSTMASTER_CONFIG="${join(tmp, "github.toml")}" bash "${HERE}/ticket-check.sh" "${R}" 3 2>&1`,
+      ],
+      { env },
+    );
+    const tcR7 = run(
+      "bash",
+      [
+        "-c",
+        `POSTMASTER_CONFIG="${join(tmp, "github.toml")}" bash "${HERE}/ticket-check.sh" "${R}" 7 2>&1`,
+      ],
+      { env },
+    );
     st.check(
       "ticket-check.sh reads tickets through this store with a config naming github, a byte-order mark aside",
-      tcR.code === 0 && tcR.out.includes("well-formed") && tcR7.code === 0 && !existsSync(join(tmp, "gh.log")),
-      tcR.out + "\n" + tcR7.out,
+      tcR.code === 0 &&
+        tcR.out.includes("well-formed") &&
+        tcR7.code === 0 &&
+        !existsSync(join(tmp, "gh.log")),
+      `${tcR.out}\n${tcR7.out}`,
     );
 
-    const tcU = run("bash", ["-c", `POSTMASTER_CONFIG="${join(tmp, "github.toml")}" bash "${HERE}/ticket-check.sh" "${U}" 3 2>&1`], { env });
+    const tcU = run(
+      "bash",
+      [
+        "-c",
+        `POSTMASTER_CONFIG="${join(tmp, "github.toml")}" bash "${HERE}/ticket-check.sh" "${U}" 3 2>&1`,
+      ],
+      { env },
+    );
     st.check(
       "without a store it goes to the github adapter, and the gh on PATH saw the call",
-      tcU.code === 1 && (tcU.out + tcU.err).includes("github adapter") && existsSync(join(tmp, "gh.log")),
+      tcU.code === 1 &&
+        (tcU.out + tcU.err).includes("github adapter") &&
+        existsSync(join(tmp, "gh.log")),
       tcU.out + tcU.err,
     );
 

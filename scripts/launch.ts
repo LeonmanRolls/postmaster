@@ -17,26 +17,27 @@
 //           or a muse or mimo resume of a thread the launch's data directory does not hold
 //   exit 3  skill: the lane's harness has no such skill recorded
 //   else    the harness's own exit code
+
+import { spawnSync } from "node:child_process";
 import {
+  accessSync,
+  chmodSync,
   existsSync,
+  constants as fsConstants,
   mkdirSync,
   readFileSync,
-  writeFileSync,
-  chmodSync,
   rmSync,
-  accessSync,
   statSync,
-  constants as fsConstants,
+  writeFileSync,
 } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
-import { spawnSync } from "node:child_process";
 import { readTomlFile, tryJsonFile } from "./lib/data.ts";
+import { scriptsDir } from "./lib/paths.ts";
 import { run, withTempDir } from "./lib/proc.ts";
 import { SelfTest } from "./lib/selftest.ts";
-import { scriptsDir, toolRoot } from "./lib/paths.ts";
 
 const CONFIG =
-  process.env["POSTMASTER_CONFIG"] ?? join(process.env["HOME"] ?? "", ".postmaster/config.toml");
+  process.env.POSTMASTER_CONFIG ?? join(process.env.HOME ?? "", ".postmaster/config.toml");
 const LEGS = ["synthesis", "review", "ship"] as const;
 
 function die(msg: string): never {
@@ -55,17 +56,12 @@ function baseModel(model: unknown): string {
   return String(model ?? "").replace(/(\[[^\]]*\])+$/, "");
 }
 
-function resolveSpec(
-  sourcePath: string,
-  name: string,
-  leg: string,
-  recorded: boolean,
-): Spec {
+function resolveSpec(sourcePath: string, name: string, leg: string, recorded: boolean): Spec {
   let cfg: Record<string, unknown>;
   if (recorded) {
     const data = tryJsonFile<Record<string, unknown>>(sourcePath);
     if (!data) die(`cannot read ${sourcePath}: it does not parse`);
-    const c = data["config"];
+    const c = data.config;
     if (c === null || typeof c !== "object" || Array.isArray(c)) {
       die(`cannot read ${sourcePath}: it records no config`);
     }
@@ -80,28 +76,28 @@ function resolveSpec(
   if (leg && !(LEGS as readonly string[]).includes(leg)) {
     die(`no such leg: --leg ${leg}; the legs are synthesis, review and ship`);
   }
-  const lanes = (cfg["lanes"] as Record<string, unknown>) ?? {};
+  const lanes = (cfg.lanes as Record<string, unknown>) ?? {};
   const laneModels = new Set(
     Object.values(lanes)
-      .filter((v) => v !== null && typeof v === "object" && (v as Record<string, unknown>)["model"])
-      .map((v) => baseModel((v as Record<string, unknown>)["model"])),
+      .filter((v) => v !== null && typeof v === "object" && (v as Record<string, unknown>).model)
+      .map((v) => baseModel((v as Record<string, unknown>).model)),
   );
   const notALane = (spec: unknown, what: string): void => {
     if (
       spec !== null &&
       typeof spec === "object" &&
-      (spec as Record<string, unknown>)["model"] &&
-      laneModels.has(baseModel((spec as Record<string, unknown>)["model"]))
+      (spec as Record<string, unknown>).model &&
+      laneModels.has(baseModel((spec as Record<string, unknown>).model))
     ) {
       die(
-        `${what} in ${sourcePath} runs on ${(spec as Record<string, unknown>)["model"]}, a lane's model, and a coachman never does`,
+        `${what} in ${sourcePath} runs on ${(spec as Record<string, unknown>).model}, a lane's model, and a coachman never does`,
       );
     }
   };
   let spec: unknown;
   if (name === "coachman") {
-    const team = (cfg["team"] as Record<string, unknown>) ?? {};
-    const legs = (team["coachman_legs"] as Record<string, unknown>) ?? {};
+    const team = (cfg.team as Record<string, unknown>) ?? {};
+    const legs = (team.coachman_legs as Record<string, unknown>) ?? {};
     const merged = Object.keys(legs).filter((k) => ["style", "bug", "security"].includes(k));
     if (merged.length > 0) {
       die(
@@ -119,21 +115,21 @@ function resolveSpec(
         die(`[team.coachman_legs] ${k} in ${sourcePath} is not a table`);
       }
       const vt = v as Record<string, unknown>;
-      if (!vt["harness"] || !vt["model"]) {
+      if (!vt.harness || !vt.model) {
         die(`[team.coachman_legs] ${k} in ${sourcePath} needs a harness and a model`);
       }
       notALane(v, `[team.coachman_legs] ${k}`);
     }
-    notALane(team["coachman"], "team.coachman");
-    spec = (leg ? legs[leg] : undefined) ?? team["coachman"];
+    notALane(team.coachman, "team.coachman");
+    spec = (leg ? legs[leg] : undefined) ?? team.coachman;
   } else if (name === "coachman_fallback") {
-    const team = (cfg["team"] as Record<string, unknown>) ?? {};
+    const team = (cfg.team as Record<string, unknown>) ?? {};
     if (team === null || typeof team !== "object") die(`[team] in ${sourcePath} is not a table`);
-    spec = team["coachman_fallback"];
+    spec = team.coachman_fallback;
     notALane(spec, "team.coachman_fallback");
   } else if (name === "postmaster") {
-    const team = (cfg["team"] as Record<string, unknown>) ?? {};
-    spec = team["postmaster"];
+    const team = (cfg.team as Record<string, unknown>) ?? {};
+    spec = team.postmaster;
   } else {
     spec = lanes[name];
   }
@@ -144,10 +140,10 @@ function resolveSpec(
   const s = spec as Record<string, unknown>;
   const str = (v: unknown): string => (v === undefined || v === null ? "" : String(v));
   return {
-    harness: str(s["harness"]),
-    model: str(s["model"]),
-    effort: str(s["effort"]),
-    envFile: str(s["env_file"]),
+    harness: str(s.harness),
+    model: str(s.model),
+    effort: str(s.effort),
+    envFile: str(s.env_file),
   };
 }
 
@@ -157,9 +153,17 @@ interface FormsResult {
   stdinFile: string;
 }
 
-function harnessData(harness: string, cmdMode: string, cwd: string, name: string, leg: string, runDir: string): string {
+function harnessData(
+  harness: string,
+  cmdMode: string,
+  cwd: string,
+  name: string,
+  leg: string,
+  runDir: string,
+): string {
   if (cmdMode === "form" || cmdMode === "form-resume") return `<harness-data>/${harness}/<key>`;
-  const root = process.env["POSTMASTER_HARNESS_DATA"] ?? join(process.env["HOME"] ?? "", ".postmaster/harness-data");
+  const root =
+    process.env.POSTMASTER_HARNESS_DATA ?? join(process.env.HOME ?? "", ".postmaster/harness-data");
   const key = `${runDir}|${resolve(cwd)}|${name}|${leg}`;
   // cksum equivalent: use a simple hash
   let sum = 0;
@@ -218,8 +222,16 @@ function buildForms(
         );
       }
       cmd.push(
-        "agy", "-p", promptText, "--model", model, "--output-format", "stream-json",
-        "--dangerously-skip-permissions", "--add-dir", cwd,
+        "agy",
+        "-p",
+        promptText,
+        "--model",
+        model,
+        "--output-format",
+        "stream-json",
+        "--dangerously-skip-permissions",
+        "--add-dir",
+        cwd,
       );
       break;
     }
@@ -228,7 +240,7 @@ function buildForms(
       else cmd.push("claude", "-p", promptText);
       cmd.push("--model", model);
       if (effort) cmd.push("--effort", effort);
-      const launchName = process.env["POSTMASTER_LAUNCH_NAME"];
+      const launchName = process.env.POSTMASTER_LAUNCH_NAME;
       if (launchName) cmd.push("--name", launchName);
       cmd.push("--output-format", "stream-json", "--verbose", "--dangerously-skip-permissions");
       break;
@@ -238,7 +250,7 @@ function buildForms(
       if (isResume) cmd.push("--session", thread);
       cmd.push("--model", model);
       if (effort) cmd.push("--thinking", effort);
-      const launchName = process.env["POSTMASTER_LAUNCH_NAME"];
+      const launchName = process.env.POSTMASTER_LAUNCH_NAME;
       if (launchName) cmd.push("--name", launchName);
       stdinFile = prompt;
       break;
@@ -255,11 +267,21 @@ function buildForms(
     }
     case "mimo": {
       data = harnessData("mimo", cmdMode, cwd, name, leg, runDir);
-      cmd.push("env", `XDG_DATA_HOME=${data}`, "MIMOCODE_DISABLE_CLAUDE_IMPORT=1", "mimo", "run", "--format", "json", "-m", model);
+      cmd.push(
+        "env",
+        `XDG_DATA_HOME=${data}`,
+        "MIMOCODE_DISABLE_CLAUDE_IMPORT=1",
+        "mimo",
+        "run",
+        "--format",
+        "json",
+        "-m",
+        model,
+      );
       if (isResume) cmd.push("-s", thread);
       if (effort) cmd.push("--variant", effort);
       if (cmdMode === "launch") {
-        const launchName = process.env["POSTMASTER_LAUNCH_NAME"];
+        const launchName = process.env.POSTMASTER_LAUNCH_NAME;
         if (launchName) cmd.push("--title", launchName);
       }
       cmd.push("--dangerously-skip-permissions"); /*BYPASS*/
@@ -279,28 +301,40 @@ function shellQuote(s: string): string {
   // eslint-disable-next-line no-control-regex
   if (/[\x00-\x1f\x7f]/.test(s)) {
     const named: Record<string, string> = {
-      "\\": "\\\\", "'": "\\'", "\n": "\\n", "\t": "\\t", "\r": "\\r",
-      "\x00": "\\0", "\x07": "\\a", "\x08": "\\b", "\x0b": "\\v", "\x0c": "\\f", "\x1b": "\\e",
+      "\\": "\\\\",
+      "'": "\\'",
+      "\n": "\\n",
+      "\t": "\\t",
+      "\r": "\\r",
+      "\x00": "\\0",
+      "\x07": "\\a",
+      "\x08": "\\b",
+      "\x0b": "\\v",
+      "\x0c": "\\f",
+      "\x1b": "\\e",
     };
     return (
       "$'" +
       // eslint-disable-next-line no-control-regex
-      s.replace(/[\x00-\x1f\x7f\\']/g, (c) => named[c] ?? `\\${c.charCodeAt(0).toString(8).padStart(3, "0")}`) +
+      s.replace(
+        /[\x00-\x1f\x7f\\']/g,
+        (c) => named[c] ?? `\\${c.charCodeAt(0).toString(8).padStart(3, "0")}`,
+      ) +
       "'"
     );
   }
-  return s.replace(/[ !"#$&'()*,;:<>?\[\\\]^`{|}~]/g, "\\$&");
+  return s.replace(/[ !"#$&'()*,;:<>?[\\\]^`{|}~]/g, "\\$&");
 }
 
 function showArg(a: string): string {
-  if (/^<.*>$/.test(a) || /=<.*>$/.test(a) || a === "$(cat <prompt-file>)") return a + " ";
-  return shellQuote(a) + " ";
+  if (/^<.*>$/.test(a) || /=<.*>$/.test(a) || a === "$(cat <prompt-file>)") return `${a} `;
+  return `${shellQuote(a)} `;
 }
 
-function putForm(cwd: string, cmd: string[], stdinFile: string): string {
-  let s = "cd " + showArg(cwd) + "&& ";
+function _putForm(cwd: string, cmd: string[], stdinFile: string): string {
+  let s = `cd ${showArg(cwd)}&& `;
   for (const a of cmd) s += showArg(a);
-  if (stdinFile) s += "< " + showArg(stdinFile);
+  if (stdinFile) s += `< ${showArg(stdinFile)}`;
   return s.trimEnd();
 }
 
@@ -311,7 +345,7 @@ if (argv[0] === "--self-test") {
   // self-test below
 } else {
   if (argv.length < 2) die("usage: launch.sh form|launch|resume|skill <name> ... | --self-test");
-  const CMD = argv[0] ?? "";
+  const CMD: string = argv[0] ?? "";
   const NAME = argv[1] ?? "";
   let LEG = "";
   let LAST = "";
@@ -338,7 +372,7 @@ if (argv[0] === "--self-test") {
     }
   }
   if (NAME === "coachman" && CMD !== "form" && !LEG) {
-    die("coachman needs --leg synthesis, review or ship to " + CMD);
+    die(`coachman needs --leg synthesis, review or ship to ${CMD}`);
   }
 
   let source: string;
@@ -370,7 +404,7 @@ if (argv[0] === "--self-test") {
   if (pathCheck.status !== 0) die(`harness '${HARNESS}' is not on PATH`);
   if (ENV_FILE) {
     if (ENV_FILE.startsWith("~")) {
-      ENV_FILE = (process.env["HOME"] ?? "") + ENV_FILE.slice(1);
+      ENV_FILE = (process.env.HOME ?? "") + ENV_FILE.slice(1);
     }
     if (!ENV_FILE.startsWith("/")) {
       ENV_FILE = join(dirname(resolve(source)), ENV_FILE);
@@ -448,28 +482,37 @@ if (argv[0] === "--self-test") {
   }
 
   const mkForms = (cmdMode: string): FormsResult =>
-    buildForms(
-      HARNESS, cmdMode, CWD, PROMPT, PTEXT, THREAD, MODEL, EFFORT, LAST, NAME, LEG, RUN,
-    );
+    buildForms(HARNESS, cmdMode, CWD, PROMPT, PTEXT, THREAD, MODEL, EFFORT, LAST, NAME, LEG, RUN);
 
   if (CMD === "form") {
     const show = (a: string): string => showArg(a);
     const put = (cwd: string, cmd: string[], stdinFile: string): string => {
-      let s = "cd " + show(cwd) + "&& ";
+      let s = `cd ${show(cwd)}&& `;
       for (const a of cmd) s += show(a);
-      if (stdinFile) s += "< " + show(stdinFile);
+      if (stdinFile) s += `< ${show(stdinFile)}`;
       return s;
     };
     const launchForms = mkForms("form");
-    process.stdout.write("launch: " + put(CWD, launchForms.cmd, launchForms.stdinFile) + "\n");
+    process.stdout.write(`launch: ${put(CWD, launchForms.cmd, launchForms.stdinFile)}\n`);
     try {
       const resumeForms = (() => {
         // Build the resume form: as the launch form's twin, with a placeholder data directory.
         return buildForms(
-          HARNESS, "form-resume", CWD, PROMPT, PTEXT, THREAD, MODEL, EFFORT, LAST, NAME, LEG, RUN,
+          HARNESS,
+          "form-resume",
+          CWD,
+          PROMPT,
+          PTEXT,
+          THREAD,
+          MODEL,
+          EFFORT,
+          LAST,
+          NAME,
+          LEG,
+          RUN,
         );
       })();
-      process.stdout.write("resume: " + put(CWD, resumeForms.cmd, resumeForms.stdinFile) + "\n");
+      process.stdout.write(`resume: ${put(CWD, resumeForms.cmd, resumeForms.stdinFile)}\n`);
     } catch (e) {
       const msg = String(e instanceof Error ? e.message : e).replace(/^launch: /, "");
       process.stdout.write(`resume: none: ${msg}\n`);
@@ -481,7 +524,7 @@ if (argv[0] === "--self-test") {
   const DATA = forms.data;
   const STDIN_FILE = forms.stdinFile;
 
-  if (DATA && CMD !== "form") {
+  if (DATA) {
     try {
       mkdirSync(DATA, { recursive: true });
     } catch {
@@ -491,10 +534,7 @@ if (argv[0] === "--self-test") {
 
   // muse/mimo resume: verify the thread exists in this launch's data directory.
   if (CMD === "resume" && DATA) {
-    const held = join(
-      (process.env["TMPDIR"] ?? "/tmp"),
-      `launch-held-${process.pid}-${Date.now()}`,
-    );
+    const held = join(process.env.TMPDIR ?? "/tmp", `launch-held-${process.pid}-${Date.now()}`);
     mkdirSync(held, { recursive: true });
     const exportCmd =
       HARNESS === "muse"
@@ -535,13 +575,13 @@ if (argv[0] === "--self-test") {
 
   // Codex: mark the worktree trusted first.
   if (HARNESS === "codex" && CMD === "launch") {
-    const codexDir = join(process.env["HOME"] ?? "", ".codex");
+    const codexDir = join(process.env.HOME ?? "", ".codex");
     mkdirSync(codexDir, { recursive: true });
     const codexConfig = join(codexDir, "config.toml");
     if (!existsSync(codexConfig)) writeFileSync(codexConfig, "");
     const existing = readFileSync(codexConfig, "utf8");
     if (!existing.includes(`[projects."${CWD}"]`)) {
-      writeFileSync(codexConfig, existing + `\n[projects."${CWD}"]\ntrust_level = "trusted"\n`);
+      writeFileSync(codexConfig, `${existing}\n[projects."${CWD}"]\ntrust_level = "trusted"\n`);
     }
   }
 
@@ -563,7 +603,7 @@ if (argv[0] === "--self-test") {
       /* already checked readable */
     }
   }
-  delete process.env["POSTMASTER_LAUNCH_NAME"];
+  delete process.env.POSTMASTER_LAUNCH_NAME;
 
   const child = spawnSync(forms.cmd[0] ?? "", forms.cmd.slice(1), {
     stdio: STDIN_FILE ? ["ignore", "inherit", "inherit"] : ["inherit", "inherit", "inherit"],
@@ -630,11 +670,27 @@ withTempDir((tmp) => {
   writeFileSync(join(tmp, "brief.txt"), "Keep going, then stop.\n");
   run("git", ["init", "-q", "-b", "main", join(tmp, "cx")]);
   run("git", [
-    "-C", join(tmp, "cx"),
-    "-c", "user.name=t", "-c", "user.email=t@example.invalid",
-    "commit", "-q", "--allow-empty", "-m", "init",
+    "-C",
+    join(tmp, "cx"),
+    "-c",
+    "user.name=t",
+    "-c",
+    "user.email=t@example.invalid",
+    "commit",
+    "-q",
+    "--allow-empty",
+    "-m",
+    "init",
   ]);
-  run("git", ["-C", join(tmp, "cx"), "worktree", "add", "-q", "--detach", join(tmp, "cx-detached")]);
+  run("git", [
+    "-C",
+    join(tmp, "cx"),
+    "worktree",
+    "add",
+    "-q",
+    "--detach",
+    join(tmp, "cx-detached"),
+  ]);
 
   const lines = (...args: string[]): string => args.join("\n");
   // bash's $(...) strips trailing newlines; comparisons are made on that form.
@@ -647,7 +703,7 @@ withTempDir((tmp) => {
       ...process.env,
       ...envx,
       POSTMASTER_CONFIG: join(tmp, `${f}.toml`),
-      PATH: `${join(tmp, "bin")}:${process.env["PATH"] ?? ""}`,
+      PATH: `${join(tmp, "bin")}:${process.env.PATH ?? ""}`,
     };
     const r = spawnSync(self, rest, { encoding: "utf8", env });
     out = r.stdout ?? "";
@@ -701,7 +757,7 @@ withTempDir((tmp) => {
       env: {
         ...process.env,
         POSTMASTER_CONFIG: join(tmp, `${f}.toml`),
-        PATH: `${join(tmp, "bin")}:${process.env["PATH"] ?? ""}`,
+        PATH: `${join(tmp, "bin")}:${process.env.PATH ?? ""}`,
       },
     });
     if (r.status !== 0) {
@@ -727,7 +783,9 @@ withTempDir((tmp) => {
             CALL.lastIndex = 0;
             while ((m = CALL.exec(line)) !== null) {
               const c = line.slice(m.index);
-              results.push(`${c.includes("--run <dispatch>") ? "run" : "unrun"} ${path}: ${c.split(/\s+/).join(" ")}`);
+              results.push(
+                `${c.includes("--run <dispatch>") ? "run" : "unrun"} ${path}: ${c.split(/\s+/).join(" ")}`,
+              );
             }
           }
         } else {
@@ -738,7 +796,9 @@ withTempDir((tmp) => {
             CALL.lastIndex = 0;
             while ((m = CALL.exec(inner)) !== null) {
               const c = inner.slice(m.index);
-              results.push(`${c.includes("--run <dispatch>") ? "run" : "unrun"} ${path}: ${c.split(/\s+/).join(" ")}`);
+              results.push(
+                `${c.includes("--run <dispatch>") ? "run" : "unrun"} ${path}: ${c.split(/\s+/).join(" ")}`,
+              );
             }
           }
         }
@@ -754,7 +814,10 @@ withTempDir((tmp) => {
   fixture("typo", "revue");
   rawfix("onlane", 'review = { harness = "claude", model = "lane-model" }\n');
   rawfix("notable", 'review = "claude"\n');
-  rawfix("dup", 'review = { harness = "claude", model = "a" }\nreview = { harness = "claude", model = "b" }\n');
+  rawfix(
+    "dup",
+    'review = { harness = "claude", model = "a" }\nreview = { harness = "claude", model = "b" }\n',
+  );
   rawfix("suffix", 'review = { harness = "claude", model = "lane-model[1m]" }\n');
   rawfix("suffixes", 'review = { harness = "claude", model = "lane-model[1m][2m]" }\n');
   mkdirSync(join(tmp, "elsewhere"), { recursive: true });
@@ -769,17 +832,40 @@ withTempDir((tmp) => {
   }
   rawfix("emptyleg", "synthesis = {}\n");
   const head = '[lanes.one]\nharness = "claude"\nmodel = "lane-model"\n\n[team]\n';
-  writeFileSync(join(tmp, "coachlane.toml"), head + 'coachman = { harness = "claude", model = "lane-model" }\n');
-  writeFileSync(join(tmp, "fblane.toml"), head + 'coachman = { harness = "claude", model = "coach-model" }\ncoachman_fallback = { harness = "claude", model = "lane-model" }\n');
-  writeFileSync(join(tmp, "bare.toml"), '[lanes.one]\nharness = "claude"\n\n[team]\ncoachman = { harness = "claude" }\n');
+  writeFileSync(
+    join(tmp, "coachlane.toml"),
+    `${head}coachman = { harness = "claude", model = "lane-model" }\n`,
+  );
+  writeFileSync(
+    join(tmp, "fblane.toml"),
+    head +
+      'coachman = { harness = "claude", model = "coach-model" }\ncoachman_fallback = { harness = "claude", model = "lane-model" }\n',
+  );
+  writeFileSync(
+    join(tmp, "bare.toml"),
+    '[lanes.one]\nharness = "claude"\n\n[team]\ncoachman = { harness = "claude" }\n',
+  );
   writeFileSync(join(tmp, "over.env"), "MODEL=lane-model\nHARNESS=nope\nPROBE=reached\n");
-  writeFileSync(join(tmp, "envfile.toml"), head + `coachman = { harness = "claude", model = "coach-model", env_file = "${join(tmp, "over.env")}" }\n`);
-  writeFileSync(join(tmp, "relenv.toml"), head + 'coachman = { harness = "claude", model = "coach-model", env_file = "rel.env" }\n');
+  writeFileSync(
+    join(tmp, "envfile.toml"),
+    head +
+      `coachman = { harness = "claude", model = "coach-model", env_file = "${join(tmp, "over.env")}" }\n`,
+  );
+  writeFileSync(
+    join(tmp, "relenv.toml"),
+    `${head}coachman = { harness = "claude", model = "coach-model", env_file = "rel.env" }\n`,
+  );
   rawfix("edited", 'review = { harness = "claude", model = "edited-model" }\n');
   writeFileSync(join(tmp, "then.env"), "PROBE=then\n");
   writeFileSync(join(tmp, "now.env"), "PROBE=now\n");
-  writeFileSync(join(tmp, "then.toml"), `[lanes.one]\nharness = "claude"\nmodel = "then-model"\neffort = "high"\nenv_file = "${join(tmp, "then.env")}"\n`);
-  writeFileSync(join(tmp, "now.toml"), `[lanes.one]\nharness = "pi"\nmodel = "now-model"\neffort = "low"\nenv_file = "${join(tmp, "now.env")}"\n`);
+  writeFileSync(
+    join(tmp, "then.toml"),
+    `[lanes.one]\nharness = "claude"\nmodel = "then-model"\neffort = "high"\nenv_file = "${join(tmp, "then.env")}"\n`,
+  );
+  writeFileSync(
+    join(tmp, "now.toml"),
+    `[lanes.one]\nharness = "pi"\nmodel = "now-model"\neffort = "low"\nenv_file = "${join(tmp, "now.env")}"\n`,
+  );
 
   // The runbook fixture
   writeFileSync(
@@ -820,37 +906,151 @@ withTempDir((tmp) => {
 
   console.log("positive controls");
   for (const k of ["synthesis", "review", "ship"]) {
-    runsOn(`--leg ${k} runs on its own [team.coachman_legs] entry`, "legs", `${k}-model`, "form", "coachman", "--leg", k);
+    runsOn(
+      `--leg ${k} runs on its own [team.coachman_legs] entry`,
+      "legs",
+      `${k}-model`,
+      "form",
+      "coachman",
+      "--leg",
+      k,
+    );
   }
-  runsOn("a leg with no entry runs on team.coachman", "none", "coach-model", "form", "coachman", "--leg", "review");
+  runsOn(
+    "a leg with no entry runs on team.coachman",
+    "none",
+    "coach-model",
+    "form",
+    "coachman",
+    "--leg",
+    "review",
+  );
   runsOn("a lane runs on its own model", "legs", "lane-model", "form", "one");
-  runsOn("a lane launches on a config the coachman refuses", "old-bug", "lane-model", "form", "one");
-  runsOn("a launch with --leg synthesis runs on the synthesis entry", "legs", "synthesis-model", "launch", "coachman", join(tmp, "wt"), join(tmp, "prompt.txt"), "--leg", "synthesis");
-  runsOn("a resume with --leg review runs on the review entry", "legs", "review-model", "resume", "coachman", join(tmp, "wt"), "T-1", join(tmp, "prompt.txt"), "--leg", "review");
+  runsOn(
+    "a lane launches on a config the coachman refuses",
+    "old-bug",
+    "lane-model",
+    "form",
+    "one",
+  );
+  runsOn(
+    "a launch with --leg synthesis runs on the synthesis entry",
+    "legs",
+    "synthesis-model",
+    "launch",
+    "coachman",
+    join(tmp, "wt"),
+    join(tmp, "prompt.txt"),
+    "--leg",
+    "synthesis",
+  );
+  runsOn(
+    "a resume with --leg review runs on the review entry",
+    "legs",
+    "review-model",
+    "resume",
+    "coachman",
+    join(tmp, "wt"),
+    "T-1",
+    join(tmp, "prompt.txt"),
+    "--leg",
+    "review",
+  );
   runsAs(
     "a codex resume runs in its worktree on its lane's model and effort, streams JSON, writes -o, and passes a prompt that starts with -",
     "codex",
-    lines(join(tmp, "wt"), "exec", "resume", "T-1", "--json", "-o", join(tmp, "last.md"), "-m", "lane-model", `-c`, CODEX_HIGH, CODEX_BYPASS, "--", "- Keep going, then stop."),
-    "resume", "one", join(tmp, "wt"), "T-1", join(tmp, "ruling.txt"), "--last", join(tmp, "last.md"),
+    lines(
+      join(tmp, "wt"),
+      "exec",
+      "resume",
+      "T-1",
+      "--json",
+      "-o",
+      join(tmp, "last.md"),
+      "-m",
+      "lane-model",
+      `-c`,
+      CODEX_HIGH,
+      CODEX_BYPASS,
+      "--",
+      "- Keep going, then stop.",
+    ),
+    "resume",
+    "one",
+    join(tmp, "wt"),
+    "T-1",
+    join(tmp, "ruling.txt"),
+    "--last",
+    join(tmp, "last.md"),
   );
   runsAs(
     "a codex coachman resumes with --leg review on the review entry's model and effort",
     "codex",
-    lines(join(tmp, "wt"), "exec", "resume", "T-1", "--json", "-m", "review-model", "-c", 'model_reasoning_effort="medium"', CODEX_BYPASS, "--", "- Keep going, then stop."),
-    "resume", "coachman", join(tmp, "wt"), "T-1", join(tmp, "ruling.txt"), "--leg", "review",
+    lines(
+      join(tmp, "wt"),
+      "exec",
+      "resume",
+      "T-1",
+      "--json",
+      "-m",
+      "review-model",
+      "-c",
+      'model_reasoning_effort="medium"',
+      CODEX_BYPASS,
+      "--",
+      "- Keep going, then stop.",
+    ),
+    "resume",
+    "coachman",
+    join(tmp, "wt"),
+    "T-1",
+    join(tmp, "ruling.txt"),
+    "--leg",
+    "review",
   );
   envx = { HOME: join(tmp, "home") };
   runsAs(
     "a codex launch on a branch runs with -C and --json, and no --skip-git-repo-check",
     "codex",
-    lines(join(tmp, "cx"), "exec", "-C", join(tmp, "cx"), "--json", "-m", "lane-model", `-c`, CODEX_HIGH, CODEX_BYPASS, "Keep going, then stop."),
-    "launch", "one", join(tmp, "cx"), join(tmp, "brief.txt"),
+    lines(
+      join(tmp, "cx"),
+      "exec",
+      "-C",
+      join(tmp, "cx"),
+      "--json",
+      "-m",
+      "lane-model",
+      `-c`,
+      CODEX_HIGH,
+      CODEX_BYPASS,
+      "Keep going, then stop.",
+    ),
+    "launch",
+    "one",
+    join(tmp, "cx"),
+    join(tmp, "brief.txt"),
   );
   runsAs(
     "a codex launch in a detached worktree adds --skip-git-repo-check",
     "codex",
-    lines(join(tmp, "cx-detached"), "exec", "-C", join(tmp, "cx-detached"), "--json", "-m", "lane-model", `-c`, CODEX_HIGH, CODEX_BYPASS, "--skip-git-repo-check", "Keep going, then stop."),
-    "launch", "one", join(tmp, "cx-detached"), join(tmp, "brief.txt"),
+    lines(
+      join(tmp, "cx-detached"),
+      "exec",
+      "-C",
+      join(tmp, "cx-detached"),
+      "--json",
+      "-m",
+      "lane-model",
+      `-c`,
+      CODEX_HIGH,
+      CODEX_BYPASS,
+      "--skip-git-repo-check",
+      "Keep going, then stop.",
+    ),
+    "launch",
+    "one",
+    join(tmp, "cx-detached"),
+    join(tmp, "brief.txt"),
   );
   envx = {};
   runsAs(
@@ -860,28 +1060,106 @@ withTempDir((tmp) => {
       `launch: cd <cwd> && codex exec -C <cwd> --json -m lane-model -c model_reasoning_effort=\\"high\\" ${CODEX_BYPASS} $(cat <prompt-file>) `,
       `resume: cd <cwd> && codex exec resume <thread-id> --json -m lane-model -c model_reasoning_effort=\\"high\\" ${CODEX_BYPASS} -- $(cat <prompt-file>) `,
     ),
-    "form", "one",
+    "form",
+    "one",
   );
-  runsOn("the fallback resumes on its own model, with no --leg", "legs", "fallback-model", "resume", "coachman_fallback", join(tmp, "wt"), "T-1", join(tmp, "prompt.txt"));
+  runsOn(
+    "the fallback resumes on its own model, with no --leg",
+    "legs",
+    "fallback-model",
+    "resume",
+    "coachman_fallback",
+    join(tmp, "wt"),
+    "T-1",
+    join(tmp, "prompt.txt"),
+  );
   runsOn("form with no --leg shows team.coachman", "legs", "coach-model", "form", "coachman");
-  carries("a lane's env file reaches the harness's environment", "envfile", "probe=reached", "launch", "coachman", join(tmp, "wt"), join(tmp, "prompt.txt"), "--leg", "review");
-  runsOn("inside a run, a resume runs on the model the run recorded, not the live config's", "edited", "review-model", "resume", "coachman", join(tmp, "wt"), "T-1", join(tmp, "prompt.txt"), "--leg", "review", "--run", join(tmp, "run"));
-  runsOn("outside a run, the same resume runs on the live config's model", "edited", "edited-model", "resume", "coachman", join(tmp, "wt"), "T-1", join(tmp, "prompt.txt"), "--leg", "review");
-  doRun("now", "resume", "one", join(tmp, "wt"), "T-1", join(tmp, "prompt.txt"), "--run", join(tmp, "run-then"));
-  printed("inside a run, a lane resumes on the harness, model, effort and env file the run recorded", "--resume T-1 ", "--model then-model ", "--effort high ", "probe=then");
+  carries(
+    "a lane's env file reaches the harness's environment",
+    "envfile",
+    "probe=reached",
+    "launch",
+    "coachman",
+    join(tmp, "wt"),
+    join(tmp, "prompt.txt"),
+    "--leg",
+    "review",
+  );
+  runsOn(
+    "inside a run, a resume runs on the model the run recorded, not the live config's",
+    "edited",
+    "review-model",
+    "resume",
+    "coachman",
+    join(tmp, "wt"),
+    "T-1",
+    join(tmp, "prompt.txt"),
+    "--leg",
+    "review",
+    "--run",
+    join(tmp, "run"),
+  );
+  runsOn(
+    "outside a run, the same resume runs on the live config's model",
+    "edited",
+    "edited-model",
+    "resume",
+    "coachman",
+    join(tmp, "wt"),
+    "T-1",
+    join(tmp, "prompt.txt"),
+    "--leg",
+    "review",
+  );
+  doRun(
+    "now",
+    "resume",
+    "one",
+    join(tmp, "wt"),
+    "T-1",
+    join(tmp, "prompt.txt"),
+    "--run",
+    join(tmp, "run-then"),
+  );
+  printed(
+    "inside a run, a lane resumes on the harness, model, effort and env file the run recorded",
+    "--resume T-1 ",
+    "--model then-model ",
+    "--effort high ",
+    "probe=then",
+  );
   doRun("now", "resume", "one", join(tmp, "wt"), "T-1", join(tmp, "prompt.txt"));
-  printed("outside a run, the same resume takes all four from the live config", "--mode json ", "--session T-1 ", "--model now-model ", "--thinking low ", "probe=now");
-  runsOn("inside a run the live config is not read: with none at all, a launch runs on the recorded model", "nowhere", "synthesis-model", "launch", "coachman", join(tmp, "wt"), join(tmp, "prompt.txt"), "--leg", "synthesis", "--run", join(tmp, "run"));
+  printed(
+    "outside a run, the same resume takes all four from the live config",
+    "--mode json ",
+    "--session T-1 ",
+    "--model now-model ",
+    "--thinking low ",
+    "probe=now",
+  );
+  runsOn(
+    "inside a run the live config is not read: with none at all, a launch runs on the recorded model",
+    "nowhere",
+    "synthesis-model",
+    "launch",
+    "coachman",
+    join(tmp, "wt"),
+    join(tmp, "prompt.txt"),
+    "--leg",
+    "synthesis",
+    "--run",
+    join(tmp, "run"),
+  );
   {
     const c = calls(join(tmp, "runbook.md"));
     out = c.out;
     rc = c.code;
     err = "";
-    const got = out
+    const got = `${out
       .replace(/\n+$/, "")
       .split("\n")
       .map((l) => l.replace(/^([a-z]+) .*launch\.sh (launch|resume) ([a-z]) .*/, "$1 $3"))
-      .join(",") + ",";
+      .join(",")},`;
     if (got === "unrun a,run b,unrun c,run d,") {
       ok("a runbook launch or resume with no --run is found, fenced or inline");
     } else {
@@ -891,32 +1169,154 @@ withTempDir((tmp) => {
 
   console.log("negative controls");
   for (const k of ["style", "bug", "security"]) {
-    refused(`a config naming ${k} is refused, and the message names review`, `old-${k}`, "one leg now, review", "form", "coachman", "--leg", "review");
+    refused(
+      `a config naming ${k} is refused, and the message names review`,
+      `old-${k}`,
+      "one leg now, review",
+      "form",
+      "coachman",
+      "--leg",
+      "review",
+    );
   }
-  refused("a key that is no leg is refused", "typo", "no such leg: revue", "form", "coachman", "--leg", "review");
-  refused("a leg entry on a lane's model is refused", "onlane", "a lane's model", "form", "coachman", "--leg", "synthesis");
-  refused("a leg entry that is not a table is refused", "notable", "is not a table", "form", "coachman", "--leg", "synthesis");
+  refused(
+    "a key that is no leg is refused",
+    "typo",
+    "no such leg: revue",
+    "form",
+    "coachman",
+    "--leg",
+    "review",
+  );
+  refused(
+    "a leg entry on a lane's model is refused",
+    "onlane",
+    "a lane's model",
+    "form",
+    "coachman",
+    "--leg",
+    "synthesis",
+  );
+  refused(
+    "a leg entry that is not a table is refused",
+    "notable",
+    "is not a table",
+    "form",
+    "coachman",
+    "--leg",
+    "synthesis",
+  );
   envx = { HARNESS: "claude", MODEL: "env-model" };
-  refused("a config that does not parse is refused, and the environment's HARNESS and MODEL go unused", "dup", "cannot read", "launch", "one", join(tmp, "wt"), join(tmp, "prompt.txt"));
+  refused(
+    "a config that does not parse is refused, and the environment's HARNESS and MODEL go unused",
+    "dup",
+    "cannot read",
+    "launch",
+    "one",
+    join(tmp, "wt"),
+    join(tmp, "prompt.txt"),
+  );
   envx = {};
-  refused("a parse error names the file and where it breaks", "dup", `launch: cannot read ${join(tmp, "dup.toml")}: `, "form", "coachman", "--leg", "review");
-  refused("a leg entry on a lane's model with a bracketed suffix is refused", "suffix", "a lane's model", "form", "coachman", "--leg", "synthesis");
-  refused("team.coachman on a lane's model is refused", "coachlane", "a lane's model", "form", "coachman", "--leg", "synthesis");
-  refused("the fallback on a lane's model is refused", "fblane", "a lane's model", "form", "coachman_fallback");
-  refused("a leg entry with no harness or model is refused", "emptyleg", "needs a harness and a model", "form", "coachman", "--leg", "synthesis");
-  refused("a coachman with no model is refused by name", "bare", "coachman has no model", "form", "coachman", "--leg", "review");
-  runsOn("an env file cannot put the coachman on another model", "envfile", "coach-model", "launch", "coachman", join(tmp, "wt"), join(tmp, "prompt.txt"), "--leg", "review");
+  refused(
+    "a parse error names the file and where it breaks",
+    "dup",
+    `launch: cannot read ${join(tmp, "dup.toml")}: `,
+    "form",
+    "coachman",
+    "--leg",
+    "review",
+  );
+  refused(
+    "a leg entry on a lane's model with a bracketed suffix is refused",
+    "suffix",
+    "a lane's model",
+    "form",
+    "coachman",
+    "--leg",
+    "synthesis",
+  );
+  refused(
+    "team.coachman on a lane's model is refused",
+    "coachlane",
+    "a lane's model",
+    "form",
+    "coachman",
+    "--leg",
+    "synthesis",
+  );
+  refused(
+    "the fallback on a lane's model is refused",
+    "fblane",
+    "a lane's model",
+    "form",
+    "coachman_fallback",
+  );
+  refused(
+    "a leg entry with no harness or model is refused",
+    "emptyleg",
+    "needs a harness and a model",
+    "form",
+    "coachman",
+    "--leg",
+    "synthesis",
+  );
+  refused(
+    "a coachman with no model is refused by name",
+    "bare",
+    "coachman has no model",
+    "form",
+    "coachman",
+    "--leg",
+    "review",
+  );
+  runsOn(
+    "an env file cannot put the coachman on another model",
+    "envfile",
+    "coach-model",
+    "launch",
+    "coachman",
+    join(tmp, "wt"),
+    join(tmp, "prompt.txt"),
+    "--leg",
+    "review",
+  );
   envx = { STDIN_FILE: join(tmp, "prompt.txt") };
   lacks("a STDIN_FILE from the environment is not used", "legs", "< ", "form", "one");
-  refused("a leg entry on a lane's model with stacked suffixes is refused", "suffixes", "a lane's model", "form", "coachman", "--leg", "synthesis");
+  refused(
+    "a leg entry on a lane's model with stacked suffixes is refused",
+    "suffixes",
+    "a lane's model",
+    "form",
+    "coachman",
+    "--leg",
+    "synthesis",
+  );
   envx = {};
   {
     const origCwd = process.cwd();
     process.chdir(join(tmp, "elsewhere"));
-    carries("a relative env file is read from the config's directory, never the worktree", "relenv", "probe=config-dir", "launch", "coachman", join(tmp, "wt"), join(tmp, "prompt.txt"), "--leg", "review");
+    carries(
+      "a relative env file is read from the config's directory, never the worktree",
+      "relenv",
+      "probe=config-dir",
+      "launch",
+      "coachman",
+      join(tmp, "wt"),
+      join(tmp, "prompt.txt"),
+      "--leg",
+      "review",
+    );
     process.chdir(origCwd);
   }
-  refused("an empty prompt file is refused, and nothing runs", "legs", "prompt file missing, unreadable or empty", "launch", "one", join(tmp, "wt"), join(tmp, "empty.txt"));
+  refused(
+    "an empty prompt file is refused, and nothing runs",
+    "legs",
+    "prompt file missing, unreadable or empty",
+    "launch",
+    "one",
+    join(tmp, "wt"),
+    join(tmp, "empty.txt"),
+  );
   {
     let canReadUnreadable = false;
     try {
@@ -928,35 +1328,190 @@ withTempDir((tmp) => {
     if (canReadUnreadable) {
       ok("an unreadable prompt file is refused (skipped: this user reads every file)");
     } else {
-      refused("an unreadable prompt file is refused, and nothing runs", "legs", "prompt file missing, unreadable or empty", "launch", "one", join(tmp, "wt"), join(tmp, "unreadable.txt"));
+      refused(
+        "an unreadable prompt file is refused, and nothing runs",
+        "legs",
+        "prompt file missing, unreadable or empty",
+        "launch",
+        "one",
+        join(tmp, "wt"),
+        join(tmp, "unreadable.txt"),
+      );
     }
   }
-  refused("a resume with no thread id is refused, and nothing runs", "legs", "launch: resume needs a thread id", "resume", "one", join(tmp, "wt"), "", join(tmp, "prompt.txt"));
-  refused("an argument launch.sh does not know is refused", "legs", "launch needs <cwd> <prompt-file>", "launch", "one", join(tmp, "wt"), join(tmp, "prompt.txt"), "--leg=review");
+  refused(
+    "a resume with no thread id is refused, and nothing runs",
+    "legs",
+    "launch: resume needs a thread id",
+    "resume",
+    "one",
+    join(tmp, "wt"),
+    "",
+    join(tmp, "prompt.txt"),
+  );
+  refused(
+    "an argument launch.sh does not know is refused",
+    "legs",
+    "launch needs <cwd> <prompt-file>",
+    "launch",
+    "one",
+    join(tmp, "wt"),
+    join(tmp, "prompt.txt"),
+    "--leg=review",
+  );
   for (const k of ["style", "bug", "security"]) {
-    refused(`--leg ${k} is refused`, "legs", `no such leg: --leg ${k}`, "form", "coachman", "--leg", k);
+    refused(
+      `--leg ${k} is refused`,
+      "legs",
+      `no such leg: --leg ${k}`,
+      "form",
+      "coachman",
+      "--leg",
+      k,
+    );
   }
-  refused("a codex lane with no model is refused, and nothing resumes on codex's default", "codex-nomodel", "has no model", "resume", "one", join(tmp, "wt"), "T-1", join(tmp, "prompt.txt"));
+  refused(
+    "a codex lane with no model is refused, and nothing resumes on codex's default",
+    "codex-nomodel",
+    "has no model",
+    "resume",
+    "one",
+    join(tmp, "wt"),
+    "T-1",
+    join(tmp, "prompt.txt"),
+  );
   runsAs(
     "a codex resume with no effort and no --last passes neither -c nor -o",
     "codex-noeffort",
-    lines(join(tmp, "wt"), "exec", "resume", "T-1", "--json", "-m", "lane-model", CODEX_BYPASS, "--", "- Keep going, then stop."),
-    "resume", "one", join(tmp, "wt"), "T-1", join(tmp, "ruling.txt"),
+    lines(
+      join(tmp, "wt"),
+      "exec",
+      "resume",
+      "T-1",
+      "--json",
+      "-m",
+      "lane-model",
+      CODEX_BYPASS,
+      "--",
+      "- Keep going, then stop.",
+    ),
+    "resume",
+    "one",
+    join(tmp, "wt"),
+    "T-1",
+    join(tmp, "ruling.txt"),
   );
-  refused("resuming the coachman with no --leg is refused, and nothing runs", "legs", "coachman needs --leg", "resume", "coachman", join(tmp, "wt"), "T-1", join(tmp, "prompt.txt"));
-  refused("launching the coachman with no --leg is refused, and nothing runs", "legs", "coachman needs --leg", "launch", "coachman", join(tmp, "wt"), join(tmp, "prompt.txt"));
-  refused("inside a run with no run.json, a resume is refused though the live config would serve, and nothing runs", "legs", `no run.json in ${join(tmp, "no-record")}`, "resume", "coachman", join(tmp, "wt"), "T-1", join(tmp, "prompt.txt"), "--leg", "review", "--run", join(tmp, "no-record"));
-  refused("inside a run whose run.json does not parse, a launch is refused, and nothing runs", "legs", `cannot read ${join(tmp, "garbled/run.json")}`, "launch", "one", join(tmp, "wt"), join(tmp, "prompt.txt"), "--run", join(tmp, "garbled"));
-  refused("a run.json that records no config is refused", "legs", "it records no config", "launch", "one", join(tmp, "wt"), join(tmp, "prompt.txt"), "--run", join(tmp, "unrecorded"));
-  refused("an empty --run is refused, never read as outside a run", "legs", "--run needs a dispatch directory", "resume", "coachman", join(tmp, "wt"), "T-1", join(tmp, "prompt.txt"), "--leg", "review", "--run", "");
-  refused("a recorded config naming bug is refused, though the live config passes", "legs", "one leg now, review", "resume", "coachman", join(tmp, "wt"), "T-1", join(tmp, "prompt.txt"), "--leg", "review", "--run", join(tmp, "run-old-bug"));
-  refused("a recorded leg on a lane's model is refused, though the live config passes", "legs", "a lane's model", "resume", "coachman", join(tmp, "wt"), "T-1", join(tmp, "prompt.txt"), "--leg", "synthesis", "--run", join(tmp, "run-onlane"));
+  refused(
+    "resuming the coachman with no --leg is refused, and nothing runs",
+    "legs",
+    "coachman needs --leg",
+    "resume",
+    "coachman",
+    join(tmp, "wt"),
+    "T-1",
+    join(tmp, "prompt.txt"),
+  );
+  refused(
+    "launching the coachman with no --leg is refused, and nothing runs",
+    "legs",
+    "coachman needs --leg",
+    "launch",
+    "coachman",
+    join(tmp, "wt"),
+    join(tmp, "prompt.txt"),
+  );
+  refused(
+    "inside a run with no run.json, a resume is refused though the live config would serve, and nothing runs",
+    "legs",
+    `no run.json in ${join(tmp, "no-record")}`,
+    "resume",
+    "coachman",
+    join(tmp, "wt"),
+    "T-1",
+    join(tmp, "prompt.txt"),
+    "--leg",
+    "review",
+    "--run",
+    join(tmp, "no-record"),
+  );
+  refused(
+    "inside a run whose run.json does not parse, a launch is refused, and nothing runs",
+    "legs",
+    `cannot read ${join(tmp, "garbled/run.json")}`,
+    "launch",
+    "one",
+    join(tmp, "wt"),
+    join(tmp, "prompt.txt"),
+    "--run",
+    join(tmp, "garbled"),
+  );
+  refused(
+    "a run.json that records no config is refused",
+    "legs",
+    "it records no config",
+    "launch",
+    "one",
+    join(tmp, "wt"),
+    join(tmp, "prompt.txt"),
+    "--run",
+    join(tmp, "unrecorded"),
+  );
+  refused(
+    "an empty --run is refused, never read as outside a run",
+    "legs",
+    "--run needs a dispatch directory",
+    "resume",
+    "coachman",
+    join(tmp, "wt"),
+    "T-1",
+    join(tmp, "prompt.txt"),
+    "--leg",
+    "review",
+    "--run",
+    "",
+  );
+  refused(
+    "a recorded config naming bug is refused, though the live config passes",
+    "legs",
+    "one leg now, review",
+    "resume",
+    "coachman",
+    join(tmp, "wt"),
+    "T-1",
+    join(tmp, "prompt.txt"),
+    "--leg",
+    "review",
+    "--run",
+    join(tmp, "run-old-bug"),
+  );
+  refused(
+    "a recorded leg on a lane's model is refused, though the live config passes",
+    "legs",
+    "a lane's model",
+    "resume",
+    "coachman",
+    join(tmp, "wt"),
+    "T-1",
+    join(tmp, "prompt.txt"),
+    "--leg",
+    "synthesis",
+    "--run",
+    join(tmp, "run-onlane"),
+  );
   {
-    const c = calls(join(here, "../skills/postmaster/coachman.md"), join(here, "../skills/postmaster/postmaster.md"));
-    const gotLines = c.out.trim().split("\n").filter((l) => l !== "");
+    const c = calls(
+      join(here, "../skills/postmaster/coachman.md"),
+      join(here, "../skills/postmaster/postmaster.md"),
+    );
+    const gotLines = c.out
+      .trim()
+      .split("\n")
+      .filter((l) => l !== "");
     const unrun = gotLines.filter((l) => l.startsWith("unrun "));
     const hasCoachman = gotLines.some((l) => l.startsWith("run ") && l.includes("/coachman.md: "));
-    const hasPostmaster = gotLines.some((l) => l.startsWith("run ") && l.includes("/postmaster.md: "));
+    const hasPostmaster = gotLines.some(
+      (l) => l.startsWith("run ") && l.includes("/postmaster.md: "),
+    );
     if (c.code === 0 && unrun.length === 0 && hasCoachman && hasPostmaster) {
       ok("no launch or resume in coachman.md or postmaster.md lacks --run <dispatch>");
     } else {
@@ -982,7 +1537,7 @@ withTempDir((tmp) => {
       ...envx,
       POSTMASTER_HARNESS_DATA: hd,
       POSTMASTER_CONFIG: join(tmp, `${f}.toml`),
-      PATH: `${join(tmp, "bin")}:${process.env["PATH"] ?? ""}`,
+      PATH: `${join(tmp, "bin")}:${process.env.PATH ?? ""}`,
     };
     const r = spawnSync(self, rest, { encoding: "utf8", env, input: "leak\n" });
     out = r.stdout ?? "";
@@ -1015,9 +1570,13 @@ withTempDir((tmp) => {
         }
       })()
     ) {
-      ok("a muse launch: JSON events, the prompt file, model, effort, bypass form and env file, nothing on stdin, and its own data directory");
+      ok(
+        "a muse launch: JSON events, the prompt file, model, effort, bypass form and env file, nothing on stdin, and its own data directory",
+      );
     } else {
-      fail("a muse launch: JSON events, the prompt file, model, effort, bypass form and env file, nothing on stdin, and its own data directory");
+      fail(
+        "a muse launch: JSON events, the prompt file, model, effort, bypass form and env file, nothing on stdin, and its own data directory",
+      );
     }
   }
   writeFileSync(join(a, "01a0-sess"), "");
@@ -1026,14 +1585,26 @@ withTempDir((tmp) => {
   {
     const wantPrefix = `exec --json --prompt-file ${join(tmp, "prompt.txt")} --session-id 01a0-sess --model muse-model --reasoning-effort max --yolo `;
     if (rc === 0 && out.startsWith(wantPrefix) && b === a) {
-      ok("a muse resume names the session, keeps the model and effort, and finds the launch's data directory");
+      ok(
+        "a muse resume names the session, keeps the model and effort, and finds the launch's data directory",
+      );
     } else {
-      fail("a muse resume names the session, keeps the model and effort, and finds the launch's data directory");
+      fail(
+        "a muse resume names the session, keeps the model and effort, and finds the launch's data directory",
+      );
     }
   }
   mrun("muse", "launch", "n", join(tmp, "wt"), join(tmp, "prompt.txt"));
   const c = dataOf();
-  mrun("muse", "launch", "coachman", join(tmp, "wt"), join(tmp, "prompt.txt"), "--leg", "synthesis");
+  mrun(
+    "muse",
+    "launch",
+    "coachman",
+    join(tmp, "wt"),
+    join(tmp, "prompt.txt"),
+    "--leg",
+    "synthesis",
+  );
   const d = dataOf();
   mrun("muse", "launch", "coachman", join(tmp, "wt"), join(tmp, "prompt.txt"), "--leg", "review");
   const e = dataOf();
@@ -1042,9 +1613,13 @@ withTempDir((tmp) => {
   {
     const uniq = new Set([a, c, d, e, f]);
     if (c && d && e && f && uniq.size === 5) {
-      ok("another lane, each coachman leg, and the same lane elsewhere each get a data directory of their own");
+      ok(
+        "another lane, each coachman leg, and the same lane elsewhere each get a data directory of their own",
+      );
     } else {
-      fail("another lane, each coachman leg, and the same lane elsewhere each get a data directory of their own");
+      fail(
+        "another lane, each coachman leg, and the same lane elsewhere each get a data directory of their own",
+      );
     }
   }
   {
@@ -1054,7 +1629,7 @@ withTempDir((tmp) => {
       ...process.env,
       POSTMASTER_HARNESS_DATA: hd,
       POSTMASTER_CONFIG: join(tmp, "muse-bare.toml"),
-      PATH: `${join(tmp, "bin")}:${process.env["PATH"] ?? ""}`,
+      PATH: `${join(tmp, "bin")}:${process.env.PATH ?? ""}`,
     };
     const r = spawnSync(self, ["launch", "m", join(tmp, "elsewhere"), "sub/p.txt"], {
       encoding: "utf8",
@@ -1067,31 +1642,53 @@ withTempDir((tmp) => {
     process.chdir(origCwd);
     const wantPrefix = `exec --json --prompt-file ${join(tmp, "wt/sub/p.txt")} --model muse-model --yolo `;
     if (rc === 0 && out.startsWith(wantPrefix)) {
-      ok("a relative prompt file is made absolute before the cd, and no effort means no effort flag");
+      ok(
+        "a relative prompt file is made absolute before the cd, and no effort means no effort flag",
+      );
     } else {
-      fail("a relative prompt file is made absolute before the cd, and no effort means no effort flag");
+      fail(
+        "a relative prompt file is made absolute before the cd, and no effort means no effort flag",
+      );
     }
   }
   carries(
     "the muse form shows its data directory, the bypass form and an empty stdin",
     "muse",
     `env XDG_DATA_HOME=<harness-data>/muse/<key> muse exec --json --prompt-file <prompt-file> --model muse-model --reasoning-effort max --yolo < /dev/null`,
-    "form", "m",
+    "form",
+    "m",
   );
   mrefused(
     "a muse resume of a thread its data directory does not hold is refused, and nothing runs",
     "muse",
     "no muse thread 01a0-none in this launch's data directory",
-    "resume", "m", join(tmp, "wt"), "01a0-none", join(tmp, "prompt.txt"),
+    "resume",
+    "m",
+    join(tmp, "wt"),
+    "01a0-none",
+    join(tmp, "prompt.txt"),
   );
   mrefused(
     "a muse resume from another directory is refused: the thread is in its launch's data directory",
     "muse",
     "no muse thread 01a0-sess in this launch's data directory",
-    "resume", "m", join(tmp, "elsewhere"), "01a0-sess", join(tmp, "prompt.txt"),
+    "resume",
+    "m",
+    join(tmp, "elsewhere"),
+    "01a0-sess",
+    join(tmp, "prompt.txt"),
   );
   writeFileSync(join(d, "01a0-coach"), "");
-  mrun("muse", "resume", "coachman", join(tmp, "wt"), "01a0-coach", join(tmp, "prompt.txt"), "--leg", "synthesis");
+  mrun(
+    "muse",
+    "resume",
+    "coachman",
+    join(tmp, "wt"),
+    "01a0-coach",
+    join(tmp, "prompt.txt"),
+    "--leg",
+    "synthesis",
+  );
   if (rc === 0 && dataOf() === d) {
     ok("a muse coachman resumes its thread on the leg it was launched on");
   } else {
@@ -1101,7 +1698,13 @@ withTempDir((tmp) => {
     "a muse coachman resumed on another leg is refused, and nothing runs",
     "muse",
     "no muse thread 01a0-coach in this launch's data directory",
-    "resume", "coachman", join(tmp, "wt"), "01a0-coach", join(tmp, "prompt.txt"), "--leg", "review",
+    "resume",
+    "coachman",
+    join(tmp, "wt"),
+    "01a0-coach",
+    join(tmp, "prompt.txt"),
+    "--leg",
+    "review",
   );
 
   console.log("mimo");
@@ -1109,7 +1712,10 @@ withTempDir((tmp) => {
     join(tmp, "mimo.toml"),
     `[lanes.x]\nharness = "mimo"\nmodel = "prov/mimo-model"\neffort = "high"\nenv_file = "${join(tmp, "over.env")}"\n\n[lanes.y]\nharness = "mimo"\nmodel = "prov/mimo-model"\n`,
   );
-  writeFileSync(join(tmp, "mimo-bare.toml"), '[lanes.x]\nharness = "mimo"\nmodel = "prov/mimo-model"\n');
+  writeFileSync(
+    join(tmp, "mimo-bare.toml"),
+    '[lanes.x]\nharness = "mimo"\nmodel = "prov/mimo-model"\n',
+  );
 
   mrun("mimo", "launch", "x", join(tmp, "wt"), join(tmp, "prompt.txt"));
   a = dataOf();
@@ -1127,9 +1733,13 @@ withTempDir((tmp) => {
         }
       })()
     ) {
-      ok("a mimo launch: JSON events, model, variant, bypass form, env file, the prompt on stdin, its own data directory, and no history import");
+      ok(
+        "a mimo launch: JSON events, model, variant, bypass form, env file, the prompt on stdin, its own data directory, and no history import",
+      );
     } else {
-      fail("a mimo launch: JSON events, model, variant, bypass form, env file, the prompt on stdin, its own data directory, and no history import");
+      fail(
+        "a mimo launch: JSON events, model, variant, bypass form, env file, the prompt on stdin, its own data directory, and no history import",
+      );
     }
   }
   writeFileSync(join(a, "ses_01a0"), "");
@@ -1138,9 +1748,13 @@ withTempDir((tmp) => {
   {
     const wantPrefix = `run --format json -m prov/mimo-model -s ses_01a0 --variant high --dangerously-skip-permissions probe=reached stdin=Continue. `;
     if (rc === 0 && out.startsWith(wantPrefix) && mb === a) {
-      ok("a mimo resume names the session, keeps the model and the variant, and finds the launch's data directory");
+      ok(
+        "a mimo resume names the session, keeps the model and the variant, and finds the launch's data directory",
+      );
     } else {
-      fail("a mimo resume names the session, keeps the model and the variant, and finds the launch's data directory");
+      fail(
+        "a mimo resume names the session, keeps the model and the variant, and finds the launch's data directory",
+      );
     }
   }
   mrun("mimo", "launch", "y", join(tmp, "wt"), join(tmp, "prompt.txt"));
@@ -1158,7 +1772,7 @@ withTempDir((tmp) => {
       POSTMASTER_HARNESS_DATA: hd,
       POSTMASTER_LAUNCH_NAME: "#7, a run",
       POSTMASTER_CONFIG: join(tmp, "mimo-bare.toml"),
-      PATH: `${join(tmp, "bin")}:${process.env["PATH"] ?? ""}`,
+      PATH: `${join(tmp, "bin")}:${process.env.PATH ?? ""}`,
     };
     const r = spawnSync(self, ["launch", "x", join(tmp, "elsewhere"), "sub/p.txt"], {
       encoding: "utf8",
@@ -1171,16 +1785,21 @@ withTempDir((tmp) => {
     process.chdir(origCwd);
     const wantPrefix = `run --format json -m prov/mimo-model --title #7, a run --dangerously-skip-permissions probe= stdin=Continue. `;
     if (rc === 0 && out.startsWith(wantPrefix)) {
-      ok("a relative prompt file is read after the cd, no effort means no variant, and a launch is titled after its run");
+      ok(
+        "a relative prompt file is read after the cd, no effort means no variant, and a launch is titled after its run",
+      );
     } else {
-      fail("a relative prompt file is read after the cd, no effort means no variant, and a launch is titled after its run");
+      fail(
+        "a relative prompt file is read after the cd, no effort means no variant, and a launch is titled after its run",
+      );
     }
   }
   carries(
     "the mimo form shows its data directory, the import switch and the prompt file on stdin",
     "mimo",
     `env XDG_DATA_HOME=<harness-data>/mimo/<key> MIMOCODE_DISABLE_CLAUDE_IMPORT=1 mimo run --format json -m prov/mimo-model --variant high --dangerously-skip-permissions < <prompt-file>`,
-    "form", "x",
+    "form",
+    "x",
   );
   doRun("mimo", "skill", "x", "security-review");
   if (rc === 3 && out === "") {
@@ -1192,13 +1811,21 @@ withTempDir((tmp) => {
     "a mimo resume of a thread its data directory does not hold is refused, and nothing runs",
     "mimo",
     "no mimo thread ses_none in this launch's data directory",
-    "resume", "x", join(tmp, "wt"), "ses_none", join(tmp, "prompt.txt"),
+    "resume",
+    "x",
+    join(tmp, "wt"),
+    "ses_none",
+    join(tmp, "prompt.txt"),
   );
   mrefused(
     "a mimo resume from another directory is refused: the thread is in its launch's data directory",
     "mimo",
     "no mimo thread ses_01a0 in this launch's data directory",
-    "resume", "x", join(tmp, "elsewhere"), "ses_01a0", join(tmp, "prompt.txt"),
+    "resume",
+    "x",
+    join(tmp, "elsewhere"),
+    "ses_01a0",
+    join(tmp, "prompt.txt"),
   );
 
   console.log("the coachman on muse, a workhorse on mimo: both forms, each with its bypass flag");
@@ -1212,7 +1839,10 @@ withTempDir((tmp) => {
     .replaceAll('cmd.push("--yolo"); /*BYPASS*/', "/*BYPASS*/")
     .replaceAll('cmd.push("--dangerously-skip-permissions"); /*BYPASS*/', "/*BYPASS*/");
   writeFileSync(join(tmp, "nobypass.ts"), nobypassSrc);
-  writeFileSync(join(tmp, "nobypass.sh"), `#!/usr/bin/env bash\nexec bun "${join(tmp, "nobypass.ts")}" "$@"\n`);
+  writeFileSync(
+    join(tmp, "nobypass.sh"),
+    `#!/usr/bin/env bash\nexec bun "${join(tmp, "nobypass.ts")}" "$@"\n`,
+  );
   chmodSync(join(tmp, "nobypass.sh"), 0o755);
   const launchonlySrc = selfSrc
     .replaceAll(
@@ -1224,7 +1854,10 @@ withTempDir((tmp) => {
       'if (cmdMode !== "resume") cmd.push("--dangerously-skip-permissions"); /*BYPASS*/',
     );
   writeFileSync(join(tmp, "launchonly.ts"), launchonlySrc);
-  writeFileSync(join(tmp, "launchonly.sh"), `#!/usr/bin/env bash\nexec bun "${join(tmp, "launchonly.ts")}" "$@"\n`);
+  writeFileSync(
+    join(tmp, "launchonly.sh"),
+    `#!/usr/bin/env bash\nexec bun "${join(tmp, "launchonly.ts")}" "$@"\n`,
+  );
   chmodSync(join(tmp, "launchonly.sh"), 0o755);
 
   const bypassed = (script: string, flag: string, ...formArgs: string[]): boolean => {
@@ -1233,7 +1866,7 @@ withTempDir((tmp) => {
       env: {
         ...process.env,
         POSTMASTER_CONFIG: join(tmp, "team.toml"),
-        PATH: `${join(tmp, "bin")}:${process.env["PATH"] ?? ""}`,
+        PATH: `${join(tmp, "bin")}:${process.env.PATH ?? ""}`,
       },
     });
     out = r.stdout ?? "";
@@ -1252,7 +1885,8 @@ withTempDir((tmp) => {
     const name = parts[0] ?? "";
     const flag = parts[1] ?? "";
     const rest = parts.slice(2);
-    if (bypassed(self, flag, name, ...rest)) ok(`${name}: the launch and resume forms both carry ${flag}`);
+    if (bypassed(self, flag, name, ...rest))
+      ok(`${name}: the launch and resume forms both carry ${flag}`);
     else fail(`${name}: the launch and resume forms both carry ${flag}`);
     for (const line of out.split("\n")) {
       if (line) console.log(`         ${line}`);
@@ -1265,12 +1899,20 @@ withTempDir((tmp) => {
     } else ok(`${name}: a resume form without ${flag} fails this check`);
   }
   doRun("legs", "form", "one");
-  printed("a claude lane's form shows a resume form too", "launch: cd <cwd> && claude -p ", "resume: cd <cwd> && claude -p --resume <thread-id> ");
+  printed(
+    "a claude lane's form shows a resume form too",
+    "launch: cd <cwd> && claude -p ",
+    "resume: cd <cwd> && claude -p --resume <thread-id> ",
+  );
   writeFileSync(join(tmp, "agy.toml"), '[lanes.g]\nharness = "agy"\nmodel = "agy-model"\n');
   writeFileSync(join(tmp, "bin/agy"), "#!/bin/sh\n");
   chmodSync(join(tmp, "bin/agy"), 0o755);
   doRun("agy", "form", "g");
-  printed("an agy lane's form says it has no resume form, and still exits 0", "launch: cd <cwd> && agy -p ", "resume: none: agy resume form is not recorded");
+  printed(
+    "an agy lane's form says it has no resume form, and still exits 0",
+    "launch: cd <cwd> && agy -p ",
+    "resume: none: agy resume form is not recorded",
+  );
 
   console.log("skills");
   writeFileSync(
@@ -1278,7 +1920,8 @@ withTempDir((tmp) => {
     '[lanes.one]\nharness = "claude"\nmodel = "lane-model"\n\n[lanes.two]\nharness = "codex"\nmodel = "other-model"\n\n[lanes.three]\nharness = "muse"\nmodel = "muse-model"\n',
   );
   doRun("skills", "skill", "one", "security-review");
-  if (rc === 0 && out.trim() === "/security-review") ok("a claude lane's security review skill is /security-review");
+  if (rc === 0 && out.trim() === "/security-review")
+    ok("a claude lane's security review skill is /security-review");
   else fail("a claude lane's security review skill is /security-review");
   doRun("skills", "skill", "two", "security-review");
   if (rc === 3 && out === "" && err.includes("no security review skill")) {
@@ -1286,7 +1929,14 @@ withTempDir((tmp) => {
   } else {
     fail("a harness with no security review skill is exit 3, never a prompt");
   }
-  refused("a skill that is not recorded is refused", "skills", "no such skill: code-review", "skill", "one", "code-review");
+  refused(
+    "a skill that is not recorded is refused",
+    "skills",
+    "no such skill: code-review",
+    "skill",
+    "one",
+    "code-review",
+  );
   doRun("skills", "skill", "three", "security-review");
   if (rc === 3 && out === "") ok("a muse lane has no security review skill: exit 3");
   else fail("a muse lane has no security review skill: exit 3");

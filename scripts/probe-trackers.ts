@@ -46,14 +46,14 @@ let planeUrl = "";
 let planeWs = "";
 const parsed = existsSync(CONFIG) ? tryTomlFile(CONFIG) : null;
 if (parsed !== null) {
-  const t = parsed["tracker"];
+  const t = parsed.tracker;
   const table =
     t !== null && typeof t === "object" && !Array.isArray(t) ? (t as Record<string, unknown>) : {};
-  const ef = table["env_file"];
+  const ef = table.env_file;
   if (typeof ef === "string" && ef !== "") envFile = ef;
-  const url = table["url"];
+  const url = table.url;
   if (typeof url === "string") planeUrl = url;
-  const ws = table["workspace"];
+  const ws = table.workspace;
   if (typeof ws === "string") planeWs = ws;
 }
 if (envFile.startsWith("~")) envFile = home + envFile.slice(1);
@@ -82,7 +82,11 @@ if (planeUrl === "" || planeWs === "") {
 // Local: tickets in each repository's own git directory, through scripts/local.sh. There is
 // nothing to reach and no login; it needs only git (the scripts themselves run on Bun).
 if (Bun.which("git") !== null) {
-  row("local", "yes", "no service, no login; a repo's store is made with: scripts/local.sh <repo> store init");
+  row(
+    "local",
+    "yes",
+    "no service, no login; a repo's store is made with: scripts/local.sh <repo> store init",
+  );
 } else {
   row("local", "no", "needs git");
 }
@@ -90,7 +94,11 @@ if (Bun.which("git") !== null) {
 // Hosted and self-hosted trackers are reached through whatever tooling the user's agent
 // provides (an MCP server, a CLI). That is a property of their agent setup, not of this
 // machine, and this script deliberately does not read any one harness's config to guess at it.
-row("other", "ask", "any tracker reached through your agent's own tooling; needs the service reachable");
+row(
+  "other",
+  "ask",
+  "any tracker reached through your agent's own tooling; needs the service reachable",
+);
 console.log("");
 console.log("  GitHub Issues is the default: the tickets sit on a GitHub Projects board the user");
 console.log('  can open. "partial" names the one command the user runs to finish it. "ask"');

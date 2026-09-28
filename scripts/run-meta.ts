@@ -116,7 +116,7 @@ function meta(d: string, repo: string): number {
 
   const tmp = join(d, `.run.json.tmp.${process.pid}`);
   try {
-    writeFileSync(tmp, JSON.stringify(record, null, 2) + "\n");
+    writeFileSync(tmp, `${JSON.stringify(record, null, 2)}\n`);
     renameSync(tmp, join(d, "run.json"));
   } catch {
     try {

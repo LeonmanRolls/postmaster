@@ -18,7 +18,7 @@
 //   exit 0  every reference resolves
 //   exit 1  faults, one per line on stdout: <file>:<line>: <reason>: <reference>
 //   exit 2  usage, or a file that cannot be read
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { toolRoot } from "./lib/paths.ts";
 import { withTempDir } from "./lib/proc.ts";
@@ -49,7 +49,7 @@ function refs(
     }
     if (mode === "fix") {
       const new_ = text.replace(BARE, "<tool>/scripts/");
-      const n = text.split(BARE).length - 1;
+      const _n = text.split(BARE).length - 1;
       // count matches of BARE
       let count = 0;
       for (const _m of text.matchAll(BARE)) count += 1;

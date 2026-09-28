@@ -23,12 +23,11 @@ import {
   rmSync,
   statSync,
   writeFileSync,
-  appendFileSync,
 } from "node:fs";
-import { join, basename } from "node:path";
+import { basename, join } from "node:path";
+import { scriptsDir } from "./lib/paths.ts";
 import { run, withTempDir } from "./lib/proc.ts";
 import { SelfTest } from "./lib/selftest.ts";
-import { scriptsDir } from "./lib/paths.ts";
 
 const HERE = scriptsDir(import.meta);
 const DEFAULT_LIMIT = 2400;
@@ -85,8 +84,8 @@ function stateLoad(path: string): RoundState {
 }
 
 function stateSave(path: string, st: RoundState): void {
-  const tmp = path + ".tmp." + process.pid;
-  writeFileSync(tmp, JSON.stringify(st, null, 2) + "\n");
+  const tmp = `${path}.tmp.${process.pid}`;
+  writeFileSync(tmp, `${JSON.stringify(st, null, 2)}\n`);
   renameSync(tmp, path);
 }
 
@@ -104,22 +103,20 @@ function stateCmd(
     let limit: number;
     let source: string;
     const fall = (why: string): void => {
-      err.push(
-        `review-round: ${why}; the round's time limit is the default, ${def}s`,
-      );
+      err.push(`review-round: ${why}; the round's time limit is the default, ${def}s`);
       limit = def;
       source = "the default";
     };
     try {
       const runData = JSON.parse(readFileSync(runJson, "utf8")) as Record<string, unknown>;
-      const cfg = runData["config"];
+      const cfg = runData.config;
       const review =
         cfg !== null && typeof cfg === "object" && !Array.isArray(cfg)
-          ? (cfg as Record<string, unknown>)["review"]
+          ? (cfg as Record<string, unknown>).review
           : undefined;
       const v =
         review !== null && typeof review === "object" && !Array.isArray(review)
-          ? (review as Record<string, unknown>)["round_timeout_seconds"]
+          ? (review as Record<string, unknown>).round_timeout_seconds
           : undefined;
       if (v === undefined || v === null) {
         limit = def;
@@ -161,7 +158,11 @@ function stateCmd(
       reviewers: [],
     });
     out.push(`${limit!}\t${source!}`);
-    return { code: 0, out: out.join("\n") + "\n", err: err.join("\n") ? err.join("\n") + "\n" : "" };
+    return {
+      code: 0,
+      out: `${out.join("\n")}\n`,
+      err: err.join("\n") ? `${err.join("\n")}\n` : "",
+    };
   }
   if (what === "check") {
     const st = stateLoad(path);
@@ -173,7 +174,7 @@ function stateCmd(
     }
     const left = Math.max(0, Math.ceil(st.deadline - monotonic()));
     out.push(`${st.attempt}\t${left}\t${st.limit}\t${st.source}`);
-    return { code: 0, out: out.join("\n") + "\n", err: "" };
+    return { code: 0, out: `${out.join("\n")}\n`, err: "" };
   }
   if (what === "reviewers" || what === "pairs") {
     const st: RoundState =
@@ -188,9 +189,7 @@ function stateCmd(
             started: "",
             reviewers: [],
           } as RoundState);
-    const given = args
-      .flatMap((a) => a.split(/[\s,]+/))
-      .filter((x) => x !== "");
+    const given = args.flatMap((a) => a.split(/[\s,]+/)).filter((x) => x !== "");
     if (given.length > 0) {
       const pairs: Array<[string, string]> = [];
       const bad: string[] = [];
@@ -214,7 +213,7 @@ function stateCmd(
     for (const [lens, lane] of st.reviewers) {
       out.push(`${lens}\t${lane}`);
     }
-    return { code: 0, out: out.join("\n") + "\n", err: "" };
+    return { code: 0, out: `${out.join("\n")}\n`, err: "" };
   }
   die(`unknown state command: ${what}`);
 }
@@ -231,7 +230,8 @@ function unswitch(s: string, ticket: string): string {
   const b = ref.out.trim();
   if (b === ticket || b.startsWith(`wb/${ticket}-`)) return "";
   const co = run("git", ["-C", s, "checkout", "-q", "--detach"]);
-  if (co.code === 0) return `a reviewer had switched it onto branch ${b}; detached, and the branch kept`;
+  if (co.code === 0)
+    return `a reviewer had switched it onto branch ${b}; detached, and the branch kept`;
   return "";
 }
 
@@ -262,13 +262,15 @@ if (argv[0] !== "--self-test") {
         rmSync(join(LOGS, f), { force: true });
       }
     }
-    const r = stateCmd("start", STATE, [join(D, "run.json"), String(DEFAULT_LIMIT), String(MAX_LIMIT)]);
+    const r = stateCmd("start", STATE, [
+      join(D, "run.json"),
+      String(DEFAULT_LIMIT),
+      String(MAX_LIMIT),
+    ]);
     if (r.err) process.stderr.write(r.err);
     if (r.code !== 0) die(`could not start round ${R}`);
     const [lim, src] = r.out.trim().split("\t");
-    console.log(
-      `review-round: round ${R} started, markers cleared, time limit ${lim}s (${src})`,
-    );
+    console.log(`review-round: round ${R} started, markers cleared, time limit ${lim}s (${src})`);
     process.exit(0);
   }
 
@@ -286,12 +288,12 @@ if (argv[0] !== "--self-test") {
     const rl = run(join(HERE, "run-log.sh"), [D, text]);
     if (rl.code !== 0) {
       console.log(`NOT RECORDED in run-log.md: ${text}`);
-      (globalThis as Record<string, unknown>)["UNRECORDED"] = 1;
+      (globalThis as Record<string, unknown>).UNRECORDED = 1;
     }
     const la = run(join(HERE, "log-action.sh"), [D, "coachman", ...logArgs]);
     if (la.code !== 0) {
       console.log(`NOT RECORDED in actions.jsonl: ${logArgs.join(" ")}`);
-      (globalThis as Record<string, unknown>)["UNRECORDED"] = 1;
+      (globalThis as Record<string, unknown>).UNRECORDED = 1;
     }
   };
 
@@ -339,7 +341,7 @@ if (argv[0] !== "--self-test") {
     const missing: number[] = [];
     let expected = "";
     for (let i = 0; i < n; i++) {
-      const f = `review-r${R}-${reviewers[i]![0]}-${reviewers[i]![1]}.done`;
+      const f = `review-r${R}-${reviewers[i]?.[0]}-${reviewers[i]?.[1]}.done`;
       expected += ` ${f} `;
       if (!existsSync(join(LOGS, f))) missing.push(i);
     }
@@ -369,7 +371,7 @@ if (argv[0] !== "--self-test") {
       );
     }
 
-    (globalThis as Record<string, unknown>)["UNRECORDED"] = 0;
+    (globalThis as Record<string, unknown>).UNRECORDED = 0;
     const reported = n - missing.length;
     record(
       `round ${R}: WAIT-TIMEOUT after ${lim}s; ${reported} of ${n} reviewers reported`,
@@ -384,7 +386,7 @@ if (argv[0] !== "--self-test") {
     }
     const stopPids: Array<number | null> = [];
     for (const i of missing) {
-      const s = scratch(REPO, TICKET, reviewers[i]![0], reviewers[i]![1]);
+      const s = scratch(REPO, TICKET, reviewers[i]?.[0], reviewers[i]?.[1]);
       if (existsSync(s)) {
         const stopOut = join(LOGS, `.stop-r${R}-${i}`);
         const child = run(join(HERE, "host.sh"), ["stop", s]);
@@ -429,7 +431,7 @@ if (argv[0] !== "--self-test") {
         );
       }
     }
-    if ((globalThis as Record<string, unknown>)["UNRECORDED"]) process.exit(4);
+    if ((globalThis as Record<string, unknown>).UNRECORDED) process.exit(4);
     process.exit(3);
   }
 
@@ -449,7 +451,7 @@ if (argv[0] !== "--self-test") {
     let finished = false;
     if (existsSync(join(LOGS, `review-r${R}-${lens}-${lane}.done`))) finished = true;
     const sPhys = run("bash", ["-c", `cd "$1" 2>/dev/null && pwd -P`, "_", s]).out.trim();
-    if (CALLER.startsWith(sPhys + "/") || CALLER === sPhys) {
+    if (CALLER.startsWith(`${sPhys}/`) || CALLER === sPhys) {
       why = "the shell that ran this works in it; run teardown from outside it";
     }
     if (!why) {
@@ -544,16 +546,28 @@ withTempDir((tmpRaw) => {
   mkdirSync(join(tmp, "pids"), { recursive: true });
   mkdirSync(join(tmp, "elsewhere"), { recursive: true });
   run("git", ["init", "-q", "-b", "main", repo]);
-  run("git", ["-C", repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "first"]);
+  run("git", [
+    "-C",
+    repo,
+    "-c",
+    "user.name=t",
+    "-c",
+    "user.email=t@t",
+    "commit",
+    "-q",
+    "--allow-empty",
+    "-m",
+    "first",
+  ]);
   for (const h of ["herdr", "tmux"]) {
     writeFileSync(join(tmp, "bin", h), "#!/bin/sh\nexit 1\n");
     run("chmod", ["+x", join(tmp, "bin", h)]);
   }
-  process.env["PATH"] = `${join(tmp, "bin")}:${process.env["PATH"]}`;
-  process.env["POSTMASTER_HOST"] = "none";
-  process.env["POSTMASTER_HOST_STATE"] = join(tmp, "host");
-  process.env["POSTMASTER_HOST_STOP_WAIT"] = "2";
-  process.env["POSTMASTER_HOST_CLOSE_WAIT"] = "1";
+  process.env.PATH = `${join(tmp, "bin")}:${process.env.PATH}`;
+  process.env.POSTMASTER_HOST = "none";
+  process.env.POSTMASTER_HOST_STATE = join(tmp, "host");
+  process.env.POSTMASTER_HOST_STOP_WAIT = "2";
+  process.env.POSTMASTER_HOST_CLOSE_WAIT = "1";
 
   writeFileSync(
     join(tmp, "reviewer.sh"),
@@ -608,8 +622,12 @@ esac
   };
   const cutScratch = (lens: string, lane: string): void => {
     run("git", [
-      "-C", repo,
-      "worktree", "add", "-q", "--detach",
+      "-C",
+      repo,
+      "worktree",
+      "add",
+      "-q",
+      "--detach",
       join(repo, ".worktrees", `T-1-rev-${lens}-${lane}`),
       "HEAD",
     ]);
@@ -820,16 +838,13 @@ esac
     "a wait from an earlier start of the round stands down, and records and stops nothing",
     rc === 1 && has("started again") && alive(slow) && !runLog.includes("four bug: DEGRADED"),
   );
-  const insideOut = join(tmp, "inside.out");
-  const insideR = run(
-    "bash",
-    [
-      "-c",
-      `cd "$1" && "${self}" teardown "${d}" 4 "${repo}" bug:four`,
-      "_",
-      join(repo, ".worktrees/T-1-rev-bug-four"),
-    ],
-  );
+  const _insideOut = join(tmp, "inside.out");
+  const insideR = run("bash", [
+    "-c",
+    `cd "$1" && "${self}" teardown "${d}" 4 "${repo}" bug:four`,
+    "_",
+    join(repo, ".worktrees/T-1-rev-bug-four"),
+  ]);
   out = insideR.out + insideR.err;
   rc = insideR.code;
   check(
@@ -870,8 +885,13 @@ esac
       })(),
   );
   run("git", [
-    "-C", repo,
-    "worktree", "add", "-q", "-b", "wb/T-1-luna",
+    "-C",
+    repo,
+    "worktree",
+    "add",
+    "-q",
+    "-b",
+    "wb/T-1-luna",
     join(repo, ".worktrees/T-1-rev-style-two"),
     "HEAD",
   ]);
@@ -880,8 +900,14 @@ esac
     "a worktree on the run's own branch is never detached or removed",
     rc === 1 &&
       has("LEFT IN PLACE") &&
-      run("git", ["-C", join(repo, ".worktrees/T-1-rev-style-two"), "symbolic-ref", "-q", "--short", "HEAD"])
-        .out.trim() === "wb/T-1-luna",
+      run("git", [
+        "-C",
+        join(repo, ".worktrees/T-1-rev-style-two"),
+        "symbolic-ref",
+        "-q",
+        "--short",
+        "HEAD",
+      ]).out.trim() === "wb/T-1-luna",
   );
   writeFileSync(join(d, "logs/review-r6-bug-one.done"), "");
   writeFileSync(join(d, "logs/review-r6-style-one.done"), "");
@@ -928,7 +954,9 @@ esac
     runSelf("start", d, "9");
     check(
       `a limit of ${v} is not used: the default, and the warning says why`,
-      rc === 0 && has("time limit 2400s (the default)") && has("not a whole number of seconds from 1 to 86400"),
+      rc === 0 &&
+        has("time limit 2400s (the default)") &&
+        has("not a whole number of seconds from 1 to 86400"),
     );
   }
   rmSync(join(d, "run.json"), { force: true });

@@ -49,8 +49,8 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
-import { run, withTempDir } from "./lib/proc.ts";
 import { scriptsDir } from "./lib/paths.ts";
+import { run, withTempDir } from "./lib/proc.ts";
 import { SelfTest } from "./lib/selftest.ts";
 
 const STATES = ["todo", "in-progress", "blocked", "done", "cancelled"];
@@ -138,7 +138,16 @@ function linkedBoards(owner: string, name: string): Board[] {
     "query($owner:String!,$name:String!){repository(owner:$owner,name:$name){" +
     "projectsV2(first:20){nodes{id number title closed url " +
     "owner{... on User{login} ... on Organization{login}}}}}}";
-  const data = ghj<any>(["api", "graphql", "-f", "query=" + q, "-F", "owner=" + owner, "-F", "name=" + name]);
+  const data = ghj<any>([
+    "api",
+    "graphql",
+    "-f",
+    `query=${q}`,
+    "-F",
+    `owner=${owner}`,
+    "-F",
+    `name=${name}`,
+  ]);
   const nodes = data?.data?.repository?.projectsV2?.nodes ?? [];
   return (nodes as Board[]).filter((n) => !n.closed);
 }
@@ -163,14 +172,29 @@ function boardInit(owner: string, name: string, nwo: string, title: string): voi
     console.log(`board exists: #${b.number} ${b.title} ${b.url}`);
     return;
   }
-  const made = ghj<any>(["project", "create", "--owner", owner, "--title", title, "--format", "json"]);
+  const made = ghj<any>([
+    "project",
+    "create",
+    "--owner",
+    owner,
+    "--title",
+    title,
+    "--format",
+    "json",
+  ]);
   gh(["project", "link", String(made.number), "--owner", owner, "--repo", nwo]);
   console.log(`board created: #${made.number} ${title} ${made.url ?? ""}`);
 }
 
 function statusField(b: Board): [string, Record<string, string>] {
   const fields = ghj<any>([
-    "project", "field-list", String(b.number), "--owner", b.ownerLogin, "--format", "json",
+    "project",
+    "field-list",
+    String(b.number),
+    "--owner",
+    b.ownerLogin ?? "",
+    "--format",
+    "json",
   ]);
   for (const f of fields.fields ?? []) {
     if ((f.name ?? "").toLowerCase() === "status" && f.options != null) {
@@ -186,7 +210,15 @@ function statusField(b: Board): [string, Record<string, string>] {
 
 function itemId(b: Board, nwo: string, number: number, url: string): [string, string | null] {
   const items = ghj<any>([
-    "project", "item-list", String(b.number), "--owner", b.ownerLogin, "--format", "json", "--limit", "1000",
+    "project",
+    "item-list",
+    String(b.number),
+    "--owner",
+    b.ownerLogin ?? "",
+    "--format",
+    "json",
+    "--limit",
+    "1000",
   ]);
   for (const it of items.items ?? []) {
     const c = it.content ?? {};
@@ -195,7 +227,15 @@ function itemId(b: Board, nwo: string, number: number, url: string): [string, st
     }
   }
   const added = ghj<any>([
-    "project", "item-add", String(b.number), "--owner", b.ownerLogin, "--url", url, "--format", "json",
+    "project",
+    "item-add",
+    String(b.number),
+    "--owner",
+    b.ownerLogin ?? "",
+    "--url",
+    url,
+    "--format",
+    "json",
   ]);
   return [added.id, null];
 }
@@ -210,14 +250,30 @@ function setColumn(b: Board, nwo: string, number: number, url: string, flow: str
   }
   const [iid] = itemId(b, nwo, number, url);
   gh([
-    "project", "item-edit", "--project-id", b.id, "--id", iid, "--field-id", field,
-    "--single-select-option-id", opts[key] ?? "",
+    "project",
+    "item-edit",
+    "--project-id",
+    b.id,
+    "--id",
+    iid,
+    "--field-id",
+    field,
+    "--single-select-option-id",
+    opts[key] ?? "",
   ]);
 }
 
 function boardStatuses(b: Board, nwo: string): Record<number, string> {
   const items = ghj<any>([
-    "project", "item-list", String(b.number), "--owner", b.ownerLogin, "--format", "json", "--limit", "1000",
+    "project",
+    "item-list",
+    String(b.number),
+    "--owner",
+    b.ownerLogin ?? "",
+    "--format",
+    "json",
+    "--limit",
+    "1000",
   ]);
   const out: Record<number, string> = {};
   for (const it of items.items ?? []) {
@@ -236,7 +292,16 @@ function issueOf(owner: string, name: string, nwo: string, number: number): Issu
     "issue(number:$number){number title body state stateReason url createdAt " +
     "labels(first:50){nodes{name}} comments(first:100){nodes{body createdAt author{login}}}}}}";
   const data = ghj<any>([
-    "api", "graphql", "-f", "query=" + q, "-F", "owner=" + owner, "-F", "name=" + name, "-F", "number=" + number,
+    "api",
+    "graphql",
+    "-f",
+    `query=${q}`,
+    "-F",
+    `owner=${owner}`,
+    "-F",
+    `name=${name}`,
+    "-F",
+    `number=${number}`,
   ]);
   const iss = data?.data?.repository?.issue;
   if (!iss) dieGh(`no issue #${number} in ${nwo}`);
@@ -253,8 +318,17 @@ function allIssues(owner: string, name: string): ListItem[] {
   const out: ListItem[] = [];
   let after: string | null = null;
   for (;;) {
-    const argv: string[] = ["api", "graphql", "-f", "query=" + q, "-F", "owner=" + owner, "-F", "name=" + name];
-    if (after) argv.push("-F", "after=" + after);
+    const argv: string[] = [
+      "api",
+      "graphql",
+      "-f",
+      `query=${q}`,
+      "-F",
+      `owner=${owner}`,
+      "-F",
+      `name=${name}`,
+    ];
+    if (after) argv.push("-F", `after=${after}`);
     const page = ghj<any>(argv)?.data?.repository?.issues ?? {};
     for (const n of page.nodes ?? []) {
       out.push({
@@ -280,11 +354,27 @@ function flowState(
 }
 
 function ensureLabel(nwo: string): void {
-  const labels = ghj<Array<{ name: string }>>(["label", "list", "-R", nwo, "--json", "name", "--limit", "200"]);
+  const labels = ghj<Array<{ name: string }>>([
+    "label",
+    "list",
+    "-R",
+    nwo,
+    "--json",
+    "name",
+    "--limit",
+    "200",
+  ]);
   const names = new Set(labels.map((l) => l.name.toLowerCase()));
   if (!names.has(BLOCKED)) {
     gh([
-      "label", "create", BLOCKED, "-R", nwo, "--color", "B60205", "--description",
+      "label",
+      "create",
+      BLOCKED,
+      "-R",
+      nwo,
+      "--color",
+      "B60205",
+      "--description",
       "Waiting on something outside the run",
     ]);
   }
@@ -339,10 +429,14 @@ function main(): void {
   const argvAll = process.argv.slice(2);
   const REPO = argvAll[0];
   if (!REPO) {
-    dieGh("usage: github.sh <repo> board|create|edit|read|state|comment|list|access ... | --self-test");
+    dieGh(
+      "usage: github.sh <repo> board|create|edit|read|state|comment|list|access ... | --self-test",
+    );
   }
   if (argvAll.length < 2) {
-    dieGh("usage: github.sh <repo> board|create|edit|read|state|comment|list|access ... | --self-test");
+    dieGh(
+      "usage: github.sh <repo> board|create|edit|read|state|comment|list|access ... | --self-test",
+    );
   }
   if (!existsSync(REPO) || !statSync(REPO).isDirectory()) dieGh(`no such directory: ${REPO}`);
   if (!Bun.which("gh")) dieGh("gh is not on PATH");
@@ -377,7 +471,16 @@ function main(): void {
     if (!("todo" in opts)) {
       dieGh(`board #${b.number} has no Status column for todo; nothing was created`);
     }
-    const createOut = gh(["issue", "create", "-R", NWO, "--title", args[1] ?? "", "--body-file", args[2] ?? ""]);
+    const createOut = gh([
+      "issue",
+      "create",
+      "-R",
+      NWO,
+      "--title",
+      args[1] ?? "",
+      "--body-file",
+      args[2] ?? "",
+    ]);
     const url = createOut.trim().split("\n").pop() ?? "";
     const number = parseInt(url.replace(/\/$/, "").split("/").pop() ?? "0", 10);
     try {
@@ -395,7 +498,7 @@ function main(): void {
     if (args.length !== 4 || !existsSync(args[2] ?? "") || statSync(args[2] ?? "").isDirectory()) {
       dieGh(
         "usage: github.sh <repo> edit <n> <body-file> <base-file>" +
-          (args.length === 4 ? "; no such body file: " + (args[2] ?? "") : ""),
+          (args.length === 4 ? `; no such body file: ${args[2] ?? ""}` : ""),
       );
     }
     const n = numberArg(args[1] ?? "");
@@ -415,7 +518,7 @@ function main(): void {
     const iss = issueOf(OWNER, NAME, NWO, n);
     const b = boardOf(NWO, OWNER, NAME);
     if (bodyOnly) {
-      process.stdout.write((iss.body ?? "") + "\n");
+      process.stdout.write(`${iss.body ?? ""}\n`);
       return;
     }
     const statuses = boardStatuses(b, NWO);
@@ -430,13 +533,15 @@ function main(): void {
     const comments = iss.comments ?? [];
     if (comments.length > 0) {
       console.log("\n## Log");
-      const sorted = [...comments].sort((a, b) => (a.createdAt ?? "").localeCompare(b.createdAt ?? ""));
+      const sorted = [...comments].sort((a, b) =>
+        (a.createdAt ?? "").localeCompare(b.createdAt ?? ""),
+      );
       for (const c of sorted) {
         let text = (c.body ?? "").split(/\s+/).filter(Boolean).join(" ");
         if (!/^\d{4}-\d{2}-\d{2} /.test(text)) {
           text = `${String(c.createdAt ?? "").slice(0, 10)} ${c.author?.login ?? "?"}: ${text}`;
         }
-        console.log("- " + text);
+        console.log(`- ${text}`);
       }
     }
   } else if (cmd === "state") {
@@ -491,8 +596,18 @@ function main(): void {
     }
   } else if (cmd === "access") {
     if (args.length !== 1) dieGh("usage: github.sh <repo> access");
-    const q = "query($owner:String!,$name:String!){repository(owner:$owner,name:$name){viewerPermission}}";
-    const data = ghj<any>(["api", "graphql", "-f", "query=" + q, "-F", "owner=" + OWNER, "-F", "name=" + NAME]);
+    const q =
+      "query($owner:String!,$name:String!){repository(owner:$owner,name:$name){viewerPermission}}";
+    const data = ghj<any>([
+      "api",
+      "graphql",
+      "-f",
+      `query=${q}`,
+      "-F",
+      `owner=${OWNER}`,
+      "-F",
+      `name=${NAME}`,
+    ]);
     const perm = data?.data?.repository?.viewerPermission;
     if (!perm) dieGh(`no permission on ${NWO} could be read`);
     console.log(perm);
@@ -500,7 +615,15 @@ function main(): void {
     if (args.length !== 2) dieGh("usage: github.sh <repo> search <text>");
     const text = (args[1] ?? "").replace(/[":]/g, " ").trim();
     const hits = ghj<Array<{ number: number; title: string; state: string }>>([
-      "search", "issues", `"${text}"`, "--repo", NWO, "--json", "number,title,state", "--limit", "100",
+      "search",
+      "issues",
+      `"${text}"`,
+      "--repo",
+      NWO,
+      "--json",
+      "number,title,state",
+      "--limit",
+      "100",
     ]);
     for (const h of [...hits].sort((a, b) => a.number - b.number)) {
       console.log(`#${h.number}\t${String(h.state ?? "").toLowerCase()}\t${h.title ?? ""}`);
@@ -518,7 +641,7 @@ function catA(text: string): string {
   return text
     .replace(/\t/g, "^I")
     .split("\n")
-    .map((l, i, arr) => (i < arr.length - 1 ? l + "$" : l))
+    .map((l, i, arr) => (i < arr.length - 1 ? `${l}$` : l))
     .join("\n");
 }
 
@@ -563,12 +686,15 @@ esac
     chmodSync(join(bin, "gh"), 0o755);
 
     if (run("git", ["init", "-q", join(tmp, "repo")]).code !== 0) process.exit(1);
-    if (run("git", ["-C", join(tmp, "repo"), "remote", "add", "origin", "https://github.com/o/r.git"]).code !== 0)
+    if (
+      run("git", ["-C", join(tmp, "repo"), "remote", "add", "origin", "https://github.com/o/r.git"])
+        .code !== 0
+    )
       process.exit(1);
 
     const BOARD =
       '{"data": {"repository": {"projectsV2": {"nodes": [{"id": "PVT_1", "number": 1, "title": "r", "closed": false, "url": "https://github.com/users/o/projects/1", "owner": {"login": "o"}}]}}}}';
-    writeFileSync(join(S, "boards.json"), BOARD + "\n");
+    writeFileSync(join(S, "boards.json"), `${BOARD}\n`);
     writeFileSync(
       join(S, "items.json"),
       '{"items": [{"id": "PVTI_7", "status": "Todo", "content": {"type": "Issue", "number": 7, "repository": "o/r"}}]}' +
@@ -591,7 +717,7 @@ esac
               body,
               state: "OPEN",
               stateReason: null,
-              url: "https://github.com/o/r/issues/" + n,
+              url: `https://github.com/o/r/issues/${n}`,
               createdAt: "2026-09-23T00:00:00Z",
               labels: { nodes: [] },
               comments: { nodes: [] },
@@ -599,7 +725,7 @@ esac
           },
         },
       };
-      writeFileSync(join(S, `issue-${n}.json`), JSON.stringify(obj) + "\n");
+      writeFileSync(join(S, `issue-${n}.json`), `${JSON.stringify(obj)}\n`);
     }
 
     function ghSh(args: string[]): { code: number; out: string; err: string } {
@@ -630,11 +756,14 @@ esac
 
     const st = new SelfTest();
 
-    const lfMd = '## Problem / feature\nA body with `code`, "quotes" and a trailing space. \n\n## Direction\nNone.';
+    const lfMd =
+      '## Problem / feature\nA body with `code`, "quotes" and a trailing space. \n\n## Direction\nNone.';
     writeFileSync(join(tmp, "lf.md"), lfMd);
-    const crlfMd = "## Problem / feature\r\nStored with CRLF line endings.\r\n\r\n## Direction\r\nNone.\r\n";
+    const crlfMd =
+      "## Problem / feature\r\nStored with CRLF line endings.\r\n\r\n## Direction\r\nNone.\r\n";
     writeFileSync(join(tmp, "crlf.md"), crlfMd);
-    const newMd = "## Problem / feature\nThe new body.\n\n## Direction\nNone: any approach that meets the criteria.\n";
+    const newMd =
+      "## Problem / feature\nThe new body.\n\n## Direction\nNone: any approach that meets the criteria.\n";
     writeFileSync(join(tmp, "new.md"), newMd);
 
     console.log("positive controls");
@@ -684,7 +813,8 @@ esac
     let editedBodyMatches = false;
     try {
       editedBodyMatches =
-        Buffer.compare(readFileSync(join(S, "edited-body")), readFileSync(join(tmp, "new.md"))) === 0;
+        Buffer.compare(readFileSync(join(S, "edited-body")), readFileSync(join(tmp, "new.md"))) ===
+        0;
     } catch {
       editedBodyMatches = false;
     }
@@ -701,7 +831,10 @@ esac
 
     // 5. a body stored with CRLF matches the same base with LF
     stored(7, join(tmp, "crlf.md"));
-    writeFileSync(join(tmp, "base-lf.md"), readFileSync(join(tmp, "crlf.md"), "utf8").replace(/\r/g, ""));
+    writeFileSync(
+      join(tmp, "base-lf.md"),
+      readFileSync(join(tmp, "crlf.md"), "utf8").replace(/\r/g, ""),
+    );
     writeFileSync(join(S, "edits.log"), "");
     r = ghSh(["edit", "7", join(tmp, "new.md"), join(tmp, "base-lf.md")]);
     st.check(
@@ -736,34 +869,55 @@ esac
       join(tmp, "new.md"),
       join(tmp, "stale.md"),
     ]);
-    refused("an empty body file exits 1", 1, "is empty", ["7", join(tmp, "empty.md"), join(tmp, "base.md")]);
+    refused("an empty body file exits 1", 1, "is empty", [
+      "7",
+      join(tmp, "empty.md"),
+      join(tmp, "base.md"),
+    ]);
     refused("a missing base file exits 1", 1, "cannot read base file", [
       "7",
       join(tmp, "new.md"),
       join(tmp, "nowhere.md"),
     ]);
-    refused("a pull request number exits 1", 1, "no issue #34", ["34", join(tmp, "new.md"), join(tmp, "base.md")]);
+    refused("a pull request number exits 1", 1, "no issue #34", [
+      "34",
+      join(tmp, "new.md"),
+      join(tmp, "base.md"),
+    ]);
     refused("the old form, with a title, is a usage error", 1, "usage:", [
       "7",
       "Check a ticket's shape",
       join(tmp, "new.md"),
     ]);
 
-    writeFileSync(join(S, "boards.json"), '{"data": {"repository": {"projectsV2": {"nodes": []}}}}' + "\n");
-    refused("no linked board exits 3", 3, "no linked board", ["7", join(tmp, "new.md"), join(tmp, "base.md")]);
+    writeFileSync(
+      join(S, "boards.json"),
+      '{"data": {"repository": {"projectsV2": {"nodes": []}}}}' + "\n",
+    );
+    refused("no linked board exits 3", 3, "no linked board", [
+      "7",
+      join(tmp, "new.md"),
+      join(tmp, "base.md"),
+    ]);
     r = ghSh(["read", "7", "--body"]);
     st.check("read --body without a linked board exits 3", r.code === 3, `exit ${r.code}`);
-    writeFileSync(join(S, "boards.json"), BOARD + "\n");
+    writeFileSync(join(S, "boards.json"), `${BOARD}\n`);
 
     console.log("access");
-    writeFileSync(join(S, "access.json"), '{"data": {"repository": {"viewerPermission": "ADMIN"}}}' + "\n");
+    writeFileSync(
+      join(S, "access.json"),
+      '{"data": {"repository": {"viewerPermission": "ADMIN"}}}' + "\n",
+    );
     r = ghSh(["access"]);
     st.check(
       "access prints the user's permission",
       r.code === 0 && r.out.trim() === "ADMIN",
       `exit ${r.code}\n${r.out}`,
     );
-    writeFileSync(join(S, "access.json"), '{"data": {"repository": {"viewerPermission": "READ"}}}' + "\n");
+    writeFileSync(
+      join(S, "access.json"),
+      '{"data": {"repository": {"viewerPermission": "READ"}}}' + "\n",
+    );
     r = ghSh(["access"]);
     st.check(
       "a repository the user only reads says READ",
@@ -830,7 +984,9 @@ esac
     }
     st.check(
       "search asks for the phrase in this repository, and prints number, state and title",
-      r.code === 0 && r.out.trimEnd() === wantSearch && searchesLog.includes('"tf-0a1b2c3d" --repo o/r'),
+      r.code === 0 &&
+        r.out.trimEnd() === wantSearch &&
+        searchesLog.includes('"tf-0a1b2c3d" --repo o/r'),
       `exit ${r.code}\n${r.out}`,
     );
 

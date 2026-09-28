@@ -36,12 +36,11 @@
 //           project or id, or a body create or edit refuses
 //   exit 2  invalid state
 //   exit 4  the work item changed since the base was read
-import { existsSync, readFileSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { run, die } from "./lib/proc.ts";
-import { readTomlFile, tryTomlFile } from "./lib/data.ts";
-import { SelfTest } from "./lib/selftest.ts";
+import { join } from "node:path";
+import { tryTomlFile } from "./lib/data.ts";
+import { run } from "./lib/proc.ts";
 
 // --- die as throw, so we can catch in create's set_column equivalent ---
 class DieError extends Error {
@@ -57,9 +56,36 @@ function dieP(msg: string, code = 1): never {
 }
 
 // --- html -> markdown --------------------------------------------------------------------------
-const VOID = new Set(["area","base","br","col","embed","hr","img","input","link","meta","source","track","wbr"]);
-const SPACED = new Set(["td","th","tr","table","tbody","thead","div","blockquote","label","dd","dt","figcaption"]);
-const HEADINGS = new Set(["h1","h2","h3","h4","h5","h6"]);
+const VOID = new Set([
+  "area",
+  "base",
+  "br",
+  "col",
+  "embed",
+  "hr",
+  "img",
+  "input",
+  "link",
+  "meta",
+  "source",
+  "track",
+  "wbr",
+]);
+const SPACED = new Set([
+  "td",
+  "th",
+  "tr",
+  "table",
+  "tbody",
+  "thead",
+  "div",
+  "blockquote",
+  "label",
+  "dd",
+  "dt",
+  "figcaption",
+]);
+const HEADINGS = new Set(["h1", "h2", "h3", "h4", "h5", "h6"]);
 const BR = "\x01";
 
 interface Node {
@@ -106,7 +132,12 @@ class Tree {
       if (html.startsWith("</", lt)) {
         const gt = html.indexOf(">", lt);
         if (gt < 0) break;
-        const tag = html.slice(lt + 2, gt).trim().toLowerCase().split(/[\s>]/)[0] ?? "";
+        const tag =
+          html
+            .slice(lt + 2, gt)
+            .trim()
+            .toLowerCase()
+            .split(/[\s>]/)[0] ?? "";
         this.handleEndTag(tag);
         i = gt + 1;
         continue;
@@ -118,7 +149,10 @@ class Tree {
       const selfClose = tagText.endsWith("/");
       if (selfClose) tagText = tagText.slice(0, -1);
       const m = /^([a-zA-Z][a-zA-Z0-9]*)/.exec(tagText);
-      if (!m) { i = gt + 1; continue; }
+      if (!m) {
+        i = gt + 1;
+        continue;
+      }
       const tag = (m[1] ?? "").toLowerCase();
       const attrs = parseAttrs(tagText.slice(m[0].length));
       this.tags.add(tag);
@@ -185,18 +219,38 @@ function unescapeHtml(s: string): string {
   return s.replace(/&(#x?[0-9a-fA-F]+|[a-zA-Z][a-zA-Z0-9]*);/g, (full, body: string) => {
     if (body.startsWith("#x") || body.startsWith("#X")) {
       const code = parseInt(body.slice(2), 16);
-      return isNaN(code) ? full : String.fromCodePoint(code);
+      return Number.isNaN(code) ? full : String.fromCodePoint(code);
     }
     if (body.startsWith("#")) {
       const code = parseInt(body.slice(1), 10);
-      return isNaN(code) ? full : String.fromCodePoint(code);
+      return Number.isNaN(code) ? full : String.fromCodePoint(code);
     }
     const map: Record<string, string> = {
-      amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: "\u00a0",
-      hellip: "\u2026", mdash: "\u2014", ndash: "\u2013", lsquo: "\u2018", rsquo: "\u2019",
-      ldquo: "\u201c", rdquo: "\u201d", copy: "\u00a9", reg: "\u00ae", trade: "\u2122",
-      deg: "\u00b0", plusmn: "\u00b1", frac12: "\u00bd", frac14: "\u00bc", frac34: "\u00be",
-      times: "\u00d7", divide: "\u00f7", laquo: "\u00ab", raquo: "\u00bb",
+      amp: "&",
+      lt: "<",
+      gt: ">",
+      quot: '"',
+      apos: "'",
+      nbsp: "\u00a0",
+      hellip: "\u2026",
+      mdash: "\u2014",
+      ndash: "\u2013",
+      lsquo: "\u2018",
+      rsquo: "\u2019",
+      ldquo: "\u201c",
+      rdquo: "\u201d",
+      copy: "\u00a9",
+      reg: "\u00ae",
+      trade: "\u2122",
+      deg: "\u00b0",
+      plusmn: "\u00b1",
+      frac12: "\u00bd",
+      frac14: "\u00bc",
+      frac34: "\u00be",
+      times: "\u00d7",
+      divide: "\u00f7",
+      laquo: "\u00ab",
+      raquo: "\u00bb",
     };
     return map[body] ?? full;
   });
@@ -215,7 +269,9 @@ function textOf(n: Node | string): string {
 }
 
 function hasBlock(n: Node): boolean {
-  return n.children.some((c) => typeof c !== "string" && (BLOCK[c.tag] || c.tag === "li" || hasBlock(c)));
+  return n.children.some(
+    (c) => typeof c !== "string" && (BLOCK[c.tag] || c.tag === "li" || hasBlock(c)),
+  );
 }
 
 function flatten(children: (Node | string)[]): (Node | string)[] {
@@ -236,7 +292,7 @@ function mdInline(nodes: (Node | string)[]): string {
     if (typeof n === "string") {
       out.push(n);
     } else if (INLINE[n.tag]) {
-      out.push(INLINE[n.tag]!(n));
+      out.push(INLINE[n.tag]?.(n));
     } else {
       const sep = SPACED.has(n.tag) ? " " : "";
       out.push(sep + mdInline(n.children) + sep);
@@ -249,7 +305,13 @@ function mdStrong(n: Node): string {
   const inner = mdInline(n.children);
   const core = inner.trim();
   if (!core) return inner;
-  return inner.slice(0, inner.length - inner.trimStart().length) + "**" + core + "**" + inner.slice(inner.trimEnd().length);
+  return (
+    inner.slice(0, inner.length - inner.trimStart().length) +
+    "**" +
+    core +
+    "**" +
+    inner.slice(inner.trimEnd().length)
+  );
 }
 
 function mdCode(n: Node): string {
@@ -271,24 +333,30 @@ function mdLink(n: Node): string {
 }
 
 const INLINE: Record<string, (n: Node) => string> = {
-  strong: mdStrong, b: mdStrong, code: mdCode, a: mdLink,
+  strong: mdStrong,
+  b: mdStrong,
+  code: mdCode,
+  a: mdLink,
   br: () => BR,
 };
 
 function paraLines(nodes: (Node | string)[]): string[] {
   const raw = mdInline(nodes).replace(/\s+/g, " ");
-  const segs = raw.split(BR).map((s) => s.trim()).filter(Boolean);
-  return segs.map((s, i) => (i < segs.length - 1 ? s + "\\" : s));
+  const segs = raw
+    .split(BR)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return segs.map((s, i) => (i < segs.length - 1 ? `${s}\\` : s));
 }
 
 function mdHeading(n: Node): string[] {
   const text = mdInline(n.children).split(BR).join(" ").split(/\s+/).filter(Boolean).join(" ");
-  return ["#".repeat(parseInt(n.tag[1] ?? "1", 10)) + (text ? " " + text : "")];
+  return ["#".repeat(parseInt(n.tag[1] ?? "1", 10)) + (text ? ` ${text}` : "")];
 }
 
 function codeLang(n: Node): string {
   const code = n.children.find((c): c is Node => typeof c !== "string" && c.tag === "code");
-  const classes = ((code?.attrs.class ?? "") + " " + (n.attrs.class ?? "")).split(/\s+/).filter(Boolean);
+  const classes = `${code?.attrs.class ?? ""} ${n.attrs.class ?? ""}`.split(/\s+/).filter(Boolean);
   for (const c of classes) {
     if (c.startsWith("language-")) return c.slice(9);
   }
@@ -311,7 +379,7 @@ function mdPre(n: Node): string[] {
 function listStart(n: Node): number {
   if (n.tag !== "ol") return 1;
   const s = parseInt(n.attrs.start ?? "1", 10);
-  return isNaN(s) ? 1 : s;
+  return Number.isNaN(s) ? 1 : s;
 }
 
 function mdList(n: Node, alt = false): string[] {
@@ -321,7 +389,7 @@ function mdList(n: Node, alt = false): string[] {
   const lines: string[] = [];
   for (const c of n.children) {
     if (typeof c === "string" || c.tag !== "li") continue;
-    const marker = ordered ? `${number}${delim} ` : delim + " ";
+    const marker = ordered ? `${number}${delim} ` : `${delim} `;
     number++;
     const body = mdBlocks(c.children, true);
     if (body.length === 0) {
@@ -337,7 +405,12 @@ function mdList(n: Node, alt = false): string[] {
 }
 
 const BLOCK: Record<string, (n: Node) => string[]> = {
-  h1: mdHeading, h2: mdHeading, h3: mdHeading, h4: mdHeading, h5: mdHeading, h6: mdHeading,
+  h1: mdHeading,
+  h2: mdHeading,
+  h3: mdHeading,
+  h4: mdHeading,
+  h5: mdHeading,
+  h6: mdHeading,
   p: (n) => paraLines(n.children),
   pre: mdPre,
   hr: () => ["---"],
@@ -360,16 +433,26 @@ function mdBlocks(children: (Node | string)[], inItem = false): string[] {
       continue;
     }
     flush();
-    const alt = (c.tag === "ol" || c.tag === "ul") && blocks.length > 0 &&
-      blocks[blocks.length - 1]![0] === c.tag && !blocks[blocks.length - 1]![2];
-    const lines = c.tag === "ol" || c.tag === "ul" ? mdList(c, alt) : BLOCK[c.tag]!(c);
+    const alt =
+      (c.tag === "ol" || c.tag === "ul") &&
+      blocks.length > 0 &&
+      blocks[blocks.length - 1]?.[0] === c.tag &&
+      !blocks[blocks.length - 1]?.[2];
+    const lines = c.tag === "ol" || c.tag === "ul" ? mdList(c, alt) : BLOCK[c.tag]?.(c);
     if (lines.length > 0) blocks.push([c.tag, lines, alt]);
   }
   flush();
   const out: string[] = [];
   for (let k = 0; k < blocks.length; k++) {
     const [tag, lines] = blocks[k]!;
-    if (k > 0 && !(inItem && (tag === "ol" || tag === "ul") && (blocks[k - 1]![0] === "p" || blocks[k - 1]![0] === "ol" || blocks[k - 1]![0] === "ul"))) {
+    if (
+      k > 0 &&
+      !(
+        inItem &&
+        (tag === "ol" || tag === "ul") &&
+        (blocks[k - 1]?.[0] === "p" || blocks[k - 1]?.[0] === "ol" || blocks[k - 1]?.[0] === "ul")
+      )
+    ) {
       out.push("");
     }
     out.push(...lines);
@@ -378,7 +461,9 @@ function mdBlocks(children: (Node | string)[], inItem = false): string[] {
 }
 
 function htmlToText(h: string): string {
-  return mdBlocks(new Tree(h).root.children).join("\n").replace(/^\n+|\n+$/g, "");
+  return mdBlocks(new Tree(h).root.children)
+    .join("\n")
+    .replace(/^\n+|\n+$/g, "");
 }
 
 // --- markdown -> html --------------------------------------------------------------------------
@@ -407,38 +492,72 @@ function fenceAt(line: string, top = true): [number, string, string] | null {
 
 function closes(fence: string, line: string): boolean {
   const s = line.trim();
-  return s.length >= fence.length && s === fence[0]!.repeat(s.length);
+  return s.length >= fence.length && s === fence[0]?.repeat(s.length);
 }
 
-function itemAt(line: string): { kind: string; delim: string; number: number; col: number; rest: string } | null {
+function itemAt(
+  line: string,
+): { kind: string; delim: string; number: number; col: number; rest: string } | null {
   if (THEMATIC.test(line)) return null;
   let m = BULLET.exec(line);
   if (m) {
-    const lead = m[1] ?? "", marker = m[2] ?? "", space = m[3] ?? "", rest = m[4] ?? "";
-    if (rest && space.length > 4) return { kind: "ul", delim: marker, number: 1, col: lead.length + marker.length + 1, rest: " ".repeat(space.length - 1) + rest };
+    const lead = m[1] ?? "",
+      marker = m[2] ?? "",
+      space = m[3] ?? "",
+      rest = m[4] ?? "";
+    if (rest && space.length > 4)
+      return {
+        kind: "ul",
+        delim: marker,
+        number: 1,
+        col: lead.length + marker.length + 1,
+        rest: " ".repeat(space.length - 1) + rest,
+      };
     const width = rest && space.length <= 4 ? space.length : 1;
     return { kind: "ul", delim: marker, number: 1, col: lead.length + marker.length + width, rest };
   }
   m = ORDERED.exec(line);
   if (!m) return null;
-  const lead = m[1] ?? "", numStr = m[2] ?? "", delim = m[3] ?? "", space = m[4] ?? "", rest = m[5] ?? "";
+  const lead = m[1] ?? "",
+    numStr = m[2] ?? "",
+    delim = m[3] ?? "",
+    space = m[4] ?? "",
+    rest = m[5] ?? "";
   const marker = numStr + delim;
-  if (rest && space.length > 4) return { kind: "ol", delim, number: parseInt(numStr, 10), col: lead.length + marker.length + 1, rest: " ".repeat(space.length - 1) + rest };
+  if (rest && space.length > 4)
+    return {
+      kind: "ol",
+      delim,
+      number: parseInt(numStr, 10),
+      col: lead.length + marker.length + 1,
+      rest: " ".repeat(space.length - 1) + rest,
+    };
   const width = rest && space.length <= 4 ? space.length : 1;
-  return { kind: "ol", delim, number: parseInt(numStr, 10), col: lead.length + marker.length + width, rest };
+  return {
+    kind: "ol",
+    delim,
+    number: parseInt(numStr, 10),
+    col: lead.length + marker.length + width,
+    rest,
+  };
 }
 
 function commentBlock(lines: string[], i: number): number | null {
   for (let j = i; j < lines.length; j++) {
-    if (lines[j]!.includes("-->")) return j + 1;
+    if (lines[j]?.includes("-->")) return j + 1;
   }
   return null;
 }
 
 function startsBlock(lines: string[], i: number): boolean {
   const line = lines[i]!;
-  return !!(ATX.exec(line) || THEMATIC.exec(line) || fenceAt(line) || itemAt(line) ||
-    (COMMENT.test(line) && commentBlock(lines, i) !== null));
+  return !!(
+    ATX.exec(line) ||
+    THEMATIC.exec(line) ||
+    fenceAt(line) ||
+    itemAt(line) ||
+    (COMMENT.test(line) && commentBlock(lines, i) !== null)
+  );
 }
 
 function codeSpans(text: string): [string, string[]] {
@@ -452,11 +571,11 @@ function codeSpans(text: string): [string, string[]] {
       continue;
     }
     const rest = text.slice(k);
-    const n = rest.length - rest.trimStart().length;
+    const _n = rest.length - rest.trimStart().length;
     // count leading backticks
     let nb = 0;
     while (k + nb < text.length && text[k + nb] === "`") nb++;
-    const closeRe = new RegExp("(?<!`)" + "`".repeat(nb) + "(?!`)");
+    const closeRe = new RegExp(`(?<!\`)${"`".repeat(nb)}(?!\`)`);
     const after = text.slice(k + nb);
     const cm = closeRe.exec(after);
     if (!cm) {
@@ -468,7 +587,7 @@ function codeSpans(text: string): [string, string[]] {
     if (code.length > 1 && code.startsWith(" ") && code.endsWith(" ") && code.trim()) {
       code = code.slice(1, -1);
     }
-    out.push("\x02" + spans.length + "\x03");
+    out.push(`\x02${spans.length}\x03`);
     spans.push(code);
     k = k + nb + cm.index + cm[0].length;
   }
@@ -496,10 +615,19 @@ function inlineMd(text: string): string {
     pos = (m.index ?? 0) + m[0].length;
   }
   out.push(bold(t0.slice(pos)));
-  return out.join("").replace(/\x02(\d+)\x03/g, (_f, i: string) => `<code>${esc(spans[parseInt(i, 10)] ?? "")}</code>`);
+  return out
+    .join("")
+    .replace(
+      /\x02(\d+)\x03/g,
+      (_f, i: string) => `<code>${esc(spans[parseInt(i, 10)] ?? "")}</code>`,
+    );
 }
 
-function itemLines(lines: string[], i: number, st: { col: number; rest: string }): [string[], number] {
+function itemLines(
+  lines: string[],
+  i: number,
+  st: { col: number; rest: string },
+): [string[], number] {
   const col = st.col;
   const body = [st.rest];
   let fence = fenceAt(st.rest, false);
@@ -538,7 +666,7 @@ function itemLines(lines: string[], i: number, st: { col: number; rest: string }
     i++;
     fence = fenceAt(rel, false);
   }
-  while (body.length > 0 && !body[body.length - 1]!.trim()) body.pop();
+  while (body.length > 0 && !body[body.length - 1]?.trim()) body.pop();
   return [body, i];
 }
 
@@ -562,7 +690,10 @@ function htmlBlocks(lines: string[]): string[] {
   let i = 0;
   while (i < lines.length) {
     const line = lines[i]!;
-    if (!line.trim()) { i++; continue; }
+    if (!line.trim()) {
+      i++;
+      continue;
+    }
     if (COMMENT.test(line) && commentBlock(lines, i) !== null) {
       i = commentBlock(lines, i)!;
       continue;
@@ -572,13 +703,15 @@ function htmlBlocks(lines: string[]): string[] {
       const code: string[] = [];
       i++;
       while (i < lines.length && !closes(f[1]!, lines[i]!)) {
-        code.push(lines[i]!.slice(Math.min(f[0], indentOf(lines[i]!))));
+        code.push(lines[i]?.slice(Math.min(f[0], indentOf(lines[i]!))));
         i++;
       }
       i++;
       const lang = f[2] ? (f[2].split(/\s+/)[0] ?? "") : "";
       const cls = lang ? ` class="language-${escapeHtml(lang, true)}"` : "";
-      out.push(`<pre><code${cls}>${escapeHtml(code.map((l) => l + "\n").join(""), false)}</code></pre>`);
+      out.push(
+        `<pre><code${cls}>${escapeHtml(code.map((l) => `${l}\n`).join(""), false)}</code></pre>`,
+      );
       continue;
     }
     const m = ATX.exec(line);
@@ -602,14 +735,16 @@ function htmlBlocks(lines: string[]): string[] {
     }
     const para = [line.trim()];
     i++;
-    while (i < lines.length && lines[i]!.trim() && !startsBlock(lines, i)) {
-      para.push(lines[i]!.trim());
+    while (i < lines.length && lines[i]?.trim() && !startsBlock(lines, i)) {
+      para.push(lines[i]?.trim());
       i++;
     }
-    const text = para.map((l, k) => {
-      if (l.endsWith("\\") && k < para.length - 1) return l.slice(0, -1) + BR;
-      return l + " ";
-    }).join("");
+    const text = para
+      .map((l, k) => {
+        if (l.endsWith("\\") && k < para.length - 1) return l.slice(0, -1) + BR;
+        return `${l} `;
+      })
+      .join("");
     out.push(`<p>${inlineMd(text.trim()).split(BR).join("<br>")}</p>`);
   }
   return out;
@@ -720,9 +855,17 @@ function shape(h: string): string[] {
 }
 
 const NAMES: Record<string, string> = {
-  p: "a paragraph", li: "a list item", ul: "a bullet list", ol: "a numbered list",
-  pre: "a code block", hr: "a rule", br: "a line break", b: "bold text", a: "a link",
-  code: "inline code", stray: "text outside the list's items",
+  p: "a paragraph",
+  li: "a list item",
+  ul: "a bullet list",
+  ol: "a numbered list",
+  pre: "a code block",
+  hr: "a rule",
+  br: "a line break",
+  b: "bold text",
+  a: "a link",
+  code: "inline code",
+  stray: "text outside the list's items",
 };
 
 function tokenName(toks: string[], n: number): string {
@@ -738,18 +881,24 @@ function tokenName(toks: string[], n: number): string {
   let name = HEADINGS.has(tag) ? `a level-${tag[1]} heading` : (NAMES[tag] ?? tag);
   if (detail && !end) {
     const suffix: Record<string, string> = {
-      ol: ` (${detail})`, a: ` to ${detail}`, code: ` "${detail}"`, pre: ` in ${detail}`,
+      ol: ` (${detail})`,
+      a: ` to ${detail}`,
+      code: ` "${detail}"`,
+      pre: ` in ${detail}`,
     };
     name += suffix[tag] ?? "";
   }
-  return end ? "the end of " + name : name;
+  return end ? `the end of ${name}` : name;
 }
 
 function firstDifference(a: string[], b: string[]): string | null {
   let n = 0;
   while (n < a.length && n < b.length && a[n] === b[n]) n++;
   if (n === a.length && n === b.length) return null;
-  const words = a.slice(0, n).filter((t) => !t.startsWith("<")).slice(-5);
+  const words = a
+    .slice(0, n)
+    .filter((t) => !t.startsWith("<"))
+    .slice(-5);
   const where = words.length > 0 ? `after "${words.join(" ")}"` : "at the start";
   return `${where}, ${tokenName(a, n)} becomes ${tokenName(b, n)}`;
 }
@@ -761,7 +910,11 @@ function readback(md: string, read?: (h: string) => string): [string, string | n
 }
 
 function normText(t: string): string {
-  const lines = t.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n").map((l) => l.replace(/[ \t]+$/, ""));
+  const lines = t
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .split("\n")
+    .map((l) => l.replace(/[ \t]+$/, ""));
   while (lines.length > 0 && lines[0] === "") lines.shift();
   while (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
   return lines.join("\n");
@@ -770,14 +923,23 @@ function normText(t: string): string {
 function planEdit(stored: string, base: string, body: string): [number, string] {
   if (!body.trim()) return [1, "the body file is empty"];
   const tree = new Tree(stored);
-  const lost = [...tree.tags].filter((t) => !RENDERED.has(t)).sort().map((t) => `<${t}>`);
+  const lost = [...tree.tags]
+    .filter((t) => !RENDERED.has(t))
+    .sort()
+    .map((t) => `<${t}>`);
   const lostTags = tree.comments > 0 ? [...lost, "an HTML comment"] : lost;
   if (lostTags.length > 0) {
-    return [1, `its description holds ${lostTags.join(", ")}, which read does not render, so writing it back would lose it; the user edits it in Plane`];
+    return [
+      1,
+      `its description holds ${lostTags.join(", ")}, which read does not render, so writing it back would lose it; the user edits it in Plane`,
+    ];
   }
   const diff = firstDifference(shape(stored), shape(mdToHtml(htmlToText(stored))));
   if (diff) {
-    return [1, `read does not show its description as Plane stores it (${diff}); the user edits it in Plane`];
+    return [
+      1,
+      `read does not show its description as Plane stores it (${diff}); the user edits it in Plane`,
+    ];
   }
   if (normText(htmlToText(stored)) !== normText(base)) {
     return [4, "it changed since the base was read"];
@@ -795,12 +957,13 @@ function selfTest(): number {
     console.log((good ? "  ok   " : "  FAIL ") + label);
     if (!good) {
       const s = String(detail);
-      for (const l of s.split("\n")) console.log("         " + l);
-      fails[0]++;
+      for (const l of s.split("\n")) console.log(`         ${l}`);
+      fails[0] = (fails[0] ?? 0) + 1;
     }
   };
   const delta = (a: string, b: string): string => {
-    const al = a.split("\n"), bl = b.split("\n");
+    const al = a.split("\n"),
+      bl = b.split("\n");
     const out: string[] = [];
     for (let i = 0; i < Math.max(al.length, bl.length); i++) {
       if (al[i] !== bl[i]) out.push(`-${al[i] ?? ""}\n+${bl[i] ?? ""}`);
@@ -811,22 +974,27 @@ function selfTest(): number {
     const kids = new Tree(h).root.children.filter((c): c is Node => typeof c !== "string");
     for (let k = 0; k < kids.length - 1; k++) {
       const c = kids[k]!;
-      if (c.tag === "h2" && textOf(c).split(/\s+/).filter(Boolean).join(" ") === "Acceptance criteria" && kids[k + 1]!.tag === "ol") {
-        return kids[k + 1]!.children.filter((x) => typeof x !== "string" && x.tag === "li").length;
+      if (
+        c.tag === "h2" &&
+        textOf(c).split(/\s+/).filter(Boolean).join(" ") === "Acceptance criteria" &&
+        kids[k + 1]?.tag === "ol"
+      ) {
+        return kids[k + 1]?.children.filter((x) => typeof x !== "string" && x.tag === "li").length;
       }
     }
     return 0;
   }
 
-  const body = [
+  const body = `${[
     "## Problem / feature\nA ticket reaches a coachman with no criteria, so it has nothing to judge the lanes against.",
     "## Acceptance criteria\n1. The check exits 0 on a well-formed ticket and prints how many criteria it has.\n2. It exits 2 and names each missing part:\n   - the title\n   - the direction\n   1. a nested number is part of criterion 2, not a criterion\n\n   ```\n   ## Direction\n   ticket-check.sh --body draft.md   # which draft? TODO\n   ```\n3. A question or a marker in code, `a?` or `TODO`, is not read,\nand a line that runs straight on belongs to the criterion above it.\n\n   So does an indented paragraph after a blank line.",
     "## Direction\n<!-- a template comment is not read: TBD -->\nNone: any approach that meets the criteria.",
     "## Turnpikes\n<!-- default, none, or turnpike names -->\n`default`",
     "## Notes\nA heading inside a fenced block is not a section:\n\n```\n## Direction\n```",
-  ].join("\n\n") + "\n";
+  ].join("\n\n")}\n`;
 
-  const editor = '<h2 class="editor-heading-block">Acceptance criteria</h2>' +
+  const editor =
+    '<h2 class="editor-heading-block">Acceptance criteria</h2>' +
     '<ol class="list-decimal pl-7 space-y-[--list-spacing-y] tight" data-tight="true">' +
     '<li class="not-prose space-y-2"><p class="editor-paragraph-block">The check runs.</p></li>' +
     '<li class="not-prose space-y-2"><p class="editor-paragraph-block">It names each part.</p></li>' +
@@ -834,74 +1002,134 @@ function selfTest(): number {
 
   console.log("positive controls");
   const [outHtml, diff] = readback(body);
-  check("the ticket-check fixture reads back with the same words and structure", diff === null, diff);
+  check(
+    "the ticket-check fixture reads back with the same words and structure",
+    diff === null,
+    diff,
+  );
   const once = htmlToText(outHtml);
-  check("it keeps exactly 3 top-level criteria, and one Direction heading",
-    criteria(mdToHtml(once)) === 3 && mdToHtml(once).split("<h2>Direction</h2>").length - 1 === 1, once);
-  check("a line running straight on stays in its criterion, and a comment stays hidden",
-    once.includes("3. A question or a marker in code, `a?` or `TODO`, is not read, and a line that runs straight on") &&
-    !outHtml.includes("template comment"), once);
+  check(
+    "it keeps exactly 3 top-level criteria, and one Direction heading",
+    criteria(mdToHtml(once)) === 3 && mdToHtml(once).split("<h2>Direction</h2>").length - 1 === 1,
+    once,
+  );
+  check(
+    "a line running straight on stays in its criterion, and a comment stays hidden",
+    once.includes(
+      "3. A question or a marker in code, `a?` or `TODO`, is not read, and a line that runs straight on",
+    ) && !outHtml.includes("template comment"),
+    once,
+  );
   let h = mdToHtml("1. Runs:\n   ```\n## not a heading\n\nnot indented\n   ```\n2. Names.");
-  check("a code block in a criterion keeps its less indented lines",
-    h.split("<ol").length - 1 === 1 && h.split("<li>").length - 1 === 2 &&
-    h.includes("<li><p>Runs:</p><pre><code>## not a heading\n\nnot indented\n</code></pre></li>"), h);
+  check(
+    "a code block in a criterion keeps its less indented lines",
+    h.split("<ol").length - 1 === 1 &&
+      h.split("<li>").length - 1 === 2 &&
+      h.includes("<li><p>Runs:</p><pre><code>## not a heading\n\nnot indented\n</code></pre></li>"),
+    h,
+  );
   h = mdToHtml("## Direction ##\n\nuse ``a`b`` and `` `x `` here\\\nnext line");
-  check("the writer drops a heading's closing #s and a code span's padding, and keeps a hard break",
-    h === '<h2>Direction</h2>\n<p>use <code>a`b</code> and <code>`x</code> here<br>next line</p>', h);
+  check(
+    "the writer drops a heading's closing #s and a code span's padding, and keeps a hard break",
+    h === "<h2>Direction</h2>\n<p>use <code>a`b</code> and <code>`x</code> here<br>next line</p>",
+    h,
+  );
   const twice = htmlToText(mdToHtml(once));
   check("a second cycle gives the same text", twice === once, delta(once, twice));
   const editorText = htmlToText(editor);
-  check("Plane editor lists read as one line per item",
-    editorText.includes("1. The check runs.\n2. It names each part."), editorText);
+  check(
+    "Plane editor lists read as one line per item",
+    editorText.includes("1. The check runs.\n2. It names each part."),
+    editorText,
+  );
   h = mdToHtml("1. A\n\n2. B\n\n3. C");
-  check("blank lines between items leave one list of three",
-    h.split("<ol").length - 1 === 1 && h.split("<li>").length - 1 === 3, h);
-  const nested = "<ul><li><p>a</p><ol><li><p>b</p></li><li><p>c</p></li></ol></li><li><p>d</p></li></ul>";
+  check(
+    "blank lines between items leave one list of three",
+    h.split("<ol").length - 1 === 1 && h.split("<li>").length - 1 === 3,
+    h,
+  );
+  const nested =
+    "<ul><li><p>a</p><ol><li><p>b</p></li><li><p>c</p></li></ol></li><li><p>d</p></li></ul>";
   const nestedText = htmlToText(nested);
   check("nested lists read back indented", nestedText === "- a\n  1. b\n  2. c\n- d", nestedText);
   const nestedDiff = firstDifference(shape(nested), shape(mdToHtml(nestedText)));
   check("and render to the same structure", nestedDiff === null, nestedDiff);
   const code = '<pre><code class="language-python">print("x")\n</code></pre>';
   const codeTextOut = htmlToText(code);
-  check("a code block keeps its language",
-    codeTextOut === '```python\nprint("x")\n```' && mdToHtml(codeTextOut).includes('class="language-python"'), codeTextOut);
-  const links = '<p>See <a href="https://en.wikipedia.org/wiki/Foo_(bar)">Foo</a>, ' +
+  check(
+    "a code block keeps its language",
+    codeTextOut === '```python\nprint("x")\n```' &&
+      mdToHtml(codeTextOut).includes('class="language-python"'),
+    codeTextOut,
+  );
+  const links =
+    '<p>See <a href="https://en.wikipedia.org/wiki/Foo_(bar)">Foo</a>, ' +
     '<a href="mailto:a@example.org">mail</a> and <a href="/docs/x">docs</a>.</p>';
   const linksText = htmlToText(links);
   const linksDiff = firstDifference(shape(links), shape(mdToHtml(linksText)));
-  check("links survive: an href with parentheses, mailto and a relative one",
-    linksDiff === null && linksText.includes("Foo_%28bar%29"), linksText);
-  const misc = '<p>one<br>two</p><hr><ol start="3"><li><p>c</p></li></ol>' +
-    '<ul><li><p>x</p></li></ul><ul><li><p>y</p></li></ul>';
+  check(
+    "links survive: an href with parentheses, mailto and a relative one",
+    linksDiff === null && linksText.includes("Foo_%28bar%29"),
+    linksText,
+  );
+  const misc =
+    '<p>one<br>two</p><hr><ol start="3"><li><p>c</p></li></ol>' +
+    "<ul><li><p>x</p></li></ul><ul><li><p>y</p></li></ul>";
   const miscText = htmlToText(misc);
   const miscDiff = firstDifference(shape(misc), shape(mdToHtml(miscText)));
-  check("line breaks, rules, a list's start and two lists in a row survive",
-    miscDiff === null && miscText.includes("one\\\ntwo") && miscText.includes("---") &&
-    miscText.includes("3. c") && miscText.includes("- x") && miscText.includes("* y"), miscText);
+  check(
+    "line breaks, rules, a list's start and two lists in a row survive",
+    miscDiff === null &&
+      miscText.includes("one\\\ntwo") &&
+      miscText.includes("---") &&
+      miscText.includes("3. c") &&
+      miscText.includes("- x") &&
+      miscText.includes("* y"),
+    miscText,
+  );
   const baseText = htmlToText(editor);
-  const [editCode, editOut] = planEdit(editor, baseText + "\n", baseText + "\n\n## Direction\n\nNone: any approach that meets the criteria.\n");
-  check("edit writes stored editor HTML back with the approved part added and the list kept",
-    editCode === 0 && editOut.includes("<h2>Direction</h2>") && editOut.split("<li>").length - 1 === 2,
-    [editCode, editOut]);
+  const [editCode, editOut] = planEdit(
+    editor,
+    `${baseText}\n`,
+    `${baseText}\n\n## Direction\n\nNone: any approach that meets the criteria.\n`,
+  );
+  check(
+    "edit writes stored editor HTML back with the approved part added and the list kept",
+    editCode === 0 &&
+      editOut.includes("<h2>Direction</h2>") &&
+      editOut.split("<li>").length - 1 === 2,
+    [editCode, editOut],
+  );
 
   console.log("negative controls");
   const bad = '<p>x <em>y</em></p><table><tr><td>z</td></tr></table><img src="a.png"><!-- c -->';
   let [code_, why] = planEdit(bad, htmlToText(bad), "## Direction\n\nNone.");
-  check("edit refuses markup read does not render, and names it",
-    code_ === 1 && ["<em>", "<table>", "<img>", "an HTML comment"].every((s) => why.includes(s)), why);
+  check(
+    "edit refuses markup read does not render, and names it",
+    code_ === 1 && ["<em>", "<table>", "<img>", "an HTML comment"].every((s) => why.includes(s)),
+    why,
+  );
   [code_, why] = planEdit("<p>1. not a list</p>", "1. not a list", "x");
-  check("edit refuses a description read does not show as stored",
-    code_ === 1 && why.includes("as Plane stores it"), why);
-  [code_, why] = planEdit(editor, baseText + "\n\nAn edit made in Plane since.", "x");
+  check(
+    "edit refuses a description read does not show as stored",
+    code_ === 1 && why.includes("as Plane stores it"),
+    why,
+  );
+  [code_, why] = planEdit(editor, `${baseText}\n\nAn edit made in Plane since.`, "x");
   check("edit refuses a work item that changed since the base was read", code_ === 4, [code_, why]);
   [code_, why] = planEdit(editor, baseText, " \n\n");
   check("edit refuses an empty body", code_ === 1 && why.includes("empty"), [code_, why]);
   const lost = firstDifference(shape(mdToHtml("1. A\n2. B\n3. C")), shape(mdToHtml("1. A\n2. B")));
-  check("the read-back check reports a lost list item", lost !== null && lost.includes("a list item"), lost);
-  const flat = firstDifference(shape(mdToHtml("1. A\n   - x\n   - y")), shape(mdToHtml("1. A\n- x\n- y")));
-  check("the read-back check reports a flattened list", flat !== null && flat.includes("a bullet list"), flat);
-  const [, diff3] = readback("1. A\n   - x\n   - y\n", (ht) => htmlToText(ht).replace(/\n   - /g, "\n- "));
-  check("a body a reader would flatten is refused", diff3 !== null && diff3.includes("a bullet list"), diff3);
+  check("the read-back check reports a lost list item", !!lost?.includes("a list item"), lost);
+  const flat = firstDifference(
+    shape(mdToHtml("1. A\n   - x\n   - y")),
+    shape(mdToHtml("1. A\n- x\n- y")),
+  );
+  check("the read-back check reports a flattened list", !!flat?.includes("a bullet list"), flat);
+  const [, diff3] = readback("1. A\n   - x\n   - y\n", (ht) =>
+    htmlToText(ht).replace(/\n {3}- /g, "\n- "),
+  );
+  check("a body a reader would flatten is refused", !!diff3?.includes("a bullet list"), diff3);
 
   // old edit form: invoke the wrapper with a title as body-file (not a file) -> usage error
   const d = mkdtempSync(join(tmpdir(), "plane-st-"));
@@ -913,8 +1141,11 @@ function selfTest(): number {
     const r = run("bash", [SCRIPT, "edit", "PM-1", "A title", bf], {
       env: { ...process.env, POSTMASTER_CONFIG: cfg, PLANE_API_KEY: "self-test" },
     });
-    check("the old edit form, with a title, is a usage error before any request",
-      r.code === 1 && r.err.includes("usage:") && !r.err.includes("GET"), r.err);
+    check(
+      "the old edit form, with a title, is a usage error before any request",
+      r.code === 1 && r.err.includes("usage:") && !r.err.includes("GET"),
+      r.err,
+    );
   } finally {
     rmSync(d, { recursive: true, force: true });
   }
@@ -937,8 +1168,12 @@ const GROUPS_FOR: Record<string, string[]> = {
   cancelled: ["cancelled"],
 };
 const STATE_FOR_GROUP: Record<string, string> = {
-  backlog: "todo", unstarted: "todo", triage: "todo",
-  started: "in-progress", completed: "done", cancelled: "cancelled",
+  backlog: "todo",
+  unstarted: "todo",
+  triage: "todo",
+  started: "in-progress",
+  completed: "done",
+  cancelled: "cancelled",
 };
 const BLOCKED = "blocked";
 
@@ -949,8 +1184,10 @@ interface PlaneConfig {
 }
 
 function loadConfig(): PlaneConfig {
-  const configPath = process.env.POSTMASTER_CONFIG || join(process.env.HOME ?? "", ".postmaster/config.toml");
-  if (!existsSync(configPath)) dieP(`no config at ${configPath} (POSTMASTER_CONFIG overrides the path)`);
+  const configPath =
+    process.env.POSTMASTER_CONFIG || join(process.env.HOME ?? "", ".postmaster/config.toml");
+  if (!existsSync(configPath))
+    dieP(`no config at ${configPath} (POSTMASTER_CONFIG overrides the path)`);
   const cfg = tryTomlFile(configPath);
   if (!cfg) dieP(`cannot read ${configPath}`);
   const tracker = (cfg.tracker ?? {}) as Record<string, unknown>;
@@ -962,7 +1199,10 @@ function loadConfig(): PlaneConfig {
       const m = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/.exec(line);
       if (m) {
         let val = m[2] ?? "";
-        if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+        if (
+          (val.startsWith('"') && val.endsWith('"')) ||
+          (val.startsWith("'") && val.endsWith("'"))
+        ) {
           val = val.slice(1, -1);
         }
         process.env[m[1] ?? ""] = val;
@@ -970,20 +1210,31 @@ function loadConfig(): PlaneConfig {
     }
   }
   const KEY = process.env.PLANE_API_KEY ?? "";
-  if (!KEY) dieP(`no PLANE_API_KEY in the environment or in ${envFile} (skills/postmaster/trackers.md, plane)`);
+  if (!KEY)
+    dieP(
+      `no PLANE_API_KEY in the environment or in ${envFile} (skills/postmaster/trackers.md, plane)`,
+    );
   const BASE = String(tracker.url ?? "").replace(/\/+$/, "");
   const WS = String(tracker.workspace ?? "");
   if (!BASE || !WS) {
-    dieP(`[tracker] url and workspace are needed in ${configPath} (skills/postmaster/trackers.md, plane)`);
+    dieP(
+      `[tracker] url and workspace are needed in ${configPath} (skills/postmaster/trackers.md, plane)`,
+    );
   }
   return { BASE, WS, KEY };
 }
 
-async function api(cfg: PlaneConfig, method: string, path: string, body?: unknown, params?: Record<string, string>): Promise<any> {
+async function api(
+  cfg: PlaneConfig,
+  method: string,
+  path: string,
+  body?: unknown,
+  params?: Record<string, string>,
+): Promise<any> {
   let url = `${cfg.BASE}/api/v1/${path}`;
   if (params) {
     const qs = new URLSearchParams(params).toString();
-    url += "?" + qs;
+    url += `?${qs}`;
   }
   const headers: Record<string, string> = {
     "X-Api-Key": cfg.KEY,
@@ -1005,7 +1256,11 @@ async function api(cfg: PlaneConfig, method: string, path: string, body?: unknow
   }
 }
 
-async function* pages(cfg: PlaneConfig, path: string, params?: Record<string, string>): AsyncGenerator<any> {
+async function* pages(
+  cfg: PlaneConfig,
+  path: string,
+  params?: Record<string, string>,
+): AsyncGenerator<any> {
   const p: Record<string, string> = { ...(params ?? {}), per_page: "100" };
   for (;;) {
     const page = await api(cfg, "GET", path, undefined, p);
@@ -1043,10 +1298,14 @@ async function labelsOf(cfg: PlaneConfig, pid: string): Promise<any[]> {
 
 function stateIdFor(states: any[], flowState: string): string {
   for (const group of GROUPS_FOR[flowState] ?? []) {
-    const found = states.filter((s) => s.group === group).sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
+    const found = states
+      .filter((s) => s.group === group)
+      .sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
     if (found.length > 0) return found[0].id;
   }
-  dieP(`project has no state in group ${(GROUPS_FOR[flowState] ?? []).join(" or ")} for ${flowState}`);
+  dieP(
+    `project has no state in group ${(GROUPS_FOR[flowState] ?? []).join(" or ")} for ${flowState}`,
+  );
 }
 
 function ref(x: unknown): unknown {
@@ -1057,7 +1316,8 @@ function flowStateOf(item: any, states: any[], labels: any[]): string {
   const labelNames: Record<string, string> = {};
   for (const l of labels) labelNames[l.id] = l.name;
   const itemLabels = item.labels ?? [];
-  if (itemLabels.some((l: unknown) => (labelNames[String(ref(l))] ?? "").toLowerCase() === BLOCKED)) return "blocked";
+  if (itemLabels.some((l: unknown) => (labelNames[String(ref(l))] ?? "").toLowerCase() === BLOCKED))
+    return "blocked";
   const stateRef = ref(item.state);
   const group = states.find((s) => s.id === stateRef)?.group;
   return STATE_FOR_GROUP[group ?? ""] ?? (group || "unknown");
@@ -1105,12 +1365,16 @@ async function runCommands(): Promise<void> {
     const proj = await projectFor(cfg, ident);
     const todo = stateIdFor(await statesOf(cfg, proj.id), "todo");
     const made = await api(cfg, "POST", `workspaces/${cfg.WS}/projects/${proj.id}/work-items/`, {
-      name: title, description_html: outHtml, state: todo,
+      name: title,
+      description_html: outHtml,
+      state: todo,
     });
     console.log(`${proj.identifier}-${made.sequence_id}`);
   } else if (cmd === "edit") {
     if (args.length !== 3 || !existsSync(args[1] ?? "")) {
-      dieP("usage: plane.sh edit <IDENT-n> <body-file> <base-file> (edit takes no title and never changes one)");
+      dieP(
+        "usage: plane.sh edit <IDENT-n> <body-file> <base-file> (edit takes no title and never changes one)",
+      );
     }
     const body = readFileP(args[1]!);
     const base = readFileP(args[2]!);
@@ -1120,9 +1384,14 @@ async function runCommands(): Promise<void> {
     const [code, result] = planEdit(item.description_html ?? "", base, body);
     if (code === 4) dieP(`${tid} changed since ${args[2]} was read; read it again`, 4);
     if (code) dieP(`${tid}: ${result}`);
-    await api(cfg, "PATCH", `workspaces/${cfg.WS}/projects/${ref(item.project)}/work-items/${item.id}/`, {
-      description_html: result,
-    });
+    await api(
+      cfg,
+      "PATCH",
+      `workspaces/${cfg.WS}/projects/${ref(item.project)}/work-items/${item.id}/`,
+      {
+        description_html: result,
+      },
+    );
     console.log(`${tid}: edited`);
   } else if (cmd === "read") {
     const rest = args.filter((a) => a !== "--body");
@@ -1140,18 +1409,25 @@ async function runCommands(): Promise<void> {
     console.log(`id: ${ident}-${item.sequence_id}`);
     console.log(`title: ${item.name ?? ""}`);
     console.log(`state: ${flowStateOf(item, states, labels)}`);
-    console.log(`labels: ${(item.labels ?? []).map((l: unknown) => names[String(ref(l))] ?? "?").join(", ")}`);
+    console.log(
+      `labels: ${(item.labels ?? []).map((l: unknown) => names[String(ref(l))] ?? "?").join(", ")}`,
+    );
     console.log(`created: ${String(item.created_at ?? "").slice(0, 10)}`);
     console.log("");
     console.log(htmlToText(item.description_html));
     const comments: any[] = [];
-    for await (const c of pages(cfg, `workspaces/${cfg.WS}/projects/${pid}/work-items/${item.id}/comments/`)) {
+    for await (const c of pages(
+      cfg,
+      `workspaces/${cfg.WS}/projects/${pid}/work-items/${item.id}/comments/`,
+    )) {
       comments.push(c);
     }
     if (comments.length > 0) {
       console.log("\n## Log");
-      for (const c of [...comments].sort((a, b) => String(a.created_at ?? "").localeCompare(String(b.created_at ?? "")))) {
-        console.log("- " + htmlToText(c.comment_html).split(/\s+/).filter(Boolean).join(" "));
+      for (const c of [...comments].sort((a, b) =>
+        String(a.created_at ?? "").localeCompare(String(b.created_at ?? "")),
+      )) {
+        console.log(`- ${htmlToText(c.comment_html).split(/\s+/).filter(Boolean).join(" ")}`);
       }
     }
   } else if (cmd === "state") {
@@ -1162,11 +1438,15 @@ async function runCommands(): Promise<void> {
     const pid = String(ref(item.project));
     const labels = await labelsOf(cfg, pid);
     const current = (item.labels ?? []).map((l: unknown) => ref(l));
-    const blockedIds = labels.filter((l: any) => l.name.toLowerCase() === BLOCKED).map((l: any) => l.id);
+    const blockedIds = labels
+      .filter((l: any) => l.name.toLowerCase() === BLOCKED)
+      .map((l: any) => l.id);
     let patch: Record<string, unknown>;
     if (newSt === "blocked") {
       if (blockedIds.length === 0) {
-        const created = await api(cfg, "POST", `workspaces/${cfg.WS}/projects/${pid}/labels/`, { name: BLOCKED });
+        const created = await api(cfg, "POST", `workspaces/${cfg.WS}/projects/${pid}/labels/`, {
+          name: BLOCKED,
+        });
         blockedIds.push(created.id);
       }
       patch = { labels: [...new Set([...current, blockedIds[0]])].sort() };
@@ -1195,12 +1475,14 @@ async function runCommands(): Promise<void> {
   } else if (cmd === "list") {
     if (args.length !== 1 && args.length !== 2) dieP("usage: plane.sh list <IDENT> [state]");
     const want = args.length === 2 ? args[1] : null;
-    if (want && !STATES.includes(want)) dieP(`invalid state ${want} (one of: ${STATES.join(", ")})`, 2);
+    if (want && !STATES.includes(want))
+      dieP(`invalid state ${want} (one of: ${STATES.join(", ")})`, 2);
     const proj = await projectFor(cfg, args[0]!);
     const states = await statesOf(cfg, proj.id);
     const labels = await labelsOf(cfg, proj.id);
     const items: any[] = [];
-    for await (const it of pages(cfg, `workspaces/${cfg.WS}/projects/${proj.id}/work-items/`)) items.push(it);
+    for await (const it of pages(cfg, `workspaces/${cfg.WS}/projects/${proj.id}/work-items/`))
+      items.push(it);
     for (const it of items.sort((a, b) => (a.sequence_id ?? 0) - (b.sequence_id ?? 0))) {
       const st = flowStateOf(it, states, labels);
       if (want === null || st === want) {

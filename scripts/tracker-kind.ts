@@ -43,9 +43,7 @@ if (looked.code !== 3) {
 }
 
 if (!existsSync(config)) {
-  console.error(
-    `tracker-kind: no config at ${config} (POSTMASTER_CONFIG overrides the path)`,
-  );
+  console.error(`tracker-kind: no config at ${config} (POSTMASTER_CONFIG overrides the path)`);
   process.exit(1);
 }
 const parsed = tryTomlFile(config);
@@ -53,14 +51,14 @@ if (parsed === null) {
   console.error(`tracker-kind: ${config} does not parse`);
   process.exit(1);
 }
-const tracker = parsed["tracker"];
+const tracker = parsed.tracker;
 let kind: unknown = "github";
 if (tracker !== undefined) {
   if (tracker === null || typeof tracker !== "object" || Array.isArray(tracker)) {
     console.error(`tracker-kind: ${config} does not parse`);
     process.exit(1);
   }
-  const named = (tracker as Record<string, unknown>)["kind"];
+  const named = (tracker as Record<string, unknown>).kind;
   if (named !== undefined) kind = named;
 }
 console.log(String(kind));

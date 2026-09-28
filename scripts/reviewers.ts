@@ -17,7 +17,7 @@
 //   exit 1  usage, no config or one that does not parse, or no such waybill
 //   exit 2  a lens the review stage does not have, a lane the config does not define, a lens with
 //           no lanes, or a waybill whose Team section has no reviewers line
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { readTomlFile } from "./lib/data.ts";
 import { scriptsDir } from "./lib/paths.ts";
@@ -50,11 +50,11 @@ function lines(configPath: string): CmdResult {
   const out: string[] = [];
   const fail1 = (msg: string): CmdResult => {
     err.push(msg);
-    return { code: 1, out: "", err: err.join("\n") + "\n" };
+    return { code: 1, out: "", err: `${err.join("\n")}\n` };
   };
-  const fail2 = (msg: string): CmdResult => {
+  const _fail2 = (msg: string): CmdResult => {
     err.push(msg);
-    return { code: 2, out: "", err: err.join("\n") + "\n" };
+    return { code: 2, out: "", err: `${err.join("\n")}\n` };
   };
   if (!existsSync(configPath)) {
     return fail1(`reviewers: no config at ${configPath} (POSTMASTER_CONFIG overrides the path)`);
@@ -65,8 +65,8 @@ function lines(configPath: string): CmdResult {
   } catch (e) {
     return fail1(`reviewers: ${configPath} does not parse: ${String(e)}`);
   }
-  const defined = new Set(Object.keys((cfg["lanes"] as Record<string, unknown>) ?? {}));
-  const team = (cfg["team"] as Record<string, unknown>) ?? {};
+  const defined = new Set(Object.keys((cfg.lanes as Record<string, unknown>) ?? {}));
+  const team = (cfg.team as Record<string, unknown>) ?? {};
   const faults: string[] = [];
   const lanesOf = (value: unknown, where: string): string[] => {
     if (
@@ -85,15 +85,15 @@ function lines(configPath: string): CmdResult {
     return value as string[];
   };
   // Python's `team.get("reviewers") or team.get("workhorses") or []` falls through on a falsey value.
-  const reviewers = team["reviewers"];
-  const workhorses = team["workhorses"];
+  const reviewers = team.reviewers;
+  const workhorses = team.workhorses;
   const defaultList = lanesOf(
     (Array.isArray(reviewers) && reviewers.length ? reviewers : undefined) ??
       (Array.isArray(workhorses) && workhorses.length ? workhorses : undefined) ??
       [],
     "[team] reviewers",
   );
-  let perLens = (team["lens_reviewers"] as Record<string, unknown>) ?? {};
+  let perLens = (team.lens_reviewers as Record<string, unknown>) ?? {};
   if (perLens === null || typeof perLens !== "object" || Array.isArray(perLens)) {
     faults.push("[team.lens_reviewers] is not a table");
     perLens = {};
@@ -113,13 +113,13 @@ function lines(configPath: string): CmdResult {
   }
   if (faults.length > 0) {
     for (const f of faults) err.push(`reviewers: ${f}`);
-    return { code: 2, out: "", err: err.join("\n") + "\n" };
+    return { code: 2, out: "", err: `${err.join("\n")}\n` };
   }
   out.push(`reviewers: ${defaultList.join(", ")}`);
   for (const [lens, names] of own) {
     out.push(`${lens} reviewers: ${names.join(", ")}`);
   }
-  return { code: 0, out: out.join("\n") + "\n", err: "" };
+  return { code: 0, out: `${out.join("\n")}\n`, err: "" };
 }
 
 /** lanes <waybill> <lens>: the lanes for one lens, one per line, from a waybill. */
@@ -127,11 +127,11 @@ function lanes(waybill: string, lens: string): CmdResult {
   const err: string[] = [];
   const fail1 = (msg: string): CmdResult => {
     err.push(msg);
-    return { code: 1, out: "", err: err.join("\n") + "\n" };
+    return { code: 1, out: "", err: `${err.join("\n")}\n` };
   };
   const fail2 = (msg: string): CmdResult => {
     err.push(msg);
-    return { code: 2, out: "", err: err.join("\n") + "\n" };
+    return { code: 2, out: "", err: `${err.join("\n")}\n` };
   };
   if (!existsSync(waybill)) {
     return fail1(`reviewers: no such waybill: ${waybill}`);
@@ -167,7 +167,7 @@ function lanes(waybill: string, lens: string): CmdResult {
   if (!found || found.length === 0) {
     return fail2(`reviewers: the Team section of ${waybill} has no reviewers line for ${lens}`);
   }
-  return { code: 0, out: found.join("\n") + "\n", err: "" };
+  return { code: 0, out: `${found.join("\n")}\n`, err: "" };
 }
 
 function printResult(r: CmdResult): never {
@@ -179,7 +179,7 @@ function printResult(r: CmdResult): never {
 // --- entry ------------------------------------------------------------------------------
 const argv = process.argv.slice(2);
 const CONFIG =
-  process.env["POSTMASTER_CONFIG"] ?? join(process.env["HOME"] ?? "", ".postmaster/config.toml");
+  process.env.POSTMASTER_CONFIG ?? join(process.env.HOME ?? "", ".postmaster/config.toml");
 
 if (argv[0] !== "--self-test") {
   switch (argv[0]) {

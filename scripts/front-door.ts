@@ -20,9 +20,9 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { readTomlFile } from "./lib/data.ts";
+import { scriptsDir } from "./lib/paths.ts";
 import { run, withTempDir } from "./lib/proc.ts";
 import { SelfTest } from "./lib/selftest.ts";
-import { scriptsDir } from "./lib/paths.ts";
 
 // A GIT_DIR from the caller must not steer repo identity to another repository.
 for (const k of [
@@ -38,7 +38,7 @@ for (const k of [
 }
 
 const CONFIG =
-  process.env["POSTMASTER_CONFIG"] ?? join(process.env["HOME"] ?? "", ".postmaster/config.toml");
+  process.env.POSTMASTER_CONFIG ?? join(process.env.HOME ?? "", ".postmaster/config.toml");
 
 function usage(): never {
   console.error(
@@ -72,15 +72,13 @@ function decide(
   const err: string[] = [];
   const die1 = (msg: string): DecideResult => {
     err.push(msg);
-    return { code: 1, out: "", err: err.join("\n") + "\n" };
+    return { code: 1, out: "", err: `${err.join("\n")}\n` };
   };
   if (term !== "yes" && term !== "no") {
     return die1(`front-door: at-terminal is yes or no, not '${term}'`);
   }
   if (!existsSync(cfgPath)) {
-    return die1(
-      `front-door: no config at ${cfgPath} (POSTMASTER_CONFIG overrides the path)`,
-    );
+    return die1(`front-door: no config at ${cfgPath} (POSTMASTER_CONFIG overrides the path)`);
   }
   let cfg: Record<string, unknown>;
   try {
@@ -88,34 +86,28 @@ function decide(
   } catch (e) {
     return die1(`front-door: ${cfgPath} does not parse: ${String(e)}`);
   }
-  const team = cfg["team"];
+  const team = cfg.team;
   const spec =
     team !== null && typeof team === "object" && !Array.isArray(team)
-      ? (team as Record<string, unknown>)["postmaster"]
+      ? (team as Record<string, unknown>).postmaster
       : undefined;
   if (spec === null || typeof spec !== "object" || Array.isArray(spec)) {
-    return die1(
-      `front-door: ${cfgPath} has no team.postmaster with a harness and a model`,
-    );
+    return die1(`front-door: ${cfgPath} has no team.postmaster with a harness and a model`);
   }
   const s = spec as Record<string, unknown>;
-  const harness = s["harness"];
-  const model = s["model"];
+  const harness = s.harness;
+  const model = s.model;
   if (!harness || !model) {
-    return die1(
-      `front-door: ${cfgPath} has no team.postmaster with a harness and a model`,
-    );
+    return die1(`front-door: ${cfgPath} has no team.postmaster with a harness and a model`);
   }
   if (typeof harness !== "string" || typeof model !== "string") {
     return die1(`front-door: ${cfgPath} team.postmaster harness and model must be strings`);
   }
   if (!harness.trim() || !model.trim()) {
-    return die1(
-      `front-door: ${cfgPath} team.postmaster harness and model must not be blank`,
-    );
+    return die1(`front-door: ${cfgPath} team.postmaster harness and model must not be blank`);
   }
   if (
-    [...harness + model].some((c) => {
+    [...(harness + model)].some((c) => {
       const o = c.codePointAt(0) ?? 0;
       return o < 0x20 || o === 0x7f;
     })
@@ -189,15 +181,31 @@ withTempDir((tmp) => {
   mkdirSync(join(tmp, "there"), { recursive: true });
   run("git", ["-C", join(tmp, "here"), "init", "-q"]);
   run("git", [
-    "-C", join(tmp, "here"),
-    "-c", "user.email=t@t", "-c", "user.name=t",
-    "commit", "-q", "--allow-empty", "-m", "base",
+    "-C",
+    join(tmp, "here"),
+    "-c",
+    "user.email=t@t",
+    "-c",
+    "user.name=t",
+    "commit",
+    "-q",
+    "--allow-empty",
+    "-m",
+    "base",
   ]);
   run("git", ["-C", join(tmp, "there"), "init", "-q"]);
   run("git", [
-    "-C", join(tmp, "there"),
-    "-c", "user.email=t@t", "-c", "user.name=t",
-    "commit", "-q", "--allow-empty", "-m", "base",
+    "-C",
+    join(tmp, "there"),
+    "-c",
+    "user.email=t@t",
+    "-c",
+    "user.name=t",
+    "commit",
+    "-q",
+    "--allow-empty",
+    "-m",
+    "base",
   ]);
   // A worktree of "here", so the same-repo case is not path equality.
   run("git", ["-C", join(tmp, "here"), "worktree", "add", "-q", join(tmp, "here-wt"), "-b", "wt"]);
@@ -276,27 +284,30 @@ withTempDir((tmp) => {
   const there = join(tmp, "there");
 
   console.log("positive controls");
-  doRun(
-    "harness differs prints spawn naming harness",
-    0,
-    "spawn",
-    "harness differs",
-    ["grok", "pm-model", here, "yes", here, ...cfg("match")],
-  );
-  doRun(
-    "model differs prints spawn naming model",
-    0,
-    "spawn",
-    "model differs",
-    ["claude", "other-model", here, "yes", here, ...cfg("match")],
-  );
-  doRun(
-    "target is another repo prints spawn naming target",
-    0,
-    "spawn",
-    "target is another repo",
-    ["claude", "pm-model", here, "yes", there, ...cfg("match")],
-  );
+  doRun("harness differs prints spawn naming harness", 0, "spawn", "harness differs", [
+    "grok",
+    "pm-model",
+    here,
+    "yes",
+    here,
+    ...cfg("match"),
+  ]);
+  doRun("model differs prints spawn naming model", 0, "spawn", "model differs", [
+    "claude",
+    "other-model",
+    here,
+    "yes",
+    here,
+    ...cfg("match"),
+  ]);
+  doRun("target is another repo prints spawn naming target", 0, "spawn", "target is another repo", [
+    "claude",
+    "pm-model",
+    here,
+    "yes",
+    there,
+    ...cfg("match"),
+  ]);
   doRun(
     "nobody at the terminal prints spawn naming terminal",
     0,
@@ -304,34 +315,38 @@ withTempDir((tmp) => {
     "nobody at the terminal",
     ["claude", "pm-model", here, "no", here, ...cfg("match")],
   );
-  doRun(
-    "all four match prints self",
-    0,
-    "self",
-    "-",
-    ["claude", "pm-model", here, "yes", here, ...cfg("match")],
-  );
-  doRun(
-    "a worktree of the target is the target's repo, so it is self",
-    0,
-    "self",
-    "-",
-    ["claude", "pm-model", join(tmp, "here-wt"), "yes", here, ...cfg("match")],
-  );
-  doRun(
-    "a subdirectory of the target is the target's repo, so it is self",
-    0,
-    "self",
-    "-",
-    ["claude", "pm-model", join(tmp, "here/sub"), "yes", here, ...cfg("match")],
-  );
-  doRun(
-    "every failed condition is reported",
-    0,
-    "spawn",
-    "harness differs",
-    ["grok", "other-model", there, "no", here, ...cfg("match")],
-  );
+  doRun("all four match prints self", 0, "self", "-", [
+    "claude",
+    "pm-model",
+    here,
+    "yes",
+    here,
+    ...cfg("match"),
+  ]);
+  doRun("a worktree of the target is the target's repo, so it is self", 0, "self", "-", [
+    "claude",
+    "pm-model",
+    join(tmp, "here-wt"),
+    "yes",
+    here,
+    ...cfg("match"),
+  ]);
+  doRun("a subdirectory of the target is the target's repo, so it is self", 0, "self", "-", [
+    "claude",
+    "pm-model",
+    join(tmp, "here/sub"),
+    "yes",
+    here,
+    ...cfg("match"),
+  ]);
+  doRun("every failed condition is reported", 0, "spawn", "harness differs", [
+    "grok",
+    "other-model",
+    there,
+    "no",
+    here,
+    ...cfg("match"),
+  ]);
   mkdirSync(join(tmp, "notrepo"), { recursive: true });
   doRun(
     "a directory outside any repo fails closed naming both paths",
@@ -348,37 +363,55 @@ withTempDir((tmp) => {
     ["claude", "pm-model", here, "yes", join(tmp, "notrepo"), ...cfg("match")],
   );
   config("spaces", "claude code", "pm-model");
-  doRun(
-    "a harness name with a space still matches itself",
-    0,
-    "self",
-    "-",
-    ["claude code", "pm-model", here, "yes", here, ...cfg("spaces")],
-  );
-  doRun(
-    "an empty harness decides spawn, not usage",
-    0,
-    "spawn",
-    "harness differs",
-    ["", "pm-model", here, "yes", here, ...cfg("match")],
-  );
-  doRun(
-    "a reported model with a newline decides spawn",
-    0,
-    "spawn",
-    "model differs",
-    ["claude", "pm-model\nother", here, "yes", here, ...cfg("match")],
-  );
+  doRun("a harness name with a space still matches itself", 0, "self", "-", [
+    "claude code",
+    "pm-model",
+    here,
+    "yes",
+    here,
+    ...cfg("spaces"),
+  ]);
+  doRun("an empty harness decides spawn, not usage", 0, "spawn", "harness differs", [
+    "",
+    "pm-model",
+    here,
+    "yes",
+    here,
+    ...cfg("match"),
+  ]);
+  doRun("a reported model with a newline decides spawn", 0, "spawn", "model differs", [
+    "claude",
+    "pm-model\nother",
+    here,
+    "yes",
+    here,
+    ...cfg("match"),
+  ]);
 
   console.log("empty paths fail closed from inside a repo");
   closed("an empty cwd fails closed from inside a repo", [
-    "claude", "pm-model", "", "yes", here, ...cfg("match"),
+    "claude",
+    "pm-model",
+    "",
+    "yes",
+    here,
+    ...cfg("match"),
   ]);
   closed("an empty target fails closed from inside a repo", [
-    "claude", "pm-model", here, "yes", "", ...cfg("match"),
+    "claude",
+    "pm-model",
+    here,
+    "yes",
+    "",
+    ...cfg("match"),
   ]);
   closed("an empty cwd and target fail closed from inside a repo", [
-    "claude", "pm-model", "", "yes", "", ...cfg("match"),
+    "claude",
+    "pm-model",
+    "",
+    "yes",
+    "",
+    ...cfg("match"),
   ]);
 
   console.log("caller environment does not steer identity");
@@ -403,12 +436,14 @@ withTempDir((tmp) => {
     "model differs",
     ["claude", "other-model", here, "yes", here, ...cfg("match")],
   );
-  absent(
-    "the model matching does not print the model reason",
-    "model differs",
-    "harness differs",
-    ["grok", "pm-model", here, "yes", here, ...cfg("match")],
-  );
+  absent("the model matching does not print the model reason", "model differs", "harness differs", [
+    "grok",
+    "pm-model",
+    here,
+    "yes",
+    here,
+    ...cfg("match"),
+  ]);
   absent(
     "the target matching does not print the target reason",
     "target is another repo",
@@ -454,92 +489,105 @@ withTempDir((tmp) => {
   } else st.fail("reasons print in ticket order", fourOut);
 
   console.log("refusals");
-  doRun(
-    "no config is refused",
-    1,
-    "",
-    "-",
-    ["claude", "pm-model", here, "yes", here, ...cfg("none")],
-  );
+  doRun("no config is refused", 1, "", "-", [
+    "claude",
+    "pm-model",
+    here,
+    "yes",
+    here,
+    ...cfg("none"),
+  ]);
   writeFileSync(join(tmp, "no-pm.toml"), '[team]\nworkhorses = ["a"]\n');
-  doRun(
-    "a config with no team.postmaster is refused",
-    1,
-    "",
-    "-",
-    ["claude", "pm-model", here, "yes", here, ...cfg("no-pm")],
-  );
+  doRun("a config with no team.postmaster is refused", 1, "", "-", [
+    "claude",
+    "pm-model",
+    here,
+    "yes",
+    here,
+    ...cfg("no-pm"),
+  ]);
   writeFileSync(join(tmp, "bad.toml"), "[team\nbroken\n");
-  doRun(
-    "a config that does not parse is refused",
-    1,
-    "",
-    "-",
-    ["claude", "pm-model", here, "yes", here, ...cfg("bad")],
-  );
+  doRun("a config that does not parse is refused", 1, "", "-", [
+    "claude",
+    "pm-model",
+    here,
+    "yes",
+    here,
+    ...cfg("bad"),
+  ]);
   writeFileSync(join(tmp, "strteam.toml"), 'team = "oops"\n');
-  doRun(
-    "a config whose team is not a table is refused",
-    1,
-    "",
-    "-",
-    ["claude", "pm-model", here, "yes", here, ...cfg("strteam")],
-  );
+  doRun("a config whose team is not a table is refused", 1, "", "-", [
+    "claude",
+    "pm-model",
+    here,
+    "yes",
+    here,
+    ...cfg("strteam"),
+  ]);
   if (lastErr.includes("team.postmaster") && !lastErr.includes("Traceback")) {
     st.ok("and refuses in its own words, with no traceback");
   } else st.fail("and refuses in its own words, with no traceback", lastErr);
-  writeFileSync(join(tmp, "nonstr.toml"), '[team]\npostmaster = { harness = 7, model = "pm-model" }\n');
-  doRun(
-    "a config with a non-string harness is refused",
-    1,
-    "",
-    "-",
-    ["claude", "pm-model", here, "yes", here, ...cfg("nonstr")],
+  writeFileSync(
+    join(tmp, "nonstr.toml"),
+    '[team]\npostmaster = { harness = 7, model = "pm-model" }\n',
   );
+  doRun("a config with a non-string harness is refused", 1, "", "-", [
+    "claude",
+    "pm-model",
+    here,
+    "yes",
+    here,
+    ...cfg("nonstr"),
+  ]);
   config("empty", "", "pm-model");
-  doRun(
-    "a config with an empty harness is refused",
-    1,
-    "",
-    "-",
-    ["claude", "pm-model", here, "yes", here, ...cfg("empty")],
-  );
+  doRun("a config with an empty harness is refused", 1, "", "-", [
+    "claude",
+    "pm-model",
+    here,
+    "yes",
+    here,
+    ...cfg("empty"),
+  ]);
   config("blank", "   ", "pm-model");
-  doRun(
-    "a config with a blank harness is refused",
-    1,
-    "",
-    "-",
-    ["claude", "pm-model", here, "yes", here, ...cfg("blank")],
-  );
+  doRun("a config with a blank harness is refused", 1, "", "-", [
+    "claude",
+    "pm-model",
+    here,
+    "yes",
+    here,
+    ...cfg("blank"),
+  ]);
   writeFileSync(
     join(tmp, "newline.toml"),
     '[team]\npostmaster = { harness = "claude", model = "pm-model\\nother" }\n',
   );
-  doRun(
-    "a config with a newline in the model is refused",
-    1,
-    "",
-    "-",
-    ["claude", "pm-model", here, "yes", here, ...cfg("newline")],
-  );
+  doRun("a config with a newline in the model is refused", 1, "", "-", [
+    "claude",
+    "pm-model",
+    here,
+    "yes",
+    here,
+    ...cfg("newline"),
+  ]);
   if (lastErr.includes("control characters")) st.ok("and says control characters");
   else st.fail("and says control characters", lastErr);
   writeFileSync(join(tmp, "tab.toml"), '[team]\npostmaster = { harness = "a\\tb", model = "m" }\n');
-  doRun(
-    "a config with a tab in the harness is refused",
-    1,
-    "",
-    "-",
-    ["a\tb", "m", here, "yes", here, ...cfg("tab")],
-  );
-  doRun(
-    "at-terminal is yes or no, not anything else",
-    1,
-    "",
-    "-",
-    ["claude", "pm-model", here, "maybe", here, ...cfg("match")],
-  );
+  doRun("a config with a tab in the harness is refused", 1, "", "-", [
+    "a\tb",
+    "m",
+    here,
+    "yes",
+    here,
+    ...cfg("tab"),
+  ]);
+  doRun("at-terminal is yes or no, not anything else", 1, "", "-", [
+    "claude",
+    "pm-model",
+    here,
+    "maybe",
+    here,
+    ...cfg("match"),
+  ]);
   if (lastErr.includes("at-terminal is yes or no")) st.ok("and says so");
   else st.fail("and says so", lastErr);
   doRun(

@@ -56,17 +56,17 @@
 //           list of `##` sections, or a part it would write named inside a later part of the base
 //   exit 2  malformed; one line per missing or malformed part on stdout, the part named first
 import {
+  chmodSync,
   copyFileSync,
   existsSync,
   mkdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
-  chmodSync,
 } from "node:fs";
 import { join } from "node:path";
+import { scriptsDir } from "./lib/paths.ts";
 import { run, withTempDir } from "./lib/proc.ts";
-import { scriptsDir, toolRoot } from "./lib/paths.ts";
 import { SelfTest } from "./lib/selftest.ts";
 
 class DieError extends Error {
@@ -99,7 +99,12 @@ const PARTS: Array<[string, string]> = [
   ["turnpikes", "Turnpikes"],
 ];
 const RANK: Record<string, number> = {
-  "problem / feature": 0, "acceptance criteria": 1, direction: 2, turnpikes: 3, notes: 4, "user journey": 5,
+  "problem / feature": 0,
+  "acceptance criteria": 1,
+  direction: 2,
+  turnpikes: 3,
+  notes: 4,
+  "user journey": 5,
 };
 
 function loadText(path: string): string {
@@ -110,7 +115,12 @@ function loadText(path: string): string {
   }
 }
 
-function uncomment(t: string, inside: boolean, k: number, last: [number, number]): [string, boolean] {
+function uncomment(
+  t: string,
+  inside: boolean,
+  k: number,
+  last: [number, number],
+): [string, boolean] {
   const out: string[] = [];
   let i = 0;
   let ins = inside;
@@ -127,7 +137,7 @@ function uncomment(t: string, inside: boolean, k: number, last: [number, number]
     const bm = TICKS.exec(t);
     const bStart = bm?.index ?? -1;
     if (bm && (c < 0 || bStart < c)) {
-      const closeRe = new RegExp("(?<!`)" + bm[0].replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?!`)");
+      const closeRe = new RegExp(`(?<!\`)${bm[0].replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?!\`)`);
       const after = t.slice(bm.index + bm[0].length);
       const cm = closeRe.exec(after);
       const end = cm ? bm.index + bm[0].length + cm.index + cm[0].length : bm.index + bm[0].length;
@@ -152,10 +162,14 @@ function uncomment(t: string, inside: boolean, k: number, last: [number, number]
 
 function tokenize(text: string): [string[], Array<[string, boolean]>] {
   const raw = text.split("\n");
-  let lastK = -1, lastIdx = -1;
+  let lastK = -1,
+    lastIdx = -1;
   for (let k = 0; k < raw.length; k++) {
-    const idx = raw[k]!.lastIndexOf("-->");
-    if (idx >= 0) { lastK = k; lastIdx = idx; }
+    const idx = raw[k]?.lastIndexOf("-->");
+    if (idx >= 0) {
+      lastK = k;
+      lastIdx = idx;
+    }
   }
   const last: [number, number] = [lastK, lastIdx];
   const lines: Array<[string, boolean]> = [];
@@ -164,11 +178,11 @@ function tokenize(text: string): [string[], Array<[string, boolean]>] {
   for (let k = 0; k < raw.length; k++) {
     // A CRLF body keeps its \r in raw (splice prints the body byte for byte); the analysis
     // line is stripped, so the regexes below see a line as BASE's `.`-matches-\r did.
-    let t = raw[k]!.replace(/\r$/, "");
+    const t = raw[k]?.replace(/\r$/, "");
     if (fence) {
       lines.push([t, true]);
       const s = t.trim();
-      if (s.length >= fence.length && s === fence[0]!.repeat(s.length)) fence = null;
+      if (s.length >= fence.length && s === fence[0]?.repeat(s.length)) fence = null;
       continue;
     }
     const m = inside ? null : FENCE.exec(t);
@@ -189,8 +203,16 @@ function tokenize(text: string): [string[], Array<[string, boolean]>] {
 }
 
 function norm(h: string): string {
-  let s = h.trim().replace(/[ \t]+#+$/, "").trim().replace(/:$/, "");
-  return s.replace(/\s+/g, " ").replace(/\s*\/\s*/g, " / ").trim().toLowerCase();
+  const s = h
+    .trim()
+    .replace(/[ \t]+#+$/, "")
+    .trim()
+    .replace(/:$/, "");
+  return s
+    .replace(/\s+/g, " ")
+    .replace(/\s*\/\s*/g, " / ")
+    .trim()
+    .toLowerCase();
 }
 
 interface Head {
@@ -217,7 +239,12 @@ function boundsOf(heads: Head[]): Head[] {
 }
 
 function hasWords(lines: Array<[string, boolean]>): boolean {
-  return /\w/.test(lines.map(([t]) => t).join(" ").replace(/_/g, ""));
+  return /\w/.test(
+    lines
+      .map(([t]) => t)
+      .join(" ")
+      .replace(/_/g, ""),
+  );
 }
 
 function prose(lines: Array<[string, boolean]>): string {
@@ -249,7 +276,7 @@ function question(p: string): string | null {
 
 function clip(s: string, n = 70): string {
   const t = s.split(/\s+/).filter(Boolean).join(" ");
-  return t.length <= n ? t : t.slice(0, n - 3) + "...";
+  return t.length <= n ? t : `${t.slice(0, n - 3)}...`;
 }
 
 function criteriaCheck(
@@ -262,7 +289,9 @@ function criteriaCheck(
   let cur: [number, Array<[string, boolean]>] | null = null;
   let base: number | null = null;
   let owner: [number, Array<[string, boolean]>] | null = null;
-  let blank = false, prevCode = false, inStray = false;
+  let blank = false,
+    prevCode = false,
+    inStray = false;
   for (const [t, code] of body) {
     if (code) {
       if (!prevCode) {
@@ -314,7 +343,7 @@ function criteriaCheck(
     fault(part, `numbered ${numbers.join(", ")}; number them 1 to ${items.length} in order`);
   }
   for (let pos = 0; pos < items.length; pos++) {
-    const ls = items[pos]![1];
+    const ls = items[pos]?.[1];
     if (!hasWords(ls)) {
       fault(part, `criterion ${pos + 1} is empty`);
       continue;
@@ -344,7 +373,7 @@ function turnpikesCheck(
     for (const l of said) fault(part, l);
     return "";
   }
-  if (r.code === 0 && said.length === 1 && said[0]!.startsWith("turnpikes: ")) {
+  if (r.code === 0 && said.length === 1 && said[0]?.startsWith("turnpikes: ")) {
     return said[0]!;
   }
   dieT(
@@ -352,7 +381,11 @@ function turnpikesCheck(
   );
 }
 
-function check(title: string | null, text: string, turnpikesPath: string): [string[], number, string] {
+function check(
+  title: string | null,
+  text: string,
+  turnpikesPath: string,
+): [string[], number, string] {
   const [, lines] = tokenize(text);
   const heads = headsOf(lines);
   const bounds = boundsOf(heads);
@@ -362,14 +395,15 @@ function check(title: string | null, text: string, turnpikesPath: string): [stri
     fault("title", "missing");
   }
   const at: Record<string, number> = {};
-  let count = 0, named = "";
+  let count = 0,
+    named = "";
   for (const [key, name] of PARTS) {
     const found = bounds.filter((h) => h.level === 2 && h.norm === key);
     if (found.length === 0) {
       const near = heads.filter((h) => h.norm === key);
       let msg = `no "## ${name}" section`;
       if (near.length > 0) {
-        msg += `; "${near[0]!.raw}" is there, at the wrong level`;
+        msg += `; "${near[0]?.raw}" is there, at the wrong level`;
       } else if (key === "direction") {
         msg += '; one is needed even if it says "None: any approach that meets the criteria"';
       } else if (key === "turnpikes") {
@@ -381,7 +415,7 @@ function check(title: string | null, text: string, turnpikesPath: string): [stri
     if (found.length > 1) {
       fault(key, `"## ${name}" appears ${found.length} times`);
     }
-    const i = (at[key] = found[0]!.i);
+    const i = (at[key] = found[0]?.i);
     const nextBound = bounds.find((b) => b.i > i);
     const body = lines.slice(i + 1, nextBound ? nextBound.i : lines.length);
     if (!hasWords(body)) {
@@ -400,7 +434,10 @@ function check(title: string | null, text: string, turnpikesPath: string): [stri
     const [key, name] = PARTS[j]!;
     const after = PARTS.slice(0, j).filter(([k]) => k in at && key in at && at[k]! > at[key]!);
     if (after.length > 0) {
-      fault(key, `"## ${name}" comes before "## ${after[0]![1]}"; the order is ${PARTS.map(([, n]) => n).join(", ")}`);
+      fault(
+        key,
+        `"## ${name}" comes before "## ${after[0]?.[1]}"; the order is ${PARTS.map(([, n]) => n).join(", ")}`,
+      );
     }
   }
   return [faults, count, named];
@@ -419,7 +456,7 @@ function chunks(text: string): [string[], Array<[Head, string[]]>] {
   return [raw.slice(0, starts[0] ?? 0), secs];
 }
 
-function splice(baseText: string, sectionsText: string, turnpikesPath: string): string {
+function splice(baseText: string, sectionsText: string, _turnpikesPath: string): string {
   const [pre, secs] = chunks(baseText);
   const [lead, given] = chunks(sectionsText);
   if (lead.some((t) => t.trim())) dieT("the sections file has text before its first heading");
@@ -450,33 +487,35 @@ function splice(baseText: string, sectionsText: string, turnpikesPath: string): 
     if (rank === undefined) {
       at = out.length;
     } else {
-      const before = out.map((s, k) => [k, RANK[s[0] ?? ""] ?? rank] as const).filter(([_, r]) => r < rank);
+      const before = out
+        .map((s, k) => [k, RANK[s[0] ?? ""] ?? rank] as const)
+        .filter(([_, r]) => r < rank);
       if (before.length > 0) {
-        at = before[before.length - 1]![0] + 1;
-        while (at < out.length && RANK[out[at]![0] ?? ""] === undefined) at++;
+        at = before[before.length - 1]?.[0] + 1;
+        while (at < out.length && RANK[out[at]?.[0] ?? ""] === undefined) at++;
       } else {
         at = out.findIndex((s) => (RANK[s[0] ?? ""] ?? -1) > rank);
         if (at < 0) at = out.length;
       }
     }
     const trimmed = [...c];
-    while (trimmed.length > 0 && !trimmed[trimmed.length - 1]!.trim()) trimmed.pop();
+    while (trimmed.length > 0 && !trimmed[trimmed.length - 1]?.trim()) trimmed.pop();
     out.splice(at, 0, [b.norm, trimmed, true]);
   }
   const linesOut = [...pre];
   for (let k = 0; k < out.length; k++) {
     const [, c, isNew] = out[k]!;
-    if (isNew && linesOut.length > 0 && linesOut[linesOut.length - 1]!.trim()) {
+    if (isNew && linesOut.length > 0 && linesOut[linesOut.length - 1]?.trim()) {
       linesOut.push("");
     }
     linesOut.push(...c);
     if (isNew && k + 1 < out.length) linesOut.push("");
   }
-  return linesOut.join("\n") + "\n";
+  return `${linesOut.join("\n")}\n`;
 }
 
 // --- printed mode ------------------------------------------------------------------------------
-function checkPrinted(text: string, turnpikesPath: string): number {
+function _checkPrinted(text: string, turnpikesPath: string): number {
   const sep = text.indexOf("\n\n");
   const head = sep >= 0 ? text.slice(0, sep) : text;
   const body = sep >= 0 ? text.slice(sep + 2) : "";
@@ -526,26 +565,38 @@ function selfTest(): void {
     }
 
     // Body parts
-    const P = "## Problem / feature\nA ticket reaches a coachman with no criteria, so it has nothing to judge the lanes against.";
-    const A = "## Acceptance criteria\n1. The check exits 0 on a well-formed ticket and prints how many criteria it has.\n2. It exits 2 and names each missing part:\n   - the title\n   - the direction\n   1. a nested number is part of criterion 2, not a criterion\n\n   ```\n   ## Direction\n   ticket-check.sh --body draft.md   # which draft? TODO\n   ```\n3. A question or a marker in code, `a?` or `TODO`, is not read,\nand a line that runs straight on belongs to the criterion above it.\n\n   So does an indented paragraph after a blank line.";
-    const D = "## Direction\n<!-- a template comment is not read: TBD -->\nNone: any approach that meets the criteria.";
+    const P =
+      "## Problem / feature\nA ticket reaches a coachman with no criteria, so it has nothing to judge the lanes against.";
+    const A =
+      "## Acceptance criteria\n1. The check exits 0 on a well-formed ticket and prints how many criteria it has.\n2. It exits 2 and names each missing part:\n   - the title\n   - the direction\n   1. a nested number is part of criterion 2, not a criterion\n\n   ```\n   ## Direction\n   ticket-check.sh --body draft.md   # which draft? TODO\n   ```\n3. A question or a marker in code, `a?` or `TODO`, is not read,\nand a line that runs straight on belongs to the criterion above it.\n\n   So does an indented paragraph after a blank line.";
+    const D =
+      "## Direction\n<!-- a template comment is not read: TBD -->\nNone: any approach that meets the criteria.";
     const K = "## Turnpikes\n<!-- default, none, or turnpike names -->\n`default`";
-    const N = "## Notes\nA heading inside a fenced block is not a section:\n\n```\n## Direction\n```";
+    const N =
+      "## Notes\nA heading inside a fenced block is not a section:\n\n```\n## Direction\n```";
     const T = "Check a ticket's shape";
-    const NT = "## Notes\nContext.\n\n### Turnpikes\nWhy the default was chosen.\n\n### Out of scope\nNothing else.";
+    const NT =
+      "## Notes\nContext.\n\n### Turnpikes\nWhy the default was chosen.\n\n### Out of scope\nNothing else.";
     const UJ = "## User journey\nThe user opens the board and reads the ticket.";
 
     function body(...parts: string[]): void {
-      writeFileSync(join(tmp, "body.md"), parts.join("\n\n") + "\n\n");
+      writeFileSync(join(tmp, "body.md"), `${parts.join("\n\n")}\n\n`);
     }
     function runCheck(title: string): { code: number; out: string } {
       const r = run("bash", [SELF, "--body", join(tmp, "body.md"), "--title", title], {
-        env: { ...process.env as Record<string, string>, TURNPIKES: join(HERE, "turnpikes.sh") },
+        env: { ...(process.env as Record<string, string>), TURNPIKES: join(HERE, "turnpikes.sh") },
       });
       return { code: r.code, out: r.out + r.err };
     }
 
-    function expect(label: string, rcWant: number, partsWant: string, why = "", not = "", title: string = T): void {
+    function expect(
+      label: string,
+      rcWant: number,
+      partsWant: string,
+      why = "",
+      not = "",
+      title: string = T,
+    ): void {
       const r = runCheck(title);
       const out = r.out;
       const rc = r.code;
@@ -554,7 +605,9 @@ function selfTest(): void {
         (rc === 2
           ? out
               .split("\n")
-              .filter((l) => /^(title|problem \/ feature|acceptance criteria|direction|turnpikes): /.test(l))
+              .filter((l) =>
+                /^(title|problem \/ feature|acceptance criteria|direction|turnpikes): /.test(l),
+              )
               .map((l) => l.split(":")[0])
               .filter((v, i, a) => a.indexOf(v) === i)
               .sort()
@@ -599,7 +652,10 @@ function selfTest(): void {
     }
     function through(): { code: number; out: string } {
       const r = run("bash", [join(tmp, "bin", "ticket-check.sh"), tmp, "7"], {
-        env: { ...process.env as Record<string, string>, POSTMASTER_CONFIG: join(tmp, "github.toml") },
+        env: {
+          ...(process.env as Record<string, string>),
+          POSTMASTER_CONFIG: join(tmp, "github.toml"),
+        },
       });
       return { code: r.code, out: r.out + r.err };
     }
@@ -607,7 +663,8 @@ function selfTest(): void {
       writeFileSync(join(tmp, "bin", "local.sh"), `#!/usr/bin/env bash\n${script}\n`);
       chmodSync(join(tmp, "bin", "local.sh"), 0o755);
     }
-    const NOSTORE = 'case $2 in store) exit 3 ;; *) echo "stand-in local.sh: $*" >&2; exit 1 ;; esac';
+    const NOSTORE =
+      'case $2 in store) exit 3 ;; *) echo "stand-in local.sh: $*" >&2; exit 1 ;; esac';
     localsh(NOSTORE);
 
     console.log("positive controls");
@@ -622,9 +679,13 @@ function selfTest(): void {
     body(P, A, D, K);
     expect("Notes and User journey are optional", 0, "none");
     const noTitle = run("bash", [SELF, "--body", join(tmp, "body.md")], {
-      env: { ...process.env as Record<string, string>, TURNPIKES: join(HERE, "turnpikes.sh") },
+      env: { ...(process.env as Record<string, string>), TURNPIKES: join(HERE, "turnpikes.sh") },
     });
-    st.check("without --title only the body is judged", noTitle.code === 0, noTitle.out + noTitle.err);
+    st.check(
+      "without --title only the body is judged",
+      noTitle.code === 0,
+      noTitle.out + noTitle.err,
+    );
 
     body(
       "## Problem/Feature\nTickets arrive without criteria.",
@@ -634,55 +695,112 @@ function selfTest(): void {
     );
     expect("headings match ignoring case, a colon, the slash's spacing and a closing #", 0, "none");
 
-    body(P, "## Acceptance criteria\n1.\nThe check runs, the criterion's text on the line below its number.", D, K);
+    body(
+      P,
+      "## Acceptance criteria\n1.\nThe check runs, the criterion's text on the line below its number.",
+      D,
+      K,
+    );
     expect("a criterion's text may start on the line below its number", 0, "none");
 
-    body(P, '## Acceptance criteria\n   1. The check runs.\n   2. It names each part.\n\n---', D, K);
+    body(
+      P,
+      "## Acceptance criteria\n   1. The check runs.\n   2. It names each part.\n\n---",
+      D,
+      K,
+    );
     expect("a list indented three spaces, and a thematic break after it", 0, "none");
 
-    body(P, '## Acceptance criteria\n1. Setup asks "Overwrite the config?" before writing, and prints https://example.org/board?view=kanban.\n2. The CLI prompts "Continue? [y/N]" before it deletes an item.', D, K);
+    body(
+      P,
+      '## Acceptance criteria\n1. Setup asks "Overwrite the config?" before writing, and prints https://example.org/board?view=kanban.\n2. The CLI prompts "Continue? [y/N]" before it deletes an item.',
+      D,
+      K,
+    );
     expect("a question mark in quotes or inside a word is not a question", 0, "none");
 
-    body(P, '## Acceptance criteria\n1. Setup prints `Overwrite the config?\n   [y/N]` and waits for an answer.', D, K);
+    body(
+      P,
+      "## Acceptance criteria\n1. Setup prints `Overwrite the config?\n   [y/N]` and waits for an answer.",
+      D,
+      K,
+    );
     expect("a code span that wraps onto the next line is still code", 0, "none");
 
-    body('## Problem / feature\nThe template parser fails when a body holds `<!--` with no closer.', '## Acceptance criteria\n1. The check runs.\n2. The arrow in `a --> b` is kept.', D, K);
+    body(
+      "## Problem / feature\nThe template parser fails when a body holds `<!--` with no closer.",
+      "## Acceptance criteria\n1. The check runs.\n2. The arrow in `a --> b` is kept.",
+      D,
+      K,
+    );
     expect("a comment marker inside code hides nothing", 0, "none");
 
-    body('## Problem / feature\nThe parser fails on <!-- when nothing closes it.', A, D, K);
+    body("## Problem / feature\nThe parser fails on <!-- when nothing closes it.", A, D, K);
     expect("a <!-- inside a line that the line does not close is text", 0, "none");
 
-    body(P, '<!-- a comment that never closes', A, "## Direction\nNone: any approach that meets the criteria.", "## Turnpikes\ndefault");
+    body(
+      P,
+      "<!-- a comment that never closes",
+      A,
+      "## Direction\nNone: any approach that meets the criteria.",
+      "## Turnpikes\ndefault",
+    );
     expect("a <!-- at the start of a line that nothing closes is text", 0, "none");
 
-    body(P, "## Acceptance criteria\n1. The check runs. <!-- TBD: more --> It names each part.", D, K);
+    body(
+      P,
+      "## Acceptance criteria\n1. The check runs. <!-- TBD: more --> It names each part.",
+      D,
+      K,
+    );
     expect("a comment inside a line is not read", 0, "none");
 
-    body(P, '## Acceptance criteria\n1. ```\n   make check\n   ```\n2. The gate passes.', D, K);
+    body(P, "## Acceptance criteria\n1. ```\n   make check\n   ```\n2. The gate passes.", D, K);
     expect("a criterion that opens with a fenced block", 0, "none");
 
-    body('## Problem / feature\n```ls``` prints nothing in an empty directory.', A, D, K);
+    body("## Problem / feature\n```ls``` prints nothing in an empty directory.", A, D, K);
     expect("a line opening with a three-backtick code span is not a fence", 0, "none");
 
-    body('## Problem / feature\nThe app has no TODO list.', '## Acceptance criteria\n1. A user can add an item to the TODO list.', '## Direction\nStore TODO items in the existing database.', K);
+    body(
+      "## Problem / feature\nThe app has no TODO list.",
+      "## Acceptance criteria\n1. A user can add an item to the TODO list.",
+      "## Direction\nStore TODO items in the existing database.",
+      K,
+    );
     {
       const r2 = run("bash", [SELF, "--body", join(tmp, "body.md"), "--title", "Add a TODO list"], {
-        env: { ...process.env as Record<string, string>, TURNPIKES: join(HERE, "turnpikes.sh") },
+        env: { ...(process.env as Record<string, string>), TURNPIKES: join(HERE, "turnpikes.sh") },
       });
       st.check("TODO as a word is not a mark", r2.code === 0, r2.out + r2.err);
     }
 
-    writeFileSync(join(tmp, "body.md"), "## Problem / feature\r\nTickets arrive without criteria.\r\n\r\n## Acceptance criteria\r\n1. The check runs.\r\n\r\n## Direction\r\nNone.\r\n\r\n## Turnpikes\r\ndefault\r\n");
+    writeFileSync(
+      join(tmp, "body.md"),
+      "## Problem / feature\r\nTickets arrive without criteria.\r\n\r\n## Acceptance criteria\r\n1. The check runs.\r\n\r\n## Direction\r\nNone.\r\n\r\n## Turnpikes\r\ndefault\r\n",
+    );
     expect("a body with CRLF line endings passes", 0, "none");
 
-    writeFileSync(join(tmp, "body.md"), Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from([P, A, D, K].join("\n\n") + "\n\n")]));
+    writeFileSync(
+      join(tmp, "body.md"),
+      Buffer.concat([
+        new Uint8Array([0xef, 0xbb, 0xbf]),
+        Buffer.from(`${[P, A, D, K].join("\n\n")}\n\n`),
+      ]),
+    );
     expect("a byte-order mark hides no heading", 0, "none");
 
     body(P, A, D, K);
     {
-      const r2 = run("bash", ["-c", `bash "${SELF}" --body /dev/stdin --title "${T}" < "${join(tmp, "body.md")}"`], {
-        env: { ...process.env as Record<string, string>, TURNPIKES: join(HERE, "turnpikes.sh") },
-      });
+      const r2 = run(
+        "bash",
+        ["-c", `bash "${SELF}" --body /dev/stdin --title "${T}" < "${join(tmp, "body.md")}"`],
+        {
+          env: {
+            ...(process.env as Record<string, string>),
+            TURNPIKES: join(HERE, "turnpikes.sh"),
+          },
+        },
+      );
       st.check("a body read from standard input", r2.code === 0, r2.out + r2.err);
     }
 
@@ -694,7 +812,10 @@ function selfTest(): void {
 
     console.log("positive controls: the turnpikes, as scripts/turnpikes.sh reads them");
     body(P, A, D, K);
-    named("default, in a code span under a template comment, stands for the default set", `turnpikes: ${DEF}`);
+    named(
+      "default, in a code span under a template comment, stands for the default set",
+      `turnpikes: ${DEF}`,
+    );
     body(P, A, D, "## Turnpikes\nnone");
     named("none passes, and names no turnpike", "turnpikes: none");
     body(P, A, D, `## Turnpikes\n- ${N2UP}\n- \`${N1}\``);
@@ -706,81 +827,232 @@ function selfTest(): void {
     body(P, A, D, K, N);
     {
       const rr = run("bash", [SELF, "--body", join(tmp, "body.md"), "--title", ""], {
-        env: { ...process.env as Record<string, string>, TURNPIKES: join(HERE, "turnpikes.sh") },
+        env: { ...(process.env as Record<string, string>), TURNPIKES: join(HERE, "turnpikes.sh") },
       });
       st.check("no title", rr.code === 2 && rr.out.includes("title: missing"), rr.out + rr.err);
     }
     // no title in adapter's read
-    writeFileSync(join(tmp, "printed-untitled.txt"), printedContent.replace(/^title: .*/m, "title: "));
+    writeFileSync(
+      join(tmp, "printed-untitled.txt"),
+      printedContent.replace(/^title: .*/m, "title: "),
+    );
     adapter(`cat -- '${join(tmp, "printed-untitled.txt")}'`);
     r = through();
-    st.check("no title in the adapter's read", r.code === 2 && r.out.includes("title: missing"), r.out);
+    st.check(
+      "no title in the adapter's read",
+      r.code === 2 && r.out.includes("title: missing"),
+      r.out,
+    );
 
     body(A, D, K, N);
     expect("no problem or feature", 2, "problem / feature", 'no "## Problem / feature" section');
     body("## Problem / feature", A, D, K);
     expect("an empty problem or feature", 2, "problem / feature", "is empty");
     body(P, D, K, N);
-    expect("no acceptance criteria", 2, "acceptance criteria", 'no "## Acceptance criteria" section');
+    expect(
+      "no acceptance criteria",
+      2,
+      "acceptance criteria",
+      'no "## Acceptance criteria" section',
+    );
     body(P, "## Acceptance criteria\n- The check runs.\n- It names each part.", D, K);
     expect("criteria that are not numbered", 2, "acceptance criteria", "not a numbered list");
-    body(P, "## Acceptance criteria\n1. The check runs.\n1. It names each part.\n1. It exits 2.", D, K);
-    expect("criteria numbered out of order", 2, "acceptance criteria", "numbered 1, 1, 1; number them 1 to 3 in order");
+    body(
+      P,
+      "## Acceptance criteria\n1. The check runs.\n1. It names each part.\n1. It exits 2.",
+      D,
+      K,
+    );
+    expect(
+      "criteria numbered out of order",
+      2,
+      "acceptance criteria",
+      "numbered 1, 1, 1; number them 1 to 3 in order",
+    );
     body(P, "## Acceptance criteria\n1. The check runs.\n2. Should it also run at dispatch?", D, K);
-    expect("a criterion that asks a question", 2, "acceptance criteria", "criterion 2 asks a question");
-    body(P, "## Acceptance criteria\n1. The check runs.\n2. **Should it also run at dispatch?**", D, K);
-    expect("a question closed by emphasis", 2, "acceptance criteria", "criterion 2 asks a question");
-    body(P, "## Acceptance criteria\n1. The check runs.\n2. It retries a few times (how many?).", D, K);
-    expect("a question closed by a bracket", 2, "acceptance criteria", "criterion 2 asks a question");
-    body(P, "## Acceptance criteria\n1. The check runs.\n2. Should it also run at dispatch？", D, K);
+    expect(
+      "a criterion that asks a question",
+      2,
+      "acceptance criteria",
+      "criterion 2 asks a question",
+    );
+    body(
+      P,
+      "## Acceptance criteria\n1. The check runs.\n2. **Should it also run at dispatch?**",
+      D,
+      K,
+    );
+    expect(
+      "a question closed by emphasis",
+      2,
+      "acceptance criteria",
+      "criterion 2 asks a question",
+    );
+    body(
+      P,
+      "## Acceptance criteria\n1. The check runs.\n2. It retries a few times (how many?).",
+      D,
+      K,
+    );
+    expect(
+      "a question closed by a bracket",
+      2,
+      "acceptance criteria",
+      "criterion 2 asks a question",
+    );
+    body(
+      P,
+      "## Acceptance criteria\n1. The check runs.\n2. Should it also run at dispatch？",
+      D,
+      K,
+    );
     expect("a full-width question mark", 2, "acceptance criteria", "criterion 2 asks a question");
-    body(P, "## Acceptance criteria\n1. The check runs on every ticket before it is accepted.\n   Should it also run again at dispatch?", D, K);
-    expect("the fault quotes the sentence that asks", 2, "acceptance criteria", 'criterion 1 asks a question: "Should it also run again at dispatch?"');
+    body(
+      P,
+      "## Acceptance criteria\n1. The check runs on every ticket before it is accepted.\n   Should it also run again at dispatch?",
+      D,
+      K,
+    );
+    expect(
+      "the fault quotes the sentence that asks",
+      2,
+      "acceptance criteria",
+      'criterion 1 asks a question: "Should it also run again at dispatch?"',
+    );
     body(P, "## Acceptance criteria\n1. The check runs.\n2. The retry limit is TBD.", D, K);
     expect("a criterion marked TBD", 2, "acceptance criteria", "criterion 2 is marked TBD");
     body(P, "## Acceptance criteria\n1. The check runs.\n2. TODO: decide the retry limit.", D, K);
     expect("a criterion marked TODO:", 2, "acceptance criteria", "criterion 2 is marked TODO");
-    body(P, '## Acceptance criteria\n1. `<!--` opens a comment.\n2. The retry limit is TBD.\n3. `-->` closes one.', D, K);
-    expect("comment markers in code hide no criterion", 2, "acceptance criteria", "criterion 2 is marked TBD");
+    body(
+      P,
+      "## Acceptance criteria\n1. `<!--` opens a comment.\n2. The retry limit is TBD.\n3. `-->` closes one.",
+      D,
+      K,
+    );
+    expect(
+      "comment markers in code hide no criterion",
+      2,
+      "acceptance criteria",
+      "criterion 2 is marked TBD",
+    );
     body(P, "## Acceptance criteria\n1. The check runs.\n2.", D, K);
     expect("an empty criterion", 2, "acceptance criteria", "criterion 2 is empty");
-    body(P, "## Acceptance criteria\n1. The check runs.\n2. It names each part.\n\nAlso, the README names it,\nand the runbook.", D, K);
-    expect("a criterion outside the numbered list", 2, "acceptance criteria", 'not part of a numbered criterion: "Also, the README names it,"');
+    body(
+      P,
+      "## Acceptance criteria\n1. The check runs.\n2. It names each part.\n\nAlso, the README names it,\nand the runbook.",
+      D,
+      K,
+    );
+    expect(
+      "a criterion outside the numbered list",
+      2,
+      "acceptance criteria",
+      'not part of a numbered criterion: "Also, the README names it,"',
+    );
     {
       const rr = runCheck(T);
       const countNotPart = rr.out.split("\n").filter((l) => l.includes("not part of")).length;
-      st.check("a paragraph outside the list is named once, not per line", countNotPart === 1, rr.out);
+      st.check(
+        "a paragraph outside the list is named once, not per line",
+        countNotPart === 1,
+        rr.out,
+      );
     }
     body(P, "## Acceptance criteria\n1. The check runs.\n- It names each part.", D, K);
-    expect("an unnumbered criterion straight after a numbered one", 2, "acceptance criteria", 'not part of a numbered criterion: "- It names each part."');
+    expect(
+      "an unnumbered criterion straight after a numbered one",
+      2,
+      "acceptance criteria",
+      'not part of a numbered criterion: "- It names each part."',
+    );
     body(P, "## Acceptance criteria\n1. The check runs.\n### Details", D, K);
-    expect("a heading straight after a criterion", 2, "acceptance criteria", 'not part of a numbered criterion: "### Details"');
-    body(P, '## Acceptance criteria\n1. The check runs.\n\n```\na stray block\n```\nThe retry limit is TBD.', D, K);
-    expect("text after a stray block is not credited to the criterion above", 2, "acceptance criteria", 'not part of a numbered criterion: "```"', "criterion 1 is marked");
+    expect(
+      "a heading straight after a criterion",
+      2,
+      "acceptance criteria",
+      'not part of a numbered criterion: "### Details"',
+    );
+    body(
+      P,
+      "## Acceptance criteria\n1. The check runs.\n\n```\na stray block\n```\nThe retry limit is TBD.",
+      D,
+      K,
+    );
+    expect(
+      "text after a stray block is not credited to the criterion above",
+      2,
+      "acceptance criteria",
+      'not part of a numbered criterion: "```"',
+      "criterion 1 is marked",
+    );
     body(P, A, A, D, K);
     expect("acceptance criteria twice", 2, "acceptance criteria", "appears 2 times");
     body(P, A, K, N);
-    expect("no direction, even with one inside a fenced block", 2, "direction", 'no "## Direction" section; one is needed even if');
+    expect(
+      "no direction, even with one inside a fenced block",
+      2,
+      "direction",
+      'no "## Direction" section; one is needed even if',
+    );
     body(P, A, "## Direction\nTBD, once the spike is done.", K);
     expect("a direction marked TBD", 2, "direction", '"## Direction" is marked TBD');
     body(P, A, "## Direction\nTODO", K);
     expect("a direction that says only TODO", 2, "direction", '"## Direction" is marked TODO');
     body(P, A, "## Direction\n<!-- None: any approach that meets the criteria. -->", K);
-    expect("a direction written only in a comment is empty", 2, "direction", '"## Direction" is empty');
-    body(P, '<!-- a comment that starts a line', A, D, K);
-    expect("a comment that starts a line hides everything up to the next -->", 2, "acceptance criteria,direction");
+    expect(
+      "a direction written only in a comment is empty",
+      2,
+      "direction",
+      '"## Direction" is empty',
+    );
+    body(P, "<!-- a comment that starts a line", A, D, K);
+    expect(
+      "a comment that starts a line hides everything up to the next -->",
+      2,
+      "acceptance criteria,direction",
+    );
     body(P, A, "### Direction\nNone: any approach that meets the criteria.", K);
-    expect("a direction at the wrong level", 2, "direction", '"### Direction" is there, at the wrong level');
+    expect(
+      "a direction at the wrong level",
+      2,
+      "direction",
+      '"### Direction" is there, at the wrong level',
+    );
     body(P, D, A, K);
-    expect("a direction before the criteria", 2, "direction", '"## Direction" comes before "## Acceptance criteria"');
+    expect(
+      "a direction before the criteria",
+      2,
+      "direction",
+      '"## Direction" comes before "## Acceptance criteria"',
+    );
     body(P, A, D, N);
-    expect("no turnpikes", 2, "turnpikes", 'no "## Turnpikes" section; one is needed, holding default, none, or turnpike names');
+    expect(
+      "no turnpikes",
+      2,
+      "turnpikes",
+      'no "## Turnpikes" section; one is needed, holding default, none, or turnpike names',
+    );
     body(P, A, D, NT);
-    expect("a ### Turnpikes in the notes, with no ## Turnpikes, is named at the wrong level", 2, "turnpikes", '"### Turnpikes" is there, at the wrong level');
-    body(P, A, D, '## Turnpikes\n- ```none\n  style, bug, security\n  ```');
-    expect("a list item that opens a fence is code, and names no turnpike", 2, "turnpikes", "names no turnpike");
+    expect(
+      "a ### Turnpikes in the notes, with no ## Turnpikes, is named at the wrong level",
+      2,
+      "turnpikes",
+      '"### Turnpikes" is there, at the wrong level',
+    );
+    body(P, A, D, "## Turnpikes\n- ```none\n  style, bug, security\n  ```");
+    expect(
+      "a list item that opens a fence is code, and names no turnpike",
+      2,
+      "turnpikes",
+      "names no turnpike",
+    );
     body(P, A, D, `## Turnpikes\n${N1}, ${NOPE}`);
-    expect("a turnpike scripts/turnpikes.sh does not list is named", 2, "turnpikes", `"${NOPE}" is not a turnpike`);
+    expect(
+      "a turnpike scripts/turnpikes.sh does not list is named",
+      2,
+      "turnpikes",
+      `"${NOPE}" is not a turnpike`,
+    );
     body(P, A, D, `## Turnpikes\nnone, ${N1}`);
     expect("none listed with another turnpike", 2, "turnpikes", "none stands alone");
     body(P, A, D, "## Turnpikes");
@@ -788,13 +1060,30 @@ function selfTest(): void {
     body(P, A, D, "## Turnpikes\nTBD");
     expect("turnpikes marked TBD", 2, "turnpikes", '"## Turnpikes" is marked TBD');
     body(P, A, D, "### Turnpikes\ndefault");
-    expect("turnpikes at the wrong level", 2, "turnpikes", '"### Turnpikes" is there, at the wrong level');
+    expect(
+      "turnpikes at the wrong level",
+      2,
+      "turnpikes",
+      '"### Turnpikes" is there, at the wrong level',
+    );
     body(P, A, K, D);
-    expect("turnpikes before the direction", 2, "turnpikes", '"## Turnpikes" comes before "## Direction"');
+    expect(
+      "turnpikes before the direction",
+      2,
+      "turnpikes",
+      '"## Turnpikes" comes before "## Direction"',
+    );
     body(P, A, D, K, K);
     expect("turnpikes twice", 2, "turnpikes", '"## Turnpikes" appears 2 times');
     writeFileSync(join(tmp, "body.md"), "");
-    expect("an empty ticket names all five parts", 2, "acceptance criteria,direction,problem / feature,title,turnpikes", "", "", "");
+    expect(
+      "an empty ticket names all five parts",
+      2,
+      "acceptance criteria,direction,problem / feature,title,turnpikes",
+      "",
+      "",
+      "",
+    );
 
     console.log("a turnpike is added in scripts/turnpikes.sh alone");
     mkdirSync(join(tmp, "added"), { recursive: true });
@@ -814,24 +1103,42 @@ function selfTest(): void {
       copyFileSync(join(HERE, "turnpikes.sh"), join(dir, "turnpikes.sh"));
       chmodSync(join(dir, "turnpikes.sh"), 0o755);
       const src = readFileSync(join(HERE, "turnpikes.ts"), "utf8");
-      const out = src.replace(/(const TABLE = `[\s\S]*?)(`;)/, (_m, a: string, b: string) => `${a}\n${row}${b}`);
+      const out = src.replace(
+        /(const TABLE = `[\s\S]*?)(`;)/,
+        (_m, a: string, b: string) => `${a}\n${row}${b}`,
+      );
       writeFileSync(join(dir, "turnpikes.ts"), out);
     }
-    addTurnpike(`${NOPE}  -        ship    a check the table does not have yet`, join(tmp, "added"));
+    addTurnpike(
+      `${NOPE}  -        ship    a check the table does not have yet`,
+      join(tmp, "added"),
+    );
     addTurnpike("none       -        review  nothing", join(tmp, "broken"));
     body(P, A, D, `## Turnpikes\ndefault, ${NOPE}`);
     {
       const rr = run("bash", [SELF, "--body", join(tmp, "body.md"), "--title", T], {
-        env: { ...process.env as Record<string, string>, TURNPIKES: join(HERE, "turnpikes.sh") },
+        env: { ...(process.env as Record<string, string>), TURNPIKES: join(HERE, "turnpikes.sh") },
       });
-      st.check("this check names a turnpike that turnpikes.sh does not list", rr.code === 2 && rr.out.includes(`"${NOPE}" is not a turnpike`), rr.out);
+      st.check(
+        "this check names a turnpike that turnpikes.sh does not list",
+        rr.code === 2 && rr.out.includes(`"${NOPE}" is not a turnpike`),
+        rr.out,
+      );
     }
     {
-      const rr = run("bash", [join(tmp, "added", "ticket-check.sh"), "--body", join(tmp, "body.md"), "--title", T], {
-        env: { ...process.env as Record<string, string> },
-      });
+      const rr = run(
+        "bash",
+        [join(tmp, "added", "ticket-check.sh"), "--body", join(tmp, "body.md"), "--title", T],
+        {
+          env: { ...(process.env as Record<string, string>) },
+        },
+      );
       const secondLine = rr.out.split("\n")[1] ?? "";
-      st.check("the same check passes it once turnpikes.sh lists it", rr.code === 0 && secondLine === `turnpikes: ${DEF}, ${NOPE}`, rr.out);
+      st.check(
+        "the same check passes it once turnpikes.sh lists it",
+        rr.code === 0 && secondLine === `turnpikes: ${DEF}, ${NOPE}`,
+        rr.out,
+      );
     }
 
     console.log("negative controls: a ticket that cannot be read is not a verdict");
@@ -840,42 +1147,75 @@ function selfTest(): void {
       st.check("no arguments is a usage error", rr.code === 1, rr.out + rr.err);
     }
     {
-      const rr = run("bash", [SELF, "--body", join(tmp, "nowhere.md")], { env: process.env as Record<string, string> });
+      const rr = run("bash", [SELF, "--body", join(tmp, "nowhere.md")], {
+        env: process.env as Record<string, string>,
+      });
       st.check("a missing body file is refused", rr.code === 1, rr.out + rr.err);
     }
     writeFileSync(join(tmp, "other.toml"), '[tracker]\nkind = "other"\nname = "notes"\n');
     {
       const rr = run("bash", [SELF, tmp, "7"], {
-        env: { ...process.env as Record<string, string>, POSTMASTER_CONFIG: join(tmp, "other.toml") },
+        env: {
+          ...(process.env as Record<string, string>),
+          POSTMASTER_CONFIG: join(tmp, "other.toml"),
+        },
       });
-      st.check("a tracker kind with no adapter script is refused, not judged", rr.code === 1 && rr.out.trim() === "", rr.out + rr.err);
+      st.check(
+        "a tracker kind with no adapter script is refused, not judged",
+        rr.code === 1 && rr.out.trim() === "",
+        rr.out + rr.err,
+      );
     }
     writeFileSync(join(tmp, "broken.toml"), "[tracker\nkind = github\n");
     {
       const rr = run("bash", [SELF, tmp, "7"], {
-        env: { ...process.env as Record<string, string>, POSTMASTER_CONFIG: join(tmp, "broken.toml") },
+        env: {
+          ...(process.env as Record<string, string>),
+          POSTMASTER_CONFIG: join(tmp, "broken.toml"),
+        },
       });
-      st.check("a config that does not parse is named as one", rr.code === 1 && rr.err.includes("does not parse"), rr.out + rr.err);
+      st.check(
+        "a config that does not parse is named as one",
+        rr.code === 1 && rr.err.includes("does not parse"),
+        rr.out + rr.err,
+      );
     }
     adapter('echo "github: no board" >&2; exit 3');
     r = through();
     st.check(
       "an adapter that cannot read the ticket is exit 1, not a shape fault",
-      r.code === 1 && !/^(title|problem \/ feature|acceptance criteria|direction|turnpikes): /.test(r.out),
+      r.code === 1 &&
+        !/^(title|problem \/ feature|acceptance criteria|direction|turnpikes): /.test(r.out),
       r.out,
     );
     body(P, A, D, K);
     {
-      const rr = run("bash", [join(tmp, "alone", "ticket-check.sh"), "--body", join(tmp, "body.md"), "--title", T], {
-        env: process.env as Record<string, string>,
-      });
-      st.check("with no turnpikes.sh beside it, the check gives no verdict", rr.code === 1 && rr.out.trim() === "", rr.out + rr.err);
+      const rr = run(
+        "bash",
+        [join(tmp, "alone", "ticket-check.sh"), "--body", join(tmp, "body.md"), "--title", T],
+        {
+          env: process.env as Record<string, string>,
+        },
+      );
+      st.check(
+        "with no turnpikes.sh beside it, the check gives no verdict",
+        rr.code === 1 && rr.out.trim() === "",
+        rr.out + rr.err,
+      );
     }
     {
-      const rr = run("bash", [join(tmp, "broken", "ticket-check.sh"), "--body", join(tmp, "body.md"), "--title", T], {
-        env: process.env as Record<string, string>,
-      });
-      st.check("a turnpikes.sh whose table breaks its rules gives no verdict", rr.code === 1 && rr.out.trim() === "", rr.out + rr.err);
+      const rr = run(
+        "bash",
+        [join(tmp, "broken", "ticket-check.sh"), "--body", join(tmp, "body.md"), "--title", T],
+        {
+          env: process.env as Record<string, string>,
+        },
+      );
+      st.check(
+        "a turnpikes.sh whose table breaks its rules gives no verdict",
+        rr.code === 1 && rr.out.trim() === "",
+        rr.out + rr.err,
+      );
     }
     mkdirSync(join(tmp, "silent"), { recursive: true });
     copyFileSync(SELF, join(tmp, "silent", "ticket-check.sh"));
@@ -887,10 +1227,18 @@ function selfTest(): void {
     writeFileSync(join(tmp, "silent", "turnpikes.sh"), "#!/bin/sh\nexit 2\n");
     chmodSync(join(tmp, "silent", "turnpikes.sh"), 0o755);
     {
-      const rr = run("bash", [join(tmp, "silent", "ticket-check.sh"), "--body", join(tmp, "body.md"), "--title", T], {
-        env: process.env as Record<string, string>,
-      });
-      st.check("a turnpikes.sh that fails with nothing to say gives no verdict, never a pass", rr.code === 1 && rr.out.trim() === "", rr.out + rr.err);
+      const rr = run(
+        "bash",
+        [join(tmp, "silent", "ticket-check.sh"), "--body", join(tmp, "body.md"), "--title", T],
+        {
+          env: process.env as Record<string, string>,
+        },
+      );
+      st.check(
+        "a turnpikes.sh that fails with nothing to say gives no verdict, never a pass",
+        rr.code === 1 && rr.out.trim() === "",
+        rr.out + rr.err,
+      );
     }
 
     console.log("positive controls: --splice changes the sections given and nothing else");
@@ -907,57 +1255,74 @@ function selfTest(): void {
       else st.fail(`${label} (exit ${r.code})`, r.out);
     }
 
-    writeFileSync(join(tmp, "base.md"), [P, A, K].join("\n\n") + "\n\n" + N + "\n");
-    writeFileSync(join(tmp, "sections.md"), D + "\n");
-    writeFileSync(join(tmp, "want.md"), [P, A, D, K].join("\n\n") + "\n\n" + N + "\n");
+    writeFileSync(join(tmp, "base.md"), `${[P, A, K].join("\n\n")}\n\n${N}\n`);
+    writeFileSync(join(tmp, "sections.md"), `${D}\n`);
+    writeFileSync(join(tmp, "want.md"), `${[P, A, D, K].join("\n\n")}\n\n${N}\n`);
     sameSplice("a missing direction goes between the criteria and the turnpikes");
     writeFileSync(join(tmp, "body.md"), spliceRun().out);
     expect("the spliced body passes the check", 0, "none");
 
-    writeFileSync(join(tmp, "base.md"), [P, A, D].join("\n\n") + "\n\n" + N + "\n");
-    writeFileSync(join(tmp, "sections.md"), K + "\n");
-    writeFileSync(join(tmp, "want.md"), [P, A, D, K].join("\n\n") + "\n\n" + N + "\n");
+    writeFileSync(join(tmp, "base.md"), `${[P, A, D].join("\n\n")}\n\n${N}\n`);
+    writeFileSync(join(tmp, "sections.md"), `${K}\n`);
+    writeFileSync(join(tmp, "want.md"), `${[P, A, D, K].join("\n\n")}\n\n${N}\n`);
     sameSplice("a missing turnpikes section goes between the direction and the notes");
     writeFileSync(join(tmp, "body.md"), spliceRun().out);
     named("and the spliced body passes, with the default turnpikes", `turnpikes: ${DEF}`);
 
-    writeFileSync(join(tmp, "base.md"), [P, A, UJ, D].join("\n\n") + "\n\n" + N + "\n");
-    writeFileSync(join(tmp, "sections.md"), K + "\n");
-    writeFileSync(join(tmp, "want.md"), [P, A, UJ, D, K].join("\n\n") + "\n\n" + N + "\n");
+    writeFileSync(join(tmp, "base.md"), `${[P, A, UJ, D].join("\n\n")}\n\n${N}\n`);
+    writeFileSync(join(tmp, "sections.md"), `${K}\n`);
+    writeFileSync(join(tmp, "want.md"), `${[P, A, UJ, D, K].join("\n\n")}\n\n${N}\n`);
     sameSplice("turnpikes go after the direction, even when a user journey comes before it");
     writeFileSync(join(tmp, "body.md"), spliceRun().out);
     named("and that spliced body passes", `turnpikes: ${DEF}`);
 
     const C = "## Acceptance criteria\n1. Only this criterion.";
-    writeFileSync(join(tmp, "base.md"), [P, A, D].join("\n\n") + "\n\n" + N + "\n");
-    writeFileSync(join(tmp, "sections.md"), C + "\n");
-    writeFileSync(join(tmp, "want.md"), [P, C, D].join("\n\n") + "\n\n" + N + "\n");
+    writeFileSync(join(tmp, "base.md"), `${[P, A, D].join("\n\n")}\n\n${N}\n`);
+    writeFileSync(join(tmp, "sections.md"), `${C}\n`);
+    writeFileSync(join(tmp, "want.md"), `${[P, C, D].join("\n\n")}\n\n${N}\n`);
     sameSplice("the criteria are replaced where they stand");
 
-    writeFileSync(join(tmp, "base.md"), [P, D, A].join("\n\n") + "\n\n" + N + "\n");
-    writeFileSync(join(tmp, "sections.md"), D + "\n");
-    writeFileSync(join(tmp, "want.md"), [P, A, D].join("\n\n") + "\n\n" + N + "\n");
+    writeFileSync(join(tmp, "base.md"), `${[P, D, A].join("\n\n")}\n\n${N}\n`);
+    writeFileSync(join(tmp, "sections.md"), `${D}\n`);
+    writeFileSync(join(tmp, "want.md"), `${[P, A, D].join("\n\n")}\n\n${N}\n`);
     sameSplice("a direction written before the criteria moves after them");
 
-    writeFileSync(join(tmp, "base.md"), [P, A, "### Direction\nAn old approach."].join("\n\n") + "\n\n" + N + "\n");
-    writeFileSync(join(tmp, "sections.md"), D + "\n");
-    writeFileSync(join(tmp, "want.md"), [P, A, D].join("\n\n") + "\n\n" + N + "\n");
+    writeFileSync(
+      join(tmp, "base.md"),
+      `${[P, A, "### Direction\nAn old approach."].join("\n\n")}\n\n${N}\n`,
+    );
+    writeFileSync(join(tmp, "sections.md"), `${D}\n`);
+    writeFileSync(join(tmp, "want.md"), `${[P, A, D].join("\n\n")}\n\n${N}\n`);
     sameSplice("a direction at the wrong level is replaced");
 
     const X = "## Context\nSeen twice this week.";
-    writeFileSync(join(tmp, "base.md"), ["Reported in the forum.", P, X, A].join("\n\n") + "\n\n" + N + "\n");
-    writeFileSync(join(tmp, "sections.md"), D + "\n");
-    writeFileSync(join(tmp, "want.md"), ["Reported in the forum.", P, X, A, D].join("\n\n") + "\n\n" + N + "\n");
+    writeFileSync(
+      join(tmp, "base.md"),
+      `${["Reported in the forum.", P, X, A].join("\n\n")}\n\n${N}\n`,
+    );
+    writeFileSync(join(tmp, "sections.md"), `${D}\n`);
+    writeFileSync(
+      join(tmp, "want.md"),
+      `${["Reported in the forum.", P, X, A, D].join("\n\n")}\n\n${N}\n`,
+    );
     sameSplice("text before the first heading and a section outside the shape are kept");
 
-    writeFileSync(join(tmp, "base.md"), ["Reported in the forum.", P, X, D, K].join("\n\n") + "\n\n" + N + "\n");
-    writeFileSync(join(tmp, "sections.md"), A + "\n");
-    writeFileSync(join(tmp, "want.md"), ["Reported in the forum.", P, X, A, D, K].join("\n\n") + "\n\n" + N + "\n");
-    sameSplice("a missing part goes after the part before it and the sections outside the shape that follow it");
+    writeFileSync(
+      join(tmp, "base.md"),
+      `${["Reported in the forum.", P, X, D, K].join("\n\n")}\n\n${N}\n`,
+    );
+    writeFileSync(join(tmp, "sections.md"), `${A}\n`);
+    writeFileSync(
+      join(tmp, "want.md"),
+      `${["Reported in the forum.", P, X, A, D, K].join("\n\n")}\n\n${N}\n`,
+    );
+    sameSplice(
+      "a missing part goes after the part before it and the sections outside the shape that follow it",
+    );
 
-    writeFileSync(join(tmp, "base.md"), [P, A, N].join("\n\n") + "\n\n\n");
-    writeFileSync(join(tmp, "sections.md"), D + "\n");
-    writeFileSync(join(tmp, "want.md"), [P, A, D, N].join("\n\n") + "\n\n\n");
+    writeFileSync(join(tmp, "base.md"), `${[P, A, N].join("\n\n")}\n\n\n`);
+    writeFileSync(join(tmp, "sections.md"), `${D}\n`);
+    writeFileSync(join(tmp, "want.md"), `${[P, A, D, N].join("\n\n")}\n\n\n`);
     {
       const r = run("bash", [SELF, "--splice", join(tmp, "base.md"), join(tmp, "sections.md")], {
         env: process.env as Record<string, string>,
@@ -986,8 +1351,8 @@ function selfTest(): void {
       const r = spliceRun();
       st.check("the same section twice", r.code === 1, r.out);
     }
-    writeFileSync(join(tmp, "base.md"), [P, A, D].join("\n\n") + "\n\n" + NT + "\n");
-    writeFileSync(join(tmp, "sections.md"), K + "\n");
+    writeFileSync(join(tmp, "base.md"), `${[P, A, D].join("\n\n")}\n\n${NT}\n`);
+    writeFileSync(join(tmp, "sections.md"), `${K}\n`);
     {
       const r = spliceRun();
       st.check(
@@ -996,8 +1361,11 @@ function selfTest(): void {
         r.out,
       );
     }
-    writeFileSync(join(tmp, "base.md"), [P, A, "## Notes\nContext.\n\n### Direction\nAn old approach."].join("\n\n") + "\n");
-    writeFileSync(join(tmp, "sections.md"), D + "\n");
+    writeFileSync(
+      join(tmp, "base.md"),
+      `${[P, A, "## Notes\nContext.\n\n### Direction\nAn old approach."].join("\n\n")}\n`,
+    );
+    writeFileSync(join(tmp, "sections.md"), `${D}\n`);
     {
       const r = spliceRun();
       st.check(
@@ -1007,8 +1375,12 @@ function selfTest(): void {
       );
     }
 
-    console.log("controls: a repo whose local ticket store exists is read through local.sh, whatever the config names");
-    localsh(`case $2 in store) exit 0 ;; read) : > '${join(tmp, "local-read")}'; cat -- '${join(tmp, "printed.txt")}' ;; *) exit 1 ;; esac`);
+    console.log(
+      "controls: a repo whose local ticket store exists is read through local.sh, whatever the config names",
+    );
+    localsh(
+      `case $2 in store) exit 0 ;; read) : > '${join(tmp, "local-read")}'; cat -- '${join(tmp, "printed.txt")}' ;; *) exit 1 ;; esac`,
+    );
     adapter(`: > '${join(tmp, "github-read")}'; exit 1`);
     rmSync(join(tmp, "local-read"), { force: true });
     rmSync(join(tmp, "github-read"), { force: true });
@@ -1030,13 +1402,18 @@ function selfTest(): void {
       r.out,
     );
 
-    localsh(`case $2 in store) echo 'local: not a git repository' >&2; exit 1 ;; *) : > '${join(tmp, "local-read")}'; exit 1 ;; esac`);
+    localsh(
+      `case $2 in store) echo 'local: not a git repository' >&2; exit 1 ;; *) : > '${join(tmp, "local-read")}'; exit 1 ;; esac`,
+    );
     rmSync(join(tmp, "local-read"), { force: true });
     rmSync(join(tmp, "github-read"), { force: true });
     r = through();
     st.check(
       "a store that cannot be looked for stops the check, and no adapter is read",
-      r.code === 1 && !existsSync(join(tmp, "github-read")) && !existsSync(join(tmp, "local-read")) && r.out.includes("cannot look for a local store"),
+      r.code === 1 &&
+        !existsSync(join(tmp, "github-read")) &&
+        !existsSync(join(tmp, "local-read")) &&
+        r.out.includes("cannot look for a local store"),
       r.out,
     );
     localsh(NOSTORE);

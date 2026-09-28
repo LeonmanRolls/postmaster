@@ -26,22 +26,31 @@ export function run(
   });
   return {
     code: r.status ?? (r.signal ? 128 : 1),
-    out: typeof r.stdout === "string" ? r.stdout : (r.stdout?.toString() ?? ""),
-    err: typeof r.stderr === "string" ? r.stderr : (r.stderr?.toString() ?? ""),
+    out: String(r.stdout ?? ""),
+    err: String(r.stderr ?? ""),
   };
 }
 
 /** mkdir -d a temp dir and hand it to fn; remove it afterwards even if fn throws. */
 export function withTempDir<T>(fn: (dir: string) => T, prefix = "postmaster-"): T {
   const dir = mkdtempSync(join(tmpdir(), prefix));
-  try {
-    return fn(dir);
-  } finally {
+  const cleanup = (): void => {
     try {
       rmSync(dir, { recursive: true, force: true });
     } catch {
       // cleanup is best-effort; a leftover temp dir is not a control failure
     }
+  };
+  try {
+    const r = fn(dir);
+    if (r instanceof Promise) {
+      return r.finally(cleanup) as T;
+    }
+    cleanup();
+    return r;
+  } catch (e) {
+    cleanup();
+    throw e;
   }
 }
 

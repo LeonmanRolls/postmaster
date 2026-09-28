@@ -31,7 +31,7 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { delimiter, dirname, join, posix, resolve, sep } from "node:path";
+import { delimiter, dirname, join, posix, resolve } from "node:path";
 import { readJsonFile, tryJsonFile } from "./lib/data.ts";
 import { die, run, withTempDir } from "./lib/proc.ts";
 import { SelfTest } from "./lib/selftest.ts";
@@ -44,7 +44,7 @@ const IMPORT = /(?:\bfrom\s*|\bimport\s*\(?\s*|\brequire\s*\(\s*)(['"])([^'"\n]+
 const TEST_CALL = /^\s*(?:await\s+)?(?:test|it|describe)(?:\.\w+)*\s*\(/gm;
 
 function notRun(msg: string): never {
-  console.log("not run: " + msg);
+  console.log(`not run: ${msg}`);
   process.exit(3);
   throw new Error("unreachable");
 }
@@ -81,7 +81,7 @@ function listOrRun(mode: "list" | "run", wtArg: string): number {
     const msg = e instanceof Error ? e.message : String(e);
     notRun(`package.json does not parse: ${msg}`);
   }
-  const name = pkg["name"];
+  const name = pkg.name;
   if (typeof name !== "string" || !name) {
     notRun("package.json has no name, so no test can import the library by it");
   }
@@ -127,7 +127,7 @@ function listOrRun(mode: "list" | "run", wtArg: string): number {
     IMPORT.lastIndex = 0;
     for (const m of src.matchAll(IMPORT)) {
       const spec = m[2] ?? "";
-      if (spec === name || spec.startsWith(name + "/")) {
+      if (spec === name || spec.startsWith(`${name}/`)) {
         byName = true;
       } else if (spec.startsWith(".")) {
         const target = posix.normalize(posix.join(posix.dirname(rel), spec));
@@ -155,7 +155,7 @@ function listOrRun(mode: "list" | "run", wtArg: string): number {
     const d = pkg[key];
     if (d && typeof d === "object") Object.assign(deps, d);
   }
-  const scriptsRaw = pkg["scripts"];
+  const scriptsRaw = pkg.scripts;
   const scripts: Record<string, string> =
     scriptsRaw && typeof scriptsRaw === "object" ? (scriptsRaw as Record<string, string>) : {};
   const bun = existsSync(join(wt, "bun.lock")) || existsSync(join(wt, "bun.lockb"));
@@ -184,14 +184,14 @@ function listOrRun(mode: "list" | "run", wtArg: string): number {
     argv = [local("mocha"), ...chosen];
   } else if (
     bun ||
-    String(scripts["test"] ?? "").startsWith("bun ") ||
+    String(scripts.test ?? "").startsWith("bun ") ||
     "@types/bun" in deps ||
     "bun-types" in deps
   ) {
     if (!which("bun")) {
       notRun("the project runs its tests with bun, which is not on PATH");
     }
-    argv = ["bun", "test", ...chosen.map((f) => "./" + f)];
+    argv = ["bun", "test", ...chosen.map((f) => `./${f}`)];
   } else {
     if (!which("node")) {
       notRun("the tests run with node --test, and node is not on PATH");
@@ -199,7 +199,7 @@ function listOrRun(mode: "list" | "run", wtArg: string): number {
     argv = ["node", "--test", ...chosen];
   }
 
-  if (scripts["build"]) {
+  if (scripts.build) {
     if (!which(pm)) {
       notRun(`package.json has a build script, run through ${pm}, which is not on PATH`);
     }
@@ -383,7 +383,7 @@ import "sample-lib";
     const p = join(tmp, "built", "package.json");
     const j = tryJsonFile<Record<string, unknown>>(p);
     if (j) {
-      j["scripts"] = { build: "touch built.flag" };
+      j.scripts = { build: "touch built.flag" };
       writeFileSync(p, JSON.stringify(j), "utf8");
     }
   }
@@ -404,7 +404,7 @@ import "sample-lib";
     const p = join(tmp, "badbuild", "package.json");
     const j = tryJsonFile<Record<string, unknown>>(p);
     if (j) {
-      j["scripts"] = { build: "exit 5" };
+      j.scripts = { build: "exit 5" };
       writeFileSync(p, JSON.stringify(j), "utf8");
     }
   }
@@ -433,7 +433,7 @@ import "sample-lib";
     const p = join(tmp, "vitest", "package.json");
     const j = tryJsonFile<Record<string, unknown>>(p);
     if (j) {
-      j["devDependencies"] = { vitest: "1" };
+      j.devDependencies = { vitest: "1" };
       writeFileSync(p, JSON.stringify(j), "utf8");
     }
   }

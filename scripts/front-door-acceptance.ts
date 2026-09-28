@@ -16,19 +16,11 @@
 //   exit 0  no stale claim remains
 //   exit 1  stale claims, one per line on stdout: <file>: <what is still claimed>
 //   exit 2  usage, or a file that cannot be read
-import {
-  chmodSync,
-  cpSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { chmodSync, cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { scriptsDir, toolRoot } from "./lib/paths.ts";
 import { run, withTempDir } from "./lib/proc.ts";
 import { SelfTest } from "./lib/selftest.ts";
-import { scriptsDir, toolRoot } from "./lib/paths.ts";
 
 function usage(): never {
   console.error("usage: front-door-acceptance.sh [repo-root] | --self-test");
@@ -37,7 +29,9 @@ function usage(): never {
 
 /** flat <path>: fold newlines so a reflow alone never passes. */
 function flat(path: string): string {
-  const text = readFileSync(path, "utf8").replace(/\r/g, "").replace(/[\n\t]/g, "  ");
+  const text = readFileSync(path, "utf8")
+    .replace(/\r/g, "")
+    .replace(/[\n\t]/g, "  ");
   return text.replace(/ {2,}/g, " ");
 }
 
@@ -66,7 +60,7 @@ function accept(root: string): AcceptResult {
     }
     if (!readable) {
       err.push(`front-door-acceptance: cannot read ${p}`);
-      return { code: 2, out: "", err: err.join("\n") + "\n" };
+      return { code: 2, out: "", err: `${err.join("\n")}\n` };
     }
   }
   const texts: Record<string, string> = {};
@@ -75,7 +69,7 @@ function accept(root: string): AcceptResult {
       texts[f] = flat(join(root, f));
     } catch {
       err.push(`front-door-acceptance: cannot read ${join(root, f)}`);
-      return { code: 2, out: "", err: err.join("\n") + "\n" };
+      return { code: 2, out: "", err: `${err.join("\n")}\n` };
     }
   }
   const skill = texts["skills/postmaster/SKILL.md"] ?? "";
@@ -128,13 +122,17 @@ function accept(root: string): AcceptResult {
     "spawns a postmaster; `postmaster.md` is what that postmaster then does",
   );
   // The claim itself, in every file, in its plain verb forms.
-  for (const claim of ["never runs the stream", "does not run the stream", "do not run the stream"]) {
+  for (const claim of [
+    "never runs the stream",
+    "does not run the stream",
+    "do not run the stream",
+  ]) {
     stale(skill, "skills/postmaster/SKILL.md", "the front door never runs the stream", claim);
     stale(post, "skills/postmaster/postmaster.md", "the front door never runs the stream", claim);
     stale(agents, "AGENTS.md", "the front door never runs the stream", claim);
     stale(readme, "README.md", "the front door never runs the stream", claim);
   }
-  return { code: fails === 0 ? 0 : 1, out: out.map((l) => l + "\n").join(""), err: "" };
+  return { code: fails === 0 ? 0 : 1, out: out.map((l) => `${l}\n`).join(""), err: "" };
 }
 
 function printAccept(r: AcceptResult): never {
@@ -163,7 +161,7 @@ if (argv[0] === "--self-test") {
 const self = join(scriptsDir(import.meta), "front-door-acceptance.sh");
 withTempDir((tmp) => {
   const st = new SelfTest();
-  const failCount = { n: 0 };
+  const _failCount = { n: 0 };
 
   const has = (name: string, output: string, line: string): void => {
     if (output.split("\n").includes(line)) st.ok(name);
@@ -238,7 +236,7 @@ the stream itself or starts a postmaster; \`postmaster.md\` is what the postmast
   const alone = (name: string, file: string, want: string, fault: string): void => {
     rmSync(join(tmp, "one"), { recursive: true, force: true });
     cpSync(join(tmp, "clean"), join(tmp, "one"), { recursive: true });
-    writeFileSync(join(tmp, "one", file), fault + "\n", { flag: "a" });
+    writeFileSync(join(tmp, "one", file), `${fault}\n`, { flag: "a" });
     const r = accept(join(tmp, "one"));
     if (r.code === 1 && r.out.replace(/\n+$/, "") === want) st.ok(name);
     else st.fail(`${name}: exit ${r.code} with:`, r.out + r.err);
@@ -303,16 +301,14 @@ the stream itself or starts a postmaster; \`postmaster.md\` is what the postmast
   const pair = (name: string, want: string, fault: string): void => {
     rmSync(join(tmp, "one"), { recursive: true, force: true });
     cpSync(join(tmp, "clean"), join(tmp, "one"), { recursive: true });
-    writeFileSync(join(tmp, "one/skills/postmaster/SKILL.md"), fault + "\n", { flag: "a" });
+    writeFileSync(join(tmp, "one/skills/postmaster/SKILL.md"), `${fault}\n`, { flag: "a" });
     const r = accept(join(tmp, "one"));
     const lines = r.out.replace(/\n+$/, "").split("\n");
     if (
       r.code === 1 &&
       lines.length === 2 &&
       lines.includes(want) &&
-      lines.includes(
-        "skills/postmaster/SKILL.md: still says the front door never runs the stream",
-      )
+      lines.includes("skills/postmaster/SKILL.md: still says the front door never runs the stream")
     ) {
       st.ok(name);
     } else st.fail(`${name}: exit ${r.code} with:`, r.out + r.err);
@@ -332,19 +328,50 @@ the stream itself or starts a postmaster; \`postmaster.md\` is what the postmast
   const staleR = accept(join(tmp, "stale"));
   if (staleR.code === 1) st.ok("stale tree exits 1");
   else st.fail(`stale tree exits ${staleR.code}, want 1`, staleR.out + staleR.err);
-  const staleLines = staleR.out.replace(/\n+$/, "").split("\n").filter((l) => l !== "");
+  const staleLines = staleR.out
+    .replace(/\n+$/, "")
+    .split("\n")
+    .filter((l) => l !== "");
   if (staleLines.length === 19) st.ok("stale tree lists 19 faults");
   else st.fail("stale tree lists:", staleR.out);
   const so = staleR.out;
-  has("stale SKILL itself", so, "skills/postmaster/SKILL.md: still says the front door never runs the stream itself");
-  has("stale SKILL spawn-does-it", so, "skills/postmaster/SKILL.md: still says the spawned session does that instead");
-  has("stale SKILL only-flow", so, "skills/postmaster/SKILL.md: still says spawn, hand over and stop is the only flow");
-  has("stale SKILL bootstrap", so, "skills/postmaster/SKILL.md: still says bootstrap never runs the stream");
-  has("stale postmaster spawned", so, "skills/postmaster/postmaster.md: still says the bootstrap always spawned it");
+  has(
+    "stale SKILL itself",
+    so,
+    "skills/postmaster/SKILL.md: still says the front door never runs the stream itself",
+  );
+  has(
+    "stale SKILL spawn-does-it",
+    so,
+    "skills/postmaster/SKILL.md: still says the spawned session does that instead",
+  );
+  has(
+    "stale SKILL only-flow",
+    so,
+    "skills/postmaster/SKILL.md: still says spawn, hand over and stop is the only flow",
+  );
+  has(
+    "stale SKILL bootstrap",
+    so,
+    "skills/postmaster/SKILL.md: still says bootstrap never runs the stream",
+  );
+  has(
+    "stale postmaster spawned",
+    so,
+    "skills/postmaster/postmaster.md: still says the bootstrap always spawned it",
+  );
   has("stale AGENTS table", so, "AGENTS.md: still says the postmaster is spawned by SKILL.md");
   has("stale AGENTS door", so, "AGENTS.md: still says the front door only spawns a postmaster");
-  has("stale SKILL general", so, "skills/postmaster/SKILL.md: still says the front door never runs the stream");
-  has("stale postmaster general", so, "skills/postmaster/postmaster.md: still says the front door never runs the stream");
+  has(
+    "stale SKILL general",
+    so,
+    "skills/postmaster/SKILL.md: still says the front door never runs the stream",
+  );
+  has(
+    "stale postmaster general",
+    so,
+    "skills/postmaster/postmaster.md: still says the front door never runs the stream",
+  );
   has("stale AGENTS general", so, "AGENTS.md: still says the front door never runs the stream");
   has("stale README", so, "README.md: still says the front door never runs the stream");
 
@@ -361,7 +388,11 @@ the stream itself or starts a postmaster; \`postmaster.md\` is what the postmast
   else st.fail(`an extra argument exits ${extraR.code}`, extraR.out + extraR.err);
   const selfExtraR = run(self, ["--self-test", "extra"]);
   if (selfExtraR.code === 2) st.ok("--self-test with an extra argument exits 2");
-  else st.fail(`--self-test with an extra argument exits ${selfExtraR.code}`, selfExtraR.out + selfExtraR.err);
+  else
+    st.fail(
+      `--self-test with an extra argument exits ${selfExtraR.code}`,
+      selfExtraR.out + selfExtraR.err,
+    );
 
   rmSync(join(tmp, "crlf"), { recursive: true, force: true });
   cpSync(join(tmp, "clean"), join(tmp, "crlf"), { recursive: true });

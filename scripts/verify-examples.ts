@@ -15,7 +15,9 @@
 //   exit 3  not run: no ticket, no transcript in its User journey, no command to run it through, or
 //           a tool the command or its build needs is not on PATH; the reason is the last line
 import {
+  accessSync,
   chmodSync,
+  constants,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -23,24 +25,21 @@ import {
   realpathSync,
   rmSync,
   statSync,
-  writeFileSync,
   symlinkSync,
-  accessSync,
-  constants,
+  writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve, basename, delimiter } from "node:path";
-import { run, withTempDir, die } from "./lib/proc.ts";
+import { basename, delimiter, dirname, join, resolve } from "node:path";
+import { die, run, withTempDir } from "./lib/proc.ts";
 import { SelfTest } from "./lib/selftest.ts";
-import { tryJsonFile } from "./lib/data.ts";
 
 const FENCE = /^(\s*)(`{3,}|~{3,})(.*)$/;
 const EXIT_RE = /\[exit (\d+)\]/;
 const BIN_NAME = /^[A-Za-z0-9@._+-]+$/;
-const TIMEOUT = 60;
+const _TIMEOUT = 60;
 
 function notRun(msg: string): never {
-  console.log("not run: " + msg);
+  console.log(`not run: ${msg}`);
   process.exit(3);
   throw new Error("unreachable");
 }
@@ -62,9 +61,15 @@ function section(lines: string[], title: string): string[] | null {
   for (const l of lines.slice(start + 1)) {
     const m = FENCE.exec(l);
     if (fence === null && /^#{1,2}\s/.test(l)) break;
-    if (m && fence === null && !(m[2]![0] === "`" && m[3]!.includes("`"))) {
+    if (m && fence === null && !(m[2]?.[0] === "`" && m[3]?.includes("`"))) {
       fence = m[2]!;
-    } else if (m && fence !== null && m[2]![0] === fence[0] && m[2]!.length >= fence.length && !m[3]!.trim()) {
+    } else if (
+      m &&
+      fence !== null &&
+      m[2]?.[0] === fence[0] &&
+      m[2]?.length >= fence.length &&
+      !m[3]?.trim()
+    ) {
       fence = null;
     }
     out.push(l);
@@ -77,15 +82,15 @@ function blocks(lines: string[]): string[][] {
   let i = 0;
   while (i < lines.length) {
     const m = FENCE.exec(lines[i]!);
-    if (m && !(m[2]![0] === "`" && m[3]!.includes("`"))) {
-      const indent = m[1]!.length;
+    if (m && !(m[2]?.[0] === "`" && m[3]?.includes("`"))) {
+      const indent = m[1]?.length;
       const fence = m[2]!;
       const body: string[] = [];
       i += 1;
       while (i < lines.length) {
         const c = /^\s*(`{3,}|~{3,})\s*$/.exec(lines[i]!);
-        if (c && c[1]![0] === fence[0] && c[1]!.length >= fence.length) break;
-        body.push(lines[i]!.replace(new RegExp(`^ {0,${indent}}`), ""));
+        if (c && c[1]?.[0] === fence[0] && c[1]?.length >= fence.length) break;
+        body.push(lines[i]?.replace(new RegExp(`^ {0,${indent}}`), ""));
         i += 1;
       }
       out.push(body);
@@ -109,13 +114,13 @@ interface Cmd {
 
 function transcript(body: string[]): Cmd[] | null {
   const first = body.find((l) => l.trim());
-  if (!first || !first.startsWith("$ ")) return null;
+  if (!first?.startsWith("$ ")) return null;
   const cmds: Array<{ cmd: string; out: string[] }> = [];
   for (const l of body) {
     if (l.startsWith("$ ")) {
       cmds.push({ cmd: l.slice(2).trim(), out: [] });
     } else if (cmds.length > 0) {
-      cmds[cmds.length - 1]!.out.push(l);
+      cmds[cmds.length - 1]?.out.push(l);
     }
   }
   const result: Cmd[] = [];
@@ -123,8 +128,8 @@ function transcript(body: string[]): Cmd[] | null {
     let out = trim(c.out);
     let exit = 0;
     if (out.length > 0) {
-      const m = EXIT_RE.exec(out[out.length - 1]!.trim());
-      if (m && out[out.length - 1]!.trim().match(/^\[exit \d+\]$/)) {
+      const m = EXIT_RE.exec(out[out.length - 1]?.trim());
+      if (m && out[out.length - 1]?.trim().match(/^\[exit \d+\]$/)) {
         exit = parseInt(m[1]!, 10);
         out = trim(out.slice(0, -1));
       }
@@ -151,9 +156,13 @@ function examples(wtArg: string, ticketArg: string): number {
   if (journey === null) {
     notRun("the ticket has no User journey, where a command-line app's example transcripts go");
   }
-  const scripts = blocks(journey!).map((b) => transcript(b)).filter((t): t is Cmd[] => t !== null);
+  const scripts = blocks(journey!)
+    .map((b) => transcript(b))
+    .filter((t): t is Cmd[] => t !== null);
   if (scripts.length === 0) {
-    notRun("the ticket's User journey has no example transcript: a fenced block whose first line starts with `$ `");
+    notRun(
+      "the ticket's User journey has no example transcript: a fenced block whose first line starts with `$ `",
+    );
   }
 
   const pkgFile = join(wt, "package.json");
@@ -168,10 +177,13 @@ function examples(wtArg: string, ticketArg: string): number {
   } catch (e) {
     notRun(`package.json does not parse: ${e instanceof Error ? e.message : String(e)}`);
   }
-  const raw = pkg!["bin"];
+  const raw = pkg?.bin;
   let bins: Record<string, string> = {};
   if (typeof raw === "string") {
-    const name = String(pkg!["name"] || "").split("/").pop() || "";
+    const name =
+      String(pkg?.name || "")
+        .split("/")
+        .pop() || "";
     if (name) bins = { [name]: raw };
   } else if (raw && typeof raw === "object") {
     for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
@@ -188,8 +200,12 @@ function examples(wtArg: string, ticketArg: string): number {
   }
   const runpath = join(wt, "node_modules", ".bin") + delimiter + (process.env.PATH || "");
 
-  const scriptsRaw = pkg!["scripts"];
-  if (scriptsRaw && typeof scriptsRaw === "object" && (scriptsRaw as Record<string, unknown>)["build"]) {
+  const scriptsRaw = pkg?.scripts;
+  if (
+    scriptsRaw &&
+    typeof scriptsRaw === "object" &&
+    (scriptsRaw as Record<string, unknown>).build
+  ) {
     const bun = existsSync(join(wt, "bun.lock")) || existsSync(join(wt, "bun.lockb"));
     const pm = existsSync(join(wt, "pnpm-lock.yaml"))
       ? "pnpm"
@@ -243,7 +259,10 @@ function examples(wtArg: string, ticketArg: string): number {
       notRun(`bin ${name} runs through ${prog || "an empty #! line"}, which is not on PATH`);
     }
     const shim = join(shims, name);
-    writeFileSync(shim, `#!/bin/sh\nexec ${argv.map((a) => shQuote(a)).join(" ")} ${shQuote(f)} "$@"\n`);
+    writeFileSync(
+      shim,
+      `#!/bin/sh\nexec ${argv.map((a) => shQuote(a)).join(" ")} ${shQuote(f)} "$@"\n`,
+    );
     chmodSync(shim, 0o755);
   }
 
@@ -260,7 +279,7 @@ function examples(wtArg: string, ticketArg: string): number {
       NO_COLOR: "1",
       PATH: shims + delimiter + runpath,
     };
-    delete (env as Record<string, unknown>)["BASH_ENV"];
+    delete (env as Record<string, unknown>).BASH_ENV;
     for (const c of cmds) {
       ran += 1;
       const r = run("bash", ["-c", c.cmd], { cwd: home, env, input: "" });
@@ -274,9 +293,19 @@ function examples(wtArg: string, ticketArg: string): number {
       console.log(`FAIL  $ ${c.cmd}`);
       if (JSON.stringify(got) !== JSON.stringify(c.out)) {
         console.log("      expected:");
-        console.log(c.out.slice(0, 20).map((l) => `        ${l}`).join("\n") || "        (nothing)");
+        console.log(
+          c.out
+            .slice(0, 20)
+            .map((l) => `        ${l}`)
+            .join("\n") || "        (nothing)",
+        );
         console.log("      got:");
-        console.log(got.slice(0, 20).map((l) => `        ${l}`).join("\n") || "        (nothing)");
+        console.log(
+          got
+            .slice(0, 20)
+            .map((l) => `        ${l}`)
+            .join("\n") || "        (nothing)",
+        );
       }
       if (code !== c.exit) {
         console.log(`      exit: expected ${c.exit}, got ${code}`);
@@ -328,7 +357,8 @@ if (argv[0] === "--self-test") {
   let i = 0;
   while (i < argv.length) {
     if (argv[i] === "--ticket") {
-      if (argv.length < i + 2) die("usage: verify-examples.sh [<worktree>] [--ticket <file>] | --self-test", 1);
+      if (argv.length < i + 2)
+        die("usage: verify-examples.sh [<worktree>] [--ticket <file>] | --self-test", 1);
       TICKET = argv[i + 1] ?? "";
       i += 2;
     } else if (argv[i]?.startsWith("-")) {
@@ -350,7 +380,13 @@ withTempDir((tmp) => {
   const SELF = join(dirname(new URL(import.meta.url).pathname), "verify-examples.sh");
   const st = new SelfTest();
 
-  function expect(label: string, exit: number, project: string, ticket: string, wantIn?: string): void {
+  function expect(
+    label: string,
+    exit: number,
+    project: string,
+    ticket: string,
+    wantIn?: string,
+  ): void {
     const r = run("bash", [SELF, join(tmp, project), "--ticket", ticket]);
     const out = r.out + r.err;
     if (r.code === exit && (wantIn === undefined || wantIn === "" || out.includes(wantIn))) {
@@ -384,21 +420,31 @@ esac
   mkdirSync(join(tmp, "built", "bin"), { recursive: true });
   mkdirSync(join(tmp, "broken"), { recursive: true });
   writeFileSync(join(tmp, "nobin", "package.json"), '{"name": "plain"}\n', "utf8");
-  writeFileSync(join(tmp, "noshebang", "package.json"), '{"name": "x", "bin": {"x": "bin/x.sh"}}\n', "utf8");
+  writeFileSync(
+    join(tmp, "noshebang", "package.json"),
+    '{"name": "x", "bin": {"x": "bin/x.sh"}}\n',
+    "utf8",
+  );
   writeFileSync(join(tmp, "noshebang", "bin", "x.sh"), "echo hi\n", "utf8");
   writeFileSync(
     join(tmp, "built", "package.json"),
     '{"name": "built", "bin": "dist/built.js", "scripts": {"build": "mkdir -p dist && cp bin/src.js dist/built.js"}}\n',
     "utf8",
   );
-  writeFileSync(join(tmp, "built", "bin", "src.js"), "console.log('built ' + process.argv[2]);\n", "utf8");
+  writeFileSync(
+    join(tmp, "built", "bin", "src.js"),
+    "console.log('built ' + process.argv[2]);\n",
+    "utf8",
+  );
   writeFileSync(
     join(tmp, "broken", "package.json"),
     '{"name": "broken", "bin": "dist/broken.js", "scripts": {"build": "exit 4"}}\n',
     "utf8",
   );
 
-  writeFileSync(join(tmp, "pass.md"), `## User journey
+  writeFileSync(
+    join(tmp, "pass.md"),
+    `## User journey
 The user greets someone, saves a name and reads it back; a new directory has nothing saved.
 
 \`\`\`
@@ -420,20 +466,32 @@ $ greet saved
 nothing saved
 [exit 1]
 ~~~
-`, "utf8");
-  writeFileSync(join(tmp, "output.md"), `## User journey
+`,
+    "utf8",
+  );
+  writeFileSync(
+    join(tmp, "output.md"),
+    `## User journey
 \`\`\`
 $ greet world
 hello there
 \`\`\`
-`, "utf8");
-  writeFileSync(join(tmp, "exit.md"), `## User journey
+`,
+    "utf8",
+  );
+  writeFileSync(
+    join(tmp, "exit.md"),
+    `## User journey
 \`\`\`
 $ greet
 usage: greet <name> | greet save <name> | greet saved
 \`\`\`
-`, "utf8");
-  writeFileSync(join(tmp, "none.md"), `## Problem / feature
+`,
+    "utf8",
+  );
+  writeFileSync(
+    join(tmp, "none.md"),
+    `## Problem / feature
 Today \`greet\` with no name greets nobody:
 
 \`\`\`
@@ -447,9 +505,13 @@ The user types \`greet world\` and sees \`hello world\`.
 \`\`\`json
 {"not": "a transcript"}
 \`\`\`
-`, "utf8");
+`,
+    "utf8",
+  );
   writeFileSync(join(tmp, "nojourney.md"), "## Problem / feature\nGreet people.\n", "utf8");
-  writeFileSync(join(tmp, "waybill.md"), `# Waybill: T-1
+  writeFileSync(
+    join(tmp, "waybill.md"),
+    `# Waybill: T-1
 
 ## Ticket
 ## Problem / feature
@@ -468,25 +530,67 @@ repo: /somewhere
 $ greet ann
 this block is not the ticket's, and would fail
 \`\`\`
-`, "utf8");
-  writeFileSync(join(tmp, "built.md"), `## User journey
+`,
+    "utf8",
+  );
+  writeFileSync(
+    join(tmp, "built.md"),
+    `## User journey
 \`\`\`
 $ built ok
 built ok
 \`\`\`
-`, "utf8");
+`,
+    "utf8",
+  );
 
   console.log("positive controls");
-  expect("matching transcripts pass, exits and state within a block included", 0, "app", join(tmp, "pass.md"), "6 of 6 example commands");
+  expect(
+    "matching transcripts pass, exits and state within a block included",
+    0,
+    "app",
+    join(tmp, "pass.md"),
+    "6 of 6 example commands",
+  );
   expect("only a waybill's ticket part is read", 0, "app", join(tmp, "waybill.md"), "1 of 1");
-  expect("a build script runs before the bin is looked for", 0, "built", join(tmp, "built.md"), "1 of 1");
+  expect(
+    "a build script runs before the bin is looked for",
+    0,
+    "built",
+    join(tmp, "built.md"),
+    "1 of 1",
+  );
 
   console.log("negative controls");
-  expect("a different output fails and shows both", 1, "app", join(tmp, "output.md"), "hello there");
-  expect("a different exit fails and names both", 1, "app", join(tmp, "exit.md"), "exit: expected 0, got 2");
+  expect(
+    "a different output fails and shows both",
+    1,
+    "app",
+    join(tmp, "output.md"),
+    "hello there",
+  );
+  expect(
+    "a different exit fails and names both",
+    1,
+    "app",
+    join(tmp, "exit.md"),
+    "exit: expected 0, got 2",
+  );
   expect("a failed build fails", 1, "broken", join(tmp, "built.md"), "the build failed");
-  expect("a transcript outside the User journey is no example", 3, "app", join(tmp, "none.md"), "User journey has no example transcript");
-  expect("a ticket with no User journey is not run", 3, "app", join(tmp, "nojourney.md"), "has no User journey");
+  expect(
+    "a transcript outside the User journey is no example",
+    3,
+    "app",
+    join(tmp, "none.md"),
+    "User journey has no example transcript",
+  );
+  expect(
+    "a ticket with no User journey is not run",
+    3,
+    "app",
+    join(tmp, "nojourney.md"),
+    "has no User journey",
+  );
   mkdirSync(join(tmp, "pathbin", "bin"), { recursive: true });
   writeFileSync(
     join(tmp, "pathbin", "package.json"),
@@ -494,12 +598,32 @@ built ok
     "utf8",
   );
   run("cp", [join(tmp, "app", "bin", "greet"), join(tmp, "pathbin", "bin")]);
-  expect("a bin named with a path is not run", 3, "pathbin", join(tmp, "pass.md"), "not a plain command name");
+  expect(
+    "a bin named with a path is not run",
+    3,
+    "pathbin",
+    join(tmp, "pass.md"),
+    "not a plain command name",
+  );
   st.check("and nothing is written where it points", !existsSync(join(tmp, "victim")));
   mkdirSync(join(tmp, "nointerp", "bin"), { recursive: true });
-  writeFileSync(join(tmp, "nointerp", "package.json"), '{"name": "n", "bin": {"greet": "bin/greet"}}\n', "utf8");
-  writeFileSync(join(tmp, "nointerp", "bin", "greet"), "#!/usr/bin/env no-such-interpreter-xyz\necho hi\n", "utf8");
-  expect("a bin whose interpreter is not installed is not run", 3, "nointerp", join(tmp, "pass.md"), "runs through no-such-interpreter-xyz");
+  writeFileSync(
+    join(tmp, "nointerp", "package.json"),
+    '{"name": "n", "bin": {"greet": "bin/greet"}}\n',
+    "utf8",
+  );
+  writeFileSync(
+    join(tmp, "nointerp", "bin", "greet"),
+    "#!/usr/bin/env no-such-interpreter-xyz\necho hi\n",
+    "utf8",
+  );
+  expect(
+    "a bin whose interpreter is not installed is not run",
+    3,
+    "nointerp",
+    join(tmp, "pass.md"),
+    "runs through no-such-interpreter-xyz",
+  );
   mkdirSync(join(tmp, "fewtools"), { recursive: true });
   for (const t of ["bash", "bun", "dirname"]) {
     const found = findInPath(t, process.env.PATH || "");
@@ -523,10 +647,22 @@ built ok
     );
   }
   expect("a project with no bin is not run", 3, "nobin", join(tmp, "pass.md"), "names no bin");
-  expect("a bin with no #! line is not run", 3, "noshebang", join(tmp, "pass.md"), "has no #! line");
+  expect(
+    "a bin with no #! line is not run",
+    3,
+    "noshebang",
+    join(tmp, "pass.md"),
+    "has no #! line",
+  );
   expect("a missing ticket is not run", 3, "app", join(tmp, "no-such-ticket.md"), "no ticket at");
   mkdirSync(join(tmp, "empty"), { recursive: true });
-  expect("a project with no package.json is not run", 3, "empty", join(tmp, "pass.md"), "no package.json");
+  expect(
+    "a project with no package.json is not run",
+    3,
+    "empty",
+    join(tmp, "pass.md"),
+    "no package.json",
+  );
 
   st.finish();
 });

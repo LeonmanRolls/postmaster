@@ -14,11 +14,11 @@
 //   exit 2  list/count: a finding whose class is neither gating nor style. gate: the waybill
 //           names no gate, or no repo that exists. check: a finding with neither class; no sort,
 //           with style findings to sort; or a sort that is wrong.
-import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
-import { join, basename, dirname, resolve, posix } from "node:path";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { basename, dirname, join, posix, resolve } from "node:path";
+import { scriptsDir, toolRoot } from "./lib/paths.ts";
 import { run, withTempDir } from "./lib/proc.ts";
 import { SelfTest } from "./lib/selftest.ts";
-import { scriptsDir, toolRoot } from "./lib/paths.ts";
 
 // --- constants ------------------------------------------------------------------------------
 const FORMS =
@@ -51,7 +51,10 @@ function plain(word: string): string {
 }
 
 function named(name: string, text: string): boolean {
-  const re = new RegExp(`(?<![A-Za-z0-9_-])${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![A-Za-z0-9_-])`, "i");
+  const re = new RegExp(
+    `(?<![A-Za-z0-9_-])${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![A-Za-z0-9_-])`,
+    "i",
+  );
   return re.test(text);
 }
 
@@ -109,7 +112,9 @@ function findings(dispatch: string): { style: Finding[]; faults: string[] } {
       die(`${path} line ${n + 1} is not JSON`);
     }
     if (!e || typeof e !== "object" || e.action !== "finding") continue;
-    const words = String(e.detail ?? "").split(/\s+/).filter(Boolean);
+    const words = String(e.detail ?? "")
+      .split(/\s+/)
+      .filter(Boolean);
     const first = words[0] ?? "";
     if (first !== "gating" && first !== "style") {
       faults.push(
@@ -226,7 +231,7 @@ class Tree {
     if (entry.mode === "120000") {
       const linkTarget = (git(this.repo, "cat-file", "blob", entry.sha) ?? "").trim();
       q = this.path(posix.dirname(q!), linkTarget);
-      if (q === null || !this.blobs.has(q) || this.blobs.get(q)!.mode === "120000") return null;
+      if (q === null || !this.blobs.has(q) || this.blobs.get(q)?.mode === "120000") return null;
     }
     return q;
   }
@@ -242,7 +247,7 @@ class Tree {
       const data = entry ? git(this.repo, "cat-file", "blob", entry.sha) : null;
       const ok = data !== null && data.length <= 512 * 1024 && !data.slice(0, 8192).includes("\0");
       // BASE decoded utf-8-sig: a byte-order mark is not part of the content.
-      this.cache.set(p, ok ? data!.replace(/^\uFEFF/, "") : null);
+      this.cache.set(p, ok ? data?.replace(/^\uFEFF/, "") : null);
     }
     return this.cache.get(p) ?? null;
   }
@@ -250,7 +255,7 @@ class Tree {
   glob(cwd: string, pattern: string): string[] {
     const q = this.path(cwd, pattern);
     if (q === null) return [];
-    if (!/[*?\[]/.test(q)) return this.blobs.has(q) ? [q] : [];
+    if (!/[*?[]/.test(q)) return this.blobs.has(q) ? [q] : [];
     return [...this.blobs.keys()].filter((p) => fnmatchCase(p, q)).sort();
   }
 
@@ -269,19 +274,225 @@ class Tree {
 
 // --- reading shell -----------------------------------------------------------------------------
 const PUNCT = new Set([";", "&", "|", "(", ")", "<", ">"]);
-const SHELL_WORDS = new Set(["!", "{", "}", "if", "then", "do", "else", "elif", "while", "until", "time", "exec", "builtin", "nohup"]);
-const INERT = new Set(["echo", "printf", ":", "true", "false", "exit", "return", "test", "[", "[[", "export", "set", "unset", "read", "shift", "local", "declare", "typeset", "trap", "wait", "sleep", "cat", "tee", "head", "tail", "wc", "sort", "uniq", "date", "pwd", "which", "type", "hash", "touch", "rm", "cp", "mv", "mkdir", "rmdir", "ln", "chmod", "chown", "ls", "fi", "done", "esac", "popd"]);
-const INTERPRETERS = new Set(["bash", "sh", "zsh", "dash", "ksh", "source", ".", "node", "nodejs", "python", "python3", "bun", "deno", "tsx", "ts-node", "ruby", "perl"]);
+const SHELL_WORDS = new Set([
+  "!",
+  "{",
+  "}",
+  "if",
+  "then",
+  "do",
+  "else",
+  "elif",
+  "while",
+  "until",
+  "time",
+  "exec",
+  "builtin",
+  "nohup",
+]);
+const INERT = new Set([
+  "echo",
+  "printf",
+  ":",
+  "true",
+  "false",
+  "exit",
+  "return",
+  "test",
+  "[",
+  "[[",
+  "export",
+  "set",
+  "unset",
+  "read",
+  "shift",
+  "local",
+  "declare",
+  "typeset",
+  "trap",
+  "wait",
+  "sleep",
+  "cat",
+  "tee",
+  "head",
+  "tail",
+  "wc",
+  "sort",
+  "uniq",
+  "date",
+  "pwd",
+  "which",
+  "type",
+  "hash",
+  "touch",
+  "rm",
+  "cp",
+  "mv",
+  "mkdir",
+  "rmdir",
+  "ln",
+  "chmod",
+  "chown",
+  "ls",
+  "fi",
+  "done",
+  "esac",
+  "popd",
+]);
+const INTERPRETERS = new Set([
+  "bash",
+  "sh",
+  "zsh",
+  "dash",
+  "ksh",
+  "source",
+  ".",
+  "node",
+  "nodejs",
+  "python",
+  "python3",
+  "bun",
+  "deno",
+  "tsx",
+  "ts-node",
+  "ruby",
+  "perl",
+]);
 const BUILTINS: Record<string, Set<string>> = {
-  pnpm: new Set(["add", "install", "i", "update", "up", "upgrade", "remove", "rm", "uninstall", "link", "ln", "unlink", "import", "rebuild", "rb", "prune", "fetch", "patch", "patch-commit", "exec", "dlx", "create", "run", "publish", "pack", "audit", "list", "ls", "outdated", "why", "root", "bin", "config", "c", "env", "setup", "store", "init", "deploy", "licenses", "server", "doctor"]),
-  yarn: new Set(["add", "install", "remove", "up", "upgrade", "run", "exec", "dlx", "workspace", "workspaces", "info", "why", "pack", "npm", "plugin", "set", "config", "version", "node", "bin", "cache", "dedupe", "explain", "init", "link", "unlink", "patch", "rebuild", "stage", "unplug", "global", "publish"]),
-  bun: new Set(["run", "test", "x", "repl", "exec", "install", "i", "add", "a", "remove", "rm", "update", "outdated", "link", "unlink", "publish", "patch", "patch-commit", "pm", "build", "init", "create", "c", "upgrade", "completions", "discord", "help", "audit", "why", "info"]),
+  pnpm: new Set([
+    "add",
+    "install",
+    "i",
+    "update",
+    "up",
+    "upgrade",
+    "remove",
+    "rm",
+    "uninstall",
+    "link",
+    "ln",
+    "unlink",
+    "import",
+    "rebuild",
+    "rb",
+    "prune",
+    "fetch",
+    "patch",
+    "patch-commit",
+    "exec",
+    "dlx",
+    "create",
+    "run",
+    "publish",
+    "pack",
+    "audit",
+    "list",
+    "ls",
+    "outdated",
+    "why",
+    "root",
+    "bin",
+    "config",
+    "c",
+    "env",
+    "setup",
+    "store",
+    "init",
+    "deploy",
+    "licenses",
+    "server",
+    "doctor",
+  ]),
+  yarn: new Set([
+    "add",
+    "install",
+    "remove",
+    "up",
+    "upgrade",
+    "run",
+    "exec",
+    "dlx",
+    "workspace",
+    "workspaces",
+    "info",
+    "why",
+    "pack",
+    "npm",
+    "plugin",
+    "set",
+    "config",
+    "version",
+    "node",
+    "bin",
+    "cache",
+    "dedupe",
+    "explain",
+    "init",
+    "link",
+    "unlink",
+    "patch",
+    "rebuild",
+    "stage",
+    "unplug",
+    "global",
+    "publish",
+  ]),
+  bun: new Set([
+    "run",
+    "test",
+    "x",
+    "repl",
+    "exec",
+    "install",
+    "i",
+    "add",
+    "a",
+    "remove",
+    "rm",
+    "update",
+    "outdated",
+    "link",
+    "unlink",
+    "publish",
+    "patch",
+    "patch-commit",
+    "pm",
+    "build",
+    "init",
+    "create",
+    "c",
+    "upgrade",
+    "completions",
+    "discord",
+    "help",
+    "audit",
+    "why",
+    "info",
+  ]),
 };
 const RUNNERS: Record<string, string[]> = {
   "pre-commit": [".pre-commit-config.yaml", ".pre-commit-config.yml"],
   prek: [".pre-commit-config.yaml", ".pre-commit-config.yml"],
-  lefthook: ["lefthook.yml", "lefthook.yaml", ".lefthook.yml", ".lefthook.yaml", "lefthook.toml", "lefthook.json"],
-  "lint-staged": [".lintstagedrc", ".lintstagedrc.json", ".lintstagedrc.yaml", ".lintstagedrc.yml", ".lintstagedrc.js", ".lintstagedrc.cjs", ".lintstagedrc.mjs", "lint-staged.config.js", "lint-staged.config.cjs", "lint-staged.config.mjs"],
+  lefthook: [
+    "lefthook.yml",
+    "lefthook.yaml",
+    ".lefthook.yml",
+    ".lefthook.yaml",
+    "lefthook.toml",
+    "lefthook.json",
+  ],
+  "lint-staged": [
+    ".lintstagedrc",
+    ".lintstagedrc.json",
+    ".lintstagedrc.yaml",
+    ".lintstagedrc.yml",
+    ".lintstagedrc.js",
+    ".lintstagedrc.cjs",
+    ".lintstagedrc.mjs",
+    "lint-staged.config.js",
+    "lint-staged.config.cjs",
+    "lint-staged.config.mjs",
+  ],
   tox: ["tox.ini"],
   nox: ["noxfile.py"],
 };
@@ -411,7 +622,7 @@ function unwrap(words: string[]): string[] {
   const n = words.length;
   let i = 0;
   const past = (j: number, valued: string[] = []): number => {
-    while (j < n && words[j]!.startsWith("-") && words[j] !== "--") {
+    while (j < n && words[j]?.startsWith("-") && words[j] !== "--") {
       j += valued.includes(words[j]!) ? 2 : 1;
     }
     return j < n && words[j] === "--" ? j + 1 : j;
@@ -437,7 +648,15 @@ function unwrap(words: string[]): string[] {
       const di = words.indexOf("--", i);
       i = di >= 0 ? di + 1 : past(i + 1, ["-e", "-f", "-c", "-v"]);
       if (i < n && words[i] === "run") i++;
-    } else if ((b === "uv" || b === "poetry" || b === "pipenv" || b === "hatch" || b === "pdm" || b === "rye") && nxt === "run") {
+    } else if (
+      (b === "uv" ||
+        b === "poetry" ||
+        b === "pipenv" ||
+        b === "hatch" ||
+        b === "pdm" ||
+        b === "rye") &&
+      nxt === "run"
+    ) {
       i = past(i + 2, ["--with", "--env", "-e", "--python", "-p"]);
     } else if (b === "bundle" && nxt === "exec") {
       i += 2;
@@ -464,12 +683,20 @@ function parseJust(text: string): JustRecipes {
   let current: string | null = null;
   for (const line of text.split("\n")) {
     if (current !== null && (line.startsWith(" ") || line.startsWith("\t") || line.trim() === "")) {
-      if (line.trim()) recipes.get(current)!.body.push(line.trim());
+      if (line.trim()) recipes.get(current)?.body.push(line.trim());
       continue;
     }
     current = null;
     const s = line.trim();
-    if (!s || s.startsWith("#") || s.startsWith("[") || s.startsWith("set ") || s.startsWith("import ") || s.startsWith("mod ")) continue;
+    if (
+      !s ||
+      s.startsWith("#") ||
+      s.startsWith("[") ||
+      s.startsWith("set ") ||
+      s.startsWith("import ") ||
+      s.startsWith("mod ")
+    )
+      continue;
     let m = /^alias\s+([\w-]+)\s*:=\s*([\w-]+)/.exec(s);
     if (m) {
       recipes.set(m[1]!, { deps: [m[2]!], body: [] });
@@ -477,13 +704,13 @@ function parseJust(text: string): JustRecipes {
     }
     m = /^(?:export\s+)?([A-Za-z_][\w-]*)\s*:=\s*(.*)$/.exec(s);
     if (m) {
-      vars.set(m[1]!, m[2]!.trim().replace(/^['"]|['"]$/g, ""));
+      vars.set(m[1]!, m[2]?.trim().replace(/^['"]|['"]$/g, ""));
       continue;
     }
     m = /^@?([A-Za-z_][\w-]*)\b[^:]*:(?!=)(.*)$/.exec(s);
     if (m) {
       current = m[1]!;
-      const deps = (m[2]!.replace(/\([^)]*\)/g, "").match(/[A-Za-z_][\w-]*/g) ?? []);
+      const deps = m[2]?.replace(/\([^)]*\)/g, "").match(/[A-Za-z_][\w-]*/g) ?? [];
       recipes.set(current, { deps, body: [] });
       if (first === null) first = current;
     }
@@ -524,7 +751,9 @@ class Makefile {
     };
     return s
       .replace(/\$\$/g, "\0")
-      .replace(/\$\(([A-Za-z0-9_.-]+)\)|\$\{([A-Za-z0-9_.-]+)\}/g, (m, p1, p2) => one(m, p1 ?? "", p2 ?? ""))
+      .replace(/\$\(([A-Za-z0-9_.-]+)\)|\$\{([A-Za-z0-9_.-]+)\}/g, (m, p1, p2) =>
+        one(m, p1 ?? "", p2 ?? ""),
+      )
       .replace(/\0/g, "$$");
   }
 
@@ -543,7 +772,7 @@ class Makefile {
       }
       if (line.startsWith("\t")) {
         for (const t of current ?? []) {
-          this.rules.get(t)!.recipe.push(line.slice(1));
+          this.rules.get(t)?.recipe.push(line.slice(1));
         }
         continue;
       }
@@ -571,28 +800,32 @@ class Makefile {
           if (op === "?=") {
             if (!this.vars.has(name!)) this.vars.set(name!, value!);
           } else if (op === "+=") {
-            this.vars.set(name!, ((this.vars.get(name!) ?? "") + " " + value!).trim());
+            this.vars.set(name!, `${this.vars.get(name!) ?? ""} ${value!}`.trim());
           } else {
-            this.vars.set(name!, op!.startsWith(":") ? this.expand(value!) : value!);
+            this.vars.set(name!, op?.startsWith(":") ? this.expand(value!) : value!);
           }
         }
         current = null;
         continue;
       }
       m = /^([^:=]+?)\s*::?(?!=)(.*)$/.exec(s);
-      if (!m || Makefile.ASSIGN.test(m[2]!.trim())) {
+      if (!m || Makefile.ASSIGN.test(m[2]?.trim())) {
         current = null;
         continue;
       }
       const [_, targets, rest] = m;
-      const semiIdx = rest!.indexOf(";");
-      const prereqs = semiIdx >= 0 ? rest!.slice(0, semiIdx) : rest!;
-      const inline = semiIdx >= 0 ? rest!.slice(semiIdx + 1).trim() : "";
+      const semiIdx = rest?.indexOf(";");
+      const prereqs = semiIdx >= 0 ? rest?.slice(0, semiIdx) : rest!;
+      const inline = semiIdx >= 0 ? rest?.slice(semiIdx + 1).trim() : "";
       current = this.expand(targets!).split(/\s+/);
       for (const t of current) {
         if (!this.rules.has(t)) this.rules.set(t, { prereqs: [], recipe: [] });
-        this.rules.get(t)!.prereqs.push(...this.expand(prereqs).split(/\s+/).filter((p) => p && p !== "|"));
-        if (inline) this.rules.get(t)!.recipe.push(inline);
+        this.rules.get(t)?.prereqs.push(
+          ...this.expand(prereqs)
+            .split(/\s+/)
+            .filter((p) => p && p !== "|"),
+        );
+        if (inline) this.rules.get(t)?.recipe.push(inline);
         if (this.first === null && !t.startsWith(".") && !t.includes("%")) this.first = t;
       }
     }
@@ -660,7 +893,12 @@ class Reach {
     this.cmds.push({ where, words: w });
     if (head === "npm" || head === "pnpm" || head === "yarn" || head === "bun") {
       this.manager(where, head, rest, cwd);
-    } else if (head === "npm-run-all" || head === "npm-run-all2" || head === "run-s" || head === "run-p") {
+    } else if (
+      head === "npm-run-all" ||
+      head === "npm-run-all2" ||
+      head === "run-s" ||
+      head === "run-p"
+    ) {
       for (const a of rest) {
         if (!a.startsWith("-")) this.scriptsLike(a, cwd);
       }
@@ -684,7 +922,7 @@ class Reach {
           break;
         }
       }
-    } else if (w[0]!.includes("/")) {
+    } else if (w[0]?.includes("/")) {
       const p = this.t.file(cwd, w[0]!);
       if (p) this.file(p, cwd);
     }
@@ -743,7 +981,13 @@ class Reach {
       let inside = false;
       for (const l of (this.t.read("pnpm-workspace.yaml") ?? "").split("\n")) {
         if (/^packages\s*:/.test(l)) inside = true;
-        else if (inside && /^\s+-\s*/.test(l)) globs.push(l.replace(/^\s+-\s*|\s+#.*$/g, "").trim().replace(/^['"]|['"]$/g, ""));
+        else if (inside && /^\s+-\s*/.test(l))
+          globs.push(
+            l
+              .replace(/^\s+-\s*|\s+#.*$/g, "")
+              .trim()
+              .replace(/^['"]|['"]$/g, ""),
+          );
         else if (inside && l.trim() && !/^\s/.test(l)) inside = false;
       }
     }
@@ -759,7 +1003,11 @@ class Reach {
   }
 
   selects(sel: string, d: string): boolean {
-    let s = sel.trim().replace(/^\.\.\.|\.\.\.$/g, "").replace(/^\{|\}$/g, "").trim();
+    let s = sel
+      .trim()
+      .replace(/^\.\.\.|\.\.\.$/g, "")
+      .replace(/^\{|\}$/g, "")
+      .trim();
     if (s.startsWith("./")) s = s.slice(2);
     const name = String(this.package(d).name ?? "");
     return (
@@ -777,21 +1025,22 @@ class Reach {
       return p ? [posix.dirname(p)] : [];
     }
     const dirs = this.workspaces();
-    const chosen = ws === "all" ? dirs : dirs.filter((d) => (ws as string[]).some((s) => this.selects(s, d)));
+    const chosen =
+      ws === "all" ? dirs : dirs.filter((d) => (ws as string[]).some((s) => this.selects(s, d)));
     return chosen.length > 0 ? chosen : dirs;
   }
 
   manager(where: string, pm: string, args: string[], cwd: string): void {
     let ws: string | string[] | null = null;
     let i = 0;
-    while (i < args.length && args[i]!.startsWith("-")) {
-      const eqIdx = args[i]!.indexOf("=");
-      const key = eqIdx >= 0 ? args[i]!.slice(0, eqIdx) : args[i]!;
+    while (i < args.length && args[i]?.startsWith("-")) {
+      const eqIdx = args[i]?.indexOf("=");
+      const key = eqIdx >= 0 ? args[i]?.slice(0, eqIdx) : args[i]!;
       const hasEq = eqIdx >= 0;
       const takes =
         ["-C", "--dir", "--prefix", "--cwd", "--filter", "-F"].includes(key) ||
         (["-w", "--workspace"].includes(key) && pm !== "pnpm");
-      const val = hasEq ? args[i]!.slice(eqIdx + 1) : i + 1 < args.length ? args[i + 1]! : "";
+      const val = hasEq ? args[i]?.slice(eqIdx + 1) : i + 1 < args.length ? args[i + 1]! : "";
       if (["-r", "--recursive", "-ws", "--workspaces"].includes(key)) {
         ws = "all";
       } else if (["-C", "--dir", "--prefix", "--cwd"].includes(key)) {
@@ -818,7 +1067,7 @@ class Reach {
       (pm === "bun" && sub === "x")
     ) {
       let j = 0;
-      while (j < after.length && after[j]!.startsWith("-") && after[j] !== "--") j++;
+      while (j < after.length && after[j]?.startsWith("-") && after[j] !== "--") j++;
       this.command(where, after[j] === "--" ? after.slice(j + 1) : after.slice(j), cwd);
     } else if (pm === "yarn" && sub === "workspaces" && names[0] === "foreach") {
       const runIdx = after.indexOf("run");
@@ -850,15 +1099,25 @@ class Reach {
     for (const n of all) {
       if (n in s && !this.seen.has(`script|${d}|${n}`)) {
         this.seen.add(`script|${d}|${n}`);
-        this.shell(`${d ? d + "/" : ""}package.json scripts.${n}`, s[n]!, d);
+        this.shell(`${d ? `${d}/` : ""}package.json scripts.${n}`, s[n]!, d);
       }
     }
   }
 
   scriptsLike(pattern: string, cwd: string): void {
     const parts = pattern.match(/\*\*|\*|\?|[^*?]+/g) ?? [];
-    const patSrc = parts.map((t) => (t === "**" ? ".*" : t === "*" ? "[^:]*" : t === "?" ? "[^:]" : t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))).join("");
-    const pat = new RegExp(patSrc + "$");
+    const patSrc = parts
+      .map((t) =>
+        t === "**"
+          ? ".*"
+          : t === "*"
+            ? "[^:]*"
+            : t === "?"
+              ? "[^:]"
+              : t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+      )
+      .join("");
+    const pat = new RegExp(`${patSrc}$`);
     for (const d of this.packages(null, cwd)) {
       for (const n of Object.keys(this.scripts(d)).sort()) {
         if (pat.test(n)) this.script(d, n, "npm");
@@ -871,14 +1130,14 @@ class Reach {
     const names: string[] = [];
     let i = 0;
     while (i < args.length && args[i] !== "--") {
-      const eqIdx = args[i]!.indexOf("=");
-      const key = eqIdx >= 0 ? args[i]!.slice(0, eqIdx) : args[i]!;
+      const eqIdx = args[i]?.indexOf("=");
+      const key = eqIdx >= 0 ? args[i]?.slice(0, eqIdx) : args[i]!;
       const hasEq = eqIdx >= 0;
-      const val = hasEq ? args[i]!.slice(eqIdx + 1) : i + 1 < args.length ? args[i + 1]! : "";
+      const val = hasEq ? args[i]?.slice(eqIdx + 1) : i + 1 < args.length ? args[i + 1]! : "";
       if (["--filter", "-F", "--scope"].includes(key)) {
         sels.push(val);
         if (!hasEq) i++;
-      } else if (!args[i]!.startsWith("-")) {
+      } else if (!args[i]?.startsWith("-")) {
         names.push(args[i]!);
       }
       i++;
@@ -898,7 +1157,23 @@ class Reach {
     const files: string[] = [];
     const targets: string[] = [];
     const sets: Record<string, string> = {};
-    const valued = ["-C", "--directory", "-f", "--file", "--makefile", "-I", "--include-dir", "-o", "--old-file", "--assume-old", "-W", "--what-if", "--new-file", "--assume-new", "--eval"];
+    const valued = [
+      "-C",
+      "--directory",
+      "-f",
+      "--file",
+      "--makefile",
+      "-I",
+      "--include-dir",
+      "-o",
+      "--old-file",
+      "--assume-old",
+      "-W",
+      "--what-if",
+      "--new-file",
+      "--assume-new",
+      "--eval",
+    ];
     let i = 0;
     while (i < args.length) {
       const a = args[i]!;
@@ -908,10 +1183,18 @@ class Reach {
       const val = hasEq ? a.slice(eqIdx + 1) : i + 1 < args.length ? args[i + 1]! : "";
       if (valued.includes(a) && i + 1 < args.length) {
         i++;
-      } else if (["-j", "--jobs", "-l", "--load-average", "--max-load"].includes(a) && i + 1 < args.length && /^\d+(\.\d+)?$/.test(args[i + 1]!)) {
+      } else if (
+        ["-j", "--jobs", "-l", "--load-average", "--max-load"].includes(a) &&
+        i + 1 < args.length &&
+        /^\d+(\.\d+)?$/.test(args[i + 1]!)
+      ) {
         i += 2;
         continue;
-      } else if ((a.startsWith("-C") || a.startsWith("-f")) && a.length > 2 && !a.startsWith("--")) {
+      } else if (
+        (a.startsWith("-C") || a.startsWith("-f")) &&
+        a.length > 2 &&
+        !a.startsWith("--")
+      ) {
         const k = a.slice(0, 2);
         const v = a.slice(2);
         if (k === "-C") {
@@ -968,10 +1251,10 @@ class Reach {
     const names: string[] = [];
     let i = 0;
     while (i < args.length) {
-      const eqIdx = args[i]!.indexOf("=");
-      const key = eqIdx >= 0 ? args[i]!.slice(0, eqIdx) : args[i]!;
+      const eqIdx = args[i]?.indexOf("=");
+      const key = eqIdx >= 0 ? args[i]?.slice(0, eqIdx) : args[i]!;
       const hasEq = eqIdx >= 0;
-      let val = hasEq ? args[i]!.slice(eqIdx + 1) : "";
+      let val = hasEq ? args[i]?.slice(eqIdx + 1) : "";
       if (key === "-f" || key === "--justfile" || key === "-d" || key === "--working-directory") {
         if (!hasEq) {
           val = i + 1 < args.length ? args[i + 1]! : "";
@@ -982,12 +1265,14 @@ class Reach {
       } else if (key === "--set") {
         i += 2;
         continue;
-      } else if (!args[i]!.startsWith("-")) {
+      } else if (!args[i]?.startsWith("-")) {
         names.push(args[i]!);
       }
       i++;
     }
-    const p = jf ? this.t.file(cwd, jf) : this.t.up(cwd, ["justfile", "Justfile", ".justfile", "JUSTFILE"]);
+    const p = jf
+      ? this.t.file(cwd, jf)
+      : this.t.up(cwd, ["justfile", "Justfile", ".justfile", "JUSTFILE"]);
     if (!p) return;
     if (!this.justs.has(p)) this.justs.set(p, parseJust(this.t.read(p) ?? ""));
     const { recipes, vars, first } = this.justs.get(p)!;
@@ -1000,14 +1285,17 @@ class Reach {
   }
 
   recipe(p: string, n: string, d: string): void {
-    const { recipes, vars } = this.justs.get(p)!;
+    const { recipes, vars, first } = this.justs.get(p)!;
     const key = `just|${p}|${n}`;
     if (this.seen.has(key) || !recipes.has(n)) return;
     this.seen.add(key);
     const { deps, body } = recipes.get(n)!;
     for (const dep of deps) this.recipe(p, dep, d);
     for (let line of body) {
-      line = line.replace(/\{\{\s*([A-Za-z_][\w-]*)\s*\}\}/g, (_, name) => vars.get(name) ?? `{{${name}}}`);
+      line = line.replace(
+        /\{\{\s*([A-Za-z_][\w-]*)\s*\}\}/g,
+        (_, name) => vars.get(name) ?? `{{${name}}}`,
+      );
       this.shell(`${p} ${n}`, line.replace(/^[@-]+/, ""), d);
     }
   }
@@ -1058,10 +1346,14 @@ class Reach {
 }
 
 // --- linter detection ---------------------------------------------------------------------------
-const MANIFESTS = /(^|\/)(package\.json|pyproject\.toml|setup\.cfg|tox\.ini|requirements[^/]*\.txt|Pipfile|Gemfile|go\.mod|Cargo\.toml|composer\.json|\.pre-commit-config\.ya?ml|\.tool-versions|mise\.toml)$/;
+const MANIFESTS =
+  /(^|\/)(package\.json|pyproject\.toml|setup\.cfg|tox\.ini|requirements[^/]*\.txt|Pipfile|Gemfile|go\.mod|Cargo\.toml|composer\.json|\.pre-commit-config\.ya?ml|\.tool-versions|mise\.toml)$/;
 
 function hasLinter(tree: Tree, linter: string): string | null {
-  const own = new RegExp(`\\.?${linter.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(rc)?([._-].*)?$`, "i");
+  const own = new RegExp(
+    `\\.?${linter.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(rc)?([._-].*)?$`,
+    "i",
+  );
   for (const p of [...tree.blobs.keys()].sort()) {
     if (own.test(posix.basename(p))) return p;
   }
@@ -1077,7 +1369,9 @@ function states(dispatch: string): Record<string, string> {
   let rows: string[];
   try {
     // BASE opened the ledger with utf-8-sig: a byte-order mark is not part of the content.
-    rows = readFileSync(LEDGER, "utf8").replace(/^\uFEFF/, "").split("\n");
+    rows = readFileSync(LEDGER, "utf8")
+      .replace(/^\uFEFF/, "")
+      .split("\n");
   } catch {
     return out;
   }
@@ -1095,7 +1389,7 @@ function states(dispatch: string): Record<string, string> {
     if (a === "ticket-create" && d.startsWith("style proposal: ")) {
       out[d.slice(16).trim()] = `filed ${e.target ?? "?"} in ${runName}`;
     } else if (a === "note" && d.startsWith("style proposal declined: ")) {
-      out[d.slice(25).split(": ", 1)[0]!.trim()] = `declined in ${runName}`;
+      out[d.slice(25).split(": ", 1)[0]?.trim()] = `declined in ${runName}`;
     } else if (a === "note" && d.startsWith("style proposal asked: ")) {
       const k = d.slice(22).trim();
       if (!(out[k] ?? "").startsWith("filed") && !(out[k] ?? "").startsWith("declined")) {
@@ -1113,12 +1407,14 @@ function shape(line: string): { id: string; head: string[]; reason: string } | n
   const m = ENTRY.exec(line);
   if (!m) return null;
   const i = m[1]!;
-  const head = m[2]!.split(/\s+/);
+  const head = m[2]?.split(/\s+/);
   const reason = (m[3] ?? "").trim();
   let ok: boolean;
   if (i[0] === "S") {
     ok =
-      (head[0] === "linter" && (head.length === 4 || (head.length === 6 && head[4] === "via")) && (head[2] === "enable" || head[2] === "write")) ||
+      (head[0] === "linter" &&
+        (head.length === 4 || (head.length === 6 && head[4] === "via")) &&
+        (head[2] === "enable" || head[2] === "write")) ||
       (head.length === 2 && head[0] === "docs") ||
       (head.length === 1 && head[0] === "neither");
   } else {
@@ -1156,7 +1452,11 @@ function core(cmd: string, dispatch: string): number {
   if (cmd === "gate") {
     const { repo, gate } = profile(dispatch);
     if (!gate || !repo || !existsSync(repo)) {
-      console.log(!gate ? "the waybill's Project profile names no gate" : `the waybill's Project profile names no repo that exists${repo ? ": " + repo : ""}`);
+      console.log(
+        !gate
+          ? "the waybill's Project profile names no gate"
+          : `the waybill's Project profile names no repo that exists${repo ? `: ${repo}` : ""}`,
+      );
       return 2;
     }
     const r = new Reach(new Tree(repo, RUN), gate);
@@ -1165,7 +1465,7 @@ function core(cmd: string, dispatch: string): number {
     for (const { where, line } of r.lines) {
       shown.set(where, (shown.get(where) ?? 0) + 1);
       if ((shown.get(where) ?? 0) <= SHOWN) {
-        console.log(`${where}: ${line.length <= 200 ? line : line.slice(0, 197) + "..."}`);
+        console.log(`${where}: ${line.length <= 200 ? line : `${line.slice(0, 197)}...`}`);
       }
     }
     for (const [where, k] of shown) {
@@ -1179,7 +1479,12 @@ function core(cmd: string, dispatch: string): number {
   const ids = style.map((s) => s.id);
   if (!existsSync(SORT)) {
     if (faults.length > 0 || style.length > 0) {
-      console.log([...faults, `no style-sort.md in ${dispatch}, and ${style.length} style finding${style.length === 1 ? "" : "s"} to sort`].join("\n"));
+      console.log(
+        [
+          ...faults,
+          `no style-sort.md in ${dispatch}, and ${style.length} style finding${style.length === 1 ? "" : "s"} to sort`,
+        ].join("\n"),
+      );
       return 2;
     }
     console.log("no style findings, so nothing to sort");
@@ -1189,7 +1494,12 @@ function core(cmd: string, dispatch: string): number {
   const onS = new Map<string, number[]>();
   const onN = new Map<string, number[]>();
   const firstNew = new Map<string, [number, string]>();
-  const props: Array<{ id: string; key: string; via: string | null; newInfo: [string[], boolean] | null }> = [];
+  const props: Array<{
+    id: string;
+    key: string;
+    via: string | null;
+    newInfo: [string[], boolean] | null;
+  }> = [];
   const checks: Array<{ n: number; id: string; kind: string; lint: string; extra: any }> = [];
   let badShape = false;
 
@@ -1208,35 +1518,57 @@ function core(cmd: string, dispatch: string): number {
     if (!reason) faults.push(`line ${n + 1}: ${i} has no reason`);
     if (i[0] === "S") {
       if (!onS.has(i)) onS.set(i, []);
-      onS.get(i)!.push(n + 1);
+      onS.get(i)?.push(n + 1);
       if (!ids.includes(i)) faults.push(`line ${n + 1}: ${i} is not a style finding of this run`);
       if (head[0] === "linter") {
         const lint = plain(head[1]!);
         const via = head.length === 6 ? plain(head[5]!) : null;
         checks.push({ n: n + 1, id: i, kind: "linter", lint, extra: via });
-        props.push({ id: i, key: `linter ${lint.toLowerCase()} ${head[2]} ${plain(head[3]!)}`, via, newInfo: null });
+        props.push({
+          id: i,
+          key: `linter ${lint.toLowerCase()} ${head[2]} ${plain(head[3]!)}`,
+          via,
+          newInfo: null,
+        });
       } else {
-        props.push({ id: i, key: head[0] === "docs" ? `docs ${plain(head[1]!)}` : "neither", via: null, newInfo: null });
+        props.push({
+          id: i,
+          key: head[0] === "docs" ? `docs ${plain(head[1]!)}` : "neither",
+          via: null,
+          newInfo: null,
+        });
       }
       continue;
     }
     if (!onN.has(i)) onN.set(i, []);
-    onN.get(i)!.push(n + 1);
+    onN.get(i)?.push(n + 1);
     const rest = head.slice(2);
     const marked = rest[rest.length - 1] === "not-in-gate";
-    const covers = (marked ? rest.slice(0, -1) : rest).join(" ").split(/[,\s]+/).filter(Boolean);
-    if (covers.length === 0) faults.push(`line ${n + 1}: ${i} names no finding the linter would enforce`);
+    const covers = (marked ? rest.slice(0, -1) : rest)
+      .join(" ")
+      .split(/[,\s]+/)
+      .filter(Boolean);
+    if (covers.length === 0)
+      faults.push(`line ${n + 1}: ${i} names no finding the linter would enforce`);
     for (const c of covers) {
-      if (!ids.includes(c)) faults.push(`line ${n + 1}: ${i} names ${c}, which is not a style finding of this run`);
+      if (!ids.includes(c))
+        faults.push(`line ${n + 1}: ${i} names ${c}, which is not a style finding of this run`);
     }
     const lint = plain(head[1]!);
     const was = firstNew.get(lint.toLowerCase());
     if (was && (was[0] !== n + 1 || was[1] !== i)) {
-      faults.push(`line ${n + 1}: ${i} proposes ${lint} again, as ${was[1]} on line ${was[0]} does: propose it once, for every finding it would enforce`);
+      faults.push(
+        `line ${n + 1}: ${i} proposes ${lint} again, as ${was[1]} on line ${was[0]} does: propose it once, for every finding it would enforce`,
+      );
     }
     if (!was) firstNew.set(lint.toLowerCase(), [n + 1, i]);
     checks.push({ n: n + 1, id: i, kind: "new", lint, extra: marked });
-    props.push({ id: i, key: `new-linter ${lint.toLowerCase()}`, via: null, newInfo: [covers, marked] });
+    props.push({
+      id: i,
+      key: `new-linter ${lint.toLowerCase()}`,
+      via: null,
+      newInfo: [covers, marked],
+    });
   }
 
   for (const i of ids) {
@@ -1250,7 +1582,9 @@ function core(cmd: string, dispatch: string): number {
     const { repo, gate } = profile(dispatch);
     if (!repo || !existsSync(repo)) {
       for (const { n, id: i, lint } of checks) {
-        faults.push(`line ${n}: ${i} names ${lint}, and the waybill's Project profile names no repo that exists to check it against`);
+        faults.push(
+          `line ${n}: ${i} names ${lint}, and the waybill's Project profile names no repo that exists to check it against`,
+        );
       }
     } else {
       const tree = new Tree(repo, RUN);
@@ -1260,13 +1594,17 @@ function core(cmd: string, dispatch: string): number {
         if (kind === "linter" && extra) {
           const p = tree.file("", extra);
           if (p === null) {
-            faults.push(`line ${n}: ${i} names ${lint} via ${extra}, which the run's branch does not have`);
+            faults.push(
+              `line ${n}: ${i} names ${lint} via ${extra}, which the run's branch does not have`,
+            );
           } else if (!named(lint, configText(tree.read(p) ?? "", p))) {
             faults.push(`line ${n}: ${i} names ${lint} via ${extra}, which does not name ${lint}`);
           }
         } else if (kind === "linter" && r === null) {
-          faults.push(`line ${n}: ${i} names ${lint}, and the waybill's Project profile has no gate to check it against`);
-        } else if (kind === "linter" && !r!.runs(lint)) {
+          faults.push(
+            `line ${n}: ${i} names ${lint}, and the waybill's Project profile has no gate to check it against`,
+          );
+        } else if (kind === "linter" && !r?.runs(lint)) {
           faults.push(
             `line ${n}: ${i} names ${lint}, which \`gate\` does not show the gate running: if the gate runs it some way \`gate\` does not follow, add via and the file that runs it after the rule; if it does not, sort the finding docs or neither, and propose ${lint} on a new-linter line`,
           );
@@ -1274,7 +1612,9 @@ function core(cmd: string, dispatch: string): number {
           const at = r?.runs(lint) ?? null;
           const own = hasLinter(tree, lint);
           if (at) {
-            faults.push(`line ${n}: ${i} proposes ${lint}, which the gate already runs (${at}): sort its findings as linter lines`);
+            faults.push(
+              `line ${n}: ${i} proposes ${lint}, which the gate already runs (${at}): sort its findings as linter lines`,
+            );
           } else if (own && !extra) {
             faults.push(
               `line ${n}: ${i} proposes ${lint}, which the project already has (${own}): if the gate runs it, sort its findings as linter lines, with via if \`gate\` does not show it; if the gate does not, add not-in-gate after the findings`,
@@ -1291,7 +1631,10 @@ function core(cmd: string, dispatch: string): number {
   }
 
   // Print proposals
-  const groups = new Map<string, { ids: string[]; via: string[]; newInfo: [string[], boolean] | null }>();
+  const groups = new Map<
+    string,
+    { ids: string[]; via: string[]; newInfo: [string[], boolean] | null }
+  >();
   const order: string[] = [];
   const seenState = states(dispatch);
   for (const { id, key, via, newInfo } of props) {
@@ -1305,7 +1648,9 @@ function core(cmd: string, dispatch: string): number {
     if (!order.includes(key)) order.push(key);
   }
   const rank: Record<string, number> = { linter: 0, docs: 1, "new-linter": 2, neither: 3 };
-  const sortedKeys = [...order].sort((a, b) => (rank[a.split(" ")[0]!] ?? 9) - (rank[b.split(" ")[0]!] ?? 9));
+  const sortedKeys = [...order].sort(
+    (a, b) => (rank[a.split(" ")[0]!] ?? 9) - (rank[b.split(" ")[0]!] ?? 9),
+  );
   for (const key of sortedKeys) {
     const g = groups.get(key)!;
     const notes: string[] = [];
@@ -1372,8 +1717,8 @@ withTempDir((tmp) => {
         super("exit");
       }
     }
-    console.log = (...a: unknown[]) => void chunks.push(a.join(" ") + "\n");
-    console.error = (...a: unknown[]) => void chunks.push(a.join(" ") + "\n");
+    console.log = (...a: unknown[]) => void chunks.push(`${a.join(" ")}\n`);
+    console.error = (...a: unknown[]) => void chunks.push(`${a.join(" ")}\n`);
     process.exit = ((code?: number) => {
       throw new ExitSignal(code ?? 0);
     }) as typeof process.exit;
@@ -1396,12 +1741,28 @@ withTempDir((tmp) => {
     const okIn = out.includes(wantIn);
     const okNot = wantNotIn === undefined || !out.includes(wantNotIn);
     if (rc === wantExit && okIn && okNot) ok(label);
-    else fail(`${label}: wanted exit ${wantExit} with "${wantIn}"${wantNotIn ? ` and no "${wantNotIn}"` : ""}, got exit ${rc}`, out);
+    else
+      fail(
+        `${label}: wanted exit ${wantExit} with "${wantIn}"${wantNotIn ? ` and no "${wantNotIn}"` : ""}, got exit ${rc}`,
+        out,
+      );
   };
   const lines = (...args: string[]): string => args.join("\n");
 
   const G = (...args: string[]): ReturnType<typeof run> =>
-    run("git", ["-c", "user.name=t", "-c", "user.email=t@example.invalid", "-c", "init.defaultBranch=main", "-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null", ...args]);
+    run("git", [
+      "-c",
+      "user.name=t",
+      "-c",
+      "user.email=t@example.invalid",
+      "-c",
+      "init.defaultBranch=main",
+      "-c",
+      "commit.gpgsign=false",
+      "-c",
+      "core.hooksPath=/dev/null",
+      ...args,
+    ]);
 
   const commit = (dir: string, msg: string): void => {
     G("-C", dir, "add", "-A");
@@ -1429,12 +1790,17 @@ withTempDir((tmp) => {
 
   const logFindings = (dispatch: string, count: number): void => {
     for (let k = 1; k <= count; k++) {
-      logged(dispatch, "finding", `src/f${k}.ts:${k}`, `style P3 r1 style luna reading: finding ${k}`);
+      logged(
+        dispatch,
+        "finding",
+        `src/f${k}.ts:${k}`,
+        `style P3 r1 style luna reading: finding ${k}`,
+      );
     }
   };
 
   const sortFile = (dispatch: string, ...args: string[]): void => {
-    writeFileSync(join(dispatch, "style-sort.md"), args.join("\n") + "\n");
+    writeFileSync(join(dispatch, "style-sort.md"), `${args.join("\n")}\n`);
   };
 
   const R = join(tmp, "runs", "proj");
@@ -1445,32 +1811,40 @@ withTempDir((tmp) => {
   mkdirSync(join(npmDir, "node_modules", ".bin"), { recursive: true });
   writeFileSync(
     join(npmDir, "package.json"),
-    JSON.stringify(
+    `${JSON.stringify(
       {
         devDependencies: { eslint: "9.0.0" },
         scripts: {
-          check: "tsc --noEmit && npm run lint && run-s 'test:*' && npm run format:check && npm run quoted && touch gate-ran",
+          check:
+            "tsc --noEmit && npm run lint && run-s 'test:*' && npm run format:check && npm run quoted && touch gate-ran",
           precheck: "node scripts/versions.js && ./node_modules/.bin/helper",
           lint: "cross-env NODE_ENV=ci biome check . && pnpm typos # oxfmt is not run yet",
           typos: "typos . > scripts/typos.txt",
           "test:unit": "bun test && bun build ./src/index.ts",
           "test:unit:slow": "jest",
-          "format:check": "prettier --check . || (echo 'run npm run format, to fix what eslint finds' && exit 1)",
+          "format:check":
+            "prettier --check . || (echo 'run npm run format, to fix what eslint finds' && exit 1)",
           quoted: "sh -c 'tsc --noEmit # stylua later'",
           format: "eslint --fix .",
           build: "hadolint Dockerfile",
           "build:types": "tsc -p types",
-          nbsp: 'node -e "console.log(\'a b\u00a0: c\')" && dprint check',
+          nbsp: "node -e \"console.log('a b\u00a0: c')\" && dprint check",
           test: "vitest",
           docs: "markdownlint docs",
         },
       },
       null,
       2,
-    ) + "\n",
+    )}\n`,
   );
-  writeFileSync(join(npmDir, "scripts", "versions.js"), "/**\n * xo would be stricter\n */\n// oxlint would catch more here\nrequire(\"child_process\").execSync(\"stylelint src\") // knip later\n");
-  writeFileSync(join(npmDir, "scripts", "typos.txt"), "jscpd is written here, and nothing runs it\n");
+  writeFileSync(
+    join(npmDir, "scripts", "versions.js"),
+    '/**\n * xo would be stricter\n */\n// oxlint would catch more here\nrequire("child_process").execSync("stylelint src") // knip later\n',
+  );
+  writeFileSync(
+    join(npmDir, "scripts", "typos.txt"),
+    "jscpd is written here, and nothing runs it\n",
+  );
   writeFileSync(join(npmDir, "node_modules", ".bin", "helper"), "#!/bin/sh\nstandard --fix .\n");
   writeFileSync(join(npmDir, ".gitignore"), "node_modules/\n");
   repoAt(npmDir, "T-1", "T-2", "T-6", "T-7", "T-8", "T-16", "T-20", "T-21", "T-28");
@@ -1488,7 +1862,10 @@ withTempDir((tmp) => {
   writeFileSync(join(mkDir, "web", "Makefile"), "lint:\n\t./ci.sh\n");
   writeFileSync(join(mkDir, "web", "ci.sh"), "#!/bin/sh\nstylelint .\n");
   writeFileSync(join(mkDir, "ci.sh"), "#!/bin/sh\nprettier --check .\n");
-  writeFileSync(join(mkDir, "scripts", "test.sh"), "#!/bin/sh\n# pylint is not run here\nbats test\n");
+  writeFileSync(
+    join(mkDir, "scripts", "test.sh"),
+    "#!/bin/sh\n# pylint is not run here\nbats test\n",
+  );
   repoAt(mkDir, "T-4", "T-24", "T-27");
 
   // === Fixture: monorepo ===
@@ -1499,25 +1876,43 @@ withTempDir((tmp) => {
     join(monoDir, "package.json"),
     '{"name": "mono", "workspaces": ["packages/*"], "scripts": {"check": "npm run lint --workspaces && turbo run typecheck && pnpm -r test && npm -w packages/docs run spell", "lint": "tsc"}}\n',
   );
-  writeFileSync(join(monoDir, "packages", "web", "package.json"), '{"name": "web", "scripts": {"lint": "eslint .", "typecheck": "tsc -b", "test": "vitest", "fmt": "dprint check"}}\n');
-  writeFileSync(join(monoDir, "packages", "docs", "package.json"), '\uFEFF{"name": "@x/docs", "scripts": {"spell": "cspell .", "lint": "markdownlint ."}}\n');
+  writeFileSync(
+    join(monoDir, "packages", "web", "package.json"),
+    '{"name": "web", "scripts": {"lint": "eslint .", "typecheck": "tsc -b", "test": "vitest", "fmt": "dprint check"}}\n',
+  );
+  writeFileSync(
+    join(monoDir, "packages", "docs", "package.json"),
+    '\uFEFF{"name": "@x/docs", "scripts": {"spell": "cspell .", "lint": "markdownlint ."}}\n',
+  );
   repoAt(monoDir, "T-10", "T-11");
 
   // === Fixture: other (just, wrappers, runners, long file) ===
   const otherDir = join(tmp, "other");
   mkdirSync(join(otherDir, "scripts"), { recursive: true });
-  writeFileSync(join(otherDir, "justfile"), "default: check\n\ncheck: lint\n    cargo test\n\nlint:\n    cargo clippy -- -D warnings\n\nfmt:\n    cargo fmt --check\n");
+  writeFileSync(
+    join(otherDir, "justfile"),
+    "default: check\n\ncheck: lint\n    cargo test\n\nlint:\n    cargo clippy -- -D warnings\n\nfmt:\n    cargo fmt --check\n",
+  );
   writeFileSync(join(otherDir, "scripts", "lint.sh"), "ruff check .\n");
-  writeFileSync(join(otherDir, "scripts", "lint.js"), 'require("child_process").execSync("stylelint x")\n');
+  writeFileSync(
+    join(otherDir, "scripts", "lint.js"),
+    'require("child_process").execSync("stylelint x")\n',
+  );
   writeFileSync(join(otherDir, "scripts", "check.ts"), "execSync(`eslint ${dir}`)\n");
   writeFileSync(join(otherDir, "scripts", "check.sh"), "shellcheck *.sh\n");
-  writeFileSync(join(otherDir, ".pre-commit-config.yaml"), "repos:\n  - repo: https://github.com/astral-sh/ruff-pre-commit\n    hooks:\n      - id: ruff\n  # - id: mypy\n");
+  writeFileSync(
+    join(otherDir, ".pre-commit-config.yaml"),
+    "repos:\n  - repo: https://github.com/astral-sh/ruff-pre-commit\n    hooks:\n      - id: ruff\n  # - id: mypy\n",
+  );
   let bigSh = "";
   for (let k = 1; k <= 60; k++) bigSh += `echo step ${k}\n`;
   bigSh += "vale .\n";
   writeFileSync(join(otherDir, "scripts", "big.sh"), bigSh);
   writeFileSync(join(otherDir, "README.md"), "A readme that names no linter.\n");
-  writeFileSync(join(otherDir, "package.json"), '{"packageManager": "yarn@4.1.0", "scripts": {"check": "yarn lint", "prelint": "sort-package-json --check", "lint": "eslint ."}}\n');
+  writeFileSync(
+    join(otherDir, "package.json"),
+    '{"packageManager": "yarn@4.1.0", "scripts": {"check": "yarn lint", "prelint": "sort-package-json --check", "lint": "eslint ."}}\n',
+  );
   repoAt(otherDir, "T-12", "T-13", "T-14", "T-18", "T-23", "T-25", "T-26");
 
   // === Dispatch setups ===
@@ -1525,13 +1920,28 @@ withTempDir((tmp) => {
   waybill(d, npmDir, "npm run check");
   logged(d, "dispatch", "luna", "thread-1");
   logged(d, "finding", "src/a.ts:12", "style P3 r1 style luna reading: a list named map");
-  logged(d, "finding", "src/b.ts:40", "gating P1 r1 style,bug luna,sol execution: an off-by-one the style lens found");
-  logged(d, "finding", "src/c.ts:7", "style P3 r2 bug sol reading: a let never reassigned, reported under bug");
+  logged(
+    d,
+    "finding",
+    "src/b.ts:40",
+    "gating P1 r1 style,bug luna,sol execution: an off-by-one the style lens found",
+  );
+  logged(
+    d,
+    "finding",
+    "src/c.ts:7",
+    "style P3 r2 bug sol reading: a let never reassigned, reported under bug",
+  );
   logged(d, "apply", "abc1234", "src/b.ts:40");
 
   const none = join(R, "T-2");
   waybill(none, npmDir, "npm run check");
-  logged(none, "finding", "src/b.ts:40", "gating P2 r1 bug luna reading: style is named here, and the finding is gating");
+  logged(
+    none,
+    "finding",
+    "src/b.ts:40",
+    "gating P2 r1 bug luna reading: style is named here, and the finding is gating",
+  );
 
   console.log("positive controls: a run's style findings");
   invoke("count", d);
@@ -1540,16 +1950,28 @@ withTempDir((tmp) => {
   is(
     "they are listed in the order logged, whichever lens found them, and not the gating one the style lens found",
     0,
-    lines("S1 src/a.ts:12 P3 r1 style luna reading: a list named map", "S2 src/c.ts:7 P3 r2 bug sol reading: a let never reassigned, reported under bug"),
+    lines(
+      "S1 src/a.ts:12 P3 r1 style luna reading: a list named map",
+      "S2 src/c.ts:7 P3 r2 bug sol reading: a let never reassigned, reported under bug",
+    ),
   );
 
   const back = join(R, "T-19");
   mkdirSync(back, { recursive: true });
   logged(back, "finding", "src/a.ts:12", "style P3 r1 style luna reading: a name");
-  logged(back, "finding", "src/a.ts:12:5", "style P3 r1 style luna reading: another name on that line, with a column");
+  logged(
+    back,
+    "finding",
+    "src/a.ts:12:5",
+    "style P3 r1 style luna reading: another name on that line, with a column",
+  );
   logged(back, "finding", "src/a.ts:12", "gating P2 r2 bug sol reading: argued back to gating");
   invoke("list", back);
-  is("a finding argued back to gating is no style finding, and one at a column of that line stays one", 0, "S1 src/a.ts:12:5 P3 r1 style luna reading: another name on that line, with a column");
+  is(
+    "a finding argued back to gating is no style finding, and one at a column of that line stays one",
+    0,
+    "S1 src/a.ts:12:5 P3 r1 style luna reading: another name on that line, with a column",
+  );
 
   console.log("negative controls: a run's style findings");
   invoke("count", none);
@@ -1564,7 +1986,14 @@ withTempDir((tmp) => {
       return 0;
     }
   })();
-  const refuseR = run("bash", [join(scriptsDir(import.meta), "log-action.sh"), d, "coachman", "finding", "src/x.ts:1", "P2 r1 bug luna reading: no class"]);
+  const refuseR = run("bash", [
+    join(scriptsDir(import.meta), "log-action.sh"),
+    d,
+    "coachman",
+    "finding",
+    "src/x.ts:1",
+    "P2 r1 bug luna reading: no class",
+  ]);
   const afterLines = (() => {
     try {
       return readFileSync(join(d, "actions.jsonl"), "utf8").split("\n").filter(Boolean).length;
@@ -1572,14 +2001,27 @@ withTempDir((tmp) => {
       return 0;
     }
   })();
-  if (refuseR.code === 1 && afterLines === beforeLines && refuseR.err.includes("gating or style")) ok("log-action.sh refuses a finding with no class, and writes nothing");
-  else fail(`log-action.sh refuses a finding with no class, and writes nothing (exit ${refuseR.code})`, refuseR.err);
+  if (refuseR.code === 1 && afterLines === beforeLines && refuseR.err.includes("gating or style"))
+    ok("log-action.sh refuses a finding with no class, and writes nothing");
+  else
+    fail(
+      `log-action.sh refuses a finding with no class, and writes nothing (exit ${refuseR.code})`,
+      refuseR.err,
+    );
 
   const bad = join(R, "T-3");
   mkdirSync(bad, { recursive: true });
-  writeFileSync(join(bad, "actions.jsonl"), readFileSync(join(d, "actions.jsonl"), "utf8") + '{"action":"finding","target":"src/x.ts:1","detail":"advisory P3 r1 style luna reading: old words"}\n');
+  writeFileSync(
+    join(bad, "actions.jsonl"),
+    readFileSync(join(d, "actions.jsonl"), "utf8") +
+      '{"action":"finding","target":"src/x.ts:1","detail":"advisory P3 r1 style luna reading: old words"}\n',
+  );
   invoke("count", bad);
-  is("a finding logged with another class is named, and nothing is counted", 2, 'actions.jsonl line 6: a finding whose detail opens with "advisory", not gating or style');
+  is(
+    "a finding logged with another class is named, and nothing is counted",
+    2,
+    'actions.jsonl line 6: a finding whose detail opens with "advisory", not gating or style',
+  );
   invoke("count", R);
   has("no action log is refused, never read as no findings", 1, "no action log at");
 
@@ -1616,12 +2058,21 @@ withTempDir((tmp) => {
   const t24 = join(R, "T-24");
   waybill(t24, mkDir, "make -j 4");
   invoke("gate", t24);
-  has("make -j 4 runs the default goal, not a target named 4", 0, "Makefile lint: shellcheck scripts/*.sh");
+  has(
+    "make -j 4 runs the default goal, not a target named 4",
+    0,
+    "Makefile lint: shellcheck scripts/*.sh",
+  );
 
   const t27 = join(R, "T-27");
   waybill(t27, mkDir, "make -j$(nproc) fmt");
   invoke("gate", t27);
-  has("a substitution in a make flag leaves the target named", 0, "Makefile fmt: ruff format .", "shellcheck");
+  has(
+    "a substitution in a make flag leaves the target named",
+    0,
+    "Makefile fmt: ruff format .",
+    "shellcheck",
+  );
 
   const t10 = join(R, "T-10");
   waybill(t10, monoDir, "npm run check");
@@ -1639,15 +2090,29 @@ withTempDir((tmp) => {
   const t11 = join(R, "T-11");
   waybill(t11, monoDir, "cd packages/web && npm run lint");
   invoke("gate", t11);
-  has("a cd before npm run takes the script from that package", 0, "packages/web/package.json scripts.lint: eslint .", "scripts.lint: tsc");
+  has(
+    "a cd before npm run takes the script from that package",
+    0,
+    "packages/web/package.json scripts.lint: eslint .",
+    "scripts.lint: tsc",
+  );
 
   const t12 = join(R, "T-12");
   waybill(t12, otherDir, "just");
   invoke("gate", t12);
-  has("just runs its first recipe, and each recipe's prerequisites", 0, "justfile lint: cargo clippy -- -D warnings", "cargo fmt");
+  has(
+    "just runs its first recipe, and each recipe's prerequisites",
+    0,
+    "justfile lint: cargo clippy -- -D warnings",
+    "cargo fmt",
+  );
 
   const t13 = join(R, "T-13");
-  waybill(t13, otherDir, "env CI=1 ./scripts/lint.sh && cross-env CI=1 node scripts/lint.js && node -r ts-node/register scripts/check.ts && bash -euo pipefail scripts/check.sh");
+  waybill(
+    t13,
+    otherDir,
+    "env CI=1 ./scripts/lint.sh && cross-env CI=1 node scripts/lint.js && node -r ts-node/register scripts/check.ts && bash -euo pipefail scripts/check.sh",
+  );
   invoke("gate", t13);
   for (const want of [
     "scripts/lint.sh: ruff check .",
@@ -1661,22 +2126,39 @@ withTempDir((tmp) => {
   const t14 = join(R, "T-14");
   waybill(t14, otherDir, "pre-commit run --all-files");
   invoke("gate", t14);
-  has("pre-commit's config is reached, less its comments", 0, ".pre-commit-config.yaml: - id: ruff", "mypy");
+  has(
+    "pre-commit's config is reached, less its comments",
+    0,
+    ".pre-commit-config.yaml: - id: ruff",
+    "mypy",
+  );
 
   const t7 = join(R, "T-7");
   waybill(t7, npmDir, "npm run build:types && npm run lint");
   invoke("gate", t7);
-  has("a build: inside the gate is part of it", 0, "package.json scripts.build:types: tsc -p types");
+  has(
+    "a build: inside the gate is part of it",
+    0,
+    "package.json scripts.build:types: tsc -p types",
+  );
 
   const t8 = join(R, "T-8");
   waybill(t8, npmDir, "npm run nbsp");
   invoke("gate", t8);
-  has("a no-break space in a quoted word is read, not recursed into", 0, "package.json scripts.nbsp:");
+  has(
+    "a no-break space in a quoted word is read, not recursed into",
+    0,
+    "package.json scripts.nbsp:",
+  );
 
   const t20 = join(R, "T-20");
   waybill(t20, npmDir, "", "- **gate:** `npm run lint`  **build:** none    browser suite: none");
   invoke("gate", t20);
-  has("a gate in bold and backticks, on a bullet, is read", 0, "package.json scripts.lint: cross-env");
+  has(
+    "a gate in bold and backticks, on a bullet, is read",
+    0,
+    "package.json scripts.lint: cross-env",
+  );
 
   const t21 = join(R, "T-21");
   waybill(t21, npmDir, "", "gate : npm run lint  build: none");
@@ -1685,14 +2167,22 @@ withTempDir((tmp) => {
 
   const t28 = join(R, "T-28");
   mkdirSync(t28, { recursive: true });
-  writeFileSync(join(t28, "brief.md"), `## Project profile\n- **repo:** \`${npmDir}\`  default branch: main\n- **gate:** \`npm run lint\`\n`);
+  writeFileSync(
+    join(t28, "brief.md"),
+    `## Project profile\n- **repo:** \`${npmDir}\`  default branch: main\n- **gate:** \`npm run lint\`\n`,
+  );
   invoke("gate", t28);
   has("a repo in backticks is read", 0, "package.json scripts.lint: cross-env");
 
   const t23 = join(R, "T-23");
   waybill(t23, otherDir, "sh scripts/big.sh");
   invoke("gate", t23);
-  has("a long file is shown in part", 0, "scripts/big.sh: 41 more lines, read and not shown", "vale");
+  has(
+    "a long file is shown in part",
+    0,
+    "scripts/big.sh: 41 more lines, read and not shown",
+    "vale",
+  );
   logFindings(t23, 1);
   sortFile(t23, "S1 linter vale enable Vale.Spelling: the file's last line runs vale");
   invoke("check", t23);
@@ -1701,11 +2191,31 @@ withTempDir((tmp) => {
   const t26 = join(R, "T-26");
   waybill(t26, otherDir, "npm run lint");
   invoke("gate", t26);
-  has("npm runs a script's pre script", 0, "package.json scripts.prelint: sort-package-json --check");
+  has(
+    "npm runs a script's pre script",
+    0,
+    "package.json scripts.prelint: sort-package-json --check",
+  );
 
   console.log("negative controls: what the gate runs");
   invoke("gate", d);
-  for (const not of ["scripts.format: ", "scripts.docs", "scripts.build: ", "scripts.test: ", "test:unit:slow", "jest", "vitest", "hadolint", "oxfmt", "oxlint", "xo", "knip", "standard", "jscpd", "decoy"]) {
+  for (const not of [
+    "scripts.format: ",
+    "scripts.docs",
+    "scripts.build: ",
+    "scripts.test: ",
+    "test:unit:slow",
+    "jest",
+    "vitest",
+    "hadolint",
+    "oxfmt",
+    "oxlint",
+    "xo",
+    "knip",
+    "standard",
+    "jscpd",
+    "decoy",
+  ]) {
     has(`the gate does not reach ${not}`, 0, "gate: npm run check", not);
   }
   invoke("gate", m);
@@ -1718,9 +2228,19 @@ withTempDir((tmp) => {
   const t25 = join(R, "T-25");
   waybill(t25, otherDir, "yarn check");
   invoke("gate", t25);
-  has("Yarn 2 and later run no pre script", 0, "package.json scripts.lint: eslint .", "sort-package-json");
+  has(
+    "Yarn 2 and later run no pre script",
+    0,
+    "package.json scripts.lint: eslint .",
+    "sort-package-json",
+  );
 
-  if (!existsSync(join(npmDir, "gate-ran")) && !existsSync(join(mkDir, "make-ran")) && !existsSync(join(tmp, "gate-ran")) && !existsSync(join(tmp, "make-ran")))
+  if (
+    !existsSync(join(npmDir, "gate-ran")) &&
+    !existsSync(join(mkDir, "make-ran")) &&
+    !existsSync(join(tmp, "gate-ran")) &&
+    !existsSync(join(tmp, "make-ran"))
+  )
     ok("nothing the gate runs was run");
   else fail("nothing the gate runs was run");
 
@@ -1732,15 +2252,29 @@ withTempDir((tmp) => {
   const g99 = join(R, "T-99");
   waybill(g99, npmDir, "npm run check");
   invoke("gate", g99);
-  has("a run with no branch of its name is refused, never read from the checkout", 1, "no branch T-99 in");
+  has(
+    "a run with no branch of its name is refused, never read from the checkout",
+    1,
+    "no branch T-99 in",
+  );
 
   console.log("positive controls: the sort");
-  sortFile(d, "# Style sort: T-1", "", "- S2 linter biome enable style/useConst: biome flags a let that is never reassigned", "- S1 docs AGENTS.md: the project names a collection by what it holds, and nothing says so");
+  sortFile(
+    d,
+    "# Style sort: T-1",
+    "",
+    "- S2 linter biome enable style/useConst: biome flags a let that is never reassigned",
+    "- S1 docs AGENTS.md: the project names a collection by what it holds, and nothing says so",
+  );
   invoke("check", d);
   is(
     "a sort of every finding passes, and prints its proposals and counts",
     0,
-    lines("S2: linter biome enable style/useConst", "S1: docs AGENTS.md", "sorted 2 style findings: 1 to a linter, 1 to the docs, 0 to neither; 0 new linters proposed"),
+    lines(
+      "S2: linter biome enable style/useConst",
+      "S1: docs AGENTS.md",
+      "sorted 2 style findings: 1 to a linter, 1 to the docs, 0 to neither; 0 new linters proposed",
+    ),
   );
 
   const five = join(R, "T-6");
@@ -1770,18 +2304,32 @@ withTempDir((tmp) => {
     ),
   );
 
-  const redo = (label: string, wantExit: number, wantIn: string, sedScript: string, wantNotIn?: string): void => {
+  const redo = (
+    label: string,
+    wantExit: number,
+    wantIn: string,
+    sedScript: string,
+    wantNotIn?: string,
+  ): void => {
     // Apply sed-like replacement to the good sort
     let text = good;
     // Simple sed-like replacements for the test cases
-    if (sedScript === "1s/biome enable style\\/useConst/stylelint enable declaration-no-important/") {
-      text = text.replace("S1 linter biome enable style/useConst", "S1 linter stylelint enable declaration-no-important");
+    if (
+      sedScript === "1s/biome enable style\\/useConst/stylelint enable declaration-no-important/"
+    ) {
+      text = text.replace(
+        "S1 linter biome enable style/useConst",
+        "S1 linter stylelint enable declaration-no-important",
+      );
     } else if (sedScript === "1s/linter biome/linter `Biome`/") {
       text = text.replace("S1 linter biome", "S1 linter `Biome`");
     } else if (sedScript === "s/new-linter shellcheck S3:/new-linter eslint S3 not-in-gate:/") {
       text = text.replace("new-linter shellcheck S3:", "new-linter eslint S3 not-in-gate:");
     } else if (sedScript === "/^S4 /d") {
-      text = text.split("\n").filter((l) => !l.startsWith("S4 ")).join("\n");
+      text = text
+        .split("\n")
+        .filter((l) => !l.startsWith("S4 "))
+        .join("\n");
     } else if (sedScript === "$a S2 neither: again") {
       text += "S2 neither: again\n";
     } else if (sedScript === "$a S9 neither: no such finding") {
@@ -1795,15 +2343,24 @@ withTempDir((tmp) => {
     } else if (sedScript === "$a These are the findings.") {
       text += "These are the findings.\n";
     } else if (sedScript === "1s/biome enable style\\/useConst/eslint enable prefer-const/") {
-      text = text.replace("S1 linter biome enable style/useConst", "S1 linter eslint enable prefer-const");
+      text = text.replace(
+        "S1 linter biome enable style/useConst",
+        "S1 linter eslint enable prefer-const",
+      );
     } else if (sedScript === "1s/biome enable style\\/useConst/oxlint enable prefer-const/") {
-      text = text.replace("S1 linter biome enable style/useConst", "S1 linter oxlint enable prefer-const");
+      text = text.replace(
+        "S1 linter biome enable style/useConst",
+        "S1 linter oxlint enable prefer-const",
+      );
     } else if (sedScript === "1s/biome enable style\\/useConst/oxfmt enable x/") {
       text = text.replace("S1 linter biome enable style/useConst", "S1 linter oxfmt enable x");
     } else if (sedScript === "1s/biome enable style\\/useConst/stylua enable x/") {
       text = text.replace("S1 linter biome enable style/useConst", "S1 linter stylua enable x");
     } else if (sedScript === "1s/biome enable style\\/useConst/hadolint enable DL3008/") {
-      text = text.replace("S1 linter biome enable style/useConst", "S1 linter hadolint enable DL3008");
+      text = text.replace(
+        "S1 linter biome enable style/useConst",
+        "S1 linter hadolint enable DL3008",
+      );
     } else if (sedScript === "s/new-linter shellcheck/new-linter BIOME/") {
       text = text.replace("new-linter shellcheck", "new-linter BIOME");
     } else if (sedScript === "s/new-linter shellcheck/new-linter eslint/") {
@@ -1820,11 +2377,33 @@ withTempDir((tmp) => {
     has(label, wantExit, wantIn, wantNotIn);
   };
 
-  redo("a linter run by a file the gate runs counts as run", 0, "S1: linter stylelint enable", "1s/biome enable style\\/useConst/stylelint enable declaration-no-important/");
-  redo("a linter's case and markup are set aside", 0, "S1 S2: linter biome enable style/useConst", "1s/linter biome/linter `Biome`/");
-  redo("a linter the project has, and the gate does not run, is a new linter when its line says not-in-gate", 0, "N1: new-linter eslint [for S3; not in the gate]", "s/new-linter shellcheck S3:/new-linter eslint S3 not-in-gate:/");
+  redo(
+    "a linter run by a file the gate runs counts as run",
+    0,
+    "S1: linter stylelint enable",
+    "1s/biome enable style\\/useConst/stylelint enable declaration-no-important/",
+  );
+  redo(
+    "a linter's case and markup are set aside",
+    0,
+    "S1 S2: linter biome enable style/useConst",
+    "1s/linter biome/linter `Biome`/",
+  );
+  redo(
+    "a linter the project has, and the gate does not run, is a new linter when its line says not-in-gate",
+    0,
+    "N1: new-linter eslint [for S3; not in the gate]",
+    "s/new-linter shellcheck S3:/new-linter eslint S3 not-in-gate:/",
+  );
 
-  sortFile(five, "S1 linter shellcheck enable SC2086: a make gate runs shellcheck", "S2 neither: x", "S3 neither: x", "S4 neither: x", "S5 neither: x");
+  sortFile(
+    five,
+    "S1 linter shellcheck enable SC2086: a make gate runs shellcheck",
+    "S2 neither: x",
+    "S3 neither: x",
+    "S4 neither: x",
+    "S5 neither: x",
+  );
   writeFileSync(join(m, "actions.jsonl"), readFileSync(join(five, "actions.jsonl"), "utf8"));
   writeFileSync(join(m, "style-sort.md"), readFileSync(join(five, "style-sort.md"), "utf8"));
   invoke("check", m);
@@ -1833,19 +2412,37 @@ withTempDir((tmp) => {
   const via = join(R, "T-18");
   waybill(via, otherDir, "tsc");
   logFindings(via, 1);
-  sortFile(via, "S1 linter ruff enable E501 via .pre-commit-config.yaml: pre-commit runs ruff, and this gate calls it some other way");
+  sortFile(
+    via,
+    "S1 linter ruff enable E501 via .pre-commit-config.yaml: pre-commit runs ruff, and this gate calls it some other way",
+  );
   invoke("check", via);
-  has("a linter named via a file of the branch that names it", 0, "S1: linter ruff enable E501 [via .pre-commit-config.yaml]");
+  has(
+    "a linter named via a file of the branch that names it",
+    0,
+    "S1: linter ruff enable E501 [via .pre-commit-config.yaml]",
+  );
 
   invoke("check", none);
-  is("a run with no style findings and no sort has nothing to sort", 0, "no style findings, so nothing to sort");
+  is(
+    "a run with no style findings and no sort has nothing to sort",
+    0,
+    "no style findings, so nothing to sort",
+  );
 
   const zero = join(R, "T-22");
   mkdirSync(zero, { recursive: true });
   logFindings(zero, 2);
   sortFile(zero, "S1 neither: one", "S2 neither: two");
   invoke("check", zero);
-  is("a sort with no linter and no docs line counts none of either", 0, lines("S1 S2: neither", "sorted 2 style findings: 0 to a linter, 0 to the docs, 2 to neither; 0 new linters proposed"));
+  is(
+    "a sort with no linter and no docs line counts none of either",
+    0,
+    lines(
+      "S1 S2: neither",
+      "sorted 2 style findings: 0 to a linter, 0 to the docs, 2 to neither; 0 new linters proposed",
+    ),
+  );
 
   writeFileSync(join(zero, "style-sort.md"), "\uFEFFS1 neither: one\nS2 neither: two\n");
   invoke("check", zero);
@@ -1862,7 +2459,12 @@ withTempDir((tmp) => {
   logged(past, "ticket-create", "81", "linter biome enable style/useConst, filed another way");
   logged(past, "note", "T-15", "style proposal declined: docs AGENTS.md: not now");
   logged(past, "note", "T-15", "style proposal asked: new-linter shellcheck");
-  sortFile(nowDir, "S1 linter biome enable style/useConst: a", "S2 docs AGENTS.md: b", "N1 new-linter shellcheck S2: c");
+  sortFile(
+    nowDir,
+    "S1 linter biome enable style/useConst: a",
+    "S2 docs AGENTS.md: b",
+    "N1 new-linter shellcheck S2: c",
+  );
   invoke("check", nowDir);
   is(
     "each proposal carries what the project's ledger last records of it, from any run",
@@ -1888,47 +2490,145 @@ withTempDir((tmp) => {
   );
   const good2 = readFileSync(join(five, "style-sort.md"), "utf8");
 
-  const redo2 = (label: string, wantExit: number, wantIn: string, transform: (text: string) => string, wantNotIn?: string): void => {
+  const redo2 = (
+    label: string,
+    wantExit: number,
+    wantIn: string,
+    transform: (text: string) => string,
+    wantNotIn?: string,
+  ): void => {
     writeFileSync(join(five, "style-sort.md"), transform(good2));
     invoke("check", five);
     has(label, wantExit, wantIn, wantNotIn);
   };
 
-  redo2("a finding left out", 2, "S4 is not sorted", (t) => t.split("\n").filter((l) => !l.startsWith("S4 ")).join("\n"));
-  redo2("a finding sorted twice", 2, "S2 is sorted twice, on lines 2, 7", (t) => t + "S2 neither: again\n");
-  redo2("an id that is no style finding", 2, "line 7: S9 is not a style finding", (t) => t + "S9 neither: no such finding\n");
-  redo2("a line with no reason", 2, "line 3: S3 has no reason", (t) => t.replace(/^S3 neither: .*/m, "S3 neither:"));
-  redo2("a kind that is not one of the three", 2, "line 4 is not a sort line", (t) => t.replace("S4 docs", "S4 convention"));
-  redo2("a linter line with no enable or write", 2, "line 1 is not a sort line", (t) => t.replace("S1 linter biome enable", "S1 linter biome"));
-  redo2("prose between the lines", 2, "line 7 is not a sort line: These are", (t) => t + "These are the findings.\n");
-  redo2("and the forms are then given", 2, 'a sort line is one of: "S<n> linter', (t) => t + "These are the findings.\n");
-  redo2("a linter only an echoed hint would reach", 2, "S1 names eslint, which `gate` does not show", (t) => t.replace("S1 linter biome enable style/useConst", "S1 linter eslint enable prefer-const"));
-  redo2("a linter only a comment names", 2, "S1 names oxlint, which `gate` does not show", (t) => t.replace("S1 linter biome enable style/useConst", "S1 linter oxlint enable prefer-const"));
-  redo2("a linter only a shell comment names", 2, "S1 names oxfmt, which `gate` does not show", (t) => t.replace("S1 linter biome enable style/useConst", "S1 linter oxfmt enable x"));
-  redo2("a linter only a comment in a quoted command names", 2, "S1 names stylua, which `gate` does not show", (t) => t.replace("S1 linter biome enable style/useConst", "S1 linter stylua enable x"));
-  redo2("a linter only bun's own build would reach", 2, "S1 names hadolint, which `gate` does not show", (t) => t.replace("S1 linter biome enable style/useConst", "S1 linter hadolint enable DL3008"));
-  redo2("a new linter the gate already runs", 2, "N1 proposes BIOME, which the gate already runs", (t) => t.replace("new-linter shellcheck", "new-linter BIOME"));
-  redo2("a new linter the project already has", 2, "N1 proposes eslint, which the project already has (package.json)", (t) => t.replace("new-linter shellcheck", "new-linter eslint"));
-  redo2("a new linter proposed twice", 2, "N2 proposes shellcheck again, as N1 on line 6 does", (t) => t + "N2 new-linter shellcheck S4: again\n");
-  redo2("a new linter for no such finding", 2, "N1 names S9, which is not a style finding", (t) => t.replace("shellcheck S3", "shellcheck S3,S9"));
-  redo2("a new linter for no finding at all", 2, "N1 names no finding the linter would enforce", (t) => t.replace("new-linter shellcheck S3:", "new-linter shellcheck not-in-gate:"));
+  redo2("a finding left out", 2, "S4 is not sorted", (t) =>
+    t
+      .split("\n")
+      .filter((l) => !l.startsWith("S4 "))
+      .join("\n"),
+  );
+  redo2(
+    "a finding sorted twice",
+    2,
+    "S2 is sorted twice, on lines 2, 7",
+    (t) => `${t}S2 neither: again\n`,
+  );
+  redo2(
+    "an id that is no style finding",
+    2,
+    "line 7: S9 is not a style finding",
+    (t) => `${t}S9 neither: no such finding\n`,
+  );
+  redo2("a line with no reason", 2, "line 3: S3 has no reason", (t) =>
+    t.replace(/^S3 neither: .*/m, "S3 neither:"),
+  );
+  redo2("a kind that is not one of the three", 2, "line 4 is not a sort line", (t) =>
+    t.replace("S4 docs", "S4 convention"),
+  );
+  redo2("a linter line with no enable or write", 2, "line 1 is not a sort line", (t) =>
+    t.replace("S1 linter biome enable", "S1 linter biome"),
+  );
+  redo2(
+    "prose between the lines",
+    2,
+    "line 7 is not a sort line: These are",
+    (t) => `${t}These are the findings.\n`,
+  );
+  redo2(
+    "and the forms are then given",
+    2,
+    'a sort line is one of: "S<n> linter',
+    (t) => `${t}These are the findings.\n`,
+  );
+  redo2(
+    "a linter only an echoed hint would reach",
+    2,
+    "S1 names eslint, which `gate` does not show",
+    (t) =>
+      t.replace("S1 linter biome enable style/useConst", "S1 linter eslint enable prefer-const"),
+  );
+  redo2("a linter only a comment names", 2, "S1 names oxlint, which `gate` does not show", (t) =>
+    t.replace("S1 linter biome enable style/useConst", "S1 linter oxlint enable prefer-const"),
+  );
+  redo2(
+    "a linter only a shell comment names",
+    2,
+    "S1 names oxfmt, which `gate` does not show",
+    (t) => t.replace("S1 linter biome enable style/useConst", "S1 linter oxfmt enable x"),
+  );
+  redo2(
+    "a linter only a comment in a quoted command names",
+    2,
+    "S1 names stylua, which `gate` does not show",
+    (t) => t.replace("S1 linter biome enable style/useConst", "S1 linter stylua enable x"),
+  );
+  redo2(
+    "a linter only bun's own build would reach",
+    2,
+    "S1 names hadolint, which `gate` does not show",
+    (t) => t.replace("S1 linter biome enable style/useConst", "S1 linter hadolint enable DL3008"),
+  );
+  redo2(
+    "a new linter the gate already runs",
+    2,
+    "N1 proposes BIOME, which the gate already runs",
+    (t) => t.replace("new-linter shellcheck", "new-linter BIOME"),
+  );
+  redo2(
+    "a new linter the project already has",
+    2,
+    "N1 proposes eslint, which the project already has (package.json)",
+    (t) => t.replace("new-linter shellcheck", "new-linter eslint"),
+  );
+  redo2(
+    "a new linter proposed twice",
+    2,
+    "N2 proposes shellcheck again, as N1 on line 6 does",
+    (t) => `${t}N2 new-linter shellcheck S4: again\n`,
+  );
+  redo2("a new linter for no such finding", 2, "N1 names S9, which is not a style finding", (t) =>
+    t.replace("shellcheck S3", "shellcheck S3,S9"),
+  );
+  redo2(
+    "a new linter for no finding at all",
+    2,
+    "N1 names no finding the linter would enforce",
+    (t) => t.replace("new-linter shellcheck S3:", "new-linter shellcheck not-in-gate:"),
+  );
 
   sortFile(via, "S1 linter ruff enable E501 via README.md: a file that does not name it");
   invoke("check", via);
-  has("a via file that does not name the linter", 2, "S1 names ruff via README.md, which does not name ruff");
+  has(
+    "a via file that does not name the linter",
+    2,
+    "S1 names ruff via README.md, which does not name ruff",
+  );
 
   sortFile(via, "S1 linter ruff enable E501 via ruff.toml: a file the branch does not have");
   invoke("check", via);
-  has("a via file the branch does not have", 2, "S1 names ruff via ruff.toml, which the run's branch does not have");
+  has(
+    "a via file the branch does not have",
+    2,
+    "S1 names ruff via ruff.toml, which the run's branch does not have",
+  );
 
   rmSync(join(five, "style-sort.md"), { force: true });
   invoke("check", five);
-  has("no sort at all, with findings to sort", 2, `no style-sort.md in ${five}, and 5 style findings to sort`);
+  has(
+    "no sort at all, with findings to sort",
+    2,
+    `no style-sort.md in ${five}, and 5 style findings to sort`,
+  );
 
   waybill(five, npmDir, "");
   writeFileSync(join(five, "style-sort.md"), good2);
   invoke("check", five);
-  has("a linter line with no gate to check it against", 2, "S1 names biome, and the waybill's Project profile has no gate");
+  has(
+    "a linter line with no gate to check it against",
+    2,
+    "S1 names biome, and the waybill's Project profile has no gate",
+  );
 
   writeFileSync(join(none, "style-sort.md"), good2);
   invoke("check", none);
@@ -1940,7 +2640,10 @@ withTempDir((tmp) => {
   console.log("the gate is read as the run's branch has it");
   // Switch npm to eslint and create a new branch
   const pkgPath = join(npmDir, "package.json");
-  const pkgText = readFileSync(pkgPath, "utf8").replace("cross-env NODE_ENV=ci biome check .", "eslint .");
+  const pkgText = readFileSync(pkgPath, "utf8").replace(
+    "cross-env NODE_ENV=ci biome check .",
+    "eslint .",
+  );
   writeFileSync(pkgPath, pkgText);
   commit(npmDir, "switch to eslint");
   G("-C", npmDir, "branch", "T-17");
@@ -1948,11 +2651,21 @@ withTempDir((tmp) => {
   const t17 = join(R, "T-17");
   waybill(t17, npmDir, "npm run lint");
   invoke("gate", t17);
-  has("a branch cut after a change reads the change", 0, "package.json scripts.lint: eslint .", "biome");
+  has(
+    "a branch cut after a change reads the change",
+    0,
+    "package.json scripts.lint: eslint .",
+    "biome",
+  );
 
   waybill(d, npmDir, "npm run lint");
   invoke("gate", d);
-  has("a run's own branch reads as it was, whatever the checkout now holds", 0, "package.json scripts.lint: cross-env NODE_ENV=ci biome check .", "scripts.lint: eslint");
+  has(
+    "a run's own branch reads as it was, whatever the checkout now holds",
+    0,
+    "package.json scripts.lint: cross-env NODE_ENV=ci biome check .",
+    "scripts.lint: eslint",
+  );
 
   console.log("the runbooks agree with this script");
   // Check that runbooks name list, count, gate and check
@@ -1965,22 +2678,27 @@ withTempDir((tmp) => {
     }
   }
   const subsStr = [...subs].sort().join(" ");
-  if (subsStr === "check count gate list") ok("the runbooks name list, count, gate and check, and no other subcommand");
+  if (subsStr === "check count gate list")
+    ok("the runbooks name list, count, gate and check, and no other subcommand");
   else fail("the runbooks name list, count, gate and check, and no other subcommand", subsStr);
 
   // A subcommand the script lacks would be caught
   const planted = join(tmp, "planted.md");
   writeFileSync(planted, "run `<tool>/scripts/style-findings.sh sort <dispatch>`\n");
-  const plantedSubs = [...readFileSync(planted, "utf8").matchAll(/style-findings\.sh ([a-z-]*)/g)].map((m) => m[1]).join(" ");
+  const plantedSubs = [...readFileSync(planted, "utf8").matchAll(/style-findings\.sh ([a-z-]*)/g)]
+    .map((m) => m[1])
+    .join(" ");
   if (plantedSubs === "sort") ok("and a subcommand the script lacks would be caught");
   else fail("and a subcommand the script lacks would be caught");
 
   // Every form coachman.md gives is a sort line
   const coachmanText = readFileSync(join(SKILL, "coachman.md"), "utf8");
-  const formBlock = coachmanText.match(/\*\*Sort the style findings\.\*\*[\s\S]*?```\n([\s\S]*?)```/);
+  const formBlock = coachmanText.match(
+    /\*\*Sort the style findings\.\*\*[\s\S]*?```\n([\s\S]*?)```/,
+  );
   if (formBlock) {
-    const forms = formBlock[1]!
-      .replace(/<n>/g, "1")
+    const forms = formBlock[1]
+      ?.replace(/<n>/g, "1")
       .replace(/<m>/g, "2")
       .replace(/\[,S2\.\.\.\]/g, "")
       .replace(/<linter>/g, "biome")
@@ -1993,7 +2711,8 @@ withTempDir((tmp) => {
     runCore("forms", formsFile);
     const okCount = out.split("\n").filter((l) => l.startsWith("ok  ")).length;
     const badCount = out.split("\n").filter((l) => l.startsWith("bad ")).length;
-    if (rc === 0 && okCount >= 7 && badCount === 0) ok("every form coachman.md gives is a sort line");
+    if (rc === 0 && okCount >= 7 && badCount === 0)
+      ok("every form coachman.md gives is a sort line");
     else fail("every form coachman.md gives is a sort line", out);
   } else {
     fail("every form coachman.md gives is a sort line", "could not find forms block");
@@ -2040,8 +2759,12 @@ withTempDir((tmp) => {
 
   // Old wording would be caught
   const oldMd = join(tmp, "old.md");
-  writeFileSync(oldMd, "When the lanes converge on a prescribed one-line fix, apply it and re-review.\n");
-  if (!says(oldMd, "one-line fix for a gating finding")) ok("and the rule's old wording would be caught");
+  writeFileSync(
+    oldMd,
+    "When the lanes converge on a prescribed one-line fix, apply it and re-review.\n",
+  );
+  if (!says(oldMd, "one-line fix for a gating finding"))
+    ok("and the rule's old wording would be caught");
   else fail("and the rule's old wording would be caught");
 
   console.log("the cleanup asks nothing at a terminal");

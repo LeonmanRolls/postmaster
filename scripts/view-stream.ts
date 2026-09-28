@@ -18,22 +18,21 @@
 //
 //   exit 0  rendered
 //   exit 1  usage, or the self-test failed
+
+import { spawnSync } from "node:child_process";
 import {
-  createReadStream,
+  closeSync,
   existsSync,
   openSync,
-  readSync,
-  closeSync,
   readFileSync,
+  readSync,
   statSync,
   writeFileSync,
-  mkdirSync,
 } from "node:fs";
 import { join } from "node:path";
-import { spawn, spawnSync } from "node:child_process";
-import { withTempDir, run } from "./lib/proc.ts";
-import { SelfTest } from "./lib/selftest.ts";
 import { scriptsDir } from "./lib/paths.ts";
+import { run, withTempDir } from "./lib/proc.ts";
+import { SelfTest } from "./lib/selftest.ts";
 
 // --- the renderer (ported from the embedded Python) ---------------------------------------
 interface Ev {
@@ -65,7 +64,7 @@ function short(s: unknown, n?: number): string {
   const str = s === null || s === undefined ? "" : String(s);
   const first = str.trim().split("\n")[0] ?? "";
   const lim = n ?? width;
-  return first.length <= lim ? first : first.slice(0, lim - 1) + "…";
+  return first.length <= lim ? first : `${first.slice(0, lim - 1)}…`;
 }
 
 function toolLine(name: unknown, inp: unknown): string {
@@ -92,7 +91,7 @@ function textOf(content: unknown): string {
   if (Array.isArray(content)) {
     return content
       .filter((b) => b !== null && typeof b === "object")
-      .map((b) => String((b as Ev)["text"] ?? ""))
+      .map((b) => String((b as Ev).text ?? ""))
       .join(" ");
   }
   return "";
@@ -101,53 +100,51 @@ function textOf(content: unknown): string {
 const mimoSessions = new Set<string>();
 
 function muse(e: Ev): string | string[] | null {
-  const pt = String(e["payload_type"] ?? "");
-  const p = (e["payload"] as Ev) ?? {};
+  const pt = String(e.payload_type ?? "");
+  const p = (e.payload as Ev) ?? {};
   if (pt === "run.model.configured") {
-    const stream = (e["stream"] as Ev) ?? {};
-    return `session ${stream["id"]} · ${p["model_id"]}`;
+    const stream = (e.stream as Ev) ?? {};
+    return `session ${stream.id} · ${p.model_id}`;
   }
   if (pt === "tool.result") {
-    const facts = (p["correlation_facts"] as Ev) ?? {};
-    const name = facts["tool_name"] || "tool";
-    if (facts["outcome"] !== undefined && facts["outcome"] !== null && facts["outcome"] !== "success") {
+    const facts = (p.correlation_facts as Ev) ?? {};
+    const name = facts.tool_name || "tool";
+    if (facts.outcome !== undefined && facts.outcome !== null && facts.outcome !== "success") {
       return `tool error: ${String(name)}`;
     }
-    return toolLine(name, p["edit_facts"] ?? {});
+    return toolLine(name, p.edit_facts ?? {});
   }
   if (pt.startsWith("run.terminal.")) {
-    const said = String(p["text"] ?? "").trim();
-    return `result: ${p["terminal"] || pt.split(".").pop()}${said ? " · " + short(said) : ""}`;
+    const said = String(p.text ?? "").trim();
+    return `result: ${p.terminal || pt.split(".").pop()}${said ? ` · ${short(said)}` : ""}`;
   }
   return null;
 }
 
 function mimo(e: Ev): string[] | null {
-  const t = e["type"];
-  const part = (e["part"] as Ev) ?? {};
+  const t = e.type;
+  const part = (e.part as Ev) ?? {};
   const out: string[] = [];
-  const sid = e["sessionID"];
+  const sid = e.sessionID;
   if (sid && !mimoSessions.has(String(sid))) {
     mimoSessions.add(String(sid));
     out.push(`session ${sid}`);
   }
-  if (t === "text" && String(part["text"] ?? "").trim()) {
-    out.push("says: " + short(part["text"]));
+  if (t === "text" && String(part.text ?? "").trim()) {
+    out.push(`says: ${short(part.text)}`);
   } else if (t === "tool_use") {
-    const state = (part["state"] as Ev) ?? {};
+    const state = (part.state as Ev) ?? {};
     out.push(
-      state["status"] === "error"
-        ? `tool error: ${String(part["tool"])}`
-        : toolLine(part["tool"], state["input"]),
+      state.status === "error"
+        ? `tool error: ${String(part.tool)}`
+        : toolLine(part.tool, state.input),
     );
-  } else if (t === "step_finish" && part["reason"] === "stop") {
+  } else if (t === "step_finish" && part.reason === "stop") {
     out.push("done");
   } else if (t === "error") {
-    const err = (e["error"] as Ev) ?? {};
-    const data = (err["data"] as Ev) ?? {};
-    out.push(
-      "error: " + short(data["message"] || err["name"] || JSON.stringify(err)),
-    );
+    const err = (e.error as Ev) ?? {};
+    const data = (err.data as Ev) ?? {};
+    out.push(`error: ${short(data.message || err.name || JSON.stringify(err))}`);
   }
   return out.length > 0 ? out : null;
 }
@@ -159,116 +156,114 @@ function render(e: Ev): string | string[] | null | typeof GENERIC {
   if ("payload_type" in e) return muse(e);
   if (
     "sessionID" in e &&
-    ["step_start", "step_finish", "text", "tool_use", "error"].includes(String(e["type"]))
+    ["step_start", "step_finish", "text", "tool_use", "error"].includes(String(e.type))
   ) {
     return mimo(e);
   }
-  const t = e["type"];
+  const t = e.type;
   if (typeof t === "string" && QUIET.has(t)) return null;
   // claude
   if (t === "system") {
-    const st = e["subtype"];
-    if (st === "init") return `session ${e["session_id"]} · ${e["model"]}`;
+    const st = e.subtype;
+    if (st === "init") return `session ${e.session_id} · ${e.model}`;
     if (st === "compact_boundary") return "context compacted";
     return null;
   }
-  if ((t === "assistant" || t === "user") && typeof e["message"] === "object" && e["message"] !== null) {
-    const msg = e["message"] as Ev;
+  if ((t === "assistant" || t === "user") && typeof e.message === "object" && e.message !== null) {
+    const msg = e.message as Ev;
     const lines: string[] = [];
-    for (const b of (msg["content"] as unknown[]) ?? []) {
+    for (const b of (msg.content as unknown[]) ?? []) {
       if (b === null || typeof b !== "object") continue;
       const blk = b as Ev;
-      const k = blk["type"];
-      if (t === "assistant" && k === "text" && String(blk["text"] ?? "").trim()) {
-        lines.push("says: " + short(blk["text"]));
+      const k = blk.type;
+      if (t === "assistant" && k === "text" && String(blk.text ?? "").trim()) {
+        lines.push(`says: ${short(blk.text)}`);
       } else if (t === "assistant" && k === "tool_use") {
-        lines.push(toolLine(blk["name"], blk["input"]));
-      } else if (t === "user" && k === "tool_result" && blk["is_error"]) {
-        lines.push("tool error: " + short(textOf(blk["content"])));
+        lines.push(toolLine(blk.name, blk.input));
+      } else if (t === "user" && k === "tool_result" && blk.is_error) {
+        lines.push(`tool error: ${short(textOf(blk.content))}`);
       }
     }
     return lines.length > 0 ? lines.join(" | ") : null;
   }
   if (t === "result") {
-    const parts: string[] = [
-      String(e["subtype"] || e["status"] || (e["is_error"] ? "error" : "done")),
-    ];
-    if (typeof e["num_turns"] === "number") parts.push(`${e["num_turns"]} turns`);
-    if (typeof e["total_cost_usd"] === "number") {
-      parts.push(`$${(e["total_cost_usd"] as number).toFixed(2)}`);
+    const parts: string[] = [String(e.subtype || e.status || (e.is_error ? "error" : "done"))];
+    if (typeof e.num_turns === "number") parts.push(`${e.num_turns} turns`);
+    if (typeof e.total_cost_usd === "number") {
+      parts.push(`$${(e.total_cost_usd as number).toFixed(2)}`);
     }
-    if (e["result"]) parts.push(short(e["result"], 100));
-    return "result: " + parts.join(" · ");
+    if (e.result) parts.push(short(e.result, 100));
+    return `result: ${parts.join(" · ")}`;
   }
   if (t === "rate_limit_event") {
-    const info = (e["rate_limit_info"] as Ev) ?? {};
-    const status = info["status"];
+    const info = (e.rate_limit_info as Ev) ?? {};
+    const status = info.status;
     return status === undefined || status === null || status === "allowed"
       ? null
       : `rate limit: ${String(status)}`;
   }
   // codex
-  if (t === "thread.started") return `session ${e["thread_id"]}`;
+  if (t === "thread.started") return `session ${e.thread_id}`;
   if (t === "item.started" || t === "item.completed") {
-    const it = (e["item"] as Ev) ?? {};
-    const k = it["type"];
+    const it = (e.item as Ev) ?? {};
+    const k = it.type;
     if (t === "item.started") {
-      return k === "command_execution" ? "shell: " + short(it["command"]) : null;
+      return k === "command_execution" ? `shell: ${short(it.command)}` : null;
     }
-    if (k === "agent_message") return "says: " + short(it["text"]);
+    if (k === "agent_message") return `says: ${short(it.text)}`;
     if (k === "command_execution") {
-      const code = it["exit_code"];
+      const code = it.exit_code;
       return code === 0 || code === undefined || code === null
         ? null
-        : `shell exit ${String(code)}: ${short(it["command"])}`;
+        : `shell exit ${String(code)}: ${short(it.command)}`;
     }
     if (k === "file_change") {
       return (
         "edit: " +
-        ((it["changes"] as unknown[]) ?? [])
+        ((it.changes as unknown[]) ?? [])
           .filter((c) => c !== null && typeof c === "object")
-          .map((c) => String((c as Ev)["path"]))
+          .map((c) => String((c as Ev).path))
           .join(", ")
       );
     }
-    if (k === "mcp_tool_call") return `tool: ${it["server"]}.${it["tool"]}`;
-    if (k === "web_search") return "search: " + short(it["query"]);
-    if (k === "error") return "error: " + short(it["message"]);
+    if (k === "mcp_tool_call") return `tool: ${it.server}.${it.tool}`;
+    if (k === "web_search") return `search: ${short(it.query)}`;
+    if (k === "error") return `error: ${short(it.message)}`;
     return null;
   }
   if (t === "turn.completed") {
-    const u = (e["usage"] as Ev) ?? {};
-    return `turn done · ${u["input_tokens"] ?? "?"} tokens in, ${u["output_tokens"] ?? "?"} out`;
+    const u = (e.usage as Ev) ?? {};
+    return `turn done · ${u.input_tokens ?? "?"} tokens in, ${u.output_tokens ?? "?"} out`;
   }
   if (t === "turn.failed") {
-    const err = (e["error"] as Ev) ?? {};
-    return "turn failed: " + short(err["message"]);
+    const err = (e.error as Ev) ?? {};
+    return `turn failed: ${short(err.message)}`;
   }
-  if (t === "error") return "error: " + short(e["message"] ?? JSON.stringify(e));
+  if (t === "error") return `error: ${short(e.message ?? JSON.stringify(e))}`;
   // pi
-  if (t === "session") return `session ${e["id"]}`;
-  if (t === "tool_execution_start") return toolLine(e["toolName"], e["args"]);
+  if (t === "session") return `session ${e.id}`;
+  if (t === "tool_execution_start") return toolLine(e.toolName, e.args);
   if (t === "tool_execution_end") {
-    return e["isError"] ? `tool error: ${String(e["toolName"])}` : null;
+    return e.isError ? `tool error: ${String(e.toolName)}` : null;
   }
   if (t === "message_end") {
-    const m = (e["message"] as Ev) ?? {};
-    if (m["role"] !== "assistant") return null;
+    const m = (e.message as Ev) ?? {};
+    if (m.role !== "assistant") return null;
     const said = textOf(
-      ((m["content"] as unknown[]) ?? []).filter(
-        (b) => b !== null && typeof b === "object" && (b as Ev)["type"] === "text",
+      ((m.content as unknown[]) ?? []).filter(
+        (b) => b !== null && typeof b === "object" && (b as Ev).type === "text",
       ),
     );
-    return said.trim() ? "says: " + short(said) : null;
+    return said.trim() ? `says: ${short(said)}` : null;
   }
   if (t === "agent_end") return "done";
-  if (t === "auto_retry_start") return "retrying: " + short(e["errorMessage"] ?? "");
+  if (t === "auto_retry_start") return `retrying: ${short(e.errorMessage ?? "")}`;
   if (t === "auto_compaction_start") return "compacting context";
   return GENERIC;
 }
 
 function generic(e: Ev): string | null {
-  const t = String(e["type"] ?? e["event"] ?? "event");
+  const t = String(e.type ?? e.event ?? "event");
   if (t === lastGeneric) return null;
   lastGeneric = t;
   for (const key of ["text", "message", "content", "result", "name", "tool_name", "command"]) {
@@ -302,7 +297,7 @@ function show(line: string, stamp: boolean): void {
   const items = Array.isArray(out) ? out : out ? [out] : [];
   for (const one of items) {
     console.log(
-      (stamp ? new Date().toTimeString().slice(0, 8) + " " : "") + one.replace(CONTROL, ""),
+      (stamp ? `${new Date().toTimeString().slice(0, 8)} ` : "") + one.replace(CONTROL, ""),
     );
   }
 }
@@ -348,7 +343,7 @@ function view(args: string[]): number {
 
   if (!follow) {
     // read stdin line by line
-    const chunks: string[] = [];
+    const _chunks: string[] = [];
     const fd = 0;
     const buf = Buffer.alloc(65536);
     let pending = "";
@@ -417,7 +412,7 @@ function view(args: string[]): number {
 }
 
 function readRemaining(fd: number, pos: number): string {
-  const parts: Buffer[] = [];
+  const parts: Uint8Array[] = [];
   for (;;) {
     const chunk = Buffer.alloc(65536);
     let n = 0;
@@ -459,7 +454,7 @@ withTempDir((tmp) => {
   const rendered = (event: string): string => {
     mimoSessions.clear();
     lastGeneric = null;
-    const r = spawnSync(self, [], { input: event + "\n", encoding: "utf8" });
+    const r = spawnSync(self, [], { input: `${event}\n`, encoding: "utf8" });
     return r.stdout.replace(/\n+$/, "");
   };
   const shows = (label: string, event: string, want: string): void => {
@@ -577,22 +572,26 @@ withTempDir((tmp) => {
   {
     mimoSessions.clear();
     lastGeneric = null;
-    const r = spawnSync(
-      self,
-      [],
-      {
-        input:
-          '{"type":"step_start","sessionID":"ses_2","part":{}}\n{"type":"text","sessionID":"ses_2","part":{"text":"DONE"}}\n{"type":"step_finish","sessionID":"ses_2","part":{"reason":"tool-calls"}}\n{"type":"step_finish","sessionID":"ses_2","part":{"reason":"stop"}}\n',
-        encoding: "utf8",
-      },
-    );
+    const r = spawnSync(self, [], {
+      input:
+        '{"type":"step_start","sessionID":"ses_2","part":{}}\n{"type":"text","sessionID":"ses_2","part":{"text":"DONE"}}\n{"type":"step_finish","sessionID":"ses_2","part":{"reason":"tool-calls"}}\n{"type":"step_finish","sessionID":"ses_2","part":{"reason":"stop"}}\n',
+      encoding: "utf8",
+    });
     const got = r.stdout.replace(/\n+$/, "");
     if (got === "session ses_2\nsays: DONE\ndone")
       st.ok("mimo: a session is named once, and only its last step says done");
     else st.fail("mimo: a session is named once, and only its last step says done", got);
   }
-  shows("a line that is not JSON is shown as it is", "plain text from a wrapper", "plain text from a wrapper");
-  shows("an unknown event shows its type", '{"type":"heartbeat","message":"still here"}', "heartbeat: still here");
+  shows(
+    "a line that is not JSON is shown as it is",
+    "plain text from a wrapper",
+    "plain text from a wrapper",
+  );
+  shows(
+    "an unknown event shows its type",
+    '{"type":"heartbeat","message":"still here"}',
+    "heartbeat: still here",
+  );
   shows(
     "escape sequences in what a model said never reach the terminal",
     '{"type":"assistant","message":{"content":[{"type":"text","text":"hi \\u001b]0;title\\u0007 there"}]}}',
@@ -601,19 +600,43 @@ withTempDir((tmp) => {
   shows("nor in a line that is not JSON", "plain \x1b[2Jtext\x07", "plain [2Jtext");
 
   console.log("negative controls: noise renders nothing");
-  silent("claude: a hook event", '{"type":"system","subtype":"hook_started","hook_name":"SessionStart:startup"}');
-  silent("claude: thinking", '{"type":"assistant","message":{"content":[{"type":"thinking","thinking":""}]}}');
-  silent("claude: a tool result that succeeded", '{"type":"user","message":{"content":[{"type":"tool_result","content":"a\\nb"}]}}');
-  silent("claude: a rate-limit event that allowed the call", '{"type":"rate_limit_event","rate_limit_info":{"status":"allowed"}}');
+  silent(
+    "claude: a hook event",
+    '{"type":"system","subtype":"hook_started","hook_name":"SessionStart:startup"}',
+  );
+  silent(
+    "claude: thinking",
+    '{"type":"assistant","message":{"content":[{"type":"thinking","thinking":""}]}}',
+  );
+  silent(
+    "claude: a tool result that succeeded",
+    '{"type":"user","message":{"content":[{"type":"tool_result","content":"a\\nb"}]}}',
+  );
+  silent(
+    "claude: a rate-limit event that allowed the call",
+    '{"type":"rate_limit_event","rate_limit_info":{"status":"allowed"}}',
+  );
   silent("codex: reasoning", '{"type":"item.completed","item":{"type":"reasoning","text":"hmm"}}');
-  silent("pi: a streaming delta", '{"type":"message_update","assistantMessageEvent":{"type":"text_delta","delta":"Al"}}');
-  silent("muse: a task\'s lifecycle record", '{"stream":{"kind":"session","id":"s1"},"payload_type":"task.lifecycle.started","payload":{"kind":"task_lifecycle"}}');
-  silent("muse: a streaming delta, whose text the result carries", '{"stream":{"kind":"session","id":"s1"},"payload_type":"run.output.delta","payload":{"text":"DO"}}');
-  silent("pi: the user\'s own message ending", '{"type":"message_end","message":{"role":"user","content":[{"type":"text","text":"do it"}]}}');
+  silent(
+    "pi: a streaming delta",
+    '{"type":"message_update","assistantMessageEvent":{"type":"text_delta","delta":"Al"}}',
+  );
+  silent(
+    "muse: a task's lifecycle record",
+    '{"stream":{"kind":"session","id":"s1"},"payload_type":"task.lifecycle.started","payload":{"kind":"task_lifecycle"}}',
+  );
+  silent(
+    "muse: a streaming delta, whose text the result carries",
+    '{"stream":{"kind":"session","id":"s1"},"payload_type":"run.output.delta","payload":{"text":"DO"}}',
+  );
+  silent(
+    "pi: the user's own message ending",
+    '{"type":"message_end","message":{"role":"user","content":[{"type":"text","text":"do it"}]}}',
+  );
   {
     mimoSessions.clear();
     lastGeneric = null;
-    const input = Array.from({ length: 50 }, (_, i) => `{"type":"delta","n":${i + 1}}`).join("\n") + "\n";
+    const input = `${Array.from({ length: 50 }, (_, i) => `{"type":"delta","n":${i + 1}}`).join("\n")}\n`;
     const r = spawnSync(self, [], { input, encoding: "utf8" });
     const got = r.stdout.replace(/\n+$/, "");
     if (got === "delta") st.ok("fifty unknown events of one type show as one line");
@@ -629,7 +652,7 @@ withTempDir((tmp) => {
       '{"type":"user","message":{"content":[{"type":"tool_result","content":"{\\"json\\": true}"}]}}',
       '{"type":"result","subtype":"success","num_turns":1}',
     ].join("\n");
-    const r = spawnSync(self, [], { input: stream + "\n", encoding: "utf8" });
+    const r = spawnSync(self, [], { input: `${stream}\n`, encoding: "utf8" });
     const got = r.stdout;
     if (got.includes("{")) st.fail("a whole stream renders with no raw JSON in it", got);
     else if (got.split("\n").filter((l) => l !== "").length === 3)
@@ -664,8 +687,9 @@ printf '{"type":"result","subtype":"success"}' >> "$1"
     const out = r.stdout;
     const n = out
       .split("\n")
-      .filter((l) => /^[0-9]{2}:[0-9]{2}:[0-9]{2} (says: step [123]|result: success)$/.test(l))
-      .length;
+      .filter((l) =>
+        /^[0-9]{2}:[0-9]{2}:[0-9]{2} (says: step [123]|result: success)$/.test(l),
+      ).length;
     if (n === 4) st.ok("every line is shown, with its time, and the unterminated last line too");
     else st.fail("every line is shown, with its time, and the unterminated last line too", out);
   }
