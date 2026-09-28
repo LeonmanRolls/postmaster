@@ -8,7 +8,7 @@ declare const process: {
   cwd(): string;
   chdir(path: string): void;
   exit(code?: number): never;
-  stdout: { write(value: string | Uint8Array): boolean };
+  stdout: { write(value: string | Uint8Array): boolean; columns?: number };
   stderr: { write(value: string | Uint8Array): boolean };
   stdin: { read(): Uint8Array | null; isTTY?: boolean; on(event: string, callback: (...args: any[]) => void): void };
 };
