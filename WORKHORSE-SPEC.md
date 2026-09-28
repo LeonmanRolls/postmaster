@@ -64,8 +64,8 @@ commands and messages from the events its stream already carries.
 
 ## Tasks
 
-- [ ] T001 [AC1] [AC2] Replace `short()` with a wrap that keeps every line and never ellipsizes; use it for messages and tool/command lines in `scripts/view-stream.sh`.
-- [ ] T002 [AC3] [AC4] Render Muse commands (bash `command` in `tool.result` text JSON, `edit_facts.path`, read_file path) and messages (flushed `run.output.delta`), keeping tool output out.
-- [ ] T003 [AC5] Extend `--self-test` with multi-line message, over-pane line, and a recorded Muse Code stream; update the first-line-only control; verify each new control fails on BASE.
-- [ ] T004 [AC1] [AC2] [AC3] Update pane-view prose in `harnesses.md`, `hosts.md`, `README.md`.
+- [x] T001 [AC1] [AC2] Replace `short()` with a wrap that keeps every line and never ellipsizes; use it for messages and tool/command lines in `scripts/view-stream.sh`.
+- [x] T002 [AC3] [AC4] Render Muse commands (bash `command` in `tool.result` text JSON, `edit_facts.path`, read_file path) and messages (flushed `run.output.delta`), keeping tool output out.
+- [x] T003 [AC5] Extend `--self-test` with multi-line message, over-pane line, and a recorded Muse Code stream; update the first-line-only control; verify each new control fails on BASE.
+- [x] T004 [AC1] [AC2] [AC3] Update pane-view prose in `harnesses.md`, `hosts.md`, `README.md`.
 - [ ] T005 [AC6] Run the extended self-test and the project gate; record results for the summary.
