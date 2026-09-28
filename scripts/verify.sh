@@ -506,7 +506,7 @@ PY
 }
 
 case "${1:-}" in
-  --self-test) ;;
+  --self-test) unset POSTMASTER_VERIFY ;;
   checks|record)
     SUB=$1; shift; POS=() GATE="" FORM=human
     while [ $# -gt 0 ]; do
