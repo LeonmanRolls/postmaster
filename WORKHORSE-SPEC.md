@@ -80,17 +80,17 @@ None.
 
 ## Tasks
 
-- [ ] T001 [P] [AC4] Write `scripts/front-door.sh`: decide from session harness, model, cwd,
+- [x] T001 [P] [AC4] Write `scripts/front-door.sh`: decide from session harness, model, cwd,
       at-terminal, target and config; print `self` or `spawn <reason>`; `--self-test` with a
       positive and a negative control for each reason (harness, model, target, terminal).
-- [ ] T002 [AC1] [AC2] [AC3] [AC5] Rewrite `skills/postmaster/SKILL.md` Stage 0: run the
+- [x] T002 [AC1] [AC2] [AC3] [AC5] Rewrite `skills/postmaster/SKILL.md` Stage 0: run the
       decision, put the outcome and reason on the launch card, carry on as the postmaster when
       it prints `self` (writing `<runs>/postmaster/brief.md` and logging from the first action
       as a spawned one does), spawn only when it prints `spawn`. Drop "You do not run the
       stream yourself" and the hard rule that says bootstrap never runs the stream.
-- [ ] T003 [AC6] Update `skills/postmaster/postmaster.md` so it does not assume it was
+- [x] T003 [AC6] Update `skills/postmaster/postmaster.md` so it does not assume it was
       spawned; note that a front-door postmaster keeps the same `<runs>/postmaster/` records.
-- [ ] T004 [AC6] Update `AGENTS.md` and `README.md`: nothing says the front door never runs
+- [x] T004 [AC6] Update `AGENTS.md` and `README.md`: nothing says the front door never runs
       the stream or always spawns a postmaster; the scripts list gains `front-door.sh`.
-- [ ] T005 [AC1] [AC2] [AC4] [AC6] Run the project gate and a phrase grep over the four
+- [x] T005 [AC1] [AC2] [AC4] [AC6] Run the project gate and a phrase grep over the four
       documents the ticket names.
