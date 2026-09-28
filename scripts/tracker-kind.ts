@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { command, writeError, writeOut } from "./lib/core.ts";
 import { scriptDir } from "./lib/core.ts";
@@ -29,10 +30,14 @@ if (store.code !== 3) {
   process.exit(1);
 }
 const config = process.env.POSTMASTER_CONFIG ?? `${process.env.HOME ?? ""}/.postmaster/config.toml`;
+if (!existsSync(config)) {
+  writeError(`tracker-kind: no config at ${config} (POSTMASTER_CONFIG overrides the path)`);
+  process.exit(1);
+}
 try {
   const parsed = Bun.TOML.parse(await Bun.file(config).text()) as { tracker?: { kind?: string } };
   writeOut(parsed.tracker?.kind ?? "github");
 } catch {
-  writeError(`tracker-kind: no config at ${config} (POSTMASTER_CONFIG overrides the path)`);
+  writeError(`tracker-kind: ${config} does not parse`);
   process.exit(1);
 }
