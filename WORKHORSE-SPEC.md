@@ -20,6 +20,11 @@ Add optional project-local settings and shared project declarations, keep run re
 - Store the full run record under `<project>/.postmaster/runs/`; leave old `~/.postmaster/runs/` contents untouched.
 - Update scripts and runbooks where they read project facts, dispatch roles, or create and poll run artifacts. Do not make project defaults a floor of turnpikes.
 - The ticket deliberately softens design rule 1: optional project files preserve discovery as the normal path while allowing explicit project decisions and corrections to survive a run. This adds a place to record what discovery cannot infer; it does not make a project file required.
+- `default_turnpikes = []` is valid and means that a ticket's `default` turnpikes list is empty; no project-level floor is imposed.
+- `turnpikes.sh --list` stays a project-independent catalogue. Target-aware default resolution uses `resolve --project`, so settings validation can query known turnpikes without recursing.
+- Path validation rejects literal machine paths and recognized machine path variables while allowing project-relative check commands and shell-local generated paths used by portable checks.
+- The repository's root `.gitignore` exposes only `.postmaster/.gitignore`; the nested ignore file hides local settings, verification files and run records. The shared profile is force-added explicitly.
+- The repository profile declares the gate from the ticket and its own default turnpikes and risk surfaces. It leaves the tracker binding at discovery, which already uses the repository's configured tracker and naming convention.
 
 ## Structure
 
@@ -47,13 +52,13 @@ Add optional project-local settings and shared project declarations, keep run re
 
 ## Tasks
 
-- [ ] T001 [P] [AC1] Implement optional shared and local project profile parsing and validation in `scripts/project-settings.sh`; extend `project.example.toml` and document the local settings shape.
-- [ ] T002 [P] [AC2] Reject credential fields and machine filesystem paths in both profile files, with positive and negative self-tests.
-- [ ] T003 [P] [AC3] Support project role assignments, default turnpikes, tracker binding and risk surfaces; preserve complete per-run records under the project's `.postmaster/runs/`.
-- [ ] T004 [P] [AC4] Add `.postmaster/.gitignore` and checks that local choices and run artifacts remain ignored while shared declarations are added only explicitly.
-- [ ] T005 [AC5] Restrict shared `project.toml` to project-owned declarations and existing check declarations; reject roles, paths, credentials and machine identity.
-- [ ] T006 [AC6] Keep missing project files optional, retain discovery behavior, and do not prompt to create settings when no decision is being recorded.
-- [ ] T007 [AC7] Apply discovery/shared/local/machine precedence in launch, front-door, tracker resolution, checks and waybill generation without imposing turnpike floors.
-- [ ] T008 [AC8] Move run-root creation, action ledger writes and status polling from machine-level basename roots to project-local path roots; leave old roots untouched.
-- [ ] T009 [AC9] Update setup conversation runbooks to offer local settings or the shared declaration when a project decision is made, and write only after agreement.
-- [ ] T010 [AC10] Report shared/local profile presence and declared versus discovered facts from `scripts/discover-project.sh`, and update runbooks and README to match.
+- [x] T001 [P] [AC1] Implement optional shared and local project profile parsing and validation in `scripts/project-settings.sh`; extend `project.example.toml` and document the local settings shape.
+- [x] T002 [P] [AC2] Reject credential fields and machine filesystem paths in both profile files, with positive and negative self-tests.
+- [x] T003 [P] [AC3] Support project role assignments, default turnpikes, tracker binding and risk surfaces; preserve complete per-run records under the project's `.postmaster/runs/`.
+- [x] T004 [P] [AC4] Add `.postmaster/.gitignore` and checks that local choices and run artifacts remain ignored while shared declarations are added only explicitly.
+- [x] T005 [AC5] Restrict shared `project.toml` to project-owned declarations and existing check declarations; reject roles, paths, credentials and machine identity.
+- [x] T006 [AC6] Keep missing project files optional, retain discovery behavior, and do not prompt to create settings when no decision is being recorded.
+- [x] T007 [AC7] Apply discovery/shared/local/machine precedence in launch, front-door, tracker resolution, checks and waybill generation without imposing turnpike floors.
+- [x] T008 [AC8] Move run-root creation, action ledger writes and status polling from machine-level basename roots to project-local path roots; leave old roots untouched.
+- [x] T009 [AC9] Update setup conversation runbooks to offer local settings or the shared declaration when a project decision is made, and write only after agreement.
+- [x] T010 [AC10] Report shared/local profile presence and declared versus discovered facts from `scripts/discover-project.sh`, and update runbooks and README to match.
