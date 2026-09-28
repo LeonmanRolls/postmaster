@@ -98,6 +98,9 @@ Why the design is shaped as it is.
 - [Each project defines how a change to it is verified](concepts/verification.md): **claimed**.
   A project declares its checks or gets defaults by discovery; every workhorse runs them before
   it reports, and the coachman runs them again on each branch and on the synthesis.
+- [A project's .postmaster/ holds its settings and every run's record](concepts/project-settings.md):
+  **claimed**. Optional, gitignored whole, shared through one narrow file; run artifacts live
+  with the project so two checkouts with the same basename no longer share a ledger.
 
 ## Sources
 

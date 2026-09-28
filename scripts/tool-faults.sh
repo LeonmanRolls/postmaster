@@ -297,7 +297,9 @@ class Safe:
         if repo and repo.is_dir() and same_repo(repo):
             waybill = ""                                # the target is postmaster: its text is public
         else:
-            names = {D.parent.name} | (set() if ONGOING else {D.name})
+            # <project>/.postmaster/runs/<TICKET>: the project root's name, not "runs".
+            root = D.parent.parent.parent if (D.parent.name == "runs" and D.parent.parent.name == ".postmaster") else D.parent
+            names = {root.name} | (set() if ONGOING else {D.name})
             k = None if ONGOING else re.match(r"([A-Za-z][A-Za-z0-9]*)[-_]\d+$", D.name)
             names |= {k.group(1)} if k else set()
             if repo:

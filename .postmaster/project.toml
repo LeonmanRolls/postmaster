@@ -1,0 +1,21 @@
+# <project>/.postmaster/project.toml
+# What this project requires of every run against it. Committed with `git add -f`, the one
+# file in .postmaster/ that travels. The shape is project.example.toml; the reader is
+# scripts/project-settings.sh, which refuses a credential or a filesystem path.
+
+[turnpikes]
+default = ["style", "bug", "security"]
+
+[risk]
+surfaces = [
+  "spawns agent CLIs in their bypass modes, in Herdr over its socket or in tmux",
+  "uses the user's gh login",
+  "reads PLANE_API_KEY and lane env files under ~/.postmaster",
+  "writes ~/.postmaster, skill links into each harness's skills folder, and worktrees, branches, pushes and pull requests in target repos",
+  "merges on the merge word",
+  "binds no port, and serves only the GitHub Pages site",
+]
+
+[checks.gate]
+command = "bash -c 'for f in scripts/*.sh; do bash -n \"$f\" || exit 1; done && scripts/skill-refs.sh && scripts/wiki-lint.sh && for n in cut-scratch fixture front-door front-door-acceptance github host launch link-skills local log-action plane project-settings review-round reviewers run-log run-meta run-times runs-status setup skill-refs stage style-findings ticket-check tool-faults turnpikes verify verify-examples verify-journey verify-library view-stream wait-for-markers wiki-lint; do scripts/$n.sh --self-test || exit 1; done'"
+shows = "every script parses, every skill path resolves, the wiki lints clean, and each script's self-test passes"

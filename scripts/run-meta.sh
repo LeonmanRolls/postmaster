@@ -32,6 +32,15 @@ def git(where, *args):
     r = subprocess.run(["git", "-C", str(where), *args], capture_output=True, text=True)
     return r.stdout.strip() if r.returncode == 0 else None
 
+def project_name(dispatch):
+    # <project>/.postmaster/runs/<TICKET>: the project root's basename. An older
+    # runs/<project>/<TICKET> layout is still read as that project.
+    p = dispatch.resolve()
+    run_parent, grand = p.parent, p.parent.parent
+    if run_parent.name == "runs" and grand.name == ".postmaster":
+        return grand.parent.name
+    return run_parent.name
+
 def version(harness):
     if not shutil.which(harness):
         return "not on PATH"
@@ -54,7 +63,7 @@ for leg in (team.get("coachman_legs") or {}).values():
 
 record = {
     "written": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-    "project": d.resolve().parent.name,
+    "project": project_name(d),
     "run": d.resolve().name,
     "target": {"head": git(repo, "rev-parse", "HEAD"), "branch": git(repo, "symbolic-ref", "--short", "-q", "HEAD")},
     "postmaster": {"commit": git(tool, "rev-parse", "HEAD"),

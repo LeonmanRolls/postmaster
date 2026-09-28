@@ -117,8 +117,18 @@ The flow is general and carries no assumptions about build tools, docs layout or
 config file before it runs on a plain git repo is a tool nobody adopts.
 
 ```sh
-<tool>/scripts/discover-project.sh "$TARGET"   # gate=… docs=… tracker=… tracker_prefix=… ambient_context=… check.<name>=…
+<tool>/scripts/discover-project.sh "$TARGET"   # gate=… docs=… tracker=… tracker_prefix=… ambient_context=… postmaster_dir=… check.<name>=…
+<tool>/scripts/project-settings.sh "$TARGET" has   # shared=yes|no local=yes|no
 ```
+
+A target may carry its own `.postmaster/`: shared `project.toml` (what the project requires
+of every run: default turnpikes, tracker binding by name, risk surfaces, checks) and local
+`settings.toml` (this person's choices on this machine: role assignments). Discovery still
+runs; the settings say what `default` means for this project and which facts are declared
+rather than found. **When a decision is one the project needs every run, offer it for
+`.postmaster/` on agreement, and say which file you are proposing** — `project.toml` is
+committed (`git add -f`) and shared; `settings.toml` never travels. A missing settings file
+is never an error and never a prompt to create one.
 
 The target's tracker is the kind `tracker` names: `local` when the target's own ticket store
 exists, whatever the config names, and the config's kind otherwise (`trackers.md`, local).

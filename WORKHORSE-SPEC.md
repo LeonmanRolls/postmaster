@@ -86,16 +86,16 @@ and have discovery and setup read and write the folder. This repo grows its own
 
 ## Tasks
 
-- [ ] T001 [P] [AC4] `.postmaster/.gitignore` with `*`, created whenever `.postmaster/` is created; document it in `project.example.toml` and `settings.example.toml`
-- [ ] T002 [P] [AC1] [AC2] [AC5] [AC7] `scripts/project-settings.sh`: read shared + local settings, enforce the schema (no credential/path), apply precedence, answer queries, write local settings; self-test
-- [ ] T003 [AC1] [AC5] [AC7] Expand `project.example.toml` (turnpikes, tracker binding, risk surfaces, checks) and add `settings.example.toml` (roles, local overrides)
-- [ ] T004 [AC7] `scripts/turnpikes.sh`: `default` expands from project settings when declared; `--project` flag; self-test covers the override
-- [ ] T005 [AC7] `scripts/ticket-check.sh`: pass the repo's default turnpikes to `turnpikes.sh`
-- [ ] T006 [AC8] `scripts/log-action.sh`: project field from the project root; docs name the new run root
-- [ ] T007 [AC8] `scripts/runs-status.sh`, `scripts/fixture.sh`: new run root; fixture no longer keys on basename
-- [ ] T008 [AC3] [AC8] Runbooks (`SKILL.md`, `postmaster.md`, `coachman.md`): `<project>/.postmaster/runs/`; session export into the run record; no migration note
-- [ ] T009 [AC9] `AGENTS.md` + `SKILL.md`: setup offers `.postmaster/` writes (shared vs local, said which); design rule 1 softened with its reason; precedence stated once
-- [ ] T010 [AC10] `scripts/discover-project.sh`: report `postmaster_dir=` and which settings files exist
-- [ ] T011 [AC1] [AC5] `README.md` + `wiki/concepts/project-settings.md`: the folder, the two files, precedence, what is forbidden
-- [ ] T012 [AC3] This repo's own `.postmaster/`: `.gitignore` and `project.toml` (checks, turnpikes default, risk surfaces), force-added
-- [ ] T013 [AC1] [AC2] Gate and self-tests pass; `wiki-lint` clean
+- [x] T001 [P] [AC4] `.postmaster/.gitignore` with `*`, created whenever `.postmaster/` is created; document it in `project.example.toml` and `settings.example.toml`
+- [x] T002 [P] [AC1] [AC2] [AC5] [AC7] `scripts/project-settings.sh`: read shared + local settings, enforce the schema (no credential/path), apply precedence, answer queries, write local settings; self-test
+- [x] T003 [AC1] [AC5] [AC7] Expand `project.example.toml` (turnpikes, tracker binding, risk surfaces, checks) and add `settings.example.toml` (roles, local overrides)
+- [x] T004 [AC7] `scripts/turnpikes.sh`: `default` expands from project settings when declared; `--project` flag; self-test covers the override
+- [x] T005 [AC7] `scripts/ticket-check.sh`: pass the repo's default turnpikes to `turnpikes.sh`
+- [x] T006 [AC8] `scripts/log-action.sh`: project field from the project root; docs name the new run root
+- [x] T007 [AC8] `scripts/runs-status.sh`, `scripts/fixture.sh`: new run root; fixture no longer keys on basename
+- [x] T008 [AC3] [AC8] Runbooks (`SKILL.md`, `postmaster.md`, `coachman.md`): `<project>/.postmaster/runs/`; session export into the run record; no migration note
+- [x] T009 [AC9] `AGENTS.md` + `SKILL.md`: setup offers `.postmaster/` writes (shared vs local, said which); design rule 1 softened with its reason; precedence stated once
+- [x] T010 [AC10] `scripts/discover-project.sh`: report `postmaster_dir=` and which settings files exist
+- [x] T011 [AC1] [AC5] `README.md` + `wiki/concepts/project-settings.md`: the folder, the two files, precedence, what is forbidden
+- [x] T012 [AC3] This repo's own `.postmaster/`: `.gitignore` and `project.toml` (checks, turnpikes default, risk surfaces), force-added
+- [x] T013 [AC1] [AC2] Gate and self-tests pass; `wiki-lint` clean

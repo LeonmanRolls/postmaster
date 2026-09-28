@@ -84,8 +84,9 @@ or `library` check reports not run, saying to declare the check.
 
 In `.postmaster/project.toml`, the one settings file a project commits, as
 [issue #18](https://github.com/brindlewick/postmaster/issues/18) describes it. The file's shape
-is `project.example.toml` at the repository root. Until issue #18 is done it holds only the
-checks.
+is `project.example.toml` at the repository root, beside `settings.example.toml` for the local
+choices that never travel. Checks are one of the things the shared file holds; see
+[a project's .postmaster/](project-settings.md) for the rest and the precedence.
 
 ## What would change it
 
