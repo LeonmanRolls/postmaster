@@ -111,7 +111,8 @@ pane. `spawn`, `send`, `wait` and `read` exit 3 on `none`.
   `[limits]` in the config (`POSTMASTER_CONFIG`; defaults 8 GiB and 512 tasks), and
   `[limits.<role>]` may override them per role. The role is the name's ` · <role>` segment
   (`coachman`), a name ending ` review` (reviewer), anything else (lane). On Linux the caps are
-  a systemd user scope per launch (`MemoryMax`, `MemorySwapMax=0`, `TasksMax`); `ulimit -u` is
+  a systemd user scope per launch (`MemoryHigh` at the cap, `MemoryMax` just above,
+  `MemorySwapMax=0`, `TasksMax`); `ulimit -u` is
   not used, since it limits the whole user rather than one launch. A launch that reaches a cap
   is stopped on its own: its marker lands, and `--err` names the cap as
   `host: launch stopped: reached the memory cap (N bytes)` or

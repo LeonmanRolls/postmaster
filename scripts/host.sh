@@ -27,8 +27,8 @@
 # under a memory cap and a process cap that bound it and everything it starts, from [limits] in
 # the config (POSTMASTER_CONFIG; defaults 8 GiB and 512), per role: the role is the name's
 # ` · <role>` segment, `coachman` as coachman, a name ending ` review` as reviewer, anything
-# else as lane. On Linux the caps are a systemd user scope per launch (MemoryMax,
-# MemorySwapMax=0, TasksMax). A launch that reaches a cap is stopped on its own: its marker
+# else as lane. On Linux the caps are a systemd user scope per launch (MemoryHigh at the cap,
+# MemoryMax just above, MemorySwapMax=0, TasksMax). A launch that reaches a cap is stopped on its own: its marker
 # lands, and --err names the cap it reached, as `host: launch stopped: reached the memory cap
 # (N bytes)` or `host: launch stopped: reached the process cap (N)`. Every other launch and the
 # postmaster keep running. On a machine with no way to cap a launch, it still runs and --err
@@ -103,8 +103,9 @@ print("" if v is None else v)' "$1"
 # Every launch runs under a memory cap and a process cap, bounding it and everything it
 # starts. Defaults: 8 GiB and 512 tasks. [limits] in the config sets them; [limits.<role>]
 # overrides per role (lane, coachman, reviewer), the role taken from the name's ` · <role>`
-# segment. On Linux they are a systemd user scope per launch (MemoryMax, MemorySwapMax=0,
-# TasksMax) -- ulimit -u is not used, since it limits the whole user rather than one launch.
+# segment. On Linux they are a systemd user scope per launch (MemoryHigh at the cap,
+# MemoryMax just above, MemorySwapMax=0, TasksMax) -- ulimit -u is not used, since it limits
+# the whole user rather than one launch.
 CAP_ERR_UNCAPPED='host: running uncapped: no way to cap a launch here'
 
 role_of() {  # role_of <name>: lane, coachman or reviewer, from the name's " · <role>" segment
@@ -639,30 +640,30 @@ cg = cgroup_of(pid)
 named = None
 while alive(pid):
     if cg and named is None:
+        mev = os.path.join(cg, "memory.events")
         pev = events(os.path.join(cg, "pids.events"), "max")
         cur = read_int(os.path.join(cg, "pids.current")) or 0
-        mev = events(os.path.join(cg, "memory.events"), "max")
-        oom = events(os.path.join(cg, "memory.events"), "oom_kill")
         mcur = read_int(os.path.join(cg, "memory.current"))
         if pev > 0 or cur >= tasks:
             named = CAP_TASKS % tasks
             note(named)
             stop()
-        elif mev > 0 or oom > 0 or (mcur is not None and mcur >= mem):
+        elif (mcur is not None and mcur >= mem) or events(mev, "high") > 0 \
+                or events(mev, "max") > 0 or events(mev, "oom_kill") > 0:
             named = CAP_MEM % mem
             note(named)
             stop()
-    time.sleep(0.05)
+    time.sleep(0.02)
 # The cgroup may already be gone; if it is not, one last read names a cap the kill just hit.
 if named is None and cg and os.path.isdir(cg):
+    mev = os.path.join(cg, "memory.events")
     pev = events(os.path.join(cg, "pids.events"), "max")
     cur = read_int(os.path.join(cg, "pids.current")) or 0
-    mev = events(os.path.join(cg, "memory.events"), "max")
-    oom = events(os.path.join(cg, "memory.events"), "oom_kill")
     mcur = read_int(os.path.join(cg, "memory.current"))
     if pev > 0 or cur >= tasks:
         note(CAP_TASKS % tasks)
-    elif mev > 0 or oom > 0 or (mcur is not None and mcur >= mem):
+    elif (mcur is not None and mcur >= mem) or events(mev, "high") > 0 \
+            or events(mev, "max") > 0 or events(mev, "oom_kill") > 0:
         note(CAP_MEM % mem)
 ' "$1" "$2" "$3" "$4" </dev/null >/dev/null 2>&1
 }
@@ -851,8 +852,11 @@ runner() {
   if cap_available; then
     capped=1
     unit="postmaster-launch-$$"
+    # MemoryHigh sits at the named cap so the watcher sees it and stops the launch before the
+    # kernel OOM at MemoryMax (the cap plus a little slack). MemorySwapMax=0, so the cap is RAM.
+    local memhi=$((mem + 8388608))
     ( CDPATH= cd -- "$rundir" && exec systemd-run --user --scope --quiet --expand-environment=no \
-        --unit="$unit" -p MemoryMax="$mem" -p MemorySwapMax=0 -p TasksMax="$tasks" -- \
+        --unit="$unit" -p MemoryHigh="$mem" -p MemoryMax="$memhi" -p MemorySwapMax=0 -p TasksMax="$tasks" -- \
         python3 -c "$START_CHILD" "${argv[@]}" 3< <(printf '%s\0' "${childenv[@]}") ) \
       >> "$o" 2>> "$e" < /dev/null &
   else
