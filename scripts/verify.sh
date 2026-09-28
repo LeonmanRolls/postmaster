@@ -531,6 +531,7 @@ case "${1:-}" in
 esac
 
 # --- self-test ----------------------------------------------------------------------------
+unset POSTMASTER_VERIFY  # the self-test builds its own world; an outer run's armed spec is not its subject
 tmp=$(cd "$(mktemp -d)" && pwd -P) || exit 1
 trap 'rm -r -- "$tmp" 2>/dev/null' EXIT
 SELF="$HERE/verify.sh"
