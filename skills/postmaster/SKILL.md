@@ -167,17 +167,21 @@ not say; the security lens reviews against them.
    the merge word (`ship.merge_authority`), the session host the fleet will run on
    (`<tool>/scripts/host.sh detect`), and the project facts above. Launch nothing before the user
    picks.
-5. **Create the run root** `~/.postmaster/runs/<project>/` (the repo's basename) and keep it
-   in one variable for the steps below:
+5. **Create the run root** under the target's own `.postmaster/`, and keep it in one variable
+   for the steps below. Run artifacts live with the project, not under `~/.postmaster/`, so
+   two projects with the same basename keep separate ledgers:
 
    ```sh
-   RUNS=~/.postmaster/runs/"<project>"   # <project> is the repo's basename
+   RUNS="$TARGET/.postmaster/runs"
+   <tool>/scripts/project-settings.sh "$TARGET" init   # .postmaster/ and its .gitignore
    mkdir -p "$RUNS/postmaster"
    ```
 
-   `<tool>/scripts/log-action.sh` needs the directory to exist, so the postmaster's own
-   actions go under `$RUNS/postmaster/`. Log from your first action there. A postmaster
-   that is this session keeps the same records as one you spawn.
+   Nothing in `.postmaster/` is committed by default; the folder's own `.gitignore` covers
+   the whole of it. `<tool>/scripts/log-action.sh` needs the directory to exist, so the
+   postmaster's own actions go under `$RUNS/postmaster/`. Log from your first action there.
+   A postmaster that is this session keeps the same records as one you spawn. A run already
+   in flight under the old `~/.postmaster/runs/<basename>/` layout is not migrated.
 6. **Write the brief** to `$RUNS/postmaster/brief.md`: "You are the postmaster for <project>.
    Read `<tool>/skills/postmaster/postmaster.md` first", then the stream paragraph, the project
    profile, the configured team, who says the merge word, the session host, `<tool>` and the
@@ -218,7 +222,7 @@ not say; the security lens reviews against them.
 
 ## The waybill
 
-The postmaster writes one per ticket at `~/.postmaster/runs/<project>/<TICKET>/brief.md`.
+The postmaster writes one per ticket at `<repo>/.postmaster/runs/<TICKET>/brief.md`.
 It is the only thing that travels between the postmaster and a coachman, so it carries
 everything the coachman needs and nothing it must go and find:
 

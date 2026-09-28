@@ -3,6 +3,10 @@
 # Prints key=value lines. Empty value means "could not determine, ask the user". Each check a
 # change is verified by is a `check.<name>=<where it came from>: <what it shows>` line: declared in
 # the project's .postmaster/project.toml, or a default and which one (scripts/verify.sh).
+# postmaster_dir says whether the target carries its own .postmaster/ settings, and
+# postmaster_shared / postmaster_local say which files: a waybill can then say which facts
+# were discovered and which were declared. A project without a .postmaster/ is the normal
+# case, and is never an error.
 set -uo pipefail
 unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_NAMESPACE
 HERE=$(CDPATH= cd -P -- "$(dirname -- "$0")" && pwd -P)
@@ -25,6 +29,14 @@ fi
 docs=$(ls AGENTS.md CLAUDE.md README.md CONTRIBUTING.md 2>/dev/null | tr '\n' ' ')
 dirs=$(ls -d wiki docs .github 2>/dev/null | tr '\n' ' ')
 
+# Does the target carry its own .postmaster/ settings, and which files? A waybill says which
+# facts were discovered and which were declared. A missing folder is the normal case.
+settings=$("$HERE/project-settings.sh" . has 2>/dev/null) || settings="shared=no
+local=no
+any=no"
+shared=$(printf '%s\n' "$settings" | sed -n 's/^shared=//p')
+localset=$(printf '%s\n' "$settings" | sed -n 's/^local=//p')
+
 # The tracker is visible in how the project already writes commits; nothing to configure.
 tracker=$(git log --oneline -200 2>/dev/null \
           | grep -oE '\b[A-Z][A-Z0-9]{1,9}-[0-9]+\b' | sed 's/-[0-9]*$//' \
@@ -46,6 +58,9 @@ echo "docs=$(echo "$docs$dirs" | sed 's/ *$//')"
 echo "tracker=$kind"
 echo "tracker_prefix=$tracker"
 echo "ambient_context=$( [ -f AGENTS.md ] && echo AGENTS.md || echo NONE )"
+echo "postmaster_dir=$( { [ "${shared:-no}" = yes ] || [ "${localset:-no}" = yes ]; } && echo yes || echo no )"
+echo "postmaster_shared=${shared:-no}"
+echo "postmaster_local=${localset:-no}"
 printf '%s\n' "$checks" | awk -F'\t' 'NF >= 4 {print "check." $1 "=" $2 ": " $4}'
 [ -f AGENTS.md ] || echo "warn=no AGENTS.md: lanes that read no ambient file will start blind" >&2
 [ "$kind" = github ] && ! git remote get-url origin >/dev/null 2>&1 \

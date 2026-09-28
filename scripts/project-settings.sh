@@ -5,6 +5,8 @@
 # writes settings.toml when a setup conversation settles a choice. A project without a
 # .postmaster/ folder has no settings: that is the normal case, never an error.
 #
+#   project-settings.sh <repo> init
+#       create <repo>/.postmaster/ with its .gitignore if they are missing; write nothing else
 #   project-settings.sh <repo> has
 #       shared=yes|no local=yes|no any=yes|no
 #   project-settings.sh <repo> get <key>
@@ -80,6 +82,13 @@ def repo(name, shared=None, local=None):
 
 print("positive controls")
 empty = repo("empty")
+# init on a project with no folder
+fresh = tmp / "fresh"
+fresh.mkdir()
+r, out, good = run(str(fresh), "init", expect=0)
+gi = fresh / ".postmaster" / ".gitignore"
+ok("init creates .postmaster/ with a .gitignore covering the whole folder") if good and gi.is_file() and gi.read_text().rstrip().endswith("*") \
+    else fail("init creates .postmaster/ with a .gitignore covering the whole folder", out)
 r, out, good = run(str(empty), "has", expect=0, contains="any=no")
 ok("a project with no settings reports any=no") if good else fail("a project with no settings reports any=no", out)
 r, out, good = run(str(empty), "get", "turnpikes.default", expect=0)
@@ -157,7 +166,7 @@ PY
   exit $?
 fi
 
-[ $# -ge 2 ] || { echo "usage: project-settings.sh <repo> has|get <key>|validate|write-local key=value... | --self-test" >&2; exit 1; }
+[ $# -ge 2 ] || { echo "usage: project-settings.sh <repo> init|has|get <key>|validate|write-local key=value... | --self-test" >&2; exit 1; }
 python3 -I - "$@" <<'PY'
 import os, re, sys, tomllib
 
@@ -474,10 +483,25 @@ def write_local(repo, assignments):
 
 def main(argv):
     if len(argv) < 2:
-        die("usage: project-settings.sh <repo> has|get <key>|validate|write-local key=value...")
+        die("usage: project-settings.sh <repo> init|has|get <key>|validate|write-local key=value...")
     repo, cmd = argv[0], argv[1]
     if not os.path.isdir(repo):
         die("no such repo: %s" % repo)
+    if cmd == "init":
+        if len(argv) != 2:
+            die("usage: project-settings.sh <repo> init")
+        folder = os.path.join(repo, ".postmaster")
+        os.makedirs(folder, exist_ok=True)
+        gi = os.path.join(folder, ".gitignore")
+        if not os.path.isfile(gi):
+            with open(gi, "w", encoding="utf-8") as f:
+                f.write(
+                    "# .postmaster/ holds this instance's settings and every run's full record.\n"
+                    "# Nothing in it is committed by default. To share what a run requires of\n"
+                    "# everyone, commit project.toml alone with: git add -f .postmaster/project.toml\n"
+                    "*\n"
+                )
+        return 0
     if cmd == "has":
         if len(argv) != 2:
             die("usage: project-settings.sh <repo> has")

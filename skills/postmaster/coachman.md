@@ -20,7 +20,7 @@ waybill carries, is `SKILL.md`. You do not need it.
 
 | Path | What |
 |---|---|
-| `<dispatch>` = `~/.postmaster/runs/<project>/<TICKET>/` | this run's directory; nothing else writes to it |
+| `<dispatch>` = `<repo>/.postmaster/runs/<TICKET>/` | this run's directory; nothing else writes to it |
 | `<dispatch>/brief.md` | the waybill |
 | `<dispatch>/manifest.json` | `stage`, `leg`, `base`, `lanes.<lane>.{thread_id, outcome}`, `coachman.legs.<n>.{thread_id, name}`; the postmaster creates it and owns `leg`, `base`, `coachman` and the terminal stages, you own `lanes` and every stage before those; change `stage` only with `<tool>/scripts/stage.sh`, update the rest in place, never rewrite the file |
 | `<dispatch>/run-log.md` | running narrative, written only through `<tool>/scripts/run-log.sh`, which puts the time on every entry and times every section |
@@ -30,6 +30,7 @@ waybill carries, is `SKILL.md`. You do not need it.
 | `<worktree>/.postmaster/verify/` | a worktree's copy of the run's checks and ticket, written by `<tool>/scripts/verify.sh arm`; git ignores it |
 | `<dispatch>/logs/` | one events stream per lane, and per reviewer lane, lens and round; each review round's deadline and reviewers, `review-r<round>.json` |
 | `<dispatch>/audit/<lane>.md` | per-workhorse digest of its durable record |
+| `<dispatch>/audit/<lane>-session.*` | that lane's durable harness session, exported at harvest (`harnesses.md`); the run's full record |
 | `<dispatch>/leg-<n>-prompt.txt` | the postmaster's one-paragraph prompt that started leg `n` |
 | `<dispatch>/handoff-<n>.md` | leg `n`'s hand-off, the whole of what the next leg knows |
 | `<dispatch>/.leg-<n>-done`, `.leg-<n>-exited` | leg `n` finished its hand-off; leg `n`'s process exited |
@@ -350,7 +351,10 @@ from it.
 - **Run audit, automatic.** Once the workhorses are harvested (at the stall cutoff, whatever
   exists), write `<dispatch>/audit/<lane>.md` per workhorse from its durable record: thread id,
   branch, key actions digested from the logs and transcript, final message, `WORKHORSE-SUMMARY.md`
-  verdict. Copy each workhorse's `WORKHORSE-SPEC.md` as its first commit added it to
+  verdict. Export each workhorse's durable session into `<dispatch>/audit/<lane>-session.*` by the
+  harness adapter's export form (`harnesses.md`: `grok export`, codex's rollout jsonl, pi's session
+  jsonl, `muse export`, `mimo export`), so the run's full record travels with the run and not with
+  the machine. Copy each workhorse's `WORKHORSE-SPEC.md` as its first commit added it to
   `<dispatch>/audit/<lane>-spec.md`, and its final version to `<lane>-spec-final.md`. Record
   whether that first commit comes before the workhorse's first code commit, and any acceptance
   criterion with no task. Copy its `.postmaster/verify/`, its journey reports included, to

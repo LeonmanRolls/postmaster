@@ -16,11 +16,13 @@ cards, and you never do its job.
 
 | Path | What |
 |---|---|
-| `<runs>` = `~/.postmaster/runs/<project>/` | the project's run root; `<project>` is the repo's basename |
+| `<runs>` = `<repo>/.postmaster/runs/` | the project's run root, under the target's own `.postmaster/` |
 | `<runs>/ledger.jsonl` | every action of every run, appended by `<tool>/scripts/log-action.sh` |
 | `<runs>/postmaster/` | your own dispatch directory: `brief.md`, `actions.jsonl`, `ESCALATION.md` to the user |
 | `<runs>/<TICKET>/` | one run: the waybill, manifest, logs, cards, hand-offs (`coachman.md`, Where things live) |
 | `<repo>/.worktrees/<TICKET>` | the synthesis worktree you cut at dispatch, branch `<TICKET>` |
+| `<repo>/.postmaster/project.toml` | what the project requires of a run, if it declares one; the one file it may commit |
+| `<repo>/.postmaster/settings.toml` | this person's choices on this machine; never committed |
 
 ## Memory is the disk
 

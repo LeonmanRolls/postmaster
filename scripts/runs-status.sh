@@ -5,7 +5,7 @@
 # from the postmaster to the user is printed first, since it is what everything else may
 # be waiting on.
 #
-#   runs-status.sh <project-run-root>        e.g. ~/.postmaster/runs/<project>
+#   runs-status.sh <project-run-root>        e.g. <project>/.postmaster/runs
 #   runs-status.sh --self-test
 #
 #   next   USER      the postmaster has put this run's question to the user and waits for the

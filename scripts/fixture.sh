@@ -84,7 +84,7 @@ PY
 }
 
 make_and_file() {  # make_and_file <name or dest> <ticket>
-  local dest=$1 ticket=$2 probe runs body number rc
+  local dest=$1 ticket=$2 probe body number rc
   is_ticket "$ticket" || return 1
   case $dest in */*) ;; *) dest=${POSTMASTER_FIXTURES:-$HOME/Code/fixtures}/$dest ;; esac
   dest=$(python3 -c 'import os, sys; print(os.path.abspath(os.path.expanduser(sys.argv[1])))' "$dest")
@@ -94,13 +94,6 @@ make_and_file() {  # make_and_file <name or dest> <ticket>
     echo "fixture: $dest would be inside the git repository at $(git -C "$probe" rev-parse --show-toplevel 2>/dev/null || echo "$probe"); a run's repo stands alone" >&2
     return 1
   fi
-  runs=$HOME/.postmaster/runs/$(basename "$dest")
-  [ -e "$runs" ] && { echo "fixture: $runs already holds runs of a project named $(basename "$dest"); choose another name" >&2; return 1; }
-  case $(basename "$dest") in   # a run's records are kept by the repo's name
-    "$(basename "$TOOL")"|"$(basename "$(git -C "$TOOL" worktree list --porcelain | sed -n '1s/^worktree //p')")")
-      echo "fixture: $(basename "$dest") is this repo's name, so its runs would share this repo's run records; choose another name" >&2
-      return 1 ;;
-  esac
 
   unmake() { [ -d "$dest" ] && rm -r -- "$dest" </dev/null; }   # until the ticket is filed, nothing refers to dest
   mkdir -p "$(dirname "$dest")" && make_repo "$dest" || { unmake; return 1; }
@@ -554,9 +547,13 @@ out=$(fresh_new "$tmp/app-$first/nested" "$first"); rc=$?
 [ $rc -eq 1 ] && [ ! -e "$tmp/app-$first/nested" ] && ok "a dest inside a git repo is refused" || fail "a dest inside a git repo is refused (exit $rc)" "$out"
 mkdir -p "$tmp/home/.postmaster/runs/taken"
 out=$(fresh_new "$tmp/runs/taken" "$first"); rc=$?
-[ $rc -eq 1 ] && [ ! -e "$tmp/runs/taken" ] && ok "a name that already has runs is refused" || fail "a name that already has runs is refused (exit $rc)" "$out"
+[ $rc -eq 0 ] && [ -d "$tmp/runs/taken/.git" ] \
+  && ok "a name that already has runs elsewhere is not refused: run homes are keyed by path" \
+  || fail "a name that already has runs elsewhere is not refused: run homes are keyed by path (exit $rc)" "$out"
 out=$(fresh_new "$tmp/runs/$(basename "$TOOL")" "$first"); rc=$?
-[ $rc -eq 1 ] && [ ! -e "$tmp/runs/$(basename "$TOOL")" ] && ok "a name that is this repo's is refused" || fail "a name that is this repo's is refused (exit $rc)" "$out"
+[ $rc -eq 0 ] && [ -d "$tmp/runs/$(basename "$TOOL")/.git" ] \
+  && ok "a name that is this repo's is not refused: its runs stay in its own .postmaster/runs/" \
+  || fail "a name that is this repo's is not refused: its runs stay in its own .postmaster/runs/ (exit $rc)" "$out"
 out=$(fresh_new "$tmp/runs/nosuch" no-such-ticket); rc=$?
 [ $rc -eq 1 ] && [ ! -e "$tmp/runs/nosuch" ] && ok "an unknown ticket is refused" || fail "an unknown ticket is refused (exit $rc)" "$out"
 out=$(LOCAL_SH=$tmp/failing-local.sh fresh_new "$tmp/runs/unfiled" "$first"); rc=$?
