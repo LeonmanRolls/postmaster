@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Keep one postmaster worktree per dispatched commit while any run using it is in flight.
 #
-#   tool-pin.sh acquire <dispatch> <tool-repo>  acquire the shared checkout and run reference
+#   tool-pin.sh acquire <dispatch> <tool-repo> <commit>  acquire the shared checkout and run reference
 #   tool-pin.sh release <dispatch> <tool-repo>  release a terminal run and reap the last pin
 #   tool-pin.sh cancel <dispatch> <tool-repo>   undo an acquire if run-meta could not write
 #   tool-pin.sh --self-test
@@ -104,10 +104,18 @@ def dispatch_path(value):
     return path.resolve()
 
 
-def tool_root(value):
+def tool_root(value, requested_commit=None):
     result = git(value, "rev-parse", "--show-toplevel")
     root = pathlib.Path(result.stdout.strip()).resolve()
-    commit = git(root, "rev-parse", "HEAD").stdout.strip()
+    if requested_commit is None:
+        commit = git(root, "rev-parse", "HEAD").stdout.strip()
+    else:
+        if len(requested_commit) != 40 or any(ch not in "0123456789abcdef" for ch in requested_commit):
+            fail("requested tool commit must be a full commit id")
+        resolved = git(root, "rev-parse", "--verify", requested_commit + "^{commit}", check=False)
+        if resolved.returncode or resolved.stdout.strip() != requested_commit:
+            fail("requested tool commit is not available in the tool repo: %s" % requested_commit)
+        commit = requested_commit
     if len(commit) != 40 or any(ch not in "0123456789abcdef" for ch in commit):
         fail("tool repo did not report a full commit id")
     return root, commit
@@ -143,13 +151,13 @@ def verify_checkout(checkout, commit):
     return True
 
 
-def acquire(dispatch_arg, repo_arg):
+def acquire(dispatch_arg, repo_arg, requested_commit):
     dispatch = dispatch_path(dispatch_arg)
     manifest_path = dispatch / "manifest.json"
     manifest = load_json(manifest_path)
     if manifest.get("stage") != "dispatched":
         fail("a tool pin can only be acquired at dispatch (manifest stage must be dispatched)")
-    repo, commit = tool_root(repo_arg)
+    repo, commit = tool_root(repo_arg, requested_commit)
     pin_dir, checkout, refs_dir, owner_file = layout(commit)
     ref = refs_dir / reference_name(dispatch)
     pending = dispatch / ".tool-pin-pending.json"
@@ -399,7 +407,10 @@ def self_test():
         (dispatch / "brief.md").write_text("tool: %s\n" % repo, encoding="utf-8")
 
     def pin_command(action, dispatch):
-        return command(action, dispatch, repo, env=env)
+        args = [action, dispatch, repo]
+        if action == "acquire":
+            args.append(a)
+        return command(*args, env=env)
 
     try:
         repo.mkdir()
@@ -423,6 +434,16 @@ def self_test():
         for dispatch in dispatches:
             put_run_record(dispatch, a, str(pin_path))
         commit_file("B")
+
+        late = temporary / "runs" / "run-late"
+        manifest(late)
+        acquired_late = pin_command("acquire", late)
+        late_info = json.loads(acquired_late.stdout) if acquired_late.returncode == 0 else {}
+        put_run_record(late, a, str(pin_path))
+        ok(
+            "a dispatch keeps its recorded commit after the source advances",
+            acquired_late.returncode == 0 and late_info.get("commit") == a and late_info.get("path") == str(pin_path),
+        )
 
         def probe_tool(path, expected):
             try:
@@ -448,6 +469,10 @@ def self_test():
 
         early = pin_command("release", dispatches[0])
         ok("an in-flight run cannot release its pin", early.returncode != 0 and pin_path.is_dir())
+
+        manifest(late, "done")
+        released_late = pin_command("release", late)
+        ok("a run acquired after the source advances releases its shared reference", released_late.returncode == 0 and pin_path.is_dir())
 
         for dispatch in dispatches:
             manifest(dispatch, "done", {"1": {"thread_id": "fixture-thread"}})
@@ -479,7 +504,7 @@ def self_test():
 
 def usage():
     print(
-        "usage: tool-pin.sh resolve <dispatch> | acquire <dispatch> <tool-repo> | release <dispatch> <tool-repo> | cancel <dispatch> <tool-repo> | --self-test",
+        "usage: tool-pin.sh resolve <dispatch> | acquire <dispatch> <tool-repo> <commit> | release <dispatch> <tool-repo> | cancel <dispatch> <tool-repo> | --self-test",
         file=sys.stderr,
     )
     return 2
@@ -495,14 +520,18 @@ def main():
         except (PinError, OSError, json.JSONDecodeError) as error:
             print("tool-pin: %s" % error, file=sys.stderr)
             return 1
-    if len(ARGS) != 3 or ARGS[0] not in {"acquire", "release", "cancel"}:
+    if ARGS and ARGS[0] == "acquire" and len(ARGS) == 4:
+        try:
+            acquire(ARGS[1], ARGS[2], ARGS[3])
+            return 0
+        except (PinError, OSError, json.JSONDecodeError) as error:
+            print("tool-pin: %s" % error, file=sys.stderr)
+            return 1
+    if len(ARGS) != 3 or ARGS[0] not in {"release", "cancel"}:
         return usage()
     action, dispatch_arg, repo_arg = ARGS
     try:
-        if action == "acquire":
-            acquire(dispatch_arg, repo_arg)
-        else:
-            release(dispatch_arg, repo_arg, cancel=(action == "cancel"))
+        release(dispatch_arg, repo_arg, cancel=(action == "cancel"))
         return 0
     except (PinError, OSError, json.JSONDecodeError) as error:
         print("tool-pin: %s" % error, file=sys.stderr)

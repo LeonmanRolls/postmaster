@@ -53,7 +53,18 @@ if [ "${1:-}" = --self-test ]; then
   self=$(CDPATH= cd -P -- "$(dirname -- "$0")" && pwd -P)/$(basename -- "$0")
   here=$(dirname "$self")
   tmp=$(mktemp -d) || exit 1
-  trap 'rm -r -- "$tmp" </dev/null 2>/dev/null' EXIT
+  export POSTMASTER_TOOL_PINS="$tmp/pins"
+  cleanup() {
+    local run
+    for run in run run-then run-old-bug run-onlane; do
+      if [ -e "$tmp/$run/run.json" ]; then
+        printf '{"stage":"done","coachman":{"legs":{}}}\n' > "$tmp/$run/manifest.json"
+        "$here/tool-pin.sh" release "$tmp/$run" "$here/.." >/dev/null 2>&1 || true
+      fi
+    done
+    rm -r -- "$tmp" </dev/null 2>/dev/null
+  }
+  trap cleanup EXIT
   # A stub prints its arguments and PROBE, which an env file may set, so a launch or a resume
   # shows the harness, model, effort and env file it would run on.
   mkdir "$tmp/bin" "$tmp/wt"
@@ -157,14 +168,15 @@ if [ "${1:-}" = --self-test ]; then
     [ $rc -eq 0 ] && ok "$label" || fail "$label"
   }
   record() {  # record <run> <fixture>: $tmp/<run>/run.json, recording that fixture as at dispatch
-    mkdir -p "$tmp/$1" && POSTMASTER_CONFIG="$tmp/$2.toml" PATH="$tmp/bin:$PATH" \
+    mkdir -p "$tmp/$1" && printf '{"stage":"dispatched","coachman":{"legs":{}}}\n' > "$tmp/$1/manifest.json" && \
+      POSTMASTER_CONFIG="$tmp/$2.toml" PATH="$tmp/bin:$PATH" \
       "$here/run-meta.sh" "$tmp/$1" "$tmp/repo" >/dev/null \
       || { printf '  FAIL run-meta.sh records %s as run %s\n' "$2" "$1"; fails=$((fails+1)); }
   }
   calls() {  # calls <runbook>...: each launch and resume in them, one per line, marked run or unrun
     python3 - "$@" <<'PY'
 import re, sys
-CALL = re.compile(r"scripts/launch\.sh\s+(?:launch|resume)\b")
+CALL = re.compile(r"""scripts/launch\.sh["']?\s+(?:launch|resume)\b""")
 FENCE = re.compile(r"^([ \t]*```.*?^[ \t]*```)", re.S | re.M)
 for path in sys.argv[1:]:
     cmds = []

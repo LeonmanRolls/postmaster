@@ -67,7 +67,7 @@ pin_script = tool / "scripts" / "tool-pin.sh"
 pin = None
 try:
     result = subprocess.run(
-        [str(pin_script), "acquire", str(d), str(tool)],
+        [str(pin_script), "acquire", str(d), str(tool), postmaster_commit or ""],
         capture_output=True, text=True,
     )
     if result.returncode:
