@@ -105,10 +105,6 @@ print("" if v is None else v)' "$1"
 # overrides per role (lane, coachman, reviewer), the role taken from the name's ` · <role>`
 # segment. On Linux they are a systemd user scope per launch (MemoryMax, MemorySwapMax=0,
 # TasksMax) -- ulimit -u is not used, since it limits the whole user rather than one launch.
-DEFAULT_MEMORY=8589934592   # 8 GiB
-DEFAULT_TASKS=512
-CAP_ERR_MEMORY='host: launch stopped: reached the memory cap (%s bytes)'
-CAP_ERR_TASKS='host: launch stopped: reached the process cap (%s)'
 CAP_ERR_UNCAPPED='host: running uncapped: no way to cap a launch here'
 
 role_of() {  # role_of <name>: lane, coachman or reviewer, from the name's " · <role>" segment
