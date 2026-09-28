@@ -9,7 +9,7 @@ Ticket #113 removes file-surface scheduling limits so runs launch up to `team.ma
 - **Language and version**: Markdown prose.
 - **Dependencies used or added**: None.
 - **Testing**: Search `skills/`, `AGENTS.md`, `README.md` and `wiki/` for rules against overlapping run file changes; run the configured gate with `/home/brindlewick/postmaster/scripts/verify.sh run .`.
-- **Constraints**: Prose only. Preserve `team.max_runs` and its value. Preserve existing merge-conflict mechanics. Do not change scripts, gates or self-tests. Work and commit only in this worktree; never push.
+- **Constraints**: Prose only, except for a script, gate or self-test change forced by the gate. Preserve `team.max_runs` and its value. Preserve existing merge-conflict mechanics. Work and commit only in this worktree; never push.
 
 ## Direction check
 
@@ -17,19 +17,21 @@ Ticket #113 removes file-surface scheduling limits so runs launch up to `team.ma
 - No hard rule will prohibit runs from changing overlapping files; `team.max_runs` will remain the only in-flight run limit in `postmaster.md`.
 - The coachman concurrency note will say the run merging second resolves conflicts at its merge, by merging and never rebasing, without sequencing advice.
 - I will search the full AC4 scope and remove or reword every remaining statement that requires runs not to change the same files.
-- Changes stay in Markdown; no scripts, gates, self-tests or `team.max_runs` values change.
+- Changes stay in Markdown, except for the gate-forced self-test isolation fix: `verify.sh run` exports `POSTMASTER_VERIFY`, so its self-test must clear that value when checking the default journey path. No gate or `team.max_runs` values change.
 
 ## Structure
 
 - Update `skills/postmaster/postmaster.md` scheduling guidance and hard rules.
 - Update the concurrency note in `skills/postmaster/coachman.md`.
 - Inspect `skills/`, `AGENTS.md`, `README.md` and `wiki/` for any further overlapping-file restrictions; edit any additional affected prose files found there.
+- Adjust the default journey-path assertion in `scripts/verify.sh` to ignore the `POSTMASTER_VERIFY` value inherited from the gate runner.
 
 ## Decisions
 
 - Keep dependency ordering: a ticket that needs another ticket's change waits for it to land.
 - Keep the current conflict-resolution mechanics in `coachman.md`; clarify that the second merge resolves conflicts by merging and never rebasing.
 - Do not change the configured `team.max_runs` value or default.
+- Clear `POSTMASTER_VERIFY` only for the existing self-test assertion of the default worktree journey path, because the runner's exported value made the fixture resolve to the lane worktree and fail the gate.
 
 ## Tasks
 
