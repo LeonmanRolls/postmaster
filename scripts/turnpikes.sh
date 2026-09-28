@@ -6,18 +6,23 @@
 #
 #   turnpikes.sh --list                 every turnpike, one per line: its name, `default` or `-`,
 #                                       the leg that runs it, and what it checks
-#   turnpikes.sh resolve [<text>...]    a `## Turnpikes` section's text, as the turnpikes it
+#   turnpikes.sh resolve [--project <path>] [<text>...]
+#                                       a `## Turnpikes` section's text, as the turnpikes it
 #                                       names; with no text given, the section is read from stdin
 #   turnpikes.sh legs <dispatch> [--expect <line>]
 #                                       a run's legs, from the `turnpikes:` line under its
 #                                       waybill's title; with --expect, that line must be <line>
 #   turnpikes.sh legs --line <line>     the legs a waybill with that `turnpikes:` line would have
-#   turnpikes.sh short <line>           the default turnpikes a `turnpikes:` line leaves out
+#   turnpikes.sh short [--project <path>] <line>
+#                                       the default turnpikes a `turnpikes:` line leaves out
 #   turnpikes.sh --self-test
 #
 # A section holds `default`, `none`, or turnpike names, separated by commas or spaces, and
-# nothing else. `default` stands for every turnpike --list marks default, alone or in a list;
-# `none` stands alone. Case, backticks, a list marker at the start of a line, a thematic break,
+# nothing else. `default` stands for the default set, alone or in a list; `none` stands alone.
+# The default set is every turnpike --list marks default, unless --project names a project
+# whose .postmaster/ settings declare a different one (scripts/project-settings.sh). That is
+# what `default` means for that project; it is not a floor: a ticket still names its own
+# turnpikes. Case, backticks, a list marker at the start of a line, a thematic break,
 # a hard line break, invisible characters and a closing full stop are ignored; every other
 # token, a lone dash or dots among them, is a word, and a word that is not a turnpike is named.
 # resolve prints the line the waybill carries: `turnpikes: ` and the names, in the order --list
@@ -40,7 +45,17 @@
 #           is not names or none, or is not the one --expect gives. One line per fault, on stdout.
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd -P)
-usage() { echo "usage: turnpikes.sh --list | resolve [<text>...] | legs <dispatch> [--expect <line>] | legs --line <line> | short <line> | --self-test" >&2; exit 1; }
+usage() { echo "usage: turnpikes.sh --list | resolve [--project <path>] [<text>...] | legs <dispatch> [--expect <line>] | legs --line <line> | short [--project <path>] <line> | --self-test" >&2; exit 1; }
+
+project_defaults() {  # project_defaults <path or empty>: the project's default set, or "" for the table's
+  local out
+  [ -n "${1:-}" ] || { printf ''; return 0; }
+  out=$("$HERE/project-settings.sh" "$1" get turnpikes.default 2>/dev/null) || out=""
+  case $out in
+    'turnpikes: '*) printf '%s' "${out#turnpikes: }" ;;
+    *) printf '' ;;
+  esac
+}
 
 # Both bodies are read with `read`, not `$(cat ...)`, so that a shell as old as bash 3.2 parses
 # this file: it reads a here-document inside `$( )` as ordinary text, quotes and backticks included.
@@ -55,7 +70,7 @@ IFS= read -r -d '' CORE <<'PY' || true
 import re, sys, unicodedata
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-table, cmd, args = sys.argv[1], sys.argv[2], sys.argv[3:]
+table, defaults_arg, cmd, args = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4:]
 LEGS = [(1, "synthesis"), (2, "review"), (3, "ship")]
 ALWAYS = {"synthesis", "ship"}
 RESERVED = ("default", "none")
@@ -87,7 +102,21 @@ if faults:
     print("\n".join("turnpikes: the table's " + f for f in faults), file=sys.stderr)
     sys.exit(1)
 names = [r[0] for r in rows]
-defaults = [r[0] for r in rows if r[1]]
+table_defaults = [r[0] for r in rows if r[1]]
+if defaults_arg.strip():
+    wanted = [w.strip().lower() for w in defaults_arg.split(",") if w.strip()]
+    unknown = [w for w in wanted if w not in names]
+    if unknown:
+        print("turnpikes: the project's default set names %s, which %s not in the table"
+              % (", ".join('"%s"' % u for u in unknown), "is" if len(unknown) == 1 else "are"),
+              file=sys.stderr)
+        sys.exit(1)
+    if not wanted:
+        print("turnpikes: the project's default set is empty", file=sys.stderr)
+        sys.exit(1)
+    defaults = [n for n in names if n in set(wanted)]
+else:
+    defaults = table_defaults
 leg_of = {r[0]: r[2] for r in rows}
 
 def words_of(text):
@@ -175,16 +204,31 @@ elif cmd == "legs":
         sys.exit(2)
     legs(found[0])
 PY
-core() { python3 -c "$CORE" "$@"; }  # core <table> list | resolve [<text>...] | short <line> | legs <waybill> [<expect>] | legs --line <line>
+core() { python3 -c "$CORE" "$@"; }  # core <table> <defaults> list | resolve [...] | short <line> | legs <waybill> [<expect>] | legs --line <line>
+
+# An optional --project <path> before the rest: what `default` means for that project.
+PROJ=""
+if [ "${1:-}" = resolve ] || [ "${1:-}" = short ]; then
+  cmd=$1; shift
+  if [ "${1:-}" = --project ]; then
+    [ $# -ge 2 ] || usage
+    PROJ=$2; shift 2
+  fi
+  DEFS=$(project_defaults "$PROJ")
+  case $cmd in
+    resolve) core "$TABLE" "$DEFS" resolve "$@"; exit $? ;;
+    short) [ $# -eq 1 ] || usage; core "$TABLE" "$DEFS" short "$1"; exit $? ;;
+  esac
+fi
 
 case ${1:-} in
-  --list) [ $# -eq 1 ] || usage; core "$TABLE" list; exit $? ;;
-  resolve) shift; core "$TABLE" resolve "$@"; exit $? ;;
-  short) [ $# -eq 2 ] || usage; core "$TABLE" short "$2"; exit $? ;;
-  legs) if [ "${2:-}" = --line ]; then [ $# -eq 3 ] || usage; core "$TABLE" legs --line "$3"; exit $?; fi
+  --list) [ $# -eq 1 ] || usage; core "$TABLE" "" list; exit $? ;;
+  resolve) core "$TABLE" "" resolve "$@"; exit $? ;;
+  short) [ $# -eq 2 ] || usage; core "$TABLE" "" short "$2"; exit $? ;;
+  legs) if [ "${2:-}" = --line ]; then [ $# -eq 3 ] || usage; core "$TABLE" "" legs --line "$3"; exit $?; fi
         [ $# -eq 2 ] || { [ $# -eq 4 ] && [ "$3" = --expect ]; } || usage
         [ -f "$2/brief.md" ] || { echo "turnpikes: no waybill at $2/brief.md" >&2; exit 1; }
-        if [ $# -eq 4 ]; then core "$TABLE" legs "$2/brief.md" "$4"; else core "$TABLE" legs "$2/brief.md"; fi; exit $? ;;
+        if [ $# -eq 4 ]; then core "$TABLE" "" legs "$2/brief.md" "$4"; else core "$TABLE" "" legs "$2/brief.md"; fi; exit $? ;;
   --self-test) [ $# -eq 1 ] || usage ;;
   *) usage ;;
 esac
@@ -243,8 +287,20 @@ out=$(lines '1. bug' '2. security' | "$self" resolve 2>&1); rc=$?
 is "with no text given, the section is read from stdin" 0 "turnpikes: bug, security"
 run "$self" resolve "bug, security"; line=$out; run "$self" resolve "${line#turnpikes: }"
 is "the waybill's line resolves to itself" 0 "$line"
-run core "$PLUS" resolve "default, $NOPE"
+run core "$PLUS" "" resolve "default, $NOPE"
 is "a turnpike added to the table resolves with nothing else changed" 0 "turnpikes: style, bug, security, $NOPE"
+
+echo "positive controls: a project's own default set"
+mkdir -p "$tmp/proj/.postmaster"
+printf '[turnpikes]\ndefault = ["style", "bug"]\n' > "$tmp/proj/.postmaster/project.toml"
+run "$self" resolve --project "$tmp/proj" default
+is "a project that declares a default set expands default to it" 0 "turnpikes: style, bug"
+run "$self" short --project "$tmp/proj" "turnpikes: style"
+is "short names what that project's default set leaves out" 0 "bug"
+run "$self" resolve --project "$tmp/proj" "security"
+is "a named turnpike is still itself" 0 "turnpikes: security"
+run "$self" resolve --project "$tmp/empty-proj" default
+is "a project that declares nothing still gets the table's default set" 0 "turnpikes: style, bug, security"
 
 echo "positive controls: a run's legs"
 waybill "$tmp/none" "turnpikes: none"; run "$self" legs "$tmp/none"
@@ -260,7 +316,7 @@ run "$self" legs "$tmp/fence"
 is "a fence the ticket leaves open changes nothing" 0 "$(lines '1 synthesis' '2 review style bug security' '3 ship')"
 run "$self" legs "$tmp/default" --expect "turnpikes:  style, bug,  security"
 is "--expect passes a waybill whose line is the check's" 0 "$(lines '1 synthesis' '2 review style bug security' '3 ship')"
-waybill "$tmp/extra" "turnpikes: $NOPE"; run core "$PLUS" legs "$tmp/extra/brief.md"
+waybill "$tmp/extra" "turnpikes: $NOPE"; run core "$PLUS" "" legs "$tmp/extra/brief.md"
 is "a turnpike that runs in another leg makes no review leg" 0 "$(lines '1 synthesis' "3 ship $NOPE")"
 run "$self" legs --line "turnpikes: none";      is "legs --line gives the legs of a line" 0 "$(lines '1 synthesis' '3 ship')"
 run "$self" legs --line "turnpikes: security";  is "legs --line gives a review leg for a review turnpike" 0 "$(lines '1 synthesis' '2 review security' '3 ship')"
@@ -297,7 +353,7 @@ run "$self" legs "$tmp/nowhere";        has "no waybill is a usage error" 1 "no 
 
 echo "negative controls: the table"
 bad() {  # bad <label> <a line added to the table> <text the refusal must carry>
-  run core "$(printf '%s\n%s' "$TABLE" "$2")" list; has "$1" 1 "$3" "style"
+  run core "$(printf '%s\n%s' "$TABLE" "$2")" "" list; has "$1" 1 "$3" "style"
 }
 bad "a turnpike named none is refused"       "none       -        review  nothing"       '"none" already means something in a ticket'
 bad "a turnpike named default is refused"    "default    -        review  everything"    '"default" already means something in a ticket'

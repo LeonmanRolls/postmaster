@@ -30,7 +30,9 @@
 #     followed by a colon. TODO as a word, as in "a TODO list", is not a mark.
 #   - The turnpikes are `default`, `none` or turnpike names, as `scripts/turnpikes.sh resolve`
 #     reads them, and every word that is not a turnpike is named. The names come from that
-#     script alone, so a turnpike added there needs no change here.
+#     script alone, so a turnpike added there needs no change here. `default` expands to the
+#     default set for the repo whose ticket is being checked, when that repo's .postmaster/
+#     settings declare one (scripts/project-settings.sh).
 # Code spans, fenced blocks and HTML comments are not read for questions, marks or headings,
 # and quoted text is not read for questions. A <!-- that nothing closes is text. Turnpikes are
 # read from code spans too, and not from fenced blocks or HTML comments.
@@ -227,8 +229,12 @@ def criteria(fault, part, body):
 def turnpikes(fault, part, body):  # the section's turnpikes, read by scripts/turnpikes.sh, which defines them
     # A list item that opens a fence is code with it, as a plain fence is.
     text = "\n".join(t for t, code in body if not code and not FENCED_ITEM.match(t))
+    cmd = [os.environ["TURNPIKES"], "resolve"]
+    project = os.environ.get("TICKET_PROJECT") or ""
+    if project:
+        cmd += ["--project", project]
     try:
-        r = subprocess.run([os.environ["TURNPIKES"], "resolve"], input=text, capture_output=True,
+        r = subprocess.run(cmd, input=text, capture_output=True,
                            encoding="utf-8", errors="replace")
     except OSError as e:
         die("cannot run %s: %s" % (os.environ["TURNPIKES"], e.strerror))
@@ -379,7 +385,7 @@ through_adapter() {  # through_adapter <repo> <id>; checks the ticket as the rep
   esac
   rc=$?
   [ $rc -eq 0 ] || { echo "ticket-check: the $kind adapter could not read $2 (exit $rc)" >&2; return 1; }
-  run_py printed "$WORK/read.txt"
+  TICKET_PROJECT=$1 run_py printed "$WORK/read.txt"
 }
 
 case ${1:-} in
