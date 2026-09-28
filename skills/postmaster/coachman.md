@@ -828,11 +828,10 @@ the open section with `<tool>/scripts/run-log.sh <dispatch> --close`, log `hando
 
 ## Concurrency note (several runs on one project)
 
-Parallel runs are safe when their tickets touch disjoint files. Colliding barrel exports are
-trivial merge noise; shared surfaces (one route table, one transport interface) are real
-conflicts. Prefer sequencing those tickets, or accept conflict resolution at each gated merge;
-merges serialize anyway, and it is merge, never rebase. The blocked-by graph on tickets encodes
-logical order, not file safety: check the file surfaces before mass-launching.
+Runs on one project run in parallel. When two runs change the same files, the one that
+merges second resolves the conflicts at its merge; it is merge, never rebase. Merges
+serialize. The blocked-by graph on tickets encodes logical order: a ticket that needs
+another's change waits for it to land.
 
 ## Hard rules
 

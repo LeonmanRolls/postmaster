@@ -86,9 +86,8 @@ the action for anything without its own verb.
    turnpikes: line>'` names, is shown to the user before it is created whatever
    `tracker.postmaster_may_create` says, and their word on its turnpikes is logged as a `note`
    naming the ticket and the line.
-6. **Order them.** Dependencies first; then the file surfaces. Two tickets touching the same
-   route table, transport interface or shared module do not run at the same time. Record the
-   order and the reason in `<runs>/postmaster/plan.md`, current state only.
+6. **Order them.** Dependencies first: a ticket that needs another's change waits for it to
+   land. Record the order and the reason in `<runs>/postmaster/plan.md`, current state only.
 
 ## Stage B: the waybill
 
@@ -387,8 +386,7 @@ only with the user's word for that specific thing, and the word is logged.
 - Never merge; never say the merge word without `MERGE_AUTHORITY` or the user behind it.
 - Never delete a dispatch directory, a manifest or a ledger line.
 - Never trust a card, a summary or a hand-off over the code; verify before every grant.
-- Never launch more runs than `team.max_runs`, and never two runs on overlapping file
-  surfaces.
+- Never launch more runs than `team.max_runs`.
 - Never modify postmaster itself, whatever the target: a fault you meet in it is a tool fault
   (Tool faults), and a fault in a control is never worked around.
 - Every action is a `log-action` line at the moment it happens. If it is not in the ledger,
