@@ -2,14 +2,14 @@
 # Write a run's fixed facts to <dispatch>/run.json, once, at dispatch. Written once and never
 # edited: the manifest is the run's current state, this is what the run started from.
 #
-#   run-meta.sh <dispatch> <repo>   <repo> is the target project's checkout
+#   run-meta.sh <dispatch> <repo>   <dispatch> is under <repo>/.postmaster/runs/
 #   run-meta.sh --self-test
 #
-# Records when it was written; the run and project; the target repo's HEAD and branch; the
-# postmaster commit that dispatched it, and whether that checkout had uncommitted changes,
-# since a run keeps the runbooks it started with; the config in force, as it was; and the
-# version each harness named in that config reports. Env files are named by the config, never
-# read. A run.json that already exists is left alone.
+# Records when it was written; the run and project's absolute repo path; the target repo's HEAD
+# and branch; the postmaster commit that dispatched it, and whether that checkout had uncommitted
+# changes, since a run keeps the runbooks it started with; the machine config with local role
+# choices resolved; the project settings and their sources; and the version each harness reports.
+# Env files are named by the machine config, never read. A run.json that already exists is left alone.
 #
 #   exit 0  written, or already there
 #   exit 1  usage, no such dispatch directory or repo, no config, or the file could not be written
@@ -23,8 +23,13 @@ meta() {  # meta <dispatch> <repo>
   [ -d "$d" ] || { echo "run-meta: no such dispatch directory: $d" >&2; return 1; }
   git -C "$repo" rev-parse --git-dir >/dev/null 2>&1 || { echo "run-meta: not a git repo: $repo" >&2; return 1; }
   [ -f "$CONFIG" ] || { echo "run-meta: no config at $CONFIG" >&2; return 1; }
+  local resolved_repo resolved_dispatch
+  resolved_repo=$(CDPATH= cd -P -- "$repo" && pwd -P) || { echo "run-meta: cannot resolve project $repo" >&2; return 1; }
+  resolved_dispatch=$(CDPATH= cd -P -- "$d" && pwd -P) || { echo "run-meta: cannot resolve dispatch $d" >&2; return 1; }
+  [ "$(dirname "$resolved_dispatch")" = "$resolved_repo/.postmaster/runs" ] \
+    || { echo "run-meta: dispatch must be under $resolved_repo/.postmaster/runs" >&2; return 1; }
   [ -e "$d/run.json" ] && { echo "run-meta: $d/run.json already written; left alone"; return 0; }
-  python3 - "$d" "$repo" "$TOOL" "$CONFIG" <<'PY' || { echo "run-meta: could not write $d/run.json" >&2; return 1; }
+  python3 - "$d" "$resolved_repo" "$TOOL" "$CONFIG" <<'PY' || { echo "run-meta: could not write $d/run.json" >&2; return 1; }
 import datetime as dt, json, os, pathlib, shutil, subprocess, sys, tempfile, tomllib
 d, repo, tool, config = map(pathlib.Path, sys.argv[1:5])
 
@@ -42,7 +47,22 @@ def version(harness):
     except (subprocess.TimeoutExpired, OSError) as e:
         return "no version: %s" % type(e).__name__
 
-cfg = tomllib.load(open(config, "rb"))
+machine_cfg = tomllib.load(open(config, "rb"))
+settings_script = tool / "scripts" / "project-settings.sh"
+profile_result = subprocess.run([str(settings_script), "inspect", str(repo)], capture_output=True, text=True)
+if profile_result.returncode:
+    print(profile_result.stderr.strip() or "project settings could not be read", file=sys.stderr); sys.exit(1)
+try:
+    project_settings = json.loads(profile_result.stdout)
+except ValueError as e:
+    print("project settings gave no JSON: %s" % e, file=sys.stderr); sys.exit(1)
+effective_result = subprocess.run([str(settings_script), "effective", str(repo), str(config)], capture_output=True, text=True)
+if effective_result.returncode:
+    print(effective_result.stderr.strip() or "effective machine config could not be resolved", file=sys.stderr); sys.exit(1)
+try:
+    cfg = json.loads(effective_result.stdout)
+except ValueError as e:
+    print("effective machine config gave no JSON: %s" % e, file=sys.stderr); sys.exit(1)
 harnesses = set()
 for lane in (cfg.get("lanes") or {}).values():
     if lane.get("harness"): harnesses.add(lane["harness"])
@@ -54,8 +74,10 @@ for leg in (team.get("coachman_legs") or {}).values():
 
 record = {
     "written": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-    "project": d.resolve().parent.name,
+    "project": str(repo.resolve()),
+    "project_name": repo.resolve().name,
     "run": d.resolve().name,
+    "project_settings": project_settings,
     "target": {"head": git(repo, "rev-parse", "HEAD"), "branch": git(repo, "symbolic-ref", "--short", "-q", "HEAD")},
     "postmaster": {"commit": git(tool, "rev-parse", "HEAD"),
                    "uncommitted_changes": bool(git(tool, "status", "--porcelain"))},
@@ -78,7 +100,7 @@ fi
 # --- self-test ----------------------------------------------------------------------------
 tmp=$(mktemp -d) || exit 1
 trap 'rm -r -- "$tmp" </dev/null 2>/dev/null' EXIT
-d="$tmp/project/RUN-1"; repo="$tmp/target"; mkdir -p "$d" "$repo"
+d="$tmp/target/.postmaster/runs/RUN-1"; repo="$tmp/target"; mkdir -p "$d" "$repo"
 git -C "$repo" init -q -b main && git -C "$repo" -c user.name=t -c user.email=t@t commit -q --allow-empty -m first
 cat > "$tmp/config.toml" <<'EOF'
 [lanes.one]
@@ -91,6 +113,7 @@ model = "m2"
 [team]
 workhorses = ["one", "two"]
 coachman = { harness = "bash", model = "judge" }
+coachman_fallback = { harness = "bash", model = "backup" }
 EOF
 export POSTMASTER_CONFIG="$tmp/config.toml"; CONFIG=$POSTMASTER_CONFIG
 fails=0
@@ -102,7 +125,9 @@ echo "positive controls"
 meta "$d" "$repo" >/dev/null && ok "run.json is written" || fail "run.json is written"
 check "it names the postmaster commit"            "r['postmaster']['commit'] == '$(git -C "$TOOL" rev-parse HEAD)'"
 check "it names the target's HEAD and branch"     "r['target'] == {'head': '$(git -C "$repo" rev-parse HEAD)', 'branch': 'main'}"
-check "it keeps the config as it was"             "r['config']['lanes']['one']['model'] == 'm1' and r['config']['team']['workhorses'] == ['one','two']"
+check "it keeps the resolved config as it was"     "r['config']['lanes']['one']['model'] == 'm1' and r['config']['team']['workhorses'] == ['one','two']"
+check "it records the project's canonical path"     "r['project'] == '$(CDPATH= cd -P -- "$repo" && pwd -P)'"
+check "it records project settings and their source" "not r['project_settings']['shared_present'] and r['project_settings']['sources']['project.default_turnpikes'] == 'discovery'"
 check "it records each harness's version"         "r['harness_versions']['bash'].startswith('GNU bash')"
 check "a harness not installed says so"           "r['harness_versions']['no-such-harness-xyz'] == 'not on PATH'"
 check "an env file is named, never read"          "r['config']['lanes']['one']['env_file'] == '~/somewhere/secret.env'"
@@ -114,6 +139,10 @@ rm -- "$d/run.json"; CONFIG="$tmp/none.toml"; meta "$d" "$repo" >/dev/null 2>&1;
 [ $rc -eq 1 ] && [ ! -e "$d/run.json" ] && ok "no config is refused, and nothing is written" || fail "no config is refused, and nothing is written (exit $rc)"
 meta "$d" "$tmp/not-a-repo" >/dev/null 2>&1; rc=$?
 [ $rc -eq 1 ] && ok "a target that is not a repo is refused" || fail "a target that is not a repo is refused (exit $rc)"
+mkdir -p "$tmp/outside/RUN-2"; meta "$tmp/outside/RUN-2" "$repo" >/dev/null 2>&1; rc=$?
+[ $rc -eq 1 ] && [ ! -e "$tmp/outside/RUN-2/run.json" ] \
+  && ok "a dispatch outside the project's run root is refused" \
+  || fail "a dispatch outside the project's run root is refused (exit $rc)"
 
 echo
 [ "$fails" -eq 0 ] && { echo "self-test: all controls behaved"; exit 0; }

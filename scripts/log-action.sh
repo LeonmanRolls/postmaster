@@ -27,8 +27,9 @@
 # Every field is written as JSON that any reader can split on newlines: a control character is
 # dropped, bytes that are not UTF-8 are dropped, and a line or paragraph separator is escaped.
 #
-# Writes one JSON line to <dispatch>/actions.jsonl and the same line, with the run named, to
-# <dispatch>/../ledger.jsonl (the project's ledger across runs). Both are append-only. Nothing
+# Writes one JSON line to <dispatch>/actions.jsonl and the same line, with the project named by
+# its absolute repo path, to <dispatch>/../ledger.jsonl (the project's ledger across runs).
+# Both are append-only. Nothing
 # in the flow reads its own narrative back to learn from it; it reads these lines.
 #
 #   exit 0  written to both files
@@ -93,7 +94,7 @@ tool_fault() {  # tool_fault <file> [flags...]; sets TARGET, DETAIL and FAULT, o
 }
 
 log_action() {  # log_action <dispatch> <actor> <action> <target> [detail...]
-  local given=$1 dispatch run project ts line
+  local given=$1 dispatch run project runs ts line
   ACTOR=$2 ACTION=$3 TARGET=$4 FAULT=""
   shift 4
   DETAIL=${*:-}
@@ -104,7 +105,10 @@ log_action() {  # log_action <dispatch> <actor> <action> <target> [detail...]
 
   dispatch=$(CDPATH= cd -P -- "$given" 2>/dev/null && pwd -P) || { echo "log-action: no such dir: $given" >&2; return 1; }
   run=$(basename "$dispatch")
-  project=$(basename "$(dirname "$dispatch")")
+  runs=$(CDPATH= cd -P -- "$dispatch/.." 2>/dev/null && pwd -P) || { echo "log-action: cannot resolve the project run root" >&2; return 1; }
+  [ "$(basename "$runs")" = runs ] && [ "$(basename "$(dirname "$runs")")" = .postmaster ] \
+    || { echo "log-action: dispatch must be under <project>/.postmaster/runs" >&2; return 1; }
+  project=$(CDPATH= cd -P -- "$runs/../.." 2>/dev/null && pwd -P) || { echo "log-action: cannot resolve the project root" >&2; return 1; }
   ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
   line=$(printf '{"ts":"%s","project":"%s","run":"%s","actor":"%s","action":"%s","target":"%s","detail":"%s"%s}' \
@@ -124,7 +128,7 @@ fi
 # --- self-test ----------------------------------------------------------------------------
 tmp=$(mktemp -d) || exit 1
 trap 'rm -r -- "$tmp" 2>/dev/null' EXIT
-d="$tmp/project/RUN-1"; mkdir -p "$d"
+d="$tmp/project/.postmaster/runs/RUN-1"; mkdir -p "$d"
 SELF="$HERE/log-action.sh"
 fails=0
 ok()   { printf '  ok   %s\n' "$1"; }
@@ -146,9 +150,9 @@ ln -s "$TOOL" "$tmp/link" && : > "$tmp/outside.sh" || exit 1
 
 echo "positive controls"
 wrote "an action is written" postmaster note RUN-1 a plain "\"detail\""
-cmp -s "$d/actions.jsonl" "$tmp/project/ledger.jsonl" && ok "as one line in the run's log and the same line in the ledger" \
+cmp -s "$d/actions.jsonl" "$tmp/project/.postmaster/runs/ledger.jsonl" && ok "as one line in the run's log and the same line in the ledger" \
   || fail "as one line in the run's log and the same line in the ledger"
-last "the detail is everything after the target" 'e["detail"] == "a plain \"detail\"" and (e["project"], e["run"]) == ("project", "RUN-1") and "fault" not in e'
+last "the detail is everything after the target" 'e["detail"] == "a plain \"detail\"" and (e["project"], e["run"]) == ("'$tmp'/project", "RUN-1") and "fault" not in e'
 wrote "a tool-fault with every field is written" coachman tool-fault scripts/launch.sh "${FIELDS[@]}" --workaround "launched in the recorded form by hand"
 [ ! -s "$tmp/err" ] && ok "and a part that is no control says nothing" || fail "and a part that is no control says nothing" "$(cat "$tmp/err")"
 last "its fields are a fault object, with --failed as the detail and the error whole" \
@@ -179,8 +183,8 @@ for f in sys.argv[1:]:
     text = open(f, encoding="utf-8").read()
     rows = text.split("\n")[:-1]
     assert len(rows) == len(text.splitlines()), "a raw line separator"
-    [json.loads(r) for r in rows]' "$d/actions.jsonl" "$tmp/project/ledger.jsonl" 2>"$tmp/err" \
-  && cmp -s "$d/actions.jsonl" "$tmp/project/ledger.jsonl" && ok "every line in both files is UTF-8 JSON, one to a line" \
+    [json.loads(r) for r in rows]' "$d/actions.jsonl" "$tmp/project/.postmaster/runs/ledger.jsonl" 2>"$tmp/err" \
+  && cmp -s "$d/actions.jsonl" "$tmp/project/.postmaster/runs/ledger.jsonl" && ok "every line in both files is UTF-8 JSON, one to a line" \
   || fail "every line in both files is UTF-8 JSON, one to a line" "$(cat "$tmp/err")"
 
 echo "negative controls: nothing is written"
