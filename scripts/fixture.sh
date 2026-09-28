@@ -401,7 +401,8 @@ stages=$(printf '%s\n' "$listed" | sed '/^done$/q' | sed '1d;$d')
 record() {  # record <name> <ticket> <shipped: reference, app or broken>: a finished run
   local name=$1 t=$2 shipped=$3 legs=3 n s section done_stages=0 count
   local repo=$tmp/$name/repo d=$tmp/$name/repo/.postmaster/runs/7 base
-  mkdir -p "$d/logs" "$d/audit" "$d/render" && make_repo "$repo" >/dev/null || return 1
+  mkdir -p "$tmp/$name" && make_repo "$repo" >/dev/null || return 1
+  mkdir -p "$d/logs" "$d/audit" "$d/render" || return 1
   base=$(git -C "$repo" rev-parse HEAD)
   git -C "$repo" checkout -q -b 7 || return 1
   case $shipped in
