@@ -3,7 +3,7 @@
 # records for its harness. One command for every harness, so no form is ever copied by hand;
 # this script and harnesses.md must agree, and a change to one is a change to both.
 #
-#   launch.sh form   <name> [--leg <leg>] [--run <dispatch>]
+#   launch.sh form   <name> [--leg <leg>] [--run <dispatch>] [--project <repo>]
 #   launch.sh launch <name> <cwd> <prompt-file> [--leg <leg>] [--last <file>] [--run <dispatch>]
 #   launch.sh resume <name> <cwd> <thread-id> <prompt-file> [--leg <leg>] [--last <file>]
 #                    [--run <dispatch>]
@@ -15,9 +15,11 @@
 # run recorded at dispatch, `config` in <dispatch>/run.json (scripts/run-meta.sh): the live
 # config is not read at all, and a run.json that is missing or unreadable is refused. Every
 # launch and resume inside a run passes --run; the postmaster's own spawn and the config check
-# before dispatch do not. The checks below apply to a recorded config as to the live one.
+# before dispatch do not. A run launch exports its durable session beside the events stream.
+# The checks below apply to a recorded config as to the live one.
 #
-# <name> is a lane from [lanes.<name>], or `coachman`, `coachman_fallback` or `postmaster`
+# A form with --project resolves the target's local role choices. <name> is a lane from
+# [lanes.<name>], or `coachman`, `coachman_fallback` or `postmaster`
 # from [team]. <leg> is synthesis, review or ship, and with --leg, [team.coachman_legs.<leg>]
 # overrides the coachman for that leg. Launching or resuming `coachman` needs --leg; `form`
 # without it shows team.coachman. The coachman is refused when [team.coachman_legs] names any
@@ -44,6 +46,7 @@
 #   exit 3  skill: the lane's harness has no such skill recorded
 #   else    the harness's own exit code
 set -uo pipefail
+HERE=$(CDPATH= cd -P -- "$(dirname -- "$0")" && pwd -P)
 CONFIG=${POSTMASTER_CONFIG:-$HOME/.postmaster/config.toml}
 
 if [ "${1:-}" = --self-test ]; then
@@ -157,8 +160,8 @@ if [ "${1:-}" = --self-test ]; then
     [ $rc -eq 0 ] && ok "$label" || fail "$label"
   }
   record() {  # record <run> <fixture>: $tmp/<run>/run.json, recording that fixture as at dispatch
-    mkdir -p "$tmp/$1" && POSTMASTER_CONFIG="$tmp/$2.toml" PATH="$tmp/bin:$PATH" \
-      "$here/run-meta.sh" "$tmp/$1" "$tmp/repo" >/dev/null \
+    mkdir -p "$tmp/repo/.postmaster/runs/$1" && POSTMASTER_CONFIG="$tmp/$2.toml" PATH="$tmp/bin:$PATH" \
+      "$here/run-meta.sh" "$tmp/repo/.postmaster/runs/$1" "$tmp/repo" >/dev/null \
       || { printf '  FAIL run-meta.sh records %s as run %s\n' "$2" "$1"; fails=$((fails+1)); }
   }
   calls() {  # calls <runbook>...: each launch and resume in them, one per line, marked run or unrun
@@ -190,9 +193,25 @@ PY
   record run-then then
   record run-old-bug old-bug
   record run-onlane onlane
-  mkdir "$tmp/no-record" "$tmp/garbled" "$tmp/unrecorded"
-  printf '{"config": \n' > "$tmp/garbled/run.json"
-  printf '{"run": "T-1"}\n' > "$tmp/unrecorded/run.json"
+  printf '[lanes.g]\nharness = "agy"\nmodel = "agy-model"\n' > "$tmp/agy-run.toml"
+  cat > "$tmp/bin/agy" <<'EOF'
+#!/bin/sh
+printf '{"conversationId":"thread-agy"}\n'
+EOF
+  chmod +x "$tmp/bin/agy"
+  record run-agy agy-run
+  agy_dispatch=$tmp/repo/.postmaster/runs/run-agy
+  agy_events=$agy_dispatch/logs/g-events.jsonl
+  mkdir -p "$(dirname "$agy_events")"
+  POSTMASTER_EVENT_STREAM="$agy_events" POSTMASTER_CONFIG="$tmp/agy-run.toml" PATH="$tmp/bin:$PATH" \
+    "$self" launch g "$tmp/wt" "$tmp/prompt.txt" --run "$agy_dispatch" >"$agy_events" 2>"$tmp/err"; rc=$?; err=$(cat "$tmp/err"); out=$(cat "$agy_events")
+  [ "$rc" -eq 0 ] && [ "$out" = '{"conversationId":"thread-agy"}' ] \
+    && cmp -s "$agy_events" "$agy_dispatch/sessions/g/thread-agy.events.jsonl" \
+    && ok "a run launch exports its durable session beside the harness event stream" \
+    || fail "a run launch exports its durable session beside the harness event stream"
+  mkdir -p "$tmp/repo/.postmaster/runs/no-record" "$tmp/repo/.postmaster/runs/garbled" "$tmp/repo/.postmaster/runs/unrecorded"
+  printf '{"config": \n' > "$tmp/repo/.postmaster/runs/garbled/run.json"
+  printf '{"run": "T-1"}\n' > "$tmp/repo/.postmaster/runs/unrecorded/run.json"
 
   echo "positive controls"
   for k in synthesis review ship; do
@@ -224,13 +243,13 @@ PY
   runs_on "the fallback resumes on its own model, with no --leg" legs fallback-model resume coachman_fallback "$tmp/wt" T-1 "$tmp/prompt.txt"
   runs_on "form with no --leg shows team.coachman" legs coach-model form coachman
   carries "a lane's env file reaches the harness's environment" envfile "probe=reached" launch coachman "$tmp/wt" "$tmp/prompt.txt" --leg review
-  runs_on "inside a run, a resume runs on the model the run recorded, not the live config's" edited review-model resume coachman "$tmp/wt" T-1 "$tmp/prompt.txt" --leg review --run "$tmp/run"
+  runs_on "inside a run, a resume runs on the model the run recorded, not the live config's" edited review-model resume coachman "$tmp/wt" T-1 "$tmp/prompt.txt" --leg review --run "$tmp/repo/.postmaster/runs/run"
   runs_on "outside a run, the same resume runs on the live config's model" edited edited-model resume coachman "$tmp/wt" T-1 "$tmp/prompt.txt" --leg review
-  run now resume one "$tmp/wt" T-1 "$tmp/prompt.txt" --run "$tmp/run-then"
+  run now resume one "$tmp/wt" T-1 "$tmp/prompt.txt" --run "$tmp/repo/.postmaster/runs/run-then"
   printed "inside a run, a lane resumes on the harness, model, effort and env file the run recorded" "--resume T-1 " "--model then-model " "--effort high " "probe=then"
   run now resume one "$tmp/wt" T-1 "$tmp/prompt.txt"
   printed "outside a run, the same resume takes all four from the live config" "--mode json " "--session T-1 " "--model now-model " "--thinking low " "probe=now"
-  runs_on "inside a run the live config is not read: with none at all, a launch runs on the recorded model" nowhere synthesis-model launch coachman "$tmp/wt" "$tmp/prompt.txt" --leg synthesis --run "$tmp/run"
+  runs_on "inside a run the live config is not read: with none at all, a launch runs on the recorded model" nowhere synthesis-model launch coachman "$tmp/wt" "$tmp/prompt.txt" --leg synthesis --run "$tmp/repo/.postmaster/runs/run"
   out=$(calls "$tmp/runbook.md"); rc=$?; err=""
   got=$(printf '%s\n' "$out" | sed -E 's/^([a-z]+) .*launch\.sh (launch|resume) ([a-z]) .*/\1 \3/' | tr '\n' ,)
   [ "$got" = "unrun a,run b,unrun c,run d," ] && ok "a runbook launch or resume with no --run is found, fenced or inline" \
@@ -277,12 +296,12 @@ PY
     resume one "$tmp/wt" T-1 "$tmp/ruling.txt"
   refused "resuming the coachman with no --leg is refused, and nothing runs" legs "coachman needs --leg" resume coachman "$tmp/wt" T-1 "$tmp/prompt.txt"
   refused "launching the coachman with no --leg is refused, and nothing runs" legs "coachman needs --leg" launch coachman "$tmp/wt" "$tmp/prompt.txt"
-  refused "inside a run with no run.json, a resume is refused though the live config would serve, and nothing runs" legs "no run.json in $tmp/no-record" resume coachman "$tmp/wt" T-1 "$tmp/prompt.txt" --leg review --run "$tmp/no-record"
-  refused "inside a run whose run.json does not parse, a launch is refused, and nothing runs" legs "cannot read $tmp/garbled/run.json" launch one "$tmp/wt" "$tmp/prompt.txt" --run "$tmp/garbled"
-  refused "a run.json that records no config is refused" legs "it records no config" launch one "$tmp/wt" "$tmp/prompt.txt" --run "$tmp/unrecorded"
+  refused "inside a run with no run.json, a resume is refused though the live config would serve, and nothing runs" legs "no run.json in $tmp/repo/.postmaster/runs/no-record" resume coachman "$tmp/wt" T-1 "$tmp/prompt.txt" --leg review --run "$tmp/repo/.postmaster/runs/no-record"
+  refused "inside a run whose run.json does not parse, a launch is refused, and nothing runs" legs "cannot read $tmp/repo/.postmaster/runs/garbled/run.json" launch one "$tmp/wt" "$tmp/prompt.txt" --run "$tmp/repo/.postmaster/runs/garbled"
+  refused "a run.json that records no config is refused" legs "it records no config" launch one "$tmp/wt" "$tmp/prompt.txt" --run "$tmp/repo/.postmaster/runs/unrecorded"
   refused "an empty --run is refused, never read as outside a run" legs "--run needs a dispatch directory" resume coachman "$tmp/wt" T-1 "$tmp/prompt.txt" --leg review --run ""
-  refused "a recorded config naming bug is refused, though the live config passes" legs "one leg now, review" resume coachman "$tmp/wt" T-1 "$tmp/prompt.txt" --leg review --run "$tmp/run-old-bug"
-  refused "a recorded leg on a lane's model is refused, though the live config passes" legs "a lane's model" resume coachman "$tmp/wt" T-1 "$tmp/prompt.txt" --leg synthesis --run "$tmp/run-onlane"
+  refused "a recorded config naming bug is refused, though the live config passes" legs "one leg now, review" resume coachman "$tmp/wt" T-1 "$tmp/prompt.txt" --leg review --run "$tmp/repo/.postmaster/runs/run-old-bug"
+  refused "a recorded leg on a lane's model is refused, though the live config passes" legs "a lane's model" resume coachman "$tmp/wt" T-1 "$tmp/prompt.txt" --leg synthesis --run "$tmp/repo/.postmaster/runs/run-onlane"
   got=$(calls "$here/../skills/postmaster/coachman.md" "$here/../skills/postmaster/postmaster.md"); rc=$?
   out=$(printf '%s\n' "$got" | grep '^unrun '); err=""
   [ $rc -eq 0 ] && [ -z "$out" ] && printf '%s\n' "$got" | grep -q '^run .*/coachman\.md: ' \
@@ -418,12 +437,13 @@ fi
 die() { echo "launch: $*" >&2; exit 1; }
 [ $# -ge 2 ] || die "usage: launch.sh form|launch|resume|skill <name> ... | --self-test"
 CMD=$1; NAME=$2; shift 2
-LEG=""; LAST=""; RUN=""; STDIN_FILE=""; args=()
+LEG=""; LAST=""; RUN=""; PROJECT=""; STDIN_FILE=""; args=()
 while [ $# -gt 0 ]; do
   case $1 in
     --leg) [ $# -ge 2 ] || die "--leg needs a value"; LEG=$2; shift ;;
     --last) [ $# -ge 2 ] || die "--last needs a file"; LAST=$2; shift ;;
     --run) [ $# -ge 2 ] && [ -n "$2" ] || die "--run needs a dispatch directory"; RUN=$2; shift ;;
+    --project) [ $# -ge 2 ] && [ -n "$2" ] || die "--project needs a project directory"; PROJECT=$2; shift ;;
     *) args+=("$1") ;;
   esac
   shift
@@ -432,6 +452,7 @@ done
   && die "coachman needs --leg synthesis, review or ship to $CMD"
 
 if [ -n "$RUN" ]; then
+  [ -z "$PROJECT" ] || die "use --run or --project, not both"
   SOURCE=${RUN%/}/run.json
   [ -f "$SOURCE" ] || die "no run.json in $RUN; inside a run, a launch or resume runs only on the config the run recorded at dispatch"
 else
@@ -439,9 +460,9 @@ else
   [ -f "$SOURCE" ] || die "no config at $CONFIG (POSTMASTER_CONFIG overrides the path)"
 fi
 python3 -c 'import tomllib' 2>/dev/null || die "python3 with tomllib (3.11 or newer) is needed to read the config"
-spec=$(python3 - "$SOURCE" "$NAME" "$LEG" "${RUN:+run}" <<'PY'
+spec=$(python3 - "$SOURCE" "$NAME" "$LEG" "${RUN:+run}" "$PROJECT" "$HERE" <<'PY'
 import json, re, sys, tomllib, shlex
-path, name, leg, recorded = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4] == "run"
+path, name, leg, recorded, project, here = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4] == "run", sys.argv[5], sys.argv[6]
 def die(msg):
     print("die %s" % shlex.quote(msg)); sys.exit(0)
 def table(v, what):
@@ -458,6 +479,20 @@ if recorded:
     cfg = cfg.get("config") if isinstance(cfg, dict) else None
     if not isinstance(cfg, dict):
         die("cannot read %s: it records no config" % path)
+elif project:
+    import subprocess
+    try:
+        tomllib.load(open(path, "rb"))
+    except (OSError, tomllib.TOMLDecodeError) as e:
+        die("cannot read %s: %s" % (path, e))
+    r = subprocess.run([here + "/project-settings.sh", "effective", project, path],
+                       capture_output=True, text=True)
+    if r.returncode:
+        die(r.stderr.strip() or "cannot resolve project role choices")
+    try:
+        cfg = json.loads(r.stdout)
+    except ValueError as e:
+        die("project settings gave no effective config: %s" % e)
 LEGS = ("synthesis", "review", "ship")
 if leg and leg not in LEGS:
     die("no such leg: --leg %s; the legs are synthesis, review and ship" % leg)
@@ -546,7 +581,9 @@ harness_data() {  # harness_data <harness>: this launch's own data directory, fo
   # and no lane, leg or run finds another's through the harness's own memory. It is not a
   # sandbox: a lane can still read files elsewhere on the machine.
   if [ "$CMD" = form ]; then echo "<harness-data>/$1/<key>"; return 0; fi
-  printf '%s/%s/%s\n' "${POSTMASTER_HARNESS_DATA:-$HOME/.postmaster/harness-data}" "$1" \
+  local root=${POSTMASTER_HARNESS_DATA:-$HOME/.postmaster/harness-data}
+  [ -z "$RUN" ] || root=${RUN%/}/harness-data
+  printf '%s/%s/%s\n' "$root" "$1" \
     "$(printf '%s|%s|%s|%s' "$RUN" "$(CDPATH= cd -P -- "$CWD" && pwd -P)" "$NAME" "$LEG" | cksum | tr ' ' '-')"
 }
 forms() {  # the command for $CMD in cmd, its data directory in DATA, the file its stdin reads in STDIN_FILE
@@ -668,10 +705,16 @@ if [ "$HARNESS" = codex ] && [ "$CMD" = launch ]; then
   grep -qF "[projects.\"$CWD\"]" "$HOME/.codex/config.toml" \
     || printf '\n[projects."%s"]\ntrust_level = "trusted"\n' "$CWD" >> "$HOME/.codex/config.toml"
 fi
+CWD=$(CDPATH= cd -P -- "$CWD" && pwd -P) || die "cannot resolve $CWD"
 CDPATH= cd -- "$CWD" || die "cannot enter $CWD"
 # A harness whose prompt arrives on stdin reads it from the file, never from an inherited pipe.
 if [ -n "$STDIN_FILE" ]; then exec < "$STDIN_FILE" || die "cannot read $STDIN_FILE"; fi
 # The env file reaches the harness's environment only: the command above is already built.
 if [ -n "${ENV_FILE:-}" ]; then set -a; . "$ENV_FILE"; set +a; fi
 unset POSTMASTER_LAUNCH_NAME   # the thread's own launches are named by their own host.sh call
-exec "${cmd[@]}"
+"${cmd[@]}"
+rc=$?
+if [ -n "$RUN" ] && [ -n "${POSTMASTER_EVENT_STREAM:-}" ] && [ -s "$POSTMASTER_EVENT_STREAM" ]; then
+  "$HERE/export-session.sh" "$RUN" "$NAME" "$HARNESS" "$CWD" "$POSTMASTER_EVENT_STREAM" "${DATA:-}" || exit 1
+fi
+exit "$rc"

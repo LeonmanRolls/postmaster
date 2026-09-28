@@ -33,6 +33,8 @@
 # the caller. A reviewer's scratch clone (cut-scratch.sh --clone) opens as a space of its own in
 # Herdr, and in tmux joins the session of the repository it was cut from. <name> labels the space when host.sh opens it, the tab or window and the pane's
 # title, and names the thread where the harness can (POSTMASTER_LAUNCH_NAME, read by launch.sh).
+# If --out is set, its absolute path also reaches launch.sh as POSTMASTER_EVENT_STREAM so that a
+# run can retain the harness's durable session beside that event stream.
 # Pass it as "$(host.sh name <dispatch> <role>)", so a ticket's title never passes through a
 # shell. A pane shows the stream through view-stream.sh. A launch carries its own pane's
 # identity (HERDR_PANE_ID and the like, or TMUX_PANE), never its caller's. If the host cannot
@@ -458,7 +460,7 @@ runner() {
 
   # The launch's environment is its caller's, except for identity: which pane it is in comes
   # from where it actually runs, so nothing it reports lands in its caller's pane.
-  local drop="POSTMASTER_LAUNCH_NAME $PANE_IDS" keep=""
+  local drop="POSTMASTER_LAUNCH_NAME POSTMASTER_EVENT_STREAM $PANE_IDS" keep=""
   case $mode in
     herdr) drop="$drop HERDR_ENV HERDR_SOCKET_PATH HERDR_BIN_PATH"; keep="HERDR_PANE_ID HERDR_TAB_ID HERDR_WORKSPACE_ID HERDR_ENV HERDR_SOCKET_PATH HERDR_BIN_PATH" ;;
     tmux)  drop="$drop TMUX"; keep="TMUX TMUX_PANE" ;;
@@ -471,6 +473,7 @@ runner() {
   done
   for k in $keep; do [ -n "${!k+x}" ] && childenv+=("$k=${!k}"); done
   childenv+=("POSTMASTER_LAUNCH_NAME=$name")
+  [ -z "$out" ] || childenv+=("POSTMASTER_EVENT_STREAM=$out")
 
   # Its streams are emptied once and then only ever appended to, so a second writer on the same
   # file, such as a resume started too soon, cannot overwrite what the first wrote. --append
@@ -849,8 +852,8 @@ EOF
 #!/usr/bin/env bash
 printf '{"type":"system","subtype":"init","session_id":"probe-1","model":"m"}\n'
 if (: < /dev/tty) 2>/dev/null; then tty=yes; else tty=no; fi
-printf 'from=%s|name=%s|pane=%s|tmuxpane=%s|var=%s|sid=%s|pid=%s|pgid=%s|tty=%s\n' "$PWD" "${POSTMASTER_LAUNCH_NAME:-}" \
-  "${HERDR_PANE_ID:-unset}" "${TMUX_PANE:-unset}" "${CALLER_VAR:-unset}" "$(python3 -c 'import os; print(os.getsid(0))')" "$$" \
+printf 'from=%s|name=%s|pane=%s|tmuxpane=%s|var=%s|events=%s|sid=%s|pid=%s|pgid=%s|tty=%s\n' "$PWD" "${POSTMASTER_LAUNCH_NAME:-}" \
+  "${HERDR_PANE_ID:-unset}" "${TMUX_PANE:-unset}" "${CALLER_VAR:-unset}" "${POSTMASTER_EVENT_STREAM:-unset}" "$(python3 -c 'import os; print(os.getsid(0))')" "$$" \
   "$(python3 -c 'import os; print(os.getpgid(0))')" "$tty"
 echo x >> "${COUNT:-/dev/null}"
 sleep "${EMIT_SLEEP:-0}"
@@ -1049,11 +1052,13 @@ EOF
   (cd "$tmp/caller" && hs "$SYS" EMIT_SLEEP=2 -- run "$NAME" "$repo" --marker ../logs/n2.done -- ./fixed.sh >/dev/null)
   check "an earlier launch's marker is gone once run returns" '[ ! -e "$tmp/logs/n2.done" ]'
   check "and it lands again when this one exits, whatever its exit" 'marker "$tmp/logs/n2.done" 20'
-  (cd "$tmp/caller" && hs "$SYS" CALLER_VAR=v HERDR_PANE_ID=caller-pane TMUX_PANE=%9 -- run "$NAME" "$repo/.worktrees/T-1-luna" \
+  (cd "$tmp/caller" && hs "$SYS" CALLER_VAR=v POSTMASTER_EVENT_STREAM=caller-events HERDR_PANE_ID=caller-pane TMUX_PANE=%9 -- run "$NAME" "$repo/.worktrees/T-1-luna" \
      --out ../logs/n3.out --marker ../logs/n3.done --pidfile ../logs/n3.pid -- ./probe.sh >/dev/null)
   marker "$tmp/logs/n3.done"
   check "it runs from the caller's directory, with the caller's environment and its name" \
     '[ "$(field "$tmp/logs/n3.out" from)" = "$tmp/caller" ] && [ "$(field "$tmp/logs/n3.out" var)" = v ] && [ "$(field "$tmp/logs/n3.out" name)" = "$NAME" ]' "$(cat "$tmp/logs/n3.out")"
+  check "the exact --out path reaches the launch as POSTMASTER_EVENT_STREAM" \
+    '[ "$(field "$tmp/logs/n3.out" events)" = "$tmp/caller/../logs/n3.out" ]' "$(cat "$tmp/logs/n3.out")"
   check "but never with its caller's pane" '[ "$(field "$tmp/logs/n3.out" pane)" = unset ] && [ "$(field "$tmp/logs/n3.out" tmuxpane)" = unset ]' "$(cat "$tmp/logs/n3.out")"
   check "it is a session of its own: its group is its pid, not the caller's session" \
     '[ "$(field "$tmp/logs/n3.out" pgid)" = "$(field "$tmp/logs/n3.out" pid)" ] && [ "$(field "$tmp/logs/n3.out" sid)" = "$(field "$tmp/logs/n3.out" pid)" ]'

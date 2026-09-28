@@ -16,6 +16,13 @@ exact launch and resume commands for a configured lane or role; `launch` and `re
 The script and this file change together, and a form the script refuses (agy resume) is a form
 this file has not recorded yet.
 
+For a launch in a run, `<tool>/scripts/host.sh run --out` passes the events path to `launch.sh`.
+After the harness exits, `launch.sh` reads the thread id from that stream and writes the durable
+session under `<dispatch>/sessions/<lane>/<thread-id>`. Codex, Claude Code and pi sessions are
+copied from their durable stores; grok, Muse Code and MiMo Code use their export command;
+Antigravity has no export command, so its complete event stream is kept as the session transcript.
+The export and event stream are separate files in the project-local run record.
+
 Every lane runs unrestricted. Its containment is its worktree (`coachman.md`, Lane capability),
 so the bypass form below is passed on every launch AND every resume. The interactive postmaster
 runs unrestricted too, in its harness's interactive form (below). Nothing in the flow depends on
