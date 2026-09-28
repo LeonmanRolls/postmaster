@@ -7,6 +7,7 @@
 #   launch.sh launch <name> <cwd> <prompt-file> [--leg <leg>] [--last <file>] [--run <dispatch>]
 #   launch.sh resume <name> <cwd> <thread-id> <prompt-file> [--leg <leg>] [--last <file>]
 #                    [--run <dispatch>]
+#   launch.sh review <name> <cwd> <base> [--leg <leg>] [--last <file>] [--run <dispatch>]
 #   launch.sh skill  <name> <skill> [--run <dispatch>]
 #   launch.sh --self-test
 #
@@ -31,7 +32,13 @@
 # The events stream goes to stdout; the caller redirects and backgrounds. --last names the file
 # a harness writes its final message to, where the harness supports it (codex -o). `skill`
 # prints the prompt that invokes the lane's harness's own skill (harnesses.md, Own review
-# skills); `launch` runs it like any other prompt. The one skill is security-review. `form`
+# skills); `launch` runs it like any other prompt. The skills are security-review and
+# code-review. `review` runs the lane's harness's own code-review form on the change from
+# <base> to the scratch's HEAD (harnesses.md, Code review skill): claude's `/code-review`
+# through its launch form, codex's `codex exec review --base <base>` with its launch form's
+# flags, and MiMo Code's launch form with `--command review` and `<base>...HEAD` in the prompt
+# file. It runs at the harness's top level (`max` for claude and codex, `high` for MiMo Code)
+# whatever effort the lane is configured at. `form`
 # prints two lines: `launch: ` and the launch form, then `resume: ` and the resume form, or
 # `resume: none: ` and why there is none.
 #
@@ -39,9 +46,10 @@
 #   exit 1  usage, config or run.json missing or unreadable, unknown name, a leg that is not
 #           synthesis, review or ship, the coachman launched or resumed with no --leg, a
 #           coachman or fallback on a lane's model, harness not on PATH, env_file missing, a
-#           form this script does not have (agy resume), a skill that is not security-review,
-#           or a muse or mimo resume of a thread the launch's data directory does not hold
-#   exit 3  skill: the lane's harness has no such skill recorded
+#           form this script does not have (agy resume), a skill that is not security-review or
+#           code-review, or a muse or mimo resume of a thread the launch's data directory does
+#           not hold
+#   exit 3  skill or review: the lane's harness has no such skill or no review form recorded
 #   else    the harness's own exit code
 set -uo pipefail
 CONFIG=${POSTMASTER_CONFIG:-$HOME/.postmaster/config.toml}
@@ -400,15 +408,61 @@ PY
   printed "an agy lane's form says it has no resume form, and still exits 0" "launch: cd <cwd> && agy -p " "resume: none: agy resume form is not recorded"
 
   echo "skills"
-  printf '[lanes.one]\nharness = "claude"\nmodel = "lane-model"\n\n[lanes.two]\nharness = "codex"\nmodel = "other-model"\n\n[lanes.three]\nharness = "muse"\nmodel = "muse-model"\n' > "$tmp/skills.toml"
+  printf '[lanes.one]\nharness = "claude"\nmodel = "lane-model"\n\n[lanes.two]\nharness = "codex"\nmodel = "other-model"\n\n[lanes.three]\nharness = "muse"\nmodel = "muse-model"\n\n[lanes.four]\nharness = "mimo"\nmodel = "mimo-model"\n' > "$tmp/skills.toml"
   run skills skill one security-review
   [ $rc -eq 0 ] && [ "$out" = /security-review ] && ok "a claude lane's security review skill is /security-review" || fail "a claude lane's security review skill is /security-review"
   run skills skill two security-review
   [ $rc -eq 3 ] && [ -z "$out" ] && case $err in *"no security review skill"*) true ;; *) false ;; esac \
     && ok "a harness with no security review skill is exit 3, never a prompt" || fail "a harness with no security review skill is exit 3, never a prompt"
-  refused "a skill that is not recorded is refused" skills "no such skill: code-review" skill one code-review
+  refused "a skill that is not recorded is refused" skills "no such skill: style-review" skill one style-review
   run skills skill three security-review
   [ $rc -eq 3 ] && [ -z "$out" ] && ok "a muse lane has no security review skill: exit 3" || fail "a muse lane has no security review skill: exit 3"
+  run skills skill one code-review
+  [ $rc -eq 0 ] && [ "$out" = "/code-review <level> <BASE>...HEAD" ] \
+    && ok "a claude lane's code-review skill is /code-review with a named level and range" \
+    || fail "a claude lane's code-review skill is /code-review with a named level and range" "$out"
+  run skills skill two code-review
+  [ $rc -eq 0 ] && [ "$out" = "codex exec review --base <BASE>" ] \
+    && ok "a codex lane's code-review skill is codex exec review --base" \
+    || fail "a codex lane's code-review skill is codex exec review --base" "$out"
+  run skills skill four code-review
+  [ $rc -eq 0 ] && [ "$out" = "mimo run --command review, <BASE>...HEAD in the prompt file" ] \
+    && ok "a mimo lane's code-review skill is mimo run --command review with the range in the prompt file" \
+    || fail "a mimo lane's code-review skill is mimo run --command review with the range in the prompt file" "$out"
+  run skills skill three code-review
+  [ $rc -eq 3 ] && [ -z "$out" ] && case $err in *"no code-review skill"*) true ;; *) false ;; esac \
+    && ok "a harness with no code-review skill is exit 3, never a prompt" || fail "a harness with no code-review skill is exit 3, never a prompt" "$err"
+  "$here/review-forms.sh" has claude && "$here/review-forms.sh" has codex && "$here/review-forms.sh" has mimo \
+    && { "$here/review-forms.sh" has muse; [ $? -eq 3 ]; } \
+    && ok "review-forms.sh and launch.sh skill agree on who has a code-review form" \
+    || fail "review-forms.sh and launch.sh skill agree on who has a code-review form"
+
+  echo "review"
+  # A review runs each harness's own form on the change from <base> to the scratch's HEAD, at
+  # the harness's top level. The stubs print their arguments (and, for mimo, their stdin), so
+  # the controls read the form.
+  printf '[lanes.c]\nharness = "claude"\nmodel = "lane-model"\neffort = "low"\n\n[lanes.x]\nharness = "codex"\nmodel = "lane-model"\neffort = "low"\n\n[lanes.m]\nharness = "mimo"\nmodel = "lane-model"\neffort = "low"\n\n[lanes.z]\nharness = "muse"\nmodel = "lane-model"\n' > "$tmp/review.toml"
+  git init -q -b main "$tmp/rw" && git -C "$tmp/rw" -c user.name=t -c user.email=t@example.invalid \
+    commit -q --allow-empty -m init && git -C "$tmp/rw" worktree add -q --detach "$tmp/rw-detached" \
+    || { echo "self-test: cannot make the review fixture repo"; exit 1; }
+  RBASE=$(git -C "$tmp/rw" rev-parse HEAD)
+  carries "a claude review is /code-review max <base>...HEAD through its launch form" review \
+    "/code-review max $RBASE...HEAD" review c "$tmp/rw" "$RBASE"
+  carries "and at max whatever the lane's effort is" review "--effort max" review c "$tmp/rw" "$RBASE"
+  lacks "a claude review never uses the lane's configured effort" review "--effort low" review c "$tmp/rw" "$RBASE"
+  carries "a codex review is codex exec review --base, with its launch form's flags" review \
+    "$(lines exec review --base "$RBASE")" review x "$tmp/rw" "$RBASE"
+  carries "and at max effort" review 'model_reasoning_effort="max"' review x "$tmp/rw" "$RBASE"
+  lacks "a codex review never uses the lane's configured effort" review 'model_reasoning_effort="low"' review x "$tmp/rw" "$RBASE"
+  carries "a mimo review is --command review --variant high with <base>...HEAD in the prompt file" review \
+    "--variant high --command review" review m "$tmp/rw" "$RBASE"
+  carries "and its stdin is the range" review "stdin=$RBASE...HEAD" review m "$tmp/rw" "$RBASE"
+  lacks "a mimo review never uses the lane's configured effort" review "--variant low" review m "$tmp/rw" "$RBASE"
+  run review review z "$tmp/rw" "$RBASE"
+  [ $rc -eq 3 ] && [ -z "$out" ] && case $err in *"no code-review form"*) true ;; *) false ;; esac \
+    && ok "a review on a harness with no review form is exit 3, never a launch" \
+    || fail "a review on a harness with no review form is exit 3, never a launch"
+  refused "a review with no base is refused" review "review needs <cwd> <base>" review c "$tmp/rw"
 
   echo
   [ "$fails" -eq 0 ] && { echo "self-test: all controls behaved"; exit 0; }
@@ -416,7 +470,8 @@ PY
 fi
 
 die() { echo "launch: $*" >&2; exit 1; }
-[ $# -ge 2 ] || die "usage: launch.sh form|launch|resume|skill <name> ... | --self-test"
+HERE=$(CDPATH= cd -P -- "$(dirname -- "$0")" && pwd -P) || die "cannot resolve this script's directory"
+[ $# -ge 2 ] || die "usage: launch.sh form|launch|resume|review|skill <name> ... | --self-test"
 CMD=$1; NAME=$2; shift 2
 LEG=""; LAST=""; RUN=""; STDIN_FILE=""; args=()
 while [ $# -gt 0 ]; do
@@ -504,6 +559,10 @@ PY
 eval "$spec"
 [ -n "${HARNESS:-}" ] || die "$NAME has no harness in $SOURCE"
 [ -n "${MODEL:-}" ] || die "$NAME has no model in $SOURCE"
+if [ "$CMD" = review ]; then
+  "$HERE/review-forms.sh" has "$HARNESS" \
+    || { echo "launch: $NAME runs on $HARNESS, which has no code-review form recorded in harnesses.md" >&2; exit 3; }
+fi
 command -v "$HARNESS" >/dev/null 2>&1 || die "harness '$HARNESS' is not on PATH"
 if [ -n "${ENV_FILE:-}" ]; then
   ENV_FILE=${ENV_FILE/#\~/$HOME}
@@ -516,7 +575,10 @@ if [ "$CMD" = skill ]; then  # the prompt that invokes the lane's harness's own 
   case $HARNESS:${args[0]} in
     claude:security-review) echo /security-review; exit 0 ;;
     *:security-review) echo "launch: $NAME runs on $HARNESS, which has no security review skill recorded in harnesses.md" >&2; exit 3 ;;
-    *) die "no such skill: ${args[0]}; the one skill is security-review" ;;
+    *:code-review)
+      if form=$("$HERE/review-forms.sh" form "$HARNESS" 2>/dev/null); then echo "$form"; exit 0
+      else echo "launch: $NAME runs on $HARNESS, which has no code-review skill recorded in harnesses.md" >&2; exit 3; fi ;;
+    *) die "no such skill: ${args[0]}; the skills are security-review and code-review" ;;
   esac
 fi
 
@@ -533,10 +595,17 @@ case $CMD in
           CWD=${args[0]}; THREAD=${args[1]}; PROMPT=${args[2]}
           [ -n "$THREAD" ] || die "resume needs a thread id, and none was given"
           prompt_text ;;
+  review) [ ${#args[@]} -eq 2 ] || die "review needs <cwd> <base>"
+          CWD=${args[0]}; BASE=${args[1]}
+          [ -n "$BASE" ] || die "review needs a base, and none was given"
+          PROMPT="" ;;
   *) die "unknown command: $CMD" ;;
 esac
 [ "$CMD" = form ] || [ -d "$CWD" ] || die "no such directory: $CWD"
-case $HARNESS in pi|muse|mimo) [ "$CMD" != form ] ;; *) false ;; esac && {   # read after the cd
+# The prompt file's absolute path, for a harness that reads it after the cd. A review has no
+# caller-supplied prompt: claude's is built in argv, codex's is `--base`, mimo's is written in
+# forms() into the scratch.
+case $HARNESS in pi|muse|mimo) [ "$CMD" = launch ] || [ "$CMD" = resume ] ;; *) false ;; esac && {
   prompt_dir=$(CDPATH= cd -P -- "$(dirname -- "$PROMPT")" && pwd -P) || die "cannot resolve prompt file: $PROMPT"
   PROMPT=$prompt_dir/$(basename "$PROMPT")
 }
@@ -557,18 +626,29 @@ case $HARNESS in
     # A resume takes the launch's flags but -C and --skip-git-repo-check, and runs in the
     # directory this script enters. Without -m and the effort it runs on codex's configured
     # default, not on the thread's own model. `--` stops a prompt that starts with - from being
-    # read as a flag.
-    if [ "$CMD" = resume ]; then cmd=(codex exec resume "$THREAD" --json)
+    # read as a flag. A review is `codex exec review --base`, which computes the merge base
+    # itself, at the top level whatever the lane's effort is.
+    if [ "$CMD" = review ]; then
+      cmd=(codex exec review --base "$BASE" --json)
+      [ -n "$LAST" ] && cmd+=(-o "$LAST")
+      cmd+=(-m "$MODEL" -c 'model_reasoning_effort="max"')
+      cmd+=(--dangerously-bypass-approvals-and-sandbox)
+      if ! git -C "$CWD" symbolic-ref -q HEAD >/dev/null 2>&1; then
+        cmd+=(--skip-git-repo-check)   # a detached scratch
+      fi
+    elif [ "$CMD" = resume ]; then cmd=(codex exec resume "$THREAD" --json)
     else cmd=(codex exec -C "$CWD" --json); fi
-    [ -n "$LAST" ] && cmd+=(-o "$LAST")
-    cmd+=(-m "$MODEL")
-    [ -n "${EFFORT:-}" ] && cmd+=(-c "model_reasoning_effort=\"$EFFORT\"")
-    cmd+=(--dangerously-bypass-approvals-and-sandbox)
-    if [ "$CMD" = launch ] && ! git -C "$CWD" symbolic-ref -q HEAD >/dev/null 2>&1; then
-      cmd+=(--skip-git-repo-check)   # a detached scratch
-    fi
-    if [ "$CMD" = resume ]; then cmd+=(--); fi
-    cmd+=("$PTEXT") ;;
+    if [ "$CMD" != review ]; then
+      [ -n "$LAST" ] && cmd+=(-o "$LAST")
+      cmd+=(-m "$MODEL")
+      [ -n "${EFFORT:-}" ] && cmd+=(-c "model_reasoning_effort=\"$EFFORT\"")
+      cmd+=(--dangerously-bypass-approvals-and-sandbox)
+      if [ "$CMD" = launch ] && ! git -C "$CWD" symbolic-ref -q HEAD >/dev/null 2>&1; then
+        cmd+=(--skip-git-repo-check)   # a detached scratch
+      fi
+      if [ "$CMD" = resume ]; then cmd+=(--); fi
+      cmd+=("$PTEXT")
+    fi ;;
   grok)
     if [ "$CMD" = resume ]; then cmd=(grok --resume "$THREAD" -p "$PTEXT")
     else cmd=(grok --prompt-file "$PROMPT"); fi
@@ -579,10 +659,19 @@ case $HARNESS in
     [ "$CMD" = resume ] && die "agy resume form is not recorded; relaunch against its conversationId by hand (harnesses.md)"
     cmd=(agy -p "$PTEXT" --model "$MODEL" --output-format stream-json --dangerously-skip-permissions --add-dir "$CWD") ;;
   claude)
-    if [ "$CMD" = resume ]; then cmd=(claude -p --resume "$THREAD" "$PTEXT")
+    # A review is the launch form with the skill's own prompt: `/code-review max <BASE>...HEAD`.
+    # The level is always named, because /code-review with no level reuses the last interactive one.
+    if [ "$CMD" = review ]; then
+      PTEXT="/code-review max ${BASE}...HEAD"
+      cmd=(claude -p "$PTEXT")
+    elif [ "$CMD" = resume ]; then cmd=(claude -p --resume "$THREAD" "$PTEXT")
     else cmd=(claude -p "$PTEXT"); fi
     cmd+=(--model "$MODEL")
-    [ -n "${EFFORT:-}" ] && cmd+=(--effort "$EFFORT")
+    if [ "$CMD" = review ]; then
+      cmd+=(--effort max)
+    else
+      [ -n "${EFFORT:-}" ] && cmd+=(--effort "$EFFORT")
+    fi
     # POSTMASTER_LAUNCH_NAME, set by scripts/host.sh, names the thread in the harness's own store.
     [ -n "${POSTMASTER_LAUNCH_NAME:-}" ] && cmd+=(--name "$POSTMASTER_LAUNCH_NAME")
     cmd+=(--output-format stream-json --verbose --dangerously-skip-permissions) ;;
@@ -618,13 +707,25 @@ case $HARNESS in
     # Code keeps its sessions and a memory tool's notes under XDG_DATA_HOME, so each launch has
     # its own. In a new one it would copy Claude Code's session history in first, which the launch
     # turns off; the instruction files it reads from Claude Code are kept.
+    #
+    # A review is the launch form with `--command review` and `<BASE>...HEAD` in the prompt file:
+    # mimo run's arguments are free text and it appends stdin to them (harnesses.md), so the
+    # range rides in the prompt file. The variant is always `high`, the top of MiMo V2.6 Pro's
+    # variants. The prompt file is written into the scratch, which is disposable.
     DATA=$(harness_data mimo)
     cmd=(env "XDG_DATA_HOME=$DATA" MIMOCODE_DISABLE_CLAUDE_IMPORT=1 mimo run --format json -m "$MODEL")
     [ "$CMD" = resume ] && cmd+=(-s "$THREAD")
-    [ -n "${EFFORT:-}" ] && cmd+=(--variant "$EFFORT")
+    if [ "$CMD" = review ]; then cmd+=(--variant high --command review)
+    else [ -n "${EFFORT:-}" ] && cmd+=(--variant "$EFFORT"); fi
     [ "$CMD" = launch ] && [ -n "${POSTMASTER_LAUNCH_NAME:-}" ] && cmd+=(--title "$POSTMASTER_LAUNCH_NAME")
     cmd+=(--dangerously-skip-permissions)
-    STDIN_FILE=$PROMPT ;;
+    if [ "$CMD" = review ]; then
+      PROMPT=$CWD/.review-range.txt
+      printf '%s\n' "${BASE}...HEAD" > "$PROMPT" || die "cannot write the review prompt: $PROMPT"
+      STDIN_FILE=$PROMPT
+    else
+      STDIN_FILE=$PROMPT
+    fi ;;
   *) die "no form for harness '$HARNESS'" ;;
 esac
 }
