@@ -38,22 +38,30 @@
 # identity (HERDR_PANE_ID and the like, or TMUX_PANE), never its caller's. If the host cannot
 # place it, it runs in the background. While it runs it is registered under
 # POSTMASTER_HOST_STATE (default ~/.postmaster/host), whatever its host, so stop and close see it.
+# The record names its group leader by start time and boot, so a pid another process reuses,
+# after a reboot or within one, is never taken for the launch.
 #
 # stop: a launch's processes are its process group and everything they started, whatever session
 # that moved to, as a harness that runs each tool command in a session of its own does. They are
 # found by process id and parent, never by a command line; frozen first, so nothing forks
 # between the listing and the signal; sent TERM; and sent KILL if still there after
 # POSTMASTER_HOST_STOP_WAIT seconds. The process that ran stop, and those above it, never are.
+# Before it signals anything it checks the whole set, and refuses, leaving everything running,
+# if the set holds a systemd manager, the Herdr server or a Herdr client, the moshi-hook daemon,
+# code-server, the tmux server, sshd, a process that is neither in a verified launch's group nor
+# descended from one, or more than POSTMASTER_HOST_STOP_MAX processes.
 #
 # POSTMASTER_HOST=herdr|tmux|none overrides detection; nothing needs setting to get the default.
 # POSTMASTER_HOST_CLAIM_WAIT (20) is how long a new pane has to start its launch,
 # POSTMASTER_HOST_CLOSE_WAIT (15) how long close waits for a launch that is just ending, and
-# POSTMASTER_HOST_STOP_WAIT (20) how long stop waits after TERM before it sends KILL.
+# POSTMASTER_HOST_STOP_WAIT (20) how long stop waits after TERM before it sends KILL, and
+# POSTMASTER_HOST_STOP_MAX (512) the most processes one stop may signal.
 #
 #   exit 0  detected, named, started, stopped, closed, sent, settled or read
 #   exit 1  usage, or nothing could be started
 #   exit 2  close refused: a launch still runs in the worktree, or its space holds something
-#           host.sh did not open; or stop left something of a launch running, named
+#           host.sh did not open; or stop left something of a launch running, named, or
+#           refused a set of processes it could not vouch for, saying why
 #   exit 3  spawn, send, wait or read with no host that keeps an interactive session; or a send
 #           or wait that did not settle, stopped at an approval or a question, or showed no turn
 set -uo pipefail
@@ -148,20 +156,201 @@ PY
 }
 
 # --- the registry of running launches ------------------------------------------------------
-# One file per launch, named for its process group, holding the directory it was placed in and
-# its name. A launch is running while any process of its group is alive; the file of one that
-# is not is removed by whoever reads it next.
-reg_add() { mkdir -p "$STATE/launches" 2>/dev/null && printf '%s\n%s\n' "$2" "$3" > "$STATE/launches/$1"; }
+# One file per launch, named for its process group: the directory it was placed in, its name,
+# `start <t>` for its group leader's start time (field 22 of /proc/<pid>/stat, or what ps prints
+# where there is no /proc) and `boot <id>` for the boot it started in. A pid is reused, after a
+# reboot and within one, so a record stands for a launch only while that same leader is alive in
+# that same boot. Once the leader has exited, its runner writes `member <pid> <t>` for each
+# process still in its group, and the record stands for those that still match. A record that
+# stands for nothing is removed by whoever reads it next. One written before the start and boot
+# lines existed is kept only if it was written in this boot by a leader that had already started,
+# and it is then rewritten with them.
+REGISTRY='import os, subprocess, sys, time
+PROC = os.path.isdir("/proc/self")
+
+def run(*argv):
+    r = subprocess.run(argv, capture_output=True, text=True, env=dict(os.environ, LC_ALL="C"))
+    return r.stdout if r.returncode == 0 else ""
+
+def boot_id():
+    try:
+        with open("/proc/sys/kernel/random/boot_id") as f:
+            return f.read().strip()
+    except OSError:
+        return " ".join(run("sysctl", "-n", "kern.boottime").split())
+
+def boot_time():
+    """When this boot started, in seconds since the epoch, or None."""
+    try:
+        with open("/proc/stat") as f:
+            for line in f:
+                if line.startswith("btime "):
+                    return int(line.split()[1])
+    except OSError:
+        pass
+    words = run("sysctl", "-n", "kern.boottime").replace(",", " ").split()
+    return int(words[words.index("sec") + 2]) if "sec" in words else None
+
+def start_of(pid):
+    """The start time of a live process, as the registry records it, or None."""
+    if PROC:
+        try:
+            with open("/proc/%d/stat" % pid) as f:
+                rest = f.read().rpartition(")")[2].split()
+        except OSError:
+            return None
+        return rest[19] if rest and rest[0] != "Z" else None
+    f = run("ps", "-o", "stat=,lstart=", "-p", str(pid)).split()
+    return " ".join(f[1:6]) if len(f) >= 6 and not f[0].startswith("Z") else None
+
+def processes():
+    """pid -> (group, start) for every live process."""
+    t = {}
+    if PROC:
+        for p in os.listdir("/proc"):
+            if p.isdigit():
+                try:
+                    with open("/proc/%s/stat" % p) as f:
+                        rest = f.read().rpartition(")")[2].split()
+                except OSError:
+                    continue
+                if rest and rest[0] != "Z":
+                    t[int(p)] = (int(rest[2]), rest[19])
+    else:
+        for line in run("ps", "-A", "-o", "pid=,pgid=,stat=,lstart=").splitlines():
+            f = line.split()
+            if len(f) >= 8 and f[0].isdigit() and f[1].isdigit() and not f[2].startswith("Z"):
+                t[int(f[0])] = (int(f[1]), " ".join(f[3:8]))
+    return t
+
+def started_at(start):
+    """When a process with this start time started, in seconds since the epoch, or None."""
+    if start.isdigit():
+        booted = boot_time()
+        return None if booted is None else booted + int(start) / os.sysconf("SC_CLK_TCK")
+    try:
+        return time.mktime(time.strptime(start, "%a %b %d %H:%M:%S %Y"))
+    except ValueError:
+        return None
+
+def load(path):
+    with open(path) as f:
+        lines = f.read().split("\n")
+    rec = {"dir": lines[0], "name": lines[1] if len(lines) > 1 else "", "start": None, "boot": None, "members": []}
+    for line in lines[2:]:
+        key, _, value = line.partition(" ")
+        if key == "start":
+            rec["start"] = value
+        elif key == "boot":
+            rec["boot"] = value
+        elif key == "member":
+            pid, _, start = value.partition(" ")
+            if pid.isdigit() and start:
+                rec["members"].append((int(pid), start))
+    return rec
+
+def save(path, rec):
+    new = path + ".new"
+    with open(new, "w") as f:
+        f.write("%s\n%s\nstart %s\nboot %s\n" % (rec["dir"], rec["name"], rec["start"] or "", rec["boot"] or ""))
+        for pid, start in rec["members"]:
+            f.write("member %d %s\n" % (pid, start))
+    os.replace(new, path)
+
+def drop(path):
+    try:
+        os.unlink(path)
+    except OSError:
+        pass
+
+def roots(path, group, rec, procs, boot):
+    """What the record still stands for: group|<pid>|<start> while its leader lives, else
+    tree|<pid>|<start> for each recorded member that does; None when it stands for nothing."""
+    if rec["start"] is None and rec["boot"] is None:        # written before start and boot were
+        booted = boot_time()
+        try:
+            written = os.stat(path).st_mtime
+        except OSError:
+            return None
+        if group not in procs or booted is None or written < booted:
+            return None
+        began = started_at(procs[group][1])
+        if began is None or began > written + 2:             # the pid is newer than the record
+            return None
+        rec["start"], rec["boot"] = procs[group][1], boot
+        save(path, rec)
+    if not rec["boot"] or rec["boot"] != boot:
+        return None
+    if group in procs and rec["start"] and procs[group][1] == rec["start"]:
+        return ["group|%d|%s" % (group, rec["start"])]
+    out = ["tree|%d|%s" % (p, s) for p, s in rec["members"] if p in procs and procs[p][1] == s]
+    return out or None
+
+cmd, reg = sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else ""
+if cmd == "add":                                  # add <registry> <group> <dir> <name>
+    group = int(sys.argv[3])
+    os.makedirs(reg, exist_ok=True)
+    save(os.path.join(reg, str(group)), {"dir": sys.argv[4], "name": sys.argv[5],
+         "start": start_of(group) or "", "boot": boot_id(), "members": []})
+elif cmd == "members":                            # members <registry> <group>: its leader has exited
+    group = int(sys.argv[3])
+    path = os.path.join(reg, str(group))
+    try:
+        rec = load(path)
+    except OSError:
+        sys.exit(0)
+    rec["members"] = sorted((p, v[1]) for p, v in processes().items() if v[0] == group)
+    save(path, rec) if rec["members"] else drop(path)
+elif cmd == "scan":                               # scan <registry> <dir>
+    boot, procs = boot_id(), processes()
+    try:
+        names = sorted(os.listdir(reg))
+    except OSError:
+        names = []
+    for n in names:
+        if not n.isdigit():
+            continue
+        path = os.path.join(reg, n)
+        try:
+            rec = load(path)
+        except OSError:
+            continue
+        r = roots(path, int(n), rec, procs, boot)
+        if r is None:
+            drop(path)
+        elif rec["dir"] == sys.argv[3]:
+            print("\t".join([n, rec["name"]] + r))
+elif cmd == "start":                              # the self-test: start <pid>
+    print(start_of(int(sys.argv[2])) or "")
+elif cmd == "started":                            # started <pid>: when, in seconds since the epoch
+    at = started_at(start_of(int(sys.argv[2])) or "")
+    print("" if at is None else int(at))
+elif cmd == "boot":
+    print(boot_id())
+elif cmd == "booted":
+    print(boot_time() or "")'
+fixture_guard() {  # while a self-test runs, the registry is its fixture and never the live one
+  [ -z "${POSTMASTER_HOST_FIXTURE:-}" ] && return 0
+  case $STATE/ in "$POSTMASTER_HOST_FIXTURE"/*) return 0 ;; esac
+  warn "refusing the registry at $STATE: a self-test uses only its fixture, $POSTMASTER_HOST_FIXTURE"
+  return 1
+}
+reg_add() {  # reg_add <group> <dir> <name>
+  fixture_guard || return 1
+  python3 -c "$REGISTRY" add "$STATE/launches" "$1" "$2" "$3"
+}
+reg_members() {  # reg_members <group>: its leader has exited; note what is left of its group, or drop it
+  fixture_guard || return 1
+  python3 -c "$REGISTRY" members "$STATE/launches" "$1"
+}
+reg_scan() {  # reg_scan <dir>: "<group>\t<name>\t<root>..." per launch placed in <dir> that checks out
+  fixture_guard || return 1
+  python3 -c "$REGISTRY" scan "$STATE/launches" "$1"
+}
 reg_live() {  # reg_live <dir>: "<group>\t<name>" per launch still running that was placed in <dir>
-  local f pg cwd name
-  for f in "$STATE"/launches/*; do
-    [ -f "$f" ] || continue
-    pg=${f##*/}
-    case $pg in ''|*[!0-9]*) continue ;; esac
-    if ! kill -0 -- "-$pg" 2>/dev/null && ! kill -0 "$pg" 2>/dev/null; then rm -f -- "$f"; continue; fi
-    { IFS= read -r cwd; IFS= read -r name; } < "$f"
-    [ "$cwd" = "$1" ] && printf '%s\t%s\n' "$pg" "$name"
-  done
+  local out
+  out=$(reg_scan "$1") || return 1
+  [ -z "$out" ] || printf '%s\n' "$out" | cut -f1,2
 }
 
 # --- Herdr placement ----------------------------------------------------------------------
@@ -484,9 +673,13 @@ runner() {
   ( CDPATH= cd -- "$rundir" && exec python3 -c "$START_CHILD" "${argv[@]}" 3< <(printf '%s\0' "${childenv[@]}") ) \
     >> "$o" 2>> "$e" < /dev/null &
   cpid=$!
-  [ -n "$pidfile" ] && printf '%s\n' "$cpid" > "$pidfile"
-  reg_add "$cpid" "$cwd" "$name"
+  # The marker's watcher and the registry record come before the pidfile, since run returns to
+  # its caller the moment the pidfile holds a pid: a caller that stops or kills the launch then
+  # finds it registered, and its marker still lands.
   trap 'kill -TERM -- "-$cpid" 2>/dev/null || kill -TERM "$cpid" 2>/dev/null' HUP INT TERM
+  [ "$mode" != bg ] && [ -n "$marker" ] && watch_exit "$cpid" "$marker"
+  reg_add "$cpid" "$cwd" "$name"
+  [ -n "$pidfile" ] && printf '%s\n' "$cpid" > "$pidfile"
 
   if [ "$mode" != bg ]; then
     printf '\033]0;%s\007' "$name"                 # the terminal title, for a pane with an agent
@@ -494,7 +687,6 @@ runner() {
     printf '%s\nstarted %s in %s\n' "$name" "$(date '+%H:%M:%S')" "$rundir"
     [ -n "$out" ] && printf 'events: %s\n' "$out"
     printf '%s\n' "----"
-    [ -n "$marker" ] && watch_exit "$cpid" "$marker"
     if [ -n "$out" ]; then "$HERE/view-stream.sh" --follow "$out" --pid "$cpid" --from "$from" & vpid=$!; fi
     [ "$mode" = herdr ] && [ -n "${HERDR_PANE_ID:-}" ] && { herdr_report "$cpid" "$name" & rpid=$!; }
     [ "$mode" = tmux ] && tmux set-option -w -t "${TMUX_PANE:-}" @postmaster_state running >/dev/null 2>&1
@@ -506,7 +698,7 @@ runner() {
   done
   [ -n "$marker" ] && touch "$marker"
   trap - HUP INT TERM
-  kill -0 -- "-$cpid" 2>/dev/null || rm -f -- "$STATE/launches/$cpid"
+  reg_members "$cpid"                              # what the leader left in its group, or nothing
   [ "$mode" = bg ] && return 0
 
   [ -n "$vpid" ] && wait "$vpid" 2>/dev/null
@@ -525,25 +717,40 @@ worktree_arg() {  # worktree_arg <dir> <what>: its real path, or die
 }
 
 stop_cmd() {  # stop <worktree>: every launch still running in it, and all it started, whatever its host
-  local path pg name n=0 live groups="" patience out rc
+  local path line f n=0 scan roots=() patience most out rc
   path=$(worktree_arg "${1:-}" stop) || exit 1
   case $(pwd -P)/ in "$path"/*) die "not stopping the launches in $path from inside it: that stops this session too" ;; esac
   patience=$(count "${POSTMASTER_HOST_STOP_WAIT:-20}" POSTMASTER_HOST_STOP_WAIT) || exit 1
-  live=$(reg_live "$path")
-  [ -n "$live" ] || { echo "no launch is running in $path"; return 0; }
-  while IFS=$'\t' read -r pg name; do groups="$groups $pg"; n=$((n + 1)); done <<< "$live"
-  out=$(stop_tree "$patience" $groups); rc=$?
+  most=$(count "${POSTMASTER_HOST_STOP_MAX:-512}" POSTMASTER_HOST_STOP_MAX) || exit 1
+  scan=$(reg_scan "$path") || exit 1
+  [ -n "$scan" ] || { echo "no launch is running in $path"; return 0; }
+  while IFS= read -r line; do
+    IFS=$'\t' read -r -a f <<< "$line"
+    roots+=("${f[@]:2}"); n=$((n + 1))
+  done <<< "$scan"
+  out=$(stop_tree "$patience" "$most" "${roots[@]}"); rc=$?
   case $rc in
     0) echo "stopped $n launch(es) in $path: ${out%%$'\t'*} process(es)" ;;
     2) warn "stopped $n launch(es) in $path, but these still run: ${out#*$'\t'}"; return 2 ;;
+    3) warn "refused to stop the launches in $path, and left them running: ${out#*$'\t'}"; return 2 ;;
     *) warn "could not stop the launches in $path: $out"; return 1 ;;
   esac
 }
-stop_tree() {  # stop_tree <seconds> <group>...: prints "<processes>\t<survivors>"; exits 2 if any survive
+# stop_tree <seconds> <most> <root>...: each root is group|<pid>|<start> for a launch whose leader
+# lives, or tree|<pid>|<start> for a process its leader left, as reg_scan prints them. Prints
+# "<processes>\t<survivors>" and exits 2 if any survive, or "refused\t<why>" and exits 3 when the
+# set it would signal holds something it must never touch, having signalled none of it.
+stop_tree() {
   python3 - "$@" <<'PY'
 import os, signal, subprocess, sys, time
 
-grace, groups = float(sys.argv[1]), {int(g) for g in sys.argv[2:]}
+grace, most = float(sys.argv[1]), int(sys.argv[2])
+roots = []
+for r in sys.argv[3:]:
+    kind, _, rest = r.partition("|")
+    pid, _, start = rest.partition("|")
+    if kind in ("group", "tree") and pid.isdigit() and start:
+        roots.append((kind, int(pid), start))
 
 def table():
     """pid -> (ppid, group, start, zombie, name), from /proc where there is one, else from ps."""
@@ -570,10 +777,42 @@ def table():
         print("cannot list processes"); sys.exit(1)
     return t
 
+def args_of(pid):
+    """A process's command line, for recognising what must never be signalled."""
+    try:
+        with open("/proc/%d/cmdline" % pid, "rb") as f:
+            return f.read().replace(b"\0", b" ").decode("utf-8", "replace").strip()
+    except OSError:
+        if os.path.isdir("/proc/self"):
+            return ""
+    return subprocess.run(["ps", "-o", "args=", "-p", str(pid)], capture_output=True, text=True,
+                          env=dict(os.environ, LC_ALL="C")).stdout.strip()
+
+def protected(pid, name):
+    """What a process is when stop must never signal it, else None."""
+    words = args_of(pid).split()
+    tail = words[1:]
+    if pid == 1:
+        return "the init process"
+    if name == "systemd":
+        return "a systemd manager"
+    if name == "herdr" and (not tail or "server" in tail or any(w.startswith("--session") for w in tail)):
+        return "the Herdr server or a Herdr client"
+    if name == "moshi-hook" and "serve" in tail:
+        return "the moshi-hook daemon"
+    if any("code-server" in w for w in words):
+        return "code-server"
+    if name.startswith("tmux") and ("server" in name or not tail):
+        return "the tmux server"
+    if name == "sshd":
+        return "sshd"
+    return None
+
 def tree(t, spare):
-    """Every live member of the launches' groups, and every live process descended from one."""
+    """Every live member of the verified launches' groups, every live process a verified root
+    names, and every live process descended from one of those."""
     live = {p for p, v in t.items() if not v[3]} - spare
-    hit = {p for p in live if t[p][1] in groups}
+    hit = {p for p in live if t[p][1] in groups} | (seeds & live)
     kids = {}
     for p, v in t.items():
         kids.setdefault(v[0], []).append(p)
@@ -596,16 +835,49 @@ def left(t, spare, known):
     """What is still there: a process signalled before, same pid and start, or one of the tree."""
     return {p for p, st in known.items() if p in t and t[p][2] == st and not t[p][3]} | tree(t, spare)
 
+def belongs(t, p):
+    """Whether a process is in a verified launch's group or descends from a verified root."""
+    q, seen = p, set()
+    while q in t and q not in seen and q not in (0, 1):
+        if q in seeds or t[q][1] in groups:
+            return True
+        seen.add(q)
+        q = t[q][0]
+    return False
+
+def refuse(why, frozen):
+    if frozen:                              # found only after the first freeze: undo it
+        sig(frozen, signal.SIGCONT)
+        why += "; the %d processes frozen before it was found were resumed" % len(frozen)
+    print("refused\t%s" % why)
+    sys.exit(3)
+
+def check(t, batch, total, frozen):
+    """Refuse the whole stop, before any of the batch is signalled, if it is not only ours."""
+    if len(total) > most:
+        refuse("%d processes, more than POSTMASTER_HOST_STOP_MAX (%d)" % (len(total), most), frozen)
+    for p in sorted(batch):
+        what = protected(p, t[p][4])
+        if what:
+            refuse("%d/%s is %s" % (p, t[p][4], what), frozen)
+        if not belongs(t, p):
+            refuse("%d/%s is not a process of these launches" % (p, t[p][4]), frozen)
+
 t = table()
 spare, p = {0, 1}, os.getpid()
 while p in t and p not in spare:            # this process and every process above it
     spare.add(p)
     p = t[p][0]
+# A root counts only if its process is still the one the registry recorded: same pid, same start.
+ok = [(kind, pid) for kind, pid, start in roots if pid in t and t[pid][2] == start and not t[pid][3]]
+groups = {pid for kind, pid in ok if kind == "group"}
+seeds = {pid for kind, pid in ok}
 frozen = set()
 for _ in range(20):
     new = tree(t, spare) - frozen
     if not new:
         break
+    check(t, new, frozen | new, frozen)
     sig(new, signal.SIGSTOP)
     frozen |= new
     t = table()
@@ -633,7 +905,7 @@ close_cmd() {  # close <worktree>: refuse while a launch runs there; then its wi
   local path live i=0 rc=0 patience
   path=$(worktree_arg "${1:-}" close) || exit 1
   patience=$(count "${POSTMASTER_HOST_CLOSE_WAIT:-15}" POSTMASTER_HOST_CLOSE_WAIT) || exit 1
-  while live=$(reg_live "$path"); [ -n "$live" ]; do   # one whose marker just landed ends a moment later
+  while live=$(reg_live "$path") || exit 1; [ -n "$live" ]; do   # one whose marker just landed ends a moment later
     if [ $i -ge "$patience" ]; then
       warn "a launch is still running in $path: $(printf '%s\n' "$live" | cut -f2 | tr '\n' ';' | sed 's/;$//')"
       return 2
@@ -827,6 +1099,9 @@ read_cmd() {  # read <handle> [<lines>]
 # --- tests --------------------------------------------------------------------------------
 test_setup() {  # a scratch repository with worktrees, and the commands the tests launch
   tmp=$(mktemp -d) || exit 1
+  # A fixture registry, and a guard that refuses any other, so no test ever reads, prunes or
+  # stops from the live one.
+  STATE=$tmp/state; export POSTMASTER_HOST_STATE=$STATE POSTMASTER_HOST_FIXTURE=$tmp
   fails=0
   repo=$tmp/hosttest-$$
   git init -q -b main "$repo" && git -C "$repo" -c user.name=t -c user.email=t@t commit -q --allow-empty -m first || exit 1
@@ -1013,7 +1288,8 @@ EOF
     local p=$1 vars=(); shift
     while [ "$1" != -- ]; do vars+=("$1"); shift; done; shift
     env -i HOME="$HOME" PATH="$p" STUB="$tmp/stub" TMPDIR="$tmp" POSTMASTER_HOST_STATE="$tmp/state" \
-      POSTMASTER_HOST_CLAIM_WAIT=3 POSTMASTER_HOST_CLOSE_WAIT=1 ${vars[@]+"${vars[@]}"} "$SELF" "$@"
+      POSTMASTER_HOST_FIXTURE="$tmp" POSTMASTER_HOST_CLAIM_WAIT=3 POSTMASTER_HOST_CLOSE_WAIT=1 \
+      ${vars[@]+"${vars[@]}"} "$SELF" "$@"
   }
   reset() { rm -f -- "$tmp"/stub/*; }
   calls() { cat "$tmp/stub/$1.calls" 2>/dev/null; }
@@ -1102,6 +1378,89 @@ EOF
   check "its marker lands" 'marker "$tmp/logs/k1.done" 10'
   check "a process that works in the worktree but that no launch started is left alone" 'alive "$b"'
   kill "$b" 2>/dev/null; wait "$b" 2>/dev/null
+
+  echo "stop: a record counts only while its own leader lives, in this boot, and nothing unvouched is signalled"
+  running() { local st; st=$(ps -o stat= -p "$1" 2>/dev/null) && [ -n "$st" ] && [ "${st#[TZ]}" = "$st" ]; }
+  reg() { python3 -c "$REGISTRY" "$@"; }
+  setmtime() { python3 -c 'import os, sys; t = int(sys.argv[2]); os.utime(sys.argv[1], (t, t))' "$1" "$2"; }
+  sol=$repo/.worktrees/T-1-sol; L=$tmp/state/launches; boot=$(reg boot); mkdir -p "$L"
+  stop_sol() { hs "$SYS" POSTMASTER_HOST_STOP_WAIT=1 "$@" -- stop "$sol" 2>&1; }
+  python3 -c 'import os; os.setsid(); os.execvp("sleep", ["sleep", "60"])' >/dev/null 2>&1 & u=$!   # a group leader no launch started
+  a=0; while [ -z "$(reg start "$u")" ] && [ $a -lt 20 ]; do sleep 0.1; a=$((a + 1)); done
+  printf '%s\n%s\nstart 1\nboot %s\n' "$sol" "not this" "$boot" > "$L/$u"
+  got=$(stop_sol); rc=$?
+  check "a record whose leader has another start time is removed, and stop signals nothing" \
+    '[ $rc -eq 0 ] && [ "$got" = "no launch is running in $sol" ] && running "$u" && [ ! -e "$L/$u" ]' "$got"
+  printf '%s\n%s\nstart %s\nboot another-boot\n' "$sol" "not this" "$(reg start "$u")" > "$L/$u"
+  got=$(stop_sol); rc=$?
+  check "a record from another boot is removed, and stop signals nothing" \
+    '[ $rc -eq 0 ] && running "$u" && [ ! -e "$L/$u" ]' "$got"
+  printf '%s\n%s\n' "$sol" "not this" > "$L/$u"; setmtime "$L/$u" $(( $(reg booted) - 60 ))
+  got=$(stop_sol); rc=$?
+  check "a record from before this change, written before this boot, is removed" \
+    '[ $rc -eq 0 ] && running "$u" && [ ! -e "$L/$u" ]' "$got"
+  printf '%s\n%s\n' "$sol" "not this" > "$L/$u"; setmtime "$L/$u" $(( $(reg started "$u") - 30 ))
+  got=$(stop_sol); rc=$?
+  check "a record from before this change, naming a pid that started after it was written, is removed" \
+    '[ $rc -eq 0 ] && running "$u" && [ ! -e "$L/$u" ]' "$got"
+  printf '%s\n%s\n' "$sol" "legacy" > "$L/$u"
+  hs "$SYS" -- close "$sol" >/dev/null 2>&1; rc=$?
+  check "a record from before this change, written by a leader already running, is kept and rewritten" \
+    '[ $rc -eq 2 ] && grep -qx "start $(reg start "$u")" "$L/$u" && grep -qx "boot $boot" "$L/$u"' "$(cat "$L/$u" 2>/dev/null)"
+  kill "$u" 2>/dev/null; rm -f "$L/$u"
+
+  cat > "$tmp/caller/leaves.sh" <<'EOF'
+#!/usr/bin/env bash
+sleep 60 & echo $! > "$TREE/left.pid"
+EOF
+  chmod +x "$tmp/caller/leaves.sh"
+  (cd "$tmp/caller" && hs "$SYS" TREE="$tmp/tree" -- run "$NAME" "$sol" --marker ../logs/k2.done -- ./leaves.sh >/dev/null)
+  marker "$tmp/logs/k2.done" 10
+  a=0; while ! grep -qs '^member ' "$L"/* && [ $a -lt 30 ]; do sleep 0.1; a=$((a + 1)); done
+  lp=$(cat "$tmp/tree/left.pid" 2>/dev/null)
+  check "a leader that exits leaving a process behind: its record names that process" \
+    '[ -n "$lp" ] && grep -qsx "member $lp $(reg start "$lp")" "$L"/*' "$(cat "$L"/* 2>/dev/null)"
+  got=$(stop_sol); rc=$?
+  check "and stop ends that process" '[ $rc -eq 0 ] && ! alive "$lp"' "$got"
+
+  ln -s "$(command -v python3)" "$tmp/sys/moshi-hook"; ln -s "$(command -v python3)" "$tmp/sys/systemd"
+  cat > "$tmp/caller/guarded.sh" <<'EOF'
+#!/usr/bin/env bash
+# A launch with a process that looks like one stop must never touch.
+"$LOOKS_LIKE" -c 'import time; time.sleep(60)' $ARGS & echo $! > "$TREE/guarded.pid"
+sleep 60 & wait
+EOF
+  chmod +x "$tmp/caller/guarded.sh"
+  local spec look args why
+  for spec in "moshi-hook serve|the moshi-hook daemon" "systemd --user|a systemd manager"; do
+    look=${spec%% *}; args=${spec#* }; args=${args%%|*}; why=${spec#*|}
+    rm -f "$tmp/tree/guarded.pid" "$tmp/logs/k3.done"
+    (cd "$tmp/caller" && hs "$SYS" TREE="$tmp/tree" LOOKS_LIKE="$look" ARGS="$args" -- \
+       run "$NAME" "$sol" --marker ../logs/k3.done --pidfile ../logs/k3.pid -- ./guarded.sh >/dev/null)
+    a=0; while [ ! -s "$tmp/tree/guarded.pid" ] && [ $a -lt 50 ]; do sleep 0.1; a=$((a + 1)); done; sleep 0.3
+    got=$(stop_sol); rc=$?
+    check "stop refuses a tree holding $why, and leaves it all running" \
+      '[ $rc -eq 2 ] && case $got in *"$why"*) true ;; *) false ;; esac && running "$(cat "$tmp/tree/guarded.pid")" && running "$(cat "$tmp/logs/k3.pid")" && [ ! -e "$tmp/logs/k3.done" ]' "$got"
+    kill -- "-$(cat "$tmp/logs/k3.pid")" 2>/dev/null; marker "$tmp/logs/k3.done" 10
+  done
+
+  cat > "$tmp/caller/wide.sh" <<'EOF'
+#!/usr/bin/env bash
+for i in 1 2 3 4; do sleep 60 & done
+wait
+EOF
+  chmod +x "$tmp/caller/wide.sh"
+  (cd "$tmp/caller" && hs "$SYS" -- run "$NAME" "$sol" --marker ../logs/k4.done --pidfile ../logs/k4.pid -- ./wide.sh >/dev/null)
+  sleep 0.5
+  got=$(stop_sol POSTMASTER_HOST_STOP_MAX=3); rc=$?
+  check "stop refuses a tree larger than POSTMASTER_HOST_STOP_MAX, and leaves it running" \
+    '[ $rc -eq 2 ] && case $got in *"more than POSTMASTER_HOST_STOP_MAX (3)"*) true ;; *) false ;; esac && running "$(cat "$tmp/logs/k4.pid")" && [ ! -e "$tmp/logs/k4.done" ]' "$got"
+  got=$(stop_sol); rc=$?
+  check "within the bound, the same tree is stopped" '[ $rc -eq 0 ] && marker "$tmp/logs/k4.done" 10' "$got"
+
+  got=$(hs "$SYS" POSTMASTER_HOST_STATE="$tmp.elsewhere" -- stop "$sol" 2>&1); rc=$?
+  check "while a self-test runs, a registry outside its fixture is refused" \
+    '[ $rc -eq 1 ] && case $got in *"refusing the registry"*) true ;; *) false ;; esac && [ ! -e "$tmp.elsewhere" ]' "$got"
 
   echo "run, Herdr (stub): a pane in the worktree's space, nested under the repository's"
   reset
@@ -1268,8 +1627,7 @@ PY
 }
 
 live_test() {
-  test_setup
-  export POSTMASTER_HOST_STATE=$tmp/state
+  test_setup                                          # its registry is the fixture's too
   opened=() tsession=""
   trap 'for (( i=${#opened[@]}-1; i>=0; i-- )); do herdr workspace close "${opened[i]}" >/dev/null 2>&1; done
         [ -n "$tsession" ] && tmux kill-session -t "=$tsession" >/dev/null 2>&1
