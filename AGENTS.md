@@ -206,6 +206,11 @@ whole system.
 
 ## Working on this repository
 
+The scripts run on Bun 1.4.2 or newer: each `scripts/<name>.sh` is a one-line wrapper that
+hands its arguments to `scripts/<name>.ts`. Runtime imports are Bun's built-ins and Node's
+standard modules only; `typescript` and `@biomejs/biome` are the development dependencies,
+and `bun run check` is the type check, the lint and every script's self-test.
+
 **Fix an open pull request instead of deferring its gaps to a ticket.** When you find a flaw
 in work an open pull request introduces, fix it on that pull request's branch: a missing
 check, a stale sentence, an instruction with no mechanism behind it, a rule written as prose
