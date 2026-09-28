@@ -370,6 +370,27 @@ whether to trust it; headless `claude -p` does not ask. The first spawn in a new
 there, and the user answers it in the pane. A row not checked here takes its bypass flag from
 the headless form above; run it once before relying on it.
 
+## The postmaster watcher
+
+The postmaster starts `<tool>/scripts/runs-watch.sh` with the `host.sh run` form in Stage D of
+`postmaster.md`. `host.sh run` returns once the watcher starts and keeps it alive beyond the
+harness call. The wrapper uses Herdr or tmux when available and otherwise starts a detached
+process. The output file in the Stage D command keeps the table available when there is no pane.
+
+| postmaster harness | Keep the watcher running without blocking the conversation |
+|---|---|
+| claude | Start it with the Stage D `host.sh run` command; the wrapper returns while it polls. |
+| pi | Start it with the Stage D `host.sh run` command; the wrapper returns while it polls. |
+| codex | Start it with the Stage D `host.sh run` command; the wrapper returns while it polls. |
+| grok | Start it with the Stage D `host.sh run` command; the wrapper returns while it polls. |
+| agy | Start it with the Stage D `host.sh run` command; the wrapper returns while it polls. |
+| muse | Start it with the Stage D `host.sh run` command; the wrapper returns while it polls. |
+| mimo | Start it with the Stage D `host.sh run` command; the wrapper returns while it polls. |
+
+If a harness cannot invoke `host.sh run`, it has no supported nonblocking watcher form. On each
+available conversation turn, run `<tool>/scripts/runs-status.sh <runs>` in the foreground and
+act on its `NEXT` values. It cannot wake a dormant conversation between turns.
+
 ## The pane view
 
 `<tool>/scripts/view-stream.sh` is the other executable half of this file: it renders an events

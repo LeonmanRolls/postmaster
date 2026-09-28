@@ -199,13 +199,26 @@ live one. Below, `<p>` is the leg before leg `<n>` in that list.
 
 ## Stage D: supervise
 
-Poll every `postmaster.poll_seconds` (default 120) with one command per project:
+Keep one `runs-watch.sh` running in the background for this project's run root. Start it with
+`host.sh run`; that returns to this conversation while the watcher keeps polling. Its pane shows
+the result on Herdr or tmux. The report is also written to `<runs>/postmaster/watch.out`; read it
+after `<runs>/postmaster/.watch-exited` appears.
 
 ```sh
-<tool>/scripts/runs-status.sh <runs>
+"<tool>/scripts/host.sh" run "postmaster watch · <project>" "<repo>" \
+    --out "<runs>/postmaster/watch.out" --err "<runs>/postmaster/watch.err" \
+    --marker "<runs>/postmaster/.watch-exited" \
+    -- "<tool>/scripts/runs-watch.sh" "<runs>"
 ```
 
-Act on the `NEXT` column, run by run, and log every action:
+When the watcher exits with a report, act on every run it names and log each action below. Start
+the watcher again immediately after those actions; do not wait for the next poll interval.
+
+To hold a run, add its exact ticket directory name as one line in `<runs>/postmaster/held`.
+The watcher ignores held runs. To release a run, remove its line from that file.
+
+The watcher reports the table from `<tool>/scripts/runs-status.sh` and names every unheld run whose
+`NEXT` is not `WAIT`, `USER` or `-`. The same states below apply:
 
 - **USER:** the run waits on the user, and its `.waiting-on-user` holds the question (Stage E
   step 3, Stage F step 2). Put the question to the user again if you have not in this session;
