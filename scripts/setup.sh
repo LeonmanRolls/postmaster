@@ -16,8 +16,8 @@
 #   exit 0  config written (or printed), or keys listed
 #   exit 1  a harness was named that is not on PATH, the coachman shares a lane's model, fewer
 #           than two lanes were given, a reviewer is not a lane, an answer was missing, a round
-#           time limit was not a whole number of seconds from 1 to 86400, or an existing config
-#           was not overwritten
+#           time limit was not a whole number of seconds from 1 to 86400, a launch cap was not
+#           a whole number greater than 0, or an existing config was not overwritten
 #
 # Control: the written file is parsed back as TOML where a parser is available, and its reviewer
 # lanes are resolved through scripts/reviewers.sh, so a config that would fail to load is never
@@ -73,6 +73,14 @@ postmaster.env_file=~/.postmaster/lanes/pm.env"; run roles; rc=$?
   [ $rc -eq 0 ] && [ "$(limit limit)" = 86400 ] && ok "an answer sets it, up to 86400" \
     || fail "an answer sets it, up to 86400 (exit $rc)" "$(cat "$tmp/limit.out")"
 
+  caps() { python3 -c 'import sys, tomllib; d=tomllib.load(open(sys.argv[1], "rb"))["limits"]; print(d["memory_bytes"], d["tasks"])' "$tmp/$1.toml" 2>&1; }
+  [ "$(caps plain)" = "8589934592 512" ] && ok "launch caps default to 8 GiB and 512 tasks, under [limits]" \
+    || fail "launch caps default to 8 GiB and 512 tasks, under [limits]" "$(caps plain)"
+  answers capset "limits.memory_bytes=1073741824
+limits.tasks=64"; run capset; rc=$?
+  [ $rc -eq 0 ] && [ "$(caps capset)" = "1073741824 64" ] && ok "answers set the launch caps" \
+    || fail "answers set the launch caps (exit $rc)" "$(cat "$tmp/capset.out")"
+
   echo "negative controls"
   n=0
   for v in 0 -60 abc 1.5 0600 "40 minutes" 86401 9999999999999999999; do
@@ -80,6 +88,13 @@ postmaster.env_file=~/.postmaster/lanes/pm.env"; run roles; rc=$?
     [ $rc -eq 1 ] && [ ! -e "$tmp/limit$n.toml" ] && grep -q "round_timeout_seconds must be" "$tmp/limit$n.out" \
       && ok "a round time limit of '$v' is refused, and nothing is written" \
       || fail "a round time limit of '$v' is refused, and nothing is written (exit $rc)" "$(cat "$tmp/limit$n.out")"
+  done
+  n=0
+  for v in 0 -1 abc 1.5; do
+    n=$((n + 1)); answers "capn$n" "limits.tasks=$v"; run "capn$n"; rc=$?
+    [ $rc -eq 1 ] && [ ! -e "$tmp/capn$n.toml" ] && grep -q "limits.tasks must be" "$tmp/capn$n.out" \
+      && ok "a process cap of '$v' is refused, and nothing is written" \
+      || fail "a process cap of '$v' is refused, and nothing is written (exit $rc)" "$(cat "$tmp/capn$n.out")"
   done
   answers ghost "reviewers.security=alpha, ghost"; run ghost; rc=$?
   [ $rc -eq 1 ] && [ ! -e "$tmp/ghost.toml" ] && grep -q "security reviewer 'ghost' is not one of the lanes" "$tmp/ghost.out" \
@@ -128,6 +143,8 @@ postmaster.effort?         (none)
 postmaster.env_file?       (none)
 max_runs                   2                  concurrent runs per project
 poll_seconds               120                postmaster poll interval
+limits.memory_bytes        8589934592         memory cap on one launch, bytes (8 GiB)
+limits.tasks               512                process cap on one launch
 tracker                    github             github, plane, local or other
 plane.url                  https://api.plane.so   plane only
 plane.workspace                               plane only; the slug in the workspace's web URL
@@ -257,6 +274,10 @@ ask PE "  postmaster: effort (blank if none)" "" "postmaster.effort?"
 ask PEF "  postmaster: env file for its key or backend (blank if none)" "" "postmaster.env_file?"
 ask MR "  concurrent runs per project" "2" "max_runs"
 ask PS "  postmaster poll interval, seconds" "120" "poll_seconds"
+ask MEM "  memory cap on one launch, bytes (its tree included)" "8589934592" "limits.memory_bytes"
+case $MEM in ''|*[!0-9]*|0) echo "setup: limits.memory_bytes must be a whole number greater than 0" >&2; exit 1 ;; esac
+ask TASKS "  process cap on one launch (its tree included)" "512" "limits.tasks"
+case $TASKS in ''|*[!0-9]*|0) echo "setup: limits.tasks must be a whole number greater than 0" >&2; exit 1 ;; esac
 
 echo
 echo "== Tickets: GitHub Issues on a Projects board by default; Plane; local, kept in each repo; or another tracker. =="
@@ -310,6 +331,10 @@ max_runs = $MR
 ${LENS_TABLE}
 [postmaster]
 poll_seconds = $PS
+
+[limits]
+memory_bytes = $MEM
+tasks = $TASKS
 
 [tracker]
 kind = "$TK"

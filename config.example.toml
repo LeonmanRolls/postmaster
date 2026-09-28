@@ -65,6 +65,30 @@ max_runs = 2                                    # concurrent runs per project
 [postmaster]
 poll_seconds = 120
 
+# Caps on every launch through scripts/host.sh run, bounding the launch and everything it
+# starts: a lane, a coachman leg or a reviewer. On Linux they are a systemd user scope per
+# launch (MemoryMax, MemorySwapMax=0, TasksMax). A launch that reaches a cap is stopped on its
+# own, its marker lands, and its .err names the cap. A machine with no way to cap runs
+# uncapped, and .err says so. Defaults below; each role may override them under
+# [limits.<role>] for lane, coachman or reviewer. The role is the launch name's ` · <role>`
+# segment: `coachman`, a name ending ` review` as reviewer, anything else as lane. A run keeps
+# the config recorded in its run.json: an edit here reaches the next run, never one already in
+# flight.
+[limits]
+memory_bytes = 8589934592   # 8 GiB
+tasks = 512
+
+# Optional, the same keys per role, as [team.coachman_legs] is:
+# [limits.lane]
+# memory_bytes = 4294967296
+# tasks = 256
+# [limits.coachman]
+# memory_bytes = 8589934592
+# tasks = 512
+# [limits.reviewer]
+# memory_bytes = 4294967296
+# tasks = 256
+
 # How tickets are read and written (skills/postmaster/trackers.md).
 #   github  GitHub Issues on a GitHub Projects board, through the gh CLI (the default; needs
 #           gh logged in with the project scope, nothing else)

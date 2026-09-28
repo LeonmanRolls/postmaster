@@ -106,6 +106,18 @@ pane. `spawn`, `send`, `wait` and `read` exit 3 on `none`.
 - **It degrades rather than refuses.** If the host cannot place the launch, or its pane has not
   started it within 20 seconds, it runs in the background instead, exactly once, and `host.sh`
   prints `host=none` rather than where it would have been.
+- **Every launch runs under a memory cap and a process cap**, bounding it and everything it
+  starts, so one lane's runaway bug stops that lane and nothing else. The caps come from
+  `[limits]` in the config (`POSTMASTER_CONFIG`; defaults 8 GiB and 512 tasks), and
+  `[limits.<role>]` may override them per role. The role is the name's ` · <role>` segment
+  (`coachman`), a name ending ` review` (reviewer), anything else (lane). On Linux the caps are
+  a systemd user scope per launch (`MemoryMax`, `MemorySwapMax=0`, `TasksMax`); `ulimit -u` is
+  not used, since it limits the whole user rather than one launch. A launch that reaches a cap
+  is stopped on its own: its marker lands, and `--err` names the cap as
+  `host: launch stopped: reached the memory cap (N bytes)` or
+  `host: launch stopped: reached the process cap (N)`. Every other launch and the postmaster
+  keep running. On a machine with no way to cap a launch, it still runs and `--err` says
+  `host: running uncapped: no way to cap a launch here`.
 
 ## herdr
 
@@ -192,7 +204,11 @@ with `herdr agent start`. It is a pane whose agent `host.sh` reports. So when it
 ## Tests
 
 `<tool>/scripts/host.sh --self-test` runs every form against stub `herdr` and `tmux` on a PATH that
-holds nothing else, and never reaches a live server. `<tool>/scripts/host.sh --live-test` runs the
+holds nothing else, and never reaches a live server. Its cap controls are self-bounding: a launch
+that forks without end is stopped at its process cap, a launch that allocates without end is
+stopped at its memory cap, a launch within the caps runs as it did before, and with the cap
+mechanism stubbed away the launch still runs and says it runs uncapped.
+`<tool>/scripts/host.sh --live-test` runs the
 ticket's controls against the hosts on this machine, in a scratch repository it creates: a launch
 that lands in its worktree's space, nested under its repository's space, with its marker landing;
 a reviewer's scratch clone opening as a space of its own, which `close` shuts; the same launch
