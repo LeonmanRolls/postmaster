@@ -534,6 +534,9 @@ esac
 tmp=$(cd "$(mktemp -d)" && pwd -P) || exit 1
 trap 'rm -r -- "$tmp" 2>/dev/null' EXIT
 SELF="$HERE/verify.sh"
+# The caller may be verify.sh run, which points checks at an armed copy through
+# POSTMASTER_VERIFY. The self-test builds its own worktrees and must not inherit that.
+unset POSTMASTER_VERIFY
 fails=0
 ok()   { printf '  ok   %s\n' "$1"; }
 fail() { printf '  FAIL %s\n' "$1"; [ -n "${2:-}" ] && printf '%s\n' "$2" | sed 's/^/         /'; fails=$((fails+1)); }
