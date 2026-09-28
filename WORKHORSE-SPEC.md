@@ -33,7 +33,7 @@ Ticket #113 removes file-surface scheduling limits so runs launch up to `team.ma
 
 ## Tasks
 
-- [ ] T001 [AC1] Change Stage A step 6 and remove the overlapping-surface prohibition in `skills/postmaster/postmaster.md`.
-- [ ] T002 [AC2] Keep `team.max_runs` as the only in-flight limit in `skills/postmaster/postmaster.md`.
-- [ ] T003 [AC3] Update the concurrency note in `skills/postmaster/coachman.md` to describe second-merge conflict resolution without sequencing advice.
-- [ ] T004 [AC4] Search `skills/`, `AGENTS.md`, `README.md` and `wiki/`, and update any remaining rules against overlapping run file changes.
+- [x] T001 [AC1] Change Stage A step 6 and remove the overlapping-surface prohibition in `skills/postmaster/postmaster.md`.
+- [x] T002 [AC2] Keep `team.max_runs` as the only in-flight limit in `skills/postmaster/postmaster.md`.
+- [x] T003 [AC3] Update the concurrency note in `skills/postmaster/coachman.md` to describe second-merge conflict resolution without sequencing advice.
+- [x] T004 [AC4] Search `skills/`, `AGENTS.md`, `README.md` and `wiki/`, and update any remaining rules against overlapping run file changes.
