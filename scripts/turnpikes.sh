@@ -331,13 +331,13 @@ bad "a name that is not a lowercase word is refused" "Zz-Not  -       ship    a 
 bad "a line with no description is refused"  "$NOPE      -        ship"                  "needs a name, default or -, a leg, and what it checks"
 
 echo "a run with no turnpikes, walked from synthesis to ship through the poll, the hand-off check and the stages"
-d=$tmp/runs/proj/T-9; waybill "$d" "turnpikes: none"; : > "$d/run-log.md"
+d=$tmp/repo/.postmaster/runs/T-9; waybill "$d" "turnpikes: none"; : > "$d/run-log.md"
 printf '{"stage": "checkpoint-1", "leg": 1, "base": "abc123", "lanes": {}, "coachman": {"legs": {}}}\n' > "$d/manifest.json"
 "$HERE/log-action.sh" "$d" postmaster dispatch T-9 "leg 1" >/dev/null
 printf '## %s\nx\n' Decisions "Deferred findings" "Verified by execution" Unverified "Branches and lanes" "Open questions" "Next leg" > "$d/handoff-1.md"
 touch "$d/.leg-1-done" "$d/.leg-1-exited"
-poll() { "$HERE/runs-status.sh" "$tmp/runs/proj" | awk '$1 == "T-9" {print $NF}'; }
-[ "$(poll)" = DISPATCH ] && ok "after synthesis the poll says DISPATCH" || fail "after synthesis the poll says DISPATCH" "$("$HERE/runs-status.sh" "$tmp/runs/proj")"
+poll() { "$HERE/runs-status.sh" "$tmp/repo/.postmaster/runs" | awk '$1 == "T-9" {print $NF}'; }
+[ "$(poll)" = DISPATCH ] && ok "after synthesis the poll says DISPATCH" || fail "after synthesis the poll says DISPATCH" "$("$HERE/runs-status.sh" "$tmp/repo/.postmaster/runs")"
 next=$("$self" legs "$d" | awk '$1 > 1 {print $1 " " $2; exit}')
 [ "$next" = "3 ship" ] && ok "the leg after synthesis is ship" || fail "the leg after synthesis is ship" "$next"
 prev=$("$self" legs "$d" | awk '$1 < 3 {p = $1} END {print p}')
