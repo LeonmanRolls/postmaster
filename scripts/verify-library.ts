@@ -21,6 +21,8 @@
 //   exit 3  not run: no package.json, no name in it, no test that imports it by name, or its
 //           runner, node or its package manager is not installed; the reason is the last line
 import {
+  accessSync,
+  constants,
   existsSync,
   mkdirSync,
   readdirSync,
@@ -29,7 +31,7 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, join, posix, resolve, sep } from "node:path";
+import { delimiter, dirname, join, posix, resolve, sep } from "node:path";
 import { readJsonFile, tryJsonFile } from "./lib/data.ts";
 import { die, run, withTempDir } from "./lib/proc.ts";
 import { SelfTest } from "./lib/selftest.ts";
@@ -217,9 +219,25 @@ function listOrRun(mode: "list" | "run", wtArg: string): number {
   return t.code === 0 ? 0 : 1;
 }
 
+/** shutil.which: the path of a runnable file named tool on PATH, or null. */
+function findOnPath(tool: string, path: string): string | null {
+  for (const dir of path.split(delimiter)) {
+    if (!dir) continue;
+    const f = join(dir, tool);
+    try {
+      if (statSync(f).isFile()) {
+        accessSync(f, constants.X_OK);
+        return f;
+      }
+    } catch {
+      // not in this directory
+    }
+  }
+  return null;
+}
+
 function which(tool: string): boolean {
-  const r = run("which", [tool]);
-  return r.code === 0;
+  return findOnPath(tool, process.env.PATH || "") !== null;
 }
 
 // --- entry -----------------------------------------------------------------------------------
@@ -441,10 +459,10 @@ import "sample-lib";
 
   mkdirSync(join(tmp, "fewtools"), { recursive: true });
   for (const t of ["bash", "bun", "dirname", "git"]) {
-    const r = run("command", ["-v", t]);
-    if (r.code === 0) {
+    const found = findOnPath(t, process.env.PATH || "");
+    if (found) {
       try {
-        symlinkSync(r.out.trim(), join(tmp, "fewtools", t));
+        symlinkSync(found, join(tmp, "fewtools", t));
       } catch {
         /* already exists */
       }

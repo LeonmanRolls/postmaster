@@ -18,15 +18,18 @@ import {
   chmodSync,
   existsSync,
   mkdirSync,
+  mkdtempSync,
   readFileSync,
   realpathSync,
+  rmSync,
+  statSync,
   writeFileSync,
   symlinkSync,
   accessSync,
   constants,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve, basename, sep } from "node:path";
+import { dirname, join, resolve, basename, delimiter } from "node:path";
 import { run, withTempDir, die } from "./lib/proc.ts";
 import { SelfTest } from "./lib/selftest.ts";
 import { tryJsonFile } from "./lib/data.ts";
@@ -183,7 +186,7 @@ function examples(wtArg: string, ticketArg: string): number {
       notRun(`package.json names a bin '${name}', which is not a plain command name`);
     }
   }
-  const runpath = join(wt, "node_modules", ".bin") + sep + (process.env.PATH || "");
+  const runpath = join(wt, "node_modules", ".bin") + delimiter + (process.env.PATH || "");
 
   const scriptsRaw = pkg!["scripts"];
   if (scriptsRaw && typeof scriptsRaw === "object" && (scriptsRaw as Record<string, unknown>)["build"]) {
@@ -195,7 +198,7 @@ function examples(wtArg: string, ticketArg: string): number {
         : existsSync(join(wt, "yarn.lock"))
           ? "yarn"
           : "npm";
-    if (run("command", ["-v", pm]).code !== 0) {
+    if (!which(pm, process.env.PATH || "")) {
       notRun(`package.json has a build script, run through ${pm}, which is not on PATH`);
     }
     const r = run(pm, ["run", "build"], { cwd: wt, input: "" });
@@ -207,8 +210,14 @@ function examples(wtArg: string, ticketArg: string): number {
   }
 
   // make shims
-  const scratch = realpathSync(join(tmpdirSync(), "verify-examples-" + Date.now()));
-  mkdirSync(scratch, { recursive: true });
+  const scratch = realpathSync(mkdtempSync(join(tmpdir(), "verify-examples-")));
+  process.on("exit", () => {
+    try {
+      rmSync(scratch, { recursive: true, force: true });
+    } catch {
+      // cleanup is best-effort
+    }
+  });
   const shims = join(scratch, "bin");
   mkdirSync(shims);
   for (const [name, rel] of Object.entries(bins)) {
@@ -249,7 +258,7 @@ function examples(wtArg: string, ticketArg: string): number {
       HOME: home,
       PWD: home,
       NO_COLOR: "1",
-      PATH: shims + sep + runpath,
+      PATH: shims + delimiter + runpath,
     };
     delete (env as Record<string, unknown>)["BASH_ENV"];
     for (const c of cmds) {
@@ -278,10 +287,6 @@ function examples(wtArg: string, ticketArg: string): number {
   return failed ? 1 : 0;
 }
 
-function tmpdirSync(): string {
-  return tmpdir();
-}
-
 function canExecute(p: string): boolean {
   try {
     accessSync(p, constants.X_OK);
@@ -291,8 +296,22 @@ function canExecute(p: string): boolean {
   }
 }
 
+/** shutil.which: a runnable file named prog in one of path's directories. */
+function findInPath(prog: string, path: string): string | null {
+  for (const dir of path.split(delimiter)) {
+    if (!dir) continue;
+    const f = join(dir, prog);
+    try {
+      if (statSync(f).isFile() && canExecute(f)) return f;
+    } catch {
+      // not in this directory
+    }
+  }
+  return null;
+}
+
 function which(prog: string, path: string): boolean {
-  return run("env", ["PATH=" + path, "which", prog]).code === 0;
+  return findInPath(prog, path) !== null;
 }
 
 function shQuote(s: string): string {
@@ -483,10 +502,10 @@ built ok
   expect("a bin whose interpreter is not installed is not run", 3, "nointerp", join(tmp, "pass.md"), "runs through no-such-interpreter-xyz");
   mkdirSync(join(tmp, "fewtools"), { recursive: true });
   for (const t of ["bash", "bun", "dirname"]) {
-    const r = run("command", ["-v", t]);
-    if (r.code === 0) {
+    const found = findInPath(t, process.env.PATH || "");
+    if (found) {
       try {
-        symlinkSync(r.out.trim(), join(tmp, "fewtools", t));
+        symlinkSync(found, join(tmp, "fewtools", t));
       } catch {
         /* exists */
       }

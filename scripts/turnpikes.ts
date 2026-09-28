@@ -215,6 +215,12 @@ if (argv[0] === "--self-test") {
   process.exit(0);
 } else if (argv[0] === "resolve") {
   const text = argv.length > 1 ? argv.slice(1).join(" ") : readFileSync(0, "utf8");
+  // BASE's core refused any command on a table that breaks its rules; resolve must too.
+  const tableCheck = parseTable(TABLE);
+  if (tableCheck.faults.length > 0) {
+    console.error(tableCheck.faults.map((f) => `turnpikes: the table's ${f}`).join("\n"));
+    process.exit(1);
+  }
   const { names, faults } = resolve(TABLE, text);
   if (faults.length > 0) {
     console.log(faults.join("\n"));

@@ -162,7 +162,9 @@ function tokenize(text: string): [string[], Array<[string, boolean]>] {
   let fence: string | null = null;
   let inside = false;
   for (let k = 0; k < raw.length; k++) {
-    let t = raw[k]!;
+    // A CRLF body keeps its \r in raw (splice prints the body byte for byte); the analysis
+    // line is stripped, so the regexes below see a line as BASE's `.`-matches-\r did.
+    let t = raw[k]!.replace(/\r$/, "");
     if (fence) {
       lines.push([t, true]);
       const s = t.trim();
@@ -386,11 +388,12 @@ function check(title: string | null, text: string, turnpikesPath: string): [stri
       fault(key, `"## ${name}" is empty`);
     } else if (key === "acceptance criteria") {
       count = criteriaCheck(fault, key, body);
-    } else if (key === "turnpikes") {
-      named = turnpikesCheck(fault, key, body, turnpikesPath);
     } else {
       const mk = marked(prose(body));
       if (mk) fault(key, `"## ${name}" is marked ${mk}`);
+      else if (key === "turnpikes") {
+        named = turnpikesCheck(fault, key, body, turnpikesPath);
+      }
     }
   }
   for (let j = 0; j < PARTS.length; j++) {
@@ -542,9 +545,10 @@ function selfTest(): void {
       return { code: r.code, out: r.out + r.err };
     }
 
-    function expect(label: string, rcWant: number, partsWant: string, why = "", not = ""): void {
-      const out = runCheck(T).out;
-      const rc = runCheck(T).code;
+    function expect(label: string, rcWant: number, partsWant: string, why = "", not = "", title: string = T): void {
+      const r = runCheck(title);
+      const out = r.out;
+      const rc = r.code;
       // BASE: only a failing check (exit 2) names parts; a pass prints "well-formed, ...".
       const partNames =
         (rc === 2
@@ -579,7 +583,15 @@ function selfTest(): void {
     // Stand-in adapter
     mkdirSync(join(tmp, "bin"), { recursive: true });
     copyFileSync(SELF, join(tmp, "bin", "ticket-check.sh"));
+    copyFileSync(join(HERE, "ticket-check.ts"), join(tmp, "bin", "ticket-check.ts"));
     copyFileSync(join(HERE, "turnpikes.sh"), join(tmp, "bin", "turnpikes.sh"));
+    copyFileSync(join(HERE, "turnpikes.ts"), join(tmp, "bin", "turnpikes.ts"));
+    copyFileSync(join(HERE, "tracker-kind.sh"), join(tmp, "bin", "tracker-kind.sh"));
+    copyFileSync(join(HERE, "tracker-kind.ts"), join(tmp, "bin", "tracker-kind.ts"));
+    mkdirSync(join(tmp, "bin", "lib"), { recursive: true });
+    for (const f of ["paths.ts", "proc.ts", "data.ts", "selftest.ts"]) {
+      copyFileSync(join(HERE, "lib", f), join(tmp, "bin", "lib", f));
+    }
     writeFileSync(join(tmp, "github.toml"), '[tracker]\nkind = "github"\n');
     function adapter(script: string): void {
       writeFileSync(join(tmp, "bin", "github.sh"), `#!/usr/bin/env bash\n${script}\n`);
@@ -591,7 +603,6 @@ function selfTest(): void {
       });
       return { code: r.code, out: r.out + r.err };
     }
-    copyFileSync(join(HERE, "tracker-kind.sh"), join(tmp, "bin", "tracker-kind.sh"));
     function localsh(script: string): void {
       writeFileSync(join(tmp, "bin", "local.sh"), `#!/usr/bin/env bash\n${script}\n`);
       chmodSync(join(tmp, "bin", "local.sh"), 0o755);
@@ -783,16 +794,7 @@ function selfTest(): void {
     body(P, A, D, K, K);
     expect("turnpikes twice", 2, "turnpikes", '"## Turnpikes" appears 2 times');
     writeFileSync(join(tmp, "body.md"), "");
-    {
-      const rr = run("bash", [SELF, "--body", join(tmp, "body.md"), "--title", ""], {
-        env: { ...process.env as Record<string, string>, TURNPIKES: join(HERE, "turnpikes.sh") },
-      });
-      st.check(
-        "an empty ticket names all five parts",
-        rr.code === 2 && rr.out.includes("acceptance criteria,direction,problem / feature,title,turnpikes"),
-        rr.out,
-      );
-    }
+    expect("an empty ticket names all five parts", 2, "acceptance criteria,direction,problem / feature,title,turnpikes", "", "", "");
 
     console.log("a turnpike is added in scripts/turnpikes.sh alone");
     mkdirSync(join(tmp, "added"), { recursive: true });
@@ -807,10 +809,13 @@ function selfTest(): void {
       }
     }
     function addTurnpike(row: string, dir: string): void {
-      const src = readFileSync(join(HERE, "turnpikes.sh"), "utf8");
-      const out = src.replace(/^TURNPIKES$/m, row + "\nTURNPIKES");
-      writeFileSync(join(dir, "turnpikes.sh"), out);
+      // The port keeps the table in turnpikes.ts behind the turnpikes.sh wrapper: copy both,
+      // and write the row as the table's last row, as BASE's awk did before its TURNPIKES marker.
+      copyFileSync(join(HERE, "turnpikes.sh"), join(dir, "turnpikes.sh"));
       chmodSync(join(dir, "turnpikes.sh"), 0o755);
+      const src = readFileSync(join(HERE, "turnpikes.ts"), "utf8");
+      const out = src.replace(/(const TABLE = `[\s\S]*?)(`;)/, (_m, a: string, b: string) => `${a}\n${row}${b}`);
+      writeFileSync(join(dir, "turnpikes.ts"), out);
     }
     addTurnpike(`${NOPE}  -        ship    a check the table does not have yet`, join(tmp, "added"));
     addTurnpike("none       -        review  nothing", join(tmp, "broken"));
@@ -1107,7 +1112,11 @@ if (mode === "--self-test") {
   try {
     const HERE = scriptsDir(import.meta);
     const kindR = run(join(HERE, "tracker-kind.sh"), [mode]);
-    if (kindR.code !== 0) process.exit(1);
+    if (kindR.code !== 0) {
+      // BASE left tracker-kind.sh's stderr to flow through; run() captures it, so forward it.
+      process.stderr.write(kindR.err);
+      process.exit(1);
+    }
     const kind = kindR.out.trim();
     const id = argv[1]!;
     let readOut = "";

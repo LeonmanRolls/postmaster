@@ -20,7 +20,7 @@ import {
   appendFileSync, renameSync, mkdtempSync, openSync, closeSync, writeSync,
 } from "node:fs";
 import { dirname, join, resolve, sep, basename } from "node:path";
-import { tmpdir } from "node:os";
+import { tmpdir, constants as osConstants } from "node:os";
 import { spawn, spawnSync } from "node:child_process";
 import { run, withTempDir, die } from "./lib/proc.ts";
 import { SelfTest } from "./lib/selftest.ts";
@@ -76,6 +76,12 @@ function dieV(msg: string): never {
   console.error("verify: " + msg);
   process.exit(1);
   throw new Error("unreachable");
+}
+
+/** Python's subprocess convention: a process killed by signal N reports exit -N. */
+function signalExit(signal: string): { code: number; num: number } {
+  const num = (osConstants.signals as Record<string, number>)[signal] ?? 0;
+  return { code: -num, num };
 }
 
 function plain(text: string): string {
@@ -191,7 +197,7 @@ function declared(repo: string, gate: string, suite: string): Check[] | null {
   } catch (e: any) {
     dieV(`${DECLARATION} does not parse: ${e.message || e}`);
   }
-  if (!table) return null;
+  if (!table || (typeof table === "object" && Object.keys(table).length === 0)) return null;
   if (typeof table !== "object" || Array.isArray(table)) {
     dieV(`${DECLARATION}: checks must be [checks.<name>] tables`);
   }
@@ -429,7 +435,8 @@ function runOne(c: Check, top: string, env: Record<string, string>, log: string)
       if (timedOut) {
         result = "fail"; exitCode = null; why = `timed out after ${timeout}s`;
       } else if (signal) {
-        result = "fail"; exitCode = -1; why = `killed by signal ${signal}: ${last}`;
+        const k = signalExit(signal);
+        result = "fail"; exitCode = k.code; why = `killed by signal ${k.num}: ${last}`;
       } else {
         exitCode = code;
         if (code === 126 || code === 127) {
@@ -485,15 +492,32 @@ function runOneSync(c: Check, top: string, env: Record<string, string>, log: str
   const t0 = Date.now();
   let timedOut = false;
 
-  // Use a shell wrapper that writes to the log file and applies timeout
-  const r = spawnSync("bash", ["-e", "-o", "pipefail", "-c", c.command], {
-    cwd: top, env, input: "", timeout: timeout * 1000,
-    maxBuffer: 64 * 1024 * 1024,
-    killSignal: "SIGKILL",
-  });
+  // BASE runs the command with the log as its stdout and a new session, then kills the whole
+  // group: the command itself if it timed out, and whatever it left running. A pipe would be
+  // held open by anything the command backgrounds.
+  const fd = openSync(log, "w");
+  let r;
+  try {
+    r = spawnSync("bash", ["-e", "-o", "pipefail", "-c", c.command], {
+      cwd: top, env, stdio: ["ignore", fd, fd], detached: true,
+      timeout: timeout * 1000,
+      killSignal: "SIGKILL",
+    });
+  } finally {
+    closeSync(fd);
+    try {
+      if (r?.pid) process.kill(-r.pid, "SIGKILL");
+    } catch {
+      /* the group is already gone */
+    }
+  }
   const secs = Math.round((Date.now() - t0) / 1000);
-  const rawOut = (r.stdout || "") + (r.stderr || "");
-  writeFileSync(log, rawOut);
+  let rawOut = "";
+  try {
+    rawOut = readFileSync(log, "utf-8");
+  } catch {
+    rawOut = "";
+  }
   let out = plain(rawOut);
   const outLines = out.split("\n").filter((l) => l.trim());
   const last = (outLines.length > 0 ? outLines[outLines.length - 1]! : "(no output)").slice(0, 300);
@@ -510,7 +534,8 @@ function runOneSync(c: Check, top: string, env: Record<string, string>, log: str
   if (timedOut) {
     result = "fail"; exitCode = null; why = `timed out after ${timeout}s`;
   } else if (r.signal) {
-    result = "fail"; exitCode = -1; why = `killed by signal ${r.signal}: ${last}`;
+    const k = signalExit(r.signal);
+    result = "fail"; exitCode = k.code; why = `killed by signal ${k.num}: ${last}`;
   } else {
     exitCode = r.status;
     const code = r.status!;
@@ -1016,7 +1041,7 @@ shows = "a scored check that prints a score, then fails"
 score = 'score: ([0-9.]+)'
 threshold = 0.85
 [checks.killed-score]
-command = "echo 'score: 0.95'; kill -9 \\$\\$"
+command = "echo 'score: 0.95'; kill -9 $$"
 shows = "a scored check killed after a score"
 score = 'score: ([0-9.]+)'
 threshold = 0.85
@@ -1344,7 +1369,7 @@ shows = "passes only on what the gate rewrote"
   const lp = join(tmp, "leftover");
   mkdirSync(join(lp, ".postmaster"), { recursive: true });
   writeFileSync(join(lp, ".postmaster", "project.toml"),
-    `[checks.gate]\ncommand = "sleep 300 & echo \\$! > ${join(tmp, "leftover.pid")}"\nshows = "x"\n`);
+    `[checks.gate]\ncommand = "sleep 300 & echo $! > ${join(tmp, "leftover.pid")}"\nshows = "x"\n`);
   mkRepo(lp);
   const ld = join(tmp, "runs/leftover/T-6");
   mkdirSync(ld, { recursive: true });
