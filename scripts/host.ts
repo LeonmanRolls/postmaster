@@ -152,6 +152,33 @@ function nameCmd(d: string, role?: string): string {
 }
 
 // --- registry ------------------------------------------------------------------------------
+function pgAlive(pg: number): boolean {
+  if (!pg) return false;
+  try {
+    process.kill(-pg, 0);
+    return true;
+  } catch {
+    try {
+      process.kill(pg, 0);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+}
+
+function pgSig(pg: number, signal: NodeJS.Signals): void {
+  try {
+    process.kill(-pg, signal);
+  } catch {
+    try {
+      process.kill(pg, signal);
+    } catch {
+      /* already gone */
+    }
+  }
+}
+
 function regAdd(pg: string, cwd: string, name: string): void {
   mkdirSync(join(STATE, "launches"), { recursive: true });
   writeFileSync(join(STATE, "launches", pg), `${cwd}\n${name}\n`);
@@ -169,10 +196,7 @@ function regLive(dir: string): Array<{ pg: string; name: string }> {
   for (const f of files) {
     const pg = f;
     if (!/^\d+$/.test(pg)) continue;
-    const alive =
-      spawnSync("kill", ["-0", `-${pg}`], { stdio: "ignore" }).status === 0 ||
-      spawnSync("kill", ["-0", pg], { stdio: "ignore" }).status === 0;
-    if (!alive) {
+    if (!pgAlive(Number(pg))) {
       rmSync(join(dir_path, f), { force: true });
       continue;
     }
@@ -303,11 +327,11 @@ function runCmd(name: string, cwd: string, args: string[]): void {
   // Wait for the spec to be consumed.
   let waitI = 0;
   while (existsSync(spec) && waitI < 120) {
-    if (rpid && spawnSync("kill", ["-0", String(rpid)], { stdio: "ignore" }).status !== 0) break;
+    if (rpid && !pgAlive(rpid)) break;
     sleep(250);
     waitI += 1;
   }
-  if (existsSync(spec) && rpid && spawnSync("kill", ["-0", String(rpid)], { stdio: "ignore" }).status !== 0) {
+  if (existsSync(spec) && rpid && !pgAlive(rpid)) {
     rmSync(spec, { recursive: true, force: true });
     launchFailed(`'${cleanName}' did not start in the background`);
   }
@@ -413,7 +437,11 @@ function runner(mode: string, spec: string): void {
 
   child.on("exit", () => {
     try {
-      rmSync(join(state, "launches", String(cpid)), { force: true });
+      // Only drop the registry entry once the whole process group is gone, matching the
+      // bash runner: a child left running in the group keeps the launch registered.
+      if (!pgAlive(cpid)) {
+        rmSync(join(state, "launches", String(cpid)), { force: true });
+      }
     } catch {
       /* ignore */
     }
@@ -463,37 +491,139 @@ function stopCmd(dir: string): number {
 }
 
 function stopTree(grace: number, groups: string[]): { code: number; processes: number; survivors: string } {
-  // Simplified port: use pkill on process groups.
   const groupSet = new Set(groups.map(Number));
-  let known = 0;
-  let survivors: string[] = [];
-  for (const g of groupSet) {
-    // SIGSTOP, SIGTERM, SIGCONT, then SIGKILL after grace.
-    spawnSync("kill", ["-STOP", `-${g}`], { stdio: "ignore" });
-  }
-  for (const g of groupSet) {
-    spawnSync("kill", ["-TERM", `-${g}`], { stdio: "ignore" });
-    spawnSync("kill", ["-CONT", `-${g}`], { stdio: "ignore" });
-    known += 1;
-  }
-  sleep(grace * 1000);
-  for (const g of groupSet) {
-    const alive = spawnSync("kill", ["-0", `-${g}`], { stdio: "ignore" }).status === 0;
-    if (alive) {
-      spawnSync("kill", ["-KILL", `-${g}`], { stdio: "ignore" });
-      survivors.push(String(g));
+  const table = buildProcTable();
+  const spare = new Set<number>([0, 1, process.pid]);
+  {
+    let p = process.pid;
+    while (table.has(p) && !spare.has(p)) {
+      spare.add(p);
+      p = table.get(p)!.ppid;
     }
   }
-  sleep(500);
-  for (const g of groupSet) {
-    const alive = spawnSync("kill", ["-0", `-${g}`], { stdio: "ignore" }).status === 0;
-    if (alive) survivors.push(String(g));
-  }
-  return {
-    code: survivors.length > 0 ? 2 : 0,
-    processes: known,
-    survivors: survivors.join(" "),
+  const treeOf = (): Set<number> => {
+    const live = new Set<number>();
+    for (const [pid, v] of table) {
+      if (!v.zombie && !spare.has(pid)) live.add(pid);
+    }
+    const hit = new Set<number>();
+    for (const pid of live) {
+      if (groupSet.has(table.get(pid)!.pgid)) hit.add(pid);
+    }
+    const kids = new Map<number, number[]>();
+    for (const [pid, v] of table) {
+      const arr = kids.get(v.ppid) ?? [];
+      arr.push(pid);
+      kids.set(v.ppid, arr);
+    }
+    const todo = [...hit];
+    while (todo.length > 0) {
+      for (const k of kids.get(todo.pop()!) ?? []) {
+        if (live.has(k) && !hit.has(k)) {
+          hit.add(k);
+          todo.push(k);
+        }
+      }
+    }
+    return hit;
   };
+  // Freeze the tree iteratively: stopping a parent can reveal children.
+  const frozen = new Set<number>();
+  for (let i = 0; i < 20; i++) {
+    refreshProcTable(table);
+    const fresh = [...treeOf()].filter((p) => !frozen.has(p));
+    if (fresh.length === 0) break;
+    for (const p of fresh) {
+      try { process.kill(p, "SIGSTOP"); } catch { /* gone */ }
+      frozen.add(p);
+    }
+  }
+  refreshProcTable(table);
+  const known = new Map<number, string>();
+  for (const p of frozen) {
+    const v = table.get(p);
+    if (v) known.set(p, v.start);
+  }
+  for (const p of known.keys()) {
+    try { process.kill(p, "SIGTERM"); } catch { /* gone */ }
+    try { process.kill(p, "SIGCONT"); } catch { /* gone */ }
+  }
+  const leftSurvivors = (): Set<number> => {
+    refreshProcTable(table);
+    const rest = new Set<number>();
+    for (const [p, st] of known) {
+      const v = table.get(p);
+      if (v && v.start === st && !v.zombie) rest.add(p);
+    }
+    for (const p of treeOf()) rest.add(p);
+    return rest;
+  };
+  const graceEnd = Date.now() + grace * 1000;
+  while (Date.now() < graceEnd && leftSurvivors().size > 0) sleep(250);
+  const killEnd = Date.now() + 5000;
+  let rest = leftSurvivors();
+  while (rest.size > 0 && Date.now() < killEnd) {
+    refreshProcTable(table);
+    for (const p of rest) {
+      try { process.kill(p, "SIGKILL"); } catch { /* gone */ }
+      const v = table.get(p);
+      if (v) known.set(p, v.start);
+    }
+    sleep(250);
+    rest = leftSurvivors();
+  }
+  refreshProcTable(table);
+  const survivors = [...rest]
+    .sort((a, b) => a - b)
+    .map((p) => `${p}/${table.get(p)?.name ?? "?"}`)
+    .join(" ");
+  return {
+    code: rest.size > 0 ? 2 : 0,
+    processes: known.size,
+    survivors,
+  };
+}
+
+interface ProcInfo {
+  ppid: number;
+  pgid: number;
+  start: string;
+  zombie: boolean;
+  name: string;
+}
+
+function buildProcTable(): Map<number, ProcInfo> {
+  const t = new Map<number, ProcInfo>();
+  refreshProcTable(t);
+  return t;
+}
+
+function refreshProcTable(t: Map<number, ProcInfo>): void {
+  t.clear();
+  try {
+    for (const entry of readdirSync("/proc")) {
+      if (!/^\d+$/.test(entry)) continue;
+      let raw: string;
+      try {
+        raw = readFileSync(`/proc/${entry}/stat`, "utf8");
+      } catch {
+        continue;
+      }
+      const head = raw.lastIndexOf(")");
+      if (head < 0) continue;
+      const name = raw.slice(raw.indexOf("(") + 1, head);
+      const f = raw.slice(head + 2).split(/\s+/);
+      t.set(Number(entry), {
+        ppid: Number(f[1]),
+        pgid: Number(f[2]),
+        start: f[19] ?? "",
+        zombie: f[0] === "Z",
+        name,
+      });
+    }
+  } catch {
+    /* /proc not available; empty table */
+  }
 }
 
 function closeCmd(dir: string): number {
@@ -668,8 +798,8 @@ exit 3
 printf '{"type":"system","subtype":"init","session_id":"probe-1","model":"m"}\\n'
 if (: < /dev/tty) 2>/dev/null; then tty=yes; else tty=no; fi
 printf 'from=%s|name=%s|pane=%s|tmuxpane=%s|var=%s|sid=%s|pid=%s|pgid=%s|tty=%s\\n' "$PWD" "\${POSTMASTER_LAUNCH_NAME:-}" \
-  "\${HERDR_PANE_ID:-unset}" "\${TMUX_PANE:-unset}" "\${CALLER_VAR:-unset}" "$(python3 -c 'import os; print(os.getsid(0))')" "$$" \
-  "$(python3 -c 'import os; print(os.getpgid(0))')" "$tty"
+  "\${HERDR_PANE_ID:-unset}" "\${TMUX_PANE:-unset}" "\${CALLER_VAR:-unset}" "$(ps -o sid= -p $$ | tr -d ' ')" "$$" \
+  "$(ps -o pgid= -p $$ | tr -d ' ')" "$tty"
 echo x >> "\${COUNT:-/dev/null}"
 sleep "\${EMIT_SLEEP:-0}"
 `);
@@ -698,9 +828,9 @@ dispatch: ${join(tmp, "run-1")}
   mkdirSync(join(tmp, "sys"), { recursive: true });
   mkdirSync(join(tmp, "stub"), { recursive: true });
   for (const t of [
-    "bash", "sh", "python3", "git", "env", "cat", "mkdir", "rmdir", "rm", "mkfifo", "mktemp",
+    "bash", "sh", "bun", "git", "env", "cat", "mkdir", "rmdir", "rm", "mkfifo", "mktemp",
     "sleep", "date", "touch", "wc", "tr", "sed", "awk", "dirname", "basename", "grep", "head",
-    "tail", "cut", "sort", "cmp", "ls", "seq", "timeout", "find", "cksum", "ps", "bun",
+    "tail", "cut", "sort", "cmp", "ls", "seq", "timeout", "find", "cksum", "ps", "setsid",
   ]) {
     const r = spawnSync("sh", ["-c", `command -v ${t}`], { encoding: "utf8" });
     const p = r.stdout.trim();
@@ -713,117 +843,195 @@ dispatch: ${join(tmp, "run-1")}
     }
   }
 
-  // Stub herdr and tmux as Python scripts (matching the original fixtures).
-  writeFileSync(join(tmp, "bin/herdr"), `#!/usr/bin/env python3
-import fcntl, json, os, subprocess, sys
-S = os.environ["STUB"]; a = sys.argv[1:]
-with open(os.path.join(S, "herdr.calls"), "a") as f: f.write("\\t".join(a) + "\\n")
-if os.path.exists(os.path.join(S, "herdr.down")): sys.exit(1)
-if a == ["agent"]: print("herdr agent commands:\\n  kinds: pi|claude|codex"); sys.exit(2)
-lock = open(os.path.join(S, "herdr.lock"), "w"); fcntl.flock(lock, fcntl.LOCK_EX)
-path = os.path.join(S, "herdr.json")
-st = json.load(open(path)) if os.path.exists(path) else {"n": 0, "spaces": {}, "panes": {}, "open": {}, "agents": []}
-def save(): json.dump(st, open(path, "w"))
-def new(prefix): st["n"] += 1; return "%s%d" % (prefix, st["n"])
-def opt(name): return a[a.index(name) + 1] if name in a else None
-def tokens(): return dict(a[i + 1].split("=", 1) for i in range(len(a) - 1) if a[i] == "--token")
-def out(obj): print(json.dumps({"id": "stub", "result": obj}))
-def error(code): print(json.dumps({"error": {"code": code, "message": code}}), file=sys.stderr); sys.exit(1)
-def flag(name): return os.path.exists(os.path.join(S, name))
-def git(*args): return subprocess.run(["git", *args], capture_output=True, text=True).stdout.strip()
-def main_of(d):
-    c = git("-C", d, "rev-parse", "--path-format=absolute", "--git-common-dir")
-    return os.path.realpath(os.path.dirname(c)) if c else None
-def space(label):
-    ws, tab, pane = new("w"), new("t"), new("p")
-    st["spaces"][ws] = {"label": label, "tokens": {}, "panes": [pane]}; st["panes"][pane] = {"ws": ws, "tokens": {}}
-    return {"workspace": {"workspace_id": ws}, "tab": {"tab_id": tab}, "root_pane": {"pane_id": pane}}
-cmd = " ".join(a[:2])
-if cmd == "workspace list": out({"workspaces": [{"workspace_id": w} for w in st["spaces"]]})
-elif cmd == "worktree list":
-    cwd = opt("--cwd"); root = main_of(cwd)
-    if not root: sys.exit(1)
-    wts = []
-    for block in git("-C", cwd, "worktree", "list", "--porcelain").split("\\n\\n"):
-        p = os.path.realpath(block.splitlines()[0].split(" ", 1)[1])
-        w = {"path": p, "is_linked_worktree": p != root}
-        if p in st["open"]: w["open_workspace_id"] = st["open"][p]
-        wts.append(w)
-    src = {"repo_root": root, "repo_name": os.path.basename(root)}
-    if root in st["open"]: src["source_workspace_id"] = st["open"][root]
-    out({"source": src, "worktrees": wts})
-elif cmd == "workspace create":
-    r = space(opt("--label")); cwd = os.path.realpath(opt("--cwd"))
-    if main_of(cwd) == cwd: st["open"][cwd] = r["workspace"]["workspace_id"]
-    save(); out(r)
-elif cmd == "worktree open":
-    r = space(opt("--label")); st["open"][os.path.realpath(opt("--path"))] = r["workspace"]["workspace_id"]
-    save(); out(r)
-elif cmd == "tab create":
-    ws = opt("--workspace"); tab, pane = new("t"), new("p")
-    st["spaces"][ws]["panes"].append(pane); st["panes"][pane] = {"ws": ws, "tokens": {}}
-    save(); out({"tab": {"tab_id": tab}, "root_pane": {"pane_id": pane}})
-elif cmd == "workspace report-metadata": st["spaces"][a[2]]["tokens"] = tokens(); save()
-elif cmd == "pane report-metadata": st["panes"][a[2]]["tokens"] = tokens(); save()
-elif cmd == "workspace get":
-    out({"workspace": {"workspace_id": a[2], "tokens": st["spaces"][a[2]]["tokens"]}})
-elif cmd == "pane list":
-    out({"panes": [{"pane_id": p, "tokens": st["panes"][p]["tokens"]} for p in st["spaces"][opt("--workspace")]["panes"]]})
-elif cmd == "pane get": out({"pane": {"pane_id": a[2], "agent": None}})
-elif cmd == "pane run":
-    pane, text, ws = a[2], a[3], st["panes"][a[2]]["ws"]
-    fcntl.flock(lock, fcntl.LOCK_UN)
-    if flag("pane.dead"): sys.exit(0)
-    late = "sleep 5; " if flag("pane.late") else ""
-    env = {"PATH": os.environ["PATH"], "HOME": os.environ.get("HOME", "/"), "STUB": S, "HERDR_ENV": "1",
-           "HERDR_PANE_ID": pane, "HERDR_TAB_ID": "tab-of-" + pane, "HERDR_WORKSPACE_ID": ws}
-    proc = subprocess.Popen(["bash", "-c", late + text], env=env, stdin=subprocess.DEVNULL, start_new_session=True,
-                            stdout=open(os.path.join(S, "pane-%s.out" % pane), "ab"), stderr=subprocess.STDOUT)
-    open(os.path.join(S, "pane-%s.pid" % pane), "w").write(str(proc.pid))
-elif cmd == "agent get":
-    if a[2] not in st["agents"]: error("agent_not_found")
-    out({"agent": {"name": a[2], "agent_status": "blocked" if flag("agent.blocked") else "idle"}})
-elif cmd == "agent start":
-    if a[2] in st["agents"]: error("agent_name_taken")
-    st["agents"].append(a[2]); save()
-    if flag("agent.notready"): error("agent_not_ready")
-elif cmd == "agent read": print("stub screen of " + a[2])
+  // Stub herdr and tmux as bun scripts, so the restricted PATH needs no interpreter but bun.
+  writeFileSync(join(tmp, "bin/herdr"), `#!/usr/bin/env bun
+import { appendFileSync, closeSync, existsSync, openSync, readFileSync, realpathSync, unlinkSync, writeFileSync } from "node:fs";
+import { spawn, spawnSync } from "node:child_process";
+import { basename, dirname, join } from "node:path";
+const S = process.env["STUB"] || "";
+const a = process.argv.slice(2);
+appendFileSync(join(S, "herdr.calls"), a.join("\\t") + "\\n");
+if (existsSync(join(S, "herdr.down"))) process.exit(1);
+if (a.length === 1 && a[0] === "agent") { console.log("herdr agent commands:\\n  kinds: pi|claude|codex"); process.exit(2); }
+function sleep(ms) { const sab = new SharedArrayBuffer(4); Atomics.wait(new Int32Array(sab), 0, 0, ms); }
+const lockPath = join(S, "herdr.lock");
+let lockFd = -1;
+const lockDeadline = Date.now() + 20000;
+for (;;) {
+  try { lockFd = openSync(lockPath, "wx"); break; } catch (e) {
+    if (Date.now() > lockDeadline) process.exit(1);
+    sleep(10);
+  }
+}
+let unlocked = false;
+function unlock() {
+  if (unlocked) return;
+  unlocked = true;
+  try { if (lockFd >= 0) closeSync(lockFd); } catch (e) {}
+  try { unlinkSync(lockPath); } catch (e) {}
+}
+process.on("exit", unlock);
+const statePath = join(S, "herdr.json");
+const st = existsSync(statePath) ? JSON.parse(readFileSync(statePath, "utf8")) : { n: 0, spaces: {}, panes: {}, open: {}, agents: [] };
+function save() { writeFileSync(statePath, JSON.stringify(st)); }
+function newId(prefix) { st.n += 1; return prefix + st.n; }
+function opt(name) { const i = a.indexOf(name); return i >= 0 && i + 1 < a.length ? a[i + 1] : null; }
+function tokens() {
+  const t = {};
+  for (let i = 0; i < a.length - 1; i++) {
+    if (a[i] === "--token") { const s = a[i + 1]; const j = s.indexOf("="); t[s.slice(0, j)] = s.slice(j + 1); }
+  }
+  return t;
+}
+function out(obj) { console.log(JSON.stringify({ id: "stub", result: obj })); }
+function fail(code) { console.error(JSON.stringify({ error: { code: code, message: code } })); process.exit(1); }
+function flag(name) { return existsSync(join(S, name)); }
+function rp(p) { try { return realpathSync(p); } catch (e) { return p; } }
+function git(...args) { return spawnSync("git", args, { encoding: "utf8" }).stdout.trim(); }
+function mainOf(d) {
+  const c = git("-C", d, "rev-parse", "--path-format=absolute", "--git-common-dir");
+  return c ? rp(dirname(c)) : null;
+}
+function space(label) {
+  const ws = newId("w"); const tab = newId("t"); const pane = newId("p");
+  st.spaces[ws] = { label: label, tokens: {}, panes: [pane] };
+  st.panes[pane] = { ws: ws, tokens: {} };
+  return { workspace: { workspace_id: ws }, tab: { tab_id: tab }, root_pane: { pane_id: pane } };
+}
+const cmd = a.slice(0, 2).join(" ");
+if (cmd === "workspace list") {
+  out({ workspaces: Object.keys(st.spaces).map(function (w) { return { workspace_id: w }; }) });
+} else if (cmd === "worktree list") {
+  const cwd = opt("--cwd");
+  const root = mainOf(cwd);
+  if (!root) process.exit(1);
+  const wts = [];
+  for (const block of git("-C", cwd, "worktree", "list", "--porcelain").split("\\n\\n")) {
+    const first = block.split("\\n")[0];
+    const p = rp(first.slice(first.indexOf(" ") + 1));
+    const w = { path: p, is_linked_worktree: p !== root };
+    if (p in st.open) w.open_workspace_id = st.open[p];
+    wts.push(w);
+  }
+  const src = { repo_root: root, repo_name: basename(root) };
+  if (root in st.open) src.source_workspace_id = st.open[root];
+  out({ source: src, worktrees: wts });
+} else if (cmd === "workspace create") {
+  const r = space(opt("--label"));
+  const cwd = rp(opt("--cwd"));
+  if (mainOf(cwd) === cwd) st.open[cwd] = r.workspace.workspace_id;
+  save(); out(r);
+} else if (cmd === "worktree open") {
+  const r = space(opt("--label"));
+  st.open[rp(opt("--path"))] = r.workspace.workspace_id;
+  save(); out(r);
+} else if (cmd === "tab create") {
+  const ws = opt("--workspace"); const tab = newId("t"); const pane = newId("p");
+  st.spaces[ws].panes.push(pane);
+  st.panes[pane] = { ws: ws, tokens: {} };
+  save(); out({ tab: { tab_id: tab }, root_pane: { pane_id: pane } });
+} else if (cmd === "workspace report-metadata") { st.spaces[a[2]].tokens = tokens(); save(); }
+else if (cmd === "pane report-metadata") { st.panes[a[2]].tokens = tokens(); save(); }
+else if (cmd === "workspace get") { out({ workspace: { workspace_id: a[2], tokens: st.spaces[a[2]].tokens } }); }
+else if (cmd === "pane list") {
+  out({ panes: st.spaces[opt("--workspace")].panes.map(function (p) { return { pane_id: p, tokens: st.panes[p].tokens }; }) });
+} else if (cmd === "pane get") { out({ pane: { pane_id: a[2], agent: null } }); }
+else if (cmd === "pane run") {
+  const pane = a[2]; const text = a[3]; const ws = st.panes[a[2]].ws;
+  unlock();
+  if (flag("pane.dead")) process.exit(0);
+  const late = flag("pane.late") ? "sleep 5; " : "";
+  const env = {
+    PATH: process.env["PATH"] || "", HOME: process.env["HOME"] || "/", STUB: S, HERDR_ENV: "1",
+    HERDR_PANE_ID: pane, HERDR_TAB_ID: "tab-of-" + pane, HERDR_WORKSPACE_ID: ws,
+  };
+  const outFd = openSync(join(S, "pane-" + pane + ".out"), "a");
+  const proc = spawn("bash", ["-c", late + text], { env: env, stdio: ["ignore", outFd, outFd], detached: true });
+  writeFileSync(join(S, "pane-" + pane + ".pid"), String(proc.pid));
+} else if (cmd === "agent get") {
+  if (st.agents.indexOf(a[2]) < 0) fail("agent_not_found");
+  out({ agent: { name: a[2], agent_status: flag("agent.blocked") ? "blocked" : "idle" } });
+} else if (cmd === "agent start") {
+  if (st.agents.indexOf(a[2]) >= 0) fail("agent_name_taken");
+  st.agents.push(a[2]); save();
+  if (flag("agent.notready")) fail("agent_not_ready");
+} else if (cmd === "agent read") { console.log("stub screen of " + a[2]); }
 `);
-  writeFileSync(join(tmp, "bin/tmux"), `#!/usr/bin/env python3
-import fcntl, json, os, subprocess, sys
-S = os.environ["STUB"]; a = sys.argv[1:]
-with open(os.path.join(S, "tmux.calls"), "a") as f: f.write("\\t".join(a) + "\\n")
-lock = open(os.path.join(S, "tmux.lock"), "w"); fcntl.flock(lock, fcntl.LOCK_EX)
-path = os.path.join(S, "tmux.json")
-st = json.load(open(path)) if os.path.exists(path) else {"n": 0, "sessions": [], "windows": {}}
-def save(): json.dump(st, open(path, "w"))
-def opt(name): return a[a.index(name) + 1] if name in a else None
-def launch(session):
-    st["n"] += 1; win = "@%d" % st["n"]
-    st["windows"][win] = {"session": session, "name": opt("-n"), "opts": {}}
-    save(); fcntl.flock(lock, fcntl.LOCK_UN)
-    env = {"PATH": os.environ["PATH"], "HOME": os.environ.get("HOME", "/"), "STUB": S,
-           "TMUX": "/stub/tmux,1,0", "TMUX_PANE": "%%%d" % st["n"]}
-    env.update(a[i + 1].split("=", 1) for i in range(len(a) - 1) if a[i] == "-e")
-    open(os.path.join(S, "win-%d.env" % st["n"]), "w").write("\\n".join("%s=%s" % kv for kv in sorted(env.items())))
-    try:
-        subprocess.Popen(a[a.index("-c") + 2:], env=env, stdin=subprocess.DEVNULL, start_new_session=True,
-                         stdout=open(os.path.join(S, "win-%d.out" % st["n"]), "ab"), stderr=subprocess.STDOUT)
-    except OSError:
-        pass
-    print(win)
-fmt = opt("-F") or ""
-if a[0] == "has-session": sys.exit(0 if opt("-t").lstrip("=") in st["sessions"] else 1)
-elif a[0] == "new-session": st["sessions"].append(opt("-s")); launch(opt("-s"))
-elif a[0] == "new-window": launch(opt("-t").lstrip("=").rstrip(":"))
-elif a[0] == "set-option":
-    t = opt("-t"); w = t if t in st["windows"] else "@" + t.lstrip("%")
-    if w in st["windows"]: st["windows"][w]["opts"][a[-2]] = a[-1]; save()
-elif a[0] == "list-windows":
-    for w, v in st["windows"].items():
-        if "-a" in a: print("%s\\t%s" % (w, v["name"]) if "#{window_id}" in fmt else v["name"])
-        elif v["session"] == opt("-t").lstrip("="): print("%s\\t%s" % (w, v["opts"].get("@postmaster_cwd", "")))
-elif a[0] == "capture-pane": print("stub screen")
+  writeFileSync(join(tmp, "bin/tmux"), `#!/usr/bin/env bun
+import { appendFileSync, closeSync, existsSync, openSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { join } from "node:path";
+const S = process.env["STUB"] || "";
+const a = process.argv.slice(2);
+appendFileSync(join(S, "tmux.calls"), a.join("\\t") + "\\n");
+function sleep(ms) { const sab = new SharedArrayBuffer(4); Atomics.wait(new Int32Array(sab), 0, 0, ms); }
+const lockPath = join(S, "tmux.lock");
+let lockFd = -1;
+const lockDeadline = Date.now() + 20000;
+for (;;) {
+  try { lockFd = openSync(lockPath, "wx"); break; } catch (e) {
+    if (Date.now() > lockDeadline) process.exit(1);
+    sleep(10);
+  }
+}
+let unlocked = false;
+function unlock() {
+  if (unlocked) return;
+  unlocked = true;
+  try { if (lockFd >= 0) closeSync(lockFd); } catch (e) {}
+  try { unlinkSync(lockPath); } catch (e) {}
+}
+process.on("exit", unlock);
+const statePath = join(S, "tmux.json");
+const st = existsSync(statePath) ? JSON.parse(readFileSync(statePath, "utf8")) : { n: 0, sessions: [], windows: {} };
+function save() { writeFileSync(statePath, JSON.stringify(st)); }
+function opt(name) { const i = a.indexOf(name); return i >= 0 && i + 1 < a.length ? a[i + 1] : null; }
+function launch(session) {
+  st.n += 1;
+  const win = "@" + st.n;
+  st.windows[win] = { session: session, name: opt("-n"), opts: {} };
+  save(); unlock();
+  const env = {
+    PATH: process.env["PATH"] || "", HOME: process.env["HOME"] || "/", STUB: S,
+    TMUX: "/stub/tmux,1,0", TMUX_PANE: "%" + st.n,
+  };
+  for (let i = 0; i < a.length - 1; i++) {
+    if (a[i] === "-e") { const s = a[i + 1]; const j = s.indexOf("="); env[s.slice(0, j)] = s.slice(j + 1); }
+  }
+  writeFileSync(join(S, "win-" + st.n + ".env"), Object.keys(env).sort().map(function (k) { return k + "=" + env[k]; }).join("\\n"));
+  try {
+    const cAt = a.indexOf("-c");
+    const outFd = openSync(join(S, "win-" + st.n + ".out"), "a");
+    spawn(a[cAt + 2], a.slice(cAt + 3), { env: env, stdio: ["ignore", outFd, outFd], detached: true });
+  } catch (e) {}
+  console.log(win);
+}
+const fmt = opt("-F") || "";
+if (a[0] === "has-session") {
+  process.exit(st.sessions.indexOf((opt("-t") || "").replace(/^=+/, "")) >= 0 ? 0 : 1);
+} else if (a[0] === "new-session") {
+  st.sessions.push(opt("-s"));
+  launch(opt("-s"));
+} else if (a[0] === "new-window") {
+  launch((opt("-t") || "").replace(/^=+/, "").replace(/:+$/, ""));
+} else if (a[0] === "set-option") {
+  const t = opt("-t");
+  const w = t in st.windows ? t : "@" + String(t).replace(/^%+/, "");
+  if (w in st.windows) { st.windows[w].opts[a[a.length - 2]] = a[a.length - 1]; save(); }
+} else if (a[0] === "list-windows") {
+  if (a.indexOf("-a") >= 0) {
+    for (const w of Object.keys(st.windows)) {
+      const v = st.windows[w];
+      console.log(fmt.indexOf("#{window_id}") >= 0 ? w + "\\t" + v.name : v.name);
+    }
+  } else {
+    const t = (opt("-t") || "").replace(/^=+/, "");
+    for (const w of Object.keys(st.windows)) {
+      const v = st.windows[w];
+      if (v.session === t) console.log(w + "\\t" + (v.opts["@postmaster_cwd"] || ""));
+    }
+  }
+} else if (a[0] === "capture-pane") { console.log("stub screen"); }
 `);
   chmodSync(join(tmp, "bin/herdr"), 0o755);
   chmodSync(join(tmp, "bin/tmux"), 0o755);
@@ -898,17 +1106,6 @@ elif a[0] == "capture-pane": print("stub screen")
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
   });
-  // For brevity, test key run/stop/close behaviours with the no-host path.
-  const runResult = hs(
-    SYS,
-    {},
-    "run", NAME, join(repoAbs, ".worktrees/T-1-luna"),
-    "--out", join(tmp, "logs/n1.out"),
-    "--err", join(tmp, "logs/n1.err"),
-    "--marker", join(tmp, "logs/n1.done"),
-    "--", "./fixed.sh",
-  );
-  // Run from caller directory
   const runResult2 = spawnSync(SELF, [
     "run", NAME, join(repoAbs, ".worktrees/T-1-luna"),
     "--out", join(tmp, "logs/n1.out"),
@@ -950,7 +1147,7 @@ elif a[0] == "capture-pane": print("stub screen")
   console.log("stop: everything a launch started, and nothing else");
   writeFileSync(join(tmp, "caller/tree.sh"), `#!/usr/bin/env bash
 trap 'echo term >> "$TREE/term"; exit 0' TERM
-python3 -c 'import os; os.setsid(); os.execvp("sleep", ["sleep", "120"])' & echo $! > "$TREE/escapee.pid"
+setsid sleep 120 & echo $! > "$TREE/escapee.pid"
 sh -c 'trap "" TERM; while :; do sleep 1; done' & echo $! > "$TREE/deaf.pid"
 sleep 120 & wait
 `);

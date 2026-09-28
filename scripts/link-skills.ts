@@ -13,6 +13,7 @@
 import {
   existsSync,
   lstatSync,
+  statSync,
   mkdirSync,
   readdirSync,
   readFileSync,
@@ -24,6 +25,7 @@ import {
   chmodSync,
 } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
+import { spawnSync } from "node:child_process";
 import { scriptsDir, toolRoot } from "./lib/paths.ts";
 import { run, withTempDir, die } from "./lib/proc.ts";
 import { SelfTest } from "./lib/selftest.ts";
@@ -101,7 +103,8 @@ function plan(root: string): string[] | null {
   const lines: string[] = [];
   let seen = "";
   for (const h of HARNESSES) {
-    if (run("command", ["-v", h]).code !== 0) {
+    // `command -v` is a shell builtin, so ask a shell for it.
+    if (run("sh", ["-c", `command -v ${h}`]).code !== 0) {
       lines.push(`absent\t${h}`);
       continue;
     }
@@ -110,7 +113,7 @@ function plan(root: string): string[] | null {
       lines.push(`no-folder\t${h}\t${join(root, "skills", "postmaster", "SKILL.md")}`);
       continue;
     }
-    if (isLink(folder) && !existsSync(folder)) {
+    if (isLink(folder) && !isDirectory(folder)) {
       lines.push(`in-the-way\t${folder}\ta link to ${readlinkSync(folder)}`);
       continue;
     }
@@ -157,7 +160,7 @@ function plan(root: string): string[] | null {
 
 function isDirectory(p: string): boolean {
   try {
-    return lstatSync(p).isDirectory();
+    return statSync(p).isDirectory();
   } catch {
     return false;
   }
@@ -280,8 +283,27 @@ withTempDir((tmp) => {
     writeFileSync(join(bin, h), "#!/bin/sh\nexit 0\n", "utf8");
     chmodSync(join(bin, h), 0o755);
   }
+  // The tools the controls shell out to, so the restricted PATH is self-sufficient and no
+  // control can reach the machine's own harnesses or skills folders.
+  for (const t of [
+    "bash", "sh", "env", "git", "bun", "readlink", "dirname", "basename", "mkdir", "ln", "rm",
+    "sed", "grep", "cat", "mktemp", "cmp", "sort", "awk", "head", "tr", "ls", "cut", "chmod", "cp",
+  ]) {
+    const r = spawnSync("sh", ["-c", `command -v ${t}`], { encoding: "utf8" });
+    const p = r.stdout.trim().split("\n").pop() ?? "";
+    if (!p || !p.startsWith("/")) {
+      console.error(`self-test: ${t} is not on PATH`);
+      process.exit(1);
+    }
+    if (!existsSync(join(bin, t))) {
+      try {
+        symlinkSync(p, join(bin, t));
+      } catch {
+        /* ignore */
+      }
+    }
+  }
 
-  const origEnv = { ...process.env };
   process.env.PATH = bin;
   process.env.HOME = home;
   delete process.env.CLAUDE_CONFIG_DIR;
@@ -318,9 +340,7 @@ withTempDir((tmp) => {
   }
 
   console.log("installing: every skill, for every installed harness with a skills folder");
-  const r1 = run("bash", ["-c", `cd "${bin}" && PATH="${bin}" HOME="${home}" bash -c 'source /dev/stdin'`], {});
-  // We need to run make_links in-process with the modified env
-  // Capture stdout of makeLinks
+  // Capture stdout of makeLinks by swapping the console out for the duration of each call.
   const origLog = console.log;
   const origErr = console.error;
   let outBuf = "";
@@ -388,7 +408,9 @@ withTempDir((tmp) => {
   console.error = origErr;
   st.check(
     "running it again changes nothing",
-    rc2 === 0 && state() === before && !outBuf.includes("linked "),
+    rc2 === 0 &&
+      state() === before &&
+      !outBuf.split("\n").some((l) => l.startsWith("linked ")),
     outBuf,
   );
   {
@@ -409,10 +431,6 @@ withTempDir((tmp) => {
       linksTo(join(tmp, "cfg", "skills", "postmaster"), join(TOOL, "skills", "postmaster")),
     );
   }
-
-  // Restore PATH/HOME for the rest
-  process.env.PATH = origEnv.PATH ?? "";
-  process.env.HOME = origEnv.HOME ?? home;
 
   console.log("positive control: from an unrelated directory, a documented command resolves through the link and runs");
   const skillMd = join(TOOL, "skills", "postmaster", "SKILL.md");

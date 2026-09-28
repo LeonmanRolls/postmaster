@@ -200,8 +200,7 @@ function cut(repo: string, src: string, dest: string, snap: string, base = ""): 
     const v = verify(dest, snap, want);
     if (v.code !== 0) {
       rmSync(dest, { recursive: true, force: true });
-      err.push(`cut-scratch: removed ${dest}`);
-      return { code: 1, out: "", err: err.join("\n") + "\n" };
+      return { code: 1, out: "", err: v.err + `cut-scratch: removed ${dest}\n` };
     }
   }
   let cloned = 0;

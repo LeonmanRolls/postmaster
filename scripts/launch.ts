@@ -25,6 +25,7 @@ import {
   chmodSync,
   rmSync,
   accessSync,
+  statSync,
   constants as fsConstants,
 } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
@@ -157,7 +158,7 @@ interface FormsResult {
 }
 
 function harnessData(harness: string, cmdMode: string, cwd: string, name: string, leg: string, runDir: string): string {
-  if (cmdMode === "form") return `<harness-data>/${harness}/<key>`;
+  if (cmdMode === "form" || cmdMode === "form-resume") return `<harness-data>/${harness}/<key>`;
   const root = process.env["POSTMASTER_HARNESS_DATA"] ?? join(process.env["HOME"] ?? "", ".postmaster/harness-data");
   const key = `${runDir}|${resolve(cwd)}|${name}|${leg}`;
   // cksum equivalent: use a simple hash
@@ -185,9 +186,10 @@ function buildForms(
   let data = "";
   let stdinFile = "";
   const cmd: string[] = [];
+  const isResume = cmdMode === "resume" || cmdMode === "form-resume";
   switch (harness) {
     case "codex": {
-      if (cmdMode === "resume") cmd.push("codex", "exec", "resume", thread, "--json");
+      if (isResume) cmd.push("codex", "exec", "resume", thread, "--json");
       else cmd.push("codex", "exec", "-C", cwd, "--json");
       if (last) cmd.push("-o", last);
       cmd.push("-m", model);
@@ -197,12 +199,12 @@ function buildForms(
         const ref = run("git", ["-C", cwd, "symbolic-ref", "-q", "HEAD"]);
         if (ref.code !== 0) cmd.push("--skip-git-repo-check");
       }
-      if (cmdMode === "resume") cmd.push("--");
+      if (isResume) cmd.push("--");
       cmd.push(promptText);
       break;
     }
     case "grok": {
-      if (cmdMode === "resume") cmd.push("grok", "--resume", thread, "-p", promptText);
+      if (isResume) cmd.push("grok", "--resume", thread, "-p", promptText);
       else cmd.push("grok", "--prompt-file", prompt);
       cmd.push("-m", model);
       if (effort) cmd.push("--reasoning-effort", effort);
@@ -210,7 +212,7 @@ function buildForms(
       break;
     }
     case "agy": {
-      if (cmdMode === "resume") {
+      if (isResume) {
         throw new Error(
           "agy resume form is not recorded; relaunch against its conversationId by hand (harnesses.md)",
         );
@@ -222,7 +224,7 @@ function buildForms(
       break;
     }
     case "claude": {
-      if (cmdMode === "resume") cmd.push("claude", "-p", "--resume", thread, promptText);
+      if (isResume) cmd.push("claude", "-p", "--resume", thread, promptText);
       else cmd.push("claude", "-p", promptText);
       cmd.push("--model", model);
       if (effort) cmd.push("--effort", effort);
@@ -233,7 +235,7 @@ function buildForms(
     }
     case "pi": {
       cmd.push("pi", "--mode", "json", "--approve");
-      if (cmdMode === "resume") cmd.push("--session", thread);
+      if (isResume) cmd.push("--session", thread);
       cmd.push("--model", model);
       if (effort) cmd.push("--thinking", effort);
       const launchName = process.env["POSTMASTER_LAUNCH_NAME"];
@@ -244,7 +246,7 @@ function buildForms(
     case "muse": {
       data = harnessData("muse", cmdMode, cwd, name, leg, runDir);
       cmd.push("env", `XDG_DATA_HOME=${data}`, "muse", "exec", "--json", "--prompt-file", prompt);
-      if (cmdMode === "resume") cmd.push("--session-id", thread);
+      if (isResume) cmd.push("--session-id", thread);
       cmd.push("--model", model);
       if (effort) cmd.push("--reasoning-effort", effort);
       cmd.push("--yolo"); /*BYPASS*/
@@ -254,7 +256,7 @@ function buildForms(
     case "mimo": {
       data = harnessData("mimo", cmdMode, cwd, name, leg, runDir);
       cmd.push("env", `XDG_DATA_HOME=${data}`, "MIMOCODE_DISABLE_CLAUDE_IMPORT=1", "mimo", "run", "--format", "json", "-m", model);
-      if (cmdMode === "resume") cmd.push("-s", thread);
+      if (isResume) cmd.push("-s", thread);
       if (effort) cmd.push("--variant", effort);
       if (cmdMode === "launch") {
         const launchName = process.env["POSTMASTER_LAUNCH_NAME"];
@@ -271,13 +273,27 @@ function buildForms(
 }
 
 function shellQuote(s: string): string {
+  // bash's printf %q: '' when empty, $'...' with escapes for control characters, and a
+  // backslash before each character outside bash's unquoted-safe set otherwise.
   if (s === "") return "''";
-  if (/^[a-zA-Z0-9_\/.\-=:]+$/.test(s)) return s;
-  return `'${s.replace(/'/g, `'\\''`)}'`;
+  // eslint-disable-next-line no-control-regex
+  if (/[\x00-\x1f\x7f]/.test(s)) {
+    const named: Record<string, string> = {
+      "\\": "\\\\", "'": "\\'", "\n": "\\n", "\t": "\\t", "\r": "\\r",
+      "\x00": "\\0", "\x07": "\\a", "\x08": "\\b", "\x0b": "\\v", "\x0c": "\\f", "\x1b": "\\e",
+    };
+    return (
+      "$'" +
+      // eslint-disable-next-line no-control-regex
+      s.replace(/[\x00-\x1f\x7f\\']/g, (c) => named[c] ?? `\\${c.charCodeAt(0).toString(8).padStart(3, "0")}`) +
+      "'"
+    );
+  }
+  return s.replace(/[ !"#$&'()*,;:<>?\[\\\]^`{|}~]/g, "\\$&");
 }
 
 function showArg(a: string): string {
-  if (/^<.*>$/.test(a) || /^=<'*'>$/.test(a) || a === "$(cat <prompt-file>)") return a + " ";
+  if (/^<.*>$/.test(a) || /=<.*>$/.test(a) || a === "$(cat <prompt-file>)") return a + " ";
   return shellQuote(a) + " ";
 }
 
@@ -448,9 +464,9 @@ if (argv[0] === "--self-test") {
     process.stdout.write("launch: " + put(CWD, launchForms.cmd, launchForms.stdinFile) + "\n");
     try {
       const resumeForms = (() => {
-        // Build the resume form: set CMD=resume for the forms builder.
+        // Build the resume form: as the launch form's twin, with a placeholder data directory.
         return buildForms(
-          HARNESS, "resume", CWD, PROMPT, PTEXT, THREAD, MODEL, EFFORT, LAST, NAME, LEG, RUN,
+          HARNESS, "form-resume", CWD, PROMPT, PTEXT, THREAD, MODEL, EFFORT, LAST, NAME, LEG, RUN,
         );
       })();
       process.stdout.write("resume: " + put(CWD, resumeForms.cmd, resumeForms.stdinFile) + "\n");
@@ -621,6 +637,8 @@ withTempDir((tmp) => {
   run("git", ["-C", join(tmp, "cx"), "worktree", "add", "-q", "--detach", join(tmp, "cx-detached")]);
 
   const lines = (...args: string[]): string => args.join("\n");
+  // bash's $(...) strips trailing newlines; comparisons are made on that form.
+  const bashOut = (s: string): string => s.replace(/\n+$/, "");
 
   const doRun = (...args: string[]): void => {
     const f = args[0] ?? "";
@@ -642,7 +660,7 @@ withTempDir((tmp) => {
 
   const runsAs = (label: string, f: string, want: string, ...args: string[]): void => {
     doRun(f, ...args);
-    if (rc === 0 && out.trimEnd() === want.trimEnd()) ok(label);
+    if (rc === 0 && bashOut(out) === bashOut(want)) ok(label);
     else fail(label);
   };
   const runsOn = (label: string, f: string, m: string, ...args: string[]): void => {
@@ -860,10 +878,10 @@ withTempDir((tmp) => {
     rc = c.code;
     err = "";
     const got = out
-      .trim()
+      .replace(/\n+$/, "")
       .split("\n")
       .map((l) => l.replace(/^([a-z]+) .*launch\.sh (launch|resume) ([a-z]) .*/, "$1 $3"))
-      .join(",");
+      .join(",") + ",";
     if (got === "unrun a,run b,unrun c,run d,") {
       ok("a runbook launch or resume with no --run is found, fenced or inline");
     } else {
@@ -987,7 +1005,7 @@ withTempDir((tmp) => {
     const want = `exec --json --prompt-file ${join(tmp, "prompt.txt")} --model muse-model --reasoning-effort max --yolo probe=reached stdin= data=${a}`;
     if (
       rc === 0 &&
-      out.trimEnd() === want &&
+      bashOut(out) === want &&
       a.startsWith(`${hd}/muse/`) &&
       (() => {
         try {
@@ -1099,7 +1117,7 @@ withTempDir((tmp) => {
     const want = `run --format json -m prov/mimo-model --variant high --dangerously-skip-permissions probe=reached stdin=Continue. import-off=1 data=${a}`;
     if (
       rc === 0 &&
-      out.trimEnd() === want &&
+      bashOut(out) === want &&
       a.startsWith(`${hd}/mimo/`) &&
       (() => {
         try {
