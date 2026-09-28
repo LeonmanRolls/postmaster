@@ -173,7 +173,7 @@ def validate_common(data, label, local):
         checks = table(data["checks"], label + ".checks")
         for name, spec in checks.items():
             if not re.fullmatch(r"[a-z][a-z0-9-]*", name):
-                die("%s.checks has an invalid check name: %s" % (label, name))
+                die("%s.checks name %s is not a lowercase word" % (label, name))
             table(spec, label + ".checks." + name)
     if local:
         roles = table(data.get("roles", {}), label + ".roles")

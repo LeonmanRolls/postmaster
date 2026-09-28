@@ -98,7 +98,7 @@ esac
 # --- self-test ----------------------------------------------------------------------------
 tmp=$(mktemp -d) || exit 1
 trap 'rm -r -- "$tmp" </dev/null 2>/dev/null' EXIT
-d="$tmp/project/RUN-1"; mkdir -p "$d"
+d="$tmp/project/.postmaster/runs/RUN-1"; mkdir -p "$d"
 fails=0
 ok()   { printf '  ok   %s\n' "$1"; }
 fail() { printf '  FAIL %s\n' "$1"; fails=$((fails+1)); }
