@@ -200,7 +200,7 @@ not say; the security lens reviews against them.
    at `$RUNS/postmaster/brief.md` first:
 
    ```sh
-   <tool>/scripts/host.sh spawn postmaster-<project> <repo> --label "<project> · postmaster" -- <interactive form>
+   <tool>/scripts/host.sh spawn postmaster-<project> <repo> --label "postmaster" -- <interactive form>
    <tool>/scripts/host.sh send postmaster-<project> <prompt-file>
    <tool>/scripts/host.sh read postmaster-<project>      # it took the message: a new session can drop one
    ```

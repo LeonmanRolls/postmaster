@@ -33,7 +33,7 @@ way on every row, only less visibly on the last.
 
 | form | herdr | tmux | none |
 |---|---|---|---|
-| run a headless launch, visibly | a new tab in the space of the worktree the launch runs in, nested under the repository's space | a window in session `postmaster-<repo>` | a detached background process |
+| run a headless launch, visibly | a new tab in the run's space (under `--under`) or the worktree's, nested under the repository's space | a window in session `postmaster-<repo>` | a detached background process |
 | spawn the interactive postmaster | `herdr agent start` in a fresh tab of the repository's space, never a pane an agent ran in before | a window in session `postmaster-<repo>` | not possible: it runs headless, below |
 | send it a message | `herdr agent prompt` | paste the text bracketed, then Enter as a key of its own | resume its thread with the message as the prompt |
 | wait for it to settle | the same call, `herdr agent prompt --wait`: idle, done or blocked | its screen unchanged for 10 seconds | its marker lands |
@@ -42,8 +42,8 @@ way on every row, only less visibly on the last.
 
 ```sh
 <tool>/scripts/host.sh detect
-<tool>/scripts/host.sh name <dispatch> [<role or lane>]
-<tool>/scripts/host.sh run <name> <cwd> [--out <file>] [--err <file>] [--append] [--marker <file>] [--pidfile <file>] -- <command...>
+<tool>/scripts/host.sh name <dispatch> [<part>...]
+<tool>/scripts/host.sh run <name> <cwd> [--out <file>] [--err <file>] [--append] [--marker <file>] [--pidfile <file>] [--under <dispatch>] -- <command...>
 <tool>/scripts/host.sh stop <worktree>
 <tool>/scripts/host.sh close <worktree>
 <tool>/scripts/host.sh spawn <handle> <cwd> [--label <name>] -- <interactive form>
@@ -87,11 +87,20 @@ pane. `spawn`, `send`, `wait` and `read` exit 3 on `none`.
   harness's own Herdr integration reports to whatever pane those name. Its environment reaches
   the pane through a FIFO and a pipe, never a file on disk or a command line.
   [Why a launch must own its pane](../../wiki/concepts/herdr-headless-launches.md)
-- **`<name>` is the run's name, then the role or lane:** `<ticket>, <ticket title> · <role or
-  lane>`, for example `#36, Run the style, bug and security reviews in parallel · coachman`.
-  Take it from the waybill, `"$(<tool>/scripts/host.sh name <dispatch> <role>)"`, never by typing it:
-  a ticket's title can hold anything a shell would run. It labels the space when `host.sh`
-  opens it, and the tab or window, and is the pane's terminal title while the launch runs, which
+- **Each level names only what it adds.** The project's space its name; the run its ticket;
+  each launch its role, lane and model. `host.sh name <dispatch>` is the run's name, the
+  ticket number and title from the waybill, and it is what labels the space that holds one
+  run's launches. `host.sh name <dispatch> <part>...` is the launch's name, the parts joined
+  with ` · ` and nothing from the ticket: `coachman · Muse Spark · leg 2`, `luna · workhorse`,
+  `mimo · bug review r2`. Take both from the waybill through `name`, never by typing them: a
+  ticket's title can hold anything a shell would run. When the first part is `coachman` and
+  the rest is empty or starts with `leg`, `name` inserts the coachman's model from the waybill
+  Team line or the run's `run.json`, so no call site types a model.
+- **`--under <dispatch>` nests the launch under its run.** The launch is a tab in the run's
+  space (the synthesis worktree's, labelled with the ticket), whatever worktree or clone its
+  `<cwd>` is. Without it, a launch takes a space of its own worktree, labelled with the launch
+  name. Pass the launch's name as `"$(<tool>/scripts/host.sh name <dispatch> <parts>...)"`.
+  The name labels the tab or window and the pane's terminal title while the launch runs, which
   is what a Herdr client shows for a pane with an agent in it. `POSTMASTER_LAUNCH_NAME` carries
   it to `launch.sh`, which names the thread where the harness can (`harnesses.md`).
 - **The pane shows the stream, not the JSON**: `<tool>/scripts/view-stream.sh` renders one line per
@@ -111,17 +120,23 @@ pane. `spawn`, `send`, `wait` and `read` exit 3 on `none`.
 
 - **Placement.** `herdr worktree list --cwd <cwd>` names the repository and the space its own
   checkout is open in; with none, `host.sh` opens it as `herdr workspace create --cwd <repo>
-  --label <repo name>`, so the tree has a root. A worktree whose space is open gets a new tab
-  there. Otherwise `herdr worktree open --workspace <repository's space> --path <worktree>
-  --label <name>` opens it, which is what nests it under the repository's space. A detached
-  reviewer scratch opens the same way. The repository's own checkout gets a tab in its own space.
-  A reviewer's scratch clone (`cut-scratch.sh --clone`) is a repository of its own to Herdr, so
-  it opens as a space of the launch's own, as a directory outside any repository does;
-  `cut-scratch.sh --kind` is what tells it from a repository the user works in.
-- **The tree today** is one level deep, by worktree: the repository's space holds the
-  postmaster; under it, the synthesis worktree's space holds each coachman leg as a tab, and each
-  workhorse's and each reviewer's worktree has a space of its own. Workhorses sit beside their
-  coachman, not under it: Herdr 0.9.1 cannot nest one agent under another.
+  --label <repo name>`, so the tree has a root. With `--under <dispatch>`, the launch is a tab
+  in the run's space: `herdr worktree open --workspace <repository's space> --path <synthesis
+  worktree> --label <the run's name>` when that space is not open yet, then a tab of the
+  launch's name. Without `--under`, a worktree whose space is open gets a new tab there;
+  otherwise `herdr worktree open --workspace <repository's space> --path <worktree>
+  --label <name>` opens it. A detached reviewer scratch opens the same way. The repository's
+  own checkout gets a tab in its own space. A reviewer's scratch clone (`cut-scratch.sh --clone`)
+  is a repository of its own to Herdr, so with no run it opens as a space of the launch's own;
+  under a run (`--under`) it is a tab in the run's space like every other launch.
+  `cut-scratch.sh --kind` is what tells a scratch from a repository the user works in.
+- **The tree** is the project, the run, the launch: the repository's space holds the postmaster
+  and each run; a run's space (its synthesis worktree's, labelled with the ticket) holds every
+  launch of that run as a tab, coachman legs, workhorses and reviewers alike, the security
+  review's clone with them. Each tab is labelled with its role, lane and model, never the
+  ticket again. Workhorses sit beside their coachman as tabs of the same space, not under it:
+  Herdr 0.9.1 cannot nest one agent under another. A space `host.sh` opens for a run shows no
+  empty shell tab beside its launches.
 - **Ownership.** `host.sh` marks what it opens with Herdr metadata tokens: a space
   `postmaster=opened`, a pane `postmaster=launch`. `host.sh close` closes a space only when it
   carries the token and every pane in it does, and nothing registered runs there. It never
@@ -179,7 +194,7 @@ with `herdr agent start`. It is a pane whose agent `host.sh` reports. So when it
   watch but its files: `<tool>/scripts/runs-status.sh`, the events file, and
   `<tool>/scripts/view-stream.sh < <events-file>` for the readable form.
 - **The postmaster runs headless, as a native session**, like every other role:
-  `<tool>/scripts/host.sh run "<project> · postmaster" <repo> --out <runs>/postmaster/events.jsonl
+  `<tool>/scripts/host.sh run "postmaster" <repo> --out <runs>/postmaster/events.jsonl
   --err <runs>/postmaster/postmaster.err --marker <runs>/postmaster/.exited -- <tool>/scripts/launch.sh
   launch postmaster <repo> <brief-file>`. Its brief says it runs headless, so whenever it needs
   the user it writes `<runs>/postmaster/ESCALATION.md` and ends its turn, and
@@ -192,9 +207,13 @@ with `herdr agent start`. It is a pane whose agent `host.sh` reports. So when it
 ## Tests
 
 `<tool>/scripts/host.sh --self-test` runs every form against stub `herdr` and `tmux` on a PATH that
-holds nothing else, and never reaches a live server. `<tool>/scripts/host.sh --live-test` runs the
-ticket's controls against the hosts on this machine, in a scratch repository it creates: a launch
-that lands in its worktree's space, nested under its repository's space, with its marker landing;
-a reviewer's scratch clone opening as a space of its own, which `close` shuts; the same launch
-with no host, backgrounded, with its marker landing; and the same on tmux. It opens only its own
-spaces and tmux session, and closes them.
+holds nothing else, and never reaches a live server. It also checks the labels: each kind of
+launch (a coachman leg, a workhorse, each review lens with its round, the postmaster) leads with
+its role and holds no part of the ticket title, and the run's level carries the ticket.
+`<tool>/scripts/host.sh --live-test` runs the same against the hosts on this machine, in a
+scratch repository it creates: a launch that lands in its worktree's space, nested under its
+repository's space, with its marker landing; a launch under its run as a tab beside the
+ticket's space label, with no empty shell tab and the security clone with it; a reviewer's
+scratch clone opening as a space of its own, which `close` shuts; the same launch with no host,
+backgrounded, with its marker landing; and the same on tmux. It opens only its own spaces and
+tmux session, and closes them.
