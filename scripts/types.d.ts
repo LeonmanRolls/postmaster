@@ -4,7 +4,8 @@ declare const process: {
   pid: number;
   platform: string;
   getuid?(): number;
-  kill(pid: number, signal: number): void;
+  kill(pid: number, signal: number | string): void;
+  on(event: string, callback: (...args: any[]) => void): void;
   cwd(): string;
   chdir(path: string): void;
   exit(code?: number): never;
