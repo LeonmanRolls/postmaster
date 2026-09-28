@@ -374,6 +374,7 @@ trap 'rm -r -- "$tmp" </dev/null 2>/dev/null' EXIT
 export GIT_AUTHOR_NAME=fixture GIT_AUTHOR_EMAIL=fixture@example.invalid
 export GIT_COMMITTER_NAME=fixture GIT_COMMITTER_EMAIL=fixture@example.invalid
 export POSTMASTER_CONFIG=$tmp/config.toml; CONFIG=$POSTMASTER_CONFIG
+export POSTMASTER_TOOLS=$tmp/tools
 cat > "$CONFIG" <<'EOF'
 [lanes.one]
 harness = "bash"
