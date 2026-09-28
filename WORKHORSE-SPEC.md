@@ -27,6 +27,7 @@ Each run will acquire a shared postmaster worktree at its dispatch commit, recor
 - Change `skills/postmaster/SKILL.md`, `skills/postmaster/postmaster.md`, and `skills/postmaster/coachman.md` to put the pinned path in each new waybill and use it for every run leg and its prompts.
 - Change `AGENTS.md` to describe the pinned run lifecycle and remove the fleet-idle contract-change rule.
 - Change `README.md` to list the pin manager and its self-test, and add that self-test to the run-local gate profile in `.postmaster/verify/spec.json`.
+- Adjust `scripts/verify.sh`'s self-test to set its temporary worktree's `POSTMASTER_VERIFY`, so the gate's inherited setting does not point that fixture at the outer worktree.
 
 ## Decisions
 
@@ -35,6 +36,7 @@ Each run will acquire a shared postmaster worktree at its dispatch commit, recor
 - Keep old waybills compatible by preserving their explicit `tool:` path behavior.
 - Add no new external package; use standard library locking and Git worktree operations.
 - The repository has no tracked gate builder; add the self-test to the waybill guidance and this run's verification profile.
+- Keep the `verify.sh` change inside its test fixture: it isolates the temporary worktree path from the verification runner's environment without changing runtime behavior.
 
 ## Tasks
 
@@ -44,4 +46,4 @@ Each run will acquire a shared postmaster worktree at its dispatch commit, recor
 - [x] T004 [AC3] Add positive and negative dispatch-version controls for later-leg runbook reads and script execution to `scripts/tool-pin.sh --self-test`.
 - [x] T005 [AC4] Track run references and release the shared checkout after terminal teardown in `scripts/tool-pin.sh` and `skills/postmaster/postmaster.md`.
 - [x] T006 [AC5] Update `AGENTS.md` to state that a run uses its dispatched version and remove only the fleet-idle restriction, retaining the fixture-run contract-quality requirement.
-- [x] T007 [AC1] Add `scripts/tool-pin.sh --self-test` to the waybill project-profile guidance in `skills/postmaster/SKILL.md` and the run-local gate profile in `.postmaster/verify/spec.json`; check for a tracked gate builder and update one if present.
+- [x] T007 [AC1] Add `scripts/tool-pin.sh --self-test` to the waybill project-profile guidance in `skills/postmaster/SKILL.md` and the run-local gate profile in `.postmaster/verify/spec.json`; check for a tracked gate builder and update one if present. Scope the `scripts/verify.sh` journey-path self-test to its fixture worktree under the gate's inherited environment.
