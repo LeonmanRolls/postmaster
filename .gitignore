@@ -11,3 +11,8 @@ config.toml
 
 # TypeScript toolchain (dev dependencies only; the scripts need only Bun at run time)
 node_modules/
+
+# port working files (not part of the change)
+.port-base/
+.port-scratch/
+PORT-CONVENTIONS.md
