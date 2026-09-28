@@ -13,15 +13,7 @@
 //
 //   exit 0  written
 //   exit 1  usage, or no such dispatch directory
-import {
-  appendFileSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  rmSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { withTempDir } from "./lib/proc.ts";
 import { SelfTest } from "./lib/selftest.ts";
@@ -33,10 +25,6 @@ function now(): string {
 function parseTime(s: string): number {
   // "%Y-%m-%d %H:%M:%S" as a UTC timestamp in seconds
   return Date.parse(`${s.replace(" ", "T")}Z`) / 1000;
-}
-
-function formatTime(t: number): string {
-  return new Date(t * 1000).toISOString().slice(0, 19).replace("T", " ");
 }
 
 function clockOf(t: number): string {
