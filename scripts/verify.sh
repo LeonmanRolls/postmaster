@@ -746,7 +746,7 @@ sha=$(git -C "$wt" rev-parse HEAD | cut -c1-12)
 grep -qF "\"target\":\"red\",\"detail\":\"on=wb/T-1-a@$sha result=fail exit=1" "$d/actions.jsonl" && ok "each naming the branch, the commit and the result" || fail "each naming the branch, the commit and the result" "$(tail -3 "$d/actions.jsonl")"
 [ -f "$d/verify/$sha/red.log" ] && ok "with its output kept in the run" || fail "with its output kept in the run"
 p1=$("$SELF" journey-path "$wt" "$d"); [ "$p1" = "$d/journey/$(git -C "$wt" rev-parse HEAD).md" ] && ok "the coachman's journey report goes in the run" || fail "the coachman's journey report goes in the run" "$p1"
-p2=$("$SELF" journey-path "$wt"); [ "$p2" = "$wt/.postmaster/verify/journey/$(git -C "$wt" rev-parse HEAD).md" ] && ok "a workhorse's in its worktree" || fail "a workhorse's in its worktree" "$p2"
+p2=$(POSTMASTER_VERIFY= "$SELF" journey-path "$wt"); [ "$p2" = "$wt/.postmaster/verify/journey/$(git -C "$wt" rev-parse HEAD).md" ] && ok "a workhorse's in its worktree" || fail "a workhorse's in its worktree" "$p2"
 
 echo "results and summaries"
 out=$("$SELF" results "$d" "$wt"); rc=$?
