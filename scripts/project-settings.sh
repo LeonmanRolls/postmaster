@@ -62,10 +62,14 @@ PARENT_PATH = re.compile(r"(?:^|[/\\])\.\.(?:[/\\]|$)")
 WINDOWS_PATH = re.compile(r"(?:^|[\s=\"'(])[A-Za-z]:[\\/]")
 UNC_PATH = re.compile(r"(?:^|[\s=\"'(])(?:\\\\[^\\\s]+\\|//[^/\s]+/)")
 FILE_URL_PATH = re.compile(r"(?i)\bfile:(?:/|\\)+[^\s\"']*")
-ENV_PATH = re.compile(r"(?i)(?<![A-Za-z0-9_])(?:\$[A-Z_][A-Z0-9_]*|%[A-Z_][A-Z0-9_]*%)")
+ENV_PATH = re.compile(
+    r"(?i)(?<![A-Za-z0-9_])(?:"
+    r"\$(?:HOME|USERPROFILE|HOMEDRIVE|HOMEPATH|PWD|PATH|TMP|TEMP|TMPDIR|[A-Z0-9_]*(?:PATH|_DIR|_ROOT|_HOME))"
+    r"|%(?:USERPROFILE|HOMEDRIVE|HOMEPATH|APPDATA|LOCALAPPDATA|TMP|TEMP)%)"
+)
 ASSIGNMENT_SECRET = re.compile(r"(?i)\b[A-Z0-9_]*(?:API[_-]?KEY|AUTH[_-]?TOKEN|ACCESS[_-]?TOKEN|PASSWORD|SECRET|CREDENTIAL)\s*=\s*[^\s,;]+")
 TOKEN_VALUE = re.compile(r"(?i)\b(?:gh[pousr]_[A-Za-z0-9]{12,}|sk-[A-Za-z0-9_-]{16,}|xox[baprs]-[A-Za-z0-9-]{12,})\b")
-NAMED_CREDENTIAL = re.compile(r"\b[A-Z][A-Z0-9_]*(?:API[_-]?KEY|AUTH[_-]?TOKEN|ACCESS[_-]?TOKEN|TOKEN|PASSWORD|SECRET|CREDENTIALS?)[A-Z0-9_]*\b", re.I)
+NAMED_CREDENTIAL = re.compile(r"\b[A-Z][A-Z0-9_]*(?:API[_-]?KEY|AUTH[_-]?TOKEN|ACCESS[_-]?TOKEN|TOKEN|PASSWORD|SECRET|CREDENTIALS?)[A-Z0-9_]*\b")
 MACHINE_NAMES = {name.strip().lower() for name in (socket.gethostname(), os.environ.get("COMPUTERNAME", "")) if name.strip()}
 MACHINE_NAMES |= {name.split(".", 1)[0] for name in list(MACHINE_NAMES) if name}
 
