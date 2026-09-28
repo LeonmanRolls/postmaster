@@ -6,9 +6,10 @@
 #   run-meta.sh --self-test
 #
 # Records when it was written; the run and project; the target repo's HEAD and branch; the
-# postmaster commit that dispatched it and the shared tool worktree pinned to that commit; the
-# config in force, as it was; and the version each harness named in that config reports. Env
-# files are named by the config, never read. A run.json that already exists is left alone.
+# postmaster commit that dispatched it, whether that checkout was dirty, and the shared tool
+# worktree pinned to that commit; the config in force, as it was; and the version each harness
+# named in that config reports. Env files are named by the config, never read. A run.json that
+# already exists is left alone.
 #
 #   exit 0  written, or already there
 #   exit 1  usage, no such dispatch directory or repo, no config, or the file could not be written

@@ -7,8 +7,10 @@
 #   tool-pin.sh --self-test
 #
 # The registry lives under ~/.postmaster/tool-pins. POSTMASTER_TOOL_PINS may point it elsewhere
-# for an isolated test. A run is in flight while its reference exists; release is allowed only
-# after its manifest is terminal. All registry changes for one commit share an advisory lock.
+# for an isolated test. A run is in flight while its reference exists. Release requires a
+# terminal manifest; done runs also need every coachman exit marker, and the postmaster releases
+# abandoned runs only after it stops their processes and removes their worktrees. Registry
+# changes for one commit share an advisory lock.
 set -uo pipefail
 HERE=$(CDPATH= cd -P -- "$(dirname -- "$0")" && pwd -P)
 ROOT=$(dirname "$HERE")
@@ -19,8 +21,8 @@ if [ "${1:-}" = "--self-test" ]; then
   trap 'rm -r -- "$TEST_TMP" </dev/null 2>/dev/null' EXIT
 fi
 python3 - "$ROOT" "$0" "$TEST_TMP" "$@" <<'PY'
-import fcntl
 import contextlib
+import fcntl
 import hashlib
 import json
 import os

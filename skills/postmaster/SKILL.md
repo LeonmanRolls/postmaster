@@ -231,7 +231,8 @@ everything the coachman needs and nothing it must go and find:
 
 ## Project profile
 repo: <abs path>          default branch: <name>       BASE: <sha>
-gate: <the real command>  build: <the real command>    browser suite: <command or none>
+gate: <the real command; include <tool>/scripts/tool-pin.sh --self-test when this repo is the target>
+build: <the real command>    browser suite: <command or none>
 docs to read first: <files, in order>
 tracker: <kind, and how a ticket is read and written>
 risk surfaces: <what the project binds, allowlists, spawns, serves; from its docs or the user>
@@ -248,9 +249,14 @@ CHECKPOINT_MODE and MERGE_AUTHORITY come from ship.checkpoint_mode and ship.merg
 name: <ticket id>, <ticket title>
 dispatch: <abs path of this directory>
 synthesis worktree: <abs path; cut by the postmaster at BASE, the coachman's cwd for every leg>
-tool: <abs path of the postmaster repo: <tool> in the runbooks>
+tool: <abs path of the postmaster worktree pinned for this run, recorded in run.json>
 postmaster ruling channel: resume the coachman's thread (harnesses.md) with the ruling as the prompt
 ```
+
+The postmaster's own session continues to use the main checkout it found from the skill. The
+waybill's `tool:` path is the run's pinned checkout; coachman launches, resumes and takeovers
+use that path for their host, launch and runbook files. An older waybill keeps the tool path it
+already names.
 
 ## Hard rules
 

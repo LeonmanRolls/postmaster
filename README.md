@@ -99,6 +99,7 @@ scripts/stage.sh <dispatch> <stage>                               # the one way 
 scripts/run-times.sh <dispatch>                                   # how long each stage took, from the log
 scripts/run-log.sh <dispatch> <text> | --section <title> | --close # the narrative, timestamped
 scripts/run-meta.sh <dispatch> <repo>                             # run.json: what a run started from
+scripts/tool-pin.sh resolve|acquire|release|cancel … | --self-test # share and release the run's pinned postmaster worktree
 scripts/github.sh <repo> board|create|edit|read|state|comment|list|access|search # GitHub Issues on a Projects board
 scripts/plane.sh create|edit|read|state|comment|list …             # Plane work items
 scripts/local.sh <repo> store|create|edit|read|title|state|comment|list # tickets in the repo's git directory

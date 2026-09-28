@@ -17,10 +17,11 @@ target the user wants before assuming either way.
 
 ### What is different when the target IS this repo
 
-**A run in flight does not see your edits.** A coachman loaded its runbook when it started;
-changing `coachman.md` mid-run changes nothing for it. That is a safety property, not a
-limitation: a broken edit cannot break a fleet that is already moving. It also means a fix
-you just merged is not in effect until the next dispatch.
+**A run's coachman legs use the postmaster version it was dispatched from.** At dispatch, its
+waybill and `run.json` name a shared worktree of that commit. Every coachman leg reads its
+runbook and runs its scripts from that worktree, including later legs, resumes and takeovers.
+The supervising postmaster stays on the main checkout. A change merged while runs are active
+applies to later dispatches; active legs keep their pinned version.
 
 **The supervising session is in the same position.** Whatever is supervising loaded its
 context at startup. After merging a change to the flow, restart it or accept that it is
@@ -28,16 +29,6 @@ running the previous version.
 
 **Everything else is ordinary.** Worktrees under `.worktrees/` are gitignored, the gate runs
 the same way, and merges are merges. There is no special mode.
-
-### The one thing that genuinely bites
-
-**Do not let a run rewrite the file that a live run is mid-way through executing and then
-expect either to be coherent.** If a ticket changes the coachman contract (markers, the
-waybill shape, the turnpike table, completion detection), land it while the fleet is idle, or the next dispatch
-will read a new contract while an older run is still writing to the old one.
-
-Contract changes are the only category that needs the fleet quiet. Ordinary changes to
-scripts, docs and prose do not.
 
 **A change to the coachman contract merges only after a fixture run scores clean**: a run
 dispatched from the change's branch against a repository made by `scripts/fixture.sh new`, and
@@ -212,8 +203,8 @@ check, a stale sentence, an instruction with no mechanism behind it, a rule writ
 that belongs in a script. That does not widen the pull request. Finishing what it introduced
 is part of the same change.
 
-A ticket is for work the pull request never set out to do: it touches another contract, needs
-the fleet quiet, or depends on something that does not exist yet.
+A ticket is for work the pull request never set out to do: it touches another contract, or
+depends on something that does not exist yet.
 
 The test is whether the fix completes what the pull request claims. "Is this a separate
 concern?" is the wrong test, because nearly anything can be described as one. Before filing a
