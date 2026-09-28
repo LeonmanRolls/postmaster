@@ -22,6 +22,7 @@
 //   exit 3  spawn, send, wait or read with no host; or a send/wait that did not settle
 import {
   appendFileSync,
+  chmodSync,
   closeSync,
   existsSync,
   mkdirSync,

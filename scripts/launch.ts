@@ -30,7 +30,7 @@ import {
 import { basename, dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { readTomlFile, tryJsonFile } from "./lib/data.ts";
-import { run } from "./lib/proc.ts";
+import { run, withTempDir } from "./lib/proc.ts";
 import { SelfTest } from "./lib/selftest.ts";
 import { scriptsDir, toolRoot } from "./lib/paths.ts";
 

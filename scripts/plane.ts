@@ -388,8 +388,8 @@ const BULLET = /^( {0,3})([-*+])(?:([ \t]+)(.*))?$/;
 const ORDERED = /^( {0,3})(\d{1,9})([.)])(?:([ \t]+)(.*))?$/;
 const FENCE = /^( *)(`{3,}|~{3,})(.*)$/;
 const COMMENT = /^ {0,3}<!--/;
-const LINK_RE = /\[([^\]]+)\]\(((?:[^\s()]|\([^\s()]*\))+)\)/;
-const BOLD = /\*\*(?=\S)(.+?)(?<=\S)\*\*/;
+const LINK_RE = /\[([^\]]+)\]\(((?:[^\s()]|\([^\s()]*\))+)\)/g;
+const BOLD = /\*\*(?=\S)(.+?)(?<=\S)\*\*/g;
 
 function indentOf(line: string): number {
   return line.length - line.trimStart().length;
@@ -554,7 +554,7 @@ function listHtml(lines: string[], i: number): [string, number] {
   }
   const start = first.kind === "ol" && first.number !== 1 ? ` start="${first.number}"` : "";
   const lis = items.map((body) => `<li>${htmlBlocks(body).join("")}</li>`).join("");
-  return `<${first.kind}${start}>${lis}</${first.kind}>`, i;
+  return [`<${first.kind}${start}>${lis}</${first.kind}>`, i];
 }
 
 function htmlBlocks(lines: string[]): string[] {

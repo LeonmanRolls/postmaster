@@ -65,7 +65,7 @@ function refs(
       REF.lastIndex = 0;
       for (const m of line.matchAll(REF)) {
         const before = line.slice(0, m.index ?? 0);
-        const ref = m.group(0).replace(/\.+$/, "");
+        const ref = (m[0] ?? "").replace(/\.+$/, "");
         if (before.length > 0 && /[A-Za-z0-9_]/.test(before[before.length - 1] ?? "")) {
           continue; // part of a longer name
         }
