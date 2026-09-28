@@ -105,7 +105,7 @@ function selfTest(): number {
     writeOut("a full run, two legs, with a wait between them");
     writeFileSync(
       join(temp, "actions.jsonl"),
-      [
+      `${[
         line("12:00", "dispatch", "r"),
         line("12:01", "handoff-accept", "1"),
         line("12:02", "stage", "bootstrapped"),
@@ -117,7 +117,7 @@ function selfTest(): number {
         line("12:56", "stage", "review"),
         line("13:10", "handoff", "2"),
         line("13:10", "stage", "done"),
-      ].join("\n") + "\n",
+      ].join("\n")}\n`,
     );
     check(
       "the dispatched stage runs from dispatch to bootstrapped",
@@ -139,9 +139,9 @@ function selfTest(): number {
     writeOut("a dispatch in the same second as the first stage");
     writeFileSync(
       join(temp, "actions.jsonl"),
-      [line("12:00", "dispatch", "r"), line("12:00", "stage", "bootstrapped"), line("12:03", "stage", "done")].join(
+      `${[line("12:00", "dispatch", "r"), line("12:00", "stage", "bootstrapped"), line("12:03", "stage", "done")].join(
         "\n",
-      ) + "\n",
+      )}\n`,
     );
     check("the dispatched row is still shown", 0, "dispatched                 2026-01-01 12:00:00   0s");
     writeOut("a run still in progress");
@@ -158,7 +158,7 @@ function selfTest(): number {
     writeOut("negative controls");
     writeFileSync(
       join(temp, "actions.jsonl"),
-      [line("12:00", "dispatch", "r"), line("12:05", "note", "x")].join("\n") + "\n",
+      `${[line("12:00", "dispatch", "r"), line("12:05", "note", "x")].join("\n")}\n`,
     );
     check("a log with no stage lines says so, and times nothing", 3, "no stage changes logged");
     writeFileSync(join(temp, "actions.jsonl"), "not json\n");

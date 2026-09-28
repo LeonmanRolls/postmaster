@@ -4,12 +4,13 @@ declare const process: {
   pid: number;
   platform: string;
   getuid?(): number;
+  kill(pid: number, signal: number): void;
   cwd(): string;
   chdir(path: string): void;
   exit(code?: number): never;
   stdout: { write(value: string | Uint8Array): boolean };
   stderr: { write(value: string | Uint8Array): boolean };
-  stdin: { read(): Uint8Array | null; on(event: string, callback: (...args: any[]) => void): void };
+  stdin: { read(): Uint8Array | null; isTTY?: boolean; on(event: string, callback: (...args: any[]) => void): void };
 };
 
 declare const Bun: {
@@ -31,16 +32,19 @@ declare module "node:fs" {
   export const cpSync: any;
   export const existsSync: any;
   export const fstatSync: any;
+  export const fsyncSync: any;
   export const lstatSync: any;
   export const mkdirSync: any;
   export const mkdtempSync: any;
   export const openSync: any;
   export const readFileSync: any;
+  export const readSync: any;
   export const readdirSync: any;
   export const readlinkSync: any;
   export const realpathSync: any;
   export const renameSync: any;
   export const rmSync: any;
+  export const rmdirSync: any;
   export const statSync: any;
   export const symlinkSync: any;
   export const unlinkSync: any;

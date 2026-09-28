@@ -1,4 +1,3 @@
-import { homedir } from "node:os";
 import { resolve } from "node:path";
 import { command, writeError, writeOut } from "./lib/core.ts";
 import { scriptDir } from "./lib/core.ts";
@@ -29,7 +28,7 @@ if (store.code !== 3) {
   writeError(`tracker-kind: cannot look for a local store in ${repo} (local.sh exit ${store.code}): ${why}`);
   process.exit(1);
 }
-const config = process.env.POSTMASTER_CONFIG ?? resolve(homedir(), ".postmaster/config.toml");
+const config = process.env.POSTMASTER_CONFIG ?? `${process.env.HOME ?? ""}/.postmaster/config.toml`;
 try {
   const parsed = Bun.TOML.parse(await Bun.file(config).text()) as { tracker?: { kind?: string } };
   writeOut(parsed.tracker?.kind ?? "github");

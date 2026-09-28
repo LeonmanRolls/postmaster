@@ -129,6 +129,9 @@ costs tokens, and is how the wrong answer gets produced confidently.
 
 ## What it is
 
+The scripts run as TypeScript under Bun 1.4.2 or newer. Bun supplies their shell, TOML parser,
+HTTP client and test runner; runtime imports use only Bun and Node's standard modules.
+
 A three-role flow for getting one ticket implemented well by several models at once.
 
 | role | what it does | where it is defined |
