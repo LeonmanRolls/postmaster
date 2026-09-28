@@ -46,7 +46,8 @@ function roleExtra(effort: string, envFile: string): string {
 }
 
 function installed(tool: string): boolean {
-  return run("command", ["-v", tool]).code === 0;
+  // command -v is a shell builtin: BASE ran it in the shell, so the port must too.
+  return run("bash", ["-c", 'command -v "$1" >/dev/null 2>&1', "_", tool]).code === 0;
 }
 
 function needHarness(h: string): void {
@@ -384,7 +385,8 @@ overwrite                  no                 yes replaces an existing config`);
     "round_timeout_seconds",
     opts,
   );
-  const rtNum = /^\d+$/.test(RT) ? parseInt(RT, 10) : 0;
+  // BASE matched 1 to 5 digits with no leading zero, else refused: '0600' is not a number it takes.
+  const rtNum = /^[1-9][0-9]{0,4}$/.test(RT) ? parseInt(RT, 10) : 0;
   if (rtNum < 1 || rtNum > 86400) {
     die("setup: round_timeout_seconds must be a whole number of seconds from 1 to 86400", 1);
   }
@@ -436,7 +438,7 @@ review_link = "${RL}"
 `;
 
   if (DRY === 1) {
-    console.log(OUT);
+    console.log(OUT.replace(/\n+$/, ""));
     process.exit(0);
   }
   if (existsSync(CONFIG)) {
@@ -444,7 +446,8 @@ review_link = "${RL}"
     if (OW !== "yes") die(`setup: left ${CONFIG} as it was`, 1);
   }
   mkdirSync(dirname(CONFIG), { recursive: true });
-  writeFileSync(CONFIG, OUT + "\n", "utf8");
+  // BASE's $(heredoc) stripped trailing newlines and printf '%s\n' added exactly one back.
+  writeFileSync(CONFIG, OUT.replace(/\n+$/, "") + "\n", "utf8");
   // parse back as TOML
   try {
     readTomlFile(CONFIG);
@@ -488,15 +491,7 @@ withTempDir((tmp) => {
     writeFileSync(join(tmp, `${name}.answers`), lines.join("\n") + "\n", "utf8");
   }
 
-  function runSetup(name: string): void {
-    run(
-      "bash",
-      [SELF, "--answers", join(tmp, `${name}.answers`), "--config", join(tmp, `${name}.toml`)],
-      {
-        env: { ...process.env, HOME: tmp },
-      },
-    );
-    // capture output to file
+  function runSetup(name: string): number {
     const r = run("bash", [
       SELF,
       "--answers",
@@ -505,6 +500,7 @@ withTempDir((tmp) => {
       join(tmp, `${name}.toml`),
     ]);
     writeFileSync(join(tmp, `${name}.out`), r.out + r.err, "utf8");
+    return r.code;
   }
 
   function team(name: string, key: string): string {
@@ -524,14 +520,16 @@ withTempDir((tmp) => {
 
   console.log("positive controls");
   answers("lens", "reviewers.security=alpha, beta, sentinel");
-  runSetup("lens");
+  const lensRc = runSetup("lens");
   {
     const cfg = tryTomlFile(join(tmp, "lens.toml"));
     st.check(
       "a lens given its own lanes is written to [team.lens_reviewers]",
-      cfg !== null &&
+      lensRc === 0 &&
+        cfg !== null &&
         JSON.stringify((cfg["team"] as Record<string, unknown>)?.["lens_reviewers"]) ===
           '{"security":["alpha","beta","sentinel"]}',
+      `exit ${lensRc}`,
     );
   }
   {
@@ -549,34 +547,38 @@ withTempDir((tmp) => {
     );
   }
   answers("plain");
-  runSetup("plain");
+  const plainRc = runSetup("plain");
   {
     const cfg = tryTomlFile(join(tmp, "plain.toml"));
     st.check(
       "without lens answers there is no table, as before",
-      cfg !== null &&
+      plainRc === 0 &&
+        cfg !== null &&
         (cfg["team"] as Record<string, unknown>)?.["lens_reviewers"] === undefined &&
         JSON.stringify((cfg["team"] as Record<string, unknown>)?.["reviewers"]) ===
           '["alpha","beta"]',
+      `exit ${plainRc}`,
     );
   }
   answers(
     "roles",
     "coachman.effort=max\ncoachman.env_file=~/.postmaster/lanes/judge.env\nfallback.env_file=spare.env\npostmaster.env_file=~/.postmaster/lanes/pm.env",
   );
-  runSetup("roles");
+  const rolesRc = runSetup("roles");
   {
     const cfg = tryTomlFile(join(tmp, "roles.toml"));
     const t = cfg?.["team"] as Record<string, unknown> | undefined;
     st.check(
       "the coachman, the fallback and the postmaster each get their env file, with or without an effort",
-      cfg !== null &&
+      rolesRc === 0 &&
+        cfg !== null &&
         JSON.stringify(t?.["coachman"]) ===
           '{"harness":"bash","model":"judge","effort":"max","env_file":"~/.postmaster/lanes/judge.env"}' &&
         JSON.stringify(t?.["coachman_fallback"]) ===
           '{"harness":"bash","model":"spare","env_file":"spare.env"}' &&
         JSON.stringify(t?.["postmaster"]) ===
           '{"harness":"bash","model":"pm","env_file":"~/.postmaster/lanes/pm.env"}',
+      `exit ${rolesRc}`,
     );
   }
   {
@@ -594,8 +596,8 @@ withTempDir((tmp) => {
     limit("plain"),
   );
   answers("limit", "round_timeout_seconds=86400");
-  runSetup("limit");
-  st.check("an answer sets it, up to 86400", limit("limit") === "86400");
+  const limitRc = runSetup("limit");
+  st.check("an answer sets it, up to 86400", limitRc === 0 && limit("limit") === "86400", `exit ${limitRc} limit=${limit("limit")}`);
 
   console.log("negative controls");
   const badLimits = [
@@ -612,21 +614,22 @@ withTempDir((tmp) => {
     const v = badLimits[n] ?? "";
     const name = `limit${n + 1}`;
     answers(name, `round_timeout_seconds=${v}`);
-    runSetup(name);
+    const rc = runSetup(name);
     const out = readFileSync(join(tmp, `${name}.out`), "utf8");
     st.check(
       `a round time limit of '${v}' is refused, and nothing is written`,
-      !existsSync(join(tmp, `${name}.toml`)) && out.includes("round_timeout_seconds must be"),
+      rc === 1 && !existsSync(join(tmp, `${name}.toml`)) && out.includes("round_timeout_seconds must be"),
       out,
     );
   }
   answers("ghost", "reviewers.security=alpha, ghost");
-  runSetup("ghost");
+  const ghostRc = runSetup("ghost");
   {
     const out = readFileSync(join(tmp, "ghost.out"), "utf8");
     st.check(
       "a lens reviewer that is not a lane is refused, and nothing is written",
-      !existsSync(join(tmp, "ghost.toml")) &&
+      ghostRc === 1 &&
+        !existsSync(join(tmp, "ghost.toml")) &&
         out.includes("security reviewer 'ghost' is not one of the lanes"),
       out,
     );
@@ -638,12 +641,12 @@ withTempDir((tmp) => {
     const text = readFileSync(f, "utf8").replace(/^coachman\.model=judge$\n?/m, "");
     writeFileSync(f, text, "utf8");
   }
-  runSetup("shared");
+  const sharedRc = runSetup("shared");
   {
     const out = readFileSync(join(tmp, "shared.out"), "utf8");
     st.check(
       "a coachman on a lane's model is refused",
-      !existsSync(join(tmp, "shared.toml")) && out.includes("cannot run on a lane's model"),
+      sharedRc === 1 && !existsSync(join(tmp, "shared.toml")) && out.includes("cannot run on a lane's model"),
       out,
     );
   }
@@ -654,12 +657,12 @@ withTempDir((tmp) => {
     const text = readFileSync(f, "utf8").replace(/^fallback\.model=.*$\n?/m, "");
     writeFileSync(f, text, "utf8");
   }
-  runSetup("missing");
+  const missingRc = runSetup("missing");
   {
     const out = readFileSync(join(tmp, "missing.out"), "utf8");
     st.check(
       "a missing answer is refused, naming it",
-      !existsSync(join(tmp, "missing.toml")) && out.includes("no answer for fallback.model"),
+      missingRc === 1 && !existsSync(join(tmp, "missing.toml")) && out.includes("no answer for fallback.model"),
       out,
     );
   }

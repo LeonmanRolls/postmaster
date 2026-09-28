@@ -38,7 +38,8 @@ function die(msg: string): never {
 
 function read(path: string, what: string): string {
   try {
-    return readFileSync(path, "utf8");
+    // BASE opened text with utf-8-sig: a byte-order mark is not part of the content.
+    return readFileSync(path, "utf8").replace(/^\uFEFF/, "");
   } catch (e: any) {
     if (e?.code === "ENOENT") die(`no ${what} at ${path}`);
     die(`cannot read ${path}: ${e?.message ?? "error"}`);
@@ -240,7 +241,8 @@ class Tree {
       const entry = this.blobs.get(p);
       const data = entry ? git(this.repo, "cat-file", "blob", entry.sha) : null;
       const ok = data !== null && data.length <= 512 * 1024 && !data.slice(0, 8192).includes("\0");
-      this.cache.set(p, ok ? data : null);
+      // BASE decoded utf-8-sig: a byte-order mark is not part of the content.
+      this.cache.set(p, ok ? data!.replace(/^\uFEFF/, "") : null);
     }
     return this.cache.get(p) ?? null;
   }
@@ -1074,7 +1076,8 @@ function states(dispatch: string): Record<string, string> {
   const out: Record<string, string> = {};
   let rows: string[];
   try {
-    rows = readFileSync(LEDGER, "utf8").split("\n");
+    // BASE opened the ledger with utf-8-sig: a byte-order mark is not part of the content.
+    rows = readFileSync(LEDGER, "utf8").replace(/^\uFEFF/, "").split("\n");
   } catch {
     return out;
   }
@@ -1354,8 +1357,36 @@ withTempDir((tmp) => {
   const fail = (label: string, detail?: string) => st.fail(label, detail);
   const invoke = (...args: string[]): void => {
     const r = run("bash", [SELF, ...args]);
-    out = r.out + r.err;
+    // BASE's run() used $(...), which strips trailing newlines.
+    out = (r.out + r.err).replace(/\n+$/, "");
     rc = r.code;
+  };
+  // BASE ran `run core forms <file>`: the core function in the same shell, not the script.
+  const runCore = (...args: string[]): void => {
+    const chunks: string[] = [];
+    const origLog = console.log;
+    const origErr = console.error;
+    const origExit = process.exit;
+    class ExitSignal extends Error {
+      constructor(public readonly code: number) {
+        super("exit");
+      }
+    }
+    console.log = (...a: unknown[]) => void chunks.push(a.join(" ") + "\n");
+    console.error = (...a: unknown[]) => void chunks.push(a.join(" ") + "\n");
+    process.exit = ((code?: number) => {
+      throw new ExitSignal(code ?? 0);
+    }) as typeof process.exit;
+    try {
+      rc = core(args[0]!, args[1]!);
+    } catch (e) {
+      rc = e instanceof ExitSignal ? e.code : 1;
+    } finally {
+      console.log = origLog;
+      console.error = origErr;
+      process.exit = origExit;
+    }
+    out = chunks.join("").replace(/\n+$/, "");
   };
   const is = (label: string, wantExit: number, wantOut: string): void => {
     if (rc === wantExit && out === wantOut) ok(label);
@@ -1959,7 +1990,7 @@ withTempDir((tmp) => {
       .replace(/<reason>/g, "a reason");
     const formsFile = join(tmp, "forms");
     writeFileSync(formsFile, forms);
-    invoke("forms", formsFile);
+    runCore("forms", formsFile);
     const okCount = out.split("\n").filter((l) => l.startsWith("ok  ")).length;
     const badCount = out.split("\n").filter((l) => l.startsWith("bad ")).length;
     if (rc === 0 && okCount >= 7 && badCount === 0) ok("every form coachman.md gives is a sort line");
@@ -1970,7 +2001,7 @@ withTempDir((tmp) => {
 
   // A form that is not one would be caught
   writeFileSync(join(tmp, "forms"), "S1 lint biome enable style/useConst: a reason\n");
-  invoke("forms", join(tmp, "forms"));
+  runCore("forms", join(tmp, "forms"));
   has("and a form that is not one would be caught", 0, "bad S1 lint biome");
 
   // The runbooks say certain things

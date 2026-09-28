@@ -52,13 +52,13 @@ import {
   readFileSync,
   realpathSync,
   renameSync,
-  rmSync,
+  rmdirSync,
   statSync,
   unlinkSync,
   writeFileSync,
   appendFileSync,
 } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, normalize } from "node:path";
 import { run, withTempDir } from "./lib/proc.ts";
 import { scriptsDir } from "./lib/paths.ts";
 import { SelfTest } from "./lib/selftest.ts";
@@ -86,8 +86,66 @@ interface TicketMeta {
   log: string[];
 }
 
+// Python's argv: bytes that are not valid UTF-8 come back as lone surrogates
+// (U+DC80..U+DCFF), so utf8Check below refuses them exactly as BASE's encode did.
+function surrogateescape(buf: Buffer): string {
+  let out = "";
+  let i = 0;
+  while (i < buf.length) {
+    const b = buf[i]!;
+    let len = 0;
+    let cp = 0;
+    if (b < 0x80) {
+      len = 1;
+      cp = b;
+    } else if (b >= 0xc2 && b <= 0xdf) len = 2;
+    else if (b >= 0xe0 && b <= 0xef) len = 3;
+    else if (b >= 0xf0 && b <= 0xf4) len = 4;
+    let ok = len > 0;
+    if (ok && len > 1) {
+      if (i + len > buf.length) ok = false;
+      for (let j = 1; ok && j < len; j++) if ((buf[i + j]! & 0xc0) !== 0x80) ok = false;
+      if (ok) {
+        cp =
+          len === 2
+            ? ((b & 0x1f) << 6) | (buf[i + 1]! & 0x3f)
+            : len === 3
+              ? ((b & 0x0f) << 12) | ((buf[i + 1]! & 0x3f) << 6) | (buf[i + 2]! & 0x3f)
+              : ((b & 0x07) << 18) | ((buf[i + 1]! & 0x3f) << 12) | ((buf[i + 2]! & 0x3f) << 6) | (buf[i + 3]! & 0x3f);
+        if ((len === 3 && cp < 0x800) || (len === 4 && (cp < 0x10000 || cp > 0x10ffff)) || (cp >= 0xd800 && cp <= 0xdfff)) {
+          ok = false;
+        }
+      }
+    }
+    if (ok) {
+      out += len === 1 ? String.fromCharCode(cp) : String.fromCodePoint(cp);
+      i += len;
+    } else {
+      out += String.fromCharCode(0xdc00 + b);
+      i += 1;
+    }
+  }
+  return out;
+}
+
+// The runtime's process.argv has already replaced invalid UTF-8 bytes with U+FFFD.
+// The shell's argv is bytes: read them back and decode them as Python's argv does.
+function rawArgv(): string[] {
+  try {
+    const data = readFileSync("/proc/self/cmdline");
+    const parts = data.toString("binary").split("\0");
+    if (parts.length > 0 && parts[parts.length - 1] === "") parts.pop();
+    if (parts.length === process.argv.length) {
+      return parts.slice(2).map((s) => surrogateescape(Buffer.from(s, "binary")));
+    }
+  } catch {
+    // no /proc: the runtime's argv is all there is
+  }
+  return process.argv.slice(2);
+}
+
 function utf8Check(s: string, what: string): string {
-  // In JS all strings are valid UTF-16; simulate Python's UTF-8 check for lone surrogates
+  // Python's s.encode("utf-8") refused lone surrogates; the round-trip does the same here.
   try {
     const buf = Buffer.from(s, "utf8");
     if (buf.toString("utf8") !== s) dieL(`the ${what} is not UTF-8`);
@@ -278,7 +336,7 @@ function main(): void {
     delete process.env[v];
   }
 
-  const argvAll = process.argv.slice(2);
+  const argvAll = rawArgv();
   if (argvAll.length < 2) {
     dieL("usage: local.sh <repo> store|create|edit|read|title|state|comment|list ... | --self-test");
   }
@@ -289,10 +347,13 @@ function main(): void {
   function gitpath(opt: string): string | null {
     const r = run("git", ["-C", REPO, "rev-parse", opt]);
     if (r.code !== 0) return null;
-    let p = r.out.trim();
-    if (!p.startsWith("/")) p = join(REPO, p);
+    const p = r.out.trim();
     try {
-      return realpathSync(p);
+      // BASE joined a relative answer onto <repo> and resolved with `cd -P`: ".." is taken
+      // against the symlink's target, never against the link's textual parent. realpathSync
+      // does not do that, so the link is resolved first and the answer joined afterwards.
+      const q = p.startsWith("/") ? realpathSync(p) : normalize(join(realpathSync(REPO), p));
+      return existsSync(q) ? q : null;
     } catch {
       return null;
     }
@@ -342,11 +403,11 @@ function main(): void {
           }
         }
         try {
-          rmSync(STORE, { recursive: false });
+          rmdirSync(STORE);
         } catch (e: any) {
           dieL(`cannot remove ${STORE}: ${e?.message ?? e}`);
         }
-        try { rmSync(dirname(STORE), { recursive: false }); } catch {}
+        try { rmdirSync(dirname(STORE)); } catch {}
       });
       console.log(`store removed: ${STORE}`);
     } else {
@@ -530,8 +591,17 @@ function selfTest(): void {
     if (!newrepo(U)) process.exit(1);
     const ST = join(R, ".git", "postmaster", "tickets");
 
-    function lt(repo: string, ...cmd: string[]): { code: number; out: string; err: string } {
-      return run("bash", [SELF, repo, ...cmd], { env });
+    // BASE fed invalid UTF-8 through bash: $(printf 'na\357ve') puts raw bytes in argv.
+    // A spawn's string arguments cannot carry them (the runtime substitutes U+FFFD), so
+    // those arguments are built by printf inside the shell that runs the command.
+    class RawArg {
+      constructor(public readonly printfBody: string) {}
+    }
+    const shq = (s: string): string => `'${s.replace(/'/g, `'\\''`)}'`;
+
+    function lt(repo: string, ...cmd: (string | RawArg)[]): { code: number; out: string; err: string } {
+      const words = [repo, ...cmd].map((a) => (a instanceof RawArg ? `"$(printf '${a.printfBody}')"` : shq(a)));
+      return run("bash", ["-c", `exec "$0" ${words.join(" ")}`, SELF], { env });
     }
 
     function snap(dir: string): string {
@@ -558,7 +628,7 @@ function selfTest(): void {
       else st.fail(`${label}: wanted exit ${want}${why ? ` with "${why}"` : ""}, got exit ${result.code}`, combined);
     }
 
-    function refused(label: string, want: number, why: string, repo: string, ...cmd: string[]): void {
+    function refused(label: string, want: number, why: string, repo: string, ...cmd: (string | RawArg)[]): void {
       const was = snap(ST);
       const result = lt(repo, ...cmd);
       const now = snap(ST);
@@ -649,7 +719,8 @@ function selfTest(): void {
     );
 
     r = lt(R, "read", "1");
-    const headLines = r.out.split("\n").slice(0, 7).join("|");
+    // BASE's head: sed -n '1,7p' | tr '\n' '|' — one pipe per line, so the blank line adds one more.
+    const headLines = r.out.split("\n").slice(0, 7).map((l) => l + "|").join("");
     const afterDate = new Date().toISOString().slice(0, 10);
     const goodHead =
       headLines === `id: #1|title: A tracker that needs no service|state: todo|labels: |created: ${beforeDate}|path: ${ST}/1.md||` ||
@@ -920,15 +991,15 @@ function selfTest(): void {
     refused("an invalid state exits 2", 2, "invalid state", R, "state", "1", "finished");
     refused("state on an unknown ticket exits 1", 1, "no ticket #99", R, "state", "99", "done");
     refused("a comment on an unknown ticket exits 1", 1, "no ticket #99", R, "comment", "99", "coachman", "hello");
-    refused("a comment that is not UTF-8 exits 1", 1, "comment is not UTF-8", R, "comment", "1", "coachman", "na\u00efve");
-    refused("an actor that is not UTF-8 exits 1", 1, "actor is not UTF-8", R, "comment", "1", "r\u00e9viewer", "hello");
+    refused("a comment that is not UTF-8 exits 1", 1, "comment is not UTF-8", R, "comment", "1", "coachman", new RawArg("na\\357ve"));
+    refused("an actor that is not UTF-8 exits 1", 1, "actor is not UTF-8", R, "comment", "1", new RawArg("r\\351viewer"), "hello");
     refused("create with an empty body exits 1", 1, "is empty", R, "create", "A title", join(tmp, "empty.md"));
     refused("create with an empty title exits 1", 1, "title is empty", R, "create", "  ", join(tmp, "body.md"));
     refused("create with a title of two lines exits 1", 1, "more than one line", R, "create", "Two\nlines", join(tmp, "body.md"));
-    refused("create with a title that is not UTF-8 exits 1", 1, "title is not UTF-8", R, "create", "caf\u00e9", join(tmp, "body.md"));
+    refused("create with a title that is not UTF-8 exits 1", 1, "title is not UTF-8", R, "create", new RawArg("caf\\351"), join(tmp, "body.md"));
     refused("title with an empty title exits 1", 1, "title is empty", R, "title", "1", " ");
     refused("title with two lines exits 1", 1, "more than one line", R, "title", "1", "Two\nlines");
-    refused("title that is not UTF-8 exits 1", 1, "title is not UTF-8", R, "title", "1", "\u00ff");
+    refused("title that is not UTF-8 exits 1", 1, "title is not UTF-8", R, "title", "1", new RawArg("\\377"));
     refused("title on an unknown ticket exits 1", 1, "no ticket #99", R, "title", "99", "A title");
     refused("something that is not a number exits 1", 1, "not a ticket number", R, "read", "PM-1");
     refused("an unknown ticket exits 1", 1, "no ticket #99", R, "read", "99");
@@ -1014,9 +1085,9 @@ function selfTest(): void {
       removeG.code === 0 && removeG.out.includes("store removed:"),
       removeG.out,
     );
-    const kindAfterRemove = run("bash", [
-      "bash", join(HERE, "tracker-kind.sh"), G,
-    ], { env: { ...env, POSTMASTER_CONFIG: join(tmp, "github.toml") } });
+    const kindAfterRemove = run("bash", [join(HERE, "tracker-kind.sh"), G], {
+      env: { ...env, POSTMASTER_CONFIG: join(tmp, "github.toml") },
+    });
     st.check(
       "and the repository is back on the config's kind",
       !existsSync(join(G, ".git", "postmaster")) && kindAfterRemove.out.trim() === "github",
