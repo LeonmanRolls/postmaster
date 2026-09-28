@@ -531,6 +531,7 @@ case "${1:-}" in
 esac
 
 # --- self-test ----------------------------------------------------------------------------
+unset POSTMASTER_VERIFY   # never a gate's armed spec: these controls name their own paths
 tmp=$(cd "$(mktemp -d)" && pwd -P) || exit 1
 trap 'rm -r -- "$tmp" 2>/dev/null' EXIT
 SELF="$HERE/verify.sh"
