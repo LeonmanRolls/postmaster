@@ -119,8 +119,11 @@ For the next ticket in order, when the run ceiling (`team.max_runs`) has room:
    {"legs": {}}}`. You own `leg`, `base`, `coachman` and the terminal stages, `done` and
    `abandoned`; the coachman owns `lanes` and every stage before those; both update fields in
    place and neither rewrites the file. Then record what the run starts from, once:
-   `<tool>/scripts/run-meta.sh <dispatch> <repo>` writes `run.json` with the postmaster commit, the
-   config and the harness versions, and nothing edits it afterwards. `<tool>/scripts/verify.sh record
+   `<tool>/scripts/run-meta.sh <dispatch> <repo>` writes `run.json` with the postmaster commit,
+   the pinned checkout of that commit, the config and the harness versions, and nothing edits it
+   afterwards. The pin is a worktree of this repo at the dispatch commit, shared by every run
+   dispatched at it; the waybill names it as `tool:`, and every leg of this run reads its
+   runbooks and runs its scripts from there. `<tool>/scripts/verify.sh record
    <repo> <dispatch> --gate '<gate>'` writes `checks.json`, the checks the run is held to, and
    prints them for the waybill; a gate the project declares wins over the launch card's, and
    `record` says so.
@@ -134,7 +137,9 @@ For the next ticket in order, when the run ceiling (`team.max_runs`) has room:
    tracker, risk surfaces), the team from the config
    with its reviewer lines as `<tool>/scripts/reviewers.sh lines` prints them, `CHECKPOINT_MODE`
    from `ship.checkpoint_mode` and `MERGE_AUTHORITY` from `ship.merge_authority`, either
-   overridden only where the user said so for this run, the dispatch path and `<tool>`. The
+   overridden only where the user said so for this run, the dispatch path and the run's pinned
+   tool — `<tool>/scripts/run-meta.sh path <dispatch>`, the checkout step 4 cut, which the
+   template names as `tool:` and the coachman uses as its `<tool>`. The
    config here is the one in `run.json`. Then
    `<tool>/scripts/turnpikes.sh legs <dispatch> --expect '<that turnpikes: line>'` exits 0 and
    prints the legs step 2 checked, before anything is launched.
@@ -148,11 +153,17 @@ A run's legs are the lines `<tool>/scripts/turnpikes.sh legs <dispatch>` prints:
 Legs). Each leg is a fresh coachman thread, launched the same way; the first is launched after
 the waybill, every later one when the previous leg's marker appears. Every launch and resume in
 a run passes `--run <dispatch>`, so it runs on the config in the run's `run.json`, never the
-live one. Below, `<p>` is the leg before leg `<n>` in that list.
+live one. Below, `<p>` is the leg before leg `<n>` in that list, and **`<rt>` is the run's
+pinned postmaster checkout** — `<tool>/scripts/run-meta.sh path <dispatch>`, the waybill's
+`tool:`, never the live `<tool>`. Every launch, resume and takeover of this run's legs runs
+from `<rt>`: its `host.sh`, its `launch.sh`, and the runbook the prompt names. Before anything
+is launched or resumed, `<tool>/scripts/run-meta.sh check <dispatch>` exits 0; on a refusal,
+stop and take its message to the user (Stage E step 3), because the pin no longer serves the
+versions the run was dispatched from.
 [Why a run keeps the config it started with](../../wiki/concepts/run-config.md)
 
 1. **Write the leg prompt** to `<runs>/<TICKET>/leg-<n>-prompt.txt`: "You are the coachman
-   for leg <n> of <TICKET>. Read `<dispatch>/brief.md`, then `<tool>/skills/postmaster/coachman.md`,
+   for leg <n> of <TICKET>. Read `<dispatch>/brief.md`, then `<rt>/skills/postmaster/coachman.md`,
    then `<dispatch>/handoff-<p>.md`" (omit the hand-off for leg 1), plus the one line naming
    the leg's job from the legs table. Nothing else: the runbook and the files carry the rest.
 2. **From leg 2 on, verify the hand-off before dispatching on it:** `<tool>/scripts/handoff-check.sh
@@ -165,10 +176,10 @@ live one. Below, `<p>` is the leg before leg `<n>` in that list.
    exited marker first:
 
    ```sh
-   <tool>/scripts/host.sh run "$(<tool>/scripts/host.sh name <dispatch> coachman)" <repo>/.worktrees/<TICKET> \
+   <rt>/scripts/host.sh run "$(<rt>/scripts/host.sh name <dispatch> coachman)" <repo>/.worktrees/<TICKET> \
        --out <dispatch>/logs/coachman-leg-<n>-events.jsonl --err <dispatch>/logs/coachman-leg-<n>.err \
        --marker <dispatch>/.leg-<n>-exited \
-       -- <tool>/scripts/launch.sh launch coachman <repo>/.worktrees/<TICKET> <dispatch>/leg-<n>-prompt.txt --leg <leg-name> \
+       -- <rt>/scripts/launch.sh launch coachman <repo>/.worktrees/<TICKET> <dispatch>/leg-<n>-prompt.txt --leg <leg-name> \
        --run <dispatch>
    ```
 
@@ -186,10 +197,10 @@ live one. Below, `<p>` is the leg before leg `<n>` in that list.
    this process's errors, and `host.sh` clears the leg's exited marker:
 
    ```sh
-   <tool>/scripts/host.sh run "$(<tool>/scripts/host.sh name <dispatch> coachman)" <repo>/.worktrees/<TICKET> --append \
+   <rt>/scripts/host.sh run "$(<rt>/scripts/host.sh name <dispatch> coachman)" <repo>/.worktrees/<TICKET> --append \
        --out <dispatch>/logs/coachman-leg-<n>-events.jsonl --err <dispatch>/logs/coachman-leg-<n>.err \
        --marker <dispatch>/.leg-<n>-exited \
-       -- <tool>/scripts/launch.sh resume <name> <repo>/.worktrees/<TICKET> <thread-id> <dispatch>/leg-<n>-resume-<time>.txt --leg <leg-name> \
+       -- <rt>/scripts/launch.sh resume <name> <repo>/.worktrees/<TICKET> <thread-id> <dispatch>/leg-<n>-resume-<time>.txt --leg <leg-name> \
        --run <dispatch>
    ```
 
@@ -236,11 +247,11 @@ Act on the `NEXT` column, run by run, and log every action:
 
 **The takeover prompt** for a fallback coachman, written to `<dispatch>/leg-<n>-takeover.txt`:
 "You take over leg <n> of <TICKET> mid-way. Read `<dispatch>/brief.md`,
-`<tool>/skills/postmaster/coachman.md`, `<dispatch>/handoff-<p>.md` (none for leg 1), then `run-log.md` and
+`<rt>/skills/postmaster/coachman.md`, `<dispatch>/handoff-<p>.md` (none for leg 1), then `run-log.md` and
 `actions.jsonl` for what this leg did before you, then the synthesis worktree's `git log` and
 `git status`. Treat every uncommitted change as unverified. Log `handoff-accept` and finish
 the leg." Move the leg's stream to `<dispatch>/logs/coachman-leg-<n>-walled-events.jsonl`, then
-launch the takeover through the wrapper of Stage C step 3, with `<tool>/scripts/launch.sh launch
+launch the takeover through the wrapper of Stage C step 3, with `<rt>/scripts/launch.sh launch
 coachman_fallback <repo>/.worktrees/<TICKET> <dispatch>/leg-<n>-takeover.txt --run <dispatch>`
 in place of the coachman's launch. Record its thread id from the new stream (`harnesses.md`) as
 `coachman.legs.<n>.thread_id`, with `coachman_fallback` as its `name`.
@@ -310,7 +321,10 @@ On `.card-ready`, read `<dispatch>/card.md` and `<dispatch>/handoff-3.md`:
    -C <repo> worktree remove .worktrees/<TICKET>`, never with force unless the tree is clean and
    the card confirmed it, and log `teardown`. The workhorse worktrees are the coachman's; if any survive, remove them the
    same way after preserving any stray file into `<dispatch>/stray/`.
-3. **Close the run** with `<tool>/scripts/stage.sh <dispatch> done postmaster`, and never delete the
+3. **Close the run** with `<tool>/scripts/stage.sh <dispatch> done postmaster`, then release the
+   run's pinned tool: `<tool>/scripts/run-meta.sh release <dispatch>`. It removes the checkout
+   only when no run whose `run.json` names it is still in flight (manifest stage other than
+   `done` or `abandoned`); a run dispatched at the same commit keeps it. Never delete the
    dispatch directory.
 4. **Put the run's tool faults to the user**, as its aftercare ends (Tool faults, below).
 5. **Put the style sort to the user once, as the run's aftercare ends,** when the run has one.
@@ -332,8 +346,10 @@ On `.card-ready`, read `<dispatch>/card.md` and `<dispatch>/handoff-3.md`:
 **Abandoning a run** happens only on the user's word for that run: log `note` with the
 word, set the stage with `<tool>/scripts/stage.sh <dispatch> abandoned postmaster`, stop what still
 runs in each worktree the run created (`<tool>/scripts/host.sh stop <wt>`), then remove each one after
-preserving stray files and closing its space (`<tool>/scripts/host.sh close <wt>`), and move the ticket back to todo or to cancelled as the user
-says. The dispatch directory stays. Then put the run's tool faults to the user (Tool faults).
+preserving stray files and closing its space (`<tool>/scripts/host.sh close <wt>`), release the run's
+pinned tool (`<tool>/scripts/run-meta.sh release <dispatch>`, as Stage G step 3 does), and move the
+ticket back to todo or to cancelled as the user says. The dispatch directory stays. Then put the
+run's tool faults to the user (Tool faults).
 
 ## Tool faults
 

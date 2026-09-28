@@ -98,7 +98,7 @@ scripts/tool-faults.sh harvest|comment|file|decline <dispatch> …  # a closed r
 scripts/stage.sh <dispatch> <stage>                               # the one way a run changes stage
 scripts/run-times.sh <dispatch>                                   # how long each stage took, from the log
 scripts/run-log.sh <dispatch> <text> | --section <title> | --close # the narrative, timestamped
-scripts/run-meta.sh <dispatch> <repo>                             # run.json: what a run started from
+scripts/run-meta.sh <dispatch> <repo> | path|check|release <dispatch> # run.json and the pinned tool a run started from
 scripts/github.sh <repo> board|create|edit|read|state|comment|list|access|search # GitHub Issues on a Projects board
 scripts/plane.sh create|edit|read|state|comment|list …             # Plane work items
 scripts/local.sh <repo> store|create|edit|read|title|state|comment|list # tickets in the repo's git directory

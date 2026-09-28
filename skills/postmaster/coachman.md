@@ -12,8 +12,10 @@ Vocabulary: a **lane** is a harness plus a model plus an effort, named in the wa
 **workhorse** is a lane implementing the ticket; a **reviewer** is a lane reviewing the synthesis.
 Every harness-specific command in this runbook is written as a form ("launch form", "resume
 form"); `harnesses.md` beside this file gives the exact invocation per harness, and the waybill
-says which harness each lane runs on. `<tool>` is the postmaster repo, whose absolute path the
-waybill gives as `tool`. The postmaster's half, how a run is prepared and what the
+says which harness each lane runs on. `<tool>` is this run's pinned checkout of the postmaster
+repo at the commit the run was dispatched from, whose absolute path the waybill gives as `tool`.
+Every script you run and every runbook you read is from that checkout, whatever `main` has done
+since. The postmaster's half, how a run is prepared and what the
 waybill carries, is `SKILL.md`. You do not need it.
 
 ## Where things live
@@ -24,7 +26,7 @@ waybill carries, is `SKILL.md`. You do not need it.
 | `<dispatch>/brief.md` | the waybill |
 | `<dispatch>/manifest.json` | `stage`, `leg`, `base`, `lanes.<lane>.{thread_id, outcome}`, `coachman.legs.<n>.{thread_id, name}`; the postmaster creates it and owns `leg`, `base`, `coachman` and the terminal stages, you own `lanes` and every stage before those; change `stage` only with `<tool>/scripts/stage.sh`, update the rest in place, never rewrite the file |
 | `<dispatch>/run-log.md` | running narrative, written only through `<tool>/scripts/run-log.sh`, which puts the time on every entry and times every section |
-| `<dispatch>/run.json` | the run's fixed facts: postmaster commit, config, harness versions; written once at dispatch by the postmaster, never edited; every launch and resume in the run takes its config from here (`--run <dispatch>`) |
+| `<dispatch>/run.json` | the run's fixed facts: postmaster commit and its pinned checkout (`tool` in the waybill), config, harness versions; written once at dispatch by the postmaster, never edited; every launch and resume in the run takes its config from here (`--run <dispatch>`) and its scripts from that checkout |
 | `<dispatch>/checks.json` | the checks the run is held to, recorded once at dispatch by `<tool>/scripts/verify.sh record`; never edited |
 | `<dispatch>/journey/` | your journey reports, one per commit walked, at the path `<tool>/scripts/verify.sh journey-path` gives |
 | `<worktree>/.postmaster/verify/` | a worktree's copy of the run's checks and ticket, written by `<tool>/scripts/verify.sh arm`; git ignores it |
