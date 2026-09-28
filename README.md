@@ -109,7 +109,7 @@ scripts/style-findings.sh list|count|gate|check <dispatch>         # a run's sty
 scripts/launch.sh form|launch|resume|skill <lane-or-role> …       # any lane or role, one command
 scripts/reviewers.sh lines|lanes <waybill> <lens>|lenses           # which lanes review under each lens
 scripts/host.sh detect|name|run|stop|close|spawn|send|wait|read … # where a launch runs, and where you watch it
-scripts/view-stream.sh < <events-file>                            # a harness's events, one line each
+scripts/view-stream.sh < <events-file>                            # a harness's events, wrapped: what it says and runs, in full
 scripts/runs-status.sh <run-root>                                  # the postmaster's poll
 scripts/handoff-check.sh <handoff-file>                            # a leg may end only on exit 0
 scripts/wiki-lint.sh [--self-test]                                 # the wiki's rules, run not remembered

@@ -94,8 +94,8 @@ pane. `spawn`, `send`, `wait` and `read` exit 3 on `none`.
   opens it, and the tab or window, and is the pane's terminal title while the launch runs, which
   is what a Herdr client shows for a pane with an agent in it. `POSTMASTER_LAUNCH_NAME` carries
   it to `launch.sh`, which names the thread where the harness can (`harnesses.md`).
-- **The pane shows the stream, not the JSON**: `<tool>/scripts/view-stream.sh` renders one line per
-  event of interest, each with its time.
+- **The pane shows the stream, not the JSON**: `<tool>/scripts/view-stream.sh` renders each event
+  of interest as wrapped lines — what the agent says and runs, in full — each with its time.
 - **Every launch is registered while it runs**, under `POSTMASTER_HOST_STATE` (default
   `~/.postmaster/host`), with the worktree it was placed in, whatever host ran it. `host.sh stop
   <worktree>` stops every launch running there and everything each one started, even in a

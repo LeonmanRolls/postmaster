@@ -373,8 +373,10 @@ the headless form above; run it once before relying on it.
 ## The pane view
 
 `<tool>/scripts/view-stream.sh` is the other executable half of this file: it renders an events
-stream one line per event of interest, for a host's pane (`hosts.md`) and for anyone reading a
-stream by hand. It knows claude's, muse's and mimo's events, checked against recorded streams; codex's
+stream as wrapped blocks for a host's pane (`hosts.md`) and for anyone reading a stream by hand.
+What an agent says and what it runs shows in full, every line, wrapped to the pane and never cut
+short; tool output stays out. It knows claude's, muse's and mimo's events, checked against recorded
+streams; codex's
 and pi's, written from the event names this file records and not yet checked against a recorded
 stream;
 any other harness shows by event type, once per run of the same type. A harness whose events it
