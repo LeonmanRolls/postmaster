@@ -1535,9 +1535,9 @@ use = "cli-examples"
     const fullSha = run("git", ["-C", wt, "rev-parse", "HEAD"]).out.trim();
     // A workhorse's path must come from its own worktree; an inherited POSTMASTER_VERIFY
     // (as verify.sh run sets for the check) would otherwise point elsewhere.
-    const env = { ...process.env } as Record<string, string | undefined>;
-    delete env.POSTMASTER_VERIFY;
-    const r2 = run("bash", [SELF, "journey-path", wt], { env: env as Record<string, string> });
+    const r2 = run("bash", [SELF, "journey-path", wt], {
+      env: { POSTMASTER_VERIFY: undefined },
+    });
     st.check(
       "a workhorse's in its worktree",
       r2.out.trim() === join(wt, ".postmaster/verify/journey", `${fullSha}.md`),

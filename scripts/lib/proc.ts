@@ -17,9 +17,17 @@ export function run(
   args: string[],
   options: { cwd?: string; env?: Record<string, string | undefined>; input?: string } = {},
 ): RunResult {
+  let env: Record<string, string | undefined> = process.env;
+  if (options.env !== undefined) {
+    env = { ...process.env };
+    for (const [k, v] of Object.entries(options.env)) {
+      if (v === undefined) delete env[k];
+      else env[k] = v;
+    }
+  }
   const r = spawnSync(cmd, args, {
     cwd: options.cwd,
-    env: options.env === undefined ? process.env : { ...process.env, ...options.env },
+    env,
     encoding: "utf8",
     input: options.input,
     maxBuffer: 64 * 1024 * 1024,
