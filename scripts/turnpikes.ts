@@ -293,7 +293,8 @@ withTempDir((tmp) => {
 
   function runSelf(...args: string[]): void {
     const r = run("bash", [self, ...args]);
-    out = r.out + r.err;
+    // BASE's run() used $(...), which strips trailing newlines.
+    out = (r.out + r.err).replace(/\n+$/, "");
     rc = r.code;
   }
 
@@ -384,7 +385,7 @@ withTempDir((tmp) => {
   is("an invisible character is not part of a name", 0, "turnpikes: style, bug, security");
   {
     const r = run("bash", ["-c", `printf '1. bug\\n2. security\\n' | "${self}" resolve`]);
-    out = r.out + r.err;
+    out = (r.out + r.err).replace(/\n+$/, "");
     rc = r.code;
     is("with no text given, the section is read from stdin", 0, "turnpikes: bug, security");
   }
