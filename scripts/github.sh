@@ -434,6 +434,7 @@ out=$(gh_sh board 2>&1); rc=$?
 [ $rc -eq 0 ] && [ "$out" = $'#2\tchosen\thttps://github.com/users/o/projects/2' ] \
   && ok "the shared tracker binding selects its named linked board" \
   || fail "the shared tracker binding selects its named linked board (exit $rc)" "$out"
+rm -- "$tmp/repo/.postmaster/project.toml"
 printf '%s\n' "$BOARD" > "$S/boards.json"
 stored 7 "$tmp/lf.md"; gh_sh read 7 --body > "$tmp/out" 2>&1; rc=$?
 { cat "$tmp/lf.md"; printf '\n'; } > "$tmp/want"
