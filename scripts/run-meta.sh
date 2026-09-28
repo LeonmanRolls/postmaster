@@ -41,26 +41,30 @@ CONFIG=${POSTMASTER_CONFIG:-$HOME/.postmaster/config.toml}
 TOOLS=${POSTMASTER_TOOLS:-$HOME/.postmaster/tools}
 
 pin() {  # pin <repo> <commit>: a checkout of <repo> at <commit> under $TOOLS, shared per commit
-  local repo=$1 want=$2 commit dest at common want_common
+  local repo=$1 want=$2 commit dest
   commit=$(git -C "$repo" rev-parse --verify -q "$want^{commit}") \
     || { echo "run-meta: no such commit in $repo: $want" >&2; return 1; }
   dest="$TOOLS/$commit"
   mkdir -p "$TOOLS" || { echo "run-meta: could not make $TOOLS" >&2; return 1; }
-  if [ -e "$dest" ]; then
-    at=$(git -C "$dest" rev-parse --verify -q HEAD 2>/dev/null) \
-      || { echo "run-meta: $dest exists but is not a git checkout; left alone" >&2; return 1; }
-    [ "$at" = "$commit" ] \
-      || { echo "run-meta: $dest is at ${at:0:12}, not ${commit:0:12}; left alone" >&2; return 1; }
-    common=$(git -C "$dest" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || common=""
-    want_common=$(git -C "$repo" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || want_common=""
-    [ -n "$common" ] && [ -n "$want_common" ] && [ "$common" = "$want_common" ] \
-      || { echo "run-meta: $dest is not a checkout of $repo; left alone" >&2; return 1; }
+  # git worktree add locks the repo, so concurrent cuts of one commit must take turns.
+  (
+    exec 9>"$TOOLS/.pin.lock" && flock 9 || { echo "run-meta: could not lock $TOOLS" >&2; exit 1; }
+    if [ -e "$dest" ]; then
+      at=$(git -C "$dest" rev-parse --verify -q HEAD 2>/dev/null) \
+        || { echo "run-meta: $dest exists but is not a git checkout; left alone" >&2; exit 1; }
+      [ "$at" = "$commit" ] \
+        || { echo "run-meta: $dest is at ${at:0:12}, not ${commit:0:12}; left alone" >&2; exit 1; }
+      common=$(git -C "$dest" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || common=""
+      want_common=$(git -C "$repo" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || want_common=""
+      [ -n "$common" ] && [ -n "$want_common" ] && [ "$common" = "$want_common" ] \
+        || { echo "run-meta: $dest is not a checkout of $repo; left alone" >&2; exit 1; }
+      printf '%s\n' "$dest"
+      exit 0
+    fi
+    git -C "$repo" worktree add --detach "$dest" "$commit" >/dev/null 2>&1 \
+      || { echo "run-meta: git could not create $dest at $commit" >&2; exit 1; }
     printf '%s\n' "$dest"
-    return 0
-  fi
-  git -C "$repo" worktree add --detach "$dest" "$commit" >/dev/null 2>&1 \
-    || { echo "run-meta: git could not create $dest at $commit" >&2; return 1; }
-  printf '%s\n' "$dest"
+  )
 }
 
 field() {  # field <run.json> <key>  the postmaster.<key> of a run.json
@@ -127,10 +131,12 @@ release_pin() {  # release_pin <dispatch>: remove the pin when no run in flight 
   fi
   common=$(git -C "$checkout" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) \
     || { echo "run-meta: could not read $checkout" >&2; return 1; }
-  git --git-dir="$common" worktree remove "$checkout" >/dev/null 2>&1 \
-    || { echo "run-meta: git could not remove $checkout" >&2; return 1; }
-  echo "run-meta: removed $checkout"
-  return 0
+  (
+    exec 9>"$TOOLS/.pin.lock" && flock 9 || { echo "run-meta: could not lock $TOOLS" >&2; exit 1; }
+    git --git-dir="$common" worktree remove "$checkout" >/dev/null 2>&1 \
+      || { echo "run-meta: git could not remove $checkout" >&2; exit 1; }
+    echo "run-meta: removed $checkout"
+  )
 }
 
 meta() {  # meta <dispatch> <repo>
@@ -320,6 +326,15 @@ meta "$d" "$repo" >/dev/null
 try check "$d"
 [ $rc -eq 0 ] && ok "check still passes the run that shares the live tool pin" \
   || fail "check still passes the run that shares the live tool pin" "$out"
+# Concurrent cuts of one commit share one pin; the loser reuses the winner's checkout.
+race="$tmp/tools/$commitA"
+rm -rf "$race"
+( pin "$fake" "$commitA" >/dev/null 2>&1 ) &
+( pin "$fake" "$commitA" >/dev/null 2>&1 ) &
+wait
+[ -d "$race" ] && [ "$(git -C "$race" rev-parse HEAD 2>/dev/null)" = "$commitA" ] \
+  && ok "two concurrent cuts of one commit end with one shared pin" \
+  || fail "two concurrent cuts of one commit end with one shared pin"
 
 echo
 [ "$fails" -eq 0 ] && { echo "self-test: all controls behaved"; exit 0; }
