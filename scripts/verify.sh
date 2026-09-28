@@ -151,6 +151,10 @@ def default(which, gate, suite, name=None, shows=None, source=None):
             "command": command or "", "shows": shows or dshows}
 
 def declared(repo, gate, suite):  # the declared checks, or None when the project declares none
+    settings = subprocess.run([str(here / "project-settings.sh"), "inspect", str(repo)],
+                              capture_output=True, text=True)
+    if settings.returncode:
+        die(settings.stderr.strip() or "project settings could not be read")
     p = repo / DECLARATION
     if not p.is_file():
         return None
@@ -835,15 +839,15 @@ rm -f -- "$q/json.py" "$q/re.py"
 
 echo "nothing a check starts outlives it"
 lp="$tmp/leftover"; mkdir -p "$lp/.postmaster"
-printf '[checks.gate]\ncommand = "sleep 300 & echo $! > %s"\nshows = "x"\n' "$tmp/leftover.pid" > "$lp/.postmaster/project.toml"; repo "$lp"
+printf '[checks.gate]\ncommand = "sleep 300 & echo $! > leftover.pid"\nshows = "x"\n' > "$lp/.postmaster/project.toml"; repo "$lp"
 ld="$tmp/runs/leftover/T-6"; mkdir -p "$ld"; printf '## Ticket\nx\n' > "$ld/brief.md"; "$SELF" record "$lp" "$ld" >/dev/null
 "$SELF" run "$lp" "$ld" >/dev/null 2>&1
 gone() { local i; for i in $(seq 40); do kill -0 "$1" 2>/dev/null || return 0; sleep 0.05; done; return 1; }
-gone "$(cat "$tmp/leftover.pid")" && ok "a process a check leaves running is stopped when it ends" || fail "a process a check leaves running is stopped when it ends"
+gone "$(cat "$lp/leftover.pid")" && ok "a process a check leaves running is stopped when it ends" || fail "a process a check leaves running is stopped when it ends"
 tp="$tmp/term"; mkdir -p "$tp/.postmaster"
-printf '[checks.gate]\ncommand = "echo $$ > %s; sleep 300"\nshows = "x"\n' "$tmp/term.pid" > "$tp/.postmaster/project.toml"; repo "$tp"
+printf '[checks.gate]\ncommand = "echo $$ > term.pid; sleep 300"\nshows = "x"\n' > "$tp/.postmaster/project.toml"; repo "$tp"
 td="$tmp/runs/term/T-7"; mkdir -p "$td"; printf '## Ticket\nx\n' > "$td/brief.md"; "$SELF" record "$tp" "$td" >/dev/null
-python3 - "$SELF" "$tp" "$td" "$tmp/term.pid" <<'PY' && ok "a run that is stopped stops its check" || fail "a run that is stopped stops its check"
+python3 - "$SELF" "$tp" "$td" "$tp/term.pid" <<'PY' && ok "a run that is stopped stops its check" || fail "a run that is stopped stops its check"
 import os, signal, subprocess, sys, time
 me, repo, dispatch, pidfile = sys.argv[1:]
 p = subprocess.Popen([me, "run", repo, dispatch], start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

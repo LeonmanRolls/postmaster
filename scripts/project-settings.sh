@@ -23,6 +23,7 @@ import os
 import pathlib
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
@@ -59,8 +60,20 @@ ABS_PATH = re.compile(r"(?:^|[\s=\"'(])/(?!/)(?:[^\s\"']+)")
 HOME_PATH = re.compile(r"(?:^|[\s=\"'(])(?:~(?:/|$)|\$HOME(?:/|$)|\$USERPROFILE(?:\\|/|$)|%USERPROFILE%(?:\\|/|$))")
 PARENT_PATH = re.compile(r"(?:^|[/\\])\.\.(?:[/\\]|$)")
 WINDOWS_PATH = re.compile(r"(?:^|[\s=\"'(])[A-Za-z]:[\\/]")
+UNC_PATH = re.compile(r"(?:^|[\s=\"'(])(?:\\\\[^\\\s]+\\|//[^/\s]+/)")
+FILE_URL_PATH = re.compile(r"(?i)\bfile:(?:/|\\)+[^\s\"']*")
+ENV_PATH = re.compile(r"(?i)(?<![A-Za-z0-9_])(?:\$[A-Z_][A-Z0-9_]*|%[A-Z_][A-Z0-9_]*%)")
 ASSIGNMENT_SECRET = re.compile(r"(?i)\b[A-Z0-9_]*(?:API[_-]?KEY|AUTH[_-]?TOKEN|ACCESS[_-]?TOKEN|PASSWORD|SECRET|CREDENTIAL)\s*=\s*[^\s,;]+")
 TOKEN_VALUE = re.compile(r"(?i)\b(?:gh[pousr]_[A-Za-z0-9]{12,}|sk-[A-Za-z0-9_-]{16,}|xox[baprs]-[A-Za-z0-9-]{12,})\b")
+NAMED_CREDENTIAL = re.compile(r"\b[A-Z][A-Z0-9_]*(?:API[_-]?KEY|AUTH[_-]?TOKEN|ACCESS[_-]?TOKEN|TOKEN|PASSWORD|SECRET|CREDENTIALS?)[A-Z0-9_]*\b", re.I)
+MACHINE_NAMES = {name.strip().lower() for name in (socket.gethostname(), os.environ.get("COMPUTERNAME", "")) if name.strip()}
+MACHINE_NAMES |= {name.split(".", 1)[0] for name in list(MACHINE_NAMES) if name}
+
+def names_machine(value):
+    for name in MACHINE_NAMES:
+        if len(name) >= 3 and re.search(r"(?<![A-Za-z0-9_.-])" + re.escape(name) + r"(?![A-Za-z0-9_.-])", value, re.I):
+            return True
+    return False
 
 def scan_machine_data(value, location):
     if isinstance(value, dict):
@@ -72,9 +85,12 @@ def scan_machine_data(value, location):
         for i, item in enumerate(value):
             scan_machine_data(item, "%s[%d]" % (location, i))
     elif isinstance(value, str):
-        if ABS_PATH.search(value) or HOME_PATH.search(value) or PARENT_PATH.search(value) or WINDOWS_PATH.search(value):
+        if (ABS_PATH.search(value) or HOME_PATH.search(value) or PARENT_PATH.search(value)
+                or WINDOWS_PATH.search(value) or UNC_PATH.search(value) or FILE_URL_PATH.search(value)
+                or ENV_PATH.search(value) or names_machine(value)):
             die("%s names a filesystem path on a machine" % location)
-        if ASSIGNMENT_SECRET.search(value) or TOKEN_VALUE.search(value) or "-----BEGIN PRIVATE KEY-----" in value:
+        if (ASSIGNMENT_SECRET.search(value) or TOKEN_VALUE.search(value) or NAMED_CREDENTIAL.search(value)
+                or "-----BEGIN PRIVATE KEY-----" in value.upper()):
             die("%s contains a credential value" % location)
 
 def read_toml(path, label):
@@ -104,9 +120,9 @@ def nonblank_string(value, where):
         die("%s must be a non-empty string without control characters" % where)
     return value.strip()
 
-def name_list(value, where):
-    if not isinstance(value, list) or not value or not all(isinstance(x, str) and x.strip() for x in value):
-        die("%s must be a non-empty list of names" % where)
+def name_list(value, where, allow_empty=False):
+    if not isinstance(value, list) or (not value and not allow_empty) or not all(isinstance(x, str) and x.strip() for x in value):
+        die("%s must be a %slist of names" % (where, "" if allow_empty else "non-empty "))
     names = [x.strip() for x in value]
     if len(set(names)) != len(names):
         die("%s repeats a name" % where)
@@ -125,7 +141,7 @@ def validate_common(data, label, local):
     if unknown:
         die("%s.project has unsupported key: %s" % (label, unknown[0]))
     if "default_turnpikes" in project:
-        names = name_list(project["default_turnpikes"], label + ".project.default_turnpikes")
+        names = name_list(project["default_turnpikes"], label + ".project.default_turnpikes", allow_empty=True)
         known = known_turnpikes()
         bad = [n for n in names if n not in known]
         if bad:
@@ -293,11 +309,7 @@ def write_profile(repo, layer, source):
             die("local role assignments need the machine config at %s" % config_path)
         effective_config(repo, load_machine(str(config_path)), (old_shared, old_local))
     d.mkdir(parents=True, exist_ok=True)
-    ignore = d / ".gitignore"
-    if ignore.is_symlink():
-        die("%s must not be a symlink" % ignore)
-    if not ignore.exists():
-        ignore.write_text("*\n!.gitignore\n", encoding="utf-8")
+    ensure_ignore(repo, quiet=True)
     if dest.exists() and not dest.is_file():
         die("%s is not a regular file" % dest)
     fd, tmp_name = tempfile.mkstemp(prefix="." + name + ".", dir=d)
@@ -312,15 +324,23 @@ def write_profile(repo, layer, source):
         raise
     print("project-settings: wrote %s" % dest)
 
-def ensure_ignore(repo):
+def ensure_ignore(repo, quiet=False):
     d = settings_dir(repo)
     d.mkdir(parents=True, exist_ok=True)
     ignore = d / ".gitignore"
     if ignore.is_symlink():
         die("%s must not be a symlink" % ignore)
-    if not ignore.exists():
-        ignore.write_text("*\n!.gitignore\n", encoding="utf-8")
-    print("project-settings: ensured %s" % ignore)
+    if ignore.exists() and not ignore.is_file():
+        die("%s is not a regular file" % ignore)
+    existing = ignore.read_text(encoding="utf-8") if ignore.exists() else ""
+    rule = "*\n!.gitignore\n"
+    if not existing.endswith(rule):
+        prefix = existing
+        if prefix and not prefix.endswith("\n"):
+            prefix += "\n"
+        ignore.write_text(prefix + rule, encoding="utf-8")
+    if not quiet:
+        print("project-settings: ensured %s" % ignore)
 
 def report(repo):
     p = inspect(repo)
@@ -345,16 +365,20 @@ def self_test():
         assert missing["sources"]["project.default_turnpikes"] == "discovery"
         print("  ok   missing profiles are normal and retain discovery defaults")
         ensure_ignore(repo)
-        assert (repo / ".postmaster" / ".gitignore").read_text() == "*\n!.gitignore\n"
+        assert (repo / ".postmaster" / ".gitignore").read_text().endswith("*\n!.gitignore\n")
         assert not (repo / ".postmaster" / "settings.toml").exists()
         print("  ok   ensure creates the folder ignore without prompting for settings")
+        (repo / ".postmaster" / ".gitignore").write_text("# existing local rules\n!keep-me\n", encoding="utf-8")
+        ensure_ignore(repo)
+        assert (repo / ".postmaster" / ".gitignore").read_text().endswith("*\n!.gitignore\n")
+        print("  ok   ensure completes an existing ignore file without discarding its rules")
         candidate = tmp / "shared.toml"
         candidate.write_text('''[project]\ndefault_turnpikes=["bug"]\nrisk_surfaces="the API and subprocess boundary"\n[tracker]\nbinding="Team board"\n''', encoding="utf-8")
         write_profile(repo, "project", str(candidate))
         shared = inspect(repo)
         assert shared["shared_present"] and shared["project"]["default_turnpikes"] == ["bug"]
         assert shared["sources"]["project.default_turnpikes"] == "shared"
-        assert (repo / ".postmaster" / ".gitignore").read_text() == "*\n!.gitignore\n"
+        assert (repo / ".postmaster" / ".gitignore").read_text().endswith("*\n!.gitignore\n")
         guarded = subprocess.run(
             ["timeout", "10", str(here / "project-settings.sh"), "inspect", str(repo)],
             capture_output=True, text=True,
@@ -365,7 +389,20 @@ def self_test():
         assert subprocess.run(["git", "init", "-q", str(repo)]).returncode == 0
         ignored = subprocess.run(["git", "-C", str(repo), "check-ignore", ".postmaster/project.toml"], capture_output=True)
         assert ignored.returncode == 0
+        postmaster = repo / ".postmaster"
+        (postmaster / "settings.toml").write_text("[roles]\nworkhorses=['alpha']\n", encoding="utf-8")
+        (postmaster / "runs" / "T-1").mkdir(parents=True)
+        (postmaster / "runs" / "T-1" / "card.md").write_text("private run text\n", encoding="utf-8")
+        for ignored_path in (".postmaster/settings.toml", ".postmaster/runs/T-1/card.md"):
+            result = subprocess.run(["git", "-C", str(repo), "check-ignore", ignored_path], capture_output=True)
+            assert result.returncode == 0, "not ignored by the project folder: " + ignored_path
         print("  ok   the shared file writes, and .postmaster ignores it by default")
+        empty_repo = tmp / "empty-default"; empty_repo.mkdir()
+        empty_settings = tmp / "empty-default.toml"
+        empty_settings.write_text('[project]\ndefault_turnpikes = []\n', encoding="utf-8")
+        write_profile(empty_repo, "project", str(empty_settings))
+        assert inspect(empty_repo)["project"]["default_turnpikes"] == []
+        print("  ok   a project may define an empty default turnpike set")
         local = tmp / "local.toml"
         local.write_text('''[project]\ndefault_turnpikes=["style"]\n[roles]\nworkhorses=["alpha","beta"]\ncoachman="coachman_fallback"\n''', encoding="utf-8")
         write_profile(repo, "local", str(local))
@@ -381,14 +418,20 @@ def self_test():
             ("shared roles", '[roles]\nworkhorses=["alpha"]\n'),
             ("absolute path", '[project]\nrisk_surfaces="reads /home/alex/secret"\n'),
             ("home path", '[tracker]\nbinding="~/.config/key"\n'),
+            ("environment path", '[project]\nrisk_surfaces="$XDG_CONFIG_HOME/service"\n'),
+            ("UNC path", '[project]\nrisk_surfaces="uses //server/share"\n'),
+            ("file URL path", '[project]\nrisk_surfaces="reads file:///etc/service"\n'),
+            ("single-slash file URL path", '[project]\nrisk_surfaces="reads file:/etc/service"\n'),
+            ("machine name", '[project]\nrisk_surfaces="runs on %s"\n' % socket.gethostname()),
             ("credential field", '[tracker]\nenv_file="credential.env"\n'),
+            ("credential name", '[project]\nrisk_surfaces="reads PLANE_API_KEY"\n'),
             ("unknown role", '[roles]\nworkhorses=["ghost"]\n'),
         ):
             bad = tmp / "bad.toml"; bad.write_text(contents, encoding="utf-8")
             try:
                 if label == "shared roles":
                     validate_common(tomllib.loads(contents), "shared project settings", False)
-                elif label in ("absolute path", "home path", "credential field"):
+                elif label not in ("unknown role", "shared roles"):
                     scan_machine_data(tomllib.loads(contents), "settings input")
                     validate_common(tomllib.loads(contents), "settings input", True)
                 else:

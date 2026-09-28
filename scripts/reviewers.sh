@@ -4,7 +4,7 @@
 # workhorses. The postmaster writes the result into the waybill's Team section, and the coachman
 # reads it back from there, so a run keeps the reviewers it was dispatched with.
 #
-#   reviewers.sh lines [--config <path>]   the waybill's reviewer lines, from the config
+#   reviewers.sh lines [--config <path>] [--project <repo>] the reviewer lines for that target
 #   reviewers.sh lanes <waybill> <lens>    the lanes for one lens, one per line, from a waybill
 #   reviewers.sh lenses                    the lenses, in the order the review stage runs them
 #   reviewers.sh --self-test
@@ -21,16 +21,24 @@
 set -uo pipefail
 LENSES="style bug security"
 CONFIG=${POSTMASTER_CONFIG:-$HOME/.postmaster/config.toml}
-usage() { echo "usage: reviewers.sh lines [--config <path>] | lanes <waybill> <lens> | lenses | --self-test" >&2; exit 1; }
+HERE=$(CDPATH= cd -P -- "$(dirname -- "$0")" && pwd -P)
+usage() { echo "usage: reviewers.sh lines [--config <path>] [--project <repo>] | lanes <waybill> <lens> | lenses | --self-test" >&2; exit 1; }
 
-lines() {  # lines <config>
-  [ -f "$1" ] || { echo "reviewers: no config at $1 (POSTMASTER_CONFIG overrides the path)" >&2; return 1; }
-  python3 - "$1" "$LENSES" <<'PY'
-import sys, tomllib
-path, lenses = sys.argv[1], sys.argv[2].split()
+lines() {  # lines <config> [<project>]
+  local source=$1 project=${2:-} format=toml data
+  [ -f "$source" ] || { echo "reviewers: no config at $source (POSTMASTER_CONFIG overrides the path)" >&2; return 1; }
+  if [ -n "$project" ]; then
+    data=$("$HERE/project-settings.sh" effective "$project" "$source") || return 1
+    format=json
+  else
+    data=""
+  fi
+  REVIEWERS_EFFECTIVE="$data" python3 - "$source" "$LENSES" "$format" <<'PY'
+import json, sys, tomllib
+path, lenses, format = sys.argv[1], sys.argv[2].split(), sys.argv[3]
 try:
-    cfg = tomllib.load(open(path, "rb"))
-except (OSError, tomllib.TOMLDecodeError) as e:
+    cfg = json.loads(__import__("os").environ["REVIEWERS_EFFECTIVE"]) if format == "json" else tomllib.load(open(path, "rb"))
+except (OSError, ValueError, tomllib.TOMLDecodeError) as e:
     print("reviewers: %s does not parse: %s" % (path, e), file=sys.stderr); sys.exit(1)
 defined = set((cfg.get("lanes") or {}).keys())
 team = cfg.get("team") or {}
@@ -90,8 +98,15 @@ PY
 
 case ${1:-} in
   lines)
-    [ $# -eq 1 ] || { [ $# -eq 3 ] && [ "$2" = --config ]; } || usage
-    lines "${3:-$CONFIG}"; exit $? ;;
+    shift; CONFIG_PATH=$CONFIG; PROJECT=""
+    while [ $# -gt 0 ]; do
+      case $1 in
+        --config) [ $# -ge 2 ] || usage; CONFIG_PATH=$2; shift 2 ;;
+        --project) [ $# -ge 2 ] || usage; PROJECT=$2; shift 2 ;;
+        *) usage ;;
+      esac
+    done
+    lines "$CONFIG_PATH" "$PROJECT"; exit $? ;;
   lanes) [ $# -eq 3 ] || usage; lanes "$2" "$3"; exit $? ;;
   lenses) [ $# -eq 1 ] || usage; printf '%s\n' $LENSES; exit 0 ;;
   --self-test) ;;

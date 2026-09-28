@@ -30,6 +30,11 @@ tracker=$(git log --oneline -200 2>/dev/null \
           | grep -oE '\b[A-Z][A-Z0-9]{1,9}-[0-9]+\b' | sed 's/-[0-9]*$//' \
           | sort | uniq -c | sort -rn | head -1 | awk '{print $2}')
 
+# Optional project settings are validated and reported with their source. Missing files are not
+# an error; their values remain discovery defaults for the session to settle in conversation.
+project_report=$("$HERE/project-settings.sh" report .) \
+  || { echo "discover-project: project settings could not be read for $T" >&2; exit 1; }
+
 # The checks, declared or found as defaults; a declared gate is the gate.
 out=$("$HERE/verify.sh" checks . --gate "$gate" --lines 2>&1); rc=$?
 if [ $rc -eq 0 ]; then
@@ -45,6 +50,7 @@ echo "gate=$gate"
 echo "docs=$(echo "$docs$dirs" | sed 's/ *$//')"
 echo "tracker=$kind"
 echo "tracker_prefix=$tracker"
+printf '%s\n' "$project_report"
 echo "ambient_context=$( [ -f AGENTS.md ] && echo AGENTS.md || echo NONE )"
 printf '%s\n' "$checks" | awk -F'\t' 'NF >= 4 {print "check." $1 "=" $2 ": " $4}'
 [ -f AGENTS.md ] || echo "warn=no AGENTS.md: lanes that read no ambient file will start blind" >&2

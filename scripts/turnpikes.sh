@@ -236,6 +236,7 @@ PLUS=$(printf '%s\n%s' "$TABLE" "$NOPE  -        ship    a check the table does 
 
 echo "positive controls: the list"
 run "$self" --list
+[ $rc -eq 0 ] && list_out=$out || list_out=""
 [ $rc -eq 0 ] && for n in style bug security; do [ "$(printf '%s\n' "$out" | awk -v n=$n '$1 == n' | wc -l)" -eq 1 ] || rc=9; done
 [ $rc -eq 0 ] && ok "--list names style, bug and security, once each" || fail "--list names style, bug and security, once each" "$out"
 [ "$(printf '%s\n' "$out" | awk '$2 == "default" {print $1}' | paste -sd' ' -)" = "style bug security" ] \
@@ -246,8 +247,14 @@ run "$self" --list
 echo "positive controls: a ticket's section"
 project="$tmp/project-profile"; mkdir -p "$project/.postmaster"
 printf '[project]\ndefault_turnpikes = ["bug"]\n' > "$project/.postmaster/project.toml"
+run env POSTMASTER_PROJECT="$tmp/no-such-project" "$self" --list
+is "--list does not read project settings" 0 "$list_out"
 run "$self" resolve --project "$project" default
 is "default resolves to the target project's declared turnpikes" 0 "turnpikes: bug"
+emptyproject="$tmp/empty-project"; mkdir -p "$emptyproject/.postmaster"
+printf '[project]\ndefault_turnpikes = []\n' > "$emptyproject/.postmaster/project.toml"
+run "$self" resolve --project "$emptyproject" default
+is "a project may define default as no turnpikes" 0 "turnpikes: none"
 run "$self" short --project "$project" "turnpikes: none"
 is "short names the project's defaults omitted by a ticket" 0 bug
 run "$self" resolve default;            is "default stands for the default set" 0 "turnpikes: style, bug, security"
