@@ -6,10 +6,9 @@
 #   run-meta.sh --self-test
 #
 # Records when it was written; the run and project; the target repo's HEAD and branch; the
-# postmaster commit that dispatched it, and whether that checkout had uncommitted changes,
-# since a run keeps the runbooks it started with; the config in force, as it was; and the
-# version each harness named in that config reports. Env files are named by the config, never
-# read. A run.json that already exists is left alone.
+# postmaster commit that dispatched it and the shared tool worktree pinned to that commit; the
+# config in force, as it was; and the version each harness named in that config reports. Env
+# files are named by the config, never read. A run.json that already exists is left alone.
 #
 #   exit 0  written, or already there
 #   exit 1  usage, no such dispatch directory or repo, no config, or the file could not be written
@@ -52,21 +51,50 @@ for role in ("coachman", "coachman_fallback", "postmaster"):
 for leg in (team.get("coachman_legs") or {}).values():
     if isinstance(leg, dict) and leg.get("harness"): harnesses.add(leg["harness"])
 
+postmaster_commit = git(tool, "rev-parse", "HEAD")
 record = {
     "written": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     "project": d.resolve().parent.name,
     "run": d.resolve().name,
     "target": {"head": git(repo, "rev-parse", "HEAD"), "branch": git(repo, "symbolic-ref", "--short", "-q", "HEAD")},
-    "postmaster": {"commit": git(tool, "rev-parse", "HEAD"),
+    "postmaster": {"commit": postmaster_commit,
                    "uncommitted_changes": bool(git(tool, "status", "--porcelain"))},
     "config": cfg,
     "harness_versions": {h: version(h) for h in sorted(harnesses)},
 }
-fd, tmp = tempfile.mkstemp(dir=d); os.close(fd)
-with open(tmp, "w") as f:
-    json.dump(record, f, indent=2, default=str); f.write("\n")
-os.replace(tmp, d / "run.json")
-print("run-meta: wrote %s (postmaster %s)" % (d / "run.json", (record["postmaster"]["commit"] or "?")[:12]))
+pin_script = tool / "scripts" / "tool-pin.sh"
+pin = None
+try:
+    result = subprocess.run(
+        [str(pin_script), "acquire", str(d), str(tool)],
+        capture_output=True, text=True,
+    )
+    if result.returncode:
+        raise RuntimeError(result.stderr.strip() or "tool pin acquisition failed")
+    pin = json.loads(result.stdout)
+    if pin.get("commit") != postmaster_commit or not pin.get("path"):
+        raise RuntimeError("tool pin did not match the dispatch commit")
+    record["tool"] = {"commit": pin["commit"], "path": pin["path"]}
+    fd, tmp = tempfile.mkstemp(dir=d); os.close(fd)
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(record, f, indent=2, default=str); f.write("\n")
+        os.replace(tmp, d / "run.json")
+        try: (d / ".tool-pin-pending.json").unlink()
+        except FileNotFoundError: pass
+    except BaseException:
+        try: os.unlink(tmp)
+        except FileNotFoundError: pass
+        raise
+except BaseException:
+    if not (d / "run.json").exists():
+        subprocess.run(
+            [str(pin_script), "cancel", str(d), str(tool)],
+            capture_output=True, text=True,
+        )
+    raise
+print("run-meta: wrote %s (postmaster %s; tool %s)" %
+      (d / "run.json", (postmaster_commit or "?")[:12], pin["path"]))
 PY
 }
 
@@ -76,10 +104,20 @@ if [ "${1:-}" != "--self-test" ]; then
 fi
 
 # --- self-test ----------------------------------------------------------------------------
-tmp=$(mktemp -d) || exit 1
-trap 'rm -r -- "$tmp" </dev/null 2>/dev/null' EXIT
+tmp=$(mktemp -d -p "$TOOL" '.run-meta-test.XXXXXX') || exit 1
+d=
+cleanup() {
+  if [ -n "$d" ] && [ -e "$d/run.json" ]; then
+    printf '{"stage":"done","coachman":{"legs":{}}}\n' > "$d/manifest.json"
+    "$TOOL/scripts/tool-pin.sh" release "$d" "$TOOL" >/dev/null 2>&1 || true
+  elif [ -n "$d" ]; then
+    "$TOOL/scripts/tool-pin.sh" cancel "$d" "$TOOL" >/dev/null 2>&1 || true
+  fi
+  rm -r -- "$tmp" </dev/null 2>/dev/null
+}
+trap cleanup EXIT
 d="$tmp/project/RUN-1"; repo="$tmp/target"; mkdir -p "$d" "$repo"
-git -C "$repo" init -q -b main && git -C "$repo" -c user.name=t -c user.email=t@t commit -q --allow-empty -m first
+git -C "$repo" init -q -b main && git -C "$repo" -c user.name=brindlewick -c user.email=332054101+brindlewick@users.noreply.github.com commit -q --allow-empty -m first
 cat > "$tmp/config.toml" <<'EOF'
 [lanes.one]
 harness = "bash"
@@ -93,19 +131,25 @@ workhorses = ["one", "two"]
 coachman = { harness = "bash", model = "judge" }
 EOF
 export POSTMASTER_CONFIG="$tmp/config.toml"; CONFIG=$POSTMASTER_CONFIG
+export POSTMASTER_TOOL_PINS="$tmp/pins"
+printf '{"stage":"dispatched","coachman":{"legs":{}}}\n' > "$d/manifest.json"
 fails=0
 ok()   { printf '  ok   %s\n' "$1"; }
 fail() { printf '  FAIL %s\n' "$1"; fails=$((fails+1)); }
-check() { python3 -c "import json,sys; r=json.load(open('$d/run.json')); sys.exit(0 if ($2) else 1)" 2>/dev/null && ok "$1" || fail "$1"; }
+check() { python3 -c "import json,os,subprocess,sys; r=json.load(open('$d/run.json')); sys.exit(0 if ($2) else 1)" 2>/dev/null && ok "$1" || fail "$1"; }
 
 echo "positive controls"
 meta "$d" "$repo" >/dev/null && ok "run.json is written" || fail "run.json is written"
 check "it names the postmaster commit"            "r['postmaster']['commit'] == '$(git -C "$TOOL" rev-parse HEAD)'"
+check "it records the pinned tool commit and checkout" "r['tool']['commit'] == r['postmaster']['commit'] and os.path.isdir(r['tool']['path']) and subprocess.check_output(['git','-C',r['tool']['path'],'rev-parse','HEAD'], text=True).strip() == r['tool']['commit']"
 check "it names the target's HEAD and branch"     "r['target'] == {'head': '$(git -C "$repo" rev-parse HEAD)', 'branch': 'main'}"
 check "it keeps the config as it was"             "r['config']['lanes']['one']['model'] == 'm1' and r['config']['team']['workhorses'] == ['one','two']"
 check "it records each harness's version"         "r['harness_versions']['bash'].startswith('GNU bash')"
 check "a harness not installed says so"           "r['harness_versions']['no-such-harness-xyz'] == 'not on PATH'"
 check "an env file is named, never read"          "r['config']['lanes']['one']['env_file'] == '~/somewhere/secret.env'"
+
+printf '{"stage":"done","coachman":{"legs":{}}}\n' > "$d/manifest.json"
+"$TOOL/scripts/tool-pin.sh" release "$d" "$TOOL" >/dev/null && ok "a terminal run releases its pin" || fail "a terminal run releases its pin"
 
 echo "negative controls"
 cp "$d/run.json" "$tmp/before.json"; sleep 1; meta "$d" "$repo" >/dev/null
