@@ -116,10 +116,12 @@ scripts/discover-project.sh <chosen>     # gate command, docs, tracker and its p
 **The target may be this repo.** Developing postmaster with postmaster is supported; see
 the section above for the two things that differ.
 
-**3. Launch the postmaster** per `skills/postmaster/SKILL.md`, and hand over. It checks the
-same preconditions again, cheaply, because it is also reached by someone typing `/postmaster`
-on a machine that has done none of the above. Tell it what this session has already settled —
-the config, the chosen target — and it will pick up from there rather than asking twice.
+**3. Start the postmaster** per `skills/postmaster/SKILL.md`. It checks the same preconditions
+again, cheaply, because it is also reached by someone typing `/postmaster` on a machine that
+has done none of the above. After the launch card, this conversation continues as postmaster
+when the session matches the configured harness and model, the target is this repo, and a
+person is at the terminal. Otherwise it starts a separate session, which reads the confirmed
+context from `~/.postmaster/runs/<project>/postmaster/brief.md`.
 
 **Prefer the scripts to doing it by hand.** They are the deterministic half of this flow and
 they carry their own controls. Reasoning your way to a project list or a git check is slower,
@@ -131,7 +133,7 @@ A three-role flow for getting one ticket implemented well by several models at o
 
 | role | what it does | where it is defined |
 |---|---|---|
-| **postmaster** | decomposes a stream into tickets, dispatches one coachman per ticket leg by leg, supervises, answers escalations, grants merges | `skills/postmaster/postmaster.md` (spawned by `SKILL.md`) |
+| **postmaster** | decomposes a stream into tickets, dispatches one coachman per ticket leg by leg, supervises, answers escalations, grants merges | `skills/postmaster/postmaster.md` (started by `SKILL.md` in this or a new session) |
 | **coachman** | drives one leg of one ticket; up to three legs, `synthesis`, `review` and `ship`, each a fresh coachman with a written hand-off between them, carry a ticket from waybill to ship card: harnessing the team, judging their work, running the turnpikes its ticket names, clearing the gate | `skills/postmaster/coachman.md` |
 | **the team** | several model lanes implementing the same ticket independently, in **blinkers**: separate worktrees, unable to see each other's work | `coachman.md`, lane table |
 
@@ -143,7 +145,8 @@ thread id), that file gives the command, the script runs it. Where a launch runs
 user watches it, is the session host's: `skills/postmaster/hosts.md` records Herdr, tmux and no
 host at all, and `scripts/host.sh` runs every launch through them. `SKILL.md` is the front door —
 reached from this file or by typing `/postmaster`, it gets the machine ready if it is not and
-spawns a postmaster; `postmaster.md` is what that postmaster then does. A run is up to three
+continues as postmaster when the session qualifies, otherwise starting a new postmaster session;
+`postmaster.md` is what the postmaster then does. A run is up to three
 coachman legs, `synthesis`, `review` and `ship`, each a fresh thread, so no context outlives a
 leg and a leg's hand-off document is the whole of what the next leg knows. The review leg runs
 only when the ticket names a turnpike that runs in it.

@@ -1,15 +1,16 @@
 ---
 name: postmaster
-description: 'Start work with postmaster on this machine, from any directory. It is the front door and establishes its own preconditions: it finds the postmaster repo from its own link, if the machine has no ~/.postmaster/config.toml it conducts setup first rather than failing later, and if a session already chose a target it picks up from there instead of asking again. Then it lists the git projects by recency, asks which to dispatch against, verifies that target is a git repository and refuses if it is not, handles an uncommitted tree by offering to commit or stash rather than stopping, discovers the gate command, docs and tracker instead of demanding config, confirms a launch card, and spawns a POSTMASTER session which decomposes a stream into tickets and dispatches one coachman per ticket. A coachman drives one leg of one ticket and its runbook is coachman.md beside this file. The postmaster runs no model lanes and edits no source. Reached by typing /postmaster, or by AGENTS.md sending a session here.'
+description: 'Start work with postmaster on this machine, from any directory. It is the front door and establishes its own preconditions: it finds the postmaster repo from its own link, conducts setup if needed, and reuses a target the session already chose. It lists git projects by recency, verifies the target, handles a dirty tree, discovers the project gate, docs and tracker, confirms a launch card, then continues in this conversation or starts a separate postmaster session according to the configured harness and model, target and terminal presence. The postmaster decomposes a stream into tickets and dispatches coachmen. Reached by typing /postmaster or by AGENTS.md.'
 ---
 
 # /postmaster: start work with postmaster
 
-You get the machine ready if it is not, choose a target, confirm a launch card, spawn a
-postmaster session, hand over, report where to watch it, and stop. **You do not run the
-stream yourself**; the session you spawn does that, from `postmaster.md` beside this file.
+You get the machine ready if it is not, choose a target, confirm a launch card, and route the
+postmaster role. When the current session qualifies, continue this conversation as postmaster;
+otherwise start a separate session and report where to watch it. Once acting as postmaster,
+follow `postmaster.md` beside this file.
 
-That session dispatches one **coachman** per ticket, one leg at a time. A coachman drives
+The postmaster dispatches one **coachman** per ticket, one leg at a time. A coachman drives
 exactly one leg of one load and hands off to the next leg in writing; its runbook is
 `coachman.md`. Harness-specific invocations are in `harnesses.md`, tracker mechanics in
 `trackers.md`, where a launch runs and how the user watches it in `hosts.md`, and the machine's choices — which harnesses, which lanes, which tracker — in
@@ -135,28 +136,61 @@ context start blind, and that has silently handicapped a lane before. Ask the us
 the project's risk surfaces (what it binds, allowlists, spawns and serves) where the docs do
 not say; the security lens reviews against them.
 
-## Stage 0: scope, confirm, spawn
+## Stage 0: scope, confirm, choose the postmaster session
 
 1. **Scope the stream.** From the user's words plus a read-only pass over the named
    sources, write one paragraph: what the stream is, its likely first few tickets, and
    which parts of the project they touch. Do not deep-dive; the postmaster does that.
-2. **Work with no ticket gets one created first**, in the project's own tracker
-   (`trackers.md`).
-3. **Launch card**: one self-contained confirmation covering the postmaster's harness,
-   model and effort (`team.postmaster` in the config), the team the config names, who says
-   the merge word (`ship.merge_authority`), the session host the fleet will run on
-   (`<tool>/scripts/host.sh detect`), and the project facts above. Launch nothing before the user
-   picks.
-4. **Create the run root** `~/.postmaster/runs/<project>/` (the repo's basename) and log the
-   launch there: `<tool>/scripts/log-action.sh` needs a run directory, so the postmaster's own
-   actions go under `~/.postmaster/runs/<project>/postmaster/`.
-5. **Spawn** it on the session host (`hosts.md`). Write the brief to
-   `~/.postmaster/runs/<project>/postmaster/brief.md`: "You are the postmaster for <project>.
-   Read `<tool>/skills/postmaster/postmaster.md` first", then the stream paragraph, the project
-   profile, `<tool>` and the config path. Start a new interactive session of the postmaster's
-   harness (`team.postmaster` in the config), rooted in the target repo, in the harness's
-   interactive form from `harnesses.md`: its bypass mode, named `<project> · postmaster`. Hand it
-   a one-line prompt file that says to read the brief:
+2. **Carry un-ticketed work into the stream paragraph.** After the user confirms the launch
+   card, the postmaster handles its first ticket under Stage A in `postmaster.md`; do not
+   create a tracker ticket before that confirmation.
+3. **Choose the postmaster session and show the launch card.** Report the current session's
+   harness and model, its working directory, and whether a person is at the terminal. Use
+   `yes` only when this conversation can ask and receive answers from a person; a headless
+   session reports `no`. Do not copy the configured harness or model into the session report.
+   Run the route check against the selected target and the machine config:
+
+   ```sh
+   <tool>/scripts/postmaster-route.sh "<reported harness>" "<reported model>" "$PWD" <yes|no> "$TARGET"
+   ```
+
+   It prints `self: ...` when this conversation will be postmaster, or `spawn: ...` with every
+   reason a separate session is required. The launch card includes that result and explains
+   that the selected route is the postmaster for this project. Also cover the configured
+   postmaster harness, model and effort (`team.postmaster`), the team the config names, who
+   says the merge word (`ship.merge_authority`), the session host the fleet will run on
+   (`<tool>/scripts/host.sh detect`), and the project facts above. Launch nothing before the
+   user confirms.
+4. **Record the confirmed launch before acting as postmaster.** Set `<runs>` to
+   `~/.postmaster/runs/<project>/`, where `<project>` is the repo's basename, and create its
+   postmaster directory:
+
+   ```sh
+   RUNS="$HOME/.postmaster/runs/$(basename -- "$TARGET")"
+   mkdir -p "$RUNS/postmaster"
+   ```
+
+   Write
+   `brief.md`, beginning with "You are the postmaster for <project>. Follow
+   `<tool>/skills/postmaster/postmaster.md`," followed by the confirmed stream paragraph,
+   project profile, configured team, merge authority, host, `<tool>` and config path, plus the
+   current session's reported harness, model, working directory and terminal presence and the
+   route result. This is the durable context a postmaster restarted from nothing reads to carry
+   on. Then log the first action:
+
+   ```sh
+   <tool>/scripts/log-action.sh "$RUNS/postmaster" postmaster note launch "<route result>"
+   ```
+
+   This `note` is the postmaster's first action and writes to both `actions.jsonl` and the
+   project's `ledger.jsonl`.
+5. **Continue or spawn according to the route result.** For `self`, continue in this same
+   conversation, read `postmaster.md` beside this file, and start its Stage A. Do not open a
+   second session. For `spawn`, start the configured postmaster on the session host (`hosts.md`)
+   using the brief just written. Start an interactive session of `team.postmaster`'s harness,
+   rooted in the target repo, in the harness's interactive form from `harnesses.md`: its bypass
+   mode, named `<project> · postmaster`. Hand it a one-line prompt file that tells it to read
+   the brief at `$RUNS/postmaster/brief.md` first, then the runbook named there:
 
    ```sh
    <tool>/scripts/host.sh spawn postmaster-<project> <repo> --label "<project> · postmaster" -- <interactive form>
@@ -171,8 +205,9 @@ not say; the security lens reviews against them.
    launch it headless instead, as `hosts.md` gives under none, with a line in its brief that it
    runs headless, so whenever it needs the user it writes `<runs>/postmaster/ESCALATION.md` and
    ends its turn; tell the user it answers by resume.
-6. **Report** where to watch it (the space and tab, the tmux session, or with no host its events
-   file), the run root, and the brief. Then stop.
+6. **Report** where to continue or watch it (this conversation, the space and tab, the tmux
+   session, or with no host its events file), the run root, and the brief. Stop only after
+   spawning; when route is `self`, continue directly into `postmaster.md`.
 
 ## The waybill
 
@@ -211,7 +246,8 @@ postmaster ruling channel: resume the coachman's thread (harnesses.md) with the 
 
 ## Hard rules
 
-- Bootstrap never runs the stream. Spawn and stop. The postmaster's job is `postmaster.md`.
+- Once the launch card is confirmed, the selected postmaster session runs the stream. Its job is
+  `postmaster.md`.
 - The postmaster runs no model lanes and edits no source. Its tokens buy judgment:
   decomposition, dispatch, supervision, escalation, merge grants, and talking to the
   user.

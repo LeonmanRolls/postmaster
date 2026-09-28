@@ -76,7 +76,9 @@ run: `AGENTS.md` tells the agent what to do, and the first time that is setting 
 up with you, one question at a time (which agent CLIs fill which role, where tickets live,
 where your projects are, who says the merge word), and linking the skills into your agent CLIs
 so you can start from any project afterwards. After that it helps you choose a project and
-launches a postmaster.
+continues as postmaster in this conversation when its harness and model match the config, the
+target is the repo it runs in, and a person is at the terminal. Otherwise it starts a separate
+postmaster session and tells you why.
 
 ```sh
 scripts/probe-harnesses.sh      # which agent CLIs are installed
