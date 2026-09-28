@@ -60,4 +60,4 @@ the AC4 scope for any leftover statement of the old rule.
 - [x] T002 [AC2] Drop the overlapping-file-surfaces clause from the hard rule in `skills/postmaster/postmaster.md`, leaving `team.max_runs` as the only in-flight limit.
 - [x] T003 [AC3] Rewrite the Concurrency note in `skills/postmaster/coachman.md`: second merger resolves conflicts at its merge, merge never rebase, no sequencing advice.
 - [x] T004 [AC4] Grep-sweep `skills/`, `AGENTS.md`, `README.md` and `wiki/` for any remaining statement that two runs must not change the same files; reword or remove any leftover, and record the searches and their returns.
-- [ ] T005 [AC1][AC2][AC3][AC4] Run the gate through `verify.sh run .` and write `WORKHORSE-SUMMARY.md`.
+- [x] T005 [AC1][AC2][AC3][AC4] Run the gate through `verify.sh run .` and write `WORKHORSE-SUMMARY.md`.
