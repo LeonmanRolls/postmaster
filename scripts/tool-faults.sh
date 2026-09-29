@@ -12,6 +12,10 @@
 #                                                 <ticket>, on that one, on the user's word that
 #                                                 it holds the same fault
 #   tool-faults.sh file <dispatch> <id>           file a new fault's draft as a ticket
+#   tool-faults.sh check <dispatch> <title> <draft>
+#                                                 refuse a ticket draft that is not safe to
+#                                                 publish against that run's waybill; the
+#                                                 hotfix skill's gate before it files
 #   tool-faults.sh decline <dispatch> <id> <word> the user said no: recorded, and nothing filed
 #   tool-faults.sh --self-test
 #
@@ -57,12 +61,12 @@
 #   exit 0  done; harvest prints a line for the run, then one per fault, then any notes
 #   exit 1  usage; no such dispatch, fault or draft; a run still open; the tracker could not
 #           be read or refused a write; or the log could not be written
-#   exit 2  comment or file refused: a changed draft is not safe to publish, a draft fails
+#   exit 2  comment, file or check refused: a draft is not safe to publish, a draft fails
 #           scripts/ticket-check.sh, a fault to comment on has no ticket, or one to file has one
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd -P)
 TOOL=$(dirname "$HERE")
-usage() { echo "usage: tool-faults.sh harvest <dispatch> | comment <dispatch> <id> [<ticket>] | file <dispatch> <id> | decline <dispatch> <id> <the user's word> | --self-test" >&2; exit 1; }
+usage() { echo "usage: tool-faults.sh harvest <dispatch> | comment <dispatch> <id> [<ticket>] | file <dispatch> <id> | check <dispatch> <title> <draft> | decline <dispatch> <id> <the user's word> | --self-test" >&2; exit 1; }
 
 run_py() {  # run_py <command> <dispatch> [args...]
   python3 - "$HERE" "$TOOL" "$@" <<'PY'
@@ -731,8 +735,25 @@ def decline(fid, word):
     print("%s: declined" % fid)
 
 
+def check(title, draft):
+    p = pathlib.Path(draft)
+    if not p.is_file():
+        die("no such draft: %s" % draft)
+    safe = Safe(own_ids(load_state()))
+    body = p.read_text(encoding="utf-8", errors="replace")
+    bad = [("title", title)] if safe.publish(title) != title else []
+    bad += [("body", l) for l in body.splitlines() if safe.publish(l) != l]
+    if bad:
+        die("not safe to publish:\n" + "\n".join("  %s: %s\n  made safe: %s" % (w, t, safe.publish(t)) for w, t in bad), 2)
+    print("safe to publish: %s" % p)
+
+
 if CMD == "harvest":
     harvest()
+elif CMD == "check":
+    if len(ARGS) != 3:
+        die("usage: tool-faults.sh check <dispatch> <title> <draft-file>")
+    check(ARGS[1], ARGS[2])
 else:
     fid = ARGS[1]
     if not re.fullmatch(r"tf-[0-9a-f]{8}", fid):
@@ -751,6 +772,7 @@ case ${1:-} in
   harvest) [ $# -eq 2 ] || usage; run_py "$@"; exit $? ;;
   comment) [ $# -eq 3 ] || [ $# -eq 4 ] || usage; run_py "$@"; exit $? ;;
   file) [ $# -eq 3 ] || usage; run_py "$@"; exit $? ;;
+  check) [ $# -eq 4 ] || usage; run_py "$@"; exit $? ;;
   decline) [ $# -ge 4 ] || usage; run_py "$@"; exit $? ;;
   *) usage ;;
 esac
@@ -954,6 +976,20 @@ out=$(tf file "$d" "$B" 2>&1); rc=$?
 [ $rc -eq 0 ] && [ "$(writes create)" -eq 1 ] && cmp -s "$S/created-60.md" "$B_MD" && printf '%s\n' "$out" | grep -qxF "$B: filed as #60" \
   && grep -qF "\"target\":\"#60\",\"detail\":\"tool fault $B filed in run $RID" "$d/actions.jsonl" \
   && ok "file files the draft as it is, once, and logs the new ticket" || fail "file files the draft as it is, once, and logs the new ticket (exit $rc)" "$out$(printf '\n'; cat "$S/writes.log")"
+echo "check refuses a draft that names the target"
+cp "$B_MD" "$tmp/dirty.md"
+printf 'seen in %s while the %s ledger was open, log at %s\n' "$NAME" "$WORD" "$HOMEP" >> "$tmp/dirty.md"
+out=$(tf check "$d" "$(cat "${B_MD%.md}.title")" "$tmp/dirty.md" 2>&1); rc=$?
+[ $rc -eq 2 ] && printf '%s\n' "$out" | grep -q "not safe to publish" \
+  && ok "check refuses a draft quoting the target's names, words and paths" \
+  || fail "check refuses a draft quoting the target's names, words and paths (exit $rc)" "$out"
+out=$(tf check "$d" "hotfix for $PROPER" "$B_MD" 2>&1); rc=$?
+[ $rc -eq 2 ] && ok "check refuses a title naming the target" \
+  || fail "check refuses a title naming the target (exit $rc)" "$out"
+out=$(tf check "$d" "$(cat "${B_MD%.md}.title")" "$B_MD" 2>&1); rc=$?
+[ $rc -eq 0 ] && printf '%s\n' "$out" | grep -q "safe to publish" \
+  && ok "check passes the scrubbed draft unchanged" \
+  || fail "check passes the scrubbed draft unchanged (exit $rc)" "$out"
 tf comment "$d" "$D1" >/dev/null 2>&1; out=$(tf decline "$d" "$D2" "the user: not worth a ticket" 2>&1); rc=$?
 [ $rc -eq 0 ] && [ "$(writes create)" -eq 1 ] && grep -qF "\"target\":\"$D2\",\"detail\":\"tool fault $D2 declined in run $RID, by the user: the user: not worth a ticket\"" "$d/actions.jsonl" \
   && ok "decline records the user's no, and files nothing" || fail "decline records the user's no, and files nothing (exit $rc)" "$out"

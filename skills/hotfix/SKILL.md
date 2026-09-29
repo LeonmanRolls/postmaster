@@ -56,15 +56,25 @@ Draft it in the ticket shape (`<tool>/scripts/ticket-check.sh` judges it): a tit
 `## Problem / feature`, numbered `## Acceptance criteria` each answerable yes or no,
 `## Direction` (the user's word, or the fix you propose and they approved),
 `## Turnpikes` (`default` for a change to the flow itself). Keep it about the postmaster
-fault: what failed, the cause, the failing control, and the fix. Do not publish target
-project names, paths, code, ticket text, run ids, machine details or credentials from the
-affected run. Check it before you file it:
+fault: what failed, the cause, the failing control, and the fix. When a scrubbed draft
+already exists for the fault — `<tool>/scripts/tool-faults.sh harvest` of the affected
+run once it has closed, or of `<runs>/postmaster` — start from that draft rather than a
+fresh one. Whatever the source, the draft passes the same scrub before it is filed:
+
+```sh
+<tool>/scripts/tool-faults.sh check <dispatch> "<title>" <draft-file>
+```
+
+with the affected run's dispatch, or the hotfix dir when no run is affected. A refusal
+stops the filing: rewrite the draft until it passes, never paste in the target's names,
+paths, code, ticket text, run ids, machine details or credentials to explain the fault.
+Then check the shape:
 
 ```sh
 <tool>/scripts/ticket-check.sh --body <draft-file> --title "<title>" --project <tool>
 ```
 
-Log `ticket-check`. File it on this repo's tracker the way
+Log both checks. File it on this repo's tracker the way
 `<tool>/skills/postmaster/trackers.md` says (GitHub Issues on the board, or the local store
 when there is one). Read its number and title back, set it in progress, and log both
 writes. If the tracker cannot create a ticket, stop and report the adapter's error.
