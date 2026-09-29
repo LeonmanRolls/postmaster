@@ -173,6 +173,9 @@ file; the postmaster keeps using its main `<tool>` for every other supervision s
    for leg <n> of <TICKET>. Read `<dispatch>/brief.md`, then `<rt>/skills/postmaster/coachman.md`,
    then `<dispatch>/handoff-<p>.md`" (omit the hand-off for leg 1), plus the one line naming
    the leg's job from the legs table. Nothing else: the runbook and the files carry the rest.
+   When `<dispatch>/hotfix-notes.md` exists, carry its lines in too: a fix commit on this
+   run's branch is main's fix, not the run's own work, and the leg must know which is which
+   (`<tool>/scripts/hotfix-reach.sh`).
 2. **From leg 2 on, verify the hand-off before dispatching on it:** `<tool>/scripts/handoff-check.sh
    <dispatch>/handoff-<p>.md` exits 0. If it exits 2, leg `p` is not finished: remove its
    `.leg-<p>-done` marker and resume leg `p` (step 5, with `p` in place of `n`), the prompt
