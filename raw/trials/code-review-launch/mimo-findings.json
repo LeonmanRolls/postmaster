@@ -1,0 +1,15 @@
+[
+  {
+    "file": "src/page.js",
+    "line": 8,
+    "line_end": "not provided",
+    "target": "src/page.js:8",
+    "severity": "not provided",
+    "summary": "returns one record too many",
+    "body": "not provided",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "mimo"
+  }
+]
