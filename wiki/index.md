@@ -93,8 +93,9 @@ Why the design is shaped as it is.
 - [When a review loop should stop](concepts/review-convergence.md): **claimed**. Model reviewers
   do not run out of minor findings, so a loop should end on verified serious findings in the
   change's own code, and a mechanism whose fixes keep breaking should be redesigned rather than
-  fixed again. From the review of #36 and outside work. The user chose one round of bug review
-  for now, to revisit if many bugs reach production.
+  fixed again. From the review of #36 and outside work. The user chose: fix as much as can be
+  fixed in the first round, then repeat until there are no more P1 and P2 findings, with the cap
+  of three rounds as a backstop; many bugs reaching production stays the signal to revisit.
 - [Each project defines how a change to it is verified](concepts/verification.md): **claimed**.
   A project declares its checks or gets defaults by discovery; every workhorse runs them before
   it reports, and the coachman runs them again on each branch and on the synthesis.
