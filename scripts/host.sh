@@ -2032,7 +2032,7 @@ elif cmd == "pane run":
     # one the create and open calls above named, which is what the controls read.
     fcntl.flock(lock, fcntl.LOCK_UN)
     if flag("pane.dead"): sys.exit(0)                     # accepted, never run
-    late = "sleep 5; " if flag("pane.late") else ""
+    late = ("sleep 5; touch %s; " % os.path.join(S, "pane.late.fired")) if flag("pane.late") else ""
     env = {"PATH": os.environ["PATH"], "HOME": os.environ.get("HOME", "/"), "STUB": S, "HERDR_ENV": "1",
            "HERDR_PANE_ID": pane, "HERDR_TAB_ID": "tab-of-" + pane, "HERDR_WORKSPACE_ID": ws}
     proc = subprocess.Popen(["bash", "-c", late + text], env=env, stdin=subprocess.DEVNULL, start_new_session=True,
@@ -2429,9 +2429,9 @@ EOF
   got=$(cd "$tmp/caller" && hs "$STUBS" COUNT="$tmp/logs/h4.count" -- run "$NAME" "$repo/.worktrees/T-1-sol" --out ../logs/h4.out --marker ../logs/h4.done -- ./probe.sh 2>/dev/null)
   marker "$tmp/logs/h4.done"
   check "a pane that never starts the launch: it runs in the background instead" '[ "$got" = host=none ] && [ "$(wc -l < "$tmp/logs/h4.count")" -eq 1 ]' "$got"
-  rm -f "$tmp/stub/pane.dead"; touch "$tmp/stub/pane.late"
+  rm -f "$tmp/stub/pane.dead"; rm -f "$tmp/stub/pane.late.fired"; touch "$tmp/stub/pane.late"
   got=$(cd "$tmp/caller" && hs "$STUBS" POSTMASTER_HOST_CLAIM_WAIT=1 COUNT="$tmp/logs/h5.count" -- run "$NAME" "$repo/.worktrees/T-1-sol" --marker ../logs/h5.done -- ./probe.sh 2>/dev/null)
-  marker "$tmp/logs/h5.done"; sleep 6
+  marker "$tmp/logs/h5.done"; wait_file "$tmp/stub/pane.late.fired" 60
   check "a pane that starts it late: it still runs exactly once" '[ "$got" = host=none ] && [ "$(wc -l < "$tmp/logs/h5.count")" -eq 1 ]' "$(cat "$tmp/logs/h5.count" 2>/dev/null)"
   rm -f "$tmp/stub/pane.late"
   check "no launch leaves its hand-over directory behind" '[ -z "$(find "$tmp" -maxdepth 1 -name "postmaster-host.*")" ]'
