@@ -409,18 +409,22 @@ PY
 }
 
 stale_round_control() {
-  local stale stale_ready
-  limit 2; cut bug four
-  run start "$d" 4; launch 4 bug four slow; slow=$(cat "$tmp/pids/launch.$n")
+  local stale stale_ready stale_has_time
+  limit 5; cut bug four
+  # The old test started its two-second clock before launching the reviewer, so a loaded
+  # host could spend the whole round starting that process. Start the reviewer first.
+  launch 4 bug four slow; slow=$(cat "$tmp/pids/launch.$n")
+  run start "$d" 4
   timeout 60 "$self" wait "$d" 4 "$repo" bug:four > "$tmp/stale.out" 2>&1 & stale=$!
-  # The previous half-second sleep did not prove the waiter had loaded the old attempt; a busy
-  # host could start it only after round_start replaced that state. Wait for its progress line.
+  # Wait for the progress line to prove this waiter read the old attempt with time remaining.
   stale_ready=no
   wait_for_text "$tmp/stale.out" "review-round: round 4," && stale_ready=yes
+  stale_has_time=no
+  grep -Eq 'review-round: round 4, .* ([2-9]|[1-9][0-9]+)s left' "$tmp/stale.out" && stale_has_time=yes
   limit 60; run start "$d" 4
   wait "$stale"; rc=$?; out=$(cat "$tmp/stale.out")
   check "a wait from an earlier start of the round stands down, and records and stops nothing" \
-    '[ "$stale_ready" = yes ] && [ $rc -eq 1 ] && has "started again" && alive "$slow" && ! grep -q "four bug: DEGRADED" "$d/run-log.md"'
+    '[ "$stale_ready" = yes ] && [ "$stale_has_time" = yes ] && [ $rc -eq 1 ] && has "started again" && alive "$slow" && ! grep -q "four bug: DEGRADED" "$d/run-log.md"'
 }
 
 if [ "${POSTMASTER_REVIEW_ROUND_SELF_TEST_TIMING_ONLY:-0}" = 1 ]; then
