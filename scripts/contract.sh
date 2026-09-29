@@ -344,6 +344,12 @@ head6=$(G rev-parse HEAD)
 checks "a docs-only change is no" 0 "" "$base" "$head6"
 G reset -q --hard "$base"
 
+printf '## Problem\n\nThis changes the coachman contract and the markers.\n' > TICKET.md
+G add -A && G commit -q -m "ticket prose"
+headt=$(G rev-parse HEAD)
+checks "ticket prose that names the contract is no" 0 "" "$base" "$headt"
+G reset -q --hard "$base"
+
 sed -i 's/Prose outside any region is not the contract./Prose outside any region stays outside./' skills/postmaster/coachman.md
 G add -A && G commit -q -m "wording fix outside the contract"
 head7=$(G rev-parse HEAD)
