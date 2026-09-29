@@ -312,15 +312,16 @@ start_attempt() {  # start_attempt <attempt> <dispatch> <leg-number> <leg-name> 
   if [ "$attempt" = takeover ]; then
     [ -f "$STREAM" ] && mv -f -- "$STREAM" "$WALLED_STREAM" 2>/dev/null || :
   fi
-  # Clear the outcome of a previous attempt so a reader never sees a stale one.
-  rm -f -- "$OUTCOME" "$OUTCOME.state"
-  local host_args=(
-    run "$name" "$wt"
+  # Clear the outcome of a previous attempt and a stale done marker, so a reader never sees
+  # either from an earlier try. The done marker this attempt earns is written by the leg.
+  rm -f -- "$OUTCOME" "$OUTCOME.state" "$DONE"
+  local host_args=( run "$name" "$wt" )
+  [ "$append" = 1 ] && host_args+=( --append )
+  host_args+=(
     --under "$d" --role coachman --run "$d"
     --out "$STREAM" --err "$ERR" --marker "$EXITED"
     -- "$HERE/leg.sh" _attempt "$attempt" "$d" "$n" "$leg_name" "$wt" "$thread" --prompt "$prompt"
   )
-  [ "$append" = 1 ] && host_args=( "${host_args[0]}" "${host_args[1]}" "${host_args[2]}" --append "${host_args[@]:3}" )
   "$HERE/host.sh" "${host_args[@]}"
 }
 
