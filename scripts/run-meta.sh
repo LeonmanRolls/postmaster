@@ -27,7 +27,9 @@
 # whatever project it lives in and whichever runs layout it uses.
 #
 # check is the control that a run still runs on its own versions after main has moved on: it
-# reads the pin's HEAD and tree against the commit run.json records. release removes the pin
+# reads the pin's HEAD and tree against the commit run.json records, and accepts only the
+# dispatch commit or the fix commits hotfix-reach.sh recorded beside the pin as
+# <commit>.fixes. release removes the pin
 # only when no claimed run is still in flight (manifest stage other than done or abandoned,
 # a claim that cannot be read counting as in flight); a pin with no claims file falls back to
 # scanning the runs root the dispatch sits under, and runs it cannot list keep the pin.
@@ -150,7 +152,7 @@ path_of() {  # path_of <dispatch>: the run's tool checkout, canonical; the waybi
 }
 
 check_pin() {  # check_pin <dispatch>: the run's checkout still serves its dispatch commit
-  local d=$1 checkout commit at dirty c
+  local d=$1 checkout commit at dirty c fixes revs
   checkout=$(path_of "$d") || return 1
   c=$(claim "$d/run.json")
   case $c in
@@ -166,12 +168,28 @@ check_pin() {  # check_pin <dispatch>: the run's checkout still serves its dispa
   [ -d "$checkout" ] || { echo "run-meta: no pinned checkout at $checkout" >&2; return 1; }
   at=$(git -C "$checkout" rev-parse --verify -q HEAD 2>/dev/null) \
     || { echo "run-meta: $checkout is not a git checkout" >&2; return 1; }
-  [ "$at" = "$commit" ] \
-    || { echo "run-meta: $checkout is at ${at:0:12}, not the recorded ${commit:0:12}" >&2; return 1; }
+  if [ "$at" != "$commit" ]; then
+    # The pin may carry hotfix-reach.sh's fix commits alone on top of the dispatch commit:
+    # recorded beside the pin as <commit>.fixes, one sha per commit it applied. Nothing
+    # else is allowed to move the pin, so a run keeps every version but the fixes it took.
+    fixes="$TOOLS/$commit.fixes"
+    revs=$(git -C "$checkout" rev-list "$commit..HEAD" 2>/dev/null) \
+      || revs=""
+    if [ -z "$revs" ] || [ ! -f "$fixes" ]; then
+      echo "run-meta: $checkout is at ${at:0:12}, not the recorded ${commit:0:12}" >&2; return 1
+    fi
+    while IFS= read -r rev; do
+      [ -n "$rev" ] || continue
+      grep -qxF -- "$rev" "$fixes" \
+        || { echo "run-meta: $checkout is at ${at:0:12}, not the recorded ${commit:0:12}" >&2; return 1; }
+    done <<EOF
+$revs
+EOF
+  fi
   dirty=$(git -C "$checkout" status --porcelain 2>/dev/null) \
     || { echo "run-meta: could not read $checkout" >&2; return 1; }
   [ -z "$dirty" ] \
-    || { echo "run-meta: $checkout is not clean at ${commit:0:12}; it does not serve that commit's versions" >&2; return 1; }
+    || { echo "run-meta: $checkout is not clean at ${at:0:12}; it does not serve that commit's versions" >&2; return 1; }
   return 0
 }
 
@@ -546,6 +564,25 @@ try check "$run_pinned"
 [ $rc -eq 1 ] && ok "check fails a pin that no longer serves its commit" \
   || fail "check fails a pin that no longer serves its commit" "$out"
 git -C "$pinA" checkout -q -- skills/postmaster/coachman.md
+
+# A pin carrying hotfix-reach.sh's recorded fix commits still serves its run; anything
+# else on the pin does not.
+printf '#!/bin/sh\necho MARKER=FIX\n' > "$pinA/scripts/foo.sh"
+git -C "$pinA" add -A
+git -C "$pinA" commit -qm "Main's fix: foo" >/dev/null 2>&1
+fixrev=$(git -C "$pinA" rev-parse HEAD)
+printf '%s\n' "$fixrev" > "$TOOLS/$commitA.fixes"
+try check "$run_pinned"
+[ $rc -eq 0 ] && ok "check passes a pin carrying only recorded fix commits" \
+  || fail "check passes a pin carrying only recorded fix commits" "$out"
+printf 'unrecorded\n' >> "$pinA/skills/postmaster/coachman.md"
+git -C "$pinA" add -A
+git -C "$pinA" commit -qm "not a recorded fix" >/dev/null 2>&1
+try check "$run_pinned"
+[ $rc -eq 1 ] && ok "check fails a pin carrying a commit no fix recorded" \
+  || fail "check fails a pin carrying a commit no fix recorded" "$out"
+git -C "$pinA" reset -q --hard "$commitA"
+rm -f -- "$TOOLS/$commitA.fixes"
 
 echo "negative controls"
 cp "$d/run.json" "$tmp/before.json"; sleep 1; meta "$d" "$repo" >/dev/null
