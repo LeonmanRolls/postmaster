@@ -202,12 +202,16 @@ HARNESS_NAMES = (
 # One literal uses a single-character class break (/ro[o]t/) so the pattern
 # source is not a match of itself; every other literal below is already broken
 # by the regex syntax around it, which the self-test's source control proves.
+# Absolute paths only: a home or root directory under a variable or a relative
+# parent ($tmp/root, $d/home) is scratch scaffolding, not a leak. The lookbehind
+# keeps PATH-style lists (preceded by a colon) matching.
 PRIVATE_PATH = re.compile(
-    r"(?:/home/|/Users/)([A-Za-z0-9._-]+)(?=/|$)"
-    r"|/ro[o]t/[^\s\"'<>),;]+"
-    r"|~(?!\.)[A-Za-z0-9._-]+/[^\s\"'<>),;]*"
-    r"|/tmp/(?:" + "|".join(HARNESS_NAMES) + r")(?:-[A-Za-z0-9._-]+|/[^\s\"'<>),;]+)"
-    r"|[A-Za-z]:\\Users\\([A-Za-z0-9._-]+)(?=$|\\)",
+    r"(?<![A-Za-z0-9_.$}~.-])(?:/home/|/Users/)([A-Za-z0-9._-]+)(?=/|$)"
+    r"|(?<![A-Za-z0-9_.$}~.-])/ro[o]t/[A-Za-z0-9._-]+"
+    r"|(?<![A-Za-z0-9_])~(?!\.)[A-Za-z0-9._-]+/[^\s\"'<>),;]*"
+    r"|(?<![A-Za-z0-9_.$}~.-])/tmp/(?:" + "|".join(HARNESS_NAMES)
+    + r")(?:-[A-Za-z0-9._-]+|/[^\s\"'<>),;]+)"
+    r"|(?<![A-Za-z0-9_])[A-Za-z]:\\Users\\([A-Za-z0-9._-]+)(?=$|\\)",
     re.IGNORECASE)
 IPV4 = re.compile(r"(?<![0-9.])(?:[0-9]{1,3}\.){3}[0-9]{1,3}(?![0-9.])")
 IPV6 = re.compile(r"(?<![0-9A-Fa-f:])(?:[0-9A-Fa-f]{0,4}:){2,7}[0-9A-Fa-f]{0,4}(?![0-9A-Fa-f:])")
@@ -646,6 +650,10 @@ def self_test(root):
                 "neg-user-bracketed", "a bracketed user is clean")
             neg("/tmp/pip-install-9 holds wheels\n",
                 "neg-tmp-lookalike", "a lookalike temp dir is clean")
+            neg('mkdir -p "$tmp/root/scripts" for the case\n',
+                "neg-var-root", "a root dir under a variable is scaffolding")
+            neg('mkdir -p "$d/home/user" for the case\n',
+                "neg-var-home", "a home dir under a variable is scaffolding")
             neg("/tmp/codex is a product name\n",
                 "neg-tmp-bare", "a bare harness name with no run marker is clean")
             neg("proxy at 127.0.0.1:9\n",
