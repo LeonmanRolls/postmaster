@@ -1,0 +1,11 @@
+# The streams and the rest of the forked task transcripts stay on the machine: they may
+# name its paths. The reports, the normalized findings and one sample task file are what
+# this trial publishes (method.md).
+*.jsonl
+*.err
+run.log
+opus-task-*.output
+!opus-findings.jsonl
+!luna-findings.jsonl
+!mimo-findings.jsonl
+!opus-task-a1928f48b7b20e826.output
