@@ -25,8 +25,8 @@
 #
 #   exit 0  clean
 #   exit 1  faults on stdout, one per line
-#   exit 2  usage, not a repository, an unresolvable base or head, or a scan
-#           that could not finish
+#   exit 2  usage, not a repository, an unresolvable base or head, a tree
+#           that could not be read, or a scan that could not finish
 set -uo pipefail
 HERE=$(CDPATH= cd -P -- "$(dirname -- "$0")" && pwd -P)
 ROOT=$(CDPATH= cd -P -- "$HERE/.." && pwd -P)
@@ -265,6 +265,20 @@ if [ "${1:-}" = "--self-test" ]; then
   }
   r=$(repo) && { cd "$r" || exit 2
     head=$(git rev-parse HEAD)
+    mkdir -p raw
+    printf 'Reach the relay at %s for pings.\n' "$SUSPECT" > raw/probe.md
+    git add raw/probe.md
+    mkdir -p "$tmp/diffshim"
+    printf '#!/usr/bin/env bash\nif [ "$1" = diff ]; then exit 128; fi\nexec %s "$@"\n' \
+      "$(command -v git)" > "$tmp/diffshim/git"
+    chmod +x "$tmp/diffshim/git"
+    out=$(PATH="$tmp/diffshim:$PATH" bash "$HERE/tree-check.sh" main "$head" 2>/dev/null); code=$?
+    [ "$code" -eq 2 ] \
+      && printf '  ok   a failed enumeration fails the check\n' \
+      || { printf '  FAIL a failed enumeration fails the check: exit %s\n' "$code"; fails=$((fails+1)); }
+  }
+  r=$(repo) && { cd "$r" || exit 2
+    head=$(git rev-parse HEAD)
     out=$(bash "$HERE/tree-check.sh" 2>/dev/null); code=$?
     { [ "$code" -eq 0 ] && [ -z "$out" ]; } \
       && printf '  ok   a clean tree passes through the identical check\n' \
@@ -305,8 +319,8 @@ redact() {  # redact <path>: the path with every shaped span removed
   printf '%s' "$safe"
 }
 
-SEENFILE=""; SCANERR=""; BLOBF=""
-tmp_cleanup() { for t in "$SEENFILE" "$SCANERR" "$BLOBF"; do [ -n "$t" ] && rm -f -- "$t"; done; }
+SEENFILE=""; SCANERR=""; BLOBF=""; ENUMF=""
+tmp_cleanup() { for t in "$SEENFILE" "$SCANERR" "$BLOBF" "$ENUMF"; do [ -n "$t" ] && rm -f -- "$t"; done; }
 trap tmp_cleanup EXIT
 SEENFILE=$(mktemp) || fail "could not stage the scan"
 seen_has() { grep -qF -x -- "$1" "$SEENFILE" 2>/dev/null; }
@@ -314,18 +328,30 @@ seen_add() { printf '%s\n' "$1" >> "$SEENFILE"; }
 fault_postmaster() {  # fault_postmaster <path> <how>: one fault, path redacted
   note "$(redact "$1"): $2 under .postmaster/ (only .postmaster/project.toml may be committed)"
 }
+# Every path enumeration is captured to a file with its exit checked: a git
+# failure that silently yielded no paths would pass a tree that was never read.
+capture() {  # capture <git args...>: one NUL enumeration into $ENUMF
+  ENUMF=$(mktemp) || fail "could not stage the scan"
+  git "$@" > "$ENUMF" 2>/dev/null || fail "the tree could not be read"
+}
+release() { rm -f -- "$ENUMF"; ENUMF=""; }
 
 # Committed in the range first: a file added and then deleted before the tip
 # is gone from the tip but was still committed. Deletions never fault.
+capture log --diff-filter=AMT -z --name-only --pretty=format: "$BASE..$HEAD_REF" -- .postmaster
 while IFS= read -r -d '' p; do
   [ -n "$p" ] || continue
   [ "$p" = ".postmaster/project.toml" ] && continue
   seen_has "$p" && continue
   seen_add "$p"
   fault_postmaster "$p" committed
-done < <( git log --diff-filter=AMT -z --name-only --pretty=format: "$BASE..$HEAD_REF" -- .postmaster 2>/dev/null )
+done < "$ENUMF"
+release
 # Then the tip: tracked files, plus staged additions and changes, never
 # staged deletions, which remove a record rather than adding one.
+capture ls-files -z -- .postmaster
+git diff --cached --name-only -z --diff-filter=ACMRT -- .postmaster >> "$ENUMF" 2>/dev/null \
+  || fail "the tree could not be read"
 while IFS= read -r -d '' p; do
   [ -n "$p" ] || continue
   [ "$p" = ".postmaster/project.toml" ] && continue
@@ -333,7 +359,8 @@ while IFS= read -r -d '' p; do
   seen_add "$p"
   if git cat-file -e "HEAD:$p" 2>/dev/null; then how=committed; else how=staged; fi
   fault_postmaster "$p" "$how"
-done < <( { git ls-files -z -- .postmaster; git diff --cached --name-only -z --diff-filter=ACMRT -- .postmaster; } 2>/dev/null )
+done < "$ENUMF"
+release
 
 scan_blob() {  # scan_blob <ref> <path> <skip|fail>: scan one blob for faults
   local blob out code safe ln
@@ -359,16 +386,20 @@ scan_blob() {  # scan_blob <ref> <path> <skip|fail>: scan one blob for faults
 
 # Staged additions are scanned as staged blobs: the worktree copy may already
 # differ from what is staged.
+capture diff --cached --name-only -z --diff-filter=A -- raw/
 while IFS= read -r -d '' p; do
   [ -n "$p" ] || continue
   scan_blob ":$p" "$p" fail
-done < <( git diff --cached --name-only -z --diff-filter=A -- raw/ 2>/dev/null )
+done < "$ENUMF"
+release
 # Committed additions are scanned as head blobs: the worktree copy may be
 # dirty, missing, or ahead of what the range added.
+capture diff --name-only -z --diff-filter=A "$BASE" "$HEAD_REF" -- raw/
 while IFS= read -r -d '' p; do
   [ -n "$p" ] || continue
   scan_blob "$HEAD_REF:$p" "$p" skip
-done < <( git diff --name-only -z --diff-filter=A "$BASE" "$HEAD_REF" -- raw/ 2>/dev/null )
+done < "$ENUMF"
+release
 
 if [ -n "$FAULTS" ]; then printf '%s\n' "$FAULTS"; exit 1; fi
 exit 0

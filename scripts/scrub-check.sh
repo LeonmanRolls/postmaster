@@ -233,13 +233,17 @@ HARNESS_NAMES = (
 # Absolute paths only: a home or root directory under a variable or a relative
 # parent ($tmp/root, $d/home) is scratch scaffolding, not a leak. The lookbehind
 # keeps PATH-style lists (preceded by a colon) matching.
+# A home user ends where its name ends: a quote, a space or the line end
+# after a bare directory is still a home directory, not just a trailing
+# slash. A bare tilde user must read as a name, with a letter in it, so
+# version ranges stay silent.
 PRIVATE_PATH = re.compile(
-    r"(?<![A-Za-z0-9_.$}~.-])(?:/home/|/Users/)([A-Za-z0-9._-]+)(?=/|$)"
+    r"(?<![A-Za-z0-9_.$}~.-])(?:/home/|/Users/)([A-Za-z0-9._-]+)(?![A-Za-z0-9._-])"
     r"|(?<![A-Za-z0-9_.$}~.-])/ro[o]t/[A-Za-z0-9._-]+"
-    r"|(?<![A-Za-z0-9_])~(?!\.)([A-Za-z0-9._-]+)/[^\s\"'<>),;]*"
+    r"|(?<![A-Za-z0-9_])~(?!\.)([A-Za-z0-9._-]*[A-Za-z][A-Za-z0-9._-]*)(?:/[^\s\"'<>),;]*)?(?![A-Za-z0-9._-])"
     r"|(?<![A-Za-z0-9_.$}~.-])/tmp/(?:" + "|".join(HARNESS_NAMES)
     + r")(?:-[A-Za-z0-9._-]+|/[^\s\"'<>),;]+)"
-    r"|(?<![A-Za-z0-9_])[A-Za-z]:\\Users\\([A-Za-z0-9._-]+)(?=$|\\)",
+    r"|(?<![A-Za-z0-9_])[A-Za-z]:\\Users\\([A-Za-z0-9._-]+)(?![A-Za-z0-9._-])",
     re.IGNORECASE)
 IPV4 = re.compile(r"(?<![0-9.])(?:[0-9]{1,3}\.){3}[0-9]{1,3}(?![0-9.])")
 IPV6 = re.compile(r"(?<![0-9A-Fa-f:])(?:[0-9A-Fa-f]{0,4}:){2,7}[0-9A-Fa-f]{0,4}(?![0-9A-Fa-f:])")
@@ -306,6 +310,14 @@ def dotenv_finding(line):
             rest = value[end + 1:].strip()
             if rest == "" or rest.startswith("#"):
                 value = value[1:end]
+    elif re.match(r"#(\s|$)", value):
+        # A comment on its own assigns nothing.
+        value = ""
+    else:
+        # An unquoted value ends where its comment starts: without the
+        # strip, a metacharacter in the comment would excuse the secret
+        # before it. A hash without a blank before it stays literal.
+        value = re.split(r"\s+#", value, maxsplit=1)[0]
     if len(value) < DOTENV_MIN_VALUE or ABSENT_VALUE.match(value):
         return None
     if DOTENV_METACHAR.search(value):
@@ -712,6 +724,16 @@ def self_test(root):
             pos("private-path", "cache under " + scratch_path + "\n", "pos-scratch-path")
             pos("private-path", "notes at " + "~" + "fixture-user-413" + "/docs\n",
                 "pos-tilde-path")
+            pos("private-path", "{\"cwd\": \"" + "/home/" + "fixture-user-413" + "\"}\n",
+                "pos-home-quoted")
+            pos("private-path", "dir " + "/home/" + "fixture-user-413" + " is here\n",
+                "pos-home-space")
+            pos("private-path", "see " + "/home/" + "fixture-user-413" + ". Next\n",
+                "pos-home-period")
+            pos("private-path", "ver \"" + "C:" + "\\Users\\" + "fixture-user-413" + "\"\n",
+                "pos-drive-quoted")
+            pos("private-path", "at " + "~" + "fixture-user-413" + "\n",
+                "pos-tilde-bare")
             pos("private-host", "endpoint " + private_ip + ":8080\n", "pos-private-ip")
             pos("private-host", "status at https://" + private_host + ":8443/up\n", "pos-private-host")
             pos("token", "relay key " + fake_token + "\n", "pos-token")
@@ -725,6 +747,10 @@ def self_test(root):
                 "pos-dotenv-comment")
             pos("dotenv", 'SESSION_SECRET=\'relay-413-quiet-secret\' # rotate soon\n',
                 "pos-dotenv-single-comment")
+            pos("dotenv", 'SESSION_SECRET=relay-413-quiet-secret # rotate $STAGING soon\n',
+                "pos-dotenv-unquoted-comment")
+            pos("dotenv", 'SESSION_SECRET=sec#retLiteralValue99\n',
+                "pos-dotenv-literal-hash")
 
             print("negative controls: clean lines stay silent")
             neg("the ship card lists each check and its exit code\n",
@@ -740,6 +766,10 @@ def self_test(root):
                 "neg-dotenv-composed", "a composed assignment value is clean")
             neg("TOKEN=\"alpha\"+\"beta\"\n",
                 "neg-dotenv-quoted-composed", "a quoted composed value is clean")
+            neg("SESSION_SECRET=# rotate soon replacement pending\n",
+                "neg-dotenv-comment-only", "a comment on its own assigns nothing")
+            neg("MY_PASSWORD=short # a much longer comment here\n",
+                "neg-dotenv-short-stripped", "a short value stays short under its comment")
             neg("write " + "someone" + AT + "example.org for the demo\n",
                 "neg-reserved-example", "a reserved example domain is clean")
             neg("write " + "someone" + AT + "thing.test for the demo\n",
@@ -776,6 +806,14 @@ def self_test(root):
                 "neg-tilde-user", "a tilde placeholder user is clean")
             neg("notes at " + "~" + "username" + "/docs\n",
                 "neg-tilde-username", "a tilde username placeholder is clean")
+            neg("\"version\": \"" + "~1.0" + "\"\n",
+                "neg-tilde-semver", "a version range is not a home directory")
+            neg("range " + "~1.0" + "/x ok\n",
+                "neg-tilde-numeric", "a numeric tilde user is not a name")
+            neg("at " + "/home/" + "user" + " is here\n",
+                "neg-home-placeholder-space", "a placeholder stays clean before a space")
+            neg("{\"cwd\": \"" + "/home/" + "user" + "\"}\n",
+                "neg-home-placeholder-quoted", "a placeholder stays clean before a quote")
             neg("keys live in ~/.ssh/id_rsa\n",
                 "neg-tilde-dotdir", "a generic dot directory names nobody")
             neg("read /home/user/docs for the layout\n",

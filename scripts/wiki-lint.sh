@@ -108,9 +108,20 @@ for p in pages:
 # The scrub is the shape authority, so only its private-path and private-host
 # kinds fault a page; documenting the rule's own examples stays possible. The
 # scrub needs a repository, so outside one this check degrades to nothing.
-top = subprocess.run(
-    ["git", "rev-parse", "--show-toplevel"],
-    stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, check=False)
+# The checkout is the target's own, never the caller's: discovering it from
+# the caller's directory would skip the scan whenever the caller stands
+# outside a repository. A target that is not a checkout either keeps the
+# caller's discovery, for the fixtures the self-test runs from this repo.
+def git_top(path):
+    found = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"], cwd=path,
+        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, check=False)
+    return found if found.returncode == 0 else None
+top = git_top(str(repo))
+if top is None:
+    top = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"],
+        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, check=False)
 if pages and top.returncode == 0:
     scrub = os.environ.get("WIKI_LINT_SCRUB", "")
     if not scrub or not pathlib.Path(scrub).is_file():
@@ -388,6 +399,20 @@ out=$(bash "$tmp/stubbin/wiki-lint.sh" "$tmp" 2>/dev/null); code=$?
 [ "$code" -eq 2 ] \
   && printf '  ok   a missing scanner fails the lint\n' \
   || { printf '  FAIL a missing scanner fails the lint: exit %s\n' "$code"; fails=$((fails+1)); }
+
+elsewhere=$tmp/outside-fixture
+rm -r -- "$elsewhere" </dev/null 2>/dev/null
+mkdir -p "$elsewhere" && cp -r "$REPO/wiki" "$elsewhere/wiki" && mkdir -p "$elsewhere/raw"
+( cd "$elsewhere" && git init -q -b main . )
+printf -- '---\ntitle: away\ntype: concept\nstanding: claimed\nsources: []\nupdated: 2026-01-01\n---\n\nBody.\n' \
+  > "$elsewhere/wiki/concepts/away.md"
+printf '\n- [away](concepts/away.md)\n' >> "$elsewhere/wiki/index.md"
+AWP=$(printf '/home/%s' fixture-user)
+printf 'See %s-413/notes.txt for the log.\n' "$AWP" >> "$elsewhere/wiki/concepts/away.md"
+out=$( ( cd /tmp && lint "$elsewhere" ) 2>/dev/null); code=$?
+{ [ "$code" -eq 1 ] && printf '%s\n' "$out" | grep -qF 'private-path'; } \
+  && printf '  ok   a target outside the caller checkout still scans\n' \
+  || { printf '  FAIL a target outside the caller checkout still scans: exit %s\n' "$code"; fails=$((fails+1)); }
 
 echo
 [ "$fails" -eq 0 ] && { echo "self-test: all controls behaved"; exit 0; }

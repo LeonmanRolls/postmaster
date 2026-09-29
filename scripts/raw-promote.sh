@@ -12,8 +12,10 @@
 # scan runs first: every regular file under src goes through the scrub, and a
 # copy that trips does not complete. Proceeding anyway is the user's ruling,
 # and --ruled writes that ruling, with its reason, to wiki/log.md itself, so
-# no copy proceeds without its record; when the record cannot be written the
-# copy is removed again. A clean copy with --ruled logs nothing: there was
+# no copy proceeds without its record. Everything the record needs is staged
+# before the copy, and every failure after it removes the copy again, so a
+# failed promotion leaves nothing behind. A clean copy with --ruled logs
+# nothing: there was
 # nothing to rule. The destination must be under raw/ and must not exist:
 # evidence is never overwritten, and a ruling never edits raw/ in place.
 # Symlinks and other non-regular files are refused, never followed, and a
@@ -212,6 +214,25 @@ if [ "${1:-}" = "--self-test" ]; then
       || { printf '  FAIL an unwriteable log removes the copy and fails: exit %s\n' "$code"; fails=$((fails+1)); }
   }
   r=$(repo) && { cd "$r" || exit 2
+    printf 'Reach the relay at %s for pings.\n' "$SUSPECT" > "$tmp/dirty.md"
+    printf 'x' > "$r/wiki"
+    out=$(bash "$HERE/raw-promote.sh" --ruled 'self-test ruling: the staging address' \
+      "$tmp/dirty.md" raw/trials/t413/notes.md 2>/dev/null); code=$?
+    { [ "$code" -eq 2 ] && refused_clean "$r" raw/trials/t413/notes.md; } \
+      && printf '  ok   an uncreatable log dir refuses before the copy\n' \
+      || { printf '  FAIL an uncreatable log dir refuses before the copy: exit %s\n' "$code"; fails=$((fails+1)); }
+  }
+  r=$(repo) && { cd "$r" || exit 2
+    mkdir -p "$tmp/cpshim"
+    printf '#!/bin/sh\neval "dest=\\${$#}"; printf partial > "$dest"; exit 1\n' > "$tmp/cpshim/cp"
+    chmod +x "$tmp/cpshim/cp"
+    printf 'clean\n' > "$tmp/clean.md"
+    out=$(PATH="$tmp/cpshim:$PATH" bash "$HERE/raw-promote.sh" "$tmp/clean.md" raw/trials/t413/notes.md 2>/dev/null); code=$?
+    { [ "$code" -eq 2 ] && refused_clean "$r" raw/trials/t413/notes.md; } \
+      && printf '  ok   a failed copy removes its partial and fails\n' \
+      || { printf '  FAIL a failed copy removes its partial and fails: exit %s\n' "$code"; fails=$((fails+1)); }
+  }
+  r=$(repo) && { cd "$r" || exit 2
     mkdir -p "$tmp/nostub" && cp "$HERE/raw-promote.sh" "$tmp/nostub/"
     printf 'Reach the relay at %s for pings.\n' "$SUSPECT" > "$tmp/dirty.md"
     out=$(bash "$tmp/nostub/raw-promote.sh" "$tmp/dirty.md" raw/trials/t413/notes.md 2>/dev/null); code=$?
@@ -297,17 +318,27 @@ if [ -n "$TRIP" ] && [ -n "$RULED" ]; then
   case $rcode in 0) ;; *) fail "the ruling names a suspect; describe it, never quote it" ;; esac
 fi
 
-mkdir -p -- "$(dirname -- "$DEST")" || fail "could not create the destination"
-if [ -d "$SRC" ] && [ ! -L "$SRC" ]; then cp -r -- "$SRC" "$DEST" || fail "the copy failed"
-else cp -- "$SRC" "$DEST" || fail "the copy failed"; fi
-
+# Everything the record needs is staged before the copy: once anything is
+# copied, every later failure removes it again, so a failed promotion
+# leaves nothing behind and an unrecorded copy never stands.
 if [ -n "$TRIP" ] && [ -n "$RULED" ]; then
   kinds=$(printf '%s\n' "$TRIP" | sed -n 's/^.*: \([A-Za-z0-9_.-]*\)$/\1/p' | sort -u | tr '\n' ',' | sed 's/,$//;s/,/, /g')
   safe_dest=$(bash "$SCRUB" --safe-path "$DEST" 2>/dev/null) || fail "the scan could not finish"
   mkdir -p wiki || fail "the ruling could not be recorded"
+fi
+
+remove_copy() { rm -rf -- "$DEST" 2>/dev/null; }
+mkdir -p -- "$(dirname -- "$DEST")" || fail "could not create the destination"
+if [ -d "$SRC" ] && [ ! -L "$SRC" ]; then
+  cp -r -- "$SRC" "$DEST" || { remove_copy; fail "the copy failed"; }
+else
+  cp -- "$SRC" "$DEST" || { remove_copy; fail "the copy failed"; }
+fi
+
+if [ -n "$TRIP" ] && [ -n "$RULED" ]; then
   if ! printf '## [%s] promote-ruled | %s: the user ruled proceed (%s); the scan had reported: %s\n' \
       "$(date -u +%F)" "$safe_dest" "$RULED" "$kinds" >> wiki/log.md; then
-    if rm -rf -- "$DEST" 2>/dev/null; then
+    if remove_copy; then
       fail "the ruling could not be recorded; the copy was removed"
     else
       fail "the ruling could not be recorded and the copy could not be removed: $safe_dest"
