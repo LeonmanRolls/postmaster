@@ -22,8 +22,10 @@
 #   hotfix-reach.sh next-leg <dispatch> <leg> <prompt-file> [--tool <repo>]
 #       at the hand-off boundary, apply one dispatch's queued fix commits alone and add
 #       the main-fix note to the next leg's prompt. The postmaster runs this before
-#       launching each leg; it refuses a leg that has already started and a branch with
-#       uncommitted changes, and it never merges main into the run.
+#       launching each leg; it refuses a leg that has already started, a branch with
+#       uncommitted changes, and any advance past a leg with no completed hand-off,
+#       and it never merges main into the run. Branches that appeared since queue and
+#       carry a fixed file are included.
 #   hotfix-reach.sh --self-test
 #
 # <fix-commit> is the one non-merge commit on main that carries the fix, subject
@@ -39,6 +41,9 @@
 # cleanly that way; that branch is left alone and named, and whichever merges second
 # resolves the conflict. A stop between legs is a completed hand-off, .done plus a
 # hand-off that checks clean; an exited leg without one is a remount, not a boundary.
+# Advancing to the next leg always needs the completed hand-off, even before the
+# first bootstrap. A branch carries the fix only while its tree holds the fix's
+# content; history alone, past a revert, does not count.
 # Pin fixes are recorded beside the pin as <dispatch-commit>.fixes, one "<pin-sha>
 # <fix-sha>" pair per fix it applied, so run-meta.sh check still accepts the checkout;
 # a row counts only while its pin is still in the pin's history, so a reset or
@@ -289,9 +294,13 @@ def at_boundary(dispatch, manifest):
     stage = (manifest or {}).get("stage") or ""
     if stage in ("", "dispatched") or leg <= 0:
         return True
-    # An exited leg with no completed hand-off is a remount, not a boundary: the
-    # postmaster restarts it rather than launching the next leg. Only .done plus a
-    # hand-off that checks clean counts.
+    return leg_completed(dispatch, leg)
+
+
+def leg_completed(dispatch, leg):
+    # A leg is complete only on .done plus a hand-off that checks clean. An
+    # exited leg without one is a remount, not a boundary, at every stage:
+    # advancing past it without a hand-off is never allowed.
     return (dispatch / (".leg-%d-done" % leg)).exists() and handoff_ok(dispatch, leg)
 
 
@@ -395,12 +404,36 @@ def apply_conflicts(repo, branch, tool, fix, patch):
         shutil.rmtree(tmp, ignore_errors=True)
 
 
-def already_on_branch(repo, branch, fix):
+def history_has_fix(repo, branch, fix):
     if git(repo, "merge-base", "--is-ancestor", fix["commit"], branch, check=False)[0] == 0:
         return True
     _, out, _ = git(repo, "log", "--format=%s", "--grep=Main's fix %s" % fix["short"],
                      branch, check=False)
     return bool(out.strip())
+
+
+def branch_has_fix(repo, branch, tool, fix):
+    """The branch carries the fix's content, not just its history. A revert
+    removes the content while leaving the commit behind; that branch needs the
+    fix again, and one that changed the lines since reads as a conflict when
+    the re-delivery is attempted."""
+    if not history_has_fix(repo, branch, fix):
+        return False
+    if not ensure_fix_object(repo, tool, fix):
+        return True
+    tmp = pathlib.Path(tempfile.mkdtemp(prefix="hotfix-reach-"))
+    try:
+        if git(repo, "worktree", "add", "--detach", str(tmp), branch, check=False)[0]:
+            return True
+        if git(tmp, "cherry-pick", "--no-commit", fix["commit"], check=False)[0]:
+            abort_pick(tmp)
+            return False
+        empty = pick_empty(tmp)
+        abort_pick(tmp)
+        return empty
+    finally:
+        git(repo, "worktree", "remove", "--force", str(tmp), check=False)
+        shutil.rmtree(tmp, ignore_errors=True)
 
 
 def classify(repo, info, tool, fix, patch):
@@ -411,7 +444,7 @@ def classify(repo, info, tool, fix, patch):
     mid = not at_boundary(info["dispatch"], info["manifest"])
     needs, skipped, done = [], [], []
     for b in carries:
-        if already_on_branch(repo, b, fix):
+        if branch_has_fix(repo, b, tool, fix):
             done.append(b)
         elif apply_conflicts(repo, b, tool, fix, patch):
             skipped.append(b)
@@ -793,7 +826,7 @@ def check_boundary(dispatch, manifest, leg):
                           "leg or between legs" % leg)
     if leg != current and leg != current + 1:
         raise HotfixError("leg %d does not follow the manifest leg %d" % (leg, current))
-    if leg == current + 1 and not at_boundary(dispatch, manifest):
+    if leg == current + 1 and not leg_completed(dispatch, current):
         raise HotfixError("leg %d has not reached a completed hand-off boundary; "
                           "hotfixes are applied only between legs" % current)
 
@@ -848,9 +881,15 @@ def do_next_leg(tool, dispatch_s, leg_s, prompt_s):
         if missing:
             raise HotfixError("queued branch %s is gone from %s; resolve by hand"
                               % (", ".join(missing), repo))
+        # Branches created after queue, such as workhorse branches cut while the
+        # run was still at dispatched, need the fix as much as the queued ones.
+        for b in run_branches(dispatch, repo):
+            if b not in branches \
+               and any(branch_carries(repo, b, f) for f in fix["paths"]):
+                branches.append(b)
         applied, skipped = {}, list(item.get("skipped_conflict", []))
         for b in branches:
-            if already_on_branch(repo, b, fix):
+            if branch_has_fix(repo, b, tool, fix):
                 applied[b] = git(repo, "rev-parse", b, check=False)[1]
                 continue
             if apply_conflicts(repo, b, tool, fix, patch):
@@ -1458,6 +1497,66 @@ out=$("$SELF" next-leg "$dJ" 2 "$dJ/leg-2-prompt.txt" --tool "$toolJ" 2>"$tmp/er
   && [ "$(cmd "$projJ" show tJ:scripts/foo.sh)" = "$(printf 'a\nb\nC')" ] \
   && ok "and both files land in the applied commit with the fix" \
   || fail "and both files land in the applied commit with the fix (exit $rc)" "$out$(cat "$tmp/err")"
+
+echo "a branch created after queue still gets the fix"
+dL=$(dispatch "$RUNS_A" tL checkpoint-1 1 '{"luna": {}}')
+between_legs "$dL"
+cmd "$projA" checkout -qb tL main
+cmd "$projA" checkout -q tA
+"$SELF" queue "$FIX" "$RUNS_A" --tool "$tool" >/dev/null 2>&1
+cmd "$projA" checkout -qb wb/tL-luna main
+cmd "$projA" checkout -q tA
+printf 'You are the coachman for leg 2.\n' > "$dL/leg-2-prompt.txt"
+out=$("$SELF" next-leg "$dL" 2 "$dL/leg-2-prompt.txt" --tool "$tool" 2>"$tmp/err"); rc=$?
+[ $rc -eq 0 ] && cmd "$projA" log -1 --format=%s tL | grep -q "Main's fix" \
+  && cmd "$projA" log -1 --format=%s wb/tL-luna | grep -q "Main's fix" \
+  && ok "a lane branch cut after queue is picked up at the boundary" \
+  || fail "a lane branch cut after queue is picked up at the boundary (exit $rc)" "$out$(cat "$tmp/err")"
+
+echo "advancing past an incomplete leg is refused at every stage"
+dP=$(dispatch "$RUNS_A" tP dispatched 1 '{}')
+: > "$dP/.leg-1-exited"
+cmd "$projA" checkout -qb tP main
+cmd "$projA" checkout -q tA
+"$SELF" queue "$FIX" "$RUNS_A" --tool "$tool" >/dev/null 2>&1
+printf 'You are the coachman for leg 2.\n' > "$dP/leg-2-prompt.txt"
+beforeP=$(cmd "$projA" rev-parse tP)
+out=$("$SELF" next-leg "$dP" 2 "$dP/leg-2-prompt.txt" --tool "$tool" 2>&1); rc=$?
+[ $rc -eq 1 ] && printf '%s\n' "$out" | grep -q "completed hand-off boundary" \
+  && [ "$(cmd "$projA" rev-parse tP)" = "$beforeP" ] \
+  && ok "next-leg 2 over an exited-only leg 1 refuses before the first bootstrap too" \
+  || fail "next-leg 2 over an exited-only leg 1 refuses before the first bootstrap too (exit $rc)" "$out"
+dP0=$(dispatch "$RUNS_A" tP0 dispatched 1 '{}')
+cmd "$projA" checkout -qb tP0 main
+cmd "$projA" checkout -q tA
+"$SELF" queue "$FIX" "$RUNS_A" --tool "$tool" >/dev/null 2>&1
+printf 'You are the coachman for leg 1.\n' > "$dP0/leg-1-prompt.txt"
+out=$("$SELF" next-leg "$dP0" 1 "$dP0/leg-1-prompt.txt" --tool "$tool" 2>"$tmp/err"); rc=$?
+[ $rc -eq 0 ] && cmd "$projA" log -1 --format=%s tP0 | grep -q "Main's fix" \
+  && ok "and the legitimate pre-leg application still lands" \
+  || fail "and the legitimate pre-leg application still lands (exit $rc)" "$out$(cat "$tmp/err")"
+
+echo "a reverted fix is delivered again"
+dV=$(dispatch "$RUNS_A" tV checkpoint-1 1 '{}')
+between_legs "$dV"
+cmd "$projA" checkout -qb tV main
+cmd "$projA" checkout -q tA
+"$SELF" queue "$FIX" "$RUNS_A" --tool "$tool" >/dev/null 2>&1
+printf 'You are the coachman for leg 2.\n' > "$dV/leg-2-prompt.txt"
+"$SELF" next-leg "$dV" 2 "$dV/leg-2-prompt.txt" --tool "$tool" >/dev/null 2>&1
+cmd "$projA" checkout -q tV
+cmd "$projA" revert --no-edit HEAD >/dev/null 2>&1
+cmd "$projA" checkout -q tA
+out=$("$SELF" report "$FIX" "$RUNS_A" --tool "$tool" 2>"$tmp/err"); rc=$?
+[ $rc -eq 0 ] && printf '%s\n' "$out" | grep -q "tV  *branch  *fix commit on" \
+  && ok "a reverted branch needs the fix again, not already-on" \
+  || fail "a reverted branch needs the fix again, not already-on (exit $rc)" "$out$(cat "$tmp/err")"
+"$SELF" queue "$FIX" "$RUNS_A" --tool "$tool" >/dev/null 2>&1
+printf 'You are the coachman for leg 2.\n' > "$dV/leg-2-prompt.txt"
+out=$("$SELF" next-leg "$dV" 2 "$dV/leg-2-prompt.txt" --tool "$tool" 2>"$tmp/err"); rc=$?
+[ $rc -eq 0 ] && [ "$(cmd "$projA" show tV:scripts/foo.sh)" = "new" ] \
+  && ok "and the re-delivery restores the content" \
+  || fail "and the re-delivery restores the content (exit $rc)" "$out$(cat "$tmp/err")"
 
 echo
 [ "$fails" -eq 0 ] && { echo "self-test: all controls behaved"; exit 0; }
