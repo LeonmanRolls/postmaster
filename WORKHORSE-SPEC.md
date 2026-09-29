@@ -95,21 +95,21 @@ No new script is added, so the gate's self-test list is unchanged.
 
 ## Tasks
 
-- [ ] T001 [P] [AC2] `scripts/launch.sh`: add `thread-id` and `transient` adapter commands
+- [x] T001 [P] [AC2] `scripts/launch.sh`: add `thread-id` and `transient` adapter commands
   with self-test controls; `skills/postmaster/harnesses.md` documents the transient set and
   the thread-id shapes.
-- [ ] T002 [AC1] `scripts/runs-watch.sh`: take-dispatch path — hand-off check, `turnpikes.sh
+- [x] T002 [AC1] `scripts/runs-watch.sh`: take-dispatch path — hand-off check, `turnpikes.sh
   legs`, leg prompt, launch through `host.sh`/`launch.sh`, thread id and `leg` recorded,
   `dispatch` logged with "the watcher took it"; failures wake the postmaster.
-- [ ] T003 [AC2] `scripts/runs-watch.sh`: take-resume path — transient check via
+- [x] T003 [AC2] `scripts/runs-watch.sh`: take-resume path — transient check via
   `launch.sh transient`, remount prompt, resume on the leg's own thread, count file in the
   dispatch directory (max 3), `resume` logged; fourth end and non-transient wakes.
-- [ ] T004 [AC3] `scripts/runs-watch.sh` + `skills/postmaster/postmaster.md` Stage D: every
+- [x] T004 [AC3] `scripts/runs-watch.sh` + `skills/postmaster/postmaster.md` Stage D: every
   judgment case still wakes (RULE, GATE, READ, INSPECT, quota/wall, launch refusal, and any
   step the watcher could not complete); Stage D describes the watcher taking steps.
-- [ ] T005 [AC4] `scripts/runs-watch.sh`: held check before any take-step; a held run is left
+- [x] T005 [AC4] `scripts/runs-watch.sh`: held check before any take-step; a held run is left
   alone entirely.
-- [ ] T006 [AC5] `scripts/runs-watch.sh --self-test`: positive control for dispatch taken and
+- [x] T006 [AC5] `scripts/runs-watch.sh --self-test`: positive control for dispatch taken and
   resume taken; a wake control for each AC3 member; negative control that a held run is left
   alone; the controls run `runs-watch.sh` with `POSTMASTER_WATCH_TAKE` stubbed.
 - [ ] T007 [P] [AC1] [AC2] [AC3] [AC4] [AC5] Run the gate and `verify.sh run .`; write
