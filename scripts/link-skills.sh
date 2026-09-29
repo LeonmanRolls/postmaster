@@ -156,7 +156,8 @@ links_to() { [ -L "$1" ] && [ "$(readlink "$1")" = "$2" ]; }
 echo "installing: every skill, for every installed harness with a skills folder"
 out=$(make_links "$TOOL" 0 2>&1); rc=$?
 if [ $rc -eq 0 ] && links_to "$C/postmaster" "$TOOL/skills/postmaster" && links_to "$C/wiki" "$TOOL/skills/wiki" \
-   && links_to "$A/postmaster" "$TOOL/skills/postmaster" && links_to "$A/wiki" "$TOOL/skills/wiki"; then
+   && links_to "$C/hotfix" "$TOOL/skills/hotfix" && links_to "$A/postmaster" "$TOOL/skills/postmaster" \
+   && links_to "$A/wiki" "$TOOL/skills/wiki" && links_to "$A/hotfix" "$TOOL/skills/hotfix"; then
   ok "each skill is a link from claude's folder and from ~/.agents/skills to the checkout"
 else fail "each skill is a link from claude's folder and from ~/.agents/skills to the checkout (exit $rc)" "$out"; fi
 [ "$(ls -A "$HOME" | tr '\n' ' ')" = ".agents .claude " ] \

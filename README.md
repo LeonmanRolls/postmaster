@@ -96,6 +96,7 @@ scripts/wait-for-markers.sh <dir> <glob> <count> <timeout>       # block until a
 scripts/review-round.sh start|wait|teardown <dispatch> <round> … # a review round's deadline, its wait, its teardown
 scripts/log-action.sh <dispatch> <actor> <action> <target> …     # one JSON line per action
 scripts/tool-faults.sh harvest|comment|file|decline <dispatch> …  # a closed run's tool faults, as tickets
+scripts/hotfix.sh report|queue|next-leg …                        # carry a merged postmaster fix safely to runs in flight
 scripts/stage.sh <dispatch> <stage>                               # the one way a run changes stage
 scripts/run-times.sh <dispatch>                                   # how long each stage took, from the log
 scripts/run-log.sh <dispatch> <text> | --section <title> | --close # the narrative, timestamped
@@ -171,6 +172,9 @@ this repo's `skills/postmaster/SKILL.md` by its absolute path.
 wiki, works in a checkout of this repo, and is only wanted by a session doing that. Each
 directory is one skill; the other files beside a `SKILL.md` are its reference material, loaded
 when its instructions send an agent to them rather than up front.
+
+`skills/hotfix` repairs a fault in postmaster itself. The skill installer links it by name to
+every harness that has a skills folder.
 
 **Tickets are GitHub Issues on a GitHub Projects board by default:** a kanban you can open,
 with each ticket a card in the column its state says, and nothing to configure beyond `gh`

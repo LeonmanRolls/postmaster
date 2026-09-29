@@ -180,7 +180,15 @@ file; the postmaster keeps using its main `<tool>` for every other supervision s
    `coachman.md` says." Then wait for its done marker.
 3. **Launch** through the host, which shows the leg in the synthesis worktree's space
    (`hosts.md`), stream to the leg's events file, marker on exit; `host.sh` clears the leg's
-   exited marker first:
+   exited marker first. Before launching, run:
+
+   ```sh
+   <tool>/scripts/hotfix.sh next-leg <tool> <dispatch> <n> <dispatch>/leg-<n>-prompt.txt
+   ```
+
+   It adds a note only when a merged main fix is queued. A refusal stops dispatch; take its
+   message to the user. It applies branch commits only after the prior leg's completed hand-off,
+   and never merges main into the run:
 
    ```sh
    <rt>/scripts/host.sh run "$(<rt>/scripts/host.sh name <dispatch> coachman <leg-name> <n>)" <repo>/.worktrees/<TICKET> \
@@ -381,8 +389,9 @@ faults), with `postmaster` as the actor: in the run you were acting on, or in
 doing: log `escalate` with the postmaster file as its target, and send it up (Stage E, step
 3). Anything else may be worked around, with the workaround in the same line.
 
-**Their tickets are shown to the user once, when a run's aftercare ends:** after the merge
-(Stage G) or on abandon. Nothing else puts them to the user.
+**Tool faults are harvested after the run closes:** after the merge (Stage G) or on abandon.
+The supervising postmaster may start `/hotfix` sooner when a fix is warranted. A hotfix has its
+own ticket and branch; it never edits the run's branch during a leg.
 
 1. **Harvest them:** `<tool>/scripts/tool-faults.sh harvest <dispatch>`, then the same for
    `<runs>/postmaster`. Each groups the `tool-fault` lines into distinct faults, drafts a
@@ -426,7 +435,8 @@ only with the user's word for that specific thing, and the word is logged.
 - Never delete a dispatch directory, a manifest or a ledger line.
 - Never trust a card, a summary or a hand-off over the code; verify before every grant.
 - Never launch more runs than `team.max_runs`.
-- Never modify postmaster itself, whatever the target: a fault you meet in it is a tool fault
-  (Tool faults), and a fault in a control is never worked around.
+- Never modify postmaster while supervising a run: a fault you meet in it is a tool fault
+  (Tool faults). Use `/hotfix` for a separate ticket and branch. A fault in a control is never
+  worked around.
 - Every action is a `log-action` line at the moment it happens. If it is not in the ledger,
   it did not happen.

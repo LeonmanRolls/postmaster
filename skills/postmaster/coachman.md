@@ -79,8 +79,10 @@ later, rather than a sentence in prose that cannot be counted.
 
 A tool fault is postmaster misbehaving: a script that fails or answers wrong, a runbook step
 that cannot be done as written, a harness adapter whose form does not work. The target's own
-code or gate failing is not one; that is the run's work. Postmaster is never fixed during a
-run, whatever the target: the fault becomes a ticket when the run closes.
+code or gate failing is not one; that is the run's work. A coachman never fixes postmaster in
+the run branch. The supervising postmaster may start the separate `/hotfix` workflow while the
+run is in flight; the fix has its own ticket and branch. Otherwise, the fault becomes a ticket
+when the run closes.
 [Why](../../wiki/concepts/tool-faults.md)
 
 1. **Log it at once**, before anything else, with your own diagnosis and proposed fix:
