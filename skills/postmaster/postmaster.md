@@ -129,9 +129,10 @@ For the next ticket in order, when the run ceiling (`team.max_runs`) has room:
    <sha>`. The coachman's cwd is that worktree from its first leg, so the project's ambient
    context loads for it.
 6. **Write `brief.md`** from the template in `SKILL.md`: the `turnpikes:` line step 1's check
-   printed, whole, under the waybill's title, then the ticket verbatim, the project profile (gate,
+   printed, whole, under the waybill's title, then the `legs:` line
+   `<tool>/scripts/turnpikes.sh legs --names '<that turnpikes: line>'` prints, then the ticket verbatim, the project profile (gate,
    build, browser suite, the checks as `verify.sh record` printed them, docs to read first,
-   tracker, risk surfaces), the team from the config
+   tracker, landing, risk surfaces), the team from the config
    with its reviewer lines as `<tool>/scripts/reviewers.sh lines` prints them, `CHECKPOINT_MODE`
    from `ship.checkpoint_mode` and `MERGE_AUTHORITY` from `ship.merge_authority`, either
    overridden only where the user said so for this run, the dispatch path and `<tool>`. The
@@ -143,12 +144,14 @@ For the next ticket in order, when the run ceiling (`team.max_runs`) has room:
 
 ## Stage C: dispatch a leg
 
-A run's legs are the lines `<tool>/scripts/turnpikes.sh legs <dispatch>` prints: `synthesis` and
-`ship`, with `review` between them when the waybill names a turnpike it runs (`coachman.md`,
-Legs). Each leg is a fresh coachman thread, launched the same way; the first is launched after
-the waybill, every later one when the previous leg's marker appears. Every launch and resume in
-a run passes `--run <dispatch>`, so it runs on the config in the run's `run.json`, never the
-live one. Below, `<p>` is the leg before leg `<n>` in that list.
+A run's legs are the lines `<tool>/scripts/turnpikes.sh legs <dispatch>` prints: at most
+`synthesis` and `review`, with review only when the waybill names a turnpike it runs
+(`coachman.md`, Legs). A run dispatched before the two-leg change keeps a third leg, `ship`.
+Each leg is a fresh coachman thread,
+launched the same way; the first is launched after the waybill, every later one when the
+previous leg's marker appears. Every launch and resume in a run passes `--run <dispatch>`, so
+it runs on the config in the run's `run.json`, never the live one. Below, `<p>` is the leg
+before leg `<n>` in that list.
 [Why a run keeps the config it started with](../../wiki/concepts/run-config.md)
 
 1. **Write the leg prompt** to `<runs>/<TICKET>/leg-<n>-prompt.txt`: "You are the coachman
@@ -214,8 +217,9 @@ Act on the `NEXT` column, run by run, and log every action:
 - **GATE:** the ship card is complete. Stage F.
 - **DISPATCH:** the leg's `.leg-<n>-done` marker is present. Stage C for the leg after `n` in
   `<tool>/scripts/turnpikes.sh legs <dispatch>`, logging a `note` that names any leg the list leaves
-  out; after the ship leg, Stage G. If the script exits other than 0, nothing is dispatched:
-  its message goes to the user as Stage E step 3 says.
+  out; after the last leg, Stage G's close. The last leg writes its card and its hand-off
+  together, so its done marker usually arrives as GATE (the card), not DISPATCH. If the script
+  exits other than 0, nothing is dispatched: its message goes to the user as Stage E step 3 says.
 - **REMOUNT:** the leg's process exited (`.leg-<n>-exited`) with no hand-off, escalation or
   card. Read the leg's `.err` file and the stream tail. A `.err` that opens with a `launch:`
   line is a refusal from `<tool>/scripts/launch.sh`: it goes to the user (Stage E step 3), and nothing
@@ -268,9 +272,11 @@ never the record.
    step 5) with the ruling as the prompt. The ruling is a prompt to a resumed thread, never
    text typed into anything.
 
-## Stage F: the gate
+## Stage F: the card
 
-On `.card-ready`, read `<dispatch>/card.md` and `<dispatch>/handoff-3.md`:
+On `.card-ready`, read `<dispatch>/card.md` and the last leg's hand-off (`handoff-2.md`, or
+`handoff-1.md` when the run has one leg; a run dispatched before the two-leg change has
+`handoff-3.md`):
 
 1. **Verify the card's claims against the code**, never against the card. In the synthesis
    worktree: the gate command exits 0 unpiped (log `gate` with its exit); every branch the
@@ -281,39 +287,85 @@ On `.card-ready`, read `<dispatch>/card.md` and `<dispatch>/handoff-3.md`:
    other lens, and each other turnpike's result on the card is in the record its step writes;
    when `<tool>/scripts/turnpikes.sh short '<the waybill's turnpikes: line>'` names any default
    turnpike, the ledger holds the user's word on this ticket's turnpikes; the blind acceptance tests are the first commit on the branch, or the Decisions
-   section of `handoff-3.md` carries leg 1's reason for not writing them;
+   section of the last hand-off carries leg 1's reason for not writing them;
    `<tool>/scripts/verify.sh results <dispatch> <synthesis-wt>` gives a result for every check at
    the synthesis HEAD, and the card gives each one that did not pass as it is; the Style
    residue's count is what `<tool>/scripts/style-findings.sh count <dispatch>` prints.
-2. **Grant or withhold.** Every word is delivered by resuming leg 3 (Stage C, step 5), and
-   `.card-ready` is removed before it is; the coachman touches it afresh when the card changes.
-   `MERGE_AUTHORITY: postmaster` and every check above holds: deliver "MERGE GRANTED" and log
-   `merge` with `granted`. Any check fails: deliver the failure as a ruling and log `merge` with
-   `withheld` and the reason; the leg addresses it and raises the card again.
-   `MERGE_AUTHORITY: user`: put the card, the review link and your verification in front of the
-   user, write what you asked them to the run's `.waiting-on-user`, and wait; when their word
-   comes, remove `.waiting-on-user` and deliver the word verbatim.
-3. **Never merge yourself.** The coachman merges on the word; you only say it.
+2. **Open the pull request, or merge on the word.** A check fails: log `merge` with `withheld`
+   and the reason, remove `.card-ready`, and resume the last leg (Stage C, step 5) with the
+   failure as the ruling; it addresses it and touches `.card-ready` afresh. Every check holds
+   and the project lands through pull requests (`landing` in the waybill's project profile):
+   push the ticket branch, open the pull request through `gh pr create` with what the card
+   carries (the change, the branch, the gate summary, the diff stat, the review link, the
+   preview link where there is one), log `merge` with `opened`, and put the pull request in
+   front of the user in `.waiting-on-user`. When they say it is merged, remove
+   `.waiting-on-user`, log `merge` with `merged`, and set the stage:
+   `<tool>/scripts/stage.sh <dispatch> shipped postmaster`. Every check holds and the project
+   merges locally: `MERGE_AUTHORITY: postmaster` means you merge on your own verification —
+   check out the default branch in the main checkout and `git merge --no-ff <ticket-branch>`
+   (merge, never rebase) — log `merge` with `granted` and `merged`, move the ticket to done,
+   and set the stage to `shipped postmaster`. `MERGE_AUTHORITY: user` means the merge word
+   comes from them: put the card, the review link and your verification in front of the user,
+   write what you asked them to the run's `.waiting-on-user`, and wait; when their word comes,
+   remove `.waiting-on-user`, log `merge` with `granted`, merge as above, and log `merged`.
+   Never escalate a grant the waybill gives you up to the user, and never say the merge word
+   without `MERGE_AUTHORITY` or the user behind it.
+3. **Then Stage G's aftercare.** The merge (or the user's word that the pull request landed) is
+   what aftercare waits on; nothing in Stage G starts before it.
 
 ## Stage G: after the merge
 
-1. **Confirm** the default branch carries the merge (`git -C <repo> log -1` on it) and the
-   ticket is done in the tracker; if the coachman could not move it, do so and log
-   `ticket-state`. Check the style sort too, once the last leg's process has exited
-   (`.leg-3-exited`): `<tool>/scripts/style-findings.sh check <dispatch>` exits 0. On exit 2,
-   remove `.leg-3-done` and resume leg 3 (Stage C, step 5) with its lines and "Fix the style sort
-   as `coachman.md` says, and end the leg", then wait for its done marker. On exit 1, tell the
-   user what it printed.
-2. **Tear down** the synthesis worktree from outside it, once the last leg's process has exited
-   (`.leg-3-exited`): close its space first (`<tool>/scripts/host.sh close <repo>/.worktrees/<TICKET>`;
-   on exit 2 the user has it open or something in it still runs, so stop and report), then `git
-   -C <repo> worktree remove .worktrees/<TICKET>`, never with force unless the tree is clean and
-   the card confirmed it, and log `teardown`. The workhorse worktrees are the coachman's; if any survive, remove them the
-   same way after preserving any stray file into `<dispatch>/stray/`.
-3. **Close the run** with `<tool>/scripts/stage.sh <dispatch> done postmaster`, and never delete the
-   dispatch directory.
-4. **Put the run's tool faults to the user**, as its aftercare ends (Tool faults, below).
-5. **Put the style sort to the user once, as the run's aftercare ends,** when the run has one.
+The aftercare and teardown the ship leg used to do, now yours: the last coachman exits at the
+card and is not resumed for any of this.
+
+1. **Sort the style findings.** For each one `<tool>/scripts/style-findings.sh list <dispatch>`
+   prints, write one line to `<dispatch>/style-sort.md`, with a one-line reason: a rule the
+   project's linter could enforce, naming the linter, which must be one the gate runs, and the
+   existing rule to enable or the custom rule to write; a convention for the project's own docs,
+   naming the doc; or neither. `<tool>/scripts/style-findings.sh gate <dispatch>` shows what the
+   gate runs, as the run's branch has it; where the gate runs a linter in a way it does not show,
+   add `via` and the file that runs it after the rule. A finding that only a linter the gate does
+   not run could enforce is sorted docs or neither, and that linter is proposed on a line of its
+   own, once, naming every finding it would enforce, and marked `not-in-gate` when the project
+   already has it:
+
+   ```
+   S<n> linter <linter> enable <rule>: <reason>
+   S<n> linter <linter> write <rule>: <reason>
+   S<n> linter <linter> enable <rule> via <file>: <reason>
+   S<n> docs <doc>: <reason>
+   S<n> neither: <reason>
+   N<n> new-linter <linter> S<n>[,S<m>...]: <reason>
+   N<n> new-linter <linter> S<n>[,S<m>...] not-in-gate: <reason>
+   ```
+
+   `<tool>/scripts/style-findings.sh check <dispatch>` must exit 0, which it does with no sort
+   when the run has no style findings. Log a `note` with its last line, and name the file in
+   the run's notes. Change neither the project's linter nor its docs for a finding: a
+   change there is a ticket, filed after the merge on the user's word.
+   [Why style findings feed the project's linter](../../wiki/concepts/review-loop.md)
+2. **Confirm** the default branch carries the merge (`git -C <repo> log -1` on it) and the
+   ticket is done in the tracker; if the run could not move it, do so and log
+   `ticket-state`.
+3. **Finish the record.** Final `run-log.md` entry (per-lane win record, findings counts, cost)
+   plus a closing dated comment on the ticket. Set the stage:
+   `<tool>/scripts/stage.sh <dispatch> shipped postmaster` if Stage F did not, then leave it
+   there. Never write timings by hand; `done` appends them. Archive finished threads where the
+   harness has an archive form (`harnesses.md`).
+4. **Tear down.** The workhorse worktrees first, preserving any stray file into
+   `<dispatch>/stray/` (a workhorse killed mid-run leaves real artifacts) and closing each
+   one's space before it is removed (`<tool>/scripts/host.sh close <wt>`), logging `teardown`
+   each time. Keep the `wb/<TICKET>-<lane>` branches as a local archive. Then the synthesis
+   worktree from outside it: close its space first (`<tool>/scripts/host.sh close
+   <repo>/.worktrees/<TICKET>`; on exit 2 the user has it open or something in it still runs,
+   so stop and report), then `git -C <repo> worktree remove .worktrees/<TICKET>`, never with
+   force unless the tree is clean and the card confirmed it, and log `teardown`. Durable
+   process learnings go to the project's own docs, not this runbook. Residue contract: a clean
+   run leaves only torn-down-able worktrees.
+5. **Close the run** with `<tool>/scripts/stage.sh <dispatch> done postmaster`, and never delete
+   the dispatch directory.
+6. **Put the run's tool faults to the user**, as its aftercare ends (Tool faults, below).
+7. **Put the style sort to the user once, as the run's aftercare ends,** when the run has one.
    `<tool>/scripts/style-findings.sh check <dispatch>` prints each proposal: the text after its
    findings' colon, up to any bracket, which holds what the ledger records of it from any run.
    For each proposal other than `neither` that the ledger does not mark filed, declined or asked,
@@ -327,7 +379,7 @@ On `.card-ready`, read `<dispatch>/card.md` and `<dispatch>/handoff-3.md`:
    does, with `style proposal: <proposal>` as the detail of its `ticket-create` line; on their
    no, log a `note` with `style proposal declined: <proposal>: <their word>`. Nothing is filed
    without the user's word, whatever `tracker.postmaster_may_create` says.
-6. **Dispatch the next ticket** in order, Stage B.
+8. **Dispatch the next ticket** in order, Stage B.
 
 **Abandoning a run** happens only on the user's word for that run: log `note` with the
 word, set the stage with `<tool>/scripts/stage.sh <dispatch> abandoned postmaster`, stop what still
@@ -384,7 +436,9 @@ only with the user's word for that specific thing, and the word is logged.
 - Never create a ticket without the user's word unless the config says you may.
 - Never dispatch a ticket that `<tool>/scripts/ticket-check.sh` fails, and never change a ticket's
   text without the user's word for that text.
-- Never merge; never say the merge word without `MERGE_AUTHORITY` or the user behind it.
+- Never merge without `MERGE_AUTHORITY` or the user behind it, and never open a pull request
+  before the card has passed your verification. The local merge and the pull request are the
+  only touches this flow makes on the default branch.
 - Never delete a dispatch directory, a manifest or a ledger line.
 - Never trust a card, a summary or a hand-off over the code; verify before every grant.
 - Never launch more runs than `team.max_runs`, and never two runs on overlapping file

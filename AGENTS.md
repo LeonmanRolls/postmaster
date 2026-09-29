@@ -134,7 +134,7 @@ A three-role flow for getting one ticket implemented well by several models at o
 | role | what it does | where it is defined |
 |---|---|---|
 | **postmaster** | decomposes a stream into tickets, dispatches one coachman per ticket leg by leg, supervises, answers escalations, grants merges | `skills/postmaster/postmaster.md` (the front door session, or one it spawned) |
-| **coachman** | drives one leg of one ticket; up to three legs, `synthesis`, `review` and `ship`, each a fresh coachman with a written hand-off between them, carry a ticket from waybill to ship card: harnessing the team, judging their work, running the turnpikes its ticket names, clearing the gate | `skills/postmaster/coachman.md` |
+| **coachman** | drives one leg of one ticket; at most two legs, `synthesis` and `review`, each a fresh coachman with a written hand-off between them, carry a ticket from waybill to ship card: harnessing the team, judging their work, running the turnpikes its ticket names, clearing the gate | `skills/postmaster/coachman.md` |
 | **the team** | several model lanes implementing the same ticket independently, in **blinkers**: separate worktrees, unable to see each other's work | `coachman.md`, lane table |
 
 The postmaster runs no model lanes and edits no source. A coachman never takes a second
@@ -147,10 +147,11 @@ host at all, and `scripts/host.sh` runs every launch through them. `SKILL.md` is
 reached from this file or by typing `/postmaster`, it gets the machine ready if it is not and
 starts the postmaster, in this conversation when the session is already the one
 `team.postmaster` names in the target repo with the user at the terminal, and as a session it
-spawns otherwise; `postmaster.md` is what the postmaster then does. A run is up to three
-coachman legs, `synthesis`, `review` and `ship`, each a fresh thread, so no context outlives a
+spawns otherwise; `postmaster.md` is what the postmaster then does. A run is at most two
+coachman legs, `synthesis` and `review`, each a fresh thread, so no context outlives a
 leg and a leg's hand-off document is the whole of what the next leg knows. The review leg runs
-only when the ticket names a turnpike that runs in it.
+only when the ticket names a turnpike that runs in it, and the last leg ends the run ready for
+the user's merge.
 
 ## What the project has learned lives in the wiki
 

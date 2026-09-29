@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # A run's style findings. They gate nothing: the review leg logs them and applies none, the ship
-# card counts them, and aftercare sorts each into a rule for a linter the project's gate runs, a
-# convention for the project's own docs, or neither. The postmaster puts the sort to the user
-# after the merge.
+# card counts them, and the postmaster's aftercare sorts each into a rule for a linter the
+# project's gate runs, a convention for the project's own docs, or neither. The postmaster puts
+# the sort to the user after the merge.
 #
 #   style-findings.sh list <dispatch>    each style finding: its id, where it is, the rest of its line
 #   style-findings.sh count <dispatch>   how many style findings the run has

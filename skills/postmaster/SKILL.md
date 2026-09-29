@@ -225,6 +225,7 @@ everything the coachman needs and nothing it must go and find:
 ```
 # Waybill: <TICKET>
 <the turnpikes: line <tool>/scripts/ticket-check.sh printed for the ticket, whole: turnpikes: <names> or turnpikes: none>
+<the legs: line <tool>/scripts/turnpikes.sh legs --names '<that turnpikes: line>' prints: legs: synthesis or legs: synthesis review>
 
 ## Ticket
 <the ticket verbatim: problem, acceptance criteria, direction, turnpikes, notes, User journey if it has one>
@@ -234,6 +235,7 @@ repo: <abs path>          default branch: <name>       BASE: <sha>
 gate: <the real command>  build: <the real command>    browser suite: <command or none>
 docs to read first: <files, in order>
 tracker: <kind, and how a ticket is read and written>
+landing: pull-request | local   (whether the postmaster opens a pull request or merges on the word)
 risk surfaces: <what the project binds, allowlists, spawns, serves; from its docs or the user>
 checks: <as `verify.sh record` printed them: each check's name, where it came from, its command and what it shows>
 

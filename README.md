@@ -15,7 +15,7 @@ config says it may.
 | role | does | never does |
 |---|---|---|
 | **postmaster** | splits a stream into tickets, dispatches one coachman per ticket, supervises, answers escalations, grants merges | run a model lane, edit source |
-| **coachman** | drives one leg of a ticket; up to three legs, synthesis, review and ship, each a fresh coachman, carry it from waybill to ship card with a written hand-off between them | take a second leg, merge on its own authority |
+| **coachman** | drives one leg of a ticket; at most two legs, synthesis and review, each a fresh coachman, carry it from waybill to ship card with a written hand-off between them; the last leg ends the run ready for merge | take a second leg, merge on its own authority |
 | **the team** | several lanes implementing the same ticket in blinkers | see each other's work |
 
 ## Why several models rather than one good one

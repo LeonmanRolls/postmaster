@@ -3,7 +3,9 @@
 **You are the COACHMAN for exactly one leg of one ticket.** The postmaster spawned you and left
 a waybill at `<dispatch>/brief.md`. Read it, then the hand-off from the leg before yours, then
 drive this leg the whole way: harness the team, judge their pull, pass the waybill's turnpikes
-and the gate, and hand over proof of delivery to the next leg or to the postmaster.
+and the gate, and hand over proof of delivery to the next leg or to the postmaster. The last
+leg of a run ends the run ready for merge: it writes the ship card and its hand-off and touches
+the card's marker. It merges nothing.
 
 **You never take a second load, never a second leg, and you never stop early.** A run that ends a turn with nothing
 written to disk is indistinguishable from a dead one and will be killed and restarted.
@@ -65,8 +67,9 @@ every lens and every lane that found it, verified by execution or reading); `app
 not review at full strength (detail the
 lens, the round and the cause, quoted); `escalate` when a ruling is needed; `gate` per gate run
 with its exit; `verify` per check per commit it runs on, written by `<tool>/scripts/verify.sh run`
-and never by hand; `ticket-state` and `ticket-comment` per tracker write; `merge` on the merge;
-`teardown` per worktree removed; `handoff-accept` as a leg's first action and `handoff` as its
+and never by hand; `ticket-state` and `ticket-comment` per tracker write; `merge` on the merge
+and `teardown` per worktree removed, both the postmaster's after the card;
+`handoff-accept` as a leg's first action and `handoff` as its
 last; `stage` whenever the run enters a stage, written by `<tool>/scripts/stage.sh` and never by hand;
 `tool-fault` as soon as postmaster itself misbehaves (Tool faults, below); `note` for anything
 else worth a line. A lone dissenter, a convergent fix, a wall: each is one line here, computable
@@ -131,19 +134,22 @@ harness-specific and the flow does not rely on it.
 
 ## Legs and hand-offs
 
-A run is up to three legs, `synthesis`, `review` and `ship`, each a fresh coachman thread
+A run is at most two legs, `synthesis` and `review`, each a fresh coachman thread
 launched by the postmaster, so no context outlives a leg and nothing a leg knew survives except
 what it wrote down. The boundaries are the run's own gates:
 
 | leg | name | covers | ends with |
 |---|---|---|---|
-| 1 | `synthesis` | stage 0, stage 1, checkpoint 1 | `handoff-1.md` |
-| 2 | `review` | stage 2: the waybill's review turnpikes as lenses in one loop, every round to clean | `handoff-2.md` |
-| 3 | `ship` | stage 3 and stage 4: gates, preview, QA, the card, the merge on the word, the style sort, teardown | `handoff-3.md` |
+| 1 | `synthesis` | stage 0, stage 1, checkpoint 1; and in a run with no review leg, stage 3's ship card | `handoff-1.md` |
+| 2 | `review` | stage 2: the waybill's review turnpikes as lenses in one loop, every round to clean; then stage 3's ship card | `handoff-2.md` |
 
-The review leg runs only when the waybill names a turnpike that runs in it; without one, ship
-follows synthesis and starts from `handoff-1.md`. `<tool>/scripts/turnpikes.sh legs <dispatch>` prints
-the run's legs and the turnpikes each one runs. A leg runs each turnpike listed for it from that
+The review leg runs only when the waybill names a turnpike that runs in it. Without one the run
+is one leg: synthesis ends the same way, with the ship card and its hand-off, ready for the
+user's merge. The last leg merges nothing and tears nothing down; the postmaster verifies the
+card, opens the pull request or merges on the word, and does the aftercare. A run dispatched
+before this change had a third leg, `ship`, and keeps it: `<tool>/scripts/turnpikes.sh legs
+<dispatch>` prints its three. Otherwise it prints the run's legs and the turnpikes each one
+runs. A leg runs each turnpike listed for it from that
 turnpike's step in this runbook; a listed turnpike with no step here cannot run: escalate.
 
 **A leg starts by accepting the hand-off.** Read `brief.md`, this runbook, and the previous
@@ -159,7 +165,7 @@ must exit 0 before the marker is touched:
 ## Decisions
 Every decision this leg took, one per line, with its reason, marked do-not-reopen where it is settled; every do-not-reopen decision from earlier hand-offs carried forward verbatim; and always the oracle decision, blind acceptance tests written as the first commit or not written and why.
 ## Deferred findings
-Every finding not applied, with its lens where it has one, its disposition and reason (the review leg restates these to its reviewers; the ship leg carries them to the ship card, the style ones to its Style residue and the rest to its open findings).
+Every finding not applied, with its lens where it has one, its disposition and reason (the review leg restates these to its reviewers; the last leg carries them to the ship card, the style ones to its Style residue and the rest to its open findings).
 ## Verified by execution
 What was verified by running something, with the command and its exit.
 ## Unverified
@@ -169,7 +175,7 @@ Every branch this run has created and its state; every lane and whether it is RE
 ## Open questions
 Anything the next leg must decide or the postmaster must rule on.
 ## Next leg
-One paragraph: where the next leg starts, and what it must do first.
+One paragraph: where the next leg starts, and what it must do first. On the last leg of a run this is for the postmaster: what Stage F must verify, and what aftercare it picks up.
 ```
 
 Then close the open section with `<tool>/scripts/run-log.sh <dispatch> --close`, log `handoff`, touch
@@ -251,7 +257,8 @@ A workhorse commits incrementally as it goes, never pushes, never reads other br
    file (the postmaster owns `leg`, `base` and `coachman`). Keep thread ids and outcomes current
    at every transition. The stage changes only through `<tool>/scripts/stage.sh`, in this order:
    `bootstrapped`, `workhorses-running`, `synthesis`, `checkpoint-1`, `review` (in a run with a
-   review leg), `shipping`, `shipped`; the postmaster sets `done` when it closes the run. Each
+   review leg), `shipping`, `shipped`; the postmaster sets `shipped` after the merge and `done`
+   when it closes the run. Each
    change is logged, and the run's timings are computed from those lines by
    `<tool>/scripts/run-times.sh <dispatch>`. Never delete the manifest. It is the run's history, and
    the postmaster's poll reads it.
@@ -433,10 +440,10 @@ from it.
   is one), with each workhorse's `verify.sh summary` verdict. A card that presents a
   finished diff without saying which lane each part came from is the defaulting failure
   wearing a verdict. Set the stage, `<tool>/scripts/stage.sh <dispatch> checkpoint-1`, then write it to
-  `<dispatch>/checkpoint-1.md` with the audit bundle beside it and touch `.checkpoint-1-ready`. Autonomous mode: write `handoff-1.md` and end the leg. Consult mode:
+  `<dispatch>/checkpoint-1.md` with the audit bundle beside it and touch `.checkpoint-1-ready`. Autonomous mode: in a run with a review leg, write `handoff-1.md` and end the leg; in a run with none, carry on to stage 3 below. Consult mode:
   also write `ESCALATION.md` naming the card, touch `.escalation-ready`, and exit; the ruling
-  arrives as a resume, and the leg then ends with its hand-off. In a run with no review leg,
-  this card doubles as the ship approval, said on the card.
+  arrives as a resume, and the leg then carries on to its hand-off, and to stage 3 when this
+  is the run's only leg.
 
 ## Stage 2 (leg 2): review, every lens in one loop
 
@@ -665,8 +672,8 @@ Set the stage first, `<tool>/scripts/stage.sh <dispatch> review`, then:
 4. **Apply once per round,** in the synthesis worktree: the verified gating findings (in a loop
    with no gating lens, none: step 5), and never a style finding. Where fixes from different
    lenses touch the same code, reconcile them into one change before applying it. Every style
-   finding is deferred in the hand-off, reaches the ship card's Style residue, and is sorted at
-   aftercare (stage 4). Then re-run the project's gate.
+   finding is deferred in the hand-off, reaches the ship card's Style residue, and is sorted by
+   the postmaster's aftercare. Then re-run the project's gate.
 5. **Loop until clean.** Round `r+1` runs the gating lenses alone, on the fixed diff, with its
    own markers, each brief updated with the fixes delta and every applied finding as known
    context, so they closure-check each fix AND hunt new holes the fixes introduced. Done only
@@ -695,15 +702,19 @@ Set the stage first, `<tool>/scripts/stage.sh <dispatch> review`, then:
    `<tool>/scripts/verify.sh run <synthesis-wt> <dispatch>` printed them after the last round's
    fixes, the journey walked first where there is one. Written to
    `<dispatch>/checkpoint-review.md` with its `.checkpoint-review-ready` marker. Autonomous
-   mode: write the leg's hand-off and end it; the ship approval is stage 3's stop. Consult mode:
+   mode: carry on to stage 3 below, which ends the run. Consult mode:
    escalate on the card and wait for the resume.
    A ruling that asks for a change is applied; in a loop with a gating lens it is followed by
    another round, counted toward the cap, and the card is written and escalated again, and a
    round past the cap runs only when the ruling says so. Any other ruling, or a change applied in
-   a loop with no gating lens, ends the leg with its hand-off. The card doubles as the ship
-   approval, said on the card.
+   a loop with no gating lens, carries on to stage 3.
 
-## Stage 3 (leg 3): ship (review link, then a gated local merge)
+## Stage 3 (the last leg): the ship card, then the hand-off
+
+The last leg of a run is review, or synthesis when the waybill names no review turnpike. It
+ends the run ready for the user's merge: once no P1 or P2 finding remains and the gates pass,
+write the ship card and its hand-off and touch the card's marker. Merging is the postmaster's,
+on the user's word or through the pull request; you merge nothing and tear nothing down.
 
 Set the stage first: `<tool>/scripts/stage.sh <dispatch> shipping`.
 
@@ -772,59 +783,25 @@ Set the stage first: `<tool>/scripts/stage.sh <dispatch> shipping`.
    carrying the feature.** A branch is part of the ship or it is abandoned; there is no third
    option, and the reader cannot tell which without being told. A ship card that omits a
    branch is a green check over unreviewed work.
-5. **STOP and wait for the live merge word from `MERGE_AUTHORITY`**: the user, or the
-   dispatching postmaster, as the waybill says. Write `handoff-3.md` as far as the card, touch
-   `.card-ready`, and exit; the word arrives as a resume of this leg's thread, and so does a
-   withheld grant with its reasons. On a withheld grant, address the reasons, update the card,
-   touch `.card-ready` again, and exit again. Only the user abandons a run. On it: check out the project's default branch
-   in the main checkout and `git merge --no-ff <ticket-branch>` (merge, never rebase), move the
-   ticket to done, and set the stage: `<tool>/scripts/stage.sh <dispatch> shipped`. Never escalate a grant the waybill gives the postmaster up to
-   the user.
-6. If the project has an origin, pushing afterwards is the user's call, never part of
-   this flow.
+5. **End the run: write the hand-off and touch the card's marker.** `<tool>/scripts/handoff-check.sh`
+   must exit 0 on the hand-off first: `handoff-1.md` when this is the only leg, `handoff-2.md`
+   when review ran. It carries the closing state of every branch and the ticket, the Style
+   residue and the open findings for the card, and what the postmaster must do in Stage F and
+   aftercare. Then touch `.card-ready` and exit. The postmaster verifies the card against the
+   code, opens the pull request or asks for the merge word and merges, and does the aftercare
+   and teardown. Never merge anything yourself, never set `shipped`, and never escalate a
+   grant the waybill gives the postmaster up to the user.
 
-## Stage 4 (leg 3, after the merge): aftercare and teardown
+## After the card
 
-**Sort the style findings.** For each one `<tool>/scripts/style-findings.sh list <dispatch>`
-prints, write one line to `<dispatch>/style-sort.md`, with a one-line reason: a rule the
-project's linter could enforce, naming the linter, which must be one the gate runs, and the
-existing rule to enable or the custom rule to write; a convention for the project's own docs,
-naming the doc; or neither. `<tool>/scripts/style-findings.sh gate <dispatch>` shows what the
-gate runs, as the run's branch has it; where the gate runs a linter in a way it does not show,
-add `via` and the file that runs it after the rule. A finding that only a linter the gate does
-not run could enforce is sorted docs or neither, and that linter is proposed on a line of its
-own, once, naming every finding it would enforce, and marked `not-in-gate` when the project
-already has it:
-
-```
-S<n> linter <linter> enable <rule>: <reason>
-S<n> linter <linter> write <rule>: <reason>
-S<n> linter <linter> enable <rule> via <file>: <reason>
-S<n> docs <doc>: <reason>
-S<n> neither: <reason>
-N<n> new-linter <linter> S<n>[,S<m>...]: <reason>
-N<n> new-linter <linter> S<n>[,S<m>...] not-in-gate: <reason>
-```
-
-`<tool>/scripts/style-findings.sh check <dispatch>` must exit 0, which it does with no sort
-when the run has no style findings. Log a `note` with its last line, and name the file in
-`handoff-3.md`'s Decisions. Change neither the project's linter nor its docs for a finding: a
-change there is a ticket, filed after the merge on the user's word.
-[Why style findings feed the project's linter](../../wiki/concepts/review-loop.md)
-
-Final `run-log.md` entry (per-lane win record, findings counts, cost) plus a closing dated
-comment on the ticket. Leave the stage at `shipped`: the postmaster sets `done` when it closes
-the run, and that appends the run's stage timings to `run-log.md`. Never write timings by hand.
-Never delete the dispatch directory or the manifest, they are the run's history. Archive
-finished threads where the harness has an archive form (`harnesses.md`). After the merge, tear
-down the workhorse worktrees, preserving any stray file first (a workhorse killed mid-run leaves
-real artifacts) and closing each one's space before it is removed (`<tool>/scripts/host.sh close <wt>`),
-and hand the synthesis worktree to the postmaster for removal from outside it.
-Keep the `wb/<TICKET>-<lane>` branches as a local archive. Durable process learnings go to the
-project's own docs, not this runbook. Residue contract: a clean run leaves only torn-down-able
-worktrees. Then finish `handoff-3.md` (the closing state of every branch and the ticket), close
-the open section with `<tool>/scripts/run-log.sh <dispatch> --close`, log `handoff`, touch
-`.leg-3-done`, and exit.
+You are done. The postmaster verifies the card against the code (`postmaster.md`, Stage F),
+opens the pull request where the project lands through pull requests, or asks for the merge
+word and merges where it merges locally, and after the merge sorts the style findings into
+`<dispatch>/style-sort.md`, writes the final `run-log.md` entry and the closing ticket comment,
+archives finished threads, tears down the workhorse worktrees and hands the synthesis worktree
+to itself for removal. That is their Stage G, not yours. Leave the stage at `shipping`; only
+the postmaster sets `shipped` and `done`. Never delete the dispatch directory or the manifest,
+they are the run's history.
 
 ## Concurrency note (several runs on one project)
 
@@ -850,8 +827,10 @@ logical order, not file safety: check the file surfaces before mass-launching.
   through a run. A lane that changes identity mid-run is not the lane that was gated.
 - Base pre-flight before cutting worktrees: a dirty main checkout means the workhorses build on stale
   committed history and drop uncommitted work. Verify clean, or escalate, first.
-- Workhorses never push; only stage 3's gated local merge touches the default branch. No push, no PR,
-  no outward message of any kind from this flow; the ticket comments are the outward record.
+- Workhorses never push; the coachman never merges and never pushes. The postmaster touches the
+  default branch only through the local merge on the word, or opens the pull request where the
+  project lands that way. No outward message of any kind from this flow; the ticket comments are
+  the outward record.
 - Launch nothing before the waybill's launch card is confirmed: every lane's model and effort,
   the coachman, the reviewer lineup, the gate selection, on one card.
 - **The coachman is never a model that ran as a lane in the same run.** Its reading is the only
@@ -866,7 +845,7 @@ logical order, not file safety: check the file surfaces before mass-launching.
 - Reap by process exit: workhorses are headless resumable threads that end themselves, and nothing is
   killed in a standard run. Record every thread id at dispatch; prefer resuming a thread over
   re-briefing a fresh one, since the thread carries its own context. Threads stay unarchived
-  until stage 4. The rare interactive workhorse (live mid-run steering genuinely needed) runs in its
+  until the postmaster's aftercare. The rare interactive workhorse (live mid-run steering genuinely needed) runs in its
   own named tmux session, is captured (scrollback to the dispatch dir) and killed as soon as
   harvested, never left to linger, never your own session (confirm with
   `tmux display-message -p '#S'`); kill only sessions YOU spawned, and inspect the pane first
@@ -949,6 +928,6 @@ logical order, not file safety: check the file surfaces before mass-launching.
   main checkout while the project's own code is clean. Establish whose file it is before
   touching shared config, and file the hygiene fix as its own ticket rather than editing lint
   config on the default branch mid-flight for another live run.
-- **A coachman cannot remove its own worktree.** Tear down the workhorse worktrees at stage 4,
-  preserving any stray file first, and hand the synthesis worktree to the postmaster for
-  removal from an outside process.
+- **A coachman cannot remove its own worktree.** The postmaster tears down the workhorse
+  worktrees in its aftercare, preserving any stray file first, and removes the synthesis
+  worktree from an outside process.
