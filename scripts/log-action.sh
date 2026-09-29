@@ -9,7 +9,7 @@
 #
 #   actor    postmaster | coachman | lane:<name>
 #   action   a verb from a fixed set, enforced, so the log is computable:
-#            dispatch resume harvest synthesize review-launch review-harvest finding apply
+#            dispatch resume harvest synthesize review-launch review-harvest spec-review finding apply
 #            escalate rule ticket-check ticket-create ticket-edit ticket-state ticket-comment
 #            gate verify merge teardown degrade handoff-accept handoff stage tool-fault note
 #   target   what the action was done to: a lane, a ticket id, a branch, a path, a round
@@ -38,7 +38,7 @@ set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd -P)
 TOOL=$(dirname "$HERE")
 CONTROLS=$TOOL/skills/postmaster/controls.md
-VERBS=" dispatch resume harvest synthesize review-launch review-harvest finding apply escalate rule ticket-check ticket-create ticket-edit ticket-state ticket-comment gate verify merge teardown degrade handoff-accept handoff stage tool-fault note "
+VERBS=" dispatch resume harvest synthesize review-launch review-harvest spec-review finding apply escalate rule ticket-check ticket-create ticket-edit ticket-state ticket-comment gate verify merge teardown degrade handoff-accept handoff stage tool-fault note "
 
 json_str() {  # the inside of a JSON string, in bash alone but for tr and iconv
   local s=$1
@@ -169,6 +169,12 @@ last "as the real path" 'e["fault"]["failed"] == "sixth" and e["target"] == "scr
 wrote "a style finding is written" coachman finding src/a.ts:12 style P3 r1 style luna reading: a list named map
 last "with its class as the first word of its detail" 'e["action"] == "finding" and e["detail"].split()[0] == "style"'
 wrote "a gating finding is written" coachman finding src/b.ts:40 gating P1 r1 bug luna execution: an off-by-one
+wrote "an approved spec review is written with its commit" postmaster spec-review luna "approved commit abc1234"
+last "the approved spec commit is recorded" 'e["action"] == "spec-review" and e["target"] == "luna" and e["detail"] == "approved commit abc1234"'
+wrote "a change request is written in the user's words" postmaster spec-review luna "changes requested at abc1234: keep the retry policy bounded"
+last "the exact change request and reviewed commit are recorded" 'e["action"] == "spec-review" and e["detail"] == "changes requested at abc1234: keep the retry policy bounded"'
+wrote "a workhorse drop is written" postmaster spec-review deepseek "dropped at def5678"
+last "the dropped spec's reviewed commit is recorded" 'e["action"] == "spec-review" and e["target"] == "deepseek" and e["detail"] == "dropped at def5678"'
 wrote "a detail ending in a newline is written" postmaster note RUN-1 $'kept whole\n'
 last "with its newline" 'e["detail"] == "kept whole\n"'
 wrote "a line separator and a byte that is not UTF-8 are written" postmaster note RUN-1 $'one\xe2\x80\xa8two \xff three'

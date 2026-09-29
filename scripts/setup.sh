@@ -16,8 +16,8 @@
 #   exit 0  config written (or printed), or keys listed
 #   exit 1  a harness was named that is not on PATH, the coachman shares a lane's model, fewer
 #           than two lanes were given, a reviewer is not a lane, an answer was missing, a round
-#           time limit was not a whole number of seconds from 1 to 86400, or an existing config
-#           was not overwritten
+#           time limit was not a whole number of seconds from 1 to 86400, a planning review link
+#           omitted {path}, or an existing config was not overwritten
 #
 # Control: the written file is parsed back as TOML where a parser is available, and its reviewer
 # lanes are resolved through scripts/reviewers.sh, so a config that would fail to load is never
@@ -42,6 +42,7 @@ if [ "${1:-}" = --self-test ]; then
   run() { "$0" --answers "$tmp/$1.answers" --config "$tmp/$1.toml" >"$tmp/$1.out" 2>&1; }
   team() { python3 -c 'import json, sys, tomllib; print(json.dumps(tomllib.load(open(sys.argv[1], "rb"))["team"].get(sys.argv[2])))' "$tmp/$1.toml" "$2"; }
   limit() { python3 -c 'import sys, tomllib; c=tomllib.load(open(sys.argv[1], "rb")).get("limits", {}); r=c.get(sys.argv[2], {}); print(r.get(sys.argv[3], c.get(sys.argv[3], "")))' "$tmp/$1.toml" "$2" "$3"; }
+  planning_link() { python3 -c 'import sys, tomllib; print(tomllib.load(open(sys.argv[1], "rb")).get("planning", {}).get("review_link", ""))' "$tmp/$1.toml"; }
 
   echo "positive controls"
   answers lens "reviewers.security=alpha, beta, sentinel"
@@ -66,6 +67,12 @@ postmaster.env_file=~/.postmaster/lanes/pm.env"; run roles; rc=$?
     || fail "the coachman, the fallback and the postmaster each get their env file (exit $rc)" "$(cat "$tmp/roles.out")"
   [ "$(team plain coachman)" = '{"harness": "bash", "model": "judge"}' ] \
     && ok "a role with no env file answer gets no env_file key" || fail "a role with no env file answer gets no env_file key" "$(team plain coachman)"
+  [ "$(planning_link plain)" = "" ] \
+    && ok "a planning link defaults to empty under [planning]" || fail "a planning link defaults to empty under [planning]" "$(planning_link plain)"
+  answers planlink 'planning.review_link=https://code.example/open?file={path}'; run planlink; rc=$?
+  [ $rc -eq 0 ] && [ "$(planning_link planlink)" = 'https://code.example/open?file={path}' ] \
+    && ok "the planning link template is stored under [planning]" \
+    || fail "the planning link template is stored under [planning] (exit $rc)" "$(cat "$tmp/planlink.out")"
 
   [ "$(limit plain default memory_max)" = 8G ] && [ "$(limit plain default tasks_max)" = 512 ] \
     && ok "launch memory and process caps default to 8G and 512" \
@@ -113,6 +120,11 @@ limits.reviewer.tasks_max=96"; run caps; rc=$?
   answers missing; sed -i '/^fallback.model=/d' "$tmp/missing.answers"; run missing; rc=$?
   [ $rc -eq 1 ] && [ ! -e "$tmp/missing.toml" ] && grep -q "no answer for fallback.model" "$tmp/missing.out" \
     && ok "a missing answer is refused, naming it" || fail "a missing answer is refused, naming it (exit $rc)" "$(cat "$tmp/missing.out")"
+  answers badlink 'planning.review_link=https://code.example/open'
+  run badlink; rc=$?
+  [ $rc -eq 1 ] && [ ! -e "$tmp/badlink.toml" ] && grep -q "planning.review_link must contain {path}" "$tmp/badlink.out" \
+    && ok "a non-empty planning link without {path} is refused" \
+    || fail "a non-empty planning link without {path} is refused (exit $rc)" "$(cat "$tmp/badlink.out")"
 
   echo
   [ "$fails" -eq 0 ] && { echo "self-test: all controls behaved"; exit 0; }
@@ -168,6 +180,7 @@ round_timeout_seconds      2400               seconds a review round may run, 1 
 merge_authority            user               user or postmaster
 checkpoint_mode            autonomous         autonomous or consult
 review_link?               (none)             template with {path}
+planning.review_link?      (none)             code-server template with {path} for workhorse specs
 overwrite                  no                 yes replaces an existing config
 EOF
       exit 0 ;;
@@ -343,6 +356,8 @@ case $MA in user|postmaster) ;; *) echo "setup: merge authority must be user or 
 ask CPM "Checkpoint mode (autonomous, consult)" "autonomous" "checkpoint_mode"
 case $CPM in autonomous|consult) ;; *) echo "setup: checkpoint mode must be autonomous or consult" >&2; exit 1 ;; esac
 ask RL "Review link template with {path} for the synthesis worktree (blank for none)" "" "review_link?"
+ask PRL "Code-server link template with {path} for a workhorse spec (blank for none)" "" "planning.review_link?"
+case $PRL in ""|*"{path}"*) ;; *) echo "setup: planning.review_link must contain {path}" >&2; exit 1 ;; esac
 
 TRACKER_EXTRA=""
 [ -n "$PWS" ] && TRACKER_EXTRA="url = \"$PURL\""$'\n'"workspace = \"$PWS\""$'\n'"env_file = \"$PENV\""
@@ -382,6 +397,9 @@ postmaster_may_create = $( [ "$PMC" = yes ] && echo true || echo false )
 
 [review]
 round_timeout_seconds = $RT
+
+[planning]
+review_link = "$PRL"
 
 [ship]
 merge_authority = "$MA"

@@ -22,7 +22,7 @@
 #   exit 4  a terminal stage set by any actor but the postmaster
 set -uo pipefail
 HERE=$(CDPATH= cd -P -- "$(dirname -- "$0")" && pwd -P)
-STAGES="dispatched bootstrapped workhorses-running synthesis checkpoint-1 review shipping shipped done abandoned"
+STAGES="dispatched bootstrapped planning workhorses-running synthesis checkpoint-1 review shipping shipped done abandoned"
 
 set_stage() {  # set_stage <dispatch> <stage> <actor>
   local d=$1 new=$2 actor=$3
@@ -125,6 +125,9 @@ fresh; set_stage "$d" abandoned postmaster >/dev/null; rc=$?
 fresh; set_stage "$d" review coachman >/dev/null; rc=$?
 [ $rc -eq 0 ] && [ "$(count)" -eq 1 ] && grep -q '"stage": "review"' "$d/manifest.json" \
   && ok "review is one stage" || fail "review is one stage (exit $rc, lines $(count))"
+fresh; set_stage "$d" planning coachman >/dev/null; rc=$?
+[ $rc -eq 0 ] && [ "$(count)" -eq 1 ] && grep -q '"stage": "planning"' "$d/manifest.json" \
+  && ok "planning is one stage" || fail "planning is one stage (exit $rc, lines $(count))"
 
 echo "negative controls"
 fresh; set_stage "$d" bootstrapped coachman >/dev/null; set_stage "$d" bootstrapped coachman >/dev/null; rc=$?
@@ -137,6 +140,10 @@ for old in review-style review-bug review-security; do
   [ $rc -eq 2 ] && [ "$(count)" -eq 0 ] && cmp -s "$d/manifest.json" "$tmp/before.json" \
     && ok "$old is refused, and nothing changes" || fail "$old is refused, and nothing changes (exit $rc)"
 done
+fresh; cp "$d/manifest.json" "$tmp/before.json"; set_stage "$d" planning-review coachman >/dev/null 2>&1; rc=$?
+[ $rc -eq 2 ] && [ "$(count)" -eq 0 ] && cmp -s "$d/manifest.json" "$tmp/before.json" \
+  && ok "an unknown planning stage is refused, and nothing changes" \
+  || fail "an unknown planning stage is refused, and nothing changes (exit $rc)"
 for t in done abandoned; do
   fresh; cp "$d/manifest.json" "$tmp/before.json"; set_stage "$d" "$t" coachman >/dev/null 2>&1; rc=$?
   [ $rc -eq 4 ] && [ "$(count)" -eq 0 ] && cmp -s "$d/manifest.json" "$tmp/before.json" \
