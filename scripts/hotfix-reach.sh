@@ -33,10 +33,18 @@
 # repo). A run is in flight when its manifest's stage is neither done nor abandoned.
 # "Carries its own copy of the fixed file" is the file existing in the run's branch
 # tree: a postmaster-as-target run does, a run against another project does not.
-# "Changed the same lines" is the fix's diff not applying cleanly to the branch; that
-# branch is left alone and named, and whichever merges second resolves the conflict.
+# The fix lands as a cherry-pick, a real three-way against the branch, fetched from
+# the tool when the branch's repo does not hold it; the exported patch only when the
+# fix object cannot be made present. "Changed the same lines" is the fix not landing
+# cleanly that way; that branch is left alone and named, and whichever merges second
+# resolves the conflict. A stop between legs is a completed hand-off, .done plus a
+# hand-off that checks clean; an exited leg without one is a remount, not a boundary.
 # Pin fixes are recorded beside the pin as <dispatch-commit>.fixes, one "<pin-sha>
-# <fix-sha>" pair per fix it applied, so run-meta.sh check still accepts the checkout.
+# <fix-sha>" pair per fix it applied, so run-meta.sh check still accepts the checkout;
+# a row counts only while its pin is still in the pin's history, so a reset or
+# re-cut pin is served again. A run outside a recognized runs folder, such as the
+# legacy runs/<project>/<ticket> layout, reports unknown and still takes the fix on
+# its pinned checkout at queue time; no branch work can be found for it.
 # Every step is logged through log-action.sh, to the run and to the project ledger.
 #
 #   exit 0  printed; queue/next-leg: every fix queued, landed, waited or rightly left alone
@@ -254,13 +262,6 @@ def stage_of(dispatch):
         return ""
 
 
-def leg_of(dispatch):
-    try:
-        return int(json.loads((dispatch / "manifest.json").read_text()).get("leg") or 0)
-    except (OSError, ValueError, AttributeError, TypeError):
-        return 0
-
-
 def lanes_of(dispatch):
     try:
         lanes = json.loads((dispatch / "manifest.json").read_text()).get("lanes") or {}
@@ -288,8 +289,9 @@ def at_boundary(dispatch, manifest):
     stage = (manifest or {}).get("stage") or ""
     if stage in ("", "dispatched") or leg <= 0:
         return True
-    if (dispatch / (".leg-%d-exited" % leg)).exists():
-        return True
+    # An exited leg with no completed hand-off is a remount, not a boundary: the
+    # postmaster restarts it rather than launching the next leg. Only .done plus a
+    # hand-off that checks clean counts.
     return (dispatch / (".leg-%d-done" % leg)).exists() and handoff_ok(dispatch, leg)
 
 
@@ -299,7 +301,7 @@ def run_branches(dispatch, repo):
     for lane in lanes_of(dispatch):
         names.append("wb/%s-%s" % (ticket, lane))
     for ln in git(repo, "for-each-ref", "--format=%(refname:short)",
-                  "refs/heads/wb/" + ticket + "-")[1].splitlines():
+                  "refs/heads/wb/" + ticket + "-*")[1].splitlines():
         if ln and ln not in names:
             names.append(ln)
     return [n for n in names
@@ -318,14 +320,76 @@ def patch_text(tool, fix):
     return out
 
 
-def apply_conflicts(repo, branch, patch):
+def outside_patch(patch):
+    fd, name = tempfile.mkstemp(prefix="hotfix-reach-", suffix=".patch")
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(patch)
+    return pathlib.Path(name)
+
+
+def ensure_fix_object(repo, tool, fix):
+    if git(repo, "cat-file", "-e", fix["commit"], check=False)[0] == 0:
+        return True
+    if git(repo, "fetch", "-q", str(tool), fix["commit"], check=False)[0] == 0 \
+       and git(repo, "cat-file", "-e", fix["commit"], check=False)[0] == 0:
+        return True
+    return False
+
+
+def pick_empty(where):
+    return git(where, "diff", "--cached", "--quiet", check=False)[0] == 0
+
+
+def abort_pick(where):
+    git(where, "cherry-pick", "--quit", check=False)
+    restore_clean(where)
+
+
+def check_clean(where, repo, tool, fix, patch):
+    """True when the fix lands cleanly on the worktree at WHERE, which is left
+    untouched. A real three-way against the branch, so main commits the branch
+    never saw do not read as conflicts; the exported patch only when the fix
+    object cannot be made present."""
+    if ensure_fix_object(repo, tool, fix):
+        rc = git(where, "cherry-pick", "--no-commit", fix["commit"], check=False)[0]
+        empty = rc == 0 and pick_empty(where)
+        abort_pick(where)
+        return rc == 0 and not empty
+    p = outside_patch(patch)
+    try:
+        return git(where, "apply", "--check", str(p), check=False)[0] == 0
+    finally:
+        p.unlink(missing_ok=True)
+
+
+def land_fix(where, repo, tool, fix, patch):
+    """Stage the fix's changes on the worktree at WHERE for the caller to commit.
+    Returns (True, how) with changes staged, or (False, why) with the tree
+    restored. The same method check_clean chose, so a clean check always lands."""
+    if ensure_fix_object(repo, tool, fix):
+        if git(where, "cherry-pick", "--no-commit", fix["commit"], check=False)[0]:
+            abort_pick(where)
+            return False, "conflict"
+        if pick_empty(where):
+            abort_pick(where)
+            return False, "conflict"
+        return True, "pick"
+    p = outside_patch(patch)
+    try:
+        if git(where, "apply", str(p), check=False)[0]:
+            restore_clean(where)
+            return False, "conflict"
+        return True, "patch"
+    finally:
+        p.unlink(missing_ok=True)
+
+
+def apply_conflicts(repo, branch, tool, fix, patch):
     tmp = pathlib.Path(tempfile.mkdtemp(prefix="hotfix-reach-"))
     try:
         if git(repo, "worktree", "add", "--detach", str(tmp), branch, check=False)[0]:
             return True
-        p = tmp / "fix.patch"
-        p.write_text(patch, encoding="utf-8")
-        return git(tmp, "apply", "--check", str(p), check=False)[0] != 0
+        return not check_clean(tmp, repo, tool, fix, patch)
     finally:
         git(repo, "worktree", "remove", "--force", str(tmp), check=False)
         shutil.rmtree(tmp, ignore_errors=True)
@@ -339,7 +403,7 @@ def already_on_branch(repo, branch, fix):
     return bool(out.strip())
 
 
-def classify(repo, info, fix, patch):
+def classify(repo, info, tool, fix, patch):
     branches = run_branches(info["dispatch"], repo)
     carries = [b for b in branches
                if any(branch_carries(repo, b, f) for f in fix["paths"])]
@@ -349,7 +413,7 @@ def classify(repo, info, fix, patch):
     for b in carries:
         if already_on_branch(repo, b, fix):
             done.append(b)
-        elif apply_conflicts(repo, b, patch):
+        elif apply_conflicts(repo, b, tool, fix, patch):
             skipped.append(b)
         else:
             needs.append(b)
@@ -407,7 +471,13 @@ def pin_serves_fix(pin, commit, fix):
     for ln in f.read_text(encoding="utf-8").splitlines():
         fields = ln.split()
         if len(fields) == 2 and fields[1] == fix["commit"]:
-            return True
+            # The record alone is not evidence: a pin reset to its dispatch
+            # commit, or one release removed and a later dispatch re-cut, keeps
+            # the row while losing the fix. The recorded pin must still be in
+            # the pin's history.
+            if git(pin, "merge-base", "--is-ancestor", fields[0], "HEAD",
+                   check=False)[0] == 0:
+                return True
     return False
 
 
@@ -428,28 +498,21 @@ def restore_clean(where):
     git(where, "clean", "-fdq", check=False)
 
 
-def apply_on_pin(pin, commit, fix, patch):
+def apply_on_pin(pin, commit, tool, fix, patch):
     if git(pin, "rev-parse", "--verify", "-q", "HEAD", check=False)[0]:
         return None, "not a checkout"
     if git(pin, "status", "--porcelain", check=False)[1].strip():
         return None, "checkout dirty"
-    p = pin / ".hotfix-reach.patch"
-    p.write_text(patch, encoding="utf-8")
-    if git(pin, "apply", "--check", str(p), check=False)[0]:
-        p.unlink(missing_ok=True)
-        return None, "conflict"
-    if git(pin, "apply", str(p), check=False)[0]:
-        p.unlink(missing_ok=True)
-        restore_clean(pin)
-        return None, "apply failed"
-    p.unlink(missing_ok=True)
+    ok, how = land_fix(pin, pin, tool, fix, patch)
+    if not ok:
+        return None, how
     git(pin, "add", "-A", check=False)
     if git(pin, "commit", "-m", fix_message(fix), check=False)[0]:
-        restore_clean(pin)
+        abort_pick(pin)
         return None, "commit failed"
     new = git(pin, "rev-parse", "HEAD", check=False)[1]
     if not new:
-        restore_clean(pin)
+        abort_pick(pin)
         return None, "no commit"
     record_pin_fix(pin, commit, new, fix)
     return new, "pin"
@@ -468,42 +531,40 @@ def live_worktree(repo, branch):
     return None
 
 
-def apply_on_branch(repo, branch, fix, patch):
+def apply_on_branch(repo, branch, tool, fix, patch):
     msg = fix_message(fix)
     wt = live_worktree(repo, branch)
     if wt is not None:
         if git(wt, "status", "--porcelain", check=False)[1].strip():
             return None, "worktree dirty"
-        p = wt / ".hotfix-reach.patch"
-        p.write_text(patch, encoding="utf-8")
-        if git(wt, "apply", str(p), check=False)[0]:
-            p.unlink(missing_ok=True)
-            restore_clean(wt)
-            return None, "apply failed"
-        p.unlink(missing_ok=True)
+        ok, how = land_fix(wt, repo, tool, fix, patch)
+        if not ok:
+            return None, how
         git(wt, "add", "-A", check=False)
         if git(wt, "commit", "-m", msg, check=False)[0]:
-            restore_clean(wt)
+            abort_pick(wt)
             return None, "commit failed"
         new = git(wt, "rev-parse", "HEAD", check=False)[1]
         return (new, "worktree") if new else (None, "no commit")
+    old = git(repo, "rev-parse", branch, check=False)[1]
+    if not old:
+        return None, "branch gone"
     tmp = pathlib.Path(tempfile.mkdtemp(prefix="hotfix-reach-"))
     try:
         if git(repo, "worktree", "add", "--detach", str(tmp), branch, check=False)[0]:
             return None, "no scratch"
-        p = tmp / "fix.patch"
-        p.write_text(patch, encoding="utf-8")
-        if git(tmp, "apply", str(p), check=False)[0]:
-            return None, "apply failed"
-        p.unlink(missing_ok=True)
+        ok, how = land_fix(tmp, repo, tool, fix, patch)
+        if not ok:
+            return None, how
         git(tmp, "add", "-A", check=False)
         if git(tmp, "commit", "-m", msg, check=False)[0]:
             return None, "commit failed"
         new = git(tmp, "rev-parse", "HEAD", check=False)[1]
         if not new:
             return None, "no commit"
-        if git(repo, "update-ref", "refs/heads/" + branch, new, check=False)[0]:
-            return None, "update-ref failed"
+        if git(repo, "update-ref", "refs/heads/" + branch, new, old,
+               check=False)[0]:
+            return None, "branch moved"
         return new, "scratch"
     finally:
         git(repo, "worktree", "remove", "--force", str(tmp), check=False)
@@ -559,7 +620,7 @@ def write_hotfix_notes(dispatch, fix, applied, skipped, runbook_only):
         note.write_text("# Hotfix notes\n\n" + "".join(lines), encoding="utf-8")
 
 
-def append_prompt_note(dispatch, fix):
+def append_prompt_note(dispatch, fix, prompt):
     markers = []
     note = dispatch / "hotfix-notes.md"
     if note.is_file():
@@ -569,16 +630,11 @@ def append_prompt_note(dispatch, fix):
     if not markers:
         markers = ["Main's fix %s (`%s`) reached this run; see hotfix-notes.md." % (
             fix["short"], fix["subject"])]
-    leg = leg_of(dispatch)
-    for n in (leg, leg + 1):
-        prompt = dispatch / ("leg-%d-prompt.txt" % n)
-        if not prompt.is_file():
-            continue
-        text = prompt.read_text(encoding="utf-8")
-        if fix["short"] in text:
-            continue
-        prompt.write_text(text.rstrip("\n") + "\n\nNote: " + " ".join(markers)
-                          + " Do not merge main into the run branch.\n", encoding="utf-8")
+    text = prompt.read_text(encoding="utf-8")
+    if fix["short"] in text:
+        return
+    prompt.write_text(text.rstrip("\n") + "\n\nNote: " + " ".join(markers)
+                      + " Do not merge main into the run branch.\n", encoding="utf-8")
 
 
 def describe(dispatch, project, stage, reach, detail):
@@ -611,7 +667,7 @@ def do_report(tool, fix_commit, roots):
             print(line)
             counts["unknown"] += 1
             continue
-        result = classify(repo, info, fix, patch)
+        result = classify(repo, info, tool, fix, patch)
         line = describe(dispatch, repo, info["stage"], result["reach"], result["detail"])
         print(line)
         counts[result["reach"]] += 1
@@ -640,7 +696,7 @@ def queue_pin_side(dispatch, fix, patch):
         return
     if pin_serves_fix(pin, commit, fix):
         return
-    new, how = apply_on_pin(pin, commit, fix, patch)
+    new, how = apply_on_pin(pin, commit, TOOL, fix, patch)
     if new:
         log_action(dispatch, "postmaster", "apply", str(pin),
                    "main's fix %s on the run's checkout (%s)" % (fix["short"], how))
@@ -667,12 +723,17 @@ def do_queue(tool, fix_commit, roots):
             continue
         repo = project_for(dispatch)
         if repo is None:
+            # A run outside a recognized runs folder, such as the legacy
+            # runs/<project>/<ticket> layout: no branch work can be found for
+            # it, but its pinned checkout still takes the fix at once.
+            queue_pin_side(dispatch, fix, patch)
             log_action(dispatch, "postmaster", "note", fix["commit"],
-                       "hotfix queue: project not recognized; left alone")
-            print("%s: unknown; left alone" % dispatch.name)
+                       "hotfix queue: project not recognized; branch work "
+                       "skipped, pin side handled")
+            print("%s: unknown; branch work skipped" % dispatch.name)
             continue
         queue_pin_side(dispatch, fix, patch)
-        result = classify(repo, info, fix, patch)
+        result = classify(repo, info, tool, fix, patch)
         reach = result["reach"]
         if reach == "checkout" and not result["runbook"]:
             log_action(dispatch, "postmaster", "note", fix["commit"],
@@ -755,19 +816,23 @@ def do_next_leg(tool, dispatch_s, leg_s, prompt_s):
     run = read_json(dispatch / "run.json")
     if not manifest or not run:
         raise HotfixError("run.json and manifest.json must be readable")
+    check_boundary(dispatch, manifest, leg)
     pending = [x for x in pending_of(dispatch) if isinstance(x, dict) and x.get("fix")]
     if not pending:
         print("hotfix: no queued fixes for leg %d" % leg)
         notes = dispatch / "hotfix-notes.md"
         if notes.is_file():
-            for fix_short in sorted({ln.split()[3] for ln in
-                                     notes.read_text(encoding="utf-8").splitlines()
-                                     if ln.startswith("- Main's fix ")}):
-                append_prompt_note(dispatch, {"short": fix_short, "subject": ""})
+            shorts = set()
+            for ln in notes.read_text(encoding="utf-8").splitlines():
+                parts = ln.split()
+                if ln.startswith("- Main's fix ") and len(parts) > 3:
+                    shorts.add(parts[3])
+            for fix_short in sorted(shorts):
+                append_prompt_note(dispatch, {"short": fix_short, "subject": ""},
+                                   prompt)
             log_action(dispatch, "postmaster", "note", "hotfix-notes.md",
                        "hotfix notes carried into the leg %d prompt" % leg)
         return 0
-    check_boundary(dispatch, manifest, leg)
     repo = project_for(dispatch)
     if repo is None:
         raise HotfixError("run directory is not under a recognized runs folder: %s" % dispatch)
@@ -788,14 +853,14 @@ def do_next_leg(tool, dispatch_s, leg_s, prompt_s):
             if already_on_branch(repo, b, fix):
                 applied[b] = git(repo, "rev-parse", b, check=False)[1]
                 continue
-            if apply_conflicts(repo, b, patch):
+            if apply_conflicts(repo, b, tool, fix, patch):
                 skipped.append(b)
                 continue
             wt = live_worktree(repo, b)
             if wt is not None and git(wt, "status", "--porcelain", check=False)[1].strip():
                 raise HotfixError("%s has uncommitted branch changes; clean or resolve "
                                   "them before leg %d" % (b, leg))
-            new, how = apply_on_branch(repo, b, fix, patch)
+            new, how = apply_on_branch(repo, b, tool, fix, patch)
             if not new:
                 raise HotfixError("could not apply %s alone to %s (%s); the branch was "
                                   "left clean" % (fix["short"], b, how))
@@ -809,7 +874,7 @@ def do_next_leg(tool, dispatch_s, leg_s, prompt_s):
             print("hotfix: applied %s alone to %s as %s" % (fix["short"], b, new[:12]))
         runbook_only = not branches and not applied and not skipped and bool(item.get("runbook"))
         write_hotfix_notes(dispatch, fix, applied, skipped, runbook_only)
-        append_prompt_note(dispatch, fix)
+        append_prompt_note(dispatch, fix, prompt)
         log_action(dispatch, "postmaster", "note", fix["commit"],
                    "main fix note added to the leg %d prompt" % leg)
         record_applied(dispatch, fix["commit"], applied, skipped, leg, prompt.name)
@@ -853,35 +918,31 @@ if [ "${1:-}" = --self-test ]; then
   :
 elif [ $# -ge 2 ] && { [ "$1" = report ] || [ "$1" = queue ]; }; then
   cmd=$1; shift
-  tool=$TOOL_DEFAULT pos=""
+  tool=$TOOL_DEFAULT; pos=()
   while [ $# -gt 0 ]; do
     case $1 in
       --tool) [ $# -ge 2 ] || usage; tool=$2; shift 2 ;;
-      *) pos="$pos $1"; shift ;;
+      *) pos+=("$1"); shift ;;
     esac
   done
-  # shellcheck disable=SC2086
-  set -- $pos
-  [ $# -ge 1 ] || usage
+  [ "${#pos[@]}" -ge 1 ] || usage
   tool=$(CDPATH= cd -P -- "$tool" 2>/dev/null && pwd -P) \
     || { echo "hotfix-reach: no such tool repo: $tool" >&2; exit 1; }
-  run_py "$cmd" "$tool" "$@"
+  run_py "$cmd" "$tool" "${pos[@]}"
   exit $?
 elif [ "${1:-}" = next-leg ]; then
   shift
-  tool=$TOOL_DEFAULT pos=""
+  tool=$TOOL_DEFAULT; pos=()
   while [ $# -gt 0 ]; do
     case $1 in
       --tool) [ $# -ge 2 ] || usage; tool=$2; shift 2 ;;
-      *) pos="$pos $1"; shift ;;
+      *) pos+=("$1"); shift ;;
     esac
   done
-  # shellcheck disable=SC2086
-  set -- $pos
-  [ $# -eq 3 ] || usage
+  [ "${#pos[@]}" -eq 3 ] || usage
   tool=$(CDPATH= cd -P -- "$tool" 2>/dev/null && pwd -P) \
     || { echo "hotfix-reach: no such tool repo: $tool" >&2; exit 1; }
-  run_py next-leg "$tool" "$@"
+  run_py next-leg "$tool" "${pos[@]}"
   exit $?
 else
   usage
@@ -1233,6 +1294,170 @@ out=$("$SELF" next-leg "$dD" 2 "$dD/leg-2-prompt.txt" --tool "$tool" 2>"$tmp/err
 [ $rc -eq 0 ] && cmd "$projA" log -1 --format=%s tD | grep -q "Main's fix" \
   && ok "and applies once the branch is clean" \
   || fail "and applies once the branch is clean (exit $rc)" "$out$(cat "$tmp/err")"
+
+echo "an exited leg without a hand-off is a remount, not a boundary"
+dX=$(dispatch "$RUNS_A" tX checkpoint-1 1 '{}')
+: > "$dX/.leg-1-exited"
+cmd "$projA" checkout -qb tX main
+cmd "$projA" checkout -q tA
+"$SELF" queue "$FIX" "$RUNS_A" --tool "$tool" >/dev/null 2>&1
+printf 'You are the coachman for leg 2.\n' > "$dX/leg-2-prompt.txt"
+beforeX=$(cmd "$projA" rev-parse tX)
+out=$("$SELF" next-leg "$dX" 2 "$dX/leg-2-prompt.txt" --tool "$tool" 2>&1); rc=$?
+[ $rc -eq 1 ] && printf '%s\n' "$out" | grep -q "completed hand-off boundary" \
+  && [ "$(cmd "$projA" rev-parse tX)" = "$beforeX" ] \
+  && ok "an exited-only leg refuses next-leg with the branch untouched" \
+  || fail "an exited-only leg refuses next-leg with the branch untouched (exit $rc)" "$out"
+
+echo "main commits the branch never saw do not read as conflicts"
+toolG="$tmp/toolG"
+new_repo "$toolG"
+mkdir -p "$toolG/scripts"
+printf 'line1\nline2\nline3\n' > "$toolG/scripts/foo.sh"
+cmd "$toolG" add -A; cmd "$toolG" commit -qm base
+printf 'line1-CHANGED\nline2\nline3\n' > "$toolG/scripts/foo.sh"; cmd "$toolG" commit -qam "#8, Touch line1"
+printf 'line1-CHANGED\nline2\nline3-FIXED\n' > "$toolG/scripts/foo.sh"; cmd "$toolG" commit -qam "#9, Fix line3"
+FIXG=$(cmd "$toolG" rev-parse HEAD)
+projG="$tmp/projG"
+new_repo "$projG"
+mkdir -p "$projG/scripts"
+printf 'line1\nline2\nline3\n' > "$projG/scripts/foo.sh"
+cmd "$projG" add -A; cmd "$projG" commit -qm base
+RUNS_G="$projG/.postmaster/runs"
+dG=$(dispatch "$RUNS_G" tG checkpoint-1 1 '{}')
+between_legs "$dG"
+cmd "$projG" checkout -qb tG
+cmd "$projG" checkout -q main
+out=$("$SELF" report "$FIXG" "$RUNS_G" --tool "$toolG" 2>"$tmp/err"); rc=$?
+[ $rc -eq 0 ] && printf '%s\n' "$out" | grep -q "tG  *branch" \
+  && ok "an unchanged branch past an intervening commit is branch, not conflict" \
+  || fail "an unchanged branch past an intervening commit is branch, not conflict (exit $rc)" "$out$(cat "$tmp/err")"
+"$SELF" queue "$FIXG" "$RUNS_G" --tool "$toolG" >/dev/null 2>&1
+printf 'You are the coachman for leg 2.\n' > "$dG/leg-2-prompt.txt"
+out=$("$SELF" next-leg "$dG" 2 "$dG/leg-2-prompt.txt" --tool "$toolG" 2>"$tmp/err"); rc=$?
+[ $rc -eq 0 ] && [ "$(cmd "$projG" show tG:scripts/foo.sh)" = "$(printf 'line1\nline2\nline3-FIXED')" ] \
+  && ok "and the applied commit carries the fix on the branch's own lines" \
+  || fail "and the applied commit carries the fix on the branch's own lines (exit $rc)" "$out$(cat "$tmp/err")"
+
+echo "a pin that lost its fix is served again"
+cmd "$pinB" reset -q --hard "$BASE"
+beforeC=$(cmd "$pinB" rev-parse HEAD)
+"$SELF" queue "$FIX" "$RUNS_A" --tool "$tool" >/dev/null 2>&1
+[ "$(cmd "$pinB" rev-parse HEAD)" != "$beforeC" ] \
+  && [ "$(cmd "$pinB" show HEAD:scripts/foo.sh)" = "new" ] \
+  && ok "a pin reset to its dispatch commit takes the fix again" \
+  || fail "a pin reset to its dispatch commit takes the fix again"
+rm -rf "$pinB"
+cmd "$tool" clone -q "$tool" "$pinB" 2>/dev/null
+cmd "$pinB" config user.email self@test
+cmd "$pinB" config user.name self-test
+cmd "$pinB" checkout -q "$BASE"
+[ -f "$POSTMASTER_TOOL_PINS/$BASE.fixes" ] || { echo "bad fixture: fixes record gone" >&2; exit 1; }
+"$SELF" queue "$FIX" "$RUNS_A" --tool "$tool" >/dev/null 2>&1
+[ "$(cmd "$pinB" rev-parse HEAD)" != "$BASE" ] \
+  && cmd "$pinB" log -1 --format=%s | grep -q "Main's fix" \
+  && ok "and so does a pin release removed and a later dispatch re-cut" \
+  || fail "and so does a pin release removed and a later dispatch re-cut"
+
+echo "notes-only next-leg writes the named prompt, and never mid-leg"
+dN=$(dispatch "$RUNS_A" tN checkpoint-1 1 '{}')
+between_legs "$dN"
+printf '# Hotfix notes\n\n- Main'"'"'s fix %s (`%s`) is a runbook fix with no copy on this run'"'"'s branches.\n' \
+  "${FIX2:0:12}" "#7, Fix the runbook" > "$dN/hotfix-notes.md"
+printf 'leg 1 prompt\n' > "$dN/leg-1-prompt.txt"
+printf 'leg 2 prompt\n' > "$dN/leg-2-prompt.txt"
+out=$("$SELF" next-leg "$dN" 2 "$dN/leg-2-prompt.txt" --tool "$tool" 2>"$tmp/err"); rc=$?
+[ $rc -eq 0 ] && grep -q "Main's fix ${FIX2:0:12}" "$dN/leg-2-prompt.txt" \
+  && [ "$(cat "$dN/leg-1-prompt.txt")" = "leg 1 prompt" ] \
+  && ok "the note lands on the named prompt and no other" \
+  || fail "the note lands on the named prompt and no other (exit $rc)" "$out$(cat "$tmp/err")"
+dNm=$(dispatch "$RUNS_A" tNm workhorses-running 2 '{}')
+cp "$dN/hotfix-notes.md" "$dNm/hotfix-notes.md"
+printf 'leg 2 prompt\n' > "$dNm/leg-2-prompt.txt"
+printf 'leg 3 prompt\n' > "$dNm/leg-3-prompt.txt"
+out=$("$SELF" next-leg "$dNm" 3 "$dNm/leg-3-prompt.txt" --tool "$tool" 2>&1); rc=$?
+[ $rc -eq 1 ] && printf '%s\n' "$out" | grep -q "completed hand-off boundary" \
+  && [ "$(cat "$dNm/leg-2-prompt.txt")" = "leg 2 prompt" ] \
+  && [ "$(cat "$dNm/leg-3-prompt.txt")" = "leg 3 prompt" ] \
+  && ok "and a notes-only next-leg mid-leg refuses with both prompts untouched" \
+  || fail "and a notes-only next-leg mid-leg refuses with both prompts untouched (exit $rc)" "$out"
+
+echo "a legacy-layout run still takes the fix on its pin"
+mkdir -p "$tmp/runs/legacy/RUN-L/logs"
+printf '{"stage": "synthesis", "leg": 1, "lanes": {}}\n' > "$tmp/runs/legacy/RUN-L/manifest.json"
+pinL="$POSTMASTER_TOOL_PINS/$FIX"
+cmd "$tool" clone -q "$tool" "$pinL" 2>/dev/null
+cmd "$pinL" config user.email self@test
+cmd "$pinL" config user.name self-test
+cmd "$pinL" checkout -q "$FIX"
+printf '{"project": "legacy", "run": "RUN-L", "postmaster": {"commit": "%s", "checkout": "%s"}}\n' \
+  "$FIX" "$pinL" > "$tmp/runs/legacy/RUN-L/run.json"
+out=$("$SELF" report "$FIX3" "$tmp/runs" --tool "$tool" 2>"$tmp/err"); rc=$?
+[ $rc -eq 0 ] && printf '%s\n' "$out" | grep -q "RUN-L  *unknown" \
+  && ok "a legacy-layout run reports unknown on its branches" \
+  || fail "a legacy-layout run reports unknown on its branches (exit $rc)" "$out$(cat "$tmp/err")"
+out=$("$SELF" queue "$FIX3" "$tmp/runs" --tool "$tool" 2>"$tmp/err"); rc=$?
+[ $rc -eq 0 ] && [ "$(cmd "$pinL" rev-parse HEAD)" != "$FIX" ] \
+  && cmd "$pinL" log -1 --format=%s | grep -q "Main's fix" \
+  && ok "and queue still serves its pinned checkout alone" \
+  || fail "and queue still serves its pinned checkout alone (exit $rc)" "$out$(cat "$tmp/err")"
+
+echo "a lane branch missing from the manifest still gets the fix"
+dR=$(dispatch "$RUNS_A" tR checkpoint-1 1 '{}')
+between_legs "$dR"
+cmd "$projA" checkout -qb tR main
+cmd "$projA" checkout -qb wb/tR-luna
+cmd "$projA" checkout -q tA
+"$SELF" queue "$FIX" "$RUNS_A" --tool "$tool" >/dev/null 2>&1
+printf 'You are the coachman for leg 2.\n' > "$dR/leg-2-prompt.txt"
+out=$("$SELF" next-leg "$dR" 2 "$dR/leg-2-prompt.txt" --tool "$tool" 2>"$tmp/err"); rc=$?
+[ $rc -eq 0 ] && cmd "$projA" log -1 --format=%s tR | grep -q "Main's fix" \
+  && cmd "$projA" log -1 --format=%s wb/tR-luna | grep -q "Main's fix" \
+  && ok "an unlisted lane branch is found by the branch scan and fixed" \
+  || fail "an unlisted lane branch is found by the branch scan and fixed (exit $rc)" "$out$(cat "$tmp/err")"
+
+echo "roots with spaces arrive whole"
+mkdir -p "$tmp/spaced root/.postmaster/runs"
+git -C "$tmp/spaced root" init -q -b main
+dS=$(dispatch "$tmp/spaced root/.postmaster/runs" tS synthesis 1 '{}')
+out=$("$SELF" report "$FIX" "$tmp/spaced root" --tool "$tool" 2>"$tmp/err"); rc=$?
+[ $rc -eq 0 ] && printf '%s\n' "$out" | grep -q "tS  *checkout" \
+  && ok "a spaced root reports instead of splitting" \
+  || fail "a spaced root reports instead of splitting (exit $rc)" "$out$(cat "$tmp/err")"
+
+echo "a fix may use the patch's own old filenames"
+toolJ="$tmp/toolJ"
+new_repo "$toolJ"
+mkdir -p "$toolJ/scripts"
+printf 'a\nb\nc\n' > "$toolJ/scripts/foo.sh"
+cmd "$toolJ" add -A; cmd "$toolJ" commit -qm base
+printf 'a\nb\nC\n' > "$toolJ/scripts/foo.sh"
+echo payload > "$toolJ/fix.patch"
+echo hidden > "$toolJ/.hotfix-reach.patch"
+cmd "$toolJ" add -A; cmd "$toolJ" commit -qm "#7, Fix with patch filenames"
+FIXJ=$(cmd "$toolJ" rev-parse HEAD)
+projJ="$tmp/projJ"
+new_repo "$projJ"
+mkdir -p "$projJ/scripts"
+printf 'a\nb\nc\n' > "$projJ/scripts/foo.sh"
+cmd "$projJ" add -A; cmd "$projJ" commit -qm base
+RUNS_J="$projJ/.postmaster/runs"
+dJ=$(dispatch "$RUNS_J" tJ checkpoint-1 1 '{}')
+between_legs "$dJ"
+cmd "$projJ" checkout -qb tJ
+cmd "$projJ" checkout -q main
+out=$("$SELF" report "$FIXJ" "$RUNS_J" --tool "$toolJ" 2>"$tmp/err"); rc=$?
+[ $rc -eq 0 ] && printf '%s\n' "$out" | grep -q "tJ  *branch" \
+  && ok "a fix creating fix.patch is branch, not conflict" \
+  || fail "a fix creating fix.patch is branch, not conflict (exit $rc)" "$out$(cat "$tmp/err")"
+"$SELF" queue "$FIXJ" "$RUNS_J" --tool "$toolJ" >/dev/null 2>&1
+printf 'You are the coachman for leg 2.\n' > "$dJ/leg-2-prompt.txt"
+out=$("$SELF" next-leg "$dJ" 2 "$dJ/leg-2-prompt.txt" --tool "$toolJ" 2>"$tmp/err"); rc=$?
+[ $rc -eq 0 ] && [ "$(cmd "$projJ" show tJ:fix.patch)" = "payload" ] \
+  && [ "$(cmd "$projJ" show tJ:.hotfix-reach.patch)" = "hidden" ] \
+  && [ "$(cmd "$projJ" show tJ:scripts/foo.sh)" = "$(printf 'a\nb\nC')" ] \
+  && ok "and both files land in the applied commit with the fix" \
+  || fail "and both files land in the applied commit with the fix (exit $rc)" "$out$(cat "$tmp/err")"
 
 echo
 [ "$fails" -eq 0 ] && { echo "self-test: all controls behaved"; exit 0; }
