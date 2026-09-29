@@ -1,12 +1,25 @@
 ---
 title: Log
 type: schema
-updated: 2026-09-27
+updated: 2026-09-29
 ---
 
 # Log
 
 Append-only. Newest first. One entry per operation, prefixed so it can be parsed.
+
+## [2026-09-29] ingest | the planning stage: every spec to the user before code
+
+A decision page, and a capture. Anthropic's AI-native SDLC playbook is captured into
+`raw/articles/ai-native-sdlc-playbook/` for its claim that design review happens before any
+code is generated. A run gains a `planning` stage: each workhorse drafts its own spec and
+stops, the postmaster puts each spec to the user one at a time as a link into the workhorse's
+worktree, and no workhorse writes code until its own spec is approved. Two approved specs are
+needed to go on. This reverses part of #29, where the spec was an audit record nobody
+reviewed during the run; the coachman still does not check code against the spec. The
+workhorse-spec page no longer says nobody reviews it, and #9's own-spec level becomes the
+workhorses' own specs reviewed by the user, with whether review makes the specs converge as a
+measure. Standing `claimed`, since no run bears on it yet.
 
 ## [2026-09-27] ingest | how the style sort is checked and put to the user
 

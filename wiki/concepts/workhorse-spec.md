@@ -3,7 +3,7 @@ title: The workhorse spec
 type: concept
 standing: claimed
 sources: [articles/spec-kit-templates]
-updated: 2026-09-25
+updated: 2026-09-29
 ---
 
 # The workhorse spec
@@ -42,20 +42,25 @@ become acceptance-criterion tags, since tickets carry numbered criteria rather t
 that lets an audit see at once whether every criterion has a task. Its `NEEDS CLARIFICATION`
 markers become recorded decisions, because a workhorse has nobody to ask mid-run.
 
-## What it does not do, at this stage
+## What reviews it
 
-Nobody reviews a spec during the run, and no stage waits on one. It is an audit record. A
-review step would be a separate decision with its own test: checking specs against each other,
-or against what the coachman would have done, would push the workhorses back toward one approach.
+The user does, before any code is written. The [planning stage](planning-stage.md) puts each
+workhorse's spec to the user one at a time, never beside another's, and a workhorse implements
+only from a spec the user approved. That review is for scope and correctness; it does not try
+to make the specs alike, which would undo the independence above.
 
 ## What would change it
 
 The comparison in issue #9 runs the same tickets three ways: each workhorse drafting its own spec,
-the coachman drafting one shared spec, and no spec at all. Its decision rule is fixed in
-advance: this stays the default unless a shared spec produces a clearly better synthesis.
+the coachman drafting one shared spec, and no spec at all. Its own-spec level is the workhorses'
+own specs reviewed by the user, and whether review makes the specs converge is a measure of it.
+Its decision rule is fixed in advance: this stays the default unless a shared spec produces a
+clearly better synthesis.
 
 ## What changed because of it
 
 The workhorse contract in `skills/postmaster/coachman.md` gains `WORKHORSE-SPEC.md` as a workhorse's first act,
 written from `skills/postmaster/workhorse-spec-template.md`, and the run's audit keeps a copy of each
-one as first committed and as finished.
+one as first committed and as finished. On 2026-09-29 the planning stage began putting each
+spec to the user before code, reversing part of #29's "nobody reviews it during the run"; the
+coachman still does not check code against the spec.
