@@ -430,7 +430,7 @@ PY
     adapter_config "$h"
     case $h in
       codex) event='{"thread_id":"fixture-codex"}' ;;
-      grok) event='{"session_id":"fixture-grok"}' ;;
+      grok) event='{"type":"session","id":"fixture-grok"}' ;;
       agy) event='{"conversationId":"fixture-agy"}' ;;
       claude) event='{"session_id":"fixture-claude"}' ;;
       pi) event='{"type":"session","id":"fixture-pi"}' ;;
@@ -450,7 +450,12 @@ PY
       || fail "$h names the model stream idle timeout as transient"
   done
   adapter_config claude
-  printf '%s\n' '{"type":"user","message":"model stream idle timeout"}' > "$tmp/adapter/events.jsonl"
+  printf '%s\n' '{"type":"result","subtype":"error_during_execution","message":"model stream idle timeout"}' > "$tmp/adapter/events.jsonl"
+  run adapter transient coachman "$tmp/adapter/err" "$tmp/adapter/events.jsonl" --leg synthesis --run "$tmp/adapter"
+  [ $rc -eq 0 ] && [ "$out" = "model stream idle timeout" ] \
+    && ok "a harness failure subtype in the stream tail is inspected" \
+    || fail "a harness failure subtype in the stream tail is inspected"
+  printf '%s\n' '{"type":"error","message":"provider request failed","prompt":{"text":"model stream idle timeout"}}' > "$tmp/adapter/events.jsonl"
   run adapter transient coachman "$tmp/adapter/err" "$tmp/adapter/events.jsonl" --leg synthesis --run "$tmp/adapter"
   [ $rc -eq 1 ] && [ "$out" = "not-transient" ] && ok "timeout text in a user prompt is not a provider error" \
     || fail "timeout text in a user prompt is not a provider error"
@@ -462,6 +467,10 @@ PY
   run adapter transient coachman "$tmp/adapter/err" "$tmp/adapter/events.jsonl" --leg synthesis --run "$tmp/adapter"
   [ $rc -eq 1 ] && [ "$out" = "provider-wall" ] && ok "a quota wall takes precedence over a transient signature" \
     || fail "a quota wall takes precedence over a transient signature"
+  printf '%s\n' 'provider wall: model capacity exhausted' > "$tmp/adapter/err"
+  run adapter transient coachman "$tmp/adapter/err" "$tmp/adapter/events.jsonl" --leg synthesis --run "$tmp/adapter"
+  [ $rc -eq 1 ] && [ "$out" = "provider-wall" ] && ok "a provider wall is never transient" \
+    || fail "a provider wall is never transient"
   printf '%s\n' 'request timeout' > "$tmp/adapter/err"
   run adapter transient coachman "$tmp/adapter/err" "$tmp/adapter/events.jsonl" --leg synthesis --run "$tmp/adapter"
   [ $rc -eq 1 ] && [ "$out" = "not-transient" ] && ok "a generic timeout is not transient" \
@@ -608,7 +617,10 @@ def thread_id(event):
     if not isinstance(event, dict): return ""
     if harness == "codex": keys = ("thread_id",)
     elif harness == "claude": keys = ("session_id",)
-    elif harness == "grok": keys = ("session_id", "sessionId", "conversation_id", "conversationId")
+    elif harness == "grok":
+        keys = ("session_id", "sessionId", "conversation_id", "conversationId")
+        kind = " ".join(str(event.get(k, "")) for k in ("type", "event", "kind")).lower()
+        if "session" in kind or "session" in event: keys += ("id", "uuid")
     elif harness == "agy": keys = ("conversationId",)
     elif harness == "pi":
         if event.get("type") != "session": return ""
@@ -640,23 +652,27 @@ except OSError as e:
     print("launch: cannot read %s: %s" % (err_path, e), file=sys.stderr)
     raise SystemExit(2)
 
-# Only error records contribute stream text. User and prompt fields are excluded, so a prompt
-# that mentions a timeout can never make a process eligible for an automatic remount.
+# Only error fields on error records contribute stream text. User and prompt fields are excluded,
+# so prompt text can never make a process eligible for an automatic remount.
 error_text = []
 for event in events(stream_path):
     if not isinstance(event, dict): continue
-    kind = " ".join(str(event.get(k, "")) for k in ("type", "event", "kind", "payload_type")).lower()
+    kind = " ".join(str(event.get(k, "")) for k in
+                     ("type", "event", "kind", "payload_type", "subtype", "status")).lower()
     marked = ("error" in kind or "fail" in kind or "exception" in kind or
-              bool(event.get("error")))
+              bool(event.get("error")) or bool(event.get("errors")))
     if not marked: continue
-    def collect(value):
+    def collect(value, parent=""):
+        if isinstance(value, str):
+            if parent in {"error", "errors", "message", "detail", "reason", "description", "text"}:
+                error_text.append(value)
+            return
         if isinstance(value, dict):
             for key, child in value.items():
                 if str(key).lower() in {"user", "prompt", "input", "transcript", "request"}: continue
-                if isinstance(child, str): error_text.append(child)
-                else: collect(child)
+                collect(child, str(key).lower())
         elif isinstance(value, list):
-            for child in value: collect(child)
+            for child in value: collect(child, parent)
     collect(event)
 
 all_errors = err + "\n" + "\n".join(error_text)

@@ -27,7 +27,7 @@ PATH.
 | harness | thread id in its stream | transient provider error named by the adapter |
 |---|---|---|
 | codex | `thread_id` | `model stream idle timeout` |
-| grok | session id (`session_id`, `sessionId`, `conversation_id` or `conversationId`) | `model stream idle timeout` |
+| grok | session id (`session_id`, `sessionId`, `conversation_id` or `conversationId`; `id` or `uuid` on a session record) | `model stream idle timeout` |
 | agy | `conversationId` | `model stream idle timeout` |
 | claude | `session_id` | `model stream idle timeout` |
 | pi | `id` on the `session` record | `model stream idle timeout` |

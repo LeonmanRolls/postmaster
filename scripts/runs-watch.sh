@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
-# Wait until a run under a project's run root needs the postmaster, then print runs-status.sh's
-# table, name each run that needs it with its NEXT, and exit. This is the loop Stage D keeps in
-# the background: it reads runs, sleeps and prints, and nothing else. A session that improvises
-# this look loses it on a restart and fires on runs it must leave alone.
+# Watch the runs under a project's run root. It dispatches a checked next leg and resumes a leg
+# ended by a named transient provider error. It prints the status table and wakes the postmaster
+# only when a decision is needed or it could not complete a step.
 #
 #   runs-watch.sh <project-run-root> [--timeout <seconds>]
 #   runs-watch.sh --help
 #   runs-watch.sh --self-test
 #
 # It looks at once, then every postmaster.poll_seconds (default 120) from the config
-# (POSTMASTER_CONFIG overrides the path). A run needs the postmaster when its NEXT is anything
-# but WAIT (a leg at work), USER (already put to the user) or - (closed). A run listed in
+# (POSTMASTER_CONFIG overrides the path). DISPATCH and eligible REMOUNT steps are taken by the
+# watcher; RULE, GATE, READ, INSPECT, a wall, a refusal, and an incomplete step wake the postmaster.
+# WAIT is a leg at work, USER is already put to the user, and - is closed. A run listed in
 # <runs>/postmaster/held, one ticket per line, never does: hold a run by writing its ticket
 # there exactly as the RUN column shows it, and release it by removing the line. A held line
 # that matches no run warns on stderr. The held list and the config are read on every look,
@@ -23,12 +23,12 @@
 # the postmaster.
 #
 #   exit 0  a run needs the postmaster: the table, then one `needs <run> <NEXT>` line each
-#   exit 3  --timeout passed with nothing to act on: the table
+#   exit 3  --timeout passed with nothing for the postmaster: the table
 #   exit 1  usage, no such root, the held list cannot be read, or a timeout
 #           that is not a whole number
 #
-# Controls: every NEXT that must wake the postmaster names its run on exit 0 (positive), and
-# WAIT, USER, -, and a held run leave it waiting until its timeout (negative).
+# Controls: self-test exercises each taken step and every postmaster wake case; its host stub
+# records the command and stream without starting an agent. WAIT, USER, -, and held runs are negative controls.
 set -uo pipefail
 HERE=$(CDPATH= cd -P -- "$(dirname -- "$0")" && pwd -P)
 
@@ -117,6 +117,320 @@ except (OSError, ValueError) as e:
 PY
 }
 
+is_held_run() {  # is_held_run <run> <postmaster-dir>: refresh the held list immediately before a step
+  local held=$1 lines
+  lines=$(held_lines "$2") || return 2
+  printf '%s\n' "$lines" | awk -v wanted="$held" '
+    { line=$0; gsub(/^[ \t]+|[ \t]+$/, "", line); if (line == wanted) found=1 }
+    END { exit(found ? 0 : 1) }
+  '
+}
+
+ACTION_ERROR=""
+NEEDS=""
+mark_needs() {  # mark_needs <run> <NEXT> [reason]
+  local run=$1 next=$2 reason=${3:-}
+  NEEDS="${NEEDS}${NEEDS:+$'\n'}needs $run $next"
+  [ -z "$reason" ] || printf 'runs-watch: %s %s: %s\n' "$run" "$next" "$reason" >&2
+}
+
+repo_from_brief() {  # repo_from_brief <dispatch>: the repo in the Project profile section
+  awk '
+    /^## Project profile[[:space:]]*$/ { profile=1; next }
+    /^## / { profile=0 }
+    profile && /^repo:[[:space:]]*/ { sub(/^repo:[[:space:]]*/, ""); sub(/[[:space:]]+$/, ""); print; exit }
+  ' "$1/brief.md"
+}
+
+leg_job() {  # leg_job <number>: the one-line job from coachman.md's legs table
+  python3 - "$HERE/../skills/postmaster/coachman.md" "$1" <<'PY'
+import pathlib, re, sys
+path, number = pathlib.Path(sys.argv[1]), sys.argv[2]
+for line in path.read_text().splitlines():
+    if not line.startswith("|"): continue
+    cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+    if len(cells) != 4 or cells[0] != number: continue
+    name, covers, ends = (re.sub(r"`", "", value) for value in cells[1:])
+    print("Your %s leg covers %s; it ends with %s." % (name, covers, ends))
+    raise SystemExit(0)
+raise SystemExit(1)
+PY
+}
+
+manifest_leg() {  # manifest_leg <dispatch> <number> <thread-id-or-empty>: set the active leg and its coachman record
+  python3 - "$1/manifest.json" "$2" "$3" <<'PY'
+import json, os, pathlib, sys, tempfile
+path, number, thread = pathlib.Path(sys.argv[1]), sys.argv[2], sys.argv[3]
+try: manifest = json.loads(path.read_text())
+except (OSError, ValueError) as e:
+    print("runs-watch: cannot read %s: %s" % (path, e), file=sys.stderr); raise SystemExit(1)
+if not isinstance(manifest, dict):
+    print("runs-watch: %s is not a JSON object" % path, file=sys.stderr); raise SystemExit(1)
+try:
+    coachman = manifest.setdefault("coachman", {})
+    legs = coachman.setdefault("legs", {})
+    entry = legs.setdefault(number, {})
+    if not all(isinstance(x, dict) for x in (coachman, legs, entry)):
+        raise ValueError("coachman.legs is not an object")
+    manifest["leg"] = int(number)
+    entry["name"] = "coachman"
+    if thread: entry["thread_id"] = thread
+    else: entry.pop("thread_id", None)
+except (AttributeError, TypeError, ValueError) as e:
+    print("runs-watch: cannot update %s: %s" % (path, e), file=sys.stderr); raise SystemExit(1)
+fd, tmp = tempfile.mkstemp(dir=str(path.parent)); os.close(fd)
+try:
+    with open(tmp, "w") as f: json.dump(manifest, f, indent=2); f.write("\n")
+    os.replace(tmp, path)
+except OSError as e:
+    try: os.unlink(tmp)
+    except OSError: pass
+    print("runs-watch: cannot write %s: %s" % (path, e), file=sys.stderr); raise SystemExit(1)
+PY
+}
+
+resume_count() {  # resume_count <dispatch> <leg>: prints the persisted automatic-remount count
+  python3 - "$1/watcher.json" "$2" <<'PY'
+import json, pathlib, sys
+path, leg = pathlib.Path(sys.argv[1]), sys.argv[2]
+if not path.exists(): print(0); raise SystemExit(0)
+try:
+    data = json.loads(path.read_text())
+    counts = data.get("resume_attempts", {})
+    value = counts.get(leg, 0)
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0: raise ValueError("invalid count")
+except (OSError, ValueError, AttributeError, TypeError) as e:
+    print("runs-watch: cannot read %s: %s" % (path, e), file=sys.stderr); raise SystemExit(1)
+print(value)
+PY
+}
+
+set_resume_count() {  # set_resume_count <dispatch> <leg> <count>: atomically persist the count
+  python3 - "$1/watcher.json" "$2" "$3" <<'PY'
+import json, os, pathlib, sys, tempfile
+path, leg, count = pathlib.Path(sys.argv[1]), sys.argv[2], int(sys.argv[3])
+try:
+    data = json.loads(path.read_text()) if path.exists() else {}
+    if not isinstance(data, dict): raise ValueError("not an object")
+    counts = data.setdefault("resume_attempts", {})
+    if not isinstance(counts, dict): raise ValueError("resume_attempts is not an object")
+    data["resume_attempts"][leg] = count
+except (OSError, ValueError, TypeError) as e:
+    print("runs-watch: cannot update %s: %s" % (path, e), file=sys.stderr); raise SystemExit(1)
+fd, tmp = tempfile.mkstemp(dir=str(path.parent)); os.close(fd)
+try:
+    with open(tmp, "w") as f: json.dump(data, f, indent=2); f.write("\n")
+    os.replace(tmp, path)
+except OSError as e:
+    try: os.unlink(tmp)
+    except OSError: pass
+    print("runs-watch: cannot write %s: %s" % (path, e), file=sys.stderr); raise SystemExit(1)
+PY
+}
+
+watch_host() {  # watch_host <dispatch|resume> <name> <cwd> <dispatch-dir> <out> <err> <marker> <append 0|1> -- <launch command>
+  local kind=$1 name=$2 cwd=$3 dispatch=$4 out=$5 err=$6 marker=$7 append=$8 callfile
+  shift 8
+  local command=(run "$name" "$cwd" --role coachman --run "$dispatch")
+  [ "$append" = 0 ] || command+=(--append)
+  command+=(--out "$out" --err "$err" --marker "$marker" -- "$@")
+  if [ "${POSTMASTER_WATCH_TEST_MODE:-}" = 1 ]; then
+    [ -n "${POSTMASTER_WATCH_TEST_CALLS:-}" ] || return 1
+    local leg_key=${marker##*.leg-}
+    leg_key=${leg_key%-exited}
+    callfile=$POSTMASTER_WATCH_TEST_CALLS/$kind-$(basename "$dispatch")-$leg_key
+    mkdir -p "${POSTMASTER_WATCH_TEST_CALLS:-}" "$(dirname "$out")" "$(dirname "$err")" || return 1
+    {
+      printf 'kind=%s\nname=%s\ncwd=%s\ndispatch=%s\nout=%s\nerr=%s\nmarker=%s\nappend=%s\nhost_command=' \
+        "$kind" "$name" "$cwd" "$dispatch" "$out" "$err" "$marker" "$append"
+      printf '%q ' "${command[@]}"; printf '\ncommand='
+      printf '%q ' "$@"; printf '\n'
+    } > "$callfile"
+    rm -f -- "$marker"
+    : > "$err"
+    if [ "${POSTMASTER_WATCH_TEST_FAIL:-}" = "$kind" ]; then
+      printf 'host: simulated %s failure\n' "$kind" > "$err"
+      : > "$marker"
+      return 1
+    fi
+    if [ "${POSTMASTER_WATCH_TEST_REFUSE:-}" = 1 ]; then
+      printf 'launch: simulated refusal\n' > "$err"
+      : > "$marker"
+      return 0
+    fi
+    if [ "$kind" = dispatch ]; then
+      if [ "${POSTMASTER_WATCH_TEST_NO_THREAD:-}" = 1 ]; then
+        printf '%s\n' '{"type":"result","message":"no session id"}' > "$out"
+      else
+        printf '%s\n' '{"session_id":"watch-fixture-thread"}' > "$out"
+      fi
+    else
+      printf '%s\n' '{"type":"assistant","message":"continued"}' >> "$out"
+    fi
+    return 0
+  fi
+  "$HERE/host.sh" "${command[@]}"
+}
+
+prepare_dispatch() {  # prepare_dispatch <dispatch> <run> <current leg>: dispatch next leg or report why it could not
+  local d=$1 run=$2 current=$3 list next job repo worktree prompt host_name out err marker number leg
+  ACTION_ERROR=""
+  if ! list=$("$HERE/turnpikes.sh" legs "$d" 2>&1); then
+    ACTION_ERROR="turnpikes.sh legs failed: $list"; return 1
+  fi
+  next=$(printf '%s\n' "$list" | awk -v n="$current" '$1 ~ /^[0-9]+$/ && $1 + 0 > n { print $1 "\t" $2; exit }')
+  if [ -z "$next" ]; then ACTION_ERROR="no later leg is listed; Stage G remains with the postmaster"; return 2; fi
+  IFS=$'\t' read -r number leg <<< "$next"
+  local handoff="$d/handoff-$current.md" check
+  check=$("$HERE/handoff-check.sh" "$handoff" 2>&1)
+  local check_rc=$?
+  if [ $check_rc -ne 0 ]; then ACTION_ERROR="handoff check failed for $handoff (exit $check_rc): $check"; return 1; fi
+  repo=$(repo_from_brief "$d")
+  case $repo in /*) ;; *) ACTION_ERROR="the Project profile has no absolute repo path"; return 1 ;; esac
+  worktree=$repo/.worktrees/$run
+  [ -d "$worktree" ] || { ACTION_ERROR="the synthesis worktree is missing: $worktree"; return 1; }
+  job=$(leg_job "$number") || { ACTION_ERROR="coachman.md has no job for leg $number"; return 1; }
+  host_name=$("$HERE/host.sh" name "$d" coachman 2>&1) || { ACTION_ERROR="host.sh name failed: $host_name"; return 1; }
+  prompt="$d/leg-$number-prompt.txt"
+  local time_file="${prompt}.tmp.$$"
+  local held_rc
+  is_held_run "$run" "$ROOT/postmaster"; held_rc=$?
+  if [ $held_rc -eq 0 ]; then return 3; fi
+  if [ $held_rc -ne 1 ]; then ACTION_ERROR="cannot re-read the held list"; return 1; fi
+  {
+    printf 'You are the coachman for leg %s of %s.\n' "$number" "$run"
+    printf 'Read %s/brief.md, then %s/skills/postmaster/coachman.md, then %s/handoff-%s.md.\n' \
+      "$d" "$(dirname "$HERE")" "$d" "$current"
+    printf '%s\n' "$job"
+  } > "$time_file" || { ACTION_ERROR="cannot write the leg prompt: $prompt"; return 1; }
+  is_held_run "$run" "$ROOT/postmaster"; held_rc=$?
+  if [ $held_rc -eq 0 ]; then rm -f -- "$time_file"; return 3; fi
+  if [ $held_rc -ne 1 ]; then rm -f -- "$time_file"; ACTION_ERROR="cannot re-read the held list"; return 1; fi
+  mv -f -- "$time_file" "$prompt" || { ACTION_ERROR="cannot install the leg prompt: $prompt"; return 1; }
+  is_held_run "$run" "$ROOT/postmaster"; held_rc=$?
+  if [ $held_rc -eq 0 ]; then return 3; fi
+  if [ $held_rc -ne 1 ]; then ACTION_ERROR="cannot re-read the held list"; return 1; fi
+  if ! manifest_leg "$d" "$number" ""; then ACTION_ERROR="could not record leg $number in manifest.json"; return 1; fi
+  out="$d/logs/coachman-leg-$number-events.jsonl"
+  err="$d/logs/coachman-leg-$number.err"
+  marker="$d/.leg-$number-exited"
+  is_held_run "$run" "$ROOT/postmaster"; held_rc=$?
+  if [ $held_rc -eq 0 ]; then return 3; fi
+  if [ $held_rc -ne 1 ]; then ACTION_ERROR="cannot re-read the held list"; return 1; fi
+  if ! watch_host dispatch "$host_name" "$worktree" "$d" "$out" "$err" "$marker" 0 \
+      "$HERE/launch.sh" launch coachman "$worktree" "$prompt" --leg "$leg" --run "$d"; then
+    ACTION_ERROR="host.sh could not start coachman leg $number; read $err"; return 1
+  fi
+  local thread="" i=0 limit=30 adapter_out adapter_rc
+  [ "${POSTMASTER_WATCH_TEST_MODE:-}" != 1 ] || limit=1
+  while [ $i -lt "$limit" ]; do
+    adapter_out=$("$HERE/launch.sh" thread-id coachman --leg "$leg" --run "$d" "$out" 2>&1)
+    adapter_rc=$?
+    if [ $adapter_rc -eq 0 ] && [ -n "$adapter_out" ]; then thread=$adapter_out; break; fi
+    case $adapter_out in launch:*) break ;; esac
+    if [ -e "$marker" ]; then break; fi
+    sleep 1; i=$((i + 1))
+  done
+  if [ -z "$thread" ]; then
+    ACTION_ERROR="the launch produced no thread id for leg $number; read $err and $out${adapter_out:+ ($adapter_out)}"
+    return 1
+  fi
+  if ! manifest_leg "$d" "$number" "$thread"; then ACTION_ERROR="could not record thread id for leg $number"; return 1; fi
+  if [ "$number" -gt $((current + 1)) ]; then
+    if ! "$HERE/log-action.sh" "$d" postmaster note "$run" "turnpikes omit the review leg; the watcher followed the listed legs"; then
+      ACTION_ERROR="could not log the omitted review leg"; return 1
+    fi
+  fi
+  if ! "$HERE/log-action.sh" "$d" postmaster dispatch coachman "leg $number, thread $thread; the watcher took it"; then
+    ACTION_ERROR="could not log dispatch of leg $number"; return 1
+  fi
+  return 0
+}
+
+resume_transient() {  # resume_transient <dispatch> <run> <leg number>
+  local d=$1 run=$2 number=$3 err="$1/logs/coachman-leg-$3.err" out="$1/logs/coachman-leg-$3-events.jsonl"
+  local info name thread classifier classifier_rc count repo worktree host_name prompt stamp held_rc list leg
+  ACTION_ERROR=""
+  if ! list=$("$HERE/turnpikes.sh" legs "$d" 2>&1); then ACTION_ERROR="turnpikes.sh legs failed: $list"; return 2; fi
+  leg=$(printf '%s\n' "$list" | awk -v n="$number" '$1 == n { print $2; exit }')
+  [ -n "$leg" ] || { ACTION_ERROR="turnpikes.sh legs has no entry for current leg $number"; return 2; }
+  info=$(python3 - "$d/manifest.json" "$number" <<'PY'
+import json, sys
+try:
+    m=json.load(open(sys.argv[1])); entry=m.get("coachman",{}).get("legs",{}).get(sys.argv[2],{})
+    print("%s\t%s" % (entry.get("name", ""), entry.get("thread_id", "")))
+except (OSError, ValueError, AttributeError, TypeError): raise SystemExit(1)
+PY
+  ) || { ACTION_ERROR="cannot read coachman leg $number from manifest.json"; return 2; }
+  IFS=$'\t' read -r name thread <<< "$info"
+  case $name in coachman|coachman_fallback) ;; *) ACTION_ERROR="leg $number has no recorded coachman name"; return 2 ;; esac
+  [ -n "$thread" ] || { ACTION_ERROR="leg $number has no recorded thread id"; return 2; }
+  classifier=$("$HERE/launch.sh" transient "$name" "$err" "$out" --leg "$leg" --run "$d" 2>&1)
+  classifier_rc=$?
+  if [ $classifier_rc -ne 0 ]; then ACTION_ERROR="the leg is not eligible for automatic resume (adapter: ${classifier:-exit $classifier_rc}); read $err and the stream tail"; return 2; fi
+  count=$(resume_count "$d" "$number") || { ACTION_ERROR="the remount count for leg $number is unreadable"; return 2; }
+  if [ "$count" -ge 3 ]; then ACTION_ERROR="leg $number ended on a transient provider error after three watcher resumes"; return 2; fi
+  repo=$(repo_from_brief "$d")
+  case $repo in /*) ;; *) ACTION_ERROR="the Project profile has no absolute repo path"; return 2 ;; esac
+  worktree=$repo/.worktrees/$run
+  [ -d "$worktree" ] || { ACTION_ERROR="the synthesis worktree is missing: $worktree"; return 2; }
+  host_name=$("$HERE/host.sh" name "$d" coachman 2>&1) || { ACTION_ERROR="host.sh name failed: $host_name"; return 2; }
+  prompt="$d/leg-$number-resume-$(date -u +%Y%m%dT%H%M%SZ).txt"
+  while [ -e "$prompt" ]; do
+    is_held_run "$run" "$ROOT/postmaster"; held_rc=$?
+    if [ $held_rc -eq 0 ]; then return 3; fi
+    if [ $held_rc -ne 1 ]; then ACTION_ERROR="cannot re-read the held list"; return 2; fi
+    sleep 1
+    prompt="$d/leg-$number-resume-$(date -u +%Y%m%dT%H%M%SZ).txt"
+  done
+  is_held_run "$run" "$ROOT/postmaster"; held_rc=$?
+  if [ $held_rc -eq 0 ]; then return 3; fi
+  if [ $held_rc -ne 1 ]; then ACTION_ERROR="cannot re-read the held list"; return 2; fi
+  printf 'Continue leg %s; your last written state is in the dispatch directory and the worktree.\n' "$number" > "$prompt" \
+    || { ACTION_ERROR="cannot write the remount prompt: $prompt"; return 2; }
+  if ! set_resume_count "$d" "$number" "$((count + 1))"; then ACTION_ERROR="cannot persist the remount count for leg $number"; return 2; fi
+  local launch_args=("$HERE/launch.sh" resume "$name" "$worktree" "$thread" "$prompt" --run "$d")
+  [ "$name" != coachman ] || launch_args+=(--leg "$leg")
+  if ! watch_host resume "$host_name" "$worktree" "$d" "$out" "$err" "$d/.leg-$number-exited" 1 "${launch_args[@]}"; then
+    ACTION_ERROR="host.sh could not resume leg $number; read $err"; return 2
+  fi
+  if ! "$HERE/log-action.sh" "$d" postmaster resume coachman "leg $number, thread $thread; the watcher took it"; then
+    ACTION_ERROR="could not log resume of leg $number"; return 2
+  fi
+  return 0
+}
+
+process_table() {  # process_table <runs-root> <table>: take mechanical steps and fill NEEDS for the postmaster
+  local root=$1 table=$2 row run leg next rc held_rc
+  ROOT=$root; NEEDS=""
+  while IFS= read -r row; do
+    run=$(printf '%s\n' "$row" | awk '{print $1}')
+    [ -n "$run" ] && [ "$run" != RUN ] && [ "$run" != POSTMASTER ] || continue
+    next=$(printf '%s\n' "$row" | awk '{print $NF}')
+    leg=$(python3 - "$ROOT/$run/manifest.json" <<'PY'
+import json,sys
+try: print(json.load(open(sys.argv[1])).get("leg", ""))
+except Exception: print("")
+PY
+    )
+    is_held_run "$run" "$ROOT/postmaster"; held_rc=$?
+    if [ $held_rc -eq 0 ]; then continue; fi
+    if [ $held_rc -ne 1 ]; then ACTION_ERROR="cannot read the held list"; return 1; fi
+    case $next in
+      DISPATCH)
+        prepare_dispatch "$ROOT/$run" "$run" "$leg"; rc=$?
+        case $rc in 0|3) ;; *) mark_needs "$run" DISPATCH "$ACTION_ERROR" ;; esac ;;
+      REMOUNT)
+        resume_transient "$ROOT/$run" "$run" "$leg"; rc=$?
+        if [ $rc -eq 0 ]; then :
+        elif [ $rc -eq 3 ]; then :
+        else mark_needs "$run" REMOUNT "$ACTION_ERROR"; fi ;;
+      WAIT|USER|-) ;;
+      *) mark_needs "$run" "$next" ;;
+    esac
+  done <<< "$table"
+}
+
 if [ "${1:-}" = --self-test ]; then
   self=$(CDPATH= cd -P -- "$(dirname "$0")" && pwd -P)/$(basename "$0")
   tmp=$(mktemp -d) || exit 1
@@ -141,6 +455,57 @@ t = time.time() - 3600
 for dp, dn, fn in os.walk(sys.argv[1]):
     for f in fn:
         os.utime(os.path.join(dp, f), (t, t))' "$1/$2"
+  }
+  auto_run() {  # auto_run <root> <name> <leg> <thread-id-or-empty>: dispatch-shaped fixture with a recorded claude config
+    local root=$1 name=$2 leg=$3 thread=$4 d="$1/$2" repo="$1-project"
+    mkdir -p "$d/logs" "$d/audit" "$d/render" "$root/postmaster" "$repo/.worktrees/$name"
+    : > "$d/run-log.md"; : > "$d/actions.jsonl"; : > "$root/ledger.jsonl"
+    cat > "$d/brief.md" <<EOF
+# Waybill: $name
+turnpikes: style, bug, security
+
+## Ticket
+## Project profile
+repo: $repo
+
+## Dispatch
+name: #1, Watcher fixture
+EOF
+    python3 - "$d/manifest.json" "$d/run.json" "$leg" "$thread" <<'PY'
+import json, pathlib, sys
+manifest, record, leg, thread = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2]), int(sys.argv[3]), sys.argv[4]
+entry = {"name": "coachman"}
+if thread: entry["thread_id"] = thread
+manifest.write_text(json.dumps({"stage": "review", "leg": leg, "coachman": {"legs": {str(leg): entry}}}, indent=2) + "\n")
+config = {"lanes": {}, "team": {"coachman": {"harness": "claude", "model": "coach-test"}}}
+record.write_text(json.dumps({"config": config}, indent=2) + "\n")
+PY
+  }
+  handoff() {  # handoff <dispatch> <leg>: a hand-off with every required section
+    local d=$1 n=$2
+    printf '## Decisions\nsettled\n## Deferred findings\none\n## Verified by execution\none\n## Unverified\none\n## Branches and lanes\none\n## Open questions\none\n## Next leg\none\n' > "$d/handoff-$n.md"
+  }
+  watch_stub() {  # watch_stub <root> [dispatch|resume failure|no-thread]: runs the watcher with only its host boundary replaced
+    local root=$1 mode=${2:-} extra=""
+    case $mode in
+      "dispatch failure") extra="POSTMASTER_WATCH_TEST_FAIL=dispatch" ;;
+      "resume failure") extra="POSTMASTER_WATCH_TEST_FAIL=resume" ;;
+      "dispatch refusal") extra="POSTMASTER_WATCH_TEST_REFUSE=1" ;;
+      "no thread") extra="POSTMASTER_WATCH_TEST_NO_THREAD=1" ;;
+    esac
+    out=$(env POSTMASTER_WATCH_TEST_MODE=1 POSTMASTER_WATCH_TEST_CALLS="$tmp/calls" $extra "$self" --timeout 0 "$root" 2>&1); rc=$?
+  }
+  watch_stub_wait() {  # watch_stub_wait <root>: allows one more poll to observe an asynchronous launch refusal
+    out=$(env POSTMASTER_WATCH_TEST_MODE=1 POSTMASTER_WATCH_TEST_CALLS="$tmp/calls" \
+      POSTMASTER_WATCH_TEST_REFUSE=1 "$self" --timeout 3 "$1" 2>&1); rc=$?
+  }
+  action_count() {  # action_count <dispatch> <action>
+    python3 - "$1/actions.jsonl" "$2" <<'PY'
+import json, pathlib, sys
+p=pathlib.Path(sys.argv[1]); action=sys.argv[2]
+if not p.exists(): print(0); raise SystemExit(0)
+print(sum(1 for line in p.read_text().splitlines() if json.loads(line).get("action") == action))
+PY
   }
 
   echo "positive controls: each NEXT that needs the postmaster names its run"
@@ -259,6 +624,201 @@ for dp, dn, fn in os.walk(sys.argv[1]):
     && ok "an empty timeout still looks once, prints the table and exits 3" \
     || fail "an empty timeout still looks once, prints the table and exits 3"
 
+  echo "watcher steps: dispatch and remount controls"
+  mkdir -p "$tmp/calls"
+  root="$tmp/auto-dispatch"; auto_run "$root" dispatch 1 ""; handoff "$root/dispatch" 1
+  : > "$root/dispatch/.leg-1-done"; : > "$root/dispatch/.leg-1-exited"
+  watch_stub "$root"
+  python3 - "$root/dispatch/manifest.json" "$root/dispatch/actions.jsonl" <<'PY'
+import json, sys
+m=json.load(open(sys.argv[1])); rows=[json.loads(x) for x in open(sys.argv[2])]
+e=[x for x in rows if x.get("action")=="dispatch"]
+assert m["leg"] == 2
+assert m["coachman"]["legs"]["2"] == {"name":"coachman", "thread_id":"watch-fixture-thread"}
+assert len(e)==1 and "watcher took it" in e[0]["detail"] and "watch-fixture-thread" in e[0]["detail"]
+PY
+  rc_test=$?
+  [ $rc -eq 3 ] && [ $rc_test -eq 0 ] && [ -f "$tmp/calls/dispatch-dispatch-2" ] \
+    && grep -qF -- '--role coachman --run' "$tmp/calls/dispatch-dispatch-2" \
+    && grep -qF 'launch.sh launch coachman' "$tmp/calls/dispatch-dispatch-2" \
+    && grep -qF -- '--leg review --run' "$tmp/calls/dispatch-dispatch-2" \
+    && grep -qF 'Your review leg covers stage 2' "$root/dispatch/leg-2-prompt.txt" \
+    && ok "a checked hand-off dispatches the listed leg, records its thread, and logs watcher ownership without launching an agent in the control" \
+    || fail "a checked hand-off dispatches the listed leg, records its thread, and logs watcher ownership without launching an agent in the control"
+  root="$tmp/auto-skip-review"; auto_run "$root" skip-review 1 ""; handoff "$root/skip-review" 1
+  sed -i 's/^turnpikes:.*/turnpikes: none/' "$root/skip-review/brief.md"
+  : > "$root/skip-review/.leg-1-done"; : > "$root/skip-review/.leg-1-exited"
+  watch_stub "$root"
+  python3 - "$root/skip-review/manifest.json" "$root/skip-review/actions.jsonl" <<'PY'
+import json,sys
+m=json.load(open(sys.argv[1])); rows=[json.loads(x) for x in open(sys.argv[2])]
+assert m["leg"] == 3 and m["coachman"]["legs"]["3"]["thread_id"] == "watch-fixture-thread"
+assert any(x.get("action")=="note" and "omit the review leg" in x.get("detail","") for x in rows)
+assert any(x.get("action")=="dispatch" and "watcher took it" in x.get("detail","") for x in rows)
+PY
+  rc_test=$?
+  [ $rc -eq 3 ] && [ $rc_test -eq 0 ] && [ -f "$tmp/calls/dispatch-skip-review-3" ] \
+    && grep -qF -- '--leg ship --run' "$tmp/calls/dispatch-skip-review-3" \
+    && ok "the watcher follows a legs list without review and records the omission" \
+    || fail "the watcher follows a legs list without review and records the omission"
+
+  root="$tmp/auto-resume"; auto_run "$root" resume 1 "prior-thread"
+  printf '%s\n' 'Model stream idle timeout' > "$root/resume/logs/coachman-leg-1.err"
+  : > "$root/resume/logs/coachman-leg-1-events.jsonl"; : > "$root/resume/.leg-1-exited"
+  watch_stub "$root"
+  [ $rc -eq 3 ] && has "resume " \
+    && [ "$(action_count "$root/resume" resume)" -eq 1 ] \
+    && grep -qF 'watcher took it' "$root/resume/actions.jsonl" \
+    && grep -qF 'Continue leg 1; your last written state is in the dispatch directory and the worktree.' "$root/resume/leg-1-resume-"*.txt \
+    && grep -qF -- '--role coachman --run' "$tmp/calls/resume-resume-1" \
+    && grep -qF -- '--append' "$tmp/calls/resume-resume-1" \
+    && grep -qF 'launch.sh resume coachman' "$tmp/calls/resume-resume-1" \
+    && grep -qF 'prior-thread' "$tmp/calls/resume-resume-1" \
+    && [ ! -e "$root/resume/.leg-1-exited" ] \
+    && ok "a named transient end resumes the recorded thread with the remount prompt and logs it without launching an agent in the control" \
+    || fail "a named transient end resumes the recorded thread with the remount prompt and logs it without launching an agent in the control"
+  for attempt in 2 3; do
+    printf '%s\n' 'model_stream_idle_timeout' > "$root/resume/logs/coachman-leg-1.err"
+    : > "$root/resume/.leg-1-exited"
+    watch_stub "$root"
+    got=$(python3 - "$root/resume/watcher.json" <<'PY'
+import json,sys
+print(json.load(open(sys.argv[1]))["resume_attempts"]["1"])
+PY
+    )
+    [ $rc -eq 3 ] && [ "$got" = "$attempt" ] && [ "$(action_count "$root/resume" resume)" -eq "$attempt" ] \
+      && ok "transient end $attempt is resumed and its per-leg count persists" \
+      || fail "transient end $attempt is resumed and its per-leg count persists"
+  done
+  printf '%s\n' 'model stream idle timeout' > "$root/resume/logs/coachman-leg-1.err"
+  : > "$root/resume/.leg-1-exited"
+  watch_stub "$root"
+  got=$(python3 - "$root/resume/watcher.json" <<'PY'
+import json,sys
+print(json.load(open(sys.argv[1]))["resume_attempts"]["1"])
+PY
+  )
+  [ $rc -eq 0 ] && has "needs resume REMOUNT" && [ "$got" = 3 ] \
+    && [ "$(action_count "$root/resume" resume)" -eq 3 ] \
+    && ok "the fourth transient end wakes the postmaster without incrementing or resuming" \
+    || fail "the fourth transient end wakes the postmaster without incrementing or resuming"
+
+  echo "postmaster wake controls: provider walls and launch refusals"
+  for spec in "wall quota exceeded: provider capacity reached" "provider provider wall: model capacity exhausted" "refusal launch: resume needs a thread id"; do
+    set -- $spec; name=$1; message=${spec#* }
+    root="$tmp/wake-$name"; auto_run "$root" "$name" 1 "thread-$name"
+    printf '%s\n' "$message" > "$root/$name/logs/coachman-leg-1.err"
+    : > "$root/$name/logs/coachman-leg-1-events.jsonl"; : > "$root/$name/.leg-1-exited"
+    watch_stub "$root"
+    [ $rc -eq 0 ] && has "needs $name REMOUNT" && [ ! -e "$root/$name/watcher.json" ] \
+      && [ ! -e "$tmp/calls/resume-$name-1" ] \
+      && ok "$name remains with the postmaster and is not retried" \
+      || fail "$name remains with the postmaster and is not retried"
+  done
+  root="$tmp/wake-other-error"; auto_run "$root" other-error 1 "thread-other"
+  printf '%s\n' 'connection reset by peer' > "$root/other-error/logs/coachman-leg-1.err"
+  : > "$root/other-error/logs/coachman-leg-1-events.jsonl"; : > "$root/other-error/.leg-1-exited"
+  watch_stub "$root"
+  [ $rc -eq 0 ] && has "needs other-error REMOUNT" \
+    && [ ! -e "$root/other-error/watcher.json" ] \
+    && [ ! -e "$tmp/calls/resume-other-error-1" ] \
+    && ok "an unlisted provider error stays with the postmaster" \
+    || fail "an unlisted provider error stays with the postmaster"
+  root="$tmp/wake-no-thread-remount"; auto_run "$root" no-thread-remount 1 ""
+  printf '%s\n' 'model stream idle timeout' > "$root/no-thread-remount/logs/coachman-leg-1.err"
+  : > "$root/no-thread-remount/logs/coachman-leg-1-events.jsonl"; : > "$root/no-thread-remount/.leg-1-exited"
+  watch_stub "$root"
+  [ $rc -eq 0 ] && has "needs no-thread-remount REMOUNT" \
+    && [ ! -e "$root/no-thread-remount/watcher.json" ] \
+    && [ ! -e "$tmp/calls/resume-no-thread-remount-1" ] \
+    && ok "a transient end with no recorded thread id stays with the postmaster" \
+    || fail "a transient end with no recorded thread id stays with the postmaster"
+
+  echo "postmaster wake controls: incomplete watcher steps"
+  root="$tmp/wake-handoff"; auto_run "$root" handoff 1 ""; : > "$root/handoff/.leg-1-done"; : > "$root/handoff/.leg-1-exited"
+  printf '## Decisions\nmissing the other required sections\n' > "$root/handoff/handoff-1.md"
+  watch_stub "$root"
+  [ $rc -eq 0 ] && has "needs handoff DISPATCH" && [ ! -e "$tmp/calls/dispatch-handoff-2" ] \
+    && ok "a failed hand-off check wakes the postmaster and launches nothing" \
+    || fail "a failed hand-off check wakes the postmaster and launches nothing"
+  root="$tmp/wake-legs"; auto_run "$root" legs 1 ""; : > "$root/legs/.leg-1-done"; : > "$root/legs/.leg-1-exited"
+  sed -i 's/^turnpikes:.*/not a turnpikes line/' "$root/legs/brief.md"; handoff "$root/legs" 1
+  watch_stub "$root"
+  [ $rc -eq 0 ] && has "needs legs DISPATCH" && [ ! -e "$tmp/calls/dispatch-legs-2" ] \
+    && ok "a failed turnpikes lookup wakes the postmaster and launches nothing" \
+    || fail "a failed turnpikes lookup wakes the postmaster and launches nothing"
+  root="$tmp/wake-dispatch"; auto_run "$root" dispatch-failure 1 ""; handoff "$root/dispatch-failure" 1
+  : > "$root/dispatch-failure/.leg-1-done"; : > "$root/dispatch-failure/.leg-1-exited"
+  watch_stub "$root" "dispatch failure"
+  [ $rc -eq 0 ] && has "needs dispatch-failure DISPATCH" \
+    && [ -e "$root/dispatch-failure/.leg-2-exited" ] \
+    && ok "a refused host dispatch wakes the postmaster" \
+    || fail "a refused host dispatch wakes the postmaster"
+  root="$tmp/wake-launch-refusal"; auto_run "$root" launch-refusal 1 ""; handoff "$root/launch-refusal" 1
+  : > "$root/launch-refusal/.leg-1-done"; : > "$root/launch-refusal/.leg-1-exited"
+  watch_stub "$root" "dispatch refusal"
+  [ $rc -eq 0 ] && has "needs launch-refusal DISPATCH" \
+    && [ -e "$root/launch-refusal/.leg-2-exited" ] \
+    && [ ! -e "$root/launch-refusal/watcher.json" ] \
+    && ok "a launch.sh refusal wakes the postmaster" \
+    || fail "a launch.sh refusal wakes the postmaster"
+  root="$tmp/wake-no-thread"; auto_run "$root" no-thread 1 ""; handoff "$root/no-thread" 1
+  : > "$root/no-thread/.leg-1-done"; : > "$root/no-thread/.leg-1-exited"
+  watch_stub "$root" "no thread"
+  [ $rc -eq 0 ] && has "needs no-thread DISPATCH" \
+    && ok "a launch with no readable thread id wakes the postmaster" \
+    || fail "a launch with no readable thread id wakes the postmaster"
+  root="$tmp/wake-resume"; auto_run "$root" resume-failure 1 "thread-resume"
+  printf '%s\n' 'model stream idle timeout' > "$root/resume-failure/logs/coachman-leg-1.err"
+  : > "$root/resume-failure/logs/coachman-leg-1-events.jsonl"; : > "$root/resume-failure/.leg-1-exited"
+  watch_stub "$root" "resume failure"
+  [ $rc -eq 0 ] && has "needs resume-failure REMOUNT" \
+    && [ "$(action_count "$root/resume-failure" resume)" -eq 0 ] \
+    && ok "a refused remount wakes the postmaster" \
+    || fail "a refused remount wakes the postmaster"
+  root="$tmp/wake-resume-refusal"; auto_run "$root" resume-refusal 1 "thread-resume-refusal"
+  printf '%s\n' 'model stream idle timeout' > "$root/resume-refusal/logs/coachman-leg-1.err"
+  : > "$root/resume-refusal/logs/coachman-leg-1-events.jsonl"; : > "$root/resume-refusal/.leg-1-exited"
+  watch_stub_wait "$root"
+  [ $rc -eq 0 ] && has "needs resume-refusal REMOUNT" \
+    && [ "$(action_count "$root/resume-refusal" resume)" -eq 1 ] \
+    && [ "$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["resume_attempts"]["1"])' "$root/resume-refusal/watcher.json")" = 1 ] \
+    && ok "a resumed harness refusal wakes the postmaster without another automatic resume" \
+    || fail "a resumed harness refusal wakes the postmaster without another automatic resume"
+  root="$tmp/wake-log"; auto_run "$root" log-failure 1 ""; handoff "$root/log-failure" 1
+  : > "$root/log-failure/.leg-1-done"; : > "$root/log-failure/.leg-1-exited"
+  rm -- "$root/log-failure/actions.jsonl"; mkdir "$root/log-failure/actions.jsonl"
+  watch_stub "$root"
+  [ $rc -eq 0 ] && has "needs log-failure DISPATCH" \
+    && [ -f "$tmp/calls/dispatch-log-failure-2" ] \
+    && ok "a dispatch whose action cannot be logged wakes the postmaster" \
+    || fail "a dispatch whose action cannot be logged wakes the postmaster"
+
+  echo "negative controls: held runs are left untouched"
+  root="$tmp/held-dispatch"; auto_run "$root" held-dispatch 1 ""; handoff "$root/held-dispatch" 1
+  : > "$root/held-dispatch/.leg-1-done"; : > "$root/held-dispatch/.leg-1-exited"
+  printf 'held-dispatch\n' > "$root/postmaster/held"
+  watch_stub "$root"
+  [ $rc -eq 3 ] && ! has "needs " && [ ! -e "$tmp/calls/dispatch-held-dispatch-2" ] \
+    && [ ! -e "$root/held-dispatch/leg-2-prompt.txt" ] \
+    && [ ! -e "$root/held-dispatch/watcher.json" ] \
+    && [ -e "$root/held-dispatch/.leg-1-done" ] && [ -e "$root/held-dispatch/.leg-1-exited" ] \
+    && [ "$(action_count "$root/held-dispatch" dispatch)" -eq 0 ] \
+    && [ "$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["leg"])' "$root/held-dispatch/manifest.json")" = 1 ] \
+    && ok "a held dispatch run keeps its manifest, markers, log, and files unchanged" \
+    || fail "a held dispatch run keeps its manifest, markers, log, and files unchanged"
+  root="$tmp/held-resume"; auto_run "$root" held-resume 1 "thread-held"
+  printf '%s\n' 'model stream idle timeout' > "$root/held-resume/logs/coachman-leg-1.err"
+  : > "$root/held-resume/logs/coachman-leg-1-events.jsonl"; : > "$root/held-resume/.leg-1-exited"
+  printf 'held-resume\n' > "$root/postmaster/held"
+  watch_stub "$root"
+  [ $rc -eq 3 ] && ! has "needs " && [ ! -e "$tmp/calls/resume-held-resume-1" ] \
+    && [ ! -e "$root/held-resume/watcher.json" ] \
+    && [ -e "$root/held-resume/.leg-1-exited" ] \
+    && [ "$(action_count "$root/held-resume" resume)" -eq 0 ] \
+    && ok "a held remount run keeps its count, marker, and log unchanged" \
+    || fail "a held remount run keeps its count, marker, and log unchanged"
+
   echo "config: a missing or unusable poll interval falls back to the default"
   root="$tmp/cfg-missing"; mkdir -p "$root"; mkrun "$root" wait review 2
   out=$(POSTMASTER_CONFIG="$tmp/nowhere.toml" "$self" --timeout 2 "$root" 2>&1); rc=$?
@@ -339,10 +899,12 @@ while :; do
   POLL=$(poll_seconds) || exit 1
   HELD_LIST=$(held_lines "$pm") || exit 1
   table=$("$HERE/runs-status.sh" "$ROOT") || { echo "runs-watch: runs-status.sh failed on $ROOT" >&2; exit 1; }
-  needs=$(printf '%s\n' "$table" | POSTMASTER_HELD_LINES="$HELD_LIST" waking_runs)
-  if [ -n "$needs" ]; then
+  printf '%s\n' "$table" | POSTMASTER_HELD_LINES="$HELD_LIST" waking_runs >/dev/null
+  process_table "$ROOT" "$table" || { echo "runs-watch: could not read the held list" >&2; exit 1; }
+  table=$("$HERE/runs-status.sh" "$ROOT") || { echo "runs-watch: runs-status.sh failed on $ROOT" >&2; exit 1; }
+  if [ -n "$NEEDS" ]; then
     printf '%s\n' "$table"
-    printf '%s\n' "$needs"
+    printf '%s\n' "$NEEDS"
     exit 0
   fi
   if [ -n "${TIMEOUT:-}" ] && [ "$left" -le 0 ]; then

@@ -37,9 +37,9 @@ Extend `runs-watch.sh` to dispatch valid next legs and resume legs ended by name
 
 ## Tasks
 
-- [ ] T001 [P] [AC1] Add hand-off validation, next-leg prompt construction, host launch, manifest updates, and `dispatch` logging in `scripts/runs-watch.sh`.
-- [ ] T002 [P] [AC2] Add durable per-leg retry limits and adapter-driven transient-error remounts in `scripts/runs-watch.sh` and `scripts/launch.sh`.
-- [ ] T003 [P] [AC2] Document thread-id and transient-error adapter behavior in `skills/postmaster/harnesses.md`.
-- [ ] T004 [AC3] Keep decision cases and incomplete watcher steps visible to the postmaster; update Stage D in `skills/postmaster/postmaster.md`.
-- [ ] T005 [AC4] Check held runs before every state change or launch in `scripts/runs-watch.sh`.
-- [ ] T006 [AC5] Add positive and negative controls for watcher actions and wake cases in `scripts/runs-watch.sh --self-test` and adapter controls in `scripts/launch.sh --self-test`.
+- [x] T001 [P] [AC1] Add hand-off validation, next-leg prompt construction, host launch, manifest updates, and `dispatch` logging in `scripts/runs-watch.sh`.
+- [x] T002 [P] [AC2] Add durable per-leg retry limits and adapter-driven transient-error remounts in `scripts/runs-watch.sh` and `scripts/launch.sh`.
+- [x] T003 [P] [AC2] Document thread-id and transient-error adapter behavior in `skills/postmaster/harnesses.md`.
+- [x] T004 [AC3] Keep decision cases and incomplete watcher steps visible to the postmaster; update Stage D in `skills/postmaster/postmaster.md`.
+- [x] T005 [AC4] Check held runs before every state change or launch in `scripts/runs-watch.sh`.
+- [x] T006 [AC5] Add positive and negative controls for watcher actions and wake cases in `scripts/runs-watch.sh --self-test` and adapter controls in `scripts/launch.sh --self-test`.
