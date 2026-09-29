@@ -1,0 +1,3 @@
+# One exact allowed value per line. A match is suppressed when an entry equals
+# its matched value span or its whole added line. Entries come only from a
+# user ruling a suspect allowed.
