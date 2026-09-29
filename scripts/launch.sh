@@ -31,6 +31,10 @@
 # and a relative path is read from the live config's directory, under --run too. It is shell,
 # sourced last, once the command, its directory and its stdin are fixed, so its assignments
 # reach the harness and not this script's choices; it runs as code, and is the user's to write.
+# A file that fails while loading is refused (exit 1), never left to look like a harness that
+# started and died. When POSTMASTER_OUTCOME_FILE is set, `die` records `{"state": "refused"}`
+# there and a start records `{"state": "started"}`, so a wrapper can tell a refusal from a
+# harness exit without reading error text.
 # The events stream goes to stdout; the caller redirects and backgrounds. --last names the file
 # a harness writes its final message to, where the harness supports it (codex -o). `skill`
 # prints the prompt that invokes the lane's harness's own skill (harnesses.md, Own review
@@ -247,6 +251,38 @@ EOF
     && [ ! -e "$env_dispatch/sessions/g/thread-decoy.events.jsonl" ] \
     && ok "a lane env file cannot redirect the session export" \
     || fail "a lane env file cannot redirect the session export (exit $rc)" "$(cat "$tmp/err")"
+  # An env file that fails while loading is a refusal, and the outcome file says so.
+  printf 'unset NOPE_NOPE_NOPE\nset -u\necho "$NOPE_NOPE_NOPE"\n' > "$tmp/unset.env"
+  printf 'exit 7\n' > "$tmp/exit.env"
+  printf 'PATH=/nonexistent\n' > "$tmp/lospath.env"
+  printf "$head"'coachman = { harness = "claude", model = "coach-model", env_file = "%s" }\n' "$tmp/unset.env" > "$tmp/env-unset.toml"
+  printf "$head"'coachman = { harness = "claude", model = "coach-model", env_file = "%s" }\n' "$tmp/exit.env" > "$tmp/env-exit.toml"
+  printf "$head"'coachman = { harness = "claude", model = "coach-model", env_file = "%s" }\n' "$tmp/lospath.env" > "$tmp/env-lospath.toml"
+  outcome_file="$tmp/outcome.json"
+  for case in unset exit lospath; do
+    rm -f "$outcome_file"
+    out=$(POSTMASTER_OUTCOME_FILE="$outcome_file" POSTMASTER_CONFIG="$tmp/env-$case.toml" PATH="$tmp/bin:$PATH" \
+      "$self" launch coachman "$tmp/wt" "$tmp/prompt.txt" --leg review 2>"$tmp/err"); rc=$?
+    err=$(cat "$tmp/err")
+    [ $rc -eq 1 ] && [ -z "$out" ] && case $err in *"launch: env_file"*) true ;; *) false ;; esac \
+      && grep -q '"state": "refused"' "$outcome_file" 2>/dev/null \
+      && ok "an env file that fails while loading ($case) is a refusal, and the outcome file says so" \
+      || fail "an env file that fails while loading ($case) is a refusal, and the outcome file says so (exit $rc)" "$err"
+  done
+  rm -f "$outcome_file"
+  out=$(POSTMASTER_OUTCOME_FILE="$outcome_file" POSTMASTER_CONFIG="$tmp/legs.toml" PATH="$tmp/bin:$PATH" \
+    "$self" launch one "$tmp/wt" "$tmp/prompt.txt" 2>"$tmp/err"); rc=$?
+  err=$(cat "$tmp/err")
+  [ $rc -eq 0 ] && grep -q '"state": "started"' "$outcome_file" 2>/dev/null \
+    && ok "a harness that starts records started in the outcome file" \
+    || fail "a harness that starts records started in the outcome file (exit $rc)" "$err"
+  rm -f "$outcome_file"
+  out=$(POSTMASTER_OUTCOME_FILE="$outcome_file" POSTMASTER_CONFIG="$tmp/legs.toml" PATH="$tmp/bin:$PATH" \
+    "$self" resume one "$tmp/wt" "" "$tmp/prompt.txt" 2>"$tmp/err"); rc=$?
+  err=$(cat "$tmp/err")
+  [ $rc -eq 1 ] && grep -q '"state": "refused"' "$outcome_file" 2>/dev/null \
+    && ok "a refusal records refused in the outcome file" \
+    || fail "a refusal records refused in the outcome file (exit $rc)" "$err"
   mkdir -p "$tmp/repo/.postmaster/runs/no-record" "$tmp/repo/.postmaster/runs/garbled" "$tmp/repo/.postmaster/runs/unrecorded"
   printf '{"config": \n' > "$tmp/repo/.postmaster/runs/garbled/run.json"
   printf '{"run": "T-1"}\n' > "$tmp/repo/.postmaster/runs/unrecorded/run.json"
@@ -472,7 +508,13 @@ EOF
   echo "self-test: $fails control(s) misbehaved"; exit 1
 fi
 
-die() { echo "launch: $*" >&2; exit 1; }
+die() {
+  echo "launch: $*" >&2
+  if [ -n "${POSTMASTER_OUTCOME_FILE:-}" ]; then
+    printf '{"state": "refused"}\n' > "$POSTMASTER_OUTCOME_FILE" 2>/dev/null || :
+  fi
+  exit 1
+}
 [ $# -ge 2 ] || die "usage: launch.sh form|launch|resume|skill <name> ... | --self-test"
 CMD=$1; NAME=$2; shift 2
 LEG=""; LAST=""; RUN=""; PROJECT=""; STDIN_FILE=""; args=()
@@ -747,13 +789,25 @@ CDPATH= cd -- "$CWD" || die "cannot enter $CWD"
 if [ -n "$STDIN_FILE" ]; then exec < "$STDIN_FILE" || die "cannot read $STDIN_FILE"; fi
 # The env file reaches the harness's environment only: the command above is already built.
 # The host-provided event-stream path is not the env file's to change: it decides which
-# session the export hook retains, so it is restored after sourcing.
+# session the export hook retains, so it is restored after sourcing. A file that fails
+# while loading — an unset variable under set -u, an exit, a PATH that loses the harness —
+# is a refusal, never a harness that quietly did not start.
 if [ -n "${ENV_FILE:-}" ]; then
+  if ! ( set -u; set -a; . "$ENV_FILE" ) >/dev/null 2>&1; then
+    die "env_file for $NAME failed to load: $ENV_FILE"
+  fi
   saved_event_stream=${POSTMASTER_EVENT_STREAM:-}
-  set -a; . "$ENV_FILE"; set +a
+  saved_harness=$HARNESS
+  set -a; . "$ENV_FILE" || die "env_file for $NAME failed to load: $ENV_FILE"
+  set +a
   POSTMASTER_EVENT_STREAM=$saved_event_stream
+  command -v "$saved_harness" >/dev/null 2>&1 \
+    || die "env_file for $NAME lost the harness from PATH: $ENV_FILE"
 fi
 unset POSTMASTER_LAUNCH_NAME   # the thread's own launches are named by their own host.sh call
+if [ -n "${POSTMASTER_OUTCOME_FILE:-}" ]; then
+  printf '{"state": "started"}\n' > "$POSTMASTER_OUTCOME_FILE" 2>/dev/null || :
+fi
 "${cmd[@]}"
 rc=$?
 # The session export is attempted on every run launch with a stream, including an
