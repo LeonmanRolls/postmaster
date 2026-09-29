@@ -8,6 +8,10 @@
 #   launch.sh resume <name> <cwd> <thread-id> <prompt-file> [--leg <leg>] [--last <file>]
 #                    [--run <dispatch>]
 #   launch.sh skill  <name> <skill> [--run <dispatch>]
+#   launch.sh thread-id <events-file>       the thread id a stream records, from its shape
+#   launch.sh transient <err-file> [<stream-file>]
+#                                           exit 0 when a leg's end is a transient provider
+#                                           error this adapter names (harnesses.md)
 #   launch.sh --self-test
 #
 # The config is the live one, ~/.postmaster/config.toml (POSTMASTER_CONFIG overrides the path),
@@ -35,12 +39,22 @@
 # prints two lines: `launch: ` and the launch form, then `resume: ` and the resume form, or
 # `resume: none: ` and why there is none.
 #
-#   exit 0  the forms or the skill's prompt were printed, or the harness exited 0
+# thread-id reads an events stream and prints the first thread id its shape carries (claude
+# session_id, codex thread_id, pi session.id, muse stream.id, mimo sessionID); it is how a
+# launch's id is recorded after the stream has started. transient names the provider errors
+# that are worth resuming on rather than escalating: a model stream idle timeout, a gateway
+# failure, a stream drop. The set is here and in harnesses.md, never in the watcher. It is
+# matched against the leg's durable record — its .err file and its stream — never a prompt.
+# Quota, payment, usage-limit and launch-refusal text is never transient.
+#
+#   exit 0  the forms or the skill's prompt were printed, or the harness exited 0; thread-id
+#           found an id; transient matched a named provider error
 #   exit 1  usage, config or run.json missing or unreadable, unknown name, a leg that is not
 #           synthesis, review or ship, the coachman launched or resumed with no --leg, a
 #           coachman or fallback on a lane's model, harness not on PATH, env_file missing, a
 #           form this script does not have (agy resume), a skill that is not security-review,
-#           or a muse or mimo resume of a thread the launch's data directory does not hold
+#           a muse or mimo resume of a thread the launch's data directory does not hold,
+#           thread-id with no id in the stream, or transient with a record that is not named
 #   exit 3  skill: the lane's harness has no such skill recorded
 #   else    the harness's own exit code
 set -uo pipefail
@@ -411,13 +425,161 @@ PY
   run skills skill three security-review
   [ $rc -eq 3 ] && [ -z "$out" ] && ok "a muse lane has no security review skill: exit 3" || fail "a muse lane has no security review skill: exit 3"
 
+  echo "thread-id: the id a stream records, from its shape"
+  tid() {  # tid <label> <want> <events-text>
+    printf '%s\n' "$3" > "$tmp/events.jsonl"
+    out=$("$self" thread-id "$tmp/events.jsonl" 2>"$tmp/err"); rc=$?
+    [ $rc -eq 0 ] && [ "$out" = "$2" ] && ok "$1" || fail "$1 (got '$out', exit $rc)"
+  }
+  tid "claude: session_id on system/init" "a99db1c7-9178" \
+    '{"type":"system","subtype":"init","session_id":"a99db1c7-9178","model":"claude-haiku-4-5"}'
+  tid "codex: thread_id on thread.started" "0199a213-81c0" \
+    '{"type":"thread.started","thread_id":"0199a213-81c0"}'
+  tid "pi: id on session" "sess-pi-1" \
+    '{"type":"session","id":"sess-pi-1"}'
+  tid "muse: stream.id on the first record" "mu-2222" \
+    '{"payload_type":"session","stream":{"kind":"session","id":"mu-2222"},"sequence":1}'
+  tid "mimo: sessionID on any event" "mi-3333" \
+    '{"type":"step_start","sessionID":"mi-3333","part":{"type":"step_start"}}'
+  tid "the first id in the stream wins" "first-1" \
+    '{"type":"thread.started","thread_id":"first-1"}
+{"type":"thread.started","thread_id":"second-2"}'
+  printf '%s\n' '{"type":"result","subtype":"success"}' > "$tmp/events.jsonl"
+  out=$("$self" thread-id "$tmp/events.jsonl" 2>"$tmp/err"); rc=$?
+  [ $rc -eq 1 ] && [ -z "$out" ] && ok "a stream with no id is exit 1" || fail "a stream with no id is exit 1 (exit $rc)"
+  out=$("$self" thread-id "$tmp/no-such-events" 2>"$tmp/err"); rc=$?
+  [ $rc -eq 1 ] && case $(cat "$tmp/err") in *"no such events file"*) true ;; *) false ;; esac \
+    && ok "a missing events file is refused" || fail "a missing events file is refused (exit $rc)"
+
+  echo "transient: a provider error worth resuming on"
+  is_transient() {  # is_transient <label> <want-exit> <err-text> [<stream-text>]
+    local label=$1 want=$2 errtxt=$3 streamtxt=${4:-}
+    printf '%s\n' "$errtxt" > "$tmp/leg.err"
+    if [ -n "$streamtxt" ]; then
+      printf '%s\n' "$streamtxt" > "$tmp/leg-events.jsonl"
+      out=$("$self" transient "$tmp/leg.err" "$tmp/leg-events.jsonl" 2>"$tmp/err"); rc=$?
+    else
+      out=$("$self" transient "$tmp/leg.err" 2>"$tmp/err"); rc=$?
+    fi
+    [ $rc -eq "$want" ] && ok "$label" || fail "$label (exit $rc, wanted $want)"
+  }
+  is_transient "a model stream idle timeout is transient" 0 "API Error: model stream idle timeout"
+  is_transient "a stream idle timeout alone is transient" 0 "stream idle timeout after 300s"
+  is_transient "a bad gateway is transient" 0 "502 Bad Gateway"
+  is_transient "an overloaded response is transient" 0 "529 overloaded"
+  is_transient "a stream disconnect is transient" 0 "stream disconnected"
+  is_transient "a connection reset is transient" 0 "read: connection reset by peer"
+  is_transient "a broken pipe is transient" 0 "write: broken pipe"
+  is_transient "a transient error in the stream tail counts" 0 "the leg ended" '{"type":"error","message":"model stream idle timeout"}'
+  is_transient "a quota wall is not transient" 1 "402 Payment Required: out of credit"
+  is_transient "a usage limit is not transient" 1 "usage limit reached for this month"
+  is_transient "a launch refusal is not transient" 1 "launch: harness 'claude' is not on PATH"
+  is_transient "an ordinary model error is not transient" 1 "Error: something went wrong"
+  is_transient "an empty record is not transient" 1 ""
+  out=$("$self" transient "$tmp/no-such.err" 2>"$tmp/err"); rc=$?
+  [ $rc -eq 1 ] && case $(cat "$tmp/err") in *"no such error file"*) true ;; *) false ;; esac \
+    && ok "a missing error file is refused" || fail "a missing error file is refused (exit $rc)"
+
   echo
   [ "$fails" -eq 0 ] && { echo "self-test: all controls behaved"; exit 0; }
   echo "self-test: $fails control(s) misbehaved"; exit 1
 fi
 
 die() { echo "launch: $*" >&2; exit 1; }
-[ $# -ge 2 ] || die "usage: launch.sh form|launch|resume|skill <name> ... | --self-test"
+
+# --- thread-id: the id a stream records, from its own shape ---------------------------------
+# Harness-specific event shapes live here and in harnesses.md, not in whoever records the id.
+thread_id() {  # thread_id <events-file>
+  [ $# -eq 1 ] || die "usage: launch.sh thread-id <events-file>"
+  [ -f "$1" ] || die "no such events file: $1"
+  python3 - "$1" <<'PY'
+import json, sys
+path = sys.argv[1]
+try:
+    f = open(path, encoding="utf-8", errors="replace")
+except OSError as e:
+    print("launch: cannot read %s: %s" % (path, e.strerror), file=sys.stderr); raise SystemExit(1)
+for line in f:
+    line = line.strip()
+    if not line:
+        continue
+    try:
+        e = json.loads(line)
+    except ValueError:
+        continue
+    if not isinstance(e, dict):
+        continue
+    # claude: system/init carries session_id
+    if e.get("type") == "system" and e.get("subtype") == "init" and e.get("session_id"):
+        print(e["session_id"]); raise SystemExit(0)
+    # codex: thread.started carries thread_id
+    if e.get("type") == "thread.started" and e.get("thread_id"):
+        print(e["thread_id"]); raise SystemExit(0)
+    # pi: session carries id
+    if e.get("type") == "session" and e.get("id"):
+        print(e["id"]); raise SystemExit(0)
+    # muse: the first record's stream.id
+    if "payload_type" in e:
+        stream = e.get("stream") or {}
+        if isinstance(stream, dict) and stream.get("id"):
+            print(stream["id"]); raise SystemExit(0)
+    # mimo: any event's sessionID
+    if e.get("sessionID"):
+        print(e["sessionID"]); raise SystemExit(0)
+print("launch: no thread id in %s" % path, file=sys.stderr); raise SystemExit(1)
+PY
+}
+
+# --- transient: a provider error worth resuming on ------------------------------------------
+# The set is enumerated here and documented in harnesses.md; the watcher only asks. Matched
+# against the leg's .err and its stream, never a prompt. A quota, payment or usage wall is
+# deliberately absent: those are the postmaster's, not a resume.
+TRANSIENT=$(cat <<'EOF'
+model stream idle timeout
+stream idle timeout
+bad gateway
+service unavailable
+gateway timeout
+overloaded
+502 bad gateway
+503 service unavailable
+504 gateway timeout
+529 overloaded
+stream disconnected
+sse error
+connection reset
+connection aborted
+broken pipe
+EOF
+)
+transient() {  # transient <err-file> [<stream-file>]
+  [ $# -ge 1 ] && [ $# -le 2 ] || die "usage: launch.sh transient <err-file> [<stream-file>]"
+  [ -f "$1" ] || die "no such error file: $1"
+  python3 - "$1" "${2:-}" "$TRANSIENT" <<'PY'
+import sys
+err_path, stream_path, patterns = sys.argv[1], sys.argv[2], sys.argv[3]
+needles = [p.strip().lower() for p in patterns.splitlines() if p.strip()]
+def text(path):
+    if not path:
+        return ""
+    try:
+        return open(path, encoding="utf-8", errors="replace").read().lower()
+    except OSError:
+        return ""
+hay = text(err_path) + "\n" + text(stream_path)
+for n in needles:
+    if n in hay:
+        print(n); raise SystemExit(0)
+raise SystemExit(1)
+PY
+}
+
+case ${1:-} in
+  thread-id) shift; thread_id "$@"; exit $? ;;
+  transient) shift; transient "$@"; exit $? ;;
+esac
+
+[ $# -ge 2 ] || die "usage: launch.sh form|launch|resume|skill <name> ... | thread-id <events-file> | transient <err-file> [<stream-file>] | --self-test"
 CMD=$1; NAME=$2; shift 2
 LEG=""; LAST=""; RUN=""; STDIN_FILE=""; args=()
 while [ $# -gt 0 ]; do

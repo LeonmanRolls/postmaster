@@ -13,8 +13,10 @@ runbooks correct for every harness and every host.
 **`<tool>/scripts/launch.sh` is the executable form of this file.** `launch.sh form <name>` prints the
 exact launch and resume commands for a configured lane or role; `launch` and `resume` run them;
 `skill` prints the prompt that invokes a harness's own review skill (Own review skills, below).
-The script and this file change together, and a form the script refuses (agy resume) is a form
-this file has not recorded yet.
+`thread-id <events-file>` prints the thread id a stream records, from its shape; `transient
+<err-file> [<stream-file>]` exits 0 when a leg's end is a transient provider error this file
+names (below). The script and this file change together, and a form the script refuses (agy
+resume) is a form this file has not recorded yet.
 
 Every lane runs unrestricted. Its containment is its worktree (`coachman.md`, Lane capability),
 so the bypass form below is passed on every launch AND every resume. The interactive postmaster
@@ -439,3 +441,20 @@ A lane that never launched is lame for that round: DEGRADED. Recognise a wall by
 own error string and quote it in `run-log.md`: a `402 Payment Required`, a usage-limit message,
 a quota wall, a spawn misfire, a stale session lock. The fix is restoring the lane on the next
 round, never suppressing the label.
+
+## Transient provider errors, any harness
+
+Some ends are the provider's, not the leg's: the model stream dropped, a gateway failed, the
+connection reset. Those are worth resuming on rather than escalating. The set is enumerated in
+`<tool>/scripts/launch.sh` (`transient`), which matches it against the leg's durable record —
+its `.err` file and its stream — and never against a prompt. This file names the same set:
+
+| name | what it looks like |
+|---|---|
+| model stream idle timeout | `model stream idle timeout`, `stream idle timeout` |
+| gateway failure | `bad gateway`, `service unavailable`, `gateway timeout`, `overloaded`, `502`, `503`, `504`, `529` |
+| stream drop | `stream disconnected`, `SSE error`, `connection reset`, `connection aborted`, `broken pipe` |
+
+A quota wall, a `402 Payment Required`, a usage-limit message and a `launch:` refusal are
+**never** transient: those go to the postmaster as today. The watcher may resume a leg on a
+transient end at most three times per leg; the fourth goes to the postmaster.
