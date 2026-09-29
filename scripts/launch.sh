@@ -442,6 +442,24 @@ PY
   [ $rc -eq 3 ] && [ -z "$out" ] && case $err in *"has no bug code-review form"*) true ;; *) false ;; esac \
     && ok "a harness without a review form exits 3 even when its CLI is absent" \
     || fail "a harness without a review form exits 3 even when its CLI is absent"
+  git -C "$tmp/cx" worktree add -q --detach "$tmp/cx-dirty" \
+    || { echo "self-test: cannot make the dirty review fixture"; exit 1; }
+  printf 'v1\n' > "$tmp/cx-dirty/tracked.txt"
+  git -C "$tmp/cx-dirty" -c user.name=t -c user.email=t@example.invalid add tracked.txt \
+    && git -C "$tmp/cx-dirty" -c user.name=t -c user.email=t@example.invalid commit -q -m tracked \
+    || { echo "self-test: cannot commit the dirty review fixture"; exit 1; }
+  dirty_base=$(git -C "$tmp/cx-dirty" rev-parse HEAD) || exit 1
+  printf 'v2\n' > "$tmp/cx-dirty/tracked.txt"
+  run review-codex review one "$tmp/cx-dirty" "$dirty_base"
+  [ $rc -eq 1 ] && [ -z "$out" ] && case $err in *"would widen the review past"*) true ;; *) false ;; esac \
+    && ok "a review on a dirty scratch is refused before the harness runs" \
+    || fail "a review on a dirty scratch is refused before the harness runs"
+  git -C "$tmp/cx-dirty" checkout -q -- tracked.txt || exit 1
+  printf 'untracked\n' > "$tmp/cx-dirty/untracked.txt"
+  run review-codex review one "$tmp/cx-dirty" "$dirty_base"
+  [ $rc -eq 0 ] && case $out in *"$dirty_base"*) true ;; *) false ;; esac \
+    && ok "untracked scratch files do not block a review" \
+    || fail "untracked scratch files do not block a review"
 
   echo
   [ "$fails" -eq 0 ] && { echo "self-test: all controls behaved"; exit 0; }
@@ -579,6 +597,8 @@ esac
 if [ "$CMD" = review ]; then
   git -C "$CWD" rev-parse --verify "$BASE^{commit}" >/dev/null 2>&1 \
     || die "review base is not a commit in $CWD: $BASE"
+  git -C "$CWD" diff --quiet HEAD -- 2>/dev/null \
+    || die "review scratch is dirty, which would widen the review past $BASE...HEAD: $CWD"
   if [ "$HARNESS" = mimo ]; then
     REVIEW_PROMPT=$(mktemp "$CWD/.postmaster-review-XXXXXX") || die "cannot create the MiMo review prompt in $CWD"
     printf '%s...HEAD\n' "$BASE" > "$REVIEW_PROMPT" || die "cannot write the MiMo review prompt in $CWD"

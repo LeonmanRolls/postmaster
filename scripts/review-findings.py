@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Normalize native bug-review reports and harvest Claude's forked task transcripts."""
+import filecmp
 import json
 import os
 import re
@@ -144,20 +145,29 @@ def json_findings(text):
     except ValueError:
         pass
     decoder = json.JSONDecoder()
+    found = []
     for match in re.finditer(r"\[", text):
         try:
             value, _ = decoder.raw_decode(text[match.start():])
         except ValueError:
             continue
         if isinstance(value, list):
-            return value
+            found.append(value)
+    # A findings list is a non-empty list holding at least one object: scalar lists such as
+    # [1, 2, 3] in the prose are incidental and say nothing. Empty lists alone say nothing too,
+    # so a placeholder [] before the prose never reads as clean on its own.
+    candidates = [value for value in found if value and any(isinstance(item, dict) for item in value)]
+    if len(candidates) > 1:
+        raise ReportError("review output holds %d JSON finding lists; refusing to guess which holds the findings" % len(candidates))
+    if candidates:
+        return candidates[0]
     return None
 
 
 CLEAN_PHRASES = ("nothing to review", "no findings", "no bugs", "no issues",
                  "looks correct", "no problems", "no defects", "patch is correct",
                  "i found no", "found nothing", "no code changes")
-FINDING_MARKER = re.compile(r"\[P[123]\]|:(\d+)")
+FINDING_MARKER = re.compile(r"\[P[123]\]|\.[A-Za-z0-9]{1,12}:\d+")
 
 
 def explicit_clean(text):
@@ -172,6 +182,37 @@ def explicit_clean(text):
     # but only when no finding marker is present: a report that cites a file and line, or a
     # priority, is parsed as findings or fails loudly, never read as clean.
     return any(phrase in compact for phrase in CLEAN_PHRASES) and not FINDING_MARKER.search(text)
+
+
+def finding_body(lines, index):
+    """The body and evidence after a finding's line: following prose until a blank line, the
+    next heading or item; a fenced block is the finding's evidence, not its end."""
+    body = []
+    evidence = None
+    following = index + 1
+    total = len(lines)
+    while following < total:
+        text_line = lines[following].strip()
+        if not text_line:
+            if body:
+                break
+            following += 1
+            continue
+        if text_line.startswith(("#", "- ", "* ", "Review comment:")):
+            break
+        if text_line.startswith("```"):
+            following += 1
+            fence = []
+            while following < total and not lines[following].strip().startswith("```"):
+                fence.append(lines[following].rstrip("\n"))
+                following += 1
+            following += 1
+            if evidence is None:
+                evidence = "\n".join(fence).strip() or None
+            continue
+        body.append(text_line)
+        following += 1
+    return ("\n".join(body) if body else None, evidence)
 
 
 def markdown_findings(text, harness, scratch):
@@ -198,19 +239,13 @@ def markdown_findings(text, harness, scratch):
         if prefix.lower() == "bug":
             prefix = ""
         title = " ".join(part for part in (prefix, suffix) if part).strip()
-        body = []
-        for following in lines[index + 1:]:
-            text_line = following.strip()
-            if not text_line:
-                if body:
-                    break
-                continue
-            if text_line.startswith(("#", "- ", "* ", "Review comment:")) or text_line.startswith("```"):
-                break
-            body.append(text_line)
-        findings.append(normalize_item({"file": match.group("path"), "line": match.group("line"),
-                                        "end_line": match.group("end"), "summary": title,
-                                        "body": "\n".join(body) if body else None}, harness, scratch))
+        body, evidence = finding_body(lines, index)
+        try:
+            findings.append(normalize_item({"file": match.group("path"), "line": match.group("line"),
+                                            "end_line": match.group("end"), "summary": title,
+                                            "body": body, "evidence": evidence}, harness, scratch))
+        except ReportError as exc:
+            raise ReportError("report line %d: %s" % (index + 1, exc)) from exc
     return findings
 
 
@@ -222,19 +257,13 @@ def codex_findings(text, scratch):
         match = pattern.match(line)
         if match:
             severity, title, path, start, end = match.groups()
-            body = []
-            for following in lines[index + 1:]:
-                text_line = following.strip()
-                if not text_line:
-                    if body:
-                        break
-                    continue
-                if text_line.startswith(("#", "- ", "* ", "Review comment:")) or text_line.startswith("```"):
-                    break
-                body.append(text_line)
-            findings.append(normalize_item({"file": path, "line": start, "end_line": end,
-                                            "severity": severity, "title": title,
-                                            "body": "\n".join(body) if body else None}, "codex", scratch))
+            body, evidence = finding_body(lines, index)
+            try:
+                findings.append(normalize_item({"file": path, "line": start, "end_line": end,
+                                                "severity": severity, "title": title,
+                                                "body": body, "evidence": evidence}, "codex", scratch))
+            except ReportError as exc:
+                raise ReportError("report line %d: %s" % (index + 1, exc)) from exc
     return findings
 
 
@@ -244,7 +273,13 @@ def parse_report(harness, text, scratch):
     if harness == "claude":
         findings = json_findings(text)
         if findings is not None:
-            return unique_findings([normalize_item(item, harness, scratch) for item in findings])
+            normalized = []
+            for position, item in enumerate(findings):
+                try:
+                    normalized.append(normalize_item(item, harness, scratch))
+                except ReportError as exc:
+                    raise ReportError("finding %d: %s" % (position, exc)) from exc
+            return unique_findings(normalized)
     if harness == "codex":
         findings = codex_findings(text, scratch)
         if findings:
@@ -286,27 +321,43 @@ def normalize_cli(lane, scratch, events_path, run_dir, last_path):
 
 
 def harvest(events_path, logs_dir, prefix):
-    paths = []
+    wanted = []
     for event in read_events(events_path):
-        if event.get("type") == "system" and event.get("subtype") == "task_notification" and event.get("output_file"):
-            path = event["output_file"]
+        if event.get("type") == "system" and event.get("subtype") == "task_notification":
+            path = event.get("output_file")
+            if not path:
+                raise ReportError("task_notification names no output file")
             if not isinstance(path, str):
                 raise ReportError("task_notification output_file is not text")
-            if path not in paths:
-                paths.append(path)
+            if path not in wanted:
+                wanted.append(path)
     os.makedirs(logs_dir, exist_ok=True)
     prefix = re.sub(r"[^A-Za-z0-9_.-]+", "-", prefix).strip(".-") or "review"
+    task_root = Path("/tmp/claude-%d" % os.getuid())
+    planned = []
+    for index, path in enumerate(wanted, 1):
+        try:
+            resolved = Path(path).resolve(strict=True)
+        except (OSError, RuntimeError) as exc:
+            raise ReportError("Claude task output named by task_notification is missing: %s" % path) from exc
+        try:
+            resolved.relative_to(task_root)
+        except ValueError as exc:
+            raise ReportError("Claude task output is outside %s: %s" % (task_root, path)) from exc
+        if not resolved.is_file():
+            raise ReportError("Claude task output named by task_notification is not a file: %s" % path)
+        planned.append((resolved, os.path.join(logs_dir, "%s-claude-task-%02d-%s" % (prefix, index, os.path.basename(path)))))
     copied = []
-    for index, path in enumerate(paths, 1):
-        if not os.path.isfile(path):
-            raise ReportError("Claude task output named by task_notification is missing: %s" % path)
-        destination = os.path.join(logs_dir, "%s-claude-task-%02d-%s" % (prefix, index, os.path.basename(path)))
+    for resolved, destination in planned:
         if os.path.exists(destination):
+            if filecmp.cmp(resolved, destination, shallow=False):
+                copied.append(destination)
+                continue
             raise ReportError("refusing to overwrite harvested task output: %s" % destination)
         try:
-            shutil.copy2(path, destination)
+            shutil.copy2(resolved, destination)
         except OSError as exc:
-            raise ReportError("cannot copy Claude task output %s: %s" % (path, exc)) from exc
+            raise ReportError("cannot copy Claude task output %s: %s" % (resolved, exc)) from exc
         copied.append(destination)
     return copied
 
@@ -354,7 +405,9 @@ def self_test():
         scratch = root / "scratch"
         (scratch / "src").mkdir(parents=True)
         logs = root / "logs"
-        external = root / "claude-task-output.txt"
+        task_home = Path("/tmp/claude-%d" % os.getuid()) / ("postmaster-selftest-%d" % os.getpid())
+        task_home.mkdir(parents=True, exist_ok=True)
+        external = task_home / "claude-task-output.txt"
         external.write_text("review task tools\n", encoding="utf-8")
 
         def run_config(name, harness):
@@ -442,6 +495,75 @@ def self_test():
         result = subprocess.run([sys.executable, __file__, "harvest", str(harvest_events), str(logs), "--prefix", "r1-bug-one"], capture_output=True, text=True)
         copied = logs / ("r1-bug-one-claude-task-01-" + external.name)
         check("Claude task_notification transcript is copied into run logs", result.returncode == 0 and copied.is_file() and "review task tools" in copied.read_text(encoding="utf-8"), result.stderr or result.stdout)
+        partial = root / "harvest-partial.events"
+        partial.write_text(json.dumps({"type": "system", "subtype": "task_notification", "output_file": str(external)}) + "\n" + json.dumps({"type": "system", "subtype": "task_notification", "output_file": str(task_home / "absent.txt")}) + "\n", encoding="utf-8")
+        partial_logs = root / "logs-partial"
+        result = subprocess.run([sys.executable, __file__, "harvest", str(partial), str(partial_logs), "--prefix", "partial"], capture_output=True, text=True)
+        check("a missing task file fails before anything is copied", result.returncode == 1 and "missing" in result.stderr and not any(partial_logs.iterdir()), result.stderr or result.stdout)
+        one = root / "harvest-one.events"
+        one.write_text(json.dumps({"type": "system", "subtype": "task_notification", "output_file": str(external)}) + "\n", encoding="utf-8")
+        retry_logs = root / "logs-retry"
+        first = subprocess.run([sys.executable, __file__, "harvest", str(one), str(retry_logs), "--prefix", "retry"], capture_output=True, text=True)
+        again = subprocess.run([sys.executable, __file__, "harvest", str(one), str(retry_logs), "--prefix", "retry"], capture_output=True, text=True)
+        check("an identical re-harvest is a no-op", first.returncode == 0 and again.returncode == 0 and again.stdout == first.stdout, (first.stderr or first.stdout) + (again.stderr or again.stdout))
+        (retry_logs / ("retry-claude-task-01-" + external.name)).write_text("changed\n", encoding="utf-8")
+        clobber = subprocess.run([sys.executable, __file__, "harvest", str(one), str(retry_logs), "--prefix", "retry"], capture_output=True, text=True)
+        check("a re-harvest over different content still refuses", clobber.returncode == 1 and "refusing to overwrite" in clobber.stderr, clobber.stderr or clobber.stdout)
+        outside = root / "outside-task-output.txt"
+        outside.write_text("not a task file\n", encoding="utf-8")
+        negatives = [
+            ("a task_notification without an output file fails", {"type": "system", "subtype": "task_notification"}, "names no output file"),
+            ("a task_notification with an empty output file fails", {"type": "system", "subtype": "task_notification", "output_file": ""}, "names no output file"),
+            ("a task_notification with a non-text output file fails", {"type": "system", "subtype": "task_notification", "output_file": 7}, "not text"),
+            ("a task_notification naming a missing file fails", {"type": "system", "subtype": "task_notification", "output_file": str(task_home / "absent.txt")}, "missing"),
+            ("a task_notification naming a file outside the task tree fails", {"type": "system", "subtype": "task_notification", "output_file": str(outside)}, "outside"),
+        ]
+        for number, (label, notification, message) in enumerate(negatives):
+            events = root / ("harvest-neg-%d.events" % number)
+            events.write_text(json.dumps(notification) + "\n", encoding="utf-8")
+            result = subprocess.run([sys.executable, __file__, "harvest", str(events), str(logs), "--prefix", "neg"], capture_output=True, text=True)
+            check(label, result.returncode == 1 and message in result.stderr, result.stderr or result.stdout)
+        quiet = root / "harvest-quiet.events"
+        quiet.write_text(json.dumps({"type": "turn.completed"}) + "\n", encoding="utf-8")
+        result = subprocess.run([sys.executable, __file__, "harvest", str(quiet), str(logs), "--prefix", "quiet"], capture_output=True, text=True)
+        check("a stream with no task_notification harvests nothing and exits 0", result.returncode == 0 and result.stdout == "", result.stderr or result.stdout)
+        empty_first = root / "claude-empty-first.events"
+        empty_first.write_text(json.dumps({"type": "result", "subtype": "success", "result": "[]\n[{\"file\": \"src/page.js\", \"line\": 8, \"summary\": \"bug\"}]"}) + "\n", encoding="utf-8")
+        result = subprocess.run([sys.executable, __file__, "normalize", "one", str(scratch), str(empty_first), "--run", str(run_config("empty-first", "claude"))], capture_output=True, text=True)
+        try:
+            parsed = json.loads(result.stdout)
+            check("an empty JSON list before findings does not read as clean", result.returncode == 0 and len(parsed) == 1 and parsed[0]["file"] == "src/page.js" and parsed[0]["line"] == 8, result.stderr or result.stdout)
+        except ValueError:
+            check("an empty JSON list before findings does not read as clean", False, result.stderr or result.stdout)
+        ambiguous = root / "claude-ambiguous.events"
+        ambiguous.write_text(json.dumps({"type": "result", "subtype": "success", "result": "[{\"file\": \"src/a.js\", \"line\": 1, \"summary\": \"one\"}]\n[{\"file\": \"src/b.js\", \"line\": 2, \"summary\": \"two\"}]"}) + "\n", encoding="utf-8")
+        result = subprocess.run([sys.executable, __file__, "normalize", "one", str(scratch), str(ambiguous), "--run", str(run_config("ambiguous", "claude"))], capture_output=True, text=True)
+        check("two non-empty JSON lists fail loudly", result.returncode == 1 and "JSON finding lists" in result.stderr, result.stderr or result.stdout)
+        scalar_first = root / "claude-scalar-first.events"
+        scalar_first.write_text(json.dumps({"type": "result", "subtype": "success", "result": "Counts [1, 2, 3] aside.\n[{\"file\": \"src/page.js\", \"line\": 8, \"summary\": \"bug\"}]"}) + "\n", encoding="utf-8")
+        result = subprocess.run([sys.executable, __file__, "normalize", "one", str(scratch), str(scalar_first), "--run", str(run_config("scalar-first", "claude"))], capture_output=True, text=True)
+        try:
+            parsed = json.loads(result.stdout)
+            check("an incidental scalar list does not hide the findings", result.returncode == 0 and len(parsed) == 1 and parsed[0]["file"] == "src/page.js", result.stderr or result.stdout)
+        except ValueError:
+            check("an incidental scalar list does not hide the findings", False, result.stderr or result.stdout)
+        timed = root / "mimo-timed.events"
+        timed.write_text(json.dumps({"type": "text", "part": {"type": "text", "text": "No findings. Checked at 12:30."}}) + "\n", encoding="utf-8")
+        result = subprocess.run([sys.executable, __file__, "normalize", "one", str(scratch), str(timed), "--run", str(run_config("timed", "mimo"))], capture_output=True, text=True)
+        check("a clean verdict mentioning a time yields no findings", result.returncode == 0 and result.stdout.strip() == "[]", result.stderr or result.stdout)
+        fenced = root / "mimo-fenced-evidence.events"
+        fenced.write_text(json.dumps({"type": "text", "part": {"type": "text", "text": "### Bug — `src/page.js:8`: off by one\n\n```js\nreturn all().slice(start, start + size + 1);\n```\n\nThe exclusive end repeats the boundary record.\n"}}) + "\n", encoding="utf-8")
+        result = subprocess.run([sys.executable, __file__, "normalize", "one", str(scratch), str(fenced), "--run", str(run_config("fenced-evidence", "mimo"))], capture_output=True, text=True)
+        try:
+            parsed = json.loads(result.stdout)
+            check("a fenced block after a finding is kept as its evidence", result.returncode == 0 and len(parsed) == 1 and "slice(start, start + size" in parsed[0]["evidence"] and "boundary record" in parsed[0]["body"], result.stderr or result.stdout)
+        except ValueError:
+            check("a fenced block after a finding is kept as its evidence", False, result.stderr or result.stdout)
+        mixed = root / "claude-mixed.events"
+        mixed.write_text(json.dumps({"type": "result", "subtype": "success", "result": "[{\"file\": \"src/a.js\", \"line\": 1, \"summary\": \"good\"}, {\"summary\": \"no file\"}, {\"file\": \"src/b.js\", \"line\": 2, \"summary\": \"good\"}]"}) + "\n", encoding="utf-8")
+        result = subprocess.run([sys.executable, __file__, "normalize", "one", str(scratch), str(mixed), "--run", str(run_config("mixed", "claude"))], capture_output=True, text=True)
+        check("a bad item names its index when the batch fails", result.returncode == 1 and "finding 1" in result.stderr, result.stderr or result.stdout)
+        shutil.rmtree(task_home, ignore_errors=True)
 
     print()
     if fails == 0:

@@ -531,11 +531,11 @@ Set the stage first, `<tool>/scripts/stage.sh <dispatch> review`, then:
    # Where a check's source names web-journey, walk the ticket's User journey on the synthesis
    # worktree first, to the path <tool>/scripts/verify.sh journey-path <synthesis-wt> <dispatch>
    # prints; then the run's checks, once, on the snapshot:
-   <tool>/scripts/verify.sh run <synthesis-wt> <dispatch> > <dispatch>/logs/review-r<round>-checks.txt
-   VERIFY_EXIT=$?
+   VERIFY_EXIT=0
+   <tool>/scripts/verify.sh run <synthesis-wt> <dispatch> > <dispatch>/logs/review-r<round>-checks.txt || VERIFY_EXIT=$?
    cat <dispatch>/logs/review-r<round>-checks.txt
    <tool>/scripts/log-action.sh <dispatch> coachman gate "$SNAP" "review round <round>, verify.sh exit $VERIFY_EXIT"
-   [ "$VERIFY_EXIT" -ne 1 ] || exit 1   # a verification control failed; do not launch reviewers
+   [ "$VERIFY_EXIT" -ne 1 ] || exit 1   # verify.sh could not run or could not log; do not launch reviewers. A check that failed (2) or was not run (3) is the run's work: the round proceeds and the card records it
    git -C <repo> worktree prune
    for LENS in <open lenses>; do   # a lens whose lanes do not resolve stops the round here
      <tool>/scripts/reviewers.sh lanes <dispatch>/brief.md "$LENS" >/dev/null || exit 1
@@ -616,13 +616,15 @@ Set the stage first, `<tool>/scripts/stage.sh <dispatch> review`, then:
    not provide is the literal `not provided`; use the normalized file as the bug report.
 
    ```sh
+   NORMALIZE_FAILED=0
    for L in $(<tool>/scripts/reviewers.sh lanes <dispatch>/brief.md bug); do
      DEST=<repo>/.worktrees/<TICKET>-rev-bug-$L
      EVENTS=<dispatch>/logs/review-r<round>-bug-$L.jsonl
-     <tool>/scripts/review-findings.sh harvest "$EVENTS" <dispatch>/logs --prefix review-r<round>-bug-$L || exit 1
+     <tool>/scripts/review-findings.sh harvest "$EVENTS" <dispatch>/logs --prefix review-r<round>-bug-$L || NORMALIZE_FAILED=1
      <tool>/scripts/review-findings.sh normalize "$L" "$DEST" "$EVENTS" --last <dispatch>/logs/review-r<round>-bug-$L-last.md --run <dispatch> \
-       > <dispatch>/logs/review-r<round>-bug-$L-findings.json || exit 1
+       > <dispatch>/logs/review-r<round>-bug-$L-findings.json || { NORMALIZE_FAILED=1; rm -f <dispatch>/logs/review-r<round>-bug-$L-findings.json; }
    done
+   [ "$NORMALIZE_FAILED" -eq 0 ] || exit 1   # a control fault still stops the leg, once every lane that could be normalized has been
    ```
 
    Record every reviewer's thread id in its `review-harvest` line.
