@@ -2,22 +2,21 @@
 title: A lane may review through its harness's own skill
 type: concept
 standing: claimed
-sources: [trials/claude-security-review]
-updated: 2026-09-26
+sources: [trials/claude-security-review, trials/code-review-scope, trials/own-review-skills-control]
+updated: 2026-09-29
 ---
 
 # A lane may review through its harness's own skill
 
-**Claim.** Under a lens, a lane whose harness ships its own review skill for that lens reviews
-at least as well by running the skill as by following postmaster's brief. A lane whose harness
-has none follows the brief, so the lens never loses a lane. The security lens works this way
-since [issue #66](https://github.com/brindlewick/postmaster/issues/66), and
-[issue #38](https://github.com/brindlewick/postmaster/issues/38) proposes the same for the bug
-lens.
+**Claim.** The flow uses a harness's own review form where one is recorded, and gives that form
+the run's exact base-to-snapshot change. Under the bug lens, a harness with no code-review form
+does not review and receives no brief fallback. This is the chosen review method; it does not
+claim that native skills find more or better bugs than a shared brief. The security lens keeps
+its earlier brief fallback for harnesses without a security skill.
 
-**Standing: claimed.** The user took this decision on reasoning. No run has yet put a skill
-beside the brief on the same snapshot. The trial below settles something narrower, a fact about
-one tool: what Claude Code's `/security-review` needs in order to review anything at all.
+**Standing: claimed.** No run has compared native bug reviews with brief-driven reviews on the
+same snapshot. The recorded controls establish which change each native form reviews and whether
+it reports the planted finding, not comparative review quality.
 
 ## The reasoning
 
@@ -29,24 +28,48 @@ one tool: what Claude Code's `/security-review` needs in order to review anythin
   snapshot as every other lane, and the coachman verifies its findings like anyone else's. So a
   finding it shares with another lane still counts as corroboration by lane, as
   [combining models](combining-models.md) needs.
-- **Nothing is lost where a harness has no skill.** That lane follows the brief, as before.
 - **The user chooses the lanes.** Since #63 a lens may have its own reviewer lanes (see
   [the review loop](review-loop.md)), so a lane can be added to one lens for its skill alone.
+- **The two lenses have different fallback rules.** Security keeps a brief for a harness without
+  a security skill. Bug review has no brief; unsupported harnesses are left out of the waybill's
+  bug reviewer list and an empty eligible list stops dispatch.
 
 ## What it costs
 
-- **The brief's context does not reach a skill.** The brief names the project's own surfaces
-  (how it binds and authenticates, what it allowlists, what it spawns) and the findings already
-  known. A skill reviews without them. It may miss a surface only the project's docs describe,
-  or report a known finding again. The coachman's verification drops what does not hold, but it
-  cannot add what a skill never looked for. Lanes on the brief keep running beside it.
+- **The brief's context does not reach a skill.** A skill may report a known bug finding again;
+  the coachman deduplicates it. It may also miss something the shared brief would have named.
+  Verification can reject a finding, but cannot add one a skill never looked for.
 - **Its report is not the finding contract.** Claude Code's gives each finding a file and line,
   a severity, a category, an exploit scenario and a confidence
   [@trials/claude-security-review/clone.txt]. It has no P1 to P3, and does not say whether a
-  finding was verified by running something. The coachman maps it as it verifies. Normalizing
-  a skill's output is #38's.
-- **A skill has its own assumptions about the repository.** Claude Code's needs `origin/HEAD`,
-  below.
+  finding was verified by running something. Bug review reports vary by harness; the normalizer
+  records missing fields as `not provided`, and the coachman verifies the finding.
+- **A skill has its own assumptions about the repository.** Review scope must be explicit, as the
+  code-review trial shows. Claude Code's security skill also needs `origin/HEAD`, below.
+
+## The bug lens's code-review forms
+
+The scope trial used a detached scratch with no upstream, a `trunk` default branch, and a bug in
+the first of two commits. The three supported forms each reported the bug at its file and line
+when given the base-to-HEAD range. With no target, Claude first reviewed only the last commit,
+Codex stopped before a model call, and MiMo Code reviewed no changes but exited successfully
+[@trials/code-review-scope/method.md]. A later control ran the `launch.sh review` adapter at each
+harness's configured top level in the same shape of scratch. Claude Code 2.1.284 at `max`, Codex
+CLI 0.157.1 at `max`, and MiMo Code 0.1.15 on MiMo V2.6 Pro at `high` each produced a normalized
+finding at the planted bug's file and line. One MiMo invocation on the control snapshot reported
+a finding at line 8; a repeat on the identical snapshot reported line 10, the planted line. This
+is one positive result per form, not a repeatability estimate
+[@trials/own-review-skills-control/method.md].
+
+| harness | change and level | report and known findings | tool-call record |
+|---|---|---|---|
+| Claude Code | `/code-review max <BASE>...HEAD`; `launch.sh` also sets effort `max` | JSON array at max; severity is not provided. Extra instructions become part of the target, so known findings are not appended. | The forked task's tool calls and output are in the task file named by `task_notification`; harvest copies that file into run logs. |
+| Codex | `codex exec review --base <BASE>`; `launch.sh` sets reasoning effort `max` | `--last` message has `[P<n>]` bullets, while its session has structured `review_output`. A custom prompt replaces `--base`, so known findings are not passed. | JSON event stream and the Codex session rollout. |
+| MiMo Code | `mimo run --command review`; the prompt file supplies `<BASE>...HEAD`, at variant `high` | Free markdown; known findings are not passed and coachman deduplication handles repeats. | Tool calls stream inline under the parent session id. |
+
+The level, scope, parsing and launch details are recorded in
+[`harnesses.md`](../../skills/postmaster/harnesses.md). No comparison with brief-driven review is
+in scope for #38.
 
 ## What Claude Code's skill needs
 
@@ -89,9 +112,11 @@ refuted if they survive verification less often than the same model's findings o
 ## What changed because of it
 
 `scripts/launch.sh skill <lane> security-review` prints the prompt that invokes a lane's
-harness's own skill, and exits 3 for a harness with none. `skills/postmaster/harnesses.md`
-records which harnesses have one, and where each answer came from. The coachman launches a
-security lane through its skill where it has one, and from the brief otherwise.
+harness's own security skill, and exits 3 for a harness with none. `scripts/launch.sh review`
+runs an eligible bug lane's own code-review form with the range named. `skills/postmaster/harnesses.md`
+records which harnesses have each form, and where each answer came from. The coachman launches a
+security lane through its skill where it has one, and from the brief otherwise; a bug lane with no
+code-review form is not launched.
 `scripts/cut-scratch.sh` cuts the security lens's scratches as clones, checks every scratch
 before a lane is launched into it, tells a scratch from anything else, and removes a scratch of
 either kind. `scripts/host.sh` hosts a clone in a space of its

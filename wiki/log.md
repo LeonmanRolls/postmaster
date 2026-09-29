@@ -8,6 +8,14 @@ updated: 2026-09-27
 
 Append-only. Newest first. One entry per operation, prefixed so it can be parsed.
 
+## [2026-09-29] ingest | bug review through native code-review forms
+
+The own-review-skills concept now records that only harnesses with a code-review form review
+under the bug lens, while security keeps its brief fallback. It cites the `launch.sh review`
+positive control on a detached `trunk` scratch at each form's configured top level. MiMo's first
+location did not match the planted line, so the page records the repeated positive result and
+does not treat it as an estimate of repeatability. Standing stays `claimed`.
+
 ## [2026-09-27] ingest | how the style sort is checked and put to the user
 
 After the review of #55's pull request, the review-loop page records why the style check reads

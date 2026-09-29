@@ -84,9 +84,10 @@ Why the design is shaped as it is.
   and resume in a run reads the config recorded at dispatch, so no lane changes part-way
   through. A change to the config reaches the next run.
 - [A lane may review through its harness's own skill](concepts/own-review-skills.md):
-  **claimed**. A security lane runs its harness's own security review skill where it has one,
-  and the brief where it has none; Claude Code's needs a clone whose `origin/HEAD` leads back to
-  the base.
+  **claimed**. Security keeps a brief fallback where a harness has no security skill; bug review
+  runs only on lanes whose harness has a code-review form, with the base-to-snapshot range named.
+  The scope trial and launch-path control show what the supported forms need to find the planted
+  change.
 - [The local tracker](concepts/local-tracker.md): **claimed**. With no service and no login,
   a repository's tickets live in its own git directory, and a repository whose store exists
   uses it whatever the config names.
