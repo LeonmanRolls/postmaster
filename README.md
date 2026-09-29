@@ -109,7 +109,7 @@ scripts/turnpikes.sh --list | resolve <text> | legs <dispatch>     # the turnpik
 scripts/style-findings.sh list|count|gate|check <dispatch>         # a run's style findings, what its gate runs, the sort
 scripts/launch.sh form|launch|resume|skill <lane-or-role> …       # any lane or role, one command
 scripts/reviewers.sh lines|lanes <waybill> <lens>|lenses           # which lanes review under each lens
-scripts/host.sh detect|name|run|stop|close|spawn|send|wait|read … # where a launch runs, and where you watch it
+scripts/host.sh leg launch|resume|takeover|retry … | detect|name|run|stop|close|spawn|send|wait|read … # leg lifecycle and session host
 scripts/view-stream.sh < <events-file>                            # a harness's events, wrapped: what it says and runs, in full
 scripts/runs-status.sh <run-root>                                  # the postmaster's poll
 scripts/runs-watch.sh <run-root> [--timeout <seconds>]              # wait until a run needs the postmaster

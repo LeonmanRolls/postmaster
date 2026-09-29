@@ -10,6 +10,13 @@ runbooks do not. `<tool>` is the postmaster repo, as the runbook that sent you h
 watch it, and lands its marker on exit (`hosts.md`); that is what makes one wrapper in the
 runbooks correct for every harness and every host.
 
+Coachman legs use `<tool>/scripts/host.sh leg`, which owns the stream path, marker lifecycle and
+attempt record. It calls the form below through `launch.sh`; a resume appends to its launch's
+stream and a takeover begins a new stream after preserving the old one. `launch.sh` marks an
+attempt `refused` before its preflight and marks it `started` only after the env file loads and
+the harness is still callable. The leg command records the final outcome before the host lands
+the exited marker.
+
 **`<tool>/scripts/launch.sh` is the executable form of this file.** `launch.sh form <name>` prints the
 exact launch and resume commands for a configured lane or role; `launch` and `resume` run them;
 `skill` prints the prompt that invokes a harness's own review skill (Own review skills, below).

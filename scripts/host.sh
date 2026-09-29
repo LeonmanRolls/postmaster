@@ -11,6 +11,9 @@
 #   host.sh name <dispatch> review <lane> <lens> <round>
 #   host.sh name <dispatch> postmaster
 #   host.sh name <dispatch> role <text...>                          any other launch, by its role alone
+#   host.sh leg launch|takeover <dispatch> <worktree> <leg> <number> <prompt>
+#   host.sh leg resume <dispatch> <worktree> <leg> <number> <thread-id> <prompt>
+#   host.sh leg retry <dispatch> <worktree> <leg> <number>
 #   host.sh run <name> <cwd> [--under <dispatch>] [--role lane|coachman|reviewer] [--run <dispatch>]
 #               [--out <file>] [--err <file>] [--append] [--marker <file>]
 #               [--pidfile <file>] -- <command...>
@@ -52,6 +55,9 @@
 # POSTMASTER_HOST_STATE (default ~/.postmaster/host), whatever its host, so stop and close see it.
 # The record names its group leader by start time and boot, so a pid another process reuses,
 # after a reboot or within one, is never taken for the launch.
+#
+# `host.sh leg` owns each leg's marker and stream paths, starts or appends the harness stream as
+# required, and records its fixed outcome. Its attempt executor runs under this same host script.
 #
 # stop: a launch's processes are its process group and everything they started, whatever session
 # that moved to, as a harness that runs each tool command in a session of its own does. They are
@@ -1715,6 +1721,395 @@ read_cmd() {  # read <handle> [<lines>]
   esac
 }
 
+# --- leg attempts -------------------------------------------------------------------------
+leg_number() {
+  local n
+  n=$(count "$1" "leg number") || exit 1
+  [ "$n" -gt 0 ] || die "leg number must be positive"
+  printf '%s\n' "$n"
+}
+
+leg_latest() {  # print the last attempt's retry fields, NUL-delimited
+  python3 - "$1" <<'PY'
+import json, sys
+try:
+    rows = [json.loads(line) for line in open(sys.argv[1], encoding="utf-8") if line.strip()]
+except (OSError, ValueError):
+    raise SystemExit(1)
+if not rows: raise SystemExit(1)
+r = rows[-1]
+for key in ("request", "role", "prompt", "thread_id", "outcome"):
+    sys.stdout.buffer.write(str(r.get(key) or "").encode() + b"\0")
+PY
+}
+
+LEG_ACTIVE_LOCK=
+leg_exec() {  # hosted executor; the caller owns paths and clears markers
+  local d=$1 wt=$2 leg=$3 n=$4 request=$5 role=$6 prompt=$7 thread=$8 stream=$9 err=${10}
+  local done=${11} attempts=${12} attempt=${13} phase=${14} wall=${15} active=${16}
+  local launch_mode=launch rc=0 errfd wallpid
+  LEG_ACTIVE_LOCK=$active
+  trap 'rmdir -- "$LEG_ACTIVE_LOCK" 2>/dev/null || :' EXIT
+  [ "$request" != resume ] || launch_mode=resume
+
+  # Observe stderr as it arrives, while teeing it to the user-readable .err file. Classification
+  # never opens or rereads .err, so a wall before the first stream event still reaches fallback.
+  exec {errfd}> >(tee -a "$err" | python3 -c 'import re, sys
+p = sys.argv[1]
+terms = ("quota", "usage limit", "rate limit", "payment required", "insufficient_quota", "overloaded", "capacity", "resource exhausted", "spawn failed", "failed to spawn", "stale session lock", "session lock")
+for line in sys.stdin:
+    s = line.casefold()
+    if re.search(r"\b(?:402|429)\b", s) or any(x in s for x in terms):
+        with open(p, "w", encoding="utf-8") as f: f.write("wall\n")
+        break' "$wall")
+  wallpid=$!
+  if [ "$launch_mode" = resume ]; then
+    "$HERE/launch.sh" resume "$role" "$wt" "$thread" "$prompt" --leg "$leg" --run "$d" 2>&"$errfd"
+  else
+    "$HERE/launch.sh" launch "$role" "$wt" "$prompt" --leg "$leg" --run "$d" 2>&"$errfd"
+  fi
+  rc=$?
+  exec {errfd}>&-
+  wait "$wallpid" 2>/dev/null || :
+
+  # Inspect only structured harness error events; assistant prose is not a wall signal.
+  python3 - "$stream" "$wall" <<'PY'
+import json, re, sys
+events, wall = sys.argv[1:]
+terms = ("quota", "usage limit", "rate limit", "payment required", "insufficient_quota", "overloaded", "capacity", "resource exhausted", "spawn failed", "failed to spawn", "stale session lock", "session lock")
+def selected(value):
+    if isinstance(value, dict):
+        return " ".join(str(value.get(k, "")) for k in ("code", "status", "message", "type", "subtype", "error"))
+    return str(value or "")
+def is_wall(value):
+    s = selected(value).casefold()
+    return bool(re.search(r"\b(?:402|429)\b", s) or any(x in s for x in terms))
+try:
+    with open(events, encoding="utf-8", errors="replace") as source:
+        for line in source:
+            try: e = json.loads(line)
+            except ValueError: continue
+            if not isinstance(e, dict): continue
+            if e.get("type") == "rate_limit_event":
+                status = (e.get("rate_limit_info") or {}).get("status")
+                if status not in (None, "allowed"):
+                    open(wall, "w").write("wall\n"); break
+            if e.get("type") in ("error", "thread.failed", "response.failed", "response.error"):
+                if is_wall(e.get("error")) or is_wall(e):
+                    open(wall, "w").write("wall\n"); break
+except OSError:
+    pass
+PY
+
+  python3 - "$d" "$wt" "$leg" "$n" "$request" "$role" "$prompt" "$thread" "$stream" "$done" "$attempts" "$attempt" "$phase" "$wall" "$rc" <<'PY'
+import datetime, json, os, pathlib, sys, tempfile
+d, wt, leg, n, request, role, prompt, supplied_thread, stream, done, attempts, attempt, phase, wall, rc = sys.argv[1:]
+dispatch, number = pathlib.Path(d), int(n)
+try: phase_value = pathlib.Path(phase).read_text(encoding="utf-8").strip()
+except OSError: phase_value = "refused"
+try: walled = pathlib.Path(wall).is_file()
+except OSError: walled = False
+handoff = pathlib.Path(done).is_file()
+run = json.loads((dispatch / "run.json").read_text(encoding="utf-8"))
+cfg = run.get("config", {})
+team = cfg.get("team", {}) if isinstance(cfg, dict) else {}
+spec = team.get("coachman_fallback" if role == "coachman_fallback" else "coachman", {})
+legs = team.get("coachman_legs", {})
+if role == "coachman" and isinstance(legs, dict): spec = legs.get(leg, spec)
+harness = spec.get("harness", "") if isinstance(spec, dict) else ""
+id_keys = {
+    "codex": ("thread_id",), "grok": ("thread_id", "session_id", "sessionId", "conversationId", "uuid"),
+    "agy": ("conversationId", "conversation_id"), "claude": ("session_id",),
+    "pi": (), "muse": (), "mimo": ("sessionID", "session_id"),
+}.get(harness, ())
+thread = supplied_thread or ""
+try:
+    for line in pathlib.Path(stream).read_text(encoding="utf-8", errors="replace").splitlines():
+        try: event = json.loads(line)
+        except ValueError: continue
+        if not isinstance(event, dict): continue
+        if harness == "muse" and isinstance(event.get("stream"), dict) and event["stream"].get("kind") == "session":
+            thread = thread or event["stream"].get("id", "")
+        if harness == "pi" and event.get("type") == "session":
+            thread = thread or event.get("id", "")
+        for key in id_keys:
+            value = event.get(key)
+            if isinstance(value, str) and value:
+                thread = thread or value
+                break
+        if thread: break
+except OSError: pass
+if phase_value != "started": outcome = "refused"
+elif walled: outcome = "walled"
+elif handoff: outcome = "finished"
+elif not thread: outcome = "pre-thread"
+else: outcome = "incomplete"
+record = {
+    "attempt": int(attempt), "leg": number, "name": leg, "request": request,
+    "role": role, "prompt": prompt, "thread_id": thread, "outcome": outcome,
+    "exit": int(rc), "ended": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+}
+with open(attempts, "a", encoding="utf-8") as f:
+    f.write(json.dumps(record, separators=(",", ":")) + "\n")
+manifest = dispatch / "manifest.json"
+try:
+    m = json.loads(manifest.read_text(encoding="utf-8"))
+    coachman = m.setdefault("coachman", {})
+    leg_records = coachman.setdefault("legs", {})
+    item = leg_records.setdefault(str(number), {})
+    item["name"], item["role"] = role, role
+    if thread: item["thread_id"] = thread
+    fd, temporary = tempfile.mkstemp(prefix=".manifest.", dir=dispatch)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        json.dump(m, f, indent=2); f.write("\n")
+    os.replace(temporary, manifest)
+except (OSError, ValueError, TypeError):
+    pass
+PY
+}
+
+leg_start() {  # leg_start <request> <dispatch> <worktree> <leg> <number> <prompt> [<thread>] [<role>]
+  local request=$1 d=$2 wt=$3 leg=$4 n=$5 prompt=$6 thread=${7:-} role=${8:-}
+  local stream err done attempts active phase wall attempt label append=0 rc
+  case $request in launch|resume|takeover) ;; *) die "unknown leg operation: $request" ;; esac
+  case $leg in synthesis|review|ship) ;; *) die "unknown coachman leg: $leg" ;; esac
+  n=$(leg_number "$n") || exit 1
+  d=$(CDPATH= cd -P -- "$d" 2>/dev/null && pwd -P) || die "no such dispatch: $2"
+  wt=$(CDPATH= cd -P -- "$wt" 2>/dev/null && pwd -P) || die "no such worktree: $3"
+  case $prompt in /*) ;; *) prompt=$PWD/$prompt ;; esac
+  [ -s "$prompt" ] && [ -r "$prompt" ] || die "prompt file missing, unreadable or empty: $prompt"
+  [ -f "$d/run.json" ] && [ -f "$d/manifest.json" ] || die "dispatch needs run.json and manifest.json"
+  local logs=$d/logs
+  mkdir -p "$logs" || die "cannot create the dispatch log directory"
+  stream=$logs/coachman-leg-$n-events.jsonl
+  err=$logs/coachman-leg-$n.err
+  done=$d/.leg-$n-done
+  local exited=$d/.leg-$n-exited
+  attempts=$logs/coachman-leg-$n-attempts.jsonl
+  attempt=$(python3 - "$attempts" <<'PY'
+import sys
+try: n = sum(1 for line in open(sys.argv[1], encoding="utf-8") if line.strip())
+except OSError: n = 0
+print(n + 1)
+PY
+  ) || die "cannot count prior attempts"
+  active=$d/.leg-$n-active
+  mkdir "$active" 2>/dev/null || die "leg $n already has an active attempt"
+  phase=$logs/coachman-leg-$n-phase-$attempt
+  wall=$logs/coachman-leg-$n-wall-$attempt
+  printf 'refused\n' > "$phase" || { rmdir "$active"; die "cannot write attempt phase"; }
+  rm -f -- "$wall" "$done" "$exited"
+  case $request in
+    launch) role=${role:-coachman} ;;
+    resume)
+      if [ -z "$role" ]; then
+        [ -s "$attempts" ] || { rmdir "$active"; die "resume has no recorded attempt for leg $n"; }
+        leg_latest "$attempts" >/dev/null || { rmdir "$active"; die "cannot read the last leg attempt"; }
+        local -a last=(); mapfile -d '' -t last < <(leg_latest "$attempts")
+        role=${last[1]:-}
+        case $role in coachman|coachman_fallback) ;; *) rmdir "$active"; die "last attempt has no valid role" ;; esac
+      fi
+      [ -n "$thread" ] || { rmdir "$active"; die "resume needs the leg's thread id"; }
+      append=1 ;;
+    takeover)
+      role=coachman_fallback
+      if [ -f "$stream" ]; then
+        local backup=$logs/coachman-leg-$n-walled-events.jsonl
+        [ ! -e "$backup" ] || backup=$logs/coachman-leg-$n-walled-attempt-$attempt-events.jsonl
+        mv -- "$stream" "$backup" || { rmdir "$active"; die "cannot preserve the walled stream"; }
+      fi
+      if [ -f "$err" ]; then
+        local err_backup=$logs/coachman-leg-$n-walled.err
+        [ ! -e "$err_backup" ] || err_backup=$logs/coachman-leg-$n-walled-attempt-$attempt.err
+        mv -- "$err" "$err_backup" || { rmdir "$active"; die "cannot preserve the walled errors"; }
+      fi ;;
+  esac
+  case $role in coachman|coachman_fallback) ;; *) rmdir "$active"; die "unknown coachman role: $role" ;; esac
+  if [ "$role" = coachman ]; then
+    label=$("$SELF" name "$d" coachman "$leg" "$n") || { rmdir "$active"; die "cannot name the coachman"; }
+  else
+    label=$("$SELF" name "$d" role "coachman_fallback $leg leg $n") || { rmdir "$active"; die "cannot name the fallback"; }
+  fi
+  local runargs=(run "$label" "$wt" --under "$d" --role coachman --run "$d" --out "$stream" --err "$err" --marker "$exited" --pidfile "$logs/coachman-leg-$n.pid")
+  [ "$append" -eq 0 ] || runargs+=(--append)
+  runargs+=(-- "$SELF" _leg_exec "$d" "$wt" "$leg" "$n" "$request" "$role" "$prompt" "$thread" "$stream" "$err" "$done" "$attempts" "$attempt" "$phase" "$wall" "$active")
+  POSTMASTER_ATTEMPT_PHASE="$phase" "$SELF" "${runargs[@]}"
+  rc=$?
+  if [ "$rc" -ne 0 ]; then
+    rmdir "$active" 2>/dev/null || :
+    python3 - "$attempts" "$attempt" "$n" "$leg" "$request" "$role" "$prompt" "$thread" "$rc" <<'PY'
+import datetime, json, os, sys
+path, attempt, number, leg, request, role, prompt, thread, rc = sys.argv[1:]
+try:
+    rows = [json.loads(line) for line in open(path, encoding="utf-8") if line.strip()]
+except FileNotFoundError:
+    rows = []
+except (OSError, ValueError):
+    rows = []
+if not rows or rows[-1].get("attempt") != int(attempt):
+    record = {"attempt": int(attempt), "leg": int(number), "name": leg, "request": request,
+              "role": role, "prompt": prompt, "thread_id": thread, "outcome": "refused",
+              "exit": int(rc), "ended": datetime.datetime.now(datetime.timezone.utc).isoformat()}
+    with open(path, "a", encoding="utf-8") as f: f.write(json.dumps(record, separators=(",", ":")) + "\n")
+PY
+    printf 'leg: host could not start attempt %s for leg %s (exit %s)\n' "$attempt" "$n" "$rc" >&2
+    return "$rc"
+  fi
+}
+
+leg_cmd() {  # leg launch|resume|takeover|retry <dispatch> <worktree> <leg> <number> ...
+  local request=${1:-}
+  [ $# -gt 0 ] || die "usage: host.sh leg launch|resume|takeover|retry ..."
+  shift
+  case $request in
+    launch)
+      [ $# -eq 5 ] || die "usage: host.sh leg launch <dispatch> <worktree> <leg> <number> <prompt>"
+      leg_start launch "$1" "$2" "$3" "$4" "$5" ;;
+    resume)
+      [ $# -eq 6 ] || die "usage: host.sh leg resume <dispatch> <worktree> <leg> <number> <thread-id> <prompt>"
+      leg_start resume "$1" "$2" "$3" "$4" "$6" "$5" ;;
+    takeover)
+      [ $# -eq 5 ] || die "usage: host.sh leg takeover <dispatch> <worktree> <leg> <number> <prompt>"
+      leg_start takeover "$1" "$2" "$3" "$4" "$5" ;;
+    retry)
+      [ $# -eq 4 ] || die "usage: host.sh leg retry <dispatch> <worktree> <leg> <number>"
+      local d=$1 wt=$2 leg=$3 n=$4 attempts=$1/logs/coachman-leg-$4-attempts.jsonl
+      [ -s "$attempts" ] || die "leg $4 has no attempt to retry"
+      local -a last=()
+      mapfile -d '' -t last < <(leg_latest "$attempts") || die "cannot read the last leg attempt"
+      local role=${last[1]} prompt=${last[2]} thread=${last[3]} outcome=${last[4]} retry_as=launch
+      [ -n "$thread" ] && retry_as=resume
+      case $outcome in refused|pre-thread|walled) ;; *) die "leg $4's last attempt is $outcome, not waiting for a retry" ;; esac
+      leg_start "$retry_as" "$d" "$wt" "$leg" "$n" "$prompt" "$thread" "$role" ;;
+    *) die "usage: host.sh leg launch|resume|takeover|retry ..." ;;
+  esac
+}
+
+
+leg_controls() {
+  echo "leg attempt controls"
+  local leg_d=$tmp/leg-dispatch leg_wt=$repo/.worktrees/T-1-luna prompt stream attempts err got rc
+  mkdir -p "$tmp/bin" "$leg_d/logs"
+  cat > "$leg_d/brief.md" <<EOF
+# Waybill: 999
+turnpikes: none
+
+## Dispatch
+name: #999, leg attempt controls
+dispatch: $leg_d
+synthesis worktree: $leg_wt
+EOF
+  printf '{"stage":"review","leg":1}\n' > "$leg_d/manifest.json"
+  cat > "$leg_d/run.json" <<'EOF'
+{"config":{"team":{"coachman":{"harness":"claude","model":"fake-coach"},"coachman_fallback":{"harness":"claude","model":"fake-fallback"}}}}
+EOF
+  cat > "$tmp/bin/claude" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$POSTMASTER_HOST_FIXTURE/leg-calls"
+case "$*" in
+  *wall-before*|*fallback-wall*)
+    printf '429 rate limit exceeded\n' >&2
+    exit 1 ;;
+  *wall-after*)
+    printf '{"session_id":"thread-wall-after"}\n'
+    printf '429 rate limit exceeded\n' >&2
+    exit 1 ;;
+  *'finish the leg'*)
+    printf '{"session_id":"thread-finished"}\n'
+    : > "$TEST_DONE"
+    exit 0 ;;
+  *replay-me*)
+    printf '{"session_id":"thread-replayed"}\n'
+    printf '%s\n' "$*" > "$TEST_OBSERVED"
+    exit 1 ;;
+  *quota-in-prose*)
+    printf '{"session_id":"thread-prose"}\n'
+    printf '{"type":"assistant","message":{"content":[{"type":"text","text":"quota"}]}}\n'
+    exit 1 ;;
+  *pre-thread*) exit 1 ;;
+  *)
+    printf '{"session_id":"thread-plain"}\n'
+    exit 1 ;;
+esac
+EOF
+  chmod +x "$tmp/bin/claude"
+  prompt=$leg_d/wall-before.txt; printf 'wall-before first event\n' > "$prompt"
+  stream=$leg_d/logs/coachman-leg-1-events.jsonl
+  err=$leg_d/logs/coachman-leg-1.err
+  attempts=$leg_d/logs/coachman-leg-1-attempts.jsonl
+  POSTMASTER_HOST=none POSTMASTER_CONFIG="$tmp/live-limits.toml" POSTMASTER_HOST_STATE="$STATE" \
+    POSTMASTER_HOST_FIXTURE="$tmp" PATH="$tmp/bin:$PATH" TEST_DONE="$leg_d/.leg-1-done" \
+    TEST_OBSERVED="$leg_d/retry-observed" "$SELF" leg launch "$leg_d" "$leg_wt" synthesis 1 "$prompt" >/dev/null
+  rc=$?; marker "$leg_d/.leg-1-exited" 30
+  got=$(python3 -c 'import json,sys; print(json.loads(open(sys.argv[1]).readlines()[-1])["outcome"])' "$attempts")
+  check "a wall before the first event is recorded as walled" '[ "$rc" -eq 0 ] && [ "$got" = walled ] && [ ! -s "$stream" ]' "$got; err=$(cat "$err" 2>/dev/null); calls=$(cat "$tmp/leg-calls" 2>/dev/null)"
+
+  prompt=$leg_d/wall-after.txt; printf 'wall-after first event\n' > "$prompt"
+  POSTMASTER_HOST=none POSTMASTER_CONFIG="$tmp/live-limits.toml" POSTMASTER_HOST_STATE="$STATE" \
+    POSTMASTER_HOST_FIXTURE="$tmp" PATH="$tmp/bin:$PATH" TEST_DONE="$leg_d/.leg-1-done" \
+    TEST_OBSERVED="$leg_d/retry-observed" "$SELF" leg launch "$leg_d" "$leg_wt" synthesis 1 "$prompt" >/dev/null
+  rc=$?; marker "$leg_d/.leg-1-exited" 30
+  got=$(python3 -c 'import json,sys; print(json.loads(open(sys.argv[1]).readlines()[-1])["outcome"])' "$attempts")
+  check "a wall after the first event is recorded as walled" '[ "$rc" -eq 0 ] && [ "$got" = walled ] && grep -q thread-wall-after "$stream"' "$got"
+
+  prompt=$leg_d/fallback-wall.txt; printf 'fallback-wall before first event\n' > "$prompt"
+  POSTMASTER_HOST=none POSTMASTER_CONFIG="$tmp/live-limits.toml" POSTMASTER_HOST_STATE="$STATE" \
+    POSTMASTER_HOST_FIXTURE="$tmp" PATH="$tmp/bin:$PATH" TEST_DONE="$leg_d/.leg-1-done" \
+    TEST_OBSERVED="$leg_d/retry-observed" "$SELF" leg takeover "$leg_d" "$leg_wt" synthesis 1 "$prompt" >/dev/null
+  rc=$?; marker "$leg_d/.leg-1-exited" 30
+  got=$(python3 -c 'import json,sys; r=json.loads(open(sys.argv[1]).readlines()[-1]); print(r["outcome"]+" "+r["role"])' "$attempts")
+  check "a pre-event fallback wall is recorded for the user" '[ "$rc" -eq 0 ] && [ "$got" = "walled coachman_fallback" ] && grep -q thread-wall-after "$leg_d/logs/coachman-leg-1-walled-events.jsonl" && grep -q "429 rate limit" "$leg_d/logs/coachman-leg-1-walled.err" && [ ! -s "$stream" ]' "$got"
+
+  prompt=$leg_d/finish.txt; printf 'finish the leg\n' > "$prompt"
+  POSTMASTER_HOST=none POSTMASTER_CONFIG="$tmp/live-limits.toml" POSTMASTER_HOST_STATE="$STATE" \
+    POSTMASTER_HOST_FIXTURE="$tmp" PATH="$tmp/bin:$PATH" TEST_DONE="$leg_d/.leg-1-done" \
+    TEST_OBSERVED="$leg_d/retry-observed" "$SELF" leg launch "$leg_d" "$leg_wt" synthesis 1 "$prompt" >/dev/null
+  rc=$?; marker "$leg_d/.leg-1-exited" 30
+  got=$(python3 -c 'import json,sys; print(json.loads(open(sys.argv[1]).readlines()[-1])["outcome"])' "$attempts")
+  check "a hand-off is recorded as finished" '[ "$rc" -eq 0 ] && [ "$got" = finished ] && [ -e "$leg_d/.leg-1-done" ]' "$got"
+
+  prompt=$leg_d/pre-thread.txt; printf 'pre-thread no event\n' > "$prompt"
+  POSTMASTER_HOST=none POSTMASTER_CONFIG="$tmp/live-limits.toml" POSTMASTER_HOST_STATE="$STATE" \
+    POSTMASTER_HOST_FIXTURE="$tmp" PATH="$tmp/bin:$PATH" TEST_DONE="$leg_d/.leg-1-done" \
+    TEST_OBSERVED="$leg_d/retry-observed" "$SELF" leg launch "$leg_d" "$leg_wt" synthesis 1 "$prompt" >/dev/null
+  rc=$?; marker "$leg_d/.leg-1-exited" 30
+  got=$(python3 -c 'import json,sys; print(json.loads(open(sys.argv[1]).readlines()[-1])["outcome"])' "$attempts")
+  check "an exit before a thread id is recorded as pre-thread" '[ "$rc" -eq 0 ] && [ "$got" = pre-thread ]' "$got"
+
+  prompt=$leg_d/replay.txt; printf 'replay-me original prompt\n' > "$prompt"
+  printf 'exit 17\n' > "$leg_d/refuse.env"
+  python3 - "$leg_d/run.json" "$leg_d/refuse.env" <<'PY'
+import json, sys
+p, env = sys.argv[1:]
+m = json.load(open(p))
+m["config"]["team"]["coachman"]["env_file"] = env
+json.dump(m, open(p, "w"))
+PY
+  POSTMASTER_HOST=none POSTMASTER_CONFIG="$tmp/live-limits.toml" POSTMASTER_HOST_STATE="$STATE" \
+    POSTMASTER_HOST_FIXTURE="$tmp" PATH="$tmp/bin:$PATH" TEST_DONE="$leg_d/.leg-1-done" \
+    TEST_OBSERVED="$leg_d/retry-observed" "$SELF" leg resume "$leg_d" "$leg_wt" synthesis 1 thread-finished "$prompt" >/dev/null
+  rc=$?; marker "$leg_d/.leg-1-exited" 30
+  got=$(python3 -c 'import json,sys; r=json.loads(open(sys.argv[1]).readlines()[-1]); print(r["outcome"]+" "+r["thread_id"])' "$attempts")
+  check "a refused resume retains its existing thread id" '[ "$rc" -eq 0 ] && [ "$got" = "refused thread-finished" ]' "$got"
+  cat > "$leg_d/run.json" <<'EOF'
+{"config":{"team":{"coachman":{"harness":"claude","model":"fake-coach"},"coachman_fallback":{"harness":"claude","model":"fake-fallback"}}}}
+EOF
+  POSTMASTER_HOST=none POSTMASTER_CONFIG="$tmp/live-limits.toml" POSTMASTER_HOST_STATE="$STATE" \
+    POSTMASTER_HOST_FIXTURE="$tmp" PATH="$tmp/bin:$PATH" TEST_DONE="$leg_d/.leg-1-done" \
+    TEST_OBSERVED="$leg_d/retry-observed" "$SELF" leg retry "$leg_d" "$leg_wt" synthesis 1 >/dev/null
+  rc=$?; marker "$leg_d/.leg-1-exited" 30
+  check "retry after an answer delivers the refused resume's saved prompt" \
+    '[ "$rc" -eq 0 ] && grep -q replay-me "$leg_d/retry-observed"'
+  prompt=$leg_d/quota-prose.txt; printf 'quota-in-prose\n' > "$prompt"
+  POSTMASTER_HOST=none POSTMASTER_CONFIG="$tmp/live-limits.toml" POSTMASTER_HOST_STATE="$STATE" \
+    POSTMASTER_HOST_FIXTURE="$tmp" PATH="$tmp/bin:$PATH" TEST_DONE="$leg_d/.leg-1-done" \
+    TEST_OBSERVED="$leg_d/retry-observed" "$SELF" leg launch "$leg_d" "$leg_wt" synthesis 1 "$prompt" >/dev/null
+  rc=$?; marker "$leg_d/.leg-1-exited" 30
+  got=$(python3 -c 'import json,sys; print(json.loads(open(sys.argv[1]).readlines()[-1])["outcome"])' "$attempts")
+  check "quota in assistant prose does not turn an incomplete thread into a wall" '[ "$rc" -eq 0 ] && [ "$got" = incomplete ]' "$got"
+}
+
+
 # --- tests --------------------------------------------------------------------------------
 test_setup() {  # a scratch repository with worktrees, and the commands the tests launch
   tmp=$(mktemp -d) || exit 1
@@ -3008,6 +3403,7 @@ EOF
   check "every role resolves from the dispatch run, inheriting each value it does not set" \
     '[ "$(launch_limits lane "$tmp/cap-dispatch" "$tmp/live-limits.toml")" = "$(printf "64M\t16")" ] && [ "$(launch_limits coachman "$tmp/cap-dispatch" "$tmp/live-limits.toml")" = "$(printf "128M\t32")" ] && [ "$(launch_limits reviewer "$tmp/cap-dispatch" "$tmp/live-limits.toml")" = "$(printf "8G\t24")" ] && [ "$(launch_limits default "$tmp/cap-dispatch" "$tmp/live-limits.toml")" = "$(printf "8G\t512")" ] && [ "$(launch_limits lane "" "$tmp/live-limits.toml")" = "$(printf "8G\t512")" ]'
 
+  leg_controls
   finish self-test
 }
 
@@ -3125,6 +3521,7 @@ print(([w.get("open_workspace_id") for w in d["result"]["worktrees"] if w["path"
 case ${1:-} in
   detect) detect ;;
   name) shift; name_cmd "$@" ;;
+  leg) shift; leg_cmd "$@" ;;
   run) shift; run_cmd "$@" ;;
   stop) shift; stop_cmd "$@" ;;
   close) shift; close_cmd "$@" ;;
@@ -3132,9 +3529,10 @@ case ${1:-} in
   send) shift; send_cmd "$@" ;;
   wait) shift; wait_cmd "$@" ;;
   read) shift; read_cmd "$@" ;;
+  _leg_exec) shift; leg_exec "$@" ;;
   _run) runner "$2" "$3" ;;
   _handle) handle_of "$2" ;;
   --self-test) self_test ;;
   --live-test) live_test ;;
-  *) echo "usage: host.sh detect | name | run [--under <dispatch>] [--role lane|coachman|reviewer] [--run <dispatch>] | stop | close | spawn | send | wait | read | --self-test | --live-test (see the header)" >&2; exit 1 ;;
+  *) echo "usage: host.sh leg | detect | name | run [--under <dispatch>] [--role lane|coachman|reviewer] [--run <dispatch>] | stop | close | spawn | send | wait | read | --self-test | --live-test (see the header)" >&2; exit 1 ;;
 esac

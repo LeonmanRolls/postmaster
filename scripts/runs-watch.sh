@@ -148,11 +148,14 @@ for dp, dn, fn in os.walk(sys.argv[1]):
     "rule review 2 .escalation-ready RULE" \
     "gate shipping 3 .card-ready GATE" \
     "dispatch review 2 .leg-2-done DISPATCH" \
-    "remount review 2 .leg-2-exited REMOUNT" \
+    "remount review 2 .leg-2-exited RESUME incomplete coachman" \
     "read review 2 .checkpoint-review-ready READ"
   do
-    set -- $spec; name=$1 stage=$2 leg=$3 marker=$4 want=$5
+    set -- $spec; name=$1 stage=$2 leg=$3 marker=$4 want=$5 outcome=${6:-} role=${7:-}
     root="$tmp/pos-$name"; mkdir -p "$root"; mkrun "$root" "$name" "$stage" "$leg" "$marker"
+    if [ -n "$outcome" ]; then
+      printf '{"outcome":"%s","role":"%s"}\n' "$outcome" "$role" > "$root/$name/logs/coachman-leg-$leg-attempts.jsonl"
+    fi
     watch "$root"
     [ $rc -eq 0 ] && has "needs $name $want" && has "NEXT" \
       && ok "NEXT $want names $name" \

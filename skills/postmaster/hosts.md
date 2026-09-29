@@ -48,6 +48,7 @@ way on every row, only less visibly on the last.
 <tool>/scripts/host.sh name <dispatch> review <lane> <lens> <round>
 <tool>/scripts/host.sh name <dispatch> postmaster
 <tool>/scripts/host.sh name <dispatch> role <text...>
+<tool>/scripts/host.sh leg launch|resume|takeover|retry <dispatch> <worktree> <leg> <number> ...
 <tool>/scripts/host.sh run <name> <cwd> [--under <dispatch>] [--role lane|coachman|reviewer] [--run <dispatch>] [--out <file>] [--err <file>] [--append] [--marker <file>] [--pidfile <file>] -- <command...>
 <tool>/scripts/host.sh stop <worktree>
 <tool>/scripts/host.sh close <worktree>
@@ -68,6 +69,15 @@ first start to ask something, such as whether to trust the folder: the user answ
 pane. `spawn`, `send`, `wait` and `read` exit 3 on `none`.
 
 ## Run, on every host
+
+**Coachman legs use `host.sh leg`**, which is the only runbook interface for launching,
+resuming or taking over a leg. It derives the marker, event, error and attempt-record paths.
+`launch` starts a new stream, `resume` appends to that stream and reuses the role recorded for
+the previous attempt, `takeover` preserves the old stream and starts a fresh fallback stream,
+and `retry` repeats the last refused, pre-thread or user-routed wall attempt with its saved prompt.
+The leg command records one of `refused`, `pre-thread`, `walled`, `incomplete` or `finished`
+before `--marker` lands. A refusal to load the env file remains `refused`; no runbook reads
+`.err` text to classify the result.
 
 - **The command is the one a caller would have backgrounded with `&`.** It runs from the
   directory `host.sh` was called in, with the caller's environment and an empty stdin, its

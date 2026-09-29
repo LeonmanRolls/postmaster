@@ -161,48 +161,37 @@ live one. Below, `<p>` is the leg before leg `<n>` in that list.
    then `<dispatch>/handoff-<p>.md`" (omit the hand-off for leg 1), plus the one line naming
    the leg's job from the legs table. Nothing else: the runbook and the files carry the rest.
 2. **From leg 2 on, verify the hand-off before dispatching on it:** `<tool>/scripts/handoff-check.sh
-   <dispatch>/handoff-<p>.md` exits 0. If it exits 2, leg `p` is not finished: remove its
-   `.leg-<p>-done` marker and resume leg `p` (step 5, with `p` in place of `n`), the prompt
-   naming the missing sections and saying "Complete the hand-off and end the leg as
-   `coachman.md` says." Then wait for its done marker.
-3. **Launch** through the host, which shows the leg in the synthesis worktree's space
-   (`hosts.md`), stream to the leg's events file, marker on exit; `host.sh` clears the leg's
-   exited marker first:
+   <dispatch>/handoff-<p>.md` exits 0. If it exits 2, leg `p` is not finished: resume leg `p`
+   (step 5, with `p` in place of `n`), the prompt naming the missing sections
+   and saying "Complete the hand-off and end the leg as `coachman.md` says." The leg script
+   clears its done marker. Then wait for its done marker.
+3. **Launch** through the leg command. It uses the host in the synthesis worktree's space,
+   clears prior markers and stream state, writes the attempt record, and owns the event and
+   error paths:
 
    ```sh
-   <tool>/scripts/host.sh run "$(<tool>/scripts/host.sh name <dispatch> coachman <leg-name> <n>)" <repo>/.worktrees/<TICKET> \
-       --under <dispatch> --role coachman --run <dispatch> \
-       --out <dispatch>/logs/coachman-leg-<n>-events.jsonl --err <dispatch>/logs/coachman-leg-<n>.err \
-       --marker <dispatch>/.leg-<n>-exited \
-       -- <tool>/scripts/launch.sh launch coachman <repo>/.worktrees/<TICKET> <dispatch>/leg-<n>-prompt.txt --leg <leg-name> \
-       --run <dispatch>
+   <tool>/scripts/host.sh leg launch <dispatch> <repo>/.worktrees/<TICKET> <leg-name> <n> \
+       <dispatch>/leg-<n>-prompt.txt
    ```
 
-   The tab name comes from the run config and leg identity through `host.sh name`; the dispatch
-   makes the synthesis worktree space carry the ticket name. Neither name is typed into a shell.
-
-   Record the thread id from the stream (`harnesses.md`) in the manifest as
-   `coachman.legs.<n>.thread_id`, and `coachman` as `coachman.legs.<n>.name`, set `leg` to
-   `<n>`, and log `dispatch` with the leg and the thread id.
+   The script records the thread id and role in the manifest and appends the outcome to
+   `<dispatch>/logs/coachman-leg-<n>-attempts.jsonl`. Log `dispatch` with the leg and the
+   recorded thread id.
 4. **The coachman's model for a leg** comes from `team.coachman`, or `team.coachman_legs.<leg-name>`
    where set. It is never a lane's model, in any leg.
 5. **Resume a leg** only in the form that launched it, with its leg, through the host. Write
    the prompt first to `<dispatch>/leg-<n>-resume-<time>.txt`, `<time>` being what
-   `date -u +%Y%m%dT%H%M%SZ` prints. The leg's stream is appended to, its `.err` file holds only
-   this process's errors, and `host.sh` clears the leg's exited marker:
+   `date -u +%Y%m%dT%H%M%SZ` prints. The leg command appends to the stream, keeps `.err` to
+   this attempt, clears the done and exited markers and records its outcome:
 
    ```sh
-   <tool>/scripts/host.sh run "$(<tool>/scripts/host.sh name <dispatch> coachman <leg-name> <n>)" <repo>/.worktrees/<TICKET> --append \
-       --under <dispatch> --role coachman --run <dispatch> \
-       --out <dispatch>/logs/coachman-leg-<n>-events.jsonl --err <dispatch>/logs/coachman-leg-<n>.err \
-       --marker <dispatch>/.leg-<n>-exited \
-       -- <tool>/scripts/launch.sh resume <name> <repo>/.worktrees/<TICKET> <thread-id> <dispatch>/leg-<n>-resume-<time>.txt --leg <leg-name> \
-       --run <dispatch>
+   <tool>/scripts/host.sh leg resume <dispatch> <repo>/.worktrees/<TICKET> <leg-name> <n> \
+       <thread-id> <dispatch>/leg-<n>-resume-<time>.txt
    ```
 
-   `<name>` and `<thread-id>` are the leg's `coachman.legs.<n>.name` and `.thread_id`. Log
-   `resume` with the leg and the thread id. A remount, a ruling and the merge word all reach
-   a leg this way.
+   `<thread-id>` is `coachman.legs.<n>.thread_id`. The script keeps the role from the last
+   attempt, including a fallback takeover. Log `resume` with the leg and thread id. A ruling
+   and the merge word reach a leg this way.
 
 ## Stage D: supervise
 
@@ -215,6 +204,10 @@ once. If it names nothing it failed: the reason is in `<runs>/postmaster/watch.e
 the cause (harnesses.md, Keeping the watcher running) before starting it again. A watcher
 that is not running is a run nobody notices.
 
+`<tool>/scripts/runs-status.sh` refreshes `<runs>/postmaster/waiting` from each run's
+`.waiting-on-user` marker. Read that generated list when the user asks which runs are waiting;
+never edit it by hand.
+
 **Hold a run** by writing its ticket to `<runs>/postmaster/held`, one ticket per line,
 exactly as the RUN column shows it: a held run never needs you. **Release it** by removing
 its line, and remove the line when the run closes. Hold a run only while you mean to leave
@@ -225,45 +218,51 @@ Each `NEXT` names the act:
 
 - **USER:** the run waits on the user, and its `.waiting-on-user` holds the question (Stage E
   step 3, Stage F step 2). Put the question to the user again if you have not in this session;
-  otherwise nothing to do until they answer.
+  otherwise do nothing until they answer. When they answer, remove the marker and follow the
+  action for the recorded outcome.
+- **ASK:** a recorded `refused`, `pre-thread` or fallback `walled` attempt needs the user.
+  Read the attempt record and `.err` only to explain what happened; outcome classification comes
+  from the record. Put the question in `.waiting-on-user` and tell the user. When they answer,
+  remove the marker and run `<tool>/scripts/host.sh leg retry <dispatch>
+  <repo>/.worktrees/<TICKET> <leg-name> <n>`. The script replays the stored attempt prompt and
+  thread id. In particular, a refused resume delivers the prompt it was carrying after the user
+  answers.
 - **RULE:** an escalation is waiting. Stage E.
 - **GATE:** the ship card is complete. Stage F.
 - **DISPATCH:** the leg's `.leg-<n>-done` marker is present. Stage C for the leg after `n` in
   `<tool>/scripts/turnpikes.sh legs <dispatch>`, logging a `note` that names any leg the list leaves
   out; after the ship leg, Stage G. If the script exits other than 0, nothing is dispatched:
   its message goes to the user as Stage E step 3 says.
-- **REMOUNT:** the leg's process exited (`.leg-<n>-exited`) with no hand-off, escalation or
-  card. Read the leg's `.err` file and the stream tail. A `.err` that opens with a `launch:`
-  line is a refusal from `<tool>/scripts/launch.sh`: it goes to the user (Stage E step 3), and nothing
-  is launched or resumed until they answer. A leg with no thread id, none in its stream and none
-  in `coachman.legs.<n>`, never started: its `.err` goes to the user too, and on their answer
-  the leg is launched again (Stage C step 3). A quota or provider wall, quoted, means the
-  coachman is lame for this leg: log `degrade` and take the leg over on the fallback (below),
-  unless it already runs on the fallback, when the wall goes to the user. Anything else is a
-  spent thread: remount it by resuming the leg (Stage C step 5) with "Continue leg <n>; your
-  last written state is in the dispatch directory and the worktree" as the prompt.
+- **TAKEOVER:** the attempt record says `walled` on the primary coachman. Log `degrade`, write
+  the takeover prompt below, then run `<tool>/scripts/host.sh leg takeover <dispatch>
+  <repo>/.worktrees/<TICKET> <leg-name> <n> <dispatch>/leg-<n>-takeover.txt`. The script
+  preserves the old stream, starts a fresh fallback stream and records its outcome and thread id.
+- **RESUME:** the attempt record says `incomplete`: the harness started, produced a thread id,
+  and exited without the hand-off. Write `<dispatch>/leg-<n>-resume-<time>.txt` with
+  "Continue leg <n>; your last written state is in the dispatch directory and the worktree",
+  then use Stage C step 5.
 - **READ:** a checkpoint card is waiting. Read it, log `note` with its one-line summary, and
   remove its `.checkpoint-*-ready` marker. In consult mode the card comes with an escalation,
   which RULE handles.
 - **INSPECT:** nothing changed for 30 minutes and no marker. Read the leg's `.err` file and
-  the stream tail; a live leg that is merely slow is left alone, and a process that is gone
-  is handled as REMOUNT. Never kill a running leg for being slow.
+  the stream tail to understand a live process; a live leg that is merely slow is left alone.
+  If it exited without an attempt record, stop and raise a control fault. Never infer an action
+  from `.err` text and never kill a running leg for being slow.
 - **WAIT:** nothing to do.
 
 **The takeover prompt** for a fallback coachman, written to `<dispatch>/leg-<n>-takeover.txt`:
 "You take over leg <n> of <TICKET> mid-way. Read `<dispatch>/brief.md`,
 `<tool>/skills/postmaster/coachman.md`, `<dispatch>/handoff-<p>.md` (none for leg 1), then `run-log.md` and
 `actions.jsonl` for what this leg did before you, then the synthesis worktree's `git log` and
-`git status`. Treat every uncommitted change as unverified. Log `handoff-accept` and finish
-the leg." Move the leg's stream to `<dispatch>/logs/coachman-leg-<n>-walled-events.jsonl`, then
-launch the takeover through the wrapper of Stage C step 3, with `<tool>/scripts/launch.sh launch
-coachman_fallback <repo>/.worktrees/<TICKET> <dispatch>/leg-<n>-takeover.txt --run <dispatch>`
-in place of the coachman's launch. Record its thread id from the new stream (`harnesses.md`) as
-`coachman.legs.<n>.thread_id`, with `coachman_fallback` as its `name`.
+`git status`. Treat every uncommitted change as unverified. Log `handoff-accept` and finish the
+leg." `host.sh leg takeover` moves the existing stream aside and starts the fallback on a fresh
+stream; it also records the fallback role and thread id.
 
-A leg's `.leg-<n>-exited` marker with `.leg-<n>-done` beside it is normal completion. Every
-transition is one `log-action` line; the narrative in your own notes is for the user,
-never the record.
+The fixed attempt outcomes are `refused`, `pre-thread`, `walled`, `incomplete` and `finished`.
+`launch.sh` records whether it reached the harness; the leg command records the outcome before
+the exited marker lands. `runs-status.sh` reads this record and never classifies an attempt from
+`.err`. Every transition is one `log-action` line; the narrative in your own notes is for the
+user, never the record.
 
 ## Stage E: rulings
 
