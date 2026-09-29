@@ -25,9 +25,10 @@ Run the bug lens through the configured harness's own review skill, normalize it
 
 - Update `skills/postmaster/harnesses.md` with each harness's code-review support, evidence, invocation, level, output, known-findings behavior, and tool-call record location.
 - Update `scripts/launch.sh` with the `review` form for Claude Code, Codex, and MiMo Code, preserving `launch` event output and its `--last` and `--run` options.
-- Add `scripts/review-findings.sh` to normalize harness review output, with positive and negative self-test controls.
+- Add `scripts/review-findings.sh` and `scripts/review-findings.py` to normalize harness review output, with positive and negative self-test controls.
 - Update `scripts/reviewers.sh`, `scripts/setup.sh`, and the postmaster waybill/pre-flight instructions in `skills/postmaster/postmaster.md` for eligible bug reviewers and empty-review refusal.
-- Update `skills/postmaster/coachman.md` for the bug lens's harness review launches, normalized findings, and the style brief's gate boundary.
+- Update `skills/postmaster/coachman.md`, `skills/postmaster/SKILL.md`, and `skills/postmaster/controls.md` for the bug lens, waybill, normalized findings, and review gate boundary.
+- Update `README.md` with the new script commands.
 - Update `wiki/concepts/own-review-skills.md` and `wiki/index.md` with sourced evidence and the scope trial/control.
 
 ## Complexity tracking

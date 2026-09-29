@@ -12,9 +12,10 @@ runbooks correct for every harness and every host.
 
 **`<tool>/scripts/launch.sh` is the executable form of this file.** `launch.sh form <name>` prints the
 exact launch and resume commands for a configured lane or role; `launch` and `resume` run them;
-`skill` prints the prompt that invokes a harness's own review skill (Own review skills, below).
-The script and this file change together, and a form the script refuses (agy resume) is a form
-this file has not recorded yet.
+`review` runs a lane's bug-review form at the harness's top level on the named base-to-HEAD
+range; `skill` prints the prompt that invokes a harness's own security review skill (Own review
+skills, below). The script and this file change together, and a form the script refuses (agy
+resume or a bug-review form the harness does not have) is a form this file has not recorded.
 
 Every lane runs unrestricted. Its containment is its worktree (`coachman.md`, Lane capability),
 so the bypass form below is passed on every launch AND every resume. The interactive postmaster
@@ -321,6 +322,51 @@ cd <wt> && env XDG_DATA_HOME=<harness-data>/mimo/<key> MIMOCODE_DISABLE_CLAUDE_I
 
 ## Own review skills
 
+The bug lens uses a harness's own code-review form where one is recorded. A lane with no form
+does not review for bugs, and there is no fallback to the bug brief. `launch.sh review` names the
+range and level for each form. The coachman normalizes the report; security review remains
+separate below.
+
+| harness | bug code-review form | source |
+|---|---|---|
+| claude | `/code-review <level> <BASE>...HEAD` | [scope trial](../../raw/trials/code-review-scope/method.md), Claude Code 2.1.283 |
+| codex | `codex exec review --base <BASE>` | [scope trial](../../raw/trials/code-review-scope/method.md), Codex CLI 0.157.1 help |
+| mimo (MiMo Code) | `/review <BASE>...HEAD` | [scope trial](../../raw/trials/code-review-scope/method.md), MiMo Code 0.1.15 |
+| pi | none: its help lists no code-review command | pi 0.87.0 help |
+| muse (Muse Code) | none: its built-in skill list has no code-review form | `muse skills list`, 1.4.0 |
+| grok | none recorded: its command documentation lists no code-review form | [Modes and Commands](https://docs.x.ai/docs/grok-cli/modes-and-commands), 2026-09 |
+| agy (Antigravity CLI) | none recorded: its CLI reference lists no code-review form | [CLI Reference](https://antigravity.google/docs/cli-reference), 2026-09 |
+
+The scope trial used a detached scratch whose fixture default branch was `trunk`, with the bug
+in the first of two commits. Each supported skill found it at its file and line when given the
+range. Without a target, Claude first read only the last commit, Codex exited before a model
+call, and MiMo Code reviewed no changes and exited 0. Every launch therefore names the range.
+
+**Claude Code** runs `/code-review max <BASE>...HEAD`, with effort `max` regardless of the lane's
+configured effort. At max the skill asks for a JSON array, runs ten review angles, verifies
+findings and sweeps for gaps. Its argument parser takes the first word as the level and the rest
+as the target, so known findings are not appended; the coachman deduplicates repeats. The skill
+runs as a forked task. Its tool calls and output are outside the `-p` stream; the
+`task_notification` event names the task output file, which is copied into run logs.
+
+**Codex** runs `codex exec review --base <BASE>` with `--json`, `-m <model>`,
+`-c model_reasoning_effort="max"`, the bypass flags, `--skip-git-repo-check` in the detached
+scratch, and `-o <last-file>`. Findings look like
+`- [P<n>] <title> — <absolute path>:<start>-<end>` with a body. The session file also holds
+structured `review_output` fields: title, body, priority, confidence, file and line range. A
+custom prompt is an alternative to `--base`; whether both combine is untested, so known findings
+are not passed. Its tool calls appear in the JSON event stream.
+
+**MiMo Code** runs `mimo run --command review` at variant `high`, the top variant of MiMo V2.6
+Pro. `mimo run` appends stdin to its arguments, so the prompt file contains `<BASE>...HEAD`.
+Its report is free markdown, and its tool calls stream inline under the parent session id. The
+launch does not pass known findings; the coachman's deduplication handles repeats.
+
+The normalizer records every field the harness omitted as `not provided`; it does not invent
+severity, evidence or confidence. Unparseable output is an error, never a clean review. Claude
+at `low`, Codex and MiMo Code each cited the planted line with the named range in the scope
+trial. [Full trial record](../../raw/trials/code-review-scope/method.md).
+
 Under the security lens, a lane whose harness has its own security review skill runs it in place
 of postmaster's brief (`coachman.md`, Security lens). `<tool>/scripts/launch.sh skill <lane>
 security-review` prints the prompt that invokes it, and exits 3 when the lane's harness has none.
@@ -329,26 +375,26 @@ The prompt goes in the lane's prompt file, and the launch is the ordinary launch
 | harness | security review skill | source |
 |---|---|---|
 | claude | `/security-review` | a trial, 2.1.283 (`raw/trials/claude-security-review/`) |
-| codex | none: `codex exec review` takes `--uncommitted`, `--base <branch>`, `--commit <sha>` or a prompt of its own, and has no security preset | its help, 0.157.1 |
+| codex | none: `codex exec review` has no security preset | its help, 0.157.1 |
 | pi | none: its help lists no review command, and its skills come from files (`--skill <path>`) | its help, 0.87.0 |
 | muse | none among its built-in skills | `muse skills list`, 1.4.0 |
-| grok | none: its slash commands have no review command; skills, plugins and workflows could add one | its documentation (docs.x.ai, Modes and Commands), 2026-09 |
-| agy | none: its slash commands have no security review; Google's security extension (`/security:analyze`) is for Gemini CLI only | its documentation (antigravity.google, CLI Reference), 2026-09 |
+| grok | none: its slash commands have no review command; skills, plugins and workflows could add one | docs.x.ai, Modes and Commands, 2026-09 |
+| agy | none: its slash commands have no security review | antigravity.google, CLI Reference, 2026-09 |
+| mimo | none: `/review` is a general code review, not security review | its commands, 0.1.15 |
 
-MiMo Code has none either: its `/review` is a general code review (its commands, 0.1.15). OpenAI's Codex Security is a CLI of its own
-(`@openai/codex-security`), not a codex skill, and would need an adapter of its own.
+OpenAI's Codex Security is a CLI of its own (`@openai/codex-security`), not a codex skill, and
+would need an adapter of its own.
 
 **claude's `/security-review`** reviews the change from the merge base of `origin/HEAD` and
 `HEAD`, reading it with `git diff origin/HEAD...`. Where `origin/HEAD` does not resolve, it exits
 0 with an empty result after no turns, having reviewed nothing. A worktree scratch cannot give it
 one: `refs/remotes/origin/HEAD` is shared by every worktree of a repository, and git 2.43
 resolves no per-worktree copy. So the security lens reviews from scratch clones, cut with
-`<tool>/scripts/cut-scratch.sh ... --clone <BASE>`, whose `origin/HEAD` is the branch the repository has
-checked out. The cut, and the check before each launch, refuse a clone where that does not lead
-back to BASE. When it verifies its findings
-in background agents, a headless run ends with one result line per turn, and an earlier one can
-say the agents are still running. Its report is the last result line, which is where the harvest
-reads a lane's final message.
+`<tool>/scripts/cut-scratch.sh ... --clone <BASE>`, whose `origin/HEAD` is the branch the
+repository has checked out. The cut and the check before each launch refuse a clone whose
+`origin/HEAD` does not lead back to BASE. When it verifies findings in background agents, a
+headless run ends with one result line per turn, and an earlier one can say the agents are still
+running. Its report is the last result line, where the harvest reads a lane's final message.
 
 ## Interactive form: the postmaster
 

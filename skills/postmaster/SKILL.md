@@ -240,6 +240,7 @@ checks: <as `verify.sh record` printed them: each check's name, where it came fr
 ## Team
 workhorses: <lane>=<harness>/<model>/<effort>, <lane>=…
 reviewers: <lane>, <lane>
+bug reviewers: <eligible code-review lanes, possibly empty>
 <lens> reviewers: <lane>, <lane>          (one line for each lens the config gives its own lanes)
 coachman: <harness>/<model>/<effort>      (never a lane's model)
 CHECKPOINT_MODE and MERGE_AUTHORITY come from ship.checkpoint_mode and ship.merge_authority, overridden only where the user says so for this run
