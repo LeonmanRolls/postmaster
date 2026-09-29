@@ -22,10 +22,10 @@ Define the coachman contract and its implementation locations in one versioned c
 ## Structure
 
 - `WORKHORSE-SPEC.md`: this plan, committed before implementation.
-- `docs/coachman-contract.md`: canonical contract definition and mapping to implementation sites.
+- `docs/coachman-contract.toml`: canonical contract definition and mapping to implementation sites.
 - `scripts/coachman-contract.sh`: base/head detector and self-test controls.
 - `skills/postmaster/postmaster.md`: dispatch record, final-branch fixture condition, and merge-repeat decision.
-- `skills/postmaster/coachman.md`: contract-marked runbook sections and hand-off/card requirements.
+- `skills/postmaster/coachman.md` and `skills/postmaster/SKILL.md`: contract-marked runbook sections and the waybill shape.
 - `scripts/host.sh`, `scripts/stage.sh`, `scripts/runs-status.sh`, `scripts/turnpikes.sh`, and `scripts/handoff-check.sh`: implementation markers, stages, turnpike and completion details as needed by the canonical mapping.
 - `scripts/fixture.sh`: fixture workflow integration or focused self-test coverage as needed.
 - `AGENTS.md`: pointer to the canonical contract definition.
@@ -34,15 +34,16 @@ Define the coachman contract and its implementation locations in one versioned c
 
 ## Decisions
 
-- Use a dedicated, versioned contract definition with explicit implementation mappings, rather than a file-level detector, so wording changes in mixed-purpose runbooks do not trigger a fixture run.
+- Use a dedicated, versioned TOML contract definition with explicit implementation mappings, rather than a file-level detector, so wording changes in mixed-purpose runbooks do not trigger a fixture run.
+- Use Python's standard-library TOML reader so the detector consumes the canonical definitions without a new dependency.
 - Use explicit contract markers around the covered implementation passages, allowing the detector to identify exactly which part and lines changed.
 - Treat a merge from main as a repeat trigger only when the contract detector reports a change in the merge's introduced diff.
 - Keep fixture execution at the final branch and have the waybill record whether the change is expected to require it.
 
 ## Tasks
 
-- [ ] T001 [P] [AC1] Add the canonical contract definition and map every covered part to its implementation files and passages in `docs/coachman-contract.md`.
-- [ ] T002 [P] [AC1] Mark contract passages in `skills/postmaster/coachman.md`, `skills/postmaster/postmaster.md`, and relevant scripts, and replace the restated contract sentence in `AGENTS.md` with a pointer.
+- [ ] T001 [P] [AC1] Add the canonical contract definition and map every covered part to its implementation files and passages in `docs/coachman-contract.toml`.
+- [ ] T002 [P] [AC1] Mark contract passages in `skills/postmaster/coachman.md`, `skills/postmaster/SKILL.md`, `skills/postmaster/postmaster.md`, and relevant scripts, and replace the restated contract sentence in `AGENTS.md` with a pointer.
 - [ ] T003 [P] [AC2] Implement base/head contract detection with per-part file and line reporting in `scripts/coachman-contract.sh`.
 - [ ] T004 [AC3] Record the initial fixture requirement at dispatch and use final-branch detection for the card and main-merge repeat decision in `skills/postmaster/postmaster.md` and the relevant scripts.
 - [ ] T005 [AC4] Add self-test controls for contract changes, non-contract changes, and merge repeat decisions in `scripts/coachman-contract.sh` and relevant existing self-tests.
