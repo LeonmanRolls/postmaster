@@ -30,7 +30,7 @@ wired into the project's checks so no change ships unscanned.
 | Match by shape and context, never a file of real private values | Patterns are regexes over key/value context, token prefixes, path shapes, RFC 1918 ranges, attribution trailer forms. No values file exists; the allowlist holds only user-ruled values and ships empty. |
 | A file holding all the private values is still bad | No values file is designed, read or created. Fixtures are invented at runtime in mktemp scratch repos. |
 | The script's own patterns must not flag its own source | Patterns are written so their source form is not a match of themselves (character-class breaks in literals, values required after keys). Verified by scanning this branch clean before ship. |
-| Lanes use made-up fixture values only | Self-test fixtures use example domains, example keys, obviously fake ids. Nothing under `~/.postmaster` or the real private instructions file is read. |
+| Lanes use made-up fixture values only | Self-test fixtures use example domains, example keys, obviously fake ids. Nothing under the postmaster home or the real private instructions file is read. |
 | Nothing repo-specific | The script discovers the repo from its own location / the scanned git root. |
 | Deterministic work in `scripts/` | The whole feature is `scripts/scrub-check.sh` plus a committed `scripts/scrub-check.allow` (empty) and `.postmaster/project.toml`. |
 | Every count needs a control | `--self-test` has positive and negative controls per kind, plus deleted-line, allowlist and history controls. |
@@ -70,10 +70,10 @@ None: the plan follows the ticket's direction without departure.
    Fixture addresses use non-documentation domains so positive controls fire.
 5. **account-id**: opaque id shapes (`org_`, `acct_`, `account_` prefixes with a long token)
    and UUIDs that sit on a line with account/org/user/identity/credential context, so a bare
-   example UUID in prose does not fire. Keyed forms (`organizationUuid: <id>`) are `key`.
+   example UUID in prose does not fire. A keyed id form is `key`, not `account-id`.
 6. **home-path**: `/home/<user>/…`, `/Users/<user>/…`, `/root/…` with further segments, and
-   harness scratch prefixes (`/tmp/` + harness name + `-` + id, `~/.claude/`, `~/.postmaster/`,
-   `~/.ssh/`, `~/.config/`). Pattern source is written so `/home/` in the regex is not itself
+   harness scratch prefixes (a temp-dir harness name with a run id, and the usual private
+   dot-directories). Pattern source is written so a home root in the regex is not itself
    a path with a user segment.
 7. **private-host**: RFC 1918 and link-local IPv4 literals; hostnames ending in `.local`,
    `.lan`, `.internal`, `.home`, `.private`, `.intranet`, `.corp`. IPv6 unique-local
@@ -88,7 +88,7 @@ None: the plan follows the ticket's direction without departure.
 10. **private-instructions**: sentences of the kind a private standing-instructions file
     carries, detected by phrase shape (ownership of a machine by a person/handle; a committer
     identity binding; a directive not to identify the account holder; a ban on AI attribution
-    markers; an opening that names standing instructions for agents on a machine). Pattern
+    markers; an opening that names standing-instructions for agents on a machine). Pattern
     source is self-avoiding as in (3).
 11. **History implementation**: `--history [ref]` runs `git rev-list <ref>` (every commit)
     and scans each commit's own patch against its first parent (root commits against the
