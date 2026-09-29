@@ -13,6 +13,9 @@ the interactive postmaster alive between turns. **It never changes what a launch
 lane and every coachman leg is the same headless command on every host: `<tool>/scripts/launch.sh`'s
 form, its events stream to its events file, its errors to its `.err` file, its marker touched
 when it exits, and then it exits. An idle thread is a native session on disk, never a process.
+A coachman leg's launch, resume and takeover go through `<tool>/scripts/leg.sh`, which calls
+this script and `launch.sh` and records how the attempt ended; the runbook never writes a
+marker, a redirect or a stream path itself.
 
 ## Which host
 

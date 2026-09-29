@@ -14,7 +14,9 @@ runbooks correct for every harness and every host.
 exact launch and resume commands for a configured lane or role; `launch` and `resume` run them;
 `skill` prints the prompt that invokes a harness's own review skill (Own review skills, below).
 The script and this file change together, and a form the script refuses (agy resume) is a form
-this file has not recorded yet.
+this file has not recorded yet. A coachman leg's attempt goes through `<tool>/scripts/leg.sh`,
+which calls `launch.sh` through `host.sh` and records how it ended; the runbook never names a
+stream path or a marker itself.
 
 For a launch in a run, `<tool>/scripts/host.sh run --out` passes the events path to `launch.sh`.
 After the harness exits, `launch.sh` reads the thread id from that stream and writes the durable

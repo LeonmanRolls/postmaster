@@ -379,9 +379,13 @@ EOF
   got=$(calls "$here/../skills/postmaster/coachman.md" "$here/../skills/postmaster/postmaster.md"); rc=$?
   out=$(printf '%s\n' "$got" | grep '^unrun '); err=""
   [ $rc -eq 0 ] && [ -z "$out" ] && printf '%s\n' "$got" | grep -q '^run .*/coachman\.md: ' \
-    && printf '%s\n' "$got" | grep -q '^run .*/postmaster\.md: ' \
     && ok "no launch or resume in coachman.md or postmaster.md lacks --run <dispatch>" \
     || fail "no launch or resume in coachman.md or postmaster.md lacks --run <dispatch>"
+  # postmaster.md dispatches a leg through leg.sh, which passes --run itself; it carries no
+  # bare launch.sh call. coachman.md still launches lanes the direct way and must keep --run.
+  grep -q 'scripts/leg\.sh ' "$here/../skills/postmaster/postmaster.md" \
+    && ok "postmaster.md dispatches a leg through leg.sh" \
+    || fail "postmaster.md dispatches a leg through leg.sh"
 
   echo "muse"
   printf '[lanes.m]\nharness = "muse"\nmodel = "muse-model"\neffort = "max"\nenv_file = "%s"\n\n[lanes.n]\nharness = "muse"\nmodel = "muse-model"\n\n[team]\ncoachman = { harness = "muse", model = "coach-muse" }\ncoachman_fallback = { harness = "claude", model = "fallback-model" }\n' "$tmp/over.env" > "$tmp/muse.toml"
