@@ -54,12 +54,30 @@ TOOL=$(dirname "$HERE")
 CONFIG=${POSTMASTER_CONFIG:-$HOME/.postmaster/config.toml}
 TOOLS=${POSTMASTER_TOOL_PINS:-$HOME/.postmaster/tool-pins}
 
+pin_accepts() {  # pin_accepts <dest> <commit>: HEAD is the commit, or only the fix
+  # commits hotfix-reach.sh recorded beside the pin as <commit>.fixes sit above
+  # it. The one rule for reusing a pin and for checking one, so the two agree.
+  local dest=$1 commit=$2 at revs rev
+  at=$(git -C "$dest" rev-parse --verify -q HEAD 2>/dev/null) || return 1
+  [ "$at" = "$commit" ] && return 0
+  [ -f "$TOOLS/$commit.fixes" ] || return 1
+  revs=$(git -C "$dest" rev-list "$commit..HEAD" 2>/dev/null) || return 1
+  [ -n "$revs" ] || return 1
+  while IFS= read -r rev; do
+    [ -n "$rev" ] || continue
+    awk -v r="$rev" '$1 == r { found=1 } END { exit !found }' "$TOOLS/$commit.fixes" || return 1
+  done <<EOF
+$revs
+EOF
+  return 0
+}
+
 pin_inner() {  # pin_inner <repo> <commit> <dest>: cut or reuse the pin; the caller holds $TOOLS/.pin.lock
   local repo=$1 commit=$2 dest=$3 at dirty
   if [ -e "$dest" ]; then
     at=$(git -C "$dest" rev-parse --verify -q HEAD 2>/dev/null) \
       || { echo "run-meta: $dest exists but is not a git checkout; left alone" >&2; return 1; }
-    [ "$at" = "$commit" ] \
+    pin_accepts "$dest" "$commit" \
       || { echo "run-meta: $dest is at ${at:0:12}, not ${commit:0:12}; left alone" >&2; exit 1; }
     # The same commit is the same content, whatever repo cut it, so any checkout at the
     # commit is shared; but it must be clean, or it does not serve that commit's versions.
@@ -152,7 +170,7 @@ path_of() {  # path_of <dispatch>: the run's tool checkout, canonical; the waybi
 }
 
 check_pin() {  # check_pin <dispatch>: the run's checkout still serves its dispatch commit
-  local d=$1 checkout commit at dirty c fixes revs
+  local d=$1 checkout commit at dirty c
   checkout=$(path_of "$d") || return 1
   c=$(claim "$d/run.json")
   case $c in
@@ -168,24 +186,10 @@ check_pin() {  # check_pin <dispatch>: the run's checkout still serves its dispa
   [ -d "$checkout" ] || { echo "run-meta: no pinned checkout at $checkout" >&2; return 1; }
   at=$(git -C "$checkout" rev-parse --verify -q HEAD 2>/dev/null) \
     || { echo "run-meta: $checkout is not a git checkout" >&2; return 1; }
-  if [ "$at" != "$commit" ]; then
-    # The pin may carry hotfix-reach.sh's fix commits alone on top of the dispatch commit:
-    # recorded beside the pin as <commit>.fixes, one "<pin-sha> <fix-sha>" pair per fix
-    # it applied. Nothing else is allowed to move the pin, so a run keeps every version
-    # but the fixes it took.
-    fixes="$TOOLS/$commit.fixes"
-    revs=$(git -C "$checkout" rev-list "$commit..HEAD" 2>/dev/null) || revs=""
-    if [ -z "$revs" ] || [ ! -f "$fixes" ]; then
-      echo "run-meta: $checkout is at ${at:0:12}, not the recorded ${commit:0:12}" >&2; return 1
-    fi
-    while IFS= read -r rev; do
-      [ -n "$rev" ] || continue
-      awk -v r="$rev" '$1 == r { found=1 } END { exit !found }' "$fixes" \
-        || { echo "run-meta: $checkout is at ${at:0:12}, not the recorded ${commit:0:12}" >&2; return 1; }
-    done <<EOF
-$revs
-EOF
-  fi
+  # The pin may carry hotfix-reach.sh's fix commits alone on top of the dispatch
+  # commit; the same rule pin_inner reuses a pin by, so the two agree.
+  pin_accepts "$checkout" "$commit" \
+    || { echo "run-meta: $checkout is at ${at:0:12}, not the recorded ${commit:0:12}" >&2; return 1; }
   dirty=$(git -C "$checkout" status --porcelain 2>/dev/null) \
     || { echo "run-meta: could not read $checkout" >&2; return 1; }
   [ -z "$dirty" ] \
@@ -575,12 +579,18 @@ printf '%s %s\n' "$fixrev" "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef" > "$TOOLS/
 try check "$run_pinned"
 [ $rc -eq 0 ] && ok "check passes a pin carrying only recorded fix commits" \
   || fail "check passes a pin carrying only recorded fix commits" "$out"
+try pin "$fake" "$commitA"
+[ $rc -eq 0 ] && [ "$out" = "$pinA" ] && ok "pin reuses a pin carrying only recorded fix commits" \
+  || fail "pin reuses a pin carrying only recorded fix commits (exit $rc)" "$out"
 printf 'unrecorded\n' >> "$pinA/skills/postmaster/coachman.md"
 git -C "$pinA" add -A
 git -C "$pinA" commit -qm "not a recorded fix" >/dev/null 2>&1
 try check "$run_pinned"
 [ $rc -eq 1 ] && ok "check fails a pin carrying a commit no fix recorded" \
   || fail "check fails a pin carrying a commit no fix recorded" "$out"
+try pin "$fake" "$commitA"
+[ $rc -eq 1 ] && ok "pin refuses a pin carrying a commit no fix recorded" \
+  || fail "pin refuses a pin carrying a commit no fix recorded (exit $rc)" "$out"
 git -C "$pinA" reset -q --hard "$commitA"
 rm -f -- "$TOOLS/$commitA.fixes"
 
