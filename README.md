@@ -115,6 +115,7 @@ scripts/review-findings.sh normalize|harvest …                   # native bug-
 scripts/host.sh detect|name|run|stop|close|spawn|send|wait|read … # where a launch runs, and where you watch it
 scripts/view-stream.sh < <events-file>                            # a harness's events, wrapped: what it says and runs, in full
 scripts/runs-status.sh <run-root>                                  # the postmaster's poll
+scripts/coachman-contract.sh <base> <head>                         # contract changes by part, file and line
 scripts/runs-watch.sh <run-root> [--timeout <seconds>]              # wait until a run needs the postmaster
 scripts/handoff-check.sh <handoff-file>                            # a leg may end only on exit 0
 scripts/wiki-lint.sh [--self-test]                                 # the wiki's rules, run not remembered

@@ -108,6 +108,7 @@ run, whatever the target: the fault becomes a ticket when the run closes.
 **The coachman is a one-shot resumable process for one leg, not a session.** It communicates
 by files in its own dispatch directory.
 
+<!-- coachman-contract:marker-artifact-table:start -->
 | It writes | Meaning |
 |---|---|
 | `run-log.md` | running narrative |
@@ -116,6 +117,7 @@ by files in its own dispatch directory.
 | `logs/coachman-leg-<n>-events.jsonl` | its own stream for leg `n`; errors in `logs/coachman-leg-<n>.err` |
 | `checkpoint-<n>.md` + `.checkpoint-<n>-ready` | a checkpoint card is complete; informational in autonomous mode, a stop in consult mode |
 | `handoff-<n>.md` + `.leg-<n>-done` | the leg is finished and the next may start |
+<!-- coachman-contract:marker-artifact-table:end -->
 
 **It never waits for an answer in-process.** On an escalation or the three-round cap it writes
 the file and exits. The postmaster answers by resuming the coachman's thread with the ruling as
@@ -132,8 +134,32 @@ the stream tail, then remount it: resume the thread.
 **The postmaster polls; the coachman never pushes.** Cross-session messaging is
 harness-specific and the flow does not rely on it.
 
+<!-- coachman-contract:markers:start -->
+### Marker ownership
+
+| Marker or artifact | Writer | Meaning / reader |
+|---|---|---|
+| `logs/<lane>.done` | `host.sh` | A workhorse process exited; the coachman collects its result. |
+| `logs/review-r<round>-$LENS-<lane>.done` | `host.sh` | A reviewer process exited; the coachman collects that round. |
+| `.leg-<n>-exited` | `host.sh` | The launch ended: its process exited or startup failed after recording the reason. Cleared before a relaunch or resume. |
+| `.leg-<n>-done` | Coachman, after `handoff-check.sh` exits 0 | The hand-off is complete; the postmaster may dispatch the next leg. |
+| `.checkpoint-<n>-ready` | Coachman | `checkpoint-<n>.md` is ready for the postmaster to read. |
+| `.checkpoint-review-ready` | Coachman | `checkpoint-review.md` is ready for the postmaster to read. |
+| `.escalation-ready` | Coachman | `ESCALATION.md` asks for a ruling; the postmaster resumes the same leg. |
+| `.card-ready` | Coachman | `card.md` and `handoff-3.md` are ready for the postmaster's gate. |
+| `.waiting-on-user` | Postmaster | A question is waiting; the postmaster removes it when the answer arrives. |
+
+Markers report the state of their paired artifact or process. They never replace it.
+<!-- coachman-contract:markers:end -->
+<!-- coachman-contract:marker-launch:start -->
+The coachman supplies `.leg-<n>-exited` to `host.sh` for its own process. Its lane and
+reviewer launches give `host.sh` the corresponding `logs/*.done` path; the host owns marker
+clearing and writing after exit.
+<!-- coachman-contract:marker-launch:end -->
+
 ## Legs and hand-offs
 
+<!-- coachman-contract:leg-table:start -->
 A run is up to three legs, `synthesis`, `review` and `ship`, each a fresh coachman thread
 launched by the postmaster, so no context outlives a leg and nothing a leg knew survives except
 what it wrote down. The boundaries are the run's own gates:
@@ -148,7 +174,9 @@ The review leg runs only when the waybill names a turnpike that runs in it; with
 follows synthesis and starts from `handoff-1.md`. `<tool>/scripts/turnpikes.sh legs <dispatch>` prints
 the run's legs and the turnpikes each one runs. A leg runs each turnpike listed for it from that
 turnpike's step in this runbook; a listed turnpike with no step here cannot run: escalate.
+<!-- coachman-contract:leg-table:end -->
 
+<!-- coachman-contract:completion:start -->
 **A leg starts by accepting the hand-off.** Read `brief.md`, this runbook, and the previous
 leg's hand-off, which the leg prompt names; log `handoff-accept`; then act. A decision the
 hand-off marks `do-not-reopen` is reopened only by logging a `note` that says why, before
@@ -178,6 +206,12 @@ One paragraph: where the next leg starts, and what it must do first.
 Then close the open section with `<tool>/scripts/run-log.sh <dispatch> --close`, log `handoff`, touch
 `.leg-<n>-done`, and exit. The postmaster launches the next leg;
 you never do. A leg that exits without its hand-off is spent, and the postmaster remounts it.
+
+**Leg completion condition.** A leg ends only after writing all required, nonempty sections
+to `handoff-<n>.md`, passing `<tool>/scripts/handoff-check.sh`, closing its open run-log
+section, logging `handoff`, and touching `.leg-<n>-done`. A process exit marker alone never
+finishes a leg. If the process exited and there is no done marker, the postmaster remounts it.
+<!-- coachman-contract:completion:end -->
 
 **Escalations stay inside the leg.** An escalation writes `ESCALATION.md`, touches
 `.escalation-ready` and exits; the ruling arrives as a resume of the same thread, and the
@@ -280,6 +314,7 @@ A workhorse commits incrementally as it goes, never pushes, never reads other br
 same breath, through the host script and the launch script so no form is ever copied by hand.
 `host.sh` runs each where the user can watch it (`hosts.md`) and returns at once:
 
+<!-- coachman-contract:workhorse-marker-call:start -->
 ```sh
 <tool>/scripts/host.sh run "$(<tool>/scripts/host.sh name <dispatch> workhorse <lane>)" <workhorse-wt> \
     --under <dispatch> --role lane --run <dispatch> \
@@ -287,6 +322,7 @@ same breath, through the host script and the launch script so no form is ever co
     -- <tool>/scripts/launch.sh launch <lane> <workhorse-wt> <dispatch>/<lane>-prompt.txt --last <dispatch>/logs/<lane>-last.md \
        --run <dispatch>
 ```
+<!-- coachman-contract:workhorse-marker-call:end -->
 
 The tab name comes from the lane and its recorded model through `host.sh name`; the dispatch
 makes its synthesis worktree space carry the ticket name. Neither name is typed into a shell.
@@ -485,6 +521,7 @@ Set the stage first, `<tool>/scripts/stage.sh <dispatch> review`, then:
    per round on the snapshot. There is no bug brief: each bug reviewer runs its harness's
    code-review form against the named range.
 
+   <!-- coachman-contract:turnpike-steps:start -->
    Each entry is the one place for its lens, the turnpike of the same name: what its reviewers
    look for, and how they are launched, which step 2 does for every lane that reviews under it.
    A review turnpike with no entry here cannot run: escalate.
@@ -508,6 +545,7 @@ Set the stage first, `<tool>/scripts/stage.sh <dispatch> review`, then:
      review skill where it has one and the lens's brief where it has none, so the lens never
      loses a lane (the security lens's launch, below).
      [Why a lane may review through its harness's own skill](../../wiki/concepts/own-review-skills.md)
+   <!-- coachman-contract:turnpike-steps:end -->
 
    **A launch from a brief** has two parts. Its preparation, once per round and before any
    reviewer starts, writes the lens's prompt file verbatim:
@@ -610,6 +648,7 @@ Set the stage first, `<tool>/scripts/stage.sh <dispatch> review`, then:
    and its deadline. A round interrupted before its launches were done is re-run whole, from the
    cut, which tears down whatever its first attempt left:
 
+   <!-- coachman-contract:reviewer-marker-call:start -->
    ```sh
    SNAP=$(git -C <synthesis-wt> rev-parse HEAD)
    for LENS in <open lenses>; do
@@ -640,6 +679,7 @@ Set the stage first, `<tool>/scripts/stage.sh <dispatch> review`, then:
    done
    <tool>/scripts/review-round.sh wait <dispatch> <round> <repo> $REVIEWERS
    ```
+   <!-- coachman-contract:reviewer-marker-call:end -->
 
    **Normalize the bug reports before triage.** For each lane under the bug lens, copy any
    forked task record the stream's `task_notification` named and normalize the native report
@@ -857,6 +897,13 @@ Set the stage first: `<tool>/scripts/stage.sh <dispatch> shipping`.
    what the change does,
    branch name, gate output summary, diff stat, the preview link, the review link, the run's
    thread ids. This is the flow's analogue of opening a PR.
+
+   <!-- coachman-contract:fixture-card:start -->
+   The ship card also records the coachman-contract check's command, result (`yes` or `no`),
+   and final branch commit. When a fixture is required, it records the fixture run's clean
+   score and the commit it scored. If the branch changes after that score, the postmaster's
+   repeat decision and any new score and commit are recorded before the merge word.
+   <!-- coachman-contract:fixture-card:end -->
 
    **The ship card carries the checks,** as `<tool>/scripts/verify.sh run <synthesis-wt> <dispatch>`
    printed them on the final synthesis, with step 3's walk as the journey report where there is

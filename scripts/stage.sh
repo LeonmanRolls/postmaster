@@ -22,6 +22,7 @@
 #   exit 4  a terminal stage set by any actor but the postmaster
 set -uo pipefail
 HERE=$(CDPATH= cd -P -- "$(dirname -- "$0")" && pwd -P)
+# coachman-contract:stage-rules:start
 STAGES="dispatched bootstrapped workhorses-running synthesis checkpoint-1 review shipping shipped done abandoned"
 
 set_stage() {  # set_stage <dispatch> <stage> <actor>
@@ -30,6 +31,7 @@ set_stage() {  # set_stage <dispatch> <stage> <actor>
   case $new in
     done|abandoned) [ "$actor" = postmaster ] || { echo "stage: only the postmaster sets $new" >&2; return 4; } ;;
   esac
+# coachman-contract:stage-rules:end
   [ -f "$d/manifest.json" ] || { echo "stage: no manifest at $d/manifest.json" >&2; return 1; }
   local plan
   plan=$(python3 - "$d" "$new" "$actor" <<'PY'

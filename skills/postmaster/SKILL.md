@@ -250,6 +250,7 @@ The postmaster writes one per ticket at `<repo>/.postmaster/runs/<TICKET>/brief.
 It is the only thing that travels between the postmaster and a coachman, so it carries
 everything the coachman needs and nothing it must go and find:
 
+<!-- coachman-contract:waybill-template:start -->
 ```
 # Waybill: <TICKET>
 <the turnpikes: line <tool>/scripts/ticket-check.sh printed for the ticket, whole: turnpikes: <names> or turnpikes: none>
@@ -279,7 +280,9 @@ dispatch: <abs path of this directory>
 synthesis worktree: <abs path; cut by the postmaster at BASE, the coachman's cwd for every leg>
 tool: <abs path of the run's pinned postmaster checkout, at the dispatch commit: <tool> in the coachman's runbook>
 postmaster ruling channel: resume the coachman's thread (harnesses.md) with the ruling as the prompt
+coachman contract fixture: pending (the postmaster sets yes or no at the final card)
 ```
+<!-- coachman-contract:waybill-template:end -->
 
 The postmaster's own session continues to use the main checkout it found from the skill. The
 waybill's `tool:` path is the run's pinned checkout; coachman launches, resumes and takeovers

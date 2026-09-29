@@ -32,10 +32,9 @@ running the previous version.
 **Everything else is ordinary.** Worktrees under `.worktrees/` are gitignored, the gate runs
 the same way, and merges are merges. There is no special mode.
 
-**A change to the coachman contract merges only after a fixture run scores clean**: a run
-dispatched from the change's branch against a repository made by `scripts/fixture.sh new`, and
-scored by `scripts/fixture.sh score` on the same branch. That rule is about the change's
-quality, not about the runs in flight. [Why](wiki/concepts/fixture-runs.md).
+**The coachman contract is defined in one place:** [its definition and implementation map](docs/coachman-contract.toml).
+The postmaster uses `scripts/coachman-contract.sh` to decide whether a final branch needs a
+clean fixture run. [Why](wiki/concepts/fixture-runs.md).
 
 ## When a session opens in this repo, do this
 

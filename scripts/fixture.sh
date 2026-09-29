@@ -612,6 +612,12 @@ out=$(score_run "$clean" "$tmp/other" 2>&1); rc=$?
 [ $rc -eq 1 ] && printf '%s\n' "$out" | grep -q "is this the run's repo" && ok "a repo whose main does not hold the run's base" \
   || fail "a repo whose main does not hold the run's base (exit $rc)" "$out"
 
+if "$HERE/coachman-contract.sh" --self-test; then
+  ok "the coachman contract detector passes its contract and repeat controls"
+else
+  fail "the coachman contract detector passes its contract and repeat controls"
+fi
+
 echo
 [ "$fails" -eq 0 ] && { echo "self-test: all controls behaved"; exit 0; }
 echo "self-test: $fails control(s) misbehaved"; exit 1

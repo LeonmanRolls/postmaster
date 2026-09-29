@@ -539,8 +539,8 @@ def draft(g, rid, safe):
             "## Notes",
             "Filed from run %s by `scripts/tool-faults.sh`. The run's own records keep the full evidence: "
             "what ran, the error and the diagnosis. This ticket carries only the file, the failure and the "
-            "proposed fix. If the fix changes the coachman contract (markers, the waybill shape, completion "
-            "detection), a fixture run confirms it before it merges." % rid, "",
+            "proposed fix. The postmaster's contract checker decides from the final branch whether a "
+            "fixture run is required; this ticket's wording does not decide it." % rid, "",
             "Tool fault id: `%s`." % g["id"]]
     return title, "\n".join(body) + "\n"
 

@@ -45,17 +45,20 @@ usage() { echo "usage: turnpikes.sh --list | resolve [--project <repo>] [<text>.
 
 # Both bodies are read with `read`, not `$(cat ...)`, so that a shell as old as bash 3.2 parses
 # this file: it reads a here-document inside `$( )` as ordinary text, quotes and backticks included.
+# coachman-contract:turnpike-table:start
 IFS= read -r -d '' TABLE <<'TURNPIKES' || true
 # name     set      leg     what it checks
 style      default  review  idiom, naming, abstraction and consistency with the project's own conventions
 bug        default  review  correctness, logic, and whether the tests are adequate
 security   default  review  exploit paths through the project's risk surfaces
 TURNPIKES
+# coachman-contract:turnpike-table:end
 
 IFS= read -r -d '' CORE <<'PY' || true
 import json, os, re, subprocess, sys, unicodedata
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+# coachman-contract:leg-rules:start
 here, table, cmd, args = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4:]
 LEGS = [(1, "synthesis"), (2, "review"), (3, "ship")]
 ALWAYS = {"synthesis", "ship"}
@@ -153,6 +156,8 @@ def legs(line):
         runs = [x for x in got if leg_of[x] == leg]
         if leg in ALWAYS or runs:
             print(" ".join([str(n), leg] + runs))
+
+# coachman-contract:leg-rules:end
 
 if cmd == "list":
     for name, d, leg, what in rows:

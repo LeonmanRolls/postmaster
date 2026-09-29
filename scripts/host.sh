@@ -768,6 +768,7 @@ try:
 except OSError as e:
     sys.stderr.write("host: cannot run %s: %s\n" % (sys.argv[2], e.strerror)); os._exit(127)'
 
+# coachman-contract:marker-writer:start
 watch_exit() {  # watch_exit <pid> <marker>: touch the marker once <pid> is gone, from outside the
   # pane, so it lands even when the pane is closed and takes its runner with it
   python3 -c 'import os, sys, time
@@ -785,6 +786,7 @@ while True:
 with open(marker, "a"):
     os.utime(marker)' "$1" "$2" </dev/null >/dev/null 2>&1
 }
+# coachman-contract:marker-writer:end
 
 herdr_report() {  # herdr_report <pid> <name>: the pane's launch working while <pid> runs, released after
   # It reports at once, whatever Herdr detects in the pane later. A closing idle report is
@@ -976,7 +978,9 @@ FAIL_ERR="" FAIL_MARKER=""
 launch_failed() {  # launch_failed <reason>: what a backgrounded launch left when nothing ran, the
   # reason in --err and the marker, so a wait on it ends and a reader finds why
   [ -n "$FAIL_ERR" ] && printf 'host: %s\n' "$1" >> "$FAIL_ERR" 2>/dev/null
+  # coachman-contract:marker-failure:start
   [ -n "$FAIL_MARKER" ] && touch "$FAIL_MARKER" 2>/dev/null
+  # coachman-contract:marker-failure:end
   die "$1"
 }
 
@@ -1026,7 +1030,9 @@ run_cmd() {
   claim_wait=$(count "${POSTMASTER_HOST_CLAIM_WAIT:-20}" POSTMASTER_HOST_CLAIM_WAIT) || launch_failed "no launch: POSTMASTER_HOST_CLAIM_WAIT"
   cwd=$(CDPATH= cd -P -- "$cwd" && pwd -P); name=$(clean "$name")
   [ -n "$pidfile" ] && rm -f -- "$pidfile"          # never an earlier launch's pid
+  # coachman-contract:marker-reset:start
   [ -n "$marker" ] && rm -f -- "$marker"            # or its marker
+  # coachman-contract:marker-reset:end
 
   local spec host where="" rpid=""
   spec=$(mktemp -d "${TMPDIR:-/tmp}/postmaster-host.XXXXXX") || launch_failed "cannot make a spec directory"
@@ -1125,7 +1131,9 @@ runner() {
       drop_spec "$spec"
       echo "host: the caller's environment never arrived, so '$name' did not start"
       [ -n "$err" ] && printf "host: the caller's environment never arrived, so '%s' did not start\n" "$name" >> "$err"
+      # coachman-contract:marker-failure-env:start
       [ -n "$marker" ] && touch "$marker"
+      # coachman-contract:marker-failure-env:end
       return 1
     fi
     unset "envs[${#envs[@]}-1]"
@@ -1222,7 +1230,9 @@ runner() {
     esac
     "$systemctl" --user reset-failed "$unit" >/dev/null 2>&1 || :
   fi
+  # coachman-contract:marker-writer-final:start
   [ -n "$marker" ] && touch "$marker"
+  # coachman-contract:marker-writer-final:end
   trap - HUP INT TERM
   reg_members "$cpid"                              # what the leader left in its group, or nothing
   rm -f -- "$event_file"

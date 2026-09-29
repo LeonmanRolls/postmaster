@@ -1,0 +1,241 @@
+version = 1
+
+[[parts]]
+id = "markers"
+title = "Run and leg markers"
+definition = """
+The postmaster creates the run directory and initial manifest. A coachman leg owns its
+handoff, checkpoint, escalation and ship-card artifacts. `.leg-<n>-done` is written only
+after the handoff passes handoff-check.sh and the handoff is logged. `.leg-<n>-exited` is
+written by host.sh when the launch reaches a terminal state: the process exited, or startup
+failed after its reason was recorded. It is written regardless of the command's exit status;
+host.sh clears it before a new launch or resume. A workhorse marker at `logs/<lane>.done` and
+a reviewer marker at `logs/review-r<round>-$LENS-<lane>.done` are written by host.sh when that
+process exits. The coachman writes `.card-ready` after the ship card and handoff are complete,
+and again after updating the card. It writes `.escalation-ready` with ESCALATION.md and
+`.checkpoint-<n>-ready` with a checkpoint card. The review leg also writes
+`.checkpoint-review-ready` with checkpoint-review.md. The postmaster writes
+`.waiting-on-user` with its question. It removes that marker when the answer arrives, removes
+`.checkpoint-*-ready` after reading the card, removes `.escalation-ready` before resuming a
+ruling, and removes `.card-ready` before resuming a merge decision. It may clear a leg's done
+marker before requiring that leg to run again. Markers signal artifacts or process state;
+they do not replace those artifacts.
+"""
+
+[[parts.implementation]]
+file = "skills/postmaster/coachman.md"
+start = "<!-- coachman-contract:markers:start -->"
+end = "<!-- coachman-contract:markers:end -->"
+
+[[parts.implementation]]
+file = "skills/postmaster/coachman.md"
+start = "<!-- coachman-contract:marker-artifact-table:start -->"
+end = "<!-- coachman-contract:marker-artifact-table:end -->"
+
+[[parts.implementation]]
+file = "skills/postmaster/coachman.md"
+start = "<!-- coachman-contract:marker-launch:start -->"
+end = "<!-- coachman-contract:marker-launch:end -->"
+
+[[parts.implementation]]
+file = "skills/postmaster/coachman.md"
+start = "<!-- coachman-contract:workhorse-marker-call:start -->"
+end = "<!-- coachman-contract:workhorse-marker-call:end -->"
+
+[[parts.implementation]]
+file = "skills/postmaster/coachman.md"
+start = "<!-- coachman-contract:reviewer-marker-call:start -->"
+end = "<!-- coachman-contract:reviewer-marker-call:end -->"
+
+[[parts.implementation]]
+file = "scripts/host.sh"
+start = "# coachman-contract:marker-writer:start"
+end = "# coachman-contract:marker-writer:end"
+
+[[parts.implementation]]
+file = "scripts/host.sh"
+start = "# coachman-contract:marker-failure:start"
+end = "# coachman-contract:marker-failure:end"
+
+[[parts.implementation]]
+file = "scripts/host.sh"
+start = "# coachman-contract:marker-failure-env:start"
+end = "# coachman-contract:marker-failure-env:end"
+
+[[parts.implementation]]
+file = "scripts/host.sh"
+start = "# coachman-contract:marker-reset:start"
+end = "# coachman-contract:marker-reset:end"
+
+[[parts.implementation]]
+file = "scripts/host.sh"
+start = "# coachman-contract:marker-writer-final:start"
+end = "# coachman-contract:marker-writer-final:end"
+
+[[parts.implementation]]
+file = "scripts/runs-status.sh"
+start = "# coachman-contract:marker-poll:start"
+end = "# coachman-contract:marker-poll:end"
+
+[[parts.implementation]]
+file = "skills/postmaster/postmaster.md"
+start = "<!-- coachman-contract:marker-reader:start -->"
+end = "<!-- coachman-contract:marker-reader:end -->"
+
+[[parts.implementation]]
+file = "skills/postmaster/postmaster.md"
+start = "<!-- coachman-contract:postmaster-marker-run:start -->"
+end = "<!-- coachman-contract:postmaster-marker-run:end -->"
+
+[[parts.implementation]]
+file = "skills/postmaster/postmaster.md"
+start = "<!-- coachman-contract:postmaster-marker-resume:start -->"
+end = "<!-- coachman-contract:postmaster-marker-resume:end -->"
+
+[[parts]]
+id = "waybill"
+title = "Waybill sections and fields"
+definition = """
+The waybill starts with `# Waybill: <TICKET>` and the resolved `turnpikes:` line. It has
+`## Ticket` containing the ticket verbatim; `## Project profile` with repo, default branch,
+BASE, gate, build, browser suite, docs to read first, tracker, risk surfaces and recorded
+checks; `## Team` with workhorses, reviewers, each configured lens reviewer list, coachman,
+CHECKPOINT_MODE and MERGE_AUTHORITY; and `## Dispatch` with ticket name/title, dispatch
+path, synthesis worktree, pinned tool path and postmaster ruling channel. It records the
+fixture requirement as pending at dispatch because the final branch does not yet exist; the
+postmaster replaces pending with yes or no after checking the final branch. Ticket content
+is copied verbatim and is not an input to contract detection.
+"""
+
+[[parts.implementation]]
+file = "skills/postmaster/SKILL.md"
+start = "<!-- coachman-contract:waybill-template:start -->"
+end = "<!-- coachman-contract:waybill-template:end -->"
+
+[[parts.implementation]]
+file = "skills/postmaster/postmaster.md"
+start = "<!-- coachman-contract:waybill-write:start -->"
+end = "<!-- coachman-contract:waybill-write:end -->"
+
+[[parts]]
+id = "turnpikes"
+title = "Turnpike table"
+definition = """
+The table defines each turnpike's name, whether it is in `default`, the leg that runs it,
+and what it checks. Its rows are: `style default review` for idiom, naming, abstraction and
+consistency with project conventions; `bug default review` for correctness, logic and test
+adequacy; and `security default review` for exploit paths through project risk surfaces. The
+project's gate always runs separately. A ticket chooses its turnpikes; review runs only when
+a chosen turnpike belongs to the review leg.
+"""
+
+[[parts.implementation]]
+file = "scripts/turnpikes.sh"
+start = "# coachman-contract:turnpike-table:start"
+end = "# coachman-contract:turnpike-table:end"
+
+[[parts.implementation]]
+file = "skills/postmaster/coachman.md"
+start = "<!-- coachman-contract:turnpike-steps:start -->"
+end = "<!-- coachman-contract:turnpike-steps:end -->"
+
+[[parts]]
+id = "legs-stages"
+title = "Legs and stages"
+definition = """
+The run has synthesis (leg 1), review (leg 2 only if the ticket names a review turnpike),
+and ship (leg 3). Leg 1 covers stages 0 and 1 plus checkpoint 1, and ends with handoff-1.md.
+Leg 2 runs review turnpikes as one loop and ends with handoff-2.md. Leg 3 covers gates,
+preview, QA, the card, merge on the word, style sort and teardown, and ends with handoff-3.md.
+The leg list is derived by turnpikes.sh from the waybill. The stage order is dispatched,
+bootstrapped, workhorses-running, synthesis, checkpoint-1, review, shipping, shipped, done,
+abandoned. The postmaster owns leg, base and terminal stages; the coachman owns lanes and
+nonterminal stage changes. Only the postmaster may set or leave done and abandoned.
+"""
+
+[[parts.implementation]]
+file = "scripts/stage.sh"
+start = "# coachman-contract:stage-rules:start"
+end = "# coachman-contract:stage-rules:end"
+
+[[parts.implementation]]
+file = "scripts/turnpikes.sh"
+start = "# coachman-contract:leg-rules:start"
+end = "# coachman-contract:leg-rules:end"
+
+[[parts.implementation]]
+file = "skills/postmaster/coachman.md"
+start = "<!-- coachman-contract:leg-table:start -->"
+end = "<!-- coachman-contract:leg-table:end -->"
+
+[[parts.implementation]]
+file = "skills/postmaster/postmaster.md"
+start = "<!-- coachman-contract:stage-ownership:start -->"
+end = "<!-- coachman-contract:stage-ownership:end -->"
+
+[[parts]]
+id = "completion"
+title = "Leg completion detection"
+definition = """
+A leg is complete only when it writes a current-state handoff with these nonempty sections:
+Decisions, Deferred findings, Verified by execution, Unverified, Branches and lanes, Open
+questions, and Next leg. `handoff-check.sh` must exit 0; then the coachman closes the open
+run-log section, logs `handoff`, and writes `.leg-<n>-done`. host.sh independently writes
+`.leg-<n>-exited` when a process has ended or failed to start after its reason was recorded.
+For an open run, runs-status.sh checks in order: `.waiting-on-user` (USER),
+`.escalation-ready` (RULE), `.card-ready` (GATE), the current leg's done marker (DISPATCH),
+its exited marker (REMOUNT), any checkpoint-ready marker (READ), 30 minutes with no file
+activity (INSPECT), then active file activity (WAIT). A manifest stage of done or abandoned
+returns `-` before those checks. A `.card-ready` marker means the ship card is ready for the
+postmaster gate, not that the run or merge is complete.
+"""
+
+[[parts.implementation]]
+file = "skills/postmaster/coachman.md"
+start = "<!-- coachman-contract:completion:start -->"
+end = "<!-- coachman-contract:completion:end -->"
+
+[[parts.implementation]]
+file = "scripts/handoff-check.sh"
+start = "# coachman-contract:handoff-completion:start"
+end = "# coachman-contract:handoff-completion:end"
+
+[[parts.implementation]]
+file = "scripts/runs-status.sh"
+start = "# coachman-contract:completion-poll:start"
+end = "# coachman-contract:completion-poll:end"
+
+[[parts]]
+id = "fixture-policy"
+title = "Fixture requirement and repeat rule"
+definition = """
+Dispatch records the fixture requirement as pending because there is no completed branch
+to classify yet. At the final card, the postmaster runs coachman-contract.sh from the run's
+pinned tool against the target repository's dispatch BASE and final branch. Yes requires a
+clean fixture run on that final branch before the merge word. Record the tested commit and
+score on the card. If the branch moves before a clean score exists, compare dispatch BASE
+with the final branch again. If main is merged into a branch after a clean fixture, compare
+the previously scored commit with the final branch: yes repeats the fixture from the final
+branch; no preserves the clean result. The decision is derived from changed contract regions,
+never from ticket prose or a whole-file list.
+"""
+
+[[parts.implementation]]
+file = "skills/postmaster/postmaster.md"
+start = "<!-- coachman-contract:fixture-dispatch:start -->"
+end = "<!-- coachman-contract:fixture-dispatch:end -->"
+
+[[parts.implementation]]
+file = "skills/postmaster/postmaster.md"
+start = "<!-- coachman-contract:fixture-card:start -->"
+end = "<!-- coachman-contract:fixture-card:end -->"
+
+[[parts.implementation]]
+file = "skills/postmaster/coachman.md"
+start = "<!-- coachman-contract:fixture-card:start -->"
+end = "<!-- coachman-contract:fixture-card:end -->"
+
+[[parts.implementation]]
+file = "scripts/coachman-contract.sh"
+start = "# coachman-contract:fixture-detector:start"
+end = "# coachman-contract:fixture-detector:end"
