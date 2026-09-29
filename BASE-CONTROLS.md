@@ -36,7 +36,6 @@ Controls below are copied from the self-test assertions at BASE `bb782a973e69427
 | --remove refuses a scratch of another repository | --remove refuses a scratch of another repository |
 | --clone with no base is a usage error | --clone with no base is a usage error |
 | [dynamic label] | [dynamic label] |
-
 ## fixture.sh
 
 | BASE control | TypeScript port |
@@ -836,4 +835,3 @@ Controls below are copied from the self-test assertions at BASE `bb782a973e69427
 | BASE control | TypeScript port |
 |---|---|
 | [dynamic label] | [dynamic label] |
-
