@@ -8,6 +8,11 @@
 # Reports every fault and fixes none: a standing contradicting its own records means either
 # the standing or the reading is wrong, and which is a judgement for a person.
 #
+# Besides front matter, standings, citations, links and orphans, it enforces
+# the two page-content rules the schema states: no private-shaped filesystem
+# path or host name, through the scrub, and no page line of forty characters
+# or more repeating a line under raw/.
+#
 #   exit 0  clean
 #   exit 1  faults found, one per line on stdout
 #   exit 2  usage, or no wiki to check
@@ -22,10 +27,10 @@ case ${1:-} in
 esac
 
 lint() {  # lint <repo>; prints faults, returns 1 if any
-  python3 - "$1" <<'PY'
-import pathlib, re, sys
+  WIKI_LINT_SCRUB=$HERE/scrub-check.sh python3 - "$1" <<'PY'
+import os, pathlib, re, subprocess, sys
 
-repo = pathlib.Path(sys.argv[1])
+repo = pathlib.Path(sys.argv[1]).resolve()
 wiki, raw = repo / "wiki", repo / "raw"
 if not wiki.is_dir():
     print("no wiki/ in %s" % repo); sys.exit(2)
@@ -98,6 +103,55 @@ for p in pages:
             continue
         if not (p.parent / t).exists():
             fault(p, "link to %s does not resolve" % t)
+
+# schema.md's Writing rule, mechanically: no private-shaped path or host name.
+# The scrub is the shape authority, so only its private-path and private-host
+# kinds fault a page; documenting the rule's own examples stays possible. The
+# scrub needs a repository, so outside one this check degrades to nothing.
+top = subprocess.run(
+    ["git", "rev-parse", "--show-toplevel"],
+    stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, check=False)
+if pages and top.returncode == 0:
+    scrub = os.environ.get("WIKI_LINT_SCRUB", "")
+    if not scrub or not pathlib.Path(scrub).is_file():
+        print("wiki-lint: no scrub to check pages with")
+        sys.exit(2)
+    child = subprocess.run(
+        [scrub, "--files", *(str(p) for p in pages)], cwd=top.stdout.strip(),
+        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, check=False)
+    if child.returncode == 2:
+        print("wiki-lint: the page scan could not finish")
+        sys.exit(2)
+    for ln in child.stdout.splitlines():
+        m = re.match(r"^(.*):(\d+): (\S+)$", ln)
+        if m is None or m.group(3) not in ("private-path", "private-host"):
+            continue
+        try:
+            rel = pathlib.Path(m.group(1)).relative_to(repo)
+        except ValueError:
+            rel = m.group(1)
+        faults.append("%s: line %s: %s (schema.md: name a target by its repository name only)"
+                      % (rel, m.group(2), m.group(3)))
+
+# Compile, do not transcribe: no page line of forty characters or more
+# repeats a line under raw/. Shorter spans are headings, citations and
+# front matter, not quotations. raw/ may hold binary evidence, so it is
+# decoded tolerantly; a wiki page that does not decode already fails above.
+raw_lines = {}
+if raw.is_dir():
+    for f in sorted(p for p in raw.rglob("*") if p.is_file()):
+        try:
+            content = f.read_bytes().decode("utf-8", errors="replace")
+        except OSError:
+            continue
+        for number, ln in enumerate(content.splitlines(), 1):
+            if len(ln) >= 40 and "\0" not in ln and ln not in raw_lines:
+                raw_lines[ln] = "%s:%d" % (f.relative_to(repo), number)
+for p in pages:
+    for number, ln in enumerate(p.read_text().splitlines(), 1):
+        hit = raw_lines.get(ln)
+        if hit is not None:
+            fault(p, "line %d repeats %s (compile, do not transcribe)" % (number, hit))
 
 # orphans: every page reachable from the index
 index = wiki / "index.md"
@@ -240,6 +294,22 @@ expect fail "a source.md with no url" "has no url"
 
 fresh; capture papers p3 'url: https://example.org/x\n'
 expect fail "a source.md with no retrieval date" "has no retrieved"
+
+fresh; concept quoted claimed ""
+QUOTE_LINE='The staging relay counted four hundred thirteen spans on the quiet Tuesday run.'
+printf '%s\n' "$QUOTE_LINE" > "$tmp/raw/evidence.txt"
+printf '%s\n' "$QUOTE_LINE" >> "$tmp/wiki/concepts/quoted.md"
+expect fail "a page line quoting raw/" "repeats raw/"
+
+fresh; concept haspath claimed ""
+HP=$(printf '/home/%s' fixture-user)
+printf 'See %s-413/notes.txt for the log.\n' "$HP" >> "$tmp/wiki/concepts/haspath.md"
+expect fail "a page carrying a private path" "private-path"
+
+fresh; concept hashhost claimed ""
+HN='metrics.interna'
+printf 'See https://%sl:8443/up for the dashboard.\n' "$HN" >> "$tmp/wiki/concepts/hashhost.md"
+expect fail "a page carrying a private hostname" "private-host"
 
 echo
 [ "$fails" -eq 0 ] && { echo "self-test: all controls behaved"; exit 0; }

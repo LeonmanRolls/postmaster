@@ -24,14 +24,17 @@ The copy is the moment of publication, so it is the moment the checks happen. Ev
 these, every time:
 
 - **Scrub for secrets.** A harness session transcript can carry anything that was on screen,
-  including a key a lane printed while debugging. Run `scripts/scrub-check.sh <base> <head>`
-  on the change that promotes the file: it scans every commit from base to head for lines
-  that look like private data and reports each suspect by commit, path, line and kind,
-  never printing the value. An unruled suspect stops the change's scrub check for the
-  postmaster to take to the user, and a match the user allows is recorded in
-  `scripts/scrub-check.allow` so it does not escalate again. Existing history is checked
-  the same value-free way with `scripts/scrub-check.sh --history`, which defaults to
-  `main`. Automated first, then read what the scrub reports.
+  including a key a lane printed while debugging. Promote through
+  `scripts/raw-promote.sh`, which scans every file with `scripts/scrub-check.sh --files`
+  before the copy completes and refuses a copy that trips. A trip is reported by path,
+  line and kind, never printing the value, and proceeding anyway is the user's ruling,
+  recorded in `wiki/log.md` with its reason. A match the user allows is recorded in
+  `scripts/scrub-check.allow` with its reason so it does not escalate again. Existing
+  history is checked the same value-free way with `scripts/scrub-check.sh --history`,
+  which defaults to `main`. The script is how a raw file's scrub is checked, and it is
+  a backstop, not a proof: it catches what looks like private data by shape, and what
+  it clears still wants a read before it is published. Automated first, then read what
+  the scrub reports.
 - **Check the target may be published.** A run against a private project carries that
   project's ticket text, branch names and file paths. Those do not become publishable by
   being evidence. Promote a run only when its target is public — which, for this repository's

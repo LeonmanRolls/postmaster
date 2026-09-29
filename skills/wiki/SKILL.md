@@ -38,12 +38,14 @@ of promoting one of them to evidence. Never ingest on your own initiative; ask.
 
 It is only ingestible once it has stopped writing.
 
-1. **Copy the run whole** from `<project>/.postmaster/runs/<run-id>/` into `raw/runs/<run-id>/`,
-   unchanged: the ledger, the narrative, the cards, `logs/` with each lane's harness events
-   stream, and each lane's durable harness session exported at teardown (`grok export`,
-   codex's rollout jsonl, pi's session jsonl). **Run the promotion checks first** — scrub,
-   target publishable, size, redistribution — per `raw/README.md`. The copy is a decision to
-   publish, and it is the only moment those checks happen.
+1. **Copy the run whole** with `scripts/raw-promote.sh
+   <project>/.postmaster/runs/<run-id>/ raw/runs/<run-id>/`, unchanged: the ledger, the
+   narrative, the cards, `logs/` with each lane's harness events stream, and each lane's
+   durable harness session exported at teardown (`grok export`, codex's rollout jsonl,
+   pi's session jsonl). The script scans before it copies and refuses a trip; a refusal
+   goes to the user, and proceeding needs their ruling. **Run the other promotion checks
+   first** — target publishable, size, redistribution — per `raw/README.md`. The copy is
+   a decision to publish, and it is the only moment those checks happen.
 2. **Write the run record** in `wiki/sources/YYYY-MM-DD-<target>-<ticket>.md` from
    `wiki/sources/template.md`, filling every section from the copied files. Every number
    carries `[@runs/<id>/<file>]`.
@@ -59,10 +61,12 @@ exists, the run is already in.
 
 A paper, article or documentation page worth keeping.
 
-1. **Capture the text** into `raw/papers/<slug>/` or `raw/articles/<slug>/` with its
-   `source.md` front matter (url, retrieved, title, author). A link alone is not a capture:
-   pages move and a citation to a moving page is not a citation. Fetching is bounded by the
-   machine's egress allowlist; a source behind a disallowed host is one the user supplies.
+1. **Capture the text** to a scratch file first, then move it in with
+   `scripts/raw-promote.sh`, which scans before it copies and refuses a trip, into
+   `raw/papers/<slug>/` or `raw/articles/<slug>/` with its `source.md` front matter (url,
+   retrieved, title, author). A link alone is not a capture: pages move and a citation
+   to a moving page is not a citation. Fetching is bounded by the machine's egress
+   allowlist; a source behind a disallowed host is one the user supplies.
 2. **Write its page** in `wiki/sources/`: what it claims, on what evidence, and what it would
    mean here if true.
 3. **Link it** from every concept it bears on, in the section on what would settle that
@@ -101,6 +105,10 @@ scripts/wiki-lint.sh --self-test  # each check fails on its own fault; a clean t
 - no orphan page: everything is reachable from `wiki/index.md`
 - every trial has a `method.md`, and every captured paper or article has a `source.md` giving
   its url and retrieval date
+- no page carries a private-shaped filesystem path or host name: a target is named by its
+  repository name only
+- no page line of forty characters or more repeats a line under `raw/`: compile, do not
+  transcribe
 
 **What a person checks, because no script can.** Passing the script says nothing about these:
 

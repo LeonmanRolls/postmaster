@@ -8,3 +8,11 @@
 [checks.scrub]
 command = "scripts/scrub-check.sh main HEAD"
 shows = "no commit from base to head adds a line that looks like private data"
+
+[checks.tree]
+command = "scripts/tree-check.sh main HEAD"
+shows = "nothing under .postmaster/ is staged or committed, and every added raw/ file scans clean"
+
+[checks.wiki-lint]
+command = "scripts/wiki-lint.sh"
+shows = "no wiki page carries a private path or hostname, or a line quoted from raw/"
