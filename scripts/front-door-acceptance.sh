@@ -241,6 +241,16 @@ out=$(accept "$ROOT"); rc=$?
 [ "$rc" -eq 0 ] && printf '  ok   live tree passes\n' \
   || { printf '  LIVE tree still carries stale claims (expected before the fix):\n%s\n' "$out"; fails=$((fails + 1)); }
 
+# The pipe race every self-test must not use: grep -q exits on its first match, the writer
+# takes SIGPIPE, and under pipefail the pipeline fails although the text matched. The old
+# form reproduces it; the herestring form this suite uses never breaks.
+old=$(bash -c 'set -o pipefail; seq 1 100000 | grep -q 1; echo $?')
+[ "$old" != 0 ] && printf '  ok   the old form fails under pipefail although it matched (exit %s)\n' "$old" \
+  || { printf '  FAIL the old form passed under pipefail (exit %s); the race did not reproduce\n' "$old"; fails=$((fails + 1)); }
+new=$(bash -c 'set -o pipefail; grep -q 1 <<<"$(seq 1 100000)"; echo $?')
+[ "$new" = 0 ] && printf '  ok   the herestring form matches without a pipe that can break\n' \
+  || { printf '  FAIL the herestring form exited %s on the same text\n' "$new"; fails=$((fails + 1)); }
+
 echo
 [ "$fails" -eq 0 ] && { echo "self-test: all controls behaved"; exit 0; }
 echo "self-test: $fails control(s) misbehaved"; exit 1
