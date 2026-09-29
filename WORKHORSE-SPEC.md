@@ -40,11 +40,11 @@ Add a shape-based scanner for suspect data in every added line across a commit r
 
 ## Tasks
 
-- [ ] T001 [P] [AC1] Implement shape and context patterns for private-data classes in `scripts/scrub-check.sh`.
-- [ ] T002 [P] [AC2] Keep `scripts/scrub-check.sh` shape-based and add no private-value inventory anywhere in the repository.
-- [ ] T003 [P] [AC3] Make `scripts/scrub-check.sh` emit value-free suspects and leave all ruling to the postmaster and user.
-- [ ] T004 [P] [AC4] Read exact match and whole-line decisions from `scripts/scrub-check.allow`.
-- [ ] T005 [AC5] Wire `scripts/scrub-check.sh` into the project's change checks through `.postmaster/project.toml`.
-- [ ] T006 [AC6] Add controls to `scripts/scrub-check.sh --self-test` for each pattern, clean lines, deleted additions, and allowlist decisions.
-- [ ] T007 [AC7] Document the enforced scrub check in `raw/README.md`.
-- [ ] T008 [AC8] Implement value-free existing-history reporting in `scripts/scrub-check.sh` for `main` or a selected ref.
+- [x] T001 [P] [AC1] Implement shape and context patterns for private-data classes in `scripts/scrub-check.sh`.
+- [x] T002 [P] [AC2] Keep `scripts/scrub-check.sh` shape-based and add no private-value inventory anywhere in the repository.
+- [x] T003 [P] [AC3] Make `scripts/scrub-check.sh` emit value-free suspects and leave all ruling to the postmaster and user.
+- [x] T004 [P] [AC4] Read exact match and whole-line decisions from `scripts/scrub-check.allow`.
+- [x] T005 [AC5] Wire `scripts/scrub-check.sh` into the project's change checks through `.postmaster/project.toml`.
+- [x] T006 [AC6] Add controls to `scripts/scrub-check.sh --self-test` for each pattern, clean lines, deleted additions, and allowlist decisions.
+- [x] T007 [AC7] Document the enforced scrub check in `raw/README.md`.
+- [x] T008 [AC8] Implement value-free existing-history reporting in `scripts/scrub-check.sh` for `main` or a selected ref.
