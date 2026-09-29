@@ -122,7 +122,10 @@ For the next ticket in order, when the run ceiling (`team.max_runs`) has room:
    config and the harness versions, and nothing edits it afterwards. `<tool>/scripts/verify.sh record
    <repo> <dispatch> --gate '<gate>'` writes `checks.json`, the checks the run is held to, and
    prints them for the waybill; a gate the project declares wins over the launch card's, and
-   `record` says so.
+   `record` says so. `<tool>/scripts/spec-review-link.sh --validate <dispatch>` also exits 0:
+   the captured `planning.review_link`, if set, must contain `{path}`. On refusal, log a `note`
+   with the config error, tell the user what to fix, set the undispatched run to `abandoned`,
+   and do not cut worktrees or move the ticket in progress.
 5. **Cut the synthesis worktree** at BASE, the sha you recorded from `git -C <repo> rev-parse
    HEAD` on the default branch: `git -C <repo> worktree add .worktrees/<TICKET> -b <TICKET>
    <sha>`. The coachman's cwd is that worktree from its first leg, so the project's ambient
@@ -254,10 +257,28 @@ never the record.
 
 1. **Read `<dispatch>/ESCALATION.md`.** It carries the question, the options the coachman
    sees, its recommendation, and the state of the branches.
-2. **Decide within the user's standing instructions** when the question is about the
+2. **If it names a workhorse spec for review, facilitate the user's review.** This is not a
+   postmaster judgement of the spec. Take the lane and commit from the escalation, and build
+   the code-server link with `<tool>/scripts/spec-review-link.sh <dispatch> <workhorse-wt>`.
+   The script uses the recorded template and absolute spec path, or prints the path when the
+   template is missing or empty. Present one spec at a time in this
+   interactive session, labelled with its commit, and wait for the user to approve it, request
+   changes in their words, or drop the workhorse. Do not show one workhorse a different
+   workhorse's spec or feedback, or use review to align their approaches. After the user's
+   decision, log it immediately through `<tool>/scripts/log-action.sh <dispatch> postmaster
+   spec-review <lane> <detail>`, passing it as one safely quoted argument. Use `approved
+   commit <sha>`, `changes requested at <sha>: <exact user words>`, or `dropped at <sha>` with
+   any reason the user gave. Then remove `.escalation-ready` and resume the coachman with the
+   same decision, commit, and exact user wording, including a requested change or drop reason.
+   A revision returns through this step with its new commit SHA and a fresh link.
+3. **If the planning escalation says fewer than two specs were approved, stop the run.** Tell
+   the user how many were approved and that implementation did not start; log a `note` with
+   the count and minimum, then close the run under the abandonment procedure below. Do not
+   resume the coachman or launch implementation.
+4. **Decide within the user's standing instructions** when the question is about the
    work: a within-brief ambiguity, a scope call the ticket's own criteria answer, a lane to
    drop as DEGRADED, a round to stop at the cap. Log `escalate` with your ruling.
-3. **Send it up** when it is genuinely destructive, changes the ticket's scope, touches
+5. **Send it up** when it is genuinely destructive, changes the ticket's scope, touches
    anything outside the repo, is a fault in a control (Tool faults), asks whether to fix a
    gating finding in a loop with no gating lens (`coachman.md`, Stage 2 step 5), or the user
    asked to see it: write the question to the run's `.waiting-on-user`, add the run and the
@@ -265,7 +286,7 @@ never the record.
    pass a postmaster grant up as if it needed the user's word, and never take the user's word
    for something the config gives you. On the user's answer, remove `.waiting-on-user` and the
    run's entry, and the file once it is empty.
-4. **Deliver the ruling:** remove `.escalation-ready`, then resume the current leg (Stage C,
+6. **Deliver the ruling:** remove `.escalation-ready`, then resume the current leg (Stage C,
    step 5) with the ruling as the prompt. The ruling is a prompt to a resumed thread, never
    text typed into anything.
 
@@ -330,11 +351,14 @@ On `.card-ready`, read `<dispatch>/card.md` and `<dispatch>/handoff-3.md`:
    without the user's word, whatever `tracker.postmaster_may_create` says.
 6. **Dispatch the next ticket** in order, Stage B.
 
-**Abandoning a run** happens only on the user's word for that run: log `note` with the
-word, set the stage with `<tool>/scripts/stage.sh <dispatch> abandoned postmaster`, stop what still
-runs in each worktree the run created (`<tool>/scripts/host.sh stop <wt>`), then remove each one after
-preserving stray files and closing its space (`<tool>/scripts/host.sh close <wt>`), and move the ticket back to todo or to cancelled as the user
-says. The dispatch directory stays. Then put the run's tool faults to the user (Tool faults).
+**Abandoning a run** happens on the user's word, or when the planning review ends with fewer
+than two approved specs as the ticket requires: log `note` with the word or the approval count,
+set the stage with `<tool>/scripts/stage.sh <dispatch> abandoned postmaster`, stop what still
+runs in each worktree the run created (`<tool>/scripts/host.sh stop <wt>`), then preserve stray
+files, close each space, and remove each worktree as Stage G step 2 says. For an insufficient-spec
+stop, return the ticket to todo; for a user-requested abandonment, use the state the user named.
+Log `ticket-state` through the tracker adapter in either case. The dispatch directory stays.
+Then put the run's tool faults to the user (Tool faults).
 
 ## Tool faults
 
@@ -380,8 +404,8 @@ only with the user's word for that specific thing, and the word is logged.
 
 ## Hard rules
 
-- Never implement, review, or launch workhorses; never edit source; never write a coachman's
-  hand-off or card for it.
+- Never implement or judge a workhorse, or launch one; facilitate the user's spec review as
+  Stage E says. Never edit source or write a coachman's hand-off or card for it.
 - Never create a ticket without the user's word unless the config says you may.
 - Never dispatch a ticket that `<tool>/scripts/ticket-check.sh` fails, and never change a ticket's
   text without the user's word for that text.
