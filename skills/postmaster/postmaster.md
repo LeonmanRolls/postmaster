@@ -103,6 +103,9 @@ For the next ticket in order, when the run ceiling (`team.max_runs`) has room:
    the default branch. On 2, the dirty-tree question goes to the user (`SKILL.md`); you
    never stash, reset or discard anything. The config is checked too, for the legs this run
    will have, `<tool>/scripts/turnpikes.sh legs --line '<the turnpikes: line step 1 printed>'`:
+   when the turnpikes: line names bug, `<tool>/scripts/reviewers.sh eligible bug` must exit 0;
+   its refusal explains that no configured bug reviewer has a code-review form. The run is not
+   dispatched without one.
    `<tool>/scripts/launch.sh form coachman --leg <leg>` for each of those legs,
    `<tool>/scripts/launch.sh form coachman_fallback`, `<tool>/scripts/launch.sh form <lane>` for
    each lane in `team.workhorses`, and, when the legs include `review`,
