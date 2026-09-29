@@ -12,8 +12,12 @@
 # already in does nothing, so a resumed or remounted leg can set it again safely. Setting a
 # terminal stage (done, abandoned) also appends the run's full stage timings to run-log.md.
 # Only the postmaster sets a terminal stage, or moves a run out of one: it closes a run after
-# the last leg, and abandons one on the user's word. The actor is the caller's own word, so this
-# holds a coachman to its runbook; it cannot stop a process that names itself the postmaster.
+# the last leg, and abandons one on the user's word. A run is at most two legs: the last one
+# carries it to `shipping` with the ship card, and the postmaster sets `shipped` after the
+# merge and `done` when it closes. `review` is entered only by a run with a review leg. A
+# run dispatched before this change keeps its three legs and the stages they enter. The actor
+# is the caller's own word, so this holds a coachman to its runbook; it cannot stop a process
+# that names itself the postmaster.
 #
 #   exit 0  the stage was set, or already was
 #   exit 1  usage, no manifest, an unreadable manifest, or the log could not be written
@@ -148,6 +152,35 @@ set_stage "$d" synthesis coachman >/dev/null 2>&1; rc=$?
   && ok "the coachman cannot move a run out of abandoned" || fail "the coachman cannot move a run out of abandoned (exit $rc)"
 rm -- "$d/manifest.json"; set_stage "$d" bootstrapped coachman >/dev/null 2>&1; rc=$?
 [ $rc -eq 1 ] && ok "no manifest is refused" || fail "no manifest is refused (exit $rc)"
+
+echo "the stages a leg count walks"
+# Two legs: synthesis through review to shipping, then the postmaster's shipped and done.
+fresh
+set_stage "$d" bootstrapped coachman >/dev/null && set_stage "$d" workhorses-running coachman >/dev/null \
+  && set_stage "$d" synthesis coachman >/dev/null && set_stage "$d" checkpoint-1 coachman >/dev/null \
+  && set_stage "$d" review coachman >/dev/null && set_stage "$d" shipping coachman >/dev/null \
+  && set_stage "$d" shipped postmaster >/dev/null && set_stage "$d" done postmaster >/dev/null
+stages=$(grep '"action":"stage"' "$d/actions.jsonl" | python3 -c 'import json,sys; print(" ".join(json.loads(l)["target"] for l in sys.stdin))')
+[ "$stages" = "bootstrapped workhorses-running synthesis checkpoint-1 review shipping shipped done" ] \
+  && ok "a two-leg run walks every stage to done" || fail "a two-leg run walks every stage to done" "$stages"
+# One leg: no review; the synthesis leg carries the card, the postmaster closes.
+fresh
+set_stage "$d" bootstrapped coachman >/dev/null && set_stage "$d" workhorses-running coachman >/dev/null \
+  && set_stage "$d" synthesis coachman >/dev/null && set_stage "$d" checkpoint-1 coachman >/dev/null \
+  && set_stage "$d" shipping coachman >/dev/null && set_stage "$d" shipped postmaster >/dev/null \
+  && set_stage "$d" done postmaster >/dev/null
+stages=$(grep '"action":"stage"' "$d/actions.jsonl" | python3 -c 'import json,sys; print(" ".join(json.loads(l)["target"] for l in sys.stdin))')
+[ "$stages" = "bootstrapped workhorses-running synthesis checkpoint-1 shipping shipped done" ] \
+  && ok "a one-leg run skips review and still reaches done" || fail "a one-leg run skips review and still reaches done" "$stages"
+# Three legs, dispatched before this change: the same stages, entered as before.
+fresh
+set_stage "$d" bootstrapped coachman >/dev/null && set_stage "$d" workhorses-running coachman >/dev/null \
+  && set_stage "$d" synthesis coachman >/dev/null && set_stage "$d" checkpoint-1 coachman >/dev/null \
+  && set_stage "$d" review coachman >/dev/null && set_stage "$d" shipping coachman >/dev/null \
+  && set_stage "$d" shipped coachman >/dev/null && set_stage "$d" done postmaster >/dev/null
+stages=$(grep '"action":"stage"' "$d/actions.jsonl" | python3 -c 'import json,sys; print(" ".join(json.loads(l)["target"] for l in sys.stdin))')
+[ "$stages" = "bootstrapped workhorses-running synthesis checkpoint-1 review shipping shipped done" ] \
+  && ok "a three-leg run keeps the stages it always walked" || fail "a three-leg run keeps the stages it always walked" "$stages"
 
 echo
 [ "$fails" -eq 0 ] && { echo "self-test: all controls behaved"; exit 0; }

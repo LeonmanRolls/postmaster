@@ -11,9 +11,11 @@
 #   next   USER      the postmaster has put this run's question to the user and waits for the
 #                    answer (.waiting-on-user)
 #          RULE      an escalation is waiting (.escalation-ready)
-#          GATE      the ship card is complete (.card-ready)
-#          DISPATCH  the current leg is done (.leg-<n>-done): the next leg, or after the last,
-#                    the postmaster's close
+#          GATE      the ship card is complete (.card-ready); Stage F verifies it and the
+#                    postmaster opens the pull request or merges, then Stage G aftercare
+#          DISPATCH  the current leg is done (.leg-<n>-done): the next leg, or after the last
+#                    leg, the postmaster's close. The last leg writes the card and its hand-off
+#                    together, so its done marker usually arrives as GATE, not DISPATCH
 #          REMOUNT   the current leg's process exited (.leg-<n>-exited) with no hand-off,
 #                    escalation or card: resume it, or relaunch it on the fallback after a wall
 #          READ      a checkpoint card is waiting to be read (.checkpoint-*-ready)
@@ -107,7 +109,10 @@ expect() {  # expect <label> <run> <next>
 
 run rule review 2 .escalation-ready
 run gate shipping 3 .card-ready
+run gate2 review 2 .leg-2-done .leg-2-exited .card-ready
+run gate1 synthesis 1 .leg-1-done .leg-1-exited .card-ready
 run dispatch review 2 .leg-2-done .leg-2-exited
+run dispatch1 checkpoint-1 1 .leg-1-done .leg-1-exited
 run remount review 2 .leg-2-exited
 run read review 2 .checkpoint-review-ready
 run inspect review 2; age inspect
@@ -123,7 +128,10 @@ mkdir -p "$tmp/root/postmaster"
 echo "positive controls"
 expect "an escalation waiting is RULE" rule RULE
 expect "a complete ship card is GATE" gate GATE
+expect "a two-leg run's last leg, card up, is GATE not DISPATCH" gate2 GATE
+expect "a one-leg run's card is GATE" gate1 GATE
 expect "the current leg done is DISPATCH" dispatch DISPATCH
+expect "a two-leg run's first leg done is DISPATCH for review" dispatch1 DISPATCH
 expect "the current leg gone with nothing written is REMOUNT" remount REMOUNT
 expect "a checkpoint card waiting is READ" read READ
 expect "nothing changed for an hour is INSPECT" inspect INSPECT
