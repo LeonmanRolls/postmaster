@@ -5,6 +5,7 @@
 #
 #   launch.sh form   <name> [--leg <leg>] [--run <dispatch>]
 #   launch.sh launch <name> <cwd> <prompt-file> [--leg <leg>] [--last <file>] [--run <dispatch>]
+#   launch.sh review <lane> <cwd> <base> [--last <file>] [--run <dispatch>]
 #   launch.sh resume <name> <cwd> <thread-id> <prompt-file> [--leg <leg>] [--last <file>]
 #                    [--run <dispatch>]
 #   launch.sh skill  <name> <skill> [--run <dispatch>]
@@ -28,8 +29,9 @@
 # and a relative path is read from the live config's directory, under --run too. It is shell,
 # sourced last, once the command, its directory and its stdin are fixed, so its assignments
 # reach the harness and not this script's choices; it runs as code, and is the user's to write.
-# The events stream goes to stdout; the caller redirects and backgrounds. --last names the file
-# a harness writes its final message to, where the harness supports it (codex -o). `skill`
+# The events stream goes to stdout; the caller redirects and backgrounds. `review` invokes a
+# lane's own bug-review form against <base>...HEAD, at the harness's top level. --last names the
+# file a harness writes its final message to, where the harness supports it (codex -o). `skill`
 # prints the prompt that invokes the lane's harness's own skill (harnesses.md, Own review
 # skills); `launch` runs it like any other prompt. The one skill is security-review. `form`
 # prints two lines: `launch: ` and the launch form, then `resume: ` and the resume form, or
@@ -41,7 +43,7 @@
 #           coachman or fallback on a lane's model, harness not on PATH, env_file missing, a
 #           form this script does not have (agy resume), a skill that is not security-review,
 #           or a muse or mimo resume of a thread the launch's data directory does not hold
-#   exit 3  skill: the lane's harness has no such skill recorded
+#   exit 3  skill or review: the lane's harness has no such review form recorded
 #   else    the harness's own exit code
 set -uo pipefail
 CONFIG=${POSTMASTER_CONFIG:-$HOME/.postmaster/config.toml}
@@ -91,6 +93,7 @@ if [ "${1:-}" = --self-test ]; then
   codexfix codex 'model = "lane-model"\neffort = "high"'
   codexfix codex-noeffort 'model = "lane-model"'
   codexfix codex-nomodel 'effort = "high"'
+  codexfix review-codex 'model = "lane-model"\neffort = "low"'
   printf -- '- Keep going, then stop.\n' > "$tmp/ruling.txt"
   printf 'Keep going, then stop.\n' > "$tmp/brief.txt"
   git init -q -b main "$tmp/cx" && git -C "$tmp/cx" -c user.name=t -c user.email=t@example.invalid \
@@ -410,15 +413,45 @@ PY
   run skills skill three security-review
   [ $rc -eq 3 ] && [ -z "$out" ] && ok "a muse lane has no security review skill: exit 3" || fail "a muse lane has no security review skill: exit 3"
 
+  echo "bug review forms"
+  base=$(git -C "$tmp/cx" rev-parse HEAD) || exit 1
+  printf '[lanes.one]\nharness = "claude"\nmodel = "claude-model"\neffort = "low"\n\n[team]\ncoachman = { harness = "claude", model = "coach-model" }\n' > "$tmp/review-claude.toml"
+  printf '[lanes.one]\nharness = "mimo"\nmodel = "prov/mimo-model"\neffort = "low"\n\n[team]\ncoachman = { harness = "mimo", model = "coach-model" }\n' > "$tmp/review-mimo.toml"
+  printf '[lanes.one]\nharness = "pi"\nmodel = "pi-model"\n\n[team]\ncoachman = { harness = "pi", model = "coach-model" }\n' > "$tmp/review-pi.toml"
+  runs_as "claude review names the range and runs /code-review at max" review-claude \
+    "-p /code-review max $base...HEAD --model claude-model --effort max --output-format stream-json --verbose --dangerously-skip-permissions probe=" \
+    review one "$tmp/cx-detached" "$base"
+  runs_as "codex review uses --base, --last, max effort and the lane model" review-codex \
+    "$(lines "$tmp/cx-detached" exec review --base "$base" --json -o "$tmp/review-last.md" -m lane-model -c 'model_reasoning_effort="max"' "$CODEX_BYPASS" --skip-git-repo-check)" \
+    review one "$tmp/cx-detached" "$base" --last "$tmp/review-last.md"
+  record review-run review-codex
+  runs_as "codex review in a run uses the recorded config and the same top level" review-codex \
+    "$(lines "$tmp/cx-detached" exec review --base "$base" --json -m lane-model -c 'model_reasoning_effort="max"' "$CODEX_BYPASS" --skip-git-repo-check)" \
+    review one "$tmp/cx-detached" "$base" --run "$tmp/review-run"
+  mrun review-mimo review one "$tmp/cx-detached" "$base"
+  case $out in *"--command review"*"--variant high"*"stdin=$base...HEAD"*) true ;; *) false ;; esac \
+    && [ $rc -eq 0 ] && ok "mimo review uses --command review, the prompt file range and high variant" \
+    || fail "mimo review uses --command review, the prompt file range and high variant"
+  [ -z "$(find "$tmp/cx-detached" -maxdepth 1 -name '.postmaster-review-*' -print -quit)" ] \
+    && ok "mimo's temporary range prompt is removed after launch" || fail "mimo's temporary range prompt is removed after launch"
+  run review-pi review one "$tmp/cx-detached" "$base"
+  [ $rc -eq 3 ] && [ -z "$out" ] && case $err in *"has no bug code-review form"*) true ;; *) false ;; esac \
+    && ok "pi has no bug review form: exit 3" || fail "pi has no bug review form: exit 3"
+  printf '[lanes.one]\nharness = "not-installed"\nmodel = "model"\n' > "$tmp/review-unsupported.toml"
+  run review-unsupported review one "$tmp/cx-detached" "$base"
+  [ $rc -eq 3 ] && [ -z "$out" ] && case $err in *"has no bug code-review form"*) true ;; *) false ;; esac \
+    && ok "a harness without a review form exits 3 even when its CLI is absent" \
+    || fail "a harness without a review form exits 3 even when its CLI is absent"
+
   echo
   [ "$fails" -eq 0 ] && { echo "self-test: all controls behaved"; exit 0; }
   echo "self-test: $fails control(s) misbehaved"; exit 1
 fi
 
 die() { echo "launch: $*" >&2; exit 1; }
-[ $# -ge 2 ] || die "usage: launch.sh form|launch|resume|skill <name> ... | --self-test"
+[ $# -ge 2 ] || die "usage: launch.sh form|launch|review|resume|skill <name> ... | --self-test"
 CMD=$1; NAME=$2; shift 2
-LEG=""; LAST=""; RUN=""; STDIN_FILE=""; args=()
+LEG=""; LAST=""; RUN=""; BASE=""; PTEXT=""; STDIN_FILE=""; REVIEW_PROMPT=""; args=()
 while [ $# -gt 0 ]; do
   case $1 in
     --leg) [ $# -ge 2 ] || die "--leg needs a value"; LEG=$2; shift ;;
@@ -504,6 +537,11 @@ PY
 eval "$spec"
 [ -n "${HARNESS:-}" ] || die "$NAME has no harness in $SOURCE"
 [ -n "${MODEL:-}" ] || die "$NAME has no model in $SOURCE"
+if [ "$CMD" = review ]; then
+  FORMS=$(CDPATH= cd -P -- "$(dirname -- "$0")" && pwd -P)/review-forms.sh
+  "$FORMS" has "$HARNESS" >/dev/null 2>&1 \
+    || { echo "launch: $NAME runs on $HARNESS, which has no bug code-review form recorded in harnesses.md" >&2; exit 3; }
+fi
 command -v "$HARNESS" >/dev/null 2>&1 || die "harness '$HARNESS' is not on PATH"
 if [ -n "${ENV_FILE:-}" ]; then
   ENV_FILE=${ENV_FILE/#\~/$HOME}
@@ -526,9 +564,11 @@ prompt_text() {  # the prompt file's text; a missing, unreadable or empty file i
 }
 case $CMD in
   form)   [ ${#args[@]} -eq 0 ] || die "form takes no argument but --leg and --run"
-          CWD='<cwd>'; PROMPT='<prompt-file>'; THREAD='<thread-id>'; PTEXT='$(cat <prompt-file>)' ;;
+          CWD='<cwd>'; PROMPT='<prompt-file>'; THREAD='<thread-id>'; BASE='<base>'; PTEXT='$(cat <prompt-file>)' ;;
   launch) [ ${#args[@]} -eq 2 ] || die "launch needs <cwd> <prompt-file>"
           CWD=${args[0]}; PROMPT=${args[1]}; prompt_text ;;
+  review) [ ${#args[@]} -eq 2 ] || die "review needs <cwd> <base>"
+          CWD=${args[0]}; BASE=${args[1]}; PROMPT='<review-prompt-file>' ;;
   resume) [ ${#args[@]} -eq 3 ] || die "resume needs <cwd> <thread-id> <prompt-file>"
           CWD=${args[0]}; THREAD=${args[1]}; PROMPT=${args[2]}
           [ -n "$THREAD" ] || die "resume needs a thread id, and none was given"
@@ -536,6 +576,16 @@ case $CMD in
   *) die "unknown command: $CMD" ;;
 esac
 [ "$CMD" = form ] || [ -d "$CWD" ] || die "no such directory: $CWD"
+if [ "$CMD" = review ]; then
+  git -C "$CWD" rev-parse --verify "$BASE^{commit}" >/dev/null 2>&1 \
+    || die "review base is not a commit in $CWD: $BASE"
+  if [ "$HARNESS" = mimo ]; then
+    REVIEW_PROMPT=$(mktemp "$CWD/.postmaster-review-XXXXXX") || die "cannot create the MiMo review prompt in $CWD"
+    printf '%s...HEAD\n' "$BASE" > "$REVIEW_PROMPT" || die "cannot write the MiMo review prompt in $CWD"
+    PROMPT=$REVIEW_PROMPT
+    trap 'rm -f -- "$REVIEW_PROMPT"' EXIT
+  fi
+fi
 case $HARNESS in pi|muse|mimo) [ "$CMD" != form ] ;; *) false ;; esac && {   # read after the cd
   prompt_dir=$(CDPATH= cd -P -- "$(dirname -- "$PROMPT")" && pwd -P) || die "cannot resolve prompt file: $PROMPT"
   PROMPT=$prompt_dir/$(basename "$PROMPT")
@@ -558,17 +608,20 @@ case $HARNESS in
     # directory this script enters. Without -m and the effort it runs on codex's configured
     # default, not on the thread's own model. `--` stops a prompt that starts with - from being
     # read as a flag.
-    if [ "$CMD" = resume ]; then cmd=(codex exec resume "$THREAD" --json)
+    if [ "$CMD" = review ]; then cmd=(codex exec review --base "$BASE" --json)
+    elif [ "$CMD" = resume ]; then cmd=(codex exec resume "$THREAD" --json)
     else cmd=(codex exec -C "$CWD" --json); fi
     [ -n "$LAST" ] && cmd+=(-o "$LAST")
     cmd+=(-m "$MODEL")
-    [ -n "${EFFORT:-}" ] && cmd+=(-c "model_reasoning_effort=\"$EFFORT\"")
+    if [ "$CMD" = review ]; then cmd+=(-c 'model_reasoning_effort="max"')
+    elif [ -n "${EFFORT:-}" ]; then cmd+=(-c "model_reasoning_effort=\"$EFFORT\""); fi
     cmd+=(--dangerously-bypass-approvals-and-sandbox)
-    if [ "$CMD" = launch ] && ! git -C "$CWD" symbolic-ref -q HEAD >/dev/null 2>&1; then
+    if { [ "$CMD" = launch ] || [ "$CMD" = review ]; } \
+      && ! git -C "$CWD" symbolic-ref -q HEAD >/dev/null 2>&1; then
       cmd+=(--skip-git-repo-check)   # a detached scratch
     fi
     if [ "$CMD" = resume ]; then cmd+=(--); fi
-    cmd+=("$PTEXT") ;;
+    [ "$CMD" = review ] || cmd+=("$PTEXT") ;;
   grok)
     if [ "$CMD" = resume ]; then cmd=(grok --resume "$THREAD" -p "$PTEXT")
     else cmd=(grok --prompt-file "$PROMPT"); fi
@@ -579,10 +632,12 @@ case $HARNESS in
     [ "$CMD" = resume ] && die "agy resume form is not recorded; relaunch against its conversationId by hand (harnesses.md)"
     cmd=(agy -p "$PTEXT" --model "$MODEL" --output-format stream-json --dangerously-skip-permissions --add-dir "$CWD") ;;
   claude)
-    if [ "$CMD" = resume ]; then cmd=(claude -p --resume "$THREAD" "$PTEXT")
+    if [ "$CMD" = review ]; then PTEXT="/code-review max $BASE...HEAD"; cmd=(claude -p "$PTEXT")
+    elif [ "$CMD" = resume ]; then cmd=(claude -p --resume "$THREAD" "$PTEXT")
     else cmd=(claude -p "$PTEXT"); fi
     cmd+=(--model "$MODEL")
-    [ -n "${EFFORT:-}" ] && cmd+=(--effort "$EFFORT")
+    if [ "$CMD" = review ]; then cmd+=(--effort max)
+    elif [ -n "${EFFORT:-}" ]; then cmd+=(--effort "$EFFORT"); fi
     # POSTMASTER_LAUNCH_NAME, set by scripts/host.sh, names the thread in the harness's own store.
     [ -n "${POSTMASTER_LAUNCH_NAME:-}" ] && cmd+=(--name "$POSTMASTER_LAUNCH_NAME")
     cmd+=(--output-format stream-json --verbose --dangerously-skip-permissions) ;;
@@ -620,8 +675,10 @@ case $HARNESS in
     # turns off; the instruction files it reads from Claude Code are kept.
     DATA=$(harness_data mimo)
     cmd=(env "XDG_DATA_HOME=$DATA" MIMOCODE_DISABLE_CLAUDE_IMPORT=1 mimo run --format json -m "$MODEL")
+    [ "$CMD" = review ] && cmd+=(--command review)
     [ "$CMD" = resume ] && cmd+=(-s "$THREAD")
-    [ -n "${EFFORT:-}" ] && cmd+=(--variant "$EFFORT")
+    if [ "$CMD" = review ]; then cmd+=(--variant high)
+    elif [ -n "${EFFORT:-}" ]; then cmd+=(--variant "$EFFORT"); fi
     [ "$CMD" = launch ] && [ -n "${POSTMASTER_LAUNCH_NAME:-}" ] && cmd+=(--title "$POSTMASTER_LAUNCH_NAME")
     cmd+=(--dangerously-skip-permissions)
     STDIN_FILE=$PROMPT ;;
@@ -671,6 +728,10 @@ fi
 CDPATH= cd -- "$CWD" || die "cannot enter $CWD"
 # A harness whose prompt arrives on stdin reads it from the file, never from an inherited pipe.
 if [ -n "$STDIN_FILE" ]; then exec < "$STDIN_FILE" || die "cannot read $STDIN_FILE"; fi
+if [ -n "$REVIEW_PROMPT" ]; then
+  rm -f -- "$REVIEW_PROMPT" || die "cannot remove the temporary MiMo review prompt: $REVIEW_PROMPT"
+  REVIEW_PROMPT=""; trap - EXIT
+fi
 # The env file reaches the harness's environment only: the command above is already built.
 if [ -n "${ENV_FILE:-}" ]; then set -a; . "$ENV_FILE"; set +a; fi
 unset POSTMASTER_LAUNCH_NAME   # the thread's own launches are named by their own host.sh call
