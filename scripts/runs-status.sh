@@ -14,12 +14,21 @@
 #          GATE      the ship card is complete (.card-ready)
 #          DISPATCH  the current leg is done (.leg-<n>-done): the next leg, or after the last,
 #                    the postmaster's close
-#          REMOUNT   the current leg's process exited (.leg-<n>-exited) with no hand-off,
-#                    escalation or card: resume it, or relaunch it on the fallback after a wall
+#          ASK       the leg's attempt ended in a way that goes to the user: a refusal, a start
+#                    with no thread id, or a wall on the fallback. Put the question to the user
+#                    (waiting add + .waiting-on-user); `leg.sh answer` names what happens then
+#          TAKEOVER  the leg's attempt was walled and the leg is not on the fallback: take it
+#                    over with `leg.sh takeover`
+#          RESUME    the leg's attempt was spent: resume it with `leg.sh resume`
+#          REMOUNT   the current leg's process exited with no outcome record: legacy, handle
+#                    as ASK/TAKEOVER/RESUME from the attempt's own state
 #          READ      a checkpoint card is waiting to be read (.checkpoint-*-ready)
 #          INSPECT   no marker, nothing changed for 30 minutes, run not done
 #          WAIT      a leg is running and its files are moving
 #          -         the manifest says done or abandoned
+#
+# The ASK/TAKEOVER/RESUME mapping comes from <dispatch>/logs/coachman-leg-<n>-outcome.json,
+# recorded by scripts/leg.sh when the attempt ended. Nothing here reads a leg's .err.
 #
 # Idle time ignores the marker files themselves, so touching a marker never hides a stall.
 #
@@ -57,12 +66,39 @@ for run in sorted(os.listdir(root)):
     idle_min = int((now - newest) / 60) if newest else -1
     done = ".leg-%s-done" % leg in markers
     exited = ".leg-%s-exited" % leg in markers
+    def next_from_outcome():
+        """ASK, TAKEOVER or RESUME from the leg's outcome record; None when there is none."""
+        path = os.path.join(d, "logs", "coachman-leg-%s-outcome.json" % leg)
+        try:
+            rec = json.load(open(path))
+        except (OSError, ValueError, TypeError):
+            return None
+        if not isinstance(rec, dict):
+            return None
+        outcome = rec.get("outcome")
+        if outcome == "spent":
+            return "RESUME"
+        if outcome == "walled":
+            on_fallback = False
+            try:
+                mpath = os.path.join(d, "manifest.json")
+                m = json.load(open(mpath))
+                entry = (m.get("coachman") or {}).get("legs", {}).get(str(leg)) or \
+                        (m.get("coachman") or {}).get("legs", {}).get(leg) or {}
+                on_fallback = entry.get("name") == "coachman_fallback"
+            except (OSError, ValueError, TypeError, AttributeError):
+                pass
+            return "ASK" if on_fallback else "TAKEOVER"
+        if outcome in ("refused", "no-thread"):
+            return "ASK"
+        return None
     if stage in ("done", "abandoned"): nxt = "-"
     elif ".waiting-on-user" in markers: nxt = "USER"
     elif ".escalation-ready" in markers: nxt = "RULE"
     elif ".card-ready" in markers: nxt = "GATE"
     elif done: nxt = "DISPATCH"
-    elif exited: nxt = "REMOUNT"
+    elif exited:
+        nxt = next_from_outcome() or "REMOUNT"
     elif any(mk.startswith(".checkpoint-") for mk in markers): nxt = "READ"
     elif idle_min >= 30: nxt = "INSPECT"
     else: nxt = "WAIT"
@@ -92,6 +128,22 @@ run() {  # run <name> <stage> <leg> [marker...]: a run directory with a manifest
   : > "$d/run-log.md"
   for m in "$@"; do : > "$d/$m"; done
 }
+outcome() {  # outcome <name> <leg> <outcome> [leg-name]: the outcome record leg.sh writes
+  local d="$tmp/root/$1" n=$2 o=$3 name=${4:-coachman}
+  mkdir -p "$d/logs"
+  printf '{"outcome": "%s", "attempt": "launch", "on_answer": "none", "exit": 1}\n' "$o" \
+    > "$d/logs/coachman-leg-$n-outcome.json"
+  if [ "$name" != coachman ]; then
+    python3 - "$d/manifest.json" "$n" "$name" <<'PY'
+import json, sys
+path, n, name = sys.argv[1], sys.argv[2], sys.argv[3]
+m = json.load(open(path))
+legs = m.setdefault("coachman", {}).setdefault("legs", {})
+legs[str(n)] = {"name": name}
+json.dump(m, open(path, "w"))
+PY
+  fi
+}
 age() {  # age <name>: nothing in the run has changed for an hour
   python3 -c 'import os, sys, time
 t = time.time() - 3600
@@ -118,6 +170,12 @@ run earlier review 2 .leg-1-done
 run usergate shipping 3 .card-ready .waiting-on-user
 run userclosed done 3 .waiting-on-user
 run stall review 2; age stall; : > "$tmp/root/stall/.leg-1-done"
+run askref review 2 .leg-2-exited; outcome askref 2 refused
+run askno review 2 .leg-2-exited; outcome askno 2 no-thread
+run take review 2 .leg-2-exited; outcome take 2 walled
+run takefb review 2 .leg-2-exited; outcome takefb 2 walled coachman_fallback
+run resume review 2 .leg-2-exited; outcome resume 2 spent
+run askuser review 2 .leg-2-exited .waiting-on-user; outcome askuser 2 refused
 mkdir -p "$tmp/root/postmaster"
 
 echo "positive controls"
@@ -130,12 +188,18 @@ expect "nothing changed for an hour is INSPECT" inspect INSPECT
 expect "a leg at work is WAIT" wait WAIT
 expect "a run waiting on the user is USER, whatever else it holds" user USER
 expect "a closed run is -" closed "-"
+expect "a refused attempt is ASK: put it to the user" askref ASK
+expect "a start with no thread id is ASK: put it to the user" askno ASK
+expect "a wall on the coachman is TAKEOVER" take TAKEOVER
+expect "a wall on the fallback is ASK: the user decides" takefb ASK
+expect "a spent attempt is RESUME" resume RESUME
 
 echo "negative controls"
 expect "an earlier leg's done marker dispatches nothing" earlier WAIT
 expect "a ship card put to the user waits on the user, not the gate" usergate USER
 expect "a closed run stays closed with a stale marker" userclosed "-"
 expect "touching a marker does not hide a stall" stall INSPECT
+expect "a refusal already put to the user waits, it does not ASK again" askuser USER
 [ -z "$(next_of postmaster)" ] && ok "the postmaster's own directory is not a run" \
   || fail "the postmaster's own directory is not a run"
 
