@@ -71,12 +71,13 @@ record at a time. `skills/wiki` carries the three operations: ingest, query, lin
 
 ## Getting started
 
-Clone this repo and open your agent in it. There is no command to memorise and no wizard to
-run: `AGENTS.md` tells the agent what to do, and the first time that is setting the machine
-up with you, one question at a time (which agent CLIs fill which role, where tickets live,
-where your projects are, who says the merge word), and linking the skills into your agent CLIs
-so you can start from any project afterwards. After that it helps you choose a project and is
-the postmaster in the session you opened, or launches one when it cannot be.
+Clone this repo, open your agent in it, and say hi. Any first message starts the flow.
+There is no command to memorise and no wizard to run: `AGENTS.md` tells the agent what to
+do, and the first time that is setting the machine up with you, one question at a time (which
+agent CLIs fill which role, where tickets live, where your projects are, who says the merge
+word), and linking the skills into your agent CLIs so you can start from any project
+afterwards. After that it helps you choose a project and is the postmaster in the session you
+opened, or launches one when it cannot be.
 
 ```sh
 scripts/probe-harnesses.sh      # which agent CLIs are installed

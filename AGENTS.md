@@ -45,9 +45,9 @@ scored by `scripts/fixture.sh score` on the same branch. [Why](wiki/concepts/fix
 
 ## When a session opens in this repo, do this
 
-No slash command, and no wizard for the user to run. They open their agent in this
-folder and this file takes it from there: set the machine up if it is not, choose a target,
-launch the postmaster. Work out where the user is and pick up from there.
+No slash command, and no wizard for the user to run. The user opens their agent in this
+folder and says hi. Any first message starts the flow: set the machine up if it is not,
+choose a target, launch the postmaster. Work out where the user is and pick up from there.
 
 **1. Is this machine set up?**
 

@@ -43,6 +43,6 @@ auto-start implication.
 
 ## Tasks
 
-- [ ] T001 [AC1] Edit README.md Getting started so it says to open your agent in the clone and say hi.
-- [ ] T002 [AC2] Edit AGENTS.md's session-opening passage so it says the user opens their agent in this folder and says hi, and that any first message starts the flow.
-- [ ] T003 [AC3] Sweep README.md and AGENTS.md whole; remove or reword anything left that says or implies the agent starts on its own.
+- [x] T001 [AC1] Edit README.md Getting started so it says to open your agent in the clone and say hi.
+- [x] T002 [AC2] Edit AGENTS.md's session-opening passage so it says the user opens their agent in this folder and says hi, and that any first message starts the flow.
+- [x] T003 [AC3] Sweep README.md and AGENTS.md whole; remove or reword anything left that says or implies the agent starts on its own.
