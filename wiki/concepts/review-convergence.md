@@ -420,11 +420,13 @@ lanes exist.
 
 ## Decision
 
-On 2026-09-27 the user chose, for now, one round of bug review, and to revisit the rule if many
-bugs reach production. It is none of options A to E. It is closest to D, without the round on the
-fixes, so the fixes that round's findings lead to are not reviewed again. It replaces the cap of
-three rounds that held while this research ran. No runbook changes under #59: `coachman.md`
-changes to match under a ticket of its own. The trial was not run.
+On 2026-09-27 the user said: “in the first round we fix as much as we can, then we repeat until
+there are no more P1 and P2s.” Round 2 therefore runs whenever round 1 applied a fix; later rounds
+run only when the prior round logged a verified P1 or P2 finding. From round 2 on, P3 findings go
+to the user without a fix. The cap of three rounds, round 1 included, stays as a backstop, and so
+does repeated-class escalation. Many bugs reaching production remains the signal to revisit the
+rule. Issue #80 updates `coachman.md` and adds the logged decision in `scripts/review-loop.sh`.
+The trial was not run.
 
 ## What would settle it
 

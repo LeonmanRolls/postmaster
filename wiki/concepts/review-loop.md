@@ -10,9 +10,11 @@ updated: 2026-09-27
 
 **Claim.** Style, bug and security review work better as one loop in one leg than as three
 passes in three legs. Each round runs every lens still open on one snapshot: all three in round
-1, then bug and security until clean. It should take fewer rounds, it needs one leg start-up
-instead of three, and every fix is re-reviewed by the gating lenses a ticket names unless the
-loop stops at its round cap.
+1, then bug and security while a verified P1 or P2 finding remains. Round 2 runs whenever round
+1 applied a fix; a later round runs only when the current round logged a verified P1 or P2
+finding. From round 2 on, P3 findings go to the user without a fix. It should take fewer rounds,
+it needs one leg start-up instead of three, and every fix is re-reviewed by the gating lenses a
+ticket names unless the loop stops at its three-round backstop.
 
 **Standing: claimed.** This is a decision taken on reasoning. No run has been recorded under
 either design, so neither the time saved nor the coverage gained is measured yet. The change is
@@ -146,8 +148,8 @@ that names `style`, `bug` or `security`.
 
 The cap was five rounds when the loop was introduced. On 2026-09-26 the user set it at three,
 after #39's own review ran four rounds without a clean one and stopped on the repeated-class
-rule. It stays at three until #59, the research on what should end an AI review loop,
-reports.
+rule. Issue #80 changes the normal end rule to verified P1/P2 findings; the cap of three rounds,
+round 1 included, remains a backstop, and repeated-class escalation remains in force.
 Each lens may have its own reviewer lanes (#63). With one list, a lane chosen for one lens, a
 Claude lane for Claude Code's `/security-review` say, would review style and bugs as well, and
 the choice of a lane for what its harness does well would cost a lane in every lens. A lens
@@ -159,9 +161,12 @@ The lenses are now the turnpikes a ticket names, all three by default, and a run
 names none has no review leg:
 [a ticket names the turnpikes its run passes through](turnpikes.md).
 
-On 2026-09-27, with #59 reported, the user chose one round of bug review for now, to be
-revisited if many bugs reach production ([when a review loop should stop](review-convergence.md)).
-`coachman.md` still says three rounds until the ticket that changes it lands.
+On 2026-09-27, after reading #59, the user chose to fix as much as possible in round 1 and
+continue until no P1 or P2 findings remain. P3 findings found from round 2 on go to the user
+without a fix. The three-round cap and repeated-class escalation stay as backstops. Many bugs
+reaching production remains the signal to revisit the rule
+([when a review loop should stop](review-convergence.md)). `coachman.md` and
+`scripts/review-loop.sh` implement the decision.
 
 Since issue #55, style gates nothing. `skills/postmaster/coachman.md` applies no style finding,
 the ship card counts them, and aftercare sorts them; `skills/postmaster/postmaster.md` puts the
