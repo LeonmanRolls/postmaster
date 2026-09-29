@@ -109,6 +109,28 @@ return all().slice(start, start + size + 1);
     '{"file": "src/page.js", "line": 8, "end_line": 8, "severity": "not provided", "confidence": "not provided", "title": "Off-by-one in slice", "body": "returns size+1", "evidence": "not provided"}' \
     claude '[{"file": "src/page.js", "line": 8, "summary": "Off-by-one in slice", "failure_scenario": "returns size+1"}]
 '
+  has_field "and one in a fenced json block is too" file src/page.js claude 'Nine findings remain.
+
+```json
+[
+  {
+    "file": "src/page.js",
+    "line": 8,
+    "summary": "The slice end makes page() return size + 1 records.",
+    "failure_scenario": "pages overlap. Reproduced with node."
+  }
+]
+```
+'
+  has_field "mimo's Bug heading with the path in the body yields the finding" file src/page.js mimo \
+    '### Bug — off-by-one in `page` (high)
+
+`src/page.js:8` returns one record too many:
+
+```js
+return all().slice(start, start + size + 1);
+```
+'
 
   echo "negative controls: no findings yield none; unparseable output fails loudly"
   is "a report that says there is nothing to review yields none" 0 '' \
@@ -223,31 +245,38 @@ def cleanish(t):
 # --- claude -----------------------------------------------------------------------------
 def parse_claude(t):
     found = []
-    # JSON array in the final message (xhigh / max).
-    stripped = t.strip()
-    if stripped.startswith("["):
+    # JSON array in the final message (xhigh / max), whole or in a fenced block.
+    candidates = [t.strip()]
+    candidates += re.findall(r"```(?:json)?\n(\[[\s\S]*?\n\])\n```", t)
+    for blob in candidates:
+        if not blob.startswith("["):
+            continue
         try:
-            arr = json.loads(stripped)
+            arr = json.loads(blob)
         except ValueError:
             arr = None
-        if isinstance(arr, list):
-            for item in arr:
-                if not isinstance(item, dict):
-                    continue
-                loc = item.get("location") or item.get("loc") or item
-                f = item.get("file") or loc.get("file") or item.get("path")
-                ln = item.get("line") or loc.get("line") or loc.get("start")
-                if not f or ln in (None, ""):
-                    continue
-                found.append({
-                    "file": norm_path(str(f)), "line": int(ln) if str(ln).isdigit() else ln,
-                    "end_line": item.get("end_line") or loc.get("end") or ln,
-                    "severity": item.get("severity") or item.get("priority"),
-                    "confidence": item.get("confidence"),
-                    "title": item.get("short_summary") or item.get("title") or item.get("summary"),
-                    "body": item.get("failure_scenario") or item.get("body") or item.get("summary"),
-                    "evidence": item.get("evidence") or item.get("code"),
-                })
+        if not isinstance(arr, list) or not arr:
+            if isinstance(arr, list):
+                return []
+            continue
+        for item in arr:
+            if not isinstance(item, dict):
+                continue
+            loc = item.get("location") or item.get("loc") or item
+            f = item.get("file") or loc.get("file") or item.get("path")
+            ln = item.get("line") or loc.get("line") or loc.get("start")
+            if not f or ln in (None, ""):
+                continue
+            found.append({
+                "file": norm_path(str(f)), "line": int(ln) if str(ln).isdigit() else ln,
+                "end_line": item.get("end_line") or loc.get("end") or ln,
+                "severity": item.get("severity") or item.get("priority"),
+                "confidence": item.get("confidence"),
+                "title": item.get("short_summary") or item.get("title") or item.get("summary"),
+                "body": item.get("failure_scenario") or item.get("body") or item.get("summary"),
+                "evidence": item.get("evidence") or item.get("code"),
+            })
+        if found:
             return found
     # `path:line — title` or `path:line — title: body` (low).
     for m in re.finditer(r"^(\S+?):(\d+)\s*[—-]\s*(.+)$", t, re.M):
@@ -310,6 +339,26 @@ def parse_mimo(t):
             "file": norm_path(m.group(1)), "line": int(m.group(2)), "end_line": int(m.group(2)),
             "title": title, "body": title,
             "evidence": evidence,
+        })
+    if found:
+        return found
+    # `### Bug — title` with `path:line` in the section that follows.
+    for m in re.finditer(
+        r"^#{2,4}\s*(?:Bug|Issue|Problem|Finding)\s*[—-]\s*([^\n]*)\n(.*?)(?=^#{2,4}\s|\Z)",
+        t, re.M | re.S,
+    ):
+        title = m.group(1).strip() or "Bug"
+        body = m.group(2)
+        loc = re.search(r"`([^`\n]+?):(\d+)`", body) or re.search(r"(\S+?):(\d+)\b", body)
+        if not loc:
+            continue
+        evidence = None
+        fence = re.search(r"```[a-zA-Z]*\n(.*?)```", body, re.S)
+        if fence:
+            evidence = fence.group(1).strip()
+        found.append({
+            "file": norm_path(loc.group(1)), "line": int(loc.group(2)), "end_line": int(loc.group(2)),
+            "title": title, "body": title, "evidence": evidence,
         })
     if found:
         return found

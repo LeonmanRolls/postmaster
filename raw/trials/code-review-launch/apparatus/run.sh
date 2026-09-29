@@ -139,8 +139,12 @@ PY
     report=$OUT/$lane-report.md
   fi
   echo "normalize $report"
-  "$ROOT/scripts/review-findings.sh" "$([ "$lane" = opus ] && echo claude || [ "$lane" = luna ] && echo codex || echo mimo)" \
-    "$report" --root "$dest" > "$OUT/$lane-findings.jsonl" 2> "$OUT/$lane-findings.err"
+  case $lane in
+    opus) h=claude ;;
+    luna) h=codex ;;
+    *) h=mimo ;;
+  esac
+  "$ROOT/scripts/review-findings.sh" "$h" "$report" --root "$dest" > "$OUT/$lane-findings.jsonl" 2> "$OUT/$lane-findings.err"
   nrc=$?
   if [ $nrc -ne 0 ]; then
     echo "FAIL $lane: review-findings.sh exit $nrc $(cat "$OUT/$lane-findings.err")"

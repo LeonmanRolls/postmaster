@@ -1,0 +1,1 @@
+{"file": "src/page.js", "line": 8, "end_line": 8, "severity": "not provided", "confidence": "not provided", "title": "off-by-one in `page` (high)", "body": "off-by-one in `page` (high)", "evidence": "return all().slice(start, start + size + 1);"}

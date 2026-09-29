@@ -51,7 +51,38 @@ passages that cite `src/page.js:8` are what the wiki cites.
 
 # Results
 
-(Recorded below when the control has run.)
+| lane | harness | `launch.sh review` | exit | normalized finding at `src/page.js:8` |
+|---|---|---|---|---|
+| opus | claude 2.1.283 | `/code-review max 4973110...HEAD` | 0 | yes — the JSON array's first finding, severity not provided |
+| luna | codex 0.157.1 | `codex exec review --base 4973110` at `max` | 0 | yes — `[P1] Limit each page to the requested size` at `src/page.js:8-8` |
+| mimo | MiMo Code 0.1.15 | `--command review --variant high`, range in the prompt file | 0 | yes — `### Bug — off-by-one in page`, `src/page.js:8` |
+
+Each ran in a worktree scratch detached at SNAP, cut and checked before the launch. The
+planted bug is in the first of two commits; a review of the last commit alone would see only
+`src/count.js`.
+
+**What each report looked like.** claude at `max` ran ten finder angles and a gap sweep through
+forked tasks (24 `task_notification` output files, kept as `opus-task-*.output`), then wrote a
+JSON array in its final message, one object per finding with `file`, `line`, `summary` and
+`failure_scenario` and no severity. Its first finding is the planted off-by-one at
+`src/page.js:8`. codex wrote `- [P1] Limit each page to the requested size —
+<scratch>/src/page.js:8-8` with a body, the form its `-o` message takes. MiMo Code wrote free
+markdown, `### Bug — off-by-one in page (high)` with `` `src/page.js:8` `` in the body and a
+fenced `js` block as evidence.
+
+**Normalization.** `scripts/review-findings.sh` turned each report into the finding contract
+and each run's check was that one normalized finding is at the bug's file and line. The first
+pass over this control's output failed on two shapes the self-test did not yet carry: claude's
+JSON array inside a fenced `json` block rather than as the whole message, and MiMo Code's Bug
+heading with the path in the body rather than in the heading. Both are now in the normalizer
+and in its self-test; re-running the normalizer on these same reports yields the finding at
+`src/page.js:8` for all three.
+
+**Claude's own record.** Each of the 24 forked task output files named by the stream's
+`task_notification` was copied into the out directory (`opus-task-*.output`), which is the
+harvest's keep. One sample is published here with the reports.
+
+**Scratches.** No run changed a tracked file in its scratch.
 
 # What it settles
 
