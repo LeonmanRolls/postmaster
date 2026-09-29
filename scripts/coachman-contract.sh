@@ -222,13 +222,31 @@ def check_change(repo, base, head):
     return reports
 
 
+def line_ranges(numbers):
+    ordered = sorted(numbers)
+    if not ordered:
+        return []
+    out, first, last = [], ordered[0], ordered[0]
+    for number in ordered[1:]:
+        if number == last + 1:
+            last = number
+            continue
+        out.append((first, last))
+        first = last = number
+    out.append((first, last))
+    return out
+
+
 def print_result(reports, base, head):
     if not reports:
         print("no coachman contract change (%s..%s)" % (base, head))
         return 0
     for ident in sorted(reports):
-        for path, line in sorted(reports[ident]):
-            print("yes %s %s:%d" % (ident, path, line))
+        paths = sorted({path for path, _ in reports[ident]})
+        for path in paths:
+            for first, last in line_ranges(line for touched_path, line in reports[ident] if touched_path == path):
+                suffix = ":%d" % first if first == last else ":%d-%d" % (first, last)
+                print("yes %s %s%s" % (ident, path, suffix))
     return 1
 # coachman-contract:fixture-detector:end
 
