@@ -1,0 +1,10 @@
+# <project>/.postmaster/project.toml
+#
+# What this project requires of every run against it. The gate is the stand-in until #17
+# gives this repo a real one; it is not redeclared here. The scrub check joins it through
+# scripts/verify.sh, so no change reaches its ship card with an unruled suspect on its
+# branch. A suspect is for the postmaster to put to the user; the script decides nothing.
+
+[checks.scrub]
+command = "scripts/scrub-check.sh main HEAD"
+shows = "no commit from base to head adds a line that looks like private data"
