@@ -1296,12 +1296,12 @@ subs=$(cat "$SKILL"/*.md | grep -o 'style-findings\.sh [a-z-]*' | awk '{print $2
 lines 'run `<tool>/scripts/style-findings.sh sort <dispatch>`' > "$tmp/planted.md"
 [ "$(grep -o 'style-findings\.sh [a-z-]*' "$tmp/planted.md" | awk '{print $2}')" = sort ] \
   && ok "and a subcommand the script lacks would be caught" || fail "and a subcommand the script lacks would be caught"
-awk '/^\*\*Sort the style findings\.\*\*/ {f = 1} f && /^```/ {n++; next} f && n == 1 {print} n == 2 {exit}' "$SKILL/coachman.md" \
+awk '/\*\*Sort the style findings\.\*\*/ {f = 1} f && /^[ \t]*```/ {n++; next} f && n == 1 {sub(/^[ \t]+/, ""); print} n == 2 {exit}' "$SKILL/postmaster.md" \
   | sed -e 's/<n>/1/g; s/<m>/2/g; s/\[,S2\.\.\.\]//; s/<linter>/biome/; s/<rule>/style\/useConst/; s/<doc>/AGENTS.md/' \
         -e 's/<file>/biome.json/; s/<reason>/a reason/' > "$tmp/forms"
 run core forms "$tmp/forms"
 [ "$rc" -eq 0 ] && [ "$(printf '%s\n' "$out" | grep -c '^ok  ')" -ge 7 ] && ! printf '%s\n' "$out" | grep -q '^bad ' \
-  && ok "every form coachman.md gives is a sort line" || fail "every form coachman.md gives is a sort line" "$out"
+  && ok "every form postmaster.md gives is a sort line" || fail "every form postmaster.md gives is a sort line" "$out"
 lines 'S1 lint biome enable style/useConst: a reason' > "$tmp/forms"; run core forms "$tmp/forms"
 has "and a form that is not one would be caught" 0 "bad S1 lint biome"
 says() { tr '\n' ' ' < "$1" | tr -s ' ' | grep -qF -- "$2"; }   # across line breaks
@@ -1309,11 +1309,11 @@ for want in "converge on a prescribed one-line fix for a gating finding" "is a f
             "for style, how many findings go to the ship card's Style residue, as"; do
   says "$SKILL/coachman.md" "$want" && ok "coachman.md says: $want" || fail "coachman.md says: $want"
 done
-for want in "Check the style sort too, once the last leg's process has exited" "--title \"<title>\"\`, and log \`ticket-check\`" \
+for want in "Sort the style findings" "--title \"<title>\"\`, and log \`ticket-check\`" \
             "log a \`note\` with \`style proposal asked: <proposal>\` for each draft shown" "and carry on with the stream"; do
   says "$SKILL/postmaster.md" "$want" && ok "postmaster.md says: $want" || fail "postmaster.md says: $want"
 done
-awk '/^5\. \*\*Put the style sort to the user/,/^6\. /' "$SKILL/postmaster.md" > "$tmp/step5"
+awk '/^[0-9]+\. \*\*Put the style sort to the user/,/^[0-9]+\. /' "$SKILL/postmaster.md" > "$tmp/step5"
 ! says "$tmp/step5" "ESCALATION.md" && ok "and the style sort is no escalation" || fail "and the style sort is no escalation" "$(cat "$tmp/step5")"
 lines 'When the lanes converge on a prescribed one-line fix, apply it and re-review.' > "$tmp/old.md"
 ! says "$tmp/old.md" "one-line fix for a gating finding" && ok "and the rule's old wording would be caught" || fail "and the rule's old wording would be caught"

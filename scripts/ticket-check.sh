@@ -718,7 +718,7 @@ echo "a turnpike is added in scripts/turnpikes.sh alone"
 mkdir "$tmp/added" "$tmp/broken" "$tmp/alone"
 for d in added broken alone; do cp "$SELF" "$tmp/$d/"; done
 add() { awk -v row="$1" '/^TURNPIKES$/ { print row } { print }' "$HERE/turnpikes.sh" > "$2/turnpikes.sh"; chmod +x "$2/turnpikes.sh"; }
-add "$NOPE  -        ship    a check the table does not have yet" "$tmp/added"
+add "$NOPE  -        review  a check the table does not have yet" "$tmp/added"
 add "none       -        review  nothing" "$tmp/broken"
 body "$P" "$A" "$D" "## Turnpikes
 default, $NOPE"
