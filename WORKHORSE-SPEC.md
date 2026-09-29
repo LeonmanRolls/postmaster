@@ -44,16 +44,16 @@ Port every script under `scripts/` to a Bun-run TypeScript entry point, keeping 
 
 ## Tasks
 
-- [ ] T001 [P] [AC1] Port `scripts/check-target.sh`, `scripts/handoff-check.sh`, `scripts/find-projects.sh`, `scripts/discover-project.sh`, `scripts/tracker-kind.sh`, and `scripts/probe-harnesses.sh` to matching `.ts` entry points and wrappers.
-- [ ] T002 [P] [AC1] Port `scripts/probe-trackers.sh`, `scripts/setup.sh`, `scripts/link-skills.sh`, `scripts/skill-refs.sh`, and `scripts/verify.sh` to matching `.ts` entry points and wrappers.
-- [ ] T003 [P] [AC1] Port `scripts/cut-scratch.sh`, `scripts/fixture.sh`, `scripts/front-door-acceptance.sh`, `scripts/front-door.sh`, and `scripts/local.sh` to matching `.ts` entry points and wrappers.
-- [ ] T004 [P] [AC1] Port `scripts/github.sh`, `scripts/plane.sh`, `scripts/ticket-check.sh`, and `scripts/tool-faults.sh` to matching `.ts` entry points and wrappers.
-- [ ] T005 [P] [AC1] Port `scripts/host.sh` and `scripts/launch.sh` to matching `.ts` entry points and wrappers.
+- [x] T001 [P] [AC1] Port `scripts/check-target.sh`, `scripts/handoff-check.sh`, `scripts/find-projects.sh`, `scripts/discover-project.sh`, `scripts/tracker-kind.sh`, and `scripts/probe-harnesses.sh` to matching `.ts` entry points and wrappers.
+- [x] T002 [P] [AC1] Port `scripts/probe-trackers.sh`, `scripts/setup.sh`, `scripts/link-skills.sh`, `scripts/skill-refs.sh`, and `scripts/verify.sh` to matching `.ts` entry points and wrappers.
+- [x] T003 [P] [AC1] Port `scripts/cut-scratch.sh`, `scripts/fixture.sh`, `scripts/front-door-acceptance.sh`, `scripts/front-door.sh`, and `scripts/local.sh` to matching `.ts` entry points and wrappers.
+- [x] T004 [P] [AC1] Port `scripts/github.sh`, `scripts/plane.sh`, `scripts/ticket-check.sh`, and `scripts/tool-faults.sh` to matching `.ts` entry points and wrappers.
+- [x] T005 [P] [AC1] Port `scripts/host.sh` and `scripts/launch.sh` to matching `.ts` entry points and wrappers.
 - [x] T006 [P] [AC1] Port `scripts/log-action.sh`, `scripts/run-log.sh`, `scripts/run-meta.sh`, `scripts/run-times.sh`, `scripts/runs-status.sh`, `scripts/stage.sh`, and `scripts/wait-for-markers.sh` to matching `.ts` entry points and wrappers.
-- [ ] T007 [P] [AC1] Port `scripts/review-round.sh`, `scripts/reviewers.sh`, `scripts/style-findings.sh`, and `scripts/turnpikes.sh` to matching `.ts` entry points and wrappers.
-- [ ] T008 [P] [AC1] Port `scripts/verify-examples.sh`, `scripts/verify-journey.sh`, `scripts/verify-library.sh`, `scripts/view-stream.sh`, and `scripts/wiki-lint.sh` to matching `.ts` entry points and wrappers.
-- [ ] T009 [AC3] Preserve and run every BASE control in the 31 self-tests, including subprocess, negative, and positive controls; record the BASE-to-port mapping in the implementation documentation.
+- [x] T007 [P] [AC1] Port `scripts/review-round.sh`, `scripts/reviewers.sh`, `scripts/style-findings.sh`, and `scripts/turnpikes.sh` to matching `.ts` entry points and wrappers.
+- [x] T008 [P] [AC1] Port `scripts/verify-examples.sh`, `scripts/verify-journey.sh`, `scripts/verify-library.sh`, `scripts/view-stream.sh`, and `scripts/wiki-lint.sh` to matching `.ts` entry points and wrappers.
+- [x] T009 [AC3] Preserve and run every BASE control in the 31 self-tests, including subprocess, negative, and positive controls; record the BASE-to-port mapping in the implementation documentation.
 - [x] T010 [AC4] Add `package.json`, `bun.lock`, strict `tsconfig.json`, Biome configuration, shared TypeScript helpers under `scripts/lib/`, and the fixed self-test runner; declare only TypeScript and Biome as development dependencies.
-- [ ] T011 [AC5] Make `package.json`'s `check` run `tsc --noEmit`, Biome, and every BASE self-test, and make `scripts/discover-project.sh .` report `bun run check`.
-- [ ] T012 [AC6] Update `README.md` and `AGENTS.md` to require Bun 1.4.2 or newer instead of Python 3.11.
-- [ ] T013 [AC2] Verify each `.sh` path forwards the same arguments to its `.ts` implementation and confirm output and status behavior through the fixed self-test suite and gate.
+- [x] T011 [AC5] Make `package.json`'s `check` run `tsc --noEmit`, Biome, and every BASE self-test, and make `scripts/discover-project.sh .` report `bun run check`.
+- [x] T012 [AC6] Update `README.md` and `AGENTS.md` to require Bun 1.4.2 or newer instead of Python 3.11.
+- [x] T013 [AC2] Verify each `.sh` path forwards the same arguments to its `.ts` implementation and confirm output and status behavior through the fixed self-test suite and gate.

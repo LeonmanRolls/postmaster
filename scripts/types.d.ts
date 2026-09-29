@@ -51,6 +51,7 @@ declare module "node:fs" {
   export const unlinkSync: any;
   export const utimesSync: any;
   export const writeFileSync: any;
+  export const writeSync: any;
   export const constants: any;
 }
 declare module "node:fs/promises" {
