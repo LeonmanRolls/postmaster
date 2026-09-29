@@ -1,12 +1,21 @@
 ---
 title: Log
 type: schema
-updated: 2026-09-27
+updated: 2026-09-29
 ---
 
 # Log
 
 Append-only. Newest first. One entry per operation, prefixed so it can be parsed.
+
+## [2026-09-29] ingest | workhorse specs are reviewed before implementation
+
+Captured the Build-stage passages from Anthropic's AI-native SDLC playbook in
+`raw/articles/ai-native-sdlc-playbook/` and added its source page. The workhorse-spec decision
+now puts user review before implementation, records the approved commit, and keeps the lanes'
+specs independent. The playbook motivates the timing but does not show whether it improves this
+flow, so the standing remains `claimed`. Issue #9's own-spec condition now includes user review
+and measures whether review makes the independent specs converge.
 
 ## [2026-09-27] ingest | how the style sort is checked and put to the user
 

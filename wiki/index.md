@@ -1,7 +1,7 @@
 ---
 title: postmaster wiki
 type: schema
-updated: 2026-09-27
+updated: 2026-09-29
 ---
 
 # postmaster wiki
@@ -59,8 +59,8 @@ How the flow is checked, and what each check can and cannot see.
 Why the design is shaped as it is.
 
 - [The workhorse spec](concepts/workhorse-spec.md): **claimed**. Each workhorse drafts its
-  own, which keeps the workhorses independent of each other and of the coachman, and makes
-  each run auditable.
+  own, and the user reviews it before implementation; specs stay independent and each run
+  records the approved commit.
 - [Faults a run finds in postmaster become tickets](concepts/tool-faults.md): **claimed**. A
   run records each fault in postmaster as it happens and never fixes the tool; a fault in a
   control stops the leg. When the run closes, its faults become tickets on postmaster's own
@@ -102,5 +102,5 @@ Why the design is shaped as it is.
 
 ## Sources
 
-[Recorded runs and captured reading](sources/index.md): one run, the review rounds of #36, and
-fourteen papers on review, fixes and severity.
+[Recorded runs and captured reading](sources/index.md): one run, the review rounds of #36,
+fourteen papers on review, fixes and severity, and an article on review before implementation.

@@ -2,14 +2,15 @@
 title: The workhorse spec
 type: concept
 standing: claimed
-sources: [articles/spec-kit-templates]
-updated: 2026-09-25
+sources: [articles/spec-kit-templates, articles/ai-native-sdlc-playbook]
+updated: 2026-09-29
 ---
 
 # The workhorse spec
 
-**Claim.** Each workhorse drafts its own spec, the workhorse spec. When a ticket carries the what, the why and the high-level technical direction, the
-detailed spec is better drafted by each workhorse for itself than by the coachman for all of them.
+**Claim.** Each workhorse drafts its own spec, the workhorse spec. When a ticket carries the
+what, the why and the high-level technical direction, each workhorse should draft its own
+detailed spec. The user reviews each spec before implementation.
 
 **Standing: claimed.** This is a decision taken on reasoning, before any run bears on it. The
 comparison in [issue #9](https://github.com/brindlewick/postmaster/issues/9) is its test.
@@ -24,8 +25,11 @@ comparison in [issue #9](https://github.com/brindlewick/postmaster/issues/9) is 
   composes the synthesis. A coachman that had written the spec would be judging each workhorse
   against its own answer, and would tend to favour whichever followed it most closely.
 - **It makes the run auditable.** Each workhorse's spec, committed before its code, records what it
-  meant to build. Read beside what it built, it shows whether the workhorses diverged at the design
-  or only in the code, and where a workhorse departed from its own plan.
+  meant to build. The run records the commit the user approved, so the accepted plan can be
+  compared with what was implemented.
+- **The review happens while the plan is still cheap to change.** The user chose this because
+  planning errors cost less to fix than code, and weaker, cheaper models gain the most. These
+  expected benefits are unverified until runs or trials measure them.
 
 ## The format
 
@@ -42,20 +46,30 @@ become acceptance-criterion tags, since tickets carry numbered criteria rather t
 that lets an audit see at once whether every criterion has a task. Its `NEEDS CLARIFICATION`
 markers become recorded decisions, because a workhorse has nobody to ask mid-run.
 
-## What it does not do, at this stage
+## Review before implementation
 
-Nobody reviews a spec during the run, and no stage waits on one. It is an audit record. A
-review step would be a separate decision with its own test: checking specs against each other,
-or against what the coachman would have done, would push the workhorses back toward one approach.
+The user reviews every spec before implementation, as an interactive planning stage. This
+reverses the audit-only decision from #29. The review is for scope and correctness. It does not
+show one workhorse another's spec or ask the coachman to choose a shared approach. The coachman
+still does not check code against the approved spec.
+
+The [AI-native SDLC playbook](../sources/ai-native-sdlc-playbook.md) motivates this timing: it
+puts design review before code generation and has acceptance of a plan start implementation
+[@articles/ai-native-sdlc-playbook]. It does not show whether this flow gets better results.
 
 ## What would change it
 
-The comparison in issue #9 runs the same tickets three ways: each workhorse drafting its own spec,
-the coachman drafting one shared spec, and no spec at all. Its decision rule is fixed in
-advance: this stays the default unless a shared spec produces a clearly better synthesis.
+The comparison in issue #9 runs the same tickets three ways: each workhorse drafting its own
+spec, the coachman drafting one shared spec, and no spec at all. The own-spec condition now
+includes user review. The experiment measures whether review makes the independent specs
+converge, as well as the quality of the synthesis. Its decision rule is fixed in advance: this
+stays the default unless a shared spec produces a clearly better synthesis.
 
 ## What changed because of it
 
-The workhorse contract in `skills/postmaster/coachman.md` gains `WORKHORSE-SPEC.md` as a workhorse's first act,
-written from `skills/postmaster/workhorse-spec-template.md`, and the run's audit keeps a copy of each
-one as first committed and as finished.
+The workhorse contract in `skills/postmaster/coachman.md` makes the first spec a stop before
+implementation. The postmaster presents each spec through the machine's `planning.review_link`
+template or its worktree path. Requested changes return to the same workhorse thread, and the
+run records the commit approved. `WORKHORSE-SPEC.md` keeps the plan and tasks format from
+`skills/postmaster/workhorse-spec-template.md`. The coachman still does not check code against
+the approved spec.

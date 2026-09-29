@@ -1,7 +1,7 @@
 ---
 title: Sources
 type: source
-updated: 2026-09-26
+updated: 2026-09-29
 ---
 
 # Sources
@@ -44,6 +44,11 @@ On when review should stop, captured for [when a review loop should stop](../con
   rejected.
 - [Models rate vulnerabilities as more urgent than they are](al-haddad-2025-vulnerability-triage.md)
   (2025).
+
+## Articles
+
+- [The AI-native SDLC playbook](ai-native-sdlc-playbook.md) (2026): design review happens before
+  code generation, and accepting a plan starts implementation.
 
 Nothing arrives here on its own. Every run writes its full record to its own project's
 gitignored `.postmaster/`, and most runs stay there. A page appears only when somebody decides
