@@ -172,7 +172,19 @@ file; the postmaster keeps using its main `<tool>` for every other supervision s
 1. **Write the leg prompt** to `<runs>/<TICKET>/leg-<n>-prompt.txt`: "You are the coachman
    for leg <n> of <TICKET>. Read `<dispatch>/brief.md`, then `<rt>/skills/postmaster/coachman.md`,
    then `<dispatch>/handoff-<p>.md`" (omit the hand-off for leg 1), plus the one line naming
-   the leg's job from the legs table. Nothing else: the runbook and the files carry the rest.
+   the leg's job from the legs table. When `<dispatch>/hotfix-notes.md` exists, carry its
+   lines in too: a fix commit on this run's branch is main's fix, not the run's own work,
+   and the leg must know which is which (`<tool>/scripts/hotfix-reach.sh`). Nothing else:
+   the runbook and the files carry the rest. Then apply the run's queued hotfixes, if any:
+
+   ```sh
+   <tool>/scripts/hotfix-reach.sh next-leg <dispatch> <n> <dispatch>/leg-<n>-prompt.txt
+   ```
+
+   It exits 0 having applied each queued fix commit alone or rightly left it alone, and it
+   adds the main-fix note to the prompt. A refusal stops dispatch; take its message to the
+   user. It runs only after the previous leg's completed hand-off, and never merges main
+   into the run.
 2. **From leg 2 on, verify the hand-off before dispatching on it:** `<tool>/scripts/handoff-check.sh
    <dispatch>/handoff-<p>.md` exits 0. If it exits 2, leg `p` is not finished: remove its
    `.leg-<p>-done` marker and resume leg `p` (step 5, with `p` in place of `n`), the prompt
@@ -381,8 +393,9 @@ faults), with `postmaster` as the actor: in the run you were acting on, or in
 doing: log `escalate` with the postmaster file as its target, and send it up (Stage E, step
 3). Anything else may be worked around, with the workaround in the same line.
 
-**Their tickets are shown to the user once, when a run's aftercare ends:** after the merge
-(Stage G) or on abandon. Nothing else puts them to the user.
+**Tool faults are harvested after the run closes:** after the merge (Stage G) or on
+abandon. The supervising postmaster may start `/hotfix` sooner when a fix is warranted. A
+hotfix has its own ticket and branch; it never edits the run's branch during a leg.
 
 1. **Harvest them:** `<tool>/scripts/tool-faults.sh harvest <dispatch>`, then the same for
    `<runs>/postmaster`. Each groups the `tool-fault` lines into distinct faults, drafts a
@@ -426,7 +439,8 @@ only with the user's word for that specific thing, and the word is logged.
 - Never delete a dispatch directory, a manifest or a ledger line.
 - Never trust a card, a summary or a hand-off over the code; verify before every grant.
 - Never launch more runs than `team.max_runs`.
-- Never modify postmaster itself, whatever the target: a fault you meet in it is a tool fault
-  (Tool faults), and a fault in a control is never worked around.
+- Never modify postmaster while supervising a run: a fault you meet in it is a tool fault
+  (Tool faults). Use `/hotfix` for a separate ticket and branch. A fault in a control is never
+  worked around.
 - Every action is a `log-action` line at the moment it happens. If it is not in the ledger,
   it did not happen.

@@ -34,6 +34,13 @@ every session you brief. If it prints the error instead, stop and tell the user:
 copied, or its link points somewhere else. `<checkout>/scripts/link-skills.sh`, where
 `<checkout>` is their postmaster checkout, links it again.
 
+## Repair a postmaster fault
+
+Use the separate `/hotfix` skill when a postmaster script, self-test, adapter or runbook needs a
+fix. It opens a ticket, starts a worktree from `origin/main`, checks the fix, opens and merges a
+pull request under `ship.merge_authority`, pulls main, and carries only the fix to runs that need
+it. A normal postmaster supervision leg still does not edit source.
+
 [Why a skill is a link, and the repo is found from it](../../wiki/concepts/skill-links.md)
 
 ## Next: establish the preconditions yourself
