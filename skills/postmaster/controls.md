@@ -29,6 +29,7 @@ A fault in one of these is a fault in a control, whatever the step that ran it.
 | `<tool>/scripts/stage.sh` | action-log | every stage change is recorded, and the run is timed from the record |
 | `<tool>/scripts/run-meta.sh` | action-log | what a run started from, and the pinned checkout it runs on |
 | `<tool>/scripts/tool-faults.sh` | action-log | every fault a run met reaches a ticket or the run's records |
+| `<tool>/scripts/hotfix.sh` | action-log | a merged postmaster fix reaches each in-flight run through its checkout, a single branch commit, or its next leg |
 
 ## Steps within a file
 
