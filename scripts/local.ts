@@ -1111,7 +1111,7 @@ async function selfTest(): Promise<number> {
     const githubCheck = command("bun", [join(here, "ticket-check.ts"), unticketed, "3"], {
       env: { POSTMASTER_CONFIG: join(temp, "github.toml") },
     });
-    githubCheck.code === 1 && githubCheck.stdout.includes("github adapter") && existsSync(ghLog)
+    githubCheck.code === 1 && output(githubCheck).includes("github adapter") && existsSync(ghLog)
       ? ok("without a store it goes to the github adapter, and the gh on PATH saw the call")
       : fail("without a store it goes to the github adapter, and the gh on PATH saw the call", output(githubCheck));
   } catch (error) {
