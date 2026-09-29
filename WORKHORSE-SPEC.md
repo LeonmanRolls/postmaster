@@ -31,6 +31,7 @@ Add a planning stage where workhorses commit independent specs, the postmaster r
 - `scripts/log-action.sh`: allow and self-test the `spec-review` decision action.
 - `scripts/spec-review-link.sh`: resolve the recorded template and spec path with positive and negative controls.
 - `scripts/setup.sh`, `config.example.toml`: collect and document `planning.review_link`.
+- `README.md`: list the spec-link command.
 - `raw/articles/ai-native-sdlc-playbook/source.md`: capture the article passages relied on.
 - `wiki/sources/ai-native-sdlc-playbook.md`: summarize the article's design-review recommendation and its relevance here.
 - `wiki/concepts/workhorse-spec.md`, `wiki/index.md`, `wiki/log.md`: update the decision, catalog it, and record the change.
@@ -62,4 +63,4 @@ No departures.
 - [ ] T005 [AC5] Add the `spec-review` action and its controls in `scripts/log-action.sh`, and record each approved spec's commit SHA in the decision event and run record.
 - [ ] T006 [AC6] Add the `planning` stage and self-test controls in `scripts/stage.sh`, and cover its elapsed time in `scripts/run-times.sh`.
 - [ ] T007 [AC7] Capture the relevant Anthropic playbook passages in `raw/articles/ai-native-sdlc-playbook/source.md`; add the source page and revise `wiki/concepts/workhorse-spec.md`, `wiki/index.md`, `wiki/sources/index.md`, and `wiki/log.md` while keeping the standing `claimed`.
-- [ ] T008 [AC8] Add `planning.review_link` to `config.example.toml` and `scripts/setup.sh`, implement path substitution in `scripts/spec-review-link.sh`, and document link rendering in `skills/postmaster/postmaster.md` and `wiki/concepts/run-config.md`, including a fresh link after revisions.
+- [ ] T008 [AC8] Add `planning.review_link` to `config.example.toml` and `scripts/setup.sh`, implement path substitution in `scripts/spec-review-link.sh`, and document link rendering in `README.md`, `skills/postmaster/postmaster.md`, and `wiki/concepts/run-config.md`, including a fresh link after revisions.
