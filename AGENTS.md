@@ -34,7 +34,9 @@ the same way, and merges are merges. There is no special mode.
 
 **A change to the coachman contract merges only after a fixture run scores clean**: a run
 dispatched from the change's branch against a repository made by `scripts/fixture.sh new`, and
-scored by `scripts/fixture.sh score` on the same branch. That rule is about the change's
+scored by `scripts/fixture.sh score` on the same branch. What the contract is is defined in one
+place, `skills/postmaster/contract.md`; `scripts/contract.sh` says whether a change touches it.
+That rule is about the change's
 quality, not about the runs in flight. [Why](wiki/concepts/fixture-runs.md).
 
 ## When a session opens in this repo, do this

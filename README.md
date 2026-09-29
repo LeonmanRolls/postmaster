@@ -106,6 +106,7 @@ scripts/plane.sh create|edit|read|state|comment|list …             # Plane wor
 scripts/local.sh <repo> store|create|edit|read|title|state|comment|list # tickets in the repo's git directory
 scripts/tracker-kind.sh <repo>                                    # the tracker kind a repo uses: local when its store exists
 scripts/ticket-check.sh <repo> <id> | --body <file> | --splice …   # a ticket's shape; --splice writes approved parts in
+scripts/contract.sh <base> <head> | --parts                       # whether a change touches the coachman contract
 scripts/turnpikes.sh --list | resolve <text> | legs <dispatch>     # the turnpikes, and a run's legs
 scripts/style-findings.sh list|count|gate|check <dispatch>         # a run's style findings, what its gate runs, the sort
 scripts/launch.sh form|launch|review|resume|skill <lane-or-role> … # any lane or role, one command

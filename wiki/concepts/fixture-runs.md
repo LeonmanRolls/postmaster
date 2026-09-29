@@ -99,4 +99,7 @@ the trust prompt. Claude Code 2.1.283, started in a fresh folder inside a truste
 nothing for a plain folder and asked for a git repository. Controls: it asked in a folder with no
 trusted parent, and not in the trusted folder itself. A copy is a git repository, so a postmaster
 started in one waits for the user to answer the prompt, once per copy. `AGENTS.md` holds a change to the coachman contract back
-from merging until a fixture run dispatched from its branch scores clean.
+from merging until a fixture run dispatched from its branch scores clean. What the contract is
+is defined in `skills/postmaster/contract.md`, and `scripts/contract.sh` says whether a change
+touches it — so a fixture run is required when the change does, and not for a skill change that
+leaves the contract alone.

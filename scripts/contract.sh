@@ -31,24 +31,26 @@ import difflib, pathlib, re, subprocess, sys
 root, base, head = pathlib.Path(sys.argv[1]), sys.argv[2], sys.argv[3]
 MARK = re.compile(r"^\s*(?:#\s*)?<!--\s*(/?)contract:part=([a-z][a-z0-9-]*)\s*-->\s*$")
 DEFINITION = "skills/postmaster/contract.md"
+SELF = "scripts/contract.sh"   # the detector carries fixture markers; it is not the contract
 
 def git(*a):
-    r = subprocess.run(["git", "-C", str(root), *a], capture_output=True, text=True)
+    r = subprocess.run(["git", "-C", str(root), *a], capture_output=True)
     return r.stdout if r.returncode == 0 else None
 
 def files(rev):
     out = git("ls-tree", "-r", "--name-only", rev)
     if out is None:
         print("contract: cannot read revision %s" % rev, file=sys.stderr); sys.exit(2)
-    return [ln for ln in out.splitlines() if ln]
+    return [ln for ln in out.decode("utf-8", "replace").splitlines() if ln and ln != SELF]
 
 def regions(rev):
     """(part -> [(file, start, end, [(lineno, text), ...])], lines of contract.md outside any region)"""
     found, outside = {}, []
     for f in files(rev):
-        text = git("show", "%s:%s" % (rev, f))
-        if text is None:
-            continue
+        raw = git("show", "%s:%s" % (rev, f))
+        if raw is None or b"\0" in raw[:8000]:
+            continue                              # binary, or unreadable
+        text = raw.decode("utf-8", "replace")
         open_part, start, body = None, None, []
         for n, line in enumerate(text.splitlines(), 1):
             m = MARK.match(line)
@@ -134,9 +136,10 @@ case ${1:-} in
 import pathlib, re, sys
 root = pathlib.Path(sys.argv[1])
 MARK = re.compile(r"^\s*(?:#\s*)?<!--\s*contract:part=([a-z][a-z0-9-]*)\s*-->\s*$")
+SELF = "scripts/contract.sh"
 found = set()
 for p in root.rglob("*"):
-    if not p.is_file() or ".git" in p.parts:
+    if not p.is_file() or ".git" in p.parts or str(p.relative_to(root)) == SELF:
         continue
     try:
         text = p.read_text(encoding="utf-8")
@@ -392,20 +395,20 @@ for part in $parts; do
 import pathlib, re, sys
 part = sys.argv[1]
 MARK = re.compile(r"^\s*(?:#\s*)?<!--\s*contract:part=%s\s*-->\s*$" % re.escape(part))
-open_m = re.compile(r"^\s*(?:#\s*)?<!--\s*contract:part=%s\s*-->\s*$" % re.escape(part))
 close_m = re.compile(r"^\s*(?:#\s*)?<!--\s*/contract:part=%s\s*-->\s*$" % re.escape(part))
 root = pathlib.Path(".")
 count = 0
 for p in list(root.rglob("*")):
     if not p.is_file() or ".git" in p.parts:
         continue
-    if str(p) == "skills/postmaster/contract.md":
+    rel = str(p)
+    if rel in ("skills/postmaster/contract.md", "scripts/contract.sh"):
         continue
     try:
         text = p.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
         continue
-    if any(open_m.match(ln) for ln in text.splitlines()):
+    if any(MARK.match(ln) for ln in text.splitlines()):
         count += 1
 print(count)
 PY

@@ -149,7 +149,10 @@ For the next ticket in order, when the run ceiling (`team.max_runs`) has room:
    overridden only where the user said so for this run, the dispatch path and the run's pinned
    tool — `<tool>/scripts/run-meta.sh path <dispatch>`, the checkout step 4 cut, which the
    template names as `tool:` and the coachman uses as its `<tool>`. The
-   config here is the one in `run.json`. Then
+   config here is the one in `run.json`. Record `fixture run:` on the waybill from
+   `<tool>/scripts/contract.sh <BASE> <HEAD of the synthesis worktree>` run in the target
+   repository: exit 1 is `yes`, exit 0 is `no`. For a fresh cut at BASE that is `no`, because
+   the change does not exist yet; the binding answer is Stage F's, on the final branch. Then
    `<tool>/scripts/turnpikes.sh legs <dispatch> --expect '<that turnpikes: line>'` exits 0 and
    prints the legs step 2 checked, before anything is launched.
 7. **Move the ticket to in-progress** through the tracker adapter and log `ticket-state`. The
@@ -318,15 +321,29 @@ On `.card-ready`, read `<dispatch>/card.md` and `<dispatch>/handoff-3.md`:
    `<tool>/scripts/verify.sh results <dispatch> <synthesis-wt>` gives a result for every check at
    the synthesis HEAD, and the card gives each one that did not pass as it is; the Style
    residue's count is what `<tool>/scripts/style-findings.sh count <dispatch>` prints.
+   **The fixture condition is the script's, never judgment:** `<tool>/scripts/contract.sh
+   <BASE> <final branch HEAD>` run in the target repository, logged as a `note`. Exit 1
+   (yes) means a fixture run from that branch is the merge condition — a run dispatched from
+   the change's branch against a repository made by `<tool>/scripts/fixture.sh new`, scored by
+   `<tool>/scripts/fixture.sh score` on the same branch, which must score clean before the
+   merge word is granted. Exit 0 (no) means no fixture run is required. Write the answer to
+   the waybill's `fixture run:` field so the run's record carries the binding standing.
 2. **Grant or withhold.** Every word is delivered by resuming leg 3 (Stage C, step 5), and
    `.card-ready` is removed before it is; the coachman touches it afresh when the card changes.
-   `MERGE_AUTHORITY: postmaster` and every check above holds: deliver "MERGE GRANTED" and log
-   `merge` with `granted`. Any check fails: deliver the failure as a ruling and log `merge` with
+   `MERGE_AUTHORITY: postmaster` and every check above holds, and when step 1 named a fixture
+   run its score is clean: deliver "MERGE GRANTED" and log
+   `merge` with `granted`. Any check fails, or a required fixture run has not scored clean:
+   deliver the failure as a ruling and log `merge` with
    `withheld` and the reason; the leg addresses it and raises the card again.
    `MERGE_AUTHORITY: user`: put the card, the review link and your verification in front of the
    user, write what you asked them to the run's `.waiting-on-user`, and wait; when their word
    comes, remove `.waiting-on-user` and deliver the word verbatim.
-3. **Never merge yourself.** The coachman merges on the word; you only say it.
+3. **When main has been merged into a branch that already has a clean fixture run,** decide
+   the repeat from what that merge brought in, never from judgment: `<tool>/scripts/contract.sh
+   <merge>^1 <merge>` in the target repository. Exit 1 (yes) repeats the fixture run from the
+   final branch; exit 0 (no) lets the clean score stand. Log a `note` with the answer and
+   which way it went.
+4. **Never merge yourself.** The coachman merges on the word; you only say it.
 
 ## Stage G: after the merge
 
