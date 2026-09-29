@@ -370,6 +370,39 @@ whether to trust it; headless `claude -p` does not ask. The first spawn in a new
 there, and the user answers it in the pane. A row not checked here takes its bypass flag from
 the headless form above; run it once before relying on it.
 
+## Keeping the watcher running
+
+Stage D keeps one `<tool>/scripts/runs-watch.sh <runs>` going per project, acts on the runs it
+names, and starts it again at once. The watcher is a long wait that must outlive a turn and must
+not hold the conversation, so it is started the way any launch is, through
+`<tool>/scripts/host.sh run`, in a session of its own outside the harness's own task list:
+
+```sh
+<tool>/scripts/host.sh run watch <runs> \
+    --out <runs>/postmaster/watch.out --err <runs>/postmaster/watch.err \
+    --marker <runs>/postmaster/.watch-exited \
+    -- <tool>/scripts/runs-watch.sh <runs>
+```
+
+`host.sh run` returns as soon as the watcher has started, so the conversation continues while
+it waits. When `.watch-exited` lands, `watch.out` holds the table and the `needs` lines: act on
+them, then start the watcher again before anything else. Each harness can run that form; what
+each must not use instead, and what to do where nothing can be kept in the background, is here.
+
+| harness | never keep the watcher in | where it cannot run in the background at all |
+|---|---|---|
+| claude | its own background tasks: those are reaped at about 29 minutes and when memory runs short | run `<tool>/scripts/runs-watch.sh <runs> --timeout <postmaster.poll_seconds>` as the poll in the conversation; it returns with the table every interval, and is started again at once |
+| codex | a shell `&` left in the harness's process tree | the same foreground poll |
+| grok | a shell `&` left in the harness's process tree | the same foreground poll |
+| agy | a shell `&` left in the harness's process tree | the same foreground poll |
+| pi | a shell `&` left in the harness's process tree | the same foreground poll |
+| muse | a shell `&` left in the harness's process tree | the same foreground poll |
+| mimo | its own background tasks, for the reason claude's are unsafe | the same foreground poll |
+
+The foreground poll is the only form that blocks the conversation, and only for one interval.
+Never leave the watcher in a harness's own background-task list: that is how one was killed on
+2026-09-28 when memory ran short, and a killed watcher is a stalled run nobody notices.
+
 ## The pane view
 
 `<tool>/scripts/view-stream.sh` is the other executable half of this file: it renders an events

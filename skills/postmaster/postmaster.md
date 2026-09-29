@@ -199,13 +199,19 @@ live one. Below, `<p>` is the leg before leg `<n>` in that list.
 
 ## Stage D: supervise
 
-Poll every `postmaster.poll_seconds` (default 120) with one command per project:
+Keep `<tool>/scripts/runs-watch.sh <runs>` running in the background, one per project
+(`harnesses.md`, Keeping the watcher running). It looks every `postmaster.poll_seconds`
+(default 120) until a run needs you, then prints `<tool>/scripts/runs-status.sh`'s table, names
+each run that needs you with its `NEXT`, and exits 0. Act on what it names, run by run, and log
+every action; then start it again at once. A watcher that is not running is a run nobody
+notices.
 
-```sh
-<tool>/scripts/runs-status.sh <runs>
-```
+**Hold a run** by writing its ticket to `<runs>/postmaster/held`, one ticket per line: a held
+run never needs you. **Release it** by removing its line. Hold a run only while you mean to
+leave it alone — a question already put to the user, a deliberate pause — never to stop a wake
+you have not acted on.
 
-Act on the `NEXT` column, run by run, and log every action:
+Each `NEXT` names the act:
 
 - **USER:** the run waits on the user, and its `.waiting-on-user` holds the question (Stage E
   step 3, Stage F step 2). Put the question to the user again if you have not in this session;
