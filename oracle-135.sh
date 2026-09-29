@@ -12,6 +12,13 @@
 # only the report form. A match on a value no lane could have listed proves
 # shape recognition (AC2).
 #
+# Extended 2026-09-29 for the absorbed #21 criteria (5, 6, 7, 10, 12): the
+# raw/ promotion gate, the .postmaster/ and added-raw/ tree checks, the wiki
+# lint for paths, hostnames and quoted raw text, the README backstop wording,
+# and no-new-dependency with streaming. Plus two gaps the widened body names
+# that the first leg missed: .env-style assignments (AC1) and a reason on
+# every allowlist entry (AC4).
+#
 # Every fixture value is fabricated here and assembled at runtime from short
 # fragments, so this file's own committed lines carry no suspect shape, and
 # scanning the ticket branch stays clean. The fixtures avoid the usual
@@ -27,8 +34,14 @@ ROOT=$PWD
 WORK=$(mktemp -d) || exit 1
 trap 'rm -r -- "$WORK" </dev/null 2>/dev/null' EXIT
 SCRIPT=scripts/scrub-check.sh
+PROMOTE=scripts/raw-promote.sh
+TREE=scripts/tree-check.sh
+LINT=scripts/wiki-lint.sh
 [ -f "$SCRIPT" ] || { echo "oracle: run from the repo root: $SCRIPT not found" >&2; exit 1; }
 [ -x "$SCRIPT" ] || { echo "oracle: $SCRIPT is not executable" >&2; exit 1; }
+need() {  # need <file> <name>: the probe's script must exist and run
+  [ -x "$ROOT/$1" ] || { bad "$2" "$1 missing or not executable"; return 1; }
+}
 
 BASE_ARG=${1:-}
 if [ -z "$BASE_ARG" ]; then
@@ -97,6 +110,16 @@ INSTR=$(printf '%s%s\n%s%s\n%s%s\n%s%s\n%s%s\n%s%s\n' \
   "$IN_1A" "$IN_1B" "$IN_2A" "$IN_2B" "$IN_3A" "$IN_3B" \
   "$IN_4A" "$IN_4B" "$IN_5A" "$IN_5B" "$IN_6A" "$IN_6B")
 INSTR_TELL="${IN_3A}${IN_3B}"
+
+D_N1='SESSION'; D_N2='SECRET'
+DOTENV_NAME="${D_N1}${US}${D_N2}"
+D_V1='relay-413-'; D_V2='quiet'
+DOTENV_VALUE="${D_V1}${D_V2}"
+DOTENV_LINE="${DOTENV_NAME}=${DOTENV_VALUE}"
+P_N1='TOKEN'; P_N2='TYPE'; P_V='Bear'; P_W='er'
+POINTER_LINE="${P_N1}${US}${P_N2}=${P_V}${P_W}"
+
+QUOTE_LINE='The staging relay counted four hundred thirteen spans on the quiet Tuesday run.'
 
 GIT_ID_NAME='oracle-135'
 # Identity by environment, so no committed line holds a key-like token.
@@ -271,12 +294,25 @@ if [ -n "${repo:-}" ]; then
   [ "$code" -eq 1 ] \
     && ok "allowlist-not-yet-allowed-flags" \
     || bad "allowlist-not-yet-allowed-flags" "exit $code, want 1"
-  commit_file "$repo" scripts/scrub-check.allow "$SUSPECT_EMAIL" >/dev/null
+  commit_file "$repo" scripts/scrub-check.allow "$(printf '%s\t%s' "$SUSPECT_EMAIL" 'oracle ruling: staging relay address, fine to publish')" >/dev/null
   head=$(git -C "$repo" rev-parse HEAD)
   out=$(scan "$repo" "$base" "$head" 2>/dev/null); code=$?
   { [ "$code" -eq 0 ] && [ -z "$out" ]; } \
     && ok "allowlist-allowed-silent" \
     || bad "allowlist-allowed-silent" "exit $code"
+fi
+
+# --- AC4: an allowlist entry without a reason is refused, not honoured --------
+repo=$(new_repo) || bad "allowlist-reason-required" "scratch repo failed"
+if [ -n "${repo:-}" ]; then
+  base=$(git -C "$repo" rev-parse HEAD)
+  commit_file "$repo" notes/contact.txt "$SUSPECT_EMAIL" >/dev/null
+  commit_file "$repo" scripts/scrub-check.allow "$SUSPECT_EMAIL" >/dev/null
+  head=$(git -C "$repo" rev-parse HEAD)
+  out=$(scan "$repo" "$base" "$head" 2>/dev/null); code=$?
+  [ "$code" -eq 2 ] \
+    && ok "allowlist-reason-required" \
+    || bad "allowlist-reason-required" "exit $code, want 2"
 fi
 
 # --- history: the past reports, the clean past stays silent --------------------
@@ -360,6 +396,239 @@ fi
 # --- clean controls: prose mentions and no-reply addresses pass -------------------
 clean_probe "prose-key-mention-passes" docs/fields.txt "The ${KEY_A} key is listed in the API reference."
 clean_probe "noreply-passes" notes/contact.txt "Reach the relay at $NOREPLY_EMAIL for pings."
+
+# --- AC1: .env-style assignments of anything key-like --------------------------
+flag_probe "flag-dotenv" deploy/app.env "$DOTENV_LINE" "$DOTENV_VALUE"
+clean_probe "dotenv-pointer-passes" deploy/app.env "$POINTER_LINE"
+
+# --- AC5: the raw/ promotion gate ---------------------------------------------
+promote() {  # promote <repo> <args...>: run the worktree's promote script there
+  ( cd "$1" && shift && bash "$ROOT/$PROMOTE" "$@" )
+}
+if need "$PROMOTE" "promote-clean-completes"; then
+repo=$(new_repo) || bad "promote-clean-completes" "scratch repo failed"
+if [ -n "${repo:-}" ]; then
+  printf 'The relay ran its checks and stayed green.\n' > "$WORK/clean-src.md"
+  out=$(promote "$repo" "$WORK/clean-src.md" raw/trials/oracle-413/notes.md 2>"$repo/stderr.txt"); code=$?
+  err=$(cat "$repo/stderr.txt")
+  if [ "$code" -ne 0 ]; then bad "promote-clean-completes" "exit $code, want 0"
+  elif [ ! -f "$repo/raw/trials/oracle-413/notes.md" ]; then bad "promote-clean-completes" "copy missing"
+  else ok "promote-clean-completes"; fi
+fi
+fi
+
+if need "$PROMOTE" "promote-dirty-refused"; then
+repo=$(new_repo) || bad "promote-dirty-refused" "scratch repo failed"
+if [ -n "${repo:-}" ]; then
+  printf 'Reach the relay at %s for pings.\n' "$SUSPECT_EMAIL" > "$WORK/dirty-src.md"
+  out=$(promote "$repo" "$WORK/dirty-src.md" raw/trials/oracle-413/notes.md 2>"$repo/stderr.txt"); code=$?
+  err=$(cat "$repo/stderr.txt")
+  if [ "$code" -eq 0 ]; then bad "promote-dirty-refused" "a tripped copy completed"
+  elif [ -e "$repo/raw/trials/oracle-413/notes.md" ]; then bad "promote-dirty-refused" "refused copy left a file"
+  elif grep -qF -- "$SUSPECT_EMAIL" <<<"$out$err"; then bad "promote-dirty-refused" "value printed"
+  else ok "promote-dirty-refused"; fi
+fi
+fi
+
+if need "$PROMOTE" "promote-ruled-proceeds"; then
+repo=$(new_repo) || bad "promote-ruled-proceeds" "scratch repo failed"
+if [ -n "${repo:-}" ]; then
+  mkdir -p "$repo/wiki"
+  printf 'Reach the relay at %s for pings.\n' "$SUSPECT_EMAIL" > "$WORK/dirty-src.md"
+  out=$(promote "$repo" --ruled 'oracle ruling: staging relay address, fine to publish' \
+    "$WORK/dirty-src.md" raw/trials/oracle-413/notes.md 2>"$repo/stderr.txt"); code=$?
+  err=$(cat "$repo/stderr.txt")
+  if [ "$code" -ne 0 ]; then bad "promote-ruled-proceeds" "exit $code, want 0"
+  elif [ ! -f "$repo/raw/trials/oracle-413/notes.md" ]; then bad "promote-ruled-proceeds" "copy missing"
+  elif ! grep -qF 'oracle ruling: staging relay address, fine to publish' "$repo/wiki/log.md" 2>/dev/null; then
+    bad "promote-ruled-proceeds" "no ruling line in wiki/log.md"
+  elif grep -qF -- "$SUSPECT_EMAIL" "$repo/wiki/log.md" 2>/dev/null; then
+    bad "promote-ruled-proceeds" "value in wiki/log.md"
+  elif grep -qF -- "$SUSPECT_EMAIL" <<<"$out$err"; then bad "promote-ruled-proceeds" "value printed"
+  else ok "promote-ruled-proceeds"; fi
+fi
+fi
+
+if need "$PROMOTE" "promote-outside-raw-refused"; then
+repo=$(new_repo) || bad "promote-outside-raw-refused" "scratch repo failed"
+if [ -n "${repo:-}" ]; then
+  printf 'clean\n' > "$WORK/clean-src.md"
+  out=$(promote "$repo" "$WORK/clean-src.md" notes/elsewhere.md 2>/dev/null); code=$?
+  if [ "$code" -eq 0 ]; then bad "promote-outside-raw-refused" "a copy outside raw/ completed"
+  elif [ -e "$repo/notes/elsewhere.md" ]; then bad "promote-outside-raw-refused" "refused copy left a file"
+  else ok "promote-outside-raw-refused"; fi
+fi
+fi
+
+# --- AC6: the tree check ------------------------------------------------------
+treecheck() {  # treecheck <repo> <base> <head>: run the worktree's tree check
+  ( cd "$1" && bash "$ROOT/$TREE" "$2" "$3" )
+}
+if need "$TREE" "tree-postmaster-staged-fails"; then
+repo=$(new_repo) || bad "tree-postmaster-staged-fails" "scratch repo failed"
+if [ -n "${repo:-}" ]; then
+  head=$(git -C "$repo" rev-parse HEAD)
+  mkdir -p "$repo/.postmaster/verify"
+  printf 'run record\n' > "$repo/.postmaster/verify/checks.json"
+  git -C "$repo" add .postmaster/verify/checks.json
+  out=$(treecheck "$repo" main "$head" 2>"$repo/stderr.txt"); code=$?
+  err=$(cat "$repo/stderr.txt")
+  if [ "$code" -ne 1 ]; then bad "tree-postmaster-staged-fails" "exit $code, want 1"
+  elif ! grep -qF '.postmaster/verify/checks.json' <<<"$out"; then
+    bad "tree-postmaster-staged-fails" "staged path not named"
+  else ok "tree-postmaster-staged-fails"; fi
+fi
+fi
+
+if need "$TREE" "tree-postmaster-committed-fails"; then
+repo=$(new_repo) || bad "tree-postmaster-committed-fails" "scratch repo failed"
+if [ -n "${repo:-}" ]; then
+  base=$(git -C "$repo" rev-parse HEAD)
+  commit_file "$repo" .postmaster/runs/stale.json '{"run": "stale"}' >/dev/null
+  head=$(git -C "$repo" rev-parse HEAD)
+  out=$(treecheck "$repo" "$base" "$head" 2>/dev/null); code=$?
+  if [ "$code" -ne 1 ]; then bad "tree-postmaster-committed-fails" "exit $code, want 1"
+  elif ! grep -qF '.postmaster/runs/stale.json' <<<"$out"; then
+    bad "tree-postmaster-committed-fails" "committed path not named"
+  else ok "tree-postmaster-committed-fails"; fi
+fi
+fi
+
+if need "$TREE" "tree-project-toml-exempt"; then
+repo=$(new_repo) || bad "tree-project-toml-exempt" "scratch repo failed"
+if [ -n "${repo:-}" ]; then
+  base=$(git -C "$repo" rev-parse HEAD)
+  commit_file "$repo" .postmaster/project.toml '[checks.example]' >/dev/null
+  head=$(git -C "$repo" rev-parse HEAD)
+  out=$(treecheck "$repo" "$base" "$head" 2>/dev/null); code=$?
+  { [ "$code" -eq 0 ] && [ -z "$out" ]; } \
+    && ok "tree-project-toml-exempt" \
+    || bad "tree-project-toml-exempt" "exit $code"
+fi
+fi
+
+if need "$TREE" "tree-raw-added-suspect-fails"; then
+repo=$(new_repo) || bad "tree-raw-added-suspect-fails" "scratch repo failed"
+if [ -n "${repo:-}" ]; then
+  base=$(git -C "$repo" rev-parse HEAD)
+  commit_file "$repo" raw/trials/oracle-413/notes.md "Reach the relay at $SUSPECT_EMAIL for pings." >/dev/null
+  head=$(git -C "$repo" rev-parse HEAD)
+  out=$(treecheck "$repo" "$base" "$head" 2>"$repo/stderr.txt"); code=$?
+  err=$(cat "$repo/stderr.txt")
+  if [ "$code" -ne 1 ]; then bad "tree-raw-added-suspect-fails" "exit $code, want 1"
+  elif ! grep -qF 'raw/trials/oracle-413/notes.md:1:' <<<"$out"; then
+    bad "tree-raw-added-suspect-fails" "added file not named"
+  elif grep -qF -- "$SUSPECT_EMAIL" <<<"$out$err"; then bad "tree-raw-added-suspect-fails" "value printed"
+  else ok "tree-raw-added-suspect-fails"; fi
+fi
+fi
+
+if need "$TREE" "tree-raw-added-clean-passes"; then
+repo=$(new_repo) || bad "tree-raw-added-clean-passes" "scratch repo failed"
+if [ -n "${repo:-}" ]; then
+  base=$(git -C "$repo" rev-parse HEAD)
+  commit_file "$repo" raw/trials/oracle-413/notes.md 'The relay ran its checks and stayed green.' >/dev/null
+  head=$(git -C "$repo" rev-parse HEAD)
+  out=$(treecheck "$repo" "$base" "$head" 2>/dev/null); code=$?
+  { [ "$code" -eq 0 ] && [ -z "$out" ]; } \
+    && ok "tree-raw-added-clean-passes" \
+    || bad "tree-raw-added-clean-passes" "exit $code"
+fi
+fi
+
+# --- AC7: the wiki lint for paths, hostnames and quoted raw text --------------
+wiki_repo() {  # a scratch repo with a minimal well-formed wiki
+  local d
+  d=$(mktemp -d -p "$WORK") || return 1
+  ( cd "$d" && g init -q -b main . && mkdir -p wiki/concepts raw \
+    && printf -- '---\ntitle: index\ntype: index\nupdated: 2026-01-01\n---\n\n- [p](concepts/p.md)\n' > wiki/index.md \
+    && printf -- '---\ntitle: p\ntype: concept\nstanding: claimed\nsources: []\nupdated: 2026-01-01\n---\n\nBody.\n' > wiki/concepts/p.md \
+    && g add -A && g commit -qm base ) || return 1
+  printf '%s' "$d"
+}
+if need "$LINT" "wiki-private-path-fails"; then
+repo=$(wiki_repo) || bad "wiki-private-path-fails" "scratch repo failed"
+if [ -n "${repo:-}" ]; then
+  printf 'See %s for the log.\n' "$SUSPECT_HOMEPATH" >> "$repo/wiki/concepts/p.md"
+  out=$(bash "$ROOT/$LINT" "$repo" 2>"$repo/stderr.txt"); code=$?
+  err=$(cat "$repo/stderr.txt")
+  if [ "$code" -ne 1 ]; then bad "wiki-private-path-fails" "exit $code, want 1"
+  elif ! grep -qF 'private-path' <<<"$out"; then bad "wiki-private-path-fails" "no private-path fault"
+  elif grep -qF -- "$SUSPECT_HOMEPATH" <<<"$out$err"; then bad "wiki-private-path-fails" "value printed"
+  else ok "wiki-private-path-fails"; fi
+fi
+fi
+
+if need "$LINT" "wiki-private-host-fails"; then
+repo=$(wiki_repo) || bad "wiki-private-host-fails" "scratch repo failed"
+if [ -n "${repo:-}" ]; then
+  printf 'See %s for the dashboard.\n' "$SUSPECT_URL" >> "$repo/wiki/concepts/p.md"
+  out=$(bash "$ROOT/$LINT" "$repo" 2>"$repo/stderr.txt"); code=$?
+  err=$(cat "$repo/stderr.txt")
+  if [ "$code" -ne 1 ]; then bad "wiki-private-host-fails" "exit $code, want 1"
+  elif ! grep -qF 'private-host' <<<"$out"; then bad "wiki-private-host-fails" "no private-host fault"
+  elif grep -qF -- "$SUSPECT_HOST" <<<"$out$err"; then bad "wiki-private-host-fails" "value printed"
+  else ok "wiki-private-host-fails"; fi
+fi
+fi
+
+if need "$LINT" "wiki-quoted-raw-fails"; then
+repo=$(wiki_repo) || bad "wiki-quoted-raw-fails" "scratch repo failed"
+if [ -n "${repo:-}" ]; then
+  printf '%s\n' "$QUOTE_LINE" > "$repo/raw/evidence.txt"
+  printf '%s\n' "$QUOTE_LINE" >> "$repo/wiki/concepts/p.md"
+  out=$(bash "$ROOT/$LINT" "$repo" 2>/dev/null); code=$?
+  if [ "$code" -ne 1 ]; then bad "wiki-quoted-raw-fails" "exit $code, want 1"
+  elif ! grep -qF 'repeats raw/' <<<"$out"; then bad "wiki-quoted-raw-fails" "no quoted-raw fault"
+  else ok "wiki-quoted-raw-fails"; fi
+fi
+fi
+
+if need "$LINT" "wiki-worktree-passes"; then
+out=$(bash "$ROOT/$LINT" 2>/dev/null); code=$?
+{ [ "$code" -eq 0 ] && [ -z "$out" ]; } \
+  && ok "wiki-worktree-passes" \
+  || bad "wiki-worktree-passes" "the branch's own wiki fails its lint"
+fi
+
+# --- AC10: the README backstop wording ----------------------------------------
+if grep -qi 'backstop' raw/README.md 2>/dev/null && grep -qi 'not a proof' raw/README.md 2>/dev/null; then
+  ok "readme-backstop-not-proof"
+else
+  bad "readme-backstop-not-proof" "raw/README.md does not say backstop, not proof"
+fi
+
+# --- AC12: no new dependency, large files streamed -----------------------------
+imports=$( { grep -hE '^import ' scripts/scrub-check.sh scripts/wiki-lint.sh 2>/dev/null | sed 's/^import //'; \
+  grep -hE '^from ' scripts/scrub-check.sh scripts/wiki-lint.sh 2>/dev/null | sed -E 's/^from ([A-Za-z0-9_]+).*/\1/'; } \
+  | tr ',' '\n' | sed -E 's/^ *([A-Za-z0-9_]+).*/\1/' | sort -u | tr '\n' ' ')
+allowed='ast ipaddress os pathlib re subprocess sys tempfile '
+leak=0
+for mod in $imports; do
+  case " $allowed" in *" $mod "*) ;; *) leak=1;; esac
+done
+if [ -f scripts/raw-promote.sh ] && [ -f scripts/tree-check.sh ] \
+    && [ "$leak" -eq 0 ] && ! grep -q 'python3' scripts/raw-promote.sh scripts/tree-check.sh 2>/dev/null; then
+  ok "no-new-dependency"
+else
+  bad "no-new-dependency" "imports beyond the gate's: $imports"
+fi
+
+if ! ( ulimit -v 262144 ) 2>/dev/null; then
+  bad "streams-large-file" "ulimit -v unavailable: no streaming proof"
+else
+repo=$(new_repo) || bad "streams-large-file" "scratch repo failed"
+if [ -n "${repo:-}" ]; then
+  python3 -c "open('$repo/big.txt','w').write(('clean relay line 413 pad ' * 100 + '\n') * 70000)"
+  printf 'Reach the relay at %s for pings.\n' "$SUSPECT_EMAIL" >> "$repo/big.txt"
+  out=$( ( cd "$repo" && ulimit -v 262144 && bash "$ROOT/$SCRIPT" --files big.txt ) 2>"$repo/stderr.txt"); code=$?
+  err=$(cat "$repo/stderr.txt")
+  if [ "$code" -ne 1 ]; then bad "streams-large-file" "exit $code, want 1"
+  elif ! grep -qF 'big.txt:70001:' <<<"$out"; then bad "streams-large-file" "tail suspect not named"
+  elif grep -qF -- "$SUSPECT_EMAIL" <<<"$out$err"; then bad "streams-large-file" "value printed"
+  else ok "streams-large-file"; fi
+fi
+fi
 
 echo "oracle-135: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
