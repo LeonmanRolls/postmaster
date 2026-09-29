@@ -12,9 +12,10 @@ runbooks correct for every harness and every host.
 
 **`<tool>/scripts/launch.sh` is the executable form of this file.** `launch.sh form <name>` prints the
 exact launch and resume commands for a configured lane or role; `launch` and `resume` run them;
-`skill` prints the prompt that invokes a harness's own review skill (Own review skills, below).
-The script and this file change together, and a form the script refuses (agy resume) is a form
-this file has not recorded yet.
+`review` runs a lane's bug-review form at the harness's top level on the named base-to-HEAD
+range; `skill` prints the prompt that invokes a harness's own security review skill (Own review
+skills, below). The script and this file change together, and a form the script refuses (agy
+resume or a bug-review form the harness does not have) is a form this file has not recorded.
 
 Every lane runs unrestricted. Its containment is its worktree (`coachman.md`, Lane capability),
 so the bypass form below is passed on every launch AND every resume. The interactive postmaster
@@ -321,10 +322,16 @@ cd <wt> && env XDG_DATA_HOME=<harness-data>/mimo/<key> MIMOCODE_DISABLE_CLAUDE_I
 
 ## Own review skills
 
-Under the security lens, a lane whose harness has its own security review skill runs it in place
-of postmaster's brief (`coachman.md`, Security lens). `<tool>/scripts/launch.sh skill <lane>
-security-review` prints the prompt that invokes it, and exits 3 when the lane's harness has none.
-The prompt goes in the lane's prompt file, and the launch is the ordinary launch form.
+Under a review lens, a lane whose harness has its own review skill for that lens runs it in
+place of postmaster's brief. Under the security lens that is `security-review`
+(`coachman.md`, Security lens): `<tool>/scripts/launch.sh skill <lane> security-review` prints
+the prompt that invokes it, and exits 3 when the lane's harness has none. The prompt goes in
+the lane's prompt file and the launch is the ordinary launch form. Under the bug lens the form
+is run by `<tool>/scripts/launch.sh review`, below, and no brief is written. A lane whose
+harness has no code-review skill does not review for bugs at all: unlike the security lens
+there is no fallback to the brief.
+
+### Security review skill
 
 | harness | security review skill | source |
 |---|---|---|
@@ -335,7 +342,8 @@ The prompt goes in the lane's prompt file, and the launch is the ordinary launch
 | grok | none: its slash commands have no review command; skills, plugins and workflows could add one | its documentation (docs.x.ai, Modes and Commands), 2026-09 |
 | agy | none: its slash commands have no security review; Google's security extension (`/security:analyze`) is for Gemini CLI only | its documentation (antigravity.google, CLI Reference), 2026-09 |
 
-MiMo Code has none either: its `/review` is a general code review (its commands, 0.1.15). OpenAI's Codex Security is a CLI of its own
+MiMo Code has none either: its `/review` is a general code review (its commands, 0.1.15), covered
+under Code review skill below. OpenAI's Codex Security is a CLI of its own
 (`@openai/codex-security`), not a codex skill, and would need an adapter of its own.
 
 **claude's `/security-review`** reviews the change from the merge base of `origin/HEAD` and
@@ -349,6 +357,76 @@ back to BASE. When it verifies its findings
 in background agents, a headless run ends with one result line per turn, and an earlier one can
 say the agents are still running. Its report is the last result line, which is where the harvest
 reads a lane's final message.
+
+### Code review skill
+
+The bug lens runs each harness's own code-review skill on the run's change, never postmaster's
+brief. Every form below names that change explicitly: a skill left to choose its own diff
+cannot be trusted in a review scratch, which is a worktree detached at the snapshot with no
+upstream. `<tool>/scripts/launch.sh review <lane> <cwd> <base>` runs the form on the change
+from `<base>` to the scratch's `HEAD`, and exits 3 for a harness with none. It runs every
+review at its harness's top level and names that level on every launch: `max` for claude and
+codex, and `high` for MiMo Code on MiMo V2.6 Pro, whose variants stop there, whatever effort
+the lane is configured at. `<tool>/scripts/review-forms.sh has <harness>` answers whether a
+harness has one, and is what the scripts ask instead of carrying their own copy of the table.
+
+| harness | code-review skill | source |
+|---|---|---|
+| claude | `/code-review` | a trial, 2.1.283 (`raw/trials/code-review-scope/`) |
+| codex | `codex exec review` | a trial and its help, 0.157.1 (`raw/trials/code-review-scope/`) |
+| mimo | `/review`, `mimo run --command review` | a trial and its commands, 0.1.15 (`raw/trials/code-review-scope/`) |
+| pi | none: its help lists no review command | its help, 0.87.0 |
+| muse | none among its built-in skills | `muse skills list`, 1.4.0 |
+| grok | none: its slash commands have no review command | its documentation (docs.x.ai, Modes and Commands), 2026-09 |
+| agy | none recorded: its CLI reference lists no code-review form | its documentation (antigravity.google, CLI Reference), 2026-09 |
+
+**claude's `/code-review`.** The form is its ordinary launch form with the prompt
+`/code-review <level> <BASE>...HEAD`, level `max`:
+
+| | |
+|---|---|
+| command | the launch form, prompt `/code-review max <BASE>...HEAD` |
+| the change | `<BASE>...HEAD` named in the prompt; the skill's own diff rule is `git diff <target>` then `git diff HEAD` |
+| level | the form always names it. `/code-review` given no level reuses the level the user last typed in an interactive session (read from the 2.1.283 code), so the form never leaves it unset. At `max` its prompt asks for ten finder angles, through subagents where it has them, then verification of each finding and a sweep for gaps |
+| findings | at `low`, one `path:line — …` line per finding in the final message; at `medium`, a findings-tool call inside the forked task (`file`, `line`, `summary`, `short_summary`, `failure_scenario`, `category`; no severity) and the findings again in its final message in a shape of its own; at `xhigh` and `max`, a JSON array in the final message (read from the 2.1.283 binary, not run). A report can end with prose that is no finding |
+| known findings | cannot be given: the argument parser reads the first word as the level and joins the rest into the target (read from the 2.1.283 code), so extra instructions would land in the review target |
+| tool calls | not in the `-p` stream. `/code-review` runs as a forked task; its tool calls, and at `medium` its findings tool call, are in the task's output file under `/tmp/claude-<uid>/`, which the stream's `task_notification` names. The harvest copies that file into the run's logs |
+
+Given no target, at `low` and at `medium`, it looked at the last commit alone first and
+reached the whole change only because the branch list showed the target's default branch
+(`trunk`), not by rule. Named `<BASE>...HEAD`, it ran one `git diff` of that range and
+reported the planted bug at its line, in 2 runs of 2 (trial).
+
+**codex's `codex exec review`.** The form is `codex exec review --base <BASE>` with its launch
+form's flags (`--json`, `-o`, `-m`, `-c model_reasoning_effort="max"`, the bypass flag, and
+`--skip-git-repo-check` in a detached scratch):
+
+| | |
+|---|---|
+| command | `codex exec review --base <BASE> --json -o <last> -m <model> -c model_reasoning_effort="max" --dangerously-bypass-approvals-and-sandbox [--skip-git-repo-check]` |
+| the change | `--base <BASE>`; codex takes a commit and computes the merge base itself, then the review thread runs `git diff` against the base commit |
+| level | `-c model_reasoning_effort="max"` on every launch |
+| findings | the `-o` message is `- [P<n>] <title> — <absolute path>:<start>-<end>` with a body; its session file holds the same findings structured (`review_output`: title, body, priority, confidence, file, line range) |
+| known findings | a custom prompt is an alternative to `--base`; whether the two combine is untested. The form does not pass one |
+| tool calls | in the `--json` stream (`command_execution`); the review thread's model, effort and prompt are in the rollouts under `~/.codex/sessions/YYYY/MM/DD/` |
+
+Given no target it exits 1 before any model call: `Specify --uncommitted, --base, --commit, or
+provide custom review instructions` (trial).
+
+**MiMo Code's `/review`.** The form is its ordinary launch form with `--command review`, and
+`<BASE>...HEAD` in the prompt file:
+
+| | |
+|---|---|
+| command | the launch form with `--command review` and `--variant high`; the prompt file (stdin) holds `<BASE>...HEAD` |
+| the change | `<BASE>...HEAD` in the prompt file. MiMo Code's arguments are free text, and `mimo run` appends its stdin to them (read from the 0.1.15 code), so the range rides in the prompt file, not as a bare argument. Its rules read a bare SHA as one commit (`git show <sha>`) |
+| level | `--variant high`, the top of MiMo V2.6 Pro's variants (`low`, `medium`, `high`) |
+| findings | free markdown in the final message; no severity or confidence fields |
+| known findings | free text in the same arguments; the form carries the range alone so nothing else lands there |
+| tool calls | a subtask's calls stream inline under the parent's session id. Its subtask launch fails in every run (`subagent_type build`, where only `explore` and `general` exist); the review runs because the model recovers |
+
+Given no target it reviewed uncommitted changes, found none in a clean scratch, and exited 0
+(trial). Named `<BASE>...HEAD` it reviewed the range and reported the planted bug at its line.
 
 ## Interactive form: the postmaster
 
