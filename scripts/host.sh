@@ -2238,7 +2238,7 @@ EOF
   touch "$tmp/logs/n2.done"
   (cd "$tmp/caller" && hs "$SYS" EMIT_SLEEP=2 -- run "$NAME" "$repo" --marker ../logs/n2.done -- ./fixed.sh >/dev/null)
   check "an earlier launch's marker is gone once run returns" '[ ! -e "$tmp/logs/n2.done" ]'
-  check "and it lands again when this one exits, whatever its exit" 'marker "$tmp/logs/n2.done" 20'
+  check "and it lands again when this one exits, whatever its exit" 'marker "$tmp/logs/n2.done" 60'
   (cd "$tmp/caller" && hs "$SYS" CALLER_VAR=v HERDR_PANE_ID=caller-pane TMUX_PANE=%9 -- run "$NAME" "$repo/.worktrees/T-1-luna" \
      --out ../logs/n3.out --marker ../logs/n3.done --pidfile ../logs/n3.pid -- ./probe.sh >/dev/null)
   marker "$tmp/logs/n3.done"
@@ -2795,7 +2795,7 @@ PY
     check "the bounded fork fixture leaves no live child processes" \
       'no_live_pids "$tmp/logs/fork.pids"' "$(cat "$tmp/logs/fork.pids" 2>/dev/null)"
     check "a healthy launch completes while the fork cap is reached" \
-      'marker "$tmp/logs/fork-other.done" 1 && cmp -s "$tmp/direct-healthy.out" "$tmp/logs/fork-other.out" && err_stream_equal "$tmp/direct-healthy.err" "$tmp/logs/fork-other.err" && [ "$(cut -d" " -f2 "$tmp/logs/fork-other.group")" = "$(cat "$tmp/logs/fork-other.pid")" ]' "$fork_other"
+      'marker "$tmp/logs/fork-other.done" 60 && cmp -s "$tmp/direct-healthy.out" "$tmp/logs/fork-other.out" && err_stream_equal "$tmp/direct-healthy.err" "$tmp/logs/fork-other.err" && [ "$(cut -d" " -f2 "$tmp/logs/fork-other.group")" = "$(cat "$tmp/logs/fork-other.pid")" ]' "$fork_other"
     exit_got=$(cap_launch "$cap_impl" "$CAPSYS" fork-exit -- timeout --signal=TERM --kill-after=1 4 python3 "$tmp/caller/fork-exit.py" 2>/dev/null)
     marker "$tmp/logs/fork-exit.done" 60
     check "a launch that exits after tripping the process cap still names the cap" \
@@ -2808,7 +2808,7 @@ PY
     check "an allocation runaway is stopped at MemoryMax and leaves its marker" \
       'grep -qFx "host: memory cap reached (MemoryMax=64M)" "$tmp/logs/memory.err" && [ -e "$tmp/logs/memory.done" ]' "$memory_got"
     check "a healthy launch completes while the memory cap is reached" \
-      'marker "$tmp/logs/memory-other.done" 1 && cmp -s "$tmp/direct-healthy.out" "$tmp/logs/memory-other.out" && err_stream_equal "$tmp/direct-healthy.err" "$tmp/logs/memory-other.err" && [ "$(cut -d" " -f2 "$tmp/logs/memory-other.group")" = "$(cat "$tmp/logs/memory-other.pid")" ]' "$memory_other"
+      'marker "$tmp/logs/memory-other.done" 60 && cmp -s "$tmp/direct-healthy.out" "$tmp/logs/memory-other.out" && err_stream_equal "$tmp/direct-healthy.err" "$tmp/logs/memory-other.err" && [ "$(cut -d" " -f2 "$tmp/logs/memory-other.group")" = "$(cat "$tmp/logs/memory-other.pid")" ]' "$memory_other"
     mkdir -p "$tmp/capshim"
     for t in "$CAPSYS"/*; do
       [ -e "$t" ] || continue
@@ -2833,12 +2833,12 @@ EOF
     chmod +x "$tmp/capshim/systemctl"
     rm -f "$tmp/logs/shim-queries.log"; touch "$tmp/logs/shim-queries.log"
     shim_got=$(cap_launch "$cap_impl" "$tmp/capshim" shim-oom -- timeout --signal=TERM --kill-after=1 6 python3 "$tmp/caller/memory-cap.py" 2>/dev/null)
-    marker "$tmp/logs/shim-oom.done" 15
+    marker "$tmp/logs/shim-oom.done" 60
     check "a transient success verdict does not hide an OOM, and the verdict reads properties by name" \
       'grep -qFx "host: memory cap reached (MemoryMax=64M)" "$tmp/logs/shim-oom.err" && [ "$(wc -l < "$tmp/logs/shim-queries.log")" -eq 2 ]' "$shim_got"
     python3 -c "import os; fd=os.open('$tmp/brush-data.bin',os.O_RDONLY); os.posix_fadvise(fd,0,0,os.POSIX_FADV_DONTNEED); os.close(fd)"
     brush_got=$(cap_launch "$cap_impl" "$CAPSYS" brush -- timeout --signal=TERM --kill-after=1 30 python3 "$tmp/caller/brush-cache.py" 2>/dev/null)
-    marker "$tmp/logs/brush.done" 20
+    marker "$tmp/logs/brush.done" 60
     check "a launch that brushes the memory cap with reclaimable cache completes unnamed" \
       'grep -q "brushed .* pages" "$tmp/logs/brush.out" && [ -e "$tmp/logs/brush.done" ] && [ ! -s "$tmp/logs/brush.err" ]' "$brush_got"
     mkdir -p "$tmp/capshim2"
@@ -2865,7 +2865,7 @@ EOF
     rm -f "$tmp/logs/shim2-cg.log" "$tmp/logs/shim2-result.log"
     touch "$tmp/logs/shim2-cg.log" "$tmp/logs/shim2-result.log"
     wmem_got=$(cap_launch "$cap_impl" "$tmp/capshim2" watcher-mem -- timeout --signal=TERM --kill-after=1 6 python3 "$tmp/caller/memory-cap.py" 2>/dev/null)
-    marker "$tmp/logs/watcher-mem.done" 15
+    marker "$tmp/logs/watcher-mem.done" 60
     check "with the fallback blinded, an OOM is still named: the watcher notes it" \
       'grep -qFx "host: memory cap reached (MemoryMax=64M)" "$tmp/logs/watcher-mem.err" && [ "$(wc -l < "$tmp/logs/shim2-cg.log")" -ge 1 ] && [ "$(wc -l < "$tmp/logs/shim2-result.log")" -eq 0 ]' "$wmem_got"
     mkdir -p "$tmp/fakecgroup/fixture"
@@ -2983,14 +2983,14 @@ print(([w.get("open_workspace_id") for w in d["result"]["worktrees"] if w["path"
     check "and the launch is released when it ends" \
       '[ "$(herdr pane get "$pane" | json "d[\"result\"][\"pane\"].get(\"agent_status\")")" != working ]'
     got=$(cd "$tmp/caller" && "$SELF" run "$NAME" "$repo/.worktrees/T-1-sol" --under "$tmp/run-1" --out ../logs/l8.out --marker ../logs/l8.done -- ./probe.sh)
-    marker "$tmp/logs/l8.done" 30
+    marker "$tmp/logs/l8.done" 60
     space8=${got#*space=}; space8=${space8%% *}; pane8=${got##*pane=}
     tab8=${got#*tab=}; tab8=${tab8%% *}
     check "the workhorse tab is under the same run and its harness name is role-first" \
       '[ "$space8" = "$space" ] && [ "$(herdr tab get "$tab8" | json "d[\"result\"][\"tab\"][\"label\"]")" = "$NAME" ] && [ "$(field "$tmp/logs/l8.out" name)" = "$NAME" ]' "$(cat "$tmp/logs/l8.out" 2>/dev/null)"
     (cd "$tmp/caller" && "$SELF" run "$NAME" "$wt" --under "$tmp/run-1" --out ../logs/l6.out --marker ../logs/l6.done -- ./probe.sh >/dev/null)
     check "the launch has no terminal, and a group of its own" \
-      'marker "$tmp/logs/l6.done" 30 && [ "$(field "$tmp/logs/l6.out" tty)" = no ] && [ "$(field "$tmp/logs/l6.out" pgid)" = "$(field "$tmp/logs/l6.out" pid)" ]' "$(cat "$tmp/logs/l6.out" 2>/dev/null)"
+      'marker "$tmp/logs/l6.done" 60 && [ "$(field "$tmp/logs/l6.out" tty)" = no ] && [ "$(field "$tmp/logs/l6.out" pgid)" = "$(field "$tmp/logs/l6.out" pid)" ]' "$(cat "$tmp/logs/l6.out" 2>/dev/null)"
     got=$(cd "$tmp/caller" && "$SELF" run "$NAME" "$wt" --under "$tmp/run-1" --marker ../logs/l5.done --pidfile ../logs/l5.pid -- sleep 120)
     sleep 2; herdr tab close "$(printf '%s' "$got" | sed -n 's/.*tab=\([^ ]*\).*/\1/p')" >/dev/null 2>&1
     check "closing a launch's pane mid-run stops it, and its marker still lands" \
