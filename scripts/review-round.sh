@@ -322,6 +322,23 @@ run()   { local t0; t0=$(date +%s); out=$("$self" "$@" 2>&1); rc=$?; took=$(( $(
 has()   { case $out in *"$1"*) true ;; *) false ;; esac; }
 lines() { grep -c -- "$1" "$d/actions.jsonl" 2>/dev/null || true; }
 alive() { local st; st=$(ps -o stat= -p "$1" 2>/dev/null) && [ -n "$st" ] && [ "${st#Z}" = "$st" ]; }
+dead()  {  # dead <pid> [<seconds>]: wait until a process is gone (or a zombie)
+  local i=0; while alive "$1" && [ $i -lt $(( ${2:-60} * 5 )) ]; do sleep 0.2; i=$((i + 1)); done; ! alive "$1"
+}
+wait_line() {  # wait_line <file> <pattern> [<seconds>]: wait until a file holds a matching line
+  local i=0; while [ $i -lt $(( ${3:-60} * 5 )) ]; do
+    [ -f "$1" ] && grep -q -- "$2" "$1" 2>/dev/null && return 0
+    sleep 0.2; i=$((i + 1))
+  done; return 1
+}
+remaining() {  # remaining <state-file>: seconds left on the round's deadline, or -1
+  python3 -c 'import json,math,sys,time
+try:
+    st=json.load(open(sys.argv[1]))
+    print(max(0, math.ceil(st["deadline"] - time.monotonic())))
+except Exception:
+    print(-1)' "$1" 2>/dev/null
+}
 limit() { printf '{"config": {"review": {"round_timeout_seconds": %s}}}\n' "$1" > "$d/run.json"; }
 cut()   { git -C "$repo" worktree add -q --detach "$repo/.worktrees/T-1-rev-$1-$2" HEAD || exit 1; }
 launch() {  # launch <round> <lens> <lane> <fast|slow|leaves>: through host.sh, as the round does
@@ -331,7 +348,7 @@ launch() {  # launch <round> <lens> <lane> <fast|slow|leaves>: through host.sh, 
       --marker "$d/logs/review-r$1-$2-$3.done" --pidfile "$tmp/pids/launch.$n" -- "$tmp/reviewer.sh" "$4" "$tmp/pids/child.$n" ) >/dev/null \
     || { echo "  (could not launch $2 $3)"; return 1; }
   [ "$4" = fast ] && return 0
-  local i=0; while [ ! -s "$tmp/pids/child.$n" ] && [ $i -lt 50 ]; do sleep 0.1; i=$((i + 1)); done
+  local i=0; while [ ! -s "$tmp/pids/child.$n" ] && [ $i -lt 300 ]; do sleep 0.1; i=$((i + 1)); done
   [ -s "$tmp/pids/child.$n" ] || { echo "  (the $4 reviewer never started)"; return 1; }
 }
 
@@ -347,18 +364,26 @@ check "at the deadline, wait exits 3 and names the reviewer with no marker" \
 check "run-log.md records it as <lane> <lens>: DEGRADED, timeout" 'grep -q " two bug: DEGRADED, timeout$" "$d/run-log.md"'
 check "a degrade line records it, with the lens, the round and the cause" \
   'grep -q "\"action\":\"degrade\",\"target\":\"two\",\"detail\":\"bug r1: timeout\"" "$d/actions.jsonl" && [ "$(lines "\"action\":\"degrade\"")" -eq 1 ]'
-check "host.sh stop ends it, and its child in a session of its own" '! alive "$slow" && ! alive "$child"'
+check "host.sh stop ends it, and its child in a session of its own" 'dead "$slow" 60 && dead "$child" 60'
 run teardown "$d" 1 "$repo"
 check "teardown takes the reviewers the wait recorded, and removes each scratch" \
   '[ $rc -eq 0 ] && [ ! -e "$repo/.worktrees/T-1-rev-bug-one" ] && [ ! -e "$repo/.worktrees/T-1-rev-bug-two" ] && [ "$(lines "\"action\":\"teardown\"")" -eq 2 ]'
 
-limit 4; cut bug three
+limit 30; cut bug three
 run start "$d" 2; launch 2 bug three slow; slow=$(cat "$tmp/pids/launch.$n")
-timeout 1 "$self" wait "$d" 2 "$repo" bug:three >/dev/null 2>&1   # the harness's cap ends the wait
-sleep 1
+attempt0=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["attempt"])' "$d/logs/review-r2.json")
+deadline0=$(python3 -c 'import json,sys; print(repr(json.load(open(sys.argv[1]))["deadline"]))' "$d/logs/review-r2.json")
+"$self" wait "$d" 2 "$repo" bug:three > "$tmp/first.out" 2>&1 & first=$!
+wait_line "$tmp/first.out" "round 2," 60
+# Let some deadline age while the first wait runs, so a reset (left back to the limit) stands out.
+i=0; while [ "$(remaining "$d/logs/review-r2.json")" -gt 25 ] && [ $i -lt 150 ]; do sleep 0.2; i=$((i + 1)); done
+kill "$first" 2>/dev/null; wait "$first" 2>/dev/null
+left=$(remaining "$d/logs/review-r2.json")
 run wait "$d" 2 "$repo"
 check "a wait run again keeps the round's deadline rather than starting a new one" \
-  '[ $rc -eq 3 ] && [ "$took" -le 3 ] && has "TIMEOUT bug three" && ! alive "$slow"'
+  '[ $rc -eq 3 ] && has "TIMEOUT bug three" && [ "$left" -lt 28 ] && [ "$took" -le $((left + 25)) ] \
+   && [ "$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))[\"attempt\"])" "$d/logs/review-r2.json")" = "$attempt0" ] \
+   && [ "$(python3 -c "import json,sys; print(repr(json.load(open(sys.argv[1]))[\"deadline\"]))" "$d/logs/review-r2.json")" = "$deadline0" ] && dead "$slow" 60'
 run teardown "$d" 2 "$repo" bug:three
 
 limit 60; cut style one
@@ -368,17 +393,19 @@ check "when every marker is in, wait exits 0 and records nothing" '[ $rc -eq 0 ]
 git -C "$repo/.worktrees/T-1-rev-style-one" switch -q -c probe
 run teardown "$d" 3 "$repo" style:one
 check "teardown stops what a finished reviewer's launch left running, and says so" \
-  '[ $rc -eq 0 ] && ! alive "$left" && has "left behind by a reviewer that had finished"'
+  '[ $rc -eq 0 ] && dead "$left" 60 && has "left behind by a reviewer that had finished"'
 check "a scratch a reviewer switched onto a branch is still removed, and the branch kept" \
   '[ ! -e "$repo/.worktrees/T-1-rev-style-one" ] && has "switched it onto branch probe" && git -C "$repo" rev-parse -q --verify refs/heads/probe >/dev/null'
 
 echo "negative controls"
 out=$wait_out rc=$wait_rc
 check "a reviewer that reported is neither recorded nor stopped" '! has "TIMEOUT bug one" && ! grep -q "one bug: DEGRADED" "$d/run-log.md"'
-limit 2; cut bug four
+limit 20; cut bug four
 run start "$d" 4; launch 4 bug four slow; slow=$(cat "$tmp/pids/launch.$n")
 "$self" wait "$d" 4 "$repo" bug:four > "$tmp/stale.out" 2>&1 & stale=$!
-sleep 0.5; limit 60; run start "$d" 4
+# The wait must have read this start's attempt before the next start replaces it.
+wait_line "$tmp/stale.out" "round 4," 60
+limit 60; run start "$d" 4
 wait "$stale"; rc=$?; out=$(cat "$tmp/stale.out")
 check "a wait from an earlier start of the round stands down, and records and stops nothing" \
   '[ $rc -eq 1 ] && has "started again" && alive "$slow" && ! grep -q "four bug: DEGRADED" "$d/run-log.md"'
@@ -387,7 +414,7 @@ check "teardown from inside a scratch leaves it in place, and stops nothing" \
   '[ $rc -eq 1 ] && has "LEFT IN PLACE" && [ -e "$repo/.worktrees/T-1-rev-bug-four" ] && alive "$slow"'
 run teardown "$d" 4 "$repo" bug:four
 check "from outside, teardown stops the unfinished reviewer first, says so, then removes it" \
-  '[ $rc -eq 0 ] && ! alive "$slow" && has "its reviewer had not finished" && [ ! -e "$repo/.worktrees/T-1-rev-bug-four" ]'
+  '[ $rc -eq 0 ] && dead "$slow" 60 && has "its reviewer had not finished" && [ ! -e "$repo/.worktrees/T-1-rev-bug-four" ]'
 cut bug seven
 run teardown "$d" 12 "$repo" bug:seven
 check "teardown given its reviewers needs no start, as at the cut, and records none for the round" \

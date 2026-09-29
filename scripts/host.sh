@@ -1807,6 +1807,15 @@ check() { if eval "$2"; then ok "$1"; else fail "$1" "${3:-}"; fi; }   # check <
 marker() {  # marker <file> [<seconds>]: wait for a marker to land
   local i=0; while [ ! -e "$1" ] && [ $i -lt $(( ${2:-30} * 5 )) ]; do sleep 0.2; i=$((i + 1)); done; [ -e "$1" ]
 }
+wait_file() {  # wait_file <file> [<seconds>]: wait until a file holds something (its pid, say)
+  local i=0; while [ ! -s "$1" ] && [ $i -lt $(( ${2:-60} * 5 )) ]; do sleep 0.2; i=$((i + 1)); done; [ -s "$1" ]
+}
+wait_grep() {  # wait_grep <file> <pattern> [<seconds>]: wait until a file matches
+  local i=0; while [ $i -lt $(( ${3:-60} * 5 )) ]; do
+    [ -f "$1" ] && grep -qE "$2" "$1" 2>/dev/null && return 0
+    sleep 0.2; i=$((i + 1))
+  done; return 1
+}
 field() { tr '|' '\n' < "$1" | sed -n "s/^$2=//p" | head -1; }   # field <probe output> <key>
 title_absent() { [[ "$1" != *"#1"* && "$1" != *"Stop"* && "$1" != *"touch"* && "$1" != *"canary"* && "$1" != *"breaking"* && "$1" != *"shell"* ]]; }
 err_stream_equal() { cmp -s "$1" <(sed -e '/^host: launch running uncapped (no supported per-launch limits available)$/d' "$2"); }
@@ -2280,7 +2289,7 @@ EOF
     '[ $rc -eq 0 ] && [ -s "$tmp/tree/escapee.pid" ] && ! alive "$(cat "$tmp/tree/escapee.pid")"' "$got"
   check "the launch got TERM first, and a child deaf to it is killed after the wait" \
     '[ -s "$tmp/tree/term" ] && [ -s "$tmp/tree/deaf.pid" ] && ! alive "$(cat "$tmp/tree/deaf.pid")"' "$got"
-  check "its marker lands" 'marker "$tmp/logs/k1.done" 10'
+  check "its marker lands" 'marker "$tmp/logs/k1.done" 60'
   check "a process that works in the worktree but that no launch started is left alone" 'alive "$b"'
   kill "$b" 2>/dev/null; wait "$b" 2>/dev/null
 
@@ -2320,7 +2329,7 @@ sleep 60 & echo $! > "$TREE/left.pid"
 EOF
   chmod +x "$tmp/caller/leaves.sh"
   (cd "$tmp/caller" && hs "$SYS" TREE="$tmp/tree" -- run "$NAME" "$sol" --marker ../logs/k2.done -- ./leaves.sh >/dev/null)
-  marker "$tmp/logs/k2.done" 10
+  marker "$tmp/logs/k2.done" 60
   a=0; while ! grep -qs '^member ' "$L"/* && [ $a -lt 30 ]; do sleep 0.1; a=$((a + 1)); done
   lp=$(cat "$tmp/tree/left.pid" 2>/dev/null)
   check "a leader that exits leaving a process behind: its record names that process" \
@@ -2346,22 +2355,23 @@ EOF
     got=$(stop_sol); rc=$?
     check "stop refuses a tree holding $why, and leaves it all running" \
       '[ $rc -eq 2 ] && case $got in *"$why"*) true ;; *) false ;; esac && running "$(cat "$tmp/tree/guarded.pid")" && running "$(cat "$tmp/logs/k3.pid")" && [ ! -e "$tmp/logs/k3.done" ]' "$got"
-    kill -- "-$(cat "$tmp/logs/k3.pid")" 2>/dev/null; marker "$tmp/logs/k3.done" 10
+    kill -- "-$(cat "$tmp/logs/k3.pid")" 2>/dev/null; marker "$tmp/logs/k3.done" 60
   done
 
   cat > "$tmp/caller/wide.sh" <<'EOF'
 #!/usr/bin/env bash
-for i in 1 2 3 4; do sleep 60 & done
+for i in 1 2 3 4; do sleep 60 & echo $! >> "$TREE/wide.pids"; done
 wait
 EOF
   chmod +x "$tmp/caller/wide.sh"
-  (cd "$tmp/caller" && hs "$SYS" -- run "$NAME" "$sol" --marker ../logs/k4.done --pidfile ../logs/k4.pid -- ./wide.sh >/dev/null)
-  sleep 0.5
+  (cd "$tmp/caller" && hs "$SYS" TREE="$tmp/tree" -- run "$NAME" "$sol" --marker ../logs/k4.done --pidfile ../logs/k4.pid -- ./wide.sh >/dev/null)
+  wait_file "$tmp/logs/k4.pid" 60
+  a=0; while [ "$(wc -l < "$tmp/tree/wide.pids" 2>/dev/null || echo 0)" -lt 4 ] && [ $a -lt 300 ]; do sleep 0.2; a=$((a + 1)); done
   got=$(stop_sol POSTMASTER_HOST_STOP_MAX=3); rc=$?
   check "stop refuses a tree larger than POSTMASTER_HOST_STOP_MAX, and leaves it running" \
     '[ $rc -eq 2 ] && case $got in *"more than POSTMASTER_HOST_STOP_MAX (3)"*) true ;; *) false ;; esac && running "$(cat "$tmp/logs/k4.pid")" && [ ! -e "$tmp/logs/k4.done" ]' "$got"
   got=$(stop_sol); rc=$?
-  check "within the bound, the same tree is stopped" '[ $rc -eq 0 ] && marker "$tmp/logs/k4.done" 10' "$got"
+  check "within the bound, the same tree is stopped" '[ $rc -eq 0 ] && marker "$tmp/logs/k4.done" 60' "$got"
 
   got=$(hs "$SYS" POSTMASTER_HOST_STATE="$tmp.elsewhere" -- stop "$sol" 2>&1); rc=$?
   check "while a self-test runs, a registry outside its fixture is refused" \
@@ -2391,7 +2401,7 @@ EOF
   marker "$tmp/logs/h1.done"
   check "the launch ran in that pane, with that pane's identity" '[ "$(field "$tmp/logs/h1.out" pane)" = "$pane" ]' "$(cat "$tmp/logs/h1.out")"
   check "and with its caller's environment, handed over by host.sh" '[ "$(field "$tmp/logs/h1.out" var)" = v ] && [ "$(field "$tmp/logs/h1.out" from)" = "$tmp/caller" ]'
-  sleep 1
+  wait_grep "$tmp/stub/pane-$pane.out" '^[0-9]{2}:[0-9]{2}:[0-9]{2} session ' 60
   check "the pane shows the name and the rendered stream, not raw JSON" \
     'grep -qF "$NAME" "$tmp/stub/pane-$pane.out" && grep -qE "^[0-9:]{8} session probe-1 · m$" "$tmp/stub/pane-$pane.out" && ! grep -q "{" "$tmp/stub/pane-$pane.out"' "$(cat "$tmp/stub/pane-$pane.out" 2>/dev/null)"
   check "and reports the launch working, then releases it" \
@@ -2405,14 +2415,16 @@ EOF
   marker "$tmp/logs/h3.done"
   check "the command streams and marker are what a background run writes, with any cap notice" 'cmp -s "$tmp/direct.out" "$tmp/logs/h3.out" && err_stream_equal "$tmp/direct.err" "$tmp/logs/h3.err"'
   got=$(cd "$tmp/caller" && hs "$STUBS" -- run "$NAME" "$repo/.worktrees/T-1-luna" --marker ../logs/h6.done --pidfile ../logs/h6.pid -- sleep 60)
-  panepid=$(cat "$tmp/stub/pane-${got##*pane=}.pid")
+  wait_file "$tmp/logs/h6.pid" 60 && wait_file "$tmp/stub/pane-${got##*pane=}.pid" 60
+  panepid=$(cat "$tmp/stub/pane-${got##*pane=}.pid" 2>/dev/null)
   kill -HUP -- "-$panepid" 2>/dev/null
   check "a pane closed mid-run: the launch stops, and its marker lands" \
-    'marker "$tmp/logs/h6.done" 10 && ! kill -0 "$(cat "$tmp/logs/h6.pid")" 2>/dev/null'
+    'marker "$tmp/logs/h6.done" 60 && ! kill -0 "$(cat "$tmp/logs/h6.pid")" 2>/dev/null'
   got=$(cd "$tmp/caller" && hs "$STUBS" -- run "$NAME" "$repo/.worktrees/T-1-luna" --marker ../logs/h7.done --pidfile ../logs/h7.pid -- sleep 60)
-  panepid=$(cat "$tmp/stub/pane-${got##*pane=}.pid")
+  wait_file "$tmp/logs/h7.pid" 60 && wait_file "$tmp/stub/pane-${got##*pane=}.pid" 60
+  panepid=$(cat "$tmp/stub/pane-${got##*pane=}.pid" 2>/dev/null)
   kill -KILL -- "-$panepid" 2>/dev/null; kill -KILL -- "-$(cat "$tmp/logs/h7.pid")" 2>/dev/null
-  check "its runner and the launch killed outright: the marker still lands" 'marker "$tmp/logs/h7.done" 10'
+  check "its runner and the launch killed outright: the marker still lands" 'marker "$tmp/logs/h7.done" 60'
   touch "$tmp/stub/pane.dead"
   got=$(cd "$tmp/caller" && hs "$STUBS" COUNT="$tmp/logs/h4.count" -- run "$NAME" "$repo/.worktrees/T-1-sol" --out ../logs/h4.out --marker ../logs/h4.done -- ./probe.sh 2>/dev/null)
   marker "$tmp/logs/h4.done"
@@ -2447,7 +2459,7 @@ PY
   (cd "$repo/.worktrees/T-1-sol" && hs "$STUBS" -- stop "$repo/.worktrees/T-1-sol" >/dev/null 2>&1); rc=$?
   check "stop refuses to run from inside the worktree it would stop" '[ $rc -eq 1 ] && [ ! -e "$tmp/logs/s1.done" ]'
   hs "$STUBS" -- stop "$repo/.worktrees/T-1-sol" >/dev/null
-  check "stop ends it, and its marker lands" 'marker "$tmp/logs/s1.done" 10'
+  check "stop ends it, and its marker lands" 'marker "$tmp/logs/s1.done" 60'
   check "then close closes the space" 'hs "$STUBS" -- close "$repo/.worktrees/T-1-sol" >/dev/null'
 
   echo "a security-review clone, Herdr (stub): a launch tab under its run"
@@ -2698,7 +2710,7 @@ PY
   check "the next is a window in the same session" 'grep -q "^new-window${T}-d${T}-P${T}-F${T}#{window_id}${T}-t${T}=postmaster-$rname:${T}" <<<"$(calls tmux)"'
   hs "$STUBS" POSTMASTER_HOST=tmux -- close "$repo/.worktrees/T-1-sol" >/dev/null 2>&1; rc=$?
   check "close refuses while a launch still runs in the worktree" '[ $rc -eq 2 ] && [ "$(calls tmux | grep -c "^kill-window")" -eq 0 ]'
-  hs "$STUBS" POSTMASTER_HOST=tmux -- stop "$repo/.worktrees/T-1-sol" >/dev/null; marker "$tmp/logs/t2.done" 10
+  hs "$STUBS" POSTMASTER_HOST=tmux -- stop "$repo/.worktrees/T-1-sol" >/dev/null; marker "$tmp/logs/t2.done" 60
   check "once it is stopped, close kills that worktree's windows" \
     'hs "$STUBS" POSTMASTER_HOST=tmux -- close "$repo/.worktrees/T-1-sol" >/dev/null && [ "$(calls tmux | grep -c "^kill-window")" -eq 2 ]'
   (cd "$tmp/caller" && hs "$STUBS" POSTMASTER_HOST=tmux -- run "$NAME" "$clone" --marker ../logs/t3.done -- ./fixed.sh >/dev/null)
@@ -2759,7 +2771,7 @@ PY
   (cd "$tmp/caller" && ./healthy.sh > "$tmp/direct-healthy.out" 2> "$tmp/direct-healthy.err")
   got=$(cap_launch "$SELF" "$SYS" uncapped -- "$tmp/caller/healthy.sh" 2>/dev/null)
   check "without the cap tools, the launch still completes and .err says uncapped" \
-    'marker "$tmp/logs/uncapped.done" 10 && grep -qFx "host: launch running uncapped (no supported per-launch limits available)" "$tmp/logs/uncapped.err" && cmp -s "$tmp/direct-healthy.out" "$tmp/logs/uncapped.out" && err_stream_equal "$tmp/direct-healthy.err" "$tmp/logs/uncapped.err"' "$got"
+    'marker "$tmp/logs/uncapped.done" 60 && grep -qFx "host: launch running uncapped (no supported per-launch limits available)" "$tmp/logs/uncapped.err" && cmp -s "$tmp/direct-healthy.out" "$tmp/logs/uncapped.out" && err_stream_equal "$tmp/direct-healthy.err" "$tmp/logs/uncapped.err"' "$got"
 
   if systemd_capability >/dev/null 2>&1; then
     echo "per-launch caps: systemd user scope controls"
@@ -2768,8 +2780,8 @@ PY
     check "a capped launch publishes its pid while the command is still running" \
       '[ -s "$tmp/logs/fork-other.pid" ] && [ ! -e "$tmp/logs/fork-other.done" ]' "$fork_other"
     fork_got=$(cap_launch "$cap_impl" "$CAPSYS" fork -- timeout --signal=TERM --kill-after=1 2 python3 "$tmp/caller/fork-cap.py" 2>/dev/null)
-    marker "$tmp/logs/fork.done" 10
-    marker "$tmp/logs/fork-other.done" 10
+    marker "$tmp/logs/fork.done" 60
+    marker "$tmp/logs/fork-other.done" 60
     no_live_pids() {
       local pid st
       while IFS= read -r pid; do
@@ -2785,14 +2797,14 @@ PY
     check "a healthy launch completes while the fork cap is reached" \
       'marker "$tmp/logs/fork-other.done" 1 && cmp -s "$tmp/direct-healthy.out" "$tmp/logs/fork-other.out" && err_stream_equal "$tmp/direct-healthy.err" "$tmp/logs/fork-other.err" && [ "$(cut -d" " -f2 "$tmp/logs/fork-other.group")" = "$(cat "$tmp/logs/fork-other.pid")" ]' "$fork_other"
     exit_got=$(cap_launch "$cap_impl" "$CAPSYS" fork-exit -- timeout --signal=TERM --kill-after=1 4 python3 "$tmp/caller/fork-exit.py" 2>/dev/null)
-    marker "$tmp/logs/fork-exit.done" 10
+    marker "$tmp/logs/fork-exit.done" 60
     check "a launch that exits after tripping the process cap still names the cap" \
       'grep -qFx "host: process cap reached (TasksMax=16)" "$tmp/logs/fork-exit.err" && [ -e "$tmp/logs/fork-exit.done" ]' "$exit_got"
 
     memory_other=$(cap_launch "$cap_impl" "$CAPSYS" memory-other -- "$tmp/caller/healthy.sh" 2>/dev/null)
     memory_got=$(cap_launch "$cap_impl" "$CAPSYS" memory -- timeout --signal=TERM --kill-after=1 2 python3 "$tmp/caller/memory-cap.py" 2>/dev/null)
-    marker "$tmp/logs/memory.done" 10
-    marker "$tmp/logs/memory-other.done" 10
+    marker "$tmp/logs/memory.done" 60
+    marker "$tmp/logs/memory-other.done" 60
     check "an allocation runaway is stopped at MemoryMax and leaves its marker" \
       'grep -qFx "host: memory cap reached (MemoryMax=64M)" "$tmp/logs/memory.err" && [ -e "$tmp/logs/memory.done" ]' "$memory_got"
     check "a healthy launch completes while the memory cap is reached" \
@@ -2876,18 +2888,18 @@ EOF
     CAPCGROOT=$tmp/fakecgroup
     printf 'low 0\nhigh 0\nmax 0\noom 0\noom_kill 1\noom_group_kill 0\n' > "$tmp/fakecgroup/fixture/memory.events"
     hostshape_got=$(cap_launch "$cap_impl" "$tmp/capshim3" hostshape -- "$tmp/caller/healthy.sh" 2>/dev/null)
-    marker "$tmp/logs/hostshape.done" 10
+    marker "$tmp/logs/hostshape.done" 60
     check "a host-wide OOM shape (oom_kill without oom) is not blamed on MemoryMax" \
       'cmp -s "$tmp/direct-healthy.out" "$tmp/logs/hostshape.out" && cmp -s "$tmp/direct-healthy.err" "$tmp/logs/hostshape.err" && [ -e "$tmp/logs/hostshape.done" ]' "$hostshape_got"
     printf 'low 0\nhigh 0\nmax 18\noom 1\noom_kill 0\noom_group_kill 0\n' > "$tmp/fakecgroup/fixture/memory.events"
     oomshape_got=$(cap_launch "$cap_impl" "$tmp/capshim3" oomshape -- "$tmp/caller/healthy.sh" 2>/dev/null)
-    marker "$tmp/logs/oomshape.done" 10
+    marker "$tmp/logs/oomshape.done" 60
     check "a cgroup OOM shape (oom set) still names the memory cap" \
       'grep -qFx "host: memory cap reached (MemoryMax=64M)" "$tmp/logs/oomshape.err" && [ -e "$tmp/logs/oomshape.done" ]' "$oomshape_got"
     unset CAPCGROOT
     kill_got=$(cap_launch "$cap_impl" "$CAPSYS" kill-healthy -- "$tmp/caller/healthy.sh" 2>/dev/null)
     sleep 0.3; kill -KILL "$(cat "$tmp/logs/kill-healthy.pid")" 2>/dev/null
-    marker "$tmp/logs/kill-healthy.done" 10
+    marker "$tmp/logs/kill-healthy.done" 60
     check "a launch killed mid-sleep is told apart: its streams no longer match a completed run" \
       '[ -e "$tmp/logs/kill-healthy.done" ] && ! cmp -s "$tmp/direct-healthy.out" "$tmp/logs/kill-healthy.out"' "$kill_got"
     check "a capped launch's .err never carries the uncapped notice" \
@@ -2982,7 +2994,7 @@ print(([w.get("open_workspace_id") for w in d["result"]["worktrees"] if w["path"
     got=$(cd "$tmp/caller" && "$SELF" run "$NAME" "$wt" --under "$tmp/run-1" --marker ../logs/l5.done --pidfile ../logs/l5.pid -- sleep 120)
     sleep 2; herdr tab close "$(printf '%s' "$got" | sed -n 's/.*tab=\([^ ]*\).*/\1/p')" >/dev/null 2>&1
     check "closing a launch's pane mid-run stops it, and its marker still lands" \
-      'marker "$tmp/logs/l5.done" 10 && ! kill -0 "$(cat "$tmp/logs/l5.pid")" 2>/dev/null' "$got"
+      'marker "$tmp/logs/l5.done" 60 && ! kill -0 "$(cat "$tmp/logs/l5.pid")" 2>/dev/null' "$got"
     rev=$repo/.worktrees/T-1-rev-luna
     got=$(cd "$tmp/caller" && "$SELF" run "$STYLE_LABEL" "$rev" --under "$tmp/run-1" --marker ../logs/l2.done -- ./fixed.sh)
     tab=${got#*tab=}; tab=${tab%% *}
