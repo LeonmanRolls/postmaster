@@ -201,8 +201,8 @@ is()   {  # is <label> <exit> <the whole output>
   if [ "$rc" -eq "$2" ] && [ "$out" = "$3" ]; then ok "$1"; else fail "$1: wanted exit $2, got $rc" "$out"; fi
 }
 has()  {  # has <label> <exit> <text a line must contain> [<text no line may contain>]
-  if [ "$rc" -eq "$2" ] && printf '%s\n' "$out" | grep -qF -- "$3" \
-     && { [ -z "${4:-}" ] || ! printf '%s\n' "$out" | grep -qF -- "$4"; }; then ok "$1"
+  if [ "$rc" -eq "$2" ] && grep -qF -- "$3" <<<"$out" \
+     && { [ -z "${4:-}" ] || ! grep -qF -- "$4" <<<"$out"; }; then ok "$1"
   else fail "$1: wanted exit $2 with \"$3\"${4:+ and no \"$4\"}, got exit $rc" "$out"; fi
 }
 waybill() {  # waybill <dispatch> <the line under the title, or nothing> [<a line in the ticket's notes>]
@@ -214,7 +214,7 @@ waybill() {  # waybill <dispatch> <the line under the title, or nothing> [<a lin
 lines() { printf '%s\n' "$@"; }
 # A name the table does not have, so that a turnpike added to it later breaks no control here.
 NOPE=zz-not-listed
-"$self" --list | awk '{print $1}' | grep -qx "$NOPE" && { echo "self-test: $NOPE is in the table; pick another unused name" >&2; exit 1; }
+grep -qx "$NOPE" <<<"$("$self" --list | awk '{print $1}')" && { echo "self-test: $NOPE is in the table; pick another unused name" >&2; exit 1; }
 PLUS=$(printf '%s\n%s' "$TABLE" "$NOPE  -        ship    a check the table does not have yet")
 
 echo "positive controls: the list"

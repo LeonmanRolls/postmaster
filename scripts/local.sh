@@ -371,13 +371,13 @@ fails=0
 ok()   { printf '  ok   %s\n' "$1"; }
 fail() { printf '  FAIL %s\n' "$1"; [ -n "${2:-}" ] && printf '%s\n' "$2" | sed 's/^/         /'; fails=$((fails+1)); }
 check() {  # check <label> <exit wanted> <text the output holds, or empty>: judges the last lt
-  if [ "$rc" -eq "$2" ] && { [ -z "$3" ] || printf '%s\n' "$out" | grep -qF -- "$3"; }; then ok "$1"
+  if [ "$rc" -eq "$2" ] && { [ -z "$3" ] || grep -qF -- "$3" <<<"$out"; }; then ok "$1"
   else fail "$1: wanted exit $2${3:+ with \"$3\"}, got exit $rc" "$out"; fi
 }
 refused() {  # refused <label> <exit> <text the message holds> <repo> <command...>: exits so and changes no file in R's store
   local label=$1 want=$2 why=$3 was; shift 3
   was=$(snap "$ST"); lt "$@"
-  if [ "$rc" -eq "$want" ] && printf '%s\n' "$out" | grep -qF -- "$why" && [ "$(snap "$ST")" = "$was" ]; then ok "$label"
+  if [ "$rc" -eq "$want" ] && grep -qF -- "$why" <<<"$out" && [ "$(snap "$ST")" = "$was" ]; then ok "$label"
   else fail "$label: wanted exit $want with \"$why\" and no file changed, got exit $rc" "$out"; fi
 }
 bodyline() { printf '%s\n' "$out" | sed -n 8p; }   # the first body line of the last read
@@ -437,26 +437,26 @@ lt "$W" read 1; from_worktree=$out; lt "$R/sub" read 1
 [ "$rc" -eq 0 ] && [ "$out" = "$from_worktree" ] && ok "a linked worktree and a subdirectory read the same ticket" \
   || fail "a linked worktree and a subdirectory read the same ticket" "$out"
 lt "$W" state 1 in-progress; lt "$R" read 1
-printf '%s\n' "$out" | grep -qx 'state: in-progress' && ok "a state set from a linked worktree is the state the main checkout reads" \
+grep -qx 'state: in-progress' <<<"$out" && ok "a state set from a linked worktree is the state the main checkout reads" \
   || fail "a state set from a linked worktree is the state the main checkout reads" "$out"
 line='[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2} coachman: Harvested both lanes\.'
 lt "$R/sub" comment 1 coachman "Harvested both
 lanes."; written=$out; lt "$R" read 1
-[ "$(printf '%s\n' "$written" | wc -l)" -eq 1 ] && printf '%s\n' "$written" | grep -qxE -e "#1: $line" \
-  && printf '%s\n' "$out" | sed -n '/^## Log$/,$p' | grep -qxE -e "- $line" \
+[ "$(printf '%s\n' "$written" | wc -l)" -eq 1 ] && grep -qxE -e "#1: $line" <<<"$written" \
+  && grep -qxE -e "- $line" <<<"$(sed -n '/^## Log$/,$p' <<<"$out")" \
   && ok "comment adds one dated line to the log, actor first, on one line" \
   || fail "comment adds one dated line to the log, actor first, on one line" "$written$(printf '\n'; printf '%s' "$out")"
 "$SELF" "$R" read 1 --body > "$tmp/base.md" 2>/dev/null
 lt "$R" edit 1 "$tmp/new.md" "$tmp/base.md"; check "edit against the body as read replaces it" 0 "#1: edited"
 "$SELF" "$R" read 1 --body > "$tmp/out" 2>&1
 lt "$R" read 1
-cmp -s "$tmp/out" "$tmp/new.md" && printf '%s\n' "$out" | grep -qx 'title: A tracker that needs no service' && printf '%s\n' "$out" | grep -qx 'state: in-progress' \
+cmp -s "$tmp/out" "$tmp/new.md" && grep -qx 'title: A tracker that needs no service' <<<"$out" && grep -qx 'state: in-progress' <<<"$out" \
   && ok "the body is the new one, and the title and state are as they were" || fail "the body is the new one, and the title and state are as they were" "$out"
 printf '## Problem / feature  \r\nThe new body.  \r\n\r\n' > "$tmp/base-crlf.md"
 lt "$R" edit 1 "$tmp/new.md" "$tmp/base-crlf.md"; check "a base that differs only in line endings and trailing spaces matches" 0 "#1: edited"
 lt "$R" title 1 "  Tickets with no service  "; check "title replaces the title" 0 "#1: title changed"
 "$SELF" "$R" read 1 --body > "$tmp/out" 2>&1; lt "$R" read 1
-printf '%s\n' "$out" | grep -qx 'title: Tickets with no service' && printf '%s\n' "$out" | grep -qx 'state: in-progress' && cmp -s "$tmp/out" "$tmp/new.md" \
+grep -qx 'title: Tickets with no service' <<<"$out" && grep -qx 'state: in-progress' <<<"$out" && cmp -s "$tmp/out" "$tmp/new.md" \
   && ok "and leaves the body and state as they were" || fail "and leaves the body and state as they were" "$out"
 lt "$R" create "Blocked one" "$tmp/body.md"; lt "$R" state 3 blocked
 lt "$R" create "Done one" "$tmp/body.md"; lt "$R" state 4 done
@@ -470,7 +470,7 @@ lt "$R" list done
 [ "$rc" -eq 0 ] && [ "$out" = "$(printf '#2\tdone\tLine endings\n#4\tdone\tDone one')" ] && ok "list <state> lists only that state" \
   || fail "list <state> lists only that state (exit $rc)" "$out"
 was=$(snap "$ST"); lt "$R" store init; said=$out; lt "$R" list
-[ "$(snap "$ST")" = "$was" ] && [ "$out" = "$want_list" ] && printf '%s\n' "$said" | grep -qF "store exists:" \
+[ "$(snap "$ST")" = "$was" ] && [ "$out" = "$want_list" ] && grep -qF "store exists:" <<<"$said" \
   && ok "store init on a store holding tickets changes none of them" || fail "store init on a store holding tickets changes none of them" "$said$(printf '\n'; printf '%s' "$out")"
 lt "$R" create "With a byte-order mark" "$tmp/bom.md"; n=$out
 "$SELF" "$R" read "$n" --body > "$tmp/out" 2>&1; lt "$R" read "$n"
@@ -567,7 +567,7 @@ out=$("$SELF" "$L" list 2> "$tmp/err"); rc=$?
 { printf '\357\273\277'; cat "$tmp/2.json"; } > "$LS/2.json"
 python3 -I -c 'import json, sys; p = sys.argv[1]; m = json.load(open(p)); m["log"] = "a line"; json.dump(m, open(p, "w"))' "$LS/3.json"
 was=$(cksum < "$LS/3.json"); lt "$L" comment 3 coachman "hello"
-[ "$rc" -eq 1 ] && printf '%s\n' "$out" | grep -qF "log is not a list" && [ "$(cksum < "$LS/3.json")" = "$was" ] \
+[ "$rc" -eq 1 ] && grep -qF "log is not a list" <<<"$out" && [ "$(cksum < "$LS/3.json")" = "$was" ] \
   && ok "a log that is not a list is refused, not split into characters" || fail "a log that is not a list is refused, not split into characters (exit $rc)" "$out"
 python3 -I -c 'import json, sys; p = sys.argv[1]; m = json.load(open(p)); m["log"] = []; m["labels"] = "bug"; json.dump(m, open(p, "w"))' "$LS/3.json"
 lt "$L" read 3; check "labels that are not a list are refused" 1 "labels is not a list"
@@ -583,7 +583,7 @@ POSTMASTER_CONFIG="$tmp/github.toml" "$SELF" "$G/.worktrees/lane" store init > /
   || fail "a lane's worktree cannot make its repository a store (exit $rc)"
 "$SELF" "$G" store init > /dev/null || exit 1
 lt "$G" store remove; check "store remove on a store that holds no ticket removes it" 0 "store removed:"
-[ ! -e "$G/.git/postmaster" ] && POSTMASTER_CONFIG="$tmp/github.toml" "$HERE/tracker-kind.sh" "$G" 2>/dev/null | grep -qx github \
+[ ! -e "$G/.git/postmaster" ] && grep -qx github <<<"$(POSTMASTER_CONFIG="$tmp/github.toml" "$HERE/tracker-kind.sh" "$G" 2>/dev/null)" \
   && ok "and the repository is back on the config's kind" || fail "and the repository is back on the config's kind" "$(ls -a "$G/.git/postmaster" 2>&1)"
 
 echo "controls: a repository whose store exists uses this tracker, whatever the config names"
@@ -596,14 +596,14 @@ tracker() { POSTMASTER_CONFIG=$1 "$HERE/discover-project.sh" "$2" 2>/dev/null | 
   && ok "a repository with no store gets the config's kind, and none without a config" \
   || fail "a repository with no store gets the config's kind, and none without a config" "$(tracker "$tmp/github.toml" "$U")"
 out=$(POSTMASTER_CONFIG="$tmp/github.toml" "$HERE/tracker-kind.sh" "$tmp/plain" 2>&1); rc=$?
-[ $rc -eq 1 ] && printf '%s\n' "$out" | grep -qF "not a git repository" && [ -z "$(tracker "$tmp/github.toml" "$tmp/plain")" ] \
+[ $rc -eq 1 ] && grep -qF "not a git repository" <<<"$out" && [ -z "$(tracker "$tmp/github.toml" "$tmp/plain")" ] \
   && ok "a store that cannot be looked for is not taken for no store" \
   || fail "a store that cannot be looked for is not taken for no store (exit $rc)" "$out"
 kind=$(cd "$tmp" && POSTMASTER_CONFIG=plane.toml "$HERE/discover-project.sh" "$U" 2>/dev/null | sed -n 's/^tracker=//p')
 [ "$kind" = plane ] && ok "a relative POSTMASTER_CONFIG is read from the caller's directory" \
   || fail "a relative POSTMASTER_CONFIG is read from the caller's directory" "tracker=$kind"
 out=$(env -u HOME -u POSTMASTER_CONFIG "$HERE/discover-project.sh" "$U" 2>/dev/null); rc=$?
-[ $rc -eq 0 ] && printf '%s\n' "$out" | grep -qx 'tracker=' && printf '%s\n' "$out" | grep -q '^gate=' \
+[ $rc -eq 0 ] && grep -qx 'tracker=' <<<"$out" && grep -q '^gate=' <<<"$out" \
   && ok "with HOME unset, discover-project.sh still reports, with the kind left to ask" \
   || fail "with HOME unset, discover-project.sh still reports, with the kind left to ask (exit $rc)" "$out"
 kind=$(cd "$(dirname -- "$HERE")" && CDPATH=.:/nonexistent POSTMASTER_CONFIG="$tmp/github.toml" scripts/discover-project.sh "$R" 2>/dev/null | sed -n 's/^tracker=//p')
@@ -617,11 +617,11 @@ grep -qF "store init" "$tmp/err" && ! grep -qF "store init" "$tmp/err-hosted" \
   || fail "a github target with no origin remote is pointed at store init, and one with a remote is not" "$(cat "$tmp/err" "$tmp/err-hosted")"
 out=$(POSTMASTER_CONFIG="$tmp/github.toml" "$HERE/ticket-check.sh" "$R" 3 2>&1); rc=$?
 out7=$(POSTMASTER_CONFIG="$tmp/github.toml" "$HERE/ticket-check.sh" "$R" 7 2>&1); rc7=$?
-[ $rc -eq 0 ] && printf '%s\n' "$out" | grep -q '^well-formed' && [ $rc7 -eq 0 ] && [ ! -e "$tmp/gh.log" ] \
+[ $rc -eq 0 ] && grep -q '^well-formed' <<<"$out" && [ $rc7 -eq 0 ] && [ ! -e "$tmp/gh.log" ] \
   && ok "ticket-check.sh reads tickets through this store with a config naming github, a byte-order mark aside" \
   || fail "ticket-check.sh reads tickets through this store with a config naming github, a byte-order mark aside (exit $rc, $rc7)" "$out$(printf '\n'; printf '%s' "$out7")"
 out=$(POSTMASTER_CONFIG="$tmp/github.toml" "$HERE/ticket-check.sh" "$U" 3 2>&1); rc=$?
-[ $rc -eq 1 ] && printf '%s\n' "$out" | grep -qF "github adapter" && [ -s "$tmp/gh.log" ] \
+[ $rc -eq 1 ] && grep -qF "github adapter" <<<"$out" && [ -s "$tmp/gh.log" ] \
   && ok "without a store it goes to the github adapter, and the gh on PATH saw the call" \
   || fail "without a store it goes to the github adapter, and the gh on PATH saw the call (exit $rc)" "$out"
 

@@ -31,7 +31,7 @@ flat() { tr -d '\r' < "$1" | tr '\n\t' '  ' | sed 's/  */ /g'; }   # fold newlin
 fails=0
 stale() {
   local text=$1 file=$2 label=$3; shift 3
-  if printf '%s' "$text" | grep -q -F -- "$*"; then
+  if grep -q -F <<<"$text" -- "$*"; then
     printf '%s: still says %s\n' "$file" "$label"
     fails=$((fails + 1))
   fi
@@ -85,7 +85,7 @@ tmp=$(mktemp -d) || exit 2
 trap 'rm -r -- "$tmp" </dev/null 2>/dev/null' EXIT
 fails=0
 has() {  # has <name> <output> <line>
-  printf '%s\n' "$2" | grep -qxF -- "$3" && printf '  ok   %s\n' "$1" \
+  grep -qxF -- "$3" <<<"$2" && printf '  ok   %s\n' "$1" \
     || { printf '  FAIL %s: no line "%s" in:\n%s\n' "$1" "$3" "$2"; fails=$((fails + 1)); }
 }
 
@@ -179,8 +179,8 @@ pair() {  # pair <name> <want-line> <fault...>: one fault firing its historical 
   printf '%s\n' "$*" >> "$tmp/one/skills/postmaster/SKILL.md"
   out=$(accept "$tmp/one"); rc=$?
   [ "$rc" -eq 1 ] && [ "$(printf '%s\n' "$out" | wc -l | tr -d ' ')" -eq 2 ] \
-    && printf '%s\n' "$out" | grep -qxF "$want" \
-    && printf '%s\n' "$out" | grep -qxF 'skills/postmaster/SKILL.md: still says the front door never runs the stream' \
+    && grep -qxF "$want" <<<"$out" \
+    && grep -qxF 'skills/postmaster/SKILL.md: still says the front door never runs the stream' <<<"$out" \
     && printf '  ok   %s\n' "$name" \
     || { printf '  FAIL %s: exit %s with:\n%s\n' "$name" "$rc" "$out"; fails=$((fails + 1)); }
 }

@@ -186,25 +186,25 @@ check "with main moved on by another run's merge, a clone still reviews from the
   '[ $rc -eq 0 ] && [ "$(git -C "$tmp/moved" diff --name-only origin/HEAD...)" = b.txt ]' "$out"
 try --remove "$repo" "$tmp/wt"
 check "--remove takes a worktree scratch away through git" \
-  '[ $rc -eq 0 ] && [ ! -e "$tmp/wt" ] && ! git -C "$repo" worktree list --porcelain | grep -qxF "worktree $tmp/wt"' "$out"
+  '[ $rc -eq 0 ] && [ ! -e "$tmp/wt" ] && ! grep -qxF "worktree $tmp/wt" <<<"$(git -C "$repo" worktree list --porcelain)"' "$out"
 try --remove "$repo" "$tmp/clone"
 check "--remove takes a clone scratch away" '[ $rc -eq 0 ] && [ ! -e "$tmp/clone" ]' "$out"
 
 echo "negative controls"
 try --check "$tmp/moved" "$base" --clone "$base"
-check "--check refuses a scratch that is not at the snapshot" '[ $rc -eq 1 ] && printf "%s" "$out" | grep -q "is not at"' "$out"
+check "--check refuses a scratch that is not at the snapshot" '[ $rc -eq 1 ] && grep -q "is not at" <<<"$out"' "$out"
 try "$repo" "$tmp/synthesis" "$tmp/wt2" "$snap"
 try --check "$tmp/wt2" "$snap" --clone "$base"
-check "and a worktree where a clone is needed" '[ $rc -eq 1 ] && printf "%s" "$out" | grep -q "needs a clone"' "$out"
+check "and a worktree where a clone is needed" '[ $rc -eq 1 ] && grep -q "needs a clone" <<<"$out"' "$out"
 try --check "$tmp/moved" "$snap" --clone "$snap"
-check "and a clone whose origin/HEAD does not lead back to the base" '[ $rc -eq 1 ] && printf "%s" "$out" | grep -q "does not lead back"' "$out"
+check "and a clone whose origin/HEAD does not lead back to the base" '[ $rc -eq 1 ] && grep -q "does not lead back" <<<"$out"' "$out"
 try "$repo" "$tmp/synthesis" "$tmp/wrong" "$snap" --clone "$snap"
 check "a clone whose origin/HEAD does not lead back to the base is refused, and removed" \
-  '[ $rc -eq 1 ] && [ ! -e "$tmp/wrong" ] && printf "%s" "$out" | grep -q "does not lead back"' "$out"
+  '[ $rc -eq 1 ] && [ ! -e "$tmp/wrong" ] && grep -q "does not lead back" <<<"$out"' "$out"
 git -C "$repo" switch -q --orphan elsewhere && commit d.txt unrelated
 try "$repo" "$tmp/synthesis" "$tmp/unrelated" "$snap" --clone "$base"
 check "so is one cut while the repository has an unrelated branch checked out" \
-  '[ $rc -eq 1 ] && [ ! -e "$tmp/unrelated" ] && printf "%s" "$out" | grep -q "merge base none"' "$out"
+  '[ $rc -eq 1 ] && [ ! -e "$tmp/unrelated" ] && grep -q "merge base none" <<<"$out"' "$out"
 git -C "$repo" switch -q main
 try "$repo" "$tmp/synthesis" "$tmp/nobase" "$snap" --clone no-such-ref
 check "a base the repository does not have is refused, and nothing is cut" '[ $rc -eq 1 ] && [ ! -e "$tmp/nobase" ]' "$out"
@@ -223,9 +223,9 @@ for victim in "$tmp/taken" "$repo" "$tmp/synthesis" "$tmp/plain" "$tmp/borrowed"
   try --remove "$repo" "$victim"
   check "--remove refuses it, and leaves it" '[ $rc -eq 1 ] && { [ ! -e "$victim" ] || [ -n "$(ls -A "$victim")" ]; }' "$out"
 done
-check "the synthesis worktree is untouched" '[ -f "$tmp/synthesis/b.txt" ] && git -C "$repo" worktree list --porcelain | grep -qxF "worktree $tmp/synthesis"'
+check "the synthesis worktree is untouched" '[ -f "$tmp/synthesis/b.txt" ] && grep -qxF "worktree $tmp/synthesis" <<<"$(git -C "$repo" worktree list --porcelain)"'
 try --remove "$tmp/repo2" "$tmp/other"
-check "--remove refuses a scratch of another repository" '[ $rc -eq 1 ] && [ -d "$tmp/other/.git" ] && printf "%s" "$out" | grep -q "not of"' "$out"
+check "--remove refuses a scratch of another repository" '[ $rc -eq 1 ] && [ -d "$tmp/other/.git" ] && grep -q "not of" <<<"$out"' "$out"
 try "$repo" "$tmp/synthesis" "$tmp/x" "$snap" --clone
 check "--clone with no base is a usage error" '[ $rc -eq 1 ] && [ ! -e "$tmp/x" ]' "$out"
 

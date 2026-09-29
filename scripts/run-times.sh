@@ -95,7 +95,7 @@ check() {  # check <label> <expected exit> [<text the output must contain>...]
   out=$(times "$tmp" 2>&1); rc=$?
   local bad=""
   [ "$rc" -eq "$want" ] || bad="exit $rc, wanted $want"
-  for text in "$@"; do printf '%s\n' "$out" | grep -qF -- "$text" || bad="${bad:+$bad; }missing: $text"; done
+  for text in "$@"; do grep -qF -- "$text" <<<"$out" || bad="${bad:+$bad; }missing: $text"; done
   if [ -z "$bad" ]; then printf '  ok   %s\n' "$label"
   else printf '  FAIL %s: %s\n' "$label" "$bad"; printf '%s\n' "$out" | sed 's/^/         /'; fails=$((fails+1)); fi
 }

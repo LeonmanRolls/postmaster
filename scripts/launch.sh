@@ -286,8 +286,8 @@ PY
   refused "a recorded leg on a lane's model is refused, though the live config passes" legs "a lane's model" resume coachman "$tmp/wt" T-1 "$tmp/prompt.txt" --leg synthesis --run "$tmp/run-onlane"
   got=$(calls "$here/../skills/postmaster/coachman.md" "$here/../skills/postmaster/postmaster.md"); rc=$?
   out=$(printf '%s\n' "$got" | grep '^unrun '); err=""
-  [ $rc -eq 0 ] && [ -z "$out" ] && printf '%s\n' "$got" | grep -q '^run .*/coachman\.md: ' \
-    && printf '%s\n' "$got" | grep -q '^run .*/postmaster\.md: ' \
+  [ $rc -eq 0 ] && [ -z "$out" ] && grep -q '^run .*/coachman\.md: ' <<<"$got" \
+    && grep -q '^run .*/postmaster\.md: ' <<<"$got" \
     && ok "no launch or resume in coachman.md or postmaster.md lacks --run <dispatch>" \
     || fail "no launch or resume in coachman.md or postmaster.md lacks --run <dispatch>"
 

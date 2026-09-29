@@ -265,7 +265,7 @@ out=$(cd "$wt" && POSTMASTER_VERIFY="$tmp/spec" "$SELF" --ticket "$tmp/prose.md"
 mkdir -p "$tmp/j/shots" && cp "$tmp/shots/1.png" "$tmp/shots/2.png" "$tmp/j/shots/"
 out=$(cd "$wt" && POSTMASTER_VERIFY="$tmp/spec" "$SELF" --ticket "$tmp/prose.md" 2>&1); rc=$?
 [ $rc -eq 0 ] && ok "and passes once its screenshots are beside it" || fail "and passes once its screenshots are beside it (exit $rc)" "$out"
-"$SELF" --format | grep -qF 'did not: <what happened instead>' && ok "the format says how a step is marked" || fail "the format says how a step is marked"
+grep -qF 'did not: <what happened instead>' <<<"$("$SELF" --format)" && ok "the format says how a step is marked" || fail "the format says how a step is marked"
 
 echo "negative controls"
 expect "a step marked did not fails, and says what happened"   1 "$tmp/prose.md" "$tmp/didnot.md" "the list stayed empty"

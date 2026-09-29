@@ -182,7 +182,7 @@ expect() {  # expect <pass|fail> <label> [<text the fault must contain>]
   out=$(lint "$tmp"); rc=$?
   got=$( [ $rc -eq 0 ] && echo pass || echo fail )
   why=""
-  if [ "$got" = fail ] && [ -n "${3:-}" ] && ! printf '%s\n' "$out" | grep -qF -- "$3"; then
+  if [ "$got" = fail ] && [ -n "${3:-}" ] && ! grep -qF -- "$3" <<<"$out"; then
     why=", but not for the expected reason"
   fi
   if [ "$got" = "$1" ] && [ -z "$why" ]; then printf '  ok   %s\n' "$2"

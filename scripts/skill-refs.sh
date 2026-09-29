@@ -108,7 +108,7 @@ echo "positive controls: each fault is found, on its own line"
 [ "$(faults "$tmp/bare.md")" -eq 3 ] && ok "three bare references are three faults" \
   || fail "three bare references are three faults" "$(refs "$tmp/root" check "$tmp/bare.md")"
 out=$(refs "$tmp/root" check "$tmp/bare.md"); rc=$?
-[ $rc -eq 1 ] && printf '%s\n' "$out" | grep -qF "$tmp/bare.md:1: bare" && ok "a fault names its file and line, and exits 1" \
+[ $rc -eq 1 ] && grep -qF "$tmp/bare.md:1: bare" <<<"$out" && ok "a fault names its file and line, and exits 1" \
   || fail "a fault names its file and line, and exits 1 (exit $rc)" "$out"
 [ "$(faults "$tmp/relative.md")" -eq 1 ] && ok "a path that reaches scripts/ another way is a fault" \
   || fail "a path that reaches scripts/ another way is a fault"

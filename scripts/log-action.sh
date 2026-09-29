@@ -80,7 +80,7 @@ tool_fault() {  # tool_fault <file> [flags...]; sets TARGET, DETAIL and FAULT, o
   [ -n "$t" ] && [ -f "$TOOL/$t" ] \
     || { echo "log-action: a tool-fault names the postmaster file that misbehaved, in $TOOL; '$given' is not one" >&2; return 1; }
   kinds=$(awk -F'|' '/^[[:space:]]*\|[[:space:]]*`/ { k = $3; gsub(/[[:space:]]/, "", k); if (k != "") print k }' "$CONTROLS" 2>/dev/null | sort -u)
-  [ -z "$control" ] || printf '%s\n' "$kinds" | grep -qxF -- "$control" \
+  [ -z "$control" ] || grep -qxF -- "$control" <<<"$kinds" \
     || { echo "log-action: '$control' is not a kind of control in $CONTROLS:" $kinds >&2; return 1; }
   f=$(awk -F'|' -v p="$t" '{ c = $2; gsub(/^[[:space:]]+|[[:space:]]+$/, "", c)
         if (c == "`" p "`" || c == "`<tool>/" p "`") { k = $3; gsub(/[[:space:]]/, "", k); print k; exit } }' "$CONTROLS" 2>/dev/null)

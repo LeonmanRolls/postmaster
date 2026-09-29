@@ -520,7 +520,7 @@ fresh_new() {  # fresh_new <dest> <ticket>: make_and_file with a home of the tes
 }
 dest=$tmp/runs/fixture-$first
 out=$(fresh_new "$dest" "$first"); rc=$?
-[ $rc -eq 0 ] && printf '%s\n' "$out" | grep -q "own ticket store as #1:" && ok "new makes the repo and prints the ticket's number" || fail "new makes the repo and prints the ticket's number (exit $rc)" "$out"
+[ $rc -eq 0 ] && grep -q "own ticket store as #1:" <<<"$out" && ok "new makes the repo and prints the ticket's number" || fail "new makes the repo and prints the ticket's number (exit $rc)" "$out"
 [ "$(git -C "$dest" rev-list --count main 2>/dev/null)" = 1 ] && [ -z "$(git -C "$dest" status --porcelain 2>/dev/null)" ] \
   && ok "one commit on main, and a clean tree" || fail "one commit on main, and a clean tree"
 same=$(git -C "$APP" ls-files --cached --others --exclude-standard | sort | while IFS= read -r f; do
@@ -560,7 +560,7 @@ out=$(fresh_new "$tmp/runs/$(basename "$TOOL")" "$first"); rc=$?
 out=$(fresh_new "$tmp/runs/nosuch" no-such-ticket); rc=$?
 [ $rc -eq 1 ] && [ ! -e "$tmp/runs/nosuch" ] && ok "an unknown ticket is refused" || fail "an unknown ticket is refused (exit $rc)" "$out"
 out=$(LOCAL_SH=$tmp/failing-local.sh fresh_new "$tmp/runs/unfiled" "$first"); rc=$?
-[ $rc -eq 1 ] && [ ! -e "$tmp/runs/unfiled" ] && printf '%s\n' "$out" | grep -q "filing the ticket" \
+[ $rc -eq 1 ] && [ ! -e "$tmp/runs/unfiled" ] && grep -q "filing the ticket" <<<"$out" \
   && ok "a ticket that cannot be filed: refused, and the repo it made is gone" \
   || fail "a ticket that cannot be filed: refused, and the repo it made is gone (exit $rc)" "$out"
 out=$(cd "$tmp/runs" && POSTMASTER_FIXTURES='' fresh_new bare-name "$first"); rc=$?
@@ -575,7 +575,7 @@ out=$(POSTMASTER_FIXTURES=$tmp/elsewhere fresh_new other-name "$first"); rc=$?
 wait
 
 echo "score: a recorded run that meets every check scores clean"
-[ -n "$sections" ] && [ -n "$stages" ] && printf '%s\n' "$listed" | grep -qx done \
+[ -n "$sections" ] && [ -n "$stages" ] && grep -qx done <<<"$listed" \
   && ok "the hand-off sections and the stages are read from the scripts that define them" \
   || fail "the hand-off sections and the stages are read from the scripts that define them"
 expect() {  # expect <label> <name> <the check that fails, or none> [<text its FAIL line carries>]
@@ -585,7 +585,7 @@ expect() {  # expect <label> <name> <the check that fails, or none> [<text its F
   lines=$(printf '%s\n' "$out" | grep -c .)
   want=$([ "$3" = none ] && echo 0 || echo 2)
   if [ "$rc" = "$want" ] && [ "$failing" = "$3" ] && [ "$lines" -eq 7 ] \
-     && { [ -z "${4:-}" ] || printf '%s\n' "$out" | grep '^FAIL' | grep -qF -- "$4"; }; then
+     && { [ -z "${4:-}" ] || grep -qF -- "$4" <<<"$(grep '^FAIL' <<<"$out")"; }; then
     ok "$1"
   else
     fail "$1: wanted exit $want with $3 failing${4:+ (\"$4\")}, got exit $rc with $failing failing" "$out"
@@ -611,7 +611,7 @@ mkdir -p "$tmp/not-a-repo"; score_run "$clean" "$tmp/not-a-repo" >/dev/null 2>&1
 [ $rc -eq 1 ] && ok "a repo that is not a git repo" || fail "a repo that is not a git repo (exit $rc)"
 git init -q -b main "$tmp/other" && git -C "$tmp/other" commit -q --allow-empty -m "Another history"
 out=$(score_run "$clean" "$tmp/other" 2>&1); rc=$?
-[ $rc -eq 1 ] && printf '%s\n' "$out" | grep -q "is this the run's repo" && ok "a repo whose main does not hold the run's base" \
+[ $rc -eq 1 ] && grep -q "is this the run's repo" <<<"$out" && ok "a repo whose main does not hold the run's base" \
   || fail "a repo whose main does not hold the run's base (exit $rc)" "$out"
 
 echo
