@@ -35,17 +35,22 @@
 # directories; with none, the machine config's projects_roots plus the tool checkout.
 # --tool names the postmaster checkout that holds the fix (default: this script's own
 # repo). A run is in flight when its manifest's stage is neither done nor abandoned.
-# A branch is concerned by the fix when it carries a fixed file or deleted one: the
-# file in the branch tree, or in its history but no longer in the tree. One
-# content-first verdict classifies every concerned branch: a trial pick of the fix
-# onto the branch's tip, in a scratch, with no history shortcut. An unchanged tree
-# means has-fix, a clean pick means needs, any conflict, modify/delete included,
-# means conflicts; that branch is left alone and named, and whichever merges second
-# resolves the conflict. The pick is fetched from the tool when the branch's repo
-# does not hold it; the exported patch only when the fix object cannot be made
-# present, with history consulted then and only then. The boundary verdict
+# A branch is concerned by the fix when it carries a fixed file or deleted one:
+# the file in the branch tree, or gone at the tip but present at the merge-base
+# of the branch and the fix. Gone at the base means the branch never carried it,
+# so there is nothing to create; with no shared history the branch's own history
+# touching the file stands in for the base. One content-first verdict classifies every
+# concerned branch: a trial pick of the fix onto the branch's tip, in a scratch,
+# with no history shortcut. An unchanged tree means has-fix, a clean pick means
+# needs, any conflict, modify/delete included, means conflicts; that branch is
+# left alone and named, and whichever merges second resolves the conflict. The
+# pick is fetched from the tool when the branch's repo does not hold it; when the
+# fix cannot be fetched the branch verdict is unknown and the tool stops with
+# that reason before any write, never guessing from history. The boundary verdict
 # supersedes the queue-time one: the notes and the prompt state only final
-# outcomes. A stop between legs is a completed hand-off, .done plus a hand-off
+# outcomes, and the record is keyed by fix and branch, a row rewritten on every
+# verdict, never trusting the fix's presence. A stop between legs is a completed
+# hand-off, .done plus a hand-off
 # that checks clean; an exited leg without one is a remount, not a boundary, and
 # advancing always needs the completed hand-off, even before the first bootstrap.
 # Pin fixes are recorded beside the pin as <dispatch-commit>.fixes, one "<pin-sha>
@@ -341,12 +346,15 @@ def outside_patch(patch):
 
 
 def ensure_fix_object(repo, tool, fix):
+    """Fetch the fix commit into REPO from the tool repo when missing. Returns
+    (True, "") or (False, why)."""
     if git(repo, "cat-file", "-e", fix["commit"], check=False)[0] == 0:
-        return True
-    if git(repo, "fetch", "-q", str(tool), fix["commit"], check=False)[0] == 0 \
-       and git(repo, "cat-file", "-e", fix["commit"], check=False)[0] == 0:
-        return True
-    return False
+        return True, ""
+    code, out, err = git(repo, "fetch", "-q", str(tool), fix["commit"], check=False)
+    if code == 0 and git(repo, "cat-file", "-e", fix["commit"], check=False)[0] == 0:
+        return True, ""
+    why = (err or out or "fetch failed").splitlines()
+    return False, why[-1][:200]
 
 
 def pick_empty(where):
@@ -363,33 +371,25 @@ def classify_branch(repo, branch, tool, fix, patch):
     trial pick of the fix onto the branch's tip, in a scratch, decides
     everything, with no history shortcut: an unchanged tree means has-fix, a
     clean pick means needs, any conflict, modify/delete included, means
-    conflicts. History is consulted only when the fix object cannot be made
-    present."""
-    if ensure_fix_object(repo, tool, fix):
-        tmp = pathlib.Path(tempfile.mkdtemp(prefix="hotfix-reach-"))
-        try:
-            if git(repo, "worktree", "add", "--detach", str(tmp), branch, check=False)[0]:
-                return "conflicts"
-            if git(tmp, "cherry-pick", "--no-commit", fix["commit"], check=False)[0]:
-                abort_pick(tmp)
-                return "conflicts"
-            empty = pick_empty(tmp)
-            abort_pick(tmp)
-            return "has-fix" if empty else "needs"
-        finally:
-            git(repo, "worktree", "remove", "--force", str(tmp), check=False)
-            shutil.rmtree(tmp, ignore_errors=True)
-    if history_has_fix(repo, branch, fix):
-        return "has-fix"
+    conflicts. When the fix object cannot be fetched the verdict is unknown
+    and the tool stops, refusing to guess from history."""
+    ok, why = ensure_fix_object(repo, tool, fix)
+    if not ok:
+        raise HotfixError("cannot classify branch %s: fix %s is not in its repo and "
+                          "cannot be fetched from the tool (%s); verdict unknown, "
+                          "refusing to guess from history"
+                          % (branch, fix["short"], why))
     tmp = pathlib.Path(tempfile.mkdtemp(prefix="hotfix-reach-"))
-    p = outside_patch(patch)
     try:
         if git(repo, "worktree", "add", "--detach", str(tmp), branch, check=False)[0]:
             return "conflicts"
-        return "needs" if git(tmp, "apply", "--check", str(p), check=False)[0] == 0 \
-            else "conflicts"
+        if git(tmp, "cherry-pick", "--no-commit", fix["commit"], check=False)[0]:
+            abort_pick(tmp)
+            return "conflicts"
+        empty = pick_empty(tmp)
+        abort_pick(tmp)
+        return "has-fix" if empty else "needs"
     finally:
-        p.unlink(missing_ok=True)
         git(repo, "worktree", "remove", "--force", str(tmp), check=False)
         shutil.rmtree(tmp, ignore_errors=True)
 
@@ -398,7 +398,8 @@ def land_fix(where, repo, tool, fix, patch):
     """Stage the fix's changes on the worktree at WHERE for the caller to commit.
     Returns (True, how) with changes staged, or (False, why) with the tree
     restored. The same method classify_branch chose, so a needs verdict lands."""
-    if ensure_fix_object(repo, tool, fix):
+    ok, _ = ensure_fix_object(repo, tool, fix)
+    if ok:
         if git(where, "cherry-pick", "--no-commit", fix["commit"], check=False)[0]:
             abort_pick(where)
             return False, "conflict"
@@ -416,23 +417,24 @@ def land_fix(where, repo, tool, fix, patch):
         p.unlink(missing_ok=True)
 
 
-def history_has_fix(repo, branch, fix):
-    if git(repo, "merge-base", "--is-ancestor", fix["commit"], branch, check=False)[0] == 0:
-        return True
-    _, out, _ = git(repo, "log", "--format=%s", "--grep=Main's fix %s" % fix["short"],
-                     branch, check=False)
-    return bool(out.strip())
-
-
-def branch_deleted(repo, branch, path):
+def branch_deleted(repo, branch, fix, path):
+    """Whether BRANCH itself deleted PATH: gone at the tip but present at the
+    merge-base of the branch and the fix. Gone at the base means the branch
+    never carried it, so there is nothing to create. When the branch and the
+    fix share no readable history there is no base, and the branch's own
+    history touching the file is the only evidence of a delete."""
     if branch_carries(repo, branch, path):
         return False
-    _, out, _ = git(repo, "log", "--format=%H", "-1", branch, "--", path, check=False)
-    return bool(out.strip())
+    code, base, _ = git(repo, "merge-base", branch, fix["commit"], check=False)
+    if code or not base:
+        _, touched, _ = git(repo, "log", "--format=%H", "-1", branch, "--", path,
+                              check=False)
+        return bool(touched.strip())
+    return git(repo, "cat-file", "-e", "%s:%s" % (base, path), check=False)[0] == 0
 
 
 def concerns(repo, branch, fix):
-    return any(branch_carries(repo, branch, f) or branch_deleted(repo, branch, f)
+    return any(branch_carries(repo, branch, f) or branch_deleted(repo, branch, fix, f)
                for f in fix["paths"])
 
 
@@ -615,13 +617,38 @@ def write_pending(dispatch, commits):
 
 
 def record_applied(dispatch, source, branch_commits, skipped, leg, prompt):
+    """Record one verdict in the applied file, keyed by fix and branch: the
+    row is rewritten on every verdict, never trusted from the fix's presence."""
     data = read_json(dispatch / APPLIED) or {}
     rows = data.get("commits")
     rows = rows if isinstance(rows, list) else []
-    if not any(isinstance(x, dict) and x.get("source") == source for x in rows):
-        rows.append({"source": source, "branch_commits": branch_commits,
-                     "skipped_conflict": sorted(skipped), "leg": leg,
-                     "prompt": prompt, "at": utcnow()})
+    row = next((x for x in rows
+                if isinstance(x, dict) and x.get("source") == source), None)
+    if row is None:
+        row = {"source": source, "branch_commits": {}, "skipped_conflict": [],
+               "leg": leg, "prompt": prompt, "at": utcnow()}
+        rows.append(row)
+    commits = row.get("branch_commits")
+    if not isinstance(commits, dict):
+        commits = {}
+        row["branch_commits"] = commits
+    conflicts = row.get("skipped_conflict")
+    if not isinstance(conflicts, list):
+        conflicts = []
+        row["skipped_conflict"] = conflicts
+    for branch, rev in branch_commits.items():
+        commits[branch] = rev
+        while branch in conflicts:
+            conflicts.remove(branch)
+    for branch in skipped:
+        if branch in commits:
+            del commits[branch]
+        if branch not in conflicts:
+            conflicts.append(branch)
+    row["skipped_conflict"] = sorted(conflicts)
+    row["leg"] = leg
+    row["prompt"] = prompt
+    row["at"] = utcnow()
     write_json(dispatch / APPLIED, {"commits": rows})
 
 
@@ -645,12 +672,26 @@ def note_lines(fix, applied, skipped, runbook_only):
 def write_hotfix_notes(dispatch, fix, applied, skipped, runbook_only):
     note = dispatch / "hotfix-notes.md"
     lines = note_lines(fix, applied, skipped, runbook_only)
-    if note.is_file():
-        text = note.read_text(encoding="utf-8")
-        if fix["short"] not in text:
-            note.write_text(text + "".join(lines), encoding="utf-8")
-    else:
+    if not note.is_file():
         note.write_text("# Hotfix notes\n\n" + "".join(lines), encoding="utf-8")
+        return
+    text = note.read_text(encoding="utf-8")
+    if runbook_only:
+        # Branchless and identical every time: presence is completeness.
+        if "".join(lines) not in text:
+            note.write_text(text + "".join(lines), encoding="utf-8")
+        return
+    kept = []
+    for ln in text.splitlines(keepends=True):
+        if ("Main's fix %s" % fix["short"]) in ln and (
+                "branch " not in ln or any(
+                    ("on branch %s. " % b) in ln
+                    or ln.rstrip("\n").endswith("on branch %s." % b)
+                    or ("with branch %s," % b) in ln
+                    for b in list(applied) + list(skipped))):
+            continue
+        kept.append(ln)
+    note.write_text("".join(kept) + "".join(lines), encoding="utf-8")
 
 
 def append_prompt_note(dispatch, fix, prompt):
@@ -663,10 +704,11 @@ def append_prompt_note(dispatch, fix, prompt):
     if not markers:
         markers = ["Main's fix %s (`%s`) reached this run; see hotfix-notes.md." % (
             fix["short"], fix["subject"])]
-    text = prompt.read_text(encoding="utf-8")
-    if fix["short"] in text:
-        return
-    prompt.write_text(text.rstrip("\n") + "\n\nNote: " + " ".join(markers)
+    kept = [ln for ln in prompt.read_text(encoding="utf-8").splitlines()
+            if not (ln.startswith("Note: ") and fix["short"] in ln)]
+    body = "\n".join(kept).rstrip("\n")
+    head = body + "\n\n" if body else ""
+    prompt.write_text(head + "Note: " + " ".join(markers)
                       + " Do not merge main into the run branch.\n", encoding="utf-8")
 
 
@@ -765,8 +807,10 @@ def do_queue(tool, fix_commit, roots):
                        "skipped, pin side handled")
             print("%s: unknown; branch work skipped" % dispatch.name)
             continue
-        queue_pin_side(dispatch, fix, patch)
+        # Classify before the pin side: an unknown branch verdict stops the run
+        # before any write, the pin's included.
         result = classify(repo, info, tool, fix, patch)
+        queue_pin_side(dispatch, fix, patch)
         reach = result["reach"]
         if reach == "checkout" and not result["runbook"]:
             log_action(dispatch, "postmaster", "note", fix["commit"],
@@ -896,6 +940,13 @@ def do_next_leg(tool, dispatch_s, leg_s, prompt_s):
         if missing:
             raise HotfixError("queued branch %s is gone from %s; resolve by hand"
                               % (", ".join(missing), repo))
+        if branches:
+            ok, why = ensure_fix_object(repo, tool, fix)
+            if not ok:
+                raise HotfixError("cannot classify %s: fix %s is not in the project "
+                                  "repo and cannot be fetched from the tool (%s); "
+                                  "verdict unknown, refusing to guess from history"
+                                  % (", ".join(branches), fix["short"], why))
         for b in branches:
             wt = live_worktree(repo, b)
             if wt is not None and git(wt, "status", "--porcelain", check=False)[1].strip():
@@ -1016,6 +1067,11 @@ mkdir -p "$POSTMASTER_TOOL_PINS"
 cmd() {  # cmd <repo> <git args...>
   local where=$1; shift
   git -C "$where" "$@" || { echo "self-test fixture failed: git $*" >&2; exit 1; }
+}
+nofetch() {  # nofetch <command...>: run with the file transport refused, so a
+  # fetch of the fix fails while every local read and commit still works.
+  GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=protocol.file.allow \
+    GIT_CONFIG_VALUE_0=never "$@"
 }
 new_repo() {  # new_repo <dir>
   mkdir -p "$1"
@@ -1642,6 +1698,226 @@ out=$("$SELF" next-leg "$dC4" 2 "$dC4/leg-2-prompt.txt" --tool "$tool" 2>&1); rc
   && [ "$(grep -c "Main's fix" "$dC4/leg-2-prompt.txt")" -eq 0 ] \
   && ok "a mid-loop refusal moves nothing: branch, pending and prompt intact" \
   || fail "a mid-loop refusal moves nothing: branch, pending and prompt intact (exit $rc)" "$out"
+
+echo "a re-delivery rewrites the record to the branch's current sha"
+dV2=$(dispatch "$RUNS_A" tV2 checkpoint-1 1 '{}')
+between_legs "$dV2"
+cmd "$projA" checkout -qb tV2 main
+cmd "$projA" checkout -q tA
+"$SELF" queue "$FIX" "$RUNS_A" --tool "$tool" >/dev/null 2>&1
+printf 'You are the coachman for leg 2.\n' > "$dV2/leg-2-prompt.txt"
+"$SELF" next-leg "$dV2" 2 "$dV2/leg-2-prompt.txt" --tool "$tool" >/dev/null 2>&1
+firstV2=$(cmd "$projA" rev-parse tV2)
+cmd "$projA" checkout -q tV2
+cmd "$projA" revert --no-edit HEAD >/dev/null 2>&1
+cmd "$projA" checkout -q tA
+"$SELF" queue "$FIX" "$RUNS_A" --tool "$tool" >/dev/null 2>&1
+# The same prompt file: a re-delivery must rewrite its note, not keep the old sha.
+out=$("$SELF" next-leg "$dV2" 2 "$dV2/leg-2-prompt.txt" --tool "$tool" 2>"$tmp/err"); rc=$?
+secondV2=$(cmd "$projA" rev-parse tV2)
+[ $rc -eq 0 ] \
+  && grep -q "${secondV2:0:12}" "$dV2/hotfix-notes.md" \
+  && grep -q "${secondV2:0:12}" "$dV2/leg-2-prompt.txt" \
+  && grep -q "$secondV2" "$dV2/.hotfix-applied.json" \
+  && ! grep -q "${firstV2:0:12}" "$dV2/hotfix-notes.md" \
+  && ! grep -q "${firstV2:0:12}" "$dV2/leg-2-prompt.txt" \
+  && ! grep -q "$firstV2" "$dV2/.hotfix-applied.json" \
+  && [ "$(grep -c "Main's fix ${FIX:0:7}" "$dV2/hotfix-notes.md")" -eq 1 ] \
+  && ok "a re-delivery leaves notes, prompt and applied naming the current sha" \
+  || fail "a re-delivery leaves notes, prompt and applied naming the current sha (exit $rc)" "$out$(cat "$tmp/err")"
+
+echo "a fix that cannot be fetched stops the tool with unknown, before any write"
+projU="$tmp/projU"
+new_repo "$projU"
+mkdir -p "$projU/scripts"
+echo "old" > "$projU/scripts/foo.sh"
+cmd "$projU" add -A
+cmd "$projU" commit -qm base
+RUNS_U="$projU/.postmaster/runs"
+dU=$(dispatch "$RUNS_U" tU checkpoint-1 1 '{}')
+between_legs "$dU"
+cmd "$projU" checkout -qb tU
+cmd "$projU" checkout -q main
+# The fix lives in the tool, not in the project, and the fetch cannot land.
+if git -C "$projU" cat-file -e "$FIX" 2>/dev/null \
+  || nofetch git -C "$projU" fetch -q "$tool" "$FIX" 2>/dev/null; then
+  fail "fixture: the fix object is reachable in projU or its fetch works"
+else
+  ok "fixture: the fix object is absent and its fetch fails"
+fi
+out=$(nofetch "$SELF" report "$FIX" "$RUNS_U" --tool "$tool" 2>&1); rc=$?
+[ $rc -eq 1 ] && printf '%s\n' "$out" | grep -q "tU" \
+  && printf '%s\n' "$out" | grep -q "unknown" \
+  && [ ! -f "$dU/.hotfix-pending.json" ] && [ ! -f "$dU/hotfix-notes.md" ] \
+  && ! grep -rq "${FIX:0:7}" "$dU/logs" 2>/dev/null \
+  && ok "report stops with unknown and writes nothing" \
+  || fail "report stops with unknown and writes nothing (exit $rc)" "$out"
+# A managed pin makes the queue case sharp: the reorder must stop before serving it.
+pinU="$POSTMASTER_TOOL_PINS/pinU"
+cmd "$tool" clone -q "$tool" "$pinU" 2>/dev/null
+cmd "$pinU" config user.email self@test
+cmd "$pinU" config user.name self-test
+cmd "$pinU" checkout -q "$BASE"
+printf '{"project": "fix", "run": "tU", "postmaster": {"commit": "%s", "checkout": "%s"}}\n' \
+  "$BASE" "$pinU" > "$dU/run.json"
+out=$(nofetch "$SELF" queue "$FIX" "$RUNS_U" --tool "$tool" 2>&1); rc=$?
+[ $rc -eq 1 ] && printf '%s\n' "$out" | grep -q "unknown" \
+  && [ "$(cmd "$pinU" rev-parse HEAD)" = "$BASE" ] \
+  && [ ! -f "$dU/.hotfix-pending.json" ] && [ ! -f "$dU/hotfix-notes.md" ] \
+  && ok "queue stops with unknown before the pin and the pending write" \
+  || fail "queue stops with unknown before the pin and the pending write (exit $rc)" "$out"
+
+echo "the next-leg preflight refuses an unfetchable fix with pending intact"
+projN="$tmp/projN"
+new_repo "$projN"
+mkdir -p "$projN/scripts"
+echo "old" > "$projN/scripts/foo.sh"
+cmd "$projN" add -A
+cmd "$projN" commit -qm base
+RUNS_N="$projN/.postmaster/runs"
+dN=$(dispatch "$RUNS_N" tN checkpoint-1 1 '{}')
+between_legs "$dN"
+cmd "$projN" checkout -qb tN
+cmd "$projN" checkout -q main
+printf '{"commits": [{"fix": "%s", "subject": "#7, Fix foo", "paths": ["scripts/foo.sh"], "branches": ["tN"], "skipped_conflict": [], "runbook": false, "queued_at": "fixture"}]}\n' \
+  "$FIX" > "$dN/.hotfix-pending.json"
+printf 'You are the coachman for leg 2.\n' > "$dN/leg-2-prompt.txt"
+if git -C "$projN" cat-file -e "$FIX" 2>/dev/null \
+  || nofetch git -C "$projN" fetch -q "$tool" "$FIX" 2>/dev/null; then
+  fail "fixture: the fix object is reachable in projN or its fetch works"
+else
+  ok "fixture: the next-leg fix object is absent and its fetch fails"
+fi
+beforeN=$(cmd "$projN" rev-parse tN)
+out=$(nofetch "$SELF" next-leg "$dN" 2 "$dN/leg-2-prompt.txt" --tool "$tool" 2>&1); rc=$?
+[ $rc -eq 1 ] && printf '%s\n' "$out" | grep -q "unknown" \
+  && printf '%s\n' "$out" | grep -q "tN" \
+  && grep -q "$FIX" "$dN/.hotfix-pending.json" \
+  && [ "$(cmd "$projN" rev-parse tN)" = "$beforeN" ] \
+  && [ ! -f "$dN/hotfix-notes.md" ] \
+  && [ "$(grep -c "Main's fix" "$dN/leg-2-prompt.txt")" -eq 0 ] \
+  && ok "next-leg refuses unknown with branch, pending, notes and prompt intact" \
+  || fail "next-leg refuses unknown with branch, pending, notes and prompt intact (exit $rc)" "$out"
+
+echo "unknown holds whatever the branch history suggests"
+projV="$tmp/projV"
+new_repo "$projV"
+mkdir -p "$projV/scripts"
+echo "old" > "$projV/scripts/foo.sh"
+cmd "$projV" add -A
+cmd "$projV" commit -qm base
+RUNS_V="$projV/.postmaster/runs"
+dRv=$(dispatch "$RUNS_V" tRv checkpoint-1 1 '{}')
+between_legs "$dRv"
+cmd "$projV" checkout -qb tRv
+echo new > "$projV/scripts/foo.sh"
+cmd "$projV" commit -qam "lane takes the fix early"
+cmd "$projV" revert --no-edit HEAD >/dev/null 2>&1
+cmd "$projV" commit -q --amend -m 'Revert "#7, Fix foo"'
+cmd "$projV" checkout -q main
+if git -C "$projV" cat-file -e "$FIX" 2>/dev/null \
+  || nofetch git -C "$projV" fetch -q "$tool" "$FIX" 2>/dev/null; then
+  fail "fixture: the fix object is reachable in projV or its fetch works"
+else
+  ok "fixture: the revert-branch fix object is absent and its fetch fails"
+fi
+out=$(nofetch "$SELF" report "$FIX" "$RUNS_V" --tool "$tool" 2>&1); rc=$?
+[ $rc -eq 1 ] && printf '%s\n' "$out" | grep -q "unknown" \
+  && ! grep -rq "${FIX:0:7}" "$dRv/logs" 2>/dev/null \
+  && ok "a branch holding a revert of the fix is unknown, not needs" \
+  || fail "a branch holding a revert of the fix is unknown, not needs (exit $rc)" "$out"
+projW="$tmp/projW"
+new_repo "$projW"
+mkdir -p "$projW/scripts"
+echo "old" > "$projW/scripts/foo.sh"
+cmd "$projW" add -A
+cmd "$projW" commit -qm base
+RUNS_W="$projW/.postmaster/runs"
+dW=$(dispatch "$RUNS_W" tW checkpoint-1 1 '{}')
+between_legs "$dW"
+cmd "$projW" checkout -qb tW
+cmd "$projW" commit -q --allow-empty -m "Main's fix ${FIX:0:7} landed already"
+cmd "$projW" checkout -q main
+if git -C "$projW" cat-file -e "$FIX" 2>/dev/null \
+  || nofetch git -C "$projW" fetch -q "$tool" "$FIX" 2>/dev/null; then
+  fail "fixture: the fix object is reachable in projW or its fetch works"
+else
+  ok "fixture: the message-branch fix object is absent and its fetch fails"
+fi
+out=$(nofetch "$SELF" report "$FIX" "$RUNS_W" --tool "$tool" 2>&1); rc=$?
+[ $rc -eq 1 ] && printf '%s\n' "$out" | grep -q "unknown" \
+  && ! grep -rq "${FIX:0:7}" "$dW/logs" 2>/dev/null \
+  && ok "a branch message claiming the fix is unknown, never has-fix" \
+  || fail "a branch message claiming the fix is unknown, never has-fix (exit $rc)" "$out"
+
+echo "a branch cut after main deleted the file is never carried, not deleted"
+cmd "$tool" rm -q scripts/foo.sh
+cmd "$tool" commit -qm "main drops foo"
+DTOOL=$(cmd "$tool" rev-parse HEAD)
+printf 'restored\n' > "$tool/scripts/foo.sh"
+cmd "$tool" add -A
+cmd "$tool" commit -qm "#7, Restore foo"
+FIXADD=$(cmd "$tool" rev-parse HEAD)
+projD="$tmp/projD"
+new_repo "$projD"
+cmd "$projD" fetch -q "$tool" "$DTOOL"
+cmd "$projD" checkout -q -B main "$DTOOL"
+cmd "$projD" commit -q --allow-empty -m "later on main"
+RUNS_D="$projD/.postmaster/runs"
+dD3=$(dispatch "$RUNS_D" tD checkpoint-1 1 '{}')
+between_legs "$dD3"
+cmd "$projD" checkout -qb tD
+cmd "$projD" checkout -q main
+# The fix object is present: the verdict must come from the merge-base, not absence.
+cmd "$projD" fetch -q "$tool" "$FIXADD"
+out=$("$SELF" report "$FIXADD" "$RUNS_D" --tool "$tool" 2>"$tmp/err"); rc=$?
+[ $rc -eq 0 ] && printf '%s\n' "$out" | grep -q "tD  *checkout" \
+  && ok "a branch cut after main deleted the file reports checkout" \
+  || fail "a branch cut after main deleted the file reports checkout (exit $rc)" "$out$(cat "$tmp/err")"
+out=$("$SELF" queue "$FIXADD" "$RUNS_D" --tool "$tool" 2>"$tmp/err"); rc=$?
+printf 'You are the coachman for leg 2.\n' > "$dD3/leg-2-prompt.txt"
+beforeD=$(cmd "$projD" rev-parse tD)
+out2=$("$SELF" next-leg "$dD3" 2 "$dD3/leg-2-prompt.txt" --tool "$tool" 2>&1); rc2=$?
+[ $rc -eq 0 ] && printf '%s\n' "$out" | grep -q "nothing more to do" \
+  && [ ! -f "$dD3/.hotfix-pending.json" ] \
+  && [ $rc2 -eq 0 ] && [ "$(cmd "$projD" rev-parse tD)" = "$beforeD" ] \
+  && [ ! -f "$dD3/hotfix-notes.md" ] \
+  && ok "and the boundary creates nothing on it" \
+  || fail "and the boundary creates nothing on it (exit $rc/$rc2)" "$out$out2$(cat "$tmp/err")"
+
+echo "a branch that never saw the file is not its deleter"
+printf 'bar\n' > "$tool/scripts/bar.sh"
+cmd "$tool" add -A
+cmd "$tool" commit -qm "main adds bar"
+ABAR=$(cmd "$tool" rev-parse HEAD)
+printf 'bar fixed\n' > "$tool/scripts/bar.sh"
+cmd "$tool" commit -qam "#7, Fix bar"
+FIXB=$(cmd "$tool" rev-parse HEAD)
+PBAR=$(cmd "$tool" rev-parse "$ABAR^")
+projE="$tmp/projE"
+new_repo "$projE"
+cmd "$projE" fetch -q "$tool" "$PBAR"
+cmd "$projE" checkout -q -B main "$PBAR"
+RUNS_E="$projE/.postmaster/runs"
+dE=$(dispatch "$RUNS_E" tE checkpoint-1 1 '{}')
+between_legs "$dE"
+cmd "$projE" checkout -qb tE
+printf 'mine\n' > "$projE/scripts/bar.sh"
+cmd "$projE" add scripts/bar.sh
+cmd "$projE" commit -qm "lane drafts its own copy"
+cmd "$projE" rm -q scripts/bar.sh
+cmd "$projE" commit -qm "lane drops its own copy"
+cmd "$projE" checkout -q main
+cmd "$projE" fetch -q "$tool" "$FIXB"
+out=$("$SELF" report "$FIXB" "$RUNS_E" --tool "$tool" 2>"$tmp/err"); rc=$?
+[ $rc -eq 0 ] && printf '%s\n' "$out" | grep -q "tE  *checkout" \
+  && ok "a branch whose own copy never met the file reports checkout" \
+  || fail "a branch whose own copy never met the file reports checkout (exit $rc)" "$out$(cat "$tmp/err")"
+out=$("$SELF" queue "$FIXB" "$RUNS_E" --tool "$tool" 2>"$tmp/err"); rc=$?
+[ $rc -eq 0 ] && printf '%s\n' "$out" | grep -q "nothing more to do" \
+  && [ ! -f "$dE/.hotfix-pending.json" ] \
+  && ok "and queue creates no branch work for it" \
+  || fail "and queue creates no branch work for it (exit $rc)" "$out$(cat "$tmp/err")"
 
 echo
 [ "$fails" -eq 0 ] && { echo "self-test: all controls behaved"; exit 0; }
