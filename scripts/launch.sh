@@ -7,6 +7,8 @@
 #   launch.sh launch <name> <cwd> <prompt-file> [--leg <leg>] [--last <file>] [--run <dispatch>]
 #   launch.sh resume <name> <cwd> <thread-id> <prompt-file> [--leg <leg>] [--last <file>]
 #                    [--run <dispatch>]
+#   launch.sh thread-id <name> <events-file> [--leg <leg>] [--run <dispatch>]
+#   launch.sh transient <name> <err-file> <events-file> [--leg <leg>] [--run <dispatch>]
 #   launch.sh skill  <name> <skill> [--run <dispatch>]
 #   launch.sh --self-test
 #
@@ -35,12 +37,15 @@
 # prints two lines: `launch: ` and the launch form, then `resume: ` and the resume form, or
 # `resume: none: ` and why there is none.
 #
-#   exit 0  the forms or the skill's prompt were printed, or the harness exited 0
+#   exit 0  the forms or the skill's prompt were printed, a thread id or a named transient
+#           provider error was found, or the harness exited 0
 #   exit 1  usage, config or run.json missing or unreadable, unknown name, a leg that is not
 #           synthesis, review or ship, the coachman launched or resumed with no --leg, a
 #           coachman or fallback on a lane's model, harness not on PATH, env_file missing, a
 #           form this script does not have (agy resume), a skill that is not security-review,
-#           or a muse or mimo resume of a thread the launch's data directory does not hold
+#           a thread id was not found, no named transient error was found, or a muse or mimo
+#           resume of a thread the launch's data directory does not hold
+#   exit 2  transient: the error file could not be read
 #   exit 3  skill: the lane's harness has no such skill recorded
 #   else    the harness's own exit code
 set -uo pipefail
@@ -411,13 +416,64 @@ PY
   run skills skill three security-review
   [ $rc -eq 3 ] && [ -z "$out" ] && ok "a muse lane has no security review skill: exit 3" || fail "a muse lane has no security review skill: exit 3"
 
+  echo "watcher adapter"
+  mkdir -p "$tmp/adapter"
+  adapter_config() {
+    python3 - "$tmp/adapter/run.json" "$1" <<'PY'
+import json, sys
+path, harness = sys.argv[1:]
+cfg = {"lanes": {}, "team": {"coachman": {"harness": harness, "model": "coach-model"}}}
+with open(path, "w") as f: json.dump({"config": cfg}, f)
+PY
+  }
+  for h in codex grok agy claude pi muse mimo; do
+    adapter_config "$h"
+    case $h in
+      codex) event='{"thread_id":"fixture-codex"}' ;;
+      grok) event='{"session_id":"fixture-grok"}' ;;
+      agy) event='{"conversationId":"fixture-agy"}' ;;
+      claude) event='{"session_id":"fixture-claude"}' ;;
+      pi) event='{"type":"session","id":"fixture-pi"}' ;;
+      muse) event='{"stream":{"kind":"session","id":"fixture-muse"}}' ;;
+      mimo) event='{"sessionID":"fixture-mimo"}' ;;
+    esac
+    printf '%s\n' "$event" > "$tmp/adapter/events.jsonl"
+    run adapter thread-id coachman --leg synthesis --run "$tmp/adapter" "$tmp/adapter/events.jsonl"
+    [ $rc -eq 0 ] && [ "$out" = "fixture-$h" ] \
+      && ok "$h thread id is read from its recorded stream field" \
+      || fail "$h thread id is read from its recorded stream field"
+    : > "$tmp/adapter/err"
+    printf '%s\n' '{"type":"error","message":"Model stream idle timeout"}' > "$tmp/adapter/events.jsonl"
+    run adapter transient coachman "$tmp/adapter/err" "$tmp/adapter/events.jsonl" --leg synthesis --run "$tmp/adapter"
+    [ $rc -eq 0 ] && [ "$out" = "model stream idle timeout" ] \
+      && ok "$h names the model stream idle timeout as transient" \
+      || fail "$h names the model stream idle timeout as transient"
+  done
+  adapter_config claude
+  printf '%s\n' '{"type":"user","message":"model stream idle timeout"}' > "$tmp/adapter/events.jsonl"
+  run adapter transient coachman "$tmp/adapter/err" "$tmp/adapter/events.jsonl" --leg synthesis --run "$tmp/adapter"
+  [ $rc -eq 1 ] && [ "$out" = "not-transient" ] && ok "timeout text in a user prompt is not a provider error" \
+    || fail "timeout text in a user prompt is not a provider error"
+  printf '%s\n' 'launch: resume needs a thread id' 'model stream idle timeout' > "$tmp/adapter/err"
+  run adapter transient coachman "$tmp/adapter/err" "$tmp/adapter/events.jsonl" --leg synthesis --run "$tmp/adapter"
+  [ $rc -eq 1 ] && [ "$out" = "launch-refusal" ] && ok "a launch refusal is never transient" \
+    || fail "a launch refusal is never transient"
+  printf '%s\n' 'quota exceeded: model stream idle timeout' > "$tmp/adapter/err"
+  run adapter transient coachman "$tmp/adapter/err" "$tmp/adapter/events.jsonl" --leg synthesis --run "$tmp/adapter"
+  [ $rc -eq 1 ] && [ "$out" = "provider-wall" ] && ok "a quota wall takes precedence over a transient signature" \
+    || fail "a quota wall takes precedence over a transient signature"
+  printf '%s\n' 'request timeout' > "$tmp/adapter/err"
+  run adapter transient coachman "$tmp/adapter/err" "$tmp/adapter/events.jsonl" --leg synthesis --run "$tmp/adapter"
+  [ $rc -eq 1 ] && [ "$out" = "not-transient" ] && ok "a generic timeout is not transient" \
+    || fail "a generic timeout is not transient"
+
   echo
   [ "$fails" -eq 0 ] && { echo "self-test: all controls behaved"; exit 0; }
   echo "self-test: $fails control(s) misbehaved"; exit 1
 fi
 
 die() { echo "launch: $*" >&2; exit 1; }
-[ $# -ge 2 ] || die "usage: launch.sh form|launch|resume|skill <name> ... | --self-test"
+[ $# -ge 2 ] || die "usage: launch.sh form|launch|resume|thread-id|transient|skill <name> ... | --self-test"
 CMD=$1; NAME=$2; shift 2
 LEG=""; LAST=""; RUN=""; STDIN_FILE=""; args=()
 while [ $# -gt 0 ]; do
@@ -505,11 +561,120 @@ PY
 eval "$spec"
 [ -n "${HARNESS:-}" ] || die "$NAME has no harness in $SOURCE"
 [ -n "${MODEL:-}" ] || die "$NAME has no model in $SOURCE"
-command -v "$HARNESS" >/dev/null 2>&1 || die "harness '$HARNESS' is not on PATH"
-if [ -n "${ENV_FILE:-}" ]; then
+case $CMD in
+  thread-id|transient) [ -n "$RUN" ] || die "$CMD needs --run <dispatch>" ;;
+  *) command -v "$HARNESS" >/dev/null 2>&1 || die "harness '$HARNESS' is not on PATH" ;;
+esac
+if [ -n "${ENV_FILE:-}" ] && [ "$CMD" != thread-id ] && [ "$CMD" != transient ]; then
   ENV_FILE=${ENV_FILE/#\~/$HOME}
   case $ENV_FILE in /*) ;; *) ENV_FILE=$(CDPATH= cd -P -- "$(dirname -- "$CONFIG")" && pwd -P)/$ENV_FILE ;; esac
   [ -f "$ENV_FILE" ] && [ -r "$ENV_FILE" ] || die "env_file for $NAME not found or not readable: $ENV_FILE"
+fi
+
+if [ "$CMD" = thread-id ] || [ "$CMD" = transient ]; then
+  case $CMD in
+    thread-id) [ ${#args[@]} -eq 1 ] || die "thread-id needs <events-file>" ;;
+    transient) [ ${#args[@]} -eq 2 ] || die "transient needs <err-file> <events-file>" ;;
+  esac
+  python3 - "$CMD" "$HARNESS" "${args[@]}" <<'PY'
+import collections, json, os, re, sys
+mode, harness = sys.argv[1:3]
+paths = sys.argv[3:]
+
+def events(path, first=False):
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            if first:
+                for line in f:
+                    try: yield json.loads(line)
+                    except (ValueError, TypeError): continue
+            else:
+                lines = collections.deque(f, maxlen=100)
+                for line in lines:
+                    try: yield json.loads(line)
+                    except (ValueError, TypeError): continue
+    except FileNotFoundError:
+        return
+
+def walk(obj):
+    if isinstance(obj, dict):
+        for key, value in obj.items():
+            yield key, value
+            yield from walk(value)
+    elif isinstance(obj, list):
+        for value in obj: yield from walk(value)
+
+def thread_id(event):
+    if not isinstance(event, dict): return ""
+    if harness == "codex": keys = ("thread_id",)
+    elif harness == "claude": keys = ("session_id",)
+    elif harness == "grok": keys = ("session_id", "sessionId", "conversation_id", "conversationId")
+    elif harness == "agy": keys = ("conversationId",)
+    elif harness == "pi":
+        if event.get("type") != "session": return ""
+        keys = ("id",)
+    elif harness == "muse":
+        stream = event.get("stream")
+        if isinstance(stream, dict) and stream.get("kind") == "session":
+            value = stream.get("id")
+            return value.strip() if isinstance(value, str) else ""
+        keys = ("session_id", "sessionId")
+    elif harness == "mimo": keys = ("sessionID",)
+    else: return ""
+    for key, value in walk(event):
+        if key in keys and isinstance(value, str) and value.strip(): return value.strip()
+    return ""
+
+if mode == "thread-id":
+    for event in events(paths[0], first=True):
+        found = thread_id(event)
+        if found:
+            print(found)
+            raise SystemExit(0)
+    raise SystemExit(1)
+
+err_path, stream_path = paths
+try:
+    with open(err_path, encoding="utf-8", errors="replace") as f: err = f.read()
+except OSError as e:
+    print("launch: cannot read %s: %s" % (err_path, e), file=sys.stderr)
+    raise SystemExit(2)
+
+# Only error records contribute stream text. User and prompt fields are excluded, so a prompt
+# that mentions a timeout can never make a process eligible for an automatic remount.
+error_text = []
+for event in events(stream_path):
+    if not isinstance(event, dict): continue
+    kind = " ".join(str(event.get(k, "")) for k in ("type", "event", "kind", "payload_type")).lower()
+    marked = ("error" in kind or "fail" in kind or "exception" in kind or
+              bool(event.get("error")))
+    if not marked: continue
+    def collect(value):
+        if isinstance(value, dict):
+            for key, child in value.items():
+                if str(key).lower() in {"user", "prompt", "input", "transcript", "request"}: continue
+                if isinstance(child, str): error_text.append(child)
+                else: collect(child)
+        elif isinstance(value, list):
+            for child in value: collect(child)
+    collect(event)
+
+all_errors = err + "\n" + "\n".join(error_text)
+if err.startswith("launch:"):
+    print("launch-refusal")
+    raise SystemExit(1)
+wall = re.compile(r"\b(?:402\s+payment\s+required|payment\s+required|quota(?:\s+(?:wall|exceeded|exhausted))?|usage[\s_-]+limit|rate[\s_-]+limit|provider\s+wall|resource\s+exhausted|insufficient\s+funds|too\s+many\s+requests)\b", re.I)
+if wall.search(all_errors):
+    print("provider-wall")
+    raise SystemExit(1)
+idle = re.compile(r"\bmodel[\s_-]+stream[\s_-]+idle[\s_-]+timeout\b", re.I)
+if idle.search(all_errors):
+    print("model stream idle timeout")
+    raise SystemExit(0)
+print("not-transient")
+raise SystemExit(1)
+PY
+  exit $?
 fi
 
 if [ "$CMD" = skill ]; then  # the prompt that invokes the lane's harness's own skill

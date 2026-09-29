@@ -16,6 +16,29 @@ exact launch and resume commands for a configured lane or role; `launch` and `re
 The script and this file change together, and a form the script refuses (agy resume) is a form
 this file has not recorded yet.
 
+`<tool>/scripts/launch.sh thread-id coachman --leg <leg> --run <dispatch> <events>` reads the
+thread id from a leg's event stream. `transient` takes the same role and run options followed by
+`<err> <events>` and exits 0 only for a named transient provider error. It reads `.err` and
+error or failure records in the stream tail; prompt and user-message records never count. A
+launch refusal (`.err` starts with `launch:`), or a quota or provider wall, is never transient.
+These forms read the config recorded in `run.json` and do not need the harness executable on
+PATH.
+
+| harness | thread id in its stream | transient provider error named by the adapter |
+|---|---|---|
+| codex | `thread_id` | `model stream idle timeout` |
+| grok | session id (`session_id`, `sessionId`, `conversation_id` or `conversationId`) | `model stream idle timeout` |
+| agy | `conversationId` | `model stream idle timeout` |
+| claude | `session_id` | `model stream idle timeout` |
+| pi | `id` on the `session` record | `model stream idle timeout` |
+| muse | `stream.id` on a `session` record | `model stream idle timeout` |
+| mimo | `sessionID` | `model stream idle timeout` |
+
+The adapter accepts spaces, underscores or hyphens between the words in that provider error,
+without regard to case. It does not treat a generic timeout, a quota, a provider wall, or any
+other failure as transient. Add a signature here and to `launch.sh` only when the adapter can
+distinguish it from those cases in the durable error record.
+
 Every lane runs unrestricted. Its containment is its worktree (`coachman.md`, Lane capability),
 so the bypass form below is passed on every launch AND every resume. The interactive postmaster
 runs unrestricted too, in its harness's interactive form (below). Nothing in the flow depends on
