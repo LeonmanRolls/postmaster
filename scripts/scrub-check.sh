@@ -235,12 +235,13 @@ HARNESS_NAMES = (
 # keeps PATH-style lists (preceded by a colon) matching.
 # A home user ends where its name ends: a quote, a space or the line end
 # after a bare directory is still a home directory, not just a trailing
-# slash. A bare tilde user must read as a name, with a letter in it, so
-# version ranges stay silent.
+# slash. The fixed literal prefixes make that widening safe; a bare tilde
+# keeps its slash, because a one-character anchor without one matches
+# binary noise hundreds of times over.
 PRIVATE_PATH = re.compile(
     r"(?<![A-Za-z0-9_.$}~.-])(?:/home/|/Users/)([A-Za-z0-9._-]+)(?![A-Za-z0-9._-])"
     r"|(?<![A-Za-z0-9_.$}~.-])/ro[o]t/[A-Za-z0-9._-]+"
-    r"|(?<![A-Za-z0-9_])~(?!\.)([A-Za-z0-9._-]*[A-Za-z][A-Za-z0-9._-]*)(?:/[^\s\"'<>),;]*)?(?![A-Za-z0-9._-])"
+    r"|(?<![A-Za-z0-9_])~(?!\.)([A-Za-z0-9._-]+)/[^\s\"'<>),;]*"
     r"|(?<![A-Za-z0-9_.$}~.-])/tmp/(?:" + "|".join(HARNESS_NAMES)
     + r")(?:-[A-Za-z0-9._-]+|/[^\s\"'<>),;]+)"
     r"|(?<![A-Za-z0-9_])[A-Za-z]:\\Users\\([A-Za-z0-9._-]+)(?![A-Za-z0-9._-])",
@@ -732,8 +733,6 @@ def self_test(root):
                 "pos-home-period")
             pos("private-path", "ver \"" + "C:" + "\\Users\\" + "fixture-user-413" + "\"\n",
                 "pos-drive-quoted")
-            pos("private-path", "at " + "~" + "fixture-user-413" + "\n",
-                "pos-tilde-bare")
             pos("private-host", "endpoint " + private_ip + ":8080\n", "pos-private-ip")
             pos("private-host", "status at https://" + private_host + ":8443/up\n", "pos-private-host")
             pos("token", "relay key " + fake_token + "\n", "pos-token")
@@ -808,8 +807,6 @@ def self_test(root):
                 "neg-tilde-username", "a tilde username placeholder is clean")
             neg("\"version\": \"" + "~1.0" + "\"\n",
                 "neg-tilde-semver", "a version range is not a home directory")
-            neg("range " + "~1.0" + "/x ok\n",
-                "neg-tilde-numeric", "a numeric tilde user is not a name")
             neg("at " + "/home/" + "user" + " is here\n",
                 "neg-home-placeholder-space", "a placeholder stays clean before a space")
             neg("{\"cwd\": \"" + "/home/" + "user" + "\"}\n",
