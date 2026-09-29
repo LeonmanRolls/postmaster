@@ -11,10 +11,13 @@
 #   action   a verb from a fixed set, enforced, so the log is computable:
 #            dispatch resume harvest synthesize review-launch review-harvest finding apply
 #            escalate rule ticket-check ticket-create ticket-edit ticket-state ticket-comment
-#            gate verify merge teardown degrade handoff-accept handoff stage tool-fault note
+#            gate verify merge teardown degrade handoff-accept handoff stage spec-review
+#            tool-fault note
 #   target   what the action was done to: a lane, a ticket id, a branch, a path, a round
 #   detail   free text; everything after the target, joined by spaces. A finding's opens with its
-#            class, gating or style, so the style findings can be told apart
+#            class, gating or style, so the style findings can be told apart. A spec-review's
+#            opens with the decision, approved, changes or dropped, then the spec commit the
+#            user saw, then the user's words where the decision is changes or dropped
 #
 # A tool-fault is postmaster itself misbehaving: a script, a runbook step or a harness adapter.
 # Its target is the postmaster file, relative to the checkout this script is in or absolute,
@@ -38,7 +41,7 @@ set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd -P)
 TOOL=$(dirname "$HERE")
 CONTROLS=$TOOL/skills/postmaster/controls.md
-VERBS=" dispatch resume harvest synthesize review-launch review-harvest finding apply escalate rule ticket-check ticket-create ticket-edit ticket-state ticket-comment gate verify merge teardown degrade handoff-accept handoff stage tool-fault note "
+VERBS=" dispatch resume harvest synthesize review-launch review-harvest finding apply escalate rule ticket-check ticket-create ticket-edit ticket-state ticket-comment gate verify merge teardown degrade handoff-accept handoff stage spec-review tool-fault note "
 
 json_str() {  # the inside of a JSON string, in bash alone but for tr and iconv
   local s=$1
@@ -100,6 +103,8 @@ log_action() {  # log_action <dispatch> <actor> <action> <target> [detail...]
   case "$VERBS" in *" $ACTION "*) ;; *) echo "log-action: '$ACTION' is not an action in the set:$VERBS" >&2; return 1 ;; esac
   [ "$ACTION" != finding ] || case ${DETAIL%% *} in gating|style) ;;
     *) echo "log-action: a finding's detail opens with its class, gating or style" >&2; return 1 ;; esac
+  [ "$ACTION" != spec-review ] || case ${DETAIL%% *} in approved|changes|dropped) ;;
+    *) echo "log-action: a spec-review's detail opens with its decision, approved, changes or dropped" >&2; return 1 ;; esac
   if [ "$ACTION" = tool-fault ]; then tool_fault "$TARGET" "$@" || return 1; fi
 
   dispatch=$(CDPATH= cd -P -- "$given" 2>/dev/null && pwd -P) || { echo "log-action: no such dir: $given" >&2; return 1; }
@@ -169,6 +174,12 @@ last "as the real path" 'e["fault"]["failed"] == "sixth" and e["target"] == "scr
 wrote "a style finding is written" coachman finding src/a.ts:12 style P3 r1 style luna reading: a list named map
 last "with its class as the first word of its detail" 'e["action"] == "finding" and e["detail"].split()[0] == "style"'
 wrote "a gating finding is written" coachman finding src/b.ts:40 gating P1 r1 bug luna execution: an off-by-one
+wrote "an approved spec review is written" postmaster spec-review luna "approved abc123"
+last "with its decision, then the commit" 'e["action"] == "spec-review" and e["target"] == "luna" and e["detail"] == "approved abc123"'
+wrote "a changes spec review is written" postmaster spec-review deepseek "changes def456 narrow the scope to the two named scripts"
+last "with the user's words after the commit" 'e["action"] == "spec-review" and e["detail"] == "changes def456 narrow the scope to the two named scripts"'
+wrote "a dropped spec review is written" postmaster spec-review luna "dropped abc123 we only need one lane"
+last "with the drop decision" 'e["action"] == "spec-review" and e["detail"].split()[0] == "dropped"'
 wrote "a detail ending in a newline is written" postmaster note RUN-1 $'kept whole\n'
 last "with its newline" 'e["detail"] == "kept whole\n"'
 wrote "a line separator and a byte that is not UTF-8 are written" postmaster note RUN-1 $'one\xe2\x80\xa8two \xff three'
@@ -195,6 +206,8 @@ refused "an action outside the set" "is not an action" tool-faults scripts/launc
 refused "an empty target" "usage:" note ""
 refused "a finding with no class" "opens with its class, gating or style" finding src/c.ts:7 P2 r1 bug luna reading: no class
 refused "a finding whose class is another word" "opens with its class, gating or style" finding src/c.ts:7 advisory P3 r1 style luna reading
+refused "a spec-review with no decision" "opens with its decision, approved, changes or dropped" spec-review luna "abc123 looks fine"
+refused "a spec-review whose decision is another word" "opens with its decision, approved, changes or dropped" spec-review luna "ok abc123"
 refused "a tool-fault with no fix" "needs --fix" tool-fault scripts/launch.sh "${FIELDS[@]:0:8}"
 refused "a tool-fault with a blank diagnosis" "needs --diagnosis" tool-fault scripts/launch.sh "${FIELDS[@]}" --diagnosis "  "
 refused "a tool-fault as plain words" "a tool-fault takes" tool-fault scripts/launch.sh the wait returned early

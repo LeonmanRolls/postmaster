@@ -22,7 +22,7 @@
 #   exit 4  a terminal stage set by any actor but the postmaster
 set -uo pipefail
 HERE=$(CDPATH= cd -P -- "$(dirname -- "$0")" && pwd -P)
-STAGES="dispatched bootstrapped workhorses-running synthesis checkpoint-1 review shipping shipped done abandoned"
+STAGES="dispatched bootstrapped planning workhorses-running synthesis checkpoint-1 review shipping shipped done abandoned"
 
 set_stage() {  # set_stage <dispatch> <stage> <actor>
   local d=$1 new=$2 actor=$3
@@ -125,6 +125,13 @@ fresh; set_stage "$d" abandoned postmaster >/dev/null; rc=$?
 fresh; set_stage "$d" review coachman >/dev/null; rc=$?
 [ $rc -eq 0 ] && [ "$(count)" -eq 1 ] && grep -q '"stage": "review"' "$d/manifest.json" \
   && ok "review is one stage" || fail "review is one stage (exit $rc, lines $(count))"
+fresh; set_stage "$d" planning coachman >/dev/null; rc=$?
+[ $rc -eq 0 ] && [ "$(count)" -eq 1 ] && grep -q '"stage": "planning"' "$d/manifest.json" \
+  && ok "planning is one stage" || fail "planning is one stage (exit $rc, lines $(count))"
+case " $STAGES " in
+  *" bootstrapped planning workhorses-running "*) ok "planning sits between bootstrapped and workhorses-running" ;;
+  *) fail "planning sits between bootstrapped and workhorses-running ($STAGES)" ;;
+esac
 
 echo "negative controls"
 fresh; set_stage "$d" bootstrapped coachman >/dev/null; set_stage "$d" bootstrapped coachman >/dev/null; rc=$?

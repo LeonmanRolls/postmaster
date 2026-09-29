@@ -168,6 +168,7 @@ round_timeout_seconds      2400               seconds a review round may run, 1 
 merge_authority            user               user or postmaster
 checkpoint_mode            autonomous         autonomous or consult
 review_link?               (none)             template with {path}
+planning.review_link?      (none)             template with {path}, for a workhorse spec
 overwrite                  no                 yes replaces an existing config
 EOF
       exit 0 ;;
@@ -343,6 +344,7 @@ case $MA in user|postmaster) ;; *) echo "setup: merge authority must be user or 
 ask CPM "Checkpoint mode (autonomous, consult)" "autonomous" "checkpoint_mode"
 case $CPM in autonomous|consult) ;; *) echo "setup: checkpoint mode must be autonomous or consult" >&2; exit 1 ;; esac
 ask RL "Review link template with {path} for the synthesis worktree (blank for none)" "" "review_link?"
+ask PRL "Spec review link template with {path} for a workhorse's WORKHORSE-SPEC.md (blank for none)" "" "planning.review_link?"
 
 TRACKER_EXTRA=""
 [ -n "$PWS" ] && TRACKER_EXTRA="url = \"$PURL\""$'\n'"workspace = \"$PWS\""$'\n'"env_file = \"$PENV\""
@@ -387,6 +389,9 @@ round_timeout_seconds = $RT
 merge_authority = "$MA"
 checkpoint_mode = "$CPM"
 review_link = "$RL"
+
+[planning]
+review_link = "$PRL"
 EOF
 )
 

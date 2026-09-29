@@ -209,10 +209,11 @@ Poll every `postmaster.poll_seconds` (default 120) with one command per project:
 Act on the `NEXT` column, run by run, and log every action:
 
 - **USER:** the run waits on the user, and its `.waiting-on-user` holds the question (Stage E
-  step 3, Stage F step 2). Put the question to the user again if you have not in this session;
+  step 3, Stage F step 2, Spec review). Put the question to the user again if you have not in this session;
   otherwise nothing to do until they answer.
 - **RULE:** an escalation is waiting. Stage E.
 - **GATE:** the ship card is complete. Stage F.
+- **SPEC:** a spec review package is waiting (`.spec-review-ready`). Spec review, below.
 - **DISPATCH:** the leg's `.leg-<n>-done` marker is present. Stage C for the leg after `n` in
   `<tool>/scripts/turnpikes.sh legs <dispatch>`, logging a `note` that names any leg the list leaves
   out; after the ship leg, Stage G. If the script exits other than 0, nothing is dispatched:
@@ -249,6 +250,37 @@ in place of the coachman's launch. Record its thread id from the new stream (`ha
 A leg's `.leg-<n>-exited` marker with `.leg-<n>-done` beside it is normal completion. Every
 transition is one `log-action` line; the narrative in your own notes is for the user,
 never the record.
+
+## Spec review: every workhorse's spec to the user before any code
+
+On `.spec-review-ready`, the planning stage has paused for the user. Read
+`<dispatch>/spec-review.md`: one entry per workhorse, each with its lane, the commit of its
+`WORKHORSE-SPEC.md`, and the link that opens it in the user's editor. The link is the config's
+`planning.review_link` template with `{path}` filled in, as `ship.review_link` is for the ship
+card; with no template it is the file's path. A revised spec comes back as a new entry at its
+new commit.
+
+1. **Put one spec to the user at a time.** Show its link and its commit, and ask for a
+   decision: approved; changes requested in their words; or drop this workhorse. Never show one
+   workhorse's spec beside another's: review is for scope and correctness, not for making the
+   specs alike. Never show any of it to a workhorse.
+2. **Record the decision as it comes**, in the run's log and in `<dispatch>/spec-decisions.md`:
+   `<tool>/scripts/log-action.sh <dispatch> postmaster spec-review <lane> "<decision> <commit>
+   <the user's words>"`, where `<decision>` is `approved`, `changes` or `dropped` and the words
+   are the user's own, carried verbatim for a `changes` or `dropped`. One line per decision, at
+   the moment it is given. `spec-decisions.md` holds the same for the coachman to read on
+   resume: one stanza per lane, with the decision, the commit and the words.
+3. **A workhorse whose spec needs changes is not finished.** Carry the user's words on the
+   resume that sends that one workhorse back to revise; the coachman does the rest. The revised
+   spec returns as a new package entry and is put to the user the same way, until it is
+   approved or dropped.
+4. **The run goes on to implementation only with at least two approved specs.** When every
+   workhorse is approved or dropped and fewer than two are approved, the run stops and says
+   why: tell the user the run needs two approved specs and has fewer, and that nothing is
+   implemented from an unapproved plan. The user alone abandons it. When two or more are
+   approved and nothing is outstanding, write `spec-decisions.md` whole, remove
+   `.spec-review-ready`, and resume the current leg (Stage C step 5) with the decisions file as
+   what it must read. Log every step; the planning span the stage timings show is this review.
 
 ## Stage E: rulings
 
