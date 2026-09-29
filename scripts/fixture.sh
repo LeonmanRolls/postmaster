@@ -222,8 +222,11 @@ def check_stages(dispatch):
     if events is None:
         return False, why
     # A run is created in the first stage; every later one is entered by a logged change.
+    # `review` is entered only by a run with a review leg, so a one-leg run skips it.
     entered = [e.get("target") for e in events if e.get("action") == "stage"]
     due = expected[1:]
+    if "review" not in entered:
+        due = [s for s in due if s != "review"]
     if entered == due:
         return True, "%s to done, %d stages, each entered in order" % (expected[0], len(expected))
     for i, (want, got) in enumerate(zip(due, entered)):
@@ -400,14 +403,16 @@ rc_of() { cat "$tmp/$1.rc" 2>/dev/null || echo none; }
 # The records of finished runs are built with the scripts a run uses, so they follow the
 # contract as those scripts define it today: the stages from stage.sh --list, and the hand-off
 # sections from what handoff-check.sh says an empty hand-off lacks. As the runbooks have it, the
-# legs enter every stage after the first and before done, and the postmaster closes the run. The
-# score counts legs from the run itself, so the number of legs here is arbitrary.
+# legs enter every stage after the first and before done (except `review`, which only a run
+# with a review leg enters), and the postmaster closes the run. The score counts legs from the
+# run itself, so records are built for a two-leg run, a one-leg run and a three-leg run
+# dispatched before the two-leg change.
 : > "$tmp/empty.md"
 sections=$("$HERE/handoff-check.sh" "$tmp/empty.md" 2>&1 >/dev/null | sed -n 's/^handoff-check: missing or empty section: //p')
 listed=$("$HERE/stage.sh" --list)
 stages=$(printf '%s\n' "$listed" | sed '/^done$/q' | sed '1d;$d')
-record() {  # record <name> <ticket> <shipped: reference, app or broken>: a finished run
-  local name=$1 t=$2 shipped=$3 legs=3 n s section done_stages=0 count
+record() {  # record <name> <ticket> <shipped: reference, app or broken> [<legs>: 1, 2 or 3, default 2]
+  local name=$1 t=$2 shipped=$3 legs=${4:-2} n s section done_stages=0 count walked
   local repo=$tmp/$name/repo d=$tmp/$name/runs/$name/7 base
   mkdir -p "$d/logs" "$d/audit" "$d/render" && make_repo "$repo" >/dev/null || return 1
   base=$(git -C "$repo" rev-parse HEAD)
@@ -422,11 +427,13 @@ record() {  # record <name> <ticket> <shipped: reference, app or broken>: a fini
   printf '{"stage": "dispatched", "leg": 1, "base": "%s", "lanes": {}, "coachman": {"legs": {}}}\n' "$base" > "$d/manifest.json"
   { printf '# Waybill: 7\n\n## Ticket\n\n'; ticket_body "$t"; printf '\n## Project profile\nrepo: %s\n' "$repo"; } > "$d/brief.md"
   "$HERE/run-meta.sh" "$d" "$repo" >/dev/null || return 1
-  count=$(printf '%s\n' "$stages" | wc -l)
+  walked=$stages
+  [ "$legs" -eq 1 ] && walked=$(printf '%s\n' "$stages" | grep -vx review)
+  count=$(printf '%s\n' "$walked" | wc -l)
   for n in $(seq 1 "$legs"); do
     printf 'You are the coachman for leg %s of 7.\n' "$n" > "$d/leg-$n-prompt.txt"
     "$HERE/log-action.sh" "$d" postmaster dispatch 7 "leg $n" && "$HERE/log-action.sh" "$d" coachman handoff-accept "leg-$n" || return 1
-    for s in $(printf '%s\n' "$stages" | sed -n "$((done_stages + 1)),$((count * n / legs))p"); do
+    for s in $(printf '%s\n' "$walked" | sed -n "$((done_stages + 1)),$((count * n / legs))p"); do
       "$HERE/stage.sh" "$d" "$s" >/dev/null || return 1
     done
     done_stages=$((count * n / legs))
@@ -471,8 +478,8 @@ PY
   done
   wait
 }
-recorded() {  # recorded <name> <ticket> <shipped>: build the record, score it, and break the first clean one
-  record "$1" "$2" "$3" > "$tmp/built-$1.out" 2>&1 \
+recorded() {  # recorded <name> <ticket> <shipped> [<legs>]: build the record, score it, and break the first clean one
+  record "$1" "$2" "$3" "${4:-2}" > "$tmp/built-$1.out" 2>&1 \
     || { echo "the record could not be built: $(tail -3 "$tmp/built-$1.out")"; return 1; }
   [ "$1" = "clean-$first" ] && breaks "$tmp/$1/runs/$1/7" "$tmp/$1/repo" &
   score_run "$tmp/$1/runs/$1/7" "$tmp/$1/repo"; local rc=$?
@@ -483,6 +490,8 @@ recorded() {  # recorded <name> <ticket> <shipped>: build the record, score it, 
 # Everything slow runs in the background at once: each record is built and scored, and each
 # ticket's hidden suite runs against the app and against its reference.
 for t in $(tickets); do background "clean-$t" recorded "clean-$t" "$t" reference; done
+background clean-one recorded clean-one "$first" reference 1
+background clean-three recorded clean-three "$first" reference 3
 background break-hidden recorded break-hidden "$first" app
 background break-gate recorded break-gate "$first" broken
 hidden=()
@@ -592,6 +601,8 @@ expect() {  # expect <label> <name> <the check that fails, or none> [<text its F
   fi
 }
 for t in $(tickets); do expect "a clean run on $t: every check passes" "clean-$t" none; done
+expect "a one-leg run scores clean" clean-one none
+expect "a three-leg run dispatched before this change scores clean" clean-three none
 
 echo "score: negative controls, the same record with one check broken at a time"
 expect "the app shipped as committed: hidden-tests alone fails, and the app's own gate passes" break-hidden hidden-tests "fail on main"
