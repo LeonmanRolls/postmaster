@@ -32,6 +32,6 @@ Update the README and AGENTS.md so a user opening an agent in a clone knows to s
 
 ## Tasks
 
-- [ ] T001 [P] [AC1] Update the clone instructions in `README.md` Getting started to say open the agent in the clone and say hi.
-- [ ] T002 [P] [AC2] Update the session-opening passage in `AGENTS.md` to name hi as the first message and state that any first message starts the flow.
-- [ ] T003 [P] [AC3] Sweep all of `README.md` and `AGENTS.md` for wording that says or implies the agent starts on its own.
+- [x] T001 [P] [AC1] Update the clone instructions in `README.md` Getting started to say open the agent in the clone and say hi.
+- [x] T002 [P] [AC2] Update the session-opening passage in `AGENTS.md` to name hi as the first message and state that any first message starts the flow.
+- [x] T003 [P] [AC3] Sweep all of `README.md` and `AGENTS.md` for wording that says or implies the agent starts on its own.
