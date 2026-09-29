@@ -65,3 +65,20 @@ None.
   restarting the watcher.
 - **README and controls.md** updated with the new script: the README lists every script and
   controls.md is the one list of controls; leaving them stale would be a gap this change introduced.
+
+## Tasks
+
+Format: `- [ ] T<n> [P] [AC<n>] <description, with exact file paths>`.
+`[P]` marks a task that depends on no other. `[AC<n>]` names the acceptance criterion the
+task serves. Every acceptance criterion has at least one task.
+
+- [x] T001 [P] [AC1] [AC2] [AC3] [AC4] `scripts/runs-watch.sh`: poll `runs-status.sh` every
+  `postmaster.poll_seconds`, name waking runs with `needs <run> <NEXT>`, honour
+  `<runs>/postmaster/held`, `--timeout` exits 3, `--help`, `--self-test` with positive and
+  negative controls.
+- [x] T002 [AC5] `skills/postmaster/postmaster.md` Stage D: keep the watcher in the background,
+  act on what it names, start it again at once; hold and release via the held list.
+- [x] T003 [AC6] `skills/postmaster/harnesses.md` "Keeping the watcher running": per postmaster
+  harness, how the watcher runs without blocking, and the foreground poll where it cannot.
+- [x] T004 [AC1] `README.md` and `skills/postmaster/controls.md`: list `runs-watch.sh` beside
+  `runs-status.sh`.
