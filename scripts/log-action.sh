@@ -160,10 +160,10 @@ wrote "an action is written" postmaster note RUN-1 a plain "\"detail\""
 cmp -s "$d/actions.jsonl" "$tmp/proj/.postmaster/runs/ledger.jsonl" && ok "as one line in the run's log and the same line in the ledger" \
   || fail "as one line in the run's log and the same line in the ledger"
 last "the detail is everything after the target" 'e["detail"] == "a plain \"detail\"" and (e["project"], e["run"]) == ("proj", "RUN-1") and "fault" not in e'
-wrote "a tool-fault with every field is written" coachman tool-fault scripts/launch.sh "${FIELDS[@]}" --workaround "launched in the recorded form by hand"
+wrote "a tool-fault with every field is written" coachman tool-fault scripts/verify.sh "${FIELDS[@]}" --workaround "launched in the recorded form by hand"
 [ ! -s "$tmp/err" ] && ok "and a part that is no control says nothing" || fail "and a part that is no control says nothing" "$(cat "$tmp/err")"
 last "its fields are a fault object, with --failed as the detail and the error whole" \
-  'e["action"] == "tool-fault" and e["target"] == "scripts/launch.sh" and e["detail"] == e["fault"]["failed"] == "returned before every marker was in" and e["fault"]["error"] == "exit 0\n\tall 2 markers present, [1mone a directory[0m" and e["fault"]["workaround"].startswith("launched") and e["fault"]["control"] == ""'
+  'e["action"] == "tool-fault" and e["target"] == "scripts/verify.sh" and e["detail"] == e["fault"]["failed"] == "returned before every marker was in" and e["fault"]["error"] == "exit 0\n\tall 2 markers present, [1mone a directory[0m" and e["fault"]["workaround"].startswith("launched") and e["fault"]["control"] == ""'
 wrote "a listed script named by its absolute path is written" coachman tool-fault "$TOOL/scripts/log-action.sh" "${FIELDS[@]}" --failed first
 last "as a control of its kind, relative to the checkout" 'e["fault"]["failed"] == "first" and e["target"] == "scripts/log-action.sh" and e["fault"]["control"] == "action-log"'
 grep -qF "scripts/log-action.sh is a control (action-log): stop the leg" "$tmp/err" && ok "and the message says to stop" || fail "and the message says to stop" "$(cat "$tmp/err")"
@@ -175,8 +175,8 @@ wrote "another spelling of a listed path is written" coachman tool-fault scripts
 last "as that path, and that control" 'e["fault"]["failed"] == "fourth" and e["target"] == "scripts/wait-for-markers.sh" and e["fault"]["control"] == "wait"'
 wrote "a path through .. that stays in the checkout is written" coachman tool-fault scripts/../scripts/log-action.sh "${FIELDS[@]}" --failed fifth
 last "as the file it reaches" 'e["fault"]["failed"] == "fifth" and e["target"] == "scripts/log-action.sh" and e["fault"]["control"] == "action-log"'
-wrote "a path through a link to the checkout is written" coachman tool-fault "$tmp/link/scripts/launch.sh" "${FIELDS[@]}" --failed sixth
-last "as the real path" 'e["fault"]["failed"] == "sixth" and e["target"] == "scripts/launch.sh"'
+wrote "a path through a link to the checkout is written" coachman tool-fault "$tmp/link/scripts/verify.sh" "${FIELDS[@]}" --failed sixth
+last "as the real path" 'e["fault"]["failed"] == "sixth" and e["target"] == "scripts/verify.sh"'
 wrote "a style finding is written" coachman finding src/a.ts:12 style P3 r1 style luna reading: a list named map
 last "with its class as the first word of its detail" 'e["action"] == "finding" and e["detail"].split()[0] == "style"'
 wrote "a gating finding is written" coachman finding src/b.ts:40 gating P1 r1 bug luna execution: an off-by-one
