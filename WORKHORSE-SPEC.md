@@ -77,11 +77,11 @@ one-leg and a pre-change three-leg run.
 
 ## Tasks
 
-- [ ] T001 [P] [AC5] `scripts/turnpikes.sh`: two-leg model, waybill `legs:` line, legacy three-leg fallback when the line is absent; self-test controls for two-leg, one-leg and legacy three-leg runs
-- [ ] T002 [P] [AC5] [AC6] `scripts/runs-status.sh`: comments follow the two-leg model; self-test controls for a two-leg card, a one-leg card and a legacy three-leg run
-- [ ] T003 [P] [AC5] [AC6] `scripts/stage.sh`: comments and self-test controls for the stage walks a two-leg and a one-leg run take, and that a three-leg walk still sets the same stages
-- [ ] T004 [P] [AC5] [AC6] `scripts/fixture.sh`: `check_stages` allows a skipped `review`; `record` takes a leg count; self-test scores a two-leg, a one-leg and a three-leg record
-- [ ] T005 [AC1] [AC2] [AC3] `skills/postmaster/coachman.md`: at most two legs; the last leg ends with the ship card and its hand-off and `.card-ready`, merging nothing; a no-review run ends the same way at the end of synthesis; the card carries what it carries today
-- [ ] T006 [AC4] `skills/postmaster/postmaster.md`: Stage F verifies then opens the PR or asks for the merge word and merges; Stage G does the aftercare and teardown the ship leg did
-- [ ] T007 [AC5] `skills/postmaster/SKILL.md`: waybill template gains `legs:` and `landing:`; `config.example.toml`, `README.md`, `AGENTS.md`, `scripts/launch.sh`, `scripts/style-findings.sh` comments follow
-- [ ] T008 [AC1] [AC5] [AC6] Run the gate through `scripts/verify.sh run .` and record what it printed
+- [x] T001 [P] [AC5] `scripts/turnpikes.sh`: two-leg model, waybill `legs:` line, legacy three-leg fallback when the line is absent; self-test controls for two-leg, one-leg and legacy three-leg runs
+- [x] T002 [P] [AC5] [AC6] `scripts/runs-status.sh`: comments follow the two-leg model; self-test controls for a two-leg card, a one-leg card and a legacy three-leg run
+- [x] T003 [P] [AC5] [AC6] `scripts/stage.sh`: comments and self-test controls for the stage walks a two-leg and a one-leg run take, and that a three-leg walk still sets the same stages
+- [x] T004 [P] [AC5] [AC6] `scripts/fixture.sh`: `check_stages` allows a skipped `review`; `record` takes a leg count; self-test scores a two-leg, a one-leg and a three-leg record
+- [x] T005 [AC1] [AC2] [AC3] `skills/postmaster/coachman.md`: at most two legs; the last leg ends with the ship card and its hand-off and `.card-ready`, merging nothing; a no-review run ends the same way at the end of synthesis; the card carries what it carries today
+- [x] T006 [AC4] `skills/postmaster/postmaster.md`: Stage F verifies then opens the PR or asks for the merge word and merges; Stage G does the aftercare and teardown the ship leg did
+- [x] T007 [AC5] `skills/postmaster/SKILL.md`: waybill template gains `legs:` and `landing:`; `config.example.toml`, `README.md`, `AGENTS.md`, `scripts/launch.sh`, `scripts/style-findings.sh` comments follow
+- [x] T008 [AC1] [AC5] [AC6] Run the gate through `scripts/verify.sh run .` and record what it printed
