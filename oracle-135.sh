@@ -109,7 +109,6 @@ IN_6A='The roster lives with the fleet steward;'; IN_6B=' ask the steward to cha
 INSTR=$(printf '%s%s\n%s%s\n%s%s\n%s%s\n%s%s\n%s%s\n' \
   "$IN_1A" "$IN_1B" "$IN_2A" "$IN_2B" "$IN_3A" "$IN_3B" \
   "$IN_4A" "$IN_4B" "$IN_5A" "$IN_5B" "$IN_6A" "$IN_6B")
-INSTR_TELL="${IN_3A}${IN_3B}"
 
 D_N1='SESSION'; D_N2='SECRET'
 DOTENV_NAME="${D_N1}${US}${D_N2}"
@@ -219,31 +218,10 @@ flag_probe "flag-token" notes/relay.txt "relay key ${SUSPECT_TOKEN}" "$SUSPECT_T
 flag_probe "flag-access-key" notes/relay.txt "relay id ${SUSPECT_KEYID}" "$SUSPECT_KEYID"
 flag_probe "flag-attribution" notes/credits.txt "$SUSPECT_ATTR" "$SUSPECT_ATTR"
 
-# --- instructions-like text: a block, not one line ----------------------------
-repo=$(new_repo) || bad "flag-instructions" "scratch repo failed"
-if [ -n "${repo:-}" ]; then
-  base=$(git -C "$repo" rev-parse HEAD)
-  sha=$(commit_file "$repo" notes/standing.txt "$INSTR")
-  if [ -z "${sha:-}" ]; then
-    bad "flag-instructions" "commit failed"
-  else
-    out=$(scan "$repo" "$base" "$sha" 2>"$repo/stderr.txt"); code=$?
-    err=$(cat "$repo/stderr.txt")
-    if [ "$code" -ne 1 ]; then
-      bad "flag-instructions" "exit $code, want 1"
-    elif [ -z "$out" ]; then
-      bad "flag-instructions" "empty stdout"
-    elif ! grep -qF ":notes/standing.txt:" <<<"$out"; then
-      bad "flag-instructions" "standing file not named"
-    elif grep -qF -- "$INSTR_TELL" <<<"$out$err"; then
-      bad "flag-instructions" "value printed"
-    else
-      deformed=0
-      while IFS= read -r line; do wellformed "$line" || deformed=1; done <<<"$out"
-      [ "$deformed" -eq 0 ] && ok "flag-instructions" || bad "flag-instructions" "malformed report line"
-    fi
-  fi
-fi
+# --- instructions-like text stays silent: the ticket narrowed the script to
+# personal data and secrets, and text from shared instruction files is not
+# private data in itself. The block below is the old kind's positive shape.
+clean_probe "instructions-text-passes" notes/standing.txt "$INSTR"
 
 # --- every commit, not only the tip -------------------------------------------
 repo=$(new_repo) || bad "older-commit-flags" "scratch repo failed"
