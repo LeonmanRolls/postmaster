@@ -10,13 +10,18 @@
 # .postmaster/ holds a run's automatic record and is gitignored in its own
 # project; the one file a project commits there is .postmaster/project.toml,
 # its shared settings, which verify.sh reads. Anything else staged or committed
-# under .postmaster/ fails, named by path. raw/ is committed by design, so for
-# raw/ the check holds every added file to the scrub instead: files the change
-# adds, plus files staged but not yet committed, scanned from the worktree.
-# Added means added: a modification to an already-committed file is the scrub's
-# business, which sees every added line of every commit. A file the change
-# added and then deleted has no worktree content to scan, and likewise rests
-# with the scrub. Both halves report value-free: paths and kinds, never values.
+# under .postmaster/ fails, named by redacted path: tracked at the tip,
+# staged, or added or modified in any commit of the range, so a file added
+# and then deleted before the tip still fails. A deletion never faults:
+# removing a run record is remediation, not a new record. raw/ is committed
+# by design, so for raw/ the check holds every added file to the scrub
+# instead: files the change adds, scanned as committed blobs, plus files
+# staged but not yet committed, scanned as staged blobs, never as worktree
+# content, which may differ from either. Added means added: a modification
+# to an already-committed file is the scrub's business, which sees every
+# added line of every commit. A file the change added and then deleted is
+# gone from its head blob, and likewise rests with the scrub. Both halves
+# report value-free: paths and kinds, never values.
 #
 #   exit 0  clean
 #   exit 1  faults on stdout, one per line
@@ -98,6 +103,59 @@ if [ "${1:-}" = "--self-test" ]; then
       && printf '  ok   a staged raw/ addition is held to the scan\n' \
       || { printf '  FAIL a staged raw/ addition is held to the scan: exit %s\n' "$code"; fails=$((fails+1)); }
   }
+  r=$(repo) && { cd "$r" || exit 2
+    base=$(git rev-parse HEAD)
+    commit_file "$r" .postmaster/verify/checks.json 'run record'
+    ( cd "$r" && git rm -q -- .postmaster/verify/checks.json && git commit -qm "remove the record" )
+    head=$(git rev-parse HEAD)
+    out=$(bash "$HERE/tree-check.sh" "$base" "$head" 2>/dev/null); code=$?
+    { [ "$code" -eq 1 ] && printf '%s' "$out" | grep -qF '.postmaster/verify/checks.json' \
+      && printf '%s' "$out" | grep -q 'committed under'; } \
+      && printf '  ok   a .postmaster/ file added and then deleted fails as committed\n' \
+      || { printf '  FAIL a .postmaster/ file added and then deleted fails as committed: exit %s\n' "$code"; fails=$((fails+1)); }
+  }
+  r=$(repo) && { cd "$r" || exit 2
+    head=$(git rev-parse HEAD)
+    mkdir -p .postmaster
+    printf 'run record\n' > ".postmaster/$SUSPECT.json"
+    git add ".postmaster/$SUSPECT.json"
+    out=$(bash "$HERE/tree-check.sh" main "$head" 2>/dev/null); code=$?
+    { [ "$code" -eq 1 ] && printf '%s' "$out" | grep -qF '[redacted]'; } \
+      && printf '  ok   a shaped .postmaster/ path is redacted\n' \
+      || { printf '  FAIL a shaped .postmaster/ path is redacted: exit %s\n' "$code"; fails=$((fails+1)); }
+    if printf '%s' "$out" | grep -qF -- "$SUSPECT"; then
+      printf '  FAIL a shaped path prints no value\n'; fails=$((fails+1))
+    else printf '  ok   a shaped path prints no value\n'; fi
+  }
+  r=$(repo) && { cd "$r" || exit 2
+    head=$(git rev-parse HEAD)
+    mkdir -p raw
+    printf 'Reach the relay at %s for pings.\n' "$SUSPECT" > raw/probe.md
+    git add raw/probe.md
+    printf 'all clean here\n' > raw/probe.md
+    out=$(bash "$HERE/tree-check.sh" main "$head" 2>/dev/null); code=$?
+    { [ "$code" -eq 1 ] && printf '%s' "$out" | grep -qF 'raw/probe.md:1:'; } \
+      && printf '  ok   a staged suspect is read from its blob, not the worktree\n' \
+      || { printf '  FAIL a staged suspect is read from its blob, not the worktree: exit %s\n' "$code"; fails=$((fails+1)); }
+  }
+  r=$(repo) && { cd "$r" || exit 2
+    base=$(git rev-parse HEAD)
+    commit_file "$r" ".postmaster/run|stale.json" '{"run": "stale"}'
+    head=$(git rev-parse HEAD)
+    out=$(bash "$HERE/tree-check.sh" "$base" "$head" 2>/dev/null); code=$?
+    { [ "$code" -eq 1 ] && printf '%s' "$out" | grep -qF '.postmaster/run|stale.json'; } \
+      && printf '  ok   a pipe in a .postmaster/ name stays one path\n' \
+      || { printf '  FAIL a pipe in a .postmaster/ name stays one path: exit %s\n' "$code"; fails=$((fails+1)); }
+  }
+  r=$(repo) && { cd "$r" || exit 2
+    base=$(git rev-parse HEAD)
+    commit_file "$r" "raw/t/no|te.md" "Reach the relay at $SUSPECT for pings."
+    head=$(git rev-parse HEAD)
+    out=$(bash "$HERE/tree-check.sh" "$base" "$head" 2>/dev/null); code=$?
+    { [ "$code" -eq 1 ] && printf '%s' "$out" | grep -qF 'raw/t/no|te.md:1:'; } \
+      && printf '  ok   a pipe in a raw/ name is scanned whole\n' \
+      || { printf '  FAIL a pipe in a raw/ name is scanned whole: exit %s\n' "$code"; fails=$((fails+1)); }
+  }
 
   echo "negative controls: the exempt file, clean trees and clean additions pass"
   r=$(repo) && { cd "$r" || exit 2
@@ -133,6 +191,77 @@ if [ "${1:-}" = "--self-test" ]; then
     { [ "$code" -eq 0 ] && [ -z "$out" ]; } \
       && printf '  ok   a modified raw/ file is not an addition\n' \
       || { printf '  FAIL a modified raw/ file is not an addition: exit %s\n' "$code"; fails=$((fails+1)); }
+  }
+  r=$(repo) && { cd "$r" || exit 2
+    commit_file "$r" .postmaster/runs/stale.json '{"run": "stale"}'
+    base=$(git rev-parse HEAD)
+    ( cd "$r" && git rm -q -- .postmaster/runs/stale.json )
+    head=$(git rev-parse HEAD)
+    out=$(bash "$HERE/tree-check.sh" "$base" "$head" 2>/dev/null); code=$?
+    { [ "$code" -eq 0 ] && [ -z "$out" ]; } \
+      && printf '  ok   a staged deletion of a .postmaster/ file passes\n' \
+      || { printf '  FAIL a staged deletion of a .postmaster/ file passes: exit %s\n' "$code"; fails=$((fails+1)); }
+  }
+  r=$(repo) && { cd "$r" || exit 2
+    commit_file "$r" .postmaster/runs/stale.json '{"run": "stale"}'
+    base=$(git rev-parse HEAD)
+    ( cd "$r" && git rm -q -- .postmaster/runs/stale.json && git commit -qm "remove the record" )
+    head=$(git rev-parse HEAD)
+    out=$(bash "$HERE/tree-check.sh" "$base" "$head" 2>/dev/null); code=$?
+    { [ "$code" -eq 0 ] && [ -z "$out" ]; } \
+      && printf '  ok   a committed deletion of a .postmaster/ file passes\n' \
+      || { printf '  FAIL a committed deletion of a .postmaster/ file passes: exit %s\n' "$code"; fails=$((fails+1)); }
+  }
+  r=$(repo) && { cd "$r" || exit 2
+    base=$(git rev-parse HEAD)
+    commit_file "$r" raw/t/notes.md 'The relay ran its checks and stayed green.'
+    head=$(git rev-parse HEAD)
+    rm -- "$r/raw/t/notes.md"
+    out=$(bash "$HERE/tree-check.sh" "$base" "$head" 2>/dev/null); code=$?
+    { [ "$code" -eq 0 ] && [ -z "$out" ]; } \
+      && printf '  ok   a clean committed add missing from the worktree passes\n' \
+      || { printf '  FAIL a clean committed add missing from the worktree passes: exit %s\n' "$code"; fails=$((fails+1)); }
+  }
+  r=$(repo) && { cd "$r" || exit 2
+    base=$(git rev-parse HEAD)
+    commit_file "$r" raw/t/notes.md "Reach the relay at $SUSPECT for pings."
+    head=$(git rev-parse HEAD)
+    rm -- "$r/raw/t/notes.md"
+    out=$(bash "$HERE/tree-check.sh" "$base" "$head" 2>/dev/null); code=$?
+    { [ "$code" -eq 1 ] && printf '%s' "$out" | grep -qF 'raw/t/notes.md:1:'; } \
+      && printf '  ok   a dirty committed add missing from the worktree is read from its blob\n' \
+      || { printf '  FAIL a dirty committed add missing from the worktree is read from its blob: exit %s\n' "$code"; fails=$((fails+1)); }
+  }
+  r=$(repo) && { cd "$r" || exit 2
+    head=$(git rev-parse HEAD)
+    mkdir -p raw
+    printf 'all clean here\n' > raw/probe.md
+    git add raw/probe.md
+    printf 'Reach the relay at %s for pings.\n' "$SUSPECT" > raw/probe.md
+    out=$(bash "$HERE/tree-check.sh" main "$head" 2>/dev/null); code=$?
+    { [ "$code" -eq 0 ] && [ -z "$out" ]; } \
+      && printf '  ok   worktree dirt over a clean staged blob passes\n' \
+      || { printf '  FAIL worktree dirt over a clean staged blob passes: exit %s\n' "$code"; fails=$((fails+1)); }
+  }
+  r=$(repo) && { cd "$r" || exit 2
+    base=$(git rev-parse HEAD)
+    commit_file "$r" raw/t/notes.md "Reach the relay at $SUSPECT for pings."
+    ( cd "$r" && git rm -q -- raw/t/notes.md && git commit -qm "remove the note" )
+    head=$(git rev-parse HEAD)
+    out=$(bash "$HERE/tree-check.sh" "$base" "$head" 2>/dev/null); code=$?
+    { [ "$code" -eq 0 ] && [ -z "$out" ]; } \
+      && printf '  ok   a raw/ file added and then deleted rests with the scrub\n' \
+      || { printf '  FAIL a raw/ file added and then deleted rests with the scrub: exit %s\n' "$code"; fails=$((fails+1)); }
+  }
+  r=$(repo) && { cd "$r" || exit 2
+    base=$(git rev-parse HEAD)
+    commit_file "$r" raw/t/notes.md "Reach the relay at $SUSPECT for pings."
+    head=$(git rev-parse HEAD)
+    mkdir -p "$tmp/nostub2" && cp "$HERE/tree-check.sh" "$tmp/nostub2/"
+    out=$(bash "$tmp/nostub2/tree-check.sh" "$base" "$head" 2>/dev/null); code=$?
+    [ "$code" -eq 2 ] \
+      && printf '  ok   a missing scanner fails the check\n' \
+      || { printf '  FAIL a missing scanner fails the check: exit %s\n' "$code"; fails=$((fails+1)); }
   }
   r=$(repo) && { cd "$r" || exit 2
     head=$(git rev-parse HEAD)
@@ -171,41 +300,75 @@ note() {  # note <line>: one fault on the pile
 $1"; fi
 }
 
-SEEN=""
-while IFS= read -r -d '' p; do
-  [ "$p" = ".postmaster/project.toml" ] && continue
-  case $SEEN in *"|$p|"*) ;; *) SEEN="$SEEN|$p|" ;; esac
-done < <( { git ls-files -z -- .postmaster; git diff --cached --name-only -z -- .postmaster; } 2>/dev/null )
-if [ -n "$SEEN" ]; then
-  while IFS= read -r -d '' p; do
-    [ -z "$p" ] && continue
-    if git cat-file -e "HEAD:$p" 2>/dev/null; then how=committed; else how=staged; fi
-    note "$p: $how under .postmaster/ (only .postmaster/project.toml may be committed)"
-  done < <(printf '%s' "$SEEN" | tr '|' '\0')
-fi
+redact() {  # redact <path>: the path with every shaped span removed
+  safe=$(bash "$SCRUB" --safe-path "$1" 2>/dev/null) || fail "the scan could not finish"
+  printf '%s' "$safe"
+}
 
-ADDED=""
+SEENFILE=""; SCANERR=""; BLOBF=""
+tmp_cleanup() { for t in "$SEENFILE" "$SCANERR" "$BLOBF"; do [ -n "$t" ] && rm -f -- "$t"; done; }
+trap tmp_cleanup EXIT
+SEENFILE=$(mktemp) || fail "could not stage the scan"
+seen_has() { grep -qF -x -- "$1" "$SEENFILE" 2>/dev/null; }
+seen_add() { printf '%s\n' "$1" >> "$SEENFILE"; }
+fault_postmaster() {  # fault_postmaster <path> <how>: one fault, path redacted
+  note "$(redact "$1"): $2 under .postmaster/ (only .postmaster/project.toml may be committed)"
+}
+
+# Committed in the range first: a file added and then deleted before the tip
+# is gone from the tip but was still committed. Deletions never fault.
 while IFS= read -r -d '' p; do
   [ -n "$p" ] || continue
-  case $ADDED in *"|$p|"*) ;; *) ADDED="$ADDED|$p|" ;; esac
-done < <( { git diff --name-only -z --diff-filter=A "$BASE" "$HEAD_REF" -- raw/ 2>/dev/null; \
-  git diff --cached --name-only -z --diff-filter=A -- raw/ 2>/dev/null; } )
-if [ -n "$ADDED" ]; then
-  PATHS=()
-  while IFS= read -r -d '' p; do
-    [ -n "$p" ] || continue
-    [ -f "$p" ] && [ ! -L "$p" ] || fail "cannot read added file $p"
-    PATHS+=("$p")
-  done < <(printf '%s' "$ADDED" | tr '|' '\0')
-  if [ "${#PATHS[@]}" -gt 0 ]; then
-    errf=$(mktemp) || fail "could not stage the scan"
-    out=$(bash "$SCRUB" --files "${PATHS[@]}" 2>"$errf"); code=$?
-    cat "$errf" >&2; rm -f -- "$errf"
-    if [ "$code" -eq 2 ]; then fail "the scan could not finish"; fi
-    [ "$code" -eq 1 ] && FAULTS="${FAULTS:+$FAULTS
-}$out"
+  [ "$p" = ".postmaster/project.toml" ] && continue
+  seen_has "$p" && continue
+  seen_add "$p"
+  fault_postmaster "$p" committed
+done < <( git log --diff-filter=AMT -z --name-only --pretty=format: "$BASE..$HEAD_REF" -- .postmaster 2>/dev/null )
+# Then the tip: tracked files, plus staged additions and changes, never
+# staged deletions, which remove a record rather than adding one.
+while IFS= read -r -d '' p; do
+  [ -n "$p" ] || continue
+  [ "$p" = ".postmaster/project.toml" ] && continue
+  seen_has "$p" && continue
+  seen_add "$p"
+  if git cat-file -e "HEAD:$p" 2>/dev/null; then how=committed; else how=staged; fi
+  fault_postmaster "$p" "$how"
+done < <( { git ls-files -z -- .postmaster; git diff --cached --name-only -z --diff-filter=ACMRT -- .postmaster; } 2>/dev/null )
+
+scan_blob() {  # scan_blob <ref> <path> <skip|fail>: scan one blob for faults
+  local blob out code safe ln
+  blob=$(mktemp) || fail "could not stage the scan"
+  BLOBF=$blob
+  if ! git show "$1" > "$blob" 2>/dev/null; then
+    rm -f -- "$blob"; BLOBF=""
+    # A committed blob that is gone was added and then deleted: it rests with
+    # the scrub, which sees the range's every added line. A staged blob that
+    # is gone is a scan that cannot finish.
+    if [ "$3" = skip ]; then return 0; else fail "cannot read added file $(redact "$2")"; fi
   fi
-fi
+  SCANERR=$(mktemp) || fail "could not stage the scan"
+  out=$(bash "$SCRUB" --files "$blob" 2>"$SCANERR"); code=$?
+  cat "$SCANERR" >&2; rm -f -- "$SCANERR"; SCANERR=""
+  case $code in 0|1) ;; *) fail "the scan could not finish" ;; esac
+  if [ "$code" -eq 1 ]; then
+    safe=$(redact "$2")
+    while IFS= read -r ln; do note "${safe}${ln#$blob}"; done <<<"$out"
+  fi
+  rm -f -- "$blob"; BLOBF=""
+}
+
+# Staged additions are scanned as staged blobs: the worktree copy may already
+# differ from what is staged.
+while IFS= read -r -d '' p; do
+  [ -n "$p" ] || continue
+  scan_blob ":$p" "$p" fail
+done < <( git diff --cached --name-only -z --diff-filter=A -- raw/ 2>/dev/null )
+# Committed additions are scanned as head blobs: the worktree copy may be
+# dirty, missing, or ahead of what the range added.
+while IFS= read -r -d '' p; do
+  [ -n "$p" ] || continue
+  scan_blob "$HEAD_REF:$p" "$p" skip
+done < <( git diff --name-only -z --diff-filter=A "$BASE" "$HEAD_REF" -- raw/ 2>/dev/null )
 
 if [ -n "$FAULTS" ]; then printf '%s\n' "$FAULTS"; exit 1; fi
 exit 0

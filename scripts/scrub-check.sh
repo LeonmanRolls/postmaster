@@ -7,6 +7,8 @@
 #   scrub-check.sh --files <path>... worktree files, streamed line by line;
 #                                   the raw/ promotion gate and the tree check
 #                                   scan through this, never through the diff
+#   scrub-check.sh --safe-path <path>...
+#                                   print each path redacted, one per line
 #   scrub-check.sh --history [ref]  whether that ref's existing history already
 #                                   holds a suspect; ref defaults to main
 #   scrub-check.sh --help           usage, exit 0
@@ -58,6 +60,11 @@
 # A value containing a tab cannot be allowed, and re-escalates instead: the
 # split is on the first tab on purpose.
 #
+# --safe-path redacts private-shaped spans and allowed values from each given
+# path, for diagnostics that name a file. It exits 2 when the repository or
+# the allowlist cannot be read; a caller that cannot redact must fail, never
+# print the path raw.
+#
 #   exit 0  clean: no unallowed suspect in the range (or the history, or files)
 #   exit 1  suspects, one per line on stdout
 #   exit 2  usage, an unreadable range, an unreadable file, a reason-less
@@ -75,7 +82,8 @@ import sys
 import tempfile
 
 
-USAGE = "usage: scrub-check.sh <base> <head> | --files <path>... | --history [<ref>] | --self-test | --help"
+USAGE = ("usage: scrub-check.sh <base> <head> | --files <path>... | "
+         "--safe-path <path>... | --history [<ref>] | --self-test | --help")
 EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 SCRIPT = pathlib.Path(os.environ.get("SCRUB_CHECK_SCRIPT", "")).resolve()
 FIXTURE_MAILBOX = "fixture" + "@" + "example.invalid"
@@ -228,7 +236,7 @@ HARNESS_NAMES = (
 PRIVATE_PATH = re.compile(
     r"(?<![A-Za-z0-9_.$}~.-])(?:/home/|/Users/)([A-Za-z0-9._-]+)(?=/|$)"
     r"|(?<![A-Za-z0-9_.$}~.-])/ro[o]t/[A-Za-z0-9._-]+"
-    r"|(?<![A-Za-z0-9_])~(?!\.)[A-Za-z0-9._-]+/[^\s\"'<>),;]*"
+    r"|(?<![A-Za-z0-9_])~(?!\.)([A-Za-z0-9._-]+)/[^\s\"'<>),;]*"
     r"|(?<![A-Za-z0-9_.$}~.-])/tmp/(?:" + "|".join(HARNESS_NAMES)
     + r")(?:-[A-Za-z0-9._-]+|/[^\s\"'<>),;]+)"
     r"|(?<![A-Za-z0-9_])[A-Za-z]:\\Users\\([A-Za-z0-9._-]+)(?=$|\\)",
@@ -288,8 +296,16 @@ def dotenv_finding(line):
         return None
     if not (set(re.split(r"[_-]+", lowered)) & DOTENV_KEYLIKE):
         return None
-    if len(value) >= 2 and value[0] == value[-1] and value[0] in {"\"", "'"}:
-        value = value[1:-1]
+    # A quoted value may carry a trailing comment: readers take the quoted
+    # span and ignore the rest, so the scan does too. Anything else after the
+    # closing quote means the line composes a value, and the whole value keeps
+    # its quote characters and fails the literal check below.
+    if len(value) >= 2 and value[0] in {"\"", "'"}:
+        end = value.find(value[0], 1)
+        if end > 0:
+            rest = value[end + 1:].strip()
+            if rest == "" or rest.startswith("#"):
+                value = value[1:end]
     if len(value) < DOTENV_MIN_VALUE or ABSENT_VALUE.match(value):
         return None
     if DOTENV_METACHAR.search(value):
@@ -358,9 +374,12 @@ def findings(line):
         value = match.group()
         while value and value[-1] in {".", "!", "?", ":", "]", "}", chr(34), chr(96)}:
             value = value[:-1]
-        user = match.group(1) if match.lastindex and match.group(1) else None
-        if user is None and match.lastindex == 2:
-            user = match.group(2)
+        # The user is whichever group took part: home, tilde or drive path.
+        user = next(
+            (match.group(i) for i in range(1, (match.lastindex or 0) + 1)
+             if match.group(i) is not None),
+            None,
+        )
         if user is not None and PLACEHOLDER_USER.match(user):
             continue
         if value:
@@ -525,6 +544,14 @@ def run_files(root, paths):
     return 1 if suspects else 0
 
 
+def run_safe_paths(root, paths):
+    entries = allowlist(root)
+    protected = list(entries)
+    for raw_path in paths:
+        print(safe_path(raw_path, protected))
+    return 0
+
+
 def commits_for_range(base, head):
     raw = git(["rev-list", "--reverse", base + ".." + head])
     commits = raw.decode("ascii", errors="strict").splitlines()
@@ -683,6 +710,8 @@ def self_test(root):
             pos("account-id", "account" + "Id: " + fake_account + "\n", "pos-account-field")
             pos("private-path", "source under " + private_path + "\n", "pos-home-path")
             pos("private-path", "cache under " + scratch_path + "\n", "pos-scratch-path")
+            pos("private-path", "notes at " + "~" + "fixture-user-413" + "/docs\n",
+                "pos-tilde-path")
             pos("private-host", "endpoint " + private_ip + ":8080\n", "pos-private-ip")
             pos("private-host", "status at https://" + private_host + ":8443/up\n", "pos-private-host")
             pos("token", "relay key " + fake_token + "\n", "pos-token")
@@ -692,6 +721,10 @@ def self_test(root):
             pos("assistant-attribution", coauthored + "Imaginary Aide\n", "pos-attribution")
             pos("assistant-attribution", 'Generated with Claude\n', "pos-generated")
             pos("dotenv", 'SESSION_SECRET=relay-413-quiet\n', "pos-dotenv")
+            pos("dotenv", 'SESSION_SECRET="relay-413-quiet-secret" # rotate soon\n',
+                "pos-dotenv-comment")
+            pos("dotenv", 'SESSION_SECRET=\'relay-413-quiet-secret\' # rotate soon\n',
+                "pos-dotenv-single-comment")
 
             print("negative controls: clean lines stay silent")
             neg("the ship card lists each check and its exit code\n",
@@ -705,6 +738,8 @@ def self_test(root):
                 "neg-dotenv-pointer", "a key-like name pointing elsewhere is clean")
             neg("SESSION_SECRET=${STAGING}_relay_secret_413\n",
                 "neg-dotenv-composed", "a composed assignment value is clean")
+            neg("TOKEN=\"alpha\"+\"beta\"\n",
+                "neg-dotenv-quoted-composed", "a quoted composed value is clean")
             neg("write " + "someone" + AT + "example.org for the demo\n",
                 "neg-reserved-example", "a reserved example domain is clean")
             neg("write " + "someone" + AT + "thing.test for the demo\n",
@@ -737,6 +772,10 @@ def self_test(root):
                 "neg-uuid-bare", "a UUID with no id context is clean")
             neg("notes under ~/Code/notes.txt\n",
                 "neg-tilde-bare", "a bare home reference names nobody")
+            neg("notes at " + "~" + "user" + "/docs\n",
+                "neg-tilde-user", "a tilde placeholder user is clean")
+            neg("notes at " + "~" + "username" + "/docs\n",
+                "neg-tilde-username", "a tilde username placeholder is clean")
             neg("keys live in ~/.ssh/id_rsa\n",
                 "neg-tilde-dotdir", "a generic dot directory names nobody")
             neg("read /home/user/docs for the layout\n",
@@ -849,6 +888,26 @@ def self_test(root):
                 reasonless and reasonless.returncode == 2
                 and not reasonless.stdout
                 and sample_email not in reasonless.stderr))
+            (repo / "scripts" / "scrub-check.allow").write_text(
+                sample_email + "\t\n", encoding="utf-8")
+            blank_reason = run_child([revoked, revoked], repo)
+            ok("an allowlist entry with a blank reason is refused, exit 2", bool(
+                blank_reason and blank_reason.returncode == 2
+                and not blank_reason.stdout
+                and sample_email not in blank_reason.stderr))
+            (repo / "scripts" / "scrub-check.allow").write_text(
+                sample_email + "\t  \n", encoding="utf-8")
+            space_reason = run_child([revoked, revoked], repo)
+            ok("an allowlist entry with a whitespace reason is refused, exit 2", bool(
+                space_reason and space_reason.returncode == 2
+                and not space_reason.stdout
+                and sample_email not in space_reason.stderr))
+            (repo / "scripts" / "scrub-check.allow").write_text(
+                "\tself-test ruling: no value\n", encoding="utf-8")
+            empty_value = run_child([revoked, revoked], repo)
+            ok("an allowlist entry with an empty value is refused, exit 2", bool(
+                empty_value and empty_value.returncode == 2
+                and not empty_value.stdout))
             (repo / "scripts" / "scrub-check.allow").write_text("", encoding="utf-8")
             last = revoked
 
@@ -859,6 +918,7 @@ def self_test(root):
                 and not help_result.stdout and "usage:" in help_result.stderr))
             for args, label in (([], "no arguments"), (["main"], "one range argument"),
                                 (["--files"], "files without paths"),
+                                (["--safe-path"], "safe-path without paths"),
                                 (["--history", "a", "b"], "three history arguments")):
                 usage_result = run_child(args, repo)
                 ok("%s is a usage error, exit 2" % label, bool(
@@ -881,6 +941,27 @@ def self_test(root):
                 and sample_email not in redacted.stdout
                 and "[redacted]" in redacted.stdout))
             last = redacted_head
+
+            print("path controls: --safe-path redacts without scanning")
+            shaped = run_child(["--safe-path", redacted_path], repo)
+            ok("--safe-path redacts a shaped span and prints no value", bool(
+                shaped and shaped.returncode == 0
+                and shaped.stdout.splitlines() == ["raw/[redacted]"]
+                and sample_email not in shaped.stdout))
+            plain_path = run_child(["--safe-path", "wiki/concepts/p.md"], repo)
+            ok("--safe-path passes a clean path through", bool(
+                plain_path and plain_path.returncode == 0
+                and plain_path.stdout.splitlines() == ["wiki/concepts/p.md"]))
+            (repo / "scripts" / "scrub-check.allow").write_text(
+                "whole-line-allowed-99\tself-test ruling: the whole line\n",
+                encoding="utf-8")
+            ruled_path = run_child(
+                ["--safe-path", "raw/notes-whole-line-allowed-99.md"], repo)
+            ok("--safe-path redacts an allowed value", bool(
+                ruled_path and ruled_path.returncode == 0
+                and ruled_path.stdout.splitlines() == ["raw/notes-[redacted].md"]
+                and "whole-line-allowed-99" not in ruled_path.stdout))
+            (repo / "scripts" / "scrub-check.allow").write_text("", encoding="utf-8")
 
             print("file controls: --files scans worktree files, streamed")
             (repo / "loose.txt").write_text(
@@ -965,6 +1046,10 @@ def main(args):
         if len(args) < 2:
             notice(USAGE)
         return run_files(root, args[1:])
+    if args and args[0] == "--safe-path":
+        if len(args) < 2:
+            notice(USAGE)
+        return run_safe_paths(root, args[1:])
     if len(args) != 2 or any(arg.startswith("--") for arg in args):
         notice(USAGE)
     base, head = resolve_commit(args[0]), resolve_commit(args[1])

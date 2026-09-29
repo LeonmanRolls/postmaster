@@ -365,7 +365,8 @@ grep -q 'scrub-check' raw/README.md 2>/dev/null \
   || bad "readme-names-script" "raw/README.md does not name the script"
 
 # --- AC2: no allowlist entries ship with the branch -------------------------------
-if [ ! -f scripts/scrub-check.allow ] || [ ! -s scripts/scrub-check.allow ]; then
+# Every non-empty line is an entry, so a file of blank lines alone holds none.
+if [ ! -f scripts/scrub-check.allow ] || ! grep -q . scripts/scrub-check.allow 2>/dev/null; then
   ok "allowlist-ships-empty"
 else
   bad "allowlist-ships-empty" "the branch ships allowlist entries of its own"
@@ -592,17 +593,17 @@ else
   bad "no-new-dependency" "imports beyond the gate's: $imports"
 fi
 
-if ! ( ulimit -v 262144 ) 2>/dev/null; then
+if ! ( ulimit -v 65536 ) 2>/dev/null; then
   bad "streams-large-file" "ulimit -v unavailable: no streaming proof"
 else
 repo=$(new_repo) || bad "streams-large-file" "scratch repo failed"
 if [ -n "${repo:-}" ]; then
-  python3 -c "open('$repo/big.txt','w').write(('clean relay line 413 pad ' * 100 + '\n') * 70000)"
+  python3 -c "open('$repo/big.txt','w').write(('clean relay line 413 pad ' * 100 + '\n') * 12000)"
   printf 'Reach the relay at %s for pings.\n' "$SUSPECT_EMAIL" >> "$repo/big.txt"
-  out=$( ( cd "$repo" && ulimit -v 262144 && bash "$ROOT/$SCRIPT" --files big.txt ) 2>"$repo/stderr.txt"); code=$?
+  out=$( ( cd "$repo" && ulimit -v 65536 && bash "$ROOT/$SCRIPT" --files big.txt ) 2>"$repo/stderr.txt"); code=$?
   err=$(cat "$repo/stderr.txt")
   if [ "$code" -ne 1 ]; then bad "streams-large-file" "exit $code, want 1"
-  elif ! grep -qF 'big.txt:70001:' <<<"$out"; then bad "streams-large-file" "tail suspect not named"
+  elif ! grep -qF 'big.txt:12001:' <<<"$out"; then bad "streams-large-file" "tail suspect not named"
   elif grep -qF -- "$SUSPECT_EMAIL" <<<"$out$err"; then bad "streams-large-file" "value printed"
   else ok "streams-large-file"; fi
 fi

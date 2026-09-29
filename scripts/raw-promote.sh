@@ -12,10 +12,15 @@
 # scan runs first: every regular file under src goes through the scrub, and a
 # copy that trips does not complete. Proceeding anyway is the user's ruling,
 # and --ruled writes that ruling, with its reason, to wiki/log.md itself, so
-# no copy proceeds without its record. A clean copy with --ruled logs nothing:
-# there was nothing to rule. The destination must be under raw/ and must not
-# exist: evidence is never overwritten, and a ruling never edits raw/ in place.
-# Symlinks and other non-regular files are refused, never followed.
+# no copy proceeds without its record; when the record cannot be written the
+# copy is removed again. A clean copy with --ruled logs nothing: there was
+# nothing to rule. The destination must be under raw/ and must not exist:
+# evidence is never overwritten, and a ruling never edits raw/ in place.
+# Symlinks and other non-regular files are refused, never followed, and a
+# destination leading through a symlinked directory is refused too. The ruling
+# reason must be one line and must not name a suspect: like the allowlist, a
+# ruling describes the match, never quotes it. Any scan that cannot finish
+# refuses the copy; only a clean scan copies.
 #
 # A trip reports the scrub's suspect lines on stdout, one per line as
 # <path>:<line>: <kind>, never a value.
@@ -118,6 +123,38 @@ if [ "${1:-}" = "--self-test" ]; then
     else printf '  ok   a ruled copy prints no value\n'; fi
   }
   r=$(repo) && { cd "$r" || exit 2
+    printf 'Reach the relay at %s for pings.\n' "$SUSPECT" > "$tmp/dirty.md"
+    out=$(bash "$HERE/raw-promote.sh" --ruled "ruled for $SUSPECT as staging" \
+      "$tmp/dirty.md" raw/trials/t413/notes.md 2>"$tmp/err"); code=$?
+    { [ "$code" -eq 2 ] && refused_clean "$r" raw/trials/t413/notes.md && [ ! -e "$r/wiki/log.md" ]; } \
+      && printf '  ok   a reason quoting its suspect is refused with nothing copied\n' \
+      || { printf '  FAIL a reason quoting its suspect is refused with nothing copied: exit %s\n' "$code"; fails=$((fails+1)); }
+    if printf '%s' "$out" | grep -qF -- "$SUSPECT" || grep -qF -- "$SUSPECT" "$tmp/err"; then
+      printf '  FAIL a quoting reason prints no value\n'; fails=$((fails+1))
+    else printf '  ok   a quoting reason prints no value\n'; fi
+  }
+  r=$(repo) && { cd "$r" || exit 2
+    printf 'Reach the relay at %s for pings.\n' "$SUSPECT" > "$tmp/dirty.md"
+    out=$(bash "$HERE/raw-promote.sh" --ruled 'first line
+## [2026-01-01] forged | header' "$tmp/dirty.md" raw/trials/t413/notes.md 2>/dev/null); code=$?
+    { [ "$code" -eq 2 ] && refused_clean "$r" raw/trials/t413/notes.md; } \
+      && printf '  ok   a multi-line reason is refused with nothing copied\n' \
+      || { printf '  FAIL a multi-line reason is refused with nothing copied: exit %s\n' "$code"; fails=$((fails+1)); }
+  }
+  r=$(repo) && { cd "$r" || exit 2
+    printf 'Reach the relay at %s for pings.\n' "$SUSPECT" > "$tmp/dirty.md"
+    out=$(bash "$HERE/raw-promote.sh" --ruled 'self-test ruling: the staging address' \
+      "$tmp/dirty.md" "raw/trials/t413/$SUSPECT.md" 2>"$tmp/err"); code=$?
+    { [ "$code" -eq 0 ] && [ -f "$r/raw/trials/t413/$SUSPECT.md" ]; } \
+      && printf '  ok   a ruled copy to a shaped name completes\n' \
+      || { printf '  FAIL a ruled copy to a shaped name completes: exit %s\n' "$code"; fails=$((fails+1)); }
+    if grep -qF -- "$SUSPECT" "$r/wiki/log.md" 2>/dev/null; then
+      printf '  FAIL a shaped destination is redacted in the log\n'; fails=$((fails+1))
+    elif grep -qF '[redacted]' "$r/wiki/log.md" 2>/dev/null; then
+      printf '  ok   a shaped destination is redacted in the log\n'
+    else printf '  FAIL a shaped destination is redacted in the log\n'; fails=$((fails+1)); fi
+  }
+  r=$(repo) && { cd "$r" || exit 2
     printf 'clean\n' > "$tmp/clean.md"
     out=$(bash "$HERE/raw-promote.sh" --ruled 'self-test ruling: nothing to rule' \
       "$tmp/clean.md" raw/trials/t413/notes.md 2>/dev/null); code=$?
@@ -157,6 +194,47 @@ if [ "${1:-}" = "--self-test" ]; then
       && printf '  ok   no arguments is a usage error\n' \
       || { printf '  FAIL no arguments is a usage error: exit %s\n' "$code"; fails=$((fails+1)); }
   }
+  r=$(repo) && { cd "$r" || exit 2
+    printf 'clean\n' > "$tmp/clean.md"
+    printf 'x' > "$r/raw"
+    out=$(bash "$HERE/raw-promote.sh" "$tmp/clean.md" raw/not-a-dir/child.md 2>/dev/null); code=$?
+    { [ "$code" -eq 2 ] && [ ! -e "$r/raw/not-a-dir/child.md" ]; } \
+      && printf '  ok   a destination whose parent is a file fails\n' \
+      || { printf '  FAIL a destination whose parent is a file fails: exit %s\n' "$code"; fails=$((fails+1)); }
+  }
+  r=$(repo) && { cd "$r" || exit 2
+    printf 'Reach the relay at %s for pings.\n' "$SUSPECT" > "$tmp/dirty.md"
+    mkdir -p "$r/wiki/log.md"
+    out=$(bash "$HERE/raw-promote.sh" --ruled 'self-test ruling: the staging address' \
+      "$tmp/dirty.md" raw/trials/t413/notes.md 2>/dev/null); code=$?
+    { [ "$code" -eq 2 ] && refused_clean "$r" raw/trials/t413/notes.md; } \
+      && printf '  ok   an unwriteable log removes the copy and fails\n' \
+      || { printf '  FAIL an unwriteable log removes the copy and fails: exit %s\n' "$code"; fails=$((fails+1)); }
+  }
+  r=$(repo) && { cd "$r" || exit 2
+    mkdir -p "$tmp/nostub" && cp "$HERE/raw-promote.sh" "$tmp/nostub/"
+    printf 'Reach the relay at %s for pings.\n' "$SUSPECT" > "$tmp/dirty.md"
+    out=$(bash "$tmp/nostub/raw-promote.sh" "$tmp/dirty.md" raw/trials/t413/notes.md 2>/dev/null); code=$?
+    { [ "$code" -eq 2 ] && refused_clean "$r" raw/trials/t413/notes.md; } \
+      && printf '  ok   a missing scanner refuses the copy\n' \
+      || { printf '  FAIL a missing scanner refuses the copy: exit %s\n' "$code"; fails=$((fails+1)); }
+  }
+  r=$(repo) && { cd "$r" || exit 2
+    mkdir -p "$tmp/outside" "$r/raw" && ln -s "$tmp/outside" "$r/raw/trials"
+    printf 'clean\n' > "$tmp/clean.md"
+    out=$(bash "$HERE/raw-promote.sh" "$tmp/clean.md" raw/trials/escape.md 2>/dev/null); code=$?
+    { [ "$code" -eq 2 ] && [ -z "$(ls -A "$tmp/outside")" ]; } \
+      && printf '  ok   a destination through a symlink is refused\n' \
+      || { printf '  FAIL a destination through a symlink is refused: exit %s\n' "$code"; fails=$((fails+1)); }
+  }
+  r=$(repo) && { cd "$r" || exit 2
+    mkdir -p "$tmp/outside2" && ln -s "$tmp/outside2" "$r/raw"
+    printf 'clean\n' > "$tmp/clean.md"
+    out=$(bash "$HERE/raw-promote.sh" "$tmp/clean.md" raw/x.md 2>/dev/null); code=$?
+    { [ "$code" -eq 2 ] && [ -z "$(ls -A "$tmp/outside2")" ]; } \
+      && printf '  ok   a symlinked raw is refused\n' \
+      || { printf '  FAIL a symlinked raw is refused: exit %s\n' "$code"; fails=$((fails+1)); }
+  }
 
   echo
   [ "$fails" -eq 0 ] && { echo "self-test: all controls behaved"; exit 0; }
@@ -176,6 +254,14 @@ top=$(git rev-parse --show-toplevel 2>/dev/null) || fail "not a git repository"
 
 case $DEST in raw/?*) ;; *) fail "the destination must be under raw/" ;; esac
 case $DEST in */../*|../*|*/..|..) fail "the destination must be under raw/" ;; esac
+# A symlinked parent would carry the copy outside raw/ despite the lexical
+# checks, so every leading component must be a real directory or nothing yet.
+prefix=$DEST
+while [ "$prefix" != raw ] && [ "$prefix" != . ] && [ "$prefix" != / ]; do
+  [ -L "$prefix" ] && fail "the destination leads through a symlink"
+  prefix=$(dirname -- "$prefix")
+done
+[ -L raw ] && fail "the destination leads through a symlink"
 [ -e "$DEST" ] && fail "the destination already exists; evidence is never overwritten"
 [ -e "$SRC" ] || fail "the source does not exist"
 
@@ -194,18 +280,38 @@ if [ "${#FILES[@]}" -gt 0 ]; then
   errf=$(mktemp) || fail "could not stage the scan"
   TRIP=$(bash "$SCRUB" --files "${FILES[@]}" 2>"$errf"); code=$?
   cat "$errf" >&2; rm -f -- "$errf"
-  if [ "$code" -eq 2 ]; then fail "the scan could not finish"; fi
+  case $code in 0|1) ;; *) fail "the scan could not finish" ;; esac
   if [ "$code" -eq 1 ] && [ -z "$RULED" ]; then printf '%s\n' "$TRIP"; exit 1; fi
 fi
 
-mkdir -p -- "$(dirname -- "$DEST")"
-if [ -d "$SRC" ] && [ ! -L "$SRC" ]; then cp -r -- "$SRC" "$DEST"
-else cp -- "$SRC" "$DEST"; fi
+# A ruling that quotes its suspect would publish the value it rules on, and a
+# multi-line reason would forge log structure, so the reason is checked before
+# anything is copied, and a refusal copies nothing.
+if [ -n "$TRIP" ] && [ -n "$RULED" ]; then
+  case $RULED in *$'\n'*) fail "the ruling must be one line" ;; esac
+  reasonf=$(mktemp) || fail "could not stage the scan"
+  printf '%s\n' "$RULED" > "$reasonf" || fail "could not stage the scan"
+  rerr=$(mktemp) || fail "could not stage the scan"
+  rout=$(bash "$SCRUB" --files "$reasonf" 2>"$rerr"); rcode=$?
+  cat "$rerr" >&2; rm -f -- "$reasonf" "$rerr"
+  case $rcode in 0) ;; *) fail "the ruling names a suspect; describe it, never quote it" ;; esac
+fi
+
+mkdir -p -- "$(dirname -- "$DEST")" || fail "could not create the destination"
+if [ -d "$SRC" ] && [ ! -L "$SRC" ]; then cp -r -- "$SRC" "$DEST" || fail "the copy failed"
+else cp -- "$SRC" "$DEST" || fail "the copy failed"; fi
 
 if [ -n "$TRIP" ] && [ -n "$RULED" ]; then
   kinds=$(printf '%s\n' "$TRIP" | sed -n 's/^.*: \([A-Za-z0-9_.-]*\)$/\1/p' | sort -u | tr '\n' ',' | sed 's/,$//;s/,/, /g')
-  mkdir -p wiki
-  printf '## [%s] promote-ruled | %s: the user ruled proceed (%s); the scan had reported: %s\n' \
-    "$(date -u +%F)" "$DEST" "$RULED" "$kinds" >> wiki/log.md
+  safe_dest=$(bash "$SCRUB" --safe-path "$DEST" 2>/dev/null) || fail "the scan could not finish"
+  mkdir -p wiki || fail "the ruling could not be recorded"
+  if ! printf '## [%s] promote-ruled | %s: the user ruled proceed (%s); the scan had reported: %s\n' \
+      "$(date -u +%F)" "$safe_dest" "$RULED" "$kinds" >> wiki/log.md; then
+    if rm -rf -- "$DEST" 2>/dev/null; then
+      fail "the ruling could not be recorded; the copy was removed"
+    else
+      fail "the ruling could not be recorded and the copy could not be removed: $safe_dest"
+    fi
+  fi
 fi
 exit 0

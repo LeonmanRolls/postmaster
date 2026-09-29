@@ -15,7 +15,7 @@
 #
 #   exit 0  clean
 #   exit 1  faults found, one per line on stdout
-#   exit 2  usage, or no wiki to check
+#   exit 2  usage, no wiki to check, or a page scan that could not finish
 set -uo pipefail
 HERE=$(CDPATH= cd -P -- "$(dirname -- "$0")" && pwd -P)
 SELFTEST=0
@@ -116,10 +116,19 @@ if pages and top.returncode == 0:
     if not scrub or not pathlib.Path(scrub).is_file():
         print("wiki-lint: no scrub to check pages with")
         sys.exit(2)
+    # Pages go to the scrub as repository-relative paths: absolute ones would
+    # redact the checkout's own location out of every diagnostic.
+    top_path = pathlib.Path(top.stdout.strip())
+    rel_args = []
+    for page in pages:
+        try:
+            rel_args.append(str(page.relative_to(top_path)))
+        except ValueError:
+            rel_args.append(str(page))
     child = subprocess.run(
-        [scrub, "--files", *(str(p) for p in pages)], cwd=top.stdout.strip(),
+        [scrub, "--files", *rel_args], cwd=top.stdout.strip(),
         stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, check=False)
-    if child.returncode == 2:
+    if child.returncode not in (0, 1):
         print("wiki-lint: the page scan could not finish")
         sys.exit(2)
     for ln in child.stdout.splitlines():
@@ -127,7 +136,7 @@ if pages and top.returncode == 0:
         if m is None or m.group(3) not in ("private-path", "private-host"):
             continue
         try:
-            rel = pathlib.Path(m.group(1)).relative_to(repo)
+            rel = (top_path / m.group(1)).relative_to(repo)
         except ValueError:
             rel = m.group(1)
         faults.append("%s: line %s: %s (schema.md: name a target by its repository name only)"
@@ -147,11 +156,36 @@ if raw.is_dir():
         for number, ln in enumerate(content.splitlines(), 1):
             if len(ln) >= 40 and "\0" not in ln and ln not in raw_lines:
                 raw_lines[ln] = "%s:%d" % (f.relative_to(repo), number)
+repeats = []
 for p in pages:
     for number, ln in enumerate(p.read_text().splitlines(), 1):
         hit = raw_lines.get(ln)
         if hit is not None:
-            fault(p, "line %d repeats %s (compile, do not transcribe)" % (number, hit))
+            rawrel, _, rawline = hit.rpartition(":")
+            repeats.append((p, number, rawrel, rawline))
+if repeats:
+    # A raw filename may itself carry a shaped value, so the named source is
+    # redacted before it reaches a diagnostic. Without a scrub there is no
+    # safe way to name it, and the lint fails rather than printing it raw.
+    scrub = os.environ.get("WIKI_LINT_SCRUB", "")
+    if not scrub or not pathlib.Path(scrub).is_file():
+        print("wiki-lint: no scrub to check pages with")
+        sys.exit(2)
+    distinct = list(dict.fromkeys(hit[2] for hit in repeats))
+    red = subprocess.run(
+        [scrub, "--safe-path", *distinct], cwd=top.stdout.strip() if top.returncode == 0 else None,
+        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, check=False)
+    if red.returncode != 0:
+        print("wiki-lint: the page scan could not finish")
+        sys.exit(2)
+    lines = red.stdout.splitlines()
+    if len(lines) != len(distinct):
+        print("wiki-lint: the page scan could not finish")
+        sys.exit(2)
+    redacted = dict(zip(distinct, lines))
+    for p, number, rawrel, rawline in repeats:
+        fault(p, "line %d repeats %s:%s (compile, do not transcribe)"
+              % (number, redacted[rawrel], rawline))
 
 # orphans: every page reachable from the index
 index = wiki / "index.md"
@@ -310,6 +344,50 @@ fresh; concept hashhost claimed ""
 HN='metrics.interna'
 printf 'See https://%sl:8443/up for the dashboard.\n' "$HN" >> "$tmp/wiki/concepts/hashhost.md"
 expect fail "a page carrying a private hostname" "private-host"
+
+fresh; concept quotefile claimed ""
+QL2='The quiet relay logged four hundred fourteen spans on the Wednesday run.'
+QE='contact-relay-413'; QH='quiet-relay-413'; QT='net'
+printf '%s\n' "$QL2" > "$tmp/raw/$QE@$QH.$QT.txt"
+printf '%s\n' "$QL2" >> "$tmp/wiki/concepts/quotefile.md"
+out=$(lint "$tmp" 2>/dev/null); code=$?
+{ [ "$code" -eq 1 ] && printf '%s\n' "$out" | grep -qF 'repeats raw/' \
+  && printf '%s\n' "$out" | grep -qF '[redacted]'; } \
+  && printf '  ok   a raw filename carrying a value is redacted\n' \
+  || { printf '  FAIL a raw filename carrying a value is redacted\n'; fails=$((fails+1)); }
+if printf '%s\n' "$out" | grep -qF -- "$QE@$QH.$QT"; then
+  printf '  FAIL a redacted filename prints no value\n'; fails=$((fails+1))
+else printf '  ok   a redacted filename prints no value\n'; fi
+
+# Both shapes below are assembled from pieces so this source carries no
+# matchable form of its own fixtures.
+shaped_parent=/tmp/clau''de-413-wikilint
+rm -r -- "$shaped_parent" </dev/null 2>/dev/null
+mkdir -p "$shaped_parent/repo" && cp -r "$REPO/wiki" "$shaped_parent/repo/wiki" \
+  && mkdir -p "$shaped_parent/repo/raw"
+( cd "$shaped_parent/repo" && git init -q -b main . )
+printf -- '---\ntitle: shaped\ntype: concept\nstanding: claimed\nsources: []\nupdated: 2026-01-01\n---\n\nBody.\n' \
+  > "$shaped_parent/repo/wiki/concepts/shaped.md"
+printf '\n- [shaped](concepts/shaped.md)\n' >> "$shaped_parent/repo/wiki/index.md"
+SHP=$(printf '/home/%s' fixture-user)
+printf 'See %s-413/notes.txt for the log.\n' "$SHP" >> "$shaped_parent/repo/wiki/concepts/shaped.md"
+out=$( ( cd "$shaped_parent/repo" && lint "$shaped_parent/repo" ) 2>/dev/null); code=$?
+rm -r -- "$shaped_parent" </dev/null 2>/dev/null
+{ [ "$code" -eq 1 ] && printf '%s\n' "$out" | grep -qF 'wiki/concepts/shaped.md: line'; } \
+  && printf '  ok   a page fault names its repo-relative path\n' \
+  || { printf '  FAIL a page fault names its repo-relative path\n'; fails=$((fails+1)); }
+if printf '%s\n' "$out" | grep -qF '[redacted]'; then
+  printf '  FAIL a checkout under a shaped path stays readable\n'; fails=$((fails+1))
+else printf '  ok   a checkout under a shaped path stays readable\n'; fi
+
+mkdir -p "$tmp/stubbin" && cp "$HERE/wiki-lint.sh" "$tmp/stubbin/"
+printf '#!/usr/bin/env bash\nexit 127\n' > "$tmp/stubbin/scrub-check.sh"
+chmod +x "$tmp/stubbin/scrub-check.sh"
+fresh
+out=$(bash "$tmp/stubbin/wiki-lint.sh" "$tmp" 2>/dev/null); code=$?
+[ "$code" -eq 2 ] \
+  && printf '  ok   a missing scanner fails the lint\n' \
+  || { printf '  FAIL a missing scanner fails the lint: exit %s\n' "$code"; fails=$((fails+1)); }
 
 echo
 [ "$fails" -eq 0 ] && { echo "self-test: all controls behaved"; exit 0; }
