@@ -109,27 +109,27 @@ None: the plan follows the ticket's direction without departure.
 
 ## Tasks
 
-- [ ] T001 [P] [AC2] Create `scripts/scrub-check.sh` with `--help`, pattern engine, allowlist
+- [x] T001 [P] [AC2] Create `scripts/scrub-check.sh` with `--help`, pattern engine, allowlist
   reader and scan of `base..head` added lines, never printing a matched value.
-- [ ] T002 [AC1] Implement all eight kinds (`key`, `email`, `account-id`, `home-path`,
+- [x] T002 [AC1] Implement all eight kinds (`key`, `email`, `account-id`, `home-path`,
   `private-host`, `token`, `attribution`, `private-instructions`) as shape-and-context
   regexes that do not match their own source.
-- [ ] T003 [AC3] Emit `<commit>:<path>:<line>: <kind>` on stdout only for suspects, notices
+- [x] T003 [AC3] Emit `<commit>:<path>:<line>: <kind>` on stdout only for suspects, notices
   on stderr, exit 0 clean / 1 suspects / 2 usage; no value ever printed.
-- [ ] T004 [AC4] Read `scripts/scrub-check.allow`; suppress on exact match of value span or
+- [x] T004 [AC4] Read `scripts/scrub-check.allow`; suppress on exact match of value span or
   whole line; ship the file with no entries.
-- [ ] T005 [AC8] Implement `--history [ref]` (default `main`) over every commit of the ref's
+- [x] T005 [AC8] Implement `--history [ref]` (default `main`) over every commit of the ref's
   history, same output and exit codes, no values printed.
-- [ ] T006 [AC6] `--self-test` with, for each kind, a positive control (fixture flagged) and
+- [x] T006 [AC6] `--self-test` with, for each kind, a positive control (fixture flagged) and
   a negative control (clean fixture passes); a control that a line added and then deleted is
   still flagged; a control for an allowed match and a not-yet-allowed match; usage and empty
   range controls; all printed as `ok` lines.
-- [ ] T007 [AC5] Commit `.postmaster/project.toml` (`git add -f`) declaring `[checks.scrub]`
+- [x] T007 [AC5] Commit `.postmaster/project.toml` (`git add -f`) declaring `[checks.scrub]`
   that runs `scripts/scrub-check.sh main HEAD`, joining the default gate without redeclaring
   it.
-- [ ] T008 [AC7] Extend `raw/README.md` to name `scripts/scrub-check.sh` as how a raw file's
+- [x] T008 [AC7] Extend `raw/README.md` to name `scripts/scrub-check.sh` as how a raw file's
   scrub is checked before promotion.
-- [ ] T009 [AC1] [AC2] Run `scripts/scrub-check.sh main HEAD` on this worktree's own commits
+- [x] T009 [AC1] [AC2] Run `scripts/scrub-check.sh main HEAD` on this worktree's own commits
   and ship the branch clean: patterns catch fixtures but not their own source or the docs.
-- [ ] T010 [AC3] [AC6] Confirm with a positive and a negative control that stdout carries
+- [x] T010 [AC3] [AC6] Confirm with a positive and a negative control that stdout carries
   only suspect lines and that no control output prints a matched value.
