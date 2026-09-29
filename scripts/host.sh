@@ -2404,6 +2404,7 @@ EOF
   wait_grep "$tmp/stub/pane-$pane.out" '^[0-9]{2}:[0-9]{2}:[0-9]{2} session ' 60
   check "the pane shows the name and the rendered stream, not raw JSON" \
     'grep -qF "$NAME" "$tmp/stub/pane-$pane.out" && grep -qE "^[0-9:]{8} session probe-1 · m$" "$tmp/stub/pane-$pane.out" && ! grep -q "{" "$tmp/stub/pane-$pane.out"' "$(cat "$tmp/stub/pane-$pane.out" 2>/dev/null)"
+  wait_grep "$tmp/stub/herdr.calls" "release-agent" 60
   check "and reports the launch working, then releases it" \
     'grep -q "^pane${T}report-agent${T}$pane${T}.*--state${T}working" <<<"$(calls herdr)" && grep -q "^pane${T}release-agent${T}$pane${T}" <<<"$(calls herdr)"'
   got2=$(cd "$tmp/caller" && hs "$STUBS" -- run "$NAME" "$repo/.worktrees/T-1-luna" --under "$tmp/run-1" --marker ../logs/h2.done -- ./fixed.sh)
