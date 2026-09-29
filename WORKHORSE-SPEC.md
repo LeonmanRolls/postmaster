@@ -108,18 +108,18 @@ None. The direction check has no departure.
 
 ## Tasks
 
-- [ ] T001 [P] [AC1] Add `planning` to `STAGES` in `scripts/stage.sh` and self-test controls (set, refuse unknown, order).
-- [ ] T002 [P] [AC1] Write the planning section of `skills/postmaster/coachman.md`: plan-only brief, spec committed then stop, harvest shapes, and the stage order including `planning`.
-- [ ] T003 [P] [AC5] Add the `spec-review` verb to `scripts/log-action.sh` with self-test controls (written with decision+commit+words; unknown decision refused).
-- [ ] T004 [P] [AC8] Add `planning.review_link` to `config.example.toml` and `scripts/setup.sh` (`--keys`, ask, write).
-- [ ] T005 [AC2] [AC8] Coachman writes `spec-review.md` (lane, link from template or path, commit) and touches `.spec-review-ready`; `scripts/runs-status.sh` shows `SPEC` with self-test controls.
-- [ ] T006 [AC2] [AC3] [AC4] `skills/postmaster/postmaster.md`: put one spec at a time to the user, record approved/changes/dropped via `spec-review`, write `spec-decisions.md`, resume the coachman; revision loop and the two-approved rule; stop and say why when under two.
-- [ ] T007 [AC3] Coachman revision loop: resume the one workhorse with the user's words, harvest the revised spec, new link and commit; no code until approved; resume approved workhorses to implement.
-- [ ] T008 [AC4] Record drop and the two-approved gate in the runbook and manifest outcomes (`dropped`, `spec_commit`).
-- [ ] T009 [AC5] Record the approved commit on each `spec-review` line and in `spec-decisions.md` / manifest.
-- [ ] T010 [AC6] Timings: `run-times.sh` already times stages from the log; add a planning row to its self-test so the review span is covered.
-- [ ] T011 [P] [AC7] Capture the SDLC playbook into `raw/articles/ai-native-sdlc-playbook/` (`source.md`, `passages.md`).
-- [ ] T012 [AC7] `wiki/concepts/planning-stage.md` at `claimed` + `wiki/sources/ai-native-sdlc-playbook.md` + `wiki/index.md` + `wiki/log.md`.
-- [ ] T013 [AC7] Update `wiki/concepts/workhorse-spec.md`: the spec is reviewed before code; remove "nobody reviews it"; note #9's measure.
-- [ ] T014 [AC1] [AC3] Update the workhorse contract text in `coachman.md` and the brief contents so the planning stop and the post-approval implement resume are spelled out (T002/T007 land with this).
-- [ ] T015 [AC6] `scripts/verify.sh run .` / gate green, including new self-tests; `scripts/skill-refs.sh` clean after runbook edits.
+- [x] T001 [P] [AC1] Add `planning` to `STAGES` in `scripts/stage.sh` and self-test controls (set, refuse unknown, order).
+- [x] T002 [P] [AC1] Write the planning section of `skills/postmaster/coachman.md`: plan-only brief, spec committed then stop, harvest shapes, and the stage order including `planning`.
+- [x] T003 [P] [AC5] Add the `spec-review` verb to `scripts/log-action.sh` with self-test controls (written with decision+commit+words; unknown decision refused).
+- [x] T004 [P] [AC8] Add `planning.review_link` to `config.example.toml` and `scripts/setup.sh` (`--keys`, ask, write).
+- [x] T005 [AC2] [AC8] Coachman writes `spec-review.md` (lane, link from template or path, commit) and touches `.spec-review-ready`; `scripts/runs-status.sh` shows `SPEC` with self-test controls.
+- [x] T006 [AC2] [AC3] [AC4] `skills/postmaster/postmaster.md`: put one spec at a time to the user, record approved/changes/dropped via `spec-review`, write `spec-decisions.md`, resume the coachman; revision loop and the two-approved rule; stop and say why when under two.
+- [x] T007 [AC3] Coachman revision loop: resume the one workhorse with the user's words, harvest the revised spec, new link and commit; no code until approved; resume approved workhorses to implement.
+- [x] T008 [AC4] Record drop and the two-approved gate in the runbook and manifest outcomes (`dropped`, `spec_commit`).
+- [x] T009 [AC5] Record the approved commit on each `spec-review` line and in `spec-decisions.md` / manifest.
+- [x] T010 [AC6] Timings: `run-times.sh` already times stages from the log; add a planning row to its self-test so the review span is covered.
+- [x] T011 [P] [AC7] Capture the SDLC playbook into `raw/articles/ai-native-sdlc-playbook/` (`source.md`, `passages.md`).
+- [x] T012 [AC7] `wiki/concepts/planning-stage.md` at `claimed` + `wiki/sources/ai-native-sdlc-playbook.md` + `wiki/index.md` + `wiki/log.md`.
+- [x] T013 [AC7] Update `wiki/concepts/workhorse-spec.md`: the spec is reviewed before code; remove "nobody reviews it"; note #9's measure.
+- [x] T014 [AC1] [AC3] Update the workhorse contract text in `coachman.md` and the brief contents so the planning stop and the post-approval implement resume are spelled out (T002/T007 land with this).
+- [x] T015 [AC6] `scripts/verify.sh run .` / gate green, including new self-tests; `scripts/skill-refs.sh` clean after runbook edits.
