@@ -39,7 +39,9 @@ if [ "${1:-}" = --self-test ]; then
         "postmaster.harness=bash" "postmaster.model=pm"
       [ -n "${2:-}" ] && printf '%s\n' "$2"; } > "$tmp/$1.answers"
   }
-  run() { "$0" --answers "$tmp/$1.answers" --config "$tmp/$1.toml" >"$tmp/$1.out" 2>&1; }
+  mkdir "$tmp/bin"
+  for h in claude codex grok agy muse mimo pi; do printf '#!/bin/sh\nexit 0\n' > "$tmp/bin/$h"; chmod +x "$tmp/bin/$h"; done
+  run() { PATH="$tmp/bin:$PATH" "$0" --answers "$tmp/$1.answers" --config "$tmp/$1.toml" >"$tmp/$1.out" 2>&1; }
   team() { python3 -c 'import json, sys, tomllib; print(json.dumps(tomllib.load(open(sys.argv[1], "rb"))["team"].get(sys.argv[2])))' "$tmp/$1.toml" "$2"; }
 
   echo "positive controls"
@@ -48,7 +50,7 @@ if [ "${1:-}" = --self-test ]; then
   [ $rc -eq 0 ] && [ "$(team lens lens_reviewers)" = '{"security": ["alpha", "beta", "sentinel"]}' ] \
     && ok "a lens given its own lanes is written to [team.lens_reviewers]" \
     || fail "a lens given its own lanes is written to [team.lens_reviewers] (exit $rc)" "$(cat "$tmp/lens.out")"
-  [ "$("$HERE/reviewers.sh" lines --config "$tmp/lens.toml")" = "$(printf 'reviewers: alpha, beta\nsecurity reviewers: alpha, beta, sentinel')" ] \
+  [ "$("$HERE/reviewers.sh" lines --config "$tmp/lens.toml")" = "$(printf 'reviewers: alpha, beta\nbug reviewers: \nsecurity reviewers: alpha, beta, sentinel')" ] \
     && ok "the written config resolves: the reviewers default to the workhorses, and security has its own" \
     || fail "the written config resolves" "$("$HERE/reviewers.sh" lines --config "$tmp/lens.toml" 2>&1)"
   answers plain; run plain; rc=$?
@@ -72,6 +74,20 @@ postmaster.env_file=~/.postmaster/lanes/pm.env"; run roles; rc=$?
   answers limit "round_timeout_seconds=86400"; run limit; rc=$?
   [ $rc -eq 0 ] && [ "$(limit limit)" = 86400 ] && ok "an answer sets it, up to 86400" \
     || fail "an answer sets it, up to 86400 (exit $rc)" "$(cat "$tmp/limit.out")"
+
+  answers no-bug "reviewers.bug=alpha, beta"; run no-bug; rc=$?
+  [ $rc -eq 0 ] && grep -q "bug reviewer 'alpha' uses bash, which has no code-review form" "$tmp/no-bug.out" \
+    && grep -q "bug reviewer 'beta' uses bash, which has no code-review form" "$tmp/no-bug.out" \
+    && grep -q "warning: no configured bug reviewer has a code-review form" "$tmp/no-bug.out" \
+    && ok "setup names unsupported bug reviewers and warns when none has a review form" \
+    || fail "setup names unsupported bug reviewers and warns when none has a review form (exit $rc)" "$(cat "$tmp/no-bug.out")"
+  answers mixed-bug "reviewers.bug=alpha, beta"
+  sed -i 's/^lane.alpha.harness=bash$/lane.alpha.harness=claude/; s/^lane.beta.harness=bash$/lane.beta.harness=pi/' "$tmp/mixed-bug.answers"
+  run mixed-bug; rc=$?
+  [ $rc -eq 0 ] && grep -q "bug reviewer 'beta' uses pi, which has no code-review form" "$tmp/mixed-bug.out" \
+    && [ "$("$HERE/reviewers.sh" eligible bug --config "$tmp/mixed-bug.toml")" = alpha ] \
+    && ok "setup warns for the ineligible lane and resolves the eligible bug reviewer" \
+    || fail "setup warns for the ineligible lane and resolves the eligible bug reviewer (exit $rc)" "$(cat "$tmp/mixed-bug.out")"
 
   echo "negative controls"
   n=0
@@ -113,7 +129,7 @@ lane.<name>.effort?        (none)             effort, blank if the harness has n
 lane.<name>.env_file?      (none)             env file for an alternate backend
 workhorses                 <lanes>            workhorse lanes, comma separated
 reviewers                  <workhorses>       reviewer lanes, comma separated
-reviewers.<lens>?          (reviewers)        reviewer lanes for one lens only (reviewers.sh lenses)
+reviewers.<lens>?          (reviewers)        reviewer lanes for one lens only; bug reviewers need a code-review form
 coachman.harness                              never a lane's model
 coachman.model
 coachman.effort?           (none)
@@ -189,7 +205,7 @@ ask LANES "Lane names, comma separated" "alpha, beta" "lanes"
 LANE_LIST=$(printf '%s' "$LANES" | tr ',' ' ')
 set -- $LANE_LIST
 [ $# -ge 2 ] || { echo "setup: at least two lanes are needed" >&2; exit 1; }
-LANE_BLOCKS=""; LANE_MODELS=""
+LANE_BLOCKS=""; LANE_MODELS=""; LANE_HARNESSES=""
 for lane in $LANE_LIST; do
   ask h "  $lane: harness (codex, grok, agy, claude, muse, mimo, pi)" "" "lane.$lane.harness"
   need_harness "$h"
@@ -201,6 +217,7 @@ for lane in $LANE_LIST; do
   [ -n "$ef" ] && block="$block"$'\n'"env_file = \"$ef\""
   LANE_BLOCKS="$LANE_BLOCKS"$'\n'"$block"$'\n'
   LANE_MODELS="$LANE_MODELS $m"
+  LANE_HARNESSES="$LANE_HARNESSES $lane=$h"
 done
 
 echo
@@ -216,8 +233,10 @@ for rv in $(printf '%s' "$REVIEWERS" | tr ',' ' '); do
   [ "$ok" -eq 1 ] || { echo "setup: reviewer '$rv' is not one of the lanes ($LANES)" >&2; exit 1; }
 done
 LENS_TABLE=""
+BUG_REVIEWERS=$REVIEWERS
 for lens in $("$HERE/reviewers.sh" lenses); do
   ask LR "  reviewer lanes for the $lens lens alone, comma separated (blank: the reviewer lanes)" "" "reviewers.$lens?"
+  [ "$lens" != bug ] || BUG_REVIEWERS=${LR:-$REVIEWERS}
   [ -n "$LR" ] || continue
   for rv in $(printf '%s' "$LR" | tr ',' ' '); do
     ok=0; for lane in $LANE_LIST; do [ "$lane" = "$rv" ] && ok=1; done
@@ -226,6 +245,24 @@ for lens in $("$HERE/reviewers.sh" lenses); do
   LENS_TABLE="$LENS_TABLE$lens = $(toml_list "$LR")"$'\n'
 done
 [ -z "$LENS_TABLE" ] || LENS_TABLE=$'\n[team.lens_reviewers]\n'"$LENS_TABLE"
+
+echo
+echo "== Bug review capability =="
+BUG_REVIEWABLE=0
+for reviewer in $(printf '%s' "$BUG_REVIEWERS" | tr ',' ' '); do
+  harness=""
+  for lane_harness in $LANE_HARNESSES; do
+    case $lane_harness in "$reviewer="*) harness=${lane_harness#*=}; break ;; esac
+  done
+  if "$HERE/review-forms.sh" has "$harness" >/dev/null 2>&1; then
+    BUG_REVIEWABLE=$((BUG_REVIEWABLE+1))
+  else
+    echo "setup: bug reviewer '$reviewer' uses $harness, which has no code-review form"
+  fi
+done
+if [ "$BUG_REVIEWABLE" -eq 0 ]; then
+  echo "setup: warning: no configured bug reviewer has a code-review form; runs whose turnpikes include bug review will be refused at pre-flight"
+fi
 
 echo
 echo "== The coachman: judges the lanes and runs the review rounds. Never a lane's model. =="
