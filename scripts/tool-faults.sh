@@ -909,10 +909,10 @@ D2=$(id_where 'skills/postmaster/coachman.md  control \(check\)')
   || fail "a line that is not JSON is left out, and said so; one with a raw line separator is read" "$out"
 grep -qF "\"action\":\"note\",\"target\":\"$(printf '%s\n' "$out" | head -1 | cut -d' ' -f2 | tr -d :)\",\"detail\":\"tool faults harvested: 5, 5 new\"" "$d/actions.jsonl" \
   && ok "the harvest logs what it found" || fail "the harvest logs what it found" "$(tail -2 "$d/actions.jsonl")"
-[ "$(state_of "$d" "$B")" = new ] && [ -f "$(draft_of "$d" "$B")" ] && printf '%s\n' "$(line_of "$B")" | grep -qF "new  tool-faults/" \
+[ "$(state_of "$d" "$B")" = new ] && [ -f "$(draft_of "$d" "$B")" ] && grep -qF "new  tool-faults/" <<<"$(line_of "$B")" \
   && ok "a fault no ticket holds is new, and its line names its draft" || fail "a fault no ticket holds is new, and its line names its draft" "$out"
-printf '%s\n' "$out" | grep -qxF "  $C: a fault in a control, and the log has no escalate naming its file after it" \
-  && ! printf '%s\n' "$out" | grep -qF "  $A: a fault in a control, and" && grep -qF 'The run stopped and escalated.' "$(draft_of "$d" "$A")" \
+grep -qxF "  $C: a fault in a control, and the log has no escalate naming its file after it" <<<"$out" \
+  && ! grep -qF "  $A: a fault in a control, and" <<<"$out" && grep -qF 'The run stopped and escalated.' "$(draft_of "$d" "$A")" \
   && ! grep -qF 'The run stopped and escalated.' "$(draft_of "$d" "$C")" \
   && ok "only an escalate naming the fault's file counts as its escalation" || fail "only an escalate naming the fault's file counts as its escalation" "$out"
 shape=0
@@ -934,8 +934,8 @@ db ADMIN 12 OPEN "An ordinary issue" "Nothing to do with faults." \
   57 OPEN "Tool fault in scripts/wait-for-markers.sh: returned early [$A]" "A body." \
   58 OPEN "Retitled by hand" "Tool fault id: \`$D1\`."
 out=$(tf harvest "$d" 2>&1)
-printf '%s\n' "$(line_of "$A")" | grep -qE " known #57 \(open\)$" && printf '%s\n' "$(line_of "$C")" | grep -qE " asked, like #57  tool-faults/" \
-  && printf '%s\n' "$(line_of "$D1")" | grep -qE " known #58 \(open\)$" && printf '%s\n' "$(line_of "$B")" | grep -qE " asked  tool-faults/" \
+grep -qE " known #57 \(open\)$" <<<"$(line_of "$A")" && grep -qE " asked, like #57  tool-faults/" <<<"$(line_of "$C")" \
+  && grep -qE " known #58 \(open\)$" <<<"$(line_of "$D1")" && grep -qE " asked  tool-faults/" <<<"$(line_of "$B")" \
   && ok "a ticket holding the id in its title or its body is known; one only like it is not; a draft already shown is asked" \
   || fail "a ticket holding the id in its title or its body is known; one only like it is not; a draft already shown is asked" "$out"
 : > "$S/writes.log"
@@ -945,11 +945,11 @@ out=$(tf comment "$d" "$A" 2>&1); rc=$?
   && ok "comment says once, on the ticket that holds it, that it was seen again, and logs it" \
   || fail "comment says once, on the ticket that holds it, that it was seen again, and logs it (exit $rc)" "$out$(printf '\n'; cat "$S/writes.log")"
 out=$(tf comment "$d" "$C" 12 2>&1); rc=$?
-[ $rc -eq 0 ] && tail -1 "$S/writes.log" | grep -qF "comment #12 " && tail -1 "$S/writes.log" | grep -qF "tool fault $C seen again: once in run $RID" \
+[ $rc -eq 0 ] && grep -qF "comment #12 " <<<"$(tail -1 "$S/writes.log")" && grep -qF "tool fault $C seen again: once in run $RID" <<<"$(tail -1 "$S/writes.log")" \
   && ok "on the user's word that a ticket holds a new fault, comment names it there" \
   || fail "on the user's word that a ticket holds a new fault, comment names it there (exit $rc)" "$out$(printf '\n'; cat "$S/writes.log")"
 out=$(tf file "$d" "$B" 2>&1); rc=$?
-[ $rc -eq 0 ] && [ "$(writes create)" -eq 1 ] && cmp -s "$S/created-60.md" "$B_MD" && printf '%s\n' "$out" | grep -qxF "$B: filed as #60" \
+[ $rc -eq 0 ] && [ "$(writes create)" -eq 1 ] && cmp -s "$S/created-60.md" "$B_MD" && grep -qxF "$B: filed as #60" <<<"$out" \
   && grep -qF "\"target\":\"#60\",\"detail\":\"tool fault $B filed in run $RID" "$d/actions.jsonl" \
   && ok "file files the draft as it is, once, and logs the new ticket" || fail "file files the draft as it is, once, and logs the new ticket (exit $rc)" "$out$(printf '\n'; cat "$S/writes.log")"
 tf comment "$d" "$D1" >/dev/null 2>&1; out=$(tf decline "$d" "$D2" "the user: not worth a ticket" 2>&1); rc=$?
@@ -959,17 +959,17 @@ mv -- "$d/tool-faults.json" "$tmp/state.was"
 python3 -c 'import json, sys; s = json.load(open(sys.argv[1])); [x.update(state="new") for x in s["faults"]]; json.dump(s, open(sys.argv[2], "w"))' "$tmp/state.was" "$d/tool-faults.json"
 out=$(tf harvest "$d" 2>&1)
 for f in "$A commented #57" "$B filed #60" "$C commented #12" "$D1 commented #58" "$D2 declined"; do
-  printf '%s\n' "$out" | grep -qE "^${f%% *}  .*  ${f#* }$" || { fail "a later harvest reads what was done from the run's log, not its state file" "$f$(printf '\n')$out"; break; }
+  grep -qE "^${f%% *}  .*  ${f#* }$" <<<"$out" || { fail "a later harvest reads what was done from the run's log, not its state file" "$f$(printf '\n')$out"; break; }
 done && ok "a later harvest reads what was done from the run's log, not its state file"
 again=$(newrun "$NAME" "${NAME^^}-16" done)
 logf "$again" coachman tool-fault scripts/wait-for-markers.sh --ran "wait" --failed "counted a directory named like a marker" \
   --error none --diagnosis "find has no -type" --fix "add -type f to the find" --control wait
 python3 -c 'import json, sys; p = sys.argv[1]; s = json.load(open(p)); s["issues"]["12"]["state"] = "CLOSED"; json.dump(s, open(p, "w"))' "$S/db.json"
 out=$(tf harvest "$again" 2>&1)
-printf '%s\n' "$(line_of "$C")" | grep -qE " known #12 \(closed\)$" && ok "in a later run, a fault a comment names on any ticket is known there" \
+grep -qE " known #12 \(closed\)$" <<<"$(line_of "$C")" && ok "in a later run, a fault a comment names on any ticket is known there" \
   || fail "in a later run, a fault a comment names on any ticket is known there" "$out"
 out=$(tf comment "$again" "$C" 2>&1); rc=$?
-[ $rc -eq 0 ] && tail -1 "$S/writes.log" | grep -qF "comment #12 " && tail -1 "$S/writes.log" | grep -qF "This ticket is closed." \
+[ $rc -eq 0 ] && grep -qF "comment #12 " <<<"$(tail -1 "$S/writes.log")" && grep -qF "This ticket is closed." <<<"$(tail -1 "$S/writes.log")" \
   && ok "a comment on a closed ticket says it is closed" || fail "a comment on a closed ticket says it is closed (exit $rc)" "$out$(printf '\n'; tail -1 "$S/writes.log")"
 pm="$RUNS/$NAME/postmaster"; mkdir -p "$pm"
 logf "$pm" postmaster tool-fault scripts/runs-status.sh --ran "the poll" --failed "listed a run twice" --error none --diagnosis x --fix "list each once"
@@ -978,7 +978,7 @@ python3 -c 'import json, sys; p = sys.argv[1]; s = json.load(open(p)); s["issues
 logf "$pm" postmaster tool-fault scripts/runs-status.sh --ran "the poll, later" --failed "listed a run twice" --error none --diagnosis x --fix "list each once"
 out=$(tf harvest "$pm" 2>&1); P2=$(id_where 'scripts/runs-status.sh')
 PR=$(python3 -c 'import json, sys; print(len(json.load(open(sys.argv[1]))["runs"]))' "$pm/tool-faults.json")
-[ "$P2" = "$P" ] && [ "$PR" -eq 2 ] && printf '%s\n' "$(line_of "$P")" | grep -qE "once  known #61 \(closed\)$" \
+[ "$P2" = "$P" ] && [ "$PR" -eq 2 ] && grep -qE "once  known #61 \(closed\)$" <<<"$(line_of "$P")" \
   && ok "the postmaster's own faults: a recurrence after its ticket is filed is a new harvest, and known" \
   || fail "the postmaster's own faults: a recurrence after its ticket is filed is a new harvest, and known" "$out"
 notes=$(newrun notes IT-12 done); : > "$S/writes.log"
@@ -1007,8 +1007,8 @@ kinds=$(newrun "$NAME" "${NAME^^}-19" done)
 printf '{"ts":"2026-01-01T00:00:00Z","project":"p","run":"r","actor":"coachman","action":"tool-fault","target":"scripts/wait-for-markers.sh","detail":"waited on the wrong folder","fault":{"ran":"x","failed":"waited on the wrong folder","error":"none","diagnosis":"x","fix":"y","workaround":"","control":"gate"}}\n' > "$kinds/actions.jsonl"
 printf '{"ts":"2026-01-01T00:00:00Z","project":"p","run":"r","actor":"coachman","action":"tool-fault","target":"scripts/log-action.sh","detail":"wrote nothing","fault":{"ran":"x","failed":"wrote nothing","error":"none","diagnosis":"x","fix":"y","workaround":"","control":""}}\n' >> "$kinds/actions.jsonl"
 out=$(tf harvest "$kinds" 2>&1)
-printf '%s\n' "$out" | grep -qE '^tf-[0-9a-f]{8}  scripts/wait-for-markers.sh  control \(gate\)  once' \
-  && printf '%s\n' "$out" | grep -qE '^tf-[0-9a-f]{8}  scripts/log-action.sh  control \(action-log\)  once' \
+grep -qE '^tf-[0-9a-f]{8}  scripts/wait-for-markers.sh  control \(gate\)  once' <<<"$out" \
+  && grep -qE '^tf-[0-9a-f]{8}  scripts/log-action.sh  control \(action-log\)  once' <<<"$out" \
   && ok "a fault keeps the kind of control its line recorded; with none recorded, the list's" \
   || fail "a fault keeps the kind of control its line recorded; with none recorded, the list's" "$out"
 long=$(newrun "$NAME" "${NAME^^}-20" done)
@@ -1018,14 +1018,14 @@ start=$SECONDS; out=$(tf harvest "$long" 2>&1); rc=$?
   || fail "a fault with a 100,000-character token is harvested in seconds (exit $rc, $((SECONDS - start))s)" "$(printf '%s\n' "$out" | cut -c1-200)"
 python3 -c 'import json, sys; p = sys.argv[1]; s = json.load(open(p)); s["faults"].append(dict(s["faults"][0], id="tf-0badf00d", state="new")); json.dump(s, open(p, "w"))' "$long/tool-faults.json"
 out=$(tf comment "$long" tf-0badf00d 2>&1); rc=$?
-[ $rc -eq 1 ] && printf '%s\n' "$out" | grep -qF "no longer gives tf-0badf00d" && ! printf '%s\n' "$out" | grep -qF Traceback \
+[ $rc -eq 1 ] && grep -qF "no longer gives tf-0badf00d" <<<"$out" && ! grep -qF Traceback <<<"$out" \
   && ok "a fault the log no longer gives is refused by name" || fail "a fault the log no longer gives is refused by name (exit $rc)" "$out"
 board=$(newrun "$NAME" "${NAME^^}-17" done); : > "$S/writes.log"
 logf "$board" coachman tool-fault scripts/cut-scratch.sh --ran "cut" --failed "cloned no dependency directory" --error none --diagnosis x --fix "clone them"
 out=$(tf harvest "$board" 2>&1); K1=$(id_where 'scripts/cut-scratch.sh'); : > "$S/no-item-add"
 out=$(tf file "$board" "$K1" 2>&1); rc=$?; mv -- "$S/no-item-add" "$tmp/no-item-add.was"
 out2=$(tf harvest "$board" 2>&1)
-[ $rc -eq 0 ] && printf '%s\n' "$out" | grep -qF "it is not on the board" && printf '%s\n' "$(printf '%s\n' "$out2" | grep "^$K1  ")" | grep -qE " filed #6[0-9]$" \
+[ $rc -eq 0 ] && grep -qF "it is not on the board" <<<"$out" && grep -qE " filed #6[0-9]$" <<<"$(printf '%s\n' "$out2" | grep "^$K1  ")" \
   && ok "a ticket created but not put on the board is still filed, and logged" || fail "a ticket created but not put on the board is still filed, and logged (exit $rc)" "$out$(printf '\n')$out2"
 [ -n "$(leaks "zz $NAME zz")" ] && ok "the leak check finds a planted piece" || fail "the leak check finds a planted piece"
 
@@ -1045,33 +1045,33 @@ out=$(tf harvest "$clean" 2>&1); rc=$?
 open=$(newrun "$NAME" "${NAME^^}-14" review)
 logf "$open" coachman tool-fault scripts/launch.sh --ran x --failed y --error none --diagnosis z --fix w
 out=$(tf harvest "$open" 2>&1); rc=$?
-[ $rc -eq 1 ] && printf '%s\n' "$out" | grep -qF "still open" && [ ! -e "$open/tool-faults.json" ] \
+[ $rc -eq 1 ] && grep -qF "still open" <<<"$out" && [ ! -e "$open/tool-faults.json" ] \
   && ok "a run still open is not harvested" || fail "a run still open is not harvested (exit $rc)" "$out"
 mine=$(newrun "$NAME" "${NAME^^}-15" abandoned)
 logf "$mine" coachman tool-fault scripts/launch.sh --ran "launch" --failed "the model flag was refused" --error none --diagnosis "renamed" --fix "use the new flag"
 python3 -c 'import json, sys; p = sys.argv[1]; s = json.load(open(p)); s["access"] = "READ"; json.dump(s, open(p, "w"))' "$S/db.json"
 out=$(tf harvest "$mine" 2>&1); rc=$?; F=$(id_where 'scripts/launch.sh')
-[ $rc -eq 0 ] && printf '%s\n' "$out" | grep -qF "the user does not own postmaster's repository" && [ "$(state_of "$mine" "$F")" = kept ] \
+[ $rc -eq 0 ] && grep -qF "the user does not own postmaster's repository" <<<"$out" && [ "$(state_of "$mine" "$F")" = kept ] \
   && ok "a repository the user does not own is no tracker: the faults are kept" || fail "a repository the user does not own is no tracker: the faults are kept (exit $rc)" "$out"
 out=$(tf file "$mine" "$F" 2>&1); rc=$?
-[ $rc -eq 1 ] && printf '%s\n' "$out" | grep -qF "no tracker of postmaster's own" && [ ! -s "$S/writes.log" ] \
+[ $rc -eq 1 ] && grep -qF "no tracker of postmaster's own" <<<"$out" && [ ! -s "$S/writes.log" ] \
   && ok "and nothing is filed there" || fail "and nothing is filed there (exit $rc)" "$out"
 python3 -c 'import json, sys; p = sys.argv[1]; s = json.load(open(p)); s["access"] = "ADMIN"; json.dump(s, open(p, "w"))' "$S/db.json"
 mkdir -p "$REPO/tools/postmaster" && cp -R "$T/scripts" "$T/skills" "$REPO/tools/postmaster/" || exit 1
 vend=$(newrun "$NAME" "${NAME^^}-18" done)
 logf "$vend" coachman tool-fault scripts/launch.sh --ran "launch" --failed "the effort flag was refused for $NAME" --error none --diagnosis x --fix "use the new flag"
 out=$(PATH="$tmp/bin:$PATH" TOOL_FAULTS_STUB="$S" "$REPO/tools/postmaster/scripts/tool-faults.sh" harvest "$vend" 2>&1); rc=$?
-[ $rc -eq 0 ] && printf '%s\n' "$out" | grep -qF "not a git checkout of its own" && [ ! -s "$S/writes.log" ] && [ -z "$(leaks "$(cat "$vend"/tool-faults/*/*)")" ] \
+[ $rc -eq 0 ] && grep -qF "not a git checkout of its own" <<<"$out" && [ ! -s "$S/writes.log" ] && [ -z "$(leaks "$(cat "$vend"/tool-faults/*/*)")" ] \
   && ok "a copy of postmaster inside the target is no tracker, and withholds the target all the same" \
   || fail "a copy of postmaster inside the target is no tracker, and withholds the target all the same (exit $rc)" "$out"
 out=$(tf harvest "$mine" 2>&1)
 : > "$S/no-search"; out=$(tf harvest "$mine" 2>&1); out2=$(tf file "$mine" "$F" 2>&1); rc=$?; mv -- "$S/no-search" "$tmp/no-search.was"
-[ "$(state_of "$mine" "$F")" = unchecked ] && [ $rc -eq 1 ] && printf '%s\n' "$out2" | grep -qF "could not be read, so nothing is filed" && [ ! -s "$S/writes.log" ] \
+[ "$(state_of "$mine" "$F")" = unchecked ] && [ $rc -eq 1 ] && grep -qF "could not be read, so nothing is filed" <<<"$out2" && [ ! -s "$S/writes.log" ] \
   && ok "a tracker that cannot be searched leaves the fault unchecked, and nothing is filed" \
   || fail "a tracker that cannot be searched leaves the fault unchecked, and nothing is filed (exit $rc)" "$out$(printf '\n')$out2"
 printf '%s\n' "\`$IDENT\` is the one to fix" >> "$(draft_of "$mine" "$F")"
 out=$(tf file "$mine" "$F" 2>&1); rc=$?
-[ $rc -eq 2 ] && [ ! -s "$S/writes.log" ] && printf '%s\n' "$out" | grep -qF "not safe to publish" \
+[ $rc -eq 2 ] && [ ! -s "$S/writes.log" ] && grep -qF "not safe to publish" <<<"$out" \
   && ok "file refuses a draft changed to carry the target's code" || fail "file refuses a draft changed to carry the target's code (exit $rc)" "$out"
 
 echo

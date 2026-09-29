@@ -416,7 +416,7 @@ stored 7 "$tmp/crlf.md"; gh_sh read 7 --body > "$tmp/out" 2>&1; rc=$?
 [ $rc -eq 0 ] && cmp -s "$tmp/out" "$tmp/want" && ok "read --body keeps a CRLF body's line endings" \
   || fail "read --body keeps a CRLF body's line endings (exit $rc)" "$(cat -A "$tmp/out")"
 stored 7 "$tmp/lf.md"; out=$(gh_sh read 7 2>&1); rc=$?
-[ $rc -eq 0 ] && [ "$(printf '%s\n' "$out" | head -1)" = "id: #7" ] && printf '%s\n' "$out" | grep -qxF "title: Check a ticket's shape" \
+[ $rc -eq 0 ] && [ "$(printf '%s\n' "$out" | head -1)" = "id: #7" ] && grep -qxF "title: Check a ticket's shape" <<<"$out" \
   && ok "read without --body still prints the header before the body" || fail "read without --body still prints the header before the body (exit $rc)" "$out"
 gh_sh read 7 --body > "$tmp/base.md" 2>/dev/null; : > "$S/edits.log"
 out=$(gh_sh edit 7 "$tmp/new.md" "$tmp/base.md" 2>&1); rc=$?
@@ -436,7 +436,7 @@ refused() {  # refused <label> <exit> <text the message holds> <edit arguments..
   local label=$1 want=$2 why=$3; shift 3
   : > "$S/edits.log"
   out=$(gh_sh edit "$@" 2>&1); rc=$?
-  if [ $rc -eq "$want" ] && [ "$(edits)" -eq 0 ] && printf '%s\n' "$out" | grep -qF -- "$why"; then ok "$label"
+  if [ $rc -eq "$want" ] && [ "$(edits)" -eq 0 ] && grep -qF -- "$why" <<<"$out"; then ok "$label"
   else fail "$label: wanted exit $want with \"$why\" and no edit, got exit $rc and $(edits) edit(s)" "$out"; fi
 }
 stored 7 "$tmp/lf.md"
@@ -462,7 +462,7 @@ out=$(gh_sh access 2>&1); rc=$?
 [ $rc -eq 0 ] && [ "$out" = READ ] && ok "a repository the user only reads says READ" || fail "a repository the user only reads says READ (exit $rc)" "$out"
 printf '%s\n' '{"data": {"repository": null}}' > "$S/access.json"
 out=$(gh_sh access 2>&1); rc=$?
-[ $rc -eq 1 ] && printf '%s\n' "$out" | grep -qF "no permission on o/r" && ok "a repository gh cannot see exits 1" \
+[ $rc -eq 1 ] && grep -qF "no permission on o/r" <<<"$out" && ok "a repository gh cannot see exits 1" \
   || fail "a repository gh cannot see exits 1 (exit $rc)" "$out"
 
 echo "create and search"
@@ -478,7 +478,7 @@ out=$(gh_sh create "A title" "$tmp/new.md" 2>"$tmp/err"); rc=$?
 mv -- "$S/no-item-add" "$tmp/no-item-add.was"; : > "$S/creates.log"; cp "$S/fields.json" "$tmp/fields.json"
 printf '%s\n' '{"fields": [{"id": "F1", "name": "Status", "options": [{"id": "o1", "name": "Backlog"}, {"id": "o3", "name": "Done"}]}]}' > "$S/fields.json"
 out=$(gh_sh create "A title" "$tmp/new.md" 2>&1); rc=$?
-[ $rc -eq 1 ] && [ "$(creates)" -eq 0 ] && printf '%s\n' "$out" | grep -qF "nothing was created" \
+[ $rc -eq 1 ] && [ "$(creates)" -eq 0 ] && grep -qF "nothing was created" <<<"$out" \
   && ok "a board with no Todo column is refused before anything is created" || fail "a board with no Todo column is refused before anything is created (exit $rc)" "$out"
 cp "$tmp/fields.json" "$S/fields.json"
 printf '%s\n' '[{"number": 9, "title": "Later", "state": "CLOSED"}, {"number": 4, "title": "Earlier", "state": "OPEN"}]' > "$S/search.json"
@@ -486,7 +486,7 @@ out=$(gh_sh search 'tf-0a1b2c3d' 2>&1); rc=$?
 [ $rc -eq 0 ] && [ "$out" = "$(printf '#4\topen\tEarlier\n#9\tclosed\tLater')" ] && grep -qF -- '"tf-0a1b2c3d" --repo o/r' "$S/searches.log" \
   && ok "search asks for the phrase in this repository, and prints number, state and title" || fail "search asks for the phrase in this repository, and prints number, state and title (exit $rc)" "$out"
 gh_sh search 'Tool fault in scripts/x.sh:' >/dev/null 2>&1
-tail -1 "$S/searches.log" | grep -qF -- '"Tool fault in scripts/x.sh" --repo o/r' \
+grep -qF -- '"Tool fault in scripts/x.sh" --repo o/r' <<<"$(tail -1 "$S/searches.log")" \
   && ok "a colon in the text is searched as a space, which GitHub's query accepts" || fail "a colon in the text is searched as a space, which GitHub's query accepts" "$(tail -1 "$S/searches.log")"
 
 echo

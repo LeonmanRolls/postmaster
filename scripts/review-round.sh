@@ -7,6 +7,7 @@
 #   review-round.sh wait     <dispatch> <round> <repo> [<lens>:<lane>...]
 #   review-round.sh teardown <dispatch> <round> <repo> [<lens>:<lane>...]
 #   review-round.sh --self-test
+#   POSTMASTER_REVIEW_ROUND_SELF_TEST_TIMING_ONLY=1 review-round.sh --self-test
 #
 # start clears the round's markers and fixes its deadline: now plus the round's time limit,
 # review.round_timeout_seconds in the config recorded in <dispatch>/run.json, from 1 to 86400,
@@ -303,7 +304,9 @@ repo="$tmp/repo" d="$tmp/runs/proj/T-1"
 mkdir -p "$d/logs" "$tmp/bin" "$tmp/host" "$tmp/pids" "$tmp/elsewhere" || exit 1
 git init -q -b main "$repo" && git -C "$repo" -c user.name=t -c user.email=t@t commit -q --allow-empty -m first || exit 1
 for h in herdr tmux; do printf '#!/bin/sh\nexit 1\n' > "$tmp/bin/$h"; chmod +x "$tmp/bin/$h"; done
-export PATH="$tmp/bin:$PATH" POSTMASTER_HOST=none POSTMASTER_HOST_STATE="$tmp/host" POSTMASTER_HOST_STOP_WAIT=2 POSTMASTER_HOST_CLOSE_WAIT=1
+# A two-second TERM grace can expire while a loaded host is scheduling the stopped tree.
+# Keep the production default out of this fixture and give teardown a generous bound.
+export PATH="$tmp/bin:$PATH" POSTMASTER_HOST=none POSTMASTER_HOST_STATE="$tmp/host" POSTMASTER_HOST_STOP_WAIT=30 POSTMASTER_HOST_CLOSE_WAIT=1
 cat > "$tmp/reviewer.sh" <<'SH'
 #!/bin/sh
 # reviewer.sh <fast|slow|leaves> <pidfile>: a stand-in reviewer
@@ -322,6 +325,26 @@ run()   { local t0; t0=$(date +%s); out=$("$self" "$@" 2>&1); rc=$?; took=$(( $(
 has()   { case $out in *"$1"*) true ;; *) false ;; esac; }
 lines() { grep -c -- "$1" "$d/actions.jsonl" 2>/dev/null || true; }
 alive() { local st; st=$(ps -o stat= -p "$1" 2>/dev/null) && [ -n "$st" ] && [ "${st#Z}" = "$st" ]; }
+round_identity() { python3 -c 'import json,sys; s=json.load(open(sys.argv[1])); print(s["attempt"], s["deadline"])' "$1"; }
+wait_for_deadline() {  # wait for a saved round deadline, and stop if another start changes it
+  local file=$1 expected=$2 out attempt left limit source i=0
+  while [ $i -lt 600 ]; do
+    [ "$(round_identity "$file")" = "$expected" ] || return 1
+    out=$(state check "$file") || return 1
+    IFS=$'\t' read -r attempt left limit source <<< "$out"
+    [ "$attempt" = "${expected%% *}" ] || return 1
+    [ "$left" -eq 0 ] && return 0
+    sleep 0.1; i=$((i + 1))
+  done
+  return 1
+}
+wait_for_text() {  # wait for a line of output, under a minute if its process never reaches it
+  local file=$1 text=$2 i=0
+  while [ ! -e "$file" ] || ! grep -Fq -- "$text" "$file" 2>/dev/null; do
+    [ $i -lt 600 ] || return 1
+    sleep 0.1; i=$((i + 1))
+  done
+}
 limit() { printf '{"config": {"review": {"round_timeout_seconds": %s}}}\n' "$1" > "$d/run.json"; }
 cut()   { git -C "$repo" worktree add -q --detach "$repo/.worktrees/T-1-rev-$1-$2" HEAD || exit 1; }
 launch() {  # launch <round> <lens> <lane> <fast|slow|leaves>: through host.sh, as the round does
@@ -331,35 +354,88 @@ launch() {  # launch <round> <lens> <lane> <fast|slow|leaves>: through host.sh, 
       --marker "$d/logs/review-r$1-$2-$3.done" --pidfile "$tmp/pids/launch.$n" -- "$tmp/reviewer.sh" "$4" "$tmp/pids/child.$n" ) >/dev/null \
     || { echo "  (could not launch $2 $3)"; return 1; }
   [ "$4" = fast ] && return 0
-  local i=0; while [ ! -s "$tmp/pids/child.$n" ] && [ $i -lt 50 ]; do sleep 0.1; i=$((i + 1)); done
+  # Child startup can be delayed by other self-tests; this is an event wait, bounded at 60s.
+  local i=0; while [ ! -s "$tmp/pids/child.$n" ] && [ $i -lt 600 ]; do sleep 0.1; i=$((i + 1)); done
   [ -s "$tmp/pids/child.$n" ] || { echo "  (the $4 reviewer never started)"; return 1; }
 }
 
-echo "positive controls"
-limit 3; cut bug one; cut bug two
-run start "$d" 1
-check "start clears the round's markers and fixes its limit from run.json" \
-  '[ $rc -eq 0 ] && has "time limit 3s (review.round_timeout_seconds in run.json)" && [ -s "$d/logs/review-r1.json" ]'
-launch 1 bug one fast; launch 1 bug two slow; slow=$(cat "$tmp/pids/launch.$n") child=$(cat "$tmp/pids/child.$n")
-run wait "$d" 1 "$repo" "bug:one bug:two"; wait_out=$out wait_rc=$rc
-check "at the deadline, wait exits 3 and names the reviewer with no marker" \
-  '[ $rc -eq 3 ] && has "WAIT-TIMEOUT" && has "TIMEOUT bug two: DEGRADED, timeout" && ! has "TIMEOUT bug one"'
-check "run-log.md records it as <lane> <lens>: DEGRADED, timeout" 'grep -q " two bug: DEGRADED, timeout$" "$d/run-log.md"'
-check "a degrade line records it, with the lens, the round and the cause" \
-  'grep -q "\"action\":\"degrade\",\"target\":\"two\",\"detail\":\"bug r1: timeout\"" "$d/actions.jsonl" && [ "$(lines "\"action\":\"degrade\"")" -eq 1 ]'
-check "host.sh stop ends it, and its child in a session of its own" '! alive "$slow" && ! alive "$child"'
-run teardown "$d" 1 "$repo"
-check "teardown takes the reviewers the wait recorded, and removes each scratch" \
-  '[ $rc -eq 0 ] && [ ! -e "$repo/.worktrees/T-1-rev-bug-one" ] && [ ! -e "$repo/.worktrees/T-1-rev-bug-two" ] && [ "$(lines "\"action\":\"teardown\"")" -eq 2 ]'
+deadline_control() {
+  local slow child
+  limit 3; cut bug one; cut bug two
+  run start "$d" 1
+  check "start clears the round's markers and fixes its limit from run.json" \
+    '[ $rc -eq 0 ] && has "time limit 3s (review.round_timeout_seconds in run.json)" && [ -s "$d/logs/review-r1.json" ]'
+  launch 1 bug one fast; launch 1 bug two slow; slow=$(cat "$tmp/pids/launch.$n") child=$(cat "$tmp/pids/child.$n")
+  out=$(timeout 60 "$self" wait "$d" 1 "$repo" "bug:one bug:two" 2>&1); rc=$?
+  wait_out=$out wait_rc=$rc
+  check "at the deadline, wait exits 3 and names the reviewer with no marker" \
+    '[ $rc -eq 3 ] && has "WAIT-TIMEOUT" && has "TIMEOUT bug two: DEGRADED, timeout" && ! has "TIMEOUT bug one"'
+  check "run-log.md records it as <lane> <lens>: DEGRADED, timeout" 'grep -q " two bug: DEGRADED, timeout$" "$d/run-log.md"'
+  check "a degrade line records it, with the lens, the round and the cause" \
+    'grep -q "\"action\":\"degrade\",\"target\":\"two\",\"detail\":\"bug r1: timeout\"" "$d/actions.jsonl" && [ "$(lines "\"action\":\"degrade\"")" -eq 1 ]'
+  check "host.sh stop ends it, and its child in a session of its own" '! alive "$slow" && ! alive "$child"'
+  run teardown "$d" 1 "$repo"
+  check "teardown takes the reviewers the wait recorded, and removes each scratch" \
+    '[ $rc -eq 0 ] && [ ! -e "$repo/.worktrees/T-1-rev-bug-one" ] && [ ! -e "$repo/.worktrees/T-1-rev-bug-two" ] && [ "$(lines "\"action\":\"teardown\"")" -eq 2 ]'
+}
 
-limit 4; cut bug three
-run start "$d" 2; launch 2 bug three slow; slow=$(cat "$tmp/pids/launch.$n")
-timeout 1 "$self" wait "$d" 2 "$repo" bug:three >/dev/null 2>&1   # the harness's cap ends the wait
-sleep 1
-run wait "$d" 2 "$repo"
-check "a wait run again keeps the round's deadline rather than starting a new one" \
-  '[ $rc -eq 3 ] && [ "$took" -le 3 ] && has "TIMEOUT bug three" && ! alive "$slow"'
-run teardown "$d" 2 "$repo" bug:three
+retry_deadline_control() {
+  local slow deadline_file first_ready interrupt_rc interrupted saved_round deadline_wait_ok
+  limit 60; cut bug three
+  run start "$d" 2; launch 2 bug three slow; slow=$(cat "$tmp/pids/launch.$n")
+  deadline_file="$d/logs/review-r2.json"
+  # The old timeout-plus-sleep assumed the wait was scheduled promptly and that one second
+  # after interruption meant the deadline was near. Under load, scheduling and the round's
+  # monotonic deadline can diverge. Interrupt only after the wait reports its saved state, then
+  # move this fixture's deadline near and poll that state event.
+  timeout 60 "$self" wait "$d" 2 "$repo" bug:three > "$tmp/interrupted.out" 2>&1 & interrupted=$!
+  first_ready=no; wait_for_text "$tmp/interrupted.out" "review-round: round 2," && first_ready=yes
+  kill -TERM "$interrupted" 2>/dev/null
+  wait "$interrupted"; interrupt_rc=$?
+  python3 - "$deadline_file" <<'PY'
+import json, sys, time
+path = sys.argv[1]
+state = json.load(open(path))
+state["deadline"] = time.monotonic() + 1
+json.dump(state, open(path, "w"))
+PY
+  saved_round=$(round_identity "$deadline_file")
+  deadline_wait_ok=yes
+  wait_for_deadline "$deadline_file" "$saved_round" || deadline_wait_ok=no
+  out=$(timeout 60 "$self" wait "$d" 2 "$repo" bug:three 2>&1); rc=$?
+  check "a wait run again keeps the round's deadline rather than starting a new one" \
+    '[ "$first_ready" = yes ] && [ "$interrupt_rc" -eq 143 ] && [ "$deadline_wait_ok" = yes ] && [ $rc -eq 3 ] && has "0s left" && has "TIMEOUT bug three" && ! alive "$slow" && [ "$(round_identity "$deadline_file")" = "$saved_round" ]'
+  run teardown "$d" 2 "$repo" bug:three
+}
+
+stale_round_control() {
+  local stale stale_ready
+  limit 2; cut bug four
+  run start "$d" 4; launch 4 bug four slow; slow=$(cat "$tmp/pids/launch.$n")
+  timeout 60 "$self" wait "$d" 4 "$repo" bug:four > "$tmp/stale.out" 2>&1 & stale=$!
+  # The previous half-second sleep did not prove the waiter had loaded the old attempt; a busy
+  # host could start it only after round_start replaced that state. Wait for its progress line.
+  stale_ready=no
+  wait_for_text "$tmp/stale.out" "review-round: round 4," && stale_ready=yes
+  limit 60; run start "$d" 4
+  wait "$stale"; rc=$?; out=$(cat "$tmp/stale.out")
+  check "a wait from an earlier start of the round stands down, and records and stops nothing" \
+    '[ "$stale_ready" = yes ] && [ $rc -eq 1 ] && has "started again" && alive "$slow" && ! grep -q "four bug: DEGRADED" "$d/run-log.md"'
+}
+
+if [ "${POSTMASTER_REVIEW_ROUND_SELF_TEST_TIMING_ONLY:-0}" = 1 ]; then
+  deadline_control
+  retry_deadline_control
+  stale_round_control
+  run teardown "$d" 4 "$repo" bug:four
+  echo
+  [ "$fails" -eq 0 ] && { echo "timing controls: all controls behaved"; exit 0; }
+  echo "timing controls: $fails control(s) misbehaved"; exit 1
+fi
+
+echo "positive controls"
+deadline_control
+retry_deadline_control
 
 limit 60; cut style one
 run start "$d" 3; launch 3 style one leaves; left=$(cat "$tmp/pids/child.$n")
@@ -375,13 +451,7 @@ check "a scratch a reviewer switched onto a branch is still removed, and the bra
 echo "negative controls"
 out=$wait_out rc=$wait_rc
 check "a reviewer that reported is neither recorded nor stopped" '! has "TIMEOUT bug one" && ! grep -q "one bug: DEGRADED" "$d/run-log.md"'
-limit 2; cut bug four
-run start "$d" 4; launch 4 bug four slow; slow=$(cat "$tmp/pids/launch.$n")
-"$self" wait "$d" 4 "$repo" bug:four > "$tmp/stale.out" 2>&1 & stale=$!
-sleep 0.5; limit 60; run start "$d" 4
-wait "$stale"; rc=$?; out=$(cat "$tmp/stale.out")
-check "a wait from an earlier start of the round stands down, and records and stops nothing" \
-  '[ $rc -eq 1 ] && has "started again" && alive "$slow" && ! grep -q "four bug: DEGRADED" "$d/run-log.md"'
+stale_round_control
 ( cd "$repo/.worktrees/T-1-rev-bug-four" && "$self" teardown "$d" 4 "$repo" bug:four > "$tmp/inside.out" 2>&1; exit $? ); rc=$?; out=$(cat "$tmp/inside.out")
 check "teardown from inside a scratch leaves it in place, and stops nothing" \
   '[ $rc -eq 1 ] && has "LEFT IN PLACE" && [ -e "$repo/.worktrees/T-1-rev-bug-four" ] && alive "$slow"'

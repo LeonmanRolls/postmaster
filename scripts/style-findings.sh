@@ -1001,8 +1001,8 @@ is()   {  # is <label> <exit> <the whole output>
   if [ "$rc" -eq "$2" ] && [ "$out" = "$3" ]; then ok "$1"; else fail "$1: wanted exit $2, got $rc" "$out"; fi
 }
 has()  {  # has <label> <exit> <text a line must contain> [<text no line may contain>]
-  if [ "$rc" -eq "$2" ] && printf '%s\n' "$out" | grep -qF -- "$3" \
-     && { [ -z "${4:-}" ] || ! printf '%s\n' "$out" | grep -qF -- "$4"; }; then ok "$1"
+  if [ "$rc" -eq "$2" ] && grep -qF -- "$3" <<<"$out" \
+     && { [ -z "${4:-}" ] || ! grep -qF -- "$4" <<<"$out"; }; then ok "$1"
   else fail "$1: wanted exit $2 with \"$3\"${4:+ and no \"$4\"}, got exit $rc" "$out"; fi
 }
 lines() { printf '%s\n' "$@"; }
@@ -1300,11 +1300,11 @@ awk '/^\*\*Sort the style findings\.\*\*/ {f = 1} f && /^```/ {n++; next} f && n
   | sed -e 's/<n>/1/g; s/<m>/2/g; s/\[,S2\.\.\.\]//; s/<linter>/biome/; s/<rule>/style\/useConst/; s/<doc>/AGENTS.md/' \
         -e 's/<file>/biome.json/; s/<reason>/a reason/' > "$tmp/forms"
 run core forms "$tmp/forms"
-[ "$rc" -eq 0 ] && [ "$(printf '%s\n' "$out" | grep -c '^ok  ')" -ge 7 ] && ! printf '%s\n' "$out" | grep -q '^bad ' \
+[ "$rc" -eq 0 ] && [ "$(printf '%s\n' "$out" | grep -c '^ok  ')" -ge 7 ] && ! grep -q '^bad ' <<<"$out" \
   && ok "every form coachman.md gives is a sort line" || fail "every form coachman.md gives is a sort line" "$out"
 lines 'S1 lint biome enable style/useConst: a reason' > "$tmp/forms"; run core forms "$tmp/forms"
 has "and a form that is not one would be caught" 0 "bad S1 lint biome"
-says() { tr '\n' ' ' < "$1" | tr -s ' ' | grep -qF -- "$2"; }   # across line breaks
+says() { grep -qF -- "$2" <<<"$(tr '\n' ' ' < "$1" | tr -s ' ')"; }   # across line breaks
 for want in "converge on a prescribed one-line fix for a gating finding" "is a finding about the LANE: log a \`note\`" \
             "for style, how many findings go to the ship card's Style residue, as"; do
   says "$SKILL/coachman.md" "$want" && ok "coachman.md says: $want" || fail "coachman.md says: $want"

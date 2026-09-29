@@ -834,7 +834,7 @@ wp="$tmp/writes"; mkdir -p "$wp/.postmaster"; printf '[checks.gate]\ncommand = "
 wd="$tmp/runs/writes/T-10"; mkdir -p "$wd"; printf '## Ticket\nx\n' > "$wd/brief.md"; "$SELF" record "$wp" "$wd" >/dev/null
 out=$("$SELF" run "$wp" "$wd" 2>&1)
 grep -qF "gate: fail, exit 0," <<<"$out" && grep -qF "gate.log" <<<"$out" && ok "so does a check that leaves a new file git sees" || fail "so does a check that leaves a new file git sees" "$out"
-! sed -n '/^core() {/,/^PY$/p' "$SELF" | grep -q 'os[.]waitid' && ok "the runner waits without os.waitid, which python lacks on macOS before 3.13" || fail "the runner waits without os.waitid, which python lacks on macOS before 3.13"
+! grep -q 'os[.]waitid' <<<"$(sed -n '/^core() {/,/^PY$/p' "$SELF")" && ok "the runner waits without os.waitid, which python lacks on macOS before 3.13" || fail "the runner waits without os.waitid, which python lacks on macOS before 3.13"
 for m in json re; do printf 'open("%s/imported", "w").write("%s")\n' "$tmp" "$m" > "$q/$m.py"; done
 (cd "$q" && "$SELF" checks . --lines >/dev/null 2>&1; "$HERE/discover-project.sh" . >/dev/null 2>&1)
 rm -f -- "$q/json.py" "$q/re.py"

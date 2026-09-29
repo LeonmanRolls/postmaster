@@ -415,7 +415,7 @@ N1=$(printf '%s\n' "$LIST" | awk 'NR == 1 {print $1}'); N2=$(printf '%s\n' "$LIS
 N2UP=$(printf '%s' "$N2" | awk '{print toupper(substr($0, 1, 1)) substr($0, 2)}')
 [ -n "$DEF" ] && [ -n "$N2" ] || { echo "self-test: turnpikes.sh needs a default set and two turnpikes" >&2; exit 1; }
 NOPE=zz-not-listed
-printf '%s\n' "$LIST" | awk '{print $1}' | grep -qx "$NOPE" && { echo "self-test: $NOPE is a turnpike; pick another unused name" >&2; exit 1; }
+grep -qx "$NOPE" <<<"$(printf '%s\n' "$LIST" | awk '{print $1}')" && { echo "self-test: $NOPE is a turnpike; pick another unused name" >&2; exit 1; }
 
 # The parts of a well-formed body. Each negative control leaves one out or breaks one.
 P='## Problem / feature
@@ -466,8 +466,8 @@ expect() {  # expect <label> <exit> <parts named, comma-separated, or none> [<te
   [ "$rc" -eq 2 ] && parts=$(printf '%s\n' "$out" | grep -E '^(title|problem / feature|acceptance criteria|direction|turnpikes): ' | sed 's/: .*//' | LC_ALL=C sort -u | paste -sd, -)
   [ -n "$parts" ] || parts=none
   if [ "$rc" -eq "$rc_want" ] && [ "$parts" = "$parts_want" ] \
-     && { [ -z "$why" ] || printf '%s\n' "$out" | grep -qF -- "$why"; } \
-     && { [ -z "$not" ] || ! printf '%s\n' "$out" | grep -qF -- "$not"; }; then
+     && { [ -z "$why" ] || grep -qF -- "$why" <<<"$out"; } \
+     && { [ -z "$not" ] || ! grep -qF -- "$not" <<<"$out"; }; then
     ok "$label"
   else
     fail "$label: wanted exit $rc_want naming $parts_want${why:+ with \"$why\"}${not:+ and without \"$not\"}, got exit $rc naming $parts" "$out"
@@ -738,10 +738,10 @@ out=$(POSTMASTER_CONFIG="$tmp/other.toml" "$SELF" "$tmp" 7 2>/dev/null); rc=$?
   || fail "a tracker kind with no adapter script is refused, not judged (exit $rc)" "$out"
 printf '[tracker\nkind = github\n' > "$tmp/broken.toml"
 out=$(POSTMASTER_CONFIG="$tmp/broken.toml" "$SELF" "$tmp" 7 2>&1); rc=$?
-[ $rc -eq 1 ] && printf '%s\n' "$out" | grep -q 'does not parse' && ok "a config that does not parse is named as one" \
+[ $rc -eq 1 ] && grep -q 'does not parse' <<<"$out" && ok "a config that does not parse is named as one" \
   || fail "a config that does not parse is named as one (exit $rc)" "$out"
 adapter 'echo "github: no board" >&2; exit 3'; through
-[ $rc -eq 1 ] && ! printf '%s\n' "$out" | grep -qE '^(title|problem / feature|acceptance criteria|direction|turnpikes): ' \
+[ $rc -eq 1 ] && ! grep -qE '^(title|problem / feature|acceptance criteria|direction|turnpikes): ' <<<"$out" \
   && ok "an adapter that cannot read the ticket is exit 1, not a shape fault" \
   || fail "an adapter that cannot read the ticket is exit 1, not a shape fault (exit $rc)" "$out"
 body "$P" "$A" "$D" "$K"
@@ -811,7 +811,7 @@ printf '### Direction\nUse the adapters.\n' > "$tmp/sections.md"; splice
 printf '%s\n\n%s\n' "$D" "$D" > "$tmp/sections.md"; splice
 [ $rc -eq 1 ] && ok "the same section twice" || fail "the same section twice (exit $rc)" "$out"
 { printf '%s\n\n' "$P" "$A" "$D"; printf '%s\n' "$NT"; } > "$tmp/base.md"; printf '%s\n' "$K" > "$tmp/sections.md"; splice
-[ $rc -eq 1 ] && printf '%s\n' "$out" | grep -qF '"### Turnpikes" stands inside a later part' \
+[ $rc -eq 1 ] && grep -qF '"### Turnpikes" stands inside a later part' <<<"$out" \
   && ok "a ### Turnpikes in the notes is neither deleted nor left beside a new one" \
   || fail "a ### Turnpikes in the notes is neither deleted nor left beside a new one (exit $rc)" "$out"
 { printf '%s\n\n' "$P" "$A" "## Notes
@@ -819,7 +819,7 @@ Context.
 
 ### Direction
 An old approach." ; } > "$tmp/base.md"; printf '%s\n' "$D" > "$tmp/sections.md"; splice
-[ $rc -eq 1 ] && printf '%s\n' "$out" | grep -qF '"### Direction" stands inside a later part' \
+[ $rc -eq 1 ] && grep -qF '"### Direction" stands inside a later part' <<<"$out" \
   && ok "a stale ### Direction in the notes is not left beside the new one" \
   || fail "a stale ### Direction in the notes is not left beside the new one (exit $rc)" "$out"
 
@@ -836,7 +836,7 @@ adapter ": > '$tmp/github-read'; cat -- '$tmp/printed.txt'"; rm -f "$tmp/local-r
   || fail "a repo with no store is read through the kind the config names (exit $rc)" "$out"
 localsh "case \$2 in store) echo 'local: not a git repository' >&2; exit 1 ;; *) : > '$tmp/local-read'; exit 1 ;; esac"
 rm -f "$tmp/local-read" "$tmp/github-read"; through
-[ $rc -eq 1 ] && [ ! -e "$tmp/github-read" ] && [ ! -e "$tmp/local-read" ] && printf '%s\n' "$out" | grep -qF "cannot look for a local store" \
+[ $rc -eq 1 ] && [ ! -e "$tmp/github-read" ] && [ ! -e "$tmp/local-read" ] && grep -qF "cannot look for a local store" <<<"$out" \
   && ok "a store that cannot be looked for stops the check, and no adapter is read" \
   || fail "a store that cannot be looked for stops the check, and no adapter is read (exit $rc)" "$out"
 localsh "$NOSTORE"

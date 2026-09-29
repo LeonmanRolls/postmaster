@@ -31,7 +31,7 @@ flat() { tr -d '\r' < "$1" | tr '\n\t' '  ' | sed 's/  */ /g'; }   # fold newlin
 fails=0
 stale() {
   local text=$1 file=$2 label=$3; shift 3
-  if printf '%s' "$text" | grep -q -F -- "$*"; then
+  if grep -q -F -- "$*" <<<"$text"; then
     printf '%s: still says %s\n' "$file" "$label"
     fails=$((fails + 1))
   fi
@@ -85,9 +85,33 @@ tmp=$(mktemp -d) || exit 2
 trap 'rm -r -- "$tmp" </dev/null 2>/dev/null' EXIT
 fails=0
 has() {  # has <name> <output> <line>
-  printf '%s\n' "$2" | grep -qxF -- "$3" && printf '  ok   %s\n' "$1" \
+  grep -qxF -- "$3" <<<"$2" && printf '  ok   %s\n' "$1" \
     || { printf '  FAIL %s: no line "%s" in:\n%s\n' "$1" "$3" "$2"; fails=$((fails + 1)); }
 }
+
+echo "the early-exit grep pipe race"
+if python3 - <<'PY'
+import shlex, subprocess, sys
+
+producer = shlex.join([sys.executable, "-c", "import os; os.write(1, b'needle\\n'); data=b'x'*16777216\nwhile data: data=data[os.write(1, data):]"])
+grep = shlex.join(["grep", "-qF", "needle"])
+old = subprocess.run(["bash", "-o", "pipefail", "-c",
+                      producer + " | " + grep + "; statuses=(\"${PIPESTATUS[@]}\"); "
+                      "test \"${statuses[0]}\" -ne 0 && test \"${statuses[1]}\" -eq 0"],
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+new = subprocess.run(["bash", "-o", "pipefail", "-c",
+                      "text=$(" + producer + "); producer_rc=$?; " + grep +
+                      " <<<\"$text\"; grep_rc=$?; "
+                      "test \"$producer_rc\" -eq 0 && test \"$grep_rc\" -eq 0"],
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+sys.exit(0 if old.returncode == 0 and new.returncode == 0 else 1)
+PY
+then
+  printf '  ok   pipefail exposes the old early-exit pipe and accepts the here-string check\n'
+else
+  printf '  FAIL the early-exit pipe race was not reproduced, or the here-string check failed\n'
+  fails=$((fails + 1))
+fi
 
 mkdir -p "$tmp/stale/skills/postmaster" "$tmp/clean/skills/postmaster"
 cat > "$tmp/stale/skills/postmaster/SKILL.md" <<'EOF'
@@ -179,8 +203,8 @@ pair() {  # pair <name> <want-line> <fault...>: one fault firing its historical 
   printf '%s\n' "$*" >> "$tmp/one/skills/postmaster/SKILL.md"
   out=$(accept "$tmp/one"); rc=$?
   [ "$rc" -eq 1 ] && [ "$(printf '%s\n' "$out" | wc -l | tr -d ' ')" -eq 2 ] \
-    && printf '%s\n' "$out" | grep -qxF "$want" \
-    && printf '%s\n' "$out" | grep -qxF 'skills/postmaster/SKILL.md: still says the front door never runs the stream' \
+    && grep -qxF "$want" <<<"$out" \
+    && grep -qxF 'skills/postmaster/SKILL.md: still says the front door never runs the stream' <<<"$out" \
     && printf '  ok   %s\n' "$name" \
     || { printf '  FAIL %s: exit %s with:\n%s\n' "$name" "$rc" "$out"; fails=$((fails + 1)); }
 }

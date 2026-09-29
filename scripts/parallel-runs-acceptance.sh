@@ -36,7 +36,7 @@ flat() { tr -d '\r' < "$1" | tr '\n\t' '  ' | sed 's/  */ /g'; }   # fold newlin
 fails=0
 stale() {
   local text=$1 file=$2 label=$3; shift 3
-  if printf '%s' "$text" | grep -qi -F -- "$*"; then
+  if grep -qi -F -- "$*" <<<"$text"; then
     printf '%s: still says %s\n' "$file" "$label"
     fails=$((fails + 1))
   fi
@@ -111,9 +111,9 @@ EOF
   step6=$(awk '/^## Stage A/{sect=1; next} sect && /^## /{exit} sect && /^6\. /{on=1} on && /^[0-9][0-9]*\. / && !/^6\. /{exit} on{print}' \
     "$root/skills/postmaster/postmaster.md")
   step6flat=$(printf '%s' "$step6" | tr '\n\t' '  ' | sed 's/  */ /g')
-  if [ -z "$step6" ] || ! printf '%s' "$step6flat" | grep -q -F 'Order them'; then
+  if [ -z "$step6" ] || ! grep -q -F 'Order them' <<<"$step6flat"; then
     gone skills/postmaster/postmaster.md 'orders tickets in an Order-them step'
-  elif ! printf '%s' "$step6flat" | grep -qiE '\bdependenc(y|ies)\b'; then
+  elif ! grep -qiE '\bdependenc(y|ies)\b' <<<"$step6flat"; then
     gone skills/postmaster/postmaster.md 'orders step 6 by dependencies'
   fi
   # The `team.max_runs` limit stays as its hard-rule sentence within the Hard rules
@@ -123,7 +123,7 @@ EOF
   rules=$(awk '/^## Hard rules/{on=1; next} on && /^## /{exit} on{print}' \
     "$root/skills/postmaster/postmaster.md")
   rulesflat=$(printf '%s' "$rules" | tr '\n\t' '  ' | sed 's/  */ /g')
-  printf '%s' "$rulesflat" | grep -q -F -- '- Never launch more runs than `team.max_runs`.' \
+  grep -q -F -- '- Never launch more runs than `team.max_runs`.' <<<"$rulesflat" \
     || gone skills/postmaster/postmaster.md 'limits runs with team.max_runs'
   # The concurrency note survives as a section that still says the run merging
   # second resolves the conflicts by merge, never rebase: a heading over a gutted
@@ -134,9 +134,9 @@ EOF
     gone skills/postmaster/coachman.md 'keeps a concurrency note'
   else
     noteflat=$(printf '%s' "$note" | tr '\n\t' '  ' | sed 's/  */ /g')
-    printf '%s' "$noteflat" | grep -qi -F 'merges second' \
+    grep -qi -F 'merges second' <<<"$noteflat" \
       || gone skills/postmaster/coachman.md 'says the second merger resolves the conflicts'
-    printf '%s' "$noteflat" | grep -qi -F 'never rebase' \
+    grep -qi -F 'never rebase' <<<"$noteflat" \
       || gone skills/postmaster/coachman.md 'says merge, never rebase'
   fi
   [ "$fails" -eq 0 ]
@@ -154,7 +154,7 @@ tmp=$(mktemp -d) || exit 2
 trap 'rm -r -- "$tmp" </dev/null 2>/dev/null' EXIT
 fails=0
 has() {  # has <name> <output> <line>
-  printf '%s\n' "$2" | grep -qxF -- "$3" && printf '  ok   %s\n' "$1" \
+  grep -qxF -- "$3" <<<"$2" && printf '  ok   %s\n' "$1" \
     || { printf '  FAIL %s: no line "%s" in:\n%s\n' "$1" "$3" "$2"; fails=$((fails + 1)); }
 }
 
@@ -284,7 +284,7 @@ printf '%s\n' '- Never launch more runs than `team.max_runs`, and never two runs
   >> "$tmp/one/skills/postmaster/postmaster.md"
 out=$(accept "$tmp/one"); rc=$?
 [ "$rc" -eq 1 ] && [ "$(printf '%s\n' "$out" | wc -l | tr -d ' ')" -eq 3 ] \
-  && printf '%s\n' "$out" | grep -qxF 'skills/postmaster/postmaster.md: still says never two runs on overlapping file surfaces' \
+  && grep -qxF 'skills/postmaster/postmaster.md: still says never two runs on overlapping file surfaces' <<<"$out" \
   && [ "$(printf '%s\n' "$out" | grep -c -xF 'skills/postmaster/postmaster.md: still says two runs must not change the same files')" -eq 2 ] \
   && printf '  ok   hard-rule clause fires its check and the general one twice\n' \
   || { printf '  FAIL hard-rule clause: exit %s with:\n%s\n' "$rc" "$out"; fails=$((fails + 1)); }
@@ -294,7 +294,7 @@ printf '%s\n' 'Never Two Runs On Overlapping File Surfaces.' \
   >> "$tmp/one/skills/postmaster/SKILL.md"
 out=$(accept "$tmp/one"); rc=$?
 [ "$rc" -eq 1 ] && [ "$(printf '%s\n' "$out" | wc -l | tr -d ' ')" -eq 3 ] \
-  && printf '%s\n' "$out" | grep -qxF 'skills/postmaster/SKILL.md: still says never two runs on overlapping file surfaces' \
+  && grep -qxF 'skills/postmaster/SKILL.md: still says never two runs on overlapping file surfaces' <<<"$out" \
   && [ "$(printf '%s\n' "$out" | grep -c -xF 'skills/postmaster/SKILL.md: still says two runs must not change the same files')" -eq 2 ] \
   && printf '  ok   capitalised clause fires its check and the general one twice\n' \
   || { printf '  FAIL capitalised clause: exit %s with:\n%s\n' "$rc" "$out"; fails=$((fails + 1)); }
