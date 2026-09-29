@@ -4,6 +4,9 @@
 #   scrub-check.sh <base> <head>    the added lines of every commit in base..head,
 #                                   not only the tip; a line added then deleted
 #                                   is still seen
+#   scrub-check.sh --files <path>... worktree files, streamed line by line;
+#                                   the raw/ promotion gate and the tree check
+#                                   scan through this, never through the diff
 #   scrub-check.sh --history [ref]  whether that ref's existing history already
 #                                   holds a suspect; ref defaults to main
 #   scrub-check.sh --help           usage, exit 0
@@ -12,9 +15,13 @@
 # One suspect per line on stdout as <commit>:<path>:<line>: <kind>, where
 # <commit> is the full 40-character sha, <path> the repo-relative file, <line>
 # the added line's number in the new file, and <kind> the pattern name below.
-# A matched value is never printed: not in a suspect line, not in a notice,
-# not in a diagnostic, not in a self-test; a value that reaches a reported
-# path is redacted. Human notices go to stderr. The scan is read-only.
+# --files prints <path>:<line>: <kind> instead: there is no commit, and <path>
+# is as given. A matched value is never printed: not in a suspect line, not in
+# a notice, not in a diagnostic, not in a self-test; a value that reaches a
+# reported path is redacted. Human notices go to stderr. The scan is read-only.
+# Both scans stream: diffs and files are read line by line, so memory is
+# bounded by the longest line, never by the file. It needs nothing beyond the
+# gate's: bash, git and the Python standard library.
 #
 # The kinds, matched by shape and context, never against anyone's values:
 #   key                   a named contact, session or credential key with a
@@ -33,18 +40,26 @@
 #                         (never loopback), or a private-network hostname
 #   token                 a documented key prefix with a body, a private-key
 #                         header, or a long value under a secret-bearing field
+#   dotenv                a .env-style NAME=value assignment whose name is
+#                         key-like and whose value is present and literal
 #   assistant-attribution an authorship trailer or generated-with footer
 #   private-instructions  an instructions-file heading or a secrecy directive
 #
 # The allowlist is scripts/scrub-check.allow at the scanned repository's root:
-# one exact allowed value per line, and every non-empty line is an entry
-# (there is no comment syntax). A suspect is suppressed when an entry equals
-# its matched value span, or equals its whole added line. A missing file means
-# no allowed values. An allowed value is by the user's ruling fine to publish.
+# one entry per line as <value><TAB><reason>, and every non-empty line is an
+# entry (there is no comment syntax). A suspect is suppressed when an entry's
+# value equals its matched value span, or equals its whole added line. A line
+# without a reason is refused: the scan exits 2 rather than honour a ruling
+# nobody wrote down, and a ruling that quotes a suspect is refused the same
+# way. The allowlist's own lines are never scanned. A missing file means no
+# allowed values. An allowed value is by the user's ruling fine to publish.
+# A value containing a tab cannot be allowed, and re-escalates instead: the
+# split is on the first tab on purpose.
 #
-#   exit 0  clean: no unallowed suspect in the range (or the history)
+#   exit 0  clean: no unallowed suspect in the range (or the history, or files)
 #   exit 1  suspects, one per line on stdout
-#   exit 2  usage, an unreadable range, or a scan that could not finish
+#   exit 2  usage, an unreadable range, an unreadable file, a reason-less
+#           allowlist entry, or a scan that could not finish
 set -uo pipefail
 SELF=$(CDPATH= cd -P -- "$(dirname -- "$0")" && pwd -P)/$(basename -- "$0")
 SCRUB_CHECK_SCRIPT="$SELF" python3 -I - "$@" <<'PY'
@@ -58,7 +73,7 @@ import sys
 import tempfile
 
 
-USAGE = "usage: scrub-check.sh <base> <head> | --history [<ref>] | --self-test | --help"
+USAGE = "usage: scrub-check.sh <base> <head> | --files <path>... | --history [<ref>] | --self-test | --help"
 EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 SCRIPT = pathlib.Path(os.environ.get("SCRUB_CHECK_SCRIPT", "")).resolve()
 FIXTURE_MAILBOX = "fixture" + "@" + "example.invalid"
@@ -155,9 +170,12 @@ ORGANIZATION_FIELDS = key_value_pattern((
 ABSENT_VALUE = re.compile(
     r"^(?:null|None|true|false|N/?A|\.{2,}|<[^<>]*>)$", re.IGNORECASE)
 
+# No dot in the trailing lookahead: the greedy domain backtracks so the top
+# label ends before a sentence period, and an address ending a sentence still
+# flags without swallowing the period.
 EMAIL = re.compile(
     r"(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"
-    r"(?![A-Za-z0-9.-])")
+    r"(?![A-Za-z0-9-])")
 NOREPLY_LOCAL = frozenset({
     "noreply", "no-reply", "no_reply", "donotreply", "do-not-reply",
     "do_not_reply", "noresponse", "no-response", "no_response",
@@ -241,6 +259,41 @@ SECRET_FIELDS = key_value_pattern((
     "private" + "Key", "secret", "token", "password", "credential",
 ))
 SECRET_VALUE = re.compile(r"(?i)^(?P<value>[A-Za-z0-9_./+=-]{20,})$")
+
+# A .env-style assignment is one NAME=value line. The name is key-like when an
+# underscore- or dash-separated component names secret-bearing material, and a
+# name ending in a pointer suffix points somewhere instead of holding a secret.
+# The value is a leak only when it is literal: shell and code metacharacters
+# mean the line composes or calls something rather than assigning a secret.
+DOTENV_LINE = re.compile(r"^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_-]*)\s*=\s*(.+?)\s*$")
+DOTENV_KEYLIKE = frozenset({
+    "key", "keys", "secret", "secrets", "token", "tokens", "password",
+    "passwd", "pwd", "credential", "credentials", "private", "auth",
+    "passphrase", "cert",
+})
+DOTENV_POINTER = ("_path", "_file", "_dir", "_url", "_type", "_host", "_port")
+DOTENV_METACHAR = re.compile(r"[$`(){}\];|&<>\"'\\]")
+DOTENV_MIN_VALUE = 8
+
+
+def dotenv_finding(line):
+    match = DOTENV_LINE.match(line)
+    if not match:
+        return None
+    name, value = match.group(1), match.group(2)
+    lowered = name.lower()
+    if lowered.endswith(DOTENV_POINTER):
+        return None
+    if not (set(re.split(r"[_-]+", lowered)) & DOTENV_KEYLIKE):
+        return None
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {"\"", "'"}:
+        value = value[1:-1]
+    if len(value) < DOTENV_MIN_VALUE or ABSENT_VALUE.match(value):
+        return None
+    if DOTENV_METACHAR.search(value):
+        return None
+    start = line.find(value, match.start(2))
+    return (start, start + len(value), "dotenv", value)
 
 COAUTHOR_PREFIX = "Co-Authored" + "-By:"
 ASSISTANT_VENDORS = (
@@ -338,6 +391,10 @@ def findings(line):
             # The span is the whole quoted value; the secret is all of it.
             found.append((start, end, "token", value))
 
+    dotenv = dotenv_finding(line)
+    if dotenv is not None:
+        found.append(dotenv)
+
     for pattern in ASSISTANT_ATTRIBUTION:
         for match in pattern.finditer(line):
             found.append((match.start(), match.end(), "assistant-attribution", match.group()))
@@ -384,11 +441,23 @@ def safe_path(path, protected_values=()):
 def allowlist(root):
     path = root / "scripts" / "scrub-check.allow"
     try:
-        return {line for line in path.read_text(encoding="utf-8").splitlines() if line != ""}
+        text = path.read_text(encoding="utf-8")
     except FileNotFoundError:
         return set()
     except (OSError, UnicodeError):
         notice("could not read scripts/scrub-check.allow")
+    entries = set()
+    for number, line in enumerate(text.splitlines(), 1):
+        if line == "":
+            continue
+        value, tab, reason = line.partition("\t")
+        if not tab or not value or not reason.strip():
+            notice("scripts/scrub-check.allow line %d has no ruling reason" % number)
+        entries.add(value)
+        if findings(reason):
+            notice("scripts/scrub-check.allow line %d ruling names a suspect; "
+                   "describe it, never quote it" % number)
+    return entries
 
 
 def git_path(raw):
@@ -406,23 +475,29 @@ def git_path(raw):
 
 
 def scan_diff(root, parent, commit, entries):
-    diff = git([
-        "diff", "--text", "--no-ext-diff", "--no-textconv", "--no-color", "--no-renames",
-        "--unified=0", "--src-prefix=a/", "--dst-prefix=b/", parent, commit, "--",
-    ], cwd=root)
+    try:
+        child = subprocess.Popen(
+            ["git", "diff", "--text", "--no-ext-diff", "--no-textconv",
+             "--no-color", "--no-renames", "--unified=0", "--src-prefix=a/",
+             "--dst-prefix=b/", parent, commit, "--"],
+            cwd=root, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+        )
+    except OSError:
+        notice("could not run Git")
     suspects, protected_values = [], []
-    path, line_number = "", None
-    for raw in diff.splitlines(keepends=True):
+    path, line_number, skipped = "", None, False
+    for raw in child.stdout:
         content = raw.rstrip(b"\r\n")
         if content.startswith(b"diff --git "):
-            path, line_number = "", None
+            path, line_number, skipped = "", None, False
         elif content.startswith(b"+++ ") and line_number is None:
             path = git_path(content[4:])
+            skipped = (path == "scripts/scrub-check.allow")
             line_number = None
         elif content.startswith(b"@@ "):
             match = re.search(rb"\+([0-9]+)(?:,[0-9]+)?\s+@@", content)
             line_number = int(match.group(1)) if match else None
-        elif line_number is not None and content.startswith(b"+"):
+        elif line_number is not None and not skipped and content.startswith(b"+"):
             text = content[1:].decode("utf-8", errors="replace")
             matches = findings(text)
             protected_values.extend(item[3] for item in matches)
@@ -430,7 +505,35 @@ def scan_diff(root, parent, commit, entries):
                 if text not in entries and item[3] not in entries:
                     suspects.append((commit, path, line_number, item[2], item[3]))
             line_number += 1
+    if child.wait() != 0:
+        notice("Git could not read the requested history")
     return suspects, protected_values
+
+
+def run_files(root, paths):
+    entries = allowlist(root)
+    suspects, protected_values = [], list(entries)
+    # The repository's own allowlist holds user-ruled values; scanning it
+    # would re-escalate the rulings themselves, so only that one path skips.
+    allow = os.path.realpath(os.path.join(root, "scripts", "scrub-check.allow"))
+    for raw_path in paths:
+        if os.path.realpath(raw_path) == allow:
+            continue
+        try:
+            handle = open(raw_path, "rb")
+        except OSError:
+            notice("could not read %s" % safe_path(raw_path))
+        with handle:
+            for number, raw in enumerate(handle, 1):
+                text = raw.rstrip(b"\r\n").decode("utf-8", errors="replace")
+                matches = findings(text)
+                protected_values.extend(item[3] for item in matches)
+                for item in matches:
+                    if text not in entries and item[3] not in entries:
+                        suspects.append((raw_path, number, item[2], item[3]))
+    for path, line, kind, _value in sorted(suspects, key=lambda item: (item[0], item[1], item[2])):
+        print("%s:%d: %s" % (safe_path(path, protected_values), line, kind))
+    return 1 if suspects else 0
 
 
 def commits_for_range(base, head):
@@ -458,7 +561,9 @@ def parent_of(commit):
 
 def run_scan(root, commits):
     entries = allowlist(root)
-    suspects, protected_values = [], []
+    # Allowed values still redact from reported paths: ruling a value
+    # allowed must not print it.
+    suspects, protected_values = [], list(entries)
     for commit in commits:
         found, protected = scan_diff(root, parent_of(commit), commit, entries)
         suspects.extend(found)
@@ -582,6 +687,7 @@ def self_test(root):
             pos("key", '{"%s": "fixture-session-413"}\n' % key_session, "pos-key-session")
             pos("key", '{"%s": "fixture-org-413"}\n' % key_cred, "pos-key-cred")
             pos("email", "contact: " + sample_email + "\n", "pos-email")
+            pos("email", "write to " + sample_email + ".\n", "pos-email-final")
             pos("account-id", "owner " + fake_org_id + "\n", "pos-org-id")
             pos("account-id", '{"%s": "%s"}\n' % (key_org, fake_uuid), "pos-org-field")
             pos("account-id", "account ref " + fake_uuid + "\n", "pos-uuid-context")
@@ -599,6 +705,7 @@ def self_test(root):
             pos("private-instructions", "# Global instructions for this fixture\n", "pos-stanza")
             pos("private-instructions",
                 "Never copy a fixture credential into a ticket\n", "pos-directive")
+            pos("dotenv", 'SESSION_SECRET=relay-413-quiet\n', "pos-dotenv")
 
             print("negative controls: clean lines stay silent")
             neg("the ship card lists each check and its exit code\n",
@@ -608,6 +715,10 @@ def self_test(root):
                 "neg-noreply-domain", "a GitHub no-reply address is clean")
             neg("write " + "noreply" + AT + "no-such-vendor-413.net instead\n",
                 "neg-noreply-local", "a no-reply local part is clean on any domain")
+            neg("TOKEN_TYPE=Bearer\n",
+                "neg-dotenv-pointer", "a key-like name pointing elsewhere is clean")
+            neg("SESSION_SECRET=${STAGING}_relay_secret_413\n",
+                "neg-dotenv-composed", "a composed assignment value is clean")
             neg("write " + "someone" + AT + "example.org for the demo\n",
                 "neg-reserved-example", "a reserved example domain is clean")
             neg("write " + "someone" + AT + "thing.test for the demo\n",
@@ -716,7 +827,8 @@ def self_test(root):
                 and sample_email not in pending_result.stdout))
             (repo / "scripts").mkdir(exist_ok=True)
             (repo / "scripts" / "scrub-check.allow").write_text(
-                sample_email + "\n", encoding="utf-8")
+                sample_email + "\tself-test ruling: the lane's relay address\n",
+                encoding="utf-8")
             git(["add", "scripts/scrub-check.allow"], cwd=repo)
             git(["-c", "user.name=Fixture", "-c", "user.email=" + FIXTURE_MAILBOX,
                  "commit", "-m", "allow one ruled value"], cwd=repo)
@@ -727,7 +839,9 @@ def self_test(root):
             whole = '{"%s": "whole-line-allowed-99"}\n' % key_user
             whole_head = add_fixture(repo, "whole.txt", whole, "whole line fixture")
             (repo / "scripts" / "scrub-check.allow").write_text(
-                sample_email + "\n" + whole, encoding="utf-8")
+                sample_email + "\tself-test ruling: the lane's relay address\n"
+                + whole.rstrip("\n") + "\tself-test ruling: the whole line\n",
+                encoding="utf-8")
             git(["add", "scripts/scrub-check.allow"], cwd=repo)
             git(["-c", "user.name=Fixture", "-c", "user.email=" + FIXTURE_MAILBOX,
                  "commit", "-m", "allow the whole line"], cwd=repo)
@@ -744,6 +858,14 @@ def self_test(root):
             ok("a match without a current allowance escalates again", bool(
                 revoked_result and revoked_result.returncode == 1
                 and sample_email not in revoked_result.stdout))
+            (repo / "scripts" / "scrub-check.allow").write_text(
+                sample_email + "\n", encoding="utf-8")
+            reasonless = run_child([revoked, revoked], repo)
+            ok("an allowlist entry without a reason is refused, exit 2", bool(
+                reasonless and reasonless.returncode == 2
+                and not reasonless.stdout
+                and sample_email not in reasonless.stderr))
+            (repo / "scripts" / "scrub-check.allow").write_text("", encoding="utf-8")
             last = revoked
 
             print("usage, range and robustness controls")
@@ -752,6 +874,7 @@ def self_test(root):
                 help_result and help_result.returncode == 0
                 and not help_result.stdout and "usage:" in help_result.stderr))
             for args, label in (([], "no arguments"), (["main"], "one range argument"),
+                                (["--files"], "files without paths"),
                                 (["--history", "a", "b"], "three history arguments")):
                 usage_result = run_child(args, repo)
                 ok("%s is a usage error, exit 2" % label, bool(
@@ -774,6 +897,41 @@ def self_test(root):
                 and sample_email not in redacted.stdout
                 and "[redacted]" in redacted.stdout))
             last = redacted_head
+
+            print("file controls: --files scans worktree files, streamed")
+            (repo / "loose.txt").write_text(
+                "contact: " + sample_email + "\n", encoding="utf-8")
+            loose = run_child(["--files", "loose.txt"], repo)
+            ok("--files reports a suspect in an uncommitted file", bool(
+                loose and loose.returncode == 1
+                and loose.stdout.splitlines() == ["loose.txt:1: email"]
+                and silent(loose)))
+            (repo / "plain.txt").write_text(
+                "ordinary public sample\n", encoding="utf-8")
+            plain = run_child(["--files", "plain.txt"], repo)
+            ok("--files stays silent on a clean file", bool(
+                plain and plain.returncode == 0 and not plain.stdout))
+            missing = run_child(["--files", "no-such-file.txt"], repo)
+            ok("--files on a missing file exits 2", bool(
+                missing and missing.returncode == 2 and not missing.stdout))
+            big_text = ("clean relay line 413 pad " * 100 + "\n") * 70000
+            big_head = add_fixture(
+                repo, "big.txt",
+                big_text + "contact: " + sample_email + "\n", "big addition")
+            try:
+                limited = subprocess.run(
+                    ["bash", "-c", "ulimit -v 262144 || exit 99; exec \"$0\" \"$@\"",
+                     str(SCRIPT), last, big_head],
+                    cwd=repo, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                    text=True, encoding="utf-8", errors="replace", check=False)
+            except OSError:
+                limited = None
+            ok("a large addition streams under a small address space", bool(
+                limited and limited.returncode == 1
+                and limited.stdout.splitlines()
+                == ["%s:big.txt:70001: email" % big_head]
+                and silent(limited)))
+            last = big_head
             fresh = scratch / "fresh"
             fresh.mkdir()
             git(["init", "-q", "--initial-branch=main"], cwd=fresh)
@@ -819,6 +977,10 @@ def main(args):
         ref = args[1] if len(args) == 2 else "main"
         head = resolve_commit(ref)
         return run_scan(root, commits_for_history(head))
+    if args and args[0] == "--files":
+        if len(args) < 2:
+            notice(USAGE)
+        return run_files(root, args[1:])
     if len(args) != 2 or any(arg.startswith("--") for arg in args):
         notice(USAGE)
     base, head = resolve_commit(args[0]), resolve_commit(args[1])
