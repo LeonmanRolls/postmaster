@@ -67,9 +67,8 @@ is one positive result per form, not a repeatability estimate
 | Codex | `codex exec review --base <BASE>`; `launch.sh` sets reasoning effort `max` | `--last` message has `[P<n>]` bullets, while its session has structured `review_output`. A custom prompt replaces `--base`, so known findings are not passed. | JSON event stream and the Codex session rollout. |
 | MiMo Code | `mimo run --command review`; the prompt file supplies `<BASE>...HEAD`, at variant `high` | Free markdown; known findings are not passed and coachman deduplication handles repeats. | Tool calls stream inline under the parent session id. |
 
-The level, scope, parsing and launch details are recorded in
-[`harnesses.md`](../../skills/postmaster/harnesses.md). No comparison with brief-driven review is
-in scope for #38.
+The level, scope, parsing and launch details are recorded in `skills/postmaster/harnesses.md`. No
+comparison with brief-driven review is in scope for #38.
 
 ## What Claude Code's skill needs
 
