@@ -33,6 +33,8 @@ Add a planning stage where workhorses commit independent specs, the postmaster r
 - `raw/articles/ai-native-sdlc-playbook/source.md`: capture the article passages relied on.
 - `wiki/sources/ai-native-sdlc-playbook.md`: summarize the article's design-review recommendation and its relevance here.
 - `wiki/concepts/workhorse-spec.md`, `wiki/index.md`, `wiki/log.md`: update the decision, catalog it, and record the change.
+- `wiki/sources/index.md`: list the captured article.
+- `wiki/concepts/run-config.md`: record that the planning link uses the run's captured config.
 
 ## Complexity tracking
 
@@ -58,5 +60,5 @@ No departures.
 - [ ] T004 [AC4] Update `skills/postmaster/postmaster.md` to support dropping a workhorse and stop with an explanation when fewer than two specs are approved.
 - [ ] T005 [AC5] Add the `spec-review` action and its controls in `scripts/log-action.sh`, and record each approved spec's commit SHA in the decision event and run record.
 - [ ] T006 [AC6] Add the `planning` stage and self-test controls in `scripts/stage.sh`, and cover its elapsed time in `scripts/run-times.sh`.
-- [ ] T007 [AC7] Capture the relevant Anthropic playbook passages in `raw/articles/ai-native-sdlc-playbook/source.md`; add the source page and revise `wiki/concepts/workhorse-spec.md`, `wiki/index.md`, and `wiki/log.md` while keeping the standing `claimed`.
-- [ ] T008 [AC8] Add `planning.review_link` to `config.example.toml` and `scripts/setup.sh`, and document link rendering from the recorded config in `skills/postmaster/postmaster.md`, including a fresh link after revisions.
+- [ ] T007 [AC7] Capture the relevant Anthropic playbook passages in `raw/articles/ai-native-sdlc-playbook/source.md`; add the source page and revise `wiki/concepts/workhorse-spec.md`, `wiki/index.md`, `wiki/sources/index.md`, and `wiki/log.md` while keeping the standing `claimed`.
+- [ ] T008 [AC8] Add `planning.review_link` to `config.example.toml` and `scripts/setup.sh`, and document link rendering from the recorded config in `skills/postmaster/postmaster.md` and `wiki/concepts/run-config.md`, including a fresh link after revisions.
