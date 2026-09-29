@@ -107,7 +107,13 @@ For the next ticket in order, when the run ceiling (`team.max_runs`) has room:
    `<tool>/scripts/launch.sh form coachman_fallback`, `<tool>/scripts/launch.sh form <lane>` for
    each lane in `team.workhorses`, and, when the legs include `review`,
    `<tool>/scripts/reviewers.sh lines` and `<tool>/scripts/launch.sh form <lane>` for each lane in
-   `team.reviewers` and `team.lens_reviewers`, each exit 0. A refusal names what the config must
+   `team.reviewers` and `team.lens_reviewers`, each exit 0. **When the turnpikes include the bug
+   review** (`<tool>/scripts/turnpikes.sh resolve '<the turnpikes: line>'` lists `bug`), the
+   `bug reviewers:` line `reviewers.sh lines` prints must name at least one lane: the bug lens
+   runs each harness's own code-review skill and never falls back to a brief, so a run whose
+   config gives it no bug reviewer whose harness has a review form is refused here, saying
+   which chosen bug reviewers lack one and that none has one, rather than dispatched without
+   its bug review. A refusal names what the config must
    change: it goes to the user, and nothing is dispatched. The project's declared checks are
    checked too: `<tool>/scripts/verify.sh checks <repo>` exits 0, and a refusal, naming what
    `.postmaster/project.toml` must change, goes to the user the same way.

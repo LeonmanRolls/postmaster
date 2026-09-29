@@ -10,9 +10,12 @@
 #   reviewers.sh --self-test
 #
 # `lines` prints `reviewers: <lane>, <lane>`, then `<lens> reviewers: <lane>, …` for each lens the
-# config gives its own lanes. `lanes` reads only the waybill's `## Team` section: the lens's own
-# line where it has one, the `reviewers:` line otherwise. The lenses are the entries of the review
-# stage in skills/postmaster/coachman.md, and change with it.
+# config gives its own lanes, and always a `bug reviewers:` line. The bug lens runs each
+# harness's own code-review skill and never falls back to a brief, so its line holds only the
+# chosen bug reviewers whose harness has a review form (`scripts/review-forms.sh has`); a lane
+# whose harness has none is left off it. `lanes` reads only the waybill's `## Team` section: the
+# lens's own line where it has one, the `reviewers:` line otherwise. The lenses are the entries
+# of the review stage in skills/postmaster/coachman.md, and change with it.
 #
 #   exit 0  printed
 #   exit 1  usage, no config or one that does not parse, or no such waybill
@@ -25,14 +28,16 @@ usage() { echo "usage: reviewers.sh lines [--config <path>] | lanes <waybill> <l
 
 lines() {  # lines <config>
   [ -f "$1" ] || { echo "reviewers: no config at $1 (POSTMASTER_CONFIG overrides the path)" >&2; return 1; }
-  python3 - "$1" "$LENSES" <<'PY'
-import sys, tomllib
-path, lenses = sys.argv[1], sys.argv[2].split()
+  FORMS=$(CDPATH= cd -P -- "$(dirname -- "$0")" && pwd -P)/review-forms.sh
+  python3 - "$1" "$LENSES" "$FORMS" <<'PY'
+import subprocess, sys, tomllib
+path, lenses, forms = sys.argv[1], sys.argv[2].split(), sys.argv[3]
 try:
     cfg = tomllib.load(open(path, "rb"))
 except (OSError, tomllib.TOMLDecodeError) as e:
     print("reviewers: %s does not parse: %s" % (path, e), file=sys.stderr); sys.exit(1)
 defined = set((cfg.get("lanes") or {}).keys())
+lanes_tbl = cfg.get("lanes") or {}
 team = cfg.get("team") or {}
 faults = []
 def lanes_of(value, where):
@@ -42,6 +47,9 @@ def lanes_of(value, where):
         if lane not in defined:
             faults.append("%s names %s, which is not a lane in [lanes]" % (where, lane))
     return value
+def has_form(lane):
+    h = (lanes_tbl.get(lane) or {}).get("harness") or ""
+    return subprocess.call([forms, "has", h], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) == 0
 default = lanes_of(team.get("reviewers") or team.get("workhorses") or [], "[team] reviewers")
 per_lens = team.get("lens_reviewers") or {}
 if not isinstance(per_lens, dict):
@@ -55,7 +63,11 @@ if faults:
     sys.exit(2)
 print("reviewers: " + ", ".join(default))
 for lens, names in own.items():
+    if lens == "bug":
+        continue  # printed below, always, filtered
     print("%s reviewers: %s" % (lens, ", ".join(names)))
+bug_src = own.get("bug", default)
+print("bug reviewers: " + ", ".join(n for n in bug_src if has_form(n)))
 PY
 }
 
@@ -112,7 +124,10 @@ harness = "mimo"
 model = "m2"
 [lanes.sentinel]
 harness = "claude"
-model = "m3"'
+model = "m3"
+[lanes.pi]
+harness = "pi"
+model = "m4"'
 config() {  # config <name> <[team] body>: a config with three lanes
   printf '%s\n\n[team]\n%s\n' "$lanes_block" "$2" > "$tmp/$1.toml"
 }
@@ -133,17 +148,29 @@ config one 'workhorses = ["luna", "mimo"]
 reviewers = ["luna", "mimo"]
 [team.lens_reviewers]
 security = ["luna", "mimo", "sentinel"]'
-expect "the waybill lines name the reviewers, then each lens with its own lanes" 0 \
-  'reviewers: luna, mimo\nsecurity reviewers: luna, mimo, sentinel' lines "$tmp/one.toml"
+expect "the waybill lines name the reviewers, then each lens with its own lanes, and the bug line always" 0 \
+  'reviewers: luna, mimo\nsecurity reviewers: luna, mimo, sentinel\nbug reviewers: luna, mimo' lines "$tmp/one.toml"
 waybill one "$(lines "$tmp/one.toml")"
 expect "a lens with its own line gets exactly those lanes" 0 'luna\nmimo\nsentinel' lanes "$tmp/one.md" security
-expect "a lens without one gets the reviewer list" 0 'luna\nmimo' lanes "$tmp/one.md" bug
-expect "and so does style" 0 'luna\nmimo' lanes "$tmp/one.md" style
+expect "the bug lens gets its own filtered line" 0 'luna\nmimo' lanes "$tmp/one.md" bug
+expect "and style falls back to the reviewers" 0 'luna\nmimo' lanes "$tmp/one.md" style
 config two 'workhorses = ["luna", "mimo"]
 reviewers = ["sentinel"]'
-expect "a config without the table gives the reviewers line alone, as before" 0 'reviewers: sentinel' lines "$tmp/two.toml"
+expect "a config without the table still names the bug reviewers" 0 \
+  'reviewers: sentinel\nbug reviewers: sentinel' lines "$tmp/two.toml"
 config three 'workhorses = ["luna", "mimo"]'
-expect "reviewers default to the workhorses" 0 'reviewers: luna, mimo' lines "$tmp/three.toml"
+expect "reviewers default to the workhorses" 0 \
+  'reviewers: luna, mimo\nbug reviewers: luna, mimo' lines "$tmp/three.toml"
+config onlyform 'workhorses = ["luna", "pi"]
+reviewers = ["luna", "pi"]'
+expect "a bug reviewer whose harness has no review form is left off the bug line" 0 \
+  'reviewers: luna, pi\nbug reviewers: luna' lines "$tmp/onlyform.toml"
+config noform 'workhorses = ["pi", "sentinel"]
+reviewers = ["pi"]
+[team.lens_reviewers]
+bug = ["pi"]'
+expect "a bug line with no form-capable lane is printed empty, never falling back" 0 \
+  'reviewers: pi\nbug reviewers: ' lines "$tmp/noform.toml"
 expect "the lenses are the review stage's, in order" 0 'style\nbug\nsecurity' "$0" lenses
 
 echo "negative controls"

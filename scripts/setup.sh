@@ -48,12 +48,31 @@ if [ "${1:-}" = --self-test ]; then
   [ $rc -eq 0 ] && [ "$(team lens lens_reviewers)" = '{"security": ["alpha", "beta", "sentinel"]}' ] \
     && ok "a lens given its own lanes is written to [team.lens_reviewers]" \
     || fail "a lens given its own lanes is written to [team.lens_reviewers] (exit $rc)" "$(cat "$tmp/lens.out")"
-  [ "$("$HERE/reviewers.sh" lines --config "$tmp/lens.toml")" = "$(printf 'reviewers: alpha, beta\nsecurity reviewers: alpha, beta, sentinel')" ] \
+  [ "$("$HERE/reviewers.sh" lines --config "$tmp/lens.toml")" = "$(printf 'reviewers: alpha, beta\nsecurity reviewers: alpha, beta, sentinel\nbug reviewers: ')" ] \
     && ok "the written config resolves: the reviewers default to the workhorses, and security has its own" \
     || fail "the written config resolves" "$("$HERE/reviewers.sh" lines --config "$tmp/lens.toml" 2>&1)"
   answers plain; run plain; rc=$?
   [ $rc -eq 0 ] && [ "$(team plain lens_reviewers)" = null ] && [ "$(team plain reviewers)" = '["alpha", "beta"]' ] \
     && ok "without lens answers there is no table, as before" || fail "without lens answers there is no table, as before (exit $rc)" "$(cat "$tmp/plain.out")"
+  grep -q "none of the bug reviewers has a harness with a code-review skill" "$tmp/plain.out" \
+    && grep -q "these bug reviewers' harnesses have no code-review skill: alpha(bash) beta(bash)" "$tmp/plain.out" \
+    && ok "setup names each bug reviewer whose harness has no code-review skill, and warns when none has one" \
+    || fail "setup names each bug reviewer whose harness has no code-review skill, and warns when none has one" "$(cat "$tmp/plain.out")"
+  # A bug reviewer on a harness with a code-review skill: the file is written by hand so the
+  # harness answer is claude, not the stub bash the shared answers helper always starts from.
+  {
+    printf '%s\n' "lanes=alpha, beta, sentinel" \
+      "lane.alpha.harness=claude" "lane.alpha.model=m1" "lane.beta.harness=claude" "lane.beta.model=m2" \
+      "lane.sentinel.harness=bash" "lane.sentinel.model=m3" "workhorses=alpha, beta" \
+      "reviewers=alpha, beta" "reviewers.bug=alpha, beta" \
+      "coachman.harness=bash" "coachman.model=judge" "fallback.harness=bash" "fallback.model=spare" \
+      "postmaster.harness=bash" "postmaster.model=pm"
+  } > "$tmp/formbug.answers"
+  run formbug; rc=$?
+  [ $rc -eq 0 ] && ! grep -q "WARNING: none of the bug reviewers" "$tmp/formbug.out" \
+    && ! grep -q "these bug reviewers' harnesses have no code-review skill" "$tmp/formbug.out" \
+    && ok "a bug reviewer whose harness has a code-review skill draws no warning" \
+    || fail "a bug reviewer whose harness has a code-review skill draws no warning (exit $rc)" "$(cat "$tmp/formbug.out")"
   answers roles "coachman.effort=max
 coachman.env_file=~/.postmaster/lanes/judge.env
 fallback.env_file=spare.env
@@ -189,7 +208,7 @@ ask LANES "Lane names, comma separated" "alpha, beta" "lanes"
 LANE_LIST=$(printf '%s' "$LANES" | tr ',' ' ')
 set -- $LANE_LIST
 [ $# -ge 2 ] || { echo "setup: at least two lanes are needed" >&2; exit 1; }
-LANE_BLOCKS=""; LANE_MODELS=""
+LANE_BLOCKS=""; LANE_MODELS=""; LANE_HARNESS=""
 for lane in $LANE_LIST; do
   ask h "  $lane: harness (codex, grok, agy, claude, muse, mimo, pi)" "" "lane.$lane.harness"
   need_harness "$h"
@@ -201,6 +220,7 @@ for lane in $LANE_LIST; do
   [ -n "$ef" ] && block="$block"$'\n'"env_file = \"$ef\""
   LANE_BLOCKS="$LANE_BLOCKS"$'\n'"$block"$'\n'
   LANE_MODELS="$LANE_MODELS $m"
+  LANE_HARNESS="$LANE_HARNESS $lane=$h"
 done
 
 echo
@@ -226,6 +246,28 @@ for lens in $("$HERE/reviewers.sh" lenses); do
   LENS_TABLE="$LENS_TABLE$lens = $(toml_list "$LR")"$'\n'
 done
 [ -z "$LENS_TABLE" ] || LENS_TABLE=$'\n[team.lens_reviewers]\n'"$LENS_TABLE"
+
+# The bug lens runs each harness's own code-review skill and never falls back to a brief. Name
+# every chosen bug reviewer whose harness has none, and warn when none of them has one.
+BUG_REVIEWERS=$(printf '%s' "$REVIEWERS")
+case $LENS_TABLE in *"bug = "*) BUG_REVIEWERS=$(printf '%s\n' "$LENS_TABLE" | sed -n 's/^bug = //p' | tr -d '[]"' | tr ',' ' ') ;; esac
+NO_FORM=""; HAS_FORM=0
+for rv in $(printf '%s' "$BUG_REVIEWERS" | tr ',' ' '); do
+  [ -n "$rv" ] || continue
+  h=""; for pair in $LANE_HARNESS; do
+    [ "${pair%%=*}" = "$rv" ] && h=${pair#*=}
+  done
+  if [ -n "$h" ] && "$HERE/review-forms.sh" has "$h" >/dev/null 2>&1; then HAS_FORM=1
+  else NO_FORM="$NO_FORM $rv(${h:-unknown})"; fi
+done
+if [ -n "$NO_FORM" ]; then
+  echo "setup: these bug reviewers' harnesses have no code-review skill:$NO_FORM" >&2
+  echo "setup: they will not review for bugs; the bug lens has no fallback to the brief" >&2
+fi
+if [ "$HAS_FORM" -eq 0 ]; then
+  echo "setup: WARNING: none of the bug reviewers has a harness with a code-review skill." >&2
+  echo "setup: a run whose turnpikes include the bug review will be refused at pre-flight." >&2
+fi
 
 echo
 echo "== The coachman: judges the lanes and runs the review rounds. Never a lane's model. =="

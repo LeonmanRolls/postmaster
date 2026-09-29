@@ -182,8 +182,10 @@ leg continues.
 
 ## Lane capability: workhorses and reviewers alike
 
-**Every lane may run anything it needs in its own worktree or scratch: shell commands,
-installs, builds, the full gate suite, and a browser.** Browser work uses the project's own
+**Every lane may run what it needs in its own worktree or scratch: shell commands,
+installs, builds, and a browser. A workhorse may run the project's full gate suite; a reviewer
+checks a finding with a targeted probe, and never runs the full gate.** The coachman runs the
+gate, its lint, build and tests, once per round on the snapshot. Browser work uses the project's own
 browser library, driven from a shell command inside the lane's worktree. Never route a lane's
 browser work through a browser server shared with other sessions: a call into one can be
 acknowledged and never return, with no timeout. If the browser is genuinely unavailable, record
@@ -198,8 +200,10 @@ write enforcement, so a workhorse is confined by having its own worktree and a r
 own disposable scratch. **The one prohibition for a reviewer is modifying the code under
 review.**
 
-**Say so in every brief.** A lane that does not know it may run the suite reasons about the code
-instead of executing it, and a reasoned verdict is worth less than a run one.
+**Say so in every brief.** A workhorse that does not know it may run the suite reasons about the
+code instead of executing it, and a reasoned verdict is worth less than a run one. A reviewer
+that does not know it must not run the full gate costs the round five minutes on top of the
+coachman's own run; say that it checks its claims with targeted probes instead.
 
 ## The workhorse contract
 
@@ -459,8 +463,10 @@ Set the stage first, `<tool>/scripts/stage.sh <dispatch> review`, then:
    reviewers hunt residues and new holes; and the output contract: severity P1 to P3,
    file:line, quoted code as evidence, confidence, and for security an exploit path. **State
    in every brief that the lane is working in its own disposable worktree with dependencies
-   installed, that it may run anything it wants there including the full gate suite, and that
-   the one thing it must not do is modify the code under review.** It is expected to RUN
+   installed, that the one thing it must not do is modify the code under review, and that it
+   checks its own claims with targeted probes — the specific reproduction, call or test for a
+   finding — never the project's full gate.** The coachman runs the gate, its lint, build and
+   tests, once per round on the snapshot. A reviewer is expected to RUN
    things to check its own claims, and to say for each finding whether it was verified by
    execution or by reading. A finding verified by execution outranks the same finding filed as
    a hypothesis, and a test that passes is not evidence until someone has seen it fail for the
@@ -475,7 +481,12 @@ Set the stage first, `<tool>/scripts/stage.sh <dispatch> review`, then:
      conventions. Launch: from its brief.
    - **Bug lens** (gating): correctness, logic, absence-versus-relative checks (does any check
      pass vacuously when a row, file or entry is missing?), test adequacy against the project's
-     own testing page. Launch: from its brief.
+     own testing page. Launch: each lane through `<tool>/scripts/launch.sh review`, which runs
+     its harness's own code-review skill on the change from BASE to the snapshot's HEAD at the
+     harness's top level. **No bug brief is written.** A lane whose harness has no review form
+     does not review for bugs at all: the waybill names as bug reviewers only the configured
+     ones whose harness has one, and there is no fallback to the brief.
+     [Why a lane may review through its harness's own skill](../../wiki/concepts/own-review-skills.md)
    - **Security lens** (gating): general exploit hunting plus the project's specific surfaces
      as the waybill names them: how it binds and authenticates, what it allowlists, how it
      handles secrets, what it spawns and with what arguments, what it serves from disk.
@@ -496,7 +507,13 @@ Set the stage first, `<tool>/scripts/stage.sh <dispatch> review`, then:
    Its launch step starts reviewer lane `$L` in its scratch `$DEST`:
    `<tool>/scripts/launch.sh launch "$L" "$DEST" <dispatch>/review-r<round>-<lens>-prompt.txt --run <dispatch>`.
 
-   **The security lens's launch** has the same two parts, with a prompt file for each lane. Its
+   **The bug lens's launch** needs no prompt file and no brief. Its launch step starts lane
+   `$L` in its scratch `$DEST` on the run's change from BASE to the snapshot:
+   `<tool>/scripts/launch.sh review "$L" "$DEST" <BASE> --last <dispatch>/logs/review-r<round>-bug-$L-last.md --run <dispatch>`.
+   Its findings arrive as the lane's final message. Step 3 normalizes them with
+   `<tool>/scripts/review-findings.sh` and verifies them like any other lane's.
+
+   **The security lens's launch** has the same two parts as a brief launch, with a prompt file for each lane. Its
    preparation writes the lens's prompt file as above, then each lane's own, and stops the round
    on any exit but 0 (the lane's harness has the skill) and 3 (it has none):
 
@@ -589,8 +606,17 @@ Set the stage first, `<tool>/scripts/stage.sh <dispatch> review`, then:
 
    Record every reviewer's thread id in its `review-harvest` line.
 
-   **EVERY LANE RUNS.** Every lane may run anything in its own scratch, the full gate suite
-   included. The one prohibition is modifying the code under review; running the suite writes
+   **Keep each review's own record where the harness keeps it outside the events stream.**
+   claude runs `/code-review` as a forked task; its tool calls are not in the `-p` stream but
+   in the task's output file under `/tmp/claude-<uid>/`, which the stream's `task_notification`
+   names. At harvest, copy each such file into `<dispatch>/logs/` beside the lane's stream,
+   named `review-r<round>-<lens>-<lane>-task-<its own name>`. The stream already holds the
+   final message; the task file is where the review's own tool calls live.
+
+   **EVERY LANE RUNS.** Every lane may run anything in its own scratch, except the project's
+   full gate: a reviewer checks a finding with a targeted probe, and the coachman runs the
+   gate, its lint, build and tests, once per round on the snapshot. The one prohibition is
+   modifying the code under review; a probe writes
    caches and build output, which is expected and contained by the scratch. No lane has
    mechanical write enforcement, so the disposable scratch plus the post-round integrity check
    is the containment. A lane's CLEAN is weaker when it did not verify what it could have
@@ -621,6 +647,10 @@ Set the stage first, `<tool>/scripts/stage.sh <dispatch> review`, then:
    Exit 4 is a timeout whose records could not all be written, a fault in a control: stop the
    leg and escalate (Tool faults). Exit 1 collects nothing, and the output says why; unless the
    round was started again, re-run it whole.
+
+   **Run the project's gate yourself, once this round, on the snapshot, before applying any
+   fix.** Its lint, build and tests, through the project's real gate command. No reviewer runs
+   it: a reviewer checks a finding with a targeted probe.
 
    **At harvest, classify every lane under every lens REVIEWED or DEGRADED.** A lane that
    never launched, died and was not recovered, had not finished by the round's deadline, or ran
