@@ -946,7 +946,7 @@ def self_test(root):
             shaped = run_child(["--safe-path", redacted_path], repo)
             ok("--safe-path redacts a shaped span and prints no value", bool(
                 shaped and shaped.returncode == 0
-                and shaped.stdout.splitlines() == ["raw/[redacted]"]
+                and shaped.stdout.splitlines() == ["[redacted]"]
                 and sample_email not in shaped.stdout))
             plain_path = run_child(["--safe-path", "wiki/concepts/p.md"], repo)
             ok("--safe-path passes a clean path through", bool(
