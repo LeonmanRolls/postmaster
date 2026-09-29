@@ -83,25 +83,27 @@ the run's branch carries its own copy of the fixed file — never as a merge of 
 
 ## Tasks
 
-- [ ] T001 [P] [AC1] Write `skills/hotfix/SKILL.md`: fault to merged fix (ticket, worktree
+- [x] T001 [P] [AC1] Write `skills/hotfix/SKILL.md`: fault to merged fix (ticket, worktree
   from `origin/main`, fix with a control that fails before and passes after, PR titled
   `#<ticket>, <title>`, merge under `ship.merge_authority`, pull of main) and then the
   reach report and apply; script paths through `<tool>`.
-- [ ] T002 [P] [AC2] Write `scripts/hotfix-reach.sh report <runs-root> <fix-commit>`:
+- [x] T002 [P] [AC2] Write `scripts/hotfix-reach.sh report <runs-root> <fix-commit>`:
   one line per in-flight run with reach `checkout`, `branch`, `next-leg` or `conflict`.
-- [ ] T003 [AC2] [AC3] Implement `scripts/hotfix-reach.sh apply <runs-root> <fix-commit>`:
+- [x] T003 [AC2] [AC3] Implement `scripts/hotfix-reach.sh apply <runs-root> <fix-commit>`:
   fix commit alone on the run's branches at a leg boundary, never mid-leg, never a merge of
   main; commit message and next-leg prompt say it is main's fix.
-- [ ] T004 [AC4] Detect a run whose branch changed the same lines of a fixed file, leave it
+- [x] T004 [AC4] Detect a run whose branch changed the same lines of a fixed file, leave it
   untouched, and name it in the report.
-- [ ] T005 [AC5] Log every apply/report step through `log-action.sh`, and write the
+- [x] T005 [AC5] Log every apply/report step through `log-action.sh`, and write the
   self-test control: a run that needs the fix commit and one that does not, told apart by
   the same `report` command.
-- [ ] T006 [AC2] [AC3] Extend `scripts/run-meta.sh check` so a pin carrying recorded fix
+- [x] T006 [AC2] [AC3] Extend `scripts/run-meta.sh check` so a pin carrying recorded fix
   commits still serves its run, and record applied pin fixes beside the pin.
-- [ ] T007 [AC3] Extend `skills/postmaster/postmaster.md` Stage C so the next leg's prompt
+- [x] T007 [AC3] Extend `skills/postmaster/postmaster.md` Stage C so the next leg's prompt
   carries hotfix notes.
-- [ ] T008 [AC1] List `hotfix-reach.sh` in `skills/postmaster/controls.md` and widen
-  `scripts/skill-refs.sh` to check every `skills/*/` markdown file.
-- [ ] T009 [AC1] Add `hotfix-reach` to the gate's self-test list in
+- [x] T008 [AC1] Widen `scripts/skill-refs.sh` to check `skills/hotfix/*.md` alongside
+  `skills/postmaster/*.md`. (Dropped: listing `hotfix-reach.sh` in `controls.md`. A fault
+  in it runs outside a leg and must not stop one; the script's own self-test is the control
+  AC5 names.)
+- [x] T009 [AC1] Add `hotfix-reach` to the gate's self-test list in
   `.postmaster/project.toml` and keep the `shows` count true.
