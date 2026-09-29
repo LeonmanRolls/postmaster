@@ -24,8 +24,10 @@
 #       the main-fix note to the next leg's prompt. The postmaster runs this before
 #       launching each leg; it refuses a leg that has already started, a branch with
 #       uncommitted changes, and any advance past a leg with no completed hand-off,
-#       and it never merges main into the run. Branches that appeared since queue and
-#       carry a fixed file are included.
+#       and it never merges main into the run. Every entry is checked before the
+#       first apply, so a refusal moves nothing; each branch is classified fresh
+#       at the boundary, branches that appeared since queue included, and lands in
+#       exactly one list.
 #   hotfix-reach.sh --self-test
 #
 # <fix-commit> is the one non-merge commit on main that carries the fix, subject
@@ -33,17 +35,19 @@
 # directories; with none, the machine config's projects_roots plus the tool checkout.
 # --tool names the postmaster checkout that holds the fix (default: this script's own
 # repo). A run is in flight when its manifest's stage is neither done nor abandoned.
-# "Carries its own copy of the fixed file" is the file existing in the run's branch
-# tree: a postmaster-as-target run does, a run against another project does not.
-# The fix lands as a cherry-pick, a real three-way against the branch, fetched from
-# the tool when the branch's repo does not hold it; the exported patch only when the
-# fix object cannot be made present. "Changed the same lines" is the fix not landing
-# cleanly that way; that branch is left alone and named, and whichever merges second
-# resolves the conflict. A stop between legs is a completed hand-off, .done plus a
-# hand-off that checks clean; an exited leg without one is a remount, not a boundary.
-# Advancing to the next leg always needs the completed hand-off, even before the
-# first bootstrap. A branch carries the fix only while its tree holds the fix's
-# content; history alone, past a revert, does not count.
+# A branch is concerned by the fix when it carries a fixed file or deleted one: the
+# file in the branch tree, or in its history but no longer in the tree. One
+# content-first verdict classifies every concerned branch: a trial pick of the fix
+# onto the branch's tip, in a scratch, with no history shortcut. An unchanged tree
+# means has-fix, a clean pick means needs, any conflict, modify/delete included,
+# means conflicts; that branch is left alone and named, and whichever merges second
+# resolves the conflict. The pick is fetched from the tool when the branch's repo
+# does not hold it; the exported patch only when the fix object cannot be made
+# present, with history consulted then and only then. The boundary verdict
+# supersedes the queue-time one: the notes and the prompt state only final
+# outcomes. A stop between legs is a completed hand-off, .done plus a hand-off
+# that checks clean; an exited leg without one is a remount, not a boundary, and
+# advancing always needs the completed hand-off, even before the first bootstrap.
 # Pin fixes are recorded beside the pin as <dispatch-commit>.fixes, one "<pin-sha>
 # <fix-sha>" pair per fix it applied, so run-meta.sh check still accepts the checkout;
 # a row counts only while its pin is still in the pin's history, so a reset or
@@ -354,27 +358,46 @@ def abort_pick(where):
     restore_clean(where)
 
 
-def check_clean(where, repo, tool, fix, patch):
-    """True when the fix lands cleanly on the worktree at WHERE, which is left
-    untouched. A real three-way against the branch, so main commits the branch
-    never saw do not read as conflicts; the exported patch only when the fix
-    object cannot be made present."""
+def classify_branch(repo, branch, tool, fix, patch):
+    """One content-first verdict for BRANCH: has-fix, needs, or conflicts. A
+    trial pick of the fix onto the branch's tip, in a scratch, decides
+    everything, with no history shortcut: an unchanged tree means has-fix, a
+    clean pick means needs, any conflict, modify/delete included, means
+    conflicts. History is consulted only when the fix object cannot be made
+    present."""
     if ensure_fix_object(repo, tool, fix):
-        rc = git(where, "cherry-pick", "--no-commit", fix["commit"], check=False)[0]
-        empty = rc == 0 and pick_empty(where)
-        abort_pick(where)
-        return rc == 0 and not empty
+        tmp = pathlib.Path(tempfile.mkdtemp(prefix="hotfix-reach-"))
+        try:
+            if git(repo, "worktree", "add", "--detach", str(tmp), branch, check=False)[0]:
+                return "conflicts"
+            if git(tmp, "cherry-pick", "--no-commit", fix["commit"], check=False)[0]:
+                abort_pick(tmp)
+                return "conflicts"
+            empty = pick_empty(tmp)
+            abort_pick(tmp)
+            return "has-fix" if empty else "needs"
+        finally:
+            git(repo, "worktree", "remove", "--force", str(tmp), check=False)
+            shutil.rmtree(tmp, ignore_errors=True)
+    if history_has_fix(repo, branch, fix):
+        return "has-fix"
+    tmp = pathlib.Path(tempfile.mkdtemp(prefix="hotfix-reach-"))
     p = outside_patch(patch)
     try:
-        return git(where, "apply", "--check", str(p), check=False)[0] == 0
+        if git(repo, "worktree", "add", "--detach", str(tmp), branch, check=False)[0]:
+            return "conflicts"
+        return "needs" if git(tmp, "apply", "--check", str(p), check=False)[0] == 0 \
+            else "conflicts"
     finally:
         p.unlink(missing_ok=True)
+        git(repo, "worktree", "remove", "--force", str(tmp), check=False)
+        shutil.rmtree(tmp, ignore_errors=True)
 
 
 def land_fix(where, repo, tool, fix, patch):
     """Stage the fix's changes on the worktree at WHERE for the caller to commit.
     Returns (True, how) with changes staged, or (False, why) with the tree
-    restored. The same method check_clean chose, so a clean check always lands."""
+    restored. The same method classify_branch chose, so a needs verdict lands."""
     if ensure_fix_object(repo, tool, fix):
         if git(where, "cherry-pick", "--no-commit", fix["commit"], check=False)[0]:
             abort_pick(where)
@@ -393,17 +416,6 @@ def land_fix(where, repo, tool, fix, patch):
         p.unlink(missing_ok=True)
 
 
-def apply_conflicts(repo, branch, tool, fix, patch):
-    tmp = pathlib.Path(tempfile.mkdtemp(prefix="hotfix-reach-"))
-    try:
-        if git(repo, "worktree", "add", "--detach", str(tmp), branch, check=False)[0]:
-            return True
-        return not check_clean(tmp, repo, tool, fix, patch)
-    finally:
-        git(repo, "worktree", "remove", "--force", str(tmp), check=False)
-        shutil.rmtree(tmp, ignore_errors=True)
-
-
 def history_has_fix(repo, branch, fix):
     if git(repo, "merge-base", "--is-ancestor", fix["commit"], branch, check=False)[0] == 0:
         return True
@@ -412,41 +424,29 @@ def history_has_fix(repo, branch, fix):
     return bool(out.strip())
 
 
-def branch_has_fix(repo, branch, tool, fix):
-    """The branch carries the fix's content, not just its history. A revert
-    removes the content while leaving the commit behind; that branch needs the
-    fix again, and one that changed the lines since reads as a conflict when
-    the re-delivery is attempted."""
-    if not history_has_fix(repo, branch, fix):
+def branch_deleted(repo, branch, path):
+    if branch_carries(repo, branch, path):
         return False
-    if not ensure_fix_object(repo, tool, fix):
-        return True
-    tmp = pathlib.Path(tempfile.mkdtemp(prefix="hotfix-reach-"))
-    try:
-        if git(repo, "worktree", "add", "--detach", str(tmp), branch, check=False)[0]:
-            return True
-        if git(tmp, "cherry-pick", "--no-commit", fix["commit"], check=False)[0]:
-            abort_pick(tmp)
-            return False
-        empty = pick_empty(tmp)
-        abort_pick(tmp)
-        return empty
-    finally:
-        git(repo, "worktree", "remove", "--force", str(tmp), check=False)
-        shutil.rmtree(tmp, ignore_errors=True)
+    _, out, _ = git(repo, "log", "--format=%H", "-1", branch, "--", path, check=False)
+    return bool(out.strip())
+
+
+def concerns(repo, branch, fix):
+    return any(branch_carries(repo, branch, f) or branch_deleted(repo, branch, f)
+               for f in fix["paths"])
 
 
 def classify(repo, info, tool, fix, patch):
     branches = run_branches(info["dispatch"], repo)
-    carries = [b for b in branches
-               if any(branch_carries(repo, b, f) for f in fix["paths"])]
+    carries = [b for b in branches if concerns(repo, b, fix)]
     runbook = any(p.startswith(RUNBOOK_PREFIX) for p in fix["paths"])
     mid = not at_boundary(info["dispatch"], info["manifest"])
     needs, skipped, done = [], [], []
     for b in carries:
-        if branch_has_fix(repo, b, tool, fix):
+        verdict = classify_branch(repo, b, tool, fix, patch)
+        if verdict == "has-fix":
             done.append(b)
-        elif apply_conflicts(repo, b, tool, fix, patch):
+        elif verdict == "conflicts":
             skipped.append(b)
         else:
             needs.append(b)
@@ -871,34 +871,49 @@ def do_next_leg(tool, dispatch_s, leg_s, prompt_s):
         raise HotfixError("run directory is not under a recognized runs folder: %s" % dispatch)
     master = ensure_hotfix_dir(tool)
     remaining = list(pending)
+    works = []
     for item in pending:
         fix = fix_details(tool, item["fix"])
         patch = patch_text(tool, fix)
-        branches = [b for b in item.get("branches", [])
+        saved = list(item.get("branches", []))
+        branches = [b for b in saved
                     if git(repo, "rev-parse", "--verify", "-q", "refs/heads/" + b,
                            check=False)[0] == 0]
-        missing = [b for b in item.get("branches", []) if b not in branches]
-        if missing:
-            raise HotfixError("queued branch %s is gone from %s; resolve by hand"
-                              % (", ".join(missing), repo))
+        missing = [b for b in saved if b not in branches]
+        branches += [b for b in item.get("skipped_conflict", [])
+                     if b not in branches
+                     and git(repo, "rev-parse", "--verify", "-q", "refs/heads/" + b,
+                             check=False)[0] == 0]
         # Branches created after queue, such as workhorse branches cut while the
         # run was still at dispatched, need the fix as much as the queued ones.
         for b in run_branches(dispatch, repo):
-            if b not in branches \
-               and any(branch_carries(repo, b, f) for f in fix["paths"]):
+            if b not in branches and concerns(repo, b, fix):
                 branches.append(b)
-        applied, skipped = {}, list(item.get("skipped_conflict", []))
+        works.append((item, fix, patch, branches, missing))
+    # Preflight: every entry is checked before the first apply, so a refusal
+    # moves nothing: no commit, no note, no prompt line, pending intact.
+    for item, fix, patch, branches, missing in works:
+        if missing:
+            raise HotfixError("queued branch %s is gone from %s; resolve by hand"
+                              % (", ".join(missing), repo))
         for b in branches:
-            if branch_has_fix(repo, b, tool, fix):
-                applied[b] = git(repo, "rev-parse", b, check=False)[1]
-                continue
-            if apply_conflicts(repo, b, tool, fix, patch):
-                skipped.append(b)
-                continue
             wt = live_worktree(repo, b)
             if wt is not None and git(wt, "status", "--porcelain", check=False)[1].strip():
                 raise HotfixError("%s has uncommitted branch changes; clean or resolve "
                                   "them before leg %d" % (b, leg))
+    for item, fix, patch, branches, _ in works:
+        # The boundary verdict supersedes the queue-time one: each branch is
+        # classified fresh, lands in exactly one list, and the notes and the
+        # prompt state only these final outcomes.
+        applied, skipped = {}, []
+        for b in branches:
+            verdict = classify_branch(repo, b, tool, fix, patch)
+            if verdict == "has-fix":
+                applied[b] = git(repo, "rev-parse", b, check=False)[1]
+                continue
+            if verdict == "conflicts":
+                skipped.append(b)
+                continue
             new, how = apply_on_branch(repo, b, tool, fix, patch)
             if not new:
                 raise HotfixError("could not apply %s alone to %s (%s); the branch was "
@@ -1557,6 +1572,76 @@ out=$("$SELF" next-leg "$dV" 2 "$dV/leg-2-prompt.txt" --tool "$tool" 2>"$tmp/err
 [ $rc -eq 0 ] && [ "$(cmd "$projA" show tV:scripts/foo.sh)" = "new" ] \
   && ok "and the re-delivery restores the content" \
   || fail "and the re-delivery restores the content (exit $rc)" "$out$(cat "$tmp/err")"
+
+echo "a branch that deleted the fixed file is a conflict"
+dDel=$(dispatch "$RUNS_A" tDel checkpoint-1 1 '{}')
+between_legs "$dDel"
+cmd "$projA" checkout -qb tDel main
+cmd "$projA" rm -q scripts/foo.sh
+cmd "$projA" commit -qm "lane deleted the file"
+cmd "$projA" checkout -q tA
+out=$("$SELF" report "$FIX" "$RUNS_A" --tool "$tool" 2>"$tmp/err"); rc=$?
+[ $rc -eq 0 ] && printf '%s\n' "$out" | grep -q "tDel  *conflict" \
+  && ok "a branch that deleted the fixed file reports conflict" \
+  || fail "a branch that deleted the fixed file reports conflict (exit $rc)" "$out$(cat "$tmp/err")"
+out=$("$SELF" queue "$FIX" "$RUNS_A" --tool "$tool" 2>"$tmp/err"); rc=$?
+[ $rc -eq 0 ] && printf '%s\n' "$out" | grep -q "tDel: branch changed the same lines" \
+  && [ ! -f "$dDel/.hotfix-pending.json" ] \
+  && ok "and queue names it untouched with no branch work" \
+  || fail "and queue names it untouched with no branch work (exit $rc)" "$out$(cat "$tmp/err")"
+
+echo "a withdrawn conflict applies with one verdict, not two"
+dW2=$(dispatch "$RUNS_A" tW2 checkpoint-1 1 '{"luna": {}}')
+between_legs "$dW2"
+cmd "$projA" checkout -qb tW2 main
+cmd "$projA" checkout -qb wb/tW2-luna
+echo conflict > "$projA/scripts/foo.sh"
+cmd "$projA" commit -qam "lane changed the same lines"
+cmd "$projA" checkout -q tA
+"$SELF" queue "$FIX" "$RUNS_A" --tool "$tool" >/dev/null 2>&1
+cmd "$projA" checkout -q wb/tW2-luna
+echo old > "$projA/scripts/foo.sh"
+cmd "$projA" commit -qam "lane withdrew the edit"
+cmd "$projA" checkout -q tA
+printf 'You are the coachman for leg 2.\n' > "$dW2/leg-2-prompt.txt"
+out=$("$SELF" next-leg "$dW2" 2 "$dW2/leg-2-prompt.txt" --tool "$tool" 2>"$tmp/err"); rc=$?
+[ $rc -eq 0 ] && cmd "$projA" log -1 --format=%s wb/tW2-luna | grep -q "Main's fix" \
+  && [ "$(grep -c "wb/tW2-luna" "$dW2/hotfix-notes.md")" -eq 1 ] \
+  && ! grep "wb/tW2-luna" "$dW2/hotfix-notes.md" | grep -q "left untouched" \
+  && ok "a withdrawn conflict applies with the applied verdict only" \
+  || fail "a withdrawn conflict applies with the applied verdict only (exit $rc)" "$out$(cat "$tmp/err")"
+
+echo "content without history is has-fix, not conflict"
+dC3=$(dispatch "$RUNS_A" tC3 checkpoint-1 1 '{}')
+between_legs "$dC3"
+cmd "$projA" checkout -qb tC3 main
+echo new > "$projA/scripts/foo.sh"
+cmd "$projA" commit -qam "lane independently fixed the same content"
+cmd "$projA" checkout -q tA
+out=$("$SELF" report "$FIX" "$RUNS_A" --tool "$tool" 2>"$tmp/err"); rc=$?
+[ $rc -eq 0 ] && printf '%s\n' "$out" | grep -q "tC3  *branch  *fix already on" \
+  && ok "content without history reports has-fix" \
+  || fail "content without history reports has-fix (exit $rc)" "$out$(cat "$tmp/err")"
+
+echo "a mid-loop refusal moves nothing"
+dC4=$(dispatch "$RUNS_A" tC4 checkpoint-1 1 '{"luna": {}}')
+between_legs "$dC4"
+cmd "$projA" checkout -qb tC4 main
+cmd "$projA" checkout -q tA
+"$SELF" queue "$FIX" "$RUNS_A" --tool "$tool" >/dev/null 2>&1
+cmd "$projA" checkout -qb wb/tC4-luna tC4
+cmd "$projA" checkout -q tA
+"$SELF" queue "$FIX2" "$RUNS_A" --tool "$tool" >/dev/null 2>&1
+cmd "$projA" branch -q -D wb/tC4-luna
+printf 'You are the coachman for leg 2.\n' > "$dC4/leg-2-prompt.txt"
+beforeC4=$(cmd "$projA" rev-parse tC4)
+out=$("$SELF" next-leg "$dC4" 2 "$dC4/leg-2-prompt.txt" --tool "$tool" 2>&1); rc=$?
+[ $rc -eq 1 ] && printf '%s\n' "$out" | grep -q "wb/tC4-luna is gone" \
+  && [ "$(cmd "$projA" rev-parse tC4)" = "$beforeC4" ] \
+  && [ "$(grep -c '"fix"' "$dC4/.hotfix-pending.json")" -eq 2 ] \
+  && [ "$(grep -c "Main's fix" "$dC4/leg-2-prompt.txt")" -eq 0 ] \
+  && ok "a mid-loop refusal moves nothing: branch, pending and prompt intact" \
+  || fail "a mid-loop refusal moves nothing: branch, pending and prompt intact (exit $rc)" "$out"
 
 echo
 [ "$fails" -eq 0 ] && { echo "self-test: all controls behaved"; exit 0; }
