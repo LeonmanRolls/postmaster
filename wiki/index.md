@@ -86,7 +86,8 @@ Why the design is shaped as it is.
 - [A lane may review through its harness's own skill](concepts/own-review-skills.md):
   **claimed**. A security lane runs its harness's own security review skill where it has one,
   and the brief where it has none; Claude Code's needs a clone whose `origin/HEAD` leads back to
-  the base.
+  the base. A bug lane runs its harness's code-review skill where it has one, names the change
+  from BASE, and does not review at all where it has none.
 - [The local tracker](concepts/local-tracker.md): **claimed**. With no service and no login,
   a repository's tickets live in its own git directory, and a repository whose store exists
   uses it whatever the config names.

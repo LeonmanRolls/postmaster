@@ -1,0 +1,63 @@
+---
+kind: trial
+subject: a positive control through the flow's own launch path — each harness's code-review form, at the level launch.sh review sets, yields a normalized finding at the planted bug's file and line
+date: 2026-09-29
+---
+
+# Method
+
+**Question.** Issue #38's criterion 9: in a worktree scratch detached at the snapshot of a
+target whose default branch is not `main`, with a planted bug in a commit that is not the last,
+does each harness with a review form, launched through `scripts/launch.sh review` at the level
+that form sets, yield a normalized finding at the bug's file and line?
+
+**Versions.** The same three harnesses as [`../code-review-scope/`](../code-review-scope/method.md):
+claude 2.1.283 on `claude-opus-5-5`; codex-cli 0.157.1 on `gpt-6-luna`; MiMo Code 0.1.15 on
+`<plan-provider>/mimo-v2.6-pro`. The flow's scripts from this change (`wb/38-mimo`): `launch.sh
+review`, `cut-scratch.sh`, `review-findings.sh`.
+
+**Setup.** `apparatus/run.sh` builds the same Node fixture as the earlier trial: default branch
+`trunk`; BASE keeps records in memory (`src/store.js`); the first of two commits on a synthesis
+branch adds `src/page.js`, whose `slice(start, start + size + 1)` at line 8 is the planted bug;
+the last adds `src/count.js`, which is correct. A review of the last commit alone sees only
+`src/count.js`. The commit dates are fixed, so the fixture has the same SHAs every time: BASE
+`4973110`, HEAD~1 `a58e725`, SNAP `5434717`.
+
+Every review runs in a fresh worktree scratch cut by `scripts/cut-scratch.sh` at SNAP and
+checked before the launch. Each harness runs once, through the flow's own form:
+
+| lane | harness | `launch.sh review` |
+|---|---|---|
+| opus | claude | `/code-review max <BASE>...HEAD` |
+| luna | codex | `codex exec review --base <BASE>` at `max` |
+| mimo | mimo | `--command review`, `--variant high`, `<BASE>...HEAD` in the prompt file |
+
+The trial config names the same harnesses, models and MiMo Code key file as the live one. Each
+lane's configured effort is `low`, so a control that ran on the lane's effort rather than the
+top level would be visible in the command. `launch.sh review` writes the events stream to
+stdout; the script keeps it as `<lane>.jsonl`, the final message as `<lane>-last.md` or
+`<lane>-report.md`, and for claude copies each `task_notification`'s output file into the out
+directory (criterion 8).
+
+**The check.** `scripts/review-findings.sh` normalizes the final message for that harness. The
+control passes when one normalized finding is at `src/page.js:8` (file ending `src/page.js`,
+line 8), which is where the planted bug sits. The check is the script's own parse of the
+report, not a grep of the report text.
+
+**What is recorded.** Per lane: the events stream, the final message, the normalized findings,
+and for claude the forked task's output file. `run.log` is the control's own stdout. The
+streams are not published: they may name this machine's paths. The findings and the report
+passages that cite `src/page.js:8` are what the wiki cites.
+
+# Results
+
+(Recorded below when the control has run.)
+
+# What it settles
+
+That the flow's own launch path — `launch.sh review` at the top level, a worktree scratch, a
+named range from BASE — puts each harness's code-review skill on the run's change and that
+`review-findings.sh` turns its report into a finding at the planted bug's file and line, on
+this fixture and this machine. It does not show how often any of them finds a bug it is not
+tipped to, nor anything about pi or muse, which have no review form and so do not review for
+bugs at all.
