@@ -180,15 +180,17 @@ you never do. A leg that exits without its hand-off is spent, and the postmaster
 `.escalation-ready` and exits; the ruling arrives as a resume of the same thread, and the
 leg continues.
 
-## Lane capability: workhorses and reviewers alike
+## Lane capability: workhorses and reviewers
 
-**Every lane may run anything it needs in its own worktree or scratch: shell commands,
-installs, builds, the full gate suite, and a browser.** Browser work uses the project's own
-browser library, driven from a shell command inside the lane's worktree. Never route a lane's
-browser work through a browser server shared with other sessions: a call into one can be
-acknowledged and never return, with no timeout. If the browser is genuinely unavailable, record
-QA as DEGRADED on the card, name what was not walked, and finish the run. A run that has passed
-every gate is never blocked by a browser.
+**A workhorse may run anything it needs in its own worktree, including the project's gate,
+lint, build, tests and browser suite. A reviewer may run a targeted probe to check a finding,
+but does not run the project's gate, lint, build or tests; the coachman runs the recorded checks
+once per review round on that round's snapshot.** Browser work uses the project's own browser
+library, driven from a shell command inside the lane's worktree. Never route a lane's browser
+work through a browser server shared with other sessions: a call into one can be acknowledged
+and never return, with no timeout. If the browser is genuinely unavailable, record QA as
+DEGRADED on the card, name what was not walked, and finish the run. A run that has passed every
+gate is never blocked by a browser.
 
 **No lane runs restricted.** Each harness's permission-bypass form is in `harnesses.md`; it goes
 on every launch and every resume.
@@ -198,8 +200,9 @@ write enforcement, so a workhorse is confined by having its own worktree and a r
 own disposable scratch. **The one prohibition for a reviewer is modifying the code under
 review.**
 
-**Say so in every brief.** A lane that does not know it may run the suite reasons about the code
-instead of executing it, and a reasoned verdict is worth less than a run one.
+**Say so in every workhorse brief.** A workhorse that does not know it may run the suite reasons
+about the code instead of executing it. A reviewer checks a finding with a targeted probe and
+leaves the project-wide checks to the coachman.
 
 ## The workhorse contract
 
@@ -452,19 +455,17 @@ has one, and the `reviewers:` line otherwise; `<tool>/scripts/reviewers.sh lanes
 
 Set the stage first, `<tool>/scripts/stage.sh <dispatch> review`, then:
 
-1. **Prepare each open lens from its entry below.** A lens's brief, `review-<lens>-brief.md`
-   in the dispatch dir, carries the diff scope (synthesis worktree,
-   `git diff <BASE>...HEAD`); the project profile plus the lens's specific pointers from it;
-   findings already known (the hand-off's deferred findings, workhorse divergences) so
-   reviewers hunt residues and new holes; and the output contract: severity P1 to P3,
-   file:line, quoted code as evidence, confidence, and for security an exploit path. **State
-   in every brief that the lane is working in its own disposable worktree with dependencies
-   installed, that it may run anything it wants there including the full gate suite, and that
-   the one thing it must not do is modify the code under review.** It is expected to RUN
-   things to check its own claims, and to say for each finding whether it was verified by
-   execution or by reading. A finding verified by execution outranks the same finding filed as
-   a hypothesis, and a test that passes is not evidence until someone has seen it fail for the
-   right reason.
+1. **Prepare each open lens from its entry below.** The style brief and security brief carry
+   their diff scope (synthesis worktree, `git diff <BASE>...HEAD`), the project profile and
+   lens-specific pointers, known findings (the hand-off's deferred findings and workhorse
+   divergences), and their output contract: severity P1 to P3, file:line, quoted code as
+   evidence, confidence, and for security an exploit path. They tell reviewers to check a
+   finding with a targeted probe, not run the project's gate, lint, build or tests, and to say
+   for each finding whether it was verified by execution or by reading. A finding verified by
+   execution outranks the same finding filed as a hypothesis, and a test that passes is not
+   evidence until someone has seen it fail for the right reason. The coachman
+   runs the recorded project checks once per round on the snapshot. There is no bug brief: each
+   bug reviewer runs its harness's code-review form against the named range.
 
    Each entry is the one place for its lens, the turnpike of the same name: what its reviewers
    look for, and how they are launched, which step 2 does for every lane that reviews under it.
@@ -474,8 +475,14 @@ Set the stage first, `<tool>/scripts/stage.sh <dispatch> review`, then:
      consistency, judged against the project's own style pages and the surrounding code's
      conventions. Launch: from its brief.
    - **Bug lens** (gating): correctness, logic, absence-versus-relative checks (does any check
-     pass vacuously when a row, file or entry is missing?), test adequacy against the project's
-     own testing page. Launch: from its brief.
+     pass vacuously when a row, file or entry is missing?), and defects in the change. Only
+     lanes whose harness has a code-review form review for bugs; no brief is written and no
+     fallback is used. Launch: `<tool>/scripts/launch.sh review "$L" "$DEST" <BASE> --last
+     <dispatch>/logs/review-r<round>-bug-$L-last.md --run <dispatch>`. The form fixes each
+     harness at its highest review level and names the base-to-HEAD change. Normalize its
+     report with `<tool>/scripts/review-findings.sh`; missing fields such as severity stay
+     `not provided`.
+     [Why a lane may review through its harness's own skill](../../wiki/concepts/own-review-skills.md)
    - **Security lens** (gating): general exploit hunting plus the project's specific surfaces
      as the waybill names them: how it binds and authenticates, what it allowlists, how it
      handles secrets, what it spawns and with what arguments, what it serves from disk.
@@ -521,6 +528,14 @@ Set the stage first, `<tool>/scripts/stage.sh <dispatch> review`, then:
 
    ```sh
    SNAP=$(git -C <synthesis-wt> rev-parse HEAD)
+   # Where a check's source names web-journey, walk the ticket's User journey on the synthesis
+   # worktree first, to the path <tool>/scripts/verify.sh journey-path <synthesis-wt> <dispatch>
+   # prints; then the run's checks, once, on the snapshot:
+   <tool>/scripts/verify.sh run <synthesis-wt> <dispatch> > <dispatch>/logs/review-r<round>-checks.txt
+   VERIFY_EXIT=$?
+   cat <dispatch>/logs/review-r<round>-checks.txt
+   <tool>/scripts/log-action.sh <dispatch> coachman gate "$SNAP" "review round <round>, verify.sh exit $VERIFY_EXIT"
+   [ "$VERIFY_EXIT" -ne 1 ] || exit 1   # a verification control failed; do not launch reviewers
    git -C <repo> worktree prune
    for LENS in <open lenses>; do   # a lens whose lanes do not resolve stops the round here
      <tool>/scripts/reviewers.sh lanes <dispatch>/brief.md "$LENS" >/dev/null || exit 1
@@ -537,11 +552,10 @@ Set the stage first, `<tool>/scripts/stage.sh <dispatch> review`, then:
        # The security lens reviews from clones, whose origin/HEAD leads back to BASE, which a
        # harness's own security review skill needs (harnesses.md, Own review skills).
        CLONE=""; [ "$LENS" = security ] && CLONE="--clone <BASE>"
-       # ASSERT the scratch is cut at SNAP and resolves before launching a lane into it. A
-       # broken scratch discovered by two lanes separately is two wasted rounds.
+       # ASSERT the scratch is cut at SNAP before launching a lane into it. The coachman runs
+       # the project's recorded checks once on the snapshot; reviewers do not build or run them.
        <tool>/scripts/cut-scratch.sh <repo> <synthesis-wt> "$DEST" "$SNAP" $CLONE \
-         && ( cd "$DEST" && <project build command> >/dev/null 2>&1 ) \
-         || echo "SCRATCH BROKEN: $DEST is not cut at $SNAP or does not build; fix before launching $L under $LENS"
+         || echo "SCRATCH BROKEN: $DEST is not cut at $SNAP; fix before launching $L under $LENS"
      done
    done
    ```
@@ -577,29 +591,51 @@ Set the stage first, `<tool>/scripts/stage.sh <dispatch> review`, then:
    for LENS in <open lenses>; do
      for L in $(<tool>/scripts/reviewers.sh lanes <dispatch>/brief.md "$LENS"); do
        DEST=<repo>/.worktrees/<TICKET>-rev-$LENS-$L
+       if [ "$LENS" = bug ]; then
+         LAUNCH=(<tool>/scripts/launch.sh review "$L" "$DEST" <BASE> --last <dispatch>/logs/review-r<round>-bug-$L-last.md --run <dispatch>)
+       else
+         LAUNCH=(<the launch step of $LENS, for "$L" in "$DEST">)
+       fi
        <tool>/scripts/host.sh run "$(<tool>/scripts/host.sh name <dispatch> "$L $LENS review")" "$DEST" \
            --out <dispatch>/logs/review-r<round>-$LENS-$L.jsonl --err <dispatch>/logs/review-r<round>-$LENS-$L.err \
            --marker <dispatch>/logs/review-r<round>-$LENS-$L.done \
-           -- <the launch step of $LENS, for "$L" in "$DEST">
+           -- "${LAUNCH[@]}"
        REVIEWERS="$REVIEWERS $LENS:$L"
      done
    done
    <tool>/scripts/review-round.sh wait <dispatch> <round> <repo> $REVIEWERS
    ```
 
+   **Normalize the bug reports before triage.** For each lane under the bug lens, copy any
+   forked task record the stream's `task_notification` named and normalize the native report
+   from the same events stream.
+   Codex reads the `--last` file; the other forms read their final event message. A non-zero
+   exit is a control fault, never a clean review; log it and escalate under Tool faults. The
+   generated JSON is the bug findings contract for triage: each item has its target, location,
+   severity, summary, body, evidence, confidence, category and source. A field the harness did
+   not provide is the literal `not provided`; use the normalized file as the bug report.
+
+   ```sh
+   for L in $(<tool>/scripts/reviewers.sh lanes <dispatch>/brief.md bug); do
+     DEST=<repo>/.worktrees/<TICKET>-rev-bug-$L
+     EVENTS=<dispatch>/logs/review-r<round>-bug-$L.jsonl
+     <tool>/scripts/review-findings.sh harvest "$EVENTS" <dispatch>/logs --prefix review-r<round>-bug-$L || exit 1
+     <tool>/scripts/review-findings.sh normalize "$L" "$DEST" "$EVENTS" --last <dispatch>/logs/review-r<round>-bug-$L-last.md --run <dispatch> \
+       > <dispatch>/logs/review-r<round>-bug-$L-findings.json || exit 1
+   done
+   ```
+
    Record every reviewer's thread id in its `review-harvest` line.
 
-   **EVERY LANE RUNS.** Every lane may run anything in its own scratch, the full gate suite
-   included. The one prohibition is modifying the code under review; running the suite writes
-   caches and build output, which is expected and contained by the scratch. No lane has
-   mechanical write enforcement, so the disposable scratch plus the post-round integrity check
-   is the containment. A lane's CLEAN is weaker when it did not verify what it could have
-   verified; that is a review-quality judgement, not a structural limit.
+   **Reviewers do not run the project-wide checks.** The coachman has run them once on this
+   round's snapshot. A reviewer may run a targeted probe for a finding. Its disposable scratch
+   and the post-round integrity check contain probe output and detect tracked changes to the
+   code under review. A lane's CLEAN is weaker when it did not probe what it could have
+   probed; that is a review-quality judgement, not a structural limit.
 
-   **Watch memory at high concurrency.** Round 1 runs every lane under every lens at once,
-   and each may run a full suite, which can spawn a large process tree. If the machine queues
-   or swaps, the levers are the run ceiling and the test runner's worker cap, never
-   withdrawing the capability.
+   **Watch memory at high concurrency.** Round 1 runs every lane under every lens at once, and
+   targeted probes can still spawn child processes. If the machine queues or swaps, the levers
+   are the run ceiling and the test runner's worker cap.
 
    **THE WAIT GOES IN THE SAME COMMAND AS THE LAUNCH. Never end a turn between launching a
    round and collecting it.** The launch above ends by blocking on every marker of the round,
@@ -666,10 +702,12 @@ Set the stage first, `<tool>/scripts/stage.sh <dispatch> review`, then:
    with no gating lens, none: step 5), and never a style finding. Where fixes from different
    lenses touch the same code, reconcile them into one change before applying it. Every style
    finding is deferred in the hand-off, reaches the ship card's Style residue, and is sorted at
-   aftercare (stage 4). Then re-run the project's gate.
+   aftercare (stage 4). The next review round runs the project checks once on the new snapshot.
 5. **Loop until clean.** Round `r+1` runs the gating lenses alone, on the fixed diff, with its
-   own markers, each brief updated with the fixes delta and every applied finding as known
-   context, so they closure-check each fix AND hunt new holes the fixes introduced. Done only
+   own markers, each brief the lens has updated with the fixes delta and every applied finding
+   as known context, so they closure-check each fix AND hunt new holes the fixes introduced.
+   The bug lens has no brief to update and its forms take no known context; a skill that
+   reports an applied finding again is dropped by the coachman's dedup. Done only
    when a round returns zero new verified gating findings and every fix verifies closed, so a
    round that applied any change is never the last, and a style finding never keeps the loop
    going. A loop with no gating lens is round 1 alone, and applies nothing: a verified gating
@@ -691,9 +729,9 @@ Set the stage first, `<tool>/scripts/stage.sh <dispatch> review`, then:
 6. **One review checkpoint card.** Per lens: the findings and their overlap, across lanes and
    with the other lenses, verified versus dismissed, applied, and the rounds it ran; for style,
    how many findings go to the ship card's Style residue, as `<tool>/scripts/style-findings.sh
-   count <dispatch>` prints it. Then the gate status, and the checks as
-   `<tool>/scripts/verify.sh run <synthesis-wt> <dispatch>` printed them after the last round's
-   fixes, the journey walked first where there is one. Written to
+   count <dispatch>` prints it. Then the gate status and the checks from the final round's
+   `<dispatch>/logs/review-r<round>-checks.txt`, run once on that round's snapshot (the
+   journey walked first where the checks name one, per step 2). Written to
    `<dispatch>/checkpoint-review.md` with its `.checkpoint-review-ready` marker. Autonomous
    mode: write the leg's hand-off and end it; the ship approval is stage 3's stop. Consult mode:
    escalate on the card and wait for the resume.
