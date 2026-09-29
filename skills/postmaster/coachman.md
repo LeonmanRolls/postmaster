@@ -602,18 +602,18 @@ Set the stage first, `<tool>/scripts/stage.sh <dispatch> review`, then:
    **Normalize the bug reports before triage.** For each lane under the bug lens, copy any
    forked task record Claude named and normalize the native report from the same events stream.
    Codex reads the `--last` file; the other forms read their final event message. A non-zero
-   exit is not a clean review: stop the leg and escalate under Tool faults. The generated JSON
-   is the bug findings contract for triage: each item has its target, location, severity,
-   summary, body, evidence, confidence, category and source. A field the harness did not
-   provide is the literal `not provided`; use the normalized file as the bug report.
+   exit is a control fault, never a clean review; log it and escalate under Tool faults. The
+   generated JSON is the bug findings contract for triage: each item has its target, location,
+   severity, summary, body, evidence, confidence, category and source. A field the harness did
+   not provide is the literal `not provided`; use the normalized file as the bug report.
 
    ```sh
    for L in $(<tool>/scripts/reviewers.sh lanes <dispatch>/brief.md bug); do
      DEST=<repo>/.worktrees/<TICKET>-rev-bug-$L
      EVENTS=<dispatch>/logs/review-r<round>-bug-$L.jsonl
-     <tool>/scripts/review-findings.sh harvest "$EVENTS" <dispatch>/logs --prefix review-r<round>-bug-$L
+     <tool>/scripts/review-findings.sh harvest "$EVENTS" <dispatch>/logs --prefix review-r<round>-bug-$L || exit 1
      <tool>/scripts/review-findings.sh normalize "$L" "$DEST" "$EVENTS" --last <dispatch>/logs/review-r<round>-bug-$L-last.md --run <dispatch> \
-       > <dispatch>/logs/review-r<round>-bug-$L-findings.json
+       > <dispatch>/logs/review-r<round>-bug-$L-findings.json || exit 1
    done
    ```
 

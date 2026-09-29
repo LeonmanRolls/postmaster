@@ -175,6 +175,8 @@ def markdown_findings(text, harness, scratch):
             continue
         if in_fence:
             continue
+        if re.search(r"\bno (?:other|additional) (?:findings|bugs|issues) found\b", line, re.I):
+            continue
         if not (line.startswith("#") or line.startswith(("-", "*", "**", "`")) or " — " in line or " – " in line):
             continue
         match = location.search(line)
@@ -354,7 +356,7 @@ def self_test():
             "claude": [{"type": "system", "subtype": "task_notification", "output_file": str(external)},
                        {"type": "result", "subtype": "success", "result": '[{"file":"src/page.js","line":8,"summary":"Page includes one extra item","category":"correctness"}]\nA sentence that is not a finding.'}],
             "codex": [{"type": "turn.completed"}],
-            "mimo": [{"type": "text", "sessionID": "ses_1", "part": {"type": "text", "text": "### Bug — `src/page.js:8`: Page includes one extra item\n\nThe exclusive end repeats the boundary record."}}],
+            "mimo": [{"type": "text", "sessionID": "ses_1", "part": {"type": "text", "text": "### Bug — `src/page.js:8`: Page includes one extra item\n\nThe exclusive end repeats the boundary record.\n\n### No other issues found — `src/count.js:6`: Empty stores yield zero pages."}}],
         }
         for harness, events in fixtures.items():
             folder = run_config(harness, harness)
