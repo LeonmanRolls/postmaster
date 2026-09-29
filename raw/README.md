@@ -25,7 +25,11 @@ these, every time:
 
 - **Scrub for secrets.** A harness session transcript can carry anything that was on screen,
   including a key a lane printed while debugging. Automated first, then read what the scrub
-  reports.
+  reports. `scripts/scrub-check.sh` scans every committed addition in a change and reports
+  suspects by commit, file, line and kind without printing their values. An unruled suspect
+  stops the change check for the postmaster to take to the user. A user's ruling is recorded
+  as an exact allowed value or line in `scripts/scrub-check.allow`. Existing history can be
+  checked with `scripts/scrub-check.sh --history`, which defaults to `main`.
 - **Check the target may be published.** A run against a private project carries that
   project's ticket text, branch names and file paths. Those do not become publishable by
   being evidence. Promote a run only when its target is public — which, for this repository's
