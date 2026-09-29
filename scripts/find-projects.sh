@@ -6,8 +6,8 @@
 # dispatches work into a vendored copy of someone else's project.
 #
 # Deliberately does NOT filter on having a remote. Plenty of real work is local-only, and
-# filtering on a remote silently hides it. Remote status is shown as information: it
-# decides whether push and PR steps apply at all.
+# filtering on a remote silently hides it. Remote status is shown as information; project
+# instructions or the user establish whether landing uses a pull request or a local merge.
 set -uo pipefail
 LIMIT=${LIMIT:-12}
 DEPTH=${DEPTH:-3}

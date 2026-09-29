@@ -1,4 +1,4 @@
-# The coachman: running one ticket from waybill to ship card
+# The coachman: running one ticket to a ready-to-merge card
 
 **You are the COACHMAN for exactly one leg of one ticket.** The postmaster spawned you and left
 a waybill at `<dispatch>/brief.md`. Read it, then the hand-off from the leg before yours, then
@@ -24,7 +24,7 @@ waybill carries, is `SKILL.md`. You do not need it.
 | `<dispatch>/brief.md` | the waybill |
 | `<dispatch>/manifest.json` | `stage`, `leg`, `base`, `lanes.<lane>.{thread_id, outcome}`, `coachman.legs.<n>.{thread_id, name}`; the postmaster creates it and owns `leg`, `base`, `coachman` and the terminal stages, you own `lanes` and every stage before those; change `stage` only with `<tool>/scripts/stage.sh`, update the rest in place, never rewrite the file |
 | `<dispatch>/run-log.md` | running narrative, written only through `<tool>/scripts/run-log.sh`, which puts the time on every entry and times every section |
-| `<dispatch>/run.json` | the run's fixed facts: postmaster commit, config, harness versions; written once at dispatch by the postmaster, never edited; every launch and resume in the run takes its config from here (`--run <dispatch>`) |
+| `<dispatch>/run.json` | the run's fixed facts: postmaster commit, coachman contract version, config, harness versions; written once at dispatch by the postmaster, never edited; every launch and resume in the run takes its config from here (`--run <dispatch>`) |
 | `<dispatch>/checks.json` | the checks the run is held to, recorded once at dispatch by `<tool>/scripts/verify.sh record`; never edited |
 | `<dispatch>/journey/` | your journey reports, one per commit walked, at the path `<tool>/scripts/verify.sh journey-path` gives |
 | `<worktree>/.postmaster/verify/` | a worktree's copy of the run's checks and ticket, written by `<tool>/scripts/verify.sh arm`; git ignores it |
@@ -43,7 +43,7 @@ waybill carries, is `SKILL.md`. You do not need it.
 
 `run-log.md` is the narrative, written through `<tool>/scripts/run-log.sh <dispatch> <text>`. Start each
 part of the work as a section, `<tool>/scripts/run-log.sh <dispatch> --section <title>`: harvest,
-verification, synthesis, each review round, the gate, the ship card. The time on each heading and
+verification, synthesis, each review round, the gate, the ready-to-merge card. The time on each heading and
 entry, and the duration written when a section closes, show how long each part took.
 `<dispatch>/actions.jsonl` is the record, and the project's
 `ledger.jsonl` beside the run directories is the same record across runs. Nothing learns from
@@ -108,7 +108,7 @@ by files in its own dispatch directory.
 | It writes | Meaning |
 |---|---|
 | `run-log.md` | running narrative |
-| `card.md` + `.card-ready` | the ship card is complete; the postmaster may gate |
+| `card.md` + `.card-ready` | the ready-to-merge card is complete; the postmaster may gate |
 | `ESCALATION.md` + `.escalation-ready` | it needs a ruling and has stopped |
 | `logs/coachman-leg-<n>-events.jsonl` | its own stream for leg `n`; errors in `logs/coachman-leg-<n>.err` |
 | `checkpoint-<n>.md` + `.checkpoint-<n>-ready` | a checkpoint card is complete; informational in autonomous mode, a stop in consult mode |
@@ -131,18 +131,21 @@ harness-specific and the flow does not rely on it.
 
 ## Legs and hand-offs
 
-A run is up to three legs, `synthesis`, `review` and `ship`, each a fresh coachman thread
-launched by the postmaster, so no context outlives a leg and nothing a leg knew survives except
-what it wrote down. The boundaries are the run's own gates:
+Read `run.json.coachman_contract` before acting. Contract `2` is the current flow: a run has
+one or two legs, synthesis and optional review. A missing value or `1` is a run dispatched
+before the change: use the legacy ship leg and its merge behavior below. Never change a run's
+contract. Each leg is a fresh coachman thread, so no context outlives a leg and nothing a leg
+knew survives except what it wrote down. The boundaries are the run's own gates:
 
 | leg | name | covers | ends with |
 |---|---|---|---|
-| 1 | `synthesis` | stage 0, stage 1, checkpoint 1 | `handoff-1.md` |
-| 2 | `review` | stage 2: the waybill's review turnpikes as lenses in one loop, every round to clean | `handoff-2.md` |
-| 3 | `ship` | stage 3 and stage 4: gates, preview, QA, the card, the merge on the word, the style sort, teardown | `handoff-3.md` |
+| 1 | `synthesis` | stage 0, stage 1, checkpoint 1; final card when no review leg runs | `handoff-1.md` |
+| 2 | `review` | stage 2: the waybill's review turnpikes as lenses in one loop, every round to clean; final card | `handoff-2.md` |
+| 3 | `ship` | legacy contract only: gates, preview, QA, card, merge on the word, aftercare | `handoff-3.md` |
 
-The review leg runs only when the waybill names a turnpike that runs in it; without one, ship
-follows synthesis and starts from `handoff-1.md`. `<tool>/scripts/turnpikes.sh legs <dispatch>` prints
+The review leg runs only when the waybill names a turnpike that runs in it. Under contract 2,
+without one synthesis writes the final card and no next leg starts. Under the legacy contract,
+ship follows synthesis when review is absent. `<tool>/scripts/turnpikes.sh legs <dispatch>` prints
 the run's legs and the turnpikes each one runs. A leg runs each turnpike listed for it from that
 turnpike's step in this runbook; a listed turnpike with no step here cannot run: escalate.
 
@@ -159,7 +162,7 @@ must exit 0 before the marker is touched:
 ## Decisions
 Every decision this leg took, one per line, with its reason, marked do-not-reopen where it is settled; every do-not-reopen decision from earlier hand-offs carried forward verbatim; and always the oracle decision, blind acceptance tests written as the first commit or not written and why.
 ## Deferred findings
-Every finding not applied, with its lens where it has one, its disposition and reason (the review leg restates these to its reviewers; the ship leg carries them to the ship card, the style ones to its Style residue and the rest to its open findings).
+Every finding not applied, with its lens where it has one, its disposition and reason (the review leg restates these to its reviewers; the final card carries the style ones to its Style residue and the rest to its open findings).
 ## Verified by execution
 What was verified by running something, with the command and its exit.
 ## Unverified
@@ -169,7 +172,7 @@ Every branch this run has created and its state; every lane and whether it is RE
 ## Open questions
 Anything the next leg must decide or the postmaster must rule on.
 ## Next leg
-One paragraph: where the next leg starts, and what it must do first.
+One paragraph: where the next leg starts and what it must do first, or that no coachman leg follows and the postmaster verifies the final card.
 ```
 
 Then close the open section with `<tool>/scripts/run-log.sh <dispatch> --close`, log `handoff`, touch
@@ -250,8 +253,9 @@ A workhorse commits incrementally as it goes, never pushes, never reads other br
    <dispatch> bootstrapped`, and add one `lanes` entry per lane, in place, never rewriting the
    file (the postmaster owns `leg`, `base` and `coachman`). Keep thread ids and outcomes current
    at every transition. The stage changes only through `<tool>/scripts/stage.sh`, in this order:
-   `bootstrapped`, `workhorses-running`, `synthesis`, `checkpoint-1`, `review` (in a run with a
-   review leg), `shipping`, `shipped`; the postmaster sets `done` when it closes the run. Each
+   `bootstrapped`, `workhorses-running`, `synthesis`, `checkpoint-1`, and `review` (when a review
+   leg runs); contract 2 then enters `ready-to-merge`, and the postmaster enters `shipped` after
+   merge. Only a legacy run enters `shipping`. The postmaster sets `done` when it closes the run. Each
    change is logged, and the run's timings are computed from those lines by
    `<tool>/scripts/run-times.sh <dispatch>`. Never delete the manifest. It is the run's history, and
    the postmaster's poll reads it.
@@ -433,10 +437,12 @@ from it.
   is one), with each workhorse's `verify.sh summary` verdict. A card that presents a
   finished diff without saying which lane each part came from is the defaulting failure
   wearing a verdict. Set the stage, `<tool>/scripts/stage.sh <dispatch> checkpoint-1`, then write it to
-  `<dispatch>/checkpoint-1.md` with the audit bundle beside it and touch `.checkpoint-1-ready`. Autonomous mode: write `handoff-1.md` and end the leg. Consult mode:
-  also write `ESCALATION.md` naming the card, touch `.escalation-ready`, and exit; the ruling
-  arrives as a resume, and the leg then ends with its hand-off. In a run with no review leg,
-  this card doubles as the ship approval, said on the card.
+  `<dispatch>/checkpoint-1.md` with the audit bundle beside it and touch `.checkpoint-1-ready`.
+  In autonomous mode, if review runs, write `handoff-1.md` and end the leg; in a contract 2 run
+  with no review leg, continue to the final-card section below in this same leg. In consult
+  mode, also write `ESCALATION.md` naming the card, touch `.escalation-ready`, and exit; after
+  the ruling arrives as a resume, follow the same branch. The checkpoint card is informational
+  and never replaces the ready-to-merge card.
 
 ## Stage 2 (leg 2): review, every lens in one loop
 
@@ -695,15 +701,58 @@ Set the stage first, `<tool>/scripts/stage.sh <dispatch> review`, then:
    `<tool>/scripts/verify.sh run <synthesis-wt> <dispatch>` printed them after the last round's
    fixes, the journey walked first where there is one. Written to
    `<dispatch>/checkpoint-review.md` with its `.checkpoint-review-ready` marker. Autonomous
-   mode: write the leg's hand-off and end it; the ship approval is stage 3's stop. Consult mode:
-   escalate on the card and wait for the resume.
+   mode: for contract 2 continue to the final-card section below in this leg; for a legacy run
+   write the leg's hand-off and end it. Consult mode: escalate on the card and wait for the resume.
    A ruling that asks for a change is applied; in a loop with a gating lens it is followed by
    another round, counted toward the cap, and the card is written and escalated again, and a
    round past the cap runs only when the ruling says so. Any other ruling, or a change applied in
-   a loop with no gating lens, ends the leg with its hand-off. The card doubles as the ship
-   approval, said on the card.
+   a loop with no gating lens, ends the legacy leg with its hand-off or continues contract 2 to
+   the final-card section below.
 
-## Stage 3 (leg 3): ship (review link, then a gated local merge)
+## Final card (last leg of contract 2): ready for the user's merge
+
+This section runs at the end of synthesis when there is no review leg, or at the end of review
+after the loop has no P1 or P2 finding left and the gates pass. The postmaster owns the landing
+route and any merge. You do not push, open a pull request, wait for a merge word, or merge.
+
+1. **Verify the final HEAD.** Run `<tool>/scripts/verify.sh run <synthesis-wt> <dispatch>` after
+   the last code change. Record every check and its result; the gate and required checks must
+   pass before the card is ready. No P1 or P2 finding may remain open.
+   If a new P1 or P2 issue appears during final QA, fix it and pass the gate again; when the
+   review loop has a gating lens, run another review round before writing the card.
+2. **Browser suite and QA when the project has a UI.** Run its browser suite blocking and
+   unpiped. Serve the production build with a throwaway database seeded from project fixtures,
+   on loopback at a throwaway port, through `<tool>/scripts/host.sh run` with
+   `--pidfile <dispatch>/render/preview.pid`. Stop its whole process group during post-merge
+   teardown. Walk the ticket's `User journey` verbatim first when it has one, at phone width;
+   then exercise any other changed surface that needs coverage. Record what worked, what did
+   not, what suite assertions need changing because behavior deliberately changed, and what new
+   surface needs coverage. A red run is a finding, not a flake. Do not update an assertion unless
+   you can name the deliberate behavior change that made it obsolete. Put the preview link and
+   QA results on the card. If the project has no UI or browser suite, say `none`.
+3. **Review link.** Put the absolute path of the synthesis worktree on the card and, when
+   `run.json` config has `ship.review_link`, its value with the path filled in. Reuse a review
+   surface already running; never start a duplicate. Verify the link from the user's device or
+   mark it unverified.
+4. **Write `card.md`.** Include the branch, final HEAD, diff stat and commit list; the final
+   `verify.sh run` results; browser suite and QA when present; every ticket turnpike with its
+   rounds and result from its checkpoint record, or `none`; all open findings with lens,
+   severity, disposition and reason, including every Style residue from
+   `<tool>/scripts/style-findings.sh list <dispatch>`; every branch created by the run and its
+   state; lane outcomes; and the review link. The card's branch state is before merge: the
+   ticket branch is ready, and every other branch is either retained or abandoned. The gate is
+   listed as the gate, never as a turnpike.
+5. **Write the final hand-off.** Set the stage to `ready-to-merge`, write
+   `<dispatch>/handoff-<n>.md` with the verified results, all decisions and open findings, and
+   state that no coachman leg follows and the postmaster must verify the card and handle
+   landing. `<tool>/scripts/handoff-check.sh` must exit 0. Close the open run-log section, log
+   `handoff`, then touch `.card-ready` and `.leg-<n>-done` and exit. The host writes
+   `.leg-<n>-exited` when the process exits. Do not change code after recording final-HEAD
+   results without repeating the checks.
+
+## Legacy Stage 3 (leg 3): ship (review link, then a gated local merge)
+
+Use this section only when `run.json` has no `coachman_contract` or records version `1`.
 
 Set the stage first: `<tool>/scripts/stage.sh <dispatch> shipping`.
 
@@ -783,7 +832,7 @@ Set the stage first: `<tool>/scripts/stage.sh <dispatch> shipping`.
 6. If the project has an origin, pushing afterwards is the user's call, never part of
    this flow.
 
-## Stage 4 (leg 3, after the merge): aftercare and teardown
+## Legacy Stage 4 (leg 3, after the merge): aftercare and teardown
 
 **Sort the style findings.** For each one `<tool>/scripts/style-findings.sh list <dispatch>`
 prints, write one line to `<dispatch>/style-sort.md`, with a one-line reason: a rule the
@@ -850,8 +899,9 @@ logical order, not file safety: check the file surfaces before mass-launching.
   through a run. A lane that changes identity mid-run is not the lane that was gated.
 - Base pre-flight before cutting worktrees: a dirty main checkout means the workhorses build on stale
   committed history and drop uncommitted work. Verify clean, or escalate, first.
-- Workhorses never push; only stage 3's gated local merge touches the default branch. No push, no PR,
-  no outward message of any kind from this flow; the ticket comments are the outward record.
+- Workhorses never push. A contract 2 coachman leaves the default branch untouched; the postmaster
+  follows the landing route in the waybill after verifying the card. A legacy ship leg follows its
+  Stage 3 instructions. No workhorse sends an outward message; ticket comments are the outward record.
 - Launch nothing before the waybill's launch card is confirmed: every lane's model and effort,
   the coachman, the reviewer lineup, the gate selection, on one card.
 - **The coachman is never a model that ran as a lane in the same run.** Its reading is the only
@@ -859,7 +909,8 @@ logical order, not file safety: check the file surfaces before mass-launching.
   of the answers it is judging. A different vendor is necessary, not sufficient: the popularity
   trap is measured across families, so the rule about agreement still binds.
 - Coachmen and workhorses are headless and have no composer. Verify workhorse claims against code before
-  trusting them. Merge, never rebase.
+  trusting them. Local merges use merge, never rebase; a pull-request merge follows the project's
+  configured review surface.
 - There is no synthesis base: compose the result from all lanes with a recorded reason per
   choice, and never fast-forward the ticket branch onto a lane's branch. Compare each lane's
   diff in writing before concluding anything, and record the SYNTHESIS line in `run-log.md`.

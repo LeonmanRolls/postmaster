@@ -120,7 +120,8 @@ For the next ticket in order, when the run ceiling (`team.max_runs`) has room:
    `abandoned`; the coachman owns `lanes` and every stage before those; both update fields in
    place and neither rewrites the file. Then record what the run starts from, once:
    `<tool>/scripts/run-meta.sh <dispatch> <repo>` writes `run.json` with the postmaster commit, the
-   config and the harness versions, and nothing edits it afterwards. `<tool>/scripts/verify.sh record
+   coachman contract version, the config and the harness versions, and nothing edits it afterwards.
+   `<tool>/scripts/verify.sh record
    <repo> <dispatch> --gate '<gate>'` writes `checks.json`, the checks the run is held to, and
    prints them for the waybill; a gate the project declares wins over the launch card's, and
    `record` says so.
@@ -130,25 +131,27 @@ For the next ticket in order, when the run ceiling (`team.max_runs`) has room:
    context loads for it.
 6. **Write `brief.md`** from the template in `SKILL.md`: the `turnpikes:` line step 1's check
    printed, whole, under the waybill's title, then the ticket verbatim, the project profile (gate,
-   build, browser suite, the checks as `verify.sh record` printed them, docs to read first,
-   tracker, risk surfaces), the team from the config
+   build, browser suite, landing route and its documented tool, the checks as `verify.sh record`
+   printed them, docs to read first, tracker, risk surfaces), the team from the config
    with its reviewer lines as `<tool>/scripts/reviewers.sh lines` prints them, `CHECKPOINT_MODE`
-   from `ship.checkpoint_mode` and `MERGE_AUTHORITY` from `ship.merge_authority`, either
+   from `ship.checkpoint_mode` and `MERGE_AUTHORITY` from `ship.merge_authority` for a local-merge
+   project, either
    overridden only where the user said so for this run, the dispatch path and `<tool>`. The
    config here is the one in `run.json`. Then
    `<tool>/scripts/turnpikes.sh legs <dispatch> --expect '<that turnpikes: line>'` exits 0 and
    prints the legs step 2 checked, before anything is launched.
 7. **Move the ticket to in-progress** through the tracker adapter and log `ticket-state`. The
-   coachman never touches the ticket's state before stage 3.
+   coachman never touches the ticket's state; the postmaster marks it done after the merge.
 
 ## Stage C: dispatch a leg
 
-A run's legs are the lines `<tool>/scripts/turnpikes.sh legs <dispatch>` prints: `synthesis` and
-`ship`, with `review` between them when the waybill names a turnpike it runs (`coachman.md`,
-Legs). Each leg is a fresh coachman thread, launched the same way; the first is launched after
-the waybill, every later one when the previous leg's marker appears. Every launch and resume in
-a run passes `--run <dispatch>`, so it runs on the config in the run's `run.json`, never the
-live one. Below, `<p>` is the leg before leg `<n>` in that list.
+A contract 2 run's legs are synthesis and review when its waybill names a review turnpike. A run
+dispatched before contract 2 keeps its original synthesis, optional review, and ship legs;
+`<tool>/scripts/turnpikes.sh legs <dispatch>` reads the saved contract and lists its schedule.
+Each leg is a fresh coachman thread, launched the same way; the first is launched after the
+waybill, every later one when the previous leg's marker appears. Every launch and resume in a
+run passes `--run <dispatch>`, so it runs on the config in its `run.json`, never the live one.
+Below, `<p>` is the leg before leg `<n>` in that list.
 [Why a run keeps the config it started with](../../wiki/concepts/run-config.md)
 
 1. **Write the leg prompt** to `<runs>/<TICKET>/leg-<n>-prompt.txt`: "You are the coachman
@@ -194,8 +197,9 @@ live one. Below, `<p>` is the leg before leg `<n>` in that list.
    ```
 
    `<name>` and `<thread-id>` are the leg's `coachman.legs.<n>.name` and `.thread_id`. Log
-   `resume` with the leg and the thread id. A remount, a ruling and the merge word all reach
-   a leg this way.
+   `resume` with the leg and the thread id. A remount and a ruling reach a leg this way. A
+   merge word reaches only a legacy ship leg; contract 2 is merged by the postmaster after the
+   final coachman hand-off.
 
 ## Stage D: supervise
 
@@ -208,13 +212,15 @@ Poll every `postmaster.poll_seconds` (default 120) with one command per project:
 Act on the `NEXT` column, run by run, and log every action:
 
 - **USER:** the run waits on the user, and its `.waiting-on-user` holds the question (Stage E
-  step 3, Stage F step 2). Put the question to the user again if you have not in this session;
+  step 3, current Stage F step 3, or Legacy Stage F step 2). Put the question to the user again if you have not in this session;
   otherwise nothing to do until they answer.
 - **RULE:** an escalation is waiting. Stage E.
-- **GATE:** the ship card is complete. Stage F.
+- **GATE:** the final card is complete. Contract 2 goes to current Stage F; an older run goes to
+  Legacy Stage F.
 - **DISPATCH:** the leg's `.leg-<n>-done` marker is present. Stage C for the leg after `n` in
   `<tool>/scripts/turnpikes.sh legs <dispatch>`, logging a `note` that names any leg the list leaves
-  out; after the ship leg, Stage G. If the script exits other than 0, nothing is dispatched:
+  out; after the last contract 2 leg a card must already be waiting at GATE. After a legacy ship
+  leg, Legacy Stage G. If the script exits other than 0, nothing is dispatched:
   its message goes to the user as Stage E step 3 says.
 - **REMOUNT:** the leg's process exited (`.leg-<n>-exited`) with no hand-off, escalation or
   card. Read the leg's `.err` file and the stream tail. A `.err` that opens with a `launch:`
@@ -268,7 +274,68 @@ never the record.
    step 5) with the ruling as the prompt. The ruling is a prompt to a resumed thread, never
    text typed into anything.
 
-## Stage F: the gate
+## Stage F (contract 2): verify and land the final card
+
+On `.card-ready`, read `run.json`, the manifest's current `leg`, `card.md`, and
+`handoff-<leg>.md`. Do not use this route for a run without `coachman_contract: 2`; its legacy
+route follows below. Wait until `.leg-<leg>-done` and `.leg-<leg>-exited` both exist before
+reading the artifacts.
+
+1. **Verify the card's claims against the code**, never against the card. In the synthesis
+   worktree, run the project's gate unpiped and log its exit; then
+   `<tool>/scripts/verify.sh results <dispatch> <synthesis-wt>` must report every recorded check
+   on the final HEAD. The gate and required checks must pass; every non-pass is named on the card
+   and blocks landing. Verify that every branch the card
+   lists exists and has the stated state; `run-log.md`'s
+   SYNTHESIS line accounts for each lane; every DEGRADED lane matches `degrade` actions; the
+   turnpikes match the waybill and each review lens has the expected `review-launch` lines;
+   the blind acceptance tests are the first commit or the hand-off records why they were not
+   written; and the card reports every failed check, all open findings, browser suite and QA
+   when present, the review link, and every run-created branch. Log the gate result. If a claim
+   fails, remove `.card-ready` and `.leg-<leg>-done`, then resume that final leg with the exact
+   discrepancy and wait for its corrected card.
+2. **Clear `.card-ready`** once verification passes. This prevents the poll from treating an
+   already checked card as new work.
+3. **Follow the landing route in the waybill.**
+   - For `landing: pull request`, push the ticket branch to the named remote and create a pull
+     request against the named default branch using the project's documented pull-request tool.
+     Include the card, final checks, diff stat, preview and review links, and thread ids. Log a
+     `note` with the push and pull-request URL, and leave a dated tracker comment linking the
+     pull request and summarizing the same evidence. Put the pull-request URL and its merge
+     instructions in `.waiting-on-user`; the user merges it in the project's review surface.
+     Do not use `MERGE_AUTHORITY` to merge a pull request on the user's behalf.
+   - For `landing: local merge`, obey `MERGE_AUTHORITY`. With `user`, put the card and
+     verification in front of the user, write the requested merge word to `.waiting-on-user`,
+     and wait. With `postmaster`, record the grant. After the required word or grant, verify the
+     default checkout is still clean and on its default branch, then merge the ticket branch
+     with `git merge --no-ff`; never rebase. Log `merge`, move the ticket to done, and set the
+     stage to `shipped`.
+   - An unknown landing route is a dispatch fault to resolve before this point. Do not infer
+     it from the presence of a remote.
+4. **After a pull request is merged**, resume the postmaster, verify the provider reports it
+   merged and the default branch contains the merge, remove `.waiting-on-user`, log `merge`,
+   move the ticket to done, and set the stage to `shipped`. For a local merge, this is already
+   done in step 3. Then run current Stage G.
+
+## Stage G (contract 2): after merge
+
+1. Confirm the default branch contains the merge and the ticket is done. Stop the preview
+   process group from `<dispatch>/render/preview.pid`, if one was started. Run
+   `<tool>/scripts/style-findings.sh check <dispatch>`. The postmaster writes or corrects
+   `<dispatch>/style-sort.md` using the sorting rules in `coachman.md`, then checks it again
+   until exit 0; it does not resume a coachman leg that already handed off. Log the final sort.
+2. Once `.leg-<leg>-exited` is present, close the synthesis worktree's host space with
+   `<tool>/scripts/host.sh close <repo>/.worktrees/<TICKET>`; on exit 2, stop and report. Remove
+   the worktree from outside it, never with force unless it is clean and the card confirmed it,
+   and log `teardown`. Remove any surviving workhorse worktrees the same way after preserving
+   stray files in `<dispatch>/stray/`. Keep the run-created branches as the local archive.
+3. Close the run with `<tool>/scripts/stage.sh <dispatch> done postmaster`. This appends stage
+   timings from `actions.jsonl`; never write timings by hand. Never delete the dispatch or
+   manifest. Archive finished threads where the harness has an archive form.
+4. Put tool faults and style-sort proposals to the user once aftercare ends, as Legacy Stage G
+   steps 4 and 5 describe, then dispatch the next ticket.
+
+## Legacy Stage F: the gate (run.json has no coachman_contract 2)
 
 On `.card-ready`, read `<dispatch>/card.md` and `<dispatch>/handoff-3.md`:
 
@@ -295,7 +362,7 @@ On `.card-ready`, read `<dispatch>/card.md` and `<dispatch>/handoff-3.md`:
    comes, remove `.waiting-on-user` and deliver the word verbatim.
 3. **Never merge yourself.** The coachman merges on the word; you only say it.
 
-## Stage G: after the merge
+## Legacy Stage G: after the merge
 
 1. **Confirm** the default branch carries the merge (`git -C <repo> log -1` on it) and the
    ticket is done in the tracker; if the coachman could not move it, do so and log
@@ -375,7 +442,8 @@ doing: log `escalate` with the postmaster file as its target, and send it up (St
 You are the one role the user talks to. On any question, answer from `<runs>`: the
 status table, the ledger, the cards. A change of plan from the user is logged as a `note`
 before it is acted on. A request to create tickets, merge, or delete anything is acted on
-only with the user's word for that specific thing, and the word is logged.
+only with the user's word for that specific thing, and the word is logged. A local merge that
+`MERGE_AUTHORITY` assigns to the postmaster is already authorized by the launch card.
 
 ## Hard rules
 
@@ -384,7 +452,9 @@ only with the user's word for that specific thing, and the word is logged.
 - Never create a ticket without the user's word unless the config says you may.
 - Never dispatch a ticket that `<tool>/scripts/ticket-check.sh` fails, and never change a ticket's
   text without the user's word for that text.
-- Never merge; never say the merge word without `MERGE_AUTHORITY` or the user behind it.
+- For contract 2, merge locally only on the `MERGE_AUTHORITY` path in Stage F; never merge a
+  pull request on the user's behalf. For a legacy run, never say the merge word without
+  `MERGE_AUTHORITY` or the user behind it, and the legacy coachman performs the merge.
 - Never delete a dispatch directory, a manifest or a ledger line.
 - Never trust a card, a summary or a hand-off over the code; verify before every grant.
 - Never launch more runs than `team.max_runs`, and never two runs on overlapping file

@@ -11,7 +11,7 @@
 #   next   USER      the postmaster has put this run's question to the user and waits for the
 #                    answer (.waiting-on-user)
 #          RULE      an escalation is waiting (.escalation-ready)
-#          GATE      the ship card is complete (.card-ready)
+#          GATE      the ready-to-merge card is complete (.card-ready)
 #          DISPATCH  the current leg is done (.leg-<n>-done): the next leg, or after the last,
 #                    the postmaster's close
 #          REMOUNT   the current leg's process exited (.leg-<n>-exited) with no hand-off,
@@ -92,6 +92,10 @@ run() {  # run <name> <stage> <leg> [marker...]: a run directory with a manifest
   : > "$d/run-log.md"
   for m in "$@"; do : > "$d/$m"; done
 }
+current_run() {  # current_run <name> <stage> <leg> [marker...]: a contract 2 dispatch
+  local name=$1; run "$@"
+  printf '{"coachman_contract": 2}\n' > "$tmp/root/$name/run.json"
+}
 age() {  # age <name>: nothing in the run has changed for an hour
   python3 -c 'import os, sys, time
 t = time.time() - 3600
@@ -106,8 +110,12 @@ expect() {  # expect <label> <run> <next>
 }
 
 run rule review 2 .escalation-ready
-run gate shipping 3 .card-ready
-run dispatch review 2 .leg-2-done .leg-2-exited
+current_run one-final checkpoint-1 1 .card-ready .leg-1-done .leg-1-exited
+current_run two-final review 2 .card-ready .leg-2-done .leg-2-exited
+current_run two-dispatch review 2 .leg-2-done .leg-2-exited
+run legacy-gate shipping 3 .card-ready
+run legacy-dispatch review 2 .leg-2-done .leg-2-exited
+run legacy-last shipped 3 .leg-3-done .leg-3-exited
 run remount review 2 .leg-2-exited
 run read review 2 .checkpoint-review-ready
 run inspect review 2; age inspect
@@ -122,8 +130,12 @@ mkdir -p "$tmp/root/postmaster"
 
 echo "positive controls"
 expect "an escalation waiting is RULE" rule RULE
-expect "a complete ship card is GATE" gate GATE
-expect "the current leg done is DISPATCH" dispatch DISPATCH
+expect "a one-leg synthesis card is GATE" one-final GATE
+expect "a two-leg review card is GATE" two-final GATE
+expect "a current two-leg review completion is DISPATCH" two-dispatch DISPATCH
+expect "a pre-change ship card remains GATE" legacy-gate GATE
+expect "a pre-change review completion still dispatches ship" legacy-dispatch DISPATCH
+expect "a pre-change ship completion is DISPATCH" legacy-last DISPATCH
 expect "the current leg gone with nothing written is REMOUNT" remount REMOUNT
 expect "a checkpoint card waiting is READ" read READ
 expect "nothing changed for an hour is INSPECT" inspect INSPECT

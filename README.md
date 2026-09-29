@@ -6,16 +6,16 @@ Get one ticket implemented by several models at once, then judged before it land
 
 Two or more models implement the same ticket **independently, in separate worktrees, unable
 to see each other's work**. A coachman combines what each got right, puts the result through
-the adversarial review rounds its ticket names, and only then asks for a merge. Nothing lands on a green gate
-alone: the merge word comes from a person, or from the supervising postmaster when the
-config says it may.
+the adversarial review rounds its ticket names, then leaves a ready-to-merge card for the
+project's landing route. Pull-request projects are merged by the user; local-merge projects use
+the merge authority in the config.
 
 ## The three roles
 
 | role | does | never does |
 |---|---|---|
 | **postmaster** | splits a stream into tickets, dispatches one coachman per ticket, supervises, answers escalations, grants merges | run a model lane, edit source |
-| **coachman** | drives one leg of a ticket; up to three legs, synthesis, review and ship, each a fresh coachman, carry it from waybill to ship card with a written hand-off between them | take a second leg, merge on its own authority |
+| **coachman** | drives one leg of a ticket; up to two legs, synthesis and optional review, each a fresh thread, carry it from waybill to a ready-to-merge card with a written hand-off | take a second leg, merge |
 | **the team** | several lanes implementing the same ticket in blinkers | see each other's work |
 
 ## Why several models rather than one good one

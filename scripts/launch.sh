@@ -18,8 +18,9 @@
 # before dispatch do not. The checks below apply to a recorded config as to the live one.
 #
 # <name> is a lane from [lanes.<name>], or `coachman`, `coachman_fallback` or `postmaster`
-# from [team]. <leg> is synthesis, review or ship, and with --leg, [team.coachman_legs.<leg>]
-# overrides the coachman for that leg. Launching or resuming `coachman` needs --leg; `form`
+# from [team]. Current runs use synthesis and review; ship remains accepted for a run dispatched
+# before the two-leg contract. With --leg, [team.coachman_legs.<leg>] overrides the coachman for
+# that leg. Launching or resuming `coachman` needs --leg; `form`
 # without it shows team.coachman. The coachman is refused when [team.coachman_legs] names any
 # other leg or holds an entry that is not a table, and the coachman and the fallback are
 # refused on a lane's model, a model id's bracketed suffixes aside. HARNESS, MODEL, EFFORT and
@@ -37,7 +38,7 @@
 #
 #   exit 0  the forms or the skill's prompt were printed, or the harness exited 0
 #   exit 1  usage, config or run.json missing or unreadable, unknown name, a leg that is not
-#           synthesis, review or ship, the coachman launched or resumed with no --leg, a
+#           unsupported leg, the coachman launched or resumed with no --leg, a
 #           coachman or fallback on a lane's model, harness not on PATH, env_file missing, a
 #           form this script does not have (agy resume), a skill that is not security-review,
 #           or a muse or mimo resume of a thread the launch's data directory does not hold

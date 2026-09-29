@@ -24,11 +24,12 @@
 # gives them, or `turnpikes: none`.
 #
 # legs prints one line per leg the run has, in order: its number, its name, and the turnpikes it
-# runs. Synthesis (1) and ship (3) always run. Review (2) runs only when the waybill names a
-# turnpike that runs in it, so a run with none goes from synthesis to ship. The waybill's line
-# is the one `turnpikes:` line between its title and its first `##` heading, above the ticket,
-# so nothing the ticket holds is ever read for it. It holds the names resolve printed, or
-# `none`, never `default`. A waybill with no such line is refused, never read as `none`.
+# runs. New runs always have synthesis (1); review (2) runs only when the waybill names a review
+# turnpike. Older run.json files without a coachman_contract version keep synthesis (1), optional
+# review (2), and ship (3). `legs --line` prints the current schedule for preflight. The waybill's
+# line is the one `turnpikes:` line between its title and its first `##` heading, above the ticket,
+# so nothing the ticket holds is ever read for it. It holds the names resolve printed, or `none`,
+# never `default`. A waybill with no such line is refused, never read as `none`.
 #
 # A turnpike is added as one line of the table below, and to the runbook step that runs it.
 # Every command checks the table first: each name a lowercase word, neither `default` nor
@@ -56,8 +57,9 @@ import re, sys, unicodedata
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 table, cmd, args = sys.argv[1], sys.argv[2], sys.argv[3:]
-LEGS = [(1, "synthesis"), (2, "review"), (3, "ship")]
-ALWAYS = {"synthesis", "ship"}
+CURRENT_LEGS = [(1, "synthesis"), (2, "review")]
+LEGACY_LEGS = [(1, "synthesis"), (2, "review"), (3, "ship")]
+ALWAYS = {"synthesis"}
 RESERVED = ("default", "none")
 BREAK = re.compile(r" {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*")
 MARKER = re.compile(r"[ \t]*(?:[-*+]|\d{1,9}[.)])(?:[ \t]+|$)")
@@ -80,8 +82,9 @@ for n, line in enumerate(table.split("\n"), 1):
         faults.append('line %d: "%s" is listed twice' % (n, name))
     if mark not in ("default", "-"):
         faults.append('line %d: "%s" is neither default nor -' % (n, mark))
-    if leg not in [l for _, l in LEGS]:
-        faults.append('line %d: "%s" is not a leg; the legs are %s' % (n, leg, ", ".join(l for _, l in LEGS)))
+    all_legs = [l for _, l in LEGACY_LEGS]
+    if leg not in all_legs:
+        faults.append('line %d: "%s" is not a leg; the legs are %s' % (n, leg, ", ".join(all_legs)))
     rows.append((name, mark == "default", leg, what.strip()))
 if faults:
     print("\n".join("turnpikes: the table's " + f for f in faults), file=sys.stderr)
@@ -134,12 +137,31 @@ def named(line):  # a waybill's turnpikes: line, as the names it holds; exit 2 u
         print("\n".join("the waybill's turnpikes: " + o for o in out)); sys.exit(2)
     return got
 
-def legs(line):
+def legs(line, legacy=False):
     got = named(line)
-    for n, leg in LEGS:
+    for n, leg in (LEGACY_LEGS if legacy else CURRENT_LEGS):
         runs = [x for x in got if leg_of[x] == leg]
-        if leg in ALWAYS or runs:
+        if leg in ALWAYS or (legacy and leg == "ship") or runs:
             print(" ".join([str(n), leg] + runs))
+
+def legacy_dispatch(waybill):
+    """Missing contract metadata belongs to a run dispatched by the old flow."""
+    import json, os
+    path = os.path.join(os.path.dirname(os.path.abspath(waybill)), "run.json")
+    if not os.path.isfile(path):
+        return True
+    try:
+        record = json.load(open(path, encoding="utf-8"))
+    except Exception as e:
+        print("turnpikes: cannot read %s: %s" % (path, e)); sys.exit(1)
+    if not isinstance(record, dict):
+        print("turnpikes: %s is not a JSON object" % path); sys.exit(1)
+    contract = record.get("coachman_contract")
+    if contract == 2:
+        return False
+    if contract is None or contract == 1:
+        return True
+    print("turnpikes: unsupported coachman contract %r in %s" % (contract, path)); sys.exit(1)
 
 if cmd == "list":
     for name, d, leg, what in rows:
@@ -173,7 +195,7 @@ elif cmd == "legs":
     if len(args) == 2 and " ".join(found[0].split()) != " ".join(args[1].split()):
         print('the waybill says "%s", and the ticket\'s check printed "%s"' % (found[0].strip(), args[1].strip()))
         sys.exit(2)
-    legs(found[0])
+    legs(found[0], legacy_dispatch(args[0]))
 PY
 core() { python3 -c "$CORE" "$@"; }  # core <table> list | resolve [<text>...] | short <line> | legs <waybill> [<expect>] | legs --line <line>
 
@@ -207,6 +229,7 @@ has()  {  # has <label> <exit> <text a line must contain> [<text no line may con
 }
 waybill() {  # waybill <dispatch> <the line under the title, or nothing> [<a line in the ticket's notes>]
   mkdir -p "$1"
+  printf '{"coachman_contract": 2}\n' > "$1/run.json"
   { printf '# Waybill: T-1\n'; [ -n "$2" ] && printf '%s\n' "$2"
     printf '\n## Ticket\n## Problem / feature\nA change.\n\n## Turnpikes\ndefault\n\n## Notes\n%s\n\n' "${3:-}"
     printf '## Project profile\nrepo: /r\n\n## Dispatch\nname: #1, A change\ndispatch: %s\ntool: /t\n' "$1"; } > "$1/brief.md"
@@ -248,22 +271,22 @@ is "a turnpike added to the table resolves with nothing else changed" 0 "turnpik
 
 echo "positive controls: a run's legs"
 waybill "$tmp/none" "turnpikes: none"; run "$self" legs "$tmp/none"
-is "a run with no turnpikes goes from synthesis to ship" 0 "$(lines '1 synthesis' '3 ship')"
+is "a new run with no review turnpike has one synthesis leg" 0 "$(lines '1 synthesis')"
 waybill "$tmp/default" "turnpikes: style, bug, security"; run "$self" legs "$tmp/default"
-is "a run with the default turnpikes has a review leg that runs all three" 0 "$(lines '1 synthesis' '2 review style bug security' '3 ship')"
+is "a new run with default turnpikes has two legs and review runs all three" 0 "$(lines '1 synthesis' '2 review style bug security')"
 waybill "$tmp/style" "turnpikes: style"; run "$self" legs "$tmp/style"
-is "one review turnpike is enough for a review leg" 0 "$(lines '1 synthesis' '2 review style' '3 ship')"
+is "one review turnpike is enough for a two-leg run" 0 "$(lines '1 synthesis' '2 review style')"
 waybill "$tmp/notes" "turnpikes: none" "turnpikes: style, bug, security"; run "$self" legs "$tmp/notes"
-is "a turnpikes line inside the ticket is never read" 0 "$(lines '1 synthesis' '3 ship')"
+is "a turnpikes line inside the ticket is never read" 0 "$(lines '1 synthesis')"
 waybill "$tmp/fence" "turnpikes: style, bug, security" "$(lines '```' '## Dispatch' 'turnpikes: none')"
 run "$self" legs "$tmp/fence"
-is "a fence the ticket leaves open changes nothing" 0 "$(lines '1 synthesis' '2 review style bug security' '3 ship')"
+is "a fence the ticket leaves open changes nothing" 0 "$(lines '1 synthesis' '2 review style bug security')"
 run "$self" legs "$tmp/default" --expect "turnpikes:  style, bug,  security"
-is "--expect passes a waybill whose line is the check's" 0 "$(lines '1 synthesis' '2 review style bug security' '3 ship')"
-waybill "$tmp/extra" "turnpikes: $NOPE"; run core "$PLUS" legs "$tmp/extra/brief.md"
-is "a turnpike that runs in another leg makes no review leg" 0 "$(lines '1 synthesis' "3 ship $NOPE")"
-run "$self" legs --line "turnpikes: none";      is "legs --line gives the legs of a line" 0 "$(lines '1 synthesis' '3 ship')"
-run "$self" legs --line "turnpikes: security";  is "legs --line gives a review leg for a review turnpike" 0 "$(lines '1 synthesis' '2 review security' '3 ship')"
+is "--expect passes a waybill whose line is the check's" 0 "$(lines '1 synthesis' '2 review style bug security')"
+waybill "$tmp/extra" "turnpikes: $NOPE"; rm -- "$tmp/extra/run.json"; run core "$PLUS" legs "$tmp/extra/brief.md"
+is "a legacy turnpike that runs in another leg is kept after synthesis" 0 "$(lines '1 synthesis' "3 ship $NOPE")"
+run "$self" legs --line "turnpikes: none";      is "legs --line gives the one-leg current schedule" 0 "$(lines '1 synthesis')"
+run "$self" legs --line "turnpikes: security";  is "legs --line gives a two-leg current schedule" 0 "$(lines '1 synthesis' '2 review security')"
 run "$self" short "turnpikes: bug";             is "short names the default turnpikes a line leaves out" 0 "$(lines style security)"
 run "$self" short "turnpikes: style, bug, security"; is "short names nothing for a line that leaves none out" 0 ""
 
@@ -294,6 +317,10 @@ run "$self" legs --line "$(lines 'turnpikes: none' 'style')"
 has "legs --line refuses a line with a newline in it" 2 "is not a turnpikes: line" "synthesis"
 run "$self" short "turnpikes: default"; has "short refuses default: a line carries names" 2 "says default"
 run "$self" legs "$tmp/nowhere";        has "no waybill is a usage error" 1 "no waybill at"
+waybill "$tmp/old-three" "turnpikes: none"; rm -- "$tmp/old-three/run.json"; run "$self" legs "$tmp/old-three"
+is "a run dispatched before the contract marker keeps synthesis and ship" 0 "$(lines '1 synthesis' '3 ship')"
+waybill "$tmp/old-review" "turnpikes: style"; rm -- "$tmp/old-review/run.json"; run "$self" legs "$tmp/old-review"
+is "a pre-change run with review keeps all three legs" 0 "$(lines '1 synthesis' '2 review style' '3 ship')"
 
 echo "negative controls: the table"
 bad() {  # bad <label> <a line added to the table> <text the refusal must carry>
@@ -307,27 +334,41 @@ bad "a set other than default or - is refused" "$NOPE    yes      ship    a chec
 bad "a name that is not a lowercase word is refused" "Zz-Not  -       ship    a check"   '"Zz-Not" is not a lowercase word'
 bad "a line with no description is refused"  "$NOPE      -        ship"                  "needs a name, default or -, a leg, and what it checks"
 
-echo "a run with no turnpikes, walked from synthesis to ship through the poll, the hand-off check and the stages"
+echo "a current one-leg run ends synthesis with its card, then closes after merge"
 d=$tmp/runs/proj/T-9; waybill "$d" "turnpikes: none"; : > "$d/run-log.md"
 printf '{"stage": "checkpoint-1", "leg": 1, "base": "abc123", "lanes": {}, "coachman": {"legs": {}}}\n' > "$d/manifest.json"
 "$HERE/log-action.sh" "$d" postmaster dispatch T-9 "leg 1" >/dev/null
 printf '## %s\nx\n' Decisions "Deferred findings" "Verified by execution" Unverified "Branches and lanes" "Open questions" "Next leg" > "$d/handoff-1.md"
-touch "$d/.leg-1-done" "$d/.leg-1-exited"
+touch "$d/card.md" "$d/.card-ready" "$d/.leg-1-done" "$d/.leg-1-exited"
 poll() { "$HERE/runs-status.sh" "$tmp/runs/proj" | awk '$1 == "T-9" {print $NF}'; }
-[ "$(poll)" = DISPATCH ] && ok "after synthesis the poll says DISPATCH" || fail "after synthesis the poll says DISPATCH" "$("$HERE/runs-status.sh" "$tmp/runs/proj")"
-next=$("$self" legs "$d" | awk '$1 > 1 {print $1 " " $2; exit}')
-[ "$next" = "3 ship" ] && ok "the leg after synthesis is ship" || fail "the leg after synthesis is ship" "$next"
-prev=$("$self" legs "$d" | awk '$1 < 3 {p = $1} END {print p}')
-"$HERE/handoff-check.sh" "$d/handoff-$prev.md" >/dev/null 2>&1 && [ "$prev" = 1 ] \
-  && ok "the ship leg starts from synthesis's hand-off, which passes its check" || fail "the ship leg starts from synthesis's hand-off, which passes its check" "handoff-$prev.md"
-python3 -c 'import json, sys; p = sys.argv[1]; m = json.load(open(p)); m["leg"] = 3; open(p, "w").write(json.dumps(m))' "$d/manifest.json"
-"$HERE/stage.sh" "$d" shipping >/dev/null && "$HERE/stage.sh" "$d" shipped >/dev/null && touch "$d/.leg-3-done" "$d/.leg-3-exited"
-after=$("$self" legs "$d" | awk '$1 > 3')
-[ "$(poll)" = DISPATCH ] && [ -z "$after" ] && ok "after ship the poll says DISPATCH, and no leg follows: Stage G" \
-  || fail "after ship the poll says DISPATCH, and no leg follows: Stage G" "$(poll) / $after"
+"$HERE/handoff-check.sh" "$d/handoff-1.md" >/dev/null 2>&1 \
+  && ok "the final synthesis hand-off passes its check" || fail "the final synthesis hand-off passes its check" "handoff-1.md"
+[ "$(poll)" = GATE ] && ok "a one-leg run with a complete card polls as GATE" || fail "a one-leg run with a complete card polls as GATE" "$(poll)"
+"$HERE/stage.sh" "$d" ready-to-merge >/dev/null && rm -- "$d/.card-ready" \
+  && ok "the postmaster clears the card marker after verification" || fail "the postmaster clears the card marker after verification"
+"$HERE/stage.sh" "$d" shipped postmaster >/dev/null && touch "$d/.leg-1-exited"
+[ "$("$self" legs "$d" | awk '$1 > 2')" = "" ] && ok "the current run has no third leg" || fail "the current run has no third leg"
 "$HERE/stage.sh" "$d" done postmaster >/dev/null
 stages=$(python3 -c 'import json, sys; print(" ".join(json.loads(l)["target"] for l in open(sys.argv[1]) if json.loads(l)["action"] == "stage"))' "$d/actions.jsonl")
-[ "$stages" = "shipping shipped done" ] && [ "$(poll)" = - ] && ok "it closes with no review stage" || fail "it closes with no review stage" "$stages"
+[ "$stages" = "ready-to-merge shipped done" ] && [ "$(poll)" = - ] && ok "the one-leg run closes after merge" || fail "the one-leg run closes after merge" "$stages"
+
+echo "a pre-change three-leg run keeps its schedule and stages"
+old=$tmp/runs/legacy/T-10; waybill "$old" "turnpikes: style"; rm -- "$old/run.json"; : > "$old/run-log.md"
+printf '{"stage": "review", "leg": 2, "base": "abc123", "lanes": {}, "coachman": {"legs": {}}}\n' > "$old/manifest.json"
+"$HERE/log-action.sh" "$old" postmaster dispatch T-10 "leg 2" >/dev/null
+touch "$old/.leg-2-done" "$old/.leg-2-exited"
+legacy_poll() { "$HERE/runs-status.sh" "$tmp/runs/legacy" | awk '$1 == "T-10" {print $NF}'; }
+[ "$(legacy_poll)" = DISPATCH ] && [ "$("$self" legs "$old" | tail -1)" = "3 ship" ] \
+  && ok "a pre-change review leg still dispatches ship" || fail "a pre-change review leg still dispatches ship" "$(legacy_poll) / $("$self" legs "$old")"
+printf '## %s\nx\n' Decisions "Deferred findings" "Verified by execution" Unverified "Branches and lanes" "Open questions" "Next leg" > "$old/handoff-2.md"
+"$HERE/handoff-check.sh" "$old/handoff-2.md" >/dev/null 2>&1 \
+  && ok "the legacy ship hand-off still passes its check" || fail "the legacy ship hand-off still passes its check"
+python3 -c 'import json, sys; p = sys.argv[1]; m = json.load(open(p)); m["leg"] = 3; m["stage"] = "review"; open(p, "w").write(json.dumps(m))' "$old/manifest.json"
+"$HERE/stage.sh" "$old" shipping >/dev/null && "$HERE/stage.sh" "$old" shipped >/dev/null \
+  && touch "$old/.leg-3-done" "$old/.leg-3-exited" \
+  && ok "the pre-change ship leg keeps its shipping stages" || fail "the pre-change ship leg keeps its shipping stages"
+"$HERE/stage.sh" "$old" done postmaster >/dev/null
+[ "$(legacy_poll)" = - ] && ok "the legacy run still closes after ship" || fail "the legacy run still closes after ship" "$(legacy_poll)"
 
 echo
 [ "$fails" -eq 0 ] && { echo "self-test: all controls behaved"; exit 0; }

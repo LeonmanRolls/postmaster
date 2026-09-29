@@ -39,11 +39,11 @@ New runs will finish in synthesis or review by writing the complete ready-to-mer
 
 ## Tasks
 
-- [ ] T001 [AC5] Add a versioned current-versus-legacy leg contract in `scripts/run-meta.sh` and `scripts/turnpikes.sh`.
-- [ ] T002 [AC1] Make final synthesis and review produce the ready-to-merge card, final hand-off, and leg marker in `skills/postmaster/coachman.md`.
-- [ ] T003 [AC2] Put final-HEAD checks, browser QA, turnpikes, findings, branch states, and review link on the final card in `skills/postmaster/coachman.md`.
-- [ ] T004 [AC3] Route a no-review run from synthesis to the final card in `skills/postmaster/coachman.md`.
-- [ ] T005 [AC4] Verify the current hand-off and card, follow the pull-request or local-merge route, then retain aftercare and teardown in `skills/postmaster/postmaster.md`.
-- [ ] T006 [AC5] Update run polling, stages, front-door profile, and README for current runs while preserving legacy runs in `scripts/runs-status.sh`, `scripts/stage.sh`, `skills/postmaster/SKILL.md`, and `README.md`.
-- [ ] T007 [AC6] Add one-, two-, and legacy three-leg controls to changed script self-tests in `scripts/run-meta.sh`, `scripts/turnpikes.sh`, `scripts/runs-status.sh`, and `scripts/stage.sh`.
+- [x] T001 [AC5] Add a versioned current-versus-legacy leg contract in `scripts/run-meta.sh` and `scripts/turnpikes.sh`.
+- [x] T002 [AC1] Make final synthesis and review produce the ready-to-merge card, final hand-off, and leg marker in `skills/postmaster/coachman.md`.
+- [x] T003 [AC2] Put final-HEAD checks, browser QA, turnpikes, findings, branch states, and review link on the final card in `skills/postmaster/coachman.md`.
+- [x] T004 [AC3] Route a no-review run from synthesis to the final card in `skills/postmaster/coachman.md`.
+- [x] T005 [AC4] Verify the current hand-off and card, follow the pull-request or local-merge route, then retain aftercare and teardown in `skills/postmaster/postmaster.md`.
+- [x] T006 [AC5] Update run polling, stages, front-door profile, and README for current runs while preserving legacy runs in `scripts/runs-status.sh`, `scripts/stage.sh`, `skills/postmaster/SKILL.md`, and `README.md`.
+- [x] T007 [AC6] Add one-, two-, and legacy three-leg controls to changed script self-tests in `scripts/run-meta.sh`, `scripts/turnpikes.sh`, `scripts/runs-status.sh`, and `scripts/stage.sh`.
 - [ ] T008 [AC1] Keep the contract change mergeable only after the fixture run and score clean.

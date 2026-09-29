@@ -7,9 +7,9 @@
 #
 # Records when it was written; the run and project; the target repo's HEAD and branch; the
 # postmaster commit that dispatched it, and whether that checkout had uncommitted changes,
-# since a run keeps the runbooks it started with; the config in force, as it was; and the
-# version each harness named in that config reports. Env files are named by the config, never
-# read. A run.json that already exists is left alone.
+# since a run keeps the runbooks it started with; the coachman contract version; the config in
+# force, as it was; and the version each harness named in that config reports. Env files are
+# named by the config, never read. A run.json that already exists is left alone.
 #
 #   exit 0  written, or already there
 #   exit 1  usage, no such dispatch directory or repo, no config, or the file could not be written
@@ -54,6 +54,7 @@ for leg in (team.get("coachman_legs") or {}).values():
 
 record = {
     "written": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    "coachman_contract": 2,
     "project": d.resolve().parent.name,
     "run": d.resolve().name,
     "target": {"head": git(repo, "rev-parse", "HEAD"), "branch": git(repo, "symbolic-ref", "--short", "-q", "HEAD")},
@@ -101,6 +102,7 @@ check() { python3 -c "import json,sys; r=json.load(open('$d/run.json')); sys.exi
 echo "positive controls"
 meta "$d" "$repo" >/dev/null && ok "run.json is written" || fail "run.json is written"
 check "it names the postmaster commit"            "r['postmaster']['commit'] == '$(git -C "$TOOL" rev-parse HEAD)'"
+check "it records the current coachman contract"  "r['coachman_contract'] == 2"
 check "it names the target's HEAD and branch"     "r['target'] == {'head': '$(git -C "$repo" rev-parse HEAD)', 'branch': 'main'}"
 check "it keeps the config as it was"             "r['config']['lanes']['one']['model'] == 'm1' and r['config']['team']['workhorses'] == ['one','two']"
 check "it records each harness's version"         "r['harness_versions']['bash'].startswith('GNU bash')"

@@ -22,7 +22,7 @@
 #   exit 4  a terminal stage set by any actor but the postmaster
 set -uo pipefail
 HERE=$(CDPATH= cd -P -- "$(dirname -- "$0")" && pwd -P)
-STAGES="dispatched bootstrapped workhorses-running synthesis checkpoint-1 review shipping shipped done abandoned"
+STAGES="dispatched bootstrapped workhorses-running synthesis checkpoint-1 review ready-to-merge shipping shipped done abandoned"
 
 set_stage() {  # set_stage <dispatch> <stage> <actor>
   local d=$1 new=$2 actor=$3
@@ -31,6 +31,29 @@ set_stage() {  # set_stage <dispatch> <stage> <actor>
     done|abandoned) [ "$actor" = postmaster ] || { echo "stage: only the postmaster sets $new" >&2; return 4; } ;;
   esac
   [ -f "$d/manifest.json" ] || { echo "stage: no manifest at $d/manifest.json" >&2; return 1; }
+  local contract
+  contract=$(python3 - "$d/run.json" <<'PY'
+import json, pathlib, sys
+p = pathlib.Path(sys.argv[1])
+try:
+    r = json.loads(p.read_text()) if p.is_file() else {}
+except Exception as e:
+    print("unreadable: %s" % e); sys.exit(0)
+if not isinstance(r, dict):
+    print("unreadable: run.json is not a JSON object"); sys.exit(0)
+print(r.get("coachman_contract", 1))
+PY
+) || { echo "stage: could not read $d/run.json" >&2; return 1; }
+  case $contract in
+    2)
+      case $new in
+        ready-to-merge|shipped|done|abandoned) ;;
+        shipping) echo "stage: shipping is for a pre-change three-leg run" >&2; return 2 ;;
+      esac ;;
+    1) [ "$new" != ready-to-merge ] || { echo "stage: ready-to-merge requires coachman contract 2" >&2; return 2; } ;;
+    unreadable*) echo "stage: $d/run.json does not parse" >&2; return 1 ;;
+    *) echo "stage: unsupported coachman contract '$contract'" >&2; return 2 ;;
+  esac
   local plan
   plan=$(python3 - "$d" "$new" "$actor" <<'PY'
 import datetime as dt, json, pathlib, sys
@@ -104,8 +127,17 @@ ok()   { printf '  ok   %s\n' "$1"; }
 fail() { printf '  FAIL %s\n' "$1"; fails=$((fails+1)); }
 fresh() {
   printf '{"stage": "dispatched", "leg": 1, "base": "abc123", "lanes": {"luna": {"outcome": "running"}}, "coachman": {"legs": {}}}\n' > "$d/manifest.json"
+  printf '{"coachman_contract": 2}\n' > "$d/run.json"
   : > "$d/actions.jsonl"; : > "$d/run-log.md"
   "$HERE/log-action.sh" "$d" postmaster dispatch RUN-1 "test" >/dev/null
+}
+legacy() {
+  fresh
+  rm -- "$d/run.json"
+  python3 - "$d/manifest.json" <<'PY'
+import json, sys
+p = sys.argv[1]; m = json.load(open(p)); m["leg"] = 3; m["stage"] = "review"; json.dump(m, open(p, "w"))
+PY
 }
 count() { grep -c "\"action\":\"stage\"" "$d/actions.jsonl"; }
 
@@ -125,6 +157,19 @@ fresh; set_stage "$d" abandoned postmaster >/dev/null; rc=$?
 fresh; set_stage "$d" review coachman >/dev/null; rc=$?
 [ $rc -eq 0 ] && [ "$(count)" -eq 1 ] && grep -q '"stage": "review"' "$d/manifest.json" \
   && ok "review is one stage" || fail "review is one stage (exit $rc, lines $(count))"
+fresh; set_stage "$d" ready-to-merge coachman >/dev/null && set_stage "$d" shipped postmaster >/dev/null \
+  && set_stage "$d" done postmaster >/dev/null \
+  && ok "a one-leg current run goes from synthesis to ready-to-merge, then closes after merge" \
+  || fail "a one-leg current run goes from synthesis to ready-to-merge, then closes after merge"
+fresh; python3 - "$d/manifest.json" <<'PY'
+import json, sys
+p = sys.argv[1]; m = json.load(open(p)); m["leg"] = 2; m["stage"] = "review"; json.dump(m, open(p, "w"))
+PY
+set_stage "$d" ready-to-merge coachman >/dev/null && set_stage "$d" shipped postmaster >/dev/null \
+  && ok "a two-leg current run ends review at ready-to-merge" || fail "a two-leg current run ends review at ready-to-merge"
+legacy; set_stage "$d" shipping coachman >/dev/null && set_stage "$d" shipped coachman >/dev/null \
+  && set_stage "$d" done postmaster >/dev/null \
+  && ok "a pre-change three-leg run retains shipping and shipped" || fail "a pre-change three-leg run retains shipping and shipped"
 
 echo "negative controls"
 fresh; set_stage "$d" bootstrapped coachman >/dev/null; set_stage "$d" bootstrapped coachman >/dev/null; rc=$?
@@ -132,6 +177,9 @@ fresh; set_stage "$d" bootstrapped coachman >/dev/null; set_stage "$d" bootstrap
 fresh; cp "$d/manifest.json" "$tmp/before.json"; set_stage "$d" reviewing coachman >/dev/null 2>&1; rc=$?
 [ $rc -eq 2 ] && [ "$(count)" -eq 0 ] && cmp -s "$d/manifest.json" "$tmp/before.json" \
   && ok "an unknown stage is refused, and nothing changes" || fail "an unknown stage is refused, and nothing changes (exit $rc)"
+fresh; cp "$d/manifest.json" "$tmp/before.json"; set_stage "$d" shipping coachman >/dev/null 2>&1; rc=$?
+[ $rc -eq 2 ] && [ "$(count)" -eq 0 ] && cmp -s "$d/manifest.json" "$tmp/before.json" \
+  && ok "a current run cannot enter the legacy shipping stage" || fail "a current run cannot enter the legacy shipping stage (exit $rc)"
 for old in review-style review-bug review-security; do
   fresh; cp "$d/manifest.json" "$tmp/before.json"; set_stage "$d" "$old" coachman >/dev/null 2>&1; rc=$?
   [ $rc -eq 2 ] && [ "$(count)" -eq 0 ] && cmp -s "$d/manifest.json" "$tmp/before.json" \

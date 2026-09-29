@@ -218,6 +218,14 @@ def check_stages(dispatch):
     if "done" not in listed:
         return False, "scripts/stage.sh --list names no done stage"
     expected = listed[:listed.index("done") + 1]
+    meta = read_json(dispatch / "run.json") or {}
+    contract = meta.get("coachman_contract", 1)
+    code, leg_out = sh([SCRIPTS / "turnpikes.sh", "legs", dispatch])
+    if code != 0:
+        return False, "scripts/turnpikes.sh legs: %s" % tail(leg_out)
+    has_review = any(len(line.split()) > 1 and line.split()[1] == "review" for line in leg_out.splitlines())
+    expected = [s for s in expected if s != ("shipping" if contract == 2 else "ready-to-merge")
+                and (s != "review" or has_review)]
     events, why = read_actions(dispatch)
     if events is None:
         return False, why
@@ -397,15 +405,13 @@ background() {  # background <name> <command...>: run it in the background, into
 }
 rc_of() { cat "$tmp/$1.rc" 2>/dev/null || echo none; }
 
-# The records of finished runs are built with the scripts a run uses, so they follow the
-# contract as those scripts define it today: the stages from stage.sh --list, and the hand-off
-# sections from what handoff-check.sh says an empty hand-off lacks. As the runbooks have it, the
-# legs enter every stage after the first and before done, and the postmaster closes the run. The
-# score counts legs from the run itself, so the number of legs here is arbitrary.
+# The records include a pre-change three-leg run, so they exercise the compatibility contract.
+# Stage and hand-off names still come from the scripts that define them. The score counts legs
+# from the run itself, so this record's leg count is independent of current dispatch defaults.
 : > "$tmp/empty.md"
 sections=$("$HERE/handoff-check.sh" "$tmp/empty.md" 2>&1 >/dev/null | sed -n 's/^handoff-check: missing or empty section: //p')
 listed=$("$HERE/stage.sh" --list)
-stages=$(printf '%s\n' "$listed" | sed '/^done$/q' | sed '1d;$d')
+stages=$(printf '%s\n' "$listed" | sed '/^done$/q' | sed '1d;$d' | sed '/^ready-to-merge$/d')
 record() {  # record <name> <ticket> <shipped: reference, app or broken>: a finished run
   local name=$1 t=$2 shipped=$3 legs=3 n s section done_stages=0 count
   local repo=$tmp/$name/repo d=$tmp/$name/runs/$name/7 base
@@ -420,8 +426,12 @@ record() {  # record <name> <ticket> <shipped: reference, app or broken>: a fini
   git -C "$repo" add -A && git -C "$repo" commit -q --allow-empty -m "Implement the ticket" \
     && git -C "$repo" checkout -q main && git -C "$repo" merge -q --no-ff -m "Merge branch 7" 7 || return 1
   printf '{"stage": "dispatched", "leg": 1, "base": "%s", "lanes": {}, "coachman": {"legs": {}}}\n' "$base" > "$d/manifest.json"
-  { printf '# Waybill: 7\n\n## Ticket\n\n'; ticket_body "$t"; printf '\n## Project profile\nrepo: %s\n' "$repo"; } > "$d/brief.md"
+  { printf '# Waybill: 7\nturnpikes: style, bug, security\n\n## Ticket\n\n'; ticket_body "$t"; printf '\n## Project profile\nrepo: %s\n' "$repo"; } > "$d/brief.md"
   "$HERE/run-meta.sh" "$d" "$repo" >/dev/null || return 1
+  python3 - "$d/run.json" <<'PY'
+import json, sys
+p = sys.argv[1]; r = json.load(open(p)); r.pop("coachman_contract", None); json.dump(r, open(p, "w"), indent=2)
+PY
   count=$(printf '%s\n' "$stages" | wc -l)
   for n in $(seq 1 "$legs"); do
     printf 'You are the coachman for leg %s of 7.\n' "$n" > "$d/leg-$n-prompt.txt"
@@ -465,7 +475,7 @@ PY
   d=$(broken break-handoffs "$clean") && : > "$d/handoff-2.md"
   d=$(broken break-runjson "$clean") && rm -- "$d/run.json"
   d=$(broken break-card "$clean") && rm -- "$d/card.md"
-  d=$(broken break-waybill "$clean") && printf '# Waybill: 7\n\n## Ticket\n\nSee the tracker.\n' > "$d/brief.md"
+  d=$(broken break-waybill "$clean") && printf '# Waybill: 7\nturnpikes: style, bug, security\n\n## Ticket\n\nSee the tracker.\n' > "$d/brief.md"
   for b in stages markers handoffs runjson card waybill; do
     background "break-$b" score_run "$tmp/break-$b/runs/break-$b/7" "$repo"
   done
