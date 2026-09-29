@@ -8,6 +8,7 @@
 #   runs-status.sh <project-run-root>        e.g. <project>/.postmaster/runs
 #   runs-status.sh --self-test
 #
+# <!-- contract:part=markers -->
 #   next   USER      the postmaster has put this run's question to the user and waits for the
 #                    answer (.waiting-on-user)
 #          RULE      an escalation is waiting (.escalation-ready)
@@ -22,6 +23,7 @@
 #          -         the manifest says done or abandoned
 #
 # Idle time ignores the marker files themselves, so touching a marker never hides a stall.
+# <!-- /contract:part=markers -->
 #
 #   exit 0  listed (an empty root lists nothing)
 #   exit 1  usage, or no such root

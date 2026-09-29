@@ -13,8 +13,10 @@ F=${1:?usage: handoff-check.sh <handoff-file>}
 [ -f "$F" ] || { echo "handoff-check: no such file: $F" >&2; exit 1; }
 python3 - "$F" <<'PY'
 import sys, re
+# <!-- contract:part=completion -->
 required = ["Decisions", "Deferred findings", "Verified by execution", "Unverified",
             "Branches and lanes", "Open questions", "Next leg"]
+# <!-- /contract:part=completion -->
 text = open(sys.argv[1]).read()
 sections = {}
 current = None

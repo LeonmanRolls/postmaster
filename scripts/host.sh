@@ -29,9 +29,13 @@
 # run: <command> is the same headless command a caller would otherwise background with `&`. It
 # runs from the directory host.sh was called in, with the caller's environment and an empty
 # stdin, in a session of its own with no terminal; its stdout goes to --out, added to with
-# --append, and its stderr to --err, which holds only this launch's errors. --marker is removed
+# --append, and its stderr to --err, which holds only this launch's errors.
+# <!-- contract:part=markers -->
+# --marker is removed
 # as it starts and touched when it exits,
-# whatever its exit, and also when host.sh cannot start it, with the reason in --err. --pidfile
+# whatever its exit, and also when host.sh cannot start it, with the reason in --err.
+# <!-- /contract:part=markers -->
+# --pidfile
 # gets its pid, which is also its process group: `kill -- -<pid>` stops all of it. <cwd> is the
 # directory the launch belongs to, usually its worktree: in Herdr the launch runs in a new tab of
 # that worktree's space, opened with `herdr worktree open` under the repository's space if it is

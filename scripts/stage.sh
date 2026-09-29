@@ -22,7 +22,9 @@
 #   exit 4  a terminal stage set by any actor but the postmaster
 set -uo pipefail
 HERE=$(CDPATH= cd -P -- "$(dirname -- "$0")" && pwd -P)
+# <!-- contract:part=stages -->
 STAGES="dispatched bootstrapped workhorses-running synthesis checkpoint-1 review shipping shipped done abandoned"
+# <!-- /contract:part=stages -->
 
 set_stage() {  # set_stage <dispatch> <stage> <actor>
   local d=$1 new=$2 actor=$3

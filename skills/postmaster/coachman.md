@@ -35,7 +35,9 @@ half, how a run is prepared and what the waybill carries, is `SKILL.md`. You do 
 | `<dispatch>/audit/<lane>.md` | per-workhorse digest of its durable record |
 | `<dispatch>/leg-<n>-prompt.txt` | the postmaster's one-paragraph prompt that started leg `n` |
 | `<dispatch>/handoff-<n>.md` | leg `n`'s hand-off, the whole of what the next leg knows |
+<!-- contract:part=markers -->
 | `<dispatch>/.leg-<n>-done`, `.leg-<n>-exited` | leg `n` finished its hand-off; leg `n`'s process exited |
+<!-- /contract:part=markers -->
 | `<repo>/.worktrees/<TICKET>` | synthesis worktree, branch `<TICKET>` |
 | `<repo>/.worktrees/<TICKET>-<lane>` | workhorse worktree, branch `wb/<TICKET>-<lane>` (`wb` for workhorse branch) |
 | `<dispatch>/checkpoint-<n>.md` | checkpoint cards: `1` and `review` |
@@ -108,6 +110,7 @@ run, whatever the target: the fault becomes a ticket when the run closes.
 **The coachman is a one-shot resumable process for one leg, not a session.** It communicates
 by files in its own dispatch directory.
 
+<!-- contract:part=markers -->
 | It writes | Meaning |
 |---|---|
 | `run-log.md` | running narrative |
@@ -116,6 +119,7 @@ by files in its own dispatch directory.
 | `logs/coachman-leg-<n>-events.jsonl` | its own stream for leg `n`; errors in `logs/coachman-leg-<n>.err` |
 | `checkpoint-<n>.md` + `.checkpoint-<n>-ready` | a checkpoint card is complete; informational in autonomous mode, a stop in consult mode |
 | `handoff-<n>.md` + `.leg-<n>-done` | the leg is finished and the next may start |
+<!-- /contract:part=markers -->
 
 **It never waits for an answer in-process.** On an escalation or the three-round cap it writes
 the file and exits. The postmaster answers by resuming the coachman's thread with the ruling as
@@ -138,6 +142,7 @@ A run is up to three legs, `synthesis`, `review` and `ship`, each a fresh coachm
 launched by the postmaster, so no context outlives a leg and nothing a leg knew survives except
 what it wrote down. The boundaries are the run's own gates:
 
+<!-- contract:part=legs -->
 | leg | name | covers | ends with |
 |---|---|---|---|
 | 1 | `synthesis` | stage 0, stage 1, checkpoint 1 | `handoff-1.md` |
@@ -148,6 +153,7 @@ The review leg runs only when the waybill names a turnpike that runs in it; with
 follows synthesis and starts from `handoff-1.md`. `<tool>/scripts/turnpikes.sh legs <dispatch>` prints
 the run's legs and the turnpikes each one runs. A leg runs each turnpike listed for it from that
 turnpike's step in this runbook; a listed turnpike with no step here cannot run: escalate.
+<!-- /contract:part=legs -->
 
 **A leg starts by accepting the hand-off.** Read `brief.md`, this runbook, and the previous
 leg's hand-off, which the leg prompt names; log `handoff-accept`; then act. A decision the
@@ -158,6 +164,7 @@ anything else.
 is current state only, in exactly these sections, none empty; `<tool>/scripts/handoff-check.sh`
 must exit 0 before the marker is touched:
 
+<!-- contract:part=completion -->
 ```
 ## Decisions
 Every decision this leg took, one per line, with its reason, marked do-not-reopen where it is settled; every do-not-reopen decision from earlier hand-offs carried forward verbatim; and always the oracle decision, blind acceptance tests written as the first commit or not written and why.
@@ -178,6 +185,7 @@ One paragraph: where the next leg starts, and what it must do first.
 Then close the open section with `<tool>/scripts/run-log.sh <dispatch> --close`, log `handoff`, touch
 `.leg-<n>-done`, and exit. The postmaster launches the next leg;
 you never do. A leg that exits without its hand-off is spent, and the postmaster remounts it.
+<!-- /contract:part=completion -->
 
 **Escalations stay inside the leg.** An escalation writes `ESCALATION.md`, touches
 `.escalation-ready` and exits; the ruling arrives as a resume of the same thread, and the
