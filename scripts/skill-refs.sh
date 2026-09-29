@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
-# Find every script reference in the postmaster skill that would not resolve from an installed
-# skill. An installed skill is a link from a harness's skills folder into the postmaster repo,
-# and a session reaches the repo only as <tool>, the path SKILL.md finds from that link once.
-# A reference resolves from any working directory only when it goes through <tool> and names
-# a script the repo has. The run's pinned checkout goes through <rt> instead, resolved per run
-# by run-meta.sh path; it is a checkout of the same repo, so the same existence check applies.
+# Find every script reference in the postmaster and hotfix skills that would not resolve from
+# an installed skill. An installed skill is a link from a harness's skills folder into the
+# postmaster repo, and a session reaches the repo only as <tool>, the path SKILL.md finds from
+# that link once. A reference resolves from any working directory only when it goes through
+# <tool> and names a script the repo has. The run's pinned checkout goes through <rt> instead,
+# resolved per run by run-meta.sh path; it is a checkout of the same repo, so the same
+# existence check applies.
 #
-#   skill-refs.sh [<file>...]          default: skills/postmaster/*.md beside this script's repo
+#   skill-refs.sh [<file>...]          default: skills/postmaster/*.md and skills/hotfix/*.md
+#                                      beside this script's repo
 #   skill-refs.sh --fix [<file>...]    put <tool>/ before every bare scripts/ path, in place
 #   skill-refs.sh --self-test
 #
@@ -77,7 +79,7 @@ esac
 if [ "$MODE" != self-test ]; then
   if [ $# -eq 0 ]; then
     CDPATH= cd -- "$ROOT" || exit 2
-    set -- skills/postmaster/*.md
+    set -- skills/postmaster/*.md skills/hotfix/*.md
     [ -f "$1" ] || { echo "skill-refs: no skills/postmaster/*.md in $ROOT" >&2; exit 2; }
   fi
   refs "$ROOT" "$MODE" "$@"; exit $?
