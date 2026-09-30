@@ -1,613 +1,687 @@
 #!/usr/bin/env bash
-# Oracle for #135: blind acceptance tests at the ticket's own interface.
+# oracle-135.sh — blind acceptance for #135, "Scrub private data from public history".
 #
-# Written by the leg-1 coachman before any lane started, committed as the first
-# commit on the ticket branch. It runs the pinned interface both lanes
-# implement (scripts/scrub-check.sh) against scratch git repositories built at
-# runtime under mktemp, and checks behaviour the ticket names: every commit
-# scanned, never only the tip; shape-and-context matches, never a comparison
-# against a list of real values; suspects reported by file, line and kind
-# without ever printing a value; a user-ruled allowlist; gate wiring; and a
-# history report. Kind names are the lane's own choice and are never asserted,
-# only the report form. A match on a value no lane could have listed proves
-# shape recognition (AC2).
+# It tests the change at its interfaces only: the scrub's exits, suspects and
+# silence on fixture repositories it builds itself, the rewrite's and the
+# promote's completes and refusals, the tree and wiki checks' fails, the
+# poll's TELL and the runner's detections log, the gate's wiring, and the
+# check's own tests. A probe that fails for any other reason than the product
+# misbehaving is an oracle bug, and fails the oracle too.
 #
-# Extended 2026-09-29 for the absorbed #21 criteria (5, 6, 7, 10, 12): the
-# raw/ promotion gate, the .postmaster/ and added-raw/ tree checks, the wiki
-# lint for paths, hostnames and quoted raw text, the README backstop wording,
-# and no-new-dependency with streaming. Plus two gaps the widened body names
-# that the first leg missed: .env-style assignments (AC1) and a reason on
-# every allowlist entry (AC4).
+#   oracle-135.sh [base] [head]    the change under test; base defaults to
+#                                  main, head to HEAD; run from the repo root
 #
-# Every fixture value is fabricated here and assembled at runtime from short
-# fragments, so this file's own committed lines carry no suspect shape, and
-# scanning the ticket branch stays clean. The fixtures avoid the usual
-# placeholder markers, so only the exclusion the ticket names (public no-reply
-# addresses) tells them apart from the real thing.
-#
-#   oracle-135.sh [base]     run from the repo root; base defaults to the
-#                            merge-base of HEAD with main; exit 0 when the
-#                            worktree's script meets the ticket, 1 otherwise
+#   exit 0  every probe behaved
+#   exit 1  a probe misbehaved
+#   exit 2  usage, not a repository, or the oracle's own fixture failed
 set -uo pipefail
-
-ROOT=$PWD
-WORK=$(mktemp -d) || exit 1
-trap 'rm -r -- "$WORK" </dev/null 2>/dev/null' EXIT
-SCRIPT=scripts/scrub-check.sh
-PROMOTE=scripts/raw-promote.sh
-TREE=scripts/tree-check.sh
-LINT=scripts/wiki-lint.sh
-[ -f "$SCRIPT" ] || { echo "oracle: run from the repo root: $SCRIPT not found" >&2; exit 1; }
-[ -x "$SCRIPT" ] || { echo "oracle: $SCRIPT is not executable" >&2; exit 1; }
-need() {  # need <file> <name>: the probe's script must exist and run
-  [ -x "$ROOT/$1" ] || { bad "$2" "$1 missing or not executable"; return 1; }
-}
-
-BASE_ARG=${1:-}
-if [ -z "$BASE_ARG" ]; then
-  BASE_ARG=$(git merge-base HEAD main 2>/dev/null) \
-    || { echo "oracle: no base: pass one or branch from main" >&2; exit 1; }
-fi
-
-# --- fabricated fixtures, assembled at runtime --------------------------------
-# No committed line below carries a whole suspect shape; each value exists only
-# at runtime, inside a scratch repository. Fragments stay short on purpose.
-AT='@'; DOT='.'; DASH='-'; SL='/'; US='_'
-
-E_LOCAL='suspect-413'; E_HOST='oraclemail-relay-135'; E_TLD='net'
-SUSPECT_EMAIL="${E_LOCAL}${AT}${E_HOST}${DOT}${E_TLD}"
-
-N_LOCAL='99999999+oracle-relay'; N_H1='users.noreply.gi'; N_H2='thub.com'
-NOREPLY_EMAIL="${N_LOCAL}${AT}${N_H1}${N_H2}"
-
-K_U='user'; K_E='Email'
-KEY_A="${K_U}${K_E}"
-K_OU_P1='organiza'; K_OU_P2='tionUuid'
-KEY_B="${K_OU_P1}${K_OU_P2}"
-K_SC_P1='session'; K_SC_P2='context'
-KEY_C="${K_SC_P1}${US}${K_SC_P2}"
-K_CO_P1='credential'; K_CO_P2='org'
-KEY_D="${K_CO_P1}${US}${K_CO_P2}"
-
-UUID_P1='41313513-0042'; UUID_P2='4c1d-9e5f-135135135135'
-SUSPECT_UUID="${UUID_P1}${DASH}${UUID_P2}"
-
-ORG_P='or'; ORG_Q='g-'; ORG_B1='oracle135relay'; ORG_B2='K7mQ2xZ9aV'
-SUSPECT_ORGID="${ORG_P}${ORG_Q}${ORG_B1}${ORG_B2}"
-
-TK_P1='s'; TK_P2='k-'; TK_B1='oracle135keyK7'; TK_B2='mQ2xZ9aVbN4'
-SUSPECT_TOKEN="${TK_P1}${TK_P2}${TK_B1}${TK_B2}"
-
-AK_P1='AK'; AK_P2='IA'; AK_B='ORACLE135400XYZ1'
-SUSPECT_KEYID="${AK_P1}${AK_P2}${AK_B}"
-
-HO_R='/ho'; HO_O='me/'; HO_U='oracle413'
-CX_A='.cod'; CX_B='ex/ses'; CX_C='sions/'
-SESS_DT='2026/09/29'; SESS_F='oracle-session-413.jsonl'
-SUSPECT_HOMEPATH="${HO_R}${HO_O}${HO_U}${SL}${CX_A}${CX_B}${CX_C}${SESS_DT}${SL}${SESS_F}"
-
-TP_A='/tm'; TP_B='p/'; CL_A='clau'; CL_B='de-501'
-SCR_A='oracle-relay-135'; SCR_B='scratchpad/oracle-notes.md'
-SUSPECT_SCRATCH="${TP_A}${TP_B}${CL_A}${CL_B}${SL}${SCR_A}${SL}${SCR_B}"
-
-IP_A='10'; IP_B='135'; IP_C='4'; IP_D='13'
-SUSPECT_IP="${IP_A}${DOT}${IP_B}${DOT}${IP_C}${DOT}${IP_D}"
-
-HN_A='metrics'; HN_B='inter'; HN_C='nal'
-SUSPECT_HOST="${HN_A}${DOT}${HN_B}${HN_C}"
-SUSPECT_URL="https://${SUSPECT_HOST}:8443/status"
-
-AB_A='Co-Au'; AB_B='thored-'; AB_C='By: Oracle Assistant <'; AB_D='>'
-SUSPECT_ATTR="${AB_A}${AB_B}${AB_C}${NOREPLY_EMAIL}${AB_D}"
-
-IN_1A='Standing ins'; IN_1B='tructions for the oracle staging fleet'
-IN_2A='This fleet belongs to the oracle'; IN_2B=' staging crew and no one else.'
-IN_3A='Rotate every staging credential on the'; IN_3B=' first Tuesday of the month.'
-IN_4A='Never copy a staging credential into a'; IN_4B=' ticket, a comment or a log.'
-IN_5A='Never debug a staging node from a network'; IN_5B=' the roster does not name.'
-IN_6A='The roster lives with the fleet steward;'; IN_6B=' ask the steward to change it.'
-INSTR=$(printf '%s%s\n%s%s\n%s%s\n%s%s\n%s%s\n%s%s\n' \
-  "$IN_1A" "$IN_1B" "$IN_2A" "$IN_2B" "$IN_3A" "$IN_3B" \
-  "$IN_4A" "$IN_4B" "$IN_5A" "$IN_5B" "$IN_6A" "$IN_6B")
-
-D_N1='SESSION'; D_N2='SECRET'
-DOTENV_NAME="${D_N1}${US}${D_N2}"
-D_V1='relay-413-'; D_V2='quiet'
-DOTENV_VALUE="${D_V1}${D_V2}"
-DOTENV_LINE="${DOTENV_NAME}=${DOTENV_VALUE}"
-P_N1='TOKEN'; P_N2='TYPE'; P_V='Bear'; P_W='er'
-POINTER_LINE="${P_N1}${US}${P_N2}=${P_V}${P_W}"
-
-QUOTE_LINE='The staging relay counted four hundred thirteen spans on the quiet Tuesday run.'
-
-GIT_ID_NAME='oracle-135'
-# Identity by environment, so no committed line holds a key-like token.
-export GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL
-GIT_AUTHOR_NAME=$GIT_ID_NAME; GIT_AUTHOR_EMAIL=$NOREPLY_EMAIL
-GIT_COMMITTER_NAME=$GIT_ID_NAME; GIT_COMMITTER_EMAIL=$NOREPLY_EMAIL
-g() { git "$@"; }
-
-# --- harness ------------------------------------------------------------------
-pass=0; fail=0
-ok() { pass=$((pass + 1)); echo "ok - $1"; }
-bad() { fail=$((fail + 1)); echo "not ok - $1"; [ -n "${2:-}" ] && echo "    $2"; }
-
-FORM='^[0-9a-f]{40}:[A-Za-z0-9_./-]+:[0-9]+: [A-Za-z0-9_.-]+$'
-# Lane output is untrusted: printf it, never let the shell expand it, and no
-# diagnostic below ever echoes it back, since a buggy lane may print a value.
-wellformed() { printf '%s' "$1" | grep -Eq "$FORM"; }
-
-new_repo() {  # print the path of a scratch repo with one clean base commit
-  local d
-  d=$(mktemp -d -p "$WORK") || return 1
-  ( cd "$d" && g init -q -b main . && printf 'oracle base\n' > base.txt \
-    && g add base.txt && g commit -qm base ) || return 1
-  printf '%s' "$d"
-}
-
-commit_file() {  # commit_file <repo> <path> <content>: commit, print the sha
-  local repo=$1 path=$2 content=$3
-  ( cd "$repo" && mkdir -p "$(dirname "$path")" && printf '%s\n' "$content" > "$path" \
-    && g add "$path" && g commit -qm "add $path" >/dev/null && git rev-parse HEAD )
-}
-
-scan() {  # scan <repo> <base> <head>: run the worktree's script from the repo root
-  ( cd "$1" && bash "$ROOT/$SCRIPT" "$2" "$3" )
-}
-
-flag_probe() {  # flag_probe <name> <path> <content> <secret>: one suspect line
-  local name=$1 path=$2 content=$3 secret=$4
-  local repo base sha out err code
-  repo=$(new_repo) || { bad "$name" "scratch repo failed"; return; }
-  base=$(git -C "$repo" rev-parse HEAD)
-  sha=$(commit_file "$repo" "$path" "$content") || { bad "$name" "commit failed"; return; }
-  out=$(scan "$repo" "$base" "$sha" 2>"$repo/stderr.txt"); code=$?
-  err=$(cat "$repo/stderr.txt")
-  [ "$code" -eq 1 ] || { bad "$name" "exit $code, want 1"; return; }
-  wellformed "$out" || { bad "$name" "malformed report line"; return; }
-  [ "$(printf '%s\n' "$out" | wc -l)" -eq 1 ] || { bad "$name" "want one report line"; return; }
-  case "$out" in "$sha:$path:1: "*) ;; *) bad "$name" "misaddressed: want $sha:$path:1:"; return;; esac
-  if grep -qF -- "$secret" <<<"$out"; then bad "$name" "value on stdout"; return; fi
-  if grep -qF -- "$secret" <<<"$err"; then bad "$name" "value on stderr"; return; fi
-  ok "$name"
-}
-
-clean_probe() {  # clean_probe <name> <path> <content>: silence and exit 0
-  local name=$1 path=$2 content=$3
-  local repo base sha out code
-  repo=$(new_repo) || { bad "$name" "scratch repo failed"; return; }
-  base=$(git -C "$repo" rev-parse HEAD)
-  sha=$(commit_file "$repo" "$path" "$content") || { bad "$name" "commit failed"; return; }
-  out=$(scan "$repo" "$base" "$sha" 2>/dev/null); code=$?
-  [ "$code" -eq 0 ] || { bad "$name" "exit $code, want 0"; return; }
-  [ -z "$out" ] || { bad "$name" "stdout not empty"; return; }
-  ok "$name"
-}
-
-# --- exits and silence --------------------------------------------------------
-bash "$ROOT/$SCRIPT" >/dev/null 2>&1; code=$?
-[ "$code" -eq 2 ] && ok "usage-exits-2" || bad "usage-exits-2" "exit $code, want 2"
-
-bash "$ROOT/$SCRIPT" --help >/dev/null 2>&1; code=$?
-[ "$code" -eq 0 ] && ok "help-exits-0" || bad "help-exits-0" "exit $code, want 0"
-
-clean_probe "clean-range-exits-0" notes/oracle.txt 'The relay ran its checks and stayed green.'
-
-repo=$(new_repo) || bad "empty-range-exits-0" "scratch repo failed"
-if [ -n "${repo:-}" ]; then
-  head=$(git -C "$repo" rev-parse HEAD)
-  out=$(scan "$repo" "$head" "$head" 2>/dev/null); code=$?
-  { [ "$code" -eq 0 ] && [ -z "$out" ]; } \
-    && ok "empty-range-exits-0" || bad "empty-range-exits-0" "exit $code"
-fi
-
-# --- one flag probe per ticket-named kind -------------------------------------
-# The key probes forbid the placeholder value on the output, never the key name:
-# a kind named after its key is the report's kind, not a printed value.
-flag_probe "flag-key-a" data/session.json "{\"${KEY_A}\": \"withheld\"}" "withheld"
-flag_probe "flag-key-b" data/session.json "{\"${KEY_B}\": \"${SUSPECT_UUID}\"}" "$SUSPECT_UUID"
-flag_probe "flag-key-c" data/session.json "{\"${KEY_C}\": \"withheld\"}" "withheld"
-flag_probe "flag-key-d" data/session.json "{\"${KEY_D}\": \"withheld\"}" "withheld"
-flag_probe "flag-email" notes/contact.txt "$SUSPECT_EMAIL" "$SUSPECT_EMAIL"
-flag_probe "flag-orgid" deploy/owner.txt "deploy-owner=${SUSPECT_ORGID}" "$SUSPECT_ORGID"
-flag_probe "flag-home-path" notes/env.txt "session under ${SUSPECT_HOMEPATH}" "$SUSPECT_HOMEPATH"
-flag_probe "flag-scratch-path" notes/env.txt "cache under ${SUSPECT_SCRATCH}" "$SUSPECT_SCRATCH"
-flag_probe "flag-private-ip" deploy/endpoint.txt "endpoint ${SUSPECT_IP}:8080" "$SUSPECT_IP"
-flag_probe "flag-private-host" deploy/endpoint.txt "$SUSPECT_URL" "$SUSPECT_HOST"
-flag_probe "flag-token" notes/relay.txt "relay key ${SUSPECT_TOKEN}" "$SUSPECT_TOKEN"
-flag_probe "flag-access-key" notes/relay.txt "relay id ${SUSPECT_KEYID}" "$SUSPECT_KEYID"
-flag_probe "flag-attribution" notes/credits.txt "$SUSPECT_ATTR" "$SUSPECT_ATTR"
-
-# --- instructions-like text stays silent: the ticket narrowed the script to
-# personal data and secrets, and text from shared instruction files is not
-# private data in itself. The block below is the old kind's positive shape.
-clean_probe "instructions-text-passes" notes/standing.txt "$INSTR"
-
-# --- every commit, not only the tip -------------------------------------------
-repo=$(new_repo) || bad "older-commit-flags" "scratch repo failed"
-if [ -n "${repo:-}" ]; then
-  base=$(git -C "$repo" rev-parse HEAD)
-  sha1=$(commit_file "$repo" notes/contact.txt "$SUSPECT_EMAIL")
-  commit_file "$repo" notes/oracle.txt 'Later clean notes.' >/dev/null
-  head=$(git -C "$repo" rev-parse HEAD)
-  if [ -z "${sha1:-}" ]; then
-    bad "older-commit-flags" "commit failed"
-  else
-    out=$(scan "$repo" "$base" "$head" 2>/dev/null); code=$?
-    if [ "$code" -ne 1 ]; then
-      bad "older-commit-flags" "exit $code, want 1"
-    elif ! wellformed "$out"; then
-      bad "older-commit-flags" "malformed report line"
-    else
-      case "$out" in "$sha1:notes/contact.txt:1: "*) ok "older-commit-flags";; *) bad "older-commit-flags" "misaddressed: want $sha1:notes/contact.txt:1:";; esac
-    fi
-  fi
-fi
-
-repo=$(new_repo) || bad "deleted-at-tip-flags" "scratch repo failed"
-if [ -n "${repo:-}" ]; then
-  base=$(git -C "$repo" rev-parse HEAD)
-  sha1=$(commit_file "$repo" notes/contact.txt "$SUSPECT_EMAIL")
-  ( cd "$repo" && git rm -q notes/contact.txt && g commit -qm drop >/dev/null )
-  head=$(git -C "$repo" rev-parse HEAD)
-  if [ -z "${sha1:-}" ]; then
-    bad "deleted-at-tip-flags" "commit failed"
-  else
-    out=$(scan "$repo" "$base" "$head" 2>/dev/null); code=$?
-    if [ "$code" -ne 1 ]; then
-      bad "deleted-at-tip-flags" "exit $code, want 1"
-    else
-      case "$out" in "$sha1:notes/contact.txt:1: "*) ok "deleted-at-tip-flags";; *) bad "deleted-at-tip-flags" "misaddressed: want $sha1:notes/contact.txt:1:";; esac
-    fi
-  fi
-fi
-
-# --- the allowlist pair: not-yet-allowed flags, allowed stays silent -----------
-repo=$(new_repo) || bad "allowlist-not-yet-allowed-flags" "scratch repo failed"
-if [ -n "${repo:-}" ]; then
-  base=$(git -C "$repo" rev-parse HEAD)
-  commit_file "$repo" notes/contact.txt "$SUSPECT_EMAIL" >/dev/null
-  head=$(git -C "$repo" rev-parse HEAD)
-  out=$(scan "$repo" "$base" "$head" 2>/dev/null); code=$?
-  [ "$code" -eq 1 ] \
-    && ok "allowlist-not-yet-allowed-flags" \
-    || bad "allowlist-not-yet-allowed-flags" "exit $code, want 1"
-  commit_file "$repo" scripts/scrub-check.allow "$(printf '%s\t%s' "$SUSPECT_EMAIL" 'oracle ruling: staging relay address, fine to publish')" >/dev/null
-  head=$(git -C "$repo" rev-parse HEAD)
-  out=$(scan "$repo" "$base" "$head" 2>/dev/null); code=$?
-  { [ "$code" -eq 0 ] && [ -z "$out" ]; } \
-    && ok "allowlist-allowed-silent" \
-    || bad "allowlist-allowed-silent" "exit $code"
-fi
-
-# --- AC4: an allowlist entry without a reason is refused, not honoured --------
-repo=$(new_repo) || bad "allowlist-reason-required" "scratch repo failed"
-if [ -n "${repo:-}" ]; then
-  base=$(git -C "$repo" rev-parse HEAD)
-  commit_file "$repo" notes/contact.txt "$SUSPECT_EMAIL" >/dev/null
-  commit_file "$repo" scripts/scrub-check.allow "$SUSPECT_EMAIL" >/dev/null
-  head=$(git -C "$repo" rev-parse HEAD)
-  out=$(scan "$repo" "$base" "$head" 2>/dev/null); code=$?
-  [ "$code" -eq 2 ] \
-    && ok "allowlist-reason-required" \
-    || bad "allowlist-reason-required" "exit $code, want 2"
-fi
-
-# --- history: the past reports, the clean past stays silent --------------------
-repo=$(new_repo) || bad "history-flags-old" "scratch repo failed"
-if [ -n "${repo:-}" ]; then
-  commit_file "$repo" notes/contact.txt "$SUSPECT_EMAIL" >/dev/null
-  commit_file "$repo" notes/oracle.txt 'Later clean notes.' >/dev/null
-  out=$( ( cd "$repo" && bash "$ROOT/$SCRIPT" --history ) 2>"$repo/stderr.txt"); code=$?
-  err=$(cat "$repo/stderr.txt")
-  if [ "$code" -ne 1 ]; then
-    bad "history-flags-old" "exit $code, want 1"
-  elif [ "$(printf '%s\n' "$out" | wc -l)" -ne 1 ]; then
-    bad "history-flags-old" "want one report line"
-  elif ! wellformed "$out"; then
-    bad "history-flags-old" "malformed report line"
-  elif grep -qF -- "$SUSPECT_EMAIL" <<<"$out$err"; then
-    bad "history-flags-old" "value printed"
-  elif ! grep -qF ":notes/contact.txt:" <<<"$out"; then
-    bad "history-flags-old" "contact file not named"
-  else
-    ok "history-flags-old"
-  fi
-fi
-
-repo=$(new_repo) || bad "history-clean-silent" "scratch repo failed"
-if [ -n "${repo:-}" ]; then
-  out=$( ( cd "$repo" && bash "$ROOT/$SCRIPT" --history ) 2>/dev/null); code=$?
-  { [ "$code" -eq 0 ] && [ -z "$out" ]; } \
-    && ok "history-clean-silent" \
-    || bad "history-clean-silent" "exit $code"
-fi
-
-# --- the lane's own self-test passes -------------------------------------------
-bash "$ROOT/$SCRIPT" --self-test >"$WORK/selftest.log" 2>&1; code=$?
-[ "$code" -eq 0 ] \
-  && ok "self-test-passes" \
-  || bad "self-test-passes" "exit $code (see the script's --self-test)"
-
-# --- the lane's own branch scans clean ------------------------------------------
-out=$(bash "$ROOT/$SCRIPT" "$BASE_ARG" HEAD 2>/dev/null); code=$?
-if [ "$code" -ne 0 ]; then
-  bad "own-branch-clean" "exit $code, want 0"
-elif [ -n "$out" ]; then
-  bad "own-branch-clean" "$(printf '%s\n' "$out" | wc -l) suspect lines on the branch (values never shown)"
-else
-  ok "own-branch-clean"
-fi
-
-# --- AC5: the scan is wired into the project's checks ---------------------------
-if ! git ls-files --error-unmatch .postmaster/project.toml >/dev/null 2>&1; then
-  bad "wiring-declared" ".postmaster/project.toml is not tracked"
-else
-  wired=$(bash scripts/verify.sh checks . --json 2>/dev/null \
-    | python3 -c 'import json,sys; cs=json.load(sys.stdin); print("\n".join(c["command"] for c in cs if "scrub-check" in c.get("command","")))' 2>/dev/null)
-  if [ -z "${wired:-}" ]; then
-    bad "wiring-declared" "no declared check runs the scan"
-  else
-    vd=$(mktemp -d -p "$WORK") || { bad "wiring-passes-clean" "scratch dir failed"; vd=""; }
-    if [ -n "$vd" ]; then
-      printf '# Ticket\n' > "$vd/ticket.md"
-      ( cd "$ROOT" && POSTMASTER_VERIFY=$vd bash -e -o pipefail -c "$wired" >/dev/null 2>&1 ); code=$?
-      [ "$code" -eq 0 ] \
-        && ok "wiring-declared-and-passes" \
-        || bad "wiring-passes-clean" "declared scan command exits $code on a clean tree"
-    fi
-  fi
-fi
-
-# --- AC7: the raw-file contract names the script ---------------------------------
-grep -q 'scrub-check' raw/README.md 2>/dev/null \
-  && ok "readme-names-script" \
-  || bad "readme-names-script" "raw/README.md does not name the script"
-
-# --- AC2: no allowlist entries ship with the branch -------------------------------
-# Every non-empty line is an entry, so a file of blank lines alone holds none.
-if [ ! -f scripts/scrub-check.allow ] || ! grep -q . scripts/scrub-check.allow 2>/dev/null; then
-  ok "allowlist-ships-empty"
-else
-  bad "allowlist-ships-empty" "the branch ships allowlist entries of its own"
-fi
-
-# --- clean controls: prose mentions and no-reply addresses pass -------------------
-clean_probe "prose-key-mention-passes" docs/fields.txt "The ${KEY_A} key is listed in the API reference."
-clean_probe "noreply-passes" notes/contact.txt "Reach the relay at $NOREPLY_EMAIL for pings."
-
-# --- AC1: .env-style assignments of anything key-like --------------------------
-flag_probe "flag-dotenv" deploy/app.env "$DOTENV_LINE" "$DOTENV_VALUE"
-clean_probe "dotenv-pointer-passes" deploy/app.env "$POINTER_LINE"
-
-# --- AC5: the raw/ promotion gate ---------------------------------------------
-promote() {  # promote <repo> <args...>: run the worktree's promote script there
-  ( cd "$1" && shift && bash "$ROOT/$PROMOTE" "$@" )
-}
-if need "$PROMOTE" "promote-clean-completes"; then
-repo=$(new_repo) || bad "promote-clean-completes" "scratch repo failed"
-if [ -n "${repo:-}" ]; then
-  printf 'The relay ran its checks and stayed green.\n' > "$WORK/clean-src.md"
-  out=$(promote "$repo" "$WORK/clean-src.md" raw/trials/oracle-413/notes.md 2>"$repo/stderr.txt"); code=$?
-  err=$(cat "$repo/stderr.txt")
-  if [ "$code" -ne 0 ]; then bad "promote-clean-completes" "exit $code, want 0"
-  elif [ ! -f "$repo/raw/trials/oracle-413/notes.md" ]; then bad "promote-clean-completes" "copy missing"
-  else ok "promote-clean-completes"; fi
-fi
-fi
-
-if need "$PROMOTE" "promote-dirty-refused"; then
-repo=$(new_repo) || bad "promote-dirty-refused" "scratch repo failed"
-if [ -n "${repo:-}" ]; then
-  printf 'Reach the relay at %s for pings.\n' "$SUSPECT_EMAIL" > "$WORK/dirty-src.md"
-  out=$(promote "$repo" "$WORK/dirty-src.md" raw/trials/oracle-413/notes.md 2>"$repo/stderr.txt"); code=$?
-  err=$(cat "$repo/stderr.txt")
-  if [ "$code" -eq 0 ]; then bad "promote-dirty-refused" "a tripped copy completed"
-  elif [ -e "$repo/raw/trials/oracle-413/notes.md" ]; then bad "promote-dirty-refused" "refused copy left a file"
-  elif grep -qF -- "$SUSPECT_EMAIL" <<<"$out$err"; then bad "promote-dirty-refused" "value printed"
-  else ok "promote-dirty-refused"; fi
-fi
-fi
-
-if need "$PROMOTE" "promote-ruled-proceeds"; then
-repo=$(new_repo) || bad "promote-ruled-proceeds" "scratch repo failed"
-if [ -n "${repo:-}" ]; then
-  mkdir -p "$repo/wiki"
-  printf 'Reach the relay at %s for pings.\n' "$SUSPECT_EMAIL" > "$WORK/dirty-src.md"
-  out=$(promote "$repo" --ruled 'oracle ruling: staging relay address, fine to publish' \
-    "$WORK/dirty-src.md" raw/trials/oracle-413/notes.md 2>"$repo/stderr.txt"); code=$?
-  err=$(cat "$repo/stderr.txt")
-  if [ "$code" -ne 0 ]; then bad "promote-ruled-proceeds" "exit $code, want 0"
-  elif [ ! -f "$repo/raw/trials/oracle-413/notes.md" ]; then bad "promote-ruled-proceeds" "copy missing"
-  elif ! grep -qF 'oracle ruling: staging relay address, fine to publish' "$repo/wiki/log.md" 2>/dev/null; then
-    bad "promote-ruled-proceeds" "no ruling line in wiki/log.md"
-  elif grep -qF -- "$SUSPECT_EMAIL" "$repo/wiki/log.md" 2>/dev/null; then
-    bad "promote-ruled-proceeds" "value in wiki/log.md"
-  elif grep -qF -- "$SUSPECT_EMAIL" <<<"$out$err"; then bad "promote-ruled-proceeds" "value printed"
-  else ok "promote-ruled-proceeds"; fi
-fi
-fi
-
-if need "$PROMOTE" "promote-outside-raw-refused"; then
-repo=$(new_repo) || bad "promote-outside-raw-refused" "scratch repo failed"
-if [ -n "${repo:-}" ]; then
-  printf 'clean\n' > "$WORK/clean-src.md"
-  out=$(promote "$repo" "$WORK/clean-src.md" notes/elsewhere.md 2>/dev/null); code=$?
-  if [ "$code" -eq 0 ]; then bad "promote-outside-raw-refused" "a copy outside raw/ completed"
-  elif [ -e "$repo/notes/elsewhere.md" ]; then bad "promote-outside-raw-refused" "refused copy left a file"
-  else ok "promote-outside-raw-refused"; fi
-fi
-fi
-
-# --- AC6: the tree check ------------------------------------------------------
-treecheck() {  # treecheck <repo> <base> <head>: run the worktree's tree check
-  ( cd "$1" && bash "$ROOT/$TREE" "$2" "$3" )
-}
-if need "$TREE" "tree-postmaster-staged-fails"; then
-repo=$(new_repo) || bad "tree-postmaster-staged-fails" "scratch repo failed"
-if [ -n "${repo:-}" ]; then
-  head=$(git -C "$repo" rev-parse HEAD)
-  mkdir -p "$repo/.postmaster/verify"
-  printf 'run record\n' > "$repo/.postmaster/verify/checks.json"
-  git -C "$repo" add .postmaster/verify/checks.json
-  out=$(treecheck "$repo" main "$head" 2>"$repo/stderr.txt"); code=$?
-  err=$(cat "$repo/stderr.txt")
-  if [ "$code" -ne 1 ]; then bad "tree-postmaster-staged-fails" "exit $code, want 1"
-  elif ! grep -qF '.postmaster/verify/checks.json' <<<"$out"; then
-    bad "tree-postmaster-staged-fails" "staged path not named"
-  else ok "tree-postmaster-staged-fails"; fi
-fi
-fi
-
-if need "$TREE" "tree-postmaster-committed-fails"; then
-repo=$(new_repo) || bad "tree-postmaster-committed-fails" "scratch repo failed"
-if [ -n "${repo:-}" ]; then
-  base=$(git -C "$repo" rev-parse HEAD)
-  commit_file "$repo" .postmaster/runs/stale.json '{"run": "stale"}' >/dev/null
-  head=$(git -C "$repo" rev-parse HEAD)
-  out=$(treecheck "$repo" "$base" "$head" 2>/dev/null); code=$?
-  if [ "$code" -ne 1 ]; then bad "tree-postmaster-committed-fails" "exit $code, want 1"
-  elif ! grep -qF '.postmaster/runs/stale.json' <<<"$out"; then
-    bad "tree-postmaster-committed-fails" "committed path not named"
-  else ok "tree-postmaster-committed-fails"; fi
-fi
-fi
-
-if need "$TREE" "tree-project-toml-exempt"; then
-repo=$(new_repo) || bad "tree-project-toml-exempt" "scratch repo failed"
-if [ -n "${repo:-}" ]; then
-  base=$(git -C "$repo" rev-parse HEAD)
-  commit_file "$repo" .postmaster/project.toml '[checks.example]' >/dev/null
-  head=$(git -C "$repo" rev-parse HEAD)
-  out=$(treecheck "$repo" "$base" "$head" 2>/dev/null); code=$?
-  { [ "$code" -eq 0 ] && [ -z "$out" ]; } \
-    && ok "tree-project-toml-exempt" \
-    || bad "tree-project-toml-exempt" "exit $code"
-fi
-fi
-
-if need "$TREE" "tree-raw-added-suspect-fails"; then
-repo=$(new_repo) || bad "tree-raw-added-suspect-fails" "scratch repo failed"
-if [ -n "${repo:-}" ]; then
-  base=$(git -C "$repo" rev-parse HEAD)
-  commit_file "$repo" raw/trials/oracle-413/notes.md "Reach the relay at $SUSPECT_EMAIL for pings." >/dev/null
-  head=$(git -C "$repo" rev-parse HEAD)
-  out=$(treecheck "$repo" "$base" "$head" 2>"$repo/stderr.txt"); code=$?
-  err=$(cat "$repo/stderr.txt")
-  if [ "$code" -ne 1 ]; then bad "tree-raw-added-suspect-fails" "exit $code, want 1"
-  elif ! grep -qF 'raw/trials/oracle-413/notes.md:1:' <<<"$out"; then
-    bad "tree-raw-added-suspect-fails" "added file not named"
-  elif grep -qF -- "$SUSPECT_EMAIL" <<<"$out$err"; then bad "tree-raw-added-suspect-fails" "value printed"
-  else ok "tree-raw-added-suspect-fails"; fi
-fi
-fi
-
-if need "$TREE" "tree-raw-added-clean-passes"; then
-repo=$(new_repo) || bad "tree-raw-added-clean-passes" "scratch repo failed"
-if [ -n "${repo:-}" ]; then
-  base=$(git -C "$repo" rev-parse HEAD)
-  commit_file "$repo" raw/trials/oracle-413/notes.md 'The relay ran its checks and stayed green.' >/dev/null
-  head=$(git -C "$repo" rev-parse HEAD)
-  out=$(treecheck "$repo" "$base" "$head" 2>/dev/null); code=$?
-  { [ "$code" -eq 0 ] && [ -z "$out" ]; } \
-    && ok "tree-raw-added-clean-passes" \
-    || bad "tree-raw-added-clean-passes" "exit $code"
-fi
-fi
-
-# --- AC7: the wiki lint for paths, hostnames and quoted raw text --------------
-wiki_repo() {  # a scratch repo with a minimal well-formed wiki
-  local d
-  d=$(mktemp -d -p "$WORK") || return 1
-  ( cd "$d" && g init -q -b main . && mkdir -p wiki/concepts raw \
-    && printf -- '---\ntitle: index\ntype: index\nupdated: 2026-01-01\n---\n\n- [p](concepts/p.md)\n' > wiki/index.md \
-    && printf -- '---\ntitle: p\ntype: concept\nstanding: claimed\nsources: []\nupdated: 2026-01-01\n---\n\nBody.\n' > wiki/concepts/p.md \
-    && g add -A && g commit -qm base ) || return 1
-  printf '%s' "$d"
-}
-if need "$LINT" "wiki-private-path-fails"; then
-repo=$(wiki_repo) || bad "wiki-private-path-fails" "scratch repo failed"
-if [ -n "${repo:-}" ]; then
-  printf 'See %s for the log.\n' "$SUSPECT_HOMEPATH" >> "$repo/wiki/concepts/p.md"
-  out=$(bash "$ROOT/$LINT" "$repo" 2>"$repo/stderr.txt"); code=$?
-  err=$(cat "$repo/stderr.txt")
-  if [ "$code" -ne 1 ]; then bad "wiki-private-path-fails" "exit $code, want 1"
-  elif ! grep -qF 'private-path' <<<"$out"; then bad "wiki-private-path-fails" "no private-path fault"
-  elif grep -qF -- "$SUSPECT_HOMEPATH" <<<"$out$err"; then bad "wiki-private-path-fails" "value printed"
-  else ok "wiki-private-path-fails"; fi
-fi
-fi
-
-if need "$LINT" "wiki-private-host-fails"; then
-repo=$(wiki_repo) || bad "wiki-private-host-fails" "scratch repo failed"
-if [ -n "${repo:-}" ]; then
-  printf 'See %s for the dashboard.\n' "$SUSPECT_URL" >> "$repo/wiki/concepts/p.md"
-  out=$(bash "$ROOT/$LINT" "$repo" 2>"$repo/stderr.txt"); code=$?
-  err=$(cat "$repo/stderr.txt")
-  if [ "$code" -ne 1 ]; then bad "wiki-private-host-fails" "exit $code, want 1"
-  elif ! grep -qF 'private-host' <<<"$out"; then bad "wiki-private-host-fails" "no private-host fault"
-  elif grep -qF -- "$SUSPECT_HOST" <<<"$out$err"; then bad "wiki-private-host-fails" "value printed"
-  else ok "wiki-private-host-fails"; fi
-fi
-fi
-
-if need "$LINT" "wiki-quoted-raw-fails"; then
-repo=$(wiki_repo) || bad "wiki-quoted-raw-fails" "scratch repo failed"
-if [ -n "${repo:-}" ]; then
-  printf '%s\n' "$QUOTE_LINE" > "$repo/raw/evidence.txt"
-  printf '%s\n' "$QUOTE_LINE" >> "$repo/wiki/concepts/p.md"
-  out=$(bash "$ROOT/$LINT" "$repo" 2>/dev/null); code=$?
-  if [ "$code" -ne 1 ]; then bad "wiki-quoted-raw-fails" "exit $code, want 1"
-  elif ! grep -qF 'repeats raw/' <<<"$out"; then bad "wiki-quoted-raw-fails" "no quoted-raw fault"
-  else ok "wiki-quoted-raw-fails"; fi
-fi
-fi
-
-if need "$LINT" "wiki-worktree-passes"; then
-out=$(bash "$ROOT/$LINT" 2>/dev/null); code=$?
-{ [ "$code" -eq 0 ] && [ -z "$out" ]; } \
-  && ok "wiki-worktree-passes" \
-  || bad "wiki-worktree-passes" "the branch's own wiki fails its lint"
-fi
-
-# --- AC10: the README backstop wording ----------------------------------------
-if grep -qi 'backstop' raw/README.md 2>/dev/null && grep -qi 'not a proof' raw/README.md 2>/dev/null; then
-  ok "readme-backstop-not-proof"
-else
-  bad "readme-backstop-not-proof" "raw/README.md does not say backstop, not proof"
-fi
-
-# --- AC12: no new dependency, large files streamed -----------------------------
-imports=$( { grep -hE '^import ' scripts/scrub-check.sh scripts/wiki-lint.sh 2>/dev/null | sed 's/^import //'; \
-  grep -hE '^from ' scripts/scrub-check.sh scripts/wiki-lint.sh 2>/dev/null | sed -E 's/^from ([A-Za-z0-9_]+).*/\1/'; } \
-  | tr ',' '\n' | sed -E 's/^ *([A-Za-z0-9_]+).*/\1/' | sort -u | tr '\n' ' ')
-allowed='ast ipaddress os pathlib re subprocess sys tempfile '
-leak=0
-for mod in $imports; do
-  case " $allowed" in *" $mod "*) ;; *) leak=1;; esac
+REPO=$(pwd -P)
+BASE_ARG=${1:-main}
+HEAD_ARG=${2:-HEAD}
+[ $# -le 2 ] || { echo "usage: oracle-135.sh [base] [head]" >&2; exit 2; }
+case $BASE_ARG in -*) echo "usage: oracle-135.sh [base] [head]" >&2; exit 2 ;; esac
+case $HEAD_ARG in -*) echo "usage: oracle-135.sh [base] [head]" >&2; exit 2 ;; esac
+git -C "$REPO" rev-parse --show-toplevel >/dev/null 2>&1 || { echo "oracle-135: not a repository" >&2; exit 2; }
+SCRUB=$REPO/scripts/scrub-check.sh
+TREE=$REPO/scripts/tree-check.sh
+LINT=$REPO/scripts/wiki-lint.sh
+PROMOTE=$REPO/scripts/raw-promote.sh
+REWRITE=$REPO/scripts/scrub-rewrite.sh
+STATUS=$REPO/scripts/runs-status.sh
+VERIFY=$REPO/scripts/verify.sh
+for s in "$SCRUB" "$TREE" "$LINT" "$PROMOTE" "$REWRITE" "$STATUS" "$VERIFY"; do
+  [ -x "$s" ] || { echo "oracle-135: no $s" >&2; exit 2; }
 done
-if [ -f scripts/raw-promote.sh ] && [ -f scripts/tree-check.sh ] \
-    && [ "$leak" -eq 0 ] && ! grep -q 'python3' scripts/raw-promote.sh scripts/tree-check.sh 2>/dev/null; then
-  ok "no-new-dependency"
-else
-  bad "no-new-dependency" "imports beyond the gate's: $imports"
-fi
 
-if ! ( ulimit -v 65536 ) 2>/dev/null; then
-  bad "streams-large-file" "ulimit -v unavailable: no streaming proof"
-else
-repo=$(new_repo) || bad "streams-large-file" "scratch repo failed"
-if [ -n "${repo:-}" ]; then
-  python3 -c "open('$repo/big.txt','w').write(('clean relay line 413 pad ' * 100 + '\n') * 12000)"
-  printf 'Reach the relay at %s for pings.\n' "$SUSPECT_EMAIL" >> "$repo/big.txt"
-  out=$( ( cd "$repo" && ulimit -v 65536 && bash "$ROOT/$SCRIPT" --files big.txt ) 2>"$repo/stderr.txt"); code=$?
-  err=$(cat "$repo/stderr.txt")
-  if [ "$code" -ne 1 ]; then bad "streams-large-file" "exit $code, want 1"
-  elif ! grep -qF 'big.txt:12001:' <<<"$out"; then bad "streams-large-file" "tail suspect not named"
-  elif grep -qF -- "$SUSPECT_EMAIL" <<<"$out$err"; then bad "streams-large-file" "value printed"
-  else ok "streams-large-file"; fi
-fi
-fi
+tmp=$(mktemp -d) || exit 2
+trap 'rm -r -- "$tmp" </dev/null 2>/dev/null' EXIT
+fails=0
+# Hermetic probes: a detections log in the environment is the gate's, and
+# fixture findings must never land in it. Logging probes set their own.
+export POSTMASTER_DETECTIONS_LOG=
 
-echo "oracle-135: $pass passed, $fail failed"
-[ "$fail" -eq 0 ]
+ok() { printf '  ok   %s\n' "$1"; }
+fail() { printf '  FAIL %s\n' "$1"; fails=$((fails+1)); }
+
+# Every fabricated secret, assembled from pieces so this file carries no
+# matchable form. own-branch-clean below proves it.
+E_LOCAL='relay-413'; E_HOST='quiet-relay-413'; E_TLD='net'
+EMAIL="contact-${E_LOCAL}@${E_HOST}.${E_TLD}"
+PLUS_LOCAL='First.Last+tag'
+PLUS_EMAIL="${PLUS_LOCAL}@sub.${E_HOST}.${E_TLD}"
+DOT='.'
+PRIV_IP="10${DOT}135${DOT}4${DOT}13"
+CGNAT_IP="100${DOT}99${DOT}4${DOT}13"
+PUB100="100${DOT}128${DOT}0${DOT}1"
+PRIV_HOST="metrics${DOT}internal"
+TAIL_HOST="node-413${DOT}ts${DOT}net"
+HOME_P='/ho'; HOME_O='me/'; HOME_U='fixture-user-413'
+HOME_PATH="${HOME_P}${HOME_O}${HOME_U}/notes.txt"
+T_P1='s'; T_P2='k-'; T_B='fictional413keyK7mQ2xZ9aVbN4qy7'
+TOKEN_V="${T_P1}${T_P2}${T_B}"
+BEARER_V1='fictional413relay'; BEARER_V2='K7mQ2xZ9aVbN4qy7'
+BEARER="Bearer ${BEARER_V1}${BEARER_V2}"
+O_P1='or'; O_P2='g-'; O_B='fictional413relayK7mQ2xZ9'
+ORG_TOKEN="${O_P1}${O_P2}${O_B}"
+SESS_P='sess-'; SESS_B='fictional413K7mQ2x'
+SESS_ID="${SESS_P}${SESS_B}"
+UUID_A='41313513-0042'; UUID_B='4c1d-9e5f-135135135135'
+UUID_V="${UUID_A}-${UUID_B}"
+ACCT_A='123456'; ACCT_B='789012'
+ACCT_NUM="${ACCT_A}${ACCT_B}"
+K_U='user'; K_E='Email'
+KEY_USER="${K_U}${K_E}"
+K_S1='session'; K_S2='Context'
+KEY_SESSC="${K_S1}${K_S2}"
+K_C1='credential'; K_C2='_org'
+KEY_CRED="${K_C1}${K_C2}"
+A_F1='account'; A_F2='Id'
+KEY_ACCT="${A_F1}${A_F2}"
+S_V1='fixture-'; S_V2='session-413'
+SESS_VAL="${S_V1}${S_V2}"
+O_V1='fixture-'; O_V2='org-413'
+ORG_VAL="${O_V1}${O_V2}"
+C_A='Co-Au'; C_B='thored-'; C_C='By: Imaginary Aide'
+TRAILER="${C_A}${C_B}${C_C}"
+G_W1='generated-'; G_W2='with: ImaginaryAide'
+GENWITH="${G_W1}${G_W2}"
+D_N1='SESSION'; D_N2='SECRET'; US='_'; D_V1='relay-413-'; D_V2='quiet'
+DOTENV_LINE="${D_N1}${US}${D_N2}=${D_V1}${D_V2}"
+ALLOW_P='private-data:allo'
+ALLOW="${ALLOW_P}w"
+ALLOW_NEXT="${ALLOW_P}w-next-line"
+
+mkrepo() {  # a scratch repo on main with one clean commit, printed
+  local d
+  d=$(mktemp -d -p "$tmp") || return 1
+  ( cd "$d" && git init -q -b main . && git config user.name Oracle \
+    && git config user.email "oracle@example.invalid" \
+    && printf 'base\n' > base.txt && git add base.txt && git commit -qm base ) || return 1
+  printf '%s' "$d"
+}
+commit_file() {  # commit_file <repo> <path> <content> [message]: commit, print the sha
+  ( cd "$1" && mkdir -p "$(dirname -- "$2")" && printf '%s\n' "$3" > "$2" \
+    && git add "$2" && git commit -qm "${4:-add $2}" >/dev/null && git rev-parse HEAD )
+}
+leaked() {  # leaked <output> <value...>: 0 when a value reaches the output
+  local out=$1; shift
+  local v
+  for v in "$@"; do printf '%s' "$out" | grep -qF -- "$v" && return 0; done
+  return 1
+}
+expects_one() {  # expects_one <repo> <base> <head> <path> <kind> <secret...>
+  local r=$1 base=$2 head=$3 path=$4 kind=$5; shift 5
+  local out code
+  out=$(cd "$r" && POSTMASTER_DETECTIONS_LOG= bash "$SCRUB" "$base" "$head" 2>/dev/null); code=$?
+  [ "$code" -eq 1 ] && [ "$out" = "$head:$path:1: $kind" ] && ! leaked "$out" "$@"
+}
+expects_silent() {  # expects_silent <repo> <base> <head>
+  local out code
+  out=$(cd "$1" && POSTMASTER_DETECTIONS_LOG= bash "$SCRUB" "$2" "$3" 2>/dev/null); code=$?
+  [ "$code" -eq 0 ] && [ -z "$out" ]
+}
+
+echo "exits and silence"
+out=$(POSTMASTER_DETECTIONS_LOG= bash "$SCRUB" 2>/dev/null); code=$?
+{ [ "$code" -eq 2 ] && [ -z "$out" ]; } && ok "no arguments is a usage error, exit 2" || fail "no arguments is a usage error, exit 2 (exit $code)"
+out=$(POSTMASTER_DETECTIONS_LOG= bash "$SCRUB" --help 2>&1); code=$?
+{ [ "$code" -eq 0 ] && printf '%s' "$out" | grep -q "usage:"; } && ok "--help exits 0 with the usage" || fail "--help exits 0 with the usage (exit $code)"
+for flag in --history "--history HEAD" --pr-description --spans --log-detection; do
+  # shellcheck disable=SC2086
+  out=$(POSTMASTER_DETECTIONS_LOG= bash "$SCRUB" $flag 2>/dev/null); code=$?
+  { [ "$code" -eq 2 ] && [ -z "$out" ]; } && ok "$flag without its argument is a usage error, exit 2" || fail "$flag without its argument is a usage error, exit 2 (exit $code)"
+done
+tip=$(git -C "$REPO" rev-parse HEAD)
+out=$(POSTMASTER_DETECTIONS_LOG= bash "$SCRUB" "$tip" "$tip" 2>/dev/null); code=$?
+{ [ "$code" -eq 0 ] && [ -z "$out" ]; } && ok "an empty commit range is clean" || fail "an empty commit range is clean (exit $code)"
+
+echo "each rule flags its shape, without its value"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+head=$(commit_file "$r" fix.txt "{\"$KEY_USER\": \"withheld\"}")
+expects_one "$r" "$base" "$head" fix.txt key "withheld" && ok "a present contact key flags" || fail "a present contact key flags"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+head=$(commit_file "$r" fix.txt "{\"$KEY_SESSC\": \"$SESS_VAL\"}")
+expects_one "$r" "$base" "$head" fix.txt key "$SESS_VAL" && ok "a present session key flags" || fail "a present session key flags"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+head=$(commit_file "$r" fix.txt "{\"$KEY_CRED\": \"$ORG_VAL\"}")
+expects_one "$r" "$base" "$head" fix.txt key "$ORG_VAL" && ok "a present credential key flags" || fail "a present credential key flags"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+head=$(commit_file "$r" fix.txt "$KEY_ACCT: $ACCT_NUM")
+expects_one "$r" "$base" "$head" fix.txt account-id "$ACCT_NUM" && ok "a populated account id field flags" || fail "a populated account id field flags"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+head=$(commit_file "$r" fix.txt "contact: $EMAIL")
+expects_one "$r" "$base" "$head" fix.txt email "$EMAIL" && ok "an address flags" || fail "an address flags"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+head=$(commit_file "$r" fix.txt "write to $PLUS_EMAIL for the demo")
+expects_one "$r" "$base" "$head" fix.txt email "$PLUS_EMAIL" && ok "a tagged subdomain address flags" || fail "a tagged subdomain address flags"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+head=$(commit_file "$r" fix.txt "owner $ORG_TOKEN")
+expects_one "$r" "$base" "$head" fix.txt account-id "$ORG_TOKEN" && ok "an opaque org token flags" || fail "an opaque org token flags"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+head=$(commit_file "$r" fix.txt "relay $SESS_ID")
+expects_one "$r" "$base" "$head" fix.txt account-id "$SESS_ID" && ok "an opaque session token flags" || fail "an opaque session token flags"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+head=$(commit_file "$r" fix.txt "account ref $UUID_V")
+expects_one "$r" "$base" "$head" fix.txt account-id "$UUID_V" && ok "a UUID with account context flags" || fail "a UUID with account context flags"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+head=$(commit_file "$r" fix.txt "source under $HOME_PATH")
+expects_one "$r" "$base" "$head" fix.txt private-path "$HOME_PATH" && ok "a home directory flags" || fail "a home directory flags"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+head=$(commit_file "$r" fix.txt "endpoint $PRIV_IP:8080")
+expects_one "$r" "$base" "$head" fix.txt private-host "$PRIV_IP" && ok "a private IP flags" || fail "a private IP flags"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+head=$(commit_file "$r" fix.txt "relay at $CGNAT_IP:8080")
+expects_one "$r" "$base" "$head" fix.txt private-host "$CGNAT_IP" && ok "a carrier-grade IP flags" || fail "a carrier-grade IP flags"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+head=$(commit_file "$r" fix.txt "node at $TAIL_HOST:8080")
+expects_one "$r" "$base" "$head" fix.txt private-host "$TAIL_HOST" && ok "a tailnet name flags" || fail "a tailnet name flags"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+head=$(commit_file "$r" fix.txt "relay key $TOKEN_V")
+expects_one "$r" "$base" "$head" fix.txt token "$TOKEN_V" && ok "a documented key prefix flags" || fail "a documented key prefix flags"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+head=$(commit_file "$r" fix.txt "auth $BEARER")
+expects_one "$r" "$base" "$head" fix.txt token "$BEARER_V1$BEARER_V2" && ok "a Bearer credential flags" || fail "a Bearer credential flags"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+head=$(commit_file "$r" fix.txt "$DOTENV_LINE")
+expects_one "$r" "$base" "$head" fix.txt dotenv "$DOTENV_LINE" && ok "a key-like assignment flags" || fail "a key-like assignment flags"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+head=$(commit_file "$r" fix.txt "$TRAILER")
+expects_one "$r" "$base" "$head" fix.txt assistant-attribution "Imaginary Aide" && ok "an authorship trailer flags" || fail "an authorship trailer flags"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+head=$(commit_file "$r" fix.txt "$GENWITH")
+expects_one "$r" "$base" "$head" fix.txt assistant-attribution "ImaginaryAide" && ok "a generated-with footer flags" || fail "a generated-with footer flags"
+
+echo "clean shapes stay silent"
+r=$(mkrepo); last=$(git -C "$r" rev-parse HEAD)
+head=$(commit_file "$r" a.txt '{"userEmail": null}'); expects_silent "$r" "$last" "$head" && ok "a null key value is clean" || fail "a null key value is clean"; last=$head
+head=$(commit_file "$r" b.txt "the userEmail field is redacted before promotion"); expects_silent "$r" "$last" "$head" && ok "a bare key name is clean" || fail "a bare key name is clean"; last=$head
+r=$(mkrepo); last=$(git -C "$r" rev-parse HEAD)
+head=$(commit_file "$r" a.txt "write noreply@no-such-vendor-413.net instead"); expects_silent "$r" "$last" "$head" && ok "a no-reply address is clean" || fail "a no-reply address is clean"; last=$head
+head=$(commit_file "$r" b.txt "write someone@example.org for the demo"); expects_silent "$r" "$last" "$head" && ok "a reserved domain is clean" || fail "a reserved domain is clean"; last=$head
+r=$(mkrepo); last=$(git -C "$r" rev-parse HEAD)
+head=$(commit_file "$r" a.txt "see org-ab12 for the demo"); expects_silent "$r" "$last" "$head" && ok "a short org token is clean" || fail "a short org token is clean"; last=$head
+head=$(commit_file "$r" b.txt "the session_context key holds the session"); expects_silent "$r" "$last" "$head" && ok "a key name with no digit is clean" || fail "a key name with no digit is clean"; last=$head
+head=$(commit_file "$r" c.txt "schema example $UUID_V"); expects_silent "$r" "$last" "$head" && ok "a UUID with no id context is clean" || fail "a UUID with no id context is clean"; last=$head
+r=$(mkrepo); last=$(git -C "$r" rev-parse HEAD)
+head=$(commit_file "$r" a.txt "notes under ~/Code/notes.txt"); expects_silent "$r" "$last" "$head" && ok "a bare home reference is clean" || fail "a bare home reference is clean"; last=$head
+head=$(commit_file "$r" b.txt "read /home/user/docs for the layout"); expects_silent "$r" "$last" "$head" && ok "a placeholder user is clean" || fail "a placeholder user is clean"; last=$head
+r=$(mkrepo); last=$(git -C "$r" rev-parse HEAD)
+head=$(commit_file "$r" a.txt "proxy at 127.0.0.1:9"); expects_silent "$r" "$last" "$head" && ok "loopback is clean" || fail "loopback is clean"; last=$head
+head=$(commit_file "$r" b.txt "the relay moved to $PUB100 last month"); expects_silent "$r" "$last" "$head" && ok "a public address past the carrier-grade range is clean" || fail "a public address past the carrier-grade range is clean"; last=$head
+r=$(mkrepo); last=$(git -C "$r" rev-parse HEAD)
+head=$(commit_file "$r" a.txt "token: short"); expects_silent "$r" "$last" "$head" && ok "a short secret-field value is clean" || fail "a short secret-field value is clean"; last=$head
+head=$(commit_file "$r" b.txt "auth Bearer <token> here"); expects_silent "$r" "$last" "$head" && ok "a placeholder Bearer credential is clean" || fail "a placeholder Bearer credential is clean"; last=$head
+r=$(mkrepo); last=$(git -C "$r" rev-parse HEAD)
+head=$(commit_file "$r" a.txt "TOKEN_TYPE=Bearer"); expects_silent "$r" "$last" "$head" && ok "a key-like name pointing elsewhere is clean" || fail "a key-like name pointing elsewhere is clean"; last=$head
+head=$(commit_file "$r" b.txt "the commit trailer policy forbids crediting an assistant"); expects_silent "$r" "$last" "$head" && ok "attribution discussion without a trailer is clean" || fail "attribution discussion without a trailer is clean"; last=$head
+
+echo "a line added and then deleted is still flagged"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+added=$(commit_file "$r" leak.txt "contact: $EMAIL")
+( cd "$r" && git rm -q leak.txt && git commit -qm "delete the leak at the tip" >/dev/null )
+gone=$(git -C "$r" rev-parse HEAD)
+out=$(cd "$r" && POSTMASTER_DETECTIONS_LOG= bash "$SCRUB" "$base" "$gone" 2>/dev/null); code=$?
+{ [ "$code" -eq 1 ] && [ "$out" = "$added:leak.txt:1: email" ] && ! leaked "$out" "$EMAIL"; } \
+  && ok "the added commit is named, without the value" || fail "the added commit is named, without the value"
+
+echo "commit messages are scanned with markers inert"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+( cd "$r" && printf 'ordinary public sample\n' > clean.txt && git add clean.txt \
+  && git commit -qm "add the notes" -m "$TRAILER" >/dev/null )
+head=$(git -C "$r" rev-parse HEAD)
+out=$(cd "$r" && POSTMASTER_DETECTIONS_LOG= bash "$SCRUB" "$base" "$head" 2>/dev/null); code=$?
+{ [ "$code" -eq 1 ] && [ "$out" = "$head:(message):3: assistant-attribution" ]; } \
+  && ok "a trailer in a message is reported as its message line" || fail "a trailer in a message is reported as its message line (exit $code)"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+( cd "$r" && printf 'ordinary public sample\n' > clean.txt && git add clean.txt \
+  && git commit -qm "note" -m "write to $EMAIL" >/dev/null )
+head=$(git -C "$r" rev-parse HEAD)
+out=$(cd "$r" && POSTMASTER_DETECTIONS_LOG= bash "$SCRUB" "$base" "$head" 2>/dev/null); code=$?
+{ [ "$code" -eq 1 ] && [ "$out" = "$head:(message):3: email" ] && ! leaked "$out" "$EMAIL"; } \
+  && ok "an address in a message is reported without the value" || fail "an address in a message is reported without the value (exit $code)"
+off=$(cd "$r" && POSTMASTER_DETECTIONS_LOG= SCRUB_CHECK_DISABLE=messages bash "$SCRUB" "$base" "$head" 2>/dev/null); code=$?
+{ [ "$code" -eq 0 ] && [ -z "$off" ]; } \
+  && ok "a message finding is silent with messages switched off" || fail "a message finding is silent with messages switched off (exit $code)"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+( cd "$r" && printf 'ordinary public sample\n' > clean.txt && git add clean.txt \
+  && git commit -qm "note" -m "write to $EMAIL  # $ALLOW email -- fixture" >/dev/null )
+head=$(git -C "$r" rev-parse HEAD)
+out=$(cd "$r" && POSTMASTER_DETECTIONS_LOG= bash "$SCRUB" "$base" "$head" 2>/dev/null); code=$?
+{ [ "$code" -eq 1 ] && [ "$out" = "$head:(message):3: email" ]; } \
+  && ok "marker text in a message suppresses nothing and faults nothing" || fail "marker text in a message suppresses nothing and faults nothing (exit $code)"
+
+echo "merge resolutions are scanned once, never twice"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+( cd "$r" && git checkout -qb side >/dev/null && printf 'side line\n' > merge.txt \
+  && git add merge.txt && git commit -qm "side work" >/dev/null && git checkout -q main \
+  && printf 'main line\n' > merge.txt && git add merge.txt \
+  && git commit -qm "main work" >/dev/null; git merge -q --no-commit side >/dev/null 2>&1; \
+  printf 'contact: %s\n' "$EMAIL" > merge.txt && git add merge.txt \
+  && git commit -qm "merge the side" >/dev/null )
+merge=$(git -C "$r" rev-parse HEAD)
+out=$(cd "$r" && POSTMASTER_DETECTIONS_LOG= bash "$SCRUB" "$base" "$merge" 2>/dev/null); code=$?
+{ [ "$code" -eq 1 ] && [ "$out" = "$merge:merge.txt:1: email" ] && ! leaked "$out" "$EMAIL"; } \
+  && ok "a resolution carrying a suspect is reported under the merge" || fail "a resolution carrying a suspect is reported under the merge (exit $code)"
+off=$(cd "$r" && POSTMASTER_DETECTIONS_LOG= SCRUB_CHECK_DISABLE=merges bash "$SCRUB" "$base" "$merge" 2>/dev/null); code=$?
+{ [ "$code" -eq 0 ] && [ -z "$off" ]; } \
+  && ok "a resolution is silent with merges switched off" || fail "a resolution is silent with merges switched off (exit $code)"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+( cd "$r" && git checkout -qb side "$base" >/dev/null )
+side=$(commit_file "$r" leak.txt "contact: $EMAIL" "side leak")
+( cd "$r" && git checkout -q main && git merge -q --no-ff -m "merge the side" side 2>/dev/null )
+merge2=$(git -C "$r" rev-parse HEAD)
+out=$(cd "$r" && POSTMASTER_DETECTIONS_LOG= bash "$SCRUB" "$base" "$merge2" 2>/dev/null); code=$?
+{ [ "$code" -eq 1 ] && [ "$out" = "$side:leak.txt:1: email" ]; } \
+  && ok "a side branch finding is reported under its own commit only" || fail "a side branch finding is reported under its own commit only (exit $code)"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+( cd "$r" && printf 'contact: %s\n' "$EMAIL" > old.txt && git add old.txt \
+  && git commit -qm "old leak" >/dev/null && printf 'ordinary\n' > quiet.txt \
+  && git add quiet.txt && git commit -qm "quiet base" >/dev/null )
+qbase=$(git -C "$r" rev-parse HEAD)
+( cd "$r" && printf 'ordinary\n' > advance.txt && git add advance.txt \
+  && git commit -qm "main advance" >/dev/null && git checkout -qb side3 "$qbase" >/dev/null \
+  && printf 'ordinary\n' > side.txt && git add side.txt && git commit -qm "side advance" >/dev/null \
+  && git checkout -q main && git merge -q --no-ff -m "merge the quiet side" side3 2>/dev/null )
+merge3=$(git -C "$r" rev-parse HEAD)
+out=$(cd "$r" && POSTMASTER_DETECTIONS_LOG= bash "$SCRUB" "$qbase" "$merge3" 2>/dev/null); code=$?
+{ [ "$code" -eq 0 ] && [ -z "$out" ]; } \
+  && ok "lines published before the base merge quietly" || fail "lines published before the base merge quietly (exit $code)"
+
+echo "marked lines stay silent, bad markers fault"
+r=$(mkrepo); last=$(git -C "$r" rev-parse HEAD)
+head=$(commit_file "$r" marked.txt "contact: $EMAIL  # $ALLOW email -- fixture relay address")
+expects_silent "$r" "$last" "$head" && ok "a marked line stays silent" || fail "a marked line stays silent"; last=$head
+off=$(cd "$r" && POSTMASTER_DETECTIONS_LOG= SCRUB_CHECK_DISABLE=markers bash "$SCRUB" "$last~1" "$last" 2>/dev/null); code=$?
+{ [ "$code" -eq 1 ] && [ "$off" = "$last:marked.txt:1: email" ]; } \
+  && ok "a marked line flags with markers switched off" || fail "a marked line flags with markers switched off (exit $code)"
+head=$(commit_file "$r" next.txt "$ALLOW_NEXT email -- fixture relay address
+contact: $EMAIL")
+expects_silent "$r" "$last" "$head" && ok "a next-line marker stays silent" || fail "a next-line marker stays silent"; last=$head
+head=$(commit_file "$r" reasonless.txt "contact: $EMAIL  # $ALLOW email")
+out=$(cd "$r" && POSTMASTER_DETECTIONS_LOG= bash "$SCRUB" "$last" "$head" 2>/dev/null); code=$?
+{ [ "$code" -eq 1 ] && printf '%s' "$out" | grep -qF "$head:reasonless.txt:1: marker"; } \
+  && ok "a marker without a reason faults beside its finding" || fail "a marker without a reason faults beside its finding (exit $code)"; last=$head
+head=$(commit_file "$r" unused.txt "ordinary public sample  # $ALLOW email -- nothing to suppress")
+out=$(cd "$r" && POSTMASTER_DETECTIONS_LOG= bash "$SCRUB" "$last" "$head" 2>/dev/null); code=$?
+{ [ "$code" -eq 1 ] && [ "$out" = "$head:unused.txt:1: marker" ]; } \
+  && ok "a marker that suppresses nothing faults" || fail "a marker that suppresses nothing faults (exit $code)"
+off=$(cd "$r" && POSTMASTER_DETECTIONS_LOG= SCRUB_CHECK_DISABLE=markers bash "$SCRUB" "$last" "$head" 2>/dev/null); code=$?
+{ [ "$code" -eq 0 ] && [ -z "$off" ]; } \
+  && ok "an unused marker is silent with markers switched off" || fail "an unused marker is silent with markers switched off (exit $code)"; last=$head
+head=$(commit_file "$r" unknown.txt "contact: $EMAIL  # $ALLOW emial -- typo in the rule")
+out=$(cd "$r" && POSTMASTER_DETECTIONS_LOG= bash "$SCRUB" "$last" "$head" 2>/dev/null); code=$?
+{ [ "$code" -eq 1 ] && printf '%s' "$out" | grep -qF "$head:unknown.txt:1: marker"; } \
+  && ok "a marker naming an unknown rule faults" || fail "a marker naming an unknown rule faults (exit $code)"; last=$head
+head=$(commit_file "$r" prose.txt "the $ALLOW template marks made-up lines")
+expects_silent "$r" "$last" "$head" && ok "marker-shaped text on a clean line is prose" || fail "marker-shaped text on a clean line is prose"; last=$head
+head=$(commit_file "$r" quoted.txt "$ALLOW email -- for $EMAIL")
+out=$(cd "$r" && POSTMASTER_DETECTIONS_LOG= bash "$SCRUB" "$last" "$head" 2>/dev/null); code=$?
+{ [ "$code" -eq 1 ] && printf '%s' "$out" | grep -qF "$head:quoted.txt:1: email" && ! leaked "$out" "$EMAIL"; } \
+  && ok "a reason quoting a suspect flags, without the value" || fail "a reason quoting a suspect flags, without the value (exit $code)"
+
+echo "pull request text scans like a message"
+r=$(mkrepo)
+printf 'Ship the relay.\n\nContact: %s\n' "$EMAIL" > "$r/pr.md"
+out=$(cd "$r" && POSTMASTER_DETECTIONS_LOG= bash "$SCRUB" --pr-description pr.md 2>/dev/null); code=$?
+{ [ "$code" -eq 1 ] && [ "$out" = "(pr-description):3: email" ] && ! leaked "$out" "$EMAIL"; } \
+  && ok "a suspect in the description is reported without the value" || fail "a suspect in the description is reported without the value (exit $code)"
+printf 'Ship the relay.\n' > "$r/clean.md"
+out=$(cd "$r" && POSTMASTER_DETECTIONS_LOG= bash "$SCRUB" --pr-description clean.md 2>/dev/null); code=$?
+{ [ "$code" -eq 0 ] && [ -z "$out" ]; } \
+  && ok "a clean description stays silent" || fail "a clean description stays silent (exit $code)"
+printf 'Contact: %s  # %s email -- fixture\n' "$EMAIL" "$ALLOW" > "$r/marked.md"
+out=$(cd "$r" && POSTMASTER_DETECTIONS_LOG= bash "$SCRUB" --pr-description marked.md 2>/dev/null); code=$?
+{ [ "$code" -eq 1 ] && [ "$out" = "(pr-description):1: email" ]; } \
+  && ok "marker text in the description suppresses nothing" || fail "marker text in the description suppresses nothing (exit $code)"
+out=$(cd "$r" && POSTMASTER_DETECTIONS_LOG= bash "$SCRUB" --pr-description no-such.md 2>/dev/null); code=$?
+{ [ "$code" -eq 2 ] && [ -z "$out" ]; } \
+  && ok "a missing description exits 2" || fail "a missing description exits 2 (exit $code)"
+
+echo "every reported finding is logged, never its value"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+head=$(commit_file "$r" logged.txt "contact: $EMAIL")
+rm -f "$tmp/o.jsonl"
+out=$(cd "$r" && POSTMASTER_DETECTIONS_LOG="$tmp/o.jsonl" bash "$SCRUB" "$base" "$head" 2>/dev/null); code=$?
+entry=$(python3 -c 'import json,sys; e=[json.loads(l) for l in open(sys.argv[1])]; print(len(e), e[0].get("rule"), e[0].get("file"), e[0].get("line"))' "$tmp/o.jsonl" 2>/dev/null)
+{ [ "$code" -eq 1 ] && [ "$entry" = "1 email logged.txt 1" ]; } \
+  && ok "a reported finding is logged once, by rule, file and line" || fail "a reported finding is logged once, by rule, file and line (exit $code)"
+centry=$(python3 -c 'import json,sys; e=[json.loads(l) for l in open(sys.argv[1])]; print(e[0].get("commit"))' "$tmp/o.jsonl" 2>/dev/null)
+[ "$centry" = "$head" ] && ok "the log names the commit" || fail "the log names the commit"
+if grep -qF -- "$EMAIL" "$tmp/o.jsonl" 2>/dev/null; then fail "a logged finding logs no value"
+else ok "a logged finding logs no value"; fi
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+head=$(commit_file "$r" fault.txt "ordinary  # $ALLOW email -- nothing to suppress")
+rm -f "$tmp/o2.jsonl"
+out=$(cd "$r" && POSTMASTER_DETECTIONS_LOG="$tmp/o2.jsonl" bash "$SCRUB" "$base" "$head" 2>/dev/null); code=$?
+{ [ "$code" -eq 1 ] && [ ! -e "$tmp/o2.jsonl" ]; } \
+  && ok "a marker fault is reported but never logged" || fail "a marker fault is reported but never logged (exit $code)"
+rm -f "$tmp/o3.jsonl"
+out=$(cd "$r" && POSTMASTER_DETECTIONS_LOG="$tmp/o3.jsonl" bash "$SCRUB" "$base" "$base" 2>/dev/null); code=$?
+{ [ "$code" -eq 0 ] && [ ! -e "$tmp/o3.jsonl" ]; } \
+  && ok "a clean scan writes nothing" || fail "a clean scan writes nothing (exit $code)"
+printf 'Contact: %s\n' "$EMAIL" > "$r/dirty.md"
+out=$(cd "$r" && POSTMASTER_DETECTIONS_LOG="$tmp/no-such-dir/o.jsonl" bash "$SCRUB" --pr-description dirty.md 2>/dev/null); code=$?
+{ [ "$code" -eq 2 ] && [ -z "$out" ]; } && ok "a log that cannot be written fails the check, exit 2" || fail "a log that cannot be written fails the check, exit 2 (exit $code)"
+out=$(cd "$r" && POSTMASTER_DETECTIONS_LOG= SCRUB_CHECK_DISABLE=key bash "$SCRUB" "$base" "$base" 2>&1); code=$?
+{ [ "$code" -eq 0 ] && printf '%s' "$out" | grep -q "disabled"; } \
+  && ok "a switched-off rule is named on stderr" || fail "a switched-off rule is named on stderr (exit $code)"
+
+echo "--log-detection appends one detection"
+r=$(mkrepo)
+rm -f "$tmp/c.jsonl"
+out=$(cd "$r" && POSTMASTER_DETECTIONS_LOG="$tmp/c.jsonl" bash "$SCRUB" --log-detection email notes/contact.txt 3 "$head" 2>/dev/null); code=$?
+entry=$(python3 -c 'import json,sys; e=[json.loads(l) for l in open(sys.argv[1])]; print(len(e), e[0].get("rule"), e[0].get("file"), e[0].get("line"), e[0].get("commit"))' "$tmp/c.jsonl" 2>/dev/null)
+{ [ "$code" -eq 0 ] && [ -z "$out" ] && [ "$entry" = "1 email notes/contact.txt 3 $head" ]; } \
+  && ok "a well-formed call appends its detection" || fail "a well-formed call appends its detection (exit $code)"
+for bad in "marker f.txt 1" "no-such-rule f.txt 1" "email f.txt x" "email f.txt 0" "email f.txt 1 short"; do
+  # shellcheck disable=SC2086
+  out=$(cd "$r" && POSTMASTER_DETECTIONS_LOG="$tmp/c.jsonl" bash "$SCRUB" --log-detection $bad 2>/dev/null); code=$?
+  { [ "$code" -eq 2 ] && [ -z "$out" ]; } && ok "--log-detection refuses $bad, exit 2" || fail "--log-detection refuses $bad, exit 2 (exit $code)"
+done
+rm -f "$tmp/c2.jsonl"
+out=$(cd "$r" && POSTMASTER_DETECTIONS_LOG= bash "$SCRUB" --log-detection email f.txt 1 2>/dev/null); code=$?
+{ [ "$code" -eq 0 ] && [ ! -e "$tmp/c2.jsonl" ]; } \
+  && ok "an unset log appends nothing, exit 0" || fail "an unset log appends nothing, exit 0 (exit $code)"
+
+echo "--spans names each finding by file index and offsets"
+r=$(mkrepo)
+printf 'contact: %s\nordinary public sample\n' "$EMAIL" > "$r/a.txt"
+printf 'ordinary\n' > "$r/b.txt"
+out=$(cd "$r" && POSTMASTER_DETECTIONS_LOG= bash "$SCRUB" --spans a.txt b.txt 2>/dev/null); code=$?
+slice=$(cd "$r" && printf '%s' "$out" | python3 -c '
+import sys
+row = sys.stdin.read().splitlines()
+assert len(row) == 1, row
+i, line, start, end, rule = row[0].split(":")
+assert (i, line, rule) == ("0", "1", "email"), row
+body = open("a.txt", encoding="utf-8").read().splitlines()[0]
+print(body[int(start):int(end)])
+' 2>/dev/null)
+{ [ "$code" -eq 0 ] && [ "$slice" = "$EMAIL" ]; } \
+  && ok "a span covers its finding exactly" || fail "a span covers its finding exactly (exit $code)"
+if leaked "$out" "$EMAIL"; then fail "a span report prints no value"; else ok "a span report prints no value"; fi
+printf 'ordinary  # %s email -- nothing to suppress\n' "$ALLOW" > "$r/f.txt"
+out=$(cd "$r" && POSTMASTER_DETECTIONS_LOG= bash "$SCRUB" --spans f.txt 2>/dev/null); code=$?
+{ [ "$code" -eq 0 ] && printf '%s' "$out" | grep -qE '^0:1:[0-9]+:[0-9]+:marker$'; } \
+  && ok "a marker fault is a span of its own" || fail "a marker fault is a span of its own (exit $code)"
+out=$(cd "$r" && POSTMASTER_DETECTIONS_LOG= bash "$SCRUB" --spans no-such.txt 2>/dev/null); code=$?
+{ [ "$code" -eq 2 ] && [ -z "$out" ]; } \
+  && ok "spans on a missing file exits 2" || fail "spans on a missing file exits 2 (exit $code)"
+
+echo "each control fails when its rule is switched off"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+head=$(commit_file "$r" fix.txt "{\"$KEY_USER\": \"withheld\"}")
+off=$(cd "$r" && POSTMASTER_DETECTIONS_LOG= SCRUB_CHECK_DISABLE=key bash "$SCRUB" "$base" "$head" 2>/dev/null); code=$?
+{ [ "$code" -eq 0 ] && [ -z "$off" ]; } \
+  && ok "a key finding is silent with key switched off" || fail "a key finding is silent with key switched off (exit $code)"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+head=$(commit_file "$r" fix.txt "relay at $CGNAT_IP:8080")
+off=$(cd "$r" && POSTMASTER_DETECTIONS_LOG= SCRUB_CHECK_DISABLE=private-host bash "$SCRUB" "$base" "$head" 2>/dev/null); code=$?
+{ [ "$code" -eq 0 ] && [ -z "$off" ]; } \
+  && ok "a host finding is silent with private-host switched off" || fail "a host finding is silent with private-host switched off (exit $code)"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+head=$(commit_file "$r" fix.txt "$DOTENV_LINE")
+off=$(cd "$r" && POSTMASTER_DETECTIONS_LOG= SCRUB_CHECK_DISABLE=dotenv bash "$SCRUB" "$base" "$head" 2>/dev/null); code=$?
+{ [ "$code" -eq 0 ] && [ -z "$off" ]; } \
+  && ok "a dotenv finding is silent with dotenv switched off" || fail "a dotenv finding is silent with dotenv switched off (exit $code)"
+
+echo "the check's own tests"
+selfout=$(cd "$REPO" && POSTMASTER_DETECTIONS_LOG= bash "$SCRUB" --self-test 2>/dev/null); code=$?
+[ "$code" -eq 0 ] && ok "the self-test passes" || fail "the self-test passes (exit $code)"
+for rule in key email account-id private-path private-host token dotenv assistant-attribution; do
+  pos=$(printf '%s' "$selfout" | grep -c "^  ok   pos $rule:")
+  neg=$(printf '%s' "$selfout" | grep -c "^  ok   neg $rule:")
+  { [ "$pos" -ge 3 ] && [ "$neg" -ge 3 ]; } \
+    && ok "$rule carries three positives and three negatives ($pos+$neg)" \
+    || fail "$rule carries three positives and three negatives ($pos+$neg)"
+done
+[ ! -e "$REPO/scripts/scrub-check.allow" ] && [ -z "$(ls "$REPO"/scripts/*.allow 2>/dev/null)" ] \
+  && ok "no exceptions file ships" || fail "no exceptions file ships"
+if grep -r "allowlist" "$REPO/scripts/" 2>/dev/null | grep -q .; then fail "no allowlist machinery"
+else ok "no allowlist machinery"; fi
+
+echo "the rewrite clears history without touching the tree"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+leak=$(commit_file "$r" notes/contact.txt "contact: $EMAIL")
+( cd "$r" && git rm -q notes/contact.txt && git commit -qm "drop the note" >/dev/null )
+saved=$(git -C "$r" rev-parse "HEAD^{tree}")
+out=$(cd "$r" && bash "$REWRITE" "$base" HEAD 2>"$tmp/rw.err"); code=$?
+[ "$code" -eq 0 ] && ok "a historical finding is rewritten" || fail "a historical finding is rewritten (exit $code)"
+[ "$(git -C "$r" rev-parse "HEAD^{tree}")" = "$saved" ] \
+  && ok "the final tree is unchanged" || fail "the final tree is unchanged"
+printf '%s' "$out" | grep -qF "$leak:notes/contact.txt:1: email removed" \
+  && ok "the removal names its commit, file, line and rule" || fail "the removal names its commit, file, line and rule"
+if leaked "$out" "$EMAIL" || grep -qF -- "$EMAIL" "$tmp/rw.err" 2>/dev/null; then fail "a rewrite prints no value"
+else ok "a rewrite prints no value"; fi
+rescan=$(cd "$r" && POSTMASTER_DETECTIONS_LOG= bash "$SCRUB" "$base" HEAD 2>/dev/null); code=$?
+{ [ "$code" -eq 0 ] && [ -z "$rescan" ]; } \
+  && ok "the rewritten range scans clean" || fail "the rewritten range scans clean (exit $code)"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+commit_file "$r" notes/contact.txt "contact: $EMAIL" >/dev/null
+tip=$(git -C "$r" rev-parse HEAD)
+out=$(cd "$r" && bash "$REWRITE" "$base" HEAD 2>/dev/null); code=$?
+{ [ "$code" -eq 2 ] && [ "$(git -C "$r" rev-parse HEAD)" = "$tip" ]; } \
+  && ok "a finding at the tip refuses with the branch untouched" || fail "a finding at the tip refuses with the branch untouched (exit $code)"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+commit_file "$r" notes/contact.txt "contact: $EMAIL" >/dev/null
+tip=$(git -C "$r" rev-parse HEAD)
+git init -q --bare "$tmp/rw-remote.git"
+( cd "$r" && git remote add origin "$tmp/rw-remote.git" && git push -q origin HEAD 2>/dev/null )
+out=$(cd "$r" && bash "$REWRITE" "$base" HEAD 2>/dev/null); code=$?
+{ [ "$code" -eq 2 ] && [ "$(git -C "$r" rev-parse HEAD)" = "$tip" ]; } \
+  && ok "a pushed branch refuses with the branch untouched" || fail "a pushed branch refuses with the branch untouched (exit $code)"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+( cd "$r" && printf 'ordinary\n' > notes.txt && git add notes.txt \
+  && git commit -qm "add the notes" -m "$TRAILER" >/dev/null )
+out=$(cd "$r" && bash "$REWRITE" "$base" HEAD 2>/dev/null); code=$?
+rescan=$(cd "$r" && POSTMASTER_DETECTIONS_LOG= bash "$SCRUB" "$base" HEAD 2>/dev/null); rcode=$?
+{ [ "$code" -eq 0 ] && [ "$rcode" -eq 0 ] && [ -z "$rescan" ]; } \
+  && ok "a trailer in an earlier message is stripped" || fail "a trailer in an earlier message is stripped (exit $code)"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+commit_file "$r" notes/contact.txt "contact: $EMAIL" >/dev/null
+( cd "$r" && git rm -q notes/contact.txt && git commit -qm "drop the note" >/dev/null )
+( cd "$r" && git checkout -qb side >/dev/null && printf 'side\n' > side.txt \
+  && git add side.txt && git commit -qm side >/dev/null && git checkout -q main \
+  && printf 'main\n' > main.txt && git add main.txt && git commit -qm mainwork >/dev/null \
+  && git merge -q --no-ff -m "merge the side" side 2>/dev/null )
+out=$(cd "$r" && bash "$REWRITE" "$base" HEAD 2>/dev/null); code=$?
+{ [ "$code" -eq 0 ] && [ "$(git -C "$r" rev-list --parents -n 1 HEAD | wc -w)" -eq 3 ]; } \
+  && ok "a clean merge keeps both parents through a rewrite" || fail "a clean merge keeps both parents through a rewrite (exit $code)"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+( cd "$r" && git checkout -qb side >/dev/null \
+  && printf 'contact: %s\n' "$EMAIL" > merge.txt && git add merge.txt \
+  && git commit -qm side >/dev/null && git checkout -q main \
+  && printf 'main\n' > merge.txt && git add merge.txt && git commit -qm mainwork >/dev/null; \
+  git merge -q --no-commit side >/dev/null 2>&1; \
+  printf 'contact: %s\n' "$EMAIL" > merge.txt && git add merge.txt \
+  && git commit -qm "merge the side" >/dev/null )
+tip=$(git -C "$r" rev-parse HEAD)
+out=$(cd "$r" && bash "$REWRITE" "$base" HEAD 2>/dev/null); code=$?
+{ [ "$code" -eq 2 ] && [ "$(git -C "$r" rev-parse HEAD)" = "$tip" ]; } \
+  && ok "a merge carrying a finding refuses with the branch untouched" || fail "a merge carrying a finding refuses with the branch untouched (exit $code)"
+
+echo "promotion scrubs, checks again, and completes only when clean"
+r=$(mkrepo)
+printf 'Reach the relay at %s for pings.\n' "$EMAIL" > "$tmp/pm-dirty.md"
+out=$(cd "$r" && POSTMASTER_DETECTIONS_LOG= bash "$PROMOTE" "$tmp/pm-dirty.md" raw/trials/t413/notes.md 2>"$tmp/pm.err"); code=$?
+[ "$code" -eq 0 ] && ok "a dirty file completes scrubbed" || fail "a dirty file completes scrubbed (exit $code)"
+if grep -qF -- "$EMAIL" "$r/raw/trials/t413/notes.md" 2>/dev/null; then fail "the copy holds no value"
+elif grep -qF '<redacted:email>' "$r/raw/trials/t413/notes.md" 2>/dev/null; then ok "the copy holds a placeholder naming its rule"
+else fail "the copy holds a placeholder naming its rule"; fi
+if leaked "$out" "$EMAIL" || grep -qF -- "$EMAIL" "$tmp/pm.err" 2>/dev/null; then fail "a scrub prints no value"
+else ok "a scrub prints no value"; fi
+printf '%s' "$out" | grep -qF 'raw/trials/t413/notes.md:1: email scrubbed' \
+  && ok "a scrub reports its rule, file and line" || fail "a scrub reports its rule, file and line"
+cmp -s "$tmp/pm-dirty.md" <(printf 'Reach the relay at %s for pings.\n' "$EMAIL") \
+  && ok "the original is untouched" || fail "the original is untouched"
+[ ! -e "$r/wiki/log.md" ] && ok "a scrub records no ruling" || fail "a scrub records no ruling"
+recheck=$(cd "$r" && POSTMASTER_DETECTIONS_LOG= bash "$SCRUB" --files raw/trials/t413/notes.md 2>/dev/null); code=$?
+{ [ "$code" -eq 0 ] && [ -z "$recheck" ]; } \
+  && ok "the copy checks clean again" || fail "the copy checks clean again (exit $code)"
+r=$(mkrepo)
+printf 'ordinary  # %s email -- nothing to suppress\n' "$ALLOW" > "$tmp/pm-fault.md"
+out=$(cd "$r" && POSTMASTER_DETECTIONS_LOG= bash "$PROMOTE" "$tmp/pm-fault.md" raw/trials/t413/notes.md 2>/dev/null); code=$?
+{ [ "$code" -eq 1 ] && [ ! -e "$r/raw/trials/t413/notes.md" ] && printf '%s' "$out" | grep -qE ': marker$'; } \
+  && ok "a marker fault is refused with nothing copied" || fail "a marker fault is refused with nothing copied (exit $code)"
+r=$(mkrepo)
+printf 'Reach the relay at %s.  # %s email -- made-up relay address\n' "$EMAIL" "$ALLOW" > "$tmp/pm-marked.md"
+out=$(cd "$r" && POSTMASTER_DETECTIONS_LOG= bash "$PROMOTE" "$tmp/pm-marked.md" raw/trials/t413/notes.md 2>/dev/null); code=$?
+{ [ "$code" -eq 0 ] && grep -qF -- "$EMAIL" "$r/raw/trials/t413/notes.md" 2>/dev/null; } \
+  && ok "marked made-up data travels verbatim" || fail "marked made-up data travels verbatim (exit $code)"
+r=$(mkrepo)
+printf 'The relay ran its checks and stayed green.\n' > "$tmp/pm-clean.md"
+out=$(cd "$r" && POSTMASTER_DETECTIONS_LOG= bash "$PROMOTE" "$tmp/pm-clean.md" raw/trials/t413/notes.md 2>/dev/null); code=$?
+{ [ "$code" -eq 0 ] && [ -z "$out" ] && cmp -s "$tmp/pm-clean.md" "$r/raw/trials/t413/notes.md"; } \
+  && ok "a clean file promotes silently and whole" || fail "a clean file promotes silently and whole (exit $code)"
+r=$(mkrepo)
+printf 'clean\n' > "$tmp/pm-out.md"
+out=$(cd "$r" && POSTMASTER_DETECTIONS_LOG= bash "$PROMOTE" "$tmp/pm-out.md" notes/elsewhere.md 2>/dev/null); code=$?
+{ [ "$code" -eq 2 ] && [ ! -e "$r/notes/elsewhere.md" ]; } \
+  && ok "a destination outside raw/ is refused" || fail "a destination outside raw/ is refused (exit $code)"
+out=$(cd "$r" && POSTMASTER_DETECTIONS_LOG= bash "$PROMOTE" --ruled 'a ruling' "$tmp/pm-out.md" raw/t413/x.md 2>/dev/null); code=$?
+{ [ "$code" -eq 2 ] && [ ! -e "$r/raw/t413/x.md" ]; } \
+  && ok "the removed ruling flag is a usage error" || fail "the removed ruling flag is a usage error (exit $code)"
+r=$(mkrepo)
+printf 'Reach the relay at %s.\n' "$EMAIL" > "$tmp/pm-logged.md"
+rm -f "$tmp/pm.jsonl"
+out=$(cd "$r" && POSTMASTER_DETECTIONS_LOG="$tmp/pm.jsonl" bash "$PROMOTE" "$tmp/pm-logged.md" raw/t/t413.md 2>/dev/null); code=$?
+entry=$(python3 -c 'import json,sys; e=[json.loads(l) for l in open(sys.argv[1])]; print(len(e), e[0].get("rule"))' "$tmp/pm.jsonl" 2>/dev/null)
+{ [ "$code" -eq 0 ] && [ "$entry" = "1 email" ] && ! grep -qF -- "$EMAIL" "$tmp/pm.jsonl" 2>/dev/null; } \
+  && ok "a scrubbed finding is logged once, without the value" || fail "a scrubbed finding is logged once, without the value (exit $code)"
+
+echo "the tree check holds the change to both halves"
+r=$(mkrepo); head=$(git -C "$r" rev-parse HEAD)
+mkdir -p "$r/.postmaster/verify" && printf 'run record\n' > "$r/.postmaster/verify/checks.json"
+( cd "$r" && git add .postmaster/verify/checks.json )
+out=$(cd "$r" && POSTMASTER_DETECTIONS_LOG= bash "$TREE" main "$head" 2>/dev/null); code=$?
+{ [ "$code" -eq 1 ] && printf '%s' "$out" | grep -qF '.postmaster/verify/checks.json'; } \
+  && ok "a staged .postmaster/ file fails, named" || fail "a staged .postmaster/ file fails, named (exit $code)"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+commit_file "$r" .postmaster/project.toml '[project]' >/dev/null
+head=$(git -C "$r" rev-parse HEAD)
+out=$(cd "$r" && POSTMASTER_DETECTIONS_LOG= bash "$TREE" "$base" "$head" 2>/dev/null); code=$?
+{ [ "$code" -eq 0 ] && [ -z "$out" ]; } \
+  && ok "the shared project.toml is exempt" || fail "the shared project.toml is exempt (exit $code)"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+commit_file "$r" raw/trials/t413/notes.md "Reach the relay at $EMAIL for pings." >/dev/null
+head=$(git -C "$r" rev-parse HEAD)
+rm -f "$tmp/t.jsonl"
+out=$(cd "$r" && POSTMASTER_DETECTIONS_LOG="$tmp/t.jsonl" bash "$TREE" "$base" "$head" 2>/dev/null); code=$?
+{ [ "$code" -eq 1 ] && printf '%s' "$out" | grep -qF 'raw/trials/t413/notes.md:1:'; } \
+  && ok "an added raw/ file carrying a suspect fails, named" || fail "an added raw/ file carrying a suspect fails, named (exit $code)"
+entry=$(python3 -c 'import json,sys; e=[json.loads(l) for l in open(sys.argv[1])]; print(len(e), e[0].get("rule"), e[0].get("file"), e[0].get("line"))' "$tmp/t.jsonl" 2>/dev/null)
+[ "$entry" = "1 email raw/trials/t413/notes.md 1" ] \
+  && ok "a raw/ fault is logged once, under its real path" || fail "a raw/ fault is logged once, under its real path ($entry)"
+
+echo "the wiki lint holds pages to paths, hosts and quotation"
+wl() {  # wl <target>: a scratch wiki fixture with one concept, printed
+  local d
+  d=$(mktemp -d -p "$tmp") || return 1
+  mkdir -p "$d/wiki/concepts" "$d/raw"
+  printf -- '---\ntitle: i\ntype: concept\nstanding: claimed\nsources: []\nupdated: 2026-01-01\n---\n\n- [c](concepts/c.md)\n' > "$d/wiki/index.md"
+  printf -- '---\ntitle: c\ntype: concept\nstanding: claimed\nsources: []\nupdated: 2026-01-01\n---\n\nBody.\n' > "$d/wiki/concepts/c.md"
+  printf '%s' "$d"
+}
+w=$(wl)
+printf 'See %s%s%s/notes.txt for the log.\n' "$HOME_P" "$HOME_O" "$HOME_U-413" >> "$w/wiki/concepts/c.md"
+rm -f "$tmp/w.jsonl"
+out=$(POSTMASTER_DETECTIONS_LOG="$tmp/w.jsonl" bash "$LINT" "$w" 2>/dev/null); code=$?
+{ [ "$code" -eq 1 ] && printf '%s' "$out" | grep -qF 'private-path'; } \
+  && ok "a page carrying a private path fails" || fail "a page carrying a private path fails (exit $code)"
+entry=$(python3 -c 'import json,sys; e=[json.loads(l) for l in open(sys.argv[1])]; print(len(e), e[0].get("rule"))' "$tmp/w.jsonl" 2>/dev/null)
+[ "$entry" = "1 private-path" ] \
+  && ok "a page fault is logged once" || fail "a page fault is logged once ($entry)"
+w=$(wl)
+printf 'Reach the relay at %s for pings.\n' "$EMAIL" >> "$w/wiki/concepts/c.md"
+rm -f "$tmp/w2.jsonl"
+out=$(POSTMASTER_DETECTIONS_LOG="$tmp/w2.jsonl" bash "$LINT" "$w" 2>/dev/null); code=$?
+{ [ "$code" -eq 0 ] && [ ! -e "$tmp/w2.jsonl" ]; } \
+  && ok "a page carrying only an address passes unlogged" || fail "a page carrying only an address passes unlogged (exit $code)"
+w=$(wl)
+QLINE='The staging relay counted four hundred thirteen spans on the quiet Tuesday run.'
+printf '%s\n' "$QLINE" > "$w/raw/evidence.txt"
+printf '%s\n' "$QLINE" >> "$w/wiki/concepts/c.md"
+out=$(POSTMASTER_DETECTIONS_LOG= bash "$LINT" "$w" 2>/dev/null); code=$?
+{ [ "$code" -eq 1 ] && printf '%s' "$out" | grep -qF 'repeats raw/'; } \
+  && ok "a page line quoting raw/ fails" || fail "a page line quoting raw/ fails (exit $code)"
+
+echo "the poll reports untold detections, the runner sets the log"
+pollroot=$tmp/poll; mkdir -p "$pollroot/tell" "$pollroot/told" "$pollroot/part"
+DET='{"commit":"","file":"notes.txt","line":1,"rule":"email","ts":"2026-09-29T00:00:00Z"}'
+DET2='{"commit":"","file":"notes.txt","line":2,"rule":"token","ts":"2026-09-29T00:01:00Z"}'
+for n in tell told part; do
+  printf '{"migration":"m1","spec":{},"stage":"review","leg":2}' > "$pollroot/$n/manifest.json"
+done
+printf '%s\n' "$DET" > "$pollroot/tell/detections.jsonl"
+printf '%s\n' "$DET" > "$pollroot/told/detections.jsonl"
+printf '%s\n' "$DET" > "$pollroot/told/.detections-told"
+printf '%s\n%s\n' "$DET" "$DET2" > "$pollroot/part/detections.jsonl"
+printf '%s\n' "$DET" > "$pollroot/part/.detections-told"
+out=$(bash "$STATUS" "$pollroot" 2>/dev/null); code=$?
+next_of() { printf '%s\n' "$out" | awk -v r="$1" '$1==r{print $NF}'; }
+{ [ "$code" -eq 0 ] && [ "$(next_of tell)" = TELL ]; } \
+  && ok "a run with an untold detection is TELL" || fail "a run with an untold detection is TELL"
+{ [ "$(next_of told)" = WAIT ] && [ "$(next_of part)" = TELL ]; } \
+  && ok "a fully told log is WAIT, a partly told one TELL" || fail "a fully told log is WAIT, a partly told one TELL"
+vproj=$tmp/vproj; mkdir -p "$vproj/.postmaster"
+cat > "$vproj/.postmaster/project.toml" <<EOF
+[checks.gate]
+command = "true"
+shows = "x"
+[checks.probe]
+command = '$SCRUB --log-detection email probe.txt 1'
+shows = "x"
+EOF
+( cd "$vproj" && git init -q -b main . && git config user.name Oracle \
+  && git config user.email "oracle@example.invalid" && git add -A && git add -f .postmaster/project.toml \
+  && git commit -qm base )
+vd="$vproj/.postmaster/runs/T-9"; mkdir -p "$vd"; printf '## Ticket\nx\n' > "$vd/brief.md"
+bash "$VERIFY" record "$vproj" "$vd" >/dev/null 2>&1
+( cd "$vproj" && git worktree add -q "$vproj/.worktrees/T-9-a" -b wb/T-9-a 2>/dev/null )
+bash "$VERIFY" arm "$vproj/.worktrees/T-9-a" "$vd" >/dev/null 2>&1
+out=$(bash "$VERIFY" run "$vproj/.worktrees/T-9-a" "$vd" 2>&1); code=$?
+entry=$(python3 -c 'import json,sys; e=[json.loads(l) for l in open(sys.argv[1])]; print(len(e), e[0].get("rule"), e[0].get("file"))' "$vd/detections.jsonl" 2>/dev/null)
+{ [ "$code" -eq 0 ] && [ "$entry" = "1 email probe.txt" ]; } \
+  && ok "a check's detection lands in the run's log" || fail "a check's detection lands in the run's log (exit $code)"
+
+echo "the gate declares and runs the checks"
+for c in checks.scrub checks.tree checks.wiki-lint; do
+  grep -qF "[$c]" "$REPO/.postmaster/project.toml" \
+    && ok "$c is declared" || fail "$c is declared"
+done
+for n in raw-promote scrub-check scrub-rewrite tree-check; do
+  grep -qF "$n" "$REPO/.postmaster/project.toml" \
+    && ok "$n self-tests in the gate" || fail "$n self-tests in the gate"
+done
+count=$(python3 -c 'import re; m=re.search(r"for n in (.*?); do", open("'"$REPO"'/.postmaster/project.toml").read()); print(len(m.group(1).split()))')
+[ "$count" = "44" ] && ok "the gate runs 44 self-tests" || fail "the gate runs 44 self-tests ($count)"
+out=$(cd "$REPO" && POSTMASTER_DETECTIONS_LOG= bash "$SCRUB" "$BASE_ARG" "$HEAD_ARG" 2>/dev/null); code=$?
+{ [ "$code" -eq 0 ] && [ -z "$out" ]; } \
+  && ok "the change's own range scans clean" || fail "the change's own range scans clean (exit $code)"
+out=$(cd "$REPO" && POSTMASTER_DETECTIONS_LOG= bash "$TREE" "$BASE_ARG" "$HEAD_ARG" 2>/dev/null); code=$?
+{ [ "$code" -eq 0 ] && [ -z "$out" ]; } \
+  && ok "the change's own tree checks clean" || fail "the change's own tree checks clean (exit $code)"
+out=$(cd "$REPO" && POSTMASTER_DETECTIONS_LOG= bash "$LINT" 2>/dev/null); code=$?
+{ [ "$code" -eq 0 ] && [ -z "$out" ]; } \
+  && ok "the wiki lints clean" || fail "the wiki lints clean (exit $code)"
+grep -q "scrub-check" "$REPO/raw/README.md" && grep -q "backstop" "$REPO/raw/README.md" \
+  && grep -q "not a proof" "$REPO/raw/README.md" \
+  && ok "the evidence guide names the check and its backstop" || fail "the evidence guide names the check and its backstop"
+allowed='^(argparse|ast|base64|collections|configparser|datetime|difflib|enum|fnmatch|functools|getopt|glob|hashlib|hmac|io|ipaddress|itertools|json|locale|logging|math|mimetypes|os|pathlib|platform|plistlib|pprint|queue|random|re|secrets|selectors|shlex|shutil|signal|socket|ssl|stat|statistics|string|struct|subprocess|sys|tarfile|tempfile|textwrap|threading|time|traceback|typing|unicodedata|unittest|urllib|uuid|warnings|weakref|xml|zipfile|zlib)$'
+foreign=$(grep -hoE '^[ \t]*(import|from) [a-zA-Z0-9_]+' "$SCRUB" "$TREE" "$LINT" "$PROMOTE" "$REWRITE" "$STATUS" "$VERIFY" \
+  | awk '{print $NF}' | cut -d. -f1 | sort -u | grep -vE "$allowed" || true)
+[ -z "$foreign" ] && ok "the checks need nothing beyond the standard library" || fail "the checks need nothing beyond the standard library ($foreign)"
+
+echo "large files stream"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+python3 -c 'print(("clean relay line 413 pad " * 100 + "\n") * 70000, end="")' > "$r/big.txt"
+printf 'contact: %s\n' "$EMAIL" >> "$r/big.txt"
+limited=$(cd "$r" && bash -c 'ulimit -v 262144 || exit 99; exec bash "$0" --files big.txt' "$SCRUB" 2>/dev/null); code=$?
+if [ "$code" -eq 99 ]; then ok "a large file streams under a small address space: skipped, no address-space limit here"
+elif [ "$code" -eq 1 ] && [ "$limited" = "big.txt:70001: email" ] && ! leaked "$limited" "$EMAIL"; then
+  ok "a large file streams under a small address space"
+else fail "a large file streams under a small address space (exit $code)"; fi
+
+echo
+if [ "$fails" -eq 0 ]; then echo "oracle-135: all probes behaved"; exit 0; fi
+echo "oracle-135: $fails probe(s) misbehaved"; exit 1
