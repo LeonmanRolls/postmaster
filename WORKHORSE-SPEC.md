@@ -210,7 +210,7 @@ Change:
 - [x] T003 [AC2] Add `--record`: write `<dispatch>/shares.json` with the pinned commits, the
   run length, exclusions, and exact counts and shares per kind and lane; print the greppable
   `SHARES:` line.
-- [ ] T004 [AC2] [AC4] Edit `skills/postmaster/coachman.md`: run the script at the end of
+- [x] T004 [AC2] [AC4] Edit `skills/postmaster/coachman.md`: run the script at the end of
   synthesis, before the SYNTHESIS line, as Decision 11 says; put `SHARES:` on checkpoint-1
   beside SYNTHESIS, keep `took=` and the coachman's reasons, add `shares.json` to the paths
   table, and say the measurement informs the ranking and does not decide it.
