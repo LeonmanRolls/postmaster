@@ -77,10 +77,23 @@ function readWaybill(dispatch: string): Waybill {
   let section = "";
   let ticketLines: string[] = [];
   let inTicket = false;
+  // The ticket body is verbatim and may hold `##` headers of its own; only these
+  // top-level sections end it.
+  const after = new Set(["Project profile", "Team", "Dispatch"]);
   for (const line of text.split("\n")) {
     if (line.startsWith("## ")) {
-      section = line.slice(3).trim();
-      inTicket = section === "Ticket";
+      const next = line.slice(3).trim();
+      if (inTicket) {
+        if (after.has(next)) {
+          inTicket = false;
+          section = next;
+        } else {
+          ticketLines.push(line);
+        }
+        continue;
+      }
+      section = next;
+      inTicket = next === "Ticket";
       if (inTicket) ticketLines = [];
       continue;
     }

@@ -50,6 +50,7 @@ function scratch(): Scratch {
       "",
       "## Ticket",
       "Do the thing.",
+      "## Problem / feature",
       "Accept it when it works.",
       "",
       "## Project profile",
@@ -124,6 +125,7 @@ describe("a brief", () => {
       expect(r.stdout.trim()).toBe(briefPath);
       const body = readFileSync(briefPath, "utf8");
       expect(body).toContain("Do the thing.");
+      expect(body).toContain("## Problem / feature");
       expect(body).toContain("Accept it when it works.");
       expect(body).toContain(`https://code.example/?folder=${join(s.d, "spec-review")}`);
       expect(body).toContain(join(s.d, "spec-review", "WORKHORSE-SPEC.md"));
