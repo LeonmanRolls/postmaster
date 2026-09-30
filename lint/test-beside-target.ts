@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { statSync } from "node:fs";
 import { basename, dirname, join, relative, sep } from "node:path";
 
 type ProgramNode = Readonly<{ type: "Program" }>;
@@ -21,6 +21,14 @@ const testFolder = (filename: string, cwd: string): string | undefined =>
 const targetPath = (filename: string): string =>
   join(dirname(filename), `${basename(filename).slice(0, -TEST_SUFFIX.length)}.ts`);
 
+const isFile = (path: string): boolean => {
+  try {
+    return statSync(path).isFile();
+  } catch {
+    return false;
+  }
+};
+
 const testBesideTarget = {
   meta: {
     type: "problem",
@@ -36,7 +44,7 @@ const testBesideTarget = {
     const target = targetPath(filename);
     const problem = disallowedFolder
       ? `Test file ${testName} is inside the ${disallowedFolder} folder; keep it beside its target.`
-      : !existsSync(target)
+      : !isFile(target)
         ? `Test file ${testName} has no sibling target ${basename(target)}.`
         : null;
     return problem === null

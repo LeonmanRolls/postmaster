@@ -93,6 +93,22 @@ test("a test file without a sibling target fails with one named problem", () =>
     });
   }));
 
+test("a directory named like the target does not count as a sibling file", () =>
+  withDirectory((directory) => {
+    const testFile = join(directory, "folder.test.ts");
+    mkdirSync(join(directory, "folder.ts"));
+    write(testFile);
+
+    expect(runOxlint(testFile)).toEqual({
+      exitCode: 1,
+      diagnostics: [relativeDiagnostic({
+        filePath: testFile,
+        ruleId: "postmaster/test-beside-target",
+        message: "Test file folder.test.ts has no sibling target folder.ts.",
+      })],
+    });
+  }));
+
 test("a test file inside a test folder fails with one named problem", () =>
   withDirectory((directory) => {
     const testFile = join(directory, "test", "nested.test.ts");

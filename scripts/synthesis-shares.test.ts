@@ -263,7 +263,7 @@ test("oracle, lane records, lockfiles, and generated paths are excluded exactly"
 
     expect(result.report.kinds.code).toEqual(expectedKind(1, [laneShare("alpha", 1, 1), laneShare("beta", 0, 1)], 0, 0));
     expect(result.report.exclusions.oracleAddedPaths).toEqual(["oracle-answer.ts"]);
-    expect(result.report.exclusions.byRange.synthesis.map(({ path }) => path).sort()).toEqual([
+    expect(result.report.exclusions.byRange.synthesis.map(({ path }) => path).toSorted()).toEqual([
       "WORKHORSE-BLOCKED.md",
       "WORKHORSE-SPEC.md",
       "WORKHORSE-SUMMARY.md",
