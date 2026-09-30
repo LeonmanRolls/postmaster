@@ -2,6 +2,7 @@
 config.toml
 *.local
 .DS_Store
+node_modules/
 
 # raw/ is committed: it is the wiki's evidence and a citation nobody can follow is not a
 # citation. What must never be committed is a run's automatic record, which lives in each

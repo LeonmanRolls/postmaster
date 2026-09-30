@@ -214,7 +214,7 @@ Change:
   synthesis, before the SYNTHESIS line, as Decision 11 says; put `SHARES:` on checkpoint-1
   beside SYNTHESIS, keep `took=` and the coachman's reasons, add `shares.json` to the paths
   table, and say the measurement informs the ranking and does not decide it.
-- [ ] T005 [P] [AC5] Set up Oxlint: add `node_modules/` to `.gitignore` before the first
+- [x] T005 [P] [AC5] Set up Oxlint: add `node_modules/` to `.gitignore` before the first
   install; a root `package.json` with `oxlint` pinned to exactly 1.86.0 and a `lint` script
   that runs `bun x --bun oxlint`; its `bun.lock`; `.oxlintrc.json` with the plugin and
   `fixtures/` left out.
