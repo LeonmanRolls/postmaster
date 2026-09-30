@@ -36,12 +36,12 @@ half, how a run is prepared and what the waybill carries, is `SKILL.md`. You do 
 | `<dispatch>/leg-<n>-prompt.txt` | the postmaster's one-paragraph prompt that started leg `n` |
 | `<dispatch>/handoff-<n>.md` | leg `n`'s hand-off, the whole of what the next leg knows |
 | `<dispatch>/.leg-<n>-done`, `.leg-<n>-exited` | leg `n` finished its hand-off; leg `n`'s process exited |
-| `<wt>/<TICKET>` | synthesis worktree, branch `<TICKET>`; `<wt>` is `<tool>/scripts/worktree-path.sh root <repo>`, outside the project folder |
-| `<wt>/<TICKET>-<lane>` | workhorse worktree, branch `wb/<TICKET>-<lane>` (`wb` for workhorse branch) |
+| `<repo>/.worktrees/<TICKET>` | synthesis worktree, branch `<TICKET>` |
+| `<repo>/.worktrees/<TICKET>-<lane>` | workhorse worktree, branch `wb/<TICKET>-<lane>` (`wb` for workhorse branch) |
 | `<dispatch>/checkpoint-<n>.md` | checkpoint cards: `1` and `review` |
 | `<dispatch>/spec-review.md` | the planning stage's review package: one entry per workhorse, its spec's commit and the link the postmaster puts to the user; written before `.spec-review-ready` |
 | `<dispatch>/spec-decisions.md` | the postmaster's record, for the current package, of the user's word on each spec: approved, changes in the user's words, or dropped; written only through `<tool>/scripts/spec-decisions.sh`, which also counts approvals run-wide; what you read on resume from the planning pause |
-| `<wt>/<TICKET>-rev-<lens>-<lane>` | reviewer scratch, one per lens per lane, detached at the synthesis HEAD, fresh every round: a clone under the security lens, a worktree under the others |
+| `<repo>/.worktrees/<TICKET>-rev-<lens>-<lane>` | reviewer scratch, one per lens per lane, detached at the synthesis HEAD, fresh every round: a clone under the security lens, a worktree under the others |
 | `<dispatch>/style-sort.md` | aftercare's sort of the run's style findings, which the postmaster puts to the user |
 
 ## Audit log: every action, as it happens
@@ -240,8 +240,8 @@ the brief.
   recommendation, and the state of its branch. The process then exits; the coachman resumes
   it with the ruling.
 
-A workhorse commits incrementally as it goes, never pushes, never reads other branches or other
-working copies (`.worktrees/` or `<wt>`), and never edits files outside its worktree.
+A workhorse commits incrementally as it goes, never pushes, never reads other branches or
+`.worktrees/`, and never edits files outside its worktree.
 
 ## Stage 0 (leg 1): bootstrap
 
@@ -254,13 +254,11 @@ working copies (`.worktrees/` or `<wt>`), and never edits files outside its work
    (`<tool>/scripts/check-target.sh <repo>` exits 0). On either failing, stop and escalate rather than
    cut worktrees from a base that is not the one the postmaster dispatched, or that would
    silently drop uncommitted work.
-3. **Exclude stray working copies without a commit:**
+3. **Exclude worktrees without a commit:**
    `grep -qxF '.worktrees/' <repo>/.git/info/exclude || echo '.worktrees/' >> <repo>/.git/info/exclude`.
-   A run's own copies are cut under `<wt>`, never under `<repo>/.worktrees/`.
 4. **Check the run's directories exist** (`mkdir -p <dispatch>/logs <dispatch>/audit
    <dispatch>/render` is idempotent) and that the synthesis worktree the postmaster cut is at
-   BASE and is your cwd; then cut one workhorse worktree per workhorse from BASE under `<wt>`
-   (`git -C <repo> worktree add <wt>/<TICKET>-<lane> -b wb/<TICKET>-<lane> <sha>`), and arm each
+   BASE and is your cwd; then cut one workhorse worktree per workhorse from BASE, and arm each
    with the run's checks: `<tool>/scripts/verify.sh arm <workhorse-wt> <dispatch>`.
 5. **Update the manifest** the postmaster created: set the stage with `<tool>/scripts/stage.sh
    <dispatch> bootstrapped`, and add one `lanes` entry per lane, in place, never rewriting the
@@ -281,7 +279,7 @@ working copies (`.worktrees/` or `<wt>`), and never edits files outside its work
    approval, implement from the approved spec and finish with the summary), the autonomous-defaults rule (decide within-brief questions
    yourself and record the decision in `WORKHORSE-SUMMARY.md`), the capability statement above, the
    instruction to commit incrementally, and the line that the workhorse must not read other branches
-   or other working copies. It names the run's checks as the waybill lists them and says to run them all
+   or `.worktrees/`. It names the run's checks as the waybill lists them and says to run them all
    with `<tool>/scripts/verify.sh run .` just before writing the summary, in the background with a
    wait where the checks together can outlast the longest command its harness allows. Where a
    check's source names `web-journey`, it also carries what
@@ -652,7 +650,7 @@ Set the stage first, `<tool>/scripts/stage.sh <dispatch> review`, then:
    done
    for LENS in <open lenses>; do
      for L in $(<tool>/scripts/reviewers.sh lanes <dispatch>/brief.md "$LENS"); do
-       DEST=<wt>/<TICKET>-rev-$LENS-$L
+       DEST=<repo>/.worktrees/<TICKET>-rev-$LENS-$L
        # A scratch an interrupted round left behind is checked like any other, then torn down;
        # one that cannot be stops the cut, and nothing is launched.
        if [ -e "$DEST" ]; then
@@ -692,7 +690,7 @@ Set the stage first, `<tool>/scripts/stage.sh <dispatch> review`, then:
      <tool>/scripts/reviewers.sh lanes <dispatch>/brief.md "$LENS" >/dev/null || exit 1
      CLONE=""; [ "$LENS" = security ] && CLONE="--clone <BASE>"
      for L in $(<tool>/scripts/reviewers.sh lanes <dispatch>/brief.md "$LENS"); do
-       <tool>/scripts/cut-scratch.sh --check <wt>/<TICKET>-rev-$LENS-$L "$SNAP" $CLONE \
+       <tool>/scripts/cut-scratch.sh --check <repo>/.worktrees/<TICKET>-rev-$LENS-$L "$SNAP" $CLONE \
          || { echo "SCRATCH NOT READY: <TICKET>-rev-$LENS-$L; nothing launched"; exit 1; }
      done
    done
@@ -700,7 +698,7 @@ Set the stage first, `<tool>/scripts/stage.sh <dispatch> review`, then:
    REVIEWERS=""
    for LENS in <open lenses>; do
      for L in $(<tool>/scripts/reviewers.sh lanes <dispatch>/brief.md "$LENS"); do
-       DEST=<wt>/<TICKET>-rev-$LENS-$L
+       DEST=<repo>/.worktrees/<TICKET>-rev-$LENS-$L
        if [ "$LENS" = bug ]; then
          LAUNCH=(<tool>/scripts/launch.sh review "$L" "$DEST" <BASE> --last <dispatch>/logs/review-r<round>-bug-$L-last.md --run <dispatch>)
        else
@@ -732,7 +730,7 @@ Set the stage first, `<tool>/scripts/stage.sh <dispatch> review`, then:
    ```sh
    NORMALIZE_FAILED=""
    for L in $(<tool>/scripts/reviewers.sh lanes <dispatch>/brief.md bug); do
-     DEST=<wt>/<TICKET>-rev-bug-$L
+     DEST=<repo>/.worktrees/<TICKET>-rev-bug-$L
      EVENTS=<dispatch>/logs/review-r<round>-bug-$L.jsonl
      HARVEST_ERR=$(<tool>/scripts/review-findings.sh harvest "$EVENTS" <dispatch>/logs --prefix review-r<round>-bug-$L 2>&1) \
        || { <tool>/scripts/log-action.sh <dispatch> coachman degrade "$L" "bug round <round>: $HARVEST_ERR"; <tool>/scripts/run-log.sh <dispatch> "$L bug: DEGRADED, $HARVEST_ERR"; continue; }
@@ -999,7 +997,7 @@ the run, and that appends the run's stage timings to `run-log.md`. Never write t
 Never delete the dispatch directory or the manifest, they are the run's history. Archive
 finished threads where the harness has an archive form (`harnesses.md`). After the merge, tear
 down the workhorse worktrees, preserving any stray file first (a workhorse killed mid-run leaves
-real artifacts) and closing each one's space before it is removed (`<tool>/scripts/host.sh close <worktree>`),
+real artifacts) and closing each one's space before it is removed (`<tool>/scripts/host.sh close <wt>`),
 and hand the synthesis worktree to the postmaster for removal from outside it.
 Keep the `wb/<TICKET>-<lane>` branches as a local archive. Durable process learnings go to the
 project's own docs, not this runbook. Residue contract: a clean run leaves only torn-down-able
@@ -1061,7 +1059,7 @@ ticket that needs another's change waits for it to land.
   `host.sh` outlives it: a "stopped" notification without a quota error is the cap ending a
   command you ran, such as a wait, never a lane. Run the wait again. Never resume a lane whose
   marker has not landed; it is still running, and a second process on one thread corrupts it.
-- **Workhorses must not read other branches or other working copies.** Those hold other runs' work,
+- **Workhorses must not read other branches or `.worktrees/`.** Those hold other runs' work,
   including abandoned and rejected approaches. Put the line in every workhorse brief; it costs
   nothing and closes all three paths (`git branch`, a plain recursive grep, and listing the
   directory). Re-runs of a ticket whose `wb/<TICKET>-*` branches still exist are the loud case;

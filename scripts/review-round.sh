@@ -16,8 +16,7 @@
 #
 # A reviewer is <lens>:<lane>, separated by spaces, commas or newlines, and a name is letters,
 # digits, dots, underscores and dashes. Its marker is <dispatch>/logs/review-r<round>-<lens>-<lane>.done
-# and its scratch <wt>/<TICKET>-rev-<lens>-<lane>, <wt> being scripts/worktree-path.sh root
-# <repo> and <TICKET> the dispatch
+# and its scratch <repo>/.worktrees/<TICKET>-rev-<lens>-<lane>, <TICKET> being the dispatch
 # directory's name. wait records the reviewers it is given; wait and teardown given none take
 # those.
 #
@@ -136,11 +135,7 @@ elif what in ("reviewers", "pairs"):         # reviewers <state> [<lens>:<lane>.
 PY
 }
 
-scratch() {  # scratch <lens> <lane>: under the run's worktree root, outside the project folder
-  local wt
-  wt=$("$HERE/worktree-path.sh" root "$REPO") || return 1
-  printf '%s/%s-rev-%s-%s' "$wt" "$TICKET" "$1" "$2"
-}
+scratch() { printf '%s/.worktrees/%s-rev-%s-%s' "$REPO" "$TICKET" "$1" "$2"; }
 unswitch() {  # unswitch <scratch>: detach a scratch worktree a reviewer switched onto a branch of its own
   local b
   "$HERE/cut-scratch.sh" --kind "$1" >/dev/null 2>&1 && return 0          # a scratch as it was cut
@@ -347,11 +342,10 @@ except Exception:
     print(-1)' "$1" 2>/dev/null
 }
 limit() { printf '{"config": {"review": {"round_timeout_seconds": %s}}}\n' "$1" > "$d/run.json"; }
-wtroot=$("$HERE/worktree-path.sh" root "$repo") || exit 1
-cut()   { mkdir -p "$wtroot" && git -C "$repo" worktree add -q --detach "$wtroot/T-1-rev-$1-$2" HEAD || exit 1; }
+cut()   { git -C "$repo" worktree add -q --detach "$repo/.worktrees/T-1-rev-$1-$2" HEAD || exit 1; }
 launch() {  # launch <round> <lens> <lane> <fast|slow|leaves>: through host.sh, as the round does
   n=$((n + 1))
-  ( cd "$tmp" && "$HERE/host.sh" run "T-1 · $3 $2 review" "$wtroot/T-1-rev-$2-$3" \
+  ( cd "$tmp" && "$HERE/host.sh" run "T-1 · $3 $2 review" "$repo/.worktrees/T-1-rev-$2-$3" \
       --role reviewer --run "$d" \
       --marker "$d/logs/review-r$1-$2-$3.done" --pidfile "$tmp/pids/launch.$n" -- "$tmp/reviewer.sh" "$4" "$tmp/pids/child.$n" ) >/dev/null \
     || { echo "  (could not launch $2 $3)"; return 1; }
@@ -380,7 +374,7 @@ check "a degrade line records it, with the lens, the round and the cause" \
 check "host.sh stop ends it, and its child in a session of its own" 'dead "$slow" 60 && dead "$child" 60'
 run teardown "$d" 1 "$repo"
 check "teardown takes the reviewers the wait recorded, and removes each scratch" \
-  '[ $rc -eq 0 ] && [ ! -e "$wtroot/T-1-rev-bug-one" ] && [ ! -e "$wtroot/T-1-rev-bug-two" ] && [ "$(lines "\"action\":\"teardown\"")" -eq 2 ]'
+  '[ $rc -eq 0 ] && [ ! -e "$repo/.worktrees/T-1-rev-bug-one" ] && [ ! -e "$repo/.worktrees/T-1-rev-bug-two" ] && [ "$(lines "\"action\":\"teardown\"")" -eq 2 ]'
 
 # The old timeout-1/sleep-1/took<=3 assumed prompt scheduling; under load the cap cut
 # the wait before it polled, or the second run outlasted its 3s window. Age a real deadline.
@@ -405,12 +399,12 @@ limit 60; cut style one
 run start "$d" 3; launch 3 style one leaves; left=$(cat "$tmp/pids/child.$n")
 run wait "$d" 3 "$repo" style:one
 check "when every marker is in, wait exits 0 and records nothing" '[ $rc -eq 0 ] && [ "$(lines "\"action\":\"degrade\"")" -eq 2 ]'
-git -C "$wtroot/T-1-rev-style-one" switch -q -c probe
+git -C "$repo/.worktrees/T-1-rev-style-one" switch -q -c probe
 run teardown "$d" 3 "$repo" style:one
 check "teardown stops what a finished reviewer's launch left running, and says so" \
   '[ $rc -eq 0 ] && dead "$left" 60 && has "left behind by a reviewer that had finished"'
 check "a scratch a reviewer switched onto a branch is still removed, and the branch kept" \
-  '[ ! -e "$wtroot/T-1-rev-style-one" ] && has "switched it onto branch probe" && git -C "$repo" rev-parse -q --verify refs/heads/probe >/dev/null'
+  '[ ! -e "$repo/.worktrees/T-1-rev-style-one" ] && has "switched it onto branch probe" && git -C "$repo" rev-parse -q --verify refs/heads/probe >/dev/null'
 
 echo "negative controls"
 out=$wait_out rc=$wait_rc
@@ -426,23 +420,23 @@ limit 60; run start "$d" 4
 wait "$stale"; rc=$?; out=$(cat "$tmp/stale.out")
 check "a wait from an earlier start of the round stands down, and records and stops nothing" \
   '[ $stale_rc -eq 0 ] && [ $rc -eq 1 ] && has "started again" && alive "$slow" && ! grep -q "four bug: DEGRADED" "$d/run-log.md"'
-( cd "$wtroot/T-1-rev-bug-four" && "$self" teardown "$d" 4 "$repo" bug:four > "$tmp/inside.out" 2>&1; exit $? ); rc=$?; out=$(cat "$tmp/inside.out")
+( cd "$repo/.worktrees/T-1-rev-bug-four" && "$self" teardown "$d" 4 "$repo" bug:four > "$tmp/inside.out" 2>&1; exit $? ); rc=$?; out=$(cat "$tmp/inside.out")
 check "teardown from inside a scratch leaves it in place, and stops nothing" \
-  '[ $rc -eq 1 ] && has "LEFT IN PLACE" && [ -e "$wtroot/T-1-rev-bug-four" ] && alive "$slow"'
+  '[ $rc -eq 1 ] && has "LEFT IN PLACE" && [ -e "$repo/.worktrees/T-1-rev-bug-four" ] && alive "$slow"'
 run teardown "$d" 4 "$repo" bug:four
 check "from outside, teardown stops the unfinished reviewer first, says so, then removes it" \
-  '[ $rc -eq 0 ] && dead "$slow" 60 && has "its reviewer had not finished" && [ ! -e "$wtroot/T-1-rev-bug-four" ]'
+  '[ $rc -eq 0 ] && dead "$slow" 60 && has "its reviewer had not finished" && [ ! -e "$repo/.worktrees/T-1-rev-bug-four" ]'
 cut bug seven
 run teardown "$d" 12 "$repo" bug:seven
 check "teardown given its reviewers needs no start, as at the cut, and records none for the round" \
-  '[ $rc -eq 0 ] && [ ! -e "$wtroot/T-1-rev-bug-seven" ] && [ ! -e "$d/logs/review-r12.json" ]'
-mkdir -p "$wtroot/T-1-rev-bug-five"
+  '[ $rc -eq 0 ] && [ ! -e "$repo/.worktrees/T-1-rev-bug-seven" ] && [ ! -e "$d/logs/review-r12.json" ]'
+mkdir -p "$repo/.worktrees/T-1-rev-bug-five"
 run teardown "$d" 4 "$repo" bug:five
-check "a directory that is no scratch is left in place" '[ $rc -eq 1 ] && has "it was not removed" && [ -d "$wtroot/T-1-rev-bug-five" ]'
-git -C "$repo" worktree add -q -b wb/T-1-luna "$wtroot/T-1-rev-style-two" HEAD
+check "a directory that is no scratch is left in place" '[ $rc -eq 1 ] && has "it was not removed" && [ -d "$repo/.worktrees/T-1-rev-bug-five" ]'
+git -C "$repo" worktree add -q -b wb/T-1-luna "$repo/.worktrees/T-1-rev-style-two" HEAD
 run teardown "$d" 4 "$repo" style:two
 check "a worktree on the run's own branch is never detached or removed" \
-  '[ $rc -eq 1 ] && has "LEFT IN PLACE" && [ "$(git -C "$wtroot/T-1-rev-style-two" symbolic-ref -q --short HEAD)" = wb/T-1-luna ]'
+  '[ $rc -eq 1 ] && has "LEFT IN PLACE" && [ "$(git -C "$repo/.worktrees/T-1-rev-style-two" symbolic-ref -q --short HEAD)" = wb/T-1-luna ]'
 touch "$d/logs/review-r6-bug-one.done" "$d/logs/review-r6-style-one.done"
 python3 -c 'import json,sys,time; json.dump({"attempt":"a","boot":"","limit":1,"source":"t","deadline":time.monotonic()+1,"reviewers":[]}, open(sys.argv[1],"w"))' "$d/logs/review-r6.json"
 run wait "$d" 6 "$repo" "bug:one,bug:two"
