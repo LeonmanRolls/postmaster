@@ -129,7 +129,7 @@ const runScenario = (
   oracle: string | null = null,
 ): ScenarioOutput => {
   const output = runScript(directory, base, synthesis, lanes, oracle);
-  output.code === 0 || (() => { throw new Error(output.stderr); })();
+  if (output.code !== 0) throw new Error(output.stderr);
   expect(output.code).toBe(0);
   expect(output.stderr).toBe("");
   const recordPath = join(directory, ".postmaster", "runs", "fixture", "shares.json");

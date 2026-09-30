@@ -177,11 +177,11 @@ const resolveCommit = (repo: string, value: string, label: string): string => {
 
 const isAncestor = (repo: string, base: string, head: string, label: string): void => {
   const result = gitResult(repo, ["merge-base", "--is-ancestor", base, head]);
-  result.code === 0
-    ? undefined
-    : fail(result.code === 1
+  if (result.code !== 0) {
+    fail(result.code === 1
       ? `${label} commit ${head} is not descended from base ${base}`
       : `git merge-base --is-ancestor ${base} ${head} failed: ${result.stderr.trim()}`);
+  }
 };
 
 const changedFiles = (repo: string, base: string, head: string): readonly ChangedFile[] => {
@@ -433,9 +433,9 @@ const sharesLine = (report: Report): string =>
 
 const writeRecord = (dispatch: string, report: Report): void => {
   const directory = resolve(dispatch);
-  existsSync(directory) && statSync(directory).isDirectory()
-    ? undefined
-    : fail(`record directory does not exist: ${directory}`);
+  if (!existsSync(directory) || !statSync(directory).isDirectory()) {
+    fail(`record directory does not exist: ${directory}`);
+  }
   const path = join(directory, "shares.json");
   writeFileSync(path, `${JSON.stringify(report, null, 2)}\n`, { encoding: "utf8", flag: "wx" });
 };
