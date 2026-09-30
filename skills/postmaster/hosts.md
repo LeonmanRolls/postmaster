@@ -34,7 +34,7 @@ way on every row, only less visibly on the last.
 | form | herdr | tmux | none |
 |---|---|---|---|
 | run a headless launch, visibly | a new tab under the run's ticket-labeled synthesis-worktree space, nested under the repository's space | a window in session `postmaster-<repo>` | a detached background process |
-| spawn the interactive postmaster | `herdr agent start` in a fresh tab of the repository's space, never a pane an agent ran in before | a window in session `postmaster-<repo>` | not possible: it runs headless, below |
+| spawn the postmaster or spec session | `herdr agent start` in a fresh tab of the repository's space, never a pane an agent ran in before | a window in session `postmaster-<repo>` | not possible: it runs headless, below |
 | send it a message | `herdr agent prompt` | paste the text bracketed, then Enter as a key of its own | resume its thread with the message as the prompt |
 | wait for it to settle | the same call, `herdr agent prompt --wait`: idle, done or blocked | its screen unchanged for 10 seconds | its marker lands |
 | read what it said | `herdr agent read --source recent-unwrapped` | `tmux capture-pane -p -J` | its final message (`harnesses.md`) |
@@ -116,7 +116,8 @@ pane. `spawn`, `send`, `wait` and `read` exit 3 on `none`.
   `role <text...>` names any other launch by its role alone. A model shows as the basename
   after its last `/`, so a provider prefix never pushes the round past the ellipsis. A lane
   or role comes first so it remains visible on a narrow sidebar. `postmaster` is the
-  project-level interactive role. `host.sh run --under <dispatch>` puts the ticket on the
+  project-level interactive role; `role <text...>` also names a spec session.
+  `host.sh run --under <dispatch>` puts the ticket on the
   synthesis worktree space and every launch label on its tab or window, pane title, and
   harness thread name (`POSTMASTER_LAUNCH_NAME`, `harnesses.md`). A title can contain shell
   syntax, so take every value from `host.sh name`; never type it into a shell.
@@ -180,8 +181,9 @@ pane. `spawn`, `send`, `wait` and `read` exit 3 on `none`.
   running, and its marker still lands, touched by a watcher outside the pane; the flow then finds
   no hand-off or summary and treats the launch as spent.
 - **`spawn`** passes the caller's `POSTMASTER_*` settings to the new pane, so the postmaster
-  runs on the same config and host as the session that started it. Its tab label is `postmaster`;
-  the project's space already names the project.
+  and its spec sessions use the same config and host as the session that started them. The
+  postmaster's tab label is `postmaster`; a spec session gets the label passed with `--label`.
+  The project's space already names the project.
 - **Never** prompt, close, move or rename a pane, tab, space or agent `host.sh` did not open, and
   never stop or restart the Herdr server.
 

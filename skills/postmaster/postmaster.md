@@ -286,58 +286,69 @@ A leg's `.leg-<n>-exited` marker with `.leg-<n>-done` beside it is normal comple
 transition is one `log-action` line; the narrative in your own notes is for the user,
 never the record.
 
-## Spec review: every workhorse's spec to the user before any code
+## Spec review: one coachman spec, one user decision
 
-On `.spec-review-ready`, the planning stage has paused for the user. Read
-`<dispatch>/spec-review.md`: one entry per workhorse, each with its lane, the commit of its
-`WORKHORSE-SPEC.md`, and the link that opens it in the user's editor. The coachman built each
-link with `<tool>/scripts/spec-review-link.sh` from the run's recorded `planning.review_link`
-template, as `ship.review_link` is for the ship card; with no template it is the file's path.
-A revised spec comes back as a new entry at its new commit. In a fixture run
-(`<tool>/scripts/fixture.sh`) there is no user to ask: you sign each spec off yourself, deciding
-approved, changes or dropped as the user would, through the same `fresh`, `record` and
-`count` steps below, and no `.waiting-on-user` is written. Every other line of this section
-holds.
+On `.spec-review-ready`, the coachman has paused with one entry in `<dispatch>/spec-review.md`:
+the synthesis commit, editor link and path of the review copy at
+`<dispatch>/spec-review/WORKHORSE-SPEC.md`. `{path}` in the captured
+`planning.review_link` is the folder holding the file; with no template the link is the file
+path. A changes round returns a refreshed copy and one new package at its new commit.
 
-1. **Put one spec to the user at a time.** A new package starts a new
-   `spec-decisions.md`: `<tool>/scripts/spec-decisions.sh <dispatch> fresh`, so no stanza
-   from an earlier package survives into this one. Show its link and its commit, and ask for
-   a decision: approved; changes requested in their words; or drop this workhorse. When the
-   first spec goes to the user, write what was asked to the run's `.waiting-on-user`, as
-   Stage F step 2 does: while it is set the poll reports USER, not SPEC, so the package is
-   never taken twice. Never show one workhorse's spec beside another's: review is for scope
-   and correctness, not for making the specs alike. Never show any of it to a workhorse.
-2. **Record the decision as it comes** with `<tool>/scripts/spec-decisions.sh <dispatch>
-   record <lane> <decision> <commit> <the user's words>`, where `<decision>` is `approved`,
-   `changes` or `dropped`, `<commit>` the spec commit the user saw, and the words are the
-   user's own, carried verbatim for a `changes` or `dropped` and omitted for an `approved`.
-   One decision per call, at the moment it is given. The script appends the stanza and logs
-   the `spec-review` line; it refuses a lane the manifest does not name, a second stanza
-   for one lane, a `changes` with no words, and a decision with no commit. The stanzas
-   accumulate as this package is decided;
-   the file is complete when every spec in the package has one, and it holds this package's
-   decisions only.
-3. **When every spec in the package is decided, send the package back.** Remove
-   `.waiting-on-user`, check `spec-decisions.md` holds every spec in the package, remove
-   `.spec-review-ready`, and resume the current leg (Stage C step 5) with the decisions file
-   as what it must read. The marker is consumed here, on every path, before the resume, as
-   `.card-ready` is before a word is delivered: a fresh package touches it afresh, so SPEC
-   always means a package nobody has taken yet. Read the run-wide numbers first:
-   `<tool>/scripts/spec-decisions.sh <dispatch> count` prints `approved <n>`, every manifest
-   lane approved in the manifest or this package counted once, and `changes <m>`, the
-   manifest lanes with a changes stanza in this package. A stanza for an unnamed lane, or
-   an approval with a blank commit, contributes nothing. Branch on the numbers, never by
-   reading the files:
-   - **`changes` above zero:** the coachman revises those specs alone, each in its own
-     thread, and pauses with a fresh package, which is put to the user the same way, until
-     every spec is approved or dropped.
-   - **No changes, fewer than two approved:** tell the user the run needs two approved specs
-     and has fewer, and that nothing is implemented from an unapproved plan. The coachman
-     stops on resume and writes an escalation carrying the count; the user alone abandons
-     the run.
-   - **No changes, two or more approved:** the coachman goes on to implementation.
-   Log every step; the planning span the stage timings show is this stage, drafting through
-   the last decision, with the user's review inside it.
+1. **Prepare the decision package.** Run `<tool>/scripts/spec-decisions.sh <dispatch> fresh`.
+   It creates the one-package decisions file; an older run still uses its pinned tool and its
+   per-workhorse decisions. Never launch a spec session for a fixture run
+   (`<tool>/scripts/fixture.sh`). In a fixture, review the one spec and record its sign-off as
+   the postmaster with `<tool>/scripts/spec-decisions.sh <dispatch> record approved <commit>`;
+   no `.waiting-on-user` or session is started.
+2. **Start the user's spec session.** For a run with a user, run
+   `<tool>/scripts/spec-session.sh brief <dispatch>`. It writes `<dispatch>/spec-session-brief.md`
+   with the ticket, the editor link and review-copy path, any lane drafts by commit, the
+   standing preferences beside the machine config (or a line saying none are set), and the
+   path of `<tool>/skills/postmaster/spec-session.md`.
+
+   Use the recorded `config.team.postmaster` harness, model and effort from
+   `<dispatch>/run.json`, and that harness's interactive form from `harnesses.md`. Fill its
+   model and effort from the captured config, and any `<name>` field with `<ticket name> · spec`.
+   Get the ticket name with `<tool>/scripts/host.sh name <dispatch>` and the session handle with
+   `<tool>/scripts/host.sh name <dispatch> role "<ticket name> · spec"`. Name the session and
+   its tab `<ticket name> · spec`. Spawn from the project root so it opens in the project's
+   space:
+
+   ```sh
+   <tool>/scripts/host.sh spawn "<spec-handle>" <repo> --label "<ticket name> · spec" -- <interactive form>
+   ```
+
+   Before spawning, write `.waiting-on-user` with the handle and editor link so the poll
+   reports USER and cannot take the package twice. Send the session a one-line prompt to read
+   `<dispatch>/spec-session-brief.md` with `<tool>/scripts/host.sh send`. Log its start with
+   `<tool>/scripts/log-action.sh <dispatch> postmaster dispatch spec-session`.
+   The user and session work on the copy until the user says it is ready. If `spawn` exits 3
+   because `POSTMASTER_HOST=none`, review the same copy with the user in your own conversation
+   and keep the wait marker. The postmaster's own harness, model and effort still come from
+   this run's `config.team.postmaster`; the editor host stays in the machine config.
+3. **Record the user's word.** The outcomes are approved, changes requested in the user's
+   words, or dropped (the run stops). If the user says the session's spec is ready, run
+   `<tool>/scripts/spec-session.sh approve <dispatch>`. It commits the edited copy at a new
+   synthesis commit only when the bytes changed, refuses any other synthesis-worktree change,
+   records approval through `spec-decisions.sh`, and prints the approved commit. If the user
+   gives changes in words to you, record them with
+   `<tool>/scripts/spec-decisions.sh <dispatch> record changes <commit> <the user's words>`.
+   If the user stops, record `dropped` with the spec commit and their words; do not implement.
+   Each `record` call appends one `## spec` stanza and logs a `spec-review` line targeted at
+   `spec`. Its detail starts with the decision and commit, then carries the user's words for
+   changes or dropped.
+4. **Resume or close once.** Run `<tool>/scripts/spec-decisions.sh <dispatch> count`:
+   `approved 1` / `changes 0` means approved; `approved 0` / `changes 1` means a changes
+   round; `approved 0` / `changes 0` means the run was stopped. On approval, remove
+   `.waiting-on-user` and `.spec-review-ready`, then resume the current coachman leg once with
+   the decisions file. On changes, remove both markers and resume once with the words; the
+   coachman revises the one spec and raises a fresh package, which returns here for another
+   session. On dropped, remove the markers and close the run as abandoned without resuming the
+   coachman or launching a lane. Never take the same package twice.
+
+The planning timing starts when the coachman enters the planning stage and ends when the
+approved spec starts implementation or the run stops. It includes the spec session and any
+changes rounds.
 
 ## Stage E: rulings
 
