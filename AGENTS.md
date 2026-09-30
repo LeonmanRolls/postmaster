@@ -47,7 +47,12 @@ choose a target, launch the postmaster. Work out where the user is and pick up f
 
 ```sh
 cat ~/.postmaster/config.toml 2>/dev/null || echo "NOT SET UP"
+scripts/link-skills.sh --check  # names missing or blocked links; read its exit status
 ```
+
+Include both results when you say whether the machine is set up. The link check is read-only.
+If the config is present but the check names missing or blocked links, report them and offer
+the install step below on the user's word.
 
 If it is missing, set it up now, in conversation, before anything else. You conduct it:
 probe first, ask one thing at a time, verify each answer, then have the script write the
@@ -89,14 +94,15 @@ scripts/setup.sh --answers <file> --dry-run   # the config it would write
 scripts/setup.sh --answers <file>             # write ~/.postmaster/config.toml
 ```
 
-Then link the skills, so the postmaster skill works from any project in every installed
-harness with a skills folder. Show the user the dry run first. The links go to this repo's
-main checkout, never a worktree, and nothing is ever copied; a path in the way is the user's
-to move, and the script changes nothing until it is gone.
+When the check names missing or blocked links, show the user the dry run output below and ask
+whether they want the links installed. Run the installer only after they agree. If they
+decline, report that setup remains without the links. The links go to this repo's main checkout,
+never a worktree, and nothing is ever copied or replaced. A path in the way is the user's to
+move before installation.
 
 ```sh
 scripts/link-skills.sh --dry-run   # the links it would make, and anything in the way
-scripts/link-skills.sh             # make them; running it again changes nothing
+scripts/link-skills.sh             # only after the user agrees; makes links, replaces nothing
 ```
 
 **2. Which project are we dispatching against?**

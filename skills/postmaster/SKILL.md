@@ -44,7 +44,14 @@ Someone typing `/postmaster` arrives cold. **Assume neither. Check.**
 
 ```sh
 cat ~/.postmaster/config.toml 2>/dev/null || echo "NOT SET UP"
+<tool>/scripts/link-skills.sh --check
 ```
+
+Report the link check with the config status. It names every missing or blocked link and
+prints the install command, `<tool>/scripts/link-skills.sh`; the check never installs or
+changes anything. Keep installation on the user's word. When links are missing and the config
+is present, offer that command; for a missing config, follow the setup section of
+`<tool>/AGENTS.md`.
 
 **No config: stop and set the machine up first**, in conversation, per the setup section of
 `<tool>/AGENTS.md`; each path there is relative to `<tool>`. Do not continue to target
@@ -56,8 +63,8 @@ and without it the launch card cannot be filled. Come back here when it is writt
 
 **Config present, no target yet:** carry on below.
 
-Say which of these you found, in one line, before doing anything else. A session that cannot
-tell whether it is setting up or dispatching is one nobody can follow.
+Say which of these you found, including the link status, in one line before selecting a target.
+A session that cannot tell whether it is setting up or dispatching is one nobody can follow.
 
 ## Choose the target project
 

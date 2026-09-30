@@ -79,8 +79,8 @@ postmaster's start, and keeps every install on the user's word.
 ## Tasks
 
 - [x] T001 [P] [AC4] Add `--check` to `scripts/link-skills.sh`: read-only, names each missing or blocked link and the install command, exits non-zero on any problem and zero on a complete set; extend `--self-test` with a missing-link-reported control and a complete-set-passes control through the identical `--check` command, hermetic like the existing controls; update the usage line.
-- [ ] T002 [AC1] In `AGENTS.md`, make the setup conversation show the user the `scripts/link-skills.sh --dry-run` output and run `scripts/link-skills.sh` only on the user's word.
-- [ ] T003 [AC2] In `AGENTS.md` step 1 ("is this machine set up?"), run `scripts/link-skills.sh --check` beside the config check and report missing links as part of the answer; when the config is present and the check fails, offer the install on the user's word.
-- [ ] T004 [AC3] In `skills/postmaster/SKILL.md` preconditions, run `<tool>/scripts/link-skills.sh --check`, name any missing or blocked link, and name `<tool>/scripts/link-skills.sh` as the one command that installs them; leave `scripts/skill-refs.sh` clean.
-- [ ] T005 [P] In `README.md`, mention `--check` on the `link-skills.sh` command line and in "Installing the skills".
+- [x] T002 [AC1] In `AGENTS.md`, make the setup conversation show the user the `scripts/link-skills.sh --dry-run` output and run `scripts/link-skills.sh` only on the user's word.
+- [x] T003 [AC2] In `AGENTS.md` step 1 ("is this machine set up?"), run `scripts/link-skills.sh --check` beside the config check and report missing links as part of the answer; when the config is present and the check fails, offer the install on the user's word.
+- [x] T004 [AC3] In `skills/postmaster/SKILL.md` preconditions, run `<tool>/scripts/link-skills.sh --check`, name any missing or blocked link, and name `<tool>/scripts/link-skills.sh` as the one command that installs them; leave `scripts/skill-refs.sh` clean.
+- [x] T005 [P] In `README.md`, mention `--check` on the `link-skills.sh` command line and in "Installing the skills".
 - [ ] T006 [AC1] [AC2] [AC3] [AC4] Run the project gate from the worktree root and confirm every self-test, including the new `link-skills.sh` controls, passes.

@@ -83,7 +83,7 @@ opened, or launches one when it cannot be.
 scripts/probe-harnesses.sh      # which agent CLIs are installed
 scripts/probe-trackers.sh       # which ticket sources are reachable
 scripts/setup.sh --answers <file> # writes the config from the agent's collected answers (--keys lists them)
-scripts/link-skills.sh [--dry-run | --remove]                     # the skills, as links into each CLI's skills folder
+scripts/link-skills.sh [--dry-run | --check | --remove]            # the skills, as links into each CLI's skills folder
 scripts/skill-refs.sh [--fix]                                      # every script path in the skill goes through <tool>
 scripts/find-projects.sh        # your git projects, most recent first
 scripts/check-target.sh  <path> # 0 usable · 1 not a repo · 2 dirty
@@ -157,12 +157,13 @@ the scripts use to read the config, and jq for discovering a JavaScript project'
 
 Skills are installed as links, never as copies. `scripts/link-skills.sh` links each directory
 under `skills/` into the user-level skills folder of every installed agent CLI that has one,
-pointing at the main checkout of this repo, never a worktree. Setup runs it, and running it
-again changes nothing:
+pointing at the main checkout of this repo, never a worktree. Setup checks their status first.
+If links are missing, it shows the dry-run output and asks before installing them:
 
 ```sh
+scripts/link-skills.sh --check      # report missing or blocked links; never changes anything
 scripts/link-skills.sh --dry-run   # the links it would make, and anything in the way
-scripts/link-skills.sh             # make them
+scripts/link-skills.sh             # install, after the user agrees
 scripts/link-skills.sh --remove    # remove them, and nothing else
 ```
 
