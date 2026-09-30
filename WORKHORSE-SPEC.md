@@ -44,8 +44,8 @@ A fixture ticket's hidden tests are its acceptance tests in `fixtures/tickets/<t
 
 ## Tasks
 
-- [ ] T001 [P] [AC1] Create `scripts/fixture-lanes.ts`: find the run's lanes from its records and kept branches, export each `wb/<TICKET>-<lane>` branch, run `fixture.sh hidden` on it, and print `<lane>: <status>` for each lane in name order.
-- [ ] T002 [AC2] In `scripts/fixture-lanes.ts`, report a lane with no branch as `missing`, and one that cannot be exported, is refused by `fixture.sh hidden` or gets no counts from it as `failed to build`, never as pass counts.
-- [ ] T003 [AC1] In `scripts/fixture.sh`, have the score path run the new script and add its output after the merged counts on the hidden-tests line, with the verdict unchanged; update the header comment to match.
-- [ ] T004 [AC3] Create `scripts/fixture-lanes.test.ts`: unit tests for the pure functions, and controls for a lane branch that passes, one that fails and one that is missing, each run through `fixture.sh score` and read back from the hidden-tests line.
-- [ ] T005 [AC2] In `scripts/fixture-lanes.test.ts`, add a control for a lane branch that fails to build, never read as a pass, and one showing the verdict follows the merged result alone.
+- [x] T001 [P] [AC1] Create `scripts/fixture-lanes.ts`: find the run's lanes from its records and kept branches, export each `wb/<TICKET>-<lane>` branch, run `fixture.sh hidden` on it, and print `<lane>: <status>` for each lane in name order.
+- [x] T002 [AC2] In `scripts/fixture-lanes.ts`, report a lane with no branch as `missing`, and one that cannot be exported, is refused by `fixture.sh hidden` or gets no counts from it as `failed to build`, never as pass counts.
+- [x] T003 [AC1] In `scripts/fixture.sh`, have the score path run the new script and add its output after the merged counts on the hidden-tests line, with the verdict unchanged; update the header comment to match.
+- [x] T004 [AC3] Create `scripts/fixture-lanes.test.ts`: unit tests for the pure functions, and controls for a lane branch that passes, one that fails and one that is missing, each run through `fixture.sh score` and read back from the hidden-tests line.
+- [x] T005 [AC2] In `scripts/fixture-lanes.test.ts`, add a control for a lane branch that fails to build, never read as a pass, and one showing the verdict follows the merged result alone.
