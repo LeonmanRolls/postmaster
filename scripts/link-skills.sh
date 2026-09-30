@@ -6,6 +6,7 @@
 # script's own tree when that is not a git checkout at all, as with an installed package.
 #
 #   link-skills.sh [--dry-run]   link every skill for every installed harness with a skills folder
+#   link-skills.sh --check       name any missing or blocked link; change nothing
 #   link-skills.sh --remove      remove the links to this checkout's skills, and nothing else
 #   link-skills.sh --self-test
 #
@@ -18,8 +19,8 @@
 # link belongs, or a link that points anywhere else, is named, and then nothing at all is
 # changed, so the user can move it and run this again.
 #
-#   exit 0  every link is in place, or would be (--dry-run), or is removed (--remove)
-#   exit 1  usage, no skills in the checkout, a bare main checkout, or something in the way
+#   exit 0  every link is in place, or would be (--dry-run), or is removed (--remove), or --check found nothing missing
+#   exit 1  usage, no skills in the checkout, a bare main checkout, something in the way, or --check found a missing or blocked link
 set -uo pipefail
 HERE=$(CDPATH= cd -P -- "$(dirname -- "$0")" && pwd -P)
 HARNESSES="claude codex grok agy muse pi mimo"
@@ -86,6 +87,22 @@ report() {  # report <plan-line>: the line a person reads
   esac
 }
 
+check_links() {  # check_links <root>: name missing or blocked links; change nothing
+  local root=$1 p line verdict found=0
+  p=$(plan "$root") || return 1
+  while IFS= read -r line; do
+    IFS=$'\t' read -r verdict _ <<< "$line"
+    case $verdict in
+      link|in-the-way) report "$line"; found=1 ;;
+    esac
+  done <<< "$p"
+  if [ "$found" -eq 1 ]; then
+    echo "link-skills: run scripts/link-skills.sh to install"
+    return 1
+  fi
+  echo "link-skills: every link is in place"
+}
+
 make_links() {  # make_links <root> <dry>
   local root=$1 dry=$2 p line verdict path target h
   p=$(plan "$root") || return 1
@@ -126,9 +143,10 @@ remove_links() {  # remove_links <root>: remove the links that point at <root>'s
 case ${1:-} in
   "") ROOT=$(checkout_root "$(dirname "$HERE")") || exit 1; make_links "$ROOT" 0; exit $? ;;
   --dry-run) ROOT=$(checkout_root "$(dirname "$HERE")") || exit 1; make_links "$ROOT" 1; exit $? ;;
+  --check) ROOT=$(checkout_root "$(dirname "$HERE")") || exit 1; check_links "$ROOT"; exit $? ;;
   --remove) ROOT=$(checkout_root "$(dirname "$HERE")") || exit 1; remove_links "$ROOT"; exit $? ;;
   --self-test) ;;
-  *) echo "usage: link-skills.sh [--dry-run] | --remove | --self-test" >&2; exit 1 ;;
+  *) echo "usage: link-skills.sh [--dry-run] | --check | --remove | --self-test" >&2; exit 1 ;;
 esac
 
 # --- self-test ----------------------------------------------------------------------------
@@ -173,6 +191,22 @@ before=$(state); out=$(make_links "$TOOL" 0 2>&1); rc=$?
 CLAUDE_CONFIG_DIR="$tmp/cfg" make_links "$TOOL" 0 >/dev/null 2>&1
 links_to "$tmp/cfg/skills/postmaster" "$TOOL/skills/postmaster" && ok "claude's folder moves with CLAUDE_CONFIG_DIR" \
   || fail "claude's folder moves with CLAUDE_CONFIG_DIR"
+
+echo "--check: a complete set passes, a missing link is reported"
+before=$(state); out=$(check_links "$TOOL" 2>&1); rc=$?
+[ $rc -eq 0 ] && grep -qF "link-skills: every link is in place" <<<"$out" && [ "$(state)" = "$before" ] \
+  && ok "a complete set passes" || fail "a complete set passes (exit $rc)" "$out"
+rm -- "$C/postmaster"
+out=$(check_links "$TOOL" 2>&1); rc=$?
+[ $rc -ne 0 ] && grep -qF "to link         $C/postmaster" <<<"$out" && grep -qF "run scripts/link-skills.sh to install" <<<"$out" \
+  && [ ! -e "$C/postmaster" ] \
+  && ok "a missing link is reported, with the install command, and nothing is installed" \
+  || fail "a missing link is reported (exit $rc)" "$out"
+mkdir -p "$C/postmaster"
+out=$(check_links "$TOOL" 2>&1); rc=$?
+[ $rc -ne 0 ] && grep -qF "IN THE WAY      $C/postmaster" <<<"$out" \
+  && ok "a path in the way is reported" || fail "a path in the way is reported (exit $rc)" "$out"
+rm -r -- "$C/postmaster"; ln -s "$TOOL/skills/postmaster" "$C/postmaster"
 
 echo "positive control: from an unrelated directory, a documented command resolves through the link and runs"
 resolver=$(grep -F 'test -f "$t/scripts/link-skills.sh"' "$TOOL/skills/postmaster/SKILL.md" | head -1)
