@@ -234,7 +234,9 @@ the brief.
   other command it ran with its exit code; every within-brief question it decided
   for itself, with the decision; what it did not do and why; and its own verdict on whether
   the ticket's acceptance criteria are met, one line per criterion. Written last, committed,
-  and the process then exits.
+  and the process then exits. Private-data suspects the checks report are fixed, never
+  committed: real data is removed, made-up data is marked inline per the scrub check's
+  header, and the gate runs again.
 - `WORKHORSE-BLOCKED.md`: written instead when the workhorse cannot proceed without a ruling that is
   genuinely destructive or scope-changing. The question, the options it sees, its
   recommendation, and the state of its branch. The process then exits; the coachman resumes
@@ -438,7 +440,9 @@ from it.
   the commit the user approved (`lanes.<lane>.spec_commit`, or none for a dropped workhorse),
   whether that first commit comes before the workhorse's first code commit, and any acceptance
   criterion with no task. Copy its `.postmaster/verify/`, its journey reports included, to
-  `<dispatch>/audit/<lane>-verify/`. Attach every audit to the checkpoint 1 card. Do the same for
+  `<dispatch>/audit/<lane>-verify/`, and append its `detections.jsonl`, where it has one, to
+  the run's `<dispatch>/detections.jsonl`, so the run's log holds every detection from
+  every lane. Attach every audit to the checkpoint 1 card. Do the same for
   any later fix thread a checkpoint relies on.
 - **THERE IS NO SYNTHESIS BASE. You are the synthesizer: judge, then compose.** Set the stage
   first, `<tool>/scripts/stage.sh <dispatch> synthesis`. Do not fast-forward the ticket branch onto any
@@ -514,7 +518,12 @@ from it.
   choice; the convention gaps found; what was dropped; gate status; the checks, as `verify.sh run`
   printed them on each workhorse's branch and then on the committed synthesis
   (`<tool>/scripts/verify.sh run <synthesis-wt> <dispatch>`, the journey walked first where there
-  is one), with each workhorse's `verify.sh summary` verdict. A card that presents a
+  is one), with each workhorse's `verify.sh summary` verdict. Every `verify.sh run` with a
+  dispatch appends the run's private-data detections to `<dispatch>/detections.jsonl`:
+  fix each before the card — real data removed, made-up data marked inline per the
+  scrub check's header, a finding left only in history rewritten out with
+  `<tool>/scripts/scrub-rewrite.sh` — and run the gate again. No finding waits on the
+  user. A card that presents a
   finished diff without saying which lane each part came from is the defaulting failure
   wearing a verdict. Set the stage, `<tool>/scripts/stage.sh <dispatch> checkpoint-1`, then write it to
   `<dispatch>/checkpoint-1.md` with the audit bundle beside it and touch `.checkpoint-1-ready`. Autonomous mode: write `handoff-1.md` and end the leg. Consult mode:
@@ -643,7 +652,9 @@ Set the stage first, `<tool>/scripts/stage.sh <dispatch> review`, then:
    # verify.sh's reason. Example: a ticket with no User journey makes the journey check
    # `not run` (`journey: not run, exit 3, ...` plus its reason line); the round proceeds,
    # the run log carries those lines, and the card records `journey: not run`. On a stopping
-   # exit, fix the cause on the synthesis worktree and repeat this step
+   # exit, fix the cause on the synthesis worktree and repeat this step. Detections are
+   # fixed as Stage 1 says: this step's gate run appends them to
+   # <dispatch>/detections.jsonl, and the step repeats once they are fixed
    git -C <repo> worktree prune
    for LENS in <open lenses>; do   # a lens whose lanes do not resolve stops the round here
      <tool>/scripts/reviewers.sh lanes <dispatch>/brief.md "$LENS" >/dev/null || exit 1
@@ -930,7 +941,9 @@ Set the stage first: `<tool>/scripts/stage.sh <dispatch> shipping`.
 4. **Dated ready-to-merge comment on the ticket**, through the tracker adapter (`trackers.md`):
    what the change does,
    branch name, gate output summary, diff stat, the preview link, the review link, the run's
-   thread ids. This is the flow's analogue of opening a PR.
+   thread ids. This is the flow's analogue of opening a PR. Write the comment to a file
+   and scan it with `<tool>/scripts/scrub-check.sh --pr-description` before posting; a
+   finding is fixed, never posted.
 
    **The ship card carries the checks,** as `<tool>/scripts/verify.sh run <synthesis-wt> <dispatch>`
    printed them on the final synthesis, with step 3's walk as the journey report where there is
@@ -951,6 +964,11 @@ Set the stage first: `<tool>/scripts/stage.sh <dispatch> shipping`.
    carrying the feature.** A branch is part of the ship or it is abandoned; there is no third
    option, and the reader cannot tell which without being told. A ship card that omits a
    branch is a green check over unreviewed work.
+
+   **The ship card lists every detection of the run,** one line each from
+   `<dispatch>/detections.jsonl`, with how it was resolved: removed, marked as made-up
+   data, or scrubbed. The log holds every detection from every leg and every lane; the
+   card accounts for each one.
 5. **STOP and wait for the live merge word from `MERGE_AUTHORITY`**: the user, or the
    dispatching postmaster, as the waybill says. Write `handoff-3.md` as far as the card, touch
    `.card-ready`, and exit; the word arrives as a resume of this leg's thread, and so does a
