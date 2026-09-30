@@ -2,10 +2,10 @@
 # The one check for private data: a single rule table serving the gate, the
 # wiki scrub and the history rewrite. It scans everything a change would
 # publish: the added lines of every commit from its base to its head, so a
-# line added and then deleted is still found; each commit message; the lines
-# each merge commit introduces beyond every parent, so already-published
-# lines merge quietly; and, through --pr-description, the pull request's
-# description before it is opened.
+# line added and then deleted is still found; the names of added files;
+# each commit message; the lines each merge commit introduces beyond every
+# parent, so already-published lines merge quietly; and, through
+# --pr-description, the pull request's description before it is opened.
 #
 #   scrub-check.sh <base> <head>    the range: added lines, messages and
 #                                   merge resolutions, one suspect per line
@@ -25,7 +25,8 @@
 #
 # One suspect per line on stdout as <commit>:<path>:<line>: <kind>, where
 # <commit> is the full 40-character sha, <path> the repo-relative file, <line>
-# the added line's number in the new file, and <kind> the rule name below.
+# the added line's number in the new file (0 when the finding is the file's
+# own name), and <kind> the rule name below.
 # Messages print <commit>:(message):<line>: <kind>; --files prints
 # <path>:<line>: <kind> and --pr-description (pr-description):<line>: <kind>,
 # since neither has a commit. A matched value is never printed: not in a
@@ -701,7 +702,7 @@ def scan_commit_diff(root, parent, commit):
         notice("could not run Git")
     suspects = []
     quiet = []
-    path, line_number = "", None
+    path, line_number, new_file = "", None, False
     scanner, texts, kept_len, fault_len, supp_len = None, {}, 0, 0, 0
 
     def drain():
@@ -727,10 +728,18 @@ def scan_commit_diff(root, parent, commit):
         content = raw.rstrip(b"\r\n")
         if content.startswith(b"diff --git "):
             end_file()
-            path, line_number = "", None
+            path, line_number, new_file = "", None, False
+        elif content.startswith(b"--- ") and line_number is None:
+            new_file = content[4:] == b"/dev/null"
         elif content.startswith(b"+++ ") and line_number is None:
             path = git_path(content[4:])
             line_number = None
+            # An added file publishes its name too: scan it with marker
+            # syntax inert, reported at line 0. A modified file's name is
+            # already published, and a deletion publishes nothing.
+            if new_file and path != "/dev/null":
+                for _start, _end, kind, _value in findings(path):
+                    suspects.append((path, 0, kind, path))
         elif content.startswith(b"@@ "):
             match = re.search(rb"\+([0-9]+)(?:,[0-9]+)?\s+@@", content)
             line_number = int(match.group(1)) if match else None
@@ -1321,6 +1330,26 @@ def self_test(root):
                     "%s:gap.txt:1: marker" % gap, "%s:gap.txt:20: email" % gap]
                 and silent(gapped)))
             last = gap
+
+            print("diff controls: added file names are scanned")
+            named_name = sample_email + ".txt"
+            named = add_fixture(repo, named_name, "just public words here\n", "shaped name")
+            named_result = run_child([last, named], repo)
+            ok("an added file with a shaped name is reported at line 0, redacted", bool(
+                named_result and named_result.returncode == 1
+                and named_result.stdout.splitlines() == [
+                    "%s:[redacted]:0: email" % named]
+                and silent(named_result)))
+            (repo / named_name).write_text("just public words, revised\n", encoding="utf-8")
+            git(["add", "--", named_name], cwd=repo)
+            git(["-c", "user.name=Fixture", "-c", "user.email=" + FIXTURE_MAILBOX,
+                 "commit", "-m", "revise the named file"], cwd=repo)
+            revised = git(["rev-parse", "HEAD"], cwd=repo).decode("ascii").strip()
+            revised_result = run_child([named, revised], repo)
+            ok("a modified file's existing name is not reported again", bool(
+                revised_result and revised_result.returncode == 0
+                and not revised_result.stdout))
+            last = revised
 
             print("message controls: commit messages are scanned with markers inert")
             (repo / "msg-clean.txt").write_text("ordinary public sample\n", encoding="utf-8")
