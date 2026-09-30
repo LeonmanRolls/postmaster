@@ -57,8 +57,8 @@ in a prompt: match on pid or working directory.
 `<tool>/scripts/usage.ts` is the executable reader for these fields. `read` reads a harness's
 event stream, or Muse's exported session record; `record` writes only fields the harness
 reported to `<dispatch>/logs/<stream>.usage.json`. A reported zero stays zero. A missing field
-stays absent. The paired invented stream fixtures in `<tool>/scripts/fixtures/usage/` and
-`<tool>/scripts/usage.test.ts` exercise each reader's positive and no-usage controls.
+stays absent. `<tool>/scripts/usage.test.ts` exercises each reader's positive and no-usage
+controls against the checked-in, invented fixture streams.
 
 | harness | input and output | cost | native record |
 |---|---|---|---|
