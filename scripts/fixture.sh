@@ -23,7 +23,9 @@
 #         files the ticket there and prints its number to dispatch against <dest>; a run reads
 #         it through the local tracker whatever the config names (scripts/tracker-kind.sh).
 # score   scores a finished run from its records, never its report: the ticket its waybill
-#         carries verbatim, whose hidden tests run against main; the app's gate as
+#         carries verbatim, whose hidden tests run against main and, beside those counts, against
+#         each lane's harvested wb/<TICKET>-<lane> branch (scripts/fixture-lanes.ts); the app's
+#         gate as
 #         scripts/discover-project.sh finds it, on main; the stages scripts/stage.sh --list names,
 #         up to done, each entered in order by a logged change; each leg's done and exited
 #         markers, for every leg the run recorded; each leg's hand-off, through
@@ -171,13 +173,26 @@ def waybill_tickets(dispatch):
             found.append(t.name)
     return found
 
-def check_hidden(dispatch, app):
+def lane_scores(dispatch, repo, ticket):
+    """Each lane's hidden status from scripts/fixture-lanes.ts; '' when there are no lanes."""
+    code, out = sh(["bun", "--no-env-file", str(SCRIPTS / "fixture-lanes.ts"),
+                    str(dispatch), str(repo), ticket])
+    if code != 0:
+        return "lanes not scored"
+    parts = [l.strip() for l in out.splitlines() if l.strip() and ": " in l]
+    return "; ".join(parts)
+
+def check_hidden(dispatch, repo, app):
     found = waybill_tickets(dispatch)
     if len(found) != 1:
         return False, ("brief.md carries no fixture ticket's criteria verbatim" if not found
                        else "brief.md carries more than one fixture ticket: %s" % ", ".join(found)), ""
     ok, detail, out = hidden(found[0], app)
-    return ok, "%s, from the waybill: %s on main" % (found[0], detail), out
+    text = "%s, from the waybill: %s on main" % (found[0], detail)
+    lanes = lane_scores(dispatch, repo, found[0])
+    if lanes:
+        text = "%s; %s" % (text, lanes)
+    return ok, text, out
 
 def check_gate(app):
     code, out = sh([SCRIPTS / "discover-project.sh", app])
@@ -314,7 +329,7 @@ def score(dispatch, repo):
         if code != 0:
             print("fixture: could not export main from %s: %s" % (repo, tail(out, 3)), file=sys.stderr); sys.exit(1)
         legs = legs_of(dispatch, manifest)
-        results = [("hidden-tests",) + check_hidden(dispatch, app),
+        results = [("hidden-tests",) + check_hidden(dispatch, repo, app),
                    ("gate",) + check_gate(app),
                    ("stages",) + check_stages(dispatch) + ("",),
                    ("markers",) + check_markers(dispatch, legs) + ("",),
