@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { lstatSync, mkdtempSync, realpathSync, rmSync, rmdirSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, sep } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -49,22 +49,35 @@ export const cleanCheckout = (repoArg: string, branch: string, command: string):
     exitCode = status(run);
   }
 
-  if (registered) {
+  const scratchType = (() => {
+    try {
+      return lstatSync(scratch).isDirectory() ? "directory" : "other";
+    } catch {
+      return "missing";
+    }
+  })();
+  let checkoutRemoved = false;
+  if (registered && scratchType !== "other") {
     const removed = spawnSync("git", ["-C", repo, "worktree", "remove", "--force", checkoutPath], {
       stdio: "ignore",
     });
-    if (removed.status !== 0) {
-      process.stderr.write("clean-checkout: could not remove the temporary git worktree\n");
-      if (exitCode === 0) exitCode = 1;
-    }
+    checkoutRemoved = removed.status === 0;
+    if (!checkoutRemoved) process.stderr.write("clean-checkout: could not remove the temporary git worktree\n");
   }
 
   try {
-    rmSync(scratch, { recursive: true, force: true });
+    if (scratchType === "directory") {
+      if (!checkoutRemoved) rmSync(checkoutPath, { recursive: true, force: true });
+      rmdirSync(scratch);
+    } else if (scratchType === "other") {
+      throw new Error("the temporary parent is no longer a directory");
+    }
   } catch (error) {
     process.stderr.write(`clean-checkout: could not remove ${scratch}: ${String(error)}\n`);
     if (exitCode === 0) exitCode = 1;
   }
+
+  if (registered && !checkoutRemoved && exitCode === 0) exitCode = 1;
 
   return { exitCode, checkoutPath };
 };
