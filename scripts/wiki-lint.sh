@@ -187,14 +187,17 @@ for p in pages:
             rawrel, _, rawline = hit.rpartition(":")
             repeats.append((p, number, rawrel, rawline))
 if repeats:
-    # A raw filename may itself carry a shaped value, so the named source is
-    # redacted before it reaches a diagnostic. Without a scrub there is no
-    # safe way to name it, and the lint fails rather than printing it raw.
+    # A raw filename or a page filename may itself carry a shaped value, so
+    # both are redacted before they reach a diagnostic. Without a scrub
+    # there is no safe way to name them, and the lint fails rather than
+    # printing either raw.
     scrub = os.environ.get("WIKI_LINT_SCRUB", "")
     if not scrub or not pathlib.Path(scrub).is_file():
         print("wiki-lint: no scrub to check pages with")
         sys.exit(2)
-    distinct = list(dict.fromkeys(hit[2] for hit in repeats))
+    distinct = list(dict.fromkeys(
+        [hit[2] for hit in repeats]
+        + [str(hit[0].relative_to(repo)) for hit in repeats]))
     red = subprocess.run(
         [scrub, "--safe-path", *distinct], cwd=top.stdout.strip() if top.returncode == 0 else None,
         stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, check=False)
@@ -207,8 +210,9 @@ if repeats:
         sys.exit(2)
     redacted = dict(zip(distinct, lines))
     for p, number, rawrel, rawline in repeats:
-        fault(p, "line %d repeats %s:%s (compile, do not transcribe)"
-              % (number, redacted[rawrel], rawline))
+        faults.append("%s: line %d repeats %s:%s (compile, do not transcribe)"
+                      % (redacted[str(p.relative_to(repo))], number,
+                         redacted[rawrel], rawline))
 
 # orphans: every page reachable from the index
 index = wiki / "index.md"
@@ -390,6 +394,22 @@ out=$(lint "$tmp" 2>/dev/null); code=$?
 if printf '%s\n' "$out" | grep -qF -- "$QE@$QH.$QT"; then
   printf '  FAIL a redacted filename prints no value\n'; fails=$((fails+1))
 else printf '  ok   a redacted filename prints no value\n'; fi
+
+fresh
+QP2='The staging relay tallied four hundred fifteen spans on the Thursday run.'
+QE2='contact-relay-414'; QH2='quiet-relay-414'; QT2='net'
+printf -- '---\ntitle: qp\ntype: concept\nstanding: claimed\nsources: []\nupdated: 2026-01-01\n---\n\nBody.\n' > "$tmp/wiki/concepts/$QE2@$QH2.$QT2.md"
+printf '\n- [qp](concepts/%s@%s.%s.md)\n' "$QE2" "$QH2" "$QT2" >> "$tmp/wiki/index.md"
+printf '%s\n' "$QP2" > "$tmp/raw/evidence2.txt"
+printf '%s\n' "$QP2" >> "$tmp/wiki/concepts/$QE2@$QH2.$QT2.md"
+out=$(lint "$tmp" 2>/dev/null); code=$?
+{ [ "$code" -eq 1 ] && printf '%s\n' "$out" | grep -qF 'repeats raw/' \
+  && printf '%s\n' "$out" | grep -qF '[redacted]'; } \
+  && printf '  ok   a shaped page filename is redacted in quote faults\n' \
+  || { printf '  FAIL a shaped page filename is redacted in quote faults\n'; fails=$((fails+1)); }
+if printf '%s\n' "$out" | grep -qF -- "$QE2@$QH2.$QT2"; then
+  printf '  FAIL a redacted page name prints no value\n'; fails=$((fails+1))
+else printf '  ok   a redacted page name prints no value\n'; fi
 
 # Both shapes below are assembled from pieces so this source carries no
 # matchable form of its own fixtures.
