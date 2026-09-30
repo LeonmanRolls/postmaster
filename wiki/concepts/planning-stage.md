@@ -3,78 +3,67 @@ title: The planning stage
 type: concept
 standing: claimed
 sources: [articles/ai-native-sdlc-playbook]
-updated: 2026-09-29
+updated: 2026-09-30
 ---
 
 # The planning stage
 
-**Claim.** Every run has a planning stage before implementation: each workhorse drafts its
-own spec and commits it, blind to the others, and stops; the user reviews each spec before
-any code is written; no workhorse implements until its own spec is approved.
+**Claim.** The current contract has the coachman write one shared spec for a run before any
+workhorse starts. The postmaster presents that spec for one user decision; on approval every
+workhorse implements from it in blinkers. This is the decision in [#170](https://github.com/brindlewick/postmaster/issues/170),
+recorded in the [coachman runbook](../../skills/postmaster/coachman.md). It is unverified as a
+fleet practice: no completed run has measured what this change does to lane contributions.
 
-**Standing: claimed.** This is a decision taken on reasoning and on outside work, before any
-run bears on it. The comparison in [issue #9](https://github.com/brindlewick/postmaster/issues/9)
-is its test. Outside work motivates the shape and moves no standing.
+**Standing: claimed.** The policy changed by decision, not by run evidence. The outside
+playbook motivates human review before code but does not settle whether one shared spec works
+better than per-workhorse specs.
 
 ## The reasoning
 
-- **A fault is cheapest to fix at the planning stage.** When the plan is still a document, a
-  change of approach is an edit. When it is already code, it is rework. The playbook says the
-  same: "Design review happens before any code is generated, when changing course is still a
-  matter of editing a document"
-  [@articles/ai-native-sdlc-playbook/passages.md] ([the capture](../sources/ai-native-sdlc-playbook.md)).
-- **Weaker models gain the most from a reviewed plan** (unverified: no run has compared
-  reviewed plans against unreviewed ones yet). A plan the user has already scoped and
-  corrected is a better starting point than one a model invented and nobody checked. The
-  playbook holds the call with the human: a person decides whether the spec may progress to
-  build [@articles/ai-native-sdlc-playbook/passages.md].
-- **Review is for scope and correctness, not for making the specs alike.** Each workhorse
-  still drafts its own spec, blind to the others ([the workhorse spec](workhorse-spec.md)),
-  so the approaches stay independent and the synthesis still has something to choose between.
-  One workhorse's spec is never shown to another, and feedback goes to one workhorse at a
-  time.
-- **Only the user's word approves a plan.** The postmaster puts each spec to the user in its
-  interactive session, one at a time, and records the decision: approved, changes requested in
-  the user's words, or dropped. A model does not approve a plan here for the same reason a
-  coachman does not write one. The one exception is a fixture run, where the postmaster signs
-  each spec off itself and the user is not asked.
+- A single review removes the second per-lane spec review and its wait from each run. This is
+  the stated reason for #170, not a measured time saving.
+- One shared spec fixes the ticket-level requirements and decisions before implementation.
+  It remains at the template's level: what to build, the decisions that matter and the tests,
+  not code. The workhorses still choose their implementation independently.
+- The earlier policy gave each workhorse its own design plan. That can expose more design
+  alternatives, but it costs a review per lane. Whether that extra diversity was useful remains
+  open; the [workhorse spec](workhorse-spec.md) records the policy change.
+- A fault is cheapest to fix while it is still a document. The captured playbook makes the same
+  case for design review before code [@articles/ai-native-sdlc-playbook/passages.md]. It does
+  not show which spec ownership produces a better synthesis.
 
 ## What it does
 
-A run's stages gain `planning`, between `bootstrapped` and `workhorses-running`. Each
-workhorse writes `WORKHORSE-SPEC.md`, commits it, and stops before any code. The coachman
-builds a review package — each spec's commit and a link to the file in that workhorse's
-worktree — and pauses. The postmaster puts one spec to the user at a time, as a link built
-from the machine config's `planning.review_link` template or the path alone, and logs each
-decision as it happens. A workhorse whose spec needs changes revises it from the user's words,
-in its own thread, and the revised spec comes back for review at a new commit. The user may
-drop a workhorse at review. Implementation needs at least two approved specs; a run with fewer
-stops and says why. The stage timings show how long the stage took, drafting through the
-last decision.
+The runbook now gives the coachman authorship of one spec and the postmaster one review pause.
+The user can approve it, request changes in their own words for another pass, or stop the run.
+A fixture run is signed off by the postmaster. Once approved, the same spec reaches each lane;
+the workhorses do not write specs. A run dispatched before the change retains its old flow
+through its pinned tool.
 
 ## What would change it
 
-The comparison in issue #9 runs the same tickets three ways: each workhorse drafting its own
-spec, the coachman drafting one shared spec, and no spec at all. Its own-spec level is the
-workhorses' own specs reviewed by the user, and whether review makes the specs converge is a
-measure of it. This stays the default unless a shared spec or no spec produces a clearly
-better synthesis.
+The open question is whether implementation choices still provide useful diversity when the
+plans are shared. [#158](https://github.com/brindlewick/postmaster/issues/158) measures each
+lane's share of the synthesis from git. A non-trivial share shows a contribution, but by itself
+does not show that the contribution improved the result. [#159](https://github.com/brindlewick/postmaster/issues/159)
+scores each lane's branch on fixture hidden tests beside the synthesis. Together, lane shares
+and branch scores can show whether lanes contribute distinct work and whether that work helps
+the shipped result. Compare these measures on runs following the shared-spec ruling with the
+earlier per-workhorse runs; retain `claimed` until a run record bears on the question.
 
 ## What changed because of it
 
-This reverses part of [#29](https://github.com/brindlewick/postmaster/issues/29), where the
-spec was an audit record that nobody reviewed during the run. #29's other decision stands:
-the coachman does not check code against the spec. The workhorse contract in
-`skills/postmaster/coachman.md` gains the planning pause and the two-approved bar; the
-postmaster's half in `skills/postmaster/postmaster.md` gains the interactive spec review;
-`scripts/stage.sh` gains the `planning` stage, `scripts/log-action.sh` the `spec-review`
-action, and `scripts/spec-decisions.sh` owns the decisions file and the run-wide approval
-count. The cost it adds is the user's review time, which the stage timings carry.
+Ticket #170 replaces the per-workhorse planning pause with one coachman-authored spec, one
+review package, and a spec session using the postmaster's recorded harness, model and effort.
+The planning timing still runs from entry through the final decision, and the action log still
+records the spec review. This change does not move a standing: the first trials, #158 and #159,
+follow the new direction by ruling, and their measures will help answer whether implementation
+diversity remains useful.
 
 ## What would settle it
 
-Across at least three dispatched runs: whether reviewed specs lead to fewer changes of
-approach after implementation starts than unreviewed ones, whether the specs of two
-workhorses converge more after review than before it, and how the planning row's time splits
-between drafting, the user's review and revision. A run that implements from an
-unapproved spec, or shows one workhorse's spec to another, refutes the practice as written.
+Across runs using each policy, compare lane shares of the synthesis, each lane's fixture score,
+and whether the synthesis passes tests the strongest lane alone fails. Record review rounds and
+planning time as well. Useful diversity would show up as distinct lane contributions that
+improve the combined result. A lane share alone is not enough. A run that implements an
+unapproved spec or gives a lane another lane's work refutes the contract as written.

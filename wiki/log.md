@@ -8,6 +8,14 @@ updated: 2026-09-29
 
 Append-only. Newest first. One entry per operation, prefixed so it can be parsed.
 
+## [2026-09-30] lint | one shared spec replaces per-workhorse planning
+
+Ticket #170 changes the planning contract: the coachman writes one template-level spec, the
+postmaster gives the user one review, and every workhorse implements from the approved copy.
+The page records that useful implementation diversity remains unmeasured. Lane shares from
+#158 and per-lane fixture scores from #159 are the measures to compare across the old and new
+policies. Standings remain `claimed`; no run has been promoted as evidence for this decision.
+
 ## [2026-09-29] ingest | the planning stage: every spec to the user before code
 
 A decision page, and a capture. Anthropic's AI-native SDLC playbook is captured into

@@ -22,18 +22,20 @@ a run dispatched without it.
   tests from them before it reads any lane's work, and ranks the lanes by those tests. A ticket
   with no criteria, or with criteria nobody can answer yes or no, leaves the coachman nothing
   to rank the lanes by and the gate nothing to prove.
-- **The direction is where the user's intent ends and the workhorses' own plans begin.** It
-  holds the approach the user wants, the constraints on how, and anything the workhorses must
-  not decide differently. It is not a design: each workhorse drafts its own spec from it
-  ([the workhorse spec](workhorse-spec.md)). It may say "None: any approach that meets the
+- **The direction is where the user's intent ends and the coachman's shared spec begins.** It
+  holds the approach the user wants, the constraints on how, and anything workhorses must not
+  decide differently. Under #170's policy (unverified by completed runs), it is not a design:
+  the coachman drafts one template-level spec from it ([the workhorse spec](workhorse-spec.md)),
+  leaving implementation choices open. It may say
+  "None: any approach that meets the
   criteria", but it is never left out, so that an open approach is a decision rather than an
   omission.
 - **A ticket is the user's.** The postmaster proposes what is missing, drawn from the stream
   and the ticket's own text, and writes back only what the user gives or approves. A ticket
   rewritten to pass the check without the user would pass on the postmaster's words. This
   matters most for the direction. A direction the postmaster wrote would narrow the
-  workhorses' approaches before they start, and keeping those approaches independent is why
-  each workhorse drafts its own spec.
+  workhorses' approaches before they start. The shared spec stays above code-level choices so
+  the workhorses can still implement independently.
 
 ## What a script can judge
 

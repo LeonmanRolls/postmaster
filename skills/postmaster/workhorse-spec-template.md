@@ -1,9 +1,10 @@
 # Workhorse spec template
 
-A workhorse copies the block below to `WORKHORSE-SPEC.md` at its worktree root, fills it in, and commits
-it on its own before writing any code. The user reviews it before implementation: revise it
-from their words in a later commit when they ask, and write no code until it is approved. The
-format is adapted from GitHub Spec Kit's plan and tasks templates, in one file.
+The coachman copies the block below to `WORKHORSE-SPEC.md` at the synthesis worktree root,
+fills it in, and commits it before implementation. The user reviews the one shared spec. It
+says what to build, the decisions that matter and the tests, not the code, so workhorses still
+choose their own implementations. The format is adapted from GitHub Spec Kit's plan and tasks
+templates, in one file.
 
 ```markdown
 # Workhorse spec: <ticket id> <ticket title>

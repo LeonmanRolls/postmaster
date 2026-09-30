@@ -24,9 +24,9 @@ Numbered. Each one answerable yes or no. What "done" looks like.
 
 ## Direction
 The high-level technical direction the user wants: the approach, the constraints on how, and
-anything the workhorses must not decide differently. Not a design: each workhorse drafts its
-own spec from it. "None: any approach that meets the criteria" is a direction; leaving the
-heading out is not.
+anything the workhorses must not decide differently. Not a design: the coachman drafts one
+shared spec from it, leaving the workhorses room to choose their implementations. "None: any
+approach that meets the criteria" is a direction; leaving the heading out is not.
 
 ## Turnpikes
 The checks the run must pass through before it ships, besides the project's gate, which always
