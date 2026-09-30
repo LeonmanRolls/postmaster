@@ -632,7 +632,15 @@ def safe_path(path):
         cursor = end
     pieces.append(path[cursor:])
     safe = "".join(pieces)
-    return "".join(ch if ch >= " " and ch != "\x7f" else "\\x%02x" % ord(ch) for ch in safe)
+    # Surrogateescape residues print as the bytes they stand for, so a
+    # redacted path is always plain ASCII and always printable.
+    def printable(ch):
+        if "\udc80" <= ch <= "\udcff":
+            return "\\x%02x" % (ord(ch) - 0xDC00)
+        if ch >= " " and ch != "\x7f":
+            return ch
+        return "\\x%02x" % ord(ch)
+    return "".join(printable(ch) for ch in safe)
 
 
 def log_detection(rule, file, line, commit, via=""):
@@ -658,7 +666,7 @@ def git_path(raw):
         try:
             path = ast.literal_eval(raw.decode("ascii"))
         except (SyntaxError, UnicodeError, ValueError):
-            path = raw.decode("utf-8", errors="replace")
+            path = raw.decode("utf-8", errors="surrogateescape")
     else:
         path = os.fsdecode(raw)
     if path.startswith("b/"):
@@ -682,7 +690,7 @@ def scan_message(commit):
         return []
     raw = git(["show", "-s", "--format=%B", commit])
     out = []
-    for number, line in enumerate(raw.decode("utf-8", errors="replace").splitlines(), 1):
+    for number, line in enumerate(raw.decode("utf-8", errors="surrogateescape").splitlines(), 1):
         for _start, _end, kind, _value in findings(line):
             out.append(("(message)", number, kind, line))
     return out
@@ -754,7 +762,7 @@ def scan_commit_diff(root, parent, commit):
         elif line_number is not None and content.startswith(b"+"):
             if scanner is None:
                 scanner = LineScanner()
-            text = content[1:].decode("utf-8", errors="replace")
+            text = content[1:].decode("utf-8", errors="surrogateescape")
             texts[line_number] = text
             scanner.feed(line_number, text)
             drain()
@@ -791,7 +799,7 @@ def added_lines(root, parent, merge, path):
             match = re.search(rb"\+([0-9]+)(?:,[0-9]+)?\s+@@", content)
             line_number = int(match.group(1)) if match else None
         elif line_number is not None and content.startswith(b"+"):
-            out.append((line_number, content[1:].decode("utf-8", errors="replace")))
+            out.append((line_number, content[1:].decode("utf-8", errors="surrogateescape")))
             line_number += 1
     if child.wait() != 0:
         notice("Git could not read the requested history")
@@ -904,7 +912,7 @@ def run_files(root, paths, markers=True):
         kept_len, fault_len, supp_len = 0, 0, 0
         with handle:
             for number, raw in enumerate(handle, 1):
-                text = raw.rstrip(b"\r\n").decode("utf-8", errors="replace")
+                text = raw.rstrip(b"\r\n").decode("utf-8", errors="surrogateescape")
                 scanner.feed(number, text)
                 for num, _s, _e, kind, _v in scanner.kept[kept_len:]:
                     suspects.append((raw_path, num, kind))
@@ -935,7 +943,7 @@ def run_spans(root, paths):
         kept_len, fault_len, supp_len = 0, 0, 0
         with handle:
             for number, raw in enumerate(handle, 1):
-                text = raw.rstrip(b"\r\n").decode("utf-8", errors="replace")
+                text = raw.rstrip(b"\r\n").decode("utf-8", errors="surrogateescape")
                 scanner.feed(number, text)
                 for num, start, end, kind, _v in scanner.kept[kept_len:]:
                     print("%d:%d:%d:%d:%s" % (index, num, start, end, kind))
@@ -962,7 +970,7 @@ def run_pr_description(root, path):
     suspects = []
     with handle:
         for number, raw in enumerate(handle, 1):
-            text = raw.rstrip(b"\r\n").decode("utf-8", errors="replace")
+            text = raw.rstrip(b"\r\n").decode("utf-8", errors="surrogateescape")
             for _start, _end, kind, _value in findings(text):
                 suspects.append((number, kind))
                 log_detection(kind, "(pr-description)", number, "")
@@ -1650,6 +1658,14 @@ def self_test(root):
             spans_missing = run_child(["--spans", "no-such-file.txt"], repo)
             ok("--spans on a missing file exits 2", bool(
                 spans_missing and spans_missing.returncode == 2 and not spans_missing.stdout))
+            (repo / "trunc.bin").write_bytes(
+                b"ok \xe2\x82 contact: " + sample_email.encode() + b"\n")
+            trunc = run_child(["--spans", "trunc.bin"], repo)
+            ok("--spans aligns with bytes past a truncated sequence", bool(
+                trunc and trunc.returncode == 0
+                and trunc.stdout.splitlines()
+                == ["0:1:15:%d:email" % (15 + len(sample_email))]
+                and silent(trunc)))
 
             print("pull request controls: --pr-description scans like a message")
             (repo / "pr.md").write_text(
@@ -1737,6 +1753,10 @@ def self_test(root):
             ok("--safe-path passes a clean path through", bool(
                 plain_path and plain_path.returncode == 0
                 and plain_path.stdout.splitlines() == ["wiki/concepts/p.md"]))
+            odd_path = run_child(["--safe-path", "notes/\udce2\udc82.txt"], repo)
+            ok("--safe-path prints undecodable bytes as escapes", bool(
+                odd_path and odd_path.returncode == 0
+                and odd_path.stdout.splitlines() == ["notes/\\xe2\\x82.txt"]))
 
             print("file controls: --files scans worktree files, streamed")
             (repo / "loose.txt").write_text(

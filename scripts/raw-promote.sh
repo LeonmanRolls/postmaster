@@ -113,6 +113,40 @@ if [ "${1:-}" = "--self-test" ]; then
       || { printf '  FAIL the copy checks clean again: exit %s\n' "$code2"; fails=$((fails+1)); }
   }
   r=$(repo) && { cd "$r" || exit 2
+    TOKEN413="$T_P1$T_P2$T_B1$T_B2"
+    printf 'mail %s then %s end\n' "$SUSPECT" "$TOKEN413" > "$tmp/twospan.md"
+    out=$(bash "$HERE/raw-promote.sh" "$tmp/twospan.md" raw/trials/t413/notes.md 2>"$tmp/err"); code=$?
+    { [ "$code" -eq 0 ] && grep -qF 'mail <redacted:email> then <redacted:token> end' "$r/raw/trials/t413/notes.md"; } \
+      && printf '  ok   two spans on one line scrub independently\n' \
+      || { printf '  FAIL two spans on one line scrub independently: exit %s\n' "$code"; fails=$((fails+1)); }
+    if grep -qF -- "$SUSPECT" "$r/raw/trials/t413/notes.md" 2>/dev/null \
+      || grep -qF -- "$TOKEN413" "$r/raw/trials/t413/notes.md" 2>/dev/null; then
+      printf '  FAIL a multi-span scrub publishes no fragment\n'; fails=$((fails+1))
+    else printf '  ok   a multi-span scrub publishes no fragment\n'; fi
+  }
+  r=$(repo) && { cd "$r" || exit 2
+    printf 'contact: %s ok \xff tail\n' "$SUSPECT" > "$tmp/invalid.md"
+    out=$(bash "$HERE/raw-promote.sh" "$tmp/invalid.md" raw/trials/t413/notes.md 2>/dev/null); code=$?
+    { [ "$code" -eq 0 ] && cmp -s "$r/raw/trials/t413/notes.md" <(printf 'contact: <redacted:email> ok \xff tail\n'); } \
+      && printf '  ok   bytes outside the span survive the scrub\n' \
+      || { printf '  FAIL bytes outside the span survive the scrub: exit %s\n' "$code"; fails=$((fails+1)); }
+  }
+  r=$(repo) && { cd "$r" || exit 2
+    python3 -c "
+lines = ['public filler line %d with padding words to add bulk volume here' % i for i in range(400000)]
+lines[200000] = 'contact: $SUSPECT'
+open('$tmp/big.md', 'w').write('\n'.join(lines) + '\n')
+"
+    limited=$(bash -c "ulimit -v 65536 || exit 99; exec bash \"$HERE/raw-promote.sh\" \"$tmp/big.md\" raw/trials/t413/big.md" 2>&1); code=$?
+    if [ "$code" -eq 99 ]; then
+      printf '  ok   a large dirty file streams under a small address space: skipped, no address-space limit on this machine\n'
+    else
+      { [ "$code" -eq 0 ] && grep -qF '<redacted:email>' "$r/raw/trials/t413/big.md" 2>/dev/null; } \
+        && printf '  ok   a large dirty file streams under a small address space\n' \
+        || { printf '  FAIL a large dirty file streams under a small address space: exit %s\n' "$code"; fails=$((fails+1)); }
+    fi
+  }
+  r=$(repo) && { cd "$r" || exit 2
     printf 'Reach the relay at %s for pings.\n' "$SUSPECT" > "$tmp/logged.md"
     rm -f "$tmp/pm.jsonl"
     out=$(POSTMASTER_DETECTIONS_LOG="$tmp/pm.jsonl" bash "$HERE/raw-promote.sh" "$tmp/logged.md" raw/trials/t413/notes.md 2>/dev/null); code=$?
@@ -481,31 +515,52 @@ while [ "$i" -lt "$N" ]; do
     if ! python3 - "$f" "$STAGE/scrubbed.$i" "$STAGE/spans.$i" <<'PY'; then
 import sys
 src, tmp, spans = sys.argv[1], sys.argv[2], sys.argv[3]
-text = open(src, "rb").read().decode("utf-8", errors="replace")
-lines = text.split("\n")
-found = []
+found = {}
 for row in open(spans, encoding="utf-8").read().splitlines():
     parts = row.split(":")
     if len(parts) != 5:
         sys.exit("a span is index:line:start:end:rule")
     _index, line, start, end, rule = parts
     try:
-        found.append((int(line), int(start), int(end), rule))
+        line, start, end = int(line), int(start), int(end)
     except ValueError:
         sys.exit("a span carries numbers")
-# Later lines first so earlier offsets hold; on a line the outer span first,
-# ties to the first span, and an overlapped span is skipped.
-found.sort(key=lambda s: (s[0], s[1], -(s[2] - s[1])))
-out, used = {}, {}
-for line, start, end, rule in found:
-    if not (1 <= line <= len(lines) and 0 <= start <= end <= len(lines[line - 1])):
+    found.setdefault(line, []).append((start, end, rule))
+# Per line, in two phases: decide keep-or-skip outer-first (start
+# ascending, longest first, overlapped spans skipped), then apply
+# right-to-left so earlier offsets hold while the line mutates.
+for line, group in found.items():
+    group.sort(key=lambda s: (s[0], -(s[1] - s[0])))
+    kept, used = [], []
+    for start, end, rule in group:
+        if any(s < end and start < e for s, e in used):
+            continue
+        used.append((start, end))
+        kept.append((start, end, rule))
+    kept.sort(key=lambda s: -s[0])
+    found[line] = kept
+# Stream the file line by line, so memory is bounded by the longest line.
+# surrogateescape round-trips undecodable bytes, so only the matched spans
+# change. Lines split exactly as the scanner splits them, and each line's
+# original terminator travels back untouched.
+count = 0
+with open(src, "rb") as handle, open(tmp, "wb") as out:
+    for raw in handle:
+        count += 1
+        body, term = raw, b""
+        if body.endswith(b"\n"):
+            body, term = body[:-1], b"\n"
+            if body.endswith(b"\r"):
+                body, term = body[:-1], b"\r\n"
+        text = body.decode("utf-8", errors="surrogateescape")
+        for start, end, rule in found.get(count, []):
+            if not (0 <= start <= end <= len(text)):
+                sys.exit("a span outside its line")
+            text = text[:start] + "<redacted:%s>" % rule + text[end:]
+        out.write(text.encode("utf-8", errors="surrogateescape") + term)
+for line in found:
+    if line < 1 or line > count:
         sys.exit("a span outside its line")
-    if any(s < end and start < e for s, e in used.setdefault(line, [])):
-        continue
-    used[line].append((start, end))
-    body = lines[line - 1]
-    lines[line - 1] = body[:start] + "<redacted:%s>" % rule + body[end:]
-open(tmp, "w", encoding="utf-8", newline="").write("\n".join(lines))
 PY
       remove_copy; fail "the scrub could not finish"
     fi
