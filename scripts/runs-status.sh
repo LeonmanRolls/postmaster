@@ -11,6 +11,9 @@
 #   next   USER      the postmaster has put this run's question to the user and waits for the
 #                    answer (.waiting-on-user)
 #          RULE      an escalation is waiting (.escalation-ready)
+#          TELL      the run holds a private-data detection the postmaster has not
+#                    yet told the user about (detections.jsonl beyond
+#                    .detections-told)
 #          GATE      the ship card is complete (.card-ready)
 #          SPEC      a spec review package is waiting (.spec-review-ready): the postmaster puts
 #                    each workhorse's spec to the user, one at a time
@@ -26,6 +29,12 @@
 #
 # Idle time ignores the marker files themselves, so touching a marker never hides a stall.
 #
+# Detections: the gate appends every private-data finding to the run's
+# detections.jsonl, one JSON line as it happens. The postmaster tells the
+# user each line it has not told before, at once, and appends the told
+# lines verbatim to the run's .detections-told. A run whose log holds a
+# line its told file does not is TELL; an unreadable log is untold.
+#
 #   exit 0  listed (an empty root lists nothing)
 #   exit 1  usage, or no such root
 set -uo pipefail
@@ -33,6 +42,7 @@ set -uo pipefail
 status() {  # status <root>
   python3 - "$1" <<'PY'
 import sys, os, json, time, glob
+from collections import Counter
 root = sys.argv[1]; now = time.time()
 pm_esc = os.path.join(root, "postmaster", "ESCALATION.md")
 if os.path.isfile(pm_esc):
@@ -60,9 +70,28 @@ for run in sorted(os.listdir(root)):
     idle_min = int((now - newest) / 60) if newest else -1
     done = ".leg-%s-done" % leg in markers
     exited = ".leg-%s-exited" % leg in markers
+    det = os.path.join(d, "detections.jsonl")
+    untold = False
+    if os.path.isfile(det):
+        try:
+            have = [ln for ln in open(det, encoding="utf-8", errors="replace"
+                                      ).read().splitlines() if ln.strip()]
+        except OSError:
+            untold = True
+        else:
+            told = os.path.join(d, ".detections-told")
+            said = []
+            if os.path.isfile(told):
+                try:
+                    said = [ln for ln in open(told, encoding="utf-8", errors="replace"
+                                              ).read().splitlines() if ln.strip()]
+                except OSError:
+                    said = []
+            untold = any((Counter(have) - Counter(said)).values())
     if stage in ("done", "abandoned"): nxt = "-"
     elif ".waiting-on-user" in markers: nxt = "USER"
     elif ".escalation-ready" in markers: nxt = "RULE"
+    elif untold: nxt = "TELL"
     elif ".card-ready" in markers: nxt = "GATE"
     elif ".spec-review-ready" in markers: nxt = "SPEC"
     elif done: nxt = "DISPATCH"
@@ -124,10 +153,38 @@ run usergate shipping 3 .card-ready .waiting-on-user
 run userspec planning 1 .spec-review-ready .waiting-on-user
 run userclosed done 3 .waiting-on-user
 run stall review 2; age stall; : > "$tmp/root/stall/.leg-1-done"
+DET1='{"commit":"","file":"notes.txt","line":1,"rule":"email","ts":"2026-09-29T00:00:00Z"}'
+DET2='{"commit":"","file":"notes.txt","line":2,"rule":"token","ts":"2026-09-29T00:01:00Z"}'
+run tell review 2
+printf '%s\n' "$DET1" > "$tmp/root/tell/detections.jsonl"
+run parttold review 2
+printf '%s\n%s\n' "$DET1" "$DET2" > "$tmp/root/parttold/detections.jsonl"
+printf '%s\n' "$DET1" > "$tmp/root/parttold/.detections-told"
+run told review 2
+printf '%s\n' "$DET1" > "$tmp/root/told/detections.jsonl"
+printf '%s\n' "$DET1" > "$tmp/root/told/.detections-told"
+run baddet review 2
+printf 'not json at all\n' > "$tmp/root/baddet/detections.jsonl"
+run baddetold review 2
+printf 'not json at all\n' > "$tmp/root/baddetold/detections.jsonl"
+printf 'not json at all\n' > "$tmp/root/baddetold/.detections-told"
+run tellgate shipping 3 .card-ready
+printf '%s\n' "$DET1" > "$tmp/root/tellgate/detections.jsonl"
+run telluser review 2 .waiting-on-user
+printf '%s\n' "$DET1" > "$tmp/root/telluser/detections.jsonl"
+run tellrule review 2 .escalation-ready
+printf '%s\n' "$DET1" > "$tmp/root/tellrule/detections.jsonl"
+run tellclosed done 3
+printf '%s\n' "$DET1" > "$tmp/root/tellclosed/detections.jsonl"
+run emptydet review 2
+: > "$tmp/root/emptydet/detections.jsonl"
 mkdir -p "$tmp/root/postmaster"
 
 echo "positive controls"
 expect "an escalation waiting is RULE" rule RULE
+expect "an untold detection is TELL" tell TELL
+expect "a partly told log is TELL" parttold TELL
+expect "an unreadable-looking line is TELL" baddet TELL
 expect "a complete ship card is GATE" gate GATE
 expect "a spec review package waiting is SPEC" spec SPEC
 expect "the current leg done is DISPATCH" dispatch DISPATCH
@@ -143,6 +200,13 @@ expect "an earlier leg's done marker dispatches nothing" earlier WAIT
 expect "a ship card put to the user waits on the user, not the gate" usergate USER
 expect "a spec package put to the user waits on the user, not the package" userspec USER
 expect "a closed run stays closed with a stale marker" userclosed "-"
+expect "a fully told log is WAIT" told WAIT
+expect "a told line told verbatim is WAIT" baddetold WAIT
+expect "an empty detections log is WAIT" emptydet WAIT
+expect "an untold detection beats a ship card" tellgate TELL
+expect "a run waiting on the user beats an untold detection" telluser USER
+expect "an escalation waiting beats an untold detection" tellrule RULE
+expect "a closed run stays closed with untold detections" tellclosed "-"
 expect "touching a marker does not hide a stall" stall INSPECT
 [ -z "$(next_of postmaster)" ] && ok "the postmaster's own directory is not a run" \
   || fail "the postmaster's own directory is not a run"

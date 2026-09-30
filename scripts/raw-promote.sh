@@ -51,6 +51,9 @@ if [ "${1:-}" = "--self-test" ]; then
   # shellcheck disable=SC2064
   trap "rm -r -- \"$tmp\" </dev/null 2>/dev/null" EXIT
   fails=0
+  # Hermetic logging: the gate runs self-tests with a detections log set,
+  # and fixture findings must never land in it.
+  export POSTMASTER_DETECTIONS_LOG=
   E_LOCAL='relay-413'; E_HOST='quiet-relay-413'; E_TLD='net'
   SUSPECT="contact-${E_LOCAL}@${E_HOST}.${E_TLD}"
   K_U='user'; K_E='Email'
@@ -108,6 +111,21 @@ if [ "${1:-}" = "--self-test" ]; then
     { [ "$code2" -eq 0 ] && [ -z "$out2" ]; } \
       && printf '  ok   the copy checks clean again\n' \
       || { printf '  FAIL the copy checks clean again: exit %s\n' "$code2"; fails=$((fails+1)); }
+  }
+  r=$(repo) && { cd "$r" || exit 2
+    printf 'Reach the relay at %s for pings.\n' "$SUSPECT" > "$tmp/logged.md"
+    rm -f "$tmp/pm.jsonl"
+    out=$(POSTMASTER_DETECTIONS_LOG="$tmp/pm.jsonl" bash "$HERE/raw-promote.sh" "$tmp/logged.md" raw/trials/t413/notes.md 2>/dev/null); code=$?
+    [ "$code" -eq 0 ] \
+      && printf '  ok   a logged scrub completes\n' \
+      || { printf '  FAIL a logged scrub completes: exit %s\n' "$code"; fails=$((fails+1)); }
+    entry=$(python3 -c 'import json,sys; e=[json.loads(l) for l in open(sys.argv[1])]; print(len(e), e[0].get("rule"), e[0].get("file").endswith("logged.md"), e[0].get("line"), repr(e[0].get("commit")))' "$tmp/pm.jsonl" 2>/dev/null)
+    [ "$entry" = "1 email True 1 ''" ] \
+      && printf '  ok   a scrubbed finding is logged once, under its source\n' \
+      || { printf '  FAIL a scrubbed finding is logged once, under its source: %s\n' "$entry"; fails=$((fails+1)); }
+    if grep -qF -- "$SUSPECT" "$tmp/pm.jsonl" 2>/dev/null; then
+      printf '  FAIL a scrub log logs no value\n'; fails=$((fails+1))
+    else printf '  ok   a scrub log logs no value\n'; fi
   }
   r=$(repo) && { cd "$r" || exit 2
     { printf '{"%s": "withheld"}\n' "$K_U$K_E"

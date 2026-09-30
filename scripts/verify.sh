@@ -19,7 +19,9 @@
 #       log each result as a `verify` action. Without it, as a workhorse: run what arm copied, and
 #       log nothing. Either way it refuses a worktree holding anything git sees that its commit
 #       does not, so every result belongs to a commit; a check that leaves such a file fails, and
-#       the checks after it are not run
+#       the checks after it are not run. Every check runs with POSTMASTER_DETECTIONS_LOG set, to
+#       <dispatch>/detections.jsonl for the coachman and to the worktree's own verify copy for a
+#       workhorse, so the scrub logs each finding as it happens.
 #   verify.sh journey-path <worktree> [<dispatch>]
 #       where the journey report for <worktree>'s HEAD goes: under <dispatch>/journey/ for the
 #       coachman, under the worktree's .postmaster/verify/journey/ for a workhorse
@@ -371,7 +373,8 @@ def run(wt, dispatch):
     logs.mkdir(parents=True, exist_ok=True)
     for s in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
         signal.signal(s, stop)
-    env = dict(os.environ, POSTMASTER_VERIFY=str(spec))
+    logs_to = (dispatch / "detections.jsonl") if dispatch else (spec / "detections.jsonl")
+    env = dict(os.environ, POSTMASTER_VERIFY=str(spec), POSTMASTER_DETECTIONS_LOG=str(logs_to))
     env.pop("POSTMASTER_LAUNCH_NAME", None)   # host.sh run names this runner's launch, not the checks it runs
     results, unlogged, spoiled = [], [], None
     for c in checks:
@@ -756,6 +759,30 @@ grep -qF "\"target\":\"red\",\"detail\":\"on=wb/T-1-a@$sha result=fail exit=1" "
 [ -f "$d/verify/$sha/red.log" ] && ok "with its output kept in the run" || fail "with its output kept in the run"
 p1=$("$SELF" journey-path "$wt" "$d"); [ "$p1" = "$d/journey/$(git -C "$wt" rev-parse HEAD).md" ] && ok "the coachman's journey report goes in the run" || fail "the coachman's journey report goes in the run" "$p1"
 p2=$(env -u POSTMASTER_VERIFY "$SELF" journey-path "$wt"); [ "$p2" = "$wt/.postmaster/verify/journey/$(git -C "$wt" rev-parse HEAD).md" ] && ok "a workhorse's in its worktree" || fail "a workhorse's in its worktree" "$p2"
+
+echo "the detections log each check runs with"
+lp="$tmp/detproj"; mkdir -p "$lp/.postmaster"
+cat > "$lp/.postmaster/project.toml" <<'EOF'
+[checks.gate]
+command = "true"
+shows = "x"
+[checks.probe]
+command = 'test -n "$POSTMASTER_DETECTIONS_LOG" && echo probe-line >> "$POSTMASTER_DETECTIONS_LOG"'
+shows = "x"
+EOF
+repo "$lp"
+ld="$lp/.postmaster/runs/T-9"; mkdir -p "$ld"; printf '## Ticket\nx\n' > "$ld/brief.md"
+"$SELF" record "$lp" "$ld" >/dev/null
+G "$lp" worktree add -q "$lp/.worktrees/T-9-a" -b wb/T-9-a
+lwt="$lp/.worktrees/T-9-a"
+"$SELF" arm "$lwt" "$ld" >/dev/null
+out=$("$SELF" run "$lwt" "$ld" 2>&1); rc=$?
+[ $rc -eq 0 ] && ok "a check that writes the detections log passes" || fail "a check that writes the detections log passes (exit $rc)" "$out"
+grep -qF probe-line "$ld/detections.jsonl" 2>/dev/null \
+  && ok "the coachman's log lands in the run" || fail "the coachman's log lands in the run"
+out=$("$SELF" run "$lwt" 2>&1); rc=$?
+grep -qF probe-line "$lwt/.postmaster/verify/detections.jsonl" 2>/dev/null \
+  && ok "a workhorse's log lands in its worktree" || fail "a workhorse's log lands in its worktree"
 
 echo "results and summaries"
 out=$("$SELF" results "$d" "$wt"); rc=$?

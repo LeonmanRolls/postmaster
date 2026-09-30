@@ -54,6 +54,9 @@ if [ "${1:-}" = "--self-test" ]; then
   # shellcheck disable=SC2064
   trap "rm -r -- \"$tmp\" </dev/null 2>/dev/null" EXIT
   fails=0
+  # Hermetic logging: the gate runs self-tests with a detections log set,
+  # and fixture findings must never land in it.
+  export POSTMASTER_DETECTIONS_LOG=
   E_LOCAL='relay-413'; E_HOST='quiet-relay-413'; E_TLD='net'
   SUSPECT="contact-${E_LOCAL}@${E_HOST}.${E_TLD}"
   C_A='Co-Au'; C_B='thored-'; C_C='By: Imaginary Aide'

@@ -136,9 +136,14 @@ if pages and top.returncode == 0:
             rel_args.append(str(page.relative_to(top_path)))
         except ValueError:
             rel_args.append(str(page))
+    # The lint logs only what it reports: the scan runs with the
+    # detections log emptied, and each path or host fault is logged under
+    # its page through --log-detection. Quoted raw/ lines are lint faults,
+    # not detections, and are never logged.
     child = subprocess.run(
         [scrub, "--files", *rel_args], cwd=top.stdout.strip(),
-        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, check=False)
+        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, check=False,
+        env=dict(os.environ, POSTMASTER_DETECTIONS_LOG=""))
     if child.returncode not in (0, 1):
         print("wiki-lint: the page scan could not finish")
         sys.exit(2)
@@ -152,6 +157,13 @@ if pages and top.returncode == 0:
             rel = m.group(1)
         faults.append("%s: line %s: %s (schema.md: name a target by its repository name only)"
                       % (rel, m.group(2), m.group(3)))
+        logged = subprocess.run(
+            [scrub, "--log-detection", m.group(3), str(rel), m.group(2)],
+            cwd=top.stdout.strip(), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            check=False)
+        if logged.returncode != 0:
+            print("wiki-lint: the detections log could not be written")
+            sys.exit(2)
 
 # Compile, do not transcribe: no page line of forty characters or more
 # repeats a line under raw/. Shorter spans are headings, citations and
@@ -275,6 +287,9 @@ capture() {  # capture <kind> <slug> <front matter lines, \n-separated>
   mkdir -p "$tmp/raw/$1/$2"; printf -- '---\n%b---\n' "$3" > "$tmp/raw/$1/$2/source.md"
 }
 GOOD_SOURCE='url: https://example.org/paper\nretrieved: 2026-01-01\ntitle: A paper\n'
+# Hermetic logging: the gate runs self-tests with a detections log set,
+# and fixture findings must never land in it.
+export POSTMASTER_DETECTIONS_LOG=
 
 fails=0
 expect() {  # expect <pass|fail> <label> [<text the fault must contain>]
@@ -413,6 +428,31 @@ out=$( ( cd /tmp && lint "$elsewhere" ) 2>/dev/null); code=$?
 { [ "$code" -eq 1 ] && printf '%s\n' "$out" | grep -qF 'private-path'; } \
   && printf '  ok   a target outside the caller checkout still scans\n' \
   || { printf '  FAIL a target outside the caller checkout still scans: exit %s\n' "$code"; fails=$((fails+1)); }
+
+echo "detection controls: the lint logs what it reports, nothing else"
+fresh; concept logpath claimed ""
+LP=$(printf '/home/%s' fixture-user)
+printf 'See %s-413/notes.txt for the log.\n' "$LP" >> "$tmp/wiki/concepts/logpath.md"
+rm -f "$tmp/wl.jsonl"
+out=$(POSTMASTER_DETECTIONS_LOG="$tmp/wl.jsonl" lint "$tmp" 2>/dev/null); code=$?
+[ "$code" -eq 1 ] \
+  && printf '  ok   a logged page fault still fails\n' \
+  || { printf '  FAIL a logged page fault still fails: exit %s\n' "$code"; fails=$((fails+1)); }
+entry=$(python3 -c 'import json,sys; e=[json.loads(l) for l in open(sys.argv[1])]; print(len(e), e[0].get("rule"), e[0].get("file"), e[0].get("line"), repr(e[0].get("commit")))' "$tmp/wl.jsonl" 2>/dev/null)
+[ "$entry" = "1 private-path wiki/concepts/logpath.md 10 ''" ] \
+  && printf '  ok   a page fault is logged once, under its page\n' \
+  || { printf '  FAIL a page fault is logged once, under its page: %s\n' "$entry"; fails=$((fails+1)); }
+fresh; concept mailto claimed ""
+ME='contact-relay-413'; MH='quiet-relay-413'; MT='net'
+printf 'Reach the relay at %s@%s.%s for pings.\n' "$ME" "$MH" "$MT" >> "$tmp/wiki/concepts/mailto.md"
+rm -f "$tmp/wl2.jsonl"
+out=$(POSTMASTER_DETECTIONS_LOG="$tmp/wl2.jsonl" lint "$tmp" 2>/dev/null); code=$?
+[ "$code" -eq 0 ] \
+  && printf '  ok   a page carrying only an address passes\n' \
+  || { printf '  FAIL a page carrying only an address passes: exit %s\n%s\n' "$code" "$out"; fails=$((fails+1)); }
+[ ! -e "$tmp/wl2.jsonl" ] \
+  && printf '  ok   an unreported finding is never logged\n' \
+  || { printf '  FAIL an unreported finding is never logged\n'; fails=$((fails+1)); }
 
 echo
 [ "$fails" -eq 0 ] && { echo "self-test: all controls behaved"; exit 0; }

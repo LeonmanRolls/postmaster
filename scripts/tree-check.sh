@@ -23,6 +23,11 @@
 # gone from its head blob, and likewise rests with the scrub. Both halves
 # report value-free: paths and kinds, never values.
 #
+# Blobs are scanned through stand-in paths, so the scrub runs with the
+# detections log emptied and each raw/ fault is logged under its real path
+# through --log-detection instead. Marker faults are reported but never
+# logged: they are structural, not detections.
+#
 #   exit 0  clean
 #   exit 1  faults on stdout, one per line
 #   exit 2  usage, not a repository, an unresolvable base or head, a tree
@@ -44,6 +49,9 @@ if [ "${1:-}" = "--self-test" ]; then
   # shellcheck disable=SC2064
   trap "rm -r -- \"$tmp\" </dev/null 2>/dev/null" EXIT
   fails=0
+  # Hermetic logging: the gate runs self-tests with a detections log set,
+  # and fixture findings must never land in it.
+  export POSTMASTER_DETECTIONS_LOG=
   E_LOCAL='relay-413'; E_HOST='quiet-relay-413'; E_TLD='net'
   SUSPECT="contact-${E_LOCAL}@${E_HOST}.${E_TLD}"
   export GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL
@@ -92,6 +100,36 @@ if [ "${1:-}" = "--self-test" ]; then
     if printf '%s' "$out" | grep -qF -- "$SUSPECT" || grep -qF -- "$SUSPECT" "$tmp/err"; then
       printf '  FAIL a raw/ fault prints no value\n'; fails=$((fails+1))
     else printf '  ok   a raw/ fault prints no value\n'; fi
+  }
+  r=$(repo) && { cd "$r" || exit 2
+    base=$(git rev-parse HEAD)
+    commit_file "$r" raw/trials/t413/notes.md "Reach the relay at $SUSPECT for pings."
+    head=$(git rev-parse HEAD)
+    out=$(POSTMASTER_DETECTIONS_LOG="$tmp/det.jsonl" bash "$HERE/tree-check.sh" "$base" "$head" 2>/dev/null); code=$?
+    [ "$code" -eq 1 ] \
+      && printf '  ok   a logged raw/ fault still fails\n' \
+      || { printf '  FAIL a logged raw/ fault still fails: exit %s\n' "$code"; fails=$((fails+1)); }
+    entry=$(python3 -c 'import json,sys; e=[json.loads(l) for l in open(sys.argv[1])]; print(len(e), e[0].get("rule"), e[0].get("file"), e[0].get("line"), repr(e[0].get("commit")))' "$tmp/det.jsonl" 2>/dev/null)
+    [ "$entry" = "1 email raw/trials/t413/notes.md 1 ''" ] \
+      && printf '  ok   a raw/ fault is logged once, under its real path\n' \
+      || { printf '  FAIL a raw/ fault is logged once, under its real path: %s\n' "$entry"; fails=$((fails+1)); }
+    if grep -qF -- "$SUSPECT" "$tmp/det.jsonl" 2>/dev/null; then
+      printf '  FAIL a logged fault logs no value\n'; fails=$((fails+1))
+    else printf '  ok   a logged fault logs no value\n'; fi
+  }
+  r=$(repo) && { cd "$r" || exit 2
+    base=$(git rev-parse HEAD)
+    ALLOW_P='private-data:allo'
+    commit_file "$r" raw/trials/t413/notes.md "ordinary  # ${ALLOW_P}w email -- nothing to suppress"
+    head=$(git rev-parse HEAD)
+    rm -f "$tmp/det2.jsonl"
+    out=$(POSTMASTER_DETECTIONS_LOG="$tmp/det2.jsonl" bash "$HERE/tree-check.sh" "$base" "$head" 2>/dev/null); code=$?
+    { [ "$code" -eq 1 ] && printf '%s' "$out" | grep -qF ': marker'; } \
+      && printf '  ok   a marker fault in a raw/ add is reported\n' \
+      || { printf '  FAIL a marker fault in a raw/ add is reported: exit %s\n' "$code"; fails=$((fails+1)); }
+    [ ! -e "$tmp/det2.jsonl" ] \
+      && printf '  ok   a marker fault is never logged\n' \
+      || { printf '  FAIL a marker fault is never logged\n'; fails=$((fails+1)); }
   }
   r=$(repo) && { cd "$r" || exit 2
     head=$(git rev-parse HEAD)
@@ -374,12 +412,18 @@ scan_blob() {  # scan_blob <ref> <path> <skip|fail>: scan one blob for faults
     if [ "$3" = skip ]; then return 0; else fail "cannot read added file $(redact "$2")"; fi
   fi
   SCANERR=$(mktemp) || fail "could not stage the scan"
-  out=$(bash "$SCRUB" --files "$blob" 2>"$SCANERR"); code=$?
+  out=$(POSTMASTER_DETECTIONS_LOG= bash "$SCRUB" --files "$blob" 2>"$SCANERR"); code=$?
   cat "$SCANERR" >&2; rm -f -- "$SCANERR"; SCANERR=""
   case $code in 0|1) ;; *) fail "the scan could not finish" ;; esac
   if [ "$code" -eq 1 ]; then
     safe=$(redact "$2")
-    while IFS= read -r ln; do note "${safe}${ln#$blob}"; done <<<"$out"
+    while IFS= read -r ln; do
+      note "${safe}${ln#$blob}"
+      rest=${ln#$blob:}; num=${rest%%:*}; kind=${rest#*: }
+      [ "$kind" = marker ] && continue
+      bash "$SCRUB" --log-detection "$kind" "$2" "$num" 2>/dev/null \
+        || fail "the detections log could not be written"
+    done <<<"$out"
   fi
   rm -f -- "$blob"; BLOBF=""
 }
