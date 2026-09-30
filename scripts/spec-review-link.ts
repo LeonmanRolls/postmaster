@@ -1,11 +1,11 @@
-// Resolve the user's workhorse-spec link from the config captured at dispatch.
+// Resolve the user's shared-spec link from the config captured at dispatch.
 //
 //   spec-review-link.sh <dispatch> <workhorse-worktree>
 //   spec-review-link.sh --validate <dispatch>
 //   spec-review-link.sh --self-test
 //
 // The optional config.planning.review_link template in run.json has {path} replaced by the
-// absolute path to WORKHORSE-SPEC.md. An empty or missing template prints the path itself.
+// absolute directory that holds WORKHORSE-SPEC.md. An empty or missing template prints the file path.
 //
 //   exit 0  link or path printed
 //   exit 1  usage, unreadable run.json or missing spec
@@ -39,7 +39,7 @@ function readStrict(path: string): string {
 }
 
 // --- verbs --------------------------------------------------------------------------------------
-function render(dispatch: string, worktree: string): void {
+function render(dispatch: string, specDirectory: string): void {
   const runJson = join(dispatch, "run.json");
   let text: string;
   try {
@@ -66,9 +66,9 @@ function render(dispatch: string, worktree: string): void {
     die("spec-review-link: config.planning.review_link must be a string", 2);
   let path: string;
   try {
-    path = realpathSync(join(worktree, "WORKHORSE-SPEC.md"));
+    path = realpathSync(join(specDirectory, "WORKHORSE-SPEC.md"));
   } catch (e: unknown) {
-    die(`spec-review-link: no WORKHORSE-SPEC.md in ${worktree} (${errMsg(e)})`, 1);
+    die(`spec-review-link: no WORKHORSE-SPEC.md in ${specDirectory} (${errMsg(e)})`, 1);
   }
   let found = false;
   try {
@@ -76,14 +76,14 @@ function render(dispatch: string, worktree: string): void {
   } catch {
     found = false;
   }
-  if (!found) die(`spec-review-link: no WORKHORSE-SPEC.md in ${worktree}`, 1);
+  if (!found) die(`spec-review-link: no WORKHORSE-SPEC.md in ${specDirectory}`, 1);
   if (template === "") {
     console.log(path);
   } else if (!template.includes("{path}")) {
     die("spec-review-link: config.planning.review_link must contain {path}", 2);
   } else {
     // Python's str.replace replaces every occurrence.
-    console.log(template.split("{path}").join(path));
+    console.log(template.split("{path}").join(realpathSync(specDirectory)));
   }
 }
 
@@ -150,12 +150,12 @@ function selfTest(): void {
       '{"config":{"planning":{"review_link":"https://code.example/open?file={path}"}}}\n',
     );
     let r = go(d, w);
-    const expected = `https://code.example/open?file=${specPath()}`;
+    const expected = `https://code.example/open?file=${realpathSync(w)}`;
     if (r.code === 0 && strip(r.out) === expected)
-      st.ok("the recorded template gets the absolute spec path");
+      st.ok("the recorded template gets the absolute spec folder");
     else
       st.fail(
-        `the recorded template gets the absolute spec path (exit ${r.code})`,
+        `the recorded template gets the absolute spec folder (exit ${r.code})`,
         `${strip(r.out)} ${r.err}`,
       );
 

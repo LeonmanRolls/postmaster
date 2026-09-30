@@ -1,26 +1,24 @@
-// Own the planning stage's spec decisions: one file per package, one stanza per lane.
+// Own the planning stage's spec decisions: one run-level spec in new runs, with legacy lane stanzas readable.
 //
 //   spec-decisions.sh <dispatch> fresh
-//   spec-decisions.sh <dispatch> record <lane> <decision> <commit> [<words>...]
+//   spec-decisions.sh <dispatch> record <decision> <commit> [<words>...]
+//   spec-decisions.sh <dispatch> record <lane> <decision> <commit> [<words>...]  (legacy)
 //   spec-decisions.sh <dispatch> count
 //   spec-decisions.sh --self-test
 //
 // fresh starts a new package's <dispatch>/spec-decisions.md, so no stanza survives across
-// packages. record appends one stanza and logs the spec-review line through
-// scripts/log-action.sh as it happens; it refuses a lane the manifest does not name, a
-// second stanza for one lane, a decision outside approved|changes|dropped, a missing
-// commit, words on an approval, and a changes or dropped with no words. count prints the
-// run-wide numbers Spec review step 3 branches on:
-//   approved <n>   manifest lanes approved in the manifest or this package, each lane once
-//   changes <m>    manifest lanes with a changes stanza in this package
-// count never over-counts: a stanza for an unnamed lane, or an approval with a blank
-// commit, contributes nothing.
+// packages. New runs record one `## spec` stanza and log the spec-review line through
+// scripts/log-action.sh. Legacy lane records remain readable and writable for pinned runs.
+// count prints the run-wide numbers Spec review branches on:
+//   approved <n>   0 or 1 for a new run; unique manifest lanes for a legacy run
+//   changes <m>    0 or 1 for a new run; unique manifest lanes for a legacy run
+// Legacy stanzas for unnamed lanes, or approvals with blank commits, contribute nothing.
 // The stanza is written before the log line, so a failed log never loses a decision, and a
 // decisions file this script did not shape is refused rather than miscounted.
 //
 //   exit 0  done; fresh and record print nothing, count prints the two lines
 //   exit 1  usage, no such dispatch, unreadable manifest, missing decisions file
-//   exit 2  a refusal: a bad decision, commit or words, a duplicate lane, a malformed stanza
+//   exit 2  a refusal: a bad decision, commit or words, a duplicate decision, a malformed stanza
 import { appendFileSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { scriptsDir } from "./lib/paths.ts";
@@ -179,6 +177,35 @@ function record(d: string, lane: string, decision: string, commit: string, rest:
     die("spec-decisions: stanza kept but the log line failed; log it by hand", 1);
 }
 
+function recordSpec(d: string, decision: string, commit: string, rest: string[]): void {
+  const words = pyWords(rest.join(" ")).join(" ");
+  if (!isDir(d)) die(`spec-decisions: no such dir: ${d}`, 1);
+  if (decision !== "approved" && decision !== "changes" && decision !== "dropped")
+    die("spec-decisions: a decision is approved, changes or dropped", 2);
+  if (!isOneWord(commit)) die("spec-decisions: a commit is one word", 2);
+  let detail: string;
+  if (decision === "approved") {
+    if (words !== "") die("spec-decisions: an approval carries no words", 2);
+    detail = `approved ${commit}`;
+  } else {
+    if (words === "") die(`spec-decisions: a ${decision} carries the user's words`, 2);
+    detail = `${decision} ${commit} ${words}`;
+  }
+  const f = join(d, "spec-decisions.md");
+  if (!isFile(f)) die("spec-decisions: no decisions file: run fresh first", 1);
+  readManifest(d);
+  if (parseDecisions(f).length > 0)
+    die("spec-decisions: a decision is already recorded in this package", 2);
+  try {
+    appendFileSync(f, `## spec\ndecision: ${decision}\ncommit: ${commit}\nwords: ${words}\n\n`);
+  } catch (e: unknown) {
+    die(`spec-decisions: cannot write ${f} (${errMsg(e)})`, 1);
+  }
+  const logged = run(join(HERE, "log-action.sh"), [d, "postmaster", "spec-review", "spec", detail]);
+  if (logged.code !== 0)
+    die("spec-decisions: stanza kept but the log line failed; log it by hand", 1);
+}
+
 function count(d: string): void {
   if (!isDir(d)) die(`spec-decisions: no such dir: ${d}`, 1);
   const lanes = readManifest(d);
@@ -187,8 +214,17 @@ function count(d: string): void {
     if (isDict(info) && info.outcome === "approved") approved.add(lane);
   const f = join(d, "spec-decisions.md");
   if (!isFile(f)) die("spec-decisions: no decisions file: run fresh first", 1);
+  const stanzas = parseDecisions(f);
+  if (stanzas.some((e) => e.lane === "spec")) {
+    if (stanzas.length !== 1 || stanzas[0]!.lane !== "spec")
+      die("spec-decisions: a run-level decision file has more than one stanza", 2);
+    const decision = stanzas[0]!;
+    console.log(`approved ${decision.decision === "approved" && decision.commit !== "" ? 1 : 0}`);
+    console.log(`changes ${decision.decision === "changes" ? 1 : 0}`);
+    return;
+  }
   const changed = new Set<string>();
-  for (const e of parseDecisions(f)) {
+  for (const e of stanzas) {
     if (!hasOwn(lanes, e.lane)) continue;
     if (e.decision === "approved" && e.commit !== "") approved.add(e.lane);
     if (e.decision === "changes") changed.add(e.lane);
@@ -199,9 +235,8 @@ function count(d: string): void {
 
 function usage(): never {
   console.error("usage: spec-decisions.sh <dispatch> fresh|record|count | --self-test");
-  console.error(
-    "       spec-decisions.sh <dispatch> record <lane> <decision> <commit> [<words>...]",
-  );
+  console.error("       spec-decisions.sh <dispatch> record <decision> <commit> [<words>...]");
+  console.error("       spec-decisions.sh <dispatch> record <lane> <decision> <commit> [<words>...]  (legacy)");
   process.exit(1);
   throw new Error("unreachable");
 }
@@ -221,8 +256,13 @@ if (argv[0] === "--self-test") {
     if (rest.length !== 0) usage();
     fresh(d);
   } else if (verb === "record") {
-    if (rest.length < 3) usage();
-    record(d, rest[0]!, rest[1]!, rest[2]!, rest.slice(3));
+    if (rest[0] === "approved" || rest[0] === "changes" || rest[0] === "dropped") {
+      if (rest.length < 2) usage();
+      recordSpec(d, rest[0]!, rest[1]!, rest.slice(2));
+    } else {
+      if (rest.length < 3) usage();
+      record(d, rest[0]!, rest[1]!, rest[2]!, rest.slice(3));
+    }
   } else if (verb === "count") {
     if (rest.length !== 0) usage();
     count(d);
