@@ -51,6 +51,8 @@ describe("cleanCheckout", () => {
       expect(positive.exitCode).toBe(0);
       expect(inside(realpathSync(repo), positive.checkoutPath)).toBe(false);
       expect(existsSync(positive.checkoutPath)).toBe(false);
+      const worktrees = spawnSync("git", ["-C", repo, "worktree", "list", "--porcelain"], { encoding: "utf8" }).stdout;
+      expect(worktrees).not.toContain(positive.checkoutPath);
     });
   });
 
@@ -59,6 +61,8 @@ describe("cleanCheckout", () => {
       const result = cleanCheckout(repo, "main", "exit 23");
       expect(result.exitCode).toBe(23);
       expect(existsSync(result.checkoutPath)).toBe(false);
+      const worktrees = spawnSync("git", ["-C", repo, "worktree", "list", "--porcelain"], { encoding: "utf8" }).stdout;
+      expect(worktrees).not.toContain(result.checkoutPath);
     });
   });
 });
