@@ -1,6 +1,6 @@
 // Resolve the user's shared-spec link from the config captured at dispatch.
 //
-//   spec-review-link.sh <dispatch> <workhorse-worktree>
+//   spec-review-link.sh <dispatch> <spec-directory>
 //   spec-review-link.sh --validate <dispatch>
 //   spec-review-link.sh --self-test
 //

@@ -1,13 +1,14 @@
 import { expect, test } from "bun:test";
 import { mkdtempSync, mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { run } from "./lib/proc.ts";
 
 const SCRIPT = join(import.meta.dir, "spec-review-link.sh");
+const SCRATCH = join(resolve(import.meta.dir, ".."), ".postmaster", "verify");
 
 function withPackage<T>(body: (dispatch: string, specDirectory: string) => T): T {
-  const root = mkdtempSync(join(tmpdir(), "spec-review-link-test-"));
+  mkdirSync(SCRATCH, { recursive: true });
+  const root = mkdtempSync(join(SCRATCH, "spec-review-link-test-"));
   const dispatch = join(root, "project", ".postmaster", "runs", "RUN-1");
   const specDirectory = join(dispatch, "spec-review");
   mkdirSync(specDirectory, { recursive: true });

@@ -1,13 +1,14 @@
 import { expect, test } from "bun:test";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { run } from "./lib/proc.ts";
 
 const SCRIPT = join(import.meta.dir, "spec-decisions.sh");
+const SCRATCH = join(resolve(import.meta.dir, ".."), ".postmaster", "verify");
 
 function withDispatch<T>(body: (dispatch: string) => T): T {
-  const root = mkdtempSync(join(tmpdir(), "spec-decisions-test-"));
+  mkdirSync(SCRATCH, { recursive: true });
+  const root = mkdtempSync(join(SCRATCH, "spec-decisions-test-"));
   const dispatch = join(root, "project", ".postmaster", "runs", "RUN-1");
   mkdirSync(dispatch, { recursive: true });
   writeFileSync(
