@@ -125,6 +125,7 @@ SELF=$(CDPATH= cd -P -- "$(dirname -- "$0")" && pwd -P)/$(basename -- "$0")
 SCRUB_CHECK_SCRIPT="$SELF" python3 -I - "$@" <<'PY'
 import ast
 import datetime
+import hashlib
 import ipaddress
 import json
 import os
@@ -781,8 +782,13 @@ def changed_names(raw):
     return [os.fsdecode(part) for part in raw.split(b"\0") if part]
 
 
+def line_digest(text):
+    return hashlib.blake2b(text.encode("utf-8", errors="surrogateescape"),
+                           digest_size=16).digest()
+
+
 def added_lines(root, parent, merge, path):
-    """(number, text) added lines of parent..merge for one path, in order."""
+    """Yield (number, text) added lines of parent..merge for one path, in order."""
     try:
         child = subprocess.Popen(
             ["git", "diff", "--text", "--no-ext-diff", "--no-textconv",
@@ -792,18 +798,17 @@ def added_lines(root, parent, merge, path):
         )
     except OSError:
         notice("could not run Git")
-    out, line_number = [], None
+    line_number = None
     for raw in child.stdout:
         content = raw.rstrip(b"\r\n")
         if content.startswith(b"@@ "):
             match = re.search(rb"\+([0-9]+)(?:,[0-9]+)?\s+@@", content)
             line_number = int(match.group(1)) if match else None
         elif line_number is not None and content.startswith(b"+"):
-            out.append((line_number, content[1:].decode("utf-8", errors="surrogateescape")))
+            yield (line_number, content[1:].decode("utf-8", errors="surrogateescape"))
             line_number += 1
     if child.wait() != 0:
         notice("Git could not read the requested history")
-    return out
 
 
 def scan_merge_diff(root, parents, merge):
@@ -822,12 +827,13 @@ def scan_merge_diff(root, parents, merge):
     suspects = []
     quiet = []
     for path in sorted(changed):
-        held = [set(text for _n, text in added_lines(root, other, merge, path))
+        held = [set(line_digest(text)
+                    for _n, text in added_lines(root, other, merge, path))
                 for other in others]
         scanner, texts = LineScanner(), {}
         kept_len, fault_len, supp_len, prev_fed = 0, 0, 0, None
         for number, text in added_lines(root, first, merge, path):
-            if not all(text in lines for lines in held):
+            if not all(line_digest(text) in lines for lines in held):
                 continue
             texts[number] = text
             for stale in [n for n in texts if n != number and n != prev_fed]:
@@ -1459,6 +1465,33 @@ def self_test(root):
             ok("lines published before the base merge quietly", bool(
                 prebase and prebase.returncode == 0 and not prebase.stdout))
             last = merge3
+            # The merge scan streams its diffs and compares held lines by
+            # digest, so its own memory stays flat. No address-space control
+            # can prove that: git's own diff holds per-line tables under the
+            # same cap, and the kernel reports the peak of the whole tree,
+            # so any cap that fits git fits the old code too. This control
+            # pins correctness at scale instead; the streaming proof lives
+            # with promotion, where no git diff shares the cap.
+            many_merge = ["merge filler %d" % n for n in range(20000)]
+            many_merge[10000] = "contact: " + sample_email
+            git(["checkout", "-qb", "side-many"], cwd=repo)
+            (repo / "many-merge.txt").write_text("\n".join(many_merge) + "\n", encoding="utf-8")
+            git(["add", "--", "many-merge.txt"], cwd=repo)
+            git(["-c", "user.name=Fixture", "-c", "user.email=" + FIXTURE_MAILBOX,
+                 "commit", "-m", "side many-line addition"], cwd=repo)
+            many_side = git(["rev-parse", "HEAD"], cwd=repo).decode("ascii").strip()
+            git(["checkout", "-q", "main"], cwd=repo)
+            add_fixture(repo, "main-advance2.txt", "ordinary public sample\n", "main advance 2")
+            git(["-c", "user.name=Fixture", "-c", "user.email=" + FIXTURE_MAILBOX,
+                 "merge", "--no-ff", "-m", "merge the many-line side", "side-many"], cwd=repo)
+            many_merge_sha = git(["rev-parse", "HEAD"], cwd=repo).decode("ascii").strip()
+            many_result = run_child([last, many_merge_sha], repo)
+            ok("a merge with a many-line added side reports through the stream", bool(
+                many_result and many_result.returncode == 1
+                and many_result.stdout.splitlines()
+                == ["%s:many-merge.txt:10001: email" % many_side]
+                and sample_email not in many_result.stdout))
+            last = many_merge_sha
 
             print("marker controls: marked lines stay silent, bad markers fault")
             marked = add_fixture(

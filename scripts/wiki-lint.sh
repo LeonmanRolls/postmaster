@@ -169,23 +169,49 @@ if pages and top.returncode == 0:
 # repeats a line under raw/. Shorter spans are headings, citations and
 # front matter, not quotations. raw/ may hold binary evidence, so it is
 # decoded tolerantly; a wiki page that does not decode already fails above.
-raw_lines = {}
-if raw.is_dir():
+def text_lines(handle, strict):
+    """Yield (number, line) numbered as whole-file splitlines numbers them.
+
+    Binary iteration splits on \\n only, and no other splitlines boundary
+    can span a \\n, so per-chunk splitlines yields exactly the whole-file
+    lines. Strict decodes like a page read; tolerant like a raw read.
+    """
+    number = 0
+    for chunk in handle:
+        text = chunk.decode("utf-8", errors="strict" if strict else "replace")
+        for ln in text.splitlines():
+            number += 1
+            yield number, ln
+
+# Both sides stream. Page lines of forty characters or more are the only
+# ones that can quote, and pages are author-scale, so they are collected
+# first; then one batched pass over raw/ confirms them in file order,
+# stopping once every candidate has its first hit. Memory is bounded by
+# the pages plus the longest raw line, never the evidence.
+wanted = {}
+for p in pages:
+    with open(p, "rb") as handle:
+        for number, ln in text_lines(handle, True):
+            if len(ln) >= 40:
+                wanted.setdefault(ln, []).append((p, number))
+repeats = []
+if wanted and raw.is_dir():
+    pending = dict(wanted)
     for f in sorted(p for p in raw.rglob("*") if p.is_file()):
+        if not pending:
+            break
         try:
-            content = f.read_bytes().decode("utf-8", errors="replace")
+            handle = open(f, "rb")
         except OSError:
             continue
-        for number, ln in enumerate(content.splitlines(), 1):
-            if len(ln) >= 40 and "\0" not in ln and ln not in raw_lines:
-                raw_lines[ln] = "%s:%d" % (f.relative_to(repo), number)
-repeats = []
-for p in pages:
-    for number, ln in enumerate(p.read_text().splitlines(), 1):
-        hit = raw_lines.get(ln)
-        if hit is not None:
-            rawrel, _, rawline = hit.rpartition(":")
-            repeats.append((p, number, rawrel, rawline))
+        with handle:
+            for number, ln in text_lines(handle, False):
+                if len(ln) >= 40 and "\0" not in ln and ln in pending:
+                    for p, pnumber in pending.pop(ln):
+                        repeats.append((p, pnumber, str(f.relative_to(repo)), number))
+                if not pending:
+                    break
+repeats.sort(key=lambda hit: (hit[0], hit[1]))
 if repeats:
     # A raw filename or a page filename may itself carry a shaped value, so
     # both are redacted before they reach a diagnostic. Without a scrub
@@ -364,6 +390,23 @@ QUOTE_LINE='The staging relay counted four hundred thirteen spans on the quiet T
 printf '%s\n' "$QUOTE_LINE" > "$tmp/raw/evidence.txt"
 printf '%s\n' "$QUOTE_LINE" >> "$tmp/wiki/concepts/quoted.md"
 expect fail "a page line quoting raw/" "repeats raw/"
+
+fresh; concept bigquote claimed ""
+BIGQ='The staging relay counted four hundred sixteen spans on the Friday run.'
+python3 -c "
+lines = ['bulk evidence filler line %d for the streaming control' % i for i in range(250000)]
+lines[125000] = '$BIGQ'
+open('$tmp/raw/big-evidence.txt', 'w').write('\n'.join(lines) + '\n')
+"
+printf '%s\n' "$BIGQ" >> "$tmp/wiki/concepts/bigquote.md"
+limited=$(bash -c "ulimit -v 65536 || exit 99; exec bash \"$HERE/wiki-lint.sh\" \"$tmp\"" 2>&1); code=$?
+if [ "$code" -eq 99 ]; then
+  printf '  ok   a large raw file streams under a small address space: skipped, no address-space limit on this machine\n'
+else
+  { [ "$code" -eq 1 ] && printf '%s\n' "$limited" | grep -qF 'repeats raw/big-evidence.txt'; } \
+    && printf '  ok   a large raw file streams under a small address space\n' \
+    || { printf '  FAIL a large raw file streams under a small address space: exit %s\n' "$code"; fails=$((fails+1)); }
+fi
 
 fresh; concept haspath claimed ""
 HP=$(printf '/home/%s' fixture-user)
