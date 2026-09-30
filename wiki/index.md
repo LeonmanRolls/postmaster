@@ -60,11 +60,11 @@ How the flow is checked, and what each check can and cannot see.
 
 Why the design is shaped as it is.
 
-- [The workhorse spec](concepts/workhorse-spec.md): **claimed**. Each workhorse drafts its
-  own, which keeps the workhorses independent of each other and of the coachman, and makes
-  each run auditable.
-- [The planning stage](concepts/planning-stage.md): **claimed**. Each workhorse's spec passes
-  the user's review before any code, from Anthropic's AI-native SDLC playbook: a fault is
+- [The workhorse spec](concepts/workhorse-spec.md): **claimed**. One spec per run, written by
+  the coachman at the template's level and passed down, so the user reviews it once and the
+  lanes still choose their own implementations.
+- [The planning stage](concepts/planning-stage.md): **claimed**. The run's one spec passes
+  the user's review in a spec session before any code, from Anthropic's AI-native SDLC playbook: a fault is
   cheapest to fix at the planning stage, and weaker models gain the most from a reviewed plan.
 - [Faults a run finds in postmaster become tickets](concepts/tool-faults.md): **claimed**. A
   run records each fault in postmaster as it happens and never fixes the tool; a fault in a
