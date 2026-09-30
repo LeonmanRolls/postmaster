@@ -115,7 +115,7 @@ new_run() {  # new_run <name or dest> <ticket>
 
 py() {  # py score <dispatch> <repo> | py hidden <ticket> <app-dir>
   python3 - "$TOOL" "$@" <<'PY'
-import json, os, pathlib, re, shutil, subprocess, sys, tempfile
+import json, os, pathlib, re, shlex, shutil, subprocess, sys, tempfile
 
 TOOL = pathlib.Path(sys.argv[1])
 SCRIPTS, TICKETS = TOOL / "scripts", TOOL / "fixtures" / "tickets"
@@ -179,17 +179,16 @@ def check_hidden(dispatch, app):
     ok, detail, out = hidden(found[0], app)
     return ok, "%s, from the waybill: %s on main" % (found[0], detail), out
 
-def check_gate(app):
+def check_gate(app, repo, branch):
     code, out = sh([SCRIPTS / "discover-project.sh", app])
     gate = next((l[len("gate="):] for l in out.splitlines() if l.startswith("gate=")), "")
     if not gate:
         return False, "scripts/discover-project.sh found no gate", out
     install = ["npm", "ci"] if (app / "package-lock.json").is_file() else ["npm", "install"]
-    code, out = sh(install + ["--prefer-offline", "--no-audit", "--no-fund"], cwd=app)
-    if code != 0:
-        return False, "%s on main: %s" % (" ".join(install), exited(code)), out
-    code, out = sh(["bash", "-c", gate], cwd=app)
-    return code == 0, "%s on main: %s" % (gate, exited(code)), out
+    setup = shlex.join(install + ["--prefer-offline", "--no-audit", "--no-fund"])
+    command = setup + " && bash -c " + shlex.quote(gate)
+    code, out = sh(["bun", SCRIPTS / "clean-checkout.ts", repo, branch, command])
+    return code == 0, "%s on main from a clean checkout: %s" % (gate, exited(code)), out
 
 def read_actions(dispatch):
     path = dispatch / "actions.jsonl"
@@ -315,7 +314,7 @@ def score(dispatch, repo):
             print("fixture: could not export main from %s: %s" % (repo, tail(out, 3)), file=sys.stderr); sys.exit(1)
         legs = legs_of(dispatch, manifest)
         results = [("hidden-tests",) + check_hidden(dispatch, app),
-                   ("gate",) + check_gate(app),
+                   ("gate",) + check_gate(app, repo, "main"),
                    ("stages",) + check_stages(dispatch) + ("",),
                    ("markers",) + check_markers(dispatch, legs) + ("",),
                    ("handoffs",) + check_handoffs(dispatch, legs) + ("",),
@@ -594,7 +593,7 @@ for t in $(tickets); do expect "a clean run on $t: every check passes" "clean-$t
 echo "score: negative controls, the same record with one check broken at a time"
 expect "the app shipped as committed: hidden-tests alone fails, and the app's own gate passes" break-hidden hidden-tests "fail on main"
 expect "the waybill does not carry the ticket: hidden-tests alone fails" break-waybill hidden-tests "carries no fixture ticket"
-expect "a type error shipped: gate alone fails" break-gate gate "npm run check on main: exit"
+expect "a type error shipped: gate alone fails" break-gate gate "npm run check on main from a clean checkout: exit"
 expect "a stage change never logged: stages alone fails" break-stages stages ", not "
 expect "a leg's done marker missing: markers alone fails" break-markers markers ".leg-2-done"
 expect "a hand-off with no sections: handoffs alone fails" break-handoffs handoffs "handoff-2.md"
