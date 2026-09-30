@@ -427,3 +427,5 @@ carries a citation.
 
 The three claims the README makes, entered as hypotheses at standing `claimed`, with four
 open questions and the run-record template.
+
+2026-09-30: Added the clean-checkout gate concept and its limit for tools run by hand from the main checkout.

@@ -113,3 +113,5 @@ Why the design is shaped as it is.
 
 [Recorded runs and captured reading](sources/index.md): one run, the review rounds of #36,
 fourteen papers on review, fixes and severity, and an article on review before implementation.
+
+- [clean checkout gates](concepts/clean-checkout-gates.md)
