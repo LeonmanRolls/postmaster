@@ -1,0 +1,7 @@
+{
+  "jsPlugins": ["./lint/plugin.ts"],
+  "rules": {
+    "postmaster/test-beside-target": "error"
+  },
+  "ignorePatterns": ["fixtures/**"]
+}
