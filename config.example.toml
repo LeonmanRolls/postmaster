@@ -105,10 +105,11 @@ postmaster_may_create = false   # true lets the postmaster create tickets withou
 round_timeout_seconds = 2400
 
 [planning]
-# Optional. A template for the link that puts a workhorse's spec to the user during the
-# planning stage, with {path} replaced by the absolute path of WORKHORSE-SPEC.md in that
-# workhorse's worktree. Leave empty to send the path alone. The host is private to this
-# machine, so it lives here and never in a ticket.
+# Optional. A template for the link that puts the run's one spec to the user during the
+# planning stage, with {path} replaced by the absolute path of the folder that holds
+# WORKHORSE-SPEC.md under review (code-server opens folders). Leave empty to send the
+# file's path alone. The host is private to this machine, so it lives here and never in
+# a ticket.
 review_link = ""
 
 [ship]
