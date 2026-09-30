@@ -97,11 +97,11 @@ helper is generic over repos.
 
 ## Tasks
 
-- [ ] T001 [P] [AC1] [AC3] Add `scripts/clean-checkout.ts`: clean checkout of a branch outside the project folder, run the command there, remove it afterwards even on failure, report the command's exit.
-- [ ] T002 [P] [AC3] Add `scripts/clean-checkout.test.ts` beside it: the AC3 pair and the lifecycle (made outside, removed even on failure); `bun test` green.
-- [ ] T003 [AC1] Add the ship leg's verification to Stage 3 of `skills/postmaster/coachman.md`: immediately after the local merge, run the recorded gate on the merged default branch through `<tool>/scripts/clean-checkout.ts` via Bun.
-- [ ] T004 [AC1] [AC4] Route fixture scoring's gate in `scripts/fixture.sh` through the helper, replacing the inline export; score and self-test clean.
-- [ ] T005 [AC2] Write `wiki/concepts/clean-checkout-gates.md` (mechanism, worktree-convention reason, hand-run non-coverage), index it, append the log line; `scripts/wiki-lint.sh` clean.
-- [ ] T006 [AC3] [AC4] Run the colocated Bun tests from the declared gate in `.postmaster/project.toml`; full gate green.
-- [ ] T007 [AC1] Run the gate from the worktree root; `scripts/skill-refs.sh` clean after the runbook edits.
-- [ ] T008 [AC1] Survey every gate the flow runs on the default branch after a merge; confirm the two above are the whole set, and route any other found through the helper.
+- [x] T001 [P] [AC1] [AC3] Add `scripts/clean-checkout.ts`: clean checkout of a branch outside the project folder, run the command there, remove it afterwards even on failure, report the command's exit.
+- [x] T002 [P] [AC3] Add `scripts/clean-checkout.test.ts` beside it: the AC3 pair and the lifecycle (made outside, removed even on failure); `bun test` green.
+- [x] T003 [AC1] Add the ship leg's verification to Stage 3 of `skills/postmaster/coachman.md`: immediately after the local merge, run the recorded gate on the merged default branch through `<tool>/scripts/clean-checkout.ts` via Bun.
+- [x] T004 [AC1] [AC4] Route fixture scoring's gate in `scripts/fixture.sh` through the helper, replacing the inline export; score and self-test clean.
+- [x] T005 [AC2] Write `wiki/concepts/clean-checkout-gates.md` (mechanism, worktree-convention reason, hand-run non-coverage), index it, append the log line; `scripts/wiki-lint.sh` clean.
+- [x] T006 [AC3] [AC4] Run the colocated Bun tests from the declared gate in `.postmaster/project.toml`; full gate green.
+- [x] T007 [AC1] Run the gate from the worktree root; `scripts/skill-refs.sh` clean after the runbook edits.
+- [x] T008 [AC1] Survey every gate the flow runs on the default branch after a merge; confirm the two above are the whole set, and route any other found through the helper.
