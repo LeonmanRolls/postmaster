@@ -239,6 +239,25 @@ FAKE
       && printf '  ok   a tripped recheck removes the copy and fails\n' \
       || { printf '  FAIL a tripped recheck removes the copy and fails: exit %s\n' "$code"; fails=$((fails+1)); }
   }
+  r=$(repo) && { cd "$r" || exit 2
+    mkdir -p "$r/scripts"
+    cat > "$r/scripts/scrub-check.sh" <<'FAKE2'
+#!/usr/bin/env bash
+case $1 in
+  --spans) exit 0 ;;
+  --files) echo "staged.md:1: email"; exit 1 ;;
+  --safe-path) shift; printf '%s\n' "$@" ;;
+  *) exit 2 ;;
+esac
+FAKE2
+    chmod +x "$r/scripts/scrub-check.sh"
+    cp "$HERE/raw-promote.sh" "$r/scripts/raw-promote.sh"
+    printf 'clean\n' > "$tmp/recheck2.md"
+    out=$(bash "$r/scripts/raw-promote.sh" "$tmp/recheck2.md" raw/trials/t413/notes2.md 2>/dev/null); code=$?
+    { [ "$code" -eq 1 ] && refused_clean "$r" raw/trials/t413/notes2.md; } \
+      && printf '  ok   a clean scan with a dirty recheck refuses the copy\n' \
+      || { printf '  FAIL a clean scan with a dirty recheck refuses the copy: exit %s\n' "$code"; fails=$((fails+1)); }
+  }
 
   echo "refusal controls: the destination and the source"
   r=$(repo) && { cd "$r" || exit 2
@@ -329,6 +348,27 @@ FAKE
       && printf '  ok   a symlinked raw is refused\n' \
       || { printf '  FAIL a symlinked raw is refused: exit %s\n' "$code"; fails=$((fails+1)); }
   }
+  r=$(repo) && { cd "$r" || exit 2
+    mkdir -p src413 && printf 'all public words\n' > src413/a.txt
+    mkdir -p "$tmp/findshim"
+    printf '#!/usr/bin/env bash\nexit 1\n' > "$tmp/findshim/find"
+    chmod +x "$tmp/findshim/find"
+    out=$(PATH="$tmp/findshim:$PATH" bash "$HERE/raw-promote.sh" src413 raw/runs/f413 2>&1); code=$?
+    { [ "$code" -eq 2 ] && [ ! -e "$r/raw/runs/f413" ]; } \
+      && printf '  ok   a failed source enumeration refuses the copy\n' \
+      || { printf '  FAIL a failed source enumeration refuses the copy: exit %s\n' "$code"; fails=$((fails+1)); }
+  }
+  r=$(repo) && { cd "$r" || exit 2
+    mkdir -p src413
+    printf 'all public words\n' > "src413/$SUSPECT.txt"
+    mkdir -p "$tmp/cpshim"
+    printf '#!/usr/bin/env bash\nfor a in "$@"; do case $a in -*) continue;; *) rm -f "$a"; break;; esac; done\nexec /bin/cp "$@"\n' > "$tmp/cpshim/cp"
+    chmod +x "$tmp/cpshim/cp"
+    out=$(PATH="$tmp/cpshim:$PATH" bash "$HERE/raw-promote.sh" src413 raw/runs/c413 2>&1); code=$?
+    { [ "$code" -eq 2 ] && ! printf '%s' "$out" | grep -qF -- "$SUSPECT"; } \
+      && printf '  ok   a failed copy prints no shaped path\n' \
+      || { printf '  FAIL a failed copy prints no shaped path: exit %s\n' "$code"; fails=$((fails+1)); }
+  }
 
   echo
   [ "$fails" -eq 0 ] && { echo "self-test: all controls behaved"; exit 0; }
@@ -361,9 +401,11 @@ trap cleanup EXIT
 
 SRC=${SRC%/}
 if [ -d "$SRC" ] && [ ! -L "$SRC" ]; then
-  odd=$(find "$SRC" -not -type f -not -type d -print -quit)
+  odd=$(find "$SRC" -not -type f -not -type d -print -quit) || fail "the source could not be read"
   [ -n "$odd" ] && fail "the source carries a non-regular file; symlinks are refused"
-  mapfile -d '' -t FILES < <(find "$SRC" -type f -print0 | LC_ALL=C sort -z)
+  find "$SRC" -type f -print0 > "$STAGE/enum.unsorted" || fail "the source could not be read"
+  LC_ALL=C sort -z -o "$STAGE/enum" "$STAGE/enum.unsorted" || fail "the source could not be read"
+  mapfile -d '' -t FILES < "$STAGE/enum"
   IS_DIR=1
 elif [ -f "$SRC" ] && [ ! -L "$SRC" ]; then
   FILES=("$SRC")
@@ -379,6 +421,15 @@ dest_for() {  # dest_for <src-file>: where it lands
 redact() {  # redact <path>: the path with every shaped span removed
   safe=$(bash "$SCRUB" --safe-path "$1" 2>/dev/null) || fail "the scan could not finish"
   printf '%s' "$safe"
+}
+
+copy_file() {  # copy_file <src> <dest>: cp whose stderr never prints a value
+  local err code
+  err=$(cp -- "$1" "$2" 2>&1); code=$?
+  if [ -n "$err" ]; then
+    bash "$SCRUB" --safe-path "$err" >&2 || true
+  fi
+  return "$code"
 }
 
 # Every file is scanned before anything is copied: a trip refuses the whole
@@ -458,32 +509,37 @@ open(tmp, "w", encoding="utf-8", newline="").write("\n".join(lines))
 PY
       remove_copy; fail "the scrub could not finish"
     fi
-    cp -- "$STAGE/scrubbed.$i" "$d" || { remove_copy; fail "the copy failed"; }
-    rerr=$STAGE/recheck-err.$i
-    rout=$(bash "$SCRUB" --files "$d" 2>"$rerr"); rcode=$?
-    cat "$rerr" >&2
-    case $rcode in
-      0) ;;
-      1) printf '%s\n' "$rout"; remove_copy; exit 1 ;;
-      *) remove_copy; fail "the scan could not finish" ;;
-    esac
+    copy_file "$STAGE/scrubbed.$i" "$d" || { remove_copy; fail "the copy failed"; }
+  else
+    copy_file "$f" "$d" || { remove_copy; fail "the copy failed"; }
+  fi
+  # The recheck covers both paths: a file clean at scan time may have
+  # changed before its copy landed.
+  rerr=$STAGE/recheck-err.$i
+  rout=$(bash "$SCRUB" --files "$d" 2>"$rerr"); rcode=$?
+  cat "$rerr" >&2
+  case $rcode in
+    0) ;;
+    1) printf '%s\n' "$rout"; remove_copy; exit 1 ;;
+    *) remove_copy; fail "the scan could not finish" ;;
+  esac
+  if [ -s "$STAGE/spans.$i" ]; then
     safe=$(redact "$d")
     while IFS=: read -r _ line _ _ rule; do
       [ -n "$line" ] && [ -n "$rule" ] && note "$safe:$line: $rule scrubbed"
     done < "$STAGE/spans.$i"
-  else
-    cp -- "$f" "$d" || { remove_copy; fail "the copy failed"; }
   fi
   i=$((i + 1))
 done
 
 # Empty directories travel like cp -r carries them.
 if [ -n "$IS_DIR" ]; then
+  find "$SRC" -type d -print0 > "$STAGE/enumdirs" || { remove_copy; fail "the source could not be read"; }
   while IFS= read -r -d '' dir; do
     rel=${dir#$SRC/}
     [ "$rel" = "$dir" ] && continue
     mkdir -p -- "$DEST/$rel" || { remove_copy; fail "could not create the destination"; }
-  done < <(find "$SRC" -type d -print0)
+  done < "$STAGE/enumdirs"
 fi
 
 [ -n "$REPORT" ] && printf '%s\n' "$REPORT"
