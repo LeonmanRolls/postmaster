@@ -105,6 +105,6 @@ None.
 
 ## Tasks
 
-- [ ] T001 [P] [AC1] [AC2] Write `scripts/run-clash.ts` in a functional style: refuse and name `<repo>/.postmaster/runs/<ticket-id>/` when it exists, and refuse and name local branch `<ticket-id>` and every `wb/<ticket-id>-*`; exit 0 free, 1 usage/not a repo, 2 clash.
-- [ ] T002 [AC3] Tests in `scripts/run-clash.test.ts`, run by `bun test`: a clean pass, each refusal (run directory, ticket branch, `wb/` branch, several at once) naming what it refused, and a near-miss control (ticket `7` against `70` / `wb/70-*`) through the identical command.
+- [x] T001 [P] [AC1] [AC2] Write `scripts/run-clash.ts` in a functional style: refuse and name `<repo>/.postmaster/runs/<ticket-id>/` when it exists, and refuse and name local branch `<ticket-id>` and every `wb/<ticket-id>-*`; exit 0 free, 1 usage/not a repo, 2 clash.
+- [x] T002 [AC3] Tests in `scripts/run-clash.test.ts`, run by `bun test`: a clean pass, each refusal (run directory, ticket branch, `wb/` branch, several at once) naming what it refused, and a near-miss control (ticket `7` against `70` / `wb/70-*`) through the identical command.
 - [ ] T003 [AC4] In `skills/postmaster/postmaster.md` Stage B, run `bun <tool>/scripts/run-clash.ts <repo> <TICKET>` after the base pre-flight and before the run directory is made; put any refusal to the user (archive, rename, or pick another id); state that the postmaster renames or removes nothing itself; renumber the later steps; run the new tests in the gate declared in `.postmaster/project.toml` and update its `shows`; list `scripts/run-clash.ts` in `README.md`.
