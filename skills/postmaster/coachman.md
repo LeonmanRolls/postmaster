@@ -28,6 +28,7 @@ half, how a run is prepared and what the waybill carries, is `SKILL.md`. You do 
 | `<dispatch>/run-log.md` | running narrative, written only through `<tool>/scripts/run-log.sh`, which puts the time on every entry and times every section |
 | `<dispatch>/run.json` | the run's fixed facts: postmaster commit and its pinned checkout (`tool` in the waybill), config, harness versions; written once at dispatch by the postmaster, never edited; every launch and resume in the run takes its config from here (`--run <dispatch>`) and its scripts from that checkout |
 | `<dispatch>/checks.json` | the checks the run is held to, recorded once at dispatch by `<tool>/scripts/verify.sh record`; never edited |
+| `<dispatch>/shares.json` | the measured share of the synthesis each lane supplied, written once at the end of synthesis by `<tool>/scripts/synthesis-shares.ts`; a later audit reads it without re-running the script |
 | `<dispatch>/journey/` | your journey reports, one per commit walked, at the path `<tool>/scripts/verify.sh journey-path` gives |
 | `<worktree>/.postmaster/verify/` | a worktree's copy of the run's checks and ticket, written by `<tool>/scripts/verify.sh arm`; git ignores it |
 | `<dispatch>/logs/` | one events stream per lane, and per reviewer lane, lens and round; each review round's deadline and reviewers, `review-r<round>.json` |
@@ -484,6 +485,22 @@ from it.
   Then build the synthesis commit by commit with a reason for each choice. Amend commit
   messages to review grade; run the project's FULL gate with its real command.
 
+  **Measure each lane's share of the finished synthesis, before you write the SYNTHESIS
+  line.** From the target's worktree, with nothing the target configures loaded:
+
+  ```
+  bun --no-env-file --config=<tool>/scripts/bunfig.empty.toml <tool>/scripts/synthesis-shares.ts <repo> \
+    --base <BASE> --lane <lane>=<harvested-head> [--lane <lane>=<harvested-head> ...] \
+    --synthesis <after-the-blind-tests>..<synthesis-HEAD> [--oracle <blind-tests-commit>] \
+    --record <dispatch>
+  ```
+
+  It prints one greppable `SHARES:` line and writes `<dispatch>/shares.json`. Put the
+  `SHARES:` line on checkpoint-1 beside the SYNTHESIS line. The measurement is by runs of
+  words in git: it informs the ranking and does not decide it, and it does not replace
+  `took=` or your reasons. A merge commit in the synthesis range is refused; measure the
+  first-parent range the synthesis actually wrote.
+
   **Record it in one greppable line in `run-log.md`:**
 
   ```
@@ -494,7 +511,9 @@ from it.
   lane contributed nothing. "I read it and took none of it, because X" is a real answer, and an
   absent lane is not the same as a rejected one. Rank every lane regardless, the lead horse first and the wheelers after it: second place
   is data too, and this line is the only record of how lanes IMPLEMENT rather than how they
-  review. `oracle=` is each lane's result on the blind acceptance tests, or `none` with the
+  review. The measured `SHARES:` line sits beside this one on the card and is not a
+  substitute for `took=`: the counts see text, not ideas the coachman rewrote in its own
+  words. `oracle=` is each lane's result on the blind acceptance tests, or `none` with the
   reason on the card; it is the only field on this line that a model did not decide.
 
   **"Primary" means launch ordering, and nothing else at all.**
@@ -509,8 +528,8 @@ from it.
   failed workhorse leaves its branch at BASE and has contributed nothing to read. Record that lane
   DEGRADED rather than absent, say so on the card, and compose from the lanes that produced
   work.
-- **Checkpoint 1 card, then the hand-off:** per-workhorse outcome (or stall); **the SYNTHESIS line, the ranking, what
-  was taken from each lane, what was rejected and why**; the code-verified evidence behind each
+- **Checkpoint 1 card, then the hand-off:** per-workhorse outcome (or stall); **the SYNTHESIS line and, beside it, the `SHARES:` line the measure printed**, the ranking, what
+  was taken from each lane, what was rejected and why; the code-verified evidence behind each
   choice; the convention gaps found; what was dropped; gate status; the checks, as `verify.sh run`
   printed them on each workhorse's branch and then on the committed synthesis
   (`<tool>/scripts/verify.sh run <synthesis-wt> <dispatch>`, the journey walked first where there
