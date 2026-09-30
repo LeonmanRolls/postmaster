@@ -108,6 +108,10 @@ Why the design is shaped as it is.
 - [A project's .postmaster/ holds its settings and every run's record](concepts/project-settings.md):
   **claimed**. Optional, gitignored whole, shared through one narrow file; run artifacts live
   with the project so two checkouts with the same basename no longer share a ledger.
+- [A run's working copies live outside the project folder](concepts/working-copies-outside.md):
+  **claimed**. A project tool that walks the whole folder must never read a run's synthesis
+  worktree, workhorse worktrees or reviewer scratches; the flow cuts them beside the repository
+  instead of under `.worktrees/`.
 
 ## Sources
 

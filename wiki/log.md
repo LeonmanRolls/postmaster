@@ -1,12 +1,22 @@
 ---
 title: Log
 type: schema
-updated: 2026-09-29
+updated: 2026-09-30
 ---
 
 # Log
 
 Append-only. Newest first. One entry per operation, prefixed so it can be parsed.
+
+## [2026-09-30] ingest | a run's working copies live outside the project folder
+
+Issue #110. A design decision, with the control that shows it. The fixture app's `npm run
+check` failed on main right after a merge in fixture runs 4 and 5 (2026-09-28), because Biome
+walked into the run's own worktrees under `.worktrees/`, and passed once they were removed.
+The flow now cuts every working copy outside the project folder at `worktree-path.sh root`,
+so a folder-walking gate cannot read them even while the synthesis worktree still exists.
+Standing `claimed`: those fixture runs are not in `raw/`, so the page marks the observation
+unverified. `scripts/worktree-path.sh --self-test` holds the positive and negative control.
 
 ## [2026-09-29] ingest | the planning stage: every spec to the user before code
 
