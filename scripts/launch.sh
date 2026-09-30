@@ -214,6 +214,11 @@ EOF
     && cmp -s "$agy_events" "$agy_dispatch/sessions/g/thread-agy.events.jsonl" \
     && ok "a run launch exports its durable session beside the harness event stream" \
     || fail "a run launch exports its durable session beside the harness event stream"
+  usage_rec=$agy_dispatch/logs/g-events-usage.json
+  [ -f "$usage_rec" ] && grep -q '"role":"workhorse"' "$usage_rec" && grep -q '"lane":"g"' "$usage_rec" \
+    && ! grep -q 'input_tokens' "$usage_rec" \
+    && ok "a run launch records usage beside the stream, omitting figures the harness did not report" \
+    || fail "a run launch records usage beside the stream, omitting figures the harness did not report" "$(cat "$usage_rec" 2>&1)"
   sessions_before=$(ls "$agy_dispatch/sessions/g" | wc -l)
   printf '#!/bin/sh\nexit 0\n' > "$tmp/bin/agy"; chmod +x "$tmp/bin/agy"
   empty_events=$agy_dispatch/logs/g-empty.jsonl; : > "$empty_events"
@@ -865,5 +870,20 @@ rc=$?
 if [ -n "$RUN" ] && [ -n "${POSTMASTER_EVENT_STREAM:-}" ]; then
   "$HERE/export-session.sh" "$RUN" "$NAME" "$HARNESS" "$CWD" "$POSTMASTER_EVENT_STREAM" "${DATA:-}" \
     || echo "launch: the harness exited $rc but its session was not exported" >&2
+  # Usage is recorded beside the same stream, best-effort like the export: a recording
+  # fault never changes the harness's exit. Role and lane come from the launch site here,
+  # never guessed from paths: a review is a reviewer on its lane, a --leg is the coachman
+  # leg, anything else is a workhorse on its lane.
+  USAGE_ROLE=workhorse; USAGE_LANE=$NAME
+  case $CMD in
+    review) USAGE_ROLE=reviewer; USAGE_LANE=$NAME ;;
+    launch|resume)
+      if [ -n "$LEG" ]; then USAGE_ROLE=coachman; USAGE_LANE=$LEG
+      elif [ "$NAME" = coachman ] || [ "$NAME" = coachman_fallback ]; then USAGE_ROLE=coachman; USAGE_LANE=$NAME
+      fi ;;
+  esac
+  bun "$HERE/usage.ts" record "$POSTMASTER_EVENT_STREAM" "$HARNESS" "$NAME" "$RUN" \
+    --role "$USAGE_ROLE" --lane "$USAGE_LANE" \
+    || echo "launch: the harness exited $rc but its usage was not recorded" >&2
 fi
 exit "$rc"
