@@ -10,6 +10,10 @@
 #   scrub-check.sh <base> <head>    the range: added lines, messages and
 #                                   merge resolutions, one suspect per line
 #   scrub-check.sh --files <path>... worktree files, streamed line by line
+#   scrub-check.sh --files-inert <path>...
+#                                   worktree files with marker syntax inert,
+#                                   for names and pages, where a marker
+#                                   suppresses nothing and faults nothing
 #   scrub-check.sh --pr-description <file>
 #                                   pull request text, scanned like a message
 #   scrub-check.sh --spans <path>... machine protocol for the wiki scrub:
@@ -132,8 +136,9 @@ import tempfile
 
 
 USAGE = ("usage: scrub-check.sh <base> <head> | --files <path>... | "
-         "--pr-description <file> | --spans <path>... | --safe-path <path>... | "
-         "--log-detection <rule> <file> <line> [<commit>] | --self-test | --help")
+         "--files-inert <path>... | --pr-description <file> | --spans <path>... | "
+         "--safe-path <path>... | --log-detection <rule> <file> <line> [<commit>] | "
+         "--self-test | --help")
 EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 SCRIPT = pathlib.Path(os.environ.get("SCRUB_CHECK_SCRIPT", "")).resolve()
 FIXTURE_MAILBOX = "fixture" + "@" + "example.invalid"
@@ -553,10 +558,10 @@ class LineScanner:
     suppressed are (number, start, end, kind, value).
     """
 
-    def __init__(self, find=findings):
+    def __init__(self, find=findings, markers=True):
         self._find = find
         self._prev = None
-        self._off = "markers" in DISABLED
+        self._off = (not markers) or "markers" in DISABLED
         self.kept = []
         self.faults = []
         self.suppressed = []
@@ -887,7 +892,7 @@ def run_scan(root, base, head):
     return 1 if suspects else 0
 
 
-def run_files(root, paths):
+def run_files(root, paths, markers=True):
     del root
     suspects = []
     for raw_path in paths:
@@ -895,7 +900,7 @@ def run_files(root, paths):
             handle = open(raw_path, "rb")
         except OSError:
             notice("could not read %s" % safe_path(raw_path))
-        scanner = LineScanner()
+        scanner = LineScanner(markers=markers)
         kept_len, fault_len, supp_len = 0, 0, 0
         with handle:
             for number, raw in enumerate(handle, 1):
@@ -1740,6 +1745,16 @@ def self_test(root):
             marked_loose = run_child(["--files", "marked-loose.txt"], repo)
             ok("--files honours a marker", bool(
                 marked_loose and marked_loose.returncode == 0 and not marked_loose.stdout))
+            inert = run_child(["--files-inert", "marked-loose.txt"], repo)
+            ok("--files-inert reports through a marker", bool(
+                inert and inert.returncode == 1
+                and inert.stdout.splitlines() == ["marked-loose.txt:1: email"]
+                and silent(inert)))
+            (repo / "marker-only.txt").write_text(
+                "ordinary  # " + ALLOW + " email -- nothing here\n", encoding="utf-8")
+            inert_only = run_child(["--files-inert", "marker-only.txt"], repo)
+            ok("--files-inert stays silent on marker text with no finding", bool(
+                inert_only and inert_only.returncode == 0 and not inert_only.stdout))
             missing = run_child(["--files", "no-such-file.txt"], repo)
             ok("--files on a missing file exits 2", bool(
                 missing and missing.returncode == 2 and not missing.stdout))
@@ -1774,6 +1789,7 @@ def self_test(root):
             for args, label in (([], "no arguments"), (["main"], "one range argument"),
                                 (["main", "HEAD", "extra"], "three range arguments"),
                                 (["--files"], "files without paths"),
+                                (["--files-inert"], "files-inert without paths"),
                                 (["--spans"], "spans without paths"),
                                 (["--safe-path"], "safe-path without paths"),
                                 (["--log-detection"], "log-detection without arguments"),
@@ -1837,6 +1853,10 @@ def main(args):
         if len(args) < 2:
             notice(USAGE)
         return run_files(root, args[1:])
+    if args and args[0] == "--files-inert":
+        if len(args) < 2:
+            notice(USAGE)
+        return run_files(root, args[1:], markers=False)
     if args and args[0] == "--spans":
         if len(args) < 2:
             notice(USAGE)

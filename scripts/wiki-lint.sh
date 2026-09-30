@@ -141,7 +141,7 @@ if pages and top.returncode == 0:
     # its page through --log-detection. Quoted raw/ lines are lint faults,
     # not detections, and are never logged.
     child = subprocess.run(
-        [scrub, "--files", *rel_args], cwd=top.stdout.strip(),
+        [scrub, "--files-inert", *rel_args], cwd=top.stdout.strip(),
         stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, check=False,
         env=dict(os.environ, POSTMASTER_DETECTIONS_LOG=""))
     if child.returncode not in (0, 1):
@@ -365,6 +365,12 @@ fresh; concept haspath claimed ""
 HP=$(printf '/home/%s' fixture-user)
 printf 'See %s-413/notes.txt for the log.\n' "$HP" >> "$tmp/wiki/concepts/haspath.md"
 expect fail "a page carrying a private path" "private-path"
+
+fresh; concept markedpath claimed ""
+MP=$(printf '/home/%s' fixture-user)
+ALLOW_P='private-data:allo'
+printf 'See %s-413/notes.txt for the log.  <!-- %sw private-path -- made-up -->\n' "$MP" "$ALLOW_P" >> "$tmp/wiki/concepts/markedpath.md"
+expect fail "a marked path still faults, markers inert on pages" "private-path"
 
 fresh; concept hashhost claimed ""
 HN='metrics.interna'
