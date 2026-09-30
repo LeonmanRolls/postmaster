@@ -1,37 +1,157 @@
-# Workhorse spec: #160 Record harness token usage and cost
+# Workhorse spec: #160 Record each launch's tokens and cost where its harness reports them
 
 ## Summary
 
-Record each lane, reviewer and coachman launch's reported token usage and cost from its harness stream, then summarize those records when the run closes.
+Read the input/output tokens and cost each harness reports for a launch from its own
+event stream or session record, keep those figures in the run's records per role and
+lane, and sum them in the run's closing record, naming harnesses that report nothing
+and never writing a missing figure as zero.
 
 ## Technical context
 
-- **Language and version**: Bash with Python 3.11 for stream parsing, consistent with the repository scripts.
-- **Dependencies used or added**: No new dependencies.
-- **Testing**: Per-harness recorded-stream controls in `scripts/usage.sh --self-test`; integration self-tests for launch recording and terminal summaries; the project gate.
-- **Constraints**: Usage must come from each harness's event stream or session record. Missing figures remain missing and must never be presented as zero.
+- **Language and version**: Bash with Python 3 in heredocs, as the rest of `scripts/`.
+- **Dependencies used or added**: none.
+- **Testing**: `scripts/usage.sh --self-test` (paired per-harness recorded-stream
+  controls); `bash -n` on changed scripts; the project's gate; `verify.sh run .`
+  just before the summary.
+- **Constraints**: read usage from each harness's own event stream or session record,
+  never estimate from text length. Per-harness reading lives behind the harness
+  adapter. Deterministic work in `scripts/`, not prose. Every count needs a control.
+  A missing figure is never recorded as zero. Touch only what this ticket requires.
 
 ## Direction check
 
-The ticket requires native harness-reported input tokens, output tokens and cost, with no estimation from text length. The parser will read each harness's own event or session fields and leave unreported fields absent. The project rules keep harness-specific interpretation in an adapter, deterministic aggregation in a script, and every reported count under positive and negative controls. Each launch's usage record will be logged with the run's action log.
+- Read usage from each harness's own event stream or session record; do not estimate
+  from text length: the reader only copies fields the harness itself writes. No
+  length-based estimation exists anywhere in the change.
+- Per-harness reading lives behind the harness adapter: field names and stream or
+  session shapes are known only to the new script and documented per harness in
+  `skills/postmaster/harnesses.md`, beside the adapter's other forms. Runbooks say
+  "cost"; the adapter says what that means per harness.
+- Self-test control per harness from a recorded stream, one that reports usage and
+  one that does not: `scripts/fixtures/usage/` holds one recorded pair per harness
+  in `harnesses.md`'s table. The self-test runs the identical read on both: the
+  with-usage stream must yield the figures it carries, the no-usage stream must
+  yield no figure and must not yield zero.
+- Each launch records its figures in the run's records, per role and lane: the new
+  script writes one record per launch beside that launch's events stream, carrying
+  role, lane, harness and only the figures reported. `launch.sh` calls it after its
+  existing session export on every run launch, resume and review, best-effort, so a
+  recording fault never changes the harness's exit.
+- The closing record sums per role and lane, names harnesses that report nothing,
+  never records a missing figure as zero: the new script's sum prints the closing
+  block; `coachman.md` Stage 4 carries that block in the final `run-log.md` entry
+  and on the ship card, quoted, never hand-recomputed.
+- Nothing harness-specific outside an adapter, deterministic work in scripts, every
+  count a control: extraction, recording and summing are all in the one new script;
+  `coachman.md` and `postmaster.md` name no harness fields.
+- Script paths under `skills/postmaster/` go through `<tool>`; `skill-refs.sh`
+  stays clean.
+
+No departures from the direction.
 
 ## Structure
 
-- Add `scripts/usage.sh` to read usage from each supported harness stream, append per-launch records to `<dispatch>/usage.jsonl`, and build the terminal summary.
-- Add recorded positive and negative streams under `scripts/fixtures/usage/` for every harness supported by `skills/postmaster/harnesses.md`.
-- Update `scripts/launch.sh` to record completed launch usage, and `scripts/host.sh` to pass the launch role into that record.
-- Update `scripts/stage.sh` to append per-role and per-lane totals, plus harnesses with no reported usage, when a run enters a terminal stage.
-- Update `scripts/log-action.sh` for the usage record action and `skills/postmaster/harnesses.md` to document each harness's usage source.
+Create:
+
+- `scripts/usage.sh` — the adapter's usage reading and the run's usage records:
+  - `read` — print one JSON object with the figures a harness reports in one
+    event stream (or, where a harness reports usage only in its session record,
+    in that record). Keys for absent figures are omitted. Cost appears only
+    where the harness reports one.
+  - `record` — write one usage record for one launch beside that launch's
+    events stream, carrying role, lane, harness and only the figures reported.
+    Re-reading a stream that grew (a resume or remount) replaces that stream's
+    record with the whole-stream reading, so one stream is never double-counted.
+  - `sum <dispatch>` — print the closing block over the run's usage records
+    (see Decisions for its shape).
+  - `--self-test` — the paired fixture controls for every harness.
+- `scripts/fixtures/usage/` — recorded streams, one with-usage and one no-usage
+  stream per harness in `harnesses.md`'s table (codex, grok, agy, claude, pi,
+  muse, mimo).
+
+Change:
+
+- `scripts/launch.sh` — after the existing `export-session.sh` call on a run
+  launch, call the usage record on the same events stream (and the exported
+  session where the harness reports usage only there). Warn on failure; still
+  exit with the harness's status. Role and lane reach the record from the launch
+  site (arguments or environment), never guessed from paths.
+- `skills/postmaster/harnesses.md` — a Usage subsection: where each harness
+  reports input and output tokens and cost (event type and field path, or the
+  session record), and the new script as this file's executable form of that
+  reading.
+- `skills/postmaster/coachman.md` — Stage 4: the final `run-log.md` entry and the
+  ship card carry the sum block as the cost, quoted, never hand-recomputed and
+  never zero for a figure no harness reported.
+- `.postmaster/project.toml` — add the new script to the gate's `--self-test`
+  list and update the shows line's count.
+
+## Complexity tracking
+
+None.
 
 ## Decisions
 
-- Store one append-only JSONL record per launch in the run directory so separate roles, lanes, resumes and missing reports remain attributable.
-- Identify a launch by role and lane or coachman leg, and retain its harness name; the same lane may run as a workhorse and as a reviewer.
-- Summarize the recorded launches in `run-log.md` when the run enters `done` or `abandoned`, including an explicit list of harnesses that reported no usage. Do not invent totals for absent fields.
-- Cover every harness currently documented in `skills/postmaster/harnesses.md` with a usage and a no-usage recorded-stream control.
+1. **One record per events stream, beside the stream it was read from.** A central
+   log cannot survive a resume: re-reading a stream that grew would double-count
+   unless records are deltas, and deltas are fragile. A per-stream record replaced
+   by each whole-stream re-read is idempotent across resumes and remounts. Review
+   rounds already have distinct stream names, so they neither overwrite a
+   workhorse's record nor each other.
+2. **Absent figures are omitted keys, never 0.** A harness that reports `0` is
+   recorded as 0; a harness that reports nothing has no such key. The sum prints
+   `not reported` for a figure no launch under that (role, lane) reported, and
+   marks partial coverage (`X (n of m launches)`) when only some launches
+   reported it.
+3. **Role and lane.** Role is workhorse, reviewer or coachman. Lane is the lane
+   name for a workhorse or reviewer, and the coachman leg for the coachman. The
+   sum is one line per (role, lane); each per-launch record also carries the
+   stream's name so individual launches stay auditable.
+4. **The sum's shape** (one line per (role, lane), then a harness line only when
+   needed):
+   ```
+   cost: workhorse luna (claude): 12345 in, 678 out, $0.42
+   cost: workhorse mimo (mimo): 23456 in, 890 out, cost not reported
+   cost: reviewer luna (claude): 3210 in, 45 out, $0.08 (2 of 3 launches)
+   cost: coachman synthesis (claude): 4567 in, 89 out, $0.12
+   cost: harness agy reports nothing
+   ```
+   A figure the harness never reported reads `not reported`, never `0`.
+5. **Recording is best-effort; the closing record quotes the sum.** A record fault
+   warns and leaves the launch's exit alone (the `export-session.sh` pattern). A
+   sum fault is quoted in the closing entry as unreadable, never as zeros.
+6. **Fixture origin.** Streams are trimmed from recorded runs where the repo
+   already holds them, or written in the harness's exact event shape from its
+   documented schema where no recorded usage-bearing stream exists yet. A fixture
+   is evidence about the reader, not a claim that a live harness always emits
+   that shape; `harnesses.md` names the source of each shape.
+7. **Which closing record.** `coachman.md` already names cost in the final
+   `run-log.md` entry, and the audit that opened this ticket read the ship card.
+   Both carry the sum block. The outward ticket comment keeps its own summary
+   and is not required to restate the block.
 
 ## Tasks
 
-- [ ] T001 [P] [AC3] Add per-harness usage readers and recorded positive and negative controls in `scripts/usage.sh` and `scripts/fixtures/usage/`; document the native usage sources in `skills/postmaster/harnesses.md`.
-- [ ] T002 [AC1] Pass launch role metadata through `scripts/host.sh` and record reported token and cost fields per launch from its event stream in `scripts/launch.sh` via `scripts/usage.sh`, logging the record through `scripts/log-action.sh`.
-- [ ] T003 [AC2] Aggregate usage by role and lane and append the terminal summary, preserving absent fields and naming harnesses with no report, through `scripts/stage.sh` and `scripts/usage.sh`.
+- [ ] T001 [P] [AC3] Usage reading and fixtures: per-harness reading from an event
+  stream or session record in `scripts/usage.sh`; `scripts/fixtures/usage/` with
+  a with-usage and a no-usage recorded stream for each harness in
+  `harnesses.md`'s table; `--self-test` pairs (with-usage reads the figures it
+  carries, no-usage reads absent and never zero) through one command.
+- [ ] T002 [P] [AC1] Per-launch records: one usage record per events stream
+  beside the stream, with role, lane, harness and only the figures reported;
+  call it from `scripts/launch.sh` after `export-session.sh` on every run
+  launch, resume and review, best-effort, with role and lane passed from the
+  launch site.
+- [ ] T003 [P] [AC2] Closing sum: `sum` over the run's usage records per role and
+  lane, `not reported` for an absent figure, partial coverage marked, harnesses
+  that report nothing named; never a missing figure as zero.
+- [ ] T004 [AC1] [AC3] `skills/postmaster/harnesses.md`: a Usage subsection naming
+  where each harness reports input/output tokens and cost, and the new script as
+  the adapter's executable form of that reading.
+- [ ] T005 [AC2] `skills/postmaster/coachman.md` Stage 4: the final `run-log.md`
+  entry and the ship card carry the sum block as the cost; a figure no harness
+  reported is never written as zero.
+- [ ] T006 [AC3] `.postmaster/project.toml`: add the new script to the gate's
+  self-test list and update the shows line's count; keep `skill-refs.sh` and the
+  rest of the gate green.
