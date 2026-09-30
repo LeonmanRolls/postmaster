@@ -1,0 +1,2 @@
+{"payload":{"kind":"session"},"payload_type":"session.started","sequence":1,"stream":{"id":"madeup-session-2","kind":"session"}}
+{"payload":{"kind":"run","text":"working"},"payload_type":"run.output","sequence":2,"stream":{"id":"madeup-session-2","kind":"session"}}

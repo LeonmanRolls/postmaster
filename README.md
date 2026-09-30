@@ -103,6 +103,7 @@ scripts/spec-decisions.sh <dispatch> fresh|record|count           # record spec 
 scripts/run-times.sh <dispatch>                                   # how long each stage took, from the log
 scripts/run-log.sh <dispatch> <text> | --section <title> | --close # the narrative, timestamped
 scripts/run-meta.sh <dispatch> <repo> | path|check|release <dispatch> # run.json and the pinned tool a run started from
+bun scripts/run-clash.ts <repo> <ticket-id>                      # refuse an id that already names a run or a branch
 scripts/github.sh <repo> board|create|edit|read|state|comment|list|access|search # GitHub Issues on a Projects board
 scripts/plane.sh create|edit|read|state|comment|list …             # Plane work items
 scripts/local.sh <repo> store|create|edit|read|title|state|comment|list # tickets in the repo's git directory

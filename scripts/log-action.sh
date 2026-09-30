@@ -9,7 +9,7 @@
 #
 #   actor    postmaster | coachman | lane:<name>
 #   action   a verb from a fixed set, enforced, so the log is computable:
-#            dispatch resume harvest synthesize review-launch review-harvest finding apply
+#            dispatch resume refuse harvest synthesize review-launch review-harvest finding apply
 #            escalate rule ticket-check ticket-create ticket-edit ticket-state ticket-comment
 #            gate verify merge teardown degrade handoff-accept handoff stage spec-review
 #            tool-fault note
@@ -46,7 +46,7 @@ set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd -P)
 TOOL=$(dirname "$HERE")
 CONTROLS=$TOOL/skills/postmaster/controls.md
-VERBS=" dispatch resume harvest synthesize review-launch review-harvest finding apply escalate rule ticket-check ticket-create ticket-edit ticket-state ticket-comment gate verify merge teardown degrade handoff-accept handoff stage spec-review tool-fault note "
+VERBS=" dispatch resume refuse harvest synthesize review-launch review-harvest finding apply escalate rule ticket-check ticket-create ticket-edit ticket-state ticket-comment gate verify merge teardown degrade handoff-accept handoff stage spec-review tool-fault note "
 
 json_str() {  # the inside of a JSON string, in bash alone but for tr and iconv
   local s=$1

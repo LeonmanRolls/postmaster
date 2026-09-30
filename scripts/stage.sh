@@ -10,7 +10,8 @@
 # It logs a `stage` action naming the stage left and how long it lasted, changes only the
 # manifest's `stage` field, and appends the same line to run-log.md. Setting the stage a run is
 # already in does nothing, so a resumed or remounted leg can set it again safely. Setting a
-# terminal stage (done, abandoned) also appends the run's full stage timings to run-log.md.
+# terminal stage (done, abandoned) appends timings and refreshes the final usage sum after every
+# launch has exited.
 # Only the postmaster sets a terminal stage, or moves a run out of one: it closes a run after
 # the last leg, and abandons one on the user's word. The actor is the caller's own word, so this
 # holds a coachman to its runbook; it cannot stop a process that names itself the postmaster.
@@ -23,6 +24,47 @@
 set -uo pipefail
 HERE=$(CDPATH= cd -P -- "$(dirname -- "$0")" && pwd -P)
 STAGES="dispatched bootstrapped planning workhorses-running synthesis checkpoint-1 review shipping shipped done abandoned"
+
+close_usage() {  # close_usage <dispatch>: refresh after the final launch record exists
+  local d=$1 summary log_status=0
+  if summary=$(bun "$HERE/usage.ts" sum "$d" 2>&1); then
+    "$HERE/run-log.sh" "$d" "final cost block:" "$summary" || log_status=$?
+  else
+    summary=${summary:-"usage sum failed"}
+    "$HERE/run-log.sh" "$d" "final cost block unreadable:" "$summary" || log_status=$?
+  fi
+  python3 - "$d/card.md" "$summary" <<'PY' || return 1
+import os, pathlib, sys, tempfile
+path = pathlib.Path(sys.argv[1])
+if not path.is_file():
+    raise SystemExit(0)
+try:
+    text = path.read_text(encoding="utf-8")
+except OSError as e:
+    print("stage: cannot refresh the ship card's cost block: %s" % e, file=sys.stderr)
+    raise SystemExit(1)
+block = "## Cost\n\n```\n%s\n```\n" % sys.argv[2].rstrip("\n")
+lines = text.splitlines(keepends=True)
+start = next((i for i, line in enumerate(lines) if line.rstrip("\r\n") == "## Cost"), None)
+if start is None:
+    text = text.rstrip() + "\n\n" + block
+else:
+    end = next((i for i in range(start + 1, len(lines)) if lines[i].startswith("## ")), len(lines))
+    text = "".join(lines[:start]) + block + "\n" + "".join(lines[end:])
+fd, temporary = tempfile.mkstemp(prefix=".card-cost-", dir=str(path.parent))
+try:
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(text)
+    os.replace(temporary, path)
+except BaseException:
+    try:
+        os.unlink(temporary)
+    except FileNotFoundError:
+        pass
+    raise
+PY
+  return "$log_status"
+}
 
 set_stage() {  # set_stage <dispatch> <stage> <actor>
   local d=$1 new=$2 actor=$3
@@ -82,7 +124,8 @@ PY
   "$HERE/run-log.sh" "$d" "stage $new, from $old$took"
   case $new in
     done|abandoned)
-      { printf '\nStage timings, from actions.jsonl:\n\n```\n'; "$HERE/run-times.sh" "$d"; printf '```\n'; } >> "$d/run-log.md" ;;
+      { printf '\nStage timings, from actions.jsonl:\n\n```\n'; "$HERE/run-times.sh" "$d"; printf '```\n'; } >> "$d/run-log.md"
+      close_usage "$d" || echo "stage: the run closed, but its final cost block could not be written" >&2 ;;
   esac
   echo "stage: $old -> $new$took"
 }
@@ -103,8 +146,10 @@ fails=0
 ok()   { printf '  ok   %s\n' "$1"; }
 fail() { printf '  FAIL %s\n' "$1"; fails=$((fails+1)); }
 fresh() {
+  mkdir -p "$d/logs"
   printf '{"stage": "dispatched", "leg": 1, "base": "abc123", "lanes": {"luna": {"outcome": "running"}}, "coachman": {"legs": {}}}\n' > "$d/manifest.json"
   : > "$d/actions.jsonl"; : > "$d/run-log.md"
+  rm -f -- "$d/card.md" "$d/logs/luna-events-usage.json"
   "$HERE/log-action.sh" "$d" postmaster dispatch RUN-1 "test" >/dev/null
 }
 count() { grep -c "\"action\":\"stage\"" "$d/actions.jsonl"; }
@@ -116,9 +161,17 @@ python3 -c "import json,sys; m=json.load(open('$d/manifest.json')); sys.exit(0 i
   && ok "only the manifest's stage field changes" || fail "only the manifest's stage field changes"
 grep -q 'stage bootstrapped, from dispatched after' "$d/run-log.md" && ok "run-log.md records the change and how long the last stage took" \
   || fail "run-log.md records the change and how long the last stage took"
+cat > "$d/logs/luna-events-usage.json" <<'JSON'
+{"schema_version":1,"name":"luna","role":"workhorse","lane":"luna","harness":"codex","stream":"logs/luna-events.jsonl","input_tokens":4,"output_tokens":2,"cost_usd":0.25}
+JSON
+printf '# Ship card\n\n## Cost\n\nold estimate\n\n## Checks\n\npassed\n' > "$d/card.md"
 set_stage "$d" done postmaster >/dev/null
 grep -q 'Stage timings, from actions.jsonl' "$d/run-log.md" && grep -q '^bootstrapped ' "$d/run-log.md" \
   && ok "the postmaster's terminal stage appends the run's timings" || fail "the postmaster's terminal stage appends the run's timings"
+grep -q '4 in' "$d/run-log.md" && grep -q '4 in' "$d/card.md" \
+  && ! grep -q 'old estimate' "$d/card.md" \
+  && ok "terminal closure refreshes the final usage sum in the run log and ship card" \
+  || { fail "terminal closure refreshes the final usage sum in the run log and ship card"; sed 's/^/         run-log: /' "$d/run-log.md"; sed 's/^/         card: /' "$d/card.md"; }
 fresh; set_stage "$d" abandoned postmaster >/dev/null; rc=$?
 [ $rc -eq 0 ] && [ "$(count)" -eq 1 ] && grep -q '"stage": "abandoned"' "$d/manifest.json" \
   && ok "the postmaster abandons a run" || fail "the postmaster abandons a run (exit $rc, lines $(count))"

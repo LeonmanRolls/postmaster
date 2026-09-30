@@ -8,3 +8,5 @@ config.toml
 # project's own .postmaster/ and is ignored there. Promotion from one to the other is a
 # deliberate, scrubbed decision to publish (raw/README.md is the contract).
 .postmaster/
+
+node_modules/
