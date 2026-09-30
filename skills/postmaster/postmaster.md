@@ -278,8 +278,9 @@ Each `NEXT` names the act:
 `git status`. Treat every uncommitted change as unverified. Log `handoff-accept` and finish
 the leg." Move the leg's stream to `<dispatch>/logs/coachman-leg-<n>-walled-events.jsonl`, then
 launch the takeover through the wrapper of Stage C step 3, with `<rt>/scripts/launch.sh launch
-coachman_fallback <repo>/.worktrees/<TICKET> <dispatch>/leg-<n>-takeover.txt --run <dispatch>`
-in place of the coachman's launch. Record its thread id from the new stream (`harnesses.md`) as
+coachman_fallback <repo>/.worktrees/<TICKET> <dispatch>/leg-<n>-takeover.txt --leg <leg-name>
+--run <dispatch>` in place of the coachman's launch. Pass the name for leg `n` from the leg list;
+the coachman-fallback usage record carries that leg. Record its thread id from the new stream (`harnesses.md`) as
 `coachman.legs.<n>.thread_id`, with `coachman_fallback` as its `name`.
 
 A leg's `.leg-<n>-exited` marker with `.leg-<n>-done` beside it is normal completion. Every

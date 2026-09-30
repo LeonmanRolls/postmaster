@@ -16,8 +16,10 @@
 # run recorded at dispatch, `config` in <dispatch>/run.json (scripts/run-meta.sh): the live
 # config is not read at all, and a run.json that is missing or unreadable is refused. Every
 # launch and resume inside a run passes --run; the postmaster's own spawn and the config check
-# before dispatch do not. A run launch exports its durable session beside the events stream;
-# a launch whose export fails says so loudly and still exits with the harness's status.
+# before dispatch do not. A run launch exports its durable session beside the events stream,
+# then records usage from the stream or session record beside it. The host passes its explicit
+# role in POSTMASTER_LAUNCH_ROLE; this script knows the lane or coachman leg. Export and usage
+# recording failures are loud and leave the harness's exit status alone.
 # The checks below apply to a recorded config as to the live one.
 #
 # A form with --project resolves the target's local role choices. <name> is a lane from
@@ -51,12 +53,14 @@
 set -uo pipefail
 HERE=$(CDPATH= cd -P -- "$(dirname -- "$0")" && pwd -P)
 CONFIG=${POSTMASTER_CONFIG:-$HOME/.postmaster/config.toml}
+LAUNCH_ROLE=${POSTMASTER_LAUNCH_ROLE:-}
 
 if [ "${1:-}" = --self-test ]; then
   # Each control runs this script on a fixture config, with stub harnesses first on PATH.
   # `form` only prints, so nothing is launched. A run's record is written from a fixture by
   # run-meta.sh, as at dispatch, so what this script reads is what that one writes.
   unset POSTMASTER_LAUNCH_NAME   # a gate run through host.sh run inherits one; a control that needs one sets its own
+  unset POSTMASTER_LAUNCH_ROLE
   self=$(CDPATH= cd -P -- "$(dirname -- "$0")" && pwd -P)/$(basename -- "$0")
   here=$(dirname "$self")
   tmp=$(mktemp -d) || exit 1
@@ -208,30 +212,75 @@ EOF
   agy_dispatch=$tmp/repo/.postmaster/runs/run-agy
   agy_events=$agy_dispatch/logs/g-events.jsonl
   mkdir -p "$(dirname "$agy_events")"
-  POSTMASTER_EVENT_STREAM="$agy_events" POSTMASTER_CONFIG="$tmp/agy-run.toml" PATH="$tmp/bin:$PATH" \
+  POSTMASTER_LAUNCH_ROLE=lane POSTMASTER_EVENT_STREAM="$agy_events" POSTMASTER_CONFIG="$tmp/agy-run.toml" PATH="$tmp/bin:$PATH" \
     "$self" launch g "$tmp/wt" "$tmp/prompt.txt" --run "$agy_dispatch" >"$agy_events" 2>"$tmp/err"; rc=$?; err=$(cat "$tmp/err"); out=$(cat "$agy_events")
   [ "$rc" -eq 0 ] && [ "$out" = '{"conversationId":"thread-agy"}' ] \
     && cmp -s "$agy_events" "$agy_dispatch/sessions/g/thread-agy.events.jsonl" \
     && ok "a run launch exports its durable session beside the harness event stream" \
     || fail "a run launch exports its durable session beside the harness event stream"
+  python3 - "$agy_dispatch/logs/g-events.jsonl.usage.json" <<'PY'
+import json, sys
+record = json.load(open(sys.argv[1]))
+assert record["role"] == "workhorse" and record["lane"] == "g" and record["harness"] == "agy"
+assert "input_tokens" not in record and "output_tokens" not in record and "cost_usd" not in record
+PY
+  [ $? -eq 0 ] && ok "a run launch records its explicit role and lane without inventing figures" \
+    || fail "a run launch records its explicit role and lane without inventing figures"
+  printf '[lanes.g]\nharness = "agy"\nmodel = "agy-model"\n\n[team]\ncoachman = { harness = "agy", model = "coach-model" }\ncoachman_fallback = { harness = "agy", model = "fallback-model" }\n' > "$tmp/agy-roles.toml"
+  record run-agy-roles agy-roles
+  roles_dispatch=$tmp/repo/.postmaster/runs/run-agy-roles
+  mkdir -p "$roles_dispatch/logs"
+  reviewer_events=$roles_dispatch/logs/reviewer-events.jsonl
+  POSTMASTER_LAUNCH_ROLE=reviewer POSTMASTER_EVENT_STREAM="$reviewer_events" POSTMASTER_CONFIG="$tmp/agy-roles.toml" PATH="$tmp/bin:$PATH" \
+    "$self" launch g "$tmp/wt" "$tmp/prompt.txt" --run "$roles_dispatch" >"$reviewer_events" 2>"$tmp/err"; rc=$?
+  python3 - "$roles_dispatch/logs/reviewer-events.jsonl.usage.json" reviewer g <<'PY'
+import json, sys
+record = json.load(open(sys.argv[1]))
+assert (record["role"], record["lane"]) == (sys.argv[2], sys.argv[3])
+PY
+  check_rc=$?
+  [ "$rc" -eq 0 ] && [ "$check_rc" -eq 0 ] && ok "a reviewer launch records its reviewer lane" \
+    || fail "a reviewer launch records its reviewer lane"
+  coachman_events=$roles_dispatch/logs/coachman-events.jsonl
+  POSTMASTER_LAUNCH_ROLE=coachman POSTMASTER_EVENT_STREAM="$coachman_events" POSTMASTER_CONFIG="$tmp/agy-roles.toml" PATH="$tmp/bin:$PATH" \
+    "$self" launch coachman "$tmp/wt" "$tmp/prompt.txt" --leg synthesis --run "$roles_dispatch" >"$coachman_events" 2>"$tmp/err"; rc=$?
+  python3 - "$roles_dispatch/logs/coachman-events.jsonl.usage.json" coachman synthesis <<'PY'
+import json, sys
+record = json.load(open(sys.argv[1]))
+assert (record["role"], record["lane"]) == (sys.argv[2], sys.argv[3])
+PY
+  check_rc=$?
+  [ "$rc" -eq 0 ] && [ "$check_rc" -eq 0 ] && ok "a coachman launch records its leg" \
+    || fail "a coachman launch records its leg"
+  fallback_events=$roles_dispatch/logs/fallback-events.jsonl
+  POSTMASTER_LAUNCH_ROLE=coachman POSTMASTER_EVENT_STREAM="$fallback_events" POSTMASTER_CONFIG="$tmp/agy-roles.toml" PATH="$tmp/bin:$PATH" \
+    "$self" launch coachman_fallback "$tmp/wt" "$tmp/prompt.txt" --leg ship --run "$roles_dispatch" >"$fallback_events" 2>"$tmp/err"; rc=$?
+  python3 - "$roles_dispatch/logs/fallback-events.jsonl.usage.json" coachman ship <<'PY'
+import json, sys
+record = json.load(open(sys.argv[1]))
+assert (record["role"], record["lane"]) == (sys.argv[2], sys.argv[3])
+PY
+  check_rc=$?
+  [ "$rc" -eq 0 ] && [ "$check_rc" -eq 0 ] && ok "a fallback coachman launch records its leg" \
+    || fail "a fallback coachman launch records its leg"
   sessions_before=$(ls "$agy_dispatch/sessions/g" | wc -l)
   printf '#!/bin/sh\nexit 0\n' > "$tmp/bin/agy"; chmod +x "$tmp/bin/agy"
   empty_events=$agy_dispatch/logs/g-empty.jsonl; : > "$empty_events"
-  POSTMASTER_EVENT_STREAM="$empty_events" POSTMASTER_CONFIG="$tmp/agy-run.toml" PATH="$tmp/bin:$PATH" \
+  POSTMASTER_LAUNCH_ROLE=lane POSTMASTER_EVENT_STREAM="$empty_events" POSTMASTER_CONFIG="$tmp/agy-run.toml" PATH="$tmp/bin:$PATH" \
     "$self" launch g "$tmp/wt" "$tmp/prompt.txt" --run "$agy_dispatch" >"$empty_events" 2>"$tmp/err"; rc=$?; err=$(cat "$tmp/err")
   [ "$rc" -eq 0 ] && [ ! -s "$empty_events" ] && grep -q "its session was not exported" <<<"$err" \
     && [ "$(ls "$agy_dispatch/sessions/g" | wc -l)" = "$sessions_before" ] \
     && ok "an empty event stream is a loud missed export, not a silent skip" \
     || fail "an empty event stream is a loud missed export, not a silent skip (exit $rc)" "$err"
   printf '#!/bin/sh\nprintf "{\\"nope\\":1}\\n"\nexit 0\n' > "$tmp/bin/agy"; chmod +x "$tmp/bin/agy"
-  POSTMASTER_EVENT_STREAM="$agy_events" POSTMASTER_CONFIG="$tmp/agy-run.toml" PATH="$tmp/bin:$PATH" \
+  POSTMASTER_LAUNCH_ROLE=lane POSTMASTER_EVENT_STREAM="$agy_events" POSTMASTER_CONFIG="$tmp/agy-run.toml" PATH="$tmp/bin:$PATH" \
     "$self" launch g "$tmp/wt" "$tmp/prompt.txt" --run "$agy_dispatch" >"$agy_events" 2>"$tmp/err"; rc=$?; err=$(cat "$tmp/err")
   [ "$rc" -eq 0 ] && grep -q "its session was not exported" <<<"$err" \
     && ok "a failed export still exits with the harness's status" \
     || fail "a failed export still exits with the harness's status (exit $rc)" "$err"
   printf '#!/bin/sh\nprintf "{\\"conversationId\\":\\"thread-rc\\"}\\n"\nexit 3\n' > "$tmp/bin/agy"; chmod +x "$tmp/bin/agy"
   rc_events=$agy_dispatch/logs/g-rc.jsonl
-  POSTMASTER_EVENT_STREAM="$rc_events" POSTMASTER_CONFIG="$tmp/agy-run.toml" PATH="$tmp/bin:$PATH" \
+  POSTMASTER_LAUNCH_ROLE=lane POSTMASTER_EVENT_STREAM="$rc_events" POSTMASTER_CONFIG="$tmp/agy-run.toml" PATH="$tmp/bin:$PATH" \
     "$self" launch g "$tmp/wt" "$tmp/prompt.txt" --run "$agy_dispatch" >"$rc_events" 2>"$tmp/err"; rc=$?
   [ "$rc" -eq 3 ] && cmp -s "$rc_events" "$agy_dispatch/sessions/g/thread-rc.events.jsonl" \
     && ok "a harness failure keeps its exit when the export succeeds" \
@@ -241,15 +290,21 @@ EOF
   env_dispatch=$tmp/repo/.postmaster/runs/run-agy-env
   mkdir -p "$env_dispatch/logs"
   printf '{"conversationId":"thread-decoy"}\n' > "$env_dispatch/logs/g-decoy.jsonl"
-  printf 'POSTMASTER_EVENT_STREAM="%s"\n' "$env_dispatch/logs/g-decoy.jsonl" > "$tmp/poison.env"
+  printf 'POSTMASTER_EVENT_STREAM="%s"\nPOSTMASTER_LAUNCH_ROLE=reviewer\n' "$env_dispatch/logs/g-decoy.jsonl" > "$tmp/poison.env"
   printf '#!/bin/sh\nprintf "{\\"conversationId\\":\\"thread-real\\"}\\n"\nexit 0\n' > "$tmp/bin/agy"; chmod +x "$tmp/bin/agy"
   real_events=$env_dispatch/logs/g-real.jsonl
-  POSTMASTER_EVENT_STREAM="$real_events" POSTMASTER_CONFIG="$tmp/agy-env.toml" PATH="$tmp/bin:$PATH" \
+  POSTMASTER_LAUNCH_ROLE=lane POSTMASTER_EVENT_STREAM="$real_events" POSTMASTER_CONFIG="$tmp/agy-env.toml" PATH="$tmp/bin:$PATH" \
     "$self" launch g "$tmp/wt" "$tmp/prompt.txt" --run "$env_dispatch" >"$real_events" 2>"$tmp/err"; rc=$?
   [ "$rc" -eq 0 ] && cmp -s "$real_events" "$env_dispatch/sessions/g/thread-real.events.jsonl" \
     && [ ! -e "$env_dispatch/sessions/g/thread-decoy.events.jsonl" ] \
     && ok "a lane env file cannot redirect the session export" \
     || fail "a lane env file cannot redirect the session export (exit $rc)" "$(cat "$tmp/err")"
+  python3 - "$env_dispatch/logs/g-real.jsonl.usage.json" <<'PY'
+import json, sys
+assert json.load(open(sys.argv[1]))["role"] == "workhorse"
+PY
+  [ $? -eq 0 ] && ok "a lane env file cannot change the recorded role" \
+    || fail "a lane env file cannot change the recorded role"
   mkdir -p "$tmp/repo/.postmaster/runs/no-record" "$tmp/repo/.postmaster/runs/garbled" "$tmp/repo/.postmaster/runs/unrecorded"
   printf '{"config": \n' > "$tmp/repo/.postmaster/runs/garbled/run.json"
   printf '{"run": "T-1"}\n' > "$tmp/repo/.postmaster/runs/unrecorded/run.json"
@@ -852,10 +907,13 @@ fi
 # session the export hook retains, so it is restored after sourcing.
 if [ -n "${ENV_FILE:-}" ]; then
   saved_event_stream=${POSTMASTER_EVENT_STREAM:-}
+  saved_launch_role=$LAUNCH_ROLE
   set -a; . "$ENV_FILE"; set +a
   POSTMASTER_EVENT_STREAM=$saved_event_stream
+  LAUNCH_ROLE=$saved_launch_role
+  export -n LAUNCH_ROLE
 fi
-unset POSTMASTER_LAUNCH_NAME   # the thread's own launches are named by their own host.sh call
+unset POSTMASTER_LAUNCH_NAME POSTMASTER_LAUNCH_ROLE   # launch identity stays with postmaster, never the model
 "${cmd[@]}"
 rc=$?
 # The session export is attempted on every run launch with a stream, including an
@@ -865,5 +923,22 @@ rc=$?
 if [ -n "$RUN" ] && [ -n "${POSTMASTER_EVENT_STREAM:-}" ]; then
   "$HERE/export-session.sh" "$RUN" "$NAME" "$HARNESS" "$CWD" "$POSTMASTER_EVENT_STREAM" "${DATA:-}" \
     || echo "launch: the harness exited $rc but its session was not exported" >&2
+  record_role="" record_lane=""
+  case $LAUNCH_ROLE in
+    lane) record_role=workhorse; record_lane=$NAME ;;
+    reviewer) record_role=reviewer; record_lane=$NAME ;;
+    coachman)
+      record_role=coachman
+      record_lane=$LEG
+      if [ -z "$record_lane" ] && [ "$NAME" != coachman_fallback ]; then record_lane=$NAME; fi
+      ;;
+  esac
+  if [ -n "$record_role" ] && [ -n "$record_lane" ]; then
+    session_dir=$RUN/sessions/$NAME
+    bun "$HERE/usage.ts" record "$HARNESS" "$record_role" "$record_lane" "$POSTMASTER_EVENT_STREAM" "$session_dir" \
+      || echo "launch: the harness exited $rc but its usage was not recorded" >&2
+  else
+    echo "launch: the harness exited $rc but its usage was not recorded; launch role or lane is missing" >&2
+  fi
 fi
 exit "$rc"

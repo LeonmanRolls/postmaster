@@ -41,7 +41,9 @@
 # the session of the repository it was cut from. <name> labels the tab or window and the pane's
 # title, and names the thread where the harness can (POSTMASTER_LAUNCH_NAME, read by launch.sh).
 # If --out is set, its absolute path also reaches launch.sh as POSTMASTER_EVENT_STREAM so that a
-# run can retain the harness's durable session beside that event stream.
+# run can retain the harness's durable session beside that event stream. For a run launch,
+# --role reaches a run's launch.sh command as POSTMASTER_LAUNCH_ROLE; it is the explicit role
+# used in its usage record, and is removed before the harness starts.
 # Pass a role-specific `host.sh name` result as the launch name and pass the dispatch separately,
 # so the ticket title labels only the run space and never passes through a shell. A pane shows
 # the stream through view-stream.sh. A launch carries its own pane's
@@ -1134,7 +1136,7 @@ runner() {
 
   # The launch's environment is its caller's, except for identity: which pane it is in comes
   # from where it actually runs, so nothing it reports lands in its caller's pane.
-  local drop="POSTMASTER_LAUNCH_NAME POSTMASTER_EVENT_STREAM $PANE_IDS" keep=""
+  local drop="POSTMASTER_LAUNCH_NAME POSTMASTER_LAUNCH_ROLE POSTMASTER_EVENT_STREAM $PANE_IDS" keep=""
   case $mode in
     herdr) drop="$drop HERDR_ENV HERDR_SOCKET_PATH HERDR_BIN_PATH"; keep="HERDR_PANE_ID HERDR_TAB_ID HERDR_WORKSPACE_ID HERDR_ENV HERDR_SOCKET_PATH HERDR_BIN_PATH" ;;
     tmux)  drop="$drop TMUX"; keep="TMUX TMUX_PANE" ;;
@@ -1147,6 +1149,11 @@ runner() {
   done
   for k in $keep; do [ -n "${!k+x}" ] && childenv+=("$k=${!k}"); done
   childenv+=("POSTMASTER_LAUNCH_NAME=$name")
+  if [ "${argv[0]##*/}" = launch.sh ]; then
+    case $role in
+      lane|coachman|reviewer) childenv+=("POSTMASTER_LAUNCH_ROLE=$role") ;;
+    esac
+  fi
   [ -z "$out" ] || childenv+=("POSTMASTER_EVENT_STREAM=$out")
 
   # Its streams are emptied once and then only ever appended to, so a second writer on the same
@@ -2123,6 +2130,16 @@ EOF
   cat > "$tmp/cap-dispatch/run.json" <<'EOF'
 {"config":{"limits":{"memory_max":"8G","tasks_max":512,"lane":{"memory_max":"64M","tasks_max":16},"coachman":{"memory_max":"128M","tasks_max":32},"reviewer":{"tasks_max":24}}}}
 EOF
+  cat > "$tmp/caller/launch.sh" <<'EOF'
+#!/usr/bin/env bash
+printf 'role=%s\n' "${POSTMASTER_LAUNCH_ROLE:-unset}"
+EOF
+  chmod +x "$tmp/caller/launch.sh"
+  (cd "$tmp/caller" && hs "$SYS" POSTMASTER_LAUNCH_ROLE=spoof -- run "$NAME" "$repo" \
+    --role reviewer --run "$tmp/cap-dispatch" --out ../logs/role.out --marker ../logs/role.done -- ./launch.sh >/dev/null)
+  marker "$tmp/logs/role.done"
+  check "the run's explicit host role reaches launch.sh and an inherited role cannot replace it" \
+    '[ "$(cat "$tmp/logs/role.out")" = role=reviewer ]' "$(cat "$tmp/logs/role.out")"
   cap_launch() {  # cap_launch <host-impl> <PATH> <prefix> -- <command...>
     local impl=$1 path=$2 prefix=$3; shift 3
     local role_args=()

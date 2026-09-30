@@ -152,7 +152,7 @@ None.
   values in each harness's exact event shape for each harness in
   `harnesses.md`'s table; `scripts/usage.test.ts` pairs (with-usage reads the
   figures it carries, no-usage reads absent and never zero) through `bun test`.
-- [ ] T002 [P] [AC1] Per-launch records: one usage record per events stream
+- [x] T002 [P] [AC1] Per-launch records: one usage record per events stream
   beside the stream, with role, lane, harness and only the figures reported;
   call it from `scripts/launch.sh` through Bun after `export-session.sh` on
   every run launch, resume and review, best-effort, with role and lane passed
@@ -160,12 +160,12 @@ None.
 - [x] T003 [P] [AC2] Closing sum: `sum` over the run's usage records per role and
   lane, `not reported` for an absent figure, partial coverage marked, harnesses
   that report nothing named; never a missing figure as zero.
-- [ ] T004 [AC1] [AC3] `skills/postmaster/harnesses.md`: a Usage subsection naming
+- [x] T004 [AC1] [AC3] `skills/postmaster/harnesses.md`: a Usage subsection naming
   where each harness reports input/output tokens and cost, and the new script as
   the adapter's executable form of that reading.
-- [ ] T005 [AC2] `skills/postmaster/coachman.md` Stage 4: the final `run-log.md`
+- [x] T005 [AC2] `skills/postmaster/coachman.md` Stage 4: the final `run-log.md`
   entry and the ship card carry the sum block as the cost; a figure no harness
   reported is never written as zero.
-- [ ] T006 [AC3] `.postmaster/project.toml`: the gate runs the new tests;
+- [x] T006 [AC3] `.postmaster/project.toml`: the gate runs the new tests;
   update the shows line's count; keep `skill-refs.sh` and the rest of the gate
   green.
