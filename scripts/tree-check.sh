@@ -143,6 +143,18 @@ if [ "${1:-}" = "--self-test" ]; then
   }
   r=$(repo) && { cd "$r" || exit 2
     base=$(git rev-parse HEAD)
+    commit_file "$r" "raw/trials/t413/$SUSPECT.txt" "just public words here."
+    head=$(git rev-parse HEAD)
+    out=$(bash "$HERE/tree-check.sh" "$base" "$head" 2>"$tmp/err"); code=$?
+    { [ "$code" -eq 1 ] && printf '%s' "$out" | grep -qF ':0: email'; } \
+      && printf '  ok   an added raw/ file with a shaped name fails at line 0\n' \
+      || { printf '  FAIL an added raw/ file with a shaped name fails at line 0: exit %s\n' "$code"; fails=$((fails+1)); }
+    if printf '%s' "$out" | grep -qF -- "$SUSPECT" || grep -qF -- "$SUSPECT" "$tmp/err"; then
+      printf '  FAIL a name fault prints no value\n'; fails=$((fails+1))
+    else printf '  ok   a name fault prints no value\n'; fi
+  }
+  r=$(repo) && { cd "$r" || exit 2
+    base=$(git rev-parse HEAD)
     commit_file "$r" .postmaster/verify/checks.json 'run record'
     ( cd "$r" && git rm -q -- .postmaster/verify/checks.json && git commit -qm "remove the record" )
     head=$(git rev-parse HEAD)
@@ -357,8 +369,8 @@ redact() {  # redact <path>: the path with every shaped span removed
   printf '%s' "$safe"
 }
 
-SEENFILE=""; SCANERR=""; BLOBF=""; ENUMF=""
-tmp_cleanup() { for t in "$SEENFILE" "$SCANERR" "$BLOBF" "$ENUMF"; do [ -n "$t" ] && rm -f -- "$t"; done; }
+SEENFILE=""; SCANERR=""; BLOBF=""; ENUMF=""; NAMEF=""
+tmp_cleanup() { for t in "$SEENFILE" "$SCANERR" "$BLOBF" "$ENUMF" "$NAMEF"; do [ -n "$t" ] && rm -f -- "$t"; done; }
 trap tmp_cleanup EXIT
 SEENFILE=$(mktemp) || fail "could not stage the scan"
 seen_has() { grep -qF -x -- "$1" "$SEENFILE" 2>/dev/null; }
@@ -426,6 +438,24 @@ scan_blob() {  # scan_blob <ref> <path> <skip|fail>: scan one blob for faults
     done <<<"$out"
   fi
   rm -f -- "$blob"; BLOBF=""
+  # The added name publishes too: scan it with marker syntax inert,
+  # reported at line 0 like the range scan reports names.
+  NAMEF=$(mktemp) || fail "could not stage the scan"
+  printf '%s\n' "$2" > "$NAMEF"
+  SCANERR=$(mktemp) || fail "could not stage the scan"
+  nameout=$(POSTMASTER_DETECTIONS_LOG= bash "$SCRUB" --files-inert "$NAMEF" 2>"$SCANERR"); namecode=$?
+  cat "$SCANERR" >&2; rm -f -- "$SCANERR"; SCANERR=""
+  rm -f -- "$NAMEF"; NAMEF=""
+  case $namecode in 0|1) ;; *) fail "the scan could not finish" ;; esac
+  if [ "$namecode" -eq 1 ]; then
+    safe=$(redact "$2")
+    while IFS= read -r ln; do
+      kind=${ln##*: }
+      note "${safe}:0: ${kind}"
+      bash "$SCRUB" --log-detection "$kind" "$2" 0 2>/dev/null \
+        || fail "the detections log could not be written"
+    done <<<"$nameout"
+  fi
 }
 
 # Staged additions are scanned as staged blobs: the worktree copy may already

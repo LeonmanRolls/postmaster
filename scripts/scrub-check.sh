@@ -991,8 +991,8 @@ def run_log_detection(args):
         number = int(line)
     except ValueError:
         notice("--log-detection takes the finding's line number")
-    if number < 1:
-        notice("--log-detection takes the finding's line number")
+    if number < 0:
+        notice("--log-detection takes the finding's line number, 0 for a name")
     if commit and not re.fullmatch(r"[0-9a-f]{40}", commit):
         notice("--log-detection takes a full commit id or nothing")
     log_detection(rule, file, number, commit)
@@ -1699,12 +1699,24 @@ def self_test(root):
                     (["--log-detection", "marker", "f.txt", "1"], "the marker rule"),
                     (["--log-detection", "no-such-rule", "f.txt", "1"], "an unknown rule"),
                     (["--log-detection", "email", "f.txt", "x"], "a bad line"),
-                    (["--log-detection", "email", "f.txt", "0"], "line zero"),
+                    (["--log-detection", "email", "f.txt", "-1"], "a negative line"),
                     (["--log-detection", "email", "f.txt", "1", "short"], "a short commit"),
                     (["--log-detection", "email"], "missing arguments")):
                 refused = run_child(bad_args, repo)
                 ok("--log-detection refuses %s, exit 2" % label, bool(
                     refused and refused.returncode == 2 and not refused.stdout))
+            log0 = scratch / "called0.jsonl"
+            called0 = run_child(
+                ["--log-detection", "email", "notes/contact.txt", "0", logged], repo,
+                {"POSTMASTER_DETECTIONS_LOG": str(log0)})
+            try:
+                called0_lines = log0.read_text(encoding="utf-8").splitlines()
+                called0_entry = json.loads(called0_lines[0]) if len(called0_lines) == 1 else None
+            except (OSError, ValueError):
+                called0_entry = None
+            ok("--log-detection accepts line 0 for a name finding", bool(
+                called0 and called0.returncode == 0 and not called0.stdout
+                and called0_entry is not None and called0_entry.get("line") == 0))
             noop = run_child(["--log-detection", "email", "f.txt", "1"], repo)
             ok("--log-detection with no log set appends nothing, exit 0", bool(
                 noop and noop.returncode == 0 and not noop.stdout))
