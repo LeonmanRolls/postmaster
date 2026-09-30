@@ -199,15 +199,15 @@ Change:
 
 ## Tasks
 
-- [ ] T001 [P] [AC1] Write `scripts/synthesis-shares.ts`: from git, count the synthesis's added
+- [x] T001 [P] [AC1] Write `scripts/synthesis-shares.ts`: from git, count the synthesis's added
   six-word runs per lane by name, shared and neither, against each lane's added runs, split
   into code and docs, leaving out the files Decision 7 names, with nothing from the target
   run or loaded (Decision 11); functional style, pure core, effects at the edges.
-- [ ] T002 [P] [AC3] Write `scripts/synthesis-shares.test.ts`: the script's controls listed
+- [x] T002 [P] [AC3] Write `scripts/synthesis-shares.test.ts`: the script's controls listed
   under Testing (wholly one lane, split between both, identical in both, coachman alone,
   exclusions, three lanes) as bun tests on small git repositories, each read back as exact
   integers.
-- [ ] T003 [AC2] Add `--record`: write `<dispatch>/shares.json` with the pinned commits, the
+- [x] T003 [AC2] Add `--record`: write `<dispatch>/shares.json` with the pinned commits, the
   run length, exclusions, and exact counts and shares per kind and lane; print the greppable
   `SHARES:` line.
 - [ ] T004 [AC2] [AC4] Edit `skills/postmaster/coachman.md`: run the script at the end of
