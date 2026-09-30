@@ -486,10 +486,11 @@ from it.
   messages to review grade; run the project's FULL gate with its real command.
 
   **Measure the committed synthesis before recording the SYNTHESIS line.** From the synthesis
-  worktree, run the pinned script with explicit commit IDs. Pass one `--lane "<name>=<commit>"`
-  for every workhorse, including lanes that stayed at BASE, and pass `--oracle <commit>` when
-  the run has an oracle commit. Run Bun with target-repository env loading disabled and an
-  empty config; the script disables external diff drivers and textconv when it reads Git:
+  worktree, run the pinned script with explicit commit IDs: the base from the manifest, the
+  final synthesis HEAD, and every lane's committed head, including lanes that stayed at BASE.
+  Pass one `--lane "<name>=<commit>"` per lane. Include `--oracle <commit>` when the run has
+  an oracle commit. Run Bun with target-repository env loading disabled and an empty config;
+  the script disables external diff drivers and textconv when it reads Git:
 
   ```sh
   SYNTHESIS_HEAD=$(git rev-parse HEAD)
@@ -501,9 +502,9 @@ from it.
   ```
 
   Replace the example lane variables with every lane in the run; omit `--oracle` when there
-  is no oracle commit. The command writes `<dispatch>/shares.json` once and prints the
-  greppable `SHARES:` line. Use that measurement as evidence when ranking; it does not set
-  the ranking.
+  is no oracle commit. Add `--oracle "$ORACLE_COMMIT"` before `--record` when there is one.
+  The command writes `<dispatch>/shares.json` once and prints the greppable `SHARES:` line.
+  Use that measurement as evidence when ranking; it does not set the ranking.
 
   **Record the coachman's account in one greppable line in `run-log.md`:**
 
@@ -512,10 +513,11 @@ from it.
   ```
 
   Keep the `SHARES:` line beside this `SYNTHESIS:` line in `run-log.md` and on checkpoint 1.
-  `took=` stays the coachman's own account and must name a contribution from every lane that produced work, or say explicitly why a
-  lane contributed nothing. "I read it and took none of it, because X" is a real answer, and an
-  absent lane is not the same as a rejected one. Rank every lane regardless, the lead horse first and the wheelers after it: second place
-  is data too, and this line is the only record of how lanes IMPLEMENT rather than how they
+  `took=` stays the coachman's own account. It must name a contribution from every lane that
+  produced work, or say explicitly why a lane contributed nothing. "I read it and took none
+  of it, because X" is a real answer, and an absent lane is not the same as a rejected one.
+  Rank every lane regardless, the lead horse first and the wheelers after it: second place is
+  data too, and this line is the only record of how lanes IMPLEMENT rather than how they
   review. `oracle=` is each lane's result on the blind acceptance tests, or `none` with the
   reason on the card; it is the only field on this line that a model did not decide.
 
