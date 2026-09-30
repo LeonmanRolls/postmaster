@@ -20,7 +20,7 @@ cards, and you never do its job.
 | `<runs>/ledger.jsonl` | every action of every run, appended by `<tool>/scripts/log-action.sh` |
 | `<runs>/postmaster/` | your own dispatch directory: `brief.md`, `actions.jsonl`, `ESCALATION.md` to the user |
 | `<runs>/<TICKET>/` | one run: the waybill, manifest, logs, cards, hand-offs (`coachman.md`, Where things live) |
-| `<repo>/.worktrees/<TICKET>` | the synthesis worktree you cut at dispatch, branch `<TICKET>` |
+| `<wt>/<TICKET>` | the synthesis worktree you cut at dispatch, branch `<TICKET>`; `<wt>` is `<tool>/scripts/worktree-path.sh root <repo>`, outside the project folder |
 | `<repo>/.postmaster/project.toml` | what the project requires of a run, if it declares one; the one file it may commit |
 | `<repo>/.postmaster/settings.toml` | this person's choices on this machine; never committed |
 
@@ -117,9 +117,10 @@ For the next ticket in order, when the run ceiling (`team.max_runs`) has room:
    change: it goes to the user, and nothing is dispatched. The project's declared checks are
    checked too: `<tool>/scripts/verify.sh checks <repo>` exits 0, and a refusal, naming what
    `.postmaster/project.toml` must change, goes to the user the same way.
-3. **Exclude worktrees without a commit,** before any is cut, or the next pre-flight reads
-   them as dirt: `grep -qxF '.worktrees/' <repo>/.git/info/exclude || echo '.worktrees/' >>
-   <repo>/.git/info/exclude`.
+3. **Exclude stray working copies without a commit,** before any is cut, or the next pre-flight
+   reads them as dirt: `grep -qxF '.worktrees/' <repo>/.git/info/exclude || echo '.worktrees/' >>
+   <repo>/.git/info/exclude`. A run's own copies are never cut there; that name stays ignored so
+   a leftover from an older layout is never committed.
 4. **Create the run directory** `<runs>/<TICKET>/` with `logs/`, `audit/` and `render/`, and the
    manifest: `{"stage": "dispatched", "leg": 1, "base": "<sha>", "lanes": {}, "coachman":
    {"legs": {}}}`. You own `leg`, `base`, `coachman` and the terminal stages, `done` and
@@ -139,9 +140,11 @@ For the next ticket in order, when the run ceiling (`team.max_runs`) has room:
    with the config error, tell the user what to fix, set the undispatched run to `abandoned`,
    and do not cut worktrees or move the ticket in progress.
 5. **Cut the synthesis worktree** at BASE, the sha you recorded from `git -C <repo> rev-parse
-   HEAD` on the default branch: `git -C <repo> worktree add .worktrees/<TICKET> -b <TICKET>
+   HEAD` on the default branch, outside the project folder: `WT=$(<tool>/scripts/worktree-path.sh
+   root <repo>)` then `mkdir -p "$WT"` and `git -C <repo> worktree add "$WT/<TICKET>" -b <TICKET>
    <sha>`. The coachman's cwd is that worktree from its first leg, so the project's ambient
-   context loads for it.
+   context loads for it. Working copies live under `<wt>` (`<tool>/scripts/worktree-path.sh root <repo>`), never
+   under `<repo>/.worktrees/`, so a project tool that walks the folder never reads them.
 6. **Write `brief.md`** from the template in `SKILL.md`: the `turnpikes:` line step 1's check
    printed, whole, under the waybill's title, then the ticket verbatim, the project profile (gate,
    build, browser suite, the checks as `verify.sh record` printed them, docs to read first,
@@ -189,11 +192,11 @@ file; the postmaster keeps using its main `<tool>` for every other supervision s
    exited marker first:
 
    ```sh
-   <rt>/scripts/host.sh run "$(<rt>/scripts/host.sh name <dispatch> coachman <leg-name> <n>)" <repo>/.worktrees/<TICKET> \
+   <rt>/scripts/host.sh run "$(<rt>/scripts/host.sh name <dispatch> coachman <leg-name> <n>)" <wt>/<TICKET> \
        --under <dispatch> --role coachman --run <dispatch> \
        --out <dispatch>/logs/coachman-leg-<n>-events.jsonl --err <dispatch>/logs/coachman-leg-<n>.err \
        --marker <dispatch>/.leg-<n>-exited \
-       -- <rt>/scripts/launch.sh launch coachman <repo>/.worktrees/<TICKET> <dispatch>/leg-<n>-prompt.txt --leg <leg-name> \
+       -- <rt>/scripts/launch.sh launch coachman <wt>/<TICKET> <dispatch>/leg-<n>-prompt.txt --leg <leg-name> \
        --run <dispatch>
    ```
 
@@ -211,11 +214,11 @@ file; the postmaster keeps using its main `<tool>` for every other supervision s
    this process's errors, and `host.sh` clears the leg's exited marker:
 
    ```sh
-   <rt>/scripts/host.sh run "$(<rt>/scripts/host.sh name <dispatch> coachman <leg-name> <n>)" <repo>/.worktrees/<TICKET> --append \
+   <rt>/scripts/host.sh run "$(<rt>/scripts/host.sh name <dispatch> coachman <leg-name> <n>)" <wt>/<TICKET> --append \
        --under <dispatch> --role coachman --run <dispatch> \
        --out <dispatch>/logs/coachman-leg-<n>-events.jsonl --err <dispatch>/logs/coachman-leg-<n>.err \
        --marker <dispatch>/.leg-<n>-exited \
-       -- <rt>/scripts/launch.sh resume <name> <repo>/.worktrees/<TICKET> <thread-id> <dispatch>/leg-<n>-resume-<time>.txt --leg <leg-name> \
+       -- <rt>/scripts/launch.sh resume <name> <wt>/<TICKET> <thread-id> <dispatch>/leg-<n>-resume-<time>.txt --leg <leg-name> \
        --run <dispatch>
    ```
 
@@ -278,7 +281,7 @@ Each `NEXT` names the act:
 `git status`. Treat every uncommitted change as unverified. Log `handoff-accept` and finish
 the leg." Move the leg's stream to `<dispatch>/logs/coachman-leg-<n>-walled-events.jsonl`, then
 launch the takeover through the wrapper of Stage C step 3, with `<rt>/scripts/launch.sh launch
-coachman_fallback <repo>/.worktrees/<TICKET> <dispatch>/leg-<n>-takeover.txt --run <dispatch>`
+coachman_fallback <wt>/<TICKET> <dispatch>/leg-<n>-takeover.txt --run <dispatch>`
 in place of the coachman's launch. Record its thread id from the new stream (`harnesses.md`) as
 `coachman.legs.<n>.thread_id`, with `coachman_fallback` as its `name`.
 
@@ -395,9 +398,9 @@ On `.card-ready`, read `<dispatch>/card.md` and `<dispatch>/handoff-3.md`:
    as `coachman.md` says, and end the leg", then wait for its done marker. On exit 1, tell the
    user what it printed.
 2. **Tear down** the synthesis worktree from outside it, once the last leg's process has exited
-   (`.leg-3-exited`): close its space first (`<tool>/scripts/host.sh close <repo>/.worktrees/<TICKET>`;
+   (`.leg-3-exited`): close its space first (`<tool>/scripts/host.sh close <wt>/<TICKET>`;
    on exit 2 the user has it open or something in it still runs, so stop and report), then `git
-   -C <repo> worktree remove .worktrees/<TICKET>`, never with force unless the tree is clean and
+   -C <repo> worktree remove <wt>/<TICKET>`, never with force unless the tree is clean and
    the card confirmed it, and log `teardown`. The workhorse worktrees are the coachman's; if any survive, remove them the
    same way after preserving any stray file into `<dispatch>/stray/`. Teardown uses the live
    checkout's host.sh, never the run's pinned one: it must work even when the pin is gone or
@@ -425,10 +428,10 @@ On `.card-ready`, read `<dispatch>/card.md` and `<dispatch>/handoff-3.md`:
 6. **Dispatch the next ticket** in order, Stage B.
 
 **Abandoning a run** happens only on the user's word for that run: log `note` with the
-word, stop what still runs in each worktree the run created (`<tool>/scripts/host.sh stop <wt>`)
+word, stop what still runs in each worktree the run created (`<tool>/scripts/host.sh stop <worktree>`)
 while the run still counts as in flight and holds its pin, then set the stage with
 `<tool>/scripts/stage.sh <dispatch> abandoned postmaster`, remove each worktree after
-preserving stray files and closing its space (`<tool>/scripts/host.sh close <wt>`), release the run's
+preserving stray files and closing its space (`<tool>/scripts/host.sh close <worktree>`), release the run's
 pinned tool (`<tool>/scripts/run-meta.sh release <dispatch>`, as Stage G step 3 does; log the result
 as `teardown`), and move the ticket back to todo or to cancelled as the user says. The dispatch
 directory stays. Then put the run's tool faults to the user (Tool faults).
