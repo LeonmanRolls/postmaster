@@ -178,7 +178,8 @@ describe("fixture lane scoring", () => {
   });
 
   test("score reports passing, failing, missing and unbuildable lane branches without changing main's verdict", () => {
-    const tempRoot = mkdtempSync(join(TOOL, ".fixture-lanes-test-"));
+    mkdirSync(join(TOOL, ".postmaster"), { recursive: true });
+    const tempRoot = mkdtempSync(join(TOOL, ".postmaster/fixture-lanes-test-"));
     try {
       const repoSetup = makeRepo(tempRoot, { solvedMain: true, lanes: ["pass", "fail", "build"] });
       const dispatch = makeDispatch(repoSetup.repo, repoSetup.base, ["pass", "fail", "missing", "build"]);
