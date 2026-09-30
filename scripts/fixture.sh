@@ -179,17 +179,19 @@ def check_hidden(dispatch, app):
     ok, detail, out = hidden(found[0], app)
     return ok, "%s, from the waybill: %s on main" % (found[0], detail), out
 
-def check_gate(app):
-    code, out = sh([SCRIPTS / "discover-project.sh", app])
+def check_gate(repo, branch):
+    """The gate on <branch>, from a clean checkout outside the project folder
+    (scripts/clean-checkout.ts), so the run's working copies under .worktrees/ never reach it."""
+    code, out = sh([SCRIPTS / "discover-project.sh", repo])
     gate = next((l[len("gate="):] for l in out.splitlines() if l.startswith("gate=")), "")
     if not gate:
         return False, "scripts/discover-project.sh found no gate", out
-    install = ["npm", "ci"] if (app / "package-lock.json").is_file() else ["npm", "install"]
-    code, out = sh(install + ["--prefer-offline", "--no-audit", "--no-fund"], cwd=app)
-    if code != 0:
-        return False, "%s on main: %s" % (" ".join(install), exited(code)), out
-    code, out = sh(["bash", "-c", gate], cwd=app)
-    return code == 0, "%s on main: %s" % (gate, exited(code)), out
+    lock = (repo / "package-lock.json").is_file()
+    install = "npm ci --prefer-offline --no-audit --no-fund" if lock \
+        else "npm install --prefer-offline --no-audit --no-fund"
+    script = "set -e\n%s\n%s\n" % (install, gate)
+    code, out = sh(["bun", SCRIPTS / "clean-checkout.ts", str(repo), branch, "bash", "-c", script])
+    return code == 0, "%s on %s: %s" % (gate, branch, exited(code)), out
 
 def read_actions(dispatch):
     path = dispatch / "actions.jsonl"
@@ -315,7 +317,7 @@ def score(dispatch, repo):
             print("fixture: could not export main from %s: %s" % (repo, tail(out, 3)), file=sys.stderr); sys.exit(1)
         legs = legs_of(dispatch, manifest)
         results = [("hidden-tests",) + check_hidden(dispatch, app),
-                   ("gate",) + check_gate(app),
+                   ("gate",) + check_gate(repo, "main"),
                    ("stages",) + check_stages(dispatch) + ("",),
                    ("markers",) + check_markers(dispatch, legs) + ("",),
                    ("handoffs",) + check_handoffs(dispatch, legs) + ("",),

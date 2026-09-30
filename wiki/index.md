@@ -108,6 +108,9 @@ Why the design is shaped as it is.
 - [A project's .postmaster/ holds its settings and every run's record](concepts/project-settings.md):
   **claimed**. Optional, gitignored whole, shared through one narrow file; run artifacts live
   with the project so two checkouts with the same basename no longer share a ledger.
+- [A gate on the default branch after a merge runs from a clean checkout](concepts/clean-checkout-gates.md):
+  **claimed**. The run's working copies stay under `.worktrees/`; the flow's post-merge gate
+  runs from a clean checkout of the branch outside the project folder, so it never reads them.
 
 ## Sources
 

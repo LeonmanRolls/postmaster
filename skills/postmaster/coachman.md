@@ -956,10 +956,20 @@ Set the stage first: `<tool>/scripts/stage.sh <dispatch> shipping`.
    `.card-ready`, and exit; the word arrives as a resume of this leg's thread, and so does a
    withheld grant with its reasons. On a withheld grant, address the reasons, update the card,
    touch `.card-ready` again, and exit again. Only the user abandons a run. On it: check out the project's default branch
-   in the main checkout and `git merge --no-ff <ticket-branch>` (merge, never rebase), move the
+   in the main checkout and `git merge --no-ff <ticket-branch>` (merge, never rebase), then
+   **verify the merged default branch** (step 6), move the
    ticket to done, and set the stage: `<tool>/scripts/stage.sh <dispatch> shipped`. Never escalate a grant the waybill gives the postmaster up to
    the user.
-6. If the project has an origin, pushing afterwards is the user's call, never part of
+6. **Gate the merged default branch from a clean checkout**, immediately after the local
+   merge, never from the main checkout where the run's working copies still sit under
+   `.worktrees/`. Run the recorded gate through Bun:
+   `bun <tool>/scripts/clean-checkout.ts <repo> <default-branch> bash -c '<gate>'`, with the
+   gate as the waybill's project profile names it and the exit on the card and in the log
+   (`<tool>/scripts/log-action.sh <dispatch> coachman gate <default-branch> "post-merge, clean
+   checkout, exit <n>"`). A non-zero exit is a red merge to address before the ticket moves:
+   the merge is already local, so fix forward on the default branch or revert it; never push.
+   [Why the gate runs from a clean checkout](../../wiki/concepts/clean-checkout-gates.md)
+7. If the project has an origin, pushing afterwards is the user's call, never part of
    this flow.
 
 ## Stage 4 (leg 3, after the merge): aftercare and teardown
