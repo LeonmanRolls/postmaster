@@ -1,0 +1,10 @@
+{
+  "name": "postmaster",
+  "private": true,
+  "devDependencies": {
+    "oxlint": "1.86.0"
+  },
+  "scripts": {
+    "lint": "bun x --bun oxlint"
+  }
+}

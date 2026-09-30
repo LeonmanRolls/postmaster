@@ -1,0 +1,5 @@
+# The empty Bun config. The coachman passes this as --config= when running a postmaster
+# script from a target's worktree, so Bun loads nothing the target configures (no bunfig
+# preload). Keep this file empty of preload and env settings; [install] is a no-op section
+# Bun accepts as a valid config.
+[install]
