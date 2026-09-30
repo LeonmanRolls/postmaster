@@ -1,0 +1,6 @@
+{"thread_id":"thread-madeup-1","type":"thread.started"}
+{"item":{"id":"item_0","type":"command_execution"},"type":"item.completed"}
+{"type":"turn.started"}
+{"type":"turn.completed","usage":{"input_tokens":4120,"output_tokens":310}}
+{"type":"turn.started"}
+{"type":"turn.completed","usage":{"input_tokens":9870,"output_tokens":540}}

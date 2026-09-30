@@ -1,0 +1,3 @@
+{"delta":"working","type":"chunk"}
+{"token_usage":{"completion_tokens":2,"prompt_tokens":10},"type":"chunk"}
+{"total_cost_usd":0.003,"type":"end","usage":{"input_tokens":40,"output_tokens":6}}

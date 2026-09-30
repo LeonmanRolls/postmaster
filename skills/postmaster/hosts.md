@@ -109,6 +109,26 @@ pane. `spawn`, `send`, `wait` and `read` exit 3 on `none`.
   harness's own Herdr integration reports to whatever pane those name. Its environment reaches
   the pane through a FIFO and a pipe, never a file on disk or a command line.
   [Why a launch must own its pane](../../wiki/concepts/herdr-headless-launches.md)
+- **A launch never carries its caller's Claude Code session identity or its caller's Herdr
+  identity.** The caller's environment is handed over minus:
+  - `CLAUDECODE`, `CLAUDE_PID`, `CLAUDE_CODE_SESSION_ID`, `CLAUDE_CODE_CHILD_SESSION`,
+    `CLAUDE_CODE_ENTRYPOINT`, `CLAUDE_CODE_EXECPATH`, `CLAUDE_CODE_SESSION_ATTENDED`,
+    `CLAUDE_CODE_MESSAGING_SOCKET`, `CLAUDE_CODE_MESSAGING_TOKEN`,
+    `CLAUDE_CODE_TOOL_USE_ID`, and the families
+    `CLAUDE_CODE_SESSION_*`, `CLAUDE_CODE_MESSAGING_*`, `CLAUDE_CODE_CHILD_*` — a lane that
+    inherits the calling session's identity can message it or keep no session record of its own.
+  - every `HERDR_*` of the caller's. In a Herdr pane the launch gets only that pane's own six
+    (`HERDR_PANE_ID`, `HERDR_TAB_ID`, `HERDR_WORKSPACE_ID`, `HERDR_ENV`, `HERDR_SOCKET_PATH`,
+    `HERDR_BIN_PATH`); with tmux or no host, none. A lane that inherits the caller's Herdr
+    variables can drive its caller's Herdr session.
+
+  Every other variable of the caller's still reaches the launch, `POSTMASTER_*` settings and a
+  harness's own configuration (such as `CLAUDE_CONFIG_DIR`, `CLAUDE_EFFORT`, `ANTHROPIC_*`, and
+  configuration under the `CLAUDE_CODE_` prefix that is not in the families above) included, and
+  so does the lane's env file once `launch.sh` sources it. The strip is a deny-list in
+  `<tool>/scripts/host.sh`'s runner: to add a name or a family, extend that list and the
+  matching control in `--self-test`. Never widen it to the whole `CLAUDE_CODE_*` prefix and
+  never replace it with an allow-list; both would drop configuration a launch needs.
 - **The ticket belongs to the run's space; a launch label carries only launch identity.**
   `<tool>/scripts/host.sh name <dispatch>` prints the ticket number and title for the run level.
   Its launch forms build labels from the run's recorded config: `coachman · <model> · leg <n>`,

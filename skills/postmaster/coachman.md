@@ -27,6 +27,7 @@ half, how a run is prepared and what the waybill carries, is `SKILL.md`. You do 
 | `<dispatch>/manifest.json` | `stage`, `leg`, `base`, `lanes.<lane>.{thread_id, outcome, spec_commit}`, `coachman.legs.<n>.{thread_id, name}`; the postmaster creates it and owns `leg`, `base`, `coachman` and the terminal stages, you own `lanes` and every stage before those; change `stage` only with `<tool>/scripts/stage.sh`, update the rest in place, never rewrite the file |
 | `<dispatch>/run-log.md` | running narrative, written only through `<tool>/scripts/run-log.sh`, which puts the time on every entry and times every section |
 | `<dispatch>/run.json` | the run's fixed facts: postmaster commit and its pinned checkout (`tool` in the waybill), config, harness versions; written once at dispatch by the postmaster, never edited; every launch and resume in the run takes its config from here (`--run <dispatch>`) and its scripts from that checkout |
+| `<dispatch>/shares.json` | the synthesis text-share measurement: base, synthesis, lane and oracle commits, exclusions, and exact counts and shares by file kind; written once by `<tool>/scripts/synthesis-shares.ts` |
 | `<dispatch>/checks.json` | the checks the run is held to, recorded once at dispatch by `<tool>/scripts/verify.sh record`; never edited |
 | `<dispatch>/journey/` | your journey reports, one per commit walked, at the path `<tool>/scripts/verify.sh journey-path` gives |
 | `<worktree>/.postmaster/verify/` | a worktree's copy of the run's checks and ticket, written by `<tool>/scripts/verify.sh arm`; git ignores it |
@@ -484,6 +485,27 @@ from it.
   Then build the synthesis commit by commit with a reason for each choice. Amend commit
   messages to review grade; run the project's FULL gate with its real command.
 
+  **Measure the committed synthesis before recording the SYNTHESIS line.** From the synthesis
+  worktree, run the pinned script with explicit commit IDs: the base from the manifest, the
+  final synthesis HEAD, and every lane's harvested head, including lanes that stayed at BASE.
+  Pass one `--lane <name>=<commit>` per lane, and `--oracle <commit>` when the run has an
+  oracle commit. Run Bun with target-repository env loading disabled and no config file;
+  the script disables external diff drivers and textconv when it reads Git:
+
+  ```sh
+  SYNTHESIS_HEAD=$(git rev-parse HEAD)
+  SHARES_LINE=$(bun --no-env-file --config=/dev/null <tool>/scripts/synthesis-shares.ts \
+    --base <base> --synthesis "$SYNTHESIS_HEAD" \
+    --lane <lane>=<harvested-head> [--lane <lane>=<harvested-head> ...] \
+    [--oracle <oracle-commit>] --record <dispatch>)
+  <tool>/scripts/run-log.sh <dispatch> "$SHARES_LINE"
+  ```
+
+  The command writes `<dispatch>/shares.json` once and prints the greppable `SHARES:` line.
+  Keep that line beside the SYNTHESIS line in `run-log.md` and on checkpoint 1. Use the
+  measurement as evidence when ranking; it does not set the ranking, and it does not
+  replace `took=`: the counts see text, not ideas the coachman rewrote in its own words.
+
   **Record it in one greppable line in `run-log.md`:**
 
   ```
@@ -509,7 +531,7 @@ from it.
   failed workhorse leaves its branch at BASE and has contributed nothing to read. Record that lane
   DEGRADED rather than absent, say so on the card, and compose from the lanes that produced
   work.
-- **Checkpoint 1 card, then the hand-off:** per-workhorse outcome (or stall); **the SYNTHESIS line, the ranking, what
+- **Checkpoint 1 card, then the hand-off:** per-workhorse outcome (or stall); **the SYNTHESIS and SHARES lines, the ranking, what
   was taken from each lane, what was rejected and why**; the code-verified evidence behind each
   choice; the convention gaps found; what was dropped; gate status; the checks, as `verify.sh run`
   printed them on each workhorse's branch and then on the committed synthesis
@@ -941,6 +963,10 @@ Set the stage first: `<tool>/scripts/stage.sh <dispatch> shipping`.
    it. **It also lists every bug or security finding left open,** with its lens and
    disposition, one line each. Every P3 deferred after round 1 includes its originating round.
 
+   **The ship card carries the cost under `## Cost`,** as `bun <tool>/scripts/usage.ts sum <dispatch>` prints it: the
+   run's tokens and cost per role and lane, and any harness that reported nothing. Quoted, never
+   hand-recomputed, and a figure no harness reported is never written as zero.
+
    **The ship card lists the turnpikes the run passed through,** exactly the waybill's, each
    with the rounds it ran and its result as the step that ran it records them
    (`checkpoint-review.md`, for a review turnpike), or `none` when
@@ -991,9 +1017,14 @@ when the run has no style findings. Log a `note` with its last line, and name th
 change there is a ticket, filed after the merge on the user's word.
 [Why style findings feed the project's linter](../../wiki/concepts/review-loop.md)
 
-Final `run-log.md` entry (per-lane win record, findings counts, cost) plus a closing dated
-comment on the ticket. Leave the stage at `shipped`: the postmaster sets `done` when it closes
-the run, and that appends the run's stage timings to `run-log.md`. Never write timings by hand.
+Run `bun <tool>/scripts/usage.ts sum <dispatch>` and put its output verbatim under `## Cost` on the
+ship card and in the final `run-log.md` entry with the per-lane win record and findings counts.
+Do not hand-recompute a figure or write a missing figure as zero. If the sum command fails, put
+the error on the card and in the log as unreadable. When the postmaster sets `done` after this
+leg exits, `stage.sh` refreshes both records from all launch usage records, including this leg's
+final resume. Leave the stage at `shipped` until then; the postmaster's terminal stage appends
+the run's stage timings to `run-log.md`. Never write timings by hand. A closing dated comment
+on the ticket carries the run summary.
 Never delete the dispatch directory or the manifest, they are the run's history. Archive
 finished threads where the harness has an archive form (`harnesses.md`). After the merge, tear
 down the workhorse worktrees, preserving any stray file first (a workhorse killed mid-run leaves

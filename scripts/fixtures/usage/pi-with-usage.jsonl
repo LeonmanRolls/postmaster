@@ -1,0 +1,2 @@
+{"message":{"role":"user"},"type":"message_end"}
+{"message":{"role":"assistant","usage":{"cost":{"total":0.012},"input":50,"output":7}},"type":"message_end"}

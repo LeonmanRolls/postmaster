@@ -24,6 +24,110 @@ copied from their durable stores; grok, Muse Code and MiMo Code use their export
 Antigravity has no export command, so its complete event stream is kept as the session transcript.
 The export and event stream are separate files in the project-local run record.
 
+`thread-id <events-file>` prints the thread id a stream records, from its shape; `transient
+<err-file> [<stream-file>]` exits 0 when a leg's end is a transient provider error this file
+names (below).
+
+| harness | thread id in its stream |
+|---|---|
+| codex | `thread_id` |
+| claude | `session_id` |
+| grok | `id` on a session record, else `session_id`, `sessionId`, `conversation_id` or `conversationId` |
+| agy | `conversationId` |
+| pi | `id` on the `session` record |
+| muse | `stream.id` on a `session` record |
+| mimo | `sessionID` |
+
+## Transient provider errors, any harness
+
+Some ends are the provider's, not the leg's: the model stream dropped, a gateway failed, the
+connection reset. Those are worth resuming on rather than escalating. The set is enumerated in
+`<tool>/scripts/launch.sh` (`transient`), which matches it against the leg's durable record:
+its `.err` file and the error records in its stream tail, never a prompt or a user message.
+This file names the same set:
+
+| name | what it looks like |
+|---|---|
+| model stream idle timeout | `model stream idle timeout`, `stream idle timeout` |
+| gateway failure | `bad gateway`, `service unavailable`, `gateway timeout`, `overloaded`, `502`, `503`, `504`, `529` |
+| stream drop | `stream disconnected`, `SSE error`, `connection reset`, `connection aborted`, `broken pipe` |
+
+The adapter answers one question: may the watcher resume this ending by itself? The
+answer is positive and narrow. An ending resumes only when it carries one of the
+signatures above and no wall-like token anywhere in it; everything else wakes the
+postmaster. A wall is **never** transient: any token stem of quota, limit, exhaust,
+exceed, throttle, billing, budget, credit, payment, usage, slow, quick or too many
+vetoes the resume wherever it appears in what the ending says, in any spelling and at
+any distance — there is no span limit and no word boundary to hide behind. What the
+ending says is its message text: the `.err` lines, non-JSON stream lines, and every
+string value of its error records, under any key. `host:` notice lines in
+`.err` are the host's words, not the child's, and the veto reads past
+them, as the refusal check does. JSON keys,
+field names and numeric payloads are structure, not text, and never count: a `usage`
+key, a `rate_limit` key, a token count of 1429 and a UUID holding 429 are not walls.
+The codes `429` and `402` count only status-shaped, as whole numbers in text or as the
+value of a status or code field. The one exclusion is Claude's `rate_limit_event`
+slowdown notice, which is not an ending and never vetoes. A false veto is a wake,
+which costs one look; a missed wall would be an automatic remount against a wall. The
+fifteen stems live once in `launch.sh` (`wall_tokens`, printed by `launch.sh
+wall-tokens`); the veto matrix is built from that list, a quote corpus beside it
+covers real provider messages verbatim, and each stem is pinned alone, so a stem that
+stops vetoing fails loudly. Usage-bearing codex and claude streams from real runs
+stand beside the corpus as fixtures that must resume. `try again later` and `server
+is busy` carry no stem on purpose: that is transient-overload language, and resuming
+on it is right.
+
+An error record is one the adapter marks: an error-indicating key at any
+depth — `error`, `fail` or `exception` in a type, event, kind, payload
+type, subtype or status value, a truthy `error`, `errors`, `is_error`
+or `error_message` field, or an `outcome` of `error` — wherever in the
+record it sits. Only a truthy value marks: null, false and empty values
+never do. The `.err` lines and non-JSON stream lines are stderr chunks
+and always count. Per harness, as observed:
+
+- codex: the generic rule, with nested `item.type: error` attested in
+  `raw/trials/codex-resume-forms/`. Usage-bearing `turn.completed`
+  records are not error records.
+- claude: the generic rule plus `is_error` on `result` records.
+  Usage-bearing assistant messages are not error records.
+- mimo: the generic rule only; no mimo-specific error shape is attested.
+  Unmarked text parts are ordinary messages, so those streams classify
+  from the `.err` text.
+- muse: the generic rule plus `outcome: error` payloads, and
+  `run.terminal.failed` with its `reason` under the generic rule.
+- pi: the generic rule only (see the exclusion below).
+- grok, agy: the generic rule; unobserved.
+
+Deliberately excluded, at every depth: tool-result subtrees — a record
+or subtree whose type or name is `tool_result` or `tool_execution_end`,
+or that sits under one of those keys. That covers claude's nested
+`tool_result` records and pi's `tool_execution_end` records, and any
+other harness's tool-result shape the adapter identifies. A failed tool
+call's text is the tool's, not the provider's: a coachman's failing
+gate prints cap and limit words all the time, and a provider wall still
+ends the turn through the harness's own error record, where the veto
+sees it: tool output contributes no signal anywhere — not a veto, not
+transient prose, and not a structured code, type or unknown. The
+exclusion is narrow on purpose: a `payload_type` of `tool.result`
+(muse `outcome: error` payloads) is an error record, not a tool's.
+
+Where a record carries a status code or an error type, values come in three classes
+over every post-skip line: the known-transient set (`502`, `503`, `504`, `529`,
+connection-reset and overloaded types) resumes on any record;
+known-harness-internal values (a `completed` status, a `rate_limit_event` slowdown,
+a `2xx`/`3xx` status, an exit code, a generic timeout) are ignored; any other
+numeric status under a code key wakes wherever it sits, and any other string
+under a code or error-name key
+wakes on an error record while on another record it is progress noise. Bare
+record-shape keys (`type`, `name`) are labels, not classifications. Per harness,
+as observed: mimo
+reports errors as prose in text parts, and muse reports prose in the `reason` of
+`run.terminal.failed`. Codex error items and grok, pi and agy error shapes are
+unobserved, so those read prose. Claude additionally emits `rate_limit_event`, which is
+a slowdown notice, not a wall — it appears in successful legs. No harness has yet been
+observed emitting numeric codes or error-type fields; when one does, the structured
+layer reads them.
+
 Every lane runs unrestricted. Its containment is its worktree (`coachman.md`, Lane capability),
 so the bypass form below is passed on every launch AND every resume. The interactive postmaster
 runs unrestricted too, in its harness's interactive form (below). Nothing in the flow depends on
@@ -505,6 +609,33 @@ run in the conversation and started again at once: it returns with the table eve
 is the only form that blocks the conversation, and only for one interval. Never keep the
 watcher anywhere but `host.sh run`: no other keeping has a documented lifetime, and on
 2026-09-28 a watcher kept outside it was killed when memory ran short (#121).
+
+## Usage
+
+`bun <tool>/scripts/usage.ts` is this file's executable form for what a launch cost: it reads the
+input and output tokens each harness reports, and the cost where the harness reports one, from
+the launch's own event stream or session record. A figure the harness did not report is omitted
+and never written as zero; a harness that reports nothing is named as reporting nothing. Its
+paired controls (`bun test <tool>/scripts/usage.test.ts`) are one made-up stream per harness
+that reports usage and one that does not, in each harness's exact event shape below.
+
+| harness | where it reports | input / output | cost | shape source |
+|---|---|---|---|---|
+| codex | the last terminal turn event (`turn.completed`, `turn.failed`, `turn.interrupted`) of `codex exec --json`; turns report cumulative session usage | `usage.input_tokens`, `usage.output_tokens` | not reported | [Codex event type](https://github.com/openai/codex/blob/main/sdk/typescript/src/events.ts), recorded turns |
+| grok | the terminal `type: "end"` event; chunk-level usage is ignored | `usage.input_tokens`, `usage.output_tokens` | `total_cost_usd` on that event | [Grok headless event format](https://github.com/xai-org/grok-build/blob/main/crates/codegen/xai-grok-pager/docs/user-guide/14-headless-mode.md) |
+| agy | the last `event: "result"` event; results report cumulative session usage | `result.usageMetadata.promptTokenCount`, `.candidatesTokenCount`, or `result.usage.input_tokens`, `.output_tokens` | not reported | Gemini-family usageMetadata, [Antigravity CLI headless mode](https://antigravity.google/docs/cli/headless/) |
+| claude | the `result` events of `--output-format stream-json` (usage summed, cost from the last), else the assistant messages | `usage.input_tokens`, `usage.output_tokens` | `total_cost_usd` | [Claude Code stream-json output](https://code.claude.com/docs/en/agent-sdk/overview), a live resumed thread |
+| pi | assistant `message.usage` on `message_end` | `input` / `input_tokens`, `output` / `output_tokens` | `usage.cost.total` | [Pi RPC event format](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/rpc.md) |
+| muse | the session record's `model_completed` events (`muse export`), not the event stream | `usage.input_tokens`, `usage.output_tokens` | not reported | a recorded `muse export` |
+| mimo | each `step_finish` part of `mimo run --format json` | `part.tokens.input`, `part.tokens.output` | `part.cost` | [MiMo Code JSON mode](https://github.com/XiaomiMiMo/MiMo-Code) |
+
+Codex and Antigravity figures are cumulative across the stream, so the last report carrying
+a figure wins and summing would count every token twice. Claude's `result` usage is
+per-invocation and is summed across the appended stream, while its `total_cost_usd` is
+cumulative across the session and is taken from the last result; a stream that ends without
+one falls back to summing its assistant messages. Mimo and pi per-step figures are summed.
+Muse Code's `goal_usage_attribution` repeats its `model_completed` values per call, so the
+reader takes `model_completed` alone.
 
 ## The pane view
 
