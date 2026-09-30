@@ -20,6 +20,8 @@
 #       log nothing. Either way it refuses a worktree holding anything git sees that its commit
 #       does not, so every result belongs to a commit; a check that leaves such a file fails, and
 #       the checks after it are not run
+#   verify.sh gate <worktree> <dispatch>
+#       run and log only the gate from the run's recorded checks
 #   verify.sh journey-path <worktree> [<dispatch>]
 #       where the journey report for <worktree>'s HEAD goes: under <dispatch>/journey/ for the
 #       coachman, under the worktree's .postmaster/verify/journey/ for a workhorse
@@ -55,7 +57,7 @@
 set -uo pipefail
 unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_NAMESPACE
 HERE=$(cd "$(dirname "$0")" && pwd -P)
-usage() { echo "usage: verify.sh checks <repo> [--gate <command>] [--lines | --json] | record <repo> <dispatch> [--gate <command>] | arm <worktree> <dispatch> | run <worktree> [<dispatch>] | journey-path <worktree> [<dispatch>] | results <dispatch> <worktree> | summary <summary-file> <dispatch> <worktree> | --self-test" >&2; exit 1; }
+usage() { echo "usage: verify.sh checks <repo> [--gate <command>] [--lines | --json] | record <repo> <dispatch> [--gate <command>] | arm <worktree> <dispatch> | run <worktree> [<dispatch>] | gate <worktree> <dispatch> | journey-path <worktree> [<dispatch>] | results <dispatch> <worktree> | summary <summary-file> <dispatch> <worktree> | --self-test" >&2; exit 1; }
 
 core() {  # core <subcommand> <args>...
   exec python3 -I - "$HERE" "$@" <<'PY'
@@ -349,7 +351,7 @@ def run_one(c, top, env, log):
         return "fail", code, secs, "score %s, below the threshold %s" % (found[-1], c["threshold"])
     return ("pass" if code == 0 else "fail"), code, secs, "" if code == 0 else last
 
-def run(wt, dispatch):
+def run(wt, dispatch, only=None):
     top = top_of(wt)
     if dispatch:  # the coachman's copy lives in the run, so a workhorse's worktree keeps its own
         spec = dispatch / "verify" / "spec"
@@ -360,6 +362,10 @@ def run(wt, dispatch):
         if not isinstance(d, dict) or not isinstance(d.get("checks"), list):
             die("%s is not armed: %s is missing; the coachman arms each workhorse worktree with verify.sh arm" % (top, spec / "spec.json"))
         checks = d["checks"]
+    if only:
+        checks = [c for c in checks if c.get("name") == only]
+        if len(checks) != 1:
+            die("the run's checks do not record exactly one %s check" % only)
     dirt = uncommitted(top)
     if dirt:
         die("%s has files git sees that its commit does not hold, so no result would belong to a commit: %s. "
@@ -456,8 +462,9 @@ if cmd == "arm":
     top, spec, checks = arm(pathlib.Path(args[0]), pathlib.Path(args[1]).resolve())
     print("armed %s: %d checks in %s" % (top, len(checks), spec)); sys.exit(0)
 
-if cmd == "run":
-    run(pathlib.Path(args[0]), pathlib.Path(args[1]).resolve() if len(args) > 1 else None)
+if cmd in ("run", "gate"):
+    run(pathlib.Path(args[0]), pathlib.Path(args[1]).resolve() if len(args) > 1 else None,
+        only="gate" if cmd == "gate" else None)
 
 if cmd == "results":
     dispatch, top = pathlib.Path(args[0]).resolve(), top_of(pathlib.Path(args[1]))
@@ -523,6 +530,7 @@ case "${1:-}" in
     core "$SUB" "${POS[@]}" "$GATE" "$FORM"; exit $? ;;
   arm) [ $# -eq 3 ] || usage; core arm "$2" "$3"; exit $? ;;
   run) [ $# -eq 2 ] || [ $# -eq 3 ] || usage; shift; core run "$@"; exit $? ;;
+  gate) [ $# -eq 3 ] || usage; core gate "$2" "$3"; exit $? ;;
   results) [ $# -eq 3 ] || usage; core results "$2" "$3"; exit $? ;;
   summary) [ $# -eq 4 ] || usage; core summary "$2" "$3" "$4"; exit $? ;;
   journey-path)
@@ -754,6 +762,11 @@ python3 -c 'import json,sys; s=json.load(open(sys.argv[1])); sys.exit(0 if s["jo
 sha=$(git -C "$wt" rev-parse HEAD | cut -c1-12)
 grep -qF "\"target\":\"red\",\"detail\":\"on=wb/T-1-a@$sha result=fail exit=1" "$d/actions.jsonl" && ok "each naming the branch, the commit and the result" || fail "each naming the branch, the commit and the result" "$(tail -3 "$d/actions.jsonl")"
 [ -f "$d/verify/$sha/red.log" ] && ok "with its output kept in the run" || fail "with its output kept in the run"
+out=$("$SELF" gate "$wt" "$d" 2>&1); rc=$?
+[ $rc -eq 0 ] && grep -qF "gate: pass, exit 0," <<<"$out" && ! grep -qF "red:" <<<"$out" \
+  && ok "gate runs and logs only the recorded gate" || fail "gate runs and logs only the recorded gate (exit $rc)" "$out"
+grep -qF "\"target\":\"gate\",\"detail\":\"on=wb/T-1-a@$sha result=pass exit=0" "$d/actions.jsonl" \
+  && ok "the recorded main-gate result has the commit and exit" || fail "the recorded main-gate result has the commit and exit" "$(tail -3 "$d/actions.jsonl")"
 p1=$("$SELF" journey-path "$wt" "$d"); [ "$p1" = "$d/journey/$(git -C "$wt" rev-parse HEAD).md" ] && ok "the coachman's journey report goes in the run" || fail "the coachman's journey report goes in the run" "$p1"
 p2=$(env -u POSTMASTER_VERIFY "$SELF" journey-path "$wt"); [ "$p2" = "$wt/.postmaster/verify/journey/$(git -C "$wt" rev-parse HEAD).md" ] && ok "a workhorse's in its worktree" || fail "a workhorse's in its worktree" "$p2"
 

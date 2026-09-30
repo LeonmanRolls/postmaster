@@ -955,11 +955,22 @@ Set the stage first: `<tool>/scripts/stage.sh <dispatch> shipping`.
    dispatching postmaster, as the waybill says. Write `handoff-3.md` as far as the card, touch
    `.card-ready`, and exit; the word arrives as a resume of this leg's thread, and so does a
    withheld grant with its reasons. On a withheld grant, address the reasons, update the card,
-   touch `.card-ready` again, and exit again. Only the user abandons a run. On it: check out the project's default branch
-   in the main checkout and `git merge --no-ff <ticket-branch>` (merge, never rebase), move the
-   ticket to done, and set the stage: `<tool>/scripts/stage.sh <dispatch> shipped`. Never escalate a grant the waybill gives the postmaster up to
-   the user.
-6. If the project has an origin, pushing afterwards is the user's call, never part of
+   touch `.card-ready` again, and exit again. Only the user abandons a run. On it: check out the
+   project's default branch in the main checkout and `git merge --no-ff <ticket-branch>` (merge,
+   never rebase). Never escalate a grant the waybill gives the postmaster up to the user.
+6. **Verify the merged default branch.** Run the recorded gate from a clean checkout outside
+   the project folder, so no run worktree under `.worktrees/` is in the gate's input tree. If the
+   gate needs dependencies, prepare them in that checkout using the project's documented
+   instructions, then run `<tool>/scripts/verify.sh gate . <dispatch>` there. Pass that command,
+   with any preparation prefix, to the helper:
+   `bun <tool>/scripts/clean-checkout.ts <repo> <default-branch> "<preparation> && <tool>/scripts/verify.sh gate . <dispatch>"`.
+   When no preparation is needed, pass only the verify command. It runs the run's recorded gate,
+   logs its result, and removes the temporary checkout whether the gate passes or fails. A red
+   result is investigated under the red-gate rule below; do not mark the ticket done or set the
+   stage to `shipped` until it passes.
+7. After the gate passes, move the ticket to done and set the stage:
+   `<tool>/scripts/stage.sh <dispatch> shipped`.
+8. If the project has an origin, pushing afterwards is the user's call, never part of
    this flow.
 
 ## Stage 4 (leg 3, after the merge): aftercare and teardown
