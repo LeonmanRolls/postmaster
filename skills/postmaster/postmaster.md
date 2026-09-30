@@ -319,13 +319,15 @@ path. A changes round returns a refreshed copy and one new package at its new co
    ```
 
    Before spawning, write `.waiting-on-user` with the handle and editor link so the poll
-   reports USER and cannot take the package twice. Send the session a one-line prompt to read
-   `<dispatch>/spec-session-brief.md` with `<tool>/scripts/host.sh send`. Log its start with
-   `<tool>/scripts/log-action.sh <dispatch> postmaster dispatch spec-session`.
-   The user and session work on the copy until the user says it is ready. If `spawn` exits 3
-   because `POSTMASTER_HOST=none`, review the same copy with the user in your own conversation
-   and keep the wait marker. The postmaster's own harness, model and effort still come from
-   this run's `config.team.postmaster`; the editor host stays in the machine config.
+   reports USER and cannot take the package twice. If `spawn` succeeds, send the session a
+   one-line prompt to read `<dispatch>/spec-session-brief.md` with
+   `<tool>/scripts/host.sh send`, and log its start with
+   `<tool>/scripts/log-action.sh <dispatch> postmaster dispatch spec-session`. The user and
+   session work on the copy until the user says it is ready. If `spawn` exits 3 because
+   `POSTMASTER_HOST=none`, do not send or log a session launch; review the same copy with the
+   user in your own conversation and keep the wait marker. The postmaster's own harness, model
+   and effort still come from this run's `config.team.postmaster`; the editor host stays in the
+   machine config.
 3. **Record the user's word.** The outcomes are approved, changes requested in the user's
    words, or dropped (the run stops). If the user says the session's spec is ready, run
    `<tool>/scripts/spec-session.sh approve <dispatch>`. It commits the edited copy at a new
