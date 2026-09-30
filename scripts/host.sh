@@ -45,7 +45,13 @@
 # Pass a role-specific `host.sh name` result as the launch name and pass the dispatch separately,
 # so the ticket title labels only the run space and never passes through a shell. A pane shows
 # the stream through view-stream.sh. A launch carries its own pane's
-# identity (HERDR_PANE_ID and the like, or TMUX_PANE), never its caller's. If the host cannot
+# identity (HERDR_PANE_ID and the like, or TMUX_PANE), never its caller's, and never its
+# caller's Claude Code session identity (CLAUDECODE, CLAUDE_PID, CLAUDE_CODE_SESSION_*,
+# CLAUDE_CODE_MESSAGING_*, CLAUDE_CODE_CHILD_*, and the listed CLAUDE_CODE_* names) or its
+# caller's HERDR_* variables: in a Herdr pane only that pane's own six, and on tmux or with no
+# host none. Every other variable of the caller's still reaches the launch, POSTMASTER_*
+# settings and a harness's own configuration included (hosts.md names the strip and how to
+# extend it). If the host cannot
 # place it, it runs in the background. On Linux with a working systemd user manager, the command
 # and its descendants run in a transient scope with MemoryMax, MemorySwapMax=0 and TasksMax;
 # otherwise it runs uncapped and records that in --err. While it runs it is registered under
@@ -1133,16 +1139,28 @@ runner() {
   drop_spec "$spec"
 
   # The launch's environment is its caller's, except for identity: which pane it is in comes
-  # from where it actually runs, so nothing it reports lands in its caller's pane.
-  local drop="POSTMASTER_LAUNCH_NAME POSTMASTER_EVENT_STREAM $PANE_IDS" keep=""
+  # from where it actually runs, so nothing it reports lands in its caller's pane. A caller's
+  # Claude Code session identity and its Herdr identity never reach a launch: a lane that
+  # inherits the caller's session can message it or keep no session record of its own, and a
+  # lane that inherits the caller's Herdr variables can drive its caller's Herdr session.
+  # Configuration under the same names survives (hosts.md lists what is stripped and how to
+  # add to it). This is a deny-list, never an allow-list, so every other variable still arrives.
+  local drop="POSTMASTER_LAUNCH_NAME POSTMASTER_EVENT_STREAM $PANE_IDS \
+    CLAUDECODE CLAUDE_PID \
+    CLAUDE_CODE_SESSION_ID CLAUDE_CODE_CHILD_SESSION CLAUDE_CODE_ENTRYPOINT \
+    CLAUDE_CODE_EXECPATH CLAUDE_CODE_SESSION_ATTENDED \
+    CLAUDE_CODE_MESSAGING_SOCKET CLAUDE_CODE_MESSAGING_TOKEN" keep=""
   case $mode in
-    herdr) drop="$drop HERDR_ENV HERDR_SOCKET_PATH HERDR_BIN_PATH"; keep="HERDR_PANE_ID HERDR_TAB_ID HERDR_WORKSPACE_ID HERDR_ENV HERDR_SOCKET_PATH HERDR_BIN_PATH" ;;
+    herdr) keep="HERDR_PANE_ID HERDR_TAB_ID HERDR_WORKSPACE_ID HERDR_ENV HERDR_SOCKET_PATH HERDR_BIN_PATH" ;;
     tmux)  drop="$drop TMUX"; keep="TMUX TMUX_PANE" ;;
   esac
   local childenv=()
   for kv in ${envs[@]+"${envs[@]}"}; do
     k=${kv%%=*}
     case " $drop " in *" $k "*) continue ;; esac
+    case $k in
+      CLAUDE_CODE_SESSION_*|CLAUDE_CODE_MESSAGING_*|CLAUDE_CODE_CHILD_*|HERDR_*) continue ;;
+    esac
     childenv+=("$kv")
   done
   for k in $keep; do [ -n "${!k+x}" ] && childenv+=("$k=${!k}"); done
