@@ -23,7 +23,8 @@
 #         files the ticket there and prints its number to dispatch against <dest>; a run reads
 #         it through the local tracker whatever the config names (scripts/tracker-kind.sh).
 # score   scores a finished run from its records, never its report: the ticket its waybill
-#         carries verbatim, whose hidden tests run against main; the app's gate as
+#         carries verbatim, whose hidden tests run against main and each lane's harvested branch,
+#         reporting the lanes' pass and fail counts beside main's; the app's gate as
 #         scripts/discover-project.sh finds it, on main; the stages scripts/stage.sh --list names,
 #         up to done, each entered in order by a logged change; each leg's done and exited
 #         markers, for every leg the run recorded; each leg's hand-off, through
@@ -179,6 +180,11 @@ def check_hidden(dispatch, app):
     ok, detail, out = hidden(found[0], app)
     return ok, "%s, from the waybill: %s on main" % (found[0], detail), out
 
+def lane_scores(dispatch, repo, ticket):
+    """Run the TypeScript lane scorer; a scorer failure is reported without changing the verdict."""
+    code, out = sh(["bun", "--no-env-file", SCRIPTS / "fixture-lanes.ts", dispatch, repo, ticket])
+    return squash(out) if code == 0 and out.strip() else "lanes not scored"
+
 def check_gate(app):
     code, out = sh([SCRIPTS / "discover-project.sh", app])
     gate = next((l[len("gate="):] for l in out.splitlines() if l.startswith("gate=")), "")
@@ -314,7 +320,12 @@ def score(dispatch, repo):
         if code != 0:
             print("fixture: could not export main from %s: %s" % (repo, tail(out, 3)), file=sys.stderr); sys.exit(1)
         legs = legs_of(dispatch, manifest)
-        results = [("hidden-tests",) + check_hidden(dispatch, app),
+        hidden_result = check_hidden(dispatch, app)
+        found = waybill_tickets(dispatch)
+        if len(found) == 1:
+            hidden_result = (hidden_result[0], "%s; %s" %
+                             (hidden_result[1], lane_scores(dispatch, repo, found[0])), hidden_result[2])
+        results = [("hidden-tests",) + hidden_result,
                    ("gate",) + check_gate(app),
                    ("stages",) + check_stages(dispatch) + ("",),
                    ("markers",) + check_markers(dispatch, legs) + ("",),
