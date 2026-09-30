@@ -218,7 +218,7 @@ Change:
   install; a root `package.json` with `oxlint` pinned to exactly 1.86.0 and a `lint` script
   that runs `bun x --bun oxlint`; its `bun.lock`; `.oxlintrc.json` with the plugin and
   `fixtures/` left out.
-- [ ] T006 [AC5] Write `lint/test-beside-target.ts`, `lint/plugin.ts` and
+- [x] T006 [AC5] Write `lint/test-beside-target.ts`, `lint/plugin.ts` and
   `lint/test-beside-target.test.ts`: the rule, and its three controls run through Oxlint on
   Bun, each read back exactly.
 - [ ] T007 [AC1] [AC2] [AC3] [AC4] [AC5] Run the project gate, `bun test ./scripts ./lint` and
