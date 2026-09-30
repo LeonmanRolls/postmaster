@@ -117,10 +117,16 @@ For the next ticket in order, when the run ceiling (`team.max_runs`) has room:
    change: it goes to the user, and nothing is dispatched. The project's declared checks are
    checked too: `<tool>/scripts/verify.sh checks <repo>` exits 0, and a refusal, naming what
    `.postmaster/project.toml` must change, goes to the user the same way.
-3. **Exclude worktrees without a commit,** before any is cut, or the next pre-flight reads
+3. **Clash check, before anything is written for this run.** `bun
+   <tool>/scripts/run-clash.ts <repo> <TICKET>` exits 0. On exit 2 it names the run directory
+   and each branch that already exist; put that to the user and stop. The postmaster renames
+   or removes nothing itself: the user decides what happens to the old run — archive it,
+   rename it, or pick another id — and Stage B starts again on their word. On exit 1 the
+   refusal goes to the user the same way.
+4. **Exclude worktrees without a commit,** before any is cut, or the next pre-flight reads
    them as dirt: `grep -qxF '.worktrees/' <repo>/.git/info/exclude || echo '.worktrees/' >>
    <repo>/.git/info/exclude`.
-4. **Create the run directory** `<runs>/<TICKET>/` with `logs/`, `audit/` and `render/`, and the
+5. **Create the run directory** `<runs>/<TICKET>/` with `logs/`, `audit/` and `render/`, and the
    manifest: `{"stage": "dispatched", "leg": 1, "base": "<sha>", "lanes": {}, "coachman":
    {"legs": {}}}`. You own `leg`, `base`, `coachman` and the terminal stages, `done` and
    `abandoned`; the coachman owns `lanes` and every stage before those; both update fields in
@@ -138,11 +144,11 @@ For the next ticket in order, when the run ceiling (`team.max_runs`) has room:
    the captured `planning.review_link`, if set, must contain `{path}`. On refusal, log a `note`
    with the config error, tell the user what to fix, set the undispatched run to `abandoned`,
    and do not cut worktrees or move the ticket in progress.
-5. **Cut the synthesis worktree** at BASE, the sha you recorded from `git -C <repo> rev-parse
+6. **Cut the synthesis worktree** at BASE, the sha you recorded from `git -C <repo> rev-parse
    HEAD` on the default branch: `git -C <repo> worktree add .worktrees/<TICKET> -b <TICKET>
    <sha>`. The coachman's cwd is that worktree from its first leg, so the project's ambient
    context loads for it.
-6. **Write `brief.md`** from the template in `SKILL.md`: the `turnpikes:` line step 1's check
+7. **Write `brief.md`** from the template in `SKILL.md`: the `turnpikes:` line step 1's check
    printed, whole, under the waybill's title, then the ticket verbatim, the project profile (gate,
    build, browser suite, the checks as `verify.sh record` printed them, docs to read first,
    tracker, risk surfaces), the team from the resolved machine config with its reviewer lines as
@@ -150,12 +156,12 @@ For the next ticket in order, when the run ceiling (`team.max_runs`) has room:
    as discovered, shared or local, `CHECKPOINT_MODE`
    from `ship.checkpoint_mode` and `MERGE_AUTHORITY` from `ship.merge_authority`, either
    overridden only where the user said so for this run, the dispatch path and the run's pinned
-   tool — `<tool>/scripts/run-meta.sh path <dispatch>`, the checkout step 4 cut, which the
+   tool — `<tool>/scripts/run-meta.sh path <dispatch>`, the checkout step 5 cut, which the
    template names as `tool:` and the coachman uses as its `<tool>`. The
    config here is the one in `run.json`. Then
    `<tool>/scripts/turnpikes.sh legs <dispatch> --expect '<that turnpikes: line>'` exits 0 and
    prints the legs step 2 checked, before anything is launched.
-7. **Move the ticket to in-progress** through the tracker adapter and log `ticket-state`. The
+8. **Move the ticket to in-progress** through the tracker adapter and log `ticket-state`. The
    coachman never touches the ticket's state before stage 3.
 
 ## Stage C: dispatch a leg

@@ -101,6 +101,7 @@ scripts/stage.sh <dispatch> <stage>                               # the one way 
 scripts/spec-review-link.sh <dispatch> <workhorse-worktree>        # resolve a reviewed spec's code-server link
 scripts/spec-decisions.sh <dispatch> fresh|record|count           # record spec decisions, count approvals run-wide
 scripts/run-times.sh <dispatch>                                   # how long each stage took, from the log
+scripts/run-clash.ts <repo> <ticket-id>                           # refuse an id that already names a run or a branch
 scripts/run-log.sh <dispatch> <text> | --section <title> | --close # the narrative, timestamped
 scripts/run-meta.sh <dispatch> <repo> | path|check|release <dispatch> # run.json and the pinned tool a run started from
 scripts/github.sh <repo> board|create|edit|read|state|comment|list|access|search # GitHub Issues on a Projects board
