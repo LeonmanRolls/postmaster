@@ -5,17 +5,20 @@
 # from the postmaster to the user is printed first, since it is what everything else may
 # be waiting on.
 #
-#   runs-status.sh <project-run-root>        e.g. ~/.postmaster/runs/<project>
+#   runs-status.sh <project-run-root>        e.g. <project>/.postmaster/runs
 #   runs-status.sh --self-test
 #
 #   next   USER      the postmaster has put this run's question to the user and waits for the
 #                    answer (.waiting-on-user)
 #          RULE      an escalation is waiting (.escalation-ready)
 #          GATE      the ship card is complete (.card-ready)
+#          SPEC      a spec review package is waiting (.spec-review-ready): the postmaster puts
+#                    each workhorse's spec to the user, one at a time
 #          DISPATCH  the current leg is done (.leg-<n>-done): the next leg, or after the last,
 #                    the postmaster's close
 #          REMOUNT   the current leg's process exited (.leg-<n>-exited) with no hand-off,
-#                    escalation or card: resume it, or relaunch it on the fallback after a wall
+#                    escalation, card or spec package: resume it, or relaunch it on the fallback
+#                    after a wall
 #          READ      a checkpoint card is waiting to be read (.checkpoint-*-ready)
 #          INSPECT   no marker, nothing changed for 30 minutes, run not done
 #          WAIT      a leg is running and its files are moving
@@ -61,6 +64,7 @@ for run in sorted(os.listdir(root)):
     elif ".waiting-on-user" in markers: nxt = "USER"
     elif ".escalation-ready" in markers: nxt = "RULE"
     elif ".card-ready" in markers: nxt = "GATE"
+    elif ".spec-review-ready" in markers: nxt = "SPEC"
     elif done: nxt = "DISPATCH"
     elif exited: nxt = "REMOUNT"
     elif any(mk.startswith(".checkpoint-") for mk in markers): nxt = "READ"
@@ -107,6 +111,7 @@ expect() {  # expect <label> <run> <next>
 
 run rule review 2 .escalation-ready
 run gate shipping 3 .card-ready
+run spec planning 1 .spec-review-ready .leg-1-exited
 run dispatch review 2 .leg-2-done .leg-2-exited
 run remount review 2 .leg-2-exited
 run read review 2 .checkpoint-review-ready
@@ -116,6 +121,7 @@ run user review 2 .waiting-on-user .leg-2-exited
 run closed done 3 .leg-3-done .leg-3-exited
 run earlier review 2 .leg-1-done
 run usergate shipping 3 .card-ready .waiting-on-user
+run userspec planning 1 .spec-review-ready .waiting-on-user
 run userclosed done 3 .waiting-on-user
 run stall review 2; age stall; : > "$tmp/root/stall/.leg-1-done"
 mkdir -p "$tmp/root/postmaster"
@@ -123,6 +129,7 @@ mkdir -p "$tmp/root/postmaster"
 echo "positive controls"
 expect "an escalation waiting is RULE" rule RULE
 expect "a complete ship card is GATE" gate GATE
+expect "a spec review package waiting is SPEC" spec SPEC
 expect "the current leg done is DISPATCH" dispatch DISPATCH
 expect "the current leg gone with nothing written is REMOUNT" remount REMOUNT
 expect "a checkpoint card waiting is READ" read READ
@@ -134,6 +141,7 @@ expect "a closed run is -" closed "-"
 echo "negative controls"
 expect "an earlier leg's done marker dispatches nothing" earlier WAIT
 expect "a ship card put to the user waits on the user, not the gate" usergate USER
+expect "a spec package put to the user waits on the user, not the package" userspec USER
 expect "a closed run stays closed with a stale marker" userclosed "-"
 expect "touching a marker does not hide a stall" stall INSPECT
 [ -z "$(next_of postmaster)" ] && ok "the postmaster's own directory is not a run" \

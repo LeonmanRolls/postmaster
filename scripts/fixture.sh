@@ -84,7 +84,7 @@ PY
 }
 
 make_and_file() {  # make_and_file <name or dest> <ticket>
-  local dest=$1 ticket=$2 probe runs body number rc
+  local dest=$1 ticket=$2 probe body number rc
   is_ticket "$ticket" || return 1
   case $dest in */*) ;; *) dest=${POSTMASTER_FIXTURES:-$HOME/Code/fixtures}/$dest ;; esac
   dest=$(python3 -c 'import os, sys; print(os.path.abspath(os.path.expanduser(sys.argv[1])))' "$dest")
@@ -94,14 +94,6 @@ make_and_file() {  # make_and_file <name or dest> <ticket>
     echo "fixture: $dest would be inside the git repository at $(git -C "$probe" rev-parse --show-toplevel 2>/dev/null || echo "$probe"); a run's repo stands alone" >&2
     return 1
   fi
-  runs=$HOME/.postmaster/runs/$(basename "$dest")
-  [ -e "$runs" ] && { echo "fixture: $runs already holds runs of a project named $(basename "$dest"); choose another name" >&2; return 1; }
-  case $(basename "$dest") in   # a run's records are kept by the repo's name
-    "$(basename "$TOOL")"|"$(basename "$(git -C "$TOOL" worktree list --porcelain | sed -n '1s/^worktree //p')")")
-      echo "fixture: $(basename "$dest") is this repo's name, so its runs would share this repo's run records; choose another name" >&2
-      return 1 ;;
-  esac
-
   unmake() { [ -d "$dest" ] && rm -r -- "$dest" </dev/null; }   # until the ticket is filed, nothing refers to dest
   mkdir -p "$(dirname "$dest")" && make_repo "$dest" || { unmake; return 1; }
   "$LOCAL_SH" "$dest" store init >/dev/null || { unmake; echo "fixture: could not make the ticket store in $dest" >&2; return 1; }
@@ -374,6 +366,7 @@ trap 'rm -r -- "$tmp" </dev/null 2>/dev/null' EXIT
 export GIT_AUTHOR_NAME=fixture GIT_AUTHOR_EMAIL=fixture@example.invalid
 export GIT_COMMITTER_NAME=fixture GIT_COMMITTER_EMAIL=fixture@example.invalid
 export POSTMASTER_CONFIG=$tmp/config.toml; CONFIG=$POSTMASTER_CONFIG
+export POSTMASTER_TOOL_PINS=$tmp/tools
 cat > "$CONFIG" <<'EOF'
 [lanes.one]
 harness = "bash"
@@ -408,8 +401,9 @@ listed=$("$HERE/stage.sh" --list)
 stages=$(printf '%s\n' "$listed" | sed '/^done$/q' | sed '1d;$d')
 record() {  # record <name> <ticket> <shipped: reference, app or broken>: a finished run
   local name=$1 t=$2 shipped=$3 legs=3 n s section done_stages=0 count
-  local repo=$tmp/$name/repo d=$tmp/$name/runs/$name/7 base
-  mkdir -p "$d/logs" "$d/audit" "$d/render" && make_repo "$repo" >/dev/null || return 1
+  local repo=$tmp/$name/repo d=$tmp/$name/repo/.postmaster/runs/7 base
+  mkdir -p "$tmp/$name" && make_repo "$repo" >/dev/null || return 1
+  mkdir -p "$d/logs" "$d/audit" "$d/render" || return 1
   base=$(git -C "$repo" rev-parse HEAD)
   git -C "$repo" checkout -q -b 7 || return 1
   case $shipped in
@@ -445,7 +439,7 @@ PY
 }
 
 broken() {  # broken <name> <clean dispatch>: a copy of the clean record's dispatch, to break one thing in
-  local d=$tmp/$1/runs/$1/7
+  local d=$tmp/$1/repo/.postmaster/runs/7
   mkdir -p "$(dirname "$d")" && cp -a "$2" "$d" && printf '%s\n' "$d"
 }
 breaks() {  # breaks <clean dispatch> <repo>: the negative controls, each with one thing broken, scored
@@ -467,15 +461,15 @@ PY
   d=$(broken break-card "$clean") && rm -- "$d/card.md"
   d=$(broken break-waybill "$clean") && printf '# Waybill: 7\n\n## Ticket\n\nSee the tracker.\n' > "$d/brief.md"
   for b in stages markers handoffs runjson card waybill; do
-    background "break-$b" score_run "$tmp/break-$b/runs/break-$b/7" "$repo"
+    background "break-$b" score_run "$tmp/break-$b/repo/.postmaster/runs/7" "$repo"
   done
   wait
 }
 recorded() {  # recorded <name> <ticket> <shipped>: build the record, score it, and break the first clean one
   record "$1" "$2" "$3" > "$tmp/built-$1.out" 2>&1 \
     || { echo "the record could not be built: $(tail -3 "$tmp/built-$1.out")"; return 1; }
-  [ "$1" = "clean-$first" ] && breaks "$tmp/$1/runs/$1/7" "$tmp/$1/repo" &
-  score_run "$tmp/$1/runs/$1/7" "$tmp/$1/repo"; local rc=$?
+  [ "$1" = "clean-$first" ] && breaks "$tmp/$1/repo/.postmaster/runs/7" "$tmp/$1/repo" &
+  score_run "$tmp/$1/repo/.postmaster/runs/7" "$tmp/$1/repo"; local rc=$?
   wait
   return $rc
 }
@@ -552,11 +546,15 @@ out=$(fresh_new "$dest" "$first"); rc=$?
 [ $rc -eq 1 ] && [ "$(git -C "$dest" rev-list --count main)" = 1 ] && ok "a dest that exists is refused, and left alone" || fail "a dest that exists is refused, and left alone (exit $rc)" "$out"
 out=$(fresh_new "$tmp/app-$first/nested" "$first"); rc=$?
 [ $rc -eq 1 ] && [ ! -e "$tmp/app-$first/nested" ] && ok "a dest inside a git repo is refused" || fail "a dest inside a git repo is refused (exit $rc)" "$out"
-mkdir -p "$tmp/home/.postmaster/runs/taken"
-out=$(fresh_new "$tmp/runs/taken" "$first"); rc=$?
-[ $rc -eq 1 ] && [ ! -e "$tmp/runs/taken" ] && ok "a name that already has runs is refused" || fail "a name that already has runs is refused (exit $rc)" "$out"
-out=$(fresh_new "$tmp/runs/$(basename "$TOOL")" "$first"); rc=$?
-[ $rc -eq 1 ] && [ ! -e "$tmp/runs/$(basename "$TOOL")" ] && ok "a name that is this repo's is refused" || fail "a name that is this repo's is refused (exit $rc)" "$out"
+same_a="$tmp/one/widgets"; same_b="$tmp/two/widgets"
+mkdir -p "$same_a/.postmaster/runs/T-1" "$same_b/.postmaster/runs/T-1"
+"$HERE/log-action.sh" "$same_a/.postmaster/runs/T-1" postmaster note same-a one >/dev/null 2>&1; a_rc=$?
+"$HERE/log-action.sh" "$same_b/.postmaster/runs/T-1" postmaster note same-b two >/dev/null 2>&1; b_rc=$?
+[ $a_rc -eq 0 ] && [ $b_rc -eq 0 ] \
+  && [ -f "$same_a/.postmaster/runs/ledger.jsonl" ] && [ -f "$same_b/.postmaster/runs/ledger.jsonl" ] \
+  && ! cmp -s "$same_a/.postmaster/runs/ledger.jsonl" "$same_b/.postmaster/runs/ledger.jsonl" \
+  && ok "same-basename projects keep separate project-local ledgers" \
+  || fail "same-basename projects keep separate project-local ledgers"
 out=$(fresh_new "$tmp/runs/nosuch" no-such-ticket); rc=$?
 [ $rc -eq 1 ] && [ ! -e "$tmp/runs/nosuch" ] && ok "an unknown ticket is refused" || fail "an unknown ticket is refused (exit $rc)" "$out"
 out=$(LOCAL_SH=$tmp/failing-local.sh fresh_new "$tmp/runs/unfiled" "$first"); rc=$?
@@ -604,7 +602,7 @@ expect "no run.json: run.json alone fails" break-runjson run.json "no run.json"
 expect "no ship card: ship-card alone fails" break-card ship-card "no card.md"
 
 echo "score: input that is not a run is refused, not scored"
-clean=$tmp/clean-$first/runs/clean-$first/7; repo=$tmp/clean-$first/repo
+clean=$tmp/clean-$first/repo/.postmaster/runs/7; repo=$tmp/clean-$first/repo
 score_run "$tmp/nowhere" "$repo" >/dev/null 2>&1; rc=$?
 [ $rc -eq 1 ] && ok "no such dispatch directory" || fail "no such dispatch directory (exit $rc)"
 mkdir -p "$tmp/not-a-repo"; score_run "$clean" "$tmp/not-a-repo" >/dev/null 2>&1; rc=$?

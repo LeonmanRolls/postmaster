@@ -1,0 +1,10 @@
+# The streams and the forked task transcripts stay on the machine: they may carry the
+# session's private context. The reports and the normalized findings are what this trial
+# publishes (method.md).
+*.jsonl
+*.err
+run.log
+opus-claude-task-*.output
+!opus-findings.json
+!luna-findings.json
+!mimo-findings.json

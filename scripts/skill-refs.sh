@@ -3,7 +3,8 @@
 # skill. An installed skill is a link from a harness's skills folder into the postmaster repo,
 # and a session reaches the repo only as <tool>, the path SKILL.md finds from that link once.
 # A reference resolves from any working directory only when it goes through <tool> and names
-# a script the repo has.
+# a script the repo has. The run's pinned checkout goes through <rt> instead, resolved per run
+# by run-meta.sh path; it is a checkout of the same repo, so the same existence check applies.
 #
 #   skill-refs.sh [<file>...]          default: skills/postmaster/*.md beside this script's repo
 #   skill-refs.sh --fix [<file>...]    put <tool>/ before every bare scripts/ path, in place
@@ -11,8 +12,8 @@
 #
 # A reference is any scripts/ path. It is a fault when it is bare (scripts/x.sh, which resolves
 # only from the repo's own root), when it reaches scripts/ some other way (../../scripts/x.sh),
-# or when it goes through <tool> to a script the repo does not have. A path under another
-# placeholder or variable, such as <repo>/scripts/, is that directory's and not the tool's.
+# or when it goes through <tool> or <rt> to a script the repo does not have. A path under
+# another placeholder or variable, such as <repo>/scripts/, is that directory's and not the tool's.
 # --fix rewrites the bare form only, so it can be run again after a rebase and changes nothing
 # the second time; the check that follows it names whatever it could not fix.
 #
@@ -51,9 +52,10 @@ for f in files:
             if before and re.match(r"[A-Za-z0-9_]", before[-1]):
                 continue                                   # part of a longer name
             name = ref[len("scripts/"):]
-            if before.endswith("<tool>/"):
+            if before.endswith(("<tool>/", "<rt>/")):
+                which = "<tool>/" if before.endswith("<tool>/") else "<rt>/"
                 if name and not (root / "scripts" / name).is_file():
-                    faults.append((f, n, "no such script in the postmaster repo", "<tool>/" + ref))
+                    faults.append((f, n, "no such script in the postmaster repo", which + ref))
             elif OTHER.search(before):
                 continue                                   # another directory's scripts/
             elif before.endswith("/"):
@@ -98,11 +100,13 @@ EOF
 cat > "$tmp/good.md" <<'EOF'
 Set the stage with `<tool>/scripts/stage.sh <dispatch> synthesis`.
 ( <tool>/scripts/launch.sh launch <lane> <wt> <prompt> ) &
+The run's own `<rt>/scripts/stage.sh` is the same repo, pinned.
 The project's own `<repo>/scripts/build.sh` and "$HERE/scripts/x" are not the tool's.
 Every `<tool>/scripts/` path is the repo's; postscripts/ and myscripts/x.sh are other words.
 EOF
 printf 'Run `../../scripts/stage.sh` from the skill.\n' > "$tmp/relative.md"
 printf 'Run `<tool>/scripts/no-such.sh`.\n' > "$tmp/missing.md"
+printf 'Run `<rt>/scripts/no-such.sh` from the pin.\n' > "$tmp/rt-missing.md"
 
 echo "positive controls: each fault is found, on its own line"
 [ "$(faults "$tmp/bare.md")" -eq 3 ] && ok "three bare references are three faults" \
@@ -114,6 +118,8 @@ out=$(refs "$tmp/root" check "$tmp/bare.md"); rc=$?
   || fail "a path that reaches scripts/ another way is a fault"
 [ "$(faults "$tmp/missing.md")" -eq 1 ] && ok "a script the repo does not have is a fault" \
   || fail "a script the repo does not have is a fault"
+[ "$(faults "$tmp/rt-missing.md")" -eq 1 ] && ok "a script the repo does not have is a fault through <rt> too" \
+  || fail "a script the repo does not have is a fault through <rt> too" "$(refs "$tmp/root" check "$tmp/rt-missing.md")"
 
 echo "negative controls: nothing is found where nothing is wrong"
 refs "$tmp/root" check "$tmp/good.md" >/dev/null 2>&1; rc=$?

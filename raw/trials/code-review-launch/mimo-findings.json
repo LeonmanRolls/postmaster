@@ -1,0 +1,15 @@
+[
+  {
+    "file": "src/page.js",
+    "line": 8,
+    "line_end": "not provided",
+    "target": "src/page.js:8",
+    "severity": "not provided",
+    "summary": "returns one record too many",
+    "body": "`Array.slice(start, end)` excludes `end`, so `start + size` already yields exactly `size` items. The extra `+ 1` makes every full page hold `size + 1` records, against the comment on line 3 (“with `size` records to a page”) and against `pageCount`, which assumes pages of `size`.",
+    "evidence": "return all().slice(start, start + size + 1);",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "mimo"
+  }
+]

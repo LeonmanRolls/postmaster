@@ -62,6 +62,22 @@ max_runs = 2                                    # concurrent runs per project
 # [team.lens_reviewers]
 # security = ["luna", "deepseek", "sentinel"]   # sentinel: a third lane, defined under [lanes]
 
+# Per-launch resource limits. On Linux with a working systemd user manager, each host.sh run
+# gets its own cgroup. Role values override either default; omitted values inherit from [limits].
+[limits]
+memory_max = "8G"
+tasks_max = 512
+
+# [limits.lane]
+# memory_max = "12G"
+# tasks_max = 768
+# [limits.coachman]
+# memory_max = "8G"
+# tasks_max = 512
+# [limits.reviewer]
+# memory_max = "6G"
+# tasks_max = 384
+
 [postmaster]
 poll_seconds = 120
 
@@ -87,6 +103,13 @@ postmaster_may_create = false   # true lets the postmaster create tickets withou
 # A reviewer still running at the limit is stopped and recorded DEGRADED, with timeout as the
 # cause (scripts/review-round.sh). 2400 when unset.
 round_timeout_seconds = 2400
+
+[planning]
+# Optional. A template for the link that puts a workhorse's spec to the user during the
+# planning stage, with {path} replaced by the absolute path of WORKHORSE-SPEC.md in that
+# workhorse's worktree. Leave empty to send the path alone. The host is private to this
+# machine, so it lives here and never in a ticket.
+review_link = ""
 
 [ship]
 # Who says the merge word for a run: "user" (a person, live) or "postmaster" (the

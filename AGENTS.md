@@ -17,10 +17,13 @@ target the user wants before assuming either way.
 
 ### What is different when the target IS this repo
 
-**A run in flight does not see your edits.** A coachman loaded its runbook when it started;
-changing `coachman.md` mid-run changes nothing for it. That is a safety property, not a
-limitation: a broken edit cannot break a fleet that is already moving. It also means a fix
-you just merged is not in effect until the next dispatch.
+**A run runs on the version it was dispatched from.** At dispatch the run is pinned to the
+postmaster commit it started on: a checkout of that commit, which the waybill names as its
+tool and `run.json` records. Every coachman leg reads its runbooks and runs its scripts from
+that checkout — later legs, resumes and takeovers included — whatever `main` has done since.
+The supervising postmaster stays on the main checkout. A change can merge with runs in
+flight; each of them finishes on the version it started with. A fix you just merged reaches
+the next dispatch, not one already running.
 
 **The supervising session is in the same position.** Whatever is supervising loaded its
 context at startup. After merging a change to the flow, restart it or accept that it is
@@ -29,25 +32,16 @@ running the previous version.
 **Everything else is ordinary.** Worktrees under `.worktrees/` are gitignored, the gate runs
 the same way, and merges are merges. There is no special mode.
 
-### The one thing that genuinely bites
-
-**Do not let a run rewrite the file that a live run is mid-way through executing and then
-expect either to be coherent.** If a ticket changes the coachman contract (markers, the
-waybill shape, the turnpike table, completion detection), land it while the fleet is idle, or the next dispatch
-will read a new contract while an older run is still writing to the old one.
-
-Contract changes are the only category that needs the fleet quiet. Ordinary changes to
-scripts, docs and prose do not.
-
 **A change to the coachman contract merges only after a fixture run scores clean**: a run
 dispatched from the change's branch against a repository made by `scripts/fixture.sh new`, and
-scored by `scripts/fixture.sh score` on the same branch. [Why](wiki/concepts/fixture-runs.md).
+scored by `scripts/fixture.sh score` on the same branch. That rule is about the change's
+quality, not about the runs in flight. [Why](wiki/concepts/fixture-runs.md).
 
 ## When a session opens in this repo, do this
 
-No slash command, and no wizard for the user to run. They open their agent in this
-folder and this file takes it from there: set the machine up if it is not, choose a target,
-launch the postmaster. Work out where the user is and pick up from there.
+No slash command, and no wizard for the user to run. The user opens their agent in this
+folder and says hi. Any first message starts the flow: set the machine up if it is not,
+choose a target, launch the postmaster. Work out where the user is and pick up from there.
 
 **1. Is this machine set up?**
 
@@ -111,7 +105,17 @@ scripts/link-skills.sh             # make them; running it again changes nothing
 scripts/find-projects.sh                 # most recently worked first
 scripts/check-target.sh <chosen>         # 0 usable · 1 not a repo · 2 dirty, ask first
 scripts/discover-project.sh <chosen>     # gate command, docs, tracker and its prefix, checks
+scripts/project-settings.sh report <chosen>  # shared/local presence and per-fact sources
 ```
+
+**When a decision belongs to the project rather than the machine, offer it for
+`.postmaster/` and write it there on agreement, never silently.** `discover-project.sh`
+reports whether the target already has settings. If a fact is one every run against this
+project needs — the default turnpikes, the tracker binding by name, the risk surfaces —
+propose the shared `project.toml` and say which file you are proposing, since that one is
+committed. If it is this person's choice on this machine — which lanes fill the roles —
+propose local `settings.toml`. A missing settings file is never an error and never a
+prompt to create one; the normal case is nothing written.
 
 **The target may be this repo.** Developing postmaster with postmaster is supported; see
 the section above for the two things that differ.
@@ -189,6 +193,11 @@ whole system.
 
 1. **Nothing repo-specific.** No hardcoded paths, hosts, trackers, build tools or user
    names. The flow discovers what a project needs; it does not demand configuration.
+   *Softened by #18:* a project may carry an optional `.postmaster/` folder holding what
+   discovery cannot infer and what one instance chose, and every run's record. The rule
+   still holds — the folder is optional, a project without one works as it does today, and
+   nothing is demanded. What it adds is a place for a decision discovery cannot make and a
+   correction where discovery guessed wrong, so the correction survives the run that made it.
 2. **Nothing harness-specific in the flow.** Every harness has its own flags and its own
    event format. That belongs behind an adapter (`skills/postmaster/harnesses.md`), not in
    prose telling a reader not to confuse them. Trackers likewise (`skills/postmaster/trackers.md`),
@@ -204,6 +213,18 @@ whole system.
    `scripts/log-action.sh`, per run and per project. The narrative is for reading; the log
    is what a run is audited from and what the flow is improved from.
 
+### Where a setting comes from
+
+Precedence, stated once and followed everywhere: **discovery** supplies defaults; the
+shared `.postmaster/project.toml`, where one exists, declares what the project requires of
+every run; local `.postmaster/settings.toml` are this person's choices on this machine;
+`~/.postmaster/config.toml` supplies what is machine-specific and is never overridden by a
+project. None of these sets a floor of turnpikes: a ticket names the turnpikes its run
+passes through (#40), and project settings only say what `default` means for that project.
+A project's settings name no credential and no filesystem path, in either file
+(`scripts/project-settings.sh`). Nothing in `.postmaster/` is committed by default; the one
+shared file is committed on purpose with `git add -f`.
+
 ## Working on this repository
 
 **Fix an open pull request instead of deferring its gaps to a ticket.** When you find a flaw
@@ -212,8 +233,8 @@ check, a stale sentence, an instruction with no mechanism behind it, a rule writ
 that belongs in a script. That does not widen the pull request. Finishing what it introduced
 is part of the same change.
 
-A ticket is for work the pull request never set out to do: it touches another contract, needs
-the fleet quiet, or depends on something that does not exist yet.
+A ticket is for work the pull request never set out to do: it touches another contract, or
+depends on something that does not exist yet.
 
 The test is whether the fix completes what the pull request claims. "Is this a separate
 concern?" is the wrong test, because nearly anything can be described as one. Before filing a
@@ -221,5 +242,6 @@ ticket, run `gh pr list` and check whether the work belongs in one of them.
 
 **A script path in `skills/postmaster/` goes through `<tool>`**, the repo the skill finds from
 its link: `<tool>/scripts/stage.sh`, never `scripts/stage.sh`, which resolves only from this
-repo's root. `scripts/skill-refs.sh` names every path that does not, and `--fix` rewrites the
-bare ones; run both after writing a runbook and after a rebase.
+repo's root. The run's own pinned tool goes through `<rt>`, resolved per run by
+`run-meta.sh path`. `scripts/skill-refs.sh` names every other path that does not go through
+`<tool>`, and `--fix` rewrites the bare ones; run both after writing a runbook and after a rebase.

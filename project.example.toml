@@ -1,16 +1,39 @@
 # <project>/.postmaster/project.toml
 #
 # What a project requires of every run against it, declared once for everyone who works on it.
-# It is the one file in a project's .postmaster/ that is committed, so it names no credential, no
-# path on anyone's machine and no role assignment. A project without it is discovered, and that
-# is the normal case. Where the project ignores .postmaster/, commit this file with `git add -f`;
-# once it is tracked, git keeps it. For now it holds the checks and nothing else.
+# It is the only project data file in `.postmaster/` intended for sharing, so it names no
+# credential, path on anyone's machine or role assignment. A project without it is discovered,
+# and that is the normal case. `.postmaster/.gitignore` ignores the whole folder; sharing is an
+# explicit `git add -f .postmaster/project.toml`.
+#
+# [project] describes project-owned facts that discovery cannot know: what `default` means in a
+# ticket and the risk surfaces the security lens should probe. `[tracker].binding` names the
+# project's board, workspace or team; service hosts, account details and credentials stay in the
+# machine config. These are requirements and shared facts, not a team's role assignment.
+# Risk surfaces are prose: they may name a path or a secret's name, since that is what the
+# security lens must probe. Every other value here is a name and may not be a path.
+#
+# Precedence, stated once and followed everywhere: discovery supplies defaults; this file
+# declares what the project requires; local settings.toml are this person's choices on this
+# machine; ~/.postmaster/config.toml supplies what is machine-specific and is never overridden
+# by a project. None of these sets a floor of turnpikes: a ticket names the turnpikes its run
+# passes through, and this file only says what `default` means for this project.
 #
 # The checks say how a change to the project is shown to work. A project that declares none gets
 # defaults (scripts/verify.sh): the gate, always, and by what discovery finds, a command-line
 # app's ticket examples run through its command, a web app's browser suite and a walk of the
 # ticket's User journey, or a library's tests through its package name. A project that declares
 # checks gets those and the gate. Why, and what the defaults cover: wiki/concepts/verification.md.
+#
+# Uncomment what the project requires. Omitted, `default` stands for every turnpike the
+# turnpike table marks default, and the tracker binding stays with discovery.
+#
+# [project]
+# default_turnpikes = ["style", "bug", "security"]
+# risk_surfaces = "Processes, network bindings, credentials and data stores the security lens should inspect."
+#
+# [tracker]
+# binding = "the board, workspace or team name"
 #
 # A check is a table named for it, in a lowercase word. It has either
 #   command    a shell command, run from the root of the worktree under test with bash -e -o

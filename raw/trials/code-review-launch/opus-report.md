@@ -1,0 +1,73 @@
+## Code review: 4973110...HEAD
+
+The range has two commits, which add `src/page.js` and `src/count.js` (20 lines). I reviewed them in `<tmpdir>/target/.worktrees/T-1-rev-bug-opus`. The one certain functional bug is at `src/page.js:8`: `page()` returns one record too many on every page except the last, so pages overlap. Six of the ten finder angles caught it.
+
+- **Candidates:** 10 finder angles produced 11 distinct candidates, and each got one verifier.
+- **Refuted:** two were refuted and dropped:
+  - `pageCount()` returning 0 for an empty store matches its own doc comment.
+  - The stale store after a require-cache reset is ordinary CommonJS behaviour. A non-destructured import behaves the same way.
+- **Sweep:** the gap sweep added one finding, the TypeScript rule, which a verifier rated PLAUSIBLE.
+- **Merged:** I merged the duplicated-guard finding into the "pageCount re-derives the paging rule" finding, because they describe the same thing.
+
+Nine findings remain, most severe first. The two commit-level rules (tests and commit identity) are anchored to the nearest file for format only.
+
+```json
+[
+  {
+    "file": "src/page.js",
+    "line": 8,
+    "summary": "The slice end `start + size + 1` makes page() return size + 1 records on every page except the last, so each page also holds the first record of the next page, against its own doc comment and pageCount().",
+    "failure_scenario": "Store holds r0..r9. page(1, 3) returns [r0,r1,r2,r3] and page(2, 3) returns [r3,r4,r5,r6]. Walking pages 1..pageCount(3) = 4 gives 13 items for 10 records, with r3, r6 and r9 twice. page(1, 1) returns 2 records. A caller that keeps fetching while result.length === size stops after page 1. Reproduced with node. Fix: slice(start, start + size)."
+  },
+  {
+    "file": "src/page.js",
+    "line": 11,
+    "summary": "page and pageCount cannot be reached through the package entry point: package.json main is src/store.js, which exports only { add, all }, and nothing requires src/page.js or src/count.js.",
+    "failure_scenario": "require('.') from the repo root, or require('records') from a project that installs the package, returns only add and all, so `const { page } = require('records'); page(1, 10)` throws TypeError 'page is not a function'. Only deep requires such as require('records/src/page') work. Plausible rather than certain: the package is private and nothing says how callers load it. Fix: make main an index module that re-exports store, page and count. Re-exporting from store.js would create a require cycle."
+  },
+  {
+    "file": "src/page.js",
+    "line": 1,
+    "summary": "page.js and count.js (line 1 of each) destructure `all` from ./store when they load, so a stub, spy or replacement of store.all installed after they are required never reaches page() or pageCount().",
+    "failure_scenario": "Require src/page and src/count, add 'real', then set store.all = () => ['stub1','stub2','stub3'] (jest.spyOn and sinon.stub behave the same). page(1, 10) still returns ['real'] and pageCount(1) returns 1, not 3, so tests silently run against the real store. jest.mock('./store') is not affected. Reproduced with node. Plausible because no tests exist yet. Fix: `const store = require('./store')` and call store.all()."
+  },
+  {
+    "file": "src/page.js",
+    "line": 8,
+    "summary": "page() and pageCount() (src/count.js:6) both go through store.all(), which copies the whole records array, so page() does O(n) work to return one page and pageCount() copies everything just to read .length.",
+    "failure_scenario": "With 1e6 records each call allocates and discards a 7.6 MiB array and takes about 10 to 13 ms whatever the page size. Walking all 1000 pages at size 1000 took about 13.3 s through page(), against 5.5 ms with direct slices, so a full walk is O(n^2/size). Cheaper: add count() (records.length) and range(start, end) (records.slice(start, end)) to src/store.js. That keeps the copy-on-read contract but copies only the window."
+  },
+  {
+    "file": "src/page.js",
+    "line": 4,
+    "summary": "page() and pageCount() ship with no tests: a58e725 touches only src/page.js, 5434717 only src/count.js, and the repository has no test file or test script.",
+    "failure_scenario": "Breaks the owner's rule that tests are written alongside the change: a single test of page(1, size) with more than size records stored would have caught the off-by-one at src/page.js:8."
+  },
+  {
+    "file": "src/count.js",
+    "line": 1,
+    "summary": "Both commits in the range, a58e725 (adds src/page.js) and 5434717 (adds src/count.js), have author and committer `t <t@t>` rather than the required identity.",
+    "failure_scenario": "Breaks the owner's single-identity commit rule: git cat-file -p shows `author t <t@t> 1790467200 +0000` and `committer t <t@t> 1790467200 +0000` on both commits. No remote is configured yet, but both commits need re-authoring before any push."
+  },
+  {
+    "file": "src/count.js",
+    "line": 6,
+    "summary": "page() and pageCount() read the process-wide store singleton through all() instead of taking the records or a total as input, so the paging logic is not a pure core. store.js has no reset, so tests of it leak state into each other.",
+    "failure_scenario": "In one node:test process, a first test that adds [1,2,3] passes pageCount(2) === 2. A second test that adds one record and expects pageCount(2) === 1 gets 2, and passes only when run alone. Better: pure page(records, number, size) and pageCount(total, size), tested on literal arrays, with thin wrappers that bind them to the store. page([1,2,3,4,5], 1, 2) would have exposed the off-by-one."
+  },
+  {
+    "file": "src/count.js",
+    "line": 5,
+    "summary": "pageCount sits in its own one-function module and re-derives the paging rule by itself: line 5 copies page.js:6's size guard word for word (page.js:5 repeats it for number), and line 6 has its own formula and its own store read, so nothing ties it to page()'s window.",
+    "failure_scenario": "The two already disagree: with 21 records and size 10, pageCount is 3 but the pages hold 11, 11 and 1 records. Any later rule change, such as a size cap, 0-based pages or numeric-string input, has to be made in both files, and nothing fails if one is missed. Simpler: define pageCount in src/page.js, with one shared positiveInteger(name, value) guard and one bounds(number, size) function. Or have page() return { items, total, pages } from a single read."
+  },
+  {
+    "file": "src/count.js",
+    "line": 4,
+    "summary": "The new modules are untyped plain JavaScript, although the user's rule makes TypeScript the default, and nothing in the change says why the exception applies.",
+    "failure_scenario": "The owner's TypeScript-default rule would require types here. With no types, pageCount(1, 10), with the arguments copied from page(number, size), returns 25 instead of 3 on a 25-record store without any error, and page('2', 10) fails only at runtime. This is a judgment call: the package was already plain CommonJS at the base commit, and on Node v24 existing code can load a .ts sibling only by naming its extension. The user decides whether the rule covers new modules in an existing JavaScript package."
+  }
+]
+```
+
+Separately, one account integration couldn't be used until authorized. This review didn't need it.

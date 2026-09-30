@@ -1,0 +1,22 @@
+# <project>/.postmaster/settings.toml
+#
+# This person's choices on this machine, for this project. Never committed: the folder's own
+# .gitignore covers the whole of .postmaster/. Role names must already exist in the machine's
+# ~/.postmaster/config.toml; harnesses, models, env files and credentials stay there.
+# Uncomment what this checkout needs. This file is an example, not a file to copy whole.
+#
+# [roles]
+# workhorses = ["luna", "mimo"]
+# reviewers = ["luna", "mimo"]
+# coachman = "coachman" # or "coachman_fallback": which machine coachman entry runs here
+#
+# [roles.lens_reviewers]
+# security = ["opus"]
+#
+# Local answers to the same project questions project.toml declares. Same shapes.
+#
+# [project]
+# default_turnpikes = ["style", "bug"]
+#
+# [tracker]
+# binding = "the board, workspace or team name for this checkout"

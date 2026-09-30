@@ -6,7 +6,7 @@
 #
 #   turnpikes.sh --list                 every turnpike, one per line: its name, `default` or `-`,
 #                                       the leg that runs it, and what it checks
-#   turnpikes.sh resolve [<text>...]    a `## Turnpikes` section's text, as the turnpikes it
+#   turnpikes.sh resolve [--project <repo>] [<text>...] a `## Turnpikes` section's text, as the turnpikes it
 #                                       names; with no text given, the section is read from stdin
 #   turnpikes.sh legs <dispatch> [--expect <line>]
 #                                       a run's legs, from the `turnpikes:` line under its
@@ -16,7 +16,8 @@
 #   turnpikes.sh --self-test
 #
 # A section holds `default`, `none`, or turnpike names, separated by commas or spaces, and
-# nothing else. `default` stands for every turnpike --list marks default, alone or in a list;
+# nothing else. `default` stands for the project's configured default turnpikes, or every
+# turnpike --list marks default when the project has not declared its own;
 # `none` stands alone. Case, backticks, a list marker at the start of a line, a thematic break,
 # a hard line break, invisible characters and a closing full stop are ignored; every other
 # token, a lone dash or dots among them, is a word, and a word that is not a turnpike is named.
@@ -40,7 +41,7 @@
 #           is not names or none, or is not the one --expect gives. One line per fault, on stdout.
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd -P)
-usage() { echo "usage: turnpikes.sh --list | resolve [<text>...] | legs <dispatch> [--expect <line>] | legs --line <line> | short <line> | --self-test" >&2; exit 1; }
+usage() { echo "usage: turnpikes.sh --list | resolve [--project <repo>] [<text>...] | legs <dispatch> [--expect <line>] | legs --line <line> | short [--project <repo>] <line> | --self-test" >&2; exit 1; }
 
 # Both bodies are read with `read`, not `$(cat ...)`, so that a shell as old as bash 3.2 parses
 # this file: it reads a here-document inside `$( )` as ordinary text, quotes and backticks included.
@@ -52,10 +53,10 @@ security   default  review  exploit paths through the project's risk surfaces
 TURNPIKES
 
 IFS= read -r -d '' CORE <<'PY' || true
-import re, sys, unicodedata
+import json, os, re, subprocess, sys, unicodedata
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-table, cmd, args = sys.argv[1], sys.argv[2], sys.argv[3:]
+here, table, cmd, args = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4:]
 LEGS = [(1, "synthesis"), (2, "review"), (3, "ship")]
 ALWAYS = {"synthesis", "ship"}
 RESERVED = ("default", "none")
@@ -88,6 +89,18 @@ if faults:
     sys.exit(1)
 names = [r[0] for r in rows]
 defaults = [r[0] for r in rows if r[1]]
+project = os.environ.get("POSTMASTER_PROJECT", "")
+if project and cmd in ("resolve", "short"):
+    p = subprocess.run([os.path.join(here, "project-settings.sh"), "inspect", project], capture_output=True, text=True)
+    if p.returncode:
+        print(p.stderr.strip() or "turnpikes: cannot read project settings", file=sys.stderr); sys.exit(1)
+    try:
+        profile = json.loads(p.stdout)
+    except ValueError as e:
+        print("turnpikes: project settings gave no JSON: %s" % e, file=sys.stderr); sys.exit(1)
+    declared = profile.get("project", {}).get("default_turnpikes")
+    if declared is not None:
+        defaults = declared
 leg_of = {r[0]: r[2] for r in rows}
 
 def words_of(text):
@@ -175,17 +188,21 @@ elif cmd == "legs":
         sys.exit(2)
     legs(found[0])
 PY
-core() { python3 -c "$CORE" "$@"; }  # core <table> list | resolve [<text>...] | short <line> | legs <waybill> [<expect>] | legs --line <line>
+core() { python3 -I -c "$CORE" "$HERE" "$@"; }  # core <table> list | resolve [<text>...] | short <line> | legs <waybill> [<expect>] | legs --line <line>
 
 case ${1:-} in
   --list) [ $# -eq 1 ] || usage; core "$TABLE" list; exit $? ;;
-  resolve) shift; core "$TABLE" resolve "$@"; exit $? ;;
-  short) [ $# -eq 2 ] || usage; core "$TABLE" short "$2"; exit $? ;;
+  resolve) shift
+           if [ "${1:-}" = --project ]; then [ $# -ge 2 ] || usage; [ -n "$2" ] || { echo "turnpikes: no such project directory: $2" >&2; exit 1; }; export POSTMASTER_PROJECT=$2; shift 2; fi
+           core "$TABLE" resolve "$@"; exit $? ;;
+  short) shift
+         if [ "${1:-}" = --project ]; then [ $# -eq 3 ] || usage; [ -n "$2" ] || { echo "turnpikes: no such project directory: $2" >&2; exit 1; }; export POSTMASTER_PROJECT=$2; shift 2; fi
+         [ $# -eq 1 ] || usage; core "$TABLE" short "$1"; exit $? ;;
   legs) if [ "${2:-}" = --line ]; then [ $# -eq 3 ] || usage; core "$TABLE" legs --line "$3"; exit $?; fi
         [ $# -eq 2 ] || { [ $# -eq 4 ] && [ "$3" = --expect ]; } || usage
         [ -f "$2/brief.md" ] || { echo "turnpikes: no waybill at $2/brief.md" >&2; exit 1; }
         if [ $# -eq 4 ]; then core "$TABLE" legs "$2/brief.md" "$4"; else core "$TABLE" legs "$2/brief.md"; fi; exit $? ;;
-  --self-test) [ $# -eq 1 ] || usage ;;
+  --self-test) [ $# -eq 1 ] || usage; unset POSTMASTER_PROJECT ;;
   *) usage ;;
 esac
 
@@ -219,6 +236,7 @@ PLUS=$(printf '%s\n%s' "$TABLE" "$NOPE  -        ship    a check the table does 
 
 echo "positive controls: the list"
 run "$self" --list
+[ $rc -eq 0 ] && list_out=$out || list_out=""
 [ $rc -eq 0 ] && for n in style bug security; do [ "$(printf '%s\n' "$out" | awk -v n=$n '$1 == n' | wc -l)" -eq 1 ] || rc=9; done
 [ $rc -eq 0 ] && ok "--list names style, bug and security, once each" || fail "--list names style, bug and security, once each" "$out"
 [ "$(printf '%s\n' "$out" | awk '$2 == "default" {print $1}' | paste -sd' ' -)" = "style bug security" ] \
@@ -227,6 +245,22 @@ run "$self" --list
   && ok "the three run in the review leg" || fail "the three run in the review leg" "$out"
 
 echo "positive controls: a ticket's section"
+project="$tmp/project-profile"; mkdir -p "$project/.postmaster"
+printf '[project]\ndefault_turnpikes = ["bug"]\n' > "$project/.postmaster/project.toml"
+run env POSTMASTER_PROJECT="$tmp/no-such-project" "$self" --list
+is "--list does not read project settings" 0 "$list_out"
+run "$self" resolve --project "$project" default
+is "default resolves to the target project's declared turnpikes" 0 "turnpikes: bug"
+emptyproject="$tmp/empty-project"; mkdir -p "$emptyproject/.postmaster"
+printf '[project]\ndefault_turnpikes = []\n' > "$emptyproject/.postmaster/project.toml"
+run "$self" resolve --project "$emptyproject" default
+is "a project may define default as no turnpikes" 0 "turnpikes: none"
+run "$self" short --project "$project" "turnpikes: none"
+is "short names the project's defaults omitted by a ticket" 0 bug
+run "$self" resolve --project "" default
+has "an explicitly empty --project is refused, never resolved as discovery" 1 "no such project directory"
+run "$self" short --project "" "turnpikes: none"
+has "short refuses an explicitly empty --project too" 1 "no such project directory"
 run "$self" resolve default;            is "default stands for the default set" 0 "turnpikes: style, bug, security"
 run "$self" resolve none;               is "none stands for no turnpike" 0 "turnpikes: none"
 run "$self" resolve "security, bug";    is "a list names its turnpikes, in the table's order" 0 "turnpikes: bug, security"
@@ -308,25 +342,25 @@ bad "a name that is not a lowercase word is refused" "Zz-Not  -       ship    a 
 bad "a line with no description is refused"  "$NOPE      -        ship"                  "needs a name, default or -, a leg, and what it checks"
 
 echo "a run with no turnpikes, walked from synthesis to ship through the poll, the hand-off check and the stages"
-d=$tmp/runs/proj/T-9; waybill "$d" "turnpikes: none"; : > "$d/run-log.md"
+d=$tmp/repo/.postmaster/runs/T-9; waybill "$d" "turnpikes: none"; : > "$d/run-log.md"
 printf '{"stage": "checkpoint-1", "leg": 1, "base": "abc123", "lanes": {}, "coachman": {"legs": {}}}\n' > "$d/manifest.json"
 "$HERE/log-action.sh" "$d" postmaster dispatch T-9 "leg 1" >/dev/null
 printf '## %s\nx\n' Decisions "Deferred findings" "Verified by execution" Unverified "Branches and lanes" "Open questions" "Next leg" > "$d/handoff-1.md"
 touch "$d/.leg-1-done" "$d/.leg-1-exited"
-poll() { "$HERE/runs-status.sh" "$tmp/runs/proj" | awk '$1 == "T-9" {print $NF}'; }
-[ "$(poll)" = DISPATCH ] && ok "after synthesis the poll says DISPATCH" || fail "after synthesis the poll says DISPATCH" "$("$HERE/runs-status.sh" "$tmp/runs/proj")"
+poll() { "$HERE/runs-status.sh" "$tmp/repo/.postmaster/runs" | awk '$1 == "T-9" {print $NF}'; }
+[ "$(poll)" = DISPATCH ] && ok "after synthesis the poll says DISPATCH" || fail "after synthesis the poll says DISPATCH" "$("$HERE/runs-status.sh" "$tmp/repo/.postmaster/runs")"
 next=$("$self" legs "$d" | awk '$1 > 1 {print $1 " " $2; exit}')
 [ "$next" = "3 ship" ] && ok "the leg after synthesis is ship" || fail "the leg after synthesis is ship" "$next"
 prev=$("$self" legs "$d" | awk '$1 < 3 {p = $1} END {print p}')
 "$HERE/handoff-check.sh" "$d/handoff-$prev.md" >/dev/null 2>&1 && [ "$prev" = 1 ] \
   && ok "the ship leg starts from synthesis's hand-off, which passes its check" || fail "the ship leg starts from synthesis's hand-off, which passes its check" "handoff-$prev.md"
-python3 -c 'import json, sys; p = sys.argv[1]; m = json.load(open(p)); m["leg"] = 3; open(p, "w").write(json.dumps(m))' "$d/manifest.json"
+python3 -I -c 'import json, sys; p = sys.argv[1]; m = json.load(open(p)); m["leg"] = 3; open(p, "w").write(json.dumps(m))' "$d/manifest.json"
 "$HERE/stage.sh" "$d" shipping >/dev/null && "$HERE/stage.sh" "$d" shipped >/dev/null && touch "$d/.leg-3-done" "$d/.leg-3-exited"
 after=$("$self" legs "$d" | awk '$1 > 3')
 [ "$(poll)" = DISPATCH ] && [ -z "$after" ] && ok "after ship the poll says DISPATCH, and no leg follows: Stage G" \
   || fail "after ship the poll says DISPATCH, and no leg follows: Stage G" "$(poll) / $after"
 "$HERE/stage.sh" "$d" done postmaster >/dev/null
-stages=$(python3 -c 'import json, sys; print(" ".join(json.loads(l)["target"] for l in open(sys.argv[1]) if json.loads(l)["action"] == "stage"))' "$d/actions.jsonl")
+stages=$(python3 -I -c 'import json, sys; print(" ".join(json.loads(l)["target"] for l in open(sys.argv[1]) if json.loads(l)["action"] == "stage"))' "$d/actions.jsonl")
 [ "$stages" = "shipping shipped done" ] && [ "$(poll)" = - ] && ok "it closes with no review stage" || fail "it closes with no review stage" "$stages"
 
 echo

@@ -7,7 +7,7 @@
 #                                                         uses, as scripts/tracker-kind.sh names it:
 #                                                         local when its store exists, else the
 #                                                         config's [tracker] kind
-#   ticket-check.sh --body <body-file> [--title <title>]  a body file, as an adapter's create
+#   ticket-check.sh --body <body-file> [--title <title>] [--project <repo>] a body file, as an adapter's create
 #                                                         takes it; the title is judged only when
 #                                                         --title gives one
 #   ticket-check.sh --splice <base-body> <sections>       print <base-body> with each `##` section
@@ -29,7 +29,7 @@
 #   - No part is marked to be decided later: TBD or TBC anywhere, or TODO as the whole text or
 #     followed by a colon. TODO as a word, as in "a TODO list", is not a mark.
 #   - The turnpikes are `default`, `none` or turnpike names, as `scripts/turnpikes.sh resolve`
-#     reads them, and every word that is not a turnpike is named. The names come from that
+#     reads them for the target project, and every word that is not a turnpike is named. The names come from that
 #     script alone, so a turnpike added there needs no change here.
 # Code spans, fenced blocks and HTML comments are not read for questions, marks or headings,
 # and quoted text is not read for questions. A <!-- that nothing closes is text. Turnpikes are
@@ -58,7 +58,7 @@
 #   exit 2  malformed; one line per missing or malformed part on stdout, the part named first
 set -uo pipefail
 HERE=$(CDPATH= cd -P -- "$(dirname -- "$0")" && pwd -P)
-usage() { echo "usage: ticket-check.sh <repo> <ticket-id> | --body <body-file> [--title <title>] | --splice <base-body> <sections> | --self-test" >&2; exit 1; }
+usage() { echo "usage: ticket-check.sh <repo> <ticket-id> | --body <body-file> [--title <title>] [--project <repo>] | --splice <base-body> <sections> | --self-test" >&2; exit 1; }
 
 run_py() {  # run_py body <file> <title> | printed <adapter-read-output> | splice <base> <sections>
   TURNPIKES="$HERE/turnpikes.sh" python3 - "$@" <<'PY'
@@ -383,17 +383,31 @@ through_adapter() {  # through_adapter <repo> <id>; checks the ticket as the rep
 }
 
 case ${1:-} in
-  --self-test) ;;
+  --self-test) unset POSTMASTER_PROJECT ;;
   --body)
-    [ $# -eq 2 ] || { [ $# -eq 4 ] && [ "$3" = --title ]; } || usage
-    workdir; copy_in "$2" body.md
-    if [ $# -eq 4 ]; then run_py body "$WORK/body.md" "$4"; else run_py body "$WORK/body.md"; fi; exit $? ;;
+    [ $# -ge 2 ] || usage
+    BODY=$2; TITLE=""; PROJECT=""; HAS_TITLE=0; HAS_PROJECT=0; shift 2
+    while [ $# -gt 0 ]; do
+      case $1 in
+        --title) [ $# -ge 2 ] || usage; TITLE=$2; HAS_TITLE=1; shift 2 ;;
+        --project) [ $# -ge 2 ] || usage; PROJECT=$2; HAS_PROJECT=1; shift 2 ;;
+        *) usage ;;
+      esac
+    done
+    if [ "$HAS_PROJECT" -eq 1 ]; then
+      [ -d "$PROJECT" ] || { echo "ticket-check: no such project directory: $PROJECT" >&2; exit 1; }
+      POSTMASTER_PROJECT=$(CDPATH= cd -P -- "$PROJECT" && pwd -P); export POSTMASTER_PROJECT
+    fi
+    workdir; copy_in "$BODY" body.md
+    if [ "$HAS_TITLE" -eq 1 ]; then run_py body "$WORK/body.md" "$TITLE"; else run_py body "$WORK/body.md"; fi; exit $? ;;
   --splice)
     [ $# -eq 3 ] || usage
     workdir; copy_in "$2" base.md; copy_in "$3" sections.md
     run_py splice "$WORK/base.md" "$WORK/sections.md"; exit $? ;;
   ""|-*) usage ;;
   *) [ $# -eq 2 ] || usage
+     [ -d "$1" ] || { echo "ticket-check: no such project directory: $1" >&2; exit 1; }
+     POSTMASTER_PROJECT=$(CDPATH= cd -P -- "$1" && pwd -P); export POSTMASTER_PROJECT
      workdir; through_adapter "$1" "$2"; exit $? ;;
 esac
 
@@ -479,7 +493,7 @@ named() {  # named <label> <the turnpikes line a passing check prints, whole>
 }
 
 # A stand-in adapter beside a copy of this script, so the path through a tracker runs without one.
-mkdir "$tmp/bin" && cp "$SELF" "$HERE/turnpikes.sh" "$tmp/bin/"
+mkdir "$tmp/bin" && cp "$SELF" "$HERE/turnpikes.sh" "$HERE/project-settings.sh" "$tmp/bin/"
 printf '[tracker]\nkind = "github"\n' > "$tmp/github.toml"
 adapter() { printf '#!/usr/bin/env bash\n%s\n' "$1" > "$tmp/bin/github.sh"; chmod +x "$tmp/bin/github.sh"; }
 through() { out=$(POSTMASTER_CONFIG="$tmp/github.toml" "$tmp/bin/ticket-check.sh" "$tmp" 7 2>&1); rc=$?; }
@@ -564,6 +578,22 @@ adapter "cat -- '$tmp/printed.txt'"; through
 expect "a ticket read through the adapter passes, its log included" 0 none
 
 echo "positive controls: the turnpikes, as scripts/turnpikes.sh reads them"
+project="$tmp/project-profile"; mkdir -p "$project/.postmaster"
+printf '[project]\ndefault_turnpikes = ["bug"]\n' > "$project/.postmaster/project.toml"
+body "$P" "$A" "$D" "$K"; out=$("$SELF" --body "$tmp/body.md" --title "$T" --project "$project" 2>&1); rc=$?
+[ $rc -eq 0 ] && printf '%s\n' "$out" | grep -qFx 'turnpikes: bug' \
+  && ok "default is checked against the target project's declaration" \
+  || fail "default is checked against the target project's declaration (exit $rc)" "$out"
+empty_project="$tmp/empty-project"; mkdir -p "$empty_project/.postmaster"
+printf '[project]\ndefault_turnpikes = []\n' > "$empty_project/.postmaster/project.toml"
+body "$P" "$A" "$D" "$K"; out=$("$SELF" --body "$tmp/body.md" --title "$T" --project "$empty_project" 2>&1); rc=$?
+[ $rc -eq 0 ] && printf '%s\n' "$out" | grep -qFx 'turnpikes: none' \
+  && ok "an empty project default does not add a review floor" \
+  || fail "an empty project default does not add a review floor (exit $rc)" "$out"
+body "$P" "$A" "$D" "$K"; out=$("$SELF" --body "$tmp/body.md" --title "$T" --project "" 2>&1); rc=$?
+[ $rc -eq 1 ] && printf '%s\n' "$out" | grep -q "no such project directory" \
+  && ok "an explicitly empty --project is refused, never checked as discovery" \
+  || fail "an explicitly empty --project is refused, never checked as discovery (exit $rc)" "$out"
 body "$P" "$A" "$D" "$K"; run "$T"
 named "default, in a code span under a template comment, stands for the default set" "turnpikes: $DEF"
 body "$P" "$A" "$D" "## Turnpikes

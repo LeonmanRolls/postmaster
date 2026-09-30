@@ -1,7 +1,7 @@
 ---
 title: Sources
 type: source
-updated: 2026-09-26
+updated: 2026-09-29
 ---
 
 # Sources
@@ -9,6 +9,11 @@ updated: 2026-09-26
 One page per piece of evidence somebody chose to keep: a run promoted from a project's
 `.postmaster/`, compiled in the shape of [the template](template.md), or a paper or article
 captured into `raw/`, saying what it claims and what it would mean here if true. Newest first.
+
+## Articles
+
+- [The AI-native SDLC playbook](ai-native-sdlc-playbook.md) (2026): design review happens
+  before any code is generated, and nothing is implemented without an accepted plan.
 
 ## Runs
 

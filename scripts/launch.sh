@@ -3,8 +3,9 @@
 # records for its harness. One command for every harness, so no form is ever copied by hand;
 # this script and harnesses.md must agree, and a change to one is a change to both.
 #
-#   launch.sh form   <name> [--leg <leg>] [--run <dispatch>]
+#   launch.sh form   <name> [--leg <leg>] [--run <dispatch>] [--project <repo>]
 #   launch.sh launch <name> <cwd> <prompt-file> [--leg <leg>] [--last <file>] [--run <dispatch>]
+#   launch.sh review <lane> <cwd> <base> [--last <file>] [--run <dispatch>]
 #   launch.sh resume <name> <cwd> <thread-id> <prompt-file> [--leg <leg>] [--last <file>]
 #                    [--run <dispatch>]
 #   launch.sh skill  <name> <skill> [--run <dispatch>]
@@ -15,9 +16,12 @@
 # run recorded at dispatch, `config` in <dispatch>/run.json (scripts/run-meta.sh): the live
 # config is not read at all, and a run.json that is missing or unreadable is refused. Every
 # launch and resume inside a run passes --run; the postmaster's own spawn and the config check
-# before dispatch do not. The checks below apply to a recorded config as to the live one.
+# before dispatch do not. A run launch exports its durable session beside the events stream;
+# a launch whose export fails says so loudly and still exits with the harness's status.
+# The checks below apply to a recorded config as to the live one.
 #
-# <name> is a lane from [lanes.<name>], or `coachman`, `coachman_fallback` or `postmaster`
+# A form with --project resolves the target's local role choices. <name> is a lane from
+# [lanes.<name>], or `coachman`, `coachman_fallback` or `postmaster`
 # from [team]. <leg> is synthesis, review or ship, and with --leg, [team.coachman_legs.<leg>]
 # overrides the coachman for that leg. Launching or resuming `coachman` needs --leg; `form`
 # without it shows team.coachman. The coachman is refused when [team.coachman_legs] names any
@@ -28,8 +32,9 @@
 # and a relative path is read from the live config's directory, under --run too. It is shell,
 # sourced last, once the command, its directory and its stdin are fixed, so its assignments
 # reach the harness and not this script's choices; it runs as code, and is the user's to write.
-# The events stream goes to stdout; the caller redirects and backgrounds. --last names the file
-# a harness writes its final message to, where the harness supports it (codex -o). `skill`
+# The events stream goes to stdout; the caller redirects and backgrounds. `review` invokes a
+# lane's own bug-review form against <base>...HEAD, at the harness's top level. --last names the
+# file a harness writes its final message to, where the harness supports it (codex -o). `skill`
 # prints the prompt that invokes the lane's harness's own skill (harnesses.md, Own review
 # skills); `launch` runs it like any other prompt. The one skill is security-review. `form`
 # prints two lines: `launch: ` and the launch form, then `resume: ` and the resume form, or
@@ -41,9 +46,10 @@
 #           coachman or fallback on a lane's model, harness not on PATH, env_file missing, a
 #           form this script does not have (agy resume), a skill that is not security-review,
 #           or a muse or mimo resume of a thread the launch's data directory does not hold
-#   exit 3  skill: the lane's harness has no such skill recorded
+#   exit 3  skill or review: the lane's harness has no such review form recorded
 #   else    the harness's own exit code
 set -uo pipefail
+HERE=$(CDPATH= cd -P -- "$(dirname -- "$0")" && pwd -P)
 CONFIG=${POSTMASTER_CONFIG:-$HOME/.postmaster/config.toml}
 
 if [ "${1:-}" = --self-test ]; then
@@ -92,6 +98,7 @@ if [ "${1:-}" = --self-test ]; then
   codexfix codex 'model = "lane-model"\neffort = "high"'
   codexfix codex-noeffort 'model = "lane-model"'
   codexfix codex-nomodel 'effort = "high"'
+  codexfix review-codex 'model = "lane-model"\neffort = "low"'
   printf -- '- Keep going, then stop.\n' > "$tmp/ruling.txt"
   printf 'Keep going, then stop.\n' > "$tmp/brief.txt"
   git init -q -b main "$tmp/cx" && git -C "$tmp/cx" -c user.name=t -c user.email=t@example.invalid \
@@ -157,9 +164,9 @@ if [ "${1:-}" = --self-test ]; then
     for t in "$@"; do case $out in *"$t"*) ;; *) fail "$label"; return ;; esac; done
     [ $rc -eq 0 ] && ok "$label" || fail "$label"
   }
-  record() {  # record <run> <fixture>: $tmp/<run>/run.json, recording that fixture as at dispatch
-    mkdir -p "$tmp/$1" && POSTMASTER_CONFIG="$tmp/$2.toml" PATH="$tmp/bin:$PATH" \
-      "$here/run-meta.sh" "$tmp/$1" "$tmp/repo" >/dev/null \
+  record() {  # record <run> <fixture>: $tmp/repo/.postmaster/runs/<run>/run.json, recording that fixture as at dispatch
+    mkdir -p "$tmp/repo/.postmaster/runs/$1" && POSTMASTER_CONFIG="$tmp/$2.toml" POSTMASTER_TOOL_PINS="$tmp/tools" PATH="$tmp/bin:$PATH" \
+      "$here/run-meta.sh" "$tmp/repo/.postmaster/runs/$1" "$tmp/repo" >/dev/null \
       || { printf '  FAIL run-meta.sh records %s as run %s\n' "$2" "$1"; fails=$((fails+1)); }
   }
   calls() {  # calls <runbook>...: each launch and resume in them, one per line, marked run or unrun
@@ -191,9 +198,61 @@ PY
   record run-then then
   record run-old-bug old-bug
   record run-onlane onlane
-  mkdir "$tmp/no-record" "$tmp/garbled" "$tmp/unrecorded"
-  printf '{"config": \n' > "$tmp/garbled/run.json"
-  printf '{"run": "T-1"}\n' > "$tmp/unrecorded/run.json"
+  printf '[lanes.g]\nharness = "agy"\nmodel = "agy-model"\n' > "$tmp/agy-run.toml"
+  cat > "$tmp/bin/agy" <<'EOF'
+#!/bin/sh
+printf '{"conversationId":"thread-agy"}\n'
+EOF
+  chmod +x "$tmp/bin/agy"
+  record run-agy agy-run
+  agy_dispatch=$tmp/repo/.postmaster/runs/run-agy
+  agy_events=$agy_dispatch/logs/g-events.jsonl
+  mkdir -p "$(dirname "$agy_events")"
+  POSTMASTER_EVENT_STREAM="$agy_events" POSTMASTER_CONFIG="$tmp/agy-run.toml" PATH="$tmp/bin:$PATH" \
+    "$self" launch g "$tmp/wt" "$tmp/prompt.txt" --run "$agy_dispatch" >"$agy_events" 2>"$tmp/err"; rc=$?; err=$(cat "$tmp/err"); out=$(cat "$agy_events")
+  [ "$rc" -eq 0 ] && [ "$out" = '{"conversationId":"thread-agy"}' ] \
+    && cmp -s "$agy_events" "$agy_dispatch/sessions/g/thread-agy.events.jsonl" \
+    && ok "a run launch exports its durable session beside the harness event stream" \
+    || fail "a run launch exports its durable session beside the harness event stream"
+  sessions_before=$(ls "$agy_dispatch/sessions/g" | wc -l)
+  printf '#!/bin/sh\nexit 0\n' > "$tmp/bin/agy"; chmod +x "$tmp/bin/agy"
+  empty_events=$agy_dispatch/logs/g-empty.jsonl; : > "$empty_events"
+  POSTMASTER_EVENT_STREAM="$empty_events" POSTMASTER_CONFIG="$tmp/agy-run.toml" PATH="$tmp/bin:$PATH" \
+    "$self" launch g "$tmp/wt" "$tmp/prompt.txt" --run "$agy_dispatch" >"$empty_events" 2>"$tmp/err"; rc=$?; err=$(cat "$tmp/err")
+  [ "$rc" -eq 0 ] && [ ! -s "$empty_events" ] && printf '%s' "$err" | grep -q "its session was not exported" \
+    && [ "$(ls "$agy_dispatch/sessions/g" | wc -l)" = "$sessions_before" ] \
+    && ok "an empty event stream is a loud missed export, not a silent skip" \
+    || fail "an empty event stream is a loud missed export, not a silent skip (exit $rc)" "$err"
+  printf '#!/bin/sh\nprintf "{\\"nope\\":1}\\n"\nexit 0\n' > "$tmp/bin/agy"; chmod +x "$tmp/bin/agy"
+  POSTMASTER_EVENT_STREAM="$agy_events" POSTMASTER_CONFIG="$tmp/agy-run.toml" PATH="$tmp/bin:$PATH" \
+    "$self" launch g "$tmp/wt" "$tmp/prompt.txt" --run "$agy_dispatch" >"$agy_events" 2>"$tmp/err"; rc=$?; err=$(cat "$tmp/err")
+  [ "$rc" -eq 0 ] && printf '%s' "$err" | grep -q "its session was not exported" \
+    && ok "a failed export still exits with the harness's status" \
+    || fail "a failed export still exits with the harness's status (exit $rc)" "$err"
+  printf '#!/bin/sh\nprintf "{\\"conversationId\\":\\"thread-rc\\"}\\n"\nexit 3\n' > "$tmp/bin/agy"; chmod +x "$tmp/bin/agy"
+  rc_events=$agy_dispatch/logs/g-rc.jsonl
+  POSTMASTER_EVENT_STREAM="$rc_events" POSTMASTER_CONFIG="$tmp/agy-run.toml" PATH="$tmp/bin:$PATH" \
+    "$self" launch g "$tmp/wt" "$tmp/prompt.txt" --run "$agy_dispatch" >"$rc_events" 2>"$tmp/err"; rc=$?
+  [ "$rc" -eq 3 ] && cmp -s "$rc_events" "$agy_dispatch/sessions/g/thread-rc.events.jsonl" \
+    && ok "a harness failure keeps its exit when the export succeeds" \
+    || fail "a harness failure keeps its exit when the export succeeds (exit $rc)" "$(cat "$tmp/err")"
+  printf '[lanes.g]\nharness = "agy"\nmodel = "agy-model"\nenv_file = "%s"\n' "$tmp/poison.env" > "$tmp/agy-env.toml"
+  record run-agy-env agy-env
+  env_dispatch=$tmp/repo/.postmaster/runs/run-agy-env
+  mkdir -p "$env_dispatch/logs"
+  printf '{"conversationId":"thread-decoy"}\n' > "$env_dispatch/logs/g-decoy.jsonl"
+  printf 'POSTMASTER_EVENT_STREAM="%s"\n' "$env_dispatch/logs/g-decoy.jsonl" > "$tmp/poison.env"
+  printf '#!/bin/sh\nprintf "{\\"conversationId\\":\\"thread-real\\"}\\n"\nexit 0\n' > "$tmp/bin/agy"; chmod +x "$tmp/bin/agy"
+  real_events=$env_dispatch/logs/g-real.jsonl
+  POSTMASTER_EVENT_STREAM="$real_events" POSTMASTER_CONFIG="$tmp/agy-env.toml" PATH="$tmp/bin:$PATH" \
+    "$self" launch g "$tmp/wt" "$tmp/prompt.txt" --run "$env_dispatch" >"$real_events" 2>"$tmp/err"; rc=$?
+  [ "$rc" -eq 0 ] && cmp -s "$real_events" "$env_dispatch/sessions/g/thread-real.events.jsonl" \
+    && [ ! -e "$env_dispatch/sessions/g/thread-decoy.events.jsonl" ] \
+    && ok "a lane env file cannot redirect the session export" \
+    || fail "a lane env file cannot redirect the session export (exit $rc)" "$(cat "$tmp/err")"
+  mkdir -p "$tmp/repo/.postmaster/runs/no-record" "$tmp/repo/.postmaster/runs/garbled" "$tmp/repo/.postmaster/runs/unrecorded"
+  printf '{"config": \n' > "$tmp/repo/.postmaster/runs/garbled/run.json"
+  printf '{"run": "T-1"}\n' > "$tmp/repo/.postmaster/runs/unrecorded/run.json"
 
   echo "positive controls"
   for k in synthesis review ship; do
@@ -225,13 +284,13 @@ PY
   runs_on "the fallback resumes on its own model, with no --leg" legs fallback-model resume coachman_fallback "$tmp/wt" T-1 "$tmp/prompt.txt"
   runs_on "form with no --leg shows team.coachman" legs coach-model form coachman
   carries "a lane's env file reaches the harness's environment" envfile "probe=reached" launch coachman "$tmp/wt" "$tmp/prompt.txt" --leg review
-  runs_on "inside a run, a resume runs on the model the run recorded, not the live config's" edited review-model resume coachman "$tmp/wt" T-1 "$tmp/prompt.txt" --leg review --run "$tmp/run"
+  runs_on "inside a run, a resume runs on the model the run recorded, not the live config's" edited review-model resume coachman "$tmp/wt" T-1 "$tmp/prompt.txt" --leg review --run "$tmp/repo/.postmaster/runs/run"
   runs_on "outside a run, the same resume runs on the live config's model" edited edited-model resume coachman "$tmp/wt" T-1 "$tmp/prompt.txt" --leg review
-  run now resume one "$tmp/wt" T-1 "$tmp/prompt.txt" --run "$tmp/run-then"
+  run now resume one "$tmp/wt" T-1 "$tmp/prompt.txt" --run "$tmp/repo/.postmaster/runs/run-then"
   printed "inside a run, a lane resumes on the harness, model, effort and env file the run recorded" "--resume T-1 " "--model then-model " "--effort high " "probe=then"
   run now resume one "$tmp/wt" T-1 "$tmp/prompt.txt"
   printed "outside a run, the same resume takes all four from the live config" "--mode json " "--session T-1 " "--model now-model " "--thinking low " "probe=now"
-  runs_on "inside a run the live config is not read: with none at all, a launch runs on the recorded model" nowhere synthesis-model launch coachman "$tmp/wt" "$tmp/prompt.txt" --leg synthesis --run "$tmp/run"
+  runs_on "inside a run the live config is not read: with none at all, a launch runs on the recorded model" nowhere synthesis-model launch coachman "$tmp/wt" "$tmp/prompt.txt" --leg synthesis --run "$tmp/repo/.postmaster/runs/run"
   out=$(calls "$tmp/runbook.md"); rc=$?; err=""
   got=$(printf '%s\n' "$out" | sed -E 's/^([a-z]+) .*launch\.sh (launch|resume) ([a-z]) .*/\1 \3/' | tr '\n' ,)
   [ "$got" = "unrun a,run b,unrun c,run d," ] && ok "a runbook launch or resume with no --run is found, fenced or inline" \
@@ -278,12 +337,12 @@ PY
     resume one "$tmp/wt" T-1 "$tmp/ruling.txt"
   refused "resuming the coachman with no --leg is refused, and nothing runs" legs "coachman needs --leg" resume coachman "$tmp/wt" T-1 "$tmp/prompt.txt"
   refused "launching the coachman with no --leg is refused, and nothing runs" legs "coachman needs --leg" launch coachman "$tmp/wt" "$tmp/prompt.txt"
-  refused "inside a run with no run.json, a resume is refused though the live config would serve, and nothing runs" legs "no run.json in $tmp/no-record" resume coachman "$tmp/wt" T-1 "$tmp/prompt.txt" --leg review --run "$tmp/no-record"
-  refused "inside a run whose run.json does not parse, a launch is refused, and nothing runs" legs "cannot read $tmp/garbled/run.json" launch one "$tmp/wt" "$tmp/prompt.txt" --run "$tmp/garbled"
-  refused "a run.json that records no config is refused" legs "it records no config" launch one "$tmp/wt" "$tmp/prompt.txt" --run "$tmp/unrecorded"
+  refused "inside a run with no run.json, a resume is refused though the live config would serve, and nothing runs" legs "no run.json in $tmp/repo/.postmaster/runs/no-record" resume coachman "$tmp/wt" T-1 "$tmp/prompt.txt" --leg review --run "$tmp/repo/.postmaster/runs/no-record"
+  refused "inside a run whose run.json does not parse, a launch is refused, and nothing runs" legs "cannot read $tmp/repo/.postmaster/runs/garbled/run.json" launch one "$tmp/wt" "$tmp/prompt.txt" --run "$tmp/repo/.postmaster/runs/garbled"
+  refused "a run.json that records no config is refused" legs "it records no config" launch one "$tmp/wt" "$tmp/prompt.txt" --run "$tmp/repo/.postmaster/runs/unrecorded"
   refused "an empty --run is refused, never read as outside a run" legs "--run needs a dispatch directory" resume coachman "$tmp/wt" T-1 "$tmp/prompt.txt" --leg review --run ""
-  refused "a recorded config naming bug is refused, though the live config passes" legs "one leg now, review" resume coachman "$tmp/wt" T-1 "$tmp/prompt.txt" --leg review --run "$tmp/run-old-bug"
-  refused "a recorded leg on a lane's model is refused, though the live config passes" legs "a lane's model" resume coachman "$tmp/wt" T-1 "$tmp/prompt.txt" --leg synthesis --run "$tmp/run-onlane"
+  refused "a recorded config naming bug is refused, though the live config passes" legs "one leg now, review" resume coachman "$tmp/wt" T-1 "$tmp/prompt.txt" --leg review --run "$tmp/repo/.postmaster/runs/run-old-bug"
+  refused "a recorded leg on a lane's model is refused, though the live config passes" legs "a lane's model" resume coachman "$tmp/wt" T-1 "$tmp/prompt.txt" --leg synthesis --run "$tmp/repo/.postmaster/runs/run-onlane"
   got=$(calls "$here/../skills/postmaster/coachman.md" "$here/../skills/postmaster/postmaster.md"); rc=$?
   out=$(printf '%s\n' "$got" | grep '^unrun '); err=""
   [ $rc -eq 0 ] && [ -z "$out" ] && printf '%s\n' "$got" | grep -q '^run .*/coachman\.md: ' \
@@ -411,20 +470,81 @@ PY
   run skills skill three security-review
   [ $rc -eq 3 ] && [ -z "$out" ] && ok "a muse lane has no security review skill: exit 3" || fail "a muse lane has no security review skill: exit 3"
 
+  echo "bug review forms"
+  base=$(git -C "$tmp/cx" rev-parse HEAD) || exit 1
+  printf '[lanes.one]\nharness = "claude"\nmodel = "claude-model"\neffort = "low"\n\n[team]\ncoachman = { harness = "claude", model = "coach-model" }\n' > "$tmp/review-claude.toml"
+  printf '[lanes.one]\nharness = "mimo"\nmodel = "prov/mimo-model"\neffort = "low"\n\n[team]\ncoachman = { harness = "mimo", model = "coach-model" }\n' > "$tmp/review-mimo.toml"
+  printf '[lanes.one]\nharness = "pi"\nmodel = "pi-model"\n\n[team]\ncoachman = { harness = "pi", model = "coach-model" }\n' > "$tmp/review-pi.toml"
+  runs_as "claude review names the range and runs /code-review at max" review-claude \
+    "-p /code-review max $base...HEAD --model claude-model --effort max --output-format stream-json --verbose --dangerously-skip-permissions probe=" \
+    review one "$tmp/cx-detached" "$base"
+  runs_as "codex review uses --base, --last, max effort and the lane model" review-codex \
+    "$(lines "$tmp/cx-detached" exec review --base "$base" --json -o "$tmp/review-last.md" -m lane-model -c 'model_reasoning_effort="max"' "$CODEX_BYPASS" --skip-git-repo-check)" \
+    review one "$tmp/cx-detached" "$base" --last "$tmp/review-last.md"
+  printf 'stale from an earlier attempt\n' > "$tmp/review-last.md"
+  run review-codex review one "$tmp/cx-detached" "$base" --last "$tmp/review-last.md"
+  [ $rc -eq 0 ] && [ ! -e "$tmp/review-last.md" ] \
+    && ok "a review launch removes a stale --last file before the harness runs" \
+    || fail "a review launch removes a stale --last file before the harness runs"
+  record review-run review-codex
+  runs_as "codex review in a run uses the recorded config and the same top level" review-codex \
+    "$(lines "$tmp/cx-detached" exec review --base "$base" --json -m lane-model -c 'model_reasoning_effort="max"' "$CODEX_BYPASS" --skip-git-repo-check)" \
+    review one "$tmp/cx-detached" "$base" --run "$tmp/repo/.postmaster/runs/review-run"
+  mrun review-mimo review one "$tmp/cx-detached" "$base"
+  case $out in *"--command review"*"--variant high"*"stdin=$base...HEAD"*) true ;; *) false ;; esac \
+    && [ $rc -eq 0 ] && ok "mimo review uses --command review, the prompt file range and high variant" \
+    || fail "mimo review uses --command review, the prompt file range and high variant"
+  [ -z "$(find "$tmp/cx-detached" -maxdepth 1 -name '.postmaster-review-*' -print -quit)" ] \
+    && ok "mimo's temporary range prompt is removed after launch" || fail "mimo's temporary range prompt is removed after launch"
+  rel_pwd=$(pwd -P) && cd "$tmp" || { echo "self-test: cannot enter $tmp"; exit 1; }
+  run review-mimo review one "cx-detached" "$base"
+  cd "$rel_pwd" || exit 1
+  case $out in *"--command review"*) ran=true ;; *) ran=false ;; esac
+  [ $rc -eq 0 ] && $ran && [ -z "$(find "$tmp/cx-detached" -maxdepth 1 -name '.postmaster-review-*' -print -quit)" ] \
+    && ok "mimo's temporary range prompt is removed after a relative-cwd launch" \
+    || fail "mimo's temporary range prompt is removed after a relative-cwd launch"
+  run review-pi review one "$tmp/cx-detached" "$base"
+  [ $rc -eq 3 ] && [ -z "$out" ] && case $err in *"has no bug code-review form"*) true ;; *) false ;; esac \
+    && ok "pi has no bug review form: exit 3" || fail "pi has no bug review form: exit 3"
+  printf '[lanes.one]\nharness = "not-installed"\nmodel = "model"\n' > "$tmp/review-unsupported.toml"
+  run review-unsupported review one "$tmp/cx-detached" "$base"
+  [ $rc -eq 3 ] && [ -z "$out" ] && case $err in *"has no bug code-review form"*) true ;; *) false ;; esac \
+    && ok "a harness without a review form exits 3 even when its CLI is absent" \
+    || fail "a harness without a review form exits 3 even when its CLI is absent"
+  git -C "$tmp/cx" worktree add -q --detach "$tmp/cx-dirty" \
+    || { echo "self-test: cannot make the dirty review fixture"; exit 1; }
+  printf 'v1\n' > "$tmp/cx-dirty/tracked.txt"
+  git -C "$tmp/cx-dirty" -c user.name=t -c user.email=t@example.invalid add tracked.txt \
+    && git -C "$tmp/cx-dirty" -c user.name=t -c user.email=t@example.invalid commit -q -m tracked \
+    || { echo "self-test: cannot commit the dirty review fixture"; exit 1; }
+  dirty_base=$(git -C "$tmp/cx-dirty" rev-parse HEAD) || exit 1
+  printf 'v2\n' > "$tmp/cx-dirty/tracked.txt"
+  run review-codex review one "$tmp/cx-dirty" "$dirty_base"
+  [ $rc -eq 1 ] && [ -z "$out" ] && case $err in *"would widen the review past"*) true ;; *) false ;; esac \
+    && ok "a review on a dirty scratch is refused before the harness runs" \
+    || fail "a review on a dirty scratch is refused before the harness runs"
+  git -C "$tmp/cx-dirty" checkout -q -- tracked.txt || exit 1
+  printf 'untracked\n' > "$tmp/cx-dirty/untracked.txt"
+  run review-codex review one "$tmp/cx-dirty" "$dirty_base"
+  [ $rc -eq 0 ] && case $out in *"$dirty_base"*) true ;; *) false ;; esac \
+    && ok "untracked scratch files do not block a review" \
+    || fail "untracked scratch files do not block a review"
+
   echo
   [ "$fails" -eq 0 ] && { echo "self-test: all controls behaved"; exit 0; }
   echo "self-test: $fails control(s) misbehaved"; exit 1
 fi
 
 die() { echo "launch: $*" >&2; exit 1; }
-[ $# -ge 2 ] || die "usage: launch.sh form|launch|resume|skill <name> ... | --self-test"
+[ $# -ge 2 ] || die "usage: launch.sh form|launch|review|resume|skill <name> ... | --self-test"
 CMD=$1; NAME=$2; shift 2
-LEG=""; LAST=""; RUN=""; STDIN_FILE=""; args=()
+LEG=""; LAST=""; RUN=""; BASE=""; PROJECT=""; PTEXT=""; STDIN_FILE=""; REVIEW_PROMPT=""; args=()
 while [ $# -gt 0 ]; do
   case $1 in
     --leg) [ $# -ge 2 ] || die "--leg needs a value"; LEG=$2; shift ;;
     --last) [ $# -ge 2 ] || die "--last needs a file"; LAST=$2; shift ;;
     --run) [ $# -ge 2 ] && [ -n "$2" ] || die "--run needs a dispatch directory"; RUN=$2; shift ;;
+    --project) [ $# -ge 2 ] && [ -n "$2" ] || die "--project needs a project directory"; PROJECT=$2; shift ;;
     *) args+=("$1") ;;
   esac
   shift
@@ -433,6 +553,7 @@ done
   && die "coachman needs --leg synthesis, review or ship to $CMD"
 
 if [ -n "$RUN" ]; then
+  [ -z "$PROJECT" ] || die "use --run or --project, not both"
   SOURCE=${RUN%/}/run.json
   [ -f "$SOURCE" ] || die "no run.json in $RUN; inside a run, a launch or resume runs only on the config the run recorded at dispatch"
 else
@@ -440,9 +561,9 @@ else
   [ -f "$SOURCE" ] || die "no config at $CONFIG (POSTMASTER_CONFIG overrides the path)"
 fi
 python3 -c 'import tomllib' 2>/dev/null || die "python3 with tomllib (3.11 or newer) is needed to read the config"
-spec=$(python3 - "$SOURCE" "$NAME" "$LEG" "${RUN:+run}" <<'PY'
+spec=$(python3 - "$SOURCE" "$NAME" "$LEG" "${RUN:+run}" "$PROJECT" "$HERE" <<'PY'
 import json, re, sys, tomllib, shlex
-path, name, leg, recorded = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4] == "run"
+path, name, leg, recorded, project, here = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4] == "run", sys.argv[5], sys.argv[6]
 def die(msg):
     print("die %s" % shlex.quote(msg)); sys.exit(0)
 def table(v, what):
@@ -459,6 +580,20 @@ if recorded:
     cfg = cfg.get("config") if isinstance(cfg, dict) else None
     if not isinstance(cfg, dict):
         die("cannot read %s: it records no config" % path)
+elif project:
+    import subprocess
+    try:
+        tomllib.load(open(path, "rb"))
+    except (OSError, tomllib.TOMLDecodeError) as e:
+        die("cannot read %s: %s" % (path, e))
+    r = subprocess.run([here + "/project-settings.sh", "effective", project, path],
+                       capture_output=True, text=True)
+    if r.returncode:
+        die(r.stderr.strip() or "cannot resolve project role choices")
+    try:
+        cfg = json.loads(r.stdout)
+    except ValueError as e:
+        die("project settings gave no effective config: %s" % e)
 LEGS = ("synthesis", "review", "ship")
 if leg and leg not in LEGS:
     die("no such leg: --leg %s; the legs are synthesis, review and ship" % leg)
@@ -505,6 +640,11 @@ PY
 eval "$spec"
 [ -n "${HARNESS:-}" ] || die "$NAME has no harness in $SOURCE"
 [ -n "${MODEL:-}" ] || die "$NAME has no model in $SOURCE"
+if [ "$CMD" = review ]; then
+  FORMS=$(CDPATH= cd -P -- "$(dirname -- "$0")" && pwd -P)/review-forms.sh
+  "$FORMS" has "$HARNESS" >/dev/null 2>&1 \
+    || { echo "launch: $NAME runs on $HARNESS, which has no bug code-review form recorded in harnesses.md" >&2; exit 3; }
+fi
 command -v "$HARNESS" >/dev/null 2>&1 || die "harness '$HARNESS' is not on PATH"
 if [ -n "${ENV_FILE:-}" ]; then
   ENV_FILE=${ENV_FILE/#\~/$HOME}
@@ -527,9 +667,11 @@ prompt_text() {  # the prompt file's text; a missing, unreadable or empty file i
 }
 case $CMD in
   form)   [ ${#args[@]} -eq 0 ] || die "form takes no argument but --leg and --run"
-          CWD='<cwd>'; PROMPT='<prompt-file>'; THREAD='<thread-id>'; PTEXT='$(cat <prompt-file>)' ;;
+          CWD='<cwd>'; PROMPT='<prompt-file>'; THREAD='<thread-id>'; BASE='<base>'; PTEXT='$(cat <prompt-file>)' ;;
   launch) [ ${#args[@]} -eq 2 ] || die "launch needs <cwd> <prompt-file>"
           CWD=${args[0]}; PROMPT=${args[1]}; prompt_text ;;
+  review) [ ${#args[@]} -eq 2 ] || die "review needs <cwd> <base>"
+          CWD=${args[0]}; BASE=${args[1]}; PROMPT='<review-prompt-file>' ;;
   resume) [ ${#args[@]} -eq 3 ] || die "resume needs <cwd> <thread-id> <prompt-file>"
           CWD=${args[0]}; THREAD=${args[1]}; PROMPT=${args[2]}
           [ -n "$THREAD" ] || die "resume needs a thread id, and none was given"
@@ -537,6 +679,22 @@ case $CMD in
   *) die "unknown command: $CMD" ;;
 esac
 [ "$CMD" = form ] || [ -d "$CWD" ] || die "no such directory: $CWD"
+if [ "$CMD" = review ]; then
+  git -C "$CWD" rev-parse --verify "$BASE^{commit}" >/dev/null 2>&1 \
+    || die "review base is not a commit in $CWD: $BASE"
+  git -C "$CWD" diff --quiet HEAD -- 2>/dev/null \
+    || die "review scratch is dirty, which would widen the review past $BASE...HEAD: $CWD"
+  if [ "$HARNESS" = mimo ]; then
+    REVIEW_PROMPT=$(mktemp "$CWD/.postmaster-review-XXXXXX") || die "cannot create the MiMo review prompt in $CWD"
+    # Absolute at creation: the cd below would re-resolve a relative path, and the
+    # removal after it, and the EXIT trap, would miss while rm -f still exits 0.
+    prompt_dir=$(CDPATH= cd -P -- "$(dirname -- "$REVIEW_PROMPT")" && pwd -P) || die "cannot resolve the MiMo review prompt in $CWD"
+    REVIEW_PROMPT=$prompt_dir/$(basename -- "$REVIEW_PROMPT")
+    printf '%s...HEAD\n' "$BASE" > "$REVIEW_PROMPT" || die "cannot write the MiMo review prompt in $CWD"
+    PROMPT=$REVIEW_PROMPT
+    trap 'rm -f -- "$REVIEW_PROMPT"' EXIT
+  fi
+fi
 case $HARNESS in pi|muse|mimo) [ "$CMD" != form ] ;; *) false ;; esac && {   # read after the cd
   prompt_dir=$(CDPATH= cd -P -- "$(dirname -- "$PROMPT")" && pwd -P) || die "cannot resolve prompt file: $PROMPT"
   PROMPT=$prompt_dir/$(basename "$PROMPT")
@@ -559,17 +717,20 @@ case $HARNESS in
     # directory this script enters. Without -m and the effort it runs on codex's configured
     # default, not on the thread's own model. `--` stops a prompt that starts with - from being
     # read as a flag.
-    if [ "$CMD" = resume ]; then cmd=(codex exec resume "$THREAD" --json)
+    if [ "$CMD" = review ]; then cmd=(codex exec review --base "$BASE" --json)
+    elif [ "$CMD" = resume ]; then cmd=(codex exec resume "$THREAD" --json)
     else cmd=(codex exec -C "$CWD" --json); fi
     [ -n "$LAST" ] && cmd+=(-o "$LAST")
     cmd+=(-m "$MODEL")
-    [ -n "${EFFORT:-}" ] && cmd+=(-c "model_reasoning_effort=\"$EFFORT\"")
+    if [ "$CMD" = review ]; then cmd+=(-c 'model_reasoning_effort="max"')
+    elif [ -n "${EFFORT:-}" ]; then cmd+=(-c "model_reasoning_effort=\"$EFFORT\""); fi
     cmd+=(--dangerously-bypass-approvals-and-sandbox)
-    if [ "$CMD" = launch ] && ! git -C "$CWD" symbolic-ref -q HEAD >/dev/null 2>&1; then
+    if { [ "$CMD" = launch ] || [ "$CMD" = review ]; } \
+      && ! git -C "$CWD" symbolic-ref -q HEAD >/dev/null 2>&1; then
       cmd+=(--skip-git-repo-check)   # a detached scratch
     fi
     if [ "$CMD" = resume ]; then cmd+=(--); fi
-    cmd+=("$PTEXT") ;;
+    [ "$CMD" = review ] || cmd+=("$PTEXT") ;;
   grok)
     if [ "$CMD" = resume ]; then cmd=(grok --resume "$THREAD" -p "$PTEXT")
     else cmd=(grok --prompt-file "$PROMPT"); fi
@@ -580,10 +741,12 @@ case $HARNESS in
     [ "$CMD" = resume ] && die "agy resume form is not recorded; relaunch against its conversationId by hand (harnesses.md)"
     cmd=(agy -p "$PTEXT" --model "$MODEL" --output-format stream-json --dangerously-skip-permissions --add-dir "$CWD") ;;
   claude)
-    if [ "$CMD" = resume ]; then cmd=(claude -p --resume "$THREAD" "$PTEXT")
+    if [ "$CMD" = review ]; then PTEXT="/code-review max $BASE...HEAD"; cmd=(claude -p "$PTEXT")
+    elif [ "$CMD" = resume ]; then cmd=(claude -p --resume "$THREAD" "$PTEXT")
     else cmd=(claude -p "$PTEXT"); fi
     cmd+=(--model "$MODEL")
-    [ -n "${EFFORT:-}" ] && cmd+=(--effort "$EFFORT")
+    if [ "$CMD" = review ]; then cmd+=(--effort max)
+    elif [ -n "${EFFORT:-}" ]; then cmd+=(--effort "$EFFORT"); fi
     # POSTMASTER_LAUNCH_NAME, set by scripts/host.sh, names the thread in the harness's own store.
     [ -n "${POSTMASTER_LAUNCH_NAME:-}" ] && cmd+=(--name "$POSTMASTER_LAUNCH_NAME")
     cmd+=(--output-format stream-json --verbose --dangerously-skip-permissions) ;;
@@ -621,8 +784,10 @@ case $HARNESS in
     # turns off; the instruction files it reads from Claude Code are kept.
     DATA=$(harness_data mimo)
     cmd=(env "XDG_DATA_HOME=$DATA" MIMOCODE_DISABLE_CLAUDE_IMPORT=1 mimo run --format json -m "$MODEL")
+    [ "$CMD" = review ] && cmd+=(--command review)
     [ "$CMD" = resume ] && cmd+=(-s "$THREAD")
-    [ -n "${EFFORT:-}" ] && cmd+=(--variant "$EFFORT")
+    if [ "$CMD" = review ]; then cmd+=(--variant high)
+    elif [ -n "${EFFORT:-}" ]; then cmd+=(--variant "$EFFORT"); fi
     [ "$CMD" = launch ] && [ -n "${POSTMASTER_LAUNCH_NAME:-}" ] && cmd+=(--title "$POSTMASTER_LAUNCH_NAME")
     cmd+=(--dangerously-skip-permissions)
     STDIN_FILE=$PROMPT ;;
@@ -669,10 +834,36 @@ if [ "$HARNESS" = codex ] && [ "$CMD" = launch ]; then
   grep -qF "[projects.\"$CWD\"]" "$HOME/.codex/config.toml" \
     || printf '\n[projects."%s"]\ntrust_level = "trusted"\n' "$CWD" >> "$HOME/.codex/config.toml"
 fi
+CWD=$(CDPATH= cd -P -- "$CWD" && pwd -P) || die "cannot resolve $CWD"
 CDPATH= cd -- "$CWD" || die "cannot enter $CWD"
 # A harness whose prompt arrives on stdin reads it from the file, never from an inherited pipe.
 if [ -n "$STDIN_FILE" ]; then exec < "$STDIN_FILE" || die "cannot read $STDIN_FILE"; fi
+if [ -n "$REVIEW_PROMPT" ]; then
+  rm -f -- "$REVIEW_PROMPT" || die "cannot remove the temporary MiMo review prompt: $REVIEW_PROMPT"
+  REVIEW_PROMPT=""; trap - EXIT
+fi
+if [ "$CMD" = review ] && [ "$HARNESS" = codex ] && [ -n "$LAST" ]; then
+  # Codex writes -o only on success, so a stale file from an earlier attempt is
+  # removed after the cd, where a relative path resolves as the harness sees it.
+  rm -f -- "$LAST" || die "cannot clear the codex review output file: $LAST"
+fi
 # The env file reaches the harness's environment only: the command above is already built.
-if [ -n "${ENV_FILE:-}" ]; then set -a; . "$ENV_FILE"; set +a; fi
+# The host-provided event-stream path is not the env file's to change: it decides which
+# session the export hook retains, so it is restored after sourcing.
+if [ -n "${ENV_FILE:-}" ]; then
+  saved_event_stream=${POSTMASTER_EVENT_STREAM:-}
+  set -a; . "$ENV_FILE"; set +a
+  POSTMASTER_EVENT_STREAM=$saved_event_stream
+fi
 unset POSTMASTER_LAUNCH_NAME   # the thread's own launches are named by their own host.sh call
-exec "${cmd[@]}"
+"${cmd[@]}"
+rc=$?
+# The session export is attempted on every run launch with a stream, including an
+# empty one: a missing session is loud on stderr, never a silent skip. The launch
+# still exits with the harness's status: a lane that did the work must not look
+# failed because its session could not be retained.
+if [ -n "$RUN" ] && [ -n "${POSTMASTER_EVENT_STREAM:-}" ]; then
+  "$HERE/export-session.sh" "$RUN" "$NAME" "$HARNESS" "$CWD" "$POSTMASTER_EVENT_STREAM" "${DATA:-}" \
+    || echo "launch: the harness exited $rc but its session was not exported" >&2
+fi
+exit "$rc"

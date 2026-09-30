@@ -11,10 +11,13 @@
 #   action   a verb from a fixed set, enforced, so the log is computable:
 #            dispatch resume harvest synthesize review-launch review-harvest finding apply
 #            escalate rule ticket-check ticket-create ticket-edit ticket-state ticket-comment
-#            gate verify merge teardown degrade handoff-accept handoff stage tool-fault note
+#            gate verify merge teardown degrade handoff-accept handoff stage spec-review
+#            tool-fault note
 #   target   what the action was done to: a lane, a ticket id, a branch, a path, a round
 #   detail   free text; everything after the target, joined by spaces. A finding's opens with its
-#            class, gating or style, so the style findings can be told apart
+#            class, gating or style, so the style findings can be told apart. A spec-review's
+#            opens with the decision, approved, changes or dropped, then the spec commit the
+#            user saw, then the user's words where the decision is changes or dropped
 #
 # A tool-fault is postmaster itself misbehaving: a script, a runbook step or a harness adapter.
 # Its target is the postmaster file, relative to the checkout this script is in or absolute,
@@ -28,8 +31,13 @@
 # dropped, bytes that are not UTF-8 are dropped, and a line or paragraph separator is escaped.
 #
 # Writes one JSON line to <dispatch>/actions.jsonl and the same line, with the run named, to
-# <dispatch>/../ledger.jsonl (the project's ledger across runs). Both are append-only. Nothing
-# in the flow reads its own narrative back to learn from it; it reads these lines.
+# <dispatch>/../ledger.jsonl (the project's ledger across runs, under the project's own
+# .postmaster/runs/). Both are append-only. Nothing in the flow reads its own narrative back
+# to learn from it; it reads these lines.
+#
+# The run is the dispatch directory's name. The project is the basename of the project root:
+# <project>/.postmaster/runs/<TICKET>, so two projects with the same basename keep separate
+# ledgers. An older layout, runs/<project>/<TICKET>, is still read as that project.
 #
 #   exit 0  written to both files
 #   exit 1  usage, an action outside the set, a finding with no class, a tool-fault missing a
@@ -38,7 +46,7 @@ set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd -P)
 TOOL=$(dirname "$HERE")
 CONTROLS=$TOOL/skills/postmaster/controls.md
-VERBS=" dispatch resume harvest synthesize review-launch review-harvest finding apply escalate rule ticket-check ticket-create ticket-edit ticket-state ticket-comment gate verify merge teardown degrade handoff-accept handoff stage tool-fault note "
+VERBS=" dispatch resume harvest synthesize review-launch review-harvest finding apply escalate rule ticket-check ticket-create ticket-edit ticket-state ticket-comment gate verify merge teardown degrade handoff-accept handoff stage spec-review tool-fault note "
 
 json_str() {  # the inside of a JSON string, in bash alone but for tr and iconv
   local s=$1
@@ -100,11 +108,19 @@ log_action() {  # log_action <dispatch> <actor> <action> <target> [detail...]
   case "$VERBS" in *" $ACTION "*) ;; *) echo "log-action: '$ACTION' is not an action in the set:$VERBS" >&2; return 1 ;; esac
   [ "$ACTION" != finding ] || case ${DETAIL%% *} in gating|style) ;;
     *) echo "log-action: a finding's detail opens with its class, gating or style" >&2; return 1 ;; esac
+  [ "$ACTION" != spec-review ] || case ${DETAIL%% *} in approved|changes|dropped) ;;
+    *) echo "log-action: a spec-review's detail opens with its decision, approved, changes or dropped" >&2; return 1 ;; esac
   if [ "$ACTION" = tool-fault ]; then tool_fault "$TARGET" "$@" || return 1; fi
 
   dispatch=$(CDPATH= cd -P -- "$given" 2>/dev/null && pwd -P) || { echo "log-action: no such dir: $given" >&2; return 1; }
   run=$(basename "$dispatch")
-  project=$(basename "$(dirname "$dispatch")")
+  parent=$(dirname "$dispatch")
+  grand=$(dirname "$parent")
+  if [ "$(basename "$parent")" = runs ] && [ "$(basename "$grand")" = .postmaster ]; then
+    project=$(basename "$(dirname "$grand")")
+  else
+    project=$(basename "$parent")
+  fi
   ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
   line=$(printf '{"ts":"%s","project":"%s","run":"%s","actor":"%s","action":"%s","target":"%s","detail":"%s"%s}' \
@@ -124,7 +140,7 @@ fi
 # --- self-test ----------------------------------------------------------------------------
 tmp=$(mktemp -d) || exit 1
 trap 'rm -r -- "$tmp" 2>/dev/null' EXIT
-d="$tmp/project/RUN-1"; mkdir -p "$d"
+d="$tmp/proj/.postmaster/runs/RUN-1"; mkdir -p "$d"
 SELF="$HERE/log-action.sh"
 fails=0
 ok()   { printf '  ok   %s\n' "$1"; }
@@ -146,9 +162,9 @@ ln -s "$TOOL" "$tmp/link" && : > "$tmp/outside.sh" || exit 1
 
 echo "positive controls"
 wrote "an action is written" postmaster note RUN-1 a plain "\"detail\""
-cmp -s "$d/actions.jsonl" "$tmp/project/ledger.jsonl" && ok "as one line in the run's log and the same line in the ledger" \
+cmp -s "$d/actions.jsonl" "$tmp/proj/.postmaster/runs/ledger.jsonl" && ok "as one line in the run's log and the same line in the ledger" \
   || fail "as one line in the run's log and the same line in the ledger"
-last "the detail is everything after the target" 'e["detail"] == "a plain \"detail\"" and (e["project"], e["run"]) == ("project", "RUN-1") and "fault" not in e'
+last "the detail is everything after the target" 'e["detail"] == "a plain \"detail\"" and (e["project"], e["run"]) == ("proj", "RUN-1") and "fault" not in e'
 wrote "a tool-fault with every field is written" coachman tool-fault scripts/launch.sh "${FIELDS[@]}" --workaround "launched in the recorded form by hand"
 [ ! -s "$tmp/err" ] && ok "and a part that is no control says nothing" || fail "and a part that is no control says nothing" "$(cat "$tmp/err")"
 last "its fields are a fault object, with --failed as the detail and the error whole" \
@@ -169,8 +185,21 @@ last "as the real path" 'e["fault"]["failed"] == "sixth" and e["target"] == "scr
 wrote "a style finding is written" coachman finding src/a.ts:12 style P3 r1 style luna reading: a list named map
 last "with its class as the first word of its detail" 'e["action"] == "finding" and e["detail"].split()[0] == "style"'
 wrote "a gating finding is written" coachman finding src/b.ts:40 gating P1 r1 bug luna execution: an off-by-one
+wrote "an approved spec review is written" postmaster spec-review luna "approved abc123"
+last "with its decision, then the commit" 'e["action"] == "spec-review" and e["target"] == "luna" and e["detail"] == "approved abc123"'
+wrote "a changes spec review is written" postmaster spec-review deepseek "changes def456 narrow the scope to the two named scripts"
+last "with the user's words after the commit" 'e["action"] == "spec-review" and e["detail"] == "changes def456 narrow the scope to the two named scripts"'
+wrote "a dropped spec review is written" postmaster spec-review luna "dropped abc123 we only need one lane"
+last "with the drop decision" 'e["action"] == "spec-review" and e["detail"].split()[0] == "dropped"'
 wrote "a detail ending in a newline is written" postmaster note RUN-1 $'kept whole\n'
 last "with its newline" 'e["detail"] == "kept whole\n"'
+old="$tmp/oldlayout/legacy-proj/RUN-2"; mkdir -p "$old"
+"$SELF" "$old" postmaster note RUN-2 old >/dev/null 2>&1 && python3 -c '
+import json, sys
+e = json.loads(open(sys.argv[1]).read().split("\n")[-2])
+sys.exit(0 if (e["project"], e["run"]) == ("legacy-proj", "RUN-2") else 1)' "$old/actions.jsonl" \
+  && ok "an older runs/<project>/<TICKET> layout is still read as that project" \
+  || fail "an older runs/<project>/<TICKET> layout is still read as that project" "$(cat "$old/actions.jsonl" 2>/dev/null)"
 wrote "a line separator and a byte that is not UTF-8 are written" postmaster note RUN-1 $'one\xe2\x80\xa8two \xff three'
 last "the separator escaped and the byte dropped" 'e["detail"] == "one two  three"'
 python3 -c '
@@ -179,8 +208,8 @@ for f in sys.argv[1:]:
     text = open(f, encoding="utf-8").read()
     rows = text.split("\n")[:-1]
     assert len(rows) == len(text.splitlines()), "a raw line separator"
-    [json.loads(r) for r in rows]' "$d/actions.jsonl" "$tmp/project/ledger.jsonl" 2>"$tmp/err" \
-  && cmp -s "$d/actions.jsonl" "$tmp/project/ledger.jsonl" && ok "every line in both files is UTF-8 JSON, one to a line" \
+    [json.loads(r) for r in rows]' "$d/actions.jsonl" "$tmp/proj/.postmaster/runs/ledger.jsonl" 2>"$tmp/err" \
+  && cmp -s "$d/actions.jsonl" "$tmp/proj/.postmaster/runs/ledger.jsonl" && ok "every line in both files is UTF-8 JSON, one to a line" \
   || fail "every line in both files is UTF-8 JSON, one to a line" "$(cat "$tmp/err")"
 
 echo "negative controls: nothing is written"
@@ -195,6 +224,8 @@ refused "an action outside the set" "is not an action" tool-faults scripts/launc
 refused "an empty target" "usage:" note ""
 refused "a finding with no class" "opens with its class, gating or style" finding src/c.ts:7 P2 r1 bug luna reading: no class
 refused "a finding whose class is another word" "opens with its class, gating or style" finding src/c.ts:7 advisory P3 r1 style luna reading
+refused "a spec-review with no decision" "opens with its decision, approved, changes or dropped" spec-review luna "abc123 looks fine"
+refused "a spec-review whose decision is another word" "opens with its decision, approved, changes or dropped" spec-review luna "ok abc123"
 refused "a tool-fault with no fix" "needs --fix" tool-fault scripts/launch.sh "${FIELDS[@]:0:8}"
 refused "a tool-fault with a blank diagnosis" "needs --diagnosis" tool-fault scripts/launch.sh "${FIELDS[@]}" --diagnosis "  "
 refused "a tool-fault as plain words" "a tool-fault takes" tool-fault scripts/launch.sh the wait returned early

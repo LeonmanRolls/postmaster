@@ -1024,7 +1024,7 @@ waybill() {  # waybill <dispatch> <repo> <gate, or nothing> [<the whole gate lin
 logged() { "$HERE/log-action.sh" "$1" coachman "${@:2}" >/dev/null; }
 findings() { local k; for k in $(seq 1 "$2"); do logged "$1" finding "src/f$k.ts:$k" "style P3 r1 style luna reading: finding $k"; done; }
 sort_file() { local d=$1; shift; lines "$@" > "$d/style-sort.md"; }
-R=$tmp/runs/proj
+R=$tmp/proj/.postmaster/runs
 
 # An npm project. The gate reaches check, its pre script, lint through npm run, test:unit through
 # run-s's glob, typos through pnpm, format:check, and the file precheck runs, less its comments.
@@ -1238,7 +1238,7 @@ is "a sort with no linter and no docs line counts none of either" 0 \
   "$(lines 'S1 S2: neither' 'sorted 2 style findings: 0 to a linter, 0 to the docs, 2 to neither; 0 new linters proposed')"
 printf '\357\273\277S1 neither: one\nS2 neither: two\n' > "$zero/style-sort.md"
 run "$self" check "$zero";              has "a sort that opens with a byte-order mark is read" 0 "S1 S2: neither"
-led=$tmp/runs/led; past=$led/T-15; mkdir -p "$past"; now=$led/T-16; waybill "$now" "$npm" "npm run check"; findings "$now" 2
+led=$tmp/led/.postmaster/runs; past=$led/T-15; mkdir -p "$past"; now=$led/T-16; waybill "$now" "$npm" "npm run check"; findings "$now" 2
 logged "$past" ticket-create 80 "style proposal: linter biome enable style/useConst"
 logged "$past" ticket-create 81 "linter biome enable style/useConst, filed another way"
 logged "$past" note T-15 "style proposal declined: docs AGENTS.md: not now"
@@ -1309,7 +1309,7 @@ for want in "converge on a prescribed one-line fix for a gating finding" "is a f
             "for style, how many findings go to the ship card's Style residue, as"; do
   says "$SKILL/coachman.md" "$want" && ok "coachman.md says: $want" || fail "coachman.md says: $want"
 done
-for want in "Check the style sort too, once the last leg's process has exited" "--title \"<title>\"\`, and log \`ticket-check\`" \
+for want in "Check the style sort too, once the last leg's process has exited" "--title \"<title>\" --project <repo>\`, and log \`ticket-check\`" \
             "log a \`note\` with \`style proposal asked: <proposal>\` for each draft shown" "and carry on with the stream"; do
   says "$SKILL/postmaster.md" "$want" && ok "postmaster.md says: $want" || fail "postmaster.md says: $want"
 done

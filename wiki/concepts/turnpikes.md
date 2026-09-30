@@ -46,10 +46,11 @@ project's gate is not a turnpike, and runs on every run.
   when it writes the waybill, on a line under its title and above the ticket, so nothing the
   ticket holds is read for it. A run then passes through what it was dispatched with, even if
   the default set changes while it runs, and the table of turnpikes is not changed while any
-  run is in flight, since a run's legs are read from it at each dispatch. When
-  [issue #18](https://github.com/brindlewick/postmaster/issues/18) lets a project say what
-  `default` means for it, the postmaster, which reads the project at dispatch, resolves it the
-  same way.
+  run is in flight, since a run's legs are read from it at each dispatch. Since
+  [issue #18](https://github.com/brindlewick/postmaster/issues/18) a project may say what
+  `default` means for it, in `.postmaster/project.toml` or local settings; the postmaster
+  resolves it the same way, through `scripts/turnpikes.sh --project`. That is never a floor:
+  a ticket still names its own turnpikes.
 - **A run with no review turnpike has no review leg.** The ship leg follows synthesis and
   starts from its hand-off. A review leg with no lens would start a coachman to do nothing.
 - **A review loop without a gating lens is one round, and applies nothing.** In

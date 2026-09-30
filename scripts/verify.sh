@@ -151,6 +151,10 @@ def default(which, gate, suite, name=None, shows=None, source=None):
             "command": command or "", "shows": shows or dshows}
 
 def declared(repo, gate, suite):  # the declared checks, or None when the project declares none
+    settings = subprocess.run([str(here / "project-settings.sh"), "inspect", str(repo)],
+                              capture_output=True, text=True)
+    if settings.returncode:
+        die(settings.stderr.strip() or "project settings could not be read")
     p = repo / DECLARATION
     if not p.is_file():
         return None
@@ -540,7 +544,11 @@ ok()   { printf '  ok   %s\n' "$1"; }
 fail() { printf '  FAIL %s\n' "$1"; [ -n "${2:-}" ] && printf '%s\n' "$2" | sed 's/^/         /'; fails=$((fails+1)); }
 G() { git -C "$1" -c user.name=t -c user.email=t@t "${@:2}"; }
 repo() {  # repo <dir>: a git repo holding whatever is already in <dir>, committed
-  mkdir -p "$1" && git -C "$1" init -q -b main && G "$1" add -A && G "$1" commit -q --allow-empty -m first
+  mkdir -p "$1" || return 1
+  "$HERE/project-settings.sh" ensure "$1" >/dev/null || return 1
+  git -C "$1" init -q -b main && G "$1" add -A || return 1
+  [ ! -f "$1/.postmaster/project.toml" ] || G "$1" add -f .postmaster/project.toml || return 1
+  G "$1" commit -q --allow-empty -m first
 }
 lines() { "$SELF" checks "$tmp/$1" --gate "${2:-make check}" --lines 2>&1 | cut -f1,2 | tr '\t' ' ' | paste -sd, -; }
 expect_lines() {  # expect_lines <label> <project> <name source,...>
@@ -604,8 +612,8 @@ grep -qF "gate [declared] npm run check" <<<"$out" && ok "a declared gate wins o
 grep -qF "passes when it exits 0 and the last number /score: ([0-9.]+)/ captures is 0.85 or more" <<<"$out" && ok "a scored check says what passes" || fail "a scored check says what passes" "$out"
 python3 -c 'import json,sys; c=[c for c in json.load(sys.stdin) if c["name"]=="try"][0]; sys.exit(0 if c.get("timeout")==120 else 1)' < <("$SELF" checks "$tmp/decl" --json 2>/dev/null) \
   && ok "a check that uses a default keeps its timeout" || fail "a check that uses a default keeps its timeout"
-mkdir -p "$tmp/runs/decl/T-0"; printf '## Ticket\nx\n' > "$tmp/runs/decl/T-0/brief.md"
-grep -qF "declares the gate as npm run check, so make ci is not used" <<<"$("$SELF" record "$tmp/decl" "$tmp/runs/decl/T-0" --gate "make ci" 2>&1 >/dev/null)" \
+mkdir -p "$tmp/decl/.postmaster/runs/T-0"; printf '## Ticket\nx\n' > "$tmp/decl/.postmaster/runs/T-0/brief.md"
+grep -qF "declares the gate as npm run check, so make ci is not used" <<<"$("$SELF" record "$tmp/decl" "$tmp/decl/.postmaster/runs/T-0" --gate "make ci" 2>&1 >/dev/null)" \
   && ok "record says when the project's declared gate overrides the one it was given" || fail "record says when the project's declared gate overrides the one it was given"
 grep -qF "verify-examples.sh" <<<"$out" && grep -qF "shows: the ticket's example transcripts" <<<"$out" && ok "a check that uses a default runs its script and says what it shows" || fail "a check that uses a default runs its script and says what it shows" "$out"
 grep -qF "warn" <<<"$out" && fail "a committed declaration raises no warning" "$out" || ok "a committed declaration raises no warning"
@@ -693,7 +701,7 @@ timeout = 1
 use = "cli-examples"
 EOF
 repo "$p"
-d="$tmp/runs/proj/T-1"; mkdir -p "$d"
+d="$p/.postmaster/runs/T-1"; mkdir -p "$d"
 printf '# Waybill: T-1\n\n## Ticket\n## Problem / feature\nA thing.\n\n## Project profile\nrepo: %s\n' "$p" > "$d/brief.md"
 out=$("$SELF" record "$p" "$d" --gate "make check"); rc=$?
 [ $rc -eq 0 ] && [ -f "$d/checks.json" ] && grep -qF "red [declared] echo broke; false" <<<"$out" && ok "record writes checks.json and prints the checks" || fail "record writes checks.json and prints the checks (exit $rc)" "$out"
@@ -747,13 +755,13 @@ sha=$(git -C "$wt" rev-parse HEAD | cut -c1-12)
 grep -qF "\"target\":\"red\",\"detail\":\"on=wb/T-1-a@$sha result=fail exit=1" "$d/actions.jsonl" && ok "each naming the branch, the commit and the result" || fail "each naming the branch, the commit and the result" "$(tail -3 "$d/actions.jsonl")"
 [ -f "$d/verify/$sha/red.log" ] && ok "with its output kept in the run" || fail "with its output kept in the run"
 p1=$("$SELF" journey-path "$wt" "$d"); [ "$p1" = "$d/journey/$(git -C "$wt" rev-parse HEAD).md" ] && ok "the coachman's journey report goes in the run" || fail "the coachman's journey report goes in the run" "$p1"
-p2=$(POSTMASTER_VERIFY= "$SELF" journey-path "$wt"); [ "$p2" = "$wt/.postmaster/verify/journey/$(git -C "$wt" rev-parse HEAD).md" ] && ok "a workhorse's in its worktree" || fail "a workhorse's in its worktree" "$p2"
+p2=$(env -u POSTMASTER_VERIFY "$SELF" journey-path "$wt"); [ "$p2" = "$wt/.postmaster/verify/journey/$(git -C "$wt" rev-parse HEAD).md" ] && ok "a workhorse's in its worktree" || fail "a workhorse's in its worktree" "$p2"
 
 echo "results and summaries"
 out=$("$SELF" results "$d" "$wt"); rc=$?
 [ $rc -eq 2 ] && grep -qF "red: fail, exit 1, at" <<<"$out" && grep -qF "gate: pass, exit 0, at" <<<"$out" && ok "results give each check's latest result at HEAD" || fail "results give each check's latest result at HEAD (exit $rc)" "$out"
-cp -r "$d" "$tmp/runs/proj/T-1-broken"; printf '{"action":"verify","target":"red","detail":"on=x\n' >> "$tmp/runs/proj/T-1-broken/actions.jsonl"
-"$SELF" results "$tmp/runs/proj/T-1-broken" "$wt" >/dev/null 2>&1; rc=$?
+cp -r "$d" "$p/.postmaster/runs/T-1-broken"; printf '{"action":"verify","target":"red","detail":"on=x\n' >> "$p/.postmaster/runs/T-1-broken/actions.jsonl"
+"$SELF" results "$p/.postmaster/runs/T-1-broken" "$wt" >/dev/null 2>&1; rc=$?
 [ $rc -eq 1 ] && ok "a log line that does not parse stops results rather than being skipped" || fail "a log line that does not parse stops results rather than being skipped (exit $rc)"
 printf '# Summary\n\n## Checks\n%s\n' "$lane_out" > "$tmp/summary.md"
 out=$("$SELF" summary "$tmp/summary.md" "$d" "$wt"); rc=$?
@@ -774,8 +782,8 @@ out=$("$SELF" results "$d" "$wt"); rc=$?
 echo "the gate and the browser suite, the defaults the runner runs itself"
 default_run() {  # default_run <project> <gate> <e2e script>: record a web app's defaults and run them
   mkdir -p "$tmp/$1"; printf '{"name": "w", "private": true, "scripts": {"e2e": "%s"}, "devDependencies": {"next": "1"}}\n' "$3" > "$tmp/$1/package.json"
-  repo "$tmp/$1"; mkdir -p "$tmp/runs/$1/T-5"; printf '## Ticket\nx\n' > "$tmp/runs/$1/T-5/brief.md"
-  "$SELF" record "$tmp/$1" "$tmp/runs/$1/T-5" --gate "$2" >/dev/null; "$SELF" run "$tmp/$1" "$tmp/runs/$1/T-5" 2>&1
+  repo "$tmp/$1"; mkdir -p "$tmp/$1/.postmaster/runs/T-5"; printf '## Ticket\nx\n' > "$tmp/$1/.postmaster/runs/T-5/brief.md"
+  "$SELF" record "$tmp/$1" "$tmp/$1/.postmaster/runs/T-5" --gate "$2" >/dev/null; "$SELF" run "$tmp/$1" "$tmp/$1/.postmaster/runs/T-5" 2>&1
 }
 out=$(default_run webpass true "echo suite ran")
 grep -qF "gate: pass, exit 0," <<<"$out" && grep -qF "browser: pass, exit 0, " <<<"$out" && grep -qF "journey: not run, exit 3," <<<"$out" \
@@ -786,16 +794,16 @@ grep -qF "gate: fail, exit 1," <<<"$out" && grep -qF "browser: fail, exit 1, " <
 
 echo "exits"
 q="$tmp/green"; mkdir -p "$q/.postmaster"; printf '[checks.gate]\ncommand = "true"\nshows = "x"\n' > "$q/.postmaster/project.toml"; repo "$q"
-e="$tmp/runs/green/T-2"; mkdir -p "$e"; printf '## Ticket\nx\n' > "$e/brief.md"; "$SELF" record "$q" "$e" >/dev/null
+e="$q/.postmaster/runs/T-2"; mkdir -p "$e"; printf '## Ticket\nx\n' > "$e/brief.md"; "$SELF" record "$q" "$e" >/dev/null
 "$SELF" run "$q" "$e" >/dev/null 2>&1; rc=$?
 [ $rc -eq 0 ] && ok "a run whose every check passed exits 0" || fail "a run whose every check passed exits 0 (exit $rc)"
 r="$tmp/grey"; mkdir -p "$r/.postmaster"; printf '[checks.gate]\ncommand = "true"\nshows = "x"\n[checks.try]\nuse = "library-tests"\n' > "$r/.postmaster/project.toml"; repo "$r"
-f="$tmp/runs/grey/T-3"; mkdir -p "$f"; printf '## Ticket\nx\n' > "$f/brief.md"; "$SELF" record "$r" "$f" >/dev/null
+f="$r/.postmaster/runs/T-3"; mkdir -p "$f"; printf '## Ticket\nx\n' > "$f/brief.md"; "$SELF" record "$r" "$f" >/dev/null
 "$SELF" run "$r" "$f" >/dev/null 2>&1; rc=$?
 [ $rc -eq 3 ] && ok "a run with a check not run and none failed exits 3" || fail "a run with a check not run and none failed exits 3 (exit $rc)"
 "$SELF" run "$tmp/plain" >/dev/null 2>&1; rc=$?
 [ $rc -eq 1 ] && ok "a worktree nobody armed is refused" || fail "a worktree nobody armed is refused (exit $rc)"
-s="$tmp/runs/none/T-4"; mkdir -p "$s"
+s="$q/.postmaster/runs/T-4"; mkdir -p "$s"
 "$SELF" arm "$q" "$s" >/dev/null 2>&1; rc=$?
 [ $rc -eq 1 ] && ok "a run that recorded no checks cannot arm a worktree" || fail "a run that recorded no checks cannot arm a worktree (exit $rc)"
 
@@ -823,7 +831,7 @@ shows = "a gate that fixes what it should only check"
 command = "grep -q fixed src.txt"
 shows = "passes only on what the gate rewrote"
 EOF
-repo "$sp"; sd="$tmp/runs/spoil/T-9"; mkdir -p "$sd"; printf '## Ticket\nx\n' > "$sd/brief.md"; "$SELF" record "$sp" "$sd" >/dev/null
+repo "$sp"; sd="$sp/.postmaster/runs/T-9"; mkdir -p "$sd"; printf '## Ticket\nx\n' > "$sd/brief.md"; "$SELF" record "$sp" "$sd" >/dev/null
 out=$("$SELF" run "$sp" "$sd" 2>&1); rc=$?
 [ $rc -eq 2 ] && grep -qF "gate: fail, exit 0," <<<"$out" && grep -qF "it changed files git sees, so its result is not its commit's: src.txt" <<<"$out" \
   && ok "a check that rewrites a tracked file fails, and names it" || fail "a check that rewrites a tracked file fails, and names it (exit $rc)" "$out"
@@ -831,7 +839,7 @@ grep -qF "unit: not run, exit -, 0s:" <<<"$out" && ok "and the checks after it d
 [ "$("$SELF" results "$sd" "$sp" 2>&1 | grep -c ': pass')" = 0 ] && ok "and nothing is logged as passed" || fail "and nothing is logged as passed"
 G "$sp" checkout -q -- src.txt
 wp="$tmp/writes"; mkdir -p "$wp/.postmaster"; printf '[checks.gate]\ncommand = "echo ok | tee gate.log"\nshows = "x"\n' > "$wp/.postmaster/project.toml"; repo "$wp"
-wd="$tmp/runs/writes/T-10"; mkdir -p "$wd"; printf '## Ticket\nx\n' > "$wd/brief.md"; "$SELF" record "$wp" "$wd" >/dev/null
+wd="$wp/.postmaster/runs/T-10"; mkdir -p "$wd"; printf '## Ticket\nx\n' > "$wd/brief.md"; "$SELF" record "$wp" "$wd" >/dev/null
 out=$("$SELF" run "$wp" "$wd" 2>&1)
 grep -qF "gate: fail, exit 0," <<<"$out" && grep -qF "gate.log" <<<"$out" && ok "so does a check that leaves a new file git sees" || fail "so does a check that leaves a new file git sees" "$out"
 ! sed -n '/^core() {/,/^PY$/p' "$SELF" | grep -q 'os[.]waitid' && ok "the runner waits without os.waitid, which python lacks on macOS before 3.13" || fail "the runner waits without os.waitid, which python lacks on macOS before 3.13"
@@ -842,15 +850,15 @@ rm -f -- "$q/json.py" "$q/re.py"
 
 echo "nothing a check starts outlives it"
 lp="$tmp/leftover"; mkdir -p "$lp/.postmaster"
-printf '[checks.gate]\ncommand = "sleep 300 & echo $! > %s"\nshows = "x"\n' "$tmp/leftover.pid" > "$lp/.postmaster/project.toml"; repo "$lp"
-ld="$tmp/runs/leftover/T-6"; mkdir -p "$ld"; printf '## Ticket\nx\n' > "$ld/brief.md"; "$SELF" record "$lp" "$ld" >/dev/null
+printf '[checks.gate]\ncommand = "sleep 300 & echo $! > leftover.pid"\nshows = "x"\n' > "$lp/.postmaster/project.toml"; repo "$lp"
+ld="$lp/.postmaster/runs/T-6"; mkdir -p "$ld"; printf '## Ticket\nx\n' > "$ld/brief.md"; "$SELF" record "$lp" "$ld" >/dev/null
 "$SELF" run "$lp" "$ld" >/dev/null 2>&1
 gone() { local i; for i in $(seq 40); do kill -0 "$1" 2>/dev/null || return 0; sleep 0.05; done; return 1; }
-gone "$(cat "$tmp/leftover.pid")" && ok "a process a check leaves running is stopped when it ends" || fail "a process a check leaves running is stopped when it ends"
+gone "$(cat "$lp/leftover.pid")" && ok "a process a check leaves running is stopped when it ends" || fail "a process a check leaves running is stopped when it ends"
 tp="$tmp/term"; mkdir -p "$tp/.postmaster"
-printf '[checks.gate]\ncommand = "echo $$ > %s; sleep 300"\nshows = "x"\n' "$tmp/term.pid" > "$tp/.postmaster/project.toml"; repo "$tp"
-td="$tmp/runs/term/T-7"; mkdir -p "$td"; printf '## Ticket\nx\n' > "$td/brief.md"; "$SELF" record "$tp" "$td" >/dev/null
-python3 - "$SELF" "$tp" "$td" "$tmp/term.pid" <<'PY' && ok "a run that is stopped stops its check" || fail "a run that is stopped stops its check"
+printf '[checks.gate]\ncommand = "echo $$ > term.pid; sleep 300"\nshows = "x"\n' > "$tp/.postmaster/project.toml"; repo "$tp"
+td="$tp/.postmaster/runs/T-7"; mkdir -p "$td"; printf '## Ticket\nx\n' > "$td/brief.md"; "$SELF" record "$tp" "$td" >/dev/null
+python3 - "$SELF" "$tp" "$td" "$tp/term.pid" <<'PY' && ok "a run that is stopped stops its check" || fail "a run that is stopped stops its check"
 import os, signal, subprocess, sys, time
 me, repo, dispatch, pidfile = sys.argv[1:]
 p = subprocess.Popen([me, "run", repo, dispatch], start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -870,7 +878,7 @@ for _ in range(40):
 sys.exit(1)
 PY
 mp="$tmp/moved"; mkdir -p "$mp/.postmaster"; printf '[checks.try]\nuse = "library-tests"\n' > "$mp/.postmaster/project.toml"; repo "$mp"
-md="$tmp/runs/moved/T-8"; mkdir -p "$md"; printf '## Ticket\nx\n' > "$md/brief.md"; "$SELF" record "$mp" "$md" >/dev/null
+md="$mp/.postmaster/runs/T-8"; mkdir -p "$md"; printf '## Ticket\nx\n' > "$md/brief.md"; "$SELF" record "$mp" "$md" >/dev/null
 python3 - "$md/checks.json" <<'PY'
 import json, sys
 d = json.load(open(sys.argv[1]))
@@ -893,8 +901,10 @@ mg="$tmp/multigate"; mkdir -p "$mg/.postmaster"; printf '[checks.gate]\ncommand 
 g=$("$HERE/discover-project.sh" "$mg" 2>/dev/null | sed -n 's/^gate=//p')
 [ "$g" = "bash -eo pipefail -c \$'false\\necho lint clean'" ] && ! bash -c "$g" >/dev/null 2>&1 \
   && ok "a gate of several lines is carried as one line that fails as the gate does" || fail "a gate of several lines is carried as one line that fails as the gate does" "$g"
-out=$("$HERE/discover-project.sh" "$tmp/bad" 2>&1)
-grep -qF 'warn=checks: ' <<<"$out" && ! grep -q '^check\.' <<<"$out" && ok "a broken declaration is warned of, and no check is guessed" || fail "a broken declaration is warned of, and no check is guessed" "$out"
+out=$("$HERE/discover-project.sh" "$tmp/bad" 2>&1); rc=$?
+[ $rc -eq 1 ] && grep -qF 'project settings could not be read' <<<"$out" && ! grep -q '^check\.' <<<"$out" \
+  && ok "a broken declaration stops discovery before it guesses checks" \
+  || fail "a broken declaration stops discovery before it guesses checks (exit $rc)" "$out"
 
 echo
 [ "$fails" -eq 0 ] && { echo "self-test: all controls behaved"; exit 0; }

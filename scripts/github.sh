@@ -41,6 +41,7 @@
 #   exit 4  the issue changed since the base was read
 #   exit 5  create made the issue, and printed its number, but could not put it on the board
 set -uo pipefail
+HERE=$(CDPATH= cd -P -- "$(dirname -- "$0")" && pwd -P)
 die() { echo "github: $*" >&2; exit 1; }
 if [ "${1:-}" != --self-test ]; then
   REPO=${1:?usage: github.sh <repo> board|create|edit|read|state|comment|list|access ... | --self-test}
@@ -50,7 +51,8 @@ if [ "${1:-}" != --self-test ]; then
   gh auth status >/dev/null 2>&1 || die "gh is not logged in; the user runs: gh auth login"
   REMOTE=$(git -C "$REPO" remote get-url origin 2>/dev/null) || die "$REPO has no origin remote"
 
-  exec python3 - "$REMOTE" "${@:2}" <<'PY'
+  POSTMASTER_PROJECT_SETTINGS="$HERE/project-settings.sh" POSTMASTER_PROJECT="$REPO" \
+    exec python3 - "$REMOTE" "$REPO" "${@:2}" <<'PY'
 import datetime, json, os, re, subprocess, sys
 
 STATES = ["todo", "in-progress", "blocked", "done", "cancelled"]
@@ -65,8 +67,21 @@ if not m:
     die("origin is not a GitHub remote: " + sys.argv[1])
 OWNER, NAME = m.group(1), m.group(2)
 NWO = "%s/%s" % (OWNER, NAME)
-args = sys.argv[2:]
+REPO = sys.argv[2]
+args = sys.argv[3:]
 cmd = args[0]
+
+def tracker_binding():
+    helper = os.environ.get("POSTMASTER_PROJECT_SETTINGS")
+    if not helper:
+        return None
+    r = subprocess.run([helper, "inspect", REPO], capture_output=True, text=True)
+    if r.returncode:
+        die(r.stderr.strip() or "cannot read the project's tracker binding")
+    try:
+        return json.loads(r.stdout).get("tracker", {}).get("binding")
+    except ValueError as e:
+        die("project settings gave no JSON: %s" % e)
 
 def gh(*argv, ok=(0,)):
     r = subprocess.run(["gh", *argv], capture_output=True, text=True)
@@ -95,7 +110,12 @@ def board():
     boards = linked_boards()
     if not boards:
         die("%s has no linked board; run: github.sh <repo> board init" % NWO, 3)
-    named = [b for b in boards if b.get("title") == NAME]
+    binding = tracker_binding()
+    named = [b for b in boards if b.get("title") == (binding or NAME)]
+    if binding and not named:
+        die("the project's tracker binding %r is not a linked GitHub Projects board" % binding)
+    if binding and len(named) > 1:
+        die("the project's tracker binding %r matches more than one linked board" % binding)
     b = named[0] if len(boards) > 1 and named else boards[0]
     b["ownerLogin"] = (b.get("owner") or {}).get("login") or OWNER
     return b
@@ -224,7 +244,7 @@ if cmd == "board":
     if len(args) == 1:
         b = board(); print("#%s\t%s\t%s" % (b["number"], b["title"], b["url"]))
     elif args[1] == "init" and len(args) in (2, 3):
-        board_init(args[2] if len(args) == 3 else NAME)
+        board_init(args[2] if len(args) == 3 else (tracker_binding() or NAME))
     else:
         usage("board [init [title]]")
 
@@ -407,6 +427,26 @@ printf '## Problem / feature\r\nStored with CRLF line endings.\r\n\r\n## Directi
 printf '## Problem / feature\nThe new body.\n\n## Direction\nNone: any approach that meets the criteria.\n' > "$tmp/new.md"
 
 echo "positive controls"
+mkdir -p "$tmp/repo/.postmaster"
+printf '[tracker]\nbinding = "chosen"\n' > "$tmp/repo/.postmaster/project.toml"
+printf '%s\n' '{"data":{"repository":{"projectsV2":{"nodes":[{"id":"PVT_1","number":1,"title":"r","closed":false,"url":"https://github.com/users/o/projects/1","owner":{"login":"o"}},{"id":"PVT_2","number":2,"title":"chosen","closed":false,"url":"https://github.com/users/o/projects/2","owner":{"login":"o"}}]}}}}' > "$S/boards.json"
+out=$(gh_sh board 2>&1); rc=$?
+[ $rc -eq 0 ] && [ "$out" = $'#2\tchosen\thttps://github.com/users/o/projects/2' ] \
+  && ok "the shared tracker binding selects its named linked board" \
+  || fail "the shared tracker binding selects its named linked board (exit $rc)" "$out"
+printf '[tracker]\nbinding = "missing"\n' > "$tmp/repo/.postmaster/project.toml"
+out=$(gh_sh board 2>&1); rc=$?
+[ $rc -eq 1 ] && printf '%s\n' "$out" | grep -q "is not a linked GitHub Projects board" \
+  && ok "a binding naming no linked board is refused" \
+  || fail "a binding naming no linked board is refused (exit $rc)" "$out"
+printf '%s\n' '{"data":{"repository":{"projectsV2":{"nodes":[{"id":"PVT_1","number":1,"title":"dup","closed":false,"url":"https://github.com/users/o/projects/1","owner":{"login":"o"}},{"id":"PVT_2","number":2,"title":"dup","closed":false,"url":"https://github.com/users/o/projects/2","owner":{"login":"o"}}]}}}}' > "$S/boards.json"
+printf '[tracker]\nbinding = "dup"\n' > "$tmp/repo/.postmaster/project.toml"
+out=$(gh_sh board 2>&1); rc=$?
+[ $rc -eq 1 ] && printf '%s\n' "$out" | grep -q "matches more than one linked board" \
+  && ok "a binding matching two linked boards is refused" \
+  || fail "a binding matching two linked boards is refused (exit $rc)" "$out"
+rm -- "$tmp/repo/.postmaster/project.toml"
+printf '%s\n' "$BOARD" > "$S/boards.json"
 stored 7 "$tmp/lf.md"; gh_sh read 7 --body > "$tmp/out" 2>&1; rc=$?
 { cat "$tmp/lf.md"; printf '\n'; } > "$tmp/want"
 [ $rc -eq 0 ] && cmp -s "$tmp/out" "$tmp/want" && ok "read --body prints the stored body byte for byte, then one newline" \

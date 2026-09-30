@@ -1,13 +1,23 @@
 # <project>/.postmaster/project.toml
-#
-# What this project requires of every run against it. The gate is the stand-in until #17
-# gives this repo a real one; it is not redeclared here. The scrub check joins it through
-# scripts/verify.sh, so no change reaches its ship card with an unruled suspect on its
-# branch. A suspect is for the postmaster to put to the user; the script decides nothing.
+# What this project requires of every run against it. Committed with `git add -f`, the one
+# file in .postmaster/ that travels. The shape is project.example.toml.
+
+[project]
+risk_surfaces = [
+  "spawns agent CLIs in their bypass modes, in Herdr over its socket or in tmux",
+  "uses the user's gh login, and reads PLANE_API_KEY and lane env files under ~/.postmaster",
+  "writes ~/.postmaster, skill links into each harness's skills folder, and worktrees, branches, pushes and pull requests in target repos",
+  "merges on the merge word",
+  "binds no port, and serves only the GitHub Pages site",
+]
+
+[checks.gate]
+command = '''bash -c 'for f in scripts/*.sh; do bash -n "$f" || exit 1; done && scripts/skill-refs.sh && scripts/wiki-lint.sh && for n in cut-scratch export-session fixture front-door front-door-acceptance github host launch link-skills local log-action parallel-runs-acceptance plane project-settings review-decide review-findings review-forms review-round reviewers run-log run-meta run-times runs-status runs-watch setup skill-refs spec-decisions spec-review-link stage style-findings ticket-check tool-faults turnpikes verify verify-examples verify-journey verify-library view-stream wait-for-markers wiki-lint; do scripts/$n.sh --self-test || exit 1; done'''
+shows = "Every script parses, the runbook references and wiki lint clean, and the 40 script self-tests pass."
 
 [checks.scrub]
 command = "scripts/scrub-check.sh main HEAD"
-shows = "no commit from base to head adds a line that looks like private data"
+shows = "no added line, commit message or merge resolution from base to head carries private data"
 
 [checks.tree]
 command = "scripts/tree-check.sh main HEAD"

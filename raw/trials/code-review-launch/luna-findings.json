@@ -1,0 +1,15 @@
+[
+  {
+    "file": "src/page.js",
+    "line": 8,
+    "line_end": 8,
+    "target": "src/page.js:8",
+    "severity": "P1",
+    "summary": "Limit each page to the requested size",
+    "body": "When a page has at least `size + 1` records remaining, this returns `size + 1` records despite the function's documented page size. Callers advancing by `size` will get overlapping pages; use an exclusive end of `start + size`.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "codex"
+  }
+]

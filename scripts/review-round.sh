@@ -299,7 +299,7 @@ fi
 self="$HERE/$(basename "$0")"
 tmp=$(mktemp -d) && tmp=$(cd "$tmp" && pwd -P) || exit 1
 trap 'for f in "$tmp"/pids/*; do [ -s "$f" ] && kill -KILL "$(cat "$f")" 2>/dev/null; done; chmod -R u+w "$tmp" 2>/dev/null; rm -r -- "$tmp" 2>/dev/null' EXIT
-repo="$tmp/repo" d="$tmp/runs/proj/T-1"
+repo="$tmp/repo" d="$tmp/repo/.postmaster/runs/T-1"
 mkdir -p "$d/logs" "$tmp/bin" "$tmp/host" "$tmp/pids" "$tmp/elsewhere" || exit 1
 git init -q -b main "$repo" && git -C "$repo" -c user.name=t -c user.email=t@t commit -q --allow-empty -m first || exit 1
 for h in herdr tmux; do printf '#!/bin/sh\nexit 1\n' > "$tmp/bin/$h"; chmod +x "$tmp/bin/$h"; done
@@ -327,6 +327,7 @@ cut()   { git -C "$repo" worktree add -q --detach "$repo/.worktrees/T-1-rev-$1-$
 launch() {  # launch <round> <lens> <lane> <fast|slow|leaves>: through host.sh, as the round does
   n=$((n + 1))
   ( cd "$tmp" && "$HERE/host.sh" run "T-1 · $3 $2 review" "$repo/.worktrees/T-1-rev-$2-$3" \
+      --role reviewer --run "$d" \
       --marker "$d/logs/review-r$1-$2-$3.done" --pidfile "$tmp/pids/launch.$n" -- "$tmp/reviewer.sh" "$4" "$tmp/pids/child.$n" ) >/dev/null \
     || { echo "  (could not launch $2 $3)"; return 1; }
   [ "$4" = fast ] && return 0

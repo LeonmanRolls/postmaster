@@ -1,38 +1,54 @@
 #!/usr/bin/env bash
 # Which lanes review under each lens. A lens is reviewed by the lanes the config names for it in
 # [team.lens_reviewers], or, where it names none, by [team] reviewers, which default to the
-# workhorses. The postmaster writes the result into the waybill's Team section, and the coachman
-# reads it back from there, so a run keeps the reviewers it was dispatched with.
+# workhorses. Bug reviewers are then limited to lanes whose harness has a code-review form.
+# The postmaster writes the result into the waybill's Team section, and the coachman reads it
+# back from there, so a run keeps the reviewers it was dispatched with.
 #
-#   reviewers.sh lines [--config <path>]   the waybill's reviewer lines, from the config
+#   reviewers.sh lines [--config <path>] [--project <repo>]   the waybill's reviewer lines, from the config (or the project's effective config)
+#   reviewers.sh eligible <lens> [--config <path>] [--project <repo>]  configured lanes for a lens, checked for eligibility
 #   reviewers.sh lanes <waybill> <lens>    the lanes for one lens, one per line, from a waybill
 #   reviewers.sh lenses                    the lenses, in the order the review stage runs them
 #   reviewers.sh --self-test
 #
-# `lines` prints `reviewers: <lane>, <lane>`, then `<lens> reviewers: <lane>, …` for each lens the
-# config gives its own lanes. `lanes` reads only the waybill's `## Team` section: the lens's own
-# line where it has one, the `reviewers:` line otherwise. The lenses are the entries of the review
-# stage in skills/postmaster/coachman.md, and change with it.
+# `lines` prints `reviewers: <lane>, <lane>`, a `bug reviewers:` line containing only eligible
+# lanes, then each other lens the config gives its own lanes. `eligible` resolves a configured
+# lens and exits 2 if it has no eligible reviewers. With `--project`, both resolve the
+# project's effective config instead of the live one. `lanes` reads only the waybill's `## Team`
+# section: the lens's own line where it has one, the `reviewers:` line otherwise, except the
+# bug lens, which is refused when its own line is missing rather than reading unfiltered
+# reviewers. The lenses are the entries of the review stage in skills/postmaster/coachman.md,
+# and change with it.
 #
 #   exit 0  printed
 #   exit 1  usage, no config or one that does not parse, or no such waybill
 #   exit 2  a lens the review stage does not have, a lane the config does not define, a lens with
-#           no lanes, or a waybill whose Team section has no reviewers line
+#           no eligible lanes, or a waybill whose Team section has no reviewers line
 set -uo pipefail
 LENSES="style bug security"
 CONFIG=${POSTMASTER_CONFIG:-$HOME/.postmaster/config.toml}
-usage() { echo "usage: reviewers.sh lines [--config <path>] | lanes <waybill> <lens> | lenses | --self-test" >&2; exit 1; }
+HERE=$(CDPATH= cd -P -- "$(dirname -- "$0")" && pwd -P)
+usage() { echo "usage: reviewers.sh lines [--config <path>] [--project <repo>] | eligible <lens> [--config <path>] [--project <repo>] | lanes <waybill> <lens> | lenses | --self-test" >&2; exit 1; }
 
-lines() {  # lines <config>
-  [ -f "$1" ] || { echo "reviewers: no config at $1 (POSTMASTER_CONFIG overrides the path)" >&2; return 1; }
-  python3 - "$1" "$LENSES" <<'PY'
-import sys, tomllib
-path, lenses = sys.argv[1], sys.argv[2].split()
+resolved() {  # resolved <lines|eligible> <config> [lens] [project]
+  local mode=$1 source=$2 lens=${3:-} project=${4:-} format=toml data=""
+  [ -f "$source" ] || { echo "reviewers: no config at $source (POSTMASTER_CONFIG overrides the path)" >&2; return 1; }
+  FORMS=$HERE/review-forms.sh
+  if [ -n "$project" ]; then
+    data=$("$HERE/project-settings.sh" effective "$project" "$source") || return 1
+    format=json
+  fi
+  REVIEWERS_EFFECTIVE="$data" python3 - "$source" "$LENSES" "$FORMS" "$mode" "$lens" "$format" <<'PY'
+import json, os, subprocess, sys, tomllib
+path, lenses, forms, mode, selected, format = sys.argv[1], sys.argv[2].split(), sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6]
+def has_form(harness):
+    return subprocess.call([forms, "has", harness or ""], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) == 0
 try:
-    cfg = tomllib.load(open(path, "rb"))
-except (OSError, tomllib.TOMLDecodeError) as e:
+    cfg = json.loads(os.environ["REVIEWERS_EFFECTIVE"]) if format == "json" else tomllib.load(open(path, "rb"))
+except (OSError, ValueError, tomllib.TOMLDecodeError) as e:
     print("reviewers: %s does not parse: %s" % (path, e), file=sys.stderr); sys.exit(1)
-defined = set((cfg.get("lanes") or {}).keys())
+lanes = cfg.get("lanes") or {}
+defined = set(lanes.keys())
 team = cfg.get("team") or {}
 faults = []
 def lanes_of(value, where):
@@ -53,11 +69,35 @@ own = {lens: lanes_of(per_lens[lens], "[team.lens_reviewers] %s" % lens) for len
 if faults:
     for f in faults: print("reviewers: " + f, file=sys.stderr)
     sys.exit(2)
-print("reviewers: " + ", ".join(default))
-for lens, names in own.items():
-    print("%s reviewers: %s" % (lens, ", ".join(names)))
+def configured(lens):
+    return own.get(lens, default)
+def eligible(lens):
+    names = configured(lens)
+    if lens != "bug":
+        return names
+    return [name for name in names if has_form((lanes.get(name) or {}).get("harness"))]
+if mode == "lines":
+    print("reviewers: " + ", ".join(default))
+    for lens in lenses:
+        if lens == "bug" or lens in own:
+            print("%s reviewers: %s" % (lens, ", ".join(eligible(lens))))
+elif mode == "eligible":
+    if selected not in lenses:
+        print("reviewers: %s is not a lens (one of: %s)" % (selected, ", ".join(lenses)), file=sys.stderr)
+        sys.exit(2)
+    names = eligible(selected)
+    if not names:
+        if selected == "bug":
+            print("reviewers: no configured bug reviewer has a code-review form; the bug turnpike cannot run", file=sys.stderr)
+        else:
+            print("reviewers: %s has no configured reviewers" % selected, file=sys.stderr)
+        sys.exit(2)
+    print("\n".join(names))
 PY
 }
+
+lines() { resolved lines "$1" "" "${2:-}"; }
+eligible() { resolved eligible "$2" "$1" "${3:-}"; }
 
 lanes() {  # lanes <waybill> <lens>
   [ -f "$1" ] || { echo "reviewers: no such waybill: $1" >&2; return 1; }
@@ -79,6 +119,12 @@ def listed(prefix):
             return [name.strip() for name in m.group(1).split(",") if name.strip()]
     return None
 found = listed(lens + " reviewers")
+if found is None and lens == "bug":
+    print("reviewers: the Team section of %s has no bug reviewers line (the bug lens never falls back to reviewers:)" % path, file=sys.stderr)
+    sys.exit(2)
+if lens == "bug" and not found:
+    print("reviewers: the Team section of %s has an empty bug reviewers line (it reviews nothing, and never falls back to reviewers:)" % path, file=sys.stderr)
+    sys.exit(2)
 if found is None:
     found = listed("reviewers")
 if not found:
@@ -90,8 +136,26 @@ PY
 
 case ${1:-} in
   lines)
-    [ $# -eq 1 ] || { [ $# -eq 3 ] && [ "$2" = --config ]; } || usage
-    lines "${3:-$CONFIG}"; exit $? ;;
+    shift; CONFIG_PATH=$CONFIG; PROJECT=""
+    while [ $# -gt 0 ]; do
+      case $1 in
+        --config) [ $# -ge 2 ] || usage; CONFIG_PATH=$2; shift 2 ;;
+        --project) [ $# -ge 2 ] || usage; [ -n "$2" ] || { echo "reviewers: no such project directory: $2" >&2; exit 1; }; PROJECT=$2; shift 2 ;;
+        *) usage ;;
+      esac
+    done
+    lines "$CONFIG_PATH" "$PROJECT"; exit $? ;;
+  eligible)
+    [ $# -ge 2 ] || usage
+    lens=$2; shift 2; CONFIG_PATH=$CONFIG; PROJECT=""
+    while [ $# -gt 0 ]; do
+      case $1 in
+        --config) [ $# -ge 2 ] || usage; CONFIG_PATH=$2; shift 2 ;;
+        --project) [ $# -ge 2 ] || usage; [ -n "$2" ] || { echo "reviewers: no such project directory: $2" >&2; exit 1; }; PROJECT=$2; shift 2 ;;
+        *) usage ;;
+      esac
+    done
+    eligible "$lens" "$CONFIG_PATH" "$PROJECT"; exit $? ;;
   lanes) [ $# -eq 3 ] || usage; lanes "$2" "$3"; exit $? ;;
   lenses) [ $# -eq 1 ] || usage; printf '%s\n' $LENSES; exit 0 ;;
   --self-test) ;;
@@ -112,8 +176,11 @@ harness = "mimo"
 model = "m2"
 [lanes.sentinel]
 harness = "claude"
-model = "m3"'
-config() {  # config <name> <[team] body>: a config with three lanes
+model = "m3"
+[lanes.pi]
+harness = "pi"
+model = "m4"'
+config() {  # config <name> <[team] body>: a config with four lanes, one per harness
   printf '%s\n\n[team]\n%s\n' "$lanes_block" "$2" > "$tmp/$1.toml"
 }
 waybill() {  # waybill <name> <reviewer lines>: a waybill whose Team section carries them
@@ -134,16 +201,28 @@ reviewers = ["luna", "mimo"]
 [team.lens_reviewers]
 security = ["luna", "mimo", "sentinel"]'
 expect "the waybill lines name the reviewers, then each lens with its own lanes" 0 \
-  'reviewers: luna, mimo\nsecurity reviewers: luna, mimo, sentinel' lines "$tmp/one.toml"
+  'reviewers: luna, mimo\nbug reviewers: luna, mimo\nsecurity reviewers: luna, mimo, sentinel' lines "$tmp/one.toml"
 waybill one "$(lines "$tmp/one.toml")"
 expect "a lens with its own line gets exactly those lanes" 0 'luna\nmimo\nsentinel' lanes "$tmp/one.md" security
-expect "a lens without one gets the reviewer list" 0 'luna\nmimo' lanes "$tmp/one.md" bug
+expect "the bug lens gets only configured reviewers with a review form" 0 'luna\nmimo' lanes "$tmp/one.md" bug
+expect "the configured bug reviewers resolve to eligible lanes" 0 'luna\nmimo' "$0" eligible bug --config "$tmp/one.toml"
 expect "and so does style" 0 'luna\nmimo' lanes "$tmp/one.md" style
 config two 'workhorses = ["luna", "mimo"]
 reviewers = ["sentinel"]'
-expect "a config without the table gives the reviewers line alone, as before" 0 'reviewers: sentinel' lines "$tmp/two.toml"
+expect "a config without the table keeps the reviewer line and adds eligible bug reviewers" 0 \
+  'reviewers: sentinel\nbug reviewers: sentinel' lines "$tmp/two.toml"
 config three 'workhorses = ["luna", "mimo"]'
-expect "reviewers default to the workhorses" 0 'reviewers: luna, mimo' lines "$tmp/three.toml"
+expect "reviewers default to the workhorses, and bug reviewers are filtered" 0 \
+  'reviewers: luna, mimo\nbug reviewers: luna, mimo' lines "$tmp/three.toml"
+printf '[lanes.pi]\nharness = "pi"\nmodel = "p"\n\n[team]\nworkhorses = ["pi"]\nreviewers = ["pi"]\n' > "$tmp/no-review.toml"
+expect "no eligible bug reviewer is a pre-flight refusal with its reason" 2 '' "$0" eligible bug --config "$tmp/no-review.toml"
+grep -q 'no configured bug reviewer has a code-review form' "$tmp/err" \
+  && ok "the refusal explains why the bug lens cannot run" || fail "the refusal explains why the bug lens cannot run" "$(cat "$tmp/err")"
+config mixed 'workhorses = ["luna", "pi"]
+reviewers = ["luna", "pi"]'
+expect "a bug reviewer whose harness has no review form is left off the bug line" 0 \
+  'reviewers: luna, pi\nbug reviewers: luna' lines "$tmp/mixed.toml"
+expect "eligible agrees with review-forms.sh on the same config" 0 'luna' "$0" eligible bug --config "$tmp/mixed.toml"
 expect "the lenses are the review stage's, in order" 0 'style\nbug\nsecurity' "$0" lenses
 
 echo "negative controls"
@@ -164,11 +243,23 @@ expect "a lens with no lanes is refused" 2 '' lines "$tmp/empty.toml"
 config bad-default 'workhorses = ["luna", "mimo"]
 reviewers = ["ghost"]'
 expect "a reviewer that is not a lane is refused" 2 '' lines "$tmp/bad-default.toml"
-expect "no config is refused" 1 '' lines "$tmp/none.toml"
+expect "no config is refused" 1 '' lines "$tmp/missing.toml"
+expect "an explicitly empty --project is refused, never read as no project" 1 '' "$0" lines --config "$tmp/one.toml" --project ""
+grep -q 'no such project directory' "$tmp/err" && ok "and the refusal names the project" || fail "and the refusal names the project" "$(cat "$tmp/err")"
+expect "an explicitly empty --project is refused for eligible too" 1 '' "$0" eligible bug --config "$tmp/one.toml" --project ""
+grep -q 'no such project directory' "$tmp/err" && ok "and the eligible refusal names the project" || fail "and the eligible refusal names the project" "$(cat "$tmp/err")"
 expect "a waybill lens that is not a lens is refused" 2 '' lanes "$tmp/one.md" secruity
 waybill no-team ''
 expect "a Team section with no reviewers line is refused, never read as no reviewers" 2 '' lanes "$tmp/no-team.md" bug
 expect "reviewer lines in the ticket's text are not read" 2 '' lanes "$tmp/no-team.md" security
+{ printf '# Waybill: 7\n\n## Team\nreviewers: luna, mimo\nbug reviewers: \n'; } > "$tmp/empty-bug.md"
+expect "an explicit empty bug reviewers line does not fall back to reviewers" 2 '' lanes "$tmp/empty-bug.md" bug
+grep -q 'empty bug reviewers line' "$tmp/err" \
+  && ok "the refusal names the empty bug reviewers line" || fail "the refusal names the empty bug reviewers line" "$(cat "$tmp/err")"
+waybill no-bug-line 'reviewers: luna, pi'
+expect "a waybill with no bug reviewers line is refused, never fallen back" 2 '' lanes "$tmp/no-bug-line.md" bug
+grep -q 'no bug reviewers line' "$tmp/err" \
+  && ok "the refusal names the missing bug reviewers line" || fail "the refusal names the missing bug reviewers line" "$(cat "$tmp/err")"
 expect "no such waybill is refused" 1 '' lanes "$tmp/none.md" bug
 
 echo

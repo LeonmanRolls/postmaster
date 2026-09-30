@@ -30,9 +30,10 @@ heading out is not.
 
 ## Turnpikes
 The checks the run must pass through before it ships, besides the project's gate, which always
-runs: `default`, `none`, or turnpikes by name, separated by commas. `default` stands for the
-default set, alone or in a list. `<tool>/scripts/turnpikes.sh --list` names every turnpike and marks
-the default ones. Only names go here; the reason for a choice goes in the notes.
+runs: `default`, `none`, or turnpikes by name, separated by commas. `default` stands for this
+project's declared default set, alone or in a list. `<tool>/scripts/turnpikes.sh --list` lists the
+turnpike names; `<tool>/scripts/turnpikes.sh resolve --project <repo> default` shows what
+`default` means for the target. Only names go here; the reason for a choice goes in the notes.
 
 ## Notes
 Everything else: context, links, decisions already taken, constraints, what is out of scope.
@@ -65,6 +66,9 @@ Everything goes through `<tool>/scripts/github.sh`, which reads the GitHub repos
 target's origin remote and needs nothing configured. `gh` must be logged in with the
 `project` scope (`gh auth login`, then `gh auth refresh -s project`); the user does both,
 never an agent, and `<tool>/scripts/probe-trackers.sh` says whether they have.
+An optional `.postmaster/project.toml` `[tracker].binding` selects the exact title of the linked
+Projects board. Without it, the adapter keeps its discovered board choice. The shared binding is
+a board name; its owner and the user's GitHub login are machine-side.
 
 ```sh
 <tool>/scripts/github.sh <repo> board                        # the linked board and its URL; exit 3 if none
@@ -116,6 +120,11 @@ which is the prefix discovery reads from commit messages; a target that has ship
 ticket needs nothing configured, and one that has not is a question for the user.
 
 Everything goes through `<tool>/scripts/plane.sh`. The instance and workspace are in the config:
+An optional project `[tracker].binding` names the workspace slug. When the project is in
+scope — `POSTMASTER_PROJECT` set, or run from the project's checkout — the binding must
+match the machine config's `workspace`, and a mismatch is refused; with no project in
+scope there is nothing to match, and the machine workspace is used as before. The instance
+URL and API key remain machine-side.
 
 ```toml
 [tracker]

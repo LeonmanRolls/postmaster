@@ -3,7 +3,7 @@ title: A run keeps the config it started with
 type: concept
 standing: claimed
 sources: []
-updated: 2026-09-26
+updated: 2026-09-29
 ---
 
 # A run keeps the config it started with
@@ -64,5 +64,5 @@ bears on it.
 run's `run.json`, applies the same checks, and never opens the live config. A run whose
 `run.json` is missing or unreadable is refused, and nothing runs. Every launch and resume in
 `skills/postmaster/postmaster.md` and `skills/postmaster/coachman.md` passes it, and the
-script's self-test fails if one does not. The waybill's team and the ship card's review link
-come from the record too.
+script's self-test fails if one does not. The waybill's team, the spec-review link template and
+the ship card's review link come from the record too.

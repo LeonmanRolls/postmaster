@@ -38,6 +38,7 @@
 #   exit 2  invalid state
 #   exit 4  the work item changed since the base was read
 set -uo pipefail
+HERE=$(CDPATH= cd -P -- "$(dirname -- "$0")" && pwd -P)
 CONFIG=${POSTMASTER_CONFIG:-$HOME/.postmaster/config.toml}
 die() { echo "plane: $*" >&2; exit 1; }
 [ $# -ge 1 ] || die "usage: plane.sh projects|create|edit|read|state|comment|list ... | --self-test"
@@ -48,6 +49,24 @@ if [ "$1" != --self-test ]; then
 import sys, tomllib
 t = tomllib.load(open(sys.argv[1], "rb")).get("tracker", {})
 print(t.get("env_file") or "~/.postmaster/plane.env")' "$CONFIG") || die "cannot read $CONFIG"
+  MACHINE_WORKSPACE=$(python3 -c 'import sys, tomllib; print(tomllib.load(open(sys.argv[1], "rb")).get("tracker", {}).get("workspace", ""))' "$CONFIG") \
+    || die "cannot read the Plane workspace from $CONFIG"
+  PROJECT=${POSTMASTER_PROJECT:-$(git rev-parse --show-toplevel 2>/dev/null || true)}
+  if [ -n "$PROJECT" ]; then
+    binding=$(python3 - "$HERE/project-settings.sh" "$PROJECT" <<'PY'
+import json, subprocess, sys
+r = subprocess.run([sys.argv[1], "inspect", sys.argv[2]], capture_output=True, text=True)
+if r.returncode:
+    print(r.stderr.strip(), file=sys.stderr); sys.exit(1)
+try:
+    print(json.loads(r.stdout).get("tracker", {}).get("binding", ""))
+except ValueError as e:
+    print("project settings gave no JSON: %s" % e, file=sys.stderr); sys.exit(1)
+PY
+) || die "cannot read the project's tracker binding"
+    [ -z "$binding" ] || [ "$binding" = "$MACHINE_WORKSPACE" ] \
+      || die "the project's Plane workspace binding '$binding' does not match the machine workspace '$MACHINE_WORKSPACE' in $CONFIG"
+  fi
   f=${ENV_FILE/#\~/$HOME}
   if [ -z "${PLANE_API_KEY:-}" ] && [ -f "$f" ]; then set -a; . "$f"; set +a; fi
   [ -n "${PLANE_API_KEY:-}" ] || die "no PLANE_API_KEY in the environment or in $f (skills/postmaster/trackers.md, plane)"
@@ -641,6 +660,27 @@ def self_test():
                            env=dict(os.environ, POSTMASTER_CONFIG=cfg, PLANE_API_KEY="self-test"))
         check("the old edit form, with a title, is a usage error before any request",
               r.returncode == 1 and "usage:" in r.stderr and "GET" not in r.stderr, r.stderr)
+        proj = os.path.join(d, "proj", ".postmaster")
+        os.makedirs(proj)
+        script = os.path.abspath(SCRIPT)
+        open(os.path.join(proj, "project.toml"), "w").write('[tracker]\nbinding = "other-ws"\n')
+        r = subprocess.run([script, "read"], capture_output=True, text=True, cwd=d,
+                           env=dict(os.environ, POSTMASTER_CONFIG=cfg, PLANE_API_KEY="self-test",
+                                    POSTMASTER_PROJECT=os.path.join(d, "proj")))
+        check("a project binding that does not match the machine workspace is refused",
+              r.returncode == 1 and "does not match the machine workspace" in r.stderr, r.stderr)
+        open(os.path.join(proj, "project.toml"), "w").write('[tracker]\nbinding = "ws"\n')
+        r = subprocess.run([script, "read"], capture_output=True, text=True, cwd=d,
+                           env=dict(os.environ, POSTMASTER_CONFIG=cfg, PLANE_API_KEY="self-test",
+                                    POSTMASTER_PROJECT=os.path.join(d, "proj")))
+        check("a matching binding reaches usage, with no request",
+              r.returncode == 1 and "usage:" in r.stderr and "does not match" not in r.stderr, r.stderr)
+        scoped = dict(os.environ, POSTMASTER_CONFIG=cfg, PLANE_API_KEY="self-test")
+        scoped.pop("POSTMASTER_PROJECT", None)
+        scoped["GIT_CEILING_DIRECTORIES"] = d
+        r = subprocess.run([script, "read"], capture_output=True, text=True, cwd=d, env=scoped)
+        check("with no project in scope the check is skipped and usage follows",
+              r.returncode == 1 and "usage:" in r.stderr and "does not match" not in r.stderr, r.stderr)
     print()
     if fails[0] == 0:
         print("self-test: all controls behaved"); return 0

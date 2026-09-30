@@ -297,7 +297,9 @@ class Safe:
         if repo and repo.is_dir() and same_repo(repo):
             waybill = ""                                # the target is postmaster: its text is public
         else:
-            names = {D.parent.name} | (set() if ONGOING else {D.name})
+            # <project>/.postmaster/runs/<TICKET>: the project root's name, not "runs".
+            root = D.parent.parent.parent if (D.parent.name == "runs" and D.parent.parent.name == ".postmaster") else D.parent
+            names = {root.name} | (set() if ONGOING else {D.name})
             k = None if ONGOING else re.match(r"([A-Za-z][A-Za-z0-9]*)[-_]\d+$", D.name)
             names |= {k.group(1)} if k else set()
             if repo:
@@ -854,7 +856,7 @@ leaks() {  # leaks <text>: the planted pieces of the target it holds, one per li
   for p in "${PLANTED[@]}"; do grep -qiF -- "$p" <<<"$1" && printf '%s\n' "$p"; done
 }
 newrun() {  # newrun <project> <ticket> <stage>: a run directory with its waybill, manifest and run.json
-  local d="$RUNS/$1/$2"
+  local d="$RUNS/$1/.postmaster/runs/$2"
   mkdir -p "$d"
   printf '# Waybill: %s\n\n## Ticket\nThe %s ledger for %s: %s. %s.\n\nrepo: %s\n\n## Project profile\nrepo: %s          default branch: main       BASE: 0123abc\n' \
     "$2" "$WORD" "$NAME" "$SENTENCE" "$CYR" "$T" "$REPO" > "$d/brief.md"
@@ -971,7 +973,7 @@ printf '%s\n' "$(line_of "$C")" | grep -qE " known #12 \(closed\)$" && ok "in a 
 out=$(tf comment "$again" "$C" 2>&1); rc=$?
 [ $rc -eq 0 ] && tail -1 "$S/writes.log" | grep -qF "comment #12 " && tail -1 "$S/writes.log" | grep -qF "This ticket is closed." \
   && ok "a comment on a closed ticket says it is closed" || fail "a comment on a closed ticket says it is closed (exit $rc)" "$out$(printf '\n'; tail -1 "$S/writes.log")"
-pm="$RUNS/$NAME/postmaster"; mkdir -p "$pm"
+pm="$RUNS/$NAME/.postmaster/runs/postmaster"; mkdir -p "$pm"
 logf "$pm" postmaster tool-fault scripts/runs-status.sh --ran "the poll" --failed "listed a run twice" --error none --diagnosis x --fix "list each once"
 out=$(tf harvest "$pm" 2>&1); P=$(id_where 'scripts/runs-status.sh'); out=$(tf file "$pm" "$P" 2>&1)
 python3 -c 'import json, sys; p = sys.argv[1]; s = json.load(open(p)); s["issues"]["61"]["state"] = "CLOSED"; json.dump(s, open(p, "w"))' "$S/db.json"

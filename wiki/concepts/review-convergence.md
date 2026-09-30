@@ -420,16 +420,20 @@ lanes exist.
 
 ## Decision
 
-On 2026-09-27 the user chose, for now, one round of bug review, and to revisit the rule if many
-bugs reach production. It is none of options A to E. It is closest to D, without the round on the
-fixes, so the fixes that round's findings lead to are not reviewed again. It replaces the cap of
-three rounds that held while this research ran. No runbook changes under #59: `coachman.md`
-changes to match under a ticket of its own. The trial was not run.
+On 2026-09-27 the user chose the rule the loop runs under #80: "in the first round we fix as much
+as we can, then we repeat until there are no more P1 and P2s." Round 1 applies the fix for every
+verified gating finding, P1, P2 and P3 alike; from round 2 on only P1 and P2 findings are fixed,
+and a P3 finding goes to the user unfixed. The cap of three rounds stays as a backstop: when
+round 3 logs a verified P1 or P2 finding, the loop stops and escalates with the residue. The
+repeated-class escalation stays too. The user's first answer, "for now we will just have one
+round of bug review, if we see lots of bugs in prod, we can revisit this", was refined into this
+rule; many bugs reaching production stays the signal to revisit it. It is none of options A to E.
+`coachman.md` changes under #80. The trial was not run.
 
 ## What would settle it
 
-The user's test for the decision is how many bugs reach production from changes that had one round
-of review. For the claim: it is supported if, across at least three dispatched runs, serious
+The user's test for the decision is how many bugs reach production from changes that had review
+under this rule. For the claim: it is supported if, across at least three dispatched runs, serious
 findings reach zero outside escalated mechanisms within the cap while minor ones continue, and the
 first trial finds few verified P1 or P2 in code already reviewed clean. It is refuted if fresh
 reviewers keep finding verified serious defects in code a loop has passed, or if the rate of serious
