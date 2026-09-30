@@ -1761,13 +1761,54 @@ EOF
 #!/usr/bin/env bash
 printf '{"type":"system","subtype":"init","session_id":"probe-1","model":"m"}\n'
 if (: < /dev/tty) 2>/dev/null; then tty=yes; else tty=no; fi
-printf 'from=%s|name=%s|pane=%s|tmuxpane=%s|var=%s|events=%s|sid=%s|pid=%s|pgid=%s|tty=%s\n' "$PWD" "${POSTMASTER_LAUNCH_NAME:-}" \
-  "${HERDR_PANE_ID:-unset}" "${TMUX_PANE:-unset}" "${CALLER_VAR:-unset}" "${POSTMASTER_EVENT_STREAM:-unset}" "$(python3 -c 'import os; print(os.getsid(0))')" "$$" \
-  "$(python3 -c 'import os; print(os.getpgid(0))')" "$tty"
+# Like launch.sh: an env file is sourced into the launch's environment after the host hand-off.
+here=$(CDPATH= cd -P -- "$(dirname -- "$0")" && pwd -P)
+if [ -f "$here/extra.env" ]; then set -a; . "$here/extra.env"; set +a; fi
+printf 'from=%s|name=%s|pane=%s|tmuxpane=%s|var=%s|events=%s|sid=%s|pid=%s|pgid=%s|tty=%s|claudecode=%s|clausesess=%s|clausechild=%s|clauseentry=%s|clauseexe=%s|clauseatt=%s|clausesock=%s|clausetok=%s|clausefuture=%s|herdrenv=%s|herdrsock=%s|herdrbin=%s|configdir=%s|effort=%s|anthropic=%s|cliconfig=%s|cliqueue=%s|envfile=%s\n' \
+  "$PWD" "${POSTMASTER_LAUNCH_NAME:-}" \
+  "${HERDR_PANE_ID:-unset}" "${TMUX_PANE:-unset}" "${CALLER_VAR:-unset}" "${POSTMASTER_EVENT_STREAM:-unset}" \
+  "$(python3 -c 'import os; print(os.getsid(0))')" "$$" \
+  "$(python3 -c 'import os; print(os.getpgid(0))')" "$tty" \
+  "${CLAUDECODE:-unset}" "${CLAUDE_CODE_SESSION_ID:-unset}" "${CLAUDE_CODE_CHILD_SESSION:-unset}" \
+  "${CLAUDE_CODE_ENTRYPOINT:-unset}" "${CLAUDE_CODE_EXECPATH:-unset}" "${CLAUDE_CODE_SESSION_ATTENDED:-unset}" \
+  "${CLAUDE_CODE_MESSAGING_SOCKET:-unset}" "${CLAUDE_CODE_MESSAGING_TOKEN:-unset}" "${CLAUDE_CODE_SESSION_FUTURE:-unset}" \
+  "${HERDR_ENV:-unset}" "${HERDR_SOCKET_PATH:-unset}" "${HERDR_BIN_PATH:-unset}" \
+  "${CLAUDE_CONFIG_DIR:-unset}" "${CLAUDE_EFFORT:-unset}" "${ANTHROPIC_BASE_URL:-unset}" \
+  "${CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY:-unset}" "${CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS:-unset}" "${ENVFILE_VALUE:-unset}"
 echo x >> "${COUNT:-/dev/null}"
 sleep "${EMIT_SLEEP:-0}"
 EOF
-  chmod +x "$tmp/caller/fixed.sh" "$tmp/caller/probe.sh"
+  printf 'ENVFILE_VALUE=reached\n' > "$tmp/caller/extra.env"
+  # A stub claude that models the session-record contract the fourth criterion pins: with a
+  # caller's session identity it attaches and writes no record of its own; without one it
+  # writes a record under the thread id its stream names, and a resume continues that record.
+  cat > "$tmp/caller/claude" <<'EOF'
+#!/usr/bin/env bash
+store=${CLAUDE_TEST_STORE:?CLAUDE_TEST_STORE}
+thread=thread-ac4
+if [ "${1:-}" = -p ] && [ "${2:-}" = --resume ]; then
+  thread=${3:?}
+  if [ -f "$store/$thread" ]; then
+    printf 'resumed\n' >> "$store/$thread"
+    printf '{"type":"system","subtype":"init","session_id":"%s"}\n' "$thread"
+    printf '{"type":"result","subtype":"success","num_turns":1}\n'
+    exit 0
+  fi
+  echo "Session not found: $thread" >&2
+  exit 1
+fi
+if [ -n "${CLAUDECODE:-}" ] || [ -n "${CLAUDE_CODE_SESSION_ID:-}" ] || [ -n "${CLAUDE_CODE_SESSION_FUTURE:-}" ] \
+   || [ -n "${CLAUDE_CODE_MESSAGING_SOCKET:-}" ] || [ -n "${CLAUDE_CODE_CHILD_SESSION:-}" ]; then
+  printf '{"type":"system","subtype":"init","session_id":"caller-attached"}\n'
+  printf '{"type":"result","subtype":"success","num_turns":1}\n'
+  exit 0
+fi
+mkdir -p "$store"
+printf 'launched\n' > "$store/$thread"
+printf '{"type":"system","subtype":"init","session_id":"%s"}\n' "$thread"
+printf '{"type":"result","subtype":"success","num_turns":1}\n'
+EOF
+  chmod +x "$tmp/caller/fixed.sh" "$tmp/caller/probe.sh" "$tmp/caller/claude"
   # A waybill whose title is written to break any shell it is typed into.
   cat > "$tmp/run-1/brief.md" <<EOF
 # Waybill: 1
@@ -1848,6 +1889,21 @@ wait_grep() {  # wait_grep <file> <pattern> [<seconds>]: wait until a file match
   done; return 1
 }
 field() { tr '|' '\n' < "$1" | sed -n "s/^$2=//p" | head -1; }   # field <probe output> <key>
+claude_record() {  # claude_record <tag> <path> <var>...: the AC4 stub through that host's hs
+  local tag=$1 path=$2 store="$tmp/claudes-$1"; shift 2
+  mkdir -p "$store"
+  (cd "$tmp/caller" && hs "$path" "$@" CLAUDE_TEST_STORE="$store" -- run "$NAME" "$repo/.worktrees/T-1-luna" \
+     --out "../logs/$tag.out" --marker "../logs/$tag.done" -- ./claude -p hi >/dev/null)
+  marker "$tmp/logs/$tag.done"
+  check "$tag: a headless claude lane writes its session record under the streamed thread id" \
+    '[ -f "'"$store"'/thread-ac4" ] && grep -q thread-ac4 "'"$tmp/logs/$tag.out"'" && grep -q launched "'"$store"'/thread-ac4"' \
+    "$(ls -la "$store" 2>/dev/null; cat "$tmp/logs/$tag.out" 2>/dev/null)"
+  (cd "$tmp/caller" && hs "$path" "$@" CLAUDE_TEST_STORE="$store" -- run "$NAME" "$repo/.worktrees/T-1-luna" \
+     --out "../logs/$tag-r.out" --append --marker "../logs/$tag-r.done" -- ./claude -p --resume thread-ac4 more >/dev/null)
+  marker "$tmp/logs/$tag-r.done"
+  check "$tag: a resume of that thread continues it" \
+    'grep -q resumed "'"$store"'/thread-ac4"' "$(cat "$store/thread-ac4" 2>/dev/null)"
+}
 title_absent() { [[ "$1" != *"#1"* && "$1" != *"Stop"* && "$1" != *"touch"* && "$1" != *"canary"* && "$1" != *"breaking"* && "$1" != *"shell"* ]]; }
 err_stream_equal() { cmp -s "$1" <(sed -e '/^host: launch running uncapped (no supported per-launch limits available)$/d' "$2"); }
 finish() {
@@ -2067,6 +2123,7 @@ elif cmd == "pane run":
     # The fired file is the event the late-pane control waits for.
     late = ("sleep 5; touch %s; " % os.path.join(S, "pane.late.fired")) if flag("pane.late") else ""
     env = {"PATH": os.environ["PATH"], "HOME": os.environ.get("HOME", "/"), "STUB": S, "HERDR_ENV": "1",
+           "HERDR_SOCKET_PATH": "/stub/herdr.sock", "HERDR_BIN_PATH": "/stub/herdr",
            "HERDR_PANE_ID": pane, "HERDR_TAB_ID": "tab-of-" + pane, "HERDR_WORKSPACE_ID": ws}
     proc = subprocess.Popen(["bash", "-c", late + text], env=env, stdin=subprocess.DEVNULL, start_new_session=True,
                             stdout=open(os.path.join(S, "pane-%s.out" % pane), "ab"), stderr=subprocess.STDOUT)
@@ -2345,6 +2402,52 @@ EOF
   check "the exact --out path reaches the launch as POSTMASTER_EVENT_STREAM" \
     '[ "$(field "$tmp/logs/n3.out" events)" = "$tmp/caller/../logs/n3.out" ]' "$(cat "$tmp/logs/n3.out")"
   check "but never with its caller's pane" '[ "$(field "$tmp/logs/n3.out" pane)" = unset ] && [ "$(field "$tmp/logs/n3.out" tmuxpane)" = unset ]' "$(cat "$tmp/logs/n3.out")"
+  echo "run, no host: the caller's Claude and Herdr identity never reach a launch"
+  local id_vars=(
+    CLAUDECODE=1 CLAUDE_PID=99
+    CLAUDE_CODE_SESSION_ID=caller-sess CLAUDE_CODE_CHILD_SESSION=caller-child
+    CLAUDE_CODE_ENTRYPOINT=caller-entry CLAUDE_CODE_EXECPATH=/caller/claude
+    CLAUDE_CODE_SESSION_ATTENDED=1
+    CLAUDE_CODE_MESSAGING_SOCKET=/caller/msg.sock CLAUDE_CODE_MESSAGING_TOKEN=caller-token
+    CLAUDE_CODE_SESSION_FUTURE=future
+    HERDR_ENV=caller-herdr HERDR_SOCKET_PATH=/caller/herdr.sock HERDR_BIN_PATH=/caller/herdr
+    HERDR_PANE_ID=caller-pane HERDR_TAB_ID=caller-tab HERDR_WORKSPACE_ID=caller-ws
+    CLAUDE_CONFIG_DIR=/caller/cfg CLAUDE_EFFORT=high ANTHROPIC_BASE_URL=https://caller.example
+    CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY=1 CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=40
+    CALLER_VAR=v
+  )
+  (cd "$tmp/caller" && env "${id_vars[@]}" ./probe.sh > "$tmp/logs/id-direct.out")
+  check "the same probe run directly sees every identity name (positive control)" \
+    '[ "$(field "$tmp/logs/id-direct.out" claudecode)" = 1 ] && [ "$(field "$tmp/logs/id-direct.out" clausesess)" = caller-sess ]' \
+    "$(cat "$tmp/logs/id-direct.out")"
+  (cd "$tmp/caller" && hs "$SYS" "${id_vars[@]}" -- run "$NAME" "$repo/.worktrees/T-1-luna" \
+     --out ../logs/id1.out --marker ../logs/id1.done -- ./probe.sh >/dev/null)
+  marker "$tmp/logs/id1.done"
+  check "no host: the launch carries none of its caller's Claude Code session identity" \
+    '[ "$(field "$tmp/logs/id1.out" claudecode)" = unset ] && [ "$(field "$tmp/logs/id1.out" clausesess)" = unset ] \
+     && [ "$(field "$tmp/logs/id1.out" clausechild)" = unset ] && [ "$(field "$tmp/logs/id1.out" clauseentry)" = unset ] \
+     && [ "$(field "$tmp/logs/id1.out" clauseexe)" = unset ] && [ "$(field "$tmp/logs/id1.out" clauseatt)" = unset ] \
+     && [ "$(field "$tmp/logs/id1.out" clausesock)" = unset ] && [ "$(field "$tmp/logs/id1.out" clausetok)" = unset ] \
+     && [ "$(field "$tmp/logs/id1.out" clausefuture)" = unset ]' "$(cat "$tmp/logs/id1.out")"
+  check "and none of its caller's Herdr variables" \
+    '[ "$(field "$tmp/logs/id1.out" herdrenv)" = unset ] && [ "$(field "$tmp/logs/id1.out" herdrsock)" = unset ] \
+     && [ "$(field "$tmp/logs/id1.out" herdrbin)" = unset ] && [ "$(field "$tmp/logs/id1.out" pane)" = unset ]' \
+    "$(cat "$tmp/logs/id1.out")"
+  check "while every other caller variable still arrives: POSTMASTER_ settings and harness configuration" \
+    '[ "$(field "$tmp/logs/id1.out" name)" = "$NAME" ] && [ "$(field "$tmp/logs/id1.out" var)" = v ] \
+     && [ "$(field "$tmp/logs/id1.out" configdir)" = /caller/cfg ] && [ "$(field "$tmp/logs/id1.out" effort)" = high ] \
+     && [ "$(field "$tmp/logs/id1.out" anthropic)" = https://caller.example ] \
+     && [ "$(field "$tmp/logs/id1.out" cliconfig)" = 1 ] && [ "$(field "$tmp/logs/id1.out" cliqueue)" = 40 ]' \
+    "$(cat "$tmp/logs/id1.out")"
+  check "and the lane's env file is sourced into that environment, untouched by the strip" \
+    '[ "$(field "$tmp/logs/id1.out" envfile)" = reached ]' "$(cat "$tmp/logs/id1.out")"
+  echo "run, no host: a headless claude lane writes its own session record and resumes"
+  mkdir -p "$tmp/claudes-direct"
+  (cd "$tmp/caller" && env "${id_vars[@]}" CLAUDE_TEST_STORE="$tmp/claudes-direct" ./claude -p hi > "$tmp/logs/claude-direct.out")
+  check "the same stub run directly with identity writes no record of its own (negative control)" \
+    '[ ! -e "$tmp/claudes-direct/thread-ac4" ] && grep -q caller-attached "$tmp/logs/claude-direct.out"' \
+    "$(ls -la "$tmp/claudes-direct" 2>/dev/null; cat "$tmp/logs/claude-direct.out" 2>/dev/null)"
+  claude_record ac4none "$SYS" "${id_vars[@]}"
   check "it is a session of its own: its group is its pid, not the caller's session" \
     '[ "$(field "$tmp/logs/n3.out" pgid)" = "$(field "$tmp/logs/n3.out" pid)" ] && [ "$(field "$tmp/logs/n3.out" sid)" = "$(field "$tmp/logs/n3.out" pid)" ]'
   check "--pidfile holds the launch's pid" '[ "$(cat "$tmp/logs/n3.pid")" = "$(field "$tmp/logs/n3.out" pid)" ]'
@@ -2483,7 +2586,7 @@ EOF
   echo "run, Herdr (stub): a pane in the worktree's space, nested under the repository's"
   echo "run, Herdr (stub): launches under the ticket-labeled run space"
   reset
-  got=$(cd "$tmp/caller" && hs "$STUBS" CALLER_VAR=v HERDR_PANE_ID=caller-pane -- run "$NAME" "$repo/.worktrees/T-1-luna" \
+  got=$(cd "$tmp/caller" && hs "$STUBS" "${id_vars[@]}" -- run "$NAME" "$repo/.worktrees/T-1-luna" \
         --under "$tmp/run-1" \
         --out ../logs/h1.out --err ../logs/h1.err --marker ../logs/h1.done -- ./probe.sh)
   check "it says where it ran" 'case $got in "host=herdr space=w"*" pane=p"*) true ;; *) false ;; esac' "$got"
@@ -2504,6 +2607,19 @@ EOF
   marker "$tmp/logs/h1.done"
   check "the launch ran in that pane, with that pane's identity" '[ "$(field "$tmp/logs/h1.out" pane)" = "$pane" ]' "$(cat "$tmp/logs/h1.out")"
   check "and with its caller's environment, handed over by host.sh" '[ "$(field "$tmp/logs/h1.out" var)" = v ] && [ "$(field "$tmp/logs/h1.out" from)" = "$tmp/caller" ]'
+  check "Herdr: the launch carries none of its caller's Claude Code session identity" \
+    '[ "$(field "$tmp/logs/h1.out" claudecode)" = unset ] && [ "$(field "$tmp/logs/h1.out" clausesess)" = unset ] \
+     && [ "$(field "$tmp/logs/h1.out" clausechild)" = unset ] && [ "$(field "$tmp/logs/h1.out" clauseentry)" = unset ] \
+     && [ "$(field "$tmp/logs/h1.out" clausesock)" = unset ] && [ "$(field "$tmp/logs/h1.out" clausetok)" = unset ] \
+     && [ "$(field "$tmp/logs/h1.out" clausefuture)" = unset ]' "$(cat "$tmp/logs/h1.out")"
+  check "only that pane's own Herdr variables, never its caller's" \
+    '[ "$(field "$tmp/logs/h1.out" herdrenv)" = 1 ] && [ "$(field "$tmp/logs/h1.out" herdrsock)" = /stub/herdr.sock ] \
+     && [ "$(field "$tmp/logs/h1.out" herdrbin)" = /stub/herdr ] && [ "$(field "$tmp/logs/h1.out" pane)" = "$pane" ]' \
+    "$(cat "$tmp/logs/h1.out")"
+  check "while harness configuration and the lane's env file still arrive" \
+    '[ "$(field "$tmp/logs/h1.out" configdir)" = /caller/cfg ] && [ "$(field "$tmp/logs/h1.out" effort)" = high ] \
+     && [ "$(field "$tmp/logs/h1.out" envfile)" = reached ]' "$(cat "$tmp/logs/h1.out")"
+  claude_record ac4herdr "$STUBS" "${id_vars[@]}"
   # Rendering is async: wait for the session line rather than sleeping a fixed second.
   wait_grep "$tmp/stub/pane-$pane.out" '^[0-9]{2}:[0-9]{2}:[0-9]{2} session ' 60
   check "the pane shows the name and the rendered stream, not raw JSON" \
@@ -2868,11 +2984,23 @@ PY
 
   echo "run, stop and close, tmux (stub)"
   reset
-  got=$(cd "$tmp/caller" && hs "$STUBS" POSTMASTER_HOST=tmux CALLER_VAR=v -- run "$NAME" "$repo/.worktrees/T-1-sol" --out ../logs/t1.out --marker ../logs/t1.done -- ./probe.sh)
+  got=$(cd "$tmp/caller" && hs "$STUBS" POSTMASTER_HOST=tmux "${id_vars[@]}" -- run "$NAME" "$repo/.worktrees/T-1-sol" --out ../logs/t1.out --marker ../logs/t1.done -- ./probe.sh)
   marker "$tmp/logs/t1.done"
   check "a first launch opens session postmaster-<repo>, a window named for it" \
     'grep -q "^new-session${T}-d${T}-P${T}-F${T}#{window_id}${T}-s${T}postmaster-$rname${T}-n${T}$NAME${T}" <<<"$(calls tmux)"' "$got"
   check "the launch ran with that window's pane and its caller's environment" '[ "$(field "$tmp/logs/t1.out" tmuxpane)" = %1 ] && [ "$(field "$tmp/logs/t1.out" var)" = v ]' "$(cat "$tmp/logs/t1.out")"
+  check "tmux: the launch carries none of its caller's Claude Code session identity" \
+    '[ "$(field "$tmp/logs/t1.out" claudecode)" = unset ] && [ "$(field "$tmp/logs/t1.out" clausesess)" = unset ] \
+     && [ "$(field "$tmp/logs/t1.out" clausechild)" = unset ] && [ "$(field "$tmp/logs/t1.out" clauseentry)" = unset ] \
+     && [ "$(field "$tmp/logs/t1.out" clausesock)" = unset ] && [ "$(field "$tmp/logs/t1.out" clausetok)" = unset ] \
+     && [ "$(field "$tmp/logs/t1.out" clausefuture)" = unset ]' "$(cat "$tmp/logs/t1.out")"
+  check "and none of its caller's Herdr variables" \
+    '[ "$(field "$tmp/logs/t1.out" herdrenv)" = unset ] && [ "$(field "$tmp/logs/t1.out" herdrsock)" = unset ] \
+     && [ "$(field "$tmp/logs/t1.out" herdrbin)" = unset ]' "$(cat "$tmp/logs/t1.out")"
+  check "while harness configuration and the lane's env file still arrive" \
+    '[ "$(field "$tmp/logs/t1.out" configdir)" = /caller/cfg ] && [ "$(field "$tmp/logs/t1.out" effort)" = high ] \
+     && [ "$(field "$tmp/logs/t1.out" envfile)" = reached ]' "$(cat "$tmp/logs/t1.out")"
+  claude_record ac4tmux "$STUBS" POSTMASTER_HOST=tmux "${id_vars[@]}"
   # sleep 300 outlives the 60s marker bound: a stop that misses still fails.
   (cd "$tmp/caller" && hs "$STUBS" POSTMASTER_HOST=tmux -- run "$NAME" "$repo/.worktrees/T-1-sol" --marker ../logs/t2.done -- sleep 300 >/dev/null)
   check "the next is a window in the same session" 'grep -q "^new-window${T}-d${T}-P${T}-F${T}#{window_id}${T}-t${T}=postmaster-$rname:${T}" <<<"$(calls tmux)"'
