@@ -25,7 +25,7 @@
 #          READ      a checkpoint card is waiting to be read (.checkpoint-*-ready)
 #          INSPECT   no marker, nothing changed for 30 minutes, run not done
 #          WAIT      a leg is running and its files are moving
-#          -         the manifest says done or abandoned
+#          -         the manifest says done or abandoned, with nothing untold
 #
 # Idle time ignores the marker files themselves, so touching a marker never hides a stall.
 #
@@ -88,7 +88,7 @@ for run in sorted(os.listdir(root)):
                 except OSError:
                     said = []
             untold = any((Counter(have) - Counter(said)).values())
-    if stage in ("done", "abandoned"): nxt = "-"
+    if stage in ("done", "abandoned") and not untold: nxt = "-"
     elif ".waiting-on-user" in markers: nxt = "USER"
     elif ".escalation-ready" in markers: nxt = "RULE"
     elif untold: nxt = "TELL"
@@ -176,6 +176,8 @@ run tellrule review 2 .escalation-ready
 printf '%s\n' "$DET1" > "$tmp/root/tellrule/detections.jsonl"
 run tellclosed done 3
 printf '%s\n' "$DET1" > "$tmp/root/tellclosed/detections.jsonl"
+run tellaban abandoned 2
+printf '%s\n' "$DET1" > "$tmp/root/tellaban/detections.jsonl"
 run emptydet review 2
 : > "$tmp/root/emptydet/detections.jsonl"
 mkdir -p "$tmp/root/postmaster"
@@ -206,7 +208,8 @@ expect "an empty detections log is WAIT" emptydet WAIT
 expect "an untold detection beats a ship card" tellgate TELL
 expect "a run waiting on the user beats an untold detection" telluser USER
 expect "an escalation waiting beats an untold detection" tellrule RULE
-expect "a closed run stays closed with untold detections" tellclosed "-"
+expect "a closed run with untold detections is TELL" tellclosed TELL
+expect "an abandoned run with untold detections is TELL" tellaban TELL
 expect "touching a marker does not hide a stall" stall INSPECT
 [ -z "$(next_of postmaster)" ] && ok "the postmaster's own directory is not a run" \
   || fail "the postmaster's own directory is not a run"
