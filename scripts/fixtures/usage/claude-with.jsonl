@@ -1,0 +1,2 @@
+{"type":"assistant","session_id":"fixture-claude-usage","message":{"role":"assistant","usage":{"input_tokens":45678,"output_tokens":901}}}
+{"type":"result","total_cost_usd":0.64}

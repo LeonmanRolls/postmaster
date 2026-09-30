@@ -1,0 +1,2 @@
+{"type":"thread.started","thread_id":"fixture-codex-empty"}
+{"type":"error","message":"fixture failure without a completed turn"}

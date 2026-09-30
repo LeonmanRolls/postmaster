@@ -1,0 +1,1 @@
+{"records":[{"sequence":7,"record_type":"runtime.session","payload_type":"runtime.session","payload":{"kind":"run","event":{"kind":"model_completed","model":"muse-spark-fixture","usage":{"input_tokens":67890,"output_tokens":123,"cached_tokens":4000}}}}]}

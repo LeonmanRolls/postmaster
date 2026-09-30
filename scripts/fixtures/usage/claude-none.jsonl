@@ -1,0 +1,2 @@
+{"type":"system","subtype":"init","session_id":"fixture-claude-empty"}
+{"type":"result","is_error":true,"total_cost_usd":null}
