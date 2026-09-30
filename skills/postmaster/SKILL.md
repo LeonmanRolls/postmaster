@@ -44,6 +44,7 @@ Someone typing `/postmaster` arrives cold. **Assume neither. Check.**
 
 ```sh
 cat ~/.postmaster/config.toml 2>/dev/null || echo "NOT SET UP"
+<tool>/scripts/link-skills.sh --check
 ```
 
 **No config: stop and set the machine up first**, in conversation, per the setup section of
@@ -51,13 +52,18 @@ cat ~/.postmaster/config.toml 2>/dev/null || echo "NOT SET UP"
 selection: every later step reads the config for the team, the tracker and the merge word,
 and without it the launch card cannot be filled. Come back here when it is written.
 
+**Skill links missing or blocked:** `--check` names each one and exits non-zero. Report
+them to the user and name the one command that installs them, `<tool>/scripts/link-skills.sh`.
+Install only on the user's word; the check never installs.
+
 **Config present, and this session has already chosen and verified a target:** skip to
 "Work out what the project needs" and do not ask again.
 
 **Config present, no target yet:** carry on below.
 
-Say which of these you found, in one line, before doing anything else. A session that cannot
-tell whether it is setting up or dispatching is one nobody can follow.
+Say which of these you found, in one line, before doing anything else — including any
+missing skill links. A session that cannot tell whether it is setting up or dispatching is
+one nobody can follow.
 
 ## Choose the target project
 

@@ -47,11 +47,17 @@ choose a target, launch the postmaster. Work out where the user is and pick up f
 
 ```sh
 cat ~/.postmaster/config.toml 2>/dev/null || echo "NOT SET UP"
+scripts/link-skills.sh --check
 ```
 
-If it is missing, set it up now, in conversation, before anything else. You conduct it:
-probe first, ask one thing at a time, verify each answer, then have the script write the
-config. Do not guess an answer, and do not hand the user a script to run instead.
+The answer covers both the config and the skill links. `--check` names any missing or
+blocked link and exits non-zero when it finds one; it never installs. If the config is
+missing, set the machine up now, in conversation, before anything else — that includes the
+links, on the user's word. If the config is present and the check names missing links,
+report them and offer `scripts/link-skills.sh` on the user's word. Never install without
+asking. You conduct setup: probe first, ask one thing at a time, verify each answer, then
+have the script write the config. Do not guess an answer, and do not hand the user a script
+to run instead.
 
 ```sh
 scripts/probe-harnesses.sh     # which agent CLIs exist, and which read no ambient context
@@ -90,13 +96,15 @@ scripts/setup.sh --answers <file>             # write ~/.postmaster/config.toml
 ```
 
 Then link the skills, so the postmaster skill works from any project in every installed
-harness with a skills folder. Show the user the dry run first. The links go to this repo's
-main checkout, never a worktree, and nothing is ever copied; a path in the way is the user's
-to move, and the script changes nothing until it is gone.
+harness with a skills folder. Show the user the dry run first, and install only on their
+word. The links go to this repo's main checkout, never a worktree, and nothing is ever
+copied; a path in the way is the user's to move, and the script changes nothing until it
+is gone.
 
 ```sh
 scripts/link-skills.sh --dry-run   # the links it would make, and anything in the way
-scripts/link-skills.sh             # make them; running it again changes nothing
+scripts/link-skills.sh             # make them, on the user's word; running it again changes nothing
+scripts/link-skills.sh --check     # name any missing or blocked link; change nothing
 ```
 
 **2. Which project are we dispatching against?**

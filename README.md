@@ -83,7 +83,7 @@ opened, or launches one when it cannot be.
 scripts/probe-harnesses.sh      # which agent CLIs are installed
 scripts/probe-trackers.sh       # which ticket sources are reachable
 scripts/setup.sh --answers <file> # writes the config from the agent's collected answers (--keys lists them)
-scripts/link-skills.sh [--dry-run | --remove]                     # the skills, as links into each CLI's skills folder
+scripts/link-skills.sh [--dry-run | --check | --remove]           # the skills, as links into each CLI's skills folder
 scripts/skill-refs.sh [--fix]                                      # every script path in the skill goes through <tool>
 scripts/find-projects.sh        # your git projects, most recent first
 scripts/check-target.sh  <path> # 0 usable · 1 not a repo · 2 dirty
@@ -157,20 +157,23 @@ the scripts use to read the config, and jq for discovering a JavaScript project'
 
 Skills are installed as links, never as copies. `scripts/link-skills.sh` links each directory
 under `skills/` into the user-level skills folder of every installed agent CLI that has one,
-pointing at the main checkout of this repo, never a worktree. Setup runs it, and running it
-again changes nothing:
+pointing at the main checkout of this repo, never a worktree. Setup shows the dry run and
+installs on the user's word, and running it again changes nothing:
 
 ```sh
 scripts/link-skills.sh --dry-run   # the links it would make, and anything in the way
 scripts/link-skills.sh             # make them
+scripts/link-skills.sh --check     # name any missing or blocked link; change nothing
 scripts/link-skills.sh --remove    # remove them, and nothing else
 ```
 
 It replaces nothing. A file, a folder or another link where a link belongs is named, and
-nothing changes until you move it. Once linked, the postmaster skill (`/postmaster` in Claude
-Code) works from any project, and finds this repo from its link. The folder each CLI reads is
-in `skills/postmaster/harnesses.md`. A CLI with no folder there, agy for now, is pointed at
-this repo's `skills/postmaster/SKILL.md` by its absolute path.
+nothing changes until you move it. `--check` is the read-only counterpart: it names any
+missing or blocked link and the one command that installs them. Once linked, the postmaster
+skill (`/postmaster` in Claude Code) works from any project, and finds this repo from its
+link. The folder each CLI reads is in `skills/postmaster/harnesses.md`. A CLI with no folder
+there, agy for now, is pointed at this repo's `skills/postmaster/SKILL.md` by its absolute
+path.
 
 `skills/postmaster` runs the flow and is the one a dispatch needs. `skills/wiki` operates the
 wiki, works in a checkout of this repo, and is only wanted by a session doing that. Each
