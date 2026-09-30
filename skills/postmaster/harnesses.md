@@ -42,8 +42,9 @@ one session messaging another; the postmaster polls files.
 | mimo | `mimo run` | `--format json` | `AGENTS.md`, a `CLAUDE.md` beside a short one, and Claude Code's user rules | yes, on stdin |
 
 A harness that reads no ambient context file must be handed the project's docs by name in its
-prompt, and must have the `WORKHORSE-SPEC.md` / `WORKHORSE-SUMMARY.md` / `WORKHORSE-BLOCKED.md` contract spelled
-out in full. The
+prompt, and must have the `WORKHORSE-SUMMARY.md` / `WORKHORSE-BLOCKED.md` contract spelled
+out in full, together with the line that the run's one approved spec is already at
+`WORKHORSE-SPEC.md` in its worktree. The
 others pick both up from the brief and the docs. A harness that reads a context file under a
 different name needs that file present: a `CLAUDE.md` that is a symlink to `AGENTS.md` serves
 both.
@@ -149,7 +150,7 @@ cd <wt> && agy -p "$(cat <dispatch>/<lane>-prompt.txt)" \
 - `--sandbox` is opt-IN restriction. Never pass it to a lane.
 - Reads NO ambient context file: not `AGENTS.md`, `GEMINI.md`, `AGENT.md`, `.agy/` or
   `.antigravity/`. The prompt must open by naming the project's docs and must spell out the
-  `WORKHORSE-SPEC.md` / `WORKHORSE-SUMMARY.md` / `WORKHORSE-BLOCKED.md` contract.
+  `WORKHORSE-SUMMARY.md` / `WORKHORSE-BLOCKED.md` contract and the approved-spec line.
 - Thread id: `conversationId` in the stream.
 - Final message: the last result line of the events stream.
 - Resume: relaunch against its `conversationId`; `agy --help` for the flag. Not recorded here,
@@ -437,10 +438,11 @@ provide custom review instructions` (trial).
 Given no target it reviewed uncommitted changes, found none in a clean scratch, and exited 0
 (trial). Named `<BASE>...HEAD` it reviewed the range and reported the planted bug at its line.
 
-## Interactive form: the postmaster
+## Interactive form: the postmaster and a spec session
 
-The postmaster is the one interactive session (`SKILL.md` spawns it through `host.sh spawn`).
-It runs in its harness's bypass mode, like every launch, named for its project:
+The postmaster is an interactive session (`SKILL.md` spawns it through `host.sh spawn`), and a
+spec session is another (`postmaster.md`, Spec review): both run in their harness's bypass
+mode, like every launch, named for their project or their ticket. The same table serves both.
 
 | harness | interactive form | checked here |
 |---|---|---|

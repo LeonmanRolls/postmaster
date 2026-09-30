@@ -1,7 +1,9 @@
 # Workhorse spec template
 
-A workhorse copies the block below to `WORKHORSE-SPEC.md` at its worktree root, fills it in, and commits
-it on its own before writing any code. The user reviews it before implementation: revise it
+The coachman copies the block below to `WORKHORSE-SPEC.md` at the synthesis worktree root,
+fills it in once per run at this level — what to build, the decisions that matter and the
+tests, not the code, so the lanes still choose their own implementation — and commits it
+before any code. The user reviews it before implementation: revise it
 from their words in a later commit when they ask, and write no code until it is approved. The
 format is adapted from GitHub Spec Kit's plan and tasks templates, in one file.
 
@@ -10,7 +12,7 @@ format is adapted from GitHub Spec Kit's plan and tasks templates, in one file.
 
 ## Summary
 
-<The ticket's requirement in one sentence, and the approach this workhorse will take.>
+<The ticket's requirement in one sentence, and the approach the run will take.>
 
 ## Technical context
 
@@ -29,7 +31,7 @@ tracking.>
 
 ## Structure
 
-<The files and directories this workhorse will create or change.>
+<The files and directories the work will create or change.>
 
 ## Complexity tracking
 
@@ -40,7 +42,7 @@ tracking.>
 
 ## Decisions
 
-<Each choice the ticket left open, and what this workhorse chose. There is no one to ask during
+<Each choice the ticket left open, and what this spec chose. There is no one to ask during
 the run: decide, and record it here.>
 
 ## Tasks

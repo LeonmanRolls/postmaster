@@ -34,7 +34,7 @@ way on every row, only less visibly on the last.
 | form | herdr | tmux | none |
 |---|---|---|---|
 | run a headless launch, visibly | a new tab under the run's ticket-labeled synthesis-worktree space, nested under the repository's space | a window in session `postmaster-<repo>` | a detached background process |
-| spawn the interactive postmaster | `herdr agent start` in a fresh tab of the repository's space, never a pane an agent ran in before | a window in session `postmaster-<repo>` | not possible: it runs headless, below |
+| spawn the interactive postmaster or a spec session | `herdr agent start` in a fresh tab of the repository's space, never a pane an agent ran in before | a window in session `postmaster-<repo>` | not possible: it runs headless, below |
 | send it a message | `herdr agent prompt` | paste the text bracketed, then Enter as a key of its own | resume its thread with the message as the prompt |
 | wait for it to settle | the same call, `herdr agent prompt --wait`: idle, done or blocked | its screen unchanged for 10 seconds | its marker lands |
 | read what it said | `herdr agent read --source recent-unwrapped` | `tmux capture-pane -p -J` | its final message (`harnesses.md`) |
@@ -65,7 +65,8 @@ report that last for a turn that did run, and a harness just started can look re
 takes input and drop what it is sent, so read the session before sending the message again.
 `spawn` refuses a handle a live session already has, and says so when the harness stops on its
 first start to ask something, such as whether to trust the folder: the user answers it in the
-pane. `spawn`, `send`, `wait` and `read` exit 3 on `none`.
+pane. A spec session is spawned the same way (`postmaster.md`, Spec review).
+`spawn`, `send`, `wait` and `read` exit 3 on `none`.
 
 ## Run, on every host
 
