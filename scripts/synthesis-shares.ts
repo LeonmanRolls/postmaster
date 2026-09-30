@@ -344,61 +344,88 @@ const usage = (msg?: string): number => {
   return 1;
 };
 
+type Cli = {
+  readonly repo: string;
+  readonly base: string;
+  readonly synthesisRaw: string;
+  readonly oracle: string | null;
+  readonly recordDir: string | null;
+  readonly wantJson: boolean;
+  readonly laneRaws: readonly string[];
+};
+
+const emptyCli = (repo: string): Cli => ({
+  repo,
+  base: "",
+  synthesisRaw: "",
+  oracle: null,
+  recordDir: null,
+  wantJson: false,
+  laneRaws: [],
+});
+
+const parseArgs = (argv: readonly string[]): Cli | { readonly error: string } => {
+  if (argv.length === 0) return { error: "need a repository" };
+  const repo = argv[0] as string;
+  // Recursion over the remaining argv, not a mutating loop: each step takes one flag
+  // and, where it takes a value, the next token with it.
+  const step = (acc: Cli, rest: readonly string[]): Cli | { readonly error: string } => {
+    if (rest.length === 0) return acc;
+    const a = rest[0] as string;
+    const next = rest[1];
+    const more = (n: number): readonly string[] => rest.slice(n);
+    if (a === "--json") return step({ ...acc, wantJson: true }, more(1));
+    if (next === undefined) return { error: `incomplete argument ${a}` };
+    if (a === "--base") return step({ ...acc, base: next }, more(2));
+    if (a === "--synthesis") return step({ ...acc, synthesisRaw: next }, more(2));
+    if (a === "--oracle") return step({ ...acc, oracle: next }, more(2));
+    if (a === "--record") return step({ ...acc, recordDir: next }, more(2));
+    if (a === "--lane") return step({ ...acc, laneRaws: acc.laneRaws.concat([next]) }, more(2));
+    return { error: `unknown argument ${a}` };
+  };
+  return step(emptyCli(repo), argv.slice(1));
+};
+
+const isLaneRef = (l: LaneRef | null): l is LaneRef => l !== null;
+
 export const main = (argv: readonly string[]): number => {
-  const args = [...argv];
-  if (args.length === 0) return usage();
-  const repo = args.shift() as string;
-  let base = "";
-  let synthesisRaw = "";
-  let oracle: string | null = null;
-  let recordDir: string | null = null;
-  let wantJson = false;
-  const laneRaws: string[] = [];
-  while (args.length > 0) {
-    const a = args.shift() as string;
-    if (a === "--json") wantJson = true;
-    else if (a === "--base" && args.length) base = args.shift() as string;
-    else if (a === "--synthesis" && args.length) synthesisRaw = args.shift() as string;
-    else if (a === "--oracle" && args.length) oracle = args.shift() as string;
-    else if (a === "--record" && args.length) recordDir = args.shift() as string;
-    else if (a === "--lane" && args.length) laneRaws.push(args.shift() as string);
-    else return usage(`unknown or incomplete argument ${a}`);
-  }
-  if (!base || !synthesisRaw || laneRaws.length === 0) {
+  const cli = parseArgs(argv);
+  if ("error" in cli) return usage(cli.error);
+  if (!cli.base || !cli.synthesisRaw || cli.laneRaws.length === 0) {
     return usage("need --base, --lane and --synthesis");
   }
-  const lanes = laneRaws.map(parseLane);
-  if (lanes.some((l) => l === null)) return usage("--lane takes name=head-sha");
-  const range = parseRange(synthesisRaw);
+  const parsedLanes = cli.laneRaws.map(parseLane);
+  if (!parsedLanes.every(isLaneRef)) return usage("--lane takes name=head-sha");
+  const lanes = parsedLanes;
+  const range = parseRange(cli.synthesisRaw);
   if (!range) return usage("--synthesis takes from..to");
-  const resolved = lanes as LaneRef[];
   const pinned = [
-    base,
-    ...resolved.map((l) => l.head),
+    cli.base,
+    ...lanes.map((l) => l.head),
     range.from,
     range.to,
-    ...(oracle ? [oracle] : []),
+    ...(cli.oracle ? [cli.oracle] : []),
   ];
-  const gone = missingCommits(repo, pinned);
+  const gone = missingCommits(cli.repo, pinned);
   if (gone.length > 0) {
     console.error(`synthesis-shares: repository lacks pinned commits ${gone.join(", ")}`);
     return 1;
   }
-  if (hasMerge(repo, range.from, range.to)) {
+  if (hasMerge(cli.repo, range.from, range.to)) {
     console.error("synthesis-shares: the synthesis range holds a merge commit");
     return 1;
   }
-  const oracleFiles = filesAddedBy(repo, oracle);
+  const oracleFiles = filesAddedBy(cli.repo, cli.oracle);
   const keepAll: Skip = () => false;
   const allPaths = [
-    ...Object.keys(parseAddedLines(git(repo, ...diffArgs(range.from, range.to)), keepAll)),
-    ...resolved.flatMap((lane) =>
-      Object.keys(parseAddedLines(git(repo, ...diffArgs(base, lane.head)), keepAll)),
+    ...Object.keys(parseAddedLines(git(cli.repo, ...diffArgs(range.from, range.to)), keepAll)),
+    ...lanes.flatMap((lane) =>
+      Object.keys(parseAddedLines(git(cli.repo, ...diffArgs(cli.base, lane.head)), keepAll)),
     ),
   ];
-  const generated = new Set(generatedPaths(repo, [...new Set(allPaths)]));
+  const generated = new Set(generatedPaths(cli.repo, [...new Set(allPaths)]));
   const skip = makeSkip(oracleFiles, generated);
-  const run: Run = { repo, base, lanes: resolved, synthesis: range, oracle };
+  const run: Run = { repo: cli.repo, base: cli.base, lanes, synthesis: range, oracle: cli.oracle };
   const counts = measure(run, skip);
   const exclusions: Exclusions = {
     oracleFiles: [...oracleFiles].sort(),
@@ -407,11 +434,14 @@ export const main = (argv: readonly string[]): number => {
     generated: [...generated].sort(),
   };
   const record = buildRecord(run, counts, exclusions);
-  const laneNames = resolved.map((l) => l.name);
+  const laneNames = lanes.map((l) => l.name);
   console.log(sharesLine(counts, laneNames));
-  if (wantJson) console.log(JSON.stringify(record, null, 2));
-  if (recordDir) {
-    Bun.write(`${recordDir.replace(/\/$/, "")}/shares.json`, JSON.stringify(record, null, 2) + "\n");
+  if (cli.wantJson) console.log(JSON.stringify(record, null, 2));
+  if (cli.recordDir) {
+    Bun.write(
+      `${cli.recordDir.replace(/\/$/, "")}/shares.json`,
+      JSON.stringify(record, null, 2) + "\n",
+    );
   }
   return 0;
 };
