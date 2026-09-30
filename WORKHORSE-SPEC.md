@@ -83,4 +83,4 @@ postmaster's start, and keeps every install on the user's word.
 - [x] T003 [AC2] In `AGENTS.md` step 1 ("is this machine set up?"), run `scripts/link-skills.sh --check` beside the config check and report missing links as part of the answer; when the config is present and the check fails, offer the install on the user's word.
 - [x] T004 [AC3] In `skills/postmaster/SKILL.md` preconditions, run `<tool>/scripts/link-skills.sh --check`, name any missing or blocked link, and name `<tool>/scripts/link-skills.sh` as the one command that installs them; leave `scripts/skill-refs.sh` clean.
 - [x] T005 [P] In `README.md`, mention `--check` on the `link-skills.sh` command line and in "Installing the skills".
-- [ ] T006 [AC1] [AC2] [AC3] [AC4] Run the project gate from the worktree root and confirm every self-test, including the new `link-skills.sh` controls, passes.
+- [x] T006 [AC1] [AC2] [AC3] [AC4] Run the project gate from the worktree root and confirm every self-test, including the new `link-skills.sh` controls, passes.
