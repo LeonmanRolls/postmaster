@@ -88,14 +88,16 @@
 # syntax inert. There is no exceptions file and no baseline: a finding
 # fails the gate like any lint error, and the coachman fixes it.
 #
-# When POSTMASTER_DETECTIONS_LOG names a file, every reported finding but a
-# marker fault is appended there as it happens, one JSON object per line
-# with the rule, the redacted file, the line and the commit, never the
-# value. The gate runner sets it; self-tests and manual runs leave it unset
-# and log nothing. An empty value logs nothing. A log that cannot be
-# written fails the check. A check that scans through a stand-in path (a
-# blob staged under a temporary name) scans with the variable emptied and
-# calls --log-detection with the real path, so one finding is logged once.
+# When POSTMASTER_DETECTIONS_LOG names a file, every finding but a marker
+# fault is appended there as it happens, kept or suppressed alike, one
+# JSON object per line with the rule, the redacted file, the line and the
+# commit, never the value. A match a valid marker suppresses carries
+# "via": "marker", so the ship card can resolve it as marked made-up data.
+# The gate runner sets it; self-tests and manual runs leave it unset and
+# log nothing. An empty value logs nothing. A log that cannot be written
+# fails the check. A check that scans through a stand-in path (a blob
+# staged under a temporary name) scans with the variable emptied and calls
+# --log-detection with the real path, so one finding is logged once.
 #
 # --safe-path redacts private-shaped spans from each given path, for
 # diagnostics that name a file. It exits 2 when the repository cannot be
@@ -546,8 +548,8 @@ class LineScanner:
     faults beside it for suppressing nothing. Marker-shaped text that is
     not a valid marker faults only when its line carries a finding; on a
     clean line it is prose. With markers disabled the feed passes findings
-    through untouched. Faults are (number, start, end) triples, kept are
-    (number, start, end, kind, value).
+    through untouched. Faults are (number, start, end) triples, kept and
+    suppressed are (number, start, end, kind, value).
     """
 
     def __init__(self, find=findings):
@@ -556,6 +558,7 @@ class LineScanner:
         self._off = "markers" in DISABLED
         self.kept = []
         self.faults = []
+        self.suppressed = []
 
     def feed(self, number, text):
         raw = self._find(text)
@@ -574,6 +577,8 @@ class LineScanner:
             if not hits:
                 self.faults.append((number, *mark["span"]))
             else:
+                for start, end, kind, value in hits:
+                    self.suppressed.append((number, start, end, kind, value))
                 current = [item for item in current if item not in hits]
         if self._prev is not None:
             prev_number, prev_marks = self._prev
@@ -584,6 +589,8 @@ class LineScanner:
                         if not hits:
                             self.faults.append((prev_number, *mark["span"]))
                         else:
+                            for start, end, kind, value in hits:
+                                self.suppressed.append((number, start, end, kind, value))
                             current = [item for item in current if item not in hits]
                     elif raw:
                         self.faults.append((prev_number, *mark["span"]))
@@ -622,7 +629,7 @@ def safe_path(path):
     return "".join(ch if ch >= " " and ch != "\x7f" else "\\x%02x" % ord(ch) for ch in safe)
 
 
-def log_detection(rule, file, line, commit):
+def log_detection(rule, file, line, commit, via=""):
     target = os.environ.get("POSTMASTER_DETECTIONS_LOG", "")
     if not target:
         return
@@ -630,6 +637,8 @@ def log_detection(rule, file, line, commit):
         "ts": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "rule": rule, "file": safe_path(file), "line": line, "commit": commit,
     }
+    if via:
+        entry["via"] = via
     try:
         with open(target, "a", encoding="utf-8") as handle:
             handle.write(json.dumps(entry, sort_keys=True) + "\n")
@@ -674,7 +683,8 @@ def scan_message(commit):
 
 
 def scan_commit_diff(root, parent, commit):
-    """Added lines of parent..commit as (path, line, kind, line text).
+    """Added lines of parent..commit: suspects and suppressed, each as
+    (path, line, kind, line text).
 
     One LineScanner per file, fed in new-file order, so a next-line marker
     applies to the very next added line only when it is the next line.
@@ -690,24 +700,28 @@ def scan_commit_diff(root, parent, commit):
     except OSError:
         notice("could not run Git")
     suspects = []
+    quiet = []
     path, line_number = "", None
-    scanner, texts, kept_len, fault_len = None, {}, 0, 0
+    scanner, texts, kept_len, fault_len, supp_len = None, {}, 0, 0, 0
 
     def drain():
-        nonlocal kept_len, fault_len
+        nonlocal kept_len, fault_len, supp_len
         for num, _s, _e, kind, _v in scanner.kept[kept_len:]:
             suspects.append((path, num, kind, texts[num]))
         kept_len = len(scanner.kept)
         for num, _s, _e in scanner.faults[fault_len:]:
             suspects.append((path, num, "marker", texts[num]))
         fault_len = len(scanner.faults)
+        for num, _s, _e, kind, _v in scanner.suppressed[supp_len:]:
+            quiet.append((path, num, kind, texts[num]))
+        supp_len = len(scanner.suppressed)
 
     def end_file():
-        nonlocal scanner, texts, kept_len, fault_len
+        nonlocal scanner, texts, kept_len, fault_len, supp_len
         if scanner is not None:
             scanner.flush()
             drain()
-        scanner, texts, kept_len, fault_len = None, {}, 0, 0
+        scanner, texts, kept_len, fault_len, supp_len = None, {}, 0, 0, 0
 
     for raw in child.stdout:
         content = raw.rstrip(b"\r\n")
@@ -720,21 +734,25 @@ def scan_commit_diff(root, parent, commit):
         elif content.startswith(b"@@ "):
             match = re.search(rb"\+([0-9]+)(?:,[0-9]+)?\s+@@", content)
             line_number = int(match.group(1)) if match else None
-        elif line_number is not None and content.startswith(b"+") \
-                and not content.startswith(b"+++ "):
+        # Inside a hunk every + line is content: file headers only appear
+        # before the first hunk, where line_number is still None, so a
+        # source line starting "++ " reads as content, never as a header.
+        elif line_number is not None and content.startswith(b"+"):
             if scanner is None:
                 scanner = LineScanner()
             text = content[1:].decode("utf-8", errors="replace")
             texts[line_number] = text
-            for stale in [n for n in texts if n < line_number - 1]:
-                del texts[stale]
             scanner.feed(line_number, text)
             drain()
+            # Evict only after the drain: a fault on the previous fed line
+            # needs its text, which a hunk gap would otherwise delete first.
+            for stale in [n for n in texts if n < line_number - 1]:
+                del texts[stale]
             line_number += 1
     end_file()
     if child.wait() != 0:
         notice("Git could not read the requested history")
-    return suspects
+    return suspects, quiet
 
 
 def changed_names(raw):
@@ -758,8 +776,7 @@ def added_lines(root, parent, merge, path):
         if content.startswith(b"@@ "):
             match = re.search(rb"\+([0-9]+)(?:,[0-9]+)?\s+@@", content)
             line_number = int(match.group(1)) if match else None
-        elif line_number is not None and content.startswith(b"+") \
-                and not content.startswith(b"+++ "):
+        elif line_number is not None and content.startswith(b"+"):
             out.append((line_number, content[1:].decode("utf-8", errors="replace")))
             line_number += 1
     if child.wait() != 0:
@@ -768,7 +785,8 @@ def added_lines(root, parent, merge, path):
 
 
 def scan_merge_diff(root, parents, merge):
-    """The merge's own lines as (path, line, kind, line text).
+    """The merge's own lines: suspects and suppressed, each as
+    (path, line, kind, line text).
 
     A file the merge leaves equal to any parent is skipped whole; of a
     file it changes, only the added lines no parent holds are scanned, so
@@ -780,11 +798,12 @@ def scan_merge_diff(root, parents, merge):
     for other in others:
         changed &= set(changed_names(git(["diff", "--name-only", "-z", other, merge, "--"], cwd=root)))
     suspects = []
+    quiet = []
     for path in sorted(changed):
         held = [set(text for _n, text in added_lines(root, other, merge, path))
                 for other in others]
         scanner, texts = LineScanner(), {}
-        kept_len, fault_len, prev_fed = 0, 0, None
+        kept_len, fault_len, supp_len, prev_fed = 0, 0, 0, None
         for number, text in added_lines(root, first, merge, path):
             if not all(text in lines for lines in held):
                 continue
@@ -798,11 +817,14 @@ def scan_merge_diff(root, parents, merge):
             for num, _s, _e in scanner.faults[fault_len:]:
                 suspects.append((path, num, "marker", texts[num]))
             fault_len = len(scanner.faults)
+            for num, _s, _e, kind, _v in scanner.suppressed[supp_len:]:
+                quiet.append((path, num, kind, texts[num]))
+            supp_len = len(scanner.suppressed)
             prev_fed = number
         scanner.flush()
         for num, _s, _e in scanner.faults[fault_len:]:
             suspects.append((path, num, "marker", texts[num]))
-    return suspects
+    return suspects, quiet
 
 
 def run_scan(root, base, head):
@@ -819,11 +841,17 @@ def run_scan(root, base, head):
         for path, line, kind, _text in scan_message(commit):
             suspects.append((commit, path, line, kind))
             log_detection(kind, path, line, commit)
-        for path, line, kind, text in scan_commit_diff(root, parent, commit):
+        found, quiet = scan_commit_diff(root, parent, commit)
+        for path, line, kind, text in found:
             suspects.append((commit, path, line, kind))
             if kind != "marker":
                 log_detection(kind, path, line, commit)
             reported.add((kind, path, text))
+        for path, line, kind, text in quiet:
+            if (kind, path, text) in reported:
+                continue
+            reported.add((kind, path, text))
+            log_detection(kind, path, line, commit, via="marker")
     for commit, parents in items:
         if len(parents) <= 1:
             continue
@@ -832,13 +860,19 @@ def run_scan(root, base, head):
             log_detection(kind, path, line, commit)
         if "merges" in DISABLED:
             continue
-        for path, line, kind, text in scan_merge_diff(root, parents, commit):
+        found, quiet = scan_merge_diff(root, parents, commit)
+        for path, line, kind, text in found:
             if (kind, path, text) in reported:
                 continue
             reported.add((kind, path, text))
             suspects.append((commit, path, line, kind))
             if kind != "marker":
                 log_detection(kind, path, line, commit)
+        for path, line, kind, text in quiet:
+            if (kind, path, text) in reported:
+                continue
+            reported.add((kind, path, text))
+            log_detection(kind, path, line, commit, via="marker")
     for commit, path, line, kind in sorted(suspects):
         print("%s:%s:%d: %s" % (commit, safe_path(path), line, kind))
     return 1 if suspects else 0
@@ -853,7 +887,7 @@ def run_files(root, paths):
         except OSError:
             notice("could not read %s" % safe_path(raw_path))
         scanner = LineScanner()
-        kept_len, fault_len = 0, 0
+        kept_len, fault_len, supp_len = 0, 0, 0
         with handle:
             for number, raw in enumerate(handle, 1):
                 text = raw.rstrip(b"\r\n").decode("utf-8", errors="replace")
@@ -865,6 +899,9 @@ def run_files(root, paths):
                 for num, _s, _e in scanner.faults[fault_len:]:
                     suspects.append((raw_path, num, "marker"))
                 fault_len = len(scanner.faults)
+                for num, _s, _e, kind, _v in scanner.suppressed[supp_len:]:
+                    log_detection(kind, raw_path, num, "", via="marker")
+                supp_len = len(scanner.suppressed)
             scanner.flush()
             for num, _s, _e in scanner.faults[fault_len:]:
                 suspects.append((raw_path, num, "marker"))
@@ -881,7 +918,7 @@ def run_spans(root, paths):
         except OSError:
             notice("could not read %s" % safe_path(raw_path))
         scanner = LineScanner()
-        kept_len, fault_len = 0, 0
+        kept_len, fault_len, supp_len = 0, 0, 0
         with handle:
             for number, raw in enumerate(handle, 1):
                 text = raw.rstrip(b"\r\n").decode("utf-8", errors="replace")
@@ -890,6 +927,9 @@ def run_spans(root, paths):
                     print("%d:%d:%d:%d:%s" % (index, num, start, end, kind))
                     log_detection(kind, raw_path, num, "")
                 kept_len = len(scanner.kept)
+                for num, _s, _e, kind, _v in scanner.suppressed[supp_len:]:
+                    log_detection(kind, raw_path, num, "", via="marker")
+                supp_len = len(scanner.suppressed)
                 for num, start, end in scanner.faults[fault_len:]:
                     print("%d:%d:%d:%d:marker" % (index, num, start, end))
                 fault_len = len(scanner.faults)
@@ -1256,6 +1296,32 @@ def self_test(root):
                 and sample_email not in covered.stdout))
             last = deleted
 
+            print("diff controls: added lines starting '++ ' read as content")
+            plus = add_fixture(repo, "plus.txt", "++ contact: " + sample_email + "\n",
+                               "plus-prefix line")
+            plused = run_child([last, plus], repo)
+            ok("an added line starting '++ ' is scanned as content, never a header", bool(
+                plused and plused.returncode == 1
+                and plused.stdout.splitlines() == ["%s:plus.txt:1: email" % plus]
+                and silent(plused)))
+            last = plus
+            gap_lines = ["public line %d\n" % n for n in range(1, 31)]
+            gap_base = add_fixture(repo, "gap.txt", "".join(gap_lines), "gap base")
+            gap_lines[0] = "# " + ALLOW_NEXT + " email -- stray marker\n"
+            gap_lines[19] = "contact: " + sample_email + "\n"
+            (repo / "gap.txt").write_text("".join(gap_lines), encoding="utf-8")
+            git(["add", "--", "gap.txt"], cwd=repo)
+            git(["-c", "user.name=Fixture", "-c", "user.email=" + FIXTURE_MAILBOX,
+                 "commit", "-m", "gap the marker"], cwd=repo)
+            gap = git(["rev-parse", "HEAD"], cwd=repo).decode("ascii").strip()
+            gapped = run_child([gap_base, gap], repo)
+            ok("an unused marker across a hunk gap names the fault and the finding", bool(
+                gapped and gapped.returncode == 1
+                and gapped.stdout.splitlines() == [
+                    "%s:gap.txt:1: marker" % gap, "%s:gap.txt:20: email" % gap]
+                and silent(gapped)))
+            last = gap
+
             print("message controls: commit messages are scanned with markers inert")
             (repo / "msg-clean.txt").write_text("ordinary public sample\n", encoding="utf-8")
             git(["add", "--", "msg-clean.txt"], cwd=repo)
@@ -1307,6 +1373,24 @@ def self_test(root):
             ok("... and silent with merges switched off", bool(
                 resolved_off and resolved_off.returncode == 0 and not resolved_off.stdout))
             last = merge_sha
+            git(["checkout", "-qb", "side-413b"], cwd=repo)
+            add_fixture(repo, "merge-plus.txt", "side line\n", "side plus work")
+            git(["checkout", "-q", "main"], cwd=repo)
+            add_fixture(repo, "merge-plus.txt", "main line\n", "main plus work")
+            subprocess.run(["git", "merge", "--no-commit", "side-413b"], cwd=repo,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+            (repo / "merge-plus.txt").write_text(
+                "++ contact: " + sample_email + "\n", encoding="utf-8")
+            git(["add", "--", "merge-plus.txt"], cwd=repo)
+            git(["-c", "user.name=Fixture", "-c", "user.email=" + FIXTURE_MAILBOX,
+                 "commit", "-m", "merge the plus side"], cwd=repo)
+            merge_plus = git(["rev-parse", "HEAD"], cwd=repo).decode("ascii").strip()
+            plused_merge = run_child([last, merge_plus], repo)
+            ok("a '++ ' resolution line is scanned as content, never a header", bool(
+                plused_merge and plused_merge.returncode == 1
+                and plused_merge.stdout.splitlines() == ["%s:merge-plus.txt:1: email" % merge_plus]
+                and silent(plused_merge)))
+            last = merge_plus
             git(["checkout", "-qb", "side-414"], cwd=repo)
             side_sha = add_fixture(repo, "leak2.txt", "contact: " + sample_email + "\n", "side leak")
             git(["checkout", "-q", "main"], cwd=repo)
@@ -1347,6 +1431,19 @@ def self_test(root):
                 marked_off and marked_off.returncode == 1
                 and marked_off.stdout.splitlines() == ["%s:marked.txt:1: email" % marked]
                 and sample_email not in marked_off.stdout))
+            marked_log = scratch / "marked-det.jsonl"
+            marked_logged = run_child([last, marked], repo,
+                                      {"POSTMASTER_DETECTIONS_LOG": str(marked_log)})
+            logged = []
+            if marked_log.is_file():
+                logged = [json.loads(line) for line in
+                          marked_log.read_text(encoding="utf-8").splitlines()]
+            ok("... and a suppressed match is logged with its marker resolution", bool(
+                marked_logged and marked_logged.returncode == 0
+                and len(logged) == 1 and logged[0]["rule"] == "email"
+                and logged[0]["file"] == "marked.txt" and logged[0]["line"] == 1
+                and logged[0]["commit"] == marked and logged[0].get("via") == "marker"
+                and sample_email not in marked_log.read_text(encoding="utf-8")))
             last = marked
             nextline = add_fixture(
                 repo, "nextline.txt",
