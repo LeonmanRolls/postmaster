@@ -506,6 +506,32 @@ is the only form that blocks the conversation, and only for one interval. Never 
 watcher anywhere but `host.sh run`: no other keeping has a documented lifetime, and on
 2026-09-28 a watcher kept outside it was killed when memory ran short (#121).
 
+## Usage
+
+`<tool>/scripts/usage.ts` is this file's executable form for what a launch cost: it reads the
+input and output tokens each harness reports, and the cost where the harness reports one, from
+the launch's own event stream or session record. A figure the harness did not report is omitted
+and never written as zero; a harness that reports nothing is named as reporting nothing. Its
+paired self-test controls (`bun test <tool>/scripts/usage.test.ts`) are one made-up stream per harness
+that reports usage and one that does not, in each harness's exact event shape below.
+
+| harness | where it reports | input / output | cost | shape source |
+|---|---|---|---|---|
+| claude | `result` event of `--output-format stream-json` | `usage.input_tokens`, `usage.output_tokens` | `total_cost_usd` | its documented result object |
+| codex | each `turn.completed` of `codex exec --json` | `usage.input_tokens`, `usage.output_tokens` | not reported | recorded `codex exec --json` turns |
+| mimo | each `step_finish` part of `mimo run --format json` | `part.tokens.input`, `part.tokens.output` | `part.cost` | the StepFinishPart schema |
+| muse | the session record's `goal_usage_attribution` (`muse export`), not the event stream | `quantity.input_tokens`, `quantity.output_tokens` | not reported | a recorded `muse export` |
+| pi | assistant `message.usage` on `message_end` / `turn_end`, and its `usage` rows | `input` / `input_tokens`, `output` / `output_tokens` | `usage.cost.total` | pi's message usage shape |
+| grok | `usage` or `token_usage` on a streaming-json event | `input_tokens` / `prompt_tokens`, `output_tokens` / `completion_tokens` | `cost_usd` when present | OpenAI-compatible usage names |
+| agy | `usageMetadata` on a stream-json event | `promptTokenCount`, `candidatesTokenCount` | not reported | Gemini-family usageMetadata |
+
+Codex and mimo figures are summed across their per-step reports; claude's `result` is the run's
+own report and is taken whole, falling back to summing its assistant messages when a stream ends
+without one. Muse Code's event stream carries tool-output token counts, never model usage, so
+`record` reads the exported session under `<dispatch>/sessions/<name>/` as well. Where a stream
+repeats one request's usage on its chunks (agy, grok), consecutive identical reports are one
+request and only the last of each run is counted.
+
 ## The pane view
 
 `<tool>/scripts/view-stream.sh` is the other executable half of this file: it renders an events

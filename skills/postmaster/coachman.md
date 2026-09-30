@@ -941,6 +941,10 @@ Set the stage first: `<tool>/scripts/stage.sh <dispatch> shipping`.
    it. **It also lists every bug or security finding left open,** with its lens and
    disposition, one line each. Every P3 deferred after round 1 includes its originating round.
 
+   **The ship card carries the cost,** as `<tool>/scripts/usage.ts sum <dispatch>` prints it: the
+   run's tokens and cost per role and lane, and any harness that reported nothing. Quoted, never
+   hand-recomputed, and a figure no harness reported is never written as zero.
+
    **The ship card lists the turnpikes the run passed through,** exactly the waybill's, each
    with the rounds it ran and its result as the step that ran it records them
    (`checkpoint-review.md`, for a review turnpike), or `none` when
@@ -992,7 +996,10 @@ change there is a ticket, filed after the merge on the user's word.
 [Why style findings feed the project's linter](../../wiki/concepts/review-loop.md)
 
 Final `run-log.md` entry (per-lane win record, findings counts, cost) plus a closing dated
-comment on the ticket. Leave the stage at `shipped`: the postmaster sets `done` when it closes
+comment on the ticket. The cost block is `<tool>/scripts/usage.ts sum <dispatch>`, quoted
+into that entry and onto the ship card, never hand-recomputed: it sums each launch's tokens
+and cost per role and lane and names any harness that reported nothing. A figure no harness
+reported is never written as zero; a `sum` that fails is quoted as unreadable. Leave the stage at `shipped`: the postmaster sets `done` when it closes
 the run, and that appends the run's stage timings to `run-log.md`. Never write timings by hand.
 Never delete the dispatch directory or the manifest, they are the run's history. Archive
 finished threads where the harness has an archive form (`harnesses.md`). After the merge, tear
