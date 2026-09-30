@@ -104,10 +104,24 @@ pane. `spawn`, `send`, `wait` and `read` exit 3 on `none`.
   security boundary.
 - **A launch outlives its caller.** It belongs to the host's server, or with no host to a session
   of its own, so a caller's background-task cap or its exit does not reach it.
-- **A launch carries its own pane's identity, never its caller's**: `HERDR_PANE_ID`, the tab and
-  space ids and `TMUX_PANE` are those of the pane it runs in, and are unset with no host. A
-  harness's own Herdr integration reports to whatever pane those name. Its environment reaches
-  the pane through a FIFO and a pipe, never a file on disk or a command line.
+- **A launch carries its caller's environment except for session identity.** The caller's
+  `CLAUDECODE`, `CLAUDE_PID`, `CLAUDE_CODE_SESSION_ID`, `CLAUDE_CODE_CHILD_SESSION`,
+  `CLAUDE_CODE_ENTRYPOINT`, `CLAUDE_CODE_EXECPATH`, `CLAUDE_CODE_SESSION_ATTENDED`,
+  `CLAUDE_CODE_MESSAGING_SOCKET` and `CLAUDE_CODE_MESSAGING_TOKEN` are stripped, along with
+  `CLAUDE_CODE_SESSION_*`, `CLAUDE_CODE_MESSAGING_*` and `CLAUDE_CODE_CHILD_*`. Other
+  `CLAUDE_CODE_*` configuration, `CLAUDE_CONFIG_DIR`, `CLAUDE_EFFORT`, provider and auth
+  settings, other `POSTMASTER_*` settings and all other caller variables remain. The host sets
+  `POSTMASTER_LAUNCH_NAME` and `POSTMASTER_EVENT_STREAM` itself. The lane's env file is sourced
+  by `launch.sh` after this handoff and reaches the harness.
+- **A launch carries its own pane's identity, never its caller's.** Every caller `HERDR_*`
+  variable is stripped. In a Herdr pane, only that pane's `HERDR_PANE_ID`, `HERDR_TAB_ID`,
+  `HERDR_WORKSPACE_ID`, `HERDR_ENV`, `HERDR_SOCKET_PATH` and `HERDR_BIN_PATH` are added back.
+  With tmux or no host, no `HERDR_*` variable is passed. `TMUX_PANE` is the pane it runs in and
+  is unset with no host. A harness's own Herdr integration reports to whatever pane those name.
+  The caller's environment reaches the pane through a FIFO and a pipe, never a file on disk or
+  a command line. To add a Claude session identity, add its exact name or identity family to
+  the filter in `<tool>/scripts/host.sh` and its caller fixture and controls in
+  `<tool>/scripts/host.sh --self-test`.
   [Why a launch must own its pane](../../wiki/concepts/herdr-headless-launches.md)
 - **The ticket belongs to the run's space; a launch label carries only launch identity.**
   `<tool>/scripts/host.sh name <dispatch>` prints the ticket number and title for the run level.
@@ -207,8 +221,9 @@ with `herdr agent start`. It is a pane whose agent `host.sh` reports. So when it
   repository it was cut from. Each launch is a window named `<name>`, with the window option
   `@postmaster_cwd` set to its worktree and `@postmaster_state` to `running`, then `done`. After
   the launch a shell stays in the window.
-- A window's command starts with the tmux server's environment; `host.sh` hands the caller's
-  across the same way as for Herdr, and `spawn` passes the caller's `POSTMASTER_*` settings.
+- A window's command starts with the tmux server's environment; `<tool>/scripts/host.sh` hands
+  the caller's across the same way as for Herdr, with the session identity described above
+  removed, and `spawn` passes the caller's `POSTMASTER_*` settings.
 - `host.sh close <worktree>` kills that worktree's windows once nothing registered runs there.
 - Sending: `tmux load-buffer` from the file, `tmux paste-buffer -p` so an application that asked
   for bracketed paste gets it, then `tmux send-keys Enter` as a key of its own. Settled means

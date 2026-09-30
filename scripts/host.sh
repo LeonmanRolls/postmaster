@@ -27,8 +27,9 @@
 #   host.sh --live-test                   the ticket's controls, against the hosts on this machine
 #
 # run: <command> is the same headless command a caller would otherwise background with `&`. It
-# runs from the directory host.sh was called in, with the caller's environment and an empty
-# stdin, in a session of its own with no terminal; its stdout goes to --out, added to with
+# runs from the directory host.sh was called in, with the caller's environment except for
+# Claude Code session identity and caller Herdr variables, and an empty stdin, in a session of
+# its own with no terminal; its stdout goes to --out, added to with
 # --append, and its stderr to --err, which holds only this launch's errors. --marker is removed
 # as it starts and touched when it exits,
 # whatever its exit, and also when host.sh cannot start it, with the reason in --err. --pidfile
@@ -44,10 +45,17 @@
 # run can retain the harness's durable session beside that event stream.
 # Pass a role-specific `host.sh name` result as the launch name and pass the dispatch separately,
 # so the ticket title labels only the run space and never passes through a shell. A pane shows
-# the stream through view-stream.sh. A launch carries its own pane's
-# identity (HERDR_PANE_ID and the like, or TMUX_PANE), never its caller's. If the host cannot
-# place it, it runs in the background. On Linux with a working systemd user manager, the command
-# and its descendants run in a transient scope with MemoryMax, MemorySwapMax=0 and TasksMax;
+# the stream through view-stream.sh. A launch carries its own pane's identity (Herdr's six
+# HERDR_* pane values, or TMUX_PANE), never its caller's. It drops caller HERDR_* and Claude
+# session identity: CLAUDECODE, CLAUDE_PID, CLAUDE_CODE_SESSION_ID,
+# CLAUDE_CODE_CHILD_SESSION, CLAUDE_CODE_ENTRYPOINT, CLAUDE_CODE_EXECPATH,
+# CLAUDE_CODE_SESSION_ATTENDED, CLAUDE_CODE_MESSAGING_SOCKET,
+# CLAUDE_CODE_MESSAGING_TOKEN, and the CLAUDE_CODE_SESSION_*,
+# CLAUDE_CODE_MESSAGING_* and CLAUDE_CODE_CHILD_* families. Add an exact identity name or family
+# to runner()'s filter and its self-test controls; keep unrelated CLAUDE_CODE_* configuration.
+# If the host cannot place it, it runs in the background. On Linux with a working systemd user
+# manager, the command and its descendants run in a transient scope with MemoryMax,
+# MemorySwapMax=0 and TasksMax;
 # otherwise it runs uncapped and records that in --err. While it runs it is registered under
 # POSTMASTER_HOST_STATE (default ~/.postmaster/host), whatever its host, so stop and close see it.
 # The record names its group leader by start time and boot, so a pid another process reuses,
@@ -1132,17 +1140,26 @@ runner() {
   fi
   drop_spec "$spec"
 
-  # The launch's environment is its caller's, except for identity: which pane it is in comes
-  # from where it actually runs, so nothing it reports lands in its caller's pane.
+  # Strip caller identity at the one boundary every run launch crosses. The Claude list is
+  # intentionally exact plus session-identity families: other CLAUDE_CODE_* names configure
+  # the harness and must reach it. Add a new identity name or family here and to the controls.
+  # Herdr values are all caller identity; a Herdr pane's own six are re-added below from this
+  # runner's environment, never from the caller FIFO.
+  local claude_identity="CLAUDECODE CLAUDE_PID CLAUDE_CODE_SESSION_ID \
+    CLAUDE_CODE_CHILD_SESSION CLAUDE_CODE_ENTRYPOINT CLAUDE_CODE_EXECPATH \
+    CLAUDE_CODE_SESSION_ATTENDED CLAUDE_CODE_MESSAGING_SOCKET CLAUDE_CODE_MESSAGING_TOKEN"
   local drop="POSTMASTER_LAUNCH_NAME POSTMASTER_EVENT_STREAM $PANE_IDS" keep=""
   case $mode in
-    herdr) drop="$drop HERDR_ENV HERDR_SOCKET_PATH HERDR_BIN_PATH"; keep="HERDR_PANE_ID HERDR_TAB_ID HERDR_WORKSPACE_ID HERDR_ENV HERDR_SOCKET_PATH HERDR_BIN_PATH" ;;
+    herdr) keep="HERDR_PANE_ID HERDR_TAB_ID HERDR_WORKSPACE_ID HERDR_ENV HERDR_SOCKET_PATH HERDR_BIN_PATH" ;;
     tmux)  drop="$drop TMUX"; keep="TMUX TMUX_PANE" ;;
   esac
   local childenv=()
   for kv in ${envs[@]+"${envs[@]}"}; do
     k=${kv%%=*}
-    case " $drop " in *" $k "*) continue ;; esac
+    case "$k" in
+      CLAUDE_CODE_SESSION_*|CLAUDE_CODE_MESSAGING_*|CLAUDE_CODE_CHILD_*|HERDR_*) continue ;;
+    esac
+    case " $claude_identity $drop " in *" $k "*) continue ;; esac
     childenv+=("$kv")
   done
   for k in $keep; do [ -n "${!k+x}" ] && childenv+=("$k=${!k}"); done
@@ -2048,8 +2065,10 @@ elif cmd == "pane run":
     if flag("pane.dead"): sys.exit(0)                     # accepted, never run
     # The fired file is the event the late-pane control waits for.
     late = ("sleep 5; touch %s; " % os.path.join(S, "pane.late.fired")) if flag("pane.late") else ""
-    env = {"PATH": os.environ["PATH"], "HOME": os.environ.get("HOME", "/"), "STUB": S, "HERDR_ENV": "1",
-           "HERDR_PANE_ID": pane, "HERDR_TAB_ID": "tab-of-" + pane, "HERDR_WORKSPACE_ID": ws}
+    env = {"PATH": os.environ["PATH"], "HOME": os.environ.get("HOME", "/"), "STUB": S,
+           "HERDR_ENV": "pane-env", "HERDR_SOCKET_PATH": "/stub/herdr.sock",
+           "HERDR_BIN_PATH": "/stub/herdr-bin", "HERDR_PANE_ID": pane,
+           "HERDR_TAB_ID": "tab-of-" + pane, "HERDR_WORKSPACE_ID": ws}
     proc = subprocess.Popen(["bash", "-c", late + text], env=env, stdin=subprocess.DEVNULL, start_new_session=True,
                             stdout=open(os.path.join(S, "pane-%s.out" % pane), "ab"), stderr=subprocess.STDOUT)
     open(os.path.join(S, "pane-%s.pid" % pane), "w").write(str(proc.pid))
@@ -3089,6 +3108,265 @@ EOF
     '[ $rc -eq 1 ] && [ -e "$tmp/logs/badrole.done" ] && grep -q "unknown launch role" "$tmp/logs/badrole.err"' "$got"
   check "every role resolves from the dispatch run, inheriting each value it does not set" \
     '[ "$(launch_limits lane "$tmp/cap-dispatch" "$tmp/live-limits.toml")" = "$(printf "64M\t16")" ] && [ "$(launch_limits coachman "$tmp/cap-dispatch" "$tmp/live-limits.toml")" = "$(printf "128M\t32")" ] && [ "$(launch_limits reviewer "$tmp/cap-dispatch" "$tmp/live-limits.toml")" = "$(printf "8G\t24")" ] && [ "$(launch_limits default "$tmp/cap-dispatch" "$tmp/live-limits.toml")" = "$(printf "8G\t512")" ] && [ "$(launch_limits lane "" "$tmp/live-limits.toml")" = "$(printf "8G\t512")" ]'
+
+  echo "run environment identity, Claude session and lane env file: Herdr, tmux and no host"
+  local -a claude_identity_names=(
+    CLAUDECODE CLAUDE_PID CLAUDE_CODE_SESSION_ID CLAUDE_CODE_CHILD_SESSION
+    CLAUDE_CODE_ENTRYPOINT CLAUDE_CODE_EXECPATH CLAUDE_CODE_SESSION_ATTENDED
+    CLAUDE_CODE_MESSAGING_SOCKET CLAUDE_CODE_MESSAGING_TOKEN
+    CLAUDE_CODE_SESSION_EXTRA CLAUDE_CODE_MESSAGING_EXTRA CLAUDE_CODE_CHILD_EXTRA
+  )
+  local -a herdr_identity_names=(
+    HERDR_PANE_ID HERDR_TAB_ID HERDR_WORKSPACE_ID HERDR_ENV HERDR_SOCKET_PATH
+    HERDR_BIN_PATH HERDR_CUSTOM
+  )
+  local -a claude_identity_env=(
+    CLAUDECODE=caller-claudecode CLAUDE_PID=caller-pid
+    CLAUDE_CODE_SESSION_ID=caller-thread CLAUDE_CODE_CHILD_SESSION=caller-child
+    CLAUDE_CODE_ENTRYPOINT=caller-entry CLAUDE_CODE_EXECPATH=caller-exec
+    CLAUDE_CODE_SESSION_ATTENDED=caller-attended
+    CLAUDE_CODE_MESSAGING_SOCKET=caller-socket CLAUDE_CODE_MESSAGING_TOKEN=caller-token
+    CLAUDE_CODE_SESSION_EXTRA=caller-session-extra
+    CLAUDE_CODE_MESSAGING_EXTRA=caller-messaging-extra
+    CLAUDE_CODE_CHILD_EXTRA=caller-child-extra
+  )
+  local -a herdr_identity_env=(
+    HERDR_PANE_ID=caller-pane HERDR_TAB_ID=caller-tab
+    HERDR_WORKSPACE_ID=caller-workspace HERDR_ENV=caller-env
+    HERDR_SOCKET_PATH=/caller/herdr.sock HERDR_BIN_PATH=/caller/herdr-bin
+    HERDR_CUSTOM=caller-herdr-extra
+  )
+  local -a caller_config_env=(
+    CALLER_VAR=caller-value POSTMASTER_CUSTOM=caller-postmaster
+    POSTMASTER_CONFIG="$tmp/claude-launch.toml"
+    CLAUDE_CONFIG_DIR="$tmp/claude-config" CLAUDE_EFFORT=high
+    CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=123
+    CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY=1
+    ANTHROPIC_BASE_URL=https://caller.invalid
+    ANTHROPIC_AUTH_TOKEN=fixture-auth-token
+  )
+  cat > "$tmp/caller/env-probe.py" <<'PY'
+#!/usr/bin/env python3
+import os
+
+exact = {
+    "CLAUDECODE", "CLAUDE_PID", "CLAUDE_CODE_SESSION_ID", "CLAUDE_CODE_CHILD_SESSION",
+    "CLAUDE_CODE_ENTRYPOINT", "CLAUDE_CODE_EXECPATH", "CLAUDE_CODE_SESSION_ATTENDED",
+    "CLAUDE_CODE_MESSAGING_SOCKET", "CLAUDE_CODE_MESSAGING_TOKEN",
+}
+families = ("CLAUDE_CODE_SESSION_", "CLAUDE_CODE_MESSAGING_", "CLAUDE_CODE_CHILD_")
+claude = sorted(k for k in os.environ if k in exact or k.startswith(families))
+herdr = sorted(k for k in os.environ if k.startswith("HERDR_"))
+names = (
+    ("claude_keys", ",".join(claude)), ("herdr_keys", ",".join(herdr)),
+    ("herdr_pane", os.environ.get("HERDR_PANE_ID", "unset")),
+    ("herdr_tab", os.environ.get("HERDR_TAB_ID", "unset")),
+    ("herdr_workspace", os.environ.get("HERDR_WORKSPACE_ID", "unset")),
+    ("herdr_env", os.environ.get("HERDR_ENV", "unset")),
+    ("herdr_socket", os.environ.get("HERDR_SOCKET_PATH", "unset")),
+    ("herdr_bin", os.environ.get("HERDR_BIN_PATH", "unset")),
+    ("herdr_custom", os.environ.get("HERDR_CUSTOM", "unset")),
+    ("caller", os.environ.get("CALLER_VAR", "unset")),
+    ("postmaster_custom", os.environ.get("POSTMASTER_CUSTOM", "unset")),
+    ("postmaster_config", os.environ.get("POSTMASTER_CONFIG", "unset")),
+    ("claude_config_dir", os.environ.get("CLAUDE_CONFIG_DIR", "unset")),
+    ("claude_effort", os.environ.get("CLAUDE_EFFORT", "unset")),
+    ("claude_bg_wait", os.environ.get("CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS", "unset")),
+    ("claude_feedback", os.environ.get("CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY", "unset")),
+    ("anthropic_base", os.environ.get("ANTHROPIC_BASE_URL", "unset")),
+    ("anthropic_auth", os.environ.get("ANTHROPIC_AUTH_TOKEN", "unset")),
+)
+print("|".join("%s=%s" % item for item in names))
+PY
+  chmod +x "$tmp/caller/env-probe.py"
+  cat > "$tmp/caller/lane.env" <<'EOF'
+LANE_ENV_ONLY=from-lane-env-file
+ANTHROPIC_BASE_URL=https://lane.invalid
+CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=456
+EOF
+  cat > "$tmp/claude-launch.toml" <<EOF
+[lanes.test]
+harness = "claude"
+model = "host-self-test"
+env_file = "$tmp/caller/lane.env"
+EOF
+  printf 'Continue.\n' > "$tmp/caller/prompt.txt"
+  cat > "$tmp/bin/claude" <<'PY'
+#!/usr/bin/env python3
+import json
+import os
+import pathlib
+import sys
+
+exact = {
+    "CLAUDECODE", "CLAUDE_PID", "CLAUDE_CODE_SESSION_ID", "CLAUDE_CODE_CHILD_SESSION",
+    "CLAUDE_CODE_ENTRYPOINT", "CLAUDE_CODE_EXECPATH", "CLAUDE_CODE_SESSION_ATTENDED",
+    "CLAUDE_CODE_MESSAGING_SOCKET", "CLAUDE_CODE_MESSAGING_TOKEN",
+}
+families = ("CLAUDE_CODE_SESSION_", "CLAUDE_CODE_MESSAGING_", "CLAUDE_CODE_CHILD_")
+identity = sorted(k for k in os.environ if k in exact or k.startswith(families))
+herdr = {k: v for k, v in os.environ.items() if k.startswith("HERDR_")}
+env_names = (
+    "CALLER_VAR", "POSTMASTER_CUSTOM", "POSTMASTER_CONFIG", "CLAUDE_CONFIG_DIR",
+    "CLAUDE_EFFORT", "CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS",
+    "CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY", "ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN",
+    "LANE_ENV_ONLY",
+)
+record = {
+    "identity": identity,
+    "herdr": herdr,
+    "env": {k: os.environ.get(k, "unset") for k in env_names},
+}
+observed = os.environ.get("HOST_TEST_OBSERVED")
+if observed:
+    with open(observed, "a", encoding="utf-8") as stream:
+        json.dump(record, stream, sort_keys=True)
+        stream.write("\n")
+
+args = sys.argv[1:]
+store = pathlib.Path(os.environ["CLAUDE_CONFIG_DIR"]) / "sessions"
+if identity:
+    # Model #67's failure: a nested headless run can finish without owning a record.
+    session_id = os.environ.get("CLAUDE_CODE_SESSION_ID", "caller-thread")
+    print(json.dumps({"type": "system", "subtype": "init", "session_id": session_id, "model": "stub"}))
+    print(json.dumps({"type": "result", "subtype": "success", "num_turns": 1}))
+    sys.exit(0)
+
+if "--resume" in args:
+    session_id = args[args.index("--resume") + 1]
+    session_record = store / (session_id + ".jsonl")
+    if not session_record.is_file():
+        print("Session not found", file=sys.stderr)
+        sys.exit(1)
+    with session_record.open("a", encoding="utf-8") as stream:
+        stream.write("resume\n")
+else:
+    session_id = "thread-" + os.environ["HOST_TEST_RUN"]
+    session_record = store / (session_id + ".jsonl")
+    session_record.parent.mkdir(parents=True, exist_ok=True)
+    with session_record.open("w", encoding="utf-8") as stream:
+        stream.write("new\n")
+
+print(json.dumps({"type": "system", "subtype": "init", "session_id": session_id, "model": "stub"}))
+print(json.dumps({"type": "result", "subtype": "success", "num_turns": 1}))
+PY
+  chmod +x "$tmp/bin/claude"
+  contains_all() {
+    local values=$1 name
+    shift
+    for name in "$@"; do case ",$values," in *",$name,"*) ;; *) return 1 ;; esac; done
+  }
+  observe() {
+    python3 - "$1" "$2" <<'PY'
+import json, sys
+d = json.loads(open(sys.argv[1], encoding="utf-8").readlines()[-1])
+key = sys.argv[2]
+if key == "identity_keys": print(",".join(d["identity"]))
+elif key == "herdr_keys": print(",".join(sorted(d["herdr"])))
+elif key.startswith("herdr:"): print(d["herdr"].get(key[6:], "unset"))
+else: print(d["env"].get(key, "unset"))
+PY
+  }
+  stream_sessions() {
+    python3 - "$1" <<'PY'
+import json, sys
+ids = [json.loads(line).get("session_id", "") for line in open(sys.argv[1], encoding="utf-8")
+       if json.loads(line).get("subtype") == "init"]
+print(",".join(ids))
+PY
+  }
+  for mode in herdr tmux none; do
+    local -a under=()
+    [ "$mode" != herdr ] || under=(--under "$tmp/run-1")
+    local input_probe="$tmp/logs/$mode.identity-input" output_probe="$tmp/logs/$mode.identity-output"
+    local run_marker="$tmp/logs/$mode.identity-probe.done" got space pane
+    (cd "$tmp/caller" && env -i HOME="$HOME" PATH="$STUBS" STUB="$tmp/stub" \
+      "${claude_identity_env[@]}" "${herdr_identity_env[@]}" "${caller_config_env[@]}" \
+      ./env-probe.py > "$input_probe")
+    check "AC1 $mode positive control: caller carries every Claude identity name" \
+      'contains_all "$(field "$input_probe" claude_keys)" "${claude_identity_names[@]}"' \
+      "$(cat "$input_probe")"
+    check "AC2 $mode positive control: caller carries every Herdr variable" \
+      'contains_all "$(field "$input_probe" herdr_keys)" "${herdr_identity_names[@]}" && [ "$(field "$input_probe" herdr_custom)" = caller-herdr-extra ]' \
+      "$(cat "$input_probe")"
+    check "AC3 $mode positive control: caller configuration is present before the handoff" \
+      '[ "$(field "$input_probe" caller)" = caller-value ] && [ "$(field "$input_probe" postmaster_custom)" = caller-postmaster ] && [ "$(field "$input_probe" claude_bg_wait)" = 123 ] && [ "$(field "$input_probe" anthropic_base)" = https://caller.invalid ]' \
+      "$(cat "$input_probe")"
+
+    got=$(cd "$tmp/caller" && hs "$STUBS" "${claude_identity_env[@]}" "${herdr_identity_env[@]}" \
+      "${caller_config_env[@]}" "POSTMASTER_HOST=$mode" -- run "$NAME" "$repo/.worktrees/T-1-luna" \
+      "${under[@]}" --out "$output_probe" --marker "$run_marker" -- ./env-probe.py)
+    marker "$run_marker" 60
+    case "$mode:$got" in
+      herdr:host=herdr\ *|tmux:host=tmux\ *|none:host=none) rc=0 ;;
+      *) rc=1 ;;
+    esac
+    check "AC5 $mode positive host control: launch used the requested host" '[ "$rc" -eq 0 ]' "$got"
+    check "AC1 $mode negative control: launch receives no Claude session identity" \
+      '[ -z "$(field "$output_probe" claude_keys)" ]' "$(cat "$output_probe")"
+    if [ "$mode" = herdr ]; then
+      space=${got#*space=}; space=${space%% *}; pane=${got##*pane=}
+      check "AC2 Herdr negative control: launch receives only its pane's six Herdr values" \
+        '[ "$(field "$output_probe" herdr_keys)" = HERDR_BIN_PATH,HERDR_ENV,HERDR_PANE_ID,HERDR_SOCKET_PATH,HERDR_TAB_ID,HERDR_WORKSPACE_ID ] && [ "$(field "$output_probe" herdr_pane)" = "$pane" ] && [ "$(field "$output_probe" herdr_tab)" = "tab-of-$pane" ] && [ "$(field "$output_probe" herdr_workspace)" = "$space" ] && [ "$(field "$output_probe" herdr_env)" = pane-env ] && [ "$(field "$output_probe" herdr_socket)" = /stub/herdr.sock ] && [ "$(field "$output_probe" herdr_bin)" = /stub/herdr-bin ] && [ "$(field "$output_probe" herdr_custom)" = unset ]' \
+        "$(cat "$output_probe")"
+    else
+      check "AC2 $mode negative control: launch receives no Herdr variables" \
+        '[ -z "$(field "$output_probe" herdr_keys)" ] && [ "$(field "$output_probe" herdr_pane)" = unset ] && [ "$(field "$output_probe" herdr_custom)" = unset ]' \
+        "$(cat "$output_probe")"
+    fi
+    check "AC3 $mode negative identity control: other caller configuration still reaches launch" \
+      '[ "$(field "$output_probe" caller)" = caller-value ] && [ "$(field "$output_probe" postmaster_custom)" = caller-postmaster ] && [ "$(field "$output_probe" postmaster_config)" = "$tmp/claude-launch.toml" ] && [ "$(field "$output_probe" claude_config_dir)" = "$tmp/claude-config" ] && [ "$(field "$output_probe" claude_effort)" = high ] && [ "$(field "$output_probe" claude_bg_wait)" = 123 ] && [ "$(field "$output_probe" claude_feedback)" = 1 ] && [ "$(field "$output_probe" anthropic_base)" = https://caller.invalid ] && [ "$(field "$output_probe" anthropic_auth)" = fixture-auth-token ]' \
+      "$(cat "$output_probe")"
+
+    local direct_stream="$tmp/logs/$mode.inherited-identity.events" direct_observed="$tmp/logs/$mode.inherited-identity.jsonl"
+    local launch_events="$tmp/logs/$mode.claude.events" launch_err="$tmp/logs/$mode.claude.err"
+    local launch_marker="$tmp/logs/$mode.claude.done" launch_observed="$tmp/logs/$mode.claude.jsonl"
+    local session_record="$tmp/claude-config/sessions/thread-$mode.jsonl" thread resume_marker claude_space claude_pane
+    (cd "$tmp/caller" && env -i HOME="$HOME" PATH="$STUBS" STUB="$tmp/stub" \
+      "${claude_identity_env[@]}" "${herdr_identity_env[@]}" "${caller_config_env[@]}" \
+      "HOST_TEST_RUN=$mode" "HOST_TEST_OBSERVED=$direct_observed" "$tmp/bin/claude" -p direct \
+      > "$direct_stream")
+    check "AC4 $mode negative control: inherited Claude identity writes no caller-thread record" \
+      '[ "$(stream_sessions "$direct_stream")" = caller-thread ] && [ ! -e "$tmp/claude-config/sessions/caller-thread.jsonl" ] && [ -n "$(observe "$direct_observed" identity_keys)" ]' \
+      "$(cat "$direct_stream")"
+
+    got=$(cd "$tmp/caller" && hs "$STUBS" "${claude_identity_env[@]}" "${herdr_identity_env[@]}" \
+      "${caller_config_env[@]}" "POSTMASTER_HOST=$mode" "HOST_TEST_RUN=$mode" \
+      "HOST_TEST_OBSERVED=$launch_observed" -- run "$NAME" "$repo/.worktrees/T-1-luna" \
+      "${under[@]}" --out "$launch_events" --err "$launch_err" --marker "$launch_marker" -- \
+      "$HERE/launch.sh" launch test "$repo/.worktrees/T-1-luna" "$tmp/caller/prompt.txt")
+    marker "$launch_marker" 60
+    if [ "$mode" = herdr ]; then
+      claude_space=${got#*space=}; claude_space=${claude_space%% *}
+      claude_pane=${got##*pane=}
+    fi
+    thread=$(stream_sessions "$launch_events")
+    check "AC1 $mode Claude control: host launch strips caller identity before the harness" \
+      '[ "$(observe "$launch_observed" identity_keys)" = "" ]' "$(tail -n 1 "$launch_observed")"
+    check "AC2 $mode Claude control: harness sees only the pane's Herdr identity" \
+      'if [ "$mode" = herdr ]; then [ "$(observe "$launch_observed" herdr_keys)" = HERDR_BIN_PATH,HERDR_ENV,HERDR_PANE_ID,HERDR_SOCKET_PATH,HERDR_TAB_ID,HERDR_WORKSPACE_ID ] && [ "$(observe "$launch_observed" herdr:HERDR_PANE_ID)" = "$claude_pane" ] && [ "$(observe "$launch_observed" herdr:HERDR_TAB_ID)" = "tab-of-$claude_pane" ] && [ "$(observe "$launch_observed" herdr:HERDR_WORKSPACE_ID)" = "$claude_space" ] && [ "$(observe "$launch_observed" herdr:HERDR_ENV)" = pane-env ] && [ "$(observe "$launch_observed" herdr:HERDR_SOCKET_PATH)" = /stub/herdr.sock ] && [ "$(observe "$launch_observed" herdr:HERDR_BIN_PATH)" = /stub/herdr-bin ]; else [ "$(observe "$launch_observed" herdr_keys)" = "" ]; fi' \
+      "$(tail -n 1 "$launch_observed")"
+    check "AC3 $mode Claude control: caller and lane env-file settings reach the harness" \
+      '[ "$(observe "$launch_observed" CALLER_VAR)" = caller-value ] && [ "$(observe "$launch_observed" POSTMASTER_CUSTOM)" = caller-postmaster ] && [ "$(observe "$launch_observed" POSTMASTER_CONFIG)" = "$tmp/claude-launch.toml" ] && [ "$(observe "$launch_observed" CLAUDE_CONFIG_DIR)" = "$tmp/claude-config" ] && [ "$(observe "$launch_observed" CLAUDE_EFFORT)" = high ] && [ "$(observe "$launch_observed" CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS)" = 456 ] && [ "$(observe "$launch_observed" CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY)" = 1 ] && [ "$(observe "$launch_observed" ANTHROPIC_BASE_URL)" = https://lane.invalid ] && [ "$(observe "$launch_observed" ANTHROPIC_AUTH_TOKEN)" = fixture-auth-token ] && [ "$(observe "$launch_observed" LANE_ENV_ONLY)" = from-lane-env-file ]' \
+      "$(tail -n 1 "$launch_observed")"
+    check "AC4 $mode positive control: streamed session id owns its record" \
+      '[ "$thread" = "thread-$mode" ] && [ -f "$session_record" ] && grep -qxF new "$session_record"' "$thread"
+
+    resume_marker="$tmp/logs/$mode.resume.done"
+    got=$(cd "$tmp/caller" && hs "$STUBS" "${claude_identity_env[@]}" "${herdr_identity_env[@]}" \
+      "${caller_config_env[@]}" "POSTMASTER_HOST=$mode" "HOST_TEST_RUN=$mode" \
+      "HOST_TEST_OBSERVED=$launch_observed" -- run "$NAME" "$repo/.worktrees/T-1-luna" \
+      "${under[@]}" --append --out "$launch_events" --err "$launch_err" \
+      --marker "$resume_marker" -- "$HERE/launch.sh" resume test "$repo/.worktrees/T-1-luna" \
+      "thread-$mode" "$tmp/caller/prompt.txt")
+    marker "$resume_marker" 60
+    check "AC4 $mode positive resume control: resume continues the streamed thread" \
+      '[ "$(stream_sessions "$launch_events")" = "thread-$mode,thread-$mode" ] && grep -qxF resume "$session_record"' \
+      "$(stream_sessions "$launch_events") / $(cat "$session_record")"
+    check "AC1 and AC3 $mode resume control: identity stays stripped and env file stays present" \
+      '[ "$(observe "$launch_observed" identity_keys)" = "" ] && [ "$(observe "$launch_observed" LANE_ENV_ONLY)" = from-lane-env-file ] && [ "$(observe "$launch_observed" CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS)" = 456 ]' \
+      "$(tail -n 1 "$launch_observed")"
+  done
 
   finish self-test
 }
