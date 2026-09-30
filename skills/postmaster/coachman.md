@@ -991,9 +991,14 @@ when the run has no style findings. Log a `note` with its last line, and name th
 change there is a ticket, filed after the merge on the user's word.
 [Why style findings feed the project's linter](../../wiki/concepts/review-loop.md)
 
-Final `run-log.md` entry (per-lane win record, findings counts, cost) plus a closing dated
-comment on the ticket. Leave the stage at `shipped`: the postmaster sets `done` when it closes
-the run, and that appends the run's stage timings to `run-log.md`. Never write timings by hand.
+Run `<tool>/scripts/usage.ts sum <dispatch>` and put its output verbatim under `## Cost` on the
+ship card and in the final `run-log.md` entry with the per-lane win record and findings counts.
+Do not hand-recompute a figure or write a missing figure as zero. If the sum command fails, put
+the error on the card and in the log as unreadable. When the postmaster sets `done` after this
+leg exits, `stage.sh` refreshes both records from all launch usage records, including this leg's
+final resume. Leave the stage at `shipped` until then; the postmaster's terminal stage appends
+the run's stage timings to `run-log.md`. Never write timings by hand. A closing dated comment
+on the ticket carries the run summary.
 Never delete the dispatch directory or the manifest, they are the run's history. Archive
 finished threads where the harness has an archive form (`harnesses.md`). After the merge, tear
 down the workhorse worktrees, preserving any stray file first (a workhorse killed mid-run leaves

@@ -52,6 +52,30 @@ Prefer `--prompt-file` wherever a harness offers it. A prompt in argv is visible
 listing on the machine, and a process must never be selected by matching text that could appear
 in a prompt: match on pid or working directory.
 
+## Usage
+
+`<tool>/scripts/usage.ts` is the executable reader for these fields. `read` reads a harness's
+event stream, or Muse's exported session record; `record` writes only fields the harness
+reported to `<dispatch>/logs/<stream>.usage.json`. A reported zero stays zero. A missing field
+stays absent. The paired invented stream fixtures in `<tool>/scripts/fixtures/usage/` and
+`<tool>/scripts/usage.test.ts` exercise each reader's positive and no-usage controls.
+
+| harness | input and output | cost | native record |
+|---|---|---|---|
+| codex | `turn.completed.usage.input_tokens` and `.output_tokens` | not reported | [Codex event type](https://github.com/openai/codex/blob/main/sdk/typescript/src/events.ts) |
+| grok | the terminal `type: "end"` event's `usage.input_tokens` and `.output_tokens` | `total_cost_usd` on that event; omit it when `cost_is_partial` is true | [Grok headless event format](https://github.com/xai-org/grok-build/blob/main/crates/codegen/xai-grok-pager/docs/user-guide/14-headless-mode.md) |
+| agy | the last `event: "result"` event's `result.usage.input_tokens` and `.output_tokens` | not reported | [Antigravity CLI headless mode](https://antigravity.google/docs/cli/headless/) |
+| claude | each assistant event's `message.usage.input_tokens` and `.output_tokens` | `total_cost_usd` on the `result` event | [Claude Code stream-json output](https://code.claude.com/docs/en/agent-sdk/overview) |
+| pi | assistant `message_end.message.usage.input` and `.output` | `message_end.message.usage.cost.total` | [Pi RPC event format](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/rpc.md) |
+| muse | exported session envelopes whose `payload.event.kind` is `model_completed`: `payload.event.usage.input_tokens` and `.output_tokens` | not reported | [Muse Code recorded session events](https://dev.meta.ai/docs/cookbook/deterministic-replay) |
+| mimo | each `step_finish.part.tokens.input` and `.output` | `step_finish.part.cost` | [MiMo Code JSON mode](https://github.com/XiaomiMiMo/MiMo-Code) |
+
+Muse's stdout stream has no usage values; `launch.sh` reads them from the session export it has
+already saved. Its `goal_usage_attribution` event repeats `model_completed` values and is
+ignored to avoid double-counting. Antigravity reports cumulative session usage, so the reader
+uses the last result event rather than adding results together. The other event formats report
+per-turn, per-message or per-step figures, which the reader sums over the stream.
+
 ## Skills folders
 
 A skill is installed as a link from a harness's user-level skills folder to that skill in the
