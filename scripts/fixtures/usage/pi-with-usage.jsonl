@@ -1,0 +1,2 @@
+{"type":"session","version":3,"id":"01a0c7e8-5863","cwd":"/w"}
+{"type":"message_end","message":{"role":"assistant","content":[{"type":"text","text":"All done."}],"usage":{"input":50,"output":7,"cacheRead":0,"cacheWrite":0,"reasoning":0,"totalTokens":57,"cost":{"input":0.005,"output":0.004,"cacheRead":0,"cacheWrite":0,"total":0.012}}}}

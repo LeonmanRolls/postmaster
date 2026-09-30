@@ -1,0 +1,3 @@
+{"type":"step_start","sessionID":"ses_ffe5f1e2","part":{"type":"step-start"}}
+{"type":"text","sessionID":"ses_ffe5f1e2","part":{"type":"text","text":"DONE"}}
+{"type":"step_finish","sessionID":"ses_ffe5f1e2","part":{"type":"step-finish","reason":"stop","cost":0.25,"tokens":{"total":1260,"input":1000,"output":200,"reasoning":50,"cache":{"read":10,"write":5}}}}
