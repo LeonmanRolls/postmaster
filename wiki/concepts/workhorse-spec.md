@@ -46,6 +46,6 @@ the hidden tests show whether a lane's work helps the result.
 
 Before #170, the workhorse contract asked each lane to write and commit its own plan before
 code, and the planning stage asked the user to review each one. The current
-[coachman contract](../../skills/postmaster/coachman.md) replaces that with one coachman-authored
+[planning-stage policy](planning-stage.md) replaces that with one coachman-authored
 spec, a single review package and one user decision. Runs dispatched before the change keep
 their per-workhorse specs through their pinned tool.

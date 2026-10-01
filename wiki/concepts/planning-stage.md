@@ -11,7 +11,7 @@ updated: 2026-09-30
 **Claim.** The current contract has the coachman write one shared spec for a run before any
 workhorse starts. The postmaster presents that spec for one user decision; on approval every
 workhorse implements from it in blinkers. This is the decision in [#170](https://github.com/brindlewick/postmaster/issues/170),
-recorded in the [coachman runbook](../../skills/postmaster/coachman.md). It is unverified as a
+recorded in the ticket and summarized in the [workhorse spec page](workhorse-spec.md). It is unverified as a
 fleet practice: no completed run has measured what this change does to lane contributions.
 
 **Standing: claimed.** The policy changed by decision, not by run evidence. The outside
