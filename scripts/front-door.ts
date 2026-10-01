@@ -3,7 +3,10 @@
 // terminal; the target and the config are given. It is `self` when that session is already on
 // team.postmaster's harness and model, in the target repo, with the user at the terminal. It is
 // `spawn` with every condition that failed, in ticket order: the harness differs, the model
-// differs, the target is another repo, or nobody is at the terminal.
+// differs, the target is another repo, or nobody is at the terminal. When the decision is
+// `spawn` and the target is a fixture copy (postmaster.fixture in its own git config, set by
+// fixture.sh new), it also prints a `headless` line: that postmaster starts headless on every
+// host, in the form hosts.md gives under none, so it never meets a trust prompt.
 //
 //   front-door.sh <harness> <model> <cwd> <at-terminal> <target> [--config <path>]
 //   front-door.sh --self-test
@@ -14,7 +17,7 @@
 //
 // `--self-test` in argv position one is the flag, whatever follows; no harness is named that.
 //
-//   exit 0  printed `self` or `spawn` with its reasons
+//   exit 0  printed `self` or `spawn` with its reasons, and `headless` for a fixture copy
 //   exit 1  no config or one that does not parse, team.postmaster missing, or a bad value
 //   exit 2  usage
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
@@ -55,6 +58,13 @@ function repoOf(path: string): string {
   return r.code === 0 ? r.out.trim() : "";
 }
 
+/** Whether the target carries fixture.sh new's mark: postmaster.fixture in its git config. */
+function isFixture(target: string): boolean {
+  if (!target) return false;
+  const r = run("git", ["-C", target, "config", "--get", "postmaster.fixture"]);
+  return r.code === 0 && r.out.trim() !== "";
+}
+
 interface DecideResult {
   code: number;
   out: string;
@@ -68,6 +78,7 @@ function decide(
   term: string,
   target: string,
   cfgPath: string,
+  fixture: boolean,
 ): DecideResult {
   const err: string[] = [];
   const die1 = (msg: string): DecideResult => {
@@ -140,7 +151,8 @@ function decide(
   }
   const out =
     reasons.length > 0
-      ? `spawn ${reasons.join("; ")}\n`
+      ? `spawn ${reasons.join("; ")}\n` +
+        (fixture ? "headless the target is a fixture copy made by fixture.sh new\n" : "")
       : "self team.postmaster harness and model, the target is this repo, and the user is at the terminal\n";
   return { code: 0, out, err: "" };
 }
@@ -167,7 +179,15 @@ if (argv[0] === "--self-test") {
     usage();
   }
   printResult(
-    decide(rest[0] ?? "", rest[1] ?? "", rest[2] ?? "", rest[3] ?? "", rest[4] ?? "", config),
+    decide(
+      rest[0] ?? "",
+      rest[1] ?? "",
+      rest[2] ?? "",
+      rest[3] ?? "",
+      rest[4] ?? "",
+      config,
+      isFixture(rest[4] ?? ""),
+    ),
   );
 }
 
@@ -608,6 +628,63 @@ withTempDir((tmp) => {
   );
   doRun("four arguments is a usage error", 2, "", "-", ["claude", "pm-model", here, "yes"]);
   doRun("--self-test takes no arguments", 2, "", "-", ["--self-test", "extra"]);
+
+  // A fixture copy: the mark is postmaster.fixture in the target's git config.
+  {
+    const fix = join(tmp, "fixture-copy");
+    mkdirSync(fix, { recursive: true });
+    run("git", ["-C", fix, "init", "-q"]);
+    run("git", [
+      "-C",
+      fix,
+      "-c",
+      "user.email=t@t",
+      "-c",
+      "user.name=t",
+      "commit",
+      "-q",
+      "--allow-empty",
+      "-m",
+      "base",
+    ]);
+    run("git", ["-C", fix, "config", "postmaster.fixture", "remove"]);
+    const args = ["grok", "pm-model", here, "no", fix, ...cfg("match")];
+    const r = run(self, args);
+    st.check(
+      "a spawn into a fixture copy says headless",
+      r.code === 0 && r.out.startsWith("spawn ") && r.out.includes("\nheadless "),
+      r.out + r.err,
+    );
+    // self in a fixture copy stays self
+    const selfArgs = ["claude", "pm-model", fix, "yes", fix, ...cfg("match")];
+    const rs = run(self, selfArgs);
+    st.check(
+      "a self decision in a fixture copy stays self",
+      rs.code === 0 && rs.out.startsWith("self ") && !rs.out.includes("headless"),
+      rs.out + rs.err,
+    );
+    // the same copy with its mark removed gives exactly the decision it gave before
+    run("git", ["-C", fix, "config", "--unset", "postmaster.fixture"]);
+    const ru = run(self, args);
+    const bare = run(self, ["grok", "pm-model", here, "no", there, ...cfg("match")]);
+    st.check(
+      "the same copy with its mark removed gives exactly the decision it gave before this change",
+      ru.code === 0 && !ru.out.includes("headless") && ru.out === bare.out.replace(there, fix),
+      `unmarked:\n${ru.out}\nbare:\n${bare.out}`,
+    );
+  }
+
+  console.log("front-door tests: the suite beside the new code runs in this self-test");
+  {
+    const r2 = run("bun", ["--no-env-file", "test", join(scriptsDir(import.meta), "front-door.test.ts")], {
+      input: "",
+    });
+    st.check(
+      "bun test scripts/front-door.test.ts",
+      r2.code === 0,
+      `exit ${r2.code}\n${r2.out}${r2.err}`,
+    );
+  }
 
   st.finish();
 });
