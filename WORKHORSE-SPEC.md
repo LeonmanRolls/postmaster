@@ -1,53 +1,159 @@
-# Workhorse spec: #201 Probe and configure lane confinement
+# Workhorse spec: #201, Setup and the probe say whether lane confinement can run on this machine, and what finishes it
 
 ## Summary
 
-Add a Bun probe that reports whether lane confinement can run and its next setup command, then use its result when setup records the machine's `confine` choice and when the postmaster shows the launch card.
+Nothing in setup says what sandbox-runtime needs on the machine, so a user finds out when a
+launch fails. This ticket adds `scripts/probe-confine.sh`, which reports `ready`, `partial` or
+`unavailable` for lane confinement in the shape `probe-trackers.sh` already uses; wires a
+`confine` key (`on`/`off`) through `setup.sh` and `config.example.toml`, asked once with the
+probe's result in front of the user; and puts the answer on the postmaster's launch card. Any
+root command is the user's to run; the probe runs again after they do.
+
+This is the coachman's one spec, written from the two lane specs (sol 79b0dc6, mimo 68b41bc)
+on the user's word: both workhorses implement from this same file, in blinkers as before.
 
 ## Technical context
 
-- **Language and version**: TypeScript run by Bun, with two-line Bash wrappers for executable scripts.
-- **Dependencies used or added**: Bun and Node builtins; the pinned #109 port files listed below are copied unchanged before modification. No package dependency is added. The probe observes `bwrap`, `socat`, `rg`, `sandbox-exec`, `sysctl`, and known package managers; it never installs software or changes AppArmor.
-- **Testing**: `bun test scripts/probe-confine.test.ts scripts/setup.test.ts` covers the three probe verdicts, Ubuntu restriction, macOS output, package advice, and setup validation. `bun test ./scripts`, `bun run lint`, and the worktree's recorded checks through the pinned `scripts/verify.sh run .` cover integration. `scripts/probe-confine.sh --self-test` runs the probe controls; `scripts/setup.sh --self-test` remains compatible with the recorded gate. Check the generated TOML and `--keys` output in setup tests.
-- **Constraints**: Work only in this worktree; read no other lane or wiki. Copy the specified #109 port files unchanged and commit that copy separately. Any privileged command is printed for the user, never executed by setup or the probe. Commit the spec alone and await approval before code. Commit as brindlewick and never push.
+- **Language and version**: TypeScript run by Bun, functional core with side effects at the
+  edges. Executable scripts keep a two-line Bash wrapper that runs the `.ts` with Bun.
+- **Dependencies used or added**: none. The port files copied below need only node builtins
+  and `bunfig.toml`; no `package.json` change.
+- **Testing**: `bun test scripts/probe-confine.test.ts` (the probe's three controls, stubbed);
+  `bun test scripts/setup.test.ts` (copied controls plus the new `confine` controls);
+  `bun test ./scripts`, `bun run lint`, the pinned `scripts/skill-refs.sh`, and the run's
+  checks through the pinned `scripts/verify.sh run .` before the summary.
+- **Constraints**: work only in this worktree; read no other lane, no other branch, no
+  `.worktrees/`, no wiki. Copy the port files unchanged and commit that copy on its own.
+  Nothing in the flow runs a privileged command, writes `/etc/apparmor.d/`, or reloads
+  AppArmor. This ticket adds the question and the config write only; `launch.sh` reading
+  `confine` is #200, and whichever lands second merges the other's change.
 
 ## Direction check
 
-- Probe first, then ask once: add `<tool>/scripts/probe-confine.sh` to the machine setup steps in `AGENTS.md`, show its verdict, and ask whether to enable confinement. If the user runs a named command, probe again before continuing; setup itself also checks the verdict when given `confine=on`.
-- Keep machine choices in `~/.postmaster/config.toml`: write a top-level `confine = "on"` or `"off"`, default off, and document that a missing key means off. Leave project settings untouched.
-- Put detection and decisions in TypeScript under `scripts/`, with a pure verdict function and side effects at its boundary. Use Bun tests beside each changed script and stub observed tools in probe controls.
-- Use OS and package-manager observations, not repository-specific paths or harness behavior. The one OS-specific path is `/usr/bin/bwrap`, required by the supplied AppArmor rule.
-- Give every verdict a test control, including negative and positive outcomes through the same probe interface. Keep the probe read-only and exit zero with a table plus a footer.
-- Update the launch-card instructions, not the launch mechanism; ticket #200 owns the launch-time read of `confine`.
-- After writing a runbook, run the pinned tool's `scripts/skill-refs.sh` check. Before the final summary, run all armed checks with the pinned `scripts/verify.sh run .` and record each result.
+- Probe first, then ask once: `AGENTS.md` gains the probe in its probe list and the confine
+  question in "What to settle", after the tracker question; `setup.sh` prints the probe table
+  as it already prints `probe-harnesses.sh`, then asks once; the probe runs again after the
+  user acts.
+- `partial` names what finishes it: one install command for missing packages; the AppArmor
+  rule block plus its activation for restricted namespaces (see Complexity tracking).
+- Root is the user's: the probe prints root commands and says the user runs them; nothing
+  executes them.
+- TypeScript run by Bun, tests beside, functional style: new probe plus changed port copy,
+  pure verdict logic, PATH/sysctl/platform reads at the edge.
+- Every result has a control: ready, partial and unavailable each forced through the same
+  stubbed lookups; setup gains positive and negative `confine` controls.
+- Nothing harness-specific: the probe checks tools and kernel state only, never a harness.
+- After writing a runbook, run the pinned `scripts/skill-refs.sh`; before the summary, run
+  the pinned `scripts/verify.sh run .` and record each check.
 
 ## Structure
 
-- `WORKHORSE-SPEC.md`: this committed plan; `WORKHORSE-SUMMARY.md` is written only after implementation and checks.
-- Copy unchanged from `c70e592819302001e8ef3a358781a9ca4b5b5232` in one preparatory commit: `scripts/setup.ts`, `scripts/setup.sh`, `scripts/setup.test.ts`, `scripts/lib/data.ts`, `scripts/lib/paths.ts`, `scripts/lib/proc.ts`, and `bunfig.toml`.
-- Create `scripts/probe-confine.sh`, `scripts/probe-confine.ts`, and `scripts/probe-confine.test.ts`.
-- Change `scripts/setup.ts` and `scripts/setup.test.ts` after the copy; keep `scripts/setup.sh` as the copied two-line wrapper.
-- Change `config.example.toml`, `AGENTS.md`, `skills/postmaster/SKILL.md`, and `README.md` for the machine choice, setup conversation, launch card, and command list.
+| Path | Change |
+|---|---|
+| `scripts/setup.ts` | Copy unchanged, then add the `confine` key |
+| `scripts/setup.sh` | Copy unchanged (two-line Bun wrapper, replaces the shell script), then keep `--self-test` working |
+| `scripts/setup.test.ts` | Copy unchanged, then add `confine` controls |
+| `scripts/lib/data.ts` | Copy unchanged |
+| `scripts/lib/paths.ts` | Copy unchanged |
+| `scripts/lib/proc.ts` | Copy unchanged |
+| `bunfig.toml` | Copy unchanged |
+| `scripts/probe-confine.sh` | New: two-line Bun wrapper |
+| `scripts/probe-confine.ts` | New: the probe |
+| `scripts/probe-confine.test.ts` | New: three controls with tool stubs |
+| `config.example.toml` | Document top-level `confine` |
+| `AGENTS.md` | Probe list plus the confine question in "What to settle" |
+| `skills/postmaster/SKILL.md` | Stage 0 launch card says whether lanes will run confined |
+| `README.md` | Script list gains the probe |
+
+## Complexity tracking
+
+| Departure | Why needed | Simpler alternative rejected because |
+|---|---|---|
+| `setup.sh --self-test` maps to `bun test scripts/setup.test.ts` after the copy | This branch's gate still runs `scripts/setup.sh --self-test`. The port moved those controls into `setup.test.ts` and left the flag out of `setup.ts`. | Leaving the flag dead breaks the gate. A second self-test inside `setup.ts` would duplicate `setup.test.ts`. |
+| The AppArmor fix is named as a rule block plus an activation command, not one line | The fix is a profile file and an AppArmor reload. The user reviews it before running it as root. | A single `sudo sh -c '...'` heredoc hides what root is about to run. |
 
 ## Decisions
 
-- The probe prints a header, a `lane` row with `ready`, `partial`, or `unavailable`, then a footer. A partial footer gives one command to run now. It exits zero for all three verdicts so the table remains the result.
-- Check packages first. On Linux, combine all missing packages in one install command, then tell the user to rerun the probe. This reveals an AppArmor step only after Bubblewrap is installed. Recognize `apt-get`, `dnf`, `pacman`, `zypper`, and `apk`; package names are `bubblewrap`, `socat`, and `ripgrep`. If a package is missing and no known manager exists, report `unavailable`.
-- With Linux tools present, use a minimal Bubblewrap user-namespace launch as the readiness test. On Ubuntu 24.04 or later, when `kernel.apparmor_restrict_unprivileged_userns=1` and that launch fails, report `partial` with a single user-run shell command that writes the supplied `/etc/apparmor.d/bwrap` profile and activates it with `apparmor_parser -r`. The global restriction remains in place. A failed launch without this known remedy is `unavailable` with its cause.
-- On macOS, require `sandbox-exec` and `rg`. Missing `rg` gets `brew install ripgrep` if Homebrew exists; missing `sandbox-exec`, or missing `rg` without Homebrew, is `unavailable`. Every macOS result says this path has not been tried.
-- On other operating systems, report `unavailable`. Do not claim a remedy the probe cannot establish.
-- `confine=off` is always accepted. `confine=on` is accepted for `ready` or `partial`, and refused for `unavailable`. Reject values other than `on` or `off`. Existing config files without `confine` keep off behavior; setup writes the explicit default for newly generated files.
-- The probe's `--self-test` runs its adjacent Bun test file. The copied setup's `--self-test` entry point will run its adjacent Bun tests, because the armed gate still invokes that switch after the port moves the old shell controls.
+1. **Table shape.** One row per need (`bubblewrap`, `socat`, `ripgrep`, `user namespaces` on
+   Linux; `sandbox-exec`, `ripgrep` on macOS), columns in the `probe-trackers.sh` shape, exit
+   0 always. The footer states `lane confinement: ready|partial|unavailable`, names the
+   command (or the rule) that finishes it when the verdict is `partial`, and explains the words.
+2. **`--verdict`.** `probe-confine.sh --verdict` prints one of `ready`, `partial`,
+   `unavailable` and nothing else. `setup.sh` uses that to validate `confine=on`. The default
+   (no flag) is the table. One implementation of the decision.
+3. **Linux order: packages first.** Missing packages are named in a single install command
+   for the machine's package manager (`apt-get`, `dnf`, `yum`, `pacman`, `zypper`, `apk`,
+   `brew` where present; packages `bubblewrap`, `socat`, `ripgrep`): `partial`, then the user
+   reruns the probe, which may reveal the AppArmor step next. A missing package with no known
+   manager is `unavailable`.
+4. **Readiness is a launch test, not the sysctl alone.** With the tools present, the probe
+   runs a minimal Bubblewrap user-namespace launch. When it fails on Ubuntu 24.04 or later
+   with `kernel.apparmor_restrict_unprivileged_userns=1` and no usable rule, the verdict is
+   `partial` naming the AppArmor rule from the brief (profile for `/usr/bin/bwrap` with
+   `userns,`) plus `sudo apparmor_parser -r /etc/apparmor.d/bwrap`, run by the user as root.
+   A profile file merely existing does not decide: loaded or not, the launch test tells the
+   truth. A failed launch with no known remedy is `unavailable` with its cause.
+5. **macOS.** `sandbox-exec` and `rg` on PATH means `ready`. Missing `rg` with Homebrew
+   present is `partial` naming `brew install ripgrep`; missing `sandbox-exec`, or missing
+   `rg` without Homebrew, is `unavailable`. Every macOS result says macOS has not been tried.
+   Any other platform is `unavailable`.
+6. **Setup.** Prints the probe table as it prints `probe-harnesses.sh`, then asks `confine`
+   once (`on`/`off`, default `off`). `on` is accepted when the verdict is `ready` or
+   `partial` (the user may still be about to run the root step) and refused with a message
+   naming the probe when `unavailable`. Any other value is refused. Writes top-level
+   `confine = "on"` or `"off"`; a config without the key reads as off.
+7. **Self-test surface.** The probe's controls live in `scripts/probe-confine.test.ts` and run
+   through `bun test` (no probe `--self-test`: the gate invokes none). `setup.sh --self-test`
+   runs `bun test scripts/setup.test.ts` so the existing gate keeps passing.
+8. **Test seam.** The probe reads tools through PATH and platform/sysctl through small edges
+   honoring `POSTMASTER_PROBE_PLATFORM` and `POSTMASTER_PROBE_SYSCTL` whenever set. Tests use
+   them (PATH stubs plus overrides) to force each verdict without touching the real machine;
+   docs never mention them. A stub `bwrap` that is present but fails the launch drives the
+   restricted control.
+9. **Docs.** `AGENTS.md`: probe list gains the probe; the confine question sits after the
+   tracker question. `SKILL.md`: the stage 0 launch card says whether lanes will run confined,
+   reading a missing key as off. `config.example.toml` documents top-level `confine`.
+   `README.md` script list gains the probe.
+
+## Acceptance checks
+
+Each check is the command, the input and the expected output, the way the work will really be used.
+
+- **AC1.** `scripts/probe-confine.sh` exits 0 and prints a table plus a footer. On this
+  machine (tools present, Bubblewrap starts) the footer says `lane confinement: ready`.
+  `scripts/probe-confine.sh --verdict` prints `ready` and nothing else. With `rg` hidden
+  behind PATH stubs, the table says `partial` and the footer names the install command.
+- **AC2.** On Ubuntu 24.04+ with restricted namespaces (stub `bwrap` present but failing the
+  launch, `POSTMASTER_PROBE_SYSCTL=1`), the probe prints `partial`, the
+  `/etc/apparmor.d/bwrap` rule block, and the activation command, saying the user runs them
+  as root. The `bun test scripts/probe-confine.test.ts` restricted control pins this output.
+- **AC3.** With a needed package hidden and a stub `apt-get` on PATH, the probe prints
+  `partial` and one install command. With no known package manager on PATH, it prints
+  `unavailable`.
+- **AC4.** With `POSTMASTER_PROBE_PLATFORM=darwin` and stub `sandbox-exec` plus `rg`, the
+  probe prints `ready` and a line saying macOS has not been tried.
+- **AC5.** `scripts/setup.sh --keys` lists `confine`. A full `--answers` run with
+  `confine=on` writes `confine = "on"` to the config; `confine=maybe` exits 1 and writes
+  nothing. With the probe forced to `unavailable`
+  (`POSTMASTER_PROBE_PLATFORM` set to an unknown platform), `confine=on` is refused with a
+  message naming the probe. `AGENTS.md` "What to settle" shows the question with the probe's
+  result; `config.example.toml` documents the key.
+- **AC6.** `skills/postmaster/SKILL.md` stage 0 "Launch card" step carries a line saying
+  whether lanes will run confined, from the config's `confine` key (missing reads as off).
+- **AC7.** `bun test scripts/probe-confine.test.ts` passes with a named control for each of
+  `ready`, `partial` and `unavailable`, each using stubs for the tools the probe looks for.
 
 ## Tasks
 
-- [ ] T001 [AC5] Copy `scripts/setup.ts`, `scripts/setup.sh`, `scripts/setup.test.ts`, `scripts/lib/data.ts`, `scripts/lib/paths.ts`, `scripts/lib/proc.ts`, and `bunfig.toml` unchanged from the specified commit and commit the copy alone.
-- [ ] T002 [AC1] Create `scripts/probe-confine.sh` and `scripts/probe-confine.ts` with a zero-exit table, footer, and a pure verdict function.
-- [ ] T003 [AC2] Add the Ubuntu restriction check, Bubblewrap launch check, and user-run AppArmor profile command to `scripts/probe-confine.ts`.
-- [ ] T004 [AC3] Add Linux package-manager detection and a combined install command for missing packages to `scripts/probe-confine.ts`.
-- [ ] T005 [AC4] Add macOS `sandbox-exec` and `rg` detection and the untried notice to `scripts/probe-confine.ts`.
-- [ ] T006 [AC7] Create `scripts/probe-confine.test.ts` with stubbed tools and controls for `ready`, `partial`, and `unavailable`; cover Ubuntu and macOS paths and the `--self-test` entry point.
-- [ ] T007 [AC5] Add `confine` to `scripts/setup.ts`, `scripts/setup.test.ts`, and `config.example.toml`; validate `on` against the probe and retain the setup self-test entry point.
-- [ ] T008 [AC5] Update `AGENTS.md` to ask the confine question once with the probe result, leave privileged commands to the user, and rerun the probe after their action.
-- [ ] T009 [AC6] Update the launch card in `skills/postmaster/SKILL.md` to show whether lanes will run confined, reading a missing config key as off.
-- [ ] T010 [AC1] Add the probe to `README.md`, run the targeted tests, lint, skill-reference check, and the worktree's pinned verification checks, then write and commit `WORKHORSE-SUMMARY.md` last.
+- [ ] T001 [P] [AC1] Copy the port files unchanged from `c70e592819302001e8ef3a358781a9ca4b5b5232` (`scripts/setup.ts`, `scripts/setup.sh`, `scripts/setup.test.ts`, `scripts/lib/data.ts`, `scripts/lib/paths.ts`, `scripts/lib/proc.ts`, `bunfig.toml`) and commit the copy on its own.
+- [ ] T002 [P] [AC1] Add `scripts/probe-confine.sh` (two-line Bun wrapper) and `scripts/probe-confine.ts`: rows plus footer in the `probe-trackers.sh` shape, exit 0, verdict `ready`/`partial`/`unavailable`, `--verdict` flag.
+- [ ] T003 [AC2] On restricted unprivileged user namespaces, say `partial` and name the AppArmor rule that lets only Bubblewrap create them, plus the activation the user runs as root.
+- [ ] T004 [AC3] When a needed package is missing, say `partial` and name the install command for the machine's package manager, or `unavailable` when no manager is known.
+- [ ] T005 [AC4] On macOS, say `ready` when `sandbox-exec` and ripgrep are present, and say macOS has not been tried.
+- [ ] T006 [AC7] `scripts/probe-confine.test.ts` with a control for each of `ready`, `partial` and `unavailable`, using stubs for the tools the probe looks for.
+- [ ] T007 [AC5] `scripts/setup.ts`: `confine` key `on`/`off` (default `off`), asked once after the probe is shown, refuse `on` when the probe says `unavailable`, write the key to the config; keep `scripts/setup.sh --self-test` working.
+- [ ] T008 [AC5] `scripts/setup.test.ts` controls for the `confine` key (writes `on`/`off`, defaults to `off`, refuses `on` when unavailable, refuses other values).
+- [ ] T009 [AC5] `config.example.toml` documents top-level `confine`.
+- [ ] T010 [AC5] `AGENTS.md`: run `scripts/probe-confine.sh` with the other probes, and ask the confine question once in "What to settle" with the probe's result, noting any root command is the user's and the probe runs again after.
+- [ ] T011 [AC6] `skills/postmaster/SKILL.md` stage 0 launch card says whether lanes will run confined; `README.md` script list gains the probe.
+- [ ] T012 [AC1] Run `bun test ./scripts`, `bun run lint`, the pinned `scripts/skill-refs.sh`, and the pinned `scripts/verify.sh run .`; record each check, then write and commit `WORKHORSE-SUMMARY.md` last.
