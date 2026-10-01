@@ -1,0 +1,152 @@
+source: git 1223cc0 1223cc0bc36a3cb33c94c2a7be87bb0aa5e45b1e
+rules in the table: 8; entries in the format file: 21
+lines compared: 20093 (92 fixtures, 20000 generated, seed 135)
+mutation: allowlists dropped from every email entry
+    entry ACCOUNT_FIELDS finds something on 133 line(s)
+    entry ORGANIZATION_FIELDS finds something on 155 line(s)
+    entry OPAQUE_ID finds something on 630 line(s)
+    entry UUID and ACCOUNT_CONTEXT finds something on 77 line(s)
+expressed  account-id  (4 entries; the table finds it on 990 line(s))
+    entry ASSISTANT_ATTRIBUTION[0] finds something on 834 line(s)
+    entry ASSISTANT_ATTRIBUTION[1] finds something on 585 line(s)
+    entry ASSISTANT_ATTRIBUTION[2] finds something on 1126 line(s)
+expressed  assistant-attribution  (3 entries; the table finds it on 2545 line(s))
+    entry DOTENV_LINE and dotenv_finding finds something on 45 line(s)
+expressed  dotenv  (1 entry; the table finds it on 45 line(s))
+    entry EMAIL and public_noreply finds something on 2682 line(s)
+NOT EXPRESSED  email  (1 entry; the table finds it on 1457 line(s))
+    disagrees with the table on 1275 line(s); first: fixture neg-noreply-domain line 1: table 0 span(s), format 1
+    entry SENSITIVE_KEYS finds something on 257 line(s)
+expressed  key  (1 entry; the table finds it on 257 line(s))
+    entry PRIVATE_HOST finds something on 690 line(s)
+    entry TS_NET finds something on 74 line(s)
+    entry IPV4 and ip_spans finds something on 136 line(s)
+    entry IPV6 and ip_spans finds something on 299 line(s)
+expressed  private-host  (4 entries; the table finds it on 1184 line(s))
+    entry PRIVATE_PATH and PLACEHOLDER_USER finds something on 1726 line(s)
+expressed  private-path  (1 entry; the table finds it on 1726 line(s))
+    entry TOKEN finds something on 1135 line(s)
+    entry XOX_TOKEN finds something on 872 line(s)
+    entry ACCESS_KEY finds something on 69 line(s)
+    entry PEM_HEADER finds something on 1729 line(s)
+    entry BEARER_TOKEN finds something on 651 line(s)
+    entry SECRET_FIELDS and SECRET_VALUE finds something on 122 line(s)
+expressed  token  (6 entries; the table finds it on 3771 line(s))
+listed: email
+exit 1
+
+ok    dropping email/allowlists lists email
+source: git 1223cc0 1223cc0bc36a3cb33c94c2a7be87bb0aa5e45b1e
+rules in the table: 8; entries in the format file: 21
+lines compared: 20093 (92 fixtures, 20000 generated, seed 135)
+mutation: requires dropped from every account-id entry
+    entry ACCOUNT_FIELDS finds something on 133 line(s)
+    entry ORGANIZATION_FIELDS finds something on 155 line(s)
+    entry OPAQUE_ID finds something on 630 line(s)
+    entry UUID and ACCOUNT_CONTEXT finds something on 535 line(s)
+NOT EXPRESSED  account-id  (4 entries; the table finds it on 990 line(s))
+    disagrees with the table on 457 line(s); first: fixture neg-uuid-bare line 1: table 0 span(s), format 1
+    entry ASSISTANT_ATTRIBUTION[0] finds something on 834 line(s)
+    entry ASSISTANT_ATTRIBUTION[1] finds something on 585 line(s)
+    entry ASSISTANT_ATTRIBUTION[2] finds something on 1126 line(s)
+expressed  assistant-attribution  (3 entries; the table finds it on 2545 line(s))
+    entry DOTENV_LINE and dotenv_finding finds something on 45 line(s)
+expressed  dotenv  (1 entry; the table finds it on 45 line(s))
+    entry EMAIL and public_noreply finds something on 1457 line(s)
+expressed  email  (1 entry; the table finds it on 1457 line(s))
+    entry SENSITIVE_KEYS finds something on 257 line(s)
+expressed  key  (1 entry; the table finds it on 257 line(s))
+    entry PRIVATE_HOST finds something on 690 line(s)
+    entry TS_NET finds something on 74 line(s)
+    entry IPV4 and ip_spans finds something on 136 line(s)
+    entry IPV6 and ip_spans finds something on 299 line(s)
+expressed  private-host  (4 entries; the table finds it on 1184 line(s))
+    entry PRIVATE_PATH and PLACEHOLDER_USER finds something on 1726 line(s)
+expressed  private-path  (1 entry; the table finds it on 1726 line(s))
+    entry TOKEN finds something on 1135 line(s)
+    entry XOX_TOKEN finds something on 872 line(s)
+    entry ACCESS_KEY finds something on 69 line(s)
+    entry PEM_HEADER finds something on 1729 line(s)
+    entry BEARER_TOKEN finds something on 651 line(s)
+    entry SECRET_FIELDS and SECRET_VALUE finds something on 122 line(s)
+expressed  token  (6 entries; the table finds it on 3771 line(s))
+listed: account-id
+exit 1
+
+ok    dropping account-id/requires lists account-id
+source: git 1223cc0 1223cc0bc36a3cb33c94c2a7be87bb0aa5e45b1e
+rules in the table: 8; entries in the format file: 21
+lines compared: 20093 (92 fixtures, 20000 generated, seed 135)
+mutation: check dropped from every private-host entry
+    entry ACCOUNT_FIELDS finds something on 133 line(s)
+    entry ORGANIZATION_FIELDS finds something on 155 line(s)
+    entry OPAQUE_ID finds something on 630 line(s)
+    entry UUID and ACCOUNT_CONTEXT finds something on 77 line(s)
+expressed  account-id  (4 entries; the table finds it on 990 line(s))
+    entry ASSISTANT_ATTRIBUTION[0] finds something on 834 line(s)
+    entry ASSISTANT_ATTRIBUTION[1] finds something on 585 line(s)
+    entry ASSISTANT_ATTRIBUTION[2] finds something on 1126 line(s)
+expressed  assistant-attribution  (3 entries; the table finds it on 2545 line(s))
+    entry DOTENV_LINE and dotenv_finding finds something on 45 line(s)
+expressed  dotenv  (1 entry; the table finds it on 45 line(s))
+    entry EMAIL and public_noreply finds something on 1457 line(s)
+expressed  email  (1 entry; the table finds it on 1457 line(s))
+    entry SENSITIVE_KEYS finds something on 257 line(s)
+expressed  key  (1 entry; the table finds it on 257 line(s))
+    entry PRIVATE_HOST finds something on 690 line(s)
+    entry TS_NET finds something on 74 line(s)
+    entry IPV4 and ip_spans finds something on 782 line(s)
+    entry IPV6 and ip_spans finds something on 1141 line(s)
+NOT EXPRESSED  private-host  (4 entries; the table finds it on 1184 line(s))
+    disagrees with the table on 1474 line(s); first: fixture neg-loopback-v4 line 1: table 0 span(s), format 1
+    entry PRIVATE_PATH and PLACEHOLDER_USER finds something on 1726 line(s)
+expressed  private-path  (1 entry; the table finds it on 1726 line(s))
+    entry TOKEN finds something on 1135 line(s)
+    entry XOX_TOKEN finds something on 872 line(s)
+    entry ACCESS_KEY finds something on 69 line(s)
+    entry PEM_HEADER finds something on 1729 line(s)
+    entry BEARER_TOKEN finds something on 651 line(s)
+    entry SECRET_FIELDS and SECRET_VALUE finds something on 122 line(s)
+expressed  token  (6 entries; the table finds it on 3771 line(s))
+listed: private-host
+exit 1
+
+ok    dropping private-host/check lists private-host
+source: git 1223cc0 1223cc0bc36a3cb33c94c2a7be87bb0aa5e45b1e
+rules in the table: 8; entries in the format file: 21
+lines compared: 20093 (92 fixtures, 20000 generated, seed 135)
+mutation: minLength dropped from every dotenv entry
+    entry ACCOUNT_FIELDS finds something on 133 line(s)
+    entry ORGANIZATION_FIELDS finds something on 155 line(s)
+    entry OPAQUE_ID finds something on 630 line(s)
+    entry UUID and ACCOUNT_CONTEXT finds something on 77 line(s)
+expressed  account-id  (4 entries; the table finds it on 990 line(s))
+    entry ASSISTANT_ATTRIBUTION[0] finds something on 834 line(s)
+    entry ASSISTANT_ATTRIBUTION[1] finds something on 585 line(s)
+    entry ASSISTANT_ATTRIBUTION[2] finds something on 1126 line(s)
+expressed  assistant-attribution  (3 entries; the table finds it on 2545 line(s))
+    entry DOTENV_LINE and dotenv_finding finds something on 59 line(s)
+NOT EXPRESSED  dotenv  (1 entry; the table finds it on 45 line(s))
+    disagrees with the table on 14 line(s); first: fixture neg-dotenv-short-stripped line 1: table 0 span(s), format 1
+    entry EMAIL and public_noreply finds something on 1457 line(s)
+expressed  email  (1 entry; the table finds it on 1457 line(s))
+    entry SENSITIVE_KEYS finds something on 257 line(s)
+expressed  key  (1 entry; the table finds it on 257 line(s))
+    entry PRIVATE_HOST finds something on 690 line(s)
+    entry TS_NET finds something on 74 line(s)
+    entry IPV4 and ip_spans finds something on 136 line(s)
+    entry IPV6 and ip_spans finds something on 299 line(s)
+expressed  private-host  (4 entries; the table finds it on 1184 line(s))
+    entry PRIVATE_PATH and PLACEHOLDER_USER finds something on 1726 line(s)
+expressed  private-path  (1 entry; the table finds it on 1726 line(s))
+    entry TOKEN finds something on 1135 line(s)
+    entry XOX_TOKEN finds something on 872 line(s)
+    entry ACCESS_KEY finds something on 69 line(s)
+    entry PEM_HEADER finds something on 1729 line(s)
+    entry BEARER_TOKEN finds something on 651 line(s)
+    entry SECRET_FIELDS and SECRET_VALUE finds something on 122 line(s)
+expressed  token  (6 entries; the table finds it on 3771 line(s))
+listed: dotenv
+exit 1
+
+ok    dropping dotenv/minLength lists dotenv

@@ -1,0 +1,22 @@
+# The controls' table in the proposed format. ctl-missing has no entry on purpose.
+
+# The positive control: written exactly.
+[[rules]]
+id = "ctl-widget"
+description = "WIDGET"
+regex = '''(?<![A-Za-z0-9])WIDGET-[0-9]{4}(?![0-9])'''
+flags = "u"
+
+# A negative control: the nearest the format comes, nine digits with no check digit.
+[[rules]]
+id = "ctl-checksum"
+description = "SERIAL, without its check digit"
+regex = '''(?<![0-9])[0-9]{9}(?![0-9])'''
+flags = "u"
+
+# A negative control: the table's own pattern, conditional group and all.
+[[rules]]
+id = "ctl-conditional"
+description = "DOUBLED"
+regex = '''(?<![a-z])(<)?(?<word>[a-z]{3})-\k<word>(?(1)>)(?![a-z])'''
+flags = "u"

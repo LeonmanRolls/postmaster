@@ -1,0 +1,206 @@
+# #135's rule table, written in the proposed format. Each entry names the #135 pattern or
+# function it stands for. The regular expressions are ECMAScript with the u flag, and spell out
+# what Python's re means where ECMAScript differs:
+#   Python \s  [\t-\r\x1c-\x20\x85\xa0  -     　]
+#   Python \S  the same class, negated
+#   Python \b  (?:(?<=[\p{L}\p{N}_])(?![\p{L}\p{N}_])|(?<![\p{L}\p{N}_])(?=[\p{L}\p{N}_]))
+#   Python .   [^\n]
+# Literals that would match a rule are broken by the regular expression syntax around them, as
+# in #135's own source, so this file scans clean under the rules it holds.
+
+# --- key, SENSITIVE_KEYS, the value not an absence marker (ABSENT_VALUE)
+[[rules]]
+id = "key"
+description = "SENSITIVE_KEYS"
+regex = '''(?<![A-Za-z0-9_])(?:userEmail|user_email|user-email|sess[i]on_context|sessionContext|credential_org|credentialOrg|credential_org_id)(?:(?<=[\p{L}\p{N}_])(?![\p{L}\p{N}_])|(?<![\p{L}\p{N}_])(?=[\p{L}\p{N}_]))[\t-\r\x1c-\x20\x85\xa0  -     　]*["']?[\t-\r\x1c-\x20\x85\xa0  -     　]*[:=][\t-\r\x1c-\x20\x85\xa0  -     　]*(?:"(?<double>[^"\n]+)"|'(?<single>[^'\n]+)'|(?<bare>[^\t-\r\x1c-\x20\x85\xa0  -     　"',;}\]]+))'''
+flags = "iu"
+secretGroup = ["double", "single", "bare"]
+[[rules.allowlists]]
+regexes = ['''^(?:null|None|true|false|N/?A|\.{2,}|<[^<>]*>)$''']
+flags = "iu"
+
+# --- account-id, ACCOUNT_FIELDS
+[[rules]]
+id = "account-id"
+description = "ACCOUNT_FIELDS"
+regex = '''(?<![A-Za-z0-9_])(?:accountId|accountID|account_id|account-id|accountUuid|account_uuid|account-uuid|userId|user_id|user-id)(?:(?<=[\p{L}\p{N}_])(?![\p{L}\p{N}_])|(?<![\p{L}\p{N}_])(?=[\p{L}\p{N}_]))[\t-\r\x1c-\x20\x85\xa0  -     　]*["']?[\t-\r\x1c-\x20\x85\xa0  -     　]*[:=][\t-\r\x1c-\x20\x85\xa0  -     　]*(?:"(?<double>[^"\n]+)"|'(?<single>[^'\n]+)'|(?<bare>[^\t-\r\x1c-\x20\x85\xa0  -     　"',;}\]]+))'''
+flags = "iu"
+secretGroup = ["double", "single", "bare"]
+[[rules.allowlists]]
+regexes = ['''^(?:null|None|true|false|N/?A|\.{2,}|<[^<>]*>)$''']
+flags = "iu"
+
+# --- account-id, ORGANIZATION_FIELDS
+[[rules]]
+id = "account-id"
+description = "ORGANIZATION_FIELDS"
+regex = '''(?<![A-Za-z0-9_])(?:organizationUuid|organization_uuid|organization-uuid|organizationId|organization_id|organization-id|orgId|org_id|org-id|orgUuid|org_uuid|org-uuid)(?:(?<=[\p{L}\p{N}_])(?![\p{L}\p{N}_])|(?<![\p{L}\p{N}_])(?=[\p{L}\p{N}_]))[\t-\r\x1c-\x20\x85\xa0  -     　]*["']?[\t-\r\x1c-\x20\x85\xa0  -     　]*[:=][\t-\r\x1c-\x20\x85\xa0  -     　]*(?:"(?<double>[^"\n]+)"|'(?<single>[^'\n]+)'|(?<bare>[^\t-\r\x1c-\x20\x85\xa0  -     　"',;}\]]+))'''
+flags = "iu"
+secretGroup = ["double", "single", "bare"]
+[[rules.allowlists]]
+regexes = ['''^(?:null|None|true|false|N/?A|\.{2,}|<[^<>]*>)$''']
+flags = "iu"
+
+# --- email, EMAIL, unless public_noreply
+[[rules]]
+id = "email"
+description = "EMAIL and public_noreply"
+regex = '''(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}(?![A-Za-z0-9-])'''
+flags = "u"
+[[rules.allowlists]]
+regexes = [
+  '''^(?:noreply|no-reply|no_reply|donotreply|do-not-reply|do_not_reply|noresponse|no-response|no_response|mailer-daemon|mailer_daemon)@''',
+  '''@users\.noreply\.github\.com$''',
+  '''@(?:[^@]*\.)?(?:example|example\.com|example\.net|example\.org|test|invalid|localhost)$''',
+]
+flags = "iu"
+
+# --- account-id, OPAQUE_ID
+[[rules]]
+id = "account-id"
+description = "OPAQUE_ID"
+regex = '''(?<![A-Za-z0-9_-])(?:org|acct|account|sess|ses|session)[_-](?=[^\t-\r\x1c-\x20\x85\xa0  -     　]*[0-9])[A-Za-z0-9]{6,}(?![A-Za-z0-9_-])'''
+flags = "u"
+
+# --- account-id, UUID, on a line with ACCOUNT_CONTEXT
+[[rules]]
+id = "account-id"
+description = "UUID and ACCOUNT_CONTEXT"
+regex = '''(?:(?<=[\p{L}\p{N}_])(?![\p{L}\p{N}_])|(?<![\p{L}\p{N}_])(?=[\p{L}\p{N}_]))[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}(?:(?<=[\p{L}\p{N}_])(?![\p{L}\p{N}_])|(?<![\p{L}\p{N}_])(?=[\p{L}\p{N}_]))'''
+flags = "u"
+[[rules.requires]]
+regexTarget = "line"
+regexes = ['''(?:(?<=[\p{L}\p{N}_])(?![\p{L}\p{N}_])|(?<![\p{L}\p{N}_])(?=[\p{L}\p{N}_]))(?:account|org(?:anization)?s?|user|identity|credential|session|thread)s?(?:(?<=[\p{L}\p{N}_])(?![\p{L}\p{N}_])|(?<![\p{L}\p{N}_])(?=[\p{L}\p{N}_]))''']
+flags = "iu"
+
+# --- private-path, PRIVATE_PATH, its trailing punctuation stripped, its user not a placeholder
+# (PLACEHOLDER_USER). Each alternative captures the stripped span as a lookahead group.
+[[rules]]
+id = "private-path"
+description = "PRIVATE_PATH and PLACEHOLDER_USER"
+regex = '''(?<![A-Za-z0-9_.$}~.-])(?=(?<home>(?:/home/|/Users/)(?:[A-Za-z0-9._-]*?[A-Za-z0-9_-])?)\.*(?![A-Za-z0-9._-]))(?:/home/|/Users/)(?<user1>[A-Za-z0-9._-]+)(?![A-Za-z0-9._-])|(?<![A-Za-z0-9_.$}~.-])(?=(?<root>/ro[o]t/(?:[A-Za-z0-9._-]*?[A-Za-z0-9_-])?)\.*(?![A-Za-z0-9._-]))/ro[o]t/[A-Za-z0-9._-]+|(?<![A-Za-z0-9_])(?=(?<tilde>~[A-Za-z0-9._-]+/(?:[^\t-\r\x1c-\x20\x85\xa0  -     　"'<>),;]*?[^\t-\r\x1c-\x20\x85\xa0  -     　"'<>),;.!?:\]}\x60])?)[.!?:\]}\x60]*(?![^\t-\r\x1c-\x20\x85\xa0  -     　"'<>),;]))~(?!\.)(?<user2>[A-Za-z0-9._-]+)/[^\t-\r\x1c-\x20\x85\xa0  -     　"'<>),;]*|(?<![A-Za-z0-9_.$}~.-])(?=(?<scratch1>/tmp/(?:claude|codex|mimo|grok|pi|agy|muse|postmaster|anthropic|openai)-(?:[A-Za-z0-9._-]*?[A-Za-z0-9_-])?)\.*(?![A-Za-z0-9._-])|(?<scratch2>/tmp/(?:claude|codex|mimo|grok|pi|agy|muse|postmaster|anthropic|openai)/(?:[^\t-\r\x1c-\x20\x85\xa0  -     　"'<>),;]*?[^\t-\r\x1c-\x20\x85\xa0  -     　"'<>),;.!?:\]}\x60])?)[.!?:\]}\x60]*(?![^\t-\r\x1c-\x20\x85\xa0  -     　"'<>),;]))/tmp/(?:claude|codex|mimo|grok|pi|agy|muse|postmaster|anthropic|openai)(?:-[A-Za-z0-9._-]+|/[^\t-\r\x1c-\x20\x85\xa0  -     　"'<>),;]+)|(?<![A-Za-z0-9_])(?=(?<drive>[A-Za-z]:\\Users\\(?:[A-Za-z0-9._-]*?[A-Za-z0-9_-])?)\.*(?![A-Za-z0-9._-]))[A-Za-z]:\\Users\\(?<user3>[A-Za-z0-9._-]+)(?![A-Za-z0-9._-])'''
+flags = "iu"
+secretGroup = ["home", "root", "tilde", "scratch1", "scratch2", "drive"]
+[[rules.allowlists]]
+regexTarget = "group:user1"
+regexes = ['''^(?:user|username|\*|\$USER|\$\{USER\}|<[^<>]*>)$''']
+flags = "iu"
+[[rules.allowlists]]
+regexTarget = "group:user2"
+regexes = ['''^(?:user|username|\*|\$USER|\$\{USER\}|<[^<>]*>)$''']
+flags = "iu"
+[[rules.allowlists]]
+regexTarget = "group:user3"
+regexes = ['''^(?:user|username|\*|\$USER|\$\{USER\}|<[^<>]*>)$''']
+flags = "iu"
+
+# --- private-host, PRIVATE_HOST
+[[rules]]
+id = "private-host"
+description = "PRIVATE_HOST"
+regex = '''(?<![A-Za-z0-9_-])(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+(?:local|internal|lan|home|tailnet|intranet|private|corp)(?:(?<=[\p{L}\p{N}_])(?![\p{L}\p{N}_])|(?<![\p{L}\p{N}_])(?=[\p{L}\p{N}_]))'''
+flags = "iu"
+
+# --- private-host, TS_NET
+[[rules]]
+id = "private-host"
+description = "TS_NET"
+regex = '''(?<![A-Za-z0-9_.-])(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+ts\.net(?:(?<=[\p{L}\p{N}_])(?![\p{L}\p{N}_])|(?<![\p{L}\p{N}_])(?=[\p{L}\p{N}_]))'''
+flags = "iu"
+
+# --- private-host, IPV4 and IPV6 through ip_spans, as the named check ip-private
+[[rules]]
+id = "private-host"
+description = "IPV4 and ip_spans"
+regex = '''(?<![0-9.])(?:[0-9]{1,3}\.){3}[0-9]{1,3}(?![0-9.])'''
+flags = "u"
+check = "ip-private"
+
+[[rules]]
+id = "private-host"
+description = "IPV6 and ip_spans"
+regex = '''(?<![0-9A-Fa-f:])(?:[0-9A-Fa-f]{0,4}:){2,7}[0-9A-Fa-f]{0,4}(?![0-9A-Fa-f:])'''
+flags = "u"
+check = "ip-private"
+
+# --- token, TOKEN, XOX_TOKEN, ACCESS_KEY, PEM_HEADER, BEARER_TOKEN
+[[rules]]
+id = "token"
+description = "TOKEN"
+regex = '''(?<![A-Za-z0-9])(?<value>(?:github_pat_|sk_live_|sk_test_|xoxb-|xoxp-|xoxa-|xoxr-|xoxs-|ya29\.|ghp_|gho_|ghu_|ghs_|ghr_|sk-)[A-Za-z0-9_./+-]{20,})'''
+flags = "u"
+secretGroup = "value"
+
+[[rules]]
+id = "token"
+description = "XOX_TOKEN"
+regex = '''(?<![A-Za-z0-9])(?<value>xox[baprs]-[A-Za-z0-9-]{10,})'''
+flags = "u"
+secretGroup = "value"
+
+[[rules]]
+id = "token"
+description = "ACCESS_KEY"
+regex = '''(?<![A-Za-z0-9])(?<value>AK[I]A[A-Z0-9]{16})(?![A-Za-z0-9])'''
+flags = "u"
+secretGroup = "value"
+
+[[rules]]
+id = "token"
+description = "PEM_HEADER"
+regex = '''(?<value>-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----)'''
+flags = "iu"
+secretGroup = "value"
+
+[[rules]]
+id = "token"
+description = "BEARER_TOKEN"
+regex = '''(?:(?<=[\p{L}\p{N}_])(?![\p{L}\p{N}_])|(?<![\p{L}\p{N}_])(?=[\p{L}\p{N}_]))(?<value>Bearer[\t-\r\x1c-\x20\x85\xa0  -     　]+[A-Za-z0-9._~+/-]{20,}={0,2})'''
+flags = "iu"
+secretGroup = "value"
+
+# --- token, SECRET_FIELDS, the value at least 20 characters of SECRET_VALUE
+[[rules]]
+id = "token"
+description = "SECRET_FIELDS and SECRET_VALUE"
+regex = '''(?<![A-Za-z0-9_])(?:api_key|apiKey|access_token|accessToken|refresh_token|refreshToken|client_secret|clientSecret|private_key|privateKey|secret|token|password|credential)(?:(?<=[\p{L}\p{N}_])(?![\p{L}\p{N}_])|(?<![\p{L}\p{N}_])(?=[\p{L}\p{N}_]))[\t-\r\x1c-\x20\x85\xa0  -     　]*["']?[\t-\r\x1c-\x20\x85\xa0  -     　]*[:=][\t-\r\x1c-\x20\x85\xa0  -     　]*(?:"(?<double>[^"\n]+)"|'(?<single>[^'\n]+)'|(?<bare>[^\t-\r\x1c-\x20\x85\xa0  -     　"',;}\]]+))'''
+flags = "iu"
+secretGroup = ["double", "single", "bare"]
+minLength = 20
+[[rules.requires]]
+regexes = ['''^[A-Za-z0-9_./+=-]{20,}$''']
+flags = "iu"
+
+# --- dotenv, DOTENV_LINE and dotenv_finding. The name has a key-like component and no pointer
+# suffix; a quoted value counts as its inner text when nothing but a comment follows it; an
+# unquoted value ends where a blank-led # starts; the value is at least eight characters,
+# not an absence marker, and holds no shell or code metacharacter.
+[[rules]]
+id = "dotenv"
+description = "DOTENV_LINE and dotenv_finding"
+regex = '''^[\t-\r\x1c-\x20\x85\xa0  -     　]*(?:export[\t-\r\x1c-\x20\x85\xa0  -     　]+)?(?![A-Za-z0-9_-]*_(?:[Pp][Aa][Tt][Hh]|[Ff][Ii][Ll][Ee]|[Dd][Ii][Rr]|[Uu][Rr][Ll]|[Tt][Yy][Pp][Ee]|[Hh][Oo][Ss][Tt]|[Pp][Oo][Rr][Tt])[\t-\r\x1c-\x20\x85\xa0  -     　]*=)(?=(?:[A-Za-z0-9_-]*[_-])?(?:[Kk][Ee][Yy][Ss]?|[Ss][Ee][Cc][Rr][Ee][Tt][Ss]?|[Tt][Oo][Kk][Ee][Nn][Ss]?|[Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]|[Pp][Aa][Ss][Ss][Ww][Dd]|[Pp][Ww][Dd]|[Cc][Rr][Ee][Dd][Ee][Nn][Tt][Ii][Aa][Ll][Ss]?|[Pp][Rr][Ii][Vv][Aa][Tt][Ee]|[Aa][Uu][Tt][Hh]|[Pp][Aa][Ss][Ss][Pp][Hh][Rr][Aa][Ss][Ee]|[Cc][Ee][Rr][Tt])(?:[_-]|[\t-\r\x1c-\x20\x85\xa0  -     　]*=))[A-Za-z_][A-Za-z0-9_-]*[\t-\r\x1c-\x20\x85\xa0  -     　]*=[\t-\r\x1c-\x20\x85\xa0  -     　]*(?:"(?<double>[^$\x60(){}\];|&<>"'\\\n]*)"[\t-\r\x1c-\x20\x85\xa0  -     　]*(?:#[^\n]*)?$|'(?<single>[^$\x60(){}\];|&<>"'\\\n]*)'[\t-\r\x1c-\x20\x85\xa0  -     　]*(?:#[^\n]*)?$|(?!#(?:[\t-\r\x1c-\x20\x85\xa0  -     　]|$))(?<bare>[^\t-\r\x1c-\x20\x85\xa0  -     　"'$\x60(){}\];|&<>\\\n][^$\x60(){}\];|&<>"'\\\n]*?)(?=[\t-\r\x1c-\x20\x85\xa0  -     　]+#|[\t-\r\x1c-\x20\x85\xa0  -     　]*$))'''
+flags = "u"
+secretGroup = ["double", "single", "bare"]
+minLength = 8
+[[rules.allowlists]]
+regexes = ['''^(?:null|None|true|false|N/?A|\.{2,}|<[^<>]*>)$''']
+flags = "iu"
+
+# --- assistant-attribution, ASSISTANT_ATTRIBUTION
+[[rules]]
+id = "assistant-attribution"
+description = "ASSISTANT_ATTRIBUTION[0]"
+regex = '''^[\t-\r\x1c-\x20\x85\xa0  -     　]*Co-Authored-By:[\t-\r\x1c-\x20\x85\xa0  -     　]*[^\t-\r\x1c-\x20\x85\xa0  -     　][^\n]*'''
+flags = "iu"
+
+[[rules]]
+id = "assistant-attribution"
+description = "ASSISTANT_ATTRIBUTION[1]"
+regex = '''^[\t-\r\x1c-\x20\x85\xa0  -     　]*(?:Generated|Created|Written|Drafted)[\t-\r\x1c-\x20\x85\xa0  -     　]+(?:with|by)[\t-\r\x1c-\x20\x85\xa0  -     　]+(?:Anthropic|ChatGPT|Claude|Codex|Copilot|Cursor|Gemini|GPT|OpenAI)(?:(?<=[\p{L}\p{N}_])(?![\p{L}\p{N}_])|(?<![\p{L}\p{N}_])(?=[\p{L}\p{N}_]))[^\n]*'''
+flags = "iu"
+
+[[rules]]
+id = "assistant-attribution"
+description = "ASSISTANT_ATTRIBUTION[2]"
+regex = '''^[\t-\r\x1c-\x20\x85\xa0  -     　]*generated-with[\t-\r\x1c-\x20\x85\xa0  -     　]*:[\t-\r\x1c-\x20\x85\xa0  -     　]*[^\t-\r\x1c-\x20\x85\xa0  -     　][^\n]*'''
+flags = "iu"

@@ -1,0 +1,6 @@
+date: 2026-10-01
+table: 1223cc0bc36a3cb33c94c2a7be87bb0aa5e45b1e (ref 1223cc0), scripts/scrub-check.sh
+bun: 1.4.2
+node: v24.21.0
+python: Python 3.12.3
+later table: c47d24696bb5a407bc07834c7dedf6c1ae6911e3 (ref c47d246)

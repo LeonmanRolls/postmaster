@@ -1,0 +1,11 @@
+trailer              assistant-attribution control: an assistant co-author trailer
+pr-default           nothing      Claude Code's documented default pull-request attribution line
+pr-footer            nothing      the pull-request footer Claude Code has long written
+pr-footer-plain      nothing      the same footer without its emoji
+json-depth-1         private-path control: a home path after an escaped newline in a JSON string
+json-depth-2         nothing      the same path one JSON level deeper, a document held in a string
+thinking-signature   nothing      a thinking block whose reasoning is only in its encrypted signature
+reasoning-encrypted  nothing      a reasoning item whose content is encrypted
+
+ok    the trailer control is found
+ok    the depth-1 control is found

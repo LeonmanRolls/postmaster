@@ -1,0 +1,37 @@
+source: git c47d246 c47d24696bb5a407bc07834c7dedf6c1ae6911e3
+rules in the table: 8; entries in the format file: 21
+lines compared: 50114 (113 fixtures, 50000 generated, seed 135)
+    entry ACCOUNT_FIELDS finds something on 384 line(s)
+    entry ORGANIZATION_FIELDS finds something on 400 line(s)
+    entry OPAQUE_ID finds something on 1493 line(s)
+    entry UUID and ACCOUNT_CONTEXT finds something on 178 line(s)
+NOT EXPRESSED  account-id  (4 entries; the table finds it on 2538 line(s))
+    disagrees with the table on 416 line(s); first: fixture pos-bare-id line 1: table 1 span(s), format 0
+    entry ASSISTANT_ATTRIBUTION[0] finds something on 1991 line(s)
+    entry ASSISTANT_ATTRIBUTION[1] finds something on 1445 line(s)
+    entry ASSISTANT_ATTRIBUTION[2] finds something on 2828 line(s)
+expressed  assistant-attribution  (3 entries; the table finds it on 6264 line(s))
+    entry DOTENV_LINE and dotenv_finding finds something on 110 line(s)
+expressed  dotenv  (1 entry; the table finds it on 110 line(s))
+    entry EMAIL and public_noreply finds something on 3579 line(s)
+expressed  email  (1 entry; the table finds it on 3579 line(s))
+    entry SENSITIVE_KEYS finds something on 635 line(s)
+NOT EXPRESSED  key  (1 entry; the table finds it on 661 line(s))
+    disagrees with the table on 140 line(s); first: fixture pos-compound-email line 1: table 1 span(s), format 0
+    entry PRIVATE_HOST finds something on 1740 line(s)
+    entry TS_NET finds something on 195 line(s)
+    entry IPV4 and ip_spans finds something on 336 line(s)
+    entry IPV6 and ip_spans finds something on 749 line(s)
+expressed  private-host  (4 entries; the table finds it on 2979 line(s))
+    entry PRIVATE_PATH and PLACEHOLDER_USER finds something on 4327 line(s)
+expressed  private-path  (1 entry; the table finds it on 4327 line(s))
+    entry TOKEN finds something on 2774 line(s)
+    entry XOX_TOKEN finds something on 2154 line(s)
+    entry ACCESS_KEY finds something on 185 line(s)
+    entry PEM_HEADER finds something on 4325 line(s)
+    entry BEARER_TOKEN finds something on 1605 line(s)
+    entry SECRET_FIELDS and SECRET_VALUE finds something on 328 line(s)
+NOT EXPRESSED  token  (6 entries; the table finds it on 9436 line(s))
+    disagrees with the table on 78 line(s); first: fixture pos-compound-password line 1: table 1 span(s), format 0
+listed: account-id, key, token
+exit 1

@@ -1,0 +1,21 @@
+source: file raw/trials/scanner-rule-format/apparatus/controls/table.sh
+rules in the table: 4; entries in the format file: 3
+lines compared: 20024 (24 fixtures, 20000 generated, seed 135)
+    entry SERIAL, without its check digit finds something on 150 line(s)
+NOT EXPRESSED  ctl-checksum  (1 entry; the table finds it on 15 line(s))
+    disagrees with the table on 135 line(s); first: fixture neg-serial-digit line 1: table 0 span(s), format 1
+NOT EXPRESSED  ctl-conditional  (1 entry; the table finds it on 3 line(s))
+    entry DOUBLED: regex does not compile: SyntaxError: Invalid regular expression: unrecognized character after (?
+    disagrees with the table on 3 line(s); first: fixture pos-doubled line 1: table 1 span(s), format 0
+NOT EXPRESSED  ctl-missing  (0 entries; the table finds it on 3 line(s))
+    no entry in the format file
+    entry WIDGET finds something on 3 line(s)
+expressed  ctl-widget  (1 entry; the table finds it on 3 line(s))
+listed: ctl-checksum, ctl-conditional, ctl-missing
+exit 1
+
+ok    the positive control, ctl-widget, is expressed
+ok    ctl-checksum is listed, for disagreeing with the table
+ok    ctl-conditional is listed, for an entry the format refuses
+ok    ctl-missing is listed, for having no entry
+ok    the run exits 1 when it lists a rule

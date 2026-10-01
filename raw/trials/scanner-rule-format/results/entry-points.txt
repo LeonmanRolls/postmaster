@@ -1,0 +1,6 @@
+USAGE = ("usage: scrub-check.sh <base> <head> | --files <path>... | "
+         "--files-inert <path>... | --pr-description <file> | --spans <path>... | "
+         "--safe-path <path>... | --log-detection <rule> <file> <line> [<commit>] | "
+         "--self-test | --help")
+USAGE="usage: raw-promote.sh <src> <dest> | --self-test | --help"
+USAGE="usage: scrub-rewrite.sh [<base> [<head>]] | --self-test | --help"
