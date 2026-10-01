@@ -125,6 +125,17 @@ if [ "${1:-}" = "--self-test" ]; then
     else printf '  ok   a multi-span scrub publishes no fragment\n'; fi
   }
   r=$(repo) && { cd "$r" || exit 2
+    JPATH=$(printf '/home/%s' fixture-user)
+    printf '{"text": "first line\\n%s-413/notes.txt/x"}\n' "$JPATH" > "$tmp/jsonl.md"
+    out=$(bash "$HERE/raw-promote.sh" "$tmp/jsonl.md" raw/trials/t413/notes.md 2>"$tmp/err"); code=$?
+    { [ "$code" -eq 0 ] && grep -qF '<redacted:private-path>' "$r/raw/trials/t413/notes.md" 2>/dev/null; } \
+      && printf '  ok   an escaped value in JSON scrubs through promotion\n' \
+      || { printf '  FAIL an escaped value in JSON scrubs through promotion: exit %s\n' "$code"; fails=$((fails+1)); }
+    if grep -qF -- "$JPATH-413" "$r/raw/trials/t413/notes.md" 2>/dev/null; then
+      printf '  FAIL a JSON scrub publishes no value\n'; fails=$((fails+1))
+    else printf '  ok   a JSON scrub publishes no value\n'; fi
+  }
+  r=$(repo) && { cd "$r" || exit 2
     printf 'contact: %s ok \xff tail\n' "$SUSPECT" > "$tmp/invalid.md"
     out=$(bash "$HERE/raw-promote.sh" "$tmp/invalid.md" raw/trials/t413/notes.md 2>/dev/null); code=$?
     { [ "$code" -eq 0 ] && cmp -s "$r/raw/trials/t413/notes.md" <(printf 'contact: <redacted:email> ok \xff tail\n'); } \

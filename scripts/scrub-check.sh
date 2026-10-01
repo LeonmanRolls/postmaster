@@ -6,6 +6,10 @@
 # each commit message; the lines each merge commit introduces beyond every
 # parent, so already-published lines merge quietly; and, through
 # --pr-description, the pull request's description before it is opened.
+# Every scanned line is ANSI-stripped and each JSON string in it decoded,
+# so values inside strings scan like any other text and anchored rules
+# fire per logical line; the raw line always scans too, and each physical
+# span reports once. A same-line marker suppresses only its own string.
 #
 #   scrub-check.sh <base> <head>    the range: added lines, messages and
 #                                   merge resolutions, one suspect per line
@@ -544,19 +548,121 @@ def parse_markers(line):
     return parsed
 
 
+ANSI_SEQUENCE = re.compile(r"(?:\x1b\[|\x9b)[0-9;:?]*[ -/]*[@-~]")
+JSON_STRING = re.compile(r'"(?:[^"\\\n]|\\.)*"')
+
+
+def strip_ansi(text):
+    """The text without CSI sequences, plus each survivor's home offset."""
+    chars, kept = [], []
+    cursor = 0
+    for match in ANSI_SEQUENCE.finditer(text):
+        chars.append(text[cursor:match.start()])
+        kept.extend(range(cursor, match.start()))
+        cursor = match.end()
+    chars.append(text[cursor:])
+    kept.extend(range(cursor, len(text)))
+    return "".join(chars), kept
+
+
+_UNESCAPES = {'"': '"', "\\": "\\", "/": "/", "b": "\b", "f": "\f",
+              "n": "\n", "r": "\r", "t": "\t"}
+_HEX = frozenset("0123456789abcdefABCDEF")
+
+
+def unquote_token(inner, base):
+    """Decode one JSON string's inner text, yielding (char, start, end).
+
+    The offsets are the escape's span in the stripped line, so a decoded
+    span maps home exactly. A bad escape decodes leniently as its
+    backslash, so a malformed token still scans; well-formed tokens decode
+    exactly, surrogate pairs combined.
+    """
+    i, end = 0, len(inner)
+    while i < end:
+        ch = inner[i]
+        if ch != "\\" or i + 1 >= end:
+            yield ch, base + i, base + i + 1
+            i += 1
+            continue
+        esc = inner[i + 1]
+        if esc in _UNESCAPES:
+            yield _UNESCAPES[esc], base + i, base + i + 2
+            i += 2
+        elif esc == "u" and i + 6 <= end and all(
+                c in _HEX for c in inner[i + 2:i + 6]):
+            code = int(inner[i + 2:i + 6], 16)
+            nxt = i + 6
+            if (0xD800 <= code <= 0xDBFF and nxt + 6 <= end
+                    and inner[nxt:nxt + 2] == "\\u" and all(
+                        c in _HEX for c in inner[nxt + 2:nxt + 6])):
+                low = int(inner[nxt + 2:nxt + 6], 16)
+                if 0xDC00 <= low <= 0xDFFF:
+                    code = 0x10000 + ((code - 0xD800) << 10) + (low - 0xDC00)
+                    nxt += 6
+            yield chr(code), base + i, base + nxt
+            i = nxt
+        else:
+            yield "\\", base + i, base + i + 1
+            i += 1
+
+
+def scan_units(text):
+    """The views of one physical line: the raw unit, then decoded units.
+
+    The raw line, ANSI-stripped, is always first, so values outside strings
+    and across token boundaries scan as before. Each JSON string then
+    contributes its decoded logical lines, so escapes cannot hide a value
+    and anchored rules fire per logical line. Returns the units as
+    (text, map) with each map entry the char's home (start, end), plus
+    the string token spans in stripped coordinates, where the raw unit's
+    marker parsing does not look.
+    """
+    stripped, kept = strip_ansi(text)
+    raw_map = [(o, o + 1) for o in kept]
+    units, strings = [(stripped, raw_map)], []
+    for match in JSON_STRING.finditer(stripped):
+        start, end = match.span()
+        if end - start < 2:
+            continue
+        strings.append((start, end))
+        run, run_map = [], []
+        for ch, pstart, pend in unquote_token(stripped[start + 1:end - 1], start + 1):
+            if ch == "\n" or ch == "\r":
+                if run:
+                    units.append(("".join(run), run_map))
+                    run, run_map = [], []
+            else:
+                run.append(ch)
+                run_map.append((kept[pstart], kept[pend - 1] + 1))
+        if run:
+            units.append(("".join(run), run_map))
+    return units, strings
+
+
+def home_span(mapping, start, end):
+    """A unit span home to original offsets."""
+    return mapping[start][0], mapping[end - 1][1]
+
+
 class LineScanner:
     """Streaming marker-aware line scanner for one line sequence.
 
     Feed (number, text) in file order; a next-line marker applies only to
-    the very next fed line. Each valid marker must suppress at least one
-    finding the others did not, same-line markers first: a redundant marker
-    faults like an unused one. A marker never suppresses inside its own
-    text, so a reason that quotes a suspect always flags, and the marker
-    faults beside it for suppressing nothing. Marker-shaped text that is
-    not a valid marker faults only when its line carries a finding; on a
-    clean line it is prose. With markers disabled the feed passes findings
-    through untouched. Faults are (number, start, end) triples, kept and
-    suppressed are (number, start, end, kind, value).
+    the very next fed line. Each fed line scans as units: the raw line
+    first, then each JSON string's decoded logical lines, all records
+    mapped home to original offsets. Each valid marker must suppress at
+    least one finding the others did not, same-line markers first: a
+    redundant marker faults like an unused one. A same-line marker
+    suppresses only its own unit, so in a JSON record each string is its
+    own logical line; next-line markers stay line-wide. A marker never
+    suppresses inside its own text, so a reason that quotes a suspect
+    always flags, and the marker faults beside it for suppressing nothing.
+    Marker-shaped text that is not a valid marker faults only when its
+    line carries a finding; on a clean line it is prose. With markers
+    disabled the feed passes findings through untouched. Faults are
+    (number, start, end) triples, kept and suppressed are
+    (number, start, end, kind, value).
     """
 
     def __init__(self, find=findings, markers=True):
@@ -568,46 +674,85 @@ class LineScanner:
         self.suppressed = []
 
     def feed(self, number, text):
-        raw = self._find(text)
+        units, strings = scan_units(text)
+        owned = lambda start: any(s <= start < e for s, e in strings)
+        homed = []
+        for unit, mapping in units:
+            homed.append([
+                (*home_span(mapping, start, end), kind, value)
+                for start, end, kind, value in self._find(unit)])
+        # A raw finding exactly equal to a decoded one is the same bytes
+        # through the same rule, so the raw copy drops and the value
+        # reports once, through its own logical line. Anything the
+        # decoded units do not report stays raw, so span rules that need
+        # their field beside the value lose nothing. The dedupe runs
+        # before suppression, so a same-line marker suppresses only its
+        # own unit: within JSON each string is its own logical line.
+        survivors = [item for item in homed[0]
+                     if not any(item in rest for rest in homed[1:])]
+        homed[0] = survivors
         if self._off:
-            for start, end, kind, value in raw:
+            inert = [item for items in homed for item in items]
+            inert.sort(key=lambda item: (item[0], item[1], item[2]))
+            for start, end, kind, value in inert:
                 self.kept.append((number, start, end, kind, value))
+            self._prev = (number, [])
             return
-        current = list(raw)
-        marks = parse_markers(text)
-        for mark in marks:
-            if not mark["valid"] and not mark["next_line"] and raw:
-                self.faults.append((number, *mark["span"]))
-        for mark in [m for m in marks if m["valid"] and not m["next_line"]]:
-            hits = [item for item in current
-                    if item[2] == mark["rule"] and item[1] <= mark["span"][0]]
-            if not hits:
-                self.faults.append((number, *mark["span"]))
+        physical = any(homed)
+        current, next_marks = [], []
+        for index, ((unit, mapping), items) in enumerate(zip(units, homed)):
+            if index == 0:
+                # A marker starting inside a string belongs to that
+                # string's unit; its reason runs to the line end by
+                # design, so only the start decides.
+                marks = [m for m in parse_markers(unit)
+                         if not owned(m["span"][0])]
             else:
-                for start, end, kind, value in hits:
-                    self.suppressed.append((number, start, end, kind, value))
-                current = [item for item in current if item not in hits]
+                marks = parse_markers(unit)
+            marks = [dict(m, span=home_span(mapping, *m["span"])) for m in marks]
+            for mark in marks:
+                if not mark["valid"] and not mark["next_line"] and physical:
+                    self.faults.append((number, *mark["span"]))
+                if mark["next_line"]:
+                    next_marks.append(mark)
+            live = list(items)
+            for mark in [m for m in marks if m["valid"] and not m["next_line"]]:
+                hits = [item for item in live
+                        if item[2] == mark["rule"] and item[1] <= mark["span"][0]]
+                if not hits:
+                    self.faults.append((number, *mark["span"]))
+                else:
+                    for start, end, kind, value in hits:
+                        self.suppressed.append((number, start, end, kind, value))
+                    live = [item for item in live if item not in hits]
+            for start, end, kind, value in live:
+                current.append((number, start, end, kind, value))
+        # Units emit raw-first; restore the (start, end, kind) order the
+        # span consumer relies on, so ties still go to the first span.
+        current.sort(key=lambda item: (item[1], item[2], item[3]))
         if self._prev is not None:
             prev_number, prev_marks = self._prev
             if prev_number == number - 1:
                 for mark in prev_marks:
                     if mark["valid"]:
-                        hits = [item for item in current if item[2] == mark["rule"]]
+                        hits = [item for item in current if item[3] == mark["rule"]]
                         if not hits:
                             self.faults.append((prev_number, *mark["span"]))
                         else:
-                            for start, end, kind, value in hits:
-                                self.suppressed.append((number, start, end, kind, value))
+                            for item in hits:
+                                self.suppressed.append(
+                                    (number, item[1], item[2], item[3], item[4]))
                             current = [item for item in current if item not in hits]
-                    elif raw:
+                    elif physical:
                         self.faults.append((prev_number, *mark["span"]))
             else:
                 for mark in prev_marks:
                     if mark["valid"]:
                         self.faults.append((prev_number, *mark["span"]))
-        for start, end, kind, value in current:
+        # Units are disjoint by construction, so no finding reports twice.
+        for _num, start, end, kind, value in current:
             self.kept.append((number, start, end, kind, value))
-        self._prev = (number, [m for m in marks if m["next_line"]])
+        self._prev = (number, next_marks)
 
     def flush(self):
         if self._prev is not None:
@@ -692,8 +837,14 @@ def scan_message(commit):
     raw = git(["show", "-s", "--format=%B", commit])
     out = []
     for number, line in enumerate(raw.decode("utf-8", errors="surrogateescape").splitlines(), 1):
-        for _start, _end, kind, _value in findings(line):
-            out.append(("(message)", number, kind, line))
+        seen = set()
+        for unit, mapping in scan_units(line)[0]:
+            for start, end, kind, _value in findings(unit):
+                key = (kind, *home_span(mapping, start, end))
+                if key in seen:
+                    continue
+                seen.add(key)
+                out.append(("(message)", number, kind, line))
     return out
 
 
@@ -977,9 +1128,15 @@ def run_pr_description(root, path):
     with handle:
         for number, raw in enumerate(handle, 1):
             text = raw.rstrip(b"\r\n").decode("utf-8", errors="surrogateescape")
-            for _start, _end, kind, _value in findings(text):
-                suspects.append((number, kind))
-                log_detection(kind, "(pr-description)", number, "")
+            seen = set()
+            for unit, mapping in scan_units(text)[0]:
+                for start, end, kind, _value in findings(unit):
+                    key = (kind, *home_span(mapping, start, end))
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    suspects.append((number, kind))
+                    log_detection(kind, "(pr-description)", number, "")
     for line, kind in sorted(suspects):
         print("(pr-description):%d: %s" % (line, kind))
     return 1 if suspects else 0
@@ -1385,6 +1542,16 @@ def self_test(root):
             ok("... and silent with messages switched off", bool(
                 trailed_off and trailed_off.returncode == 0 and not trailed_off.stdout))
             last = trailer
+            jsonmsg = add_fixture(
+                repo, "jsonmsg.txt", "ordinary public sample\n",
+                "note\n{\"text\": \"a\\n" + private_path + "\"}")
+            jsonmsg_result = run_child([last, jsonmsg], repo)
+            ok("a JSON-escaped value in a commit message is reported", bool(
+                jsonmsg_result and jsonmsg_result.returncode == 1
+                and jsonmsg_result.stdout.splitlines()
+                == ["%s:(message):2: private-path" % jsonmsg]
+                and silent(jsonmsg_result)))
+            last = jsonmsg
             (repo / "msg-clean2.txt").write_text("ordinary public sample\n", encoding="utf-8")
             git(["add", "--", "msg-clean2.txt"], cwd=repo)
             git(["-c", "user.name=Fixture", "-c", "user.email=" + FIXTURE_MAILBOX,
@@ -1820,6 +1987,68 @@ def self_test(root):
             inert_only = run_child(["--files-inert", "marker-only.txt"], repo)
             ok("--files-inert stays silent on marker text with no finding", bool(
                 inert_only and inert_only.returncode == 0 and not inert_only.stdout))
+            print("string controls: values inside JSON strings scan like any other text")
+            (repo / "j-path.jsonl").write_text(
+                '{"text": "first line\\n' + private_path + '/x"}\n', encoding="utf-8")
+            jpath = run_child(["--files", "j-path.jsonl"], repo)
+            ok("a JSON-escaped path is found", bool(
+                jpath and jpath.returncode == 1
+                and jpath.stdout.splitlines() == ["j-path.jsonl:1: private-path"]
+                and silent(jpath)))
+            (repo / "j-env.jsonl").write_text(
+                '{"text": "a\\nSESSION_SECRET=relay-413-quiet"}\n', encoding="utf-8")
+            jenv = run_child(["--files", "j-env.jsonl"], repo)
+            ok("a dotenv assignment inside a JSON string fires on its logical line", bool(
+                jenv and jenv.returncode == 1
+                and jenv.stdout.splitlines() == ["j-env.jsonl:1: dotenv"]
+                and silent(jenv)))
+            (repo / "j-attr.jsonl").write_text(
+                '{"text": "a\\n' + COAUTHOR_PREFIX + " Fixture <" + sample_email + '>"}' + "\n",
+                encoding="utf-8")
+            jattr = run_child(["--files", "j-attr.jsonl"], repo)
+            ok("an attribution line inside a JSON string fires on its logical line", bool(
+                jattr and jattr.returncode == 1
+                and jattr.stdout.splitlines() == [
+                    "j-attr.jsonl:1: assistant-attribution", "j-attr.jsonl:1: email"]
+                and silent(jattr)))
+            (repo / "ansi.log").write_text(
+                "prefix \x1b[32m" + private_path + "\x1b[0m suffix\n", encoding="utf-8")
+            ansi = run_child(["--files", "ansi.log"], repo)
+            ok("a color-wrapped path is found", bool(
+                ansi and ansi.returncode == 1
+                and ansi.stdout.splitlines() == ["ansi.log:1: private-path"]
+                and silent(ansi)))
+            (repo / "j-mail.jsonl").write_text(
+                '{"mail": "' + sample_email + '"}\n', encoding="utf-8")
+            jmail = run_child(["--files", "j-mail.jsonl"], repo)
+            ok("a plain value inside a JSON string is reported once", bool(
+                jmail and jmail.returncode == 1
+                and jmail.stdout.splitlines() == ["j-mail.jsonl:1: email"]
+                and silent(jmail)))
+            (repo / "j-mark.jsonl").write_text(
+                '{"mail": "' + sample_email + '", "note": "x # ' + ALLOW
+                + ' email -- made-up"}\n', encoding="utf-8")
+            jmark = run_child(["--files", "j-mark.jsonl"], repo)
+            ok("a marker in another field neither suppresses nor passes", bool(
+                jmark and jmark.returncode == 1
+                and jmark.stdout.splitlines() == [
+                    "j-mark.jsonl:1: email", "j-mark.jsonl:1: marker"]
+                and silent(jmark)))
+            (repo / "j-selfmark.jsonl").write_text(
+                '{"note": "contact ' + sample_email + " # " + ALLOW + ' email -- made-up"}\n',
+                encoding="utf-8")
+            selfmark_log = scratch / "selfmark-det.jsonl"
+            selfmark = run_child(["--files", "j-selfmark.jsonl"], repo,
+                                 {"POSTMASTER_DETECTIONS_LOG": str(selfmark_log)})
+            selfmark_logged = []
+            if selfmark_log.is_file():
+                selfmark_logged = [json.loads(line) for line in
+                                   selfmark_log.read_text(encoding="utf-8").splitlines()]
+            ok("a marker inside its own string still suppresses, and logs it", bool(
+                selfmark and selfmark.returncode == 0 and not selfmark.stdout
+                and len(selfmark_logged) == 1
+                and selfmark_logged[0].get("via") == "marker"
+                and selfmark_logged[0]["rule"] == "email"))
             missing = run_child(["--files", "no-such-file.txt"], repo)
             ok("--files on a missing file exits 2", bool(
                 missing and missing.returncode == 2 and not missing.stdout))
