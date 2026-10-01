@@ -1,0 +1,49 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/package.json",
+  "root": true,
+  "files": {
+    "includes": ["scripts/**", "types/**", "package.json", "tsconfig.json", "biome.json"]
+  },
+  "overrides": [
+    {
+      "includes": ["scripts/fixtures/**"],
+      "formatter": { "enabled": false },
+      "linter": { "enabled": false },
+      "assist": { "enabled": false }
+    }
+  ],
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true,
+      "style": {
+        "noNonNullAssertion": "off"
+      },
+      "suspicious": {
+        "noControlCharactersInRegex": "off",
+        "noShadowRestrictedNames": "off",
+        "noExplicitAny": "off",
+        "noImplicitAnyLet": "off",
+        "noAssignInExpressions": "off",
+        "noFallthroughSwitchClause": "off",
+        "noTemplateCurlyInString": "off"
+      },
+      "correctness": {
+        "noUnusedVariables": "warn"
+      }
+    }
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100
+  },
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
+    }
+  }
+}
