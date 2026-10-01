@@ -89,7 +89,7 @@ describe("front-door says headless for a fixture copy", () => {
     sh(["git", "-C", fixtureCopy, "config", "postmaster.fixture", "remove"]);
     // The decision never reads the host: Herdr, tmux and none are the same call.
     const outputs: string[] = [];
-    for (const host of ["herdr", "tmux", "none"]) {
+    for (const _host of ["herdr", "tmux", "none"]) {
       const r = decide(here, fixtureCopy, "no");
       expect(r.code).toBe(0);
       expect(r.out.startsWith("spawn ")).toBe(true);
