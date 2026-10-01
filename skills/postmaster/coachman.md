@@ -202,6 +202,16 @@ and never return, with no timeout. If the browser is genuinely unavailable, reco
 DEGRADED on the card, name what was not walked, and finish the run. A run that has passed every
 gate is never blocked by a browser.
 
+**A workhorse checks its own work the way the change will really be used, and keeps at it
+until it can.** On a project with a user surface, every criterion that touches the surface is
+checked in a real browser: the workhorse drives the app through the project's own browser
+library, from a shell command in its own worktree, whether or not the ticket has a `User
+journey`, and takes a screenshot per step. Where the ticket has no journey, the spec's steps
+are the journey. For a command-line tool or scripts, each new or changed command is run the way
+it will be run, on realistic input, and the transcript is kept: the command, its output and its
+exit. A workhorse whose harness has no browser backend marks the browser evidence `not shown`
+with that reason; the coachman's render gate covers the surface, as today.
+
 **No lane runs restricted.** Each harness's permission-bypass form is in `harnesses.md`; it goes
 on every launch and every resume.
 
@@ -218,12 +228,19 @@ leaves the project-wide checks to the coachman.
 
 A workhorse writes one file at its worktree root before anything else, and one of two files as
 its final act. The brief spells all three out in full, since some harnesses read nothing but
-the brief.
+the brief. Implementation is a loop, not a single pass: build, run each criterion's check as
+the spec specifies it, fix what fails, and run it again, until every criterion's check shows it
+working and the run's checks pass. A lane may add checks of its own, never drop or weaken one
+the spec specifies. The evidence the summary cites comes from the loop's last pass, on the
+final code: a transcript or walk taken before a later code change is taken again. A workhorse
+that is genuinely stuck stops and says what blocks it. Running every check with
+`<tool>/scripts/verify.sh run .` just before the summary stays the last step.
 
 - `WORKHORSE-SPEC.md`, the **workhorse spec**: written from `workhorse-spec-template.md`
   beside this file and committed first, on its own, before any code: its approach, technical
   context, how it meets the ticket's direction, the files it will touch, the decisions it
-  made, and its tasks, each tagged with the acceptance criterion it serves. The planning
+  made, how it will show each acceptance criterion working the way it will really be used, and
+  its tasks, each tagged with the acceptance criterion it serves. The planning
   stage puts it to the user before any code is written; a workhorse whose spec is not
   approved writes no code. You copy it into the run's audit as its first commit added it and
   as it stood when approved. The brief carries this instruction without the link that follows.
@@ -232,14 +249,21 @@ the brief.
 - `WORKHORSE-SUMMARY.md`: what it built, as a list of the commits on its branch; how it verified
   it: under `## Checks`, what `<tool>/scripts/verify.sh run .` printed when run just before the
   summary was written, one line per check the brief names with its command and exit, then any
-  other command it ran with its exit code; every within-brief question it decided
+  other command it ran with its exit code; under `## Evidence`, one entry per acceptance
+  criterion numbered as the ticket numbers them, each one or more worktree-relative paths under
+  `.postmaster/verify/` — the transcripts, or the journey report and its screenshots — or the
+  line `not shown: <reason>`; every within-brief question it decided
   for itself, with the decision; what it did not do and why; and its own verdict on whether
   the ticket's acceptance criteria are met, one line per criterion. Written last, committed,
   and the process then exits.
-- `WORKHORSE-BLOCKED.md`: written instead when the workhorse cannot proceed without a ruling that is
-  genuinely destructive or scope-changing. The question, the options it sees, its
-  recommendation, and the state of its branch. The process then exits; the coachman resumes
-  it with the ruling.
+- `WORKHORSE-BLOCKED.md`: written instead when a check the spec gives cannot pass as written,
+  or contradicts the ticket — changing an approved check is not the lane's to make — or when
+  the workhorse cannot proceed without a ruling that is genuinely destructive or
+  scope-changing. The question or the check, what it shows, the change it proposes, and the
+  state of its branch. The process then exits; the coachman resumes
+  it with the ruling. Anything else the workhorse cannot get working does not block: it
+  finishes, with the failing transcript as that criterion's evidence, what blocks it under what
+  it did not do, and that criterion's verdict as not met.
 
 A workhorse commits incrementally as it goes, never pushes, never reads other branches or
 `.worktrees/`, and never edits files outside its worktree.
@@ -280,9 +304,22 @@ A workhorse commits incrementally as it goes, never pushes, never reads other br
    approval, implement from the approved spec and finish with the summary), the autonomous-defaults rule (decide within-brief questions
    yourself and record the decision in `WORKHORSE-SUMMARY.md`), the capability statement above, the
    instruction to commit incrementally, and the line that the workhorse must not read other branches
-   or `.worktrees/`. It names the run's checks as the waybill lists them and says to run them all
+   or `.worktrees/`. It names the run's checks as the waybill lists them and the loop: build,
+   run each criterion's check as the approved spec's `## Showing each criterion` specifies it,
+   fix what fails, and run it again, until every criterion's check shows it working and the
+   run's checks pass; the lane may add checks of its own, never drop or weaken one the spec
+   specifies; the evidence the summary cites comes from the loop's last pass, on the final
+   code. It says to run the checks all
    with `<tool>/scripts/verify.sh run .` just before writing the summary, in the background with a
-   wait where the checks together can outlast the longest command its harness allows. Where a
+   wait where the checks together can outlast the longest command its harness allows. Where the
+   project has a user surface it says that every criterion touching it is checked in a real
+   browser through the project's own library from a shell command in the worktree, screenshot
+   per step, whether or not the ticket has a `User journey`, and that where the ticket has none
+   the spec's steps are the journey. Where the work is a command-line tool or scripts it says
+   each new or changed command is run the way it will be run, on realistic input, and the
+   transcript kept: the command, its output and its exit. Where the workhorse's harness has no
+   browser backend, say so in the brief — naming no harness, only the fact — so the workhorse
+   marks the browser evidence `not shown` with that reason. Where a
    check's source names `web-journey`, it also carries what
    `<tool>/scripts/verify-journey.sh --format` prints and the command that names the report's path,
    `<tool>/scripts/verify.sh journey-path .`. Where the workhorse's harness reads no ambient context
@@ -413,8 +450,9 @@ from it.
   never by interrogating a workhorse. Keep threads UNARCHIVED while the run lives; that preserves
   follow-up questions via the resume forms and the interactive scrollback each harness offers
   on a finished thread.
-- **Verify before trusting.** Read each summary, then check every load-bearing claim against
-  the workhorse's actual diff and the repo code. Workhorses ship false absolutes in docs and commit
+- **Verify before trusting.** Read each summary and its `## Evidence`, then check every load-bearing claim against
+  the workhorse's actual diff and the repo code. A criterion claimed as shown without evidence
+  counts against that lane. Workhorses ship false absolutes in docs and commit
   messages.
 - **Run the checks on each workhorse's branch** once its thread has exited, in its worktree:
   `<tool>/scripts/verify.sh run <workhorse-wt> <dispatch>`, which runs the run's checks whatever the
@@ -430,6 +468,13 @@ from it.
   summary to your run: `<tool>/scripts/verify.sh summary <workhorse-wt>/WORKHORSE-SUMMARY.md
   <dispatch> <workhorse-wt>`. Exit 2 names each check the summary does not give, which makes the
   summary unverified, and each claim your run contradicts; both go on the checkpoint 1 card.
+  Hold its evidence the same way, beside that verdict:
+  `bun --no-env-file --config=/dev/null <tool>/scripts/summary-evidence.ts
+  <workhorse-wt>/WORKHORSE-SUMMARY.md <workhorse-wt>`. Exit 2 names each criterion missing
+  evidence, citing evidence that does not exist or lies outside `.postmaster/verify/`, or
+  claimed shown with no evidence; those names go on the checkpoint 1 card beside the
+  `verify.sh summary` verdict, and a criterion claimed as shown without evidence counts against
+  that lane.
   [Why a project defines its own checks](../../wiki/concepts/verification.md)
 - **Run audit, automatic.** Once the workhorses are harvested (at the stall cutoff, whatever
   exists), write `<dispatch>/audit/<lane>.md` per workhorse from its durable record: thread id,
@@ -536,7 +581,8 @@ from it.
   choice; the convention gaps found; what was dropped; gate status; the checks, as `verify.sh run`
   printed them on each workhorse's branch and then on the committed synthesis
   (`<tool>/scripts/verify.sh run <synthesis-wt> <dispatch>`, the journey walked first where there
-  is one), with each workhorse's `verify.sh summary` verdict. A card that presents a
+  is one), with each workhorse's `verify.sh summary` verdict and its `summary-evidence.ts`
+  result. A card that presents a
   finished diff without saying which lane each part came from is the defaulting failure
   wearing a verdict. Set the stage, `<tool>/scripts/stage.sh <dispatch> checkpoint-1`, then write it to
   `<dispatch>/checkpoint-1.md` with the audit bundle beside it and touch `.checkpoint-1-ready`. Autonomous mode: write `handoff-1.md` and end the leg. Consult mode:
