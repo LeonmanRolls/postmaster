@@ -373,11 +373,16 @@ out=$(cd "$r" && POSTMASTER_DETECTIONS_LOG="$tmp/c.jsonl" bash "$SCRUB" --log-de
 entry=$(python3 -c 'import json,sys; e=[json.loads(l) for l in open(sys.argv[1])]; print(len(e), e[0].get("rule"), e[0].get("file"), e[0].get("line"), e[0].get("commit"))' "$tmp/c.jsonl" 2>/dev/null)
 { [ "$code" -eq 0 ] && [ -z "$out" ] && [ "$entry" = "1 email notes/contact.txt 3 $head" ]; } \
   && ok "a well-formed call appends its detection" || fail "a well-formed call appends its detection (exit $code)"
-for bad in "marker f.txt 1" "no-such-rule f.txt 1" "email f.txt x" "email f.txt 0" "email f.txt 1 short"; do
+for bad in "marker f.txt 1" "no-such-rule f.txt 1" "email f.txt x" "email f.txt 1 short"; do
   # shellcheck disable=SC2086
   out=$(cd "$r" && POSTMASTER_DETECTIONS_LOG="$tmp/c.jsonl" bash "$SCRUB" --log-detection $bad 2>/dev/null); code=$?
   { [ "$code" -eq 2 ] && [ -z "$out" ]; } && ok "--log-detection refuses $bad, exit 2" || fail "--log-detection refuses $bad, exit 2 (exit $code)"
 done
+rm -f "$tmp/c0.jsonl"
+out=$(cd "$r" && POSTMASTER_DETECTIONS_LOG="$tmp/c0.jsonl" bash "$SCRUB" --log-detection email f.txt 0 2>/dev/null); code=$?
+entry0=$(python3 -c 'import json,sys; e=[json.loads(l) for l in open(sys.argv[1])]; print(len(e), e[0].get("rule"), e[0].get("line"))' "$tmp/c0.jsonl" 2>/dev/null)
+{ [ "$code" -eq 0 ] && [ -z "$out" ] && [ "$entry0" = "1 email 0" ]; } \
+  && ok "line 0 appends, for findings on the file's name" || fail "line 0 appends, for findings on the file's name (exit $code)"
 rm -f "$tmp/c2.jsonl"
 out=$(cd "$r" && POSTMASTER_DETECTIONS_LOG= bash "$SCRUB" --log-detection email f.txt 1 2>/dev/null); code=$?
 { [ "$code" -eq 0 ] && [ ! -e "$tmp/c2.jsonl" ]; } \
@@ -681,6 +686,119 @@ if [ "$code" -eq 99 ]; then ok "a large file streams under a small address space
 elif [ "$code" -eq 1 ] && [ "$limited" = "big.txt:70001: email" ] && ! leaked "$limited" "$EMAIL"; then
   ok "a large file streams under a small address space"
 else fail "a large file streams under a small address space (exit $code)"; fi
+
+echo "the round-3 repairs hold at the interfaces"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+head=$(commit_file "$r" plus.txt "++ contact: $EMAIL")
+expects_one "$r" "$base" "$head" plus.txt email "$EMAIL" && ok "a plus-prefixed content line flags" || fail "a plus-prefixed content line flags"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+( cd "$r" && git checkout -qb side >/dev/null && printf 'side line\n' > merge.txt \
+  && git add merge.txt && git commit -qm "side work" >/dev/null && git checkout -q main \
+  && printf 'main line\n' > merge.txt && git add merge.txt \
+  && git commit -qm "main work" >/dev/null; git merge -q --no-commit side >/dev/null 2>&1; \
+  printf '++ contact: %s\n' "$EMAIL" > merge.txt && git add merge.txt \
+  && git commit -qm "merge the side" >/dev/null )
+merge=$(git -C "$r" rev-parse HEAD)
+out=$(cd "$r" && POSTMASTER_DETECTIONS_LOG= bash "$SCRUB" "$base" "$merge" 2>/dev/null); code=$?
+{ [ "$code" -eq 1 ] && [ "$out" = "$merge:merge.txt:1: email" ] && ! leaked "$out" "$EMAIL"; } \
+  && ok "a plus-prefixed resolution line flags" || fail "a plus-prefixed resolution line flags (exit $code)"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+head=$(commit_file "$r" j.jsonl "{\"text\": \"first line\\n$HOME_PATH/x\"}")
+expects_one "$r" "$base" "$head" j.jsonl private-path "$HOME_PATH" && ok "an escaped value inside JSON flags" || fail "an escaped value inside JSON flags"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+head=$(commit_file "$r" ansi.log "$(printf 'prefix \033[32m%s\033[0m suffix' "$HOME_PATH")")
+expects_one "$r" "$base" "$head" ansi.log private-path "$HOME_PATH" && ok "a color-wrapped value flags" || fail "a color-wrapped value flags"
+r=$(mkrepo)
+python3 -c 'print("".join("public line %d\n" % n for n in range(1, 31)), end="")' > "$r/gap.txt"
+( cd "$r" && git add gap.txt && git commit -qm "gap base" >/dev/null ); last=$(git -C "$r" rev-parse HEAD)
+python3 -c 'import sys; lines = open(sys.argv[1]).read().splitlines(keepends=True); lines[0] = sys.argv[2] + "\n"; lines[19] = sys.argv[3] + "\n"; open(sys.argv[1], "w").write("".join(lines))' \
+  "$r/gap.txt" "# $ALLOW_NEXT email -- stray marker" "contact: $EMAIL"
+( cd "$r" && git add gap.txt && git commit -qm "gap the marker" >/dev/null ); head=$(git -C "$r" rev-parse HEAD)
+out=$(cd "$r" && POSTMASTER_DETECTIONS_LOG= bash "$SCRUB" "$last" "$head" 2>/dev/null); code=$?
+{ [ "$code" -eq 1 ] && [ "$out" = "$head:gap.txt:1: marker
+$head:gap.txt:20: email" ] && ! leaked "$out" "$EMAIL"; } \
+  && ok "a marker across a hunk gap faults beside its finding, never crashes" || fail "a marker across a hunk gap faults beside its finding, never crashes (exit $code)"
+r=$(mkrepo)
+{ printf '{"%s": "write to %s soon"}\n' "$KEY_USER" "$EMAIL"
+  printf '{"%s": "%s"}\n' "$KEY_USER" "$EMAIL"; } > "$tmp/pm-overlap.md"
+out=$(cd "$r" && POSTMASTER_DETECTIONS_LOG= bash "$PROMOTE" "$tmp/pm-overlap.md" raw/trials/t413/overlap.md 2>/dev/null); code=$?
+{ [ "$code" -eq 0 ] && cmp -s "$r/raw/trials/t413/overlap.md" <(printf '{"%s": "<redacted:key>"}\n{"%s": "<redacted:email>"}\n' "$KEY_USER" "$KEY_USER"); } \
+  && ok "overlapping spans scrub outer-first, ties to the first span" || fail "overlapping spans scrub outer-first, ties to the first span (exit $code)"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+head=$(commit_file "$r" "$EMAIL.txt" "just public words here" "shaped name")
+out=$(cd "$r" && POSTMASTER_DETECTIONS_LOG= bash "$SCRUB" "$base" "$head" 2>/dev/null); code=$?
+{ [ "$code" -eq 1 ] && [ "$out" = "$head:[redacted]:0: email" ] && ! leaked "$out" "$EMAIL"; } \
+  && ok "an added file with a shaped name is reported at line 0, redacted" || fail "an added file with a shaped name is reported at line 0, redacted (exit $code)"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+head=$(commit_file "$r" marked.txt "contact: $EMAIL  # $ALLOW email -- fixture relay address")
+rm -f "$tmp/v6.jsonl"
+out=$(cd "$r" && POSTMASTER_DETECTIONS_LOG="$tmp/v6.jsonl" bash "$SCRUB" "$base" "$head" 2>/dev/null); code=$?
+entry=$(python3 -c 'import json,sys; e=[json.loads(l) for l in open(sys.argv[1])]; print(len(e), e[0].get("rule"), e[0].get("via"))' "$tmp/v6.jsonl" 2>/dev/null)
+{ [ "$code" -eq 0 ] && [ -z "$out" ] && [ "$entry" = "1 email marker" ] && ! grep -qF -- "$EMAIL" "$tmp/v6.jsonl" 2>/dev/null; } \
+  && ok "a suppressed match is logged with its marker resolution, never its value" || fail "a suppressed match is logged with its marker resolution, never its value (exit $code)"
+mkdir -p "$tmp/v7/done" "$tmp/v7/abandoned"
+printf '{"migration":"m1","spec":{},"stage":"done","leg":2}' > "$tmp/v7/done/manifest.json"
+printf '{"migration":"m1","spec":{},"stage":"abandoned","leg":2}' > "$tmp/v7/abandoned/manifest.json"
+printf '%s\n' "$DET" > "$tmp/v7/done/detections.jsonl"
+printf '%s\n' "$DET" > "$tmp/v7/abandoned/detections.jsonl"
+out=$(bash "$STATUS" "$tmp/v7" 2>/dev/null); code=$?
+{ [ "$code" -eq 0 ] && [ "$(printf '%s\n' "$out" | awk '$1=="done"{print $NF}')" = TELL ] \
+  && [ "$(printf '%s\n' "$out" | awk '$1=="abandoned"{print $NF}')" = TELL ]; } \
+  && ok "terminal runs with untold detections are TELL" || fail "terminal runs with untold detections are TELL"
+r=$(mkrepo)
+mkdir -p "$r/src413" && printf 'all public words\n' > "$r/src413/a.txt"
+mkdir -p "$tmp/v8shim" && printf '#!/usr/bin/env bash\nexit 1\n' > "$tmp/v8shim/find" && chmod +x "$tmp/v8shim/find"
+out=$(cd "$r" && PATH="$tmp/v8shim:$PATH" POSTMASTER_DETECTIONS_LOG= bash "$PROMOTE" src413 raw/runs/f413 2>&1); code=$?
+{ [ "$code" -eq 2 ] && [ ! -e "$r/raw/runs/f413" ]; } \
+  && ok "a failed source enumeration refuses the copy" || fail "a failed source enumeration refuses the copy (exit $code)"
+r=$(mkrepo)
+mkdir -p "$r/src413" && printf 'all public words\n' > "$r/src413/$EMAIL.txt"
+mkdir -p "$tmp/v9shim"
+printf '#!/usr/bin/env bash\nfor a in "$@"; do case $a in -*) continue;; *) rm -f "$a"; break;; esac; done\nexec /bin/cp "$@"\n' > "$tmp/v9shim/cp" && chmod +x "$tmp/v9shim/cp"
+out=$(cd "$r" && PATH="$tmp/v9shim:$PATH" POSTMASTER_DETECTIONS_LOG= bash "$PROMOTE" src413 raw/runs/c413 2>&1); code=$?
+{ [ "$code" -eq 2 ] && ! leaked "$out" "$EMAIL"; } \
+  && ok "a failed copy prints no shaped path" || fail "a failed copy prints no shaped path (exit $code)"
+r=$(mkrepo)
+printf 'contact: %s ok \xff tail\n' "$EMAIL" > "$tmp/pm-invalid.md"
+out=$(cd "$r" && POSTMASTER_DETECTIONS_LOG= bash "$PROMOTE" "$tmp/pm-invalid.md" raw/trials/t413/notes.md 2>/dev/null); code=$?
+{ [ "$code" -eq 0 ] && cmp -s "$r/raw/trials/t413/notes.md" <(printf 'contact: <redacted:email> ok \xff tail\n'); } \
+  && ok "bytes outside the span survive the scrub" || fail "bytes outside the span survive the scrub (exit $code)"
+r=$(mkrepo)
+python3 -c "
+lines = ['public filler line %d with padding words to add bulk volume here' % i for i in range(400000)]
+lines[200000] = 'contact: $EMAIL'
+open('$tmp/pm-big.md', 'w').write('\n'.join(lines) + '\n')
+"
+limited=$(cd "$r" && bash -c 'ulimit -v 65536 || exit 99; exec bash "$0" "$1" raw/trials/t413/big.md' "$PROMOTE" "$tmp/pm-big.md" 2>&1); code=$?
+if [ "$code" -eq 99 ]; then ok "a large dirty file promotes under a small address space: skipped, no address-space limit here"
+elif [ "$code" -eq 0 ] && grep -qF '<redacted:email>' "$r/raw/trials/t413/big.md" 2>/dev/null; then
+  ok "a large dirty file promotes under a small address space"
+else fail "a large dirty file promotes under a small address space (exit $code)"; fi
+w=$(wl)
+printf 'See %s%s%s-413/notes.txt for the log.  <!-- %s private-path -- made-up -->\n' "$HOME_P" "$HOME_O" "$HOME_U" "$ALLOW" >> "$w/wiki/concepts/c.md"
+out=$(POSTMASTER_DETECTIONS_LOG= bash "$LINT" "$w" 2>/dev/null); code=$?
+{ [ "$code" -eq 1 ] && printf '%s' "$out" | grep -qF 'private-path'; } \
+  && ok "a marked path on a page still faults, markers inert" || fail "a marked path on a page still faults, markers inert (exit $code)"
+w=$(wl)
+QE2='contact-relay-414'; QH2='quiet-relay-414'; QT2='net'
+printf -- '---\ntitle: qp\ntype: concept\nstanding: claimed\nsources: []\nupdated: 2026-01-01\n---\n\nBody.\n' > "$w/wiki/concepts/$QE2@$QH2.$QT2.md"
+printf '\n- [qp](concepts/%s@%s.%s.md)\n' "$QE2" "$QH2" "$QT2" >> "$w/wiki/index.md"
+QL4='The staging relay tallied four hundred fifteen spans on the Thursday run.'
+printf '%s\n' "$QL4" > "$w/raw/evidence.txt"
+printf '%s\n' "$QL4" >> "$w/wiki/concepts/$QE2@$QH2.$QT2.md"
+out=$(POSTMASTER_DETECTIONS_LOG= bash "$LINT" "$w" 2>/dev/null); code=$?
+{ [ "$code" -eq 1 ] && printf '%s' "$out" | grep -qF 'repeats raw/' \
+  && printf '%s' "$out" | grep -qF '[redacted]' && ! leaked "$out" "$QE2@$QH2.$QT2"; } \
+  && ok "a quote fault on a shaped page path redacts the path" || fail "a quote fault on a shaped page path redacts the path (exit $code)"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+head=$(commit_file "$r" j.jsonl "{\"mail\": \"$EMAIL\", \"note\": \"x # $ALLOW email -- made-up\"}")
+out=$(cd "$r" && POSTMASTER_DETECTIONS_LOG= bash "$SCRUB" "$base" "$head" 2>/dev/null); code=$?
+{ [ "$code" -eq 1 ] && [ "$out" = "$head:j.jsonl:1: email
+$head:j.jsonl:1: marker" ] && ! leaked "$out" "$EMAIL"; } \
+  && ok "a marker in another field neither suppresses nor passes" || fail "a marker in another field neither suppresses nor passes (exit $code)"
+# V12's recheck divergence and the merge-resolution streaming cap hold only in
+# the suites: the first is a TOCTOU no blind probe reproduces stably, and the
+# second needs git itself under a cap git cannot survive.
 
 echo
 if [ "$fails" -eq 0 ]; then echo "oracle-135: all probes behaved"; exit 0; fi
