@@ -248,6 +248,9 @@ with `herdr agent start`. It is a pane whose agent `host.sh` reports. So when it
   `<tool>/scripts/runs-status.sh` shows the escalation pending. The user answers by resuming its thread,
   through `host.sh run --append` with `<tool>/scripts/launch.sh resume postmaster <repo> <thread-id>
   <message-file>`, or by opening the thread in the harness's own interactive resume.
+  A fixture copy's postmaster uses this headless form on every host, whatever `host.sh detect`
+  says: `front-door.sh` prints `headless` for it (`SKILL.md` step 3), so it never meets a trust
+  prompt.
 - **This needs a harness with a resume form.** `launch.sh` refuses to resume agy, so with no
   host the postmaster runs on another harness.
 

@@ -189,12 +189,16 @@ Never put paths or credentials in either file.
    with the user at the terminal: the postmaster is this session, and no second one is
    started. `spawn` means a separate postmaster session is needed, and the reasons say
    which conditions failed: the harness or the model differs from `team.postmaster`, the
-   target is another repo, or nobody is at the terminal. If it exits non-zero instead,
+   target is another repo, or nobody is at the terminal. When the target is a fixture copy
+   (`fixture.sh new` marked it), it also prints `headless`: that postmaster starts headless
+   on every host, in the form `hosts.md` gives under none, so it never meets a trust
+   prompt. `self` stays `self` in a fixture copy. If it exits non-zero instead,
    stop and tell the user what it said: the config is missing, does not parse, or has no
    `team.postmaster`, or the report was malformed. Settle that first; there is no route
    to put on the launch card until the script answers.
 4. **Launch card**: one self-contained confirmation covering whether the postmaster is this
-   session or a new one, with every reason the script printed, the postmaster's harness,
+   session or a new one, whether it runs headless (the script's `headless` line), with every
+   reason the script printed, the postmaster's harness,
    model and effort (`team.postmaster` in the config), the team the config names, who says
    the merge word (`ship.merge_authority`), the session host the fleet will run on
    (`<tool>/scripts/host.sh detect`), and the project facts above. Launch nothing before the user
@@ -217,8 +221,9 @@ Never put paths or credentials in either file.
 6. **Write the brief** to `$RUNS/postmaster/brief.md`: "You are the postmaster for <project>.
    Read `<tool>/skills/postmaster/postmaster.md` first", then the stream paragraph, the project
    profile, the configured team, who says the merge word, the session host, `<tool>` and the
-   config path, plus this session's report and the route result, and, when the host is none,
-   that it runs headless and writes `<runs>/postmaster/ESCALATION.md` when it needs the user.
+   config path, plus this session's report and the route result, and, when the route says
+   `headless` or the host is none, that it runs headless and writes
+   `<runs>/postmaster/ESCALATION.md` when it needs the user.
    It is what you settled here,
    and what a postmaster restarted from nothing reads to carry on. Then log the first action:
 
@@ -229,11 +234,22 @@ Never put paths or credentials in either file.
 7. **`self`: carry on as the postmaster.** Read `<tool>/skills/postmaster/postmaster.md` and
    run the stream in this conversation. Log every action through `log-action.sh` under
    `<runs>/postmaster/`, as that runbook says. Do not start a second session.
-8. **`spawn`: start a new postmaster session** on the session host (`hosts.md`). Start a new
-   interactive session of the postmaster's harness (`team.postmaster` in the config), rooted
-   in the target repo, in the harness's interactive form from `harnesses.md`: its bypass mode,
-   named `postmaster`. Hand it a one-line prompt file that says to read the brief
-   at `$RUNS/postmaster/brief.md` first:
+8. **`spawn`: start a new postmaster session** on the session host (`hosts.md`). When the
+   route printed `headless`, start it headless on every host, in the form `hosts.md` gives
+   under none, through `<tool>/scripts/host.sh run` so it shows in the host like any headless
+   launch, whatever `host.sh detect` says, and never through `host.sh spawn`:
+
+   ```sh
+   <tool>/scripts/host.sh run "postmaster" <repo> --out <runs>/postmaster/events.jsonl \
+     --err <runs>/postmaster/postmaster.err --marker <runs>/postmaster/.exited \
+     -- <tool>/scripts/launch.sh launch postmaster <repo> $RUNS/postmaster/brief.md
+   ```
+
+   That form needs a harness with a resume form (`hosts.md`, none), so the user can answer an
+   escalation by resuming it. Otherwise start a new interactive session of the postmaster's
+   harness (`team.postmaster` in the config), rooted in the target repo, in the harness's
+   interactive form from `harnesses.md`: its bypass mode, named `postmaster`. Hand it a
+   one-line prompt file that says to read the brief at `$RUNS/postmaster/brief.md` first:
 
    ```sh
    <tool>/scripts/host.sh spawn postmaster-<project> <repo> --label "postmaster" -- <interactive form>

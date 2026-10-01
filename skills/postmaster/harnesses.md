@@ -558,8 +558,9 @@ It runs in its harness's bypass mode, like every launch, named for its project:
 
 Bypass mode does not skip claude's question, on first start in a folder it has never opened,
 whether to trust it; headless `claude -p` does not ask. The first spawn in a new target stops
-there, and the user answers it in the pane. A row not checked here takes its bypass flag from
-the headless form above; run it once before relying on it.
+there, and the user answers it in the pane. A fixture copy's postmaster runs headless
+(`SKILL.md` step 8, `hosts.md` none), so it never meets the question. A row not checked here
+takes its bypass flag from the headless form above; run it once before relying on it.
 
 ## Keeping the watcher running
 
