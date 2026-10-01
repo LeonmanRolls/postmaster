@@ -1,12 +1,20 @@
 ---
 title: Log
 type: schema
-updated: 2026-09-29
+updated: 2026-10-01
 ---
 
 # Log
 
 Append-only. Newest first. One entry per operation, prefixed so it can be parsed.
+
+## [2026-10-01] ingest | fixture postmasters use the headless form
+
+Issue #98 marks each fixture repository in its own git config. The front door routes a marked
+target's postmaster to the existing headless launch form on every host. The parent folder is
+outside Claude Code's trust search because it stops at the fixture repository's git root, so
+no harness trust settings are written. The fixture-runs page and postmaster runbooks record
+the route.
 
 ## [2026-09-29] ingest | the planning stage: every spec to the user before code
 

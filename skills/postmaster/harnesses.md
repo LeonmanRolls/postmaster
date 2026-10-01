@@ -561,6 +561,9 @@ whether to trust it; headless `claude -p` does not ask. The first spawn in a new
 there, and the user answers it in the pane. A row not checked here takes its bypass flag from
 the headless form above; run it once before relying on it.
 
+A fixture copy's postmaster uses the headless `claude -p` form on every host. It never meets
+this trust question, and no harness trust setting is written for the copy.
+
 ## Keeping the watcher running
 
 Stage D keeps one `<tool>/scripts/runs-watch.sh <runs>` going per project, acts on the runs it

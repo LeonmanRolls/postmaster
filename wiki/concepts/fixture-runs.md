@@ -3,7 +3,7 @@ title: A fixture run tests the flow end to end, which the gate cannot
 type: concept
 standing: claimed
 sources: []
-updated: 2026-09-27
+updated: 2026-10-01
 ---
 
 # Fixture runs
@@ -94,9 +94,18 @@ scores clean is found to have shipped something its ticket did not ask for.
 `scripts/fixture.sh` makes a run's repository and files its ticket (`new`), scores a finished
 run (`score`), and runs a ticket's hidden tests against any copy of the app (`hidden`). The app
 and its tickets are in `fixtures/`. `new` puts a copy under `~/Code/fixtures` unless it is given a
-path, so every copy is in one place. Trusting that folder in Claude Code does not spare a copy
-the trust prompt. Claude Code 2.1.283, started in a fresh folder inside a trusted one, asked
-nothing for a plain folder and asked for a git repository. Controls: it asked in a folder with no
-trusted parent, and not in the trusted folder itself. A copy is a git repository, so a postmaster
-started in one waits for the user to answer the prompt, once per copy. `AGENTS.md` holds a change to the coachman contract back
-from merging until a fixture run dispatched from its branch scores clean.
+path, and records `postmaster.fixture` with the ticket name in that copy's local git config.
+This mark leaves the copy's tree clean and one commit on `main`.
+
+Trusting `~/Code/fixtures` in Claude Code never covered the copies. Claude Code 2.1.283 looks for
+trust from the working folder upward and stops at the repository root. A fixture copy is its own
+git repository, so its parent folder is outside that search. In the observed controls, Claude
+Code asked for a new repository inside a trusted folder, and did not ask for the trusted folder
+itself.
+
+The front door uses the mark to start a fixture copy's postmaster headless on every host, through
+the existing `host.sh run` form. Its `claude -p` launch does not ask the interactive trust
+question, and the flow writes no harness trust settings. When it needs the user, the postmaster
+writes `<runs>/postmaster/ESCALATION.md` and ends its turn; the user answers by resuming its
+thread. `AGENTS.md` holds a change to the coachman contract back from merging until a fixture run
+dispatched from its branch scores clean.

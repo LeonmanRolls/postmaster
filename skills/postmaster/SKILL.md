@@ -189,16 +189,19 @@ Never put paths or credentials in either file.
    with the user at the terminal: the postmaster is this session, and no second one is
    started. `spawn` means a separate postmaster session is needed, and the reasons say
    which conditions failed: the harness or the model differs from `team.postmaster`, the
-   target is another repo, or nobody is at the terminal. If it exits non-zero instead,
-   stop and tell the user what it said: the config is missing, does not parse, or has no
-   `team.postmaster`, or the report was malformed. Settle that first; there is no route
-   to put on the launch card until the script answers.
+   target is another repo, or nobody is at the terminal. For a repository marked by
+   `<tool>/scripts/fixture.sh new`, it also prints a `headless` line. Start that postmaster
+   headless through `host.sh run` on every host; `self` remains `self`. If it exits non-zero
+   instead, stop and tell the user what it said: the config is missing, does not parse, or has
+   no `team.postmaster`, or the report was malformed. Settle that first; there is no route to
+   put on the launch card until the script answers.
 4. **Launch card**: one self-contained confirmation covering whether the postmaster is this
    session or a new one, with every reason the script printed, the postmaster's harness,
    model and effort (`team.postmaster` in the config), the team the config names, who says
    the merge word (`ship.merge_authority`), the session host the fleet will run on
    (`<tool>/scripts/host.sh detect`), and the project facts above. Launch nothing before the user
-   picks.
+   picks. If the route includes a `headless` line, say the postmaster will use the headless
+   form on that host.
 5. **Create the project-local run root** and keep it in one variable for the steps below. The
    project path, not its basename, identifies this run root:
 
@@ -217,10 +220,10 @@ Never put paths or credentials in either file.
 6. **Write the brief** to `$RUNS/postmaster/brief.md`: "You are the postmaster for <project>.
    Read `<tool>/skills/postmaster/postmaster.md` first", then the stream paragraph, the project
    profile, the configured team, who says the merge word, the session host, `<tool>` and the
-   config path, plus this session's report and the route result, and, when the host is none,
-   that it runs headless and writes `<runs>/postmaster/ESCALATION.md` when it needs the user.
-   It is what you settled here,
-   and what a postmaster restarted from nothing reads to carry on. Then log the first action:
+   config path, plus this session's report and the route result. When the route is headless or
+   the host is none, say it runs headless and writes
+   `<runs>/postmaster/ESCALATION.md` when it needs the user. It is what you settled here, and
+   what a postmaster restarted from nothing reads to carry on. Then log the first action:
 
    ```sh
    <tool>/scripts/log-action.sh "$RUNS/postmaster" postmaster note launch "<route result>"
@@ -229,11 +232,21 @@ Never put paths or credentials in either file.
 7. **`self`: carry on as the postmaster.** Read `<tool>/skills/postmaster/postmaster.md` and
    run the stream in this conversation. Log every action through `log-action.sh` under
    `<runs>/postmaster/`, as that runbook says. Do not start a second session.
-8. **`spawn`: start a new postmaster session** on the session host (`hosts.md`). Start a new
-   interactive session of the postmaster's harness (`team.postmaster` in the config), rooted
-   in the target repo, in the harness's interactive form from `harnesses.md`: its bypass mode,
-   named `postmaster`. Hand it a one-line prompt file that says to read the brief
-   at `$RUNS/postmaster/brief.md` first:
+8. **`spawn`: start a new postmaster session.** If the route has a `headless` line, use the
+   headless form from `hosts.md` through `host.sh run` on every host. It starts the configured
+   harness in print mode with the brief as its prompt, writes events and errors under
+   `$RUNS/postmaster/`, and has no terminal to stop at a question:
+
+   ```sh
+   <tool>/scripts/host.sh run "postmaster" "$TARGET_ROOT" --out "$RUNS/postmaster/events.jsonl" \
+     --err "$RUNS/postmaster/postmaster.err" --marker "$RUNS/postmaster/.exited" -- \
+     <tool>/scripts/launch.sh launch postmaster "$TARGET_ROOT" "$RUNS/postmaster/brief.md"
+   ```
+
+   Otherwise, start an interactive session of the postmaster's harness (`team.postmaster` in
+   the config), rooted in the target repo, in the harness's interactive form from
+   `harnesses.md`: its bypass mode, named `postmaster`. Hand it a one-line prompt file that says
+   to read the brief at `$RUNS/postmaster/brief.md` first:
 
    ```sh
    <tool>/scripts/host.sh spawn postmaster-<project> <repo> --label "postmaster" -- <interactive form>
@@ -244,10 +257,10 @@ Never put paths or credentials in either file.
    On Herdr it opens as a tab in the target repo's space, the root of every run's tree; on tmux,
    as a window in session `postmaster-<project>`. If `spawn` says it is not ready, the harness is
    asking something on its first start there, such as claude asking whether to trust the folder:
-   the user answers it in the pane, and then the prompt is sent. With no host, `spawn` exits 3:
-   launch it headless instead, as `hosts.md` gives under none, with a line in its brief that it
-   runs headless, so whenever it needs the user it writes `<runs>/postmaster/ESCALATION.md` and
-   ends its turn; tell the user it answers by resume.
+   the user answers it in the pane, and then the prompt is sent. For an ordinary `spawn` with no
+   host, `spawn` exits 3: launch it headless as `hosts.md` gives under none, with a line in its
+   brief that it runs headless, so whenever it needs the user it writes
+   `<runs>/postmaster/ESCALATION.md` and ends its turn; tell the user it answers by resume.
 9. **Report**. `self`: say that you are the postmaster and the stream is running here. `spawn`:
    say where to watch it (the space and tab, the tmux session, or with no host its events
    file), the run root, and the brief, then stop.

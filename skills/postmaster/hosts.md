@@ -13,6 +13,8 @@ the interactive postmaster alive between turns. **It never changes what a launch
 lane and every coachman leg is the same headless command on every host: `<tool>/scripts/launch.sh`'s
 form, its events stream to its events file, its errors to its `.err` file, its marker touched
 when it exits, and then it exits. An idle thread is a native session on disk, never a process.
+For a marked fixture copy, the front door selects this same headless launch form for its
+postmaster on every host; the host only places the launch.
 
 ## Which host
 
@@ -237,6 +239,8 @@ with `herdr agent start`. It is a pane whose agent `host.sh` reports. So when it
 
 ## none
 
+- A marked fixture copy's postmaster uses this form on every host. Herdr and tmux place that
+  headless launch visibly; neither changes it into an interactive session.
 - A launch is a detached process in a session of its own, with no terminal. There is nothing to
   watch but its files: `<tool>/scripts/runs-status.sh`, the events file, and
   `<tool>/scripts/view-stream.sh < <events-file>` for the readable form.
@@ -248,8 +252,9 @@ with `herdr agent start`. It is a pane whose agent `host.sh` reports. So when it
   `<tool>/scripts/runs-status.sh` shows the escalation pending. The user answers by resuming its thread,
   through `host.sh run --append` with `<tool>/scripts/launch.sh resume postmaster <repo> <thread-id>
   <message-file>`, or by opening the thread in the harness's own interactive resume.
-- **This needs a harness with a resume form.** `launch.sh` refuses to resume agy, so with no
-  host the postmaster runs on another harness.
+- **A headless postmaster needs a harness with a resume form.** Fixture copies use this form on
+  every host; with no host, ordinary postmasters do too. `launch.sh` refuses agy resume, so a
+  headless postmaster cannot use agy.
 
 ## Tests
 
