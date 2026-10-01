@@ -8,6 +8,19 @@ updated: 2026-10-01
 
 Append-only. Newest first. One entry per operation, prefixed so it can be parsed.
 
+## [2026-10-01] ingest | whether to publish the private-data scanner as a library
+
+Issue #208. Thirty-two outside tools captured in `raw/articles/scanner-*`, each with the passages
+the survey rests on, read at a dated version; passages from GitHub were checked against the file
+at the pinned commit or tag. Seven more captures on who publishes agent transcripts and what they
+carry. A trial recorded in `raw/trials/scanner-rule-format/`: #135's rule table at `1223cc0`,
+written in a proposed rule format, agreed with the scanner on every one of 50,093 lines, under Bun
+and Node; its controls and mutations behaved, and round 5's table at `c47d246` already differs in
+three rules. Probes found three gaps in #135: Claude Code's pull-request attribution, JSON nested
+two deep, and encrypted reasoning blocks. New page
+[No library covers what the private-data scanner checks](concepts/scanner-library.md), at
+**claimed**.
+
 ## [2026-10-01] ingest | what keeps a lane inside its worktree
 
 Issue #107. A trial recorded in `raw/trials/confine-lanes/`: ten model runs on codex, Claude Code,

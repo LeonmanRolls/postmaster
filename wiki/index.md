@@ -116,6 +116,11 @@ Why the design is shaped as it is.
 - [A gate on the default branch after a merge runs from a clean checkout](concepts/clean-checkout-gates.md):
   **claimed**. The run's working copies stay under `.worktrees/`; the flow's post-merge gate
   runs from a clean checkout of the branch outside the project folder, so it never reads them.
+- [No library covers what the private-data scanner checks](concepts/scanner-library.md):
+  **claimed**. A survey of 32 tools found none covering home paths, private hosts and attribution
+  lines in both agent transcripts and git history. A trial wrote #135's eight rules as data, and
+  every one agreed with the scanner. The scanner stays here, ported as a self-contained module
+  under #109, and is published once its rules settle and someone outside wants it.
 
 ## Sources
 
