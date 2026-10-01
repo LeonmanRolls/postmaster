@@ -1,12 +1,19 @@
 ---
 title: Log
 type: schema
-updated: 2026-09-29
+updated: 2026-09-30
 ---
 
 # Log
 
 Append-only. Newest first. One entry per operation, prefixed so it can be parsed.
+
+## [2026-09-30] lint | a fixture run's postmaster runs headless
+
+The fixture-runs page now records that `fixture.sh new` marks each copy as a fixture in its own
+git config, and that a fixture run's postmaster runs headless on every host, so it never meets
+Claude Code's trust question. Trusting the fixtures folder never covered a copy: the trust
+search stops at the git root, and every copy is its own repository. Issue #98.
 
 ## [2026-09-29] ingest | the planning stage: every spec to the user before code
 
