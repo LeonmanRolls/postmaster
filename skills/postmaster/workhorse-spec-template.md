@@ -5,6 +5,9 @@ it on its own before writing any code. The user reviews it before implementation
 from their words in a later commit when they ask, and write no code until it is approved. The
 format is adapted from GitHub Spec Kit's plan and tasks templates, in one file.
 
+`## Showing each criterion` records how each criterion will be checked in real use; the user
+reviews these checks with the rest of the spec.
+
 ```markdown
 # Workhorse spec: <ticket id> <ticket title>
 
@@ -42,6 +45,17 @@ tracking.>
 
 <Each choice the ticket left open, and what this workhorse chose. There is no one to ask during
 the run: decide, and record it here.>
+
+## Showing each criterion
+
+For each acceptance criterion, copy its full wording from the ticket and specify the check that
+shows it working the way it will really be used: the command, input and expected output, or the
+steps through the user surface and what each should show. The user approves these checks with
+the rest of the spec.
+
+| # | Criterion, as the ticket words it | Check (command and input) | Expected output |
+|---|---|---|---|
+| AC1 | <full criterion wording> | <command and realistic input, or user-surface steps> | <output or what each step should show> |
 
 ## Tasks
 
