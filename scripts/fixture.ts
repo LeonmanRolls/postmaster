@@ -1,10 +1,37 @@
 // Run the flow end to end against a small app whose tickets have a known outcome, and score a
-// finished run from its own records.
+// finished run from its own records. Why, and what it catches that the gate cannot:
+// wiki/concepts/fixture-runs.md.
 //
 //   fixture.sh new <name or dest> <ticket>
 //   fixture.sh score <dispatch> <repo>
 //   fixture.sh hidden <ticket> <app-dir>
 //   fixture.sh --self-test
+//
+// The app is fixtures/app. A ticket is fixtures/tickets/<ticket>/: ticket.md (a `# ` title line,
+// then the body in the ticket shape), hidden/ (acceptance tests written before any run) and
+// reference.patch (a solution, applied to the app, that passes them). Only the app ever leaves
+// this repo; the hidden tests run from here, against a copy.
+//
+// new     makes <dest> a fresh git repo holding the committed app, one commit on main, outside
+//         every other repo, so a run never touches this repo's branches, worktrees or run records.
+//         A bare name goes under ~/Code/fixtures, or $POSTMASTER_FIXTURES when that is set; a
+//         path is used as given. It has no remote. It makes the repo's own ticket store
+//         (scripts/local.sh), files the ticket there and prints its number to dispatch against
+//         <dest>; a run reads it through the local tracker whatever the config names
+//         (scripts/tracker-kind.sh).
+// score   scores a finished run from its records, never its report: the ticket its waybill
+//         carries verbatim, whose hidden tests run against main and, beside those counts, against
+//         each lane's harvested wb/<TICKET>-<lane> branch (scripts/fixture-lanes.ts); the app's
+//         gate as scripts/discover-project.sh finds it, on main; the stages scripts/stage.sh
+//         --list names, up to done, each entered in order by a logged change; each leg's done and
+//         exited markers, for every leg the run recorded; each leg's hand-off, through
+//         scripts/handoff-check.sh; run.json; and card.md. One line per check on stdout, and what
+//         a failed check printed on stderr.
+// hidden  runs a ticket's hidden tests against an app directory.
+//
+// The stages and hand-off rules are the ones in the checkout score runs from, so a run is scored
+// from the postmaster commit it was dispatched from; score says so when the two differ. The
+// self-test needs no network once npm's cache holds the app's packages.
 //
 //   exit 0  new: made and filed; score, hidden: every check passed
 //   exit 1  usage, a tool not on PATH, a refusal from new, or input that is not what it says
@@ -358,7 +385,7 @@ function score(dispatch: string, repo: string): { code: number; out: string } {
   }
   const legs = legsOf(dispatch, manifest);
   const results: CheckResult[] = [
-    { name: "hidden-tests", ...checkHidden(dispatch, app) },
+    { name: "hidden-tests", ...checkHidden(dispatch, repo, app) },
     { name: "gate", ...checkGate(app) },
     { name: "stages", ...checkStages(dispatch), out: "" },
     { name: "markers", ...checkMarkers(dispatch, legs), out: "" },
@@ -427,7 +454,24 @@ function legsOf(dispatch: string, manifest: Record<string, unknown> | null): num
   return Array.from({ length: max }, (_, i) => i + 1);
 }
 
-function checkHidden(dispatch: string, app: string): { ok: boolean; detail: string; out: string } {
+const LANE_LINE = /^(.*): (\p{Nd}+ pass, \p{Nd}+ fail|missing|failed to build)$/u;
+
+function laneScores(dispatch: string, repo: string, ticket: string): string {
+  // Each lane's hidden status from scripts/fixture-lanes.ts; '' when there are no lanes.
+  const r = sh(["bun", "--no-env-file", join(HERE, "fixture-lanes.ts"), dispatch, repo, ticket]);
+  if (r.code !== 0) return "lanes not scored";
+  return (r.out ?? "")
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => LANE_LINE.test(l))
+    .join("; ");
+}
+
+function checkHidden(
+  dispatch: string,
+  repo: string,
+  app: string,
+): { ok: boolean; detail: string; out: string } {
   const brief = join(dispatch, "brief.md");
   const text = existsSync(brief) ? squash(readFileSync(brief, "utf8")) : "";
   const found: string[] = [];
@@ -448,7 +492,10 @@ function checkHidden(dispatch: string, app: string): { ok: boolean; detail: stri
     };
   }
   const h = hidden(found[0]!, app);
-  return { ok: h.passed, detail: `${found[0]}, from the waybill: ${h.detail} on main`, out: h.out };
+  let detail = `${found[0]}, from the waybill: ${h.detail} on main`;
+  const lanes = laneScores(dispatch, repo, found[0]!);
+  if (lanes) detail = `${detail}; ${lanes}`;
+  return { ok: h.passed, detail, out: h.out };
 }
 
 function checkGate(app: string): { ok: boolean; detail: string; out: string } {
@@ -1345,6 +1392,18 @@ case $2 in store) exec "${join(HERE, "local.sh")}" "$@" ;; *) exit 1 ;; esac
   );
   expectScore("no run.json: run.json alone fails", "break-runjson", "run.json", "no run.json");
   expectScore("no ship card: ship-card alone fails", "break-card", "ship-card", "no card.md");
+
+  console.log("lane scoring: the suite beside the new code runs in this self-test");
+  {
+    const r2 = run("bun", ["--no-env-file", "test", join(HERE, "fixture-lanes.test.ts")], {
+      input: "",
+    });
+    st.check(
+      "bun test scripts/fixture-lanes.test.ts",
+      r2.code === 0,
+      `exit ${r2.code}\n${r2.out}${r2.err}`,
+    );
+  }
 
   console.log("score: input that is not a run is refused, not scored");
   const cleanDir = join(tmp, `clean-${first}`, "repo", ".postmaster", "runs", "7");
