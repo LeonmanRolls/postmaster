@@ -240,9 +240,8 @@ the brief.
   output or the user-surface steps and what each should show. The user reviews these checks
   with the rest of the spec. A workhorse may add checks of its own, never drop or weaken one
   the spec gives. The planning stage puts the spec to the user before any code is written; a
-  workhorse whose spec is not approved writes no code. You copy it into the run's audit as its
-  first commit added it and
-  as it stood when approved. The brief carries this instruction without the link that follows.
+  workhorse whose spec is not approved writes no code. Copy its first committed spec and its
+  approved version into the run's audit. The brief carries this instruction without the link that follows.
   [Why each workhorse drafts its own spec](../../wiki/concepts/workhorse-spec.md)
   [Why the user reviews it before code](../../wiki/concepts/planning-stage.md)
 - `WORKHORSE-SUMMARY.md`: what it built, as a list of the commits on its branch; how it verified
@@ -324,7 +323,8 @@ A workhorse commits incrementally as it goes, never pushes, never reads other br
    stuck-check rules above, the real-browser and CLI transcript requirements, the summary's
    `## Evidence` format and exact summary-evidence command including its transcript path, the
    capability statement above, the instruction to commit incrementally, and the line that the
-   workhorse must not read other branches or `.worktrees/`. It names the run's checks as the waybill lists them and says to run them all
+   workhorse must not read other branches or `.worktrees/`. It names the run's checks as the
+   waybill lists them and says to run them all
    with `<tool>/scripts/verify.sh run .` just before writing the summary, in the background with a
    wait where the checks together can outlast the longest command its harness allows. Where a
    check's source names `web-journey`, it also carries what
@@ -462,8 +462,9 @@ from it.
   messages.
 - **Read the evidence for every lane.** Run
   `bun --no-env-file --config=/dev/null <tool>/scripts/summary-evidence.ts
-  <workhorse-wt>/WORKHORSE-SUMMARY.md <workhorse-wt>` beside `verify.sh summary`. Put each
-  result on the checkpoint 1 card beside the `verify.sh summary` verdict. Read each lane's
+  <workhorse-wt>/WORKHORSE-SUMMARY.md <workhorse-wt>` beside
+  `<tool>/scripts/verify.sh summary`. Put each result on the checkpoint 1 card beside that
+  verdict. Read each lane's
   evidence against its approved `## Showing each criterion`; a criterion claimed as shown without
   valid evidence counts against that lane and goes on the card.
 - **Run the checks on each workhorse's branch** once its thread has exited, in its worktree:
