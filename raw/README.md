@@ -11,6 +11,9 @@ this repository, follow a standing to the record behind it, and count again.
 
 One exception: something private that the scrub missed is redacted where it appears. The record
 says what was redacted and when, `wiki/log.md` has an entry for it, and nothing else changes.
+The same substitution happens at promotion: the copy replaces each scrub finding with a
+placeholder naming its rule, so a promoted record may carry placeholders where the run's
+own record carries values, and nothing else differs.
 
 **Nothing arrives here automatically.** Every run already writes its full record — ledger,
 narrative, cards, harness logs — to its own project's `.postmaster/`, which is gitignored in
@@ -24,8 +27,15 @@ The copy is the moment of publication, so it is the moment the checks happen. Ev
 these, every time:
 
 - **Scrub for secrets.** A harness session transcript can carry anything that was on screen,
-  including a key a lane printed while debugging. Automated first, then read what the scrub
-  reports.
+  including a key a lane printed while debugging. Promote through
+  `scripts/raw-promote.sh`, which scans every file with the same rules as
+  `scripts/scrub-check.sh`, replaces each finding with a placeholder naming its rule,
+  checks the copy again, and completes only when clean. Each replacement is reported
+  by destination, line and rule, never the value. The original stays untouched in
+  `.postmaster/`. The check is how a raw file's scrub is checked, and it is
+  a backstop, not a proof: it catches what looks like private data by shape, and what
+  it clears still wants a read before it is published. Automated first, then read what
+  the scrub reports.
 - **Check the target may be published.** A run against a private project carries that
   project's ticket text, branch names and file paths. Those do not become publishable by
   being evidence. Promote a run only when its target is public — which, for this repository's

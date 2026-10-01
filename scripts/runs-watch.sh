@@ -163,6 +163,12 @@ for dp, dn, fn in os.walk(sys.argv[1]):
   watch "$root"
   [ $rc -eq 0 ] && has "needs inspect INSPECT" \
     && ok "NEXT INSPECT names inspect" || fail "NEXT INSPECT names inspect"
+  root="$tmp/pos-tell"; mkdir -p "$root"; mkrun "$root" tell review 2
+  printf '{"commit":"","file":"notes.txt","line":1,"rule":"email","ts":"2026-09-29T00:00:00Z"}\n' \
+    > "$root/tell/detections.jsonl"
+  watch "$root"
+  [ $rc -eq 0 ] && has "needs tell TELL" \
+    && ok "NEXT TELL names tell" || fail "NEXT TELL names tell"
   root="$tmp/pos-late"; mkdir -p "$root"; mkrun "$root" late review 2
   "$self" --timeout 10 "$root" > "$tmp/late.out" 2>&1 &
   w=$!; sleep 2; : > "$root/late/.escalation-ready"; wait "$w"; rc=$?

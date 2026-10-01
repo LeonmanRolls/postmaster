@@ -246,6 +246,12 @@ Each `NEXT` names the act:
   step 3, Stage F step 2, Spec review). Put the question to the user again if you have not in this session;
   otherwise nothing to do until they answer.
 - **RULE:** an escalation is waiting. Stage E.
+- **TELL:** the run holds a private-data detection the user has not been told. Read
+  `<run>/detections.jsonl`, tell the user each line `<run>/.detections-told` does not
+  hold — rule, file, line and commit, never the value — at once, and append the told
+  lines verbatim to `.detections-told`. Log `note` with what was told. Telling is not
+  a ruling: the finding is the coachman's to fix, and the user is told so they know,
+  not so they decide.
 - **GATE:** the ship card is complete. Stage F.
 - **SPEC:** a spec review package is waiting (`.spec-review-ready`). Spec review, below.
 - **DISPATCH:** the leg's `.leg-<n>-done` marker is present. Stage C for the leg after `n` in
@@ -374,7 +380,9 @@ On `.card-ready`, read `<dispatch>/card.md` and `<dispatch>/handoff-3.md`:
    section of `handoff-3.md` carries leg 1's reason for not writing them;
    `<tool>/scripts/verify.sh results <dispatch> <synthesis-wt>` gives a result for every check at
    the synthesis HEAD, and the card gives each one that did not pass as it is; the Style
-   residue's count is what `<tool>/scripts/style-findings.sh count <dispatch>` prints.
+   residue's count is what `<tool>/scripts/style-findings.sh count <dispatch>` prints; the
+   card lists every detection in `<dispatch>/detections.jsonl` with how it was resolved,
+   and no line there is missing from `<dispatch>/.detections-told`.
 2. **Grant or withhold.** Every word is delivered by resuming leg 3 (Stage C, step 5), and
    `.card-ready` is removed before it is; the coachman touches it afresh when the card changes.
    `MERGE_AUTHORITY: postmaster` and every check above holds: deliver "MERGE GRANTED" and log
