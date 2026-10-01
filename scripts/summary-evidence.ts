@@ -10,8 +10,8 @@
 //
 //   bun scripts/summary-evidence.ts <summary.md> <worktree> [--ticket <file>]
 //
-// The ticket defaults to the armed copy ($POSTMASTER_VERIFY/ticket.md, else
-// <worktree>/.postmaster/verify/ticket.md). A ticket that is a waybill is read from its
+// The ticket defaults to the armed copy at <worktree>/.postmaster/verify/ticket.md
+// ($POSTMASTER_VERIFY/ticket.md is a fallback). A ticket that is a waybill is read from its
 // `## Ticket` heading to its `## Project profile` heading. Run it as the coachman does,
 // `bun --no-env-file --config=/dev/null <tool>/scripts/summary-evidence.ts …`, so no .env or
 // bunfig.toml from a worktree is read.
@@ -223,13 +223,14 @@ function readText(path: string): string | null {
 }
 
 function defaultTicket(worktree: string): string | null {
+  const local = resolve(worktree, ".postmaster", "verify", "ticket.md");
+  if (existsSync(local)) return local;
   const fromEnv = process.env.POSTMASTER_VERIFY;
   if (fromEnv) {
     const p = resolve(fromEnv, "ticket.md");
     if (existsSync(p)) return p;
   }
-  const local = resolve(worktree, ".postmaster", "verify", "ticket.md");
-  return existsSync(local) ? local : null;
+  return null;
 }
 
 function main(argv: string[]): number {

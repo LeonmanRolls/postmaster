@@ -100,7 +100,14 @@ function writeSummary(wt: string, text: string, name = "WORKHORSE-SUMMARY.md"): 
 }
 
 function runCheck(summary: string, worktree: string, extra: string[] = []) {
-  const r = spawnSync("bun", [script, summary, worktree, ...extra], { encoding: "utf8" });
+  const env: Record<string, string> = {};
+  for (const [k, v] of Object.entries(process.env)) {
+    if (v !== undefined && k !== "POSTMASTER_VERIFY") env[k] = v;
+  }
+  const r = spawnSync("bun", [script, summary, worktree, ...extra], {
+    encoding: "utf8",
+    env,
+  });
   return {
     code: r.status ?? -1,
     out: `${r.stdout ?? ""}${r.stderr ?? ""}`,
