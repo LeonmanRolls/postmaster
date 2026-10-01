@@ -109,6 +109,15 @@ SSH2_H='---- BEGIN SSH2 ENCRYPTED PRIVATE '
 SSH2_T='KEY ----'
 AGE_A='AGE-'; AGE_S='SECRET-'; AGE_K='KEY-'
 AGE_B='AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+PUTTY_V3='3: test-413-key'
+QPW_N1='DB_PASS'; QPW_N2='WORD'
+QPW_V1='Db413&K7'; QPW_V2='mQ2x'
+FPW_F1='{"pas'; FPW_F2='sword": "'
+FPW_V1='Db413Q7mZ2xK9a&Vb'; FPW_V2='N4qy7W8'
+UNC_H='\\myhost'; UNC_U='\Users\'; UNC_T='\x soon'
+ST_P1='/tmp/clau'; ST_P2='de-9999/-home-'; ST_P3='-postmaster/x/scratchpad/log.txt'
+FURL_A='file://relay-'; FURL_B='host/home/'; FURL_C='/notes.txt today'
+PGP_N='PGPASSW'; PGP_O='ORD'
 
 mkrepo() {  # a scratch repo on main with one clean commit, printed
   local d
@@ -927,6 +936,51 @@ r=$(mkrepo)
 out=$(POSTMASTER_DETECTIONS_LOG= bash "$MERGE" "$r" 2>/dev/null); code=$?
 { [ "$code" -eq 0 ] && [ -z "$out" ]; } \
   && ok "a clean merge passes the merge scan" || fail "a clean merge passes the merge scan (exit $code)"
+
+echo "round-5 findings repaired: escapes, merges, dotenv, keys, paths, names"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+head=$(commit_file "$r" tilde.txt "$(printf 'contact: contact-%s\033~@%s.%s' "$E_LOCAL" "$E_HOST" "$E_TLD")")
+expects_one "$r" "$base" "$head" tilde.txt email "$EMAIL" && ok "a name split by a tilde escape still matches" || fail "a name split by a tilde escape still matches"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+( cd "$r" && git checkout -qb side >/dev/null && printf 'side\n' > base.txt && git commit -qam "side work" >/dev/null && git checkout -q main && printf 'main\n' > base.txt && git commit -qam "main work" >/dev/null && git merge --no-commit side >/dev/null 2>&1; printf 'resolved\n' > base.txt && printf 'just public words\n' > "$EMAIL.txt" && git add base.txt "$EMAIL.txt" && git commit -qm "merge the side" >/dev/null ); merge=$(git -C "$r" rev-parse HEAD)
+out=$(cd "$r" && POSTMASTER_DETECTIONS_LOG= bash "$SCRUB" "$base" "$merge" 2>/dev/null); code=$?
+{ [ "$code" -eq 1 ] && [ "$out" = "$merge:[redacted]:0: email" ] && ! leaked "$out" "$EMAIL"; } \
+  && ok "a file the resolution creates has its name scanned" || fail "a file the resolution creates has its name scanned (exit $code)"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+( cd "$r" && git checkout -qb side >/dev/null && printf 'side\n' > anchor.txt && git add anchor.txt && git commit -qm "side" >/dev/null && git checkout -q main && printf 'main\n' > anchor.txt && git add anchor.txt && git commit -qm "main" >/dev/null && git merge --no-commit side >/dev/null 2>&1; printf 'resolved\n' > anchor.txt && mkdir -p .postmaster/runs && printf '{"run": "merge"}\n' > .postmaster/runs/m413.json && git add anchor.txt .postmaster/runs/m413.json && git commit -qm "merge the side" >/dev/null && git rm -q .postmaster/runs/m413.json && git commit -qm "remove the record" >/dev/null ); head=$(git -C "$r" rev-parse HEAD)
+out=$(cd "$r" && POSTMASTER_DETECTIONS_LOG= bash "$TREE" "$base" "$head" 2>/dev/null); code=$?
+{ [ "$code" -eq 1 ] && printf '%s' "$out" | grep -qF '.postmaster/runs/m413.json'; } \
+  && ok "a .postmaster/ file merged in and then deleted fails as committed" || fail "a .postmaster/ file merged in and then deleted fails as committed (exit $code)"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+head=$(commit_file "$r" quoted.env "${QPW_N1}${QPW_N2}='${QPW_V1}${QPW_V2}'")
+expects_one "$r" "$base" "$head" quoted.env dotenv "${QPW_V1}${QPW_V2}" && ok "a quoted value carrying symbols flags" || fail "a quoted value carrying symbols flags"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+head=$(commit_file "$r" field.json "${FPW_F1}${FPW_F2}${FPW_V1}${FPW_V2}\"}")
+expects_one "$r" "$base" "$head" field.json token "${FPW_V1}${FPW_V2}" && ok "a symbol-bearing field value flags" || fail "a symbol-bearing field value flags"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+head=$(commit_file "$r" key3.txt "${PUTTY_H}${PUTTY_V3}")
+expects_one "$r" "$base" "$head" key3.txt token && ok "a PuTTY v3 header flags" || fail "a PuTTY v3 header flags"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+head=$(commit_file "$r" share.txt "open ${UNC_H}${UNC_U}${HOME_U}${UNC_T}")
+expects_one "$r" "$base" "$head" share.txt private-path "$HOME_U" && ok "a host-pathed home directory flags" || fail "a host-pathed home directory flags"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+head=$(commit_file "$r" pass.txt "db_pass: ${FPW_V1}${FPW_V2}")
+expects_one "$r" "$base" "$head" pass.txt token "${FPW_V1}${FPW_V2}" && ok "a pass-ending field flags" || fail "a pass-ending field flags"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+head=$(commit_file "$r" pass.env "${QPW_N1}${QPW_N2}=${D_V1}${D_V2}")
+expects_one "$r" "$base" "$head" pass.env dotenv && ok "a pass-named assignment flags" || fail "a pass-named assignment flags"
+r=$(mkrepo)
+printf 'session cwd %s%s%s%s end\n' "$ST_P1" "$ST_P2" "$HOME_U" "$ST_P3" > "$tmp/pm-tail.md"
+out=$(cd "$r" && POSTMASTER_DETECTIONS_LOG= bash "$PROMOTE" "$tmp/pm-tail.md" raw/trials/t413/tail.md 2>/dev/null); code=$?
+{ [ "$code" -eq 0 ] && cmp -s "$r/raw/trials/t413/tail.md" <(printf 'session cwd <redacted:private-path> end\n') \
+  && printf '%s' "$out" | grep -qF 'tail.md:1: private-path scrubbed' && ! leaked "$out" "$HOME_U"; } \
+  && ok "a scratch tail past the uid is scrubbed whole" || fail "a scratch tail past the uid is scrubbed whole (exit $code)"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+head=$(commit_file "$r" furl.txt "open ${FURL_A}${FURL_B}${HOME_U}${FURL_C}")
+expects_one "$r" "$base" "$head" furl.txt private-path "$HOME_U" && ok "a host-pathed file URL flags" || fail "a host-pathed file URL flags"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+head=$(commit_file "$r" pg.env "${PGP_N}${PGP_O}=${D_V1}${D_V2}")
+expects_one "$r" "$base" "$head" pg.env dotenv && ok "an unsplit password compound flags" || fail "an unsplit password compound flags"
 
 # V12's recheck divergence and the merge-resolution streaming cap hold only in
 # the suites: the first is a TOCTOU no blind probe reproduces stably, and the

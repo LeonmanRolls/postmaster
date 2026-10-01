@@ -55,8 +55,9 @@
 #                         value that is present, not an absence marker and
 #                         not a public no-reply or reserved-domain address;
 #                         the field name matches by its ending
-#                         (ownerMail, user_session) or a known
-#                         multi-component name (session_context)
+#                         (ownerMail, user_session), an unsplit compound
+#                         ending in a long secret word (pgpassword), or a
+#                         known multi-component name (session_context)
 #   email                 an address that is neither a public no-reply form
 #                         nor on a reserved domain
 #   account-id            an opaque org, account or session token whose
@@ -223,7 +224,9 @@ def value_span(match):
 # One secret-field-name matcher for every rule: a name matches by its
 # ending. The name splits on separators and camelCase boundaries, and
 # its last component decides: secret endings report as token,
-# contact endings as key, identifier endings as account-id. A bare
+# contact endings as key, identifier endings as account-id. A name with
+# no separators matches when it ends with a long secret word, so an
+# unsplit compound like pgpassword still reports. A bare
 # session or auth stays silent (a word, not a name), an id value
 # under six chars is a counter, not an identifier, a contact value
 # that is a public no-reply or reserved-domain address holds no leak,
@@ -237,7 +240,7 @@ SECRET_NAME_STEMS = frozenset({
 })
 SECRET_TOKEN_ENDINGS = frozenset({
     "sec" + "ret", "sec" + "rets", "pass" + "word", "pass" + "wd",
-    "p" + "wd", "pass" + "code", "passph" + "rase", "to" + "ken",
+    "p" + "wd", "pas" + "s", "pass" + "code", "passph" + "rase", "to" + "ken",
     "tok" + "ens", "k" + "ey", "ke" + "ys", "api" + "key",
     "private" + "key", "secret" + "key", "access" + "token",
     "refresh" + "token", "creden" + "tial", "credent" + "ials",
@@ -247,6 +250,16 @@ SECRET_KEY_ENDINGS = frozenset({
     "em" + "ail", "m" + "ail", "sess" + "ion",
 })
 SECRET_ID_ENDINGS = frozenset({"i" + "d", "i" + "ds", "uu" + "id", "gu" + "id"})
+# An unsplit compound ends with a long secret word: pgpassword is a
+# password. Short endings stay exact matches, or ordinary words ending
+# in their letters (bypass, compass, monkey, valid) would flag. Bare
+# auth and session stay silent through the single-word skip above.
+SECRET_TOKEN_SUFFIXES = (
+    "pass" + "word", "pass" + "wd", "pass" + "code", "passph" + "rase",
+    "sec" + "ret", "sec" + "rets", "to" + "ken", "tok" + "ens",
+    "creden" + "tial", "credent" + "ials", "a" + "uth",
+)
+SECRET_KEY_SUFFIXES = ("em" + "ail", "sess" + "ion")
 SECRET_SINGLE_SKIP = frozenset({"sess" + "ion", "a" + "uth"})
 SECRET_ID_MIN_VALUE = 6
 
@@ -269,6 +282,12 @@ def secret_field_kind(name):
         return "key"
     if last in SECRET_ID_ENDINGS:
         return "account-id"
+    for suffix in SECRET_TOKEN_SUFFIXES:
+        if squashed.endswith(suffix):
+            return "token"
+    for suffix in SECRET_KEY_SUFFIXES:
+        if squashed.endswith(suffix):
+            return "key"
     return None
 
 
@@ -354,14 +373,18 @@ HARNESS_NAMES = (
 # after a bare directory is still a home directory, not just a trailing
 # slash. The fixed literal prefixes make that widening safe; a bare tilde
 # keeps its slash, because a one-character anchor without one matches
-# binary noise hundreds of times over.
+# binary noise hundreds of times over. A file:// or ssh:// URL naming a
+# host before /home/ or /Users/ is a remote home; other schemes stay out,
+# so a web route under /home/ never flags.
 PRIVATE_PATH = re.compile(
     r"(?<![A-Za-z0-9_.$}~.-])(?:/home/|/Users/)([A-Za-z0-9._-]+)(?![A-Za-z0-9._-])"
     r"|(?<![A-Za-z0-9_.$}~.-])/ro[o]t/[A-Za-z0-9._-]+"
     r"|(?<![A-Za-z0-9_])~(?!\.)([A-Za-z0-9._-]+)/[^\s\"'<>),;]*"
     r"|(?<![A-Za-z0-9_.$}~.-])/tmp/(?:" + "|".join(HARNESS_NAMES)
-    + r")(?:-[A-Za-z0-9._-]+|/[^\s\"'<>),;]+)"
-    r"|(?<![A-Za-z0-9_])[A-Za-z]:\\Users\\([A-Za-z0-9._-]+)(?![A-Za-z0-9._-])",
+    + r")(?:-[A-Za-z0-9._-]+(?:/[^\s\"'<>),;]+)?|/[^\s\"'<>),;]+)"
+    r"|(?<![A-Za-z0-9_])[A-Za-z]:\\Users\\([A-Za-z0-9._-]+)(?![A-Za-z0-9._-])"
+    r"|(?<![A-Za-z0-9_.$}~.-])\\\\[A-Za-z0-9._-]+\\Users\\([A-Za-z0-9._-]+)(?![A-Za-z0-9._-])"
+    r"|(?<![A-Za-z0-9_])(?:file|ssh)://[A-Za-z0-9.-]+(?:/home/|/Users/)([A-Za-z0-9._-]+)(?![A-Za-z0-9._-])",
     re.IGNORECASE)
 IPV4 = re.compile(r"(?<![0-9.])(?:[0-9]{1,3}\.){3}[0-9]{1,3}(?![0-9.])")
 IPV6 = re.compile(r"(?<![0-9A-Fa-f:])(?:[0-9A-Fa-f]{0,4}:){2,7}[0-9A-Fa-f]{0,4}(?![0-9A-Fa-f:])")
@@ -394,7 +417,7 @@ PEM_HEADER = re.compile(r"(?i)(?P<value>-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----)")
 PGP_PRIVATE = re.compile(
     r"(?i)(?P<value>-----BEGIN PGP PRIVATE " + "KEY BLOCK-----)")
 PUTTY_KEY = re.compile(
-    r"(?P<value>PuTTY-User-Key-File-" + "2:" + r"\s*\S+)")
+    r"(?P<value>PuTTY-User-Key-File-" + "[23]:" + r"\s*\S+)")
 SSH2_KEY = re.compile(
     r"(?P<value>---- BEGIN SSH2 ENCRYPTED PRIVATE " + "KEY ----)")
 AGE_KEY = re.compile(
@@ -407,7 +430,7 @@ AGE_KEY = re.compile(
 KEY_BEGIN = re.compile(
     r"-----BEGIN (?:[A-Z0-9 ]*PRIVATE KEY|PGP PRIVATE " + "KEY BLOCK)-----"
     r"|---- BEGIN SSH2 ENCRYPTED PRIVATE " + "KEY ----"
-    r"|PuTTY-User-Key-File-" + "2:",
+    r"|PuTTY-User-Key-File-" + "[23]:",
     re.IGNORECASE)
 KEY_END = re.compile(
     r"-----END [^-]*-----|---- END SSH2 [^-]* ----|^Private-MAC:",
@@ -473,21 +496,33 @@ def blob_block_lines(root, commit, path):
         return set()
     return key_block_lines(shown.stdout.decode("utf-8", errors="surrogateescape"))
 BEARER_TOKEN = re.compile(r"(?i)\b(?P<value>Bearer\s+[A-Za-z0-9._~+/-]{20,}={0,2})")
-SECRET_VALUE = re.compile(r"(?i)^(?P<value>[A-Za-z0-9_./+=-]{20,})$")
+# A field value may carry password symbols: the dotenv excuse's characters
+# are literal inside quotes, so the field rule accepts them too. Braces
+# and hashes stay out, so a composed value and a hash-bearing one split
+# into fragments under the minimum and stay clean.
+SECRET_VALUE = re.compile(r"(?i)^(?P<value>[A-Za-z0-9_./+=&;|$`()\]<>\"'-]{20,})$")
 
 # A .env-style assignment is one NAME=value line. The name is key-like when an
 # underscore- or dash-separated component names secret-bearing material, and a
 # name ending in a pointer suffix points somewhere instead of holding a secret.
-# The value is a leak only when it is literal: shell and code metacharacters
-# mean the line composes or calls something rather than assigning a secret.
+# The value is a leak only when it is literal. Single quotes are literal
+# everywhere; double quotes excuse only an expansion; a spaced unquoted
+# value is a code assignment and stays silent when it carries a split
+# character; a spaceless one scans its first token before the first
+# split character.
 DOTENV_LINE = re.compile(r"^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_-]*)\s*=\s*(.+?)\s*$")
 DOTENV_KEYLIKE = frozenset({
     "key", "keys", "secret", "secrets", "token", "tokens", "password",
-    "passwd", "pwd", "credential", "credentials", "private", "auth",
+    "passwd", "pwd", "pass", "credential", "credentials", "private", "auth",
     "passphrase", "cert",
 })
 DOTENV_POINTER = ("_path", "_file", "_dir", "_url", "_type", "_host", "_port")
-DOTENV_METACHAR = re.compile(r"[$`(){}\];|&<>\"'\\]")
+DOTENV_SUFFIXES = (
+    "password", "passwd", "passcode", "passphrase", "secret", "secrets",
+    "token", "tokens", "credential", "credentials", "auth",
+)
+DOTENV_EXPANSION = re.compile(r"\$[{A-Za-z_(]|`")
+DOTENV_SPLIT = re.compile(r"[\"'(){}\[`\[]|\$[{A-Za-z_(]")
 DOTENV_MIN_VALUE = 8
 
 
@@ -499,17 +534,25 @@ def dotenv_finding(line):
     lowered = name.lower()
     if lowered.endswith(DOTENV_POINTER):
         return None
-    if not (set(re.split(r"[_-]+", lowered)) & DOTENV_KEYLIKE):
+    components = set(re.split(r"[_-]+", lowered))
+    if not (components & DOTENV_KEYLIKE) and not any(
+            part.endswith(suffix)
+            for part in components for suffix in DOTENV_SUFFIXES):
         return None
     # A quoted value may carry a trailing comment: readers take the quoted
     # span and ignore the rest, so the scan does too. Anything else after the
     # closing quote means the line composes a value, and the whole value keeps
-    # its quote characters and fails the literal check below.
+    # its quote characters and fails the literal check below. Which quote
+    # wrapped the value decides what excuses it: single quotes are literal
+    # everywhere, double quotes only excuse an expansion, and an unquoted
+    # value splits on spacing and split characters as below.
+    quoted = None
     if len(value) >= 2 and value[0] in {"\"", "'"}:
         end = value.find(value[0], 1)
         if end > 0:
             rest = value[end + 1:].strip()
             if rest == "" or rest.startswith("#"):
+                quoted = value[0]
                 value = value[1:end]
     elif re.match(r"#(\s|$)", value):
         # A comment on its own assigns nothing.
@@ -519,12 +562,33 @@ def dotenv_finding(line):
         # strip, a metacharacter in the comment would excuse the secret
         # before it. A hash without a blank before it stays literal.
         value = re.split(r"\s+#", value, maxsplit=1)[0]
-    if len(value) < DOTENV_MIN_VALUE or ABSENT_VALUE.match(value):
+    if not value:
         return None
-    if DOTENV_METACHAR.search(value):
+    if quoted == "'":
+        scan = value
+    elif quoted == '"':
+        if DOTENV_EXPANSION.search(value):
+            return None
+        scan = value
+    else:
+        # Unquoted: a value spaced from its equals sign is a code
+        # assignment, so when it carries a split character (a quote,
+        # paren, brace, open bracket, dollar expansion or backtick) it
+        # stays silent; a spaced literal still flags. A spaceless value
+        # is shell-shaped: only its first token assigns, so only that
+        # token scans, before the first split character; any other
+        # metacharacter in it is literal dotenv text.
+        gap = line[match.end(1):match.start(2)]
+        if gap[:1].isspace() and gap[-1:].isspace():
+            if DOTENV_SPLIT.search(value):
+                return None
+            scan = value
+        else:
+            scan = DOTENV_SPLIT.split(value.split(None, 1)[0], maxsplit=1)[0]
+    if len(scan) < DOTENV_MIN_VALUE or ABSENT_VALUE.match(scan):
         return None
-    start = line.find(value, match.start(2))
-    return (start, start + len(value), "dotenv", value)
+    start = line.find(scan, match.start(2))
+    return (start, start + len(scan), "dotenv", scan)
 
 COAUTHOR_PREFIX = "Co-Authored" + "-By:"
 ASSISTANT_VENDORS = (
@@ -663,15 +727,17 @@ def parse_markers(line):
     return parsed
 
 
-# Escape sequences, every form a harness log may carry: CSI, a terminated
-# OSC with its parameter text kept for its own unit, a character-set
-# designation, a two-character Fe/Fs/Fp sequence, and a lone ESC. An
-# unterminated OSC matches only its ESC: its text stays visible, failing
-# closed, since stripping past its end would swallow the values after it.
+# Escape sequences, every form a harness log may carry: CSI with full
+# parameter bytes, a terminated OSC with its parameter text kept for its
+# own unit, a character-set designation, a two-character Fe/Fs/Fp
+# sequence over the whole 0x30-0x7E range, and a lone ESC. An
+# unterminated OSC matches only its opener pair: its text stays
+# visible, failing closed, since stripping past its end would swallow
+# the values after it.
 ANSI_SEQUENCE = re.compile(
-    r"(?:\x1b\[|\x9b)[0-9;:?]*[ -/]*[@-~]"
+    r"(?:\x1b\[|\x9b)[0-9:;<=>?]*[ -/]*[@-~]"
     r"|(?:\x1b\]|\x9d)(?P<params>[^\x07\x1b\x9c]*)(?:\x07|\x1b\\|\x9c)"
-    r"|\x1b[()][0-9A-Za-z]|\x1b[A-Za-z0-9=>@^_]|\x1b")
+    r"|\x1b[()][0-9A-Za-z]|\x1b[0-~]|\x1b")
 JSON_STRING = re.compile(r'"(?:[^"\\\n]|\\.)*"')
 # Nested JSON strings decode to this depth; deeper text still scans as
 # plain text, so the cap costs precision, never silence, and recursion
@@ -1228,6 +1294,18 @@ def scan_merge_diff(root, parents, merge):
         changed &= set(changed_names(git(["diff", "--name-only", "-z", other, merge, "--"], cwd=root)))
     suspects = []
     quiet = []
+    # A file the resolution creates is in no parent: added against every
+    # one of them. Its name publishes with it, so it scans at line 0
+    # exactly like a commit's added file; a side branch's own adds are in
+    # their commits' diffs and report there, never here.
+    created = None
+    for parent in parents:
+        names = set(changed_names(git(
+            ["diff", "--name-only", "-z", "--diff-filter=A", parent, merge, "--"], cwd=root)))
+        created = names if created is None else (created & names)
+    for path in sorted(created or ()):
+        for _start, _end, kind, _value in findings(path):
+            suspects.append((path, 0, kind, path))
     for path in sorted(changed):
         held = [set(line_digest(text)
                     for _n, text in added_lines(root, other, merge, path))
@@ -1514,6 +1592,7 @@ def self_test(root):
     noreply_addr = "verify-merge" + AT + "users.noreply.github.com"
     reserved_addr = "relay" + AT + "exam" + "ple.com"
     plus_addr = "First.Last+tag" + AT + "sub." + "relay-413" + ".net"
+    merge_addr = "lane-414" + AT + "relay-414" + ".net"
     private_ip = ".".join(("10", "135", "4", "13"))
     cgnat_ip = ".".join(("100", "99", "4", "13"))
     public_100 = ".".join(("100", "128", "0", "1"))
@@ -1532,6 +1611,8 @@ def self_test(root):
     compound_aws = "E413" + "K7mQ2xZ9aVbN4qy7W8eR0tY"
     compound_env = "F413" + "mQ2xZ9aVbN4qy7W8eR0tYu"
     compound_camel = "G413" + "xZ9aVbN4qy7W8eR0tYuI1o"
+    field_sym = "Db413Q7mZ2xK9a&Vb" + "N4qy7W8"
+    field_dollar = "Db413Q7mZ2xK9a$" + "VbN4qy7W8"
     key_body1 = "QUJD" * 10
     key_body2 = "REVG" * 10
     key_body1b = "QkJD" * 10
@@ -1544,11 +1625,12 @@ def self_test(root):
     coauthored = "Co-Authored" + "-By: "
     generated_with = "generated-with: " + "ImaginaryAide"
     secrets = [
-        sample_addr, plus_addr, private_ip, cgnat_ip, private_host, tailnet_host,
+        sample_addr, plus_addr, merge_addr, private_ip, cgnat_ip, private_host, tailnet_host,
         private_path, scratch_path, fake_token, fake_key_id, fake_bearer,
         fake_org_id, fake_sess_id, fake_uuid_value, fake_account,
         "fixture-session-413", "fixture-org-413", "withheld",
         compound_pw, compound_aws, compound_env, compound_camel,
+        field_sym, field_dollar,
         key_body1, key_body2, key_body1b, age_body,
     ]
 
@@ -1622,6 +1704,12 @@ def self_test(root):
                 "pos-home-period")
             pos("private-path", "ver \"" + "C:" + "\\Users\\" + "fixture-user-413" + "\"\n",
                 "pos-drive-quoted")
+            pos("private-path", "open " + "\\\\" + "myhost" + "\\Users\\" + "fixture-user-413" + "\\x soon\n",
+                "pos-unc-path")
+            pos("private-path", "open " + "file://" + "relay-host" + "/home/" + "fixture-user-413" + "/notes.txt\n",
+                "pos-file-url")
+            pos("private-path", "open " + "ssh://" + "devbox" + "/home/" + "fixture-user-413" + "/x\n",
+                "pos-ssh-url")
             pos("private-host", "endpoint " + private_ip + ":8080\n", "pos-private-ip")
             pos("private-host", "status at https://" + private_host + ":8443/up\n", "pos-private-host")
             pos("private-host", "relay at " + cgnat_ip + ":8080\n", "pos-cgnat-ip")
@@ -1635,6 +1723,8 @@ def self_test(root):
             pos("assistant-attribution", 'Generated with Claude\n', "pos-generated")
             pos("assistant-attribution", generated_with + "\n", "pos-generated-with")
             pos("dotenv", 'SESSION_SECRET=relay-413-quiet\n', "pos-dotenv")
+            pos("dotenv", 'DB_PASS=relay-413-quiet\n', "pos-dotenv-pass")
+            pos("dotenv", 'PGPASSWORD=relay-413-quiet\n', "pos-dotenv-pgpassword")
             pos("dotenv", 'SESSION_SECRET="relay-413-calm" # rotate soon\n',
                 "pos-dotenv-comment")
             pos("dotenv", 'SESSION_SECRET=\'relay-413-still\' # rotate soon\n',
@@ -1643,7 +1733,32 @@ def self_test(root):
                 "pos-dotenv-unquoted-comment")
             pos("dotenv", 'SESSION_SECRET=sec#retLiteralValue99\n',
                 "pos-dotenv-literal-hash")
+            pos("dotenv", 'DB_PASSWORD=\'Db413&K7mQ2x\'\n',
+                "pos-dotenv-single-symbol")
+            pos("dotenv", 'DB_PASSWORD="Db413(K7m)Q2x"\n',
+                "pos-dotenv-double-paren")
+            pos("dotenv", 'DB_PASSWORD=\'${STAGING}xx413\'\n',
+                "pos-dotenv-single-expansion-literal")
+            pos("dotenv", 'DB_PASSWORD=\'Db413$K7mQ2x\'\n',
+                "pos-dotenv-single-dollar")
+            pos("dotenv", 'DB_PASSWORD=\'Db413`K7mQ2x\'\n',
+                "pos-dotenv-single-backtick")
+            pos("dotenv", 'DB_PASSWORD="cost$.413.calm"\n',
+                "pos-dotenv-double-dollar-literal")
+            pos("dotenv", 'DB_PASSWORD=Db413&K7mQ2xZ9a\n',
+                "pos-dotenv-unquoted-symbol")
+            pos("dotenv", 'DB_PASSWORD=Db413Q7m$VARNAME\n',
+                "pos-dotenv-unquoted-prefix")
+            pos("dotenv", 'password = correct-horse-413\n',
+                "pos-dotenv-spaced-literal")
+            pos("token", '{"pass' + 'word": "' + field_sym + '"}\n',
+                "pos-field-symbols")
+            pos("token", '{"pass' + 'word": "' + field_dollar + '"}\n',
+                "pos-field-dollar")
             pos("token", "db_password: " + compound_pw + "\n", "pos-compound-password")
+            pos("token", "db_pass: " + compound_pw + "\n", "pos-compound-pass")
+            pos("token", '{"pgpassword": "' + compound_pw + '"}\n', "pos-pgpassword")
+            pos("token", "pass_word: " + compound_pw + "\n", "pos-pass-word")
             pos("token", '{"aws_secret_access_key": "' + compound_aws + '"}\n',
                 "pos-compound-aws")
             pos("token", '{"POSTGRES_PASSWORD": "' + compound_env + '"}\n',
@@ -1655,6 +1770,7 @@ def self_test(root):
             pos("account-id", '{"i' + 'd": "abc123"}\n', "pos-bare-id")
             pos("token", '-----BEGIN PGP PRIVATE ' + 'KEY BLOCK-----\n', "pos-pgp-header")
             pos("token", 'PuTTY-User-Key-File-' + '2: test-413-key\n', "pos-putty-header")
+            pos("token", 'PuTTY-User-Key-File-' + '3: test-413-key\n', "pos-putty3-header")
             pos("token", '---- BEGIN SSH2 ENCRYPTED PRIVATE ' + 'KEY ----\n',
                 "pos-ssh2-header")
             pos("token", "AGE-SECRET-KEY-" + age_body + "\n", "pos-age-key")
@@ -1677,6 +1793,28 @@ def self_test(root):
                 "neg-dotenv-comment-only", "a comment on its own assigns nothing")
             neg("dotenv", "MY_PASSWORD=short # a much longer comment here\n",
                 "neg-dotenv-short-stripped", "a short value stays short under its comment")
+            neg("dotenv", 'DB_PASSWORD="xx${STAGING}413"\n',
+                "neg-dotenv-double-expansion", "a double-quoted expansion is composed")
+            neg("dotenv", 'DB_PASSWORD="ab413`cd413ef"\n',
+                "neg-dotenv-double-backtick", "a double-quoted substitution is composed")
+            neg("dotenv", 'DB_PASSWORD="xx$STAGING413"\n',
+                "neg-dotenv-double-bare-dollar", "a double-quoted bare expansion is composed")
+            neg("dotenv", 'DB_PASSWORD="xx$(hostname)413"\n',
+                "neg-dotenv-double-command", "a double-quoted substitution is composed")
+            neg("dotenv", 'password = compute' + '_value(413)\n',
+                "neg-dotenv-spaced-code", "a spaced code assignment is not dotenv")
+            neg("dotenv", 'key=lambda item: order\n',
+                "neg-dotenv-first-token", "only the first token of a spaceless value assigns")
+            neg("token", '{"pass' + 'word": "${STAGING}_relay_secret_413"}\n',
+                "neg-field-braces", "a composed field value splits on its braces")
+            neg("token", '{"passph' + 'rase": "correct horse battery staple"}\n',
+                "neg-field-spaces", "a spaced passphrase is not a token")
+            neg("token", '{"compass": "' + compound_pw + '"}\n',
+                "neg-compass", "a compass name is not secret-bearing")
+            neg("token", '{"monkey": "' + compound_pw + '"}\n',
+                "neg-monkey-long", "a long value under monkey stays silent")
+            neg("token", '{"valid": "' + compound_pw + '"}\n',
+                "neg-valid", "a valid name is not an identifier")
             neg("email", "write " + "someone" + AT + "example.org for the demo\n",
                 "neg-reserved-example", "a reserved example domain is clean")
             neg("email", "write " + "someone" + AT + "thing.test for the demo\n",
@@ -1750,6 +1888,8 @@ def self_test(root):
                 "neg-user-bracketed", "a bracketed user is clean")
             neg("private-path", "/tmp/pip-install-9 holds wheels\n",
                 "neg-tmp-lookalike", "a lookalike temp dir is clean")
+            neg("private-path", "see https://app-413.example.com/home/dashboard today\n",
+                "neg-url-route", "a web route under /home/ is not a home")
             neg("private-path", 'mkdir -p "$tmp/root/scripts" for the case\n',
                 "neg-var-root", "a root dir under a variable is scaffolding")
             neg("private-path", 'mkdir -p "$d/home/user" for the case\n',
@@ -1821,6 +1961,24 @@ def self_test(root):
             good = good and bool(off and off.returncode == 0 and not off.stdout)
             ok("a key block flags its header, body and end", good)
             last = key_head
+            putty3_text = ("PuTTY-User-Key-File-" + "3: ssh-ed25519\n"
+                           + "Encryption: none\n"
+                           + "Comment: test-413-key\n"
+                           + "Private-Lines: 1\n"
+                           + key_body1 + "\n"
+                           + "Private-MAC: " + "a" * 40 + "\n")
+            putty3_head = add_fixture(repo, "fixtures/putty3-block.txt", putty3_text,
+                                      "putty v3 key")
+            result = run_child([last, putty3_head], repo)
+            lines = [] if result is None else result.stdout.splitlines()
+            expected = ["%s:fixtures/putty3-block.txt:%d: token" % (putty3_head, n)
+                        for n in (1, 5, 6)]
+            good = bool(result and result.returncode == 1 and lines == expected
+                        and silent(result))
+            off = run_child([last, putty3_head], repo, {"SCRUB_CHECK_DISABLE": "token"})
+            good = good and bool(off and off.returncode == 0 and not off.stdout)
+            ok("a PuTTY v3 block flags its header, body and end", good)
+            last = putty3_head
             body_base = add_fixture(repo, "keys/deploy.pem", key_text, "deploy key")
             rotated = key_text.replace(key_body1, key_body1b, 1)
             body_head = add_fixture(repo, "keys/deploy.pem", rotated, "rotate one line")
@@ -2007,6 +2165,41 @@ def self_test(root):
                 and deduped.stdout.splitlines() == ["%s:leak2.txt:1: email" % side_sha]
                 and sample_addr not in deduped.stdout))
             last = merge2
+            git(["checkout", "-qb", "side-413c"], cwd=repo)
+            add_fixture(repo, "merge-name.txt", "side line\n", "side name work")
+            git(["checkout", "-q", "main"], cwd=repo)
+            add_fixture(repo, "merge-name.txt", "main line\n", "main name work")
+            subprocess.run(["git", "merge", "--no-commit", "side-413c"], cwd=repo,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+            (repo / "merge-name.txt").write_text("resolved\n", encoding="utf-8")
+            (repo / (merge_addr + ".txt")).write_text(
+                "just public words\n", encoding="utf-8")
+            git(["add", "--", "merge-name.txt", merge_addr + ".txt"], cwd=repo)
+            git(["-c", "user.name=Fixture", "-c", "user.email=" + FIXTURE_MAILBOX,
+                 "commit", "-m", "merge the named side"], cwd=repo)
+            merge_named = git(["rev-parse", "HEAD"], cwd=repo).decode("ascii").strip()
+            named = run_child([last, merge_named], repo)
+            ok("a file the resolution creates has its name scanned", bool(
+                named and named.returncode == 1
+                and named.stdout.splitlines() == ["%s:[redacted]:0: email" % merge_named]
+                and merge_addr not in named.stdout))
+            last = merge_named
+            git(["checkout", "-qb", "side-413d"], cwd=repo)
+            side_named = add_fixture(repo, plus_addr + ".txt", "just public words\n",
+                                     "side named leak")
+            git(["checkout", "-q", "main"], cwd=repo)
+            add_fixture(repo, "merge-name.txt", "resolved\nmain advance\n",
+                        "main name advance")
+            git(["-c", "user.name=Fixture", "-c", "user.email=" + FIXTURE_MAILBOX,
+                 "merge", "--no-ff", "-m", "merge the renamed side", "side-413d"], cwd=repo)
+            merge_side_named = git(["rev-parse", "HEAD"], cwd=repo).decode("ascii").strip()
+            side_named_out = run_child([last, merge_side_named], repo)
+            ok("a side branch filename is reported once, under its own commit", bool(
+                side_named_out and side_named_out.returncode == 1
+                and side_named_out.stdout.splitlines() == [
+                    "%s:[redacted]:0: email" % side_named]
+                and plus_addr not in side_named_out.stdout))
+            last = merge_side_named
             add_fixture(repo, "old-leak.txt", "contact: " + sample_addr + "\n", "old leak")
             quiet_base = add_fixture(repo, "quiet-base.txt", "ordinary public sample\n",
                                      "quiet base")
@@ -2338,6 +2531,11 @@ def self_test(root):
                 shaped and shaped.returncode == 0
                 and shaped.stdout.splitlines() == ["[redacted]"]
                 and sample_addr not in shaped.stdout))
+            scratch_tail = run_child(
+                ["--safe-path", "/tmp/" + "clau" + "de-9999" + "/proj/sess/x.txt"], repo)
+            ok("--safe-path redacts a scratch path past its uid", bool(
+                scratch_tail and scratch_tail.returncode == 0
+                and scratch_tail.stdout.splitlines() == ["[redacted]"]))
             plain_path = run_child(["--safe-path", "wiki/concepts/p.md"], repo)
             ok("--safe-path passes a clean path through", bool(
                 plain_path and plain_path.returncode == 0
@@ -2454,6 +2652,38 @@ def self_test(root):
                 csi and csi.returncode == 1
                 and csi.stdout.splitlines() == ["csi.jsonl:1: key"]
                 and silent(csi)))
+            (repo / "fp.jsonl").write_text(
+                '{"userEm' + "\x1b~" + 'ail": "fixture413"}\n',
+                encoding="utf-8")
+            fp = run_child(["--files", "fp.jsonl"], repo)
+            ok("a key split inside its ending by an Fp sequence flags", bool(
+                fp and fp.returncode == 1
+                and fp.stdout.splitlines() == ["fp.jsonl:1: key"]
+                and silent(fp)))
+            (repo / "csipriv.jsonl").write_text(
+                '{"userEm' + "\x1b[>0m" + 'ail": "fixture413"}\n',
+                encoding="utf-8")
+            csipriv = run_child(["--files", "csipriv.jsonl"], repo)
+            ok("a key split by a private-parameter CSI sequence flags", bool(
+                csipriv and csipriv.returncode == 1
+                and csipriv.stdout.splitlines() == ["csipriv.jsonl:1: key"]
+                and silent(csipriv)))
+            (repo / "csipriv2.jsonl").write_text(
+                '{"userEm' + "\x1b[=5u" + 'ail": "fixture413"}\n',
+                encoding="utf-8")
+            csipriv2 = run_child(["--files", "csipriv2.jsonl"], repo)
+            ok("a key split by an =-parameter CSI sequence flags", bool(
+                csipriv2 and csipriv2.returncode == 1
+                and csipriv2.stdout.splitlines() == ["csipriv2.jsonl:1: key"]
+                and silent(csipriv2)))
+            (repo / "csipriv3.jsonl").write_text(
+                '{"userEm' + "\x1b[<u" + 'ail": "fixture413"}\n',
+                encoding="utf-8")
+            csipriv3 = run_child(["--files", "csipriv3.jsonl"], repo)
+            ok("a key split by a <-parameter CSI sequence flags", bool(
+                csipriv3 and csipriv3.returncode == 1
+                and csipriv3.stdout.splitlines() == ["csipriv3.jsonl:1: key"]
+                and silent(csipriv3)))
             (repo / "j-ansi.jsonl").write_text(
                 '{"text": "\\u001b[35m' + private_path + '/x\\u001b[0m"}\n',
                 encoding="utf-8")

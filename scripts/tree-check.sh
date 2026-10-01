@@ -206,6 +206,25 @@ if [ "${1:-}" = "--self-test" ]; then
       && printf '  ok   a pipe in a raw/ name is scanned whole\n' \
       || { printf '  FAIL a pipe in a raw/ name is scanned whole: exit %s\n' "$code"; fails=$((fails+1)); }
   }
+  r=$(repo) && { cd "$r" || exit 2
+    base=$(git rev-parse HEAD)
+    git checkout -qb side-413
+    commit_file "$r" anchor.txt 'side advance'
+    git checkout -q main
+    commit_file "$r" anchor.txt 'main advance'
+    git merge --no-commit side-413 >/dev/null 2>&1 || true
+    mkdir -p .postmaster/runs
+    printf '{"run": "merge"}\n' > .postmaster/runs/merge413.json
+    printf 'resolved\n' > anchor.txt
+    git add anchor.txt .postmaster/runs/merge413.json
+    git commit -qm "merge the side"
+    git rm -q -- .postmaster/runs/merge413.json && git commit -qm "remove the record"
+    head=$(git rev-parse HEAD)
+    out=$(bash "$HERE/tree-check.sh" "$base" "$head" 2>/dev/null); code=$?
+    { [ "$code" -eq 1 ] && printf '%s' "$out" | grep -qF '.postmaster/runs/merge413.json'; } \
+      && printf '  ok   a .postmaster/ file merged in and then deleted fails as committed\n' \
+      || { printf '  FAIL a .postmaster/ file merged in and then deleted fails as committed: exit %s\n' "$code"; fails=$((fails+1)); }
+  }
 
   echo "negative controls: the exempt file, clean trees and clean additions pass"
   r=$(repo) && { cd "$r" || exit 2
@@ -388,7 +407,9 @@ release() { rm -f -- "$ENUMF"; ENUMF=""; }
 
 # Committed in the range first: a file added and then deleted before the tip
 # is gone from the tip but was still committed. Deletions never fault.
-capture log --diff-filter=AMT -z --name-only --pretty=format: "$BASE..$HEAD_REF" -- .postmaster
+# Split merges per parent: without -m a merge names nothing, and a file
+# its resolution added would escape both this query and the tip scan.
+capture log -m --diff-filter=AMT -z --name-only --pretty=format: "$BASE..$HEAD_REF" -- .postmaster
 while IFS= read -r -d '' p; do
   [ -n "$p" ] || continue
   [ "$p" = ".postmaster/project.toml" ] && continue
