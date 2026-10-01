@@ -27,9 +27,10 @@ TREE=$REPO/scripts/tree-check.sh
 LINT=$REPO/scripts/wiki-lint.sh
 PROMOTE=$REPO/scripts/raw-promote.sh
 REWRITE=$REPO/scripts/scrub-rewrite.sh
+MERGE=$REPO/scripts/verify-merge.sh
 STATUS=$REPO/scripts/runs-status.sh
 VERIFY=$REPO/scripts/verify.sh
-for s in "$SCRUB" "$TREE" "$LINT" "$PROMOTE" "$REWRITE" "$STATUS" "$VERIFY"; do
+for s in "$SCRUB" "$TREE" "$LINT" "$PROMOTE" "$REWRITE" "$STATUS" "$VERIFY" "$MERGE"; do
   [ -x "$s" ] || { echo "oracle-135: no $s" >&2; exit 2; }
 done
 
@@ -44,11 +45,13 @@ ok() { printf '  ok   %s\n' "$1"; }
 fail() { printf '  FAIL %s\n' "$1"; fails=$((fails+1)); }
 
 # Every fabricated secret, assembled from pieces so this file carries no
-# matchable form. own-branch-clean below proves it.
+# matchable form. own-branch-clean below proves it. A name ending in a
+# secret word takes its value through printf -v, never `=`: assigning a
+# value to such a name is itself the shape the check finds.
 E_LOCAL='relay-413'; E_HOST='quiet-relay-413'; E_TLD='net'
-EMAIL="contact-${E_LOCAL}@${E_HOST}.${E_TLD}"
+printf -v EMAIL '%s' "contact-${E_LOCAL}@${E_HOST}.${E_TLD}"
 PLUS_LOCAL='First.Last+tag'
-PLUS_EMAIL="${PLUS_LOCAL}@sub.${E_HOST}.${E_TLD}"
+printf -v PLUS_EMAIL '%s' "${PLUS_LOCAL}@sub.${E_HOST}.${E_TLD}"
 DOT='.'
 PRIV_IP="10${DOT}135${DOT}4${DOT}13"
 CGNAT_IP="100${DOT}99${DOT}4${DOT}13"
@@ -64,7 +67,7 @@ BEARER="Bearer ${BEARER_V1}${BEARER_V2}"
 O_P1='or'; O_P2='g-'; O_B='fictional413relayK7mQ2xZ9'
 ORG_TOKEN="${O_P1}${O_P2}${O_B}"
 SESS_P='sess-'; SESS_B='fictional413K7mQ2x'
-SESS_ID="${SESS_P}${SESS_B}"
+printf -v SESS_ID '%s' "${SESS_P}${SESS_B}"
 UUID_A='41313513-0042'; UUID_B='4c1d-9e5f-135135135135'
 UUID_V="${UUID_A}-${UUID_B}"
 ACCT_A='123456'; ACCT_B='789012'
@@ -90,6 +93,22 @@ DOTENV_LINE="${D_N1}${US}${D_N2}=${D_V1}${D_V2}"
 ALLOW_P='private-data:allo'
 ALLOW="${ALLOW_P}w"
 ALLOW_NEXT="${ALLOW_P}w-next-line"
+ON_LOCAL='oracle-135'
+printf -v NOREPLY_ADDR '%s' "${ON_LOCAL}@users.noreply.github.com"
+BODY1='QUJDQUJDQUJDQUJDQUJDQUJDQUJDQUJDQUJDQUJD'
+BODY2='REVGREVGREVGREVGREVGREVGREVGREVGREVGREVG'
+BODY3='QkJDQkJDQkJDQkJDQkJDQkJDQkJDQkJDQkJDQkJD'
+PEM_HEAD='-----BEGIN PRIVATE '
+PEM_T='KEY-----'
+PEM_END='-----END PRIVATE '
+PGP_H='-----BEGIN PGP PRIVATE '
+PGP_T='KEY BLOCK-----'
+PUTTY_H='PuTTY-User-Key-File-'
+PUTTY_V='2: test-413-key'
+SSH2_H='---- BEGIN SSH2 ENCRYPTED PRIVATE '
+SSH2_T='KEY ----'
+AGE_A='AGE-'; AGE_S='SECRET-'; AGE_K='KEY-'
+AGE_B='AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
 
 mkrepo() {  # a scratch repo on main with one clean commit, printed
   local d
@@ -654,12 +673,12 @@ for c in checks.scrub checks.tree checks.wiki-lint; do
   grep -qF "[$c]" "$REPO/.postmaster/project.toml" \
     && ok "$c is declared" || fail "$c is declared"
 done
-for n in raw-promote scrub-check scrub-rewrite tree-check; do
+for n in raw-promote scrub-check scrub-rewrite tree-check verify-merge; do
   grep -qF "$n" "$REPO/.postmaster/project.toml" \
     && ok "$n self-tests in the gate" || fail "$n self-tests in the gate"
 done
 count=$(python3 -c 'import re; m=re.search(r"for n in (.*?); do", open("'"$REPO"'/.postmaster/project.toml").read()); print(len(m.group(1).split()))')
-[ "$count" = "44" ] && ok "the gate runs 44 self-tests" || fail "the gate runs 44 self-tests ($count)"
+[ "$count" = "45" ] && ok "the gate runs 45 self-tests" || fail "the gate runs 45 self-tests ($count)"
 out=$(cd "$REPO" && POSTMASTER_DETECTIONS_LOG= bash "$SCRUB" "$BASE_ARG" "$HEAD_ARG" 2>/dev/null); code=$?
 { [ "$code" -eq 0 ] && [ -z "$out" ]; } \
   && ok "the change's own range scans clean" || fail "the change's own range scans clean (exit $code)"
@@ -673,7 +692,7 @@ grep -q "scrub-check" "$REPO/raw/README.md" && grep -q "backstop" "$REPO/raw/REA
   && grep -q "not a proof" "$REPO/raw/README.md" \
   && ok "the evidence guide names the check and its backstop" || fail "the evidence guide names the check and its backstop"
 allowed='^(argparse|ast|base64|collections|configparser|datetime|difflib|enum|fnmatch|functools|getopt|glob|hashlib|hmac|io|ipaddress|itertools|json|locale|logging|math|mimetypes|os|pathlib|platform|plistlib|pprint|queue|random|re|secrets|selectors|shlex|shutil|signal|socket|ssl|stat|statistics|string|struct|subprocess|sys|tarfile|tempfile|textwrap|threading|time|traceback|typing|unicodedata|unittest|urllib|uuid|warnings|weakref|xml|zipfile|zlib)$'
-foreign=$(grep -hoE '^[ \t]*(import|from) [a-zA-Z0-9_]+' "$SCRUB" "$TREE" "$LINT" "$PROMOTE" "$REWRITE" "$STATUS" "$VERIFY" \
+foreign=$(grep -hoE '^[ \t]*(import|from) [a-zA-Z0-9_]+' "$SCRUB" "$TREE" "$LINT" "$PROMOTE" "$REWRITE" "$STATUS" "$VERIFY" "$MERGE" \
   | awk '{print $NF}' | cut -d. -f1 | sort -u | grep -vE "$allowed" || true)
 [ -z "$foreign" ] && ok "the checks need nothing beyond the standard library" || fail "the checks need nothing beyond the standard library ($foreign)"
 
@@ -791,11 +810,124 @@ out=$(POSTMASTER_DETECTIONS_LOG= bash "$LINT" "$w" 2>/dev/null); code=$?
   && printf '%s' "$out" | grep -qF '[redacted]' && ! leaked "$out" "$QE2@$QH2.$QT2"; } \
   && ok "a quote fault on a shaped page path redacts the path" || fail "a quote fault on a shaped page path redacts the path (exit $code)"
 r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
-head=$(commit_file "$r" j.jsonl "{\"mail\": \"$EMAIL\", \"note\": \"x # $ALLOW email -- made-up\"}")
+MAIL_FIELD='mail'
+json=$(printf '{"%s": "%s", "note": "x # %s email -- made-up"}' "$MAIL_FIELD" "$EMAIL" "$ALLOW")
+head=$(commit_file "$r" j.jsonl "$json")
 out=$(cd "$r" && POSTMASTER_DETECTIONS_LOG= bash "$SCRUB" "$base" "$head" 2>/dev/null); code=$?
 { [ "$code" -eq 1 ] && [ "$out" = "$head:j.jsonl:1: email
+$head:j.jsonl:1: key
 $head:j.jsonl:1: marker" ] && ! leaked "$out" "$EMAIL"; } \
   && ok "a marker in another field neither suppresses nor passes" || fail "a marker in another field neither suppresses nor passes (exit $code)"
+echo "round-5 repairs: shared causes and the merge scan"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+head=$(commit_file "$r" split.txt "$(printf '{"ownerM\033[0mail": "%s"}' "$SESS_VAL")")
+expects_one "$r" "$base" "$head" split.txt key "$SESS_VAL" && ok "a name split by an escape still matches by its ending" || fail "a name split by an escape still matches by its ending"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+outer=$(python3 -c 'import json,sys; print(json.dumps({"outer": sys.argv[1]}))' "$(printf '{"%s": "%s"}' "$MAIL_FIELD" "$EMAIL")")
+head=$(commit_file "$r" nest.jsonl "$outer")
+out=$(cd "$r" && POSTMASTER_DETECTIONS_LOG= bash "$SCRUB" "$base" "$head" 2>/dev/null); code=$?
+{ [ "$code" -eq 1 ] && [ "$out" = "$head:nest.jsonl:1: email
+$head:nest.jsonl:1: key" ] && ! leaked "$out" "$EMAIL"; } \
+  && ok "a suspect nested two strings deep flags" || fail "a suspect nested two strings deep flags (exit $code)"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+content=$(printf 'aws_secret_access_key: %s\ndb_password: "%s"\nPOSTGRES_PASSWORD=%s\n' "$TOKEN_V" "$TOKEN_V" "$TOKEN_V")
+head=$(commit_file "$r" comp.txt "$content")
+out=$(cd "$r" && POSTMASTER_DETECTIONS_LOG= bash "$SCRUB" "$base" "$head" 2>/dev/null); code=$?
+{ [ "$code" -eq 1 ] && [ "$out" = "$head:comp.txt:1: token
+$head:comp.txt:2: token
+$head:comp.txt:3: dotenv
+$head:comp.txt:3: token" ] && ! leaked "$out" "$TOKEN_V"; } \
+  && ok "compound secret endings flag" || fail "compound secret endings flag (exit $code)"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+{ printf '%s%s\n' "$PGP_H" "$PGP_T"
+  printf '%s%s\n' "$PUTTY_H" "$PUTTY_V"
+  printf '%s%s\n' "$SSH2_H" "$SSH2_T"
+  printf '%s%s%s%s\n' "$AGE_A" "$AGE_S" "$AGE_K" "$AGE_B"
+  printf '%s%s\n%s\n%s\n%s%s\n' "$PEM_HEAD" "$PEM_T" "$BODY1" "$BODY2" "$PEM_END" "$PEM_T"; } > "$tmp/keys.txt"
+cp "$tmp/keys.txt" "$r/keys.txt"
+( cd "$r" && git add keys.txt && git commit -qm "add keys" >/dev/null ); head=$(git -C "$r" rev-parse HEAD)
+out=$(cd "$r" && POSTMASTER_DETECTIONS_LOG= bash "$SCRUB" "$base" "$head" 2>/dev/null); code=$?
+{ [ "$code" -eq 1 ] && [ "$(printf '%s' "$out" | grep -c ': token$')" -eq 8 ] && ! leaked "$out" "$BODY1"; } \
+  && ok "every key format flags its every line" || fail "every key format flags its every line (exit $code)"
+r=$(mkrepo)
+( cd "$r" && mkdir -p keys && { printf '%s%s\n%s\n%s\n%s%s\n' "$PEM_HEAD" "$PEM_T" "$BODY1" "$BODY2" "$PEM_END" "$PEM_T"; } > keys/deploy.pem \
+  && git add keys/deploy.pem && git commit -qm "deploy key" >/dev/null ); body_base=$(git -C "$r" rev-parse HEAD)
+( cd "$r" && { printf '%s%s\n%s\n%s\n%s%s\n' "$PEM_HEAD" "$PEM_T" "$BODY3" "$BODY2" "$PEM_END" "$PEM_T"; } > keys/deploy.pem \
+  && git add keys/deploy.pem && git commit -qm "rotate one line" >/dev/null ); body_head=$(git -C "$r" rev-parse HEAD)
+out=$(cd "$r" && POSTMASTER_DETECTIONS_LOG= bash "$SCRUB" "$body_base" "$body_head" 2>/dev/null); code=$?
+{ [ "$code" -eq 1 ] && [ "$out" = "$body_head:keys/deploy.pem:2: token" ] && ! leaked "$out" "$BODY3"; } \
+  && ok "a body-only change inside a key block flags" || fail "a body-only change inside a key block flags (exit $code)"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+content=$(printf '{"note": "x # %s email -- r"}\n{"contact": "%s"}\n' "$ALLOW_NEXT" "$EMAIL")
+head=$(commit_file "$r" jn.jsonl "$content")
+out=$(cd "$r" && POSTMASTER_DETECTIONS_LOG= bash "$SCRUB" "$base" "$head" 2>/dev/null); code=$?
+{ [ "$code" -eq 1 ] && [ "$out" = "$head:jn.jsonl:1: marker
+$head:jn.jsonl:2: email" ] && ! leaked "$out" "$EMAIL"; } \
+  && ok "an in-string next-line marker does not reach the next record" || fail "an in-string next-line marker does not reach the next record (exit $code)"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+head=$(commit_file "$r" quiet.txt "$(printf '{"%s": "%s"}' "$KEY_USER" "$NOREPLY_ADDR")")
+expects_silent "$r" "$base" "$head" && ok "a contact field holding a no-reply address is clean" || fail "a contact field holding a no-reply address is clean"
+r=$(mkrepo)
+printf 'see /home/%s@%s.%s/docs for logs\n' "$HOME_U" "$E_HOST" "$E_TLD" > "$tmp/pm-part.md"
+out=$(cd "$r" && POSTMASTER_DETECTIONS_LOG= bash "$PROMOTE" "$tmp/pm-part.md" raw/trials/t413/part.md 2>/dev/null); code=$?
+{ [ "$code" -eq 0 ] && cmp -s "$r/raw/trials/t413/part.md" <(printf 'see <redacted:private-path>/docs for logs\n') \
+  && printf '%s' "$out" | grep -qF 'part.md:1: private-path scrubbed' \
+  && printf '%s' "$out" | grep -qF 'part.md:1: email scrubbed' && ! leaked "$out" "$HOME_U"; } \
+  && ok "partly overlapping spans merge under the first rule, both reported" || fail "partly overlapping spans merge under the first rule, both reported (exit $code)"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+commit_file "$r" "$EMAIL.txt" "just public words here" "shaped name" >/dev/null
+commit_file "$r" notes/contact.txt "contact: $EMAIL" >/dev/null; head=$(git -C "$r" rev-parse HEAD)
+out=$(cd "$r" && POSTMASTER_DETECTIONS_LOG= bash "$SCRUB" --findings "$base" "$head" 2>/dev/null); code=$?
+shaped=$(printf '%s' "$out" | python3 -c 'import json,sys; fs=[json.loads(l) for l in sys.stdin]; print(len(fs), all(set(f) >= {"commit","path","line","rule"} for f in fs), sum("@" in f["path"] for f in fs))' 2>/dev/null)
+{ [ "$code" -eq 1 ] && [ "$shaped" = "2 True 1" ]; } \
+  && ok "machine findings carry raw paths for the planner" || fail "machine findings carry raw paths for the planner (exit $code)"
+r=$(mkrepo); base=$(git -C "$r" rev-parse HEAD)
+commit_file "$r" "$EMAIL.txt" "contact: $EMAIL" "add the shaped note" >/dev/null
+( cd "$r" && git rm -q "$EMAIL.txt" && git commit -qm "drop the shaped note" >/dev/null )
+saved=$(git -C "$r" rev-parse "HEAD^{tree}")
+out=$(cd "$r" && bash "$REWRITE" "$base" HEAD 2>/dev/null); code=$?
+rescan=$(cd "$r" && POSTMASTER_DETECTIONS_LOG= bash "$SCRUB" "$base" HEAD 2>/dev/null); rcode=$?
+{ [ "$code" -eq 0 ] && [ "$(git -C "$r" rev-parse "HEAD^{tree}")" = "$saved" ] && [ "$rcode" -eq 0 ] && [ -z "$rescan" ]; } \
+  && ok "a historical finding under a shaped name is rewritten" || fail "a historical finding under a shaped name is rewritten (exit $code)"
+hproj=$tmp/hproj; mkdir -p "$hproj/.postmaster"
+printf 'contact: %s\n' "$EMAIL" > "$hproj/dirty.txt"
+cat > "$hproj/.postmaster/project.toml" <<EOF
+[checks.gate]
+command = "bash $SCRUB --files dirty.txt"
+shows = "x"
+EOF
+( cd "$hproj" && git init -q -b main . && git config user.name Oracle \
+  && git config user.email "oracle@example.invalid" && git add -A && git add -f .postmaster/project.toml \
+  && git commit -qm base )
+hd="$hproj/.postmaster/runs/T-9"; mkdir -p "$hd"; printf '## Ticket\nx\n' > "$hd/brief.md"
+bash "$VERIFY" record "$hproj" "$hd" >/dev/null 2>&1
+( cd "$hproj" && git worktree add -q "$hproj/.worktrees/T-9-a" -b wb/T-9-a 2>/dev/null )
+bash "$VERIFY" arm "$hproj/.worktrees/T-9-a" "$hd" >/dev/null 2>&1
+out=$(bash "$VERIFY" run "$hproj/.worktrees/T-9-a" "$hd" 2>&1); code=$?
+[ "$code" -eq 2 ] && ok "a dirty tree fails the gate" || fail "a dirty tree fails the gate (exit $code)"
+out=$(SCRUB_CHECK_DISABLE=email bash "$VERIFY" run "$hproj/.worktrees/T-9-a" "$hd" 2>&1); code=$?
+[ "$code" -eq 2 ] && ok "it fails with the test hook set in the caller too" || fail "it fails with the test hook set in the caller too (exit $code)"
+grep -q "verify-merge" "$REPO/skills/postmaster/coachman.md" \
+  && ok "the ship runbook names the merge scan" || fail "the ship runbook names the merge scan"
+r=$(mkrepo)
+( cd "$r" && git checkout -qb side >/dev/null && printf 'side\n' > base.txt \
+  && git commit -qam "side work" >/dev/null && git checkout -q main \
+  && printf 'main\n' > base.txt && git commit -qam "main work" >/dev/null; \
+  git merge -q --no-ff side >/dev/null 2>&1; \
+  printf 'resolved by the relay at %s\n' "$EMAIL" > base.txt && git add base.txt \
+  && git commit -qm "Merge branch 'side'" >/dev/null )
+out=$(POSTMASTER_DETECTIONS_LOG= bash "$MERGE" "$r" 2>/dev/null); code=$?
+{ [ "$code" -eq 1 ] && printf '%s' "$out" | grep -qF 'base.txt:1: email' && ! leaked "$out" "$EMAIL"; } \
+  && ok "a suspect in a merge resolution fails the merge scan" || fail "a suspect in a merge resolution fails the merge scan (exit $code)"
+r=$(mkrepo)
+( cd "$r" && git checkout -qb side >/dev/null && printf 'side\n' > side.txt \
+  && git add side.txt && git commit -qm "side work" >/dev/null && git checkout -q main \
+  && printf 'main\n' > main.txt && git add main.txt && git commit -qm "main work" >/dev/null \
+  && git merge -q --no-ff -m "Merge branch 'side'" side >/dev/null )
+out=$(POSTMASTER_DETECTIONS_LOG= bash "$MERGE" "$r" 2>/dev/null); code=$?
+{ [ "$code" -eq 0 ] && [ -z "$out" ]; } \
+  && ok "a clean merge passes the merge scan" || fail "a clean merge passes the merge scan (exit $code)"
+
 # V12's recheck divergence and the merge-resolution streaming cap hold only in
 # the suites: the first is a TOCTOU no blind probe reproduces stably, and the
 # second needs git itself under a cap git cannot survive.

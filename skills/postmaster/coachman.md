@@ -974,7 +974,13 @@ Set the stage first: `<tool>/scripts/stage.sh <dispatch> shipping`.
    `.card-ready`, and exit; the word arrives as a resume of this leg's thread, and so does a
    withheld grant with its reasons. On a withheld grant, address the reasons, update the card,
    touch `.card-ready` again, and exit again. Only the user abandons a run. On it: check out the project's default branch
-   in the main checkout and `git merge --no-ff <ticket-branch>` (merge, never rebase), move the
+   in the main checkout and `git merge --no-ff <ticket-branch>` (merge, never rebase), then scan
+   the merge itself — `<tool>/scripts/verify-merge.sh <main-checkout>` — which holds the merge's
+   message and resolution to the scrub and the tree check against the merge's first parent, the
+   range the branch gate cannot see. On findings: a message-only fault is fixed with
+   `git commit --amend` and re-verified; a resolution fault is fixed with
+   `git reset --hard <merge>^1`, merging again cleanly, and re-verified; the merge is local-only,
+   so neither touches anything pushed. Move the
    ticket to done, and set the stage: `<tool>/scripts/stage.sh <dispatch> shipped`. Never escalate a grant the waybill gives the postmaster up to
    the user.
 6. If the project has an origin, pushing afterwards is the user's call, never part of

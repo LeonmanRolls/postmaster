@@ -6,10 +6,13 @@
 # each commit message; the lines each merge commit introduces beyond every
 # parent, so already-published lines merge quietly; and, through
 # --pr-description, the pull request's description before it is opened.
-# Every scanned line is ANSI-stripped and each JSON string in it decoded,
-# so values inside strings scan like any other text and anchored rules
-# fire per logical line; the raw line always scans too, and each physical
-# span reports once. A same-line marker suppresses only its own string.
+# Every scanned line is stripped of escape sequences and each JSON string
+# in it decoded, nested strings decoded in turn and sequences stripped at
+# every level, so values inside strings scan like any other text and
+# anchored rules fire per logical line; the raw line always scans too,
+# and each physical span reports once. A same-line marker suppresses
+# only its own string, and a next-line marker inside a string reaches
+# only that string's next logical line.
 #
 #   scrub-check.sh <base> <head>    the range: added lines, messages and
 #                                   merge resolutions, one suspect per line
@@ -23,6 +26,9 @@
 #   scrub-check.sh --spans <path>... machine protocol for the wiki scrub:
 #                                   <index>:<line>:<start>:<end>:<rule> per
 #                                   finding, the file indexing into argv
+#   scrub-check.sh --findings <base> <head>
+#                                   machine protocol for the rewrite: one
+#                                   JSON finding per line, paths raw
 #   scrub-check.sh --safe-path <path>...
 #                                   print each path redacted, one per line
 #   scrub-check.sh --log-detection <rule> <file> <line> [<commit>]
@@ -45,16 +51,18 @@
 # nothing beyond the gate's: bash, git and the Python standard library.
 #
 # The rules, matched by shape and context, never against anyone's values:
-#   key                   a named contact, session or credential key with a
-#                         value that is present, not an absence marker
-#                         (userEmail, session_context, credential_org and
-#                         their case forms)
+#   key                   a contact, session or credential field with a
+#                         value that is present, not an absence marker and
+#                         not a public no-reply or reserved-domain address;
+#                         the field name matches by its ending
+#                         (ownerMail, user_session) or a known
+#                         multi-component name (session_context)
 #   email                 an address that is neither a public no-reply form
 #                         nor on a reserved domain
 #   account-id            an opaque org, account or session token whose
 #                         body carries a digit, a UUID on a line with
-#                         account context, or a populated account or
-#                         organization id field
+#                         account context, or a populated id, uuid or
+#                         guid field with a substantial value
 #   private-path          a home directory with a concrete user, or harness
 #                         scratch with a run marker; bare ~/ references and
 #                         placeholder users are not suspects
@@ -62,8 +70,8 @@
 #                         IP literal (never loopback), or a private-network
 #                         hostname, tailnet names included
 #   token                 a documented key prefix with a body, a private-key
-#                         header, a Bearer credential, or a long value under
-#                         a secret-bearing field
+#                         header, a Bearer credential, a line of its block, or a long value
+#                         under a secret-ending field
 #   dotenv                a .env-style NAME=value assignment whose name is
 #                         key-like and whose value is present and literal
 #   assistant-attribution an authorship trailer or generated-with footer
@@ -142,8 +150,8 @@ import tempfile
 
 USAGE = ("usage: scrub-check.sh <base> <head> | --files <path>... | "
          "--files-inert <path>... | --pr-description <file> | --spans <path>... | "
-         "--safe-path <path>... | --log-detection <rule> <file> <line> [<commit>] | "
-         "--self-test | --help")
+         "--findings <base> <head> | --safe-path <path>... | "
+         "--log-detection <rule> <file> <line> [<commit>] | --self-test | --help")
 EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 SCRIPT = pathlib.Path(os.environ.get("SCRUB_CHECK_SCRIPT", "")).resolve()
 FIXTURE_MAILBOX = "fixture" + "@" + "example.invalid"
@@ -189,13 +197,11 @@ def resolve_commit(ref):
     return commit
 
 
-def key_value_pattern(keys):
-    choices = "|".join(re.escape(key) for key in keys)
-    return re.compile(
-        r"(?<![A-Za-z0-9_])(?:" + choices + r")\b\s*[\"']?\s*[:=]\s*"
-        r"(?:\"(?P<double>[^\"\n]+)\"|'(?P<single>[^'\n]+)'|(?P<bare>[^\s\"',;}\]]+))",
-        re.IGNORECASE,
-    )
+FIELD_VALUE = re.compile(
+    r"(?<![A-Za-z0-9_])(?P<name>[A-Za-z][A-Za-z0-9_.-]*)"
+    r"\b\s*[\"']?\s*[:=]\s*"
+    r"(?:\"(?P<double>[^\"\n]+)\"|'(?P<single>[^'\n]+)'|(?P<bare>[^\s\"',;}\]]+))",
+)
 
 
 def field_value(match):
@@ -214,28 +220,75 @@ def value_span(match):
     )
 
 
-# Field names are built from pieces so this source holds no key/value example.
-# The value span is the unquoted inner value, so a JSON closing brace never
-# becomes part of it.
-# Identifier fields report as account-id, never here: one line per suspect.
-SENSITIVE_KEYS = key_value_pattern((
-    "user" + "Email", "user" + "_" + "email", "user" + "-" + "email",
-    "session" + "_" + "context", "session" + "Context",
-    "credential" + "_" + "org", "credential" + "Org", "credential" + "_" + "org" + "_" + "id",
-))
-ACCOUNT_FIELDS = key_value_pattern((
-    "account" + "Id", "account" + "ID", "account" + "_" + "id",
-    "account" + "-" + "id", "account" + "Uuid", "account" + "_" + "uuid",
-    "account" + "-" + "uuid", "user" + "Id", "user" + "_" + "id",
-    "user" + "-" + "id",
-))
-ORGANIZATION_FIELDS = key_value_pattern((
-    "organization" + "Uuid", "organization" + "_" + "uuid",
-    "organization" + "-" + "uuid", "organization" + "Id",
-    "organization" + "_" + "id", "organization" + "-" + "id",
-    "org" + "Id", "org" + "_" + "id", "org" + "-" + "id",
-    "org" + "Uuid", "org" + "_" + "uuid", "org" + "-" + "uuid",
-))
+# One secret-field-name matcher for every rule: a name matches by its
+# ending. The name splits on separators and camelCase boundaries, and
+# its last component decides: secret endings report as token,
+# contact endings as key, identifier endings as account-id. A bare
+# session or auth stays silent (a word, not a name), an id value
+# under six chars is a counter, not an identifier, a contact value
+# that is a public no-reply or reserved-domain address holds no leak,
+# and a few known multi-component names keep their kinds. Anything
+# else, monkey or keyboard or my_org, is not secret-bearing. The value span is the
+# unquoted inner value, so a JSON closing brace never becomes part of
+# it. Stems are fragmented pairs: no committed line holds a whole
+# one, which the source control proves.
+SECRET_NAME_STEMS = frozenset({
+    "sessioncon" + "text", "credential" + "org", "credentialorg" + "id",
+})
+SECRET_TOKEN_ENDINGS = frozenset({
+    "sec" + "ret", "sec" + "rets", "pass" + "word", "pass" + "wd",
+    "p" + "wd", "pass" + "code", "passph" + "rase", "to" + "ken",
+    "tok" + "ens", "k" + "ey", "ke" + "ys", "api" + "key",
+    "private" + "key", "secret" + "key", "access" + "token",
+    "refresh" + "token", "creden" + "tial", "credent" + "ials",
+    "a" + "uth",
+})
+SECRET_KEY_ENDINGS = frozenset({
+    "em" + "ail", "m" + "ail", "sess" + "ion",
+})
+SECRET_ID_ENDINGS = frozenset({"i" + "d", "i" + "ds", "uu" + "id", "gu" + "id"})
+SECRET_SINGLE_SKIP = frozenset({"sess" + "ion", "a" + "uth"})
+SECRET_ID_MIN_VALUE = 6
+
+
+def secret_field_kind(name):
+    """A field name's finding kind, or None when the name is ordinary."""
+    squashed = re.sub(r"[^a-z0-9]+", "", name.lower())
+    if squashed in SECRET_NAME_STEMS:
+        return "key"
+    camel = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", name)
+    parts = [p for p in re.split(r"[^A-Za-z0-9]+", camel.lower()) if p]
+    if not parts:
+        return None
+    if len(parts) == 1 and parts[0] in SECRET_SINGLE_SKIP:
+        return None
+    last = parts[-1]
+    if last in SECRET_TOKEN_ENDINGS:
+        return "token"
+    if last in SECRET_KEY_ENDINGS:
+        return "key"
+    if last in SECRET_ID_ENDINGS:
+        return "account-id"
+    return None
+
+
+def field_finding(match):
+    """A field match's finding, or None when its name or value is clean."""
+    kind = secret_field_kind(match.group("name"))
+    if kind is None or kind in DISABLED:
+        return None
+    value = field_value(match)
+    if not value or ABSENT_VALUE.match(value):
+        return None
+    if kind == "key" and EMAIL_RE.fullmatch(value) and public_noreply(value):
+        return None
+    if kind == "token":
+        if len(value) < 20 or not SECRET_VALUE.match(value):
+            return None
+    elif kind == "account-id" and len(value) < SECRET_ID_MIN_VALUE:
+        return None
+    start, end = value_span(match)
+    return (start, end, kind, value)
 # A value that marks absence is not a leaked secret. The list is syntactic on
 # purpose: no word may excuse a value, or redaction markers would.
 ABSENT_VALUE = re.compile(
@@ -244,7 +297,7 @@ ABSENT_VALUE = re.compile(
 # No dot in the trailing lookahead: the greedy domain backtracks so the top
 # label ends before a sentence period, and an address ending a sentence still
 # flags without swallowing the period.
-EMAIL = re.compile(
+EMAIL_RE = re.compile(
     r"(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"
     r"(?![A-Za-z0-9-])")
 NOREPLY_LOCAL = frozenset({
@@ -272,10 +325,10 @@ def public_noreply(address):
 
 # The body must carry a digit: opaque machine ids always do, and without
 # one the shape is a name (session_context), not an id.
-OPAQUE_ID = re.compile(
+OPAQUE_ID_RE = re.compile(
     r"(?<![A-Za-z0-9_-])(?:org|acct|account|sess|ses|session)[_-](?=\S*[0-9])[A-Za-z0-9]{6,}"
     r"(?![A-Za-z0-9_-])")
-UUID = re.compile(
+UUID_RE = re.compile(
     r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
     r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b")
 ACCOUNT_CONTEXT = re.compile(
@@ -336,13 +389,90 @@ TOKEN = re.compile(
 XOX_TOKEN = re.compile(r"(?<![A-Za-z0-9])(?P<value>xox[baprs]-[A-Za-z0-9-]{10,})")
 ACCESS_KEY = re.compile(r"(?<![A-Za-z0-9])(?P<value>" + "AK" + "IA" + r"[A-Z0-9]{16})(?![A-Za-z0-9])")
 PEM_HEADER = re.compile(r"(?i)(?P<value>-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----)")
+# Key-format literals are fragmented like TOKEN_PREFIXES: the source must
+# never hold a whole one, which the source control proves.
+PGP_PRIVATE = re.compile(
+    r"(?i)(?P<value>-----BEGIN PGP PRIVATE " + "KEY BLOCK-----)")
+PUTTY_KEY = re.compile(
+    r"(?P<value>PuTTY-User-Key-File-" + "2:" + r"\s*\S+)")
+SSH2_KEY = re.compile(
+    r"(?P<value>---- BEGIN SSH2 ENCRYPTED PRIVATE " + "KEY ----)")
+AGE_KEY = re.compile(
+    r"(?<![A-Za-z0-9])(?P<value>AGE-SECRET-" + "KEY-[A-Za-z0-9]{20,})(?![A-Za-z0-9])")
+
+# A private key is a block, not a header: body and end lines flag as
+# token whenever the block around them does. Literals are fragmented
+# like TOKEN_PREFIXES; the source control proves the source holds
+# none whole.
+KEY_BEGIN = re.compile(
+    r"-----BEGIN (?:[A-Z0-9 ]*PRIVATE KEY|PGP PRIVATE " + "KEY BLOCK)-----"
+    r"|---- BEGIN SSH2 ENCRYPTED PRIVATE " + "KEY ----"
+    r"|PuTTY-User-Key-File-" + "2:",
+    re.IGNORECASE)
+KEY_END = re.compile(
+    r"-----END [^-]*-----|---- END SSH2 [^-]* ----|^Private-MAC:",
+    re.IGNORECASE)
+KEY_MATERIAL = re.compile(r"^[A-Za-z0-9+/=]{20,}$")
+KEY_FIELD = re.compile(r"^[A-Za-z-]+:\s*\S")
+KEY_BLOCK_PREFILTER = re.compile(
+    r"[A-Za-z0-9+/=]{20,}|-----END |---- END |Private-MAC:")
+KEY_BLOCK_MAX_BLOB = 8000000
+
+
+def key_block_iter(lines):
+    """(number, in-block) for each line of an iterable of line texts.
+
+    A BEGIN header opens the block (the header flags through the token
+    rule); base64 body lines and the END line belong to it; metadata
+    fields and blank lines are transparent; anything else closes it.
+    """
+    in_block = False
+    for number, line in enumerate(lines, 1):
+        stripped = line.strip()
+        flag = False
+        if KEY_BEGIN.search(stripped):
+            in_block = True
+        elif in_block:
+            if KEY_END.search(stripped):
+                flag = True
+                in_block = False
+            elif not stripped or KEY_FIELD.match(stripped):
+                pass
+            elif KEY_MATERIAL.match(stripped):
+                flag = True
+            else:
+                in_block = False
+        yield number, flag
+
+
+def key_block_lines(text):
+    """1-based numbers of a text's key-block body and end lines."""
+    return {n for n, flag in key_block_iter(text.split("\n")) if flag}
+
+
+def blob_block_lines(root, commit, path):
+    """A committed blob's key-block line numbers, or empty when unreadable.
+
+    Blobs past the cap are skipped: their headers still flag through the
+    token rule, so the gate holds and only surgical precision degrades.
+    """
+    try:
+        sized = subprocess.run(
+            ["git", "cat-file", "-s", "%s:%s" % (commit, path)],
+            cwd=root, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            check=False)
+        if sized.returncode != 0 or int(sized.stdout.decode("ascii").strip()) > KEY_BLOCK_MAX_BLOB:
+            return set()
+        shown = subprocess.run(
+            ["git", "show", "%s:%s" % (commit, path)],
+            cwd=root, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            check=False)
+        if shown.returncode != 0:
+            return set()
+    except (OSError, ValueError):
+        return set()
+    return key_block_lines(shown.stdout.decode("utf-8", errors="surrogateescape"))
 BEARER_TOKEN = re.compile(r"(?i)\b(?P<value>Bearer\s+[A-Za-z0-9._~+/-]{20,}={0,2})")
-SECRET_FIELDS = key_value_pattern((
-    "api" + "_" + "key", "api" + "Key", "access" + "_" + "token",
-    "access" + "Token", "refresh" + "_" + "token", "refresh" + "Token",
-    "client" + "_" + "secret", "client" + "Secret", "private" + "_" + "key",
-    "private" + "Key", "secret", "token", "password", "credential",
-))
 SECRET_VALUE = re.compile(r"(?i)^(?P<value>[A-Za-z0-9_./+=-]{20,})$")
 
 # A .env-style assignment is one NAME=value line. The name is key-like when an
@@ -429,32 +559,22 @@ def ip_spans(line):
 def findings(line):
     found = []
 
-    if "key" not in DISABLED:
-        for match in SENSITIVE_KEYS.finditer(line):
-            value = field_value(match)
-            if value and not ABSENT_VALUE.match(value):
-                start, end = value_span(match)
-                found.append((start, end, "key", value))
-
-    if "account-id" not in DISABLED:
-        for pattern in (ACCOUNT_FIELDS, ORGANIZATION_FIELDS):
-            for match in pattern.finditer(line):
-                value = field_value(match)
-                if value and not ABSENT_VALUE.match(value):
-                    start, end = value_span(match)
-                    found.append((start, end, "account-id", value))
+    for match in FIELD_VALUE.finditer(line):
+        finding = field_finding(match)
+        if finding is not None:
+            found.append(finding)
 
     if "email" not in DISABLED:
-        for match in EMAIL.finditer(line):
+        for match in EMAIL_RE.finditer(line):
             value = match.group()
             if not public_noreply(value):
                 found.append((match.start(), match.end(), "email", value))
 
     if "account-id" not in DISABLED:
-        for match in OPAQUE_ID.finditer(line):
+        for match in OPAQUE_ID_RE.finditer(line):
             found.append((match.start(), match.end(), "account-id", match.group()))
         if ACCOUNT_CONTEXT.search(line):
-            for match in UUID.finditer(line):
+            for match in UUID_RE.finditer(line):
                 found.append((match.start(), match.end(), "account-id", match.group()))
 
     if "private-path" not in DISABLED:
@@ -482,18 +602,13 @@ def findings(line):
             (start, end, "private-host", value) for start, end, value in ip_spans(line))
 
     if "token" not in DISABLED:
-        for pattern in (TOKEN, XOX_TOKEN, ACCESS_KEY, PEM_HEADER, BEARER_TOKEN):
+        for pattern in (TOKEN, XOX_TOKEN, ACCESS_KEY, PEM_HEADER, PGP_PRIVATE,
+                        PUTTY_KEY, SSH2_KEY, AGE_KEY, BEARER_TOKEN):
             for match in pattern.finditer(line):
                 start, end = match.span("value")
                 found.append((start, end, "token", match.group("value")))
 
-        for match in SECRET_FIELDS.finditer(line):
-            value = field_value(match)
-            inner = SECRET_VALUE.match(value) if len(value) >= 20 else None
-            if inner:
-                start, end = value_span(match)
-                # The span is the whole quoted value; the secret is all of it.
-                found.append((start, end, "token", value))
+
 
     if "dotenv" not in DISABLED:
         dotenv = dotenv_finding(line)
@@ -548,21 +663,44 @@ def parse_markers(line):
     return parsed
 
 
-ANSI_SEQUENCE = re.compile(r"(?:\x1b\[|\x9b)[0-9;:?]*[ -/]*[@-~]")
+# Escape sequences, every form a harness log may carry: CSI, a terminated
+# OSC with its parameter text kept for its own unit, a character-set
+# designation, a two-character Fe/Fs/Fp sequence, and a lone ESC. An
+# unterminated OSC matches only its ESC: its text stays visible, failing
+# closed, since stripping past its end would swallow the values after it.
+ANSI_SEQUENCE = re.compile(
+    r"(?:\x1b\[|\x9b)[0-9;:?]*[ -/]*[@-~]"
+    r"|(?:\x1b\]|\x9d)(?P<params>[^\x07\x1b\x9c]*)(?:\x07|\x1b\\|\x9c)"
+    r"|\x1b[()][0-9A-Za-z]|\x1b[A-Za-z0-9=>@^_]|\x1b")
 JSON_STRING = re.compile(r'"(?:[^"\\\n]|\\.)*"')
+# Nested JSON strings decode to this depth; deeper text still scans as
+# plain text, so the cap costs precision, never silence, and recursion
+# stays far from the interpreter's limit.
+NEST_MAX_DEPTH = 64
 
 
 def strip_ansi(text):
-    """The text without CSI sequences, plus each survivor's home offset."""
-    chars, kept = [], []
+    """The text without escape sequences, each survivor's home offset,
+    and each terminated OSC's parameter text with its own home offsets.
+
+    A terminated OSC's parameters scan as their own unit, so a value the
+    sequence carries is still found; the stripped line glues across the
+    sequence, so a value it splits is still found.
+    """
+    chars, kept, extras = [], [], []
     cursor = 0
     for match in ANSI_SEQUENCE.finditer(text):
         chars.append(text[cursor:match.start()])
         kept.extend(range(cursor, match.start()))
+        params = match.group("params")
+        if params:
+            base = match.start("params")
+            extras.append((params, [(o, o + 1) for o in
+                                    range(base, base + len(params))]))
         cursor = match.end()
     chars.append(text[cursor:])
     kept.extend(range(cursor, len(text)))
-    return "".join(chars), kept
+    return "".join(chars), kept, extras
 
 
 _UNESCAPES = {'"': '"', "\\": "\\", "/": "/", "b": "\b", "f": "\f",
@@ -607,36 +745,90 @@ def unquote_token(inner, base):
             i += 1
 
 
+def _clean_line(text, home, prov, depth):
+    """A decoded logical line, stripped and rescanned, in home coordinates.
+
+    Escapes may have delivered sequences, so the line strips before it
+    scans; terminated OSC parameters become leaf units of their own.
+    """
+    stripped, kept, extras = strip_ansi(text)
+    mapping = [home[i] for i in kept]
+    units = _nested_units(stripped, mapping, prov, depth)
+    for ptext, pmap in extras:
+        units.append((ptext, [home[o] for o, _ in pmap], None))
+    return units
+
+
+def _nested_units(text, mapping, prov, depth):
+    """A decoded logical line's units: itself, then its nested strings'.
+
+    Each nested JSON string decodes to logical lines, stripped and
+    rescanned in turn, so JSON nested inside JSON scans at any depth
+    and anchored rules fire per logical line at every level. Every map
+    stays in original coordinates through the composed mappings. Past
+    the depth cap the line still scans as plain text.
+    """
+    found = [(text, mapping, prov)]
+    if depth >= NEST_MAX_DEPTH:
+        return found
+    for match in JSON_STRING.finditer(text):
+        start, end = match.span()
+        if end - start < 2:
+            continue
+        run, spans = [], []
+        for ch, pstart, pend in unquote_token(text[start + 1:end - 1], start + 1):
+            if ch == "\n" or ch == "\r":
+                if run:
+                    home = [(mapping[s][0], mapping[e - 1][1]) for s, e in spans]
+                    found.extend(_clean_line("".join(run), home, prov, depth + 1))
+                    run, spans = [], []
+            else:
+                run.append(ch)
+                spans.append((pstart, pend))
+        if run:
+            home = [(mapping[s][0], mapping[e - 1][1]) for s, e in spans]
+            found.extend(_clean_line("".join(run), home, prov, depth + 1))
+    return found
+
+
 def scan_units(text):
     """The views of one physical line: the raw unit, then decoded units.
 
-    The raw line, ANSI-stripped, is always first, so values outside strings
-    and across token boundaries scan as before. Each JSON string then
-    contributes its decoded logical lines, so escapes cannot hide a value
-    and anchored rules fire per logical line. Returns the units as
-    (text, map) with each map entry the char's home (start, end), plus
-    the string token spans in stripped coordinates, where the raw unit's
+    The raw line, stripped of escape sequences, is always first, so
+    values outside strings and across token boundaries scan as before.
+    Each terminated OSC contributes its parameter text as its own unit.
+    Each JSON string then contributes its decoded logical lines,
+    stripped and rescanned in turn, so escapes cannot hide a value,
+    JSON nested inside JSON scans at any depth, and anchored rules
+    fire per logical line. Returns the units as (text, map, prov) with
+    each map entry the char's home (start, end) and prov the top-level
+    string's index (None for the raw line and OSC leaves), plus the
+    string token spans in stripped coordinates, where the raw unit's
     marker parsing does not look.
     """
-    stripped, kept = strip_ansi(text)
+    stripped, kept, extras = strip_ansi(text)
     raw_map = [(o, o + 1) for o in kept]
-    units, strings = [(stripped, raw_map)], []
-    for match in JSON_STRING.finditer(stripped):
+    units = [(stripped, raw_map, None)]
+    units.extend((ptext, pmap, None) for ptext, pmap in extras)
+    strings = []
+    for index, match in enumerate(JSON_STRING.finditer(stripped)):
         start, end = match.span()
         if end - start < 2:
             continue
         strings.append((start, end))
-        run, run_map = [], []
+        run, spans = [], []
         for ch, pstart, pend in unquote_token(stripped[start + 1:end - 1], start + 1):
             if ch == "\n" or ch == "\r":
                 if run:
-                    units.append(("".join(run), run_map))
-                    run, run_map = [], []
+                    home = [(kept[s], kept[e - 1] + 1) for s, e in spans]
+                    units.extend(_clean_line("".join(run), home, index, 0))
+                    run, spans = [], []
             else:
                 run.append(ch)
-                run_map.append((kept[pstart], kept[pend - 1] + 1))
+                spans.append((pstart, pend))
         if run:
-            units.append(("".join(run), run_map))
+            home = [(kept[s], kept[e - 1] + 1) for s, e in spans]
+            units.extend(_clean_line("".join(run), home, index, 0))
     return units, strings
 
 
@@ -648,20 +840,22 @@ def home_span(mapping, start, end):
 class LineScanner:
     """Streaming marker-aware line scanner for one line sequence.
 
-    Feed (number, text) in file order; a next-line marker applies only to
-    the very next fed line. Each fed line scans as units: the raw line
-    first, then each JSON string's decoded logical lines, all records
-    mapped home to original offsets. Each valid marker must suppress at
-    least one finding the others did not, same-line markers first: a
-    redundant marker faults like an unused one. A same-line marker
-    suppresses only its own unit, so in a JSON record each string is its
-    own logical line; next-line markers stay line-wide. A marker never
-    suppresses inside its own text, so a reason that quotes a suspect
-    always flags, and the marker faults beside it for suppressing nothing.
-    Marker-shaped text that is not a valid marker faults only when its
-    line carries a finding; on a clean line it is prose. With markers
-    disabled the feed passes findings through untouched. Faults are
-    (number, start, end) triples, kept and suppressed are
+    Feed (number, text) in file order; a next-line marker outside strings
+    applies only to the very next fed line. Each fed line scans as
+    units: the raw line first, then each JSON string's decoded logical
+    lines, all records mapped home to original offsets. Each valid
+    marker must suppress at least one finding the others did not,
+    same-line markers first: a redundant marker faults like an unused
+    one. A same-line marker suppresses only its own unit, so in a JSON
+    record each string is its own logical line; a next-line marker
+    inside a string reaches only that string's next logical line, and
+    faults when the string has none. A marker never suppresses inside
+    its own text, so a reason that quotes a suspect always flags, and
+    the marker faults beside it for suppressing nothing. Marker-shaped
+    text that is not a valid marker faults only when its line carries
+    a finding; on a clean line it is prose. With markers disabled the
+    feed passes findings through untouched. Faults are (number, start,
+    end) triples, kept and suppressed are
     (number, start, end, kind, value).
     """
 
@@ -673,24 +867,37 @@ class LineScanner:
         self.faults = []
         self.suppressed = []
 
-    def feed(self, number, text):
+    def feed(self, number, text, in_key_block=False):
         units, strings = scan_units(text)
         owned = lambda start: any(s <= start < e for s, e in strings)
         homed = []
-        for unit, mapping in units:
+        for unit, mapping, _prov in units:
             homed.append([
                 (*home_span(mapping, start, end), kind, value)
                 for start, end, kind, value in self._find(unit)])
-        # A raw finding exactly equal to a decoded one is the same bytes
-        # through the same rule, so the raw copy drops and the value
-        # reports once, through its own logical line. Anything the
-        # decoded units do not report stays raw, so span rules that need
-        # their field beside the value lose nothing. The dedupe runs
-        # before suppression, so a same-line marker suppresses only its
-        # own unit: within JSON each string is its own logical line.
-        survivors = [item for item in homed[0]
-                     if not any(item in rest for rest in homed[1:])]
-        homed[0] = survivors
+        # A key-block body or end line flags as token through its raw
+        # unit, so same-line markers still apply and the dedupe below
+        # keeps one report when a decoded view agrees.
+        if in_key_block and "token" not in DISABLED and units[0][0].strip():
+            raw_text, raw_map, _ = units[0]
+            homed[0].append(
+                (*home_span(raw_map, 0, len(raw_text)), "token", raw_text))
+        # A finding exactly equal to one in a later unit is the same
+        # bytes through a shallower view, so the shallow copy drops and
+        # the value reports once, through its own logical line. Anything
+        # no deeper unit reports stays where it was found, so span rules
+        # that need their field beside the value lose nothing. The
+        # dedupe runs before suppression, so a same-line marker
+        # suppresses only its own unit: within JSON each string is its
+        # own logical line.
+        seen = set()
+        for depth in range(len(homed) - 1, -1, -1):
+            survivors = []
+            for item in homed[depth]:
+                if item not in seen:
+                    survivors.append(item)
+                    seen.add(item)
+            homed[depth] = survivors
         if self._off:
             inert = [item for items in homed for item in items]
             inert.sort(key=lambda item: (item[0], item[1], item[2]))
@@ -698,9 +905,19 @@ class LineScanner:
                 self.kept.append((number, start, end, kind, value))
             self._prev = (number, [])
             return
+        # A string unit's logical successor is the next unit from its
+        # own top-level string; units are emitted in logical order, so
+        # the first later match is the next logical line.
+        next_index = {}
+        for index, (_unit, _mapping, prov) in enumerate(units):
+            if prov is not None:
+                following = [later for later in range(index + 1, len(units))
+                             if units[later][2] == prov]
+                next_index[index] = following[0] if following else None
         physical = any(homed)
-        current, next_marks = [], []
-        for index, ((unit, mapping), items) in enumerate(zip(units, homed)):
+        current, next_marks, pending = [], [], {}
+        for index, ((unit, mapping, prov), items) in enumerate(zip(units, homed)):
+            due = pending.pop(prov, []) if prov is not None else []
             if index == 0:
                 # A marker starting inside a string belongs to that
                 # string's unit; its reason runs to the line end by
@@ -714,7 +931,13 @@ class LineScanner:
                 if not mark["valid"] and not mark["next_line"] and physical:
                     self.faults.append((number, *mark["span"]))
                 if mark["next_line"]:
-                    next_marks.append(mark)
+                    if prov is None:
+                        next_marks.append(mark)
+                    elif next_index[index] is None:
+                        if mark["valid"]:
+                            self.faults.append((number, *mark["span"]))
+                    else:
+                        pending.setdefault(prov, []).append(mark)
             live = list(items)
             for mark in [m for m in marks if m["valid"] and not m["next_line"]]:
                 hits = [item for item in live
@@ -725,6 +948,18 @@ class LineScanner:
                     for start, end, kind, value in hits:
                         self.suppressed.append((number, start, end, kind, value))
                     live = [item for item in live if item not in hits]
+            for mark in due:
+                if mark["valid"]:
+                    hits = [item for item in live if item[2] == mark["rule"]]
+                    if not hits:
+                        self.faults.append((number, *mark["span"]))
+                    else:
+                        for start, end, kind, value in hits:
+                            self.suppressed.append(
+                                (number, start, end, kind, value))
+                        live = [item for item in live if item not in hits]
+                elif items:
+                    self.faults.append((number, *mark["span"]))
             for start, end, kind, value in live:
                 current.append((number, start, end, kind, value))
         # Units emit raw-first; restore the (start, end, kind) order the
@@ -836,15 +1071,24 @@ def scan_message(commit):
         return []
     raw = git(["show", "-s", "--format=%B", commit])
     out = []
-    for number, line in enumerate(raw.decode("utf-8", errors="surrogateescape").splitlines(), 1):
+    text = raw.decode("utf-8", errors="surrogateescape")
+    blocks = key_block_lines(text)
+    for number, line in enumerate(text.splitlines(), 1):
         seen = set()
-        for unit, mapping in scan_units(line)[0]:
+        units = scan_units(line)[0]
+        for unit, mapping, _prov in units:
             for start, end, kind, _value in findings(unit):
                 key = (kind, *home_span(mapping, start, end))
                 if key in seen:
                     continue
                 seen.add(key)
                 out.append(("(message)", number, kind, line))
+        if number in blocks and "token" not in DISABLED and units[0][0].strip():
+            unit0, map0, _ = units[0]
+            key = ("token", *home_span(map0, 0, len(unit0)))
+            if key not in seen:
+                seen.add(key)
+                out.append(("(message)", number, "token", line))
     return out
 
 
@@ -869,6 +1113,7 @@ def scan_commit_diff(root, parent, commit):
     quiet = []
     path, line_number, new_file = "", None, False
     scanner, texts, kept_len, fault_len, supp_len = None, {}, 0, 0, 0
+    blocks = None
 
     def drain():
         nonlocal kept_len, fault_len, supp_len
@@ -883,11 +1128,12 @@ def scan_commit_diff(root, parent, commit):
         supp_len = len(scanner.suppressed)
 
     def end_file():
-        nonlocal scanner, texts, kept_len, fault_len, supp_len
+        nonlocal scanner, texts, kept_len, fault_len, supp_len, blocks
         if scanner is not None:
             scanner.flush()
             drain()
         scanner, texts, kept_len, fault_len, supp_len = None, {}, 0, 0, 0
+        blocks = None
 
     for raw in child.stdout:
         content = raw.rstrip(b"\r\n")
@@ -916,7 +1162,12 @@ def scan_commit_diff(root, parent, commit):
                 scanner = LineScanner()
             text = content[1:].decode("utf-8", errors="surrogateescape")
             texts[line_number] = text
-            scanner.feed(line_number, text)
+            # Key-block membership comes from the new blob, not the fed
+            # lines: a hunk gap would corrupt streaming state. The blob
+            # is fetched once, and only when a material line needs it.
+            if blocks is None and KEY_BLOCK_PREFILTER.search(text):
+                blocks = blob_block_lines(root, commit, path)
+            scanner.feed(line_number, text, blocks is not None and line_number in blocks)
             drain()
             # Evict only after the drain: a fault on the previous fed line
             # needs its text, which a hunk gap would otherwise delete first.
@@ -983,13 +1234,16 @@ def scan_merge_diff(root, parents, merge):
                 for other in others]
         scanner, texts = LineScanner(), {}
         kept_len, fault_len, supp_len, prev_fed = 0, 0, 0, None
+        blocks = None
         for number, text in added_lines(root, first, merge, path):
             if not all(line_digest(text) in lines for lines in held):
                 continue
             texts[number] = text
             for stale in [n for n in texts if n != number and n != prev_fed]:
                 del texts[stale]
-            scanner.feed(number, text)
+            if blocks is None and KEY_BLOCK_PREFILTER.search(text):
+                blocks = blob_block_lines(root, merge, path)
+            scanner.feed(number, text, blocks is not None and number in blocks)
             for num, _s, _e, kind, _v in scanner.kept[kept_len:]:
                 suspects.append((path, num, kind, texts[num]))
             kept_len = len(scanner.kept)
@@ -1006,7 +1260,7 @@ def scan_merge_diff(root, parents, merge):
     return suspects, quiet
 
 
-def run_scan(root, base, head):
+def run_scan(root, base, head, machine=False):
     items = commits_with_parents(base, head)
     suspects = []
     # A merge resolution never reports a finding twice: (kind, path, text)
@@ -1053,7 +1307,15 @@ def run_scan(root, base, head):
             reported.add((kind, path, text))
             log_detection(kind, path, line, commit, via="marker")
     for commit, path, line, kind in sorted(suspects):
-        print("%s:%s:%d: %s" % (commit, safe_path(path), line, kind))
+        if machine:
+            # The rewrite reads this, not the human report: paths stay
+            # raw so the planner can open them, and JSON carries them
+            # whole whatever they contain. The caller keeps this stream
+            # in a file and never prints it.
+            print(json.dumps({"commit": commit, "path": path,
+                              "line": line, "rule": kind}))
+        else:
+            print("%s:%s:%d: %s" % (commit, safe_path(path), line, kind))
     return 1 if suspects else 0
 
 
@@ -1068,9 +1330,13 @@ def run_files(root, paths, markers=True):
         scanner = LineScanner(markers=markers)
         kept_len, fault_len, supp_len = 0, 0, 0
         with handle:
+            blocks = {n for n, flag in key_block_iter(
+                raw.rstrip(b"\r\n").decode("utf-8", errors="surrogateescape")
+                for raw in handle) if flag}
+            handle.seek(0)
             for number, raw in enumerate(handle, 1):
                 text = raw.rstrip(b"\r\n").decode("utf-8", errors="surrogateescape")
-                scanner.feed(number, text)
+                scanner.feed(number, text, number in blocks)
                 for num, _s, _e, kind, _v in scanner.kept[kept_len:]:
                     suspects.append((raw_path, num, kind))
                     log_detection(kind, raw_path, num, "")
@@ -1099,9 +1365,13 @@ def run_spans(root, paths):
         scanner = LineScanner()
         kept_len, fault_len, supp_len = 0, 0, 0
         with handle:
+            blocks = {n for n, flag in key_block_iter(
+                raw.rstrip(b"\r\n").decode("utf-8", errors="surrogateescape")
+                for raw in handle) if flag}
+            handle.seek(0)
             for number, raw in enumerate(handle, 1):
                 text = raw.rstrip(b"\r\n").decode("utf-8", errors="surrogateescape")
-                scanner.feed(number, text)
+                scanner.feed(number, text, number in blocks)
                 for num, start, end, kind, _v in scanner.kept[kept_len:]:
                     print("%d:%d:%d:%d:%s" % (index, num, start, end, kind))
                     log_detection(kind, raw_path, num, "")
@@ -1126,10 +1396,15 @@ def run_pr_description(root, path):
         notice("could not read %s" % safe_path(path))
     suspects = []
     with handle:
+        blocks = {n for n, flag in key_block_iter(
+            raw.rstrip(b"\r\n").decode("utf-8", errors="surrogateescape")
+            for raw in handle) if flag}
+        handle.seek(0)
         for number, raw in enumerate(handle, 1):
             text = raw.rstrip(b"\r\n").decode("utf-8", errors="surrogateescape")
             seen = set()
-            for unit, mapping in scan_units(text)[0]:
+            units = scan_units(text)[0]
+            for unit, mapping, _prov in units:
                 for start, end, kind, _value in findings(unit):
                     key = (kind, *home_span(mapping, start, end))
                     if key in seen:
@@ -1137,6 +1412,13 @@ def run_pr_description(root, path):
                     seen.add(key)
                     suspects.append((number, kind))
                     log_detection(kind, "(pr-description)", number, "")
+            if number in blocks and "token" not in DISABLED and units[0][0].strip():
+                unit0, map0, _ = units[0]
+                key = ("token", *home_span(map0, 0, len(unit0)))
+                if key not in seen:
+                    seen.add(key)
+                    suspects.append((number, "token"))
+                    log_detection("token", "(pr-description)", number, "")
     for line, kind in sorted(suspects):
         print("(pr-description):%d: %s" % (line, kind))
     return 1 if suspects else 0
@@ -1228,8 +1510,10 @@ def self_test(root):
     AT = "@"
     ALLOW = "private-data:allo" + "w"
     ALLOW_NEXT = "private-data:allow-next" + "-line"
-    sample_email = "lane-413" + AT + "relay-413" + ".net"
-    plus_email = "First.Last+tag" + AT + "sub." + "relay-413" + ".net"
+    sample_addr = "lane-413" + AT + "relay-413" + ".net"
+    noreply_addr = "verify-merge" + AT + "users.noreply.github.com"
+    reserved_addr = "relay" + AT + "exam" + "ple.com"
+    plus_addr = "First.Last+tag" + AT + "sub." + "relay-413" + ".net"
     private_ip = ".".join(("10", "135", "4", "13"))
     cgnat_ip = ".".join(("100", "99", "4", "13"))
     public_100 = ".".join(("100", "128", "0", "1"))
@@ -1242,20 +1526,30 @@ def self_test(root):
     fake_bearer = "Bearer " + "fictional413relay" + "K7mQ2xZ9aVbN4qy7"
     fake_org_id = "org-" + "fictional413relayK7mQ2xZ9"
     fake_sess_id = "sess-" + "fictional413K7mQ2x"
-    fake_uuid = "41313513-0042" + "-" + "4c1d-9e5f-135135135135"
+    fake_uuid_value = "41313513-0042" + "-" + "4c1d-9e5f-135135135135"
     fake_account = "123456789012"
+    compound_pw = "Db413" + "Q7mZ2xK9aVbN4qy7W8eR"
+    compound_aws = "E413" + "K7mQ2xZ9aVbN4qy7W8eR0tY"
+    compound_env = "F413" + "mQ2xZ9aVbN4qy7W8eR0tYu"
+    compound_camel = "G413" + "xZ9aVbN4qy7W8eR0tYuI1o"
+    key_body1 = "QUJD" * 10
+    key_body2 = "REVG" * 10
+    key_body1b = "QkJD" * 10
+    age_body = "A" * 58
     key_user = "user" + "Email"
-    key_session = "session" + "_" + "context"
+    key_sess_ctx = "session" + "_" + "context"
     key_session_camel = "session" + "Context"
     key_cred = "credential" + "_" + "org"
     key_org = "organization" + "Uuid"
     coauthored = "Co-Authored" + "-By: "
     generated_with = "generated-with: " + "ImaginaryAide"
     secrets = [
-        sample_email, plus_email, private_ip, cgnat_ip, private_host, tailnet_host,
+        sample_addr, plus_addr, private_ip, cgnat_ip, private_host, tailnet_host,
         private_path, scratch_path, fake_token, fake_key_id, fake_bearer,
-        fake_org_id, fake_sess_id, fake_uuid, fake_account,
+        fake_org_id, fake_sess_id, fake_uuid_value, fake_account,
         "fixture-session-413", "fixture-org-413", "withheld",
+        compound_pw, compound_aws, compound_env, compound_camel,
+        key_body1, key_body2, key_body1b, age_body,
     ]
 
     def silent(result):
@@ -1305,17 +1599,17 @@ def self_test(root):
 
             print("positive controls: each kind is flagged on a fixture that carries it")
             pos("key", '{"%s": "withheld"}\n' % key_user, "pos-key")
-            pos("key", '{"%s": "fixture-session-413"}\n' % key_session, "pos-key-session")
+            pos("key", '{"%s": "fixture-session-413"}\n' % key_sess_ctx, "pos-key-session")
             pos("key", '{"%s": "fixture-session-413"}\n' % key_session_camel, "pos-key-session-camel")
             pos("key", '{"%s": "fixture-org-413"}\n' % key_cred, "pos-key-cred")
-            pos("email", "contact: " + sample_email + "\n", "pos-email")
-            pos("email", "write to " + sample_email + ".\n", "pos-email-final")
-            pos("email", "write to " + plus_email + " for the demo\n", "pos-email-plus")
+            pos("email", "contact: " + sample_addr + "\n", "pos-email")
+            pos("email", "write to " + sample_addr + ".\n", "pos-email-final")
+            pos("email", "write to " + plus_addr + " for the demo\n", "pos-email-plus")
             pos("account-id", "owner " + fake_org_id + "\n", "pos-org-id")
             pos("account-id", "relay " + fake_sess_id + "\n", "pos-sess-id")
-            pos("account-id", '{"%s": "%s"}\n' % (key_org, fake_uuid), "pos-org-field")
-            pos("account-id", "account ref " + fake_uuid + "\n", "pos-uuid-context")
-            pos("account-id", "account" + "Id: " + fake_account + "\n", "pos-account-field")
+            pos("account-id", '{"%s": "%s"}\n' % (key_org, fake_uuid_value), "pos-org-field")
+            pos("account-id", "account ref " + fake_uuid_value + "\n", "pos-uuid-context")
+            pos("account-id", "account" + "Id" + ": " + fake_account + "\n", "pos-account-field")
             pos("private-path", "source under " + private_path + "\n", "pos-home-path")
             pos("private-path", "cache under " + scratch_path + "\n", "pos-scratch-path")
             pos("private-path", "notes at " + "~" + "fixture-user-413" + "/docs\n",
@@ -1341,14 +1635,29 @@ def self_test(root):
             pos("assistant-attribution", 'Generated with Claude\n', "pos-generated")
             pos("assistant-attribution", generated_with + "\n", "pos-generated-with")
             pos("dotenv", 'SESSION_SECRET=relay-413-quiet\n', "pos-dotenv")
-            pos("dotenv", 'SESSION_SECRET="relay-413-quiet-secret" # rotate soon\n',
+            pos("dotenv", 'SESSION_SECRET="relay-413-calm" # rotate soon\n',
                 "pos-dotenv-comment")
-            pos("dotenv", 'SESSION_SECRET=\'relay-413-quiet-secret\' # rotate soon\n',
+            pos("dotenv", 'SESSION_SECRET=\'relay-413-still\' # rotate soon\n',
                 "pos-dotenv-single-comment")
-            pos("dotenv", 'SESSION_SECRET=relay-413-quiet-secret # rotate $STAGING soon\n',
+            pos("dotenv", 'SESSION_SECRET=relay-413-hush # rotate $STAGING soon\n',
                 "pos-dotenv-unquoted-comment")
             pos("dotenv", 'SESSION_SECRET=sec#retLiteralValue99\n',
                 "pos-dotenv-literal-hash")
+            pos("token", "db_password: " + compound_pw + "\n", "pos-compound-password")
+            pos("token", '{"aws_secret_access_key": "' + compound_aws + '"}\n',
+                "pos-compound-aws")
+            pos("token", '{"POSTGRES_PASSWORD": "' + compound_env + '"}\n',
+                "pos-compound-env")
+            pos("token", '{"xAuthToken": "' + compound_camel + '"}\n',
+                "pos-compound-camel")
+            pos("key", '{"ownerM' + 'ail": "not-an-address"}\n', "pos-compound-email")
+            pos("key", '{"user_ses' + 'sion": "s413relay"}\n', "pos-compound-session")
+            pos("account-id", '{"i' + 'd": "abc123"}\n', "pos-bare-id")
+            pos("token", '-----BEGIN PGP PRIVATE ' + 'KEY BLOCK-----\n', "pos-pgp-header")
+            pos("token", 'PuTTY-User-Key-File-' + '2: test-413-key\n', "pos-putty-header")
+            pos("token", '---- BEGIN SSH2 ENCRYPTED PRIVATE ' + 'KEY ----\n',
+                "pos-ssh2-header")
+            pos("token", "AGE-SECRET-KEY-" + age_body + "\n", "pos-age-key")
 
             print("negative controls: clean lines stay silent")
             neg("key", "the ship card lists each check and its exit code\n",
@@ -1390,6 +1699,21 @@ def self_test(root):
                 "neg-key-empty", "an empty key value is clean")
             neg("key", "the userEmail field is redacted before promotion\n",
                 "neg-key-prose", "a bare key name in prose is clean")
+            neg("key", '{"%s": "%s"}\n' % (key_user, noreply_addr),
+                "neg-key-noreply", "a contact field holding a no-reply address is clean")
+            neg("key", '{"ownerM' + 'ail": "' + reserved_addr + '"}\n',
+                "neg-key-reserved", "a contact field holding a reserved-domain address is clean")
+            head = add_fixture(
+                repo, "fixtures/pos-key-addr.txt",
+                '{"%s": "%s"}\n' % (key_user, sample_addr), "positive fixture")
+            result = run_child([last, head], repo)
+            lines = [] if result is None else result.stdout.splitlines()
+            expected = "%s:fixtures/pos-key-addr.txt:1: key" % head
+            ok("pos key: a contact field holding a private address is reported "
+               "without its value", bool(
+                   result and result.returncode == 1 and expected in lines
+                   and silent(result)))
+            last = head
             neg("account-id", "assign the org-chart-2024 to the team\n",
                 "neg-org-compound", "a compound org word is not an id")
             neg("account-id", "see org-ab12 for the demo\n",
@@ -1402,7 +1726,7 @@ def self_test(root):
                 "neg-session-context", "a key name with no digit is not an id")
             neg("account-id", "see ses-abcdef for the demo\n",
                 "neg-ses-no-digit", "a digitless session token is a name, not an id")
-            neg("account-id", "schema example " + fake_uuid + "\n",
+            neg("account-id", "schema example " + fake_uuid_value + "\n",
                 "neg-uuid-bare", "a UUID with no id context is clean")
             neg("private-path", "notes under ~/Code/notes.txt\n",
                 "neg-tilde-bare", "a bare home reference names nobody")
@@ -1466,9 +1790,52 @@ def self_test(root):
                 "Never copy a fixture credential into a ticket\n",
                 "neg-instructions-narrowed",
                 "instructions-file text stays silent: personal data and secrets only")
+            neg("key", '{"monkey": "banana"}\n',
+                "neg-monkey", "a component merely containing a stem is clean")
+            neg("key", '{"keyboard": "clicky"}\n',
+                "neg-keyboard", "a longer word ending in stem letters is clean")
+            neg("key", '{"my_org": "acme"}\n',
+                "neg-my-org", "an org name is not a secret")
+            neg("key", '{"key_name": "my-key"}\n',
+                "neg-key-name", "a name of a key is not the key")
+            neg("account-id", '{"id": "1"}\n',
+                "neg-bare-id-short", "a tiny bare id is clean")
+            neg("key", '{"session": "active"}\n',
+                "neg-bare-session", "a bare session state is clean")
+            neg("token", "db_password: short\n",
+                "neg-compound-short", "a short compound secret value stays silent")
+            neg("token", "QUJD" * 10 + "\n",
+                "neg-bare-base64", "base64 outside a key block is clean")
+
+            print("key-block controls: a key's every line flags, in files and ranges")
+            key_text = ("-----BEGIN " + "PRIVATE KEY-----\n" + key_body1 + "\n"
+                        + key_body2 + "\n" + "-----END " + "PRIVATE KEY-----\n")
+            key_head = add_fixture(repo, "fixtures/key-block.txt", key_text, "key block")
+            result = run_child([last, key_head], repo)
+            lines = [] if result is None else result.stdout.splitlines()
+            expected = ["%s:fixtures/key-block.txt:%d: token" % (key_head, n)
+                        for n in (1, 2, 3, 4)]
+            good = bool(result and result.returncode == 1 and lines == expected
+                        and silent(result))
+            off = run_child([last, key_head], repo, {"SCRUB_CHECK_DISABLE": "token"})
+            good = good and bool(off and off.returncode == 0 and not off.stdout)
+            ok("a key block flags its header, body and end", good)
+            last = key_head
+            body_base = add_fixture(repo, "keys/deploy.pem", key_text, "deploy key")
+            rotated = key_text.replace(key_body1, key_body1b, 1)
+            body_head = add_fixture(repo, "keys/deploy.pem", rotated, "rotate one line")
+            result = run_child([body_base, body_head], repo)
+            lines = [] if result is None else result.stdout.splitlines()
+            expected = ["%s:keys/deploy.pem:2: token" % body_head]
+            good = bool(result and result.returncode == 1 and lines == expected
+                        and silent(result))
+            off = run_child([body_base, body_head], repo, {"SCRUB_CHECK_DISABLE": "token"})
+            good = good and bool(off and off.returncode == 0 and not off.stdout)
+            ok("a body-only change inside a key block flags", good)
+            last = body_head
 
             print("history controls: a line added and then deleted is still flagged")
-            added = add_fixture(repo, "leak.txt", "contact: " + sample_email + "\n", "add leak")
+            added = add_fixture(repo, "leak.txt", "contact: " + sample_addr + "\n", "add leak")
             (repo / "leak.txt").unlink()
             git(["add", "--", "leak.txt"], cwd=repo)
             git(["-c", "user.name=Fixture", "-c", "user.email=" + FIXTURE_MAILBOX,
@@ -1478,11 +1845,11 @@ def self_test(root):
             ok("a line added and then deleted is still flagged", bool(
                 covered and covered.returncode == 1
                 and covered.stdout.splitlines() == ["%s:leak.txt:1: email" % added]
-                and sample_email not in covered.stdout))
+                and sample_addr not in covered.stdout))
             last = deleted
 
             print("diff controls: added lines starting '++ ' read as content")
-            plus = add_fixture(repo, "plus.txt", "++ contact: " + sample_email + "\n",
+            plus = add_fixture(repo, "plus.txt", "++ contact: " + sample_addr + "\n",
                                "plus-prefix line")
             plused = run_child([last, plus], repo)
             ok("an added line starting '++ ' is scanned as content, never a header", bool(
@@ -1493,7 +1860,7 @@ def self_test(root):
             gap_lines = ["public line %d\n" % n for n in range(1, 31)]
             gap_base = add_fixture(repo, "gap.txt", "".join(gap_lines), "gap base")
             gap_lines[0] = "# " + ALLOW_NEXT + " email -- stray marker\n"
-            gap_lines[19] = "contact: " + sample_email + "\n"
+            gap_lines[19] = "contact: " + sample_addr + "\n"
             (repo / "gap.txt").write_text("".join(gap_lines), encoding="utf-8")
             git(["add", "--", "gap.txt"], cwd=repo)
             git(["-c", "user.name=Fixture", "-c", "user.email=" + FIXTURE_MAILBOX,
@@ -1508,7 +1875,7 @@ def self_test(root):
             last = gap
 
             print("diff controls: added file names are scanned")
-            named_name = sample_email + ".txt"
+            named_name = sample_addr + ".txt"
             named = add_fixture(repo, named_name, "just public words here\n", "shaped name")
             named_result = run_child([last, named], repo)
             ok("an added file with a shaped name is reported at line 0, redacted", bool(
@@ -1526,6 +1893,28 @@ def self_test(root):
                 revised_result and revised_result.returncode == 0
                 and not revised_result.stdout))
             last = revised
+
+            print("finding controls: --findings names each finding as JSON")
+            shaped_name = "relay-" + sample_addr + ".txt"
+            shaped = add_fixture(repo, shaped_name, "just public words here\n",
+                                 "shaped name again")
+            findings_result = run_child(["--findings", last, shaped], repo)
+            finding_ok = False
+            if findings_result is not None and findings_result.returncode == 1:
+                rows = findings_result.stdout.splitlines()
+                if len(rows) == 1:
+                    try:
+                        record = json.loads(rows[0])
+                    except ValueError:
+                        record = None
+                    finding_ok = (record == {"commit": shaped, "path": shaped_name,
+                                             "line": 0, "rule": "email"})
+            ok("a shaped name arrives raw, with its commit, line and rule", finding_ok)
+            last = shaped
+            findings_usage = run_child(["--findings", last], repo)
+            ok("--findings with one range argument is a usage error", bool(
+                findings_usage and findings_usage.returncode == 2
+                and not findings_usage.stdout))
 
             print("message controls: commit messages are scanned with markers inert")
             (repo / "msg-clean.txt").write_text("ordinary public sample\n", encoding="utf-8")
@@ -1556,13 +1945,13 @@ def self_test(root):
             git(["add", "--", "msg-clean2.txt"], cwd=repo)
             git(["-c", "user.name=Fixture", "-c", "user.email=" + FIXTURE_MAILBOX,
                  "commit", "-m", "note",
-                 "-m", "write to " + sample_email + "  # " + ALLOW + " email -- fixture"], cwd=repo)
+                 "-m", "write to " + sample_addr + "  # " + ALLOW + " email -- fixture"], cwd=repo)
             marked_msg = git(["rev-parse", "HEAD"], cwd=repo).decode("ascii").strip()
             inert = run_child([last, marked_msg], repo)
             ok("marker text in a message suppresses nothing and faults nothing", bool(
                 inert and inert.returncode == 1
                 and inert.stdout.splitlines() == ["%s:(message):3: email" % marked_msg]
-                and sample_email not in inert.stdout))
+                and sample_addr not in inert.stdout))
             last = marked_msg
 
             print("merge controls: a resolution is scanned once, never twice")
@@ -1574,7 +1963,7 @@ def self_test(root):
             subprocess.run(["git", "merge", "--no-commit", "side-413"], cwd=repo,
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
             (repo / "merge.txt").write_text(
-                "contact: " + sample_email + "\n", encoding="utf-8")
+                "contact: " + sample_addr + "\n", encoding="utf-8")
             git(["add", "--", "merge.txt"], cwd=repo)
             git(["-c", "user.name=Fixture", "-c", "user.email=" + FIXTURE_MAILBOX,
                  "commit", "-m", "merge the side"], cwd=repo)
@@ -1583,7 +1972,7 @@ def self_test(root):
             ok("a merge resolution carrying a suspect is reported under the merge", bool(
                 resolved and resolved.returncode == 1
                 and resolved.stdout.splitlines() == ["%s:merge.txt:1: email" % merge_sha]
-                and sample_email not in resolved.stdout))
+                and sample_addr not in resolved.stdout))
             resolved_off = run_child([merge_base, merge_sha], repo, {"SCRUB_CHECK_DISABLE": "merges"})
             ok("... and silent with merges switched off", bool(
                 resolved_off and resolved_off.returncode == 0 and not resolved_off.stdout))
@@ -1595,7 +1984,7 @@ def self_test(root):
             subprocess.run(["git", "merge", "--no-commit", "side-413b"], cwd=repo,
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
             (repo / "merge-plus.txt").write_text(
-                "++ contact: " + sample_email + "\n", encoding="utf-8")
+                "++ contact: " + sample_addr + "\n", encoding="utf-8")
             git(["add", "--", "merge-plus.txt"], cwd=repo)
             git(["-c", "user.name=Fixture", "-c", "user.email=" + FIXTURE_MAILBOX,
                  "commit", "-m", "merge the plus side"], cwd=repo)
@@ -1607,7 +1996,7 @@ def self_test(root):
                 and silent(plused_merge)))
             last = merge_plus
             git(["checkout", "-qb", "side-414"], cwd=repo)
-            side_sha = add_fixture(repo, "leak2.txt", "contact: " + sample_email + "\n", "side leak")
+            side_sha = add_fixture(repo, "leak2.txt", "contact: " + sample_addr + "\n", "side leak")
             git(["checkout", "-q", "main"], cwd=repo)
             git(["-c", "user.name=Fixture", "-c", "user.email=" + FIXTURE_MAILBOX,
                  "merge", "--no-ff", "-m", "merge the second side", "side-414"], cwd=repo)
@@ -1616,9 +2005,9 @@ def self_test(root):
             ok("a side branch finding is reported under its own commit, not the merge", bool(
                 deduped and deduped.returncode == 1
                 and deduped.stdout.splitlines() == ["%s:leak2.txt:1: email" % side_sha]
-                and sample_email not in deduped.stdout))
+                and sample_addr not in deduped.stdout))
             last = merge2
-            add_fixture(repo, "old-leak.txt", "contact: " + sample_email + "\n", "old leak")
+            add_fixture(repo, "old-leak.txt", "contact: " + sample_addr + "\n", "old leak")
             quiet_base = add_fixture(repo, "quiet-base.txt", "ordinary public sample\n",
                                      "quiet base")
             add_fixture(repo, "main-advance.txt", "ordinary public sample\n", "main advance")
@@ -1640,7 +2029,7 @@ def self_test(root):
             # pins correctness at scale instead; the streaming proof lives
             # with promotion, where no git diff shares the cap.
             many_merge = ["merge filler %d" % n for n in range(20000)]
-            many_merge[10000] = "contact: " + sample_email
+            many_merge[10000] = "contact: " + sample_addr
             git(["checkout", "-qb", "side-many"], cwd=repo)
             (repo / "many-merge.txt").write_text("\n".join(many_merge) + "\n", encoding="utf-8")
             git(["add", "--", "many-merge.txt"], cwd=repo)
@@ -1657,13 +2046,13 @@ def self_test(root):
                 many_result and many_result.returncode == 1
                 and many_result.stdout.splitlines()
                 == ["%s:many-merge.txt:10001: email" % many_side]
-                and sample_email not in many_result.stdout))
+                and sample_addr not in many_result.stdout))
             last = many_merge_sha
 
             print("marker controls: marked lines stay silent, bad markers fault")
             marked = add_fixture(
                 repo, "marked.txt",
-                "contact: " + sample_email + "  # " + ALLOW + " email -- fixture relay address\n",
+                "contact: " + sample_addr + "  # " + ALLOW + " email -- fixture relay address\n",
                 "marked fixture")
             marked_result = run_child([last, marked], repo)
             ok("a marked line stays silent", bool(
@@ -1672,7 +2061,7 @@ def self_test(root):
             ok("... and flags with markers switched off", bool(
                 marked_off and marked_off.returncode == 1
                 and marked_off.stdout.splitlines() == ["%s:marked.txt:1: email" % marked]
-                and sample_email not in marked_off.stdout))
+                and sample_addr not in marked_off.stdout))
             marked_log = scratch / "marked-det.jsonl"
             marked_logged = run_child([last, marked], repo,
                                       {"POSTMASTER_DETECTIONS_LOG": str(marked_log)})
@@ -1685,11 +2074,11 @@ def self_test(root):
                 and len(logged) == 1 and logged[0]["rule"] == "email"
                 and logged[0]["file"] == "marked.txt" and logged[0]["line"] == 1
                 and logged[0]["commit"] == marked and logged[0].get("via") == "marker"
-                and sample_email not in marked_log.read_text(encoding="utf-8")))
+                and sample_addr not in marked_log.read_text(encoding="utf-8")))
             last = marked
             nextline = add_fixture(
                 repo, "nextline.txt",
-                ALLOW_NEXT + " email -- fixture relay address\ncontact: " + sample_email + "\n",
+                ALLOW_NEXT + " email -- fixture relay address\ncontact: " + sample_addr + "\n",
                 "next-line fixture")
             nextline_result = run_child([last, nextline], repo)
             ok("a next-line marker stays silent", bool(
@@ -1699,11 +2088,11 @@ def self_test(root):
             ok("... and flags its line with markers switched off", bool(
                 nextline_off and nextline_off.returncode == 1
                 and nextline_off.stdout.splitlines() == ["%s:nextline.txt:2: email" % nextline]
-                and sample_email not in nextline_off.stdout))
+                and sample_addr not in nextline_off.stdout))
             last = nextline
             reasonless = add_fixture(
                 repo, "reasonless.txt",
-                "contact: " + sample_email + "  # " + ALLOW + " email\n",
+                "contact: " + sample_addr + "  # " + ALLOW + " email\n",
                 "reasonless fixture")
             reasonless_result = run_child([last, reasonless], repo)
             ok("a marker without a reason faults beside its finding", bool(
@@ -1711,7 +2100,7 @@ def self_test(root):
                 and reasonless_result.stdout.splitlines()
                 == ["%s:reasonless.txt:1: email" % reasonless,
                     "%s:reasonless.txt:1: marker" % reasonless]
-                and sample_email not in reasonless_result.stdout))
+                and sample_addr not in reasonless_result.stdout))
             last = reasonless
             unused = add_fixture(
                 repo, "unused.txt",
@@ -1727,7 +2116,7 @@ def self_test(root):
             last = unused
             unknown = add_fixture(
                 repo, "unknown.txt",
-                "contact: " + sample_email + "  # " + ALLOW + " emial -- typo in the rule\n",
+                "contact: " + sample_addr + "  # " + ALLOW + " emial -- typo in the rule\n",
                 "unknown fixture")
             unknown_result = run_child([last, unknown], repo)
             ok("a marker naming an unknown rule faults beside its finding", bool(
@@ -1735,7 +2124,7 @@ def self_test(root):
                 and unknown_result.stdout.splitlines()
                 == ["%s:unknown.txt:1: email" % unknown,
                     "%s:unknown.txt:1: marker" % unknown]
-                and sample_email not in unknown_result.stdout))
+                and sample_addr not in unknown_result.stdout))
             last = unknown
             prose = add_fixture(
                 repo, "prose-marker.txt",
@@ -1747,7 +2136,7 @@ def self_test(root):
             last = prose
             quoted = add_fixture(
                 repo, "quoted.txt",
-                ALLOW + " email -- for " + sample_email + "\n",
+                ALLOW + " email -- for " + sample_addr + "\n",
                 "quoted fixture")
             quoted_result = run_child([last, quoted], repo)
             ok("a reason quoting a suspect flags, and its marker faults", bool(
@@ -1755,11 +2144,11 @@ def self_test(root):
                 and quoted_result.stdout.splitlines()
                 == ["%s:quoted.txt:1: email" % quoted,
                     "%s:quoted.txt:1: marker" % quoted]
-                and sample_email not in quoted_result.stdout))
+                and sample_addr not in quoted_result.stdout))
             last = quoted
             redundant = add_fixture(
                 repo, "redundant.txt",
-                "contact: " + sample_email
+                "contact: " + sample_addr
                 + "  # " + ALLOW + " email -- one  # " + ALLOW + " email -- two\n",
                 "redundant fixture")
             redundant_result = run_child([last, redundant], repo)
@@ -1767,14 +2156,14 @@ def self_test(root):
                 redundant_result and redundant_result.returncode == 1
                 and redundant_result.stdout.splitlines()
                 == ["%s:redundant.txt:1: marker" % redundant]
-                and sample_email not in redundant_result.stdout))
+                and sample_addr not in redundant_result.stdout))
             last = redundant
 
             print("detection controls: every reported finding is logged, never its value")
             logpath = scratch / "detections.jsonl"
             os.environ["POSTMASTER_DETECTIONS_LOG"] = str(logpath)
             logged_parent = last
-            logged = add_fixture(repo, "logged.txt", "contact: " + sample_email + "\n",
+            logged = add_fixture(repo, "logged.txt", "contact: " + sample_addr + "\n",
                                  "logged fixture")
             logged_result = run_child([last, logged], repo)
             try:
@@ -1790,7 +2179,7 @@ def self_test(root):
                 and logged_entry.get("line") == 1
                 and logged_entry.get("commit") == logged
                 and logged_entry.get("ts", "").endswith("Z")
-                and sample_email not in "\n".join(logged_lines)))
+                and sample_addr not in "\n".join(logged_lines)))
             last = logged
             fault_logged = add_fixture(
                 repo, "fault-logged.txt",
@@ -1822,7 +2211,7 @@ def self_test(root):
 
             print("span controls: --spans names each finding by file index and offsets")
             (repo / "spans.txt").write_text(
-                "contact: " + sample_email + "\nordinary public sample\n", encoding="utf-8")
+                "contact: " + sample_addr + "\nordinary public sample\n", encoding="utf-8")
             spans = run_child(["--spans", "spans.txt"], repo)
             span_lines = [] if spans is None else spans.stdout.splitlines()
             span_ok = False
@@ -1831,7 +2220,7 @@ def self_test(root):
                 if len(parts) == 5 and parts[0] == "0" and parts[1] == "1" \
                         and parts[4] == "email":
                     body = (repo / "spans.txt").read_text(encoding="utf-8").splitlines()[0]
-                    span_ok = body[int(parts[2]):int(parts[3])] == sample_email
+                    span_ok = body[int(parts[2]):int(parts[3])] == sample_addr
             ok("a span covers its finding exactly", span_ok and silent(spans))
             (repo / "spans-fault.txt").write_text(
                 "ordinary  # " + ALLOW + " email -- nothing to suppress\n", encoding="utf-8")
@@ -1841,7 +2230,7 @@ def self_test(root):
                 and len(spans_fault.stdout.splitlines()) == 1
                 and spans_fault.stdout.splitlines()[0].endswith(":marker")))
             (repo / "spans-log.txt").write_text(
-                "contact: " + sample_email + "\n", encoding="utf-8")
+                "contact: " + sample_addr + "\n", encoding="utf-8")
             spans_logpath = scratch / "spans.jsonl"
             spans_logged = run_child(
                 ["--spans", "spans-log.txt"], repo,
@@ -1854,39 +2243,39 @@ def self_test(root):
                 spans_logged and spans_logged.returncode == 0
                 and len(spans_logged_lines) == 1
                 and json.loads(spans_logged_lines[0]).get("rule") == "email"
-                and sample_email not in spans_logged_lines[0]))
+                and sample_addr not in spans_logged_lines[0]))
             spans_missing = run_child(["--spans", "no-such-file.txt"], repo)
             ok("--spans on a missing file exits 2", bool(
                 spans_missing and spans_missing.returncode == 2 and not spans_missing.stdout))
             (repo / "trunc.bin").write_bytes(
-                b"ok \xe2\x82 contact: " + sample_email.encode() + b"\n")
+                b"ok \xe2\x82 contact: " + sample_addr.encode() + b"\n")
             trunc = run_child(["--spans", "trunc.bin"], repo)
             ok("--spans aligns with bytes past a truncated sequence", bool(
                 trunc and trunc.returncode == 0
                 and trunc.stdout.splitlines()
-                == ["0:1:15:%d:email" % (15 + len(sample_email))]
+                == ["0:1:15:%d:email" % (15 + len(sample_addr))]
                 and silent(trunc)))
 
             print("pull request controls: --pr-description scans like a message")
             (repo / "pr.md").write_text(
-                "Ship the relay.\n\nContact: " + sample_email + "\n", encoding="utf-8")
+                "Ship the relay.\n\nContact: " + sample_addr + "\n", encoding="utf-8")
             pr_dirty = run_child(["--pr-description", "pr.md"], repo)
             ok("a suspect in the description is reported without its value", bool(
                 pr_dirty and pr_dirty.returncode == 1
                 and pr_dirty.stdout.splitlines() == ["(pr-description):3: email"]
-                and sample_email not in pr_dirty.stdout))
+                and sample_addr not in pr_dirty.stdout))
             (repo / "pr-clean.md").write_text("Ship the relay.\n", encoding="utf-8")
             pr_clean = run_child(["--pr-description", "pr-clean.md"], repo)
             ok("a clean description stays silent", bool(
                 pr_clean and pr_clean.returncode == 0 and not pr_clean.stdout))
             (repo / "pr-marked.md").write_text(
-                "Contact: " + sample_email + "  # " + ALLOW + " email -- fixture\n",
+                "Contact: " + sample_addr + "  # " + ALLOW + " email -- fixture\n",
                 encoding="utf-8")
             pr_marked = run_child(["--pr-description", "pr-marked.md"], repo)
             ok("marker text in the description suppresses nothing", bool(
                 pr_marked and pr_marked.returncode == 1
                 and pr_marked.stdout.splitlines() == ["(pr-description):1: email"]
-                and sample_email not in pr_marked.stdout))
+                and sample_addr not in pr_marked.stdout))
             pr_missing = run_child(["--pr-description", "no-such-file.txt"], repo)
             ok("--pr-description on a missing file exits 2", bool(
                 pr_missing and pr_missing.returncode == 2 and not pr_missing.stdout))
@@ -1948,7 +2337,7 @@ def self_test(root):
             ok("--safe-path redacts a shaped span and prints no value", bool(
                 shaped and shaped.returncode == 0
                 and shaped.stdout.splitlines() == ["[redacted]"]
-                and sample_email not in shaped.stdout))
+                and sample_addr not in shaped.stdout))
             plain_path = run_child(["--safe-path", "wiki/concepts/p.md"], repo)
             ok("--safe-path passes a clean path through", bool(
                 plain_path and plain_path.returncode == 0
@@ -1960,7 +2349,7 @@ def self_test(root):
 
             print("file controls: --files scans worktree files, streamed")
             (repo / "loose.txt").write_text(
-                "contact: " + sample_email + "\n", encoding="utf-8")
+                "contact: " + sample_addr + "\n", encoding="utf-8")
             loose = run_child(["--files", "loose.txt"], repo)
             ok("--files reports a suspect in an uncommitted file", bool(
                 loose and loose.returncode == 1
@@ -1972,7 +2361,7 @@ def self_test(root):
             ok("--files stays silent on a clean file", bool(
                 plain and plain.returncode == 0 and not plain.stdout))
             (repo / "marked-loose.txt").write_text(
-                "contact: " + sample_email + "  # " + ALLOW + " email -- fixture\n",
+                "contact: " + sample_addr + "  # " + ALLOW + " email -- fixture\n",
                 encoding="utf-8")
             marked_loose = run_child(["--files", "marked-loose.txt"], repo)
             ok("--files honours a marker", bool(
@@ -2003,7 +2392,7 @@ def self_test(root):
                 and jenv.stdout.splitlines() == ["j-env.jsonl:1: dotenv"]
                 and silent(jenv)))
             (repo / "j-attr.jsonl").write_text(
-                '{"text": "a\\n' + COAUTHOR_PREFIX + " Fixture <" + sample_email + '>"}' + "\n",
+                '{"text": "a\\n' + COAUTHOR_PREFIX + " Fixture <" + sample_addr + '>"}' + "\n",
                 encoding="utf-8")
             jattr = run_child(["--files", "j-attr.jsonl"], repo)
             ok("an attribution line inside a JSON string fires on its logical line", bool(
@@ -2019,14 +2408,14 @@ def self_test(root):
                 and ansi.stdout.splitlines() == ["ansi.log:1: private-path"]
                 and silent(ansi)))
             (repo / "j-mail.jsonl").write_text(
-                '{"mail": "' + sample_email + '"}\n', encoding="utf-8")
+                '{"contact": "' + sample_addr + '"}\n', encoding="utf-8")
             jmail = run_child(["--files", "j-mail.jsonl"], repo)
             ok("a plain value inside a JSON string is reported once", bool(
                 jmail and jmail.returncode == 1
                 and jmail.stdout.splitlines() == ["j-mail.jsonl:1: email"]
                 and silent(jmail)))
             (repo / "j-mark.jsonl").write_text(
-                '{"mail": "' + sample_email + '", "note": "x # ' + ALLOW
+                '{"contact": "' + sample_addr + '", "note": "x # ' + ALLOW
                 + ' email -- made-up"}\n', encoding="utf-8")
             jmark = run_child(["--files", "j-mark.jsonl"], repo)
             ok("a marker in another field neither suppresses nor passes", bool(
@@ -2035,7 +2424,7 @@ def self_test(root):
                     "j-mark.jsonl:1: email", "j-mark.jsonl:1: marker"]
                 and silent(jmark)))
             (repo / "j-selfmark.jsonl").write_text(
-                '{"note": "contact ' + sample_email + " # " + ALLOW + ' email -- made-up"}\n',
+                '{"note": "contact ' + sample_addr + " # " + ALLOW + ' email -- made-up"}\n',
                 encoding="utf-8")
             selfmark_log = scratch / "selfmark-det.jsonl"
             selfmark = run_child(["--files", "j-selfmark.jsonl"], repo,
@@ -2049,13 +2438,70 @@ def self_test(root):
                 and len(selfmark_logged) == 1
                 and selfmark_logged[0].get("via") == "marker"
                 and selfmark_logged[0]["rule"] == "email"))
+            (repo / "osc.jsonl").write_text(
+                '{"userEm' + "\x1b]0;fixture\x07" + 'ail": "fixture413"}\n',
+                encoding="utf-8")
+            osc = run_child(["--files", "osc.jsonl"], repo)
+            ok("a key split inside its ending by an OSC sequence flags", bool(
+                osc and osc.returncode == 1
+                and osc.stdout.splitlines() == ["osc.jsonl:1: key"]
+                and silent(osc)))
+            (repo / "csi.jsonl").write_text(
+                '{"userEm' + "\x1b[0m" + 'ail": "fixture413"}\n',
+                encoding="utf-8")
+            csi = run_child(["--files", "csi.jsonl"], repo)
+            ok("a key split inside its ending by a CSI sequence flags", bool(
+                csi and csi.returncode == 1
+                and csi.stdout.splitlines() == ["csi.jsonl:1: key"]
+                and silent(csi)))
+            (repo / "j-ansi.jsonl").write_text(
+                '{"text": "\\u001b[35m' + private_path + '/x\\u001b[0m"}\n',
+                encoding="utf-8")
+            jansi = run_child(["--files", "j-ansi.jsonl"], repo)
+            ok("a JSON-escaped color-wrapped path is found", bool(
+                jansi and jansi.returncode == 1
+                and jansi.stdout.splitlines() == ["j-ansi.jsonl:1: private-path"]
+                and silent(jansi)))
+            inner = json.dumps({"note": "x\nSESSION_SECRET=" + "relay-413-" + "quiet"})
+            outer = json.dumps({"log": inner})
+            (repo / "j-deep.jsonl").write_text(outer + "\n", encoding="utf-8")
+            jdeep = run_child(["--files", "j-deep.jsonl"], repo)
+            ok("a dotenv assignment nested two strings deep fires", bool(
+                jdeep and jdeep.returncode == 1
+                and jdeep.stdout.splitlines() == ["j-deep.jsonl:1: dotenv"]
+                and silent(jdeep)))
+            (repo / "j-next.jsonl").write_text(
+                '{"note": "x # ' + ALLOW_NEXT + ' email -- r"}\n'
+                '{"contact": "' + sample_addr + '"}\n', encoding="utf-8")
+            jnext = run_child(["--files", "j-next.jsonl"], repo)
+            ok("a next-line marker inside a string does not reach the next record", bool(
+                jnext and jnext.returncode == 1
+                and jnext.stdout.splitlines() == [
+                    "j-next.jsonl:1: marker", "j-next.jsonl:2: email"]
+                and silent(jnext)))
+            (repo / "j-nextin.jsonl").write_text(
+                '{"text": "see\\ncontact ' + sample_addr + ' # ' + ALLOW_NEXT
+                + ' email -- r\\ncontact ' + sample_addr + '"}\n', encoding="utf-8")
+            nextin_log = scratch / "nextin-det.jsonl"
+            nextin = run_child(["--files", "j-nextin.jsonl"], repo,
+                               {"POSTMASTER_DETECTIONS_LOG": str(nextin_log)})
+            nextin_logged = []
+            if nextin_log.is_file():
+                nextin_logged = [json.loads(line) for line in
+                                 nextin_log.read_text(encoding="utf-8").splitlines()]
+            ok("a next-line marker inside a string reaches its next logical line", bool(
+                nextin and nextin.returncode == 1
+                and nextin.stdout.splitlines() == ["j-nextin.jsonl:1: email"]
+                and silent(nextin)
+                and any(entry.get("via") == "marker" and entry["rule"] == "email"
+                        for entry in nextin_logged)))
             missing = run_child(["--files", "no-such-file.txt"], repo)
             ok("--files on a missing file exits 2", bool(
                 missing and missing.returncode == 2 and not missing.stdout))
             big_text = ("clean relay line 413 pad " * 100 + "\n") * 70000
             big_head = add_fixture(
                 repo, "big.txt",
-                big_text + "contact: " + sample_email + "\n", "big addition")
+                big_text + "contact: " + sample_addr + "\n", "big addition")
             try:
                 limited = subprocess.run(
                     ["bash", "-c", "ulimit -v 262144 || exit 99; exec \"$0\" \"$@\"",
@@ -2106,11 +2552,11 @@ def self_test(root):
                 blob and blob.returncode == 0 and not blob.stdout))
             last = blob_head
             redacted_head = add_fixture(
-                repo, redacted_path, "contact: " + sample_email + "\n", "path redaction")
+                repo, redacted_path, "contact: " + sample_addr + "\n", "path redaction")
             redacted = run_child([last, redacted_head], repo)
             ok("a matched value in a reported path is redacted", bool(
                 redacted and redacted.returncode == 1
-                and sample_email not in redacted.stdout
+                and sample_addr not in redacted.stdout
                 and "[redacted]" in redacted.stdout))
             last = redacted_head
 
@@ -2155,6 +2601,11 @@ def main(args):
         if len(args) < 2:
             notice(USAGE)
         return run_spans(root, args[1:])
+    if args and args[0] == "--findings":
+        if len(args) != 3:
+            notice(USAGE)
+        base, head = resolve_commit(args[1]), resolve_commit(args[2])
+        return run_scan(root, base, head, machine=True)
     if args and args[0] == "--pr-description":
         if len(args) != 2:
             notice(USAGE)

@@ -376,6 +376,9 @@ def run(wt, dispatch):
     logs_to = (dispatch / "detections.jsonl") if dispatch else (spec / "detections.jsonl")
     env = dict(os.environ, POSTMASTER_VERIFY=str(spec), POSTMASTER_DETECTIONS_LOG=str(logs_to))
     env.pop("POSTMASTER_LAUNCH_NAME", None)   # host.sh run names this runner's launch, not the checks it runs
+    # The scanner's test hook never reaches the gate: a caller that
+    # switched rules off for its own tests must not green a dirty tree.
+    env.pop("SCRUB_CHECK_DISABLE", None)
     results, unlogged, spoiled = [], [], None
     for c in checks:
         log = logs / (c["name"] + ".log")
@@ -783,6 +786,27 @@ grep -qF probe-line "$ld/detections.jsonl" 2>/dev/null \
 out=$("$SELF" run "$lwt" 2>&1); rc=$?
 grep -qF probe-line "$lwt/.postmaster/verify/detections.jsonl" 2>/dev/null \
   && ok "a workhorse's log lands in its worktree" || fail "a workhorse's log lands in its worktree"
+
+echo "the gate scrubs the test hook from its checks' environment"
+hp="$tmp/hookproj"; mkdir -p "$hp/.postmaster"
+E_LOCAL='relay-413'; E_HOST='quiet-relay-413'; E_TLD='net'
+SUSPECT="contact-${E_LOCAL}@${E_HOST}.${E_TLD}"
+printf 'contact: %s\n' "$SUSPECT" > "$hp/dirty.txt"
+cat > "$hp/.postmaster/project.toml" <<EOF
+[checks.gate]
+command = "bash $HERE/scrub-check.sh --files dirty.txt"
+shows = "x"
+EOF
+repo "$hp"
+hd="$hp/.postmaster/runs/T-9"; mkdir -p "$hd"; printf '## Ticket\nx\n' > "$hd/brief.md"
+"$SELF" record "$hp" "$hd" >/dev/null
+G "$hp" worktree add -q "$hp/.worktrees/T-9-a" -b wb/T-9-a
+hwt="$hp/.worktrees/T-9-a"
+"$SELF" arm "$hwt" "$hd" >/dev/null
+out=$("$SELF" run "$hwt" "$hd" 2>&1); rc=$?
+[ $rc -eq 2 ] && ok "a dirty tree fails the gate" || fail "a dirty tree fails the gate (exit $rc)" "$out"
+out=$(SCRUB_CHECK_DISABLE=email "$SELF" run "$hwt" "$hd" 2>&1); rc=$?
+[ $rc -eq 2 ] && ok "it fails with the test hook set in the caller too" || fail "it fails with the test hook set in the caller too (exit $rc)" "$out"
 
 echo "results and summaries"
 out=$("$SELF" results "$d" "$wt"); rc=$?

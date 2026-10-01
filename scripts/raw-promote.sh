@@ -125,6 +125,28 @@ if [ "${1:-}" = "--self-test" ]; then
     else printf '  ok   a multi-span scrub publishes no fragment\n'; fi
   }
   r=$(repo) && { cd "$r" || exit 2
+    printf '%s\n' "$H_R$H_O$H_U@${E_HOST}${DOT}${E_TLD}/docs" > "$tmp/overlap.md"
+    out=$(bash "$HERE/raw-promote.sh" "$tmp/overlap.md" raw/trials/t413/notes.md 2>"$tmp/err"); code=$?
+    { [ "$code" -eq 0 ] && ! grep -qF '@' "$r/raw/trials/t413/notes.md" 2>/dev/null \
+      && ! grep -qF -- "$H_U" "$r/raw/trials/t413/notes.md" 2>/dev/null \
+      && ! grep -qF -- "${E_HOST}${DOT}${E_TLD}" "$r/raw/trials/t413/notes.md" 2>/dev/null; } \
+      && printf '  ok   partly overlapping spans merge to one placeholder\n' \
+      || { printf '  FAIL partly overlapping spans merge to one placeholder: exit %s\n' "$code"; fails=$((fails+1)); }
+    if printf '%s' "$out" | grep -qF 'private-path scrubbed' \
+      && printf '%s' "$out" | grep -qF 'email scrubbed'; then
+      printf '  ok   a merged scrub reports every rule it scrubbed\n'
+    else printf '  FAIL a merged scrub reports every rule it scrubbed\n'; fails=$((fails+1)); fi
+  }
+  r=$(repo) && { cd "$r" || exit 2
+    { printf '%s\n' '-----BEGIN 'PRIVATE' KEY-----' 'QUJDQUJDQUJDQUJDQUJDQUJDQUJDQUJDQUJDQUJDQUJD' \
+      'REVGREVGREVGREVGREVGREVGREVGREVGREVGREVGREVG' '-----END 'PRIVATE' KEY-----'; } > "$tmp/key.pem"
+    out=$(bash "$HERE/raw-promote.sh" "$tmp/key.pem" raw/trials/t413/key.pem 2>"$tmp/err"); code=$?
+    { [ "$code" -eq 0 ] && cmp -s "$r/raw/trials/t413/key.pem" \
+      <(printf '<redacted:token>\n<redacted:token>\n<redacted:token>\n<redacted:token>\n'); } \
+      && printf '  ok   a private key scrubs its header, body and end\n' \
+      || { printf '  FAIL a private key scrubs its header, body and end: exit %s\n' "$code"; fails=$((fails+1)); }
+  }
+  r=$(repo) && { cd "$r" || exit 2
     JPATH=$(printf '/home/%s' fixture-user)
     printf '{"text": "first line\\n%s-413/notes.txt/x"}\n' "$JPATH" > "$tmp/jsonl.md"
     out=$(bash "$HERE/raw-promote.sh" "$tmp/jsonl.md" raw/trials/t413/notes.md 2>"$tmp/err"); code=$?
@@ -537,17 +559,22 @@ for row in open(spans, encoding="utf-8").read().splitlines():
     except ValueError:
         sys.exit("a span carries numbers")
     found.setdefault(line, []).append((start, end, rule))
-# Per line, in two phases: decide keep-or-skip outer-first (start
-# ascending, longest first, overlapped spans skipped), then apply
-# right-to-left so earlier offsets hold while the line mutates.
+# Per line, in two phases: decide keep-or-merge outer-first (start
+# ascending, longest first), then apply right-to-left so earlier offsets
+# hold while the line mutates. Sorted starts mean a span can only meet
+# the last keeper: a contained span vanishes into it, and a partly
+# overlapping span merges, taking the union under the first rule, so no
+# span leaves a remnant behind. The report below still names every input
+# span's rule, since each was scrubbed, alone or merged.
 for line, group in found.items():
     group.sort(key=lambda s: (s[0], -(s[1] - s[0])))
-    kept, used = [], []
+    kept = []
     for start, end, rule in group:
-        if any(s < end and start < e for s, e in used):
-            continue
-        used.append((start, end))
-        kept.append((start, end, rule))
+        if kept and start < kept[-1][1] and kept[-1][0] < end:
+            if end > kept[-1][1]:
+                kept[-1] = (kept[-1][0], end, kept[-1][2])
+        else:
+            kept.append((start, end, rule))
     kept.sort(key=lambda s: -s[0])
     found[line] = kept
 # Stream the file line by line, so memory is bounded by the longest line.

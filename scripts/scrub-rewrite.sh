@@ -11,11 +11,14 @@
 # rewrites the range without it, before the branch is pushed. A leaked line
 # is deleted from the commit that added it; a marker fault is cut from its
 # line, deleting the line when nothing but the marker is left; an
-# authorship trailer is cut from its message. A commit whose every change
-# the surgery removes is dropped from the replay. Anything needing
-# judgement is refused with the commit named: a finding in a merge (redo
-# the merge by hand), a message finding that is not a trailer (reword it
-# by hand), a marker in a file that is not UTF-8.
+# authorship trailer is cut from its message. A shaped file name is
+# backdated to the clean name a pure later rename gave it, or omitted
+# with its pure later delete. A commit whose every change the surgery
+# removes is dropped from the replay. Anything needing judgement is
+# refused with the commit named: a finding in a merge (redo the merge by
+# hand), a message finding that is not a trailer (reword it by hand), a
+# marker in a file that is not UTF-8, a shaped name still standing at the
+# tip or landing shaped (rename it by hand).
 #
 # A pushed branch is never rewritten: any commit of the range reachable
 # from any remote-tracking branch refuses the rewrite. The worktree must
@@ -387,6 +390,165 @@ if [ "${1:-}" = "--self-test" ]; then
       || { printf '  FAIL a missing scanner fails the rewrite: exit %s\n' "$code"; fails=$((fails+1)); }
   }
 
+  echo "rewrite controls: shaped names rewrite through machine findings"
+  r=$(repo) && { cd "$r" || exit 2
+    SHAPED="$SUSPECT.txt"
+    base=$(git rev-parse HEAD)
+    leak=$(commit_file "$r" "notes/$SHAPED" "contact: $SUSPECT" "add the notes")
+    ( cd "$r" && git rm -q "notes/$SHAPED" && git commit -qm "drop the note" >/dev/null )
+    saved=$(tree_of "$r")
+    out=$(bash "$REWRITE" "$base" HEAD 2>"$tmp/err"); code=$?
+    [ "$code" -eq 0 ] \
+      && printf '  ok   a finding in a shaped-name file is rewritten\n' \
+      || { printf '  FAIL a finding in a shaped-name file is rewritten: exit %s\n%s\n' "$code" "$(cat "$tmp/err")"; fails=$((fails+1)); }
+    [ "$(tree_of "$r")" = "$saved" ] \
+      && printf '  ok   the shaped rewrite leaves the tree unchanged\n' \
+      || { printf '  FAIL the shaped rewrite leaves the tree unchanged\n'; fails=$((fails+1)); }
+    shown=$(bash "$HERE/scrub-check.sh" --safe-path "notes/$SHAPED" 2>/dev/null)
+    if printf '%s' "$out" | grep -qF "$leak:$shown:0: email removed" \
+      && printf '%s' "$out" | grep -qF "$leak:$shown:1: email removed"; then
+      printf '  ok   the shaped removal names redacted paths\n'
+    else printf '  FAIL the shaped removal names redacted paths\n%s\n' "$out"; fails=$((fails+1)); fi
+    leak_free "$out" "$tmp/err" \
+      && printf '  ok   a shaped rewrite prints no value\n' \
+      || { printf '  FAIL a shaped rewrite prints no value\n'; fails=$((fails+1)); }
+    rescan=$(POSTMASTER_DETECTIONS_LOG= bash "$HERE/scrub-check.sh" "$base" HEAD 2>/dev/null); rcode=$?
+    { [ "$rcode" -eq 0 ] && [ -z "$rescan" ]; } \
+      && printf '  ok   the shaped rewrite scans clean\n' \
+      || { printf '  FAIL the shaped rewrite scans clean: exit %s\n' "$rcode"; fails=$((fails+1)); }
+  }
+  r=$(repo) && { cd "$r" || exit 2
+    SHAPED="$SUSPECT.txt"
+    base=$(git rev-parse HEAD)
+    leak=$(commit_file "$r" "notes/$SHAPED" 'Later clean notes.' "add the notes")
+    ( cd "$r" && git mv "notes/$SHAPED" notes/clean.txt && git commit -qm "use a clean name" >/dev/null )
+    renamed=$(git rev-parse HEAD); saved=$(tree_of "$r")
+    out=$(bash "$REWRITE" "$base" HEAD 2>"$tmp/err"); code=$?
+    [ "$code" -eq 0 ] \
+      && printf '  ok   a renamed-away filename is backdated\n' \
+      || { printf '  FAIL a renamed-away filename is backdated: exit %s\n%s\n' "$code" "$(cat "$tmp/err")"; fails=$((fails+1)); }
+    [ "$(tree_of "$r")" = "$saved" ] \
+      && printf '  ok   the backdate leaves the tree unchanged\n' \
+      || { printf '  FAIL the backdate leaves the tree unchanged\n'; fails=$((fails+1)); }
+    [ "$(git show HEAD:notes/clean.txt)" = 'Later clean notes.' ] \
+      && printf '  ok   the backdated file keeps its content\n' \
+      || { printf '  FAIL the backdated file keeps its content\n'; fails=$((fails+1)); }
+    ! git rev-list "$base"..HEAD | grep -q "$renamed" \
+      && printf '  ok   the emptied rename is dropped\n' \
+      || { printf '  FAIL the emptied rename is dropped\n'; fails=$((fails+1)); }
+    rescan=$(POSTMASTER_DETECTIONS_LOG= bash "$HERE/scrub-check.sh" "$base" HEAD 2>/dev/null); rcode=$?
+    { [ "$rcode" -eq 0 ] && [ -z "$rescan" ]; } \
+      && printf '  ok   the backdated range scans clean\n' \
+      || { printf '  FAIL the backdated range scans clean: exit %s\n' "$rcode"; fails=$((fails+1)); }
+  }
+  r=$(repo) && { cd "$r" || exit 2
+    SHAPED="$SUSPECT.txt"
+    base=$(git rev-parse HEAD)
+    leak=$(commit_file "$r" "notes/$SHAPED" 'Later clean notes.' "add the notes")
+    ( cd "$r" && git rm -q "notes/$SHAPED" && git commit -qm "drop the note" >/dev/null )
+    dropped=$(git rev-parse HEAD); saved=$(tree_of "$r")
+    out=$(bash "$REWRITE" "$base" HEAD 2>"$tmp/err"); code=$?
+    [ "$code" -eq 0 ] \
+      && printf '  ok   a deleted-away filename is omitted\n' \
+      || { printf '  FAIL a deleted-away filename is omitted: exit %s\n%s\n' "$code" "$(cat "$tmp/err")"; fails=$((fails+1)); }
+    [ "$(tree_of "$r")" = "$saved" ] \
+      && printf '  ok   the omission leaves the tree unchanged\n' \
+      || { printf '  FAIL the omission leaves the tree unchanged\n'; fails=$((fails+1)); }
+    { ! git rev-list "$base"..HEAD | grep -q "$leak" \
+      && ! git rev-list "$base"..HEAD | grep -q "$dropped"; } \
+      && printf '  ok   the omission drops its commits\n' \
+      || { printf '  FAIL the omission drops its commits\n'; fails=$((fails+1)); }
+    rescan=$(POSTMASTER_DETECTIONS_LOG= bash "$HERE/scrub-check.sh" "$base" HEAD 2>/dev/null); rcode=$?
+    { [ "$rcode" -eq 0 ] && [ -z "$rescan" ]; } \
+      && printf '  ok   the omitted range scans clean\n' \
+      || { printf '  FAIL the omitted range scans clean: exit %s\n' "$rcode"; fails=$((fails+1)); }
+  }
+  r=$(repo) && { cd "$r" || exit 2
+    SHAPED="$SUSPECT.txt"
+    base=$(git rev-parse HEAD)
+    leak=$(commit_file "$r" "notes/$SHAPED" 'Later clean notes.' "add the notes")
+    tip=$(git rev-parse HEAD); saved=$(tree_of "$r")
+    out=$(bash "$REWRITE" "$base" HEAD 2>"$tmp/err"); code=$?
+    { [ "$code" -eq 2 ] && grep -qF 'rename it by hand' "$tmp/err"; } \
+      && printf '  ok   a filename still at the tip refuses with its remedy\n' \
+      || { printf '  FAIL a filename still at the tip refuses with its remedy: exit %s\n%s\n' "$code" "$(cat "$tmp/err")"; fails=$((fails+1)); }
+    { [ "$(git rev-parse HEAD)" = "$tip" ] && [ "$(tree_of "$r")" = "$saved" ]; } \
+      && printf '  ok   the refused branch is untouched\n' \
+      || { printf '  FAIL the refused branch is untouched\n'; fails=$((fails+1)); }
+  }
+  r=$(repo) && { cd "$r" || exit 2
+    SHAPED="$SUSPECT.txt"
+    base=$(git rev-parse HEAD)
+    leak=$(commit_file "$r" "notes/$SHAPED" 'First notes.' "add the notes")
+    ( cd "$r" && printf 'Second notes.\n' > "notes/$SHAPED" && git add "notes/$SHAPED" \
+      && git commit -qm "revise the notes" >/dev/null \
+      && git mv "notes/$SHAPED" notes/clean.txt && git commit -qm "use a clean name" >/dev/null )
+    tip=$(git rev-parse HEAD); saved=$(tree_of "$r")
+    out=$(bash "$REWRITE" "$base" HEAD 2>"$tmp/err"); code=$?
+    { [ "$code" -eq 2 ] && grep -qF 'rewrite its later history by hand' "$tmp/err"; } \
+      && printf '  ok   a filename with edited history refuses\n' \
+      || { printf '  FAIL a filename with edited history refuses: exit %s\n%s\n' "$code" "$(cat "$tmp/err")"; fails=$((fails+1)); }
+    { [ "$(git rev-parse HEAD)" = "$tip" ] && [ "$(tree_of "$r")" = "$saved" ]; } \
+      && printf '  ok   the edited-history branch is untouched\n' \
+      || { printf '  FAIL the edited-history branch is untouched\n'; fails=$((fails+1)); }
+  }
+  r=$(repo) && { cd "$r" || exit 2
+    SHAPED="$SUSPECT.txt"
+    base=$(git rev-parse HEAD)
+    ( cd "$r" && mkdir -p notes && { printf 'contact: %s\n' "$SUSPECT"; printf 'Later clean notes.\n'; } > "notes/$SHAPED" \
+      && git add "notes/$SHAPED" && git commit -qm "add the notes" >/dev/null )
+    ( cd "$r" && git mv "notes/$SHAPED" notes/clean.txt && git commit -qm "use a clean name" >/dev/null \
+      && printf 'Later clean notes.\n' > notes/clean.txt && git add notes/clean.txt \
+      && git commit -qm "drop the contact" >/dev/null )
+    saved=$(tree_of "$r")
+    out=$(bash "$REWRITE" "$base" HEAD 2>"$tmp/err"); code=$?
+    [ "$code" -eq 0 ] \
+      && printf '  ok   a renamed file with content findings rewrites together\n' \
+      || { printf '  FAIL a renamed file with content findings rewrites together: exit %s\n%s\n' "$code" "$(cat "$tmp/err")"; fails=$((fails+1)); }
+    [ "$(tree_of "$r")" = "$saved" ] \
+      && printf '  ok   the joint rewrite leaves the tree unchanged\n' \
+      || { printf '  FAIL the joint rewrite leaves the tree unchanged\n'; fails=$((fails+1)); }
+    [ "$(git show HEAD:notes/clean.txt)" = 'Later clean notes.' ] \
+      && printf '  ok   the joint rewrite keeps clean content\n' \
+      || { printf '  FAIL the joint rewrite keeps clean content\n'; fails=$((fails+1)); }
+    rescan=$(POSTMASTER_DETECTIONS_LOG= bash "$HERE/scrub-check.sh" "$base" HEAD 2>/dev/null); rcode=$?
+    { [ "$rcode" -eq 0 ] && [ -z "$rescan" ]; } \
+      && printf '  ok   the jointly rewritten range scans clean\n' \
+      || { printf '  FAIL the jointly rewritten range scans clean: exit %s\n' "$rcode"; fails=$((fails+1)); }
+  }
+  r=$(repo) && { cd "$r" || exit 2
+    SHAPED="$SUSPECT.txt"
+    SHAPED2="relay-$SUSPECT.txt"
+    base=$(git rev-parse HEAD)
+    leak=$(commit_file "$r" "notes/$SHAPED" 'Later clean notes.' "add the notes")
+    ( cd "$r" && git mv "notes/$SHAPED" "notes/$SHAPED2" && git commit -qm "rename the note" >/dev/null )
+    tip=$(git rev-parse HEAD); saved=$(tree_of "$r")
+    out=$(bash "$REWRITE" "$base" HEAD 2>"$tmp/err"); code=$?
+    { [ "$code" -eq 2 ] && grep -qF 'still shaped where it lands' "$tmp/err"; } \
+      && printf '  ok   a rename landing shaped refuses\n' \
+      || { printf '  FAIL a rename landing shaped refuses: exit %s\n%s\n' "$code" "$(cat "$tmp/err")"; fails=$((fails+1)); }
+    { [ "$(git rev-parse HEAD)" = "$tip" ] && [ "$(tree_of "$r")" = "$saved" ]; } \
+      && printf '  ok   the shaped-landing branch is untouched\n' \
+      || { printf '  FAIL the shaped-landing branch is untouched\n'; fails=$((fails+1)); }
+  }
+  r=$(repo) && { cd "$r" || exit 2
+    SHAPED="$SUSPECT.txt"
+    base=$(git rev-parse HEAD)
+    ( cd "$r" && mkdir -p notes && printf 'Held notes.\n' > notes/final.txt && git add notes/final.txt \
+      && git commit -qm "hold the name" >/dev/null )
+    leak=$(commit_file "$r" "notes/$SHAPED" 'Later clean notes.' "add the notes")
+    ( cd "$r" && git rm -q notes/final.txt && git commit -qm "drop the held name" >/dev/null \
+      && git mv "notes/$SHAPED" notes/final.txt && git commit -qm "take the name" >/dev/null )
+    tip=$(git rev-parse HEAD); saved=$(tree_of "$r")
+    out=$(bash "$REWRITE" "$base" HEAD 2>"$tmp/err"); code=$?
+    { [ "$code" -eq 2 ] && grep -qF 'over an existing file' "$tmp/err"; } \
+      && printf '  ok   a rename landing on a held name refuses\n' \
+      || { printf '  FAIL a rename landing on a held name refuses: exit %s\n%s\n' "$code" "$(cat "$tmp/err")"; fails=$((fails+1)); }
+    { [ "$(git rev-parse HEAD)" = "$tip" ] && [ "$(tree_of "$r")" = "$saved" ]; } \
+      && printf '  ok   the held-name branch is untouched\n' \
+      || { printf '  FAIL the held-name branch is untouched\n'; fails=$((fails+1)); }
+  }
+
   echo
   [ "$fails" -eq 0 ] && { echo "self-test: all controls behaved"; exit 0; }
   echo "self-test: $fails control(s) misbehaved"; exit 1
@@ -419,16 +581,19 @@ cleanup() { rm -rf -- "$STAGE" 2>/dev/null; }
 trap cleanup EXIT
 
 # The gate that failed logged these findings already; the rewrite remediates,
-# it does not detect, so it scans with the log emptied.
+# it does not detect, so it scans with the log emptied. The planner reads
+# machine findings, never the human report: redacted paths cannot be
+# opened, so a shaped name would refuse the whole rewrite. The stream
+# stays in the stage file and is never printed.
 scanerr=$STAGE/scan.err
-scanout=$(POSTMASTER_DETECTIONS_LOG= bash "$SCRUB" "$base" "$head" 2>"$scanerr"); code=$?
+scanout=$(POSTMASTER_DETECTIONS_LOG= bash "$SCRUB" --findings "$base" "$head" 2>"$scanerr"); code=$?
 cat "$scanerr" >&2
 case $code in
   0) exit 0 ;;
   1) ;;
   *) fail "the scan could not finish" ;;
 esac
-printf '%s\n' "$scanout" > "$STAGE/scan.txt"
+printf '%s\n' "$scanout" > "$STAGE/scan.json"
 
 # Plan the surgery: classify every finding, refuse what needs hands, and
 # write the operations with the report of what they remove.
@@ -454,14 +619,19 @@ def sh(*args):
 
 
 findings = []
-for ln in open(os.path.join(stage, "scan.txt"), encoding="utf-8").read().splitlines():
-    if len(ln) < 44 or ln[40] != ":" or not SHA.fullmatch(ln[:40]):
+for ln in open(os.path.join(stage, "scan.json"), encoding="utf-8").read().splitlines():
+    try:
+        record = json.loads(ln)
+    except ValueError:
         fail("the scan could not be read")
-    before, sep, kind = ln[41:].rpartition(": ")
-    path, colon, line = before.rpartition(":") if sep else ("", "", "")
-    if not sep or not kind or not colon or not path or not line.isdigit():
+    if (not isinstance(record, dict) or sorted(record) != ["commit", "line", "path", "rule"]
+            or not isinstance(record["commit"], str) or not SHA.fullmatch(record["commit"])
+            or not isinstance(record["path"], str) or not record["path"]
+            or not isinstance(record["rule"], str) or not record["rule"]
+            or not isinstance(record["line"], int) or isinstance(record["line"], bool)
+            or record["line"] < 0):
         fail("the scan could not be read")
-    findings.append((ln[:40], path, int(line), kind))
+    findings.append((record["commit"], record["path"], record["line"], record["rule"]))
 if not findings:
     fail("the scan could not be read")
 
@@ -492,6 +662,8 @@ for sha, parents in commits:
 
 drops, strips, msgs = {}, {}, {}
 for sha, path, line, kind in findings:
+    if line == 0:
+        continue
     if path == "(message)":
         if kind != "assistant-attribution":
             fail("commit %s carries %s in its message; reword it by hand" % (sha, kind))
@@ -507,6 +679,7 @@ for key in drops:
             del strips[key]
 
 
+
 def blob(sha, path):
     result = sh("git", "show", "%s:%s" % (sha, path))
     if result.returncode != 0:
@@ -514,12 +687,150 @@ def blob(sha, path):
     return result.stdout
 
 
+def shown(path):
+    """A path as the report and refusals name it: redacted, never raw."""
+    result = sh(scrub, "--safe-path", path)
+    if result.returncode != 0:
+        fail("the scan could not finish")
+    lines = result.stdout.decode("utf-8", errors="replace").splitlines()
+    if len(lines) != 1:
+        fail("the scan could not finish")
+    return lines[0]
+
+
+def diff_records(parent, sha):
+    """(status, old, new) records for one commit, renames detected."""
+    changed = sh("git", "diff-tree", "-M", "--raw", "-r", "-z", parent, sha)
+    if changed.returncode != 0:
+        fail("the range could not be read")
+    records = changed.stdout.split(b"\0")
+    out, i = [], 0
+    while i < len(records) - 1:
+        meta = records[i].decode("ascii", errors="strict")
+        if not meta.startswith(":"):
+            fail("the range could not be read")
+        fields = meta[1:].split(" ")
+        if len(fields) != 5:
+            fail("the range could not be read")
+        status = fields[4]
+        old = records[i + 1].decode("utf-8", errors="surrogateescape")
+        if status.startswith("R"):
+            if i + 2 >= len(records) - 1:
+                fail("the range could not be read")
+            new = records[i + 2].decode("utf-8", errors="surrogateescape")
+            i += 3
+        else:
+            new, i = old, i + 2
+        out.append((status, old, new))
+    return out
+
+
+# A line-0 finding is the file's own name, shaped where it was added.
+# When a pure later rename carries it to a clean name, the addition is
+# backdated to that name and the rename commits drop; when a pure later
+# delete removes it, the addition is omitted and the delete drops. Any
+# later touch the replay could not carry refuses instead, and a name
+# still standing at the tip needs its new name from hands.
+parents_of = {sha: parents for sha, parents in commits}
+for sha, _path, _line, _kind in findings:
+    if sha not in parents_of:
+        fail("the scan could not be read")
+order = {sha: i for i, (sha, _parents) in enumerate(reversed(commits))}
+renames, omits, doomed_extra = {}, set(), set()
+for sha, old in sorted(set((s, p) for s, p, line, _k in findings if line == 0),
+                       key=lambda item: order[item[0]]):
+    current, gone_at, steps = old, None, []
+    abandoned = {old}
+    started, stopped = False, False
+    for sha2, parents2 in reversed(commits):
+        if not started:
+            if sha2 == sha:
+                started = True
+            continue
+        if stopped:
+            break
+        if len(parents2) > 1:
+            touched = set()
+            for p in parents2:
+                diff = sh("git", "diff", "--name-only", "-z", p, sha2)
+                if diff.returncode != 0:
+                    fail("the range could not be read")
+                touched.update(part.decode("utf-8", errors="surrogateescape")
+                               for part in diff.stdout.split(b"\0") if part)
+            if current is not None and current in touched and not steps:
+                fail("commit %s adds %s; rewrite its later history by hand"
+                     % (sha, shown(old)))
+            if touched & abandoned and (not steps and gone_at is None):
+                fail("commit %s adds %s; rewrite its later history by hand"
+                     % (sha, shown(old)))
+            if touched & abandoned:
+                stopped = True
+            continue
+        parent = parents2[0] if parents2 else EMPTY_TREE
+        records = diff_records(parent, sha2)
+        mentions = set()
+        for _status, a, b in records:
+            mentions.add(a)
+            mentions.add(b)
+        if current is None:
+            if mentions & abandoned:
+                stopped = True
+            continue
+        if current not in mentions and not (mentions & abandoned):
+            continue
+        if current not in mentions:
+            if not steps:
+                fail("commit %s adds %s; rewrite its later history by hand"
+                     % (sha, shown(old)))
+            stopped = True
+            continue
+        if len(records) != 1:
+            fail("commit %s adds %s; rewrite its later history by hand"
+                 % (sha, shown(old)))
+        status, a, b = records[0]
+        if status == "D" and a == current:
+            if steps:
+                continue
+            gone_at = sha2
+            abandoned.add(current)
+            current = None
+        elif status == "R100" and a == current:
+            steps.append((sha2, a, b))
+            abandoned.add(a)
+            current = b
+        elif steps or gone_at is not None:
+            continue
+        else:
+            fail("commit %s adds %s; rewrite its later history by hand"
+                 % (sha, shown(old)))
+    if gone_at is not None:
+        omits.add((sha, old))
+        doomed_extra.add(gone_at)
+    elif steps:
+        final = current
+        if shown(final) != final:
+            fail("commit %s adds %s, still shaped where it lands; rename it by hand"
+                 % (sha, shown(old)))
+        own_parents = parents_of[sha]
+        own_parent = own_parents[0] if own_parents else EMPTY_TREE
+        exists = sh("git", "cat-file", "-e", "%s:%s" % (own_parent, final))
+        if exists.returncode == 0:
+            fail("commit %s adds %s over an existing file; rewrite by hand"
+                 % (sha, shown(old)))
+        renames[(sha, old)] = final
+        for step_sha, _a, _b in steps:
+            doomed_extra.add(step_sha)
+    else:
+        fail("commit %s adds %s; rename it by hand" % (sha, shown(old)))
+for key in omits:
+    drops.pop(key, None)
+    strips.pop(key, None)
 strip_at = {}
 for (sha, path), lines in strips.items():
     try:
         text = blob(sha, path).decode("utf-8")
     except UnicodeError:
-        fail("%s in commit %s is not UTF-8; strip its marker by hand" % (path, sha))
+        fail("%s in commit %s is not UTF-8; strip its marker by hand" % (shown(path), sha))
     body = text.split("\n")
     count = len(body) - (1 if body and body[-1] == "" else 0)
     starts = {}
@@ -554,11 +865,24 @@ for (sha, path), starts in strip_at.items():
         str(number): start for number, start in starts.items()}
 for sha, lines in msgs.items():
     ops.setdefault(sha, {})["msg"] = sorted(lines)
+for (sha, old), new in renames.items():
+    ops.setdefault(sha, {}).setdefault("rename", {})[old] = new
+for sha, path in omits:
+    ops.setdefault(sha, {}).setdefault("omit", []).append(path)
+for sha in ops:
+    if "omit" in ops[sha]:
+        ops[sha]["omit"].sort()
 
 # Doomed commits: surgery removes their every change, so replaying them
 # would amend to empty, which git refuses. They are dropped from the todo
 # instead. Simulation mirrors operate.py line for line: drops remove
 # lines, strips cut or remove them, nothing left means the file is gone.
+renamed_at = {}
+for (sha, old), new in renames.items():
+    renamed_at.setdefault(sha, {})[old] = new
+omitted_at = {}
+for sha, path in omits:
+    omitted_at.setdefault(sha, set()).add(path)
 doomed = set()
 for sha, parents in commits:
     if len(parents) > 1 or sha not in ops or "msg" in ops[sha] and len(ops[sha]) == 1:
@@ -579,15 +903,28 @@ for sha, parents in commits:
             fail("the range could not be read")
         files[path.decode("utf-8", errors="surrogateescape")] = (fields[4], fields[0], fields[1])
     doomed_flag = True
+    ren = renamed_at.get(sha, {})
+    om = omitted_at.get(sha, set())
     for path, (status, oldmode, newmode) in files.items():
         key = (sha, path)
+        if path in ren:
+            # A backdated addition always changes its parent: the final
+            # name is new there, so the commit can never replay empty.
+            if status != "A":
+                fail("the scan could not be read")
+            doomed_flag = False
+            break
+        if path in om:
+            if status != "A":
+                fail("the scan could not be read")
+            continue
         if key not in drops and key not in strips:
             doomed_flag = False
             break
         if status == "D":
             fail("the scan could not be read")
         if status == "T" or (status == "M" and oldmode != newmode):
-            fail("commit %s changes %s's type; rewrite by hand" % (sha, path))
+            fail("commit %s changes %s's type; rewrite by hand" % (sha, shown(path)))
         raw = blob(sha, path)
         if key in strips:
             text = raw.decode("utf-8")
@@ -624,6 +961,9 @@ for sha, parents in commits:
     if doomed_flag:
         doomed.add(sha)
         del ops[sha]
+for extra in doomed_extra:
+    doomed.add(extra)
+    ops.pop(extra, None)
 with open(os.path.join(stage, "ops.json"), "w", encoding="utf-8") as handle:
     json.dump(ops, handle, sort_keys=True)
 with open(os.path.join(stage, "doomed.txt"), "w", encoding="utf-8") as handle:
@@ -634,13 +974,7 @@ with open(os.path.join(stage, "doomed.txt"), "w", encoding="utf-8") as handle:
 redacted = {}
 for _sha, path, _line, _kind in findings:
     if path not in redacted and path != "(message)":
-        result = sh(scrub, "--safe-path", path)
-        if result.returncode != 0:
-            fail("the scan could not finish")
-        redacted[path] = result.stdout.decode("utf-8", errors="replace").splitlines()
-        if len(redacted[path]) != 1:
-            fail("the scan could not finish")
-        redacted[path] = redacted[path][0]
+        redacted[path] = shown(path)
 with open(os.path.join(stage, "removed.txt"), "w", encoding="utf-8") as handle:
     for sha, path, line, kind in sorted(findings):
         shown = path if path == "(message)" else redacted[path]
@@ -706,6 +1040,7 @@ def split_keep(raw):
     return parts, trailing
 
 
+renamed = set(mine.get("rename", {}))
 for path in sorted(set(mine.get("drop", {})) | set(mine.get("strip", {}))):
     if path in mine.get("strip", {}):
         try:
@@ -726,7 +1061,7 @@ for path in sorted(set(mine.get("drop", {})) | set(mine.get("strip", {}))):
         lines = [cut.get(i, text) for i, text in enumerate(lines, 1) if i not in gone]
         open(path, "w", encoding="utf-8", newline="").write(
             "\n".join(lines) + ("\n" if trailing and lines else ""))
-        if not lines:
+        if not lines and path not in renamed:
             sh("git", "rm", "-q", "-f", "--", path)
         else:
             sh("git", "add", "--", path)
@@ -738,12 +1073,16 @@ for path in sorted(set(mine.get("drop", {})) | set(mine.get("strip", {}))):
         lines, trailing = split_keep(raw)
         gone = set(mine["drop"][path])
         lines = [text for i, text in enumerate(lines, 1) if i not in gone]
-        if not lines:
+        if not lines and path not in renamed:
             open(path, "wb").close()
             sh("git", "rm", "-q", "-f", "--", path)
         else:
             open(path, "wb").write(b"\n".join(lines) + (b"\n" if trailing else b""))
             sh("git", "add", "--", path)
+for path in sorted(mine.get("omit", [])):
+    sh("git", "rm", "-q", "-f", "--", path)
+for old, new in sorted(mine.get("rename", {}).items()):
+    sh("git", "mv", "--", old, new)
 
 staged = subprocess.run(["git", "diff", "--cached", "--quiet"], check=False).returncode != 0
 if "msg" in mine:
