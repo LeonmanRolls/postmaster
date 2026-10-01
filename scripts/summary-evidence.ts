@@ -40,10 +40,43 @@ function normalizedHeading(text: string): string {
 }
 
 function headings(lines: string[]): Heading[] {
-  return lines.flatMap((line, index) => {
-    const match = headingPattern.exec(line);
-    return match ? [{ level: match[1].length, text: normalizedHeading(match[2]), index }] : [];
-  });
+  const found: Heading[] = [];
+  let fence: { char: string; length: number } | undefined;
+  let inComment = false;
+  for (const [index, line] of lines.entries()) {
+    let visible = line;
+    if (inComment) {
+      const close = visible.indexOf("-->");
+      if (close < 0) continue;
+      visible = visible.slice(close + 3);
+      inComment = false;
+    }
+    const comment = visible.indexOf("<!--");
+    if (comment >= 0) {
+      const close = visible.indexOf("-->", comment + 4);
+      if (close < 0) {
+        visible = visible.slice(0, comment);
+        inComment = true;
+      } else {
+        visible = visible.slice(0, comment) + visible.slice(close + 3);
+      }
+    }
+    if (fence) {
+      const close = visible.trim();
+      if (close.length >= fence.length && [...close].every((char) => char === fence?.char)) {
+        fence = undefined;
+      }
+      continue;
+    }
+    const fenceMatch = codeFencePattern.exec(visible);
+    if (fenceMatch) {
+      fence = { char: fenceMatch[1][0], length: fenceMatch[1].length };
+      continue;
+    }
+    const match = headingPattern.exec(visible);
+    if (match) found.push({ level: match[1].length, text: normalizedHeading(match[2]), index });
+  }
+  return found;
 }
 
 function ticketBody(text: string): string[] {
