@@ -15,10 +15,11 @@
 // new     makes <dest> a fresh git repo holding the committed app, one commit on main, outside
 //         every other repo, so a run never touches this repo's branches, worktrees or run records.
 //         A bare name goes under ~/Code/fixtures, or $POSTMASTER_FIXTURES when that is set; a
-//         path is used as given. It has no remote. It makes the repo's own ticket store
-//         (scripts/local.sh), files the ticket there and prints its number to dispatch against
-//         <dest>; a run reads it through the local tracker whatever the config names
-//         (scripts/tracker-kind.sh).
+//         path is used as given. It marks the copy as a fixture, in the copy's own git config
+//         (postmaster.fixture), so the tree stays one commit and clean. It has no remote. It
+//         makes the repo's own ticket store (scripts/local.sh), files the ticket there and prints
+//         its number to dispatch against <dest>; a run reads it through the local tracker whatever
+//         the config names (scripts/tracker-kind.sh).
 // score   scores a finished run from its records, never its report: the ticket its waybill
 //         carries verbatim, whose hidden tests run against main and, beside those counts, against
 //         each lane's harvested wb/<TICKET>-<lane> branch (scripts/fixture-lanes.ts); the app's
@@ -245,6 +246,14 @@ function makeAndFile(dest: string, ticket: string): number {
     console.error(
       `fixture: filing the ticket in ${dest}'s own store failed (exit ${createR.code})`,
     );
+    return 1;
+  }
+  // Mark the copy as a fixture: postmaster.fixture in its own git config, so the tree
+  // stays one commit and clean, and a worktree of the copy reads it too.
+  const markR = run("git", ["-C", dest, "config", "postmaster.fixture", ticket]);
+  if (markR.code !== 0) {
+    unmake();
+    console.error(`fixture: could not mark ${dest} as a fixture copy`);
     return 1;
   }
   const headShort = run("git", ["-C", TOOL, "rev-parse", "--short", "HEAD"]).out.trim();
@@ -1094,6 +1103,10 @@ case $2 in store) exec "${join(HERE, "local.sh")}" "$@" ;; *) exit 1 ;; esac
     );
   }
   {
+    const mark = run("git", ["-C", dest, "config", "--get", "postmaster.fixture"]).out.trim();
+    st.check("new marks the copy as a fixture in its git config", mark === first, `mark=${mark}`);
+  }
+  {
     // Compare files
     const listed2 = run("bash", [
       "-c",
@@ -1313,6 +1326,18 @@ case $2 in store) exec "${join(HERE, "local.sh")}" "$@" ;; *) exit 1 ;; esac
         existsSync(join(tmp, "elsewhere", "other-name", ".git")) &&
         !existsSync(join(tmp, "home", "Code", "fixtures", "other-name")),
       `exit ${otherCode}\n${captured}`,
+    );
+  }
+
+  console.log("fixture tests: the suite beside the new code runs in this self-test");
+  {
+    const r2 = run("bun", ["--no-env-file", "test", join(HERE, "fixture.test.ts")], {
+      input: "",
+    });
+    st.check(
+      "bun test scripts/fixture.test.ts",
+      r2.code === 0,
+      `exit ${r2.code}\n${r2.out}${r2.err}`,
     );
   }
 
