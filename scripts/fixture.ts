@@ -6,6 +6,9 @@
 //   fixture.sh hidden <ticket> <app-dir>
 //   fixture.sh --self-test
 //
+// `new` marks its copy with `postmaster.fixture` in that repository's local git config.
+// `score` reports the merged result's hidden-test counts, then the harvested lane branches'
+// counts from `scripts/fixture-lanes.ts`; only the merged result decides the verdict.
 //   exit 0  new: made and filed; score, hidden: every check passed
 //   exit 1  usage, a tool not on PATH, a refusal from new, or input that is not what it says
 //   exit 2  score, hidden: a check failed
@@ -220,6 +223,12 @@ function makeAndFile(dest: string, ticket: string): number {
     );
     return 1;
   }
+  const mark = run("git", ["-C", dest, "config", "--local", "postmaster.fixture", ticket]);
+  if (mark.code !== 0) {
+    unmake();
+    console.error(`fixture: could not mark ${dest} as a fixture copy`);
+    return 1;
+  }
   const headShort = run("git", ["-C", TOOL, "rev-parse", "--short", "HEAD"]).out.trim();
   const destHead = run("git", ["-C", dest, "rev-parse", "--short", "HEAD"]).out.trim();
   console.log(`fixture: made ${dest} from fixtures/app at ${headShort}; main is at ${destHead}`);
@@ -309,6 +318,18 @@ function hidden(ticket: string, app: string): { passed: boolean; detail: string;
   return { passed: r.code === 0 && passed > 0 && failed === 0, detail, out: r.out ?? "" };
 }
 
+const LANE_LINE = /^(.*): (?:\d+ pass, \d+ fail|missing|failed to build)$/u;
+
+function laneScores(dispatch: string, repo: string, ticket: string): string {
+  const r = sh(["bun", "--no-env-file", join(HERE, "fixture-lanes.ts"), dispatch, repo, ticket]);
+  if (r.code !== 0) return "lanes not scored";
+  return (r.out ?? "")
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter((line) => LANE_LINE.test(line))
+    .join("; ");
+}
+
 function score(dispatch: string, repo: string): { code: number; out: string } {
   const mainR = sh(["git", "-C", repo, "rev-parse", "--verify", "-q", "refs/heads/main^{commit}"]);
   const main = (mainR.out ?? "").trim();
@@ -358,7 +379,7 @@ function score(dispatch: string, repo: string): { code: number; out: string } {
   }
   const legs = legsOf(dispatch, manifest);
   const results: CheckResult[] = [
-    { name: "hidden-tests", ...checkHidden(dispatch, app) },
+    { name: "hidden-tests", ...checkHidden(dispatch, repo, app) },
     { name: "gate", ...checkGate(app) },
     { name: "stages", ...checkStages(dispatch), out: "" },
     { name: "markers", ...checkMarkers(dispatch, legs), out: "" },
@@ -427,7 +448,11 @@ function legsOf(dispatch: string, manifest: Record<string, unknown> | null): num
   return Array.from({ length: max }, (_, i) => i + 1);
 }
 
-function checkHidden(dispatch: string, app: string): { ok: boolean; detail: string; out: string } {
+function checkHidden(
+  dispatch: string,
+  repo: string,
+  app: string,
+): { ok: boolean; detail: string; out: string } {
   const brief = join(dispatch, "brief.md");
   const text = existsSync(brief) ? squash(readFileSync(brief, "utf8")) : "";
   const found: string[] = [];
@@ -448,7 +473,13 @@ function checkHidden(dispatch: string, app: string): { ok: boolean; detail: stri
     };
   }
   const h = hidden(found[0]!, app);
-  return { ok: h.passed, detail: `${found[0]}, from the waybill: ${h.detail} on main`, out: h.out };
+  const mainDetail = `${found[0]}, from the waybill: ${h.detail} on main`;
+  const lanes = laneScores(dispatch, repo, found[0]!);
+  return {
+    ok: h.passed,
+    detail: lanes ? `${mainDetail}; ${lanes}` : mainDetail,
+    out: h.out,
+  };
 }
 
 function checkGate(app: string): { ok: boolean; detail: string; out: string } {
@@ -1346,6 +1377,14 @@ case $2 in store) exec "${join(HERE, "local.sh")}" "$@" ;; *) exit 1 ;; esac
   expectScore("no run.json: run.json alone fails", "break-runjson", "run.json", "no run.json");
   expectScore("no ship card: ship-card alone fails", "break-card", "ship-card", "no card.md");
 
+  console.log("lane scoring: the suite beside the new code runs in this self-test");
+  const laneTest = run("bun", ["--no-env-file", "test", join(HERE, "fixture-lanes.test.ts")]);
+  st.check(
+    "bun test scripts/fixture-lanes.test.ts",
+    laneTest.code === 0,
+    laneTest.out + laneTest.err,
+  );
+
   console.log("score: input that is not a run is refused, not scored");
   const cleanDir = join(tmp, `clean-${first}`, "repo", ".postmaster", "runs", "7");
   const cleanRepo = join(tmp, `clean-${first}`, "repo");
@@ -1489,6 +1528,13 @@ case $2 in store) exec "${join(HERE, "local.sh")}" "$@" ;; *) exit 1 ;; esac
       `made=${ok} linked=${linked}`,
     );
   }
+
+  const fixtureTest = run("bun", ["--no-env-file", "test", join(HERE, "fixture.test.ts")]);
+  st.check(
+    "bun test scripts/fixture.test.ts",
+    fixtureTest.code === 0,
+    fixtureTest.out + fixtureTest.err,
+  );
 
   st.finish();
 });
