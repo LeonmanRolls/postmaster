@@ -6,13 +6,36 @@
 // Reports every fault and fixes none: a standing contradicting its own records means either
 // the standing or the reading is wrong, and which is a judgement for a person.
 //
+// Besides front matter, standings, citations, links and orphans, it enforces
+// the two page-content rules the schema states: no private-shaped filesystem
+// path or host name, through the scrub, and no page line of forty characters
+// or more repeating a line under raw/.
+//
 //   exit 0  clean
 //   exit 1  faults found, one per line on stdout
-//   exit 2  usage, or no wiki to check
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+//   exit 2  usage, no wiki to check, or a page scan that could not finish
+import {
+  closeSync,
+  existsSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  readSync,
+  realpathSync,
+  statSync,
+} from "node:fs";
 import { join, relative, resolve } from "node:path";
-import { toolRoot } from "./lib/paths.ts";
-import { DOT_ALL, PY_DOT, PY_M_END, PY_M_START, PY_S_CLASS } from "./lib/text.ts";
+import { beside, toolRoot } from "./lib/paths.ts";
+import { run } from "./lib/proc.ts";
+import {
+  DOT_ALL,
+  PY_DOT,
+  PY_M_END,
+  PY_M_START,
+  PY_S_CLASS,
+  pySplitLines,
+  pyTrim,
+} from "./lib/text.ts";
 
 const STANDINGS = new Set(["claimed", "supported", "mixed", "refuted", "settled"]);
 const OWN_EVIDENCE = ["runs", "trials"]; // what this fleet did; papers and articles are not
@@ -51,22 +74,127 @@ function dirExists(p: string): boolean {
   }
 }
 
+function isFile(p: string): boolean {
+  try {
+    return statSync(p).isFile();
+  } catch {
+    return false;
+  }
+}
+
+function gitTop(cwd?: string): { ok: boolean; top: string } {
+  const r = run("git", ["rev-parse", "--show-toplevel"], cwd === undefined ? {} : { cwd });
+  if (r.code !== 0) return { ok: false, top: "" };
+  return { ok: true, top: pyTrim(r.out) };
+}
+
+// text.ts: pySplitLines — the same boundaries, split incrementally so a raw
+// file streams in chunks instead of loading.
+const LINE_BOUNDARY = /\r\n|[\n\x0b\x0c\r\x1c\x1d\x1e\x85\u2028\u2029]/gu;
+
+/** Split text into Python splitlines, holding a trailing \r for the next
+ * chunk: it may yet join a \n. Complete lines plus the carry. */
+export function splitChunk(text: string, eof: boolean): { lines: string[]; carry: string } {
+  let body = text;
+  let held = "";
+  if (!eof && body.endsWith("\r")) {
+    held = "\r";
+    body = body.slice(0, -1);
+  }
+  const lines: string[] = [];
+  let start = 0;
+  for (const m of body.matchAll(LINE_BOUNDARY)) {
+    lines.push(body.slice(start, m.index!));
+    start = m.index! + m[0].length;
+  }
+  return { lines, carry: body.slice(start) + held };
+}
+
+/** Numbered lines of a file, streamed in 64 KiB chunks: memory is bounded by
+ * the buffer plus the longest line, never the file. Numbers match whole-file
+ * splitlines numbering. Strict decodes like a page read; tolerant like a raw
+ * read. The open happens eagerly, so an unopenable file throws at the call. */
+export function textLines(path: string, strict: boolean): Generator<[number, string], void, void> {
+  const fd = openSync(path, "r");
+  return (function* (): Generator<[number, string], void, void> {
+    try {
+      const decoder = new TextDecoder("utf-8", { fatal: strict, ignoreBOM: true });
+      const part = new Uint8Array(65536);
+      let carry = "";
+      let number = 0;
+      for (;;) {
+        const read = readSync(fd, part, 0, part.length, null);
+        const eof = read < part.length;
+        const text = carry + decoder.decode(part.subarray(0, read), { stream: !eof });
+        const split = splitChunk(text, eof);
+        carry = split.carry;
+        for (const ln of split.lines) {
+          number += 1;
+          yield [number, ln] as [number, string];
+        }
+        if (eof) {
+          if (carry !== "") {
+            number += 1;
+            yield [number, carry] as [number, string];
+          }
+          return;
+        }
+      }
+    } finally {
+      closeSync(fd);
+    }
+  })();
+}
+
+function rawFiles(raw: string): string[] {
+  const out: string[] = [];
+  (function walk(dir: string): void {
+    let entries: string[];
+    try {
+      entries = readdirSync(dir);
+    } catch {
+      return;
+    }
+    for (const n of entries) {
+      const p = join(dir, n);
+      try {
+        if (statSync(p).isDirectory()) walk(p);
+        else if (statSync(p).isFile()) out.push(p);
+      } catch {
+        /* skip */
+      }
+    }
+  })(raw);
+  out.sort();
+  return out;
+}
+
+// A scrub --files-inert finding: <path>:<line>: <kind>. ASCII digits: the
+// scrub prints ASCII line numbers.
+const SCAN_RE = new RegExp(`^(${PY_DOT}*):([0-9]+): ([^${PY_S_CLASS}]+)$`, "u");
+
 function relPath(p: string, repo: string): string {
   return p === repo ? p : relative(repo, p);
 }
 
 /** lint <repo>; prints faults, returns 1 if any */
 export function lint(repo: string): number {
-  const wiki = join(repo, "wiki");
-  const raw = join(repo, "raw");
+  let repoR = repo;
+  try {
+    repoR = realpathSync(repo);
+  } catch {
+    repoR = resolve(repo);
+  }
+  const wiki = join(repoR, "wiki");
+  const raw = join(repoR, "raw");
   if (!dirExists(wiki)) {
-    console.log(`no wiki/ in ${repo}`);
+    console.log(`no wiki/ in ${repoR}`);
     return 2;
   }
 
   const faults: string[] = [];
   const fault = (p: string, msg: string): void => {
-    faults.push(`${relPath(p, repo)}: ${msg}`);
+    faults.push(`${relPath(p, repoR)}: ${msg}`);
   };
 
   const pages: string[] = [];
@@ -159,6 +287,138 @@ export function lint(repo: string): number {
       if (!existsSync(join(p.split("/").slice(0, -1).join("/"), t))) {
         fault(p, `link to ${t} does not resolve`);
       }
+    }
+  }
+
+  // schema.md's Writing rule, mechanically: no private-shaped path or host name.
+  // The scrub is the shape authority, so only its private-path and private-host
+  // kinds fault a page; documenting the rule's own examples stays possible. The
+  // scrub needs a repository, so outside one this check degrades to nothing.
+  // The checkout is the target's own, never the caller's: discovering it from
+  // the caller's directory would skip the scan whenever the caller stands
+  // outside a repository. A target that is not a checkout either keeps the
+  // caller's discovery, for the fixtures the tests run from this repo.
+  let top = gitTop(repoR);
+  if (!top.ok) top = gitTop();
+  if (pages.length > 0 && top.ok) {
+    const scrub = process.env.WIKI_LINT_SCRUB ?? beside(import.meta, "scrub-check.sh");
+    if (!scrub || !isFile(scrub)) {
+      console.log("wiki-lint: no scrub to check pages with");
+      return 2;
+    }
+    // Pages go to the scrub as repository-relative paths: absolute ones would
+    // redact the checkout's own location out of every diagnostic.
+    const relArgs: string[] = [];
+    for (const page of pages) {
+      const r = relative(top.top, page);
+      relArgs.push(r === "" || r === ".." || r.startsWith("../") ? page : r);
+    }
+    // The lint logs only what it reports: the scan runs with the
+    // detections log emptied, and each path or host fault is logged under
+    // its page through --log-detection. Quoted raw/ lines are lint faults,
+    // not detections, and are never logged.
+    const child = run(scrub, ["--files-inert", ...relArgs], {
+      cwd: top.top,
+      env: { POSTMASTER_DETECTIONS_LOG: "" },
+    });
+    if (child.code !== 0 && child.code !== 1) {
+      console.log("wiki-lint: the page scan could not finish");
+      return 2;
+    }
+    for (const ln of pySplitLines(child.out)) {
+      const m = SCAN_RE.exec(ln);
+      if (m === null || (m[3] !== "private-path" && m[3] !== "private-host")) continue;
+      const found = m[1] ?? "";
+      const r = relative(repoR, resolve(top.top, found));
+      const rel = r === "" || r === ".." || r.startsWith("../") ? found : r;
+      faults.push(
+        `${rel}: line ${m[2]}: ${m[3]} (schema.md: name a target by its repository name only)`,
+      );
+      const logged = run(scrub, ["--log-detection", m[3] ?? "", rel, m[2] ?? ""], {
+        cwd: top.top,
+      });
+      if (logged.code !== 0) {
+        console.log("wiki-lint: the detections log could not be written");
+        return 2;
+      }
+    }
+  }
+
+  // Compile, do not transcribe: no page line of forty characters or more
+  // repeats a line under raw/. Shorter spans are headings, citations and
+  // front matter, not quotations. raw/ may hold binary evidence, so it is
+  // decoded tolerantly; a wiki page that does not decode already fails above.
+  //
+  // Both sides stream. Page lines of forty characters or more are the only
+  // ones that can quote, and pages are author-scale, so they are collected
+  // first; then one batched pass over raw/ confirms them in file order,
+  // stopping once every candidate has its first hit. Memory is bounded by
+  // the pages plus the longest raw line, never the evidence.
+  const wanted = new Map<string, Array<[string, number]>>();
+  for (const p of pages) {
+    for (const [number, ln] of textLines(p, true)) {
+      if ([...ln].length >= 40) {
+        const list = wanted.get(ln) ?? [];
+        list.push([p, number]);
+        wanted.set(ln, list);
+      }
+    }
+  }
+  const repeats: Array<[string, number, string, number]> = [];
+  if (wanted.size > 0 && dirExists(raw)) {
+    const pending = new Map(wanted);
+    for (const f of rawFiles(raw)) {
+      if (pending.size === 0) break;
+      let lines: Generator<[number, string], void, void>;
+      try {
+        lines = textLines(f, false);
+      } catch {
+        continue;
+      }
+      for (const [number, ln] of lines) {
+        if ([...ln].length >= 40 && !ln.includes("\0") && pending.has(ln)) {
+          const hits = pending.get(ln)!;
+          pending.delete(ln);
+          for (const [p, pnumber] of hits) {
+            repeats.push([p, pnumber, relative(repoR, f), number]);
+          }
+        }
+        if (pending.size === 0) break;
+      }
+    }
+  }
+  repeats.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : a[1] - b[1]));
+  if (repeats.length > 0) {
+    // A raw filename or a page filename may itself carry a shaped value, so
+    // both are redacted before they reach a diagnostic. Without a scrub
+    // there is no safe way to name them, and the lint fails rather than
+    // printing either raw.
+    const scrub = process.env.WIKI_LINT_SCRUB ?? beside(import.meta, "scrub-check.sh");
+    if (!scrub || !isFile(scrub)) {
+      console.log("wiki-lint: no scrub to check pages with");
+      return 2;
+    }
+    const distinct = [
+      ...new Set([
+        ...repeats.map((r) => r[2]),
+        ...repeats.map((r) => relative(repoR, r[0])),
+      ]),
+    ];
+    const red = run(scrub, ["--safe-path", ...distinct], top.ok ? { cwd: top.top } : {});
+    if (red.code !== 0) {
+      console.log("wiki-lint: the page scan could not finish");
+      return 2;
+    }
+    const redLines = pySplitLines(red.out);
+    if (redLines.length !== distinct.length) {
+      console.log("wiki-lint: the page scan could not finish");
+      return 2;
+    }
+    const redacted = new Map(distinct.map((d, i) => [d, redLines[i]!] as [string, string]));
+    for (const [p, number, rawrel, rawline] of repeats) {
+      faults.push(
+        `${redacted.get(relative(repoR, p))}: line ${number} repeats ${redacted.get(rawrel)}:${rawline} (compile, do not transcribe)`,
+      );
     }
   }
 
