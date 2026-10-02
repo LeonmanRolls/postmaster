@@ -26,8 +26,9 @@
 //             restored and the refusal is logged. A fourth such end, a non-transient end, or
 //             a resume it cannot complete wakes the postmaster.
 //
-// Everything that needs judgment still wakes the postmaster: RULE (an escalation), GATE (a
-// ship card), READ (a checkpoint card), SPEC (a spec package), ASK (a recorded refusal or
+// Everything that needs judgment still wakes the postmaster: RULE (an escalation), TELL
+// (an untold private-data detection), GATE (a ship card), READ (a checkpoint card), SPEC
+// (a spec package), ASK (a recorded refusal or
 // pre-thread exit, or a wall on the fallback), TAKEOVER (a recorded wall on the primary),
 // INSPECT (a stall, or an attempt without its record), and any step the watcher could not
 // complete. USER (already put to the user), WAIT (a leg at work) and - (closed) never do.

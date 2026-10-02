@@ -1,4 +1,4 @@
-// Tests beside scripts/runs-watch.ts, moved from its --self-test on #109: 80 controls.
+// Tests beside scripts/runs-watch.ts, moved from its --self-test on #109: 81 controls.
 // POSTMASTER_CONFIG is pointed at a 1s-poll config for the run and restored in afterAll.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { spawn } from "node:child_process";
@@ -160,6 +160,19 @@ describe("positive controls: each NEXT that needs the postmaster names its run",
     const { rc, out } = watch(root);
     expect(rc).toBe(0);
     expect(out).toContain("needs inspect INSPECT");
+  }, 30000);
+
+  test("NEXT TELL names tell", () => {
+    const root = join(tmp, "pos-tell");
+    mkdirSync(root, { recursive: true });
+    mkrun(root, "tell", "review", 2);
+    writeFileSync(
+      join(root, "tell", "detections.jsonl"),
+      '{"commit":"","file":"notes.txt","line":1,"rule":"email","ts":"2026-09-29T00:00:00Z"}\n',
+    );
+    const { rc, out } = watch(root);
+    expect(rc).toBe(0);
+    expect(out).toContain("needs tell TELL");
   }, 30000);
 
   test("a run that becomes actionable mid-wait is named", () => {
