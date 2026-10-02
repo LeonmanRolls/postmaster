@@ -24,8 +24,10 @@ A fault in one of these is a fault in a control, whatever the step that ran it.
 | `<tool>/scripts/wait-for-markers.sh` | wait | a round is collected only when every marker is in |
 | `<tool>/scripts/review-round.sh` | wait | a review round is collected by its deadline, its reviewers that miss it are recorded and stopped, and its scratches are removed only once nothing of it runs there |
 | `<tool>/scripts/review-findings.sh` | check | native bug-review output is normalized, and an unrecognized report cannot count as clean |
-| `<tool>/scripts/runs-status.sh` | marker | what the postmaster's poll reads from each run's markers |
+| `<tool>/scripts/runs-status.sh` | marker | the next action from each run's markers and outcome record; the waiting list it reports is kept by `host.sh leg waiting` |
 | `<tool>/scripts/runs-watch.sh` | wait | a run needs the postmaster only when its NEXT is not WAIT, USER or `-`, and never when its ticket is on the held list |
+| `<tool>/scripts/host.sh leg` | marker | launch, resume and takeover lifecycle, including the recorded attempt outcome |
+| `<tool>/scripts/launch.sh` | marker | whether the harness started; a preflight or env-file failure remains refused |
 | `<tool>/scripts/log-action.sh` | action-log | every action is recorded as it happens |
 | `<tool>/scripts/stage.sh` | action-log | every stage change is recorded, and the run is timed from the record |
 | `<tool>/scripts/run-meta.sh` | action-log | what a run started from, and the pinned checkout it runs on |
@@ -45,6 +47,6 @@ step in `--ran`, and the kind in `--control`.
 | `coachman.md`: running the project's gate, unpiped | gate |
 | `postmaster.md`: Stage F, verifying the card against the code | gate |
 | `coachman.md`, `postmaster.md`: touching or reading a marker | marker |
-| `<tool>/scripts/host.sh`: removing a launch's `--marker` as it starts, and touching it when it exits | marker |
+| `<tool>/scripts/host.sh`: clearing and landing a leg's done/exited markers and recording its outcome | marker |
 | `coachman.md`: the wait in the same command as the launch, and the stall cutoffs | wait |
 | `coachman.md`, `postmaster.md`: a `log-action.sh` line a step writes | action-log |

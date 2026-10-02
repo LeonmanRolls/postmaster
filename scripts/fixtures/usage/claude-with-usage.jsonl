@@ -1,0 +1,4 @@
+{"message":{"role":"assistant","usage":{"input_tokens":800,"output_tokens":400}},"type":"assistant"}
+{"message":{"role":"assistant","usage":{"input_tokens":300,"output_tokens":100}},"type":"assistant"}
+{"message":{"role":"user"},"type":"user"}
+{"result":"done","total_cost_usd":1.25,"type":"result","usage":{"input_tokens":1234,"output_tokens":567}}

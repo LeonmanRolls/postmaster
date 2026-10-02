@@ -1,0 +1,101 @@
+# The coachman contract, as a list of files. A change anywhere in a listed
+# file is a contract change. version must stay 1. detector is the checker's
+# repo-relative path, read from BASE's index.
+version = 1
+detector = "scripts/coachman-contract.sh"
+
+[[files]]
+path = "docs/coachman-contract.toml"
+holds = "this list; changing which files the contract covers is a contract change"
+
+[[files]]
+path = "skills/postmaster/coachman.md"
+holds = "marker tables and ownership, legs and stages, completion, turnpike steps, launch marker calls"
+
+[[files]]
+path = "skills/postmaster/postmaster.md"
+holds = "marker reading and clearing, stage ownership, waybill writing, leg dispatch and resume, the fixture check"
+
+[[files]]
+path = "skills/postmaster/SKILL.md"
+holds = "the waybill template, including the fixture requirement lines"
+
+[[files]]
+path = "scripts/host.sh"
+holds = "marker writing and clearing, the exit watcher and its call"
+
+[[files]]
+path = "scripts/runs-status.sh"
+holds = "marker polling, the completion poll and NEXT derivation"
+
+[[files]]
+path = "scripts/turnpikes.sh"
+holds = "the turnpike table and leg derivation with its dispatch"
+
+[[files]]
+path = "scripts/stage.sh"
+holds = "the stage list and the transition and terminal-stage rules"
+
+[[files]]
+path = "scripts/handoff-check.sh"
+holds = "the required handoff sections"
+
+[[files]]
+path = "scripts/coachman-contract.sh"
+holds = "the detector itself, whole: classification, entrypoint and controls"
+
+[[files]]
+path = "scripts/landing.sh"
+holds = "the landing's deterministic checks: landed state, freshness, card rendering and matching, journey gating"
+
+[[files]]
+path = "scripts/runs-watch.sh"
+holds = "the mechanical leg steps, next-leg dispatch and transient remounts, and what wakes the postmaster"
+
+[[files]]
+path = "scripts/run-meta.sh"
+holds = "the coachman contract version recorded in run.json"
+
+[[files]]
+path = "scripts/ticket-check.sh"
+holds = "the flow's one reading of whether a ticket mentions a user journey"
+
+[[files]]
+path = "skills/postmaster/spec-session.md"
+holds = "the spec session role: its brief, the spec copy it edits, the approval handoff"
+
+[[files]]
+path = "scripts/spec-session.sh"
+holds = "the spec session entrypoint the runbooks invoke"
+
+[[files]]
+path = "scripts/spec-session.ts"
+holds = "the spec brief shape and the approval commit and record"
+
+[[files]]
+path = "scripts/spec-decisions.sh"
+holds = "the spec decisions entrypoint the runbooks invoke"
+
+[[files]]
+path = "scripts/spec-decisions.ts"
+holds = "the approval stanza shape and the count vocabulary Spec review branches on"
+
+[[files]]
+path = "scripts/launch.sh"
+holds = "the attempt phase: refused before preflight, started once the harness is callable"
+
+[[files]]
+path = "scripts/fixture.sh"
+holds = "the fixture entrypoint the flow invokes"
+
+[[files]]
+path = "scripts/fixture.ts"
+holds = "the fixture-copy mark new writes, and scoring a run from its records"
+
+[[files]]
+path = "skills/postmaster/workhorse-spec-template.md"
+holds = "the workhorse spec shape, including the per-criterion checks section the brief's loop rests on"
+
+[[files]]
+path = "scripts/summary-evidence.ts"
+holds = "the evidence-shape enforcement the runbook invokes at harvest"

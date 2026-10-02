@@ -6,17 +6,30 @@ Get one ticket implemented by several models at once, then judged before it land
 
 Two or more models implement the same ticket **independently, in separate worktrees, unable
 to see each other's work**. A coachman combines what each got right, puts the result through
-the adversarial review rounds its ticket names, and only then asks for a merge. Nothing lands on a green gate
-alone: the merge word comes from a person, or from the supervising postmaster when the
-config says it may.
+the adversarial review rounds its ticket names, then leaves a ship card for the
+project's landing route. Pull-request projects are merged by the user; local-merge projects use
+the merge authority in the config.
 
 ## The three roles
 
 | role | does | never does |
 |---|---|---|
 | **postmaster** | splits a stream into tickets, dispatches one coachman per ticket, supervises, answers escalations, grants merges | run a model lane, edit source |
-| **coachman** | drives one leg of a ticket; up to three legs, synthesis, review and ship, each a fresh coachman, carry it from waybill to ship card with a written hand-off between them | take a second leg, merge on its own authority |
+| **coachman** | drives one leg of a ticket; at most two legs, synthesis and review, each a fresh coachman, carry it from waybill to ship card with a written hand-off between them; the last leg ends the run ready for merge | take a second leg, merge |
 | **the team** | several lanes implementing the same ticket in blinkers | see each other's work |
+
+## Lean on the harnesses
+
+postmaster leans on the agent harnesses as much as it can. Planning, coding, reviewing and
+fixing are the harnesses' work, through their own skills wherever a harness has one: a bug
+review is the harness's own code-review skill, and a security review its own security-review
+skill. postmaster itself is mostly plumbing between the stages. It starts each agent with the
+right brief, carries the hand-off from one leg to the next, and records what happened.
+
+That is why it has so many scripts. A check written once as a script runs the same way every
+time, instead of being worked out again by a model on every run, which saves tokens. The
+scripts are well tested, and when one does fail, the model running it can usually read the
+error and carry on. The run records the fault, so the script gets fixed.
 
 ## Why several models rather than one good one
 
@@ -28,6 +41,13 @@ is corroboration you can act on; a single lane agreeing with itself is not.
 Disagreement is also diagnostic. When two lanes build the same mechanism and name it
 differently, the project's own conventions did not decide it, and the coachman records the
 gap as a proposed rule rather than flipping a coin the next run will flip again.
+
+Running several models is also a way to take full advantage of the competition between
+providers. There are many strong models now, from many providers, and they compete hard.
+postmaster runs several side by side, so it is not locked into anyone's ecosystem. A lane is
+a harness plus a model, each harness sits behind an adapter, and nothing in the flow depends
+on one provider's tools. The config says which harness and model fills each role, so moving
+a role to a different model is an edit to the config.
 
 ## Logging, auditing and tracing
 
@@ -83,7 +103,7 @@ opened, or launches one when it cannot be.
 scripts/probe-harnesses.sh      # which agent CLIs are installed
 scripts/probe-trackers.sh       # which ticket sources are reachable
 scripts/setup.sh --answers <file> # writes the config from the agent's collected answers (--keys lists them)
-scripts/link-skills.sh [--dry-run | --remove]                     # the skills, as links into each CLI's skills folder
+scripts/link-skills.sh [--dry-run | --check | --remove]            # the skills, as links into each CLI's skills folder
 scripts/skill-refs.sh [--fix]                                      # every script path in the skill goes through <tool>
 scripts/find-projects.sh        # your git projects, most recent first
 scripts/check-target.sh  <path> # 0 usable · 1 not a repo · 2 dirty
@@ -98,11 +118,13 @@ scripts/review-round.sh start|wait|teardown <dispatch> <round> … # a review ro
 scripts/log-action.sh <dispatch> <actor> <action> <target> …     # one JSON line per action
 scripts/tool-faults.sh harvest|comment|file|decline <dispatch> …  # a closed run's tool faults, as tickets
 scripts/stage.sh <dispatch> <stage>                               # the one way a run changes stage
-scripts/spec-review-link.sh <dispatch> <workhorse-worktree>        # resolve a reviewed spec's code-server link
-scripts/spec-decisions.sh <dispatch> fresh|record|count           # record spec decisions, count approvals run-wide
+scripts/spec-review-link.sh <dispatch> <spec-folder>              # resolve a reviewed spec's code-server link
+scripts/spec-decisions.sh <dispatch> fresh|record|count           # record the spec decision, count the package
+scripts/spec-session.sh brief|approve <dispatch>                  # the spec session's brief; approve commits and records
 scripts/run-times.sh <dispatch>                                   # how long each stage took, from the log
 scripts/run-log.sh <dispatch> <text> | --section <title> | --close # the narrative, timestamped
 scripts/run-meta.sh <dispatch> <repo> | path|check|release <dispatch> # run.json and the pinned tool a run started from
+bun scripts/run-clash.ts <repo> <ticket-id>                      # refuse an id that already names a run or a branch
 scripts/github.sh <repo> board|create|edit|read|state|comment|list|access|search # GitHub Issues on a Projects board
 scripts/plane.sh create|edit|read|state|comment|list …             # Plane work items
 scripts/local.sh <repo> store|create|edit|read|title|state|comment|list # tickets in the repo's git directory
@@ -114,12 +136,13 @@ scripts/launch.sh form|launch|review|resume|skill <lane-or-role> … # any lane 
 scripts/reviewers.sh lines|eligible <lens>|lanes <waybill> <lens>|lenses # which lanes review under each lens
 scripts/review-forms.sh has <harness>                            # whether the harness has a code-review form
 scripts/review-findings.sh normalize|harvest …                   # native bug-review output into the finding contract
-scripts/host.sh detect|name|run|stop|close|spawn|send|wait|read … # where a launch runs, and where you watch it
+scripts/host.sh leg launch|resume|takeover|retry|outcome|backfill|waiting … | detect|name|run|stop|close|stop-run|close-run|spawn|send|wait|read … # leg lifecycle, launch placement and teardown
 scripts/view-stream.sh < <events-file>                            # a harness's events, wrapped: what it says and runs, in full
 scripts/runs-status.sh <run-root>                                  # the postmaster's poll
+scripts/coachman-contract.sh <base> <head>                         # whether a change touches the contract, by file
 scripts/runs-watch.sh <run-root> [--timeout <seconds>]              # wait until a run needs the postmaster
 scripts/handoff-check.sh <handoff-file>                            # a leg may end only on exit 0
-scripts/wiki-lint.sh [--self-test]                                 # the wiki's rules, run not remembered
+scripts/wiki-lint.sh                                             # the wiki's rules, run not remembered
 scripts/fixture.sh new|score|hidden …                              # a run on a fixture app, scored against a known outcome
 ```
 
@@ -150,24 +173,28 @@ settings only say what `default` means for that project.
 At least two agent CLIs that can run headless. Any git repository as a target. A session host
 to watch the fleet in: [Herdr](https://herdr.dev) by default wherever it is running, where each
 launch appears in its worktree's space under the project's, or tmux. With neither, launches run
-in the background and the flow still works (`skills/postmaster/hosts.md`). Python 3.11 or newer, which
-the scripts use to read the config, and jq for discovering a JavaScript project's gate.
+in the background and the flow still works (`skills/postmaster/hosts.md`). Bun 1.4.2 or newer, which
+runs the TypeScript scripts and reads the config, and jq, which the fixture flow requires.
+Python 3.11 or newer, which the bash scripts use to read the config, and for discovering a
+JavaScript project's gate.
 
 ## Installing the skills
 
 Skills are installed as links, never as copies. `scripts/link-skills.sh` links each directory
 under `skills/` into the user-level skills folder of every installed agent CLI that has one,
-pointing at the main checkout of this repo, never a worktree. Setup runs it, and running it
-again changes nothing:
+pointing at the main checkout of this repo, never a worktree. Setup checks their status first.
+If links are missing, it shows the dry-run output and asks before installing them:
 
 ```sh
+scripts/link-skills.sh --check      # report missing or blocked links; never changes anything
 scripts/link-skills.sh --dry-run   # the links it would make, and anything in the way
-scripts/link-skills.sh             # make them
+scripts/link-skills.sh             # install, after the user agrees
 scripts/link-skills.sh --remove    # remove them, and nothing else
 ```
 
 It replaces nothing. A file, a folder or another link where a link belongs is named, and
-nothing changes until you move it. Once linked, the postmaster skill (`/postmaster` in Claude
+nothing changes until you move it. `--check` is the read-only counterpart: it names any
+missing or blocked link and the one command that installs them. Once linked, the postmaster skill (`/postmaster` in Claude
 Code) works from any project, and finds this repo from its link. The folder each CLI reads is
 in `skills/postmaster/harnesses.md`. A CLI with no folder there, agy for now, is pointed at
 this repo's `skills/postmaster/SKILL.md` by its absolute path.

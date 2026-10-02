@@ -1,0 +1,2 @@
+https://registry.npmjs.org/ -> 200 (curl exit 0)
+https://example.com/ -> 000 (curl exit 56)

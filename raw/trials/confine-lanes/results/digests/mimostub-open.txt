@@ -1,0 +1,4 @@
+ 1 bash {"command": "echo OUTSIDE > <trial>/app/outside-mimostub-open.txt; echo \"write exit $?\"", "description": "write outsi… -> completed | write exit 0
+ 2 bash {"command": "cat <trial>/app/.worktrees/other/draft.txt; echo \"read other exit $?\"", "description": "read other lane"} -> completed | LANE-efe2b5f3 read other exit 0
+ 3 bash {"command": "cat <trial>/home/note.txt; echo \"read home exit $?\"", "description": "read home"} -> completed | HOME-33f91d82 read home exit 0
+final: Done: 3 of 3 steps issued.

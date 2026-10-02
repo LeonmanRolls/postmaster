@@ -1,0 +1,11 @@
+npm ci                             exit 0
+npm run check (the gate)           exit 0
+write and commit in own worktree   worked
+write into the main checkout       worked
+read the other lane worktree       refused
+read elsewhere in home             refused
+read the other lane commit via git worked
+connect to a Unix socket outside   refused
+signal a process outside           refused
+exit 0
+main checkout file on disk after   no

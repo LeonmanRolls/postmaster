@@ -1,0 +1,13 @@
+# Claude Code's own sandbox, required, in bypass mode, on 2026-09-29 (Claude Code 2.1.284), before socat was installed and before
+# Bubblewrap could create user namespaces here. Copied from the session's tool output; the file it
+# was first written to was lost to a reboot. The prompt was a one-word reply; the run made no
+# model call (0 output tokens in its result record).
+$ claude -p "Reply with the single word OK." --model <lane model> --effort low \
+    --output-format stream-json --verbose --dangerously-skip-permissions \
+    --settings '{"sandbox": {"enabled": true, "failIfUnavailable": true, "allowUnsandboxedCommands": false}}'
+exit=1
+
+Error: sandbox required but unavailable: sandbox is enabled but dependencies are missing: socat not installed · install missing tools (e.g. apt install bubblewrap socat) or see https://code.claude.com/docs/en/sandboxing
+  sandbox.failIfUnavailable is set — refusing to start without a working sandbox.
+
+result error_during_execution  0

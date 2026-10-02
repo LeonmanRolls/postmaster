@@ -1,0 +1,6 @@
+write and commit in own clone        worked
+the other lane commit in git log --all absent
+the other lane branch via origin     absent
+the other lane commit by its id      absent
+control: a main repository commit    reached
+exit 0

@@ -44,7 +44,14 @@ Someone typing `/postmaster` arrives cold. **Assume neither. Check.**
 
 ```sh
 cat ~/.postmaster/config.toml 2>/dev/null || echo "NOT SET UP"
+<tool>/scripts/link-skills.sh --check
 ```
+
+Report the link check with the config status. It names every missing or blocked link and
+prints the install command, `<tool>/scripts/link-skills.sh`; the check never installs or
+changes anything. Keep installation on the user's word. When links are missing and the config
+is present, offer that command; for a missing config, follow the setup section of
+`<tool>/AGENTS.md`.
 
 **No config: stop and set the machine up first**, in conversation, per the setup section of
 `<tool>/AGENTS.md`; each path there is relative to `<tool>`. Do not continue to target
@@ -56,8 +63,9 @@ and without it the launch card cannot be filled. Come back here when it is writt
 
 **Config present, no target yet:** carry on below.
 
-Say which of these you found, in one line, before doing anything else. A session that cannot
-tell whether it is setting up or dispatching is one nobody can follow.
+Say which of these you found, in one line, before doing anything else — including any
+missing skill links.
+A session that cannot tell whether it is setting up or dispatching is one nobody can follow.
 
 ## Choose the target project
 
@@ -77,8 +85,10 @@ off the list without needing to be named. Offer the full list on request.
 into a vendored copy of someone else's project.
 
 **Do NOT filter to projects with a remote.** Plenty of real work is local-only, and
-filtering on a remote silently hides it. Show the remote status as information instead: it
-decides whether push and PR steps apply, and a local-only project is normal, not broken.
+filtering on a remote silently hides it. Show the remote status as information. Determine the
+landing route from the project's instructions: whether it uses pull requests, and which default
+branch they target. If the project does not say, ask the user before dispatch. A remote by
+itself does not decide the route.
 
 Adjust the search roots to the machine. `~/Code` is one convention, not a rule.
 
@@ -181,14 +191,19 @@ Never put paths or credentials in either file.
    with the user at the terminal: the postmaster is this session, and no second one is
    started. `spawn` means a separate postmaster session is needed, and the reasons say
    which conditions failed: the harness or the model differs from `team.postmaster`, the
-   target is another repo, or nobody is at the terminal. If it exits non-zero instead,
+   target is another repo, or nobody is at the terminal. When the decision is `spawn` and the
+   target is a fixture copy (`fixture.sh new` marked it), it also prints `headless`: that
+   postmaster starts headless on every host, in the form `hosts.md` gives under none, so it
+   never meets a trust prompt. `self` stays `self` in a fixture copy. If it exits non-zero instead,
    stop and tell the user what it said: the config is missing, does not parse, or has no
    `team.postmaster`, or the report was malformed. Settle that first; there is no route
    to put on the launch card until the script answers.
 4. **Launch card**: one self-contained confirmation covering whether the postmaster is this
-   session or a new one, with every reason the script printed, the postmaster's harness,
+   session or a new one, whether it runs headless (the script's `headless` line), with every
+   reason the script printed, the postmaster's harness,
    model and effort (`team.postmaster` in the config), the team the config names, who says
-   the merge word (`ship.merge_authority`), the session host the fleet will run on
+   the merge word for local-merge projects (`ship.merge_authority`), the landing route
+   (`pull-request` or `local`), the session host the fleet will run on
    (`<tool>/scripts/host.sh detect`), and the project facts above. Launch nothing before the user
    picks.
 5. **Create the project-local run root** and keep it in one variable for the steps below. The
@@ -209,8 +224,9 @@ Never put paths or credentials in either file.
 6. **Write the brief** to `$RUNS/postmaster/brief.md`: "You are the postmaster for <project>.
    Read `<tool>/skills/postmaster/postmaster.md` first", then the stream paragraph, the project
    profile, the configured team, who says the merge word, the session host, `<tool>` and the
-   config path, plus this session's report and the route result, and, when the host is none,
-   that it runs headless and writes `<runs>/postmaster/ESCALATION.md` when it needs the user.
+   config path, plus this session's report and the route result, and, when the route says
+   `headless` or the host is none, that it runs headless and writes
+   `<runs>/postmaster/ESCALATION.md` when it needs the user.
    It is what you settled here,
    and what a postmaster restarted from nothing reads to carry on. Then log the first action:
 
@@ -221,11 +237,25 @@ Never put paths or credentials in either file.
 7. **`self`: carry on as the postmaster.** Read `<tool>/skills/postmaster/postmaster.md` and
    run the stream in this conversation. Log every action through `log-action.sh` under
    `<runs>/postmaster/`, as that runbook says. Do not start a second session.
-8. **`spawn`: start a new postmaster session** on the session host (`hosts.md`). Start a new
-   interactive session of the postmaster's harness (`team.postmaster` in the config), rooted
-   in the target repo, in the harness's interactive form from `harnesses.md`: its bypass mode,
-   named `postmaster`. Hand it a one-line prompt file that says to read the brief
-   at `$RUNS/postmaster/brief.md` first:
+8. **`spawn`: start a new postmaster session.** If the route has a `headless` line, use the
+   headless form from `hosts.md` through `host.sh run` on every host. It starts the configured
+   harness headless with the brief as its prompt, writes events and errors under
+   `$RUNS/postmaster/`, and has no terminal to stop at a question:
+
+   ```sh
+   <tool>/scripts/host.sh run "postmaster" "$TARGET_ROOT" --out "$RUNS/postmaster/events.jsonl" \
+     --err "$RUNS/postmaster/postmaster.err" --marker "$RUNS/postmaster/.exited" -- \
+     <tool>/scripts/launch.sh launch postmaster "$TARGET_ROOT" "$RUNS/postmaster/brief.md"
+   ```
+
+   That form needs a harness with a resume form (`hosts.md`, none), so the user can answer an
+   escalation by resuming it. When the route has a `headless` line and `team.postmaster` names
+   a harness with none, run the postmaster on another harness that has one, as `hosts.md` says,
+   and never fall back to interactive for a marked fixture. Without a `headless` line, start an
+   interactive session of the postmaster's harness (`team.postmaster` in the config), rooted in
+   the target repo, in the harness's interactive form from `harnesses.md`: its bypass mode, named
+   `postmaster`. Hand it a
+   one-line prompt file that says to read the brief at `$RUNS/postmaster/brief.md` first:
 
    ```sh
    <tool>/scripts/host.sh spawn postmaster-<project> <repo> --label "postmaster" -- <interactive form>
@@ -236,10 +266,10 @@ Never put paths or credentials in either file.
    On Herdr it opens as a tab in the target repo's space, the root of every run's tree; on tmux,
    as a window in session `postmaster-<project>`. If `spawn` says it is not ready, the harness is
    asking something on its first start there, such as claude asking whether to trust the folder:
-   the user answers it in the pane, and then the prompt is sent. With no host, `spawn` exits 3:
-   launch it headless instead, as `hosts.md` gives under none, with a line in its brief that it
-   runs headless, so whenever it needs the user it writes `<runs>/postmaster/ESCALATION.md` and
-   ends its turn; tell the user it answers by resume.
+   the user answers it in the pane, and then the prompt is sent. For an ordinary `spawn` with no
+   host, `spawn` exits 3: launch it headless as `hosts.md` gives under none, with a line in its
+   brief that it runs headless, so whenever it needs the user it writes
+   `<runs>/postmaster/ESCALATION.md` and ends its turn; tell the user it answers by resume.
 9. **Report**. `self`: say that you are the postmaster and the stream is running here. `spawn`:
    say where to watch it (the space and tab, the tmux session, or with no host its events
    file), the run root, and the brief, then stop.
@@ -260,6 +290,7 @@ everything the coachman needs and nothing it must go and find:
 ## Project profile
 repo: <abs path>          default branch: <name>       BASE: <sha>
 gate: <the real command>  build: <the real command>    browser suite: <command or none>
+landing: pull-request | local   (whether the postmaster opens a pull request or merges on the word)
 docs to read first: <files, in order>
 tracker: <kind, and how a ticket is read and written>
 risk surfaces: <what the project binds, allowlists, spawns, serves; from its docs or the user>
@@ -271,7 +302,7 @@ reviewers: <lane>, <lane>
 bug reviewers: <lane>, <lane>             (always; only the chosen bug reviewers whose harness has a code-review form, which is the bug lens's whole team)
 <lens> reviewers: <lane>, <lane>          (one line for each lens the config gives its own lanes)
 coachman: <harness>/<model>/<effort>      (never a lane's model)
-CHECKPOINT_MODE and MERGE_AUTHORITY come from ship.checkpoint_mode and ship.merge_authority, overridden only where the user says so for this run
+CHECKPOINT_MODE comes from ship.checkpoint_mode; MERGE_AUTHORITY for local merges comes from ship.merge_authority; override either only where the user says so for this run
 
 ## Dispatch
 name: <ticket id>, <ticket title>
@@ -279,6 +310,8 @@ dispatch: <abs path of this directory>
 synthesis worktree: <abs path; cut by the postmaster at BASE, the coachman's cwd for every leg>
 tool: <abs path of the run's pinned postmaster checkout, at the dispatch commit: <tool> in the coachman's runbook>
 postmaster ruling channel: resume the coachman's thread (harnesses.md) with the ruling as the prompt
+coachman contract fixture: pending (the postmaster sets yes or no at the final card)
+contract fixture check: - (the postmaster records the command, commit and score at the final card)
 ```
 
 The postmaster's own session continues to use the main checkout it found from the skill. The

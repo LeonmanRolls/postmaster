@@ -1,7 +1,7 @@
 ---
 title: postmaster wiki
 type: schema
-updated: 2026-09-29
+updated: 2026-10-01
 ---
 
 # postmaster wiki
@@ -36,6 +36,11 @@ How each agent CLI really behaves, as distinct from what its documentation says.
 - [A resume's exit status does not say it continued its thread](concepts/resume-exit-status.md):
   **settled**, for pi, Muse Code and MiMo Code. Resuming a thread it cannot find, a harness can
   exit 0 having done nothing, or having started a new thread.
+- [A lane stays inside its worktree only when a sandbox wraps its harness](concepts/lane-confinement.md):
+  **claimed**. In bypass mode every harness wrote into the main checkout and read another lane's
+  worktree; their own guards switch off or check only what a tool call names. sandbox-runtime
+  around the harness stopped every reach on all five, and every lane still passed the gate.
+  A worktree still shares its repository's store; a shared clone per lane does not.
 
 ## Trackers and tooling
 
@@ -60,11 +65,11 @@ How the flow is checked, and what each check can and cannot see.
 
 Why the design is shaped as it is.
 
-- [The workhorse spec](concepts/workhorse-spec.md): **claimed**. Each workhorse drafts its
-  own, which keeps the workhorses independent of each other and of the coachman, and makes
-  each run auditable.
-- [The planning stage](concepts/planning-stage.md): **claimed**. Each workhorse's spec passes
-  the user's review before any code, from Anthropic's AI-native SDLC playbook: a fault is
+- [The workhorse spec](concepts/workhorse-spec.md): **claimed**. One spec per run, written by
+  the coachman at the template's level and passed down, so the user reviews it once and the
+  lanes still choose their own implementations.
+- [The planning stage](concepts/planning-stage.md): **claimed**. The run's one spec passes
+  the user's review in a spec session before any code, from Anthropic's AI-native SDLC playbook: a fault is
   cheapest to fix at the planning stage, and weaker models gain the most from a reviewed plan.
 - [Faults a run finds in postmaster become tickets](concepts/tool-faults.md): **claimed**. A
   run records each fault in postmaster as it happens and never fixes the tool; a fault in a
@@ -108,6 +113,9 @@ Why the design is shaped as it is.
 - [A project's .postmaster/ holds its settings and every run's record](concepts/project-settings.md):
   **claimed**. Optional, gitignored whole, shared through one narrow file; run artifacts live
   with the project so two checkouts with the same basename no longer share a ledger.
+- [A gate on the default branch after a merge runs from a clean checkout](concepts/clean-checkout-gates.md):
+  **claimed**. The run's working copies stay under `.worktrees/`; the flow's post-merge gate
+  runs from a clean checkout of the branch outside the project folder, so it never reads them.
 
 ## Sources
 

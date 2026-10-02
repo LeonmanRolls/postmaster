@@ -1,0 +1,37 @@
+$ ls -la (dotfiles), inside sandbox-runtime, in a clean worktree
+crw-rw-rw- .bash_profile
+crw-rw-rw- .bashrc
+drwx------ .claude
+-rw-rw-r-- .git
+crw-rw-rw- .gitconfig
+-rw-rw-r-- .gitignore
+crw-rw-rw- .gitmodules
+crw-rw-rw- .idea
+crw-rw-rw- .mcp.json
+drwxrwxr-x .postmaster
+crw-rw-rw- .profile
+crw-rw-rw- .ripgreprc
+crw-rw-rw- .vscode
+crw-rw-rw- .zprofile
+crw-rw-rw- .zshrc
+
+$ git status --short, inside
+?? .bash_profile
+?? .bashrc
+?? .gitconfig
+?? .gitmodules
+?? .idea
+?? .mcp.json
+?? .profile
+?? .ripgreprc
+?? .vscode
+?? .zprofile
+?? .zshrc
+
+$ git add -A, inside
+error: .bash_profile: can only add regular files, symbolic links or git-directories
+fatal: adding files failed
+exit 128
+
+$ git status --short, outside, after
+(clean)

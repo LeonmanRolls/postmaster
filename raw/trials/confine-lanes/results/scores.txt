@@ -1,0 +1,16 @@
+codex      open      gate=pass commit=yes outside=yes other=read home=read exit=0
+claude     open      gate=pass commit=yes outside=yes other=read home=read exit=0
+muse       open      gate=pass commit=yes outside=yes other=read home=read exit=?
+mimo       open      gate=pass commit=yes outside=yes other=read home=read exit=0
+codex      srt       gate=pass commit=yes outside=no other=no home=no exit=0
+claude     srt       gate=pass commit=yes outside=no other=no home=no exit=0
+muse       srt       gate=pass commit=yes outside=no other=no home=no exit=0
+mimo       srt       gate=pass commit=yes outside=no other=no home=no exit=0
+claude     own       gate=pass commit=yes outside=yes other=no home=no exit=0
+mimo       own       gate=pass commit=yes outside=no other=no home=no exit=?
+pi         open      gate=pass commit=yes outside=yes other=read home=read exit=0
+pi         srt       gate=pass commit=yes outside=no other=no home=no exit=0
+pi         landlock  gate=pass commit=yes outside=no other=no home=no exit=0
+mimostub   open      gate=none commit=no outside=yes other=read home=read exit=0
+mimostub   own       gate=none commit=no outside=yes other=no home=no exit=0
+mimostub   srt       gate=none commit=no outside=no other=no home=no exit=0

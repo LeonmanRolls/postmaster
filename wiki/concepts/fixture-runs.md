@@ -3,7 +3,7 @@ title: A fixture run tests the flow end to end, which the gate cannot
 type: concept
 standing: claimed
 sources: []
-updated: 2026-09-27
+updated: 2026-10-01
 ---
 
 # Fixture runs
@@ -94,9 +94,15 @@ scores clean is found to have shipped something its ticket did not ask for.
 `scripts/fixture.sh` makes a run's repository and files its ticket (`new`), scores a finished
 run (`score`), and runs a ticket's hidden tests against any copy of the app (`hidden`). The app
 and its tickets are in `fixtures/`. `new` puts a copy under `~/Code/fixtures` unless it is given a
-path, so every copy is in one place. Trusting that folder in Claude Code does not spare a copy
-the trust prompt. Claude Code 2.1.283, started in a fresh folder inside a trusted one, asked
-nothing for a plain folder and asked for a git repository. Controls: it asked in a folder with no
-trusted parent, and not in the trusted folder itself. A copy is a git repository, so a postmaster
-started in one waits for the user to answer the prompt, once per copy. `AGENTS.md` holds a change to the coachman contract back
-from merging until a fixture run dispatched from its branch scores clean.
+path, so every copy is in one place, and marks the copy as a fixture in its own git config. A
+fixture run's postmaster runs headless on every host, in the form `hosts.md` gives under none, so
+it never meets Claude Code's trust question: a headless session does not ask. Trusting the
+fixtures folder never spared a copy the prompt. Claude Code 2.1.283 looks for a trusted folder
+from the working folder upward and stops at the top of the git repository, so a trusted parent
+covers plain folders only; every copy is its own repository, and the search never reaches the
+parent. In the observed controls, Claude Code asked for a new repository inside a trusted folder,
+and did not ask for the trusted folder itself. `AGENTS.md` holds a change to the coachman contract back
+from merging until a fixture run dispatched from its branch scores clean. What the contract is
+is defined in `docs/coachman-contract.toml`, and `scripts/coachman-contract.sh` says whether a
+change touches it — so a fixture run is required when the change touches a listed file,
+and not for a change to files the list does not name.

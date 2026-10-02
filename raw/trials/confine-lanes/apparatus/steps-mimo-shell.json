@@ -1,0 +1,3 @@
+[["bash", {"command": "echo OUTSIDE > @ROOT@/app/outside-@LANE@.txt; echo \"write exit $?\"", "description": "write outside"}],
+ ["bash", {"command": "cat @ROOT@/app/.worktrees/other/draft.txt; echo \"read other exit $?\"", "description": "read other lane"}],
+ ["bash", {"command": "cat @ROOT@/home/note.txt; echo \"read home exit $?\"", "description": "read home"}]]

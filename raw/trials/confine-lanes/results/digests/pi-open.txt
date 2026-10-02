@@ -1,0 +1,7 @@
+ 1 bash {"command": "npm ci; echo \"npm ci exit $?\"; npm run check; echo \"npm run check exit $?\""} -> ok | added 8 packages, and audited 9 packages in 3s 1 package is looking for funding run `npm fund` for details found 0 vulnerabilities npm ci exit 0 > todo@0.1.0 check > tsc…
+ 2 write {"path": "inside.txt", "content": "INSIDE\n"} -> ok | Successfully wrote to inside.txt
+ 3 bash {"command": "git add inside.txt && git -c user.name=pi -c user.email=pi@example.invalid commit -q -m 'trial: inside'; e… -> ok | commit exit 0
+ 4 write {"path": "<trial>/app/outside-pi-open.txt", "content": "OUTSIDE\n"} -> ok | Successfully wrote to <trial>/app/outside-pi-open.txt
+ 5 read {"path": "<trial>/app/.worktrees/other/draft.txt"} -> ok | LANE-efe2b5f3
+ 6 read {"path": "<trial>/home/note.txt"} -> ok | HOME-33f91d82
+final: Done: 6 of 6 steps issued.

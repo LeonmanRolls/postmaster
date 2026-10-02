@@ -1,12 +1,44 @@
 ---
 title: Log
 type: schema
-updated: 2026-09-29
+updated: 2026-10-01
 ---
 
 # Log
 
 Append-only. Newest first. One entry per operation, prefixed so it can be parsed.
+
+## [2026-10-01] ingest | what keeps a lane inside its worktree
+
+Issue #107. A trial recorded in `raw/trials/confine-lanes/`: ten model runs on codex, Claude Code,
+Muse Code and MiMo Code, pi and MiMo Code's shell on a stand-in provider, and plain-shell probes,
+at four levels: as launched today, with each harness's own guard, inside sandbox-runtime, and
+inside a Landlock ruleset. Unconfined, every harness wrote into the main checkout and read the
+other lane's worktree and a file elsewhere in the home directory. Claude Code's and MiMo Code's
+own rules refused reads and let a shell write through; codex's and Muse Code's sandboxes switch off
+in bypass mode. sandbox-runtime stopped every reach and every lane still passed the gate, after
+three changes the page lists; it needed root to allow Bubblewrap on this Ubuntu machine. A
+worktree's shared store still lets a lane read another lane's commits; a shared clone per lane
+does not. New concept page `lane-confinement`, standing `claimed`.
+
+## [2026-10-01] lint | a fixture run's postmaster runs headless
+
+Fixture copies are marked in their own git config, and a fixture run's
+postmaster runs headless on every host, so a run starts without a trust
+prompt. Trusting the fixtures folder never spared a copy: the trust search
+stops at the top of the repository.
+
+## [2026-09-30] ingest | a gate on the default branch after a merge runs from a clean checkout
+
+Issue #110. A design decision, with the control that shows it. The fixture app's `npm run
+check` failed on main right after a merge in fixture runs 4 and 5 (2026-09-28), because Biome
+walked into the run's own worktrees under `.worktrees/`, and passed once they were removed.
+The copies stay where the machine's convention puts them; the flow's two post-merge gates (the
+ship leg's verification of the merged default branch, and fixture scoring's gate) now run from
+a clean checkout of the branch outside the project folder, through `scripts/clean-checkout.ts`.
+Hand-run tools in the main checkout still see the copies; the page says so. Standing `claimed`:
+those fixture runs are not in `raw/`, so the page marks the observation unverified. The
+colocated tests hold the positive and negative control.
 
 ## [2026-09-29] ingest | the planning stage: every spec to the user before code
 

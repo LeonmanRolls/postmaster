@@ -1,0 +1,15 @@
+date: 2026-10-01
+os: Ubuntu 24.04.5 LTS, kernel 6.8.0-142-generic
+landlock abi: 4
+apparmor_restrict_unprivileged_userns: 1
+bubblewrap: 0.9.0
+socat: 1.8.0.0
+ripgrep: 14.1.0
+sandbox-runtime: 0.0.77
+codex: 0.157.1
+claude: 2.1.286
+muse: 1.4.2 (1.4.2-R4684.1)
+mimo: 0.1.15 (a build of 0.1.15 on Bun 1.4.2)
+pi: 0.87.0
+node: v24.21.0
+git: 2.43.0

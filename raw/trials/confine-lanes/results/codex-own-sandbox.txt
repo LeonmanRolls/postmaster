@@ -1,0 +1,23 @@
+# codex's own sandbox, driven from a plain shell with `codex sandbox`, no model.
+# Before: the machine's default, AppArmor restricting unprivileged user namespaces. Copied from
+# the session's tool output; the file it was first written to was lost to a reboot.
+$ codex sandbox -P :workspace -C <lane worktree> -- sh -c 'echo x > inside-probe.txt'
+bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted
+exit 1
+$ codex sandbox -P :read-only -C <lane worktree> -- sh -c 'echo x > inside-probe.txt'
+bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted
+exit 1
+$ codex sandbox --enable use_legacy_landlock -P :workspace -C <lane worktree> -- sh -c 'echo x > inside-probe.txt'
+thread 'main' panicked at linux-sandbox/src/linux_run_main.rs:410:9:
+filesystem-restricted execution requires bubblewrap to isolate app-server sockets
+exit 101
+
+# After: an AppArmor profile lets /usr/bin/bwrap create user namespaces.
+$ codex sandbox -P :workspace -C <lane worktree> -- sh -c '<the reaches, then staging a file to commit>'
+write in own worktree: worked
+write into the main checkout: refused
+read the other lane worktree: worked
+read elsewhere in home: worked
+fatal: Unable to create '<trial>/app/.git/worktrees/1-shell-open/index.lock': Read-only file system
+git add exit 128
+exit 0

@@ -1,0 +1,6 @@
+[["bash", {"command": "npm ci; echo \"npm ci exit $?\"; npm run check; echo \"npm run check exit $?\""}],
+ ["write", {"path": "inside.txt", "content": "INSIDE\n"}],
+ ["bash", {"command": "git add inside.txt && git -c user.name=pi -c user.email=pi@example.invalid commit -q -m 'trial: inside'; echo \"commit exit $?\""}],
+ ["write", {"path": "@ROOT@/app/outside-@LANE@.txt", "content": "OUTSIDE\n"}],
+ ["read", {"path": "@ROOT@/app/.worktrees/other/draft.txt"}],
+ ["read", {"path": "@ROOT@/home/note.txt"}]]
