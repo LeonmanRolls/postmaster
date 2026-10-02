@@ -61,6 +61,7 @@ config. Do not guess an answer, and do not hand the user a script to run instead
 ```sh
 scripts/probe-harnesses.sh     # which agent CLIs exist, and which read no ambient context
 scripts/probe-trackers.sh      # which ticket sources are reachable, and what would finish each
+scripts/probe-confine.sh       # whether lane confinement can run, and what finishes it
 ```
 
 What to settle, in this order, and why none of it is guessed:
@@ -79,6 +80,12 @@ What to settle, in this order, and why none of it is guessed:
   projects`. `local` needs no service and no login: it keeps each repo's tickets in the
   repo's own git directory, and a repo whose store exists uses it whatever this answer is.
   Anything else is `other`, described once outside this repo (`skills/postmaster/trackers.md`).
+- **Whether lanes run confined.** Show `scripts/probe-confine.sh` and ask once
+  (`confine`, `on` or `off`, default `off`). When the probe says `partial` it names what
+  finishes it — an install command, or an AppArmor rule for Bubblewrap — and any root
+  command is the user's to run, never the flow's; the probe runs again after they do.
+  `setup.sh` writes the answer to the config and refuses `on` when the probe says
+  `unavailable`.
 - **Where projects live.** `~/Code` is one convention, not a rule.
 - **Who says the merge word.** A person, or the postmaster itself (`ship.merge_authority`).
   A run never merges on its own authority; the config says whose authority that is.
