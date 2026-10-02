@@ -11,6 +11,10 @@
 # Where projects live. scripts/find-projects.sh reads this when given no roots.
 projects_roots = ["~/Code"]
 
+# Lane confinement wraps lane harnesses with sandbox-runtime. It is opt-in; a config that
+# predates this key also means off. Run scripts/probe-confine.sh before choosing on.
+confine = "off"   # "on" or "off"
+
 # A lane is a harness plus a model plus an effort, and is a workhorse or a reviewer or
 # both, as [team] says. Name lanes for what they are. A lane may carry an env_file, loaded
 # before launch, which is how a harness reaches an alternate backend (an Anthropic-compatible

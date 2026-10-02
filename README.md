@@ -102,6 +102,7 @@ opened, or launches one when it cannot be.
 ```sh
 scripts/probe-harnesses.sh      # which agent CLIs are installed
 scripts/probe-trackers.sh       # which ticket sources are reachable
+scripts/probe-confine.sh        # whether lane confinement can run, and what would finish it
 scripts/setup.sh --answers <file> # writes the config from the agent's collected answers (--keys lists them)
 scripts/link-skills.sh [--dry-run | --check | --remove]            # the skills, as links into each CLI's skills folder
 scripts/skill-refs.sh [--fix]                                      # every script path in the skill goes through <tool>

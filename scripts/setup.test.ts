@@ -56,7 +56,7 @@ function answers(name: string, extra?: string): void {
   writeFileSync(join(tmp, `${name}.answers`), `${lines.join("\n")}\n`, "utf8");
 }
 
-function runSetup(name: string): number {
+function runSetup(name: string, extraEnv: Record<string, string> = {}): number {
   const r = run(
     "bash",
     [SELF, "--answers", join(tmp, `${name}.answers`), "--config", join(tmp, `${name}.toml`)],
@@ -64,11 +64,28 @@ function runSetup(name: string): number {
       env: {
         ...(process.env as Record<string, string>),
         PATH: `${join(tmp, "bin")}:${process.env.PATH}`,
+        ...extraEnv,
       },
     },
   );
   writeFileSync(join(tmp, `${name}.out`), r.out + r.err, "utf8");
   return r.code;
+}
+
+function confineEnv(bwrapExit: number): Record<string, string> {
+  const bin = join(tmp, `confine-${bwrapExit}`);
+  mkdirSync(bin, { recursive: true });
+  for (const tool of ["bwrap", "socat", "rg"]) {
+    const path = join(bin, tool);
+    writeFileSync(path, `#!/bin/sh\nexit ${tool === "bwrap" ? bwrapExit : 0}\n`, "utf8");
+    chmodSync(path, 0o755);
+  }
+  return {
+    PATH: `${bin}:${join(tmp, "bin")}:${process.env.PATH}`,
+    POSTMASTER_PROBE_PLATFORM: "linux",
+    POSTMASTER_PROBE_SYSCTL: bwrapExit === 0 ? "0" : "1",
+    POSTMASTER_PROBE_OS_RELEASE: 'ID=ubuntu\nVERSION_ID="24.04"\n',
+  };
 }
 
 function limit(name: string): string {
@@ -94,6 +111,44 @@ function planningLink(name: string): string {
 }
 
 describe("positive controls", () => {
+  test("setup lists confine, asks once after the probe, and defaults it to off", () => {
+    const keys = run("bash", [SELF, "--keys"]);
+    const out = readFileSync(join(tmp, "plain.out"), "utf8");
+    const cfg = tryTomlFile(join(tmp, "plain.toml"));
+    expect(keys.code).toBe(0);
+    expect(keys.out).toContain("confine                    off");
+    expect(plainRc).toBe(0);
+    expect(cfg?.confine).toBe("off");
+    expect(out).toContain("lane confinement:");
+    expect(out.match(/Run lanes confined \(on\/off\)/gu)?.length).toBe(1);
+  }, 30000);
+
+  test("confine=on is written when Bubblewrap starts", () => {
+    answers("confine-ready", "confine=on");
+    const rc = runSetup("confine-ready", confineEnv(0));
+    const cfg = tryTomlFile(join(tmp, "confine-ready.toml"));
+    expect(rc).toBe(0);
+    expect(cfg?.confine).toBe("on");
+  }, 30000);
+
+  test("confine=on is written for a partial AppArmor result", () => {
+    answers("confine-partial", "confine=on");
+    const rc = runSetup("confine-partial", confineEnv(1));
+    const cfg = tryTomlFile(join(tmp, "confine-partial.toml"));
+    const out = readFileSync(join(tmp, "confine-partial.out"), "utf8");
+    expect(rc).toBe(0);
+    expect(cfg?.confine).toBe("on");
+    expect(out).toContain("lane confinement: partial");
+  }, 30000);
+
+  test("confine=off is written even when the probe is unavailable", () => {
+    answers("confine-off", "confine=off");
+    const rc = runSetup("confine-off", { POSTMASTER_PROBE_PLATFORM: "unknown" });
+    const cfg = tryTomlFile(join(tmp, "confine-off.toml"));
+    expect(rc).toBe(0);
+    expect(cfg?.confine).toBe("off");
+  }, 30000);
+
   test("a lens given its own lanes is written to [team.lens_reviewers]", () => {
     answers("lens", "reviewers.security=alpha, beta, sentinel");
     const lensRc = runSetup("lens");
@@ -247,6 +302,24 @@ describe("positive controls", () => {
 });
 
 describe("negative controls", () => {
+  test("confine=on is refused when the probe says unavailable", () => {
+    answers("confine-unavailable", "confine=on");
+    const rc = runSetup("confine-unavailable", { POSTMASTER_PROBE_PLATFORM: "unknown" });
+    const out = readFileSync(join(tmp, "confine-unavailable.out"), "utf8");
+    expect(rc).toBe(1);
+    expect(out).toContain("confine=on is unavailable");
+    expect(existsSync(join(tmp, "confine-unavailable.toml"))).toBe(false);
+  }, 30000);
+
+  test("a value other than on or off is refused", () => {
+    answers("confine-invalid", "confine=maybe");
+    const rc = runSetup("confine-invalid");
+    const out = readFileSync(join(tmp, "confine-invalid.out"), "utf8");
+    expect(rc).toBe(1);
+    expect(out).toContain("confine must be on or off");
+    expect(existsSync(join(tmp, "confine-invalid.toml"))).toBe(false);
+  }, 30000);
+
   const badLimits = [
     "0",
     "-60",

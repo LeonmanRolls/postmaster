@@ -1,5 +1,5 @@
 // Set this machine up: probe the agent CLIs, ask which harness and model fills each role, how
-// tickets are tracked, where projects live and who says the merge word, then write
+// tickets are tracked, whether lanes run confined, where projects live and who says the merge word, then write
 // ~/.postmaster/config.toml in the shape of config.example.toml.
 //
 //   setup.sh [--answers <file>] [--dry-run] [--config <path>]
@@ -131,6 +131,12 @@ function hasKey(file: string, key: string): boolean {
 
 // --- entry -----------------------------------------------------------------------------------
 const argv = process.argv.slice(2);
+if (argv.length === 1 && argv[0] === "--self-test") {
+  const tested = run(process.execPath, ["test", join(HERE, "setup.test.ts")]);
+  process.stdout.write(tested.out);
+  process.stderr.write(tested.err);
+  process.exit(tested.code);
+}
 let DRY = 0;
 let ANSWERS = "";
 let CONFIG = join(process.env.HOME ?? "~", ".postmaster", "config.toml");
@@ -182,6 +188,7 @@ limits.coachman.tasks_max? (default)         coachman process cap override
 limits.reviewer.memory_max? (default)         reviewer memory cap override
 limits.reviewer.tasks_max? (default)          reviewer process cap override
 tracker                    github             github, plane, local or other
+confine                    off                lane confinement, on or off (see probe-confine.sh)
 plane.url                  https://api.plane.so   plane only
 plane.workspace                               plane only; the slug in the workspace's web URL
 plane.env_file             ~/.postmaster/plane.env   plane only; holds PLANE_API_KEY=<key>
@@ -445,6 +452,23 @@ if (TK === "plane") {
 }
 
 console.log("");
+console.log("== Lane confinement ==");
+const confineProbe = run("bash", [join(HERE, "probe-confine.sh")]);
+if (confineProbe.code !== 0) die("setup: probe-confine.sh failed; fix it before choosing confinement", 1);
+process.stdout.write(confineProbe.out);
+process.stderr.write(confineProbe.err);
+const CONFINE = ask("Run lanes confined (on/off)", "off", "confine", opts);
+if (CONFINE !== "on" && CONFINE !== "off") die("setup: confine must be on or off", 1);
+if (CONFINE === "on") {
+  const verdict = run("bash", [join(HERE, "probe-confine.sh"), "--verdict"]);
+  if (verdict.code !== 0) die("setup: probe-confine.sh --verdict failed", 1);
+  if (verdict.out.trim() === "unavailable")
+    die("setup: confine=on is unavailable here; run probe-confine.sh for the machine's result", 1);
+  if (verdict.out.trim() !== "ready" && verdict.out.trim() !== "partial")
+    die("setup: probe-confine.sh returned no usable verdict", 1);
+}
+
+console.log("");
 const PMC = ask(
   "May the postmaster create tickets without asking (yes/no)",
   "no",
@@ -490,6 +514,7 @@ if (OTHER) TRACKER_EXTRA = `name = "${OTHER}"`;
 const dateStr = new Date().toISOString().slice(0, 10);
 const OUT = `# Written by scripts/setup.sh on ${dateStr}. Shape: config.example.toml.
 projects_roots = ${tomlList(ROOTS)}
+confine = "${CONFINE}"
 ${LANE_BLOCKS}
 
 [team]
