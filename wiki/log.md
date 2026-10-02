@@ -18,8 +18,9 @@ written in a proposed rule format, agreed with the scanner on every one of 50,09
 and Node; its controls and mutations behaved, and round 5's table at `c47d246` already differs in
 three rules. Probes found three gaps in #135: Claude Code's pull-request attribution, JSON nested
 two deep, and encrypted reasoning blocks. New page
-[No library covers what the private-data scanner checks](concepts/scanner-library.md), at
-**claimed**.
+[No library covers what the private-data scanner checks, so postmaster publishes one](concepts/scanner-library.md),
+at **claimed**. The user's word of 2026-10-02: a gap is reason enough to publish, with no wait for
+an outside request; the order is #135, then #109's port, then the package.
 
 ## [2026-10-01] ingest | what keeps a lane inside its worktree
 

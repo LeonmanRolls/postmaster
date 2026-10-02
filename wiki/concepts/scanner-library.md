@@ -1,12 +1,12 @@
 ---
-title: No library covers what the private-data scanner checks, and extracting one waits for #135 and #109
+title: No library covers what the private-data scanner checks, so postmaster publishes one
 type: concept
 standing: claimed
 sources: [trials/scanner-rule-format, papers/panfilov-2026-reasoning-traces, papers/richards-2026-agentlogs, articles/csa-2026-reasoning-trace-theft, articles/anthropic-thinking-encryption, articles/claude-code-attribution-setting, articles/claude-code-issue-50014, articles/gitguardian-secrets-sprawl-2026, articles/scanner-gitleaks, articles/scanner-betterleaks, articles/scanner-trufflehog, articles/scanner-kingfisher, articles/scanner-titus, articles/scanner-detect-secrets, articles/scanner-secretlint, articles/scanner-ggshield, articles/scanner-git-secrets, articles/scanner-talisman, articles/scanner-ripsecrets, articles/scanner-trivy, articles/scanner-github-secret-scanning, articles/scanner-presidio, articles/scanner-scrubadub, articles/scanner-datafog, articles/scanner-llm-guard, articles/scanner-google-sdp, articles/scanner-openredaction, articles/scanner-openai-privacy-filter, articles/scanner-entire, articles/scanner-clawjournal, articles/scanner-deja-vu, articles/scanner-ccs-sanitizer, articles/scanner-agent-archive, articles/scanner-scrub-transcripts, articles/scanner-dataclaw, articles/scanner-agentscrub, articles/scanner-git-filter-repo, articles/scanner-bfg, articles/scanner-leak-lock, articles/scanner-pii-check]
 updated: 2026-10-01
 ---
 
-# No library covers what the private-data scanner checks, and extracting one waits for #135 and #109
+# No library covers what the private-data scanner checks, so postmaster publishes one
 
 **Claim.** As of 2026-10-01 no tool or library checks what #135's scanner checks: secrets and
 personal data, the home paths of any user, private hosts, email addresses and attribution lines,
@@ -14,9 +14,10 @@ in agent transcripts and in the whole git history of a change with its commit me
 scrubs a copy and checks it again. Secret scanners leave out personal context, and most leave out
 commit messages. Personal-data tools read neither transcripts nor git. The transcript scrubbers
 released in 2026 each cover part of a transcript, and none reads git history. A library
-would fill a real gap. But #135's rules are still changing, and #109 is about to port them to
-TypeScript, so the recommendation is to port them as a self-contained module now and to publish
-only once the rules settle and someone outside this project wants them.
+would fill a real gap, and the gap is the reason to publish it: nobody asks an individual to
+publish a library that does not exist yet. Its rules are still changing under #135's review, and
+#109 is about to port them to TypeScript, so the scanner is published once #135 lands, through
+that port, rather than built first.
 
 **Standing: claimed.** It rests on a survey of 32 outside tools, each cited to its documentation
 or source at a dated version, and on one trial against #135's rule table
@@ -259,9 +260,10 @@ written in Python or Go, so they would call it as a command, not import it (unve
   needs signed releases, a security contact, and answers to reports from strangers.
 - **Ownership.** gitleaks's author lost control of its repository and name and started again as
   Betterleaks [@articles/scanner-betterleaks].
-- **It would not mean less code for the user.** The code would move to another repository the
-  same user keeps, with a release process added. Carrying less code comes from using someone
-  else's library, and the survey found none that fits.
+- **It moves code more than it removes it.** The scanner would live in another repository the
+  same user keeps, with a release process added. This project carries less code once it uses the
+  published package, but the user still keeps both, and the survey found no one else's library
+  that would take the load.
 
 ### What it would look like
 
@@ -332,29 +334,30 @@ gitleaks-compatible format, without lookaround, could express the same rules was
 
 ## Recommendation
 
-Do not publish a library now. Keep the scanner in this repository until #135 lands. When #109
-ports the scripts to TypeScript, port the scanner as a self-contained module: its rules as data
-in the format checked above, an engine that imports nothing else from postmaster, and the same
-fixtures and probes passing under Bun and Node. That makes a later extraction a move, not a
-rewrite. Fix the gaps the probes found in #135, or in the first change after it: Claude Code's
-pull-request attribution, JSON nested more than one level deep, and encrypted reasoning blocks,
-which a copy into `raw/` should drop rather than keep, since no scan can read them.
+Publish it. The survey found the gap, and a gap is the case for publishing: nobody asks an
+individual to publish a library that does not exist yet, so waiting for a request would mean never
+publishing. This is the user's word of 2026-10-02 on #208.
 
-Publish only when two things hold: the rule table has gone unchanged through several runs after
-#135 lands, and someone outside this project wants to use it. Then the name, the licence and the
-package are decided as set out above.
+The order is what keeps it from being written three times:
+
+1. **Close #135's gaps** in its last round or the first change after it lands: Claude Code's
+   pull-request attribution, JSON nested more than one level deep, and encrypted reasoning blocks,
+   which a copy into `raw/` should drop rather than keep, since no scan can read them.
+2. **Port it as a self-contained module** when #109 ports the scripts to TypeScript: its rules as
+   data in the format checked above, an engine that imports nothing else from postmaster, and the
+   same fixtures and probes passing under Bun and Node.
+3. **Publish the module as a package** under the project's account name, with the name, the
+   licence and the API set out above, and have postmaster use the published package in place of
+   its own copy. Only then does this project carry less code.
 
 ## What would change it
 
-- **Someone asks for it.** A maintainer of one of the transcript scrubbers, or a project that
-  publishes agent transcripts, wants a shared rule set for personal context. Publishing then has a
-  user from the first release, and should follow the module port.
-- **An existing tool closes the gap.** If gitleaks, Betterleaks, TruffleHog or one of the
+- **An existing tool closes the gap first.** If gitleaks, Betterleaks, TruffleHog or one of the
   transcript scrubbers adds the home paths of any user, private hosts, attribution lines and
-  commit messages, adopting it would let this project carry less code, which publishing its own
-  would not.
-- **The rules stop changing.** If #135's table survives several runs unchanged, the main reason to
-  wait is gone, and the remaining question is whether the user wants the maintenance described
-  above.
-- **The cost is accepted outright.** If the user values the public tool over the cost of keeping
-  it, publishing can follow the module port with no outside request.
+  commit messages, contributing there and adopting it would serve both aims better than a new
+  package.
+- **The rules keep changing after #135 lands.** That delays the first release, so that it does not
+  carry an interface that breaks at once; it does not cancel it.
+- **The maintenance proves heavier than accepted.** A scanner other people rely on has to keep up
+  with new transcript formats and answer reports of misses. If that cannot be kept up, the
+  package should say so plainly and point to the alternatives, rather than drift.
