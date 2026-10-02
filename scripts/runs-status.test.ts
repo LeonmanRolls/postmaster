@@ -1,5 +1,5 @@
-// Tests beside scripts/runs-status.ts, moved from its --self-test on #109: 47 controls.
-// Forty-five fixture runs plus the postmaster directory are planted once in beforeAll;
+// Tests beside scripts/runs-status.ts, moved from its --self-test on #109: 58 controls.
+// Fifty-six fixture runs plus the postmaster directory are planted once in beforeAll;
 // status() only reads, so every test is independent.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import {
@@ -82,6 +82,19 @@ function liveowner(name: string): void {
 function deadowner(name: string): void {
   writeFileSync(join(root, name, ".leg-2-active"), "999999999 0\n");
 }
+
+function detections(name: string, ...lines: string[]): void {
+  writeFileSync(join(root, name, "detections.jsonl"), lines.map((l) => `${l}\n`).join(""));
+}
+
+function told(name: string, ...lines: string[]): void {
+  writeFileSync(join(root, name, ".detections-told"), lines.map((l) => `${l}\n`).join(""));
+}
+
+const DET1 =
+  '{"commit":"","file":"notes.txt","line":1,"rule":"email","ts":"2026-09-29T00:00:00Z"}';
+const DET2 =
+  '{"commit":"","file":"notes.txt","line":2,"rule":"token","ts":"2026-09-29T00:01:00Z"}';
 
 function age(name: string): void {
   const t = Date.now() / 1000 - 3600;
@@ -228,6 +241,31 @@ beforeAll(() => {
   mkRun("legacy-gate", "shipping", 3, ".card-ready");
   mkRun("legacy-dispatch", "review", 2, ".leg-2-done", ".leg-2-exited");
   mkRun("legacy-last", "shipped", 3, ".leg-3-done", ".leg-3-exited");
+  mkRun("tell", "review", 2);
+  detections("tell", DET1);
+  mkRun("parttold", "review", 2);
+  detections("parttold", DET1, DET2);
+  told("parttold", DET1);
+  mkRun("told", "review", 2);
+  detections("told", DET1);
+  told("told", DET1);
+  mkRun("baddet", "review", 2);
+  detections("baddet", "not json at all");
+  mkRun("baddetold", "review", 2);
+  detections("baddetold", "not json at all");
+  told("baddetold", "not json at all");
+  mkRun("tellgate", "shipping", 3, ".card-ready");
+  detections("tellgate", DET1);
+  mkRun("telluser", "review", 2, ".waiting-on-user");
+  detections("telluser", DET1);
+  mkRun("tellrule", "review", 2, ".escalation-ready");
+  detections("tellrule", DET1);
+  mkRun("tellclosed", "done", 3);
+  detections("tellclosed", DET1);
+  mkRun("tellaban", "abandoned", 2);
+  detections("tellaban", DET1);
+  mkRun("emptydet", "review", 2);
+  detections("emptydet");
   mkdirSync(join(root, "postmaster"), { recursive: true });
 });
 
@@ -347,6 +385,18 @@ describe("positive controls", () => {
   test("a corrupt middle line does not hide the last good record", () => {
     expect(nextOf("corruptmid")).toBe("RESUME");
   }, 10000);
+
+  test("an untold detection is TELL", () => {
+    expect(nextOf("tell")).toBe("TELL");
+  }, 10000);
+
+  test("a partly told log is TELL", () => {
+    expect(nextOf("parttold")).toBe("TELL");
+  }, 10000);
+
+  test("an unreadable-looking line is TELL", () => {
+    expect(nextOf("baddet")).toBe("TELL");
+  }, 10000);
 });
 
 describe("negative controls", () => {
@@ -364,6 +414,38 @@ describe("negative controls", () => {
 
   test("a closed run stays closed with a stale marker", () => {
     expect(nextOf("userclosed")).toBe("-");
+  }, 10000);
+
+  test("a fully told log is WAIT", () => {
+    expect(nextOf("told")).toBe("WAIT");
+  }, 10000);
+
+  test("a told line told verbatim is WAIT", () => {
+    expect(nextOf("baddetold")).toBe("WAIT");
+  }, 10000);
+
+  test("an empty detections log is WAIT", () => {
+    expect(nextOf("emptydet")).toBe("WAIT");
+  }, 10000);
+
+  test("an untold detection beats a ship card", () => {
+    expect(nextOf("tellgate")).toBe("TELL");
+  }, 10000);
+
+  test("a run waiting on the user beats an untold detection", () => {
+    expect(nextOf("telluser")).toBe("USER");
+  }, 10000);
+
+  test("an escalation waiting beats an untold detection", () => {
+    expect(nextOf("tellrule")).toBe("RULE");
+  }, 10000);
+
+  test("a closed run with untold detections is TELL", () => {
+    expect(nextOf("tellclosed")).toBe("TELL");
+  }, 10000);
+
+  test("an abandoned run with untold detections is TELL", () => {
+    expect(nextOf("tellaban")).toBe("TELL");
   }, 10000);
 
   test("an unknown outcome is inspected instead of resumed", () => {

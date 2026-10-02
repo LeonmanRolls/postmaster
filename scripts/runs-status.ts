@@ -9,6 +9,9 @@
 //   next   USER      the postmaster has put this run's question to the user and waits for the
 //                    answer (.waiting-on-user)
 //          RULE      an escalation is waiting (.escalation-ready)
+//          TELL      the run holds a private-data detection the postmaster has not
+//                    yet told the user about (detections.jsonl beyond
+//                    .detections-told)
 //          GATE      the ship card is complete (.card-ready)
 //          SPEC      a spec review package is waiting (.spec-review-ready): the postmaster puts
 //                    each workhorse's spec to the user, one at a time
@@ -21,9 +24,15 @@
 //          INSPECT   an attempt died without its record, the last record is corrupt,
 //                    or no marker and nothing changed for 30 minutes, run not done
 //          WAIT      a leg is running and its files are moving
-//          -         the manifest says done or abandoned
+//          -         the manifest says done or abandoned, with nothing untold
 //
 // Idle time ignores the marker files themselves, so touching a marker never hides a stall.
+//
+// Detections: the gate appends every private-data finding to the run's
+// detections.jsonl, one JSON line as it happens. The postmaster tells the
+// user each line it has not told before, at once, and appends the told
+// lines verbatim to the run's .detections-told. A run whose log holds a
+// line its told file does not is TELL; an unreadable log is untold.
 //
 //   exit 0  listed (an empty root lists nothing)
 //   exit 1  usage, or no such root
@@ -121,6 +130,41 @@ function ownerAlive(d: string, leg: string): boolean {
   const r = run("ps", ["-o", "stat=,lstart=", "-p", String(pid)], { env: { LC_ALL: "C" } });
   const f = pyWords(r.out);
   return f.length >= 6 && !f[0]!.startsWith("Z") && f.slice(1, 6).join(" ") === start;
+}
+
+// Whether the run's detections log holds a line its told file does not:
+// a multiset difference, so a twice-seen line told once is still untold.
+// No log is nothing untold; a log that cannot be read is untold, while a
+// told file that cannot be read counts as empty.
+function untoldDetections(d: string): boolean {
+  try {
+    if (!statSync(join(d, "detections.jsonl")).isFile()) return false;
+  } catch {
+    return false;
+  }
+  let have: string[];
+  try {
+    have = readFileSync(join(d, "detections.jsonl"), "utf8")
+      .split("\n")
+      .filter((l) => l.trim() !== "");
+  } catch {
+    return true;
+  }
+  let said: string[] = [];
+  try {
+    if (statSync(join(d, ".detections-told")).isFile()) {
+      said = readFileSync(join(d, ".detections-told"), "utf8")
+        .split("\n")
+        .filter((l) => l.trim() !== "");
+    }
+  } catch {
+    said = [];
+  }
+  const counts = new Map<string, number>();
+  for (const ln of have) counts.set(ln, (counts.get(ln) ?? 0) + 1);
+  for (const ln of said) counts.set(ln, (counts.get(ln) ?? 0) - 1);
+  for (const n of counts.values()) if (n > 0) return true;
+  return false;
 }
 
 export function status(root: string): number {
@@ -239,10 +283,12 @@ export function status(root: string): number {
     const phaseMax = tailMax(`coachman-leg-${leg}-phase-`, "");
     const intentMax = tailMax(`coachman-leg-${leg}-intent-`, ".json");
     const gap = phaseMax > lastAttempt || intentMax > lastAttempt;
+    const untold = untoldDetections(d);
     let next: string;
-    if (stage === "done" || stage === "abandoned") next = "-";
+    if ((stage === "done" || stage === "abandoned") && !untold) next = "-";
     else if (markers.includes(".waiting-on-user")) next = "USER";
     else if (markers.includes(".escalation-ready")) next = "RULE";
+    else if (untold) next = "TELL";
     else if (markers.includes(".card-ready")) next = "GATE";
     else if (active) next = "WAIT";
     else if (gap || corrupt) next = "INSPECT";
