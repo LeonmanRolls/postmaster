@@ -7,6 +7,7 @@
 //   run-meta.sh path <dispatch>     print the canonical path of the run's tool checkout
 //   run-meta.sh check <dispatch>    the run's checkout still serves its dispatch commit
 //   run-meta.sh release <dispatch>  remove the pin when no claimed run is in flight
+//   run-meta.sh efforts <dispatch>  print the waybill's efforts: line from run.json
 //
 // Records when it was written; the run and project; the target repo's HEAD and branch; the
 // postmaster commit that dispatched it, and whether that checkout had uncommitted changes,
@@ -15,6 +16,9 @@
 // waybill's `tool:`); the machine config with local role choices resolved; the project
 // settings and their sources; and the version each harness reports. Env files are named by
 // the machine config, never read. A run.json that already exists is left alone.
+// A fixture run (the target repo carries `.postmaster/fixture`) records every lane and role's
+// effort lowered to its harness's lowest level from one table; the machine config file is
+// never changed. A ticket run records the effective config unchanged.
 //
 // The pin is a detached worktree of the postmaster repo at the dispatch commit, under
 // $POSTMASTER_TOOL_PINS (default ~/.postmaster/tool-pins), one directory per commit so every
@@ -87,7 +91,7 @@ const TOOL = toolRoot(import.meta);
 const SCRIPT = import.meta.path;
 
 const USAGE =
-  "usage: run-meta.sh <dispatch> <repo> | pin <repo> <commit> | path <dispatch> | check <dispatch> | release <dispatch>";
+  "usage: run-meta.sh <dispatch> <repo> | pin <repo> <commit> | path <dispatch> | check <dispatch> | release <dispatch> | efforts <dispatch>";
 
 // Every command returns its exit code with the bytes for each stream; the CLI boundary writes
 // them, and the tests inspect them. stdout carries results (the pin path, the checkout,
@@ -694,7 +698,84 @@ function collectHarnesses(cfg: Record<string, unknown>): string[] {
   return [...harnesses].sort();
 }
 
-type Built = { ok: true; record: Record<string, unknown> } | { ok: false; messages: string[] };
+// The one lowest-effort table for a fixture run. Each harness's lowest level, tried 2026-09-30.
+const LOWEST_EFFORT: Record<string, string> = {
+  codex: "none",
+  claude: "low",
+  muse: "minimal",
+  mimo: "low",
+};
+
+// isFixture <repo>: whether the target repo carries the fixture marker file. Presence is the
+// fact; a missing file means a ticket run. Never the repository's name or path.
+function isFixture(repo: string): boolean {
+  return existsSync(join(repo, ".postmaster", "fixture"));
+}
+
+// lowerEfforts <cfg>: rewrite every lane and role that names an effort to the lowest table's
+// entry for its harness. One that names no effort stays without one. An unmapped harness keeps
+// its effort and is named on stderr with the kept effort. Returns the number of efforts lowered.
+function lowerEfforts(cfg: Record<string, unknown>): number {
+  let lowered = 0;
+  const apply = (spec: Record<string, unknown> | undefined, name: string): void => {
+    if (!spec || typeof spec !== "object" || Array.isArray(spec)) return;
+    const harness = spec.harness;
+    const effort = spec.effort;
+    if (harness === undefined || harness === null) return;
+    if (effort === undefined || effort === null || effort === "") return;
+    const h = String(harness);
+    const lowest = LOWEST_EFFORT[h];
+    if (lowest === undefined) {
+      console.error(
+        `run-meta: fixture run: ${name} is on ${h}, which has no lowest-effort entry; keeping ${String(effort)}`,
+      );
+      return;
+    }
+    spec.effort = lowest;
+    lowered++;
+  };
+  const lanes = (cfg.lanes ?? {}) as Record<string, Record<string, unknown>>;
+  for (const [name, lane] of Object.entries(lanes)) apply(lane, `lanes.${name}`);
+  const team = (cfg.team ?? {}) as Record<string, unknown>;
+  for (const role of ["coachman", "coachman_fallback", "postmaster"]) {
+    apply(team[role] as Record<string, unknown> | undefined, `team.${role}`);
+  }
+  const legs = (team.coachman_legs ?? {}) as Record<string, Record<string, unknown>>;
+  for (const [leg, spec] of Object.entries(legs)) apply(spec, `team.coachman_legs.${leg}`);
+  return lowered;
+}
+
+// effortsLine <run.json config>: the waybill's `efforts:` line from the recorded config.
+// Names every lane and coachman role that has an effort, a per-leg coachman as coachman.<leg>;
+// the postmaster is left out (no launch in a run reads its entry).
+export function effortsLine(cfg: Record<string, unknown>): string {
+  const parts: string[] = [];
+  const lanes = (cfg.lanes ?? {}) as Record<string, Record<string, unknown>>;
+  for (const [name, lane] of Object.entries(lanes)) {
+    const e = (lane as Record<string, unknown>)?.effort;
+    if (e !== undefined && e !== null && e !== "") parts.push(`${name}=${String(e)}`);
+  }
+  const team = (cfg.team ?? {}) as Record<string, unknown>;
+  for (const role of ["coachman", "coachman_fallback"]) {
+    const v = team[role] as Record<string, unknown> | undefined;
+    const e = v?.effort;
+    if (e !== undefined && e !== null && e !== "") parts.push(`${role}=${String(e)}`);
+  }
+  const legs = (team.coachman_legs ?? {}) as Record<string, Record<string, unknown>>;
+  for (const [leg, spec] of Object.entries(legs)) {
+    const e = (spec as Record<string, unknown>)?.effort;
+    if (e !== undefined && e !== null && e !== "") parts.push(`coachman.${leg}=${String(e)}`);
+  }
+  return `efforts: ${parts.join(", ")}`;
+}
+
+type Built =
+  | {
+      ok: true;
+      record: Record<string, unknown>;
+      fixture: boolean;
+    }
+  | { ok: false; messages: string[] };
 
 function parseSettingsJson(text: string, what: string): { value: unknown } | { error: string } {
   try {
@@ -733,11 +814,14 @@ function buildRecord(
   }
   const cfg = parseSettingsJson(effective.out, "effective machine config");
   if ("error" in cfg) return { ok: false, messages: [cfg.error] };
+  const fixture = isFixture(resolvedRepo);
+  if (fixture) lowerEfforts(cfg.value as Record<string, unknown>);
   const harnessVersions: Record<string, string> = {};
   for (const h of collectHarnesses(cfg.value as Record<string, unknown>))
     harnessVersions[h] = version(h);
   return {
     ok: true,
+    fixture,
     record: {
       written: utcStamp(new Date()),
       coachman_contract: 2,
@@ -985,14 +1069,32 @@ if (import.meta.main) {
   }
   {
     const cmd = argv[0];
-    const verbs = ["pin", "path", "check", "release"];
+    const verbs = ["pin", "path", "check", "release", "efforts"];
     let outcome: Outcome;
     if (cmd === "pin" && argv.length === 3)
       outcome = pin(argv[1] as string, argv[2] as string, readTools());
     else if (cmd === "path" && argv.length === 2) outcome = pathOf(argv[1] as string);
     else if (cmd === "check" && argv.length === 2) outcome = checkPin(argv[1] as string);
     else if (cmd === "release" && argv.length === 2) outcome = releasePin(argv[1] as string);
-    else if (cmd !== undefined && !verbs.includes(cmd) && argv.length === 2) {
+    else if (cmd === "efforts" && argv.length === 2) {
+      const d = argv[1] as string;
+      const runJson = join(d, "run.json");
+      if (!isFile(runJson)) {
+        outcome = fail(`run-meta: no run.json in ${d}\n`);
+      } else {
+        try {
+          const data = JSON.parse(readFileSync(runJson, "utf8")) as Record<string, unknown>;
+          const cfg = data.config as Record<string, unknown> | undefined;
+          if (!cfg || typeof cfg !== "object") {
+            outcome = fail(`run-meta: ${runJson} records no config\n`);
+          } else {
+            outcome = ok(`${effortsLine(cfg)}\n`);
+          }
+        } catch {
+          outcome = fail(`run-meta: ${runJson} does not parse\n`);
+        }
+      }
+    } else if (cmd !== undefined && !verbs.includes(cmd) && argv.length === 2) {
       outcome = meta(argv[0] as string, argv[1] as string);
     } else usage();
     if (outcome.out !== "") process.stdout.write(outcome.out);

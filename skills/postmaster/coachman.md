@@ -679,8 +679,8 @@ Set the stage first, `<tool>/scripts/stage.sh <dispatch> review`, then:
      pass vacuously when a row, file or entry is missing?), and defects in the change. Only
      lanes whose harness has a code-review form review for bugs; no brief is written and no
      fallback is used. Launch: `<tool>/scripts/launch.sh review "$L" "$DEST" <BASE> --last
-     <dispatch>/logs/review-r<round>-bug-$L-last.md --run <dispatch>`. The form fixes each
-     harness at its highest review level and names the base-to-HEAD change. Normalize its
+     <dispatch>/logs/review-r<round>-bug-$L-last.md --run <dispatch>`. The form names the
+     base-to-HEAD change at the run-recorded lane effort. Normalize its
      report with `<tool>/scripts/review-findings.sh`; missing fields such as severity stay
      `not provided`.
      [Why a lane may review through its harness's own skill](../../wiki/concepts/own-review-skills.md)

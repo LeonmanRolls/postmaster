@@ -3567,16 +3567,16 @@ beforeAll(() => {
       '[lanes.one]\nharness = "pi"\nmodel = "pi-model"\n\n[team]\ncoachman = { harness = "pi", model = "coach-model" }\n',
     );
     runsAs(
-      "claude review names the range and runs /code-review at max",
+      "claude review names the range and runs /code-review at the lane's effort",
       "review-claude",
-      `-p /code-review max ${base}...HEAD --model claude-model --effort max --output-format stream-json --verbose --dangerously-skip-permissions probe=`,
+      `-p /code-review low ${base}...HEAD --model claude-model --effort low --output-format stream-json --verbose --dangerously-skip-permissions probe=`,
       "review",
       "one",
       join(tmp, "cx-detached"),
       base,
     );
     runsAs(
-      "codex review uses --base, --last, max effort and the lane model",
+      "codex review uses --base, --last, the lane's effort and the lane model",
       "review-codex",
       lines(
         join(tmp, "cx-detached"),
@@ -3590,7 +3590,7 @@ beforeAll(() => {
         "-m",
         "lane-model",
         "-c",
-        'model_reasoning_effort="max"',
+        'model_reasoning_effort="low"',
         CODEX_BYPASS,
         "--skip-git-repo-check",
       ),
@@ -3618,7 +3618,7 @@ beforeAll(() => {
     }
     record("review-run", "review-codex");
     runsAs(
-      "codex review in a run uses the recorded config and the same top level",
+      "codex review in a run uses the recorded config and the recorded effort",
       "review-codex",
       lines(
         join(tmp, "cx-detached"),
@@ -3630,7 +3630,7 @@ beforeAll(() => {
         "-m",
         "lane-model",
         "-c",
-        'model_reasoning_effort="max"',
+        'model_reasoning_effort="low"',
         CODEX_BYPASS,
         "--skip-git-repo-check",
       ),
@@ -3645,12 +3645,12 @@ beforeAll(() => {
     if (
       rc === 0 &&
       out.includes("--command review") &&
-      out.includes("--variant high") &&
+      out.includes("--variant low") &&
       out.includes(`stdin=${base}...HEAD`)
     ) {
-      ok("mimo review uses --command review, the prompt file range and high variant");
+      ok("mimo review uses --command review, the prompt file range and the lane's variant");
     } else {
-      fail("mimo review uses --command review, the prompt file range and high variant");
+      fail("mimo review uses --command review, the prompt file range and the lane's variant");
     }
     const noPromptLeft = (): boolean =>
       !readdirSync(join(tmp, "cx-detached")).some((f) => f.startsWith(".postmaster-review-"));
@@ -3909,6 +3909,118 @@ beforeAll(() => {
             "a resume's check and harness match main's PWD, OLDPWD and SHLVL",
             mismatches.join("\n"),
           );
+      }
+    }
+
+    // AC5: identical commands under a fixture run's dispatch name the lowest efforts,
+    // and under a ticket run's the configured ones.
+    console.log("AC5 effort controls");
+    writeFileSync(
+      join(tmp, "ac5.toml"),
+      '[lanes.one]\nharness = "codex"\nmodel = "lane-model"\neffort = "high"\n\n' +
+        '[lanes.claude-lane]\nharness = "claude"\nmodel = "claude-model"\neffort = "max"\n\n' +
+        '[lanes.mimo-lane]\nharness = "mimo"\nmodel = "prov/mimo-model"\neffort = "high"\n\n' +
+        '[team]\ncoachman = { harness = "codex", model = "coach-model", effort = "high" }\n' +
+        'coachman_fallback = { harness = "claude", model = "fallback-model", effort = "max" }\n\n' +
+        '[team.coachman_legs]\nsynthesis = { harness = "codex", model = "synth-model", effort = "high" }\n',
+    );
+    // A fixture repo: the marker lowers every effort. A ticket repo: no marker, config unchanged.
+    const ac5FixtureRepo = join(tmp, "ac5-fixture-repo");
+    mkdirSync(join(ac5FixtureRepo, ".postmaster"), { recursive: true });
+    run("git", ["init", "-q", "-b", "main", ac5FixtureRepo]);
+    writeFileSync(join(ac5FixtureRepo, ".postmaster", "fixture"), "postmaster.fixture\n");
+    run("git", ["-C", ac5FixtureRepo, "add", "-A"]);
+    run("git", [
+      "-C",
+      ac5FixtureRepo,
+      "-c",
+      "user.name=t",
+      "-c",
+      "user.email=t@example.invalid",
+      "commit",
+      "-q",
+      "-m",
+      "init",
+    ]);
+    const ac5TicketRepo = join(tmp, "ac5-ticket-repo");
+    run("git", ["init", "-q", "-b", "main", ac5TicketRepo]);
+    run("git", [
+      "-C",
+      ac5TicketRepo,
+      "-c",
+      "user.name=t",
+      "-c",
+      "user.email=t@example.invalid",
+      "commit",
+      "-q",
+      "--allow-empty",
+      "-m",
+      "init",
+    ]);
+    const recordFor = (runName: string, f: string, repo: string): void => {
+      mkdirSync(runDir(runName), { recursive: true });
+      const r = spawnSync(join(here, "run-meta.sh"), [runDir(runName), repo], {
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          POSTMASTER_CONFIG: join(tmp, `${f}.toml`),
+          POSTMASTER_TOOL_PINS: join(tmp, "tools"),
+          PATH: `${join(tmp, "bin")}:${process.env.PATH ?? ""}`,
+        },
+      });
+      if (r.status !== 0) fail(`run-meta.sh records ${f} as run ${runName}`);
+    };
+    recordFor("ac5-fixture", "ac5", ac5FixtureRepo);
+    recordFor("ac5-ticket", "ac5", ac5TicketRepo);
+    {
+      // Workhorse launch: form one --run <dispatch>
+      doRun("ac5", "form", "one", "--run", runDir("ac5-fixture"));
+      const fixtureLaunch = out;
+      doRun("ac5", "form", "one", "--run", runDir("ac5-ticket"));
+      const ticketLaunch = out;
+      const fixtureHasNone = fixtureLaunch.includes("none");
+      const ticketHasHigh = ticketLaunch.includes("high");
+      if (fixtureHasNone && ticketHasHigh) {
+        ok("AC5 workhorse launch: fixture names lowest, ticket names configured");
+      } else {
+        fail(
+          "AC5 workhorse launch: fixture names lowest, ticket names configured",
+          `fixture=${fixtureHasNone} ticket=${ticketHasHigh}\nfixture out: ${fixtureLaunch}\nticket out: ${ticketLaunch}`,
+        );
+      }
+    }
+    {
+      // Coachman leg: form coachman --leg synthesis --run <dispatch>
+      doRun("ac5", "form", "coachman", "--leg", "synthesis", "--run", runDir("ac5-fixture"));
+      const fixtureCoach = out;
+      doRun("ac5", "form", "coachman", "--leg", "synthesis", "--run", runDir("ac5-ticket"));
+      const ticketCoach = out;
+      const fixtureHasNone = fixtureCoach.includes("none");
+      const ticketHasHigh = ticketCoach.includes("high");
+      if (fixtureHasNone && ticketHasHigh) {
+        ok("AC5 coachman leg: fixture names lowest, ticket names configured");
+      } else {
+        fail(
+          "AC5 coachman leg: fixture names lowest, ticket names configured",
+          `fixture=${fixtureHasNone} ticket=${ticketHasHigh}\nfixture out: ${fixtureCoach}\nticket out: ${ticketCoach}`,
+        );
+      }
+    }
+    {
+      // Review: the bug-lens review at the recorded effort
+      doRun("ac5", "review", "one", join(tmp, "cx-detached"), base, "--run", runDir("ac5-fixture"));
+      const fixtureReview = out;
+      doRun("ac5", "review", "one", join(tmp, "cx-detached"), base, "--run", runDir("ac5-ticket"));
+      const ticketReview = out;
+      const fixtureHasNone = fixtureReview.includes("none");
+      const ticketHasHigh = ticketReview.includes("high") && !fixtureReview.includes("high");
+      if (fixtureHasNone && ticketHasHigh) {
+        ok("AC5 bug-lens review: fixture names lowest, ticket names configured");
+      } else {
+        fail(
+          "AC5 bug-lens review: fixture names lowest, ticket names configured",
+          `fixture=${fixtureHasNone} ticket=${ticketHasHigh}\nfixture out: ${fixtureReview}\nticket out: ${ticketReview}`,
+        );
       }
     }
   });
@@ -4727,20 +4839,22 @@ describe("quote corpus: real wall phrasings wake, alone and beside every transie
 });
 
 describe("bug review forms", () => {
-  test("claude review names the range and runs /code-review at max", () => {
-    assertControl("claude review names the range and runs /code-review at max");
+  test("claude review names the range and runs /code-review at the lane's effort", () => {
+    assertControl("claude review names the range and runs /code-review at the lane's effort");
   });
-  test("codex review uses --base, --last, max effort and the lane model", () => {
-    assertControl("codex review uses --base, --last, max effort and the lane model");
+  test("codex review uses --base, --last, the lane's effort and the lane model", () => {
+    assertControl("codex review uses --base, --last, the lane's effort and the lane model");
   });
   test("a review launch removes a stale --last file before the harness runs", () => {
     assertControl("a review launch removes a stale --last file before the harness runs");
   });
-  test("codex review in a run uses the recorded config and the same top level", () => {
-    assertControl("codex review in a run uses the recorded config and the same top level");
+  test("codex review in a run uses the recorded config and the recorded effort", () => {
+    assertControl("codex review in a run uses the recorded config and the recorded effort");
   });
-  test("mimo review uses --command review, the prompt file range and high variant", () => {
-    assertControl("mimo review uses --command review, the prompt file range and high variant");
+  test("mimo review uses --command review, the prompt file range and the lane's variant", () => {
+    assertControl(
+      "mimo review uses --command review, the prompt file range and the lane's variant",
+    );
   });
   test("mimo's temporary range prompt is removed after launch", () => {
     assertControl("mimo's temporary range prompt is removed after launch");
@@ -4777,5 +4891,17 @@ describe("bug review forms", () => {
   });
   test.skipIf(skipPython)("a resume's check and harness match main's PWD, OLDPWD and SHLVL", () => {
     assertControl("a resume's check and harness match main's PWD, OLDPWD and SHLVL");
+  });
+});
+
+describe("AC5 effort controls", () => {
+  test("AC5 workhorse launch: fixture names lowest, ticket names configured", () => {
+    assertControl("AC5 workhorse launch: fixture names lowest, ticket names configured");
+  });
+  test("AC5 coachman leg: fixture names lowest, ticket names configured", () => {
+    assertControl("AC5 coachman leg: fixture names lowest, ticket names configured");
+  });
+  test("AC5 bug-lens review: fixture names lowest, ticket names configured", () => {
+    assertControl("AC5 bug-lens review: fixture names lowest, ticket names configured");
   });
 });

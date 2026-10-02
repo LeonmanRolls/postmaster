@@ -67,7 +67,16 @@ const TOOL = toolRoot(import.meta);
 const APP = join(TOOL, "fixtures", "app");
 const TICKETS = join(TOOL, "fixtures", "tickets");
 export const TIMEOUT = 1200;
-const _CHECKS = ["hidden-tests", "gate", "stages", "markers", "handoffs", "run.json", "ship-card"];
+const _CHECKS = [
+  "hidden-tests",
+  "gate",
+  "stages",
+  "markers",
+  "handoffs",
+  "run.json",
+  "efforts",
+  "ship-card",
+];
 
 function usage(): never {
   die(
@@ -129,7 +138,10 @@ export function appFiles(dir: string): string[] | null {
   if (r.code !== 0) return null;
   return r.out.split("\0").filter((n) => n !== "");
 }
-export function makeRepo(dest: string, src = APP): boolean {
+// The fixed one-line marker naming the fixture format: no path, no repository name.
+export const FIXTURE_MARKER = "postmaster.fixture\n";
+
+export function makeRepo(dest: string, src = APP, marker?: string): boolean {
   try {
     mkdirSync(dest, { recursive: true });
   } catch {
@@ -162,6 +174,15 @@ export function makeRepo(dest: string, src = APP): boolean {
   } catch {
     console.error(`fixture: could not copy the app to ${dest}`);
     return false;
+  }
+  if (marker !== undefined) {
+    try {
+      mkdirSync(join(dest, ".postmaster"), { recursive: true });
+      writeFileSync(join(dest, ".postmaster", "fixture"), marker);
+    } catch {
+      console.error(`fixture: could not write the fixture marker in ${dest}`);
+      return false;
+    }
   }
   if (run("git", ["-C", dest, "init", "-q", "-b", "main"]).code !== 0) return false;
   for (const key of ["user.name", "user.email"]) {
@@ -209,7 +230,7 @@ export function makeAndFile(dest: string, ticket: string): number {
   };
 
   mkdirSync(dirname(dest), { recursive: true });
-  if (!makeRepo(dest)) {
+  if (!makeRepo(dest, APP, FIXTURE_MARKER)) {
     unmake();
     return 1;
   }
@@ -412,6 +433,7 @@ export function score(dispatch: string, repo: string): { code: number; out: stri
     { name: "markers", ...checkMarkers(dispatch, legs), out: "" },
     { name: "handoffs", ...checkHandoffs(dispatch, legs), out: "" },
     { name: "run.json", ...checkRunJson(dispatch), out: "" },
+    { name: "efforts", ...checkEfforts(dispatch), out: "" },
     { name: "ship-card", ...checkCard(dispatch), out: "" },
   ];
   rmSync(scratch, { recursive: true, force: true });
@@ -644,6 +666,85 @@ function checkRunJson(dispatch: string): { ok: boolean; detail: string } {
     return { ok: false, detail: "run.json is not a JSON object" };
   }
   return { ok: true, detail: "written, and parses" };
+}
+
+// The waybill's `efforts:` line and each Team entry's effort against run.json. The effort is
+// the entry's last `/` field because a model may itself hold a slash.
+function checkEfforts(dispatch: string): { ok: boolean; detail: string } {
+  const runJsonPath = join(dispatch, "run.json");
+  const briefPath = join(dispatch, "brief.md");
+  if (!existsSync(runJsonPath)) return { ok: false, detail: "no run.json" };
+  if (!existsSync(briefPath)) return { ok: false, detail: "no brief.md" };
+  const data = tryJsonFile<Record<string, unknown>>(runJsonPath);
+  const cfg = data?.config as Record<string, unknown> | undefined;
+  if (!cfg || typeof cfg !== "object") return { ok: false, detail: "run.json records no config" };
+  const brief = readFileSync(briefPath, "utf8");
+
+  // Collect the expected efforts from run.json: every lane and coachman role with an effort.
+  const expected = new Map<string, string>();
+  const lanes = (cfg.lanes ?? {}) as Record<string, Record<string, unknown>>;
+  for (const [name, lane] of Object.entries(lanes)) {
+    const e = (lane as Record<string, unknown>)?.effort;
+    if (e !== undefined && e !== null && e !== "") expected.set(name, String(e));
+  }
+  const team = (cfg.team ?? {}) as Record<string, unknown>;
+  for (const role of ["coachman", "coachman_fallback"]) {
+    const v = team[role] as Record<string, unknown> | undefined;
+    const e = v?.effort;
+    if (e !== undefined && e !== null && e !== "") expected.set(role, String(e));
+  }
+  const legs = (team.coachman_legs ?? {}) as Record<string, Record<string, unknown>>;
+  for (const [leg, spec] of Object.entries(legs)) {
+    const e = (spec as Record<string, unknown>)?.effort;
+    if (e !== undefined && e !== null && e !== "") expected.set(`coachman.${leg}`, String(e));
+  }
+
+  // Check the waybill's `efforts:` line pair by pair.
+  const effortsLine = brief.split("\n").find((l) => l.startsWith("efforts:"));
+  if (!effortsLine) return { ok: false, detail: "brief.md carries no efforts: line" };
+  const pairs = effortsLine
+    .slice("efforts:".length)
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const got = new Map<string, string>();
+  for (const p of pairs) {
+    const eq = p.indexOf("=");
+    if (eq > 0) got.set(p.slice(0, eq).trim(), p.slice(eq + 1).trim());
+  }
+  for (const [name, want] of expected) {
+    const have = got.get(name);
+    if (have !== want) {
+      return { ok: false, detail: `efforts: ${name}=${have ?? "missing"}, expected ${want}` };
+    }
+  }
+  for (const [name] of got) {
+    if (!expected.has(name)) {
+      return { ok: false, detail: `efforts: ${name} is not in run.json` };
+    }
+  }
+
+  // Check each Team entry's effort (its last `/` field) against the recorded one.
+  const teamSection = sectionOf(brief, "Team");
+  for (const line of teamSection.split("\n")) {
+    const m = new RegExp(`^(workhorses|coachman):[${PY_S_CLASS}]*(.+)$`, "u").exec(line.trim());
+    if (!m) continue;
+    const entries = m[2]!.split(",").map((s) => s.trim());
+    for (const entry of entries) {
+      const eq = entry.indexOf("=");
+      if (eq < 0) continue;
+      const name = entry.slice(0, eq).trim();
+      const rest = entry.slice(eq + 1);
+      const slash = rest.lastIndexOf("/");
+      if (slash < 0) continue;
+      const effort = rest.slice(slash + 1).trim();
+      const want = expected.get(name);
+      if (want !== undefined && effort !== want) {
+        return { ok: false, detail: `Team ${name} effort ${effort}, expected ${want}` };
+      }
+    }
+  }
+  return { ok: true, detail: `${expected.size} efforts match run.json` };
 }
 
 function checkCard(dispatch: string): { ok: boolean; detail: string } {

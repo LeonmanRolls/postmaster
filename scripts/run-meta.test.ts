@@ -1432,6 +1432,145 @@ beforeAll(async () => {
       rcRo === 1 && !claimsAfter.includes(rorun),
       `exit ${rcRo}`,
     );
+
+    // Fixture efforts: a run against a repo carrying .postmaster/fixture lowers efforts.
+    console.log("fixture efforts");
+    const fxRepo = join(tmp, "fx-repo");
+    mkdirSync(join(fxRepo, ".postmaster"), { recursive: true });
+    run("git", ["init", "-q", "-b", "main", fxRepo]);
+    writeFileSync(join(fxRepo, ".postmaster", "fixture"), "postmaster.fixture\n");
+    run("git", ["-C", fxRepo, "add", "-A"]);
+    run("git", [
+      "-C",
+      fxRepo,
+      "-c",
+      "user.name=t",
+      "-c",
+      "user.email=t@t",
+      "commit",
+      "-q",
+      "-m",
+      "first",
+    ]);
+    const fxCfg = join(tmp, "fx-config.toml");
+    writeFileSync(
+      fxCfg,
+      '[lanes.one]\nharness = "codex"\nmodel = "m1"\neffort = "high"\n' +
+        '[lanes.two]\nharness = "claude"\nmodel = "m2"\neffort = "max"\n' +
+        '[lanes.three]\nharness = "mimo"\nmodel = "m3"\neffort = "high"\n' +
+        '[lanes.four]\nharness = "muse"\nmodel = "m4"\neffort = "xhigh"\n' +
+        '[lanes.five]\nharness = "no-such-harness"\nmodel = "m5"\neffort = "high"\n' +
+        '[lanes.six]\nharness = "codex"\nmodel = "m6"\n' +
+        '[team]\ncoachman = { harness = "codex", model = "judge", effort = "high" }\n' +
+        'coachman_fallback = { harness = "claude", model = "backup", effort = "max" }\n' +
+        '[team.coachman_legs]\nsynthesis = { harness = "mimo", model = "synth", effort = "high" }\n' +
+        'review = { harness = "codex", model = "rev", effort = "medium" }\n',
+    );
+    process.env.POSTMASTER_CONFIG = fxCfg;
+    const fxRun = join(tmp, "runs", "acme", "RUN-FX");
+    mkdirSync(fxRun, { recursive: true });
+    const fxResult = meta(fxRun, fxRepo);
+    const checkFx = (label: string, fn: (r: Record<string, any>) => boolean): void => {
+      try {
+        if (fn(runJson(fxRun))) ok(label);
+        else fail(label);
+      } catch {
+        fail(label);
+      }
+    };
+    if (fxResult.code === 0) ok("fixture run.json is written");
+    else fail("fixture run.json is written", fxResult.err);
+    checkFx("fixture: codex lane is lowered to none", (r) => r.config.lanes.one.effort === "none");
+    checkFx("fixture: claude lane is lowered to low", (r) => r.config.lanes.two.effort === "low");
+    checkFx("fixture: mimo lane is lowered to low", (r) => r.config.lanes.three.effort === "low");
+    checkFx(
+      "fixture: muse lane is lowered to minimal",
+      (r) => r.config.lanes.four.effort === "minimal",
+    );
+    checkFx(
+      "fixture: unmapped harness keeps its effort",
+      (r) => r.config.lanes.five.effort === "high",
+    );
+    checkFx(
+      "fixture: lane with no effort stays without one",
+      (r) => r.config.lanes.six.effort === undefined,
+    );
+    checkFx("fixture: coachman is lowered", (r) => r.config.team.coachman.effort === "none");
+    checkFx(
+      "fixture: coachman_fallback is lowered",
+      (r) => r.config.team.coachman_fallback.effort === "low",
+    );
+    checkFx(
+      "fixture: coachman_legs.synthesis is lowered",
+      (r) => r.config.team.coachman_legs.synthesis.effort === "low",
+    );
+    checkFx(
+      "fixture: coachman_legs.review is lowered",
+      (r) => r.config.team.coachman_legs.review.effort === "none",
+    );
+    {
+      const t = cli(["efforts", fxRun]);
+      check(
+        "efforts prints the fixture run's lowered line",
+        t.code === 0 &&
+          t.out.includes("efforts:") &&
+          t.out.includes("one=none") &&
+          t.out.includes("two=low") &&
+          t.out.includes("three=low") &&
+          t.out.includes("four=minimal") &&
+          t.out.includes("five=high") &&
+          !t.out.includes("six=") &&
+          t.out.includes("coachman=none") &&
+          t.out.includes("coachman_fallback=low") &&
+          t.out.includes("coachman.synthesis=low") &&
+          t.out.includes("coachman.review=none") &&
+          !t.out.includes("postmaster"),
+        t.out,
+      );
+    }
+    // Ticket run: no marker, config unchanged.
+    const tkRepo = join(tmp, "tk-repo");
+    run("git", ["init", "-q", "-b", "main", tkRepo]);
+    run("git", [
+      "-C",
+      tkRepo,
+      "-c",
+      "user.name=t",
+      "-c",
+      "user.email=t@t",
+      "commit",
+      "-q",
+      "--allow-empty",
+      "-m",
+      "first",
+    ]);
+    const tkRun = join(tmp, "runs", "acme", "RUN-TK");
+    mkdirSync(tkRun, { recursive: true });
+    const tkResult = meta(tkRun, tkRepo);
+    const checkTk = (label: string, fn: (r: Record<string, any>) => boolean): void => {
+      try {
+        if (fn(runJson(tkRun))) ok(label);
+        else fail(label);
+      } catch {
+        fail(label);
+      }
+    };
+    if (tkResult.code === 0) ok("ticket run.json is written");
+    else fail("ticket run.json is written", tkResult.err);
+    checkTk("ticket: codex lane keeps high", (r) => r.config.lanes.one.effort === "high");
+    checkTk("ticket: claude lane keeps max", (r) => r.config.lanes.two.effort === "max");
+    checkTk("ticket: coachman keeps high", (r) => r.config.team.coachman.effort === "high");
+    {
+      const t = cli(["efforts", tkRun]);
+      check(
+        "efforts prints the ticket run's configured line",
+        t.code === 0 &&
+          t.out.includes("one=high") &&
+          t.out.includes("two=max") &&
+          t.out.includes("coachman=high"),
+        t.out,
+      );
+    }
   });
 }, 300000);
 
@@ -1819,4 +1958,58 @@ describe("pin lock beside the bash flow", () => {
       }
     });
   }, 180000);
+});
+
+describe("fixture efforts", () => {
+  test("fixture run.json is written", () => {
+    assertControl("fixture run.json is written");
+  });
+  test("fixture: codex lane is lowered to none", () => {
+    assertControl("fixture: codex lane is lowered to none");
+  });
+  test("fixture: claude lane is lowered to low", () => {
+    assertControl("fixture: claude lane is lowered to low");
+  });
+  test("fixture: mimo lane is lowered to low", () => {
+    assertControl("fixture: mimo lane is lowered to low");
+  });
+  test("fixture: muse lane is lowered to minimal", () => {
+    assertControl("fixture: muse lane is lowered to minimal");
+  });
+  test("fixture: unmapped harness keeps its effort", () => {
+    assertControl("fixture: unmapped harness keeps its effort");
+  });
+  test("fixture: lane with no effort stays without one", () => {
+    assertControl("fixture: lane with no effort stays without one");
+  });
+  test("fixture: coachman is lowered", () => {
+    assertControl("fixture: coachman is lowered");
+  });
+  test("fixture: coachman_fallback is lowered", () => {
+    assertControl("fixture: coachman_fallback is lowered");
+  });
+  test("fixture: coachman_legs.synthesis is lowered", () => {
+    assertControl("fixture: coachman_legs.synthesis is lowered");
+  });
+  test("fixture: coachman_legs.review is lowered", () => {
+    assertControl("fixture: coachman_legs.review is lowered");
+  });
+  test("efforts prints the fixture run's lowered line", () => {
+    assertControl("efforts prints the fixture run's lowered line");
+  });
+  test("ticket run.json is written", () => {
+    assertControl("ticket run.json is written");
+  });
+  test("ticket: codex lane keeps high", () => {
+    assertControl("ticket: codex lane keeps high");
+  });
+  test("ticket: claude lane keeps max", () => {
+    assertControl("ticket: claude lane keeps max");
+  });
+  test("ticket: coachman keeps high", () => {
+    assertControl("ticket: coachman keeps high");
+  });
+  test("efforts prints the ticket run's configured line", () => {
+    assertControl("efforts prints the ticket run's configured line");
+  });
 });

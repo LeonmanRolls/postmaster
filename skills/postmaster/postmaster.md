@@ -152,9 +152,11 @@ For the next ticket in order, when the run ceiling (`team.max_runs`) has room:
 7. **Write `brief.md`** from the template in `SKILL.md`: the `turnpikes:` line step 1's check
    printed, whole, under the waybill's title, then the ticket verbatim, the project profile (gate,
    build, browser suite, landing (`pull-request` or `local`), the checks as `verify.sh record`
-   printed them, docs to read first, tracker, risk surfaces), the team from the resolved
-   machine config with its reviewer lines as `<tool>/scripts/reviewers.sh lines --project <repo>`
-   prints them, each project's facts sourced as discovered, shared or local, `CHECKPOINT_MODE`
+   printed them, docs to read first, tracker, risk surfaces), the team from `run.json` — the
+   resolved machine config step 5 recorded — with its reviewer lines as
+   `<tool>/scripts/reviewers.sh lines --project <repo>` prints them, and the `efforts:` line
+   pasted from `<tool>/scripts/run-meta.sh efforts <dispatch>`, never composed by hand; each
+   project's facts sourced as discovered, shared or local, `CHECKPOINT_MODE`
    from `ship.checkpoint_mode` and `MERGE_AUTHORITY` from `ship.merge_authority`, either
    overridden only where the user said so for this run, the dispatch path and the run's pinned
    tool — `<tool>/scripts/run-meta.sh path <dispatch>`, the checkout step 5 cut, which the

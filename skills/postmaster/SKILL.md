@@ -302,6 +302,7 @@ reviewers: <lane>, <lane>
 bug reviewers: <lane>, <lane>             (always; only the chosen bug reviewers whose harness has a code-review form, which is the bug lens's whole team)
 <lens> reviewers: <lane>, <lane>          (one line for each lens the config gives its own lanes)
 coachman: <harness>/<model>/<effort>      (never a lane's model)
+efforts: <name>=<effort>, <name>=<effort>, …   (pasted from `run-meta.sh efforts <dispatch>`: every lane and coachman role that has an effort, a per-leg coachman as coachman.<leg>; the postmaster is left out)
 CHECKPOINT_MODE comes from ship.checkpoint_mode; MERGE_AUTHORITY for local merges comes from ship.merge_authority; override either only where the user says so for this run
 
 ## Dispatch

@@ -24,6 +24,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import {
   appFiles,
+  FIXTURE_MARKER,
   HIDDEN_RE,
   hidden,
   laneScores,
@@ -121,6 +122,12 @@ function record(
     `# Waybill: 7\n${turnpikes}\n\n## Ticket\n\n${ticketBody(t)}\n## Project profile\nrepo: ${repo}\n`,
   );
   run("bash", [join(HERE, "run-meta.sh"), d, repo]);
+  // Paste the efforts: line from run.json into the waybill, as the postmaster does.
+  const effortsOut = run("bash", [join(HERE, "run-meta.sh"), "efforts", d]).out.trim();
+  if (effortsOut) {
+    const brief = readFileSync(join(d, "brief.md"), "utf8");
+    writeFileSync(join(d, "brief.md"), `${brief}\n## Team\n${effortsOut}\n`);
+  }
   if (legs === 3) {
     const runJson = JSON.parse(readFileSync(join(d, "run.json"), "utf-8"));
     delete runJson.coachman_contract;
@@ -230,7 +237,22 @@ function breaks(cleanDir: string, repo: string): void {
       .join("\n"),
   );
 
-  for (const b of ["stages", "markers", "handoffs", "runjson", "card", "waybill", "legs"]) {
+  d = brokenCopy("break-efforts", cleanDir);
+  writeFileSync(
+    join(d, "brief.md"),
+    readFileSync(join(d, "brief.md"), "utf-8").replace(/^efforts:.*$/mu, "efforts: one=wrong"),
+  );
+
+  for (const b of [
+    "stages",
+    "markers",
+    "handoffs",
+    "runjson",
+    "card",
+    "waybill",
+    "legs",
+    "efforts",
+  ]) {
     background(`break-${b}`, () =>
       score(join(tmp, `break-${b}`, "repo", ".postmaster", "runs", "7"), repo),
     );
@@ -297,7 +319,7 @@ function expectScore(key: string, failing: string, failText?: string): void {
   const lines = out.split("\n").filter((l) => l.trim()).length;
   expect(rc).toBe(failing === "none" ? 0 : 2);
   expect(failingChecks).toBe(failing);
-  expect(lines).toBe(7);
+  expect(lines).toBe(8);
   if (failText !== undefined) {
     expect(
       out
@@ -557,7 +579,7 @@ describe("new: a fresh repo outside every other, with its ticket in its own stor
     expect(count).toBe("1");
     expect(status).toBe("");
   }, 30000);
-  test("it holds the app's files as git sees them, symlink included, and nothing else", () => {
+  test("it holds the app's files as git sees them, symlink included, and the fixture marker", () => {
     const listed2 = run("bash", [
       "-c",
       `git -C "${APP}" ls-files --cached --others --exclude-standard`,
@@ -582,10 +604,11 @@ describe("new: a fresh repo outside every other, with its ticket in its own stor
       `cd "${dest}" && find . -path ./.git -prune -o \\( -type f -o -type l \\) -print | ` +
         `sed 's|^\\./||' | sort`,
     ]).out.trim();
+    const expected = [...listed2.filter(Boolean), ".postmaster/fixture"].sort().join("\n");
     const isSymlink =
       existsSync(join(dest, "CLAUDE.md")) && lstatSync(join(dest, "CLAUDE.md")).isSymbolicLink();
     expect(same).toBe(true);
-    expect(heldFiles).toBe(listed2.filter(Boolean).join("\n"));
+    expect(heldFiles).toBe(expected);
     expect(isSymlink).toBe(true);
   }, 30000);
   test("it commits as this checkout does", () => {
@@ -808,8 +831,8 @@ describe("score: negative controls, the same record with one check broken at a t
   test(APP_SHIPPED, () => {
     expectScore("break-hidden", "hidden-tests", "fail on main");
   }, 30000);
-  test("the waybill does not carry the ticket: hidden-tests alone fails", () => {
-    expectScore("break-waybill", "hidden-tests", "carries no fixture ticket");
+  test("the waybill does not carry the ticket: hidden-tests and efforts fail", () => {
+    expectScore("break-waybill", "hidden-tests,efforts", "carries no fixture ticket");
   }, 30000);
   test("a type error shipped: gate alone fails", () => {
     expectScore("break-gate", "gate", "npm run check on main from a clean checkout: exit");
@@ -823,14 +846,17 @@ describe("score: negative controls, the same record with one check broken at a t
   test("a hand-off with no sections: handoffs alone fails", () => {
     expectScore("break-handoffs", "handoffs", "handoff-2.md");
   }, 30000);
-  test("no run.json: run.json alone fails", () => {
-    expectScore("break-runjson", "run.json", "no run.json");
+  test("no run.json: run.json and efforts fail", () => {
+    expectScore("break-runjson", "run.json,efforts", "no run.json");
   }, 30000);
   test("no ship card: ship-card alone fails", () => {
     expectScore("break-card", "ship-card", "no card.md");
   }, 30000);
   test("a waybill with no turnpikes line: stages alone fails", () => {
     expectScore("break-legs", "stages", "turnpikes.sh legs");
+  }, 30000);
+  test("a waybill with mismatched efforts: efforts alone fails", () => {
+    expectScore("break-efforts", "efforts", "efforts:");
   }, 30000);
 });
 
@@ -1111,5 +1137,44 @@ describe("fixture copy mark and harness settings", () => {
     expect(mark.code).toBe(0);
     expect(mark.out.trim()).toBe(FIXTURE_TICKET);
     expect(leaked.code).not.toBe(0);
+  });
+
+  test("new writes .postmaster/fixture with the fixed marker in the first commit", () => {
+    const home = join(scratch, "home");
+    const dest = join(scratch, "runs", "fixture-marker");
+    mkdirSync(home, { recursive: true });
+
+    const made = runNew(dest, home);
+    expect(made.code).toBe(0);
+
+    const markerPath = join(dest, ".postmaster", "fixture");
+    expect(existsSync(markerPath)).toBe(true);
+    const content = readFileSync(markerPath, "utf8");
+    expect(content).toBe(FIXTURE_MARKER);
+
+    const inFirst = run("git", ["-C", dest, "show", "HEAD:.postmaster/fixture"]);
+    expect(inFirst.code).toBe(0);
+    expect(inFirst.out).toBe(FIXTURE_MARKER);
+  });
+
+  test("a plain repo from makeRepo has no fixture marker", () => {
+    const plain = join(scratch, "plain-no-marker");
+    expect(makeRepo(plain)).toBe(true);
+    expect(existsSync(join(plain, ".postmaster", "fixture"))).toBe(false);
+  });
+
+  test("detection is name-independent: renaming the copy keeps the marker", () => {
+    const home = join(scratch, "home");
+    const dest = join(scratch, "runs", "fixture-rename");
+    mkdirSync(home, { recursive: true });
+
+    const made = runNew(dest, home);
+    expect(made.code).toBe(0);
+
+    const renamed = join(scratch, "neutral-name");
+    run("mv", [dest, renamed]);
+    expect(existsSync(join(renamed, ".postmaster", "fixture"))).toBe(true);
+    const content = readFileSync(join(renamed, ".postmaster", "fixture"), "utf8");
+    expect(content).toBe(FIXTURE_MARKER);
   });
 });
