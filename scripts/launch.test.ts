@@ -4015,8 +4015,11 @@ describe("run-recorded effort controls", () => {
           env,
         });
         launched(`${kind} coach form`, coach);
-        expect(coach.out).toContain(`--effort ${want.claude}`);
-        expect(coach.out).toContain("resume:");
+        const coachForms = coach.out
+          .split("\n")
+          .filter((line) => line.startsWith("launch:") || line.startsWith("resume:"));
+        expect(coachForms).toHaveLength(2);
+        expect(coachForms.every((line) => line.includes(`--effort ${want.claude}`))).toBe(true);
         const codexReview = run(
           self,
           ["review", "codex_lane", reviewRepo, base, "--run", dispatch],
