@@ -42,13 +42,19 @@ million active), run on this machine's CPU by `apparatus/opf.ts` through Transfo
 its 4-bit ONNX weights, each line on its own; its eight labels map onto the trial's kinds
 (`private_person` to person, `private_url` and `private_date` to other-personal, and so on), at a
 score of 0.5 or more. Hugging Face was added to this machine's egress list for the download, at
-the user's word. Jev, which the user asked about, was not run: OpenRouter offers only its
-router, which hands a request to another model, and no key for TypeSafe's own API is on this
-machine. Each ran in an empty temporary folder, with this session's identity taken out of its
-environment (issue #102), and read only its harness's user-level instructions. Every level got
+the user's word. A sixth, `jev`, is TypeSafe's Jev 1.13, a model that answers typed questions
+with calibrated probabilities and writes no text, called through OpenRouter's System One
+endpoint with a key the user keeps on this machine. TypeSafe's guidance is to ask it atomic
+questions and keep exact work in code, so each line is one request, the line as its state, with
+one yes/no question per kind carrying that kind's definition (`JEV_QUESTIONS`), eight requests
+at a time; a kind counts at a probability of 0.5 or more, and the probabilities are kept, so
+`scores.txt` also gives other thresholds.
+
+The four general models each ran in an empty temporary folder, with this session's identity taken
+out of its environment (issue #102), and read only its harness's user-level instructions. Each got
 the same instruction (in `apparatus/ai_check.py`): ten kinds, each defined; report made-up values
 too, since made-up data is marked separately; never repeat a value; answer with line numbers and
-kinds as JSON. Each level answered the whole corpus three times, then once a control of ten plain
+kinds as JSON. Every level answered the whole corpus three times, then once a control of ten plain
 lines with no private data.
 
 **What is recorded**, in `results/`: `corpus.txt` (each line's number, group, label, expected
@@ -82,8 +88,11 @@ add findings and never clear one.
 | GPT-6 Sol | 63 | 16 | 6 | 18 | 0 | 26 to 52 | 176 |
 | MiMo V2.6 Pro | 61 | 14 | 6 | 18 | 0 | 333 to 705 | 174 |
 | Privacy Filter, local | 49 | 24 | 1 | 12 | 0 | 46 to 58 | 188 |
+| Jev 1.13, at 0.5 | 65 | 44 | 6 | 18 | 2 | 5.2 to 5.4 | see `scores.txt` |
+| Jev 1.13, at 0.9 | 45 | 9 | 4 | 16 | 0 | | |
 | each general model with the scanner | 67 | its own count | 6 | 18 | 2 | | |
 | Privacy Filter with the scanner | 67 | 24 | 3 | 13 | 2 | | |
+| Jev at 0.9 with the scanner | 67 | 9 | 6 | 17 | 2 | | |
 
 - **What the shapes miss, the general models find.** All four found every open-ended positive
   and named its kind on every one: names, a health detail, street addresses, phone numbers, a
@@ -105,6 +114,13 @@ add findings and never clear one.
   no-reply or reserved-domain email addresses, which the scanner's own list would drop, composed
   `.env` values it takes for secrets, and placeholder user names. It gave the same answer on every
   call.
+- **Jev trades recall for false alarms through its threshold.** At 0.5 it found more of #135's
+  positives than any other level, 65 of 67, and raised the most negatives, 44 of 79, among them
+  placeholder users, loopback and reserved-domain addresses its questions excluded in words: the
+  literal reading TypeSafe's own notes warn of. At 0.9, with the scanner, it found 17 of the 18
+  open-ended positives and raised 9 of #135's negatives, near Opus, in about five seconds and half
+  a cent a pass (`results/jev-*.json` keep the cost). An exclusion the scanner already makes in
+  code, such as the no-reply list, belongs in code rather than in a question.
 - **Encrypted blocks.** Haiku, Opus and the Privacy Filter reported both on every call, Sol on
   two of three, MiMo on none. Reporting them is the safe outcome; dropping them unread, as
   #208's page proposes, does not depend on it.
@@ -113,7 +129,7 @@ add findings and never clear one.
 # What it settles
 
 Facts about these models at these versions, on one corpus of made-up lines, at low effort and
-one instruction: a general model reading the same lines as #135's scanner finds the private data
+one instruction (and, for Jev, one set of questions): a general model reading the same lines as #135's scanner finds the private data
 the shapes cannot see, and with the scanner beside it nothing labelled private was missed, at
 the price of some false alarms on lines written to look private. The local Privacy Filter covers
 people, addresses, phones and some secrets only. It does not settle how a model does on real

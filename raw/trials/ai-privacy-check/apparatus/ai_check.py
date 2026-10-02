@@ -2,6 +2,7 @@
 """Compare an AI privacy check with #135's mechanical scanner on the same made-up lines.
 
   ai_check.py <source> --out <dir> [--tmp <dir>] [--levels a,b] [--repeats N] [--opf <dir>]
+              [--key-file <file>]
   ai_check.py <source> --out <dir> --score-only
 
 <source> is what ../../scanner-rule-format/apparatus/load.py takes (git:<ref>:<path>). The
@@ -12,13 +13,17 @@ check is #135's whole line pipeline; each AI level is a harness model given the 
 lines and a fixed instruction, answering in JSON with line numbers and kinds, never values.
 Each AI level answers the corpus --repeats times, plus a control of ten plain lines. The
 level opf is OpenAI's Privacy Filter run locally by opf.ts, which --opf names a folder for: one
-holding @huggingface/transformers in node_modules and the model under models/. --score-only
-makes no call and scores every level whose answers are already in --out.
+holding @huggingface/transformers in node_modules and the model under models/. The level jev
+is TypeSafe's Jev 1.13 through OpenRouter's System One endpoint: one request per line, with one
+yes/no question per kind; it reads OPENROUTER_API_KEY from the environment, or from the
+file of name=value lines --key-file names. --score-only makes no call and scores every level whose answers
+are already in --out.
 
 Writes, under --out: corpus.txt (each line's number, group, label, expected kind and name,
 never its text), mechanical.txt, one <level>-<n>.json per call (the parsed findings, the
 exit status and the seconds taken), and scores.txt.
 """
+import concurrent.futures
 import json
 import os
 import pathlib
@@ -29,6 +34,8 @@ import subprocess
 import sys
 import tempfile
 import time
+import urllib.error
+import urllib.request
 
 HERE = pathlib.Path(__file__).resolve().parent
 RULE_TRIAL = HERE.parent.parent / "scanner-rule-format" / "apparatus"
@@ -80,7 +87,24 @@ LEVELS = {
     "sol": ("codex", "gpt-6-sol", "low"),
     "mimo": ("mimo", "xiaomi-token-plan-sgp/mimo-v2.6-pro", "low"),
     "opf": ("local", "openai/privacy-filter, 4-bit ONNX", None),
+    "jev": ("jev", "typesafe/jev-1.13", None),
 }
+
+# Jev reads each question literally and answers each one on its own (TypeSafe's guidance), so
+# every kind is one yes/no question about the line, carrying that kind's whole definition.
+JEV_QUESTIONS = dict([
+    ("secret", "Does `line` hold a token, API key, password, credential or private-key material, real or made up?"),
+    ("email", "Does `line` hold an email address, real or made up, other than a public no-reply address or one at example.com, example.org or example.net or under a name ending .test, .invalid or .localhost?"),
+    ("home-path", "Does `line` hold a file path that names one person's home directory, such as /home/<name> or /Users/<name>, or a per-user temporary folder of an agent tool? A placeholder user such as user, username, $USER or <user>, or a bare ~/, names nobody."),
+    ("private-host", "Does `line` hold a host or address on a private network: a private, link-local or carrier-grade IP address, a name under .internal, .local, .lan, .home.arpa or .ts.net, or a personal device's name?"),
+    ("account-id", "Does `line` hold an identifier of an account, organisation, customer, user or session, not just the name of a field?"),
+    ("attribution", "Does `line` credit an AI assistant or AI tool with writing or co-writing the work, in any wording?"),
+    ("person", "Does `line` hold the name of a private individual, not a public figure, not a placeholder such as Alice or Bob, and not a product or project?"),
+    ("phone", "Does `line` hold a phone number of a person, real or made up?"),
+    ("postal-address", "Does `line` hold a street address, real or made up?"),
+    ("other-personal", "Does `line` hold other data that identifies a private person or their private life?"),
+])
+JEV_URL = "https://openrouter.ai/api/v1/systemone"
 
 # A run inside another agent's session must not carry that session's identity (issue #102).
 IDENTITY = re.compile(r"^(CLAUDECODE|CLAUDE_PID|CLAUDE_CODE_(SESSION|MESSAGING|CHILD)\w*|"
@@ -211,6 +235,39 @@ def ask(level, text, workdir, lines=None, opf=None):
     harness, model, effort = LEVELS[level]
     workdir = pathlib.Path(workdir)
     started = time.monotonic()
+    if harness == "jev":
+        found, cost = [], 0.0
+
+        def one(item):
+            number, line = item
+            body = json.dumps({"model": model, "state": {"line": line}, "questions": {
+                kind: {"type": "noul", "instructions": text} for kind, text in JEV_QUESTIONS.items()}})
+            for attempt in range(4):
+                request = urllib.request.Request(JEV_URL, data=body.encode(), headers={
+                    "Authorization": "Bearer " + opf, "Content-Type": "application/json"})
+                try:
+                    with urllib.request.urlopen(request, timeout=120) as response:
+                        return number, json.loads(response.read())
+                except urllib.error.HTTPError as error:
+                    if error.code != 429 or attempt == 3:
+                        return number, {"error": error.code}
+                    time.sleep(2 ** attempt)
+            return number, {"error": "retries"}
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+            replies = list(pool.map(one, enumerate(lines, 1)))
+        failed = [n for n, reply in replies if "answers" not in reply]
+        nouls = {}
+        for number, reply in replies:
+            cost += float((reply.get("usage") or {}).get("cost") or 0)
+            answers = reply.get("answers") or {}
+            if answers:
+                # Kept as a list in KINDS order, so no kind's name stands before its number.
+                nouls[str(number)] = [round(float((answers.get(k) or {}).get("noul", 0)), 3) for k in KINDS]
+                found += [(number, k) for k, v in zip(KINDS, nouls[str(number)]) if v >= 0.5]
+        seconds = round(time.monotonic() - started, 1)
+        ask.nouls = nouls
+        return ("failed %d" % len(failed) if failed else 0), seconds, sorted(set(found)), round(cost, 6)
     if harness == "local":
         folder = pathlib.Path(opf)
         (folder / "opf.ts").write_text((HERE / "opf.ts").read_text())
@@ -262,7 +319,14 @@ def ask(level, text, workdir, lines=None, opf=None):
                 parts.append((event.get("part") or {}).get("text", ""))
         answer = "".join(parts)
     seconds = round(time.monotonic() - started, 1)
-    return result.returncode, seconds, parse(answer)
+    return result.returncode, seconds, parse(answer), None
+
+
+def api_key(path):
+    """OPENROUTER_API_KEY from the environment, or from a KEY=value file; never printed."""
+    if path:
+        return env_file(path).get("OPENROUTER_API_KEY") or sys.exit("ai_check: no OPENROUTER_API_KEY in the key file")
+    return os.environ.get("OPENROUTER_API_KEY") or sys.exit("ai_check: OPENROUTER_API_KEY is not set")
 
 
 def parse(answer):
@@ -294,7 +358,8 @@ def score(items, flagged_lines):
 
 
 def main(args):
-    opts = {"--levels": ",".join(LEVELS), "--repeats": "3", "--tmp": None, "--out": None, "--opf": None}
+    opts = {"--levels": ",".join(LEVELS), "--repeats": "3", "--tmp": None, "--out": None, "--opf": None,
+            "--key-file": None}
     rest, score_only = [], False
     while args:
         head = args.pop(0)
@@ -336,13 +401,19 @@ def main(args):
         for run in [str(n) for n in range(1, int(opts["--repeats"]) + 1)] + ["control"]:
             given = CLEAN if run == "control" else lines
             text = prompt(given)
+            extra = opts["--opf"] if LEVELS[level][0] != "jev" else api_key(opts["--key-file"])
             with tempfile.TemporaryDirectory(dir=opts["--tmp"], prefix="ai-check-") as workdir:
                 try:
-                    code, seconds, found = ask(level, text, workdir, given, opts["--opf"])
+                    code, seconds, found, cost = ask(level, text, workdir, given, extra)
                 except subprocess.TimeoutExpired:
-                    code, seconds, found = "timeout", 900, None
+                    code, seconds, found, cost = "timeout", 900, None, None
             record = {"level": level, "run": run, "exit": code, "seconds": seconds,
                       "findings": found if found is not None else "unparsed"}
+            if cost is not None:
+                record["cost_usd"] = cost
+            if LEVELS[level][0] == "jev" and getattr(ask, "nouls", None) is not None:
+                record["noul_order"], record["nouls"] = KINDS, ask.nouls
+                ask.nouls = None
             (out / ("%s-%s.json" % (level, run))).write_text(json.dumps(record) + "\n")
             results[(level, run)] = record
             print("%s %s exit=%s %ss %s" % (level, run, code, seconds,
@@ -409,6 +480,19 @@ def write_scores(out, items, mech_lines, results, opts):
             record = results[(level, r)]
             flagged = {n for n, _k in record["findings"]} if isinstance(record["findings"], list) else set()
             lines.append("%-13s %d/%d" % ("%s %s" % (level, r), len(set(unreadable) & flagged), len(unreadable)))
+    jev_runs = [results[(lv, r)] for lv in levels for r in repeats
+                if LEVELS.get(lv, ("",))[0] == "jev" and "nouls" in results[(lv, r)]]
+    if jev_runs:
+        lines += ["", "Jev at other thresholds: lines found, from the probabilities its calls returned, majority of calls."]
+        for threshold in (0.5, 0.7, 0.8, 0.9, 0.95):
+            votes = {}
+            for record in jev_runs:
+                for number, values in record["nouls"].items():
+                    if max(values) >= threshold:
+                        votes[int(number)] = votes.get(int(number), 0) + 1
+            majority = {n for n, v in votes.items() if v * 2 > len(jev_runs)}
+            lines.append(row("jev >= %.2f" % threshold, majority))
+            lines.append(row("  + mech", majority | mech_lines))
     lines += ["", "Control: ten plain lines with no private data; lines reported (0 expected)."]
     for level in levels:
         record = results[(level, "control")]

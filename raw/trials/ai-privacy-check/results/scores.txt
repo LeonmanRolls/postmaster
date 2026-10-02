@@ -27,6 +27,11 @@ opf 2         49/67          24/79          1/6            12/18          0/18  
 opf 3         49/67          24/79          1/6            12/18          0/18           58.0
 opf majority  49/67          24/79          1/6            12/18          0/18           57.8
 opf + mech    67/67          24/79          3/6            13/18          2/18           -
+jev 1         65/67          44/79          6/6            18/18          2/18           5.4
+jev 2         65/67          43/79          6/6            18/18          2/18           5.2
+jev 3         66/67          43/79          6/6            18/18          2/18           5.3
+jev majority  65/67          44/79          6/6            18/18          2/18           5.3
+jev + mech    67/67          44/79          6/6            18/18          3/18           -
 
 Consistency: the share of scored lines on which every repeat of a level agrees.
 haiku         173/188
@@ -34,6 +39,7 @@ opus          182/188
 sol           176/188
 mimo          174/188
 opf           188/188
+jev           185/188
 
 Kinds on open-ended positives: lines where a majority named the expected kind.
 haiku         18/18
@@ -41,6 +47,7 @@ opus          18/18
 sol           18/18
 mimo          18/18
 opf           8/18
+jev           18/18
 
 Unreadable probes (encrypted blocks): lines each level reported.
 mechanical    0/2
@@ -59,6 +66,21 @@ mimo 3        0/2
 opf 1         2/2
 opf 2         2/2
 opf 3         2/2
+jev 1         1/2
+jev 2         1/2
+jev 3         1/2
+
+Jev at other thresholds: lines found, from the probabilities its calls returned, majority of calls.
+jev >= 0.50   65/67          44/79          6/6            18/18          2/18           -
+  + mech      67/67          44/79          6/6            18/18          3/18           -
+jev >= 0.70   59/67          26/79          6/6            18/18          1/18           -
+  + mech      67/67          26/79          6/6            18/18          2/18           -
+jev >= 0.80   56/67          21/79          6/6            18/18          1/18           -
+  + mech      67/67          21/79          6/6            18/18          2/18           -
+jev >= 0.90   45/67          9/79           4/6            16/18          0/18           -
+  + mech      67/67          9/79           6/6            17/18          2/18           -
+jev >= 0.95   30/67          6/79           4/6            15/18          0/18           -
+  + mech      67/67          6/79           6/6            16/18          2/18           -
 
 Control: ten plain lines with no private data; lines reported (0 expected).
 haiku         0
@@ -66,3 +88,4 @@ opus          0
 sol           0
 mimo          0
 opf           0
+jev           0
