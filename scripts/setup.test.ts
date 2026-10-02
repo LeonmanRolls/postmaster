@@ -56,7 +56,7 @@ function answers(name: string, extra?: string): void {
   writeFileSync(join(tmp, `${name}.answers`), `${lines.join("\n")}\n`, "utf8");
 }
 
-function runSetup(name: string): number {
+function runSetup(name: string, extraEnv: Record<string, string> = {}): number {
   const r = run(
     "bash",
     [SELF, "--answers", join(tmp, `${name}.answers`), "--config", join(tmp, `${name}.toml`)],
@@ -64,11 +64,17 @@ function runSetup(name: string): number {
       env: {
         ...(process.env as Record<string, string>),
         PATH: `${join(tmp, "bin")}:${process.env.PATH}`,
+        ...extraEnv,
       },
     },
   );
   writeFileSync(join(tmp, `${name}.out`), r.out + r.err, "utf8");
   return r.code;
+}
+
+function confineOf(name: string): string {
+  const cfg = tryTomlFile(join(tmp, `${name}.toml`));
+  return String(cfg?.confine ?? "");
 }
 
 function limit(name: string): string {
@@ -244,6 +250,24 @@ describe("positive controls", () => {
     expect(out).toContain("bug reviewer 'beta' uses pi, which has no code-review form");
     expect(er.out.trim()).toBe("alpha");
   }, 30000);
+
+  test("a confine answer of on is written to the config", () => {
+    answers("confine-on", "confine=on");
+    const rc = runSetup("confine-on");
+    expect(rc).toBe(0);
+    expect(confineOf("confine-on")).toBe("on");
+  }, 30000);
+
+  test("a confine answer of off is written to the config", () => {
+    answers("confine-off", "confine=off");
+    const rc = runSetup("confine-off");
+    expect(rc).toBe(0);
+    expect(confineOf("confine-off")).toBe("off");
+  }, 30000);
+
+  test("without a confine answer the key is off", () => {
+    expect(confineOf("plain")).toBe("off");
+  }, 30000);
 });
 
 describe("negative controls", () => {
@@ -310,5 +334,24 @@ describe("negative controls", () => {
     expect(badlinkRc).toBe(1);
     expect(existsSync(join(tmp, "badlink.toml"))).toBe(false);
     expect(out).toContain("planning.review_link must contain {path}");
+  }, 30000);
+
+  test("a confine answer that is not on or off is refused, and nothing is written", () => {
+    answers("confine-maybe", "confine=maybe");
+    const rc = runSetup("confine-maybe");
+    const out = readFileSync(join(tmp, "confine-maybe.out"), "utf8");
+    expect(rc).toBe(1);
+    expect(existsSync(join(tmp, "confine-maybe.toml"))).toBe(false);
+    expect(out).toContain("confine must be on or off");
+  }, 30000);
+
+  test("confine=on is refused when the probe says unavailable, naming the probe", () => {
+    answers("confine-unavail", "confine=on");
+    const rc = runSetup("confine-unavail", { POSTMASTER_PROBE_PLATFORM: "plan9" });
+    const out = readFileSync(join(tmp, "confine-unavail.out"), "utf8");
+    expect(rc).toBe(1);
+    expect(existsSync(join(tmp, "confine-unavail.toml"))).toBe(false);
+    expect(out).toContain("probe-confine");
+    expect(out).toContain("unavailable");
   }, 30000);
 });

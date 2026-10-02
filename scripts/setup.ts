@@ -173,6 +173,7 @@ postmaster.effort?         (none)
 postmaster.env_file?       (none)
 max_runs                   2                  concurrent runs per project
 poll_seconds               120                postmaster poll interval
+confine                    off                lanes run confined in sandbox-runtime (on, off)
 limits.memory_max          8G                 default memory cap per launch (K, M, G or T)
 limits.tasks_max           512                default process cap per launch
 limits.lane.memory_max?    (default)          lane memory cap override
@@ -452,6 +453,26 @@ const PMC = ask(
   opts,
 );
 if (PMC !== "yes" && PMC !== "no") die("setup: answer yes or no", 1);
+
+console.log("");
+console.log("== Lane confinement: sandbox-runtime wraps each lane's harness. ==");
+const confineProbe = run(join(HERE, "probe-confine.sh"));
+process.stdout.write(confineProbe.out);
+process.stderr.write(confineProbe.err);
+console.log("");
+const CONFINE = ask("Lanes run confined in sandbox-runtime (on/off)", "off", "confine", opts);
+if (CONFINE !== "on" && CONFINE !== "off") die("setup: confine must be on or off", 1);
+if (CONFINE === "on") {
+  const confineVerdict = run(join(HERE, "probe-confine.sh"), ["--verdict"]);
+  const verdict = (confineVerdict.out + confineVerdict.err).trim();
+  if (verdict === "unavailable") {
+    die(
+      "setup: confine=on but the probe says unavailable; run scripts/probe-confine.sh and finish it first",
+      1,
+    );
+  }
+}
+
 const RT = ask(
   "Seconds a review round may run before the reviewers still running are stopped",
   "2400",
@@ -490,6 +511,7 @@ if (OTHER) TRACKER_EXTRA = `name = "${OTHER}"`;
 const dateStr = new Date().toISOString().slice(0, 10);
 const OUT = `# Written by scripts/setup.sh on ${dateStr}. Shape: config.example.toml.
 projects_roots = ${tomlList(ROOTS)}
+confine = "${CONFINE}"
 ${LANE_BLOCKS}
 
 [team]
