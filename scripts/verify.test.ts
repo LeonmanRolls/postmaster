@@ -1087,9 +1087,14 @@ describe("a result belongs to a commit", () => {
   });
 
   test("every wrapper isolates bun from the working directory", () => {
+    // Wrappers are the scripts that run bun; a shell script that never runs
+    // bun has no bun config to leak. Every wrapper still answers here.
     const badWrappers: string[] = [];
+    let wrappers = 0;
     for (const w of readdirSync(HERE).filter((f) => f.endsWith(".sh"))) {
       const text = readFileSync(join(HERE, w), "utf8");
+      if (!text.includes("bun")) continue;
+      wrappers++;
       if (
         !text.includes("--no-env-file") ||
         !text.includes("--config=") ||
@@ -1097,6 +1102,7 @@ describe("a result belongs to a commit", () => {
       )
         badWrappers.push(w);
     }
+    expect(wrappers > 0).toBe(true);
     expect(badWrappers).toEqual([]);
   });
 
