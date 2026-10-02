@@ -381,8 +381,8 @@ function exerciseSelfTest(sourceRoot: string): number {
       replaceOnce(
         repo,
         "scripts/fixture.ts",
-        "// `new` marks its copy with `postmaster.fixture` in that repository's local git config.",
-        "// `new` marks its copy with `postmaster.fixture` in that copy's local git config.",
+        'export const FIXTURE_MARKER = "postmaster fixture v1\\n";',
+        'export const FIXTURE_MARKER = "postmaster fixture v2\\n";',
       ),
     "scripts/fixture.ts",
   );

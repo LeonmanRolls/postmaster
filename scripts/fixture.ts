@@ -70,7 +70,16 @@ const APP = join(TOOL, "fixtures", "app");
 const TICKETS = join(TOOL, "fixtures", "tickets");
 export const FIXTURE_MARKER = "postmaster fixture v1\n";
 export const TIMEOUT = 1200;
-const _CHECKS = ["hidden-tests", "gate", "stages", "markers", "handoffs", "run.json", "efforts", "ship-card"];
+const _CHECKS = [
+  "hidden-tests",
+  "gate",
+  "stages",
+  "markers",
+  "handoffs",
+  "run.json",
+  "efforts",
+  "ship-card",
+];
 
 function usage(): never {
   die(
@@ -676,7 +685,7 @@ export function checkWaybillEfforts(dispatch: string): { ok: boolean; detail: st
   const team = (config.team ?? {}) as Record<string, unknown>;
   const workhorses = Array.isArray(team.workhorses) ? team.workhorses.map(String) : [];
   const entries = (lines.find((line) => line.startsWith("workhorses:")) ?? "")
-    .replace(/^workhorses:\s*/u, "")
+    .replace(/^workhorses:[ \t]*/u, "")
     .split(",")
     .map((entry) => entry.trim())
     .filter(Boolean);

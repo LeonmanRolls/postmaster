@@ -1477,7 +1477,9 @@ describe("fixture effort records", () => {
         PATH: `${bin}${delimiter}${process.env.PATH ?? ""}`,
       };
       const original = join(tmp, "original");
-      const created = run(join(import.meta.dir, "fixture.sh"), ["new", original, "remove"], { env });
+      const created = run(join(import.meta.dir, "fixture.sh"), ["new", original, "remove"], {
+        env,
+      });
       expect(created.code).toBe(0);
       const moved = join(tmp, "neutral");
       renameSync(original, moved);
@@ -1513,11 +1515,25 @@ describe("fixture effort records", () => {
       mkdirSync(ticketRepo);
       expect(run("git", ["-C", ticketRepo, "init", "-q", "-b", "main"]).code).toBe(0);
       expect(
-        run("git", ["-C", ticketRepo, "-c", "user.name=brindlewick", "-c", "user.email=332054101+brindlewick@users.noreply.github.com", "commit", "-q", "--allow-empty", "-m", "init"]).code,
+        run("git", [
+          "-C",
+          ticketRepo,
+          "-c",
+          "user.name=brindlewick",
+          "-c",
+          "user.email=332054101+brindlewick@users.noreply.github.com",
+          "commit",
+          "-q",
+          "--allow-empty",
+          "-m",
+          "init",
+        ]).code,
       ).toBe(0);
       const ticketDispatch = join(ticketRepo, ".postmaster", "runs", "8");
       mkdirSync(ticketDispatch, { recursive: true });
-      const ticketRecord = run(join(import.meta.dir, "run-meta.sh"), [ticketDispatch, ticketRepo], { env });
+      const ticketRecord = run(join(import.meta.dir, "run-meta.sh"), [ticketDispatch, ticketRepo], {
+        env,
+      });
       expect(ticketRecord.code).toBe(0);
       const ticketCfg = JSON.parse(readFileSync(join(ticketDispatch, "run.json"), "utf8")).config;
       expect(ticketCfg.lanes.codex_lane.effort).toBe("max");

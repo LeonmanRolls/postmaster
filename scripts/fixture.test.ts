@@ -234,7 +234,7 @@ function breaks(cleanDir: string, repo: string): void {
   writeFileSync(
     join(d, "brief.md"),
     readFileSync(join(d, "brief.md"), "utf8").replace(
-      /## Ticket\n\n[\s\S]*?(?=## Project profile)/u,
+      /## Ticket\n\n.*?(?=## Project profile)/su,
       "## Ticket\n\nSee the tracker.\n",
     ),
   );

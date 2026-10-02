@@ -3927,10 +3927,7 @@ describe("run-recorded effort controls", () => {
       const bin = join(tmp, "bin");
       mkdirSync(bin);
       for (const harness of ["codex", "claude", "mimo", "muse"]) {
-        writeFileSync(
-          join(bin, harness),
-          '#!/bin/sh\nprintf "%s stdin=%s\\n" "$*" "$(cat)"\n',
-        );
+        writeFileSync(join(bin, harness), '#!/bin/sh\nprintf "%s stdin=%s\\n" "$*" "$(cat)"\n');
         chmodSync(join(bin, harness), 0o755);
       }
       const config = join(tmp, "machine.toml");
@@ -3961,7 +3958,19 @@ describe("run-recorded effort controls", () => {
           run("git", ["-C", repo, "add", ".postmaster/fixture"]);
         }
         expect(
-          run("git", ["-C", repo, "-c", "user.name=brindlewick", "-c", "user.email=332054101+brindlewick@users.noreply.github.com", "commit", "-q", "--allow-empty", "-m", "init"]).code,
+          run("git", [
+            "-C",
+            repo,
+            "-c",
+            "user.name=brindlewick",
+            "-c",
+            "user.email=332054101+brindlewick@users.noreply.github.com",
+            "commit",
+            "-q",
+            "--allow-empty",
+            "-m",
+            "init",
+          ]).code,
         ).toBe(0);
         const dispatch = join(repo, ".postmaster", "runs", "7");
         mkdirSync(dispatch, { recursive: true });
@@ -3971,36 +3980,68 @@ describe("run-recorded effort controls", () => {
       const reviewRepo = join(tmp, "review");
       mkdirSync(reviewRepo);
       run("git", ["-C", reviewRepo, "init", "-q", "-b", "main"]);
-      run("git", ["-C", reviewRepo, "-c", "user.name=brindlewick", "-c", "user.email=332054101+brindlewick@users.noreply.github.com", "commit", "-q", "--allow-empty", "-m", "init"]);
+      run("git", [
+        "-C",
+        reviewRepo,
+        "-c",
+        "user.name=brindlewick",
+        "-c",
+        "user.email=332054101+brindlewick@users.noreply.github.com",
+        "commit",
+        "-q",
+        "--allow-empty",
+        "-m",
+        "init",
+      ]);
       const base = run("git", ["-C", reviewRepo, "rev-parse", "HEAD"]).out.trim();
       const launched = (label: string, result: ReturnType<typeof run>): void => {
-        if (result.code !== 0) throw new Error(`${label}: exit ${result.code}: ${result.err}${result.out}`);
+        if (result.code !== 0)
+          throw new Error(`${label}: exit ${result.code}: ${result.err}${result.out}`);
       };
-      for (const [kind, want] of [["fixture", { codex: "none", claude: "low", mimo: "low" }], ["ticket", { codex: "max", claude: "max", mimo: "high" }]] as const) {
+      for (const [kind, want] of [
+        ["fixture", { codex: "none", claude: "low", mimo: "low" }],
+        ["ticket", { codex: "max", claude: "max", mimo: "high" }],
+      ] as const) {
         const dispatch = dispatches[kind]!;
         const form = run(self, ["form", "codex_lane", "--run", dispatch], { env });
         launched(`${kind} form`, form);
-        const formEfforts = [...form.out.matchAll(/model_reasoning_effort=\S+/gu)].map(
+        const formEfforts = [...form.out.matchAll(/model_reasoning_effort=[^ \t\r\n]+/gu)].map(
           (match) => match[0],
         );
         expect(formEfforts).toHaveLength(2);
         expect(formEfforts.every((entry) => entry.includes(want.codex))).toBe(true);
         expect(form.out).toContain("resume:");
-        const coach = run(self, ["form", "coachman", "--leg", "synthesis", "--run", dispatch], { env });
+        const coach = run(self, ["form", "coachman", "--leg", "synthesis", "--run", dispatch], {
+          env,
+        });
         launched(`${kind} coach form`, coach);
         expect(coach.out).toContain(`--effort ${want.claude}`);
         expect(coach.out).toContain("resume:");
-        const codexReview = run(self, ["review", "codex_lane", reviewRepo, base, "--run", dispatch], { env });
+        const codexReview = run(
+          self,
+          ["review", "codex_lane", reviewRepo, base, "--run", dispatch],
+          { env },
+        );
         launched(`${kind} codex review`, codexReview);
         expect(codexReview.out).toContain(`model_reasoning_effort="${want.codex}"`);
-        const claudeReview = run(self, ["review", "claude_lane", reviewRepo, base, "--run", dispatch], { env });
+        const claudeReview = run(
+          self,
+          ["review", "claude_lane", reviewRepo, base, "--run", dispatch],
+          { env },
+        );
         launched(`${kind} claude review`, claudeReview);
         expect(claudeReview.out).toContain(`/code-review ${want.claude} ${base}...HEAD`);
         expect(claudeReview.out).toContain(`--effort ${want.claude}`);
-        const mimoReview = run(self, ["review", "mimo_lane", reviewRepo, base, "--run", dispatch], { env });
+        const mimoReview = run(self, ["review", "mimo_lane", reviewRepo, base, "--run", dispatch], {
+          env,
+        });
         launched(`${kind} mimo review`, mimoReview);
         expect(mimoReview.out).toContain(`--variant ${want.mimo}`);
-        const effortlessReview = run(self, ["review", "effortless", reviewRepo, base, "--run", dispatch], { env });
+        const effortlessReview = run(
+          self,
+          ["review", "effortless", reviewRepo, base, "--run", dispatch],
+          { env },
+        );
         launched(`${kind} effortless review`, effortlessReview);
         expect(effortlessReview.out).toContain('model_reasoning_effort="max"');
       }

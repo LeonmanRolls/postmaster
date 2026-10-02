@@ -737,7 +737,9 @@ function fixtureEfforts(cfg: Record<string, unknown>): string[] {
 
 export function effortsLine(cfg: Record<string, unknown>): string {
   const pairs = teamSpecs(cfg)
-    .filter(([name, spec]) => name !== "postmaster" && typeof spec.effort === "string" && !!spec.effort)
+    .filter(
+      ([name, spec]) => name !== "postmaster" && typeof spec.effort === "string" && !!spec.effort,
+    )
     .map(([name, spec]) => `${name}=${spec.effort}`);
   return `efforts:${pairs.length > 0 ? ` ${pairs.join(", ")}` : ""}`;
 }
@@ -796,8 +798,7 @@ function buildRecord(
     ? fixtureEfforts(resolvedConfig)
     : [];
   const harnessVersions: Record<string, string> = {};
-  for (const h of collectHarnesses(resolvedConfig))
-    harnessVersions[h] = version(h);
+  for (const h of collectHarnesses(resolvedConfig)) harnessVersions[h] = version(h);
   return {
     ok: true,
     warnings,
