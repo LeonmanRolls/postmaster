@@ -1,4 +1,4 @@
-// Tests beside scripts/wiki-lint.ts, moved from its --self-test on #109: 39 controls.
+// Tests beside scripts/wiki-lint.ts, moved from its --self-test on #109: 40 controls.
 // expect() is renamed to expectLint(): bun:test owns expect. lint() output is captured by
 // swapping console.log, as the self-test's lintCapture did.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
@@ -490,6 +490,16 @@ describe("streaming line splitter", () => {
       [1, "a"],
       [2, "b"],
       [3, "c"],
+    ]);
+  });
+
+  test("a multibyte character split across chunks decodes whole", () => {
+    const f = join(tmpRoot, "split-char.txt");
+    const prefix = "x".repeat(65535);
+    writeFileSync(f, `${prefix}é\ntail\n`, "utf8");
+    expect([...textLines(f, true)]).toEqual([
+      [1, `${prefix}é`],
+      [2, "tail"],
     ]);
   });
 

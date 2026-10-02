@@ -119,13 +119,20 @@ export function textLines(path: string, strict: boolean): Generator<[number, str
   return (function* (): Generator<[number, string], void, void> {
     try {
       const decoder = new TextDecoder("utf-8", { fatal: strict, ignoreBOM: true });
+      // The lib's TextDecoder typing lacks decode's documented second
+      // argument; the runtime honors it, and the mid-character split test
+      // fails loudly if it ever stops.
+      const decodeChunk = decoder.decode.bind(decoder) as (
+        input: Uint8Array,
+        options: { stream: boolean },
+      ) => string;
       const part = new Uint8Array(65536);
       let carry = "";
       let number = 0;
       for (;;) {
         const read = readSync(fd, part, 0, part.length, null);
         const eof = read < part.length;
-        const text = carry + decoder.decode(part.subarray(0, read), { stream: !eof });
+        const text = carry + decodeChunk(part.subarray(0, read), { stream: !eof });
         const split = splitChunk(text, eof);
         carry = split.carry;
         for (const ln of split.lines) {
