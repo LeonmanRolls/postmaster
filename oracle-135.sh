@@ -682,12 +682,14 @@ for c in checks.scrub checks.tree checks.wiki-lint; do
   grep -qF "[$c]" "$REPO/.postmaster/project.toml" \
     && ok "$c is declared" || fail "$c is declared"
 done
+# The gate is the Bun suite now (#109 runs every script's tests beside it);
+# the shell scripts keep embedded self-tests that run standalone.
+grep -qF "bun run check" "$REPO/.postmaster/project.toml" \
+  && ok "the gate runs the Bun suite" || fail "the gate runs the Bun suite"
 for n in raw-promote scrub-check scrub-rewrite tree-check verify-merge; do
-  grep -qF "$n" "$REPO/.postmaster/project.toml" \
-    && ok "$n self-tests in the gate" || fail "$n self-tests in the gate"
+  POSTMASTER_DETECTIONS_LOG= bash "$REPO/scripts/$n.sh" --self-test >/dev/null 2>&1 \
+    && ok "$n self-tests pass standalone" || fail "$n self-tests pass standalone"
 done
-count=$(python3 -c 'import re; m=re.search(r"for n in (.*?); do", open("'"$REPO"'/.postmaster/project.toml").read()); print(len(m.group(1).split()))')
-[ "$count" = "45" ] && ok "the gate runs 45 self-tests" || fail "the gate runs 45 self-tests ($count)"
 out=$(cd "$REPO" && POSTMASTER_DETECTIONS_LOG= bash "$SCRUB" "$BASE_ARG" "$HEAD_ARG" 2>/dev/null); code=$?
 { [ "$code" -eq 0 ] && [ -z "$out" ]; } \
   && ok "the change's own range scans clean" || fail "the change's own range scans clean (exit $code)"
