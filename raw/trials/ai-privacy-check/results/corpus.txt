@@ -1,0 +1,191 @@
+table: b6b070d b6b070dc1306453050460678646c7536ca5c5455
+1	fixture	pos	dotenv	pos-dotenv-unquoted-prefix line 1
+2	fixture	neg	dotenv	neg-dotenv-spaced-code line 1
+3	open	pos	private-host	open-ssh-target
+4	fixture	pos	dotenv	pos-dotenv-double-paren line 1
+5	fixture	neg	private-host	neg-unspecified line 1
+6	fixture	neg	key	neg-key-reserved line 1
+7	fixture	pos	key	pos-key line 1
+8	fixture	pos	key	pos-key-session-camel line 1
+9	open	pos	attribution	open-attribution-prose
+10	fixture	pos	account-id	pos-uuid-context line 1
+11	fixture	neg	private-path	neg-tilde-dotdir line 1
+12	fixture	neg	key	neg-key-na line 1
+13	fixture	pos	dotenv	pos-dotenv-unquoted-symbol line 1
+14	fixture	neg	dotenv	neg-dotenv-double-expansion line 1
+15	open	pos	postal-address	open-address-person
+16	open	pos	person	open-branch-name
+17	fixture	neg	private-path	neg-var-home line 1
+18	fixture	neg	token	neg-valid line 1
+19	fixture	pos	token	pos-token line 1
+20	fixture	neg	token	neg-token-short line 1
+21	fixture	neg	token	neg-monkey-long line 1
+22	open	neg	-	open-assistant-reply
+23	fixture	neg	key	neg-key-bracketed line 1
+24	fixture	neg	private-path	neg-home-placeholder-quoted line 1
+25	fixture	pos	email	pos-email-plus line 1
+26	fixture	pos	email	pos-email-final line 1
+27	fixture	pos	dotenv	pos-dotenv-comment line 1
+28	fixture	neg	email	neg-reserved-example line 1
+29	fixture	neg	dotenv	neg-dotenv-comment-only line 1
+30	fixture	pos	dotenv	pos-dotenv-single-expansion-literal line 1
+31	fixture	pos	token	pos-putty3-header line 1
+32	fixture	neg	key	neg-plain line 1
+33	open	neg	-	open-public-figure
+34	fixture	neg	dotenv	neg-dotenv-double-command line 1
+35	open	neg	-	open-ci
+36	fixture	neg	private-path	neg-tilde-username line 1
+37	fixture	pos	token	pos-secret-field line 1
+38	fixture	pos	token	pos-compound-pass line 1
+39	open	neg	-	open-public-ip
+40	fixture	neg	account-id	neg-ses-no-digit line 1
+41	fixture	neg	private-path	neg-user-placeholder line 1
+42	fixture	pos	assistant-attribution	pos-generated line 1
+43	fixture	neg	private-host	neg-loopback-v6 line 1
+44	fixture	neg	private-path	neg-tilde-bare line 1
+45	fixture	neg	assistant-attribution	neg-bare-trailer line 1
+46	fixture	neg	key	neg-instructions-narrowed line 1
+47	open	pos	attribution	open-attribution-pr
+48	fixture	neg	private-path	neg-tmp-lookalike line 1
+49	fixture	pos	private-host	pos-tailnet line 1
+50	fixture	neg	private-path	neg-user-var line 1
+51	fixture	neg	key	neg-bare-session line 1
+52	fixture	neg	private-path	neg-var-root line 1
+53	fixture	neg	dotenv	neg-dotenv-quoted-composed line 1
+54	fixture	neg	token	neg-compass line 1
+55	fixture	pos	token	pos-field-dollar line 1
+56	fixture	neg	token	neg-hex-sha line 1
+57	open	pos	postal-address	open-address
+58	fixture	neg	email	neg-noreply-local line 1
+59	fixture	pos	private-path	pos-unc-path line 1
+60	fixture	neg	private-host	neg-localhost line 1
+61	open	neg	-	open-by-hand
+62	fixture	pos	private-path	pos-home-quoted line 1
+63	fixture	pos	private-path	pos-file-url line 1
+64	fixture	neg	dotenv	neg-dotenv-pointer line 1
+65	fixture	pos	account-id	pos-account-field line 1
+66	open	neg	-	open-phone-field
+67	fixture	neg	token	neg-field-braces line 1
+68	open	neg	-	open-placeholders
+69	fixture	pos	token	pos-access-key line 1
+70	open	pos	private-host	open-host-arpa
+71	fixture	neg	private-host	neg-public-100 line 1
+72	fixture	neg	key	neg-key-null line 1
+73	fixture	neg	token	neg-bearer-placeholder line 1
+74	fixture	pos	key	pos-compound-session line 1
+75	fixture	neg	account-id	neg-bare-id-short line 1
+76	open	pos	email	open-email
+77	fixture	pos	token	pos-bearer line 1
+78	open	neg	-	open-field-name
+79	open	pos	person	open-person-health
+80	fixture	neg	token	neg-field-spaces line 1
+81	probe	pos	attribution	pr-footer-plain
+82	fixture	neg	account-id	neg-uuid-bare line 1
+83	fixture	pos	private-host	pos-private-host line 1
+84	fixture	pos	key	pos-key-session line 1
+85	fixture	pos	dotenv	pos-dotenv-single-symbol line 1
+86	fixture	pos	private-path	pos-scratch-path line 1
+87	fixture	pos	dotenv	pos-dotenv-literal-hash line 1
+88	fixture	neg	private-host	neg-loopback-v4 line 1
+89	fixture	pos	assistant-attribution	pos-generated-with line 1
+90	fixture	neg	assistant-attribution	neg-attribution-talk line 1
+91	probe	pos	attribution	pr-default
+92	fixture	pos	private-path	pos-home-period line 1
+93	fixture	neg	dotenv	neg-dotenv-first-token line 1
+94	fixture	neg	email	neg-reserved-test line 1
+95	fixture	pos	key	pos-compound-email line 1
+96	fixture	neg	account-id	neg-session-context line 1
+97	fixture	pos	token	pos-pem-header line 1
+98	probe	unreadable	-	thinking-signature
+99	open	pos	person	open-person-phone
+100	fixture	pos	dotenv	pos-dotenv-double-dollar-literal line 1
+101	fixture	neg	token	neg-prefix-short line 1
+102	probe	pos	home-path	json-depth-1
+103	fixture	neg	private-path	neg-home-placeholder-space line 1
+104	fixture	neg	account-id	neg-ses-short line 1
+105	open	neg	-	open-doc-ip
+106	fixture	pos	private-host	pos-cgnat-ip line 1
+107	fixture	neg	private-path	neg-user-bracketed line 1
+108	fixture	pos	key	pos-key-cred line 1
+109	open	pos	account-id	open-customer-id
+110	probe	unreadable	-	reasoning-encrypted
+111	fixture	pos	email	pos-email line 1
+112	fixture	pos	token	pos-compound-aws line 1
+113	fixture	neg	email	neg-noreply-domain line 1
+114	probe	pos	home-path	json-depth-2
+115	fixture	pos	dotenv	pos-dotenv-pass line 1
+116	fixture	neg	private-host	neg-bare-tailnet line 1
+117	fixture	pos	dotenv	pos-dotenv-spaced-literal line 1
+118	fixture	neg	key	neg-my-org line 1
+119	open	neg	-	open-id-shape
+120	open	pos	attribution	open-attribution-drafted
+121	fixture	pos	account-id	pos-bare-id line 1
+122	fixture	pos	private-path	pos-drive-quoted line 1
+123	fixture	neg	key	neg-key-bool line 1
+124	fixture	pos	assistant-attribution	pos-attribution line 1
+125	fixture	pos	private-path	pos-home-space line 1
+126	fixture	neg	key	neg-monkey line 1
+127	fixture	neg	account-id	neg-org-compound line 1
+128	fixture	pos	private-host	pos-private-ip line 1
+129	fixture	pos	private-path	pos-ssh-url line 1
+130	fixture	pos	account-id	pos-org-field line 1
+131	fixture	neg	key	neg-key-noreply line 1
+132	fixture	neg	token	neg-bare-base64 line 1
+133	fixture	neg	private-host	neg-public-ip line 1
+134	fixture	neg	private-path	neg-tilde-semver line 1
+135	fixture	pos	dotenv	pos-dotenv-single-dollar line 1
+136	open	pos	private-host	open-device-name
+137	fixture	pos	token	pos-pgp-header line 1
+138	fixture	neg	key	neg-key-ellipsis line 1
+139	fixture	neg	email	neg-reserved-localhost line 1
+140	fixture	neg	private-path	neg-tmp-bare line 1
+141	open	neg	-	open-system-path
+142	open	neg	-	open-vendor-mention
+143	fixture	pos	token	pos-pass-word line 1
+144	fixture	pos	account-id	pos-sess-id line 1
+145	fixture	neg	dotenv	neg-dotenv-short-stripped line 1
+146	open	neg	-	open-tool-credit
+147	fixture	pos	account-id	pos-org-id line 1
+148	fixture	pos	token	pos-pgpassword line 1
+149	fixture	pos	dotenv	pos-dotenv-unquoted-comment line 1
+150	fixture	neg	key	neg-keyboard line 1
+151	open	neg	-	open-public-host
+152	fixture	neg	key	neg-key-empty line 1
+153	fixture	neg	private-host	neg-public-host line 1
+154	probe	pos	attribution	pr-footer
+155	fixture	pos	private-path	pos-home-path line 1
+156	fixture	pos	token	pos-putty-header line 1
+157	fixture	neg	account-id	neg-kind-name line 1
+158	open	pos	home-path	open-cwd
+159	fixture	pos	dotenv	pos-dotenv-pgpassword line 1
+160	fixture	neg	key	neg-instructions-narrowed line 2
+161	open	pos	attribution	open-attribution-trailer
+162	fixture	pos	token	pos-compound-env line 1
+163	fixture	pos	token	pos-compound-password line 1
+164	open	pos	phone	open-phone-us
+165	fixture	pos	token	pos-age-key line 1
+166	fixture	neg	key	neg-key-prose line 1
+167	fixture	neg	dotenv	neg-dotenv-double-bare-dollar line 1
+168	fixture	neg	account-id	neg-org-short line 1
+169	fixture	pos	dotenv	pos-dotenv-single-comment line 1
+170	fixture	neg	key	neg-key-name line 1
+171	fixture	neg	dotenv	neg-dotenv-double-backtick line 1
+172	fixture	pos	token	pos-compound-camel line 1
+173	fixture	pos	dotenv	pos-dotenv line 1
+174	fixture	pos	dotenv	pos-dotenv-single-backtick line 1
+175	fixture	neg	private-path	neg-tilde-user line 1
+176	fixture	neg	email	neg-reserved-invalid line 1
+177	open	neg	-	open-names-secret
+178	open	pos	phone	open-phone-mobile
+179	open	neg	-	open-role
+180	open	neg	-	open-bare-tilde
+181	fixture	neg	private-path	neg-url-route line 1
+182	open	pos	secret	open-password-prose
+183	open	neg	-	open-placeholder-home
+184	fixture	pos	token	pos-ssh2-header line 1
+185	fixture	neg	token	neg-compound-short line 1
+186	probe	pos	attribution	trailer
+187	fixture	pos	private-path	pos-tilde-path line 1
+188	fixture	pos	token	pos-field-symbols line 1
+189	fixture	neg	assistant-attribution	neg-generated-tool line 1
+190	fixture	neg	dotenv	neg-dotenv-composed line 1

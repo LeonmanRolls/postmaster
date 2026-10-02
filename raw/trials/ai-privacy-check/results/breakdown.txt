@@ -1,0 +1,23 @@
+## mechanical: 17 positives missed, 2 negatives raised
+missed: open-attribution-prose, open-address-person, open-branch-name, open-attribution-pr, open-address, open-person-health, pr-footer-plain, pr-default, open-person-phone, open-customer-id, open-attribution-drafted, open-device-name, pr-footer, open-attribution-trailer, open-phone-us, open-phone-mobile, open-password-prose
+raised: open-doc-ip, open-placeholder-home
+
+## haiku: 21 positives missed, 12 negatives raised
+missed: pos-key line 1, pos-key-session-camel line 1, pos-email-plus line 1, pos-putty3-header line 1, pos-unc-path line 1, pos-home-quoted line 1, pos-file-url line 1, pos-key-session line 1, pos-scratch-path line 1, pos-home-period line 1, pos-compound-email line 1, json-depth-1, pos-key-cred line 1, json-depth-2, pos-bare-id line 1, pos-drive-quoted line 1, pos-home-space line 1, pos-ssh-url line 1, pos-home-path line 1, pos-putty-header line 1, pos-tilde-path line 1
+raised: neg-dotenv-double-expansion line 1, neg-valid line 1, neg-monkey-long line 1, neg-dotenv-double-command line 1, neg-compass line 1, neg-field-braces line 1, neg-public-100 line 1, neg-field-spaces line 1, neg-uuid-bare line 1, neg-dotenv-double-bare-dollar line 1, neg-dotenv-double-backtick line 1, neg-dotenv-composed line 1
+
+## mimo: 6 positives missed, 14 negatives raised
+missed: pos-key line 1, pos-dotenv-single-expansion-literal line 1, pos-putty3-header line 1, pos-compound-email line 1, pos-bare-id line 1, pos-putty-header line 1
+raised: neg-valid line 1, neg-token-short line 1, neg-monkey-long line 1, neg-ses-no-digit line 1, neg-compass line 1, neg-field-braces line 1, neg-field-spaces line 1, neg-uuid-bare line 1, neg-ses-short line 1, neg-dotenv-short-stripped line 1, neg-org-short line 1, neg-dotenv-double-backtick line 1, neg-compound-short line 1, neg-dotenv-composed line 1
+
+## opf: 29 positives missed, 24 negatives raised
+missed: open-ssh-target, pos-key-session-camel line 1, open-attribution-prose, open-branch-name, pos-putty3-header line 1, pos-generated line 1, open-attribution-pr, pos-tailnet line 1, pos-unc-path line 1, pos-home-quoted line 1, pr-footer-plain, pos-key-session line 1, pos-scratch-path line 1, pr-default, pos-home-period line 1, pos-compound-email line 1, json-depth-1, json-depth-2, open-attribution-drafted, pos-bare-id line 1, pos-drive-quoted line 1, pos-attribution line 1, pos-home-space line 1, pos-private-ip line 1, open-device-name, pr-footer, pos-putty-header line 1, pos-age-key line 1, pos-ssh2-header line 1
+raised: neg-key-reserved line 1, neg-key-na line 1, neg-dotenv-double-expansion line 1, neg-valid line 1, neg-monkey-long line 1, neg-reserved-example line 1, neg-dotenv-double-command line 1, neg-tilde-username line 1, neg-dotenv-quoted-composed line 1, neg-compass line 1, neg-hex-sha line 1, neg-noreply-local line 1, neg-field-braces line 1, neg-uuid-bare line 1, neg-noreply-domain line 1, neg-key-noreply line 1, neg-reserved-localhost line 1, neg-dotenv-double-bare-dollar line 1, neg-org-short line 1, neg-key-name line 1, neg-dotenv-double-backtick line 1, neg-tilde-user line 1, neg-url-route line 1, neg-dotenv-composed line 1
+
+## opus: 6 positives missed, 7 negatives raised
+missed: pos-key line 1, pos-dotenv-single-expansion-literal line 1, pos-secret-field line 1, pos-access-key line 1, pos-compound-email line 1, pos-bare-id line 1
+raised: neg-valid line 1, neg-monkey-long line 1, neg-compass line 1, neg-noreply-local line 1, neg-public-100 line 1, neg-field-spaces line 1, neg-dotenv-double-backtick line 1
+
+## sol: 4 positives missed, 16 negatives raised
+missed: pos-key line 1, pos-dotenv-single-expansion-literal line 1, pos-compound-email line 1, pos-bare-id line 1
+raised: neg-dotenv-double-expansion line 1, neg-token-short line 1, neg-dotenv-double-command line 1, neg-ses-no-digit line 1, neg-dotenv-quoted-composed line 1, neg-noreply-local line 1, neg-field-braces line 1, neg-public-100 line 1, neg-field-spaces line 1, neg-ses-short line 1, neg-dotenv-short-stripped line 1, neg-dotenv-double-bare-dollar line 1, neg-org-short line 1, neg-dotenv-double-backtick line 1, neg-compound-short line 1, neg-dotenv-composed line 1

@@ -1,0 +1,68 @@
+Lines found, as found/total, by corpus group and label.
+
+level         fixture pos    fixture neg    probe pos      open pos       open neg       seconds
+mechanical    67/67          0/79           3/6            4/18           2/18           -
+haiku 1       47/67          13/79          4/6            18/18          0/18           168.4
+haiku 2       48/67          15/79          4/6            18/18          0/18           184.4
+haiku 3       49/67          13/79          4/6            18/18          0/18           112.5
+haiku majority 48/67          12/79          4/6            18/18          0/18           168.4
+haiku + mech  67/67          12/79          6/6            18/18          2/18           -
+opus 1        61/67          7/79           6/6            18/18          0/18           14.1
+opus 2        59/67          7/79           6/6            18/18          0/18           24.5
+opus 3        61/67          3/79           6/6            18/18          0/18           24.7
+opus majority 61/67          7/79           6/6            18/18          0/18           24.5
+opus + mech   67/67          7/79           6/6            18/18          2/18           -
+sol 1         64/67          17/79          6/6            18/18          0/18           51.5
+sol 2         63/67          8/79           6/6            18/18          0/18           25.9
+sol 3         63/67          16/79          6/6            18/18          0/18           39.1
+sol majority  63/67          16/79          6/6            18/18          0/18           39.1
+sol + mech    67/67          16/79          6/6            18/18          2/18           -
+mimo 1        61/67          13/79          6/6            18/18          0/18           705.4
+mimo 2        61/67          11/79          6/6            18/18          0/18           332.5
+mimo 3        65/67          18/79          6/6            18/18          0/18           444.7
+mimo majority 61/67          14/79          6/6            18/18          0/18           444.7
+mimo + mech   67/67          14/79          6/6            18/18          2/18           -
+opf 1         49/67          24/79          1/6            12/18          0/18           57.8
+opf 2         49/67          24/79          1/6            12/18          0/18           45.6
+opf 3         49/67          24/79          1/6            12/18          0/18           58.0
+opf majority  49/67          24/79          1/6            12/18          0/18           57.8
+opf + mech    67/67          24/79          3/6            13/18          2/18           -
+
+Consistency: the share of scored lines on which every repeat of a level agrees.
+haiku         173/188
+opus          182/188
+sol           176/188
+mimo          174/188
+opf           188/188
+
+Kinds on open-ended positives: lines where a majority named the expected kind.
+haiku         18/18
+opus          18/18
+sol           18/18
+mimo          18/18
+opf           8/18
+
+Unreadable probes (encrypted blocks): lines each level reported.
+mechanical    0/2
+haiku 1       2/2
+haiku 2       2/2
+haiku 3       2/2
+opus 1        2/2
+opus 2        2/2
+opus 3        2/2
+sol 1         0/2
+sol 2         2/2
+sol 3         2/2
+mimo 1        0/2
+mimo 2        0/2
+mimo 3        0/2
+opf 1         2/2
+opf 2         2/2
+opf 3         2/2
+
+Control: ten plain lines with no private data; lines reported (0 expected).
+haiku         0
+opus          0
+sol           0
+mimo          0
+opf           0

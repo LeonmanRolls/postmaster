@@ -1,0 +1,6 @@
+date: 2026-10-02
+table: b6b070dc1306453050460678646c7536ca5c5455 (branch 135), scripts/scrub-check.sh
+python: Python 3.12.3
+claude: 2.1.288 (Claude Code); haiku = claude-haiku-4-5-20251001 (no effort flag); opus = claude-opus-5-5, effort low
+codex: codex-cli 0.157.1; sol = gpt-6-sol, reasoning effort low
+mimo: MiMo Code 0.1.15; mimo = xiaomi-token-plan-sgp/mimo-v2.6-pro, variant low
