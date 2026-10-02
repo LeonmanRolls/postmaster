@@ -769,7 +769,10 @@ describe("the detections log each check runs with", () => {
   }, 60000);
 
   test("the coachman's log lands in the run", () => {
-    const logged = readFileSync(join(tmp, "detproj", ".postmaster", "runs", "T-9", "detections.jsonl"), "utf-8");
+    const logged = readFileSync(
+      join(tmp, "detproj", ".postmaster", "runs", "T-9", "detections.jsonl"),
+      "utf-8",
+    );
     expect(logged.includes("probe-line")).toBe(true);
   });
 

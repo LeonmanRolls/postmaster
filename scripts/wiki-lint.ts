@@ -406,10 +406,7 @@ export function lint(repo: string): number {
       return 2;
     }
     const distinct = [
-      ...new Set([
-        ...repeats.map((r) => r[2]),
-        ...repeats.map((r) => relative(repoR, r[0])),
-      ]),
+      ...new Set([...repeats.map((r) => r[2]), ...repeats.map((r) => relative(repoR, r[0]))]),
     ];
     const red = run(scrub, ["--safe-path", ...distinct], top.ok ? { cwd: top.top } : {});
     if (red.code !== 0) {

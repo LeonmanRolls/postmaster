@@ -258,7 +258,11 @@ describe("page content: paths, hosts and quotations", () => {
     const home = "/home";
     const who = "fixture-user";
     const p = join(tmpRoot, "wiki", "concepts", "haspath.md");
-    writeFileSync(p, `${readFileSync(p, "utf8")}See ${home}/${who}-413/notes.txt for the log.\n`, "utf8");
+    writeFileSync(
+      p,
+      `${readFileSync(p, "utf8")}See ${home}/${who}-413/notes.txt for the log.\n`,
+      "utf8",
+    );
     expectLint("fail", "private-path");
   }, 60000);
 
@@ -282,7 +286,11 @@ describe("page content: paths, hosts and quotations", () => {
     concept("hashhost", "claimed", "");
     const hn = "metrics.interna";
     const p = join(tmpRoot, "wiki", "concepts", "hashhost.md");
-    writeFileSync(p, `${readFileSync(p, "utf8")}See https://${hn}l:8443/up for the dashboard.\n`, "utf8");
+    writeFileSync(
+      p,
+      `${readFileSync(p, "utf8")}See https://${hn}l:8443/up for the dashboard.\n`,
+      "utf8",
+    );
     expectLint("fail", "private-host");
   }, 60000);
 
@@ -317,7 +325,11 @@ describe("page content: paths, hosts and quotations", () => {
       "utf8",
     );
     const idx = join(tmpRoot, "wiki", "index.md");
-    writeFileSync(idx, `${readFileSync(idx, "utf8")}\n- [qp](concepts/${qe}@${qh}.${qt}.md)\n`, "utf8");
+    writeFileSync(
+      idx,
+      `${readFileSync(idx, "utf8")}\n- [qp](concepts/${qe}@${qh}.${qt}.md)\n`,
+      "utf8",
+    );
     const { code, out } = lintCapture();
     expect(code === 0 ? "pass" : "fail").toBe("fail");
     expect(out).toContain("repeats raw/");
@@ -342,7 +354,11 @@ describe("page content: paths, hosts and quotations", () => {
     const home = "/home";
     const who = "fixture-user";
     const p = join(parent, "repo", "wiki", "concepts", "shaped.md");
-    writeFileSync(p, `${readFileSync(p, "utf8")}See ${home}/${who}-413/notes.txt for the log.\n`, "utf8");
+    writeFileSync(
+      p,
+      `${readFileSync(p, "utf8")}See ${home}/${who}-413/notes.txt for the log.\n`,
+      "utf8",
+    );
     const logs: string[] = [];
     const origLog = console.log;
     console.log = (...args: unknown[]) => {
@@ -393,7 +409,11 @@ describe("page content: paths, hosts and quotations", () => {
     const home = "/home";
     const who = "fixture-user";
     const p = join(elsewhere, "wiki", "concepts", "away.md");
-    writeFileSync(p, `${readFileSync(p, "utf8")}See ${home}/${who}-413/notes.txt for the log.\n`, "utf8");
+    writeFileSync(
+      p,
+      `${readFileSync(p, "utf8")}See ${home}/${who}-413/notes.txt for the log.\n`,
+      "utf8",
+    );
     const r = run("bash", [SELF, elsewhere], { cwd: tmpdir() });
     const out = r.out + r.err;
     expect(r.code).toBe(1);
@@ -408,7 +428,11 @@ describe("detection controls: the lint logs what it reports, nothing else", () =
     const home = "/home";
     const who = "fixture-user";
     const p = join(tmpRoot, "wiki", "concepts", "logpath.md");
-    writeFileSync(p, `${readFileSync(p, "utf8")}See ${home}/${who}-413/notes.txt for the log.\n`, "utf8");
+    writeFileSync(
+      p,
+      `${readFileSync(p, "utf8")}See ${home}/${who}-413/notes.txt for the log.\n`,
+      "utf8",
+    );
     const log = join(tmpRoot, "wl.jsonl");
     rmSync(log, { force: true });
     process.env.POSTMASTER_DETECTIONS_LOG = log;
@@ -436,7 +460,11 @@ describe("detection controls: the lint logs what it reports, nothing else", () =
     const mh = "quiet-relay-413";
     const mt = "net";
     const p = join(tmpRoot, "wiki", "concepts", "mailto.md");
-    writeFileSync(p, `${readFileSync(p, "utf8")}Reach the relay at ${me}@${mh}.${mt} for pings.\n`, "utf8");
+    writeFileSync(
+      p,
+      `${readFileSync(p, "utf8")}Reach the relay at ${me}@${mh}.${mt} for pings.\n`,
+      "utf8",
+    );
     const log = join(tmpRoot, "wl2.jsonl");
     rmSync(log, { force: true });
     process.env.POSTMASTER_DETECTIONS_LOG = log;

@@ -91,10 +91,8 @@ function told(name: string, ...lines: string[]): void {
   writeFileSync(join(root, name, ".detections-told"), lines.map((l) => `${l}\n`).join(""));
 }
 
-const DET1 =
-  '{"commit":"","file":"notes.txt","line":1,"rule":"email","ts":"2026-09-29T00:00:00Z"}';
-const DET2 =
-  '{"commit":"","file":"notes.txt","line":2,"rule":"token","ts":"2026-09-29T00:01:00Z"}';
+const DET1 = '{"commit":"","file":"notes.txt","line":1,"rule":"email","ts":"2026-09-29T00:00:00Z"}';
+const DET2 = '{"commit":"","file":"notes.txt","line":2,"rule":"token","ts":"2026-09-29T00:01:00Z"}';
 
 function age(name: string): void {
   const t = Date.now() / 1000 - 3600;
