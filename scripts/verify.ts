@@ -786,8 +786,19 @@ function runChecks(wt: string, dispatch: string | null): never {
   const branch = git(top, "symbolic-ref", "--short", "-q", "HEAD") || "detached";
   const logs = dispatch ? join(dispatch, "verify", sha.slice(0, 12)) : join(spec, "logs");
   mkdirSync(logs, { recursive: true });
-  const env = { ...process.env, POSTMASTER_VERIFY: spec } as Record<string, string>;
+  // Every check runs with POSTMASTER_DETECTIONS_LOG set, to the run's
+  // detections.jsonl for the coachman and to the worktree's own verify copy
+  // for a workhorse, so the scrub logs each finding as it happens.
+  const logsTo = dispatch ? join(dispatch, "detections.jsonl") : join(spec, "detections.jsonl");
+  const env = {
+    ...process.env,
+    POSTMASTER_VERIFY: spec,
+    POSTMASTER_DETECTIONS_LOG: logsTo,
+  } as Record<string, string>;
   delete env.POSTMASTER_LAUNCH_NAME;
+  // The scanner's test hook never reaches the gate: a caller that
+  // switched rules off for its own tests must not green a dirty tree.
+  delete env.SCRUB_CHECK_DISABLE;
   const results: string[] = [];
   const unlogged: string[] = [];
   let spoiled: string | null = null;

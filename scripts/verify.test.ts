@@ -1,4 +1,4 @@
-// Tests beside scripts/verify.ts, moved from its --self-test on #109: 109 controls.
+// Tests beside scripts/verify.ts, moved from its --self-test on #109: 114 controls.
 // The self-test stages one shared story (record, arm, run, the coachman's run, results) and the
 // tests below keep that order: the workhorse run's output is captured once by the run test and
 // read by the controls after it, and the later-commit, worktree-mutation and summary controls
@@ -744,6 +744,75 @@ describe("the coachman's run", () => {
     expect(r.out.trim()).toBe(join(realpathSync(meta), "journey", `${fullSha}.md`));
     expect(existsSync(marker)).toBe(false);
   });
+});
+
+describe("the detections log each check runs with", () => {
+  test("a check that writes the detections log passes", () => {
+    const lp = join(tmp, "detproj");
+    mkdirSync(join(lp, ".postmaster"), { recursive: true });
+    writeFileSync(
+      join(lp, ".postmaster", "project.toml"),
+      '[checks.gate]\ncommand = "true"\nshows = "x"\n[checks.probe]\n' +
+        'command = \'test -n "$POSTMASTER_DETECTIONS_LOG" && echo probe-line >> "$POSTMASTER_DETECTIONS_LOG"\'\n' +
+        'shows = "x"\n',
+    );
+    mkRepo(lp);
+    const ld = join(lp, ".postmaster", "runs", "T-9");
+    mkdirSync(ld, { recursive: true });
+    writeFileSync(join(ld, "brief.md"), "## Ticket\nx\n");
+    run("bash", [SELF, "record", lp, ld]);
+    G(lp, "worktree", "add", "-q", join(lp, ".worktrees/T-9-a"), "-b", "wb/T-9-a");
+    const lwt = join(lp, ".worktrees/T-9-a");
+    run("bash", [SELF, "arm", lwt, ld]);
+    const r = run("bash", [SELF, "run", lwt, ld]);
+    expect(r.code).toBe(0);
+  }, 60000);
+
+  test("the coachman's log lands in the run", () => {
+    const logged = readFileSync(join(tmp, "detproj", ".postmaster", "runs", "T-9", "detections.jsonl"), "utf-8");
+    expect(logged.includes("probe-line")).toBe(true);
+  });
+
+  test("a workhorse's log lands in its worktree", () => {
+    const lwt = join(tmp, "detproj", ".worktrees/T-9-a");
+    run("bash", [SELF, "run", lwt]);
+    const logged = readFileSync(join(lwt, ".postmaster/verify/detections.jsonl"), "utf-8");
+    expect(logged.includes("probe-line")).toBe(true);
+  }, 60000);
+});
+
+describe("the gate scrubs the test hook from its checks' environment", () => {
+  test("a dirty tree fails the gate", () => {
+    const hp = join(tmp, "hookproj");
+    mkdirSync(join(hp, ".postmaster"), { recursive: true });
+    const eLocal = "relay-413";
+    const eHost = "quiet-relay-413";
+    const eTld = "net";
+    const suspect = `contact-${eLocal}@${eHost}.${eTld}`;
+    writeFileSync(join(hp, "dirty.txt"), `contact: ${suspect}\n`);
+    writeFileSync(
+      join(hp, ".postmaster", "project.toml"),
+      `[checks.gate]\ncommand = "bash ${HERE}/scrub-check.sh --files dirty.txt"\nshows = "x"\n`,
+    );
+    mkRepo(hp);
+    const hd = join(hp, ".postmaster", "runs", "T-9");
+    mkdirSync(hd, { recursive: true });
+    writeFileSync(join(hd, "brief.md"), "## Ticket\nx\n");
+    run("bash", [SELF, "record", hp, hd]);
+    G(hp, "worktree", "add", "-q", join(hp, ".worktrees/T-9-a"), "-b", "wb/T-9-a");
+    const hwt = join(hp, ".worktrees/T-9-a");
+    run("bash", [SELF, "arm", hwt, hd]);
+    const r = run("bash", [SELF, "run", hwt, hd]);
+    expect(r.code).toBe(2);
+  }, 60000);
+
+  test("it fails with the test hook set in the caller too", () => {
+    const hp = join(tmp, "hookproj");
+    const hd = join(hp, ".postmaster", "runs", "T-9");
+    const hwt = join(hp, ".worktrees/T-9-a");
+    const r = run("bash", [SELF, "run", hwt, hd], { env: { SCRUB_CHECK_DISABLE: "email" } });
+    expect(r.code).toBe(2);
+  }, 60000);
 });
 
 describe("results and summaries", () => {
