@@ -5,7 +5,8 @@
 //   fixture.sh score <dispatch> <repo>
 //   fixture.sh hidden <ticket> <app-dir>
 //
-// `new` marks its copy with `postmaster.fixture` in that repository's local git config.
+// `new` marks its copy with `.postmaster/fixture` in the first commit and
+// `postmaster.fixture` in that repository's local git config.
 // `score` reports the merged result's hidden-test counts, then the harvested lane branches'
 // counts from `scripts/fixture-lanes.ts`; only the merged result decides the verdict.
 // Its gate runs from a clean checkout of main, outside the project folder, through
@@ -33,6 +34,7 @@ import {
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { tryJsonFile } from "./lib/data.ts";
+import { effortsLine } from "./run-meta.ts";
 import { scriptsDir, toolRoot } from "./lib/paths.ts";
 import { die, run } from "./lib/proc.ts";
 import {
@@ -66,8 +68,9 @@ const HERE = scriptsDir(import.meta);
 const TOOL = toolRoot(import.meta);
 const APP = join(TOOL, "fixtures", "app");
 const TICKETS = join(TOOL, "fixtures", "tickets");
+export const FIXTURE_MARKER = "postmaster fixture v1\n";
 export const TIMEOUT = 1200;
-const _CHECKS = ["hidden-tests", "gate", "stages", "markers", "handoffs", "run.json", "ship-card"];
+const _CHECKS = ["hidden-tests", "gate", "stages", "markers", "handoffs", "run.json", "efforts", "ship-card"];
 
 function usage(): never {
   die(
@@ -129,7 +132,7 @@ export function appFiles(dir: string): string[] | null {
   if (r.code !== 0) return null;
   return r.out.split("\0").filter((n) => n !== "");
 }
-export function makeRepo(dest: string, src = APP): boolean {
+export function makeRepo(dest: string, src = APP, fixture = false): boolean {
   try {
     mkdirSync(dest, { recursive: true });
   } catch {
@@ -162,6 +165,10 @@ export function makeRepo(dest: string, src = APP): boolean {
   } catch {
     console.error(`fixture: could not copy the app to ${dest}`);
     return false;
+  }
+  if (fixture) {
+    mkdirSync(join(dest, ".postmaster"), { recursive: true });
+    writeFileSync(join(dest, ".postmaster", "fixture"), FIXTURE_MARKER);
   }
   if (run("git", ["-C", dest, "init", "-q", "-b", "main"]).code !== 0) return false;
   for (const key of ["user.name", "user.email"]) {
@@ -209,7 +216,7 @@ export function makeAndFile(dest: string, ticket: string): number {
   };
 
   mkdirSync(dirname(dest), { recursive: true });
-  if (!makeRepo(dest)) {
+  if (!makeRepo(dest, APP, true)) {
     unmake();
     return 1;
   }
@@ -412,6 +419,7 @@ export function score(dispatch: string, repo: string): { code: number; out: stri
     { name: "markers", ...checkMarkers(dispatch, legs), out: "" },
     { name: "handoffs", ...checkHandoffs(dispatch, legs), out: "" },
     { name: "run.json", ...checkRunJson(dispatch), out: "" },
+    { name: "efforts", ...checkWaybillEfforts(dispatch), out: "" },
     { name: "ship-card", ...checkCard(dispatch), out: "" },
   ];
   rmSync(scratch, { recursive: true, force: true });
@@ -644,6 +652,53 @@ function checkRunJson(dispatch: string): { ok: boolean; detail: string } {
     return { ok: false, detail: "run.json is not a JSON object" };
   }
   return { ok: true, detail: "written, and parses" };
+}
+
+export function checkWaybillEfforts(dispatch: string): { ok: boolean; detail: string } {
+  const data = tryJsonFile<Record<string, unknown>>(join(dispatch, "run.json"));
+  if (!existsSync(join(dispatch, "run.json"))) {
+    return { ok: true, detail: "skipped: no run.json" };
+  }
+  if (!data || !data.config || typeof data.config !== "object") {
+    return { ok: false, detail: "no run.json config" };
+  }
+  const brief = join(dispatch, "brief.md");
+  if (!existsSync(brief)) return { ok: false, detail: "no brief.md" };
+  const teamText = sectionOf(readFileSync(brief, "utf8"), "Team");
+  const lines = teamText.split(/\r?\n/u).map((line) => line.trim());
+  const effortLines = lines.filter((line) => line.startsWith("efforts:"));
+  const config = data.config as Record<string, unknown>;
+  const expected = effortsLine(config);
+  if (effortLines.length !== 1 || effortLines[0] !== expected) {
+    return { ok: false, detail: `waybill efforts differ from run.json: expected ${expected}` };
+  }
+  const lanes = (config.lanes ?? {}) as Record<string, Record<string, unknown>>;
+  const team = (config.team ?? {}) as Record<string, unknown>;
+  const workhorses = Array.isArray(team.workhorses) ? team.workhorses.map(String) : [];
+  const entries = (lines.find((line) => line.startsWith("workhorses:")) ?? "")
+    .replace(/^workhorses:\s*/u, "")
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  if (entries.length !== workhorses.length) {
+    return { ok: false, detail: "waybill workhorses differ from run.json" };
+  }
+  for (const name of workhorses) {
+    const entry = entries.find((item) => item.slice(0, item.indexOf("=")) === name);
+    const effort = entry?.slice(entry.lastIndexOf("/") + 1);
+    if (!entry || effort !== String(lanes[name]?.effort ?? "")) {
+      return { ok: false, detail: `workhorse ${name} effort differs from run.json` };
+    }
+  }
+  const coachmanEntry = lines.find((line) => line.startsWith("coachman:"));
+  const coachman = team.coachman as Record<string, unknown> | undefined;
+  if (coachman || coachmanEntry) {
+    const effort = coachmanEntry?.slice(coachmanEntry.lastIndexOf("/") + 1);
+    if (!coachman || !coachmanEntry || effort !== String(coachman.effort ?? "")) {
+      return { ok: false, detail: "coachman effort differs from run.json" };
+    }
+  }
+  return { ok: true, detail: "waybill Team efforts match run.json" };
 }
 
 function checkCard(dispatch: string): { ok: boolean; detail: string } {

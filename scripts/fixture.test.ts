@@ -24,6 +24,8 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import {
   appFiles,
+  checkWaybillEfforts,
+  FIXTURE_MARKER,
   HIDDEN_RE,
   hidden,
   laneScores,
@@ -121,6 +123,19 @@ function record(
     `# Waybill: 7\n${turnpikes}\n\n## Ticket\n\n${ticketBody(t)}\n## Project profile\nrepo: ${repo}\n`,
   );
   run("bash", [join(HERE, "run-meta.sh"), d, repo]);
+  const recordedConfig = JSON.parse(readFileSync(join(d, "run.json"), "utf8")).config;
+  const workhorses = (recordedConfig.team.workhorses ?? [])
+    .map((name: string) => {
+      const lane = recordedConfig.lanes[name];
+      return `${name}=${lane.harness}/${lane.model}/${lane.effort ?? ""}`;
+    })
+    .join(", ");
+  const coachman = recordedConfig.team.coachman;
+  const efforts = run("bash", [join(HERE, "run-meta.sh"), "efforts", d]).out.trim();
+  writeFileSync(
+    join(d, "brief.md"),
+    `${readFileSync(join(d, "brief.md"), "utf8")}\n## Team\nworkhorses: ${workhorses}\ncoachman: ${coachman.harness}/${coachman.model}/${coachman.effort ?? ""}\n${efforts}\n`,
+  );
   if (legs === 3) {
     const runJson = JSON.parse(readFileSync(join(d, "run.json"), "utf-8"));
     delete runJson.coachman_contract;
@@ -218,7 +233,10 @@ function breaks(cleanDir: string, repo: string): void {
   d = brokenCopy("break-waybill", cleanDir);
   writeFileSync(
     join(d, "brief.md"),
-    "# Waybill: 7\nturnpikes: style, bug, security\n\n## Ticket\n\nSee the tracker.\n",
+    readFileSync(join(d, "brief.md"), "utf8").replace(
+      /## Ticket\n\n[\s\S]*?(?=## Project profile)/u,
+      "## Ticket\n\nSee the tracker.\n",
+    ),
   );
 
   d = brokenCopy("break-legs", cleanDir);
@@ -297,7 +315,7 @@ function expectScore(key: string, failing: string, failText?: string): void {
   const lines = out.split("\n").filter((l) => l.trim()).length;
   expect(rc).toBe(failing === "none" ? 0 : 2);
   expect(failingChecks).toBe(failing);
-  expect(lines).toBe(7);
+  expect(lines).toBe(8);
   if (failText !== undefined) {
     expect(
       out
@@ -585,7 +603,9 @@ describe("new: a fresh repo outside every other, with its ticket in its own stor
     const isSymlink =
       existsSync(join(dest, "CLAUDE.md")) && lstatSync(join(dest, "CLAUDE.md")).isSymbolicLink();
     expect(same).toBe(true);
-    expect(heldFiles).toBe(listed2.filter(Boolean).join("\n"));
+    expect(heldFiles).toBe([...listed2.filter(Boolean), ".postmaster/fixture"].sort().join("\n"));
+    expect(readFileSync(join(dest, ".postmaster", "fixture"), "utf8")).toBe(FIXTURE_MARKER);
+    expect(run("git", ["-C", dest, "show", "HEAD:.postmaster/fixture"]).out).toBe(FIXTURE_MARKER);
     expect(isSymlink).toBe(true);
   }, 30000);
   test("it commits as this checkout does", () => {
@@ -832,6 +852,61 @@ describe("score: negative controls, the same record with one check broken at a t
   test("a waybill with no turnpikes line: stages alone fails", () => {
     expectScore("break-legs", "stages", "turnpikes.sh legs");
   }, 30000);
+});
+
+describe("score: waybill effort controls", () => {
+  test("the score command accepts the recorded efforts line and Team entries", () => {
+    const repo = join(tmp, `clean-${first}`, "repo");
+    const dispatch = join(repo, ".postmaster", "runs", "7");
+    const result = runScore(dispatch, repo);
+    expect(result.code).toBe(0);
+    expect(result.out).toContain("ok   efforts");
+  }, 30000);
+
+  test("the same score command rejects a changed efforts line", () => {
+    const repo = join(tmp, `clean-${first}`, "repo");
+    const dispatch = brokenCopy("wrong-efforts-line", join(repo, ".postmaster", "runs", "7"));
+    const brief = join(dispatch, "brief.md");
+    writeFileSync(
+      brief,
+      readFileSync(brief, "utf8").replace(/^efforts:.*$/mu, "efforts: wrong=high"),
+    );
+    const result = runScore(dispatch, repo);
+    expect(result.code).toBe(2);
+    expect(result.out).toContain("FAIL efforts");
+  }, 30000);
+
+  test("the same score command rejects a changed Team effort", () => {
+    const repo = join(tmp, `clean-${first}`, "repo");
+    const dispatch = brokenCopy("wrong-team-effort", join(repo, ".postmaster", "runs", "7"));
+    const brief = join(dispatch, "brief.md");
+    const text = readFileSync(brief, "utf8");
+    const changed = text.replace(/^(workhorses: [^\n]*\/)[^,\n]*/mu, "$1wrong");
+    expect(changed).not.toBe(text);
+    writeFileSync(brief, changed);
+    const result = runScore(dispatch, repo);
+    expect(result.code).toBe(2);
+    expect(result.out).toContain("FAIL efforts");
+  }, 30000);
+
+  test("a model containing a slash leaves the Team effort as its last field", () => {
+    const dispatch = join(scratch, "dispatch");
+    mkdirSync(dispatch, { recursive: true });
+    writeFileSync(
+      join(dispatch, "run.json"),
+      JSON.stringify({
+        config: {
+          lanes: { one: { harness: "mimo", model: "provider/model", effort: "low" } },
+          team: { workhorses: ["one"], coachman: { effort: "low" } },
+        },
+      }),
+    );
+    writeFileSync(
+      join(dispatch, "brief.md"),
+      "## Team\nworkhorses: one=mimo/provider/model/low\ncoachman: claude/model/low\nefforts: one=low, coachman=low\n",
+    );
+    expect(checkWaybillEfforts(dispatch).ok).toBe(true);
+  });
 });
 
 describe("score: input that is not a run is refused, not scored", () => {

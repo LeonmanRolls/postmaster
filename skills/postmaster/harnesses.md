@@ -19,7 +19,7 @@ the exited marker.
 
 **`<tool>/scripts/launch.sh` is the executable form of this file.** `launch.sh form <name>` prints the
 exact launch and resume commands for a configured lane or role; `launch` and `resume` run them;
-`review` runs a lane's bug-review form at the harness's top level on the named base-to-HEAD
+`review` runs a lane's bug-review form at its recorded effort on the named base-to-HEAD
 range; `skill` prints the prompt that invokes a harness's own security review skill (Own review
 skills, below). The script and this file change together, and a form the script refuses (agy
 resume or a bug-review form the harness does not have) is a form this file has not recorded.
@@ -486,9 +486,9 @@ brief. Every form below names that change explicitly: a skill left to choose its
 cannot be trusted in a review scratch, which is a worktree detached at the snapshot with no
 upstream. `<tool>/scripts/launch.sh review <lane> <cwd> <base>` runs the form on the change
 from `<base>` to the scratch's `HEAD`, and exits 3 for a harness with none. It runs every
-review at its harness's top level and names that level on every launch: `max` for claude and
-codex, and `high` for MiMo Code on MiMo V2.6 Pro, whose variants stop there, whatever effort
-the lane is configured at. `<tool>/scripts/review-forms.sh has <harness>` answers whether a
+review at the lane's effort in `run.json` and names that level on every launch. A lane with
+no recorded effort reviews at its harness's top level: `max` for claude and codex, `high`
+for MiMo Code. `<tool>/scripts/review-forms.sh has <harness>` answers whether a
 harness has one, and is what the scripts ask instead of carrying their own copy of the table.
 
 | harness | code-review skill | source |
@@ -502,13 +502,13 @@ harness has one, and is what the scripts ask instead of carrying their own copy 
 | agy | none recorded: its CLI reference lists no code-review form | its documentation (antigravity.google, CLI Reference), 2026-09 |
 
 **claude's `/code-review`.** The form is its ordinary launch form with the prompt
-`/code-review <level> <BASE>...HEAD`, level `max`:
+`/code-review <level> <BASE>...HEAD`, at the lane's recorded level:
 
 | | |
 |---|---|
-| command | the launch form, prompt `/code-review max <BASE>...HEAD` |
+| command | the launch form, prompt `/code-review <effort> <BASE>...HEAD` |
 | the change | `<BASE>...HEAD` named in the prompt; the skill's own diff rule is `git diff <target>` then `git diff HEAD` |
-| level | the form always names it. `/code-review` given no level reuses the level the user last typed in an interactive session (read from the 2.1.283 code), so the form never leaves it unset. At `max` its prompt asks for ten finder angles, through subagents where it has them, then verification of each finding and a sweep for gaps |
+| level | the form always names the recorded level, or `max` when the lane names none. `/code-review` given no level reuses the level the user last typed in an interactive session (read from the 2.1.283 code), so the form never leaves it unset. At `max` its prompt asks for ten finder angles, through subagents where it has them, then verification of each finding and a sweep for gaps |
 | findings | at `low`, one `path:line — …` line per finding in the final message; at `medium`, a findings-tool call inside the forked task (`file`, `line`, `summary`, `short_summary`, `failure_scenario`, `category`; no severity) and the findings again in its final message in a shape of its own; at `xhigh` and `max`, a JSON array in the final message (read from the 2.1.283 binary, not run). Prose around the array may cite a location only when it names a filed finding's file and line; anything else outside the array fails the normalize and is read by hand |
 | known findings | cannot be given: the argument parser reads the first word as the level and joins the rest into the target (read from the 2.1.283 code), so extra instructions would land in the review target |
 | tool calls | not in the `-p` stream. `/code-review` runs as a forked task; its tool calls, and at `medium` its findings tool call, are in the task's output file under `/tmp/claude-<uid>/`, which the stream's `task_notification` names. The harvest copies that file into the run's logs |
@@ -519,14 +519,14 @@ reached the whole change only because the branch list showed the target's defaul
 reported the planted bug at its line, in 2 runs of 2 (trial).
 
 **codex's `codex exec review`.** The form is `codex exec review --base <BASE>` with its launch
-form's flags (`--json`, `-o`, `-m`, `-c model_reasoning_effort="max"`, the bypass flag, and
+form's flags (`--json`, `-o`, `-m`, `-c model_reasoning_effort="<effort>"`, the bypass flag, and
 `--skip-git-repo-check` in a detached scratch):
 
 | | |
 |---|---|
-| command | `codex exec review --base <BASE> --json -o <last> -m <model> -c model_reasoning_effort="max" --dangerously-bypass-approvals-and-sandbox [--skip-git-repo-check]` |
+| command | `codex exec review --base <BASE> --json -o <last> -m <model> -c model_reasoning_effort="<effort>" --dangerously-bypass-approvals-and-sandbox [--skip-git-repo-check]` |
 | the change | `--base <BASE>`; codex takes a commit and computes the merge base itself, then the review thread runs `git diff` against the base commit |
-| level | `-c model_reasoning_effort="max"` on every launch |
+| level | the lane's recorded effort, or `max` when it names none, on every launch |
 | findings | the `-o` message is `- [P<n>] <title> — <absolute path>:<start>-<end>` with a body; its session file holds the same findings structured (`review_output`: title, body, priority, confidence, file, line range) |
 | known findings | a custom prompt is an alternative to `--base`; whether the two combine is untested. The form does not pass one |
 | tool calls | in the `--json` stream (`command_execution`); the review thread's model, effort and prompt are in the rollouts under `~/.codex/sessions/YYYY/MM/DD/` |
@@ -539,9 +539,9 @@ provide custom review instructions` (trial).
 
 | | |
 |---|---|
-| command | the launch form with `--command review` and `--variant high`; the prompt file (stdin) holds `<BASE>...HEAD` |
+| command | the launch form with `--command review` and `--variant <effort>`; the prompt file (stdin) holds `<BASE>...HEAD` |
 | the change | `<BASE>...HEAD` in the prompt file. MiMo Code's arguments are free text, and `mimo run` appends its stdin to them (read from the 0.1.15 code), so the range rides in the prompt file, not as a bare argument. Its rules read a bare SHA as one commit (`git show <sha>`) |
-| level | `--variant high`, the top of MiMo V2.6 Pro's variants (`low`, `medium`, `high`) |
+| level | the lane's recorded effort, or `high` when it names none; MiMo V2.6 Pro's variants are `low`, `medium`, `high` |
 | findings | free markdown in the final message; no severity or confidence fields |
 | known findings | free text in the same arguments; the form carries the range alone so nothing else lands there |
 | tool calls | a subtask's calls stream inline under the parent's session id. Its subtask launch fails in every run (`subagent_type build`, where only `explore` and `general` exist); the review runs because the model recovers |

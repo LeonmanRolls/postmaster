@@ -282,6 +282,7 @@ function buildForms(
   const cmd: string[] = [];
   const isResume = cmdMode === "resume" || cmdMode === "form-resume";
   const isReview = cmdMode === "review";
+  const reviewEffort = effort || (harness === "mimo" ? "high" : "max");
   switch (harness) {
     case "codex": {
       if (isReview) cmd.push("codex", "exec", "review", "--base", base, "--json");
@@ -289,7 +290,7 @@ function buildForms(
       else cmd.push("codex", "exec", "-C", cwd, "--json");
       if (last) cmd.push("-o", last);
       cmd.push("-m", model);
-      if (isReview) cmd.push("-c", 'model_reasoning_effort="max"');
+      if (isReview) cmd.push("-c", `model_reasoning_effort="${reviewEffort}"`);
       else if (effort) cmd.push("-c", `model_reasoning_effort="${effort}"`);
       cmd.push("--dangerously-bypass-approvals-and-sandbox");
       if (cmdMode === "launch" || isReview) {
@@ -333,13 +334,13 @@ function buildForms(
       break;
     }
     case "claude": {
-      const text = isReview ? `/code-review max ${base}...HEAD` : promptText;
+      const text = isReview ? `/code-review ${reviewEffort} ${base}...HEAD` : promptText;
       if (isResume) cmd.push("claude", "-p", "--resume", thread, text);
       else cmd.push("claude", "-p", text);
       // A review's text is already literal; only a launch or resume splices the file after the cd.
       if (!isReview) promptArg = cmd.length - 1;
       cmd.push("--model", model);
-      if (isReview) cmd.push("--effort", "max");
+      if (isReview) cmd.push("--effort", reviewEffort);
       else if (effort) cmd.push("--effort", effort);
       const launchName = process.env.POSTMASTER_LAUNCH_NAME;
       if (launchName) cmd.push("--name", launchName);
@@ -381,7 +382,7 @@ function buildForms(
       );
       if (isReview) cmd.push("--command", "review");
       if (isResume) cmd.push("-s", thread);
-      if (isReview) cmd.push("--variant", "high");
+      if (isReview) cmd.push("--variant", reviewEffort);
       else if (effort) cmd.push("--variant", effort);
       if (cmdMode === "launch") {
         const launchName = process.env.POSTMASTER_LAUNCH_NAME;

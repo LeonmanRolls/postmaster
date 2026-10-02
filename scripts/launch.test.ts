@@ -122,7 +122,7 @@ beforeAll(() => {
     codexfix("codex", 'model = "lane-model"\neffort = "high"');
     codexfix("codex-noeffort", 'model = "lane-model"');
     codexfix("codex-nomodel", 'effort = "high"');
-    codexfix("review-codex", 'model = "lane-model"\neffort = "low"');
+    codexfix("review-codex", 'model = "lane-model"\neffort = "max"');
     writeFileSync(join(tmp, "ruling.txt"), "- Keep going, then stop.\n");
     writeFileSync(join(tmp, "brief.txt"), "Keep going, then stop.\n");
     run("git", ["init", "-q", "-b", "main", join(tmp, "cx")]);
@@ -3556,11 +3556,11 @@ beforeAll(() => {
     const base = run("git", ["-C", join(tmp, "cx"), "rev-parse", "HEAD"]).out.trim();
     writeFileSync(
       join(tmp, "review-claude.toml"),
-      '[lanes.one]\nharness = "claude"\nmodel = "claude-model"\neffort = "low"\n\n[team]\ncoachman = { harness = "claude", model = "coach-model" }\n',
+      '[lanes.one]\nharness = "claude"\nmodel = "claude-model"\neffort = "max"\n\n[team]\ncoachman = { harness = "claude", model = "coach-model" }\n',
     );
     writeFileSync(
       join(tmp, "review-mimo.toml"),
-      '[lanes.one]\nharness = "mimo"\nmodel = "prov/mimo-model"\neffort = "low"\n\n[team]\ncoachman = { harness = "mimo", model = "coach-model" }\n',
+      '[lanes.one]\nharness = "mimo"\nmodel = "prov/mimo-model"\neffort = "high"\n\n[team]\ncoachman = { harness = "mimo", model = "coach-model" }\n',
     );
     writeFileSync(
       join(tmp, "review-pi.toml"),
@@ -3919,6 +3919,93 @@ afterAll(() => {
     if (v === undefined) delete process.env[k];
     else process.env[k] = v;
   }
+});
+
+describe("run-recorded effort controls", () => {
+  test("identical forms and stub reviews use fixture lows or ticket levels", () => {
+    withTempDir((tmp) => {
+      const bin = join(tmp, "bin");
+      mkdirSync(bin);
+      for (const harness of ["codex", "claude", "mimo", "muse"]) {
+        writeFileSync(
+          join(bin, harness),
+          '#!/bin/sh\nprintf "%s stdin=%s\\n" "$*" "$(cat)"\n',
+        );
+        chmodSync(join(bin, harness), 0o755);
+      }
+      const config = join(tmp, "machine.toml");
+      writeFileSync(
+        config,
+        '[lanes.codex_lane]\nharness = "codex"\nmodel = "c"\neffort = "max"\n' +
+          '[lanes.claude_lane]\nharness = "claude"\nmodel = "c"\neffort = "max"\n' +
+          '[lanes.mimo_lane]\nharness = "mimo"\nmodel = "p/m"\neffort = "high"\n' +
+          '[lanes.effortless]\nharness = "codex"\nmodel = "c"\n' +
+          '[team]\nworkhorses = ["codex_lane"]\n' +
+          'coachman = { harness = "claude", model = "coach-model", effort = "max" }\n' +
+          '[team.coachman_legs]\nsynthesis = { harness = "claude", model = "coach-model", effort = "max" }\n',
+      );
+      const env = {
+        ...process.env,
+        POSTMASTER_CONFIG: config,
+        POSTMASTER_TOOL_PINS: join(tmp, "pins"),
+        PATH: `${bin}:${process.env.PATH ?? ""}`,
+      };
+      const dispatches: Record<string, string> = {};
+      for (const kind of ["fixture", "ticket"]) {
+        const repo = join(tmp, kind);
+        mkdirSync(repo);
+        expect(run("git", ["-C", repo, "init", "-q", "-b", "main"]).code).toBe(0);
+        if (kind === "fixture") {
+          mkdirSync(join(repo, ".postmaster"));
+          writeFileSync(join(repo, ".postmaster", "fixture"), "postmaster fixture v1\n");
+          run("git", ["-C", repo, "add", ".postmaster/fixture"]);
+        }
+        expect(
+          run("git", ["-C", repo, "-c", "user.name=brindlewick", "-c", "user.email=332054101+brindlewick@users.noreply.github.com", "commit", "-q", "--allow-empty", "-m", "init"]).code,
+        ).toBe(0);
+        const dispatch = join(repo, ".postmaster", "runs", "7");
+        mkdirSync(dispatch, { recursive: true });
+        expect(run(join(here, "run-meta.sh"), [dispatch, repo], { env }).code).toBe(0);
+        dispatches[kind] = dispatch;
+      }
+      const reviewRepo = join(tmp, "review");
+      mkdirSync(reviewRepo);
+      run("git", ["-C", reviewRepo, "init", "-q", "-b", "main"]);
+      run("git", ["-C", reviewRepo, "-c", "user.name=brindlewick", "-c", "user.email=332054101+brindlewick@users.noreply.github.com", "commit", "-q", "--allow-empty", "-m", "init"]);
+      const base = run("git", ["-C", reviewRepo, "rev-parse", "HEAD"]).out.trim();
+      const launched = (label: string, result: ReturnType<typeof run>): void => {
+        if (result.code !== 0) throw new Error(`${label}: exit ${result.code}: ${result.err}${result.out}`);
+      };
+      for (const [kind, want] of [["fixture", { codex: "none", claude: "low", mimo: "low" }], ["ticket", { codex: "max", claude: "max", mimo: "high" }]] as const) {
+        const dispatch = dispatches[kind]!;
+        const form = run(self, ["form", "codex_lane", "--run", dispatch], { env });
+        launched(`${kind} form`, form);
+        const formEfforts = [...form.out.matchAll(/model_reasoning_effort=\S+/gu)].map(
+          (match) => match[0],
+        );
+        expect(formEfforts).toHaveLength(2);
+        expect(formEfforts.every((entry) => entry.includes(want.codex))).toBe(true);
+        expect(form.out).toContain("resume:");
+        const coach = run(self, ["form", "coachman", "--leg", "synthesis", "--run", dispatch], { env });
+        launched(`${kind} coach form`, coach);
+        expect(coach.out).toContain(`--effort ${want.claude}`);
+        expect(coach.out).toContain("resume:");
+        const codexReview = run(self, ["review", "codex_lane", reviewRepo, base, "--run", dispatch], { env });
+        launched(`${kind} codex review`, codexReview);
+        expect(codexReview.out).toContain(`model_reasoning_effort="${want.codex}"`);
+        const claudeReview = run(self, ["review", "claude_lane", reviewRepo, base, "--run", dispatch], { env });
+        launched(`${kind} claude review`, claudeReview);
+        expect(claudeReview.out).toContain(`/code-review ${want.claude} ${base}...HEAD`);
+        expect(claudeReview.out).toContain(`--effort ${want.claude}`);
+        const mimoReview = run(self, ["review", "mimo_lane", reviewRepo, base, "--run", dispatch], { env });
+        launched(`${kind} mimo review`, mimoReview);
+        expect(mimoReview.out).toContain(`--variant ${want.mimo}`);
+        const effortlessReview = run(self, ["review", "effortless", reviewRepo, base, "--run", dispatch], { env });
+        launched(`${kind} effortless review`, effortlessReview);
+        expect(effortlessReview.out).toContain('model_reasoning_effort="max"');
+      }
+    });
+  }, 60000);
 });
 
 describe("preamble", () => {

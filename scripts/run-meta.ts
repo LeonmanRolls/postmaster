@@ -7,6 +7,7 @@
 //   run-meta.sh path <dispatch>     print the canonical path of the run's tool checkout
 //   run-meta.sh check <dispatch>    the run's checkout still serves its dispatch commit
 //   run-meta.sh release <dispatch>  remove the pin when no claimed run is in flight
+//   run-meta.sh efforts <dispatch>  print the waybill's efforts line from run.json
 //
 // Records when it was written; the run and project; the target repo's HEAD and branch; the
 // postmaster commit that dispatched it, and whether that checkout had uncommitted changes,
@@ -78,7 +79,7 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
-import { tryTomlFile } from "./lib/data.ts";
+import { tryJsonFile, tryTomlFile } from "./lib/data.ts";
 import { toolRoot } from "./lib/paths.ts";
 import { mkstempSync, run, signalExitCode } from "./lib/proc.ts";
 import { pySplitLines, pyTrim } from "./lib/text.ts";
@@ -87,7 +88,7 @@ const TOOL = toolRoot(import.meta);
 const SCRIPT = import.meta.path;
 
 const USAGE =
-  "usage: run-meta.sh <dispatch> <repo> | pin <repo> <commit> | path <dispatch> | check <dispatch> | release <dispatch>";
+  "usage: run-meta.sh <dispatch> <repo> | pin <repo> <commit> | path <dispatch> | check <dispatch> | release <dispatch> | efforts <dispatch>";
 
 // Every command returns its exit code with the bytes for each stream; the CLI boundary writes
 // them, and the tests inspect them. stdout carries results (the pin path, the checkout,
@@ -694,7 +695,64 @@ function collectHarnesses(cfg: Record<string, unknown>): string[] {
   return [...harnesses].sort();
 }
 
-type Built = { ok: true; record: Record<string, unknown> } | { ok: false; messages: string[] };
+const LOWEST_EFFORT: Readonly<Record<string, string>> = {
+  codex: "none",
+  claude: "low",
+  muse: "minimal",
+  mimo: "low",
+};
+
+function teamSpecs(cfg: Record<string, unknown>): [string, Record<string, unknown>][] {
+  const specs: [string, Record<string, unknown>][] = [];
+  const lanes = (cfg.lanes ?? {}) as Record<string, Record<string, unknown>>;
+  for (const [name, spec] of Object.entries(lanes)) {
+    if (spec && typeof spec === "object") specs.push([name, spec]);
+  }
+  const team = (cfg.team ?? {}) as Record<string, unknown>;
+  for (const name of ["coachman", "coachman_fallback", "postmaster"]) {
+    const spec = team[name];
+    if (spec && typeof spec === "object") specs.push([name, spec as Record<string, unknown>]);
+  }
+  const legs = (team.coachman_legs ?? {}) as Record<string, Record<string, unknown>>;
+  for (const [name, spec] of Object.entries(legs)) {
+    if (spec && typeof spec === "object") specs.push([`coachman.${name}`, spec]);
+  }
+  return specs;
+}
+
+function fixtureEfforts(cfg: Record<string, unknown>): string[] {
+  const warnings: string[] = [];
+  for (const [name, spec] of teamSpecs(cfg)) {
+    if (typeof spec.effort !== "string" || !spec.effort) continue;
+    const harness = String(spec.harness ?? "");
+    const lowest = LOWEST_EFFORT[harness];
+    if (lowest === undefined) {
+      warnings.push(`run-meta: no lowest effort for ${name} on ${harness}; keeping ${spec.effort}`);
+    } else {
+      spec.effort = lowest;
+    }
+  }
+  return warnings;
+}
+
+export function effortsLine(cfg: Record<string, unknown>): string {
+  const pairs = teamSpecs(cfg)
+    .filter(([name, spec]) => name !== "postmaster" && typeof spec.effort === "string" && !!spec.effort)
+    .map(([name, spec]) => `${name}=${spec.effort}`);
+  return `efforts:${pairs.length > 0 ? ` ${pairs.join(", ")}` : ""}`;
+}
+
+export function efforts(d: string): Outcome {
+  const record = tryJsonFile<Record<string, unknown>>(join(d, "run.json"));
+  if (!record) return fail(`run-meta: no readable run.json in ${d}\n`);
+  const cfg = record.config;
+  if (!cfg || typeof cfg !== "object") return fail(`run-meta: no config in ${d}/run.json\n`);
+  return ok(`${effortsLine(cfg as Record<string, unknown>)}\n`);
+}
+
+type Built =
+  | { ok: true; record: Record<string, unknown>; warnings: string[] }
+  | { ok: false; messages: string[] };
 
 function parseSettingsJson(text: string, what: string): { value: unknown } | { error: string } {
   try {
@@ -733,11 +791,16 @@ function buildRecord(
   }
   const cfg = parseSettingsJson(effective.out, "effective machine config");
   if ("error" in cfg) return { ok: false, messages: [cfg.error] };
+  const resolvedConfig = cfg.value as Record<string, unknown>;
+  const warnings = existsSync(join(resolvedRepo, ".postmaster", "fixture"))
+    ? fixtureEfforts(resolvedConfig)
+    : [];
   const harnessVersions: Record<string, string> = {};
-  for (const h of collectHarnesses(cfg.value as Record<string, unknown>))
+  for (const h of collectHarnesses(resolvedConfig))
     harnessVersions[h] = version(h);
   return {
     ok: true,
+    warnings,
     record: {
       written: utcStamp(new Date()),
       coachman_contract: 2,
@@ -753,7 +816,7 @@ function buildRecord(
         uncommitted_changes: (git(TOOL, "status", "--porcelain") ?? "") !== "",
         checkout,
       },
-      config: cfg.value,
+      config: resolvedConfig,
       harness_versions: harnessVersions,
     },
   };
@@ -834,7 +897,11 @@ export function meta(d: string, repo: string): Outcome {
       return { code: 1, out: "", err };
     }
     const commit12 = (commit === "" ? "?" : commit).slice(0, 12);
-    return ok(`run-meta: wrote ${runJson} (postmaster ${commit12}, pinned at ${checkout})\n`);
+    return {
+      code: 0,
+      out: `run-meta: wrote ${runJson} (postmaster ${commit12}, pinned at ${checkout})\n`,
+      err: built.warnings.map((warning) => `${warning}\n`).join(""),
+    };
   });
   if (!held.locked) return fail(`run-meta: could not lock ${tools}\n`);
   return held.value;
@@ -985,13 +1052,14 @@ if (import.meta.main) {
   }
   {
     const cmd = argv[0];
-    const verbs = ["pin", "path", "check", "release"];
+    const verbs = ["pin", "path", "check", "release", "efforts"];
     let outcome: Outcome;
     if (cmd === "pin" && argv.length === 3)
       outcome = pin(argv[1] as string, argv[2] as string, readTools());
     else if (cmd === "path" && argv.length === 2) outcome = pathOf(argv[1] as string);
     else if (cmd === "check" && argv.length === 2) outcome = checkPin(argv[1] as string);
     else if (cmd === "release" && argv.length === 2) outcome = releasePin(argv[1] as string);
+    else if (cmd === "efforts" && argv.length === 2) outcome = efforts(argv[1] as string);
     else if (cmd !== undefined && !verbs.includes(cmd) && argv.length === 2) {
       outcome = meta(argv[0] as string, argv[1] as string);
     } else usage();

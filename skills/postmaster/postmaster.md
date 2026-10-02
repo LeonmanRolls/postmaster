@@ -134,7 +134,8 @@ For the next ticket in order, when the run ceiling (`team.max_runs`) has room:
    place and neither rewrites the file. Then record what the run starts from, once:
    `<tool>/scripts/run-meta.sh <dispatch> <repo>` writes `run.json` with the postmaster commit,
    the pinned checkout of that commit, the coachman contract version, the resolved machine
-   config, project settings and their sources, and the harness versions, and nothing edits it
+   config (with fixture efforts lowered for a marked copy), project settings and their sources,
+   and the harness versions, and nothing edits it
    afterwards. The pin is a worktree of this repo at the dispatch commit, shared by every run
    dispatched at it; the waybill names it as `tool:`, and every leg of this run reads its
    runbooks and runs its scripts from there. Log the `run-meta.sh` output as a `note`.
@@ -152,14 +153,14 @@ For the next ticket in order, when the run ceiling (`team.max_runs`) has room:
 7. **Write `brief.md`** from the template in `SKILL.md`: the `turnpikes:` line step 1's check
    printed, whole, under the waybill's title, then the ticket verbatim, the project profile (gate,
    build, browser suite, landing (`pull-request` or `local`), the checks as `verify.sh record`
-   printed them, docs to read first, tracker, risk surfaces), the team from the resolved
-   machine config with its reviewer lines as `<tool>/scripts/reviewers.sh lines --project <repo>`
-   prints them, each project's facts sourced as discovered, shared or local, `CHECKPOINT_MODE`
+   printed them, docs to read first, tracker, risk surfaces), the team from the config in
+   `run.json` with its reviewer lines as `<tool>/scripts/reviewers.sh lines --project <repo>`
+   prints them and the whole `efforts:` line from `<tool>/scripts/run-meta.sh efforts <dispatch>`,
+   each project's facts sourced as discovered, shared or local, `CHECKPOINT_MODE`
    from `ship.checkpoint_mode` and `MERGE_AUTHORITY` from `ship.merge_authority`, either
    overridden only where the user said so for this run, the dispatch path and the run's pinned
    tool — `<tool>/scripts/run-meta.sh path <dispatch>`, the checkout step 5 cut, which the
-   template names as `tool:` and the coachman uses as its `<tool>`. The
-   config here is the one in `run.json`. Then
+   template names as `tool:` and the coachman uses as its `<tool>`. Then
    `<tool>/scripts/turnpikes.sh legs <dispatch> --expect '<that turnpikes: line>'` exits 0 and
    prints the legs step 2 checked, before anything is launched.
    Record `coachman contract fixture: pending` and `contract fixture check: -`; no

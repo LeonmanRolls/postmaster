@@ -11,6 +11,7 @@ import {
   mkdirSync,
   readFileSync,
   realpathSync,
+  renameSync,
   rmSync,
   symlinkSync,
   utimesSync,
@@ -1440,6 +1441,92 @@ afterAll(() => {
     if (v === undefined) delete process.env[k];
     else process.env[k] = v;
   }
+});
+
+describe("fixture effort records", () => {
+  test("a moved fixture copy lowers every named effort, while a fixture-named ticket repo keeps its config", () => {
+    withTempDir((raw) => {
+      const tmp = realpathSync(raw);
+      const config = join(tmp, "machine.toml");
+      const pins = join(tmp, "pins");
+      const bin = join(tmp, "bin");
+      mkdirSync(bin);
+      for (const harness of ["codex", "claude", "muse", "mimo"]) {
+        writeFileSync(join(bin, harness), "#!/bin/sh\necho stub-version\n");
+        chmodSync(join(bin, harness), 0o755);
+      }
+      writeFileSync(
+        config,
+        '[lanes.codex_lane]\nharness = "codex"\nmodel = "c"\neffort = "max"\n' +
+          '[lanes.claude_lane]\nharness = "claude"\nmodel = "c"\neffort = "max"\n' +
+          '[lanes.muse_lane]\nharness = "muse"\nmodel = "m"\neffort = "high"\n' +
+          '[lanes.mimo_lane]\nharness = "mimo"\nmodel = "p/m"\neffort = "high"\n' +
+          '[lanes.no_effort]\nharness = "codex"\nmodel = "c"\n' +
+          '[lanes.unknown]\nharness = "agy"\nmodel = "a"\neffort = "high"\n' +
+          '[team]\nworkhorses = ["codex_lane"]\n' +
+          'coachman = { harness = "claude", model = "c", effort = "max" }\n' +
+          'coachman_fallback = { harness = "muse", model = "m", effort = "high" }\n' +
+          'postmaster = { harness = "codex", model = "c", effort = "max" }\n' +
+          '[team.coachman_legs]\nsynthesis = { harness = "mimo", model = "p/m", effort = "high" }\n',
+      );
+      const before = readFileSync(config);
+      const env = {
+        ...process.env,
+        POSTMASTER_CONFIG: config,
+        POSTMASTER_TOOL_PINS: pins,
+        PATH: `${bin}${delimiter}${process.env.PATH ?? ""}`,
+      };
+      const original = join(tmp, "original");
+      const created = run(join(import.meta.dir, "fixture.sh"), ["new", original, "remove"], { env });
+      expect(created.code).toBe(0);
+      const moved = join(tmp, "neutral");
+      renameSync(original, moved);
+      expect(run("git", ["-C", moved, "show", "HEAD:.postmaster/fixture"]).out).toBe(
+        "postmaster fixture v1\n",
+      );
+      const dispatch = join(moved, ".postmaster", "runs", "7");
+      mkdirSync(dispatch, { recursive: true });
+      const fixtureRecord = run(join(import.meta.dir, "run-meta.sh"), [dispatch, moved], { env });
+      expect(fixtureRecord.code).toBe(0);
+      expect(fixtureRecord.err).toContain("no lowest effort for unknown on agy; keeping high");
+      const recorded = JSON.parse(readFileSync(join(dispatch, "run.json"), "utf8"));
+      const cfg = recorded.config;
+      expect(cfg.lanes.codex_lane.effort).toBe("none");
+      expect(cfg.lanes.claude_lane.effort).toBe("low");
+      expect(cfg.lanes.muse_lane.effort).toBe("minimal");
+      expect(cfg.lanes.mimo_lane.effort).toBe("low");
+      expect(cfg.lanes.no_effort.effort).toBeUndefined();
+      expect(cfg.lanes.unknown.effort).toBe("high");
+      expect(cfg.team.coachman.effort).toBe("low");
+      expect(cfg.team.coachman_fallback.effort).toBe("minimal");
+      expect(cfg.team.postmaster.effort).toBe("none");
+      expect(cfg.team.coachman_legs.synthesis.effort).toBe("low");
+      expect(readFileSync(config).equals(before)).toBe(true);
+      const line = run(join(import.meta.dir, "run-meta.sh"), ["efforts", dispatch], { env });
+      expect(line.code).toBe(0);
+      expect(line.out.trim()).toContain("codex_lane=none");
+      expect(line.out.trim()).toContain("coachman.synthesis=low");
+      expect(line.out.trim()).not.toContain("postmaster=");
+      expect(line.out.trim()).not.toContain("no_effort=");
+
+      const ticketRepo = join(tmp, "fixture-in-name");
+      mkdirSync(ticketRepo);
+      expect(run("git", ["-C", ticketRepo, "init", "-q", "-b", "main"]).code).toBe(0);
+      expect(
+        run("git", ["-C", ticketRepo, "-c", "user.name=brindlewick", "-c", "user.email=332054101+brindlewick@users.noreply.github.com", "commit", "-q", "--allow-empty", "-m", "init"]).code,
+      ).toBe(0);
+      const ticketDispatch = join(ticketRepo, ".postmaster", "runs", "8");
+      mkdirSync(ticketDispatch, { recursive: true });
+      const ticketRecord = run(join(import.meta.dir, "run-meta.sh"), [ticketDispatch, ticketRepo], { env });
+      expect(ticketRecord.code).toBe(0);
+      const ticketCfg = JSON.parse(readFileSync(join(ticketDispatch, "run.json"), "utf8")).config;
+      expect(ticketCfg.lanes.codex_lane.effort).toBe("max");
+      expect(ticketCfg.lanes.mimo_lane.effort).toBe("high");
+      expect(ticketCfg.team.coachman_legs.synthesis.effort).toBe("high");
+      expect(ticketRecord.err).toBe("");
+      expect(readFileSync(config).equals(before)).toBe(true);
+    });
+  }, 60000);
 });
 
 describe("positive controls", () => {
