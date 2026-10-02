@@ -128,4 +128,14 @@ describe("the probe says ready, partial or unavailable", () => {
     expect(t.out).toContain("lane confinement: unavailable");
     expect(t.out).toContain("macOS has not been tried");
   });
+
+  test("the .sh wrapper runs the probe and the --verdict form", () => {
+    // Host PATH so the wrapper finds bun; the real machine's tools decide the verdict.
+    const t = run("bash", [SELF], { env: { ...(process.env as Record<string, string>) } });
+    expect(t.code).toBe(0);
+    expect(t.out + t.err).toContain("lane confinement:");
+    const v = run("bash", [SELF, "--verdict"], { env: { ...(process.env as Record<string, string>) } });
+    expect(v.code).toBe(0);
+    expect(["ready", "partial", "unavailable"]).toContain((v.out + v.err).trim());
+  });
 });
