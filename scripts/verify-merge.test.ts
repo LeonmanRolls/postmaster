@@ -9,13 +9,22 @@ afterEach(cleanupScratch);
 function mergedChange(value: string, conflict = false): string {
   const repo = initRepo();
   gitAt(repo, ["switch", "-q", "-c", "side"]);
-  writeFileSync(join(repo, conflict ? "base.txt" : "private-note.txt"), `${conflict ? "side" : value}\n`);
+  writeFileSync(
+    join(repo, conflict ? "base.txt" : "private-note.txt"),
+    `${conflict ? "side" : value}\n`,
+  );
   commit(repo, "side change");
   gitAt(repo, ["switch", "-q", "main"]);
-  writeFileSync(join(repo, conflict ? "base.txt" : "ordinary.txt"), conflict ? "main change\n" : "main change\n");
+  writeFileSync(
+    join(repo, conflict ? "base.txt" : "ordinary.txt"),
+    conflict ? "main change\n" : "main change\n",
+  );
   commit(repo, "main change");
   if (conflict) {
-    const merge = spawnSync("git", ["merge", "--no-ff", "--no-commit", "side"], { cwd: repo, encoding: "utf8" });
+    const merge = spawnSync("git", ["merge", "--no-ff", "--no-commit", "side"], {
+      cwd: repo,
+      encoding: "utf8",
+    });
     expect(merge.status).not.toBe(0);
     writeFileSync(join(repo, "base.txt"), `phone ${value}\n`);
     gitAt(repo, ["add", "base.txt"]);

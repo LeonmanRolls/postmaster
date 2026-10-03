@@ -267,7 +267,24 @@ describe("refusals", () => {
     ["caps word in phrasing", '[tracker]\nbinding="The TOKEN is here"\n'],
     ["padded credential name", '[tracker]\nbinding="  api_key  "\n'],
     ["credential word in a role name", '[roles]\nworkhorses=["API_KEY"]\n'],
-    ["classic token value", "[tr" + "ack" + "er]" + "\nbi" + "ndi" + "ng=" + "\"gh" + "p_1" + "234" + "567" + "890" + "123" + "456" + "789" + "0\"\n"],
+    [
+      "classic token value",
+      "[tr" +
+        "ack" +
+        "er]" +
+        "\nbi" +
+        "ndi" +
+        "ng=" +
+        '"gh' +
+        "p_1" +
+        "234" +
+        "567" +
+        "890" +
+        "123" +
+        "456" +
+        "789" +
+        '0"\n',
+    ],
     ["short classic token value", '[tracker]\nbinding="ghp_12345678"\n'],
     ["fine-grained token value", '[tracker]\nbinding="github_pat_ABCDEFGHIJKL"\n'],
     ["gitlab token value", '[tracker]\nbinding="glpat-ABCDEFGHIJKL"\n'],
@@ -275,7 +292,25 @@ describe("refusals", () => {
     ["key-like token value", '[tracker]\nbinding="sk-1234567890123456"\n'],
     ["credential assignment", '[tracker]\nbinding="X_API_KEY=abc123"\n'],
     ["lowercase credential assignment", '[tracker]\nbinding="password = hunter2"\n'],
-    ["private key block", "[tr" + "ack" + "er]" + "\nbi" + "ndi" + "ng=" + "\"--" + "---" + "BEG" + "IN " + "PRI" + "VAT" + "E K" + "EY-" + "---" + "-\"\n"],
+    [
+      "private key block",
+      "[tr" +
+        "ack" +
+        "er]" +
+        "\nbi" +
+        "ndi" +
+        "ng=" +
+        '"--' +
+        "---" +
+        "BEG" +
+        "IN " +
+        "PRI" +
+        "VAT" +
+        "E K" +
+        "EY-" +
+        "---" +
+        '-"\n',
+    ],
   ];
   for (const [label, contents] of rejects) {
     test(`rejects ${label}`, () => {
@@ -312,7 +347,27 @@ describe("refusals", () => {
 
 describe("acceptances", () => {
   const accepts: Array<[string, string, boolean]> = [
-    ["risk prose naming a path", "[pr" + "oje" + "ct]" + "\nri" + "sk_" + "sur" + "fac" + "es=" + "\"re" + "ads" + " /h" + "ome" + "/al" + "ex/" + "sec" + "ret" + "\"\n", true],
+    [
+      "risk prose naming a path",
+      "[pr" +
+        "oje" +
+        "ct]" +
+        "\nri" +
+        "sk_" +
+        "sur" +
+        "fac" +
+        "es=" +
+        '"re' +
+        "ads" +
+        " /h" +
+        "ome" +
+        "/al" +
+        "ex/" +
+        "sec" +
+        "ret" +
+        '"\n',
+      true,
+    ],
     [
       "risk prose naming a secret",
       '[project]\nrisk_surfaces="reads PLANE_API_KEY and lane env files"\n',

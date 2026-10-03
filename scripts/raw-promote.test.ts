@@ -1,7 +1,15 @@
 import { afterEach, expect, test } from "bun:test";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { cleanupScratch, email, initRepo, marker, runScript, scratchDir, token } from "./scrub-test-kit.ts";
+import {
+  cleanupScratch,
+  email,
+  initRepo,
+  marker,
+  runScript,
+  scratchDir,
+  token,
+} from "./scrub-test-kit.ts";
 
 afterEach(cleanupScratch);
 
@@ -21,7 +29,11 @@ test("C19 promotion replaces findings in the copy and leaves the source byte-for
   const promoted = readFileSync(join(repo, "raw/copied", "record.jsonl"), "utf8");
   expect(promoted).toContain("<redacted:email>");
   expect(promoted).toContain("<redacted:token>");
-  const clean = runScript("scrub-check", ["--files", join(repo, "raw/copied", "record.jsonl")], repo);
+  const clean = runScript(
+    "scrub-check",
+    ["--files", join(repo, "raw/copied", "record.jsonl")],
+    repo,
+  );
   expect(clean.status).toBe(0);
   expect(clean.stdout).toBe("");
   expect(copied.stdout.includes(email()) || copied.stdout.includes(token())).toBe(false);
@@ -40,14 +52,23 @@ test("C20 promotion removes all encrypted reasoning forms, including one nested 
   writeFileSync(join(source, "trace.jsonl"), `${lines.join("\n")}\n`);
   const copied = runScript("raw-promote", [source, "raw/trace"], repo);
   expect(copied.status).toBe(0);
-  expect(copied.stdout.trim().split("\n").filter((line) => line.includes("encrypted-reasoning scrubbed"))).toHaveLength(4);
-  const promoted = readFileSync(join(repo, "raw/trace", "trace.jsonl"), "utf8").trim().split("\n");
+  expect(
+    copied.stdout
+      .trim()
+      .split("\n")
+      .filter((line) => line.includes("encrypted-reasoning scrubbed")),
+  ).toHaveLength(4);
+  const promoted = readFileSync(join(repo, "raw/trace", "trace.jsonl"), "utf8")
+    .trim()
+    .split("\n");
   expect(promoted).toHaveLength(lines.length);
   const parsed = promoted.map((line) => JSON.parse(line) as Record<string, unknown>);
   expect(parsed[0]!.signature).toBe("<redacted:encrypted-reasoning>");
   expect(parsed[1]!.data).toBe("<redacted:encrypted-reasoning>");
   expect(parsed[2]!.encrypted_content).toBe("<redacted:encrypted-reasoning>");
-  expect(JSON.parse(parsed[3]!.nested as string)).toEqual({ encrypted_content: "<redacted:encrypted-reasoning>" });
+  expect(JSON.parse(parsed[3]!.nested as string)).toEqual({
+    encrypted_content: "<redacted:encrypted-reasoning>",
+  });
   expect(promoted.join("\n").includes("sealedtext")).toBe(false);
 });
 

@@ -1,24 +1,59 @@
 import { afterEach, expect, test } from "bun:test";
-import { accessSync, closeSync, constants, mkdirSync, openSync, readFileSync, symlinkSync, writeFileSync, writeSync } from "node:fs";
+import {
+  accessSync,
+  closeSync,
+  constants,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  symlinkSync,
+  writeFileSync,
+  writeSync,
+} from "node:fs";
 import { delimiter, join } from "node:path";
 import { spawnSync } from "node:child_process";
-import { cleanupScratch, commit, email, initRepo, opaqueId, phone, privatePath, ROOT, runScript, scratchDir, token } from "./scrub-test-kit.ts";
+import {
+  cleanupScratch,
+  commit,
+  email,
+  initRepo,
+  opaqueId,
+  phone,
+  privatePath,
+  ROOT,
+  runScript,
+  scratchDir,
+  token,
+} from "./scrub-test-kit.ts";
 
 afterEach(cleanupScratch);
 
 function direct(script: string, args: string[], cwd: string, env: Record<string, string> = {}) {
-  return spawnSync(process.execPath, ["--no-env-file", `--config=${join(ROOT, "bunfig.toml")}`, join(ROOT, "scripts", `${script}.ts`), ...args], {
-    cwd,
-    env: { ...process.env, ...env },
-    encoding: "utf8",
-  });
+  return spawnSync(
+    process.execPath,
+    [
+      "--no-env-file",
+      `--config=${join(ROOT, "bunfig.toml")}`,
+      join(ROOT, "scripts", `${script}.ts`),
+      ...args,
+    ],
+    {
+      cwd,
+      env: { ...process.env, ...env },
+      encoding: "utf8",
+    },
+  );
 }
 
 function executable(name: string): string {
   for (const dir of (process.env.PATH ?? "").split(delimiter)) {
     const path = join(dir, name);
-    try { accessSync(path, constants.X_OK); return path; }
-    catch { /* keep looking */ }
+    try {
+      accessSync(path, constants.X_OK);
+      return path;
+    } catch {
+      /* keep looking */
+    }
   }
   throw new Error("required executable was not found");
 }
@@ -27,14 +62,31 @@ test("C1 wrappers match host.sh and a direct Bun range scan needs only Bun, git 
   const scripts = ["scrub-check", "tree-check", "raw-promote", "scrub-rewrite", "verify-merge"];
   const host = readFileSync(join(ROOT, "scripts", "host.sh"), "utf8");
   for (const name of scripts) {
-    expect(readFileSync(join(ROOT, "scripts", `${name}.sh`), "utf8")).toBe(host.replaceAll("host.ts", `${name}.ts`));
+    expect(readFileSync(join(ROOT, "scripts", `${name}.sh`), "utf8")).toBe(
+      host.replaceAll("host.ts", `${name}.ts`),
+    );
   }
-  const grep = spawnSync("grep", ["-i", "-l", "python", ...scripts.flatMap((name) => [join(ROOT, "scripts", `${name}.ts`), join(ROOT, "scripts", `${name}.sh`)])], { encoding: "utf8" });
+  const grep = spawnSync(
+    "grep",
+    [
+      "-i",
+      "-l",
+      "python",
+      ...scripts.flatMap((name) => [
+        join(ROOT, "scripts", `${name}.ts`),
+        join(ROOT, "scripts", `${name}.sh`),
+      ]),
+    ],
+    { encoding: "utf8" },
+  );
   expect(grep.status).toBe(1);
   expect(grep.stdout.trim()).toBe("");
 
   const repo = initRepo();
-  const base = spawnSync("git", ["rev-parse", "HEAD"], { cwd: repo, encoding: "utf8" }).stdout.trim();
+  const base = spawnSync("git", ["rev-parse", "HEAD"], {
+    cwd: repo,
+    encoding: "utf8",
+  }).stdout.trim();
   writeFileSync(join(repo, "notes.txt"), email());
   const head = commit(repo, "add note");
   const bin = join(scratchDir(), "bin");
@@ -49,7 +101,10 @@ test("C1 wrappers match host.sh and a direct Bun range scan needs only Bun, git 
 
 test("C2 range scan sees added then deleted lines, file names, messages, identities and merge resolutions", () => {
   const repo = initRepo();
-  const base = spawnSync("git", ["rev-parse", "HEAD"], { cwd: repo, encoding: "utf8" }).stdout.trim();
+  const base = spawnSync("git", ["rev-parse", "HEAD"], {
+    cwd: repo,
+    encoding: "utf8",
+  }).stdout.trim();
   const added = email();
   writeFileSync(join(repo, "notes.txt"), added);
   const first = commit(repo, "add temporary note");
@@ -61,7 +116,10 @@ test("C2 range scan sees added then deleted lines, file names, messages, identit
   expect(!deleted.stdout.includes(added)).toBe(true);
 
   const namedRepo = initRepo();
-  const namedBase = spawnSync("git", ["rev-parse", "HEAD"], { cwd: namedRepo, encoding: "utf8" }).stdout.trim();
+  const namedBase = spawnSync("git", ["rev-parse", "HEAD"], {
+    cwd: namedRepo,
+    encoding: "utf8",
+  }).stdout.trim();
   const filename = `empty-${email()}`;
   writeFileSync(join(namedRepo, filename), "");
   commit(namedRepo, "add empty file");
@@ -71,7 +129,10 @@ test("C2 range scan sees added then deleted lines, file names, messages, identit
   expect(!named.stdout.includes(email())).toBe(true);
 
   const messageRepo = initRepo();
-  const messageBase = spawnSync("git", ["rev-parse", "HEAD"], { cwd: messageRepo, encoding: "utf8" }).stdout.trim();
+  const messageBase = spawnSync("git", ["rev-parse", "HEAD"], {
+    cwd: messageRepo,
+    encoding: "utf8",
+  }).stdout.trim();
   const message = `note ${email()}`;
   const messageCommit = commit(messageRepo, message);
   const messageScan = runScript("scrub-check", [messageBase, "HEAD"], messageRepo);
@@ -81,34 +142,58 @@ test("C2 range scan sees added then deleted lines, file names, messages, identit
 
   for (const key of ["GIT_AUTHOR_EMAIL", "GIT_COMMITTER_EMAIL"]) {
     const identityRepo = initRepo();
-    const identityBase = spawnSync("git", ["rev-parse", "HEAD"], { cwd: identityRepo, encoding: "utf8" }).stdout.trim();
+    const identityBase = spawnSync("git", ["rev-parse", "HEAD"], {
+      cwd: identityRepo,
+      encoding: "utf8",
+    }).stdout.trim();
     const identityCommit = commit(identityRepo, "identity fixture", { [key]: email() });
     const identityScan = runScript("scrub-check", [identityBase, "HEAD"], identityRepo);
     expect(identityScan.status).toBe(1);
-    expect(identityScan.stdout.trim()).toBe(`${identityCommit}:(${key === "GIT_AUTHOR_EMAIL" ? "author" : "committer"}):1: email`);
+    expect(identityScan.stdout.trim()).toBe(
+      `${identityCommit}:(${key === "GIT_AUTHOR_EMAIL" ? "author" : "committer"}):1: email`,
+    );
     expect(!identityScan.stdout.includes(email())).toBe(true);
   }
 
   const mergeRepo = initRepo();
-  const mergeBase = spawnSync("git", ["rev-parse", "HEAD"], { cwd: mergeRepo, encoding: "utf8" }).stdout.trim();
+  const mergeBase = spawnSync("git", ["rev-parse", "HEAD"], {
+    cwd: mergeRepo,
+    encoding: "utf8",
+  }).stdout.trim();
   writeFileSync(join(mergeRepo, "merge.txt"), "side\n");
   commit(mergeRepo, "side change");
-  const side = spawnSync("git", ["rev-parse", "HEAD"], { cwd: mergeRepo, encoding: "utf8" }).stdout.trim();
+  const side = spawnSync("git", ["rev-parse", "HEAD"], {
+    cwd: mergeRepo,
+    encoding: "utf8",
+  }).stdout.trim();
   spawnSync("git", ["switch", "-q", "main"], { cwd: mergeRepo });
   writeFileSync(join(mergeRepo, "merge.txt"), "main\n");
   commit(mergeRepo, "main change");
-  spawnSync("git", ["merge", "--no-commit", side], { cwd: mergeRepo, encoding: "utf8", stdio: "ignore" });
+  spawnSync("git", ["merge", "--no-commit", side], {
+    cwd: mergeRepo,
+    encoding: "utf8",
+    stdio: "ignore",
+  });
   writeFileSync(join(mergeRepo, "merge.txt"), `phone ${phone()}\n`);
   const mergeCommit = commit(mergeRepo, "resolve merge");
   const mergeScan = runScript("scrub-check", [mergeBase, "HEAD"], mergeRepo);
   expect(mergeScan.status).toBe(1);
-  expect(mergeScan.stdout.trim().split("\n").some((line) => line.startsWith(`${mergeCommit}:merge.txt:1: phone`))).toBe(true);
+  expect(
+    mergeScan.stdout
+      .trim()
+      .split("\n")
+      .some((line) => line.startsWith(`${mergeCommit}:merge.txt:1: phone`)),
+  ).toBe(true);
 });
 
 test("range scan completes while per-file lookups await inside the diff read", () => {
   const repo = initRepo();
-  const base = spawnSync("git", ["rev-parse", "HEAD"], { cwd: repo, encoding: "utf8" }).stdout.trim();
-  for (let i = 0; i < 20; i++) writeFileSync(join(repo, `page-${i}.md`), `---\nname: t\n---\nnote ${email()}\n`);
+  const base = spawnSync("git", ["rev-parse", "HEAD"], {
+    cwd: repo,
+    encoding: "utf8",
+  }).stdout.trim();
+  for (let i = 0; i < 20; i++)
+    writeFileSync(join(repo, `page-${i}.md`), `---\nname: t\n---\nnote ${email()}\n`);
   writeFileSync(join(repo, "key.txt"), "-----BEGIN PRIV" + "ATE KEY-----\n");
   commit(repo, "add pages and key");
   const scan = runScript("scrub-check", [base, "HEAD"], repo);
@@ -142,7 +227,10 @@ test("C3 --files decodes ANSI, JSON depths one through four and the depth limit,
   for (let level = 0; level < 64; level++) atLimit = `{"node":${atLimit}}`;
   const ansi = JSON.stringify({ content: value.replace("@", `@\u001b[31m`) });
   const truncated = JSON.stringify({ content: value }).slice(0, -2);
-  writeFileSync(path, `${[1, 2, 3, 4].map(nested).join("\n")}\n${atLimit}\n${ansi}\n${truncated}\n`);
+  writeFileSync(
+    path,
+    `${[1, 2, 3, 4].map(nested).join("\n")}\n${atLimit}\n${ansi}\n${truncated}\n`,
+  );
   const utf16 = join(repo, "transcript-utf16.jsonl");
   writeFileSync(utf16, Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(value, "utf16le")]));
   const result = runScript("scrub-check", ["--files", path, utf16], repo);
@@ -162,15 +250,32 @@ test("C4 --files and range scans find private-key body lines, even when changed 
   expect(fileScan.status).toBe(1);
   expect(fileScan.stdout.trim()).toBe("[redacted]:1: token");
 
-  const base = spawnSync("git", ["rev-parse", "HEAD"], { cwd: repo, encoding: "utf8" }).stdout.trim();
-  writeFileSync(path, "-----BEGIN RSA PRIV" + "ATE KEY-----\n\n-----END RSA PRIV" + "ATE KEY-----\n");
+  const base = spawnSync("git", ["rev-parse", "HEAD"], {
+    cwd: repo,
+    encoding: "utf8",
+  }).stdout.trim();
+  writeFileSync(
+    path,
+    "-----BEGIN RSA PRIV" + "ATE KEY-----\n\n-----END RSA PRIV" + "ATE KEY-----\n",
+  );
   commit(repo, "add key header");
-  const headerCommit = spawnSync("git", ["rev-parse", "HEAD"], { cwd: repo, encoding: "utf8" }).stdout.trim();
-  writeFileSync(path, `-----BEGIN RSA PRIV${"ATE"} KEY-----\n${body}\n-----END RSA PRIV${"ATE"} KEY-----\n`);
+  const headerCommit = spawnSync("git", ["rev-parse", "HEAD"], {
+    cwd: repo,
+    encoding: "utf8",
+  }).stdout.trim();
+  writeFileSync(
+    path,
+    `-----BEGIN RSA PRIV${"ATE"} KEY-----\n${body}\n-----END RSA PRIV${"ATE"} KEY-----\n`,
+  );
   const bodyCommit = commit(repo, "add key body");
   const range = runScript("scrub-check", [headerCommit, bodyCommit], repo);
   expect(range.status).toBe(1);
-  expect(range.stdout.trim().split("\n").some((line) => line.endsWith(":2: token"))).toBe(true);
+  expect(
+    range.stdout
+      .trim()
+      .split("\n")
+      .some((line) => line.endsWith(":2: token")),
+  ).toBe(true);
 
   const values = [
     token(),
@@ -190,10 +295,12 @@ test("C4 --files and range scans find private-key body lines, even when changed 
   writeFileSync(allShapes, `${values.join("\n")}\n`);
   const shapes = runScript("scrub-check", ["--files", allShapes], repo);
   expect(shapes.status).toBe(1);
-  const lines = new Set(shapes.stdout.split("\n").flatMap((line) => {
-    const match = /^\[redacted\]:(\d+): (?:token|dotenv)$/u.exec(line);
-    return match ? [Number(match[1])] : [];
-  }));
+  const lines = new Set(
+    shapes.stdout.split("\n").flatMap((line) => {
+      const match = /^\[redacted\]:(\d+): (?:token|dotenv)$/u.exec(line);
+      return match ? [Number(match[1])] : [];
+    }),
+  );
   expect(lines.size).toBe(values.length);
   expect(!shapes.stdout.includes(body)).toBe(true);
   expect(!shapes.stderr.includes(body)).toBe(true);
@@ -222,21 +329,30 @@ test("C14 and C16 marked file values pass, while marked messages and post text r
   writeFileSync(path, `${same}${next}`);
   const file = runScript("scrub-check", ["--files", path], repo);
   expect(file.status).toBe(0);
-  const markedMessage = commit(repo, `message ${email()} ${["private-data", ":allow email -- synthetic fixture"].join("")}`);
+  const markedMessage = commit(
+    repo,
+    `message ${email()} ${["private-data", ":allow email -- synthetic fixture"].join("")}`,
+  );
   const messages = runScript("scrub-check", ["HEAD~1", markedMessage], repo);
   expect(messages.status).toBe(1);
   expect(messages.stdout).toContain("(message):1: email");
   expect(!messages.stdout.includes(email())).toBe(true);
 
   const prPath = join(repo, "pr.txt");
-  writeFileSync(prPath, `comment ${email()} ${["private-data", ":allow email -- synthetic fixture"].join("")}`);
+  writeFileSync(
+    prPath,
+    `comment ${email()} ${["private-data", ":allow email -- synthetic fixture"].join("")}`,
+  );
   const pr = runScript("scrub-check", ["--pr-description", prPath], repo);
   expect(pr.status).toBe(1);
   expect(pr.stdout.trim()).toBe("(pr-description):1: email");
   expect(!pr.stdout.includes(email())).toBe(true);
 
   const commentPath = join(repo, "ticket-comment.txt");
-  writeFileSync(commentPath, `ticket comment ${email()} ${["private-data", ":allow email -- synthetic fixture"].join("")}\n`);
+  writeFileSync(
+    commentPath,
+    `ticket comment ${email()} ${["private-data", ":allow email -- synthetic fixture"].join("")}\n`,
+  );
   const comment = runScript("scrub-check", ["--pr-description", commentPath], repo);
   expect(comment.status).toBe(1);
   expect(comment.stdout.trim()).toBe("(pr-description):1: email");
@@ -265,7 +381,9 @@ test("C23 disabling a named rule flips its ordinary positive control", () => {
   writeFileSync(path, email());
   const active = runScript("scrub-check", ["--files", path], repo);
   expect(active.status).toBe(1);
-  const disabled = runScript("scrub-check", ["--files", path], repo, { SCRUB_CHECK_DISABLE: "email" });
+  const disabled = runScript("scrub-check", ["--files", path], repo, {
+    SCRUB_CHECK_DISABLE: "email",
+  });
   expect(disabled.status).toBe(0);
   expect(disabled.stdout.trim()).toBe("");
   expect(token().length).toBeGreaterThan(20);
@@ -286,10 +404,20 @@ test("C5 patterns stay offline and find personal data from fragments", () => {
   mkdirSync(bin);
   symlinkSync(process.execPath, join(bin, "bun"));
   symlinkSync(executable("sh"), join(bin, "sh"));
-  const result = direct("scrub-check", ["--files", path], repo, { PATH: bin, HTTP_PROXY: "http://127.0.0.1:1", HTTPS_PROXY: "http://127.0.0.1:1" });
+  const result = direct("scrub-check", ["--files", path], repo, {
+    PATH: bin,
+    HTTP_PROXY: "http://127.0.0.1:1",
+    HTTPS_PROXY: "http://127.0.0.1:1",
+  });
   expect(result.status).toBe(1);
-  const found = new Set(result.stdout.split("\n").map((line) => line.split(": ").at(-1)).filter(Boolean));
-  for (const rule of ["self-introduction", "email", "phone", "street", "ssn"]) expect(found.has(rule)).toBe(true);
+  const found = new Set(
+    result.stdout
+      .split("\n")
+      .map((line) => line.split(": ").at(-1))
+      .filter(Boolean),
+  );
+  for (const rule of ["self-introduction", "email", "phone", "street", "ssn"])
+    expect(found.has(rule)).toBe(true);
   expect(!result.stdout.includes(email())).toBe(true);
   expect(!result.stderr.includes(email())).toBe(true);
 });
@@ -322,20 +450,24 @@ test("C7 --files finds private context while code and placeholders pass", () => 
   expect(found.status).toBe(1);
   const rows = found.stdout.trim().split("\n");
   const rules = new Set(rows.map((row) => row.split(": ").at(-1)));
-  for (const rule of ["private-path", "private-host", "account-id", "assistant-attribution"]) expect(rules.has(rule)).toBe(true);
+  for (const rule of ["private-path", "private-host", "account-id", "assistant-attribution"])
+    expect(rules.has(rule)).toBe(true);
   expect(rows.every((row) => !row.endsWith(": email"))).toBe(true);
   expect(!found.stdout.includes(credit) && !found.stdout.includes(footer)).toBe(true);
   expect(!found.stderr.includes(credit) && !found.stderr.includes(footer)).toBe(true);
 
   const clean = join(repo, "code-only.txt");
-  writeFileSync(clean, [
-    "process.env.HOME",
-    'join(home, "note.txt")',
-    "const session_id = process.env.SESSION_ID",
-    "/home/user/trial/home/note.txt",
-    "ssh host",
-    'const host = "<placeholder>"',
-  ].join("\n") + "\n");
+  writeFileSync(
+    clean,
+    [
+      "process.env.HOME",
+      'join(home, "note.txt")',
+      "const session_id = process.env.SESSION_ID",
+      "/home/user/trial/home/note.txt",
+      "ssh host",
+      'const host = "<placeholder>"',
+    ].join("\n") + "\n",
+  );
   const passed = runScript("scrub-check", ["--files", clean], repo);
   expect(passed.status).toBe(0);
   expect(passed.stdout).toBe("");
@@ -344,28 +476,69 @@ test("C7 --files finds private context while code and placeholders pass", () => 
 
 test("C6 held-out personal-data results meet both recorded thresholds", () => {
   const personalRules = new Set([
-    "sign-off", "author-field", "copyright", "git-identity", "title", "self-introduction", "relative", "credit",
-    "name-and-address", "email", "phone", "card", "iban", "ssn", "id-number", "date-of-birth", "health", "income", "family", "residence", "employer",
-    "street", "postcode", "po-box", "address-field",
+    "sign-off",
+    "author-field",
+    "copyright",
+    "git-identity",
+    "title",
+    "self-introduction",
+    "relative",
+    "credit",
+    "name-and-address",
+    "email",
+    "phone",
+    "card",
+    "iban",
+    "ssn",
+    "id-number",
+    "date-of-birth",
+    "health",
+    "income",
+    "family",
+    "residence",
+    "employer",
+    "street",
+    "postcode",
+    "po-box",
+    "address-field",
   ]);
   const sets = [
-    { path: "raw/trials/pii-patterns/results/heldout/lines.json", foundFloor: 33, raisedCeiling: 3 },
-    { path: "raw/trials/pii-patterns/results/heldout2/lines.json", foundFloor: 25, raisedCeiling: 4 },
+    {
+      path: "raw/trials/pii-patterns/results/heldout/lines.json",
+      foundFloor: 33,
+      raisedCeiling: 3,
+    },
+    {
+      path: "raw/trials/pii-patterns/results/heldout2/lines.json",
+      foundFloor: 25,
+      raisedCeiling: 4,
+    },
   ];
   for (const set of sets) {
-    const source = JSON.parse(readFileSync(join(ROOT, set.path), "utf8")) as Array<{ parts: string[]; label: string }>;
+    const source = JSON.parse(readFileSync(join(ROOT, set.path), "utf8")) as Array<{
+      parts: string[];
+      label: string;
+    }>;
     const input = join(scratchDir(), "heldout.txt");
     writeFileSync(input, `${source.map((row) => row.parts.join("")).join("\n")}\n`);
     const scanned = runScript("scrub-check", ["--files", input], ROOT);
-    const lines = new Set(scanned.stdout.split("\n").flatMap((line) => {
-      const match = /^\[redacted\]:(\d+): (.+)$/u.exec(line);
-      return match && personalRules.has(match[2]!) ? [match[1]!] : [];
-    }));
-    const positives = source.map((row, index) => ({ row, index })).filter(({ row }) => row.label !== "none");
-    const negatives = source.map((row, index) => ({ row, index })).filter(({ row }) => row.label === "none");
+    const lines = new Set(
+      scanned.stdout.split("\n").flatMap((line) => {
+        const match = /^\[redacted\]:(\d+): (.+)$/u.exec(line);
+        return match && personalRules.has(match[2]!) ? [match[1]!] : [];
+      }),
+    );
+    const positives = source
+      .map((row, index) => ({ row, index }))
+      .filter(({ row }) => row.label !== "none");
+    const negatives = source
+      .map((row, index) => ({ row, index }))
+      .filter(({ row }) => row.label === "none");
     const found = positives.filter(({ index }) => lines.has(String(index + 1))).length;
     const raised = negatives.filter(({ index }) => lines.has(String(index + 1))).length;
-    console.log(`${set.path}: found ${found}/${positives.length}, raised ${raised}/${negatives.length}`);
+    console.log(
+      `${set.path}: found ${found}/${positives.length}, raised ${raised}/${negatives.length}`,
+    );
     expect(scanned.status).not.toBe(2);
     expect(found).toBeGreaterThanOrEqual(set.foundFloor);
     expect(raised).toBeLessThanOrEqual(set.raisedCeiling);
@@ -413,19 +586,28 @@ test("C27 --files and raw promotion stream a 175 MB file below 512 MB", () => {
   mkdirSync(source);
   const fd = openSync(file, "w");
   const row = Buffer.from(`${"letter ".repeat(357)}\n`);
-  try { for (let index = 0; index < 70_000; index++) writeSync(fd, row); }
-  finally { closeSync(fd); }
+  try {
+    for (let index = 0; index < 70_000; index++) writeSync(fd, row);
+  } finally {
+    closeSync(fd);
+  }
   expect(Buffer.byteLength(row) * 70_000).toBeGreaterThan(170_000_000);
-  writeFileSync(join(scratchDir(), "whole-read.ts"), [
-    'import { readFileSync } from "node:fs";',
-    'const body = readFileSync(process.argv[2]!, "utf8");',
-    'const lines = body.split("\\n");',
-    'console.log(lines.length);',
-  ].join("\n"));
+  writeFileSync(
+    join(scratchDir(), "whole-read.ts"),
+    [
+      'import { readFileSync } from "node:fs";',
+      'const body = readFileSync(process.argv[2]!, "utf8");',
+      'const lines = body.split("\\n");',
+      "console.log(lines.length);",
+    ].join("\n"),
+  );
 
-  const withinLimit = (script: string, args: string[]) => spawnSync("bash", [
-    "-c", 'ulimit -v 524288 || exit 99; exec "$@"', "bash", script, ...args,
-  ], { cwd: repo, encoding: "utf8", maxBuffer: 1024 * 1024 });
+  const withinLimit = (script: string, args: string[]) =>
+    spawnSync("bash", ["-c", 'ulimit -v 524288 || exit 99; exec "$@"', "bash", script, ...args], {
+      cwd: repo,
+      encoding: "utf8",
+      maxBuffer: 1024 * 1024,
+    });
   const scan = withinLimit(join(ROOT, "scripts/scrub-check.sh"), ["--files", file]);
   expect(scan.status).toBe(0);
   expect(scan.stdout).toBe("");

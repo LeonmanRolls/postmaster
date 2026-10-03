@@ -45,17 +45,28 @@ interface RunRow {
 function detectionKeys(path: string): Set<string> {
   const keys = new Set<string>();
   let lines: string[];
-  try { lines = readFileSync(path, "utf8").split("\n"); }
-  catch { return keys; }
+  try {
+    lines = readFileSync(path, "utf8").split("\n");
+  } catch {
+    return keys;
+  }
   for (const line of lines) {
     if (!line.trim()) continue;
     try {
       const record: unknown = JSON.parse(line);
       if (typeof record !== "object" || record === null || Array.isArray(record)) continue;
       const row = record as Record<string, unknown>;
-      if (typeof row.rule !== "string" || typeof row.file !== "string" || typeof row.commit !== "string" || typeof row.line !== "number") continue;
+      if (
+        typeof row.rule !== "string" ||
+        typeof row.file !== "string" ||
+        typeof row.commit !== "string" ||
+        typeof row.line !== "number"
+      )
+        continue;
       keys.add(JSON.stringify([row.rule, row.file, row.line, row.commit]));
-    } catch { /* an incomplete last append is ignored until the writer finishes */ }
+    } catch {
+      /* an incomplete last append is ignored until the writer finishes */
+    }
   }
   return keys;
 }

@@ -1763,7 +1763,10 @@ if (a[0] === "api" && a[1] === "graphql") {
         ["scripts/launch.sh", "ping admin@exämple.com now"],
         ["scripts/launch.sh", "not" + "e u" + "ser" + "@ex" + "ämp" + "le." + "com" + " he" + "re"],
         ["scripts/launch.sh", "mai" + "l q" + "zxv" + "ndr" + "@例え" + ".テス" + "ト o" + "k"],
-        ["scripts/launch.sh", "ask" + " jo" + "sé@" + "acm" + "e-c" + "orp" + ".co" + "m p" + "lea" + "se"],
+        [
+          "scripts/launch.sh",
+          "ask" + " jo" + "sé@" + "acm" + "e-c" + "orp" + ".co" + "m p" + "lea" + "se",
+        ],
         ["scripts/launch.sh", "mail u@example.com ok"],
         ["scripts/launch.sh", `see ${"üP" + "M"}-12 and more`],
         ["scripts/launch.sh", `see ${"xüP" + "M"}-99 here`],

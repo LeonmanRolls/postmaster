@@ -371,7 +371,12 @@ function checkBlock(dispatch: string, wt: string, checkpoint: string, card: stri
   return 0;
 }
 
-interface PrivateFinding { rule: string; file: string; line: number; commit: string }
+interface PrivateFinding {
+  rule: string;
+  file: string;
+  line: number;
+  commit: string;
+}
 type PrivateResolution = "removed" | "marked" | "scrubbed";
 
 function privateFindingKey(row: PrivateFinding): string {
@@ -380,8 +385,9 @@ function privateFindingKey(row: PrivateFinding): string {
 
 function jsonLines(path: string): Record<string, unknown>[] {
   let source: string;
-  try { source = readFileSync(path, "utf8"); }
-  catch (error) {
+  try {
+    source = readFileSync(path, "utf8");
+  } catch (error) {
     if ((error as NodeJS.ErrnoException)?.code === "ENOENT") return [];
     die("private-data record could not be read");
   }
@@ -390,18 +396,31 @@ function jsonLines(path: string): Record<string, unknown>[] {
     if (!line.trim()) continue;
     try {
       const value: unknown = JSON.parse(line);
-      if (typeof value !== "object" || value === null || Array.isArray(value)) die("private-data record is invalid");
+      if (typeof value !== "object" || value === null || Array.isArray(value))
+        die("private-data record is invalid");
       records.push(value as Record<string, unknown>);
-    } catch { die("private-data record is invalid"); }
+    } catch {
+      die("private-data record is invalid");
+    }
   }
   return records;
 }
 
 function privateFinding(record: Record<string, unknown>): PrivateFinding {
-  if (typeof record.rule !== "string" || typeof record.file !== "string" || typeof record.line !== "number" || typeof record.commit !== "string") {
+  if (
+    typeof record.rule !== "string" ||
+    typeof record.file !== "string" ||
+    typeof record.line !== "number" ||
+    typeof record.commit !== "string"
+  ) {
     die("private-data record is invalid");
   }
-  return { rule: record.rule, file: safePath(record.file), line: record.line, commit: record.commit };
+  return {
+    rule: record.rule,
+    file: safePath(record.file),
+    line: record.line,
+    commit: record.commit,
+  };
 }
 
 export function privateDataBlock(dispatch: string): string {
@@ -418,23 +437,33 @@ export function privateDataBlock(dispatch: string): string {
     const key = privateFindingKey(finding);
     if (!found.has(key)) die("private-data resolution has no finding");
     const resolution = record.resolution;
-    if (resolution !== "removed" && resolution !== "marked" && resolution !== "scrubbed") die("private-data resolution is invalid");
+    if (resolution !== "removed" && resolution !== "marked" && resolution !== "scrubbed")
+      die("private-data resolution is invalid");
     const previous = resolved.get(key);
-    if (previous && previous !== resolution) die("private-data finding has conflicting resolutions");
+    if (previous && previous !== resolution)
+      die("private-data finding has conflicting resolutions");
     resolved.set(key, resolution);
   }
-  const lines = [...found.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([key, finding]) => {
-    const resolution = resolved.get(key);
-    if (!resolution) die("private-data finding has no resolution");
-    const label = resolution === "marked" ? "marked as made-up" : resolution;
-    return `- ${finding.rule} at ${finding.file}:${finding.line} (${finding.commit.slice(0, 12)}) - ${label}`;
-  });
+  const lines = [...found.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, finding]) => {
+      const resolution = resolved.get(key);
+      if (!resolution) die("private-data finding has no resolution");
+      const label = resolution === "marked" ? "marked as made-up" : resolution;
+      return `- ${finding.rule} at ${finding.file}:${finding.line} (${finding.commit.slice(0, 12)}) - ${label}`;
+    });
   const census = jsonLines(join(dispatch, "private-data-census.jsonl"));
   const censusRules = new Map<string, number>();
   const censusVerdicts = new Map<string, number>();
   const censusPlaces = new Set<string>();
   for (const record of census) {
-    if (typeof record.rule !== "string" || (record.verdict !== "made-up" && record.verdict !== "real") || typeof record.file !== "string" || typeof record.line !== "number" || typeof record.commit !== "string") {
+    if (
+      typeof record.rule !== "string" ||
+      (record.verdict !== "made-up" && record.verdict !== "real") ||
+      typeof record.file !== "string" ||
+      typeof record.line !== "number" ||
+      typeof record.commit !== "string"
+    ) {
       die("private-data census is invalid");
     }
     const key = JSON.stringify([record.file, record.line, record.commit]);
@@ -445,10 +474,17 @@ export function privateDataBlock(dispatch: string): string {
   }
   if (census.length > 50) die("private-data census exceeds 50 suspects");
   const censusBlock = census.length
-    ? `\n## Main history census\n\n- suspects: ${census.length}\n- made-up: ${censusVerdicts.get("made-up") ?? 0}\n- real: ${censusVerdicts.get("real") ?? 0}\n\n${[...censusRules.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([rule, count]) => `- ${count} suspect(s): ${rule}`).join("\n")}\n`
+    ? `\n## Main history census\n\n- suspects: ${census.length}\n- made-up: ${censusVerdicts.get("made-up") ?? 0}\n- real: ${censusVerdicts.get("real") ?? 0}\n\n${[
+        ...censusRules.entries(),
+      ]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([rule, count]) => `- ${count} suspect(s): ${rule}`)
+        .join("\n")}\n`
     : "";
-  const benchmark = "\n## Personal-data held-out checks\n\n- heldout: 33/33 found, 2/27 raised\n- heldout2: 25/37 found, 4/23 raised\n";
-  const portDecisions = "\n## Port decisions\n\n- D1: the scan runs inside this project's gate.\n- D8: untold findings take priority in the status poll.\n- D9: the steps are in stages current runs use.\n- D19: a finding is told once, even when the gate sees it again.\n";
+  const benchmark =
+    "\n## Personal-data held-out checks\n\n- heldout: 33/33 found, 2/27 raised\n- heldout2: 25/37 found, 4/23 raised\n";
+  const portDecisions =
+    "\n## Port decisions\n\n- D1: the scan runs inside this project's gate.\n- D8: untold findings take priority in the status poll.\n- D9: the steps are in stages current runs use.\n- D19: a finding is told once, even when the gate sees it again.\n";
   return `## Private data findings\n\n${lines.join("\n") || "none"}\n${censusBlock}${benchmark}${portDecisions}`;
 }
 

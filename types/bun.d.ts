@@ -1,7 +1,15 @@
 // Ambient declarations for the Bun and Node standard APIs the scripts use.
 // Development dependencies are only typescript and @biomejs/biome, so these live here.
 
-type BufferEncoding = "utf8" | "utf-8" | "hex" | "base64" | "ascii" | "binary" | "latin1" | "utf16le";
+type BufferEncoding =
+  | "utf8"
+  | "utf-8"
+  | "hex"
+  | "base64"
+  | "ascii"
+  | "binary"
+  | "latin1"
+  | "utf16le";
 
 interface Dirent {
   name: string;

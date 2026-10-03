@@ -1217,7 +1217,11 @@ const entryArg = process.argv[1];
 const entryPath = fileURLToPath(import.meta.url);
 // The basename check keeps this silent inside a bundle: there argv[1] and the
 // module URL are both the bundle, so the equality alone would fire.
-if (typeof entryArg === "string" && resolve(entryArg) === entryPath && entryPath.endsWith("text.ts")) {
+if (
+  typeof entryArg === "string" &&
+  resolve(entryArg) === entryPath &&
+  entryPath.endsWith("text.ts")
+) {
   const argv = process.argv.slice(2);
   if (argv.length === 1 && argv[0] === "--dump-golden-cases") {
     // Hidden: fixture regen only, not flow. Prints {cases, prog} for

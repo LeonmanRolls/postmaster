@@ -21,7 +21,31 @@ const script = join(import.meta.dir, "review-page.ts");
 describe("pure core", () => {
   test("addresses outside the example domains are removed, line numbers kept", () => {
     const r = scrub(
-      "a: " + "som" + "eon" + "e@c" + "omp" + "any" + ".co" + "\nb:" + " u@" + "exa" + "mpl" + "e.c" + "om\n" + "c: " + "x@h" + "ost" + ".in" + "val" + "id\n" + "d: " + "é@e" + "xäm" + "ple" + ".co" + "m\n",
+      "a: " +
+        "som" +
+        "eon" +
+        "e@c" +
+        "omp" +
+        "any" +
+        ".co" +
+        "\nb:" +
+        " u@" +
+        "exa" +
+        "mpl" +
+        "e.c" +
+        "om\n" +
+        "c: " +
+        "x@h" +
+        "ost" +
+        ".in" +
+        "val" +
+        "id\n" +
+        "d: " +
+        "é@e" +
+        "xäm" +
+        "ple" +
+        ".co" +
+        "m\n",
     );
     expect(r.text).toBe(
       "a: <address removed>\nb: u@example.com\nc: x@host.invalid\nd: <address removed>\n",
@@ -112,7 +136,25 @@ beforeAll(() => {
   run("mkdir", ["-p", join(repo, "src")]);
   writeFileSync(
     join(repo, "src", "new.ts"),
-    "con" + "st " + "own" + "er " + "= \"" + "som" + "eon" + "e@c" + "omp" + "any" + ".co" + "\";\n" + "exp" + "ort" + " co" + "nst" + " n " + "= 1" + ";\n",
+    "con" +
+      "st " +
+      "own" +
+      "er " +
+      '= "' +
+      "som" +
+      "eon" +
+      "e@c" +
+      "omp" +
+      "any" +
+      ".co" +
+      '";\n' +
+      "exp" +
+      "ort" +
+      " co" +
+      "nst" +
+      " n " +
+      "= 1" +
+      ";\n",
   );
   g("add", "-A");
   g("commit", "-q", "-m", "head");

@@ -228,7 +228,8 @@ beforeAll(() => {
   mkRun("legacy-gate", "shipping", 3, ".card-ready");
   mkRun("legacy-dispatch", "review", 2, ".leg-2-done", ".leg-2-exited");
   mkRun("legacy-last", "shipped", 3, ".leg-3-done", ".leg-3-exited");
-  const detection = (time: string, via = "") => `${JSON.stringify({ rule: "email", file: "notes.txt", line: 1, commit: "a".repeat(40), time, ...(via ? { via } : {}) })}\n`;
+  const detection = (time: string, via = "") =>
+    `${JSON.stringify({ rule: "email", file: "notes.txt", line: 1, commit: "a".repeat(40), time, ...(via ? { via } : {}) })}\n`;
   mkRun("tell-waiting", "review", 2, ".waiting-on-user");
   writeFileSync(join(root, "tell-waiting", "detections.jsonl"), detection("first"));
   mkRun("tell-done", "done", 2);
@@ -237,7 +238,10 @@ beforeAll(() => {
   writeFileSync(join(root, "told-waiting", "detections.jsonl"), detection("first", "marker"));
   writeFileSync(join(root, "told-waiting", ".detections-told"), detection("first", "marker"));
   mkRun("repeat-told", "review", 2, ".waiting-on-user");
-  writeFileSync(join(root, "repeat-told", "detections.jsonl"), detection("first") + detection("second"));
+  writeFileSync(
+    join(root, "repeat-told", "detections.jsonl"),
+    detection("first") + detection("second"),
+  );
   writeFileSync(join(root, "repeat-told", ".detections-told"), detection("first"));
   mkdirSync(join(root, "postmaster"), { recursive: true });
 });

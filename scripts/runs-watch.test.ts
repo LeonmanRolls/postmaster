@@ -147,7 +147,10 @@ describe("positive controls: each NEXT that needs the postmaster names its run",
         );
       }
       if (want === "TELL") {
-        writeFileSync(join(root, name, "detections.jsonl"), `${JSON.stringify({ rule: "email", file: "notes.txt", line: 1, commit: "a".repeat(40), time: "first" })}\n`);
+        writeFileSync(
+          join(root, name, "detections.jsonl"),
+          `${JSON.stringify({ rule: "email", file: "notes.txt", line: 1, commit: "a".repeat(40), time: "first" })}\n`,
+        );
       }
       const { rc, out } = watch(root);
       expect(rc).toBe(0);

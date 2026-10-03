@@ -291,10 +291,81 @@ function approve(dispatch: string): void {
     wtText = null;
   }
   if (wtText === null && copyText === committed)
-    die("spe" + "c-s" + "ess" + "ion" + ": W" + "ORK" + "HOR" + "SE-" + "SPE" + "C.m" + "d i" + "s m" + "iss" + "ing" + " fr" + "om " + "the" + " sy" + "nth" + "esi" + "s w" + "ork" + "tre" + "e", 2);
+    die(
+      "spe" +
+        "c-s" +
+        "ess" +
+        "ion" +
+        ": W" +
+        "ORK" +
+        "HOR" +
+        "SE-" +
+        "SPE" +
+        "C.m" +
+        "d i" +
+        "s m" +
+        "iss" +
+        "ing" +
+        " fr" +
+        "om " +
+        "the" +
+        " sy" +
+        "nth" +
+        "esi" +
+        "s w" +
+        "ork" +
+        "tre" +
+        "e",
+      2,
+    );
   if (wtText !== null && wtText !== committed && wtText !== copyText)
     die(
-      "spe" + "c-s" + "ess" + "ion" + ": t" + "he " + "syn" + "the" + "sis" + " wo" + "rkt" + "ree" + " ho" + "lds" + " an" + " un" + "com" + "mit" + "ted" + " ed" + "it " + "to " + "WOR" + "KHO" + "RSE" + "-SP" + "EC." + "md " + "tha" + "t m" + "atc" + "hes" + " ne" + "ith" + "er " + "the" + " co" + "mmi" + "tte" + "d s" + "pec" + " no" + "r t" + "he " + "cop" + "y",
+      "spe" +
+        "c-s" +
+        "ess" +
+        "ion" +
+        ": t" +
+        "he " +
+        "syn" +
+        "the" +
+        "sis" +
+        " wo" +
+        "rkt" +
+        "ree" +
+        " ho" +
+        "lds" +
+        " an" +
+        " un" +
+        "com" +
+        "mit" +
+        "ted" +
+        " ed" +
+        "it " +
+        "to " +
+        "WOR" +
+        "KHO" +
+        "RSE" +
+        "-SP" +
+        "EC." +
+        "md " +
+        "tha" +
+        "t m" +
+        "atc" +
+        "hes" +
+        " ne" +
+        "ith" +
+        "er " +
+        "the" +
+        " co" +
+        "mmi" +
+        "tte" +
+        "d s" +
+        "pec" +
+        " no" +
+        "r t" +
+        "he " +
+        "cop" +
+        "y",
       2,
     );
 

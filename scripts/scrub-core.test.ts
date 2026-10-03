@@ -3,12 +3,28 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { KINDS, scan as scanPersonal } from "../raw/trials/pii-patterns/apparatus/patterns.ts";
 import { keyBlockStep, RULES, scanLine, StreamScanner } from "./scrub-core.ts";
-import { cleanupScratch, email, initRepo, marker, opaqueId, phone, privatePath, runScript, token } from "./scrub-test-kit.ts";
+import {
+  cleanupScratch,
+  email,
+  initRepo,
+  marker,
+  opaqueId,
+  phone,
+  privatePath,
+  runScript,
+  token,
+} from "./scrub-test-kit.ts";
 
 afterEach(cleanupScratch);
 
 const rules = (line: string, options: { markers?: boolean; keyBlock?: boolean } = {}) =>
-  (() => { const result = scanLine(line, options); return [...result.findings.map((finding) => finding.rule), ...result.markers.map(() => "marker")]; })();
+  (() => {
+    const result = scanLine(line, options);
+    return [
+      ...result.findings.map((finding) => finding.rule),
+      ...result.markers.map(() => "marker"),
+    ];
+  })();
 
 const joined = (...parts: string[]) => parts.join("");
 
@@ -20,7 +36,9 @@ test("the personal patterns cover each kind, accented names and basic clean cont
     ["postal-address", joined("48 Orchard ", "Lane, Northport, MA ", "01980")],
     ["other-personal", joined("ssn: ", "392", "-", "84", "-", "6137")],
   ] as const;
-  const found = new Set(examples.flatMap(([, line]) => scanPersonal(line).map((finding) => finding.kind)));
+  const found = new Set(
+    examples.flatMap(([, line]) => scanPersonal(line).map((finding) => finding.kind)),
+  );
   expect([...found].sort()).toEqual([...KINDS].sort());
   expect(scanPersonal("The project reads process.env.HOME and a test user field.")).toEqual([]);
   expect(scanPersonal("There is no address or person value in this sentence.")).toEqual([]);
@@ -93,7 +111,7 @@ test("private context finds concrete paths, machine names, network addresses, id
 
   expect(rules("process.env.HOME")).toEqual([]);
   expect(rules('join(home, "note.txt")')).toEqual([]);
-  expect(rules('const session_id = process.env.SESSION_ID')).toEqual([]);
+  expect(rules("const session_id = process.env.SESSION_ID")).toEqual([]);
   expect(rules("/home/user/trial/home/note.txt")).toEqual([]);
   expect(rules("ssh host")).toEqual([]);
   expect(rules("a tailnet name may end in `.ts.net`.")).toEqual([]);
@@ -114,12 +132,16 @@ test("JSON transcript values decode through nested strings, ANSI controls, trunc
   const { writeFileSync } = await import("node:fs");
   const { scratchDir } = await import("./scrub-test-kit.ts");
   const path = `${scratchDir()}/session.txt`;
-  const units = [...email()].flatMap((ch) => { const code = ch.charCodeAt(0); return [code & 255, code >> 8]; });
+  const units = [...email()].flatMap((ch) => {
+    const code = ch.charCodeAt(0);
+    return [code & 255, code >> 8];
+  });
   writeFileSync(path, Uint8Array.from([0xff, 0xfe, ...units]));
   const { streamLines } = await import("./scrub-core.ts");
   const scanner = new StreamScanner();
   const rows: string[] = [];
-  for await (const line of streamLines(path)) rows.push(...scanner.feed(line.number, line.text).findings.map((finding) => finding.rule));
+  for await (const line of streamLines(path))
+    rows.push(...scanner.feed(line.number, line.text).findings.map((finding) => finding.rule));
   expect(rows).toContain("email");
 });
 
@@ -155,8 +177,13 @@ test("private-key block classification is line-oriented", () => {
   const header = joined("-----BEGIN RSA PRIV", "ATE KEY-----");
   const start = keyBlockStep(header, false);
   expect(start).toEqual({ inBlock: true, flagged: true });
-  expect(keyBlockStep(joined("abcde", "fghij", "klmno", "pqrst", "uvwxy"), start.inBlock).flagged).toBe(true);
-  expect(keyBlockStep("-----END RSA PRIVATE KEY-----", true)).toEqual({ inBlock: false, flagged: true });
+  expect(
+    keyBlockStep(joined("abcde", "fghij", "klmno", "pqrst", "uvwxy"), start.inBlock).flagged,
+  ).toBe(true);
+  expect(keyBlockStep("-----END RSA PRIVATE KEY-----", true)).toEqual({
+    inBlock: false,
+    flagged: true,
+  });
 });
 
 test("C23 every rule has three positive and negative fixtures and its disable control", () => {
@@ -176,41 +203,145 @@ test("C23 every rule has three positive and negative fixtures and its disable co
   const ssn = (suffix: string) => joined("392-84-61", suffix);
   const account = () => opaqueId().toUpperCase();
   const fixtures: Record<string, string[]> = {
-    key: [joined('user_session: "room-', "1234", '"'), joined('email: "', email(), '"'), joined('session_context: "', longSecret, '"')],
-    "account-id": [joined('{"account_id":"', opaqueId(), '"}'), joined('organization_id: "', opaqueId(), '"'), joined('session_guid: "', opaqueId(), '"')],
+    key: [
+      joined('user_session: "room-', "1234", '"'),
+      joined('email: "', email(), '"'),
+      joined('session_context: "', longSecret, '"'),
+    ],
+    "account-id": [
+      joined('{"account_id":"', opaqueId(), '"}'),
+      joined('organization_id: "', opaqueId(), '"'),
+      joined('session_guid: "', opaqueId(), '"'),
+    ],
     email: [email(), email(), email()],
-    "private-path": [privatePath(), joined("/Users/", "bluejay", "/note.txt"), joined("~", "bluejay", "/note.txt")],
-    "private-host": [joined("ss", "h bluejay"), joined("host: \"relay", ".internal", "\""), joined("10", ".", "42", ".", "5", ".", "6")],
+    "private-path": [
+      privatePath(),
+      joined("/Users/", "bluejay", "/note.txt"),
+      joined("~", "bluejay", "/note.txt"),
+    ],
+    "private-host": [
+      joined("ss", "h bluejay"),
+      joined('host: "relay', ".internal", '"'),
+      joined("10", ".", "42", ".", "5", ".", "6"),
+    ],
     token: [token(), joined("Bearer ", longSecret), joined("AS", "IA", "ABCDEFGHIJKLMN12")],
-    dotenv: [joined("SERVICE_TOKEN=", longSecret), joined("API_KEY=", longSecret), joined("DB_PASSWORD=", longSecret)],
-    "assistant-attribution": [joined("Co-Authored-", "By: OpenAI ", "Codex"), joined("Generated ", "with Claude"), joined("Written ", "by Copilot")],
-    marker: [marker("email"), joined(email(), " ", marker("phone")), joined(email(), " ", ["private-data", ":allow email"].join(""))],
+    dotenv: [
+      joined("SERVICE_TOKEN=", longSecret),
+      joined("API_KEY=", longSecret),
+      joined("DB_PASSWORD=", longSecret),
+    ],
+    "assistant-attribution": [
+      joined("Co-Authored-", "By: OpenAI ", "Codex"),
+      joined("Generated ", "with Claude"),
+      joined("Written ", "by Copilot"),
+    ],
+    marker: [
+      marker("email"),
+      joined(email(), " ", marker("phone")),
+      joined(email(), " ", ["private-data", ":allow email"].join("")),
+    ],
     "sign-off": [by("Signed-off-by: "), by("Reviewed-by: "), by("Tested-by: ")],
-    "author-field": [joined("author: ", person()), joined("owner_name: ", person()), joined("maintainer: ", person())],
-    copyright: [joined("Copyright 2026 ", person()), joined("Copyright (c) 2024 ", person()), joined("Copyright by ", person())],
-    "git-identity": [joined("user.name = ", person()), joined("GIT_AUTHOR_NAME=", person()), joined("GIT_COMMITTER_NAME=", person())],
+    "author-field": [
+      joined("author: ", person()),
+      joined("owner_name: ", person()),
+      joined("maintainer: ", person()),
+    ],
+    copyright: [
+      joined("Copyright 2026 ", person()),
+      joined("Copyright (c) 2024 ", person()),
+      joined("Copyright by ", person()),
+    ],
+    "git-identity": [
+      joined("user.name = ", person()),
+      joined("GIT_AUTHOR_NAME=", person()),
+      joined("GIT_COMMITTER_NAME=", person()),
+    ],
     title: [joined("Dr. ", person()), joined("Mrs ", person()), joined("Prof. ", person())],
-    "self-introduction": [joined("My name is ", person()), joined("I'm ", person()), joined("I am ", person())],
-    relative: [joined("mother: ", person()), joined("sister: ", person()), joined("father: ", person())],
-    credit: [joined("Thanks to ", person()), joined("contributed by ", person()), joined("cc ", person())],
+    "self-introduction": [
+      joined("My name is ", person()),
+      joined("I'm ", person()),
+      joined("I am ", person()),
+    ],
+    relative: [
+      joined("mother: ", person()),
+      joined("sister: ", person()),
+      joined("father: ", person()),
+    ],
+    credit: [
+      joined("Thanks to ", person()),
+      joined("contributed by ", person()),
+      joined("cc ", person()),
+    ],
     "name-and-address": [nameAddress(), nameAddress(), nameAddress()],
     phone: [joined("phone ", phone()), joined("mobile ", phone()), joined("text me at ", phone())],
-    card: [joined("visa ", cardNumber(["4111", "1111", "1111", "1111"])), joined("mastercard ", cardNumber(["5555", "5555", "5555", "4444"])), joined("amex ", ["3782", "822463", "10005"].join(""))],
-    iban: [iban("NORT", "12345678901234"), iban("WIND", "56789012345678"), iban("STAR", "90123456789012")].map((value) => joined("IBAN ", value)),
-    ssn: [joined("ssn: ", ssn("71")), joined("social security ", ssn("82")), joined("ssn: ", ssn("93"))],
-    "id-number": [joined("passport: AB", account()), joined("tax id: CD", account()), joined("driver's license: EF", account())],
-    "date-of-birth": [joined("date of bi", "rth: 12 M", "ay ", "1982"), joined("DO", "B: ", "1983-06-", "11"), joined("bo", "rn: ", "19", "67")],
-    health: [joined("I have been diagnosed wi", "th ", "asthma"), joined("She suffers fr", "om ", "cancer"), joined("My medica", "tion is ", "private")],
-    income: [joined("salary: $", "12345"), joined("My income ", "is $", "54321"), joined("I earned $", "76543")],
+    card: [
+      joined("visa ", cardNumber(["4111", "1111", "1111", "1111"])),
+      joined("mastercard ", cardNumber(["5555", "5555", "5555", "4444"])),
+      joined("amex ", ["3782", "822463", "10005"].join("")),
+    ],
+    iban: [
+      iban("NORT", "12345678901234"),
+      iban("WIND", "56789012345678"),
+      iban("STAR", "90123456789012"),
+    ].map((value) => joined("IBAN ", value)),
+    ssn: [
+      joined("ssn: ", ssn("71")),
+      joined("social security ", ssn("82")),
+      joined("ssn: ", ssn("93")),
+    ],
+    "id-number": [
+      joined("passport: AB", account()),
+      joined("tax id: CD", account()),
+      joined("driver's license: EF", account()),
+    ],
+    "date-of-birth": [
+      joined("date of bi", "rth: 12 M", "ay ", "1982"),
+      joined("DO", "B: ", "1983-06-", "11"),
+      joined("bo", "rn: ", "19", "67"),
+    ],
+    health: [
+      joined("I have been diagnosed wi", "th ", "asthma"),
+      joined("She suffers fr", "om ", "cancer"),
+      joined("My medica", "tion is ", "private"),
+    ],
+    income: [
+      joined("salary: $", "12345"),
+      joined("My income ", "is $", "54321"),
+      joined("I earned $", "76543"),
+    ],
     family: [joined("My daugh", "ter"), joined("My spo", "use"), joined("My child", "ren")],
-    residence: [joined("I live in ", "Northport"), joined("We grew up in ", "Lakeside"), joined("My home is at ", "48")],
-    employer: [joined("I work at ", "Northstar Labs"), joined("We worked for ", "Harbor Systems"), joined("My emplo", "yer is recorded")],
-    street: [joined("48 ", "Orchard ", "Lane"), joined("12 ", "Rue de ", "Rivoli"), joined("5 ", "Via ", "Roma")],
-    postcode: [joined("Northport, MA ", "01980"), joined("Lakeside AB1 ", "2DE"), joined("1-chome ", "100-00", "01")],
+    residence: [
+      joined("I live in ", "Northport"),
+      joined("We grew up in ", "Lakeside"),
+      joined("My home is at ", "48"),
+    ],
+    employer: [
+      joined("I work at ", "Northstar Labs"),
+      joined("We worked for ", "Harbor Systems"),
+      joined("My emplo", "yer is recorded"),
+    ],
+    street: [
+      joined("48 ", "Orchard ", "Lane"),
+      joined("12 ", "Rue de ", "Rivoli"),
+      joined("5 ", "Via ", "Roma"),
+    ],
+    postcode: [
+      joined("Northport, MA ", "01980"),
+      joined("Lakeside AB1 ", "2DE"),
+      joined("1-chome ", "100-00", "01"),
+    ],
     "po-box": [joined("PO Box ", "1234"), joined("P.O. Box ", "5678"), joined("P O Box ", "9012")],
-    "address-field": [joined('{"address":"Plot ', "88, Sector 3", '"}'), joined('address: "Block ', "17, Unit 4", '"'), joined('postal_address: "Lot ', "12, Zone 2", '"')],
+    "address-field": [
+      joined('{"address":"Plot ', "88, Sector 3", '"}'),
+      joined('address: "Block ', "17, Unit 4", '"'),
+      joined('postal_address: "Lot ', "12, Zone 2", '"'),
+    ],
   };
-  const negatives = ["ordinary implementation detail", "no populated value is set", "the placeholder remains empty"];
+  const negatives = [
+    "ordinary implementation detail",
+    "no populated value is set",
+    "the placeholder remains empty",
+  ];
   const expectedRules = [...RULES].filter((rule) => rule !== "encrypted-reasoning").sort();
   expect(Object.keys(fixtures).sort()).toEqual(expectedRules);
   const repo = initRepo();
@@ -229,7 +360,9 @@ test("C23 every rule has three positive and negative fixtures and its disable co
     const active = runScript("scrub-check", ["--files", path], repo);
     expect(active.status).toBe(1);
     expect(active.stdout.split("\n").some((line) => line.endsWith(`: ${rule}`))).toBe(true);
-    const disabled = runScript("scrub-check", ["--files", path], repo, { SCRUB_CHECK_DISABLE: rule });
+    const disabled = runScript("scrub-check", ["--files", path], repo, {
+      SCRUB_CHECK_DISABLE: rule,
+    });
     expect(disabled.stdout.split("\n").some((line) => line.endsWith(`: ${rule}`))).toBe(false);
     ruleLines.push(`${rule}:${positives.length}:${negatives.length}`);
   }
@@ -238,7 +371,9 @@ test("C23 every rule has three positive and negative fixtures and its disable co
   expect(clean.status).toBe(0);
   expect(clean.stdout).toBe("");
   expect(ruleLines).toHaveLength(expectedRules.length);
-  console.log(`C23 fixtures: ${expectedRules.length} rules, three positive and three negative cases each`);
+  console.log(
+    `C23 fixtures: ${expectedRules.length} rules, three positive and three negative cases each`,
+  );
 });
 
 test("opaque ids need a digit in the body; host lookup passes flags and ports", () => {

@@ -1,10 +1,22 @@
 import { afterEach, expect, test } from "bun:test";
-import { cleanupScratch, email, gitAt, initRepo, marker, opaqueId, phone, privatePath, token } from "./scrub-test-kit.ts";
+import {
+  cleanupScratch,
+  email,
+  gitAt,
+  initRepo,
+  marker,
+  opaqueId,
+  phone,
+  privatePath,
+  token,
+} from "./scrub-test-kit.ts";
 
 afterEach(cleanupScratch);
 
 test("test values are assembled from pieces at runtime", () => {
-  expect([email(), phone(), opaqueId(), token(), privatePath()].every((value) => value.length > 0)).toBe(true);
+  expect(
+    [email(), phone(), opaqueId(), token(), privatePath()].every((value) => value.length > 0),
+  ).toBe(true);
   expect(marker("email").startsWith("private-data")).toBe(true);
 });
 

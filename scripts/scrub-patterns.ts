@@ -22,7 +22,12 @@ export interface Finding {
 
 type Rule = (line: string, context: string) => Finding[];
 
-const finding = (kind: Kind, rule: string, start: number, end: number): Finding => ({ kind, rule, start, end });
+const finding = (kind: Kind, rule: string, start: number, end: number): Finding => ({
+  kind,
+  rule,
+  start,
+  end,
+});
 
 // Names
 
@@ -145,7 +150,8 @@ function citation(context: string): boolean {
   return /^\s*title\s*:/m.test(context) && /^\s*(?:url|doi|retrieved|arxiv)\s*:/m.test(context);
 }
 
-const COMPANY_AFTER = /^,?\s*(?:Inc|LLC|Ltd|Limited|Corp|Corporation|GmbH|AG|BV|Foundation|Contributors|Authors|and contributors|& contributors)\b/u;
+const COMPANY_AFTER =
+  /^,?\s*(?:Inc|LLC|Ltd|Limited|Corp|Corporation|GmbH|AG|BV|Foundation|Contributors|Authors|and contributors|& contributors)\b/u;
 
 interface Slot {
   rule: string;
@@ -172,7 +178,11 @@ const SLOTS: Slot[] = [
     key: /\bcopyright\b\s*(?:\(c\)|©)?\s*(?:\d{4}(?:\s*[-–,]\s*\d{4})*,?\s*)?(?:by\s+)?/giu,
     full: true,
   },
-  { rule: "git-identity", key: /(?:\buser\.name|\bGIT_(?:AUTHOR|COMMITTER)_NAME)\s*[= ]\s*["']?/gu, full: true },
+  {
+    rule: "git-identity",
+    key: /(?:\buser\.name|\bGIT_(?:AUTHOR|COMMITTER)_NAME)\s*[= ]\s*["']?/gu,
+    full: true,
+  },
   { rule: "title", key: /\b(?:Mr|Mrs|Ms|Miss|Mx|Dr|Prof|Sir|Dame)\.?\s+/gu, full: false },
   { rule: "self-introduction", key: /\bmy name is\s+/giu, full: false },
   {
@@ -190,20 +200,97 @@ const SLOTS: Slot[] = [
 ];
 
 const SLOT_CUES = [
-  "signed-off-by", "co-authored-by", "reviewed-by", "acked-by", "tested-by", "reported-by",
-  "suggested-by", "helped-by", "author", "maintainer", "contributor", "committer", "owner",
-  "assignee", "reporter", "signer", "contact", "copyright", "user.name", "git_author",
-  "git_committer", "mr ", "mrs ", "ms ", "miss ", "mx ", "dr ", "prof ", "sir ", "dame ",
-  "mr.", "mrs.", "ms.", "miss.", "mx.", "dr.", "prof.", "sir.", "dame.",
-  "my name is", "i am ", "i'm ", "i’m ", "mother", "father", "mum", "mom", "dad", "wife",
-  "husband", "partner", "spouse", "sister", "brother", "son", "daughter", "grandmother",
-  "grandfather", "grandma", "grandpa", "fiance", "fiancé", "fiancée",
-  "aunt", "uncle", "cousin", "niece", "nephew", "thanks", "thank you", "kudos",
-  "cheers", "assigned to", "reported by", "written by", "created by", "maintained by",
-  "contributed by", "reviewed by", "signed by", "on behalf of", "courtesy of", "according to",
-  "ask ", "cc ", "name",
+  "signed-off-by",
+  "co-authored-by",
+  "reviewed-by",
+  "acked-by",
+  "tested-by",
+  "reported-by",
+  "suggested-by",
+  "helped-by",
+  "author",
+  "maintainer",
+  "contributor",
+  "committer",
+  "owner",
+  "assignee",
+  "reporter",
+  "signer",
+  "contact",
+  "copyright",
+  "user.name",
+  "git_author",
+  "git_committer",
+  "mr ",
+  "mrs ",
+  "ms ",
+  "miss ",
+  "mx ",
+  "dr ",
+  "prof ",
+  "sir ",
+  "dame ",
+  "mr.",
+  "mrs.",
+  "ms.",
+  "miss.",
+  "mx.",
+  "dr.",
+  "prof.",
+  "sir.",
+  "dame.",
+  "my name is",
+  "i am ",
+  "i'm ",
+  "i’m ",
+  "mother",
+  "father",
+  "mum",
+  "mom",
+  "dad",
+  "wife",
+  "husband",
+  "partner",
+  "spouse",
+  "sister",
+  "brother",
+  "son",
+  "daughter",
+  "grandmother",
+  "grandfather",
+  "grandma",
+  "grandpa",
+  "fiance",
+  "fiancé",
+  "fiancée",
+  "aunt",
+  "uncle",
+  "cousin",
+  "niece",
+  "nephew",
+  "thanks",
+  "thank you",
+  "kudos",
+  "cheers",
+  "assigned to",
+  "reported by",
+  "written by",
+  "created by",
+  "maintained by",
+  "contributed by",
+  "reviewed by",
+  "signed by",
+  "on behalf of",
+  "courtesy of",
+  "according to",
+  "ask ",
+  "cc ",
+  "name",
 ];
-const SLOT_SIGNAL = new RegExp(SLOT_CUES.map((cue) => cue.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")).join("|"), "iu");
+const SLOT_SIGNAL = new RegExp(
+  SLOT_CUES.map((cue) => cue.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")).join("|"),
+  "iu",
+);
 
 const slots: Rule = (line, context) => {
   const out: Finding[] = [];
@@ -220,9 +307,20 @@ const slots: Rule = (line, context) => {
     }
   }
   if (line.includes("<") && line.includes("@")) {
-    const identity = new RegExp(String.raw`(${WORD}(?:${GAP}${WORD})+)\s*<[^<>\s@]+@[^<>\s]+>`, "gu");
+    const identity = new RegExp(
+      String.raw`(${WORD}(?:${GAP}${WORD})+)\s*<[^<>\s@]+@[^<>\s]+>`,
+      "gu",
+    );
     for (const match of line.matchAll(identity)) {
-      if (personName(match[1])) out.push(finding("person", "name-and-address", match.index ?? 0, (match.index ?? 0) + match[1].length));
+      if (personName(match[1]))
+        out.push(
+          finding(
+            "person",
+            "name-and-address",
+            match.index ?? 0,
+            (match.index ?? 0) + match[1].length,
+          ),
+        );
     }
   }
   return out;
@@ -230,9 +328,25 @@ const slots: Rule = (line, context) => {
 
 // Email addresses
 
-const MAILBOX = /(?<![\p{L}\p{N}._%+-])([\p{L}\p{N}._%+-]+)@((?:[\p{L}\p{N}-]+\.)+\p{L}{2,})(?![\p{L}\p{N}-])/gu;
-const NOREPLY = new Set(["noreply", "no-reply", "no_reply", "donotreply", "do-not-reply", "mailer-daemon"]);
-const RESERVED = ["example", "example.com", "example.net", "example.org", "test", "invalid", "localhost"];
+const MAILBOX =
+  /(?<![\p{L}\p{N}._%+-])([\p{L}\p{N}._%+-]+)@((?:[\p{L}\p{N}-]+\.)+\p{L}{2,})(?![\p{L}\p{N}-])/gu;
+const NOREPLY = new Set([
+  "noreply",
+  "no-reply",
+  "no_reply",
+  "donotreply",
+  "do-not-reply",
+  "mailer-daemon",
+]);
+const RESERVED = [
+  "example",
+  "example.com",
+  "example.net",
+  "example.org",
+  "test",
+  "invalid",
+  "localhost",
+];
 /** Mailboxes that belong to a role rather than a person (RFC 2142 and their like). */
 const ROLES = new Set([
   "abuse",
@@ -308,7 +422,8 @@ const phone: Rule = (line) => {
     const text = match[0];
     const digits = text.replace(/\D/g, "");
     if (digits.length < 8 || digits.length > 15) continue;
-    if (/\d{4}-\d{2}-\d{2}|\d{2}:\d{2}/.test(text) || /^\d{1,3}(?:\.\d{1,3}){3}$/.test(text)) continue;
+    if (/\d{4}-\d{2}-\d{2}|\d{2}:\d{2}/.test(text) || /^\d{1,3}(?:\.\d{1,3}){3}$/.test(text))
+      continue;
     if (/^[\d.]+$/.test(text) && text.split(".").length === 2) continue; // a decimal number
     const national = digits.length === 11 && digits.startsWith("1") ? digits.slice(1) : digits;
     if (national.length === 10 && TOLL_FREE.test(national)) continue; // a business's free line
@@ -322,7 +437,8 @@ const phone: Rule = (line) => {
 
 // Numbers that carry their own check, and numbers named by the word before them
 
-const CARD = /(?<![\w.-])(?:\d{4}[ -]){3}\d{1,7}(?![\w-]|\.\d)|(?<![\w.-])\d{4}[ -]\d{6}[ -]\d{4,5}(?![\w-]|\.\d)|(?<![\w.-])\d{13,19}(?![\w-]|\.\d)/g;
+const CARD =
+  /(?<![\w.-])(?:\d{4}[ -]){3}\d{1,7}(?![\w-]|\.\d)|(?<![\w.-])\d{4}[ -]\d{6}[ -]\d{4,5}(?![\w-]|\.\d)|(?<![\w.-])\d{13,19}(?![\w-]|\.\d)/g;
 const CARD_WORD = /\b(?:card|visa|mastercard|amex|american express|credit|debit|payment)\b/i;
 
 function luhn(digits: string): boolean {
@@ -356,7 +472,9 @@ const card: Rule = (line) => {
     const digits = match[0].replace(/\D/g, "");
     if (digits.length < 13 || digits.length > 19 || !luhn(digits) || !issuer(digits)) continue;
     if (!/[ -]/.test(match[0]) && !CARD_WORD.test(line)) continue;
-    out.push(finding("other-personal", "card", match.index ?? 0, (match.index ?? 0) + match[0].length));
+    out.push(
+      finding("other-personal", "card", match.index ?? 0, (match.index ?? 0) + match[0].length),
+    );
   }
   return out;
 };
@@ -379,7 +497,9 @@ const iban: Rule = (line) => {
     const account = match[0].replace(/ /g, "");
     if (account.length < 15 || account.length > 34 || mod97(account) !== 1) continue;
     if (!match[0].includes(" ") && !/\biban\b/i.test(line)) continue;
-    out.push(finding("other-personal", "iban", match.index ?? 0, (match.index ?? 0) + match[0].length));
+    out.push(
+      finding("other-personal", "iban", match.index ?? 0, (match.index ?? 0) + match[0].length),
+    );
   }
   return out;
 };
@@ -393,14 +513,22 @@ const ssn: Rule = (line) => {
   const word = SSN_WORD.test(line);
   for (const match of line.matchAll(SSN)) {
     const [, area, group, serial] = match;
-    const issued = area !== "000" && area !== "666" && !area.startsWith("9") && group !== "00" && serial !== "0000";
+    const issued =
+      area !== "000" &&
+      area !== "666" &&
+      !area.startsWith("9") &&
+      group !== "00" &&
+      serial !== "0000";
     if (!word && (!issued || SSN_EXAMPLES.has(match[0]))) continue;
-    out.push(finding("other-personal", "ssn", match.index ?? 0, (match.index ?? 0) + match[0].length));
+    out.push(
+      finding("other-personal", "ssn", match.index ?? 0, (match.index ?? 0) + match[0].length),
+    );
   }
   return out;
 };
 
-const ID_WORD = /\b(?:passport|driver'?s licen[cs]e|licen[cs]e number|national insurance|ni number|nino|nhs number|tax id|tax number|national id|identity card|identity number|id number|customer number|account number|membership number|patient number)\b/gi;
+const ID_WORD =
+  /\b(?:passport|driver'?s licen[cs]e|licen[cs]e number|national insurance|ni number|nino|nhs number|tax id|tax number|national id|identity card|identity number|id number|customer number|account number|membership number|patient number)\b/gi;
 const ID_VALUE = /(?<![\w-])[A-Z0-9][A-Z0-9-]{4,17}(?![\w-])/g;
 
 const idNumber: Rule = (line) => {
@@ -419,14 +547,16 @@ const idNumber: Rule = (line) => {
 };
 
 const BIRTH_WORD = /\b(?:date of birth|birth ?date|dob|d\.o\.b|born|birthday)\b/gi;
-const DATE = /^[^\n]{0,30}?\b(?:\d{1,2}(?:st|nd|rd|th)?\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?,?\s+(?:19|20)\d{2}|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d{1,2}(?:st|nd|rd|th)?,?\s+(?:19|20)\d{2}|(?:19|20)\d{2}-\d{2}-\d{2}|\d{1,2}[/.]\d{1,2}[/.](?:19|20)?\d{2}|(?:19|20)\d{2})\b/i;
+const DATE =
+  /^[^\n]{0,30}?\b(?:\d{1,2}(?:st|nd|rd|th)?\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?,?\s+(?:19|20)\d{2}|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d{1,2}(?:st|nd|rd|th)?,?\s+(?:19|20)\d{2}|(?:19|20)\d{2}-\d{2}-\d{2}|\d{1,2}[/.]\d{1,2}[/.](?:19|20)?\d{2}|(?:19|20)\d{2})\b/i;
 
 const birth: Rule = (line) => {
   const out: Finding[] = [];
   for (const word of line.matchAll(BIRTH_WORD)) {
     const from = (word.index ?? 0) + word[0].length;
     const date = DATE.exec(line.slice(from));
-    if (date) out.push(finding("other-personal", "date-of-birth", word.index ?? 0, from + date[0].length));
+    if (date)
+      out.push(finding("other-personal", "date-of-birth", word.index ?? 0, from + date[0].length));
   }
   return out;
 };
@@ -442,7 +572,13 @@ const PHRASES: [string, RegExp][] = [
       "gu",
     ),
   ],
-  ["health", new RegExp(String.raw`\b${SUBJECT}\s+(?:suffers?|suffered|is suffering|am suffering)\s+from\b`, "gu")],
+  [
+    "health",
+    new RegExp(
+      String.raw`\b${SUBJECT}\s+(?:suffers?|suffered|is suffering|am suffering)\s+from\b`,
+      "gu",
+    ),
+  ],
   [
     "health",
     /\b(?:[Mm]y|[Hh]is|[Hh]er)\s+(?:diagnosis|prescription|medication|meds|therapist|psychiatrist|oncologist|disability|illness|miscarriage|pregnancy|cancer|diabetes|depression|anxiety|ADHD|autism|HIV)\b/gu,
@@ -477,7 +613,9 @@ const phrases: Rule = (line) => {
   const out: Finding[] = [];
   for (const [rule, pattern] of PHRASES) {
     for (const match of line.matchAll(pattern)) {
-      out.push(finding("other-personal", rule, match.index ?? 0, (match.index ?? 0) + match[0].length));
+      out.push(
+        finding("other-personal", rule, match.index ?? 0, (match.index ?? 0) + match[0].length),
+      );
     }
   }
   return out;
@@ -487,7 +625,10 @@ const phrases: Rule = (line) => {
 
 const STREET_TYPES =
   "Street|St|Road|Rd|Avenue|Ave|Lane|Ln|Close|Row|Way|Drive|Dr|Court|Ct|Place|Pl|Terrace|Crescent|Cres|Gardens|Grove|Hill|Square|Sq|Boulevard|Blvd|Parkway|Pkwy|Highway|Hwy|Mews|Walk|Hollow|Rise|Green|Circle|Cir|Trail|Wharf|Quay";
-const STREET = new RegExp(String.raw`(?<![\w.-])\d{1,5}[A-Za-z]?\s+((?:${WORD}\s+){1,3})(?:${STREET_TYPES})\b\.?`, "gu");
+const STREET = new RegExp(
+  String.raw`(?<![\w.-])\d{1,5}[A-Za-z]?\s+((?:${WORD}\s+){1,3})(?:${STREET_TYPES})\b\.?`,
+  "gu",
+);
 const STREET_EU = new RegExp(
   String.raw`(?<![\w-])(?:\p{Lu}\p{Ll}+(?:straße|strasse|weg|gasse|platz|allee|damm|ufer|steig|pfad)|\p{Lu}\p{Ll}+\s+(?:Straße|Strasse|Weg|Gasse|Platz|Allee|Damm|Ufer)|(?:Rue|Avenue|Boulevard|Via|Viale|Calle|Avenida|Rua|Piazza|Chemin|Allée)\s+(?:(?:de|du|des|la|le|del|della|di|da|do|dos)\s+)*${WORD}(?:\s+${WORD})*)\s+\d{1,4}[a-z]?\b`,
   "gu",
@@ -506,12 +647,18 @@ const ADDRESS_FIELD =
   /\b(?![\w-]*(?:email|mail|ip|mac|url|web|host|server|listen|bind|remote|local|wallet|contract|memory|base|socket|proxy))[\w-]*(?:address|addr)["']?\s*[:=]\s*["']([^"']*\d[^"']*,[^"']*)["']/giu;
 /** Words that make an address a placeholder. */
 const PLACEHOLDER_PLACE = /\b(?:fake|example|sample|dummy|placeholder|anytown|nowhere)\w*/i;
-const UK_POSTCODE = new RegExp(String.raw`${WORD},?\s+((?:[A-Z]{1,2}\d[A-Z\d]?|GIR)\s?\d[ABD-HJLNP-UW-Z]{2})\b`, "gu");
+const UK_POSTCODE = new RegExp(
+  String.raw`${WORD},?\s+((?:[A-Z]{1,2}\d[A-Z\d]?|GIR)\s?\d[ABD-HJLNP-UW-Z]{2})\b`,
+  "gu",
+);
 const US_STATES =
   "AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|DC";
 const PO_BOX = /\bP\.?\s?O\.?\s?Box\s+\d+/giu;
 const US_CITY_WORD = new RegExp(`^(?:${WORD})$`, "u");
-const US_CITY_SUFFIX = new RegExp(`,[${PY_S_CLASS}]*(?:${US_STATES})[${PY_S_CLASS}]+[0-9]{5}(?:-[0-9]{4})?${BOUND_R}`, "gu");
+const US_CITY_SUFFIX = new RegExp(
+  `,[${PY_S_CLASS}]*(?:${US_STATES})[${PY_S_CLASS}]+[0-9]{5}(?:-[0-9]{4})?${BOUND_R}`,
+  "gu",
+);
 const PY_SPACE = new RegExp(`[${PY_S_CLASS}]`, "u");
 
 function usCityZip(line: string): Finding[] {
@@ -531,7 +678,8 @@ function usCityZip(line: string): Finding[] {
       while (cursor > 0 && PY_SPACE.test(line[cursor - 1]!)) cursor--;
       if (cursor === wordStart || cursor === 0) break;
     }
-    if (start >= 0) out.push(finding("postal-address", "postcode", start, comma + suffix[0].length));
+    if (start >= 0)
+      out.push(finding("postal-address", "postcode", start, comma + suffix[0].length));
   }
   return out;
 }
@@ -540,7 +688,9 @@ const address: Rule = (line) => {
   const out: Finding[] = [];
   for (const match of line.matchAll(STREET)) {
     if (namesAProduct(match[1])) continue; // a product's word, as in "2 Google Drive"
-    out.push(finding("postal-address", "street", match.index ?? 0, (match.index ?? 0) + match[0].length));
+    out.push(
+      finding("postal-address", "street", match.index ?? 0, (match.index ?? 0) + match[0].length),
+    );
   }
   for (const [rule, pattern] of [
     ["street", STREET_EU],
@@ -551,13 +701,22 @@ const address: Rule = (line) => {
     ["address-field", ADDRESS_FIELD],
   ] as const) {
     for (const match of line.matchAll(pattern)) {
-      out.push(finding("postal-address", rule, match.index ?? 0, (match.index ?? 0) + match[0].length));
+      out.push(
+        finding("postal-address", rule, match.index ?? 0, (match.index ?? 0) + match[0].length),
+      );
     }
   }
   out.push(...usCityZip(line));
   if (JP_PLACE.test(line)) {
     for (const match of line.matchAll(JP_POSTCODE)) {
-      out.push(finding("postal-address", "postcode", match.index ?? 0, (match.index ?? 0) + match[0].length));
+      out.push(
+        finding(
+          "postal-address",
+          "postcode",
+          match.index ?? 0,
+          (match.index ?? 0) + match[0].length,
+        ),
+      );
     }
   }
   return out.filter((f) => !PLACEHOLDER_PLACE.test(line.slice(f.start, f.end)));
@@ -568,7 +727,8 @@ const RULES: Rule[] = [slots, mailboxes, phone, card, iban, ssn, idNumber, birth
 // Lines with no numeric or semantic signal cannot match a rule above: bare
 // names are intentionally out of scope. This gate avoids making name-shaped
 // patterns walk long documentation lines that carry no personal-data cue.
-const SCAN_SIGNAL = /@|[0-9]|(?:signed-off-by|co-authored-by|reviewed-by|acked-by|tested-by|reported-by|suggested-by|helped-by|author|maintainer|contributor|committer|owner|assignee|reporter|signer|contact|copyright|user\.name|GIT_AUTHOR|GIT_COMMITTER|\b(?:Mr|Mrs|Ms|Miss|Mx|Dr|Prof|Sir|Dame)\b|my name is|\bI am\b|\bI['’]m\b|mother|father|mum|mom|dad|wife|husband|partner|spouse|sister|brother|girlfriend|boyfriend|fianc[ée]e?|son|daughter|kids|children|baby|toddler|parents|siblings?|grandmother|grandfather|grandma|grandpa|aunt|uncle|cousin|niece|nephew|in-law|thanks|thank you|kudos|cheers|assigned to|written by|created by|maintained by|contributed by|reviewed by|signed by|on behalf of|courtesy of|according to|credit|\bask\b|\bcc\b|phone|telephone|mobile|cell|whatsapp|signal|fax|ssn|social security|passport|licen[cs]e|national insurance|nino|nhs number|tax id|tax number|national id|identity number|id number|customer number|account number|membership number|patient number|date of birth|birth ?date|dob|birthday|diagnosed|suffer|treated|hospital|therapy|rehab|antidepressant|chemo|dialysis|medication|disability|illness|pregnan|salary|income|wages|compensation|earnings|net.?worth|my home|our home|my house|my address|my hometown|my flat|my apartment|our house|our flat|our apartment|our address|our hometown|live|living|reside|based|grew up|work(?:ed|ing)?\s+(?:at|for)|workplace|employer|\biban\b|credit card|po\.?\s?box|street|road|avenue|lane|drive|court|terrace|postcode|postal address|address\s*[:=])/iu;
+const SCAN_SIGNAL =
+  /@|[0-9]|(?:signed-off-by|co-authored-by|reviewed-by|acked-by|tested-by|reported-by|suggested-by|helped-by|author|maintainer|contributor|committer|owner|assignee|reporter|signer|contact|copyright|user\.name|GIT_AUTHOR|GIT_COMMITTER|\b(?:Mr|Mrs|Ms|Miss|Mx|Dr|Prof|Sir|Dame)\b|my name is|\bI am\b|\bI['’]m\b|mother|father|mum|mom|dad|wife|husband|partner|spouse|sister|brother|girlfriend|boyfriend|fianc[ée]e?|son|daughter|kids|children|baby|toddler|parents|siblings?|grandmother|grandfather|grandma|grandpa|aunt|uncle|cousin|niece|nephew|in-law|thanks|thank you|kudos|cheers|assigned to|written by|created by|maintained by|contributed by|reviewed by|signed by|on behalf of|courtesy of|according to|credit|\bask\b|\bcc\b|phone|telephone|mobile|cell|whatsapp|signal|fax|ssn|social security|passport|licen[cs]e|national insurance|nino|nhs number|tax id|tax number|national id|identity number|id number|customer number|account number|membership number|patient number|date of birth|birth ?date|dob|birthday|diagnosed|suffer|treated|hospital|therapy|rehab|antidepressant|chemo|dialysis|medication|disability|illness|pregnan|salary|income|wages|compensation|earnings|net.?worth|my home|our home|my house|my address|my hometown|my flat|my apartment|our house|our flat|our apartment|our address|our hometown|live|living|reside|based|grew up|work(?:ed|ing)?\s+(?:at|for)|workplace|employer|\biban\b|credit card|po\.?\s?box|street|road|avenue|lane|drive|court|terrace|postcode|postal address|address\s*[:=])/iu;
 
 /** Every finding on one line; the context is the lines around it, which only the author field reads. */
 export function scan(line: string, context = ""): Finding[] {
