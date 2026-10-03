@@ -189,7 +189,8 @@ onto the fragment it supersedes.
 - `host.sh stop-run <dispatch>` and `host.sh close-run <dispatch>` cover the synthesis worktree,
   workhorse worktrees in the run config, and reviewer scratches in its round records and action
   log, including scratch clones that Git does not list as worktrees, plus any pane or window
-  still tagged for the run. Either exits 2 when the run's records cannot be read.
+  still tagged for the run. Either exits 2 when the run's records cannot be read, naming the
+  record it refused.
 - **It degrades rather than refuses.** If the host cannot place the launch, or its pane has not
   started it within 20 seconds, it runs in the background instead, exactly once, and `host.sh`
   prints `host=none` rather than where it would have been.

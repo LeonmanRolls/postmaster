@@ -1,4 +1,4 @@
-// Tests beside scripts/host.ts, moved from its --self-test on #109: 320 controls.
+// Tests beside scripts/host.ts, moved from its --self-test on #109: 337 controls.
 // host.ts's suite lives in ./host-self-test.ts's runControls (shared sequential fixture);
 // this file drives it once in beforeAll, splits its printed lines on the section headers,
 // and asserts each section's control count with no FAIL. No fixture state is restructured.
@@ -34,6 +34,7 @@ const SECTIONS: Array<{ name: string; count: number }> = [
   { name: "review round 2 fixes, tmux (stub)", count: 1 },
   { name: "review round 4 fixes, Herdr (stub)", count: 16 },
   { name: "review round 4 fixes, tmux (stub)", count: 11 },
+  { name: "teardown reads only the round records", count: 16 },
   { name: "interactive sessions", count: 15 },
   { name: "run role: the explicit host role", count: 1 },
   { name: "leg attempt controls", count: 89 },

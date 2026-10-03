@@ -3448,6 +3448,310 @@ export async function runControls(): Promise<number> {
       resetHarness(root);
     }
 
+    console.log("teardown reads only the round records");
+    // Record R: the lane and round records teardown reads, beside the log
+    // folder entries it must not take for state (findings, usage, notes).
+    resetHarness(root);
+    writeFileSync(join(stub, "herdr.down"), "");
+    const STOP_PREFIX = "no launch is running in ";
+    const CLOSE_PREFIX = "closed what host.sh opened for ";
+    const covered = (result: Result, prefix: string): string[] =>
+      result.out
+        .split("\n")
+        .filter((line) => line.startsWith(prefix))
+        .map((line) => basename(line.slice(prefix.length)));
+    const buildRecord = () => {
+      const t = realpathSync(mkdtempSync(join(root, "record-")));
+      const worktrees = join(t, "repo", ".worktrees");
+      for (const name of [
+        "227",
+        "227-sol",
+        "227-mimo",
+        "227-rev-bug-mimo",
+        "227-rev-bug-decoy",
+        "227-rev-security-opus",
+      ])
+        mkdirSync(join(worktrees, name), { recursive: true });
+      const dispatch = join(t, "runs", "227");
+      mkdirSync(join(dispatch, "logs"), { recursive: true });
+      writeFileSync(
+        join(dispatch, "brief.md"),
+        `## Dispatch\nname: #227, test\nsynthesis worktree: ${join(worktrees, "227")}\n`,
+      );
+      writeFileSync(
+        join(dispatch, "run.json"),
+        '{"config":{"team":{"workhorses":["sol","mimo"]}}}',
+      );
+      writeFileSync(join(dispatch, "manifest.json"), '{"lanes":{"sol":{},"mimo":{}}}');
+      writeFileSync(join(dispatch, "logs", "review-r1.json"), '{"reviewers":[["bug","mimo"]]}');
+      writeFileSync(
+        join(dispatch, "logs", "review-r1-bug-mimo-findings.json"),
+        '[{"finding":"one"}]',
+      );
+      writeFileSync(
+        join(dispatch, "logs", "review-r1-bug-mimo-usage.json"),
+        '{"reviewers":[["bug","decoy"]]}',
+      );
+      writeFileSync(join(dispatch, "logs", "review-r1-notes.json"), '["not","a","record"]');
+      return { t, dispatch, logs: join(dispatch, "logs"), worktrees };
+    };
+    const torn = (dispatch: string) => ({
+      stop: execHost(["stop-run", dispatch], stubs, root),
+      close: execHost(["close-run", dispatch], stubs, root),
+    });
+    const bothCover = (pair: { stop: Result; close: Result }, names: string) =>
+      pair.stop.code === 0 &&
+      pair.close.code === 0 &&
+      pair.stop.err === "" &&
+      pair.close.err === "" &&
+      covered(pair.stop, STOP_PREFIX).join(",") === names &&
+      covered(pair.close, CLOSE_PREFIX).join(",") === names;
+    const bothName = (pair: { stop: Result; close: Result }, needle: string) =>
+      pair.stop.code === 2 &&
+      pair.close.code === 2 &&
+      pair.stop.out === "" &&
+      pair.close.out === "" &&
+      pair.stop.err.trim().split("\n").length === 1 &&
+      pair.close.err.trim().split("\n").length === 1 &&
+      pair.stop.err.includes(needle) &&
+      pair.close.err.includes(needle);
+    const bothSay = (pair: { stop: Result; close: Result }, message: string) =>
+      pair.stop.code === 2 &&
+      pair.close.code === 2 &&
+      pair.stop.out === "" &&
+      pair.close.out === "" &&
+      pair.stop.err.trim() === message &&
+      pair.close.err.trim() === message;
+    const FOUR = "227-mimo,227-sol,227-rev-bug-mimo,227";
+    const FIVE = "227-mimo,227-sol,227-rev-bug-mimo,227-rev-security-opus,227";
+    const THREE = "227-mimo,227-sol,227";
+    {
+      const r = buildRecord();
+      const pair = torn(r.dispatch);
+      await pass(
+        "the reproduction: findings and usage beside the round record no longer stop teardown",
+        () => bothCover(pair, FOUR),
+        `${pair.stop.out}${pair.stop.err}${pair.close.out}${pair.close.err}`,
+      );
+    }
+    {
+      const r = buildRecord();
+      writeFileSync(
+        join(r.dispatch, "actions.jsonl"),
+        '{"action":"review-launch","target":"opus","detail":"security r1"}\n',
+      );
+      const pair = torn(r.dispatch);
+      await pass("and an action-log review-launch adds its reviewer worktree", () =>
+        bothCover(pair, FIVE),
+      );
+    }
+    {
+      const r = buildRecord();
+      rmSync(r.logs, { recursive: true, force: true });
+      const pair = torn(r.dispatch);
+      await pass("with no logs folder only the lane worktrees and synthesis remain", () =>
+        bothCover(pair, THREE),
+      );
+    }
+    {
+      const r = buildRecord();
+      const recordPath = join(r.logs, "review-r1.json");
+      const cases = ['[["bug","mimo"]]', '"text"', "5", "true", "null"];
+      let ok = true;
+      let detail = "";
+      for (const body of cases) {
+        writeFileSync(recordPath, body);
+        const pair = torn(r.dispatch);
+        const named = bothName(pair, recordPath);
+        if (!named) {
+          ok = false;
+          detail = `${body} => ${pair.stop.code}/${pair.close.code} ${pair.stop.err}${pair.close.err}`;
+        }
+      }
+      await pass(
+        "a round record that is not a mapping stops teardown and names the record",
+        () => ok,
+        detail,
+      );
+    }
+    {
+      const r = buildRecord();
+      writeFileSync(join(r.logs, "review-r1.json"), '[["bug","mimo"]]');
+      const link = join(r.t, "link-to-227");
+      symlinkSync(r.dispatch, link);
+      const pair = torn(link);
+      await pass(
+        "and the message names the resolved record path through a link to the dispatch",
+        () => bothName(pair, join(r.dispatch, "logs", "review-r1.json")),
+        `${pair.stop.err}${pair.close.err}`,
+      );
+    }
+    {
+      const r = buildRecord();
+      writeFileSync(join(r.logs, "review-r1.json"), "null");
+      writeFileSync(join(r.logs, "review-r2.json"), "null");
+      const pair = torn(r.dispatch);
+      await pass(
+        "when several records are damaged just one is named, and teardown stops there",
+        () => bothName(pair, "review-r"),
+        `${pair.stop.err}${pair.close.err}`,
+      );
+    }
+    {
+      const r = buildRecord();
+      writeFileSync(join(r.logs, "review-r1.json"), "null");
+      writeFileSync(
+        join(r.dispatch, "actions.jsonl"),
+        [
+          '{"action":"review-launch","target":"mimo","detail":"bug r1"}',
+          "",
+          "{broken",
+          '["review-launch"]',
+          "",
+        ].join("\n"),
+      );
+      const pair = torn(r.dispatch);
+      await pass("and a damaged action log behind a damaged record is not reached", () =>
+        bothName(pair, "review-r"),
+      );
+    }
+    {
+      const r = buildRecord();
+      const recordPath = join(r.logs, "review-r1.json");
+      const cases = ["{broken", "", "{}", '{"reviewers":"bug"}'];
+      let ok = true;
+      let detail = "";
+      for (const body of cases) {
+        rmSync(recordPath, { recursive: true, force: true });
+        if (body === "") mkdirSync(recordPath);
+        else writeFileSync(recordPath, body);
+        const pair = torn(r.dispatch);
+        if (!bothCover(pair, THREE)) {
+          ok = false;
+          detail = `${JSON.stringify(body)} => ${pair.stop.out}${pair.stop.err}${pair.close.out}${pair.close.err}`;
+        }
+      }
+      await pass(
+        "a round record that cannot be used is passed over without a word",
+        () => ok,
+        detail,
+      );
+    }
+    {
+      const r = buildRecord();
+      writeFileSync(
+        join(r.logs, "review-r1.json"),
+        '{"attempt":"1","reviewers":[["bug","mimo"],["bug"]]}',
+      );
+      const pair = torn(r.dispatch);
+      await pass("a bad reviewer pair is dropped and the good one kept", () =>
+        bothCover(pair, FOUR),
+      );
+    }
+    {
+      const r = buildRecord();
+      rmSync(join(r.dispatch, "actions.jsonl"), { recursive: true, force: true });
+      mkdirSync(join(r.dispatch, "actions.jsonl"));
+      const pair = torn(r.dispatch);
+      await pass("a folder in place of the action log is passed over", () => bothCover(pair, FOUR));
+    }
+    {
+      const r = buildRecord();
+      const logPath = join(r.dispatch, "actions.jsonl");
+      const cases = ['["review-launch"]', "null", '"text"'];
+      let ok = true;
+      let detail = "";
+      for (const body of cases) {
+        writeFileSync(
+          logPath,
+          [
+            '{"action":"review-launch","target":"mimo","detail":"bug r1"}',
+            "",
+            "{broken",
+            body,
+            "",
+          ].join("\n"),
+        );
+        const pair = torn(r.dispatch);
+        const named =
+          pair.stop.code === 2 &&
+          pair.close.code === 2 &&
+          pair.stop.out === "" &&
+          pair.close.out === "" &&
+          pair.stop.err.trim().split("\n").length === 1 &&
+          pair.close.err.trim().split("\n").length === 1 &&
+          pair.stop.err.includes(logPath) &&
+          pair.stop.err.includes("line 4") &&
+          pair.close.err.includes(logPath) &&
+          pair.close.err.includes("line 4");
+        if (!named) {
+          ok = false;
+          detail = `${body} => ${pair.stop.code}/${pair.close.code} ${pair.stop.err}${pair.close.err}`;
+        }
+      }
+      await pass(
+        "an action-log line that is not a mapping stops teardown and names the line",
+        () => ok,
+        detail,
+      );
+    }
+    {
+      const r = buildRecord();
+      writeFileSync(
+        join(r.dispatch, "actions.jsonl"),
+        ['{"action":"review-launch","target":"mimo","detail":"bug r1"}', "", "{broken", ""].join(
+          "\n",
+        ),
+      );
+      const pair = torn(r.dispatch);
+      await pass("without that line the run tears down", () => bothCover(pair, FOUR));
+    }
+    {
+      const empty = realpathSync(mkdtempSync(join(root, "record-empty-")));
+      const pair = torn(empty);
+      await pass(
+        "an empty dispatch still refuses with the waybill message, word for word",
+        () => bothSay(pair, "host: run waybill has no synthesis worktree"),
+        `${pair.stop.err}${pair.close.err}`,
+      );
+    }
+    {
+      const r = buildRecord();
+      const elsewhere = join(r.t, "repo", "elsewhere", "227");
+      mkdirSync(elsewhere, { recursive: true });
+      writeFileSync(
+        join(r.dispatch, "brief.md"),
+        `## Dispatch\nname: #227, test\nsynthesis worktree: ${elsewhere}\n`,
+      );
+      const pair = torn(r.dispatch);
+      await pass(
+        "a synthesis worktree outside .worktrees still refuses that way, word for word",
+        () => bothSay(pair, "host: synthesis worktree is not under .worktrees"),
+        `${pair.stop.err}${pair.close.err}`,
+      );
+    }
+    {
+      const r = buildRecord();
+      writeFileSync(join(r.dispatch, "run.json"), "{broken");
+      writeFileSync(join(r.dispatch, "manifest.json"), "{broken");
+      const pair = torn(r.dispatch);
+      await pass(
+        "unreadable lane records still refuse that way, word for word",
+        () => bothSay(pair, "host: run lane records unreadable"),
+        `${pair.stop.err}${pair.close.err}`,
+      );
+    }
+    {
+      const r = buildRecord();
+      writeFileSync(join(r.dispatch, "run.json"), "{broken");
+      writeFileSync(join(r.dispatch, "manifest.json"), "{broken");
+      writeFileSync(join(r.logs, "review-r1.json"), '["not","a","record"]');
+      const pair = torn(r.dispatch);
+      await pass("and a damaged round record beside them adds no second message", () =>
+        bothSay(pair, "host: run lane records unreadable"),
+      );
+    }
+
     console.log("interactive sessions");
     const noSpawn = execHost(["spawn", "postmaster-repo", f.repo, "--", "claude"]);
     const noSend = execHost(["send", "postmaster-repo", join(f.caller, "fixed.sh")]);
