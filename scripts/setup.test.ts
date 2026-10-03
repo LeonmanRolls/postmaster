@@ -135,12 +135,25 @@ describe("positive controls", () => {
     const before = `[team]\nworkhorses = ["alpha", "beta"]\npostmaster = { harness = "claude", model = "pm" }\n\n[postmaster]\npoll_seconds = 9\n`;
     writeFileSync(join(tmp, "legacy.toml"), before);
     answers("legacy", "clerk.harness=claude");
-    const r = run("bash", [SELF, "--add-clerk", "--answers", join(tmp, "legacy.answers"), "--config", join(tmp, "legacy.toml")], {
-      env: { ...process.env, PATH: `${join(tmp, "bin")}:${process.env.PATH}` },
-    });
+    const r = run(
+      "bash",
+      [
+        SELF,
+        "--add-clerk",
+        "--answers",
+        join(tmp, "legacy.answers"),
+        "--config",
+        join(tmp, "legacy.toml"),
+      ],
+      {
+        env: { ...process.env, PATH: `${join(tmp, "bin")}:${process.env.PATH}` },
+      },
+    );
     expect(r.code).toBe(0);
     const after = readFileSync(join(tmp, "legacy.toml"), "utf8");
-    expect(after.replace('clerk = { harness = "claude", model = "clerk-model" }\n', "")).toBe(before);
+    expect(after.replace('clerk = { harness = "claude", model = "clerk-model" }\n', "")).toBe(
+      before,
+    );
     const team = tryTomlFile(join(tmp, "legacy.toml"))?.team as Record<string, unknown>;
     expect(team.clerk).toBeDefined();
     expect((team.clerk as Record<string, unknown>).harness).toBe("claude");
@@ -150,15 +163,37 @@ describe("positive controls", () => {
   test("the adding verb names a missing clerk harness or model", () => {
     writeFileSync(join(tmp, "missing-clerk.toml"), `[team]\nworkhorses = ["alpha", "beta"]\n`);
     writeFileSync(join(tmp, "missing-harness.answers"), "clerk.model=clerk-model\n");
-    const noHarness = run("bash", [SELF, "--add-clerk", "--answers", join(tmp, "missing-harness.answers"), "--config", join(tmp, "missing-clerk.toml")], {
-      env: { ...process.env, PATH: `${join(tmp, "bin")}:${process.env.PATH}` },
-    });
+    const noHarness = run(
+      "bash",
+      [
+        SELF,
+        "--add-clerk",
+        "--answers",
+        join(tmp, "missing-harness.answers"),
+        "--config",
+        join(tmp, "missing-clerk.toml"),
+      ],
+      {
+        env: { ...process.env, PATH: `${join(tmp, "bin")}:${process.env.PATH}` },
+      },
+    );
     expect(noHarness.code).toBe(1);
     expect(noHarness.err).toContain("clerk.harness");
     writeFileSync(join(tmp, "missing-model.answers"), "clerk.harness=claude\n");
-    const noModel = run("bash", [SELF, "--add-clerk", "--answers", join(tmp, "missing-model.answers"), "--config", join(tmp, "missing-clerk.toml")], {
-      env: { ...process.env, PATH: `${join(tmp, "bin")}:${process.env.PATH}` },
-    });
+    const noModel = run(
+      "bash",
+      [
+        SELF,
+        "--add-clerk",
+        "--answers",
+        join(tmp, "missing-model.answers"),
+        "--config",
+        join(tmp, "missing-clerk.toml"),
+      ],
+      {
+        env: { ...process.env, PATH: `${join(tmp, "bin")}:${process.env.PATH}` },
+      },
+    );
     expect(noModel.code).toBe(1);
     expect(noModel.err).toContain("clerk.model");
   }, 30000);

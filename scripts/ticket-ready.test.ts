@@ -69,12 +69,14 @@ esac
 const PLANE_SERVER = `
 const data = JSON.parse(await Bun.file(process.env.PLANE_READY_STUB_DATA).text());
 const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch(req) {
-  const path = new URL(req.url).pathname.replace(/^\\/api\\/v1\\//, "");
-  const item = path.match(/^workspaces\\/ws\\/work-items\\/(PM-\\d+)\\/$/);
-  if (item) return Response.json(data.items[item[1]] ?? null, { status: data.items[item[1]] ? 200 : 404 });
+  const path = new URL(req.url).pathname.slice("/api/v1/".length);
+  const itemPrefix = "workspaces/ws/work-items/";
+  const item = path.startsWith(itemPrefix) && path.endsWith("/") ? path.slice(itemPrefix.length, -1) : "";
+  const numericId = item.startsWith("PM-") && item.slice(3).length > 0 && [...item.slice(3)].every((digit) => digit >= "0" && digit <= "9");
+  if (numericId) return Response.json(data.items[item] ?? null, { status: data.items[item] ? 200 : 404 });
   if (path === "workspaces/ws/projects/p1/states/") return Response.json({ results: [{ id: "state-todo", group: "unstarted" }] });
   if (path === "workspaces/ws/projects/p1/labels/") return Response.json({ results: [{ id: "ready-label", name: "ready" }] });
-  if (/workspaces\\/ws\\/projects\\/p1\\/work-items\\/[^/]+\\/comments\\//.test(path)) return Response.json({ results: [] });
+  if (path.startsWith("workspaces/ws/projects/p1/work-items/") && path.endsWith("/comments/")) return Response.json({ results: [] });
   console.error("unexpected Plane route", path);
   return Response.json({ error: "unexpected route" }, { status: 404 });
 }});
@@ -110,7 +112,19 @@ beforeAll(async () => {
   repo = join(temp, "repo");
   mkdirSync(repo, { recursive: true });
   run("git", ["init", "-q", "-b", "main", repo]);
-  run("git", ["-C", repo, "-c", "user.name=test", "-c", "user.email=test@example.invalid", "commit", "-q", "--allow-empty", "-m", "init"]);
+  run("git", [
+    "-C",
+    repo,
+    "-c",
+    "user.name=test",
+    "-c",
+    "user.email=test@example.invalid",
+    "commit",
+    "-q",
+    "--allow-empty",
+    "-m",
+    "init",
+  ]);
   config = join(temp, "config.toml");
   writeFileSync(config, '[tracker]\nkind = "local"\n');
   ticketBody = join(temp, "ticket.md");
@@ -144,35 +158,51 @@ beforeAll(async () => {
   const githubLabels = [[{ name: "ready" }], [], [{ name: "ready" }], [{ name: "ready" }]];
   githubBodies.forEach((body, index) => {
     const n = index + 1;
-    writeFileSync(join(githubStub, `issue-${n}.json`), JSON.stringify({ data: { repository: { issue: {
-      number: n,
-      title: n === 3 ? "Remove" : n === 4 ? "Draft" : "Fix the list",
-      body,
-      state: "OPEN",
-      stateReason: null,
-      labels: { nodes: githubLabels[index] },
-      comments: { nodes: [] },
-    } } } }));
+    writeFileSync(
+      join(githubStub, `issue-${n}.json`),
+      JSON.stringify({
+        data: {
+          repository: {
+            issue: {
+              number: n,
+              title: n === 3 ? "Remove" : n === 4 ? "Draft" : "Fix the list",
+              body,
+              state: "OPEN",
+              stateReason: null,
+              labels: { nodes: githubLabels[index] },
+              comments: { nodes: [] },
+            },
+          },
+        },
+      }),
+    );
   });
 
   planeRepo = join(temp, "plane-repo");
   mkdirSync(planeRepo, { recursive: true });
   run("git", ["init", "-q", "-b", "main", planeRepo]);
   planeConfig = join(temp, "plane-config.toml");
-  const planeData = { items: Object.fromEntries(githubBodies.map((body, index) => {
-    const n = index + 1;
-    const labels = githubLabels[index]!.length ? ["ready-label"] : [];
-    return [`PM-${n}`, {
-      id: `item-${n}`,
-      sequence_id: n,
-      name: n === 3 ? "Remove" : n === 4 ? "Draft" : "Fix the list",
-      description_html: mdToHtml(body),
-      state: "state-todo",
-      project: "p1",
-      labels,
-      created_at: "2026-10-03T00:00:00Z",
-    }];
-  })) };
+  const planeData = {
+    items: Object.fromEntries(
+      githubBodies.map((body, index) => {
+        const n = index + 1;
+        const labels = githubLabels[index]!.length ? ["ready-label"] : [];
+        return [
+          `PM-${n}`,
+          {
+            id: `item-${n}`,
+            sequence_id: n,
+            name: n === 3 ? "Remove" : n === 4 ? "Draft" : "Fix the list",
+            description_html: mdToHtml(body),
+            state: "state-todo",
+            project: "p1",
+            labels,
+            created_at: "2026-10-03T00:00:00Z",
+          },
+        ];
+      }),
+    ),
+  };
   const planeDataFile = join(temp, "plane-data.json");
   writeFileSync(planeDataFile, JSON.stringify(planeData));
   planeChild = spawn(process.execPath, ["-e", PLANE_SERVER], {
@@ -184,16 +214,25 @@ beforeAll(async () => {
     const timeout = setTimeout(() => reject(new Error("Plane test double did not start")), 10000);
     planeChild!.stdout!.on("data", (chunk: Buffer) => {
       stdout += chunk.toString();
-      const match = /READY_PORT=(\d+)/u.exec(stdout);
-      if (match) {
+      const portLine = stdout.split("\n").find((line) => line.startsWith("READY_PORT="));
+      if (portLine) {
         clearTimeout(timeout);
-        resolve(Number(match[1]));
+        resolve(Number(portLine.slice("READY_PORT=".length)));
       }
     });
-    planeChild!.on("error", (error) => { clearTimeout(timeout); reject(error); });
-    planeChild!.on("exit", (code) => { clearTimeout(timeout); reject(new Error(`Plane test double exited ${code}: ${stdout}`)); });
+    planeChild!.on("error", (error) => {
+      clearTimeout(timeout);
+      reject(error);
+    });
+    planeChild!.on("exit", (code) => {
+      clearTimeout(timeout);
+      reject(new Error(`Plane test double exited ${code}: ${stdout}`));
+    });
   });
-  writeFileSync(planeConfig, `[tracker]\nkind = "plane"\nurl = "http://127.0.0.1:${planePort}"\nworkspace = "ws"\n`);
+  writeFileSync(
+    planeConfig,
+    `[tracker]\nkind = "plane"\nurl = "http://127.0.0.1:${planePort}"\nworkspace = "ws"\n`,
+  );
 });
 
 afterAll(() => {
@@ -265,20 +304,39 @@ describe("ticket readiness", () => {
     const labels = join(temp, "labels.txt");
     writeFileSync(body, BODY);
     writeFileSync(labels, "ready\n");
-    const pass = cli(["--body", body, "--labels", labels, "--title", "Other ticket", "--project", repo]);
+    const pass = cli([
+      "--body",
+      body,
+      "--labels",
+      labels,
+      "--title",
+      "Other ticket",
+      "--project",
+      repo,
+    ]);
     expect(pass.code).toBe(0);
     writeFileSync(labels, "");
-    const fail = cli(["--body", body, "--labels", labels, "--title", "Other ticket", "--project", repo]);
+    const fail = cli([
+      "--body",
+      body,
+      "--labels",
+      labels,
+      "--title",
+      "Other ticket",
+      "--project",
+      repo,
+    ]);
     expect(fail.code).toBe(2);
     expect(fail.out).toContain("ready label is missing");
   });
 
   test("the GitHub adapter test double reports the same ready and not-ready cases", () => {
-    const runGithub = (id: number) => cli([githubRepo, String(id)], {
-      POSTMASTER_CONFIG: githubConfig,
-      PATH: `${githubBin}:${process.env.PATH ?? ""}`,
-      GITHUB_READY_STUB: githubStub,
-    });
+    const runGithub = (id: number) =>
+      cli([githubRepo, String(id)], {
+        POSTMASTER_CONFIG: githubConfig,
+        PATH: `${githubBin}:${process.env.PATH ?? ""}`,
+        GITHUB_READY_STUB: githubStub,
+      });
     expect(runGithub(1).code).toBe(0);
     expect(runGithub(2).out).toContain("ready label is missing");
     expect(runGithub(2).code).toBe(2);
@@ -289,10 +347,11 @@ describe("ticket readiness", () => {
   }, 30000);
 
   test("the Plane adapter test double reports the same ready and not-ready cases", () => {
-    const runPlane = (id: number) => cli([planeRepo, `PM-${id}`], {
-      POSTMASTER_CONFIG: planeConfig,
-      PLANE_API_KEY: "stub-key",
-    });
+    const runPlane = (id: number) =>
+      cli([planeRepo, `PM-${id}`], {
+        POSTMASTER_CONFIG: planeConfig,
+        PLANE_API_KEY: "stub-key",
+      });
     expect(runPlane(1).code).toBe(0);
     expect(runPlane(2).out).toContain("ready label is missing");
     expect(runPlane(2).code).toBe(2);

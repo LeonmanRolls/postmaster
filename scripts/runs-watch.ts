@@ -1351,16 +1351,19 @@ function physicalDir(path: string): string {
 export function pendingReadyTickets(root: string): string[] {
   const dir = join(root, "postmaster", "ready");
   try {
-    return readdirSync(dir).filter((name) => name.endsWith(".ready")).sort().flatMap((name) => {
-      let id = "";
-      try {
-        id = decodeURIComponent(name.slice(0, -6));
-        if (readFileSync(join(dir, name), "utf8").trim() !== id) return [];
-      } catch {
-        return [];
-      }
-      return [id];
-    });
+    return readdirSync(dir)
+      .filter((name) => name.endsWith(".ready"))
+      .sort()
+      .flatMap((name) => {
+        let id = "";
+        try {
+          id = decodeURIComponent(name.slice(0, -6));
+          if (readFileSync(join(dir, name), "utf8").trim() !== id) return [];
+        } catch {
+          return [];
+        }
+        return [id];
+      });
   } catch {
     return [];
   }
@@ -1395,7 +1398,8 @@ export function activeRunCount(root: string): number {
 export function runCapacity(configPath: string): number {
   const config = tryTomlFile(configPath);
   const team = config?.team;
-  const value = team && typeof team === "object" ? Number((team as Record<string, unknown>).max_runs) : NaN;
+  const value =
+    team && typeof team === "object" ? Number((team as Record<string, unknown>).max_runs) : NaN;
   return Number.isSafeInteger(value) && value > 0 ? value : 2;
 }
 
@@ -1423,9 +1427,8 @@ function watch(root: string, config: string, timeout: number | null): never {
     }
     const table = r.out.replace(/\n+$/u, "");
     const ready = pendingReadyTickets(root);
-    const readyNeeds = activeRunCount(root) < runCapacity(config)
-      ? ready.map((id) => `needs READY ${id}`)
-      : [];
+    const readyNeeds =
+      activeRunCount(root) < runCapacity(config) ? ready.map((id) => `needs READY ${id}`) : [];
     if (steps.needs.length > 0 || readyNeeds.length > 0) {
       process.stdout.write(`${table}\n${[...steps.needs, ...readyNeeds].join("\n")}\n`);
       process.exit(0);

@@ -326,7 +326,11 @@ function exerciseSelfTest(sourceRoot: string): number {
     "scripts/ticket-check.sh",
     "the journey reading",
   );
-  wrapperCase("a wording fix in premises.sh answers yes", "scripts/premises.sh", "premise comparison");
+  wrapperCase(
+    "a wording fix in premises.sh answers yes",
+    "scripts/premises.sh",
+    "premise comparison",
+  );
   runCase(
     "a premise comparison change answers yes",
     (repo) =>

@@ -1359,10 +1359,14 @@ describe("ready tickets wait for a run slot", () => {
     mkrun(root, "flight", "review", 2);
     queued(root, "2");
     const manifest = join(root, "flight", "manifest.json");
-    const child = spawn("sh", ["-c", 'sleep 2; printf \'{"stage":"done","leg":2}\\n\' > "$1"', "sh", manifest], {
-      detached: true,
-      stdio: "ignore",
-    });
+    const child = spawn(
+      "sh",
+      ["-c", 'sleep 2; printf \'{"stage":"done","leg":2}\\n\' > "$1"', "sh", manifest],
+      {
+        detached: true,
+        stdio: "ignore",
+      },
+    );
     child.unref();
     expect(activeRunCount(root)).toBe(1);
     const { rc, out } = watch(root, "8", config);

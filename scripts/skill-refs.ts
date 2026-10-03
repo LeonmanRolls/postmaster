@@ -134,7 +134,9 @@ if (import.meta.main) {
     try {
       files = ["postmaster", "clerk"].flatMap((role) => {
         const dir = join(ROOT, "skills", role);
-        return readdirSync(dir).filter((n) => n.endsWith(".md")).map((n) => join(dir, n));
+        return readdirSync(dir)
+          .filter((n) => n.endsWith(".md"))
+          .map((n) => join(dir, n));
       });
       if (files.length === 0) throw new Error("no runbooks");
     } catch {

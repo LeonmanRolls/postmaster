@@ -57,7 +57,10 @@ the action for anything without its own verb.
    each new title, the user's request, priority and one-line rationale, then create approved
    tickets through the tracker adapter and log `ticket-create`. Do not draft missing ticket
    parts or create a ticket on your own initiative.
-5. **Order them.** Dependencies first: a ticket that needs another's change waits for it to
+5. **Keep the plan current.** Record the tickets the user asked you to implement and their
+   readiness in `<runs>/postmaster/plan.md`. Keep an unready ticket there; prepare it only
+   when the user asks you to implement it.
+6. **Order them.** Dependencies first: a ticket that needs another's change waits for it to
    land. Record the order and the reason in `<runs>/postmaster/plan.md`, current state only.
 
 ## Stage B: the waybill

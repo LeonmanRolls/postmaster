@@ -223,7 +223,10 @@ describe("positive controls", () => {
     mkdirSync(project, { recursive: true });
     const r = projectAction(project, ["postmaster", "dispatch", "clerk", "ticket=2"]);
     expect(r.code).toBe(0);
-    const log = readFileSync(join(project, ".postmaster", "runs", "postmaster", "actions.jsonl"), "utf8");
+    const log = readFileSync(
+      join(project, ".postmaster", "runs", "postmaster", "actions.jsonl"),
+      "utf8",
+    );
     const ledger = readFileSync(join(project, ".postmaster", "runs", "ledger.jsonl"), "utf8");
     const entry = JSON.parse(log.trim());
     expect(log).toBe(ledger);

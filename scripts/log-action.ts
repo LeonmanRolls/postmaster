@@ -37,7 +37,14 @@
 //   exit 1  usage, an action outside the set, a finding with no class, a premises result with
 //           no verified commit or base, a tool-fault missing a field or naming no postmaster file, or a file
 //           could not be appended
-import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync, statSync } from "node:fs";
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+  statSync,
+} from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { toolRoot } from "./lib/paths.ts";
 import { argvDecoded } from "./lib/proc.ts";
@@ -245,9 +252,18 @@ function logAction(
     }
   }
   if (action === "premises") {
-    const result = /(?:^|[ \t])result=(same|moved|unknown|changed|missing)(?:[ \t]|$)/u.test(detail);
-    if (actor !== "coachman" || !target.trim() || !/(?:^|[ \t])base=\S+/u.test(detail) || !result) {
-      console.error("log-action: premises needs the coachman, a verified commit, base=<commit> and result=<state>");
+    const result = /(?:^|[ \t])result=(same|moved|unknown|changed|missing)(?:[ \t]|$)/u.test(
+      detail,
+    );
+    if (
+      actor !== "coachman" ||
+      !target.trim() ||
+      !/(?:^|[ \t])base=[^\t\r\n ]+/u.test(detail) ||
+      !result
+    ) {
+      console.error(
+        "log-action: premises needs the coachman, a verified commit, base=<commit> and result=<state>",
+      );
       return 1;
     }
   }
@@ -315,7 +331,9 @@ function logProjectEvent(
   const note = actor === "clerk" && action === "note" && target !== "";
   const dispatch = actor === "postmaster" && action === "dispatch" && target === "clerk";
   if (!note && !dispatch) {
-    console.error("usage: log-action.sh --project <repo> clerk note <target> | postmaster dispatch clerk [detail...]");
+    console.error(
+      "usage: log-action.sh --project <repo> clerk note <target> | postmaster dispatch clerk [detail...]",
+    );
     return 1;
   }
   let project = "";
@@ -347,20 +365,36 @@ const argv = argvDecoded();
 if (import.meta.main) {
   if (argv[0] === "--project") {
     if (argv.length < 5) {
-      console.error("usage: log-action.sh --project <repo> clerk note <target> | postmaster dispatch clerk [detail...]");
+      console.error(
+        "usage: log-action.sh --project <repo> clerk note <target> | postmaster dispatch clerk [detail...]",
+      );
       process.exit(1);
     }
     if (argv[2] === "clerk" && argv[3] === "note") {
       process.exit(
-        logProjectEvent(argv[1] as string, argv[2] as string, argv[3] as string, argv[4] as string, argv.slice(5) as string[]),
+        logProjectEvent(
+          argv[1] as string,
+          argv[2] as string,
+          argv[3] as string,
+          argv[4] as string,
+          argv.slice(5) as string[],
+        ),
       );
     }
     if (argv[2] === "postmaster" && argv[3] === "dispatch" && argv[4] === "clerk") {
       process.exit(
-        logProjectEvent(argv[1] as string, argv[2] as string, argv[3] as string, argv[4] as string, argv.slice(5) as string[]),
+        logProjectEvent(
+          argv[1] as string,
+          argv[2] as string,
+          argv[3] as string,
+          argv[4] as string,
+          argv.slice(5) as string[],
+        ),
       );
     }
-    console.error("usage: log-action.sh --project <repo> clerk note <target> | postmaster dispatch clerk [detail...]");
+    console.error(
+      "usage: log-action.sh --project <repo> clerk note <target> | postmaster dispatch clerk [detail...]",
+    );
     process.exit(1);
   }
   if (argv.length < 4 || !argv[0] || !argv[1] || !argv[2] || !argv[3]) {

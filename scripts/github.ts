@@ -384,7 +384,9 @@ function ensureLabel(nwo: string, label: string): void {
       "--color",
       label === BLOCKED ? "B60205" : "0E8A16",
       "--description",
-      label === BLOCKED ? "Waiting on something outside the run" : "Ticket signed off and ready to run",
+      label === BLOCKED
+        ? "Waiting on something outside the run"
+        : "Ticket signed off and ready to run",
     ]);
   }
 }
@@ -522,7 +524,8 @@ function main(): void {
     gh(["issue", "edit", String(n), "-R", NWO, "--body-file", args[2] ?? ""]);
     console.log(`#${n}: edited`);
   } else if (cmd === "title") {
-    if (args.length !== 3 || !(args[2] ?? "").trim()) dieGh("usage: github.sh <repo> title <n> <title>");
+    if (args.length !== 3 || !(args[2] ?? "").trim())
+      dieGh("usage: github.sh <repo> title <n> <title>");
     const n = numberArg(args[1] ?? "");
     issueOf(OWNER, NAME, NWO, n);
     gh(["issue", "edit", String(n), "-R", NWO, "--title", args[2] ?? ""]);

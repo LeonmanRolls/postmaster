@@ -23,9 +23,10 @@ export interface PremiseResult {
   state: PremiseState;
 }
 
-const LINK_RE = /https?:\/\/[^\s)\]>]+/gu;
+const LINK_RE = /https?:\/\/[^\p{White_Space})\]>]+/gu;
 const CODE_RE = /`([^`\n]+)`/gu;
-const PATH_RE = /(?:^|[^\p{L}\p{N}_.-])((?:[\p{L}\p{N}_.-]+\/)*[\p{L}\p{N}_.-]+\.[\p{L}\p{N}_.-]+)(#L[0-9]+(?:-L[0-9]+)?)?(?=$|[^\p{L}\p{N}_-])/gu;
+const PATH_RE =
+  /(?:^|[^\p{L}\p{N}_.-])((?:[\p{L}\p{N}_.-]+\/)*[\p{L}\p{N}_.-]+\.[\p{L}\p{N}_.-]+)(#L[0-9]+(?:-L[0-9]+)?)?(?=$|[^\p{L}\p{N}_-])/gu;
 
 function splitRef(ref: string): { start?: number; end?: number } {
   const match = ref.match(/^#L([0-9]+)(?:-L([0-9]+))?$/u);
@@ -40,7 +41,7 @@ function safePath(value: string): boolean {
 }
 
 export function citationsFromText(text: string): Citation[] {
-  const sectionMatch = text.match(/^##[ \t]+For the agents[ \t]*\n([\s\S]*)$/imu);
+  const sectionMatch = text.match(/^##[ \t]+For the agents[ \t]*\n([\u0000-\u{10ffff}]*)$/mu);
   if (!sectionMatch) return [];
   const section = sectionMatch[1] ?? "";
   const citations = new Map<string, Citation>();
@@ -108,22 +109,29 @@ function compareCitation(
 
   const oldLines = previous.replace(/\r\n/gu, "\n").split("\n");
   const newLines = current.replace(/\r\n/gu, "\n").split("\n");
-  const excerpt = oldLines.slice(citation.start - 1, (citation.end ?? citation.start));
+  const excerpt = oldLines.slice(citation.start - 1, citation.end ?? citation.start);
   if (excerpt.length === 0) return "missing";
-  const atOriginalRange = newLines.slice(citation.start - 1, (citation.end ?? citation.start));
-  if (excerpt.length === atOriginalRange.length && excerpt.every((line, i) => line === atOriginalRange[i]))
+  const atOriginalRange = newLines.slice(citation.start - 1, citation.end ?? citation.start);
+  if (
+    excerpt.length === atOriginalRange.length &&
+    excerpt.every((line, i) => line === atOriginalRange[i])
+  )
     return "same";
   return containsLines(newLines, excerpt) ? "moved" : "changed";
 }
 
-export function checkPremises(repo: string, waybill: string, base: string): {
+export function checkPremises(
+  repo: string,
+  waybill: string,
+  base: string,
+): {
   verified: string;
   base: string;
   result: "same" | "moved" | "unknown" | "changed" | "missing";
   entries: PremiseResult[];
 } {
   const text = readFileSync(waybill, "utf8");
-  const verifiedMatch = text.match(/^### Verified at ([0-9a-f]{7,40})\s*$/imu);
+  const verifiedMatch = text.match(/^### Verified at ([0-9a-f]{7,40})[ \t]*$/imu);
   const verified = verifiedMatch?.[1] ?? "unknown";
   const citations = citationsFromText(text);
   if (git(repo, ["rev-parse", "--verify", `${base}^{commit}`]).code !== 0)

@@ -5,12 +5,7 @@
 //   clerk.sh start <repo> <ticket-id>
 //   clerk.sh reader <clerk-model> <plain-file> <worktree>
 
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { readTomlFile, tryTomlFile } from "./lib/data.ts";
@@ -20,7 +15,8 @@ import { run } from "./lib/proc.ts";
 const HERE = scriptsDir(import.meta);
 const TOOL = toolRoot(import.meta);
 const args = process.argv.slice(2);
-const CONFIG = process.env.POSTMASTER_CONFIG ?? join(process.env.HOME ?? "", ".postmaster", "config.toml");
+const CONFIG =
+  process.env.POSTMASTER_CONFIG ?? join(process.env.HOME ?? "", ".postmaster", "config.toml");
 
 function die(message: string, code = 1): never {
   console.error(`clerk: ${message}`);
@@ -46,9 +42,18 @@ function tracker(repo: string): string {
 }
 
 function trackerCommand(kind: string, repo: string, id: string, verb: "read" | "body") {
-  if (kind === "local") return ["local.sh", verb === "body" ? [repo, "read", id, "--body"] : [repo, "read", id]] as const;
-  if (kind === "github") return ["github.sh", verb === "body" ? [repo, "read", id, "--body"] : [repo, "read", id]] as const;
-  if (kind === "plane") return ["plane.sh", verb === "body" ? ["read", id, "--body"] : ["read", id]] as const;
+  if (kind === "local")
+    return [
+      "local.sh",
+      verb === "body" ? [repo, "read", id, "--body"] : [repo, "read", id],
+    ] as const;
+  if (kind === "github")
+    return [
+      "github.sh",
+      verb === "body" ? [repo, "read", id, "--body"] : [repo, "read", id],
+    ] as const;
+  if (kind === "plane")
+    return ["plane.sh", verb === "body" ? ["read", id, "--body"] : ["read", id]] as const;
   return null;
 }
 
@@ -62,26 +67,53 @@ interface Ticket {
 function readTicket(repo: string, id: string): Ticket {
   const kind = tracker(repo);
   const read = trackerCommand(kind, repo, id, "read");
-  if (!read) die(`tracker kind '${kind}' needs its own ticket read; see skills/postmaster/trackers.md`);
+  if (!read)
+    die(`tracker kind '${kind}' needs its own ticket read; see skills/postmaster/trackers.md`);
   const summary = runScript(read[0], read[1], projectEnv(repo));
-  if (summary.code !== 0) die(`${kind} adapter could not read ${id}: ${(summary.err || summary.out).trim()}`);
+  if (summary.code !== 0)
+    die(`${kind} adapter could not read ${id}: ${(summary.err || summary.out).trim()}`);
   const body = trackerCommand(kind, repo, id, "body");
   if (!body) die(`tracker kind '${kind}' cannot read the ticket body`);
   const content = runScript(body[0], body[1], projectEnv(repo));
-  if (content.code !== 0) die(`${kind} adapter could not read the body of ${id}: ${(content.err || content.out).trim()}`);
+  if (content.code !== 0)
+    die(`${kind} adapter could not read the body of ${id}: ${(content.err || content.out).trim()}`);
   return {
     kind,
-    title: summary.out.split(/\r?\n/u).find((line) => line.startsWith("title:"))?.slice(6).trim() ?? "",
-    labels: (summary.out.split(/\r?\n/u).find((line) => line.startsWith("labels:"))?.slice(7) ?? "")
-      .split(",").map((label) => label.trim()).filter(Boolean),
+    title:
+      summary.out
+        .split(/\r?\n/u)
+        .find((line) => line.startsWith("title:"))
+        ?.slice(6)
+        .trim() ?? "",
+    labels: (
+      summary.out
+        .split(/\r?\n/u)
+        .find((line) => line.startsWith("labels:"))
+        ?.slice(7) ?? ""
+    )
+      .split(",")
+      .map((label) => label.trim())
+      .filter(Boolean),
     body: content.out,
   };
 }
 
 function defaultBase(repo: string): string {
-  const remoteHead = run("git", ["-C", repo, "symbolic-ref", "--quiet", "refs/remotes/origin/HEAD"]);
+  const remoteHead = run("git", [
+    "-C",
+    repo,
+    "symbolic-ref",
+    "--quiet",
+    "refs/remotes/origin/HEAD",
+  ]);
   if (remoteHead.code === 0) {
-    const remote = run("git", ["-C", repo, "rev-parse", "--verify", `${remoteHead.out.trim()}^{commit}`]);
+    const remote = run("git", [
+      "-C",
+      repo,
+      "rev-parse",
+      "--verify",
+      `${remoteHead.out.trim()}^{commit}`,
+    ]);
     if (remote.code === 0) return remote.out.trim();
   }
   const branch = run("git", ["-C", repo, "symbolic-ref", "--quiet", "HEAD"]);
@@ -106,19 +138,29 @@ function activePath(repo: string, id: string): string {
 function linkForDraft(draft: string): string {
   const cfg = tryTomlFile(CONFIG);
   const planning = cfg?.planning;
-  const template = planning && typeof planning === "object" ? (planning as Record<string, unknown>).review_link : "";
-  if (typeof template === "string" && template.includes("{path}")) return template.split("{path}").join(draft);
+  const template =
+    planning && typeof planning === "object"
+      ? (planning as Record<string, unknown>).review_link
+      : "";
+  if (typeof template === "string" && template.includes("{path}"))
+    return template.split("{path}").join(draft);
   return draft;
 }
 
 function preferences(): string {
   const path = join(dirname(CONFIG), "preferences.md");
   if (!existsSync(path)) return "No standing preferences file is present.";
-  try { return readFileSync(path, "utf8").trim() || "The preferences file is empty."; }
-  catch { return `Could not read the preferences file at ${path}.`; }
+  try {
+    return readFileSync(path, "utf8").trim() || "The preferences file is empty.";
+  } catch {
+    return `Could not read the preferences file at ${path}.`;
+  }
 }
 
-function brief(repoArg: string, id: string): { repo: string; id: string; title: string; path: string; name: string; kind: string } {
+function brief(
+  repoArg: string,
+  id: string,
+): { repo: string; id: string; title: string; path: string; name: string; kind: string } {
   const repo = resolve(repoArg);
   const root = run("git", ["-C", repo, "rev-parse", "--show-toplevel"]);
   if (root.code !== 0) die(`not a git repository: ${repo}`);
@@ -127,25 +169,36 @@ function brief(repoArg: string, id: string): { repo: string; id: string; title: 
   const readyLabel = ticket.labels.some((label) => label.toLocaleLowerCase() === "ready");
   if (readyLabel && ticket.kind !== "other") {
     const unmarked = runScript("ticket-ready.sh", ["unmark", project, id], projectEnv(project));
-    if (unmarked.code !== 0) die(`could not take ready mark off ${id}: ${(unmarked.err || unmarked.out).trim()}`);
+    if (unmarked.code !== 0)
+      die(`could not take ready mark off ${id}: ${(unmarked.err || unmarked.out).trim()}`);
   }
   const ensure = runScript("project-settings.sh", ["ensure", project]);
-  if (ensure.code !== 0) die((ensure.err || ensure.out).trim() || `cannot prepare ${project}/.postmaster`);
+  if (ensure.code !== 0)
+    die((ensure.err || ensure.out).trim() || `cannot prepare ${project}/.postmaster`);
   const dir = clerkDir(project);
   mkdirSync(dir, { recursive: true });
   const draft = join(dir, `${safeId(id)}.md`);
   if (readyLabel) {
-    writeFileSync(draft, `DRAFT: not approved, do not implement from this file\n\n${ticket.body.replace(/^DRAFT:[^\n]*\n+/u, "")}`, { mode: 0o600 });
+    writeFileSync(
+      draft,
+      `DRAFT: not approved, do not implement from this file\n\n${ticket.body.replace(/^DRAFT:[^\n]*\n+/u, "")}`,
+      { mode: 0o600 },
+    );
   } else if (!existsSync(draft)) {
-    writeFileSync(draft, `DRAFT: not approved, do not implement from this file\n\n${ticket.body}`, { flag: "wx", mode: 0o600 });
+    writeFileSync(draft, `DRAFT: not approved, do not implement from this file\n\n${ticket.body}`, {
+      flag: "wx",
+      mode: 0o600,
+    });
   } else {
     const existing = readFileSync(draft, "utf8");
-    if (!existing.startsWith("DRAFT:")) writeFileSync(draft, `DRAFT: not approved, do not implement from this file\n\n${existing}`, { mode: 0o600 });
+    if (!existing.startsWith("DRAFT:"))
+      writeFileSync(draft, `DRAFT: not approved, do not implement from this file\n\n${existing}`, {
+        mode: 0o600,
+      });
   }
   const title = ticket.title || id;
-  const displayId = (ticket.kind === "github" || ticket.kind === "local") && !id.startsWith("#")
-    ? `#${id}`
-    : id;
+  const displayId =
+    (ticket.kind === "github" || ticket.kind === "local") && !id.startsWith("#") ? `#${id}` : id;
   const name = `${displayId}, ${title}`;
   const base = defaultBase(project);
   const preferencesText = preferences();
@@ -172,20 +225,33 @@ Title: ${title}
 ${ticket.body.replace(/\n+$/u, "")}
 `;
   writeFileSync(join(dir, `${safeId(id)}.brief.md`), content, { mode: 0o600 });
-  return { repo: project, id, title, path: join(dir, `${safeId(id)}.brief.md`), name, kind: ticket.kind };
+  return {
+    repo: project,
+    id,
+    title,
+    path: join(dir, `${safeId(id)}.brief.md`),
+    name,
+    kind: ticket.kind,
+  };
 }
 
 function recordOpen(repo: string, id: string, handle: string): void {
   const path = activePath(repo, id);
   mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, `${JSON.stringify({ ticket: id, handle, opened_at: new Date().toISOString() }, null, 2)}\n`, { mode: 0o600 });
+  writeFileSync(
+    path,
+    `${JSON.stringify({ ticket: id, handle, opened_at: new Date().toISOString() }, null, 2)}\n`,
+    { mode: 0o600 },
+  );
 }
 
 function openRecord(repo: string, id: string): { handle: string } | null {
   try {
     const raw = JSON.parse(readFileSync(activePath(repo, id), "utf8"));
     return raw && typeof raw.handle === "string" ? { handle: raw.handle } : { handle: "" };
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 
 function handleOf(repo: string, id: string): string {
@@ -207,18 +273,36 @@ function finalFromStream(harness: string, streamPath: string): string {
   let museText = "";
   for (const event of events) {
     if (harness === "claude") {
-      if (event.type === "result" && event.subtype === "success" && typeof event.result === "string") {
+      if (
+        event.type === "result" &&
+        event.subtype === "success" &&
+        typeof event.result === "string"
+      ) {
         last = event.result;
-      } else if (event.type === "assistant" && event.message && Array.isArray(event.message.content)) {
+      } else if (
+        event.type === "assistant" &&
+        event.message &&
+        Array.isArray(event.message.content)
+      ) {
         const text = event.message.content
           .filter((part: any) => part?.type === "text" && typeof part.text === "string")
           .map((part: any) => part.text)
           .join("\n");
         if (text.trim()) last = text;
       }
-    } else if (harness === "codex" && event.type === "item.completed" && event.item?.type === "agent_message" && typeof event.item.text === "string") {
+    } else if (
+      harness === "codex" &&
+      event.type === "item.completed" &&
+      event.item?.type === "agent_message" &&
+      typeof event.item.text === "string"
+    ) {
       last = event.item.text;
-    } else if (harness === "pi" && event.type === "message_end" && event.message?.role === "assistant" && Array.isArray(event.message.content)) {
+    } else if (
+      harness === "pi" &&
+      event.type === "message_end" &&
+      event.message?.role === "assistant" &&
+      Array.isArray(event.message.content)
+    ) {
       const text = event.message.content
         .filter((part: any) => part?.type === "text" && typeof part.text === "string")
         .map((part: any) => part.text)
@@ -226,16 +310,34 @@ function finalFromStream(harness: string, streamPath: string): string {
       if (text.trim()) last = text;
     } else if (harness === "muse" && event.payload_type === "run.output.delta") {
       museText += typeof event.payload?.text === "string" ? event.payload.text : "";
-    } else if (harness === "muse" && typeof event.payload_type === "string" && event.payload_type.startsWith("run.terminal.")) {
-      if (typeof event.payload?.text === "string" && event.payload.text.trim()) last = event.payload.text;
+    } else if (
+      harness === "muse" &&
+      typeof event.payload_type === "string" &&
+      event.payload_type.startsWith("run.terminal.")
+    ) {
+      if (typeof event.payload?.text === "string" && event.payload.text.trim())
+        last = event.payload.text;
       else if (museText.trim()) last = museText;
       museText = "";
-    } else if (harness === "mimo" && event.type === "text" && typeof event.part?.text === "string") {
+    } else if (
+      harness === "mimo" &&
+      event.type === "text" &&
+      typeof event.part?.text === "string"
+    ) {
       last = event.part.text;
     } else if (harness === "grok" && (event.type === "end" || event.event === "end")) {
-      last = firstText(event.result, event.text, event.message, event.content, event.output) || last;
+      last =
+        firstText(event.result, event.text, event.message, event.content, event.output) || last;
     } else if (harness === "agy" && (event.event === "result" || event.type === "result")) {
-      last = firstText(event.result, event.response, event.text, event.message, event.content, event.output) || last;
+      last =
+        firstText(
+          event.result,
+          event.response,
+          event.text,
+          event.message,
+          event.content,
+          event.output,
+        ) || last;
     }
   }
   return last;
@@ -246,7 +348,13 @@ function firstText(...values: unknown[]): string {
     if (typeof value === "string" && value.trim()) return value;
     if (value && typeof value === "object") {
       const record = value as Record<string, unknown>;
-      const nested = firstText(record.text, record.content, record.message, record.output, record.response);
+      const nested = firstText(
+        record.text,
+        record.content,
+        record.message,
+        record.output,
+        record.response,
+      );
       if (nested) return nested;
     }
   }
@@ -268,27 +376,58 @@ function start(repoArg: string, id: string): number {
   const host = runScript("host.sh", ["detect"]);
   if (host.code !== 0) die((host.err || host.out).trim() || "cannot determine the session host");
   if (host.out.trim() === "none") {
-    console.error(`clerk: no session host can open ${started.name}; start /clerk ${id} in a session on ${repo}`);
+    console.error(
+      `clerk: no session host can open ${started.name}; start /clerk ${id} in a session on ${repo}`,
+    );
     return 3;
   }
   const handle = handleOf(repo, id);
   const spawned = runScript("host.sh", [
-    "spawn", handle, repo, "--label", started.name, "--",
-    script("launch.sh"), "interactive", "clerk", "--project", repo, "--name", started.name,
+    "spawn",
+    handle,
+    repo,
+    "--label",
+    started.name,
+    "--",
+    script("launch.sh"),
+    "interactive",
+    "clerk",
+    "--project",
+    repo,
+    "--name",
+    started.name,
   ]);
   if (spawned.code !== 0) {
-    if ((spawned.err + spawned.out).includes("already")) die(`one booking clerk session is open for ${id} (${handle})`, 3);
+    if ((spawned.err + spawned.out).includes("already"))
+      die(`one booking clerk session is open for ${id} (${handle})`, 3);
     if (spawned.err) process.stderr.write(spawned.err);
     if (spawned.out) process.stdout.write(spawned.out);
     return spawned.code;
   }
-  const logged = runScript("log-action.sh", ["--project", repo, "postmaster", "dispatch", "clerk", `ticket=${id}`]);
-  if (logged.code !== 0) die(`clerk session opened as ${handle}, but its dispatch could not be logged: ${(logged.err || logged.out).trim()}`);
+  const logged = runScript("log-action.sh", [
+    "--project",
+    repo,
+    "postmaster",
+    "dispatch",
+    "clerk",
+    `ticket=${id}`,
+  ]);
+  if (logged.code !== 0)
+    die(
+      `clerk session opened as ${handle}, but its dispatch could not be logged: ${(logged.err || logged.out).trim()}`,
+    );
   recordOpen(repo, id, handle);
   const prompt = join(clerkDir(repo), `${safeId(id)}.start.txt`);
-  writeFileSync(prompt, `Read ${TOOL}/skills/clerk/SKILL.md and ${started.path}. Continue with ticket ${id}.\n`, { mode: 0o600 });
+  writeFileSync(
+    prompt,
+    `Read ${TOOL}/skills/clerk/SKILL.md and ${started.path}. Continue with ticket ${id}.\n`,
+    { mode: 0o600 },
+  );
   const sent = runScript("host.sh", ["send", handle, prompt]);
-  if (sent.code !== 0) die(`clerk session opened as ${handle}, but its brief could not be sent: ${(sent.err || sent.out).trim()}`);
+  if (sent.code !== 0)
+    die(
+      `clerk session opened as ${handle}, but its brief could not be sent: ${(sent.err || sent.out).trim()}`,
+    );
   console.log(`clerk: opened ${started.name} in ${host.out.trim()}`);
   console.log(started.path);
   return 0;
@@ -296,12 +435,18 @@ function start(repoArg: string, id: string): number {
 
 function reader(clerkModel: string, plainPath: string, worktreeArg: string): number {
   let config: Record<string, any>;
-  try { config = readTomlFile(CONFIG) as Record<string, any>; }
-  catch { die(`cannot read config ${CONFIG}`); }
+  try {
+    config = readTomlFile(CONFIG) as Record<string, any>;
+  } catch {
+    die(`cannot read config ${CONFIG}`);
+  }
   const team = config!.team && typeof config!.team === "object" ? config!.team : {};
   const lanes = config!.lanes && typeof config!.lanes === "object" ? config!.lanes : {};
   const names = Array.isArray(team.workhorses) ? team.workhorses.map(String) : Object.keys(lanes);
-  const baseModel = (model: unknown): string => String(model ?? "").split("/").at(-1) ?? "";
+  const baseModel = (model: unknown): string =>
+    String(model ?? "")
+      .split("/")
+      .at(-1) ?? "";
   let lane = "";
   let laneModel = "";
   let laneHarness = "";
@@ -318,9 +463,13 @@ function reader(clerkModel: string, plainPath: string, worktreeArg: string): num
   if (!lane) die(`no configured lane uses a model other than the clerk's model ${clerkModel}`);
   const worktree = resolve(worktreeArg);
   const draft = readFileSync(plainPath, "utf8");
-  const boundary = /^## For the agents\s*$/mu.exec(draft);
-  if (!boundary || boundary.index === undefined) die(`draft ${plainPath} has no ## For the agents boundary`);
-  const plain = draft.slice(0, boundary.index).replace(/^DRAFT:[^\n]*\n*/u, "").trim();
+  const boundary = /^## For the agents[ \t]*$/mu.exec(draft);
+  if (!boundary || boundary.index === undefined)
+    die(`draft ${plainPath} has no ## For the agents boundary`);
+  const plain = draft
+    .slice(0, boundary.index)
+    .replace(/^DRAFT:[^\n]*\n*/u, "")
+    .trim();
   if (!plain) die(`draft ${plainPath} has no plain part before ## For the agents`);
   const projectSettings = runScript("project-settings.sh", ["ensure", worktree]);
   if (projectSettings.code !== 0) die((projectSettings.err || projectSettings.out).trim());
@@ -342,15 +491,37 @@ Answer only these questions from the ticket and code:
 `;
   writeFileSync(prompt, promptText, { mode: 0o600 });
   const hostName = `clerk-reader-${token}`;
-  const launched = runScript("host.sh", [
-    "run", hostName, worktree, "--out", out, "--err", err, "--marker", marker, "--",
-    script("launch.sh"), "launch", lane, worktree, prompt, "--last", last,
-  ], { POSTMASTER_CONFIG: CONFIG });
-  if (launched.code !== 0) die(`could not start fresh reader ${lane}: ${(launched.err || launched.out).trim()}`);
+  const launched = runScript(
+    "host.sh",
+    [
+      "run",
+      hostName,
+      worktree,
+      "--out",
+      out,
+      "--err",
+      err,
+      "--marker",
+      marker,
+      "--",
+      script("launch.sh"),
+      "launch",
+      lane,
+      worktree,
+      prompt,
+      "--last",
+      last,
+    ],
+    { POSTMASTER_CONFIG: CONFIG },
+  );
+  if (launched.code !== 0)
+    die(`could not start fresh reader ${lane}: ${(launched.err || launched.out).trim()}`);
   const waited = runScript("wait-for-markers.sh", [join(readerDir), `${token}.done`, "1", "3600"]);
   if (waited.code !== 0) {
     const detail = (waited.out + waited.err).trim();
-    die(`fresh reader ${lane} failed or did not finish (exit ${waited.code})${detail ? `: ${detail}` : ""}`);
+    die(
+      `fresh reader ${lane} failed or did not finish (exit ${waited.code})${detail ? `: ${detail}` : ""}`,
+    );
   }
   const response = existsSync(last)
     ? readFileSync(last, "utf8")

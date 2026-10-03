@@ -1,5 +1,13 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { scriptsDir } from "./lib/paths.ts";
@@ -90,9 +98,24 @@ beforeAll(() => {
   mkdirSync(home, { recursive: true });
   mkdirSync(bin, { recursive: true });
   run("git", ["init", "-q", "-b", "main", repo]);
-  run("git", ["-C", repo, "-c", "user.name=test", "-c", "user.email=test@example.invalid", "commit", "-q", "--allow-empty", "-m", "init"]);
+  run("git", [
+    "-C",
+    repo,
+    "-c",
+    "user.name=test",
+    "-c",
+    "user.email=test@example.invalid",
+    "commit",
+    "-q",
+    "--allow-empty",
+    "-m",
+    "init",
+  ]);
   config = join(temp, "config.toml");
-  writeFileSync(config, `[tracker]\nkind = "local"\n\n[team]\nworkhorses = ["codex_lane", "claude_lane"]\nclerk = { harness = "claude", model = "claude-clerk", effort = "high" }\n\n[lanes.codex_lane]\nharness = "codex"\nmodel = "codex-reader"\n\n[lanes.claude_lane]\nharness = "claude"\nmodel = "claude-reader"\n`);
+  writeFileSync(
+    config,
+    `[tracker]\nkind = "local"\n\n[team]\nworkhorses = ["codex_lane", "claude_lane"]\nclerk = { harness = "claude", model = "claude-clerk", effort = "high" }\n\n[lanes.codex_lane]\nharness = "codex"\nmodel = "codex-reader"\n\n[lanes.claude_lane]\nharness = "claude"\nmodel = "claude-reader"\n`,
+  );
   writeFileSync(join(bin, "claude"), CLAUDE_STUB, { mode: 0o755 });
   writeFileSync(join(bin, "codex"), CODEX_STUB, { mode: 0o755 });
   chmodSync(join(bin, "claude"), 0o755);
@@ -122,7 +145,9 @@ describe("booking clerk brief", () => {
     expect(brief).toContain("Runbook: ");
     expect(brief).toContain("/skills/clerk/clerk.md");
     expect(local("read", "1").out).toContain("labels: \n");
-    const readiness = run("bash", [READY, repo, "1"], { env: { ...process.env, POSTMASTER_CONFIG: config } });
+    const readiness = run("bash", [READY, repo, "1"], {
+      env: { ...process.env, POSTMASTER_CONFIG: config },
+    });
     expect(readiness.code).toBe(2);
     expect(readiness.out).toContain("ready label is missing");
   });
@@ -139,9 +164,27 @@ describe("booking clerk brief", () => {
   });
 
   test("the interactive form carries the Herdr tab's ticket name", () => {
-    const result = run("bash", [join(HERE, "launch.sh"), "form", "clerk", "--project", repo, "--interactive", "--name", "#2, Fix the list"], {
-      env: { ...process.env, HOME: home, PATH: `${bin}:${process.env.PATH ?? ""}`, POSTMASTER_CONFIG: config },
-    });
+    const result = run(
+      "bash",
+      [
+        join(HERE, "launch.sh"),
+        "form",
+        "clerk",
+        "--project",
+        repo,
+        "--interactive",
+        "--name",
+        "#2, Fix the list",
+      ],
+      {
+        env: {
+          ...process.env,
+          HOME: home,
+          PATH: `${bin}:${process.env.PATH ?? ""}`,
+          POSTMASTER_CONFIG: config,
+        },
+      },
+    );
     expect(result.code).toBe(0);
     expect(result.out).toContain(String.raw`--name \#2\,\ Fix\ the\ list`);
   });
@@ -174,13 +217,21 @@ describe("fresh reader", () => {
 
   test("no lane on another model and a failed reader both refuse with a reason", () => {
     const original = readFileSync(config, "utf8");
-    writeFileSync(config, original.replace('workhorses = ["codex_lane", "claude_lane"]', 'workhorses = ["claude_lane"]'));
+    writeFileSync(
+      config,
+      original.replace(
+        'workhorses = ["codex_lane", "claude_lane"]',
+        'workhorses = ["claude_lane"]',
+      ),
+    );
     const noLane = cli(["reader", "claude-reader", draft, repo]);
     expect(noLane.code).toBe(1);
     expect(noLane.err).toContain("no configured lane uses a model other than the clerk's model");
     writeFileSync(config, original);
     const failed = cli(["reader", "codex-reader", draft, repo], { POSTMASTER_READER_FAIL: "1" });
     expect(failed.code).not.toBe(0);
-    expect(`${failed.err}${failed.out}`).toContain("fresh reader claude_lane exited without a final message");
+    expect(`${failed.err}${failed.out}`).toContain(
+      "fresh reader claude_lane exited without a final message",
+    );
   }, 30000);
 });

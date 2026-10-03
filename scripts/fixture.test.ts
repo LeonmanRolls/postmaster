@@ -152,11 +152,14 @@ function record(
       `base=${base}`,
       "result=same",
     ]).code !== 0
-  ) return 1;
+  )
+    return 1;
   for (const lane of recordedConfig.team.workhorses as string[]) {
     if (
-      run("bash", [join(HERE, "log-action.sh"), d, "coachman", "dispatch", lane, "workhorse"]).code !== 0
-    ) return 1;
+      run("bash", [join(HERE, "log-action.sh"), d, "coachman", "dispatch", lane, "workhorse"])
+        .code !== 0
+    )
+      return 1;
   }
 
   const stageList = stages.split("\n").filter(Boolean);
@@ -831,12 +834,20 @@ describe("score: premises are checked before workhorse dispatch", () => {
       join(dispatch, "run.json"),
       JSON.stringify({ config: { team: { workhorses: ["one", "two"] } } }),
     );
-    writeFileSync(join(dispatch, "actions.jsonl"), `${rows.map((row) => JSON.stringify(row)).join("\n")}\n`);
+    writeFileSync(
+      join(dispatch, "actions.jsonl"),
+      `${rows.map((row) => JSON.stringify(row)).join("\n")}\n`,
+    );
     return dispatch;
   }
 
   const premise = { actor: "coachman", action: "premises", target: "base", detail: "result=same" };
-  const laneDispatch = { actor: "coachman", action: "dispatch", target: "one", detail: "workhorse" };
+  const laneDispatch = {
+    actor: "coachman",
+    action: "dispatch",
+    target: "one",
+    detail: "workhorse",
+  };
 
   test("a premises action before the first workhorse dispatch passes", () => {
     expect(checkPremisesOrder(recordOrder("before", [premise, laneDispatch])).ok).toBe(true);

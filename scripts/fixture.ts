@@ -642,7 +642,9 @@ export function checkPremisesOrder(dispatch: string): { ok: boolean; detail: str
     }
   }
   const lanes = new Set(names);
-  const premiseIndex = events.findIndex((event) => event.action === "premises" && event.actor === "coachman");
+  const premiseIndex = events.findIndex(
+    (event) => event.action === "premises" && event.actor === "coachman",
+  );
   const dispatchIndex = events.findIndex(
     (event) =>
       event.action === "dispatch" &&

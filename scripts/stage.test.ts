@@ -157,7 +157,10 @@ describe("positive controls", () => {
 
   test("an older run can leave its historical planning stage", () => {
     fresh();
-    writeFileSync(join(d, "manifest.json"), MANIFEST.replace('"stage": "dispatched"', '"stage": "planning"'));
+    writeFileSync(
+      join(d, "manifest.json"),
+      MANIFEST.replace('"stage": "dispatched"', '"stage": "planning"'),
+    );
     const rc = setStage(d, "workhorses-running", "coachman");
     expect(rc).toBe(0);
     expect(count()).toBe(1);

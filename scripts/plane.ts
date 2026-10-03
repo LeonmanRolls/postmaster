@@ -1276,18 +1276,22 @@ async function runCommands(): Promise<void> {
     for (const label of labels) ids.set(pyLower(String(label.name ?? "")), String(label.id));
     const id = ids.get(pyLower(args[2]!));
     const current = (item.labels ?? []).map((l: unknown) => String(ref(l)));
-    const next = args[1] === "add"
-      ? id ? [...new Set([...current, id])] : current
-      : id ? current.filter((value: string) => value !== id) : current;
+    const next =
+      args[1] === "add"
+        ? id
+          ? [...new Set([...current, id])]
+          : current
+        : id
+          ? current.filter((value: string) => value !== id)
+          : current;
     if (next.length !== current.length) {
-      await api(
-        cfg,
-        "PATCH",
-        `workspaces/${cfg.WS}/projects/${pid}/work-items/${item.id}/`,
-        { labels: next },
-      );
+      await api(cfg, "PATCH", `workspaces/${cfg.WS}/projects/${pid}/work-items/${item.id}/`, {
+        labels: next,
+      });
     }
-    console.log(`${ident}-${item.sequence_id}: label ${args[1] === "add" ? "added" : "removed"} ${args[2]}`);
+    console.log(
+      `${ident}-${item.sequence_id}: label ${args[1] === "add" ? "added" : "removed"} ${args[2]}`,
+    );
   } else if (cmd === "read") {
     const rest = args.filter((a) => a !== "--body");
     if (rest.length !== 1 || args.length > 2) dieP("usage: plane.sh read <IDENT-n> [--body]");

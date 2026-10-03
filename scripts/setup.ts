@@ -203,7 +203,9 @@ planning.review_link?      (none)             code-server template with {path} f
 overwrite                  no                 yes replaces an existing config`);
     process.exit(0);
   } else {
-    console.error("usage: setup.sh [--answers <file>] [--dry-run] [--config <path>] | --add-clerk [options] | --keys");
+    console.error(
+      "usage: setup.sh [--answers <file>] [--dry-run] [--config <path>] | --add-clerk [options] | --keys",
+    );
     process.exit(1);
   }
   i++;
@@ -222,14 +224,20 @@ if (ADD_CLERK) {
     die(`setup: ${CONFIG} does not parse`, 1);
   }
   const team = parsed!.team;
-  if (!team || typeof team !== "object" || Array.isArray(team)) die(`setup: [team] is missing in ${CONFIG}`, 1);
+  if (!team || typeof team !== "object" || Array.isArray(team))
+    die(`setup: [team] is missing in ${CONFIG}`, 1);
   if (team.clerk !== undefined) die(`setup: ${CONFIG} already has team.clerk`, 1);
   console.log("== The booking clerk: prepares a ticket with the user. ==");
   const harness = ask("  clerk: harness", "", "clerk.harness", opts);
   needHarness(harness);
   const model = ask("  clerk: model id", "", "clerk.model", opts);
   const effort = ask("  clerk: effort (blank if none)", "", "clerk.effort?", opts);
-  const envFile = ask("  clerk: env file for its key or backend (blank if none)", "", "clerk.env_file?", opts);
+  const envFile = ask(
+    "  clerk: env file for its key or backend (blank if none)",
+    "",
+    "clerk.env_file?",
+    opts,
+  );
   const entry = `clerk = { harness = "${harness}", model = "${model}"${roleExtra(effort, envFile)} }`;
   const header = /^\[team\][ \t]*(?:#.*)?(?:\r?\n|$)/mu.exec(original);
   if (!header) die(`setup: ${CONFIG} has no [team] table`, 1);
@@ -246,7 +254,8 @@ if (ADD_CLERK) {
   writeFileSync(CONFIG, changed, "utf8");
   try {
     const reread = readTomlFile(CONFIG) as Record<string, any>;
-    if (reread.team?.clerk?.harness !== harness || reread.team?.clerk?.model !== model) throw new Error("mismatch");
+    if (reread.team?.clerk?.harness !== harness || reread.team?.clerk?.model !== model)
+      throw new Error("mismatch");
   } catch {
     writeFileSync(CONFIG, original, "utf8");
     die(`setup: ${CONFIG} did not parse after adding team.clerk; restored the original`, 1);
