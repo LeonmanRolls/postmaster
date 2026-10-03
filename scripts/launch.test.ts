@@ -5067,6 +5067,6 @@ describe("confinement battery: every AC2 and AC3 item unconfined and confined", 
     const r = records.find((x) => x.label.startsWith("confinement battery:"));
     expect(r).toBeDefined();
     expect(r?.ok).toBe(true);
-    expect(r?.detail).toMatch(/^\d+ run, \d+ skipped$/);
+    expect(r?.detail).toMatch(/^\p{Nd}+ run, \p{Nd}+ skipped$/u);
   });
 });
