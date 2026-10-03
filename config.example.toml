@@ -50,6 +50,7 @@ reviewers = ["luna", "deepseek"]
 coachman = { harness = "grok", model = "grok-4.6", effort = "xhigh" }
 coachman_fallback = { harness = "codex", model = "gpt-6-astra", effort = "max" }
 postmaster = { harness = "agy", model = "gemini-3.8-flash-high" }   # interactive, in tmux
+clerk = { harness = "claude", model = "claude-fable-5", effort = "max" }   # the booking clerk
 max_runs = 2                                    # concurrent runs per project
 
 # A muse coachman takes its key from an env file, as any role may:

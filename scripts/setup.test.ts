@@ -51,6 +51,8 @@ function answers(name: string, extra?: string): void {
     "fallback.model=spare",
     "postmaster.harness=bash",
     "postmaster.model=pm",
+    "clerk.harness=bash",
+    "clerk.model=clerk-m",
   ];
   if (extra) lines.push(extra);
   writeFileSync(join(tmp, `${name}.answers`), `${lines.join("\n")}\n`, "utf8");

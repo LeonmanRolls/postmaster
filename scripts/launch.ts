@@ -220,6 +220,9 @@ function resolveSpec(
   } else if (name === "postmaster") {
     const team = (cfg.team as Record<string, unknown>) ?? {};
     spec = team.postmaster;
+  } else if (name === "clerk") {
+    const team = (cfg.team as Record<string, unknown>) ?? {};
+    spec = team.clerk;
   } else {
     spec = lanes[name];
   }
@@ -409,6 +412,58 @@ function buildForms(
       die(`no form for harness '${harness}'`);
   }
   return { cmd, data, stdinFile, promptArg };
+}
+
+/** The interactive form a session runs in, as harnesses.md records it: the
+ *  role's harness in its bypass mode, with the session's name where the
+ *  harness takes one (claude and pi). */
+export function interactiveForm(
+  harness: string,
+  model: string,
+  effort: string,
+  name: string,
+): string[] {
+  const cmd: string[] = [];
+  switch (harness) {
+    case "claude":
+      cmd.push("claude", "--model", model);
+      if (effort) cmd.push("--effort", effort);
+      if (name) cmd.push("--name", name);
+      cmd.push("--dangerously-skip-permissions");
+      break;
+    case "pi":
+      cmd.push("pi", "--model", model);
+      if (effort) cmd.push("--thinking", effort);
+      if (name) cmd.push("--name", name);
+      cmd.push("--approve");
+      break;
+    case "codex":
+      cmd.push("codex", "-m", model);
+      if (effort) cmd.push("-c", `model_reasoning_effort="${effort}"`);
+      cmd.push("--dangerously-bypass-approvals-and-sandbox");
+      break;
+    case "grok":
+      cmd.push("grok", "-m", model);
+      if (effort) cmd.push("--reasoning-effort", effort);
+      cmd.push("--always-approve");
+      break;
+    case "agy":
+      cmd.push("agy", "--model", model);
+      cmd.push("--dangerously-skip-permissions");
+      break;
+    case "muse":
+      cmd.push("muse", "--model", model);
+      if (effort) cmd.push("--reasoning-effort", effort);
+      cmd.push("--yolo");
+      break;
+    case "mimo":
+      cmd.push("mimo", "-m", model);
+      cmd.push("--dangerously-skip-permissions");
+      break;
+    default:
+      die(`no interactive form for harness '${harness}'`);
+  }
+  return cmd;
 }
 
 function shellQuote(s: string): string {
@@ -1069,6 +1124,8 @@ if (import.meta.main) {
   let LAST = "";
   let RUN = "";
   let PROJECT = "";
+  let INTERACTIVE = 0;
+  let SESSION_NAME = "";
   const args: string[] = [];
   let i = 2;
   while (i < argv.length) {
@@ -1088,6 +1145,13 @@ if (import.meta.main) {
     } else if (a === "--project") {
       if (i + 1 >= argv.length || !argv[i + 1]) die("--project needs a project directory");
       PROJECT = argv[i + 1] ?? "";
+      i += 2;
+    } else if (a === "--interactive") {
+      INTERACTIVE = 1;
+      i += 1;
+    } else if (a === "--session-name") {
+      if (i + 1 >= argv.length || !argv[i + 1]) die("--session-name needs text");
+      SESSION_NAME = argv[i + 1] ?? "";
       i += 2;
     } else {
       args.push(a ?? "");
@@ -1325,6 +1389,11 @@ if (import.meta.main) {
     );
 
   if (CMD === "form") {
+    if (INTERACTIVE === 1) {
+      const cmd = interactiveForm(HARNESS, MODEL, EFFORT, SESSION_NAME);
+      process.stdout.write(`interactive: ${cmd.map(showArg).join("")}\n`);
+      process.exit(0);
+    }
     const show = (a: string): string => showArg(a);
     const maybeWrap = (cmd: string[]): string[] => {
       if (!showWrap) return cmd;

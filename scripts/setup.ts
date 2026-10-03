@@ -133,6 +133,7 @@ function hasKey(file: string, key: string): boolean {
 const argv = process.argv.slice(2);
 let DRY = 0;
 let ANSWERS = "";
+let ADD_CLERK = 0;
 let CONFIG = join(process.env.HOME ?? "~", ".postmaster", "config.toml");
 let i = 0;
 while (i < argv.length) {
@@ -171,6 +172,10 @@ postmaster.harness
 postmaster.model
 postmaster.effort?         (none)
 postmaster.env_file?       (none)
+clerk.harness                              the booking clerk; no rule against a lane's model
+clerk.model
+clerk.effort?              (none)
+clerk.env_file?            (none)
 max_runs                   2                  concurrent runs per project
 poll_seconds               120                postmaster poll interval
 limits.memory_max          8G                 default memory cap per launch (K, M, G or T)
@@ -195,14 +200,71 @@ review_link?               (none)             template with {path}
 planning.review_link?      (none)             code-server template with {path} for workhorse specs
 overwrite                  no                 yes replaces an existing config`);
     process.exit(0);
+  } else if (a === "--add-clerk") {
+    ADD_CLERK = 1;
   } else {
-    console.error("usage: setup.sh [--answers <file>] [--dry-run] [--config <path>] | --keys");
+    console.error(
+      "usage: setup.sh [--answers <file>] [--dry-run] [--config <path>] [--add-clerk] | --keys",
+    );
     process.exit(1);
   }
   i++;
 }
 
 const opts: AskOpts = { answers: ANSWERS };
+
+if (ADD_CLERK === 1) {
+  if (!existsSync(CONFIG)) die(`setup: no config at ${CONFIG}`, 1);
+  const text = readFileSync(CONFIG, "utf8");
+  if (/^\s*clerk\s*=/mu.test(text))
+    die(`setup: ${CONFIG} already names a clerk`, 1);
+  const clH = ask("  clerk: harness", "", "clerk.harness", opts);
+  needHarness(clH);
+  const clM = ask("  clerk: model id", "", "clerk.model", opts);
+  if (!clM) die("setup: a clerk model is needed", 1);
+  const clE = ask("  clerk: effort (blank if none)", "", "clerk.effort?", opts);
+  const clEF = ask(
+    "  clerk: env file for its key or backend (blank if none)",
+    "",
+    "clerk.env_file?",
+    opts,
+  );
+  const clerkLine = `clerk = { harness = "${clH}", model = "${clM}"${roleExtra(clE, clEF)} }`;
+  const lines = text.split("\n");
+  const out: string[] = [];
+  let inserted = false;
+  let inTeam = false;
+  for (const line of lines) {
+    if (/^\[team\]\s*$/u.test(line)) {
+      inTeam = true;
+      out.push(line);
+      continue;
+    }
+    if (inTeam && /^\[/u.test(line)) {
+      if (!inserted) {
+        out.push(clerkLine);
+        inserted = true;
+      }
+      inTeam = false;
+    }
+    if (inTeam && /^postmaster\s*=/u.test(line)) {
+      out.push(line);
+      out.push(clerkLine);
+      inserted = true;
+      continue;
+    }
+    out.push(line);
+  }
+  if (!inserted) out.push(clerkLine);
+  if (DRY === 1) {
+    console.log(out.join("\n").replace(/\n+$/u, ""));
+    process.exit(0);
+  }
+  writeFileSync(CONFIG, `${out.join("\n").replace(/\n+$/u, "")}\n`, "utf8");
+  console.log(`added the clerk to ${CONFIG}`);
+  process.exit(0);
+}
+
 console.log("== Installed agent CLIs ==");
 const probe = run("bash", [join(HERE, "probe-harnesses.sh")]);
 process.stdout.write(probe.out);
@@ -367,6 +429,22 @@ const PEF = ask(
   "postmaster.env_file?",
   opts,
 );
+
+console.log("");
+console.log(
+  "== The booking clerk: prepares every ticket with the user before it runs. The strongest model they can afford. ==",
+);
+const CH2 = ask("  clerk: harness", "", "clerk.harness", opts);
+needHarness(CH2);
+const CM2 = ask("  clerk: model id", "", "clerk.model", opts);
+if (!CM2) die("setup: a clerk model is needed", 1);
+const CE2 = ask("  clerk: effort (blank if none)", "", "clerk.effort?", opts);
+const CEF2 = ask(
+  "  clerk: env file for its key or backend (blank if none)",
+  "",
+  "clerk.env_file?",
+  opts,
+);
 const MR = ask("  concurrent runs per project", "2", "max_runs", opts);
 const PS = ask("  postmaster poll interval, seconds", "120", "poll_seconds", opts);
 
@@ -518,6 +596,7 @@ reviewers = ${tomlList(REVIEWERS)}
 coachman = { harness = "${CH}", model = "${CM}"${roleExtra(CE, CEF)} }
 coachman_fallback = { harness = "${FH}", model = "${FM}"${roleExtra(FE, FEF)} }
 postmaster = { harness = "${PH}", model = "${PM}"${roleExtra(PE, PEF)} }
+clerk = { harness = "${CH2}", model = "${CM2}"${roleExtra(CE2, CEF2)} }
 max_runs = ${MR}
 ${LENS_TABLE}
 
