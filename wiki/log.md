@@ -8,6 +8,16 @@ updated: 2026-10-03
 
 Append-only. Newest first. One entry per operation, prefixed so it can be parsed.
 
+## [2026-10-03] query | can patterns carry the private-data check without a model
+
+The user asked whether the check's patterns could cover what Jev catches. Answered from
+`raw/trials/pii-patterns/`: they match it on personal data with a shape or a label, raise less
+on real code, and leave names in prose. The user's word: #216 takes the narrowed scope with
+patterns alone, no model. #216's and #135's tickets were rewritten to match. Updated
+[No library covers what the private-data scanner checks, so postmaster publishes one](concepts/scanner-library.md),
+still **claimed**: the library's scope is patterns, and a judge for names in prose is a later,
+optional argument.
+
 ## [2026-10-03] ingest | patterns for personal data, beside Jev
 
 Issue #208. A trial recorded in `raw/trials/pii-patterns/`: patterns in TypeScript for names in

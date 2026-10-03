@@ -44,9 +44,9 @@ codes and has its JSON strings decoded before the rules run.
 On 2026-10-02 the user narrowed #135 to personal data and secrets: private context, such as home
 paths, host names, private addresses, account and session ids and attribution lines, is allowed.
 The ticket, now "A gate check refuses any change that carries personal data or a secret", drops
-the rules for those kinds, keeps the shapes for keys, tokens, `.env` assignments and email
-addresses, and adds Jev, TypeSafe's model for typed decisions, to judge personal data in prose,
-as the trials below did.
+the rules for those kinds and keeps the shapes for keys, tokens, `.env` assignments and email
+addresses. On 2026-10-03, after the trials below, the user chose patterns alone for personal data,
+with no model, and #216 carries the work in TypeScript; #135's criteria are now #216's.
 
 The ticket named the kinds a survey must cover before that change, and the tables below use them
 as columns; the ones that still matter are secrets, personal data in plain text, email
@@ -289,7 +289,9 @@ another model wrote after the patterns were fixed, they found 25 of 34 that held
 where Jev found 32, with about as many false alarms; four of the lines only Jev found were names
 in prose, three were fields whose names use underscores, an easy fix. On this repository's
 history the patterns flagged 9 lines, all email addresses made up for a test, in five seconds,
-with no network, key or cost, and the same answer every time.
+with no network, key or cost, and the same answer every time. On that evidence the user chose
+patterns alone for the check on 2026-10-03, leaving names in prose to the security review that
+runs on every ticket run.
 
 ## The case for and against publishing one
 
@@ -341,8 +343,9 @@ written in Python or Go, so they would call it as a command, not import it (unve
 - **Name.** `unspill`, `scrubline` or `transcript-scrub`, each free on npm on 2026-10-01 (a
   registry lookup; nothing was claimed).
 - **Scope.** Personal data and secrets in agent transcripts and git changes: the shapes for keys,
-  tokens, `.env` assignments and email addresses; a judge for personal data in prose, its
-  questions, masked names and threshold kept as data and its verdicts cached; transcript
+  tokens, `.env` assignments and email addresses; patterns for personal data, for names where a
+  name is written down, phone numbers, card, bank and ID numbers with their checks, dates of
+  birth and street addresses; transcript
   decoding, with escapes at any depth, terminal escape codes, and encrypted reasoning dropped as
   unreadable; the range scan over added lines, added file names, commit messages and merge
   resolutions; inline markers that name a rule and a reason; and scrub-and-recheck. Provider
@@ -352,10 +355,9 @@ written in Python or Go, so they would call it as a command, not import it (unve
   rule, line and span, never the value. `scanRange({ repo, base, head })` adds the commit and the
   place: a line, a file name, a message or a merge. `scrub(text)` returns the copy and its
   replacements, and throws when the copy still scans dirty. The rules are data, in the format
-  checked below. A judge is an argument, not built in: without one the shapes run offline with no
-  account, and the Jev judge is a separate export that needs a key and sends each line it is
-  asked about to OpenRouter, which the README has to say. A command line offers `check`, `files`
-  and `scrub`.
+  checked below. It needs no model, network or account. A judge for names in prose, which the
+  patterns leave, could be added later as an argument, never built in. A command line offers
+  `check`, `files` and `scrub`.
 - **Packaging.** One npm package with its types and no runtime dependency, needing git on the
   path for history, for Node and for Bun. The trial's format engine found the same spans under
   Node 24.21 and Bun 1.4.2 [@trials/scanner-rule-format/method.md].
@@ -366,8 +368,7 @@ written in Python or Go, so they would call it as a command, not import it (unve
 ### What it would take from #135, and what stays
 
 It would take the rule table, as data; the line pipeline that strips escape codes and decodes JSON
-strings; the markers; the range scan; the judge, with its questions, masking and cache; and the
-span protocol, placeholders and recheck at the heart of the copy into `raw/`, with the redaction
+strings; the markers; the range scan; and the span protocol, placeholders and recheck at the heart of the copy into `raw/`, with the redaction
 of values in its own messages.
 
 The detections log stays, with what the status poll and the ship card do with it. So do the
@@ -417,12 +418,12 @@ publishing. This is the user's word of 2026-10-02 on #208.
 
 The order is what keeps it from being written three times:
 
-1. **Land #135 as rewritten on 2026-10-02**: personal data and secrets, the judge beside the
-   shapes, JSON nested more than one level deep, and encrypted reasoning blocks dropped from a
-   copy into `raw/`, since no scan can read them.
-2. **Port it as a self-contained module** when #109 ports the scripts to TypeScript: its rules and
-   the judge's questions as data, an engine that imports nothing else from postmaster and takes
-   the judge as an argument, and the same fixtures and probes passing under Bun and Node.
+1. **Land #216**, which carries #135 in TypeScript: personal data and secrets by patterns alone,
+   JSON nested more than one level deep, and encrypted reasoning blocks dropped from a copy into
+   `raw/`, since no scan can read them.
+2. **Keep it a self-contained module**, as #216 writes it or in the first change after: its
+   rules as data, an engine that imports nothing else from postmaster, and the same fixtures and
+   probes passing under Bun and Node.
 3. **Publish the module as a package** under the project's account name, with the name, the
    licence and the API set out above, and have postmaster use the published package in place of
    its own copy. Only then does this project carry less code.
@@ -432,10 +433,10 @@ The order is what keeps it from being written three times:
 - **An existing tool closes the gap first.** If gitleaks, Betterleaks, TruffleHog or one of the
   transcript scrubbers adds personal data in prose and commit messages, contributing there and
   adopting it would serve both aims better than a new package.
-- **The judge's service changes.** The prose check rests on one model behind one router; the
-  shapes do not. Keeping the judge an argument makes a change of model a swap rather than a
-  rewrite, and a local model as accurate as Jev would remove the dependency; OpenAI's Privacy
-  Filter, run locally, was not [@trials/ai-privacy-check/method.md].
+- **A name in prose leaks.** The patterns leave a first name in prose, which Jev read
+  [@trials/pii-patterns/method.md]. If that is how something leaks, a model passed in as a judge,
+  or a local one as accurate as Jev, is the next measure; OpenAI's Privacy Filter, run locally,
+  was not as accurate [@trials/ai-privacy-check/method.md].
 - **Other repositories raise more.** The false alarms were counted on this repository's history
   alone. A repository with more prose about people would test the exclusions harder.
 - **The rules keep changing after #135 lands.** That delays the first release, so that it does not
