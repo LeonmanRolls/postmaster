@@ -678,6 +678,30 @@ stream;
 any other harness shows by event type, once per run of the same type. A harness whose events it
 shows badly gets its rules there, and a line here saying they were checked.
 
+## Tool-call shapes and each harness's own folders
+
+`<tool>/scripts/reach.ts` is this section's executable form: it reads each lane's own record of
+tool calls to find every place outside the lane's folder the lane read or wrote. The whole record
+is read, after any resume. The tools with a reader are codex, Claude Code, Muse Code, MiMo Code
+and pi; grok and Antigravity have none yet and read `not checked`, as does a record that cannot
+be parsed or in which no tool call is recognized.
+
+| harness | tool-call shape in the events stream | where its settings live | where its own data lives |
+|---|---|---|---|
+| codex | `item.completed` items `command_execution` (`command` is `/bin/bash -lc '…'`, with `aggregated_output`, `exit_code`) and `file_change` (`changes[].path`) | `~/.codex` | `~/.codex` |
+| claude | `assistant` `tool_use` blocks (`name`, `input`) and their `tool_result`; a `/code-review` call is in its forked task's file, which the bug harvest copies to `logs/<prefix>-claude-task-*` | `~/.claude`, `~/.claude.json` | `~/.claude` |
+| muse | `tool.result` (`correlation_facts`, `edit_facts`, and the result text) | `~/.config/muse` | `$XDG_DATA_HOME`, per lane and leg |
+| mimo | `tool_use` with `part.tool` and `part.state` (`input`, `output`, `metadata.exit`) | `~/.config/mimocode`, `~/.mimocode` | `$XDG_DATA_HOME`, per lane |
+| pi | `tool_execution_start` (`toolName`, `args`) and `tool_execution_end` | `~/.pi/agent` | `~/.pi/agent` |
+| grok | none yet: `not checked` | `~/.grok` | its session store |
+| agy | none yet: `not checked` | `~/.antigravity` | its session store |
+
+pi's shape is not yet checked against a recorded stream. Normal, and not reported: reading paths
+outside `$HOME` and the repository, the run's tool checkout, the lane's prompt and brief files in
+the dispatch folder, and each harness's settings above; reading and writing the temp folder, `/dev`,
+`~/.npm`, `~/.cache`, `~/.bun`, and the lane's own `XDG_DATA_HOME`. Anywhere else outside the
+lane's folder, a write is a finding and a read, or an attempt that was refused, is a note.
+
 ## Walls, any harness
 
 A lane that never launched is lame for that round: DEGRADED. Recognise a wall by the provider's

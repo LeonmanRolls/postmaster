@@ -438,7 +438,10 @@ other line of this section holds.
    drop as DEGRADED, a round to stop at the cap. Log `escalate` with your ruling.
 3. **Send it up** when it is genuinely destructive, changes the ticket's scope, touches
    anything outside the repo, is a fault in a control (Tool faults), asks whether to fix a
-   gating finding in a loop with no gating lens (`coachman.md`, Stage 2 step 5), or the user
+   gating finding in a loop with no gating lens (`coachman.md`, Stage 2 step 5), is a reach
+   (`coachman.md`, the reach check: a workhorse's finding, a main checkout change no lane's
+   record explains at `workhorses`, or a reviewer's write outside this run's own branches and
+   folders), or the user
    asked to see it: write the question to the run's `.waiting-on-user`, add the run and the
    question to the waiting list (`<runs>/postmaster/ESCALATION.md`, owned by
    `<tool>/scripts/host.sh leg waiting add <runs> <ticket> <question-file>`), tell the user in
@@ -447,7 +450,8 @@ other line of this section holds.
    pass a postmaster grant up as if it needed the user's word, and never take the user's word
    for something the config gives you. On the user's answer, remove `.waiting-on-user`, remove
    the run from the list with `<tool>/scripts/host.sh leg waiting remove <runs> <ticket>`, and
-   act on the answer as the record named.
+   act on the answer as the record named. In a fixture run there is no user to ask: rule on a
+   reach yourself, as for the spec review, and let the fixture score fail.
 4. **Deliver the ruling:** remove `.escalation-ready`, then resume the current leg (Stage C,
    step 5) with the ruling as the prompt. The ruling is a prompt to a resumed thread, never
    text typed into anything.

@@ -80,8 +80,8 @@
 //           unreadable state, a fence marker line, or a quoted line); a card holding an
 //           HTML comment or not holding the rendered block exactly once
 //   exit 2  fresh: the faults, one line each; journey: `blocked`
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { dirname, isAbsolute, join, normalize, relative, resolve } from "node:path";
 import { scriptsDir } from "./lib/paths.ts";
 import { run } from "./lib/proc.ts";
 import {
@@ -341,6 +341,86 @@ function checkpointStates(path: string): CheckpointFinding[] {
   return out;
 }
 
+/** The card's reach section, built from the run's log. A path inside the project is named
+ * relative to it; a path outside the project reads `outside the project`, since the card goes
+ * into the pull request. Nothing for a run whose log has no `reach` line. A point with no
+ * `reach` line of its own reads `not checked`. */
+function reachBlock(dispatch: string, repo: string): string {
+  const path = join(dispatch, "actions.jsonl");
+  if (!existsSync(path)) return "";
+  const rows: Array<{ target: string; detail: string }> = [];
+  for (const line of readFileSync(path, "utf8").split("\n")) {
+    if (line.trim() === "") continue;
+    let row: Record<string, unknown>;
+    try {
+      row = JSON.parse(line) as Record<string, unknown>;
+    } catch {
+      continue;
+    }
+    if (row.action !== "reach") continue;
+    const detail = typeof row.detail === "string" ? row.detail : "";
+    const target = typeof row.target === "string" ? row.target : "";
+    rows.push({ target, detail });
+  }
+  if (rows.length === 0) return "";
+  // Every point the run's records show, in order: workhorses, each round, the card. A point
+  // with no line of its own is not checked.
+  const points: string[] = ["workhorses"];
+  try {
+    for (const n of readdirSync(join(dispatch, "logs"))) {
+      const m = /^review-r([0-9]+)\.json$/u.exec(n);
+      if (m) points.push(`r${m[1]}`);
+    }
+  } catch {
+    /* no logs directory: the rounds are unknown */
+  }
+  points.push("card");
+  const seen = new Set(rows.filter((r) => r.detail !== "").map((r) => r.target));
+  const lines: string[] = [];
+  for (const p of points) {
+    if (!seen.has(p)) {
+      lines.push(reachLine("not checked", p, repo));
+    }
+  }
+  for (const r of rows) {
+    if (r.detail === "") continue;
+    lines.push(reachLine(r.detail, r.target, repo));
+  }
+  return `## Reach\n\n${lines.join("\n")}\n`;
+}
+
+/** One reach line on the card: a path in the repository relative to it, a path outside it
+ * as `outside the project`, and a missing point as `not checked`. */
+function reachLine(detail: string, target: string, repo: string): string {
+  if (detail.startsWith("not checked") || detail === "clean" || detail.startsWith("fault ")) {
+    return `- ${target}: ${detail}`;
+  }
+  if (detail.startsWith("main path ")) {
+    const p = detail.slice("main path ".length);
+    return `- main ${cardPath(p, repo)}`;
+  }
+  if (detail.startsWith("main ")) {
+    return `- ${target}: ${detail}`;
+  }
+  // finding|note <lane> <path> <access> <place>
+  const m = /^(finding|note) (\S+) (\S+) (\S+) (.*)$/u.exec(detail);
+  if (m) {
+    const [, kind, lane, p, access, place] = m;
+    return `- ${kind} ${lane}: ${cardPath(p ?? "", repo)} ${access} (${place})`;
+  }
+  return `- ${target}: ${detail}`;
+}
+
+/** A path on the card: relative to the project inside it, `outside the project` otherwise. */
+function cardPath(p: string, repo: string): string {
+  const abs = isAbsolute(p) ? normalize(p) : resolve(repo, p);
+  if (abs === repo || abs.startsWith(`${repo}/`)) {
+    const rel = relative(repo, abs);
+    return rel === "" ? "." : rel;
+  }
+  return "outside the project";
+}
+
 /** The card's checked sections, byte-exact. */
 function renderBlock(dispatch: string, wt: string, checkpoint: string): string {
   const checks = recordedResults(dispatch, wt);
@@ -356,7 +436,10 @@ function renderBlock(dispatch: string, wt: string, checkpoint: string): string {
       .filter((f) => f.state === "user-applied")
       .map((f) => `- [${f.sev}] ${f.fid}`)
       .join("\n") || "none";
-  return `## Checks\n\n${b1}\n\n## Open findings\n\n${b2}\n\n## Not re-reviewed\n\n${b3}\n`;
+  const base = `## Checks\n\n${b1}\n\n## Open findings\n\n${b2}\n\n## Not re-reviewed\n\n${b3}\n`;
+  const repo = dirname(dirname(dirname(dispatch)));
+  const reach = reachBlock(dispatch, repo);
+  return reach === "" ? base : `${base}\n${reach}`;
 }
 
 /** match iff the card holds the block once. */

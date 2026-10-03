@@ -526,6 +526,19 @@ from it.
   its journey reports included, to
   `<dispatch>/audit/<lane>-verify/`. Attach every audit to the checkpoint 1 card. Do the same for
   any later fix thread a checkpoint relies on.
+- **Reach check, after the harvest and before synthesis.** Run
+  `bun --no-env-file --config=/dev/null <tool>/scripts/reach.ts check <dispatch> workhorses`, which
+  lists every changed or new file in the main checkout, says when the checkout is not on its
+  default branch, and lists every place outside a lane's folder that lane's own record shows it
+  read or wrote. A write outside a lane's folder is a finding about that lane; a read, or an
+  attempt that was refused, is a note. Exit 0 is clean, 3 notes only, 2 a finding, 1 cannot check.
+  The result is recorded in the run's log, a clean result included. A finding at `workhorses`, or a
+  main checkout change no lane's record explains, goes to the user before synthesis, with your
+  advice on using that lane's work: write `ESCALATION.md` naming the reach, touch
+  `.escalation-ready`, and exit; the run waits for the user's answer. Everything else the check
+  finds is shown on the ship card and stops nothing. A lane whose record cannot be read is
+  reported as `not checked`, never as clean. In a fixture run there is no user to ask: rule on a
+  reach yourself and let the score fail.
 - **THERE IS NO SYNTHESIS BASE. You are the synthesizer: judge, then compose.** Set the stage
   first, `<tool>/scripts/stage.sh <dispatch> synthesis`. Do not fast-forward the ticket branch onto any
   lane. Start from BASE and write the synthesis
@@ -804,6 +817,7 @@ Set the stage first, `<tool>/scripts/stage.sh <dispatch> review`, then:
          || { echo "SCRATCH NOT READY: <TICKET>-rev-$LENS-$L; nothing launched"; exit 1; }
      done
    done
+   bun --no-env-file --config=/dev/null <tool>/scripts/reach.ts before <dispatch> <round> || exit 1
    <tool>/scripts/review-round.sh start <dispatch> <round> || exit 1
    REVIEWERS=""
    for LENS in <open lenses>; do
@@ -900,6 +914,24 @@ Set the stage first, `<tool>/scripts/stage.sh <dispatch> review`, then:
    snapshot, staged or committed included, not `status --porcelain` (scratches are expected to
    be dirty with untracked build output). Any modified tracked file is a finding about the LANE:
    log a `note` with the file list, and do not count that lane's verdict until it is understood.
+   Then run the reach check for the round, and restore the code it compares:
+   `bun --no-env-file --config=/dev/null <tool>/scripts/reach.ts check <dispatch> r<round>`, then
+   `bun --no-env-file --config=/dev/null <tool>/scripts/reach.ts restore <dispatch> r<round>`.
+   The check compares this run's own branches and synthesis worktree with what `before` recorded
+   and names what changed, and lists every place outside a lane's folder that lane's own record
+   shows it read or wrote. A write outside a lane's folder is a finding about that lane and voids
+   that reviewer's verdict for the round, as a reviewer that died mid-round is voided: it never
+   counts as clean, its findings are still checked, and it reviews again if another round runs. A
+   write outside this run's own branches and folders also goes to the user. A change to the run's
+   branches or synthesis worktree that no record explains voids every verdict of the round, and
+   another round runs, counting toward the limit of three. A read, a refused attempt, a new
+   untracked file in the synthesis worktree no stream names, and a main checkout change are notes
+   on the card and stop nothing. `restore` puts the run's own branches and synthesis worktree back
+   as `before` recorded them, keeping a copy of what it undid and moving any new file out of the
+   synthesis worktree into the run's records, so fixes build on reviewed code and the next round's
+   checks find a clean worktree. Escalate a finding that goes to the user after `restore`, as any
+   escalation. The check replaces the hand assertion that the synthesis worktree is clean; the
+   scratch check before it stands as it is.
    Then tear the round down, here as at the cut:
 
    ```sh
@@ -1027,10 +1059,17 @@ Set the stage first: `<tool>/scripts/stage.sh <dispatch> shipping`.
    `run.json` config has `ship.review_link`, its value with the path filled in. Reuse a review
    surface already running; never start a duplicate. Verify the link from the user's device or
    mark it unverified.
-4. **Write `card.md`.** Include the branch, final HEAD, diff stat and commit list; the output
+4. **Reach check, before the card.** Run
+   `bun --no-env-file --config=/dev/null <tool>/scripts/reach.ts check <dispatch> card`, which
+   lists every changed or new file in the main checkout as it stands and says when the checkout is
+   not on its default branch. Its result is recorded in the run's log; a main checkout change here
+   is a note on the card and stops nothing. The card's `## Reach` section is built from the run's
+   log by `landing.sh card-block`, and lists every finding, note and voided verdict, and any check
+   that was skipped.
+5. **Write `card.md`.** Include the branch, final HEAD, diff stat and commit list; the output
    of `<tool>/scripts/landing.sh card-block <dispatch> <synthesis-wt> <the leg's
    checkpoint>` pasted verbatim as the card's `## Checks`,
-   `## Open findings` and `## Not re-reviewed` sections, appearing exactly once —
+   `## Open findings`, `## Not re-reviewed` and `## Reach` sections, appearing exactly once —
    never retyped or indented, never repeated even inside a fence — and no HTML comment
    anywhere in the card; a card quoting `<!--`, in a commit subject or finding title,
    escapes it, for example as `&lt;!--` (the leg's checkpoint is
@@ -1047,7 +1086,7 @@ Set the stage first: `<tool>/scripts/stage.sh <dispatch> shipping`.
    The card's branch state is before merge: the
    ticket branch is ready, and every other branch is either retained or abandoned. The gate is
    listed as the gate, never as a turnpike.
-5. **Write the final hand-off.** Write
+6. **Write the final hand-off.** Write
    `<dispatch>/handoff-<n>.md` with the verified results, all decisions and open findings, and
    state that no coachman leg follows and the postmaster must verify the card and handle
    landing. `<tool>/scripts/handoff-check.sh` must exit 0. Close the open run-log section, log

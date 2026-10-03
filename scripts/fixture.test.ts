@@ -123,6 +123,14 @@ function record(
     `# Waybill: 7\n${turnpikes}\n\n## Ticket\n\n${ticketBody(t)}\n## Project profile\nrepo: ${repo}\n`,
   );
   run("bash", [join(HERE, "run-meta.sh"), d, repo]);
+  // The reach check applies when the run's pinned tool has scripts/reach.ts. Point the
+  // record at this checkout, which holds it, so the check runs against the record.
+  {
+    const rj = JSON.parse(readFileSync(join(d, "run.json"), "utf8"));
+    rj.postmaster = rj.postmaster ?? {};
+    rj.postmaster.checkout = join(HERE, "..");
+    writeFileSync(join(d, "run.json"), JSON.stringify(rj, null, 2));
+  }
   const recordedConfig = JSON.parse(readFileSync(join(d, "run.json"), "utf8")).config;
   const workhorses = (recordedConfig.team.workhorses ?? [])
     .map((name: string) => {
@@ -181,6 +189,12 @@ function record(
   for (const s of postStages) {
     run("bash", [join(HERE, "stage.sh"), d, s, "postmaster"]);
   }
+  // The reach check: one line per point reading clean, as the runbook writes them.
+  run("bash", [join(HERE, "log-action.sh"), d, "coachman", "reach", "workhorses", "clean"]);
+  for (let r = 1; r < (legs === 1 ? 1 : 2); r++) {
+    run("bash", [join(HERE, "log-action.sh"), d, "coachman", "reach", `r${r}`, "clean"]);
+  }
+  run("bash", [join(HERE, "log-action.sh"), d, "coachman", "reach", "card", "clean"]);
   writeFileSync(join(d, "card.md"), "# Ship card: 7\n\nBranch 7 is merged into main.\n");
   const manifest = JSON.parse(readFileSync(join(d, "manifest.json"), "utf-8"));
   manifest.leg = legs;
@@ -268,6 +282,69 @@ function breaks(cleanDir: string, repo: string): void {
       score(join(tmp, `break-${b}`, "repo", ".postmaster", "runs", "7"), repo),
     );
   }
+
+  // C17: the reach check. A clean record reads reach ok; a record missing a point, holding a
+  // finding, or holding not checked for a mimo lane fails.
+  d = brokenCopy("reach-missing", cleanDir);
+  writeFileSync(
+    join(d, "actions.jsonl"),
+    readFileSync(join(d, "actions.jsonl"), "utf8")
+      .split("\n")
+      .filter((l) => {
+        if (!l.trim()) return false;
+        try {
+          const row = JSON.parse(l);
+          return !(row.action === "reach" && row.target === "card");
+        } catch {
+          return true;
+        }
+      })
+      .join("\n"),
+  );
+
+  d = brokenCopy("reach-finding", cleanDir);
+  writeFileSync(
+    join(d, "actions.jsonl"),
+    `${readFileSync(join(d, "actions.jsonl"), "utf8")}${JSON.stringify({
+      ts: "2026-01-01T00:00:00Z",
+      project: "p",
+      run: "7",
+      actor: "coachman",
+      action: "reach",
+      target: "workhorses",
+      detail: "finding codex /repo/out.txt write main checkout",
+    })}\n`,
+  );
+
+  d = brokenCopy("reach-notchecked", cleanDir);
+  {
+    // A mimo lane whose tool has a reader must not read not checked.
+    const rj = JSON.parse(readFileSync(join(d, "run.json"), "utf8"));
+    rj.config = rj.config ?? {};
+    rj.config.lanes = rj.config.lanes ?? {};
+    rj.config.lanes.mimo = { harness: "mimo", model: "provider/model" };
+    writeFileSync(join(d, "run.json"), JSON.stringify(rj, null, 2));
+  }
+  writeFileSync(
+    join(d, "actions.jsonl"),
+    `${readFileSync(join(d, "actions.jsonl"), "utf8")}${JSON.stringify({
+      ts: "2026-01-01T00:00:00Z",
+      project: "p",
+      run: "7",
+      actor: "coachman",
+      action: "reach",
+      target: "workhorses",
+      detail: "not checked mimo",
+    })}\n`,
+  );
+
+  for (const b of ["missing", "finding", "notchecked"]) {
+    background(`reach-${b}`, () =>
+      score(join(tmp, `reach-${b}`, "repo", ".postmaster", "runs", "7"), repo),
+    );
+  }
+  // The clean record, the same one the break copies came from, reads reach ok.
+  background("reach-clean", () => score(cleanDir, repo));
 }
 
 function recorded(
@@ -330,7 +407,7 @@ function expectScore(key: string, failing: string, failText?: string): void {
   const lines = out.split("\n").filter((l) => l.trim()).length;
   expect(rc).toBe(failing === "none" ? 0 : 2);
   expect(failingChecks).toBe(failing);
-  expect(lines).toBe(8);
+  expect(lines).toBe(9);
   if (failText !== undefined) {
     expect(
       out
@@ -869,6 +946,45 @@ describe("score: negative controls, the same record with one check broken at a t
   }, 30000);
   test("a waybill with mismatched efforts: efforts alone fails", () => {
     expectScore("break-efforts", "efforts", "efforts:");
+  }, 30000);
+});
+
+describe("score: the reach check (C17)", () => {
+  test("a record with reach lines for every point and no finding reads reach ok", () => {
+    const key = "reach-clean";
+    const result = bgResults.get(key);
+    const out = result ? result.out : "";
+    expect(out.split("\n").some((l) => l.startsWith("ok") && l.includes("reach"))).toBe(true);
+  }, 30000);
+
+  test("a record missing a point: reach FAIL", () => {
+    const key = "reach-missing";
+    const result = bgResults.get(key);
+    const out = result ? result.out : "";
+    const rc = result ? result.code : -1;
+    expect(rc).toBe(2);
+    expect(out.split("\n").some((l) => l.startsWith("FAIL") && l.includes("reach"))).toBe(true);
+    expect(out.includes("no reach line for")).toBe(true);
+  }, 30000);
+
+  test("a record holding a finding: reach FAIL", () => {
+    const key = "reach-finding";
+    const result = bgResults.get(key);
+    const out = result ? result.out : "";
+    const rc = result ? result.code : -1;
+    expect(rc).toBe(2);
+    expect(out.split("\n").some((l) => l.startsWith("FAIL") && l.includes("reach"))).toBe(true);
+    expect(out.includes("finding")).toBe(true);
+  }, 30000);
+
+  test("a record holding not checked for a mimo lane: reach FAIL", () => {
+    const key = "reach-notchecked";
+    const result = bgResults.get(key);
+    const out = result ? result.out : "";
+    const rc = result ? result.code : -1;
+    expect(rc).toBe(2);
+    expect(out.split("\n").some((l) => l.startsWith("FAIL") && l.includes("reach"))).toBe(true);
+    expect(out.includes("not checked")).toBe(true);
   }, 30000);
 });
 

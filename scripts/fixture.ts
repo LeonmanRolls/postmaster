@@ -435,6 +435,7 @@ export function score(dispatch: string, repo: string): { code: number; out: stri
     { name: "run.json", ...checkRunJson(dispatch), out: "" },
     { name: "efforts", ...checkWaybillEfforts(dispatch), out: "" },
     { name: "ship-card", ...checkCard(dispatch), out: "" },
+    { name: "reach", ...checkReach(dispatch), out: "" },
   ];
   rmSync(scratch, { recursive: true, force: true });
   return report(results);
@@ -756,6 +757,73 @@ function checkCard(dispatch: string): { ok: boolean; detail: string } {
     .filter((l) => l.trim());
   if (lines.length === 0) return { ok: false, detail: "card.md is empty" };
   return { ok: true, detail: `card.md, ${lines.length} lines` };
+}
+
+/** The reach check: lines for the workhorses, each round logged and the card, no finding,
+ * and no `not checked` for a lane whose tool has a reader. It does not apply to a run whose
+ * pinned tool has no `scripts/reach.ts`. */
+function checkReach(dispatch: string): { ok: boolean; detail: string } {
+  const runJsonPath = join(dispatch, "run.json");
+  const runJson = tryJsonFile<Record<string, unknown>>(runJsonPath);
+  const checkout =
+    runJson && typeof runJson === "object"
+      ? ((runJson.postmaster as Record<string, unknown> | undefined)?.checkout as
+          | string
+          | undefined)
+      : undefined;
+  if (
+    typeof checkout === "string" &&
+    checkout !== "" &&
+    !existsSync(join(checkout, "scripts", "reach.ts"))
+  ) {
+    return { ok: true, detail: "skipped: the run's pinned tool has no scripts/reach.ts" };
+  }
+  const events = readActions(dispatch);
+  if (events === null) return { ok: false, detail: "no actions.jsonl" };
+  const reach = events.filter((e) => e.action === "reach");
+  if (reach.length === 0) {
+    return { ok: false, detail: "no reach line in the run's log" };
+  }
+  const points = new Set(reach.map((e) => String(e.target)));
+  const rounds: string[] = [];
+  try {
+    for (const n of readdirSync(join(dispatch, "logs"))) {
+      const m = /^review-r([0-9]+)\.json$/u.exec(n);
+      if (m) rounds.push(`r${m[1]}`);
+    }
+  } catch {
+    /* no logs directory: no rounds */
+  }
+  const missing: string[] = [];
+  if (!points.has("workhorses")) missing.push("workhorses");
+  for (const r of rounds) if (!points.has(r)) missing.push(r);
+  if (!points.has("card")) missing.push("card");
+  if (missing.length > 0) return { ok: false, detail: `no reach line for ${missing.join(", ")}` };
+  for (const e of reach) {
+    const detail = String(e.detail);
+    if (detail.includes("finding")) {
+      return { ok: false, detail: `a finding at ${e.target}: ${detail}` };
+    }
+  }
+  // A lane whose tool has a reader must not be `not checked`.
+  const READERS = new Set(["codex", "claude", "muse", "mimo", "pi"]);
+  const lanes =
+    runJson && typeof runJson === "object"
+      ? ((runJson.config as Record<string, unknown> | undefined)?.lanes as
+          | Record<string, Record<string, unknown>>
+          | undefined)
+      : undefined;
+  for (const e of reach) {
+    const detail = String(e.detail);
+    const m = /^not checked (\S+)/u.exec(detail);
+    if (!m) continue;
+    const lane = m[1] ?? "";
+    const harness = lanes?.[lane]?.harness;
+    if (typeof harness === "string" && READERS.has(harness)) {
+      return { ok: false, detail: `not checked ${lane} on ${harness}, which has a reader` };
+    }
+  }
+  return { ok: true, detail: `reach lines for ${points.size} point(s), no finding` };
 }
 
 function report(results: CheckResult[]): { code: number; out: string } {
