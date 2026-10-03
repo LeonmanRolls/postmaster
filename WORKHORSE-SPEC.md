@@ -127,11 +127,11 @@ Collects the run's un-ruled workhorse walls plus its pending rests (D10) from th
 action log. When there are neither, print `none` and change nothing. Otherwise
 write `<dispatch>/ESCALATION.md` with one section per walled lane (lane, role, the
 provider's message verbatim, the reset moment or the words `no reset time named`),
-one section per pending rest (lane, `resume after <moment>`), the three ruling
+one section per pending rest (lane, `resume after <moment>`), the four ruling
 choices with their meanings, the one-lane-per-ruling rule, and the `--note` text
 as `Last ruling refused` when given; touch `.escalation-ready`; log one `escalate`
 line per un-ruled walled lane (target the lane, detail `provider wall: ruling
-needed, rest | substitute | go-on`); print `paused <lane>...`. No guard against
+needed, rest | reset-now | substitute | go-on`); print `paused <lane>...`. No guard against
 re-running: every call is a genuine new pause (initial, post-refusal, or
 rest-awaiting), and the coachman never re-pauses an unchanged pause.
 
@@ -139,6 +139,7 @@ rest-awaiting), and the coachman never re-pauses an unchanged pause.
 
 ```
 lane-wall.sh ruling <dispatch> rest <lane> [--time <clock>]
+lane-wall.sh ruling <dispatch> reset-now <lane>
 lane-wall.sh ruling <dispatch> substitute <walled> <sub> --brief <file>
 lane-wall.sh ruling <dispatch> go-on <lane>
 ```
@@ -157,6 +158,13 @@ refusal (run stays paused, `WALL` still shows); exit 1 is usage or IO.
   in the same worktree instead, whose approved spec is already committed. The
   ruling line carries `stream-skip N`. Print `restored <lane>`. The coachman then
   waits and harvests as for any lane.
+- `reset-now`: the user asserts the limit is already reset. Resume at once
+  through the same standard resume form (or a fresh launch in the same worktree
+  with no recorded thread id), regardless of the stated reset time. The ruling
+  line carries the stated moment overridden (`stated <ISO|none>`) plus
+  `stream-skip N`, so a lane that walls again immediately shows why it was
+  resumed early. Print `resumed <lane>`. Never parks. The coachman then waits
+  and harvests as for any lane.
 - `substitute`: read `[lanes.<sub>]` from the live machine config
   (`POSTMASTER_CONFIG`, else `~/.postmaster/config.toml`) with the TOML reader in
   `scripts/lib/data.ts`. Refuse with exit 2 when the config has no such lane, or
@@ -177,13 +185,14 @@ refusal (run stays paused, `WALL` still shows); exit 1 is usage or IO.
 
 ### D5. The effective resume-after, and rulings with no time or a past time
 
-Effective resume-after is the ruling's `--time` when given, else the wall line's
-reset moment, else none. `--time` takes the D17 clock shapes, parsed against now.
-None, or a moment not in the future, means now: resume on delivery. A future
-moment means park: log the ruling with `resume-after <moment>` and print `parked
-<lane> <moment>`; the coachman runs `pause` and exits, and the timed step (D10)
-resumes the leg after the moment. Nothing sleeps. A ruling `--time` overrides the
-message's time; the user's word is fresher.
+For `rest`, the effective resume-after is the ruling's `--time` when given,
+else the wall line's reset moment, else none. `--time` takes the D17 clock
+shapes, parsed against now. None, or a moment not in the future, means now:
+resume on delivery. A future moment means park: log the ruling with
+`resume-after <moment>` and print `parked <lane> <moment>`; the coachman runs
+`pause` and exits, and the timed step (D10) resumes the leg after the moment.
+Nothing sleeps. A ruling `--time` overrides the message's time; the user's word
+is fresher. `reset-now` bypasses this rule entirely: it always resumes at once.
 
 ### D6. When the coachman classifies a lane end
 
@@ -226,14 +235,16 @@ them and a malformed line must fail at write time, never misread later.
 - `wall <lane> "<workhorse|reviewer> reset <ISO-moment|none> <message>"`: role
   first, then the literal `reset`, the ISO moment in machine-local offset or
   `none`, then the provider's message.
-- `wall-ruling <lane> "<rest|substitute|go-on> ..."`: `rest resume-after
-  <ISO-moment|now> stream-skip <N>`; `substitute <sub>
+- `wall-ruling <lane> "<rest|reset-now|substitute|go-on> ..."`: `rest
+  resume-after <ISO-moment|now> stream-skip <N>`; `reset-now stated
+  <ISO-moment|none> stream-skip <N>`; `substitute <sub>
   <harness>/<model>/<effort>`; `go-on degraded`.
 
 ### D10. Rest-awaiting runs: silence until the moment, then a mechanical resume
 
 `pause` covers pending rests (a rest ruling with no later `resume` line for the
-lane) as well as un-ruled walls, so one command re-pauses every pause. On `RULE`
+lane) as well as un-ruled walls, so one command re-pauses every pause. A
+`reset-now` ruling never pends: it resumes at once. On `RULE`
 with a pending rest and no un-ruled wall, the watcher stays silent while the
 moment is future and, once it passes, takes the timed step itself: remove
 `.escalation-ready`, resume the leg on its recorded thread with prompt
@@ -253,13 +264,15 @@ the next resume harvests it.
 ### D12. Pre-thread workhorse walls
 
 A workhorse that walled before printing a thread id is recorded and paused like
-any workhorse wall. Rest launches it fresh in its own worktree (the approved
-spec is already committed there); substitute and go-on behave as usual.
+any workhorse wall. Rest and reset-now launch it fresh in its own worktree
+(the approved spec is already committed there); substitute and go-on behave as
+usual.
 
 ### D13. Walls recurse with no special rule
 
-A substitute, or a rested lane, that walls again gets a new wall line (its
-earlier wall was ruled) and pauses again. The record shows the whole chain.
+A substitute, a rested lane, or a lane resumed early by reset-now, that walls
+again gets a new wall line (its earlier wall was ruled) and pauses again. The
+record shows the whole chain.
 
 ### D14. Substitutes launch through the standard forms
 
@@ -274,7 +287,9 @@ attempt phases and refusal behavior are untouched.
 The checkpoint-1 card's per-workhorse outcomes and the ship card's lane outcomes
 gain `replaced`: the walled lane is recorded as replaced with the cause and the
 substitute's name, never as degraded, and both cards name the substitute. A
-go-on lane is recorded degraded with the cause, as today. The `SYNTHESIS` line
+go-on lane is recorded degraded with the cause, as today. Rest and reset-now
+leave no card mark beyond the wall and ruling lines: the lane continues as any
+lane's does. The `SYNTHESIS` line
 ranks the lanes that produced work the synthesis considered, the substitute
 under its own name; a replaced lane is named on the cards, not ranked. The
 substitute is audited (`audit/<sub>.md`, `audit/<sub>-verify/`) as any
@@ -327,8 +342,8 @@ that fixture is the postmaster's at landing, not a lane task.
 | # | Criterion, as the ticket words it | Check (command and input) | Expected output |
 |---|---|---|---|
 | AC1 | A lane ending on a provider wall is recorded as one. When a workhorse or a review launch ends on a usage-limit or quota message from its provider, the action log gets a `wall` line naming the lane, its role (workhorse or reviewer), the provider's own message and the reset time when the message names one. The same classifier that tells the watcher a wall from a transient ending decides ([`scripts/launch.ts`](https://github.com/brindlewick/postmaster/blob/c74d9b3/scripts/launch.ts#L640-L680)); there is no second one. Check, through the identical command for a workhorse launch and for a review launch: a stub lane ending with a usage-limit message that names a reset time records the line with that time, and the same stub ending with a gateway timeout records none. | `lane-wall.sh record <dispatch> stub workhorse stub-events.jsonl stub.err` with the D19 codex wall stream, then the same with role `reviewer`; then both roles with a gateway-timeout stream and `.err`. | Wall streams print `wall` and append `wall stub "<role> reset <next 2:29 after the stream mtime> You've hit your usage limit..."`; timeout streams print `none` and the log gains no line. `launch.sh transient` is the only classifier invoked; `wall-tokens`/`wall-quotes` output is unchanged. |
-| AC2 | A workhorse wall pauses the run and asks. The coachman does not synthesize from the other lanes by itself: it writes an escalation that names the lane, the provider's message and the reset time and lists the choices of criterion 3, and stops, with its usual escalation marker. Check: a run whose stub workhorse hits a wall reaches the escalation and writes no checkpoint card, and its status reads as waiting for the postmaster; with the stub's message transient, the existing resume path is unchanged. | `record` on the D19 wall stub, then `lane-wall.sh pause <dispatch>`; `runs-status.sh <runs>`; `record` on the gateway-timeout stub. | `pause` prints `paused stub`, writes `ESCALATION.md` naming the lane, the provider message, the reset moment and the three choices, touches `.escalation-ready`, and logs `escalate`; no `checkpoint-1.md` exists; status shows `WALL`. The timeout stub prints `none`; the remount prose in `coachman.md` is byte-identical except for the added wall branch. |
-| AC3 | The user's ruling has three forms and the flow carries out each. **Rest:** the lane's own session is resumed in its own worktree, only after the reset time, and its result joins the synthesis as any lane's does. **Use a different model:** the ruling names another lane from the machine config, for example a Claude Sonnet lane; that lane takes the walled lane's place on the same spec, in a worktree of its own cut from the run's base, so the walled lane's partial work is not carried over and the lanes still cannot see each other's work. Its entry is copied into the run's record at the moment of the ruling and the copy is logged, so the record shows what ran. Its result joins the synthesis as any workhorse's does. The walled lane is recorded as replaced, with the cause and the substitute's name, on the checkpoint card and the ship card, not as degraded, and the cards name the substitute. A ruling that names a lane the machine config does not have is refused with a message and the run stays paused. **Go on without it:** the lane is recorded degraded on both cards, as today. Check against the stub lanes: after a rest ruling the lane is launched once, not before the stated time, and its result reaches the synthesis; after a substitute ruling that names a configured stub lane that lane is launched once in its own worktree, its result reaches the synthesis, the run's record gains its entry, and both cards name both lanes; a substitute ruling that names an unknown lane is refused and the run stays paused; after a go-on ruling the cards name the lane as degraded and the cause. | `ruling <dispatch> rest stub` with the reset past (stub harness on `PATH`), and with the reset future; `runs-watch.sh` with a pending rest past its moment under `POSTMASTER_WATCH_TEST_MODE=1`; `ruling <dispatch> substitute stub sonnet --brief <file>` with a stub `sonnet` lane in a test config, and with an unknown lane; `ruling <dispatch> go-on stub`. | Past rest launches the stub harness exactly once in the lane's worktree and logs the ruling with `resume-after` and `stream-skip`; future rest prints `parked`, launches nothing, and the staged watcher resumes the leg after the moment. Substitute launches the stub lane once in `<TICKET>-sonnet` cut at BASE with the approved spec committed and none of the walled lane's files, gains the manifest entry plus the ruling line carrying `harness/model/effort`; unknown lane exits 2 with a message naming it, logs no ruling, and the run still shows `WALL`. Go-on logs the ruling and prints `go-on`. Which lane each synthesis part came from, and the replaced/degraded card words, are runbook prose, read against this criterion. |
+| AC2 | A workhorse wall pauses the run and asks. The coachman does not synthesize from the other lanes by itself: it writes an escalation that names the lane, the provider's message and the reset time and lists the choices of criterion 3, and stops, with its usual escalation marker. Check: a run whose stub workhorse hits a wall reaches the escalation and writes no checkpoint card, and its status reads as waiting for the postmaster; with the stub's message transient, the existing resume path is unchanged. | `record` on the D19 wall stub, then `lane-wall.sh pause <dispatch>`; `runs-status.sh <runs>`; `record` on the gateway-timeout stub. | `pause` prints `paused stub`, writes `ESCALATION.md` naming the lane, the provider message, the reset moment and the four choices, touches `.escalation-ready`, and logs `escalate`; no `checkpoint-1.md` exists; status shows `WALL`. The timeout stub prints `none`; the remount prose in `coachman.md` is byte-identical except for the added wall branch. |
+| AC3 | The user's ruling has four forms and the flow carries out each. **Rest:** the lane's own session is resumed in its own worktree, only after the reset time, and its result joins the synthesis as any lane's does. **Reset now:** the user has reset the limit themselves, which is sometimes possible, and says so; the lane's session is resumed at once, without waiting for the stated reset time, in its own worktree, and its result joins the synthesis as any lane's does. **Use a different model:** the ruling names another lane from the machine config, for example a Claude Sonnet lane; that lane takes the walled lane's place on the same spec, in a worktree of its own cut from the run's base, so the walled lane's partial work is not carried over and the lanes still cannot see each other's work. Its entry is copied into the run's record at the moment of the ruling and the copy is logged, so the record shows what ran. Its result joins the synthesis as any workhorse's does. The walled lane is recorded as replaced, with the cause and the substitute's name, on the checkpoint card and the ship card, not as degraded, and the cards name the substitute. A ruling that names a lane the machine config does not have is refused with a message and the run stays paused. **Go on without it:** the lane is recorded degraded on both cards, as today. Check against the stub lanes: after a rest ruling the lane is launched once, not before the stated time, and its result reaches the synthesis; after a reset-now ruling the lane is launched once at once, with the stated time still in the future, and its result reaches the synthesis; after a substitute ruling that names a configured stub lane that lane is launched once in its own worktree, its result reaches the synthesis, the run's record gains its entry, and both cards name both lanes; a substitute ruling that names an unknown lane is refused and the run stays paused; after a go-on ruling the cards name the lane as degraded and the cause. | `ruling <dispatch> rest stub` with the reset past (stub harness on `PATH`), and with the reset future; `ruling <dispatch> reset-now stub` with the reset future (stub harness on `PATH`); `runs-watch.sh` with a pending rest past its moment under `POSTMASTER_WATCH_TEST_MODE=1`; `ruling <dispatch> substitute stub sonnet --brief <file>` with a stub `sonnet` lane in a test config, and with an unknown lane; `ruling <dispatch> go-on stub`. | Past rest launches the stub harness exactly once in the lane's worktree and logs the ruling with `resume-after` and `stream-skip`; future rest prints `parked`, launches nothing, and the staged watcher resumes the leg after the moment. Reset-now with the reset future launches the stub harness exactly once at once and logs the ruling with the stated moment overridden. Substitute launches the stub lane once in `<TICKET>-sonnet` cut at BASE with the approved spec committed and none of the walled lane's files, gains the manifest entry plus the ruling line carrying `harness/model/effort`; unknown lane exits 2 with a message naming it, logs no ruling, and the run still shows `WALL`. Go-on logs the ruling and prints `go-on`. Which lane each synthesis part came from, and the replaced/degraded card words, are runbook prose, read against this criterion. |
 | AC4 | A reviewer wall does not pause the run. It is recorded as a `wall` line as well as degraded, and the lane is restored on the next round, as the runbook says today. Check: a stub reviewer that hits a wall in round 1 is launched again in round 2, and the round-1 record carries the degraded word and the `wall` line. | `record` with role `reviewer` on the D19 wall stub (the AC1 identical command); read the review-harvest prose. | The round-1 record carries the `wall` line; the degraded word, the no-verdict classification and the round-2 restore are the runbook's existing round mechanics, read against this criterion, with status showing `WAIT`, never `WALL`, for a reviewer wall. |
 | AC5 | The user hears at once. A `wall` line without a ruling makes the status table show a `WALL` state for the run and the watcher stops for it instead of carrying on; the postmaster's runbook says to tell the user immediately, naming the run, the lane, its role and the reset time. Check: with a recorded wall and no ruling `runs-status.sh` shows `WALL` for the run, and after the ruling it does not. | `runs-status.sh <runs>` on a record with a workhorse wall line and no ruling, then after appending the ruling; `runs-watch.sh --timeout` over a `WALL` run; the same record with role `reviewer`. | `WALL` before the ruling through the identical command, not `WALL` after; the watcher wakes naming the run and `WALL`; the reviewer-wall record never shows `WALL`. The immediate tell-user wording is `postmaster.md` prose, read against this criterion. |
 | AC6 | The runbooks say it. `coachman.md` replaces the degrade-and-go-on rule for provider walls with the pause-and-ask of criterion 2 and keeps it for failures that are not walls; `postmaster.md` and `harnesses.md` say what the postmaster does with `WALL`. Check: read against the criteria, and `scripts/skill-refs.sh` passes. | Read the three runbooks against AC1-AC5; run `skill-refs.sh`. | Walls pause and ask, non-wall failures degrade and go on as today; `WALL` handling, the immediate notice and the ruling delivery are in `postmaster.md`; attested wall shapes and the one recognition path are in `harnesses.md`; `skill-refs.sh` exits 0. |
@@ -344,8 +359,10 @@ that fixture is the postmaster's at landing, not a lane task.
   shape-checks in `scripts/log-action.ts` plus tests in `scripts/log-action.test.ts`.
 - [ ] T004 [AC2] Add `pause` in `scripts/lane-wall.ts` plus tests: escalation
   content, marker, `escalate` lines, `paused`/`none`.
-- [ ] T005 [AC3] Add `ruling rest` in `scripts/lane-wall.ts` plus tests: past-time
-  resume launches the stub once, future-time parks without launching, skip recorded.
+- [ ] T005 [AC3] Add `ruling rest` and `ruling reset-now` in
+  `scripts/lane-wall.ts` plus tests: past-time rest launches the stub once,
+  future-time rest parks without launching, reset-now with the reset future
+  launches at once, skip recorded in each resume.
 - [ ] T006 [AC3] Add `ruling substitute` in `scripts/lane-wall.ts` plus tests:
   live-config validation, refusal of unknown and already-run lanes, manifest copy,
   worktree cut at BASE with the approved spec, single launch.
