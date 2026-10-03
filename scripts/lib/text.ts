@@ -1214,7 +1214,10 @@ export const PLANTED_MISS = [
 
 // --- entry: the hidden --dump-golden-cases; silent on import ---
 const entryArg = process.argv[1];
-if (typeof entryArg === "string" && resolve(entryArg) === fileURLToPath(import.meta.url)) {
+const entryPath = fileURLToPath(import.meta.url);
+// The basename check keeps this silent inside a bundle: there argv[1] and the
+// module URL are both the bundle, so the equality alone would fire.
+if (typeof entryArg === "string" && resolve(entryArg) === entryPath && entryPath.endsWith("text.ts")) {
   const argv = process.argv.slice(2);
   if (argv.length === 1 && argv[0] === "--dump-golden-cases") {
     // Hidden: fixture regen only, not flow. Prints {cases, prog} for

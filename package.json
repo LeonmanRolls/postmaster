@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "scripts/scrub-check.sh origin/main HEAD && scripts/tree-check.sh origin/main HEAD && tsc --noEmit && bunx oxlint && bunx biome format scripts types lint package.json tsconfig.json biome.json .oxlintrc.json && bun test scripts/ lint/ && scripts/skill-refs.sh && scripts/wiki-lint.sh"
+    "check": "scripts/bundle-scrub.sh --check && scripts/scrub-check.sh origin/main HEAD && scripts/tree-check.sh origin/main HEAD && tsc --noEmit && bunx oxlint && bunx biome format scripts types lint package.json tsconfig.json biome.json .oxlintrc.json && bun test scripts/ lint/ && scripts/skill-refs.sh && scripts/wiki-lint.sh"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.14",

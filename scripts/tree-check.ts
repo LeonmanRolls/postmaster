@@ -1,7 +1,6 @@
 #!/usr/bin/env bun
 // Checks the private run folder and new raw records in a project change.
-import { createInterface } from "node:readline";
-import { git, keyBlockStep, logFinding, resolveCommit, runGit, safePath, StreamScanner } from "./scrub-core.ts";
+import { childLines, git, keyBlockStep, logFinding, resolveCommit, runGit, safePath, StreamScanner } from "./scrub-core.ts";
 import { pyWords } from "./lib/text.ts";
 
 const EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
@@ -9,11 +8,6 @@ const USAGE = "usage: tree-check.sh [<base> [<head>]] | --help";
 const DISABLED = new Set((process.env.SCRUB_CHECK_DISABLE ?? "").replaceAll(",", " ").split(" ").filter(Boolean));
 
 function fail(message: string): never { console.error(`tree-check: ${message}`); process.exit(2); }
-
-async function* linesOf(stream: NodeJS.ReadableStream): AsyncGenerator<string> {
-  const rl = createInterface({ input: stream, crlfDelay: Infinity });
-  for await (const line of rl as unknown as AsyncIterable<string>) yield line;
-}
 
 function hasReasoning(value: unknown, depth = 0): boolean {
   if (depth > 64) return false;
@@ -38,7 +32,7 @@ async function scanBlob(root: string, object: string, path: string, commit: stri
   const failures: string[] = [];
   let line = 0;
   let inBlock = false;
-  for await (const text of linesOf(child.stdout)) {
+  for await (const text of childLines(child.stdout)) {
     line++;
     if (!DISABLED.has("encrypted-reasoning")) {
       try {

@@ -3,6 +3,7 @@
 import { spawnSync } from "node:child_process";
 import { PY_S_CLASS, pyLower, pyWords } from "./lib/text.ts";
 import {
+  childLines,
   codePointOffset,
   decodeBytes,
   detectLine,
@@ -27,28 +28,6 @@ interface FindingRow { commit: string; path: string; line: number; rule: string;
 function safeError(message: string): never {
   console.error(`scrub-check: ${message}`);
   process.exit(2);
-}
-
-async function* linesOf(readable: NodeJS.ReadableStream): AsyncGenerator<string> {
-  // A manual splitter, not readline: when the loop body awaits a slow git
-  // child, the diff child can finish and close stdout first, and Bun's
-  // readline answers the next read with ERR_USE_AFTER_CLOSE. A byte split
-  // on 0x0A cannot strand a character, since no UTF-8 sequence holds one.
-  let pending = Buffer.alloc(0);
-  const emit = (bytes: Buffer): string => {
-    const end = bytes.length > 0 && bytes[bytes.length - 1] === 0x0d ? bytes.length - 1 : bytes.length;
-    return decodeBytes(Buffer.from(bytes.slice(0, end)));
-  };
-  for await (const raw of readable as unknown as AsyncIterable<Uint8Array>) {
-    const chunk = Buffer.concat([pending, Buffer.from(raw)]);
-    let start = 0;
-    for (let at = chunk.indexOf(0x0a, start); at >= 0; at = chunk.indexOf(0x0a, start)) {
-      yield emit(chunk.subarray(start, at));
-      start = at + 1;
-    }
-    pending = Buffer.from(chunk.slice(start));
-  }
-  if (pending.length > 0) yield emit(pending);
 }
 
 async function citationContext(path: string): Promise<string> {
@@ -81,7 +60,7 @@ async function citationContextAt(commit: string, path: string, root: string): Pr
   let source = false;
   const closed = new Promise<number>((resolve) => child.once("close", (code) => resolve(code ?? 1)));
   try {
-    for await (const text of linesOf(child.stdout)) {
+    for await (const text of childLines(child.stdout)) {
       if (ended) continue;
       if (!frontmatter) {
         if (text.trim() === "---") frontmatter = true;
@@ -117,7 +96,7 @@ async function keyBlockLines(commit: string, path: string, root: string): Promis
   const result = new Set<number>();
   let inBlock = false;
   let number = 0;
-  for await (const line of linesOf(child.stdout)) {
+  for await (const line of childLines(child.stdout)) {
     number++;
     const step = keyBlockStep(line, inBlock);
     inBlock = step.inBlock;
@@ -155,7 +134,7 @@ async function scanCommitDiff(root: string, parent: string, commit: string): Pro
   let keyLines: Set<number> | null = null;
   let keyState = false;
   let context = "";
-  for await (const line of linesOf(child.stdout)) {
+  for await (const line of childLines(child.stdout)) {
     if (line.startsWith("diff --git ")) {
       for (const marker of scanner.flush()) rows.push({ commit, path, line: marker.line ?? Math.max(1, (lineNumber ?? 1) - 1), rule: "marker" });
       scanner = new StreamScanner();
@@ -226,7 +205,7 @@ async function commitHasExactLine(root: string, commit: string, path: string, ex
   const child = runGit(["show", `${commit}:${path}`], root);
   if (!child.stdout) safeError("the requested history could not be read");
   let found = false;
-  for await (const line of linesOf(child.stdout)) if (line === expected) found = true;
+  for await (const line of childLines(child.stdout)) if (line === expected) found = true;
   const code = await new Promise<number>((resolve) => child.once("close", (value) => resolve(value ?? 1)));
   if (code !== 0) safeError("the requested history could not be read");
   return found;

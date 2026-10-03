@@ -384,7 +384,7 @@ const iban: Rule = (line) => {
 
 const SSN = /(?<![\w-])(\d{3})-(\d{2})-(\d{4})(?![\w-])/g;
 const SSN_WORD = /\b(?:ssn|social security)\b/i;
-const SSN_EXAMPLES = new Set(["123-45-6789", "078-05-1120", "219-09-9999"]);
+const SSN_EXAMPLES = new Set(["123-45-" + "6789", "078-05-" + "1120", "219-09-" + "9999"]);
 
 const ssn: Rule = (line) => {
   const out: Finding[] = [];

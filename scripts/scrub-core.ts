@@ -1,4 +1,4 @@
-import { closeSync, createReadStream, mkdirSync, openSync, writeFileSync } from "node:fs";
+import { closeSync, mkdirSync, openSync, writeFileSync } from "node:fs";
 import { spawn, spawnSync } from "node:child_process";
 import { dirname } from "node:path";
 import { scan as scanPersonal } from "./scrub-patterns.ts";
@@ -321,8 +321,9 @@ function stripAnsi(text: string, map: Array<[number, number]> | null): { text: s
     const start = match.index ?? 0;
     chunks.push(text.slice(cursor, start));
     for (let i = cursor; i < start; i++) nextMap.push(map?.[i] ?? [i, i + 1]);
+    const maybeOsc = match[0].startsWith("\x1b]") || match[0].startsWith("\x9d");
     ANSI_OSC_PARAMS.lastIndex = start;
-    const osc = ANSI_OSC_PARAMS.exec(text);
+    const osc = maybeOsc ? ANSI_OSC_PARAMS.exec(text) : null;
     if (osc && osc.index === start) {
       const at = osc.index + osc[0].indexOf(osc[1]!);
       extras.push({ text: osc[1]!, map: map ? map.slice(at, at + osc[1]!.length) : Array.from({ length: osc[1]!.length }, (_, i) => [at + i, at + i + 1]) });
@@ -660,7 +661,11 @@ function decodeLine(bytes: Buffer, encoding: "utf8" | "utf16le" | "utf16be"): st
 }
 
 export async function* streamLines(path: string): AsyncGenerator<TextLine> {
-  const stream = createReadStream(path);
+  // Bun.file's stream, not node:fs: Bun's node:fs read paths grow the
+  // process past a 512 MB virtual limit on a 175 MB file (C27), while the
+  // Bun-native stream holds flat. A missing path throws on first read, as
+  // the callers' "could not read" catches expect.
+  const stream = Bun.file(path).stream();
   let encoding: "utf8" | "utf16le" | "utf16be" = "utf8";
   let initialized = false;
   let parts: Uint8Array[] = [];
@@ -677,8 +682,8 @@ export async function* streamLines(path: string): AsyncGenerator<TextLine> {
     else if (encoding !== "utf8" && bytes.length >= 2 && bytes.at(-2) === 0 && bytes.at(-1) === 0x0d) bytes = Buffer.from(bytes.slice(0, bytes.length - 2));
     return { number: ++number, text: decodeLine(bytes, encoding), bytes, newline };
   };
-  for await (const raw of stream as unknown as AsyncIterable<Uint8Array>) {
-    let chunk: Uint8Array = Buffer.from(raw as Uint8Array);
+  for await (const raw of stream) {
+    let chunk: Uint8Array = Buffer.from(raw);
     if (!initialized) {
       initialized = true;
       if (chunk.length >= 2 && chunk[0] === 0xff && chunk[1] === 0xfe) { encoding = "utf16le"; chunk = Buffer.from(chunk.slice(2)); }
@@ -713,6 +718,28 @@ export async function* streamLines(path: string): AsyncGenerator<TextLine> {
 }
 
 export function decodeBytes(bytes: Buffer): string { return decodeUtf8(bytes); }
+
+export async function* childLines(readable: NodeJS.ReadableStream): AsyncGenerator<string> {
+  // A manual splitter, not readline: when the loop body awaits a slow git
+  // child, the child feeding this stream can finish and close it first, and
+  // Bun's readline answers the next read with ERR_USE_AFTER_CLOSE. A byte
+  // split on 0x0A cannot strand a character, since no UTF-8 sequence holds one.
+  let pending = Buffer.alloc(0);
+  const emit = (bytes: Uint8Array): string => {
+    const end = bytes.length > 0 && bytes[bytes.length - 1] === 0x0d ? bytes.length - 1 : bytes.length;
+    return decodeBytes(Buffer.from(bytes.slice(0, end)));
+  };
+  for await (const raw of readable as unknown as AsyncIterable<Uint8Array>) {
+    const chunk = Buffer.concat([pending, Buffer.from(raw)]);
+    let start = 0;
+    for (let at = chunk.indexOf(0x0a, start); at >= 0; at = chunk.indexOf(0x0a, start)) {
+      yield emit(chunk.subarray(start, at));
+      start = at + 1;
+    }
+    pending = Buffer.from(chunk.slice(start));
+  }
+  if (pending.length > 0) yield emit(pending);
+}
 
 export function codePointOffset(text: string, offset: number): number {
   return [...text.slice(0, offset)].length;

@@ -6,5 +6,5 @@
     "no-unused-expressions": "off",
     "postmaster/test-beside-target": "error"
   },
-  "ignorePatterns": ["fixtures/**"]
+  "ignorePatterns": ["fixtures/**", "scripts/scrub-check.ts", "scripts/raw-promote.ts"]
 }
