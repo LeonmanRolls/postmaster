@@ -216,8 +216,7 @@ const opts: AskOpts = { answers: ANSWERS };
 if (ADD_CLERK === 1) {
   if (!existsSync(CONFIG)) die(`setup: no config at ${CONFIG}`, 1);
   const text = readFileSync(CONFIG, "utf8");
-  if (/^\s*clerk\s*=/mu.test(text))
-    die(`setup: ${CONFIG} already names a clerk`, 1);
+  if (/^\s*clerk\s*=/mu.test(text)) die(`setup: ${CONFIG} already names a clerk`, 1);
   const clH = ask("  clerk: harness", "", "clerk.harness", opts);
   needHarness(clH);
   const clM = ask("  clerk: model id", "", "clerk.model", opts);

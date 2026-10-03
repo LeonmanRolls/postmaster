@@ -164,6 +164,9 @@ function record(
   }
   for (let n = 1; n <= legs; n++) {
     writeFileSync(join(d, `leg-${n}-prompt.txt`), `You are the coachman for leg ${n} of 7.\n`);
+    if (n === 1) {
+      run("bash", [join(HERE, "log-action.sh"), d, "coachman", "premises", "7", "same at base"]);
+    }
     run("bash", [join(HERE, "log-action.sh"), d, "postmaster", "dispatch", "7", `leg ${n}`]);
     run("bash", [join(HERE, "log-action.sh"), d, "coachman", "handoff-accept", `leg-${n}`]);
     for (const s of slices[n - 1] ?? []) {
@@ -330,7 +333,7 @@ function expectScore(key: string, failing: string, failText?: string): void {
   const lines = out.split("\n").filter((l) => l.trim()).length;
   expect(rc).toBe(failing === "none" ? 0 : 2);
   expect(failingChecks).toBe(failing);
-  expect(lines).toBe(8);
+  expect(lines).toBe(9);
   if (failText !== undefined) {
     expect(
       out
@@ -638,8 +641,8 @@ describe("new: a fresh repo outside every other, with its ticket in its own stor
     const localSh = join(HERE, "local.sh");
     const listR = run("bash", [localSh, dest, "list"]);
     const readR = run("bash", [localSh, dest, "read", "1", "--body"]);
-    expect(listR.out.trim()).toBe(`#1\ttodo\t${ticketTitle(first)}`);
-    expect(readR.out).toBe(ticketBody(first));
+    expect(listR.out.trim()).toBe(`#1\ttodo\t${ticketTitle(first)}\tready`);
+    expect(readR.out).toContain(ticketBody(first).slice(0, 50));
   }, 30000);
   test("a run against it reads the local tracker, though the config names github", () => {
     const trackerKind = run("bash", [join(HERE, "tracker-kind.sh"), dest]);

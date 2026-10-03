@@ -1274,7 +1274,9 @@ async function runCommands(): Promise<void> {
     const pid = String(ref(item.project));
     const labels = await labelsOf(cfg, pid);
     const current = (item.labels ?? []).map((l: unknown) => ref(l));
-    const named = labels.filter((l: any) => pyLower(l.name) === pyLower(name)).map((l: any) => l.id);
+    const named = labels
+      .filter((l: any) => pyLower(l.name) === pyLower(name))
+      .map((l: any) => l.id);
     let labelId = named[0];
     if (verb === "add") {
       if (!labelId) {
@@ -1284,21 +1286,15 @@ async function runCommands(): Promise<void> {
         labelId = created.id;
       }
       const next = [...new Set([...current, labelId])].sort();
-      await api(
-        cfg,
-        "PATCH",
-        `workspaces/${cfg.WS}/projects/${pid}/work-items/${item.id}/`,
-        { labels: next },
-      );
+      await api(cfg, "PATCH", `workspaces/${cfg.WS}/projects/${pid}/work-items/${item.id}/`, {
+        labels: next,
+      });
     } else {
       const drop = new Set(named);
       const next = current.filter((l: unknown) => !drop.has(l));
-      await api(
-        cfg,
-        "PATCH",
-        `workspaces/${cfg.WS}/projects/${pid}/work-items/${item.id}/`,
-        { labels: next },
-      );
+      await api(cfg, "PATCH", `workspaces/${cfg.WS}/projects/${pid}/work-items/${item.id}/`, {
+        labels: next,
+      });
     }
     console.log(`${tid}: label ${verb} ${name}`);
   } else if (cmd === "read") {

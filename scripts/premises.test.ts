@@ -39,7 +39,11 @@ beforeAll(() => {
   // Record the base after the move (same content, different position).
   const baseMoved = run("git", ["-C", repo, "rev-parse", "HEAD"]).out.trim();
   // Change the content.
-  writeFileSync(join(repo, "scripts", "example.ts"), "line1\nCHANGED\nline3\nline4\nline5\n", "utf8");
+  writeFileSync(
+    join(repo, "scripts", "example.ts"),
+    "line1\nCHANGED\nline3\nline4\nline5\n",
+    "utf8",
+  );
   run("git", ["-C", repo, "add", "."]);
   run("git", ["-C", repo, "commit", "-q", "-m", "changed"]);
   const base = run("git", ["-C", repo, "rev-parse", "HEAD"]).out.trim();

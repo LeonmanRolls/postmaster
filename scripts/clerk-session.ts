@@ -126,9 +126,7 @@ function editorLinkOf(repo: string, draftFolder: string): string {
   let template = "";
   try {
     const cfg = readFileSync(configPath, "utf8");
-    const m = /^\s*review_link\s*=\s*"([^"]*)"/mu.exec(
-      cfg.split("[planning]")[1] ?? "",
-    );
+    const m = /^\s*review_link\s*=\s*"([^"]*)"/mu.exec(cfg.split("[planning]")[1] ?? "");
     if (m) template = m[1] ?? "";
   } catch {
     /* no config, no template */
@@ -150,9 +148,7 @@ function brief(repo: string, id: string): void {
   const draftPath = join(draftDir, "draft.md");
   const skillPath = join(TOOL, "skills", "clerk");
   const prefsPath = join(configDir(), "preferences.md");
-  const prefs = isFile(prefsPath)
-    ? readStrict(prefsPath).replace(/\n+$/gu, "")
-    : "None are set.";
+  const prefs = isFile(prefsPath) ? readStrict(prefsPath).replace(/\n+$/gu, "") : "None are set.";
   const link = editorLinkOf(repo, draftDir);
   const briefText = `# Booking clerk brief: ${ticket.id} ${ticket.title}
 
@@ -222,7 +218,9 @@ function freshReader(plainFile: string, worktree: string, clerkModel: string): v
   const baseModel = (m: string) => m.replace(/\[[^\]]*\]\s*$/u, "").trim();
   const lane = lanes.find((l) => baseModel(l.model) !== baseModel(clerkModel));
   if (!lane) {
-    console.error("clerk-session: no lane on a model other than the clerk's; the draft was not tested");
+    console.error(
+      "clerk-session: no lane on a model other than the clerk's; the draft was not tested",
+    );
     process.exit(2);
   }
   // Build the prompt: the plain part, the worktree path, and the two questions.
@@ -312,10 +310,7 @@ function main(argv: string[]): number {
       else if (!worktree) worktree = rest[i] ?? "";
     }
     if (!plainFile || !worktree || !clerkModel)
-      die(
-        "usage: clerk-session.sh fresh-reader <plain-file> <worktree> --clerk-model <model>",
-        1,
-      );
+      die("usage: clerk-session.sh fresh-reader <plain-file> <worktree> --clerk-model <model>", 1);
     freshReader(plainFile, worktree, clerkModel);
     return 0;
   }

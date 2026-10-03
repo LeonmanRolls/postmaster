@@ -51,7 +51,21 @@ const TWO_PART = [
   "",
 ].join("\n");
 
-const REMOVE_TICKET = readFileSync(join(HERE, "..", "fixtures", "tickets", "remove", "ticket.md"), "utf8");
+const REMOVE_TICKET = [
+  "## Problem / feature",
+  "A task added by mistake stays on the list for good.",
+  "",
+  "## Acceptance criteria",
+  "1. The remove command deletes a task by id.",
+  "2. The remove command takes several ids.",
+  "",
+  "## Direction",
+  "Follow the existing split. Add no dependency.",
+  "",
+  "## Turnpikes",
+  "default",
+  "",
+].join("\n");
 
 let tmp = "";
 let repo = "";

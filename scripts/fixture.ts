@@ -248,10 +248,7 @@ export function makeAndFile(dest: string, ticket: string): number {
   // Write the copy's first commit as the ticket's Verified at before filing it.
   const destHeadFull = run("git", ["-C", dest, "rev-parse", "HEAD"]).out.trim();
   const verified = destHeadFull.slice(0, 7);
-  const bodyWithVerified = body.replace(
-    /(^|\n)(### Verified at )[0-9a-f]+/mu,
-    `$1$2${verified}`,
-  );
+  const bodyWithVerified = body.replace(/(^|\n)(### Verified at )[0-9a-f]+/mu, `$1$2${verified}`);
   const finalBody = bodyWithVerified.includes("### Verified at")
     ? bodyWithVerified
     : `${bodyWithVerified.trimEnd()}\n\n### Verified at ${verified}\n\n- The fixture copy's first commit.\n`;
@@ -774,7 +771,11 @@ export function checkPremises(dispatch: string): { ok: boolean; detail: string }
     try {
       const entry = JSON.parse(lines[i]!);
       if (entry.action === "premises" && firstPremises < 0) firstPremises = i;
-      if (entry.action === "dispatch" && String(entry.target ?? "").startsWith("wb/") && firstWbDispatch < 0)
+      if (
+        entry.action === "dispatch" &&
+        String(entry.target ?? "").startsWith("wb/") &&
+        firstWbDispatch < 0
+      )
         firstWbDispatch = i;
     } catch {
       /* not JSON */

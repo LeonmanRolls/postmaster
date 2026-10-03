@@ -528,9 +528,7 @@ function main(args: string[]): number {
     rows.sort((a, b) => rank(a[1]) - rank(b[1]) || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
     for (const [number, state, title, labels] of rows)
       if (!wanted || state === wanted)
-        console.log(
-          `#${number}\t${state}\t${title}${labels ? `\t${labels}` : ""}`,
-        );
+        console.log(`#${number}\t${state}\t${title}${labels ? `\t${labels}` : ""}`);
     for (const why of unread) console.error(`local: ${why}`);
     return unread.length ? 1 : 0;
   }

@@ -82,7 +82,8 @@ function citedPlaces(agents: string): CitedPlace[] {
   for (const m of agents.matchAll(spanRe)) {
     const raw = m[1] ?? "";
     const path = raw.split("#")[0] ?? "";
-    if (!/^(scripts|skills|docs|lint|types)\//u.test(path) && path !== "config.example.toml") continue;
+    if (!/^(scripts|skills|docs|lint|types)\//u.test(path) && path !== "config.example.toml")
+      continue;
     const key = path;
     if (!seen.has(key)) {
       seen.add(key);

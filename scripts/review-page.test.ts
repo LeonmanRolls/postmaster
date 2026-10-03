@@ -147,7 +147,7 @@ describe("the script", () => {
     expect(review.files.find((f: { path: string }) => f.path === "gone.txt").lines).toBeNull();
   });
 
-  test("the spec is the WORKHORSE-SPEC.md the head commits, and none without one", () => {
+  test("the spec is the ticket; no committed copy is used", () => {
     const none = join(repo, ".out-nospec");
     expect(
       run("bun", [script, "change", none, "--base", base, "--head", head], { cwd: repo }).code,
@@ -163,9 +163,8 @@ describe("the script", () => {
         cwd: repo,
       }).code,
     ).toBe(0);
-    expect(JSON.parse(readFileSync(join(withSpec, "review.json"), "utf8")).spec).toBe(
-      "# Workhorse spec: #1 Two edits\n",
-    );
+    // The spec is the ticket; no copy is committed on any branch.
+    expect(JSON.parse(readFileSync(join(withSpec, "review.json"), "utf8")).spec).toBeNull();
   });
 
   test("files: each path as it stands at the ref, with its own file", () => {

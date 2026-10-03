@@ -234,7 +234,13 @@ function labelViaAdapter(repo: string, id: string, kind: string, verb: "add" | "
   }
 }
 
-function markReady(ticket: TicketRead, project: string, repo: string, id: string, kind: string): number {
+function markReady(
+  ticket: TicketRead,
+  project: string,
+  repo: string,
+  id: string,
+  kind: string,
+): number {
   const reasons = runChecks(ticket, project).filter((r) => !r.startsWith("no ready label"));
   if (reasons.length > 0) {
     for (const r of reasons) console.log(r);
