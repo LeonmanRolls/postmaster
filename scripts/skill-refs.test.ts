@@ -22,7 +22,8 @@ beforeAll(() => {
   const scriptsDir = join(root, "scripts");
   mkdirSync(scriptsDir, { recursive: true });
   writeFileSync(join(scriptsDir, "run"), "");
-  writeFileSync(join(scriptsDir, "run"), "");
+  writeFileSync(join(scriptsDir, "stage.ts"), "");
+  writeFileSync(join(scriptsDir, "launch.ts"), "");
 
   bare = join(tmp, "bare.md");
   good = join(tmp, "good.md");

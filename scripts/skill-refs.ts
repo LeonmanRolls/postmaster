@@ -27,9 +27,9 @@ import { toolRoot } from "./lib/paths.ts";
 const REF = /scripts\/[A-Za-z0-9._-]*/gu;
 const BARE = /(?<![A-Za-z0-9_./-])scripts\//gu;
 const OTHER = /(<[A-Za-z0-9_-]+>|\$\{?[A-Za-z_][A-Za-z0-9_]*\}?)\/$/u;
-const OLD_FORM = /(?:(?<![A-Za-z0-9_./-])|(?<=>\/))scripts\/([A-Za-z0-9_-]+)\.sh\b/gu;
-const DIRECT_BUN = /(?:^|[\s`"'])bun\s+(?:--[^\s]+\s+)*[^\s]*scripts\/[A-Za-z0-9_-]+\.ts\b/gu;
-const ENTRY_FORM = /scripts\/run\s+([A-Za-z][A-Za-z0-9-]*)/gu;
+const OLD_FORM = /(?:(?<![A-Za-z0-9_./-])|(?<=>\/))scripts\/([A-Za-z0-9_-]+)\.sh(?![A-Za-z0-9_-])/gu;
+const DIRECT_BUN = /(?:^|[ \t`"'])bun[ \t]+(?:--[^ \t]+[ \t]+)*[^ \t]*scripts\/[A-Za-z0-9_-]+\.ts(?![A-Za-z0-9_-])/gu;
+const ENTRY_FORM = /scripts\/run[ \t]+([A-Za-z][A-Za-z0-9-]*)/gu;
 
 type Fault = { file: string; line: number; why: string; ref: string };
 
@@ -95,16 +95,18 @@ export function refs(
           ref: (m[0] ?? "").trim(),
         });
       }
-      // Fault entry-form references whose name does not resolve.
+      // Fault <tool>/ or <rt>/ entry-form references whose name does not resolve.
       ENTRY_FORM.lastIndex = 0;
       for (const m of line.matchAll(ENTRY_FORM)) {
+        const before = line.slice(0, m.index ?? 0);
+        if (!before.endsWith("<tool>/") && !before.endsWith("<rt>/")) continue;
         const name = m[1] ?? "";
         if (!resolves(root, name)) {
           faults.push({
             file: f,
             line: i + 1,
             why: "no such script in the postmaster repo",
-            ref: `scripts/run ${name}`,
+            ref: `${before.endsWith("<tool>/") ? "<tool>/" : "<rt>/"}scripts/run ${name}`,
           });
         }
       }
