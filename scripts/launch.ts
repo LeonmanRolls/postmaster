@@ -1113,15 +1113,16 @@ if (import.meta.main) {
   if (!MODEL) die(`${NAME} has no model in ${source}`);
   // A lane in the effective [lanes] table runs in a process space of its own
   // when confine is on. Coachman, fallback and postmaster are not confined.
-  const isLane =
-    NAME !== "coachman" && NAME !== "coachman_fallback" && NAME !== "postmaster";
+  const isLane = NAME !== "coachman" && NAME !== "coachman_fallback" && NAME !== "postmaster";
   let confineWrap = false;
   if (spec.confine && isLane && CMD !== "skill") {
     const check = startCheck();
     if (check.ok) {
       confineWrap = true;
     } else {
-      console.error(`launch: confinement cannot start (${check.cause}); running ${NAME} unconfined`);
+      console.error(
+        `launch: confinement cannot start (${check.cause}); running ${NAME} unconfined`,
+      );
       if (RUN) {
         run(join(scriptsDir(import.meta), "log-action.sh"), [
           RUN,
@@ -1311,7 +1312,9 @@ if (import.meta.main) {
       return s;
     };
     const launchForms = mkForms("form");
-    process.stdout.write(`launch: ${put(CWD, maybeWrap(launchForms.cmd), launchForms.stdinFile)}\n`);
+    process.stdout.write(
+      `launch: ${put(CWD, maybeWrap(launchForms.cmd), launchForms.stdinFile)}\n`,
+    );
     try {
       const resumeForms = (() => {
         // Build the resume form: as the launch form's twin, with a placeholder data directory.
@@ -1331,7 +1334,9 @@ if (import.meta.main) {
           BASE,
         );
       })();
-      process.stdout.write(`resume: ${put(CWD, maybeWrap(resumeForms.cmd), resumeForms.stdinFile)}\n`);
+      process.stdout.write(
+        `resume: ${put(CWD, maybeWrap(resumeForms.cmd), resumeForms.stdinFile)}\n`,
+      );
     } catch (e) {
       const msg = String(e instanceof Error ? e.message : e).replace(/^launch: /u, "");
       process.stdout.write(`resume: none: ${msg}\n`);

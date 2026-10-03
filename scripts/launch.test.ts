@@ -3951,15 +3951,24 @@ beforeAll(() => {
           writeFileSync(join(dir, "f.txt"), "hello\n");
           const add = run("git", ["-C", dir, "add", "f.txt"]);
           const commit = run("git", [
-            "-C", dir, "-c", "user.name=t", "-c", "user.email=t@example.invalid",
-            "commit", "-q", "-m", "battery",
+            "-C",
+            dir,
+            "-c",
+            "user.name=t",
+            "-c",
+            "user.email=t@example.invalid",
+            "commit",
+            "-q",
+            "-m",
+            "battery",
           ]);
           return add.code === 0 && commit.code === 0;
         },
         wrapped: () => {
           const dir = mkWorktree();
           const w = wrapCommand([
-            "sh", "-c",
+            "sh",
+            "-c",
             `cd "${dir}" && echo hello > f.txt && git add f.txt && git -c user.name=t -c user.email=t@example.invalid commit -q -m battery`,
           ]);
           if (!w) return false;
@@ -3994,7 +4003,8 @@ beforeAll(() => {
           ]).code === 0,
         wrapped: () => {
           const w = wrapCommand([
-            "python3", "-c",
+            "python3",
+            "-c",
             "import socket; s=socket.socket(); s.settimeout(5); s.connect(('1.1.1.1',53)); s.close()",
           ]);
           if (!w) return false;
@@ -4052,7 +4062,9 @@ s.close()
         const outUnconf = run("sh", ["-c", `${outsideCmd} & echo $!`], { timeout: 5000 });
         const outsidePid = outUnconf.out.trim();
         const signalOutsideBare = run(
-          "sh", ["-c", `kill -TERM ${outsidePid} 2>/dev/null; echo rc=$?`], { timeout: 5000 },
+          "sh",
+          ["-c", `kill -TERM ${outsidePid} 2>/dev/null; echo rc=$?`],
+          { timeout: 5000 },
         );
         const reachedBare = signalOutsideBare.out.includes("rc=0");
         check(
@@ -4066,7 +4078,9 @@ s.close()
           const outConf = run("sh", ["-c", `${outsideCmd} & echo $!`], { timeout: 5000 });
           const confOutsidePid = outConf.out.trim();
           const w = wrapCommand([
-            "sh", "-c", `kill -TERM ${confOutsidePid} 2>/dev/null; echo rc=$?`,
+            "sh",
+            "-c",
+            `kill -TERM ${confOutsidePid} 2>/dev/null; echo rc=$?`,
           ]);
           const r = w ? run(w[0]!, w.slice(1), { timeout: 30000 }) : { out: "", code: -1 };
           const refused = r.out.includes("rc=1") || r.out.includes("No such process");
@@ -4076,7 +4090,9 @@ s.close()
           );
           itemsRun++;
           // That process is still running afterwards
-          const still = run("sh", ["-c", `kill -0 ${confOutsidePid} 2>/dev/null`], { timeout: 5000 });
+          const still = run("sh", ["-c", `kill -0 ${confOutsidePid} 2>/dev/null`], {
+            timeout: 5000,
+          });
           check(
             `signalling a process started outside: still running: ${still.code === 0 ? "yes" : "no"}`,
             still.code === 0,
@@ -4095,7 +4111,8 @@ s.close()
       // AC3: signalling a process the lane started itself
       if (confinement.ok) {
         const w = wrapCommand([
-          "sh", "-c",
+          "sh",
+          "-c",
           "sleep 30 & CHILD=$!; kill -TERM $CHILD 2>/dev/null; wait $CHILD; echo rc=$?",
         ]);
         const r = w ? run(w[0]!, w.slice(1), { timeout: 30000 }) : { out: "", code: -1 };
@@ -5028,15 +5045,15 @@ describe("confinement battery: every AC2 and AC3 item unconfined and confined", 
     assertControl("signalling a process started outside: unconfined: reached");
   });
   test("signalling a process started outside: confined", () => {
-    const r = records.find(
-      (x) => x.label.startsWith("signalling a process started outside: confined:"),
+    const r = records.find((x) =>
+      x.label.startsWith("signalling a process started outside: confined:"),
     );
     expect(r).toBeDefined();
     if (r !== undefined && !r.ok) throw new Error(r.detail === "" ? r.label : r.detail);
   });
   test("signalling a process started outside: still running afterwards", () => {
-    const r = records.find(
-      (x) => x.label.startsWith("signalling a process started outside: still running:"),
+    const r = records.find((x) =>
+      x.label.startsWith("signalling a process started outside: still running:"),
     );
     if (r === undefined) return; // skipped when no confinement
     if (!r.ok) throw new Error(r.detail === "" ? r.label : r.detail);
