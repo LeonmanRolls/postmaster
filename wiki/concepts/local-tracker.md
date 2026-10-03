@@ -31,7 +31,7 @@ the repository, which the ticket's own notes suggested.
 
 - **One copy for every worktree.** A repository's linked worktrees share its common git
   directory, so a run's worktree reads the same ticket files as the main checkout, and a state
-  set from one is the state the other sees. `scripts/local.sh --self-test` checks both.
+  set from one is the state the other sees. The tests beside `scripts/local.sh` check both.
 - **No name to collide.** A store under `~/.postmaster/tickets/<name>/` would be keyed by the
   repository's name, as the run records are. Two repositories with one name would share a
   store, and a repository that moved would lose its own. In the git directory, the repository

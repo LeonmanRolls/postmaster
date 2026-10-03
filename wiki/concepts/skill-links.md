@@ -33,8 +33,8 @@ load a linked skill [@trials/skill-folders].
 - **The first check cannot be a script.** Finding the repo is the one step that runs before
   `scripts/` can be reached: when the link is missing or leads to a copy, the scripts are
   exactly what is out of reach. So it is one line in `SKILL.md` that names the link when it
-  fails, rather than a bare "no such file". `scripts/link-skills.sh --self-test` runs that line
-  as written, so it cannot drift from what the self-test proves.
+  fails, rather than a bare "no such file". The tests beside `scripts/link-skills.sh` run
+  that line as written, so they cannot drift from what they prove.
 
 ## What the trial found
 

@@ -45,6 +45,16 @@ tracking.>
 <Each choice the ticket left open, and what this spec chose. There is no one to ask during
 the run: decide, and record it here.>
 
+## Showing each criterion
+
+For each acceptance criterion, copy its full wording from the ticket and specify the check that
+shows it working the way it will really be used: the command, input and expected output, or the
+steps through the user surface and what each should show.
+
+| # | Criterion, as the ticket words it | Check (command and input) | Expected output |
+|---|---|---|---|
+| AC1 | <the criterion in full, word for word from the ticket> | <the command and the input, or the steps through the user surface> | <what the command prints and its exit, or what each step should show> |
+
 ## Tasks
 
 Format: `- [ ] T<n> [P] [AC<n>] <description, with exact file paths>`.
@@ -57,3 +67,8 @@ task serves. Every acceptance criterion has at least one task.
 Tasks may be ticked in later commits as they are done. A task dropped or added along the way
 is noted in `WORKHORSE-SUMMARY.md`. The commit that first adds `WORKHORSE-SPEC.md` is the record of intent
 and is not rewritten.
+
+`## Showing each criterion` is how the lanes check their work: for each acceptance criterion,
+the check that shows it working the way it will really be used — the command, the input and the
+expected output, or the steps through the user surface and what each should show. The user
+reviews those checks with the rest of the spec.

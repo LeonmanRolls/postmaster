@@ -130,7 +130,7 @@ function readWaybill(dispatch: string): Waybill {
         w.synthesis = pyTrim(line.slice(line.indexOf(":") + 1));
     }
   }
-  w.ticket = ticketLines.join("\n").replace(/^\n+|\n+$/g, "");
+  w.ticket = ticketLines.join("\n").replace(/^\n+|\n+$/gu, "");
   return w;
 }
 
@@ -176,7 +176,7 @@ function brief(dispatch: string): void {
   const drafts: string[] = [];
   const lanes = readLanes(dispatch);
   // Workhorse worktrees are <repo>/.worktrees/<TICKET>-<lane>; TICKET is the run's id.
-  const ticket = dispatch.replace(/\/+$/, "").split("/").pop() || "";
+  const ticket = dispatch.replace(/\/+$/u, "").split("/").pop() || "";
   for (const lane of lanes) {
     const wt = join(w.repo, ".worktrees", `${ticket}-${lane}`);
     if (!isDir(wt)) continue;
@@ -187,7 +187,7 @@ function brief(dispatch: string): void {
     const commit = log.out.trim() || "uncommitted";
     let text: string;
     try {
-      text = readStrict(draft).replace(/\n+$/g, "");
+      text = readStrict(draft).replace(/\n+$/gu, "");
     } catch {
       continue;
     }
@@ -195,7 +195,9 @@ function brief(dispatch: string): void {
       .split("\n")
       .map((line) => `  ${line}`)
       .join("\n");
-    drafts.push(`- ${lane}: commit \`${commit}\`; file \`${draft}\`\n\n  Draft text:\n\n${indented}`);
+    drafts.push(
+      `- ${lane}: commit \`${commit}\`; file \`${draft}\`\n\n  Draft text:\n\n${indented}`,
+    );
   }
   const draftsBlock = drafts.length > 0 ? drafts.join("\n") : "There are no lane drafts.";
 
@@ -203,7 +205,7 @@ function brief(dispatch: string): void {
   const prefsPath = join(configDir(), "preferences.md");
   if (isFile(prefsPath)) {
     try {
-      prefs = readStrict(prefsPath).replace(/\n+$/g, "");
+      prefs = readStrict(prefsPath).replace(/\n+$/gu, "");
     } catch (e: unknown) {
       die(`spec-session: cannot read ${prefsPath} (${errMsg(e)})`, 1);
     }
@@ -260,7 +262,7 @@ function approve(dispatch: string): void {
   if (status.code !== 0) die(`spec-session: cannot read ${synth} status (${status.err.trim()})`, 1);
   for (const line of status.out.split("\n")) {
     if (line.trim() === "") continue;
-    const path = line.slice(3).trim().replace(/^"|"$/g, "");
+    const path = line.slice(3).trim().replace(/^"|"$/gu, "");
     if (path !== "WORKHORSE-SPEC.md")
       die(`spec-session: the synthesis worktree holds another change: ${line.trim()}`, 2);
   }

@@ -1,4 +1,3 @@
-#!/usr/bin/env bun
 // Read what a launch cost from its harness's own event stream or session record, keep it in
 // the run's records per role and lane, and sum it for the closing record. The per-harness
 // reading lives here, behind the harness adapter (skills/postmaster/harnesses.md): this script
@@ -14,7 +13,14 @@
 //
 //   exit 0  read, recorded or summed
 //   exit 1  usage, an unreadable stream or dispatch
-import { lstatSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from "node:fs";
+import {
+  lstatSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  writeFileSync,
+} from "node:fs";
 import { basename, join } from "node:path";
 
 export type UsageFigures = {
@@ -82,7 +88,9 @@ const costFigures = (...candidates: unknown[]): UsageFigures => {
 
 const mergeFigures = (all: UsageFigures[]): UsageFigures => {
   const total = (key: UsageKey): number | undefined => {
-    const values = all.flatMap((figures) => figures[key] === undefined ? [] : [figures[key] as number]);
+    const values = all.flatMap((figures) =>
+      figures[key] === undefined ? [] : [figures[key] as number],
+    );
     return values.length === 0 ? undefined : values.reduce((sum, value) => sum + value, 0);
   };
   return {
@@ -93,16 +101,20 @@ const mergeFigures = (all: UsageFigures[]): UsageFigures => {
 };
 
 const hasFigure = (figures: UsageFigures): boolean =>
-  figures.input_tokens !== undefined || figures.output_tokens !== undefined || figures.cost_usd !== undefined;
+  figures.input_tokens !== undefined ||
+  figures.output_tokens !== undefined ||
+  figures.cost_usd !== undefined;
 
 const jsonRows = (content: string): Row[] => {
   const rows: Row[] = [];
-  const stripped = content.replace(/^\s+/, "");
+  // ASCII: event streams are machine JSON; the leading gap is ASCII whitespace.
+  const stripped = content.replace(/^\s+/u, "");
   if (!stripped) return rows;
   try {
     const document: unknown = JSON.parse(stripped);
     if (Array.isArray(document)) return document.filter(isObject);
-    if (isObject(document) && Array.isArray(document.events)) return document.events.filter(isObject);
+    if (isObject(document) && Array.isArray(document.events))
+      return document.events.filter(isObject);
     if (isObject(document)) return [document];
   } catch {
     // Not one JSON document: JSONL below.
@@ -124,8 +136,12 @@ const jsonRows = (content: string): Row[] => {
 // usage is skipped, never read as zero. Verified against a rollout whose session total matched
 // its last turn's figures to the unit.
 const readCodex = (rows: Row[]): UsageFigures => {
-  const terminal = rows.filter((row) =>
-    row.type === "turn.completed" || row.type === "turn.failed" || row.type === "turn.interrupted");
+  const terminal = rows.filter(
+    (row) =>
+      row.type === "turn.completed" ||
+      row.type === "turn.failed" ||
+      row.type === "turn.interrupted",
+  );
   for (let i = terminal.length - 1; i >= 0; i--) {
     const figures = tokenFigures(terminal[i]?.usage);
     if (hasFigure(figures)) return figures;
@@ -148,22 +164,26 @@ const readClaude = (rows: Row[]): UsageFigures => {
       ...costFigures(last.total_cost_usd),
     };
   }
-  return mergeFigures(rows.flatMap((row) => {
-    if (row.type !== "assistant") return [];
-    const message = at(row, "message");
-    if (!isObject(message) || message.role !== "assistant") return [];
-    return [tokenFigures(message.usage)];
-  }));
+  return mergeFigures(
+    rows.flatMap((row) => {
+      if (row.type !== "assistant") return [];
+      const message = at(row, "message");
+      if (!isObject(message) || message.role !== "assistant") return [];
+      return [tokenFigures(message.usage)];
+    }),
+  );
 };
 
 // MiMo Code puts per-step tokens and cost on each step_finish part; the launch is their sum.
 const readMimo = (rows: Row[]): UsageFigures =>
-  mergeFigures(rows.flatMap((row) => {
-    if (row.type !== "step_finish") return [];
-    const part = at(row, "part");
-    if (!isObject(part)) return [];
-    return [{ ...tokenFigures(part.tokens), ...costFigures(part.cost) }];
-  }));
+  mergeFigures(
+    rows.flatMap((row) => {
+      if (row.type !== "step_finish") return [];
+      const part = at(row, "part");
+      if (!isObject(part)) return [];
+      return [{ ...tokenFigures(part.tokens), ...costFigures(part.cost) }];
+    }),
+  );
 
 // Muse Code reports model tokens in the session record's model_completed events, not in the
 // event stream. goal_usage_attribution repeats those values per call; reading both would count
@@ -175,20 +195,25 @@ const readMuse = (rows: Row[]): UsageFigures => {
     const event = at(payload, "event");
     return isObject(event) ? [event] : [];
   });
-  return mergeFigures(events.flatMap((event) =>
-    event.kind === "model_completed" ? [tokenFigures(event.usage)] : []));
+  return mergeFigures(
+    events.flatMap((event) =>
+      event.kind === "model_completed" ? [tokenFigures(event.usage)] : [],
+    ),
+  );
 };
 
 // Pi carries usage on the assistant message of message_end.
 const readPi = (rows: Row[]): UsageFigures =>
-  mergeFigures(rows.flatMap((row) => {
-    if (row.type !== "message_end") return [];
-    const message = at(row, "message");
-    if (!isObject(message) || message.role !== "assistant") return [];
-    const usage = at(message, "usage");
-    if (!isObject(usage)) return [];
-    return [{ ...tokenFigures(usage), ...costFigures(at(usage, "cost", "total"), usage.cost) }];
-  }));
+  mergeFigures(
+    rows.flatMap((row) => {
+      if (row.type !== "message_end") return [];
+      const message = at(row, "message");
+      if (!isObject(message) || message.role !== "assistant") return [];
+      const usage = at(message, "usage");
+      if (!isObject(usage)) return [];
+      return [{ ...tokenFigures(usage), ...costFigures(at(usage, "cost", "total"), usage.cost) }];
+    }),
+  );
 
 // Grok's terminal end event carries the run's usage; chunk-level usage is ignored so a
 // repeated report is never counted twice. The last end carrying a figure wins; an end without
@@ -241,7 +266,11 @@ const READERS: Record<string, (rows: Row[]) => UsageFigures> = {
   mimo: readMimo,
 };
 
-export const readHarnessUsage = (harness: string, eventsContent: string, sessionContent?: string): UsageFigures => {
+export const readHarnessUsage = (
+  harness: string,
+  eventsContent: string,
+  sessionContent?: string,
+): UsageFigures => {
   const read = READERS[harness];
   if (!read) throw new Error(`unknown harness: ${harness}`);
   if (harness === "muse") {
@@ -250,7 +279,7 @@ export const readHarnessUsage = (harness: string, eventsContent: string, session
   return read(jsonRows(eventsContent));
 };
 
-const safeName = (value: string): boolean => /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/.test(value);
+const safeName = (value: string): boolean => /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/u.test(value);
 
 const regularFile = (path: string): boolean => {
   try {
@@ -289,7 +318,8 @@ export const makeUsageRecord = (input: {
 }): UsageRecord => {
   const { harness, name, role, lane, eventsPath, dispatch } = input;
   if (!HARNESSES.includes(harness)) throw new Error(`unknown harness: ${harness}`);
-  if (!ROLES.includes(role as UsageRole)) throw new Error("role must be workhorse, reviewer or coachman");
+  if (!ROLES.includes(role as UsageRole))
+    throw new Error("role must be workhorse, reviewer or coachman");
   if (!safeName(name)) throw new Error("name must be a lane or role name");
   if (!safeName(lane)) throw new Error("lane must be a safe name");
   if (!regularFile(eventsPath)) throw new Error(`no such events stream: ${eventsPath}`);
@@ -300,7 +330,8 @@ export const makeUsageRecord = (input: {
   let readError: UsageRecord["read_error"];
   if (harness === "muse") {
     const sessionId = museSessionId(jsonRows(eventsContent));
-    const sessionPath = sessionId === undefined ? undefined : join(dispatch, "sessions", name, `${sessionId}.json`);
+    const sessionPath =
+      sessionId === undefined ? undefined : join(dispatch, "sessions", name, `${sessionId}.json`);
     if (sessionPath === undefined || !regularFile(sessionPath)) {
       readError = "session-record-unavailable";
     } else {
@@ -333,7 +364,10 @@ export const writeUsageRecord = (input: Parameters<typeof makeUsageRecord>[0]): 
   mkdirSync(logs, { recursive: true });
   if (!regularDir(logs)) throw new Error("logs is not a regular directory");
   const destination = recordPath(input.dispatch, input.eventsPath);
-  if (!regularFile(destination) && lstatSync(destination, { throwIfNoEntry: false }) !== undefined) {
+  if (
+    !regularFile(destination) &&
+    lstatSync(destination, { throwIfNoEntry: false }) !== undefined
+  ) {
     throw new Error("usage record destination is not a regular file");
   }
   const temporary = join(logs, `.${basename(destination)}.${process.pid}.tmp`);
@@ -344,9 +378,19 @@ export const writeUsageRecord = (input: Parameters<typeof makeUsageRecord>[0]): 
 
 const validateRecord = (value: unknown): UsageRecord | undefined => {
   if (!isObject(value)) return undefined;
-  if (value.schema_version !== 1 || typeof value.harness !== "string" || !HARNESSES.includes(value.harness)) return undefined;
+  if (
+    value.schema_version !== 1 ||
+    typeof value.harness !== "string" ||
+    !HARNESSES.includes(value.harness)
+  )
+    return undefined;
   if (!ROLES.includes(value.role as UsageRole)) return undefined;
-  if (typeof value.name !== "string" || typeof value.lane !== "string" || typeof value.stream !== "string") return undefined;
+  if (
+    typeof value.name !== "string" ||
+    typeof value.lane !== "string" ||
+    typeof value.stream !== "string"
+  )
+    return undefined;
   const figures: UsageFigures = {};
   for (const key of USAGE_KEYS) {
     if (value[key] === undefined) continue;
@@ -374,25 +418,29 @@ const formatMoney = (value: number): string => {
   let decimals = 9;
   let text = "0";
   while (text === "0" && decimals <= 100) {
-    text = value.toFixed(decimals).replace(/\.?0+$/, "");
+    text = value.toFixed(decimals).replace(/\.?0+$/u, "");
     decimals++;
   }
   return `$${text}`;
 };
 
 const formatCoverage = (records: UsageRecord[], key: UsageKey): string => {
-  const reported = records.flatMap((record) => record[key] === undefined ? [] : [record[key] as number]);
+  const reported = records.flatMap((record) =>
+    record[key] === undefined ? [] : [record[key] as number],
+  );
   if (reported.length === 0) return key === "cost_usd" ? "cost not reported" : "not reported";
   const total = reported.reduce((sum, value) => sum + value, 0);
   const shown = key === "cost_usd" ? formatMoney(total) : String(total);
-  return reported.length === records.length ? shown : `${shown} (${reported.length} of ${records.length} launches)`;
+  return reported.length === records.length
+    ? shown
+    : `${shown} (${reported.length} of ${records.length} launches)`;
 };
 
 export const sumUsageRecords = (records: UsageRecord[]): string => {
   if (records.length === 0) return "cost: no launch usage records";
   const groups = new Map<string, UsageRecord[]>();
   for (const record of records) {
-    const key = `${record.role} ${record.lane}`;
+    const key = `${record.role}\x00${record.lane}`;
     groups.set(key, [...(groups.get(key) ?? []), record]);
   }
   const lines = [...groups.entries()]
@@ -401,19 +449,29 @@ export const sumUsageRecords = (records: UsageRecord[]): string => {
       const first = group[0] as UsageRecord;
       const harnesses = [...new Set(group.map((record) => record.harness))].sort().join(", ");
       const unreadable = group.filter((record) => record.read_error).length;
-      const suffix = unreadable === 0 ? "" : `; usage unreadable for ${unreadable} ${unreadable === 1 ? "launch" : "launches"}`;
-      return `cost: ${first.role} ${first.lane} (${harnesses}): `
-        + `${formatCoverage(group, "input_tokens")} in, `
-        + `${formatCoverage(group, "output_tokens")} out, `
-        + `${formatCoverage(group, "cost_usd")}${suffix}`;
+      const suffix =
+        unreadable === 0
+          ? ""
+          : `; usage unreadable for ${unreadable} ${unreadable === 1 ? "launch" : "launches"}`;
+      return (
+        `cost: ${first.role} ${first.lane} (${harnesses}): ` +
+        `${formatCoverage(group, "input_tokens")} in, ` +
+        `${formatCoverage(group, "output_tokens")} out, ` +
+        `${formatCoverage(group, "cost_usd")}${suffix}`
+      );
     });
-  const harnessLines = [...new Set(records.map((record) => record.harness))].sort().flatMap((harness) => {
-    const owned = records.filter((record) => record.harness === harness);
-    if (owned.some((record) => USAGE_KEYS.some((key) => record[key] !== undefined))) return [];
-    const unreadable = owned.filter((record) => record.read_error).length;
-    if (unreadable > 0) return [`cost: harness ${harness} usage unreadable for ${unreadable} ${unreadable === 1 ? "launch" : "launches"}`];
-    return [`cost: harness ${harness} reports nothing`];
-  });
+  const harnessLines = [...new Set(records.map((record) => record.harness))]
+    .sort()
+    .flatMap((harness) => {
+      const owned = records.filter((record) => record.harness === harness);
+      if (owned.some((record) => USAGE_KEYS.some((key) => record[key] !== undefined))) return [];
+      const unreadable = owned.filter((record) => record.read_error).length;
+      if (unreadable > 0)
+        return [
+          `cost: harness ${harness} usage unreadable for ${unreadable} ${unreadable === 1 ? "launch" : "launches"}`,
+        ];
+      return [`cost: harness ${harness} reports nothing`];
+    });
   return [...lines, ...harnessLines].join("\n");
 };
 
@@ -422,32 +480,38 @@ export const sumDispatch = (dispatch: string): string => {
   const logs = join(dispatch, "logs");
   if (!regularDir(logs)) throw new Error(`no such logs directory: ${logs}`);
   const unreadable: string[] = [];
-  const records = readdirSync(logs).sort().flatMap((file) => {
-    if (!file.endsWith("-usage.json")) return [];
-    const path = join(logs, file);
-    if (!regularFile(path)) {
-      unreadable.push(`cost: ${file} could not be read`);
-      return [];
-    }
-    try {
-      const record = validateRecord(JSON.parse(readFileSync(path, "utf8")) as unknown);
-      if (!record) unreadable.push(`cost: ${file} could not be read`);
-      return record ? [record] : [];
-    } catch {
-      unreadable.push(`cost: ${file} could not be read`);
-      return [];
-    }
-  });
+  const records = readdirSync(logs)
+    .sort()
+    .flatMap((file) => {
+      if (!file.endsWith("-usage.json")) return [];
+      const path = join(logs, file);
+      if (!regularFile(path)) {
+        unreadable.push(`cost: ${file} could not be read`);
+        return [];
+      }
+      try {
+        const record = validateRecord(JSON.parse(readFileSync(path, "utf8")) as unknown);
+        if (!record) unreadable.push(`cost: ${file} could not be read`);
+        return record ? [record] : [];
+      } catch {
+        unreadable.push(`cost: ${file} could not be read`);
+        return [];
+      }
+    });
   return [...unreadable, sumUsageRecords(records)].join("\n");
 };
 
 const readCommand = (args: string[]): void => {
-  if (args.length < 2 || args.length > 3) throw new Error("usage: read <events> <harness> [<session>]");
+  if (args.length < 2 || args.length > 3)
+    throw new Error("usage: read <events> <harness> [<session>]");
   const [eventsPath, harness, sessionPath] = args as [string, string, string?];
   if (!regularFile(eventsPath)) throw new Error(`no such events stream: ${eventsPath}`);
-  if (sessionPath !== undefined && !regularFile(sessionPath)) throw new Error(`no such session record: ${sessionPath}`);
+  if (sessionPath !== undefined && !regularFile(sessionPath))
+    throw new Error(`no such session record: ${sessionPath}`);
   const sessionContent = sessionPath === undefined ? undefined : readFileSync(sessionPath, "utf8");
-  console.log(JSON.stringify(readHarnessUsage(harness, readFileSync(eventsPath, "utf8"), sessionContent)));
+  console.log(
+    JSON.stringify(readHarnessUsage(harness, readFileSync(eventsPath, "utf8"), sessionContent)),
+  );
 };
 
 const recordCommand = (args: string[]): void => {
@@ -466,25 +530,37 @@ const recordCommand = (args: string[]): void => {
       rest.push(arg);
     }
   }
-  if (rest.length !== 4) throw new Error("usage: record <events> <harness> <name> <dispatch> --role <role> --lane <lane>");
+  if (rest.length !== 4)
+    throw new Error(
+      "usage: record <events> <harness> <name> <dispatch> --role <role> --lane <lane>",
+    );
   const [eventsPath, harness, name, dispatch] = rest as [string, string, string, string];
   if (!role || !lane) throw new Error("record needs --role and --lane from the launch site");
   const record = writeUsageRecord({ harness, name, role, lane, eventsPath, dispatch });
   // The record is saved, so this is exit 0: a nonzero exit would tell the launch site the
   // usage was not recorded. The read_error field and the sum's unreadable line carry the state.
-  if (record.read_error) console.error("usage: session record is unavailable; usage record saved without figures");
+  if (record.read_error)
+    console.error("usage: session record is unavailable; usage record saved without figures");
 };
 
 const main = (args: string[]): void => {
   const [command, ...rest] = args;
-  if (command === "read") return readCommand(rest);
-  if (command === "record") return recordCommand(rest);
+  if (command === "read") {
+    readCommand(rest);
+    return;
+  }
+  if (command === "record") {
+    recordCommand(rest);
+    return;
+  }
   if (command === "sum") {
     if (rest.length !== 1) throw new Error("usage: sum <dispatch>");
     console.log(sumDispatch(rest[0] as string));
     return;
   }
-  throw new Error("usage: usage.ts read <events> <harness> [<session>] | record <events> <harness> <name> <dispatch> --role <role> --lane <lane> | sum <dispatch>");
+  throw new Error(
+    "usage: usage.ts read <events> <harness> [<session>] | record <events> <harness> <name> <dispatch> --role <role> --lane <lane> | sum <dispatch>",
+  );
 };
 
 if (import.meta.main) {

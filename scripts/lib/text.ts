@@ -7,10 +7,8 @@
 // Generated from python3 unicodedata 15.0.0: every code point where
 // casefold(c) != lower(c), plus U+03A3 (context-free fold beats final sigma).
 // Regen: the loop in the round-9 notes (python3 -c over 0..0x10FFFF).
-import { readdirSync, readFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { SelfTest } from "./selftest.ts";
 
 const CASEFOLD_EXTRA: Record<string, string> = {
   "\u00b5": "\u03bc",
@@ -407,7 +405,7 @@ export function literalI(s: string): string {
  * and every char is Nd or an integer-valued No (superscripts, Kharosthi
  * digits; `½` and Aegean numerals are out). Regen: the loop in the
  * round-10 notes (`unicodedata.category`/`numeric` over 0..0x10FFFF). */
-const INT_NO_CHARS =
+export const INT_NO_CHARS =
   "\u00b2\u00b3\u00b9\u1369\u136a\u136b\u136c\u136d\u136e\u136f\u1370\u1371\u19da\u2070\u2074\u2075\u2076\u2077\u2078\u2079\u2080\u2081\u2082\u2083\u2084\u2085\u2086\u2087\u2088\u2089\u2460\u2461\u2462\u2463\u2464\u2465\u2466\u2467\u2468\u2474\u2475\u2476\u2477\u2478\u2479\u247a\u247b\u247c\u2488\u2489\u248a\u248b\u248c\u248d\u248e\u248f\u2490\u24ea\u24f5\u24f6\u24f7\u24f8\u24f9\u24fa\u24fb\u24fc\u24fd\u24ff\u2776\u2777\u2778\u2779\u277a\u277b\u277c\u277d\u277e\u2780\u2781\u2782\u2783\u2784\u2785\u2786\u2787\u2788\u278a\u278b\u278c\u278d\u278e\u278f\u2790\u2791\u2792\u{10a40}\u{10a41}\u{10a42}\u{10a43}\u{10e60}\u{10e61}\u{10e62}\u{10e63}\u{10e64}\u{10e65}\u{10e66}\u{10e67}\u{10e68}\u{11052}\u{11053}\u{11054}\u{11055}\u{11056}\u{11057}\u{11058}\u{11059}\u{1105a}\u{1f100}\u{1f101}\u{1f102}\u{1f103}\u{1f104}\u{1f105}\u{1f106}\u{1f107}\u{1f108}\u{1f109}\u{1f10a}";
 const INT_NO = new Set<string>();
 for (const ch of INT_NO_CHARS) INT_NO.add(ch);
@@ -423,7 +421,7 @@ for (const ch of INT_NO_CHARS) INT_NO.add(ch);
  * unassigned, so `int()` rejects what digitValue now accepts. The port
  * follows its runtime (ICU 17, which `D_CLASS` matches with), not the
  * reference's older table. */
-const ND_RUNS: Array<[number, number]> = [
+export const ND_RUNS: Array<[number, number]> = [
   [0x30, 0x39],
   [0x660, 0x669],
   [0x6f0, 0x6f9],
@@ -587,6 +585,14 @@ export function pyWords(s: string): string[] {
   return t === "" ? [] : t.split(PY_WS_RUN);
 }
 
+/** Words on JavaScript-whitespace runs, ends stripped, empties dropped: the
+ * split main's synthesis-shares uses for overlap runs. Both compared sides
+ * split the same way, so the set is main's (`\s`), not Python's. */
+export function jsWords(s: string): string[] {
+  const t = s.trim();
+  return t === "" ? [] : t.split(/\s+/u);
+}
+
 /** Python `str.splitlines`: line boundaries split, `\r\n` counts once, a
  * boundary at the very end emits no trailing empty, and `""` gives `[]`. */
 export function pySplitLines(s: string): string[] {
@@ -596,11 +602,13 @@ export function pySplitLines(s: string): string[] {
   return parts;
 }
 
-// --- self-test: goldens, then the guard ------------------------------------------------------------------
+// --- golden cases: behavior tables for the beside test and --dump-golden-cases -------------------------------
 // Every export above is differenced against the Python it ports, in one
 // python3 call over a JSON case list. Cases carry both spellings (the
 // Python pattern and the module's) because the spellings differ on
-// purpose; the behavior must not.
+// purpose; the behavior must not. The controls moved beside the script
+// on #109 (lib/text.test.ts); the builders stay: the regen note in
+// scripts/fixtures/text-goldens.json runs them through --dump-golden-cases.
 
 interface GoldenCase {
   op: string;
@@ -649,7 +657,7 @@ const PY_GOLDEN_PROG = [
   "print(json.dumps(out))",
 ].join("\n");
 
-function tsGolden(c: GoldenCase): GoldenOut {
+export function tsGolden(c: GoldenCase): GoldenOut {
   try {
     const s = c.s;
     switch (c.op) {
@@ -691,7 +699,7 @@ function tsGolden(c: GoldenCase): GoldenOut {
   }
 }
 
-function goldenCases(): GoldenCase[] {
+export function goldenCases(): GoldenCase[] {
   const cases: GoldenCase[] = [];
   const wFull = { pyPat: "\\w+", tsSrc: `[${W_CLASS}]+` };
   const wWords = ["aZ09_", "ßſ", "٣١", "½Ⅷ²", "a-b", "\u0301", "Ω𝔘", "x_y2", "ﬁﬂ", ""];
@@ -948,87 +956,11 @@ function goldenCases(): GoldenCase[] {
   return cases;
 }
 
-function sameValue(a: unknown, b: unknown): boolean {
+export function sameValue(a: unknown, b: unknown): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
-function runGoldens(st: SelfTest): void {
-  // Invariants that hold without any interpreter: the tables' shapes.
-  st.check("isdigit table holds its 128 integer-valued others", [...INT_NO_CHARS].length === 128);
-  st.check("digit runs cover their 73 blocks", ND_RUNS.length === 73);
-  st.check(
-    "digitValue reads the finding's witness, Garay zero (U+10D40)",
-    digitValue("\u{10D40}") === "0",
-  );
-  {
-    // ND_RUNS covers the runtime's \p{Nd} exactly: no matcher can hand
-    // digitValue a digit the table throws on. Full range, ~0.1 s.
-    const one = /^\p{Nd}$/u;
-    let missing = 0;
-    let missingCp = 0;
-    for (let cp = 0; cp <= 0x10ffff; cp++) {
-      if (cp >= 0xd800 && cp <= 0xdfff) continue;
-      one.lastIndex = 0;
-      if (!one.test(String.fromCodePoint(cp))) continue;
-      let v = -1;
-      for (const [first, last] of ND_RUNS) {
-        if (cp >= first && cp <= last) {
-          v = (cp - first) % 10;
-          break;
-        }
-      }
-      if (v < 0) {
-        missing += 1;
-        missingCp = cp;
-      }
-    }
-    st.check(
-      "every Nd the runtime matches is a digit the table values",
-      missing === 0,
-      missing === 0 ? "" : `${missing} missing, first U+${missingCp.toString(16)}`,
-    );
-  }
-  // The BASE side is committed, not run: the cases still build live, and
-  // the truth comes from the fixture (regen per its _note). A case added
-  // or edited without a regen fails the length check or its row.
-  const cases = goldenCases();
-  const fixture = JSON.parse(
-    readFileSync(
-      join(dirname(fileURLToPath(import.meta.url)), "..", "fixtures", "text-goldens.json"),
-      "utf-8",
-    ),
-  ) as { python: string; truth: GoldenOut[] };
-  const truth = fixture.truth;
-  if (truth.length !== cases.length) {
-    st.fail(
-      "module goldens vs python3",
-      `fixture has ${truth.length} rows for ${cases.length} cases: regen per scripts/fixtures/text-goldens.json _note`,
-    );
-    return;
-  }
-  const bad: string[] = [];
-  for (let i = 0; i < cases.length; i++) {
-    const mine = tsGolden(cases[i]!);
-    const want = truth[i]!;
-    const c = cases[i]!;
-    if (c.diverge !== undefined) {
-      if (!sameValue(mine.r, c.diverge.ts) || !sameValue(want.r, c.diverge.py)) {
-        bad.push(
-          `${c.op} ${JSON.stringify(c.s.slice(0, 40))}: intended split drifted: port ${JSON.stringify(mine.r)} (want ${JSON.stringify(c.diverge.ts)}) vs py ${JSON.stringify(want.r)} (want ${JSON.stringify(c.diverge.py)})`,
-        );
-      }
-    } else if (mine.ok !== want.ok || !sameValue(mine.r, want.r)) {
-      bad.push(
-        `${c.op} ${JSON.stringify(c.s.slice(0, 40))}: port ${JSON.stringify(mine.r)} vs py ${JSON.stringify(want.r)}`,
-      );
-    }
-  }
-  st.check(
-    `module goldens vs python3 (${cases.length} cases, fixture ${fixture.python})`,
-    bad.length === 0,
-    bad.slice(0, 12).join("\n"),
-  );
-}
+// The golden/guard controls moved beside the script on #109: lib/text.test.ts.
 
 // --- the guard: no hand-written Unicode-meaning escape outside this module ---
 // JavaScript's \w \W \d \D \b \B \s \S stay ASCII (the u flag only enables
@@ -1246,7 +1178,7 @@ function ctorFlags(raw: string): string[] {
   }
 }
 
-const PLANTED = [
+export const PLANTED = [
   "const a = /\\w+/;",
   "const b = /\\d+/g;",
   "const c = /\\d+/u;",
@@ -1262,7 +1194,7 @@ const PLANTED = [
 // documented misses, not fixed): each pins zero hits, so any future
 // hardening — or any drift that starts catching one — fails loudly here
 // instead of silently changing the tripwire.
-const PLANTED_MISS = [
+export const PLANTED_MISS = [
   // 1. A string holding `// ASCII:` shields real code: marked() reads the
   // raw line, strings included.
   'const re = /\\d+/; const note = "// ASCII: nothing";',
@@ -1278,66 +1210,19 @@ const PLANTED_MISS = [
   'const pat = "\\\\w+"; const re = new RegExp(pat, "u");',
 ];
 
-function runGuard(st: SelfTest): void {
-  const scriptsDir = join(dirname(fileURLToPath(import.meta.url)), "..");
-  const files: string[] = [];
-  const walk = (d: string): void => {
-    for (const e of readdirSync(d, { withFileTypes: true })) {
-      const p = join(d, e.name);
-      if (e.isDirectory()) walk(p);
-      else if (e.isFile() && e.name.endsWith(".ts")) files.push(p);
-    }
-  };
-  walk(scriptsDir);
-  const mine = fileURLToPath(import.meta.url);
-  const targets = files.filter((f) => f !== mine);
-  const hits: GuardHit[] = [];
-  for (const f of targets) hits.push(...scanSource(f, readFileSync(f, "utf-8")));
-  const rel = (f: string): string =>
-    f.startsWith(scriptsDir) ? f.slice(scriptsDir.length + 1) : f;
-  st.check(
-    `guard: no hand-written \\w \\d \\b \\s or case-op without ASCII: (${targets.length} files)`,
-    hits.length === 0,
-    hits
-      .slice(0, 30)
-      .map((h) => `${rel(h.file)}:${h.line}: ${h.kind} ${h.text}`)
-      .join("\n"),
-  );
-  const got = scanSource("planted.ts", PLANTED.join("\n")).map((h) => h.line);
-  st.check(
-    "guard catches its planted failure",
-    JSON.stringify(got) === JSON.stringify([1, 2, 3, 4, 5, 6, 9]),
-    `got lines ${JSON.stringify(got)}, want [1,2,3,4,5,6,9]`,
-  );
-  const missed = scanSource("planted-miss.ts", PLANTED_MISS.join("\n"));
-  st.check(
-    "guard documents its five known misses",
-    missed.length === 0,
-    missed.map((h) => `${h.line}: ${h.kind} ${h.text}`).join("\n"),
-  );
-  st.check(
-    "guard scanned the port's scripts",
-    targets.some((f) => f.endsWith("tool-faults.ts")) && targets.length > 5,
-    `${targets.length} files`,
-  );
-}
+// The golden/guard controls moved beside the script on #109: lib/text.test.ts.
 
-// --- entry: this module's --self-test; silent on import ---
+// --- entry: the hidden --dump-golden-cases; silent on import ---
 const entryArg = process.argv[1];
 if (typeof entryArg === "string" && resolve(entryArg) === fileURLToPath(import.meta.url)) {
   const argv = process.argv.slice(2);
-  if (argv.length === 1 && argv[0] === "--self-test") {
-    const st = new SelfTest();
-    runGoldens(st);
-    runGuard(st);
-    st.finish();
-  } else if (argv.length === 1 && argv[0] === "--dump-golden-cases") {
+  if (argv.length === 1 && argv[0] === "--dump-golden-cases") {
     // Hidden: fixture regen only, not flow. Prints {cases, prog} for
     // scripts/fixtures/text-goldens.json (see its _note to regen).
     console.log(JSON.stringify({ cases: goldenCases(), prog: PY_GOLDEN_PROG }));
     process.exit(0);
   } else {
-    console.error("usage: text.sh --self-test");
+    console.error("usage: text.sh --dump-golden-cases");
     process.exit(2);
   }
 }

@@ -34,7 +34,9 @@ the same way, and merges are merges. There is no special mode.
 
 **A change to the coachman contract merges only after a fixture run scores clean**: a run
 dispatched from the change's branch against a repository made by `scripts/fixture.sh new`, and
-scored by `scripts/fixture.sh score` on the same branch. That rule is about the change's
+scored by `scripts/fixture.sh score` on the same branch. What the contract is is defined in one
+place, [its file list](docs/coachman-contract.toml);
+`scripts/coachman-contract.sh` says whether a change touches it. That rule is about the change's
 quality, not about the runs in flight. [Why](wiki/concepts/fixture-runs.md).
 
 ## When a session opens in this repo, do this
@@ -61,6 +63,7 @@ config. Do not guess an answer, and do not hand the user a script to run instead
 ```sh
 scripts/probe-harnesses.sh     # which agent CLIs exist, and which read no ambient context
 scripts/probe-trackers.sh      # which ticket sources are reachable, and what would finish each
+scripts/probe-confine.sh       # whether lane confinement can run, and what would finish it
 ```
 
 What to settle, in this order, and why none of it is guessed:
@@ -79,6 +82,10 @@ What to settle, in this order, and why none of it is guessed:
   projects`. `local` needs no service and no login: it keeps each repo's tickets in the
   repo's own git directory, and a repo whose store exists uses it whatever this answer is.
   Anything else is `other`, described once outside this repo (`skills/postmaster/trackers.md`).
+- **Whether lanes run confined.** Show `scripts/probe-confine.sh`'s result, then ask once
+  whether `confine` is `on` or `off` (default `off`). `partial` names the next step. Any root
+  command is the user's to run, never the flow's; after they run it, probe again before
+  continuing. `unavailable` cannot be set to `on`. A config without `confine` reads as off.
 - **Where projects live.** `~/Code` is one convention, not a rule.
 - **Who says the merge word.** A person, or the postmaster itself (`ship.merge_authority`).
   A run never merges on its own authority; the config says whose authority that is.
@@ -220,6 +227,11 @@ whole system.
    `scripts/log-action.sh`, per run and per project. The narrative is for reading; the log
    is what a run is audited from and what the flow is improved from.
 
+The scripts run on Bun 1.4.2 or newer: each `scripts/<name>.sh` is a one-line wrapper that
+hands its arguments to `scripts/<name>.ts`. Runtime imports are Bun's built-ins and Node's
+standard modules only; `typescript`, `@biomejs/biome` and `oxlint` are the development dependencies,
+and `bun run check` is the type check, Oxlint, the Biome format check, and the tests beside every script.
+
 ### Where a setting comes from
 
 Precedence, stated once and followed everywhere: **discovery** supplies defaults; the
@@ -252,3 +264,22 @@ its link: `<tool>/scripts/stage.sh`, never `scripts/stage.sh`, which resolves on
 repo's root. The run's own pinned tool goes through `<rt>`, resolved per run by
 `run-meta.sh path`. `scripts/skill-refs.sh` names every other path that does not go through
 `<tool>`, and `--fix` rewrites the bare ones; run both after writing a runbook and after a rebase.
+
+**Link what you mention.** Whenever you name something that has an address, in conversation, a pull request, a
+ticket or a comment, write it as a clickable link, so that nobody has to look it up. That covers:
+
+- A ticket: its page in the tracker, with the ticket's title the first time you name it in a message,
+  `[#200, Run every lane in its own process space, so it cannot kill processes it did not start](https://github.com/<owner>/<repo>/issues/200)`,
+  and `[#200](https://github.com/<owner>/<repo>/issues/200)` after that. For a tracker other than GitHub Issues, link the
+  address its adapter gives (`skills/postmaster/trackers.md`).
+- A file or folder in a repository on GitHub: its page at the commit or branch you mean,
+  `[scripts/launch.ts](https://github.com/<owner>/<repo>/blob/<commit>/scripts/launch.ts)`, with `#L<a>-L<b>` when you name lines.
+- A project's homepage, a published documentation or wiki page, an artifact or a document: its address (for an
+  artifact, `https://claude.ai/code/artifact/<uuid>`).
+
+A path that exists only on the machine, such as a run's record or a file a lane has not committed, stays plain
+text, since no link can reach it.
+
+**Comment auto-replies stay off.** Publishing or watching an artifact turns on automatic replies to comments sent to Claude,
+and a reply can land in a thread the conversation never sees. Right after each publish or watch, stop the session's watch on
+that artifact. The user says when they have left comments; then read each thread, answer it there, and make the change it asks for.

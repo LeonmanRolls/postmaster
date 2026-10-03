@@ -88,7 +88,9 @@ const timeoutSecs = (): number => {
   if (raw === undefined) return DEFAULT_TIMEOUT_SECS;
   const n = Number(raw);
   if (Number.isInteger(n) && n > 0) return n;
-  process.stderr.write(`clean-checkout: ignoring invalid CLEAN_CHECKOUT_TIMEOUT ${JSON.stringify(raw)}\n`);
+  process.stderr.write(
+    `clean-checkout: ignoring invalid CLEAN_CHECKOUT_TIMEOUT ${JSON.stringify(raw)}\n`,
+  );
   return DEFAULT_TIMEOUT_SECS;
 };
 
@@ -155,10 +157,14 @@ export const cleanCheckout = async (
 
   const scratch = temporaryRoot(repo);
   const checkoutPath = join(scratch, "checkout");
-  const added = spawnSync("git", ["-C", repo, "worktree", "add", "--quiet", "--detach", checkoutPath, branch], {
-    stdio: "inherit",
-    env,
-  });
+  const added = spawnSync(
+    "git",
+    ["-C", repo, "worktree", "add", "--quiet", "--detach", checkoutPath, branch],
+    {
+      stdio: "inherit",
+      env,
+    },
+  );
 
   if (added.error) process.stderr.write(`clean-checkout: ${added.error.message}\n`);
   let exitCode = status(added);
@@ -174,7 +180,9 @@ export const cleanCheckout = async (
       { stdio: "inherit", env },
     );
     if (status(sub) !== 0)
-      process.stderr.write("clean-checkout: could not populate submodules; running on the checkout as made\n");
+      process.stderr.write(
+        "clean-checkout: could not populate submodules; running on the checkout as made\n",
+      );
   }
 
   if (registered) {
@@ -201,7 +209,8 @@ export const cleanCheckout = async (
       env,
     });
     checkoutRemoved = removed.status === 0;
-    if (!checkoutRemoved) process.stderr.write("clean-checkout: could not remove the temporary git worktree\n");
+    if (!checkoutRemoved)
+      process.stderr.write("clean-checkout: could not remove the temporary git worktree\n");
   }
 
   try {

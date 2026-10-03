@@ -1,11 +1,10 @@
-#!/usr/bin/env bun
 // Paired controls for usage.ts: for every harness the adapter knows, one made-up stream that
 // reports usage and one that does not, read through the identical command. The with-usage
 // stream must yield the figures it carries; the no-usage stream must yield no figure and must
 // never yield zero. Fixtures hold made-up values only, in each harness's exact event shape.
 import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { copyFileSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -54,7 +53,10 @@ describe("a stream that reports usage reads its figures", () => {
   for (const harness of harnesses) {
     test(harness, () => {
       const got = readJson(
-        join(fixtures, `${harness}-with-usage.jsonl`), harness, sessionFixture(harness, "with-usage"));
+        join(fixtures, `${harness}-with-usage.jsonl`),
+        harness,
+        sessionFixture(harness, "with-usage"),
+      );
       expect(got).toEqual(expected[harness]);
       for (const [key, value] of Object.entries(expected[harness] as Record<string, number>)) {
         if (key.endsWith("tokens")) expect(value).toBeGreaterThan(0);
@@ -67,7 +69,10 @@ describe("a stream that does not report usage records nothing, never zero", () =
   for (const harness of harnesses) {
     test(harness, () => {
       const got = readJson(
-        join(fixtures, `${harness}-no-usage.jsonl`), harness, sessionFixture(harness, "no-usage"));
+        join(fixtures, `${harness}-no-usage.jsonl`),
+        harness,
+        sessionFixture(harness, "no-usage"),
+      );
       expect(got).toEqual({});
       expect(got.input_tokens).toBeUndefined();
       expect(got.output_tokens).toBeUndefined();
@@ -81,11 +86,20 @@ describe("reading rules", () => {
     const tmp = mkdtempSync(join(tmpdir(), "usage-"));
     try {
       const events = join(tmp, "claude-cut.jsonl");
-      writeFileSync(events, [
-        JSON.stringify({ message: { role: "assistant", usage: { input_tokens: 60, output_tokens: 8 } }, type: "assistant" }),
-        JSON.stringify({ message: { role: "assistant", usage: { input_tokens: 40, output_tokens: 2 } }, type: "assistant" }),
-        "",
-      ].join("\n"));
+      writeFileSync(
+        events,
+        [
+          JSON.stringify({
+            message: { role: "assistant", usage: { input_tokens: 60, output_tokens: 8 } },
+            type: "assistant",
+          }),
+          JSON.stringify({
+            message: { role: "assistant", usage: { input_tokens: 40, output_tokens: 2 } },
+            type: "assistant",
+          }),
+          "",
+        ].join("\n"),
+      );
       expect(readJson(events, "claude")).toEqual({ input_tokens: 100, output_tokens: 10 });
     } finally {
       rmSync(tmp, { recursive: true, force: true });
@@ -96,10 +110,17 @@ describe("reading rules", () => {
     const tmp = mkdtempSync(join(tmpdir(), "usage-"));
     try {
       const events = join(tmp, "mimo-free.jsonl");
-      writeFileSync(events, [
-        JSON.stringify({ part: { cost: 0, tokens: { input: 30, output: 4 } }, sessionID: "ses_madeup_9", type: "step_finish" }),
-        "",
-      ].join("\n"));
+      writeFileSync(
+        events,
+        [
+          JSON.stringify({
+            part: { cost: 0, tokens: { input: 30, output: 4 } },
+            sessionID: "ses_madeup_9",
+            type: "step_finish",
+          }),
+          "",
+        ].join("\n"),
+      );
       expect(readJson(events, "mimo")).toEqual({ input_tokens: 30, output_tokens: 4, cost_usd: 0 });
     } finally {
       rmSync(tmp, { recursive: true, force: true });
@@ -110,13 +131,28 @@ describe("reading rules", () => {
     const tmp = mkdtempSync(join(tmpdir(), "usage-"));
     try {
       const events = join(tmp, "claude-resumed.jsonl");
-      writeFileSync(events, [
-        JSON.stringify({ type: "result", usage: { input_tokens: 60, output_tokens: 8 }, total_cost_usd: 0.1 }),
-        JSON.stringify({ type: "result", usage: { input_tokens: 40, output_tokens: 2 }, total_cost_usd: 0.16 }),
-        "",
-      ].join("\n"));
+      writeFileSync(
+        events,
+        [
+          JSON.stringify({
+            type: "result",
+            usage: { input_tokens: 60, output_tokens: 8 },
+            total_cost_usd: 0.1,
+          }),
+          JSON.stringify({
+            type: "result",
+            usage: { input_tokens: 40, output_tokens: 2 },
+            total_cost_usd: 0.16,
+          }),
+          "",
+        ].join("\n"),
+      );
       // Result usage is per-invocation (summed); total_cost_usd is cumulative (last wins).
-      expect(readJson(events, "claude")).toEqual({ input_tokens: 100, output_tokens: 10, cost_usd: 0.16 });
+      expect(readJson(events, "claude")).toEqual({
+        input_tokens: 100,
+        output_tokens: 10,
+        cost_usd: 0.16,
+      });
     } finally {
       rmSync(tmp, { recursive: true, force: true });
     }
@@ -126,11 +162,17 @@ describe("reading rules", () => {
     const tmp = mkdtempSync(join(tmpdir(), "usage-"));
     try {
       const events = join(tmp, "codex-interrupted.jsonl");
-      writeFileSync(events, [
-        JSON.stringify({ type: "turn.completed", usage: { input_tokens: 100, output_tokens: 10 } }),
-        JSON.stringify({ type: "turn.interrupted" }),
-        "",
-      ].join("\n"));
+      writeFileSync(
+        events,
+        [
+          JSON.stringify({
+            type: "turn.completed",
+            usage: { input_tokens: 100, output_tokens: 10 },
+          }),
+          JSON.stringify({ type: "turn.interrupted" }),
+          "",
+        ].join("\n"),
+      );
       expect(readJson(events, "codex")).toEqual({ input_tokens: 100, output_tokens: 10 });
     } finally {
       rmSync(tmp, { recursive: true, force: true });
@@ -141,18 +183,35 @@ describe("reading rules", () => {
     const tmp = mkdtempSync(join(tmpdir(), "usage-"));
     try {
       const grokEvents = join(tmp, "grok-empty-end.jsonl");
-      writeFileSync(grokEvents, [
-        JSON.stringify({ type: "end", usage: { input_tokens: 40, output_tokens: 6 }, total_cost_usd: 0.003 }),
-        JSON.stringify({ type: "end" }),
-        "",
-      ].join("\n"));
-      expect(readJson(grokEvents, "grok")).toEqual({ input_tokens: 40, output_tokens: 6, cost_usd: 0.003 });
+      writeFileSync(
+        grokEvents,
+        [
+          JSON.stringify({
+            type: "end",
+            usage: { input_tokens: 40, output_tokens: 6 },
+            total_cost_usd: 0.003,
+          }),
+          JSON.stringify({ type: "end" }),
+          "",
+        ].join("\n"),
+      );
+      expect(readJson(grokEvents, "grok")).toEqual({
+        input_tokens: 40,
+        output_tokens: 6,
+        cost_usd: 0.003,
+      });
       const agyEvents = join(tmp, "agy-empty-result.jsonl");
-      writeFileSync(agyEvents, [
-        JSON.stringify({ event: "result", result: { usageMetadata: { promptTokenCount: 120, candidatesTokenCount: 14 } } }),
-        JSON.stringify({ event: "result", result: {} }),
-        "",
-      ].join("\n"));
+      writeFileSync(
+        agyEvents,
+        [
+          JSON.stringify({
+            event: "result",
+            result: { usageMetadata: { promptTokenCount: 120, candidatesTokenCount: 14 } },
+          }),
+          JSON.stringify({ event: "result", result: {} }),
+          "",
+        ].join("\n"),
+      );
       expect(readJson(agyEvents, "agy")).toEqual({ input_tokens: 120, output_tokens: 14 });
     } finally {
       rmSync(tmp, { recursive: true, force: true });
@@ -165,9 +224,21 @@ describe("record and sum", () => {
     const tmp = mkdtempSync(join(tmpdir(), "usage-"));
     try {
       mkdirSync(join(tmp, "logs"), { recursive: true });
-      copyFileSync(join(fixtures, "claude-with-usage.jsonl"), join(tmp, "logs", "luna-events.jsonl"));
-      const result = run("record", join(tmp, "logs", "luna-events.jsonl"), "claude", "luna", tmp,
-        "--role", "workhorse", "--lane", "luna");
+      copyFileSync(
+        join(fixtures, "claude-with-usage.jsonl"),
+        join(tmp, "logs", "luna-events.jsonl"),
+      );
+      const result = run(
+        "record",
+        join(tmp, "logs", "luna-events.jsonl"),
+        "claude",
+        "luna",
+        tmp,
+        "--role",
+        "workhorse",
+        "--lane",
+        "luna",
+      );
       expect(result.status).toBe(0);
       const record = JSON.parse(readFileSync(join(tmp, "logs", "luna-events-usage.json"), "utf8"));
       expect(record.input_tokens).toBe(1234);
@@ -186,8 +257,17 @@ describe("record and sum", () => {
     try {
       mkdirSync(join(tmp, "logs"), { recursive: true });
       copyFileSync(join(fixtures, "agy-no-usage.jsonl"), join(tmp, "logs", "other-events.jsonl"));
-      const result = run("record", join(tmp, "logs", "other-events.jsonl"), "agy", "other", tmp,
-        "--role", "workhorse", "--lane", "other");
+      const result = run(
+        "record",
+        join(tmp, "logs", "other-events.jsonl"),
+        "agy",
+        "other",
+        tmp,
+        "--role",
+        "workhorse",
+        "--lane",
+        "other",
+      );
       expect(result.status).toBe(0);
       const record = JSON.parse(readFileSync(join(tmp, "logs", "other-events-usage.json"), "utf8"));
       expect(record.input_tokens).toBeUndefined();
@@ -205,10 +285,29 @@ describe("record and sum", () => {
       const events = join(tmp, "logs", "luna-events.jsonl");
       copyFileSync(join(fixtures, "mimo-with-usage.jsonl"), events);
       const record = (...extra: string[]) =>
-        run("record", events, "mimo", "luna", tmp, "--role", "workhorse", "--lane", "luna", ...extra);
+        run(
+          "record",
+          events,
+          "mimo",
+          "luna",
+          tmp,
+          "--role",
+          "workhorse",
+          "--lane",
+          "luna",
+          ...extra,
+        );
       expect(record().status).toBe(0);
-      writeFileSync(events, readFileSync(events, "utf8")
-        + JSON.stringify({ part: { cost: 0.05, tokens: { input: 100, output: 10 } }, sessionID: "ses_madeup_1", type: "step_finish" }) + "\n");
+      writeFileSync(
+        events,
+        readFileSync(events, "utf8") +
+          JSON.stringify({
+            part: { cost: 0.05, tokens: { input: 100, output: 10 } },
+            sessionID: "ses_madeup_1",
+            type: "step_finish",
+          }) +
+          "\n",
+      );
       expect(record().status).toBe(0);
       const saved = JSON.parse(readFileSync(join(tmp, "logs", "luna-events-usage.json"), "utf8"));
       expect(saved.input_tokens).toBe(1100);
@@ -224,13 +323,29 @@ describe("record and sum", () => {
     try {
       mkdirSync(join(tmp, "logs"), { recursive: true });
       mkdirSync(join(tmp, "sessions", "coachman"), { recursive: true });
-      copyFileSync(join(fixtures, "muse-with-usage.jsonl"), join(tmp, "logs", "coachman-events.jsonl"));
-      copyFileSync(join(fixtures, "muse-with-usage.session.json"),
-        join(tmp, "sessions", "coachman", "madeup-session-1.json"));
-      const result = run("record", join(tmp, "logs", "coachman-events.jsonl"), "muse", "coachman", tmp,
-        "--role", "coachman", "--lane", "synthesis");
+      copyFileSync(
+        join(fixtures, "muse-with-usage.jsonl"),
+        join(tmp, "logs", "coachman-events.jsonl"),
+      );
+      copyFileSync(
+        join(fixtures, "muse-with-usage.session.json"),
+        join(tmp, "sessions", "coachman", "madeup-session-1.json"),
+      );
+      const result = run(
+        "record",
+        join(tmp, "logs", "coachman-events.jsonl"),
+        "muse",
+        "coachman",
+        tmp,
+        "--role",
+        "coachman",
+        "--lane",
+        "synthesis",
+      );
       expect(result.status).toBe(0);
-      const record = JSON.parse(readFileSync(join(tmp, "logs", "coachman-events-usage.json"), "utf8"));
+      const record = JSON.parse(
+        readFileSync(join(tmp, "logs", "coachman-events-usage.json"), "utf8"),
+      );
       expect(record.input_tokens).toBe(900);
       expect(record.output_tokens).toBe(110);
       expect(record.read_error).toBeUndefined();
@@ -243,13 +358,27 @@ describe("record and sum", () => {
     const tmp = mkdtempSync(join(tmpdir(), "usage-"));
     try {
       mkdirSync(join(tmp, "logs"), { recursive: true });
-      copyFileSync(join(fixtures, "muse-with-usage.jsonl"), join(tmp, "logs", "coachman-events.jsonl"));
-      const result = run("record", join(tmp, "logs", "coachman-events.jsonl"), "muse", "coachman", tmp,
-        "--role", "coachman", "--lane", "synthesis");
+      copyFileSync(
+        join(fixtures, "muse-with-usage.jsonl"),
+        join(tmp, "logs", "coachman-events.jsonl"),
+      );
+      const result = run(
+        "record",
+        join(tmp, "logs", "coachman-events.jsonl"),
+        "muse",
+        "coachman",
+        tmp,
+        "--role",
+        "coachman",
+        "--lane",
+        "synthesis",
+      );
       // Exit 0: the record IS saved; a nonzero exit would tell the launch site it was not recorded.
       expect(result.status).toBe(0);
       expect(result.stderr).toContain("usage record saved without figures");
-      const record = JSON.parse(readFileSync(join(tmp, "logs", "coachman-events-usage.json"), "utf8"));
+      const record = JSON.parse(
+        readFileSync(join(tmp, "logs", "coachman-events-usage.json"), "utf8"),
+      );
       expect(record.read_error).toBe("session-record-unavailable");
       expect(record.input_tokens).toBeUndefined();
     } finally {
@@ -261,23 +390,39 @@ describe("record and sum", () => {
     const tmp = mkdtempSync(join(tmpdir(), "usage-"));
     try {
       mkdirSync(join(tmp, "logs"), { recursive: true });
-      copyFileSync(join(fixtures, "claude-with-usage.jsonl"), join(tmp, "logs", "luna-events.jsonl"));
+      copyFileSync(
+        join(fixtures, "claude-with-usage.jsonl"),
+        join(tmp, "logs", "luna-events.jsonl"),
+      );
       copyFileSync(join(fixtures, "agy-no-usage.jsonl"), join(tmp, "logs", "other-events.jsonl"));
       for (const [events, harness, name, role, lane] of [
         ["luna-events.jsonl", "claude", "luna", "workhorse", "luna"],
         ["other-events.jsonl", "agy", "other", "workhorse", "other"],
       ]) {
-        expect(run("record", join(tmp, "logs", events), harness, name, tmp,
-          "--role", role, "--lane", lane).status).toBe(0);
+        expect(
+          run(
+            "record",
+            join(tmp, "logs", events),
+            harness,
+            name,
+            tmp,
+            "--role",
+            role,
+            "--lane",
+            lane,
+          ).status,
+        ).toBe(0);
       }
       writeFileSync(join(tmp, "logs", "broken-usage.json"), "{not json");
       const result = run("sum", tmp);
       expect(result.status).toBe(0);
       expect(result.stdout).toContain("cost: workhorse luna (claude): 1234 in, 567 out, $1.25");
-      expect(result.stdout).toContain("cost: workhorse other (agy): not reported in, not reported out, cost not reported");
+      expect(result.stdout).toContain(
+        "cost: workhorse other (agy): not reported in, not reported out, cost not reported",
+      );
       expect(result.stdout).toContain("cost: harness agy reports nothing");
       expect(result.stdout).toContain("cost: broken-usage.json could not be read");
-      expect(result.stdout).not.toMatch(/0 in/);
+      expect(result.stdout).not.toMatch(/0 in/u);
     } finally {
       rmSync(tmp, { recursive: true, force: true });
     }
@@ -290,8 +435,19 @@ describe("record and sum", () => {
       copyFileSync(join(fixtures, "mimo-with-usage.jsonl"), join(tmp, "logs", "a-events.jsonl"));
       copyFileSync(join(fixtures, "mimo-no-usage.jsonl"), join(tmp, "logs", "b-events.jsonl"));
       for (const events of ["a-events.jsonl", "b-events.jsonl"]) {
-        expect(run("record", join(tmp, "logs", events), "mimo", "luna", tmp,
-          "--role", "workhorse", "--lane", "luna").status).toBe(0);
+        expect(
+          run(
+            "record",
+            join(tmp, "logs", events),
+            "mimo",
+            "luna",
+            tmp,
+            "--role",
+            "workhorse",
+            "--lane",
+            "luna",
+          ).status,
+        ).toBe(0);
       }
       const result = run("sum", tmp);
       expect(result.status).toBe(0);
@@ -305,20 +461,31 @@ describe("record and sum", () => {
     const tmp = mkdtempSync(join(tmpdir(), "usage-"));
     try {
       mkdirSync(join(tmp, "logs"), { recursive: true });
-      for (const [name, cost] of [["tiny", 1e-7], ["tinier", 4.9e-10], ["plain", 0.003]] as const) {
+      for (const [name, cost] of [
+        ["tiny", 1e-7],
+        ["tinier", 4.9e-10],
+        ["plain", 0.003],
+      ] as const) {
         const events = join(tmp, "logs", `${name}-events.jsonl`);
-        writeFileSync(events, JSON.stringify({
-          type: "end", usage: { input_tokens: 10, output_tokens: 2 }, total_cost_usd: cost,
-        }) + "\n");
-        expect(run("record", events, "grok", name, tmp,
-          "--role", "workhorse", "--lane", name).status).toBe(0);
+        writeFileSync(
+          events,
+          JSON.stringify({
+            type: "end",
+            usage: { input_tokens: 10, output_tokens: 2 },
+            total_cost_usd: cost,
+          }) + "\n",
+        );
+        expect(
+          run("record", events, "grok", name, tmp, "--role", "workhorse", "--lane", name).status,
+        ).toBe(0);
       }
       const result = run("sum", tmp);
       expect(result.status).toBe(0);
       expect(result.stdout).toContain("$0.0000001");
       expect(result.stdout).toContain("$0.0000000005");
       expect(result.stdout).toContain("$0.003");
-      expect(result.stdout).not.toMatch(/\$[\d.]+e/);
+      // ASCII: summed figures print as machine ASCII; \d never meets Unicode.
+      expect(result.stdout).not.toMatch(/\$[\d.]+e/u);
     } finally {
       rmSync(tmp, { recursive: true, force: true });
     }

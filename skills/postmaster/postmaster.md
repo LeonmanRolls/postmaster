@@ -18,7 +18,7 @@ cards, and you never do its job.
 |---|---|
 | `<runs>` = `<repo>/.postmaster/runs/` | the project's run root, identified by its path |
 | `<runs>/ledger.jsonl` | every action of every run, appended by `<tool>/scripts/log-action.sh` |
-| `<runs>/postmaster/` | your own dispatch directory: `brief.md`, `actions.jsonl`, `ESCALATION.md` to the user |
+| `<runs>/postmaster/` | your own dispatch directory: `brief.md`, `actions.jsonl`, `ESCALATION.md` (the waiting list, written only through `<tool>/scripts/host.sh leg waiting`) |
 | `<runs>/<TICKET>/` | one run: the waybill, manifest, logs, cards, hand-offs (`coachman.md`, Where things live) |
 | `<repo>/.worktrees/<TICKET>` | the synthesis worktree you cut at dispatch, branch `<TICKET>` |
 | `<repo>/.postmaster/project.toml` | what the project requires of a run, if it declares one; the one file it may commit |
@@ -134,7 +134,8 @@ For the next ticket in order, when the run ceiling (`team.max_runs`) has room:
    place and neither rewrites the file. Then record what the run starts from, once:
    `<tool>/scripts/run-meta.sh <dispatch> <repo>` writes `run.json` with the postmaster commit,
    the pinned checkout of that commit, the coachman contract version, the resolved machine
-   config, project settings and their sources, and the harness versions, and nothing edits it
+   config (with fixture efforts lowered for a marked copy), project settings and their sources,
+   and the harness versions, and nothing edits it
    afterwards. The pin is a worktree of this repo at the dispatch commit, shared by every run
    dispatched at it; the waybill names it as `tool:`, and every leg of this run reads its
    runbooks and runs its scripts from there. Log the `run-meta.sh` output as a `note`.
@@ -152,16 +153,19 @@ For the next ticket in order, when the run ceiling (`team.max_runs`) has room:
 7. **Write `brief.md`** from the template in `SKILL.md`: the `turnpikes:` line step 1's check
    printed, whole, under the waybill's title, then the ticket verbatim, the project profile (gate,
    build, browser suite, landing (`pull-request` or `local`), the checks as `verify.sh record`
-   printed them, docs to read first, tracker, risk surfaces), the team from the resolved
-   machine config with its reviewer lines as `<tool>/scripts/reviewers.sh lines --project <repo>`
-   prints them, each project's facts sourced as discovered, shared or local, `CHECKPOINT_MODE`
+   printed them, docs to read first, tracker, risk surfaces), the team from `run.json` — the
+   resolved machine config step 5 recorded — with its reviewer lines as
+   `<tool>/scripts/reviewers.sh lines --project <repo>` prints them, and the `efforts:` line
+   pasted from `<tool>/scripts/run-meta.sh efforts <dispatch>`, never composed by hand; each
+   project's facts sourced as discovered, shared or local, `CHECKPOINT_MODE`
    from `ship.checkpoint_mode` and `MERGE_AUTHORITY` from `ship.merge_authority`, either
    overridden only where the user said so for this run, the dispatch path and the run's pinned
    tool — `<tool>/scripts/run-meta.sh path <dispatch>`, the checkout step 5 cut, which the
-   template names as `tool:` and the coachman uses as its `<tool>`. The
-   config here is the one in `run.json`. Then
+   template names as `tool:` and the coachman uses as its `<tool>`. Then
    `<tool>/scripts/turnpikes.sh legs <dispatch> --expect '<that turnpikes: line>'` exits 0 and
    prints the legs step 2 checked, before anything is launched.
+   Record `coachman contract fixture: pending` and `contract fixture check: -`; no
+   implementation branch exists yet to classify.
 8. **Move the ticket to in-progress** through the tracker adapter and log `ticket-state`. Under
    contract 2 the coachman never touches the ticket's state and the postmaster marks it done
    after the merge; under the legacy contract the coachman touches it only at stage 3's merge.
@@ -191,49 +195,40 @@ ones it names.
    then `<dispatch>/handoff-<p>.md`" (omit the hand-off for leg 1), plus the one line naming
    the leg's job from the legs table. Nothing else: the runbook and the files carry the rest.
 2. **From leg 2 on, verify the hand-off before dispatching on it:** `<tool>/scripts/handoff-check.sh
-   <dispatch>/handoff-<p>.md` exits 0. If it exits 2, leg `p` is not finished: remove its
-   `.leg-<p>-done` marker and resume leg `p` (step 5, with `p` in place of `n`), the prompt
-   naming the missing sections and saying "Complete the hand-off and end the leg as
-   `coachman.md` says." Then wait for its done marker.
-3. **Launch** through the host, which shows the leg in the synthesis worktree's space
-   (`hosts.md`), stream to the leg's events file, marker on exit; `host.sh` clears the leg's
-   exited marker first:
+   <dispatch>/handoff-<p>.md` exits 0. If it exits 2, leg `p` is not finished: resume leg `p`
+   (step 5, with `p` in place of `n`), the prompt naming the missing sections
+   and saying "Complete the hand-off and end the leg as `coachman.md` says." The leg script
+   clears its done marker. Then wait for its done marker.
+3. **Launch** through the leg command. It uses the host in the synthesis worktree's space,
+   clears prior markers and stream state, writes the attempt record, and owns the event and
+   error paths:
 
    ```sh
-   <rt>/scripts/host.sh run "$(<rt>/scripts/host.sh name <dispatch> coachman <leg-name> <n>)" <repo>/.worktrees/<TICKET> \
-       --under <dispatch> --role coachman --run <dispatch> \
-       --out <dispatch>/logs/coachman-leg-<n>-events.jsonl --err <dispatch>/logs/coachman-leg-<n>.err \
-       --marker <dispatch>/.leg-<n>-exited \
-       -- <rt>/scripts/launch.sh launch coachman <repo>/.worktrees/<TICKET> <dispatch>/leg-<n>-prompt.txt --leg <leg-name> \
-       --run <dispatch>
+   <rt>/scripts/host.sh leg launch <dispatch> <repo>/.worktrees/<TICKET> <leg-name> <n> \
+       <dispatch>/leg-<n>-prompt.txt
    ```
 
-   The tab name comes from the run config and leg identity through `host.sh name`; the dispatch
-   makes the synthesis worktree space carry the ticket name. Neither name is typed into a shell.
-
-   Record the thread id from the stream (`harnesses.md`) in the manifest as
-   `coachman.legs.<n>.thread_id`, and `coachman` as `coachman.legs.<n>.name`, set `leg` to
-   `<n>`, and log `dispatch` with the leg and the thread id.
+   The script records the thread id and role in the manifest and appends the outcome to
+   `<dispatch>/logs/coachman-leg-<n>-attempts.jsonl`. Log `dispatch` with the leg and the
+   recorded thread id.
 4. **The coachman's model for a leg** comes from `team.coachman`, or `team.coachman_legs.<leg-name>`
    where set. It is never a lane's model, in any leg.
 5. **Resume a leg** only in the form that launched it, with its leg, through the host. Write
    the prompt first to `<dispatch>/leg-<n>-resume-<time>.txt`, `<time>` being what
-   `date -u +%Y%m%dT%H%M%SZ` prints. The leg's stream is appended to, its `.err` file holds only
-   this process's errors, and `host.sh` clears the leg's exited marker:
+   `date -u +%Y%m%dT%H%M%SZ` prints. The leg command appends to the stream, keeps `.err` to
+   this attempt, clears the done and exited markers and records its outcome:
 
    ```sh
-   <rt>/scripts/host.sh run "$(<rt>/scripts/host.sh name <dispatch> coachman <leg-name> <n>)" <repo>/.worktrees/<TICKET> --append \
-       --under <dispatch> --role coachman --run <dispatch> \
-       --out <dispatch>/logs/coachman-leg-<n>-events.jsonl --err <dispatch>/logs/coachman-leg-<n>.err \
-       --marker <dispatch>/.leg-<n>-exited \
-       -- <rt>/scripts/launch.sh resume <name> <repo>/.worktrees/<TICKET> <thread-id> <dispatch>/leg-<n>-resume-<time>.txt --leg <leg-name> \
-       --run <dispatch>
+   <rt>/scripts/host.sh leg resume <dispatch> <repo>/.worktrees/<TICKET> <leg-name> <n> \
+       <thread-id> <dispatch>/leg-<n>-resume-<time>.txt
    ```
 
-   `<name>` and `<thread-id>` are the leg's `coachman.legs.<n>.name` and `.thread_id`. Log
-   `resume` with the leg and the thread id. A remount and a ruling reach a leg this way. A
-   merge word reaches only a legacy ship leg; contract 2 is merged by the postmaster after the
-   final coachman hand-off.
+   `<thread-id>` is `coachman.legs.<n>.thread_id`. The script keeps the role from the last
+   attempt, including a fallback takeover. If the manifest has no thread id for the leg,
+   take it from `<tool>/scripts/host.sh leg outcome <dispatch> <n>` instead: the record
+   is authoritative and the manifest is best-effort. Log `resume` with the leg and thread
+   id. A remount and a ruling reach a leg this way. A merge word reaches only a legacy
+   ship leg; contract 2 is merged by the postmaster after the final coachman hand-off.
 
 ## Stage D: supervise
 
@@ -262,6 +257,10 @@ with `the watcher took it` in the detail:
   three times per leg (the count is in `<dispatch>/watcher.json` and survives a restart).
   A fourth such end, a non-transient end, or a resume it cannot complete is named to you.
 
+The list of runs waiting on the user is `<runs>/postmaster/ESCALATION.md`, kept by
+`<tool>/scripts/host.sh leg waiting`, never by hand. Read it with
+`<tool>/scripts/host.sh leg waiting list <runs>` when the user asks which runs are waiting.
+
 **Hold a run** by writing its ticket to `<runs>/postmaster/held`, one ticket per line,
 exactly as the RUN column shows it: a held run never needs you and the watcher never touches
 it — unless the hold lands mid-step, when the watcher aborts and names the partial state.
@@ -274,7 +273,19 @@ is what needs judgment or what it could not complete:
 
 - **USER:** the run waits on the user, and its `.waiting-on-user` holds the question (Stage E
   step 3, current Stage F step 2, Legacy Stage F step 2, or Spec review). Put the question to the user again if you have not in this session;
-  otherwise nothing to do until they answer. The watcher never wakes you on USER.
+  otherwise nothing to do until they answer. When they answer, remove the marker and follow the
+  action for the recorded outcome (or the spec-review step, for a package). The watcher never
+  wakes you on USER.
+- **ASK:** a recorded `refused`, `pre-thread` or fallback `walled` attempt needs the user.
+  Read the attempt record and `.err` only to explain what happened; outcome classification comes
+  from the record. Put the question in `.waiting-on-user`, add the run to the waiting list with
+  `<tool>/scripts/host.sh leg waiting add <runs> <ticket> <dispatch>/.waiting-on-user`, and tell
+  the user. When they answer, remove the marker and the run from the list with
+  `<tool>/scripts/host.sh leg waiting remove <runs> <ticket>`, then run
+  `<rt>/scripts/host.sh leg retry <dispatch> <repo>/.worktrees/<TICKET> <leg-name> <n>`
+  (`<rt>` resolves as Stage C says; a run with no pin keeps its waybill's tool).
+  The script replays the stored attempt prompt and thread id. In particular, a refused resume
+  delivers the prompt it was carrying after the user answers.
 - **RULE:** an escalation is waiting. Stage E.
 - **GATE:** the ship card is complete. Contract 2 goes to current Stage F; an older run goes to
   Legacy Stage F.
@@ -284,9 +295,7 @@ is what needs judgment or what it could not complete:
   `n` in place of the next leg), the prompt naming the missing sections and saying "Complete
   the hand-off and end the leg as `coachman.md` says." If `turnpikes.sh legs` exits other than
   0, nothing is dispatched: its message goes to the user as Stage E step 3 says. If the new
-  leg's `.err` opens with a `launch:` line past any leading `host:` notices, the launch
-  was refused: put the error to the user
-  (Stage E step 3) and wait for their answer before launching again. Where no leg
+  leg's attempt record says `refused`, its launch was refused: handle it as ASK. Where no leg
   follows `n` in `<tool>/scripts/turnpikes.sh legs <dispatch>`: at stage `shipped`
   run current Stage G; otherwise the last leg's correction was interrupted before
   it raised the card again, so remount that leg with "re-run Stage 3: verify the
@@ -294,50 +303,50 @@ is what needs judgment or what it could not complete:
   Legacy Stage G. Otherwise Stage C for the leg after `n`, call it `m`, logging a `note`
   that names any leg the list leaves out — but if
   `.leg-<m>-exited` is absent, the watcher's launch may have succeeded or still be running:
-  a silent launch has no thread id and an empty stream yet is live, so inspect (`.err`,
-  stream tail) and launch again only if the previous attempt is clearly dead, never a
-  second leg onto a running one. A wake that says the run was held mid-step names its
+  a launch whose thread id has not landed in its record yet is live, so inspect (the attempt
+  record, `.err`, stream tail) and launch again only if the previous attempt clearly ended,
+  never a second leg onto a running one. A wake that says the run was held mid-step names its
   partial state: complete or unwind that state (finish the remaining part, or restore
   `manifest.json`'s leg) rather than taking the step fresh.
-- **REMOUNT:** the watcher could not take the resume: a non-transient end, a fourth transient
-  end, or a resume that failed. Read the leg's `.err` file and the stream tail. If
-  `.leg-<n>-exited` is absent, the leg may be running — a resume landed but its log line did
-  not: inspect before resuming, and never resume a live thread. A `.err` that
-  opens with a `launch:` line past any leading `host:` notices is a refusal from
-  the run's `<rt>/scripts/launch.sh`: resolve `<rt>` as Stage C says; it goes to the user
-  (Stage E step 3), and nothing is launched or resumed until they answer. A leg with no thread
-  id, none in its stream and none in `coachman.legs.<n>`, never started: its `.err` goes to
-  the user too, and on their answer the leg is launched again (Stage C step 3). A quota or
-  provider wall, quoted from the leg's `.err`, means the coachman is lame for this leg:
-  log `degrade` and take the leg over on the fallback (below), unless it already runs on the
-  fallback, when the wall goes to the user. The adapter vetoes on any wall-like token, so
-  confirm the wall in the `.err` before degrading; a veto with no wall behind it is handled
-  as whatever the end is. Anything else is a spent thread: remount it by resuming the leg (Stage C step 5)
-  with "Continue leg <n>; your last written state is in the dispatch directory and the
-  worktree" as the prompt.
+- **TAKEOVER:** the attempt record says `walled` on the primary coachman. Log `degrade`, write
+  the takeover prompt below, then run `<rt>/scripts/host.sh leg takeover <dispatch>
+  <repo>/.worktrees/<TICKET> <leg-name> <n> <dispatch>/leg-<n>-takeover.txt`. The script
+  preserves the old stream, starts a fresh fallback stream and records its outcome and thread id.
+- **RESUME:** the attempt record says `incomplete`: the harness started, produced a thread id,
+  and exited without the hand-off. The watcher resumes a transient end itself, so a RESUME
+  wake is one it could not take: a non-transient end, a fourth transient end, or a resume that
+  failed, which the wake names. Write `<dispatch>/leg-<n>-resume-<time>.txt` with
+  "Continue leg <n>; your last written state is in the dispatch directory and the worktree",
+  then use Stage C step 5. A fourth transient end is judgment: resume again, take the leg over
+  on the fallback, or wait out the provider — say which and why.
 - **READ:** a checkpoint card is waiting. Read it, log `note` with its one-line summary, and
   remove its `.checkpoint-*-ready` marker. In consult mode the card comes with an escalation,
   which RULE handles.
-- **INSPECT:** nothing changed for 30 minutes and no marker. Read the leg's `.err` file and
-  the stream tail; a live leg that is merely slow is left alone, and a process that is gone
-  is handled as REMOUNT. Never kill a running leg for being slow.
+- **INSPECT:** nothing changed for 30 minutes and no marker, an attempt that died without
+  its record, or a last record line that is not a record. Read the leg's `.err` file and
+  the stream tail to understand a live process; a live leg that is merely slow is left alone.
+  If it exited without an attempt record, or its last record line is corrupt, stop and raise
+  a control fault. On the user's answer to that fault, run `<tool>/scripts/host.sh leg backfill
+  <dispatch> <leg-name> <n>`, which classifies the dead attempt from its evidence and appends
+  its record, then act on the backfilled outcome as its NEXT names. If backfill appends no
+  record, the evidence is gone and only the user can decide: escalate with the files that
+  remain. Never infer an action from `.err` text and never kill a running leg for being slow.
 - **WAIT:** nothing to do. The watcher never wakes you on WAIT.
 
 **The takeover prompt** for a fallback coachman, written to `<dispatch>/leg-<n>-takeover.txt`:
 "You take over leg <n> of <TICKET> mid-way. Read `<dispatch>/brief.md`,
 `<rt>/skills/postmaster/coachman.md`, `<dispatch>/handoff-<p>.md` (none for leg 1), then `run-log.md` and
 `actions.jsonl` for what this leg did before you, then the synthesis worktree's `git log` and
-`git status`. Treat every uncommitted change as unverified. Log `handoff-accept` and finish
-the leg." Move the leg's stream to `<dispatch>/logs/coachman-leg-<n>-walled-events.jsonl`, then
-launch the takeover through the wrapper of Stage C step 3, with `<rt>/scripts/launch.sh launch
-coachman_fallback <repo>/.worktrees/<TICKET> <dispatch>/leg-<n>-takeover.txt --leg <leg-name>
---run <dispatch>` in place of the coachman's launch. Pass the name for leg `n` from the leg list;
-the coachman-fallback usage record carries that leg. Record its thread id from the new stream (`harnesses.md`) as
-`coachman.legs.<n>.thread_id`, with `coachman_fallback` as its `name`.
+`git status`. Treat every uncommitted change as unverified. Log `handoff-accept` and finish the
+leg." `host.sh leg takeover` moves the existing stream aside and starts the fallback on a fresh
+stream; it also records the fallback role and thread id, and the coachman-fallback usage record
+carries the leg.
 
-A leg's `.leg-<n>-exited` marker with `.leg-<n>-done` beside it is normal completion. Every
-transition is one `log-action` line; the narrative in your own notes is for the user,
-never the record.
+The fixed attempt outcomes are `refused`, `pre-thread`, `walled`, `incomplete` and `finished`.
+`launch.sh` records whether it reached the harness; the leg command records the outcome before
+the exited marker lands. `runs-status.sh` reads this record and never classifies an attempt from
+`.err`. Every transition is one `log-action` line; the narrative in your own notes is for the
+user, never the record.
 
 ## Spec review: one spec for the run, to the user before any code
 
@@ -376,16 +385,19 @@ other line of this section holds.
        --label "$(<tool>/scripts/host.sh name <dispatch>) · spec" -- <interactive form>
    ```
 
-   Send it a one-line prompt to read `<dispatch>/spec-session-brief.md` and work on the copy
-   with the user, and log `dispatch` with the target `spec-session`. Write `.waiting-on-user`
-   naming the session and the link: while it is set the poll reports USER, not SPEC, so the
-   package is never taken twice. With no session host (`spawn` exits 3), there is no session
+   Write a one-line prompt file telling it to read `<dispatch>/spec-session-brief.md` and work
+   on the copy with the user, send it with `<tool>/scripts/host.sh send <handle> <prompt-file>`
+   on the session's handle (`hosts.md`), and log `dispatch` with the target `spec-session`.
+   Write `.waiting-on-user` naming the session and the link, and add the run to the waiting
+   list with `<tool>/scripts/host.sh leg waiting add <runs> <ticket>
+   <dispatch>/.waiting-on-user`: while the marker is set the poll reports USER, not SPEC, so
+   the package is never taken twice. With no session host (`spawn` exits 3), there is no session
    to send to: do not send a prompt and do not log a `dispatch` line. Put the spec to the
    user in this conversation instead, showing the link and the commit, and ask for a
    decision: approved; changes requested in their words; or stop the run. Write
-   `.waiting-on-user` with the link and the commit in this path too, so the poll reports
-   USER while the user decides. Never show any of it to a workhorse. A fixture run gets
-   no session.
+   `.waiting-on-user` with the link and the commit in this path too, and add the run to the
+   waiting list the same way, so the poll reports USER while the user decides. Never show
+   any of it to a workhorse. A fixture run gets no session.
 2. **On the user's word, record the decision** with `<tool>/scripts/spec-session.sh approve
    <dispatch>` when they approve the copy the session worked on: it commits the copy as
    `WORKHORSE-SPEC.md` in the synthesis worktree when it differs from what is committed
@@ -399,10 +411,12 @@ other line of this section holds.
    a second stanza, a `changes` with no words, and a decision with no commit. The file holds
    this package's decision only.
 3. **When the package is decided, send it back.** Remove `.waiting-on-user` and
-   `.spec-review-ready`, then resume the current leg (Stage C step 5) with the decisions file
-   as what it must read. The marker is consumed here, on every path, before the resume, as
-   `.card-ready` is before a word is delivered: a fresh package touches it afresh, so SPEC
-   always means a package nobody has taken yet. Read the numbers first:
+   `.spec-review-ready`, remove the run from the waiting list with
+   `<tool>/scripts/host.sh leg waiting remove <runs> <ticket>`, then resume the current leg
+   (Stage C step 5) with the decisions file as what it must read. The marker is consumed
+   here, on every path, before the resume, as `.card-ready` is before a word is delivered:
+   a fresh package touches it afresh, so SPEC always means a package nobody has taken yet.
+   Read the numbers first:
    `<tool>/scripts/spec-decisions.sh <dispatch> count` prints `approved 0|1` and
    `changes 0|1`. Branch on the numbers, never by reading the files:
    - **`changes` above zero:** the coachman revises the spec from the user's words and pauses
@@ -426,10 +440,14 @@ other line of this section holds.
    anything outside the repo, is a fault in a control (Tool faults), asks whether to fix a
    gating finding in a loop with no gating lens (`coachman.md`, Stage 2 step 5), or the user
    asked to see it: write the question to the run's `.waiting-on-user`, add the run and the
-   question to `<runs>/postmaster/ESCALATION.md`, tell the user in the session, and wait. Never
+   question to the waiting list (`<runs>/postmaster/ESCALATION.md`, owned by
+   `<tool>/scripts/host.sh leg waiting add <runs> <ticket> <question-file>`), tell the user in
+   the session, and wait. Say what happens when they answer:
+   for an ASK outcome the attempt record's `on_answer` names it. Never
    pass a postmaster grant up as if it needed the user's word, and never take the user's word
-   for something the config gives you. On the user's answer, remove `.waiting-on-user` and the
-   run's entry, and the file once it is empty.
+   for something the config gives you. On the user's answer, remove `.waiting-on-user`, remove
+   the run from the list with `<tool>/scripts/host.sh leg waiting remove <runs> <ticket>`, and
+   act on the answer as the record named.
 4. **Deliver the ruling:** remove `.escalation-ready`, then resume the current leg (Stage C,
    step 5) with the ruling as the prompt. The ruling is a prompt to a resumed thread, never
    text typed into anything.
@@ -474,9 +492,9 @@ missed.
    rebasing, run its gates again and raise the card again, and wait for the corrected card.
    For a change to the coachman contract, that merge means a new fixture run from the final
    branch only when what the merge brought in changes the coachman contract; otherwise the
-   earlier fixture result stands. Until #163 (a script that decides whether a change touches
-   the contract) lands, that is the postmaster's judgement from the tickets the default
-   branch merged. Then
+   earlier fixture result stands. That is what the contract checker says: run the dispatch
+   BASE's copy on what the merge brought in, as the classify step below does; a yes repeats
+   the fixture from the final branch, a no lets the recorded clean score stand. Then
    `<tool>/scripts/landing.sh card-results <dispatch> <synthesis-wt> <the leg's
    checkpoint> <dispatch>/card.md`
    must print `match`: the card holds the rendered block exactly once (the leg's
@@ -487,8 +505,40 @@ missed.
    waybill mentions a user journey, holds landing until the journey runs or the user
    rules. The postmaster judges
    every other non-pass with its evidence, as before: on `judge`, and on any other check
-   but the gate that is not pass, weigh the result and put it to the user. Verify that every
-   branch the card
+   but the gate that is not pass, weigh the result and put it to the user.
+   **Classify the final branch.** The index is a list of files; any change to a
+   listed file is a contract change, and the checker names each listed file the
+   change touched. The index names the checker in its detector field; read that
+   path from BASE's index, never the branch tip's. Each comparison first checks
+   the index at both revs: neither has one, and there is no contract change, so
+   record `no` (a target that does not carry the contract lands here); only the
+   older has one, and the branch deleted the contract, an error to resolve. If
+   dispatch BASE lacks the detector file, the branch introduces the checker:
+   every comparison, the first and every repeat, ends in a fixture run without
+   classifying. Else run BASE's copy — `tmp=$(mktemp) && git -C <repo>
+   show <BASE>:<detector-file> > "$tmp" && bash "$tmp" <repo> <BASE> <ticket-branch>` —
+   and record its command, result, and checked commit: replace `coachman
+   contract fixture: pending` on the waybill with `yes` or `no`, fill `contract fixture
+   check:` with the command, the commit and the score (`-` when no fixture runs), and log
+   a `note` with the same. Remove the temp copy. BASE's logic is the last honest one: a
+   change that weakens the checker is itself caught as a contract change, since the
+   detector file is covered whole, while the file list compared comes from both revs.
+   Exit 1 means yes: make a fresh fixture repo with `<tool>/scripts/fixture.sh new
+   <fixture-name> <fixture-ticket>`, dispatch its ticket with the postmaster tool checked
+   out at the final branch, and withhold landing until `<tool>/scripts/fixture.sh score
+   <fixture-dispatch> <fixture-repo>` exits 0. Exit 0 from the contract checker means no;
+   any other exit is an error to resolve before landing.
+
+   Record the commit that the clean fixture score covered, on the waybill's check line and
+   in a `note`. Before landing, check the final branch again if it moved. With no clean
+   fixture score yet, compare dispatch BASE to the final branch; a yes requires the first
+   fixture. With a clean score, compare its commit to the final branch, still running the
+   dispatch BASE's copy, never the scored commit's; a yes repeats the fixture from the
+   final branch, made with `<tool>/scripts/fixture.sh new`, while a no lets the recorded
+   clean score stand. This is the check for a merge of main into the ticket branch after
+   the earlier score. Where dispatch BASE has no copy to run, the no-copy rule above ends
+   the comparison in a fixture without classifying.
+   Verify that every branch the card
    lists exists and has the stated state; `run-log.md`'s
    SYNTHESIS line accounts for each lane; every DEGRADED lane matches `degrade` actions; the
    turnpikes match the waybill, `actions.jsonl` has `review-launch` lines under each review lens
@@ -630,8 +680,10 @@ On `.card-ready`, read `<dispatch>/card.md` and `<dispatch>/handoff-3.md`:
    `merge` with `granted`. Any check fails: deliver the failure as a ruling and log `merge` with
    `withheld` and the reason; the leg addresses it and raises the card again.
    `MERGE_AUTHORITY: user`: put the card, the review link and your verification in front of the
-   user, write what you asked them to the run's `.waiting-on-user`, and wait; when their word
-   comes, remove `.waiting-on-user` and deliver the word verbatim.
+   user, write what you asked them to the run's `.waiting-on-user`, add the run to the waiting
+   list with `<tool>/scripts/host.sh leg waiting add <runs> <ticket> <question-file>`, and wait;
+   when their word comes, remove `.waiting-on-user`, remove the run from the list with
+   `<tool>/scripts/host.sh leg waiting remove <runs> <ticket>`, and deliver the word verbatim.
 3. **Never merge yourself.** The coachman merges on the word; you only say it.
 
 ## Legacy Stage G: after the merge

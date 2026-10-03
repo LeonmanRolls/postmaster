@@ -12,5 +12,11 @@ risk_surfaces = [
 ]
 
 [checks.gate]
-command = '''bash -c 'for f in scripts/*.sh; do bash -n "$f" || exit 1; done && bun test scripts/usage.test.ts && scripts/skill-refs.sh && scripts/wiki-lint.sh && bun test scripts/clean-checkout.test.ts && for n in cut-scratch discover-project export-session fixture front-door front-door-acceptance github host landing launch link-skills local log-action parallel-runs-acceptance plane project-settings review-decide review-findings review-forms review-round reviewers run-log run-meta run-times runs-status runs-watch setup skill-refs spec-decisions spec-review-link stage style-findings ticket-check tool-faults turnpikes verify verify-examples verify-journey verify-library view-stream wait-for-markers wiki-lint; do scripts/$n.sh --self-test || exit 1; done && bun test scripts/run-clash.test.ts && bun install --frozen-lockfile && bun test ./scripts ./lint && bun run lint''''
-shows = "Every script parses, the Bun usage tests pass, the runbook references and wiki lint clean, the clean-checkout tests and the 42 script self-tests pass, the run-clash tests pass, and `bun test ./scripts ./lint` and `bun run lint` pass."
+command = '''bun run check'''
+shows = "tsc strict, Oxlint with the project's rules, the Biome format check, the Bun tests beside every script and lint rule, the runbook references and wiki lint pass."
+
+# Main's gate beside the port's: everything it runs lives inside `bun run check`
+# except the coachman-contract detector's own self-test, which keeps its entry.
+[checks.coachman-contract]
+command = '''scripts/coachman-contract.sh --self-test'''
+shows = "the coachman contract detector's self-test passes."

@@ -1,5 +1,14 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, sep } from "node:path";
 import { afterEach, describe, expect, test } from "bun:test";
@@ -11,7 +20,8 @@ const realGit = spawnSync("sh", ["-c", "command -v git"], { encoding: "utf8" }).
 
 const command = (program: string, args: string[], cwd?: string): void => {
   const result = spawnSync(program, args, { cwd, stdio: "ignore" });
-  if (result.status !== 0) throw new Error(`${program} exited ${result.status ?? "without a status"}`);
+  if (result.status !== 0)
+    throw new Error(`${program} exited ${result.status ?? "without a status"}`);
 };
 
 const withRepo = async (run: (repo: string) => void | Promise<void>): Promise<void> => {
@@ -48,9 +58,13 @@ const inside = (parent: string, child: string): boolean => {
 };
 
 const worktreeList = (repo: string): string =>
-  spawnSync("git", ["-C", repo, "worktree", "list", "--porcelain"], { encoding: "utf8" }).stdout ?? "";
+  spawnSync("git", ["-C", repo, "worktree", "list", "--porcelain"], { encoding: "utf8" }).stdout ??
+  "";
 
-const runHelper = (args: string[], env?: Record<string, string>): { status: number; out: string } => {
+const runHelper = (
+  args: string[],
+  env?: Record<string, string>,
+): { status: number; out: string } => {
   const r = spawnSync("bun", [helper, ...args], {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
@@ -108,7 +122,11 @@ describe("cleanCheckout", () => {
 
   test("runs the command on the branch's content", async () => {
     await withRepo(async (repo) => {
-      const result = await cleanCheckout(repo, "main", "test -f app.ts && test -f check.sh && test ! -e .worktrees");
+      const result = await cleanCheckout(
+        repo,
+        "main",
+        "test -f app.ts && test -f check.sh && test ! -e .worktrees",
+      );
       expect(result.exitCode).toBe(0);
     });
   });
@@ -139,7 +157,9 @@ describe("cleanCheckout", () => {
     await withRepo(async (repo) => {
       const refused = runHelper([repo, "no-such-branch", "true"]);
       expect(refused.status).toBe(1);
-      expect(readdirSync(dirname(repo)).filter((n) => n.startsWith("postmaster-clean-checkout-"))).toEqual([]);
+      expect(
+        readdirSync(dirname(repo)).filter((n) => n.startsWith("postmaster-clean-checkout-")),
+      ).toEqual([]);
     });
   });
 
@@ -168,13 +188,17 @@ describe("cleanCheckout", () => {
       writeFileSync(join(repo, "vers.txt"), "one\n");
       command("git", ["-C", repo, "add", "vers.txt"]);
       command("git", ["-C", repo, "commit", "-q", "-m", "one"]);
-      const sha = spawnSync("git", ["-C", repo, "rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim();
+      const sha = spawnSync("git", ["-C", repo, "rev-parse", "HEAD"], {
+        encoding: "utf8",
+      }).stdout.trim();
       command("git", ["-C", repo, "tag", "v-one"]);
       writeFileSync(join(repo, "vers.txt"), "two\n");
       command("git", ["-C", repo, "commit", "-q", "-am", "two"]);
       expect((await cleanCheckout(repo, sha, 'test "$(cat vers.txt)" = one')).exitCode).toBe(0);
       expect((await cleanCheckout(repo, "v-one", 'test "$(cat vers.txt)" = one')).exitCode).toBe(0);
-      expect((await cleanCheckout(repo, "main", 'test "$(cat vers.txt)" = one')).exitCode).not.toBe(0);
+      expect((await cleanCheckout(repo, "main", 'test "$(cat vers.txt)" = one')).exitCode).not.toBe(
+        0,
+      );
     });
   });
 
@@ -188,7 +212,17 @@ describe("cleanCheckout", () => {
       writeFileSync(join(lib, "lib.txt"), "lib\n");
       command("git", ["-C", lib, "add", "lib.txt"]);
       command("git", ["-C", lib, "commit", "-q", "-m", "lib"]);
-      command("git", ["-C", repo, "-c", "protocol.file.allow=always", "submodule", "add", "-q", lib, "vendor"]);
+      command("git", [
+        "-C",
+        repo,
+        "-c",
+        "protocol.file.allow=always",
+        "submodule",
+        "add",
+        "-q",
+        lib,
+        "vendor",
+      ]);
       command("git", ["-C", repo, "add", ".gitmodules", "vendor"]);
       command("git", ["-C", repo, "commit", "-q", "-m", "vendor"]);
       expect((await cleanCheckout(repo, "main", "test -f vendor/lib.txt")).exitCode).toBe(0);
@@ -205,7 +239,9 @@ describe("cleanCheckout", () => {
       });
       expect(failed.status).toBe(1);
       expect(existsSync(marker)).toBe(false);
-      expect(readdirSync(root).filter((n) => n.startsWith("postmaster-clean-checkout-"))).toEqual([]);
+      expect(readdirSync(root).filter((n) => n.startsWith("postmaster-clean-checkout-"))).toEqual(
+        [],
+      );
       expect(worktreeList(repo)).not.toContain("postmaster-clean-checkout-");
     });
   });
@@ -220,7 +256,9 @@ describe("cleanCheckout", () => {
       expect(removed.status).toBe(0);
       expect(removed.out).toContain("could not remove the temporary git worktree");
       expect(worktreeList(repo)).not.toContain("postmaster-clean-checkout-");
-      expect(readdirSync(root).filter((n) => n.startsWith("postmaster-clean-checkout-"))).toEqual([]);
+      expect(readdirSync(root).filter((n) => n.startsWith("postmaster-clean-checkout-"))).toEqual(
+        [],
+      );
     });
   });
 
@@ -274,7 +312,12 @@ describe("cleanCheckout", () => {
       roots.push(dir);
       const first = join(dir, "first");
       const second = join(dir, "second");
-      const failed = await cleanCheckout(repo, "main", `touch ${first} && exit 3`, `touch ${second}`);
+      const failed = await cleanCheckout(
+        repo,
+        "main",
+        `touch ${first} && exit 3`,
+        `touch ${second}`,
+      );
       expect(failed.exitCode).toBe(3);
       expect(existsSync(first)).toBe(true);
       expect(existsSync(second)).toBe(false);
@@ -293,31 +336,27 @@ describe("cleanCheckout", () => {
     });
   });
 
-  test(
-    "a command that outlives its bound fails as a timeout and leaves no process behind",
-    async () => {
-      await withRepo(async (repo) => {
-        const dir = mkdtempSync(join(tmpdir(), "clean-checkout-marks-"));
-        roots.push(dir);
-        const control = join(dir, "control");
-        const survivor = join(dir, "survivor");
-        // Positive control: the marker construct works when nothing is killed.
-        const quick = runHelper([repo, "main", `(sleep 1 && touch ${control}) & sleep 2`], {
-          CLEAN_CHECKOUT_TIMEOUT: "30",
-        });
-        expect(quick.status).toBe(0);
-        expect(existsSync(control)).toBe(true);
-        // The bound kills the whole group: the 5s marker never lands.
-        const timed = runHelper([repo, "main", `(sleep 5 && touch ${survivor}) & sleep 30`], {
-          CLEAN_CHECKOUT_TIMEOUT: "2",
-        });
-        expect(timed.status).toBe(124);
-        expect(timed.out).toContain("timed out after 2s");
-        expect(existsSync(survivor)).toBe(false);
-        await new Promise((resolve) => setTimeout(resolve, 5000));
-        expect(existsSync(survivor)).toBe(false);
+  test("a command that outlives its bound fails as a timeout and leaves no process behind", async () => {
+    await withRepo(async (repo) => {
+      const dir = mkdtempSync(join(tmpdir(), "clean-checkout-marks-"));
+      roots.push(dir);
+      const control = join(dir, "control");
+      const survivor = join(dir, "survivor");
+      // Positive control: the marker construct works when nothing is killed.
+      const quick = runHelper([repo, "main", `(sleep 1 && touch ${control}) & sleep 2`], {
+        CLEAN_CHECKOUT_TIMEOUT: "30",
       });
-    },
-    { timeout: 30000 },
-  );
+      expect(quick.status).toBe(0);
+      expect(existsSync(control)).toBe(true);
+      // The bound kills the whole group: the 5s marker never lands.
+      const timed = runHelper([repo, "main", `(sleep 5 && touch ${survivor}) & sleep 30`], {
+        CLEAN_CHECKOUT_TIMEOUT: "2",
+      });
+      expect(timed.status).toBe(124);
+      expect(timed.out).toContain("timed out after 2s");
+      expect(existsSync(survivor)).toBe(false);
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+      expect(existsSync(survivor)).toBe(false);
+    });
+  }, 30000);
 });
