@@ -1,0 +1,10 @@
+calls compared            answers  differ  largest difference
+v2/jev-1 v2/jev-2         365      131     0.10
+v2/jev-1 v2/jev-3         365      142     0.11
+v2/jev-2 v2/jev-3         365      142     0.14
+v3/jev-1 v3/jev-2         525      242     0.15
+v6/jev-1 v6/jev-2         523      235     0.20
+v2/jev-1 v3/jev-1         365      139     0.09
+v2/jev-2 v3/jev-2         365      143     0.10
+
+v2's three calls, pairwise: 4 of 1095 answers fall on opposite sides of 0.5

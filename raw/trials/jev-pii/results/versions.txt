@@ -1,0 +1,6 @@
+requested model: typesafe/jev-1.13
+served model: typesafe/jev-1.13-20260917
+python: 3.12.3
+history range: origin/main at 8fcb8b7b72cf9dc8fb4aac0902bed78aea3e999c (v2 to v6, re-asked)
+full v6 pass: origin/main at 873cf2dea324 (see results/v6-full/history.json)
+date: 2026-10-02 to 2026-10-03

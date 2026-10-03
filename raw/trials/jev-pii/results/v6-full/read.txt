@@ -1,0 +1,74 @@
+Every line the full v6 pass flagged at 0.5 or above, sorted by hand. Columns: the line's index
+in history_lines(rev), the highest threshold it was flagged at, the kinds, the sorting, the path.
+The line's text is not kept; the index finds it again.
+
+699    0.5  person                       misread           scripts/setup.sh
+2156   0.5  person                       misread           scripts/github.sh
+2395   0.5  person                       misread           scripts/plane.sh
+2634   0.5  person                       misread           scripts/setup.sh
+6297   0.5  phone                        misread           raw/trials/herdr-agent-lifecycle/multistep.txt
+15449  0.5  phone                        misread           raw/trials/herdr-agent-lifecycle/kill-mid-turn.txt
+17639  0.7  person                       misread           scripts/local.sh
+19208  0.5  person                       misread           scripts/style-findings.sh
+20541  0.7  person                       misread           scripts/local.sh
+23081  0.5  person                       misread           scripts/style-findings.sh
+23082  0.5  person                       misread           scripts/style-findings.sh
+25121  0.8  person                       made-up           scripts/verify-examples.sh
+25122  0.8  person                       made-up           scripts/verify-examples.sh
+25124  0.9  person                       made-up           scripts/verify-examples.sh
+25143  0.9  person                       made-up           scripts/verify-examples.sh
+25144  0.9  person                       made-up           scripts/verify-examples.sh
+28053  0.5  person                       misread           scripts/host.sh
+28301  0.5  person                       misread           scripts/host.sh
+28649  0.5  person                       misread           scripts/host.sh
+29984  0.9  person                       made-up           scripts/project-settings.sh
+31855  0.8  other-personal               misread           scripts/host.sh
+34313  0.5  other-personal               misread           scripts/github.ts
+34571  0.5  person                       misread           scripts/github.ts
+35302  0.7  other-personal               misread           scripts/log-action.ts
+35331  0.5  other-personal               misread           scripts/log-action.ts
+35346  0.7  other-personal               misread           scripts/log-action.ts
+44602  0.5  person                       misread           scripts/setup.ts
+44612  0.5  person                       misread           scripts/setup.ts
+46855  0.7  other-personal               misread           scripts/host-self-test.ts
+48405  0.7  person                       misread           scripts/host.ts
+52271  0.5  person                       misread           scripts/setup.sh
+53063  0.5  other-personal               made-up           raw/trials/code-review-launch/opus-findings.json
+56389  0.5  other-personal               cited author      raw/articles/ai-native-sdlc-playbook/source.md
+56479  0.9  person                       cited author      wiki/sources/ai-native-sdlc-playbook.md
+58859  0.5  postal-address               misread           raw/trials/2026-09-29-synthesis-audit/measure.py
+64406  0.9  postal-address               made-up           scripts/tool-faults.ts
+67532  0.5  person                       made-up           scripts/host-self-test.ts
+68006  0.5  postal-address               misread           scripts/lib/text.ts
+68400  0.8  person                       misread           scripts/reviewers.ts
+68847  0.9  person                       made-up           scripts/tool-faults.ts
+68980  0.5  postal-address               misread           scripts/tool-faults.ts
+69098  0.5  other-personal               made-up           scripts/tool-faults.ts
+69100  0.9  person                       made-up           scripts/tool-faults.ts
+70579  0.5  other-personal               misread           scripts/host.sh
+71104  0.5  postal-address               misread           scripts/run-clash.test.ts
+71116  0.5  person                       misread           scripts/run-clash.ts
+71548  0.5  person                       made-up           oracle-98.sh
+71549  0.5  person                       made-up           oracle-98.sh
+72792  0.5  other-personal               project identity  scripts/synthesis-shares.test.ts
+76071  0.5  phone                        misread           scripts/launch.test.ts
+76517  0.7  person                       misread           scripts/lib/text.test.ts
+77924  0.5  person                       misread           scripts/parallel-runs-acceptance.test.ts
+77928  0.5  person                       misread           scripts/parallel-runs-acceptance.test.ts
+78516  0.9  person                       made-up           scripts/project-settings.test.ts
+81324  0.5  person                       misread           scripts/setup.test.ts
+81422  0.5  person                       misread           scripts/setup.test.ts
+81970  0.7  person                       misread           scripts/style-findings.test.ts
+81979  0.7  person                       misread           scripts/style-findings.test.ts
+84200  0.9  postal-address               made-up           scripts/tool-faults.test.ts
+84267  0.9  person                       made-up           scripts/tool-faults.test.ts
+86845  0.5  person                       misread           scripts/lib/text.ts
+86847  0.5  person                       misread           scripts/lib/text.ts
+86889  0.7  person                       misread           scripts/lib/text.ts
+91696  0.5  other-personal               project identity  scripts/coachman-contract.test.ts
+
+Counts by threshold:
+at 0.5: personal data 0, made-up 17, cited author 2, project identity 2, misread 43
+at 0.7: personal data 0, made-up 12, cited author 1, project identity 0, misread 12
+at 0.8: personal data 0, made-up 12, cited author 1, project identity 0, misread 2
+at 0.9: personal data 0, made-up 10, cited author 1, project identity 0, misread 0
