@@ -71,8 +71,8 @@ than its own [@trials/codex-resume-forms].
 ## What changed because of it
 
 `skills/postmaster/harnesses.md` records the stdin form for pi and the resume-directory
-caveat; `scripts/launch.sh` passes the prompt on stdin. Landed in pull request #1. For Muse Code
-and MiMo Code it records what arrives, and `launch.sh` gives Muse Code the file with
+caveat; `scripts/run launch` passes the prompt on stdin. Landed in pull request #1. For Muse Code
+and MiMo Code it records what arrives, and `run launch` gives Muse Code the file with
 `--prompt-file` and MiMo Code the file on stdin. What a resume of a missing thread does is in
 [its own page](resume-exit-status.md).
 

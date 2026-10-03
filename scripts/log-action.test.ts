@@ -11,7 +11,7 @@ import { toolRoot } from "./lib/paths.ts";
 import { decodeDropInvalid } from "./lib/proc.ts";
 import { controlOf, kindsOf } from "./log-action";
 
-const SELF = join(import.meta.dir, "log-action.sh");
+const SELF = join(import.meta.dir, "run");
 const TOOL = toolRoot(import.meta);
 const noIconv = spawnSync("bash", ["-c", "command -v iconv"], { encoding: "utf8" }).status !== 0;
 if (noIconv) {
@@ -22,7 +22,7 @@ if (noIconv) {
 
 const FIELDS = [
   "--ran",
-  "scripts/wait-for-markers.sh <dispatch>/logs 'r1-*.done' 2 60",
+  "scripts/run wait-for-markers <dispatch>/logs 'r1-*.done' 2 60",
   "--failed",
   "returned before every marker was in",
   "--error",
@@ -35,7 +35,7 @@ const FIELDS = [
 const FAULT_EVERY = [
   "coachman",
   "tool-fault",
-  "scripts/verify.sh",
+  "scripts/run verify",
   ...FIELDS,
   "--workaround",
   "launched in the recorded form by hand",
@@ -43,7 +43,7 @@ const FAULT_EVERY = [
 const FAULT_ABS = [
   "coachman",
   "tool-fault",
-  join(TOOL, "scripts/log-action.sh"),
+  join(TOOL, "scripts/run log-action"),
   ...FIELDS,
   "--failed",
   "first",
@@ -51,7 +51,7 @@ const FAULT_ABS = [
 const FAULT_OTHER = [
   "coachman",
   "tool-fault",
-  "scripts/log-action.sh",
+  "scripts/run log-action",
   ...FIELDS,
   "--failed",
   "second",
@@ -89,7 +89,7 @@ let tmp = "";
 let d = "";
 
 function logAction(args: string[]): { code: number; out: string; err: string } {
-  const r = spawnSync("bash", [SELF, d, ...args], { encoding: "utf8" });
+  const r = spawnSync(SELF, ["log-action", d, ...args], { encoding: "utf8" });
   return { code: r.status ?? -1, out: r.stdout ?? "", err: r.stderr ?? "" };
 }
 
@@ -170,7 +170,7 @@ describe("unicode primitives", () => {
     const fields = [...FIELDS];
     fields[7] = "\u00a0";
     const before = lines();
-    const r = logAction(["coachman", "tool-fault", "scripts/launch.sh", ...fields]);
+    const r = logAction(["coachman", "tool-fault", "scripts/run launch", ...fields]);
     expect(r.code).toBe(0);
     expect(lines()).toBe(before + 1);
   }, 30000);
@@ -227,7 +227,7 @@ describe("positive controls", () => {
     expect(
       last !== null &&
         last.action === "tool-fault" &&
-        last.target === "scripts/verify.sh" &&
+        last.target === "scripts/run verify" &&
         last.detail === "returned before every marker was in" &&
         last.fault?.failed === "returned before every marker was in" &&
         last.fault?.error === "exit 0\n\tall 2 markers present, [1mone a directory[0m" &&
@@ -256,7 +256,7 @@ describe("positive controls", () => {
     expect(
       last !== null &&
         last.fault?.failed === "first" &&
-        last.target === "scripts/log-action.sh" &&
+        last.target === "scripts/run log-action" &&
         last.fault?.control === "action-log",
     ).toBe(true);
   }, 30000);
@@ -264,7 +264,7 @@ describe("positive controls", () => {
   test("and the message says to stop", () => {
     const r = logAction(FAULT_ABS);
     expect(r.code).toBe(0);
-    expect(r.err.includes("scripts/log-action.sh is a control (action-log): stop the leg")).toBe(
+    expect(r.err.includes("scripts/run log-action is a control (action-log): stop the leg")).toBe(
       true,
     );
   }, 30000);
@@ -318,7 +318,7 @@ describe("positive controls", () => {
     expect(
       last !== null &&
         last.fault?.failed === "fourth" &&
-        last.target === "scripts/wait-for-markers.sh" &&
+        last.target === "scripts/run wait-for-markers" &&
         last.fault?.control === "wait",
     ).toBe(true);
   }, 30000);
@@ -337,7 +337,7 @@ describe("positive controls", () => {
     expect(
       last !== null &&
         last.fault?.failed === "fifth" &&
-        last.target === "scripts/log-action.sh" &&
+        last.target === "scripts/run log-action" &&
         last.fault?.control === "action-log",
     ).toBe(true);
   }, 30000);
@@ -368,7 +368,7 @@ describe("positive controls", () => {
     expect(r.code).toBe(0);
     const last = lastLine();
     expect(
-      last !== null && last.fault?.failed === "sixth" && last.target === "scripts/verify.sh",
+      last !== null && last.fault?.failed === "sixth" && last.target === "scripts/run verify",
     ).toBe(true);
   }, 30000);
 
@@ -492,7 +492,7 @@ describe("positive controls", () => {
   test("an older runs/<project>/<TICKET> layout is still read as that project", () => {
     const old = join(tmp, "oldlayout", "legacy-proj", "RUN-2");
     mkdirSync(old, { recursive: true });
-    const r = spawnSync("bash", [SELF, old, "postmaster", "note", "RUN-2", "old"], {
+    const r = spawnSync(SELF, ["log-action", old, "postmaster", "note", "RUN-2", "old"], {
       encoding: "utf8",
     });
     let oldEntry: Record<string, any> | null = null;
@@ -650,7 +650,7 @@ describe("positive controls", () => {
 describe("negative controls: nothing is written", () => {
   test("an action outside the set", () => {
     const before = lines();
-    const r = logAction(["coachman", "tool-faults", "scripts/launch.sh", "x"]);
+    const r = logAction(["coachman", "tool-faults", "scripts/run launch", "x"]);
     expect(r.code).toBe(1);
     expect(lines()).toBe(before);
     expect(r.err.includes("is not an action")).toBe(true);
@@ -698,7 +698,7 @@ describe("negative controls: nothing is written", () => {
 
   test("a tool-fault with no fix", () => {
     const before = lines();
-    const r = logAction(["coachman", "tool-fault", "scripts/launch.sh", ...FIELDS.slice(0, 8)]);
+    const r = logAction(["coachman", "tool-fault", "scripts/run launch", ...FIELDS.slice(0, 8)]);
     expect(r.code).toBe(1);
     expect(lines()).toBe(before);
     expect(r.err.includes("needs --fix")).toBe(true);
@@ -709,7 +709,7 @@ describe("negative controls: nothing is written", () => {
     const r = logAction([
       "coachman",
       "tool-fault",
-      "scripts/launch.sh",
+      "scripts/run launch",
       ...FIELDS,
       "--diagnosis",
       "  ",
@@ -724,7 +724,7 @@ describe("negative controls: nothing is written", () => {
     const r = logAction([
       "coachman",
       "tool-fault",
-      "scripts/launch.sh",
+      "scripts/run launch",
       "the",
       "wait",
       "returned",
@@ -737,7 +737,7 @@ describe("negative controls: nothing is written", () => {
 
   test("a flag with no value", () => {
     const before = lines();
-    const r = logAction(["coachman", "tool-fault", "scripts/launch.sh", ...FIELDS, "--workaround"]);
+    const r = logAction(["coachman", "tool-fault", "scripts/run launch", ...FIELDS, "--workaround"]);
     expect(r.code).toBe(1);
     expect(lines()).toBe(before);
     expect(r.err.includes("--workaround needs a value")).toBe(true);
@@ -804,7 +804,7 @@ describe("negative controls: nothing is written", () => {
 
   test("a missing dispatch directory is refused, and named", () => {
     const missing = join(tmp, "nowhere");
-    const r = spawnSync("bash", [SELF, missing, "coachman", "note", "x", "y"], {
+    const r = spawnSync(SELF, ["log-action", missing, "coachman", "note", "x", "y"], {
       encoding: "utf8",
     });
     expect(r.status).toBe(1);

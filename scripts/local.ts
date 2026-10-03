@@ -40,7 +40,7 @@ function die(message: string, code = 1): never {
   throw new LocalFailure(message, code);
 }
 function usage(text: string): never {
-  return die(`usage: local.sh <repo> ${text}`);
+  return die(`usage: run local <repo> ${text}`);
 }
 function utf8(value: string, what: string): string {
   // A U+FFFD in a decoded argument is undecodable input only when the raw
@@ -55,13 +55,13 @@ function titleArg(value: string): string {
   if (title.includes("\n") || title.includes("\r")) die("the title is more than one line");
   return title;
 }
-// text.ts: BASE's local.sh embeds Python; its #?0*[1-9]\d* is Unicode (local.sh:102).
+// text.ts: BASE's run local embeds Python; its #?0*[1-9]\d* is Unicode (run local:102).
 export const NUMBER_RE = /^#?0*[1-9]\p{Nd}*$/u;
-// text.ts: BASE re.fullmatch(r"(\d+)\.json") on listdir names (local.sh:212).
+// text.ts: BASE re.fullmatch(r"(\d+)\.json") on listdir names (run local:212).
 const STORE_JSON_RE = /^\p{Nd}+\.json$/u;
-// text.ts: BASE re.fullmatch(r"\d+\.(?:json|md)") (local.sh:215,234).
+// text.ts: BASE re.fullmatch(r"\d+\.(?:json|md)") (run local:215,234).
 export const STORE_FILE_RE = /^\p{Nd}+\.(?:json|md)$/u;
-// text.ts: BASE re.fullmatch(r"\d+\.(?:json|md)\.\d+\.tmp") (local.sh:237).
+// text.ts: BASE re.fullmatch(r"\d+\.(?:json|md)\.\d+\.tmp") (run local:237).
 export const STORE_TMP_RE = /^\p{Nd}+\.(?:json|md)\.\p{Nd}+\.tmp$/u;
 
 export function numberArg(value: string): bigint {
@@ -114,7 +114,7 @@ type Meta = {
 };
 function needStore(store: string): void {
   if (!existsSync(store) || !statSync(store).isDirectory())
-    die(`no ticket store at ${store}; with the user's word, run: local.sh <repo> store init`, 3);
+    die(`no ticket store at ${store}; with the user's word, run: run local <repo> store init`, 3);
 }
 export function ticketPath(store: string, number: bigint, ext: string): string {
   return join(store, `${number}.${ext}`);

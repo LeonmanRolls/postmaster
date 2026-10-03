@@ -80,7 +80,7 @@ own spec and the user reviewed every one. The workhorse contract in
 `skills/postmaster/coachman.md` gains the coachman-written spec and loses the per-workhorse
 one; the postmaster's half in `skills/postmaster/postmaster.md` gains the spec session and
 one decision per run; `scripts/spec-session.ts` writes the session's brief and commits the
-approved text; `scripts/spec-decisions.sh` records one `## spec` stanza and still counts a
+approved text; `scripts/run spec-decisions` records one `## spec` stanza and still counts a
 per-lane decisions file from before the change. Runs dispatched before this change keep
 their per-workhorse specs through the tool each is pinned to.
 

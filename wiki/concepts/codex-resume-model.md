@@ -64,7 +64,7 @@ The same trial found more about the resume form:
 ## Why it matters
 
 The flow resumes a thread for a remount, a ruling, the merge word and a workhorse's answer.
-Before issue #45, `launch.sh` resumed a codex thread with no model and no effort. Through it, a
+Before issue #45, `run launch` resumed a codex thread with no model and no effort. Through it, a
 resumed lane and a resumed coachman leg both ran on the codex config's default
 [@trials/codex-resume-forms/part2/before-one.md]
 [@trials/codex-resume-forms/part2/before-coachman.md]. That default can be a lane's model, and
@@ -82,9 +82,9 @@ record.
 ## What changed because of it
 
 `skills/postmaster/harnesses.md` records the resume form the trial found, and
-`scripts/launch.sh resume` builds it: the launch's flags without `-C` and
+`scripts/run launch resume` builds it: the launch's flags without `-C` and
 `--skip-git-repo-check`, with `--` before the prompt. `coachman.md` resumes a lane with
-`--last`, so the lane's final message file holds its latest turn. Through `launch.sh`, a
+`--last`, so the lane's final message file holds its latest turn. Through `run launch`, a
 resumed lane and a resumed coachman leg now run on the model and effort the config names for
 them, write the same events as their launch, and receive a prompt that starts with `-`
 [@trials/codex-resume-forms/part2/after-one.md]

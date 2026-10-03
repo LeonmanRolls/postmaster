@@ -34,7 +34,7 @@ project's gate is not a turnpike, and runs on every run.
   [issue #55](https://github.com/brindlewick/postmaster/issues/55), style's findings go to the
   project's linter instead, by the user's decision to try it for now:
   [the review loop](review-loop.md) says why.
-- **The turnpikes are listed in one place.** `scripts/turnpikes.sh` defines every turnpike and
+- **The turnpikes are listed in one place.** `scripts/run turnpikes` defines every turnpike and
   the default set, and the check, the postmaster and the coachman read them from it. A new
   turnpike, such as a fixture run from
   [issue #37](https://github.com/brindlewick/postmaster/issues/37), is one line there and a
@@ -49,7 +49,7 @@ project's gate is not a turnpike, and runs on every run.
   run is in flight, since a run's legs are read from it at each dispatch. Since
   [issue #18](https://github.com/brindlewick/postmaster/issues/18) a project may say what
   `default` means for it, in `.postmaster/project.toml` or local settings; the postmaster
-  resolves it the same way, through `scripts/turnpikes.sh --project`. That is never a floor:
+  resolves it the same way, through `scripts/run turnpikes --project`. That is never a floor:
   a ticket still names its own turnpikes.
 - **A run with no review turnpike has no review leg.** The ship leg follows synthesis and
   starts from its hand-off. A review leg with no lens would start a coachman to do nothing.
@@ -91,8 +91,8 @@ those runs shipped:
 ## What changed because of it
 
 The ticket shape in `skills/postmaster/trackers.md` gains `## Turnpikes` after `## Direction`.
-`scripts/turnpikes.sh` lists the turnpikes and turns a ticket's section into names, and
-`scripts/ticket-check.sh` requires the section and names any word that is not a turnpike. The
+`scripts/run turnpikes` lists the turnpikes and turns a ticket's section into names, and
+`scripts/run ticket-check` requires the section and names any word that is not a turnpike. The
 postmaster copies the resolved names into the waybill, and proposes `default` for a ticket with
 no section. The coachman runs exactly the waybill's turnpikes, so a run with none goes from
 synthesis to ship, and the ship card lists the turnpikes the run passed through. `AGENTS.md`

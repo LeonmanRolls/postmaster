@@ -20,7 +20,7 @@ import { dirname, join } from "node:path";
 import { run } from "./lib/proc.ts";
 import { findingState, isFindingShaped, pyRepr } from "./landing.ts";
 
-const SELF = join(import.meta.dir, "landing.sh");
+const SELF = join(import.meta.dir, "run");
 const HERE = import.meta.dir;
 
 delete process.env.GIT_DIR;
@@ -37,7 +37,7 @@ const S: Record<string, string> = {};
 const strip = (s: string): string => s.replace(/\n+$/u, "");
 
 function sh(args: string[]): { code: number; out: string } {
-  const r = run("bash", [SELF, ...args]);
+  const r = run(SELF, ["landing", ...args]);
   return { code: r.code, out: strip(`${r.out}${r.err}`) };
 }
 
@@ -1797,7 +1797,7 @@ describe("journey", () => {
     mkrepo(S.jw);
     commitFile(S.jw, "f", "X", "X");
     S.jsha12 = short(sha(S.jw));
-    const jr = run("bash", [join(HERE, "verify.sh"), "journey-path", S.jw, S.j]);
+    const jr = run(join(HERE, "run"), ["verify", "journey-path", S.jw, S.j]);
     if (jr.code !== 0) throw new Error(`journey-path failed: ${jr.err}`);
     S.jrep = strip(jr.out);
     writeFileSync(join(S.j, "plain.md"), "# T\n\n## Problem / feature\nA change.\n");

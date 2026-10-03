@@ -1,7 +1,7 @@
 // Health-check the wiki, so its rules are run rather than remembered. Deterministic checks
 // belong in a script; a check written as prose is re-derived, and mis-derived, on every pass.
 //
-//   wiki-lint.sh [<repo>]      default: the repo this script lives in
+//   run wiki-lint [<repo>]      default: the repo this script lives in
 //
 // Reports every fault and fixes none: a standing contradicting its own records means either
 // the standing or the reading is wrong, and which is a judgement for a person.
@@ -250,7 +250,7 @@ if (import.meta.main) {
   if (argv[0] === undefined || argv[0] === "") {
     REPO = toolRoot(import.meta);
   } else if (argv[0]?.startsWith("-")) {
-    console.error("usage: wiki-lint.sh [<repo>]");
+    console.error("usage: run wiki-lint [<repo>]");
     process.exit(2);
   } else {
     REPO = argv[0] as string;

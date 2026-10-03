@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { run } from "./lib/proc.ts";
 
-const cli = join(import.meta.dir, "front-door.sh");
+const cli = join(import.meta.dir, "run");
 
 interface CliResult {
   code: number;
@@ -19,7 +19,7 @@ function runCli(
   args: string[],
   opts: { cwd?: string; env?: Record<string, string | undefined> } = {},
 ): CliResult {
-  const r = spawnSync(cli, args, {
+  const r = spawnSync(cli, ["front-door", ...args], {
     cwd: opts.cwd,
     encoding: "utf8",
     env: opts.env === undefined ? process.env : { ...process.env, ...opts.env },
@@ -392,7 +392,7 @@ describe("refusals", () => {
 // Main's #98 headless-fixture controls, unioned at the merge: the beside suite
 // above is this branch's; what follows is main's, verbatim but for imports.
 
-const SCRIPT = join(import.meta.dir, "front-door.sh");
+const SCRIPT = join(import.meta.dir, "run");
 const gitEnv = {
   GIT_AUTHOR_NAME: "fixture",
   GIT_AUTHOR_EMAIL: "fixture@example.invalid",
@@ -430,7 +430,7 @@ function initRepo(path: string): void {
 }
 
 function frontDoor(cwd: string, target: string, host: "herdr" | "tmux" | "none") {
-  return run("bash", [SCRIPT, "claude", "pm-model", cwd, "yes", target, "--config", config], {
+  return run(SCRIPT, ["front-door", "claude", "pm-model", cwd, "yes", target, "--config", config], {
     env: {
       ...gitEnv,
       POSTMASTER_HOST: host,
@@ -474,7 +474,7 @@ describe("front door fixture routing", () => {
       expect(result.code).toBe(0);
       expect(result.err).toBe("");
       expect(result.out).toBe(
-        `${baseline.out}headless the target is a fixture copy made by fixture.sh new\n`,
+        `${baseline.out}headless the target is a fixture copy made by run fixture new\n`,
       );
     }
 

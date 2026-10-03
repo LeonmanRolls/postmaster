@@ -78,7 +78,7 @@ not promoted). A PID namespace per launch, which sandbox-runtime gives, stops th
 
 ## How the flow would notice a lane that reaches out anyway
 
-- **The main checkout.** `check-target.sh` on the main checkout after the workhorses run, and again
+- **The main checkout.** `run check-target` on the main checkout after the workhorses run, and again
   before the card, finds a write that reached it. In a fixture run on 2026-09-27 a codex workhorse
   wrote a test file into the main checkout, and nothing in the flow looked until the merge
   (unverified here: issue #107 records it, and the run is not promoted).

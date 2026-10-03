@@ -21,8 +21,8 @@ beforeAll(() => {
   root = join(tmp, "root");
   const scriptsDir = join(root, "scripts");
   mkdirSync(scriptsDir, { recursive: true });
-  writeFileSync(join(scriptsDir, "stage.sh"), "");
-  writeFileSync(join(scriptsDir, "launch.sh"), "");
+  writeFileSync(join(scriptsDir, "run"), "");
+  writeFileSync(join(scriptsDir, "run"), "");
 
   bare = join(tmp, "bare.md");
   good = join(tmp, "good.md");
@@ -33,9 +33,9 @@ beforeAll(() => {
   writeFileSync(
     bare,
     [
-      "Set the stage with `scripts/stage.sh <dispatch> synthesis`.",
-      "( scripts/launch.sh launch <lane> <wt> <prompt> ) &",
-      "Every leg ends with scripts/stage.sh.",
+      "Set the stage with `scripts/run stage <dispatch> synthesis`.",
+      "( scripts/run launch launch <lane> <wt> <prompt> ) &",
+      "Every leg ends with scripts/run stage.",
       "",
     ].join("\n"),
     "utf8",
@@ -43,9 +43,9 @@ beforeAll(() => {
   writeFileSync(
     good,
     [
-      "Set the stage with `<tool>/scripts/stage.sh <dispatch> synthesis`.",
-      "( <tool>/scripts/launch.sh launch <lane> <wt> <prompt> ) &",
-      "The run's own `<rt>/scripts/stage.sh` is the same repo, pinned.",
+      "Set the stage with `<tool>/scripts/run stage <dispatch> synthesis`.",
+      "( <tool>/scripts/run launch launch <lane> <wt> <prompt> ) &",
+      "The run's own `<rt>/scripts/run stage` is the same repo, pinned.",
       "The project's own `<repo>/scripts/build.sh` and \"$HERE/scripts/x\" are not the tool's.",
       "Every `<tool>/scripts/` path is the repo's; postscripts/ and myscripts/x.sh are other words.",
       "",
@@ -112,7 +112,7 @@ describe("--fix: bare references go through <tool>, and a second run changes not
     const body = readFileSync(fix, "utf8");
     expect(r.faults.length).toBe(1);
     expect(body.includes("<tool>/<tool>/")).toBe(false);
-    expect(body.includes("`<tool>/scripts/stage.sh <dispatch>")).toBe(true);
+    expect(body.includes("`<tool>/scripts/run stage <dispatch>")).toBe(true);
   }, 10000);
 
   test("a second --fix changes nothing", () => {

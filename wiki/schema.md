@@ -150,7 +150,7 @@ every concept it bears on. It does not change a standing.
 **query** — a question. Read the relevant pages, answer with citations, and where the answer
 is worth keeping, file it back as a page rather than leaving it in a chat.
 
-**lint** — a health check in two halves. `scripts/wiki-lint.sh` does the mechanical half:
+**lint** — a health check in two halves. `scripts/run wiki-lint` does the mechanical half:
 front matter and standings, citations and links resolving, orphans, trial and capture records,
 and a standing beyond `claimed` resting on this fleet's own runs or trials. Whoever runs it
 does the judgement half: that every claim is cited or marked unverified, and that no standing

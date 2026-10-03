@@ -1,27 +1,27 @@
 // Take the steps that need no judgment, and wait until a run under a project's run root needs
-// the postmaster. Then print runs-status.sh's table, name each run that needs it with its NEXT,
+// the postmaster. Then print run runs-status's table, name each run that needs it with its NEXT,
 // and exit. This is the loop Stage D keeps in the background. A session that improvises this
 // look loses it on a restart and fires on runs it must leave alone.
 //
-//   runs-watch.sh <project-run-root> [--timeout <seconds>]
-//   runs-watch.sh --help
+//   run runs-watch <project-run-root> [--timeout <seconds>]
+//   run runs-watch --help
 //
-// Mechanical steps this script takes itself, logging each through log-action.sh with "the
+// Mechanical steps this script takes itself, logging each through run log-action with "the
 // watcher took it" in the detail. Every leg start runs from the run's own checkout
-// (`run-meta.sh path`, checked first): a checkout that does not serve its dispatch commit
+// (`run run-meta path`, checked first): a checkout that does not serve its dispatch commit
 // wakes the postmaster instead.
 //
-//   DISPATCH  the leg is done and its hand-off passes handoff-check.sh: dispatch the next leg
-//             turnpikes.sh legs lists, through `host.sh leg launch` (Stage C). The thread id
+//   DISPATCH  the leg is done and its hand-off passes run handoff-check: dispatch the next leg
+//             run turnpikes legs lists, through `run host leg launch` (Stage C). The thread id
 //             lands in the attempt record when the attempt ends, never at dispatch. A hand-off
-//             that fails, a turnpikes.sh legs that exits non-zero, no next leg after the ship
+//             that fails, a run turnpikes legs that exits non-zero, no next leg after the ship
 //             leg, or a launch it cannot complete are steps it could not complete: they wake
 //             the postmaster.
 //   RESUME    the attempt record says incomplete and the end is a transient provider error the
-//             harness adapter names (launch.sh transient, reading only the current launch's
+//             harness adapter names (run launch transient, reading only the current launch's
 //             stream lines past the skip in <run>/watcher.json, vetoing on any wall-like
 //             token): resume it on its recorded thread with the remount prompt through
-//             `host.sh leg resume`, at most three times per leg (the count is beside the skip
+//             `run host leg resume`, at most three times per leg (the count is beside the skip
 //             and survives a restart). A start that fails spends no retry: the count is
 //             restored and the refusal is logged. A fourth such end, a non-transient end, or
 //             a resume it cannot complete wakes the postmaster.
@@ -83,9 +83,10 @@ import { basename, dirname, join, resolve } from "node:path";
 import { tryJsonFile } from "./lib/data.ts";
 import { beside, scriptsDir } from "./lib/paths.ts";
 import { die, run } from "./lib/proc.ts";
+import { hasEntry, pinCommand, runFromPin } from "./lib/pinned.ts";
 import { PY_M_END, PY_M_START } from "./lib/text.ts";
 
-const USAGE = "usage: runs-watch.sh <project-run-root> [--timeout <seconds>] | --help";
+const USAGE = "usage: run runs-watch <project-run-root> [--timeout <seconds>] | --help";
 
 function printHelp(): never {
   const src = readFileSync(join(scriptsDir(import.meta), "runs-watch.ts"), "utf8");
@@ -637,14 +638,14 @@ function runRepo(dispatch: string): string | null {
 /** The one-line job from coachman.md's legs table. */
 /** The run's checked tool checkout, or the wake reason when it does not serve. */
 function legRt(d: string): { rt: string; error: string } {
-  const p = run(beside(import.meta, "run-meta.sh"), ["path", d]);
+  const p = run(beside(import.meta, "run"), ["run-meta", "path", d]);
   if (p.code !== 0) {
     return {
       rt: "",
       error: `cannot resolve the run's tool checkout: ${(p.out + p.err).replace(/\n+$/u, "")}`,
     };
   }
-  const c = run(beside(import.meta, "run-meta.sh"), ["check", d]);
+  const c = run(beside(import.meta, "run"), ["run-meta", "check", d]);
   if (c.code !== 0) {
     return {
       rt: "",
@@ -844,9 +845,12 @@ function watchLeg(
     // The double checks the script it would execute: a checkout without the leg
     // script fails the start the way the shell would, before any marker moves.
     try {
-      accessSync(join(rt, "scripts", "host.sh"), constants.X_OK);
+      accessSync(
+        hasEntry(rt) ? join(rt, "scripts", "run") : join(rt, "scripts", "host.sh"),
+        constants.X_OK,
+      );
     } catch {
-      return { code: 1, text: `leg: ${join(rt, "scripts", "host.sh")} is not executable\n` };
+      return { code: 1, text: `leg: ${pinCommand(rt, "host")} is not executable\n` };
     }
     // The leg command clears the starting attempt's markers before its intent
     // lands; the double clears the same markers and writes no intent.
@@ -890,7 +894,7 @@ function watchLeg(
     kind === "dispatch"
       ? ["leg", "launch", d, wt, leg, n, prompt]
       : ["leg", "resume", d, wt, leg, n, thread, prompt];
-  const r = run(join(rt, "scripts", "host.sh"), args);
+  const r = runFromPin(rt, "host", args);
   return { code: r.code, text: r.out + r.err };
 }
 
@@ -946,11 +950,11 @@ function nextLeg(list: string, current: string): [string, string] | null {
 /** Dispatch the next leg, or report why it could not. 0 took the step, 1 wakes, 3 held. */
 function prepareDispatch(d: string, runName: string, current: string, root: string): StepResult {
   const heldDir = join(root, "postmaster");
-  const legs = run(beside(import.meta, "turnpikes.sh"), ["legs", d]);
+  const legs = run(beside(import.meta, "run"), ["turnpikes", "legs", d]);
   if (legs.code !== 0) {
     return {
       rc: 1,
-      error: `turnpikes.sh legs failed: ${(legs.out + legs.err).replace(/\n+$/u, "")}`,
+      error: `run turnpikes legs failed: ${(legs.out + legs.err).replace(/\n+$/u, "")}`,
     };
   }
   // The manifest leg is validated before anything uses it: it must be a canonical
@@ -972,7 +976,7 @@ function prepareDispatch(d: string, runName: string, current: string, root: stri
   }
   const [number, leg] = next;
   const handoff = join(d, `handoff-${current}.md`);
-  const check = run(beside(import.meta, "handoff-check.sh"), [handoff]);
+  const check = run(beside(import.meta, "run"), ["handoff-check", handoff]);
   if (check.code !== 0) {
     return {
       rc: 1,
@@ -1051,22 +1055,18 @@ function prepareDispatch(d: string, runName: string, current: string, root: stri
     return { rc: 1, error: `could not start coachman leg ${number}: ${first}` };
   }
   if (parseInt(number, 10) > parseInt(current, 10) + 1) {
-    const note = run(beside(import.meta, "log-action.sh"), [
-      d,
+    const note = run(beside(import.meta, "run"), ["log-action", d,
       "postmaster",
       "note",
       runName,
-      "turnpikes omit the review leg; the watcher followed the listed legs",
-    ]);
+      "turnpikes omit the review leg; the watcher followed the listed legs",]);
     if (note.code !== 0) return { rc: 1, error: "could not log the omitted review leg" };
   }
-  const logged = run(beside(import.meta, "log-action.sh"), [
-    d,
+  const logged = run(beside(import.meta, "run"), ["log-action", d,
     "postmaster",
     "dispatch",
     "coachman",
-    `leg ${number} (${leg}); the watcher took it`,
-  ]);
+    `leg ${number} (${leg}); the watcher took it`,]);
   if (logged.code !== 0) return { rc: 1, error: `could not log dispatch of leg ${number}` };
   return { rc: 0, error: "" };
 }
@@ -1076,11 +1076,11 @@ function resumeTransient(d: string, runName: string, number: string, root: strin
   const heldDir = join(root, "postmaster");
   const err = join(d, "logs", `coachman-leg-${number}.err`);
   const out = join(d, "logs", `coachman-leg-${number}-events.jsonl`);
-  const legs = run(beside(import.meta, "turnpikes.sh"), ["legs", d]);
+  const legs = run(beside(import.meta, "run"), ["turnpikes", "legs", d]);
   if (legs.code !== 0) {
     return {
       rc: 2,
-      error: `turnpikes.sh legs failed: ${(legs.out + legs.err).replace(/\n+$/u, "")}`,
+      error: `run turnpikes legs failed: ${(legs.out + legs.err).replace(/\n+$/u, "")}`,
     };
   }
   if (!isCanonicalLeg(number)) {
@@ -1090,7 +1090,7 @@ function resumeTransient(d: string, runName: string, number: string, root: strin
     };
   }
   const leg = listedLeg(legs.out, number);
-  if (!leg) return { rc: 2, error: `turnpikes.sh legs has no entry for current leg ${number}` };
+  if (!leg) return { rc: 2, error: `run turnpikes legs has no entry for current leg ${number}` };
   let name = "";
   let thread = "";
   try {
@@ -1113,7 +1113,7 @@ function resumeTransient(d: string, runName: string, number: string, root: strin
   if (!thread) return { rc: 2, error: `leg ${number} has no recorded thread id` };
   const skip = watcherValue(d, "stream_skip", number);
   if (skip === null) return { rc: 2, error: `the stream skip for leg ${number} is unreadable` };
-  const judged = run(beside(import.meta, "launch.sh"), ["transient", err, out, String(skip)]);
+  const judged = run(beside(import.meta, "run"), ["launch", "transient", err, out, String(skip)]);
   const classifier = (judged.out + judged.err).replace(/\n+$/u, "") || `exit ${judged.code}`;
   if (judged.code !== 0) {
     return {
@@ -1194,23 +1194,19 @@ function resumeTransient(d: string, runName: string, number: string, root: strin
     if (!setResumeCount(d, number, count, newSkip)) {
       return { rc: 2, error: `cannot restore the remount count for leg ${number}` };
     }
-    const logged = run(beside(import.meta, "log-action.sh"), [
-      d,
+    const logged = run(beside(import.meta, "run"), ["log-action", d,
       "postmaster",
       "refuse",
       "coachman",
-      `leg ${number}, thread ${thread}; the resume did not start (${first})`,
-    ]);
+      `leg ${number}, thread ${thread}; the resume did not start (${first})`,]);
     if (logged.code !== 0) return { rc: 2, error: `could not log refusal of leg ${number}` };
     return { rc: 2, error: `could not resume leg ${number}: ${first}` };
   }
-  const logged = run(beside(import.meta, "log-action.sh"), [
-    d,
+  const logged = run(beside(import.meta, "run"), ["log-action", d,
     "postmaster",
     "resume",
     "coachman",
-    `leg ${number}, thread ${thread}, ${classifier}, resume ${count + 1} of 3; the watcher took it`,
-  ]);
+    `leg ${number}, thread ${thread}, ${classifier}, resume ${count + 1} of 3; the watcher took it`,]);
   if (logged.code !== 0) return { rc: 2, error: `could not log resume of leg ${number}` };
   return { rc: 0, error: "" };
 }
@@ -1347,15 +1343,15 @@ function physicalDir(path: string): string {
 
 function watch(root: string, config: string, timeout: number | null): never {
   const pm = join(root, "postmaster");
-  const statusSh = beside(import.meta, "runs-status.sh");
+  const statusSh = beside(import.meta, "run");
   let left = timeout ?? 0;
   for (;;) {
     const poll = pollSeconds(config);
     const held = readHeld(pm);
-    let r = run(statusSh, [root]);
+    let r = run(statusSh, ["runs-status", root]);
     if (r.code !== 0) {
       if (r.err) process.stderr.write(r.err);
-      die(`runs-watch: runs-status.sh failed on ${root}`, 1);
+      die(`runs-watch: run runs-status failed on ${root}`, 1);
     }
     const first = r.out.replace(/\n+$/u, "");
     // The waking read fires only for its held warnings; the steps below fill NEEDS.
@@ -1365,7 +1361,7 @@ function watch(root: string, config: string, timeout: number | null): never {
     r = run(statusSh, [root]);
     if (r.code !== 0) {
       if (r.err) process.stderr.write(r.err);
-      die(`runs-watch: runs-status.sh failed on ${root}`, 1);
+      die(`runs-watch: run runs-status failed on ${root}`, 1);
     }
     const table = r.out.replace(/\n+$/u, "");
     if (steps.needs.length > 0) {

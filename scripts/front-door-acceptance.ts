@@ -9,7 +9,7 @@
 // guard. Further paraphrases are beyond a grep oracle. Any conditional rewrite breaks
 // every match.
 //
-//   front-door-acceptance.sh [repo-root]   default: the repo this script lives in
+//   run front-door-acceptance [repo-root]   default: the repo this script lives in
 //
 //   exit 0  no stale claim remains
 //   exit 1  stale claims, one per line on stdout: <file>: <what is still claimed>
@@ -19,7 +19,7 @@ import { join } from "node:path";
 import { toolRoot } from "./lib/paths.ts";
 
 function usage(): never {
-  console.error("usage: front-door-acceptance.sh [repo-root]");
+  console.error("usage: run front-door-acceptance [repo-root]");
   process.exit(2);
 }
 

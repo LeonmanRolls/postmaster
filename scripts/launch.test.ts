@@ -26,7 +26,7 @@ import { toolRoot } from "./lib/paths.ts";
 import { run, withTempDir } from "./lib/proc.ts";
 import { BOUND_R, DOT_ALL, PY_M_START, PY_S_CLASS, pySplitLines, pyWords } from "./lib/text.ts";
 
-const self = join(import.meta.dir, "launch.sh");
+const self = join(import.meta.dir, "run");
 const here = import.meta.dir;
 
 const skipPython = run("sh", ["-c", "command -v python3"]).code !== 0;
@@ -207,7 +207,7 @@ beforeAll(() => {
     const runDir = (runName: string): string => join(tmp, "repo", ".postmaster", "runs", runName);
     const record = (runName: string, f: string): void => {
       mkdirSync(runDir(runName), { recursive: true });
-      const r = spawnSync(join(here, "run-meta.sh"), [runDir(runName), join(tmp, "repo")], {
+      const r = spawnSync(join(here, "run"), [runDir(runName), join(tmp, "repo")], {
         encoding: "utf8",
         env: {
           ...process.env,
@@ -217,7 +217,7 @@ beforeAll(() => {
         },
       });
       if (r.status !== 0) {
-        fail(`run-meta.sh records ${f} as run ${runName}`);
+        fail(`run run-meta records ${f} as run ${runName}`);
       }
     };
 
@@ -445,7 +445,7 @@ beforeAll(() => {
               while ((m = CALL.exec(line)) !== null) {
                 const c = line.slice(m.index);
                 const recorded =
-                  c.includes("--run <dispatch>") || c.includes("scripts/host.sh leg");
+                  c.includes("--run <dispatch>") || c.includes("scripts/run host leg");
                 results.push(`${recorded ? "run" : "unrun"} ${path}: ${pyWords(c).join(" ")}`);
               }
             }
@@ -458,7 +458,7 @@ beforeAll(() => {
               while ((m = CALL.exec(inner)) !== null) {
                 const c = inner.slice(m.index);
                 const recorded =
-                  c.includes("--run <dispatch>") || c.includes("scripts/host.sh leg");
+                  c.includes("--run <dispatch>") || c.includes("scripts/run host leg");
                 results.push(`${recorded ? "run" : "unrun"} ${path}: ${pyWords(c).join(" ")}`);
               }
             }
@@ -535,24 +535,24 @@ beforeAll(() => {
         "Fenced, with no --run:",
         "",
         "```sh",
-        "( scripts/launch.sh launch a <wt> <prompt-file> \\",
+        "( scripts/run launch launch a <wt> <prompt-file> \\",
         "    > <dispatch>/logs/a-events.jsonl ) &",
         "```",
         "",
         "Fenced and indented, with it:",
         "",
         "   ```sh",
-        "   ( scripts/launch.sh launch b <wt> <prompt-file> \\",
+        "   ( scripts/run launch launch b <wt> <prompt-file> \\",
         "       --run <dispatch> > <dispatch>/logs/b-events.jsonl ) &",
         "   ```",
         "",
-        "Inline, with no --run: `scripts/launch.sh resume c <wt> <thread-id> <prompt-file>`. Inline and",
-        "across a line break, with it: `<tool>/scripts/launch.sh resume d <wt> <thread-id>",
+        "Inline, with no --run: `scripts/run launch resume c <wt> <thread-id> <prompt-file>`. Inline and",
+        "across a line break, with it: `<tool>/scripts/run launch resume d <wt> <thread-id>",
         "<prompt-file> --run <dispatch>`.",
       ].join("\n"),
     );
     {
-      // Unicode primitives, BASE launch.sh python: every expectation python3-verified.
+      // Unicode primitives, BASE run launch python: every expectation python3-verified.
       writeFileSync(join(tmp, "uni.md"), "```sh\nscripts/launch.sh\x1flaunch u1 <wt> <p>\n```\n");
       const u1 = calls(join(tmp, "uni.md"));
       check("calls finds an invocation spaced with U+001F", u1.out.includes("u1"), u1.out);
@@ -582,7 +582,7 @@ beforeAll(() => {
     ): { rc: number; err: string } => {
       mkdirSync(dirname(streamFile), { recursive: true });
       const fd = openSync(streamFile, "w");
-      const r = spawnSync(self, args, {
+      const r = spawnSync(self, ["launch", ...args], {
         encoding: "utf8",
         stdio: ["inherit", fd, "pipe"],
         env: {
@@ -1389,7 +1389,7 @@ beforeAll(() => {
     );
     // Env-file parity: the port and BASE run the same file, and the harness's
     // received environment, the exit status and both launch streams agree.
-    // BASE is the newest scripts/launch.sh in history that is a real script
+    // BASE is the newest scripts/run launch in history that is a real script
     // rather than the port's one-line wrapper; it must still carry the
     // source-and-exec tail, or the extraction failed loudly and every parity
     // control with it.
@@ -1402,13 +1402,13 @@ beforeAll(() => {
         "log",
         "--format=%H",
         "--",
-        "scripts/launch.sh",
+        "scripts/run launch",
       ]);
       for (const c of log.out
         .split("\n")
         .map((s) => s.trim())
         .filter(Boolean)) {
-        const show = run("git", ["-C", toolRoot(import.meta), "show", `${c}:scripts/launch.sh`]);
+        const show = run("git", ["-C", toolRoot(import.meta), "show", `${c}:scripts/run launch`]);
         if (
           show.code === 0 &&
           show.out.split("\n").length > 10 &&
@@ -1422,7 +1422,7 @@ beforeAll(() => {
       }
       hasPy3 = !skipPython;
       check(
-        "BASE launch.sh extracts with its source-and-exec tail",
+        "BASE run launch extracts with its source-and-exec tail",
         baseLaunch !== "",
         `base=${baseLaunch || "none"}`,
       );
@@ -2034,7 +2034,7 @@ beforeAll(() => {
       join(tmp, "prompt.txt"),
     );
     refused(
-      "an argument launch.sh does not know is refused",
+      "an argument run launch does not know is refused",
       "legs",
       "launch needs <cwd> <prompt-file>",
       "launch",
@@ -2686,7 +2686,7 @@ beforeAll(() => {
     const doSub = (...args: string[]): void => {
       // thread-id, transient and the wall lists read no config; the ambient
       // environment is inherited, as the self-test ran them bare.
-      const r = run(self, args);
+      const r = run(self, ["launch", ...args]);
       out = r.out;
       err = r.err;
       rc = r.code;
@@ -3012,7 +3012,7 @@ beforeAll(() => {
     const codexUsage =
       '{"type": "turn.completed", "usage": {"input_tokens": 3072288, "cached_input_tokens": 2910208, "cache_write_input_tokens": 0, "output_tokens": 50050, "reasoning_output_tokens": 44266}}';
     const claudeUsage =
-      '{"type":"system","subtype":"task_progress","task_id":"ac8fe1ebf375eff4d","tool_use_id":"toolu_013hqT2oMy1VXLYEaky3ttuc","description":"Reading scripts/runs-watch.sh","subagent_type":"general-purpose","usage":{"total_tokens":30007,"tool_uses":1,"duration_ms":4119},"last_tool_name":"Read","uuid":"c4295b17-b348-4933-8a1e-7dfe07cfb78e","session_id":"7449d3c5-8a18-45ba-aa72-1f0ae0ea8a30"}';
+      '{"type":"system","subtype":"task_progress","task_id":"ac8fe1ebf375eff4d","tool_use_id":"toolu_013hqT2oMy1VXLYEaky3ttuc","description":"Reading scripts/run runs-watch","subagent_type":"general-purpose","usage":{"total_tokens":30007,"tool_uses":1,"duration_ms":4119},"last_tool_name":"Read","uuid":"c4295b17-b348-4933-8a1e-7dfe07cfb78e","session_id":"7449d3c5-8a18-45ba-aa72-1f0ae0ea8a30"}';
     const realisticTail = '{"type":"error","message":"model stream idle timeout"}';
     const realisticWall = '{"type":"error","message":"quota exceeded for this key"}';
     writeFileSync(join(tmp, "real.err"), "the leg ended\n");
@@ -3809,13 +3809,13 @@ beforeAll(() => {
       const baseLaunch = join(f1, "base-launch.sh");
       const shown = spawnSync(
         "git",
-        ["-C", dirname(here), "show", "e902378fd4a4b39aa41870da2c771b6963525517:scripts/launch.sh"],
+        ["-C", dirname(here), "show", "e902378fd4a4b39aa41870da2c771b6963525517:scripts/run launch"],
         { encoding: "utf8" },
       );
       if (shown.status !== 0) {
         fail(
           "a resume's check and harness match main's PWD, OLDPWD and SHLVL",
-          `git show main launch.sh: ${shown.stderr ?? ""}`,
+          `git show main run launch: ${shown.stderr ?? ""}`,
         );
       } else {
         writeFileSync(baseLaunch, shown.stdout ?? "");
@@ -4137,8 +4137,8 @@ describe("negative controls", () => {
   test("an env file that execs never launches", () => {
     assertControl("an env file that execs never launches");
   });
-  test("BASE launch.sh extracts with its source-and-exec tail", () => {
-    assertControl("BASE launch.sh extracts with its source-and-exec tail");
+  test("BASE run launch extracts with its source-and-exec tail", () => {
+    assertControl("BASE run launch extracts with its source-and-exec tail");
   });
   test.skipIf(skipPython)(
     "parity: an echo in the file reaches stdout and the full env reaches the harness",
@@ -4242,8 +4242,8 @@ describe("negative controls", () => {
   test("a resume with no thread id is refused, and nothing runs", () => {
     assertControl("a resume with no thread id is refused, and nothing runs");
   });
-  test("an argument launch.sh does not know is refused", () => {
-    assertControl("an argument launch.sh does not know is refused");
+  test("an argument run launch does not know is refused", () => {
+    assertControl("an argument run launch does not know is refused");
   });
   test("--leg style is refused", () => {
     assertControl("--leg style is refused");

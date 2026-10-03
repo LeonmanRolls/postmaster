@@ -5,10 +5,10 @@
 // `spawn` with every condition that failed, in ticket order: the harness differs, the model
 // differs, the target is another repo, or nobody is at the terminal. When the decision is
 // `spawn` and the target is a fixture copy (postmaster.fixture in its own git config, set by
-// fixture.sh new), it also prints a `headless` line: that postmaster starts headless on every
+// run fixture new), it also prints a `headless` line: that postmaster starts headless on every
 // host, in the form hosts.md gives under none, so it never meets a trust prompt.
 //
-//   front-door.sh <harness> <model> <cwd> <at-terminal> <target> [--config <path>]
+//   run front-door <harness> <model> <cwd> <at-terminal> <target> [--config <path>]
 //
 //   at-terminal  yes when a person is at the terminal, no otherwise
 //
@@ -40,7 +40,7 @@ const CONFIG =
 
 function usage(): never {
   console.error(
-    "usage: front-door.sh <harness> <model> <cwd> <at-terminal> <target> [--config <path>]",
+    "usage: run front-door <harness> <model> <cwd> <at-terminal> <target> [--config <path>]",
   );
   process.exit(2);
 }
@@ -53,7 +53,7 @@ function repoOf(path: string): string {
   return r.code === 0 ? r.out.trim() : "";
 }
 
-/** Whether fixture.sh marked the target repository in its own git config. */
+/** Whether run fixture marked the target repository in its own git config. */
 function isFixtureCopy(path: string): boolean {
   if (!path) return false;
   const r = run("git", ["-C", path, "config", "--local", "--get", "postmaster.fixture"]);
@@ -103,7 +103,7 @@ function route(
           "and the user is at the terminal\n",
         ].join("");
   return reasons.length > 0 && fixtureCopy
-    ? `${spawn}headless the target is a fixture copy made by fixture.sh new\n`
+    ? `${spawn}headless the target is a fixture copy made by run fixture new\n`
     : spawn;
 }
 

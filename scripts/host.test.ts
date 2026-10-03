@@ -147,12 +147,12 @@ describe("waiting list lock", () => {
         join(runs, "postmaster", "ESCALATION.md"),
         Array.from({ length: 500 }, (_, i) => `## FILL-${i}\nfill ${i}\n`).join(""),
       );
-      const wrapper = join(import.meta.dir, "host.sh");
+      const wrapper = join(import.meta.dir, "run");
       const worker = [
         `import { spawnSync } from "node:child_process";`,
         `const [wrapper, runs, qfile, idx] = process.argv.slice(process.argv.length - 4);`,
         `for (let j = 0; j < 8; j++) {`,
-        `  const r = spawnSync(wrapper, ["leg", "waiting", "add", runs, "T" + idx + "-" + j, qfile], { encoding: "utf8" });`,
+        `  const r = spawnSync(wrapper, ["host", "leg", "waiting", "add", runs, "T" + idx + "-" + j, qfile], { encoding: "utf8" });`,
         `  if (r.status !== 0) { process.stderr.write(String(r.stderr)); process.exit(1); }`,
         `}`,
       ].join("\n");
@@ -188,7 +188,7 @@ describe("waiting list lock", () => {
       const runs = join(dir, "runs");
       const qfile = join(dir, "q.md");
       writeFileSync(qfile, "why is the run waiting?\n");
-      const wrapper = join(import.meta.dir, "host.sh");
+      const wrapper = join(import.meta.dir, "run");
       // A PATH with no flock: bash for the wrapper's shebang, bun and dirname
       // for its exec.
       const bin = join(dir, "bin");
@@ -200,7 +200,7 @@ describe("waiting list lock", () => {
         `import { spawnSync } from "node:child_process";`,
         `const [wrapper, runs, qfile, idx] = process.argv.slice(process.argv.length - 4);`,
         `for (let j = 0; j < 2; j++) {`,
-        `  const r = spawnSync(wrapper, ["leg", "waiting", "add", runs, "T" + idx + "-" + j, qfile], { encoding: "utf8" });`,
+        `  const r = spawnSync(wrapper, ["host", "leg", "waiting", "add", runs, "T" + idx + "-" + j, qfile], { encoding: "utf8" });`,
         `  if (r.status !== 0) { process.stderr.write(String(r.stderr)); process.exit(1); }`,
         `}`,
       ].join("\n");

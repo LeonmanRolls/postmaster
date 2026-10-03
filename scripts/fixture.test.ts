@@ -51,7 +51,7 @@ const TOOL = toolRoot(import.meta);
 const HERE = scriptsDir(import.meta);
 const APP = join(TOOL, "fixtures", "app");
 const TICKETS = join(TOOL, "fixtures", "tickets");
-const wrapper = join(import.meta.dir, "fixture.sh");
+const wrapper = join(import.meta.dir, "run");
 const first = tickets()[0] ?? "";
 
 let tmp = "";
@@ -120,7 +120,7 @@ function record(
     join(d, "brief.md"),
     `# Waybill: 7\n${turnpikes}\n\n## Ticket\n\n${ticketBody(t)}\n## Project profile\nrepo: ${repo}\n`,
   );
-  run("bash", [join(HERE, "run-meta.sh"), d, repo]);
+  run(join(HERE, "run"), ["run-meta", d, repo]);
   if (legs === 3) {
     const runJson = JSON.parse(readFileSync(join(d, "run.json"), "utf-8"));
     delete runJson.coachman_contract;
@@ -149,22 +149,22 @@ function record(
   }
   for (let n = 1; n <= legs; n++) {
     writeFileSync(join(d, `leg-${n}-prompt.txt`), `You are the coachman for leg ${n} of 7.\n`);
-    run("bash", [join(HERE, "log-action.sh"), d, "postmaster", "dispatch", "7", `leg ${n}`]);
-    run("bash", [join(HERE, "log-action.sh"), d, "coachman", "handoff-accept", `leg-${n}`]);
+    run(join(HERE, "run"), ["log-action", d, "postmaster", "dispatch", "7", `leg ${n}`]);
+    run(join(HERE, "run"), ["log-action", d, "coachman", "handoff-accept", `leg-${n}`]);
     for (const s of slices[n - 1] ?? []) {
-      run("bash", [join(HERE, "stage.sh"), d, s]);
+      run(join(HERE, "run"), ["stage", d, s]);
     }
     const handoffSections = sections.split("\n").filter(Boolean);
     writeFileSync(
       join(d, `handoff-${n}.md`),
       handoffSections.map((sec) => `## ${sec}\nLeg ${n}, recorded.\n\n`).join(""),
     );
-    run("bash", [join(HERE, "log-action.sh"), d, "coachman", "handoff", `leg-${n}`]);
+    run(join(HERE, "run"), ["log-action", d, "coachman", "handoff", `leg-${n}`]);
     writeFileSync(join(d, `.leg-${n}-done`), "");
     writeFileSync(join(d, `.leg-${n}-exited`), "");
   }
   for (const s of postStages) {
-    run("bash", [join(HERE, "stage.sh"), d, s, "postmaster"]);
+    run(join(HERE, "run"), ["stage", d, s, "postmaster"]);
   }
   writeFileSync(join(d, "card.md"), "# Ship card: 7\n\nBranch 7 is merged into main.\n");
   const manifest = JSON.parse(readFileSync(join(d, "manifest.json"), "utf-8"));
@@ -309,7 +309,7 @@ function expectScore(key: string, failing: string, failText?: string): void {
 }
 
 function runScore(dispatch: string, repo: string): { code: number; out: string } {
-  const r = spawnSync(wrapper, ["score", dispatch, repo], { encoding: "utf8" });
+  const r = spawnSync(wrapper, ["fixture", "score", dispatch, repo], { encoding: "utf8" });
   return { code: r.status ?? -1, out: `${r.stdout ?? ""}${r.stderr ?? ""}` };
 }
 
@@ -366,13 +366,13 @@ beforeAll(() => {
 
   const emptyMd = join(tmp, "empty.md");
   writeFileSync(emptyMd, "");
-  const sectionsR = run("bash", [join(HERE, "handoff-check.sh"), emptyMd]);
+  const sectionsR = run(join(HERE, "run"), ["handoff-check", emptyMd]);
   sections = sectionsR.err
     .split("\n")
     .filter((l) => l.startsWith("handoff-check: missing or empty section: "))
     .map((l) => l.replace("handoff-check: missing or empty section: ", ""))
     .join("\n");
-  const listedR = run("bash", [join(HERE, "stage.sh"), "--list"]);
+  const listedR = run(join(HERE, "run"), ["stage", "--list"]);
   listed = listedR.out.trim();
   const stageLines = listed.split("\n");
   const doneIdx = stageLines.indexOf("done");
@@ -520,11 +520,11 @@ describe(TICKETS_HEAD, () => {
     expect(tickets().length >= 2).toBe(true);
   }, 30000);
   for (const t of tickets()) {
-    test(`${t}: in the ticket shape, by scripts/ticket-check.sh`, () => {
+    test(`${t}: in the ticket shape, by scripts/run ticket-check`, () => {
       const body = ticketBody(t);
       writeFileSync(join(tmp, `body-${t}.md`), body);
       const checkR = run("bash", [
-        join(HERE, "ticket-check.sh"),
+        join(HERE, "run"),
         "--body",
         join(tmp, `body-${t}.md`),
         "--title",
@@ -600,14 +600,14 @@ describe("new: a fresh repo outside every other, with its ticket in its own stor
     expect(run("git", ["-C", dest, "remote"]).out.trim()).toBe("");
   }, 30000);
   test("its own store holds the fixture ticket, title and body verbatim, in todo", () => {
-    const localSh = join(HERE, "local.sh");
-    const listR = run("bash", [localSh, dest, "list"]);
-    const readR = run("bash", [localSh, dest, "read", "1", "--body"]);
+    const localSh = join(HERE, "run");
+    const listR = run(localSh, ["local", dest, "list"]);
+    const readR = run(localSh, ["local", dest, "read", "1", "--body"]);
     expect(listR.out.trim()).toBe(`#1\ttodo\t${ticketTitle(first)}`);
     expect(readR.out).toBe(ticketBody(first));
   }, 30000);
   test("a run against it reads the local tracker, though the config names github", () => {
-    const trackerKind = run("bash", [join(HERE, "tracker-kind.sh"), dest]);
+    const trackerKind = run(join(HERE, "run"), ["tracker-kind", dest]);
     expect(trackerKind.out.trim()).toBe("local");
   }, 30000);
   test("no hidden test and no reference solution reached it", () => {
@@ -656,7 +656,7 @@ describe("new: a fresh repo outside every other, with its ticket in its own stor
     mkdirSync(join(sameA, ".postmaster", "runs", "T-1"), { recursive: true });
     mkdirSync(join(sameB, ".postmaster", "runs", "T-1"), { recursive: true });
     const aRc = run("bash", [
-      join(HERE, "log-action.sh"),
+      join(HERE, "run"),
       join(sameA, ".postmaster", "runs", "T-1"),
       "postmaster",
       "note",
@@ -664,7 +664,7 @@ describe("new: a fresh repo outside every other, with its ticket in its own stor
       "one",
     ]).code;
     const bRc = run("bash", [
-      join(HERE, "log-action.sh"),
+      join(HERE, "run"),
       join(sameB, ".postmaster", "runs", "T-1"),
       "postmaster",
       "note",
@@ -696,8 +696,8 @@ describe("new: a fresh repo outside every other, with its ticket in its own stor
     writeFileSync(
       failingLocal,
       "#!/usr/bin/env bash\n" +
-        "# Stands in for scripts/local.sh: makes the store, and fails to file the ticket.\n" +
-        `case $2 in store) exec "${join(HERE, "local.sh")}" "$@" ;; *) exit 1 ;; esac\n`,
+        "# Stands in for scripts/run local: makes the store, and fails to file the ticket.\n" +
+        `case $2 in store) exec "${join(HERE, "run")}" "$@" ;; *) exit 1 ;; esac\n`,
     );
     run("chmod", ["+x", failingLocal]);
     const origLocal = process.env.LOCAL_SH;
@@ -830,7 +830,7 @@ describe("score: negative controls, the same record with one check broken at a t
     expectScore("break-card", "ship-card", "no card.md");
   }, 30000);
   test("a waybill with no turnpikes line: stages alone fails", () => {
-    expectScore("break-legs", "stages", "turnpikes.sh legs");
+    expectScore("break-legs", "stages", "run turnpikes legs");
   }, 30000);
 });
 
@@ -982,7 +982,7 @@ afterEach(() => {
 
 function runNew(dest: string, home: string, extraEnv: Record<string, string | undefined> = {}) {
   const config = join(import.meta.dir, "..", "bunfig.toml");
-  return run("bun", ["--no-env-file", `--config=${config}`, SCRIPT, "new", dest, FIXTURE_TICKET], {
+  return run(join(import.meta.dir, "run"), ["fixture", "new", dest, FIXTURE_TICKET], {
     env: {
       ...gitEnv,
       HOME: home,

@@ -3,10 +3,10 @@
 // and a session reaches the repo only as <tool>, the path SKILL.md finds from that link once.
 // A reference resolves from any working directory only when it goes through <tool> and names
 // a script the repo has. The run's pinned checkout goes through <rt> instead, resolved per run
-// by run-meta.sh path; it is a checkout of the same repo, so the same existence check applies.
+// by run run-meta path; it is a checkout of the same repo, so the same existence check applies.
 //
-//   skill-refs.sh [<file>...]          default: skills/postmaster/*.md beside this script's repo
-//   skill-refs.sh --fix [<file>...]    put <tool>/ before every bare scripts/ path, in place
+//   run skill-refs [<file>...]          default: skills/postmaster/*.md beside this script's repo
+//   run skill-refs --fix [<file>...]    put <tool>/ before every bare scripts/ path, in place
 //
 // A reference is any scripts/ path. It is a fault when it is bare (scripts/x.sh, which resolves
 // only from the repo's own root), when it reaches scripts/ some other way (../../scripts/x.sh),
@@ -122,7 +122,7 @@ if (import.meta.main) {
     mode = "fix";
     argv.shift();
   } else if (argv[0]?.startsWith("-")) {
-    console.error("usage: skill-refs.sh [--fix] [<file>...]");
+    console.error("usage: run skill-refs [--fix] [<file>...]");
     process.exit(2);
   }
 

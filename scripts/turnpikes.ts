@@ -1,18 +1,18 @@
 // The turnpikes: the checks a run must pass through before it ships. The project's gate is not
 // one of them; it runs on every run. This is the one place the turnpikes and the default set are
 // defined. A ticket names its run's turnpikes in its `## Turnpikes` section, and
-// scripts/ticket-check.sh, the postmaster and the coachman all read them from here.
+// scripts/run ticket-check, the postmaster and the coachman all read them from here.
 //
-//   turnpikes.sh --list                 every turnpike, one per line: its name, `default` or `-`,
+//   run turnpikes --list                 every turnpike, one per line: its name, `default` or `-`,
 //                                       the leg that runs it, and what it checks
-//   turnpikes.sh resolve [--project <repo>] [<text>...] a `## Turnpikes` section's text, as the turnpikes it
+//   run turnpikes resolve [--project <repo>] [<text>...] a `## Turnpikes` section's text, as the turnpikes it
 //                                       names; with no text given, the section is read from stdin
-//   turnpikes.sh legs <dispatch> [--expect <line>]
+//   run turnpikes legs <dispatch> [--expect <line>]
 //                                       a run's legs, from the `turnpikes:` line under its
 //                                       waybill's title; with --expect, that line must be <line>
-//   turnpikes.sh legs --line <line>     the current schedule for preflight: the legs a waybill
+//   run turnpikes legs --line <line>     the current schedule for preflight: the legs a waybill
 //                                       with that `turnpikes:` line would have on a current run
-//   turnpikes.sh short [--project <repo>] <line> the default turnpikes a `turnpikes:` line leaves out
+//   run turnpikes short [--project <repo>] <line> the default turnpikes a `turnpikes:` line leaves out
 //
 // New runs always have synthesis (1); review (2) runs only when the waybill names a review
 // turnpike. Older run.json files without a coachman_contract version keep synthesis (1),
@@ -139,7 +139,7 @@ function projectDefaults(): string[] | null {
   const project = process.env.POSTMASTER_PROJECT ?? "";
   if (project === "") return null;
   if (project === cachedProject) return cachedDefaults;
-  const r = run(join(scriptsDir(import.meta), "project-settings.sh"), ["inspect", project]);
+  const r = run(join(scriptsDir(import.meta), "run"), ["project-settings", "inspect", project]);
   if (r.code !== 0) {
     console.error(r.err.trim() || "turnpikes: cannot read project settings");
     process.exit(1);
@@ -204,7 +204,7 @@ export function named(table: string, line: string): string[] | null {
   const value2 = line.replace(/^[ \t]*turnpikes[ \t]*:/u, "");
   if (wordsOf(value2).includes("default")) {
     console.log(
-      "the waybill's turnpikes line says default; it carries the names ticket-check.sh printed for the ticket",
+      "the waybill's turnpikes line says default; it carries the names run ticket-check printed for the ticket",
     );
     process.exit(2);
   }
@@ -315,7 +315,7 @@ function legsOf(table: string, line: string, legacy: boolean): number {
 }
 
 const USAGE =
-  "usage: turnpikes.sh --list | resolve [--project <repo>] [<text>...] | legs <dispatch> [--expect <line>] | legs --line <line> | short [--project <repo>] <line>";
+  "usage: run turnpikes --list | resolve [--project <repo>] [<text>...] | legs <dispatch> [--expect <line>] | legs --line <line> | short [--project <repo>] <line>";
 
 // --- entry -----------------------------------------------------------------------------------
 function main(argv: string[]): number {

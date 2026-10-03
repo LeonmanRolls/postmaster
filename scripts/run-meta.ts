@@ -2,11 +2,11 @@
 // postmaster commit it was dispatched from. Written once and never edited: the manifest is the
 // run's current state, this is what the run started from and the checkout it runs on.
 //
-//   run-meta.sh <dispatch> <repo>   <repo> is the target project's checkout; also cuts the pin
-//   run-meta.sh pin <repo> <commit> a shared checkout of <repo> at <commit> under $POSTMASTER_TOOL_PINS
-//   run-meta.sh path <dispatch>     print the canonical path of the run's tool checkout
-//   run-meta.sh check <dispatch>    the run's checkout still serves its dispatch commit
-//   run-meta.sh release <dispatch>  remove the pin when no claimed run is in flight
+//   run run-meta <dispatch> <repo>   <repo> is the target project's checkout; also cuts the pin
+//   run run-meta pin <repo> <commit> a shared checkout of <repo> at <commit> under $POSTMASTER_TOOL_PINS
+//   run run-meta path <dispatch>     print the canonical path of the run's tool checkout
+//   run run-meta check <dispatch>    the run's checkout still serves its dispatch commit
+//   run run-meta release <dispatch>  remove the pin when no claimed run is in flight
 //
 // Records when it was written; the run and project; the target repo's HEAD and branch; the
 // postmaster commit that dispatched it, and whether that checkout had uncommitted changes,
@@ -18,7 +18,7 @@
 //
 // The pin is a detached worktree of the postmaster repo at the dispatch commit, under
 // $POSTMASTER_TOOL_PINS (default ~/.postmaster/tool-pins), one directory per commit so every
-// run dispatched at that commit shares it. It is the run's `<tool>`: its host.sh, its launch.sh
+// run dispatched at that commit shares it. It is the run's `<tool>`: its run host, its run launch
 // and the runbooks its prompts name. The live checkout still serves the front door and the
 // postmaster's own supervision. A bare `pin` holds no claim; each dispatch appends its own
 // path to the pin's claims file beside it, so release finds every run that names the pin,
@@ -45,7 +45,7 @@
 //           be written, the pin lock could not be taken, no pin or it does not serve its
 //           commit, or git could not make or remove it
 //
-// Port notes (main scripts/run-meta.sh): the flock(2) pin lock is an O_EXCL lock file holding
+// Port notes (main scripts/run run-meta): the flock(2) pin lock is an O_EXCL lock file holding
 // the owner's PID, stolen from a dead owner or an empty file old enough that no live
 // creator is mid-write, never by age otherwise, since a dispatch legitimately holds it
 // across 15-second harness probes; the lock file is removed on release rather than left
@@ -87,7 +87,7 @@ const TOOL = toolRoot(import.meta);
 const SCRIPT = import.meta.path;
 
 const USAGE =
-  "usage: run-meta.sh <dispatch> <repo> | pin <repo> <commit> | path <dispatch> | check <dispatch> | release <dispatch>";
+  "usage: run run-meta <dispatch> <repo> | pin <repo> <commit> | path <dispatch> | check <dispatch> | release <dispatch>";
 
 // Every command returns its exit code with the bytes for each stream; the CLI boundary writes
 // them, and the tests inspect them. stdout carries results (the pin path, the checkout,
@@ -717,7 +717,7 @@ function buildRecord(
   pinnedCommit: string,
 ): Built {
   if (tryTomlFile(config) === null) return { ok: false, messages: [] };
-  const settingsScript = join(TOOL, "scripts", "project-settings.sh");
+  const settingsScript = join(TOOL, "scripts", "run project-settings");
   const inspected = run(settingsScript, ["inspect", resolvedRepo]);
   if (inspected.code !== 0) {
     return { ok: false, messages: [pyTrim(inspected.err) || "project settings could not be read"] };

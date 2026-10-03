@@ -20,7 +20,7 @@
 # passes through, and this file only says what `default` means for this project.
 #
 # The checks say how a change to the project is shown to work. A project that declares none gets
-# defaults (scripts/verify.sh): the gate, always, and by what discovery finds, a command-line
+# defaults (scripts/run verify): the gate, always, and by what discovery finds, a command-line
 # app's ticket examples run through its command, a web app's browser suite and a walk of the
 # ticket's User journey, or a library's tests through its package name. A project that declares
 # checks gets those and the gate. Why, and what the defaults cover: wiki/concepts/verification.md.

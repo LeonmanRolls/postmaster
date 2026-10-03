@@ -53,7 +53,7 @@ its source, and the repository's space cannot be closed while it is open
 
 ## What changed because of it
 
-`scripts/host.sh` runs each launch in a pane of its worktree's space, gives it that pane's
+`scripts/run host` runs each launch in a pane of its worktree's space, gives it that pane's
 identity in place of its caller's, reports it `working` as it starts and releases it on exit,
 and titles the pane with the launch's name. `skills/postmaster/hosts.md`
 records the forms. Landed with issue #10.

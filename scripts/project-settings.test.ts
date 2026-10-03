@@ -23,8 +23,8 @@ import {
   type Rec,
 } from "./project-settings";
 
-const SELF = join(import.meta.dir, "project-settings.sh");
-const VERIFY = join(import.meta.dir, "verify.sh");
+const SELF = join(import.meta.dir, "run");
+const VERIFY = join(import.meta.dir, "run");
 
 interface Run {
   code: number;
@@ -367,7 +367,7 @@ describe("acceptances", () => {
   }
 });
 
-describe("check shapes agree with verify.sh", () => {
+describe("check shapes agree with run verify", () => {
   const badShapes: Array<[string, string]> = [
     ["unknown key", '[checks.x]\ncommand = "true"\nshows = "s"\nunknown = 1\n'],
     ["command and use", '[checks.x]\ncommand = "true"\nuse = "cli-examples"\nshows = "s"\n'],
@@ -397,7 +397,7 @@ describe("check shapes agree with verify.sh", () => {
     ["non-lowercase name", '[checks.Bad]\ncommand = "true"\nshows = "s"\n'],
   ];
   badShapes.forEach(([label, contents], i) => {
-    test(`write and verify.sh agree in refusing ${label}`, () => {
+    test(`write and run verify agree in refusing ${label}`, () => {
       const shapeRepo = at(`bad-shape-${i}`);
       mkdirSync(shapeRepo, { recursive: true });
       const shapeIn = at(`bad-shape-${i}.toml`);
@@ -431,7 +431,7 @@ describe("check shapes agree with verify.sh", () => {
     ["gate command", '[checks.gate]\ncommand = "true"\nshows = "s"\n'],
   ];
   goodShapes.forEach(([label, contents], i) => {
-    test(`write and verify.sh agree in accepting ${label}`, () => {
+    test(`write and run verify agree in accepting ${label}`, () => {
       const shapeRepo = at(`good-shape-${i}`);
       mkdirSync(shapeRepo, { recursive: true });
       const shapeIn = at(`good-shape-${i}.toml`);

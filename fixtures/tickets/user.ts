@@ -1,6 +1,6 @@
 // How the hidden acceptance tests drive the app: as a user would, through its command, in a
 // directory of their own. They never import the app's code, because how it is built inside is
-// the run's to choose. FIXTURE_APP names the app's directory; scripts/fixture.sh sets it.
+// the run's to choose. FIXTURE_APP names the app's directory; scripts/run fixture sets it.
 
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";

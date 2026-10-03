@@ -401,7 +401,7 @@ if (a[0] === "api" && a[1] === "graphql") {
     };
 
     const tf = (...args: string[]): RunR => {
-      return run("bash", [join(T, "scripts", "tool-faults.sh"), ...args], {
+      return run(join(T, "scripts", "run"), ["tool-faults", ...args], {
         env: {
           ...process.env,
           PATH: `${join(tmp, "bin")}:${process.env.PATH}`,
@@ -411,7 +411,7 @@ if (a[0] === "api" && a[1] === "graphql") {
     };
 
     const logf = (d: string, ...args: string[]): void => {
-      run("bash", [join(T, "scripts", "log-action.sh"), d, ...args]);
+      run(join(T, "scripts", "run"), ["log-action", d, ...args]);
     };
 
     const writes = (prefix: string): number => {
@@ -569,9 +569,9 @@ if (a[0] === "api" && a[1] === "graphql") {
       d,
       "coachman",
       "tool-fault",
-      "scripts/wait-for-markers.sh",
+      "scripts/run wait-for-markers",
       "--ran",
-      `scripts/wait-for-markers.sh ${REPO}/logs 'r1-*.done' 3 2400`,
+      `scripts/run wait-for-markers ${REPO}/logs 'r1-*.done' 3 2400`,
       "--failed",
       `returned before 1 of 3 markers were in ${HOMEP}/logs`,
       "--error",
@@ -581,7 +581,7 @@ if (a[0] === "api" && a[1] === "graphql") {
       "--fix",
       "count only regular files, with find -type f",
     );
-    logf(d, "coachman", "escalate", "scripts/wait-for-markers.sh", "the wait is a control");
+    logf(d, "coachman", "escalate", "scripts/run wait-for-markers", "the wait is a control");
     logf(
       d,
       "coachman",
@@ -602,7 +602,7 @@ if (a[0] === "api" && a[1] === "graphql") {
       d,
       "coachman",
       "tool-fault",
-      "scripts/wait-for-markers.sh",
+      "scripts/run wait-for-markers",
       "--ran",
       "the same wait, round 3",
       "--failed",
@@ -622,7 +622,7 @@ if (a[0] === "api" && a[1] === "graphql") {
       "--ran",
       `resume of ${TICKET}'s leg 2`,
       "--failed",
-      `the resume form hung while the ${WORD} ledger was open, reading src/${WORD}/billing.ts in ${NAME} of ${OWNER} for ${PROPER}, ${CYR} and ${CYR2} and ${KEYX}, mailed to ${EMAIL}, after scripts/ticket-check.sh quoted: ${SENTENCE}`,
+      `the resume form hung while the ${WORD} ledger was open, reading src/${WORD}/billing.ts in ${NAME} of ${OWNER} for ${PROPER}, ${CYR} and ${CYR2} and ${KEYX}, mailed to ${EMAIL}, after scripts/run ticket-check quoted: ${SENTENCE}`,
       "--error",
       `timeout after 600s in ${HOMEP}`,
       "--diagnosis",
@@ -636,7 +636,7 @@ if (a[0] === "api" && a[1] === "graphql") {
       d,
       "coachman",
       "tool-fault",
-      "scripts/wait-for-markers.sh",
+      "scripts/run wait-for-markers",
       "--ran",
       "wait, round 4",
       "--failed",
@@ -657,7 +657,7 @@ if (a[0] === "api" && a[1] === "graphql") {
       "--ran",
       "stage 2",
       "--failed",
-      "the step runs scripts/stage.sh with a flag it does not take",
+      "the step runs scripts/run stage with a flag it does not take",
       "--error",
       "none",
       "--diagnosis",
@@ -675,7 +675,7 @@ if (a[0] === "api" && a[1] === "graphql") {
       "--ran",
       "stage 2",
       "--failed",
-      "the step runs scripts/handoff-check.sh with a flag it does not take",
+      "the step runs scripts/run handoff-check with a flag it does not take",
       "--error",
       "none",
       "--diagnosis",
@@ -698,9 +698,9 @@ if (a[0] === "api" && a[1] === "graphql") {
     let outR = tf("harvest", d);
     let out = outR.out + outR.err;
     let rc = outR.code;
-    const A = idWhere(out, String.raw`scripts/wait-for-markers.sh  control \(wait\)  3 times`);
+    const A = idWhere(out, String.raw`scripts/run wait-for-markers  control \(wait\)  3 times`);
     const B = idWhere(out, "skills/postmaster/harnesses.md");
-    const C = idWhere(out, String.raw`scripts/wait-for-markers.sh  control \(wait\)  once`);
+    const C = idWhere(out, String.raw`scripts/run wait-for-markers  control \(wait\)  once`);
     const D1 = idWhere(out, String.raw`skills/postmaster/coachman.md  control \(action-log\)`);
     const D2 = idWhere(out, String.raw`skills/postmaster/coachman.md  control \(check\)`);
     const faultCount = out.split("\n").filter((l: string) => /^tf-[0-9a-f]{8} {2}/u.test(l)).length;
@@ -766,8 +766,8 @@ if (a[0] === "api" && a[1] === "graphql") {
       let shape = 0;
       for (const fid of [A, B, C]) {
         const f = draftOf(d, fid);
-        const r = run("bash", [
-          join(T, "scripts", "ticket-check.sh"),
+        const r = run(join(T, "scripts", "run"), [
+          "ticket-check",
           "--body",
           f,
           "--title",
@@ -777,7 +777,7 @@ if (a[0] === "api" && a[1] === "graphql") {
         if (!readFileSync(f, "utf-8").split("\n").includes("## Turnpikes")) shape++;
       }
       check(
-        "each draft is in the ticket shape, with its turnpikes, and passes scripts/ticket-check.sh",
+        "each draft is in the ticket shape, with its turnpikes, and passes scripts/run ticket-check",
         shape === 0,
         `${shape} fail`,
       );
@@ -811,7 +811,7 @@ if (a[0] === "api" && a[1] === "graphql") {
         "postmaster's own files and words are kept, and what is withheld is marked",
         bTitle.includes("skills/postmaster/harnesses.md") &&
           bBody.includes("pass the prompt on stdin") &&
-          bBody.includes("scripts/ticket-check.sh") &&
+          bBody.includes("scripts/run ticket-check") &&
           marked,
         `${bTitle}\n${bBody}`,
       );
@@ -825,7 +825,7 @@ if (a[0] === "api" && a[1] === "graphql") {
       "Nothing to do with faults.",
       "57",
       "OPEN",
-      `Tool fault in scripts/wait-for-markers.sh: returned early [${A}]`,
+      `Tool fault in scripts/run wait-for-markers: returned early [${A}]`,
       "A body.",
       "58",
       "OPEN",
@@ -957,7 +957,7 @@ if (a[0] === "api" && a[1] === "graphql") {
       again,
       "coachman",
       "tool-fault",
-      "scripts/wait-for-markers.sh",
+      "scripts/run wait-for-markers",
       "--ran",
       "wait",
       "--failed",
@@ -1008,7 +1008,7 @@ if (a[0] === "api" && a[1] === "graphql") {
       pmDir,
       "postmaster",
       "tool-fault",
-      "scripts/runs-status.sh",
+      "scripts/run runs-status",
       "--ran",
       "the poll",
       "--failed",
@@ -1022,7 +1022,7 @@ if (a[0] === "api" && a[1] === "graphql") {
     );
     outR = tf("harvest", pmDir);
     out = outR.out + outR.err;
-    const P = idWhere(out, "scripts/runs-status.sh");
+    const P = idWhere(out, "scripts/run runs-status");
     outR = tf("file", pmDir, P);
     out = outR.out + outR.err;
     // close issue 61
@@ -1035,7 +1035,7 @@ if (a[0] === "api" && a[1] === "graphql") {
       pmDir,
       "postmaster",
       "tool-fault",
-      "scripts/runs-status.sh",
+      "scripts/run runs-status",
       "--ran",
       "the poll, later",
       "--failed",
@@ -1049,7 +1049,7 @@ if (a[0] === "api" && a[1] === "graphql") {
     );
     outR = tf("harvest", pmDir);
     out = outR.out + outR.err;
-    const P2 = idWhere(out, "scripts/runs-status.sh");
+    const P2 = idWhere(out, "scripts/run runs-status");
     const PR = JSON.parse(readFileSync(join(pmDir, "tool-faults.json"), "utf-8")).runs.length;
     {
       const pLine = lineOf(out, P);
@@ -1071,7 +1071,7 @@ if (a[0] === "api" && a[1] === "graphql") {
       notesDir,
       "coachman",
       "tool-fault",
-      "scripts/launch.sh",
+      "scripts/run launch",
       "--ran",
       "launch",
       "--failed",
@@ -1087,7 +1087,7 @@ if (a[0] === "api" && a[1] === "graphql") {
       notesDir,
       "coachman",
       "tool-fault",
-      "scripts/cut-scratch.sh",
+      "scripts/run cut-scratch",
       "--ran",
       "cut",
       "--failed",
@@ -1101,8 +1101,8 @@ if (a[0] === "api" && a[1] === "graphql") {
     );
     outR = tf("harvest", notesDir);
     out = outR.out + outR.err;
-    const N1 = idWhere(out, "scripts/launch.sh");
-    const N2 = idWhere(out, "scripts/cut-scratch.sh");
+    const N1 = idWhere(out, "scripts/run launch");
+    const N2 = idWhere(out, "scripts/run cut-scratch");
     outR = tf("file", notesDir, N1);
     out = outR.out + outR.err;
     rc = outR.code;
@@ -1141,7 +1141,7 @@ if (a[0] === "api" && a[1] === "graphql") {
         "--ran",
         "stage 2",
         "--failed",
-        `${pad} then scripts/wait-for-markers.sh waited for ever`,
+        `${pad} then scripts/run wait-for-markers waited for ever`,
         "--error",
         "none",
         "--diagnosis",
@@ -1168,8 +1168,8 @@ if (a[0] === "api" && a[1] === "graphql") {
     const kindsDir = newrun(NAME, `${NAME_UP}-19`, "done");
     writeFileSync(
       join(kindsDir, "actions.jsonl"),
-      '{"ts":"2026-01-01T00:00:00Z","project":"p","run":"r","actor":"coachman","action":"tool-fault","target":"scripts/wait-for-markers.sh","detail":"waited on the wrong folder","fault":{"ran":"x","failed":"waited on the wrong folder","error":"none","diagnosis":"x","fix":"y","workaround":"","control":"gate"}}\n' +
-        '{"ts":"2026-01-01T00:00:00Z","project":"p","run":"r","actor":"coachman","action":"tool-fault","target":"scripts/log-action.sh","detail":"wrote nothing","fault":{"ran":"x","failed":"wrote nothing","error":"none","diagnosis":"x","fix":"y","workaround":"","control":""}}\n',
+      '{"ts":"2026-01-01T00:00:00Z","project":"p","run":"r","actor":"coachman","action":"tool-fault","target":"scripts/run wait-for-markers","detail":"waited on the wrong folder","fault":{"ran":"x","failed":"waited on the wrong folder","error":"none","diagnosis":"x","fix":"y","workaround":"","control":"gate"}}\n' +
+        '{"ts":"2026-01-01T00:00:00Z","project":"p","run":"r","actor":"coachman","action":"tool-fault","target":"scripts/run log-action","detail":"wrote nothing","fault":{"ran":"x","failed":"wrote nothing","error":"none","diagnosis":"x","fix":"y","workaround":"","control":""}}\n',
     );
     outR = tf("harvest", kindsDir);
     out = outR.out + outR.err;
@@ -1185,7 +1185,7 @@ if (a[0] === "api" && a[1] === "graphql") {
       longDir,
       "coachman",
       "tool-fault",
-      "scripts/launch.sh",
+      "scripts/run launch",
       "--ran",
       "x",
       "--failed",
@@ -1228,7 +1228,7 @@ if (a[0] === "api" && a[1] === "graphql") {
       boardDir,
       "coachman",
       "tool-fault",
-      "scripts/cut-scratch.sh",
+      "scripts/run cut-scratch",
       "--ran",
       "cut",
       "--failed",
@@ -1242,7 +1242,7 @@ if (a[0] === "api" && a[1] === "graphql") {
     );
     outR = tf("harvest", boardDir);
     out = outR.out + outR.err;
-    const K1 = idWhere(out, "scripts/cut-scratch.sh");
+    const K1 = idWhere(out, "scripts/run cut-scratch");
     writeFileSync(join(S, "no-item-add"), "");
     outR = tf("file", boardDir, K1);
     out = outR.out + outR.err;
@@ -1324,7 +1324,7 @@ if (a[0] === "api" && a[1] === "graphql") {
         openDir,
         "coachman",
         "tool-fault",
-        "scripts/launch.sh",
+        "scripts/run launch",
         "--ran",
         "x",
         "--failed",
@@ -1350,7 +1350,7 @@ if (a[0] === "api" && a[1] === "graphql") {
       mineDir,
       "coachman",
       "tool-fault",
-      "scripts/launch.sh",
+      "scripts/run launch",
       "--ran",
       "launch",
       "--failed",
@@ -1371,7 +1371,7 @@ if (a[0] === "api" && a[1] === "graphql") {
     outR = tf("harvest", mineDir);
     out = outR.out + outR.err;
     rc = outR.code;
-    const F = idWhere(out, "scripts/launch.sh");
+    const F = idWhere(out, "scripts/run launch");
     check(
       "a repository the user does not own is no tracker: the faults are kept",
       rc === 0 &&
@@ -1406,7 +1406,7 @@ if (a[0] === "api" && a[1] === "graphql") {
       vendDir,
       "coachman",
       "tool-fault",
-      "scripts/launch.sh",
+      "scripts/run launch",
       "--ran",
       "launch",
       "--failed",
@@ -1501,8 +1501,8 @@ if (a[0] === "api" && a[1] === "graphql") {
     // grouping files each entry under faultId of its own target and key.
     {
       const cases: Array<[string, string, string]> = [
-        ["scripts/launch.sh", "codex --json hung", "tf-e2ae0dba"],
-        ["scripts/host.sh", "tmux: no server running", "tf-eb56942b"],
+        ["scripts/run launch", "codex --json hung", "tf-e2ae0dba"],
+        ["scripts/run host", "tmux: no server running", "tf-eb56942b"],
         ["", "", "tf-01ba4719"],
         ["a", "b\nc", "tf-ea7fb08b"],
         ["snowman ☃", "key ☃", "tf-b1776d54"],
@@ -1523,12 +1523,12 @@ if (a[0] === "api" && a[1] === "graphql") {
       const entries = [
         {
           action: "tool-fault",
-          target: "scripts/launch.sh",
+          target: "scripts/run launch",
           fault: { failed: "codex --json hung", control: "", workaround: "" },
         },
         {
           action: "tool-fault",
-          target: "scripts/host.sh",
+          target: "scripts/run host",
           fault: { failed: "tmux: no server running", control: "retry", workaround: "" },
         },
       ];
@@ -1639,17 +1639,17 @@ if (a[0] === "api" && a[1] === "graphql") {
         );
       }
       const faults: Array<[string, string]> = [
-        ["scripts/launch.sh", "crash in Straße 42"],
-        ["scripts/launch.sh", "ςigma failed on DBΣ now"],
-        ["scripts/launch.sh", "İllegal instruction"],
-        ["scripts/launch.sh", "see İ/ſ docs"],
-        ["scripts/launch.sh", "see docs/STRASSE.md"],
-        ["scripts/launch.sh", "STRASSE broke it"],
-        ["scripts/launch.sh", "großartig qzxv jkwv bnpm"],
-        ["scripts/launch.sh", "run `STRASSE` now"],
-        ["scripts/launch.sh", "see STRASSE.MD"],
-        ["scripts/launch.sh", "see https://STRASSE.example/x"],
-        ["scripts/launch.sh", "plain ascii failure"],
+        ["scripts/run launch", "crash in Straße 42"],
+        ["scripts/run launch", "ςigma failed on DBΣ now"],
+        ["scripts/run launch", "İllegal instruction"],
+        ["scripts/run launch", "see İ/ſ docs"],
+        ["scripts/run launch", "see docs/STRASSE.md"],
+        ["scripts/run launch", "STRASSE broke it"],
+        ["scripts/run launch", "großartig qzxv jkwv bnpm"],
+        ["scripts/run launch", "run `STRASSE` now"],
+        ["scripts/run launch", "see STRASSE.MD"],
+        ["scripts/run launch", "see https://STRASSE.example/x"],
+        ["scripts/run launch", "plain ascii failure"],
       ];
       const mkDisp = (name: string): string => {
         const d = join(tmp, name);
@@ -1684,14 +1684,14 @@ if (a[0] === "api" && a[1] === "graphql") {
       };
       const mismatches: string[] = [];
       if (shown.code !== 0 || ghStart < 0 || ghEnd < 0) {
-        mismatches.push("could not extract BASE tool-faults.sh and its stub gh");
+        mismatches.push("could not extract BASE run tool-faults and its stub gh");
       } else {
         const dB = mkDisp("runsB");
         const dP = mkDisp("runsP");
         const base = run("bash", [baseTf, "harvest", dB], {
           env: { ...process.env, PATH: `${binB}:${process.env.PATH}`, TOOL_FAULTS_STUB: S2B },
         });
-        const port = run("bash", [join(T2, "scripts", "tool-faults.sh"), "harvest", dP], {
+        const port = run(join(T2, "scripts", "run"), ["tool-faults", "harvest", dP], {
           env: {
             ...process.env,
             PATH: `${join(tmp, "bin")}:${process.env.PATH}`,
@@ -1759,51 +1759,51 @@ if (a[0] === "api" && a[1] === "graphql") {
       const HXAB = "abcdefab" + "٣";
       const FS = "\x1c";
       const primFaults: Array<[string, string]> = [
-        ["scripts/launch.sh", "mailed to ü@internal.example today"],
-        ["scripts/launch.sh", "ping admin@exämple.com now"],
-        ["scripts/launch.sh", "note user@exämple.com here"],
-        ["scripts/launch.sh", "mail qzxvndr@例え.テスト ok"],
-        ["scripts/launch.sh", "ask josé@acme-corp.com please"],
-        ["scripts/launch.sh", "mail u@example.com ok"],
-        ["scripts/launch.sh", `see ${"üP" + "M"}-12 and more`],
-        ["scripts/launch.sh", `see ${"xüP" + "M"}-99 here`],
-        ["scripts/launch.sh", "see PM-12 here"],
-        ["scripts/launch.sh", `again ${"é" + "tf"}-${ID8} broke`],
-        ["scripts/launch.sh", `again ${"ß" + "tf"}-${ID8} broke`],
-        ["scripts/launch.sh", `again ${"İ" + "tf"}-${ID8} broke`],
-        ["scripts/launch.sh", `again tf-${ID8} broke`],
-        ["scripts/launch.sh", `still TF-${ID8} broke`],
-        ["scripts/launch.sh", `open ${"ßht" + "tp"}://x.com/a now`],
-        ["scripts/launch.sh", `open ${"αht" + "tp"}://x.com/a now`],
-        ["scripts/launch.sh", `open ß${"http" + "/x"} now`],
-        ["scripts/launch.sh", `hash ${"ßabc" + "def1"} done`],
-        ["scripts/launch.sh", `hash ${HXAB}! done`],
-        ["scripts/launch.sh", `saw ß${C12} here`],
-        ["scripts/launch.sh", `read data.${"ß" + "x"} now`],
-        ["scripts/launch.sh", `read secret.${"é" + "xt"} now`],
-        ["scripts/launch.sh", `read file.${"日" + "本"} now`],
-        ["scripts/launch.sh", "read data.txt now"],
-        ["scripts/launch.sh", `run \`${AR7}\` now`],
-        ["scripts/launch.sh", `call ${AR7} ok`],
-        ["scripts/launch.sh", `run \`${D7}\` now`],
-        ["scripts/launch.sh", `hail \`${AR3}\` now`],
-        ["scripts/launch.sh", `ring ${AR3} ok`],
-        ["scripts/launch.sh", `call ${AB3} ok`],
-        ["scripts/launch.sh", `see ${D3} here`],
-        ["scripts/launch.sh", `ſ${SK.slice(1)} failed`],
-        ["scripts/launch.sh", `${SK} failed`],
-        ["scripts/launch.sh", `see _${SK} fail`],
-        ["scripts/launch.sh", `see ${D3A}${SK} fail`],
-        ["scripts/launch.sh", `see ${SK}${D3A}x fail`],
-        ["scripts/launch.sh", `see _${Q} fail`],
-        ["scripts/launch.sh", `spot ${Q}_ fail`],
-        ["scripts/launch.sh", `see é${Q} fail`],
-        ["scripts/launch.sh", `see ${Q}é fail`],
-        ["scripts/launch.sh", `note ${Q} fails`],
-        ["scripts/launch.sh", `see a${FS}b here`],
-        ["scripts/launch.sh", `ping ${"ü1" + "0"}.0.0.1 now`],
-        ["scripts/launch.sh", `ping ${O3}.${O3}.${O3}.${O3} now`],
-        ["scripts/launch.sh", "ping 10.0.0.1 yet"],
+        ["scripts/run launch", "mailed to ü@internal.example today"],
+        ["scripts/run launch", "ping admin@exämple.com now"],
+        ["scripts/run launch", "note user@exämple.com here"],
+        ["scripts/run launch", "mail qzxvndr@例え.テスト ok"],
+        ["scripts/run launch", "ask josé@acme-corp.com please"],
+        ["scripts/run launch", "mail u@example.com ok"],
+        ["scripts/run launch", `see ${"üP" + "M"}-12 and more`],
+        ["scripts/run launch", `see ${"xüP" + "M"}-99 here`],
+        ["scripts/run launch", "see PM-12 here"],
+        ["scripts/run launch", `again ${"é" + "tf"}-${ID8} broke`],
+        ["scripts/run launch", `again ${"ß" + "tf"}-${ID8} broke`],
+        ["scripts/run launch", `again ${"İ" + "tf"}-${ID8} broke`],
+        ["scripts/run launch", `again tf-${ID8} broke`],
+        ["scripts/run launch", `still TF-${ID8} broke`],
+        ["scripts/run launch", `open ${"ßht" + "tp"}://x.com/a now`],
+        ["scripts/run launch", `open ${"αht" + "tp"}://x.com/a now`],
+        ["scripts/run launch", `open ß${"http" + "/x"} now`],
+        ["scripts/run launch", `hash ${"ßabc" + "def1"} done`],
+        ["scripts/run launch", `hash ${HXAB}! done`],
+        ["scripts/run launch", `saw ß${C12} here`],
+        ["scripts/run launch", `read data.${"ß" + "x"} now`],
+        ["scripts/run launch", `read secret.${"é" + "xt"} now`],
+        ["scripts/run launch", `read file.${"日" + "本"} now`],
+        ["scripts/run launch", "read data.txt now"],
+        ["scripts/run launch", `run \`${AR7}\` now`],
+        ["scripts/run launch", `call ${AR7} ok`],
+        ["scripts/run launch", `run \`${D7}\` now`],
+        ["scripts/run launch", `hail \`${AR3}\` now`],
+        ["scripts/run launch", `ring ${AR3} ok`],
+        ["scripts/run launch", `call ${AB3} ok`],
+        ["scripts/run launch", `see ${D3} here`],
+        ["scripts/run launch", `ſ${SK.slice(1)} failed`],
+        ["scripts/run launch", `${SK} failed`],
+        ["scripts/run launch", `see _${SK} fail`],
+        ["scripts/run launch", `see ${D3A}${SK} fail`],
+        ["scripts/run launch", `see ${SK}${D3A}x fail`],
+        ["scripts/run launch", `see _${Q} fail`],
+        ["scripts/run launch", `spot ${Q}_ fail`],
+        ["scripts/run launch", `see é${Q} fail`],
+        ["scripts/run launch", `see ${Q}é fail`],
+        ["scripts/run launch", `note ${Q} fails`],
+        ["scripts/run launch", `see a${FS}b here`],
+        ["scripts/run launch", `ping ${"ü1" + "0"}.0.0.1 now`],
+        ["scripts/run launch", `ping ${O3}.${O3}.${O3}.${O3} now`],
+        ["scripts/run launch", "ping 10.0.0.1 yet"],
       ];
       const primMismatches: string[] = [];
       {
@@ -1852,7 +1852,7 @@ if (a[0] === "api" && a[1] === "graphql") {
         const bOut = run("bash", [baseTf, "harvest", pB], {
           env: { ...process.env, PATH: `${binB}:${process.env.PATH}`, TOOL_FAULTS_STUB: S10B },
         });
-        const pOut = run("bash", [join(T2, "scripts", "tool-faults.sh"), "harvest", pP], {
+        const pOut = run(join(T2, "scripts", "run"), ["tool-faults", "harvest", pP], {
           env: {
             ...process.env,
             PATH: `${join(tmp, "bin")}:${process.env.PATH}`,
@@ -1956,7 +1956,7 @@ if (a[0] === "api" && a[1] === "graphql") {
               run: "t",
               actor: "coachman",
               action: "tool-fault",
-              target: "scripts/launch.sh",
+              target: "scripts/run launch",
               detail: "x",
               fault: { failed: `${word} broke the build`, control: "", workaround: "" },
             })}\n`,
@@ -1973,7 +1973,7 @@ if (a[0] === "api" && a[1] === "graphql") {
           const bOut = run("bash", [join(T3, "scripts", "base-tf.sh"), "harvest", dB], {
             env: { ...process.env, PATH: `${binB}:${process.env.PATH}`, TOOL_FAULTS_STUB: S11B },
           });
-          const pOut = run("bash", [join(T3, "scripts", "tool-faults.sh"), "harvest", dP], {
+          const pOut = run(join(T3, "scripts", "run"), ["tool-faults", "harvest", dP], {
             env: {
               ...process.env,
               PATH: `${join(tmp, "bin")}:${process.env.PATH}`,
@@ -2169,9 +2169,9 @@ describe("positive controls", () => {
   test("only an escalate naming the fault's file counts as its escalation", () => {
     assertControl("only an escalate naming the fault's file counts as its escalation");
   });
-  test("each draft is in the ticket shape, with its turnpikes, and passes scripts/ticket-check.sh", () => {
+  test("each draft is in the ticket shape, with its turnpikes, and passes scripts/run ticket-check", () => {
     assertControl(
-      "each draft is in the ticket shape, with its turnpikes, and passes scripts/ticket-check.sh",
+      "each draft is in the ticket shape, with its turnpikes, and passes scripts/run ticket-check",
     );
   });
   test("a draft names the run by its public id, and the postmaster it ran", () => {

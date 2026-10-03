@@ -2,13 +2,13 @@
 // one spec. A decisions file in the per-lane shape a run from before the one-spec change
 // left behind is still counted, so an older run's file is never misread.
 //
-//   spec-decisions.sh <dispatch> fresh
-//   spec-decisions.sh <dispatch> record <decision> <commit> [<words>...]
-//   spec-decisions.sh <dispatch> count
+//   run spec-decisions <dispatch> fresh
+//   run spec-decisions <dispatch> record <decision> <commit> [<words>...]
+//   run spec-decisions <dispatch> count
 //
 // fresh starts a new package's <dispatch>/spec-decisions.md, so no stanza survives across
 // packages. record appends one `## spec` stanza and logs the spec-review line through
-// scripts/log-action.sh as it happens, with the target `spec`; it refuses a second stanza,
+// scripts/run log-action as it happens, with the target `spec`; it refuses a second stanza,
 // a decision outside approved|changes|dropped, a missing commit, words on an approval, and
 // a changes or dropped with no words. count prints the numbers Spec review branches on:
 //   approved 0|1   1 when this package's `## spec` stanza is an approval with a commit
@@ -191,7 +191,7 @@ function record(d: string, decision: string, commit: string, rest: string[]): vo
   } catch (e: unknown) {
     die(`spec-decisions: cannot write ${f} (${errMsg(e)})`, 1);
   }
-  const logged = run(join(HERE, "log-action.sh"), [d, "postmaster", "spec-review", "spec", detail]);
+  const logged = run(join(HERE, "run"), ["log-action", d, "postmaster", "spec-review", "spec", detail]);
   if (logged.code !== 0)
     die("spec-decisions: stanza kept but the log line failed; log it by hand", 1);
 }
@@ -232,8 +232,8 @@ function count(d: string): void {
 }
 
 function usage(): never {
-  console.error("usage: spec-decisions.sh <dispatch> fresh|record|count");
-  console.error("       spec-decisions.sh <dispatch> record <decision> <commit> [<words>...]");
+  console.error("usage: run spec-decisions <dispatch> fresh|record|count");
+  console.error("       run spec-decisions <dispatch> record <decision> <commit> [<words>...]");
   process.exit(1);
   throw new Error("unreachable");
 }

@@ -2,9 +2,9 @@
 // the markers present, minutes since anything in it changed, and what the postmaster does
 // next. This is the postmaster's poll; it reads files and nothing else. A pending escalation
 // from the postmaster to the user is printed first, since it is what everything else may
-// be waiting on. The waiting list itself is kept by host.sh leg waiting, never by hand.
+// be waiting on. The waiting list itself is kept by run host leg waiting, never by hand.
 //
-//   runs-status.sh <project-run-root>        e.g. <project>/.postmaster/runs
+//   run runs-status <project-run-root>        e.g. <project>/.postmaster/runs
 //
 //   next   USER      the postmaster has put this run's question to the user and waits for the
 //                    answer (.waiting-on-user)
@@ -312,7 +312,7 @@ export function walkFiles(dir: string, fn: (path: string) => void): void {
 const argv = process.argv.slice(2);
 if (import.meta.main) {
   if (argv.length !== 1) {
-    console.error("usage: runs-status.sh <project-run-root>");
+    console.error("usage: run runs-status <project-run-root>");
     process.exit(1);
   }
   const raw = argv[0] as string;

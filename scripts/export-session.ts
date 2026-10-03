@@ -1,8 +1,8 @@
 // Copy a finished lane or coachman thread into its project-local run record.
 //
-//   export-session.sh <dispatch> <name> <harness> <cwd> <events> [<harness-data>]
+//   run export-session <dispatch> <name> <harness> <cwd> <events> [<harness-data>]
 //
-// launch.sh calls this after a run launch exits. The host supplies the exact events path; the
+// run launch calls this after a run launch exits. The host supplies the exact events path; the
 // thread id is read from that harness's stream. Each thread gets a separate file under
 // <dispatch>/sessions/<name>/, so coachman legs and review rounds do not overwrite one another.
 import { spawnSync } from "node:child_process";
@@ -26,7 +26,7 @@ import { mkstempSync, signalExitCode } from "./lib/proc.ts";
 import { D_CLASS, END_OF_STRING, pySplitLines } from "./lib/text.ts";
 
 const USAGE =
-  "usage: export-session.sh <dispatch> <name> <harness> <cwd> <events> [<harness-data>]";
+  "usage: run export-session <dispatch> <name> <harness> <cwd> <events> [<harness-data>]";
 
 function die(msg: string): never {
   console.error(`export-session: ${msg}`);

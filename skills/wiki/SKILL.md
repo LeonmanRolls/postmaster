@@ -1,6 +1,6 @@
 ---
 name: wiki
-description: 'Operate the postmaster wiki, the project knowledge base: how harnesses and services really behave, why the design is as it is, and what happens when several models implement one ticket. Ingest promotes a run somebody chose to keep, or captures a paper or article, into committed raw evidence and compiles a page from it; nothing arrives automatically. Query answers with citations. Lint runs scripts/wiki-lint.sh over citations, links, standings and orphans. Every claim traces to a promoted run, a recorded trial or a captured source. Invoke via /wiki.'
+description: 'Operate the postmaster wiki, the project knowledge base: how harnesses and services really behave, why the design is as it is, and what happens when several models implement one ticket. Ingest promotes a run somebody chose to keep, or captures a paper or article, into committed raw evidence and compiles a page from it; nothing arrives automatically. Query answers with citations. Lint runs scripts/run wiki-lint over citations, links, standings and orphans. Every claim traces to a promoted run, a recorded trial or a captured source. Invoke via /wiki.'
 ---
 
 # /wiki: ingest, query, lint
@@ -85,7 +85,7 @@ A question the wiki may already answer.
 A health check. Run it before committing any change to the wiki.
 
 ```sh
-scripts/wiki-lint.sh              # faults on stdout, exit 1 if any
+scripts/run wiki-lint              # faults on stdout, exit 1 if any
 bun test scripts/wiki-lint.test.ts  # each check fails on its own fault; a clean tree passes
 ```
 

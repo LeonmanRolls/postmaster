@@ -38,16 +38,16 @@ quietly starts afresh hands a lane a prompt without the context it refers to. On
 does nothing looks like a lane with nothing to say. A lane resumed in the wrong directory works
 in someone else's worktree, which breaks blinkers.
 
-`launch.sh` gives each Muse Code and MiMo Code launch its own data directory, keyed by
+`run launch` gives each Muse Code and MiMo Code launch its own data directory, keyed by
 directory, name, leg and run. That makes the not-found case the common one: a resume from
 another directory, on another leg, or outside the run it was launched in looks in a data
 directory that holds no such thread.
 
 ## What changed because of it
 
-`scripts/launch.sh` refuses a muse or mimo resume unless the harness's own export finds the
+`scripts/run launch` refuses a muse or mimo resume unless the harness's own export finds the
 thread in the launch's data directory. Its self-test shows each refusal, and fails without the
-check (issue #71). pi's case was covered already: `launch.sh resume` changes to the given
+check (issue #71). pi's case was covered already: `run launch resume` changes to the given
 directory first. `skills/postmaster/harnesses.md` records each harness's behaviour.
 
 ## What would overturn it

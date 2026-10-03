@@ -18,7 +18,7 @@ import { join } from "node:path";
 import { toolRoot } from "./lib/paths.ts";
 import { accept } from "./parallel-runs-acceptance";
 
-const wrapper = join(import.meta.dir, "parallel-runs-acceptance.sh");
+const wrapper = join(import.meta.dir, "run");
 const ROOT = toolRoot(import.meta);
 const POST = "skills/postmaster/postmaster.md";
 const COACH = "skills/postmaster/coachman.md";
@@ -166,7 +166,7 @@ function has(output: string, line: string): void {
 }
 
 function runCli(...args: string[]): { code: number; out: string } {
-  const r = spawnSync(wrapper, args, { encoding: "utf8" });
+  const r = spawnSync(wrapper, ["parallel-runs-acceptance", ...args], { encoding: "utf8" });
   return { code: r.status ?? -1, out: `${r.stdout ?? ""}${r.stderr ?? ""}` };
 }
 

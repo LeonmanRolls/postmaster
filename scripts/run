@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# The one entry for every tool script. Replaces the per-script wrappers: every script is
+# scripts/<name>.ts (or scripts/lib/<name>.ts) and runs through this.
+#
+#   scripts/run <name> [args]
+#
+# It keeps the isolation the wrappers gave: Bun runs with --no-env-file and this tool's own
+# bunfig.toml, so a script invoked from inside a target project never loads that project's
+# .env or Bun config. The tool root is this file's own directory's parent, never a hardcoded
+# path. The body stays inside what POSIX sh and bash 3.2 both accept.
+if [ "$#" -eq 0 ]; then
+  echo "usage: run <name> [args]" >&2
+  exit 2
+fi
+name=$1
+shift
+case $name in
+  */* | . | ..)
+    echo "run: no such script: $name" >&2
+    exit 2
+    ;;
+esac
+dir=$(dirname "$0")
+root=$(dirname "$dir")
+if [ -f "$dir/$name.ts" ]; then
+  script=$dir/$name.ts
+elif [ -f "$dir/lib/$name.ts" ]; then
+  script=$dir/lib/$name.ts
+else
+  echo "run: no such script: $name" >&2
+  exit 2
+fi
+exec bun --no-env-file "--config=$root/bunfig.toml" "$script" "$@"

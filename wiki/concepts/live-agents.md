@@ -30,9 +30,9 @@ default. Building the option does not wait for it.
 
 **Control: the current arrangement.** A lane or a leg is launched headless, writes its event
 stream and exits, and its wrapper touches a marker. The coachman waits for lanes with
-`scripts/wait-for-markers.sh`, which looks every 20 s. The postmaster sees a leg's markers when
+`scripts/run wait-for-markers`, which looks every 20 s. The postmaster sees a leg's markers when
 it next polls, every `postmaster.poll_seconds` (120 by default). A ruling resumes the thread.
-Since issue #10 merged, these launches run in Herdr panes through `scripts/host.sh`, so both
+Since issue #10 merged, these launches run in Herdr panes through `scripts/run host`, so both
 levels are watched the same way and differ only in the contract.
 
 **Live.** A lane or a leg is an interactive agent in its pane. The coachman gives a lane work
@@ -110,7 +110,7 @@ the trial found the intrinsic delays alike, so the measurement has little left t
 
 **Ticket**: the tightly constrained ticket of the fixture app in issue #37. The fixture is
 built to be dispatched again and again: each run gets a fresh repository from the same commit,
-its merge lands in that throwaway copy, and `fixture.sh score` checks every stage, marker and
+its merge lands in that throwaway copy, and `run fixture score` checks every stage, marker and
 hand-off from the run's own records, at either level. The constrained ticket is the choice so
 that runs are alike in length and counts per launch compare.
 
@@ -135,11 +135,11 @@ a script with its controls: the wait's return logged as it happens at both level
 re-prompts logged apart from rulings; each lane's final-message time, and each leg's first
 action after a ruling, read from the harness session records at teardown; an idle sampler
 recording every agent's state, process count and memory where the idle clock of
-`runs-status.sh` does not read, such as a dot-named file, so sampling cannot hide a stall; and
+`run runs-status` does not read, such as a dot-named file, so sampling cannot hide a stall; and
 `run.json` recording the Herdr version, the detection manifest versions and which integrations
 are installed. Runs from before issue #10 merged are no control: until then a ruling's resume
-left the leg's `.leg-<n>-exited` in place, so the next poll of `runs-status.sh` read REMOUNT
-for a leg that was working. `scripts/host.sh` now clears it on every resume.
+left the leg's `.leg-<n>-exited` in place, so the next poll of `run runs-status` read REMOUNT
+for a leg that was working. `scripts/run host` now clears it on every resume.
 
 **Cost**: six fixture runs, each costing what #37's first scored run records, which is not
 known yet. The live level holds a process per idle agent, about 100 to 160 MiB each on the
@@ -169,7 +169,7 @@ the first run.
 ## What the option needs
 
 With the option off, nothing in the flow changes. The poll finding stands on its own and needs
-no contract change: `wait-for-markers.sh` can look more often or wait on a file-system event,
+no contract change: `run wait-for-markers` can look more often or wait on a file-system event,
 and the postmaster's poll stays the trade between tokens and delay that
 `postmaster.poll_seconds` already exposes.
 
@@ -183,10 +183,10 @@ needs these:
   catches a killed lane. A lane that settles without its final act is prompted again, and
   counted as lost.
 - **Markers.** The coachman touches the lane markers a headless wrapper would, and whatever
-  closes a live leg's agent touches its `.leg-<n>-exited`: `runs-status.sh` reads that marker
-  to call a remount, and `fixture.sh score` requires both leg markers.
+  closes a live leg's agent touches its `.leg-<n>-exited`: `run runs-status` reads that marker
+  to call a remount, and `run fixture score` requires both leg markers.
 - **Liveness.** A live lane writes no event stream into the dispatch directory, and the idle
-  clock of `runs-status.sh` reads file times there. It needs another sign of work, such as the
+  clock of `run runs-status` reads file times there. It needs another sign of work, such as the
   growth of the lane's harness session record, or a healthy live run reads INSPECT after 30
   minutes.
 - **Setup.** Each live agent starts with its harness's bypass form from `harnesses.md`, as

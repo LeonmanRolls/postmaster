@@ -6,26 +6,26 @@ each of those means for each harness. When a harness changes, this file changes 
 runbooks do not. `<tool>` is the postmaster repo, as the runbook that sent you here found it.
 
 **Every form below runs in the foreground and writes its event stream to stdout.**
-`<tool>/scripts/host.sh run` adds the redirect to the lane's events file, runs it where the user can
+`<tool>/scripts/run host run` adds the redirect to the lane's events file, runs it where the user can
 watch it, and lands its marker on exit (`hosts.md`); that is what makes one wrapper in the
 runbooks correct for every harness and every host.
 
-Coachman legs use `<tool>/scripts/host.sh leg`, which owns the stream path, marker lifecycle and
-attempt record. It calls the form below through `launch.sh`; a resume appends to its launch's
-stream and a takeover begins a new stream after preserving the old one. `launch.sh` marks an
+Coachman legs use `<tool>/scripts/run host leg`, which owns the stream path, marker lifecycle and
+attempt record. It calls the form below through `run launch`; a resume appends to its launch's
+stream and a takeover begins a new stream after preserving the old one. `run launch` marks an
 attempt `refused` before its preflight and marks it `started` only after the env file loads and
 the harness is still callable. The leg command records the final outcome before the host lands
 the exited marker.
 
-**`<tool>/scripts/launch.sh` is the executable form of this file.** `launch.sh form <name>` prints the
+**`<tool>/scripts/run launch` is the executable form of this file.** `run launch form <name>` prints the
 exact launch and resume commands for a configured lane or role; `launch` and `resume` run them;
 `review` runs a lane's bug-review form at the harness's top level on the named base-to-HEAD
 range; `skill` prints the prompt that invokes a harness's own security review skill (Own review
 skills, below). The script and this file change together, and a form the script refuses (agy
 resume or a bug-review form the harness does not have) is a form this file has not recorded.
 
-For a launch in a run, `<tool>/scripts/host.sh run --out` passes the events path to `launch.sh`.
-After the harness exits, `launch.sh` reads the thread id from that stream and writes the durable
+For a launch in a run, `<tool>/scripts/run host run --out` passes the events path to `run launch`.
+After the harness exits, `run launch` reads the thread id from that stream and writes the durable
 session under `<dispatch>/sessions/<lane>/<thread-id>`. Codex, Claude Code and pi sessions are
 copied from their durable stores; grok, Muse Code and MiMo Code use their export command;
 Antigravity has no export command, so its complete event stream is kept as the session transcript.
@@ -49,7 +49,7 @@ names (below).
 
 Some ends are the provider's, not the leg's: the model stream dropped, a gateway failed, the
 connection reset. Those are worth resuming on rather than escalating. The set is enumerated in
-`<tool>/scripts/launch.sh` (`transient`), which matches it against the leg's durable record:
+`<tool>/scripts/run launch` (`transient`), which matches it against the leg's durable record:
 its `.err` file and the error records in its stream tail, never a prompt or a user message.
 This file names the same set:
 
@@ -76,7 +76,7 @@ The codes `429` and `402` count only status-shaped, as whole numbers in text or 
 value of a status or code field. The one exclusion is Claude's `rate_limit_event`
 slowdown notice, which is not an ending and never vetoes. A false veto is a wake,
 which costs one look; a missed wall would be an automatic remount against a wall. The
-fifteen stems live once in `launch.sh` (`wall_tokens`, printed by `launch.sh
+fifteen stems live once in `run launch` (`wall_tokens`, printed by `run launch
 wall-tokens`); the veto matrix is built from that list, a quote corpus beside it
 covers real provider messages verbatim, and each stem is pinned alone, so a stem that
 stops vetoing fails loudly. Usage-bearing codex and claude streams from real runs
@@ -168,7 +168,7 @@ in a prompt: match on pid or working directory.
 
 A skill is installed as a link from a harness's user-level skills folder to that skill in the
 postmaster repo's main checkout, never as a copy, and a session finds `<tool>`, the postmaster
-repo, from the link (`SKILL.md`, first section). `<tool>/scripts/link-skills.sh` makes the links
+repo, from the link (`SKILL.md`, first section). `<tool>/scripts/run link-skills` makes the links
 and is this table's executable form; its tests beside it fail when the two disagree. Harnesses that
 read one folder share one link there.
 
@@ -265,7 +265,7 @@ cd <wt> && agy -p "$(cat <dispatch>/<lane>-prompt.txt)" \
 - Thread id: `conversationId` in the stream.
 - Final message: the last result line of the events stream.
 - Resume: relaunch against its `conversationId`; `agy --help` for the flag. Not recorded here,
-  so `launch.sh resume` refuses agy; a postmaster on agy is an interactive session on the
+  so `run launch resume` refuses agy; a postmaster on agy is an interactive session on the
   session host (`hosts.md`) and is never resumed this way.
 - Threads persist harmlessly; nothing to archive.
 - No skills folder is linked for agy (Skills folders, above). A session on agy is pointed at
@@ -287,14 +287,14 @@ cd <wt> && claude -p "$(cat <dispatch>/<lane>-prompt.txt)" --model <model> \
   `[1m]` suffix (or the window the endpoint offers), or the harness assumes 200k and compacts
   early.
 - Thread id: `session_id` on the first event of the stream.
-- Thread name: `--name <text>`, which `launch.sh` passes from `POSTMASTER_LAUNCH_NAME` when
-  `host.sh` sets it. Headless, it names the thread in the resume picker and does not set the
-  pane's terminal title; `host.sh` sets that itself.
+- Thread name: `--name <text>`, which `run launch` passes from `POSTMASTER_LAUNCH_NAME` when
+  `run host` sets it. Headless, it names the thread in the resume picker and does not set the
+  pane's terminal title; `run host` sets that itself.
 - Resume: `claude -p --resume <session_id> "<prompt>"` with the same flags.
 - Ambient context: reads `CLAUDE.md` in the repo and the files it imports. A project that keeps
   its context in `AGENTS.md` needs a `CLAUDE.md` pointing at it; a symlink works.
 - As the coachman's own harness: background tasks are reaped at about 29 minutes, and a long
-  lane routinely outlives that. A launch through `<tool>/scripts/host.sh` is not one of its background
+  lane routinely outlives that. A launch through `<tool>/scripts/run host` is not one of its background
   tasks: it runs in a host's pane, or detached in a session of its own, and outlives the call
   that started it. The cap reaches only what the harness runs itself, such as a wait. A
   "stopped" notification without a quota error is that cap, not a failure: run the wait again,
@@ -330,7 +330,7 @@ cd <wt> && pi --mode json --approve --model <provider/model> \
   working directory's sessions first. Given an id that exists only under another directory,
   pi prints "Session found in different project", asks "Fork this session into current
   directory? [y/N]" on stdin, reads the first line of the piped prompt as the answer, prints
-  "Aborted." and exits 0 having done nothing. `launch.sh resume` always changes to the given
+  "Aborted." and exits 0 having done nothing. `run launch resume` always changes to the given
   directory first, so this bites only a caller that passes a different one.
 - Durable record: session JSONL under `~/.pi/agent/sessions/--<path>--/`, where `<path>` is the
   working directory with `/` replaced by `-`. Threads persist harmlessly; nothing to archive.
@@ -358,7 +358,7 @@ cd <wt> && env XDG_DATA_HOME=<harness-data>/muse/<key> muse exec --json \
 - Resume: the launch form with `--session-id <thread id>`, the model and the effort passed
   again. `muse resume` opens the interactive picker and is not used. Given an id its data
   directory does not hold, Muse Code opens a new thread under that id and exits 0. So
-  `launch.sh` refuses a resume unless Muse Code's own export (`muse export --session <id>`)
+  `run launch` refuses a resume unless Muse Code's own export (`muse export --session <id>`)
   finds the thread in the launch's data directory. It is only there from the same directory,
   name, leg and run. Resumed from another directory with its launch's data, Muse Code refuses
   on its own, with exit 1. [Why the exit is not enough](../../wiki/concepts/resume-exit-status.md)
@@ -373,7 +373,7 @@ cd <wt> && env XDG_DATA_HOME=<harness-data>/muse/<key> muse exec --json \
   last `run.terminal.*` record.
 - **Its data, per lane and per leg.** Muse Code keeps its sessions under `XDG_DATA_HOME`, and a
   memory that outlives them (`add_memory`, `read_memory`): a fresh session there recalled a word
-  an earlier one had been asked to remember. So `launch.sh` gives each lane and each coachman leg
+  an earlier one had been asked to remember. So `run launch` gives each lane and each coachman leg
   its own `XDG_DATA_HOME`, under `POSTMASTER_HARNESS_DATA` (default
   `~/.postmaster/harness-data`), keyed by run, directory, name and leg. A resume finds its
   session there, and no lane, leg or run finds another's through Muse Code's own memory; a lane
@@ -414,10 +414,10 @@ cd <wt> && env XDG_DATA_HOME=<harness-data>/mimo/<key> MIMOCODE_DISABLE_CLAUDE_I
   each message's provider, model and variant. Given an id its data directory does not hold, it
   exits 0 with no event at all, having sent nothing, and says `Session not found` only on
   stderr. Resumed from another directory with its launch's data, it continues the thread and
-  runs its tools in that directory. So `launch.sh` refuses a resume unless `mimo export <id>`
+  runs its tools in that directory. So `run launch` refuses a resume unless `mimo export <id>`
   finds the thread in the launch's data directory. It is only there from the same directory,
   name, leg and run. [Why the exit is not enough](../../wiki/concepts/resume-exit-status.md)
-- Thread name: `--title <text>` on a launch, which `launch.sh` passes from
+- Thread name: `--title <text>` on a launch, which `run launch` passes from
   `POSTMASTER_LAUNCH_NAME`.
 - Final message: the `part.text` of the last `text` event; `step_finish` with reason `stop`
   closes the run. **A run that fails exits 0 all the same**: on a model that does not exist it
@@ -425,7 +425,7 @@ cd <wt> && env XDG_DATA_HOME=<harness-data>/mimo/<key> MIMOCODE_DISABLE_CLAUDE_I
 - **Its data, per lane.** MiMo Code keeps its sessions under `XDG_DATA_HOME`, with a `memory`
   tool's notes and one session-notes file that every session there shares
   (`memory/sessions/current_session_id/notes.md`): a fresh session in the same data directory
-  recalled a word an earlier one had been asked to remember. So `launch.sh` gives each lane its
+  recalled a word an earlier one had been asked to remember. So `run launch` gives each lane its
   own `XDG_DATA_HOME`, as it does for Muse Code. That closes MiMo Code's own channel, not the
   filesystem: a lane asked to search can still read files anywhere on the machine. In a new data
   directory MiMo Code first copies in Claude Code's session history, 69 MB here, which
@@ -445,10 +445,10 @@ cd <wt> && env XDG_DATA_HOME=<harness-data>/mimo/<key> MIMOCODE_DISABLE_CLAUDE_I
 
 Under a review lens, a lane whose harness has its own review skill for that lens runs it in
 place of postmaster's brief. Under the security lens that is `security-review`
-(`coachman.md`, Security lens): `<tool>/scripts/launch.sh skill <lane> security-review` prints
+(`coachman.md`, Security lens): `<tool>/scripts/run launch skill <lane> security-review` prints
 the prompt that invokes it, and exits 3 when the lane's harness has none. The prompt goes in
 the lane's prompt file and the launch is the ordinary launch form. Under the bug lens the form
-is run by `<tool>/scripts/launch.sh review`, below, and no brief is written. A lane whose
+is run by `<tool>/scripts/run launch review`, below, and no brief is written. A lane whose
 harness has no code-review skill does not review for bugs at all: unlike the security lens
 there is no fallback to the brief.
 
@@ -472,7 +472,7 @@ under Code review skill below. OpenAI's Codex Security is a CLI of its own
 0 with an empty result after no turns, having reviewed nothing. A worktree scratch cannot give it
 one: `refs/remotes/origin/HEAD` is shared by every worktree of a repository, and git 2.43
 resolves no per-worktree copy. So the security lens reviews from scratch clones, cut with
-`<tool>/scripts/cut-scratch.sh ... --clone <BASE>`, whose `origin/HEAD` is the branch the repository has
+`<tool>/scripts/run cut-scratch ... --clone <BASE>`, whose `origin/HEAD` is the branch the repository has
 checked out. The cut, and the check before each launch, refuse a clone where that does not lead
 back to BASE. When it verifies its findings
 in background agents, a headless run ends with one result line per turn, and an earlier one can
@@ -484,11 +484,11 @@ reads a lane's final message.
 The bug lens runs each harness's own code-review skill on the run's change, never postmaster's
 brief. Every form below names that change explicitly: a skill left to choose its own diff
 cannot be trusted in a review scratch, which is a worktree detached at the snapshot with no
-upstream. `<tool>/scripts/launch.sh review <lane> <cwd> <base>` runs the form on the change
+upstream. `<tool>/scripts/run launch review <lane> <cwd> <base>` runs the form on the change
 from `<base>` to the scratch's `HEAD`, and exits 3 for a harness with none. It runs every
 review at its harness's top level and names that level on every launch: `max` for claude and
 codex, and `high` for MiMo Code on MiMo V2.6 Pro, whose variants stop there, whatever effort
-the lane is configured at. `<tool>/scripts/review-forms.sh has <harness>` answers whether a
+the lane is configured at. `<tool>/scripts/run review-forms has <harness>` answers whether a
 harness has one, and is what the scripts ask instead of carrying their own copy of the table.
 
 | harness | code-review skill | source |
@@ -551,7 +551,7 @@ Given no target it reviewed uncommitted changes, found none in a clean scratch, 
 
 ## Interactive form: the postmaster and a spec session
 
-The postmaster is an interactive session (`SKILL.md` spawns it through `host.sh spawn`), and a
+The postmaster is an interactive session (`SKILL.md` spawns it through `run host spawn`), and a
 spec session is another (`postmaster.md`, Spec review): both run in their harness's bypass
 mode, like every launch, named for their project or their ticket. The same table serves both.
 
@@ -573,24 +573,24 @@ takes its bypass flag from the headless form above; run it once before relying o
 
 ## Keeping the watcher running
 
-Stage D keeps one `<tool>/scripts/runs-watch.sh <runs>` going per project, acts on the runs it
+Stage D keeps one `<tool>/scripts/run runs-watch <runs>` going per project, acts on the runs it
 names, and starts it again at once. The watcher is a long wait that must outlive a turn and must
 not hold the conversation, so it is started the way any launch is, through
-`<tool>/scripts/host.sh run`, which returns as soon as the watcher has started and keeps it in a
+`<tool>/scripts/run host run`, which returns as soon as the watcher has started and keeps it in a
 session of its own: a host's pane where there is one, a detached process where there is none
 (`hosts.md`).
 
 ```sh
-<tool>/scripts/host.sh run "watch · <project>" "<repo>" \
+<tool>/scripts/run host run "watch · <project>" "<repo>" \
     --out "<runs>/postmaster/watch.out" --err "<runs>/postmaster/watch.err" \
     --marker "<runs>/postmaster/.watch-exited" \
-    -- "<tool>/scripts/runs-watch.sh" "<runs>"
+    -- "<tool>/scripts/run runs-watch" "<runs>"
 ```
 
-Wait for its return in the conversation with `<tool>/scripts/wait-for-markers.sh`:
+Wait for its return in the conversation with `<tool>/scripts/run wait-for-markers`:
 
 ```sh
-<tool>/scripts/wait-for-markers.sh "<runs>/postmaster" '.watch-exited' 1 86400
+<tool>/scripts/run wait-for-markers "<runs>/postmaster" '.watch-exited' 1 86400
 ```
 
 Exit 0 means the watcher returned: read `watch.out`. Exit 3 means nothing returned in a
@@ -606,23 +606,23 @@ killed rather than exiting: start the watcher again.
 
 | harness | nonblocking form | where the session cannot keep it in the background |
 |---|---|---|
-| claude | the `host.sh run` form above; never its own background tasks, which are reaped at about 29 minutes (its section above) | the foreground poll below |
-| codex | the `host.sh run` form above | the foreground poll below |
-| grok | the `host.sh run` form above | the foreground poll below |
-| agy | the `host.sh run` form above | the foreground poll below |
-| pi | the `host.sh run` form above | the foreground poll below |
-| muse | the `host.sh run` form above | the foreground poll below |
-| mimo | the `host.sh run` form above | the foreground poll below |
+| claude | the `run host run` form above; never its own background tasks, which are reaped at about 29 minutes (its section above) | the foreground poll below |
+| codex | the `run host run` form above | the foreground poll below |
+| grok | the `run host run` form above | the foreground poll below |
+| agy | the `run host run` form above | the foreground poll below |
+| pi | the `run host run` form above | the foreground poll below |
+| muse | the `run host run` form above | the foreground poll below |
+| mimo | the `run host run` form above | the foreground poll below |
 
-The foreground poll is `<tool>/scripts/runs-watch.sh <runs> --timeout <postmaster.poll_seconds>`,
+The foreground poll is `<tool>/scripts/run runs-watch <runs> --timeout <postmaster.poll_seconds>`,
 run in the conversation and started again at once: it returns with the table every interval. It
 is the only form that blocks the conversation, and only for one interval. Never keep the
-watcher anywhere but `host.sh run`: no other keeping has a documented lifetime, and on
+watcher anywhere but `run host run`: no other keeping has a documented lifetime, and on
 2026-09-28 a watcher kept outside it was killed when memory ran short (#121).
 
 ## Usage
 
-`bun <tool>/scripts/usage.ts` is this file's executable form for what a launch cost: it reads the
+`scripts/run usage` is this file's executable form for what a launch cost: it reads the
 input and output tokens each harness reports, and the cost where the harness reports one, from
 the launch's own event stream or session record. A figure the harness did not report is omitted
 and never written as zero; a harness that reports nothing is named as reporting nothing. Its
@@ -649,7 +649,7 @@ reader takes `model_completed` alone.
 
 ## The pane view
 
-`<tool>/scripts/view-stream.sh` is the other executable half of this file: it renders an events
+`<tool>/scripts/run view-stream` is the other executable half of this file: it renders an events
 stream as wrapped blocks for a host's pane (`hosts.md`) and for anyone reading a stream by hand.
 What an agent says and what it runs shows in full, every line, wrapped to the pane and never cut
 short; tool output stays out. It knows claude's, muse's and mimo's events, checked against recorded

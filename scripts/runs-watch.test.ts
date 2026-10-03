@@ -22,7 +22,7 @@ import { join } from "node:path";
 import { streamLines } from "./runs-watch.ts";
 import { run } from "./lib/proc.ts";
 
-const self = join(import.meta.dir, "runs-watch.sh");
+const self = join(import.meta.dir, "run");
 const savedConfig = process.env.POSTMASTER_CONFIG;
 
 let tmp = "";
@@ -53,7 +53,7 @@ function makePin(dir: string, withHost: boolean): { pin: string; commit: string 
   );
   if (withHost) {
     mkdirSync(join(dir, "scripts"), { recursive: true });
-    writeFileSync(join(dir, "scripts", "host.sh"), "#!/usr/bin/env bash\nexit 0\n", {
+    writeFileSync(join(dir, "scripts", "run host"), "#!/usr/bin/env bash\nexit 0\n", {
       mode: 0o755,
     });
   }
@@ -431,13 +431,13 @@ function watchStub(root: string, mode = ""): { rc: number; out: string } {
   else if (mode === "dispatch refusal" || mode === "resume refusal") {
     env.POSTMASTER_WATCH_TEST_REFUSE = "1";
   }
-  const r = run(self, ["--timeout", "0", root], { env });
+  const r = run(self, ["runs-watch", "--timeout", "0", root], { env });
   return { rc: r.code, out: `${r.out}${r.err}` };
 }
 
 function watchStubWait(root: string): { rc: number; out: string } {
   mkdirSync(join(tmp, "calls"), { recursive: true });
-  const r = run(self, ["--timeout", "3", root], {
+  const r = run(self, ["runs-watch", "--timeout", "3", root], {
     env: {
       POSTMASTER_WATCH_TEST_MODE: "1",
       POSTMASTER_WATCH_TEST_CALLS: join(tmp, "calls"),
@@ -1390,7 +1390,7 @@ describe("config: a missing or unusable poll interval falls back to the default"
 
 describe("usage", () => {
   test("no run root is refused with the usage", () => {
-    const r = run(self, []);
+    const r = run(self, ["runs-watch", ]);
     const out = `${r.out}${r.err}`;
     expect(r.code).toBe(1);
     expect(out).toContain("usage:");
@@ -1398,31 +1398,31 @@ describe("usage", () => {
   }, 30000);
 
   test("a timeout that is not a number is refused", () => {
-    const r = run(self, ["--timeout", "soon", join(tmp, "neg-wait")]);
+    const r = run(self, ["runs-watch", "--timeout", "soon", join(tmp, "neg-wait")]);
     const out = `${r.out}${r.err}`;
     expect(r.code).toBe(1);
     expect(out).toContain("not a whole number");
   }, 30000);
 
   test("an empty timeout is refused", () => {
-    const r = run(self, ["--timeout", "", join(tmp, "neg-wait")]);
+    const r = run(self, ["runs-watch", "--timeout", "", join(tmp, "neg-wait")]);
     const out = `${r.out}${r.err}`;
     expect(r.code).toBe(1);
     expect(out).toContain("not a whole number");
   }, 30000);
 
   test("a run root that does not exist is refused", () => {
-    const r = run(self, ["--timeout", "2", join(tmp, "nowhere")]);
+    const r = run(self, ["runs-watch", "--timeout", "2", join(tmp, "nowhere")]);
     const out = `${r.out}${r.err}`;
     expect(r.code).toBe(1);
     expect(out).toContain("no such root");
   }, 30000);
 
   test("--help prints the usage", () => {
-    const r = run(self, ["--help"]);
+    const r = run(self, ["runs-watch", "--help"]);
     const out = `${r.out}${r.err}`;
     expect(r.code).toBe(0);
-    expect(out).toContain("runs-watch.sh");
+    expect(out).toContain("run runs-watch");
     expect(out).toContain("held");
   }, 30000);
 });

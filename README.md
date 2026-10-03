@@ -100,50 +100,50 @@ afterwards. After that it helps you choose a project and is the postmaster in th
 opened, or launches one when it cannot be.
 
 ```sh
-scripts/probe-harnesses.sh      # which agent CLIs are installed
-scripts/probe-trackers.sh       # which ticket sources are reachable
-scripts/setup.sh --answers <file> # writes the config from the agent's collected answers (--keys lists them)
-scripts/link-skills.sh [--dry-run | --check | --remove]            # the skills, as links into each CLI's skills folder
-scripts/skill-refs.sh [--fix]                                      # every script path in the skill goes through <tool>
-scripts/find-projects.sh        # your git projects, most recent first
-scripts/check-target.sh  <path> # 0 usable · 1 not a repo · 2 dirty
-scripts/discover-project.sh <path>                                # gate, docs, tracker and its prefix, and the checks
-scripts/project-settings.sh inspect|report|ensure|write …        # optional project settings and their source
-scripts/front-door.sh <harness> <model> <cwd> <yes|no> <target>   # self or spawn: who runs the stream
-scripts/verify.sh checks|record|arm|run|results|summary …          # the checks a change is verified by
-scripts/verify-examples.sh | verify-journey.sh | verify-library.sh # the defaults beyond the gate
-scripts/cut-scratch.sh <repo> <source-worktree> <dest> <commit> [--clone <base>]  # reviewer scratch; --kind, --remove
-scripts/wait-for-markers.sh <dir> <glob> <count> <timeout>       # block until a round is in
-scripts/review-round.sh start|wait|teardown <dispatch> <round> … # a review round's deadline, its wait, its teardown
-scripts/log-action.sh <dispatch> <actor> <action> <target> …     # one JSON line per action
-scripts/tool-faults.sh harvest|comment|file|decline <dispatch> …  # a closed run's tool faults, as tickets
-scripts/stage.sh <dispatch> <stage>                               # the one way a run changes stage
-scripts/spec-review-link.sh <dispatch> <spec-folder>              # resolve a reviewed spec's code-server link
-scripts/spec-decisions.sh <dispatch> fresh|record|count           # record the spec decision, count the package
-scripts/spec-session.sh brief|approve <dispatch>                  # the spec session's brief; approve commits and records
-scripts/run-times.sh <dispatch>                                   # how long each stage took, from the log
-scripts/run-log.sh <dispatch> <text> | --section <title> | --close # the narrative, timestamped
-scripts/run-meta.sh <dispatch> <repo> | path|check|release <dispatch> # run.json and the pinned tool a run started from
-bun scripts/run-clash.ts <repo> <ticket-id>                      # refuse an id that already names a run or a branch
-scripts/github.sh <repo> board|create|edit|read|state|comment|list|access|search # GitHub Issues on a Projects board
-scripts/plane.sh create|edit|read|state|comment|list …             # Plane work items
-scripts/local.sh <repo> store|create|edit|read|title|state|comment|list # tickets in the repo's git directory
-scripts/tracker-kind.sh <repo>                                    # the tracker kind a repo uses: local when its store exists
-scripts/ticket-check.sh <repo> <id> | --body <file> | --splice …   # a ticket's shape; --splice writes approved parts in
-scripts/turnpikes.sh --list | resolve <text> | legs <dispatch>     # the turnpikes, and a run's legs
-scripts/style-findings.sh list|count|gate|check <dispatch>         # a run's style findings, what its gate runs, the sort
-scripts/launch.sh form|launch|review|resume|skill <lane-or-role> … # any lane or role, one command
-scripts/reviewers.sh lines|eligible <lens>|lanes <waybill> <lens>|lenses # which lanes review under each lens
-scripts/review-forms.sh has <harness>                            # whether the harness has a code-review form
-scripts/review-findings.sh normalize|harvest …                   # native bug-review output into the finding contract
-scripts/host.sh leg launch|resume|takeover|retry|outcome|backfill|waiting … | detect|name|run|stop|close|stop-run|close-run|spawn|send|wait|read … # leg lifecycle, launch placement and teardown
-scripts/view-stream.sh < <events-file>                            # a harness's events, wrapped: what it says and runs, in full
-scripts/runs-status.sh <run-root>                                  # the postmaster's poll
-scripts/coachman-contract.sh <base> <head>                         # whether a change touches the contract, by file
-scripts/runs-watch.sh <run-root> [--timeout <seconds>]              # wait until a run needs the postmaster
-scripts/handoff-check.sh <handoff-file>                            # a leg may end only on exit 0
-scripts/wiki-lint.sh                                             # the wiki's rules, run not remembered
-scripts/fixture.sh new|score|hidden …                              # a run on a fixture app, scored against a known outcome
+scripts/run probe-harnesses      # which agent CLIs are installed
+scripts/run probe-trackers       # which ticket sources are reachable
+scripts/run setup --answers <file> # writes the config from the agent's collected answers (--keys lists them)
+scripts/run link-skills [--dry-run | --check | --remove]            # the skills, as links into each CLI's skills folder
+scripts/run skill-refs [--fix]                                      # every script path in the skill goes through <tool>
+scripts/run find-projects        # your git projects, most recent first
+scripts/run check-target  <path> # 0 usable · 1 not a repo · 2 dirty
+scripts/run discover-project <path>                                # gate, docs, tracker and its prefix, and the checks
+scripts/run project-settings inspect|report|ensure|write …        # optional project settings and their source
+scripts/run front-door <harness> <model> <cwd> <yes|no> <target>   # self or spawn: who runs the stream
+scripts/run verify checks|record|arm|run|results|summary …          # the checks a change is verified by
+scripts/run verify-examples | run verify-journey | run verify-library # the defaults beyond the gate
+scripts/run cut-scratch <repo> <source-worktree> <dest> <commit> [--clone <base>]  # reviewer scratch; --kind, --remove
+scripts/run wait-for-markers <dir> <glob> <count> <timeout>       # block until a round is in
+scripts/run review-round start|wait|teardown <dispatch> <round> … # a review round's deadline, its wait, its teardown
+scripts/run log-action <dispatch> <actor> <action> <target> …     # one JSON line per action
+scripts/run tool-faults harvest|comment|file|decline <dispatch> …  # a closed run's tool faults, as tickets
+scripts/run stage <dispatch> <stage>                               # the one way a run changes stage
+scripts/run spec-review-link <dispatch> <spec-folder>              # resolve a reviewed spec's code-server link
+scripts/run spec-decisions <dispatch> fresh|record|count           # record the spec decision, count the package
+scripts/run spec-session brief|approve <dispatch>                  # the spec session's brief; approve commits and records
+scripts/run run-times <dispatch>                                   # how long each stage took, from the log
+scripts/run run-log <dispatch> <text> | --section <title> | --close # the narrative, timestamped
+scripts/run run-meta <dispatch> <repo> | path|check|release <dispatch> # run.json and the pinned tool a run started from
+scripts/run run-clash <repo> <ticket-id>                      # refuse an id that already names a run or a branch
+scripts/run github <repo> board|create|edit|read|state|comment|list|access|search # GitHub Issues on a Projects board
+scripts/run plane create|edit|read|state|comment|list …             # Plane work items
+scripts/run local <repo> store|create|edit|read|title|state|comment|list # tickets in the repo's git directory
+scripts/run tracker-kind <repo>                                    # the tracker kind a repo uses: local when its store exists
+scripts/run ticket-check <repo> <id> | --body <file> | --splice …   # a ticket's shape; --splice writes approved parts in
+scripts/run turnpikes --list | resolve <text> | legs <dispatch>     # the turnpikes, and a run's legs
+scripts/run style-findings list|count|gate|check <dispatch>         # a run's style findings, what its gate runs, the sort
+scripts/run launch form|launch|review|resume|skill <lane-or-role> … # any lane or role, one command
+scripts/run reviewers lines|eligible <lens>|lanes <waybill> <lens>|lenses # which lanes review under each lens
+scripts/run review-forms has <harness>                            # whether the harness has a code-review form
+scripts/run review-findings normalize|harvest …                   # native bug-review output into the finding contract
+scripts/run host leg launch|resume|takeover|retry|outcome|backfill|waiting … | detect|name|run|stop|close|stop-run|close-run|spawn|send|wait|read … # leg lifecycle, launch placement and teardown
+scripts/run view-stream < <events-file>                            # a harness's events, wrapped: what it says and runs, in full
+scripts/run runs-status <run-root>                                  # the postmaster's poll
+scripts/run coachman-contract <base> <head>                         # whether a change touches the contract, by file
+scripts/run runs-watch <run-root> [--timeout <seconds>]              # wait until a run needs the postmaster
+scripts/run handoff-check <handoff-file>                            # a leg may end only on exit 0
+scripts/run wiki-lint                                             # the wiki's rules, run not remembered
+scripts/run fixture new|score|hidden …                              # a run on a fixture app, scored against a known outcome
 ```
 
 A project may carry a `.postmaster/` folder. It holds the project's settings and every run's
@@ -180,16 +180,16 @@ JavaScript project's gate.
 
 ## Installing the skills
 
-Skills are installed as links, never as copies. `scripts/link-skills.sh` links each directory
+Skills are installed as links, never as copies. `scripts/run link-skills` links each directory
 under `skills/` into the user-level skills folder of every installed agent CLI that has one,
 pointing at the main checkout of this repo, never a worktree. Setup checks their status first.
 If links are missing, it shows the dry-run output and asks before installing them:
 
 ```sh
-scripts/link-skills.sh --check      # report missing or blocked links; never changes anything
-scripts/link-skills.sh --dry-run   # the links it would make, and anything in the way
-scripts/link-skills.sh             # install, after the user agrees
-scripts/link-skills.sh --remove    # remove them, and nothing else
+scripts/run link-skills --check      # report missing or blocked links; never changes anything
+scripts/run link-skills --dry-run   # the links it would make, and anything in the way
+scripts/run link-skills             # install, after the user agrees
+scripts/run link-skills --remove    # remove them, and nothing else
 ```
 
 It replaces nothing. A file, a folder or another link where a link belongs is named, and
@@ -208,7 +208,7 @@ when its instructions send an agent to them rather than up front.
 with each ticket a card in the column its state says, and nothing to configure beyond `gh`
 being logged in. Plane works the same way through its API, cloud or self-hosted. With no
 service and no login, the local kind keeps a repo's tickets in its own git directory, and
-`scripts/local.sh <repo> list` shows them by state. Any other tracker your agent reaches
+`scripts/run local <repo> list` shows them by state. Any other tracker your agent reaches
 through its own tooling is described once, outside this repo.
 The adapters are in `skills/postmaster/trackers.md`.
 
@@ -226,7 +226,7 @@ conversation is the live process and needs no host of its own. Everything else r
 as a **native session**: the harness's own thread, in its
 own store on disk. A lane or a coachman leg is launched headless, writes its events and a
 marker, and exits. When it is needed again, for a ruling to a coachman or a remount of a
-stalled lane, the flow resumes that thread with one command (`scripts/launch.sh resume`) and
+stalled lane, the flow resumes that thread with one command (`scripts/run launch resume`) and
 the harness reloads the conversation itself.
 
 That is cheaper than a pane per role. An idle interactive agent in a tmux or Herdr pane is a

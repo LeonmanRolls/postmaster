@@ -3,7 +3,7 @@
 // tool that walks the whole folder never reads the run's working copies under .worktrees/.
 // Why: wiki/concepts/clean-checkout-gates.md.
 //
-//   bun scripts/clean-checkout.ts <repo> <branch> <command> [<command>...]
+//   scripts/run clean-checkout <repo> <branch> <command> [<command>...]
 //
 // Makes a detached git worktree of <branch> (a branch, tag, or commit) in a temporary
 // directory outside the project folder, populates its submodules where the branch has any,
@@ -14,7 +14,7 @@
 // git worktree, rather than an archive export, so gates that read git metadata keep
 // working. Separate commands, rather than one shell string joined with &&, so a failed
 // preparation can never be hidden by a later statement. Each command runs in a process
-// group of its own with verify.sh's bound (1800s, or CLEAN_CHECKOUT_TIMEOUT for a test);
+// group of its own with run verify's bound (1800s, or CLEAN_CHECKOUT_TIMEOUT for a test);
 // the whole group is killed when the bound is reached, and a timeout fails with 124.
 //
 //   exit 0..255  the failing command's exit, or the last command's when all passed; a
@@ -77,7 +77,7 @@ const scrubbedEnv = (): Record<string, string | undefined> =>
 const gitOk = (repo: string, args: string[], env: Record<string, string | undefined>): boolean =>
   spawnSync("git", ["-C", repo, ...args], { stdio: "ignore", env }).status === 0;
 
-// verify.sh's bound, not a new one: each command gets 1800s unless the caller overrides it
+// run verify's bound, not a new one: each command gets 1800s unless the caller overrides it
 // for a test. A timeout kills the command's whole process group and fails with 124, the
 // timeout(1) convention: a timeout is a failure, never a pass.
 const DEFAULT_TIMEOUT_SECS = 1800;
@@ -123,7 +123,7 @@ const runBounded = (
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      // The whole group goes, left-behind children included, as verify.sh does.
+      // The whole group goes, left-behind children included, as run verify does.
       if (child.pid !== undefined) {
         try {
           process.kill(-child.pid, "SIGKILL");

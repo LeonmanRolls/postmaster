@@ -259,7 +259,7 @@ describe("--check: the same command reports missing links and passes when comple
     checkHome = realpathSync(checkHomeBase);
     cpSync(join(TOOL, "skills"), join(checkTool, "skills"), { recursive: true });
     // The install command names the script being run: in-process, the real one.
-    checkRun = shellQuote(join(scriptsDir(import.meta), "link-skills.sh"));
+    checkRun = shellQuote(join(scriptsDir(import.meta), "run"));
     blockedPath = join(checkHome, ".claude", "skills", "postmaster");
   });
 

@@ -2,17 +2,17 @@
 // acceptance criteria each answerable yes or no, the direction, and the turnpikes. This is the
 // executable form of the ticket shape in skills/postmaster/trackers.md.
 //
-//   ticket-check.sh <repo> <ticket-id>                    through the adapter of the kind the repo
-//                                                         uses, as scripts/tracker-kind.sh names it:
+//   run ticket-check <repo> <ticket-id>                    through the adapter of the kind the repo
+//                                                         uses, as scripts/run tracker-kind names it:
 //                                                         local when its store exists, else the
 //                                                         config's [tracker] kind
-//   ticket-check.sh --body <body-file> [--title <title>] [--project <repo>] a body file, as an adapter's create
+//   run ticket-check --body <body-file> [--title <title>] [--project <repo>] a body file, as an adapter's create
 //                                                         takes it; the title is judged only when
 //                                                         --title gives one
-//   ticket-check.sh --splice <base-body> <sections>       print <base-body> with each `##` section
+//   run ticket-check --splice <base-body> <sections>       print <base-body> with each `##` section
 //                                                         of <sections> in place of the one it
 //                                                         names, or added where the shape puts it
-//   ticket-check.sh --has-journey <file>                  print `journey` or `no journey`: whether
+//   run ticket-check --has-journey <file>                  print `journey` or `no journey`: whether
 //                                                         the phrase "user journey" occurs anywhere in
 //                                                         the text, case-insensitively, with whitespace
 //                                                         runs (and zero-width joiners) collapsed, the
@@ -36,7 +36,7 @@
 //     brackets and emphasis aside; and it is not marked to be decided later.
 //   - No part is marked to be decided later: TBD or TBC anywhere, or TODO as the whole text or
 //     followed by a colon. TODO as a word, as in "a TODO list", is not a mark.
-//   - The turnpikes are `default`, `none` or turnpike names, as `scripts/turnpikes.sh resolve`
+//   - The turnpikes are `default`, `none` or turnpike names, as `scripts/run turnpikes resolve`
 //     reads them for the target project, and every word that is not a turnpike is named. The names come from that
 //     script alone, so a turnpike added there needs no change here.
 // Code spans, fenced blocks and HTML comments are not read for questions, marks or headings,
@@ -62,7 +62,7 @@
 //   exit 0  well-formed: it prints how many acceptance criteria it has, then the turnpikes as the
 //           waybill carries them, `turnpikes: <names>` or `turnpikes: none`; with --splice, the body
 //   exit 1  usage; a file that cannot be read; no config, or one that does not parse; a tracker kind
-//           with no adapter script; the adapter could not read the ticket; scripts/turnpikes.sh
+//           with no adapter script; the adapter could not read the ticket; scripts/run turnpikes
 //           could not be run or gave no verdict; or, with --splice, a sections file that is not a
 //           list of `##` sections, or a part it would write named inside a later part of the base
 //   exit 2  malformed; one line per missing or malformed part on stdout, the part named first
@@ -404,7 +404,7 @@ function turnpikesCheck(
     .filter(([t, code]) => !code && !FENCED_ITEM.test(t))
     .map(([t]) => t)
     .join("\n");
-  const r = run(turnpikesPath, ["resolve"], { input: text });
+  const r = run(turnpikesPath, ["turnpikes", "resolve"], { input: text });
   const said = r.out.split("\n").filter(Boolean);
   if (r.code === 2 && said.length > 0) {
     for (const l of said) fault(part, l);
@@ -414,7 +414,7 @@ function turnpikesCheck(
     return said[0]!;
   }
   dieT(
-    `turnpikes.sh resolve gave no verdict (exit ${r.code}): ${r.err.trim() || r.out.trim() || "no output"}`,
+    `run turnpikes resolve gave no verdict (exit ${r.code}): ${r.err.trim() || r.out.trim() || "no output"}`,
   );
 }
 
@@ -584,10 +584,10 @@ function _checkPrinted(text: string, turnpikesPath: string): number {
 }
 
 // --- entry -------------------------------------------------------------------------------------
-const TURNPIKES = join(scriptsDir(import.meta), "turnpikes.sh");
+const TURNPIKES = join(scriptsDir(import.meta), "run");
 
 const USAGE =
-  "usage: ticket-check.sh <repo> <ticket-id> | --body <body-file> [--title <title>] [--project <repo>] | --splice <base-body> <sections> | --has-journey <file>";
+  "usage: run ticket-check <repo> <ticket-id> | --body <body-file> [--title <title>] [--project <repo>] | --splice <base-body> <sections> | --has-journey <file>";
 
 function usage(): never {
   console.error(USAGE);
@@ -706,9 +706,9 @@ function main(argv: string[]): number {
   process.env.POSTMASTER_PROJECT = realpathSync(mode);
   try {
     const HERE = scriptsDir(import.meta);
-    const kindR = run(join(HERE, "tracker-kind.sh"), [mode]);
+    const kindR = run(join(HERE, "run"), ["tracker-kind", mode]);
     if (kindR.code !== 0) {
-      // BASE left tracker-kind.sh's stderr to flow through; run() captures it, so forward it.
+      // BASE left run tracker-kind's stderr to flow through; run() captures it, so forward it.
       process.stderr.write(kindR.err);
       return 1;
     }
@@ -717,20 +717,20 @@ function main(argv: string[]): number {
     let readOut = "";
     let readCode = 0;
     if (kind === "github") {
-      const r = run(join(HERE, "github.sh"), [mode, "read", id]);
+      const r = run(join(HERE, "run"), ["github", mode, "read", id]);
       readOut = r.out;
       readCode = r.code;
     } else if (kind === "plane") {
-      const r = run(join(HERE, "plane.sh"), ["read", id]);
+      const r = run(join(HERE, "run"), ["plane", "read", id]);
       readOut = r.out;
       readCode = r.code;
     } else if (kind === "local") {
-      const r = run(join(HERE, "local.sh"), [mode, "read", id]);
+      const r = run(join(HERE, "run"), ["local", mode, "read", id]);
       readOut = r.out;
       readCode = r.code;
     } else {
       console.error(
-        `ticket-check: tracker kind '${kind}' has no adapter script; read the ticket with its own tooling (trackers.md, other), write its body to a file, and run: ticket-check.sh --body <file> --title <title>`,
+        `ticket-check: tracker kind '${kind}' has no adapter script; read the ticket with its own tooling (trackers.md, other), write its body to a file, and run: run ticket-check --body <file> --title <title>`,
       );
       return 1;
     }

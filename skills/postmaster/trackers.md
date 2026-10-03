@@ -3,7 +3,7 @@
 The runbooks make five demands of a tracker and no more: read a ticket, set its state, add a
 dated comment, create a ticket, and replace a ticket's body. This file says what each means for
 each tracker kind the config allows (`<tool>/config.example.toml`, `[tracker]`). Every write is also
-logged through `<tool>/scripts/log-action.sh` as `ticket-create`, `ticket-edit`, `ticket-state` or
+logged through `<tool>/scripts/run log-action` as `ticket-create`, `ticket-edit`, `ticket-state` or
 `ticket-comment`. `<tool>` is the postmaster repo, as the runbook that sent you here found it.
 
 **GitHub Issues is the default**, on a GitHub Projects board so the tickets are a kanban the
@@ -12,7 +12,7 @@ git directory, with no service and no login. Anything else is `other`. Tickets n
 live on a branch of the target repo: a ticket is state, and state does not belong in a commit.
 
 The ticket shape is the same everywhere: a title, then these headings in this order, so opening
-one costs no orientation. `<tool>/scripts/ticket-check.sh` is its executable form. It requires the
+one costs no orientation. `<tool>/scripts/run ticket-check` is its executable form. It requires the
 title and the first four headings, and does not check `Notes` or `User journey`.
 
 ```
@@ -31,8 +31,8 @@ heading out is not.
 ## Turnpikes
 The checks the run must pass through before it ships, besides the project's gate, which always
 runs: `default`, `none`, or turnpikes by name, separated by commas. `default` stands for this
-project's declared default set, alone or in a list. `<tool>/scripts/turnpikes.sh --list` lists the
-turnpike names; `<tool>/scripts/turnpikes.sh resolve --project <repo> default` shows what
+project's declared default set, alone or in a list. `<tool>/scripts/run turnpikes --list` lists the
+turnpike names; `<tool>/scripts/run turnpikes resolve --project <repo> default` shows what
 `default` means for the target. Only names go here; the reason for a choice goes in the notes.
 
 ## Notes
@@ -62,26 +62,26 @@ it and removed by the next state change. `done` closes the issue; `cancelled` cl
 not planned. The ticket id is the issue number, and the prefix discovery reads from commit
 messages is `#`.
 
-Everything goes through `<tool>/scripts/github.sh`, which reads the GitHub repository from the
+Everything goes through `<tool>/scripts/run github`, which reads the GitHub repository from the
 target's origin remote and needs nothing configured. `gh` must be logged in with the
 `project` scope (`gh auth login`, then `gh auth refresh -s project`); the user does both,
-never an agent, and `<tool>/scripts/probe-trackers.sh` says whether they have.
+never an agent, and `<tool>/scripts/run probe-trackers` says whether they have.
 An optional `.postmaster/project.toml` `[tracker].binding` selects the exact title of the linked
 Projects board. Without it, the adapter keeps its discovered board choice. The shared binding is
 a board name; its owner and the user's GitHub login are machine-side.
 
 ```sh
-<tool>/scripts/github.sh <repo> board                        # the linked board and its URL; exit 3 if none
-<tool>/scripts/github.sh <repo> board init                   # create a board named after the repo and link it
-<tool>/scripts/github.sh <repo> create "<title>" <body-file> # prints the new issue number
-<tool>/scripts/github.sh <repo> read <n>
-<tool>/scripts/github.sh <repo> read <n> --body              # the body alone, exactly as stored
-<tool>/scripts/github.sh <repo> edit <n> <body-file> <base-file>
-<tool>/scripts/github.sh <repo> state <n> in-progress
-<tool>/scripts/github.sh <repo> comment <n> coachman "<text>"
-<tool>/scripts/github.sh <repo> list [state]
-<tool>/scripts/github.sh <repo> access                       # the user's permission: ADMIN, WRITE, READ...
-<tool>/scripts/github.sh <repo> search "<text>"              # issues holding it: number, open or closed, title
+<tool>/scripts/run github <repo> board                        # the linked board and its URL; exit 3 if none
+<tool>/scripts/run github <repo> board init                   # create a board named after the repo and link it
+<tool>/scripts/run github <repo> create "<title>" <body-file> # prints the new issue number
+<tool>/scripts/run github <repo> read <n>
+<tool>/scripts/run github <repo> read <n> --body              # the body alone, exactly as stored
+<tool>/scripts/run github <repo> edit <n> <body-file> <base-file>
+<tool>/scripts/run github <repo> state <n> in-progress
+<tool>/scripts/run github <repo> comment <n> coachman "<text>"
+<tool>/scripts/run github <repo> list [state]
+<tool>/scripts/run github <repo> access                       # the user's permission: ADMIN, WRITE, READ...
+<tool>/scripts/run github <repo> search "<text>"              # issues holding it: number, open or closed, title
 ```
 
 - **Board:** one per target repo, found through the repo's project links. A repo with no
@@ -119,7 +119,7 @@ target repo, matched by the project identifier that prefixes every work item id 
 which is the prefix discovery reads from commit messages; a target that has shipped one
 ticket needs nothing configured, and one that has not is a question for the user.
 
-Everything goes through `<tool>/scripts/plane.sh`. The instance and workspace are in the config:
+Everything goes through `<tool>/scripts/run plane`. The instance and workspace are in the config:
 An optional project `[tracker].binding` names the workspace slug. When the project is in
 scope — `POSTMASTER_PROJECT` set, or run from the project's checkout — the binding must
 match the machine config's `workspace`, and a mismatch is refused; with no project in
@@ -136,18 +136,18 @@ workspace = "<slug>"             # the segment after the host in the workspace's
 The API key is `PLANE_API_KEY` in `~/.postmaster/plane.env` (or the file `[tracker]
 env_file` names), one line, made in Plane under profile settings, API tokens. The user
 writes that file; the key never passes through a conversation, the config or this repo.
-`<tool>/scripts/plane.sh projects` proves the three of them agree by listing the workspace's
-projects, and `<tool>/scripts/probe-trackers.sh` runs it.
+`<tool>/scripts/run plane projects` proves the three of them agree by listing the workspace's
+projects, and `<tool>/scripts/run probe-trackers` runs it.
 
 ```sh
-<tool>/scripts/plane.sh projects                             # identifier, id and name of every project
-<tool>/scripts/plane.sh create <IDENT> "<title>" <body-file> # prints the new id, IDENT-n
-<tool>/scripts/plane.sh read PM-12
-<tool>/scripts/plane.sh read PM-12 --body                    # the body alone, as markdown
-<tool>/scripts/plane.sh edit PM-12 <body-file> <base-file>
-<tool>/scripts/plane.sh state PM-12 in-progress
-<tool>/scripts/plane.sh comment PM-12 coachman "<text>"
-<tool>/scripts/plane.sh list PM [state]
+<tool>/scripts/run plane projects                             # identifier, id and name of every project
+<tool>/scripts/run plane create <IDENT> "<title>" <body-file> # prints the new id, IDENT-n
+<tool>/scripts/run plane read PM-12
+<tool>/scripts/run plane read PM-12 --body                    # the body alone, as markdown
+<tool>/scripts/run plane edit PM-12 <body-file> <base-file>
+<tool>/scripts/run plane state PM-12 in-progress
+<tool>/scripts/run plane comment PM-12 coachman "<text>"
+<tool>/scripts/run plane list PM [state]
 ```
 
 - **Read:** `read`; the body Plane stores as HTML comes back as markdown in the ticket
@@ -177,30 +177,30 @@ as written, and `<n>.json`, its title, state, labels, created time and log. The 
 its number, written `#<n>` as on GitHub.
 
 **A repo whose store exists uses this tracker, whatever `[tracker] kind` names**, and any other
-repo uses the config's kind. `<tool>/scripts/tracker-kind.sh <repo>` names the kind a repo uses:
-`<tool>/scripts/discover-project.sh` reports it as `tracker=`, and `<tool>/scripts/ticket-check.sh <repo>
+repo uses the config's kind. `<tool>/scripts/run tracker-kind <repo>` names the kind a repo uses:
+`<tool>/scripts/run discover-project` reports it as `tracker=`, and `<tool>/scripts/run ticket-check <repo>
 <id>` reads through it.
 
-Everything goes through `<tool>/scripts/local.sh`, which takes any checkout of the repo, a linked
+Everything goes through `<tool>/scripts/run local`, which takes any checkout of the repo, a linked
 worktree included:
 
 ```sh
-<tool>/scripts/local.sh <repo> store                         # the store's path; exit 3 if none
-<tool>/scripts/local.sh <repo> store init                    # make the store
-<tool>/scripts/local.sh <repo> store remove                  # remove a store that holds no ticket
-<tool>/scripts/local.sh <repo> create "<title>" <body-file>  # prints the new number
-<tool>/scripts/local.sh <repo> read <n>
-<tool>/scripts/local.sh <repo> read <n> --body               # the body alone, as stored
-<tool>/scripts/local.sh <repo> edit <n> <body-file> <base-file>
-<tool>/scripts/local.sh <repo> title <n> "<title>"
-<tool>/scripts/local.sh <repo> state <n> in-progress
-<tool>/scripts/local.sh <repo> comment <n> coachman "<text>"
-<tool>/scripts/local.sh <repo> list [state]                  # every ticket, grouped by state
+<tool>/scripts/run local <repo> store                         # the store's path; exit 3 if none
+<tool>/scripts/run local <repo> store init                    # make the store
+<tool>/scripts/run local <repo> store remove                  # remove a store that holds no ticket
+<tool>/scripts/run local <repo> create "<title>" <body-file>  # prints the new number
+<tool>/scripts/run local <repo> read <n>
+<tool>/scripts/run local <repo> read <n> --body               # the body alone, as stored
+<tool>/scripts/run local <repo> edit <n> <body-file> <base-file>
+<tool>/scripts/run local <repo> title <n> "<title>"
+<tool>/scripts/run local <repo> state <n> in-progress
+<tool>/scripts/run local <repo> comment <n> coachman "<text>"
+<tool>/scripts/run local <repo> list [state]                  # every ticket, grouped by state
 ```
 
 - **Store:** `store init` makes one and `store remove` removes one that holds no ticket, each
   only on the user's word and only from the repo's main checkout; from a linked worktree both
-  refuse. Every other command on a repo without a store exits 3. `discover-project.sh` warns
+  refuse. Every other command on a repo without a store exits 3. `run discover-project` warns
   when a github target has no origin remote, and so can have no board: a store is the one to
   propose.
 - **Read:** `read` prints the ticket, with a `path:` line naming its body file. `read --body`
@@ -234,5 +234,5 @@ A fault a run meets in postmaster itself is filed on postmaster's own tracker, n
 target's. That tracker is GitHub, whatever the config's kind: the repository the origin of
 postmaster's own checkout names, when postmaster is a checkout of its own and `access` says
 ADMIN, since nothing is filed on a repository the user does not own.
-`<tool>/scripts/tool-faults.sh` finds a fault's ticket with `search` and files one with
+`<tool>/scripts/run tool-faults` finds a fault's ticket with `search` and files one with
 `create`. With no such tracker, the fault stays in the run's records.

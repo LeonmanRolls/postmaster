@@ -1222,7 +1222,7 @@ if (typeof entryArg === "string" && resolve(entryArg) === fileURLToPath(import.m
     console.log(JSON.stringify({ cases: goldenCases(), prog: PY_GOLDEN_PROG }));
     process.exit(0);
   } else {
-    console.error("usage: text.sh --dump-golden-cases");
+    console.error("usage: run text --dump-golden-cases");
     process.exit(2);
   }
 }

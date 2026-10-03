@@ -1,7 +1,7 @@
 // Decide whether the review loop runs another round, from the round's finding and apply lines.
 // The runbook calls this rather than counting findings itself.
 //
-//   review-decide.sh <dispatch> <round>
+//   run review-decide <dispatch> <round>
 //
 //   round    the round that just finished, a whole number from 1 to 3
 //
@@ -32,7 +32,7 @@
 import { readFileSync, statSync } from "node:fs";
 import { D_CLASS, digitValue, END_OF_STRING, pySplitLines, pyTrim, pyWords } from "./lib/text.ts";
 
-const USAGE = "usage: review-decide.sh <dispatch> <round>";
+const USAGE = "usage: run review-decide <dispatch> <round>";
 
 function die(msg: string): never {
   console.error(`review-decide: ${msg}`);

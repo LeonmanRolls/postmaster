@@ -22,7 +22,7 @@ import { scriptsDir } from "./lib/paths.ts";
 import { pyWords } from "./lib/text.ts";
 
 const HERE = scriptsDir(import.meta);
-const SELF = join(HERE, "host.sh");
+const SELF = join(HERE, "run");
 const SCRIPT = join(HERE, "host-self-test.ts");
 type Result = { code: number; out: string; err: string };
 const sleep = (ms: number) => Bun.sleep(ms);
@@ -582,7 +582,7 @@ function host(
     POSTMASTER_HOST_FINISH_DELAY: finishDelay,
     ...env,
   };
-  return exec(SELF, [...args], { cwd, env: environment });
+  return exec(SELF, ["host", ...args], { cwd, env: environment });
 }
 function testStopFinishers(root: string): void {
   const path = join(root, "finishers");
@@ -694,7 +694,8 @@ async function setup(
   ]);
   if (result.code) throw new Error(result.err);
   const clone = join(repo, ".worktrees", "T-1-rev-security-opus");
-  result = exec(join(HERE, "cut-scratch.sh"), [
+  result = exec(join(HERE, "run"), [
+    "cut-scratch",
     repo,
     repo,
     clone,
@@ -929,7 +930,7 @@ async function check(
   if (detail) console.log(`         ${detail.replace(/\n/gu, "\n         ")}`);
   return false;
 }
-// text.ts: BASE cuts where-values at the first ASCII space (${v%% *}, host.sh:1111);
+// text.ts: BASE cuts where-values at the first ASCII space (${v%% *}, run host:1111);
 // a tab or exotic space inside a value survives there, so it must survive here.
 export function kvOf(text: string, key: string): string {
   // [^ \r\n]: BASE reads command-substitution (trailing newlines already
@@ -1903,7 +1904,7 @@ export async function runControls(): Promise<number> {
       listedCalls,
     );
     await pass(
-      "host.sh marks the space it opened as its own",
+      "run host marks the space it opened as its own",
       () => state.spaces[spaceId]?.tokens?.postmaster === "opened",
     );
     await marker(markerPath("h1"));
@@ -1915,7 +1916,7 @@ export async function runControls(): Promise<number> {
       herdrOut,
     );
     await pass(
-      "and with its caller's environment, handed over by host.sh",
+      "and with its caller's environment, handed over by run host",
       () => field(herdrOut, "var") === "v" && field(herdrOut, "from") === f.caller,
       JSON.stringify({
         from: field(herdrOut, "from"),
@@ -2040,7 +2041,7 @@ export async function runControls(): Promise<number> {
     console.log("stop and close, Herdr (stub)");
     const closedHerdr = execHost(["close", worktree], stubs, root);
     await pass(
-      "a space host.sh opened, its launches done, is closed",
+      "a space run host opened, its launches done, is closed",
       () =>
         closedHerdr.code === 0 &&
         (json(join(stub, "herdr.json"), { open: {} }).open[worktree] ?? "") === "",
@@ -2082,7 +2083,7 @@ export async function runControls(): Promise<number> {
     save(herdrStatePath, currentState);
     const userSpaceClose = execHost(["close", revLuna], stubs, root);
     await pass(
-      "a space host.sh did not open is refused, and left open",
+      "a space run host did not open is refused, and left open",
       () =>
         userSpaceClose.code === 2 &&
         !calls(root, "herdr").includes(`workspace\tclose\t${userSpace}`),
@@ -2135,7 +2136,7 @@ export async function runControls(): Promise<number> {
         cloneCalls.some((line) => line.includes(`--cwd\t${f.clone}\t--label\t${f.name}`)),
     );
     await pass(
-      "host.sh marks that space as its own",
+      "run host marks that space as its own",
       () =>
         json(join(stub, "herdr.json"), { spaces: {} }).spaces[cloneSpace]?.tokens?.postmaster ===
         "opened",
@@ -3013,10 +3014,10 @@ export async function runControls(): Promise<number> {
       }
       const unopenedClose = execHost(["close", sol], stubs, root);
       await pass(
-        "close names a space host.sh did not open instead of failing to read it",
+        "close names a space run host did not open instead of failing to read it",
         () =>
           unopenedClose.code === 2 &&
-          `${unopenedClose.out}${unopenedClose.err}`.includes("was not opened by host.sh"),
+          `${unopenedClose.out}${unopenedClose.err}`.includes("was not opened by run host"),
         `${unopenedClose.out}${unopenedClose.err}`,
       );
       await pass("and it leaves that space open", () => "w9" in (herdrState().spaces ?? {}));
@@ -3639,12 +3640,14 @@ export async function runControls(): Promise<number> {
       '{"config":{"limits":{"memory_max":"8G","tasks_max":512,"lane":{"memory_max":"64M","tasks_max":16},"coachman":{"memory_max":"128M","tasks_max":32},"reviewer":{"tasks_max":24}}}}\n',
     );
     writeFileSync(
-      join(f.caller, "launch.sh"),
-      ["#!/usr/bin/env bash", "printf 'role=%s\\n' \"${POSTMASTER_LAUNCH_ROLE:-unset}\"", ""].join(
-        "\n",
-      ),
+      join(f.caller, "run"),
+      [
+        "#!/usr/bin/env bash",
+        "if [ \"$1\" = launch ]; then printf 'role=%s\\n' \"${POSTMASTER_LAUNCH_ROLE:-unset}\"; else printf 'role=none\\n'; fi",
+        "",
+      ].join("\n"),
     );
-    exec("chmod", ["+x", join(f.caller, "launch.sh")]);
+    exec("chmod", ["+x", join(f.caller, "run")]);
     execHost(
       [
         "run",
@@ -3661,7 +3664,8 @@ export async function runControls(): Promise<number> {
         "--marker",
         "../logs/role.done",
         "--",
-        "./launch.sh",
+        "./run",
+        "launch",
       ],
       noHost,
       f.caller,
@@ -3670,9 +3674,40 @@ export async function runControls(): Promise<number> {
     await marker(markerPath("role"));
     const roleOut = readFileSync(join(logs, "role.out"), "utf8");
     await pass(
-      "the run's explicit host role reaches launch.sh and an inherited role cannot replace it",
+      "the run's explicit host role reaches run launch and an inherited role cannot replace it",
       () => roleOut === "role=reviewer\n",
       roleOut,
+    );
+    // Negative control: a command other than a launch gets no role.
+    execHost(
+      [
+        "run",
+        NAME,
+        f.repo,
+        "--under",
+        capDispatch,
+        "--role",
+        "reviewer",
+        "--run",
+        capDispatch,
+        "--out",
+        "../logs/role-neg.out",
+        "--marker",
+        "../logs/role-neg.done",
+        "--",
+        "./run",
+        "other",
+      ],
+      noHost,
+      f.caller,
+      { POSTMASTER_LAUNCH_ROLE: "spoof" },
+    );
+    await marker(markerPath("role-neg"));
+    const negOut = readFileSync(join(logs, "role-neg.out"), "utf8");
+    await pass(
+      "a command other than a launch receives no role",
+      () => negOut === "role=none\n",
+      negOut,
     );
 
     console.log("leg attempt controls");
@@ -3825,7 +3860,7 @@ export async function runControls(): Promise<number> {
       TEST_DONE: join(legD, ".leg-1-done"),
       TEST_OBSERVED: join(legD, "retry-observed"),
       TEST_RUNJSON: join(legD, "run.json"),
-      TEST_LAUNCH: join(HERE, "launch.sh"),
+      TEST_LAUNCH: join(HERE, "run"),
       TEST_DISPATCH: legD,
       ...extra,
     });
@@ -4152,7 +4187,7 @@ export async function runControls(): Promise<number> {
     writeFileSync(prompt, "skill-caller mid-leg\n");
     r = await legRun(["launch", legD, legWt, "synthesis", "1", prompt]);
     await pass(
-      "a launch.sh call mid-leg does not overwrite the attempt's phase",
+      "a run launch call mid-leg does not overwrite the attempt's phase",
       () => r.code === 0 && lastRecord(attemptsPath).outcome === "incomplete",
       safeOutcome(attemptsPath),
     );
@@ -5995,7 +6030,7 @@ export async function runControls(): Promise<number> {
           "--marker",
           launchMarker,
           "--",
-          join(HERE, "launch.sh"),
+          join(HERE, "run"),
           "launch",
           "test",
           lunaWorktree,
@@ -6073,7 +6108,7 @@ export async function runControls(): Promise<number> {
           "--marker",
           resumeMarker,
           "--",
-          join(HERE, "launch.sh"),
+          join(HERE, "run"),
           "resume",
           "test",
           lunaWorktree,

@@ -1,7 +1,7 @@
 // Work out what a target project needs, rather than demanding it be configured.
 // Prints key=value lines. Empty value means "could not determine, ask the user". Each check a
 // change is verified by is a `check.<name>=<where it came from>: <what it shows>` line: declared in
-// the project's .postmaster/project.toml, or a default and which one (scripts/verify.sh).
+// the project's .postmaster/project.toml, or a default and which one (scripts/run verify).
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { tryJsonFile } from "./lib/data.ts";
 import { beside, toolRoot } from "./lib/paths.ts";
@@ -22,12 +22,12 @@ for (const name of [
 const args = process.argv.slice(2);
 const T = args[0];
 if (T === undefined || T === "") {
-  console.error("usage: discover-project.sh <path>");
+  console.error("usage: run discover-project <path>");
   process.exit(1);
 }
 
 // The tracker kind, before the cd, so a relative path or config is read from the caller's directory.
-const kindRun = run(beside(import.meta, "tracker-kind.sh"), [T]);
+const kindRun = run(beside(import.meta, "run"), ["tracker-kind", T]);
 const kind = kindRun.code === 0 ? kindRun.out.replace(/\n+$/u, "") : "";
 
 let ABS: string;
@@ -41,7 +41,7 @@ try {
 }
 
 // One package-manager choice feeds both the gate runner and install= below, in
-// verify.sh's pm() order (pnpm, bun, yarn, npm), so the two can never disagree.
+// run verify's pm() order (pnpm, bun, yarn, npm), so the two can never disagree.
 let pm = "npm";
 if (existsSync("pnpm-lock.yaml")) pm = "pnpm";
 else if (existsSync("bun.lock") || existsSync("bun.lockb")) pm = "bun";
@@ -117,7 +117,7 @@ const trackerPrefix = ranked[0]?.[0] ?? "";
 
 // Optional project settings are validated and reported with their source. Missing files are not
 // an error; their values remain discovery defaults for the session to settle in conversation.
-const settings = run(beside(import.meta, "project-settings.sh"), ["report", ABS], {
+const settings = run(beside(import.meta, "run"), ["project-settings", "report", ABS], {
   cwd: toolRoot(import.meta),
 });
 if (settings.code !== 0) {
@@ -130,7 +130,7 @@ if (settings.code !== 0) {
 // target and the tool root to stand on. (Wrapper --no-env-file/--config
 // covers the rest; kindRun above keeps the caller's directory because a
 // relative POSTMASTER_CONFIG reads from there, as BASE has it.)
-const verified = run(beside(import.meta, "verify.sh"), ["checks", ABS, "--gate", gate, "--lines"], {
+const verified = run(beside(import.meta, "run"), ["verify", "checks", ABS, "--gate", gate, "--lines"], {
   cwd: toolRoot(import.meta),
 });
 const fields = (line: string): number => (line === "" ? 0 : line.split("\t").length);
@@ -171,7 +171,7 @@ if (!existsSync("AGENTS.md")) {
 }
 if (kind === "github" && run("git", ["remote", "get-url", "origin"]).code !== 0) {
   console.error(
-    "warn=no origin remote, so no github board: with the user's word, scripts/local.sh <repo> store init gives it a local store",
+    "warn=no origin remote, so no github board: with the user's word, scripts/run local <repo> store init gives it a local store",
   );
 }
 process.exit(0);

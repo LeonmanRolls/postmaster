@@ -2,7 +2,7 @@
 // A hand-off that passes is the whole of what the next leg's coachman knows, so a missing
 // section here is a decision silently lost, not a formatting nit.
 //
-//   handoff-check.sh <handoff-file>
+//   run handoff-check <handoff-file>
 //
 //   exit 0  every section present and non-empty
 //   exit 1  usage or no such file
@@ -23,7 +23,7 @@ const REQUIRED = [
 const args = process.argv.slice(2);
 const f = args[0];
 if (f === undefined || f === "") {
-  console.error("usage: handoff-check.sh <handoff-file>");
+  console.error("usage: run handoff-check <handoff-file>");
   process.exit(1);
 }
 let isFile = false;

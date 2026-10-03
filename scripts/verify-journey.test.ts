@@ -23,7 +23,7 @@ import {
   VERDICT_GUARD,
 } from "./verify-journey.ts";
 
-const SELF = join(import.meta.dir, "verify-journey.sh");
+const SELF = join(import.meta.dir, "run");
 const BASE_BLOB = "bb782a973e69427c820ce16a676718e87f51995b:scripts/verify-journey.sh";
 
 const hasPy = run("sh", ["-c", "command -v python3"]).code === 0;
@@ -177,9 +177,9 @@ afterAll(() => {
 });
 
 const judge = (ticket: string, rep: string): { code: number; out: string } => {
-  const args = [SELF, wt, "--ticket", ticket];
+  const args = ["verify-journey", wt, "--ticket", ticket];
   if (rep) args.push("--report", rep);
-  const r = run("bash", args);
+  const r = run(SELF, args);
   return { code: r.code, out: r.out + r.err };
 };
 
@@ -200,7 +200,7 @@ const judgeArmed = (name: string, withShots: boolean): { code: number; out: stri
   const specDir = join(tmp, `${name}-spec`);
   mkdirSync(jDir, { recursive: true });
   mkdirSync(specDir, { recursive: true });
-  const p = run("bash", [SELF, "--path", wt, "--dir", jDir]).out.trim();
+  const p = run(SELF, ["verify-journey", "--path", wt, "--dir", jDir]).out.trim();
   cpSync(join(tmp, "good.md"), p);
   writeFileSync(join(specDir, "spec.json"), `${JSON.stringify({ journey_dir: jDir })}\n`, "utf8");
   if (withShots) {
@@ -210,7 +210,7 @@ const judgeArmed = (name: string, withShots: boolean): { code: number; out: stri
   }
   const r = run("bash", [
     "-c",
-    `cd "${wt}" && POSTMASTER_VERIFY="${specDir}" "${SELF}" --ticket "${join(tmp, "prose.md")}"`,
+    `cd "${wt}" && POSTMASTER_VERIFY="${specDir}" "${SELF}" verify-journey --ticket "${join(tmp, "prose.md")}"`,
   ]);
   return { code: r.code, out: r.out + r.err };
 };
@@ -237,7 +237,7 @@ describe("positive controls", () => {
   });
 
   test("the report's path names the commit", () => {
-    const r = run("bash", [SELF, "--path", wt, "--dir", join(tmp, "j")]);
+    const r = run(SELF, ["verify-journey", "--path", wt, "--dir", join(tmp, "j")]);
     const head = run("git", ["-C", wt, "rev-parse", "HEAD"]);
     expect(r.out.trim()).toBe(join(tmp, "j", `${head.out.trim()}.md`));
   });
@@ -253,7 +253,7 @@ describe("positive controls", () => {
   });
 
   test("the format says how a step is marked", () => {
-    const r = run("bash", [SELF, "--format"]);
+    const r = run(SELF, ["verify-journey", "--format"]);
     expect(r.out.includes("did not: <what happened instead>")).toBe(true);
   });
 });
@@ -314,7 +314,7 @@ describe("negative controls", () => {
     const specDir = join(tmp, "j-older-spec");
     mkdirSync(jDir, { recursive: true });
     mkdirSync(specDir, { recursive: true });
-    const p = run("bash", [SELF, "--path", wt, "--dir", jDir]).out.trim();
+    const p = run(SELF, ["verify-journey", "--path", wt, "--dir", jDir]).out.trim();
     cpSync(join(tmp, "good.md"), p);
     mkdirSync(join(jDir, "shots"), { recursive: true });
     cpSync(join(tmp, "shots", "1.png"), join(jDir, "shots", "1.png"));
@@ -335,7 +335,7 @@ describe("negative controls", () => {
     ]);
     const r = run("bash", [
       "-c",
-      `cd "${wt}" && POSTMASTER_VERIFY="${specDir}" "${SELF}" --ticket "${join(tmp, "prose.md")}"`,
+      `cd "${wt}" && POSTMASTER_VERIFY="${specDir}" "${SELF}" verify-journey --ticket "${join(tmp, "prose.md")}"`,
     ]);
     const out = r.out + r.err;
     expect(r.code).toBe(3);
@@ -364,16 +364,8 @@ describe("negative controls", () => {
         "did",
         "shots/1.png",
       );
-      const args = (bin: string): string[] => [
-        bin,
-        wt,
-        "--ticket",
-        join(tmp, "fold-ticket.md"),
-        "--report",
-        join(tmp, "fold-report.md"),
-      ];
-      const base = run("bash", args(baseVj));
-      const port = run("bash", args(SELF));
+      const base = run("bash", [baseVj, wt, "--ticket", join(tmp, "fold-ticket.md"), "--report", join(tmp, "fold-report.md")]);
+      const port = run(SELF, ["verify-journey", wt, "--ticket", join(tmp, "fold-ticket.md"), "--report", join(tmp, "fold-report.md")]);
       const walked = (r: { code: number; out: string; err: string }): boolean =>
         r.code === 0 && `${r.out}${r.err}`.includes("all 3 steps walked");
       expect(walked(base) && walked(port)).toBe(true);

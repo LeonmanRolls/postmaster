@@ -1,9 +1,9 @@
-// Score each lane's harvested branch against the ticket's hidden tests, for fixture.sh score.
+// Score each lane's harvested branch against the ticket's hidden tests, for run fixture score.
 //
 //   fixture-lanes.ts <dispatch> <repo> <fixture-ticket>
 //
 // Finds the run's lanes from its records and its kept wb/<TICKET>-<lane> branches, exports each
-// lane's branch the way score exports main, runs `fixture.sh hidden` on that tree, and prints one
+// lane's branch the way score exports main, runs `run fixture hidden` on that tree, and prints one
 // `<lane>: <status>` line per lane in name order:
 //
 //   <lane>: N pass, M fail     the hidden suite ran and reported counts
@@ -13,7 +13,7 @@
 //
 // Missing and failed-to-build never print pass counts. The verdict is the merged result's alone;
 // these lines are measurement beside it. Pure functions are exported for the tests; only the
-// edges read files, run git or fixture.sh, or print. Run as `bun --no-env-file` so no .env in
+// edges read files, run git or run fixture, or print. Run as `bun --no-env-file` so no .env in
 // the working directory reaches it.
 //
 //   exit 0  printed one line per lane (zero lanes prints nothing)
@@ -107,11 +107,11 @@ export function branchName(ticket: string, lane: string): string {
   return `wb/${ticket}-${lane}`;
 }
 
-/** Counts on a fixture.sh hidden report line, or null when it printed none. Only a full `hidden-tests` line counts: a counts-shaped fragment in noise is not a run, and reads as failed to build rather than as a pass. */
+/** Counts on a run fixture hidden report line, or null when it printed none. Only a full `hidden-tests` line counts: a counts-shaped fragment in noise is not a run, and reads as failed to build rather than as a pass. */
 export function parseHiddenCounts(out: string): Counts | null {
   const rows = [
     ...out.matchAll(
-      // ASCII: fixture.sh hidden prints machine-made report lines; the counts are JS numbers.
+      // ASCII: run fixture hidden prints machine-made report lines; the counts are JS numbers.
       /^\s*(?:ok|FAIL)\s+hidden-tests\s+[^:\r\n]+:\s*(\d+)\s+pass,\s*(\d+)\s+fail\s*$/gmu,
     ),
   ];
@@ -120,7 +120,7 @@ export function parseHiddenCounts(out: string): Counts | null {
   return { passed: Number(last[1]), failed: Number(last[2]) };
 }
 
-/** What fixture.sh hidden's output says about a lane's tree. */
+/** What run fixture hidden's output says about a lane's tree. */
 export function hiddenStatusFromOutput(out: string): LaneStatus {
   const counts = parseHiddenCounts(out);
   if (counts) return { kind: "counts", passed: counts.passed, failed: counts.failed };
@@ -259,7 +259,7 @@ function main(argv: string[]): void {
   const manifest = readJson(join(dispatch, "manifest.json"));
   const ticket = ticketId(dispatch, waybill);
   const lanes = discoverLanes(dispatch, repo, ticket, waybill, manifest);
-  const fixtureSh = join(import.meta.dir, "fixture.sh");
+  const fixtureSh = join(import.meta.dir, "run");
   const scratch = mkdtempSync(join(tmpdir(), "fixture-lanes-"));
   try {
     const entries: Array<[string, LaneStatus]> = lanes.map((lane) => [

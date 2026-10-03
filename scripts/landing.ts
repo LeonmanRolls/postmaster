@@ -2,7 +2,7 @@
 // predicates in prose; what it prints is the answer, and prose carries only what an agent must
 // judge, such as putting a non-pass to the user.
 //
-//   landing.sh already-landed --repo <repo> --default <branch> --ticket <ref> --base <sha>
+//   run landing already-landed --repo <repo> --default <branch> --ticket <ref> --base <sha>
 //       --card-head <sha> [--local-ticket <branch>] [--pr-merge <sha> --pr-head <sha>]
 //       whether the ticket branch already landed. `landed` when the default branch contains
 //       the ticket's HEAD and that HEAD is not the run's BASE, or when the provider reports
@@ -17,23 +17,23 @@
 //       otherwise differ, or when a reported merge names another head: a reported
 //       head that does not resolve locally names another head too, since the card's
 //       HEAD resolved. Otherwise `not-landed`.
-//   landing.sh anything-to-land --repo <repo> --default <branch> --ticket <ref> --base <sha>
+//   run landing anything-to-land --repo <repo> --default <branch> --ticket <ref> --base <sha>
 //       whether the branch holds anything to land. `nothing-to-land` when the ticket's diff
 //       against BASE is empty (its HEAD is BASE, whatever the default branch holds), or when
 //       the default branch contains its HEAD. Otherwise `land`: a squash merge the provider
 //       did not report is out of scope, and the pull request shows a person what landed.
-//   landing.sh fresh --repo <repo> --default <branch> --ticket <ref>
+//   run landing fresh --repo <repo> --default <branch> --ticket <ref>
 //       --dispatch <dispatch> --wt <synthesis-wt>
 //       whether the ticket is fresh to land. Prints `fresh` when the ticket branch contains
-//       the current default branch, the worktree is at the ticket's head, and `verify.sh
+//       the current default branch, the worktree is at the ticket's head, and `run verify
 //       results` shows the gate passing at that head. Otherwise one fault line each for the
 //       head the worktree is not at, the default branch the ticket lacks, and the gate
 //       that is not passing.
-//   landing.sh results <dispatch> <synthesis-wt>
+//   run landing results <dispatch> <synthesis-wt>
 //       every recorded check's result at the worktree's HEAD, one `name: result` line each,
 //       as the cards carry them. This is the one place the vocabulary mapping lives:
 //       `no result logged` reads as `not run`, and the `at ...` suffix is dropped.
-//   landing.sh card-block <dispatch> <synthesis-wt> <checkpoint>
+//   run landing card-block <dispatch> <synthesis-wt> <checkpoint>
 //       the card's checked sections rendered from their sources as one exact block of
 //       text: `## Checks` with one `- <name>: <result>` bullet per recorded check in
 //       recorded order, then `## Open findings` with one `- [<severity>] <id>` bullet
@@ -46,20 +46,20 @@
 //       (`[` plus severity digit, an id, then a colon or end of line), that is not
 //       such a finding is an input fault. A fence marker line is an input fault too.
 //       The review leg writes this block into the card verbatim. Prints the block.
-//   landing.sh card-results <dispatch> <synthesis-wt> <checkpoint> <card>
-//   landing.sh card-findings <dispatch> <synthesis-wt> <checkpoint> <card>
+//   run landing card-results <dispatch> <synthesis-wt> <checkpoint> <card>
+//   run landing card-findings <dispatch> <synthesis-wt> <checkpoint> <card>
 //       whether the card holds the block `card-block` renders, as an exact, contiguous
 //       byte string, found once. Nothing is parsed: a card holding `<!--` anywhere is an
 //       input fault, and otherwise a card whose block differs in any way, or that holds
 //       it never or more than once, is an input fault, never `match`. A card quoting
 //       `<!--` escapes it, for example as `&lt;!--`. A copy inside a
 //       code fence is text a reader sees, so it counts like any other copy.
-//   landing.sh card-open <checkpoint>
+//   run landing card-open <checkpoint>
 //       the checkpoint's open P1 and P2 findings, one `- [<severity>] <id>` bullet
 //       each, or `none`. Open P3 residue prints `none`: it lands.
-//   landing.sh journey <dispatch> <synthesis-wt> <waybill>
+//   run landing journey <dispatch> <synthesis-wt> <waybill>
 //       whether the journey holds landing. Whether the waybill mentions a user journey
-//       is asked of `ticket-check.sh --has-journey`, the flow's one reading of a ticket.
+//       is asked of `run ticket-check --has-journey`, the flow's one reading of a ticket.
 //       `clear` when no check's source names `web-journey`, or when the report exists and
 //       the journey check passed. `blocked` when the waybill mentions one, a check uses
 //       `web-journey`, and the report is missing or the check did not run: missing
@@ -74,8 +74,8 @@
 //           --card-head, --local-ticket, --pr-merge, and --ticket without a
 //           report: --pr-head answers `re-verify` instead); a file that cannot
 //           be read; checks
-//           that cannot be recorded-read; `verify.sh results`, `journey-path` or
-//           `ticket-check.sh --has-journey` failing; a checkpoint whose structure cannot
+//           that cannot be recorded-read; `run verify results`, `journey-path` or
+//           `run ticket-check --has-journey` failing; a checkpoint whose structure cannot
 //           be read (a duplicate id, a finding-shaped line that is not a finding, an
 //           unreadable state, a fence marker line, or a quoted line); a card holding an
 //           HTML comment or not holding the rendered block exactly once
@@ -95,8 +95,8 @@ import {
 } from "./lib/text.ts";
 
 const SCRIPTS = scriptsDir(import.meta);
-const VERIFY = join(SCRIPTS, "verify.sh");
-const TICKET_CHECK = join(SCRIPTS, "ticket-check.sh");
+const VERIFY = join(SCRIPTS, "run");
+const TICKET_CHECK = join(SCRIPTS, "run");
 
 // The bash revision unsets these for the whole script; the port drops them on every git,
 // verify and ticket-check call instead.
@@ -268,12 +268,12 @@ function load(path: string): string {
 // --- results and checkpoints -------------------------------------------------------------
 type CheckResult = [string, string];
 
-/** [(name, result)]: verify.sh results with the mapping read. Only exit 1 fails the
+/** [(name, result)]: run verify results with the mapping read. Only exit 1 fails the
  * read; any other exit still parses the lines, as BASE does. */
 function recordedResults(dispatch: string, wt: string): CheckResult[] {
-  const r = run(VERIFY, ["results", dispatch, wt], { env: UNSET_GIT });
+  const r = run(VERIFY, ["verify", "results", dispatch, wt], { env: UNSET_GIT });
   if (r.code === 1)
-    die(`verify.sh results failed: ${pyTrim(r.err) || pyTrim(r.out) || "no output"}`);
+    die(`run verify results failed: ${pyTrim(r.err) || pyTrim(r.out) || "no output"}`);
   const out: CheckResult[] = [];
   for (const line of pySplitLines(r.out)) {
     const m = RESULT_LINE.exec(line);
@@ -286,7 +286,7 @@ function recordedResults(dispatch: string, wt: string): CheckResult[] {
       out.push([m[1] ?? "", w[1] ?? ""]);
     }
   }
-  if (out.length === 0) die("verify.sh results reported no checks");
+  if (out.length === 0) die("run verify results reported no checks");
   return out;
 }
 
@@ -372,7 +372,7 @@ function checkBlock(dispatch: string, wt: string, checkpoint: string, card: stri
 
 // --- modes --------------------------------------------------------------------------------
 const TOP_USAGE =
-  "usage: landing.sh already-landed --repo <repo> --default <branch> --ticket <ref> --base <sha> " +
+  "usage: run landing already-landed --repo <repo> --default <branch> --ticket <ref> --base <sha> " +
   "--card-head <sha> [--local-ticket <branch>] [--pr-merge <sha> --pr-head <sha>] | anything-to-land " +
   "--repo <repo> --default <branch> --ticket <ref> --base <sha> | fresh --repo <repo> --default <branch> " +
   "--ticket <ref> --dispatch <dispatch> --wt <synthesis-wt> | results <dispatch> <synthesis-wt> | " +
@@ -380,21 +380,21 @@ const TOP_USAGE =
   "<checkpoint> <card> | card-findings <dispatch> <synthesis-wt> <checkpoint> <card> | " +
   "card-open <checkpoint> | journey <dispatch> <synthesis-wt> <waybill>";
 const ALREADY_USAGE =
-  "usage: landing.sh already-landed --repo <repo> --default <branch> --ticket <ref> --base <sha> " +
+  "usage: run landing already-landed --repo <repo> --default <branch> --ticket <ref> --base <sha> " +
   "--card-head <sha> [--local-ticket <branch>] [--pr-merge <sha> --pr-head <sha>]";
 const ANYTHING_USAGE =
-  "usage: landing.sh anything-to-land --repo <repo> --default <branch> --ticket <ref> --base <sha>";
+  "usage: run landing anything-to-land --repo <repo> --default <branch> --ticket <ref> --base <sha>";
 const FRESH_USAGE =
-  "usage: landing.sh fresh --repo <repo> --default <branch> --ticket <ref> --dispatch <dispatch> " +
+  "usage: run landing fresh --repo <repo> --default <branch> --ticket <ref> --dispatch <dispatch> " +
   "--wt <synthesis-wt>";
-const RESULTS_USAGE = "usage: landing.sh results <dispatch> <synthesis-wt>";
-const BLOCK_USAGE = "usage: landing.sh card-block <dispatch> <synthesis-wt> <checkpoint>";
+const RESULTS_USAGE = "usage: run landing results <dispatch> <synthesis-wt>";
+const BLOCK_USAGE = "usage: run landing card-block <dispatch> <synthesis-wt> <checkpoint>";
 const CRESULTS_USAGE =
-  "usage: landing.sh card-results <dispatch> <synthesis-wt> <checkpoint> <card>";
+  "usage: run landing card-results <dispatch> <synthesis-wt> <checkpoint> <card>";
 const CFINDINGS_USAGE =
-  "usage: landing.sh card-findings <dispatch> <synthesis-wt> <checkpoint> <card>";
-const OPEN_USAGE = "usage: landing.sh card-open <checkpoint>";
-const JOURNEY_USAGE = "usage: landing.sh journey <dispatch> <synthesis-wt> <waybill>";
+  "usage: run landing card-findings <dispatch> <synthesis-wt> <checkpoint> <card>";
+const OPEN_USAGE = "usage: run landing card-open <checkpoint>";
+const JOURNEY_USAGE = "usage: run landing journey <dispatch> <synthesis-wt> <waybill>";
 
 function alreadyLanded(o: string[]): number {
   if (
@@ -570,7 +570,7 @@ function journey(dispatch: string, wt: string, waybill: string): number {
     console.log("clear: no check uses web-journey");
     return 0;
   }
-  const t = run(TICKET_CHECK, ["--has-journey", waybill], { env: UNSET_GIT });
+  const t = run(TICKET_CHECK, ["ticket-check", "--has-journey", waybill], { env: UNSET_GIT });
   const said = pyTrim(t.out);
   if (t.code !== 0 || (said !== "journey" && said !== "no journey")) {
     if (t.code !== 0) {
@@ -586,9 +586,9 @@ function journey(dispatch: string, wt: string, waybill: string): number {
     );
     return 0;
   }
-  const v = run(VERIFY, ["journey-path", wt, dispatch], { env: UNSET_GIT });
+  const v = run(VERIFY, ["verify", "journey-path", wt, dispatch], { env: UNSET_GIT });
   if (v.code !== 0 || pyTrim(v.out) === "") {
-    die(`verify.sh journey-path failed: ${pyTrim(v.err) || "no output"}`);
+    die(`run verify journey-path failed: ${pyTrim(v.err) || "no output"}`);
   }
   const report = pySplitLines(pyTrim(v.out))[0] ?? "";
   let missing: boolean;

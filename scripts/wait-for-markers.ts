@@ -2,7 +2,7 @@
 // pass. The wait goes in the SAME command as the launch that will produce the markers; a turn
 // that ends between launching a round and collecting it is a round nobody collects.
 //
-//   wait-for-markers.sh <dir> <glob> <count> <timeout-seconds>
+//   run wait-for-markers <dir> <glob> <count> <timeout-seconds>
 //
 // It looks every 20 seconds, and once more at the timeout, so the timeout is kept to the second.
 // The timeout counts the seconds it has slept, so time the machine spends asleep is not counted,
@@ -128,7 +128,7 @@ export function countdown(
 const argv = process.argv.slice(2);
 if (import.meta.main) {
   if (argv.length < 4) {
-    console.error("usage: wait-for-markers.sh <dir> <glob> <count> <timeout-seconds>");
+    console.error("usage: run wait-for-markers <dir> <glob> <count> <timeout-seconds>");
     process.exit(1);
   }
   process.exit(wait(argv[0] as string, argv[1] as string, argv[2] as string, argv[3] as string));

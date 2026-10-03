@@ -36,7 +36,7 @@ import {
   ticketPath,
 } from "./local";
 
-const self = join(scriptsDir(import.meta), "local.sh");
+const self = join(scriptsDir(import.meta), "run");
 const here = scriptsDir(import.meta);
 
 // The proxy-snapshot regression below needs a proxy-free outer environment;
@@ -143,7 +143,7 @@ function bodyline(value: string): string {
 }
 
 const invoke = (repoPath: string, ...commandArgs: string[]) =>
-  run(self, [repoPath, ...commandArgs]);
+  run(self, ["local", repoPath, ...commandArgs]);
 
 const output = (result: { out: string; err: string }) =>
   `${result.out.replace(/\n+$/u, "")}${
@@ -231,7 +231,7 @@ const refusedRaw = (
 };
 
 const tracker = (configPath: string, path: string) =>
-  run("bun", [join(here, "discover-project.ts"), path], {
+  run(join(here, "run"), ["discover-project", path], {
     env: { POSTMASTER_CONFIG: configPath },
   }).out.match(/^tracker=(.*)$/mu)?.[1] ?? "";
 
@@ -543,7 +543,7 @@ describe("positive controls", () => {
   );
 
   test("create takes its body from /dev/stdin", () => {
-    const stdinCreate = run(self, [repo, "create", "From a pipe", "/dev/stdin"], {
+    const stdinCreate = run(self, ["local", repo, "create", "From a pipe", "/dev/stdin"], {
       input: readFileSync(bodyPath, "utf8"),
     });
     const stdinRead = invoke(repo, "read", stdinCreate.out.trim(), "--body");
@@ -558,7 +558,7 @@ describe("positive controls", () => {
     put(join(temp, "stdin-base.md"), stdinBase.out);
     const stdinEdit = run(
       self,
-      [repo, "edit", created, "/dev/stdin", join(temp, "stdin-base.md")],
+      ["local", repo, "edit", created, "/dev/stdin", join(temp, "stdin-base.md")],
       { input: readFileSync(newPath, "utf8") },
     );
     const afterStdin = invoke(repo, "read", created, "--body");
@@ -569,7 +569,7 @@ describe("positive controls", () => {
   test("edit takes its base from /dev/stdin", () => {
     const created = readFileSync(join(temp, "stdin-number"), "utf8");
     const stdinReadForBase = invoke(repo, "read", created, "--body");
-    const baseEdit = run(self, [repo, "edit", created, bodyPath, "/dev/stdin"], {
+    const baseEdit = run(self, ["local", repo, "edit", created, bodyPath, "/dev/stdin"], {
       input: stdinReadForBase.out,
     });
     expect(baseEdit.code).toBe(0);
@@ -606,7 +606,7 @@ describe("positive controls", () => {
       })),
     );
     const ids = childResults.map((child) => Number(child.out.trim())).sort((a, b) => a - b);
-    const concurrentList = run(self, [concurrent, "list"]);
+    const concurrentList = run(self, ["local", concurrent, "list"]);
     expect(childResults.every((child) => child.code === 0)).toBe(true);
     expect(ids.join(" ")).toBe("1 2 3 4 5 6 7 8 9 10");
     expect(concurrentList.out.trim().split("\n").length).toBe(10);
@@ -654,7 +654,7 @@ describe("positive controls", () => {
 describe("controls: what the caller's environment must not change", () => {
   test("a GIT_DIR from the caller does not steer it to another repository", () => {
     const mine = lt(repo, "store").out;
-    const diverted = run(self, [repo, "store"], {
+    const diverted = run(self, ["local", repo, "store"], {
       env: {
         GIT_DIR: join(unticketed, ".git"),
         GIT_WORK_TREE: unticketed,
@@ -663,7 +663,7 @@ describe("controls: what the caller's environment must not change", () => {
     });
     const other = join(temp, "other");
     newRepo(other);
-    run(self, [other, "store", "init"], {
+    run(self, ["local", other, "store", "init"], {
       env: { GIT_DIR: join(unticketed, ".git"), GIT_WORK_TREE: unticketed },
     });
     expect(diverted.code).toBe(0);
@@ -673,7 +673,7 @@ describe("controls: what the caller's environment must not change", () => {
   }, 30000);
 
   test("an exported CDPATH does not move a relative <repo>", () => {
-    const cdp = run(self, ["repo", "store"], { cwd: temp, env: { CDPATH: ".:/nonexistent" } });
+    const cdp = run(self, ["local", "repo", "store"], { cwd: temp, env: { CDPATH: ".:/nonexistent" } });
     expect(cdp.code).toBe(0);
     expect(cdp.out.trim()).toBe(store);
   }, 30000);
@@ -692,21 +692,21 @@ describe("controls: what the caller's environment must not change", () => {
   test("modules in the target's own directory are never imported", () => {
     const shadow = join(temp, "shadowing");
     newRepo(shadow);
-    run(self, [shadow, "store", "init"]);
-    run(self, [shadow, "create", "Shadowed", bodyPath]);
+    run(self, ["local", shadow, "store", "init"]);
+    run(self, ["local", shadow, "create", "Shadowed", bodyPath]);
     mkdirSync(join(shadow, "json"));
     for (const name of ["signal", "re", "contextlib", "datetime", "tomllib", "json/__init__"])
       put(
         join(shadow, `${name}.py`),
         `open('${join(temp, "imported")}', 'a').write('${name}\\n')\nraise SystemExit(9)\n`,
       );
-    const shadowList = run(self, [".", "list"], { cwd: shadow });
-    const discovered = run("bun", [join(here, "discover-project.ts"), "."], {
+    const shadowList = run(self, ["local", ".", "list"], { cwd: shadow });
+    const discovered = run(join(here, "run"), ["discover-project", "."], {
       cwd: shadow,
       env: { POSTMASTER_CONFIG: join(temp, "github.toml") },
     });
     const shadowKind = discovered.out.match(/^tracker=(.*)$/mu)?.[1];
-    const otherKind = run("bun", [join(here, "tracker-kind.ts"), unticketed], {
+    const otherKind = run(join(here, "run"), ["tracker-kind", unticketed], {
       cwd: shadow,
       env: { POSTMASTER_CONFIG: join(temp, "github.toml") },
     });
@@ -850,11 +850,11 @@ describe("controls: a ticket file that is not as this script writes it", () => {
 
   test("list prints the tickets it can read, names the one it cannot, and exits 1", () => {
     newRepo(damaged());
-    run(self, [damaged(), "store", "init"]);
-    for (const title of ["One", "Two", "Three"]) run(self, [damaged(), "create", title, bodyPath]);
+    run(self, ["local", damaged(), "store", "init"]);
+    for (const title of ["One", "Two", "Three"]) run(self, ["local", damaged(), "create", title, bodyPath]);
     copyFileSync(join(damagedStore(), "2.json"), join(temp, "2.json"));
     put(join(damagedStore(), "2.json"), '{"title": "Two", "state": "todo",\n');
-    const damagedList = run(self, [damaged(), "list"]);
+    const damagedList = run(self, ["local", damaged(), "list"]);
     expect(damagedList.code).toBe(1);
     expect(damagedList.out.trim()).toBe("#1\ttodo\tOne\n#3\ttodo\tThree");
     expect(damagedList.err).toContain("ticket #2");
@@ -924,7 +924,7 @@ describe("controls: store init and store remove, from the main checkout only", (
 
   test("and the repository is back on the config's kind", () => {
     const guarded = readFileSync(join(temp, "guarded-path"), "utf8");
-    const afterRemoval = run("bun", [join(here, "tracker-kind.ts"), guarded], {
+    const afterRemoval = run(join(here, "run"), ["tracker-kind", guarded], {
       env: { POSTMASTER_CONFIG: join(temp, "github.toml") },
     });
     expect(afterRemoval.code).toBe(0);
@@ -945,7 +945,7 @@ describe("controls: a repository whose store exists uses this tracker, whatever 
   }, 30000);
 
   test("a store that cannot be looked for is not taken for no store", () => {
-    const trackerPlain = run("bun", [join(here, "tracker-kind.ts"), plain], {
+    const trackerPlain = run(join(here, "run"), ["tracker-kind", plain], {
       env: { POSTMASTER_CONFIG: join(temp, "github.toml") },
     });
     expect(trackerPlain.code).toBe(1);
@@ -954,7 +954,7 @@ describe("controls: a repository whose store exists uses this tracker, whatever 
   }, 30000);
 
   test("a relative POSTMASTER_CONFIG is read from the caller's directory", () => {
-    const relativeConfig = run("bun", [join(here, "discover-project.ts"), unticketed], {
+    const relativeConfig = run(join(here, "run"), ["discover-project", unticketed], {
       cwd: temp,
       env: { POSTMASTER_CONFIG: "plane.toml" },
     });
@@ -962,7 +962,7 @@ describe("controls: a repository whose store exists uses this tracker, whatever 
   }, 30000);
 
   test("with HOME unset, discover-project.sh still reports, with the kind left to ask", () => {
-    const noHome = run("bun", [join(here, "discover-project.ts"), unticketed], {
+    const noHome = run(join(here, "run"), ["discover-project", unticketed], {
       env: { HOME: undefined, POSTMASTER_CONFIG: undefined },
     });
     expect(noHome.code).toBe(0);
@@ -971,7 +971,7 @@ describe("controls: a repository whose store exists uses this tracker, whatever 
   }, 30000);
 
   test("discover-project.sh run by a relative path with CDPATH exported still finds the rule", () => {
-    const relativePath = run("bun", ["scripts/discover-project.ts", repo], {
+    const relativePath = run(join(here, "run"), ["discover-project", repo], {
       cwd: dirname(here),
       env: { CDPATH: ".:/nonexistent", POSTMASTER_CONFIG: join(temp, "github.toml") },
     });
@@ -981,14 +981,14 @@ describe("controls: a repository whose store exists uses this tracker, whatever 
   test("a github target with no origin remote is pointed at store init, and one with a remote is not", () => {
     const noRemoteErr = join(temp, "err");
     const hostedErr = join(temp, "err-hosted");
-    const noRemote = run("bun", [join(here, "discover-project.ts"), unticketed], {
+    const noRemote = run(join(here, "run"), ["discover-project", unticketed], {
       env: { POSTMASTER_CONFIG: join(temp, "github.toml") },
     });
     writeFileSync(noRemoteErr, noRemote.err);
     const hosted = join(temp, "hosted");
     newRepo(hosted);
     run("git", ["-C", hosted, "remote", "add", "origin", "https://github.com/o/r.git"]);
-    const hasRemote = run("bun", [join(here, "discover-project.ts"), hosted], {
+    const hasRemote = run(join(here, "run"), ["discover-project", hosted], {
       env: { POSTMASTER_CONFIG: join(temp, "github.toml") },
     });
     writeFileSync(hostedErr, hasRemote.err);
@@ -997,10 +997,10 @@ describe("controls: a repository whose store exists uses this tracker, whatever 
   }, 30000);
 
   test("ticket-check.sh reads tickets through this store with a config naming github, a byte-order mark aside", () => {
-    const ticketCheck = run("bun", [join(here, "ticket-check.ts"), repo, "3"], {
+    const ticketCheck = run(join(here, "run"), ["ticket-check", repo, "3"], {
       env: { POSTMASTER_CONFIG: join(temp, "github.toml") },
     });
-    const ticketCheckSeven = run("bun", [join(here, "ticket-check.ts"), repo, "7"], {
+    const ticketCheckSeven = run(join(here, "run"), ["ticket-check", repo, "7"], {
       env: { POSTMASTER_CONFIG: join(temp, "github.toml") },
     });
     expect(ticketCheck.code).toBe(0);
@@ -1010,7 +1010,7 @@ describe("controls: a repository whose store exists uses this tracker, whatever 
   }, 30000);
 
   test("without a store it goes to the github adapter, and the gh on PATH saw the call", () => {
-    const githubCheck = run("bun", [join(here, "ticket-check.ts"), unticketed, "3"], {
+    const githubCheck = run(join(here, "run"), ["ticket-check", unticketed, "3"], {
       env: { POSTMASTER_CONFIG: join(temp, "github.toml") },
     });
     expect(githubCheck.code).toBe(1);

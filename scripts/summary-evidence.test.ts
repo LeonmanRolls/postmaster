@@ -1,5 +1,5 @@
 // Tests beside scripts/summary-evidence.ts. The script cases run it the way the coachman
-// does at harvest — `bun --no-env-file --config=/dev/null scripts/summary-evidence.ts
+// does at harvest — `scripts/run summary-evidence
 // <summary> <worktree>` — against a throwaway worktree with an armed ticket, so a clean pass
 // and every refusal are shown through the identical command. The core cases call the pure
 // functions directly.
@@ -110,7 +110,7 @@ function runCheck(summary: string, worktree: string, extra: string[] = []) {
   return { code: r.status ?? -1, out: `${r.stdout ?? ""}${r.stderr ?? ""}` };
 }
 
-const ticketCheck = join(import.meta.dir, "ticket-check.sh");
+const ticketCheck = join(import.meta.dir, "run");
 
 describe("pure core", () => {
   test("a waybill is read from ## Ticket to ## Project profile", () => {
@@ -521,14 +521,14 @@ default
   });
 });
 
-describe("criteria from ticket-check.sh", () => {
+describe("criteria from run ticket-check", () => {
   test("pins the well-formed line the checker reads", () => {
-    // If ticket-check.sh changes this line, this test fails here, not in a lane's run.
+    // If run ticket-check changes this line, this test fails here, not in a lane's run.
     const dir = mkdtempSync(join(tmpdir(), "pin-"));
     try {
       const file = join(dir, "ticket.md");
       writeFileSync(file, ticketWith(3));
-      const r = spawnSync("bash", [ticketCheck, "--body", file, "--project", dir], {
+      const r = spawnSync(ticketCheck, ["ticket-check", "--body", file, "--project", dir], {
         encoding: "utf8",
       });
       expect(r.status).toBe(0);

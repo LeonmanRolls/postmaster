@@ -38,20 +38,20 @@ import {
   textOf,
 } from "./plane";
 
-const wrapper = join(import.meta.dir, "plane.sh");
+const wrapper = join(import.meta.dir, "run");
 
 function cli(
   args: string[],
   env?: Record<string, string | undefined>,
   cwd?: string,
 ): { code: number; out: string; err: string } {
-  const r = spawnSync("bash", [wrapper, ...args], { encoding: "utf8", env, cwd });
+  const r = spawnSync(wrapper, ["plane", ...args], { encoding: "utf8", env, cwd });
   return { code: r.status ?? -1, out: r.stdout ?? "", err: r.stderr ?? "" };
 }
 
 const body = `${[
   "## Problem / feature\nA ticket reaches a coachman with no criteria, so it has nothing to judge the lanes against.",
-  "## Acceptance criteria\n1. The check exits 0 on a well-formed ticket and prints how many criteria it has.\n2. It exits 2 and names each missing part:\n   - the title\n   - the direction\n   1. a nested number is part of criterion 2, not a criterion\n\n   ```\n   ## Direction\n   ticket-check.sh --body draft.md   # which draft? TODO\n   ```\n3. A question or a marker in code, `a?` or `TODO`, is not read,\nand a line that runs straight on belongs to the criterion above it.\n\n   So does an indented paragraph after a blank line.",
+  "## Acceptance criteria\n1. The check exits 0 on a well-formed ticket and prints how many criteria it has.\n2. It exits 2 and names each missing part:\n   - the title\n   - the direction\n   1. a nested number is part of criterion 2, not a criterion\n\n   ```\n   ## Direction\n   run ticket-check --body draft.md   # which draft? TODO\n   ```\n3. A question or a marker in code, `a?` or `TODO`, is not read,\nand a line that runs straight on belongs to the criterion above it.\n\n   So does an indented paragraph after a blank line.",
   "## Direction\n<!-- a template comment is not read: TBD -->\nNone: any approach that meets the criteria.",
   "## Turnpikes\n<!-- default, none, or turnpike names -->\n`default`",
   "## Notes\nA heading inside a fenced block is not a section:\n\n```\n## Direction\n```",
@@ -331,7 +331,7 @@ describe("CLI and API behavior", () => {
     const r = cli([], env);
     expect(r.code).toBe(1);
     expect(r.out).toBe("");
-    expect(r.err).toBe("plane: usage: plane.sh projects|create|edit|read|state|comment|list ...\n");
+    expect(r.err).toBe("plane: usage: run plane projects|create|edit|read|state|comment|list ...\n");
   }, 30000);
 
   test("a stalled API is cut off after 30 seconds with BASE's words", async () => {

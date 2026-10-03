@@ -36,7 +36,7 @@ import {
   YPKGS,
 } from "./style-findings.ts";
 
-const SELF = join(import.meta.dir, "style-findings.sh");
+const SELF = join(import.meta.dir, "run");
 const SKILL = join(toolRoot(import.meta), "skills/postmaster");
 
 interface ControlRecord {
@@ -74,7 +74,7 @@ beforeAll(() => {
     let rc = 0;
 
     const invoke = (...args: string[]): void => {
-      const r = run("bash", [SELF, ...args]);
+      const r = run(SELF, ["style-findings", ...args]);
       // BASE's run() used $(...), which strips trailing newlines.
       out = (r.out + r.err).replace(/\n+$/u, "");
       rc = r.code;
@@ -158,7 +158,7 @@ beforeAll(() => {
     };
 
     const logged = (dispatch: string, ...args: string[]): void => {
-      run("bash", [join(import.meta.dir, "log-action.sh"), dispatch, "coachman", ...args]);
+      run(join(import.meta.dir, "run"), ["log-action", dispatch, "coachman", ...args]);
     };
 
     const logFindings = (dispatch: string, count: number): void => {
@@ -360,7 +360,7 @@ beforeAll(() => {
       }
     })();
     const refuseR = run("bash", [
-      join(import.meta.dir, "log-action.sh"),
+      join(import.meta.dir, "run"),
       d,
       "coachman",
       "finding",
@@ -375,10 +375,10 @@ beforeAll(() => {
       }
     })();
     if (refuseR.code === 1 && afterLines === beforeLines && refuseR.err.includes("gating or style"))
-      ok("log-action.sh refuses a finding with no class, and writes nothing");
+      ok("run log-action refuses a finding with no class, and writes nothing");
     else
       fail(
-        `log-action.sh refuses a finding with no class, and writes nothing (exit ${refuseR.code})`,
+        `run log-action refuses a finding with no class, and writes nothing (exit ${refuseR.code})`,
         refuseR.err,
       );
 
@@ -1057,7 +1057,7 @@ beforeAll(() => {
 
     // A subcommand the script lacks would be caught
     const planted = join(tmp, "planted.md");
-    writeFileSync(planted, "run `<tool>/scripts/style-findings.sh sort <dispatch>`\n");
+    writeFileSync(planted, "run `<tool>/scripts/run style-findings sort <dispatch>`\n");
     const plantedSubs = [
       ...readFileSync(planted, "utf8").matchAll(/style-findings\.sh ([a-z-]*)/gu),
     ]
@@ -1275,8 +1275,8 @@ describe("negative controls: a run's style findings", () => {
   test("and lists none", () => {
     assertControl("and lists none");
   });
-  test("log-action.sh refuses a finding with no class, and writes nothing", () => {
-    assertControl("log-action.sh refuses a finding with no class, and writes nothing");
+  test("run log-action refuses a finding with no class, and writes nothing", () => {
+    assertControl("run log-action refuses a finding with no class, and writes nothing");
   });
   test("a finding logged with another class is named, and nothing is counted", () => {
     assertControl("a finding logged with another class is named, and nothing is counted");

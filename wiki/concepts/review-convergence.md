@@ -326,10 +326,10 @@ passed, still finds serious defects, or only minor ones.
 
 **Method.** Pin commit `547687c`, main after #36. Two scopes, in one brief:
 
-- *Reviewed clean:* `scripts/stage.sh` and `scripts/runs-status.sh`. Round 3 found a defect in
+- *Reviewed clean:* `scripts/run stage` and `scripts/run runs-status`. Round 3 found a defect in
   each; in round 4 all four reviewers confirmed the fixes closed and reported nothing new in
   either.
-- *Known open:* the REMOUNT rules in `postmaster.md` and `launch.sh`'s input checks, where #57 and
+- *Known open:* the REMOUNT rules in `postmaster.md` and `run launch`'s input checks, where #57 and
   #58 list the findings already known. This is the control: a reviewer that finds none of them there
   is not looking.
 

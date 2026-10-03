@@ -16,7 +16,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const cli = join(import.meta.dir, "cut-scratch.sh");
+const cli = join(import.meta.dir, "run");
 
 interface Run {
   code: number;
@@ -25,7 +25,7 @@ interface Run {
 }
 
 function sh(...args: string[]): Run {
-  const r = spawnSync(cli, args, { encoding: "utf8" });
+  const r = spawnSync(cli, ["cut-scratch", ...args], { encoding: "utf8" });
   return { code: r.status ?? -1, out: r.stdout ?? "", err: r.stderr ?? "" };
 }
 
@@ -130,7 +130,7 @@ describe("positive controls", () => {
     const nbspDir = "a\u00a0b";
     mkdirSync(join(synth, nbspDir, "dep"), { recursive: true });
     writeFileSync(join(synth, nbspDir, "dep/index.js"), "x\n");
-    const r = spawnSync(cli, [repo, synth, join(tmp, "nbsp"), snap], {
+    const r = spawnSync(cli, ["cut-scratch", repo, synth, join(tmp, "nbsp"), snap], {
       encoding: "utf8",
       env: { ...process.env, DEPS_DIRS: nbspDir },
     });

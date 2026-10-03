@@ -6,10 +6,10 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const wrapper = join(import.meta.dir, "spec-review-link.sh");
+const wrapper = join(import.meta.dir, "run");
 
 function cli(...args: string[]): { code: number; out: string; err: string } {
-  const r = spawnSync("bash", [wrapper, ...args], { encoding: "utf8" });
+  const r = spawnSync(wrapper, ["spec-review-link", ...args], { encoding: "utf8" });
   return { code: r.status ?? -1, out: r.stdout ?? "", err: r.stderr ?? "" };
 }
 
@@ -134,7 +134,7 @@ function linkWithFixture(
 }
 
 function linkGo(...args: string[]): { status: number | null; stdout: string; stderr: string } {
-  const result = spawnSync("bash", [wrapper, ...args], { encoding: "utf8", timeout: 15_000 });
+  const result = spawnSync(wrapper, ["spec-review-link", ...args], { encoding: "utf8", timeout: 15_000 });
   return { status: result.status, stdout: result.stdout ?? "", stderr: result.stderr ?? "" };
 }
 

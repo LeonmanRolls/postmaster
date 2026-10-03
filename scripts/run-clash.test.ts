@@ -1,5 +1,5 @@
 // Tests beside scripts/run-clash.ts: the AC3 self-test. Each case runs the script the way
-// Stage B does — `bun scripts/run-clash.ts <repo> <ticket-id>` — against a throwaway git
+// Stage B does — `scripts/run run-clash <repo> <ticket-id>` — against a throwaway git
 // repository, so a clean pass and every refusal are shown through the identical command.
 
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";

@@ -14,7 +14,7 @@ import { join } from "node:path";
 import { tryTomlFile } from "./lib/data.ts";
 import { run } from "./lib/proc.ts";
 
-const SELF = join(import.meta.dir, "setup.sh");
+const SELF = join(import.meta.dir, "run");
 
 let tmp = "";
 let plainRc = -1;
@@ -107,7 +107,7 @@ describe("positive controls", () => {
 
   test("the written config resolves: the reviewers default to the workhorses, and security has its own", () => {
     const r = run("bash", [
-      join(import.meta.dir, "reviewers.sh"),
+      join(import.meta.dir, "run"),
       "lines",
       "--config",
       join(tmp, "lens.toml"),
@@ -234,7 +234,7 @@ describe("positive controls", () => {
     const mixedBugRc = runSetup("mixed-bug");
     const out = readFileSync(join(tmp, "mixed-bug.out"), "utf8");
     const er = run("bash", [
-      join(import.meta.dir, "reviewers.sh"),
+      join(import.meta.dir, "run"),
       "eligible",
       "bug",
       "--config",

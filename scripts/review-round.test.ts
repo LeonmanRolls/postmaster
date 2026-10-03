@@ -16,7 +16,7 @@ import { join } from "node:path";
 import { run, withTempDir } from "./lib/proc.ts";
 import { ARG_SPLIT_RE, monotonic } from "./review-round.ts";
 
-const self = join(import.meta.dir, "review-round.sh");
+const self = join(import.meta.dir, "run");
 
 const skipBootId = !existsSync("/proc/sys/kernel/random/boot_id");
 if (skipBootId) {
@@ -148,7 +148,7 @@ esac
     }
     const runSelf = (...args: string[]): void => {
       const t0 = Date.now();
-      const r = run(self, args);
+      const r = run(self, ["review-round", ...args]);
       out = r.out + r.err;
       rc = r.code;
       took = Math.round((Date.now() - t0) / 1000);
@@ -228,7 +228,7 @@ esac
     const launch = (round: number, lens: string, lane: string, kind: string): void => {
       n += 1;
       const r = run(
-        join(import.meta.dir, "host.sh"),
+        join(import.meta.dir, "run"),
         [
           "run",
           `T-1 · ${lane} ${lens} review`,
@@ -254,7 +254,7 @@ esac
         console.log(`  (could not launch ${lens} ${lane})`);
         return;
       }
-      // host.sh run waits 10s for the launch pid itself; this covers a slower
+      // run host run waits 10s for the launch pid itself; this covers a slower
       // runner, so an empty pid below means the launch failed, never that it lags.
       const launchPidFile = join(tmp, "pids", `launch.${n}`);
       let i = 0;
@@ -370,7 +370,7 @@ esac
       })(),
     );
     check(
-      "host.sh stop ends it, and its child in a session of its own",
+      "run host stop ends it, and its child in a session of its own",
       dead(slow, 60) && dead(child, 60),
     );
     runSelf("teardown", d, "1", repo);
@@ -669,7 +669,7 @@ esac
     ];
     for (const argsStr of refusedArgs) {
       runSelf(...argsStr.split(" "));
-      check(`refused: review-round.sh ${argsStr.replaceAll(tmp, "<tmp>")}`, rc === 1);
+      check(`refused: run review-round ${argsStr.replaceAll(tmp, "<tmp>")}`, rc === 1);
     }
     runSelf("wait", d, "11", repo, "bug:one\nbug:one security:two");
     check(
@@ -703,7 +703,7 @@ describe("positive controls", () => {
     "at the deadline, wait exits 3 and names the reviewer with no marker",
     "run-log.md records it as <lane> <lens>: DEGRADED, timeout",
     "a degrade line records it, with the lens, the round and the cause",
-    "host.sh stop ends it, and its child in a session of its own",
+    "run host stop ends it, and its child in a session of its own",
     "teardown takes the reviewers the wait recorded, and removes each scratch",
     "a wait run again keeps the round's deadline rather than starting a new one",
     "when every marker is in, wait exits 0 and records nothing",
@@ -772,13 +772,13 @@ describe("negative controls", () => {
     },
   );
   const refused = [
-    "refused: review-round.sh wait <tmp>/repo/.postmaster/runs/T-1 11 <tmp>/repo bug",
-    "refused: review-round.sh wait <tmp>/repo/.postmaster/runs/T-1 11 <tmp>/repo bug:../x",
-    "refused: review-round.sh wait <tmp>/repo/.postmaster/runs/T-1 0 <tmp>/repo bug:one",
-    "refused: review-round.sh wait <tmp>/nowhere 1 <tmp>/repo bug:one",
-    "refused: review-round.sh wait <tmp>/repo/.postmaster/runs/T-1 11 <tmp>/elsewhere bug:one",
-    "refused: review-round.sh stop <tmp>/repo/.postmaster/runs/T-1 11 <tmp>/repo bug:one",
-    "refused: review-round.sh start <tmp>/repo/.postmaster/runs/T-1",
+    "refused: run review-round wait <tmp>/repo/.postmaster/runs/T-1 11 <tmp>/repo bug",
+    "refused: run review-round wait <tmp>/repo/.postmaster/runs/T-1 11 <tmp>/repo bug:../x",
+    "refused: run review-round wait <tmp>/repo/.postmaster/runs/T-1 0 <tmp>/repo bug:one",
+    "refused: run review-round wait <tmp>/nowhere 1 <tmp>/repo bug:one",
+    "refused: run review-round wait <tmp>/repo/.postmaster/runs/T-1 11 <tmp>/elsewhere bug:one",
+    "refused: run review-round stop <tmp>/repo/.postmaster/runs/T-1 11 <tmp>/repo bug:one",
+    "refused: run review-round start <tmp>/repo/.postmaster/runs/T-1",
   ];
   for (const label of refused) {
     test(label, () => {

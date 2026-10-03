@@ -2,7 +2,7 @@
 //
 //   bun --no-env-file test scripts/fixture-lanes.test.ts
 //
-// The controls run the real `fixture.sh score` and read the hidden-tests line back. A lane that
+// The controls run the real `run fixture score` and read the hidden-tests line back. A lane that
 // passes, one that fails, one that is missing and one that fails to build; and a run whose merged
 // result alone decides the verdict. They use the fixture app and the `remove` ticket's hidden
 // suite, the same ones score uses.
@@ -29,7 +29,7 @@ import {
 
 const SCRIPTS = import.meta.dir;
 const TOOL = join(SCRIPTS, "..");
-const FIXTURE_SH = join(SCRIPTS, "fixture.sh");
+const FIXTURE_SH = join(SCRIPTS, "run");
 const APP = join(TOOL, "fixtures", "app");
 const TICKETS = join(TOOL, "fixtures", "tickets");
 const FIXTURE_TICKET = "remove";
@@ -252,7 +252,7 @@ describe("pure core", () => {
     expect(branchName("T-1", "luna")).toBe("wb/T-1-luna");
   });
 
-  test("parseHiddenCounts reads a fixture.sh hidden line", () => {
+  test("parseHiddenCounts reads a run fixture hidden line", () => {
     expect(parseHiddenCounts("ok   hidden-tests  remove: 5 pass, 0 fail")).toEqual({
       passed: 5,
       failed: 0,

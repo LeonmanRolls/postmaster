@@ -40,7 +40,7 @@ a run dispatched without it.
 
 The check is a script, so "answerable yes or no" means what a script can see: a criterion has
 words, asks no question, and is not marked to be decided later. The header of
-`scripts/ticket-check.sh` lists what it judges and what it does not.
+`scripts/run ticket-check` lists what it judges and what it does not.
 
 Hedging words such as "where possible" were left out. A criterion can hedge and still say what
 happens otherwise, as criterion 4 of
@@ -58,10 +58,10 @@ how often tickets arrive malformed, and which part is missing.
 ## What changed because of it
 
 The ticket shape in `skills/postmaster/trackers.md` gains `## Direction`, and
-`scripts/ticket-check.sh` is the shape's executable form. Stage A of
+`scripts/run ticket-check` is the shape's executable form. Stage A of
 `skills/postmaster/postmaster.md` runs the check on every ticket before it is accepted, and
 Stage B runs it again before a ticket is dispatched. Only the user's answer is written back:
-`ticket-check.sh --splice` changes the sections the user approved and no other line, and the
+`run ticket-check --splice` changes the sections the user approved and no other line, and the
 `edit` command added to each tracker adapter replaces the body alone, never the title, and
 writes nothing if the ticket changed since it was read.
 

@@ -1,14 +1,14 @@
 # ~/.postmaster/config.toml
 #
 # The user's machine-level choices, and nothing about any target project. Projects are
-# discovered (scripts/discover-project.sh), never configured. scripts/setup.sh writes this
+# discovered (scripts/run discover-project), never configured. scripts/run setup writes this
 # file from your answers; copy it by hand if you prefer. Model ids are whatever the provider
-# serves under the harness; confirm each with one trial launch (scripts/launch.sh form <name>
-# prints the exact command). Every value below is one that scripts/launch.sh can run today.
+# serves under the harness; confirm each with one trial launch (scripts/run launch form <name>
+# prints the exact command). Every value below is one that scripts/run launch can run today.
 # A run keeps the config it was dispatched with, recorded in its run.json: an edit here
 # reaches the next run, never one already in flight.
 
-# Where projects live. scripts/find-projects.sh reads this when given no roots.
+# Where projects live. scripts/run find-projects reads this when given no roots.
 projects_roots = ["~/Code"]
 
 # A lane is a harness plus a model plus an effort, and is a workhorse or a reviewer or
@@ -51,19 +51,19 @@ max_runs = 2                                    # concurrent runs per project
 #              env_file = "~/.postmaster/lanes/muse.env" }     # holds META_API_KEY=<key>
 
 # Optional: a different coachman per leg. The legs are synthesis and review (and ship for a
-# run dispatched before the two-leg change), and scripts/launch.sh refuses a config that names
+# run dispatched before the two-leg change), and scripts/run launch refuses a config that names
 # any other.
 # [team.coachman_legs]
 # synthesis = { harness = "codex", model = "gpt-6-astra", effort = "max" }
 
 # Optional: a lens's own reviewer lanes, where they differ from `reviewers`, such as a lane
 # whose harness has a skill for that lens alone. A lens not named here is reviewed by
-# `reviewers`. The lenses are the review stage's: `scripts/reviewers.sh lenses` lists them, and
-# `scripts/reviewers.sh lines` refuses any other name, or a lane not defined above.
+# `reviewers`. The lenses are the review stage's: `scripts/run reviewers lenses` lists them, and
+# `scripts/run reviewers lines` refuses any other name, or a lane not defined above.
 # [team.lens_reviewers]
 # security = ["luna", "deepseek", "sentinel"]   # sentinel: a third lane, defined under [lanes]
 
-# Per-launch resource limits. On Linux with a working systemd user manager, each host.sh run
+# Per-launch resource limits. On Linux with a working systemd user manager, each run host run
 # gets its own cgroup. Role values override either default; omitted values inherit from [limits].
 [limits]
 memory_max = "8G"
@@ -86,7 +86,7 @@ poll_seconds = 120
 #   github  GitHub Issues on a GitHub Projects board, through the gh CLI (the default; needs
 #           gh logged in with the project scope, nothing else)
 #   plane   Plane work items through its REST API; url and workspace here, the key in env_file
-#   local   tickets in each repository's own git directory, through scripts/local.sh; no
+#   local   tickets in each repository's own git directory, through scripts/run local; no
 #           service, no login, nothing more here. A repository whose store exists uses it
 #           whatever this kind is.
 #   other   a tracker the agent reaches through its own tooling, named here and described in
@@ -102,7 +102,7 @@ postmaster_may_create = false   # true lets the postmaster create tickets withou
 [review]
 # Seconds a review round may run; a run keeps the value recorded in its run.json at dispatch.
 # A reviewer still running at the limit is stopped and recorded DEGRADED, with timeout as the
-# cause (scripts/review-round.sh). 2400 when unset.
+# cause (scripts/run review-round). 2400 when unset.
 round_timeout_seconds = 2400
 
 [planning]

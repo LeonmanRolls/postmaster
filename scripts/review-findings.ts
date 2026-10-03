@@ -1,7 +1,7 @@
 // Normalize native bug-review reports and harvest Claude's forked task transcripts.
 //
-//   review-findings.sh normalize <lane> <scratch> <events> --run <dispatch> [--last <file>]
-//   review-findings.sh harvest <events> <logs-dir> --prefix <name>
+//   run review-findings normalize <lane> <scratch> <events> --run <dispatch> [--last <file>]
+//   run review-findings harvest <events> <logs-dir> --prefix <name>
 //
 //   exit 0  printed
 //   exit 1  usage; a report that cannot be read; a harvest that cannot be completed
@@ -23,7 +23,7 @@ import {
 } from "./lib/text.ts";
 
 const USAGE =
-  "usage: review-findings.sh normalize <lane> <scratch> <events> --run <dispatch> [--last <file>] | harvest <events> <logs-dir> --prefix <name>";
+  "usage: run review-findings normalize <lane> <scratch> <events> --run <dispatch> [--last <file>] | harvest <events> <logs-dir> --prefix <name>";
 
 // --- failures ---------------------------------------------------------------------------
 // BASE raises ReportError; a ported method that returns it cannot also fail loudly, so the

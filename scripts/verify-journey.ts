@@ -4,9 +4,9 @@
 // `## User journey`, in the ticket's order, marked did or did not, with a screenshot beside the
 // report, in its directory or below it, so a walk leaves nothing in the worktree it walked.
 //
-//   verify-journey.sh [<worktree>] [--ticket <file>] [--report <file>]
-//   verify-journey.sh --path [<worktree>] [--dir <dir>]   where the report for <worktree>'s HEAD goes
-//   verify-journey.sh --format                            the report's format, for a brief
+//   run verify-journey [<worktree>] [--ticket <file>] [--report <file>]
+//   run verify-journey --path [<worktree>] [--dir <dir>]   where the report for <worktree>'s HEAD goes
+//   run verify-journey --format                            the report's format, for a brief
 //
 //   exit 0  every step is in the report, in order, marked did, with its screenshot beside it
 //   exit 1  a step is marked did not
@@ -180,7 +180,7 @@ function steps(lines: string[]): string[] | null {
 
 function format(): void {
   console.log(`Walk the ticket's User journey in a browser, through the project's own browser library, at the
-commit you are reporting on. Write the report to the path \`verify.sh journey-path\` prints for
+commit you are reporting on. Write the report to the path \`run verify journey-path\` prints for
 that commit. For each step, in the ticket's order: a \`## \` heading holding the step as the
 ticket words it; under it a line \`did\`, or \`did not: <what happened instead>\`; then a line
 \`screenshot: <path>\`, the path, relative to the report, of a screenshot of that step saved in the
@@ -224,7 +224,7 @@ function journey(mode: "path" | "judge", wtArg: string, ...rest: string[]): numb
   try {
     text = readFileSync(ticket, "utf8");
   } catch {
-    notRun(`no ticket at ${ticket}; scripts/verify.sh arm copies the run's there`);
+    notRun(`no ticket at ${ticket}; scripts/run verify arm copies the run's there`);
   }
   const want = steps(ticketLines(text!));
   if (want === null) notRun("the ticket has no User journey");
@@ -307,7 +307,7 @@ function journey(mode: "path" | "judge", wtArg: string, ...rest: string[]): numb
 
 // --- entry -----------------------------------------------------------------------------------
 const USAGE =
-  "usage: verify-journey.sh [<worktree>] [--ticket <file>] [--report <file>] | --path [<worktree>] [--dir <dir>] | --format";
+  "usage: run verify-journey [<worktree>] [--ticket <file>] [--report <file>] | --path [<worktree>] [--dir <dir>] | --format";
 
 function main(argv: string[]): number {
   if (argv[0] === "--format") {

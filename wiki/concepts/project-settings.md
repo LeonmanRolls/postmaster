@@ -54,7 +54,7 @@ whole, and sharing is one narrow file a project chooses to commit. The machine's
 - A run already in flight under the old `~/.postmaster/runs/<basename>/` layout is not
   migrated. It finishes where it started.
 - Two settings files with a precedence between them is one more thing to get wrong. The
-  reader is one script (`scripts/project-settings.sh`) that enforces the shape and the
+  reader is one script (`scripts/run project-settings`) that enforces the shape and the
   no-path/no-credential rule, so a mistake is named rather than silently honoured.
 
 ## What would change it
@@ -67,10 +67,10 @@ whole, and sharing is one narrow file a project chooses to commit. The machine's
 
 ## What changed because of it
 
-`scripts/project-settings.sh` reads and writes the two files and refuses a credential or a
-path in either. `scripts/turnpikes.sh` expands `default` from a project's declared set.
-`scripts/discover-project.sh` reports whether the target has one. Run artifacts live at
-`<project>/.postmaster/runs/`, and `log-action.sh` names the project from its root.
+`scripts/run project-settings` reads and writes the two files and refuses a credential or a
+path in either. `scripts/run turnpikes` expands `default` from a project's declared set.
+`scripts/run discover-project` reports whether the target has one. Run artifacts live at
+`<project>/.postmaster/runs/`, and `run log-action` names the project from its root.
 `settings.example.toml` and `project.example.toml` document the shapes. The setup
 conversation offers a project decision for `.postmaster/` and says which file it proposes.
 A run resolves the target's local roles at dispatch, and every run launch's durable session

@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { accept } from "./front-door-acceptance";
 import { toolRoot } from "./lib/paths";
 
-const cli = join(import.meta.dir, "front-door-acceptance.sh");
+const cli = join(import.meta.dir, "run");
 const ROOT = toolRoot(import.meta);
 
 let tmp: string;
@@ -287,12 +287,12 @@ describe("all faults together", () => {
   }, 30000);
 
   test("an extra argument exits 2", () => {
-    const r = spawnSync(cli, [join(tmp, "clean"), "extra"], { encoding: "utf8" });
+    const r = spawnSync(cli, ["front-door-acceptance", join(tmp, "clean"), "extra"], { encoding: "utf8" });
     expect(r.status).toBe(2);
   }, 30000);
 
   test("an unknown flag exits 2", () => {
-    const r = spawnSync(cli, ["--no-such-flag", "extra"], { encoding: "utf8" });
+    const r = spawnSync(cli, ["front-door-acceptance", "--no-such-flag", "extra"], { encoding: "utf8" });
     expect(r.status).toBe(2);
   }, 30000);
 

@@ -31,7 +31,7 @@ import {
   trim,
 } from "./verify-examples.ts";
 
-const SELF = join(import.meta.dir, "verify-examples.sh");
+const SELF = join(import.meta.dir, "run");
 
 const spacedDone = process.env.POSTMASTER_SPACED_DONE === "1";
 if (spacedDone) {
@@ -272,7 +272,7 @@ afterAll(() => {
 });
 
 const runExample = (project: string, ticket: string): { code: number; out: string } => {
-  const r = run("bash", [SELF, join(tmp, project), "--ticket", ticket]);
+  const r = run(SELF, ["verify-examples", join(tmp, project), "--ticket", ticket]);
   return { code: r.code, out: r.out + r.err };
 };
 
@@ -408,7 +408,7 @@ describe("negative controls", () => {
   });
 
   test("a build whose package manager is not installed is not run", () => {
-    const r = run("bash", [SELF, join(tmp, "built"), "--ticket", join(tmp, "built.md")], {
+    const r = run(SELF, ["verify-examples", join(tmp, "built"), "--ticket", join(tmp, "built.md")], {
       env: { ...process.env, PATH: join(tmp, "fewtools") },
     });
     const out = r.out + r.err;

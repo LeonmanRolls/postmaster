@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { run } from "./lib/proc.ts";
 
-const SELF = join(import.meta.dir, "review-decide.sh");
+const SELF = join(import.meta.dir, "run");
 
 let tmp = "";
 
@@ -36,7 +36,7 @@ const logged = (d: string, action: string, target: string, detail: string): void
 };
 
 const decide = (d: string, round: string): { code: number; out: string } => {
-  const r = run(SELF, [d, round]);
+  const r = run(SELF, ["review-decide", d, round]);
   return { code: r.code, out: r.out + r.err };
 };
 
@@ -284,13 +284,13 @@ describe("negative controls: malformed lines fail loudly, each fault named", () 
   });
 
   test("a missing dispatch directory is refused", () => {
-    const r = run(SELF, [join(tmp, "nowhere"), "1"]);
+    const r = run(SELF, ["review-decide", join(tmp, "nowhere"), "1"]);
     expect(r.code).toBe(1);
     expect(r.err.includes("no dispatch directory")).toBe(true);
   });
 
   test("no arguments is refused", () => {
-    const r = run(SELF, []);
+    const r = run(SELF, ["review-decide", ]);
     expect(r.code).toBe(1);
     expect(r.err.includes("usage:")).toBe(true);
   });

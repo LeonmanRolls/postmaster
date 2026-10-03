@@ -3,10 +3,10 @@
 // installed into a scratch; a lane that opens on a broken scratch reports the breakage as a
 // finding about the diff, or gives up on running the suite and reverts to reading.
 //
-//   cut-scratch.sh <repo> <source-worktree> <dest-path> <commit> [--clone <base>]
-//   cut-scratch.sh --check <dest-path> <commit> [--clone <base>]
-//   cut-scratch.sh --kind <dir>
-//   cut-scratch.sh --remove <repo> <dest-path>
+//   run cut-scratch <repo> <source-worktree> <dest-path> <commit> [--clone <base>]
+//   run cut-scratch --check <dest-path> <commit> [--clone <base>]
+//   run cut-scratch --kind <dir>
+//   run cut-scratch --remove <repo> <dest-path>
 //
 // A scratch is a detached worktree of <repo> at <commit>. With --clone it is a shared clone of
 // <repo> instead (`git clone --shared`, which copies no objects), detached at <commit>: its
@@ -58,7 +58,7 @@ interface CmdResult {
 
 function usage(): never {
   console.error(
-    "usage: cut-scratch.sh <repo> <source-worktree> <dest-path> <commit> [--clone <base>] | --check <dest-path> <commit> [--clone <base>] | --kind <dir> | --remove <repo> <dest-path>",
+    "usage: run cut-scratch <repo> <source-worktree> <dest-path> <commit> [--clone <base>] | --check <dest-path> <commit> [--clone <base>] | --kind <dir> | --remove <repo> <dest-path>",
   );
   process.exit(1);
 }
