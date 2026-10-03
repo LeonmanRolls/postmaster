@@ -8,7 +8,10 @@
 //   plane.sh read <IDENT-n> [--body]                 title, state, labels, body, comments; with
 //                                                    --body, the body alone
 //   plane.sh edit <IDENT-n> <body-file> <base-file>  replace its description; the title stays
+//   plane.sh title <IDENT-n> <title>                 change the work item's title
 //   plane.sh state <IDENT-n> <state>                 todo | in-progress | blocked | done | cancelled
+//   plane.sh label <IDENT-n> add|remove <name>       add or remove a label, creating it when
+//                                                    missing; a state change leaves `ready` alone
 //   plane.sh comment <IDENT-n> <actor> <text>        one comment, dated to the minute, actor first
 //   plane.sh list <IDENT> [state]                    one line per work item: id, state, title
 //
@@ -1003,6 +1006,7 @@ const STATE_FOR_GROUP: Record<string, string> = {
   cancelled: "cancelled",
 };
 const BLOCKED = "blocked";
+const READY = "ready";
 
 interface PlaneConfig {
   BASE: string;
@@ -1249,6 +1253,54 @@ async function runCommands(): Promise<void> {
       },
     );
     console.log(`${tid}: edited`);
+  } else if (cmd === "title") {
+    if (args.length !== 2) dieP("usage: plane.sh title <IDENT-n> <title>");
+    const [ident, item] = await itemFor(cfg, args[0]!);
+    const tid = `${ident}-${item.sequence_id}`;
+    await api(
+      cfg,
+      "PATCH",
+      `workspaces/${cfg.WS}/projects/${ref(item.project)}/work-items/${item.id}/`,
+      { name: args[1] },
+    );
+    console.log(`${tid}: title changed`);
+  } else if (cmd === "label") {
+    if (args.length !== 3 || (args[1] !== "add" && args[1] !== "remove"))
+      dieP("usage: plane.sh label <IDENT-n> add|remove <name>");
+    const verb = args[1] as "add" | "remove";
+    const name = args[2]!;
+    const [ident, item] = await itemFor(cfg, args[0]!);
+    const tid = `${ident}-${item.sequence_id}`;
+    const pid = String(ref(item.project));
+    const labels = await labelsOf(cfg, pid);
+    const current = (item.labels ?? []).map((l: unknown) => ref(l));
+    const named = labels.filter((l: any) => pyLower(l.name) === pyLower(name)).map((l: any) => l.id);
+    let labelId = named[0];
+    if (verb === "add") {
+      if (!labelId) {
+        const created = await api(cfg, "POST", `workspaces/${cfg.WS}/projects/${pid}/labels/`, {
+          name,
+        });
+        labelId = created.id;
+      }
+      const next = [...new Set([...current, labelId])].sort();
+      await api(
+        cfg,
+        "PATCH",
+        `workspaces/${cfg.WS}/projects/${pid}/work-items/${item.id}/`,
+        { labels: next },
+      );
+    } else {
+      const drop = new Set(named);
+      const next = current.filter((l: unknown) => !drop.has(l));
+      await api(
+        cfg,
+        "PATCH",
+        `workspaces/${cfg.WS}/projects/${pid}/work-items/${item.id}/`,
+        { labels: next },
+      );
+    }
+    console.log(`${tid}: label ${verb} ${name}`);
   } else if (cmd === "read") {
     const rest = args.filter((a) => a !== "--body");
     if (rest.length !== 1 || args.length > 2) dieP("usage: plane.sh read <IDENT-n> [--body]");
@@ -1344,7 +1396,7 @@ async function runCommands(): Promise<void> {
       }
     }
   } else {
-    dieP("usage: plane.sh projects|create|edit|read|state|comment|list ...");
+    dieP("usage: plane.sh projects|create|edit|title|read|state|label|comment|list ...");
   }
 }
 
@@ -1353,7 +1405,7 @@ const firstArg = process.argv[2];
 if (import.meta.main) {
   if (!firstArg) {
     try {
-      dieP("usage: plane.sh projects|create|edit|read|state|comment|list ...");
+      dieP("usage: plane.sh projects|create|edit|title|read|state|label|comment|list ...");
     } catch (e) {
       fatal(e);
     }

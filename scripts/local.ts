@@ -15,7 +15,7 @@ import {
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { argvHasUndecodableBytes, run } from "./lib/proc.ts";
-import { digitValue, pyWords } from "./lib/text.ts";
+import { digitValue, pyLower, pyWords } from "./lib/text.ts";
 
 const states = ["todo", "in-progress", "blocked", "done", "cancelled"];
 const args = process.argv.slice(2);
@@ -322,7 +322,7 @@ function minuteNow(): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 function main(args: string[]): number {
-  if (args.length < 2) return usage("store|create|edit|read|title|state|comment|list ...");
+  if (args.length < 2) return usage("store|create|edit|read|title|state|label|comment|list ...");
   const info = repoInfo(args[0]);
   const [cmd, ...rest] = args.slice(1);
   const { store, main } = info;
@@ -470,6 +470,25 @@ function main(args: string[]): number {
     console.log(`#${number}: ${state}`);
     return 0;
   }
+  if (cmd === "label") {
+    if (rest.length !== 3 || (rest[1] !== "add" && rest[1] !== "remove"))
+      return usage("label <n> add|remove <name>");
+    const number = numberArg(rest[0]);
+    const verb = rest[1] as "add" | "remove";
+    const name = oneLine(utf8(rest[2], "label"));
+    if (!name) return usage("label <n> add|remove <name>");
+    needStore(store);
+    locked(store, () => {
+      const meta = metaOrDie(store, number);
+      const has = meta.labels.some((l) => pyLower(l) === pyLower(name));
+      if (verb === "add" && !has) meta.labels.push(name);
+      else if (verb === "remove" && has)
+        meta.labels = meta.labels.filter((l) => pyLower(l) !== pyLower(name));
+      writeMeta(store, number, meta);
+    });
+    console.log(`#${number}: label ${verb} ${name}`);
+    return 0;
+  }
   if (cmd === "comment") {
     if (rest.length < 3) return usage("comment <n> <actor> <text>");
     const number = numberArg(rest[0]);
@@ -489,24 +508,33 @@ function main(args: string[]): number {
     if (rest.length > 1) return usage("list [state]");
     const wanted = rest.length ? stateArg(rest[0]) : undefined;
     needStore(store);
-    const rows: [bigint, string, string][] = [];
+    const rows: [bigint, string, string, string][] = [];
     const unread: string[] = [];
     for (const number of numbers(store)) {
       const loaded = load(store, number);
       if (loaded.why) unread.push(loaded.why);
-      else rows.push([number, oneLine(loaded.meta!.state), oneLine(loaded.meta!.title)]);
+      else
+        rows.push([
+          number,
+          oneLine(loaded.meta!.state),
+          oneLine(loaded.meta!.title),
+          loaded.meta!.labels.map(oneLine).join(","),
+        ]);
     }
     const rank = (state: string) => {
       const index = states.indexOf(state);
       return index < 0 ? states.length : index;
     };
     rows.sort((a, b) => rank(a[1]) - rank(b[1]) || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
-    for (const [number, state, title] of rows)
-      if (!wanted || state === wanted) console.log(`#${number}\t${state}\t${title}`);
+    for (const [number, state, title, labels] of rows)
+      if (!wanted || state === wanted)
+        console.log(
+          `#${number}\t${state}\t${title}${labels ? `\t${labels}` : ""}`,
+        );
     for (const why of unread) console.error(`local: ${why}`);
     return unread.length ? 1 : 0;
   }
-  return usage("store|create|edit|read|title|state|comment|list ...");
+  return usage("store|create|edit|read|title|state|label|comment|list ...");
 }
 
 if (import.meta.main) {

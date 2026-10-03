@@ -13,7 +13,10 @@
 //                                                  --body, only the body, exactly as stored
 //   github.sh <repo> edit <n> <body-file> <base-file>
 //                                                  replace the issue's body; never its title
+//   github.sh <repo> title <n> <title>             change the issue's title
 //   github.sh <repo> state <n> <state>             todo | in-progress | blocked | done | cancelled
+//   github.sh <repo> label <n> add|remove <name>   add or remove a label, creating it when
+//                                                  missing; a state change leaves `ready` alone
 //   github.sh <repo> comment <n> <actor> <text>    one comment, dated to the minute, actor first
 //   github.sh <repo> list [state]                  one line per issue: number, state, title
 //   github.sh <repo> access                        the user's permission on the repository:
@@ -51,6 +54,7 @@ const COLUMN: Record<string, string> = {
   cancelled: "done",
 };
 const BLOCKED = "blocked";
+const READY = "ready";
 
 class DieError extends Error {
   constructor(
@@ -362,7 +366,12 @@ function flowState(
   return pyLower((status ?? "").replace(NONWORD_RE, "")) === "inprogress" ? "in-progress" : "todo";
 }
 
-function ensureLabel(nwo: string): void {
+const LABEL_COLORS: Record<string, [string, string]> = {
+  [BLOCKED]: ["B60205", "Waiting on something outside the run"],
+  [READY]: ["0E8A16", "Signed off by the user, ready to run"],
+};
+
+function ensureLabel(nwo: string, name: string): void {
   const labels = ghj<Array<{ name: string }>>([
     "label",
     "list",
@@ -374,27 +383,18 @@ function ensureLabel(nwo: string): void {
     "200",
   ]);
   const names = new Set(labels.map((l) => pyLower(l.name)));
-  if (!names.has(BLOCKED)) {
-    gh([
-      "label",
-      "create",
-      BLOCKED,
-      "-R",
-      nwo,
-      "--color",
-      "B60205",
-      "--description",
-      "Waiting on something outside the run",
-    ]);
+  if (!names.has(pyLower(name))) {
+    const [color, description] = LABEL_COLORS[pyLower(name)] ?? ["D4C5F9", name];
+    gh(["label", "create", name, "-R", nwo, "--color", color, "--description", description]);
   }
 }
 
-function setLabel(nwo: string, number: number, present: boolean): void {
+function setLabel(nwo: string, number: number, present: boolean, name = BLOCKED): void {
   if (present) {
-    ensureLabel(nwo);
-    gh(["issue", "edit", String(number), "-R", nwo, "--add-label", BLOCKED]);
+    ensureLabel(nwo, name);
+    gh(["issue", "edit", String(number), "-R", nwo, "--add-label", name]);
   } else {
-    gh(["issue", "edit", String(number), "-R", nwo, "--remove-label", BLOCKED]);
+    gh(["issue", "edit", String(number), "-R", nwo, "--remove-label", name]);
   }
 }
 
@@ -442,10 +442,10 @@ function main(): void {
   const argvAll = process.argv.slice(2);
   const REPO = argvAll[0];
   if (!REPO) {
-    dieGh("usage: github.sh <repo> board|create|edit|read|state|comment|list|access ...");
+    dieGh("usage: github.sh <repo> board|create|edit|title|read|state|label|comment|list|access ...");
   }
   if (argvAll.length < 2) {
-    dieGh("usage: github.sh <repo> board|create|edit|read|state|comment|list|access ...");
+    dieGh("usage: github.sh <repo> board|create|edit|title|read|state|label|comment|list|access ...");
   }
   if (!existsSync(REPO) || !statSync(REPO).isDirectory()) dieGh(`no such directory: ${REPO}`);
   REPO_DIR = REPO;
@@ -521,6 +521,22 @@ function main(): void {
     }
     gh(["issue", "edit", String(n), "-R", NWO, "--body-file", args[2] ?? ""]);
     console.log(`#${n}: edited`);
+  } else if (cmd === "title") {
+    if (args.length !== 3) dieGh("usage: github.sh <repo> title <n> <title>");
+    const n = numberArg(args[1] ?? "");
+    const title = args[2] ?? "";
+    issueOf(OWNER, NAME, NWO, n);
+    gh(["issue", "edit", String(n), "-R", NWO, "--title", title]);
+    console.log(`#${n}: title changed`);
+  } else if (cmd === "label") {
+    if (args.length !== 4 || (args[2] !== "add" && args[2] !== "remove"))
+      dieGh("usage: github.sh <repo> label <n> add|remove <name>");
+    const n = numberArg(args[1] ?? "");
+    const verb = args[2] as "add" | "remove";
+    const name = args[3] ?? "";
+    issueOf(OWNER, NAME, NWO, n);
+    setLabel(NWO, n, verb === "add", name);
+    console.log(`#${n}: label ${verb} ${name}`);
   } else if (cmd === "read") {
     const bodyOnly = args.slice(2).length === 1 && args[2] === "--body";
     if (args.length !== 2 && !bodyOnly) dieGh("usage: github.sh <repo> read <n> [--body]");
@@ -639,7 +655,7 @@ function main(): void {
       console.log(`#${h.number}\t${pyLower(String(h.state ?? ""))}\t${h.title ?? ""}`);
     }
   } else {
-    dieGh("usage: github.sh <repo> board|create|edit|read|state|comment|list|access|search ...");
+    dieGh("usage: github.sh <repo> board|create|edit|title|read|state|label|comment|list|access|search ...");
   }
 }
 
