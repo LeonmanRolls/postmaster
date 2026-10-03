@@ -18,6 +18,27 @@ import { git, keyBlockStep, logFinding, safePath, StreamScanner, streamLines } f
 import { pyLower } from "./lib/text.ts";
 
 const USAGE = "usage: raw-promote.sh <src> <dest> | --help";
+
+function repoRoot(): string {
+  // Walk up to the worktree root without spawning: under the 512 MB virtual
+  // limit (C27) a single spawnSync permanently reserves ~170 MB of vsize
+  // (child reservation plus the 64 MB capture buffer), leaving no room to
+  // stream. A .git dir is a normal repo, a .git file a worktree or submodule;
+  // both answer the same root rev-parse would. Exotic setups (bare repos,
+  // $GIT_DIR) fall back to one git spawn.
+  let dir = process.cwd();
+  for (;;) {
+    try {
+      const dotGit = lstatSync(join(dir, ".git"));
+      if (dotGit.isDirectory() || dotGit.isFile()) return dir;
+    } catch { /* keep walking */ }
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return git(["rev-parse", "--show-toplevel"]).toString("utf8").trim();
+}
+
 const PLACEHOLDER = "<redacted:encrypted-reasoning>";
 const ALLOW_MARKER = /(?:<!--|#|\/\/)?[ \t]*private-data:allow(?:-next-line)?[ \t]+[^ \t]+[ \t]+--[ \t]+[^\r\n]*(?:-->)?$/gu;
 
@@ -177,7 +198,7 @@ async function verifyFiles(files: string[]): Promise<string[]> {
 async function main(args: string[]): Promise<number> {
   if (args.length === 1 && args[0] === "--help") { console.error(USAGE); return 0; }
   if (args.length !== 2) fail(USAGE);
-  const root = git(["rev-parse", "--show-toplevel"]).toString("utf8").trim();
+  const root = repoRoot();
   const source = resolve(args[0]!);
   const dest = resolve(root, args[1]!);
   const relDest = relative(root, dest).split(sep).join("/");

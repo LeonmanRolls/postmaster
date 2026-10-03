@@ -63,7 +63,7 @@ const ANSI_OSC_PARAMS = /(?:\x1b\]|\x9d)([^\x07\x1b\x9c]*)(?:\x07|\x1b\\|\x9c)/g
 const MAX_JSON_DEPTH = 64;
 const PATTERN_CODE = new RegExp(`${BOUND_L}new${SPACE}+RegExp${SPACE}*\\(${BOUND_L}P\\(${SPACE}*["'](?:email|ipv4|ipv6|phone|address)["']${SPACE}*,${SPACE}*["']search["']|^(?:export${SPACE}+)?const${SPACE}+[A-Z_]+${SPACE}*=${SPACE}*\\/`, "u");
 const TOKEN_SIGNAL = /(?:gh[pours]_|github_pat_|sk[_-](?:live|test)|sk-|xox|ya29\.|\bbearer\b|AKIA|ASIA|PRIVATE KEY|SSH2 ENCRYPTED|PuTTY-User-Key|AGE-SECRET-KEY|[:=])|^[A-Za-z0-9+/=]{20,}$/iu;
-const PRIVATE_SIGNAL = /\/(?:home|Users)\/|~\/|[A-Za-z]:\\|\b(?:ssh|scp)\s|(?:account|org(?:anization)?|session|thread|credential|identity|user)[_-]?(?:id|uuid|guid)\b|co-authored-by|generated-with|(?:generated|created|written|drafted)\s+(?:with|by)|\.(?:internal|local|lan|home|tailnet|intranet|private|corp|ts\.net)\b|(?<![0-9.])(?:[0-9]{1,3}\.){3}[0-9]{1,3}(?![0-9.])|[0-9a-f]{0,4}(?::[0-9a-f]{0,4}){2,7}|[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}|(?:org|acct|account|sess|ses|session)[_-][A-Za-z0-9]{6,}/iu;
+const PRIVATE_SIGNAL = /\/(?:home|Users)\/|~\/|~[A-Za-z0-9._-]+\/|[A-Za-z]:\\|\b(?:ssh|scp)\s|(?:account|org(?:anization)?|session|thread|credential|identity|user)[_-]?(?:id|uuid|guid)\b|co-authored-by|generated-with|(?:generated|created|written|drafted)\s+(?:with|by)|\.(?:internal|local|lan|home|tailnet|intranet|private|corp|ts\.net)\b|(?<![0-9.])(?:[0-9]{1,3}\.){3}[0-9]{1,3}(?![0-9.])|[0-9a-f]{0,4}(?::[0-9a-f]{0,4}){2,7}|[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}|(?:org|acct|account|sess|ses|session)[_-][A-Za-z0-9]{6,}/iu;
 const PLAIN_LOWER_WORDS = /^[a-z ]+$/u;
 const PLAIN_SHAPE_CUE = /\b(?:ssh|scp|bearer)\b/iu;
 const PLAIN_CUE_WORDS = new Set([
@@ -629,6 +629,12 @@ export function runGit(args: string[], cwd = process.cwd()) {
 export interface TextLine { number: number; text: string; bytes: Buffer; newline: boolean }
 
 function decodeUtf8(bytes: Buffer): string {
+  // Fast path: valid UTF-8 round-trips byte-for-byte through the native
+  // decoder, so only genuinely broken input pays for the byte loop below.
+  // Besides speed, this keeps per-line allocation low enough that a second
+  // streamed file fits under the 512 MB virtual limit (C27).
+  const fast = bytes.toString("utf8");
+  if (!fast.includes("\uFFFD") || Buffer.from(fast, "utf8").equals(bytes)) return fast;
   let out = "";
   for (let i = 0; i < bytes.length;) {
     const b = bytes[i]!;
