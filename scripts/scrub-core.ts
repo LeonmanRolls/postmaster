@@ -1,7 +1,7 @@
 import { closeSync, createReadStream, mkdirSync, openSync, writeFileSync } from "node:fs";
 import { spawn, spawnSync } from "node:child_process";
 import { dirname } from "node:path";
-import { scan as scanPersonal } from "../raw/trials/pii-patterns/apparatus/patterns.ts";
+import { scan as scanPersonal } from "./scrub-patterns.ts";
 import { BOUND_L, BOUND_R, PY_S_CLASS, pyLower, pyWords } from "./lib/text.ts";
 
 export const RULES = new Set([

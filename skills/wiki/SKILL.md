@@ -38,15 +38,12 @@ of promoting one of them to evidence. Never ingest on your own initiative; ask.
 
 It is only ingestible once it has stopped writing.
 
-1. **Promote the run through the scrubber** from `<project>/.postmaster/runs/<run-id>/` to
-   `raw/runs/<run-id>/` with `scripts/raw-promote.sh <source> <destination>`. It copies the
-   ledger, narrative, cards, logs and selected session exports, replacing each finding with a
-   rule placeholder and encrypted reasoning payloads with a placeholder. The source records
-   stay unchanged. Exit 0 means the destination was rescanned clean. Exit 1 means a marker
-   fault: fix the source marker and try again; no copy was made. Exit 2 means the promotion
-   could not finish, including an existing destination; resolve the cause and do not copy by
-   hand. Before promoting, confirm the target may be published and check size and
-   redistribution per `raw/README.md`.
+1. **Copy the run whole** from `<project>/.postmaster/runs/<run-id>/` into `raw/runs/<run-id>/`,
+   unchanged: the ledger, the narrative, the cards, `logs/` with each lane's harness events
+   stream, and each lane's durable harness session exported at teardown (`grok export`,
+   codex's rollout jsonl, pi's session jsonl). **Run the promotion checks first** — scrub,
+   target publishable, size, redistribution — per `raw/README.md`. The copy is a decision to
+   publish, and it is the only moment those checks happen.
 2. **Write the run record** in `wiki/sources/YYYY-MM-DD-<target>-<ticket>.md` from
    `wiki/sources/template.md`, filling every section from the copied files. Every number
    carries `[@runs/<id>/<file>]`.
