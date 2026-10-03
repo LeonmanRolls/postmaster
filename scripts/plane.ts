@@ -1006,7 +1006,6 @@ const STATE_FOR_GROUP: Record<string, string> = {
   cancelled: "cancelled",
 };
 const BLOCKED = "blocked";
-const READY = "ready";
 
 interface PlaneConfig {
   BASE: string;
