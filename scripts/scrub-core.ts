@@ -63,7 +63,7 @@ const ANSI_OSC_PARAMS = /(?:\x1b\]|\x9d)([^\x07\x1b\x9c]*)(?:\x07|\x1b\\|\x9c)/g
 const MAX_JSON_DEPTH = 64;
 const PATTERN_CODE = new RegExp(`${BOUND_L}new${SPACE}+RegExp${SPACE}*\\(${BOUND_L}P\\(${SPACE}*["'](?:email|ipv4|ipv6|phone|address)["']${SPACE}*,${SPACE}*["']search["']|^(?:export${SPACE}+)?const${SPACE}+[A-Z_]+${SPACE}*=${SPACE}*\\/`, "u");
 const TOKEN_SIGNAL = /(?:gh[pours]_|github_pat_|sk[_-](?:live|test)|sk-|xox|ya29\.|\bbearer\b|AKIA|ASIA|PRIVATE KEY|SSH2 ENCRYPTED|PuTTY-User-Key|AGE-SECRET-KEY|[:=])|^[A-Za-z0-9+/=]{20,}$/iu;
-const PRIVATE_SIGNAL = /\/(?:home|Users)\/|~\/|[A-Za-z]:\\|\b(?:ssh|scp)\s|(?:account|org(?:anization)?|session|thread|credential|identity|user)[_-]?(?:id|uuid|guid)\b|co-authored-by|generated-with|(?:generated|created|written|drafted)\s+(?:with|by)|\.(?:internal|local|lan|home|tailnet|intranet|private|corp|ts\.net)\b|(?<![0-9.])(?:[0-9]{1,3}\.){3}[0-9]{1,3}(?![0-9.])|[0-9a-f]{0,4}(?::[0-9a-f]{0,4}){2,7}/iu;
+const PRIVATE_SIGNAL = /\/(?:home|Users)\/|~\/|[A-Za-z]:\\|\b(?:ssh|scp)\s|(?:account|org(?:anization)?|session|thread|credential|identity|user)[_-]?(?:id|uuid|guid)\b|co-authored-by|generated-with|(?:generated|created|written|drafted)\s+(?:with|by)|\.(?:internal|local|lan|home|tailnet|intranet|private|corp|ts\.net)\b|(?<![0-9.])(?:[0-9]{1,3}\.){3}[0-9]{1,3}(?![0-9.])|[0-9a-f]{0,4}(?::[0-9a-f]{0,4}){2,7}|[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}|(?:org|acct|account|sess|ses|session)[_-][A-Za-z0-9]{6,}/iu;
 const PLAIN_LOWER_WORDS = /^[a-z ]+$/u;
 const PLAIN_SHAPE_CUE = /\b(?:ssh|scp|bearer)\b/iu;
 const PLAIN_CUE_WORDS = new Set([
@@ -252,13 +252,18 @@ function privateFindings(line: string, out: Finding[]): void {
     const machineAddress = before.endsWith("@") || new RegExp(`${BOUND_L}(?:ssh|scp)${SPACE}+(?:-[A-Za-z]+${SPACE}+)*(?:[A-Za-z0-9._-]+@)?$`, "iu").test(before);
     if (isPrivateName(m[0]) && !/\.[A-Z]+$/u.test(m[0]) && (quoted || (hostValue && !templateExpression) || machineAddress)) add(out, start, start + m[0].length, "private-host", m[0]);
   }
-  const ssh = new RegExp(`${BOUND_L}(?:ssh|scp)${SPACE}+(?:-[A-Za-z]+${SPACE}+)*(?:[A-Za-z0-9._-]+@)?([A-Za-z0-9][A-Za-z0-9.-]*)(?=:[${PY_S_CLASS}/]|$)`, "giu");
+  const ssh = new RegExp(`${BOUND_L}(?:ssh|scp)${SPACE}+(?:-[A-Za-z]+${SPACE}+)*(?:[0-9]+${SPACE}+)*(?:[A-Za-z0-9._-]+@)?([A-Za-z0-9][A-Za-z0-9.-]*)(?=[${PY_S_CLASS}:/]|$)`, "giu");
   for (const m of line.matchAll(ssh)) {
     const host = m[1] ?? "";
-    if (host && !PLACEHOLDER.test(host) && (!host.includes(".") || isPrivateName(host)) && !/[{}$]/u.test(host)) {
+    if (!host || /^[0-9]+$/u.test(host)) continue;
+    if (!PLACEHOLDER.test(host) && (!host.includes(".") || isPrivateName(host)) && !/[{}$]/u.test(host)) {
       const start = (m.index ?? 0) + m[0].lastIndexOf(host);
       add(out, start, start + host.length, "private-host", host);
     }
+  }
+  const opaque = new RegExp(`(?<![A-Za-z0-9_-])(?:org|acct|account|sess|ses|session)[_-](?=[^${PY_S_CLASS}]*[0-9])[A-Za-z0-9]{6,}(?![A-Za-z0-9_-])`, "gu");
+  for (const m of line.matchAll(opaque)) {
+    add(out, m.index ?? 0, (m.index ?? 0) + m[0].length, "account-id", m[0]);
   }
 
   const context = new RegExp(`${BOUND_L}(?:account|org(?:anization)?s?|user|identity|credential|session|thread)s?${BOUND_R}`, "iu").test(line);

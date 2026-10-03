@@ -240,3 +240,9 @@ test("C23 every rule has three positive and negative fixtures and its disable co
   expect(ruleLines).toHaveLength(expectedRules.length);
   console.log(`C23 fixtures: ${expectedRules.length} rules, three positive and three negative cases each`);
 });
+
+test("opaque ids need a digit in the body; host lookup passes flags and ports", () => {
+  expect(rules(joined("org", "_abc", "123"))).toContain("account-id");
+  expect(rules(joined("ses", "s_abcdef", " no digit here"))).not.toContain("account-id");
+  expect(rules(joined("ssh -p 22", "22 alice@we", "b01 uptime"))).toContain("private-host");
+});
