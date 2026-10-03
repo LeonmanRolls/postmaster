@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Run a tool script with the tool's Bun configuration, regardless of the caller's directory.
+set -eu
+
+if [ "$#" -eq 0 ]; then
+  echo 'usage: scripts/run <name> [args...]' >&2
+  exit 2
+fi
+
+name=$1
+shift
+case "$name" in
+  ''|.|..|*/*)
+    echo "run: no such script: $name" >&2
+    exit 2
+    ;;
+esac
+
+scripts_dir=$(dirname "$0")
+script=$scripts_dir/$name.ts
+if [ ! -f "$script" ]; then
+  script=$scripts_dir/lib/$name.ts
+fi
+if [ ! -f "$script" ]; then
+  echo "run: no such script: $name" >&2
+  exit 2
+fi
+
+exec bun --no-env-file "--config=$scripts_dir/../bunfig.toml" "$script" "$@"
