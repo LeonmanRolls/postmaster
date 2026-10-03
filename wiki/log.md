@@ -1,12 +1,21 @@
 ---
 title: Log
 type: schema
-updated: 2026-10-01
+updated: 2026-10-03
 ---
 
 # Log
 
 Append-only. Newest first. One entry per operation, prefixed so it can be parsed.
+
+## [2026-10-03] ingest | reviewing a change on a page made for the phone
+
+Issue #214. Trials recorded in `raw/trials/artifact-review/`: three ways to open a spec's linked
+files on the user's phone, how a comment, a choice and a verdict get back to the session, and
+review pages for three merged changes of 1, 6 and 175 files, shaped with the user in four
+versions. New concept page `review-pages`, standing `claimed`: the page is built today as the
+`review-pages` skill and is to become the dashboard's change view. Five of the seven artifact
+capabilities were not tried, on the user's word.
 
 ## [2026-10-01] ingest | what keeps a lane inside its worktree
 

@@ -34,3 +34,6 @@ quoted; their screenshots are not kept.
 | folder | what it tries |
 |---|---|
 | `spec-files/` | three ways to open the files a spec links to, on a phone: GitHub links, tabs in the spec's Claude Docs document, and an HTML viewer page published with the files; line comments sent from the viewer |
+| `decisions/` | how a comment on a line, a choice among options and a verdict get back to the session, and what the user sees when it is not watching |
+| `prototypes/` | review pages for three merged changes of 1, 6 and 175 files, and the builder that makes their data |
+| `tickets/` | the tickets the research proposed, each one's shape check, and the user's answer |

@@ -1,7 +1,7 @@
 ---
 title: postmaster wiki
 type: schema
-updated: 2026-10-01
+updated: 2026-10-03
 ---
 
 # postmaster wiki
@@ -121,6 +121,10 @@ Why the design is shaped as it is.
   already compute it, listens on a Unix socket, and is reached only by the machine's owner
   through Tailscale's proxy over plain HTTP. It never acts, because anything it could do, an
   agent running as the user could do too.
+- [A change is reviewed on a page made for the phone, an artifact now and the dashboard later](concepts/review-pages.md):
+  **claimed**. Ticket, spec and summary beside the diff and the files as they stand; comments on
+  lines, and the verdict in the chat. Built today as the `review-pages` skill, to become the
+  dashboard's change view. What a published page may hold, and how a decision gets back.
 
 ## Sources
 

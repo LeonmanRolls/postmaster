@@ -1,0 +1,18 @@
+## Problem / feature
+The user reviews a change when they have switched automatic merging off; most review now happens at the spec stage. Today a card's review link opens code-server, which is not made for a phone (the user, 2026-10-03), and nothing in it reaches the session. In #214's research the user shaped and approved a review page published as a private artifact: tabs for the ticket, the spec, the change's summary, the diff and the files as they stand; on a wide screen the ticket, spec and summary sit beside the diff and files; a comment on a line is saved in the page's own database, and the session's reply shows under it without a reload; the verdict is given in the chat; no checks or review findings. A change of 175 files was readable in a reading order with every file folded. The dashboard (#146 to #150, design in #238) will show changes later; the user's word on 2026-10-03 is to build this now and keep it until that version exists.
+
+## Acceptance criteria
+1. A script builds a review page's data from a run: the ticket's text from the tracker, the run's approved spec, the change's summary from its pull request or card, and for each changed file its diff from the merge base and its text at the head, grouped in a reading order, with files loaded only when opened. Check: built for this repository's merged pull requests 152, 213 and 215, each one's file count and added and removed lines equal what git and GitHub give for the same range.
+2. The page template lives in the repository and shows those tabs and layouts, wraps long lines, and draws a long diff or file in slices. A tap on a line, or a second tap for a range, opens a comment box; a comment is saved with its file, side, lines, text and time; a reply the session writes into the page's database shows under the comment without a reload. Check: on a published page, a comment saved from a phone is read back by the session, and the session's reply then shows on the page.
+3. When the merge authority is the user and a run's card is ready, the postmaster publishes the review page before it asks for the merge word, gives its link as `https://claude.ai/code/artifact/<uuid>`, and stops its watch on the page right after the publish. When the user says they have commented, it reads the comments, answers each one under it, and acts on them. Check: `skills/postmaster/postmaster.md` names each step, and `scripts/skill-refs.sh` passes.
+4. Nothing private reaches the page: its data passes the published-page check before every publish, email addresses in code show as `<address removed>` with line numbers unchanged, and nothing is read from the run's private records but the approved spec. Check: an address planted in a changed file shows removed on the page, and the publish step runs the check first.
+5. The page has no verdict control and shows no checks or review findings. Check: the template has none.
+
+## Direction
+A stopgap until the dashboard shows a change; keep the template small and reuse what #214's trial built (`raw/trials/artifact-review/prototypes/apparatus/`). The script is TypeScript run by Bun, with its tests beside it. Only Claude Code can publish an artifact, so the postmaster publishes the page; every page stays private to the user's account. The page loads scripts only from the hosts an artifact allows, and its data is published as files beside it.
+
+## Turnpikes
+default
+
+## Notes
+The user's word on 2026-10-03, in #214's session: "I want what we have worked on today to be implemented until we have the version that doesn't depend on claude code." Depends on the published-page check. Related: #214, #229, #238, #146, #147.
