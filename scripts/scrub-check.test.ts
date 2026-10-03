@@ -105,6 +105,18 @@ test("C2 range scan sees added then deleted lines, file names, messages, identit
   expect(mergeScan.stdout.trim().split("\n").some((line) => line.startsWith(`${mergeCommit}:merge.txt:1: phone`))).toBe(true);
 });
 
+test("range scan completes while per-file lookups await inside the diff read", () => {
+  const repo = initRepo();
+  const base = spawnSync("git", ["rev-parse", "HEAD"], { cwd: repo, encoding: "utf8" }).stdout.trim();
+  for (let i = 0; i < 20; i++) writeFileSync(join(repo, `page-${i}.md`), `---\nname: t\n---\nnote ${email()}\n`);
+  writeFileSync(join(repo, "key.txt"), "-----BEGIN PRIV" + "ATE KEY-----\n");
+  commit(repo, "add pages and key");
+  const scan = runScript("scrub-check", [base, "HEAD"], repo);
+  expect(scan.status).toBe(1);
+  expect(scan.stdout).toContain("page-0.md:4: email");
+  expect(scan.stdout).toContain("key.txt:1: token");
+});
+
 test("C3 --files decodes nested and cut-off JSON transcript values", () => {
   const repo = initRepo();
   const path = join(repo, "session.jsonl");
