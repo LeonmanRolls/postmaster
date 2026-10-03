@@ -67,7 +67,8 @@ const runConfig = (name: string, harness: string): string => {
   return folder;
 };
 
-const cli = (...args: string[]): { code: number; out: string; err: string } => run(SELF, ["review-findings", ...args]);
+const cli = (...args: string[]): { code: number; out: string; err: string } =>
+  run(SELF, ["review-findings", ...args]);
 
 const writeEvents = (name: string, events: unknown[]): string => {
   const eventFile = join(root, name);

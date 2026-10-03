@@ -220,7 +220,7 @@ const refusedRaw = (
   // the marker. spawnSync encodes every argument as UTF-8, so a shell builds
   // the bytes, as BASE's fixtures do.
   const before = snapshot(trackerStore);
-  const line = [self, repoPath, ...commandArgs]
+  const line = [self, "local", repoPath, ...commandArgs]
     .map((a) => (a === "<RAW-BYTES>" ? `"$(printf '${octal}')"` : `'${a.replace(/'/gu, `'\\''`)}'`))
     .join(" ");
   const result = run("bash", ["-c", line]);
@@ -594,7 +594,7 @@ describe("positive controls", () => {
     if (!newRepo(concurrent) || invoke(concurrent, "store", "init").code !== 0)
       throw new Error("could not make concurrency fixture");
     const children = Array.from({ length: 10 }, (_, index) =>
-      Bun.spawn([self, concurrent, "create", `Ticket ${index + 1}`, bodyPath], {
+      Bun.spawn([self, "local", concurrent, "create", `Ticket ${index + 1}`, bodyPath], {
         stdout: "pipe",
         stderr: "pipe",
       }),
@@ -673,7 +673,10 @@ describe("controls: what the caller's environment must not change", () => {
   }, 30000);
 
   test("an exported CDPATH does not move a relative <repo>", () => {
-    const cdp = run(self, ["local", "repo", "store"], { cwd: temp, env: { CDPATH: ".:/nonexistent" } });
+    const cdp = run(self, ["local", "repo", "store"], {
+      cwd: temp,
+      env: { CDPATH: ".:/nonexistent" },
+    });
     expect(cdp.code).toBe(0);
     expect(cdp.out.trim()).toBe(store);
   }, 30000);
@@ -851,7 +854,8 @@ describe("controls: a ticket file that is not as this script writes it", () => {
   test("list prints the tickets it can read, names the one it cannot, and exits 1", () => {
     newRepo(damaged());
     run(self, ["local", damaged(), "store", "init"]);
-    for (const title of ["One", "Two", "Three"]) run(self, ["local", damaged(), "create", title, bodyPath]);
+    for (const title of ["One", "Two", "Three"])
+      run(self, ["local", damaged(), "create", title, bodyPath]);
     copyFileSync(join(damagedStore(), "2.json"), join(temp, "2.json"));
     put(join(damagedStore(), "2.json"), '{"title": "Two", "state": "todo",\n');
     const damagedList = run(self, ["local", damaged(), "list"]);

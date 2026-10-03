@@ -256,7 +256,9 @@ function mkDefault(
       ? gate
       : which === "browser-suite"
         ? suite
-        : d.script ? `${shlexQuote(join(HERE, "run"))} ${d.script}` : "";
+        : d.script
+          ? `${shlexQuote(join(HERE, "run"))} ${d.script}`
+          : "";
   return {
     name: name || d.name,
     source: source || `default:${which}`,
@@ -828,8 +830,8 @@ function runChecks(wt: string, dispatch: string | null): never {
       const detail = `on=${branch}@${sha.slice(0, 12)} result=${result.replace(/ /gu, "-")} exit=${code === null ? "-" : code} secs=${secs}`;
       let detailFull = detail;
       if (why) detailFull += (result === "pass" ? " score=" : " reason=") + why;
-      const lr = run("bash", [
-        join(HERE, "run"),
+      const lr = run(join(HERE, "run"), [
+        "log-action",
         dispatch,
         "coachman",
         "verify",

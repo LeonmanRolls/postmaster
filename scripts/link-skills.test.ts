@@ -396,11 +396,11 @@ describe("positive control: from an unrelated directory, a documented command re
       resolver =
         readFileSync(skillMd, "utf8")
           .split("\n")
-          .find((l) => l.includes('test -f "$t/scripts/link-skills.sh"')) ?? "";
+          .find((l) => l.includes('test -f "$t/scripts/run"')) ?? "";
       documented =
         readFileSync(trackersMd, "utf8")
           .split("\n")
-          .find((l) => /^<tool>\/scripts\/github\.sh <repo> board +#/u.test(l))
+          .find((l) => /^<tool>\/scripts\/run github <repo> board +#/u.test(l))
           ?.replace(/ *#.*$/u, "") ?? "";
     } catch {
       /* files not found */

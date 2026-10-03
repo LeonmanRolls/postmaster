@@ -97,7 +97,16 @@ export function controlOf(text: string, t: string): string | undefined {
   for (const line of text.split("\n")) {
     const cells = line.split("|");
     const c = (cells[1] ?? "").replace(/^[ \t\n\v\f\r]+|[ \t\n\v\f\r]+$/gu, "");
-    if (c === `\`${t}\`` || c === `\`<tool>/${t}\``) {
+    // A row may name the entry form (`scripts/run <name>`) while the fault names the
+    // script file (`scripts/<name>.ts`); both refer to the same script.
+    const bare = t.replace(/\.ts$/u, "");
+    const entryForm = `scripts/run ${bare.split("/").pop() ?? ""}`;
+    if (
+      c === `\`${t}\`` ||
+      c === `\`<tool>/${t}\`` ||
+      c === `\`${entryForm}\`` ||
+      c === `\`<tool>/${entryForm}\``
+    ) {
       return (cells[2] ?? "").replace(/[ \t\n\v\f\r]/gu, "");
     }
   }

@@ -51,7 +51,7 @@ function commitAll(repo: string, message: string): string {
 
 describe("the detector's command line", () => {
   test("no arguments prints the usage line", () => {
-    const r = run(SELF, ["coachman-contract", ]);
+    const r = run(SELF, ["coachman-contract"]);
     expect(r.code).toBe(2);
     expect(r.err).toBe("usage: run coachman-contract [<repo>] <base> <head> | --self-test\n");
   });

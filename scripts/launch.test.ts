@@ -3809,7 +3809,12 @@ beforeAll(() => {
       const baseLaunch = join(f1, "base-launch.sh");
       const shown = spawnSync(
         "git",
-        ["-C", dirname(here), "show", "e902378fd4a4b39aa41870da2c771b6963525517:scripts/run launch"],
+        [
+          "-C",
+          dirname(here),
+          "show",
+          "e902378fd4a4b39aa41870da2c771b6963525517:scripts/run launch",
+        ],
         { encoding: "utf8" },
       );
       if (shown.status !== 0) {

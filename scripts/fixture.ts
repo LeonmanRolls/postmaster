@@ -215,7 +215,7 @@ export function makeAndFile(dest: string, ticket: string): number {
   }
   // make ticket store
   const localSh = process.env.LOCAL_SH || join(HERE, "run");
-  const storeR = run("bash", [localSh, dest, "store", "init"]);
+  const storeR = run(localSh, ["local", dest, "store", "init"]);
   if (storeR.code !== 0) {
     unmake();
     console.error(`fixture: could not make the ticket store in ${dest}`);
@@ -225,7 +225,7 @@ export function makeAndFile(dest: string, ticket: string): number {
   const body = ticketBody(ticket);
   const title = ticketTitle(ticket);
   const bodyFile = makeBodyFile(body);
-  const createR = run("bash", [localSh, dest, "create", title, bodyFile]);
+  const createR = run(localSh, ["local", dest, "create", title, bodyFile]);
   rmSync(bodyFile, { force: true });
   const number = createR.out.trim().split("\n").pop() ?? "";
   // ASCII: BASE matches ^[0-9]+$ for the filed number in bash; local create prints one line
@@ -340,13 +340,7 @@ const LANE_LINE = /^(.*): ([0-9]+ pass, [0-9]+ fail|missing|failed to build)$/u;
 
 // Each lane's hidden status from fixture-lanes.ts; "" when there are no lanes.
 export function laneScores(dispatch: string, repo: string, ticket: string): string {
-  const r = sh([
-    join(HERE, "run"),
-    "fixture-lanes",
-    dispatch,
-    repo,
-    ticket,
-  ]);
+  const r = sh([join(HERE, "run"), "fixture-lanes", dispatch, repo, ticket]);
   if (r.code !== 0) return "lanes not scored";
   return r.out
     .split(/\r?\n/u)
@@ -523,12 +517,7 @@ function checkGate(
     .split("\n")
     .find((l) => l.startsWith("install="))
     ?.slice(8);
-  const argv = [
-    join(HERE, "run"),
-    "clean-checkout",
-    repo,
-    branch,
-  ];
+  const argv = [join(HERE, "run"), "clean-checkout", repo, branch];
   if (install) argv.push(install);
   argv.push(gate);
   const g = sh(argv);

@@ -35,7 +35,7 @@ const SECTIONS: Array<{ name: string; count: number }> = [
   { name: "review round 4 fixes, Herdr (stub)", count: 16 },
   { name: "review round 4 fixes, tmux (stub)", count: 11 },
   { name: "interactive sessions", count: 15 },
-  { name: "run role: the explicit host role", count: 1 },
+  { name: "run role: the explicit host role", count: 2 },
   { name: "leg attempt controls", count: 89 },
   {
     name: "run environment identity, Claude session and lane env file: Herdr, tmux and no host",

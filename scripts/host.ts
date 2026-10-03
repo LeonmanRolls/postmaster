@@ -2253,15 +2253,7 @@ async function runLaunch(specDir: string, mode: string): Promise<number> {
       followed = new Promise((resolveFollow) => {
         const follower = spawn(
           join(HERE, "run"),
-          [
-            "view-stream",
-            "--follow",
-            spec.out,
-            "--pid",
-            String(pid),
-            "--from",
-            String(from),
-          ],
+          ["view-stream", "--follow", spec.out, "--pid", String(pid), "--from", String(from)],
           { stdio: "inherit" },
         );
         follower.once("error", () => resolveFollow(null));
@@ -4804,8 +4796,8 @@ async function legExec(args: string[]): Promise<void> {
     const child = spawn(
       join(HERE, "run"),
       launchMode === "resume"
-        ? ["resume", role, wt, thread, prompt, "--leg", leg, "--run", d]
-        : ["launch", role, wt, prompt, "--leg", leg, "--run", d],
+        ? ["launch", "resume", role, wt, thread, prompt, "--leg", leg, "--run", d]
+        : ["launch", "launch", role, wt, prompt, "--leg", leg, "--run", d],
       {
         env: process.env,
         stdio: ["ignore", "inherit", "pipe"],

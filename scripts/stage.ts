@@ -64,9 +64,7 @@ function closeUsage(d: string): number {
   } else {
     const combined = s.out + s.err;
     summary = combined === "" ? "usage sum failed" : combined;
-    if (
-      run(join(here, "run"), ["run-log", d, "final cost block unreadable:", summary]).code !== 0
-    )
+    if (run(join(here, "run"), ["run-log", d, "final cost block unreadable:", summary]).code !== 0)
       logStatus = 1;
   }
   const cardPath = join(d, "card.md");
@@ -213,8 +211,8 @@ export function setStage(d: string, newStage: string, actor: string): number {
   }
 
   // Log the change first
-  const logResult = run("bash", [
-    join(HERE, "run"),
+  const logResult = run(join(HERE, "run"), [
+    "log-action",
     d,
     actor,
     "stage",

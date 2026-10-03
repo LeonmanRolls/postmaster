@@ -323,7 +323,7 @@ describe("score controls", () => {
       ],
     });
     const run = Bun.spawnSync({
-      cmd: [FIXTURE_SH, "score", rec.dispatch, rec.repo],
+      cmd: [FIXTURE_SH, "fixture", "score", rec.dispatch, rec.repo],
       env: { ...gitEnv, POSTMASTER_CONFIG: join(scratch, "no-config.toml") },
       stdout: "pipe",
       stderr: "pipe",
@@ -363,7 +363,7 @@ describe("score controls", () => {
       lanes: [{ lane: "pass", branch: "reference" }],
     });
     const run = Bun.spawnSync({
-      cmd: [FIXTURE_SH, "score", rec.dispatch, rec.repo],
+      cmd: [FIXTURE_SH, "fixture", "score", rec.dispatch, rec.repo],
       env: { ...gitEnv, POSTMASTER_CONFIG: join(scratch, "no-config.toml") },
       stdout: "pipe",
       stderr: "pipe",

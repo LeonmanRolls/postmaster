@@ -227,7 +227,7 @@ function branchExists(repo: string, ref: string): boolean {
 }
 
 function runHidden(fixtureSh: string, ticket: string, tree: string): LaneStatus {
-  const r = sh([fixtureSh, "hidden", ticket, tree]);
+  const r = sh([fixtureSh, "fixture", "hidden", ticket, tree]);
   return hiddenStatusFromOutput(r.out);
 }
 

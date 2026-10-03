@@ -523,8 +523,8 @@ describe(TICKETS_HEAD, () => {
     test(`${t}: in the ticket shape, by scripts/run ticket-check`, () => {
       const body = ticketBody(t);
       writeFileSync(join(tmp, `body-${t}.md`), body);
-      const checkR = run("bash", [
-        join(HERE, "run"),
+      const checkR = run(join(HERE, "run"), [
+        "ticket-check",
         "--body",
         join(tmp, `body-${t}.md`),
         "--title",
@@ -655,16 +655,16 @@ describe("new: a fresh repo outside every other, with its ticket in its own stor
     const sameB = join(tmp, "two", "widgets");
     mkdirSync(join(sameA, ".postmaster", "runs", "T-1"), { recursive: true });
     mkdirSync(join(sameB, ".postmaster", "runs", "T-1"), { recursive: true });
-    const aRc = run("bash", [
-      join(HERE, "run"),
+    const aRc = run(join(HERE, "run"), [
+      "log-action",
       join(sameA, ".postmaster", "runs", "T-1"),
       "postmaster",
       "note",
       "same-a",
       "one",
     ]).code;
-    const bRc = run("bash", [
-      join(HERE, "run"),
+    const bRc = run(join(HERE, "run"), [
+      "log-action",
       join(sameB, ".postmaster", "runs", "T-1"),
       "postmaster",
       "note",

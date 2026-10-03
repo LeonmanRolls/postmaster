@@ -239,11 +239,7 @@ function exerciseSelfTest(sourceRoot: string): number {
   };
 
   const tsCase = (label: string, rel: string, comment: string): void =>
-    runCase(
-      label,
-      (repo) => replaceOnce(repo, rel, TS_HEAD, `// ${comment}\n// `),
-      rel,
-    );
+    runCase(label, (repo) => replaceOnce(repo, rel, TS_HEAD, `// ${comment}\n// `), rel);
 
   runCase(
     "editing the contract list itself answers yes",
@@ -641,10 +637,10 @@ function atBase(repo: string, base: string, head: string): number {
     }
     let detector = "scripts/coachman-contract.sh";
     for (const line of indexBlob.out.split("\n")) {
-      const m = line.match(/^detector\s*=\s*"([^"]+)"/);
+      const m = line.match(/^detector\s*=\s*"([^"]+)"/u);
       if (m) detector = m[1]!;
     }
-    const detectorName = detector.replace(/^scripts\//, "");
+    const detectorName = detector.replace(/^scripts\//u, "");
     const isSh = detectorName.endsWith(".sh");
     const r = isSh
       ? run("bash", [join(scratch, "scripts", detectorName), repo, base, head], { cwd: repo })

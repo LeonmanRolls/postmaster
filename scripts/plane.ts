@@ -1025,7 +1025,11 @@ function loadConfig(): PlaneConfig {
   const project =
     process.env.POSTMASTER_PROJECT || (toplevel.code === 0 ? toplevel.out.trim() : "");
   if (project !== "") {
-    const insp = run(join(scriptsDir(import.meta), "run"), ["project-settings", "inspect", project]);
+    const insp = run(join(scriptsDir(import.meta), "run"), [
+      "project-settings",
+      "inspect",
+      project,
+    ]);
     if (insp.code !== 0) {
       if (insp.err.trim() !== "") console.error(insp.err.trim());
       dieP("cannot read the project's tracker binding");

@@ -191,7 +191,14 @@ function record(d: string, decision: string, commit: string, rest: string[]): vo
   } catch (e: unknown) {
     die(`spec-decisions: cannot write ${f} (${errMsg(e)})`, 1);
   }
-  const logged = run(join(HERE, "run"), ["log-action", d, "postmaster", "spec-review", "spec", detail]);
+  const logged = run(join(HERE, "run"), [
+    "log-action",
+    d,
+    "postmaster",
+    "spec-review",
+    "spec",
+    detail,
+  ]);
   if (logged.code !== 0)
     die("spec-decisions: stanza kept but the log line failed; log it by hand", 1);
 }

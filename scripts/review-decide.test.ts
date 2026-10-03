@@ -290,7 +290,7 @@ describe("negative controls: malformed lines fail loudly, each fault named", () 
   });
 
   test("no arguments is refused", () => {
-    const r = run(SELF, ["review-decide", ]);
+    const r = run(SELF, ["review-decide"]);
     expect(r.code).toBe(1);
     expect(r.err.includes("usage:")).toBe(true);
   });

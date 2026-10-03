@@ -359,8 +359,8 @@ beforeAll(() => {
         return 0;
       }
     })();
-    const refuseR = run("bash", [
-      join(import.meta.dir, "run"),
+    const refuseR = run(join(import.meta.dir, "run"), [
+      "log-action",
       d,
       "coachman",
       "finding",
@@ -1046,7 +1046,7 @@ beforeAll(() => {
     const subs = new Set<string>();
     for (const f of skillFiles) {
       const text = readFileSync(join(SKILL, f), "utf8");
-      for (const m of text.matchAll(/style-findings\.sh ([a-z-]*)/gu)) {
+      for (const m of text.matchAll(/run style-findings ([a-z-]*)/gu)) {
         if (m[1]) subs.add(m[1]);
       }
     }
@@ -1059,7 +1059,7 @@ beforeAll(() => {
     const planted = join(tmp, "planted.md");
     writeFileSync(planted, "run `<tool>/scripts/run style-findings sort <dispatch>`\n");
     const plantedSubs = [
-      ...readFileSync(planted, "utf8").matchAll(/style-findings\.sh ([a-z-]*)/gu),
+      ...readFileSync(planted, "utf8").matchAll(/run style-findings ([a-z-]*)/gu),
     ]
       .map((m) => m[1])
       .join(" ");

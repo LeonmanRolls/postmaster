@@ -809,7 +809,9 @@ function checked(titlePath: string, bodyPath: string, safe: Safe, sha: string): 
   }
   const r = runCmd([join(HERE, "run"), "ticket-check", "--body", bodyPath, "--title", title]);
   // text.ts: BASE rstrips the failure tail Python-style.
-  return r.code === 0 ? "" : `the draft fails scripts/run ticket-check:\n${pyRstrip(r.out + r.err)}`;
+  return r.code === 0
+    ? ""
+    : `the draft fails scripts/run ticket-check:\n${pyRstrip(r.out + r.err)}`;
 }
 
 // --- the commands -------------------------------------------------------------------------------

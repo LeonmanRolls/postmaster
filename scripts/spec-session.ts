@@ -319,11 +319,10 @@ function approve(dispatch: string): void {
     commit = rev.out.trim();
   }
 
-  const record = spawnSync(
-    "bash",
-    [join(HERE, "run"), dispatch, "record", "approved", commit],
-    { encoding: "utf8", timeout: 15_000 },
-  );
+  const record = spawnSync(join(HERE, "run"), ["spec-decisions", dispatch, "record", "approved", commit], {
+    encoding: "utf8",
+    timeout: 15_000,
+  });
   if (record.status !== 0)
     die(
       `spec-session: the commit is ${commit} but recording the approval failed: ${(record.stderr || record.stdout || "").trim()}`,

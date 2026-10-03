@@ -402,7 +402,7 @@ describe("positive controls: a ticket's section", () => {
   });
 
   test("with no text given, the section is read from stdin", () => {
-    const r = run("bash", ["-c", `printf '1. bug\\n2. security\\n' | "${SELF}" resolve`]);
+    const r = run("bash", ["-c", `printf '1. bug\\n2. security\\n' | "${SELF}" turnpikes resolve`]);
     checkIs(
       { code: r.code, out: (r.out + r.err).replace(/\n+$/u, "") },
       0,

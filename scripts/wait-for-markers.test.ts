@@ -22,7 +22,9 @@ function invoke(
   timeout: string,
 ): { out: string; rc: number; took: number } {
   const t0 = Date.now();
-  const r = spawnSync(wrapper, ["wait-for-markers", dir, glob, count, timeout], { encoding: "utf8" });
+  const r = spawnSync(wrapper, ["wait-for-markers", dir, glob, count, timeout], {
+    encoding: "utf8",
+  });
   return {
     out: `${r.stdout ?? ""}${r.stderr ?? ""}`,
     rc: r.status ?? -1,

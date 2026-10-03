@@ -134,11 +134,7 @@ function resolveSpec(
     } catch (e) {
       die(`cannot read ${sourcePath}: ${String(e)}`);
     }
-    const r = run(join(scriptsDir(import.meta), "run"), [
-      "effective",
-      project,
-      sourcePath,
-    ]);
+    const r = run(join(scriptsDir(import.meta), "run"), ["effective", project, sourcePath]);
     if (r.code !== 0) die(r.err.trim() || "cannot resolve project role choices");
     try {
       cfg = JSON.parse(r.out);

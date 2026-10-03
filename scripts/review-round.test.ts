@@ -230,6 +230,7 @@ esac
       const r = run(
         join(import.meta.dir, "run"),
         [
+          "host",
           "run",
           `T-1 · ${lane} ${lens} review`,
           join(repo, ".worktrees", `T-1-rev-${lens}-${lane}`),
@@ -406,7 +407,7 @@ esac
     const first = Bun.spawn([
       "bash",
       "-c",
-      `exec "${self}" wait "${d}" 2 "${repo}" bug:three > "${firstOut}" 2>&1`,
+      `exec "${self}" review-round wait "${d}" 2 "${repo}" bug:three > "${firstOut}" 2>&1`,
     ]);
     const firstRc = waitLine(firstOut, "round 2,", 60);
     // Let some deadline age while the first wait runs, so a reset (left back to the limit) stands out.
@@ -491,7 +492,7 @@ esac
     const stale = Bun.spawn([
       "bash",
       "-c",
-      `"${self}" wait "${d}" 4 "${repo}" bug:four > "${staleOut}" 2>&1; echo $? > "${staleRcFile}"`,
+      `"${self}" review-round wait "${d}" 4 "${repo}" bug:four > "${staleOut}" 2>&1; echo $? > "${staleRcFile}"`,
     ]);
     // The wait must have read this start's attempt before the next start replaces it.
     const staleRc = waitLine(staleOut, "round 4,", 60);
@@ -522,7 +523,7 @@ esac
     const _insideOut = join(tmp, "inside.out");
     const insideR = run("bash", [
       "-c",
-      `cd "$1" && "${self}" teardown "${d}" 4 "${repo}" bug:four`,
+      `cd "$1" && "${self}" review-round teardown "${d}" 4 "${repo}" bug:four`,
       "_",
       join(repo, ".worktrees/T-1-rev-bug-four"),
     ]);

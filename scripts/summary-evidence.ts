@@ -227,8 +227,8 @@ function runTicketCheck(
   // The reader beside this checker, by its command line, as it will run when
   // run ticket-check is #109's port: same script, same flags, same output line.
   const r = spawnSync(
-    "bash",
-    [`${import.meta.dir}/ticket-check.sh`, "--body", bodyFile, "--project", worktree],
+    join(import.meta.dir, "run"),
+    ["ticket-check", "--body", bodyFile, "--project", worktree],
     {
       encoding: "utf8",
     },

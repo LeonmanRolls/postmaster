@@ -1055,18 +1055,24 @@ function prepareDispatch(d: string, runName: string, current: string, root: stri
     return { rc: 1, error: `could not start coachman leg ${number}: ${first}` };
   }
   if (parseInt(number, 10) > parseInt(current, 10) + 1) {
-    const note = run(beside(import.meta, "run"), ["log-action", d,
+    const note = run(beside(import.meta, "run"), [
+      "log-action",
+      d,
       "postmaster",
       "note",
       runName,
-      "turnpikes omit the review leg; the watcher followed the listed legs",]);
+      "turnpikes omit the review leg; the watcher followed the listed legs",
+    ]);
     if (note.code !== 0) return { rc: 1, error: "could not log the omitted review leg" };
   }
-  const logged = run(beside(import.meta, "run"), ["log-action", d,
+  const logged = run(beside(import.meta, "run"), [
+    "log-action",
+    d,
     "postmaster",
     "dispatch",
     "coachman",
-    `leg ${number} (${leg}); the watcher took it`,]);
+    `leg ${number} (${leg}); the watcher took it`,
+  ]);
   if (logged.code !== 0) return { rc: 1, error: `could not log dispatch of leg ${number}` };
   return { rc: 0, error: "" };
 }
@@ -1194,19 +1200,25 @@ function resumeTransient(d: string, runName: string, number: string, root: strin
     if (!setResumeCount(d, number, count, newSkip)) {
       return { rc: 2, error: `cannot restore the remount count for leg ${number}` };
     }
-    const logged = run(beside(import.meta, "run"), ["log-action", d,
+    const logged = run(beside(import.meta, "run"), [
+      "log-action",
+      d,
       "postmaster",
       "refuse",
       "coachman",
-      `leg ${number}, thread ${thread}; the resume did not start (${first})`,]);
+      `leg ${number}, thread ${thread}; the resume did not start (${first})`,
+    ]);
     if (logged.code !== 0) return { rc: 2, error: `could not log refusal of leg ${number}` };
     return { rc: 2, error: `could not resume leg ${number}: ${first}` };
   }
-  const logged = run(beside(import.meta, "run"), ["log-action", d,
+  const logged = run(beside(import.meta, "run"), [
+    "log-action",
+    d,
     "postmaster",
     "resume",
     "coachman",
-    `leg ${number}, thread ${thread}, ${classifier}, resume ${count + 1} of 3; the watcher took it`,]);
+    `leg ${number}, thread ${thread}, ${classifier}, resume ${count + 1} of 3; the watcher took it`,
+  ]);
   if (logged.code !== 0) return { rc: 2, error: `could not log resume of leg ${number}` };
   return { rc: 0, error: "" };
 }
@@ -1358,7 +1370,7 @@ function watch(root: string, config: string, timeout: number | null): never {
     for (const w of wakingRuns(first, held).warnings) console.error(w);
     const steps = processTable(root, first);
     if (steps.heldUnreadable) die("runs-watch: could not read the held list", 1);
-    r = run(statusSh, [root]);
+    r = run(statusSh, ["runs-status", root]);
     if (r.code !== 0) {
       if (r.err) process.stderr.write(r.err);
       die(`runs-watch: run runs-status failed on ${root}`, 1);

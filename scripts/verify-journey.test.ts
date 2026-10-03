@@ -364,8 +364,22 @@ describe("negative controls", () => {
         "did",
         "shots/1.png",
       );
-      const base = run("bash", [baseVj, wt, "--ticket", join(tmp, "fold-ticket.md"), "--report", join(tmp, "fold-report.md")]);
-      const port = run(SELF, ["verify-journey", wt, "--ticket", join(tmp, "fold-ticket.md"), "--report", join(tmp, "fold-report.md")]);
+      const base = run("bash", [
+        baseVj,
+        wt,
+        "--ticket",
+        join(tmp, "fold-ticket.md"),
+        "--report",
+        join(tmp, "fold-report.md"),
+      ]);
+      const port = run(SELF, [
+        "verify-journey",
+        wt,
+        "--ticket",
+        join(tmp, "fold-ticket.md"),
+        "--report",
+        join(tmp, "fold-report.md"),
+      ]);
       const walked = (r: { code: number; out: string; err: string }): boolean =>
         r.code === 0 && `${r.out}${r.err}`.includes("all 3 steps walked");
       expect(walked(base) && walked(port)).toBe(true);

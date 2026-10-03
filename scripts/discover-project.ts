@@ -130,9 +130,13 @@ if (settings.code !== 0) {
 // target and the tool root to stand on. (Wrapper --no-env-file/--config
 // covers the rest; kindRun above keeps the caller's directory because a
 // relative POSTMASTER_CONFIG reads from there, as BASE has it.)
-const verified = run(beside(import.meta, "run"), ["verify", "checks", ABS, "--gate", gate, "--lines"], {
-  cwd: toolRoot(import.meta),
-});
+const verified = run(
+  beside(import.meta, "run"),
+  ["verify", "checks", ABS, "--gate", gate, "--lines"],
+  {
+    cwd: toolRoot(import.meta),
+  },
+);
 const fields = (line: string): number => (line === "" ? 0 : line.split("\t").length);
 let checks: string[] = [];
 if (verified.code === 0) {

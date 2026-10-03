@@ -326,12 +326,7 @@ if (import.meta.main) {
     console.log(
       `review-round: round ${R}, ${n} reviewers, ${leftStr}s left of its ${lim}s limit (${src})`,
     );
-    const wf = run(join(HERE, "run"), [
-      LOGS,
-      `review-r${R}-*.done`,
-      String(n),
-      leftStr ?? "0",
-    ]);
+    const wf = run(join(HERE, "run"), ["wait-for-markers", LOGS, `review-r${R}-*.done`, String(n), leftStr ?? "0"]);
     const rc = wf.code;
     if (rc !== 0 && rc !== 3) die(`the wait ended with exit ${rc}, so nothing is recorded`);
     const missing: number[] = [];
@@ -483,6 +478,7 @@ if (import.meta.main) {
       console.log(`removed ${s}`);
       removed += 1;
       const la = run(join(HERE, "run"), [
+        "log-action",
         D,
         "coachman",
         "teardown",

@@ -377,12 +377,26 @@ describe("discovery: which defaults a project gets", () => {
   });
 
   test("the suite's command is the project's own script", () => {
-    const r = run(SELF, ["verify", "checks", join(tmp, "web"), "--gate", "npm run check", "--lines"]);
+    const r = run(SELF, [
+      "verify",
+      "checks",
+      join(tmp, "web"),
+      "--gate",
+      "npm run check",
+      "--lines",
+    ]);
     expect(r.out.includes("browser\tdefault:browser-suite\tnpm run e2e\t")).toBe(true);
   });
 
   test("the gate is the one it was given", () => {
-    const r = run(SELF, ["verify", "checks", join(tmp, "web"), "--gate", "npm run check", "--lines"]);
+    const r = run(SELF, [
+      "verify",
+      "checks",
+      join(tmp, "web"),
+      "--gate",
+      "npm run check",
+      "--lines",
+    ]);
     expect(r.out.includes("gate\tdefault:gate\tnpm run check\t")).toBe(true);
   });
 
@@ -438,7 +452,14 @@ describe("declaration", () => {
   test("record says when the project's declared gate overrides the one it was given", () => {
     mkdirSync(join(tmp, "decl", ".postmaster", "runs", "T-0"), { recursive: true });
     writeFileSync(join(tmp, "decl", ".postmaster", "runs", "T-0", "brief.md"), "## Ticket\nx\n");
-    const r = run(SELF, ["verify", "record", join(tmp, "decl"), join(tmp, "decl", ".postmaster", "runs", "T-0"), "--gate", "make ci"]);
+    const r = run(SELF, [
+      "verify",
+      "record",
+      join(tmp, "decl"),
+      join(tmp, "decl", ".postmaster", "runs", "T-0"),
+      "--gate",
+      "make ci",
+    ]);
     expect(r.err.includes("declares the gate as npm run check, so make ci is not used")).toBe(true);
   });
 
@@ -771,7 +792,13 @@ describe("results and summaries", () => {
   test("a summary that pastes the run's lines holds, signals, backticks and several lines included", () => {
     const d = join(tmp, "proj", ".postmaster", "runs", "T-1");
     writeFileSync(join(tmp, "summary.md"), `# Summary\n\n## Checks\n${laneOut}\n`);
-    const r = run(SELF, ["verify", "summary", join(tmp, "summary.md"), d, join(tmp, "proj", ".worktrees/T-1-a")]);
+    const r = run(SELF, [
+      "verify",
+      "summary",
+      join(tmp, "summary.md"),
+      d,
+      join(tmp, "proj", ".worktrees/T-1-a"),
+    ]);
     const out = r.out + r.err;
     expect(r.code).toBe(0);
     expect(out.includes("agrees with the coachman's run")).toBe(true);
@@ -784,7 +811,13 @@ describe("results and summaries", () => {
       .filter((l) => !l.startsWith("slow:"))
       .join("\n");
     writeFileSync(join(tmp, "missing.md"), missing);
-    const r = run(SELF, ["verify", "summary", join(tmp, "missing.md"), d, join(tmp, "proj", ".worktrees/T-1-a")]);
+    const r = run(SELF, [
+      "verify",
+      "summary",
+      join(tmp, "missing.md"),
+      d,
+      join(tmp, "proj", ".worktrees/T-1-a"),
+    ]);
     const out = r.out + r.err;
     expect(r.code).toBe(2);
     expect(out.includes("unverified: the summary does not give slow's command and exit")).toBe(
@@ -816,7 +849,13 @@ describe("results and summaries", () => {
       "gate: pass, exit 0, $1s: make",
     );
     writeFileSync(join(tmp, "other.md"), other);
-    const r = run(SELF, ["verify", "summary", join(tmp, "other.md"), d, join(tmp, "proj", ".worktrees/T-1-a")]);
+    const r = run(SELF, [
+      "verify",
+      "summary",
+      join(tmp, "other.md"),
+      d,
+      join(tmp, "proj", ".worktrees/T-1-a"),
+    ]);
     const out = r.out + r.err;
     expect(r.code).toBe(2);
     expect(out.includes("unverified: the summary says gate ran make")).toBe(true);
@@ -882,7 +921,9 @@ describe("a check sees what it would from a terminal", () => {
     const np = join(tmp, "named");
     const nd = join(tmp, "runs/named/T-11");
     run(SELF, ["verify", "record", np, nd]);
-    const r = run(SELF, ["verify", "run", np, nd], { env: { POSTMASTER_LAUNCH_NAME: "#11, a run" } });
+    const r = run(SELF, ["verify", "run", np, nd], {
+      env: { POSTMASTER_LAUNCH_NAME: "#11, a run" },
+    });
     expect(r.code).toBe(0);
   }, 60000);
 });

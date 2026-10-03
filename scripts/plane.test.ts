@@ -331,7 +331,9 @@ describe("CLI and API behavior", () => {
     const r = cli([], env);
     expect(r.code).toBe(1);
     expect(r.out).toBe("");
-    expect(r.err).toBe("plane: usage: run plane projects|create|edit|read|state|comment|list ...\n");
+    expect(r.err).toBe(
+      "plane: usage: run plane projects|create|edit|read|state|comment|list ...\n",
+    );
   }, 30000);
 
   test("a stalled API is cut off after 30 seconds with BASE's words", async () => {

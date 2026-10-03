@@ -405,7 +405,9 @@ const readToml = (path: string, label: string): { data: Rec; present: boolean } 
 };
 
 const knownTurnpikes = (): Set<string> => {
-  const r = run(join(HERE, "run"), ["turnpikes", "--list"], { env: { POSTMASTER_PROJECT: undefined } });
+  const r = run(join(HERE, "run"), ["turnpikes", "--list"], {
+    env: { POSTMASTER_PROJECT: undefined },
+  });
   if (r.code !== 0) {
     fail(`cannot read the turnpike list: ${pyTrim(r.err) || pyTrim(r.out)}`);
   }

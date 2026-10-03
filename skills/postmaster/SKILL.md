@@ -26,12 +26,12 @@ your harness loaded this file from, or `skills/postmaster` when `AGENTS.md` sent
 the repo here.
 
 ```sh
-t=$(CDPATH= cd -P -- "<skill>/../.." 2>/dev/null && pwd) && test -f "$t/scripts/link-skills.sh" && echo "$t" || { echo "postmaster: <skill> is not a link into a postmaster checkout" >&2; false; }
+t=$(CDPATH= cd -P -- "<skill>/../.." 2>/dev/null && pwd) && test -f "$t/scripts/run" && echo "$t" || { echo "postmaster: <skill> is not a link into a postmaster checkout" >&2; false; }
 ```
 
 It prints `<tool>`. Write that absolute path wherever these runbooks say `<tool>`, and give it to
 every session you brief. If it prints the error instead, stop and tell the user: the skill was
-copied, or its link points somewhere else. `<checkout>/scripts/link-skills.sh`, where
+copied, or its link points somewhere else. `<checkout>/scripts/run`, where
 `<checkout>` is their postmaster checkout, links it again.
 
 [Why a skill is a link, and the repo is found from it](../../wiki/concepts/skill-links.md)
