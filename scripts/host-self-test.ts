@@ -3105,6 +3105,7 @@ export async function runControls(): Promise<number> {
           `${nolanesStop.out}${nolanesStop.err}`.includes("lane records unreadable"),
       );
       resetHarness(root);
+
       finishDelay = "3600";
       writeFileSync(join(f.caller, "sleeper.sh"), "#!/bin/sh\nsleep 30\n");
       exec("chmod", ["+x", join(f.caller, "sleeper.sh")]);
@@ -3313,6 +3314,331 @@ export async function runControls(): Promise<number> {
       await pass("and keeps the placement record", () => existsSync(h7file));
       rmSync(h7file, { force: true });
       resetHarness(root);
+
+      console.log("run teardown records, Herdr and tmux stubs");
+      const teardownTemp = mkdtempSync(join(root, "teardown-227-"));
+      const teardownPwd = exec("pwd", ["-P"], { cwd: teardownTemp });
+      if (teardownPwd.code !== 0 || !teardownPwd.out.trim())
+        throw new Error("could not resolve teardown test folder with pwd -P");
+      const teardownT = teardownPwd.out.trim();
+      const teardownRepo = join(teardownT, "repo");
+      const teardownDispatch = join(teardownT, "runs", "227");
+      const teardownTrees = join(teardownRepo, ".worktrees");
+      const teardownLogs = join(teardownDispatch, "logs");
+      const teardownBin = join(teardownT, "bin");
+      mkdirSync(teardownBin, { recursive: true });
+      for (const program of ["herdr", "tmux"]) {
+        const path = join(teardownBin, program);
+        writeFileSync(path, "#!/bin/sh\nexit 1\n");
+        exec("chmod", ["+x", path]);
+      }
+      const teardownPath = `${teardownBin}:${process.env.PATH ?? ""}`;
+      const teardownNames = [
+        "227",
+        "227-sol",
+        "227-mimo",
+        "227-rev-bug-mimo",
+        "227-rev-bug-decoy",
+        "227-rev-security-opus",
+      ];
+      const makeTeardownRecord = (withLogs = true): void => {
+        rmSync(teardownRepo, { recursive: true, force: true });
+        rmSync(join(teardownT, "runs"), { recursive: true, force: true });
+        for (const name of teardownNames) mkdirSync(join(teardownTrees, name), { recursive: true });
+        mkdirSync(teardownDispatch, { recursive: true });
+        writeFileSync(
+          join(teardownDispatch, "brief.md"),
+          `## Dispatch\nname: #227, test\nsynthesis worktree: ${join(teardownTrees, "227")}\n`,
+        );
+        writeFileSync(
+          join(teardownDispatch, "run.json"),
+          '{"config":{"team":{"workhorses":["sol","mimo"]}}}\n',
+        );
+        writeFileSync(join(teardownDispatch, "manifest.json"), '{"lanes":{"sol":{},"mimo":{}}}\n');
+        if (!withLogs) return;
+        mkdirSync(teardownLogs, { recursive: true });
+        writeFileSync(join(teardownLogs, "review-r1.json"), '{"reviewers":[["bug","mimo"]]}\n');
+        writeFileSync(
+          join(teardownLogs, "review-r1-bug-mimo-findings.json"),
+          '[{"finding":"example"}]\n',
+        );
+        writeFileSync(
+          join(teardownLogs, "review-r1-bug-mimo-usage.json"),
+          '{"reviewers":[["bug","decoy"]]}\n',
+        );
+        writeFileSync(join(teardownLogs, "review-r1-notes.json"), '["not","a","record"]\n');
+      };
+      const teardownLines = (operation: "stop-run" | "close-run", names: string[]): string =>
+        names
+          .map((name) =>
+            operation === "stop-run"
+              ? `no launch is running in ${join(teardownTrees, name)}`
+              : `closed what host.sh opened for ${join(teardownTrees, name)}`,
+          )
+          .join("\n");
+      const runTeardown = (
+        operation: "stop-run" | "close-run",
+        dispatch = teardownDispatch,
+      ): Result => execHost([operation, dispatch], teardownPath, root);
+      const teardownCore = ["227-mimo", "227-sol", "227-rev-bug-mimo", "227"];
+      await pass(
+        "C1: both teardown commands use only existing worktrees named by round records and action log",
+        () => {
+          makeTeardownRecord();
+          const initial = (["stop-run", "close-run"] as const).map((op) => runTeardown(op));
+          if (
+            initial.some(
+              (result, index) =>
+                result.code !== 0 ||
+                result.err !== "" ||
+                result.out !==
+                  `${teardownLines(index === 0 ? "stop-run" : "close-run", teardownCore)}\n`,
+            )
+          )
+            return false;
+          writeFileSync(
+            join(teardownDispatch, "actions.jsonl"),
+            '{"action":"review-launch","target":"opus","detail":"security r1"}\n',
+          );
+          const withAction = (["stop-run", "close-run"] as const).map((op) => runTeardown(op));
+          const five = [...teardownCore.slice(0, 3), "227-rev-security-opus", "227"];
+          if (
+            withAction.some(
+              (result, index) =>
+                result.code !== 0 ||
+                result.err !== "" ||
+                result.out !== `${teardownLines(index === 0 ? "stop-run" : "close-run", five)}\n`,
+            )
+          )
+            return false;
+          makeTeardownRecord(false);
+          const withoutLogs = (["stop-run", "close-run"] as const).map((op) => runTeardown(op));
+          return withoutLogs.every(
+            (result, index) =>
+              result.code === 0 &&
+              result.err === "" &&
+              result.out ===
+                `${teardownLines(index === 0 ? "stop-run" : "close-run", ["227-mimo", "227-sol", "227"])}\n`,
+          );
+        },
+      );
+
+      await pass(
+        "C2: non-mapping round records refuse with one message naming the resolved record",
+        () => {
+          const badValues = ['[["bug","mimo"]]', '"text"', "5", "true", "null"];
+          for (const badValue of badValues) {
+            makeTeardownRecord();
+            writeFileSync(join(teardownLogs, "review-r1.json"), `${badValue}\n`);
+            for (const operation of ["stop-run", "close-run"] as const) {
+              const result = runTeardown(operation);
+              if (
+                result.code !== 2 ||
+                result.out !== "" ||
+                result.err !==
+                  `host: run review record is not a mapping: ${join(teardownLogs, "review-r1.json")}\n`
+              )
+                return false;
+            }
+          }
+          makeTeardownRecord();
+          writeFileSync(join(teardownLogs, "review-r1.json"), "[]\n");
+          writeFileSync(join(teardownLogs, "review-r2.json"), "null\n");
+          writeFileSync(join(teardownDispatch, "actions.jsonl"), "null\n");
+          const multiple = runTeardown("stop-run");
+          const lines = multiple.err.trimEnd().split("\n");
+          if (
+            multiple.code !== 2 ||
+            multiple.out !== "" ||
+            lines.length !== 1 ||
+            !["review-r1.json", "review-r2.json"].some((name) => lines[0]!.endsWith(name)) ||
+            lines[0]!.includes("actions.jsonl")
+          )
+            return false;
+          makeTeardownRecord();
+          writeFileSync(join(teardownLogs, "review-r1.json"), "[]\n");
+          writeFileSync(join(teardownDispatch, "actions.jsonl"), "null\n");
+          const roundBeforeAction = runTeardown("close-run");
+          if (
+            roundBeforeAction.code !== 2 ||
+            roundBeforeAction.out !== "" ||
+            roundBeforeAction.err !==
+              `host: run review record is not a mapping: ${join(teardownLogs, "review-r1.json")}\n`
+          )
+            return false;
+          makeTeardownRecord();
+          writeFileSync(join(teardownLogs, "review-r1.json"), "[]\n");
+          const alias = join(teardownT, "teardown-linked-227");
+          symlinkSync(teardownDispatch, alias);
+          const throughLink = runTeardown("stop-run", alias);
+          return (
+            throughLink.code === 2 &&
+            throughLink.out === "" &&
+            throughLink.err ===
+              `host: run review record is not a mapping: ${join(teardownLogs, "review-r1.json")}\n`
+          );
+        },
+      );
+
+      await pass(
+        "C3: unreadable or unusable round records and unreadable action logs remain skipped",
+        () => {
+          const cases: Array<{ name: string; setup: () => void; names: string[] }> = [
+            {
+              name: "invalid JSON",
+              setup: () => writeFileSync(join(teardownLogs, "review-r1.json"), "{broken\n"),
+              names: ["227-mimo", "227-sol", "227"],
+            },
+            {
+              name: "empty",
+              setup: () => writeFileSync(join(teardownLogs, "review-r1.json"), ""),
+              names: ["227-mimo", "227-sol", "227"],
+            },
+            {
+              name: "directory",
+              setup: () => {
+                rmSync(join(teardownLogs, "review-r1.json"), { force: true });
+                mkdirSync(join(teardownLogs, "review-r1.json"));
+              },
+              names: ["227-mimo", "227-sol", "227"],
+            },
+            {
+              name: "missing reviewers",
+              setup: () => writeFileSync(join(teardownLogs, "review-r1.json"), "{}\n"),
+              names: ["227-mimo", "227-sol", "227"],
+            },
+            {
+              name: "reviewers is not a list",
+              setup: () =>
+                writeFileSync(join(teardownLogs, "review-r1.json"), '{"reviewers":"bug"}\n'),
+              names: ["227-mimo", "227-sol", "227"],
+            },
+            {
+              name: "one malformed reviewer pair",
+              setup: () =>
+                writeFileSync(
+                  join(teardownLogs, "review-r1.json"),
+                  '{"attempt":"1","reviewers":[["bug","mimo"],["bug"]]}\n',
+                ),
+              names: teardownCore,
+            },
+            {
+              name: "actions log is a directory",
+              setup: () => {
+                rmSync(join(teardownDispatch, "actions.jsonl"), { force: true });
+                mkdirSync(join(teardownDispatch, "actions.jsonl"));
+              },
+              names: teardownCore,
+            },
+          ];
+          for (const check of cases) {
+            makeTeardownRecord();
+            check.setup();
+            for (const operation of ["stop-run", "close-run"] as const) {
+              const result = runTeardown(operation);
+              if (
+                result.code !== 0 ||
+                result.err !== "" ||
+                result.out !== `${teardownLines(operation, check.names)}\n`
+              )
+                return false;
+            }
+          }
+          makeTeardownRecord(false);
+          for (const operation of ["stop-run", "close-run"] as const) {
+            const result = runTeardown(operation);
+            if (
+              result.code !== 0 ||
+              result.err !== "" ||
+              result.out !== `${teardownLines(operation, ["227-mimo", "227-sol", "227"])}\n`
+            )
+              return false;
+          }
+          return true;
+        },
+      );
+
+      await pass(
+        "C4: non-mapping action lines name the log and their original one-based line",
+        () => {
+          const badValues = ['["review-launch"]', "null", '"text"'];
+          const logPath = join(teardownDispatch, "actions.jsonl");
+          for (const badValue of badValues) {
+            makeTeardownRecord();
+            writeFileSync(
+              logPath,
+              [
+                '{"action":"review-launch","target":"mimo","detail":"bug r1"}',
+                "",
+                "{broken",
+                badValue,
+                "",
+              ].join("\n"),
+            );
+            for (const operation of ["stop-run", "close-run"] as const) {
+              const result = runTeardown(operation);
+              if (
+                result.code !== 2 ||
+                result.out !== "" ||
+                result.err !== `host: run action log line is not a mapping: ${logPath} line 4\n`
+              )
+                return false;
+            }
+          }
+          makeTeardownRecord();
+          writeFileSync(
+            logPath,
+            '{"action":"review-launch","target":"mimo","detail":"bug r1"}\n\n{broken\n',
+          );
+          return (["stop-run", "close-run"] as const).every((operation) => {
+            const result = runTeardown(operation);
+            return (
+              result.code === 0 &&
+              result.err === "" &&
+              result.out === `${teardownLines(operation, teardownCore)}\n`
+            );
+          });
+        },
+      );
+
+      await pass("C5: pre-existing teardown record refusals keep their exact messages", () => {
+        const checkRefusal = (
+          operation: "stop-run" | "close-run",
+          dispatch: string,
+          message: string,
+        ): boolean => {
+          const result = runTeardown(operation, dispatch);
+          return result.code === 2 && result.out === "" && result.err === `host: ${message}\n`;
+        };
+        const empty = join(teardownT, "empty-dispatch");
+        mkdirSync(empty, { recursive: true });
+        for (const operation of ["stop-run", "close-run"] as const) {
+          if (!checkRefusal(operation, empty, "run waybill has no synthesis worktree"))
+            return false;
+        }
+        const outside = join(teardownT, "outside", "227");
+        mkdirSync(outside, { recursive: true });
+        writeFileSync(
+          join(outside, "brief.md"),
+          `## Dispatch\nname: #227, test\nsynthesis worktree: ${join(teardownT, "elsewhere", "227")}\n`,
+        );
+        mkdirSync(join(teardownT, "elsewhere", "227"), { recursive: true });
+        for (const operation of ["stop-run", "close-run"] as const) {
+          if (!checkRefusal(operation, outside, "synthesis worktree is not under .worktrees"))
+            return false;
+        }
+        makeTeardownRecord();
+        writeFileSync(join(teardownDispatch, "run.json"), "{broken\n");
+        writeFileSync(join(teardownDispatch, "manifest.json"), "{broken\n");
+        for (const operation of ["stop-run", "close-run"] as const) {
+          if (!checkRefusal(operation, teardownDispatch, "run lane records unreadable"))
+            return false;
+        }
+        writeFileSync(join(teardownLogs, "review-r1.json"), "[]\n");
+        return (["stop-run", "close-run"] as const).every((operation) =>
+          checkRefusal(operation, teardownDispatch, "run lane records unreadable"),
+        );
+      });
 
       console.log("review round 4 fixes, tmux (stub)");
       resetHarness(root);

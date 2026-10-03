@@ -127,7 +127,6 @@ import { mkstempSync, run, signalExitCode } from "./lib/proc.ts";
 import {
   BOUND_L,
   BOUND_R,
-  DOT_ALL,
   END_OF_STRING,
   PY_DOT,
   PY_S_CLASS,
@@ -331,7 +330,6 @@ const LEGACY_REVIEW = new RegExp(
 const REVIEW_ROUND_FILE = new RegExp("^review-r([0-9]+)\\.json" + END_OF_STRING, "u");
 const HERDR_TAB_ID = new RegExp("^w[A-Za-z0-9]+:t[0-9A-Za-z]+" + END_OF_STRING, "u");
 const PATH_COMPONENT = new RegExp("^[A-Za-z0-9._-]+$", "u");
-const REVIEW_STATE_GLOB = new RegExp("^review-r[0-9]" + DOT_ALL + "*\\.json$", "u");
 const LENS_WORD = new RegExp(BOUND_L + "(style|bug|security)" + BOUND_R, "u");
 
 function isPathComponent(value: unknown): boolean {
@@ -5541,16 +5539,15 @@ function runWorktreePaths(givenDispatch: string): string[] {
     reviewFiles = [];
   }
   for (const entry of reviewFiles) {
-    if (!REVIEW_STATE_GLOB.test(entry)) continue;
-    // BASE lets a non-mapping state abort the whole lookup with a traceback;
-    // the port refuses the same teardown, quietly, with the same exit.
+    if (!REVIEW_ROUND_FILE.test(entry)) continue;
     let state: any = null;
     try {
       state = JSON.parse(readFileSync(join(dispatch, "logs", entry), "utf8"));
     } catch {
       continue;
     }
-    if (state === null || typeof state !== "object" || Array.isArray(state)) throw hostError("", 2);
+    if (state === null || typeof state !== "object" || Array.isArray(state))
+      throw hostError(`run review record is not a mapping: ${join(dispatch, "logs", entry)}`, 2);
     // BASE iterates whatever .get returns: a non-list either raises
     // TypeError (None, a number), which the file skips, or yields items the
     // shape check below rejects (a string, a mapping). Only a list can add.
@@ -5567,16 +5564,20 @@ function runWorktreePaths(givenDispatch: string): string[] {
     }
   }
   try {
-    for (const line of pySplitLines(readFileSync(join(dispatch, "actions.jsonl"), "utf8"))) {
+    const actionLog = join(dispatch, "actions.jsonl");
+    for (const [lineIndex, line] of pySplitLines(readFileSync(actionLog, "utf8")).entries()) {
       let action: any = null;
       try {
         action = JSON.parse(line);
       } catch {
         continue;
       }
-      // As above: a non-mapping action line aborts the lookup, quietly.
+      // As above, a non-mapping action line refuses teardown and identifies its source.
       if (action === null || typeof action !== "object" || Array.isArray(action))
-        throw hostError("", 2);
+        throw hostError(
+          `run action log line is not a mapping: ${actionLog} line ${lineIndex + 1}`,
+          2,
+        );
       if (action.action !== "review-launch") continue;
       const detail = hasOwn(action, "detail") ? pyStrScalar(action.detail) : "";
       const lens = LENS_WORD.exec(detail);
