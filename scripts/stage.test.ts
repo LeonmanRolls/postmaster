@@ -148,16 +148,20 @@ describe("positive controls", () => {
     expect(manifestStage()).toBe("review");
   });
 
-  test("planning is one stage", () => {
-    fresh();
-    const rc = setStage(d, "planning", "coachman");
-    expect(rc).toBe(0);
-    expect(count()).toBe(1);
-    expect(manifestStage()).toBe("planning");
+  test("the planning stage is no longer in the current stage list", () => {
+    expect(STAGES.includes("planning")).toBe(false);
+    const r = run("bash", [join(HERE, "stage.sh"), "--list"]);
+    expect(r.code).toBe(0);
+    expect(r.out).not.toContain("planning");
   });
 
-  test("planning sits between bootstrapped and workhorses-running", () => {
-    expect(STAGES.includes(" bootstrapped planning workhorses-running ")).toBe(true);
+  test("an older run can leave its historical planning stage", () => {
+    fresh();
+    writeFileSync(join(d, "manifest.json"), MANIFEST.replace('"stage": "dispatched"', '"stage": "planning"'));
+    const rc = setStage(d, "workhorses-running", "coachman");
+    expect(rc).toBe(0);
+    expect(count()).toBe(1);
+    expect(manifestStage()).toBe("workhorses-running");
   });
 });
 

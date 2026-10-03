@@ -37,7 +37,7 @@ import { mkstempSync, run } from "./lib/proc.ts";
 import { pyRstrip } from "./lib/text.ts";
 
 export const STAGES =
-  "dispatched bootstrapped planning workhorses-running synthesis checkpoint-1 review shipping shipped done abandoned";
+  "dispatched bootstrapped workhorses-running synthesis checkpoint-1 review shipping shipped done abandoned";
 const STAGE_LIST = STAGES.split(" ");
 
 // Lines with their endings kept, as str.splitlines(keepends=True) cuts

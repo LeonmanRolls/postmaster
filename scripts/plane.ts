@@ -1249,6 +1249,45 @@ async function runCommands(): Promise<void> {
       },
     );
     console.log(`${tid}: edited`);
+  } else if (cmd === "title") {
+    if (args.length !== 2 || !args[1]!.trim()) dieP("usage: plane.sh title <IDENT-n> <title>");
+    const [ident, item] = await itemFor(cfg, args[0]!);
+    await api(
+      cfg,
+      "PATCH",
+      `workspaces/${cfg.WS}/projects/${ref(item.project)}/work-items/${item.id}/`,
+      { name: args[1] },
+    );
+    console.log(`${ident}-${item.sequence_id}: title changed`);
+  } else if (cmd === "label") {
+    if (args.length !== 3 || (args[1] !== "add" && args[1] !== "remove") || !args[2])
+      dieP("usage: plane.sh label <IDENT-n> add|remove <label>");
+    const [ident, item] = await itemFor(cfg, args[0]!);
+    const pid = String(ref(item.project));
+    const labels = await labelsOf(cfg, pid);
+    let found = labels.find((l: any) => pyLower(String(l.name ?? "")) === pyLower(args[2]!));
+    if (args[1] === "add" && !found) {
+      found = await api(cfg, "POST", `workspaces/${cfg.WS}/projects/${pid}/labels/`, {
+        name: args[2],
+      });
+      labels.push(found);
+    }
+    const ids = new Map<string, string>();
+    for (const label of labels) ids.set(pyLower(String(label.name ?? "")), String(label.id));
+    const id = ids.get(pyLower(args[2]!));
+    const current = (item.labels ?? []).map((l: unknown) => String(ref(l)));
+    const next = args[1] === "add"
+      ? id ? [...new Set([...current, id])] : current
+      : id ? current.filter((value: string) => value !== id) : current;
+    if (next.length !== current.length) {
+      await api(
+        cfg,
+        "PATCH",
+        `workspaces/${cfg.WS}/projects/${pid}/work-items/${item.id}/`,
+        { labels: next },
+      );
+    }
+    console.log(`${ident}-${item.sequence_id}: label ${args[1] === "add" ? "added" : "removed"} ${args[2]}`);
   } else if (cmd === "read") {
     const rest = args.filter((a) => a !== "--body");
     if (rest.length !== 1 || args.length > 2) dieP("usage: plane.sh read <IDENT-n> [--body]");

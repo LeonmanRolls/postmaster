@@ -27,7 +27,8 @@
 //             a resume it cannot complete wakes the postmaster.
 //
 // Everything that needs judgment still wakes the postmaster: RULE (an escalation), GATE (a
-// ship card), READ (a checkpoint card), SPEC (a spec package), ASK (a recorded refusal or
+// ship card), READ (a checkpoint card), SPEC (a spec package), READY (a signed-off ticket and
+// a free run slot), ASK (a recorded refusal or
 // pre-thread exit, or a wall on the fallback), TAKEOVER (a recorded wall on the primary),
 // INSPECT (a stall, or an attempt without its record), and any step the watcher could not
 // complete. USER (already put to the user), WAIT (a leg at work) and - (closed) never do.
@@ -55,7 +56,8 @@
 // attempt, as a host that could not start one; =1 on POSTMASTER_WATCH_TEST_REFUSE refuses
 // that start with no record, as a validation refusal.
 //
-//   exit 0  a run needs the postmaster: the table, then one `needs <run> <NEXT>` line each
+//   exit 0  a run or ready ticket needs the postmaster: the table, then `needs <run> <NEXT>` or
+//           `needs READY <ticket>` lines
 //   exit 3  --timeout passed with nothing to act on: the table
 //   exit 1  usage, no such root, the held list cannot be read, or a timeout
 //           that is not a whole number
@@ -80,7 +82,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
-import { tryJsonFile } from "./lib/data.ts";
+import { tryJsonFile, tryTomlFile } from "./lib/data.ts";
 import { beside, scriptsDir } from "./lib/paths.ts";
 import { die, run } from "./lib/proc.ts";
 import { PY_M_END, PY_M_START } from "./lib/text.ts";
@@ -1345,6 +1347,58 @@ function physicalDir(path: string): string {
   return resolved;
 }
 
+/** Ready tickets wait under the project's postmaster run root until dispatched. */
+export function pendingReadyTickets(root: string): string[] {
+  const dir = join(root, "postmaster", "ready");
+  try {
+    return readdirSync(dir).filter((name) => name.endsWith(".ready")).sort().flatMap((name) => {
+      let id = "";
+      try {
+        id = decodeURIComponent(name.slice(0, -6));
+        if (readFileSync(join(dir, name), "utf8").trim() !== id) return [];
+      } catch {
+        return [];
+      }
+      return [id];
+    });
+  } catch {
+    return [];
+  }
+}
+
+/** An unreadable run counts against the cap; only done and abandoned are closed. */
+export function activeRunCount(root: string): number {
+  let count = 0;
+  for (const name of readdirSync(root)) {
+    if (name === "postmaster") continue;
+    const dir = join(root, name);
+    try {
+      if (!statSync(dir).isDirectory()) continue;
+    } catch {
+      continue;
+    }
+    let stage = "unknown";
+    try {
+      const manifest: unknown = JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8"));
+      if (typeof manifest === "object" && manifest !== null && !Array.isArray(manifest)) {
+        const raw = (manifest as Record<string, unknown>).stage;
+        if (typeof raw === "string") stage = raw;
+      }
+    } catch {
+      // A run directory without a readable manifest still holds a slot.
+    }
+    if (stage !== "done" && stage !== "abandoned") count += 1;
+  }
+  return count;
+}
+
+export function runCapacity(configPath: string): number {
+  const config = tryTomlFile(configPath);
+  const team = config?.team;
+  const value = team && typeof team === "object" ? Number((team as Record<string, unknown>).max_runs) : NaN;
+  return Number.isSafeInteger(value) && value > 0 ? value : 2;
+}
+
 function watch(root: string, config: string, timeout: number | null): never {
   const pm = join(root, "postmaster");
   const statusSh = beside(import.meta, "runs-status.sh");
@@ -1368,8 +1422,12 @@ function watch(root: string, config: string, timeout: number | null): never {
       die(`runs-watch: runs-status.sh failed on ${root}`, 1);
     }
     const table = r.out.replace(/\n+$/u, "");
-    if (steps.needs.length > 0) {
-      process.stdout.write(`${table}\n${steps.needs.join("\n")}\n`);
+    const ready = pendingReadyTickets(root);
+    const readyNeeds = activeRunCount(root) < runCapacity(config)
+      ? ready.map((id) => `needs READY ${id}`)
+      : [];
+    if (steps.needs.length > 0 || readyNeeds.length > 0) {
+      process.stdout.write(`${table}\n${[...steps.needs, ...readyNeeds].join("\n")}\n`);
       process.exit(0);
     }
     if (timeout !== null && left <= 0) {

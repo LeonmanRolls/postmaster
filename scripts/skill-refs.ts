@@ -130,16 +130,14 @@ if (import.meta.main) {
 
   let files = argv;
   if (files.length === 0) {
-    const dir = join(ROOT, "skills", "postmaster");
     try {
-      const entries = readdirSync(dir).filter((n) => n.endsWith(".md"));
-      files = entries.map((n) => join(dir, n));
-      if (files.length === 0) {
-        console.error(`skill-refs: no skills/postmaster/*.md in ${ROOT}`);
-        process.exit(2);
-      }
+      files = ["postmaster", "clerk"].flatMap((role) => {
+        const dir = join(ROOT, "skills", role);
+        return readdirSync(dir).filter((n) => n.endsWith(".md")).map((n) => join(dir, n));
+      });
+      if (files.length === 0) throw new Error("no runbooks");
     } catch {
-      console.error(`skill-refs: no skills/postmaster/*.md in ${ROOT}`);
+      console.error(`skill-refs: no runbooks under skills/postmaster or skills/clerk in ${ROOT}`);
       process.exit(2);
     }
   }

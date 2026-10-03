@@ -1,7 +1,7 @@
 # Tracker adapters
 
-The runbooks make five demands of a tracker and no more: read a ticket, set its state, add a
-dated comment, create a ticket, and replace a ticket's body. This file says what each means for
+The runbooks make six demands of a tracker and no more: read a ticket, set its state, add a
+dated comment, create a ticket, replace a ticket's body, and add or remove a label. This file says what each means for
 each tracker kind the config allows (`<tool>/config.example.toml`, `[tracker]`). Every write is also
 logged through `<tool>/scripts/log-action.sh` as `ticket-create`, `ticket-edit`, `ticket-state` or
 `ticket-comment`. `<tool>` is the postmaster repo, as the runbook that sent you here found it.
@@ -43,8 +43,8 @@ in its User journey: a fenced block whose `$ ` lines are commands, each followed
 other than 0, a line `[exit N]`.
 ```
 
-A ticket brought to ready in a ticket session has two parts: a plain part the user signs off, which holds the headings
-above, and a `## For the agents` section after them. [ticket-template.md](ticket-template.md) is its shape. The four
+A ticket brought to ready by the booking clerk has two parts: a plain part the user signs off, which holds the headings
+above, and a `## For the agents` section after them. [the ticket template](../clerk/ticket-template.md) is its shape. The four
 required headings stay required, in the order above.
 
 [Why a ticket carries a direction, and is checked before it is accepted](../../wiki/concepts/ticket-shape.md)
@@ -81,6 +81,8 @@ a board name; its owner and the user's GitHub login are machine-side.
 <tool>/scripts/github.sh <repo> read <n>
 <tool>/scripts/github.sh <repo> read <n> --body              # the body alone, exactly as stored
 <tool>/scripts/github.sh <repo> edit <n> <body-file> <base-file>
+<tool>/scripts/github.sh <repo> title <n> "<title>"
+<tool>/scripts/github.sh <repo> label <n> add|remove <label>
 <tool>/scripts/github.sh <repo> state <n> in-progress
 <tool>/scripts/github.sh <repo> comment <n> coachman "<text>"
 <tool>/scripts/github.sh <repo> list [state]
@@ -106,6 +108,8 @@ a board name; its owner and the user's GitHub login are machine-side.
 - **Set state:** `state`. `todo` and `in-progress` move the card and reopen a closed issue;
   `blocked` adds the label; `done` closes the issue and moves the card to Done; `cancelled`
   closes it as not planned.
+- **Labels:** `label`, which adds or removes a label without changing the issue's state. The
+  booking clerk uses `ready` to record the user's sign-off.
 - **Comment:** `comment`, dated to the minute, actor first (`postmaster`, `coachman`, or the
   user's word for themselves). The ready-to-merge comment is one such line pointing at
   `<dispatch>/card.md`.
@@ -149,6 +153,8 @@ projects, and `<tool>/scripts/probe-trackers.sh` runs it.
 <tool>/scripts/plane.sh read PM-12
 <tool>/scripts/plane.sh read PM-12 --body                    # the body alone, as markdown
 <tool>/scripts/plane.sh edit PM-12 <body-file> <base-file>
+<tool>/scripts/plane.sh title PM-12 "<title>"
+<tool>/scripts/plane.sh label PM-12 add|remove <label>
 <tool>/scripts/plane.sh state PM-12 in-progress
 <tool>/scripts/plane.sh comment PM-12 coachman "<text>"
 <tool>/scripts/plane.sh list PM [state]
@@ -167,7 +173,10 @@ projects, and `<tool>/scripts/probe-trackers.sh` runs it.
   which it names, or text it would read back as something else. The user makes that change
   in Plane. It also refuses an empty body, and one that would not read back with the same
   words and structure.
-- **Set state:** `state`, one API call per change; `blocked` is the label.
+- **Set state:** `state`, one API call per change; `blocked` is the label. State changes leave
+  other labels alone.
+- **Labels:** `label`, which adds or removes a label without changing the work item's state. The
+  booking clerk uses `ready` to record the user's sign-off.
 - **Comment:** `comment`, the same dated line as on GitHub.
 
 ## local
@@ -197,6 +206,7 @@ worktree included:
 <tool>/scripts/local.sh <repo> read <n> --body               # the body alone, as stored
 <tool>/scripts/local.sh <repo> edit <n> <body-file> <base-file>
 <tool>/scripts/local.sh <repo> title <n> "<title>"
+<tool>/scripts/local.sh <repo> label <n> add|remove <label>
 <tool>/scripts/local.sh <repo> state <n> in-progress
 <tool>/scripts/local.sh <repo> comment <n> coachman "<text>"
 <tool>/scripts/local.sh <repo> list [state]                  # every ticket, grouped by state
@@ -219,6 +229,9 @@ worktree included:
 - **Title:** `title` is where the user sets a title, as they would on GitHub's page. Like any
   change to a ticket's text, it waits for the user's word.
 - **Set state:** `state`. All five states are the ticket's own, `blocked` included.
+- **Labels:** the tracker must let the user add and remove labels. The booking clerk uses the
+  `ready` label to record sign-off. Configure that capability with the tracker in
+  `~/.postmaster/trackers/<name>.md`.
 - **Comment:** `comment`, the same dated line as on GitHub, kept in the ticket's log.
 
 [Why a repo's tickets live in its git directory, and its tracker is discovered](../../wiki/concepts/local-tracker.md)

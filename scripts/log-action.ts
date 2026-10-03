@@ -1,6 +1,7 @@
 // Append one structured action to a run's audit log and to the project's ledger.
 //
 //   log-action.sh <dispatch-dir> <actor> <action> <target> [detail...]
+//   log-action.sh --project <repo> <actor> note <target> [detail...]
 //   log-action.sh <dispatch-dir> <actor> tool-fault <postmaster-file> --ran <what ran>
 //                 --failed <what failed> --error <the error, or none> --diagnosis <why>
 //                 --fix <the fix proposed> [--workaround <what was done instead>] [--control <kind>]
@@ -9,7 +10,7 @@
 //   action   a verb from a fixed set, enforced, so the log is computable:
 //            dispatch resume refuse harvest synthesize review-launch review-harvest finding apply
 //            escalate rule ticket-check ticket-create ticket-edit ticket-state ticket-comment
-//            gate verify merge teardown degrade handoff-accept handoff stage spec-review
+//            gate verify merge teardown degrade handoff-accept handoff stage spec-review premises
 //            tool-fault note
 //   target   what the action was done to: a lane, a ticket id, a branch, a path, a round
 //   detail   free text; everything after the target, joined by spaces. A finding's opens with its
@@ -37,13 +38,13 @@
 //   exit 1  usage, an action outside the set, a finding with no class, a spec-review with no
 //           decision, a tool-fault missing a field or naming no postmaster file, or a file
 //           could not be appended
-import { appendFileSync, existsSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { toolRoot } from "./lib/paths.ts";
 import { argvDecoded } from "./lib/proc.ts";
 
 const VERBS =
-  " dispatch resume refuse harvest synthesize review-launch review-harvest finding apply escalate rule ticket-check ticket-create ticket-edit ticket-state ticket-comment gate verify merge teardown degrade handoff-accept handoff stage spec-review tool-fault note ";
+  " dispatch resume refuse harvest synthesize review-launch review-harvest finding apply escalate rule ticket-check ticket-create ticket-edit ticket-state ticket-comment gate verify merge teardown degrade handoff-accept handoff stage spec-review premises tool-fault note ";
 const CONTROLS = join(toolRoot(import.meta), "skills/postmaster/controls.md");
 
 // JSON string escaping: drop control chars, escape separators. Bytes that
@@ -307,9 +308,39 @@ function logAction(
   return 0;
 }
 
+function logProjectNote(repo: string, actor: string, target: string, detailParts: string[]): number {
+  if (actor !== "clerk" || !target) {
+    console.error("usage: log-action.sh --project <repo> clerk note <target> [detail...]");
+    return 1;
+  }
+  let project = "";
+  try {
+    const root = resolve(repo);
+    if (!statSync(root).isDirectory()) throw new Error("not a directory");
+    project = basename(root);
+    const runs = join(root, ".postmaster", "runs");
+    mkdirSync(runs, { recursive: true });
+    const ledger = join(runs, "ledger.jsonl");
+    const ts = new Date().toISOString().replace(/\.[0-9]+Z$/u, "Z");
+    const line = `{"ts":"${ts}","project":"${jsonStr(project)}","run":"booking-clerk","actor":"clerk","action":"note","target":"${jsonStr(target)}","detail":"${jsonStr(detailParts.join(" "))}"}`;
+    appendFileSync(ledger, `${line}\n`);
+  } catch {
+    console.error(`log-action: cannot append the booking clerk note to ${repo}/.postmaster/runs/ledger.jsonl`);
+    return 1;
+  }
+  return 0;
+}
+
 // --- entry ------------------------------------------------------------------------------
 const argv = argvDecoded();
 if (import.meta.main) {
+  if (argv[0] === "--project") {
+    if (argv.length < 5 || argv[2] !== "clerk" || argv[3] !== "note") {
+      console.error("usage: log-action.sh --project <repo> clerk note <target> [detail...]");
+      process.exit(1);
+    }
+    process.exit(logProjectNote(argv[1] as string, argv[2] as string, argv[4] as string, argv.slice(5) as string[]));
+  }
   if (argv.length < 4 || !argv[0] || !argv[1] || !argv[2] || !argv[3]) {
     console.error("usage: log-action.sh <dispatch-dir> <actor> <action> <target> [detail...]");
     process.exit(1);

@@ -16,7 +16,7 @@ import {
 } from "./ticket-parts.ts";
 
 const SELF = join(import.meta.dir, "ticket-parts.sh");
-const TEMPLATE = join(import.meta.dir, "..", "skills", "postmaster", "ticket-template.md");
+const TEMPLATE = join(import.meta.dir, "..", "skills", "clerk", "ticket-template.md");
 const TICK = "`";
 const FENCE = "```";
 

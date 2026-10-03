@@ -322,7 +322,7 @@ function minuteNow(): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 function main(args: string[]): number {
-  if (args.length < 2) return usage("store|create|edit|read|title|state|comment|list ...");
+  if (args.length < 2) return usage("store|create|edit|read|title|state|label|comment|list ...");
   const info = repoInfo(args[0]);
   const [cmd, ...rest] = args.slice(1);
   const { store, main } = info;
@@ -470,6 +470,26 @@ function main(args: string[]): number {
     console.log(`#${number}: ${state}`);
     return 0;
   }
+  if (cmd === "label") {
+    if (rest.length !== 3 || (rest[1] !== "add" && rest[1] !== "remove"))
+      return usage("label <n> add|remove <label>");
+    const number = numberArg(rest[0]);
+    const label = utf8(rest[2], "label").trim();
+    if (!label || /[\r\n\0]/u.test(label)) die("the label is empty or contains a line break");
+    needStore(store);
+    locked(store, () => {
+      const meta = metaOrDie(store, number);
+      const same = (existing: string) => existing.toLocaleLowerCase() === label.toLocaleLowerCase();
+      if (rest[1] === "add") {
+        if (!meta.labels.some(same)) meta.labels.push(label);
+      } else {
+        meta.labels = meta.labels.filter((existing) => !same(existing));
+      }
+      writeMeta(store, number, meta);
+    });
+    console.log(`#${number}: label ${rest[1] === "add" ? "added" : "removed"} ${label}`);
+    return 0;
+  }
   if (cmd === "comment") {
     if (rest.length < 3) return usage("comment <n> <actor> <text>");
     const number = numberArg(rest[0]);
@@ -506,7 +526,7 @@ function main(args: string[]): number {
     for (const why of unread) console.error(`local: ${why}`);
     return unread.length ? 1 : 0;
   }
-  return usage("store|create|edit|read|title|state|comment|list ...");
+  return usage("store|create|edit|read|title|state|label|comment|list ...");
 }
 
 if (import.meta.main) {

@@ -113,6 +113,7 @@ beforeAll(() => {
 
     const fixture = (name: string, ...keys: string[]): void => {
       let body = `[lanes.one]\nharness = "claude"\nmodel = "lane-model"\n\n[team]\n`;
+      body += `clerk = { harness = "claude", model = "clerk-model" }\n`;
       body += `coachman = { harness = "claude", model = "coach-model" }\n`;
       body += `coachman_fallback = { harness = "claude", model = "fallback-model" }\n\n[team.coachman_legs]\n`;
       for (const k of keys) body += `${k} = { harness = "claude", model = "${k}-model" }\n`;
@@ -2657,6 +2658,17 @@ beforeAll(() => {
       "a claude lane's form shows a resume form too",
       "launch: cd <cwd> && claude -p ",
       "resume: cd <cwd> && claude -p --resume <thread-id> ",
+    );
+    doRun("phase-start", "form", "clerk");
+    printed(
+      "the clerk role resolves from team.clerk",
+      "launch: cd <cwd> && claude -p ",
+      "--model clerk-model",
+    );
+    doRun("phase-start", "form", "clerk", "--interactive", "--name", "#2, Fix the list");
+    printed(
+      "the clerk interactive form is named for its ticket",
+      "claude --model clerk-model --name \\#2\\,\\ Fix\\ the\\ list --dangerously-skip-permissions",
     );
     writeFileSync(join(tmp, "agy.toml"), '[lanes.g]\nharness = "agy"\nmodel = "agy-model"\n');
     writeFileSync(join(tmp, "bin/agy"), "#!/bin/sh\n");

@@ -362,7 +362,7 @@ function flowState(
   return pyLower((status ?? "").replace(NONWORD_RE, "")) === "inprogress" ? "in-progress" : "todo";
 }
 
-function ensureLabel(nwo: string): void {
+function ensureLabel(nwo: string, label: string): void {
   const labels = ghj<Array<{ name: string }>>([
     "label",
     "list",
@@ -374,27 +374,27 @@ function ensureLabel(nwo: string): void {
     "200",
   ]);
   const names = new Set(labels.map((l) => pyLower(l.name)));
-  if (!names.has(BLOCKED)) {
+  if (!names.has(pyLower(label))) {
     gh([
       "label",
       "create",
-      BLOCKED,
+      label,
       "-R",
       nwo,
       "--color",
-      "B60205",
+      label === BLOCKED ? "B60205" : "0E8A16",
       "--description",
-      "Waiting on something outside the run",
+      label === BLOCKED ? "Waiting on something outside the run" : "Ticket signed off and ready to run",
     ]);
   }
 }
 
-function setLabel(nwo: string, number: number, present: boolean): void {
+function setLabel(nwo: string, number: number, label: string, present: boolean): void {
   if (present) {
-    ensureLabel(nwo);
-    gh(["issue", "edit", String(number), "-R", nwo, "--add-label", BLOCKED]);
+    ensureLabel(nwo, label);
+    gh(["issue", "edit", String(number), "-R", nwo, "--add-label", label]);
   } else {
-    gh(["issue", "edit", String(number), "-R", nwo, "--remove-label", BLOCKED]);
+    gh(["issue", "edit", String(number), "-R", nwo, "--remove-label", label]);
   }
 }
 
@@ -521,6 +521,19 @@ function main(): void {
     }
     gh(["issue", "edit", String(n), "-R", NWO, "--body-file", args[2] ?? ""]);
     console.log(`#${n}: edited`);
+  } else if (cmd === "title") {
+    if (args.length !== 3 || !(args[2] ?? "").trim()) dieGh("usage: github.sh <repo> title <n> <title>");
+    const n = numberArg(args[1] ?? "");
+    issueOf(OWNER, NAME, NWO, n);
+    gh(["issue", "edit", String(n), "-R", NWO, "--title", args[2] ?? ""]);
+    console.log(`#${n}: title changed`);
+  } else if (cmd === "label") {
+    if (args.length !== 4 || (args[2] !== "add" && args[2] !== "remove") || !args[3])
+      dieGh("usage: github.sh <repo> label <n> add|remove <label>");
+    const n = numberArg(args[1] ?? "");
+    issueOf(OWNER, NAME, NWO, n);
+    setLabel(NWO, n, args[3], args[2] === "add");
+    console.log(`#${n}: label ${args[2] === "add" ? "added" : "removed"} ${args[3]}`);
   } else if (cmd === "read") {
     const bodyOnly = args.slice(2).length === 1 && args[2] === "--body";
     if (args.length !== 2 && !bodyOnly) dieGh("usage: github.sh <repo> read <n> [--body]");
@@ -567,9 +580,9 @@ function main(): void {
     const closed = iss.state === "CLOSED";
     if (newSt === "blocked") {
       if (closed) gh(["issue", "reopen", String(n), "-R", NWO]);
-      if (!blockedNow) setLabel(NWO, n, true);
+      if (!blockedNow) setLabel(NWO, n, BLOCKED, true);
     } else {
-      if (blockedNow) setLabel(NWO, n, false);
+      if (blockedNow) setLabel(NWO, n, BLOCKED, false);
       if ((newSt === "todo" || newSt === "in-progress") && closed) {
         gh(["issue", "reopen", String(n), "-R", NWO]);
       } else if (newSt === "done" && !closed) {
