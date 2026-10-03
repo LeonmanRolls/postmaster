@@ -1,0 +1,13 @@
+{
+  "_note": "Regen: export with `git show 135:scripts/scrub-check.sh > .postmaster/verify/legacy/scrub-check.sh`, then run `SCRUB_PARITY_ORACLE=.postmaster/verify/legacy/scrub-check.sh SCRUB_PARITY_UPDATE=1 bun test scripts/scrub-parity.test.ts`; the test builds values from fragments and normalizes only commit ids and timestamps.",
+  "spans": "0:1:2:38:token\n0:2:14:44:dotenv\n0:2:14:44:token\n0:3:0:36:token\n0:3:37:64:marker\n0:4:0:45:marker\n1:1:2:38:token\n",
+  "findingsOutput": "{\"commit\": \"<commit>\", \"path\": \"range.txt\", \"line\": 1, \"rule\": \"token\"}\n{\"commit\": \"<commit>\", \"path\": \"range.txt\", \"line\": 2, \"rule\": \"dotenv\"}\n{\"commit\": \"<commit>\", \"path\": \"range.txt\", \"line\": 2, \"rule\": \"token\"}\n{\"commit\": \"<commit>\", \"path\": \"range.txt\", \"line\": 3, \"rule\": \"marker\"}\n{\"commit\": \"<commit>\", \"path\": \"range.txt\", \"line\": 3, \"rule\": \"token\"}\n{\"commit\": \"<commit>\", \"path\": \"range.txt\", \"line\": 4, \"rule\": \"marker\"}\n",
+  "safePath": "private-[redacted]\n",
+  "exits": {
+    "spans": 0,
+    "findings": 1,
+    "safePath": 0,
+    "logDetection": 0
+  },
+  "logDetection": "{\"commit\": \"<commit>\", \"file\": \"cases.txt\", \"line\": 1, \"rule\": \"token\", \"ts\": \"<timestamp>\"}\n{\"commit\": \"<commit>\", \"file\": \"cases.txt\", \"line\": 2, \"rule\": \"dotenv\", \"ts\": \"<timestamp>\"}\n"
+}
