@@ -419,12 +419,15 @@ function exerciseSelfTest(sourceRoot: string): number {
       "utf8",
     ),
   );
-  runCase("adding a harness entry is not a contract change", (repo) =>
-    writeFileSync(
-      join(repo, "skills", "postmaster", "harnesses.md"),
-      "\nNew harness entry.\n",
-      "utf8",
-    ),
+  runCase(
+    "a harness record change is a contract change",
+    (repo) =>
+      writeFileSync(
+        join(repo, "skills", "postmaster", "harnesses.md"),
+        "\nNew harness record.\n",
+        "utf8",
+      ),
+    "skills/postmaster/harnesses.md",
   );
   runCase("ticket prose naming the contract is not a contract change", (repo) =>
     writeFileSync(
@@ -550,7 +553,7 @@ function exerciseSelfTest(sourceRoot: string): number {
         );
         part = "scripts/stage.sh";
       } else {
-        writeFileSync(join(repo, "skills", "postmaster", "harnesses.md"), "new harness\n", "utf8");
+        writeFileSync(join(repo, "README.md"), "main-only note\n", "utf8");
       }
       commitFixture(repo, "change on main");
       g("switch", "-q", "feature");
