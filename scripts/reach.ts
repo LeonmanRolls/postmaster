@@ -12,6 +12,7 @@
 
 import {
   existsSync,
+  lstatSync,
   mkdirSync,
   readdirSync,
   readFileSync,
@@ -1002,8 +1003,9 @@ function addMainChanges(info: RunInfo, point: string, touches: Touch[], initial:
   const result = reachTarget(info.repo, info.defaultBranch);
   if (result.code === 1) throw new Error(result.out.trim());
   for (const path of result.changed) {
-    const absolute = physical(join(info.repo, path));
-    const explained = touches.some((touch) => touch.path === absolute && touch.access === "write");
+    const absolute = resolve(info.repo, path);
+    const target = physical(absolute);
+    const explained = touches.some((touch) => (touch.path === absolute || touch.path === target) && touch.access === "write");
     const severity: Touch["kind"] = initial && !explained ? "finding" : "note";
     touches.push({ lane: "", path: absolute, access: "write", place: "main checkout", kind: severity, source: "checkout", detail: explained ? "changed by a lane record" : "main checkout changed without a lane record" });
   }
@@ -1034,7 +1036,7 @@ function roundChanges(info: RunInfo, round: number, snapshot: Snapshot, reads: L
     const before = snapshot.synthesisStatus[name] ?? "(absent)";
     const after = current[name] ?? "(absent)";
     if (before !== after) {
-      const absolute = physical(join(ticketWorktree, name));
+      const absolute = resolve(ticketWorktree, name);
       const tracked = before !== "(absent)" || after !== "??";
       changes.push({ path: absolute, before, after, tracked });
     }
@@ -1237,7 +1239,7 @@ function checkCard(info: RunInfo): number {
   const touches = aggregateLaneReads(reads);
   const synth = synthesisPath(info);
   for (const [path, status] of Object.entries(statusMap(info.repo, synth))) {
-    const absolute = physical(join(synth, path));
+    const absolute = resolve(synth, path);
     touches.push({
       path: absolute,
       access: "write",
@@ -1263,7 +1265,21 @@ function savePatch(path: string, content: string): void {
 }
 
 function ensureInside(parent: string, path: string): void {
-  if (!inside(physical(path), physical(parent))) throw new Error(`refusing to move a path outside ${parent}`);
+  const absoluteParent = physical(parent);
+  const absolutePath = resolve(path);
+  const realParent = physical(dirname(absolutePath));
+  if (!inside(absolutePath, resolve(parent)) || !inside(realParent, absoluteParent)) {
+    throw new Error(`refusing to move a path outside ${parent}`);
+  }
+}
+
+function pathExists(path: string): boolean {
+  try {
+    lstatSync(path);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function restoreRound(info: RunInfo, round: number): number {
@@ -1324,7 +1340,7 @@ function restoreRound(info: RunInfo, round: number): number {
     const destination = join(saved, path);
     ensureInside(synth, source);
     ensureInside(saved, destination);
-    if (existsSync(destination)) throw new Error(`reach restore copy already exists: ${destination}`);
+    if (pathExists(destination)) throw new Error(`reach restore copy already exists: ${destination}`);
     mkdirSync(dirname(destination), { recursive: true });
     renameSync(source, destination);
   }

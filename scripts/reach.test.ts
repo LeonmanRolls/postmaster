@@ -6,7 +6,9 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readlinkSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -556,10 +558,13 @@ describe("C10-C12: review rounds, verdicts and restore", () => {
     expect(round.code).toBe(2);
     expect(round.out).toContain("r1: finding");
     writeFileSync(join(layout.synth, "u.txt"), "preserve me\n");
+    const symlinkTarget = join(layout.home, "outside-target.txt");
+    symlinkSync(symlinkTarget, join(layout.synth, "outside-link"));
     expect(call(layout, ["restore", layout.dispatch, "r1"]).code).toBe(0);
     expect(git(layout.repo, "rev-parse", "refs/heads/T")).toBe(layout.base);
     expect(git(layout.repo, "-C", layout.synth, "rev-parse", "HEAD")).toBe(layout.base);
     expect(readFileSync(join(layout.dispatch, "reach", "r1", "u.txt"), "utf8")).toBe("preserve me\n");
+    expect(readlinkSync(join(layout.dispatch, "reach", "r1", "outside-link"))).toBe(symlinkTarget);
     expect(existsSync(join(layout.dispatch, "reach", "r1", "branches", "refs_heads_T.patch"))).toBe(true);
     writeFileSync(join(layout.dispatch, "checks.json"), JSON.stringify({ checks: [{ name: "gate", source: "default:gate", command: "true", shows: "gate" }] }));
     const verified = run("bash", [VERIFY, "run", layout.synth, layout.dispatch]);
@@ -610,6 +615,8 @@ describe("C13-C15: card, contract and balanced controls", () => {
     const layout = makeLayout();
     const codexOut = join(layout.repo, "out.txt");
     const homeOut = join(layout.home, "other", "x");
+    const privateTarget = join(layout.home, "private-target.txt");
+    symlinkSync(privateTarget, join(layout.repo, "project-link"));
     mkdirSync(join(layout.home, "other"), { recursive: true });
     writeWorkhorse(layout, "codex", [codexFile(codexOut), codexFile(homeOut)]);
     expect(check(layout, "workhorses").code).toBe(2);
@@ -631,6 +638,8 @@ describe("C13-C15: card, contract and balanced controls", () => {
     expect(card.out).toContain("out.txt");
     expect(card.out).toContain("outside the project");
     expect(card.out).toContain("synthesis worktree");
+    expect(card.out).toContain("project-link");
+    expect(card.out).not.toContain("private-target.txt");
     expect(card.out).toContain("voided verdict: bug reviewer mimo");
     expect(card.out).not.toContain(layout.home);
     expect(card.out).not.toContain(layout.repo);
