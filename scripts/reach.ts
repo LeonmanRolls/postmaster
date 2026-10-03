@@ -108,13 +108,28 @@ const TOOL = toolRoot(import.meta);
 const LOG_ACTION = join(TOOL, "scripts", "log-action.ts");
 const RUN_LOG = join(TOOL, "scripts", "run-log.ts");
 const READ_GIT = new Set([
-  "status", "diff", "log", "show", "rev-parse", "rev-list", "merge-base", "ls-files",
-  "ls-tree", "cat-file", "show-ref", "for-each-ref", "describe", "blame", "grep",
+  "status",
+  "diff",
+  "log",
+  "show",
+  "rev-parse",
+  "rev-list",
+  "merge-base",
+  "ls-files",
+  "ls-tree",
+  "cat-file",
+  "show-ref",
+  "for-each-ref",
+  "describe",
+  "blame",
+  "grep",
 ]);
 const READ_GIT_EXTRA = new Set(["worktree list", "stash list"]);
-const REFUSAL = /permission denied|operation not permitted|read-only file system|access denied|approval required|blocked by (?:the )?(?:sandbox|policy)|not allowed/iu;
-const MISSING = /no such file or directory|cannot find (?:the )?(?:file|path)|does not exist|enoent/iu;
-const DATA_RE = /^\s*\{[\s\S]*\}\s*$/u;
+const REFUSAL =
+  /permission denied|operation not permitted|read-only file system|access denied|approval required|blocked by (?:the )?(?:sandbox|policy)|not allowed/iu;
+const MISSING =
+  /no such file or directory|cannot find (?:the )?(?:file|path)|does not exist|enoent/iu;
+const DATA_RE = /^[ \t\r\n]*\{[^]*\}[ \t\r\n]*$/u;
 
 function rec(value: unknown): RecordOf {
   return value !== null && typeof value === "object" && !Array.isArray(value)
@@ -165,9 +180,15 @@ function inside(path: string, dir: string): boolean {
   return rel === "" || (rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
 }
 
-function pathFromBrief(dispatch: string, repo: string, run: RecordOf): { repo: string; branch: string } {
+function pathFromBrief(
+  dispatch: string,
+  repo: string,
+  run: RecordOf,
+): { repo: string; branch: string } {
   const brief = readFileSync(join(dispatch, "brief.md"), "utf8");
-  const profile = /^repo:[ \t]*(\S+)(?:[ \t]+default branch:[ \t]*([^ \t\n]+))?/mu.exec(brief);
+  const profile = /^repo:[ \t]*([^ \t\r\n]+)(?:[ \t]+default branch:[ \t]*([^ \t\r\n]+))?/mu.exec(
+    brief,
+  );
   const namedRepo = profile?.[1] ? physical(profile[1]) : repo;
   const target = rec(run.target);
   let defaultBranch = profile?.[2] ?? text(target.branch);
@@ -199,7 +220,9 @@ function loadRun(dispatchArg: string): RunInfo {
   const postmaster = rec(runData.postmaster);
   let tool = text(postmaster.checkout);
   if (!tool) {
-    const found = /^tool:[ \t]*(\S+)/mu.exec(readFileSync(join(dispatch, "brief.md"), "utf8"));
+    const found = /^tool:[ \t]*([^ \t\r\n]+)/mu.exec(
+      readFileSync(join(dispatch, "brief.md"), "utf8"),
+    );
     tool = found?.[1] ?? TOOL;
   }
   return {
@@ -220,10 +243,19 @@ function withinAny(path: string, roots: string[]): boolean {
   return roots.some((root) => root !== "" && inside(path, root));
 }
 
-function laneDataHome(info: RunInfo, lane: string, harness: Harness, ownFolder: string, lens?: string): string {
+function laneDataHome(
+  info: RunInfo,
+  lane: string,
+  harness: Harness,
+  ownFolder: string,
+  lens?: string,
+): string {
   if (harness !== "muse" && harness !== "mimo") return "";
   const configured = text(rec(info.config).harness_data);
-  const root = configured || process.env.POSTMASTER_HARNESS_DATA || join(info.home, ".postmaster", "harness-data");
+  const root =
+    configured ||
+    process.env.POSTMASTER_HARNESS_DATA ||
+    join(info.home, ".postmaster", "harness-data");
   const leg = lens ? "review" : "synthesis";
   const key = `${info.dispatch}|${physical(ownFolder)}|${lane}|${leg}`;
   const sum = run("cksum", [], { input: key });
@@ -238,13 +270,15 @@ function normalPath(info: RunInfo, path: string, access: Access, ownDataHome: st
   // project, its worktrees and main checkout take precedence over temp-folder rules.
   if (inside(p, info.repo)) return false;
   const homeReadRoots = [
-    join(info.home, ".codex"), join(info.home, ".claude"), join(info.home, ".claude.json"),
-    join(info.home, ".config", "muse"), join(info.home, ".config", "mimocode"),
-    join(info.home, ".mimocode"), join(info.home, ".pi", "agent"),
+    join(info.home, ".codex"),
+    join(info.home, ".claude"),
+    join(info.home, ".claude.json"),
+    join(info.home, ".config", "muse"),
+    join(info.home, ".config", "mimocode"),
+    join(info.home, ".mimocode"),
+    join(info.home, ".pi", "agent"),
   ];
-  const rwRoots = [
-    join(info.home, ".npm"), join(info.home, ".cache"), join(info.home, ".bun"),
-  ];
+  const rwRoots = [join(info.home, ".npm"), join(info.home, ".cache"), join(info.home, ".bun")];
   const xdg = text(rec(info.run.config).xdg_data_home);
   if (xdg) rwRoots.push(physical(xdg));
   const envXdg = process.env.XDG_DATA_HOME;
@@ -265,7 +299,18 @@ function normalPath(info: RunInfo, path: string, access: Access, ownDataHome: st
   if (temp && (p === temp || inside(p, temp))) return true;
 
   // System files and executables are routine reads. A write remains a reach.
-  const systemRoots = ["/etc", "/usr", "/bin", "/sbin", "/lib", "/lib64", "/System", "/Library", "/proc", "/sys"];
+  const systemRoots = [
+    "/etc",
+    "/usr",
+    "/bin",
+    "/sbin",
+    "/lib",
+    "/lib64",
+    "/System",
+    "/Library",
+    "/proc",
+    "/sys",
+  ];
   if (access === "read" && withinAny(p, systemRoots)) return true;
 
   if (withinAny(p, rwRoots)) return true;
@@ -274,9 +319,12 @@ function normalPath(info: RunInfo, path: string, access: Access, ownDataHome: st
   if (access === "read" && inside(p, info.tool)) return true;
   if (
     access === "read" &&
-    (inside(p, info.dispatch) &&
-      (basename(p) === "brief.md" || basename(p).endsWith("-prompt.txt") || basename(p).endsWith("-brief.md")))
-  ) return true;
+    inside(p, info.dispatch) &&
+    (basename(p) === "brief.md" ||
+      basename(p).endsWith("-prompt.txt") ||
+      basename(p).endsWith("-brief.md"))
+  )
+    return true;
 
   return false;
 }
@@ -310,9 +358,16 @@ function expandPath(token: string, cwd: string): string | null {
 }
 
 function isPathToken(token: string, cwd: string): boolean {
-  if (!token || token.startsWith("-") || token.includes("=") || /^\d+>&?\d*$/u.test(token)) return false;
+  if (!token || token.startsWith("-") || token.includes("=") || /^[0-9]+>&?[0-9]*$/u.test(token))
+    return false;
   if (/^(?:https?|mailto|data):/iu.test(token)) return false;
-  if (token.startsWith("/") || token.startsWith("~/") || token.startsWith("./") || token.startsWith("../")) return true;
+  if (
+    token.startsWith("/") ||
+    token.startsWith("~/") ||
+    token.startsWith("./") ||
+    token.startsWith("../")
+  )
+    return true;
   if (token.includes("/") || /\.[A-Za-z0-9_-]{1,12}(?:[:#][0-9]+)?$/u.test(token)) return true;
   try {
     return existsSync(resolve(cwd, token));
@@ -338,7 +393,8 @@ function splitShell(source: string): string[] {
       continue;
     }
     if (quote === '"' && ch !== '"') {
-      if (ch === "\\" && i + 1 < source.length && "\\\"$`".includes(source[i + 1] ?? "")) escaped = true;
+      if (ch === "\\" && i + 1 < source.length && '\\"$`'.includes(source[i + 1] ?? ""))
+        escaped = true;
       else part += ch;
       continue;
     }
@@ -403,7 +459,8 @@ function shellWords(segment: string): string[] {
       continue;
     }
     if (quote === '"' && ch !== '"') {
-      if (ch === "\\" && i + 1 < segment.length && "\\\"$`".includes(segment[i + 1] ?? "")) escaped = true;
+      if (ch === "\\" && i + 1 < segment.length && '\\"$`'.includes(segment[i + 1] ?? ""))
+        escaped = true;
       else word += ch;
       continue;
     }
@@ -415,13 +472,14 @@ function shellWords(segment: string): string[] {
       quote = quote === "" ? ch : "";
       continue;
     }
-    if (quote === "" && /\s/u.test(ch)) {
+    if (quote === "" && (ch === " " || ch === "\t" || ch === "\n")) {
       push();
       continue;
     }
     if (quote === "" && [">>", "2>", "<", ">", "&>"].some((op) => segment.startsWith(op, i))) {
       push();
-      const op = [">>", "2>", "&>", "<", ">"].find((candidate) => segment.startsWith(candidate, i)) ?? ch;
+      const op =
+        [">>", "2>", "&>", "<", ">"].find((candidate) => segment.startsWith(candidate, i)) ?? ch;
       words.push(op);
       i += op.length - 1;
       continue;
@@ -465,7 +523,13 @@ function workTreeForGitDir(gitDir: string): string {
 
 function toolCallsFromEvents(harness: Harness, events: unknown[]): ToolCall[] {
   const calls: ToolCall[] = [];
-  const add = (name: unknown, input: unknown, output = "", exitCode: unknown = undefined, direct: ToolCall["direct"] = []): number => {
+  const add = (
+    name: unknown,
+    input: unknown,
+    output = "",
+    exitCode: unknown = undefined,
+    direct: ToolCall["direct"] = [],
+  ): number => {
     calls.push({ name: text(name) || "tool", input: rec(input), output, exitCode, direct });
     return calls.length - 1;
   };
@@ -477,7 +541,12 @@ function toolCallsFromEvents(harness: Harness, events: unknown[]): ToolCall[] {
       if (event.type !== "item.completed") continue;
       const item = rec(event.item);
       if (item.type === "command_execution") {
-        add("shell", { command: text(item.command) }, `${text(item.aggregated_output)}\n${text(item.output)}`, item.exit_code);
+        add(
+          "shell",
+          { command: text(item.command) },
+          `${text(item.aggregated_output)}\n${text(item.output)}`,
+          item.exit_code,
+        );
       } else if (item.type === "file_change") {
         const direct = array(item.changes).flatMap((entry) => {
           const path = text(rec(entry).path);
@@ -494,13 +563,16 @@ function toolCallsFromEvents(harness: Harness, events: unknown[]): ToolCall[] {
         if (event.type === "assistant" && block.type === "tool_use") {
           const index = add(block.name, block.input);
           if (typeof block.id === "string") linked.set(block.id, index);
-      } else if (event.type === "user" && block.type === "tool_result") {
-        const id = text(block.tool_use_id);
-        const index = linked.get(id);
-        if (index !== undefined) {
-          const body = typeof block.content === "string" ? block.content : JSON.stringify(block.content ?? "");
-          calls[index]!.output += `\n${body}`;
-        }
+        } else if (event.type === "user" && block.type === "tool_result") {
+          const id = text(block.tool_use_id);
+          const index = linked.get(id);
+          if (index !== undefined) {
+            const body =
+              typeof block.content === "string"
+                ? block.content
+                : JSON.stringify(block.content ?? "");
+            calls[index]!.output += `\n${body}`;
+          }
         }
       }
     } else if (harness === "mimo") {
@@ -530,7 +602,7 @@ function toolCallsFromEvents(harness: Harness, events: unknown[]): ToolCall[] {
         const first = resultText.trimStart().split("\n", 1)[0] ?? "";
         if (DATA_RE.test(first)) {
           try {
-            input = { ...JSON.parse(first) as RecordOf, ...input };
+            input = { ...(JSON.parse(first) as RecordOf), ...input };
           } catch {
             // Non-JSON result text can still carry the edit_facts record.
           }
@@ -541,9 +613,10 @@ function toolCallsFromEvents(harness: Harness, events: unknown[]): ToolCall[] {
       }
       const direct: ToolCall["direct"] = [];
       const toolName = text(facts.tool_name);
-      const access: Access = /write|edit|create|patch|apply|delete|remove|move|copy|install|save/iu.test(toolName)
-        ? "write"
-        : "read";
+      const access: Access =
+        /write|edit|create|patch|apply|delete|remove|move|copy|install|save/iu.test(toolName)
+          ? "write"
+          : "read";
       for (const field of ["path", "file_path"]) {
         const p = text(input[field]);
         if (p) direct.push({ path: p, access });
@@ -600,20 +673,48 @@ function commandTouches(
   const touches: Touch[] = [];
   let cwd = ownFolder;
   const shellGroups = unwrapShell(command);
-  const add = (rawPath: string, access: Access, source: "stream" = "stream", detail?: string): void => {
+  const add = (
+    rawPath: string,
+    access: Access,
+    source: "stream" = "stream",
+    detail?: string,
+  ): void => {
     const path = expandPath(rawPath, cwd);
     if (!path) return;
     const place = placeOf(info, path, ownFolder);
     if (place === "inside") {
-      touches.push({ path, access, place, kind: "expected", lane, ...(lens ? { lens } : {}), source, ...(detail ? { detail } : {}) });
+      touches.push({
+        path,
+        access,
+        place,
+        kind: "expected",
+        lane,
+        ...(lens ? { lens } : {}),
+        source,
+        ...(detail ? { detail } : {}),
+      });
       return;
     }
     const denied = REFUSAL.test(result);
     if (!denied && normalPath(info, path, access, ownDataHome)) return;
     const missing = access === "read" && MISSING.test(result);
-    const finalAccess: Access = (access === "write" || access === "read") && denied ? "refused" : missing ? "refused" : access;
+    const finalAccess: Access =
+      (access === "write" || access === "read") && denied
+        ? "refused"
+        : missing
+          ? "refused"
+          : access;
     const kind = finalAccess === "write" ? "finding" : "note";
-    touches.push({ path, access: finalAccess, place, kind, lane, ...(lens ? { lens } : {}), source, ...(detail ? { detail } : {}) });
+    touches.push({
+      path,
+      access: finalAccess,
+      place,
+      kind,
+      lane,
+      ...(lens ? { lens } : {}),
+      source,
+      ...(detail ? { detail } : {}),
+    });
   };
 
   for (const group of shellGroups) {
@@ -638,7 +739,9 @@ function commandTouches(
       let gitDir = cwd;
       let targetWorktree = cwd;
       let worktreeExplicit = false;
-      const assignedWorkTree = assignments.GIT_WORK_TREE ? expandPath(assignments.GIT_WORK_TREE, cwd) : null;
+      const assignedWorkTree = assignments.GIT_WORK_TREE
+        ? expandPath(assignments.GIT_WORK_TREE, cwd)
+        : null;
       const assignedGitDir = assignments.GIT_DIR ? expandPath(assignments.GIT_DIR, cwd) : null;
       if (assignedWorkTree) {
         targetWorktree = assignedWorkTree;
@@ -694,9 +797,12 @@ function commandTouches(
         subIndex++;
         break;
       }
-      const gitRead = READ_GIT.has(cmd) || READ_GIT_EXTRA.has(`${cmd} ${words[subIndex] ?? ""}`) ||
+      const gitRead =
+        READ_GIT.has(cmd) ||
+        READ_GIT_EXTRA.has(`${cmd} ${words[subIndex] ?? ""}`) ||
         (cmd === "config" && words[subIndex] === "--get") ||
-        (cmd === "branch" && words.length <= subIndex + 1) || (cmd === "tag" && words.length <= subIndex + 1);
+        (cmd === "branch" && words.length <= subIndex + 1) ||
+        (cmd === "tag" && words.length <= subIndex + 1);
       const access: Access = gitRead ? "read" : "write";
       add(targetWorktree, access, "stream", `git ${cmd}`);
       for (const word of words.slice(subIndex)) {
@@ -711,12 +817,25 @@ function commandTouches(
         if (flag >= 0 && args[flag + 1]) refs.push(`refs/heads/${args[flag + 1]}`);
         if (cmd === "branch") {
           const branch = args.find((word) => !word.startsWith("-"));
-          if (branch && (args.some((word) => ["-d", "-D", "-m", "-M", "--set-upstream-to"].includes(word)))) refs.push(`refs/heads/${branch}`);
+          if (
+            branch &&
+            args.some((word) => ["-d", "-D", "-m", "-M", "--set-upstream-to"].includes(word))
+          )
+            refs.push(`refs/heads/${branch}`);
         }
       }
       for (const ref of new Set(refs)) {
         if (!normalPath(info, join(info.repo, ".git", ref), "write", ownDataHome)) {
-          touches.push({ path: ref, access: "write", place: "elsewhere", kind: "finding", lane, ...(lens ? { lens } : {}), source: "stream", detail: `git ${cmd}` });
+          touches.push({
+            path: ref,
+            access: "write",
+            place: "elsewhere",
+            kind: "finding",
+            lane,
+            ...(lens ? { lens } : {}),
+            source: "stream",
+            detail: `git ${cmd}`,
+          });
         }
       }
       continue;
@@ -724,8 +843,21 @@ function commandTouches(
 
     const outTokens = new Set<string>();
     const inTokens = new Set<string>();
-    const writeCommands = new Set(["cp", "mv", "rm", "mkdir", "touch", "tee", "install", "ln", "truncate", "chmod", "chown"]);
-    const inPlace = baseCommand === "sed" && words.some((word) => word === "-i" || word.startsWith("-i"));
+    const writeCommands = new Set([
+      "cp",
+      "mv",
+      "rm",
+      "mkdir",
+      "touch",
+      "tee",
+      "install",
+      "ln",
+      "truncate",
+      "chmod",
+      "chown",
+    ]);
+    const inPlace =
+      baseCommand === "sed" && words.some((word) => word === "-i" || word.startsWith("-i"));
     for (let i = 0; i < words.length; i++) {
       const word = words[i] ?? "";
       if ([">", ">>", "2>", "&>"].includes(word)) {
@@ -736,7 +868,9 @@ function commandTouches(
         i++;
       }
     }
-    const args = words.slice(first + 1).filter((word) => ![">", ">>", "2>", "&>", "<"].includes(word));
+    const args = words
+      .slice(first + 1)
+      .filter((word) => ![">", ">>", "2>", "&>", "<"].includes(word));
     if (writeCommands.has(baseCommand)) {
       if (baseCommand === "cp" || baseCommand === "mv") {
         const paths = args.filter((arg) => isPathToken(arg, cwd));
@@ -776,32 +910,62 @@ function directCallTouches(
 ): Touch[] {
   const touches: Touch[] = [];
   for (const call of calls) {
-    const name = call.name.toLowerCase();
+    const name = call.name.toLowerCase(); // LOWER: harness tool names are ASCII identifiers
     const command = text(call.input.command ?? call.input.cmd);
     if (command) {
-      touches.push(...commandTouches(command, call.output, call.exitCode, info, lane, ownFolder, ownDataHome, lens));
+      touches.push(
+        ...commandTouches(
+          command,
+          call.output,
+          call.exitCode,
+          info,
+          lane,
+          ownFolder,
+          ownDataHome,
+          lens,
+        ),
+      );
       continue;
     }
     const direct = [...call.direct];
     const path = inputPath(call.input);
     if (path) {
       let access: Access = "read";
-      if (/write|edit|create|patch|apply|delete|remove|move|copy|install|save/iu.test(name)) access = "write";
+      if (/write|edit|create|patch|apply|delete|remove|move|copy|install|save/iu.test(name))
+        access = "write";
       direct.push({ path, access });
     }
     if (direct.length === 0) continue;
-    const refused = REFUSAL.test(call.output) || (direct.some((item) => item.access === "read") && MISSING.test(call.output));
+    const refused =
+      REFUSAL.test(call.output) ||
+      (direct.some((item) => item.access === "read") && MISSING.test(call.output));
     for (const item of direct) {
       const absolute = expandPath(item.path, ownFolder);
       if (!absolute) continue;
       const place = placeOf(info, absolute, ownFolder);
       if (place === "inside") {
-        touches.push({ path: absolute, access: item.access, place, kind: "expected", lane, ...(lens ? { lens } : {}), source: "stream" });
+        touches.push({
+          path: absolute,
+          access: item.access,
+          place,
+          kind: "expected",
+          lane,
+          ...(lens ? { lens } : {}),
+          source: "stream",
+        });
         continue;
       }
       if (!refused && normalPath(info, absolute, item.access, ownDataHome)) continue;
       const access: Access = refused ? "refused" : item.access;
-      touches.push({ path: absolute, access, place, kind: access === "write" ? "finding" : "note", lane, ...(lens ? { lens } : {}), source: "stream" });
+      touches.push({
+        path: absolute,
+        access,
+        place,
+        kind: access === "write" ? "finding" : "note",
+        lane,
+        ...(lens ? { lens } : {}),
+        source: "stream",
+      });
     }
   }
   return touches;
@@ -815,7 +979,9 @@ function mergeTouches(touches: Touch[]): Touch[] {
     const old = byPath.get(key);
     if (!old || rank[touch.access] > rank[old.access]) byPath.set(key, touch);
   }
-  return [...byPath.values()].sort((a, b) => `${a.lane}\0${a.lens ?? ""}\0${a.path}`.localeCompare(`${b.lane}\0${b.lens ?? ""}\0${b.path}`));
+  return [...byPath.values()].sort((a, b) =>
+    `${a.lane}\0${a.lens ?? ""}\0${a.path}`.localeCompare(`${b.lane}\0${b.lens ?? ""}\0${b.path}`),
+  );
 }
 
 function readLane(
@@ -826,7 +992,16 @@ function readLane(
   lens?: string,
 ): LaneRead {
   const harness = text(rec(info.lanes[lane]).harness);
-  const laneRecord: LaneRead = { lane, harness, ownFolder: physical(ownFolder), ...(lens ? { lens } : {}), events, calls: [], touches: [], status: "not checked" };
+  const laneRecord: LaneRead = {
+    lane,
+    harness,
+    ownFolder: physical(ownFolder),
+    ...(lens ? { lens } : {}),
+    events,
+    calls: [],
+    touches: [],
+    status: "not checked",
+  };
   if (!["codex", "claude", "muse", "mimo", "pi"].includes(harness)) {
     laneRecord.reason = `${harness || "unknown harness"} has no reach reader`;
     return laneRecord;
@@ -861,7 +1036,9 @@ function readLane(
   }
   laneRecord.status = "checked";
   const dataHome = laneDataHome(info, lane, harness, laneRecord.ownFolder, lens);
-  laneRecord.touches = mergeTouches(directCallTouches(laneRecord.calls, info, lane, laneRecord.ownFolder, dataHome, lens));
+  laneRecord.touches = mergeTouches(
+    directCallTouches(laneRecord.calls, info, lane, laneRecord.ownFolder, dataHome, lens),
+  );
   return laneRecord;
 }
 
@@ -885,7 +1062,8 @@ function readStreamMode(info: RunInfo, lane: string, stream: string, ownFolder: 
 
 function gitOutput(repo: string, args: string[]): string {
   const result = runGit(repo, args);
-  if (result.code !== 0) throw new Error(`git ${args.join(" ")} failed in ${repo}: ${result.err.trim()}`);
+  if (result.code !== 0)
+    throw new Error(`git ${args.join(" ")} failed in ${repo}: ${result.err.trim()}`);
   return result.out;
 }
 
@@ -899,7 +1077,14 @@ function branchName(repo: string, where = repo): string {
 }
 
 function statusMap(repo: string, where: string): Record<string, string> {
-  const result = run("git", ["-C", where, "status", "--porcelain=v1", "-z", "--untracked-files=all"]);
+  const result = run("git", [
+    "-C",
+    where,
+    "status",
+    "--porcelain=v1",
+    "-z",
+    "--untracked-files=all",
+  ]);
   if (result.code !== 0) throw new Error(`cannot read status in ${where}: ${result.err.trim()}`);
   const fields = result.out.split("\0").filter(Boolean);
   const status: Record<string, string> = {};
@@ -913,12 +1098,24 @@ function statusMap(repo: string, where: string): Record<string, string> {
 }
 
 function runRefs(repo: string, ticket: string): Record<string, string> {
-  const result = run("git", ["-C", repo, "for-each-ref", "--format=%(refname) %(objectname)", "refs/heads"]);
-  if (result.code !== 0) throw new Error(`cannot read run branches in ${repo}: ${result.err.trim()}`);
+  const result = run("git", [
+    "-C",
+    repo,
+    "for-each-ref",
+    "--format=%(refname) %(objectname)",
+    "refs/heads",
+  ]);
+  if (result.code !== 0)
+    throw new Error(`cannot read run branches in ${repo}: ${result.err.trim()}`);
   const refs: Record<string, string> = {};
   for (const line of result.out.split("\n")) {
-    const [ref, hash] = line.trim().split(/\s+/u);
-    if (ref && hash && (ref === `refs/heads/${ticket}` || ref.startsWith(`refs/heads/wb/${ticket}-`))) refs[ref] = hash;
+    const [ref, hash] = line.trim().split(" ");
+    if (
+      ref &&
+      hash &&
+      (ref === `refs/heads/${ticket}` || ref.startsWith(`refs/heads/wb/${ticket}-`))
+    )
+      refs[ref] = hash;
   }
   return refs;
 }
@@ -953,7 +1150,11 @@ function saveSnapshot(info: RunInfo, round: number): number {
 
 function loadSnapshot(info: RunInfo, round: number): Snapshot {
   const parsed = readJson(snapshotPath(info, round), `before r${round}`);
-  if (parsed.round !== round || typeof parsed.synthesisHead !== "string" || typeof parsed.refs !== "object") {
+  if (
+    parsed.round !== round ||
+    typeof parsed.synthesisHead !== "string" ||
+    typeof parsed.refs !== "object"
+  ) {
     throw new Error(`before r${round} is malformed`);
   }
   return parsed as unknown as Snapshot;
@@ -961,15 +1162,25 @@ function loadSnapshot(info: RunInfo, round: number): Snapshot {
 
 function expectedWorkhorseNames(info: RunInfo): string[] {
   const lanes = rec(info.manifest.lanes);
-  return Object.keys(lanes).filter((lane) => Object.hasOwn(info.lanes, lane)).sort();
+  return Object.keys(lanes)
+    .filter((lane) => Object.hasOwn(info.lanes, lane))
+    .sort();
 }
 
 function reviewersFor(info: RunInfo, round: number): Array<[string, string]> {
-  const state = readJson(join(info.dispatch, "logs", `review-r${round}.json`), `round ${round} reviewer record`);
+  const state = readJson(
+    join(info.dispatch, "logs", `review-r${round}.json`),
+    `round ${round} reviewer record`,
+  );
   const pairs = array(state.reviewers);
   const reviewers: Array<[string, string]> = [];
   for (const pair of pairs) {
-    if (!Array.isArray(pair) || pair.length < 2 || typeof pair[0] !== "string" || typeof pair[1] !== "string") {
+    if (
+      !Array.isArray(pair) ||
+      pair.length < 2 ||
+      typeof pair[0] !== "string" ||
+      typeof pair[1] !== "string"
+    ) {
       throw new Error(`round ${round} has a malformed reviewer record`);
     }
     reviewers.push([pair[0], pair[1]]);
@@ -993,29 +1204,74 @@ function aggregateLaneReads(reads: LaneRead[]): Touch[] {
   return reads.flatMap((read) => read.touches);
 }
 
-function pathChangeTouch(info: RunInfo, path: string, access: Access, lane: string, detail: string): Touch {
-  const absolute = path.startsWith("refs/") || isAbsolute(path) ? path : physical(join(info.repo, path));
+function pathChangeTouch(
+  info: RunInfo,
+  path: string,
+  access: Access,
+  lane: string,
+  detail: string,
+): Touch {
+  const absolute =
+    path.startsWith("refs/") || isAbsolute(path) ? path : physical(join(info.repo, path));
   const place = path.startsWith("refs/") ? "elsewhere" : placeOf(info, absolute, "");
-  return { lane, path: absolute, access, place, kind: access === "write" ? "finding" : "note", source: "round", detail };
+  return {
+    lane,
+    path: absolute,
+    access,
+    place,
+    kind: access === "write" ? "finding" : "note",
+    source: "round",
+    detail,
+  };
 }
 
-function addMainChanges(info: RunInfo, point: string, touches: Touch[], initial: boolean): { result: ReturnType<typeof reachTarget>; mainDirty: boolean } {
+function addMainChanges(
+  info: RunInfo,
+  point: string,
+  touches: Touch[],
+  initial: boolean,
+): { result: ReturnType<typeof reachTarget>; mainDirty: boolean } {
   const result = reachTarget(info.repo, info.defaultBranch);
   if (result.code === 1) throw new Error(result.out.trim());
   for (const path of result.changed) {
     const absolute = resolve(info.repo, path);
     const target = physical(absolute);
-    const explained = touches.some((touch) => (touch.path === absolute || touch.path === target) && touch.access === "write");
+    const explained = touches.some(
+      (touch) => (touch.path === absolute || touch.path === target) && touch.access === "write",
+    );
     const severity: Touch["kind"] = initial && !explained ? "finding" : "note";
-    touches.push({ lane: "", path: absolute, access: "write", place: "main checkout", kind: severity, source: "checkout", detail: explained ? "changed by a lane record" : "main checkout changed without a lane record" });
+    touches.push({
+      lane: "",
+      path: absolute,
+      access: "write",
+      place: "main checkout",
+      kind: severity,
+      source: "checkout",
+      detail: explained
+        ? "changed by a lane record"
+        : "main checkout changed without a lane record",
+    });
   }
   if (result.offDefault) {
-    touches.push({ lane: "", path: info.repo, access: "write", place: "main checkout", kind: initial ? "finding" : "note", source: "checkout", detail: `branch ${result.branch} is not the default branch ${info.defaultBranch}` });
+    touches.push({
+      lane: "",
+      path: info.repo,
+      access: "write",
+      place: "main checkout",
+      kind: initial ? "finding" : "note",
+      source: "checkout",
+      detail: `branch ${result.branch} is not the default branch ${info.defaultBranch}`,
+    });
   }
   return { result, mainDirty: result.code === 2 };
 }
 
-function roundChanges(info: RunInfo, round: number, snapshot: Snapshot, reads: LaneRead[]): { touches: Touch[]; unassignedTracked: boolean } {
+function roundChanges(
+  info: RunInfo,
+  round: number,
+  snapshot: Snapshot,
+  reads: LaneRead[],
+): { touches: Touch[]; unassignedTracked: boolean } {
   const touches: Touch[] = [];
   const refsNow = runRefs(info.repo, info.ticket);
   const refs = new Set([...Object.keys(snapshot.refs), ...Object.keys(refsNow)]);
@@ -1028,7 +1284,12 @@ function roundChanges(info: RunInfo, round: number, snapshot: Snapshot, reads: L
   }
   const head = currentHead(info.repo, ticketWorktree);
   if (head !== snapshot.synthesisHead) {
-    changes.push({ path: ticketWorktree, before: snapshot.synthesisHead, after: head, tracked: true });
+    changes.push({
+      path: ticketWorktree,
+      before: snapshot.synthesisHead,
+      after: head,
+      tracked: true,
+    });
   }
   const current = statusMap(info.repo, ticketWorktree);
   const fileNames = new Set([...Object.keys(snapshot.synthesisStatus), ...Object.keys(current)]);
@@ -1043,12 +1304,12 @@ function roundChanges(info: RunInfo, round: number, snapshot: Snapshot, reads: L
   }
   let unassignedTracked = false;
   const ticketRef = `refs/heads/${info.ticket}`;
-  const ticketWorktreeOwner = reads.find((read) => read.touches.some((touch) =>
-    touch.access === "write" && touch.path === ticketWorktree,
-  ));
-  const ticketRefOwner = reads.find((read) => read.touches.some((touch) =>
-    touch.access === "write" && touch.path === ticketRef,
-  ));
+  const ticketWorktreeOwner = reads.find((read) =>
+    read.touches.some((touch) => touch.access === "write" && touch.path === ticketWorktree),
+  );
+  const ticketRefOwner = reads.find((read) =>
+    read.touches.some((touch) => touch.access === "write" && touch.path === ticketRef),
+  );
   for (const change of changes) {
     const matching = reads.filter((read) => read.status === "checked");
     const refName = change.path.startsWith("refs/heads/") ? change.path : "";
@@ -1059,21 +1320,35 @@ function roundChanges(info: RunInfo, round: number, snapshot: Snapshot, reads: L
       const lane = refName.slice(`refs/heads/wb/${info.ticket}-`.length);
       checkedOutWorktree = join(info.repo, ".worktrees", `${info.ticket}-${lane}`);
     }
-    const owners = matching.filter((read) => read.touches.some((touch) => {
-      if (touch.access !== "write") return false;
-      if (touch.path === exactPath) return true;
-      if (refName && checkedOutWorktree && touch.path === checkedOutWorktree) return true;
-      if (!refName && inside(exactPath, ticketWorktree) && touch.path === ticketWorktree) return true;
-      return false;
-    }));
-    const owner = owners[0]
-      ?? (!refName && inside(exactPath, ticketWorktree) ? ticketRefOwner ?? ticketWorktreeOwner : undefined);
+    const owners = matching.filter((read) =>
+      read.touches.some((touch) => {
+        if (touch.access !== "write") return false;
+        if (touch.path === exactPath) return true;
+        if (refName && checkedOutWorktree && touch.path === checkedOutWorktree) return true;
+        if (!refName && inside(exactPath, ticketWorktree) && touch.path === ticketWorktree)
+          return true;
+        return false;
+      }),
+    );
+    const owner =
+      owners[0] ??
+      (!refName && inside(exactPath, ticketWorktree)
+        ? (ticketRefOwner ?? ticketWorktreeOwner)
+        : undefined);
     if (owner) {
-      const touch = pathChangeTouch(info, change.path, "write", owner.lane, `${change.before} -> ${change.after}`);
+      const touch = pathChangeTouch(
+        info,
+        change.path,
+        "write",
+        owner.lane,
+        `${change.before} -> ${change.after}`,
+      );
       touch.lens = owner.lens;
       touches.push(touch);
     } else {
-      const humanPath = change.path.startsWith("refs/") ? change.path : relative(info.repo, change.path) || change.path;
+      const humanPath = change.path.startsWith("refs/")
+        ? change.path
+        : relative(info.repo, change.path) || change.path;
       const detail = `${change.before} -> ${change.after}`;
       const touch = pathChangeTouch(info, change.path, "read", "", `unexplained change ${detail}`);
       touch.kind = "note";
@@ -1100,21 +1375,51 @@ function eventOf(touch: Touch, point: string): ReachEvent {
   };
 }
 
-function writeAction(info: RunInfo, actor: string, action: string, target: string, detail: string): void {
-  const result = run(Bun.which("bun") ?? "bun", ["--no-env-file", "--config=/dev/null", LOG_ACTION, info.dispatch, actor, action, target, detail]);
-  if (result.code !== 0) throw new Error(`log-action failed: ${result.err.trim() || result.out.trim()}`);
+function writeAction(
+  info: RunInfo,
+  actor: string,
+  action: string,
+  target: string,
+  detail: string,
+): void {
+  const result = run(Bun.which("bun") ?? "bun", [
+    "--no-env-file",
+    "--config=/dev/null",
+    LOG_ACTION,
+    info.dispatch,
+    actor,
+    action,
+    target,
+    detail,
+  ]);
+  if (result.code !== 0)
+    throw new Error(`log-action failed: ${result.err.trim() || result.out.trim()}`);
 }
 
 function writeRunLog(info: RunInfo, value: string): void {
-  const result = run(Bun.which("bun") ?? "bun", ["--no-env-file", "--config=/dev/null", RUN_LOG, info.dispatch, value]);
-  if (result.code !== 0) throw new Error(`run-log failed: ${result.err.trim() || result.out.trim()}`);
+  const result = run(Bun.which("bun") ?? "bun", [
+    "--no-env-file",
+    "--config=/dev/null",
+    RUN_LOG,
+    info.dispatch,
+    value,
+  ]);
+  if (result.code !== 0)
+    throw new Error(`run-log failed: ${result.err.trim() || result.out.trim()}`);
 }
 
 function laneStatusEvents(reads: LaneRead[], point: string): ReachEvent[] {
   const events: ReachEvent[] = [];
   for (const read of reads) {
     if (read.status === "not checked") {
-      events.push({ kind: "note", point, lane: read.lane, lens: read.lens, path: read.events, reason: `not checked: ${read.reason}` });
+      events.push({
+        kind: "note",
+        point,
+        lane: read.lane,
+        lens: read.lens,
+        path: read.events,
+        reason: `not checked: ${read.reason}`,
+      });
     }
     for (const touch of read.touches) {
       if (touch.kind === "expected") continue;
@@ -1124,31 +1429,54 @@ function laneStatusEvents(reads: LaneRead[], point: string): ReachEvent[] {
   return events;
 }
 
-function logPoint(info: RunInfo, point: string, reads: LaneRead[], touches: Touch[], result: ReturnType<typeof reachTarget>): { status: string; code: number } {
-  const all = [...laneStatusEvents(reads, point), ...touches.filter((touch) => touch.source !== "stream").map((touch) => eventOf(touch, point))];
+function logPoint(
+  info: RunInfo,
+  point: string,
+  reads: LaneRead[],
+  touches: Touch[],
+  result: ReturnType<typeof reachTarget>,
+): { status: string; code: number } {
+  const all = [
+    ...laneStatusEvents(reads, point),
+    ...touches.filter((touch) => touch.source !== "stream").map((touch) => eventOf(touch, point)),
+  ];
   const hasFinding = all.some((event) => event.kind === "finding");
   const hasNote = all.some((event) => event.kind === "note");
   const notChecked = reads.some((read) => read.status === "not checked");
   const status = hasFinding ? "finding" : hasNote || notChecked ? "note" : "clean";
-  writeAction(info, "coachman", "reach", point, JSON.stringify({
-    kind: "point",
+  writeAction(
+    info,
+    "coachman",
+    "reach",
     point,
-    result: status,
-    main: {
-      branch: result.branch,
-      defaultBranch: result.defaultBranch,
-      head: result.head,
-      changed: result.changed,
-      offDefault: result.offDefault,
-    },
-    lanes: reads.map((read) => ({ lane: read.lane, lens: read.lens ?? "", harness: read.harness, status: read.status, reason: read.reason ?? "" })),
-  }));
+    JSON.stringify({
+      kind: "point",
+      point,
+      result: status,
+      main: {
+        branch: result.branch,
+        defaultBranch: result.defaultBranch,
+        head: result.head,
+        changed: result.changed,
+        offDefault: result.offDefault,
+      },
+      lanes: reads.map((read) => ({
+        lane: read.lane,
+        lens: read.lens ?? "",
+        harness: read.harness,
+        status: read.status,
+        reason: read.reason ?? "",
+      })),
+    }),
+  );
   for (const event of all) {
     const actor = event.lane ? `lane:${event.lane}` : "coachman";
     writeAction(info, actor, "reach", point, JSON.stringify(event));
   }
   for (const touch of all) {
-    console.log(`${touch.kind} ${touch.lane || "main checkout"}${touch.lens ? ` ${touch.lens}` : ""}: ${touch.access ?? "change"} ${touch.path ?? ""}${touch.place ? ` (${touch.place})` : ""}${touch.reason ? ` · ${touch.reason}` : ""}`);
+    console.log(
+      `${touch.kind} ${touch.lane || "main checkout"}${touch.lens ? ` ${touch.lens}` : ""}: ${touch.access ?? "change"} ${touch.path ?? ""}${touch.place ? ` (${touch.place})` : ""}${touch.reason ? ` · ${touch.reason}` : ""}`,
+    );
   }
   console.log(`${point}: ${status}`);
   const anyUnknown = notChecked || hasNote;
@@ -1157,7 +1485,14 @@ function logPoint(info: RunInfo, point: string, reads: LaneRead[], touches: Touc
 
 function checkWorkhorses(info: RunInfo): number {
   const lanes = expectedWorkhorseNames(info);
-  const reads = lanes.map((lane) => readLane(info, lane, workhorseEvents(info, lane), join(info.repo, ".worktrees", `${info.ticket}-${lane}`)));
+  const reads = lanes.map((lane) =>
+    readLane(
+      info,
+      lane,
+      workhorseEvents(info, lane),
+      join(info.repo, ".worktrees", `${info.ticket}-${lane}`),
+    ),
+  );
   const touches = aggregateLaneReads(reads);
   const { result } = addMainChanges(info, "workhorses", touches, true);
   const outcome = logPoint(info, "workhorses", reads, touches, result);
@@ -1166,7 +1501,15 @@ function checkWorkhorses(info: RunInfo): number {
 
 function checkRound(info: RunInfo, round: number): number {
   const reviewers = reviewersFor(info, round);
-  const reads = reviewers.map(([lens, lane]) => readLane(info, lane, reviewerEvents(info, round, lens, lane), roundOwnFolder(info, lens, lane), lens));
+  const reads = reviewers.map(([lens, lane]) =>
+    readLane(
+      info,
+      lane,
+      reviewerEvents(info, round, lens, lane),
+      roundOwnFolder(info, lens, lane),
+      lens,
+    ),
+  );
   const touches = aggregateLaneReads(reads);
   for (const touch of touches.filter((entry) => entry.kind === "finding")) {
     touch.user = !runOwnedWrite(info, touch.path);
@@ -1210,7 +1553,14 @@ function runOwnedWrite(info: RunInfo, path: string): boolean {
 }
 
 function readAllRecords(info: RunInfo): LaneRead[] {
-  const reads = expectedWorkhorseNames(info).map((lane) => readLane(info, lane, workhorseEvents(info, lane), join(info.repo, ".worktrees", `${info.ticket}-${lane}`)));
+  const reads = expectedWorkhorseNames(info).map((lane) =>
+    readLane(
+      info,
+      lane,
+      workhorseEvents(info, lane),
+      join(info.repo, ".worktrees", `${info.ticket}-${lane}`),
+    ),
+  );
   const logs = join(info.dispatch, "logs");
   // Review rounds are enumerated from their authoritative review-round records.
   const rounds = new Set<number>();
@@ -1224,7 +1574,15 @@ function readAllRecords(info: RunInfo): LaneRead[] {
   }
   for (const round of [...rounds].sort((a, b) => a - b)) {
     for (const [lens, lane] of reviewersFor(info, round)) {
-      reads.push(readLane(info, lane, reviewerEvents(info, round, lens, lane), roundOwnFolder(info, lens, lane), lens));
+      reads.push(
+        readLane(
+          info,
+          lane,
+          reviewerEvents(info, round, lens, lane),
+          roundOwnFolder(info, lens, lane),
+          lens,
+        ),
+      );
     }
   }
   return reads;
@@ -1293,24 +1651,43 @@ function restoreRound(info: RunInfo, round: number): number {
     const after = nowRefs[ref] ?? "";
     if (before === after) continue;
     const safe = ref.replace(/[^A-Za-z0-9._-]/gu, "_");
-    const patch = before && after ? run("git", ["-C", info.repo, "diff", "--binary", before, after]) : { code: 0, out: "" };
+    const patch =
+      before && after
+        ? run("git", ["-C", info.repo, "diff", "--binary", before, after])
+        : { code: 0, out: "" };
     if (patch.code !== 0) throw new Error(`cannot save branch diff for ${ref}`);
     savePatch(join(saved, "branches", `${safe}.patch`), patch.out);
-    savePatch(join(saved, "branches", `${safe}.json`), `${JSON.stringify({ ref, before: before || null, after: after || null }, null, 2)}\n`);
+    savePatch(
+      join(saved, "branches", `${safe}.json`),
+      `${JSON.stringify({ ref, before: before || null, after: after || null }, null, 2)}\n`,
+    );
   }
 
   const synth = synthesisPath(info);
   const currentHead = currentHeadForRestore(info.repo, synth);
   const tracked = run("git", ["-C", synth, "diff", "--binary", "HEAD"]);
-  if (tracked.code !== 0) throw new Error(`cannot save synthesis worktree diff: ${tracked.err.trim()}`);
-  const commitPatch = snapshot.synthesisHead === currentHead ? "" : run("git", ["-C", info.repo, "diff", "--binary", snapshot.synthesisHead, currentHead]).out;
+  if (tracked.code !== 0)
+    throw new Error(`cannot save synthesis worktree diff: ${tracked.err.trim()}`);
+  const commitPatch =
+    snapshot.synthesisHead === currentHead
+      ? ""
+      : run("git", ["-C", info.repo, "diff", "--binary", snapshot.synthesisHead, currentHead]).out;
   savePatch(join(saved, "synthesis.patch"), `${commitPatch}${tracked.out}`);
-  savePatch(join(saved, "synthesis.json"), `${JSON.stringify({ before: snapshot.synthesisHead, after: currentHead }, null, 2)}\n`);
+  savePatch(
+    join(saved, "synthesis.json"),
+    `${JSON.stringify({ before: snapshot.synthesisHead, after: currentHead }, null, 2)}\n`,
+  );
 
   // Restore the checked-out ticket branch through its worktree first, then restore the other
   // run branches by ref. Reviewers can move a branch with update-ref from any scratch.
   if (existsSync(synth)) {
-    const reset = run("git", ["-C", synth, "reset", "--hard", snapshot.refs[`refs/heads/${info.ticket}`] ?? snapshot.synthesisHead]);
+    const reset = run("git", [
+      "-C",
+      synth,
+      "reset",
+      "--hard",
+      snapshot.refs[`refs/heads/${info.ticket}`] ?? snapshot.synthesisHead,
+    ]);
     if (reset.code !== 0) throw new Error(`cannot restore synthesis branch: ${reset.err.trim()}`);
   }
   for (const ref of [...changedRefs].sort()) {
@@ -1328,7 +1705,8 @@ function restoreRound(info: RunInfo, round: number): number {
       if (update.code !== 0) throw new Error(`cannot restore ${ref}: ${update.err.trim()}`);
     } else {
       const remove = run("git", ["-C", info.repo, "update-ref", "-d", ref]);
-      if (remove.code !== 0) throw new Error(`cannot remove new run branch ${ref}: ${remove.err.trim()}`);
+      if (remove.code !== 0)
+        throw new Error(`cannot remove new run branch ${ref}: ${remove.err.trim()}`);
     }
   }
 
@@ -1340,7 +1718,8 @@ function restoreRound(info: RunInfo, round: number): number {
     const destination = join(saved, path);
     ensureInside(synth, source);
     ensureInside(saved, destination);
-    if (pathExists(destination)) throw new Error(`reach restore copy already exists: ${destination}`);
+    if (pathExists(destination))
+      throw new Error(`reach restore copy already exists: ${destination}`);
     mkdirSync(dirname(destination), { recursive: true });
     renameSync(source, destination);
   }
@@ -1396,7 +1775,9 @@ export function reachActions(dispatch: string): Array<{ actor: string; event: Re
 }
 
 function usage(): never {
-  console.error("usage: reach.ts stream <dispatch> <lane> <events> <own-folder> | before <dispatch> <round> | check <dispatch> workhorses|r<round>|card | restore <dispatch> r<round>");
+  console.error(
+    "usage: reach.ts stream <dispatch> <lane> <events> <own-folder> | before <dispatch> <round> | check <dispatch> workhorses|r<round>|card | restore <dispatch> r<round>",
+  );
   process.exit(1);
 }
 

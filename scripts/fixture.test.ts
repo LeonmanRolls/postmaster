@@ -196,18 +196,22 @@ function record(
     const logged = run("bash", [join(HERE, "log-action.sh"), d, "coachman", "reach", name, detail]);
     if (logged.code !== 0) throw new Error(`could not make fixture reach record: ${logged.err}`);
   };
-  const laneRecords = (names: string[]) => names.map((name: string) => ({
-    lane: name,
-    lens: "",
-    harness: recordedConfig.lanes[name]?.harness ?? "codex",
-    status: "checked",
-    reason: "",
-  }));
+  const laneRecords = (names: string[]) =>
+    names.map((name: string) => ({
+      lane: name,
+      lens: "",
+      harness: recordedConfig.lanes[name]?.harness ?? "codex",
+      status: "checked",
+      reason: "",
+    }));
   const workhorseNames: string[] = recordedConfig.team.workhorses ?? [];
   point("workhorses", laneRecords(workhorseNames));
   if (legs >= 2) {
     const reviewer = workhorseNames[0] ?? "one";
-    writeFileSync(join(d, "logs", "review-r1.json"), JSON.stringify({ reviewers: [["bug", reviewer]] }));
+    writeFileSync(
+      join(d, "logs", "review-r1.json"),
+      JSON.stringify({ reviewers: [["bug", reviewer]] }),
+    );
     point("r1", laneRecords([reviewer]));
   }
   point("card", laneRecords(workhorseNames));

@@ -440,7 +440,9 @@ export function score(dispatch: string, repo: string): { code: number; out: stri
   ];
   const postmaster = meta?.postmaster;
   const pinnedTool =
-    typeof postmaster === "object" && postmaster !== null && !Array.isArray(postmaster) &&
+    typeof postmaster === "object" &&
+    postmaster !== null &&
+    !Array.isArray(postmaster) &&
     typeof (postmaster as Record<string, unknown>).checkout === "string"
       ? ((postmaster as Record<string, unknown>).checkout as string)
       : "";
@@ -784,15 +786,24 @@ function checkReach(dispatch: string): { ok: boolean; detail: string } {
   const findings = actions.filter(({ event }) => event.kind === "finding" || event.kind === "void");
   if (findings.length > 0) {
     const first = findings[0]!.event;
-    return { ok: false, detail: `reach found at ${first.point}: ${first.path ?? first.reason ?? first.kind}` };
+    return {
+      ok: false,
+      detail: `reach found at ${first.point}: ${first.path ?? first.reason ?? first.kind}`,
+    };
   }
   for (const { event } of points) {
     if (event.result === "finding") return { ok: false, detail: `reach found at ${event.point}` };
     const lanes = Array.isArray(event.lanes) ? event.lanes : [];
     for (const laneValue of lanes) {
-      const lane = typeof laneValue === "object" && laneValue !== null ? (laneValue as Record<string, unknown>) : {};
+      const lane =
+        typeof laneValue === "object" && laneValue !== null
+          ? (laneValue as Record<string, unknown>)
+          : {};
       if (lane.status === "not checked" && REACH_READERS.has(String(lane.harness ?? ""))) {
-        return { ok: false, detail: `not checked: ${String(lane.lane ?? "lane")} at ${event.point}` };
+        return {
+          ok: false,
+          detail: `not checked: ${String(lane.lane ?? "lane")} at ${event.point}`,
+        };
       }
     }
   }

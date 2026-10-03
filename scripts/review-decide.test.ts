@@ -101,7 +101,11 @@ describe("positive controls: the cap is reached", () => {
   test("a reach-voided reviewer at round 3 names the cap", () => {
     const d = newRun("reach-r3");
     logged(d, "degrade", "mimo", "bug r3: reach");
-    checkWhole(decide(d, "3"), 0, "CAP 3: a reviewer verdict was voided by the reach check; escalate with residue");
+    checkWhole(
+      decide(d, "3"),
+      0,
+      "CAP 3: a reviewer verdict was voided by the reach check; escalate with residue",
+    );
   });
 });
 

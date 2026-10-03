@@ -372,13 +372,19 @@ function reachBlock(dispatch: string): string {
     const m = /^r([1-9][0-9]*)$/u.exec(event.point);
     if (m) roundNumbers.add(Number(m[1]));
   }
-  const points = ["workhorses", ...[...roundNumbers].sort((a, b) => a - b).map((n) => `r${n}`), "card"];
+  const points = [
+    "workhorses",
+    ...[...roundNumbers].sort((a, b) => a - b).map((n) => `r${n}`),
+    "card",
+  ];
   const lines = ["## Reach", ""];
   const card = lastPoint.get("card");
   const main = card?.main;
   if (main !== null && typeof main === "object" && !Array.isArray(main)) {
     const state = main as Record<string, unknown>;
-    lines.push(`- Main checkout: branch ${String(state.branch ?? "unknown")} (default ${String(state.defaultBranch ?? "unknown")})`);
+    lines.push(
+      `- Main checkout: branch ${String(state.branch ?? "unknown")} (default ${String(state.defaultBranch ?? "unknown")})`,
+    );
     const changed = Array.isArray(state.changed) ? state.changed : [];
     if (changed.length === 0) lines.push("  - clean at the card check");
     else for (const path of changed) lines.push(`  - changed: \`${reachPath(dispatch, path)}\``);
@@ -386,12 +392,17 @@ function reachBlock(dispatch: string): string {
   for (const point of points) {
     const record = lastPoint.get(point);
     const result = record?.result ?? "not checked";
-    const title = point === "workhorses" ? point : point === "card" ? point : `round ${point.slice(1)}`;
+    const title =
+      point === "workhorses" ? point : point === "card" ? point : `round ${point.slice(1)}`;
     lines.push(`- ${title}: ${result}`);
-    const incidents = actions.filter(({ event }) => event.point === point && ["finding", "note", "void"].includes(event.kind));
+    const incidents = actions.filter(
+      ({ event }) => event.point === point && ["finding", "note", "void"].includes(event.kind),
+    );
     for (const { event } of incidents) {
       if (event.kind === "void") {
-        lines.push(`  - voided verdict: ${event.lens ?? "review"} reviewer ${event.lane ?? "unknown"} (${event.reason ?? "reach"})`);
+        lines.push(
+          `  - voided verdict: ${event.lens ?? "review"} reviewer ${event.lane ?? "unknown"} (${event.reason ?? "reach"})`,
+        );
         continue;
       }
       if (typeof event.reason === "string" && event.reason.startsWith("not checked:")) {
@@ -399,7 +410,12 @@ function reachBlock(dispatch: string): string {
         continue;
       }
       const lane = event.lane ? `${event.lane}: ` : "";
-      const access = event.access === "write" ? "write" : event.access === "refused" ? "refused attempt" : "read";
+      const access =
+        event.access === "write"
+          ? "write"
+          : event.access === "refused"
+            ? "refused attempt"
+            : "read";
       const place = event.place ? ` (${event.place})` : "";
       const path = reachPath(dispatch, event.path);
       const reason = event.reason ? ` — ${event.reason}` : "";

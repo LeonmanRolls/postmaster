@@ -62,7 +62,14 @@ export function reachTarget(target: string, defaultBranch: string): TargetReach 
   }
   const branchResult = run("git", ["-C", root, "symbolic-ref", "--short", "-q", "HEAD"]);
   const branch = branchResult.code === 0 ? branchResult.out.trimEnd() : "(detached HEAD)";
-  const status = run("git", ["-C", root, "status", "--porcelain=v1", "-z", "--untracked-files=all"]);
+  const status = run("git", [
+    "-C",
+    root,
+    "status",
+    "--porcelain=v1",
+    "-z",
+    "--untracked-files=all",
+  ]);
   if (status.code !== 0) {
     return {
       code: 1,
@@ -121,7 +128,9 @@ function standardCheck(target: string): number {
     console.log(`dirty  ${dirty} uncommitted path(s):`);
     for (const line of lines.slice(0, 20)) console.log(`       ${line}`);
     console.log("");
-    console.log("A coachman branches from committed HEAD, so this work would be silently excluded.");
+    console.log(
+      "A coachman branches from committed HEAD, so this work would be silently excluded.",
+    );
     console.log("Ask before proceeding. Offer: commit it / stash it (shared stack, say where) /");
     console.log("commit to a base branch and dispatch from there / hand back. Never discard.");
     return 2;
