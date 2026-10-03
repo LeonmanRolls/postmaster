@@ -11,7 +11,7 @@ import { toolRoot } from "./lib/paths.ts";
 import { decodeDropInvalid } from "./lib/proc.ts";
 import { controlOf, kindsOf } from "./log-action";
 
-const SELF = join(import.meta.dir, "log-action.sh");
+const SELF = join(import.meta.dir, "run");
 const TOOL = toolRoot(import.meta);
 const noIconv = spawnSync("bash", ["-c", "command -v iconv"], { encoding: "utf8" }).status !== 0;
 if (noIconv) {
@@ -89,7 +89,7 @@ let tmp = "";
 let d = "";
 
 function logAction(args: string[]): { code: number; out: string; err: string } {
-  const r = spawnSync("bash", [SELF, d, ...args], { encoding: "utf8" });
+  const r = spawnSync(SELF, ["log-action", d, ...args], { encoding: "utf8" });
   return { code: r.status ?? -1, out: r.stdout ?? "", err: r.stderr ?? "" };
 }
 
@@ -492,7 +492,7 @@ describe("positive controls", () => {
   test("an older runs/<project>/<TICKET> layout is still read as that project", () => {
     const old = join(tmp, "oldlayout", "legacy-proj", "RUN-2");
     mkdirSync(old, { recursive: true });
-    const r = spawnSync("bash", [SELF, old, "postmaster", "note", "RUN-2", "old"], {
+    const r = spawnSync(SELF, ["log-action", old, "postmaster", "note", "RUN-2", "old"], {
       encoding: "utf8",
     });
     let oldEntry: Record<string, any> | null = null;
@@ -804,7 +804,7 @@ describe("negative controls: nothing is written", () => {
 
   test("a missing dispatch directory is refused, and named", () => {
     const missing = join(tmp, "nowhere");
-    const r = spawnSync("bash", [SELF, missing, "coachman", "note", "x", "y"], {
+    const r = spawnSync(SELF, ["log-action", missing, "coachman", "note", "x", "y"], {
       encoding: "utf8",
     });
     expect(r.status).toBe(1);

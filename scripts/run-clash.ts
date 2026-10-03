@@ -1,6 +1,6 @@
 // Refuse a ticket id that already names a run directory or a branch.
 //
-//   bun scripts/run-clash.ts <repo> <ticket-id>
+//   scripts/run run-clash <repo> <ticket-id>
 //
 // Stage B names a run's directory and branches after its ticket id and would otherwise make
 // them without looking. A re-run, or a local ticket whose number an earlier GitHub issue used,
@@ -26,7 +26,7 @@ export type Clash = { kind: "run-directory"; path: string } | { kind: "branch"; 
 export const ADVICE =
   "the user decides what happens to the old run: archive it, rename it, or pick another id";
 
-export const USAGE = "usage: bun scripts/run-clash.ts <repo> <ticket-id>";
+export const USAGE = "usage: scripts/run run-clash <repo> <ticket-id>";
 
 export function isUsableTicketId(id: string): boolean {
   return id.length > 0 && !id.includes("/") && id !== "." && id !== "..";
@@ -94,7 +94,7 @@ type GitResult = {
 };
 
 // Git's own location variables, as a hook or rebase --exec can export them. They override
-// -C, so every git child runs without them; the same seven local.sh and verify.sh unset.
+// -C, so every git child runs without them; the same seven run local and run verify unset.
 export const GIT_LOCATION_ENV = [
   "GIT_DIR",
   "GIT_WORK_TREE",

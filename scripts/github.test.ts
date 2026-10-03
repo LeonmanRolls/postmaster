@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { pyLower } from "./lib/text.ts";
 import { DATE_PREFIX_RE, NONWORD_RE, NUMBER_RE } from "./github";
 
-const SELF = join(import.meta.dir, "github.sh");
+const SELF = join(import.meta.dir, "run");
 const BOARD =
   '{"data": {"repository": {"projectsV2": {"nodes": [{"id": "PVT_1", "number": 1, ' +
   '"title": "r", "closed": false, "url": "https://github.com/users/o/projects/1", ' +
@@ -92,7 +92,7 @@ let bin = "";
 let repo = "";
 
 function ghSh(args: string[]): { code: number; out: string; err: string } {
-  const r = spawnSync("bash", [SELF, repo, ...args], {
+  const r = spawnSync(SELF, ["github", repo, ...args], {
     encoding: "utf8",
     env: {
       ...process.env,

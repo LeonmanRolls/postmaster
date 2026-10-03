@@ -5,7 +5,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { run, withTempDir } from "./lib/proc.ts";
 
-const self = join(import.meta.dir, "discover-project.sh");
+const self = join(import.meta.dir, "run");
 
 const lineOf = (out: string, key: string): string => {
   const found = out.split("\n").filter((l) => l.startsWith(`${key}=`));
@@ -22,7 +22,7 @@ const touch = (dir: string, name: string): void => {
 };
 
 const agree = (dir: string, family: string, install: string, gate: string): void => {
-  const r = run(self, [dir]);
+  const r = run(self, ["discover-project", dir]);
   expect(r.code).toBe(0);
   expect(lineOf(r.out, "install")).toBe(install);
   expect(lineOf(r.out, "gate")).toBe(gate);
@@ -104,7 +104,7 @@ describe("install line: one manager for install and gate", () => {
       const d = join(tmp, "cargo");
       mkdirSync(d);
       touch(d, "Cargo.toml");
-      const r = run(self, [d]);
+      const r = run(self, ["discover-project", d]);
       expect(r.code).toBe(0);
       expect(lineOf(r.out, "install")).toBe("");
     });
@@ -114,7 +114,7 @@ describe("install line: one manager for install and gate", () => {
     withTempDir((tmp) => {
       const d = join(tmp, "bare");
       mkdirSync(d);
-      const r = run(self, [d]);
+      const r = run(self, ["discover-project", d]);
       expect(r.code).toBe(0);
       expect(lineOf(r.out, "install")).toBe("");
     });
@@ -124,7 +124,7 @@ describe("install line: one manager for install and gate", () => {
     withTempDir((tmp) => {
       const d = join(tmp, "bare-gate");
       mkdirSync(d);
-      const r = run(self, [d]);
+      const r = run(self, ["discover-project", d]);
       expect(r.code).toBe(0);
       expect(r.out.split("\n").filter((l) => l.startsWith("gate=")).length).toBe(1);
     });

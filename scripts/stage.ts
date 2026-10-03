@@ -1,9 +1,9 @@
 // Move a run to a stage. This is the one way a run's stage changes, so every change is logged,
-// and the run's timings (scripts/run-times.sh) are computed from those log lines rather than
+// and the run's timings (scripts/run run-times) are computed from those log lines rather than
 // written by hand.
 //
-//   stage.sh <dispatch> <stage> [actor]   actor defaults to coachman
-//   stage.sh --list                       the stages, in order
+//   run stage <dispatch> <stage> [actor]   actor defaults to coachman
+//   run stage --list                       the stages, in order
 //
 // It logs a `stage` action naming the stage left and how long it lasted, changes only the
 // manifest's `stage` field, and appends the same line to run-log.md. Setting the stage a run is
@@ -54,19 +54,17 @@ function keependsLines(text: string): string[] {
 // into run-log.md, and the ship card's ## Cost block rewritten around it.
 function closeUsage(d: string): number {
   const here = scriptsDir(import.meta);
-  const s = run("bun", [join(here, "usage.ts"), "sum", d]);
+  const s = run(join(here, "run"), ["usage", "sum", d]);
   let logStatus = 0;
   let summary: string;
   if (s.code === 0) {
     summary = s.out + s.err;
-    if (run("bash", [join(here, "run-log.sh"), d, "final cost block:", summary]).code !== 0)
+    if (run(join(here, "run"), ["run-log", d, "final cost block:", summary]).code !== 0)
       logStatus = 1;
   } else {
     const combined = s.out + s.err;
     summary = combined === "" ? "usage sum failed" : combined;
-    if (
-      run("bash", [join(here, "run-log.sh"), d, "final cost block unreadable:", summary]).code !== 0
-    )
+    if (run(join(here, "run"), ["run-log", d, "final cost block unreadable:", summary]).code !== 0)
       logStatus = 1;
   }
   const cardPath = join(d, "card.md");
@@ -213,8 +211,8 @@ export function setStage(d: string, newStage: string, actor: string): number {
   }
 
   // Log the change first
-  const logResult = run("bash", [
-    join(HERE, "log-action.sh"),
+  const logResult = run(join(HERE, "run"), [
+    "log-action",
     d,
     actor,
     "stage",
@@ -239,11 +237,11 @@ export function setStage(d: string, newStage: string, actor: string): number {
   }
 
   // Append to run-log.md
-  run("bash", [join(HERE, "run-log.sh"), d, `stage ${newStage}, from ${old ?? "none"}${took}`]);
+  run(join(HERE, "run"), ["run-log", d, `stage ${newStage}, from ${old ?? "none"}${took}`]);
 
   // Terminal stage: append timings
   if (newStage === "done" || newStage === "abandoned") {
-    const timesResult = run("bash", [join(HERE, "run-times.sh"), d]);
+    const timesResult = run(join(HERE, "run"), ["run-times", d]);
     const timingBlock = `\nStage timings, from actions.jsonl:\n\n\`\`\`\n${timesResult.out}\`\`\`\n`;
     try {
       appendFileSync(join(d, "run-log.md"), timingBlock);
@@ -266,11 +264,11 @@ function main(argv: string[]): number {
     return 0;
   }
   if (argv[0] === "" || argv[0] === undefined || argv[0].startsWith("-")) {
-    console.error("usage: stage.sh <dispatch> <stage> [actor] | --list");
+    console.error("usage: run stage <dispatch> <stage> [actor] | --list");
     return 1;
   }
   if (argv.length < 2) {
-    console.error("usage: stage.sh <dispatch> <stage> [actor]");
+    console.error("usage: run stage <dispatch> <stage> [actor]");
     return 1;
   }
   return setStage(argv[0] as string, argv[1] as string, (argv[2] as string) ?? "coachman");

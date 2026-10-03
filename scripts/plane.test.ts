@@ -38,14 +38,14 @@ import {
   textOf,
 } from "./plane";
 
-const wrapper = join(import.meta.dir, "plane.sh");
+const wrapper = join(import.meta.dir, "run");
 
 function cli(
   args: string[],
   env?: Record<string, string | undefined>,
   cwd?: string,
 ): { code: number; out: string; err: string } {
-  const r = spawnSync("bash", [wrapper, ...args], { encoding: "utf8", env, cwd });
+  const r = spawnSync(wrapper, ["plane", ...args], { encoding: "utf8", env, cwd });
   return { code: r.status ?? -1, out: r.stdout ?? "", err: r.stderr ?? "" };
 }
 
@@ -331,7 +331,7 @@ describe("CLI and API behavior", () => {
     const r = cli([], env);
     expect(r.code).toBe(1);
     expect(r.out).toBe("");
-    expect(r.err).toBe("plane: usage: plane.sh projects|create|edit|read|state|comment|list ...\n");
+    expect(r.err).toBe("plane: usage: run plane projects|create|edit|read|state|comment|list ...\n");
   }, 30000);
 
   test("a stalled API is cut off after 30 seconds with BASE's words", async () => {

@@ -1,22 +1,22 @@
 # Session hosts
 
 Every host-specific fact in the flow lives here and nowhere else. The runbooks say "through
-`<tool>/scripts/host.sh`"; this file says what that means on each host. When a host changes, this file
+`<tool>/scripts/run host`"; this file says what that means on each host. When a host changes, this file
 changes and the runbooks do not. `<tool>` is the postmaster repo, as the runbook that sent you here
 found it.
 
-**`<tool>/scripts/host.sh` is the executable form of this file.** The two change together. A form the
+**`<tool>/scripts/run host` is the executable form of this file.** The two change together. A form the
 script does not have is a form this file has not recorded yet.
 
 A host decides two things only: where a launch runs, so the user can watch it, and what keeps
 the interactive postmaster alive between turns. **It never changes what a launch is.** Every
-lane and every coachman leg is the same headless command on every host: `<tool>/scripts/launch.sh`'s
+lane and every coachman leg is the same headless command on every host: `<tool>/scripts/run launch`'s
 form, its events stream to its events file, its errors to its `.err` file, its marker touched
 when it exits, and then it exits. An idle thread is a native session on disk, never a process.
 
 ## Which host
 
-`<tool>/scripts/host.sh detect` prints `herdr`, `tmux` or `none`:
+`<tool>/scripts/run host detect` prints `herdr`, `tmux` or `none`:
 
 | host | when |
 |---|---|
@@ -41,23 +41,23 @@ way on every row, only less visibly on the last.
 | close a worktree's space | `herdr workspace close`, before the worktree is removed | kill the worktree's windows | nothing to close |
 
 ```sh
-<tool>/scripts/host.sh detect
-<tool>/scripts/host.sh name <dispatch>
-<tool>/scripts/host.sh name <dispatch> coachman <leg-name> <leg-number>
-<tool>/scripts/host.sh name <dispatch> workhorse <lane>
-<tool>/scripts/host.sh name <dispatch> review <lane> <lens> <round>
-<tool>/scripts/host.sh name <dispatch> postmaster
-<tool>/scripts/host.sh name <dispatch> role <text...>
-<tool>/scripts/host.sh leg launch|resume|takeover|retry|outcome|backfill|waiting ...
-<tool>/scripts/host.sh run <name> <cwd> [--under <dispatch>] [--role lane|coachman|reviewer] [--run <dispatch>] [--out <file>] [--err <file>] [--append] [--marker <file>] [--pidfile <file>] -- <command...>
-<tool>/scripts/host.sh stop <worktree>
-<tool>/scripts/host.sh close <worktree>
-<tool>/scripts/host.sh stop-run <dispatch>
-<tool>/scripts/host.sh close-run <dispatch>
-<tool>/scripts/host.sh spawn <handle> <cwd> [--label <name>] -- <interactive form>
-<tool>/scripts/host.sh send <handle> <file> [--wait [<seconds>]]
-<tool>/scripts/host.sh wait <handle> [<seconds>]
-<tool>/scripts/host.sh read <handle> [<lines>]
+<tool>/scripts/run host detect
+<tool>/scripts/run host name <dispatch>
+<tool>/scripts/run host name <dispatch> coachman <leg-name> <leg-number>
+<tool>/scripts/run host name <dispatch> workhorse <lane>
+<tool>/scripts/run host name <dispatch> review <lane> <lens> <round>
+<tool>/scripts/run host name <dispatch> postmaster
+<tool>/scripts/run host name <dispatch> role <text...>
+<tool>/scripts/run host leg launch|resume|takeover|retry|outcome|backfill|waiting ...
+<tool>/scripts/run host run <name> <cwd> [--under <dispatch>] [--role lane|coachman|reviewer] [--run <dispatch>] [--out <file>] [--err <file>] [--append] [--marker <file>] [--pidfile <file>] -- <command...>
+<tool>/scripts/run host stop <worktree>
+<tool>/scripts/run host close <worktree>
+<tool>/scripts/run host stop-run <dispatch>
+<tool>/scripts/run host close-run <dispatch>
+<tool>/scripts/run host spawn <handle> <cwd> [--label <name>] -- <interactive form>
+<tool>/scripts/run host send <handle> <file> [--wait [<seconds>]]
+<tool>/scripts/run host wait <handle> [<seconds>]
+<tool>/scripts/run host read <handle> [<lines>]
 ```
 
 **Send and wait as one command, `send --wait`.** On Herdr a separate `wait` straight after a
@@ -105,7 +105,7 @@ onto the fragment it supersedes.
 - **Its marker means it ended.** `--marker` is removed as the launch starts, so an earlier one is
   never mistaken for it, and touched when it exits, whatever its exit. If `host.sh` cannot start
   it at all, the marker lands anyway and `--err` says why.
-- **`--append` is for a resume**, which is a run like any other, with `<tool>/scripts/launch.sh resume
+- **`--append` is for a resume**, which is a run like any other, with `<tool>/scripts/run launch resume
   ...` as the command: it adds to `--out` instead of emptying it, while `--err` always holds only
   the latest process's errors. A stream is only ever appended to after being emptied once, so a
   second writer on the same file cannot overwrite the first.
@@ -120,8 +120,8 @@ onto the fragment it supersedes.
   stream and logs stay on disk.
 - **`--pidfile` gets its pid, which is also its process group:** `kill -- -<pid>` stops all of
   it. `host.sh run` returns as soon as the launch has started. The wait still goes in the same
-  command as the launch, as `<tool>/scripts/wait-for-markers.sh`, or for a review round
-  `<tool>/scripts/review-round.sh wait`.
+  command as the launch, as `<tool>/scripts/run wait-for-markers`, or for a review round
+  `<tool>/scripts/run review-round wait`.
 - **`--role` selects per-role limits; `--run` selects the dispatch's recorded config.** Use
   `lane` for a workhorse, `coachman` for a leg, and `reviewer` for a review launch. Direct host
   launches use the default limits. With `--run <dispatch>`, the limits come from the config in
@@ -163,11 +163,11 @@ onto the fragment it supersedes.
   harness's own configuration (such as `CLAUDE_CONFIG_DIR`, `CLAUDE_EFFORT`, `ANTHROPIC_*`, and
   configuration under the `CLAUDE_CODE_` prefix that is not in the families above) included, and
   so does the lane's env file once `launch.sh` sources it. The strip is a deny-list in
-  `<tool>/scripts/host.sh`'s runner: to add a name or a family, extend that list and the
+  `<tool>/scripts/run host`'s runner: to add a name or a family, extend that list and the
   matching test beside the script. Never widen it to the whole `CLAUDE_CODE_*` prefix and
   never replace it with an allow-list; both would drop configuration a launch needs.
 - **The ticket belongs to the run's space; a launch label carries only launch identity.**
-  `<tool>/scripts/host.sh name <dispatch>` prints the ticket number and title for the run level.
+  `<tool>/scripts/run host name <dispatch>` prints the ticket number and title for the run level.
   Its launch forms build labels from the run's recorded config: `coachman · <model> · leg <n>`,
   `<lane> · workhorse · <model>`, or `<lane> · <lens> review · <model> · r<n>`, and
   `role <text...>` names any other launch by its role alone. A model shows as the basename
@@ -177,7 +177,7 @@ onto the fragment it supersedes.
   synthesis worktree space and every launch label on its tab or window, pane title, and
   harness thread name (`POSTMASTER_LAUNCH_NAME`, `harnesses.md`). A title can contain shell
   syntax, so take every value from `host.sh name`; never type it into a shell.
-- **The pane shows the stream, not the JSON**: `<tool>/scripts/view-stream.sh` renders each event
+- **The pane shows the stream, not the JSON**: `<tool>/scripts/run view-stream` renders each event
   of interest as wrapped lines — what the agent says and runs, in full — each with its time.
 - **Every launch is registered while it runs**, under `POSTMASTER_HOST_STATE` (default
   `~/.postmaster/host`), with the worktree it was placed in, whatever host ran it. `host.sh stop
@@ -286,15 +286,15 @@ with `herdr agent start`. It is a pane whose agent `host.sh` reports. So when it
 ## none
 
 - A launch is a detached process in a session of its own, with no terminal. There is nothing to
-  watch but its files: `<tool>/scripts/runs-status.sh`, the events file, and
-  `<tool>/scripts/view-stream.sh < <events-file>` for the readable form.
+  watch but its files: `<tool>/scripts/run runs-status`, the events file, and
+  `<tool>/scripts/run view-stream < <events-file>` for the readable form.
 - **The postmaster runs headless, as a native session**, like every other role:
-  `<tool>/scripts/host.sh run "postmaster" <repo> --out <runs>/postmaster/events.jsonl
-  --err <runs>/postmaster/postmaster.err --marker <runs>/postmaster/.exited -- <tool>/scripts/launch.sh
+  `<tool>/scripts/run host run "postmaster" <repo> --out <runs>/postmaster/events.jsonl
+  --err <runs>/postmaster/postmaster.err --marker <runs>/postmaster/.exited -- <tool>/scripts/run launch
   launch postmaster <repo> <brief-file>`. Its brief says it runs headless, so whenever it needs
   the user it writes `<runs>/postmaster/ESCALATION.md` and ends its turn, and
-  `<tool>/scripts/runs-status.sh` shows the escalation pending. The user answers by resuming its thread,
-  through `host.sh run --append` with `<tool>/scripts/launch.sh resume postmaster <repo> <thread-id>
+  `<tool>/scripts/run runs-status` shows the escalation pending. The user answers by resuming its thread,
+  through `host.sh run --append` with `<tool>/scripts/run launch resume postmaster <repo> <thread-id>
   <message-file>`, or by opening the thread in the harness's own interactive resume.
   A fixture copy's postmaster uses this headless form on every host, whatever `host.sh detect`
   says: `front-door.sh` prints `headless` for it (`SKILL.md` step 3), so it never meets a trust
@@ -304,14 +304,14 @@ with `herdr agent start`. It is a pane whose agent `host.sh` reports. So when it
 
 ## Tests
 
-The tests beside `<tool>/scripts/host.sh` run every form against stub `herdr` and `tmux` on a PATH that
+The tests beside `<tool>/scripts/run host` run every form against stub `herdr` and `tmux` on a PATH that
 holds nothing else, and never reaches a live server. It also checks the labels: each kind of
 launch (a coachman leg, a workhorse, each review lens with its round, the postmaster) leads
 with its role and holds no part of the ticket title, and the run's level carries the ticket.
 Where a working systemd user scope exists, it also checks that a bounded fork and allocation
 launch are stopped at their caps while a healthy launch completes. Without that backend it
 checks the uncapped notice and successful launch.
-`<tool>/scripts/host.sh --live-test` runs the
+`<tool>/scripts/run host --live-test` runs the
 ticket's controls against the hosts on this machine, in a scratch repository it creates: a
 postmaster using the project's first tab; a coachman in a ticket-labeled run space with no spare
 shell tab; a workhorse and style, bug, and security launches under that run, including a security

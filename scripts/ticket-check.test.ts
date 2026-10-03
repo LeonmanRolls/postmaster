@@ -32,7 +32,7 @@ import {
   QSPLIT,
 } from "./ticket-check.ts";
 
-const SELF = join(import.meta.dir, "ticket-check.sh");
+const SELF = join(import.meta.dir, "run");
 const HERE = import.meta.dir;
 const NOPE = "zz-not-listed";
 
@@ -66,8 +66,8 @@ const body = (...parts: string[]): void => {
 };
 
 const runCheck = (title: string): { code: number; out: string } => {
-  const r = run("bash", [SELF, "--body", join(tmp, "body.md"), "--title", title], {
-    env: { ...(process.env as Record<string, string>), TURNPIKES: join(HERE, "turnpikes.sh") },
+  const r = run(SELF, ["ticket-check", "--body", join(tmp, "body.md"), "--title", title], {
+    env: { ...(process.env as Record<string, string>), TURNPIKES: join(HERE, "run") },
   });
   return { code: r.code, out: r.out + r.err };
 };
@@ -114,7 +114,7 @@ const adapter = (script: string): void => {
 };
 
 const through = (): { code: number; out: string } => {
-  const r = run("bash", [join(tmp, "bin", "ticket-check.sh"), tmp, "7"], {
+  const r = run(join(tmp, "bin", "run"), ["ticket-check", tmp, "7"], {
     env: {
       ...(process.env as Record<string, string>),
       POSTMASTER_CONFIG: join(tmp, "github.toml"),
@@ -129,7 +129,7 @@ const localsh = (script: string): void => {
 };
 
 const spliceRun = (): { code: number; out: string } => {
-  const r = run("bash", [SELF, "--splice", join(tmp, "base.md"), join(tmp, "sections.md")], {
+  const r = run(SELF, ["ticket-check", "--splice", join(tmp, "base.md"), join(tmp, "sections.md")], {
     env: process.env as Record<string, string>,
   });
   return { code: r.code, out: r.out + r.err };
@@ -151,8 +151,6 @@ const sameSplice = (
 };
 
 const addTurnpike = (row: string, dir: string): void => {
-  copyFileSync(join(HERE, "turnpikes.sh"), join(dir, "turnpikes.sh"));
-  chmodSync(join(dir, "turnpikes.sh"), 0o755);
   const src = readFileSync(join(HERE, "turnpikes.ts"), "utf8");
   const out = src.replace(
     new RegExp("(const TABLE = `" + DOT_ALL + "*?)(`;)", "u"),
@@ -167,11 +165,11 @@ beforeAll(() => {
 
   copyFileSync(join(toolRoot(import.meta), "bunfig.toml"), join(tmp, "bunfig.toml"));
 
-  const listR = run(join(HERE, "turnpikes.sh"), ["--list"]);
+  const listR = run(join(HERE, "run"), ["turnpikes", "--list"]);
   if (listR.code !== 0) throw new Error("test setup: turnpikes.sh --list failed");
   const listLines = listR.out.trim().split("\n").filter(Boolean);
   DEF = listLines
-    // ASCII: turnpikes.sh --list emits ASCII slug-names; fields split on its runs.
+    // ASCII: run turnpikes --list emits ASCII slug-names; fields split on its runs.
     .filter((l) => l.split(/\s+/u)[1] === "default")
     // ASCII: turnpike slugs from --list are ASCII by the TABLE.
     .map((l) => l.split(/\s+/u)[0])
@@ -190,17 +188,20 @@ beforeAll(() => {
   }
 
   mkdirSync(join(tmp, "bin"), { recursive: true });
-  copyFileSync(SELF, join(tmp, "bin", "ticket-check.sh"));
+  copyFileSync(SELF, join(tmp, "bin", "run"));
   copyFileSync(join(HERE, "ticket-check.ts"), join(tmp, "bin", "ticket-check.ts"));
-  copyFileSync(join(HERE, "turnpikes.sh"), join(tmp, "bin", "turnpikes.sh"));
   copyFileSync(join(HERE, "turnpikes.ts"), join(tmp, "bin", "turnpikes.ts"));
-  copyFileSync(join(HERE, "project-settings.sh"), join(tmp, "bin", "project-settings.sh"));
   copyFileSync(join(HERE, "project-settings.ts"), join(tmp, "bin", "project-settings.ts"));
-  copyFileSync(join(HERE, "tracker-kind.sh"), join(tmp, "bin", "tracker-kind.sh"));
   copyFileSync(join(HERE, "tracker-kind.ts"), join(tmp, "bin", "tracker-kind.ts"));
   mkdirSync(join(tmp, "bin", "lib"), { recursive: true });
   for (const f of ["paths.ts", "proc.ts", "data.ts", "text.ts"]) {
     copyFileSync(join(HERE, "lib", f), join(tmp, "bin", "lib", f));
+  }
+  for (const name of ["github", "local"]) {
+    writeFileSync(
+      join(tmp, "bin", `${name}.ts`),
+      `import { spawnSync } from "node:child_process";\nimport { join } from "node:path";\nconst result = spawnSync("bash", [join(import.meta.dir, "${name}.sh"), ...process.argv.slice(2)], { encoding: "utf8" });\nprocess.stdout.write(result.stdout ?? "");\nprocess.stderr.write(result.stderr ?? "");\nprocess.exit(result.status ?? 1);\n`,
+    );
   }
   writeFileSync(join(tmp, "github.toml"), '[tracker]\nkind = "github"\n');
   localsh(NOSTORE);
@@ -223,7 +224,7 @@ beforeAll(() => {
 
   for (const d of ["added", "broken", "alone"]) {
     mkdirSync(join(tmp, d), { recursive: true });
-    copyFileSync(SELF, join(tmp, d, "ticket-check.sh"));
+    copyFileSync(SELF, join(tmp, d, "run"));
     copyFileSync(join(HERE, "ticket-check.ts"), join(tmp, d, "ticket-check.ts"));
     mkdirSync(join(tmp, d, "lib"), { recursive: true });
     for (const f of ["paths.ts", "proc.ts", "data.ts", "text.ts"]) {
@@ -234,14 +235,13 @@ beforeAll(() => {
   addTurnpike("none       -        review  nothing", join(tmp, "broken"));
 
   mkdirSync(join(tmp, "silent"), { recursive: true });
-  copyFileSync(SELF, join(tmp, "silent", "ticket-check.sh"));
+  copyFileSync(SELF, join(tmp, "silent", "run"));
   copyFileSync(join(HERE, "ticket-check.ts"), join(tmp, "silent", "ticket-check.ts"));
   mkdirSync(join(tmp, "silent", "lib"), { recursive: true });
   for (const f of ["paths.ts", "proc.ts", "data.ts", "text.ts"]) {
     copyFileSync(join(HERE, "lib", f), join(tmp, "silent", "lib", f));
   }
-  writeFileSync(join(tmp, "silent", "turnpikes.sh"), "#!/bin/sh\nexit 2\n");
-  chmodSync(join(tmp, "silent", "turnpikes.sh"), 0o755);
+  writeFileSync(join(tmp, "silent", "turnpikes.ts"), "process.exit(2);\n");
 
   writeFileSync(join(tmp, "other.toml"), '[tracker]\nkind = "other"\nname = "notes"\n');
   writeFileSync(join(tmp, "broken.toml"), "[tracker\nkind = github\n");
@@ -270,8 +270,8 @@ describe("positive controls", () => {
 
   test("without --title only the body is judged", () => {
     body(P, A, D, K);
-    const r = run("bash", [SELF, "--body", join(tmp, "body.md")], {
-      env: { ...(process.env as Record<string, string>), TURNPIKES: join(HERE, "turnpikes.sh") },
+    const r = run(SELF, ["ticket-check", "--body", join(tmp, "body.md")], {
+      env: { ...(process.env as Record<string, string>), TURNPIKES: join(HERE, "run") },
     });
     expect(r.code).toBe(0);
   });
@@ -379,8 +379,8 @@ describe("positive controls", () => {
       "## Direction\nStore TODO items in the existing database.",
       K,
     );
-    const r = run("bash", [SELF, "--body", join(tmp, "body.md"), "--title", "Add a TODO list"], {
-      env: { ...(process.env as Record<string, string>), TURNPIKES: join(HERE, "turnpikes.sh") },
+    const r = run(SELF, ["ticket-check", "--body", join(tmp, "body.md"), "--title", "Add a TODO list"], {
+      env: { ...(process.env as Record<string, string>), TURNPIKES: join(HERE, "run") },
     });
     expect(r.code).toBe(0);
   });
@@ -408,11 +408,11 @@ describe("positive controls", () => {
     body(P, A, D, K);
     const r = run(
       "bash",
-      ["-c", `bash "${SELF}" --body /dev/stdin --title "${T}" < "${join(tmp, "body.md")}"`],
+      ["-c", `"${SELF}" ticket-check --body /dev/stdin --title "${T}" < "${join(tmp, "body.md")}"`],
       {
         env: {
           ...(process.env as Record<string, string>),
-          TURNPIKES: join(HERE, "turnpikes.sh"),
+          TURNPIKES: join(HERE, "run"),
         },
       },
     );
@@ -429,10 +429,7 @@ describe("positive controls", () => {
 describe("positive controls: the turnpikes, as scripts/turnpikes.sh reads them", () => {
   test("default is checked against the target project's declaration", () => {
     body(P, A, D, K);
-    const r = run(
-      "bash",
-      [
-        SELF,
+    const r = run(SELF, ["ticket-check",
         "--body",
         join(tmp, "body.md"),
         "--title",
@@ -443,7 +440,7 @@ describe("positive controls: the turnpikes, as scripts/turnpikes.sh reads them",
       {
         env: {
           ...(process.env as Record<string, string>),
-          TURNPIKES: join(HERE, "turnpikes.sh"),
+          TURNPIKES: join(HERE, "run"),
         },
       },
     );
@@ -453,13 +450,11 @@ describe("positive controls: the turnpikes, as scripts/turnpikes.sh reads them",
 
   test("an empty project default does not add a review floor", () => {
     body(P, A, D, K);
-    const r = run(
-      "bash",
-      [SELF, "--body", join(tmp, "body.md"), "--title", T, "--project", join(tmp, "empty-project")],
+    const r = run(SELF, ["ticket-check", "--body", join(tmp, "body.md"), "--title", T, "--project", join(tmp, "empty-project")],
       {
         env: {
           ...(process.env as Record<string, string>),
-          TURNPIKES: join(HERE, "turnpikes.sh"),
+          TURNPIKES: join(HERE, "run"),
         },
       },
     );
@@ -469,8 +464,8 @@ describe("positive controls: the turnpikes, as scripts/turnpikes.sh reads them",
 
   test("an explicitly empty --project is refused, never checked as discovery", () => {
     body(P, A, D, K);
-    const r = run("bash", [SELF, "--body", join(tmp, "body.md"), "--title", T, "--project", ""], {
-      env: { ...(process.env as Record<string, string>), TURNPIKES: join(HERE, "turnpikes.sh") },
+    const r = run(SELF, ["ticket-check", "--body", join(tmp, "body.md"), "--title", T, "--project", ""], {
+      env: { ...(process.env as Record<string, string>), TURNPIKES: join(HERE, "run") },
     });
     expect(r.code).toBe(1);
     expect((r.out + r.err).includes("no such project directory")).toBe(true);
@@ -500,8 +495,8 @@ describe("positive controls: the turnpikes, as scripts/turnpikes.sh reads them",
 describe("negative controls: each part is named on its own", () => {
   test("no title", () => {
     body(P, A, D, K, N);
-    const r = run("bash", [SELF, "--body", join(tmp, "body.md"), "--title", ""], {
-      env: { ...(process.env as Record<string, string>), TURNPIKES: join(HERE, "turnpikes.sh") },
+    const r = run(SELF, ["ticket-check", "--body", join(tmp, "body.md"), "--title", ""], {
+      env: { ...(process.env as Record<string, string>), TURNPIKES: join(HERE, "run") },
     });
     expect(r.code).toBe(2);
     expect(r.out.includes("title: missing")).toBe(true);
@@ -509,10 +504,10 @@ describe("negative controls: each part is named on its own", () => {
 
   test("a title in another script has words", () => {
     body(P, A, D, K, N);
-    const r = run("bash", [SELF, "--body", join(tmp, "body.md"), "--title", "日本語のタイトル"], {
+    const r = run(SELF, ["ticket-check", "--body", join(tmp, "body.md"), "--title", "日本語のタイトル"], {
       env: {
         ...(process.env as Record<string, string>),
-        TURNPIKES: join(HERE, "turnpikes.sh"),
+        TURNPIKES: join(HERE, "run"),
       },
     });
     expect(r.code).toBe(0);
@@ -794,8 +789,8 @@ describe("negative controls: each part is named on its own", () => {
 describe("a turnpike is added in scripts/turnpikes.sh alone", () => {
   test("this check names a turnpike that turnpikes.sh does not list", () => {
     body(P, A, D, `## Turnpikes\ndefault, ${NOPE}`);
-    const r = run("bash", [SELF, "--body", join(tmp, "body.md"), "--title", T], {
-      env: { ...(process.env as Record<string, string>), TURNPIKES: join(HERE, "turnpikes.sh") },
+    const r = run(SELF, ["ticket-check", "--body", join(tmp, "body.md"), "--title", T], {
+      env: { ...(process.env as Record<string, string>), TURNPIKES: join(HERE, "run") },
     });
     expect(r.code).toBe(2);
     expect(r.out.includes(`"${NOPE}" is not a turnpike`)).toBe(true);
@@ -804,8 +799,8 @@ describe("a turnpike is added in scripts/turnpikes.sh alone", () => {
   test("the same check passes it once turnpikes.sh lists it", () => {
     body(P, A, D, `## Turnpikes\ndefault, ${NOPE}`);
     const r = run(
-      "bash",
-      [join(tmp, "added", "ticket-check.sh"), "--body", join(tmp, "body.md"), "--title", T],
+      join(tmp, "added", "run"),
+      ["ticket-check", "--body", join(tmp, "body.md"), "--title", T],
       {
         env: { ...(process.env as Record<string, string>) },
       },
@@ -817,19 +812,19 @@ describe("a turnpike is added in scripts/turnpikes.sh alone", () => {
 
 describe("negative controls: a ticket that cannot be read is not a verdict", () => {
   test("no arguments is a usage error", () => {
-    const r = run("bash", [SELF], { env: process.env as Record<string, string> });
+    const r = run(SELF, ["ticket-check"], { env: process.env as Record<string, string> });
     expect(r.code).toBe(1);
   });
 
   test("a missing body file is refused", () => {
-    const r = run("bash", [SELF, "--body", join(tmp, "nowhere.md")], {
+    const r = run(SELF, ["ticket-check", "--body", join(tmp, "nowhere.md")], {
       env: process.env as Record<string, string>,
     });
     expect(r.code).toBe(1);
   });
 
   test("a tracker kind with no adapter script is refused, not judged", () => {
-    const r = run("bash", [SELF, tmp, "7"], {
+    const r = run(SELF, ["ticket-check", tmp, "7"], {
       env: {
         ...(process.env as Record<string, string>),
         POSTMASTER_CONFIG: join(tmp, "other.toml"),
@@ -840,7 +835,7 @@ describe("negative controls: a ticket that cannot be read is not a verdict", () 
   });
 
   test("a config that does not parse is named as one", () => {
-    const r = run("bash", [SELF, tmp, "7"], {
+    const r = run(SELF, ["ticket-check", tmp, "7"], {
       env: {
         ...(process.env as Record<string, string>),
         POSTMASTER_CONFIG: join(tmp, "broken.toml"),
@@ -862,8 +857,8 @@ describe("negative controls: a ticket that cannot be read is not a verdict", () 
   test("with no turnpikes.sh beside it, the check gives no verdict", () => {
     body(P, A, D, K);
     const r = run(
-      "bash",
-      [join(tmp, "alone", "ticket-check.sh"), "--body", join(tmp, "body.md"), "--title", T],
+      join(tmp, "alone", "run"),
+      ["ticket-check", "--body", join(tmp, "body.md"), "--title", T],
       {
         env: process.env as Record<string, string>,
       },
@@ -875,8 +870,8 @@ describe("negative controls: a ticket that cannot be read is not a verdict", () 
   test("a turnpikes.sh whose table breaks its rules gives no verdict", () => {
     body(P, A, D, K);
     const r = run(
-      "bash",
-      [join(tmp, "broken", "ticket-check.sh"), "--body", join(tmp, "body.md"), "--title", T],
+      join(tmp, "broken", "run"),
+      ["ticket-check", "--body", join(tmp, "body.md"), "--title", T],
       {
         env: process.env as Record<string, string>,
       },
@@ -888,8 +883,8 @@ describe("negative controls: a ticket that cannot be read is not a verdict", () 
   test("a turnpikes.sh that fails with nothing to say gives no verdict, never a pass", () => {
     body(P, A, D, K);
     const r = run(
-      "bash",
-      [join(tmp, "silent", "ticket-check.sh"), "--body", join(tmp, "body.md"), "--title", T],
+      join(tmp, "silent", "run"),
+      ["ticket-check", "--body", join(tmp, "body.md"), "--title", T],
       {
         env: process.env as Record<string, string>,
       },
@@ -1144,7 +1139,7 @@ describe("unicode primitives", () => {
 describe("--has-journey answers whether the ticket has a User journey", () => {
   const jbody = (...parts: string[]): { code: number; out: string } => {
     writeFileSync(join(tmp, "j.md"), `${parts.join("\n\n")}\n\n`);
-    const r = run("bash", [SELF, "--has-journey", join(tmp, "j.md")], {
+    const r = run(SELF, ["ticket-check", "--has-journey", join(tmp, "j.md")], {
       env: { ...(process.env as Record<string, string>) },
     });
     return { code: r.code, out: `${r.out}${r.err}`.replace(/\n+$/u, "") };

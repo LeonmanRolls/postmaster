@@ -1,17 +1,17 @@
 // Turn the faults a run met in postmaster itself into tickets on postmaster's own tracker, once
 // the run has closed. A run never fixes postmaster: each fault is logged as it happens, as a
-// `tool-fault` action (scripts/log-action.sh), and this script collects them afterwards.
+// `tool-fault` action (scripts/run log-action), and this script collects them afterwards.
 //
-//   tool-faults.sh harvest <dispatch>
-//   tool-faults.sh comment <dispatch> <id> [<ticket>]
-//   tool-faults.sh file <dispatch> <id>
-//   tool-faults.sh decline <dispatch> <id> <word>
+//   run tool-faults harvest <dispatch>
+//   run tool-faults comment <dispatch> <id> [<ticket>]
+//   run tool-faults file <dispatch> <id>
+//   run tool-faults decline <dispatch> <id> <word>
 //
 //   exit 0  done; harvest prints a line for the run, then one per fault, then any notes
 //   exit 1  usage; no such dispatch, fault or draft; a run still open; the tracker could not
 //           be read or refused a write; or the log could not be written
 //   exit 2  comment or file refused: a changed draft is not safe to publish, a draft fails
-//           scripts/ticket-check.sh, a fault to comment on has no ticket, or one to file has one
+//           scripts/run ticket-check, a fault to comment on has no ticket, or one to file has one
 
 import { createHash, randomBytes } from "node:crypto";
 import {
@@ -672,7 +672,7 @@ class Unreached extends Error {}
 
 class GitHub {
   call(...args: string[]): RunR {
-    return runCmd([join(HERE, "github.sh"), TOOL, ...args]);
+    return runCmd([join(HERE, "run"), "github", TOOL, ...args]);
   }
   search(text: string): Array<[string, string, string]> {
     const r = this.call("search", text);
@@ -701,7 +701,7 @@ function reach(): { tracker: GitHub | null; reason: string } {
   if (r?.[0] !== "github.com") {
     return { tracker: null, reason: "postmaster's checkout has no origin on GitHub" };
   }
-  const a = runCmd([join(HERE, "github.sh"), TOOL, "access"]);
+  const a = runCmd([join(HERE, "run"), "github", TOOL, "access"]);
   if (a.code !== 0) {
     return { tracker: null, reason: `github.sh access: ${whyR(a)}` };
   }
@@ -807,7 +807,7 @@ function checked(titlePath: string, bodyPath: string, safe: Safe, sha: string): 
       );
     }
   }
-  const r = runCmd([join(HERE, "ticket-check.sh"), "--body", bodyPath, "--title", title]);
+  const r = runCmd([join(HERE, "run"), "ticket-check", "--body", bodyPath, "--title", title]);
   // text.ts: BASE rstrips the failure tail Python-style.
   return r.code === 0 ? "" : `the draft fails scripts/ticket-check.sh:\n${pyRstrip(r.out + r.err)}`;
 }
@@ -970,7 +970,8 @@ function harvestCmd(d: string, ongoing: boolean): void {
     .map(([s, n]) => `, ${n} ${s}`)
     .join("");
   const r = runCmd([
-    join(HERE, "log-action.sh"),
+    join(HERE, "run"),
+    "log-action",
     d,
     "postmaster",
     "note",
@@ -1064,7 +1065,8 @@ function commentCmd(fid: string, ticket: string, d: string, ongoing: boolean): v
     dieTF(`the tracker refused the comment: ${whyR(r)}`);
   }
   const lr = runCmd([
-    join(HERE, "log-action.sh"),
+    join(HERE, "run"),
+    "log-action",
     d,
     "postmaster",
     "ticket-comment",
@@ -1109,7 +1111,8 @@ function fileCmd(fid: string, d: string, ongoing: boolean): void {
     dieTF(`the tracker refused the ticket: ${whyR(r)}`);
   }
   const lr = runCmd([
-    join(HERE, "log-action.sh"),
+    join(HERE, "run"),
+    "log-action",
     d,
     "postmaster",
     "ticket-create",
@@ -1127,7 +1130,8 @@ function declineCmd(fid: string, word: string, d: string, ongoing: boolean): voi
   const statePath = join(d, "tool-faults.json");
   const { st, x } = begin(fid, d, ongoing);
   const lr = runCmd([
-    join(HERE, "log-action.sh"),
+    join(HERE, "run"),
+    "log-action",
     d,
     "postmaster",
     "note",
@@ -1558,7 +1562,7 @@ function usageDie(): never {
   throw new Error("unreachable");
 }
 const usage =
-  "usage: tool-faults.sh harvest <dispatch> | comment <dispatch> <id> [<ticket>] | file <dispatch> <id> | decline <dispatch> <id> <the user's word>";
+  "usage: run tool-faults harvest <dispatch> | comment <dispatch> <id> [<ticket>] | file <dispatch> <id> | decline <dispatch> <id> <the user's word>";
 
 if (import.meta.main) {
   if (argv[0] === "--dump-parity-cases") {
@@ -1567,7 +1571,7 @@ if (import.meta.main) {
     // The dir argument is the scratch the remote cases' git repos live in;
     // regen runs the BASE side there before deleting it.
     if (argv.length !== 2 || !argv[1]) {
-      console.error("usage: tool-faults.sh --dump-parity-cases <scratch-dir>");
+      console.error("usage: run tool-faults --dump-parity-cases <scratch-dir>");
       process.exit(2);
     }
     mkdirSync(argv[1], { recursive: true });

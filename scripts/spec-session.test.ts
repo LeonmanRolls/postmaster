@@ -16,7 +16,7 @@ import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const tool = dirname(here);
-const script = join(here, "spec-session.sh");
+const script = join(here, "run");
 
 interface Scratch {
   d: string;
@@ -106,7 +106,7 @@ function go(
   cfgDir: string,
   ...args: string[]
 ): { status: number | null; stdout: string; stderr: string } {
-  const result = spawnSync("bash", [script, ...args], {
+  const result = spawnSync(script, ["spec-session", ...args], {
     encoding: "utf8",
     timeout: 15_000,
     env: { ...process.env, POSTMASTER_CONFIG: join(cfgDir, "config.toml") },

@@ -6,7 +6,7 @@ import { run } from "./lib/proc.ts";
 
 const T = process.argv[2];
 if (T === undefined) {
-  console.error("usage: check-target.sh <path>");
+  console.error("usage: run check-target <path>");
   process.exit(1);
 }
 

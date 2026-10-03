@@ -80,7 +80,7 @@ type Report = Readonly<{
   kinds: Readonly<Record<Kind, KindShare>>;
 }>;
 
-const USAGE = `Usage: bun --no-env-file --config=/dev/null <tool>/scripts/synthesis-shares.ts \\
+const USAGE = `Usage: <tool>/scripts/run synthesis-shares \\
   --base <commit> --synthesis <commit> [--lane <name>=<commit> ...] \\
   [--oracle <commit>] [--record <dispatch-dir>]
 

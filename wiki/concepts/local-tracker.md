@@ -31,13 +31,13 @@ the repository, which the ticket's own notes suggested.
 
 - **One copy for every worktree.** A repository's linked worktrees share its common git
   directory, so a run's worktree reads the same ticket files as the main checkout, and a state
-  set from one is the state the other sees. The tests beside `scripts/local.sh` check both.
+  set from one is the state the other sees. The tests beside `scripts/run local` check both.
 - **No name to collide.** A store under `~/.postmaster/tickets/<name>/` would be keyed by the
   repository's name, as the run records are. Two repositories with one name would share a
   store, and a repository that moved would lose its own. In the git directory, the repository
   itself is the key.
 - **Nothing in the working tree.** A store never shows in `git status`, so it never makes a
-  target look dirty to `scripts/check-target.sh`. The self-test checks that a store leaves
+  target look dirty to `scripts/run check-target`. The self-test checks that a store leaves
   `git status` empty and adds no branch or commit.
 - **A throwaway repository takes its tickets with it.** Fixture runs
   ([issue #37](https://github.com/brindlewick/postmaster/issues/37)) make a fresh repository
@@ -58,9 +58,9 @@ tracker on a machine whose config names GitHub for everything else. Naming each 
 in the config would mean a script editing the user's config on every run.
 
 The store is its own signal: it exists only in the repository it belongs to. So a repository
-that has one uses it, and any other uses the config's kind. `scripts/tracker-kind.sh` holds
-that rule in one place; `scripts/discover-project.sh` reports the kind, and
-`scripts/ticket-check.sh` reads a ticket through it. Only a store that is known to be absent
+that has one uses it, and any other uses the config's kind. `scripts/run tracker-kind` holds
+that rule in one place; `scripts/run discover-project` reports the kind, and
+`scripts/run ticket-check` reads a ticket through it. Only a store that is known to be absent
 sends a repository to the config's kind: when the script cannot look, the kind is not told.
 
 That makes making a store a decision about where a repository's tickets live, since one made by
@@ -72,7 +72,7 @@ repository is made by a script the user runs for that purpose.
 
 ## Where the user looks
 
-`scripts/local.sh <repo> list` prints every ticket, one line each, grouped by state in the
+`scripts/run local <repo> list` prints every ticket, one line each, grouped by state in the
 flow's order. `read` prints one ticket with the path of its body, a plain markdown file, and
 `title` is where the user changes a title, which `edit` never does. Issue #11 did not need a
 kanban view, and the store does not rule one out: a ticket's title, state and log are one small
@@ -89,9 +89,9 @@ JSON file beside its body.
 
 ## What changed because of it
 
-`scripts/local.sh` is the adapter, with the same command shape and read output as the other
+`scripts/run local` is the adapter, with the same command shape and read output as the other
 two, and `skills/postmaster/trackers.md` describes it as the `local` kind. `store init` and
-`store remove` refuse in a linked worktree. `scripts/tracker-kind.sh` names the kind a target
-uses: `scripts/discover-project.sh` reports it as `tracker`, and warns when a github target has
-no origin remote, and `scripts/ticket-check.sh` reads a ticket through it.
-`scripts/probe-trackers.sh`, `scripts/setup.sh` and `config.example.toml` name the kind.
+`store remove` refuse in a linked worktree. `scripts/run tracker-kind` names the kind a target
+uses: `scripts/run discover-project` reports it as `tracker`, and warns when a github target has
+no origin remote, and `scripts/run ticket-check` reads a ticket through it.
+`scripts/run probe-trackers`, `scripts/run setup` and `config.example.toml` name the kind.

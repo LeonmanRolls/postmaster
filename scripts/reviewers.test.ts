@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { run } from "./lib/proc.ts";
 import { eligible, lanes, lines } from "./reviewers.ts";
 
-const SELF = join(import.meta.dir, "reviewers.sh");
+const SELF = join(import.meta.dir, "run");
 
 let tmp = "";
 
@@ -178,7 +178,7 @@ describe("positive controls", () => {
   });
 
   test("the lenses are the review stage's, in order", () => {
-    check(run(SELF, ["lenses"]), 0, "style\nbug\nsecurity");
+    check(run(SELF, ["reviewers", "lenses"]), 0, "style\nbug\nsecurity");
   });
 });
 
@@ -214,24 +214,24 @@ describe("negative controls", () => {
   });
 
   test("an explicitly empty --project is refused, never read as no project", () => {
-    check(run(SELF, ["lines", "--config", join(tmp, "one.toml"), "--project", ""]), 1, "");
+    check(run(SELF, ["reviewers", "lines", "--config", join(tmp, "one.toml"), "--project", ""]), 1, "");
   });
 
   test("and the refusal names the project", () => {
-    const r = run(SELF, ["lines", "--config", join(tmp, "one.toml"), "--project", ""]);
+    const r = run(SELF, ["reviewers", "lines", "--config", join(tmp, "one.toml"), "--project", ""]);
     expect(r.err.includes("no such project directory")).toBe(true);
   });
 
   test("an explicitly empty --project is refused for eligible too", () => {
     check(
-      run(SELF, ["eligible", "bug", "--config", join(tmp, "one.toml"), "--project", ""]),
+      run(SELF, ["reviewers", "eligible", "bug", "--config", join(tmp, "one.toml"), "--project", ""]),
       1,
       "",
     );
   });
 
   test("and the eligible refusal names the project", () => {
-    const r = run(SELF, ["eligible", "bug", "--config", join(tmp, "one.toml"), "--project", ""]);
+    const r = run(SELF, ["reviewers", "eligible", "bug", "--config", join(tmp, "one.toml"), "--project", ""]);
     expect(r.err.includes("no such project directory")).toBe(true);
   });
 

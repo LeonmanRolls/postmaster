@@ -4,10 +4,10 @@
 // The postmaster writes the result into the waybill's Team section, and the coachman reads it
 // back from there, so a run keeps the reviewers it was dispatched with.
 //
-//   reviewers.sh lines [--config <path>] [--project <repo>]   the waybill's reviewer lines, from the config (or the project's effective config)
-//   reviewers.sh eligible <lens> [--config <path>] [--project <repo>]  configured lanes for a lens, checked for eligibility
-//   reviewers.sh lanes <waybill> <lens>    the lanes for one lens, one per line, from a waybill
-//   reviewers.sh lenses                    the lenses, in the order the review stage runs them
+//   run reviewers lines [--config <path>] [--project <repo>]   the waybill's reviewer lines, from the config (or the project's effective config)
+//   run reviewers eligible <lens> [--config <path>] [--project <repo>]  configured lanes for a lens, checked for eligibility
+//   run reviewers lanes <waybill> <lens>    the lanes for one lens, one per line, from a waybill
+//   run reviewers lenses                    the lenses, in the order the review stage runs them
 //
 // `lines` prints `reviewers: <lane>, <lane>`, a `bug reviewers:` line containing only eligible
 // lanes, then each other lens the config gives its own lanes. `eligible` resolves a configured
@@ -40,7 +40,7 @@ interface CmdResult {
 
 function usage(): never {
   console.error(
-    "usage: reviewers.sh lines [--config <path>] [--project <repo>] | eligible <lens> [--config <path>] [--project <repo>] | lanes <waybill> <lens> | lenses",
+    "usage: run reviewers lines [--config <path>] [--project <repo>] | eligible <lens> [--config <path>] [--project <repo>] | lanes <waybill> <lens> | lenses",
   );
   process.exit(1);
 }
@@ -50,7 +50,7 @@ function isLens(s: string): s is Lens {
 }
 
 function hasForm(harness: string): boolean {
-  return run("bash", [join(scriptsDir(import.meta), "review-forms.sh"), "has", harness]).code === 0;
+  return run(join(scriptsDir(import.meta), "run"), ["review-forms", "has", harness]).code === 0;
 }
 
 /** resolved <lines|eligible> <config> [lens] [project]: the reviewer lines or one lens's lanes. */
@@ -75,8 +75,8 @@ function resolved(
   }
   let cfg: Record<string, unknown>;
   if (project !== "") {
-    const r = run("bash", [
-      join(scriptsDir(import.meta), "project-settings.sh"),
+    const r = run(join(scriptsDir(import.meta), "run"), [
+      "project-settings",
       "effective",
       project,
       configPath,

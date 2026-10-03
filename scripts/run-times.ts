@@ -1,9 +1,9 @@
 // How long each stage of a run took, computed from the run's own action log. Nothing here is
-// written by hand: a stage starts at the `stage` line that entered it (scripts/stage.sh writes
+// written by hand: a stage starts at the `stage` line that entered it (scripts/run stage writes
 // those) and ends at the next one, and the first stage, `dispatched`, starts at the postmaster's
 // `dispatch` line.
 //
-//   run-times.sh <dispatch>      the table, from <dispatch>/actions.jsonl
+//   run run-times <dispatch>      the table, from <dispatch>/actions.jsonl
 //
 // Waiting is the part of a stage when no coachman leg was running: from one leg's `handoff`
 // to the next leg's `handoff-accept`. A run whose log has neither shows waiting as "-".
@@ -142,7 +142,7 @@ export function times(dispatch: string): number {
 const argv = process.argv.slice(2);
 if (import.meta.main) {
   if (argv.length !== 1) {
-    console.error("usage: run-times.sh <dispatch>");
+    console.error("usage: run run-times <dispatch>");
     process.exit(1);
   }
   process.exit(times(argv[0] as string));

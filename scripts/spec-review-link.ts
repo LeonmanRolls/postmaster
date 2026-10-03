@@ -1,7 +1,7 @@
 // Resolve the user's spec-review link from the config captured at dispatch.
 //
-//   spec-review-link.sh <dispatch> <spec-folder>
-//   spec-review-link.sh --validate <dispatch>
+//   run spec-review-link <dispatch> <spec-folder>
+//   run spec-review-link --validate <dispatch>
 //
 // The optional config.planning.review_link template in run.json has {path} replaced by the
 // absolute path of the folder that holds WORKHORSE-SPEC.md under review — code-server opens
@@ -15,7 +15,7 @@ import { readFileSync, realpathSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { die } from "./lib/proc.ts";
 
-const FULL_USAGE = "usage: spec-review-link.sh <dispatch> <spec-folder> | --validate <dispatch>";
+const FULL_USAGE = "usage: run spec-review-link <dispatch> <spec-folder> | --validate <dispatch>";
 
 // --- helpers --------------------------------------------------------------------------------
 function errMsg(e: unknown): string {
@@ -108,7 +108,7 @@ function validate(dispatch: string): void {
 const argv = process.argv.slice(2);
 if (argv[0] === "--validate") {
   if (argv.length !== 2) {
-    console.error("usage: spec-review-link.sh --validate <dispatch>");
+    console.error("usage: run spec-review-link --validate <dispatch>");
     process.exit(1);
   }
   validate(argv[1]!);

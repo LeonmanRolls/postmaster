@@ -101,7 +101,7 @@ const assertControl = (label: string): void => {
 };
 
 // Round-10 pattern parity: every regex above, diffed against BASE's own
-// pattern text (bb782a9 scripts/tool-faults.sh) on the vectors where
+// pattern text (bb782a9 scripts/run tool-faults) on the vectors where
 // Unicode meets the pattern. The port side runs the real consts, so a
 // routed pattern that drifts fails here before any harvest runs.
 // Multi-slash remote tails are absent on purpose: BASE's /*$ and the
@@ -1897,7 +1897,7 @@ if (a[0] === "api" && a[1] === "graphql") {
         primMismatches.join("\n\n").slice(0, 4000),
       );
       // Round-10 pattern parity: every regex above, diffed against BASE's own
-      // pattern text (bb782a9 scripts/tool-faults.sh) on the vectors where
+      // pattern text (bb782a9 scripts/run tool-faults) on the vectors where
       // Unicode meets the pattern. The port side runs the real consts, so a
       // routed pattern that drifts fails here before any harvest runs.
       // Multi-slash remote tails are absent on purpose: BASE's /*$ and the

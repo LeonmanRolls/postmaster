@@ -19,7 +19,7 @@ import { tryJsonFile } from "./lib/data.ts";
 import { run } from "./lib/proc.ts";
 import { findOnPath, IMPORT, TEST_CALL } from "./verify-library.ts";
 
-const SELF = join(import.meta.dir, "verify-library.sh");
+const SELF = join(import.meta.dir, "run");
 const spacedDone = process.env.POSTMASTER_SPACED_DONE === "1";
 if (spacedDone) {
   console.log(
@@ -191,7 +191,7 @@ afterAll(() => {
 });
 
 const runProject = (project: string): { code: number; out: string } => {
-  const r = run("bash", [SELF, join(tmp, project)]);
+  const r = run(SELF, ["verify-library", join(tmp, project)]);
   return { code: r.code, out: r.out + r.err };
 };
 
@@ -214,7 +214,7 @@ describe("unicode primitives", () => {
 
 describe("positive controls", () => {
   test("only the tests that import it by name and open a line with a test are chosen, not helpers, fixtures, method calls or comments", () => {
-    const r = run("bash", [SELF, "--list", lib]);
+    const r = run(SELF, ["verify-library", "--list", lib]);
     const list = r.out.trim().split("\n").filter(Boolean).join(" ");
     expect(list).toBe("test/helped.test.js test/public.test.js");
   }, 30000);
@@ -280,7 +280,7 @@ describe("negative controls", () => {
   }, 60000);
 
   test("tests with no node to run them are not run", () => {
-    const r = run("bash", [SELF, lib], {
+    const r = run(SELF, ["verify-library", lib], {
       env: { ...process.env, PATH: join(tmp, "fewtools") },
     });
     const out = r.out + r.err;

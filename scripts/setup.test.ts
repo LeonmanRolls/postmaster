@@ -14,7 +14,7 @@ import { join } from "node:path";
 import { tryTomlFile } from "./lib/data.ts";
 import { run } from "./lib/proc.ts";
 
-const SELF = join(import.meta.dir, "setup.sh");
+const SELF = join(import.meta.dir, "run");
 
 let tmp = "";
 let plainRc = -1;
@@ -57,9 +57,7 @@ function answers(name: string, extra?: string): void {
 }
 
 function runSetup(name: string): number {
-  const r = run(
-    "bash",
-    [SELF, "--answers", join(tmp, `${name}.answers`), "--config", join(tmp, `${name}.toml`)],
+  const r = run(SELF, ["setup", "--answers", join(tmp, `${name}.answers`), "--config", join(tmp, `${name}.toml`)],
     {
       env: {
         ...(process.env as Record<string, string>),
@@ -106,8 +104,8 @@ describe("positive controls", () => {
   }, 30000);
 
   test("the written config resolves: the reviewers default to the workhorses, and security has its own", () => {
-    const r = run("bash", [
-      join(import.meta.dir, "reviewers.sh"),
+    const r = run(join(import.meta.dir, "run"), [
+      "reviewers",
       "lines",
       "--config",
       join(tmp, "lens.toml"),
@@ -233,8 +231,8 @@ describe("positive controls", () => {
     writeFileSync(ap, swapped, "utf8");
     const mixedBugRc = runSetup("mixed-bug");
     const out = readFileSync(join(tmp, "mixed-bug.out"), "utf8");
-    const er = run("bash", [
-      join(import.meta.dir, "reviewers.sh"),
+    const er = run(join(import.meta.dir, "run"), [
+      "reviewers",
       "eligible",
       "bug",
       "--config",

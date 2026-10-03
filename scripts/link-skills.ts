@@ -4,9 +4,9 @@
 // section). The links go to the main checkout even when this runs from a worktree, and to this
 // script's own tree when that is not a git checkout at all, as with an installed package.
 //
-//   link-skills.sh [--dry-run]   link every skill for every installed harness with a skills folder
-//   link-skills.sh --check       report missing or blocked links without changing anything
-//   link-skills.sh --remove      remove the links to this checkout's skills, and nothing else
+//   run link-skills [--dry-run]   link every skill for every installed harness with a skills folder
+//   run link-skills --check       report missing or blocked links without changing anything
+//   run link-skills --remove      remove the links to this checkout's skills, and nothing else
 //
 //   exit 0  every link is in place, would be (--dry-run), or is removed (--remove); --check is complete
 //   exit 1  usage, no skills in the checkout, a bare main checkout, or something in the way; --check is incomplete
@@ -224,7 +224,7 @@ export function checkLinks(root: string): number {
   }
   if (problems) {
     console.log(
-      `link-skills: to install missing links after resolving any blockers, run: ${shellQuote(join(scriptsDir(import.meta), "link-skills.sh"))}`,
+      `link-skills: to install missing links after resolving any blockers, run: ${shellQuote(join(scriptsDir(import.meta), "run"))} link-skills`,
     );
     return 1;
   }
@@ -315,6 +315,6 @@ if (import.meta.main) {
     if (ROOT === null) process.exit(1);
     process.exit(makeLinks(ROOT, 0));
   } else {
-    die("usage: link-skills.sh [--dry-run | --check] | --remove", 1);
+    die("usage: run link-skills [--dry-run | --check] | --remove", 1);
   }
 }

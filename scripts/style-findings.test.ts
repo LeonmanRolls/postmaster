@@ -36,7 +36,7 @@ import {
   YPKGS,
 } from "./style-findings.ts";
 
-const SELF = join(import.meta.dir, "style-findings.sh");
+const SELF = join(import.meta.dir, "run");
 const SKILL = join(toolRoot(import.meta), "skills/postmaster");
 
 interface ControlRecord {
@@ -74,7 +74,7 @@ beforeAll(() => {
     let rc = 0;
 
     const invoke = (...args: string[]): void => {
-      const r = run("bash", [SELF, ...args]);
+      const r = run(SELF, ["style-findings", ...args]);
       // BASE's run() used $(...), which strips trailing newlines.
       out = (r.out + r.err).replace(/\n+$/u, "");
       rc = r.code;
@@ -158,7 +158,7 @@ beforeAll(() => {
     };
 
     const logged = (dispatch: string, ...args: string[]): void => {
-      run("bash", [join(import.meta.dir, "log-action.sh"), dispatch, "coachman", ...args]);
+      run(join(import.meta.dir, "run"), ["log-action", dispatch, "coachman", ...args]);
     };
 
     const logFindings = (dispatch: string, count: number): void => {
@@ -359,8 +359,8 @@ beforeAll(() => {
         return 0;
       }
     })();
-    const refuseR = run("bash", [
-      join(import.meta.dir, "log-action.sh"),
+    const refuseR = run(join(import.meta.dir, "run"), [
+      "log-action",
       d,
       "coachman",
       "finding",

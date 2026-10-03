@@ -82,7 +82,7 @@ record.
 ## What changed because of it
 
 `skills/postmaster/harnesses.md` records the resume form the trial found, and
-`scripts/launch.sh resume` builds it: the launch's flags without `-C` and
+`scripts/run launch resume` builds it: the launch's flags without `-C` and
 `--skip-git-repo-check`, with `--` before the prompt. `coachman.md` resumes a lane with
 `--last`, so the lane's final message file holds its latest turn. Through `launch.sh`, a
 resumed lane and a resumed coachman leg now run on the model and effort the config names for

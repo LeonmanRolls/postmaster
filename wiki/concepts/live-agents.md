@@ -30,9 +30,9 @@ default. Building the option does not wait for it.
 
 **Control: the current arrangement.** A lane or a leg is launched headless, writes its event
 stream and exits, and its wrapper touches a marker. The coachman waits for lanes with
-`scripts/wait-for-markers.sh`, which looks every 20 s. The postmaster sees a leg's markers when
+`scripts/run wait-for-markers`, which looks every 20 s. The postmaster sees a leg's markers when
 it next polls, every `postmaster.poll_seconds` (120 by default). A ruling resumes the thread.
-Since issue #10 merged, these launches run in Herdr panes through `scripts/host.sh`, so both
+Since issue #10 merged, these launches run in Herdr panes through `scripts/run host`, so both
 levels are watched the same way and differ only in the contract.
 
 **Live.** A lane or a leg is an interactive agent in its pane. The coachman gives a lane work
@@ -139,7 +139,7 @@ recording every agent's state, process count and memory where the idle clock of
 `run.json` recording the Herdr version, the detection manifest versions and which integrations
 are installed. Runs from before issue #10 merged are no control: until then a ruling's resume
 left the leg's `.leg-<n>-exited` in place, so the next poll of `runs-status.sh` read REMOUNT
-for a leg that was working. `scripts/host.sh` now clears it on every resume.
+for a leg that was working. `scripts/run host` now clears it on every resume.
 
 **Cost**: six fixture runs, each costing what #37's first scored run records, which is not
 known yet. The live level holds a process per idle agent, about 100 to 160 MiB each on the

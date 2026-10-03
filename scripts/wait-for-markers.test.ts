@@ -13,7 +13,7 @@ if (isRoot) {
   console.log("skip a reader that cannot see its own planted marker: root writes anywhere");
 }
 
-const wrapper = join(import.meta.dir, "wait-for-markers.sh");
+const wrapper = join(import.meta.dir, "run");
 
 function invoke(
   dir: string,
@@ -22,7 +22,7 @@ function invoke(
   timeout: string,
 ): { out: string; rc: number; took: number } {
   const t0 = Date.now();
-  const r = spawnSync("bash", [wrapper, dir, glob, count, timeout], { encoding: "utf8" });
+  const r = spawnSync(wrapper, ["wait-for-markers", dir, glob, count, timeout], { encoding: "utf8" });
   return {
     out: `${r.stdout ?? ""}${r.stderr ?? ""}`,
     rc: r.status ?? -1,

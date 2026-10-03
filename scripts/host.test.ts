@@ -35,7 +35,7 @@ const SECTIONS: Array<{ name: string; count: number }> = [
   { name: "review round 4 fixes, Herdr (stub)", count: 16 },
   { name: "review round 4 fixes, tmux (stub)", count: 11 },
   { name: "interactive sessions", count: 15 },
-  { name: "run role: the explicit host role", count: 1 },
+  { name: "run role: the explicit host role", count: 2 },
   { name: "leg attempt controls", count: 89 },
   {
     name: "run environment identity, Claude session and lane env file: Herdr, tmux and no host",
@@ -59,6 +59,10 @@ beforeAll(async () => {
     failures = await runControls();
   } finally {
     console.log = origLog;
+  }
+  if (failures > 0) {
+    for (const line of lines.filter((line) => line.includes("FAIL") || line.includes("setup failed")))
+      process.stderr.write(`${line}\n`);
   }
 }, 600000);
 
@@ -147,12 +151,12 @@ describe("waiting list lock", () => {
         join(runs, "postmaster", "ESCALATION.md"),
         Array.from({ length: 500 }, (_, i) => `## FILL-${i}\nfill ${i}\n`).join(""),
       );
-      const wrapper = join(import.meta.dir, "host.sh");
+      const wrapper = join(import.meta.dir, "run");
       const worker = [
         `import { spawnSync } from "node:child_process";`,
         `const [wrapper, runs, qfile, idx] = process.argv.slice(process.argv.length - 4);`,
         `for (let j = 0; j < 8; j++) {`,
-        `  const r = spawnSync(wrapper, ["leg", "waiting", "add", runs, "T" + idx + "-" + j, qfile], { encoding: "utf8" });`,
+        `  const r = spawnSync(wrapper, ["host", "leg", "waiting", "add", runs, "T" + idx + "-" + j, qfile], { encoding: "utf8" });`,
         `  if (r.status !== 0) { process.stderr.write(String(r.stderr)); process.exit(1); }`,
         `}`,
       ].join("\n");
@@ -188,7 +192,7 @@ describe("waiting list lock", () => {
       const runs = join(dir, "runs");
       const qfile = join(dir, "q.md");
       writeFileSync(qfile, "why is the run waiting?\n");
-      const wrapper = join(import.meta.dir, "host.sh");
+      const wrapper = join(import.meta.dir, "run");
       // A PATH with no flock: bash for the wrapper's shebang, bun and dirname
       // for its exec.
       const bin = join(dir, "bin");
@@ -200,7 +204,7 @@ describe("waiting list lock", () => {
         `import { spawnSync } from "node:child_process";`,
         `const [wrapper, runs, qfile, idx] = process.argv.slice(process.argv.length - 4);`,
         `for (let j = 0; j < 2; j++) {`,
-        `  const r = spawnSync(wrapper, ["leg", "waiting", "add", runs, "T" + idx + "-" + j, qfile], { encoding: "utf8" });`,
+        `  const r = spawnSync(wrapper, ["host", "leg", "waiting", "add", runs, "T" + idx + "-" + j, qfile], { encoding: "utf8" });`,
         `  if (r.status !== 0) { process.stderr.write(String(r.stderr)); process.exit(1); }`,
         `}`,
       ].join("\n");

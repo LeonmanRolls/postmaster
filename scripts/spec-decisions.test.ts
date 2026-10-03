@@ -11,7 +11,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync }
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const SELF = join(import.meta.dir, "spec-decisions.sh");
+const SELF = join(import.meta.dir, "run");
 
 interface Run {
   code: number;
@@ -20,7 +20,7 @@ interface Run {
 }
 
 function go(...args: string[]): Run {
-  const r = spawnSync(SELF, args, { encoding: "utf8", timeout: 10000 });
+  const r = spawnSync(SELF, ["spec-decisions", ...args], { encoding: "utf8", timeout: 10000 });
   return { code: r.status ?? 1, out: String(r.stdout ?? ""), err: String(r.stderr ?? "") };
 }
 
@@ -272,7 +272,7 @@ function oneSpecGo(
   d: string,
   ...args: string[]
 ): { status: number | null; stdout: string; stderr: string } {
-  const result = spawnSync("bash", [SELF, d, ...args], { encoding: "utf8", timeout: 15_000 });
+  const result = spawnSync(SELF, ["spec-decisions", d, ...args], { encoding: "utf8", timeout: 15_000 });
   return { status: result.status, stdout: result.stdout ?? "", stderr: result.stderr ?? "" };
 }
 

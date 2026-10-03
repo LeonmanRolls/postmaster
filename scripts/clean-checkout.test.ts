@@ -14,7 +14,7 @@ import { dirname, isAbsolute, join, relative, sep } from "node:path";
 import { afterEach, describe, expect, test } from "bun:test";
 import { cleanCheckout } from "./clean-checkout";
 
-const helper = join(import.meta.dir, "clean-checkout.ts");
+const helper = join(import.meta.dir, "run");
 const roots: string[] = [];
 const realGit = spawnSync("sh", ["-c", "command -v git"], { encoding: "utf8" }).stdout.trim();
 
@@ -65,7 +65,7 @@ const runHelper = (
   args: string[],
   env?: Record<string, string>,
 ): { status: number; out: string } => {
-  const r = spawnSync("bun", [helper, ...args], {
+  const r = spawnSync(helper, ["clean-checkout", ...args], {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
     env: env ? { ...process.env, ...env } : process.env,

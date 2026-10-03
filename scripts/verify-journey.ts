@@ -4,9 +4,9 @@
 // `## User journey`, in the ticket's order, marked did or did not, with a screenshot beside the
 // report, in its directory or below it, so a walk leaves nothing in the worktree it walked.
 //
-//   verify-journey.sh [<worktree>] [--ticket <file>] [--report <file>]
-//   verify-journey.sh --path [<worktree>] [--dir <dir>]   where the report for <worktree>'s HEAD goes
-//   verify-journey.sh --format                            the report's format, for a brief
+//   run verify-journey [<worktree>] [--ticket <file>] [--report <file>]
+//   run verify-journey --path [<worktree>] [--dir <dir>]   where the report for <worktree>'s HEAD goes
+//   run verify-journey --format                            the report's format, for a brief
 //
 //   exit 0  every step is in the report, in order, marked did, with its screenshot beside it
 //   exit 1  a step is marked did not
@@ -307,7 +307,7 @@ function journey(mode: "path" | "judge", wtArg: string, ...rest: string[]): numb
 
 // --- entry -----------------------------------------------------------------------------------
 const USAGE =
-  "usage: verify-journey.sh [<worktree>] [--ticket <file>] [--report <file>] | --path [<worktree>] [--dir <dir>] | --format";
+  "usage: run verify-journey [<worktree>] [--ticket <file>] [--report <file>] | --path [<worktree>] [--dir <dir>] | --format";
 
 function main(argv: string[]): number {
   if (argv[0] === "--format") {

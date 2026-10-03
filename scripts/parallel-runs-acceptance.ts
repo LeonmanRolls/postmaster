@@ -14,7 +14,7 @@
 // rewritten, not deleted, keeping second-resolves and never-rebase. The replacement
 // wording beyond those pins is judged by reading, not by this script.
 //
-//   parallel-runs-acceptance.sh [repo-root]   default: the repo this script lives in
+//   run parallel-runs-acceptance [repo-root]   default: the repo this script lives in
 //
 //   exit 0  no stale claim remains
 //   exit 1  stale claims, one per line on stdout: <file>: <what is still claimed>
@@ -29,7 +29,7 @@ import { toolRoot } from "./lib/paths.ts";
 import { casefold } from "./lib/text.ts";
 
 function usage(): never {
-  console.error("usage: parallel-runs-acceptance.sh [repo-root]");
+  console.error("usage: run parallel-runs-acceptance [repo-root]");
   process.exit(2);
 }
 

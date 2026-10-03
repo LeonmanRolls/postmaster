@@ -1,8 +1,8 @@
 // The default check for a library: run the tests that reach it the way its users do, by its
 // package name, which resolves only to what the package exports.
 //
-//   verify-library.sh [<worktree>]
-//   verify-library.sh --list [<worktree>]   the test files it would run, one per line
+//   run verify-library [<worktree>]
+//   run verify-library --list [<worktree>]   the test files it would run, one per line
 //
 // A test file is a JavaScript or TypeScript file under a test, tests or __tests__ directory, or
 // named *.test.* or *.spec.*, tracked or new, outside node_modules and outside the directories
@@ -238,15 +238,15 @@ function which(tool: string): boolean {
 // --- entry -----------------------------------------------------------------------------------
 function main(argv: string[]): number {
   if (argv[0] === "--list") {
-    if (argv.length > 2) die("usage: verify-library.sh [--list] [<worktree>]", 1);
+    if (argv.length > 2) die("usage: run verify-library [--list] [<worktree>]", 1);
     const WT = argv[1] ?? ".";
     if (!existsSync(WT)) die(`verify-library: no such directory: ${WT}`, 1);
     return listOrRun("list", WT);
   }
   if (argv[0]?.startsWith("-")) {
-    die("usage: verify-library.sh [--list] [<worktree>]", 1);
+    die("usage: run verify-library [--list] [<worktree>]", 1);
   }
-  if (argv.length > 1) die("usage: verify-library.sh [--list] [<worktree>]", 1);
+  if (argv.length > 1) die("usage: run verify-library [--list] [<worktree>]", 1);
   const WT = argv[0] ?? ".";
   if (!existsSync(WT)) die(`verify-library: no such directory: ${WT}`, 1);
   return listOrRun("run", WT);

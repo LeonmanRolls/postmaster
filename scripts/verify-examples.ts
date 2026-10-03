@@ -7,7 +7,7 @@
 // HOME, one command at a time through bash, so a later command sees what an earlier one wrote and
 // no block sees another's.
 //
-//   verify-examples.sh [<worktree>] [--ticket <file>]
+//   run verify-examples [<worktree>] [--ticket <file>]
 //
 //   exit 0  every command printed what its example says and exited as it says
 //   exit 1  one did not, or the build failed; each difference is shown
@@ -425,7 +425,7 @@ function shQuote(s: string): string {
 }
 
 // --- entry -----------------------------------------------------------------------------------
-const USAGE = "usage: verify-examples.sh [<worktree>] [--ticket <file>]";
+const USAGE = "usage: run verify-examples [<worktree>] [--ticket <file>]";
 
 function main(argv: string[]): number {
   let WT = ".";

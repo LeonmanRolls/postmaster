@@ -1,11 +1,11 @@
 // Read, validate and write a project's optional shared and local settings.
 //
-//   project-settings.sh inspect <repo>       resolved facts and their source as JSON
-//   project-settings.sh report <repo>        compact key=value source report
-//   project-settings.sh effective <repo> [<machine-config>]
+//   run project-settings inspect <repo>       resolved facts and their source as JSON
+//   run project-settings report <repo>        compact key=value source report
+//   run project-settings effective <repo> [<machine-config>]
 //                                             machine config with local role choices applied
-//   project-settings.sh ensure <repo>         create .postmaster/.gitignore, no settings
-//   project-settings.sh write <repo> project|local [<toml-file>]
+//   run project-settings ensure <repo>         create .postmaster/.gitignore, no settings
+//   run project-settings write <repo> project|local [<toml-file>]
 //                                             validate, then write the agreed settings
 //
 //   exit 0  printed, wrote, or ensured
@@ -49,7 +49,7 @@ import {
 
 const HERE = scriptsDir(import.meta);
 const USAGE =
-  "usage: project-settings.sh inspect|report <repo> | effective <repo> [<machine-config>]" +
+  "usage: run project-settings inspect|report <repo> | effective <repo> [<machine-config>]" +
   " | ensure <repo> | write <repo> project|local [<toml-file>]";
 
 // --- failure ----------------------------------------------------------------------------
@@ -199,7 +199,7 @@ const RX_NAME = /^[A-Za-z0-9][A-Za-z0-9_.-]*$/u;
 const RX_CHECK_NAME = /^[a-z][a-z0-9-]*$/u;
 const RX_SCHEME = /^[A-Za-z\u017F\u212A\u0130\u0131][A-Za-z0-9+.\u017F\u212A\u0130\u0131-]*:[^ ]/u;
 const RX_CONTROL = /[\x00-\x1f\x7f]/u;
-// verify.sh counts a score's groups this way and stays authoritative: the count below
+// run verify counts a score's groups this way and stays authoritative: the count below
 // matches it literally.
 const RX_GROUP_OPEN = /\((?!\?)/gu;
 
@@ -405,7 +405,9 @@ const readToml = (path: string, label: string): { data: Rec; present: boolean } 
 };
 
 const knownTurnpikes = (): Set<string> => {
-  const r = run(join(HERE, "turnpikes.sh"), ["--list"], { env: { POSTMASTER_PROJECT: undefined } });
+  const r = run(join(HERE, "run"), ["turnpikes", "--list"], {
+    env: { POSTMASTER_PROJECT: undefined },
+  });
   if (r.code !== 0) {
     fail(`cannot read the turnpike list: ${pyTrim(r.err) || pyTrim(r.out)}`);
   }
@@ -443,7 +445,7 @@ const CHECK_KEYS = ["command", "shows", "use", "score", "threshold", "timeout"];
 const CHECK_USES = ["cli-examples", "browser-suite", "web-journey", "library-tests"];
 
 const validateCheck = (name: string, specValue: unknown, where: string): void => {
-  // Mirrors the declared-check rules in scripts/verify.sh, which stays
+  // Mirrors the declared-check rules in scripts/run verify, which stays
   // authoritative: write must never persist a shape checks would reject.
   if (!RX_CHECK_NAME.test(name)) fail(`${where}: a check's name is a lowercase word`);
   const spec = asTable(specValue, where);
@@ -494,7 +496,7 @@ const validateCheck = (name: string, specValue: unknown, where: string): void =>
     if (typeof score !== "string") {
       fail(`${where}: score is a regular expression with one group, the number`);
     }
-    // A user pattern, compiled the way verify.sh compiles it: no flags, so the two
+    // A user pattern, compiled the way run verify compiles it: no flags, so the two
     // validators agree on what counts as a regular expression.
     let groups = 0;
     try {

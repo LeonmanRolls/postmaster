@@ -1,16 +1,16 @@
 // Plane work items as tickets, through Plane's REST API. One Plane project per target repo,
 // matched by the project identifier that prefixes every work item id (PM-12): the same prefix
-// scripts/discover-project.sh reads off the target's commit messages, so a project that has
+// scripts/run discover-project reads off the target's commit messages, so a project that has
 // shipped one ticket needs nothing configured.
 //
-//   plane.sh projects                                identifier, id and name of every project
-//   plane.sh create <IDENT> <title> <body-file>      new work item in the todo state; prints its id
-//   plane.sh read <IDENT-n> [--body]                 title, state, labels, body, comments; with
+//   run plane projects                                identifier, id and name of every project
+//   run plane create <IDENT> <title> <body-file>      new work item in the todo state; prints its id
+//   run plane read <IDENT-n> [--body]                 title, state, labels, body, comments; with
 //                                                    --body, the body alone
-//   plane.sh edit <IDENT-n> <body-file> <base-file>  replace its description; the title stays
-//   plane.sh state <IDENT-n> <state>                 todo | in-progress | blocked | done | cancelled
-//   plane.sh comment <IDENT-n> <actor> <text>        one comment, dated to the minute, actor first
-//   plane.sh list <IDENT> [state]                    one line per work item: id, state, title
+//   run plane edit <IDENT-n> <body-file> <base-file>  replace its description; the title stays
+//   run plane state <IDENT-n> <state>                 todo | in-progress | blocked | done | cancelled
+//   run plane comment <IDENT-n> <actor> <text>        one comment, dated to the minute, actor first
+//   run plane list <IDENT> [state]                    one line per work item: id, state, title
 //
 // The instance and workspace come from [tracker] in ~/.postmaster/config.toml (url and
 // workspace; POSTMASTER_CONFIG overrides the path). The key is PLANE_API_KEY in the
@@ -1025,7 +1025,11 @@ function loadConfig(): PlaneConfig {
   const project =
     process.env.POSTMASTER_PROJECT || (toplevel.code === 0 ? toplevel.out.trim() : "");
   if (project !== "") {
-    const insp = run(join(scriptsDir(import.meta), "project-settings.sh"), ["inspect", project]);
+    const insp = run(join(scriptsDir(import.meta), "run"), [
+      "project-settings",
+      "inspect",
+      project,
+    ]);
     if (insp.code !== 0) {
       if (insp.err.trim() !== "") console.error(insp.err.trim());
       dieP("cannot read the project's tracker binding");
@@ -1119,7 +1123,7 @@ async function* pages(
 }
 
 export function parseId(tid: string): [string, number] {
-  // text.ts: BASE re.fullmatch(r"([A-Za-z][A-Za-z0-9]*)-(\d+)" (plane.sh:698); the upper is regex-gated ASCII.
+  // text.ts: BASE re.fullmatch(r"([A-Za-z][A-Za-z0-9]*)-(\d+)" (run plane:698); the upper is regex-gated ASCII.
   const m = /^([A-Za-z][A-Za-z0-9]*)-(\p{Nd}+)$/u.exec(tid);
   if (!m) dieP(`not a work item id: ${tid} (expected IDENT-n)`);
   return [(m[1] ?? "").toUpperCase(), Number(digitValue(m[2] ?? "0"))]; // ASCII: group 1 is [A-Za-z0-9]* by the match.
@@ -1213,7 +1217,7 @@ async function runCommands(): Promise<void> {
       console.log(`${p.identifier ?? ""}\t${p.id}\t${p.name ?? ""}`);
     }
   } else if (cmd === "create") {
-    if (args.length !== 3) dieP("usage: plane.sh create <IDENT> <title> <body-file>");
+    if (args.length !== 3) dieP("usage: run plane create <IDENT> <title> <body-file>");
     const [ident, title, bodyFile] = [args[0]!, args[1]!, args[2]!];
     const body = readFileP(bodyFile);
     const [outHtml, diff] = readback(body);
@@ -1229,7 +1233,7 @@ async function runCommands(): Promise<void> {
   } else if (cmd === "edit") {
     if (args.length !== 3 || !existsSync(args[1] ?? "")) {
       dieP(
-        "usage: plane.sh edit <IDENT-n> <body-file> <base-file> (edit takes no title and never changes one)",
+        "usage: run plane edit <IDENT-n> <body-file> <base-file> (edit takes no title and never changes one)",
       );
     }
     const body = readFileP(args[1]!);
@@ -1251,7 +1255,7 @@ async function runCommands(): Promise<void> {
     console.log(`${tid}: edited`);
   } else if (cmd === "read") {
     const rest = args.filter((a) => a !== "--body");
-    if (rest.length !== 1 || args.length > 2) dieP("usage: plane.sh read <IDENT-n> [--body]");
+    if (rest.length !== 1 || args.length > 2) dieP("usage: run plane read <IDENT-n> [--body]");
     const [ident, item] = await itemFor(cfg, rest[0]!);
     if (args.includes("--body")) {
       console.log(htmlToText(item.description_html));
@@ -1287,7 +1291,7 @@ async function runCommands(): Promise<void> {
       }
     }
   } else if (cmd === "state") {
-    if (args.length !== 2) dieP("usage: plane.sh state <IDENT-n> <state>");
+    if (args.length !== 2) dieP("usage: run plane state <IDENT-n> <state>");
     const newSt = args[1]!;
     if (!STATES.includes(newSt)) dieP(`invalid state ${newSt} (one of: ${STATES.join(", ")})`, 2);
     const [ident, item] = await itemFor(cfg, args[0]!);
@@ -1314,7 +1318,7 @@ async function runCommands(): Promise<void> {
     await api(cfg, "PATCH", `workspaces/${cfg.WS}/projects/${pid}/work-items/${item.id}/`, patch);
     console.log(`${ident}-${item.sequence_id}: ${newSt}`);
   } else if (cmd === "comment") {
-    if (args.length < 3) dieP("usage: plane.sh comment <IDENT-n> <actor> <text>");
+    if (args.length < 3) dieP("usage: run plane comment <IDENT-n> <actor> <text>");
     const [ident, item] = await itemFor(cfg, args[0]!);
     const actor = args[1]!;
     const text = args.slice(2).join(" ");
@@ -1327,7 +1331,7 @@ async function runCommands(): Promise<void> {
     });
     console.log(`${ident}-${item.sequence_id}: ${line}`);
   } else if (cmd === "list") {
-    if (args.length !== 1 && args.length !== 2) dieP("usage: plane.sh list <IDENT> [state]");
+    if (args.length !== 1 && args.length !== 2) dieP("usage: run plane list <IDENT> [state]");
     const want = args.length === 2 ? args[1] : null;
     if (want && !STATES.includes(want))
       dieP(`invalid state ${want} (one of: ${STATES.join(", ")})`, 2);
@@ -1344,7 +1348,7 @@ async function runCommands(): Promise<void> {
       }
     }
   } else {
-    dieP("usage: plane.sh projects|create|edit|read|state|comment|list ...");
+    dieP("usage: run plane projects|create|edit|read|state|comment|list ...");
   }
 }
 
@@ -1353,7 +1357,7 @@ const firstArg = process.argv[2];
 if (import.meta.main) {
   if (!firstArg) {
     try {
-      dieP("usage: plane.sh projects|create|edit|read|state|comment|list ...");
+      dieP("usage: run plane projects|create|edit|read|state|comment|list ...");
     } catch (e) {
       fatal(e);
     }

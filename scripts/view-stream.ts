@@ -1,10 +1,10 @@
 // Show a harness's event stream readably: what an agent says and runs, in full and wrapped to the
 // pane, never raw JSON. This is what a session host's pane shows while a launch runs
-// (scripts/host.sh). Event formats are harness-specific, so this script belongs to the harness
-// adapter beside launch.sh, and harnesses.md says which harness's events it knows.
+// (scripts/run host). Event formats are harness-specific, so this script belongs to the harness
+// adapter beside run launch, and harnesses.md says which harness's events it knows.
 //
-//   view-stream.sh < <events-file>                           render a stream, then stop
-//   view-stream.sh --follow <file> --pid <pid> [--from <byte>] render the file as it grows,
+//   run view-stream < <events-file>                           render a stream, then stop
+//   run view-stream --follow <file> --pid <pid> [--from <byte>] render the file as it grows,
 //                                                           and stop once <pid> has exited
 //                                                           and everything it wrote is shown
 //

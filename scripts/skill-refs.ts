@@ -3,16 +3,19 @@
 // and a session reaches the repo only as <tool>, the path SKILL.md finds from that link once.
 // A reference resolves from any working directory only when it goes through <tool> and names
 // a script the repo has. The run's pinned checkout goes through <rt> instead, resolved per run
-// by run-meta.sh path; it is a checkout of the same repo, so the same existence check applies.
+// by run-meta path. A pinned checkout can use an older entry form, so runbooks invoke it
+// through run-meta script rather than naming a script under <rt> themselves.
 //
-//   skill-refs.sh [<file>...]          default: skills/postmaster/*.md beside this script's repo
-//   skill-refs.sh --fix [<file>...]    put <tool>/ before every bare scripts/ path, in place
+//   scripts/run skill-refs [<file>...]          default: skills/postmaster/*.md
+//   scripts/run skill-refs --fix [<file>...]    upgrade old paths and prefix bare tool paths
+//   scripts/run skill-refs --root <root>        inspect another tool tree
 //
-// A reference is any scripts/ path. It is a fault when it is bare (scripts/x.sh, which resolves
+// A reference is any scripts/ path. It is a fault when it is bare (scripts/run x, which resolves
 // only from the repo's own root), when it reaches scripts/ some other way (../../scripts/x.sh),
-// or when it goes through <tool> or <rt> to a script the repo does not have. A path under
+// or when it goes through <tool> to a script the repo does not have. A path under
 // another placeholder or variable, such as <repo>/scripts/, is that directory's and not the tool's.
-// --fix rewrites the bare form only, so it can be run again after a rebase and changes nothing
+// --fix also upgrades old .sh names resolved by scripts/run, so a rebase adding a script
+// converts that reference without a fixed name list. A second run changes nothing.
 // the second time; the check that follows it names whatever it could not fix.
 //
 //   exit 0  every reference resolves
@@ -25,6 +28,8 @@ import { toolRoot } from "./lib/paths.ts";
 const REF = /scripts\/[A-Za-z0-9._-]*/gu;
 const BARE = /(?<![A-Za-z0-9_./-])scripts\//gu;
 const OTHER = /(<[A-Za-z0-9_-]+>|\$\{?[A-Za-z_][A-Za-z0-9_]*\}?)\/$/u;
+const OLD = /scripts\/([A-Za-z0-9_-]+)\.sh\b/gu;
+const DIRECT_BUN = /\bbun\s+[^\n]*?scripts\/[A-Za-z0-9_-]+\.ts\b/gu;
 
 type Fault = { file: string; line: number; why: string; ref: string };
 
@@ -36,6 +41,14 @@ export function refs(
 ): { faults: Fault[]; code: number; fixMessages: string[] } {
   const faults: Fault[] = [];
   const fixMessages: string[] = [];
+  try {
+    for (const name of readdirSync(join(root, "scripts"))) {
+      if (name.endsWith(".sh") && isFile(join(root, "scripts", name)))
+        faults.push({ file: `scripts/${name}`, line: 0, why: "wrapper remains", ref: name });
+    }
+  } catch {
+    faults.push({ file: join(root, "scripts"), line: 0, why: "no scripts directory", ref: "" });
+  }
   for (const f of files) {
     let text: string;
     try {
@@ -46,10 +59,15 @@ export function refs(
       return { faults, code: 2, fixMessages };
     }
     if (mode === "fix") {
-      const new_ = text.replace(BARE, "<tool>/scripts/");
-      const _n = text.split(BARE).length - 1;
-      // count matches of BARE
+      let new_ = text.replace(OLD, (old, name: string, offset: number) => {
+        const before = text.slice(0, offset);
+        if (OTHER.test(before) && !before.endsWith("<tool>/") && !before.endsWith("<rt>/"))
+          return old;
+        return scriptExists(root, name) ? `scripts/run ${name}` : old;
+      });
+      new_ = new_.replace(BARE, "<tool>/scripts/");
       let count = 0;
+      for (const _m of text.matchAll(OLD)) count += 1;
       for (const _m of text.matchAll(BARE)) count += 1;
       if (count > 0) {
         writeFileSync(f, new_, "utf8");
@@ -60,6 +78,13 @@ export function refs(
     const lines = text.split("\n");
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i] ?? "";
+      for (const match of line.matchAll(DIRECT_BUN))
+        faults.push({
+          file: f,
+          line: i + 1,
+          why: "direct bun script invocation bypasses scripts/run",
+          ref: match[0],
+        });
       REF.lastIndex = 0;
       for (const m of line.matchAll(REF)) {
         const before = line.slice(0, m.index ?? 0);
@@ -77,6 +102,16 @@ export function refs(
               why: "no such script in the postmaster repo",
               ref: `${which}${ref}`,
             });
+          } else if (name === "run") {
+            const after = line.slice((m.index ?? 0) + (m[0] ?? "").length);
+            const next = /^\s+([A-Za-z0-9_-]+)/u.exec(after)?.[1];
+            if (next && !scriptExists(root, next))
+              faults.push({
+                file: f,
+                line: i + 1,
+                why: "no such script through scripts/run",
+                ref: `${which}${ref} ${next}`,
+              });
           }
         } else if (OTHER.test(before)) {
         } else if (before.endsWith("/")) {
@@ -108,6 +143,14 @@ function isFile(p: string): boolean {
   }
 }
 
+function scriptExists(root: string, name: string): boolean {
+  return (
+    /^[A-Za-z0-9_-]+$/u.test(name) &&
+    (isFile(join(root, "scripts", `${name}.ts`)) ||
+      isFile(join(root, "scripts", "lib", `${name}.ts`)))
+  );
+}
+
 function printFaults(faults: Fault[]): void {
   for (const f of faults) {
     console.log(`${f.file}:${f.line}: ${f.why}: ${f.ref}`);
@@ -121,29 +164,33 @@ if (import.meta.main) {
   if (argv[0] === "--fix") {
     mode = "fix";
     argv.shift();
-  } else if (argv[0]?.startsWith("-")) {
-    console.error("usage: skill-refs.sh [--fix] [<file>...]");
+  }
+  let root = toolRoot(import.meta);
+  if (argv[0] === "--root" && argv.length >= 2) {
+    argv.shift();
+    root = argv.shift()!;
+  }
+  if (argv[0]?.startsWith("-")) {
+    console.error("usage: scripts/run skill-refs [--fix] [--root <root>] [<file>...]");
     process.exit(2);
   }
 
-  const ROOT = toolRoot(import.meta);
-
   let files = argv;
   if (files.length === 0) {
-    const dir = join(ROOT, "skills", "postmaster");
+    const dir = join(root, "skills", "postmaster");
     try {
       const entries = readdirSync(dir).filter((n) => n.endsWith(".md"));
       files = entries.map((n) => join(dir, n));
       if (files.length === 0) {
-        console.error(`skill-refs: no skills/postmaster/*.md in ${ROOT}`);
+        console.error(`skill-refs: no skills/postmaster/*.md in ${root}`);
         process.exit(2);
       }
     } catch {
-      console.error(`skill-refs: no skills/postmaster/*.md in ${ROOT}`);
+      console.error(`skill-refs: no skills/postmaster/*.md in ${root}`);
       process.exit(2);
     }
   }
-  const { faults, code, fixMessages } = refs(ROOT, mode, files);
+  const { faults, code, fixMessages } = refs(root, mode, files);
   for (const m of fixMessages) process.stderr.write(`${m}\n`);
   printFaults(faults);
   process.exit(code);

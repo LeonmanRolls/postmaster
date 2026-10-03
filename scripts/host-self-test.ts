@@ -22,7 +22,7 @@ import { scriptsDir } from "./lib/paths.ts";
 import { pyWords } from "./lib/text.ts";
 
 const HERE = scriptsDir(import.meta);
-const SELF = join(HERE, "host.sh");
+const SELF = join(HERE, "run");
 const SCRIPT = join(HERE, "host-self-test.ts");
 type Result = { code: number; out: string; err: string };
 const sleep = (ms: number) => Bun.sleep(ms);
@@ -582,7 +582,7 @@ function host(
     POSTMASTER_HOST_FINISH_DELAY: finishDelay,
     ...env,
   };
-  return exec(SELF, [...args], { cwd, env: environment });
+  return exec(SELF, ["host", ...args], { cwd, env: environment });
 }
 function testStopFinishers(root: string): void {
   const path = join(root, "finishers");
@@ -694,7 +694,8 @@ async function setup(
   ]);
   if (result.code) throw new Error(result.err);
   const clone = join(repo, ".worktrees", "T-1-rev-security-opus");
-  result = exec(join(HERE, "cut-scratch.sh"), [
+  result = exec(join(HERE, "run"), [
+    "cut-scratch",
     repo,
     repo,
     clone,
@@ -929,7 +930,7 @@ async function check(
   if (detail) console.log(`         ${detail.replace(/\n/gu, "\n         ")}`);
   return false;
 }
-// text.ts: BASE cuts where-values at the first ASCII space (${v%% *}, host.sh:1111);
+// text.ts: BASE cuts where-values at the first ASCII space (${v%% *}, run host:1111);
 // a tab or exotic space inside a value survives there, so it must survive here.
 export function kvOf(text: string, key: string): string {
   // [^ \r\n]: BASE reads command-substitution (trailing newlines already
@@ -3639,12 +3640,12 @@ export async function runControls(): Promise<number> {
       '{"config":{"limits":{"memory_max":"8G","tasks_max":512,"lane":{"memory_max":"64M","tasks_max":16},"coachman":{"memory_max":"128M","tasks_max":32},"reviewer":{"tasks_max":24}}}}\n',
     );
     writeFileSync(
-      join(f.caller, "launch.sh"),
+      join(f.caller, "run"),
       ["#!/usr/bin/env bash", "printf 'role=%s\\n' \"${POSTMASTER_LAUNCH_ROLE:-unset}\"", ""].join(
         "\n",
       ),
     );
-    exec("chmod", ["+x", join(f.caller, "launch.sh")]);
+    exec("chmod", ["+x", join(f.caller, "run")]);
     execHost(
       [
         "run",
@@ -3661,7 +3662,8 @@ export async function runControls(): Promise<number> {
         "--marker",
         "../logs/role.done",
         "--",
-        "./launch.sh",
+        "./run",
+        "launch",
       ],
       noHost,
       f.caller,
@@ -3670,9 +3672,39 @@ export async function runControls(): Promise<number> {
     await marker(markerPath("role"));
     const roleOut = readFileSync(join(logs, "role.out"), "utf8");
     await pass(
-      "the run's explicit host role reaches launch.sh and an inherited role cannot replace it",
+      "the run's explicit host role reaches run launch and an inherited role cannot replace it",
       () => roleOut === "role=reviewer\n",
       roleOut,
+    );
+    execHost(
+      [
+        "run",
+        NAME,
+        f.repo,
+        "--under",
+        capDispatch,
+        "--role",
+        "reviewer",
+        "--run",
+        capDispatch,
+        "--out",
+        "../logs/other-role.out",
+        "--marker",
+        "../logs/other-role.done",
+        "--",
+        "./run",
+        "host",
+      ],
+      noHost,
+      f.caller,
+      { POSTMASTER_LAUNCH_ROLE: "spoof" },
+    );
+    await marker(markerPath("other-role"));
+    const otherRoleOut = readFileSync(join(logs, "other-role.out"), "utf8");
+    await pass(
+      "a command other than run launch receives no host role",
+      () => otherRoleOut === "role=unset\n",
+      otherRoleOut,
     );
 
     console.log("leg attempt controls");
@@ -3802,7 +3834,7 @@ export async function runControls(): Promise<number> {
         "    printf 'error é429 settled\\n' >&2",
         "    exit 1 ;;",
         "  *skill-caller*)",
-        '    "$TEST_LAUNCH" skill coachman security-review --leg synthesis --run "$TEST_DISPATCH" >/dev/null 2>&1',
+        '    "$TEST_LAUNCH" launch skill coachman security-review --leg synthesis --run "$TEST_DISPATCH" >/dev/null 2>&1',
         '    printf \'{"session_id":"thread-skilled"}\\n\'',
         "    exit 1 ;;",
         "  *pre-thread*) exit 1 ;;",
@@ -3825,7 +3857,7 @@ export async function runControls(): Promise<number> {
       TEST_DONE: join(legD, ".leg-1-done"),
       TEST_OBSERVED: join(legD, "retry-observed"),
       TEST_RUNJSON: join(legD, "run.json"),
-      TEST_LAUNCH: join(HERE, "launch.sh"),
+      TEST_LAUNCH: join(HERE, "run"),
       TEST_DISPATCH: legD,
       ...extra,
     });
@@ -5995,7 +6027,8 @@ export async function runControls(): Promise<number> {
           "--marker",
           launchMarker,
           "--",
-          join(HERE, "launch.sh"),
+          join(HERE, "run"),
+          "launch",
           "launch",
           "test",
           lunaWorktree,
@@ -6073,7 +6106,8 @@ export async function runControls(): Promise<number> {
           "--marker",
           resumeMarker,
           "--",
-          join(HERE, "launch.sh"),
+          join(HERE, "run"),
+          "launch",
           "resume",
           "test",
           lunaWorktree,

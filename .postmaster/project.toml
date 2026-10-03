@@ -18,5 +18,5 @@ shows = "tsc strict, Oxlint with the project's rules, the Biome format check, th
 # Main's gate beside the port's: everything it runs lives inside `bun run check`
 # except the coachman-contract detector's own self-test, which keeps its entry.
 [checks.coachman-contract]
-command = '''scripts/coachman-contract.sh --self-test'''
+command = '''scripts/run coachman-contract --self-test'''
 shows = "the coachman contract detector's self-test passes."

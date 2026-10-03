@@ -3,10 +3,10 @@
 // convention for the project's own docs, or neither. The postmaster puts the sort to the user
 // after the merge.
 //
-//   style-findings.sh list <dispatch>    each style finding: its id, where it is, the rest of its line
-//   style-findings.sh count <dispatch>   how many style findings the run has
-//   style-findings.sh gate <dispatch>    what the gate runs, as the run's branch has it
-//   style-findings.sh check <dispatch>   whether <dispatch>/style-sort.md sorts every style finding
+//   run style-findings list <dispatch>    each style finding: its id, where it is, the rest of its line
+//   run style-findings count <dispatch>   how many style findings the run has
+//   run style-findings gate <dispatch>    what the gate runs, as the run's branch has it
+//   run style-findings check <dispatch>   whether <dispatch>/style-sort.md sorts every style finding
 //
 //   exit 0  printed
 //   exit 1  usage; no waybill, action log, or branch named for the run; a file that cannot be read
@@ -1803,7 +1803,7 @@ const sub = argv[0];
 if (import.meta.main) {
   if (sub === "list" || sub === "count" || sub === "gate" || sub === "check") {
     if (argv.length !== 2) {
-      console.error("usage: style-findings.sh list|count|gate|check <dispatch>");
+      console.error("usage: run style-findings list|count|gate|check <dispatch>");
       process.exit(1);
     }
     const d = argv[1]!;
@@ -1813,7 +1813,7 @@ if (import.meta.main) {
     }
     process.exit(core(sub, d));
   } else {
-    console.error("usage: style-findings.sh list|count|gate|check <dispatch>");
+    console.error("usage: run style-findings list|count|gate|check <dispatch>");
     process.exit(1);
   }
 }

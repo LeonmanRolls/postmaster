@@ -18,7 +18,7 @@ lenses a ticket names unless the loop stops at its round cap.
 runs only when round `r` logged a verified P1 or P2 finding; a P3 finding does not keep the loop
 going and is carried to the user unfixed. The cap of three rounds stays as a backstop: when
 round 3 logs a verified P1 or P2 finding, the loop stops and escalates with the residue.
-`scripts/review-decide.sh` decides this from the round's `finding` and `apply` lines.
+`scripts/run review-decide` decides this from the round's `finding` and `apply` lines.
 
 **Standing: claimed.** This is a decision taken on reasoning. No run has been recorded under
 either design, so neither the time saved nor the coverage gained is measured yet. The change is
@@ -84,7 +84,7 @@ which become tickets.
   linter, so a new rule is a change to the project, made through a ticket. A rule for a linter
   the gate already runs is a small change the gate enforces at once. A linter the project does
   not run is a larger change, so it is proposed on its own, for the user to accept or not.
-- **The check reads the gate, and never runs it.** `scripts/style-findings.sh` reads the gate
+- **The check reads the gate, and never runs it.** `scripts/run style-findings` reads the gate
   as the run's own branch has it, so another run's merge cannot change a finished run's sort,
   and running a project's gate to learn what it runs would run everything it runs. It follows
   the scripts, recipes, files and tool configs the gate reaches, but no reader can follow every
@@ -116,7 +116,7 @@ What it costs:
 
 ## What would settle it
 
-The stage timings from `scripts/run-times.sh` measure the review stage once runs exist. From
+The stage timings from `scripts/run run-times` measure the review stage once runs exist. From
 them and from each run's action log:
 
 - the review stage's duration and its number of rounds, per run, against the estimate above;
@@ -146,8 +146,8 @@ by the lens other than the one whose finding each fix addressed: 3.06, 3.08 and 
 
 A run has three legs, `synthesis`, `review` and `ship`, where it had five.
 `skills/postmaster/coachman.md` runs review as one stage, `review`, with one checkpoint card,
-and `scripts/stage.sh` refuses the three review stages it replaces. `[team.coachman_legs]` in
-the config takes `synthesis`, `review` and `ship`, and `scripts/launch.sh` refuses a config
+and `scripts/run stage` refuses the three review stages it replaces. `[team.coachman_legs]` in
+the config takes `synthesis`, `review` and `ship`, and `scripts/run launch` refuses a config
 that names `style`, `bug` or `security`.
 
 The cap was five rounds when the loop was introduced. On 2026-09-26 the user set it at three,
@@ -173,6 +173,6 @@ the signal to revisit the rule.
 
 Since issue #55, style gates nothing. `skills/postmaster/coachman.md` applies no style finding,
 the ship card counts them, and aftercare sorts them; `skills/postmaster/postmaster.md` puts the
-sort to the user after the merge. `scripts/style-findings.sh` lists a run's style findings,
-shows what the gate runs and checks the sort, and `scripts/log-action.sh` refuses a `finding`
+sort to the user after the merge. `scripts/run style-findings` lists a run's style findings,
+shows what the gate runs and checks the sort, and `scripts/run log-action` refuses a `finding`
 line that does not open with its class, `gating` or `style`.

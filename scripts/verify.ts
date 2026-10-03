@@ -2,13 +2,13 @@
 // checks in .postmaster/project.toml. A project that declares none gets defaults. Either way
 // the gate is a check. A run is held to the checks it recorded at dispatch.
 //
-//   verify.sh checks <repo> [--gate <command>] [--lines | --json]
-//   verify.sh record <repo> <dispatch> [--gate <command>]
-//   verify.sh arm <worktree> <dispatch>
-//   verify.sh run <worktree> [<dispatch>]
-//   verify.sh journey-path <worktree> [<dispatch>]
-//   verify.sh results <dispatch> <worktree>
-//   verify.sh summary <summary-file> <dispatch> <worktree>
+//   run verify checks <repo> [--gate <command>] [--lines | --json]
+//   run verify record <repo> <dispatch> [--gate <command>]
+//   run verify arm <worktree> <dispatch>
+//   run verify run <worktree> [<dispatch>]
+//   run verify journey-path <worktree> [<dispatch>]
+//   run verify results <dispatch> <worktree>
+//   run verify summary <summary-file> <dispatch> <worktree>
 //
 //   exit 0  printed; run, results, summary: every check passed, or the summary holds
 //   exit 1  usage, or input that is not what it says, a declaration included
@@ -86,7 +86,7 @@ const DEFAULTS: Record<
     kind: "tool",
     shows:
       "the ticket's example transcripts, run through the project's command, print and exit as they say",
-    script: "verify-examples.sh",
+    script: "verify-examples",
   },
   "browser-suite": {
     name: "browser",
@@ -98,13 +98,13 @@ const DEFAULTS: Record<
     name: "journey",
     kind: "tool",
     shows: "each step of the ticket's User journey, walked in a browser, does what the ticket says",
-    script: "verify-journey.sh",
+    script: "verify-journey",
   },
   "library-tests": {
     name: "library",
     kind: "tool",
     shows: "the tests that import the library by its package name pass",
-    script: "verify-library.sh",
+    script: "verify-library",
   },
 };
 
@@ -256,7 +256,7 @@ function mkDefault(
       ? gate
       : which === "browser-suite"
         ? suite
-        : shlexQuote(join(HERE, d.script ?? ""));
+        : `${shlexQuote(join(HERE, "run"))} ${shlexQuote(d.script ?? "")}`;
   return {
     name: name || d.name,
     source: source || `default:${which}`,
@@ -267,7 +267,7 @@ function mkDefault(
 }
 
 function declared(repo: string, gate: string, suite: string): Check[] | null {
-  const settings = run(join(scriptsDir(import.meta), "project-settings.sh"), ["inspect", repo]);
+  const settings = run(join(scriptsDir(import.meta), "run"), ["project-settings", "inspect", repo]);
   if (settings.code !== 0) dieV(settings.err.trim() || "project settings could not be read");
   const p = join(repo, DECLARATION);
   if (!existsSync(p)) return null;
@@ -828,8 +828,8 @@ function runChecks(wt: string, dispatch: string | null): never {
       const detail = `on=${branch}@${sha.slice(0, 12)} result=${result.replace(/ /gu, "-")} exit=${code === null ? "-" : code} secs=${secs}`;
       let detailFull = detail;
       if (why) detailFull += (result === "pass" ? " score=" : " reason=") + why;
-      const lr = run("bash", [
-        join(HERE, "log-action.sh"),
+      const lr = run(join(HERE, "run"), [
+        "log-action",
         dispatch,
         "coachman",
         "verify",
@@ -886,7 +886,7 @@ function usageDieV(): never {
   throw new Error("unreachable");
 }
 const usage =
-  "usage: verify.sh checks <repo> [--gate <command>] [--lines | --json] | record <repo> <dispatch> [--gate <command>] | arm <worktree> <dispatch> | run <worktree> [<dispatch>] | journey-path <worktree> [<dispatch>] | results <dispatch> <worktree> | summary <summary-file> <dispatch> <worktree>";
+  "usage: run verify checks <repo> [--gate <command>] [--lines | --json] | record <repo> <dispatch> [--gate <command>] | arm <worktree> <dispatch> | run <worktree> [<dispatch>] | journey-path <worktree> [<dispatch>] | results <dispatch> <worktree> | summary <summary-file> <dispatch> <worktree>";
 
 function main(argv: string[]): number {
   if (argv[0] === "checks" || argv[0] === "record") {
@@ -1059,7 +1059,7 @@ function main(argv: string[]): number {
       }
       args.push("--dir", join(r.out.trim(), "journey"));
     }
-    const r = run("bash", [join(HERE, "verify-journey.sh"), ...args]);
+    const r = run(join(HERE, "run"), ["verify-journey", ...args]);
     process.stdout.write(r.out);
     process.stderr.write(r.err);
     return r.code;

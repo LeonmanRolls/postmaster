@@ -11,10 +11,10 @@ import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fixtures = join(here, "fixtures", "usage");
-const script = join(here, "usage.ts");
+const script = join(here, "run");
 
 const run = (...args: string[]): { status: number | null; stdout: string; stderr: string } => {
-  const result = spawnSync("bun", [script, ...args], { encoding: "utf8", timeout: 15_000 });
+  const result = spawnSync(script, ["usage", ...args], { encoding: "utf8", timeout: 15_000 });
   return { status: result.status, stdout: result.stdout ?? "", stderr: result.stderr ?? "" };
 };
 

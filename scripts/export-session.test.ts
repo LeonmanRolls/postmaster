@@ -18,7 +18,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { EXTENSIONS } from "./export-session";
 
-const SELF = join(import.meta.dir, "export-session.sh");
+const SELF = join(import.meta.dir, "run");
 
 interface Run {
   code: number;
@@ -34,7 +34,7 @@ function runCli(args: string[], env?: Record<string, string | undefined>, cwd?: 
       else merged[k] = v;
     }
   }
-  const r = spawnSync(SELF, args, { encoding: "utf8", timeout: 10000, env: merged, cwd });
+  const r = spawnSync(SELF, ["export-session", ...args], { encoding: "utf8", timeout: 10000, env: merged, cwd });
   return { code: r.status ?? 1, out: String(r.stdout ?? ""), err: String(r.stderr ?? "") };
 }
 

@@ -2,7 +2,7 @@
 //
 //   bun --no-env-file test scripts/fixture-lanes.test.ts
 //
-// The controls run the real `fixture.sh score` and read the hidden-tests line back. A lane that
+// The controls run the real `run fixture score` and read the hidden-tests line back. A lane that
 // passes, one that fails, one that is missing and one that fails to build; and a run whose merged
 // result alone decides the verdict. They use the fixture app and the `remove` ticket's hidden
 // suite, the same ones score uses.
@@ -29,7 +29,7 @@ import {
 
 const SCRIPTS = import.meta.dir;
 const TOOL = join(SCRIPTS, "..");
-const FIXTURE_SH = join(SCRIPTS, "fixture.sh");
+const FIXTURE_SH = join(SCRIPTS, "run");
 const APP = join(TOOL, "fixtures", "app");
 const TICKETS = join(TOOL, "fixtures", "tickets");
 const FIXTURE_TICKET = "remove";
@@ -323,7 +323,7 @@ describe("score controls", () => {
       ],
     });
     const run = Bun.spawnSync({
-      cmd: [FIXTURE_SH, "score", rec.dispatch, rec.repo],
+      cmd: [FIXTURE_SH, "fixture", "score", rec.dispatch, rec.repo],
       env: { ...gitEnv, POSTMASTER_CONFIG: join(scratch, "no-config.toml") },
       stdout: "pipe",
       stderr: "pipe",
@@ -363,7 +363,7 @@ describe("score controls", () => {
       lanes: [{ lane: "pass", branch: "reference" }],
     });
     const run = Bun.spawnSync({
-      cmd: [FIXTURE_SH, "score", rec.dispatch, rec.repo],
+      cmd: [FIXTURE_SH, "fixture", "score", rec.dispatch, rec.repo],
       env: { ...gitEnv, POSTMASTER_CONFIG: join(scratch, "no-config.toml") },
       stdout: "pipe",
       stderr: "pipe",

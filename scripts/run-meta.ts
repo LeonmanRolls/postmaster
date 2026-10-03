@@ -2,11 +2,11 @@
 // postmaster commit it was dispatched from. Written once and never edited: the manifest is the
 // run's current state, this is what the run started from and the checkout it runs on.
 //
-//   run-meta.sh <dispatch> <repo>   <repo> is the target project's checkout; also cuts the pin
-//   run-meta.sh pin <repo> <commit> a shared checkout of <repo> at <commit> under $POSTMASTER_TOOL_PINS
-//   run-meta.sh path <dispatch>     print the canonical path of the run's tool checkout
-//   run-meta.sh check <dispatch>    the run's checkout still serves its dispatch commit
-//   run-meta.sh release <dispatch>  remove the pin when no claimed run is in flight
+//   run run-meta <dispatch> <repo>   <repo> is the target project's checkout; also cuts the pin
+//   run run-meta pin <repo> <commit> a shared checkout of <repo> at <commit> under $POSTMASTER_TOOL_PINS
+//   run run-meta path <dispatch>     print the canonical path of the run's tool checkout
+//   run run-meta check <dispatch>    the run's checkout still serves its dispatch commit
+//   run run-meta release <dispatch>  remove the pin when no claimed run is in flight
 //
 // Records when it was written; the run and project; the target repo's HEAD and branch; the
 // postmaster commit that dispatched it, and whether that checkout had uncommitted changes,
@@ -18,7 +18,7 @@
 //
 // The pin is a detached worktree of the postmaster repo at the dispatch commit, under
 // $POSTMASTER_TOOL_PINS (default ~/.postmaster/tool-pins), one directory per commit so every
-// run dispatched at that commit shares it. It is the run's `<tool>`: its host.sh, its launch.sh
+// run dispatched at that commit shares it. It is the run's `<tool>`: its run host, its run launch
 // and the runbooks its prompts name. The live checkout still serves the front door and the
 // postmaster's own supervision. A bare `pin` holds no claim; each dispatch appends its own
 // path to the pin's claims file beside it, so release finds every run that names the pin,
@@ -45,7 +45,7 @@
 //           be written, the pin lock could not be taken, no pin or it does not serve its
 //           commit, or git could not make or remove it
 //
-// Port notes (main scripts/run-meta.sh): the flock(2) pin lock is an O_EXCL lock file holding
+// Port notes (main scripts/run run-meta): the flock(2) pin lock is an O_EXCL lock file holding
 // the owner's PID, stolen from a dead owner or an empty file old enough that no live
 // creator is mid-write, never by age otherwise, since a dispatch legitimately holds it
 // across 15-second harness probes; the lock file is removed on release rather than left
@@ -79,15 +79,15 @@ import {
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { tryTomlFile } from "./lib/data.ts";
+import { runPinned } from "./lib/pinned-script.ts";
 import { toolRoot } from "./lib/paths.ts";
 import { mkstempSync, run, signalExitCode } from "./lib/proc.ts";
 import { pySplitLines, pyTrim } from "./lib/text.ts";
 
 const TOOL = toolRoot(import.meta);
-const SCRIPT = import.meta.path;
 
 const USAGE =
-  "usage: run-meta.sh <dispatch> <repo> | pin <repo> <commit> | path <dispatch> | check <dispatch> | release <dispatch>";
+  "usage: run run-meta <dispatch> <repo> | pin <repo> <commit> | path <dispatch> | check <dispatch> | release <dispatch>";
 
 // Every command returns its exit code with the bytes for each stream; the CLI boundary writes
 // them, and the tests inspect them. stdout carries results (the pin path, the checkout,
@@ -527,20 +527,16 @@ function scanHoldMs(): number {
 function runScanChild(root: string, checkout: string): { code: number; out: string; err: string } {
   const bun = Bun.which("bun");
   if (bun === null) return { code: 127, out: "", err: "" };
-  const args = [
-    "--no-env-file",
-    `--config=${join(TOOL, "bunfig.toml")}`,
-    SCRIPT,
-    "run-meta-scan",
-    root,
-    checkout,
-  ];
+  const args = ["run-meta", "run-meta-scan", root, checkout];
   const hold = scanHoldMs();
   if (hold > 0) args.push(String(hold));
   // The scan runs where the caller's environment cannot reach it: PATH alone crosses over,
   // and the tool bunfig.toml anchors config discovery, so no HOME, no startup file and no
   // working-directory config reaches the scan.
-  const r = spawnSync(bun, args, { encoding: "utf8", env: { PATH: process.env.PATH ?? "" } });
+  const r = spawnSync(join(TOOL, "scripts", "run"), args, {
+    encoding: "utf8",
+    env: { PATH: process.env.PATH ?? "" },
+  });
   let code: number;
   if (r.status !== null && r.status !== undefined) code = r.status;
   else if (r.signal) code = signalExitCode(r.signal);
@@ -717,14 +713,14 @@ function buildRecord(
   pinnedCommit: string,
 ): Built {
   if (tryTomlFile(config) === null) return { ok: false, messages: [] };
-  const settingsScript = join(TOOL, "scripts", "project-settings.sh");
-  const inspected = run(settingsScript, ["inspect", resolvedRepo]);
+  const settingsScript = join(TOOL, "scripts", "run");
+  const inspected = run(settingsScript, ["project-settings", "inspect", resolvedRepo]);
   if (inspected.code !== 0) {
     return { ok: false, messages: [pyTrim(inspected.err) || "project settings could not be read"] };
   }
   const settings = parseSettingsJson(inspected.out, "project settings");
   if ("error" in settings) return { ok: false, messages: [settings.error] };
-  const effective = run(settingsScript, ["effective", resolvedRepo, config]);
+  const effective = run(settingsScript, ["project-settings", "effective", resolvedRepo, config]);
   if (effective.code !== 0) {
     return {
       ok: false,
@@ -985,14 +981,21 @@ if (import.meta.main) {
   }
   {
     const cmd = argv[0];
-    const verbs = ["pin", "path", "check", "release"];
+    const verbs = ["pin", "path", "check", "release", "script"];
     let outcome: Outcome;
     if (cmd === "pin" && argv.length === 3)
       outcome = pin(argv[1] as string, argv[2] as string, readTools());
     else if (cmd === "path" && argv.length === 2) outcome = pathOf(argv[1] as string);
     else if (cmd === "check" && argv.length === 2) outcome = checkPin(argv[1] as string);
     else if (cmd === "release" && argv.length === 2) outcome = releasePin(argv[1] as string);
-    else if (cmd !== undefined && !verbs.includes(cmd) && argv.length === 2) {
+    else if (cmd === "script" && argv.length >= 3) {
+      const pinned = pathOf(argv[1] as string);
+      if (pinned.code !== 0) outcome = pinned;
+      else {
+        const result = runPinned(pinned.out.trim(), argv[2] as string, argv.slice(3));
+        outcome = { code: result.code, out: result.out, err: result.err };
+      }
+    } else if (cmd !== undefined && !verbs.includes(cmd) && argv.length === 2) {
       outcome = meta(argv[0] as string, argv[1] as string);
     } else usage();
     if (outcome.out !== "") process.stdout.write(outcome.out);

@@ -28,7 +28,7 @@ bears on it.
 - **A thread id belongs to one harness.** A resume hands the recorded thread id to the harness
   the config names. If the config names another harness by then, the id goes to a harness that
   never issued it.
-- **The record already exists.** `scripts/run-meta.sh` writes the config in force into the
+- **The record already exists.** `scripts/run run-meta` writes the config in force into the
   run's `run.json` at dispatch, and nothing edits it afterwards. Making it the run's config of
   record needs no new state.
 - **The live config still serves what is not a run.** The postmaster's own spawn, and the
@@ -60,7 +60,7 @@ bears on it.
 
 ## What changed because of it
 
-`scripts/launch.sh` takes `--run <dispatch>`. With it, the script reads the config from that
+`scripts/run launch` takes `--run <dispatch>`. With it, the script reads the config from that
 run's `run.json`, applies the same checks, and never opens the live config. A run whose
 `run.json` is missing or unreadable is refused, and nothing runs. Every launch and resume in
 `skills/postmaster/postmaster.md` and `skills/postmaster/coachman.md` passes it, and the

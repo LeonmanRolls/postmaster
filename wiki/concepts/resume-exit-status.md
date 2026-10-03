@@ -45,7 +45,7 @@ directory that holds no such thread.
 
 ## What changed because of it
 
-`scripts/launch.sh` refuses a muse or mimo resume unless the harness's own export finds the
+`scripts/run launch` refuses a muse or mimo resume unless the harness's own export finds the
 thread in the launch's data directory. Its self-test shows each refusal, and fails without the
 check (issue #71). pi's case was covered already: `launch.sh resume` changes to the given
 directory first. `skills/postmaster/harnesses.md` records each harness's behaviour.

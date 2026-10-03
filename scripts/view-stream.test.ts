@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { cellWidth } from "./view-stream";
 
-const viewer = join(import.meta.dir, "view-stream.sh");
+const viewer = join(import.meta.dir, "run");
 const long = "x".repeat(200);
 const TRAIL_NL = /\n+$/u;
 const STAMPED = /^[0-9]{2}:[0-9]{2}:[0-9]{2} /u;
@@ -21,12 +21,12 @@ const bufferedEvents = [
 ];
 
 function rendered(event: string): string {
-  const r = spawnSync(viewer, [], { input: `${event}\n`, encoding: "utf8" });
+  const r = spawnSync(viewer, ["view-stream", ], { input: `${event}\n`, encoding: "utf8" });
   return (r.stdout ?? "").replace(TRAIL_NL, "");
 }
 
 function streamOut(events: string[]): string {
-  const r = spawnSync(viewer, [], { input: `${events.join("\n")}\n`, encoding: "utf8" });
+  const r = spawnSync(viewer, ["view-stream", ], { input: `${events.join("\n")}\n`, encoding: "utf8" });
   return (r.stdout ?? "").replace(TRAIL_NL, "");
 }
 
@@ -184,7 +184,7 @@ describe("positive controls: event text is readable and complete", () => {
 
   test("muse: a recorded stream shows its full command and message, not tool output", () => {
     const recorded = readFileSync(join(import.meta.dir, "fixtures/view-stream/muse.jsonl"), "utf8");
-    const r = spawnSync(viewer, [], { input: recorded, encoding: "utf8" });
+    const r = spawnSync(viewer, ["view-stream", ], { input: recorded, encoding: "utf8" });
     const got = (r.stdout ?? "").replace(TRAIL_NL, "");
     const want =
       "bash: printf 'MUSE_COMMAND_SAMPLE'\nresult: completed · MUSE_MESSAGE_FIRST_LINE\nMUSE_MESSAGE_SECOND_LINE";
@@ -351,7 +351,7 @@ describe("negative controls: noise renders nothing", () => {
   test("fifty unknown events of one type show as one line", () => {
     const deltas = Array.from({ length: 50 }, (_, i) => `{"type":"delta","n":${i + 1}}`);
     const input = `${deltas.join("\n")}\n`;
-    const r = spawnSync(viewer, [], { input, encoding: "utf8" });
+    const r = spawnSync(viewer, ["view-stream", ], { input, encoding: "utf8" });
     expect((r.stdout ?? "").replace(TRAIL_NL, "")).toBe("delta");
   }, 30000);
 
@@ -363,7 +363,7 @@ describe("negative controls: noise renders nothing", () => {
       '{"type":"user","message":{"content":[{"type":"tool_result","content":"{\\"json\\": true}"}]}}',
       '{"type":"result","subtype":"success","num_turns":1}',
     ];
-    const r = spawnSync(viewer, [], { input: `${events.join("\n")}\n`, encoding: "utf8" });
+    const r = spawnSync(viewer, ["view-stream", ], { input: `${events.join("\n")}\n`, encoding: "utf8" });
     const got = r.stdout ?? "";
     expect(got.includes("{")).toBe(false);
     expect(got.split("\n").filter((l) => l !== "").length).toBe(3);
@@ -390,7 +390,7 @@ printf '{"type":"result","subtype":"success"}' >> "$1"
     chmodSync(wscript, 0o755);
     const wr = spawnSync("bash", ["-c", `"${wscript}" "${f}" & echo $!`], { encoding: "utf8" });
     const writerPid = parseInt((wr.stdout ?? "").trim(), 10);
-    const r = spawnSync(viewer, ["--follow", f, "--pid", String(writerPid)], {
+    const r = spawnSync(viewer, ["view-stream", "--follow", f, "--pid", String(writerPid)], {
       encoding: "utf8",
       timeout: 30000,
     });
@@ -409,9 +409,7 @@ printf '{"type":"result","subtype":"success"}' >> "$1"
     chmodSync(wscript2, 0o755);
     const wr = spawnSync("bash", ["-c", `"${wscript2}" "${f}" & echo $!`], { encoding: "utf8" });
     const writerPid = parseInt((wr.stdout ?? "").trim(), 10);
-    const r = spawnSync(
-      viewer,
-      ["--follow", f, "--pid", String(writerPid), "--from", String(from)],
+    const r = spawnSync(viewer, ["view-stream", "--follow", f, "--pid", String(writerPid), "--from", String(from)],
       {
         encoding: "utf8",
         timeout: 30000,
@@ -426,7 +424,7 @@ printf '{"type":"result","subtype":"success"}' >> "$1"
     const f = join(tmp, "long.jsonl");
     const event = `{"type":"item.started","item":{"type":"command_execution","command":"${long}"}}`;
     writeFileSync(f, `${event}\n`);
-    const r = spawnSync(viewer, ["--follow", f, "--pid", exitedPid()], {
+    const r = spawnSync(viewer, ["view-stream", "--follow", f, "--pid", exitedPid()], {
       encoding: "utf8",
       timeout: 30000,
       env: { ...process.env, COLUMNS: "60" },
@@ -443,7 +441,7 @@ printf '{"type":"result","subtype":"success"}' >> "$1"
     const f = join(tmp, "narrow.jsonl");
     const event = `{"type":"item.completed","item":{"type":"agent_message","text":"${narrow}"}}`;
     writeFileSync(f, `${event}\n`);
-    const r = spawnSync(viewer, ["--follow", f, "--pid", exitedPid()], {
+    const r = spawnSync(viewer, ["view-stream", "--follow", f, "--pid", exitedPid()], {
       encoding: "utf8",
       timeout: 30000,
       env: { ...process.env, COLUMNS: "30" },
@@ -459,7 +457,7 @@ printf '{"type":"result","subtype":"success"}' >> "$1"
     const f = join(tmp, "cjk.jsonl");
     const event = `{"type":"item.completed","item":{"type":"agent_message","text":"${"漢".repeat(70)}"}}`;
     writeFileSync(f, `${event}\n`);
-    const r = spawnSync(viewer, ["--follow", f, "--pid", exitedPid()], {
+    const r = spawnSync(viewer, ["view-stream", "--follow", f, "--pid", exitedPid()], {
       encoding: "utf8",
       timeout: 30000,
       env: { ...process.env, COLUMNS: "80" },
@@ -477,7 +475,7 @@ printf '{"type":"result","subtype":"success"}' >> "$1"
       f,
       '{"type":"item.completed","item":{"type":"agent_message","text":"hi there"}}\n',
     );
-    const r = spawnSync(viewer, ["--follow", f, "--pid", exitedPid()], {
+    const r = spawnSync(viewer, ["view-stream", "--follow", f, "--pid", exitedPid()], {
       encoding: "utf8",
       timeout: 20000,
       env: { ...process.env, COLUMNS: "10" },

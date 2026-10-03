@@ -2,18 +2,18 @@
 // records for its harness. One command for every harness, so no form is ever copied by hand;
 // this script and harnesses.md must agree, and a change to one is a change to both.
 //
-//   launch.sh form   <name> [--leg <leg>] [--run <dispatch>] [--project <repo>]
-//   launch.sh launch <name> <cwd> <prompt-file> [--leg <leg>] [--last <file>] [--run <dispatch>]
-//   launch.sh review <name> <cwd> <base> [--last <file>] [--run <dispatch>]
-//   launch.sh resume <name> <cwd> <thread-id> <prompt-file> [--leg <leg>] [--last <file>]
+//   run launch form   <name> [--leg <leg>] [--run <dispatch>] [--project <repo>]
+//   run launch launch <name> <cwd> <prompt-file> [--leg <leg>] [--last <file>] [--run <dispatch>]
+//   run launch review <name> <cwd> <base> [--last <file>] [--run <dispatch>]
+//   run launch resume <name> <cwd> <thread-id> <prompt-file> [--leg <leg>] [--last <file>]
 //                    [--run <dispatch>]
-//   launch.sh skill  <name> <skill> [--run <dispatch>]
-//   launch.sh thread-id <events-file>       the thread id a stream records, from its shape
-//   launch.sh transient <err-file> [<stream-file> [<skip-lines>]]
+//   run launch skill  <name> <skill> [--run <dispatch>]
+//   run launch thread-id <events-file>       the thread id a stream records, from its shape
+//   run launch transient <err-file> [<stream-file> [<skip-lines>]]
 //                                           exit 0 when a leg's end is a transient provider
 //                                           error this adapter names (harnesses.md)
-//   launch.sh wall-tokens                   the wall token stems transient vetoes on, one per line
-//   launch.sh wall-quotes                   the quote corpus, one wall phrasing per line
+//   run launch wall-tokens                   the wall token stems transient vetoes on, one per line
+//   run launch wall-quotes                   the quote corpus, one wall phrasing per line
 //
 // thread-id reads an events stream and prints the first thread id its shape carries (codex
 // thread_id, claude session_id, grok session id, agy conversationId, pi session id, muse
@@ -134,7 +134,8 @@ function resolveSpec(
     } catch (e) {
       die(`cannot read ${sourcePath}: ${String(e)}`);
     }
-    const r = run(join(scriptsDir(import.meta), "project-settings.sh"), [
+    const r = run(join(scriptsDir(import.meta), "run"), [
+      "project-settings",
       "effective",
       project,
       sourcePath,
@@ -959,7 +960,7 @@ function classifyTransient(
     }
   }
   const allErrors = `${err}\n${errorText.join("\n")}`;
-  // host.sh's own notices (uncapped, cap reached) precede the child's stderr, so a
+  // run host's own notices (uncapped, cap reached) precede the child's stderr, so a
   // refusal is a launch: line past any leading host: lines, not offset 0.
   if (err.replace(/^(?:host:[^\n]*\n)+/u, "").startsWith("launch:")) {
     return { out: "launch-refusal", code: 1 };
@@ -1002,7 +1003,7 @@ if (import.meta.main) {
   const CMD0: string = argv[0] ?? "";
   if (CMD0 === "thread-id") {
     const rest = argv.slice(1);
-    if (rest.length !== 1) die("usage: launch.sh thread-id <events-file>");
+    if (rest.length !== 1) die("usage: run launch thread-id <events-file>");
     const id = findThreadId(readRegularFile(rest[0]!, `no such events file: ${rest[0]}`));
     if (id === null) die(`no thread id in ${rest[0]}`);
     console.log(id);
@@ -1011,7 +1012,7 @@ if (import.meta.main) {
   if (CMD0 === "transient") {
     const rest = argv.slice(1);
     if (rest.length < 1 || rest.length > 3)
-      die("usage: launch.sh transient <err-file> [<stream-file> [<skip-lines>]]");
+      die("usage: run launch transient <err-file> [<stream-file> [<skip-lines>]]");
     const err = readRegularFile(rest[0]!, `no such error file: ${rest[0]}`);
     let streamText: string | null = null;
     if (rest.length >= 2) {
@@ -1032,18 +1033,18 @@ if (import.meta.main) {
     process.exit(verdict.code);
   }
   if (CMD0 === "wall-tokens") {
-    if (argv.length !== 1) die("usage: launch.sh wall-tokens");
+    if (argv.length !== 1) die("usage: run launch wall-tokens");
     for (const t of WALL_TOKENS) console.log(t);
     process.exit(0);
   }
   if (CMD0 === "wall-quotes") {
-    if (argv.length !== 1) die("usage: launch.sh wall-quotes");
+    if (argv.length !== 1) die("usage: run launch wall-quotes");
     for (const q of WALL_QUOTES) console.log(q);
     process.exit(0);
   }
   if (argv.length < 2)
     die(
-      "usage: launch.sh form|launch|review|resume|skill <name> ... | thread-id <events-file> | transient <err-file> [<stream-file> [<skip-lines>]] | wall-tokens | wall-quotes",
+      "usage: run launch form|launch|review|resume|skill <name> ... | thread-id <events-file> | transient <err-file> [<stream-file> [<skip-lines>]] | wall-tokens | wall-quotes",
     );
   const CMD: string = argv[0] ?? "";
   const NAME = argv[1] ?? "";
@@ -1109,7 +1110,7 @@ if (import.meta.main) {
   if (!HARNESS) die(`${NAME} has no harness in ${source}`);
   if (!MODEL) die(`${NAME} has no model in ${source}`);
   if (CMD === "review") {
-    const forms = run(join(scriptsDir(import.meta), "review-forms.sh"), ["has", HARNESS]);
+    const forms = run(join(scriptsDir(import.meta), "run"), ["review-forms", "has", HARNESS]);
     if (forms.code !== 0) {
       console.error(
         `launch: ${NAME} runs on ${HARNESS}, which has no bug code-review form recorded in harnesses.md`,
@@ -1543,7 +1544,8 @@ exit "$rc"
         : 1;
   const stream = process.env.POSTMASTER_EVENT_STREAM ?? "";
   if (RUN && stream) {
-    const r = run(join(scriptsDir(import.meta), "export-session.sh"), [
+    const r = run(join(scriptsDir(import.meta), "run"), [
+      "export-session",
       RUN,
       NAME,
       HARNESS,
@@ -1568,9 +1570,7 @@ exit "$rc"
       if (!recordLane && NAME !== "coachman_fallback") recordLane = NAME;
     }
     if (recordRole && recordLane) {
-      const u = run("bun", [
-        join(scriptsDir(import.meta), "usage.ts"),
-        "record",
+      const u = run(join(scriptsDir(import.meta), "run"), ["usage", "record",
         stream,
         HARNESS,
         NAME,

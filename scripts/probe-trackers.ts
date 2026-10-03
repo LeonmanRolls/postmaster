@@ -67,7 +67,7 @@ if (planeUrl === "" || planeWs === "") {
 } else if (!(process.env.PLANE_API_KEY ?? "") && !existsSync(envFile)) {
   row("plane", "partial", `url and workspace set; no key at ${envFile}`);
 } else {
-  const listed = run(beside(import.meta, "plane.sh"), ["projects"], {
+  const listed = run(beside(import.meta, "run"), ["plane", "projects"], {
     env: { POSTMASTER_CONFIG: CONFIG },
   });
   const out = (listed.out + listed.err).replace(/\n+$/u, "");
@@ -79,7 +79,7 @@ if (planeUrl === "" || planeWs === "") {
   }
 }
 
-// Local: tickets in each repository's own git directory, through scripts/local.sh. There is
+// Local: tickets in each repository's own git directory, through scripts/run local. There is
 // nothing to reach and no login; it needs only git (the scripts themselves run on Bun).
 if (Bun.which("git") !== null) {
   row(

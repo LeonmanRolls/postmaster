@@ -33,7 +33,7 @@ load a linked skill [@trials/skill-folders].
 - **The first check cannot be a script.** Finding the repo is the one step that runs before
   `scripts/` can be reached: when the link is missing or leads to a copy, the scripts are
   exactly what is out of reach. So it is one line in `SKILL.md` that names the link when it
-  fails, rather than a bare "no such file". The tests beside `scripts/link-skills.sh` run
+  fails, rather than a bare "no such file". The tests beside `scripts/run link-skills` run
   that line as written, so they cannot drift from what they prove.
 
 ## What the trial found
@@ -44,7 +44,7 @@ a temporary HOME holding only the link under test [@trials/skill-folders]:
 - All five list a skill whose folder is a link, in each user-level folder they document, and
   none lists one whose link is missing or points nowhere. None says anything about a link that
   points nowhere, on stderr or in its output, so the harness is no check that a link works;
-  the resolver in `SKILL.md` and `scripts/link-skills.sh` are.
+  the resolver in `SKILL.md` and `scripts/run link-skills` are.
 - `~/.agents/skills` serves every one of them except Claude Code, which reads only
   `~/.claude/skills`, or `$CLAUDE_CONFIG_DIR/skills` when that is set. Each of the others also
   has a folder of its own, and muse also reads `~/.claude/skills`; a skill linked from two
@@ -66,14 +66,14 @@ then a session on it is pointed at the skill by absolute path.
   that harness does look, or an absolute path in its brief; never a copy.
 - A harness update that removes links. One was reported against Claude Code's auto-update on
   macOS ([issue 50052](https://github.com/anthropics/claude-code/issues/50052), closed as not
-  planned); it has not been seen here. Running `scripts/link-skills.sh` again restores the
+  planned); it has not been seen here. Running `scripts/run link-skills` again restores the
   links, and the resolver names a missing one.
 - A trial of Antigravity's CLI showing which folder it reads, which would add it to the table.
 
 ## What changed because of it
 
-`scripts/link-skills.sh` makes the links, and setup runs it. `SKILL.md` finds `<tool>` from
+`scripts/run link-skills` makes the links, and setup runs it. `SKILL.md` finds `<tool>` from
 its own link before anything else, and every script path in `skills/postmaster/` goes through
-`<tool>`; `scripts/skill-refs.sh` names any that does not. The Skills folders table in
+`<tool>`; `scripts/run skill-refs` names any that does not. The Skills folders table in
 `skills/postmaster/harnesses.md` is the link script's source, and the README describes the
 linked install only.

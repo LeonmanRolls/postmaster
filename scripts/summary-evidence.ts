@@ -3,17 +3,17 @@
 // per acceptance criterion the ticket numbers, each citing one or more worktree-relative paths
 // under .postmaster/verify/ that exist once `..` and symlinks are resolved, or the line
 // `not shown: <reason>`. The criterion list comes from the one reader,
-// scripts/ticket-check.sh, run on the ticket: this checker parses the count from its
+// scripts/run ticket-check, run on the ticket: this checker parses the count from its
 // `well-formed, N acceptance criteria` line and never reads ticket markdown itself, so the
 // two cannot disagree. The evidence section below is the checker's own contract, pinned by
 // this file's tests. Expected criteria come from the ticket, never inferred from the summary.
 //
-//   bun scripts/summary-evidence.ts <summary.md> <worktree> [--ticket <file>]
+//   scripts/run summary-evidence <summary.md> <worktree> [--ticket <file>]
 //
 // The ticket defaults to the armed copy at <worktree>/.postmaster/verify/ticket.md. A ticket
 // that is a waybill is read from its `## Ticket` heading to its `## Project profile` heading.
 // Run it as the coachman does, `bun --no-env-file --config=/dev/null
-// <tool>/scripts/summary-evidence.ts …`, beside `verify.sh summary`, so no .env or bunfig.toml
+// <tool>/scripts/summary-evidence.ts …`, beside `run verify summary`, so no .env or bunfig.toml
 // from a worktree is read.
 //
 //   exit 0  each ticket criterion has existing evidence or a not shown reason
@@ -28,7 +28,7 @@ import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
 
 export const USAGE =
-  "usage: bun scripts/summary-evidence.ts <summary.md> <worktree> [--ticket <file>]";
+  "usage: scripts/run summary-evidence <summary.md> <worktree> [--ticket <file>]";
 
 type Heading = { level: number; text: string; index: number };
 export type EvidenceEntry = { criterion: number; lines: string[] };
@@ -40,7 +40,7 @@ type Fence = { char: string; length: number };
 type ReadableLine = { text: string; code: boolean };
 
 // The ticket parts, normalized as headings() writes them. A section ends at a
-// heading naming one, at any level, as in ticket-check.sh.
+// heading naming one, at any level, as in run ticket-check.
 const TICKET_PARTS = new Set([
   "problem / feature",
   "acceptance criteria",
@@ -61,7 +61,7 @@ function sectionEnd(found: Heading[], section: Heading, lineCount: number): numb
 
 const headingPattern = /^ {0,3}(#{1,6})[ \t]+(.*?)[ \t]*#*[ \t]*$/; // ASCII: ATX heading syntax
 const numberedItemPattern = /^( *)(\d{1,9})[.)](?:[ \t]+|$)/; // ASCII: criterion numbers are ASCII digits
-// ticket-check.sh's fence rules, verbatim: a backtick fence carries no backtick
+// run ticket-check's fence rules, verbatim: a backtick fence carries no backtick
 // in its info string, and a list item that opens a fence is read while the
 // body it opens is code.
 const fencePattern = /^\s*(`{3,})[^`]*$|^\s*(~{3,})/; // ASCII: fence runs are ASCII backtick/tilde
@@ -84,7 +84,7 @@ function closesFence(fence: Fence, line: string): boolean {
 }
 
 function lastCloser(lines: string[]): { line: number; index: number } {
-  // Where the body's last --> starts, or (-1, -1): ticket-check.sh's `last`.
+  // Where the body's last --> starts, or (-1, -1): run ticket-check's `last`.
   // A line-leading <!-- opens a comment only when a closer comes after it.
   let best = { line: -1, index: -1 };
   for (const [k, t] of lines.entries()) {
@@ -103,7 +103,7 @@ function uncommentLine(
   last: { line: number; index: number },
 ): { text: string; inside: boolean } {
   // One line without its HTML comments, code spans left alone: a faithful
-  // port of ticket-check.sh's uncomment. A comment that starts a line runs to
+  // port of run ticket-check's uncomment. A comment that starts a line runs to
   // the next --> on a later line; one inside a line must close on that line;
   // a <!-- that nothing closes is text.
   const out: string[] = [];
@@ -153,7 +153,7 @@ function tokenize(lines: string[]): ReadableLine[] {
   // lines are code, except a list item that opens a fence, which is read
   // while its body is code; every other line is uncommented. One entry per
   // input line, so indices still address the input. Ticket criteria never
-  // come from here; they come from ticket-check.sh below.
+  // come from here; they come from run ticket-check below.
   const last = lastCloser(lines);
   const read: ReadableLine[] = [];
   let fence: Fence | undefined;
@@ -206,7 +206,7 @@ export function extractTicketBody(text: string): string {
 }
 
 export function criteriaFromCheckOutput(output: string): number[] | undefined {
-  // The one line this checker reads from ticket-check.sh: `well-formed, N
+  // The one line this checker reads from run ticket-check: `well-formed, N
   // acceptance criteria`. A ticket is numbered 1 to N by the ticket shape,
   // so the count is the criterion list. Pinned by "pins the well-formed line
   // the checker reads", so a change to that output fails here, not in a lane.
@@ -225,10 +225,10 @@ function runTicketCheck(
   worktree: string,
 ): { code: number; out: string } | undefined {
   // The reader beside this checker, by its command line, as it will run when
-  // ticket-check.sh is #109's port: same script, same flags, same output line.
+  // run ticket-check is #109's port: same script, same flags, same output line.
   const r = spawnSync(
-    "bash",
-    [`${import.meta.dir}/ticket-check.sh`, "--body", bodyFile, "--project", worktree],
+    join(import.meta.dir, "run"),
+    ["ticket-check", "--body", bodyFile, "--project", worktree],
     {
       encoding: "utf8",
     },
@@ -251,12 +251,12 @@ function readCriteria(ticketPath: string, ticketText: string, worktree: string):
       writeFileSync(bodyFile, extractTicketBody(ticketText));
     }
     const checked = runTicketCheck(bodyFile, worktree);
-    if (!checked) return { unreadable: "summary-evidence: cannot run ticket-check.sh" };
+    if (!checked) return { unreadable: "summary-evidence: cannot run ticket-check" };
     if (checked.code !== 0) return { refused: checked.out.trimEnd() };
     const criteria = criteriaFromCheckOutput(checked.out);
     if (!criteria) {
       return {
-        refused: `summary-evidence: cannot read the criteria count from ticket-check.sh:\n${checked.out.trimEnd()}`,
+        refused: `summary-evidence: cannot read the criteria count from ticket-check:\n${checked.out.trimEnd()}`,
       };
     }
     return { criteria };

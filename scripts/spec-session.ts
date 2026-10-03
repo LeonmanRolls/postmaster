@@ -1,8 +1,8 @@
 // The spec session's two verbs: brief writes the interactive session's brief, and approve
 // commits the text the user approved and records the approval.
 //
-//   spec-session.sh brief <dispatch>
-//   spec-session.sh approve <dispatch>
+//   run spec-session brief <dispatch>
+//   run spec-session approve <dispatch>
 //
 // brief writes <dispatch>/spec-session-brief.md and prints its path. The brief holds the
 // ticket as the waybill carries it; the editor link and the path of the copy under review
@@ -119,7 +119,7 @@ function readWaybill(dispatch: string): Waybill {
       continue;
     }
     if (section === "Project profile" && line.startsWith("repo:")) {
-      // The path runs to the first run of two or more spaces, as tool-faults.sh
+      // The path runs to the first run of two or more spaces, as run tool-faults
       // reads it, so a path holding single spaces survives.
       const rest = pyTrim(line.slice(5));
       const m = rest.match(/^([^ \t].*?)(?:[ \t]{2,}.*)?$/u);
@@ -153,7 +153,7 @@ function configDir(): string {
 }
 
 function editorLink(dispatch: string, copyFolder: string): string {
-  const r = spawnSync("bash", [join(HERE, "spec-review-link.sh"), dispatch, copyFolder], {
+  const r = spawnSync(join(HERE, "run"), ["spec-review-link", dispatch, copyFolder], {
     encoding: "utf8",
     timeout: 15_000,
   });
@@ -320,8 +320,8 @@ function approve(dispatch: string): void {
   }
 
   const record = spawnSync(
-    "bash",
-    [join(HERE, "spec-decisions.sh"), dispatch, "record", "approved", commit],
+    join(HERE, "run"),
+    ["spec-decisions", dispatch, "record", "approved", commit],
     { encoding: "utf8", timeout: 15_000 },
   );
   if (record.status !== 0)
@@ -336,17 +336,17 @@ function approve(dispatch: string): void {
 const argv = process.argv.slice(2);
 if (argv[0] === "brief") {
   if (argv.length !== 2) {
-    console.error("usage: spec-session.sh brief <dispatch>");
+    console.error("usage: run spec-session brief <dispatch>");
     process.exit(1);
   }
   brief(argv[1]!);
 } else if (argv[0] === "approve") {
   if (argv.length !== 2) {
-    console.error("usage: spec-session.sh approve <dispatch>");
+    console.error("usage: run spec-session approve <dispatch>");
     process.exit(1);
   }
   approve(argv[1]!);
 } else {
-  console.error("usage: spec-session.sh brief|approve <dispatch>");
+  console.error("usage: run spec-session brief|approve <dispatch>");
   process.exit(1);
 }

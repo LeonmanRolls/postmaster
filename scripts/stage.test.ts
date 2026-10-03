@@ -35,7 +35,7 @@ const fresh = (): void => {
   writeFileSync(join(d, "run-log.md"), "");
   rmSync(join(d, "card.md"), { force: true });
   rmSync(join(d, "logs", "luna-events-usage.json"), { force: true });
-  run("bash", [join(HERE, "log-action.sh"), d, "postmaster", "dispatch", "RUN-1", "test"]);
+  run(join(HERE, "run"), ["log-action", d, "postmaster", "dispatch", "RUN-1", "test"]);
 };
 
 const count = (): number => {

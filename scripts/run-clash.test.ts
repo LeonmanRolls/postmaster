@@ -1,5 +1,5 @@
 // Tests beside scripts/run-clash.ts: the AC3 self-test. Each case runs the script the way
-// Stage B does — `bun scripts/run-clash.ts <repo> <ticket-id>` — against a throwaway git
+// Stage B does — `scripts/run run-clash <repo> <ticket-id>` — against a throwaway git
 // repository, so a clean pass and every refusal are shown through the identical command.
 
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
@@ -29,7 +29,7 @@ import {
   stripGitLocationEnv,
 } from "./run-clash";
 
-const script = join(import.meta.dir, "run-clash.ts");
+const script = join(import.meta.dir, "run");
 
 function git(repo: string, ...args: string[]): string {
   const r = spawnSync("git", ["-C", repo, ...args], { encoding: "utf8" });
@@ -63,7 +63,7 @@ function plantBranch(repo: string, name: string): void {
 }
 
 function runClash(repo: string, ticketId: string, extraEnv?: Record<string, string>) {
-  const r = spawnSync("bun", [script, repo, ticketId], {
+  const r = spawnSync(script, ["run-clash", repo, ticketId], {
     encoding: "utf8",
     env: { ...process.env, ...extraEnv },
   });
@@ -335,7 +335,7 @@ describe("run-clash.ts through its own command line", () => {
   });
 
   test("wrong arity is refused as usage", () => {
-    const r = spawnSync("bun", [script], { encoding: "utf8" });
+    const r = spawnSync(script, ["run-clash"], { encoding: "utf8" });
     expect(r.status).toBe(1);
     expect(`${r.stdout}${r.stderr}`).toContain("usage:");
   });

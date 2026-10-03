@@ -5,10 +5,10 @@
 // `spawn` with every condition that failed, in ticket order: the harness differs, the model
 // differs, the target is another repo, or nobody is at the terminal. When the decision is
 // `spawn` and the target is a fixture copy (postmaster.fixture in its own git config, set by
-// fixture.sh new), it also prints a `headless` line: that postmaster starts headless on every
+// run fixture new), it also prints a `headless` line: that postmaster starts headless on every
 // host, in the form hosts.md gives under none, so it never meets a trust prompt.
 //
-//   front-door.sh <harness> <model> <cwd> <at-terminal> <target> [--config <path>]
+//   run front-door <harness> <model> <cwd> <at-terminal> <target> [--config <path>]
 //
 //   at-terminal  yes when a person is at the terminal, no otherwise
 //
@@ -40,7 +40,7 @@ const CONFIG =
 
 function usage(): never {
   console.error(
-    "usage: front-door.sh <harness> <model> <cwd> <at-terminal> <target> [--config <path>]",
+    "usage: run front-door <harness> <model> <cwd> <at-terminal> <target> [--config <path>]",
   );
   process.exit(2);
 }

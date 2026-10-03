@@ -33,10 +33,10 @@ running the previous version.
 the same way, and merges are merges. There is no special mode.
 
 **A change to the coachman contract merges only after a fixture run scores clean**: a run
-dispatched from the change's branch against a repository made by `scripts/fixture.sh new`, and
-scored by `scripts/fixture.sh score` on the same branch. What the contract is is defined in one
+dispatched from the change's branch against a repository made by `scripts/run fixture new`, and
+scored by `scripts/run fixture score` on the same branch. What the contract is is defined in one
 place, [its file list](docs/coachman-contract.toml);
-`scripts/coachman-contract.sh` says whether a change touches it. That rule is about the change's
+`scripts/run coachman-contract` says whether a change touches it. That rule is about the change's
 quality, not about the runs in flight. [Why](wiki/concepts/fixture-runs.md).
 
 ## When a session opens in this repo, do this
@@ -49,7 +49,7 @@ choose a target, launch the postmaster. Work out where the user is and pick up f
 
 ```sh
 cat ~/.postmaster/config.toml 2>/dev/null || echo "NOT SET UP"
-scripts/link-skills.sh --check  # names missing or blocked links; read its exit status
+scripts/run link-skills --check  # names missing or blocked links; read its exit status
 ```
 
 Include both results when you say whether the machine is set up. The link check is read-only.
@@ -61,8 +61,8 @@ probe first, ask one thing at a time, verify each answer, then have the script w
 config. Do not guess an answer, and do not hand the user a script to run instead.
 
 ```sh
-scripts/probe-harnesses.sh     # which agent CLIs exist, and which read no ambient context
-scripts/probe-trackers.sh      # which ticket sources are reachable, and what would finish each
+scripts/run probe-harnesses     # which agent CLIs exist, and which read no ambient context
+scripts/run probe-trackers      # which ticket sources are reachable, and what would finish each
 ```
 
 What to settle, in this order, and why none of it is guessed:
@@ -77,7 +77,7 @@ What to settle, in this order, and why none of it is guessed:
   `gh auth refresh -s project`); the user runs it, since a login is theirs, and you probe
   again. Plane is another named kind: ask for the API origin and the workspace slug, ask
   the user to write `~/.postmaster/plane.env` with `PLANE_API_KEY=<key>` themselves,
-  since a key never passes through a conversation, and confirm with `scripts/plane.sh
+  since a key never passes through a conversation, and confirm with `scripts/run plane
   projects`. `local` needs no service and no login: it keeps each repo's tickets in the
   repo's own git directory, and a repo whose store exists uses it whatever this answer is.
   Anything else is `other`, described once outside this repo (`skills/postmaster/trackers.md`).
@@ -91,9 +91,9 @@ config that does not parse, and a refusal is a question back to the user, not so
 to work around.
 
 ```sh
-scripts/setup.sh --keys                       # every key, its default and what it asks
-scripts/setup.sh --answers <file> --dry-run   # the config it would write
-scripts/setup.sh --answers <file>             # write ~/.postmaster/config.toml
+scripts/run setup --keys                       # every key, its default and what it asks
+scripts/run setup --answers <file> --dry-run   # the config it would write
+scripts/run setup --answers <file>             # write ~/.postmaster/config.toml
 ```
 
 When the check names missing or blocked links, show the user the dry run output below and ask
@@ -103,17 +103,17 @@ never a worktree, and nothing is ever copied or replaced. A path in the way is t
 move before installation.
 
 ```sh
-scripts/link-skills.sh --dry-run   # the links it would make, and anything in the way
-scripts/link-skills.sh             # only after the user agrees; makes links, replaces nothing
+scripts/run link-skills --dry-run   # the links it would make, and anything in the way
+scripts/run link-skills             # only after the user agrees; makes links, replaces nothing
 ```
 
 **2. Which project are we dispatching against?**
 
 ```sh
-scripts/find-projects.sh                 # most recently worked first
-scripts/check-target.sh <chosen>         # 0 usable · 1 not a repo · 2 dirty, ask first
-scripts/discover-project.sh <chosen>     # gate command, docs, tracker and its prefix, checks
-scripts/project-settings.sh report <chosen>  # shared/local presence and per-fact sources
+scripts/run find-projects                 # most recently worked first
+scripts/run check-target <chosen>         # 0 usable · 1 not a repo · 2 dirty, ask first
+scripts/run discover-project <chosen>     # gate command, docs, tracker and its prefix, checks
+scripts/run project-settings report <chosen>  # shared/local presence and per-fact sources
 ```
 
 **When a decision belongs to the project rather than the machine, offer it for
@@ -152,10 +152,10 @@ A three-role flow for getting one ticket implemented well by several models at o
 The postmaster runs no model lanes and edits no source. A coachman never takes a second
 load. The **waybill** (`<dispatch>/brief.md`) is the only thing that travels between them.
 Harness-specific invocations live in `skills/postmaster/harnesses.md`, and
-`scripts/launch.sh` is their executable form: the runbooks name a form (launch, resume,
+`scripts/run launch` is their executable form: the runbooks name a form (launch, resume,
 thread id), that file gives the command, the script runs it. Where a launch runs, and how the
 user watches it, is the session host's: `skills/postmaster/hosts.md` records Herdr, tmux and no
-host at all, and `scripts/host.sh` runs every launch through them. `SKILL.md` is the front door —
+host at all, and `scripts/run host` runs every launch through them. `SKILL.md` is the front door —
 reached from this file or by typing `/postmaster`, it gets the machine ready if it is not and
 starts the postmaster, in this conversation when the session is already the one
 `team.postmaster` names in the target repo with the user at the terminal, and as a session it
@@ -219,11 +219,12 @@ whole system.
 5. **Every count needs a control.** A positive control reading non-zero and a negative
    control reading zero, through the identical command.
 6. **Every action on a project is logged as it happens**, one JSON line per action through
-   `scripts/log-action.sh`, per run and per project. The narrative is for reading; the log
+   `scripts/run log-action`, per run and per project. The narrative is for reading; the log
    is what a run is audited from and what the flow is improved from.
 
-The scripts run on Bun 1.4.2 or newer: each `scripts/<name>.sh` is a one-line wrapper that
-hands its arguments to `scripts/<name>.ts`. Runtime imports are Bun's built-ins and Node's
+The scripts run on Bun 1.4.2 or newer through `scripts/run <name> [args]`. The entry
+uses this tool's empty `bunfig.toml` and disables environment file loading, even when
+called from a target project. Runtime imports are Bun's built-ins and Node's
 standard modules only; `typescript`, `@biomejs/biome` and `oxlint` are the development dependencies,
 and `bun run check` is the type check, Oxlint, the Biome format check, and the tests beside every script.
 
@@ -236,7 +237,7 @@ every run; local `.postmaster/settings.toml` are this person's choices on this m
 project. None of these sets a floor of turnpikes: a ticket names the turnpikes its run
 passes through (#40), and project settings only say what `default` means for that project.
 A project's settings name no credential and no filesystem path, in either file
-(`scripts/project-settings.sh`). Nothing in `.postmaster/` is committed by default; the one
+(`scripts/run project-settings`). Nothing in `.postmaster/` is committed by default; the one
 shared file is committed on purpose with `git add -f`.
 
 ## Working on this repository
@@ -254,8 +255,8 @@ The test is whether the fix completes what the pull request claims. "Is this a s
 concern?" is the wrong test, because nearly anything can be described as one. Before filing a
 ticket, run `gh pr list` and check whether the work belongs in one of them.
 
-**A script path in `skills/postmaster/` goes through `<tool>`**, the repo the skill finds from
-its link: `<tool>/scripts/stage.sh`, never `scripts/stage.sh`, which resolves only from this
+**A script command in `skills/postmaster/` goes through `<tool>`**, the repo the skill finds from
+its link: `<tool>/scripts/run stage`, never `scripts/run stage`, which resolves only from this
 repo's root. The run's own pinned tool goes through `<rt>`, resolved per run by
-`run-meta.sh path`. `scripts/skill-refs.sh` names every other path that does not go through
+`run-meta.sh path`. `scripts/run skill-refs` names every other path that does not go through
 `<tool>`, and `--fix` rewrites the bare ones; run both after writing a runbook and after a rebase.

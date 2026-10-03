@@ -23,8 +23,8 @@ import {
   type Rec,
 } from "./project-settings";
 
-const SELF = join(import.meta.dir, "project-settings.sh");
-const VERIFY = join(import.meta.dir, "verify.sh");
+const SELF = join(import.meta.dir, "run");
+const VERIFY = join(import.meta.dir, "run");
 
 interface Run {
   code: number;
@@ -105,7 +105,7 @@ describe("missing profiles and ensure", () => {
   test("project modules cannot shadow the settings reader's standard library imports", () => {
     const shadow = at("shadow");
     write(join(shadow, "json", "__init__.py"), 'raise SystemExit("target module imported")\n');
-    const isolated = runCli(SELF, ["inspect", shadow], { cwd: shadow });
+    const isolated = runCli(SELF, ["project-settings", "inspect", shadow], { cwd: shadow });
     expect(isolated.code).toBe(0);
   }, 30000);
 
@@ -157,7 +157,7 @@ describe("missing profiles and ensure", () => {
 describe("shared and local profiles", () => {
   test("inspect stays bounded when POSTMASTER_PROJECT is inherited", () => {
     writeShared();
-    const guarded = runCli(SELF, ["inspect", repo], { env: { POSTMASTER_PROJECT: repo } });
+    const guarded = runCli(SELF, ["project-settings", "inspect", repo], { env: { POSTMASTER_PROJECT: repo } });
     expect(guarded.code).toBe(0);
   }, 30000);
 
@@ -411,7 +411,7 @@ describe("check shapes agree with verify.sh", () => {
       }
       const planted = join(shapeRepo, ".postmaster", "project.toml");
       write(planted, contents);
-      const checked = runCli(VERIFY, ["checks", shapeRepo]);
+      const checked = runCli(VERIFY, ["verify", "checks", shapeRepo]);
       expect(writeRefused).toBe(true);
       expect(checked.code).not.toBe(0);
     }, 30000);
@@ -443,7 +443,7 @@ describe("check shapes agree with verify.sh", () => {
         if (isDie(e)) writeError = e.message;
         else throw e;
       }
-      const checked = runCli(VERIFY, ["checks", shapeRepo]);
+      const checked = runCli(VERIFY, ["verify", "checks", shapeRepo]);
       expect(writeError).toBe(null);
       expect(checked.code).toBe(0);
     }, 30000);

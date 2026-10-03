@@ -23,7 +23,7 @@ import {
   VERDICT_GUARD,
 } from "./verify-journey.ts";
 
-const SELF = join(import.meta.dir, "verify-journey.sh");
+const SELF = join(import.meta.dir, "run");
 const BASE_BLOB = "bb782a973e69427c820ce16a676718e87f51995b:scripts/verify-journey.sh";
 
 const hasPy = run("sh", ["-c", "command -v python3"]).code === 0;
@@ -200,7 +200,7 @@ const judgeArmed = (name: string, withShots: boolean): { code: number; out: stri
   const specDir = join(tmp, `${name}-spec`);
   mkdirSync(jDir, { recursive: true });
   mkdirSync(specDir, { recursive: true });
-  const p = run("bash", [SELF, "--path", wt, "--dir", jDir]).out.trim();
+  const p = run(SELF, ["verify-journey", "--path", wt, "--dir", jDir]).out.trim();
   cpSync(join(tmp, "good.md"), p);
   writeFileSync(join(specDir, "spec.json"), `${JSON.stringify({ journey_dir: jDir })}\n`, "utf8");
   if (withShots) {
@@ -237,7 +237,7 @@ describe("positive controls", () => {
   });
 
   test("the report's path names the commit", () => {
-    const r = run("bash", [SELF, "--path", wt, "--dir", join(tmp, "j")]);
+    const r = run(SELF, ["verify-journey", "--path", wt, "--dir", join(tmp, "j")]);
     const head = run("git", ["-C", wt, "rev-parse", "HEAD"]);
     expect(r.out.trim()).toBe(join(tmp, "j", `${head.out.trim()}.md`));
   });
@@ -253,7 +253,7 @@ describe("positive controls", () => {
   });
 
   test("the format says how a step is marked", () => {
-    const r = run("bash", [SELF, "--format"]);
+    const r = run(SELF, ["verify-journey", "--format"]);
     expect(r.out.includes("did not: <what happened instead>")).toBe(true);
   });
 });
@@ -314,7 +314,7 @@ describe("negative controls", () => {
     const specDir = join(tmp, "j-older-spec");
     mkdirSync(jDir, { recursive: true });
     mkdirSync(specDir, { recursive: true });
-    const p = run("bash", [SELF, "--path", wt, "--dir", jDir]).out.trim();
+    const p = run(SELF, ["verify-journey", "--path", wt, "--dir", jDir]).out.trim();
     cpSync(join(tmp, "good.md"), p);
     mkdirSync(join(jDir, "shots"), { recursive: true });
     cpSync(join(tmp, "shots", "1.png"), join(jDir, "shots", "1.png"));

@@ -98,10 +98,10 @@ is never anything but not run is one the defaults should not offer.
 
 ## What changed because of it
 
-`scripts/verify.sh` reads a project's declaration or finds its defaults, records the run's checks
+`scripts/run verify` reads a project's declaration or finds its defaults, records the run's checks
 at dispatch, copies them into worktrees, runs them and logs each result as a `verify` action.
-Each default is its own script with a self-test: `scripts/verify-examples.sh`,
-`scripts/verify-journey.sh` and `scripts/verify-library.sh`. `scripts/discover-project.sh`
+Each default is its own script with a self-test: `scripts/run verify-examples`,
+`scripts/run verify-journey` and `scripts/run verify-library`. `scripts/run discover-project`
 reports each check and where it came from, the waybill carries them, a workhorse's brief names
 them and its summary gives each one's command and exit. The coachman runs them at harvest and
 before each card, and the postmaster checks that the final commit has a result for each before

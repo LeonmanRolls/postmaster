@@ -20,7 +20,7 @@ import {
   WORD_SPLIT_RE,
 } from "./turnpikes.ts";
 
-const SELF = join(import.meta.dir, "turnpikes.sh");
+const SELF = join(import.meta.dir, "run");
 const HERE = import.meta.dir;
 const NOPE = "zz-not-listed";
 const PLUS = `${TABLE}\n${NOPE}  -        ship    a check the table does not have yet`;
@@ -56,7 +56,7 @@ let tmp = "";
 beforeAll(() => {
   tmp = mkdtempSync(join(tmpdir(), "postmaster-"));
   {
-    const r = run("bash", [SELF, "--list"]);
+    const r = run(SELF, ["turnpikes", "--list"]);
     if (r.out.split("\n").some((l) => pyWords(l)[0] === NOPE)) {
       throw new Error(`test setup: ${NOPE} is in the table; pick another unused name`);
     }
@@ -80,7 +80,7 @@ afterAll(() => {
 });
 
 const runSelf = (...args: string[]): { code: number; out: string } => {
-  const r = run("bash", [SELF, ...args]);
+  const r = run(SELF, ["turnpikes", ...args]);
   return { code: r.code, out: (r.out + r.err).replace(/\n+$/u, "") };
 };
 
@@ -127,7 +127,7 @@ const bad = (extra: string, want: string): void => {
 };
 
 const poll = (runsDir: string, name: string): string => {
-  const r = run("bash", [join(HERE, "runs-status.sh"), runsDir]);
+  const r = run(join(HERE, "run"), ["runs-status", runsDir]);
   const row = r.out.split("\n").find((l) => l.startsWith(name));
   return row ? (pyWords(row).pop() ?? "") : "";
 };
@@ -153,7 +153,7 @@ const setupWalk = (
     `{"stage": "${stage}", "leg": ${leg}, "base": "abc123", "lanes": {}, "coachman": {"legs": {}}}\n`,
     "utf8",
   );
-  run("bash", [join(HERE, "log-action.sh"), d, "postmaster", "dispatch", name, `leg ${leg}`]);
+  run(join(HERE, "run"), ["log-action", d, "postmaster", "dispatch", name, `leg ${leg}`]);
   for (const n of handoffs) writeFileSync(join(d, `handoff-${n}.md`), HANDOFF_SECTIONS, "utf8");
   for (const m of markers) writeFileSync(join(d, m), "", "utf8");
   return { repo, d };
@@ -302,7 +302,7 @@ describe("positive controls: a ticket's section", () => {
   test("--list does not read project settings", () => {
     const plain = runSelf("--list");
     expect(plain.code).toBe(0);
-    const r = run("bash", [SELF, "--list"], {
+    const r = run(SELF, ["turnpikes", "--list"], {
       env: {
         ...(process.env as Record<string, string>),
         POSTMASTER_PROJECT: join(tmp, "no-such-project"),
@@ -402,7 +402,7 @@ describe("positive controls: a ticket's section", () => {
   });
 
   test("with no text given, the section is read from stdin", () => {
-    const r = run("bash", ["-c", `printf '1. bug\\n2. security\\n' | "${SELF}" resolve`]);
+    const r = run("bash", ["-c", `printf '1. bug\\n2. security\\n' | "${SELF}" turnpikes resolve`]);
     checkIs(
       { code: r.code, out: (r.out + r.err).replace(/\n+$/u, "") },
       0,
@@ -688,7 +688,7 @@ describe("negative controls: the table", () => {
 describe("controls: a one-leg run, walked from synthesis to the card through the poll, the hand-off check and the stages", () => {
   test("the final synthesis hand-off passes its check", () => {
     const { d } = setupOne("one-handoff");
-    const hc = run("bash", [join(HERE, "handoff-check.sh"), join(d, "handoff-1.md")]);
+    const hc = run(join(HERE, "run"), ["handoff-check", join(d, "handoff-1.md")]);
     expect(hc.code).toBe(0);
   }, 30000);
 
@@ -699,21 +699,21 @@ describe("controls: a one-leg run, walked from synthesis to the card through the
 
   test("a one-leg run has no second leg", () => {
     const { d } = setupOne("one-legs");
-    const r = run("bash", [SELF, "legs", d]);
+    const r = run(SELF, ["turnpikes", "legs", d]);
     expect(r.out.replace(/\n+$/u, "")).toBe("1 synthesis");
   }, 30000);
 
   test("a one-leg run closes at done", () => {
     const { repo, d } = setupOne("one-close");
-    run("bash", [join(HERE, "stage.sh"), d, "shipped", "postmaster"]);
-    run("bash", [join(HERE, "stage.sh"), d, "done", "postmaster"]);
+    run(join(HERE, "run"), ["stage", d, "shipped", "postmaster"]);
+    run(join(HERE, "run"), ["stage", d, "done", "postmaster"]);
     expect(poll(join(repo, ".postmaster", "runs"), "one")).toBe("-");
   }, 30000);
 
   test("a one-leg run's stages after the card are the postmaster's", () => {
     const { d } = setupOne("one-stages");
-    run("bash", [join(HERE, "stage.sh"), d, "shipped", "postmaster"]);
-    run("bash", [join(HERE, "stage.sh"), d, "done", "postmaster"]);
+    run(join(HERE, "run"), ["stage", d, "shipped", "postmaster"]);
+    run(join(HERE, "run"), ["stage", d, "done", "postmaster"]);
     expect(stageTargetsOf(d)).toBe("shipped done");
   }, 30000);
 });
@@ -726,7 +726,7 @@ describe("controls: a two-leg run, walked from synthesis through review to the c
 
   test("the leg after synthesis is review", () => {
     const { d } = setupTwo("two-next");
-    const r = run("bash", [SELF, "legs", d]);
+    const r = run(SELF, ["turnpikes", "legs", d]);
     const next = r.out.split("\n").find((l) => {
       const n = parseInt(pyWords(l)[0] ?? "", 10);
       return n > 1;
@@ -737,13 +737,13 @@ describe("controls: a two-leg run, walked from synthesis through review to the c
 
   test("the review leg starts from synthesis's hand-off, which passes its check", () => {
     const { d } = setupTwo("two-handoff");
-    const r = run("bash", [SELF, "legs", d]);
+    const r = run(SELF, ["turnpikes", "legs", d]);
     const prevs = r.out
       .split("\n")
       .map((l) => parseInt(pyWords(l)[0] ?? "", 10))
       .filter((n) => n < 2);
     const prev = prevs[prevs.length - 1] ?? 0;
-    const hc = run("bash", [join(HERE, "handoff-check.sh"), join(d, `handoff-${prev}.md`)]);
+    const hc = run(join(HERE, "run"), ["handoff-check", join(d, `handoff-${prev}.md`)]);
     expect(hc.code).toBe(0);
     expect(prev).toBe(1);
   }, 30000);
@@ -751,13 +751,13 @@ describe("controls: a two-leg run, walked from synthesis through review to the c
   test("the review leg ends with the card, and no leg follows", () => {
     const { repo, d } = setupTwo("two-card");
     advanceWalk(d, 2);
-    run("bash", [join(HERE, "stage.sh"), d, "review"]);
-    run("bash", [join(HERE, "stage.sh"), d, "shipping"]);
+    run(join(HERE, "run"), ["stage", d, "review"]);
+    run(join(HERE, "run"), ["stage", d, "shipping"]);
     writeFileSync(join(d, "handoff-2.md"), HANDOFF_SECTIONS, "utf8");
     writeFileSync(join(d, ".leg-2-done"), "", "utf8");
     writeFileSync(join(d, ".leg-2-exited"), "", "utf8");
     writeFileSync(join(d, ".card-ready"), "", "utf8");
-    const r = run("bash", [SELF, "legs", d]);
+    const r = run(SELF, ["turnpikes", "legs", d]);
     const after = r.out.split("\n").filter((l) => parseInt(pyWords(l)[0] ?? "", 10) > 2);
     expect(poll(join(repo, ".postmaster", "runs"), "two")).toBe("GATE");
     expect(after).toEqual([]);
@@ -766,14 +766,14 @@ describe("controls: a two-leg run, walked from synthesis through review to the c
   test("it closes through the postmaster's stages", () => {
     const { repo, d } = setupTwo("two-close");
     advanceWalk(d, 2);
-    run("bash", [join(HERE, "stage.sh"), d, "review"]);
-    run("bash", [join(HERE, "stage.sh"), d, "shipping"]);
+    run(join(HERE, "run"), ["stage", d, "review"]);
+    run(join(HERE, "run"), ["stage", d, "shipping"]);
     writeFileSync(join(d, "handoff-2.md"), HANDOFF_SECTIONS, "utf8");
     writeFileSync(join(d, ".leg-2-done"), "", "utf8");
     writeFileSync(join(d, ".leg-2-exited"), "", "utf8");
     writeFileSync(join(d, ".card-ready"), "", "utf8");
-    run("bash", [join(HERE, "stage.sh"), d, "shipped", "postmaster"]);
-    run("bash", [join(HERE, "stage.sh"), d, "done", "postmaster"]);
+    run(join(HERE, "run"), ["stage", d, "shipped", "postmaster"]);
+    run(join(HERE, "run"), ["stage", d, "done", "postmaster"]);
     expect(stageTargetsOf(d)).toBe("review shipping shipped done");
     expect(poll(join(repo, ".postmaster", "runs"), "two")).toBe("-");
   }, 30000);
@@ -782,7 +782,7 @@ describe("controls: a two-leg run, walked from synthesis through review to the c
 describe("controls: a three-leg run dispatched before this change, walked from review to ship", () => {
   test("a pre-change review leg still dispatches ship", () => {
     const { repo, d } = setupOld("old-poll");
-    const r = run("bash", [SELF, "legs", d]);
+    const r = run(SELF, ["turnpikes", "legs", d]);
     const last = r.out.replace(/\n+$/u, "").split("\n").pop() ?? "";
     expect(poll(join(repo, ".postmaster", "runs"), "old")).toBe("DISPATCH");
     expect(last).toBe("3 ship");
@@ -790,7 +790,7 @@ describe("controls: a three-leg run dispatched before this change, walked from r
 
   test("the leg after review is ship", () => {
     const { d } = setupOld("old-next");
-    const r = run("bash", [SELF, "legs", d]);
+    const r = run(SELF, ["turnpikes", "legs", d]);
     const next = r.out.split("\n").find((l) => {
       const n = parseInt(pyWords(l)[0] ?? "", 10);
       return n > 2;
@@ -801,19 +801,19 @@ describe("controls: a three-leg run dispatched before this change, walked from r
 
   test("the legacy ship hand-off still passes its check", () => {
     const { d } = setupOld("old-handoff");
-    const hc = run("bash", [join(HERE, "handoff-check.sh"), join(d, "handoff-2.md")]);
+    const hc = run(join(HERE, "run"), ["handoff-check", join(d, "handoff-2.md")]);
     expect(hc.code).toBe(0);
   }, 30000);
 
   test("after ship the card is GATE, and no leg follows", () => {
     const { repo, d } = setupOld("old-card");
     advanceWalk(d, 3);
-    run("bash", [join(HERE, "stage.sh"), d, "shipping"]);
+    run(join(HERE, "run"), ["stage", d, "shipping"]);
     writeFileSync(join(d, "handoff-3.md"), HANDOFF_SECTIONS, "utf8");
     writeFileSync(join(d, ".leg-3-done"), "", "utf8");
     writeFileSync(join(d, ".leg-3-exited"), "", "utf8");
     writeFileSync(join(d, ".card-ready"), "", "utf8");
-    const r = run("bash", [SELF, "legs", d]);
+    const r = run(SELF, ["turnpikes", "legs", d]);
     const after = r.out.split("\n").filter((l) => parseInt(pyWords(l)[0] ?? "", 10) > 3);
     expect(poll(join(repo, ".postmaster", "runs"), "old")).toBe("GATE");
     expect(after).toEqual([]);
@@ -822,13 +822,13 @@ describe("controls: a three-leg run dispatched before this change, walked from r
   test("a three-leg run keeps its stages", () => {
     const { repo, d } = setupOld("old-close");
     advanceWalk(d, 3);
-    run("bash", [join(HERE, "stage.sh"), d, "shipping"]);
+    run(join(HERE, "run"), ["stage", d, "shipping"]);
     writeFileSync(join(d, "handoff-3.md"), HANDOFF_SECTIONS, "utf8");
     writeFileSync(join(d, ".leg-3-done"), "", "utf8");
     writeFileSync(join(d, ".leg-3-exited"), "", "utf8");
     writeFileSync(join(d, ".card-ready"), "", "utf8");
-    run("bash", [join(HERE, "stage.sh"), d, "shipped"]);
-    run("bash", [join(HERE, "stage.sh"), d, "done", "postmaster"]);
+    run(join(HERE, "run"), ["stage", d, "shipped"]);
+    run(join(HERE, "run"), ["stage", d, "done", "postmaster"]);
     expect(stageTargetsOf(d)).toBe("shipping shipped done");
     expect(poll(join(repo, ".postmaster", "runs"), "old")).toBe("-");
   }, 30000);

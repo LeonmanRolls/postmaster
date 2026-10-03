@@ -2,9 +2,9 @@
 // narrative is written, so a reader can see when each thing happened and how long each part of
 // the work took.
 //
-//   run-log.sh <dispatch> <text...>            one entry:  - 12:35:07Z <text>
-//   run-log.sh <dispatch> --section <title>    close the open section, start a new one
-//   run-log.sh <dispatch> --close              close the open section; nothing if none is open
+//   run run-log <dispatch> <text...>            one entry:  - 12:35:07Z <text>
+//   run run-log <dispatch> --section <title>    close the open section, start a new one
+//   run run-log <dispatch> --close              close the open section; nothing if none is open
 //
 // A section starts with a heading carrying its start time, and ends with a line saying how long
 // it took, written when the next section starts or when --close is called. The narrative is for
@@ -73,7 +73,7 @@ export function write(d: string, args: string[]): number {
   if (a0 === "--section") {
     const title = args[1];
     if (title === undefined || title === "") {
-      console.error("usage: run-log.sh <dispatch> --section <title>");
+      console.error("usage: run run-log <dispatch> --section <title>");
       return 1;
     }
     closeOpen(log, t);
@@ -81,7 +81,7 @@ export function write(d: string, args: string[]): number {
   } else if (a0 === "--close") {
     closeOpen(log, t);
   } else if (a0 === undefined || a0 === "") {
-    console.error("usage: run-log.sh <dispatch> <text...> | --section <title> | --close");
+    console.error("usage: run run-log <dispatch> <text...> | --section <title> | --close");
     return 1;
   } else {
     const hhmmss = t.includes(" ") ? t.slice(t.indexOf(" ") + 1) : t;
@@ -102,7 +102,7 @@ function isDirectory(p: string): boolean {
 const argv = process.argv.slice(2);
 if (import.meta.main) {
   if (argv.length < 1) {
-    console.error("usage: run-log.sh <dispatch> <text...> | --section <title> | --close");
+    console.error("usage: run run-log <dispatch> <text...> | --section <title> | --close");
     process.exit(1);
   }
   const d = argv[0];

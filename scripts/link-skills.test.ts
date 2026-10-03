@@ -259,7 +259,7 @@ describe("--check: the same command reports missing links and passes when comple
     checkHome = realpathSync(checkHomeBase);
     cpSync(join(TOOL, "skills"), join(checkTool, "skills"), { recursive: true });
     // The install command names the script being run: in-process, the real one.
-    checkRun = shellQuote(join(scriptsDir(import.meta), "link-skills.sh"));
+    checkRun = `${shellQuote(join(scriptsDir(import.meta), "run"))} link-skills`;
     blockedPath = join(checkHome, ".claude", "skills", "postmaster");
   });
 
@@ -396,11 +396,11 @@ describe("positive control: from an unrelated directory, a documented command re
       resolver =
         readFileSync(skillMd, "utf8")
           .split("\n")
-          .find((l) => l.includes('test -f "$t/scripts/link-skills.sh"')) ?? "";
+          .find((l) => l.includes('test -x "$t/scripts/run"')) ?? "";
       documented =
         readFileSync(trackersMd, "utf8")
           .split("\n")
-          .find((l) => /^<tool>\/scripts\/github\.sh <repo> board +#/u.test(l))
+          .find((l) => /^<tool>\/scripts\/run github <repo> board +#/u.test(l))
           ?.replace(/ *#.*$/u, "") ?? "";
     } catch {
       /* files not found */

@@ -1,7 +1,7 @@
 // Append one structured action to a run's audit log and to the project's ledger.
 //
-//   log-action.sh <dispatch-dir> <actor> <action> <target> [detail...]
-//   log-action.sh <dispatch-dir> <actor> tool-fault <postmaster-file> --ran <what ran>
+//   run log-action <dispatch-dir> <actor> <action> <target> [detail...]
+//   run log-action <dispatch-dir> <actor> tool-fault <postmaster-file> --ran <what ran>
 //                 --failed <what failed> --error <the error, or none> --diagnosis <why>
 //                 --fix <the fix proposed> [--workaround <what was done instead>] [--control <kind>]
 //
@@ -311,7 +311,7 @@ function logAction(
 const argv = argvDecoded();
 if (import.meta.main) {
   if (argv.length < 4 || !argv[0] || !argv[1] || !argv[2] || !argv[3]) {
-    console.error("usage: log-action.sh <dispatch-dir> <actor> <action> <target> [detail...]");
+    console.error("usage: run log-action <dispatch-dir> <actor> <action> <target> [detail...]");
     process.exit(1);
   }
   process.exit(

@@ -8,7 +8,7 @@
 //   usage.ts record <events> <harness> <name> <dispatch> --role <role> --lane <lane>
 //   usage.ts sum <dispatch>
 //
-// Recording is best-effort like export-session.sh: a fault warns and leaves the launch's own
+// Recording is best-effort like run export-session: a fault warns and leaves the launch's own
 // exit alone. `sum` is what the closing record quotes; it never invents a figure.
 //
 //   exit 0  read, recorded or summed

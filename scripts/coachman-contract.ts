@@ -2,19 +2,18 @@
 // of files in docs/coachman-contract.toml. A change anywhere in a listed file
 // is a contract change.
 //
-//   coachman-contract.sh <base> <head>
-//   coachman-contract.sh [<repo>] <base> <head>   (or --repo <repo> <base> <head>)
-//   coachman-contract.sh --self-test
+//   scripts/run coachman-contract <base> <head>
+//   scripts/run coachman-contract [<repo>] <base> <head>   (or --repo <repo> <base> <head>)
+//   scripts/run coachman-contract --self-test
+//   scripts/run coachman-contract --at-base <repo> <base> <head>
 //
 //   exit 0  no contract change
 //   exit 1  contract change; print each listed file the change touched
 //   exit 2  usage, git or contract-list error
 //
-// Ported from #163's bash wrapper over embedded python on #109; the .sh stays
-// a wrapper. The self-test keeps its check entry in .postmaster/project.toml,
-// so it stays in the script instead of moving beside it. Fixtures replicate
-// the wrapper layout: scripts/coachman-contract.{sh,ts} and scripts/lib under
-// a bunfig.toml, with the contract files copied beside them.
+// The self-test keeps its check entry in .postmaster/project.toml, so it stays
+// in the script instead of moving beside it. Fixtures replicate scripts/run,
+// scripts/coachman-contract.ts and scripts/lib under a bunfig.toml.
 
 import {
   chmodSync,
@@ -28,7 +27,8 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
+import { tmpdir } from "node:os";
 import { parseTomlText } from "./lib/data.ts";
 import { toolRoot } from "./lib/paths.ts";
 import { run } from "./lib/proc.ts";
@@ -136,6 +136,50 @@ function checkChange(repo: string, base: string, head: string): string[] {
   return [...new Set(changedFiles(abs, base, head))].filter((f) => listed.has(f)).sort();
 }
 
+// Run the checker named by BASE's index using BASE's own script tree. A branch cannot
+// weaken its checker and then classify itself with that weakened version.
+function checkAtBase(repo: string, base: string, head: string): number {
+  const abs = realpathSync(resolve(repo));
+  gitOrDie(["rev-parse", "--verify", `${base}^{commit}`], abs);
+  gitOrDie(["rev-parse", "--verify", `${head}^{commit}`], abs);
+  const index = readIndex(abs, base);
+  if (!index) throw new ContractError(`${INDEX} does not exist at ${base}`);
+  if (!/^scripts\/[A-Za-z0-9_-]+\.(sh|ts)$/u.test(index.detector))
+    throw new ContractError(`unsupported detector at ${base}: ${index.detector}`);
+  if (blob(abs, base, index.detector) === null)
+    throw new ContractError(`detector does not exist at ${base}: ${index.detector}`);
+
+  const scratch = mkdtempSync(join(tmpdir(), "coachman-base-"));
+  try {
+    const paths = gitOrDie(
+      ["ls-tree", "-r", "--name-only", "-z", base, "--", "scripts", "bunfig.toml"],
+      abs,
+    )
+      .split("\0")
+      .filter(Boolean);
+    for (const rel of paths) {
+      if (badPath(rel)) throw new ContractError(`unsafe script path at ${base}: ${rel}`);
+      const content = blob(abs, base, rel);
+      if (content === null) throw new ContractError(`cannot read ${rel} at ${base}`);
+      const destination = join(scratch, rel);
+      mkdirSync(dirname(destination), { recursive: true });
+      writeFileSync(destination, content);
+      if (rel === "scripts/run" || rel.endsWith(".sh")) chmodSync(destination, 0o755);
+    }
+    const args = [abs, base, head];
+    const result = index.detector.endsWith(".sh")
+      ? run("bash", [join(scratch, index.detector), ...args], { cwd: abs })
+      : run(join(scratch, "scripts", "run"), [basename(index.detector, ".ts"), ...args], {
+          cwd: abs,
+        });
+    process.stdout.write(result.out);
+    process.stderr.write(result.err);
+    return result.code;
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
+}
+
 function printResult(touched: string[], base: string, head: string): number {
   if (touched.length === 0) {
     console.log(`no coachman contract change (${base}..${head})`);
@@ -152,10 +196,7 @@ function control(ok: boolean, name: string, detail = ""): boolean {
 
 function gitFixture(repo: string, sourceRoot: string, files: Array<{ path: string }>): string {
   mkdirSync(join(repo, "scripts"), { recursive: true });
-  copyFileSync(
-    join(sourceRoot, "scripts", "coachman-contract.sh"),
-    join(repo, "scripts", "coachman-contract.sh"),
-  );
+  copyFileSync(join(sourceRoot, "scripts", "run"), join(repo, "scripts", "run"));
   copyFileSync(
     join(sourceRoot, "scripts", "coachman-contract.ts"),
     join(repo, "scripts", "coachman-contract.ts"),
@@ -179,7 +220,7 @@ function gitFixture(repo: string, sourceRoot: string, files: Array<{ path: strin
   }
   g("config", "user.name", "brindlewick");
   g("config", "user.email", "332054101+brindlewick@users.noreply.github.com");
-  chmodSync(join(repo, "scripts", "coachman-contract.sh"), 0o755);
+  chmodSync(join(repo, "scripts", "run"), 0o755);
   g("add", ".");
   g("commit", "-q", "-m", "fixture baseline");
   return g("rev-parse", "HEAD").trim();
@@ -191,9 +232,6 @@ function commitFixture(repo: string, message: string): string {
   g("commit", "-q", "-m", message);
   return g("rev-parse", "HEAD").trim();
 }
-
-/** Every listed file's first two lines: the wrapper head a wording fix extends. */
-const WRAPPER_HEAD = "#!/usr/bin/env bash\nexec bun";
 
 function exerciseSelfTest(sourceRoot: string): number {
   let files: Array<{ path: string }>;
@@ -215,7 +253,7 @@ function exerciseSelfTest(sourceRoot: string): number {
       const base = gitFixture(repo, sourceRoot, files);
       edit(repo);
       const head = commitFixture(repo, label);
-      const result = run(join(repo, "scripts", "coachman-contract.sh"), [base, head], {
+      const result = run(join(repo, "scripts", "run"), ["coachman-contract", base, head], {
         cwd: repo,
       });
       const expectedCode = expectedFile ? 1 : 0;
@@ -241,10 +279,13 @@ function exerciseSelfTest(sourceRoot: string): number {
     writeFileSync(target, content.replace(before, after));
   };
 
-  const wrapperCase = (label: string, rel: string, comment: string): void =>
+  const scriptCase = (label: string, rel: string, comment: string): void =>
     runCase(
       label,
-      (repo) => replaceOnce(repo, rel, WRAPPER_HEAD, `#!/usr/bin/env bash\n# ${comment}\nexec bun`),
+      (repo) => {
+        const path = join(repo, rel);
+        writeFileSync(path, `// ${comment}\n${readFileSync(path, "utf8")}`);
+      },
       rel,
     );
 
@@ -292,38 +333,38 @@ function exerciseSelfTest(sourceRoot: string): number {
       ),
     "skills/postmaster/SKILL.md",
   );
-  wrapperCase("a wording fix in host.sh answers yes", "scripts/host.sh", "the exit watcher");
-  wrapperCase(
-    "a change in runs-status.sh answers yes",
-    "scripts/runs-status.sh",
+  scriptCase("a wording fix in host.ts answers yes", "scripts/host.ts", "the exit watcher");
+  scriptCase(
+    "a change in runs-status.ts answers yes",
+    "scripts/runs-status.ts",
     "the completion poll",
   );
-  wrapperCase(
-    "a wording fix in turnpikes.sh answers yes",
-    "scripts/turnpikes.sh",
+  scriptCase(
+    "a wording fix in turnpikes.ts answers yes",
+    "scripts/turnpikes.ts",
     "the turnpike table",
   );
-  wrapperCase("a wording fix in stage.sh answers yes", "scripts/stage.sh", "the stage list");
-  wrapperCase(
-    "a wording fix in handoff-check.sh answers yes",
-    "scripts/handoff-check.sh",
+  scriptCase("a wording fix in stage.ts answers yes", "scripts/stage.ts", "the stage list");
+  scriptCase(
+    "a wording fix in handoff-check.ts answers yes",
+    "scripts/handoff-check.ts",
     "the required sections",
   );
-  wrapperCase(
+  scriptCase(
     "a wording fix in the detector answers yes",
-    "scripts/coachman-contract.sh",
+    "scripts/coachman-contract.ts",
     "the detector entrypoint",
   );
-  wrapperCase("a wording fix in landing.sh answers yes", "scripts/landing.sh", "the landing");
-  wrapperCase(
-    "a wording fix in runs-watch.sh answers yes",
-    "scripts/runs-watch.sh",
+  scriptCase("a wording fix in landing.ts answers yes", "scripts/landing.ts", "the landing");
+  scriptCase(
+    "a wording fix in runs-watch.ts answers yes",
+    "scripts/runs-watch.ts",
     "the mechanical steps",
   );
-  wrapperCase("a wording fix in run-meta.sh answers yes", "scripts/run-meta.sh", "the run record");
-  wrapperCase(
-    "a wording fix in ticket-check.sh answers yes",
-    "scripts/ticket-check.sh",
+  scriptCase("a wording fix in run-meta.ts answers yes", "scripts/run-meta.ts", "the run record");
+  scriptCase(
+    "a wording fix in ticket-check.ts answers yes",
+    "scripts/ticket-check.ts",
     "the journey reading",
   );
   runCase(
@@ -337,9 +378,9 @@ function exerciseSelfTest(sourceRoot: string): number {
       ),
     "skills/postmaster/spec-session.md",
   );
-  wrapperCase(
-    "a wording fix in spec-session.sh answers yes",
-    "scripts/spec-session.sh",
+  scriptCase(
+    "a wording fix in spec-session.ts answers yes",
+    "scripts/spec-session.ts",
     "the spec session's verbs",
   );
   runCase(
@@ -353,9 +394,9 @@ function exerciseSelfTest(sourceRoot: string): number {
       ),
     "scripts/spec-session.ts",
   );
-  wrapperCase(
-    "a wording fix in spec-decisions.sh answers yes",
-    "scripts/spec-decisions.sh",
+  scriptCase(
+    "a wording fix in spec-decisions.ts answers yes",
+    "scripts/spec-decisions.ts",
     "the approval record's verbs",
   );
   runCase(
@@ -369,10 +410,10 @@ function exerciseSelfTest(sourceRoot: string): number {
       ),
     "scripts/spec-decisions.ts",
   );
-  wrapperCase("a wording fix in launch.sh answers yes", "scripts/launch.sh", "the attempt phase");
-  wrapperCase(
-    "a wording fix in fixture.sh answers yes",
-    "scripts/fixture.sh",
+  scriptCase("a wording fix in launch.ts answers yes", "scripts/launch.ts", "the attempt phase");
+  scriptCase(
+    "a wording fix in fixture.ts answers yes",
+    "scripts/fixture.ts",
     "fixture copies and scores",
   );
   runCase(
@@ -442,7 +483,7 @@ function exerciseSelfTest(sourceRoot: string): number {
       const base = gitFixture(repo, sourceRoot, files);
       const honestDir = join(scratch, "honest");
       mkdirSync(join(honestDir, "scripts"), { recursive: true });
-      for (const name of ["coachman-contract.sh", "coachman-contract.ts"]) {
+      for (const name of ["run", "coachman-contract.ts"]) {
         const shown = run("git", ["-C", repo, "show", `${base}:scripts/${name}`]);
         if (shown.code !== 0) throw new ContractError(`cannot read scripts/${name} at ${base}`);
         writeFileSync(join(honestDir, "scripts", name), shown.out);
@@ -451,24 +492,24 @@ function exerciseSelfTest(sourceRoot: string): number {
         recursive: true,
       });
       copyFileSync(join(sourceRoot, "bunfig.toml"), join(honestDir, "bunfig.toml"));
-      chmodSync(join(honestDir, "scripts", "coachman-contract.sh"), 0o755);
+      chmodSync(join(honestDir, "scripts", "run"), 0o755);
       replaceOnce(
         repo,
-        "scripts/coachman-contract.sh",
-        "exec bun",
-        "exit 0 # neutered: always answers no\n# exec bun",
+        "scripts/coachman-contract.ts",
+        "\nif (import.meta.main) process.exit(main(process.argv.slice(2)));\n",
+        "\nif (import.meta.main) process.exit(0); // neutered: always answers no\n",
       );
       const head = commitFixture(repo, label);
-      const neutered = run(join(repo, "scripts", "coachman-contract.sh"), [base, head], {
+      const neutered = run(join(repo, "scripts", "run"), ["coachman-contract", base, head], {
         cwd: repo,
       });
-      const honest = run(join(honestDir, "scripts", "coachman-contract.sh"), [base, head], {
+      const honest = run(join(honestDir, "scripts", "run"), ["coachman-contract", base, head], {
         cwd: repo,
       });
       const ok =
         neutered.code === 0 &&
         honest.code === 1 &&
-        honest.out.split("\n").includes("yes scripts/coachman-contract.sh");
+        honest.out.split("\n").includes("yes scripts/coachman-contract.ts");
       if (control(ok, label, `exits ${neutered.code}/${honest.code}`)) passed += 1;
       else {
         failed += 1;
@@ -489,7 +530,7 @@ function exerciseSelfTest(sourceRoot: string): number {
       const base = gitFixture(repo, sourceRoot, files);
       replaceOnce(repo, INDEX, "version = 1", "version = 2");
       const head = commitFixture(repo, label);
-      const result = run(join(repo, "scripts", "coachman-contract.sh"), [base, head], {
+      const result = run(join(repo, "scripts", "run"), ["coachman-contract", base, head], {
         cwd: repo,
       });
       const ok = result.code === 2 && result.err.includes("version");
@@ -511,9 +552,9 @@ function exerciseSelfTest(sourceRoot: string): number {
     try {
       const repo = join(scratch, "repo");
       const base = gitFixture(repo, sourceRoot, files);
-      replaceOnce(repo, INDEX, 'detector = "scripts/coachman-contract.sh"\n', "");
+      replaceOnce(repo, INDEX, 'detector = "scripts/coachman-contract.ts"\n', "");
       const head = commitFixture(repo, label);
-      const result = run(join(repo, "scripts", "coachman-contract.sh"), [base, head], {
+      const result = run(join(repo, "scripts", "run"), ["coachman-contract", base, head], {
         cwd: repo,
       });
       const ok = result.code === 2 && result.err.includes("detector");
@@ -542,13 +583,9 @@ function exerciseSelfTest(sourceRoot: string): number {
       g("switch", "-q", "main");
       let part: string | null = null;
       if (contract) {
-        replaceOnce(
-          repo,
-          "scripts/stage.sh",
-          WRAPPER_HEAD,
-          "#!/usr/bin/env bash\n# the stage list\n# except on a contract-2 run\nexec bun",
-        );
-        part = "scripts/stage.sh";
+        const stage = join(repo, "scripts", "stage.ts");
+        writeFileSync(stage, `// the stage list changes\n${readFileSync(stage, "utf8")}`);
+        part = "scripts/stage.ts";
       } else {
         writeFileSync(join(repo, "skills", "postmaster", "harnesses.md"), "new harness\n", "utf8");
       }
@@ -556,7 +593,7 @@ function exerciseSelfTest(sourceRoot: string): number {
       g("switch", "-q", "feature");
       g("merge", "-q", "--no-ff", "main", "-m", "merge main");
       const head = g("rev-parse", "HEAD").trim();
-      const result = run(join(repo, "scripts", "coachman-contract.sh"), [base, head], {
+      const result = run(join(repo, "scripts", "run"), ["coachman-contract", base, head], {
         cwd: repo,
       });
       let ok = result.code === (contract ? 1 : 0);
@@ -581,17 +618,13 @@ function exerciseSelfTest(sourceRoot: string): number {
     try {
       const repo = join(scratch, "repo");
       const base = gitFixture(repo, sourceRoot, files);
-      replaceOnce(
-        repo,
-        "scripts/stage.sh",
-        WRAPPER_HEAD,
-        "#!/usr/bin/env bash\n# the stage list\n# except on a contract-2 run\nexec bun",
-      );
+      const stage = join(repo, "scripts", "stage.ts");
+      writeFileSync(stage, `// the stage list changes\n${readFileSync(stage, "utf8")}`);
       const head = commitFixture(repo, label);
-      const result = run(join(repo, "scripts", "coachman-contract.sh"), [repo, base, head], {
+      const result = run(join(repo, "scripts", "run"), ["coachman-contract", repo, base, head], {
         cwd: sourceRoot,
       });
-      const ok = result.code === 1 && result.out.split("\n").includes("yes scripts/stage.sh");
+      const ok = result.code === 1 && result.out.split("\n").includes("yes scripts/stage.ts");
       if (control(ok, label, `exit ${result.code}`)) passed += 1;
       else {
         failed += 1;
@@ -610,12 +643,27 @@ function exerciseSelfTest(sourceRoot: string): number {
 
 function main(argv: string[]): number {
   if (argv.length === 0) {
-    console.error("usage: coachman-contract.sh [<repo>] <base> <head> | --self-test");
+    console.error(
+      "usage: scripts/run coachman-contract [<repo>] <base> <head> | --self-test | --at-base <repo> <base> <head>",
+    );
     return 2;
+  }
+  if (argv[0] === "--at-base") {
+    if (argv.length !== 4) {
+      console.error("usage: scripts/run coachman-contract --at-base <repo> <base> <head>");
+      return 2;
+    }
+    try {
+      return checkAtBase(argv[1]!, argv[2]!, argv[3]!);
+    } catch (e) {
+      if (!(e instanceof ContractError)) throw e;
+      console.error(`coachman-contract: ${e.message}`);
+      return 2;
+    }
   }
   if (argv[0] === "--self-test") {
     if (argv.length !== 1) {
-      console.error("usage: coachman-contract.sh --self-test");
+      console.error("usage: scripts/run coachman-contract --self-test");
       return 2;
     }
     try {
@@ -647,7 +695,9 @@ function main(argv: string[]): number {
     base = argv[1]!;
     head = argv[2]!;
   } else {
-    console.error("usage: coachman-contract.sh [<repo>] <base> <head> | --self-test");
+    console.error(
+      "usage: scripts/run coachman-contract [<repo>] <base> <head> | --self-test | --at-base <repo> <base> <head>",
+    );
     return 2;
   }
   try {
