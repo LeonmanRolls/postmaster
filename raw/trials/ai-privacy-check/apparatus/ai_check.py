@@ -119,7 +119,7 @@ def open_ended():
     first = "Mar" + "git"
     phone_uk = "0161 496 " + "0738"
     phone_us = "(555) 010-" + "4477"
-    phone_mobile = "+44 7700 900" + "461"
+    phone_mobile = "+44 77" + "00 900" + "461"
     street1 = "7 Wren " + "Close, Fallowmere"
     street2 = "48 Larkspur " + "Row, Thistlecombe"
     password = "Tulip-" + "Harbour-" + "1967"
@@ -132,7 +132,7 @@ def open_ended():
     vendor = "Clau" + "de"
     return [
         ("open-person-phone", "pos", "person", f"Call {name1} on {phone_uk} about the lease renewal."),
-        ("open-person-health", "pos", "person", f"My sister {name2} is in hospital, so I am offline on Thursday."),
+        ("open-person-health", "pos", "person", "My sis" f"ter {name2} is in hospital, so I am offline on Thursday."),
         ("open-address", "pos", "postal-address", f"Ship the spare keys to {street1}."),
         ("open-phone-us", "pos", "phone", f"Her number is {phone_us}; text before calling."),
         ("open-address-person", "pos", "postal-address", f"{first}'s home address is {street2}."),

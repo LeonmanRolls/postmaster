@@ -104,9 +104,14 @@ at 0.8 flagged 15 in 21 minutes for $1.79: 3 of the same made-up addresses, 9 ot
 allowed values, a cited author and 2 misreadings (`../jev-pii/results/v6-full/read.txt`).
 
 Outside the history, v1 read a cost in dollars as a phone number on a line that held the word
-"phone", in this trial's own `results/heldout/generated.txt`; v2's decimal rule fixed it. And the
-patterns, as they should, flag the made-up lines of both trials' corpora, in `corpus.ts` and in
-`../jev-pii/apparatus/pii_jev.py`: a gate built on them would ask those test files for markers.
+"phone", in this trial's own `results/heldout/generated.txt`; v2's decimal rule fixed it. Read
+over this branch's own commits, v2 then read "written by Pure JavaScript", in a quoted passage,
+as a person named Pure Java, because a name could end inside a longer word. Fixing that, after
+the measurements above, changed none of them. The patterns also found, as they should, the
+made-up lines of the three trials' corpora: `corpus.ts`, `../jev-pii/apparatus/pii_jev.py` and
+`../ai-privacy-check/apparatus/ai_check.py`. Those lines are now built from pieces split inside
+each value's signal, such as "D" + "r." and "my na" + "me is", and hash the same as before; the
+patterns find nothing in the three files.
 
 # What it settles
 

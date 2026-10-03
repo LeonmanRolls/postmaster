@@ -28,8 +28,9 @@ const PART = String.raw`(?:Mc|Mac|O['’]|D['’])?\p{Lu}\p{Ll}+`;
 const WORD = String.raw`${PART}(?:-${PART})*`;
 /** What may stand between two words of a name: a nickname in quotes, initials, and particles such as "van" or "al". */
 const GAP = String.raw`\s+(?:["“'][\p{L}.\s-]{1,20}["”']\s+)?(?:\p{Lu}\.\s+)*(?:(?:van|von|der|den|de|del|della|da|di|du|le|la|al|el|bin|ibn|ter|ten|zu|y)\s+)*`;
-const FULL_NAME = new RegExp(String.raw`${WORD}(?:${GAP}${WORD})+`, "uy");
-const ANY_NAME = new RegExp(String.raw`${WORD}(?:${GAP}${WORD})*`, "uy");
+/** A name ends where its last word does, never inside a longer word such as "JavaScript". */
+const FULL_NAME = new RegExp(String.raw`${WORD}(?:${GAP}${WORD})+(?!\p{L})`, "uy");
+const ANY_NAME = new RegExp(String.raw`${WORD}(?:${GAP}${WORD})*(?!\p{L})`, "uy");
 
 /** Names that stand for nobody. */
 const PLACEHOLDERS = new Set([
