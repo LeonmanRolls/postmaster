@@ -1611,7 +1611,10 @@ if (a[0] === "api" && a[1] === "graphql") {
       run("cp", ["-R", HERE, join(T2, "scripts")]);
       // BASE's tool-faults.sh calls github.sh; provide a shim through the entry.
       for (const shim of ["github", "ticket-check", "log-action"]) {
-        writeFileSync(join(T2, "scripts", `${shim}.sh`), `#!/bin/sh\nexec "$(dirname "$0")/run" ${shim} "$@"\n`);
+        writeFileSync(
+          join(T2, "scripts", `${shim}.sh`),
+          `#!/bin/sh\nexec "$(dirname "$0")/run" ${shim} "$@"\n`,
+        );
         run("chmod", ["+x", join(T2, "scripts", `${shim}.sh`)]);
       }
       copyFileSync(join(TOOL, "bunfig.toml"), join(T2, "bunfig.toml"));

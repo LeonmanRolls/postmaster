@@ -75,7 +75,12 @@ function resolved(
   }
   let cfg: Record<string, unknown>;
   if (project !== "") {
-    const r = run(join(scriptsDir(import.meta), "run"), ["project-settings", "effective", project, configPath]);
+    const r = run(join(scriptsDir(import.meta), "run"), [
+      "project-settings",
+      "effective",
+      project,
+      configPath,
+    ]);
     if (r.code !== 0) return { code: 1, out: "", err: r.err };
     try {
       cfg = JSON.parse(r.out);

@@ -737,13 +737,7 @@ describe("negative controls: nothing is written", () => {
 
   test("a flag with no value", () => {
     const before = lines();
-    const r = logAction([
-      "coachman",
-      "tool-fault",
-      "scripts/launch.ts",
-      ...FIELDS,
-      "--workaround",
-    ]);
+    const r = logAction(["coachman", "tool-fault", "scripts/launch.ts", ...FIELDS, "--workaround"]);
     expect(r.code).toBe(1);
     expect(lines()).toBe(before);
     expect(r.err.includes("--workaround needs a value")).toBe(true);
