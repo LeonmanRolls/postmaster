@@ -1,6 +1,5 @@
 #!/usr/bin/env bun
 // Range and file scanner for content a run is about to publish.
-import { createInterface } from "node:readline";
 import { spawnSync } from "node:child_process";
 import { PY_S_CLASS, pyLower, pyWords } from "./lib/text.ts";
 import {
@@ -31,8 +30,25 @@ function safeError(message: string): never {
 }
 
 async function* linesOf(readable: NodeJS.ReadableStream): AsyncGenerator<string> {
-  const rl = createInterface({ input: readable, crlfDelay: Infinity });
-  for await (const line of rl as unknown as AsyncIterable<string>) yield line;
+  // A manual splitter, not readline: when the loop body awaits a slow git
+  // child, the diff child can finish and close stdout first, and Bun's
+  // readline answers the next read with ERR_USE_AFTER_CLOSE. A byte split
+  // on 0x0A cannot strand a character, since no UTF-8 sequence holds one.
+  let pending = Buffer.alloc(0);
+  const emit = (bytes: Buffer): string => {
+    const end = bytes.length > 0 && bytes[bytes.length - 1] === 0x0d ? bytes.length - 1 : bytes.length;
+    return decodeBytes(Buffer.from(bytes.slice(0, end)));
+  };
+  for await (const raw of readable as unknown as AsyncIterable<Uint8Array>) {
+    const chunk = Buffer.concat([pending, Buffer.from(raw)]);
+    let start = 0;
+    for (let at = chunk.indexOf(0x0a, start); at >= 0; at = chunk.indexOf(0x0a, start)) {
+      yield emit(chunk.subarray(start, at));
+      start = at + 1;
+    }
+    pending = Buffer.from(chunk.slice(start));
+  }
+  if (pending.length > 0) yield emit(pending);
 }
 
 async function citationContext(path: string): Promise<string> {
