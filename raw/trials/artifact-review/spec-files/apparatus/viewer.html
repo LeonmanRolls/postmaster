@@ -1,0 +1,388 @@
+<title>#179 spec files</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Red+Hat+Display:wght@600;700&family=Red+Hat+Mono:wght@400;500&family=Red+Hat+Text:wght@400;500;600&display=swap">
+<style>
+/* Layout: phone = header, a strip of file chips, then the file; 760px and up = file list beside the file. */
+:root {
+  --bg: #f5f6f8;
+  --panel: #ffffff;
+  --ink: #1c2230;
+  --muted: #5a6475;
+  --rule: #dfe3ea;
+  --accent: #1d5ca8;
+  --accent-soft: #e5eefa;
+  --mark: #fff1b5;
+  --mark-edge: #d9a700;
+  --gutter: #8b94a4;
+  --wt: #fbeedf;
+  --wt-ink: #8f4a00;
+  --hl-keyword: #4338ca;
+  --hl-string: #1f6f37;
+  --hl-comment: #6b7380;
+  --hl-number: #9c4a00;
+  --hl-title: #0d6880;
+  --hl-type: #8330b0;
+  --hl-meta: #a3261a;
+  --font-ui: "Red Hat Text", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Red Hat Display", "Red Hat Text", system-ui, sans-serif;
+  --font-code: "Red Hat Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12161d; --panel: #181d26; --ink: #e3e7ee; --muted: #9aa3b2; --rule: #2a313d;
+    --accent: #8ab8f2; --accent-soft: #1d2b40; --mark: #3d3412; --mark-edge: #c99c1a; --gutter: #6c7686;
+    --wt: #3a2a16; --wt-ink: #f0b46a;
+    --hl-keyword: #a5b0ff; --hl-string: #8fd69b; --hl-comment: #8b95a5; --hl-number: #f2b66b;
+    --hl-title: #6fd0e2; --hl-type: #d6a8ff; --hl-meta: #ff9c8f;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12161d; --panel: #181d26; --ink: #e3e7ee; --muted: #9aa3b2; --rule: #2a313d;
+  --accent: #8ab8f2; --accent-soft: #1d2b40; --mark: #3d3412; --mark-edge: #c99c1a; --gutter: #6c7686;
+  --wt: #3a2a16; --wt-ink: #f0b46a;
+  --hl-keyword: #a5b0ff; --hl-string: #8fd69b; --hl-comment: #8b95a5; --hl-number: #f2b66b;
+  --hl-title: #6fd0e2; --hl-type: #d6a8ff; --hl-meta: #ff9c8f;
+  color-scheme: dark;
+}
+body { background: var(--bg); color: var(--ink); font-family: var(--font-ui); font-size: 15px; line-height: 1.5; }
+.app { display: grid; gap: 14px; padding-inline: 16px; padding-block: 16px 96px; max-width: 1400px; margin: 0 auto; }
+.top { display: grid; gap: 6px; }
+.eyebrow { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--wt-ink); }
+h1 { margin: 0; font-family: var(--font-display); font-size: 24px; line-height: 1.2; text-wrap: balance; }
+.lede { margin: 0; color: var(--muted); max-width: 68ch; }
+.files { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; }
+.file { flex: none; display: grid; gap: 2px; text-align: left; font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; padding: 8px 12px; cursor: pointer; min-width: 0; }
+.file:focus-visible, .l:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.file[aria-current="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.file .fn { font-family: var(--font-code); font-size: 13px; font-weight: 500; white-space: nowrap; }
+.file .fr { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.tag { justify-self: start; font-size: 11px; font-weight: 600; letter-spacing: .03em; border-radius: 999px; padding: 1px 8px; white-space: nowrap; }
+.tag.main { background: var(--accent-soft); color: var(--accent); }
+.tag.worktree { background: var(--wt); color: var(--wt-ink); }
+.viewer { display: grid; gap: 8px; min-width: 0; }
+.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 2; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 14px; background: var(--bg); padding-block: 8px; border-bottom: 1px solid var(--rule); }
+.path { display: grid; min-width: 0; }
+#fpath { font-family: var(--font-code); font-size: 13px; font-weight: 500; overflow-wrap: anywhere; }
+#fmeta { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.wrap { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); cursor: pointer; }
+.code { background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; overflow-x: auto; font-family: var(--font-code); font-size: 12.5px; line-height: 1.6; padding-block: 8px; }
+.lines { min-width: 100%; }
+.nowrap .lines { width: max-content; }
+.l { display: grid; grid-template-columns: calc(var(--digits, 3) * 1ch + 1.8ch) minmax(0, 1fr); cursor: pointer; scroll-margin-top: 72px; }
+.nowrap .l { grid-template-columns: calc(var(--digits, 3) * 1ch + 1.8ch) max-content; }
+.n { color: var(--gutter); text-align: right; padding-right: 1ch; user-select: none; -webkit-user-select: none; font-variant-numeric: tabular-nums; }
+.c { white-space: pre-wrap; overflow-wrap: anywhere; padding-right: 14px; min-width: 0; }
+.nowrap .c { white-space: pre; overflow-wrap: normal; }
+.l.sel { background: var(--mark); box-shadow: inset 3px 0 0 var(--mark-edge); }
+.l.sel .n { color: var(--ink); }
+.status { padding: 14px; color: var(--muted); font-family: var(--font-ui); }
+.hljs-keyword, .hljs-built_in, .hljs-literal, .hljs-selector-tag { color: var(--hl-keyword); }
+.hljs-string, .hljs-regexp, .hljs-template-string, .hljs-code { color: var(--hl-string); }
+.hljs-comment, .hljs-quote { color: var(--hl-comment); font-style: italic; }
+.hljs-number, .hljs-bullet, .hljs-symbol { color: var(--hl-number); }
+.hljs-title, .hljs-section, .hljs-name, .hljs-attr, .hljs-property { color: var(--hl-title); }
+.hljs-section { font-weight: 600; }
+.hljs-type, .hljs-params, .hljs-variable, .hljs-template-variable { color: var(--hl-type); }
+.hljs-meta, .hljs-link, .hljs-deletion { color: var(--hl-meta); }
+.hljs-strong { font-weight: 600; }
+.hljs-emphasis { font-style: italic; }
+.selbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 12px; padding-inline: 16px; padding-block: 10px calc(10px + env(safe-area-inset-bottom, 0px)); background: var(--panel); border-top: 1px solid var(--rule); box-shadow: 0 -6px 18px rgb(0 0 0 / .08); }
+#seltext { font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.btn { font: inherit; font-size: 14px; font-weight: 600; border-radius: 9px; padding: 9px 14px; border: 1px solid var(--accent); background: var(--accent); color: var(--panel); cursor: pointer; }
+.btn.quiet { background: transparent; color: var(--accent); }
+.btn:disabled { opacity: .55; cursor: default; }
+#note { flex-basis: 100%; text-align: center; margin: 0; font-size: 12.5px; color: var(--muted); }
+.composer { flex-basis: 100%; display: grid; gap: 6px; }
+.composer label { font-size: 13px; font-weight: 600; }
+.composer textarea { font: inherit; font-size: 15px; color: var(--ink); background: var(--bg); border: 1px solid var(--rule); border-radius: 9px; padding: 8px 10px; resize: vertical; min-height: 4.5em; width: 100%; box-sizing: border-box; }
+.cactions { display: flex; gap: 8px; justify-content: flex-end; }
+.foot { font-size: 12.5px; color: var(--muted); max-width: 68ch; margin: 0; }
+@media (min-width: 760px) {
+  .app { grid-template-columns: 270px minmax(0, 1fr); grid-template-areas: "top top" "files viewer" "foot viewer"; align-items: start; column-gap: 22px; }
+  .top { grid-area: top; }
+  .files { grid-area: files; flex-direction: column; overflow: visible; position: sticky; top: 16px; }
+  .file { flex: initial; }
+  .file .fn, .file .fr { white-space: normal; overflow-wrap: anywhere; }
+  .viewer { grid-area: viewer; }
+  .foot { grid-area: foot; }
+  .code { font-size: 13.5px; }
+  .selbar { left: auto; right: 24px; bottom: 20px; border: 1px solid var(--rule); border-radius: 14px; max-width: 520px; }
+  h1 { font-size: 28px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="app">
+  <header class="top">
+    <p class="eyebrow">Trial page for #214 · example, not a real run</p>
+    <h1>Code the #179 spec links to</h1>
+    <p class="lede">The code files a made-up spec for #179 links to, taken from this repository at the commits of pull request 213. The two scripts stand in for files that exist only in a run's worktree; its Markdown files are tabs in the spec doc. Tap a line to select it, tap another to make a range, then comment.</p>
+  </header>
+
+  <nav class="files" id="files" aria-label="Files"></nav>
+
+  <main class="viewer">
+    <div class="bar">
+      <div class="path"><span id="fpath">Loading…</span><span id="fmeta"></span></div>
+      <label class="wrap" for="wrap"><input type="checkbox" id="wrap" checked> Wrap long lines</label>
+    </div>
+    <div class="code" id="code" role="region" aria-label="File contents"><div class="status">Loading the file…</div></div>
+  </main>
+
+  <p class="foot">A comment is pinned to the first line you chose and starts with the file and the lines, then goes to Claude. Colours come from highlight.js 11.11.1; if it cannot load, the file shows as plain text.</p>
+</div>
+
+<div class="selbar" id="selbar" hidden>
+  <span id="seltext"></span>
+  <button class="btn" id="comment" type="button">Comment on these lines</button>
+  <button class="btn quiet" id="clear" type="button">Clear</button>
+  <form class="composer" id="composer" hidden>
+    <label for="ctext" id="clabel">Your comment</label>
+    <textarea id="ctext" rows="3" maxlength="3000" placeholder="What should change here?"></textarea>
+    <div class="cactions">
+      <button class="btn" id="send" type="submit">Send to Claude</button>
+      <button class="btn quiet" id="cancel" type="button">Cancel</button>
+    </div>
+  </form>
+  <p id="note" hidden></p>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js"></script>
+<script>
+// Code files only: the spec's Markdown files are tabs in the spec doc.
+const FILES = [
+  { id: "f4", path: "scripts/summary-evidence.ts", role: "New evidence checker", where: "worktree", lang: "typescript", src: "files/summary-evidence.ts" },
+  { id: "f5", path: "scripts/summary-evidence.test.ts", role: "Its tests", where: "worktree", lang: "typescript", src: "files/summary-evidence.test.ts" },
+  { id: "f3", path: "docs/coachman-contract.toml", role: "Contract file list", where: "main", lang: "ini", src: "files/coachman-contract.toml" },
+];
+const WHERE = { main: "On main at the base commit", worktree: "Only in the run's worktree" };
+const DEFAULT = { id: "f4", from: 304, to: 324 };
+
+const $ = (id) => document.getElementById(id);
+const cache = new Map();
+let current = null;
+let sel = null;
+let comments = null;
+
+function baseName(path) { return path.split("/").at(-1); }
+
+function renderFileList() {
+  const nav = $("files");
+  for (const f of FILES) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "file";
+    b.id = "pick-" + f.id;
+    b.dataset.id = f.id;
+    const fn = document.createElement("span"); fn.className = "fn"; fn.textContent = baseName(f.path);
+    const fr = document.createElement("span"); fr.className = "fr"; fr.textContent = f.role;
+    const tag = document.createElement("span"); tag.className = "tag " + f.where; tag.textContent = WHERE[f.where];
+    b.append(fn, fr, tag);
+    b.addEventListener("click", () => openFile(f.id, null));
+    nav.append(b);
+  }
+}
+
+// Split highlight.js output into lines, carrying each text run's classes.
+function toLines(html) {
+  const tpl = document.createElement("template");
+  tpl.innerHTML = html;
+  const lines = [[]];
+  const walk = (node, classes) => {
+    for (const child of node.childNodes) {
+      if (child.nodeType === Node.TEXT_NODE) {
+        child.nodeValue.split("\n").forEach((part, i) => {
+          if (i > 0) lines.push([]);
+          if (part) lines.at(-1).push({ text: part, cls: classes });
+        });
+      } else if (child.nodeType === Node.ELEMENT_NODE) {
+        walk(child, child.className ? classes.concat(String(child.className).split(/\s+/)) : classes);
+      }
+    }
+  };
+  walk(tpl.content, []);
+  return lines;
+}
+
+function plainLines(text) { return text.split("\n").map((t) => (t ? [{ text: t, cls: [] }] : [])); }
+
+function highlight(text, lang) {
+  try {
+    if (window.hljs && hljs.getLanguage(lang)) return toLines(hljs.highlight(text, { language: lang, ignoreIllegals: true }).value);
+  } catch (e) { /* plain text below */ }
+  return plainLines(text);
+}
+
+async function load(f) {
+  if (cache.has(f.id)) return cache.get(f.id);
+  const res = await fetch(f.src);
+  if (!res.ok) throw new Error("HTTP " + res.status);
+  const raw = await res.text();
+  const text = raw.endsWith("\n") ? raw.slice(0, -1) : raw;
+  const entry = { text, bytes: new TextEncoder().encode(raw).length, lines: highlight(text, f.lang) };
+  cache.set(f.id, entry);
+  return entry;
+}
+
+function renderLines(f, entry) {
+  const box = document.createElement("div");
+  box.className = "lines";
+  box.style.setProperty("--digits", String(String(entry.lines.length).length));
+  entry.lines.forEach((runs, i) => {
+    const n = i + 1;
+    const row = document.createElement("div");
+    row.className = "l";
+    row.id = f.id + "-L" + n;
+    row.dataset.n = String(n);
+    row.setAttribute("data-comment-target", "");
+    const num = document.createElement("span"); num.className = "n"; num.textContent = String(n);
+    const code = document.createElement("span"); code.className = "c";
+    for (const r of runs) {
+      if (r.cls.length) { const s = document.createElement("span"); s.className = r.cls.join(" "); s.textContent = r.text; code.append(s); }
+      else code.append(document.createTextNode(r.text));
+    }
+    if (!runs.length) code.append(document.createTextNode(" "));
+    row.append(num, code);
+    box.append(row);
+  });
+  return box;
+}
+
+async function openFile(id, range) {
+  const f = FILES.find((x) => x.id === id) ?? FILES[0];
+  current = f;
+  sel = null;
+  for (const b of document.querySelectorAll(".file")) b.setAttribute("aria-current", String(b.dataset.id === f.id));
+  $("fpath").textContent = f.path;
+  $("fmeta").textContent = WHERE[f.where];
+  const code = $("code");
+  code.replaceChildren(Object.assign(document.createElement("div"), { className: "status", textContent: "Loading " + baseName(f.path) + "…" }));
+  try {
+    const entry = await load(f);
+    if (current !== f) return;
+    $("fmeta").textContent = WHERE[f.where] + " · " + entry.lines.length + " lines · " + (entry.bytes / 1024).toFixed(1) + " KB";
+    code.replaceChildren(renderLines(f, entry));
+    if (range) { select(range.from, range.to); scrollToLine(range.from); }
+    else { code.scrollTop = 0; updateSelbar(); }
+  } catch (e) {
+    code.replaceChildren(Object.assign(document.createElement("div"), { className: "status", textContent: "Could not load " + f.path + " (" + e.message + "). Reload the page to try again." }));
+  }
+}
+
+function scrollToLine(n) {
+  const row = $(current.id + "-L" + n);
+  if (row) row.scrollIntoView({ block: "center" });
+}
+
+function select(from, to) {
+  const a = Math.min(from, to), b = Math.max(from, to);
+  sel = { from: a, to: b };
+  for (const row of document.querySelectorAll(".l.sel")) row.classList.remove("sel");
+  for (let n = a; n <= b; n++) $(current.id + "-L" + n)?.classList.add("sel");
+  updateSelbar();
+}
+
+function clearSel() {
+  sel = null;
+  for (const row of document.querySelectorAll(".l.sel")) row.classList.remove("sel");
+  updateSelbar();
+}
+
+function rangeText() { return sel.from === sel.to ? "line " + sel.from : "lines " + sel.from + "–" + sel.to; }
+
+function updateSelbar() {
+  const bar = $("selbar");
+  bar.hidden = !sel;
+  $("note").hidden = true;
+  $("composer").hidden = true;
+  $("comment").hidden = false;
+  if (!sel) return;
+  $("seltext").textContent = sel.from === sel.to ? "Line " + sel.from : "Lines " + sel.from + "–" + sel.to;
+}
+
+$("code").addEventListener("click", (ev) => {
+  const row = ev.target.closest(".l");
+  if (!row) return;
+  const picked = window.getSelection && String(window.getSelection()).length > 0;
+  if (picked) return;
+  const n = Number(row.dataset.n);
+  if (!sel) select(n, n);
+  else if (sel.from === sel.to && sel.from === n) clearSel();
+  else if (sel.from === sel.to) select(sel.from, n);
+  else select(n, n);
+});
+
+$("clear").addEventListener("click", clearSel);
+$("wrap").addEventListener("change", (ev) => { $("code").classList.toggle("nowrap", !ev.target.checked); });
+
+function note(text) { const p = $("note"); p.textContent = text; p.hidden = false; }
+
+// A comment is pinned to the first chosen line, and its text starts with the file and the
+// lines, so whoever reads the thread knows exactly where it points.
+let canSend = "off";
+
+$("comment").addEventListener("click", async () => {
+  if (!sel) return;
+  if (!comments) { note("Commenting from this page is off here. Use claude.ai's comment mode and tap a line."); return; }
+  try { canSend = await comments.canSendToClaude(); } catch (e) { canSend = "off"; }
+  $("send").textContent = canSend === "available" ? "Send to Claude" : "Post comment";
+  $("clabel").textContent = "Comment on " + baseName(current.path) + ", " + rangeText();
+  $("comment").hidden = true;
+  $("composer").hidden = false;
+  $("note").hidden = true;
+  $("ctext").focus();
+});
+
+$("cancel").addEventListener("click", () => { $("composer").hidden = true; $("comment").hidden = false; });
+
+$("composer").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  if (!sel || !comments) return;
+  const words = $("ctext").value.trim();
+  if (!words) { note("Write a comment first."); return; }
+  const row = $(current.id + "-L" + sel.from);
+  if (!row) return;
+  const text = current.path + ", " + rangeText() + "\n" + words;
+  $("send").disabled = true;
+  try {
+    const anchor = await comments.anchorFor(row);
+    if (canSend === "available") {
+      await comments.sendToClaude({ anchor, text });
+      note("Sent to Claude. The reply appears in the comment thread on line " + sel.from + ".");
+    } else {
+      await comments.create({ anchor, text });
+      note("Posted on line " + sel.from + ". It was not sent to Claude.");
+    }
+    $("ctext").value = "";
+    $("composer").hidden = true;
+    $("comment").hidden = false;
+  } catch (e) {
+    const code = e && e.code ? e.code : "error";
+    if (code === "consent_required") note("Not posted. Allow comments from this page when claude.ai asks, then send again.");
+    else if (code === "forbidden" || code === "not_granted" || code === "capability_disabled") { $("comment").disabled = true; $("composer").hidden = true; note("Commenting from this page is off here."); }
+    else if (code === "claude_unavailable") { canSend = "off"; $("send").textContent = "Post comment"; note("Claude cannot take it from this view. Post it as a plain comment instead."); }
+    else note("Not posted (" + code + "). Your text is still here; try again once.");
+  } finally {
+    $("send").disabled = false;
+  }
+});
+
+function fromHash() {
+  const m = /^#(f\d+)(?:-L(\d+)(?:-L(\d+))?)?$/.exec(location.hash);
+  if (!m || !FILES.some((f) => f.id === m[1])) return null;
+  const from = m[2] ? Number(m[2]) : null;
+  return { id: m[1], range: from ? { from, to: m[3] ? Number(m[3]) : from } : null };
+}
+
+renderFileList();
+const start = fromHash();
+if (start) openFile(start.id, start.range); else openFile(DEFAULT.id, { from: DEFAULT.from, to: DEFAULT.to });
+window.addEventListener("hashchange", () => { const h = fromHash(); if (h) openFile(h.id, h.range); });
+
+(async () => {
+  try { comments = window.claude && typeof window.claude.use === "function" ? await window.claude.use("comments") : null; }
+  catch (e) { comments = null; }
+})();
+</script>

@@ -1,0 +1,6 @@
+# GitHub contents API at pull request 213's base, faf18732c1281208d31ea8ee502f8287d75af3a0, run 2026-10-02
+skills/postmaster/coachman.md: found, 95591 bytes
+skills/postmaster/workhorse-spec-template.md: found, 2044 bytes
+docs/coachman-contract.toml: found, 2917 bytes
+scripts/summary-evidence.ts: {"message":"Not Found","documentation_url":"https://docs.github.com/rest/repos/contents#get-repository-content","status":"404"}gh: Not Found (HTTP 404)
+scripts/summary-evidence.test.ts: {"message":"Not Found","documentation_url":"https://docs.github.com/rest/repos/contents#get-repository-content","status":"404"}gh: Not Found (HTTP 404)

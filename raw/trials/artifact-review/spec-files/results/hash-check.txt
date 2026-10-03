@@ -1,0 +1,5 @@
+positive control, empty text: e3b0c442 (the doc printed e3b0c442 for its empty paragraph)
+scripts/summary-evidence.ts: file de5353ab, doc de5353ab: match
+  negative control, first byte changed: bfe619f0: differs
+skills/postmaster/workhorse-spec-template.md: file 7569516f, doc 7569516f: match
+  negative control, first byte changed: 1b3b1fbb: differs

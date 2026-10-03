@@ -1,0 +1,56 @@
+# What the Claude Docs connector and the Artifact comment tool returned, 2026-10-02 (UTC)
+# Ids of documents, tabs, threads and comments are left out; times are as the tools printed them.
+
+## Filling the doc's tabs from uploads (one connector update per tab, each replacing a
+## pending block with {"from": {"kind": "blob", "id": "blob/<id>"}, "as": "markdown"})
+
+summary-evidence-ts.md (18568 bytes) -> allow; one block: codeBlock language='ts', h='de5353ab'
+workhorse-spec-template.md (2062 bytes) -> allow; one block: codeBlock language='markdown', h='7569516f'
+coachman-runbook.md (95591 bytes) -> allow; rendered. The outline the call returned shows
+  18 headings (the runbook's 18; the seven heading-like lines inside its hand-off fence came
+  through as one code block), 4 tables, 4 code blocks outside lists (language 'sh' where the
+  runbook's fence names it), lists folded uncounted, bold and code spans; `<dispatch>` and
+  `<tool>` kept inside code spans
+
+## Embedding the viewer page in a doc tab (control: the one embed form the guide documents
+## is node/<id> of the same doc)
+
+insert {"type": "embed", "ref": "artifact/<viewer page id>"} ->
+{"verdict":"deny","reason":"bad_at","detail":"ops[0]: an embed's ref is a RELATIVE address in
+this container: node/<id> — no container prefix (another container's node is not embeddable),
+exactly noun/id"}
+Nothing landed.
+
+## Comments on the viewer page, sent to Claude, as the comment tool read them
+
+Version 1 of the page: comments capability {"composer_only": true}; "Comment on these lines"
+called openComposer({range}) with a range from the first chosen line's code to the last's.
+
+  thread 1  anchored at: #code > div:nth-of-type(1)
+            anchored element, read from the published source: <div class="status"> Loading the file…
+            the user (owner), sent to you — 2026-10-02T23:24
+              test comment
+            Claude (via the user) — 2026-10-02T23:24   [posted by the session's automatic reply]
+              (said the comment was anchored to the loading placeholder and suggested tapping a
+              line and using "Comment on these lines")
+
+Version 2 of the page: comments capability {}; the page's own box; on Send it called
+anchorFor(<the first chosen line's row, id f4-L304>) and sendToClaude({anchor, text}) with the
+text starting "<path>, lines <a>–<b>".
+
+  thread 2  anchored at: #f4-L304
+            the user (owner), posted by the artifact, sent to you — 2026-10-02T23:52
+              scripts/summary-evidence.ts, lines 304–324
+              hi just a test comment
+            Claude (via the user) — 2026-10-02T23:52   [automatic reply]
+              (named line 304 of scripts/summary-evidence.ts and the range 304–324)
+
+  thread 3  anchored at: #f4-L304
+            the user (owner), posted by the artifact, sent to you — 2026-10-02T23:53
+              scripts/summary-evidence.ts, lines 304–324
+              hi just a test comment
+            read at 23:53 as "awaiting reply"; an automatic reply landed within the minute,
+            before this session's own reply, which the tool then refused as a duplicate
+
+This session was told of each automatic reply by a task notification at the start of its next
+turn.
