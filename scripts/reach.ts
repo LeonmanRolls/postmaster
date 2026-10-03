@@ -170,7 +170,7 @@ export function resolvePath(raw: string, cwd: string): string {
 /** Whether a path needs a variable other than $HOME or a glob: skipped. */
 export function needsVariableOrGlob(p: string): boolean {
   if (/[?*[\]]/u.test(p)) return true;
-  return /\$(?!HOME\b)[A-Za-z_]/u.test(p);
+  return /\$(?!HOME\b)[A-Za-z_]/u.test(p); // ASCII: \b is the ASCII word bound the rule asks for
 }
 
 /** A path's place in the run's layout. */
@@ -927,7 +927,7 @@ function parseMuse(rows: Array<Record<string, unknown>>): ToolCall[] {
     // A bash result's text is JSON with the command; a read_file's text opens with "Read text file `path`".
     let command = "";
     let readPath = "";
-    const t = text.replace(/^\s+/u, "");
+    const t = text.replace(/^\s+/u, ""); // ASCII: \s is the ASCII space class here
     if (t.startsWith("{")) {
       try {
         const blob = JSON.parse(t) as Record<string, unknown>;
@@ -1560,7 +1560,7 @@ export function restoreRound(L: Layout, n: string): void {
         : join(
             L.repo,
             ".worktrees",
-            `${L.ticket}-${short.replace(new RegExp(`^wb/${L.ticket}-`), "")}`,
+            `${L.ticket}-${short.replace(new RegExp(`^wb/${L.ticket}-`, "u"), "")}`,
           );
     if (existsSync(wt)) {
       run("git", ["-C", wt, "reset", "--hard", was]);

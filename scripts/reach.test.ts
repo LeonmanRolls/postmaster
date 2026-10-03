@@ -421,10 +421,10 @@ describe("C4 the check says when the main checkout is off its default branch", (
     writeStream(L, "mimo", [mimoWrite(join(L.R, ".worktrees", `${L.T}-mimo`, "b.ts"))]);
     const r = reach("check", L.D, "card", { env: L.env });
     expect(r.code).toBe(2);
-    expect(r.out).toMatch(/off /);
+    expect(r.out).toMatch(/off /u);
     expect(r.out).toContain("x");
     const ct = sh(CHECK_TARGET, ["--reach", L.R, "main"]);
-    expect(ct.out).toMatch(/off the default branch/);
+    expect(ct.out).toMatch(/off the default branch/u);
   });
 
   test("a commit added to main, tree clean: clean, exit 0", () => {
@@ -492,7 +492,7 @@ describe("C5 the stream reader reads every harness's own shape", () => {
     const r = reach("stream", L.D, "mimo", events, own, { env: L.env });
     expect(r.code).toBe(2);
     expect(r.out).toContain("synthesis worktree");
-    expect(r.out).toMatch(/write/);
+    expect(r.out).toMatch(/write/u);
   });
 
   test("a grok lane, an unreadable stream, or no recognized tool call: not checked, exit 3", () => {
@@ -601,11 +601,11 @@ describe("C6 around a round the check compares this run's own branches and synth
     git("-C", join(L.R, ".worktrees", L.T), "merge", "-q", "--ff-only", sha);
     const r = reach("check", L.D, "r1", { env: L.env });
     expect(r.code).toBe(2);
-    expect(r.out).toMatch(/ref refs\/heads\/T /);
-    expect(r.out).toMatch(/synth /);
+    expect(r.out).toMatch(/ref refs\/heads\/T /u);
+    expect(r.out).toMatch(/synth /u);
     // Both hashes each.
     const refLine = r.out.split("\n").find((l) => l.includes("ref refs/heads/T"));
-    expect(refLine).toMatch(/\.\./);
+    expect(refLine).toMatch(/\.\./u);
   });
 
   test("a commit in a scratch, a commit on 99, and tags and main moving forward name nothing", () => {
@@ -631,8 +631,8 @@ describe("C6 around a round the check compares this run's own branches and synth
     git("-C", L.R, "commit", "-qm", "forward");
     git("-C", L.R, "push", "-q", "origin", "main");
     const r = reach("check", L.D, "r1", { env: L.env });
-    expect(r.out).not.toMatch(/ref refs\/heads\/T /);
-    expect(r.out).not.toMatch(/ref refs\/heads\/99/);
+    expect(r.out).not.toMatch(/ref refs\/heads\/T /u);
+    expect(r.out).not.toMatch(/ref refs\/heads\/99/u);
   });
 
   test("an untracked file in the synthesis worktree is named", () => {
@@ -763,7 +763,7 @@ describe("C10 a reviewer's finding voids that reviewer's verdict for the round",
     const r = reach("check", L.D, "r1", { env: L.env });
     expect(r.code).toBe(2);
     expect(r.out).toContain("refs/heads/T");
-    expect(r.out).toMatch(/write/);
+    expect(r.out).toMatch(/write/u);
     // The finding is about mimo, not codex.
     const log = existsSync(join(L.D, "actions.jsonl"))
       ? readFileSync(join(L.D, "actions.jsonl"), "utf8")

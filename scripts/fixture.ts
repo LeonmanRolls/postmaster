@@ -815,7 +815,7 @@ function checkReach(dispatch: string): { ok: boolean; detail: string } {
       : undefined;
   for (const e of reach) {
     const detail = String(e.detail);
-    const m = /^not checked (\S+)/u.exec(detail);
+    const m = /^not checked (\S+)/u.exec(detail); // ASCII: \S is the ASCII non-space class here
     if (!m) continue;
     const lane = m[1] ?? "";
     const harness = lanes?.[lane]?.harness;

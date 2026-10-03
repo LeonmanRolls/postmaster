@@ -403,7 +403,7 @@ function reachLine(detail: string, target: string, repo: string): string {
     return `- ${target}: ${detail}`;
   }
   // finding|note <lane> <path> <access> <place>
-  const m = /^(finding|note) (\S+) (\S+) (\S+) (.*)$/u.exec(detail);
+  const m = /^(finding|note) (\S+) (\S+) (\S+) (.*)$/u.exec(detail); // ASCII: \S is the ASCII non-space class here
   if (m) {
     const [, kind, lane, p, access, place] = m;
     return `- ${kind} ${lane}: ${cardPath(p ?? "", repo)} ${access} (${place})`;
