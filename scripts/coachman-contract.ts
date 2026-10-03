@@ -637,7 +637,7 @@ function atBase(repo: string, base: string, head: string): number {
     }
     let detector = "scripts/coachman-contract.sh";
     for (const line of indexBlob.out.split("\n")) {
-      const m = line.match(/^detector\s*=\s*"([^"]+)"/u);
+      const m = line.match(/^detector[ 	]*=[ 	]*"([^"]+)"/u);
       if (m) detector = m[1]!;
     }
     const detectorName = detector.replace(/^scripts\//u, "");

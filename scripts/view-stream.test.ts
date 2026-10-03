@@ -417,7 +417,7 @@ printf '{"type":"result","subtype":"success"}' >> "$1"
     const writerPid = parseInt((wr.stdout ?? "").trim(), 10);
     const r = spawnSync(
       viewer,
-      ["--follow", f, "--pid", String(writerPid), "--from", String(from)],
+      ["view-stream", "--follow", f, "--pid", String(writerPid), "--from", String(from)],
       {
         encoding: "utf8",
         timeout: 30000,
