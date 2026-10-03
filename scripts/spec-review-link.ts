@@ -2,7 +2,6 @@
 //
 //   spec-review-link.sh <dispatch> <spec-folder>
 //   spec-review-link.sh --validate <dispatch>
-//   spec-review-link.sh --self-test
 //
 // The optional config.planning.review_link template in run.json has {path} replaced by the
 // absolute path of the folder that holds WORKHORSE-SPEC.md under review — code-server opens
@@ -12,15 +11,11 @@
 //   exit 0  link or path printed
 //   exit 1  usage, unreadable run.json or missing spec
 //   exit 2  malformed planning.review_link
-import { mkdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { readFileSync, realpathSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { scriptsDir } from "./lib/paths.ts";
-import { die, run, withTempDir } from "./lib/proc.ts";
-import { SelfTest } from "./lib/selftest.ts";
+import { die } from "./lib/proc.ts";
 
-const HERE = scriptsDir(import.meta);
-const FULL_USAGE =
-  "usage: spec-review-link.sh <dispatch> <spec-folder> | --validate <dispatch> | --self-test";
+const FULL_USAGE = "usage: spec-review-link.sh <dispatch> <spec-folder> | --validate <dispatch>";
 
 // --- helpers --------------------------------------------------------------------------------
 function errMsg(e: unknown): string {
@@ -111,9 +106,7 @@ function validate(dispatch: string): void {
 
 // --- entry --------------------------------------------------------------------------------------
 const argv = process.argv.slice(2);
-if (argv[0] === "--self-test") {
-  selfTest();
-} else if (argv[0] === "--validate") {
+if (argv[0] === "--validate") {
   if (argv.length !== 2) {
     console.error("usage: spec-review-link.sh --validate <dispatch>");
     process.exit(1);
@@ -128,90 +121,4 @@ if (argv[0] === "--self-test") {
     process.exit(1);
   }
   render(argv[0], argv[1]!);
-}
-
-// --- self-test ----------------------------------------------------------------------------------
-function selfTest(): void {
-  withTempDir((tmp) => {
-    const d = join(tmp, "project", ".postmaster", "runs", "RUN-1");
-    const w = join(tmp, "project", ".worktrees", "RUN-1-lane");
-    mkdirSync(d, { recursive: true });
-    mkdirSync(w, { recursive: true });
-    const spec = join(w, "WORKHORSE-SPEC.md");
-    writeFileSync(spec, "approved plan\n");
-    const SELF = join(HERE, "spec-review-link.sh");
-    const st = new SelfTest();
-    const go = (...args: string[]) => run("bash", [SELF, ...args]);
-    // The shell's $(...): trailing newlines stripped.
-    const strip = (s: string): string => s.replace(/\n+$/u, "");
-    const specPath = (): string => join(realpathSync(w), "WORKHORSE-SPEC.md");
-    const folderPath = (): string => realpathSync(w);
-
-    console.log("positive controls");
-    writeFileSync(
-      join(d, "run.json"),
-      '{"config":{"planning":{"review_link":"https://code.example/?folder={path}"}}}\n',
-    );
-    let r = go(d, w);
-    const expected = `https://code.example/?folder=${folderPath()}`;
-    if (r.code === 0 && strip(r.out) === expected)
-      st.ok("the recorded template gets the folder that holds the spec");
-    else
-      st.fail(
-        `the recorded template gets the folder that holds the spec (exit ${r.code})`,
-        `${strip(r.out)} ${r.err}`,
-      );
-
-    writeFileSync(join(d, "run.json"), '{"config":{}}\n');
-    r = go(d, w);
-    if (r.code === 0 && strip(r.out) === specPath())
-      st.ok("a missing template prints the absolute spec path");
-    else
-      st.fail(
-        `a missing template prints the absolute spec path (exit ${r.code})`,
-        `${strip(r.out)} ${r.err}`,
-      );
-
-    r = go("--validate", d);
-    if (r.code === 0) st.ok("a run with no template passes config validation");
-    else st.fail(`a run with no template passes config validation (exit ${r.code})`, r.err);
-
-    console.log("negative controls");
-    writeFileSync(
-      join(d, "run.json"),
-      '{"config":{"planning":{"review_link":"https://code.example/open"}}}\n',
-    );
-    r = go(d, w);
-    if (r.code === 2 && strip(r.out) === "" && r.err.includes("must contain {path}"))
-      st.ok("a template without {path} is refused");
-    else
-      st.fail(`a template without {path} is refused (exit ${r.code})`, `${strip(r.out)} ${r.err}`);
-
-    r = go("--validate", d);
-    if (r.code === 2 && r.err.includes("must be empty or contain {path}"))
-      st.ok("a template without {path} is refused before the run starts");
-    else
-      st.fail(`a template without {path} is refused before the run starts (exit ${r.code})`, r.err);
-
-    writeFileSync(join(d, "run.json"), '{"config": [1]}\n');
-    r = go(d, w);
-    if (r.code === 1 && r.err.includes("config must be an object"))
-      st.ok("a malformed config object is refused");
-    else st.fail(`a malformed config object is refused (exit ${r.code})`, r.err);
-
-    writeFileSync(join(d, "run.json"), '{"config":{}}\n');
-    rmSync(spec);
-    r = go(d, w);
-    if (r.code === 1 && r.err.includes("no WORKHORSE-SPEC.md")) st.ok("a missing spec is refused");
-    else st.fail(`a missing spec is refused (exit ${r.code})`, r.err);
-
-    mkdirSync(spec);
-    r = go(d, w);
-    if (r.code === 1 && r.err.includes("no WORKHORSE-SPEC.md"))
-      st.ok("a directory as the spec is refused");
-    else st.fail(`a directory as the spec is refused (exit ${r.code})`, r.err);
-    rmSync(spec, { recursive: true });
-
-    st.finish();
-  });
 }

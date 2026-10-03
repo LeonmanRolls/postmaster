@@ -201,7 +201,9 @@ Never put paths or credentials in either file.
 4. **Launch card**: one self-contained confirmation covering whether the postmaster is this
    session or a new one, whether it runs headless (the script's `headless` line), with every
    reason the script printed, the postmaster's harness,
-   model and effort (`team.postmaster` in the config), the team the config names, who says
+   model and effort (`team.postmaster` in the config), the team the config names, whether
+   lanes will run confined (top-level `confine` in the config; a missing key means `off`;
+   recorded but not yet enforced, until launch reads the key in #200), who says
    the merge word for local-merge projects (`ship.merge_authority`), the landing route
    (`pull-request` or `local`), the session host the fleet will run on
    (`<tool>/scripts/host.sh detect`), and the project facts above. Launch nothing before the user
@@ -302,6 +304,7 @@ reviewers: <lane>, <lane>
 bug reviewers: <lane>, <lane>             (always; only the chosen bug reviewers whose harness has a code-review form, which is the bug lens's whole team)
 <lens> reviewers: <lane>, <lane>          (one line for each lens the config gives its own lanes)
 coachman: <harness>/<model>/<effort>      (never a lane's model)
+efforts: <name>=<effort>, <name>=<effort>, …   (pasted whole from the line `<tool>/scripts/run-meta.sh efforts <dispatch>` printed: every lane and coachman role that has an effort, a per-leg coachman as coachman.<leg>; the postmaster is left out)
 CHECKPOINT_MODE comes from ship.checkpoint_mode; MERGE_AUTHORITY for local merges comes from ship.merge_authority; override either only where the user says so for this run
 
 ## Dispatch

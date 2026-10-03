@@ -40,6 +40,19 @@ Hand-run tools in the main checkout still see the copies; the page says so. Stan
 those fixture runs are not in `raw/`, so the page marks the observation unverified. The
 colocated tests hold the positive and negative control.
 
+## [2026-09-29] ingest | a read-only dashboard, reached through Tailscale's proxy
+
+The design agreed with the user in issue #126. The dashboard shows every run by who acts next,
+each run's cards, timings, review rounds, gate results and live output, and the machine's load.
+Its layout follows the window's width, for a phone, an iPad or a desktop. It only shows,
+because an action it could take is one an agent running as the user could take too. It takes
+every figure from the scripts that already compute it, and listens on a Unix socket that
+`tailscale serve` publishes on the tailnet over plain HTTP, so no certificate publishes the
+machine's name. It answers only the owner's login at the machine's own name. New page at
+standing `claimed`; whether the identity header reaches a plain-HTTP service is left for the
+first ticket's live control. Tickets #146 to #150 build it, the first a dashboard the user can use
+on its own.
+
 ## [2026-09-29] ingest | the planning stage: every spec to the user before code
 
 A decision page, and a capture. Anthropic's AI-native SDLC playbook is captured into

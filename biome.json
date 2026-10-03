@@ -2,14 +2,28 @@
   "$schema": "./node_modules/@biomejs/biome/package.json",
   "root": true,
   "files": {
-    "includes": ["scripts/**", "types/**", "package.json", "tsconfig.json", "biome.json"]
+    "includes": [
+      "scripts/**",
+      "types/**",
+      "lint/**",
+      "package.json",
+      "tsconfig.json",
+      "biome.json",
+      ".oxlintrc.json"
+    ]
   },
   "overrides": [
     {
       "includes": ["scripts/fixtures/**"],
-      "formatter": { "enabled": false },
-      "linter": { "enabled": false },
-      "assist": { "enabled": false }
+      "formatter": {
+        "enabled": false
+      },
+      "linter": {
+        "enabled": false
+      },
+      "assist": {
+        "enabled": false
+      }
     }
   ],
   "linter": {

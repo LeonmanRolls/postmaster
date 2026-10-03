@@ -2,6 +2,8 @@
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "jsPlugins": ["./lint/plugin.ts"],
   "rules": {
+    "no-control-regex": "off",
+    "no-unused-expressions": "off",
     "postmaster/test-beside-target": "error"
   },
   "ignorePatterns": ["fixtures/**"]

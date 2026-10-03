@@ -1,4 +1,3 @@
-#!/usr/bin/env bun
 // Score each lane's harvested branch against the ticket's hidden tests, for fixture.sh score.
 //
 //   fixture-lanes.ts <dispatch> <repo> <fixture-ticket>
@@ -45,14 +44,17 @@ export function formatLanes(entries: Array<[string, LaneStatus]>): string {
 
 /** The run's ticket id, from the waybill's first line: `# Waybill: <TICKET>`. */
 export function ticketIdFromWaybill(text: string): string | null {
-  const m = /^#\s*Waybill:\s*(\S+)\s*$/.exec(text.split(/\r?\n/, 1)[0] ?? "");
+  // ASCII: the postmaster writes `# Waybill: <id>` as the brief's first line.
+  const m = /^#\s*Waybill:\s*(\S+)\s*$/u.exec(text.split(/\r?\n/u, 1)[0] ?? "");
   return m ? m[1] : null;
 }
 
 /** Lane names from manifest.json's lanes object. */
 export function laneNamesFromManifestLanes(lanes: unknown): string[] {
   if (lanes === null || typeof lanes !== "object" || Array.isArray(lanes)) return [];
-  return Object.keys(lanes as Record<string, unknown>).filter((n) => n.length > 0).sort();
+  return Object.keys(lanes as Record<string, unknown>)
+    .filter((n) => n.length > 0)
+    .sort();
 }
 
 /** Lane names from audit file basenames, dropping the spec copies. */
@@ -66,12 +68,15 @@ export function laneNamesFromAuditFiles(names: string[]): string[] {
 
 /** Lane names from the waybill's `workhorses: <lane>=…, <lane>=…` line, read only from its `## Team` section, so a quoted line elsewhere is not a lane. */
 export function laneNamesFromWorkhorses(text: string): string[] {
-  const lines = text.split(/\r?\n/);
+  const lines = text.split(/\r?\n/u);
+  // ASCII: the waybill's Team section is template-written; /i stays ASCII-only as main wrote it.
   const start = lines.findIndex((l) => /^##[ \t]+Team[ \t]*$/i.test(l));
   if (start < 0) return [];
   const rest = lines.slice(start + 1);
+  // ASCII: the waybill's Team section is template-written; /i stays ASCII-only as main wrote it.
   const end = rest.findIndex((l) => /^##[ \t]+/i.test(l));
   const team = (end < 0 ? rest : rest.slice(0, end)).join("\n");
+  // ASCII: the workhorses line is template-written; /im stays ASCII-only as main wrote it.
   const line = /^workhorses:[ \t]*(.*)$/im.exec(team)?.[1] ?? "";
   if (!line) return [];
   return line
@@ -104,7 +109,12 @@ export function branchName(ticket: string, lane: string): string {
 
 /** Counts on a fixture.sh hidden report line, or null when it printed none. Only a full `hidden-tests` line counts: a counts-shaped fragment in noise is not a run, and reads as failed to build rather than as a pass. */
 export function parseHiddenCounts(out: string): Counts | null {
-  const rows = [...out.matchAll(/^\s*(?:ok|FAIL)\s+hidden-tests\s+[^:\r\n]+:\s*(\d+)\s+pass,\s*(\d+)\s+fail\s*$/gm)];
+  const rows = [
+    ...out.matchAll(
+      // ASCII: fixture.sh hidden prints machine-made report lines; the counts are JS numbers.
+      /^\s*(?:ok|FAIL)\s+hidden-tests\s+[^:\r\n]+:\s*(\d+)\s+pass,\s*(\d+)\s+fail\s*$/gmu,
+    ),
+  ];
   const last = rows.at(-1);
   if (!last) return null;
   return { passed: Number(last[1]), failed: Number(last[2]) };
@@ -137,7 +147,8 @@ function sh(cmd: string[], cwd?: string): { code: number | null; out: string } {
       stderr: "pipe",
       stdin: "ignore",
     });
-    const out = (proc.stdout ? new TextDecoder().decode(proc.stdout) : "") +
+    const out =
+      (proc.stdout ? new TextDecoder().decode(proc.stdout) : "") +
       (proc.stderr ? new TextDecoder().decode(proc.stderr) : "");
     return { code: proc.exitCode, out };
   } catch {
@@ -173,34 +184,46 @@ function ticketId(dispatch: string, waybill: string): string {
   return ticketIdFromWaybill(waybill) ?? basename(dispatch);
 }
 
-function discoverLanes(dispatch: string, repo: string, ticket: string, waybill: string, manifest: unknown): string[] {
+function discoverLanes(
+  dispatch: string,
+  repo: string,
+  ticket: string,
+  waybill: string,
+  manifest: unknown,
+): string[] {
   const fromManifest = laneNamesFromManifestLanes(
     manifest !== null && typeof manifest === "object" && !Array.isArray(manifest)
       ? (manifest as Record<string, unknown>).lanes
       : null,
   );
   const auditDir = join(dispatch, "audit");
-  const fromAudit = isDir(auditDir)
-    ? laneNamesFromAuditFiles(readdirSync(auditDir).sort())
-    : [];
+  const fromAudit = isDir(auditDir) ? laneNamesFromAuditFiles(readdirSync(auditDir).sort()) : [];
   const fromWaybill = laneNamesFromWorkhorses(waybill);
   const listed = sh(["git", "-C", repo, "for-each-ref", "--format=%(refname)", "refs/heads/wb/"]);
-  const refs = listed.code === 0 ? listed.out.split(/\r?\n/).filter((r) => r.length > 0) : [];
+  const refs = listed.code === 0 ? listed.out.split(/\r?\n/u).filter((r) => r.length > 0) : [];
   const fromBranches = laneNamesFromBranches(refs, ticket);
   return mergeLaneNames(fromManifest, fromAudit, fromWaybill, fromBranches);
 }
 
 function exportBranch(repo: string, ref: string, dest: string): boolean {
   const r = sh([
-    "bash", "-o", "pipefail", "-c",
+    "bash",
+    "-o",
+    "pipefail",
+    "-c",
     'git -C "$1" archive --format=tar "$2" | tar -x -C "$3"',
-    "export", repo, ref, dest,
+    "export",
+    repo,
+    ref,
+    dest,
   ]);
   return r.code === 0;
 }
 
 function branchExists(repo: string, ref: string): boolean {
-  return sh(["git", "-C", repo, "rev-parse", "--verify", "-q", `refs/heads/${ref}^{commit}`]).code === 0;
+  return (
+    sh(["git", "-C", repo, "rev-parse", "--verify", "-q", `refs/heads/${ref}^{commit}`]).code === 0
+  );
 }
 
 function runHidden(fixtureSh: string, ticket: string, tree: string): LaneStatus {
@@ -208,7 +231,14 @@ function runHidden(fixtureSh: string, ticket: string, tree: string): LaneStatus 
   return hiddenStatusFromOutput(r.out);
 }
 
-function scoreLane(fixtureSh: string, repo: string, ticketId_: string, fixtureTicket: string, lane: string, scratch: string): LaneStatus {
+function scoreLane(
+  fixtureSh: string,
+  repo: string,
+  ticketId_: string,
+  fixtureTicket: string,
+  lane: string,
+  scratch: string,
+): LaneStatus {
   const ref = branchName(ticketId_, lane);
   if (!branchExists(repo, ref)) return { kind: "missing" };
   let dest: string;

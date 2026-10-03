@@ -27,12 +27,15 @@ import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
 
-export const USAGE = "usage: bun scripts/summary-evidence.ts <summary.md> <worktree> [--ticket <file>]";
+export const USAGE =
+  "usage: bun scripts/summary-evidence.ts <summary.md> <worktree> [--ticket <file>]";
 
 type Heading = { level: number; text: string; index: number };
 export type EvidenceEntry = { criterion: number; lines: string[] };
 export type Problem = { criterion: number; reason: string };
-type PathProbe = { path: string; status: "ok" } | { path: string; status: "missing" | "outside" | "not-file" };
+type PathProbe =
+  | { path: string; status: "ok" }
+  | { path: string; status: "missing" | "outside" | "not-file" };
 type Fence = { char: string; length: number };
 type ReadableLine = { text: string; code: boolean };
 
@@ -49,28 +52,30 @@ const TICKET_PARTS = new Set([
 
 function sectionEnd(found: Heading[], section: Heading, lineCount: number): number {
   return (
-    found.find((heading) => heading.index > section.index && (heading.level <= 2 || TICKET_PARTS.has(heading.text)))?.index ??
-    lineCount
+    found.find(
+      (heading) =>
+        heading.index > section.index && (heading.level <= 2 || TICKET_PARTS.has(heading.text)),
+    )?.index ?? lineCount
   );
 }
 
-const headingPattern = /^ {0,3}(#{1,6})[ \t]+(.*?)[ \t]*#*[ \t]*$/;
-const numberedItemPattern = /^( *)(\d{1,9})[.)](?:[ \t]+|$)/;
+const headingPattern = /^ {0,3}(#{1,6})[ \t]+(.*?)[ \t]*#*[ \t]*$/; // ASCII: ATX heading syntax
+const numberedItemPattern = /^( *)(\d{1,9})[.)](?:[ \t]+|$)/; // ASCII: criterion numbers are ASCII digits
 // ticket-check.sh's fence rules, verbatim: a backtick fence carries no backtick
 // in its info string, and a list item that opens a fence is read while the
 // body it opens is code.
-const fencePattern = /^\s*(`{3,})[^`]*$|^\s*(~{3,})/;
-const fencedItemPattern = /^ *(?:[-*+]|\d{1,9}[.)])[ \t]+(?:(`{3,})[^`]*|(~{3,}).*)$/;
+const fencePattern = /^\s*(`{3,})[^`]*$|^\s*(~{3,})/; // ASCII: fence runs are ASCII backtick/tilde
+const fencedItemPattern = /^ *(?:[-*+]|\d{1,9}[.)])[ \t]+(?:(`{3,})[^`]*|(~{3,}).*)$/; // ASCII: list markers and fence runs are ASCII
 
 function normalizedHeading(text: string): string {
   return text
-    .replace(/[ \t]+#+$/, "")
+    .replace(/[ \t]+#+$/, "") // ASCII: closing-hash strip
     .trim()
-    .replace(/[ \t]*\/[ \t]*/g, " / ")
-    .replace(/\s+/g, " ")
-    .replace(/:$/, "")
+    .replace(/[ \t]*\/[ \t]*/g, " / ") // ASCII: slash respacing
+    .replace(/\s+/g, " ") // ASCII: inner whitespace collapse
+    .replace(/:$/, "") // ASCII: trailing colon strip
     .trim()
-    .toLowerCase();
+    .toLowerCase(); // LOWER: heading lowered for an ASCII keyword match
 }
 
 function closesFence(fence: Fence, line: string): boolean {
@@ -113,10 +118,10 @@ function uncommentLine(
       continue;
     }
     const c = t.indexOf("<!--", i);
-    const tick = /`+/.exec(t.slice(i));
+    const tick = /`+/.exec(t.slice(i)); // ASCII: backtick runs
     if (tick && (c < 0 || tick.index + i < c)) {
       const run = tick[0];
-      const closer = new RegExp(`(?<!\`)${run}(?!\`)`, "g");
+      const closer = new RegExp(`(?<!\`)${run}(?!\`)`, "g"); // ASCII: backtick-run closer
       closer.lastIndex = tick.index + i + run.length;
       const found = closer.exec(t);
       const end = found ? found.index + run.length : tick.index + i + run.length;
@@ -125,7 +130,10 @@ function uncommentLine(
     } else if (c < 0) {
       out.push(t.slice(i));
       return { text: out.join(""), inside: false };
-    } else if (!t.slice(0, c).trim() && (k < last.line || (k === last.line && c + 4 <= last.index))) {
+    } else if (
+      !t.slice(0, c).trim() &&
+      (k < last.line || (k === last.line && c + 4 <= last.index))
+    ) {
       out.push(t.slice(i, c));
       i = c + 4;
       hidden = true;
@@ -186,11 +194,14 @@ function headings(lines: string[]): Heading[] {
 }
 
 export function extractTicketBody(text: string): string {
-  const lines = text.replace(/^\uFEFF/, "").split(/\r?\n/);
+  const lines = text.replace(/^\uFEFF/, "").split(/\r?\n/); // ASCII: BOM strip and line split
   const found = headings(lines);
   const ticket = found.find((heading) => heading.level === 2 && heading.text === "ticket");
   if (!ticket) return lines.join("\n");
-  const profile = found.find((heading) => heading.level === 2 && heading.text === "project profile" && heading.index > ticket.index);
+  const profile = found.find(
+    (heading) =>
+      heading.level === 2 && heading.text === "project profile" && heading.index > ticket.index,
+  );
   return lines.slice(ticket.index + 1, profile?.index ?? lines.length).join("\n");
 }
 
@@ -199,22 +210,29 @@ export function criteriaFromCheckOutput(output: string): number[] | undefined {
   // acceptance criteria`. A ticket is numbered 1 to N by the ticket shape,
   // so the count is the criterion list. Pinned by "pins the well-formed line
   // the checker reads", so a change to that output fails here, not in a lane.
-  const match = /^well-formed, (\d+) acceptance criteria$/m.exec(output);
+  const match = /^well-formed, (\d+) acceptance criteria$/m.exec(output); // ASCII: ticket-check's machine line
   if (!match) return undefined;
   return Array.from({ length: Number(match[1]) }, (_, index) => index + 1);
 }
 
 function isWaybill(text: string): boolean {
-  const lines = text.replace(/^\uFEFF/, "").split(/\r?\n/);
+  const lines = text.replace(/^\uFEFF/, "").split(/\r?\n/); // ASCII: BOM strip and line split
   return headings(lines).some((heading) => heading.level === 2 && heading.text === "ticket");
 }
 
-function runTicketCheck(bodyFile: string, worktree: string): { code: number; out: string } | undefined {
+function runTicketCheck(
+  bodyFile: string,
+  worktree: string,
+): { code: number; out: string } | undefined {
   // The reader beside this checker, by its command line, as it will run when
   // ticket-check.sh is #109's port: same script, same flags, same output line.
-  const r = spawnSync("bash", [`${import.meta.dir}/ticket-check.sh`, "--body", bodyFile, "--project", worktree], {
-    encoding: "utf8",
-  });
+  const r = spawnSync(
+    "bash",
+    [`${import.meta.dir}/ticket-check.sh`, "--body", bodyFile, "--project", worktree],
+    {
+      encoding: "utf8",
+    },
+  );
   if (r.error) return undefined;
   return { code: r.status ?? -1, out: `${r.stdout ?? ""}${r.stderr ?? ""}` };
 }
@@ -237,7 +255,9 @@ function readCriteria(ticketPath: string, ticketText: string, worktree: string):
     if (checked.code !== 0) return { refused: checked.out.trimEnd() };
     const criteria = criteriaFromCheckOutput(checked.out);
     if (!criteria) {
-      return { refused: `summary-evidence: cannot read the criteria count from ticket-check.sh:\n${checked.out.trimEnd()}` };
+      return {
+        refused: `summary-evidence: cannot read the criteria count from ticket-check.sh:\n${checked.out.trimEnd()}`,
+      };
     }
     return { criteria };
   } finally {
@@ -246,7 +266,7 @@ function readCriteria(ticketPath: string, ticketText: string, worktree: string):
 }
 
 export function parseEvidenceEntries(text: string): EvidenceEntry[] {
-  const lines = text.replace(/^\uFEFF/, "").split(/\r?\n/);
+  const lines = text.replace(/^\uFEFF/, "").split(/\r?\n/); // ASCII: BOM strip and line split
   const found = headings(lines);
   const section = found.find((heading) => heading.level === 2 && heading.text === "evidence");
   if (!section) return [];
@@ -256,7 +276,9 @@ export function parseEvidenceEntries(text: string): EvidenceEntry[] {
   for (const { text, code } of tokenize(lines).slice(section.index + 1, end)) {
     if (code) continue;
     const match = numberedItemPattern.exec(text);
-    const startsEntry = match && (baseIndent === undefined ? match[1].length <= 3 : match[1].length <= baseIndent + 2);
+    const startsEntry =
+      match &&
+      (baseIndent === undefined ? match[1].length <= 3 : match[1].length <= baseIndent + 2);
     if (startsEntry && match) {
       if (baseIndent === undefined) baseIndent = match[1].length;
       entries.push({ criterion: Number(match[2]), lines: [text.slice(match[0].length).trim()] });
@@ -275,7 +297,11 @@ function pathIsInside(root: string, candidate: string): boolean {
   return rel !== "" && rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
 }
 
-export function probeEvidencePath(worktree: string, verifyDirectory: string, reference: string): PathProbe {
+export function probeEvidencePath(
+  worktree: string,
+  verifyDirectory: string,
+  reference: string,
+): PathProbe {
   if (isAbsolute(reference)) return { path: reference, status: "outside" };
   const lexicalPath = resolve(worktree, reference);
   if (!pathIsInside(verifyDirectory, lexicalPath)) return { path: reference, status: "outside" };
@@ -290,7 +316,10 @@ export function probeEvidencePath(worktree: string, verifyDirectory: string, ref
   } catch {
     return { path: reference, status: "missing" };
   }
-  if (!pathIsInside(realWorktree, realVerifyDirectory) || !pathIsInside(realVerifyDirectory, realEvidence)) {
+  if (
+    !pathIsInside(realWorktree, realVerifyDirectory) ||
+    !pathIsInside(realVerifyDirectory, realEvidence)
+  ) {
     return { path: reference, status: "outside" };
   }
   try {
@@ -304,7 +333,7 @@ export function probeEvidencePath(worktree: string, verifyDirectory: string, ref
 export function evidencePaths(lines: string[]): string[] {
   const paths: string[] = [];
   for (const line of lines) {
-    const codePaths = [...line.matchAll(/`([^`]+)`/g)]
+    const codePaths = [...line.matchAll(/`([^`]+)`/g)] // ASCII: inline code spans
       .map((match) => match[1].trim())
       // A code span is prose until it names the verify directory: terms like
       // `CLI/iOS` and incidental paths are not evidence citations.
@@ -312,9 +341,13 @@ export function evidencePaths(lines: string[]): string[] {
     paths.push(...codePaths);
     // Bare citations share the line with code spans, so the rest of the line
     // is still read, with the spans blanked to avoid counting them twice.
-    const bare = line.replace(/`[^`]*`/g, " ").replace(/^[-*+]\s+/, "");
+    const bare = line.replace(/`[^`]*`/g, " ").replace(/^[-*+]\s+/, ""); // ASCII: span-blanked citation line
+    // ASCII: comma/whitespace token split
     for (const token of bare.split(/[,\s]+/)) {
-      const cleaned = token.replace(/^`+|`+$/g, "").replace(/[.,;:!?]+$/, "").trim();
+      const cleaned = token
+        .replace(/^`+|`+$/g, "") // ASCII: stray backtick strip
+        .replace(/[.,;:!?]+$/, "") // ASCII: trailing punctuation strip
+        .trim();
       // Bare prose carries slashes (and/or, CLI/iOS) that are not paths, so a
       // bare token counts only when it names the verify directory.
       if (cleaned.includes(".postmaster/verify/")) paths.push(cleaned);
@@ -323,7 +356,11 @@ export function evidencePaths(lines: string[]): string[] {
   return paths;
 }
 
-export function validateEvidence(criteria: number[], entries: EvidenceEntry[], worktree: string): Problem[] {
+export function validateEvidence(
+  criteria: number[],
+  entries: EvidenceEntry[],
+  worktree: string,
+): Problem[] {
   const problems: Problem[] = [];
   const byCriterion = new Map<number, EvidenceEntry[]>();
   for (const entry of entries) {
@@ -348,7 +385,7 @@ export function validateEvidence(criteria: number[], entries: EvidenceEntry[], w
     const lines = matched[0]?.lines ?? [];
     // The contract form is `1. not shown: <reason>` on the entry's own line;
     // a `not shown:` on a continuation line is prose, neither a pass nor a mix.
-    const notShown = /^not shown:\s*(.*)$/i.exec((lines[0] ?? "").trim());
+    const notShown = /^not shown:\s*(.*)$/i.exec((lines[0] ?? "").trim()); // ASCII: the contract's not-shown form
     const paths = evidencePaths(lines);
     if (notShown) {
       if (!notShown[1]?.trim()) {
@@ -365,9 +402,12 @@ export function validateEvidence(criteria: number[], entries: EvidenceEntry[], w
     }
     for (const path of paths) {
       const probe = probeEvidencePath(worktree, verifyDirectory, path);
-      if (probe.status === "missing") problems.push({ criterion, reason: `evidence does not exist: ${path}` });
-      else if (probe.status === "outside") problems.push({ criterion, reason: `evidence is outside .postmaster/verify/: ${path}` });
-      else if (probe.status === "not-file") problems.push({ criterion, reason: `evidence is not a file: ${path}` });
+      if (probe.status === "missing")
+        problems.push({ criterion, reason: `evidence does not exist: ${path}` });
+      else if (probe.status === "outside")
+        problems.push({ criterion, reason: `evidence is outside .postmaster/verify/: ${path}` });
+      else if (probe.status === "not-file")
+        problems.push({ criterion, reason: `evidence is not a file: ${path}` });
     }
   }
   return problems;
@@ -387,12 +427,15 @@ function readText(path: string, label: string): string | undefined {
   }
 }
 
-function parseArgs(args: string[]): { summary: string; worktree: string; ticket?: string } | undefined {
+function parseArgs(
+  args: string[],
+): { summary: string; worktree: string; ticket?: string } | undefined {
   if (args.length < 2) return undefined;
   const [summary, worktree, ...rest] = args;
   let ticket: string | undefined;
   for (let index = 0; index < rest.length; index += 1) {
-    if (rest[index] !== "--ticket" || rest[index + 1] === undefined || ticket !== undefined) return undefined;
+    if (rest[index] !== "--ticket" || rest[index + 1] === undefined || ticket !== undefined)
+      return undefined;
     ticket = rest[index + 1];
     index += 1;
   }
@@ -430,8 +473,13 @@ export function main(args: string[]): number {
     console.error(`summary-evidence: ${problems.length} evidence problem(s)`);
     return 2;
   }
-  const notShown = entries.filter((entry) => /^not shown:/i.test((entry.lines[0] ?? "").trim())).length;
-  console.log(`summary-evidence: evidence shape holds for ${read.criteria.length} criteria${notShown ? ` (${notShown} not shown)` : ""}`);
+  const notShown = entries.filter((entry) =>
+    // ASCII: the contract's not-shown keyword
+    /^not shown:/i.test((entry.lines[0] ?? "").trim()),
+  ).length;
+  console.log(
+    `summary-evidence: evidence shape holds for ${read.criteria.length} criteria${notShown ? ` (${notShown} not shown)` : ""}`,
+  );
   return 0;
 }
 

@@ -21,9 +21,7 @@
 import { lstatSync } from "node:fs";
 import { resolve } from "node:path";
 
-export type Clash =
-  | { kind: "run-directory"; path: string }
-  | { kind: "branch"; name: string };
+export type Clash = { kind: "run-directory"; path: string } | { kind: "branch"; name: string };
 
 export const ADVICE =
   "the user decides what happens to the old run: archive it, rename it, or pick another id";
@@ -107,7 +105,9 @@ export const GIT_LOCATION_ENV = [
   "GIT_NAMESPACE",
 ];
 
-export function stripGitLocationEnv(env: Record<string, string | undefined>): Record<string, string> {
+export function stripGitLocationEnv(
+  env: Record<string, string | undefined>,
+): Record<string, string> {
   const clean: Record<string, string> = {};
   for (const [key, value] of Object.entries(env)) {
     if (value === undefined || GIT_LOCATION_ENV.includes(key)) continue;

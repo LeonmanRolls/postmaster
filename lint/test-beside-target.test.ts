@@ -21,21 +21,26 @@ const write = (path: string, contents = "export {};\n"): void => {
 };
 
 const runOxlint = (path: string, cwd: string = ROOT, config: string = CONFIG): OxlintResult => {
-  const result = Bun.spawnSync([
-    process.execPath,
-    "x",
-    "--bun",
-    "oxlint",
-    `--config=${config}`,
-    "--no-ignore",
-    "--format=json",
-    path,
-  ], { cwd, stdout: "pipe", stderr: "pipe" });
+  const result = Bun.spawnSync(
+    [
+      process.execPath,
+      "x",
+      "--bun",
+      "oxlint",
+      `--config=${config}`,
+      "--no-ignore",
+      "--format=json",
+      path,
+    ],
+    { cwd, stdout: "pipe", stderr: "pipe" },
+  );
   const stdout = new TextDecoder().decode(result.stdout);
   const stderr = new TextDecoder().decode(result.stderr);
   return result.exitCode === 0 || result.exitCode === 1
     ? { exitCode: result.exitCode, diagnostics: parseDiagnostics(stdout) }
-    : (() => { throw new Error(stderr || stdout || `Oxlint exited ${result.exitCode}`); })();
+    : (() => {
+        throw new Error(stderr || stdout || `Oxlint exited ${result.exitCode}`);
+      })();
 };
 
 const parseDiagnostics = (stdout: string): readonly Diagnostic[] => {
@@ -63,9 +68,10 @@ const withDirectory = (run: (directory: string) => void): void => {
 
 const relativeDiagnostic = (diagnostic: Diagnostic, from: string = ROOT): Diagnostic => ({
   ...diagnostic,
-  filePath: relative(from, isAbsolute(diagnostic.filePath)
-    ? diagnostic.filePath
-    : resolve(from, diagnostic.filePath)),
+  filePath: relative(
+    from,
+    isAbsolute(diagnostic.filePath) ? diagnostic.filePath : resolve(from, diagnostic.filePath),
+  ),
 });
 
 test("a test file beside its target passes with no problem", () =>
@@ -85,11 +91,13 @@ test("a test file without a sibling target fails with one named problem", () =>
 
     expect(runOxlint(testFile)).toEqual({
       exitCode: 1,
-      diagnostics: [relativeDiagnostic({
-        filePath: testFile,
-        ruleId: "postmaster/test-beside-target",
-        message: "Test file missing.test.ts has no sibling target missing.ts.",
-      })],
+      diagnostics: [
+        relativeDiagnostic({
+          filePath: testFile,
+          ruleId: "postmaster/test-beside-target",
+          message: "Test file missing.test.ts has no sibling target missing.ts.",
+        }),
+      ],
     });
   }));
 
@@ -101,11 +109,13 @@ test("a directory named like the target does not count as a sibling file", () =>
 
     expect(runOxlint(testFile)).toEqual({
       exitCode: 1,
-      diagnostics: [relativeDiagnostic({
-        filePath: testFile,
-        ruleId: "postmaster/test-beside-target",
-        message: "Test file folder.test.ts has no sibling target folder.ts.",
-      })],
+      diagnostics: [
+        relativeDiagnostic({
+          filePath: testFile,
+          ruleId: "postmaster/test-beside-target",
+          message: "Test file folder.test.ts has no sibling target folder.ts.",
+        }),
+      ],
     });
   }));
 
@@ -117,11 +127,13 @@ test("a test file inside a test folder fails with one named problem", () =>
 
     expect(runOxlint(testFile)).toEqual({
       exitCode: 1,
-      diagnostics: [relativeDiagnostic({
-        filePath: testFile,
-        ruleId: "postmaster/test-beside-target",
-        message: "Test file nested.test.ts is inside the test folder; keep it beside its target.",
-      })],
+      diagnostics: [
+        relativeDiagnostic({
+          filePath: testFile,
+          ruleId: "postmaster/test-beside-target",
+          message: "Test file nested.test.ts is inside the test folder; keep it beside its target.",
+        }),
+      ],
     });
   }));
 
@@ -134,11 +146,17 @@ test("a test file still fails when the run starts inside its own test folder", (
 
     expect(runOxlint(testFile, testDir)).toEqual({
       exitCode: 1,
-      diagnostics: [relativeDiagnostic({
-        filePath: testFile,
-        ruleId: "postmaster/test-beside-target",
-        message: "Test file nested.test.ts is inside the test folder; keep it beside its target.",
-      }, testDir)],
+      diagnostics: [
+        relativeDiagnostic(
+          {
+            filePath: testFile,
+            ruleId: "postmaster/test-beside-target",
+            message:
+              "Test file nested.test.ts is inside the test folder; keep it beside its target.",
+          },
+          testDir,
+        ),
+      ],
     });
   }));
 
@@ -151,11 +169,17 @@ test("a test file still fails when the run starts two levels inside its test tre
 
     expect(runOxlint(testFile, unitDir)).toEqual({
       exitCode: 1,
-      diagnostics: [relativeDiagnostic({
-        filePath: testFile,
-        ruleId: "postmaster/test-beside-target",
-        message: "Test file nested.test.ts is inside the test folder; keep it beside its target.",
-      }, unitDir)],
+      diagnostics: [
+        relativeDiagnostic(
+          {
+            filePath: testFile,
+            ruleId: "postmaster/test-beside-target",
+            message:
+              "Test file nested.test.ts is inside the test folder; keep it beside its target.",
+          },
+          unitDir,
+        ),
+      ],
     });
   }));
 
@@ -165,11 +189,17 @@ test("a test beside its target passes in a project whose root is named test", ()
     const lintDir = join(projectRoot, "lint");
     const testFile = join(projectRoot, "nearby.test.ts");
     write(join(lintDir, "plugin.ts"), readFileSync(join(ROOT, "lint", "plugin.ts"), "utf8"));
-    write(join(lintDir, "test-beside-target.ts"), readFileSync(join(ROOT, "lint", "test-beside-target.ts"), "utf8"));
-    write(join(projectRoot, ".oxlintrc.json"), JSON.stringify({
-      jsPlugins: ["./lint/plugin.ts"],
-      rules: { "postmaster/test-beside-target": "error" },
-    }));
+    write(
+      join(lintDir, "test-beside-target.ts"),
+      readFileSync(join(ROOT, "lint", "test-beside-target.ts"), "utf8"),
+    );
+    write(
+      join(projectRoot, ".oxlintrc.json"),
+      JSON.stringify({
+        jsPlugins: ["./lint/plugin.ts"],
+        rules: { "postmaster/test-beside-target": "error" },
+      }),
+    );
     write(join(projectRoot, "nearby.ts"));
     write(testFile);
 

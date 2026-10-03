@@ -102,6 +102,7 @@ opened, or launches one when it cannot be.
 ```sh
 scripts/probe-harnesses.sh      # which agent CLIs are installed
 scripts/probe-trackers.sh       # which ticket sources are reachable
+scripts/probe-confine.sh        # whether lane confinement can run, and what would finish it
 scripts/setup.sh --answers <file> # writes the config from the agent's collected answers (--keys lists them)
 scripts/link-skills.sh [--dry-run | --check | --remove]            # the skills, as links into each CLI's skills folder
 scripts/skill-refs.sh [--fix]                                      # every script path in the skill goes through <tool>
@@ -142,7 +143,7 @@ scripts/runs-status.sh <run-root>                                  # the postmas
 scripts/coachman-contract.sh <base> <head>                         # whether a change touches the contract, by file
 scripts/runs-watch.sh <run-root> [--timeout <seconds>]              # wait until a run needs the postmaster
 scripts/handoff-check.sh <handoff-file>                            # a leg may end only on exit 0
-scripts/wiki-lint.sh [--self-test]                                 # the wiki's rules, run not remembered
+scripts/wiki-lint.sh                                             # the wiki's rules, run not remembered
 scripts/fixture.sh new|score|hidden …                              # a run on a fixture app, scored against a known outcome
 ```
 
@@ -173,9 +174,10 @@ settings only say what `default` means for that project.
 At least two agent CLIs that can run headless. Any git repository as a target. A session host
 to watch the fleet in: [Herdr](https://herdr.dev) by default wherever it is running, where each
 launch appears in its worktree's space under the project's, or tmux. With neither, launches run
-in the background and the flow still works (`skills/postmaster/hosts.md`). Python 3.11 or newer, which
-the scripts use to read the config, jq for discovering a JavaScript project's gate, and Bun,
-which runs the TypeScript scripts.
+in the background and the flow still works (`skills/postmaster/hosts.md`). Bun 1.4.2 or newer, which
+runs the TypeScript scripts and reads the config, and jq, which the fixture flow requires.
+Python 3.11 or newer, which the bash scripts use to read the config, and for discovering a
+JavaScript project's gate.
 
 ## Installing the skills
 

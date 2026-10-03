@@ -1,9 +1,396 @@
-// Tests for front-door.ts: fixture marks alter only spawn routes and never depend on the host.
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+// Tests beside scripts/front-door.ts, moved from its --self-test on #109: 45 controls.
+// Follow-up stderr checks re-run their command instead of reading the previous run's stderr.
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { run } from "./lib/proc.ts";
+
+const cli = join(import.meta.dir, "front-door.sh");
+
+interface CliResult {
+  code: number;
+  out: string;
+  err: string;
+}
+
+function runCli(
+  args: string[],
+  opts: { cwd?: string; env?: Record<string, string | undefined> } = {},
+): CliResult {
+  const r = spawnSync(cli, args, {
+    cwd: opts.cwd,
+    encoding: "utf8",
+    env: opts.env === undefined ? process.env : { ...process.env, ...opts.env },
+  });
+  return { code: r.status ?? -1, out: r.stdout ?? "", err: r.stderr ?? "" };
+}
+
+function git(dir: string, args: string[]): void {
+  const r = spawnSync("git", ["-C", dir, ...args], { encoding: "utf8" });
+  if (r.status !== 0) throw new Error(`git ${args.join(" ")} failed: ${r.stderr}`);
+}
+
+function firstWord(out: string): string {
+  return out.split(" ")[0] ?? "";
+}
+
+let tmp: string;
+let here: string;
+let there: string;
+
+function writeConfig(name: string, harness: string, model: string): void {
+  writeFileSync(
+    join(tmp, `${name}.toml`),
+    `[team]\npostmaster = { harness = "${harness}", model = "${model}" }\n`,
+  );
+}
+
+function cfg(name: string): string[] {
+  return ["--config", join(tmp, `${name}.toml`)];
+}
+
+beforeAll(() => {
+  tmp = mkdtempSync(join(tmpdir(), "front-door-"));
+  here = join(tmp, "here");
+  there = join(tmp, "there");
+  mkdirSync(join(here, "sub"), { recursive: true });
+  mkdirSync(there, { recursive: true });
+  mkdirSync(join(tmp, "notrepo"), { recursive: true });
+  for (const repo of [here, there]) {
+    git(repo, ["init", "-q"]);
+    git(repo, [
+      "-c",
+      "user.email=t@t",
+      "-c",
+      "user.name=t",
+      "commit",
+      "-q",
+      "--allow-empty",
+      "-m",
+      "base",
+    ]);
+  }
+  git(here, ["worktree", "add", "-q", join(tmp, "here-wt"), "-b", "wt"]);
+  writeConfig("match", "claude", "pm-model");
+  writeConfig("spaces", "claude code", "pm-model");
+  writeConfig("empty", "", "pm-model");
+  writeConfig("blank", "   ", "pm-model");
+  writeFileSync(join(tmp, "no-pm.toml"), '[team]\nworkhorses = ["a"]\n');
+  writeFileSync(join(tmp, "bad.toml"), "[team\nbroken\n");
+  writeFileSync(join(tmp, "strteam.toml"), 'team = "oops"\n');
+  writeFileSync(
+    join(tmp, "nonstr.toml"),
+    '[team]\npostmaster = { harness = 7, model = "pm-model" }\n',
+  );
+  writeFileSync(
+    join(tmp, "newline.toml"),
+    '[team]\npostmaster = { harness = "claude", model = "pm-model\\nother" }\n',
+  );
+  writeFileSync(join(tmp, "tab.toml"), '[team]\npostmaster = { harness = "a\\tb", model = "m" }\n');
+});
+
+afterAll(() => {
+  rmSync(tmp, { recursive: true, force: true });
+});
+
+describe("positive controls", () => {
+  test("harness differs prints spawn naming harness", () => {
+    const r = runCli(["grok", "pm-model", here, "yes", here, ...cfg("match")]);
+    expect(r.code).toBe(0);
+    expect(firstWord(r.out)).toBe("spawn");
+    expect(r.out).toContain("harness differs");
+  }, 10000);
+
+  test("model differs prints spawn naming model", () => {
+    const r = runCli(["claude", "other-model", here, "yes", here, ...cfg("match")]);
+    expect(r.code).toBe(0);
+    expect(firstWord(r.out)).toBe("spawn");
+    expect(r.out).toContain("model differs");
+  }, 10000);
+
+  test("target is another repo prints spawn naming target", () => {
+    const r = runCli(["claude", "pm-model", here, "yes", there, ...cfg("match")]);
+    expect(r.code).toBe(0);
+    expect(firstWord(r.out)).toBe("spawn");
+    expect(r.out).toContain("target is another repo");
+  }, 10000);
+
+  test("nobody at the terminal prints spawn naming terminal", () => {
+    const r = runCli(["claude", "pm-model", here, "no", here, ...cfg("match")]);
+    expect(r.code).toBe(0);
+    expect(firstWord(r.out)).toBe("spawn");
+    expect(r.out).toContain("nobody at the terminal");
+  }, 10000);
+
+  test("all four match prints self", () => {
+    const r = runCli(["claude", "pm-model", here, "yes", here, ...cfg("match")]);
+    expect(r.code).toBe(0);
+    expect(firstWord(r.out)).toBe("self");
+  }, 10000);
+
+  test("a worktree of the target is the target's repo, so it is self", () => {
+    const r = runCli(["claude", "pm-model", join(tmp, "here-wt"), "yes", here, ...cfg("match")]);
+    expect(r.code).toBe(0);
+    expect(firstWord(r.out)).toBe("self");
+  }, 10000);
+
+  test("a subdirectory of the target is the target's repo, so it is self", () => {
+    const r = runCli(["claude", "pm-model", join(tmp, "here/sub"), "yes", here, ...cfg("match")]);
+    expect(r.code).toBe(0);
+    expect(firstWord(r.out)).toBe("self");
+  }, 10000);
+
+  test("every failed condition is reported", () => {
+    const r = runCli(["grok", "other-model", there, "no", here, ...cfg("match")]);
+    expect(r.code).toBe(0);
+    expect(firstWord(r.out)).toBe("spawn");
+    expect(r.out).toContain("harness differs");
+  }, 10000);
+
+  test("a directory outside any repo fails closed naming both paths", () => {
+    const r = runCli(["claude", "pm-model", join(tmp, "notrepo"), "yes", here, ...cfg("match")]);
+    expect(r.code).toBe(0);
+    expect(firstWord(r.out)).toBe("spawn");
+    expect(r.out).toContain("not in a git repository");
+  }, 10000);
+
+  test("a target outside any repo fails closed naming both paths", () => {
+    const r = runCli(["claude", "pm-model", here, "yes", join(tmp, "notrepo"), ...cfg("match")]);
+    expect(r.code).toBe(0);
+    expect(firstWord(r.out)).toBe("spawn");
+    expect(r.out).toContain("not in a git repository");
+  }, 10000);
+
+  test("a harness name with a space still matches itself", () => {
+    const r = runCli(["claude code", "pm-model", here, "yes", here, ...cfg("spaces")]);
+    expect(r.code).toBe(0);
+    expect(firstWord(r.out)).toBe("self");
+  }, 10000);
+
+  test("an empty harness decides spawn, not usage", () => {
+    const r = runCli(["", "pm-model", here, "yes", here, ...cfg("match")]);
+    expect(r.code).toBe(0);
+    expect(firstWord(r.out)).toBe("spawn");
+    expect(r.out).toContain("harness differs");
+  }, 10000);
+
+  test("a reported model with a newline decides spawn", () => {
+    const r = runCli(["claude", "pm-model\nother", here, "yes", here, ...cfg("match")]);
+    expect(r.code).toBe(0);
+    expect(firstWord(r.out)).toBe("spawn");
+    expect(r.out).toContain("model differs");
+  }, 10000);
+});
+
+describe("empty paths fail closed from inside a repo", () => {
+  test("an empty cwd fails closed from inside a repo", () => {
+    const r = runCli(["claude", "pm-model", "", "yes", here, ...cfg("match")], { cwd: here });
+    expect(r.code).toBe(0);
+    expect(r.out.startsWith("spawn not in a git repository")).toBe(true);
+  }, 10000);
+
+  test("an empty target fails closed from inside a repo", () => {
+    const r = runCli(["claude", "pm-model", here, "yes", "", ...cfg("match")], { cwd: here });
+    expect(r.code).toBe(0);
+    expect(r.out.startsWith("spawn not in a git repository")).toBe(true);
+  }, 10000);
+
+  test("an empty cwd and target fail closed from inside a repo", () => {
+    const r = runCli(["claude", "pm-model", "", "yes", "", ...cfg("match")], { cwd: here });
+    expect(r.code).toBe(0);
+    expect(r.out.startsWith("spawn not in a git repository")).toBe(true);
+  }, 10000);
+});
+
+describe("caller environment does not steer identity", () => {
+  test("a GIT_DIR from the caller does not steer distinct repos to self", () => {
+    const r = runCli(["claude", "pm-model", here, "yes", there, ...cfg("match")], {
+      env: {
+        GIT_DIR: join(tmp, "there/.git"),
+        GIT_COMMON_DIR: join(tmp, "there/.git"),
+      },
+    });
+    expect(r.code).toBe(0);
+    expect(firstWord(r.out)).toBe("spawn");
+    expect(r.out).toContain("target is another repo");
+  }, 10000);
+});
+
+describe("negative controls", () => {
+  test("the harness matching does not print the harness reason", () => {
+    const r = runCli(["claude", "other-model", here, "yes", here, ...cfg("match")]);
+    expect(r.code).toBe(0);
+    expect(r.out).not.toContain("harness differs");
+    expect(r.out).toContain("model differs");
+  }, 10000);
+
+  test("the model matching does not print the model reason", () => {
+    const r = runCli(["grok", "pm-model", here, "yes", here, ...cfg("match")]);
+    expect(r.code).toBe(0);
+    expect(r.out).not.toContain("model differs");
+    expect(r.out).toContain("harness differs");
+  }, 10000);
+
+  test("the target matching does not print the target reason", () => {
+    const r = runCli(["claude", "pm-model", here, "no", here, ...cfg("match")]);
+    expect(r.code).toBe(0);
+    expect(r.out).not.toContain("target is another repo");
+    expect(r.out).toContain("nobody at the terminal");
+  }, 10000);
+
+  test("a person at the terminal does not print the terminal reason", () => {
+    const r = runCli(["grok", "pm-model", here, "yes", here, ...cfg("match")]);
+    expect(r.code).toBe(0);
+    expect(r.out).not.toContain("nobody at the terminal");
+    expect(r.out).toContain("harness differs");
+  }, 10000);
+
+  test("an unresolvable path does not print the another-repo label", () => {
+    const r = runCli(["claude", "pm-model", join(tmp, "notrepo"), "yes", here, ...cfg("match")]);
+    expect(r.code).toBe(0);
+    expect(r.out).not.toContain("target is another repo");
+    expect(r.out).toContain("not in a git repository");
+  }, 10000);
+
+  test("resolved paths do not print the unresolvable label", () => {
+    const r = runCli(["grok", "pm-model", here, "yes", here, ...cfg("match")]);
+    expect(r.code).toBe(0);
+    expect(r.out).not.toContain("not in a git repository");
+    expect(r.out).toContain("harness differs");
+  }, 10000);
+
+  for (const reason of [
+    "harness differs",
+    "model differs",
+    "target is another repo",
+    "nobody at the terminal",
+  ]) {
+    test(`all four failing names ${reason}`, () => {
+      const r = runCli(["grok", "other-model", there, "no", here, ...cfg("match")]);
+      expect(r.out).toContain(reason);
+    }, 10000);
+  }
+
+  test("reasons print in ticket order", () => {
+    const r = runCli(["grok", "other-model", there, "no", here, ...cfg("match")]);
+    const out = r.out.trimEnd();
+    expect(out.startsWith("spawn harness differs")).toBe(true);
+    expect(out).toContain("; model differs");
+    expect(out).toContain("; target is another repo");
+    expect(out.endsWith("nobody at the terminal")).toBe(true);
+  }, 10000);
+});
+
+describe("refusals", () => {
+  test("no config is refused", () => {
+    const r = runCli(["claude", "pm-model", here, "yes", here, ...cfg("none")]);
+    expect(r.code).toBe(1);
+    expect(firstWord(r.out)).toBe("");
+  }, 10000);
+
+  test("a config with no team.postmaster is refused", () => {
+    const r = runCli(["claude", "pm-model", here, "yes", here, ...cfg("no-pm")]);
+    expect(r.code).toBe(1);
+    expect(firstWord(r.out)).toBe("");
+  }, 10000);
+
+  test("a config that does not parse is refused", () => {
+    const r = runCli(["claude", "pm-model", here, "yes", here, ...cfg("bad")]);
+    expect(r.code).toBe(1);
+    expect(firstWord(r.out)).toBe("");
+  }, 10000);
+
+  test("a config whose team is not a table is refused", () => {
+    const r = runCli(["claude", "pm-model", here, "yes", here, ...cfg("strteam")]);
+    expect(r.code).toBe(1);
+    expect(firstWord(r.out)).toBe("");
+  }, 10000);
+
+  test("and refuses in its own words, with no traceback", () => {
+    const r = runCli(["claude", "pm-model", here, "yes", here, ...cfg("strteam")]);
+    expect(r.err).toContain("team.postmaster");
+    expect(r.err).not.toContain("Traceback");
+  }, 10000);
+
+  test("a config with a non-string harness is refused", () => {
+    const r = runCli(["claude", "pm-model", here, "yes", here, ...cfg("nonstr")]);
+    expect(r.code).toBe(1);
+    expect(firstWord(r.out)).toBe("");
+  }, 10000);
+
+  test("a config with an empty harness is refused", () => {
+    const r = runCli(["claude", "pm-model", here, "yes", here, ...cfg("empty")]);
+    expect(r.code).toBe(1);
+    expect(firstWord(r.out)).toBe("");
+  }, 10000);
+
+  test("a config with a blank harness is refused", () => {
+    const r = runCli(["claude", "pm-model", here, "yes", here, ...cfg("blank")]);
+    expect(r.code).toBe(1);
+    expect(firstWord(r.out)).toBe("");
+  }, 10000);
+
+  test("a config with a newline in the model is refused", () => {
+    const r = runCli(["claude", "pm-model", here, "yes", here, ...cfg("newline")]);
+    expect(r.code).toBe(1);
+    expect(firstWord(r.out)).toBe("");
+  }, 10000);
+
+  test("and says control characters", () => {
+    const r = runCli(["claude", "pm-model", here, "yes", here, ...cfg("newline")]);
+    expect(r.err).toContain("control characters");
+  }, 10000);
+
+  test("a config with a tab in the harness is refused", () => {
+    const r = runCli(["a\tb", "m", here, "yes", here, ...cfg("tab")]);
+    expect(r.code).toBe(1);
+    expect(firstWord(r.out)).toBe("");
+  }, 10000);
+
+  test("at-terminal is yes or no, not anything else", () => {
+    const r = runCli(["claude", "pm-model", here, "maybe", here, ...cfg("match")]);
+    expect(r.code).toBe(1);
+    expect(firstWord(r.out)).toBe("");
+  }, 10000);
+
+  test("and says so", () => {
+    const r = runCli(["claude", "pm-model", here, "maybe", here, ...cfg("match")]);
+    expect(r.err).toContain("at-terminal is yes or no");
+  }, 10000);
+
+  test("POSTMASTER_CONFIG names the config", () => {
+    const r = runCli(["claude", "pm-model", here, "yes", here], {
+      env: { POSTMASTER_CONFIG: join(tmp, "match.toml") },
+    });
+    expect(r.code).toBe(0);
+    expect(firstWord(r.out)).toBe("self");
+  }, 10000);
+
+  test("--config overrides POSTMASTER_CONFIG", () => {
+    const r = runCli(["claude", "pm-model", here, "yes", here, ...cfg("match")], {
+      env: { POSTMASTER_CONFIG: join(tmp, "no-pm.toml") },
+    });
+    expect(r.code).toBe(0);
+    expect(firstWord(r.out)).toBe("self");
+  }, 10000);
+
+  test("four arguments is a usage error", () => {
+    const r = runCli(["claude", "pm-model", here, "yes"]);
+    expect(r.code).toBe(2);
+    expect(firstWord(r.out)).toBe("");
+  }, 10000);
+
+  test("an unknown flag exits 2", () => {
+    const r = runCli(["--no-such-flag", "extra"]);
+    expect(r.code).toBe(2);
+    expect(firstWord(r.out)).toBe("");
+  }, 10000);
+});
+
+// Main's #98 headless-fixture controls, unioned at the merge: the beside suite
+// above is this branch's; what follows is main's, verbatim but for imports.
 
 const SCRIPT = join(import.meta.dir, "front-door.sh");
 const gitEnv = {
@@ -43,20 +430,16 @@ function initRepo(path: string): void {
 }
 
 function frontDoor(cwd: string, target: string, host: "herdr" | "tmux" | "none") {
-  return run(
-    "bash",
-    [SCRIPT, "claude", "pm-model", cwd, "yes", target, "--config", config],
-    {
-      env: {
-        ...gitEnv,
-        POSTMASTER_HOST: host,
-        HERDR_SOCKET_PATH: host === "herdr" ? join(scratch, "herdr.sock") : undefined,
-        TMUX: host === "tmux" ? "test-server,1,0" : undefined,
-        TMUX_PANE: host === "tmux" ? "%1" : undefined,
-      },
-      input: "",
+  return run("bash", [SCRIPT, "claude", "pm-model", cwd, "yes", target, "--config", config], {
+    env: {
+      ...gitEnv,
+      POSTMASTER_HOST: host,
+      HERDR_SOCKET_PATH: host === "herdr" ? join(scratch, "herdr.sock") : undefined,
+      TMUX: host === "tmux" ? "test-server,1,0" : undefined,
+      TMUX_PANE: host === "tmux" ? "%1" : undefined,
     },
-  );
+    input: "",
+  });
 }
 
 function markFixture(): void {

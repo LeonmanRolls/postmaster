@@ -32,7 +32,12 @@ type ScenarioOutput = Readonly<{ line: string; report: Report; recordPath: strin
 const SCRIPT = fileURLToPath(new URL("./synthesis-shares.ts", import.meta.url));
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const TEMP_ROOT = join(REPO_ROOT, "node_modules", ".cache");
-const IDENTITY = ["-c", "user.name=brindlewick", "-c", "user.email=332054101+brindlewick@users.noreply.github.com"];
+const IDENTITY = [
+  "-c",
+  "user.name=brindlewick",
+  "-c",
+  "user.email=332054101+brindlewick@users.noreply.github.com",
+];
 
 const git = (directory: string, args: readonly string[]): string => {
   const result = Bun.spawnSync(
@@ -43,7 +48,9 @@ const git = (directory: string, args: readonly string[]): string => {
   const stderr = new TextDecoder().decode(result.stderr);
   return result.exitCode === 0
     ? stdout.trim()
-    : (() => { throw new Error(stderr || `git ${args.join(" ")} exited ${result.exitCode}`); })();
+    : (() => {
+        throw new Error(stderr || `git ${args.join(" ")} exited ${result.exitCode}`);
+      })();
 };
 
 const initializeRepo = (directory: string): string => {
@@ -180,16 +187,24 @@ test("a synthesis taken wholly from one lane is read back exactly", () =>
     const base = initializeRepo(directory);
     const phrase = "violet maple harbor candle swift planet";
     const alpha = commitFiles(directory, base, "alpha work", { "feature.ts": `${phrase}\n` });
-    const beta = commitFiles(directory, base, "beta work", { "other.ts": "copper field quiet winter circle branch\n" });
+    const beta = commitFiles(directory, base, "beta work", {
+      "other.ts": "copper field quiet winter circle branch\n",
+    });
     const synthesis = commitFiles(directory, base, "synthesis", { "feature.ts": `${phrase}\n` });
     const result = runScenario(directory, base, synthesis, [
       { name: "beta", head: beta },
       { name: "alpha", head: alpha },
     ]);
 
-    expect(result.line).toBe("SHARES: code runs=1 lane:alpha=1/1 lane:beta=0/1 shared=0/1 neither=0/1 | docs runs=0 lane:alpha=n/a lane:beta=n/a shared=n/a neither=n/a");
-    expect(result.report.kinds.code).toEqual(expectedKind(1, [laneShare("alpha", 1, 1), laneShare("beta", 0, 1)], 0, 0));
-    expect(result.report.kinds.docs).toEqual(expectedKind(0, [laneShare("alpha", 0, 0), laneShare("beta", 0, 0)], 0, 0));
+    expect(result.line).toBe(
+      "SHARES: code runs=1 lane:alpha=1/1 lane:beta=0/1 shared=0/1 neither=0/1 | docs runs=0 lane:alpha=n/a lane:beta=n/a shared=n/a neither=n/a",
+    );
+    expect(result.report.kinds.code).toEqual(
+      expectedKind(1, [laneShare("alpha", 1, 1), laneShare("beta", 0, 1)], 0, 0),
+    );
+    expect(result.report.kinds.docs).toEqual(
+      expectedKind(0, [laneShare("alpha", 0, 0), laneShare("beta", 0, 0)], 0, 0),
+    );
     expect(result.report.algorithm.wordsPerRun).toBe(6);
   }));
 
@@ -209,9 +224,15 @@ test("a synthesis split between both lanes is counted by lane and file kind", ()
       { name: "beta", head: beta },
     ]);
 
-    expect(result.line).toBe("SHARES: code runs=1 lane:alpha=1/1 lane:beta=0/1 shared=0/1 neither=0/1 | docs runs=1 lane:alpha=0/1 lane:beta=1/1 shared=0/1 neither=0/1");
-    expect(result.report.kinds.code).toEqual(expectedKind(1, [laneShare("alpha", 1, 1), laneShare("beta", 0, 1)], 0, 0));
-    expect(result.report.kinds.docs).toEqual(expectedKind(1, [laneShare("alpha", 0, 1), laneShare("beta", 1, 1)], 0, 0));
+    expect(result.line).toBe(
+      "SHARES: code runs=1 lane:alpha=1/1 lane:beta=0/1 shared=0/1 neither=0/1 | docs runs=1 lane:alpha=0/1 lane:beta=1/1 shared=0/1 neither=0/1",
+    );
+    expect(result.report.kinds.code).toEqual(
+      expectedKind(1, [laneShare("alpha", 1, 1), laneShare("beta", 0, 1)], 0, 0),
+    );
+    expect(result.report.kinds.docs).toEqual(
+      expectedKind(1, [laneShare("alpha", 0, 1), laneShare("beta", 1, 1)], 0, 0),
+    );
   }));
 
 test("identical text in both lanes is shared", () =>
@@ -226,23 +247,37 @@ test("identical text in both lanes is shared", () =>
       { name: "beta", head: beta },
     ]);
 
-    expect(result.report.kinds.code).toEqual(expectedKind(1, [laneShare("alpha", 0, 1), laneShare("beta", 0, 1)], 1, 0));
-    expect(result.line).toBe("SHARES: code runs=1 lane:alpha=0/1 lane:beta=0/1 shared=1/1 neither=0/1 | docs runs=0 lane:alpha=n/a lane:beta=n/a shared=n/a neither=n/a");
+    expect(result.report.kinds.code).toEqual(
+      expectedKind(1, [laneShare("alpha", 0, 1), laneShare("beta", 0, 1)], 1, 0),
+    );
+    expect(result.line).toBe(
+      "SHARES: code runs=1 lane:alpha=0/1 lane:beta=0/1 shared=1/1 neither=0/1 | docs runs=0 lane:alpha=n/a lane:beta=n/a shared=n/a neither=n/a",
+    );
   }));
 
 test("text written by the coachman alone is attributed to neither lane", () =>
   withWorkspace((directory) => {
     const base = initializeRepo(directory);
-    const alpha = commitFiles(directory, base, "alpha work", { "alpha.ts": "bright copper river sleeps beyond quiet mountains\n" });
-    const beta = commitFiles(directory, base, "beta work", { "beta.ts": "gentle silver clouds drift across open fields\n" });
-    const synthesis = commitFiles(directory, base, "synthesis", { "coachman.md": "velvet lantern dances under midnight winter\n" });
+    const alpha = commitFiles(directory, base, "alpha work", {
+      "alpha.ts": "bright copper river sleeps beyond quiet mountains\n",
+    });
+    const beta = commitFiles(directory, base, "beta work", {
+      "beta.ts": "gentle silver clouds drift across open fields\n",
+    });
+    const synthesis = commitFiles(directory, base, "synthesis", {
+      "coachman.md": "velvet lantern dances under midnight winter\n",
+    });
     const result = runScenario(directory, base, synthesis, [
       { name: "alpha", head: alpha },
       { name: "beta", head: beta },
     ]);
 
-    expect(result.report.kinds.docs).toEqual(expectedKind(1, [laneShare("alpha", 0, 1), laneShare("beta", 0, 1)], 0, 1));
-    expect(result.line).toBe("SHARES: code runs=0 lane:alpha=n/a lane:beta=n/a shared=n/a neither=n/a | docs runs=1 lane:alpha=0/1 lane:beta=0/1 shared=0/1 neither=1/1");
+    expect(result.report.kinds.docs).toEqual(
+      expectedKind(1, [laneShare("alpha", 0, 1), laneShare("beta", 0, 1)], 0, 1),
+    );
+    expect(result.line).toBe(
+      "SHARES: code runs=0 lane:alpha=n/a lane:beta=n/a shared=n/a neither=n/a | docs runs=1 lane:alpha=0/1 lane:beta=0/1 shared=0/1 neither=1/1",
+    );
   }));
 
 test("oracle, lane records, lockfiles, and generated paths are excluded exactly", () =>
@@ -272,14 +307,25 @@ test("oracle, lane records, lockfiles, and generated paths are excluded exactly"
     };
     const alpha = commitFiles(directory, base, "alpha work", changed);
     const synthesis = commitFiles(directory, base, "synthesis", changed);
-    const result = runScenario(directory, base, synthesis, [
-      { name: "alpha", head: alpha },
-      { name: "beta", head: base },
-    ], oracle);
+    const result = runScenario(
+      directory,
+      base,
+      synthesis,
+      [
+        { name: "alpha", head: alpha },
+        { name: "beta", head: base },
+      ],
+      oracle,
+    );
 
-    expect(result.report.kinds.code).toEqual(expectedKind(1, [laneShare("alpha", 1, 1), laneShare("beta", 0, 1)], 0, 0));
+    expect(result.report.kinds.code).toEqual(
+      expectedKind(1, [laneShare("alpha", 1, 1), laneShare("beta", 0, 1)], 0, 0),
+    );
     expect(result.report.kinds.docs.totalRuns).toBe(0);
-    expect([...result.report.exclusions.oraclePaths].toSorted()).toEqual(["lib.ts", "oracle-answer.ts"]);
+    expect([...result.report.exclusions.oraclePaths].toSorted()).toEqual([
+      "lib.ts",
+      "oracle-answer.ts",
+    ]);
     expect(result.report.exclusions.byRange.synthesis.map(({ path }) => path).toSorted()).toEqual([
       "WORKHORSE-BLOCKED.md",
       "WORKHORSE-SPEC.md",
@@ -313,11 +359,14 @@ test("three lanes are counted by name, with any overlap grouped as shared", () =
       { name: "alpha", head: alpha },
     ]);
 
-    expect(result.report.kinds.code).toEqual(expectedKind(2, [
-      laneShare("alpha", 0, 2),
-      laneShare("beta", 0, 2),
-      laneShare("gamma", 1, 2),
-    ], 1, 0));
+    expect(result.report.kinds.code).toEqual(
+      expectedKind(
+        2,
+        [laneShare("alpha", 0, 2), laneShare("beta", 0, 2), laneShare("gamma", 1, 2)],
+        1,
+        0,
+      ),
+    );
     expect(result.report.lanes).toEqual([
       { name: "alpha", head: alpha },
       { name: "beta", head: beta },
@@ -329,7 +378,8 @@ test("a rename contributes only its changed added lines", () =>
   withWorkspace((directory) => {
     const initial = initializeRepo(directory);
     const base = commitFiles(directory, initial, "base file", {
-      "old.ts": "baseline words remain in their original file across this rename with enough unchanged content to detect it\n",
+      "old.ts":
+        "baseline words remain in their original file across this rename with enough unchanged content to detect it\n",
     });
     const phrase = "quiet harbor lantern velvet canyon orbit";
     const alpha = renameWithAddedText(directory, base, "alpha rename", phrase);
@@ -339,19 +389,30 @@ test("a rename contributes only its changed added lines", () =>
       { name: "beta", head: base },
     ]);
 
-    expect(result.report.kinds.code).toEqual(expectedKind(1, [laneShare("alpha", 1, 1), laneShare("beta", 0, 1)], 0, 0));
+    expect(result.report.kinds.code).toEqual(
+      expectedKind(1, [laneShare("alpha", 1, 1), laneShare("beta", 0, 1)], 0, 0),
+    );
   }));
 
 test("a rename of an oracle-touched file stays excluded", () =>
   withWorkspace((directory) => {
     const emptyBase = initializeRepo(directory);
     const base = commitFiles(directory, emptyBase, "base file", {
-      "lib.ts": "alpha beta gamma delta epsilon zeta eta theta\none two three four five six seven eight\nred green blue yellow purple orange pink gray\n",
+      "lib.ts":
+        "alpha beta gamma delta epsilon zeta eta theta\none two three four five six seven eight\nred green blue yellow purple orange pink gray\n",
     });
     const oracle = commitFiles(directory, base, "oracle fixture", {
-      "lib.ts": "alpha beta gamma delta epsilon zeta eta theta\none two three four five six seven eight\nred green blue yellow purple orange pink gray\noracle hidden helper words alpha beta\n",
+      "lib.ts":
+        "alpha beta gamma delta epsilon zeta eta theta\none two three four five six seven eight\nred green blue yellow purple orange pink gray\noracle hidden helper words alpha beta\n",
     });
-    const synthesis = renameWithAddedText(directory, base, "synthesis rename", "synthesis edit line here today now", "lib.ts", "util.ts");
+    const synthesis = renameWithAddedText(
+      directory,
+      base,
+      "synthesis rename",
+      "synthesis edit line here today now",
+      "lib.ts",
+      "util.ts",
+    );
     const result = runScenario(directory, base, synthesis, [{ name: "alpha", head: base }], oracle);
 
     expect(result.report.kinds.code.totalRuns).toBe(0);
@@ -363,8 +424,12 @@ test("a rename of an oracle-touched file stays excluded", () =>
 test("a merge in the synthesis range is refused", () =>
   withWorkspace((directory) => {
     const base = initializeRepo(directory);
-    const side = commitFiles(directory, base, "side work", { "side.ts": "side words for the merge commit fixture\n" });
-    const main = commitFiles(directory, base, "main work", { "main.ts": "main words for the merge commit fixture\n" });
+    const side = commitFiles(directory, base, "side work", {
+      "side.ts": "side words for the merge commit fixture\n",
+    });
+    const main = commitFiles(directory, base, "main work", {
+      "main.ts": "main words for the merge commit fixture\n",
+    });
     git(directory, ["checkout", "--quiet", "--detach", main]);
     git(directory, ["merge", "--quiet", "--no-ff", "-m", "merge side", side]);
     const merged = git(directory, ["rev-parse", "HEAD"]);

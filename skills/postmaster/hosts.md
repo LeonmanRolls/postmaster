@@ -164,7 +164,7 @@ onto the fragment it supersedes.
   configuration under the `CLAUDE_CODE_` prefix that is not in the families above) included, and
   so does the lane's env file once `launch.sh` sources it. The strip is a deny-list in
   `<tool>/scripts/host.sh`'s runner: to add a name or a family, extend that list and the
-  matching control in `--self-test`. Never widen it to the whole `CLAUDE_CODE_*` prefix and
+  matching test beside the script. Never widen it to the whole `CLAUDE_CODE_*` prefix and
   never replace it with an allow-list; both would drop configuration a launch needs.
 - **The ticket belongs to the run's space; a launch label carries only launch identity.**
   `<tool>/scripts/host.sh name <dispatch>` prints the ticket number and title for the run level.
@@ -304,7 +304,7 @@ with `herdr agent start`. It is a pane whose agent `host.sh` reports. So when it
 
 ## Tests
 
-`<tool>/scripts/host.sh --self-test` runs every form against stub `herdr` and `tmux` on a PATH that
+The tests beside `<tool>/scripts/host.sh` run every form against stub `herdr` and `tmux` on a PATH that
 holds nothing else, and never reaches a live server. It also checks the labels: each kind of
 launch (a coachman leg, a workhorse, each review lens with its round, the postmaster) leads
 with its role and holds no part of the ticket title, and the run's level carries the ticket.

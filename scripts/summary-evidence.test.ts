@@ -39,7 +39,10 @@ default
 `;
 
 function ticketWith(count: number): string {
-  const items = Array.from({ length: count }, (_, i) => `${i + 1}. Criterion ${i + 1} happens.`).join("\n");
+  const items = Array.from(
+    { length: count },
+    (_, i) => `${i + 1}. Criterion ${i + 1} happens.`,
+  ).join("\n");
   return `# A thing
 
 ## Problem / feature
@@ -56,7 +59,10 @@ default
 }
 
 function evidenceAll(count: number, file = "ok.md"): string {
-  const items = Array.from({ length: count }, (_, i) => `${i + 1}. \`.postmaster/verify/${file}\``).join("\n");
+  const items = Array.from(
+    { length: count },
+    (_, i) => `${i + 1}. \`.postmaster/verify/${file}\``,
+  ).join("\n");
   return `# Summary
 
 ## Evidence
@@ -93,10 +99,14 @@ function runCheck(summary: string, worktree: string, extra: string[] = []) {
   for (const [k, v] of Object.entries(process.env)) {
     if (v !== undefined && k !== "POSTMASTER_VERIFY") env[k] = v;
   }
-  const r = spawnSync("bun", ["--no-env-file", "--config=/dev/null", script, summary, worktree, ...extra], {
-    encoding: "utf8",
-    env,
-  });
+  const r = spawnSync(
+    "bun",
+    ["--no-env-file", "--config=/dev/null", script, summary, worktree, ...extra],
+    {
+      encoding: "utf8",
+      env,
+    },
+  );
   return { code: r.status ?? -1, out: `${r.stdout ?? ""}${r.stderr ?? ""}` };
 }
 
@@ -104,7 +114,9 @@ const ticketCheck = join(import.meta.dir, "ticket-check.sh");
 
 describe("pure core", () => {
   test("a waybill is read from ## Ticket to ## Project profile", () => {
-    const body = extractTicketBody(`# brief\n\n## Ticket\n${TICKET}\n## Project profile\nrepo: x\n`);
+    const body = extractTicketBody(
+      `# brief\n\n## Ticket\n${TICKET}\n## Project profile\nrepo: x\n`,
+    );
     expect(body).toContain("## Acceptance criteria");
     expect(body).not.toContain("Project profile");
   });
@@ -117,7 +129,9 @@ describe("pure core", () => {
   });
 
   test("a numbered line indented past the entries' base continues its entry", () => {
-    const entries = parseEvidenceEntries("## Evidence\n1. `.postmaster/verify/a.md`\n   1. a nested restatement\n");
+    const entries = parseEvidenceEntries(
+      "## Evidence\n1. `.postmaster/verify/a.md`\n   1. a nested restatement\n",
+    );
     expect(entries.map((e) => e.criterion)).toEqual([1]);
   });
 
@@ -129,11 +143,15 @@ describe("pure core", () => {
 
   test("a code span is prose until it names the verify directory", () => {
     expect(evidencePaths(["no `CLI/iOS` backend"])).toEqual([]);
-    expect(evidencePaths(["`.postmaster/verify/a.md` from `scripts/x.ts`"])).toEqual([".postmaster/verify/a.md"]);
+    expect(evidencePaths(["`.postmaster/verify/a.md` from `scripts/x.ts`"])).toEqual([
+      ".postmaster/verify/a.md",
+    ]);
   });
 
   test("adjacent comments on one line are all stripped", () => {
-    const entries = parseEvidenceEntries("## Evidence <!-- a --><!-- b -->\n1. `.postmaster/verify/a.md`\n");
+    const entries = parseEvidenceEntries(
+      "## Evidence <!-- a --><!-- b -->\n1. `.postmaster/verify/a.md`\n",
+    );
     expect(entries.map((e) => e.criterion)).toEqual([1]);
   });
 
@@ -148,7 +166,9 @@ describe("pure core", () => {
   });
 
   test("entries keep their criterion numbers and continuation lines", () => {
-    const entries = parseEvidenceEntries("## Evidence\nAn intro line.\n1. `.postmaster/verify/a.md`\n2. not shown: x\n");
+    const entries = parseEvidenceEntries(
+      "## Evidence\nAn intro line.\n1. `.postmaster/verify/a.md`\n2. not shown: x\n",
+    );
     expect(entries.map((e) => e.criterion)).toEqual([1, 2]);
   });
 
@@ -156,8 +176,13 @@ describe("pure core", () => {
     const wt = freshWorktree("pure-paths");
     const verify = join(wt, ".postmaster", "verify");
     writeFileSync(join(wt, "outside.md"), "no\n");
-    expect(probeEvidencePath(wt, verify, ".postmaster/verify/ok.md")).toEqual({ path: ".postmaster/verify/ok.md", status: "ok" });
-    expect(probeEvidencePath(wt, verify, ".postmaster/verify/../outside.md").status).toBe("outside");
+    expect(probeEvidencePath(wt, verify, ".postmaster/verify/ok.md")).toEqual({
+      path: ".postmaster/verify/ok.md",
+      status: "ok",
+    });
+    expect(probeEvidencePath(wt, verify, ".postmaster/verify/../outside.md").status).toBe(
+      "outside",
+    );
     symlinkSync(join(wt, "outside.md"), join(verify, "escape.md"));
     expect(probeEvidencePath(wt, verify, ".postmaster/verify/escape.md").status).toBe("outside");
     expect(probeEvidencePath(wt, verify, ".postmaster/verify/missing.md").status).toBe("missing");
@@ -190,7 +215,10 @@ describe("the script", () => {
 
   test("a criterion missing from the evidence section is a problem", () => {
     const wt = freshWorktree("missing");
-    const summary = writeSummary(wt, `# Summary\n\n## Evidence\n1. \`.postmaster/verify/ok.md\`\n3. \`.postmaster/verify/ok.md\`\n`);
+    const summary = writeSummary(
+      wt,
+      `# Summary\n\n## Evidence\n1. \`.postmaster/verify/ok.md\`\n3. \`.postmaster/verify/ok.md\`\n`,
+    );
     const { code, out } = runCheck(summary, wt);
     expect(code).toBe(2);
     expect(out).toContain("criterion 2 is missing from the evidence section");
@@ -220,7 +248,10 @@ describe("the script", () => {
 
   test("a criterion claimed shown with no evidence is a problem", () => {
     const wt = freshWorktree("bare");
-    const summary = writeSummary(wt, `# Summary\n\n## Evidence\n1. \`.postmaster/verify/ok.md\`\n2. shown\n3. \`.postmaster/verify/ok.md\`\n`);
+    const summary = writeSummary(
+      wt,
+      `# Summary\n\n## Evidence\n1. \`.postmaster/verify/ok.md\`\n2. shown\n3. \`.postmaster/verify/ok.md\`\n`,
+    );
     const { code, out } = runCheck(summary, wt);
     expect(code).toBe(2);
     expect(out).toContain("criterion 2 has no evidence path or not shown reason");
@@ -237,7 +268,9 @@ describe("the script", () => {
     );
     const dots = runCheck(viaDots, wt);
     expect(dots.code).toBe(2);
-    expect(dots.out).toContain("criterion 1 evidence is outside .postmaster/verify/: .postmaster/verify/../outside.md");
+    expect(dots.out).toContain(
+      "criterion 1 evidence is outside .postmaster/verify/: .postmaster/verify/../outside.md",
+    );
     const viaLink = writeSummary(
       wt,
       `# Summary\n\n## Evidence\n1. \`.postmaster/verify/escape.md\`\n2. \`.postmaster/verify/ok.md\`\n3. \`.postmaster/verify/ok.md\`\n`,
@@ -245,7 +278,9 @@ describe("the script", () => {
     );
     const link = runCheck(viaLink, wt);
     expect(link.code).toBe(2);
-    expect(link.out).toContain("criterion 1 evidence is outside .postmaster/verify/: .postmaster/verify/escape.md");
+    expect(link.out).toContain(
+      "criterion 1 evidence is outside .postmaster/verify/: .postmaster/verify/escape.md",
+    );
   });
 
   test("an entry for a criterion the ticket does not have is a problem", () => {
@@ -278,7 +313,10 @@ describe("the script", () => {
 
   test("an intro line before the first entry is tolerated", () => {
     const wt = freshWorktree("intro");
-    const summary = writeSummary(wt, `# Summary\n\n## Evidence\nEvidence for the three criteria.\n${evidenceAll(3).split("\n").slice(3).join("\n")}\n`);
+    const summary = writeSummary(
+      wt,
+      `# Summary\n\n## Evidence\nEvidence for the three criteria.\n${evidenceAll(3).split("\n").slice(3).join("\n")}\n`,
+    );
     const { code, out } = runCheck(summary, wt);
     expect(code).toBe(0);
     expect(out).toContain("evidence shape holds for 3 criteria");
@@ -455,7 +493,9 @@ default
     );
     const r2 = runCheck(escaping, wt);
     expect(r2.code).toBe(2);
-    expect(r2.out).toContain("criterion 1 evidence is outside .postmaster/verify/: .postmaster/verify/../outside.md");
+    expect(r2.out).toContain(
+      "criterion 1 evidence is outside .postmaster/verify/: .postmaster/verify/../outside.md",
+    );
   });
 
   test("an entry indented up to two past the base starts, as for criteria", () => {
@@ -471,7 +511,10 @@ default
 
   test("a fence body opened by an entry line holds no evidence", () => {
     const wt = freshWorktree("fenced-item");
-    const summary = writeSummary(wt, "# Summary\n\n## Evidence\n1. ```\n.postmaster/verify/ok.md\n```\n");
+    const summary = writeSummary(
+      wt,
+      "# Summary\n\n## Evidence\n1. ```\n.postmaster/verify/ok.md\n```\n",
+    );
     const { code, out } = runCheck(summary, wt);
     expect(code).toBe(2);
     expect(out).toContain("criterion 1 has no evidence path or not shown reason");
@@ -485,11 +528,17 @@ describe("criteria from ticket-check.sh", () => {
     try {
       const file = join(dir, "ticket.md");
       writeFileSync(file, ticketWith(3));
-      const r = spawnSync("bash", [ticketCheck, "--body", file, "--project", dir], { encoding: "utf8" });
+      const r = spawnSync("bash", [ticketCheck, "--body", file, "--project", dir], {
+        encoding: "utf8",
+      });
       expect(r.status).toBe(0);
       expect((r.stdout ?? "").split("\n")[0] ?? "").toBe("well-formed, 3 acceptance criteria");
       expect(criteriaFromCheckOutput(r.stdout ?? "")).toEqual([1, 2, 3]);
-      expect(criteriaFromCheckOutput("acceptance criteria: numbered 1, 3; number them 1 to 2 in order\n")).toBeUndefined();
+      expect(
+        criteriaFromCheckOutput(
+          "acceptance criteria: numbered 1, 3; number them 1 to 2 in order\n",
+        ),
+      ).toBeUndefined();
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -534,7 +583,8 @@ default
     },
     {
       name: "an unclosed comment opener is text",
-      criteria: "1. The parser fails on <!-- when nothing closes it.\n2. The second thing happens.\n",
+      criteria:
+        "1. The parser fails on <!-- when nothing closes it.\n2. The second thing happens.\n",
       count: 2,
     },
     {
@@ -544,7 +594,8 @@ default
     },
     {
       name: "items indented past the base",
-      criteria: "1. The first thing happens.\n 2. The second thing happens.\n  3. The third thing happens.\n",
+      criteria:
+        "1. The first thing happens.\n 2. The second thing happens.\n  3. The third thing happens.\n",
       count: 3,
     },
     {

@@ -116,6 +116,11 @@ Why the design is shaped as it is.
 - [A gate on the default branch after a merge runs from a clean checkout](concepts/clean-checkout-gates.md):
   **claimed**. The run's working copies stay under `.worktrees/`; the flow's post-merge gate
   runs from a clean checkout of the branch outside the project folder, so it never reads them.
+- [The dashboard shows the fleet and can do nothing to it](concepts/dashboard.md): **claimed**.
+  A read-only web page for phone, iPad and desktop. It takes every figure from the scripts that
+  already compute it, listens on a Unix socket, and is reached only by the machine's owner
+  through Tailscale's proxy over plain HTTP. It never acts, because anything it could do, an
+  agent running as the user could do too.
 
 ## Sources
 

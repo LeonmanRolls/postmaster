@@ -84,6 +84,7 @@ declare const process: {
   platform: string;
   arch: string;
   version: string;
+  execPath: string;
   stdout: {
     write(data: string | Uint8Array): boolean;
     isTTY: boolean;
@@ -169,6 +170,20 @@ declare const Bun: {
     stdout?: "inherit" | "pipe" | "ignore" | null;
     stderr?: "inherit" | "pipe" | "ignore" | null;
   }): {
+    exitCode: number;
+    stdout: Uint8Array;
+    stderr: Uint8Array;
+  };
+  spawnSync(
+    cmd: string[],
+    options?: {
+      cwd?: string;
+      env?: Record<string, string | undefined>;
+      stdin?: "inherit" | "pipe" | "ignore" | null | Uint8Array | string;
+      stdout?: "inherit" | "pipe" | "ignore" | null;
+      stderr?: "inherit" | "pipe" | "ignore" | null;
+    },
+  ): {
     exitCode: number;
     stdout: Uint8Array;
     stderr: Uint8Array;
@@ -806,9 +821,14 @@ declare module "bun:test" {
   }
   export function expect(actual: unknown): Matchers;
   export function test(name: string, fn: () => unknown, timeout?: number): void;
+  export namespace test {
+    export function skipIf(
+      condition: boolean,
+    ): (name: string, fn: () => unknown, timeout?: number) => void;
+  }
   export function describe(name: string, fn: () => void): void;
-  export function beforeAll(fn: () => unknown): void;
-  export function afterAll(fn: () => unknown): void;
-  export function beforeEach(fn: () => unknown): void;
-  export function afterEach(fn: () => unknown): void;
+  export function beforeAll(fn: () => unknown, timeout?: number): void;
+  export function afterAll(fn: () => unknown, timeout?: number): void;
+  export function beforeEach(fn: () => unknown, timeout?: number): void;
+  export function afterEach(fn: () => unknown, timeout?: number): void;
 }

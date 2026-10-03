@@ -2,23 +2,31 @@
 // Stage B does — `bun scripts/run-clash.ts <repo> <ticket-id>` — against a throwaway git
 // repository, so a clean pass and every refusal are shown through the identical command.
 
-import { describe, expect, test, beforeAll, afterAll } from "bun:test";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync, existsSync, symlinkSync, chmodSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join, dirname, resolve } from "node:path";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import {
+  ADVICE,
   collectClashes,
   formatFree,
   formatReport,
+  GIT_LOCATION_ENV,
+  isTicketBranch,
   isUsableTicketId,
   isWbBranch,
-  isTicketBranch,
   parseBranchNames,
   runDirPath,
   stripGitLocationEnv,
-  GIT_LOCATION_ENV,
-  ADVICE,
 } from "./run-clash";
 
 const script = join(import.meta.dir, "run-clash.ts");
@@ -106,10 +114,7 @@ describe("pure core", () => {
   });
 
   test("parseBranchNames strips refs/heads/ and skips anything else", () => {
-    expect(parseBranchNames("refs/heads/75\nrefs/heads/wb/75-a\n")).toEqual([
-      "75",
-      "wb/75-a",
-    ]);
+    expect(parseBranchNames("refs/heads/75\nrefs/heads/wb/75-a\n")).toEqual(["75", "wb/75-a"]);
     expect(parseBranchNames("refs/heads/main\n\nrefs/tags/75\n")).toEqual(["main"]);
     expect(parseBranchNames("")).toEqual([]);
   });

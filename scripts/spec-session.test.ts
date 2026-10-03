@@ -174,7 +174,10 @@ describe("a brief", () => {
   test("copies a preferences file word for word", () => {
     const s = scratch();
     try {
-      writeFileSync(join(s.cfgDir, "preferences.md"), "Prefer short sentences.\nAnd concrete names.\n");
+      writeFileSync(
+        join(s.cfgDir, "preferences.md"),
+        "Prefer short sentences.\nAnd concrete names.\n",
+      );
       const r = go(s.cfgDir, "brief", s.d);
       expect(r.status).toBe(0);
       const body = readFileSync(join(s.d, "spec-session-brief.md"), "utf8");
@@ -198,7 +201,7 @@ describe("a brief", () => {
       const r = go(s.cfgDir, "brief", s.d);
       expect(r.status).toBe(0);
       const body = readFileSync(join(s.d, "spec-session-brief.md"), "utf8");
-      expect(body).toMatch(/alpha: commit `[0-9a-f]{40}`/);
+      expect(body).toMatch(/alpha: commit `[0-9a-f]{40}`/u);
       expect(body).toContain("Draft text:");
       expect(body).toContain("  draft A");
       expect(body).not.toContain("There are no lane drafts.");
@@ -210,7 +213,10 @@ describe("a brief", () => {
   test("fails when the editor link cannot be built", () => {
     const s = scratch();
     try {
-      writeFileSync(join(s.d, "run.json"), '{"config":{"planning":{"review_link":"https://code.example/open"}}}\n');
+      writeFileSync(
+        join(s.d, "run.json"),
+        '{"config":{"planning":{"review_link":"https://code.example/open"}}}\n',
+      );
       const r = go(s.cfgDir, "brief", s.d);
       expect(r.status).not.toBe(0);
       expect(r.stderr).toContain("cannot build the editor link");
@@ -270,7 +276,11 @@ describe("a brief", () => {
       const wt = join(repoDir, ".worktrees", "RUN-1-alpha");
       initRepo(wt);
       commitFile(wt, "WORKHORSE-SPEC.md", "spaced draft\n", "draft");
-      rewriteWaybillLine(s.d, "repo:", `repo: ${repoDir}          default branch: main       BASE: abc`);
+      rewriteWaybillLine(
+        s.d,
+        "repo:",
+        `repo: ${repoDir}          default branch: main       BASE: abc`,
+      );
       const r = go(s.cfgDir, "brief", s.d);
       expect(r.status).toBe(0);
       const body = readFileSync(join(s.d, "spec-session-brief.md"), "utf8");
@@ -305,7 +315,8 @@ describe("an approval", () => {
     try {
       writeFileSync(join(s.d, "spec-decisions.md"), "");
       const before = head(s.synth);
-      const edited = "# Workhorse spec: scratch\n\nBuild the thing.\n\nA new line the user added.\n";
+      const edited =
+        "# Workhorse spec: scratch\n\nBuild the thing.\n\nA new line the user added.\n";
       writeFileSync(join(s.d, "spec-review", "WORKHORSE-SPEC.md"), edited);
       const r = go(s.cfgDir, "approve", s.d);
       expect(r.status).toBe(0);
@@ -359,7 +370,10 @@ describe("an approval", () => {
     const s = scratch();
     try {
       writeFileSync(join(s.d, "spec-decisions.md"), "");
-      writeFileSync(join(s.synth, "WORKHORSE-SPEC.md"), "# Workhorse spec: scratch\n\nA stray edit.\n");
+      writeFileSync(
+        join(s.synth, "WORKHORSE-SPEC.md"),
+        "# Workhorse spec: scratch\n\nA stray edit.\n",
+      );
       const before = head(s.synth);
       const r = go(s.cfgDir, "approve", s.d);
       expect(r.status).toBe(2);
@@ -375,7 +389,10 @@ describe("an approval", () => {
     const s = scratch();
     try {
       writeFileSync(join(s.d, "spec-decisions.md"), "");
-      writeFileSync(join(s.synth, "WORKHORSE-SPEC.md"), "# Workhorse spec: scratch\n\nA stray edit.\n");
+      writeFileSync(
+        join(s.synth, "WORKHORSE-SPEC.md"),
+        "# Workhorse spec: scratch\n\nA stray edit.\n",
+      );
       writeFileSync(
         join(s.d, "spec-review", "WORKHORSE-SPEC.md"),
         "# Workhorse spec: scratch\n\nBuild the thing.\n\nA new line the user added.\n",

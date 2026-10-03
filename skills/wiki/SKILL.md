@@ -86,10 +86,10 @@ A health check. Run it before committing any change to the wiki.
 
 ```sh
 scripts/wiki-lint.sh              # faults on stdout, exit 1 if any
-scripts/wiki-lint.sh --self-test  # each check fails on its own fault; a clean tree passes
+bun test scripts/wiki-lint.test.ts  # each check fails on its own fault; a clean tree passes
 ```
 
-**What the script checks.** The self-test has a failing case for every item here:
+**What the script checks.** The tests beside it have a failing case for every item here:
 
 - every page has front matter with `title`, `type` and `updated`, and a concept also has a
   `standing` that is one of the five
