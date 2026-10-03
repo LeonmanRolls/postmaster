@@ -349,15 +349,15 @@ function exerciseSelfTest(sourceRoot: string): number {
     "scripts/fixture.ts",
   );
   runCase(
-    "a wording fix in premises.sh answers yes",
+    "a wording fix in premises.ts answers yes",
     (repo) =>
       replaceOnce(
         repo,
-        "scripts/premises.sh",
-        "# Check the ticket's premises still hold at the run's base.",
-        "# Check the ticket's premises still hold at the run's base",
+        "scripts/premises.ts",
+        "// # Check the ticket's premises still hold at the run's base.",
+        "// # Check the ticket's premises still hold at the run's base",
       ),
-    "scripts/premises.sh",
+    "scripts/premises.ts",
   );
   runCase(
     "a wording fix in summary-evidence.ts answers yes",

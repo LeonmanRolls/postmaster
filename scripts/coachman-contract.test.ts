@@ -199,7 +199,7 @@ describe("a broken contract list is an error", () => {
 });
 
 describe("the current index recognises its new files", () => {
-  const NEW_FILES = ["skills/postmaster/workhorse-spec-template.md", "scripts/summary-evidence.ts"];
+  const NEW_FILES = ["scripts/premises.ts", "scripts/summary-evidence.ts"];
 
   /** A git repo carrying the real contract index and the two new files. */
   function realFixture(dir: string): { repo: string; base: string } {

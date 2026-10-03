@@ -1,3 +1,4 @@
+// # Check the ticket's premises still hold at the run's base.
 // Check the ticket's premises still hold at the run's base. Each place the agents' part
 // cites — by a link at a commit or as a path in a code span — is compared between its
 // Verified at commit and the run's base: same, moved (the cited text is elsewhere in the

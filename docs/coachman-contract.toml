@@ -77,7 +77,7 @@ path = "scripts/fixture.ts"
 holds = "the fixture-copy mark new writes, and scoring a run from its records"
 
 [[files]]
-path = "scripts/premises.sh"
+path = "scripts/premises.ts"
 holds = "the premises check: what the ticket's agents' part cites, between its verified commit and the run's base"
 
 [[files]]

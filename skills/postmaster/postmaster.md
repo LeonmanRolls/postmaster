@@ -65,23 +65,14 @@ the action for anything without its own verb.
    the parts named, or the `turnpikes:` line it prints, as the detail. Exit 0 means the shape
    is complete; whether the ticket is dispatchable is still step 2's test. Exit 1 means it
    could not be read, and the message says why. Exit 2 names each missing or malformed part on
-   its own line: save the ticket's body as your base with the adapter's `read <id> --body` (a
-   draft is its own base), draft each part from the stream and the ticket's own text, and put
-   the ticket, the check's lines and your drafts to the user together. A missing
+   its own line: the ticket stays in the plan, not ready. The booking clerk prepares it with
+   the user when the user asks to implement it. A missing
    `## Turnpikes` is proposed as `default`, with what the target project's
    `<tool>/scripts/turnpikes.sh resolve --project <repo> default` says it stands for; the user
    may name fewer, others, or `none`.
-4. **Write back the user's answer and nothing else.** Write the parts as the user gave or
-   approved them, each under its `##` heading, to a sections file, and splice them into the
-   base: `<tool>/scripts/ticket-check.sh --splice <base> <sections> > <new>` changes those sections
-   and no other line. Check `<new>` with `<tool>/scripts/ticket-check.sh --body <new> --project <repo>`. Write it with
-   the adapter's `edit <id> <new> <base>` (`trackers.md`), log `ticket-edit`, and check the
-   ticket again by its id; a draft's `<new>` replaces its file. `edit` never changes a title,
-   so a missing one is the user's to set in the tracker. On exit 4 the ticket changed after
-   you saved the base: go back to step 3. A user who edits the ticket in the tracker has
-   answered: check it again and write nothing. A ticket that still fails stays out of the
-   plan, and `plan.md` says what it waits on.
-   [Why a ticket is checked, and only the user's answer written back](../../wiki/concepts/ticket-shape.md)
+4. **A ticket that fails the shape check stays out of the dispatch queue.** The postmaster does
+   not draft its missing parts: the booking clerk does, with the user. Record what it waits on
+   in `plan.md`.
 5. **Propose before creating** unless `tracker.postmaster_may_create` is true. Show the
    user each ticket's title, priority, direction, turnpikes and one-line rationale, then create
    the ones they approve through the tracker adapter, logging `ticket-create` per ticket, and
@@ -97,11 +88,17 @@ the action for anything without its own verb.
 
 For the next ticket in order, when the run ceiling (`team.max_runs`) has room:
 
-1. **Check the ticket once more:** `<tool>/scripts/ticket-check.sh <repo> <id>` exits 0, logged as
-   `ticket-check`. On exit 2 it goes back to Stage A, step 3, and the next ticket in order is
-   taken instead. When `<tool>/scripts/turnpikes.sh short --project <repo> '<the turnpikes: line it printed>'`
-   names any project default, the ledger must hold the user's word on this ticket's turnpikes
-   (Stage A, step 5); if it does not, ask them, and log their word, before going on.
+1. **Check the ticket's readiness:** `<tool>/scripts/ticket-ready.sh <repo> <id>` exits 0.
+   On exit 2 it is not ready: start a booking clerk session for it
+   (`<tool>/scripts/clerk-session.sh brief <repo> <id>` writes the brief; then spawn the clerk
+   through `host.sh spawn` with the interactive form), log `dispatch` with the target `clerk`,
+   and go on with the other tickets it was asked for. The postmaster never dispatches a ticket
+   that is not ready. On exit 1 the refusal goes to the user. When the user asks the postmaster
+   to implement a ticket that is not ready, alone or in a stream, it starts a clerk session for
+   it instead of dispatching it. If a clerk session for that ticket is already open, say so and
+   start no second one. When the user asks for nothing, no clerk starts. The user's sign-off on
+   the ticket's turnpikes is in the ledger (the readiness script's mark verb logged it); the
+   turnpike question is not asked again at dispatch.
 2. **Base pre-flight.** `<tool>/scripts/check-target.sh <repo>` exits 0 and the main checkout is on
    the default branch. On 2, the dirty-tree question goes to the user (`SKILL.md`); you
    never stash, reset or discard anything. The config is checked too, for the legs this run
@@ -142,8 +139,8 @@ For the next ticket in order, when the run ceiling (`team.max_runs`) has room:
    `<tool>/scripts/verify.sh record
    <repo> <dispatch> --gate '<gate>'` writes `checks.json`, the checks the run is held to, and
    prints them for the waybill; a gate the project declares wins over the launch card's, and
-   `record` says so. `<tool>/scripts/spec-review-link.sh --validate <dispatch>` also exits 0:
-   the captured `planning.review_link`, if set, must contain `{path}`. On refusal, log a `note`
+   `record` says so.
+   On refusal, log a `note`
    with the config error, tell the user what to fix, set the undispatched run to `abandoned`,
    and do not cut worktrees or move the ticket in progress.
 6. **Cut the synthesis worktree** at BASE, the sha you recorded from `git -C <repo> rev-parse
@@ -289,7 +286,7 @@ is what needs judgment or what it could not complete:
 - **RULE:** an escalation is waiting. Stage E.
 - **GATE:** the ship card is complete. Contract 2 goes to current Stage F; an older run goes to
   Legacy Stage F.
-- **SPEC:** a spec review package is waiting (`.spec-review-ready`). Spec review, below.
+- **SPEC:** an older run's spec review package is waiting (`.spec-review-ready`). Spec review, above.
 - **DISPATCH:** the watcher could not take the dispatch. If the hand-off check fails, leg `n`
   is not finished: remove its `.leg-<n>-done` marker and resume leg `n` (Stage C step 5, with
   `n` in place of the next leg), the prompt naming the missing sections and saying "Complete
@@ -348,86 +345,13 @@ the exited marker lands. `runs-status.sh` reads this record and never classifies
 `.err`. Every transition is one `log-action` line; the narrative in your own notes is for the
 user, never the record.
 
-## Spec review: one spec for the run, to the user before any code
+## Spec review: older runs only
 
-On `.spec-review-ready`, the planning stage has paused for the user. Read
-`<dispatch>/spec-review.md`: one entry for the run's spec, with the commit of the
-coachman's `WORKHORSE-SPEC.md`, and the link that opens it in the user's editor. The coachman
-built the link with `<tool>/scripts/spec-review-link.sh` from the run's recorded
-`planning.review_link` template, as `ship.review_link` is for the ship card; `{path}` is the
-folder that holds the copy under review, `<dispatch>/spec-review/`, and with no template it
-is the file's path. A revised spec comes back as a new entry at its new commit. In a fixture
-run (`<tool>/scripts/fixture.sh`) there is no user to ask: you sign the one spec off yourself,
-deciding approved, changes or dropped as the user would, through the same `fresh`, `record`
-and `count` steps below, and no spec session and no `.waiting-on-user` are written. Every
-other line of this section holds.
-
-1. **Start a spec session.** A new package starts a new `spec-decisions.md`:
-   `<tool>/scripts/spec-decisions.sh <dispatch> fresh`, so no stanza from an earlier package
-   survives into this one. In a run with a person to ask, run
-   `<tool>/scripts/spec-session.sh brief <dispatch>`, which writes the session's brief to
-   `<dispatch>/spec-session-brief.md`: the ticket as the waybill carries it, the editor link
-   and the copy's path, the lanes' drafts by commit, with the draft text, where the run
-   has any, the user's standing
-   preferences from `preferences.md` beside the machine config, and the path of the session's
-   runbook, `<tool>/skills/postmaster/spec-session.md`. Start the session with
-   `<tool>/scripts/host.sh spawn`, rooted in the project so it opens in the project's space,
-   in the interactive form `harnesses.md` gives for the harness, model and effort the run
-   recorded for `team.postmaster`, labelled `<ticket name> · spec` with the ticket
-   name from `<tool>/scripts/host.sh name <dispatch>`. The handle carries the package's
-   spec commit, short, so a revised package spawns a new session instead of colliding
-   with the earlier one, which stays open until the user closes it: `spawn` refuses a
-   handle a live session already has.
-
-   ```sh
-   SHA=$(git -C <repo> rev-parse --short <the spec commit from spec-review.md>)
-   <tool>/scripts/host.sh spawn "spec-$(<tool>/scripts/host.sh name <dispatch>)-$SHA" <repo> \
-       --label "$(<tool>/scripts/host.sh name <dispatch>) · spec" -- <interactive form>
-   ```
-
-   Write a one-line prompt file telling it to read `<dispatch>/spec-session-brief.md` and work
-   on the copy with the user, send it with `<tool>/scripts/host.sh send <handle> <prompt-file>`
-   on the session's handle (`hosts.md`), and log `dispatch` with the target `spec-session`.
-   Write `.waiting-on-user` naming the session and the link, and add the run to the waiting
-   list with `<tool>/scripts/host.sh leg waiting add <runs> <ticket>
-   <dispatch>/.waiting-on-user`: while the marker is set the poll reports USER, not SPEC, so
-   the package is never taken twice. With no session host (`spawn` exits 3), there is no session
-   to send to: do not send a prompt and do not log a `dispatch` line. Put the spec to the
-   user in this conversation instead, showing the link and the commit, and ask for a
-   decision: approved; changes requested in their words; or stop the run. Write
-   `.waiting-on-user` with the link and the commit in this path too, and add the run to the
-   waiting list the same way, so the poll reports USER while the user decides. Never show
-   any of it to a workhorse. A fixture run gets no session.
-2. **On the user's word, record the decision** with `<tool>/scripts/spec-session.sh approve
-   <dispatch>` when they approve the copy the session worked on: it commits the copy as
-   `WORKHORSE-SPEC.md` in the synthesis worktree when it differs from what is committed
-   there, commits nothing when it does not, records `approved` at the resulting commit
-   through `<tool>/scripts/spec-decisions.sh`, and prints that commit. For changes in the
-   user's words, or a stop, record them directly with
-   `<tool>/scripts/spec-decisions.sh <dispatch> record <decision> <commit> <the user's words>`,
-   where `<decision>` is `changes` or `dropped`, `<commit>` the spec commit the user saw, and
-   the words are the user's own, carried verbatim. One decision per call, at the moment it is
-   given. The script appends the `## spec` stanza and logs the `spec-review` line; it refuses
-   a second stanza, a `changes` with no words, and a decision with no commit. The file holds
-   this package's decision only.
-3. **When the package is decided, send it back.** Remove `.waiting-on-user` and
-   `.spec-review-ready`, remove the run from the waiting list with
-   `<tool>/scripts/host.sh leg waiting remove <runs> <ticket>`, then resume the current leg
-   (Stage C step 5) with the decisions file as what it must read. The marker is consumed
-   here, on every path, before the resume, as `.card-ready` is before a word is delivered:
-   a fresh package touches it afresh, so SPEC always means a package nobody has taken yet.
-   Read the numbers first:
-   `<tool>/scripts/spec-decisions.sh <dispatch> count` prints `approved 0|1` and
-   `changes 0|1`. Branch on the numbers, never by reading the files:
-   - **`changes` above zero:** the coachman revises the spec from the user's words and pauses
-     with a fresh package, which goes to a spec session the same way, until the spec is
-     approved or the run stops.
-   - **No changes, not approved (`dropped`):** the run stops. Tell the user why, carrying
-     their words; the coachman stops on resume and writes an escalation; the user alone
-     abandons the run.
-   - **No changes, approved:** the coachman goes on to implementation.
-   Log every step; the planning span the stage timings show is this stage, drafting through
-   the last decision, with the user's review inside it.
+A run dispatched before the booking clerk change pauses for a spec review. Handle it from that
+run's own copy of the tool: its pinned checkout at `<rt>`, resolved per run by
+`<rt>/scripts/run-meta.sh path`. The Spec review section of `<rt>/skills/postmaster/postmaster.md`
+carries the steps; run them with `<rt>`'s scripts. A run dispatched from this version writes no
+spec and pauses for no spec review.
 
 ## Stage E: rulings
 
@@ -782,10 +706,10 @@ only with the user's word for that specific thing, and the word is logged. A loc
 
 ## Hard rules
 
-- Never implement or judge a workhorse, or launch one; facilitate the user's spec review as
-  Spec review says. Never edit source or write a coachman's hand-off or card for it.
+- Never implement or judge a workhorse, or launch one; start a booking clerk when the user asks
+  to implement a ticket that is not ready. Never edit source or write a coachman's hand-off or card for it.
 - Never create a ticket without the user's word unless the config says you may.
-- Never dispatch a ticket that `<tool>/scripts/ticket-check.sh` fails, and never change a ticket's
+- Never dispatch a ticket that `<tool>/scripts/ticket-ready.sh` does not say is ready, and never change a ticket's
   text without the user's word for that text.
 - For contract 2, merge locally only on the `MERGE_AUTHORITY` path in Stage F; never merge a
   pull request on the user's behalf. For a legacy run, never say the merge word without
