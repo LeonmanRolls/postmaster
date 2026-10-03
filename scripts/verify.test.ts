@@ -1060,7 +1060,7 @@ describe("a result belongs to a commit", () => {
 
   test("discover runs verify from the tool root against the absolute target", () => {
     const src = readFileSync(join(HERE, "discover-project.ts"), "utf8");
-    expect(src.includes('["checks", ABS,')).toBe(true);
+    expect(src.includes('["verify", "checks", ABS,')).toBe(true);
     expect(src.includes("cwd: toolRoot(import.meta)")).toBe(true);
   });
 

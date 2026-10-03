@@ -697,7 +697,7 @@ describe("new: a fresh repo outside every other, with its ticket in its own stor
       failingLocal,
       "#!/usr/bin/env bash\n" +
         "# Stands in for scripts/run local: makes the store, and fails to file the ticket.\n" +
-        `case $2 in store) exec "${join(HERE, "run")}" "$@" ;; *) exit 1 ;; esac\n`,
+        `case $3 in store) exec "${join(HERE, "run")}" "$@" ;; *) exit 1 ;; esac\n`,
     );
     run("chmod", ["+x", failingLocal]);
     const origLocal = process.env.LOCAL_SH;

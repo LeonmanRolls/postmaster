@@ -162,7 +162,7 @@ beforeAll(() => {
         POSTMASTER_CONFIG: join(tmp, `${f}.toml`),
         PATH: `${join(tmp, "bin")}:${process.env.PATH ?? ""}`,
       };
-      const r = spawnSync(self, rest, { encoding: "utf8", env });
+      const r = spawnSync(self, ["launch", ...rest], { encoding: "utf8", env });
       out = r.stdout ?? "";
       err = r.stderr ?? "";
       rc = r.status ?? 1;
@@ -207,7 +207,7 @@ beforeAll(() => {
     const runDir = (runName: string): string => join(tmp, "repo", ".postmaster", "runs", runName);
     const record = (runName: string, f: string): void => {
       mkdirSync(runDir(runName), { recursive: true });
-      const r = spawnSync(join(here, "run"), [runDir(runName), join(tmp, "repo")], {
+      const r = spawnSync(join(here, "run"), ["run-meta", runDir(runName), join(tmp, "repo")], {
         encoding: "utf8",
         env: {
           ...process.env,
@@ -385,7 +385,7 @@ beforeAll(() => {
     {
       const r = spawnSync(
         self,
-        ["launch", "coachman", join(tmp, "wt"), join(tmp, "prompt.txt"), "--leg", "synthesis"],
+        ["launch", "launch", "coachman", join(tmp, "wt"), join(tmp, "prompt.txt"), "--leg", "synthesis"],
         {
           encoding: "utf8",
           env: {
@@ -427,7 +427,7 @@ beforeAll(() => {
     const calls = (...paths: string[]): { code: number; out: string } => {
       const results: string[] = [];
       const CALL = new RegExp(
-        `scripts/(?:launch\\.sh[${PY_S_CLASS}]+(?:launch|resume)|host\\.sh[${PY_S_CLASS}]+leg[${PY_S_CLASS}]+(?:launch|resume|takeover|retry))${BOUND_R}`,
+        `scripts/run[${PY_S_CLASS}]+(?:launch[${PY_S_CLASS}]+(?:launch|resume)|(?:run-meta[${PY_S_CLASS}]+run-pinned[^\\n]*?|host)[${PY_S_CLASS}]+leg[${PY_S_CLASS}]+(?:launch|resume|takeover|retry))${BOUND_R}`,
         "gu",
       );
       for (const path of paths) {
@@ -445,7 +445,7 @@ beforeAll(() => {
               while ((m = CALL.exec(line)) !== null) {
                 const c = line.slice(m.index);
                 const recorded =
-                  c.includes("--run <dispatch>") || c.includes("scripts/run host leg");
+                  c.includes("--run <dispatch>") || c.includes("scripts/run host leg") || c.includes("scripts/run run-meta run-pinned");
                 results.push(`${recorded ? "run" : "unrun"} ${path}: ${pyWords(c).join(" ")}`);
               }
             }
@@ -458,7 +458,7 @@ beforeAll(() => {
               while ((m = CALL.exec(inner)) !== null) {
                 const c = inner.slice(m.index);
                 const recorded =
-                  c.includes("--run <dispatch>") || c.includes("scripts/run host leg");
+                  c.includes("--run <dispatch>") || c.includes("scripts/run host leg") || c.includes("scripts/run run-meta run-pinned");
                 results.push(`${recorded ? "run" : "unrun"} ${path}: ${pyWords(c).join(" ")}`);
               }
             }
@@ -553,15 +553,15 @@ beforeAll(() => {
     );
     {
       // Unicode primitives, BASE run launch python: every expectation python3-verified.
-      writeFileSync(join(tmp, "uni.md"), "```sh\nscripts/launch.sh\x1flaunch u1 <wt> <p>\n```\n");
+      writeFileSync(join(tmp, "uni.md"), "```sh\nscripts/run\x1flaunch\x1flaunch u1 <wt> <p>\n```\n");
       const u1 = calls(join(tmp, "uni.md"));
       check("calls finds an invocation spaced with U+001F", u1.out.includes("u1"), u1.out);
-      writeFileSync(join(tmp, "uni2.md"), "```sh\nscripts/launch.sh\rlaunch u2 <wt> <p>\n```\n");
+      writeFileSync(join(tmp, "uni2.md"), "```sh\nscripts/run\rlaunch r u2 <wt> <p>\n```\n");
       const u2 = calls(join(tmp, "uni2.md"));
       check("calls misses an invocation broken by CR (splitlines)", !u2.out.includes("u2"), u2.out);
       const contGot = "a\\\n\x1fb".replace(CONT_RE, " ");
       check("continuations join across U+001F", contGot === "a b", JSON.stringify(contGot));
-      const fenceGot = "a\r```sh\nscripts/launch.sh launch x\n```\nb".split(FENCE_SPLIT_RE);
+      const fenceGot = "a\r```sh\nscripts/run launch launch x\n```\nb".split(FENCE_SPLIT_RE);
       check("fences do not open after CR", fenceGot.length === 1, String(fenceGot.length));
     }
     run("git", ["init", "-q", join(tmp, "repo")]);
@@ -1086,7 +1086,7 @@ beforeAll(() => {
       const got = `${out
         .replace(/\n+$/u, "")
         .split("\n")
-        .map((l) => l.replace(/^([a-z]+) .*launch\.sh (launch|resume) ([a-z]) .*/u, "$1 $3"))
+        .map((l) => l.replace(/^([a-z]+) .*run launch (launch|resume) ([a-z]) .*/u, "$1 $3"))
         .join(",")},`;
       if (got === "unrun a,run b,unrun c,run d,") {
         ok("a runbook launch or resume with no --run is found, fenced or inline");
@@ -1116,7 +1116,7 @@ beforeAll(() => {
       const claude = join(tmp, "bin", "claude");
       const saved = readFileSync(claude, "utf8");
       writeFileSync(claude, "#!/bin/sh\nkill -TERM $$\n");
-      const r = spawnSync(self, ["launch", "one", join(tmp, "wt"), join(tmp, "prompt.txt")], {
+      const r = spawnSync(self, ["launch", "launch", "one", join(tmp, "wt"), join(tmp, "prompt.txt")], {
         encoding: "utf8",
         env: {
           ...process.env,
@@ -1402,13 +1402,13 @@ beforeAll(() => {
         "log",
         "--format=%H",
         "--",
-        "scripts/run launch",
+        "scripts/launch.sh",
       ]);
       for (const c of log.out
         .split("\n")
         .map((s) => s.trim())
         .filter(Boolean)) {
-        const show = run("git", ["-C", toolRoot(import.meta), "show", `${c}:scripts/run launch`]);
+        const show = run("git", ["-C", toolRoot(import.meta), "show", `${c}:scripts/launch.sh`]);
         if (
           show.code === 0 &&
           show.out.split("\n").length > 10 &&
@@ -1422,7 +1422,7 @@ beforeAll(() => {
       }
       hasPy3 = !skipPython;
       check(
-        "BASE run launch extracts with its source-and-exec tail",
+        "BASE launch.sh extracts with its source-and-exec tail",
         baseLaunch !== "",
         `base=${baseLaunch || "none"}`,
       );
@@ -2228,7 +2228,7 @@ beforeAll(() => {
         POSTMASTER_CONFIG: join(tmp, `${f}.toml`),
         PATH: `${join(tmp, "bin")}:${process.env.PATH ?? ""}`,
       };
-      const r = spawnSync(self, rest, { encoding: "utf8", env, input: "leak\n" });
+      const r = spawnSync(self, ["launch", ...rest], { encoding: "utf8", env, input: "leak\n" });
       out = r.stdout ?? "";
       err = r.stderr ?? "";
       rc = r.status ?? 1;
@@ -2320,7 +2320,7 @@ beforeAll(() => {
         POSTMASTER_CONFIG: join(tmp, "muse-bare.toml"),
         PATH: `${join(tmp, "bin")}:${process.env.PATH ?? ""}`,
       };
-      const r = spawnSync(self, ["launch", "m", join(tmp, "elsewhere"), "sub/p.txt"], {
+      const r = spawnSync(self, ["launch", "launch", "m", join(tmp, "elsewhere"), "sub/p.txt"], {
         encoding: "utf8",
         env,
         stdio: ["ignore", "pipe", "pipe"],
@@ -2510,7 +2510,7 @@ beforeAll(() => {
         POSTMASTER_CONFIG: join(tmp, "mimo-bare.toml"),
         PATH: `${join(tmp, "bin")}:${process.env.PATH ?? ""}`,
       };
-      const r = spawnSync(self, ["launch", "x", join(tmp, "elsewhere"), "sub/p.txt"], {
+      const r = spawnSync(self, ["launch", "launch", "x", join(tmp, "elsewhere"), "sub/p.txt"], {
         encoding: "utf8",
         env,
         stdio: ["ignore", "pipe", "pipe"],
@@ -2597,7 +2597,7 @@ beforeAll(() => {
     symlinkSync(join(here, "lib"), join(tmp, "lib"));
 
     const bypassed = (script: string, flag: string, ...formArgs: string[]): boolean => {
-      const r = spawnSync(script, ["form", ...formArgs], {
+      const r = spawnSync(script, script === self ? ["launch", "form", ...formArgs] : ["form", ...formArgs], {
         encoding: "utf8",
         env: {
           ...process.env,
@@ -3813,7 +3813,7 @@ beforeAll(() => {
           "-C",
           dirname(here),
           "show",
-          "e902378fd4a4b39aa41870da2c771b6963525517:scripts/run launch",
+          "e902378fd4a4b39aa41870da2c771b6963525517:scripts/launch.sh",
         ],
         { encoding: "utf8" },
       );
@@ -3878,7 +3878,7 @@ beforeAll(() => {
           const codes: Record<string, number> = {};
           for (const [side, bin, argv] of [
             ["base", "bash", [baseLaunch, ...args]],
-            ["port", self, args],
+            ["port", self, ["launch", ...args]],
           ] as Array<[string, string, string[]]>) {
             rmSync(recOf(harness), { force: true });
             const r = spawnSync(bin, argv, { cwd: startlink, encoding: "utf8", env });
@@ -4142,8 +4142,8 @@ describe("negative controls", () => {
   test("an env file that execs never launches", () => {
     assertControl("an env file that execs never launches");
   });
-  test("BASE run launch extracts with its source-and-exec tail", () => {
-    assertControl("BASE run launch extracts with its source-and-exec tail");
+  test("BASE launch.sh extracts with its source-and-exec tail", () => {
+    assertControl("BASE launch.sh extracts with its source-and-exec tail");
   });
   test.skipIf(skipPython)(
     "parity: an echo in the file reaches stdout and the full env reaches the harness",

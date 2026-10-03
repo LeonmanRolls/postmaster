@@ -717,14 +717,14 @@ function buildRecord(
   pinnedCommit: string,
 ): Built {
   if (tryTomlFile(config) === null) return { ok: false, messages: [] };
-  const settingsScript = join(TOOL, "scripts", "run project-settings");
-  const inspected = run(settingsScript, ["inspect", resolvedRepo]);
+  const settingsScript = join(TOOL, "scripts", "run");
+  const inspected = run(settingsScript, ["project-settings", "inspect", resolvedRepo]);
   if (inspected.code !== 0) {
     return { ok: false, messages: [pyTrim(inspected.err) || "project settings could not be read"] };
   }
   const settings = parseSettingsJson(inspected.out, "project settings");
   if ("error" in settings) return { ok: false, messages: [settings.error] };
-  const effective = run(settingsScript, ["effective", resolvedRepo, config]);
+  const effective = run(settingsScript, ["project-settings", "effective", resolvedRepo, config]);
   if (effective.code !== 0) {
     return {
       ok: false,
