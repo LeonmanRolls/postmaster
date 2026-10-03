@@ -402,8 +402,51 @@ function pathOf(d: string): Outcome {
   return ok(`${canonical}\n`);
 }
 
-// check_pin <dispatch>: the run's checkout still serves its dispatch commit. Silent on success.
-function checkPin(d: string): Outcome {
+// check_confinement <run.json>: the recorded mode agrees with the recorded config.
+// Mode disagreeing with config.confine fails; a run without the object is accepted
+// only when its config resolves to off.
+function checkConfinement(runJson: string): Outcome {
+  let r: unknown;
+  try {
+    r = JSON.parse(readFileSync(runJson, "utf8")) as unknown;
+  } catch {
+    return fail(`run-meta: ${runJson} cannot be read\n`);
+  }
+  if (typeof r !== "object" || r === null || Array.isArray(r)) {
+    return fail(`run-meta: ${runJson} is not an object\n`);
+  }
+  const rec = r as Record<string, unknown>;
+  const cfg = rec.config;
+  const configConfine =
+    typeof cfg === "object" && cfg !== null && !Array.isArray(cfg)
+      ? String((cfg as Record<string, unknown>).confine ?? "") === "on"
+      : false;
+  const conf = rec.confinement;
+  if (conf === undefined || conf === null) {
+    // A run without the object is accepted only when its config resolves to off.
+    if (configConfine) {
+      return fail(
+        `run-meta: ${runJson} records no confinement object but its config has confine on\n`,
+      );
+    }
+    return ok();
+  }
+  if (typeof conf !== "object" || Array.isArray(conf)) {
+    return fail(`run-meta: ${runJson} records a confinement that is not an object\n`);
+  }
+  const mode = (conf as Record<string, unknown>).mode;
+  const recordedOn = mode === "on";
+  if (recordedOn !== configConfine) {
+    return fail(
+      `run-meta: ${runJson} records confinement mode "${String(mode)}" but its config confine is ${configConfine ? "on" : "not on"}\n`,
+    );
+  }
+  return ok();
+}
+
+// check_pin <dispatch>: the run's checkout still serves its dispatch commit,
+// and its recorded confinement mode agrees with its config. Silent on success.
+function checkPinAndConfinement(d: string): Outcome {
   const runJson = join(d, "run.json");
   const at = pathOf(d);
   if (at.code !== 0) return at;
@@ -417,7 +460,7 @@ function checkPin(d: string): Outcome {
     if (git(checkout, "rev-parse", "--git-dir") === null) {
       return fail(`run-meta: ${checkout} is not a git checkout\n`);
     }
-    return ok();
+    return checkConfinement(runJson);
   }
   const commit = fieldCommit(runJson);
   if (commit === "") return fail(`run-meta: ${d}/run.json records no postmaster commit\n`);
@@ -437,7 +480,7 @@ function checkPin(d: string): Outcome {
         "it does not serve that commit's versions\n",
     );
   }
-  return ok();
+  return checkConfinement(runJson);
 }
 
 // --- pin scan -------------------------------------------------------------------------------
@@ -799,6 +842,8 @@ function buildRecord(
     : [];
   const harnessVersions: Record<string, string> = {};
   for (const h of collectHarnesses(resolvedConfig)) harnessVersions[h] = version(h);
+  const confineVal = resolvedConfig.confine;
+  const confinementMode = String(confineVal ?? "") === "on" ? "on" : "off";
   return {
     ok: true,
     warnings,
@@ -818,6 +863,7 @@ function buildRecord(
         checkout,
       },
       config: resolvedConfig,
+      confinement: { mode: confinementMode },
       harness_versions: harnessVersions,
     },
   };
@@ -1058,7 +1104,8 @@ if (import.meta.main) {
     if (cmd === "pin" && argv.length === 3)
       outcome = pin(argv[1] as string, argv[2] as string, readTools());
     else if (cmd === "path" && argv.length === 2) outcome = pathOf(argv[1] as string);
-    else if (cmd === "check" && argv.length === 2) outcome = checkPin(argv[1] as string);
+    else if (cmd === "check" && argv.length === 2)
+      outcome = checkPinAndConfinement(argv[1] as string);
     else if (cmd === "release" && argv.length === 2) outcome = releasePin(argv[1] as string);
     else if (cmd === "efforts" && argv.length === 2) outcome = efforts(argv[1] as string);
     else if (cmd !== undefined && !verbs.includes(cmd) && argv.length === 2) {

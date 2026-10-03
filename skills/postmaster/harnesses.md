@@ -136,10 +136,27 @@ a slowdown notice, not a wall — it appears in successful legs. No harness has 
 observed emitting numeric codes or error-type fields; when one does, the structured
 layer reads them.
 
-Every lane runs unrestricted. Its containment is its worktree (`coachman.md`, Lane capability),
-so the bypass form below is passed on every launch AND every resume. The interactive postmaster
+Every lane runs in a process space of its own when `confine = "on"` (Confinement below).
+Its writes are kept apart by its worktree (`coachman.md`, Lane capability),
+and the bypass form below is passed on every launch AND every resume. The interactive postmaster
 runs unrestricted too, in its harness's interactive form (below). Nothing in the flow depends on
 one session messaging another; the postmaster polls files.
+
+## Confinement
+
+With `confine = "on"`, each lane's harness is wrapped in the system's own process isolation at
+the point `launch.sh` runs it. The harness form is unchanged, bypass flag included. A lane
+whose confinement cannot start runs unconfined, with a warning naming the cause.
+
+| system | mechanism | what it does |
+|---|---|---|
+| Linux | Bubblewrap: new PID namespace, fresh /proc, new session, host /dev kept | A lane cannot signal a process it did not start. |
+| macOS | `sandbox-exec`, Seatbelt profile denying signals to external processes | Same, via Seatbelt. Untested here; #205 checks it. |
+| other | none | The lane runs unconfined, with the warning. |
+
+The wrap is outside the harness command, so one mechanism covers every harness. Files, network
+and sockets are not restricted; those are a separate ticket. The coachman, its fallback and the
+postmaster are never confined.
 
 **Different CLIs, different output-format flags. Never copy one into another.**
 

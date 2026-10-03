@@ -62,6 +62,7 @@ import {
 import { basename, dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { readTomlFile, tryJsonFile } from "./lib/data.ts";
+import { startCheck, wrapCommand } from "./lib/confine.ts";
 import { scriptsDir } from "./lib/paths.ts";
 import { mkstempSync, run, signalExitCode } from "./lib/proc.ts";
 import { BOUND_L, BOUND_R, PY_S_CLASS } from "./lib/text.ts";
@@ -115,6 +116,7 @@ interface Spec {
   model: string;
   effort: string;
   envFile: string;
+  confine: boolean;
 }
 
 function baseModel(model: unknown): string {
@@ -232,6 +234,7 @@ function resolveSpec(
     model: str(s.model),
     effort: str(s.effort),
     envFile: str(s.env_file),
+    confine: String(cfg.confine ?? "") === "on",
   };
 }
 
@@ -1119,6 +1122,44 @@ if (import.meta.main) {
   let ENV_FILE = spec.envFile;
   if (!HARNESS) die(`${NAME} has no harness in ${source}`);
   if (!MODEL) die(`${NAME} has no model in ${source}`);
+  // A lane in the effective [lanes] table runs in a process space of its own
+  // when confine is on. Coachman, fallback and postmaster are not confined.
+  // form shows the wrapped command whenever one applies; it runs no start
+  // check. launch, resume and review start the confinement with a no-op, and
+  // run the lane unconfined with a warning when it cannot start.
+  const isLane = NAME !== "coachman" && NAME !== "coachman_fallback" && NAME !== "postmaster";
+  const showWrap = spec.confine && isLane;
+  let confineWrap = false;
+  if (spec.confine && isLane && CMD !== "skill" && CMD !== "form") {
+    const check = startCheck();
+    if (check.ok) {
+      confineWrap = true;
+    } else {
+      // A nonfatal warning, so without the launch: prefix: that prefix is
+      // the classifier's mark of a launch refusal, and the lane still runs.
+      console.error(
+        `warning: confinement cannot start (${check.cause}); running ${NAME} unconfined`,
+      );
+      if (RUN) {
+        const logged = run(join(scriptsDir(import.meta), "log-action.sh"), [
+          RUN,
+          `lane:${NAME}`,
+          "note",
+          NAME,
+          `confinement fallback: ${check.cause}`,
+        ]);
+        if (logged.code !== 0) {
+          // Fail closed: without the fallback action an unconfined lane
+          // would read as a confined one. The harness never starts, so this
+          // is a launch refusal, correctly classified.
+          const why = logged.err.trim().split("\n")[0] ?? "";
+          die(
+            `cannot log the confinement fallback for ${NAME}; refusing to run it unconfined${why ? `: ${why}` : ""}`,
+          );
+        }
+      }
+    }
+  }
   if (CMD === "review") {
     const forms = run(join(scriptsDir(import.meta), "review-forms.sh"), ["has", HARNESS]);
     if (forms.code !== 0) {
@@ -1285,6 +1326,11 @@ if (import.meta.main) {
 
   if (CMD === "form") {
     const show = (a: string): string => showArg(a);
+    const maybeWrap = (cmd: string[]): string[] => {
+      if (!showWrap) return cmd;
+      const w = wrapCommand(cmd);
+      return w ?? cmd;
+    };
     const put = (cwd: string, cmd: string[], stdinFile: string): string => {
       let s = `cd ${show(cwd)}&& `;
       for (const a of cmd) s += show(a);
@@ -1292,7 +1338,9 @@ if (import.meta.main) {
       return s;
     };
     const launchForms = mkForms("form");
-    process.stdout.write(`launch: ${put(CWD, launchForms.cmd, launchForms.stdinFile)}\n`);
+    process.stdout.write(
+      `launch: ${put(CWD, maybeWrap(launchForms.cmd), launchForms.stdinFile)}\n`,
+    );
     try {
       const resumeForms = (() => {
         // Build the resume form: as the launch form's twin, with a placeholder data directory.
@@ -1312,7 +1360,9 @@ if (import.meta.main) {
           BASE,
         );
       })();
-      process.stdout.write(`resume: ${put(CWD, resumeForms.cmd, resumeForms.stdinFile)}\n`);
+      process.stdout.write(
+        `resume: ${put(CWD, maybeWrap(resumeForms.cmd), resumeForms.stdinFile)}\n`,
+      );
     } catch (e) {
       const msg = String(e instanceof Error ? e.message : e).replace(/^launch: /u, "");
       process.stdout.write(`resume: none: ${msg}\n`);
@@ -1536,6 +1586,14 @@ exit "$rc"
   } else if (forms.promptArg >= 0) {
     cmd = "bash";
     cmdArgs = promptedArgv(PROMPT, forms.promptArg, forms.cmd);
+  }
+
+  if (confineWrap) {
+    const wrapped = wrapCommand([cmd, ...cmdArgs]);
+    if (wrapped) {
+      cmd = wrapped[0] ?? cmd;
+      cmdArgs = wrapped.slice(1);
+    }
   }
 
   if (!attemptPhase("started")) die("cannot record that the harness started");

@@ -22,6 +22,7 @@ import {
 } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { harnessData, makeHeldDir } from "./launch.ts";
+import { startCheck, wrapCommand } from "./lib/confine.ts";
 import { toolRoot } from "./lib/paths.ts";
 import { run, withTempDir } from "./lib/proc.ts";
 import { BOUND_R, DOT_ALL, PY_M_START, PY_S_CLASS, pySplitLines, pyWords } from "./lib/text.ts";
@@ -32,8 +33,20 @@ const here = import.meta.dir;
 const skipPython = run("sh", ["-c", "command -v python3"]).code !== 0;
 if (skipPython) {
   console.log(
-    "skip parity: and handed-environment comparisons (16) and the resume PWD/OLDPWD/SHLVL match: python3 not on PATH",
+    "skip parity: and handed-environment comparisons (16) and the resume PWD/OLDPWD/SHLVL match and the battery socket checks (4): python3 not on PATH",
   );
+}
+
+// The confinement battery's confined checks run only when the mechanism
+// starts; a machine without one skips them loudly, never as silent passes.
+const confinementAvail = startCheck();
+const skipConfined = !confinementAvail.ok;
+if (skipConfined) {
+  console.log(`skip confinement battery confined checks (11): ${confinementAvail.cause}`);
+}
+const skipLinuxOnly = process.platform !== "linux";
+if (skipLinuxOnly) {
+  console.log("skip Linux-only confinement battery checks (6): not Linux");
 }
 
 interface ControlRecord {
@@ -3911,6 +3924,453 @@ beforeAll(() => {
           );
       }
     }
+
+    // --- confinement battery: every AC2 and AC3 item unconfined and confined ---
+    {
+      const confinement = confinementAvail;
+      const skipReason = confinement.ok
+        ? ""
+        : confinement.cause.includes("not installed")
+          ? "no confinement"
+          : "inside a confinement";
+      // Shell commands that stand in for the work a lane does. Each returns 0 on success.
+      const mkWorktree = (): string => {
+        const dir = join(tmp, `battery-wt-${Math.random().toString(36).slice(2)}`);
+        mkdirSync(dir, { recursive: true });
+        run("git", ["init", "-q", "-b", "main", dir]);
+        run("git", ["-C", dir, "config", "user.name", "t"]);
+        run("git", ["-C", dir, "config", "user.email", "t@example.invalid"]);
+        return dir;
+      };
+      const items: Array<{ name: string; bare: () => boolean; wrapped: () => boolean }> = [];
+
+      // AC2 item: the gate (a command that succeeds, standing in for the project gate)
+      items.push({
+        name: "the gate",
+        bare: () => run("sh", ["-c", "exit 0"]).code === 0,
+        wrapped: () => {
+          const w = wrapCommand(["sh", "-c", "exit 0"]);
+          if (!w) return false;
+          return run(w[0]!, w.slice(1), { timeout: 30000 }).code === 0;
+        },
+      });
+
+      // AC2 item: a commit in its own worktree
+      items.push({
+        name: "a commit in its own worktree",
+        bare: () => {
+          const dir = mkWorktree();
+          writeFileSync(join(dir, "f.txt"), "hello\n");
+          const add = run("git", ["-C", dir, "add", "f.txt"]);
+          const commit = run("git", [
+            "-C",
+            dir,
+            "-c",
+            "user.name=t",
+            "-c",
+            "user.email=t@example.invalid",
+            "commit",
+            "-q",
+            "-m",
+            "battery",
+          ]);
+          return add.code === 0 && commit.code === 0;
+        },
+        wrapped: () => {
+          const dir = mkWorktree();
+          const w = wrapCommand([
+            "sh",
+            "-c",
+            `cd "${dir}" && echo hello > f.txt && git add f.txt && git -c user.name=t -c user.email=t@example.invalid commit -q -m battery`,
+          ]);
+          if (!w) return false;
+          return run(w[0]!, w.slice(1), { timeout: 30000 }).code === 0;
+        },
+      });
+
+      // AC2 item: a write outside its worktree
+      items.push({
+        name: "a write outside its worktree",
+        bare: () => {
+          const f = join(tmp, `battery-out-${Math.random().toString(36).slice(2)}.txt`);
+          writeFileSync(f, "written\n");
+          return existsSync(f);
+        },
+        wrapped: () => {
+          const f = join(tmp, `battery-out-w-${Math.random().toString(36).slice(2)}.txt`);
+          const w = wrapCommand(["sh", "-c", `echo written > "${f}"`]);
+          if (!w) return false;
+          const r = run(w[0]!, w.slice(1), { timeout: 30000 });
+          return r.code === 0 && existsSync(f);
+        },
+      });
+
+      // AC2 item: a network reach (TCP to a loopback listener of its own, so
+      // the battery needs no live network and stays green on an offline machine)
+      const loopbackReach =
+        "import socket; s=socket.socket(); s.bind(('127.0.0.1',0)); s.listen(1); " +
+        "p=s.getsockname()[1]; c=socket.socket(); c.settimeout(5); " +
+        "c.connect(('127.0.0.1',p)); c.close(); s.close()";
+      // Both socket probes need python3; without it they skip loudly.
+      if (!skipPython) {
+        items.push({
+          name: "a network reach",
+          bare: () => run("python3", ["-c", loopbackReach]).code === 0,
+          wrapped: () => {
+            const w = wrapCommand(["python3", "-c", loopbackReach]);
+            if (!w) return false;
+            return run(w[0]!, w.slice(1), { timeout: 30000 }).code === 0;
+          },
+        });
+      }
+
+      // AC2 item: a Unix socket connection
+      const unixSocketTest = `
+import socket, os, tempfile
+d = tempfile.mkdtemp()
+p = os.path.join(d, 's.sock')
+s = socket.socket(socket.AF_UNIX)
+s.bind(p)
+s.listen(1)
+c = socket.socket(socket.AF_UNIX)
+c.connect(p)
+c.close()
+s.close()
+`;
+      if (!skipPython) {
+        items.push({
+          name: "a Unix socket connection",
+          bare: () => run("python3", ["-c", unixSocketTest]).code === 0,
+          wrapped: () => {
+            const w = wrapCommand(["python3", "-c", unixSocketTest]);
+            if (!w) return false;
+            return run(w[0]!, w.slice(1), { timeout: 30000 }).code === 0;
+          },
+        });
+      }
+
+      // AC2 item: a consistent /proc (Linux: the lane's PIDs match what its
+      // /proc shows, so ps and friends see the lane, not the host's table)
+      if (process.platform === "linux") {
+        // Fork-free: read runs in this shell, so /proc/self is the shell
+        // itself, not a subshell a $() would fork.
+        const selfProbe = 'read pid rest < /proc/self/stat; test "$pid" = "$$"';
+        items.push({
+          name: "a consistent /proc",
+          bare: () => run("sh", ["-c", selfProbe]).code === 0,
+          wrapped: () => {
+            const w = wrapCommand(["sh", "-c", selfProbe]);
+            if (!w) return false;
+            return run(w[0]!, w.slice(1), { timeout: 30000 }).code === 0;
+          },
+        });
+      }
+
+      // AC2 item: a host device node (Linux: a shared-memory object made
+      // outside stays visible inside, so the lane keeps the host's /dev)
+      if (process.platform === "linux") {
+        const devNode = (tag: string, probe: (node: string) => boolean): boolean => {
+          const node = `/dev/shm/battery-dev-${tag}-${Math.random().toString(36).slice(2)}`;
+          try {
+            writeFileSync(node, "x\n");
+          } catch {
+            return false;
+          }
+          const seen = probe(node);
+          rmSync(node, { force: true });
+          return seen;
+        };
+        items.push({
+          name: "a host device node",
+          bare: () => devNode("bare", (node) => run("sh", ["-c", `test -e "${node}"`]).code === 0),
+          wrapped: () =>
+            devNode("conf", (node) => {
+              const w = wrapCommand(["sh", "-c", `test -e "${node}"`]);
+              if (!w) return false;
+              return run(w[0]!, w.slice(1), { timeout: 30000 }).code === 0;
+            }),
+        });
+      }
+
+      let itemsRun = 0;
+      let itemsSkipped = 0;
+
+      for (const item of items) {
+        // Unconfined: always run (the paired control)
+        const bareOk = item.bare();
+        check(`${item.name}: unconfined: ${bareOk ? "ok" : "fail"}`, bareOk);
+        itemsRun++;
+        // Confined: run when available, skip by name when not
+        if (confinement.ok) {
+          const confOk = item.wrapped();
+          check(`${item.name}: confined: ${confOk ? "ok" : "fail"}`, confOk);
+          itemsRun++;
+        } else {
+          check(`${item.name}: confined: skipped (${skipReason})`, true);
+          itemsSkipped++;
+        }
+      }
+
+      // AC3: signalling a process started outside the lane
+      {
+        // Start an outside process, try to signal it from inside the wrap.
+        const outsideCmd = "sleep 60";
+        // Unconfined: the signal reaches
+        const outUnconf = run("sh", ["-c", `${outsideCmd} & echo $!`], { timeout: 5000 });
+        const outsidePid = outUnconf.out.trim();
+        const signalOutsideBare = run(
+          "sh",
+          ["-c", `kill -TERM ${outsidePid} 2>/dev/null; echo rc=$?`],
+          { timeout: 5000 },
+        );
+        const reachedBare = signalOutsideBare.out.includes("rc=0");
+        check(
+          `signalling a process started outside: unconfined: ${reachedBare ? "reached" : "failed"}`,
+          reachedBare,
+        );
+        itemsRun++;
+
+        // Confined: the signal is refused
+        if (confinement.ok) {
+          const outConf = run("sh", ["-c", `${outsideCmd} & echo $!`], { timeout: 5000 });
+          const confOutsidePid = outConf.out.trim();
+          const w = wrapCommand([
+            "sh",
+            "-c",
+            `kill -TERM ${confOutsidePid} 2>/dev/null; echo rc=$?`,
+          ]);
+          const r = w ? run(w[0]!, w.slice(1), { timeout: 30000 }) : { out: "", code: -1 };
+          const refused = r.out.includes("rc=1") || r.out.includes("No such process");
+          check(
+            `signalling a process started outside: confined: ${refused ? "refused" : "reached"}`,
+            refused,
+          );
+          itemsRun++;
+          // That process is still running afterwards
+          const still = run("sh", ["-c", `kill -0 ${confOutsidePid} 2>/dev/null`], {
+            timeout: 5000,
+          });
+          check(
+            `signalling a process started outside: still running: ${still.code === 0 ? "yes" : "no"}`,
+            still.code === 0,
+          );
+          itemsRun++;
+          // Clean up
+          run("sh", ["-c", `kill -TERM ${confOutsidePid} 2>/dev/null`], { timeout: 5000 });
+        } else {
+          check(`signalling a process started outside: confined: skipped (${skipReason})`, true);
+          itemsSkipped++;
+        }
+        // Clean up unconfined outside process
+        run("sh", ["-c", `kill -TERM ${outsidePid} 2>/dev/null`], { timeout: 5000 });
+      }
+
+      // AC3: signalling a process the lane started itself
+      if (confinement.ok) {
+        const w = wrapCommand([
+          "sh",
+          "-c",
+          "sleep 30 & CHILD=$!; kill -TERM $CHILD 2>/dev/null; wait $CHILD; echo rc=$?",
+        ]);
+        const r = w ? run(w[0]!, w.slice(1), { timeout: 30000 }) : { out: "", code: -1 };
+        // wait reports 143 when the TERM lands; a 0 would mean the signal never did.
+        const selfOk = r.out.includes("rc=143");
+        check(`signalling a process the lane started: confined: ${selfOk ? "ok" : "fail"}`, selfOk);
+        itemsRun++;
+      } else {
+        check(`signalling a process the lane started: confined: skipped (${skipReason})`, true);
+        itemsSkipped++;
+      }
+
+      // AC3: kill 0 from inside stays inside the lane (Linux: the bwrap row's
+      // --new-session; the Seatbelt profile answers it on macOS). The probe
+      // runs under setsid in a group of its own, so an uncontained kill 0 can
+      // only reach the probe's own processes, never the test runner.
+      if (process.platform === "linux") {
+        const middleman = join(tmp, "battery-kill0-mid.sh");
+        // The middleman catches TERM rather than ignoring it: an ignored
+        // disposition survives exec, and a shell that inherits one cannot
+        // re-trap it, so the sensor below would never fire.
+        writeFileSync(
+          middleman,
+          '#!/bin/sh\nFLAG=$1; shift\ntrap ":" TERM\n' +
+            'sh -c "trap \'echo HIT > \\"$FLAG\\"\' TERM; sleep 30" & C1=$!\n' +
+            'sleep 0.3\n"$@"\nsleep 2\nkill -KILL $C1 2>/dev/null\nexit 0\n',
+        );
+        const kill0 = (tag: string, inner: string[]): boolean => {
+          const flag = join(tmp, `battery-kill0-${tag}.flag`);
+          rmSync(flag, { force: true });
+          run("setsid", ["sh", middleman, flag, ...inner], { timeout: 30000 });
+          return existsSync(flag);
+        };
+        // Unconfined: the groupmate is hit (the positive control)
+        const bareHit = kill0("bare", ["sh", "-c", "kill -TERM 0"]);
+        check(`kill 0 from inside: unconfined: ${bareHit ? "hit" : "miss"}`, bareHit);
+        itemsRun++;
+        // Confined: the group signal stays inside the lane
+        if (confinement.ok) {
+          const w = wrapCommand(["sh", "-c", "kill -TERM 0"]);
+          const hit = w ? kill0("conf", w) : true;
+          check(`kill 0 from inside: confined: ${hit ? "hit" : "contained"}`, !hit);
+          itemsRun++;
+        } else {
+          check(`kill 0 from inside: confined: skipped (${skipReason})`, true);
+          itemsSkipped++;
+        }
+      }
+
+      // The count of items run and skipped (AC6)
+      check(
+        `confinement battery: ${itemsRun} run, ${itemsSkipped} skipped`,
+        true,
+        `${itemsRun} run, ${itemsSkipped} skipped`,
+      );
+    }
+
+    // --- confinement wiring: form shows the wrap, fallback warns and logs ---
+    {
+      const confLane = (name: string, confineLine: string): void => {
+        writeFileSync(
+          join(tmp, `${name}.toml`),
+          `${confineLine}[lanes.one]\nharness = "codex"\nmodel = "lane-model"\neffort = "high"\n\n[team]\ncoachman = { harness = "codex", model = "coach-model" }\n`,
+        );
+      };
+      confLane("conf-on", 'confine = "on"\n');
+      confLane("conf-off", 'confine = "off"\n');
+      confLane("conf-absent", "");
+      const mech =
+        process.platform === "linux"
+          ? "bwrap"
+          : process.platform === "darwin"
+            ? "sandbox-exec"
+            : "";
+      const launchLine = (form: string): string =>
+        form.split("\n").find((l) => l.startsWith("launch:")) ?? "";
+      const resumeLine = (form: string): string =>
+        form.split("\n").find((l) => l.startsWith("resume:")) ?? "";
+      doRun("conf-off", "form", "one");
+      const offForm = out;
+      const offRc = rc;
+      doRun("conf-absent", "form", "one");
+      check(
+        "form with confine off runs as absent",
+        offRc === 0 && rc === 0 && offForm === out,
+        `off=${offRc} absent=${rc}`,
+      );
+      doRun("conf-on", "form", "one");
+      const onForm = out;
+      const onRc = rc;
+      if (mech === "") {
+        check(
+          "form with confine on stays bare on a system with no row",
+          onRc === 0 && onForm === offForm,
+        );
+      } else {
+        check(
+          "form with confine on wraps the launch line",
+          onRc === 0 && launchLine(onForm).includes(mech),
+          onForm,
+        );
+        check(
+          "form with confine on wraps the resume line",
+          onRc === 0 && resumeLine(onForm).includes(mech),
+          onForm,
+        );
+        const launchAt = launchLine(offForm).indexOf("codex exec");
+        const resumeAt = resumeLine(offForm).indexOf("codex exec");
+        const bareLaunch = launchAt === -1 ? "" : launchLine(offForm).slice(launchAt);
+        const bareResume = resumeAt === -1 ? "" : resumeLine(offForm).slice(resumeAt);
+        check(
+          "the wrapped launch line carries the bare harness argv",
+          bareLaunch !== "" && launchLine(onForm).includes(bareLaunch),
+          onForm,
+        );
+        check(
+          "the wrapped resume line carries the bare harness argv",
+          bareResume !== "" && resumeLine(onForm).includes(bareResume),
+          onForm,
+        );
+      }
+      doRun("conf-on", "form", "coachman");
+      check(
+        "form for the coachman stays bare with confine on",
+        rc === 0 && (mech === "" || !out.includes(mech)),
+        out,
+      );
+      // The fallback: a refusing mechanism runs the lane unconfined, warns
+      // naming the cause, and logs the fallback as an action inside a run.
+      if (mech !== "") {
+        writeFileSync(join(tmp, "bin", mech), "#!/bin/sh\necho shadow-refused >&2\nexit 1\n");
+        chmodSync(join(tmp, "bin", mech), 0o755);
+      }
+      doRun("conf-on", "launch", "one", join(tmp, "wt"), join(tmp, "prompt.txt"));
+      check(
+        "a lane whose confinement cannot start still runs",
+        rc === 0 && out.includes("--dangerously-bypass-approvals-and-sandbox"),
+        `rc=${rc} out=${out} err=${err}`,
+      );
+      check(
+        "a lane whose confinement cannot start warns naming the cause",
+        err.includes("confinement cannot start"),
+        err,
+      );
+      // The warning is nonfatal, so it must not read as a launch refusal.
+      const warnErr = join(tmp, "fallback-err.txt");
+      writeFileSync(warnErr, err);
+      const warnClass = run(self, ["transient", warnErr], { timeout: 10000 });
+      check(
+        "the fallback warning classifies as other than a launch refusal",
+        warnClass.out.trim() !== "launch-refusal",
+        `class=${warnClass.out.trim()} err=${err}`,
+      );
+      doRun("conf-off", "launch", "one", join(tmp, "wt"), join(tmp, "prompt.txt"));
+      check(
+        "confine off runs with no warning past the refusing mechanism",
+        rc === 0 && !err.includes("confinement cannot start"),
+        `rc=${rc} err=${err}`,
+      );
+      record("confrun", "conf-on");
+      doRun(
+        "conf-on",
+        "launch",
+        "one",
+        join(tmp, "wt"),
+        join(tmp, "prompt.txt"),
+        "--run",
+        runDir("confrun"),
+      );
+      let fallbackLogged = false;
+      try {
+        const lines = readFileSync(join(runDir("confrun"), "actions.jsonl"), "utf8").split("\n");
+        const line = lines.find((l) => l.includes("confinement fallback"));
+        fallbackLogged = line !== undefined && line.includes('"action":"note"');
+      } catch {
+        fallbackLogged = false;
+      }
+      check(
+        "the fallback is logged as an action inside a run",
+        rc === 0 && fallbackLogged,
+        `rc=${rc} err=${err}`,
+      );
+      // A fallback the log cannot record refuses to run: an unconfined lane
+      // with no fallback action would read as a confined one.
+      record("confnolog", "conf-on");
+      mkdirSync(join(runDir("confnolog"), "actions.jsonl"), { recursive: true });
+      doRun(
+        "conf-on",
+        "launch",
+        "one",
+        join(tmp, "wt"),
+        join(tmp, "prompt.txt"),
+        "--run",
+        runDir("confnolog"),
+      );
+      check(
+        "a fallback that cannot be logged refuses to run",
+        rc !== 0 && err.includes("refusing to run it unconfined"),
+        `rc=${rc} err=${err}`,
+      );
+    }
   });
 }, 300000);
 
@@ -4927,5 +5387,161 @@ describe("bug review forms", () => {
   });
   test.skipIf(skipPython)("a resume's check and harness match main's PWD, OLDPWD and SHLVL", () => {
     assertControl("a resume's check and harness match main's PWD, OLDPWD and SHLVL");
+  });
+});
+
+describe("confinement battery: every AC2 and AC3 item unconfined and confined", () => {
+  test("the gate: unconfined", () => {
+    assertControl("the gate: unconfined: ok");
+  });
+  test.skipIf(skipConfined)("the gate: confined", () => {
+    const r = records.find((x) => x.label.startsWith("the gate: confined:"));
+    expect(r).toBeDefined();
+    if (r !== undefined && !r.ok) throw new Error(r.detail === "" ? r.label : r.detail);
+  });
+  test("a commit in its own worktree: unconfined", () => {
+    assertControl("a commit in its own worktree: unconfined: ok");
+  });
+  test.skipIf(skipConfined)("a commit in its own worktree: confined", () => {
+    const r = records.find((x) => x.label.startsWith("a commit in its own worktree: confined:"));
+    expect(r).toBeDefined();
+    if (r !== undefined && !r.ok) throw new Error(r.detail === "" ? r.label : r.detail);
+  });
+  test("a write outside its worktree: unconfined", () => {
+    assertControl("a write outside its worktree: unconfined: ok");
+  });
+  test.skipIf(skipConfined)("a write outside its worktree: confined", () => {
+    const r = records.find((x) => x.label.startsWith("a write outside its worktree: confined:"));
+    expect(r).toBeDefined();
+    if (r !== undefined && !r.ok) throw new Error(r.detail === "" ? r.label : r.detail);
+  });
+  test.skipIf(skipPython)("a network reach: unconfined", () => {
+    assertControl("a network reach: unconfined: ok");
+  });
+  test.skipIf(skipPython || skipConfined)("a network reach: confined", () => {
+    const r = records.find((x) => x.label.startsWith("a network reach: confined:"));
+    expect(r).toBeDefined();
+    if (r !== undefined && !r.ok) throw new Error(r.detail === "" ? r.label : r.detail);
+  });
+  test.skipIf(skipPython)("a Unix socket connection: unconfined", () => {
+    assertControl("a Unix socket connection: unconfined: ok");
+  });
+  test.skipIf(skipPython || skipConfined)("a Unix socket connection: confined", () => {
+    const r = records.find((x) => x.label.startsWith("a Unix socket connection: confined:"));
+    expect(r).toBeDefined();
+    if (r !== undefined && !r.ok) throw new Error(r.detail === "" ? r.label : r.detail);
+  });
+  test.skipIf(skipLinuxOnly)("a consistent /proc: unconfined", () => {
+    assertControl("a consistent /proc: unconfined: ok");
+  });
+  test.skipIf(skipLinuxOnly || skipConfined)("a consistent /proc: confined", () => {
+    const r = records.find((x) => x.label.startsWith("a consistent /proc: confined:"));
+    expect(r).toBeDefined();
+    if (r !== undefined && !r.ok) throw new Error(r.detail === "" ? r.label : r.detail);
+  });
+  test.skipIf(skipLinuxOnly)("a host device node: unconfined", () => {
+    assertControl("a host device node: unconfined: ok");
+  });
+  test.skipIf(skipLinuxOnly || skipConfined)("a host device node: confined", () => {
+    const r = records.find((x) => x.label.startsWith("a host device node: confined:"));
+    expect(r).toBeDefined();
+    if (r !== undefined && !r.ok) throw new Error(r.detail === "" ? r.label : r.detail);
+  });
+  test("signalling a process started outside: unconfined", () => {
+    assertControl("signalling a process started outside: unconfined: reached");
+  });
+  test.skipIf(skipConfined)("signalling a process started outside: confined", () => {
+    const r = records.find((x) =>
+      x.label.startsWith("signalling a process started outside: confined:"),
+    );
+    expect(r).toBeDefined();
+    if (r !== undefined && !r.ok) throw new Error(r.detail === "" ? r.label : r.detail);
+  });
+  test.skipIf(skipConfined)(
+    "signalling a process started outside: still running afterwards",
+    () => {
+      const r = records.find((x) =>
+        x.label.startsWith("signalling a process started outside: still running:"),
+      );
+      expect(r).toBeDefined();
+      if (r !== undefined && !r.ok) throw new Error(r.detail === "" ? r.label : r.detail);
+    },
+  );
+  test.skipIf(skipConfined)("signalling a process the lane started: confined", () => {
+    const r = records.find((x) => x.label.startsWith("signalling a process the lane started:"));
+    expect(r).toBeDefined();
+    if (r !== undefined && !r.ok) throw new Error(r.detail === "" ? r.label : r.detail);
+  });
+  test.skipIf(skipLinuxOnly)("kill 0 from inside: unconfined", () => {
+    assertControl("kill 0 from inside: unconfined: hit");
+  });
+  test.skipIf(skipLinuxOnly || skipConfined)("kill 0 from inside: confined", () => {
+    const r = records.find((x) => x.label.startsWith("kill 0 from inside: confined:"));
+    expect(r).toBeDefined();
+    if (r !== undefined && !r.ok) throw new Error(r.detail === "" ? r.label : r.detail);
+  });
+  test("the battery ends with a count of items run and skipped", () => {
+    const r = records.find((x) => x.label.startsWith("confinement battery:"));
+    expect(r).toBeDefined();
+    expect(r?.ok).toBe(true);
+    expect(r?.detail).toMatch(/^\p{Nd}+ run, \p{Nd}+ skipped$/u);
+  });
+});
+
+describe("confinement wiring: form shows the wrap, fallback warns and logs", () => {
+  test("form with confine off runs as absent", () => {
+    assertControl("form with confine off runs as absent");
+  });
+  test("form with confine on wraps the launch line", () => {
+    const r = records.find((x) => x.label === "form with confine on wraps the launch line");
+    if (r === undefined) return; // no row on this system: the bare-form record holds instead
+    assertControl("form with confine on wraps the launch line");
+  });
+  test("form with confine on wraps the resume line", () => {
+    const r = records.find((x) => x.label === "form with confine on wraps the resume line");
+    if (r === undefined) return; // no row on this system: the bare-form record holds instead
+    assertControl("form with confine on wraps the resume line");
+  });
+  test("form with confine on stays bare on a system with no row", () => {
+    const r = records.find(
+      (x) => x.label === "form with confine on stays bare on a system with no row",
+    );
+    if (r === undefined) return; // this system has a row: the wrap records hold instead
+    assertControl("form with confine on stays bare on a system with no row");
+  });
+  test("the wrapped launch line carries the bare harness argv", () => {
+    const r = records.find(
+      (x) => x.label === "the wrapped launch line carries the bare harness argv",
+    );
+    if (r === undefined) return; // no row on this system
+    assertControl("the wrapped launch line carries the bare harness argv");
+  });
+  test("the wrapped resume line carries the bare harness argv", () => {
+    const r = records.find(
+      (x) => x.label === "the wrapped resume line carries the bare harness argv",
+    );
+    if (r === undefined) return; // no row on this system
+    assertControl("the wrapped resume line carries the bare harness argv");
+  });
+  test("form for the coachman stays bare with confine on", () => {
+    assertControl("form for the coachman stays bare with confine on");
+  });
+  test("a lane whose confinement cannot start still runs", () => {
+    assertControl("a lane whose confinement cannot start still runs");
+  });
+  test("a lane whose confinement cannot start warns naming the cause", () => {
+    assertControl("a lane whose confinement cannot start warns naming the cause");
+  });
+  test("the fallback warning classifies as other than a launch refusal", () => {
+    assertControl("the fallback warning classifies as other than a launch refusal");
+  });
+  test("confine off runs with no warning past the refusing mechanism", () => {
+    assertControl("confine off runs with no warning past the refusing mechanism");
+  });
+  test("the fallback is logged as an action inside a run", () => {
+    assertControl("the fallback is logged as an action inside a run");
+  });
+  test("a fallback that cannot be logged refuses to run", () => {
+    assertControl("a fallback that cannot be logged refuses to run");
   });
 });

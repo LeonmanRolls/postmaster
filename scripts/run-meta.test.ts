@@ -1433,6 +1433,110 @@ beforeAll(async () => {
       rcRo === 1 && !claimsAfter.includes(rorun),
       `exit ${rcRo}`,
     );
+    // Confinement mode recording (#200): dispatch writes the mode from
+    // top-level confine, and check holds the recorded mode to the config.
+    const mkConfRun = (tag: string, confineLine: string): string => {
+      const cfg = join(tmp, `conf-${tag}.toml`);
+      writeFileSync(cfg, `${confineLine}[lanes.one]\nharness = "bash"\nmodel = "m1"\n[team]\n`);
+      const dir = join(tmp, `confrun-${tag}`);
+      mkdirSync(dir, { recursive: true });
+      const r = cli([dir, repo], { ...process.env, POSTMASTER_CONFIG: cfg });
+      check(`dispatch with confine ${tag} writes run.json`, r.code === 0, r.out);
+      return dir;
+    };
+    const dOn = mkConfRun("on", 'confine = "on"\n');
+    const dOff = mkConfRun("off", 'confine = "off"\n');
+    const dAbsent = mkConfRun("absent", "");
+    const modeOf = (dir: string): unknown => {
+      try {
+        const r = JSON.parse(readFileSync(join(dir, "run.json"), "utf8")) as Record<string, any>;
+        return (r.confinement as Record<string, unknown> | undefined)?.mode;
+      } catch {
+        return undefined;
+      }
+    };
+    check("dispatch with on records mode on", modeOf(dOn) === "on");
+    check("dispatch with off records mode off", modeOf(dOff) === "off");
+    check("dispatch with absent confine records mode off", modeOf(dAbsent) === "off");
+    {
+      const t = cli(["check", dOn]);
+      check("check passes a run whose mode agrees with its config", t.code === 0, t.out);
+    }
+    // A mode that disagrees with the config fails. Edited copies share the
+    // dispatch's pin, so the pin check passes and the mode check decides.
+    const editRun = (src: string, tag: string, edit: (r: Record<string, any>) => void): string => {
+      const dir = join(tmp, `confrun-${tag}`);
+      mkdirSync(dir, { recursive: true });
+      const r = JSON.parse(readFileSync(join(src, "run.json"), "utf8")) as Record<string, any>;
+      edit(r);
+      writeFileSync(join(dir, "run.json"), JSON.stringify(r));
+      return dir;
+    };
+    {
+      const dDis = editRun(dOn, "disagree", (r) => {
+        r.confinement = { mode: "off" };
+      });
+      const t = cli(["check", dDis]);
+      check("check fails a mode that disagrees with its config", t.code === 1, t.out);
+    }
+    {
+      const dNoObjOff = editRun(dOff, "no-object-off", (r) => {
+        delete r.confinement;
+      });
+      const t = cli(["check", dNoObjOff]);
+      check(
+        "check passes a run without the object when its config resolves to off",
+        t.code === 0,
+        t.out,
+      );
+    }
+    {
+      const dNoObjOn = editRun(dOn, "no-object-on", (r) => {
+        delete r.confinement;
+      });
+      const t = cli(["check", dNoObjOn]);
+      check(
+        "check fails a run without the object when its config has confine on",
+        t.code === 1,
+        t.out,
+      );
+    }
+    // An old unpinned waybill holds its mode to its config too. The edited
+    // copies drop the checkout (kind "no") and name it from a waybill, so the
+    // pin check passes on the waybill path and the mode check decides.
+    const unpinRun = (src: string, tag: string, edit: (r: Record<string, any>) => void): string => {
+      const dir = join(tmp, `confrun-${tag}`);
+      mkdirSync(dir, { recursive: true });
+      const r = JSON.parse(readFileSync(join(src, "run.json"), "utf8")) as Record<string, any>;
+      const checkout = (r.postmaster as Record<string, any>).checkout as string;
+      delete (r.postmaster as Record<string, any>).checkout;
+      edit(r);
+      writeFileSync(join(dir, "run.json"), JSON.stringify(r));
+      writeFileSync(join(dir, "brief.md"), `## Dispatch\ntool: ${checkout}\n`);
+      return dir;
+    };
+    {
+      const dNoPinOn = unpinRun(dOn, "no-pin-on", (r) => {
+        delete r.confinement;
+      });
+      const t = cli(["check", dNoPinOn]);
+      check(
+        "check fails an unpinned run without the object when its config has confine on",
+        t.code === 1,
+        t.out,
+      );
+    }
+    {
+      const dNoPinOff = unpinRun(dOff, "no-pin-off", (r) => {
+        delete r.confinement;
+      });
+      const t = cli(["check", dNoPinOff]);
+      check(
+        "check passes an unpinned run without the object when its config resolves to off",
+        t.code === 0,
+        t.out,
+      );
+    }
   });
 }, 300000);
 
@@ -1931,4 +2035,45 @@ describe("pin lock beside the bash flow", () => {
       }
     });
   }, 180000);
+});
+
+describe("confinement mode recording", () => {
+  test("dispatch with confine on writes run.json", () => {
+    assertControl("dispatch with confine on writes run.json");
+  });
+  test("dispatch with confine off writes run.json", () => {
+    assertControl("dispatch with confine off writes run.json");
+  });
+  test("dispatch with confine absent writes run.json", () => {
+    assertControl("dispatch with confine absent writes run.json");
+  });
+  test("dispatch with on records mode on", () => {
+    assertControl("dispatch with on records mode on");
+  });
+  test("dispatch with off records mode off", () => {
+    assertControl("dispatch with off records mode off");
+  });
+  test("dispatch with absent confine records mode off", () => {
+    assertControl("dispatch with absent confine records mode off");
+  });
+  test("check passes a run whose mode agrees with its config", () => {
+    assertControl("check passes a run whose mode agrees with its config");
+  });
+  test("check fails a mode that disagrees with its config", () => {
+    assertControl("check fails a mode that disagrees with its config");
+  });
+  test("check passes a run without the object when its config resolves to off", () => {
+    assertControl("check passes a run without the object when its config resolves to off");
+  });
+  test("check fails a run without the object when its config has confine on", () => {
+    assertControl("check fails a run without the object when its config has confine on");
+  });
+  test("check fails an unpinned run without the object when its config has confine on", () => {
+    assertControl("check fails an unpinned run without the object when its config has confine on");
+  });
+  test("check passes an unpinned run without the object when its config resolves to off", () => {
+    assertControl(
+      "check passes an unpinned run without the object when its config resolves to off",
+    );
+  });
 });

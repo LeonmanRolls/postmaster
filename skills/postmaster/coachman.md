@@ -249,7 +249,8 @@ on every launch and every resume.
 **The containment is the WORKTREE, not a permission flag.** No harness has verified mechanical
 write enforcement, so a workhorse is confined by having its own worktree and a reviewer by having its
 own disposable scratch. **The one prohibition for a reviewer is modifying the code under
-review.**
+review.** When `confine = "on"`, lanes also run in a process space of their own and cannot
+signal processes they did not start (`harnesses.md`, Confinement).
 
 **Say so in every workhorse brief.** A workhorse that does not know it may run the suite reasons
 about the code instead of executing it. A reviewer checks a finding with a targeted probe and
