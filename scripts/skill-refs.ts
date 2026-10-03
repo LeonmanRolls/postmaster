@@ -28,8 +28,9 @@ import { toolRoot } from "./lib/paths.ts";
 const REF = /scripts\/[A-Za-z0-9._-]*/gu;
 const BARE = /(?<![A-Za-z0-9_./-])scripts\//gu;
 const OTHER = /(<[A-Za-z0-9_-]+>|\$\{?[A-Za-z_][A-Za-z0-9_]*\}?)\/$/u;
-const OLD = /scripts\/([A-Za-z0-9_-]+)\.sh\b/gu;
-const DIRECT_BUN = /\bbun\s+[^\n]*?scripts\/[A-Za-z0-9_-]+\.ts\b/gu;
+const OLD = /scripts\/([A-Za-z0-9_-]+)\.sh(?=$|[^A-Za-z0-9_])/gu;
+const DIRECT_BUN =
+  /(?<![A-Za-z0-9_])bun[ \t]+[^\n]*?scripts\/[A-Za-z0-9_-]+\.ts(?=$|[^A-Za-z0-9_])/gu;
 
 type Fault = { file: string; line: number; why: string; ref: string };
 
@@ -104,7 +105,7 @@ export function refs(
             });
           } else if (name === "run") {
             const after = line.slice((m.index ?? 0) + (m[0] ?? "").length);
-            const next = /^\s+([A-Za-z0-9_-]+)/u.exec(after)?.[1];
+            const next = /^[ \t]+([A-Za-z0-9_-]+)/u.exec(after)?.[1];
             if (next && !scriptExists(root, next))
               faults.push({
                 file: f,

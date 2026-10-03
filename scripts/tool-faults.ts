@@ -593,7 +593,7 @@ function controlsList(): Record<string, string> {
       const m = cells[0]?.match(/^`(?:<tool>\/)?([^`]+)`$/u);
       if (m && CONTROLS_VALUE_RE.test(cells[1]!)) {
         out[m[1]!] = cells[1]!;
-        const entry = /^scripts\/run ([A-Za-z0-9_-]+)(?:\s|$)/u.exec(m[1]!);
+        const entry = /^scripts\/run ([A-Za-z0-9_-]+)(?:[ \t\r\n\v\f]|$)/u.exec(m[1]!);
         if (entry) {
           out[`scripts/${entry[1]}.ts`] = cells[1]!;
           // Runs pinned before the entry migration still log the wrapper file.
