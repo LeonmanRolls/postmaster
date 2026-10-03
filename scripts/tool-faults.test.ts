@@ -69,10 +69,15 @@ if (skipPython) {
 // The port's own wording is asserted directly by the contract-checker control, so the
 // remap never runs on the port side.
 function note163(body: string): string {
-  return body.replace(
-    "proposed fix. If the fix changes the coachman contract (markers, the waybill shape, completion detection), a fixture run confirms it before it merges.",
-    "proposed fix. The postmaster's contract checker decides from the final branch whether a fixture run is required; this ticket's wording does not decide it.",
-  );
+  return body
+    .replace(
+      "proposed fix. If the fix changes the coachman contract (markers, the waybill shape, completion detection), a fixture run confirms it before it merges.",
+      "proposed fix. The postmaster's contract checker decides from the final branch whether a fixture run is required; this ticket's wording does not decide it.",
+    )
+    .replace(/scripts\/tool-faults\.sh/gu, "scripts/run tool-faults")
+    .replace(/scripts\/ticket-check\.sh/gu, "scripts/run ticket-check")
+    .replace(/scripts\/github\.sh/gu, "scripts/run github")
+    .replace(/scripts\/log-action\.sh/gu, "scripts/run log-action");
 }
 
 function normRid(s: string): string {
@@ -581,12 +586,12 @@ if (a[0] === "api" && a[1] === "graphql") {
       "--fix",
       "count only regular files, with find -type f",
     );
-    logf(d, "coachman", "escalate", "scripts/run wait-for-markers", "the wait is a control");
+    logf(d, "coachman", "escalate", "scripts/wait-for-markers.ts", "the wait is a control");
     logf(
       d,
       "coachman",
       "tool-fault",
-      `${T}/scripts/wait-for-markers.sh`,
+      "scripts/run wait-for-markers",
       "--ran",
       "the same wait, round 2",
       "--failed",
@@ -698,9 +703,9 @@ if (a[0] === "api" && a[1] === "graphql") {
     let outR = tf("harvest", d);
     let out = outR.out + outR.err;
     let rc = outR.code;
-    const A = idWhere(out, String.raw`scripts/run wait-for-markers  control \(wait\)  3 times`);
+    const A = idWhere(out, String.raw`scripts/wait-for-markers.ts  control \(wait\)  3 times`);
     const B = idWhere(out, "skills/postmaster/harnesses.md");
-    const C = idWhere(out, String.raw`scripts/run wait-for-markers  control \(wait\)  once`);
+    const C = idWhere(out, String.raw`scripts/wait-for-markers.ts  control \(wait\)  once`);
     const D1 = idWhere(out, String.raw`skills/postmaster/coachman.md  control \(action-log\)`);
     const D2 = idWhere(out, String.raw`skills/postmaster/coachman.md  control \(check\)`);
     const faultCount = out.split("\n").filter((l: string) => /^tf-[0-9a-f]{8} {2}/u.test(l)).length;
@@ -825,7 +830,7 @@ if (a[0] === "api" && a[1] === "graphql") {
       "Nothing to do with faults.",
       "57",
       "OPEN",
-      `Tool fault in scripts/run wait-for-markers: returned early [${A}]`,
+      `Tool fault in scripts/wait-for-markers.ts: returned early [${A}]`,
       "A body.",
       "58",
       "OPEN",
@@ -1022,7 +1027,7 @@ if (a[0] === "api" && a[1] === "graphql") {
     );
     outR = tf("harvest", pmDir);
     out = outR.out + outR.err;
-    const P = idWhere(out, "scripts/run runs-status");
+    const P = idWhere(out, "scripts/runs-status.ts");
     outR = tf("file", pmDir, P);
     out = outR.out + outR.err;
     // close issue 61
@@ -1049,7 +1054,7 @@ if (a[0] === "api" && a[1] === "graphql") {
     );
     outR = tf("harvest", pmDir);
     out = outR.out + outR.err;
-    const P2 = idWhere(out, "scripts/run runs-status");
+    const P2 = idWhere(out, "scripts/runs-status.ts");
     const PR = JSON.parse(readFileSync(join(pmDir, "tool-faults.json"), "utf-8")).runs.length;
     {
       const pLine = lineOf(out, P);
@@ -1101,8 +1106,8 @@ if (a[0] === "api" && a[1] === "graphql") {
     );
     outR = tf("harvest", notesDir);
     out = outR.out + outR.err;
-    const N1 = idWhere(out, "scripts/run launch");
-    const N2 = idWhere(out, "scripts/run cut-scratch");
+    const N1 = idWhere(out, "scripts/launch.ts");
+    const N2 = idWhere(out, "scripts/cut-scratch.ts");
     outR = tf("file", notesDir, N1);
     out = outR.out + outR.err;
     rc = outR.code;
@@ -1175,8 +1180,8 @@ if (a[0] === "api" && a[1] === "graphql") {
     out = outR.out + outR.err;
     check(
       "a fault keeps the kind of control its line recorded; with none recorded, the list's",
-      /^tf-[0-9a-f]{8} {2}scripts\/wait-for-markers\.sh {2}control \(gate\) {2}once/mu.test(out) &&
-        /^tf-[0-9a-f]{8} {2}scripts\/log-action\.sh {2}control \(action-log\) {2}once/mu.test(out),
+      /^tf-[0-9a-f]{8} {2}scripts\/run wait-for-markers {2}control \(gate\) {2}once/mu.test(out) &&
+        /^tf-[0-9a-f]{8} {2}scripts\/run log-action {2}control \(action-log\) {2}once/mu.test(out),
       out,
     );
     // long token
@@ -1242,7 +1247,7 @@ if (a[0] === "api" && a[1] === "graphql") {
     );
     outR = tf("harvest", boardDir);
     out = outR.out + outR.err;
-    const K1 = idWhere(out, "scripts/run cut-scratch");
+    const K1 = idWhere(out, "scripts/cut-scratch.ts");
     writeFileSync(join(S, "no-item-add"), "");
     outR = tf("file", boardDir, K1);
     out = outR.out + outR.err;
@@ -1371,7 +1376,7 @@ if (a[0] === "api" && a[1] === "graphql") {
     outR = tf("harvest", mineDir);
     out = outR.out + outR.err;
     rc = outR.code;
-    const F = idWhere(out, "scripts/run launch");
+    const F = idWhere(out, "scripts/launch.ts");
     check(
       "a repository the user does not own is no tracker: the faults are kept",
       rc === 0 &&
@@ -1420,7 +1425,7 @@ if (a[0] === "api" && a[1] === "graphql") {
     );
     outR = run(
       "bash",
-      [join(REPO, "tools/postmaster/scripts/tool-faults.sh"), "harvest", vendDir],
+      [join(REPO, "tools/postmaster/scripts/run"), "tool-faults", "harvest", vendDir],
       {
         env: {
           ...process.env,
@@ -1501,8 +1506,8 @@ if (a[0] === "api" && a[1] === "graphql") {
     // grouping files each entry under faultId of its own target and key.
     {
       const cases: Array<[string, string, string]> = [
-        ["scripts/run launch", "codex --json hung", "tf-e2ae0dba"],
-        ["scripts/run host", "tmux: no server running", "tf-eb56942b"],
+        ["scripts/launch.sh", "codex --json hung", "tf-e2ae0dba"],
+        ["scripts/host.sh", "tmux: no server running", "tf-eb56942b"],
         ["", "", "tf-01ba4719"],
         ["a", "b\nc", "tf-ea7fb08b"],
         ["snowman ☃", "key ☃", "tf-b1776d54"],
@@ -1604,6 +1609,11 @@ if (a[0] === "api" && a[1] === "graphql") {
       const T2 = join(tmp, "tool2");
       mkdirSync(join(T2, "skills"), { recursive: true });
       run("cp", ["-R", HERE, join(T2, "scripts")]);
+      // BASE's tool-faults.sh calls github.sh; provide a shim through the entry.
+      for (const shim of ["github", "ticket-check", "log-action"]) {
+        writeFileSync(join(T2, "scripts", `${shim}.sh`), `#!/bin/sh\nexec "$(dirname "$0")/run" ${shim} "$@"\n`);
+        run("chmod", ["+x", join(T2, "scripts", `${shim}.sh`)]);
+      }
       copyFileSync(join(TOOL, "bunfig.toml"), join(T2, "bunfig.toml"));
       run("cp", ["-R", join(TOOL, "skills/postmaster"), join(T2, "skills/postmaster")]);
       writeFileSync(

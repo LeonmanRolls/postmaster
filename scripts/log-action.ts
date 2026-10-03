@@ -174,19 +174,31 @@ function toolFault(
     }
   }
 
-  // Resolve the target path relative to TOOL
-  let t = given.startsWith("/") ? given : join(TOOL, given);
-  try {
-    const dir = dirname(t);
-    const resolved = realpathSync(dir);
-    t = join(resolved, basename(t));
-  } catch {
-    t = "";
-  }
-  if (t.startsWith(`${TOOL}/`)) {
-    t = t.slice(TOOL.length + 1);
+  // Entry form: "scripts/run <name>" names the script the entry resolves.
+  let t = "";
+  const entryMatch = given.match(/^(?:[^/]*\/)?scripts\/run ([a-z][a-z0-9-]*)$/u);
+  if (entryMatch) {
+    const name = entryMatch[1]!;
+    t = existsSync(join(TOOL, "scripts", `${name}.ts`))
+      ? `scripts/${name}.ts`
+      : existsSync(join(TOOL, "scripts", "lib", `${name}.ts`))
+        ? `scripts/lib/${name}.ts`
+        : "";
   } else {
-    t = "";
+    // Resolve the target path relative to TOOL
+    t = given.startsWith("/") ? given : join(TOOL, given);
+    try {
+      const dir = dirname(t);
+      const resolved = realpathSync(dir);
+      t = join(resolved, basename(t));
+    } catch {
+      t = "";
+    }
+    if (t.startsWith(`${TOOL}/`)) {
+      t = t.slice(TOOL.length + 1);
+    } else {
+      t = "";
+    }
   }
   if (!t || !existsSync(join(TOOL, t))) {
     return {

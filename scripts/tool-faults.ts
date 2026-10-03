@@ -973,6 +973,7 @@ function harvestCmd(d: string, ongoing: boolean): void {
     .join("");
   const r = runCmd([
     join(HERE, "run"),
+    "log-action",
     d,
     "postmaster",
     "note",
@@ -1067,6 +1068,7 @@ function commentCmd(fid: string, ticket: string, d: string, ongoing: boolean): v
   }
   const lr = runCmd([
     join(HERE, "run"),
+    "log-action",
     d,
     "postmaster",
     "ticket-comment",
@@ -1112,6 +1114,7 @@ function fileCmd(fid: string, d: string, ongoing: boolean): void {
   }
   const lr = runCmd([
     join(HERE, "run"),
+    "log-action",
     d,
     "postmaster",
     "ticket-create",
@@ -1130,6 +1133,7 @@ function declineCmd(fid: string, word: string, d: string, ongoing: boolean): voi
   const { st, x } = begin(fid, d, ongoing);
   const lr = runCmd([
     join(HERE, "run"),
+    "log-action",
     d,
     "postmaster",
     "note",
