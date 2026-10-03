@@ -474,7 +474,7 @@ describe("front door fixture routing", () => {
       expect(result.code).toBe(0);
       expect(result.err).toBe("");
       expect(result.out).toBe(
-        `${baseline.out}headless the target is a fixture copy made by fixture.sh new\n`,
+        `${baseline.out}headless the target is a fixture copy made by run fixture new\n`,
       );
     }
 

@@ -177,9 +177,9 @@ afterAll(() => {
 });
 
 const judge = (ticket: string, rep: string): { code: number; out: string } => {
-  const args = [SELF, wt, "--ticket", ticket];
+  const args = ["verify-journey", wt, "--ticket", ticket];
   if (rep) args.push("--report", rep);
-  const r = run("bash", args);
+  const r = run(SELF, args);
   return { code: r.code, out: r.out + r.err };
 };
 
@@ -210,7 +210,7 @@ const judgeArmed = (name: string, withShots: boolean): { code: number; out: stri
   }
   const r = run("bash", [
     "-c",
-    `cd "${wt}" && POSTMASTER_VERIFY="${specDir}" "${SELF}" --ticket "${join(tmp, "prose.md")}"`,
+    `cd "${wt}" && POSTMASTER_VERIFY="${specDir}" "${SELF}" verify-journey --ticket "${join(tmp, "prose.md")}"`,
   ]);
   return { code: r.code, out: r.out + r.err };
 };
@@ -335,7 +335,7 @@ describe("negative controls", () => {
     ]);
     const r = run("bash", [
       "-c",
-      `cd "${wt}" && POSTMASTER_VERIFY="${specDir}" "${SELF}" --ticket "${join(tmp, "prose.md")}"`,
+      `cd "${wt}" && POSTMASTER_VERIFY="${specDir}" "${SELF}" verify-journey --ticket "${join(tmp, "prose.md")}"`,
     ]);
     const out = r.out + r.err;
     expect(r.code).toBe(3);
@@ -373,7 +373,7 @@ describe("negative controls", () => {
         join(tmp, "fold-report.md"),
       ];
       const base = run("bash", args(baseVj));
-      const port = run("bash", args(SELF));
+      const port = run(SELF, ["verify-journey", ...args(SELF).slice(1)]);
       const walked = (r: { code: number; out: string; err: string }): boolean =>
         r.code === 0 && `${r.out}${r.err}`.includes("all 3 steps walked");
       expect(walked(base) && walked(port)).toBe(true);

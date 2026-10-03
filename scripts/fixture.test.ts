@@ -830,7 +830,7 @@ describe("score: negative controls, the same record with one check broken at a t
     expectScore("break-card", "ship-card", "no card.md");
   }, 30000);
   test("a waybill with no turnpikes line: stages alone fails", () => {
-    expectScore("break-legs", "stages", "turnpikes.sh legs");
+    expectScore("break-legs", "stages", "run turnpikes legs");
   }, 30000);
 });
 

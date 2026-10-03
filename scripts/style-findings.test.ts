@@ -1046,7 +1046,7 @@ beforeAll(() => {
     const subs = new Set<string>();
     for (const f of skillFiles) {
       const text = readFileSync(join(SKILL, f), "utf8");
-      for (const m of text.matchAll(/style-findings\.sh ([a-z-]*)/gu)) {
+      for (const m of text.matchAll(/scripts\/run style-findings ([a-z-]*)/gu)) {
         if (m[1]) subs.add(m[1]);
       }
     }
@@ -1057,9 +1057,9 @@ beforeAll(() => {
 
     // A subcommand the script lacks would be caught
     const planted = join(tmp, "planted.md");
-    writeFileSync(planted, "run `<tool>/scripts/style-findings.sh sort <dispatch>`\n");
+    writeFileSync(planted, "run `<tool>/scripts/run style-findings sort <dispatch>`\n");
     const plantedSubs = [
-      ...readFileSync(planted, "utf8").matchAll(/style-findings\.sh ([a-z-]*)/gu),
+      ...readFileSync(planted, "utf8").matchAll(/scripts\/run style-findings ([a-z-]*)/gu),
     ]
       .map((m) => m[1])
       .join(" ");
