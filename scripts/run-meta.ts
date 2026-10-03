@@ -81,13 +81,14 @@ import { basename, dirname, join } from "node:path";
 import { tryTomlFile } from "./lib/data.ts";
 import { toolRoot } from "./lib/paths.ts";
 import { mkstempSync, run, signalExitCode } from "./lib/proc.ts";
+import { runFromPin } from "./lib/pinned.ts";
 import { pySplitLines, pyTrim } from "./lib/text.ts";
 
 const TOOL = toolRoot(import.meta);
 const SCRIPT = import.meta.path;
 
 const USAGE =
-  "usage: run run-meta <dispatch> <repo> | pin <repo> <commit> | path <dispatch> | check <dispatch> | release <dispatch>";
+  "usage: run run-meta <dispatch> <repo> | pin <repo> <commit> | path <dispatch> | check <dispatch> | release <dispatch> | run-pinned <dispatch> <name> [args...]";
 
 // Every command returns its exit code with the bytes for each stream; the CLI boundary writes
 // them, and the tests inspect them. stdout carries results (the pin path, the checkout,
@@ -989,6 +990,22 @@ if (import.meta.main) {
     let outcome: Outcome;
     if (cmd === "pin" && argv.length === 3)
       outcome = pin(argv[1] as string, argv[2] as string, readTools());
+    else if (cmd === "run-pinned" && argv.length >= 3) {
+      const dispatch = argv[1] as string;
+      const name = argv[2] as string;
+      const args = argv.slice(3);
+      const pinResult = pathOf(dispatch);
+      if (pinResult.code !== 0) {
+        process.stdout.write(pinResult.out);
+        process.stderr.write(pinResult.err);
+        process.exit(pinResult.code);
+      }
+      const copy = pinResult.out.trim();
+      const r = runFromPin(copy, name, args);
+      process.stdout.write(r.out);
+      process.stderr.write(r.err);
+      process.exit(r.code);
+    }
     else if (cmd === "path" && argv.length === 2) outcome = pathOf(argv[1] as string);
     else if (cmd === "check" && argv.length === 2) outcome = checkPin(argv[1] as string);
     else if (cmd === "release" && argv.length === 2) outcome = releasePin(argv[1] as string);
