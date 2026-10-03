@@ -33,7 +33,8 @@ what it is, or by the slot it sits in.
 - **Street addresses**: a house number before capitalised words and a street type; a European
   street name before its number; a UK postcode after a town; a US city, state and ZIP; a PO box.
 
-**v1** was written before any run over the history, and committed as it ran (7dfffcb). **v2**,
+**v1** was written before any run over the history, and is kept as it ran in
+`apparatus/patterns-v1.ts`; `run.ts` uses it with `--patterns v1`. **v2**,
 after the first held-out set, adds: a nickname in quotes inside a name; a prefix on a person
 field's name, as in `lead-maintainer`, and a plain `contact` field; "thanks", "kudos" and
 "cheers" as credits; a named relative, a family word before a full name; a diagnosis of a listed
@@ -68,7 +69,8 @@ and `qwen/qwen3.8-max-0902` as `results/heldout*/generated.txt` record.
 
 **Running it.** From the repository root, `bun raw/trials/pii-patterns/apparatus/run.ts corpus
 --out <dir>`, `history --out <dir> --rev 873cf2d`, `identity --out <dir> --rev 873cf2d` and
-`heldout --out <dir> --in raw/trials/pii-patterns/results/heldout2/lines.json`.
+`heldout --out <dir> --in raw/trials/pii-patterns/results/heldout2/lines.json`, each with
+`--patterns v1` for the first version.
 
 # Results
 

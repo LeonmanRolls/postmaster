@@ -7,6 +7,9 @@
  *   bun run.ts identity --out <dir> --rev <rev>     the corpus and the history hashed, to compare with Python's
  *   bun run.ts heldout  --out <dir> --in <file>     lines another model wrote, stored in fragments
  *
+ * Each mode takes --patterns v1 to run the first version of the patterns, kept as it ran in
+ * patterns-v1.ts; the default is the current version in patterns.ts.
+ *
  * Patterns make no call and give the same answer every time, so each set is scanned once. The
  * history mode records, for each line flagged, its index, commit, path, kinds and rules, never
  * its text, and compares the flags with the Jev trial's full pass where it judged the same lines.
@@ -15,7 +18,11 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { CLEAN, corpus, corpusContext, type Item } from "./corpus";
 import { historyLines } from "./history";
-import { type Finding, KINDS, kinds, scan } from "./patterns";
+import type { Finding } from "./patterns";
+import * as current from "./patterns";
+
+/** The patterns in use, chosen by --patterns. */
+let P: typeof current = current;
 
 const JEV_FULL = "raw/trials/jev-pii/results/v6-full/history.json";
 
@@ -38,8 +45,8 @@ function score(items: Item[], context: Map<string, string>): string[] {
   const falseAlarms: string[] = [];
   const byRule = new Map<string, number>();
   items.forEach((item, index) => {
-    const findings = scan(item.text, context.get(item.text) ?? "");
-    const got = kinds(findings);
+    const findings = P.scan(item.text, context.get(item.text) ?? "");
+    const got = P.kinds(findings);
     for (const rule of rulesOf(findings)) byRule.set(rule, (byRule.get(rule) ?? 0) + 1);
     const number = `${index + 1}`;
     if (item.label) {
@@ -64,7 +71,7 @@ function score(items: Item[], context: Map<string, string>): string[] {
 
 function corpusMode(out: string): void {
   const items = corpus();
-  const control = CLEAN.filter((line) => scan(line).length > 0).length;
+  const control = CLEAN.filter((line) => P.scan(line).length > 0).length;
   const report = [
     "The Jev trial's 71 made-up lines (v6), scanned once; line numbers as in ../../jev-pii/results/v6/corpus.txt.",
     "",
@@ -88,9 +95,9 @@ function historyMode(out: string, rev: string): void {
   const lines = historyLines(rev);
   const flagged: Flag[] = [];
   lines.forEach((line, index) => {
-    const findings = scan(line.text, line.context);
+    const findings = P.scan(line.text, line.context);
     if (findings.length) {
-      flagged.push({ index, commit: line.commit.slice(0, 12), path: line.path, kinds: kinds(findings), rules: rulesOf(findings) });
+      flagged.push({ index, commit: line.commit.slice(0, 12), path: line.path, kinds: P.kinds(findings), rules: rulesOf(findings) });
     }
   });
   const seconds = Math.round((performance.now() - started) / 100) / 10;
@@ -100,7 +107,7 @@ function historyMode(out: string, rev: string): void {
   for (const flag of flagged) for (const rule of flag.rules) byRule.set(rule, (byRule.get(rule) ?? 0) + 1);
   const report = [
     `history at ${resolved.slice(0, 12)}: ${lines.length} lines in ${seconds} s, ${flagged.length} flagged`,
-    `by kind: ${KINDS.map((k) => `${k} ${flagged.filter((f) => f.kinds.includes(k)).length}`).join(", ")}`,
+    `by kind: ${P.KINDS.map((k) => `${k} ${flagged.filter((f) => f.kinds.includes(k)).length}`).join(", ")}`,
     `by rule: ${[...byRule].map(([r, c]) => `${r} ${c}`).join(", ")}`,
   ];
   const jev = JSON.parse(readFileSync(JEV_FULL, "utf8"));
@@ -143,7 +150,7 @@ function heldoutMode(out: string, file: string): void {
   console.log(report.join("\n"));
 }
 
-function main(args: string[]): void {
+async function main(args: string[]): Promise<void> {
   const [mode, ...rest] = args;
   const opts = new Map<string, string>();
   for (let i = 0; i + 1 < rest.length; i += 2) opts.set(rest[i], rest[i + 1]);
@@ -153,10 +160,11 @@ function main(args: string[]): void {
     process.exit(2);
   }
   mkdirSync(out, { recursive: true });
+  if (opts.get("--patterns") === "v1") P = await import("./patterns-v1");
   if (mode === "corpus") corpusMode(out);
   else if (mode === "history") historyMode(out, opts.get("--rev") ?? "origin/main");
   else if (mode === "identity") identityMode(out, opts.get("--rev") ?? "origin/main");
   else heldoutMode(out, opts.get("--in") ?? "");
 }
 
-main(process.argv.slice(2));
+await main(process.argv.slice(2));
