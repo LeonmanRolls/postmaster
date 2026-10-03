@@ -1,202 +1,369 @@
-# Workhorse spec: 182 A fixture run runs every agent at its harness's lowest effort
+# Workhorse spec: 237 A lane that hits a provider limit pauses its run and tells the user at once
 
 ## Summary
 
-A fixture run launches every agent at its harness's lowest effort; a ticket
-run keeps its configured levels. `fixture.sh new` leaves a fixture fact in
-the copy it makes, [`run-meta.sh`](https://github.com/brindlewick/postmaster/blob/0620bfc90eb32a35124279d9780df42174e6ccd9/scripts/run-meta.sh) records lowered efforts from one table when
-that fact is present, `launch.sh review` takes its effort from the run's
-record instead of a fixed top level, and every waybill carries one
-`efforts:` line printed from the record, which `fixture.sh score` checks.
-This spec is the coachman's one spec for both lanes, written for a base that
-includes #109.
+A workhorse or reviewer that ends on a provider usage-limit or quota message is recorded
+as walled, a walled workhorse pauses its run with an escalation instead of being silently
+degraded, and the user hears at once through a new `WALL` run state. One new script,
+`lane-wall.sh` (`record`, `pause`, `ruling`), holds the deterministic half; the runbooks
+hold the judgment half. The wall classifier in `launch.sh transient` stays the one
+authority and is called, never copied.
 
 ## Technical context
 
-- **Language and version**: TypeScript run by Bun. Since #109 the scripts
-  this ticket changes are [`scripts/fixture.ts`](https://github.com/brindlewick/postmaster/blob/0620bfc90eb32a35124279d9780df42174e6ccd9/scripts/fixture.ts), [`scripts/run-meta.ts`](https://github.com/brindlewick/postmaster/blob/0620bfc90eb32a35124279d9780df42174e6ccd9/scripts/run-meta.ts) and
-  [`scripts/launch.ts`](https://github.com/brindlewick/postmaster/blob/0620bfc90eb32a35124279d9780df42174e6ccd9/scripts/launch.ts), each run by its `scripts/<name>.sh` wrapper;
-  every edit lands in the `.ts`, never the wrapper.
-- **Dependencies used or added**: none. No new packages; [`package.json`](https://github.com/brindlewick/postmaster/blob/0620bfc90eb32a35124279d9780df42174e6ccd9/package.json) and
-  [`bun.lock`](https://github.com/brindlewick/postmaster/blob/0620bfc90eb32a35124279d9780df42174e6ccd9/bun.lock) are not touched.
-- **Testing**: `bun test scripts/fixture.test.ts scripts/run-meta.test.ts
-  scripts/launch.test.ts` for the ticket's controls; the waybill's gate from
-  the worktree root; and a fixture run scored clean on this branch before
-  merge (the merge gate, not this run's work).
-- **Constraints**: This ticket waits for #109 and is implemented on a base
-  that includes it, so nothing is copied from #109's branch (the user's
-  word, 2026-10-01). Only fixture runs change. Fixture status comes only
-  from the marker `fixture.sh new` writes, never the repository's name or
-  path. The machine config file is never written. A ticket run records its
-  config as today. An unmapped harness keeps its effort, with a warning.
-  Tests sit beside their target as `<name>.test.ts`, in a functional style.
-  Work in this worktree only; never push.
+- **Language and version**: TypeScript on Bun 1.4.2 or newer, as the repo's other scripts:
+  each `scripts/<name>.sh` a one-line wrapper handing its arguments to `scripts/<name>.ts`.
+- **Dependencies used or added**: none. Reuse only: `launch.sh transient` (subprocess),
+  the TOML reader in `scripts/lib/data.ts`, `scripts/lib/proc.ts`, `log-action.sh`,
+  `host.sh`, `launch.sh launch`/`resume`, `verify.sh`, and a new pure query module
+  `scripts/lib/wall.ts`.
+- **Testing**: Bun tests beside every script (`bun run check` runs them); stub lane logs
+  (events `.jsonl` streams plus `.err` files in real harness shapes, including the codex
+  `turn.failed` shape quoted in D19); stub harness binaries on `PATH` with invocation
+  counters for launched-once checks (the pattern `launch.test.ts` already uses);
+  `POSTMASTER_WATCH_TEST_MODE` for watcher steps; a fixed `TZ` for clock-time tests.
+- **Constraints**: no new Python; works on Linux and macOS 13 or newer with pure
+  TypeScript and no platform branches; `launch.ts`'s classifier untouched (the one
+  authority; [#200](https://github.com/brindlewick/postmaster/issues/200) merges clean
+  either way); `log-action.sh` verbs stay a fixed enforced set, extended by two;
+  runbook script references go through `<tool>`.
 
 ## Direction check
 
-- "Fixture runs should be at minimum effort" (2026-09-30): [`run-meta.ts`](https://github.com/brindlewick/postmaster/blob/0620bfc90eb32a35124279d9780df42174e6ccd9/scripts/run-meta.ts)
-  rewrites the recorded config's efforts to the one lowest table when the
-  fixture fact is present, so every `--run` launch, resume and review
-  follows it.
-- Lowest levels tried 2026-09-30: exactly the one table [`run-meta.ts`](https://github.com/brindlewick/postmaster/blob/0620bfc90eb32a35124279d9780df42174e6ccd9/scripts/run-meta.ts)
-  records from: codex `low`, claude `low`, muse `minimal`, MiMo `low`.
-- Only fixture runs change; ticket runs keep their top level: the ticket
-  path records the effective machine config unchanged, and review reads the
-  lane's recorded effort, which on a ticket run is the configured level
-  (top in practice, per AC5).
-- No repo-specific hardcoding: the fixture fact is a file the copy carries;
-  detection never looks at name or path.
-- Deterministic work in scripts: the table, the fact check, the record
-  rewrite, the review effort, the `efforts:` line and the score check all
-  live in `scripts/`, with paired controls in their tests. The postmaster
-  pastes the `efforts:` line; it never composes it.
-- TypeScript for every script this ticket changes: the three scripts are
-  TypeScript on the base, so the change is made there directly.
-- Every count needs a control: AC5 is a control matrix over identical
-  commands under a fixture run's record and a ticket run's.
+- The substitute starts from the run's base, never the walled lane's branch, and no
+  partial work carries over: the ruling cuts a fresh worktree at BASE (D4) and the
+  walled branch is never read for code. Lanes still cannot see each other.
+- TypeScript in the scripts the watcher and the coachman already use, tests beside
+  them, stub lanes as the launch tests have: new `lane-wall` script plus small edits
+  to `runs-status`, `runs-watch`, `log-action` and `launch` (config resolution only);
+  tests beside each; stubs as above.
+- No new Python: every new file is TypeScript, shell wrappers, or runbook prose.
+- Linux and macOS: no shell-outs with platform-specific flags, no `/proc`, no
+  GNU-only tools; time math in TypeScript against the machine-local zone.
+- The `launch.ts` classifier is the one authority; lane streams and `.err` lines are
+  read the way the watcher reads a coachman's: `record` passes `(err, stream, skip)`
+  to `launch.sh transient` and treats only its `provider-wall` verdict as a wall. No
+  wall-token matching exists anywhere else; message selection is positional (D2).
+- The reset time is whatever the provider's message names; when it names none, the
+  escalation says so and the ruling decides: D2 parses the named time or records
+  `none`; D5 says how a ruling with no time, or a past time, behaves.
+- Deterministic work goes in scripts, not prose: record, pause, ruling, WALL
+  derivation and the timed rest step are all scripted and tested; the runbooks say
+  when to run them.
+- Nothing harness-specific in the flow: harness wall shapes are documented in
+  `harnesses.md`; the scripts read generic record shapes and the one classifier.
 
 ## Structure
 
-- [`scripts/fixture.ts`](https://github.com/brindlewick/postmaster/blob/0620bfc90eb32a35124279d9780df42174e6ccd9/scripts/fixture.ts) / [`scripts/fixture.test.ts`](https://github.com/brindlewick/postmaster/blob/0620bfc90eb32a35124279d9780df42174e6ccd9/scripts/fixture.test.ts): `new` leaves the
-  fixture fact in the copy; `score` checks the waybill's efforts against
-  `run.json` (AC1, AC4).
-- [`scripts/run-meta.ts`](https://github.com/brindlewick/postmaster/blob/0620bfc90eb32a35124279d9780df42174e6ccd9/scripts/run-meta.ts) / [`scripts/run-meta.test.ts`](https://github.com/brindlewick/postmaster/blob/0620bfc90eb32a35124279d9780df42174e6ccd9/scripts/run-meta.test.ts): dispatch records
-  fixture efforts from the one table, warns on an unknown harness, never
-  touches the machine file, ticket path unchanged (AC2); a new
-  `efforts <dispatch>` command prints the waybill's `efforts:` line from
-  `run.json` (AC4).
-- [`scripts/launch.ts`](https://github.com/brindlewick/postmaster/blob/0620bfc90eb32a35124279d9780df42174e6ccd9/scripts/launch.ts) / [`scripts/launch.test.ts`](https://github.com/brindlewick/postmaster/blob/0620bfc90eb32a35124279d9780df42174e6ccd9/scripts/launch.test.ts): `review` takes the
-  lane's effort from the selected config instead of a fixed top level
-  (AC3); the AC5 command controls.
-- [`skills/postmaster/SKILL.md`](https://github.com/brindlewick/postmaster/blob/0620bfc90eb32a35124279d9780df42174e6ccd9/skills/postmaster/SKILL.md): the waybill template's Team section gains
-  the `efforts:` line.
-- [`skills/postmaster/postmaster.md`](https://github.com/brindlewick/postmaster/blob/0620bfc90eb32a35124279d9780df42174e6ccd9/skills/postmaster/postmaster.md): Stage B step 7 pastes the line
-  `run-meta.sh efforts <dispatch>` prints, and names `run.json` as the
-  source of the whole team.
-- [`skills/postmaster/harnesses.md`](https://github.com/brindlewick/postmaster/blob/0620bfc90eb32a35124279d9780df42174e6ccd9/skills/postmaster/harnesses.md): the review level is the run-recorded
-  lane effort, not a fixed top level.
-- [`skills/postmaster/coachman.md`](https://github.com/brindlewick/postmaster/blob/0620bfc90eb32a35124279d9780df42174e6ccd9/skills/postmaster/coachman.md): the bug-lens entry no longer says the
-  form fixes each harness at its highest review level.
+New:
 
-No wiki page is updated here: the wiki records what a scored fixture run
-has shown, and that evidence is the merge gate's business.
+- `scripts/lane-wall.sh`, `scripts/lane-wall.ts`, `scripts/lane-wall.test.ts`:
+  `record`, `pause`, `ruling`.
+- `scripts/lib/wall.ts`, `scripts/lib/wall.test.ts`: pure queries over action-log
+  lines (un-ruled workhorse walls, rulings, pending rests).
 
-## Acceptance checks
+Changed (implementation plus the tests beside each):
 
-For each acceptance criterion, the check that shows it working the way it
-will really be used: the command, the input and what it should print.
+- `scripts/log-action.ts`: two new verbs, `wall` and `wall-ruling`, shape-enforced.
+- `scripts/runs-status.ts`: the `WALL` state.
+- `scripts/runs-watch.ts`: wake on `WALL`; silence plus a timed resume step for
+  rest-awaiting runs.
+- `scripts/launch.ts`: config resolution only — a lane missing from `run.json` falls
+  back to the run manifest's ruled-in entry. The classifier is untouched.
+- `skills/postmaster/coachman.md`: classify at harvest, pause-and-ask for walls,
+  ruling forms, card words (`replaced` vs `degraded`).
+- `skills/postmaster/postmaster.md`: the `WALL` poll entry, immediate user notice,
+  rest-awaiting resumes.
+- `skills/postmaster/harnesses.md`: attested wall shapes, the one recognition path.
 
-- **AC1.** `scripts/fixture.sh new <scratch>/copy1 <ticket>` makes a repo
-  whose first commit holds `.postmaster/fixture` with the fixed one-line
-  marker and nothing else new. `mv` the copy to a neutral name and
-  dispatch against it: `run.json` still records the lowest efforts. A
-  plain repo with "fixture" in its name records the configured efforts.
-- **AC2.** `scripts/run-meta.sh <dispatch> <fixture-copy>` writes
-  `run.json` with codex `low`, claude `low`, muse `minimal`, MiMo `low`
-  on every lane and role whose config names an effort; a lane that names
-  none still names none; a lane on an unmapped harness keeps its
-  configured effort and the command names it on stderr; `sha256sum` of
-  the machine config is identical before and after. Against a plain repo
-  the same command records the effective config unchanged.
-- **AC3.** With stub harnesses on PATH,
-  `scripts/launch.sh review <lane> <scratch> <base> --run <fixture-dispatch>`
-  runs codex with `model_reasoning_effort="low"`, claude with
-  `/code-review low <range>` and `--effort low`, mimo with
-  `--variant low`. The identical commands with `--run <ticket-dispatch>`
-  name `max`, `max`, `high`, as today.
-- **AC4.** `scripts/run-meta.sh efforts <fixture-dispatch>` prints one
-  `efforts:` line naming every lane and coachman role that has an effort
-  in `run.json`, each at its recorded level, and a fixture run's waybill
-  carries that line. `scripts/fixture.sh score <dispatch> <repo>` passes
-  a waybill whose `efforts:` line and Team efforts match `run.json`, and
-  fails one where either differs.
-- **AC5.** `scripts/launch.sh form <lane> --run <dispatch>`,
-  `form coachman --leg synthesis --run <dispatch>` (launch and resume
-  lines) and the stubbed AC3 review: identical commands under a fixture
-  run's dispatch name the lowest efforts, and under a ticket run's the
-  configured ones.
-
-## Complexity tracking
-
-| Departure | Why needed | Simpler alternative rejected because |
-|---|---|---|
-| Review names the harness top level when the lane names no effort (codex `max`, claude `max`, mimo `high`) | Without a named level, claude's `/code-review` reuses whatever level an interactive session last used ([harnesses.md](https://github.com/brindlewick/postmaster/blob/0620bfc90eb32a35124279d9780df42174e6ccd9/skills/postmaster/harnesses.md)), which is nondeterministic; and an effortless lane's review must stay as today. | Omitting the level follows harness defaults that differ per harness and, for claude, per machine history. |
+Deliberately untouched: `review-round.sh` (the coachman classifies reviewers at
+harvest with the identical command); stages (a pause is a stop inside the current
+stage, not a stage); markers (no new marker); `run.json` (never edited).
 
 ## Decisions
 
-- **Where the fixture fact lives.** `fixture.sh new` writes
-  `.postmaster/fixture` in the copy before the initial commit, so the
-  fact is tracked in the copy's first commit. Content is a fixed one-line
-  marker string naming the format, holding no path or repository name;
-  tests assert it byte-for-byte. `.postmaster/` is the established home
-  for postmaster facts (settings, verify); a root dotfile would scatter
-  them. The app template does NOT ship the file: it is a property of the
-  copy `new` made, and shipping it would mark every `makeRepo`-built
-  repo (including score self-test records) as a fixture run.
-- **Detection site.** [`run-meta.ts`](https://github.com/brindlewick/postmaster/blob/0620bfc90eb32a35124279d9780df42174e6ccd9/scripts/run-meta.ts) checks the target repo path it is
-  already given for `.postmaster/fixture`. Presence is the fact: a
-  missing file means a ticket run, and an unreadable-but-present file
-  still counts as fixture. Never the repository's name or path.
-- **One lowest table, in [`run-meta.ts`](https://github.com/brindlewick/postmaster/blob/0620bfc90eb32a35124279d9780df42174e6ccd9/scripts/run-meta.ts).** The table
-  (codex `low`, claude `low`, muse `minimal`, MiMo `low`) lives once in
-  [`run-meta.ts`](https://github.com/brindlewick/postmaster/blob/0620bfc90eb32a35124279d9780df42174e6ccd9/scripts/run-meta.ts), its only consumer; no shared module, no second table.
-  It applies to every lane and every team role (coachman,
-  coachman_fallback, postmaster, coachman_legs entries) whose effective
-  config names a harness and an effort, before `run.json` is written. One
-  that names no effort stays without one (the user's word, 2026-10-01):
-  the table never adds an effort the config did not name. An unmapped
-  harness keeps its configured effort and is named on stderr with the
-  kept effort.
-- **No separate review effort.** Review reads the lane's recorded
-  `effort`, the field AC3 names ("the effort the run recorded for that
-  lane"). A ticket run therefore reviews at its configured level (top in
-  practice), exactly what AC5's "in a ticket run, each launches at the
-  configured level" requires of the bug-lens review. A parallel
-  `review_effort` field would contradict that sentence and add a second
-  table the ticket never asks for.
-- **Review effort source.** `launch.ts review` takes the lane's effort
-  from the selected config (recorded with `--run`, live without), the
-  same source as launch and resume; the fixed top level is gone. When
-  the lane names no effort, review names the harness top level (see
-  Complexity tracking), on a fixture run as on a ticket run. Harnesses
-  without a review form still exit 3.
-- **Waybill efforts: one `efforts:` line.** `run-meta.sh efforts
-  <dispatch>` prints one line from `run.json`: `efforts:` followed by
-  `<name>=<effort>` pairs for every lane and coachman role that has an
-  effort, a per-leg coachman as `coachman.<leg>`. It names the levels the
-  Team lines leave out: reviewer-only lanes, the coachman fallback and
-  per-leg coachmen. The postmaster is left out: no launch in a run reads
-  its entry. Every waybill's Team section carries the line, a ticket
-  run's naming its configured levels, so the template has one shape. The
-  postmaster pastes the printed line at Stage B step 7 and never writes it
-  by hand.
-- **`score` checks AC4.** `fixture.sh score` checks the waybill's
-  `efforts:` line against `run.json` pair by pair, and each Team entry's
-  effort against the recorded one, reading the effort as the entry's last
-  `/` field because a model may itself hold a slash
-  (`mimo=mimo/<provider>/<model>/high`). A match scores clean and any
-  difference fails, with positive and negative controls beside the
-  existing ones.
-- **Runbook wording follows the behavior.** [`harnesses.md`](https://github.com/brindlewick/postmaster/blob/0620bfc90eb32a35124279d9780df42174e6ccd9/skills/postmaster/harnesses.md) (review level
-  is the run-recorded lane effort; top when the lane names none),
-  [`coachman.md`](https://github.com/brindlewick/postmaster/blob/0620bfc90eb32a35124279d9780df42174e6ccd9/skills/postmaster/coachman.md) (bug-lens entry drops the fixed-top sentence),
-  [`postmaster.md`](https://github.com/brindlewick/postmaster/blob/0620bfc90eb32a35124279d9780df42174e6ccd9/skills/postmaster/postmaster.md) (Stage B step 7 pastes the `efforts:` line; it already
-  says the team's config is the one in `run.json`, and its wording is
-  tidied to name that source once) and [`SKILL.md`](https://github.com/brindlewick/postmaster/blob/0620bfc90eb32a35124279d9780df42174e6ccd9/skills/postmaster/SKILL.md) (the template's
-  `efforts:` line) change with the scripts; the script and its runbook
-  change together.
+### D1. One new script, one shared lib, classifier untouched
+
+`lane-wall.sh` holds `record`, `pause` and `ruling`. `lib/wall.ts` holds the pure
+queries `runs-status.sh`, `runs-watch.sh` and `lane-wall.sh` share. `launch.sh
+transient` decides every wall; nothing else matches wall tokens. `#200` touches the
+harness-command construction in `launch.ts`; this ticket touches config resolution
+there only, so the two merge in either order.
+
+### D2. `record`: classify one lane end through the one classifier
+
+```
+lane-wall.sh record <dispatch> <lane> <role> <events> <err>
+```
+
+`<role>` is `workhorse` or `reviewer`. The command shells to `launch.sh transient
+<err> <events> <skip>`, where `<skip>` is the `stream-skip` on the lane's latest
+rest ruling, or 0 when there is none (attempt 1 has no earlier attempt; a rested
+lane's earlier attempts keep their history in the appended stream, and the skip
+reads past them exactly as the watcher's skip does for coachman legs).
+
+- Verdict `provider-wall`: select the message, parse the reset (D17), and append
+  `wall <lane> "<role> reset <ISO|none> <message>"` via `log-action.sh`, unless the
+  lane already has an un-ruled wall line, in which case record nothing. Print `wall`
+  (recorded) or `duplicate` (already recorded).
+- Any other verdict: record nothing, print `none`.
+- Exit 0 whenever the verdict was obtained; exit 1 on usage or unreadable inputs.
+  Callers branch on the printed word, so the common case stays `set -e` safe.
+
+Message selection is positional and matches no tokens: the last error-record text
+in the post-skip stream, preferring values under `message`, then `error_message`,
+then `reason`, then the first string depth-first excluding `type` and `name`;
+failing that, the last non-empty non-`host:` `.err` line; failing that, the last
+non-JSON stream line. First line only, capped at 500 characters. The reset parse
+runs on the selected message only.
+
+### D3. `pause`: write the pause state and stop
+
+```
+lane-wall.sh pause <dispatch> [--note <text>]
+```
+
+Collects the run's un-ruled workhorse walls plus its pending rests (D10) from the
+action log. When there are neither, print `none` and change nothing. Otherwise
+write `<dispatch>/ESCALATION.md` with one section per walled lane (lane, role, the
+provider's message verbatim, the reset moment or the words `no reset time named`),
+one section per pending rest (lane, `resume after <moment>`), the three ruling
+choices with their meanings, the one-lane-per-ruling rule, and the `--note` text
+as `Last ruling refused` when given; touch `.escalation-ready`; log one `escalate`
+line per un-ruled walled lane (target the lane, detail `provider wall: ruling
+needed, rest | substitute | go-on`); print `paused <lane>...`. No guard against
+re-running: every call is a genuine new pause (initial, post-refusal, or
+rest-awaiting), and the coachman never re-pauses an unchanged pause.
+
+### D4. `ruling`: carry out one ruling for one lane
+
+```
+lane-wall.sh ruling <dispatch> rest <lane> [--time <clock>]
+lane-wall.sh ruling <dispatch> substitute <walled> <sub> --brief <file>
+lane-wall.sh ruling <dispatch> go-on <lane>
+```
+
+Every form first requires an un-ruled workhorse wall for the named lane and
+otherwise refuses with exit 2 and a message. Validation passed, the ruling is
+logged (`wall-ruling`, D9) at accept time, before acting, and the copy or timing
+it carries is in that line. Every form prints `remaining <n>`, the un-ruled
+workhorse walls left; the coachman runs `pause` while any remain. Exit 2 is a
+refusal (run stays paused, `WALL` still shows); exit 1 is usage or IO.
+
+- `rest`: effective resume-after per D5. When it is now, measure the stream's line
+  count N, then resume the lane through the run's standard resume form (`host.sh
+  run` with `launch.sh resume --run`, `--append`, the lane's own `--out`/`--err`/
+  `--marker` paths); with no recorded thread id (a pre-thread wall) launch fresh
+  in the same worktree instead, whose approved spec is already committed. The
+  ruling line carries `stream-skip N`. Print `restored <lane>`. The coachman then
+  waits and harvests as for any lane.
+- `substitute`: read `[lanes.<sub>]` from the live machine config
+  (`POSTMASTER_CONFIG`, else `~/.postmaster/config.toml`) with the TOML reader in
+  `scripts/lib/data.ts`. Refuse with exit 2 when the config has no such lane, or
+  when the run manifest already has the lane (no second worktree for one lane
+  name). Otherwise copy `{harness, model, effort, env_file}` (whichever keys exist;
+  values only, never key contents) into a new manifest entry `lanes.<sub> =
+  {thread_id: null, outcome: "staged", spec_commit: <the run's approved spec
+  commit>, substitute_for: <walled>, config: {...}}` in place; cut
+  `<repo>/.worktrees/<TICKET>-<sub>` at BASE on branch `wb/<TICKET>-<sub>`; arm it
+  (`verify.sh arm`); commit the approved spec at its root byte-identical (read at
+  `spec_commit` from the synthesis worktree); launch it through the standard
+  launch form with the coachman-written `--brief`. The ruling line carries the
+  copied `harness/model/effort`. Print `substituted <walled> <sub>`. The
+  substitute is launched and resumed thereafter exactly like any workhorse (D14);
+  the coachman records its thread id, waits, harvests and audits it as any lane's.
+- `go-on`: nothing further to run. Print `go-on <lane>`; the coachman synthesizes
+  without the lane and records it degraded with the cause on both cards.
+
+### D5. The effective resume-after, and rulings with no time or a past time
+
+Effective resume-after is the ruling's `--time` when given, else the wall line's
+reset moment, else none. `--time` takes the D17 clock shapes, parsed against now.
+None, or a moment not in the future, means now: resume on delivery. A future
+moment means park: log the ruling with `resume-after <moment>` and print `parked
+<lane> <moment>`; the coachman runs `pause` and exits, and the timed step (D10)
+resumes the leg after the moment. Nothing sleeps. A ruling `--time` overrides the
+message's time; the user's word is fresher.
+
+### D6. When the coachman classifies a lane end
+
+Workhorses, at harvest, for exited lanes only: a summary present means harvested,
+with no classification (a finished lane did not end on a wall, whatever its
+stream holds mid-flight). Otherwise run `record`: a wall wins over `BLOCKED`
+(the run never auto-resumes into a possibly exhausted allowance; the coachman
+attaches the blocked question with `pause --note`). No wall means today's paths:
+blocked handling, or the unchanged remount path. Stalled and still-running lanes
+are never classified; stall handling is unchanged.
+
+Reviewers, at harvest, for finished non-timeout reviewers only: a reviewer the
+wait recorded as timed out keeps its timeout degradation with no classification;
+a reviewer that returned a verdict is `REVIEWED` with no classification;
+otherwise run the identical `record` command with role `reviewer`. A wall is
+recorded as a `wall` line as well as degraded, and the lane is restored by being
+launched again in the next round, which the round mechanics do for every lane.
+
+### D7. `WALL` means an un-ruled workhorse wall
+
+A `wall` line with role `workhorse` and no later `wall-ruling` line for the same
+lane raises `WALL`. Reviewer walls never raise it: no ruling is owed for them
+(the standing disposition is degraded plus restore), and paging the user over a
+fully automatic restore would be noise that can stick past the loop's last round.
+The tell-user message still names the role.
+
+### D8. Status precedence
+
+`WALL` sits after `USER` and before `RULE`; everything else keeps its order. A
+paused run reads `WALL`, which is waiting for the postmaster: the escalation
+marker beside it does not win. `USER` still wins once the ruling question is
+with the user, so a parked ruling question never re-wakes.
+
+### D9. Line grammars, enforced at write time
+
+`log-action.sh` gains two verbs. Their details are shape-checked like `finding`
+and `spec-review`, because `runs-status.sh` and `runs-watch.sh` compute from
+them and a malformed line must fail at write time, never misread later.
+
+- `wall <lane> "<workhorse|reviewer> reset <ISO-moment|none> <message>"`: role
+  first, then the literal `reset`, the ISO moment in machine-local offset or
+  `none`, then the provider's message.
+- `wall-ruling <lane> "<rest|substitute|go-on> ..."`: `rest resume-after
+  <ISO-moment|now> stream-skip <N>`; `substitute <sub>
+  <harness>/<model>/<effort>`; `go-on degraded`.
+
+### D10. Rest-awaiting runs: silence until the moment, then a mechanical resume
+
+`pause` covers pending rests (a rest ruling with no later `resume` line for the
+lane) as well as un-ruled walls, so one command re-pauses every pause. On `RULE`
+with a pending rest and no un-ruled wall, the watcher stays silent while the
+moment is future and, once it passes, takes the timed step itself: remove
+`.escalation-ready`, resume the leg on its recorded thread with prompt
+`Carry out the recorded rest ruling for <lane>; the reset time (<moment>) has
+passed.`, and log the step with `the watcher took it`. The coachman then re-runs
+the ruling, which resumes the lane. Without a watcher, the postmaster does the
+same on reading the rest-awaiting escalation with a past moment.
+
+### D11. Several walls, one lane per ruling
+
+A ruling names its lane, always (substitute names both). After each carried-out
+ruling the coachman waits for and harvests any lane it launched, then runs
+`pause`: output `paused` means exit; `none` means continue. Launches outlive the
+coachman through `host.sh`, so exiting paused with a substitute running is safe;
+the next resume harvests it.
+
+### D12. Pre-thread workhorse walls
+
+A workhorse that walled before printing a thread id is recorded and paused like
+any workhorse wall. Rest launches it fresh in its own worktree (the approved
+spec is already committed there); substitute and go-on behave as usual.
+
+### D13. Walls recurse with no special rule
+
+A substitute, or a rested lane, that walls again gets a new wall line (its
+earlier wall was ruled) and pauses again. The record shows the whole chain.
+
+### D14. Substitutes launch through the standard forms
+
+`launch.sh` resolves a lane missing from `run.json` from the dispatch manifest's
+`lanes.<name>.config`, falling back only there and dying as today when neither
+has it. No new flags; launch and resume both work; the coachman uses the
+standard forms unchanged. Only config resolution changes; the classifier,
+attempt phases and refusal behavior are untouched.
+
+### D15. Cards and the synthesis line
+
+The checkpoint-1 card's per-workhorse outcomes and the ship card's lane outcomes
+gain `replaced`: the walled lane is recorded as replaced with the cause and the
+substitute's name, never as degraded, and both cards name the substitute. A
+go-on lane is recorded degraded with the cause, as today. The `SYNTHESIS` line
+ranks the lanes that produced work the synthesis considered, the substitute
+under its own name; a replaced lane is named on the cards, not ranked. The
+substitute is audited (`audit/<sub>.md`, `audit/<sub>-verify/`) as any
+workhorse.
+
+### D16. What this does not add
+
+No new stage (a pause stops inside the current stage), no new marker, no
+sleeping process, no `run.json` edit, no `review-round.sh` change.
+
+### D17. Reset-time shapes and the reference moment
+
+Parsed shapes, in machine-local zone: `h:MM AM/PM` (`2:29 AM`), `HH:MM` 24-hour
+(`14:29`), and relative `in N minutes|hours`. The reference is the mtime of the
+file the selected message came from (stream or `.err`). A clock time becomes
+the next occurrence strictly after the reference; a relative time is reference
+plus delta. First match wins; absent or unparseable means `none`. Strictly
+after, never early: a skewed reading waits too long rather than resuming into
+the wall, and the escalation shows the computed moment so the user can rule
+otherwise.
+
+### D18. The substitute comes from the live machine config
+
+Validation and the entry copy read the live config at ruling time, so a lane
+added after dispatch (the ticket's own sonnet example) can step in. The manifest
+copy plus the ruling line freeze what ran for the audit. Only the four entry
+keys are copied; key contents never enter the repo.
+
+### D19. Stub lanes and controls
+
+Stub lane logs reuse real shapes: the codex wall exactly as the run met it,
+`{"type":"turn.failed","error":{"message":"You've hit your usage limit. Upgrade
+to Pro (https://chatgpt.com/explore/pro), visit
+https://chatgpt.com/codex/settings/usage to purchase more credits or try again
+at 2:29 AM."}}`, plus one prose/`.err` shape and the gateway-timeout negative
+through the identical command. Launched-once checks use stub harness binaries
+with invocation counters. Every check below runs its positive control to a
+non-zero reading and its negative control to zero through the identical command.
+
+### D20. Runbook references and the contract check
+
+Every new script reference in runbook prose goes through `<tool>` and names a
+script the repo has, so `skill-refs.sh` passes. This changes the coachman
+contract (`coachman.md`, `postmaster.md`, `runs-status.sh`, `runs-watch.sh`,
+`launch.sh`), so it lands after a fixture run from its final head scores clean;
+that fixture is the postmaster's at landing, not a lane task.
+
+## Showing each criterion
+
+| # | Criterion, as the ticket words it | Check (command and input) | Expected output |
+|---|---|---|---|
+| AC1 | A lane ending on a provider wall is recorded as one. When a workhorse or a review launch ends on a usage-limit or quota message from its provider, the action log gets a `wall` line naming the lane, its role (workhorse or reviewer), the provider's own message and the reset time when the message names one. The same classifier that tells the watcher a wall from a transient ending decides ([`scripts/launch.ts`](https://github.com/brindlewick/postmaster/blob/c74d9b3/scripts/launch.ts#L640-L680)); there is no second one. Check, through the identical command for a workhorse launch and for a review launch: a stub lane ending with a usage-limit message that names a reset time records the line with that time, and the same stub ending with a gateway timeout records none. | `lane-wall.sh record <dispatch> stub workhorse stub-events.jsonl stub.err` with the D19 codex wall stream, then the same with role `reviewer`; then both roles with a gateway-timeout stream and `.err`. | Wall streams print `wall` and append `wall stub "<role> reset <next 2:29 after the stream mtime> You've hit your usage limit..."`; timeout streams print `none` and the log gains no line. `launch.sh transient` is the only classifier invoked; `wall-tokens`/`wall-quotes` output is unchanged. |
+| AC2 | A workhorse wall pauses the run and asks. The coachman does not synthesize from the other lanes by itself: it writes an escalation that names the lane, the provider's message and the reset time and lists the choices of criterion 3, and stops, with its usual escalation marker. Check: a run whose stub workhorse hits a wall reaches the escalation and writes no checkpoint card, and its status reads as waiting for the postmaster; with the stub's message transient, the existing resume path is unchanged. | `record` on the D19 wall stub, then `lane-wall.sh pause <dispatch>`; `runs-status.sh <runs>`; `record` on the gateway-timeout stub. | `pause` prints `paused stub`, writes `ESCALATION.md` naming the lane, the provider message, the reset moment and the three choices, touches `.escalation-ready`, and logs `escalate`; no `checkpoint-1.md` exists; status shows `WALL`. The timeout stub prints `none`; the remount prose in `coachman.md` is byte-identical except for the added wall branch. |
+| AC3 | The user's ruling has three forms and the flow carries out each. **Rest:** the lane's own session is resumed in its own worktree, only after the reset time, and its result joins the synthesis as any lane's does. **Use a different model:** the ruling names another lane from the machine config, for example a Claude Sonnet lane; that lane takes the walled lane's place on the same spec, in a worktree of its own cut from the run's base, so the walled lane's partial work is not carried over and the lanes still cannot see each other's work. Its entry is copied into the run's record at the moment of the ruling and the copy is logged, so the record shows what ran. Its result joins the synthesis as any workhorse's does. The walled lane is recorded as replaced, with the cause and the substitute's name, on the checkpoint card and the ship card, not as degraded, and the cards name the substitute. A ruling that names a lane the machine config does not have is refused with a message and the run stays paused. **Go on without it:** the lane is recorded degraded on both cards, as today. Check against the stub lanes: after a rest ruling the lane is launched once, not before the stated time, and its result reaches the synthesis; after a substitute ruling that names a configured stub lane that lane is launched once in its own worktree, its result reaches the synthesis, the run's record gains its entry, and both cards name both lanes; a substitute ruling that names an unknown lane is refused and the run stays paused; after a go-on ruling the cards name the lane as degraded and the cause. | `ruling <dispatch> rest stub` with the reset past (stub harness on `PATH`), and with the reset future; `runs-watch.sh` with a pending rest past its moment under `POSTMASTER_WATCH_TEST_MODE=1`; `ruling <dispatch> substitute stub sonnet --brief <file>` with a stub `sonnet` lane in a test config, and with an unknown lane; `ruling <dispatch> go-on stub`. | Past rest launches the stub harness exactly once in the lane's worktree and logs the ruling with `resume-after` and `stream-skip`; future rest prints `parked`, launches nothing, and the staged watcher resumes the leg after the moment. Substitute launches the stub lane once in `<TICKET>-sonnet` cut at BASE with the approved spec committed and none of the walled lane's files, gains the manifest entry plus the ruling line carrying `harness/model/effort`; unknown lane exits 2 with a message naming it, logs no ruling, and the run still shows `WALL`. Go-on logs the ruling and prints `go-on`. Which lane each synthesis part came from, and the replaced/degraded card words, are runbook prose, read against this criterion. |
+| AC4 | A reviewer wall does not pause the run. It is recorded as a `wall` line as well as degraded, and the lane is restored on the next round, as the runbook says today. Check: a stub reviewer that hits a wall in round 1 is launched again in round 2, and the round-1 record carries the degraded word and the `wall` line. | `record` with role `reviewer` on the D19 wall stub (the AC1 identical command); read the review-harvest prose. | The round-1 record carries the `wall` line; the degraded word, the no-verdict classification and the round-2 restore are the runbook's existing round mechanics, read against this criterion, with status showing `WAIT`, never `WALL`, for a reviewer wall. |
+| AC5 | The user hears at once. A `wall` line without a ruling makes the status table show a `WALL` state for the run and the watcher stops for it instead of carrying on; the postmaster's runbook says to tell the user immediately, naming the run, the lane, its role and the reset time. Check: with a recorded wall and no ruling `runs-status.sh` shows `WALL` for the run, and after the ruling it does not. | `runs-status.sh <runs>` on a record with a workhorse wall line and no ruling, then after appending the ruling; `runs-watch.sh --timeout` over a `WALL` run; the same record with role `reviewer`. | `WALL` before the ruling through the identical command, not `WALL` after; the watcher wakes naming the run and `WALL`; the reviewer-wall record never shows `WALL`. The immediate tell-user wording is `postmaster.md` prose, read against this criterion. |
+| AC6 | The runbooks say it. `coachman.md` replaces the degrade-and-go-on rule for provider walls with the pause-and-ask of criterion 2 and keeps it for failures that are not walls; `postmaster.md` and `harnesses.md` say what the postmaster does with `WALL`. Check: read against the criteria, and `scripts/skill-refs.sh` passes. | Read the three runbooks against AC1-AC5; run `skill-refs.sh`. | Walls pause and ask, non-wall failures degrade and go on as today; `WALL` handling, the immediate notice and the ruling delivery are in `postmaster.md`; attested wall shapes and the one recognition path are in `harnesses.md`; `skill-refs.sh` exits 0. |
 
 ## Tasks
 
-Format: `- [ ] T<n> [P] [AC<n>] <description, with exact file paths>`.
-`[P]` marks a task that depends on no other. `[AC<n>]` names the acceptance criterion the
-task serves. Every acceptance criterion has at least one task.
-
-- [ ] T001 [P] [AC1] Make [`scripts/fixture.ts`](https://github.com/brindlewick/postmaster/blob/0620bfc90eb32a35124279d9780df42174e6ccd9/scripts/fixture.ts) `new` write `.postmaster/fixture` with the fixed one-line marker before the initial commit; update the copy-contents control in [`scripts/fixture.test.ts`](https://github.com/brindlewick/postmaster/blob/0620bfc90eb32a35124279d9780df42174e6ccd9/scripts/fixture.test.ts) to expect exactly the app's files plus the marker, and cover the marker's presence, content and name/path independence.
-- [ ] T002 [P] [AC2] Make [`scripts/run-meta.ts`](https://github.com/brindlewick/postmaster/blob/0620bfc90eb32a35124279d9780df42174e6ccd9/scripts/run-meta.ts) lower every lane and role that names an effort from the one table when `.postmaster/fixture` is present in the target repo (leave one that names none without one; warn on stderr naming an unmapped harness and keep its effort), record the config unchanged when absent, and never write the machine config; controls in [`scripts/run-meta.test.ts`](https://github.com/brindlewick/postmaster/blob/0620bfc90eb32a35124279d9780df42174e6ccd9/scripts/run-meta.test.ts), including coachman_legs entries and a lane with no effort.
-- [ ] T003 [P] [AC3] Make [`scripts/launch.ts`](https://github.com/brindlewick/postmaster/blob/0620bfc90eb32a35124279d9780df42174e6ccd9/scripts/launch.ts) `review` use the lane's effort from the selected config, falling back to the harness top level when the lane names none; controls in [`scripts/launch.test.ts`](https://github.com/brindlewick/postmaster/blob/0620bfc90eb32a35124279d9780df42174e6ccd9/scripts/launch.test.ts), including a ticket-run review that still names `max` / `high` and an effortless lane that names top.
-- [ ] T004 [AC4] Add `efforts <dispatch>` to [`scripts/run-meta.ts`](https://github.com/brindlewick/postmaster/blob/0620bfc90eb32a35124279d9780df42174e6ccd9/scripts/run-meta.ts), printing the `efforts:` line from `run.json` (lanes and coachman roles, not the postmaster), with controls in [`scripts/run-meta.test.ts`](https://github.com/brindlewick/postmaster/blob/0620bfc90eb32a35124279d9780df42174e6ccd9/scripts/run-meta.test.ts); add the line to the waybill template's Team section in [`skills/postmaster/SKILL.md`](https://github.com/brindlewick/postmaster/blob/0620bfc90eb32a35124279d9780df42174e6ccd9/skills/postmaster/SKILL.md), and make [`skills/postmaster/postmaster.md`](https://github.com/brindlewick/postmaster/blob/0620bfc90eb32a35124279d9780df42174e6ccd9/skills/postmaster/postmaster.md) Stage B step 7 paste it and name `run.json` as the team's source.
-- [ ] T005 [AC4] Make [`scripts/fixture.ts`](https://github.com/brindlewick/postmaster/blob/0620bfc90eb32a35124279d9780df42174e6ccd9/scripts/fixture.ts) `score` check the waybill's `efforts:` line and each Team entry's effort (its last `/` field) against `run.json`, with positive and negative controls in [`scripts/fixture.test.ts`](https://github.com/brindlewick/postmaster/blob/0620bfc90eb32a35124279d9780df42174e6ccd9/scripts/fixture.test.ts).
-- [ ] T006 [AC3] Update [`skills/postmaster/harnesses.md`](https://github.com/brindlewick/postmaster/blob/0620bfc90eb32a35124279d9780df42174e6ccd9/skills/postmaster/harnesses.md) (review level is the run-recorded lane effort, top when the lane names none) and [`skills/postmaster/coachman.md`](https://github.com/brindlewick/postmaster/blob/0620bfc90eb32a35124279d9780df42174e6ccd9/skills/postmaster/coachman.md) (bug-lens entry drops the fixed-top sentence), then run [`scripts/skill-refs.sh`](https://github.com/brindlewick/postmaster/blob/0620bfc90eb32a35124279d9780df42174e6ccd9/scripts/skill-refs.sh).
-- [ ] T007 [AC5] Add the AC5 control matrix to [`scripts/launch.test.ts`](https://github.com/brindlewick/postmaster/blob/0620bfc90eb32a35124279d9780df42174e6ccd9/scripts/launch.test.ts): identical `form` (workhorse launch, coachman leg, resume lines) and stubbed `review` commands under a fixture run's dispatch and a ticket run's, asserting lowest vs configured each way.
-- [ ] T008 [AC1] [AC2] [AC3] [AC4] [AC5] Run the waybill's gate from the worktree root, fix what it names that this change broke, and confirm every acceptance criterion has a green control.
+- [ ] T001 [P] [AC1] Add `scripts/lib/wall.ts` plus `scripts/lib/wall.test.ts`: pure
+  queries over action-log lines (un-ruled workhorse walls, rulings by lane,
+  pending rests).
+- [ ] T002 [AC1] Add `scripts/lane-wall.sh`, `record` in `scripts/lane-wall.ts`,
+  plus tests in `scripts/lane-wall.test.ts`, with the D19 stub streams.
+- [ ] T003 [P] [AC1] Add the `wall` and `wall-ruling` verbs with detail
+  shape-checks in `scripts/log-action.ts` plus tests in `scripts/log-action.test.ts`.
+- [ ] T004 [AC2] Add `pause` in `scripts/lane-wall.ts` plus tests: escalation
+  content, marker, `escalate` lines, `paused`/`none`.
+- [ ] T005 [AC3] Add `ruling rest` in `scripts/lane-wall.ts` plus tests: past-time
+  resume launches the stub once, future-time parks without launching, skip recorded.
+- [ ] T006 [AC3] Add `ruling substitute` in `scripts/lane-wall.ts` plus tests:
+  live-config validation, refusal of unknown and already-run lanes, manifest copy,
+  worktree cut at BASE with the approved spec, single launch.
+- [ ] T007 [AC3] Add `ruling go-on` in `scripts/lane-wall.ts` plus tests.
+- [ ] T008 [AC3] Add the run-manifest lane fallback in `scripts/launch.ts`
+  config resolution plus tests in `scripts/launch.test.ts`; classifier untouched.
+- [ ] T009 [AC5] Add the `WALL` state in `scripts/runs-status.ts` plus tests in
+  `scripts/runs-status.test.ts`: precedence, role filter, ruled clears.
+- [ ] T010 [AC3] [AC5] Add the rest-awaiting silence and timed resume step in
+  `scripts/runs-watch.ts` plus tests in `scripts/runs-watch.test.ts`; `WALL` wakes.
+- [ ] T011 [P] [AC4] Audit every manifest-lanes reader (`fixture-lanes.ts` and
+  any other) for the substitute entry shape; adjust only what breaks, with tests.
+- [ ] T012 [AC2] [AC3] [AC4] [AC6] Edit `skills/postmaster/coachman.md`: harvest
+  classification, pause-and-ask for walls, ruling forms, rest-awaiting, card words,
+  audit and manifest rows; keep degrade-and-go-on for non-walls.
+- [ ] T013 [AC5] [AC6] Edit `skills/postmaster/postmaster.md`: the `WALL` poll
+  entry with the immediate notice, ruling delivery, rest-awaiting resumes.
+- [ ] T014 [AC1] [AC6] Edit `skills/postmaster/harnesses.md`: attested wall
+  shapes, the one recognition path.
+- [ ] T015 [AC6] Run `scripts/skill-refs.sh` and the full gate `bun run check`
+  until clean; keep a transcript per criterion under `.postmaster/verify/`.
