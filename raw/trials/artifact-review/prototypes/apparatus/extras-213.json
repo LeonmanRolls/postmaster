@@ -1,0 +1,23 @@
+{
+ "spec": {
+  "example": true,
+  "markdown": "# Workhorse spec: #179 A workhorse shows every acceptance criterion working, and keeps at it until it can\n\n## Summary\n\nEach acceptance criterion gets a check in the spec that shows it working the way it will really be used. The workhorse builds, runs each check, fixes what fails and repeats until every check shows its criterion working; its summary cites the evidence per criterion, and a new script holds the summary to that shape.\n\n## Technical context\n\n- **Language and version**: TypeScript run by Bun, for the new checker; Markdown for the runbook and the spec template.\n- **Dependencies used or added**: none.\n- **Testing**: `bun test scripts/summary-evidence.test.ts`, run through the same command the coachman uses at harvest.\n- **Constraints**: the criterion list comes from `ticket-check.sh`, never from the summary.\n\n## Structure\n\n- `skills/postmaster/workhorse-spec-template.md`: a section listing each criterion and its check.\n- `skills/postmaster/coachman.md`: the implementation as a loop, and the evidence held at harvest.\n- `scripts/summary-evidence.ts` and its tests: the checker.\n- `docs/coachman-contract.toml`: the new contract files listed.\n\n## Decisions\n\n1. Evidence sits under `.postmaster/verify/` in the worktree; a path outside it is refused, by `..` or by a symlink.\n2. A criterion that cannot be shown says `not shown: <reason>` on its own line.\n3. The checker reads the criteria count from `ticket-check.sh`'s `well-formed` line, so there is one reader of the ticket.\n\n## Tasks\n\n- [ ] T001 [AC1] Add the criterion checks section to the spec template\n- [ ] T002 [AC2] Make the workhorse brief a loop in `coachman.md`\n- [ ] T003 [AC3] Write `scripts/summary-evidence.ts` with tests beside it\n- [ ] T004 [AC4] List the new contract files\n"
+ },
+ "card": {
+  "checks": [
+   {"name": "The gate at the head", "result": "pass", "detail": "Passed at c84220e, which holds current main, including #163, #98, #57 and #170.", "source": "pull request text"},
+   {"name": "The review loop", "result": "pass", "detail": "Five rounds; no P1 or P2 remains.", "source": "pull request text"},
+   {"name": "A fixture run from this head", "result": "pass", "detail": "Scored 7 of 7 under fixture.sh score, as the card's merge precondition requires.", "source": "pull request text"},
+   {"name": "Style findings", "result": "pass", "detail": "Five style P3 findings go to aftercare.", "source": "pull request text"}
+  ],
+  "findings": [
+   {"id": "F1", "example": true, "lens": "bug", "severity": "P3", "path": "scripts/summary-evidence.ts", "line": 390, "endLine": 400,
+    "title": "--ticket before the two paths is read as the summary's path",
+    "evidence": "parseArgs takes the first two arguments as the summary and the worktree whatever they are, so `--ticket t.md summary.md wt` tries to read a summary called --ticket and exits 1 with a misleading message."},
+   {"id": "F2", "example": true, "lens": "bug", "severity": "P3", "path": "scripts/summary-evidence.ts", "line": 278, "endLine": 281,
+    "title": "An absolute path to evidence inside the verify directory is refused as outside",
+    "evidence": "probeEvidencePath returns outside for any absolute reference before it checks where the path points, so a lane citing its own evidence by absolute path is told the evidence is outside .postmaster/verify/."}
+  ],
+  "options": ["Fix before merge", "Make a ticket", "Accept as is"]
+ }
+}

@@ -1,0 +1,72 @@
+{
+ "card": {
+  "summary": "One file, scripts/host.sh: the cap watcher reads each cgroup events file once before it waits and again after every wake, and a new self-test control measures the watcher's CPU while its launch brushes the memory cap.",
+  "checks": [
+   {
+    "name": "New control: a cap watcher sleeps while its launch's memory.events changes",
+    "result": "pass",
+    "detail": "Under a tenth of a core over three seconds while the cgroup's max count rises.",
+    "source": "pull request text"
+   },
+   {
+    "name": "The same control on the code before this change",
+    "result": "fail",
+    "detail": "2.52 s of CPU in 3 s, 613 memory events: the watcher spins.",
+    "source": "pull request text"
+   },
+   {
+    "name": "The same control, reading before waiting but not after a wake",
+    "result": "fail",
+    "detail": "2.52 s of CPU in 3 s, 644 memory events.",
+    "source": "pull request text"
+   },
+   {
+    "name": "The same control on this change",
+    "result": "pass",
+    "detail": "0.04 s of CPU in 3 s, 810 memory events.",
+    "source": "pull request text"
+   },
+   {
+    "name": "Existing cap controls",
+    "result": "pass",
+    "detail": "A fork runaway stopped at the process cap, an allocation runaway stopped at the memory cap, a trip read within moments, and a healthy launch beside each, unchanged.",
+    "source": "pull request text"
+   }
+  ],
+  "findings": [
+   {
+    "id": "F1",
+    "example": true,
+    "lens": "bug",
+    "severity": "P3",
+    "path": "scripts/host.sh",
+    "line": 959,
+    "endLine": 962,
+    "title": "A read that keeps failing after a wake is swallowed, and the watcher would spin again",
+    "evidence": "The wake loop catches OSError and passes. If the read keeps failing, the descriptor stays ready, poll(100) returns at once on every pass, and the watcher burns a core as before this change, with nothing logged.",
+    "quote": "            try:\n                byfd[fd].seek(0); byfd[fd].read()\n            except OSError:\n                pass"
+   },
+   {
+    "id": "F2",
+    "example": true,
+    "lens": "bug",
+    "severity": "P3",
+    "path": "scripts/host.sh",
+    "line": 2234,
+    "endLine": 2239,
+    "title": "The CPU probe crashes instead of printing none when the launch never writes its pid",
+    "evidence": "If the pid file is still missing after ten seconds, cpid is the empty string and stat(cpid) opens /proc//stat, which raises. The control then fails with a traceback, not the none line its header promises.",
+    "quote": "deadline = time.monotonic() + 10\ncpid = \"\"\nwhile not cpid and time.monotonic() < deadline:\n    try: cpid = open(pidfile).read().strip()\n    except OSError: time.sleep(0.05)\nlauncher = stat(cpid)[1]"
+   }
+  ],
+  "options": [
+   "Fix before merge",
+   "Make a ticket",
+   "Accept as is"
+  ]
+ },
+ "spec": {
+  "example": true,
+  "markdown": "# Workhorse spec: #145 host.sh's cap watcher spins instead of sleeping, using most of a core per launch\n\n## Summary\n\nThe cap watcher must sleep in `poll()` between real changes to its launch's cgroup events. It reads each events file through the descriptor the poll watches, once before it waits and again after every wake.\n\n## Technical context\n\n- **Language and version**: Bash, with the watcher in Python 3 inside `scripts/host.sh`.\n- **Dependencies used or added**: none.\n- **Testing**: `scripts/host.sh --self-test`, with a new control that measures the watcher's CPU while its launch brushes the memory cap.\n- **Constraints**: a hotfix, as #128 was; the control must fail on the spinning version.\n\n## Direction check\n\n- A ticket, the fix with a control that fails on the spinning version, a pull request, the merge and a pull of main: this spec covers the fix and the control.\n- Every count needs a control: the new check reads the cgroup's `max` count, so a window with no memory events cannot pass.\n\n## Structure\n\n- `scripts/host.sh`: the watcher's poll loop and the comment above it; two helper scripts and one check in the self-test's cap controls.\n\n## Decisions\n\n1. Arm each descriptor with one read before registering it, and re-read it from the start after every wake.\n2. The control passes under a tenth of a core over three seconds, and only when memory events landed in that window.\n\n## Tasks\n\n- [ ] T001 [AC1] Read each events descriptor before the poll and after every wake in `scripts/host.sh`\n- [ ] T002 [AC2] Add the watcher-CPU control to the self-test, and show it failing on the old watcher\n- [ ] T003 [AC3] Run the existing cap controls unchanged\n"
+ }
+}

@@ -1,0 +1,566 @@
+<title>#145 review</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Red+Hat+Display:wght@600;700&family=Red+Hat+Mono:wght@400;500&family=Red+Hat+Text:wght@400;500;600&display=swap">
+<style>
+/* Layout: phone = four tabs (Ticket, Spec, Changes, Files), one at a time, and a bar at the bottom;
+   900px and up = the ticket and spec in a column beside the changes and files. */
+:root {
+  --bg: #f5f6f8; --panel: #ffffff; --ink: #1c2230; --muted: #5a6475; --rule: #dfe3ea;
+  --accent: #1d5ca8; --accent-soft: #e5eefa; --on-accent: #ffffff;
+  --add: #e6f4ea; --add-ink: #1f6f37; --del: #fbeaea; --del-ink: #a3261a;
+  --mark: #fff1b5; --mark-edge: #d9a700; --gutter: #8b94a4;
+  --ex: #fbeedf; --ex-ink: #8f4a00; --ok: #1f6f37; --bad: #a3261a;
+  --hl-keyword: #4338ca; --hl-string: #1f6f37; --hl-comment: #6b7380; --hl-number: #9c4a00;
+  --hl-title: #0d6880; --hl-type: #8330b0; --hl-meta: #a3261a;
+  --font-ui: "Red Hat Text", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Red Hat Display", "Red Hat Text", system-ui, sans-serif;
+  --font-code: "Red Hat Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12161d; --panel: #181d26; --ink: #e3e7ee; --muted: #9aa3b2; --rule: #2a313d;
+    --accent: #8ab8f2; --accent-soft: #1d2b40; --on-accent: #10151c;
+    --add: #15301f; --add-ink: #8fd69b; --del: #3a1a1a; --del-ink: #ff9c8f;
+    --mark: #3d3412; --mark-edge: #c99c1a; --gutter: #6c7686;
+    --ex: #3a2a16; --ex-ink: #f0b46a; --ok: #8fd69b; --bad: #ff9c8f;
+    --hl-keyword: #a5b0ff; --hl-string: #8fd69b; --hl-comment: #8b95a5; --hl-number: #f2b66b;
+    --hl-title: #6fd0e2; --hl-type: #d6a8ff; --hl-meta: #ff9c8f;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12161d; --panel: #181d26; --ink: #e3e7ee; --muted: #9aa3b2; --rule: #2a313d;
+  --accent: #8ab8f2; --accent-soft: #1d2b40; --on-accent: #10151c;
+  --add: #15301f; --add-ink: #8fd69b; --del: #3a1a1a; --del-ink: #ff9c8f;
+  --mark: #3d3412; --mark-edge: #c99c1a; --gutter: #6c7686;
+  --ex: #3a2a16; --ex-ink: #f0b46a; --ok: #8fd69b; --bad: #ff9c8f;
+  --hl-keyword: #a5b0ff; --hl-string: #8fd69b; --hl-comment: #8b95a5; --hl-number: #f2b66b;
+  --hl-title: #6fd0e2; --hl-type: #d6a8ff; --hl-meta: #ff9c8f;
+  color-scheme: dark;
+}
+body { background: var(--bg); color: var(--ink); font-family: var(--font-ui); font-size: 15px; line-height: 1.5; }
+.app { display: grid; gap: 10px; padding-inline: 16px; padding-block: 14px 110px; max-width: 1600px; margin: 0 auto; }
+.top { display: grid; gap: 4px; }
+.eyebrow { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--ex-ink); }
+h1 { margin: 0; font-family: var(--font-display); font-size: 21px; line-height: 1.25; text-wrap: balance; }
+.meta { margin: 0; color: var(--muted); font-size: 13.5px; font-variant-numeric: tabular-nums; }
+.meta b, .fnum b { color: var(--add-ink); font-weight: 600; } .meta i, .fnum i { color: var(--del-ink); font-style: normal; font-weight: 600; }
+.tabs { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 3; display: flex; gap: 4px; background: var(--bg); padding-block: 6px; border-bottom: 1px solid var(--rule); }
+.tabs button { flex: 1; font: inherit; font-size: 13.5px; font-weight: 600; color: var(--muted); background: transparent; border: 0; border-radius: 8px; padding: 8px 4px; cursor: pointer; }
+.tabs button[aria-selected="true"] { color: var(--accent); background: var(--accent-soft); }
+.sidetabs { display: none; }
+.pane[hidden] { display: none !important; }
+.label { margin: 8px 0; font-size: 12.5px; font-weight: 600; color: var(--ex-ink); background: var(--ex); border-radius: 8px; padding: 6px 10px; }
+.prose { max-width: 72ch; overflow-wrap: anywhere; }
+.prose h3 { font-family: var(--font-display); font-size: 16px; margin: 16px 0 6px; }
+.prose p, .prose ul, .prose ol { margin: 0 0 10px; } .prose ul, .prose ol { padding-left: 22px; }
+.prose li { margin-bottom: 4px; }
+.prose code, .finding code { font-family: var(--font-code); font-size: .9em; background: var(--accent-soft); padding: 0 4px; border-radius: 4px; overflow-wrap: anywhere; }
+.tablewrap { overflow-x: auto; margin: 0 0 10px; }
+.prose table { border-collapse: collapse; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+.prose th, .prose td { border: 1px solid var(--rule); padding: 4px 8px; text-align: left; }
+details.fold { background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; margin-bottom: 12px; }
+details.fold > summary { cursor: pointer; padding: 10px 12px; font-weight: 600; font-size: 14px; }
+details.fold > div { padding: 0 12px 10px; }
+.checks { display: grid; gap: 8px; margin: 0 0 12px; padding: 0; list-style: none; }
+.checks li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 10px; border: 1px solid var(--rule); border-radius: 10px; padding: 8px 10px; }
+.pill { align-self: start; font-size: 11.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; border-radius: 999px; padding: 2px 8px; }
+.pill.pass { color: var(--ok); background: var(--add); } .pill.fail { color: var(--bad); background: var(--del); }
+.checks .cn { font-weight: 600; } .checks .cd { grid-column: 2; color: var(--muted); font-size: 13.5px; }
+.finding { border: 1px solid var(--rule); border-radius: 10px; padding: 10px; display: grid; gap: 6px; margin-bottom: 8px; }
+.ftop { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.tag { font-size: 11.5px; font-weight: 700; border-radius: 999px; padding: 2px 8px; background: var(--accent-soft); color: var(--accent); }
+.tag.example { background: var(--ex); color: var(--ex-ink); }
+.finding h4 { margin: 0; font-size: 14.5px; }
+.finding p { margin: 0; font-size: 13.5px; color: var(--muted); }
+.link { font: inherit; font-size: 13px; color: var(--accent); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; text-align: left; }
+.quote { margin: 0; font-family: var(--font-code); font-size: 12px; background: var(--bg); border: 1px solid var(--rule); border-radius: 8px; padding: 8px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.options { display: flex; flex-wrap: wrap; gap: 6px; }
+.opt { font: inherit; font-size: 13px; font-weight: 600; border: 1px solid var(--rule); background: var(--bg); color: var(--ink); border-radius: 999px; padding: 5px 11px; cursor: pointer; }
+.opt[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.saved { font-size: 12.5px; color: var(--muted); }
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; justify-content: space-between; font-size: 13px; color: var(--muted); margin-bottom: 8px; }
+.toolbar label { display: flex; gap: 6px; align-items: center; cursor: pointer; }
+.toolbar select { font: inherit; font-size: 13px; max-width: 100%; color: var(--ink); background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 6px 8px; }
+.group { margin: 16px 0 8px; } .group h3 { font-family: var(--font-display); font-size: 15px; margin: 0; } .group p { margin: 2px 0 0; color: var(--muted); font-size: 13.5px; }
+details.file { background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; margin-bottom: 10px; overflow: hidden; }
+details.file > summary { display: flex; flex-wrap: wrap; gap: 4px 12px; justify-content: space-between; align-items: baseline; padding: 8px 12px; cursor: pointer; list-style: none; }
+details.file > summary::-webkit-details-marker { display: none; }
+details.file[open] > summary { border-bottom: 1px solid var(--rule); }
+.fpath { font-family: var(--font-code); font-size: 13px; font-weight: 500; overflow-wrap: anywhere; min-width: 0; }
+.fpath::before { content: "▸ "; color: var(--gutter); } details[open] > summary .fpath::before { content: "▾ "; }
+.fnum { font-size: 12.5px; font-variant-numeric: tabular-nums; color: var(--muted); }
+.code { font-family: var(--font-code); font-size: 12.5px; line-height: 1.6; overflow-x: auto; padding-block: 4px; background: var(--panel); }
+.rows { min-width: 100%; } .nowrap .rows { width: max-content; }
+.hunk { color: var(--muted); background: var(--accent-soft); padding: 2px 12px; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.r { display: grid; grid-template-columns: 4.5ch 4.5ch 2ch minmax(0, 1fr); cursor: pointer; scroll-margin-top: 90px; }
+.fileview .r { grid-template-columns: 1ch 5ch minmax(0, 1fr); }
+.nowrap .r { grid-template-columns: 4.5ch 4.5ch 2ch max-content; } .nowrap .fileview .r { grid-template-columns: 1ch 5ch max-content; }
+.n { color: var(--gutter); text-align: right; padding-right: 1ch; user-select: none; -webkit-user-select: none; font-variant-numeric: tabular-nums; }
+.sg { user-select: none; -webkit-user-select: none; text-align: center; color: var(--gutter); }
+.c { white-space: pre-wrap; overflow-wrap: anywhere; padding-right: 14px; min-width: 0; }
+.nowrap .c { white-space: pre; overflow-wrap: normal; }
+.r.add { background: var(--add); } .r.add .sg { color: var(--add-ink); }
+.r.del { background: var(--del); } .r.del .sg { color: var(--del-ink); }
+.fileview .r.changed .sg { background: var(--add-ink); } .fileview .r.after-del .sg { box-shadow: inset 0 2px 0 var(--del-ink); }
+.r.sel { background: var(--mark); box-shadow: inset 3px 0 0 var(--mark-edge); }
+.r.hit { animation: hit 1.6s ease-out; }
+@keyframes hit { from { background: var(--mark); } }
+.thread { margin: 4px 10px 8px; display: grid; gap: 6px; font-family: var(--font-ui); }
+.cm { background: var(--bg); border: 1px solid var(--rule); border-left: 3px solid var(--accent); border-radius: 8px; padding: 6px 10px; font-size: 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.cm.claude { border-left-color: var(--ok); } .cm .who { display: block; font-size: 12px; color: var(--muted); font-weight: 600; }
+.status { padding: 14px; color: var(--muted); }
+.more { display: block; width: 100%; font: inherit; font-size: 13px; color: var(--accent); background: var(--accent-soft); border: 0; padding: 8px; cursor: pointer; }
+.hljs-keyword, .hljs-built_in, .hljs-literal, .hljs-selector-tag { color: var(--hl-keyword); }
+.hljs-string, .hljs-regexp, .hljs-template-string, .hljs-code { color: var(--hl-string); }
+.hljs-comment, .hljs-quote { color: var(--hl-comment); font-style: italic; }
+.hljs-number, .hljs-bullet, .hljs-symbol { color: var(--hl-number); }
+.hljs-title, .hljs-section, .hljs-name, .hljs-attr, .hljs-property { color: var(--hl-title); }
+.hljs-type, .hljs-params, .hljs-variable, .hljs-template-variable { color: var(--hl-type); }
+.hljs-meta, .hljs-link, .hljs-deletion { color: var(--hl-meta); }
+.bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; background: var(--panel); border-top: 1px solid var(--rule); box-shadow: 0 -6px 18px rgb(0 0 0 / .08); padding-inline: 16px; padding-block: 8px calc(8px + env(safe-area-inset-bottom, 0px)); display: grid; gap: 6px; }
+.barrow { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.barrow .grow { flex: 1; min-width: 0; font-size: 13px; color: var(--muted); }
+.btn { font: inherit; font-size: 14px; font-weight: 600; border-radius: 9px; padding: 8px 12px; border: 1px solid var(--accent); background: var(--accent); color: var(--on-accent); cursor: pointer; }
+.btn.quiet { background: transparent; color: var(--accent); }
+.btn:disabled { opacity: .5; cursor: default; }
+.sheet { display: grid; gap: 6px; }
+.sheet label { font-size: 13px; font-weight: 600; }
+.sheet textarea { font: inherit; font-size: 15px; color: var(--ink); background: var(--bg); border: 1px solid var(--rule); border-radius: 9px; padding: 8px 10px; min-height: 4em; width: 100%; box-sizing: border-box; resize: vertical; }
+.copyout { width: 100%; box-sizing: border-box; font-family: var(--font-code); font-size: 12px; }
+.loadtime { font-size: 12px; color: var(--muted); margin: 6px 0 0; }
+@media (min-width: 900px) {
+  .app { grid-template-columns: minmax(320px, 0.8fr) minmax(0, 1.6fr); grid-template-areas: "top top" "side tabs" "side main"; column-gap: 24px; align-items: start; }
+  .top { grid-area: top; } .tabs { grid-area: tabs; }
+  .tabs [data-tab="ticket"], .tabs [data-tab="spec"], .tabs [data-tab="summary"] { display: none; }
+  .tabs button { font-size: 14px; }
+  .side { grid-area: side; position: sticky; top: 12px; max-height: calc(100vh - 24px); overflow: auto; padding-right: 4px; }
+  .sidetabs { display: flex; position: sticky; top: 0; }
+  .main { grid-area: main; min-width: 0; }
+  body.focus-side .main, body.focus-main .side { display: block; }
+  .code { font-size: 13.5px; }
+  .bar { left: auto; right: 24px; bottom: 18px; width: min(560px, calc(100vw - 48px)); border: 1px solid var(--rule); border-radius: 14px; }
+  h1 { font-size: 26px; }
+}
+@media (max-width: 899.98px) { body.focus-side .main { display: none; } body.focus-main .side { display: none; } }
+@media (prefers-reduced-motion: reduce) { .r.hit { animation: none; } }
+</style>
+
+<div class="app">
+  <header class="top">
+    <p class="eyebrow">Trial page for #214 · a merged change · examples are marked</p>
+    <h1 id="title">Loading the review…</h1>
+    <p class="meta" id="meta"></p>
+  </header>
+
+  <nav class="tabs" role="tablist" aria-label="Views">
+    <button type="button" role="tab" data-tab="ticket" id="tab-ticket">Ticket</button>
+    <button type="button" role="tab" data-tab="spec" id="tab-spec">Spec</button>
+    <button type="button" role="tab" data-tab="summary" id="tab-summary">Summary</button>
+    <button type="button" role="tab" data-tab="changes" id="tab-changes">Diff</button>
+    <button type="button" role="tab" data-tab="files" id="tab-files">Files</button>
+  </nav>
+
+  <aside class="side">
+    <nav class="tabs sidetabs" role="tablist" aria-label="Ticket and spec">
+      <button type="button" role="tab" data-side="ticket" id="side-ticket">Ticket</button>
+      <button type="button" role="tab" data-side="spec" id="side-spec">Spec</button>
+      <button type="button" role="tab" data-side="summary" id="side-summary">Summary</button>
+    </nav>
+    <div class="pane" id="pane-ticket"><div class="prose" id="ticket"></div></div>
+    <div class="pane" id="pane-spec" hidden><p class="label" id="spec-label"></p><div class="prose" id="spec"></div></div>
+    <div class="pane" id="pane-summary" hidden><p class="label">What the change does, as its pull request says.</p><div class="prose" id="body"></div></div>
+  </aside>
+
+  <main class="main">
+    <div class="pane" id="pane-changes">
+      <div class="toolbar"><span id="changes-sum"></span><label for="wrap-c"><input type="checkbox" id="wrap-c" checked> Wrap long lines</label></div>
+      <div id="changes"><div class="status">Loading the changes…</div></div>
+      <details class="fold" id="cardfold"><summary>From the ship card: checks and findings</summary><div><p class="label">Kept for the trial. The findings are made up.</p><ul class="checks" id="checks"></ul><div id="findings"></div></div></details>
+    </div>
+    <div class="pane" id="pane-files" hidden>
+      <div class="toolbar">
+        <select id="pick" aria-label="File"></select>
+        <span><button class="btn quiet" type="button" id="prev">Previous change</button> <button class="btn quiet" type="button" id="next">Next change</button></span>
+        <label for="wrap-f"><input type="checkbox" id="wrap-f" checked> Wrap long lines</label>
+      </div>
+      <div id="files"><div class="status">Pick a file.</div></div>
+    </div>
+    <p class="loadtime" id="loadtime"></p>
+  </main>
+</div>
+
+<div class="bar" id="bar">
+  <div class="barrow" id="selrow" hidden>
+    <span class="grow" id="seltext"></span>
+    <button class="btn" type="button" id="comment">Comment</button>
+    <button class="btn quiet" type="button" id="clear">Clear</button>
+  </div>
+  <form class="sheet" id="csheet" hidden>
+    <label for="ctext" id="clabel">Comment</label>
+    <textarea id="ctext" maxlength="3000" placeholder="What should change here?"></textarea>
+    <div class="barrow"><span class="grow"></span><button class="btn quiet" type="button" id="ccancel">Cancel</button><button class="btn" type="submit" id="csave">Save comment</button></div>
+  </form>
+  <div class="barrow" id="vrow"><span class="grow" id="state">Tap a line to comment on it. Your verdict goes in your chat with the session.</span><button class="btn quiet" type="button" id="copy">Copy for chat</button></div>
+  <textarea class="copyout" id="copyout" rows="3" hidden aria-label="Text to paste into your chat"></textarea>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js"></script>
+<script>
+const T0 = performance.now();
+const $ = (id) => document.getElementById(id);
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+let R = null; const chunks = new Map(); let db = null;
+let sel = null, comments = [], choices = {};
+let sideTab = "ticket", mainTab = "changes";
+const PAGE = "review";
+const BIG = 12;          // more files than this: diffs start folded and draw when opened
+const SLICE = 400;       // rows drawn at a time in a long diff or file
+
+// ---------- text ----------
+function hm(iso) { try { return new Date(iso).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }); } catch (e) { return iso; } }
+function inline(text, into) {
+  const re = /(\*\*([^*]+)\*\*)|(`([^`]+)`)|(\[([^\]]+)\]\((https?:[^)\s]+)\))/g;
+  let last = 0, m;
+  while ((m = re.exec(text))) {
+    if (m.index > last) into.append(text.slice(last, m.index));
+    if (m[2]) into.append(el("strong", null, m[2]));
+    else if (m[4]) into.append(el("code", null, m[4]));
+    else { const a = el("a", null, m[6]); a.href = m[7]; a.target = "_blank"; a.rel = "noopener"; into.append(a); }
+    last = re.lastIndex;
+  }
+  if (last < text.length) into.append(text.slice(last));
+  return into;
+}
+function markdown(src, into) {
+  const lines = src.replace(/\r/g, "").split("\n");
+  const isList = (l) => /^\s*([-*]|\d+[.)])\s+/.test(l);
+  let i = 0;
+  while (i < lines.length) {
+    const l = lines[i];
+    if (!l.trim()) { i++; continue; }
+    const h = /^(#{1,6})\s+(.*)$/.exec(l);
+    if (h) { into.append(inline(h[2], el("h3"))); i++; continue; }
+    if (/^\s*(```|~~~)/.test(l)) { const fence = l.trim().slice(0, 3); const buf = []; i++; while (i < lines.length && !lines[i].trim().startsWith(fence)) buf.push(lines[i++]); i++; into.append(el("pre", "quote", buf.join("\n"))); continue; }
+    if (/^\s*\|/.test(l)) {
+      const rows = []; while (i < lines.length && /^\s*\|/.test(lines[i])) rows.push(lines[i++]);
+      const cells = (r) => r.trim().replace(/^\||\|$/g, "").split("|").map((c) => c.trim());
+      const t = el("table"); const head = el("tr");
+      for (const c of cells(rows[0])) head.append(inline(c, el("th")));
+      t.append(head);
+      for (const r of rows.slice(2)) { const tr = el("tr"); for (const c of cells(r)) tr.append(inline(c, el("td"))); t.append(tr); }
+      const w = el("div", "tablewrap"); w.append(t); into.append(w); continue;
+    }
+    if (isList(l)) {
+      const ordered = /^\s*\d+[.)]\s+/.test(l); const list = el(ordered ? "ol" : "ul");
+      while (i < lines.length && isList(lines[i])) {
+        let item = lines[i++].replace(/^\s*([-*]|\d+[.)])\s+/, "");
+        while (i < lines.length && /^\s{2,}\S/.test(lines[i]) && !isList(lines[i])) item += " " + lines[i++].trim();
+        const box = /^\[( |x)\]\s+/i.exec(item); if (box) item = (box[1] === " " ? "☐ " : "☑ ") + item.slice(box[0].length);
+        list.append(inline(item, el("li")));
+      }
+      into.append(list); continue;
+    }
+    const buf = [l]; i++;
+    while (i < lines.length && lines[i].trim() && !/^(#{1,6}\s|```|~~~|\s*\|)/.test(lines[i]) && !isList(lines[i])) buf.push(lines[i++]);
+    into.append(inline(buf.join(" "), el("p")));
+  }
+  return into;
+}
+
+// ---------- code ----------
+function hl(text, lang) {
+  let html = null;
+  try { if (window.hljs && hljs.getLanguage(lang)) html = hljs.highlight(text, { language: lang, ignoreIllegals: true }).value; } catch (e) { html = null; }
+  if (html == null) return text.split("\n").map((t) => (t ? [{ text: t, cls: [] }] : []));
+  const tpl = document.createElement("template"); tpl.innerHTML = html;
+  const out = [[]];
+  const walk = (node, cls) => {
+    for (const ch of node.childNodes) {
+      if (ch.nodeType === Node.TEXT_NODE) ch.nodeValue.split("\n").forEach((p, k) => { if (k > 0) out.push([]); if (p) out.at(-1).push({ text: p, cls }); });
+      else if (ch.nodeType === Node.ELEMENT_NODE) walk(ch, ch.className ? cls.concat(String(ch.className).split(/\s+/)) : cls);
+    }
+  };
+  walk(tpl.content, []);
+  return out;
+}
+function runs(into, list) {
+  for (const r of list) { if (r.cls.length) into.append(el("span", r.cls.join(" "), r.text)); else into.append(document.createTextNode(r.text)); }
+  if (!list.length) into.append(document.createTextNode(" "));
+  return into;
+}
+function parseDiff(text) {
+  const hunks = []; let h = null, o = 0, n = 0;
+  for (const line of text.split("\n")) {
+    const m = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@(.*)$/.exec(line);
+    if (m) { h = { header: line, lines: [] }; hunks.push(h); o = Number(m[1]); n = Number(m[2]); continue; }
+    if (!h || line.startsWith("\\")) continue;
+    const t = line[0], s = line.slice(1);
+    if (t === "+") h.lines.push({ t, o: null, n: n++, s });
+    else if (t === "-") h.lines.push({ t, o: o++, n: null, s });
+    else if (t === " ") h.lines.push({ t, o: o++, n: n++, s });
+  }
+  return hunks;
+}
+async function chunk(k) {
+  if (!chunks.has(k)) chunks.set(k, fetch("chunks/" + k + ".json").then((r) => { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); }));
+  return chunks.get(k);
+}
+async function item(fi) { const items = await chunk(R.files[fi].chunk); return items.find((x) => x.i === fi); }
+function drawInSlices(container, makeRows, total) {
+  // Draws rows SLICE at a time; a button draws the next slice, so a huge file never blocks the page.
+  let at = 0;
+  const step = () => {
+    const end = Math.min(total, at + SLICE);
+    const frag = document.createDocumentFragment();
+    makeRows(at, end, frag); at = end;
+    container.append(frag);
+    if (at < total) { const b = el("button", "more", "Show " + Math.min(SLICE, total - at) + " more of " + (total - at) + " lines"); b.type = "button"; b.addEventListener("click", () => { b.remove(); step(); paintComments(); }); container.append(b); }
+  };
+  step();
+}
+
+// ---------- tabs ----------
+function wide() { return window.matchMedia("(min-width: 900px)").matches; }
+function applyTabs(focus) {
+  for (const b of document.querySelectorAll(".tabs [data-tab]")) { const t = b.dataset.tab; const on = wide() ? t === mainTab : (focus === "side" ? t === sideTab : t === mainTab); b.setAttribute("aria-selected", String(on)); }
+  for (const b of document.querySelectorAll("[data-side]")) b.setAttribute("aria-selected", String(b.dataset.side === sideTab));
+  $("pane-ticket").hidden = sideTab !== "ticket"; $("pane-spec").hidden = sideTab !== "spec"; $("pane-summary").hidden = sideTab !== "summary";
+  $("pane-changes").hidden = mainTab !== "changes"; $("pane-files").hidden = mainTab !== "files";
+  document.body.classList.toggle("focus-side", focus === "side"); document.body.classList.toggle("focus-main", focus !== "side");
+}
+let focus = "main";
+for (const b of document.querySelectorAll(".tabs [data-tab]")) b.addEventListener("click", () => {
+  const t = b.dataset.tab;
+  if (t === "ticket" || t === "spec" || t === "summary") { sideTab = t; focus = "side"; } else { mainTab = t; focus = "main"; if (t === "files") renderFile(); }
+  clearSel(); applyTabs(focus); window.scrollTo({ top: 0 });
+});
+for (const b of document.querySelectorAll("[data-side]")) b.addEventListener("click", () => { sideTab = b.dataset.side; applyTabs(focus); });
+window.matchMedia("(min-width: 900px)").addEventListener("change", () => applyTabs(focus));
+
+// ---------- ticket, spec, card ----------
+function renderTexts() {
+  $("ticket").append(el("h3", null, "#" + R.ticket + ", " + R.ticketTitle));
+  markdown(R.ticketBody || "The ticket has no text.", $("ticket"));
+  if (R.spec) { $("spec-label").textContent = R.spec.example ? "Example, made up for this trial. In a real run this tab shows the run's approved spec, the one you reviewed in its spec session." : "The run's approved spec."; markdown(R.spec.markdown, $("spec")); }
+  else { $("spec-label").textContent = "This change had no spec."; }
+  markdown(R.body.replace(/^Closes #\d+\.\s*/i, ""), $("body"));
+  const card = R.card || {};
+  for (const c of card.checks || []) { const li = el("li"); li.append(el("span", "pill " + c.result, c.result === "pass" ? "Pass" : "Fail"), el("span", "cn", c.name), el("span", "cd", c.detail)); $("checks").append(li); }
+  for (const f of card.findings || []) {
+    const box = el("article", "finding");
+    const top = el("div", "ftop"); top.append(el("span", "tag", f.severity + " · " + f.lens)); if (f.example) top.append(el("span", "tag example", "Example"));
+    const jump = el("button", "link", f.path + " lines " + f.line + "–" + f.endLine); jump.type = "button"; jump.addEventListener("click", () => jumpTo(f.path, f.line, f.endLine));
+    const opts = el("div", "options");
+    for (const o of card.options || []) { const b = el("button", "opt", o); b.type = "button"; b.dataset.finding = f.id; b.dataset.option = o; b.setAttribute("aria-pressed", "false"); b.addEventListener("click", () => choose(f.id, o)); opts.append(b); }
+    const saved = el("span", "saved"); saved.id = "saved-" + f.id;
+    box.append(top, el("h4", null, f.id + ". " + f.title), jump, el("p", null, f.evidence), el("pre", "quote", f.quote), opts, saved);
+    $("findings").append(box);
+  }
+  if (!(card.findings || []).length && !(card.checks || []).length) $("cardfold").hidden = true;
+}
+
+// ---------- changes ----------
+function diffRows(fi, f, hunks, into) {
+  const flat = [];
+  for (const h of hunks) { flat.push({ hunk: h.header }); const colored = hl(h.lines.map((l) => l.s).join("\n"), f.lang); h.lines.forEach((l, k) => flat.push({ l, runs: colored[k] || [] })); }
+  drawInSlices(into, (a, b, frag) => {
+    for (let k = a; k < b; k++) {
+      const x = flat[k];
+      if (x.hunk) { frag.append(el("div", "hunk", x.hunk)); continue; }
+      const l = x.l;
+      const r = el("div", "r" + (l.t === "+" ? " add" : l.t === "-" ? " del" : ""));
+      r.id = "c-" + fi + "-" + (l.n != null ? "n" + l.n : "o" + l.o);
+      r.dataset.fi = String(fi); r.dataset.side = l.n != null ? "new" : "old"; r.dataset.line = String(l.n != null ? l.n : l.o);
+      r.append(el("span", "n", l.o != null ? String(l.o) : ""), el("span", "n", l.n != null ? String(l.n) : ""), el("span", "sg", l.t === " " ? "" : l.t), runs(el("span", "c"), x.runs));
+      frag.append(r);
+    }
+  }, flat.length);
+}
+async function openDiff(fi, det) {
+  if (det.dataset.drawn) return;
+  det.dataset.drawn = "1";
+  const code = det.querySelector(".code");
+  const f = R.files[fi];
+  try {
+    const it = await item(fi);
+    const rows = el("div", "rows"); code.replaceChildren(rows);
+    if (f.binary) rows.append(el("div", "status", "A binary file: nothing to show."));
+    else if (!it.diff.trim()) rows.append(el("div", "status", f.status === "R" ? "Renamed, with no change to its text." : "No change to show."));
+    else diffRows(fi, f, parseDiff(it.diff), rows);
+    paintComments();
+  } catch (e) { code.replaceChildren(el("div", "status", "This file did not load (" + e.message + ").")); det.dataset.drawn = ""; }
+}
+function renderChanges() {
+  const box = $("changes"); box.replaceChildren();
+  const many = R.files.length > BIG;
+  let group = -1;
+  R.files.forEach((f, fi) => {
+    if (R.order.length && f.group !== group) {
+      group = f.group; const g = R.order[group];
+      const head = el("div", "group"); head.append(el("h3", null, g ? g.title : "Everything else")); if (g && g.note) head.append(el("p", null, g.note));
+      box.append(head);
+    }
+    const det = el("details", "file"); det.id = "cfile-" + fi;
+    const sum = el("summary"); const num = el("span", "fnum");
+    num.append(el("b", null, "+" + f.add), " ", el("i", null, "−" + f.del), f.status === "A" ? " · new" : f.status === "D" ? " · deleted" : f.status === "R" ? " · renamed" : "");
+    sum.append(el("span", "fpath", f.path), num);
+    det.append(sum, el("div", "code"));
+    det.addEventListener("toggle", () => { if (det.open) openDiff(fi, det); });
+    box.append(det);
+    if (!many) { det.open = true; }
+  });
+  $("changes-sum").textContent = R.changedFiles + (R.changedFiles === 1 ? " file" : " files") + ", +" + R.additions + " −" + R.deletions + (many ? " · tap a file to open it" : "");
+}
+
+// ---------- files ----------
+function renderPicker() {
+  const pick = $("pick");
+  R.files.forEach((f, fi) => { if (f.status === "D") return; const o = el("option", null, f.path); o.value = String(fi); pick.append(o); });
+  pick.addEventListener("change", () => { fileShown = -1; renderFile(); });
+}
+let fileShown = -1, lastChange = -1;
+async function renderFile() {
+  const fi = Number($("pick").value); if (Number.isNaN(fi) || fi === fileShown) return;
+  fileShown = fi; lastChange = -1;
+  const f = R.files[fi]; const box = $("files");
+  box.replaceChildren(el("div", "status", "Loading " + f.path + "…"));
+  const it = await item(fi);
+  if (fileShown !== fi) return;
+  const changed = new Set(), afterDel = new Set();
+  for (const h of parseDiff(it.diff)) { let pend = false; for (const l of h.lines) { if (l.t === "+") changed.add(l.n); if (l.t === "-") pend = true; else if (pend && l.n != null) { afterDel.add(l.n); pend = false; } } }
+  const text = it.text.endsWith("\n") ? it.text.slice(0, -1) : it.text;
+  const lines = hl(text, f.lang);
+  const sec = el("section", "file"); const head = el("div", "toolbar"); head.append(el("span", "fpath", f.path + " · " + lines.length + " lines as they stand"));
+  const code = el("div", "code fileview"); const rows = el("div", "rows"); code.append(rows);
+  box.replaceChildren(head, code);
+  const total = lines.length;
+  const make = (a, b, frag) => {
+    for (let k = a; k < b; k++) {
+      const n = k + 1;
+      const r = el("div", "r" + (changed.has(n) ? " changed" : "") + (afterDel.has(n) ? " after-del" : ""));
+      r.id = "f-" + fi + "-" + n; r.dataset.fi = String(fi); r.dataset.side = "new"; r.dataset.line = String(n);
+      r.append(el("span", "sg", ""), el("span", "n", String(n)), runs(el("span", "c"), lines[k]));
+      frag.append(r);
+    }
+  };
+  // a file is drawn whole up to 3000 lines; past that, in slices
+  if (total <= 3000) { const frag = document.createDocumentFragment(); make(0, total, frag); rows.append(frag); }
+  else drawInSlices(rows, make, total);
+  paintComments();
+}
+function stepChange(dir) {
+  const rows = [...document.querySelectorAll("#files .r.changed, #files .r.after-del")]; if (!rows.length) return;
+  const starts = rows.filter((r, k) => k === 0 || r.previousElementSibling !== rows[k - 1]);
+  lastChange = (lastChange + dir + starts.length) % starts.length;
+  const r = starts[lastChange]; r.scrollIntoView({ block: "center" }); r.classList.remove("hit"); void r.offsetWidth; r.classList.add("hit");
+}
+$("next").addEventListener("click", () => stepChange(1));
+$("prev").addEventListener("click", () => stepChange(-1));
+$("wrap-c").addEventListener("change", (e) => $("changes").classList.toggle("nowrap", !e.target.checked));
+$("wrap-f").addEventListener("change", (e) => $("files").classList.toggle("nowrap", !e.target.checked));
+
+async function jumpTo(path, from, to) {
+  const fi = R.files.findIndex((f) => f.path === path); if (fi < 0) return;
+  mainTab = "changes"; focus = "main"; applyTabs(focus);
+  const det = $("cfile-" + fi); det.open = true; await openDiff(fi, det);
+  const first = $("c-" + fi + "-n" + from); if (!first) return;
+  first.scrollIntoView({ block: "center" });
+  selectRange("changes", fi, "new", from, to);
+}
+
+// ---------- selection and comments ----------
+function rowId(v, fi, side, n) { return v === "changes" ? "c-" + fi + "-" + (side === "new" ? "n" : "o") + n : "f-" + fi + "-" + n; }
+function selectRange(v, fi, side, a, b) {
+  const from = Math.min(a, b), to = Math.max(a, b);
+  clearSel(true);
+  sel = { view: v, fi, side, from, to };
+  for (let n = from; n <= to; n++) $(rowId(v, fi, side, n))?.classList.add("sel");
+  $("seltext").textContent = R.files[fi].path.split("/").at(-1) + (side === "old" ? ", removed lines " : ", lines ") + (from === to ? from : from + "–" + to);
+  $("selrow").hidden = false; $("vrow").hidden = true;
+}
+function clearSel(keepBar) {
+  sel = null;
+  for (const r of document.querySelectorAll(".r.sel")) r.classList.remove("sel");
+  if (!keepBar) { $("selrow").hidden = true; $("csheet").hidden = true; $("vrow").hidden = false; }
+}
+document.addEventListener("click", (ev) => {
+  const r = ev.target.closest(".r"); if (!r) return;
+  if (String(window.getSelection ? window.getSelection() : "").length) return;
+  const v = r.closest("#files") ? "files" : "changes";
+  const fi = Number(r.dataset.fi), side = r.dataset.side, n = Number(r.dataset.line);
+  if (sel && sel.view === v && sel.fi === fi && sel.side === side && sel.from === sel.to) { if (sel.from === n) { clearSel(); return; } selectRange(v, fi, side, sel.from, n); return; }
+  selectRange(v, fi, side, n, n);
+});
+$("clear").addEventListener("click", () => clearSel());
+$("comment").addEventListener("click", () => { if (!sel) return; $("clabel").textContent = "Comment on " + $("seltext").textContent; $("selrow").hidden = true; $("csheet").hidden = false; $("ctext").focus(); });
+$("ccancel").addEventListener("click", () => { $("csheet").hidden = true; $("selrow").hidden = !sel; });
+$("csheet").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const text = $("ctext").value.trim(); if (!text || !sel) return;
+  if (!db) { note("Saving is off in this view, so the comment was not kept."); return; }
+  const f = R.files[sel.fi];
+  const doc = { kind: "comment", page: PAGE, path: f.path, side: sel.side, from: sel.from, to: sel.to, view: sel.view, text, by: "user", at: new Date().toISOString() };
+  $("csave").disabled = true;
+  try { await db.collection("comments").add(doc); $("ctext").value = ""; $("csheet").hidden = true; clearSel(); note("Comment saved " + hm(doc.at) + ". Claude reads it when you tell your session."); }
+  catch (e) { note("The comment was not saved (" + (e && e.code || "error") + "). Your text is still in the box."); $("csheet").hidden = false; }
+  finally { $("csave").disabled = false; }
+});
+function paintComments() {
+  for (const t of document.querySelectorAll(".thread")) t.remove();
+  for (const c of comments.filter((x) => !x.replyTo)) {
+    const fi = R.files.findIndex((f) => f.path === c.path); if (fi < 0) continue;
+    for (const v of ["changes", "files"]) {
+      if (v === "files" && c.side !== "new") continue;
+      const row = $(rowId(v, fi, c.side, c.to)); if (!row) continue;
+      const th = el("div", "thread");
+      const add = (x) => { const m = el("div", "cm" + (x.by === "claude" ? " claude" : "")); m.append(el("span", "who", (x.by === "claude" ? "Claude" : "You") + " · " + (c.from === c.to ? "line " + c.from : "lines " + c.from + "–" + c.to) + " · " + hm(x.at))); m.append(x.text); th.append(m); };
+      add(c); for (const r of comments.filter((x) => x.replyTo === c.id)) add(r);
+      row.after(th);
+    }
+  }
+}
+
+// ---------- choices ----------
+async function choose(id, option) {
+  if (!db) { note("Saving is off in this view, so the choice was not kept."); return; }
+  try { await db.doc("choices/" + id).set({ kind: "choice", page: PAGE, finding: id, option, by: "user", at: new Date().toISOString() }); }
+  catch (e) { note("The choice was not saved (" + (e && e.code || "error") + ")."); }
+}
+function paintChoices() {
+  for (const b of document.querySelectorAll(".opt")) b.setAttribute("aria-pressed", String((choices[b.dataset.finding] || {}).option === b.dataset.option));
+  for (const [id, c] of Object.entries(choices)) { const s = $("saved-" + id); if (s) s.textContent = "Saved " + hm(c.at) + "."; }
+}
+function note(t) { $("state").textContent = t; }
+function chatText() {
+  const ch = Object.values(choices).map((c) => c.finding + ": " + c.option.toLowerCase()).join("; ");
+  const n = comments.filter((c) => !c.replyTo && c.by !== "claude").length;
+  return "I reviewed #" + R.ticket + " (pull request " + R.pr + ") on its page: " + n + (n === 1 ? " line comment" : " line comments") + (ch ? "; findings " + ch : "") + ". Read them there.";
+}
+$("copy").addEventListener("click", async () => {
+  const t = chatText();
+  try { await navigator.clipboard.writeText(t); note("Copied. Paste it into your chat with the session."); $("copyout").hidden = true; }
+  catch (e) { const o = $("copyout"); o.value = t; o.hidden = false; o.focus(); o.select(); note("Copy the selected text and paste it into your chat."); }
+});
+
+// ---------- start ----------
+(async () => {
+  try { const res = await fetch("review.json"); if (!res.ok) throw new Error("HTTP " + res.status); R = await res.json(); }
+  catch (e) { $("title").textContent = "The review data did not load (" + e.message + "). Reload to try again."; return; }
+  $("title").textContent = "#" + R.ticket + ", " + R.ticketTitle;
+  $("meta").append("Pull request " + R.pr + " · merged " + hm(R.mergedAt) + " · " + R.changedFiles + (R.changedFiles === 1 ? " file · " : " files · "), el("b", null, "+" + R.additions), " ", el("i", null, "−" + R.deletions));
+  if (R.redactions) $("meta").append(" · " + R.redactions + (R.redactions === 1 ? " email address" : " email addresses") + " in the code shown as <address removed>");
+  renderTexts(); renderPicker(); renderChanges();
+  focus = wide() ? "main" : "side"; sideTab = "ticket"; mainTab = "changes"; applyTabs(focus);
+  const firstOpen = R.files.length <= BIG ? R.files.map((f, fi) => openDiff(fi, $("cfile-" + fi))) : [];
+  await Promise.all(firstOpen);
+  const ms = Math.round(performance.now() - T0);
+  $("loadtime").textContent = "Loaded in " + ms + " ms" + (R.files.length <= BIG ? ", every diff drawn." : ", diffs drawn when opened.");
+  try { db = window.claude && typeof window.claude.use === "function" ? await window.claude.use("db") : null; } catch (e) { db = null; }
+  if (!db) { note("Saving is off in this view: comments would not be kept."); return; }
+  try { await db.collection("loads").add({ page: PAGE, ms, width: window.innerWidth, height: window.innerHeight, at: new Date().toISOString() }); } catch (e) { /* the timing is shown on the page either way */ }
+  db.collection("comments").orderBy("at").onSnapshot((s) => { comments = s.docs.map((d) => Object.assign({ id: d.id }, d.data())); paintComments(); }, (e) => note("Comments stopped updating (" + e.code + ")."));
+  db.collection("choices").onSnapshot((s) => { choices = {}; for (const d of s.docs) choices[d.id] = d.data(); paintChoices(); }, () => {});
+})();
+</script>

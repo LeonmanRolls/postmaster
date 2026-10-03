@@ -1,0 +1,35 @@
+{
+ "spec": {
+  "example": true,
+  "markdown": "# Workhorse spec: #109 Rewrite the scripts in TypeScript, run by Bun\n\n## Summary\n\nPort every script to TypeScript run by Bun, so Bun replaces Python as the runtime the flow needs. Each script keeps its name and its command line as a thin wrapper that runs its TypeScript, so no runbook, prompt or output changes.\n\n## Technical context\n\n- **Language and version**: TypeScript, run by Bun.\n- **Dependencies used or added**: Bun; Oxlint for lint and Biome for formatting.\n- **Testing**: `bun run check`: the type check, Oxlint, Biome's format check and every test; differential tests compare each port's output with the shell script it replaces.\n- **Constraints**: every command, prompt and output looks as it did; runs in flight keep working through the wrappers.\n\n## Structure\n\n- `scripts/<name>.ts` beside each `scripts/<name>.sh`, which becomes a one-line wrapper, and `scripts/<name>.test.ts` beside it.\n- `scripts/lib/`: the process, file and text helpers the shell scripts repeated.\n- `package.json`, `tsconfig.json`, `biome.json`, `.oxlintrc.json`: the gate.\n\n## Decisions\n\n1. The wrappers stay, so every caller and runbook keeps working unchanged.\n2. Tests sit beside their target, named `<name>.test.ts`.\n3. A port is held to its shell script by comparing their outputs on the same inputs.\n\n## Tasks\n\n- [ ] T001 [AC1] Write the shared library with its tests\n- [ ] T002 [AC2] Port each script, with a test file beside it and a differential test against the shell script\n- [ ] T003 [AC3] Make `bun run check` the gate\n- [ ] T004 [AC4] Update the runbooks where a command's runtime is named\n"
+ },
+ "card": {
+  "checks": [
+   {"name": "bun run check at the head", "result": "pass", "detail": "Passes at 5f0daf0, which holds current main: 2531 tests across 52 files, tsc clean, Oxlint exit 0, Biome format clean, skill-refs.sh and wiki-lint.sh exit 0.", "source": "pull request text"},
+   {"name": "Each port against the shell script it replaces", "result": "pass", "detail": "Differential tests on their output.", "source": "pull request text"},
+   {"name": "The review loop", "result": "pass", "detail": "Thirteen rounds under the style, bug and security lenses; four round-11 P2 findings accepted and tracked in #184, #171, #185 and #186.", "source": "pull request text"},
+   {"name": "A fixture run from this head", "result": "pass", "detail": "Scored 7 of 7 under fixture.sh score, as the contract rule requires.", "source": "pull request text"}
+  ],
+  "findings": [
+   {"id": "F1", "example": true, "lens": "bug", "severity": "P3", "path": "scripts/wait-for-markers.ts", "line": 23, "endLine": 34,
+    "title": "A glob's character class matches literally, unlike the shell's find",
+    "evidence": "matchGlob escapes [ and ] before it builds the pattern, so a marker glob such as review-r1-*-[ab].done that the shell script's find matched now matches nothing, and the wait runs to its timeout."},
+   {"id": "F2", "example": true, "lens": "bug", "severity": "P3", "path": "scripts/wait-for-markers.ts", "line": 36, "endLine": 42,
+    "title": "A directory that disappears mid-wait reads as no markers yet",
+    "evidence": "countMarkers returns 0 when readdirSync fails, so a dispatch directory removed while the wait runs is waited on until the timeout instead of failing at once."}
+  ],
+  "options": ["Fix before merge", "Make a ticket", "Accept as is"]
+ },
+ "order": [
+  {"title": "Start here: the runtime and the gate", "note": "Bun replaces Python, and bun run check is the gate. These files say how everything below runs.", "paths": ["package.json", "bun.lock", "tsconfig.json", "biome.json", ".oxlintrc.json", "types/", ".postmaster/", "AGENTS.md", "README.md"]},
+  {"title": "The shared library", "note": "The process, file and text helpers the shell scripts used to repeat.", "paths": ["scripts/lib/"]},
+  {"title": "One small port, read end to end", "note": "Every script follows this pattern: the .sh becomes a one-line wrapper, the logic moves to the .ts, and its tests sit beside it. Read this one whole, then skim the rest.", "paths": ["scripts/wait-for-markers."]},
+  {"title": "Launching and hosting runs", "note": "The largest ports. host-self-test.ts holds host.sh's old self-test.", "paths": ["scripts/host.", "scripts/host-self-test.ts", "scripts/launch.", "scripts/export-session.", "scripts/view-stream.", "scripts/cut-scratch.", "scripts/clean-checkout."]},
+  {"title": "Legs, stages and markers", "note": "What the postmaster and the coachman read to know where a run is.", "paths": ["scripts/run-", "scripts/runs-", "scripts/stage.", "scripts/turnpikes.", "scripts/handoff-check.", "scripts/log-action.", "scripts/parallel-runs-acceptance."]},
+  {"title": "Review and verification", "note": "The review loop, the checks and the landing; review-findings.py goes away here.", "paths": ["scripts/review-", "scripts/reviewers.", "scripts/verify", "scripts/landing.", "scripts/style-findings.", "scripts/summary-evidence.", "scripts/synthesis-shares.", "scripts/coachman-contract.", "scripts/ticket-check.", "scripts/tool-faults.", "scripts/usage."]},
+  {"title": "Specs and fixtures", "note": "The spec session's scripts and the fixture runs.", "paths": ["scripts/spec-", "scripts/fixture"]},
+  {"title": "Setup, trackers and the front door", "note": "What a new machine and a new project go through.", "paths": ["scripts/github.", "scripts/plane.", "scripts/local.", "scripts/tracker-kind.", "scripts/setup.", "scripts/link-skills.", "scripts/probe-", "scripts/find-projects.", "scripts/discover-project.", "scripts/check-target.", "scripts/project-settings.", "scripts/front-door", "scripts/skill-refs.", "scripts/wiki-lint.", "scripts/text."]},
+  {"title": "Runbooks, wiki and lint", "note": "Small wording changes where a runbook names a runtime, and the lint rule's tests.", "paths": ["skills/", "wiki/", "lint/"]},
+  {"title": "The acceptance oracle", "note": "The ticket's own acceptance test.", "paths": ["oracle-109.sh"]}
+ ]
+}
