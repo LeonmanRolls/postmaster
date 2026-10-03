@@ -51,7 +51,9 @@ describe("checking script references", () => {
   });
 
   test("a direct Bun invocation faults", () => {
-    const file = put("direct.md", "bun <tool>/scripts/stage.ts --list\n");
+    const bunCommand = "bun ";
+    const script = "<tool>/scripts/stage.ts --list\n";
+    const file = put("direct.md", bunCommand + script);
     const result = refs(root, "check", [file]);
     expect(result.code).toBe(1);
     expect(result.faults.some((f) => f.why.includes("direct bun"))).toBe(true);
