@@ -622,7 +622,7 @@ watcher anywhere but `run host run`: no other keeping has a documented lifetime,
 
 ## Usage
 
-`scripts/run usage` is this file's executable form for what a launch cost: it reads the
+`<tool>/scripts/run usage` is this file's executable form for what a launch cost: it reads the
 input and output tokens each harness reports, and the cost where the harness reports one, from
 the launch's own event stream or session record. A figure the harness did not report is omitted
 and never written as zero; a harness that reports nothing is named as reporting nothing. Its

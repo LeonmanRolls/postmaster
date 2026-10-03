@@ -289,7 +289,7 @@ full, since some harnesses read nothing but the brief.
   comes from the loop's last pass, on the final code. Draft the summary under
   `.postmaster/verify/` while looping and run the applicable checks on that draft; after the
   final `<tool>/scripts/run verify run .` passes, write the root summary and run
-  `scripts/run summary-evidence WORKHORSE-SUMMARY.md .`
+  `<tool>/scripts/run summary-evidence WORKHORSE-SUMMARY.md .`
   once more, keep that command with its output and exit under `.postmaster/verify/`, and cite
   the transcript in `## Evidence` when at least one criterion cites a path. Written last,
   committed, and the process then exits.
@@ -506,7 +506,7 @@ from it.
   <dispatch> <workhorse-wt>`. Exit 2 names each check the summary does not give, which makes the
   summary unverified, and each claim your run contradicts; both go on the checkpoint 1 card.
   Hold its evidence the same way, beside that verdict:
-  `scripts/run summary-evidence
+  `<tool>/scripts/run summary-evidence
   <workhorse-wt>/WORKHORSE-SUMMARY.md <workhorse-wt> --ticket <dispatch>/brief.md`.
   The criteria come from the run's waybill, never the lane's armed ticket copy,
   which the lane can edit. Exit 2 names each criterion missing
@@ -578,7 +578,7 @@ from it.
 
   ```sh
   SYNTHESIS_HEAD=$(git rev-parse HEAD)
-  SHARES_LINE=$(scripts/run synthesis-shares \
+  SHARES_LINE=$(<tool>/scripts/run synthesis-shares \
     --base <base> --synthesis "$SYNTHESIS_HEAD" \
     --lane <lane>=<harvested-head> [--lane <lane>=<harvested-head> ...] \
     [--oracle <oracle-commit>] --record <dispatch>)
@@ -1117,7 +1117,7 @@ Set the stage first: `<tool>/scripts/run stage <dispatch> shipping`.
    it. **It also lists every bug or security finding left open,** with its lens and
    disposition, one line each. Every P3 deferred after round 1 includes its originating round.
 
-   **The ship card carries the cost under `## Cost`,** as `scripts/run usage sum <dispatch>` prints it: the
+   **The ship card carries the cost under `## Cost`,** as `<tool>/scripts/run usage sum <dispatch>` prints it: the
    run's tokens and cost per role and lane, and any harness that reported nothing. Quoted, never
    hand-recomputed, and a figure no harness reported is never written as zero.
 
@@ -1149,7 +1149,7 @@ Set the stage first: `<tool>/scripts/run stage <dispatch> shipping`.
    `<dispatch>` with a quoted heredoc, which carries `$`, quotes and newlines literally,
    and pass them as separate arguments — never joined with `&&` into one shell string, in
    which a failed preparation would hide behind a later statement:
-   `scripts/run clean-checkout <repo> <default-branch> "$(cat
+   `<tool>/scripts/run clean-checkout <repo> <default-branch> "$(cat
    <dispatch>/ship-install.txt)" "$(cat <dispatch>/ship-build.txt)" "$(cat
    <dispatch>/ship-gate.txt)"`, leaving out the empty parts. The helper runs them in turn
    and stops at the first failure. Where the profile names no gate, there is nothing to
@@ -1193,7 +1193,7 @@ when the run has no style findings. Log a `note` with its last line, and name th
 change there is a ticket, filed after the merge on the user's word.
 [Why style findings feed the project's linter](../../wiki/concepts/review-loop.md)
 
-Run `scripts/run usage sum <dispatch>` and put its output verbatim under `## Cost` on the
+Run `<tool>/scripts/run usage sum <dispatch>` and put its output verbatim under `## Cost` on the
 ship card and in the final `run-log.md` entry with the per-lane win record and findings counts.
 Do not hand-recompute a figure or write a missing figure as zero. If the sum command fails, put
 the error on the card and in the log as unreadable. When the postmaster sets `done` after this

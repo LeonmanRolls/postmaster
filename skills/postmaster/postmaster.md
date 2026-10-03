@@ -117,7 +117,7 @@ For the next ticket in order, when the run ceiling (`team.max_runs`) has room:
    change: it goes to the user, and nothing is dispatched. The project's declared checks are
    checked too: `<tool>/scripts/run verify checks <repo>` exits 0, and a refusal, naming what
    `.postmaster/project.toml` must change, goes to the user the same way.
-3. **Clash check, before anything is written for this run.** `scripts/run run-clash <repo> <TICKET>` exits 0. On exit 2 it names the run directory
+3. **Clash check, before anything is written for this run.** `<tool>/scripts/run run-clash <repo> <TICKET>` exits 0. On exit 2 it names the run directory
    and each branch that already exist; put that to the user and stop, writing nothing: there
    is no run yet to log to, and the old run's records are the user's to dispose of.
    The postmaster renames or removes nothing itself: the user decides what happens

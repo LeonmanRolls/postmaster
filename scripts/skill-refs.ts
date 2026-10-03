@@ -6,14 +6,16 @@
 // by run run-meta path; it is a checkout of the same repo, so the same existence check applies.
 //
 //   run skill-refs [<file>...]          default: skills/postmaster/*.md beside this script's repo
-//   run skill-refs --fix [<file>...]    put <tool>/ before every bare scripts/ path, in place
+//   run skill-refs --fix [<file>...]    rewrite old-form and bare scripts/ paths in place
 //
 // A reference is any scripts/ path. It is a fault when it is bare (scripts/x.sh, which resolves
 // only from the repo's own root), when it reaches scripts/ some other way (../../scripts/x.sh),
-// or when it goes through <tool> or <rt> to a script the repo does not have. A path under
-// another placeholder or variable, such as <repo>/scripts/, is that directory's and not the tool's.
-// --fix rewrites the bare form only, so it can be run again after a rebase and changes nothing
-// the second time; the check that follows it names whatever it could not fix.
+// when it goes through <tool> or <rt> to a script the repo does not have, or when a runbook line
+// runs bun … scripts/<name>.ts directly, past the entry and its isolation. An old
+// <tool>/scripts/<name>.sh reference faults as naming a script the repo does not have.
+// --fix rewrites every scripts/<name>.sh whose <name> the entry resolves to
+// <tool>/scripts/run <name>, prefixes other bare scripts/ paths with <tool>/, and stays
+// idempotent; the check that follows it names whatever it could not fix.
 //
 //   exit 0  every reference resolves
 //   exit 1  faults, one per line on stdout: <file>:<line>: <reason>: <reference>
@@ -25,8 +27,17 @@ import { toolRoot } from "./lib/paths.ts";
 const REF = /scripts\/[A-Za-z0-9._-]*/gu;
 const BARE = /(?<![A-Za-z0-9_./-])scripts\//gu;
 const OTHER = /(<[A-Za-z0-9_-]+>|\$\{?[A-Za-z_][A-Za-z0-9_]*\}?)\/$/u;
+const OLD_FORM = /(?:(?<![A-Za-z0-9_./-])|(?<=>\/))scripts\/([A-Za-z0-9_-]+)\.sh\b/gu;
+const DIRECT_BUN = /(?:^|[\s`"'])bun\s+(?:--[^\s]+\s+)*[^\s]*scripts\/[A-Za-z0-9_-]+\.ts\b/gu;
+const ENTRY_FORM = /scripts\/run\s+([A-Za-z][A-Za-z0-9-]*)/gu;
 
 type Fault = { file: string; line: number; why: string; ref: string };
+
+/** Does the entry resolve <name> to a script under root? */
+export function resolves(root: string, name: string): boolean {
+  if (name === "" || name === "." || name === ".." || name.includes("/")) return false;
+  return isFile(join(root, "scripts", `${name}.ts`)) || isFile(join(root, "scripts", "lib", `${name}.ts`));
+}
 
 /** refs <root> check|fix <file>... — returns faults and the exit code the shell form took. */
 export function refs(
@@ -46,11 +57,25 @@ export function refs(
       return { faults, code: 2, fixMessages };
     }
     if (mode === "fix") {
-      const new_ = text.replace(BARE, "<tool>/scripts/");
-      const _n = text.split(BARE).length - 1;
-      // count matches of BARE
       let count = 0;
-      for (const _m of text.matchAll(BARE)) count += 1;
+      // Rewrite old-form scripts/<name>.sh to the entry form when <name> resolves.
+      let new_ = text.replace(OLD_FORM, (match, name: string, offset: number) => {
+        if (resolves(root, name)) {
+          count++;
+          const before = text.slice(0, offset);
+          if (before.endsWith("<tool>/") || before.endsWith("<rt>/")) {
+            return `scripts/run ${name}`;
+          }
+          return `<tool>/scripts/run ${name}`;
+        }
+        return match;
+      });
+      // Prefix remaining bare scripts/ paths with <tool>/.
+      const bareCount = [...new_.matchAll(BARE)].length;
+      if (bareCount > 0) {
+        new_ = new_.replace(BARE, "<tool>/scripts/");
+        count += bareCount;
+      }
       if (count > 0) {
         writeFileSync(f, new_, "utf8");
         fixMessages.push(`${f}: ${count} reference(s) now go through <tool>`);
@@ -60,6 +85,29 @@ export function refs(
     const lines = text.split("\n");
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i] ?? "";
+      // Fault direct bun invocations of scripts/*.ts (past the entry).
+      DIRECT_BUN.lastIndex = 0;
+      for (const m of line.matchAll(DIRECT_BUN)) {
+        faults.push({
+          file: f,
+          line: i + 1,
+          why: "direct bun invocation past the entry",
+          ref: (m[0] ?? "").trim(),
+        });
+      }
+      // Fault entry-form references whose name does not resolve.
+      ENTRY_FORM.lastIndex = 0;
+      for (const m of line.matchAll(ENTRY_FORM)) {
+        const name = m[1] ?? "";
+        if (!resolves(root, name)) {
+          faults.push({
+            file: f,
+            line: i + 1,
+            why: "no such script in the postmaster repo",
+            ref: `scripts/run ${name}`,
+          });
+        }
+      }
       REF.lastIndex = 0;
       for (const m of line.matchAll(REF)) {
         const before = line.slice(0, m.index ?? 0);
@@ -143,6 +191,20 @@ if (import.meta.main) {
       process.exit(2);
     }
   }
+
+  // Gate: a scripts/*.sh file fails the check.
+  if (mode === "check") {
+    try {
+      const scripts = readdirSync(join(ROOT, "scripts")).filter((n) => n.endsWith(".sh"));
+      for (const n of scripts) {
+        console.log(`${join(ROOT, "scripts", n)}:1: wrapper file remains: scripts/${n}`);
+      }
+      if (scripts.length > 0) process.exit(1);
+    } catch {
+      // no scripts dir is a fault elsewhere
+    }
+  }
+
   const { faults, code, fixMessages } = refs(ROOT, mode, files);
   for (const m of fixMessages) process.stderr.write(`${m}\n`);
   printFaults(faults);

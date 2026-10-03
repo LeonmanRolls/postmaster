@@ -1,5 +1,5 @@
 # What every run against this app is held to: the checks a change is verified by. Postmaster
-# reads them with scripts/verify.sh; project.example.toml at postmaster's root is the shape.
+# reads them with scripts/run verify; project.example.toml at postmaster's root is the shape.
 
 [checks.gate]
 command = "npm run check"
