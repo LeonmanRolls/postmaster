@@ -1,12 +1,28 @@
 ---
 title: Log
 type: schema
-updated: 2026-10-01
+updated: 2026-10-03
 ---
 
 # Log
 
 Append-only. Newest first. One entry per operation, prefixed so it can be parsed.
+
+## [2026-10-03] ingest | a model beside the private-data scanner
+
+Issue #208. Two trials. `raw/trials/ai-privacy-check/`: 188 made-up lines, #135's fixtures,
+probes and open-ended lines, given to Claude Haiku 4.5, Claude Opus 5.5, GPT-6 Sol, MiMo V2.6
+Pro, OpenAI's Privacy Filter run locally, and Jev 1.13; every general model found every
+open-ended positive, none replaced the patterns, and Opus raised the fewest false alarms.
+`raw/trials/jev-pii/`: after the user narrowed #135 to personal data and secrets on 2026-10-02,
+Jev asked atomic questions with every exclusion in code, in five versions. The last finds 33 of
+34 made-up personal-data lines at 0.8 and raises 2 of 37 hard negatives; over all 92,252 lines
+of this repository's history it flagged 15, none of them personal data. Its answers move by up
+to 0.2 between identical calls, a 1.1 MB line is past its context, and 21 requests failed after
+six attempts. Updated
+[No library covers what the private-data scanner checks, so postmaster publishes one](concepts/scanner-library.md),
+still **claimed**: the claim, the library's scope and the recommendation follow the narrowed
+#135, and the judge is an argument of the library, not built in.
 
 ## [2026-10-01] ingest | whether to publish the private-data scanner as a library
 

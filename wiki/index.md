@@ -1,7 +1,7 @@
 ---
 title: postmaster wiki
 type: schema
-updated: 2026-10-01
+updated: 2026-10-03
 ---
 
 # postmaster wiki
@@ -117,10 +117,13 @@ Why the design is shaped as it is.
   **claimed**. The run's working copies stay under `.worktrees/`; the flow's post-merge gate
   runs from a clean checkout of the branch outside the project folder, so it never reads them.
 - [No library covers what the private-data scanner checks, so postmaster publishes one](concepts/scanner-library.md):
-  **claimed**. A survey of 32 tools found none covering home paths, private hosts and attribution
-  lines in both agent transcripts and git history. A trial wrote #135's eight rules as data, and
-  every one agreed with the scanner. The gap is the reason to publish: after #135 lands, #109's
-  port makes the scanner a self-contained module, which is then published and used from here.
+  **claimed**. A survey of 32 tools found none checking agent transcripts and git history together
+  for personal data and secrets. A trial wrote #135's rules as data, and every one agreed with
+  the scanner; two more found that Jev, asked atomic questions with every exclusion in code, finds
+  the personal data in prose that patterns miss and raised almost nothing else over this
+  repository's history. The gap is the reason to publish: after #135 lands, #109's port makes the
+  scanner a self-contained module, with the model as an argument, which is then published and used
+  from here.
 
 ## Sources
 
