@@ -2,7 +2,7 @@
 title: No library covers what the private-data scanner checks, so postmaster publishes one
 type: concept
 standing: claimed
-sources: [trials/scanner-rule-format, trials/ai-privacy-check, trials/jev-pii, papers/panfilov-2026-reasoning-traces, papers/richards-2026-agentlogs, articles/csa-2026-reasoning-trace-theft, articles/anthropic-thinking-encryption, articles/claude-code-attribution-setting, articles/claude-code-issue-50014, articles/gitguardian-secrets-sprawl-2026, articles/scanner-gitleaks, articles/scanner-betterleaks, articles/scanner-trufflehog, articles/scanner-kingfisher, articles/scanner-titus, articles/scanner-detect-secrets, articles/scanner-secretlint, articles/scanner-ggshield, articles/scanner-git-secrets, articles/scanner-talisman, articles/scanner-ripsecrets, articles/scanner-trivy, articles/scanner-github-secret-scanning, articles/scanner-presidio, articles/scanner-scrubadub, articles/scanner-datafog, articles/scanner-llm-guard, articles/scanner-google-sdp, articles/scanner-openredaction, articles/scanner-openai-privacy-filter, articles/scanner-entire, articles/scanner-clawjournal, articles/scanner-deja-vu, articles/scanner-ccs-sanitizer, articles/scanner-agent-archive, articles/scanner-scrub-transcripts, articles/scanner-dataclaw, articles/scanner-agentscrub, articles/scanner-git-filter-repo, articles/scanner-bfg, articles/scanner-leak-lock, articles/scanner-pii-check]
+sources: [trials/scanner-rule-format, trials/ai-privacy-check, trials/jev-pii, trials/pii-patterns, papers/panfilov-2026-reasoning-traces, papers/richards-2026-agentlogs, articles/csa-2026-reasoning-trace-theft, articles/anthropic-thinking-encryption, articles/claude-code-attribution-setting, articles/claude-code-issue-50014, articles/gitguardian-secrets-sprawl-2026, articles/scanner-gitleaks, articles/scanner-betterleaks, articles/scanner-trufflehog, articles/scanner-kingfisher, articles/scanner-titus, articles/scanner-detect-secrets, articles/scanner-secretlint, articles/scanner-ggshield, articles/scanner-git-secrets, articles/scanner-talisman, articles/scanner-ripsecrets, articles/scanner-trivy, articles/scanner-github-secret-scanning, articles/scanner-presidio, articles/scanner-scrubadub, articles/scanner-datafog, articles/scanner-llm-guard, articles/scanner-google-sdp, articles/scanner-openredaction, articles/scanner-openai-privacy-filter, articles/scanner-entire, articles/scanner-clawjournal, articles/scanner-deja-vu, articles/scanner-ccs-sanitizer, articles/scanner-agent-archive, articles/scanner-scrub-transcripts, articles/scanner-dataclaw, articles/scanner-agentscrub, articles/scanner-git-filter-repo, articles/scanner-bfg, articles/scanner-leak-lock, articles/scanner-pii-check]
 updated: 2026-10-03
 ---
 
@@ -13,9 +13,10 @@ and secrets, in agent transcripts and in the whole git history of a change with 
 messages, and then scrubs a copy and checks it again. Secret scanners leave out personal data,
 and most leave out commit messages. Personal-data tools read neither transcripts nor git. The
 transcript scrubbers released in 2026 each cover part of a transcript, and none reads git
-history. Personal data written as prose, a name or a street address, has no shape for a pattern
-to find; a model asked atomic questions finds it, and over this repository's whole history it
-raised almost nothing else [@trials/jev-pii/method.md]. A library would fill a real gap, and
+history. Patterns that read checksums, context words and the places a name is written find
+most personal data, and raised nothing but made-up test addresses over this repository's whole
+history; what they leave is names in prose, a first name above all, which a model asked atomic
+questions finds [@trials/pii-patterns/method.md] [@trials/jev-pii/method.md]. A library would fill a real gap, and
 the gap is the reason to publish it: nobody asks an individual to publish a library that does
 not exist yet. #135's scope changed on 2026-10-02, and #109 is about to port the scanner to
 TypeScript, so the scanner is published once #135 lands, through that port, rather than built
@@ -278,6 +279,17 @@ pieces and ask again before it fails. It is fast and cheap enough for a linter: 
 in flight judged about 70 lines a second, the whole history in twenty minutes for under two
 dollars, and a change of a few hundred lines takes seconds. How it does on another repository, on text written to steer it, or on personal data
 that was not made up for a test, neither trial measured.
+
+A third trial asked whether patterns could do the same work [@trials/pii-patterns/method.md].
+They find names in the places a name is written down (sign-offs, author and contact fields,
+copyright lines, git identities, credits and titles), email addresses, phone numbers, card and
+bank numbers by their checksums, ID numbers and dates of birth by the words beside them, street
+addresses in several countries' formats, and a few phrases about a person's life. On 60 lines
+another model wrote after the patterns were fixed, they found 25 of 34 that held personal data
+where Jev found 32, with about as many false alarms; four of the lines only Jev found were names
+in prose, three were fields whose names use underscores, an easy fix. On this repository's
+history the patterns flagged 9 lines, all email addresses made up for a test, in five seconds,
+with no network, key or cost, and the same answer every time.
 
 ## The case for and against publishing one
 

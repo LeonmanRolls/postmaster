@@ -8,6 +8,18 @@ updated: 2026-10-03
 
 Append-only. Newest first. One entry per operation, prefixed so it can be parsed.
 
+## [2026-10-03] ingest | patterns for personal data, beside Jev
+
+Issue #208. A trial recorded in `raw/trials/pii-patterns/`: patterns in TypeScript for names in
+the places a name is written, email addresses, phone numbers, card, bank and ID numbers, dates of
+birth, street addresses and a few phrases, against Jev 1.13 on the same lines. On the Jev
+trial's corpus, a fit, they found 32 of 34. On two sets another model wrote, they found 23 of 33
+before fixes and 25 of 34 after, where Jev found 32 of 33 and 32 of 34, with about as many false
+alarms; the gap is names in prose. On this repository's 92,252 history lines they flagged 9 made-up
+test addresses in five seconds. Updated
+[No library covers what the private-data scanner checks, so postmaster publishes one](concepts/scanner-library.md),
+still **claimed**: patterns carry the check, and names in prose are what a model adds.
+
 ## [2026-10-03] ingest | a model beside the private-data scanner
 
 Issue #208. Two trials. `raw/trials/ai-privacy-check/`: 188 made-up lines, #135's fixtures,
