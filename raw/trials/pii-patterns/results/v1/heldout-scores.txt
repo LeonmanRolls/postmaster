@@ -1,0 +1,8 @@
+60 lines another model wrote, scanned once.
+
+personal-data lines found: 23/33, with the right kind: 23/33
+negatives raised: 4/27
+missed: 5 (postal-address), 7 (other-personal), 8 (person), 10 (other-personal), 13 (postal-address), 26 (other-personal), 40 (person), 48 (person), 50 (postal-address), 60 (phone)
+found with another kind only: none
+negatives raised: 14 (postal-address: postcode,street), 27 (person: credit), 34 (postal-address: postcode,street), 45 (postal-address: postcode)
+lines each rule fired on: phone 6, email 7, postcode 4, street 4, name-and-address 1, sign-off 1, date-of-birth 2, credit 3, copyright 1, iban 1, id-number 1

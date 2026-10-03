@@ -1,0 +1,106 @@
+{
+ "rev": "873cf2dea324fdc5ca07f3e8a3a29a2bfd41b970",
+ "lines": 92252,
+ "seconds": 3.2,
+ "flagged": [
+  {
+   "index": 68846,
+   "commit": "3a7261631a52",
+   "path": "scripts/tool-faults.ts",
+   "kinds": [
+    "email"
+   ],
+   "rules": [
+    "email"
+   ]
+  },
+  {
+   "index": 68847,
+   "commit": "3a7261631a52",
+   "path": "scripts/tool-faults.ts",
+   "kinds": [
+    "email"
+   ],
+   "rules": [
+    "email"
+   ]
+  },
+  {
+   "index": 68849,
+   "commit": "3a7261631a52",
+   "path": "scripts/tool-faults.ts",
+   "kinds": [
+    "email"
+   ],
+   "rules": [
+    "email"
+   ]
+  },
+  {
+   "index": 69098,
+   "commit": "3a7261631a52",
+   "path": "scripts/tool-faults.ts",
+   "kinds": [
+    "email"
+   ],
+   "rules": [
+    "email"
+   ]
+  },
+  {
+   "index": 69099,
+   "commit": "3a7261631a52",
+   "path": "scripts/tool-faults.ts",
+   "kinds": [
+    "email"
+   ],
+   "rules": [
+    "email"
+   ]
+  },
+  {
+   "index": 69100,
+   "commit": "3a7261631a52",
+   "path": "scripts/tool-faults.ts",
+   "kinds": [
+    "email"
+   ],
+   "rules": [
+    "email"
+   ]
+  },
+  {
+   "index": 84265,
+   "commit": "ad2c175f4975",
+   "path": "scripts/tool-faults.test.ts",
+   "kinds": [
+    "email"
+   ],
+   "rules": [
+    "email"
+   ]
+  },
+  {
+   "index": 84266,
+   "commit": "ad2c175f4975",
+   "path": "scripts/tool-faults.test.ts",
+   "kinds": [
+    "email"
+   ],
+   "rules": [
+    "email"
+   ]
+  },
+  {
+   "index": 84267,
+   "commit": "ad2c175f4975",
+   "path": "scripts/tool-faults.test.ts",
+   "kinds": [
+    "email"
+   ],
+   "rules": [
+    "email"
+   ]
+  }
+ ]
+}

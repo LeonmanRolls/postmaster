@@ -6,6 +6,10 @@
   pii_jev.py rejudge --out <dir> --from <history.json> [--key-file <file>] [--version v2..v6]
   pii_jev.py score   --out <dir> [--version v2..v6]   (rescore a corpus run from its saved answers)
 
+The corpus and score modes take --lines <file> to judge other labelled lines instead of the
+corpus: a JSON list of {"label", "parts"}, each line stored in pieces as the patterns trial
+keeps the lines another model wrote (`../../pii-patterns/`); a label of "none" is a negative.
+
 The second iteration of #208's AI check, after the user narrowed the scope on 2026-10-02:
 personal data only, since private context such as paths, hosts, ids and attribution is allowed.
 Following TypeSafe's guidance, every question is atomic and every exclusion is made in code:
@@ -82,6 +86,8 @@ CITATION_QUESTION_V6 = ("Is every person named in `line` an author of a publishe
 VERSION = {"questions": dict(QUESTIONS), "mask": False, "names": NAMES, "citation": False}
 # The lines around a line, by its text: up to three on each side, for v5's citation question.
 CONTEXT = {}
+# Labelled lines to judge in place of the corpus, from --lines.
+LINES = {"file": None}
 
 EMAIL_QUESTION = "Does `email` belong to an individual person, rather than a company, team, mailing list, service or bot?"
 MAILBOX_SHAPE = re.compile(r"(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}(?![A-Za-z0-9-])")
@@ -180,6 +186,9 @@ def run_all(api_key, lines, workers):
 
 def corpus():
     """Made-up lines, each labelled with the kind it holds, or "" for a hard negative."""
+    if LINES["file"]:
+        rows = json.loads(pathlib.Path(LINES["file"]).read_text())
+        return [("" if row["label"] == "none" else row["label"], "".join(row["parts"])) for row in rows]
     n = lambda *parts: "".join(parts)  # noqa: E731 - names built in pieces
     at = "@"
     items = [
@@ -450,7 +459,7 @@ def main(args):
     if not args or args[0] not in ("corpus", "history", "rejudge", "score"):
         sys.exit(__doc__)
     mode, opts = args[0], {"--out": None, "--repeats": "3", "--key-file": None, "--range": "origin/main",
-                           "--version": "v3", "--from": None}
+                           "--version": "v3", "--from": None, "--lines": None}
     rest = args[1:]
     while rest:
         head = rest.pop(0)
@@ -470,6 +479,7 @@ def main(args):
         del VERSION["questions"]["cited_author"]
         VERSION.update(mask=True, names=NAMES_V5,
                        citation=CITATION_QUESTION if opts["--version"] == "v5" else CITATION_QUESTION_V6)
+    LINES["file"] = opts["--lines"]
     if mode == "score":
         return score_mode(out)
     api_key = key(opts["--key-file"])

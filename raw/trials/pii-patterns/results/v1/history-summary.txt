@@ -1,0 +1,6 @@
+history at 873cf2dea324: 92252 lines in 3.2 s, 9 flagged
+by kind: person 0, email 9, phone 0, postal-address 0, other-personal 0
+by rule: email 9
+against Jev's full pass at 0.5: both 4, patterns only 5, Jev only 60
+against Jev's full pass at 0.8: both 3, patterns only 6, Jev only 12
+against Jev's full pass at 0.9: both 3, patterns only 6, Jev only 8

@@ -1,0 +1,15 @@
+Lines found by the majority of 3 calls, as found/total; in brackets, the fewest and
+most found by any one call, since a linter makes one call per line.
+
+threshold  personal-data lines  kind right  negatives raised  control
+0.5        33/33 (32-33)        31/33       6/27 (6-6)        0
+0.7        33/33 (32-33)        31/33       5/27 (5-5)        0
+0.8        32/33 (32-32)        30/33       5/27 (5-5)        0
+0.9        29/33 (28-30)        25/33       4/27 (4-4)        0
+
+Negatives raised at 0.5 and 0.9, and positives missed at 0.9, by corpus line number:
+at 0.5 raised: 11, 14, 27, 32, 34, 45
+at 0.9 raised: 11, 14, 34, 45
+at 0.9 missed: 12 (email), 28 (email), 46 (email), 55 (other-personal)
+
+Seconds and cost per call: 1 2.5s $0.001468, 2 2.2s $0.001468, 3 2.2s $0.001468, control 0.4s $0.000188
