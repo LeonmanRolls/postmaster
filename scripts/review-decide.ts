@@ -161,6 +161,7 @@ function decide(dispatch: string, roundS: string): void {
   const roundsSeen = new Map<string, Set<string>>();
   const seenPairs = new Set<string>();
   const applies: Array<{ n: number; targets: string[] }> = [];
+  const reachDegraded = new Set<string>();
   const faults: string[] = [];
   lines.forEach((line, idx) => {
     const n = idx + 1;
@@ -225,6 +226,10 @@ function decide(dispatch: string, roundS: string): void {
       }
       set.add(rndN);
       latest.set(target, { sev, rnd: rndN, cls });
+    } else if (action === "degrade") {
+      const detail = pyStr(rec.detail, !("detail" in rec));
+      const match = new RegExp(`^(.+) r${r}: reach$`, "u").exec(detail);
+      if (match) reachDegraded.add(pyStr(rec.target, !("target" in rec)));
     } else if (action === "apply") {
       applies.push({ n, targets: pyWords(pyStr(rec.detail, !("detail" in rec))) });
     }
@@ -249,7 +254,11 @@ function decide(dispatch: string, roundS: string): void {
       ({ sev, rnd, cls }) => rnd === roundNum && (sev === "P1" || sev === "P2") && cls === "gating",
     );
 
-  if (r === "1") {
+  if (reachDegraded.size > 0 && r !== "3") {
+    console.log(`RUN ${Number(r) + 1}: a reviewer verdict was voided by the reach check`);
+  } else if (reachDegraded.size > 0) {
+    console.log("CAP 3: a reviewer verdict was voided by the reach check; escalate with residue");
+  } else if (r === "1") {
     console.log(
       appliedIn("1") ? "RUN 2: round 1 applied a fix" : "STOP 1: round 1 applied no fixes",
     );

@@ -459,6 +459,32 @@ cd <wt> && env XDG_DATA_HOME=<harness-data>/mimo/<key> MIMOCODE_DISABLE_CLAUDE_I
 - Source: trials of MiMo Code 0.1.15, `raw/trials/mimo-headless-forms/`, and for the prompt and
   resumes, `raw/trials/muse-mimo-controls/`.
 
+## Reach records
+
+`<tool>/scripts/reach.ts` reads the lane's recorded tool calls. It does not use a lane's final
+message to decide which files it touched. A lane with no reader, an unreadable stream or no
+recognized tool call is `not checked`; it never reads as clean.
+
+| harness | call record read by `reach.ts` | result used to identify refusal | normal settings and data folders |
+|---|---|---|---|
+| codex | completed `command_execution` items (`command`, `aggregated_output`, `exit_code`) and `file_change` items (`changes[].path`) | command output; file changes are writes | `~/.codex` for settings and sessions |
+| claude | assistant `tool_use` blocks (`name`, `input`) paired with user `tool_result`; for bug review, the copied `logs/<prefix>-claude-task-*` files too | tool result text; `is_error` alone is not a refusal | `~/.claude`, `~/.claude.json` |
+| muse | `tool.result` (`correlation_facts`, `edit_facts`, `text`) | result text | `~/.config/muse`; its lane's `XDG_DATA_HOME` |
+| mimo | `tool_use` (`part.tool`, `part.state.input`, `part.state.output`, `part.state.metadata.exit`) | output and metadata exit | `~/.config/mimocode`, `~/.mimocode`; its lane's `XDG_DATA_HOME` |
+| pi | `tool_execution_start` (`toolName`, `args`) paired with `tool_execution_end` | result; `isError` alone is not a refusal | `~/.pi/agent` |
+| grok, agy | no reader yet | not available | not exempted |
+
+The reader opens `/bin/bash -lc` commands but never executes them. It follows `cd`, splits
+command chains and substitutions, resolves the lane's home and worktree paths, and treats a
+git command as a write unless it only shows information. A successful or failed write remains
+a finding; only a refusal recorded by the harness or the system, or a read of a missing path,
+becomes a refused note. A generic tool-error flag is not enough to call an attempt refused.
+Reads of system files, the pinned postmaster checkout, lane prompts and
+briefs, the settings folders above, and paths outside the home and project are routine. The
+temporary folders, `/dev`, `~/.npm`, `~/.cache`, `~/.bun`, and a lane's own data folder are
+routine for reads and writes. Other writes outside a lane's folder are findings, including
+writes under its home directory or another project.
+
 ## Own review skills
 
 Under a review lens, a lane whose harness has its own review skill for that lens runs it in

@@ -69,6 +69,12 @@ describe("positive controls: another round runs", () => {
     logged(d, "finding", "src/c.ts:3", "gating P2 r2 security sol reading: a security gap");
     checkWhole(decide(d, "2"), 0, "RUN 3: round 2 logged a verified P1 or P2 finding");
   });
+
+  test("a reach-voided reviewer makes the next round run even without a finding or apply", () => {
+    const d = newRun("reach-r1");
+    logged(d, "degrade", "mimo", "bug r1: reach");
+    checkWhole(decide(d, "1"), 0, "RUN 2: a reviewer verdict was voided by the reach check");
+  });
 });
 
 describe("positive controls: the cap is reached", () => {
@@ -90,6 +96,12 @@ describe("positive controls: the cap is reached", () => {
       0,
       "CAP 3: round 3 logged a verified P1 or P2 finding; escalate with residue",
     );
+  });
+
+  test("a reach-voided reviewer at round 3 names the cap", () => {
+    const d = newRun("reach-r3");
+    logged(d, "degrade", "mimo", "bug r3: reach");
+    checkWhole(decide(d, "3"), 0, "CAP 3: a reviewer verdict was voided by the reach check; escalate with residue");
   });
 });
 

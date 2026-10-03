@@ -80,10 +80,11 @@
 //           unreadable state, a fence marker line, or a quoted line); a card holding an
 //           HTML comment or not holding the rendered block exactly once
 //   exit 2  fresh: the faults, one line each; journey: `blocked`
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync, readdirSync } from "node:fs";
+import { isAbsolute, join, relative, sep } from "node:path";
 import { scriptsDir } from "./lib/paths.ts";
 import { run } from "./lib/proc.ts";
+import { reachActions } from "./reach.ts";
 import {
   D_CLASS,
   END_OF_STRING,
@@ -341,6 +342,73 @@ function checkpointStates(path: string): CheckpointFinding[] {
   return out;
 }
 
+function reachPath(dispatch: string, path: unknown): string {
+  if (typeof path !== "string" || path === "") return "unknown path";
+  if (path.startsWith("refs/")) return path;
+  if (!isAbsolute(path)) return path;
+  const repo = join(dispatch, "..", "..", "..");
+  const rel = relative(repo, path);
+  return rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel)
+    ? "outside the project"
+    : rel.split(sep).join("/");
+}
+
+function reachBlock(dispatch: string): string {
+  const actions = reachActions(dispatch);
+  if (actions.length === 0) return "";
+  const pointRows = actions.filter(({ event }) => event.kind === "point");
+  const lastPoint = new Map<string, (typeof pointRows)[number]["event"]>();
+  for (const row of pointRows) lastPoint.set(row.event.point, row.event);
+  const roundNumbers = new Set<number>();
+  try {
+    for (const name of readdirSync(join(dispatch, "logs"))) {
+      const m = /^review-r([1-9][0-9]*)\.json$/u.exec(name);
+      if (m) roundNumbers.add(Number(m[1]));
+    }
+  } catch {
+    die(`cannot list review round records in ${dispatch}/logs`);
+  }
+  for (const { event } of actions) {
+    const m = /^r([1-9][0-9]*)$/u.exec(event.point);
+    if (m) roundNumbers.add(Number(m[1]));
+  }
+  const points = ["workhorses", ...[...roundNumbers].sort((a, b) => a - b).map((n) => `r${n}`), "card"];
+  const lines = ["## Reach", ""];
+  const card = lastPoint.get("card");
+  const main = card?.main;
+  if (main !== null && typeof main === "object" && !Array.isArray(main)) {
+    const state = main as Record<string, unknown>;
+    lines.push(`- Main checkout: branch ${String(state.branch ?? "unknown")} (default ${String(state.defaultBranch ?? "unknown")})`);
+    const changed = Array.isArray(state.changed) ? state.changed : [];
+    if (changed.length === 0) lines.push("  - clean at the card check");
+    else for (const path of changed) lines.push(`  - changed: \`${reachPath(dispatch, path)}\``);
+  }
+  for (const point of points) {
+    const record = lastPoint.get(point);
+    const result = record?.result ?? "not checked";
+    const title = point === "workhorses" ? point : point === "card" ? point : `round ${point.slice(1)}`;
+    lines.push(`- ${title}: ${result}`);
+    const incidents = actions.filter(({ event }) => event.point === point && ["finding", "note", "void"].includes(event.kind));
+    for (const { event } of incidents) {
+      if (event.kind === "void") {
+        lines.push(`  - voided verdict: ${event.lens ?? "review"} reviewer ${event.lane ?? "unknown"} (${event.reason ?? "reach"})`);
+        continue;
+      }
+      if (typeof event.reason === "string" && event.reason.startsWith("not checked:")) {
+        lines.push(`  - ${event.lane ?? "lane"}: ${event.reason}`);
+        continue;
+      }
+      const lane = event.lane ? `${event.lane}: ` : "";
+      const access = event.access === "write" ? "write" : event.access === "refused" ? "refused attempt" : "read";
+      const place = event.place ? ` (${event.place})` : "";
+      const path = reachPath(dispatch, event.path);
+      const reason = event.reason ? ` — ${event.reason}` : "";
+      lines.push(`  - ${event.kind}: ${lane}${access} \`${path}\`${place}${reason}`);
+    }
+  }
+  return `${lines.join("\n")}\n`;
+}
+
 /** The card's checked sections, byte-exact. */
 function renderBlock(dispatch: string, wt: string, checkpoint: string): string {
   const checks = recordedResults(dispatch, wt);
@@ -356,7 +424,9 @@ function renderBlock(dispatch: string, wt: string, checkpoint: string): string {
       .filter((f) => f.state === "user-applied")
       .map((f) => `- [${f.sev}] ${f.fid}`)
       .join("\n") || "none";
-  return `## Checks\n\n${b1}\n\n## Open findings\n\n${b2}\n\n## Not re-reviewed\n\n${b3}\n`;
+  const base = `## Checks\n\n${b1}\n\n## Open findings\n\n${b2}\n\n## Not re-reviewed\n\n${b3}\n`;
+  const reach = reachBlock(dispatch);
+  return reach ? `${base}\n${reach}` : base;
 }
 
 /** match iff the card holds the block once. */

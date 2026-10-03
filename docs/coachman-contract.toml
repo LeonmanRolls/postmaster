@@ -90,7 +90,35 @@ holds = "the fixture entrypoint the flow invokes"
 
 [[files]]
 path = "scripts/fixture.ts"
-holds = "the fixture-copy mark new writes, and scoring a run from its records"
+holds = "the fixture-copy mark new writes, and scoring a run from its records, including lane reach"
+
+[[files]]
+path = "scripts/reach.ts"
+holds = "lane record reading, reach classification, round snapshots and restoration"
+
+[[files]]
+path = "scripts/check-target.ts"
+holds = "the non-fetching reach form that lists every changed target path and the default branch"
+
+[[files]]
+path = "scripts/log-action.ts"
+holds = "the fixed action vocabulary, including reach"
+
+[[files]]
+path = "scripts/review-decide.ts"
+holds = "the review-loop decision, including rerunning voided reach verdicts"
+
+[[files]]
+path = "scripts/landing.ts"
+holds = "reach card rendering from logged reach actions"
+
+[[files]]
+path = "skills/postmaster/controls.md"
+holds = "the list of controls and their fault behavior"
+
+[[files]]
+path = "skills/postmaster/harnesses.md"
+holds = "the lane event and task record forms read by reach.ts"
 
 [[files]]
 path = "skills/postmaster/workhorse-spec-template.md"

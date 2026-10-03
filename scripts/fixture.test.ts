@@ -54,6 +54,7 @@ const HERE = scriptsDir(import.meta);
 const APP = join(TOOL, "fixtures", "app");
 const TICKETS = join(TOOL, "fixtures", "tickets");
 const wrapper = join(import.meta.dir, "fixture.sh");
+const LOG_ACTION = join(import.meta.dir, "log-action.sh");
 const first = tickets()[0] ?? "";
 
 let tmp = "";
@@ -189,6 +190,27 @@ function record(
     manifest.coachman.legs[String(n)] = { thread_id: `thread-${n}` };
   }
   writeFileSync(join(d, "manifest.json"), JSON.stringify(manifest, null, 2));
+
+  const point = (name: string, lanes: Array<Record<string, string>>): void => {
+    const detail = JSON.stringify({ kind: "point", point: name, result: "clean", lanes });
+    const logged = run("bash", [join(HERE, "log-action.sh"), d, "coachman", "reach", name, detail]);
+    if (logged.code !== 0) throw new Error(`could not make fixture reach record: ${logged.err}`);
+  };
+  const laneRecords = (names: string[]) => names.map((name: string) => ({
+    lane: name,
+    lens: "",
+    harness: recordedConfig.lanes[name]?.harness ?? "codex",
+    status: "checked",
+    reason: "",
+  }));
+  const workhorseNames: string[] = recordedConfig.team.workhorses ?? [];
+  point("workhorses", laneRecords(workhorseNames));
+  if (legs >= 2) {
+    const reviewer = workhorseNames[0] ?? "one";
+    writeFileSync(join(d, "logs", "review-r1.json"), JSON.stringify({ reviewers: [["bug", reviewer]] }));
+    point("r1", laneRecords([reviewer]));
+  }
+  point("card", laneRecords(workhorseNames));
   return 0;
 }
 
@@ -330,7 +352,7 @@ function expectScore(key: string, failing: string, failText?: string): void {
   const lines = out.split("\n").filter((l) => l.trim()).length;
   expect(rc).toBe(failing === "none" ? 0 : 2);
   expect(failingChecks).toBe(failing);
-  expect(lines).toBe(8);
+  expect(lines).toBe(9);
   if (failText !== undefined) {
     expect(
       out
@@ -345,6 +367,72 @@ function runScore(dispatch: string, repo: string): { code: number; out: string }
   const r = spawnSync(wrapper, ["score", dispatch, repo], { encoding: "utf8" });
   return { code: r.status ?? -1, out: `${r.stdout ?? ""}${r.stderr ?? ""}` };
 }
+
+describe("ticket #202 fixture reach score", () => {
+  test("C16 a clean fixture score includes the reach check", () => {
+    const dispatch = join(tmp, `clean-${first}`, "repo", ".postmaster", "runs", "7");
+    const repo = join(tmp, `clean-${first}`, "repo");
+    const result = runScore(dispatch, repo);
+    expect(result.code).toBe(0);
+    expect(result.out).toContain("ok  reach");
+    expect(result.out.split("\n").filter(Boolean)).toHaveLength(9);
+  }, 120000);
+
+  test("C17 findings, missing points and supported-reader gaps fail fixture score", () => {
+    const dispatch = join(tmp, `clean-${first}`, "repo", ".postmaster", "runs", "7");
+    const repo = join(tmp, `clean-${first}`, "repo");
+    const actionsPath = join(dispatch, "actions.jsonl");
+    const finding = run("bash", [
+      LOG_ACTION,
+      dispatch,
+      "lane:one",
+      "reach",
+      "workhorses",
+      JSON.stringify({ kind: "finding", point: "workhorses", lane: "one", access: "write", path: "/tmp/out.txt" }),
+    ]);
+    expect(finding.code).toBe(0);
+    const found = runScore(dispatch, repo);
+    expect(found.code).toBe(2);
+    expect(found.out).toContain("FAIL reach");
+
+    const cleanLines = readFileSync(actionsPath, "utf8").split("\n").filter(Boolean);
+    writeFileSync(actionsPath, `${cleanLines.filter((line) => {
+      const row = JSON.parse(line) as Record<string, unknown>;
+      if (row.action !== "reach") return true;
+      const event = JSON.parse(String(row.detail)) as Record<string, unknown>;
+      return !(event.kind === "finding" && event.point === "workhorses");
+    }).join("\n")}\n`);
+    const withoutRound = readFileSync(actionsPath, "utf8").split("\n").filter(Boolean);
+    writeFileSync(actionsPath, `${withoutRound.filter((line) => {
+      const row = JSON.parse(line) as Record<string, unknown>;
+      if (row.action !== "reach") return true;
+      const event = JSON.parse(String(row.detail)) as Record<string, unknown>;
+      return !(event.kind === "point" && event.point === "r1");
+    }).join("\n")}\n`);
+    const missing = runScore(dispatch, repo);
+    expect(missing.code).toBe(2);
+    expect(missing.out).toContain("FAIL reach");
+    expect(missing.out).toContain("not checked: r1");
+
+    const laneGap = run("bash", [
+      LOG_ACTION,
+      dispatch,
+      "coachman",
+      "reach",
+      "r1",
+      JSON.stringify({
+        kind: "point",
+        point: "r1",
+        result: "note",
+        lanes: [{ lane: "mimo", harness: "mimo", status: "not checked" }],
+      }),
+    ]);
+    expect(laneGap.code).toBe(0);
+    const unchecked = runScore(dispatch, repo);
+    expect(unchecked.code).toBe(2);
+    expect(unchecked.out).toContain("not checked: mimo at r1");
+  }, 240000);
+});
 
 function captureStderr<T>(fn: () => T): { value: T; errs: string[] } {
   const errs: string[] = [];
