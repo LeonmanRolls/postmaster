@@ -8,6 +8,14 @@ updated: 2026-10-03
 
 Append-only. Newest first. One entry per operation, prefixed so it can be parsed.
 
+## [2026-10-03] query | should #216 build the check as a library module
+
+The user's word: no; whether it becomes a library is a later concern, so #216 builds the check
+for postmaster alone and the module work waits for a change of its own. Updated the
+recommendation in
+[No library covers what the private-data scanner checks, so postmaster publishes one](concepts/scanner-library.md),
+still **claimed**.
+
 ## [2026-10-03] query | can patterns carry the private-data check without a model
 
 The user asked whether the check's patterns could cover what Jev catches. Answered from

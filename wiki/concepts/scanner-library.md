@@ -421,9 +421,10 @@ The order is what keeps it from being written three times:
 1. **Land #216**, which carries #135 in TypeScript: personal data and secrets by patterns alone,
    JSON nested more than one level deep, and encrypted reasoning blocks dropped from a copy into
    `raw/`, since no scan can read them.
-2. **Keep it a self-contained module**, as #216 writes it or in the first change after: its
-   rules as data, an engine that imports nothing else from postmaster, and the same fixtures and
-   probes passing under Bun and Node.
+2. **Make it a self-contained module** when the library is taken up, in a change of its own:
+   its rules as data, an engine that imports nothing else from postmaster, and the same fixtures
+   and probes passing under Bun and Node. #216 is not asked to build it that way: the user's word
+   of 2026-10-03 is that the library is a later concern.
 3. **Publish the module as a package** under the project's account name, with the name, the
    licence and the API set out above, and have postmaster use the published package in place of
    its own copy. Only then does this project carry less code.
