@@ -228,6 +228,17 @@ beforeAll(() => {
   mkRun("legacy-gate", "shipping", 3, ".card-ready");
   mkRun("legacy-dispatch", "review", 2, ".leg-2-done", ".leg-2-exited");
   mkRun("legacy-last", "shipped", 3, ".leg-3-done", ".leg-3-exited");
+  const detection = (time: string, via = "") => `${JSON.stringify({ rule: "email", file: "notes.txt", line: 1, commit: "a".repeat(40), time, ...(via ? { via } : {}) })}\n`;
+  mkRun("tell-waiting", "review", 2, ".waiting-on-user");
+  writeFileSync(join(root, "tell-waiting", "detections.jsonl"), detection("first"));
+  mkRun("tell-done", "done", 2);
+  writeFileSync(join(root, "tell-done", "detections.jsonl"), detection("first", "marker"));
+  mkRun("told-waiting", "review", 2, ".waiting-on-user");
+  writeFileSync(join(root, "told-waiting", "detections.jsonl"), detection("first", "marker"));
+  writeFileSync(join(root, "told-waiting", ".detections-told"), detection("first", "marker"));
+  mkRun("repeat-told", "review", 2, ".waiting-on-user");
+  writeFileSync(join(root, "repeat-told", "detections.jsonl"), detection("first") + detection("second"));
+  writeFileSync(join(root, "repeat-told", ".detections-told"), detection("first"));
   mkdirSync(join(root, "postmaster"), { recursive: true });
 });
 
@@ -236,6 +247,16 @@ afterAll(() => {
 });
 
 describe("positive controls", () => {
+  test("untold findings take priority over waiting and done markers, including marked findings", () => {
+    expect(nextOf("tell-waiting")).toBe("TELL");
+    expect(nextOf("tell-done")).toBe("TELL");
+  });
+
+  test("a told finding waits for the user and a repeated log entry does not tell again", () => {
+    expect(nextOf("told-waiting")).toBe("USER");
+    expect(nextOf("repeat-told")).toBe("USER");
+  });
+
   test("an escalation waiting is RULE", () => {
     expect(nextOf("rule")).toBe("RULE");
   }, 10000);

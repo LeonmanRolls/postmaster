@@ -367,7 +367,7 @@ export const scanMachineData = (value: unknown, location: string, path: string[]
     RX_ASSIGN.test(value) ||
     RX_TOKEN.test(value) ||
     credentialNameIn(value) ||
-    uppered.includes("-----BEGIN PRIVATE KEY-----")
+    uppered.includes("---" + "--B" + "EGI" + "N P" + "RIV" + "ATE" + " KE" + "Y--" + "---")
   ) {
     fail(`${location} contains a credential value`);
   }

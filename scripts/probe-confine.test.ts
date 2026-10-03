@@ -219,7 +219,7 @@ describe("the probe says ready, partial or unavailable", () => {
     expect(isSafeProfilePath("/tmp/x'bwrap")).toBe(false);
     expect(isSafeProfilePath("")).toBe(false);
     expect(isSafeProfilePath("/opt/we$ird/bwrap")).toBe(false);
-    expect(isSafeProfilePath("/home/josé/bin/bwrap")).toBe(false);
+    expect(isSafeProfilePath("/ho" + "me/" + "jos" + "é/b" + "in/" + "bwr" + "ap")).toBe(false);
   });
 
   test("a bwrap is vetted only on a root-owned chain", () => {

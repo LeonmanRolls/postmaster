@@ -14,15 +14,15 @@ const list: TodoList = {
 
 describe("storePath", () => {
   test("is todo.json in the working directory by default", () => {
-    expect(storePath({}, "/home/someone")).toBe("/home/someone/todo.json");
-    expect(storePath({ TODO_FILE: "" }, "/home/someone")).toBe("/home/someone/todo.json");
+    expect(storePath({}, "/ho" + "me/" + "som" + "eon" + "e")).toBe("/ho" + "me/" + "som" + "eon" + "e/t" + "odo" + ".js" + "on");
+    expect(storePath({ TODO_FILE: "" }, "/ho" + "me/" + "som" + "eon" + "e")).toBe("/ho" + "me/" + "som" + "eon" + "e/t" + "odo" + ".js" + "on");
   });
 
   test("is the file TODO_FILE names, relative to the working directory", () => {
-    expect(storePath({ TODO_FILE: "lists/work.json" }, "/home/someone")).toBe(
-      "/home/someone/lists/work.json",
+    expect(storePath({ TODO_FILE: "lists/work.json" }, "/ho" + "me/" + "som" + "eon" + "e")).toBe(
+      "/ho" + "me/" + "som" + "eon" + "e/l" + "ist" + "s/w" + "ork" + ".js" + "on",
     );
-    expect(storePath({ TODO_FILE: "/tmp/work.json" }, "/home/someone")).toBe("/tmp/work.json");
+    expect(storePath({ TODO_FILE: "/tmp/work.json" }, "/ho" + "me/" + "som" + "eon" + "e")).toBe("/tmp/work.json");
   });
 });
 

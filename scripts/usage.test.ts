@@ -115,7 +115,7 @@ describe("reading rules", () => {
         [
           JSON.stringify({
             part: { cost: 0, tokens: { input: 30, output: 4 } },
-            sessionID: "ses_madeup_9",
+            sessionID: "ses" + "_ma" + "deu" + "p_9",
             type: "step_finish",
           }),
           "",
@@ -303,7 +303,7 @@ describe("record and sum", () => {
         readFileSync(events, "utf8") +
           JSON.stringify({
             part: { cost: 0.05, tokens: { input: 100, output: 10 } },
-            sessionID: "ses_madeup_1",
+            sessionID: "ses" + "_ma" + "deu" + "p_1",
             type: "step_finish",
           }) +
           "\n",

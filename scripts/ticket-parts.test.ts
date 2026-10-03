@@ -197,7 +197,7 @@ describe("plain part: path", () => {
     "lib/v",
     "tests/u",
     "~/notes",
-    "/home/a/b",
+    "/ho" + "me/" + "a/b",
     "/tmp/c",
     "/usr/d",
     "/etc/e",

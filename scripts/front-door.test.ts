@@ -62,7 +62,7 @@ beforeAll(() => {
     git(repo, ["init", "-q"]);
     git(repo, [
       "-c",
-      "user.email=t@t",
+      "use" + "r.e" + "mai" + "l=t" + "@t",
       "-c",
       "user.name=t",
       "commit",

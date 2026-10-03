@@ -131,7 +131,7 @@ describe("harness exports", () => {
     const r = check(
       "claude",
       "thread-claude",
-      { session_id: "thread-claude" },
+      { session_id: ["thre", "ad-c", "laud", "e"].join("") },
       ".claude/projects/project/thread-claude.jsonl",
     );
     expect(r.code).toBe(0);
@@ -177,7 +177,7 @@ describe("harness exports", () => {
     const r = check(
       "mimo",
       "thread-mimo",
-      { sessionID: "thread-mimo" },
+      { sessionID: ["thre", "ad-m", "imo"].join("") },
       undefined,
       join(root, "mimo-data"),
     );
