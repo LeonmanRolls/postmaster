@@ -362,6 +362,19 @@ def score_corpus(out, items, lines, runs):
     print("\n".join(report))
 
 
+def dump(record):
+    """A history record as JSON with one flagged line per row, so a long list stays short."""
+    rows = ["{"] + [" %s: %s," % (json.dumps(k), json.dumps(v)) for k, v in record.items() if k != "flagged"]
+    rows.append(' "flagged": {')
+    thresholds = list(record["flagged"])
+    for t_index, threshold in enumerate(thresholds):
+        entries = record["flagged"][threshold]
+        rows.append("  %s: [" % json.dumps(threshold))
+        rows += ["   %s%s" % (json.dumps(e), "," if i < len(entries) - 1 else "") for i, e in enumerate(entries)]
+        rows.append("  ]%s" % ("," if t_index < len(thresholds) - 1 else ""))
+    return "\n".join(rows + [" }", "}"]) + "\n"
+
+
 def history_lines(rev):
     """Every unique added line of rev's history outside raw/runs and JSONL files, with the
     commit and path that first added it, oldest first; lines with no letter and fewer than seven
@@ -415,7 +428,7 @@ def history_mode(out, rev, api_key):
               "lines": len(items), "seconds": seconds, "errors": sum(1 for r in replies if "error" in r),
               "cost_usd": round(sum(r.get("cost", 0) for r in replies), 4),
               "flagged": {str(t): v for t, v in flagged.items()}}
-    (out / "history.json").write_text(json.dumps(record, indent=1) + "\n")
+    (out / "history.json").write_text(dump(record))
     print("history: %d lines, %ss, errors %d, $%s; flagged at 0.5/0.7/0.8/0.9: %s" % (
         record["lines"], seconds, record["errors"], record["cost_usd"],
         "/".join(str(len(flagged[t])) for t in THRESHOLDS)))
@@ -443,7 +456,7 @@ def rejudge_mode(out, source, api_key):
               "errors": sum(1 for r in replies if "error" in r),
               "cost_usd": round(sum(r.get("cost", 0) for r in replies), 4),
               "flagged": {str(t): v for t, v in flagged.items()}}
-    (out / "history.json").write_text(json.dumps(record, indent=1) + "\n")
+    (out / "history.json").write_text(dump(record))
     print("rejudged %d of %d lines, %ss, errors %d, $%s; flagged at 0.5/0.7/0.8/0.9: %s" % (
         len(indices), earlier["lines"], seconds, record["errors"], record["cost_usd"],
         "/".join(str(len(flagged[t])) for t in THRESHOLDS)))

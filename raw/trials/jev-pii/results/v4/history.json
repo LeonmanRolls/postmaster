@@ -7,1372 +7,182 @@
  "cost_usd": 0.2427,
  "flagged": {
   "0.5": [
-   {
-    "index": 699,
-    "commit": "67a66b7c5100",
-    "path": "scripts/setup.sh",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 702,
-    "commit": "67a66b7c5100",
-    "path": "scripts/setup.sh",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 1254,
-    "commit": "67a66b7c5100",
-    "path": "skills/postmaster/coachman.md",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 2156,
-    "commit": "858deabdd357",
-    "path": "scripts/github.sh",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 2395,
-    "commit": "858deabdd357",
-    "path": "scripts/plane.sh",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 2436,
-    "commit": "858deabdd357",
-    "path": "scripts/setup.sh",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 2636,
-    "commit": "c6b7f21fbb3b",
-    "path": "scripts/setup.sh",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 2884,
-    "commit": "d79d9565eb68",
-    "path": "skills/postmaster/harnesses.md",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 3153,
-    "commit": "73a14f5ec87b",
-    "path": "wiki/log.md",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 3321,
-    "commit": "985693e6b462",
-    "path": "wiki/concepts/prompt-delivery.md",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 3592,
-    "commit": "d4d27865afcd",
-    "path": "wiki/schema.md",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 6297,
-    "commit": "2c7a893a30dc",
-    "path": "raw/trials/herdr-agent-lifecycle/multistep.txt",
-    "kinds": [
-     "phone"
-    ]
-   },
-   {
-    "index": 6524,
-    "commit": "2c7a893a30dc",
-    "path": "wiki/concepts/live-agents.md",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 6638,
-    "commit": "7245f09e6d12",
-    "path": "fixtures/app/package-lock.json",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 12703,
-    "commit": "d40f552cf7ef",
-    "path": "scripts/launch.sh",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 14397,
-    "commit": "c4e16bc9b698",
-    "path": "scripts/review-round.sh",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 15608,
-    "commit": "e65e10033bad",
-    "path": "raw/papers/kemerer-paulk-2009-review-rate/source.md",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 17639,
-    "commit": "fcbd4094c606",
-    "path": "scripts/local.sh",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 17799,
-    "commit": "fcbd4094c606",
-    "path": "scripts/setup.sh",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 18670,
-    "commit": "a4e27206aeef",
-    "path": "wiki/concepts/own-review-skills.md",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 19208,
-    "commit": "b1e0e24ddaca",
-    "path": "scripts/style-findings.sh",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 20541,
-    "commit": "e944d47939b3",
-    "path": "scripts/local.sh",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 22031,
-    "commit": "2310675f88be",
-    "path": "raw/trials/muse-headless-forms/method.md",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 23082,
-    "commit": "330bb35a3830",
-    "path": "scripts/style-findings.sh",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 23563,
-    "commit": "7fdca19bd05b",
-    "path": "wiki/log.md",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 23998,
-    "commit": "469da6ff829a",
-    "path": "raw/trials/muse-mimo-controls/method.md",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 25121,
-    "commit": "d905eda6f761",
-    "path": "scripts/verify-examples.sh",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 25122,
-    "commit": "d905eda6f761",
-    "path": "scripts/verify-examples.sh",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 25124,
-    "commit": "d905eda6f761",
-    "path": "scripts/verify-examples.sh",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 25143,
-    "commit": "d905eda6f761",
-    "path": "scripts/verify-examples.sh",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 25144,
-    "commit": "d905eda6f761",
-    "path": "scripts/verify-examples.sh",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 28053,
-    "commit": "e3d0ef604383",
-    "path": "scripts/host.sh",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 28301,
-    "commit": "e3d0ef604383",
-    "path": "scripts/host.sh",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 28649,
-    "commit": "7f5d47ec7404",
-    "path": "scripts/host.sh",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 29984,
-    "commit": "ee877f1b0b84",
-    "path": "scripts/project-settings.sh",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 30687,
-    "commit": "fd107a9d2687",
-    "path": "scripts/launch.sh",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 31855,
-    "commit": "3b3897fab5ef",
-    "path": "scripts/host.sh",
-    "kinds": [
-     "other-personal"
-    ]
-   },
-   {
-    "index": 34563,
-    "commit": "8fa67ddd6ef7",
-    "path": "scripts/github.ts",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 35302,
-    "commit": "8fa67ddd6ef7",
-    "path": "scripts/log-action.ts",
-    "kinds": [
-     "other-personal"
-    ]
-   },
-   {
-    "index": 35331,
-    "commit": "8fa67ddd6ef7",
-    "path": "scripts/log-action.ts",
-    "kinds": [
-     "other-personal"
-    ]
-   },
-   {
-    "index": 35346,
-    "commit": "8fa67ddd6ef7",
-    "path": "scripts/log-action.ts",
-    "kinds": [
-     "other-personal"
-    ]
-   },
-   {
-    "index": 35414,
-    "commit": "8fa67ddd6ef7",
-    "path": "scripts/log-action.ts",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 40421,
-    "commit": "8fa67ddd6ef7",
-    "path": "scripts/tool-faults.ts",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 46855,
-    "commit": "c57107840f64",
-    "path": "scripts/host-self-test.ts",
-    "kinds": [
-     "other-personal"
-    ]
-   },
-   {
-    "index": 48318,
-    "commit": "c57107840f64",
-    "path": "scripts/host.ts",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 48405,
-    "commit": "c57107840f64",
-    "path": "scripts/host.ts",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 48954,
-    "commit": "c57107840f64",
-    "path": "scripts/local.ts",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 51464,
-    "commit": "389782d98f74",
-    "path": "oracle-124.sh",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 52132,
-    "commit": "13eb9d4d3644",
-    "path": "scripts/launch.sh",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 52271,
-    "commit": "3ec5109e0f09",
-    "path": "scripts/setup.sh",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 52981,
-    "commit": "808851c5192f",
-    "path": "raw/trials/code-review-launch/method.md",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 53063,
-    "commit": "808851c5192f",
-    "path": "raw/trials/code-review-launch/opus-findings.json",
-    "kinds": [
-     "other-personal"
-    ]
-   },
-   {
-    "index": 55366,
-    "commit": "31faa9d99a69",
-    "path": "wiki/concepts/dashboard.md",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 56389,
-    "commit": "7a52fc15a9ac",
-    "path": "raw/articles/ai-native-sdlc-playbook/source.md",
-    "kinds": [
-     "other-personal"
-    ]
-   },
-   {
-    "index": 56479,
-    "commit": "7a52fc15a9ac",
-    "path": "wiki/sources/ai-native-sdlc-playbook.md",
-    "kinds": [
-     "other-personal"
-    ]
-   },
-   {
-    "index": 58859,
-    "commit": "ccc052c3b94a",
-    "path": "raw/trials/2026-09-29-synthesis-audit/measure.py",
-    "kinds": [
-     "postal-address"
-    ]
-   },
-   {
-    "index": 59085,
-    "commit": "ccc052c3b94a",
-    "path": "raw/trials/2026-09-29-synthesis-audit/method.md",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 59090,
-    "commit": "ccc052c3b94a",
-    "path": "raw/trials/2026-09-29-synthesis-audit/method.md",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 60905,
-    "commit": "1b86aba2f0fd",
-    "path": "scripts/host-self-test.ts",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 64406,
-    "commit": "f701818eb906",
-    "path": "scripts/tool-faults.ts",
-    "kinds": [
-     "postal-address"
-    ]
-   },
-   {
-    "index": 66770,
-    "commit": "6643879efaff",
-    "path": "scripts/host.sh",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 67532,
-    "commit": "3a7261631a52",
-    "path": "scripts/host-self-test.ts",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 67534,
-    "commit": "3a7261631a52",
-    "path": "scripts/host-self-test.ts",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 68006,
-    "commit": "3a7261631a52",
-    "path": "scripts/lib/text.ts",
-    "kinds": [
-     "postal-address"
-    ]
-   },
-   {
-    "index": 68400,
-    "commit": "3a7261631a52",
-    "path": "scripts/reviewers.ts",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 68847,
-    "commit": "3a7261631a52",
-    "path": "scripts/tool-faults.ts",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 68888,
-    "commit": "3a7261631a52",
-    "path": "scripts/tool-faults.ts",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 68980,
-    "commit": "3a7261631a52",
-    "path": "scripts/tool-faults.ts",
-    "kinds": [
-     "postal-address"
-    ]
-   },
-   {
-    "index": 69100,
-    "commit": "3a7261631a52",
-    "path": "scripts/tool-faults.ts",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 70579,
-    "commit": "f678472ede4b",
-    "path": "scripts/host.sh",
-    "kinds": [
-     "other-personal"
-    ]
-   },
-   {
-    "index": 71104,
-    "commit": "bb7f1997aa1a",
-    "path": "scripts/run-clash.test.ts",
-    "kinds": [
-     "postal-address"
-    ]
-   },
-   {
-    "index": 71116,
-    "commit": "bb7f1997aa1a",
-    "path": "scripts/run-clash.ts",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 71548,
-    "commit": "58a52e8f7ebe",
-    "path": "oracle-98.sh",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 71549,
-    "commit": "58a52e8f7ebe",
-    "path": "oracle-98.sh",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 72063,
-    "commit": "045f7542e5f7",
-    "path": "scripts/fixture-lanes.ts",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 72792,
-    "commit": "630780d17770",
-    "path": "scripts/synthesis-shares.test.ts",
-    "kinds": [
-     "other-personal"
-    ]
-   },
-   {
-    "index": 76113,
-    "commit": "ad2c175f4975",
-    "path": "scripts/launch.test.ts",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 76517,
-    "commit": "ad2c175f4975",
-    "path": "scripts/lib/text.test.ts",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 77924,
-    "commit": "ad2c175f4975",
-    "path": "scripts/parallel-runs-acceptance.test.ts",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 77926,
-    "commit": "ad2c175f4975",
-    "path": "scripts/parallel-runs-acceptance.test.ts",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 77928,
-    "commit": "ad2c175f4975",
-    "path": "scripts/parallel-runs-acceptance.test.ts",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 78516,
-    "commit": "ad2c175f4975",
-    "path": "scripts/project-settings.test.ts",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 81324,
-    "commit": "ad2c175f4975",
-    "path": "scripts/setup.test.ts",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 81970,
-    "commit": "ad2c175f4975",
-    "path": "scripts/style-findings.test.ts",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 81979,
-    "commit": "ad2c175f4975",
-    "path": "scripts/style-findings.test.ts",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 83609,
-    "commit": "ad2c175f4975",
-    "path": "scripts/tool-faults.test.ts",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 84200,
-    "commit": "ad2c175f4975",
-    "path": "scripts/tool-faults.test.ts",
-    "kinds": [
-     "postal-address"
-    ]
-   },
-   {
-    "index": 84265,
-    "commit": "ad2c175f4975",
-    "path": "scripts/tool-faults.test.ts",
-    "kinds": [
-     "other-personal"
-    ]
-   },
-   {
-    "index": 84267,
-    "commit": "ad2c175f4975",
-    "path": "scripts/tool-faults.test.ts",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 86845,
-    "commit": "cef7719793a3",
-    "path": "scripts/lib/text.ts",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 86847,
-    "commit": "cef7719793a3",
-    "path": "scripts/lib/text.ts",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 86889,
-    "commit": "cef7719793a3",
-    "path": "scripts/lib/text.ts",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 87774,
-    "commit": "1f1eb82d4785",
-    "path": "scripts/spec-session.ts",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 87832,
-    "commit": "1f1eb82d4785",
-    "path": "scripts/spec-session.ts",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 88119,
-    "commit": "8df80091b577",
-    "path": "wiki/concepts/planning-stage.md",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 88137,
-    "commit": "8df80091b577",
-    "path": "wiki/concepts/planning-stage.md",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 90214,
-    "commit": "c2f2d45a4c1e",
-    "path": "wiki/concepts/lane-confinement.md",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 90269,
-    "commit": "c2f2d45a4c1e",
-    "path": "wiki/concepts/lane-confinement.md",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 11016,
-    "commit": "2092278ce6f0",
-    "path": "wiki/concepts/herdr-headless-launches.md",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 16989,
-    "commit": "3cf1deaa6c1c",
-    "path": "wiki/sources/2026-09-26-postmaster-36.md",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 23208,
-    "commit": "7fdca19bd05b",
-    "path": "config.example.toml",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 44602,
-    "commit": "958a05bc4f2f",
-    "path": "scripts/setup.ts",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 70738,
-    "commit": "f1a6265ea33a",
-    "path": "scripts/launch.sh",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 88118,
-    "commit": "8df80091b577",
-    "path": "wiki/concepts/planning-stage.md",
-    "kinds": [
-     "person"
-    ]
-   }
+   {"index": 699, "commit": "67a66b7c5100", "path": "scripts/setup.sh", "kinds": ["person"]},
+   {"index": 702, "commit": "67a66b7c5100", "path": "scripts/setup.sh", "kinds": ["person"]},
+   {"index": 1254, "commit": "67a66b7c5100", "path": "skills/postmaster/coachman.md", "kinds": ["person"]},
+   {"index": 2156, "commit": "858deabdd357", "path": "scripts/github.sh", "kinds": ["person"]},
+   {"index": 2395, "commit": "858deabdd357", "path": "scripts/plane.sh", "kinds": ["person"]},
+   {"index": 2436, "commit": "858deabdd357", "path": "scripts/setup.sh", "kinds": ["person"]},
+   {"index": 2636, "commit": "c6b7f21fbb3b", "path": "scripts/setup.sh", "kinds": ["person"]},
+   {"index": 2884, "commit": "d79d9565eb68", "path": "skills/postmaster/harnesses.md", "kinds": ["person"]},
+   {"index": 3153, "commit": "73a14f5ec87b", "path": "wiki/log.md", "kinds": ["person"]},
+   {"index": 3321, "commit": "985693e6b462", "path": "wiki/concepts/prompt-delivery.md", "kinds": ["person"]},
+   {"index": 3592, "commit": "d4d27865afcd", "path": "wiki/schema.md", "kinds": ["person"]},
+   {"index": 6297, "commit": "2c7a893a30dc", "path": "raw/trials/herdr-agent-lifecycle/multistep.txt", "kinds": ["phone"]},
+   {"index": 6524, "commit": "2c7a893a30dc", "path": "wiki/concepts/live-agents.md", "kinds": ["person"]},
+   {"index": 6638, "commit": "7245f09e6d12", "path": "fixtures/app/package-lock.json", "kinds": ["person"]},
+   {"index": 12703, "commit": "d40f552cf7ef", "path": "scripts/launch.sh", "kinds": ["person"]},
+   {"index": 14397, "commit": "c4e16bc9b698", "path": "scripts/review-round.sh", "kinds": ["person"]},
+   {"index": 15608, "commit": "e65e10033bad", "path": "raw/papers/kemerer-paulk-2009-review-rate/source.md", "kinds": ["person"]},
+   {"index": 17639, "commit": "fcbd4094c606", "path": "scripts/local.sh", "kinds": ["person"]},
+   {"index": 17799, "commit": "fcbd4094c606", "path": "scripts/setup.sh", "kinds": ["person"]},
+   {"index": 18670, "commit": "a4e27206aeef", "path": "wiki/concepts/own-review-skills.md", "kinds": ["person"]},
+   {"index": 19208, "commit": "b1e0e24ddaca", "path": "scripts/style-findings.sh", "kinds": ["person"]},
+   {"index": 20541, "commit": "e944d47939b3", "path": "scripts/local.sh", "kinds": ["person"]},
+   {"index": 22031, "commit": "2310675f88be", "path": "raw/trials/muse-headless-forms/method.md", "kinds": ["person"]},
+   {"index": 23082, "commit": "330bb35a3830", "path": "scripts/style-findings.sh", "kinds": ["person"]},
+   {"index": 23563, "commit": "7fdca19bd05b", "path": "wiki/log.md", "kinds": ["person"]},
+   {"index": 23998, "commit": "469da6ff829a", "path": "raw/trials/muse-mimo-controls/method.md", "kinds": ["person"]},
+   {"index": 25121, "commit": "d905eda6f761", "path": "scripts/verify-examples.sh", "kinds": ["person"]},
+   {"index": 25122, "commit": "d905eda6f761", "path": "scripts/verify-examples.sh", "kinds": ["person"]},
+   {"index": 25124, "commit": "d905eda6f761", "path": "scripts/verify-examples.sh", "kinds": ["person"]},
+   {"index": 25143, "commit": "d905eda6f761", "path": "scripts/verify-examples.sh", "kinds": ["person"]},
+   {"index": 25144, "commit": "d905eda6f761", "path": "scripts/verify-examples.sh", "kinds": ["person"]},
+   {"index": 28053, "commit": "e3d0ef604383", "path": "scripts/host.sh", "kinds": ["person"]},
+   {"index": 28301, "commit": "e3d0ef604383", "path": "scripts/host.sh", "kinds": ["person"]},
+   {"index": 28649, "commit": "7f5d47ec7404", "path": "scripts/host.sh", "kinds": ["person"]},
+   {"index": 29984, "commit": "ee877f1b0b84", "path": "scripts/project-settings.sh", "kinds": ["person"]},
+   {"index": 30687, "commit": "fd107a9d2687", "path": "scripts/launch.sh", "kinds": ["person"]},
+   {"index": 31855, "commit": "3b3897fab5ef", "path": "scripts/host.sh", "kinds": ["other-personal"]},
+   {"index": 34563, "commit": "8fa67ddd6ef7", "path": "scripts/github.ts", "kinds": ["person"]},
+   {"index": 35302, "commit": "8fa67ddd6ef7", "path": "scripts/log-action.ts", "kinds": ["other-personal"]},
+   {"index": 35331, "commit": "8fa67ddd6ef7", "path": "scripts/log-action.ts", "kinds": ["other-personal"]},
+   {"index": 35346, "commit": "8fa67ddd6ef7", "path": "scripts/log-action.ts", "kinds": ["other-personal"]},
+   {"index": 35414, "commit": "8fa67ddd6ef7", "path": "scripts/log-action.ts", "kinds": ["person"]},
+   {"index": 40421, "commit": "8fa67ddd6ef7", "path": "scripts/tool-faults.ts", "kinds": ["person"]},
+   {"index": 46855, "commit": "c57107840f64", "path": "scripts/host-self-test.ts", "kinds": ["other-personal"]},
+   {"index": 48318, "commit": "c57107840f64", "path": "scripts/host.ts", "kinds": ["person"]},
+   {"index": 48405, "commit": "c57107840f64", "path": "scripts/host.ts", "kinds": ["person"]},
+   {"index": 48954, "commit": "c57107840f64", "path": "scripts/local.ts", "kinds": ["person"]},
+   {"index": 51464, "commit": "389782d98f74", "path": "oracle-124.sh", "kinds": ["person"]},
+   {"index": 52132, "commit": "13eb9d4d3644", "path": "scripts/launch.sh", "kinds": ["person"]},
+   {"index": 52271, "commit": "3ec5109e0f09", "path": "scripts/setup.sh", "kinds": ["person"]},
+   {"index": 52981, "commit": "808851c5192f", "path": "raw/trials/code-review-launch/method.md", "kinds": ["person"]},
+   {"index": 53063, "commit": "808851c5192f", "path": "raw/trials/code-review-launch/opus-findings.json", "kinds": ["other-personal"]},
+   {"index": 55366, "commit": "31faa9d99a69", "path": "wiki/concepts/dashboard.md", "kinds": ["person"]},
+   {"index": 56389, "commit": "7a52fc15a9ac", "path": "raw/articles/ai-native-sdlc-playbook/source.md", "kinds": ["other-personal"]},
+   {"index": 56479, "commit": "7a52fc15a9ac", "path": "wiki/sources/ai-native-sdlc-playbook.md", "kinds": ["other-personal"]},
+   {"index": 58859, "commit": "ccc052c3b94a", "path": "raw/trials/2026-09-29-synthesis-audit/measure.py", "kinds": ["postal-address"]},
+   {"index": 59085, "commit": "ccc052c3b94a", "path": "raw/trials/2026-09-29-synthesis-audit/method.md", "kinds": ["person"]},
+   {"index": 59090, "commit": "ccc052c3b94a", "path": "raw/trials/2026-09-29-synthesis-audit/method.md", "kinds": ["person"]},
+   {"index": 60905, "commit": "1b86aba2f0fd", "path": "scripts/host-self-test.ts", "kinds": ["person"]},
+   {"index": 64406, "commit": "f701818eb906", "path": "scripts/tool-faults.ts", "kinds": ["postal-address"]},
+   {"index": 66770, "commit": "6643879efaff", "path": "scripts/host.sh", "kinds": ["person"]},
+   {"index": 67532, "commit": "3a7261631a52", "path": "scripts/host-self-test.ts", "kinds": ["person"]},
+   {"index": 67534, "commit": "3a7261631a52", "path": "scripts/host-self-test.ts", "kinds": ["person"]},
+   {"index": 68006, "commit": "3a7261631a52", "path": "scripts/lib/text.ts", "kinds": ["postal-address"]},
+   {"index": 68400, "commit": "3a7261631a52", "path": "scripts/reviewers.ts", "kinds": ["person"]},
+   {"index": 68847, "commit": "3a7261631a52", "path": "scripts/tool-faults.ts", "kinds": ["person"]},
+   {"index": 68888, "commit": "3a7261631a52", "path": "scripts/tool-faults.ts", "kinds": ["person"]},
+   {"index": 68980, "commit": "3a7261631a52", "path": "scripts/tool-faults.ts", "kinds": ["postal-address"]},
+   {"index": 69100, "commit": "3a7261631a52", "path": "scripts/tool-faults.ts", "kinds": ["person"]},
+   {"index": 70579, "commit": "f678472ede4b", "path": "scripts/host.sh", "kinds": ["other-personal"]},
+   {"index": 71104, "commit": "bb7f1997aa1a", "path": "scripts/run-clash.test.ts", "kinds": ["postal-address"]},
+   {"index": 71116, "commit": "bb7f1997aa1a", "path": "scripts/run-clash.ts", "kinds": ["person"]},
+   {"index": 71548, "commit": "58a52e8f7ebe", "path": "oracle-98.sh", "kinds": ["person"]},
+   {"index": 71549, "commit": "58a52e8f7ebe", "path": "oracle-98.sh", "kinds": ["person"]},
+   {"index": 72063, "commit": "045f7542e5f7", "path": "scripts/fixture-lanes.ts", "kinds": ["person"]},
+   {"index": 72792, "commit": "630780d17770", "path": "scripts/synthesis-shares.test.ts", "kinds": ["other-personal"]},
+   {"index": 76113, "commit": "ad2c175f4975", "path": "scripts/launch.test.ts", "kinds": ["person"]},
+   {"index": 76517, "commit": "ad2c175f4975", "path": "scripts/lib/text.test.ts", "kinds": ["person"]},
+   {"index": 77924, "commit": "ad2c175f4975", "path": "scripts/parallel-runs-acceptance.test.ts", "kinds": ["person"]},
+   {"index": 77926, "commit": "ad2c175f4975", "path": "scripts/parallel-runs-acceptance.test.ts", "kinds": ["person"]},
+   {"index": 77928, "commit": "ad2c175f4975", "path": "scripts/parallel-runs-acceptance.test.ts", "kinds": ["person"]},
+   {"index": 78516, "commit": "ad2c175f4975", "path": "scripts/project-settings.test.ts", "kinds": ["person"]},
+   {"index": 81324, "commit": "ad2c175f4975", "path": "scripts/setup.test.ts", "kinds": ["person"]},
+   {"index": 81970, "commit": "ad2c175f4975", "path": "scripts/style-findings.test.ts", "kinds": ["person"]},
+   {"index": 81979, "commit": "ad2c175f4975", "path": "scripts/style-findings.test.ts", "kinds": ["person"]},
+   {"index": 83609, "commit": "ad2c175f4975", "path": "scripts/tool-faults.test.ts", "kinds": ["person"]},
+   {"index": 84200, "commit": "ad2c175f4975", "path": "scripts/tool-faults.test.ts", "kinds": ["postal-address"]},
+   {"index": 84265, "commit": "ad2c175f4975", "path": "scripts/tool-faults.test.ts", "kinds": ["other-personal"]},
+   {"index": 84267, "commit": "ad2c175f4975", "path": "scripts/tool-faults.test.ts", "kinds": ["person"]},
+   {"index": 86845, "commit": "cef7719793a3", "path": "scripts/lib/text.ts", "kinds": ["person"]},
+   {"index": 86847, "commit": "cef7719793a3", "path": "scripts/lib/text.ts", "kinds": ["person"]},
+   {"index": 86889, "commit": "cef7719793a3", "path": "scripts/lib/text.ts", "kinds": ["person"]},
+   {"index": 87774, "commit": "1f1eb82d4785", "path": "scripts/spec-session.ts", "kinds": ["person"]},
+   {"index": 87832, "commit": "1f1eb82d4785", "path": "scripts/spec-session.ts", "kinds": ["person"]},
+   {"index": 88119, "commit": "8df80091b577", "path": "wiki/concepts/planning-stage.md", "kinds": ["person"]},
+   {"index": 88137, "commit": "8df80091b577", "path": "wiki/concepts/planning-stage.md", "kinds": ["person"]},
+   {"index": 90214, "commit": "c2f2d45a4c1e", "path": "wiki/concepts/lane-confinement.md", "kinds": ["person"]},
+   {"index": 90269, "commit": "c2f2d45a4c1e", "path": "wiki/concepts/lane-confinement.md", "kinds": ["person"]},
+   {"index": 11016, "commit": "2092278ce6f0", "path": "wiki/concepts/herdr-headless-launches.md", "kinds": ["person"]},
+   {"index": 16989, "commit": "3cf1deaa6c1c", "path": "wiki/sources/2026-09-26-postmaster-36.md", "kinds": ["person"]},
+   {"index": 23208, "commit": "7fdca19bd05b", "path": "config.example.toml", "kinds": ["person"]},
+   {"index": 44602, "commit": "958a05bc4f2f", "path": "scripts/setup.ts", "kinds": ["person"]},
+   {"index": 70738, "commit": "f1a6265ea33a", "path": "scripts/launch.sh", "kinds": ["person"]},
+   {"index": 88118, "commit": "8df80091b577", "path": "wiki/concepts/planning-stage.md", "kinds": ["person"]}
   ],
   "0.7": [
-   {
-    "index": 702,
-    "commit": "67a66b7c5100",
-    "path": "scripts/setup.sh",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 2436,
-    "commit": "858deabdd357",
-    "path": "scripts/setup.sh",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 2884,
-    "commit": "d79d9565eb68",
-    "path": "skills/postmaster/harnesses.md",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 3153,
-    "commit": "73a14f5ec87b",
-    "path": "wiki/log.md",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 3592,
-    "commit": "d4d27865afcd",
-    "path": "wiki/schema.md",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 15608,
-    "commit": "e65e10033bad",
-    "path": "raw/papers/kemerer-paulk-2009-review-rate/source.md",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 17639,
-    "commit": "fcbd4094c606",
-    "path": "scripts/local.sh",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 17799,
-    "commit": "fcbd4094c606",
-    "path": "scripts/setup.sh",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 20541,
-    "commit": "e944d47939b3",
-    "path": "scripts/local.sh",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 22031,
-    "commit": "2310675f88be",
-    "path": "raw/trials/muse-headless-forms/method.md",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 23563,
-    "commit": "7fdca19bd05b",
-    "path": "wiki/log.md",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 25121,
-    "commit": "d905eda6f761",
-    "path": "scripts/verify-examples.sh",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 25122,
-    "commit": "d905eda6f761",
-    "path": "scripts/verify-examples.sh",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 25124,
-    "commit": "d905eda6f761",
-    "path": "scripts/verify-examples.sh",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 25143,
-    "commit": "d905eda6f761",
-    "path": "scripts/verify-examples.sh",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 25144,
-    "commit": "d905eda6f761",
-    "path": "scripts/verify-examples.sh",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 29984,
-    "commit": "ee877f1b0b84",
-    "path": "scripts/project-settings.sh",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 31855,
-    "commit": "3b3897fab5ef",
-    "path": "scripts/host.sh",
-    "kinds": [
-     "other-personal"
-    ]
-   },
-   {
-    "index": 35302,
-    "commit": "8fa67ddd6ef7",
-    "path": "scripts/log-action.ts",
-    "kinds": [
-     "other-personal"
-    ]
-   },
-   {
-    "index": 35346,
-    "commit": "8fa67ddd6ef7",
-    "path": "scripts/log-action.ts",
-    "kinds": [
-     "other-personal"
-    ]
-   },
-   {
-    "index": 48405,
-    "commit": "c57107840f64",
-    "path": "scripts/host.ts",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 51464,
-    "commit": "389782d98f74",
-    "path": "oracle-124.sh",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 52132,
-    "commit": "13eb9d4d3644",
-    "path": "scripts/launch.sh",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 55366,
-    "commit": "31faa9d99a69",
-    "path": "wiki/concepts/dashboard.md",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 59085,
-    "commit": "ccc052c3b94a",
-    "path": "raw/trials/2026-09-29-synthesis-audit/method.md",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 64406,
-    "commit": "f701818eb906",
-    "path": "scripts/tool-faults.ts",
-    "kinds": [
-     "postal-address"
-    ]
-   },
-   {
-    "index": 68400,
-    "commit": "3a7261631a52",
-    "path": "scripts/reviewers.ts",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 68847,
-    "commit": "3a7261631a52",
-    "path": "scripts/tool-faults.ts",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 69100,
-    "commit": "3a7261631a52",
-    "path": "scripts/tool-faults.ts",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 76517,
-    "commit": "ad2c175f4975",
-    "path": "scripts/lib/text.test.ts",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 78516,
-    "commit": "ad2c175f4975",
-    "path": "scripts/project-settings.test.ts",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 81970,
-    "commit": "ad2c175f4975",
-    "path": "scripts/style-findings.test.ts",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 81979,
-    "commit": "ad2c175f4975",
-    "path": "scripts/style-findings.test.ts",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 84200,
-    "commit": "ad2c175f4975",
-    "path": "scripts/tool-faults.test.ts",
-    "kinds": [
-     "postal-address"
-    ]
-   },
-   {
-    "index": 84267,
-    "commit": "ad2c175f4975",
-    "path": "scripts/tool-faults.test.ts",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 86889,
-    "commit": "cef7719793a3",
-    "path": "scripts/lib/text.ts",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 88137,
-    "commit": "8df80091b577",
-    "path": "wiki/concepts/planning-stage.md",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 90269,
-    "commit": "c2f2d45a4c1e",
-    "path": "wiki/concepts/lane-confinement.md",
-    "kinds": [
-     "person"
-    ]
-   }
+   {"index": 702, "commit": "67a66b7c5100", "path": "scripts/setup.sh", "kinds": ["person"]},
+   {"index": 2436, "commit": "858deabdd357", "path": "scripts/setup.sh", "kinds": ["person"]},
+   {"index": 2884, "commit": "d79d9565eb68", "path": "skills/postmaster/harnesses.md", "kinds": ["person"]},
+   {"index": 3153, "commit": "73a14f5ec87b", "path": "wiki/log.md", "kinds": ["person"]},
+   {"index": 3592, "commit": "d4d27865afcd", "path": "wiki/schema.md", "kinds": ["person"]},
+   {"index": 15608, "commit": "e65e10033bad", "path": "raw/papers/kemerer-paulk-2009-review-rate/source.md", "kinds": ["person"]},
+   {"index": 17639, "commit": "fcbd4094c606", "path": "scripts/local.sh", "kinds": ["person"]},
+   {"index": 17799, "commit": "fcbd4094c606", "path": "scripts/setup.sh", "kinds": ["person"]},
+   {"index": 20541, "commit": "e944d47939b3", "path": "scripts/local.sh", "kinds": ["person"]},
+   {"index": 22031, "commit": "2310675f88be", "path": "raw/trials/muse-headless-forms/method.md", "kinds": ["person"]},
+   {"index": 23563, "commit": "7fdca19bd05b", "path": "wiki/log.md", "kinds": ["person"]},
+   {"index": 25121, "commit": "d905eda6f761", "path": "scripts/verify-examples.sh", "kinds": ["person"]},
+   {"index": 25122, "commit": "d905eda6f761", "path": "scripts/verify-examples.sh", "kinds": ["person"]},
+   {"index": 25124, "commit": "d905eda6f761", "path": "scripts/verify-examples.sh", "kinds": ["person"]},
+   {"index": 25143, "commit": "d905eda6f761", "path": "scripts/verify-examples.sh", "kinds": ["person"]},
+   {"index": 25144, "commit": "d905eda6f761", "path": "scripts/verify-examples.sh", "kinds": ["person"]},
+   {"index": 29984, "commit": "ee877f1b0b84", "path": "scripts/project-settings.sh", "kinds": ["person"]},
+   {"index": 31855, "commit": "3b3897fab5ef", "path": "scripts/host.sh", "kinds": ["other-personal"]},
+   {"index": 35302, "commit": "8fa67ddd6ef7", "path": "scripts/log-action.ts", "kinds": ["other-personal"]},
+   {"index": 35346, "commit": "8fa67ddd6ef7", "path": "scripts/log-action.ts", "kinds": ["other-personal"]},
+   {"index": 48405, "commit": "c57107840f64", "path": "scripts/host.ts", "kinds": ["person"]},
+   {"index": 51464, "commit": "389782d98f74", "path": "oracle-124.sh", "kinds": ["person"]},
+   {"index": 52132, "commit": "13eb9d4d3644", "path": "scripts/launch.sh", "kinds": ["person"]},
+   {"index": 55366, "commit": "31faa9d99a69", "path": "wiki/concepts/dashboard.md", "kinds": ["person"]},
+   {"index": 59085, "commit": "ccc052c3b94a", "path": "raw/trials/2026-09-29-synthesis-audit/method.md", "kinds": ["person"]},
+   {"index": 64406, "commit": "f701818eb906", "path": "scripts/tool-faults.ts", "kinds": ["postal-address"]},
+   {"index": 68400, "commit": "3a7261631a52", "path": "scripts/reviewers.ts", "kinds": ["person"]},
+   {"index": 68847, "commit": "3a7261631a52", "path": "scripts/tool-faults.ts", "kinds": ["person"]},
+   {"index": 69100, "commit": "3a7261631a52", "path": "scripts/tool-faults.ts", "kinds": ["person"]},
+   {"index": 76517, "commit": "ad2c175f4975", "path": "scripts/lib/text.test.ts", "kinds": ["person"]},
+   {"index": 78516, "commit": "ad2c175f4975", "path": "scripts/project-settings.test.ts", "kinds": ["person"]},
+   {"index": 81970, "commit": "ad2c175f4975", "path": "scripts/style-findings.test.ts", "kinds": ["person"]},
+   {"index": 81979, "commit": "ad2c175f4975", "path": "scripts/style-findings.test.ts", "kinds": ["person"]},
+   {"index": 84200, "commit": "ad2c175f4975", "path": "scripts/tool-faults.test.ts", "kinds": ["postal-address"]},
+   {"index": 84267, "commit": "ad2c175f4975", "path": "scripts/tool-faults.test.ts", "kinds": ["person"]},
+   {"index": 86889, "commit": "cef7719793a3", "path": "scripts/lib/text.ts", "kinds": ["person"]},
+   {"index": 88137, "commit": "8df80091b577", "path": "wiki/concepts/planning-stage.md", "kinds": ["person"]},
+   {"index": 90269, "commit": "c2f2d45a4c1e", "path": "wiki/concepts/lane-confinement.md", "kinds": ["person"]}
   ],
   "0.8": [
-   {
-    "index": 15608,
-    "commit": "e65e10033bad",
-    "path": "raw/papers/kemerer-paulk-2009-review-rate/source.md",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 23563,
-    "commit": "7fdca19bd05b",
-    "path": "wiki/log.md",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 25121,
-    "commit": "d905eda6f761",
-    "path": "scripts/verify-examples.sh",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 25122,
-    "commit": "d905eda6f761",
-    "path": "scripts/verify-examples.sh",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 25124,
-    "commit": "d905eda6f761",
-    "path": "scripts/verify-examples.sh",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 25143,
-    "commit": "d905eda6f761",
-    "path": "scripts/verify-examples.sh",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 25144,
-    "commit": "d905eda6f761",
-    "path": "scripts/verify-examples.sh",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 29984,
-    "commit": "ee877f1b0b84",
-    "path": "scripts/project-settings.sh",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 31855,
-    "commit": "3b3897fab5ef",
-    "path": "scripts/host.sh",
-    "kinds": [
-     "other-personal"
-    ]
-   },
-   {
-    "index": 52132,
-    "commit": "13eb9d4d3644",
-    "path": "scripts/launch.sh",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 64406,
-    "commit": "f701818eb906",
-    "path": "scripts/tool-faults.ts",
-    "kinds": [
-     "postal-address"
-    ]
-   },
-   {
-    "index": 68847,
-    "commit": "3a7261631a52",
-    "path": "scripts/tool-faults.ts",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 69100,
-    "commit": "3a7261631a52",
-    "path": "scripts/tool-faults.ts",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 76517,
-    "commit": "ad2c175f4975",
-    "path": "scripts/lib/text.test.ts",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 78516,
-    "commit": "ad2c175f4975",
-    "path": "scripts/project-settings.test.ts",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 84200,
-    "commit": "ad2c175f4975",
-    "path": "scripts/tool-faults.test.ts",
-    "kinds": [
-     "postal-address"
-    ]
-   },
-   {
-    "index": 84267,
-    "commit": "ad2c175f4975",
-    "path": "scripts/tool-faults.test.ts",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 86889,
-    "commit": "cef7719793a3",
-    "path": "scripts/lib/text.ts",
-    "kinds": [
-     "person"
-    ]
-   }
+   {"index": 15608, "commit": "e65e10033bad", "path": "raw/papers/kemerer-paulk-2009-review-rate/source.md", "kinds": ["person"]},
+   {"index": 23563, "commit": "7fdca19bd05b", "path": "wiki/log.md", "kinds": ["person"]},
+   {"index": 25121, "commit": "d905eda6f761", "path": "scripts/verify-examples.sh", "kinds": ["person"]},
+   {"index": 25122, "commit": "d905eda6f761", "path": "scripts/verify-examples.sh", "kinds": ["person"]},
+   {"index": 25124, "commit": "d905eda6f761", "path": "scripts/verify-examples.sh", "kinds": ["person"]},
+   {"index": 25143, "commit": "d905eda6f761", "path": "scripts/verify-examples.sh", "kinds": ["person"]},
+   {"index": 25144, "commit": "d905eda6f761", "path": "scripts/verify-examples.sh", "kinds": ["person"]},
+   {"index": 29984, "commit": "ee877f1b0b84", "path": "scripts/project-settings.sh", "kinds": ["person"]},
+   {"index": 31855, "commit": "3b3897fab5ef", "path": "scripts/host.sh", "kinds": ["other-personal"]},
+   {"index": 52132, "commit": "13eb9d4d3644", "path": "scripts/launch.sh", "kinds": ["person"]},
+   {"index": 64406, "commit": "f701818eb906", "path": "scripts/tool-faults.ts", "kinds": ["postal-address"]},
+   {"index": 68847, "commit": "3a7261631a52", "path": "scripts/tool-faults.ts", "kinds": ["person"]},
+   {"index": 69100, "commit": "3a7261631a52", "path": "scripts/tool-faults.ts", "kinds": ["person"]},
+   {"index": 76517, "commit": "ad2c175f4975", "path": "scripts/lib/text.test.ts", "kinds": ["person"]},
+   {"index": 78516, "commit": "ad2c175f4975", "path": "scripts/project-settings.test.ts", "kinds": ["person"]},
+   {"index": 84200, "commit": "ad2c175f4975", "path": "scripts/tool-faults.test.ts", "kinds": ["postal-address"]},
+   {"index": 84267, "commit": "ad2c175f4975", "path": "scripts/tool-faults.test.ts", "kinds": ["person"]},
+   {"index": 86889, "commit": "cef7719793a3", "path": "scripts/lib/text.ts", "kinds": ["person"]}
   ],
   "0.9": [
-   {
-    "index": 25124,
-    "commit": "d905eda6f761",
-    "path": "scripts/verify-examples.sh",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 25143,
-    "commit": "d905eda6f761",
-    "path": "scripts/verify-examples.sh",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 25144,
-    "commit": "d905eda6f761",
-    "path": "scripts/verify-examples.sh",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 29984,
-    "commit": "ee877f1b0b84",
-    "path": "scripts/project-settings.sh",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 64406,
-    "commit": "f701818eb906",
-    "path": "scripts/tool-faults.ts",
-    "kinds": [
-     "postal-address"
-    ]
-   },
-   {
-    "index": 68847,
-    "commit": "3a7261631a52",
-    "path": "scripts/tool-faults.ts",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 69100,
-    "commit": "3a7261631a52",
-    "path": "scripts/tool-faults.ts",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 78516,
-    "commit": "ad2c175f4975",
-    "path": "scripts/project-settings.test.ts",
-    "kinds": [
-     "person"
-    ]
-   },
-   {
-    "index": 84200,
-    "commit": "ad2c175f4975",
-    "path": "scripts/tool-faults.test.ts",
-    "kinds": [
-     "postal-address"
-    ]
-   },
-   {
-    "index": 84267,
-    "commit": "ad2c175f4975",
-    "path": "scripts/tool-faults.test.ts",
-    "kinds": [
-     "person"
-    ]
-   }
+   {"index": 25124, "commit": "d905eda6f761", "path": "scripts/verify-examples.sh", "kinds": ["person"]},
+   {"index": 25143, "commit": "d905eda6f761", "path": "scripts/verify-examples.sh", "kinds": ["person"]},
+   {"index": 25144, "commit": "d905eda6f761", "path": "scripts/verify-examples.sh", "kinds": ["person"]},
+   {"index": 29984, "commit": "ee877f1b0b84", "path": "scripts/project-settings.sh", "kinds": ["person"]},
+   {"index": 64406, "commit": "f701818eb906", "path": "scripts/tool-faults.ts", "kinds": ["postal-address"]},
+   {"index": 68847, "commit": "3a7261631a52", "path": "scripts/tool-faults.ts", "kinds": ["person"]},
+   {"index": 69100, "commit": "3a7261631a52", "path": "scripts/tool-faults.ts", "kinds": ["person"]},
+   {"index": 78516, "commit": "ad2c175f4975", "path": "scripts/project-settings.test.ts", "kinds": ["person"]},
+   {"index": 84200, "commit": "ad2c175f4975", "path": "scripts/tool-faults.test.ts", "kinds": ["postal-address"]},
+   {"index": 84267, "commit": "ad2c175f4975", "path": "scripts/tool-faults.test.ts", "kinds": ["person"]}
   ]
  }
 }
