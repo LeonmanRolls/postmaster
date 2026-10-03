@@ -297,7 +297,7 @@ function buildForms(
     switch (harness) {
       case "codex":
         cmd.push("codex", "-m", model);
-        if (effort) cmd.push("-c", `model_reasoning_effort=\"${effort}\"`);
+        if (effort) cmd.push("-c", `model_reasoning_effort="${effort}"`);
         cmd.push("--dangerously-bypass-approvals-and-sandbox");
         break;
       case "grok":

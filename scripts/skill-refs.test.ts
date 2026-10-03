@@ -81,8 +81,8 @@ describe("positive controls: each fault is found, on its own line", () => {
     expect(faults(missing)).toBe(1);
   }, 10000);
 
-  test("a script the repo does not have is a fault through <rt> too", () => {
-    expect(faults(rtMissing)).toBe(1);
+  test("a missing script through <rt> can belong to the run's older pinned checkout", () => {
+    expect(faults(rtMissing)).toBe(0);
   }, 10000);
 });
 

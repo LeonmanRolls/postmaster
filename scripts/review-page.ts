@@ -4,16 +4,15 @@
 //
 //   review-page.ts change <out-dir> --pr <number>
 //   review-page.ts change <out-dir> --base <ref> --head <ref> [--ticket <number>] [--title <text>]
-//                  [--summary <file>] [--spec <file>]
+//                  [--summary <file>]
 //   review-page.ts files <out-dir> <ref> <path>...
 //
 // change: diffs the head against its merge base with the base, as GitHub does, and writes
 // <out-dir>/index.html (the review page, titled for its ticket), review.json and chunks/<k>.json.
 // With --pr, the title, the summary (the pull request's text), the base and the head come from
 // `gh api` on the repository's origin. With --ticket, or a pull request titled "#<n>, <title>",
-// the ticket's text comes from that issue. --summary and --spec are Markdown files: the change's
-// summary and the run's approved spec; without --spec, a WORKHORSE-SPEC.md the head commits at
-// its root is the spec. Files are grouped by their first folder, top-level files first, and the
+// the ticket's text comes from that issue. --summary is a Markdown file containing the change's
+// summary. Files are grouped by their first folder, top-level files first, and the
 // page loads a file's diff and text only when it is opened.
 //
 // files: writes the code viewer, files.json and files/<k>.txt, one per path as it stands at <ref>.
@@ -29,7 +28,7 @@ import { run } from "./lib/proc.ts";
 
 export const USAGE = [
   "usage: review-page.ts change <out-dir> --pr <number>",
-  "       review-page.ts change <out-dir> --base <ref> --head <ref> [--ticket <number>] [--title <text>] [--summary <file>] [--spec <file>]",
+  "       review-page.ts change <out-dir> --base <ref> --head <ref> [--ticket <number>] [--title <text>] [--summary <file>]",
   "       review-page.ts files <out-dir> <ref> <path>...",
 ].join("\n");
 
@@ -180,12 +179,6 @@ function gh(path: string): Record<string, unknown> {
   return JSON.parse(r.out) as Record<string, unknown>;
 }
 
-/** The run's spec as the head commits it at its root, where a run puts it; null without one. */
-function committedSpec(head: string): string | null {
-  const r = run("git", ["show", `${head}:WORKHORSE-SPEC.md`]);
-  return r.code === 0 ? r.out : null;
-}
-
 function flag(args: string[], name: string): string | undefined {
   const i = args.indexOf(name);
   return i >= 0 ? args[i + 1] : undefined;
@@ -224,8 +217,6 @@ function buildChange(out: string, args: string[]): string {
   const summaryFile = flag(args, "--summary");
   if (summaryFile) body = readFileSync(summaryFile, "utf8");
   const mb = git(["merge-base", base, head]).trim();
-  const specFile = flag(args, "--spec");
-  const spec = specFile ? readFileSync(specFile, "utf8") : committedSpec(head);
   const changes = parseChanges(
     git(["diff", "--numstat", "-M", mb, head]),
     git(["diff", "--name-status", "-M", mb, head]),
@@ -261,7 +252,6 @@ function buildChange(out: string, args: string[]): string {
     ticketTitle: title || `${head.slice(0, 7)} against ${mb.slice(0, 7)}`,
     ticketBody: scrub(ticketBody).text,
     body: scrub(body).text,
-    spec: spec === null ? null : scrub(spec).text,
     mergedAt,
     base: mb,
     head,

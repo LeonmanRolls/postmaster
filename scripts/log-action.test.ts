@@ -93,6 +93,11 @@ function logAction(args: string[]): { code: number; out: string; err: string } {
   return { code: r.status ?? -1, out: r.stdout ?? "", err: r.stderr ?? "" };
 }
 
+function projectAction(repo: string, args: string[]): { code: number; out: string; err: string } {
+  const r = spawnSync("bash", [SELF, "--project", repo, ...args], { encoding: "utf8" });
+  return { code: r.status ?? -1, out: r.stdout ?? "", err: r.stderr ?? "" };
+}
+
 function lines(): number {
   try {
     return readFileSync(join(d, "actions.jsonl"), "utf8")
@@ -211,6 +216,21 @@ describe("positive controls", () => {
         last.run === "RUN-1" &&
         !last.fault,
     ).toBe(true);
+  }, 30000);
+
+  test("a project clerk dispatch is written to the postmaster log and ledger", () => {
+    const project = join(tmp, "project-dispatch");
+    mkdirSync(project, { recursive: true });
+    const r = projectAction(project, ["postmaster", "dispatch", "clerk", "ticket=2"]);
+    expect(r.code).toBe(0);
+    const log = readFileSync(join(project, ".postmaster", "runs", "postmaster", "actions.jsonl"), "utf8");
+    const ledger = readFileSync(join(project, ".postmaster", "runs", "ledger.jsonl"), "utf8");
+    const entry = JSON.parse(log.trim());
+    expect(log).toBe(ledger);
+    expect(entry.actor).toBe("postmaster");
+    expect(entry.action).toBe("dispatch");
+    expect(entry.target).toBe("clerk");
+    expect(entry.detail).toBe("ticket=2");
   }, 30000);
 
   test("a tool-fault with every field is written", () => {
@@ -410,69 +430,14 @@ describe("positive controls", () => {
     expect(lines()).toBe(before + 1);
   }, 30000);
 
-  test("an approved spec review is written", () => {
+  test("the premise result names the verified and base commits", () => {
     const before = lines();
-    const r = logAction(["postmaster", "spec-review", "luna", "approved abc123"]);
+    const r = logAction(["coachman", "premises", "abc1234", "base=def5678", "result=moved"]);
     expect(r.code).toBe(0);
     expect(lines()).toBe(before + 1);
-  }, 30000);
-
-  test("with its decision, then the commit", () => {
-    const r = logAction(["postmaster", "spec-review", "luna", "approved abc123"]);
-    expect(r.code).toBe(0);
     const last = lastLine();
-    expect(
-      last !== null &&
-        last.action === "spec-review" &&
-        last.target === "luna" &&
-        last.detail === "approved abc123",
-    ).toBe(true);
-  }, 30000);
-
-  test("a changes spec review is written", () => {
-    const before = lines();
-    const r = logAction([
-      "postmaster",
-      "spec-review",
-      "deepseek",
-      "changes def456 narrow the scope to the two named scripts",
-    ]);
-    expect(r.code).toBe(0);
-    expect(lines()).toBe(before + 1);
-  }, 30000);
-
-  test("with the user's words after the commit", () => {
-    const r = logAction([
-      "postmaster",
-      "spec-review",
-      "deepseek",
-      "changes def456 narrow the scope to the two named scripts",
-    ]);
-    expect(r.code).toBe(0);
-    const last = lastLine();
-    expect(
-      last !== null && last.detail === "changes def456 narrow the scope to the two named scripts",
-    ).toBe(true);
-  }, 30000);
-
-  test("a dropped spec review is written", () => {
-    const before = lines();
-    const args = ["postmaster", "spec-review", "luna", "dropped abc123 we only need one lane"];
-    const r = logAction(args);
-    expect(r.code).toBe(0);
-    expect(lines()).toBe(before + 1);
-  }, 30000);
-
-  test("with the drop decision", () => {
-    const args = ["postmaster", "spec-review", "luna", "dropped abc123 we only need one lane"];
-    const r = logAction(args);
-    expect(r.code).toBe(0);
-    const last = lastLine();
-    expect(
-      last !== null &&
-        last.action === "spec-review" &&
-        String(last.detail).split(" ")[0] === "dropped",
-    ).toBe(true);
+    expect(last !== null && last.action === "premises" && last.target === "abc1234").toBe(true);
+    expect(last !== null && last.detail === "base=def5678 result=moved").toBe(true);
   }, 30000);
 
   test("a detail ending in a newline is written", () => {
@@ -680,20 +645,12 @@ describe("negative controls: nothing is written", () => {
     expect(r.err.includes("opens with its class, gating or style")).toBe(true);
   }, 30000);
 
-  test("a spec-review with no decision", () => {
+  test("a premise result without its base is refused", () => {
     const before = lines();
-    const r = logAction(["coachman", "spec-review", "luna", "abc123 looks fine"]);
+    const r = logAction(["coachman", "premises", "abc1234", "result=same"]);
     expect(r.code).toBe(1);
     expect(lines()).toBe(before);
-    expect(r.err.includes("opens with its decision, approved, changes or dropped")).toBe(true);
-  }, 30000);
-
-  test("a spec-review whose decision is another word", () => {
-    const before = lines();
-    const r = logAction(["coachman", "spec-review", "luna", "ok abc123"]);
-    expect(r.code).toBe(1);
-    expect(lines()).toBe(before);
-    expect(r.err.includes("opens with its decision, approved, changes or dropped")).toBe(true);
+    expect(r.err.includes("base=<commit>")).toBe(true);
   }, 30000);
 
   test("a tool-fault with no fix", () => {

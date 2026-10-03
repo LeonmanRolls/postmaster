@@ -4,7 +4,7 @@ import { jsWords } from "./lib/text.ts";
 
 const WORDS_PER_RUN = 6;
 const DOC_SUFFIXES = [".md", ".mdx", ".rst", ".adoc", ".txt"] as const;
-const ROOT_RECORDS = ["WORKHORSE-SPEC.md", "WORKHORSE-SUMMARY.md", "WORKHORSE-BLOCKED.md"] as const;
+const ROOT_RECORDS = ["WORKHORSE-SUMMARY.md", "WORKHORSE-BLOCKED.md"] as const;
 const GENERATED_NAMES = [
   "bun.lock",
   "bun.lockb",
@@ -25,7 +25,7 @@ const NEGATIVE_ATTRIBUTE_VALUES = ["unspecified", "unset", "false"] as const;
 // material, wherever they sit.
 // /u would newly fold non-ASCII letters into these names, which main's /i never does.
 // ASCII: the excluded audit names are ASCII literals matched ASCII-case-insensitively.
-const AUDIT_EXCLUDED = /(WORKHORSE-(SPEC|SUMMARY)\.md|BASE-CONTROLS|oracle|acceptance)/i;
+const AUDIT_EXCLUDED = /(WORKHORSE-SUMMARY\.md|BASE-CONTROLS|oracle|acceptance)/i;
 
 type Kind = "code" | "docs";
 type LaneInput = Readonly<{ name: string; commit: string }>;

@@ -147,27 +147,6 @@ describe("the script", () => {
     expect(review.files.find((f: { path: string }) => f.path === "gone.txt").lines).toBeNull();
   });
 
-  test("the spec is the WORKHORSE-SPEC.md the head commits, and none without one", () => {
-    const none = join(repo, ".out-nospec");
-    expect(
-      run("bun", [script, "change", none, "--base", base, "--head", head], { cwd: repo }).code,
-    ).toBe(0);
-    expect(JSON.parse(readFileSync(join(none, "review.json"), "utf8")).spec).toBeNull();
-    const g = (...a: string[]) => run("git", ["-C", repo, ...a]).out.trim();
-    writeFileSync(join(repo, "WORKHORSE-SPEC.md"), "# Workhorse spec: #1 Two edits\n");
-    g("add", "WORKHORSE-SPEC.md");
-    g("commit", "-q", "-m", "spec");
-    const withSpec = join(repo, ".out-spec");
-    expect(
-      run("bun", [script, "change", withSpec, "--base", base, "--head", g("rev-parse", "HEAD")], {
-        cwd: repo,
-      }).code,
-    ).toBe(0);
-    expect(JSON.parse(readFileSync(join(withSpec, "review.json"), "utf8")).spec).toBe(
-      "# Workhorse spec: #1 Two edits\n",
-    );
-  });
-
   test("files: each path as it stands at the ref, with its own file", () => {
     const out = join(repo, ".out-files");
     const r = run("bun", [script, "files", out, head, "keep.txt", "src/new.ts"], { cwd: repo });

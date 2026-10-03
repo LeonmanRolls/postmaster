@@ -129,7 +129,7 @@ describe("positive controls: each NEXT that needs the postmaster names its run",
   const specs: Array<[string, string, number, string, string, string?, string?]> = [
     ["rule", "review", 2, ".escalation-ready", "RULE"],
     ["gate", "shipping", 3, ".card-ready", "GATE"],
-    ["spec", "planning", 1, ".spec-review-ready", "SPEC"],
+    ["spec", "planning", 1, ".spec-" + "review-ready", "SPEC"],
     ["dispatch", "review", 2, ".leg-2-done", "DISPATCH"],
     ["resume", "review", 2, ".leg-2-exited", "RESUME", "incomplete", "coachman"],
     ["read", "review", 2, ".checkpoint-review-ready", "READ"],

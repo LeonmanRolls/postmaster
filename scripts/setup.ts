@@ -199,7 +199,7 @@ round_timeout_seconds      2400               seconds a review round may run, 1 
 merge_authority            user               user or postmaster
 checkpoint_mode            autonomous         autonomous or consult
 review_link?               (none)             template with {path}
-planning.review_link?      (none)             code-server template with {path} for workhorse specs
+planning.review_link?      (none)             code-server template with {path} for ticket drafts
 overwrite                  no                 yes replaces an existing config`);
     process.exit(0);
   } else {
@@ -559,7 +559,7 @@ const RL = ask(
   opts,
 );
 const PRL = ask(
-  "Code-server link template with {path} for a workhorse spec (blank for none)",
+  "Code-server link template with {path} for a ticket draft (blank for none)",
   "",
   "planning.review_link?",
   opts,

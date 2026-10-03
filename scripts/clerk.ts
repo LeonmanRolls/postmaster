@@ -140,10 +140,13 @@ function brief(repoArg: string, id: string): { repo: string; id: string; title: 
     writeFileSync(draft, `DRAFT: not approved, do not implement from this file\n\n${ticket.body}`, { flag: "wx", mode: 0o600 });
   } else {
     const existing = readFileSync(draft, "utf8");
-    if (!/^DRAFT:/u.test(existing)) writeFileSync(draft, `DRAFT: not approved, do not implement from this file\n\n${existing}`, { mode: 0o600 });
+    if (!existing.startsWith("DRAFT:")) writeFileSync(draft, `DRAFT: not approved, do not implement from this file\n\n${existing}`, { mode: 0o600 });
   }
   const title = ticket.title || id;
-  const name = `${id}, ${title}`;
+  const displayId = (ticket.kind === "github" || ticket.kind === "local") && !id.startsWith("#")
+    ? `#${id}`
+    : id;
+  const name = `${displayId}, ${title}`;
   const base = defaultBase(project);
   const preferencesText = preferences();
   const content = `# Booking clerk brief: ${name}
@@ -190,6 +193,66 @@ function handleOf(repo: string, id: string): string {
   return `clerk-${safe}`;
 }
 
+function finalFromStream(harness: string, streamPath: string): string {
+  let events: Array<Record<string, any>>;
+  try {
+    events = readFileSync(streamPath, "utf8")
+      .split(/\r?\n/u)
+      .filter(Boolean)
+      .map((line) => JSON.parse(line));
+  } catch {
+    return "";
+  }
+  let last = "";
+  let museText = "";
+  for (const event of events) {
+    if (harness === "claude") {
+      if (event.type === "result" && event.subtype === "success" && typeof event.result === "string") {
+        last = event.result;
+      } else if (event.type === "assistant" && event.message && Array.isArray(event.message.content)) {
+        const text = event.message.content
+          .filter((part: any) => part?.type === "text" && typeof part.text === "string")
+          .map((part: any) => part.text)
+          .join("\n");
+        if (text.trim()) last = text;
+      }
+    } else if (harness === "codex" && event.type === "item.completed" && event.item?.type === "agent_message" && typeof event.item.text === "string") {
+      last = event.item.text;
+    } else if (harness === "pi" && event.type === "message_end" && event.message?.role === "assistant" && Array.isArray(event.message.content)) {
+      const text = event.message.content
+        .filter((part: any) => part?.type === "text" && typeof part.text === "string")
+        .map((part: any) => part.text)
+        .join("\n");
+      if (text.trim()) last = text;
+    } else if (harness === "muse" && event.payload_type === "run.output.delta") {
+      museText += typeof event.payload?.text === "string" ? event.payload.text : "";
+    } else if (harness === "muse" && typeof event.payload_type === "string" && event.payload_type.startsWith("run.terminal.")) {
+      if (typeof event.payload?.text === "string" && event.payload.text.trim()) last = event.payload.text;
+      else if (museText.trim()) last = museText;
+      museText = "";
+    } else if (harness === "mimo" && event.type === "text" && typeof event.part?.text === "string") {
+      last = event.part.text;
+    } else if (harness === "grok" && (event.type === "end" || event.event === "end")) {
+      last = firstText(event.result, event.text, event.message, event.content, event.output) || last;
+    } else if (harness === "agy" && (event.event === "result" || event.type === "result")) {
+      last = firstText(event.result, event.response, event.text, event.message, event.content, event.output) || last;
+    }
+  }
+  return last;
+}
+
+function firstText(...values: unknown[]): string {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) return value;
+    if (value && typeof value === "object") {
+      const record = value as Record<string, unknown>;
+      const nested = firstText(record.text, record.content, record.message, record.output, record.response);
+      if (nested) return nested;
+    }
+  }
+  return "";
+}
+
 function start(repoArg: string, id: string): number {
   const repo = resolve(repoArg);
   const old = openRecord(repo, id);
@@ -219,6 +282,8 @@ function start(repoArg: string, id: string): number {
     if (spawned.out) process.stdout.write(spawned.out);
     return spawned.code;
   }
+  const logged = runScript("log-action.sh", ["--project", repo, "postmaster", "dispatch", "clerk", `ticket=${id}`]);
+  if (logged.code !== 0) die(`clerk session opened as ${handle}, but its dispatch could not be logged: ${(logged.err || logged.out).trim()}`);
   recordOpen(repo, id, handle);
   const prompt = join(clerkDir(repo), `${safeId(id)}.start.txt`);
   writeFileSync(prompt, `Read ${TOOL}/skills/clerk/SKILL.md and ${started.path}. Continue with ticket ${id}.\n`, { mode: 0o600 });
@@ -239,12 +304,14 @@ function reader(clerkModel: string, plainPath: string, worktreeArg: string): num
   const baseModel = (model: unknown): string => String(model ?? "").split("/").at(-1) ?? "";
   let lane = "";
   let laneModel = "";
+  let laneHarness = "";
   for (const name of names) {
     const spec = (lanes as Record<string, any>)[name];
     const model = baseModel(spec?.model);
     if (model && model !== baseModel(clerkModel)) {
       lane = name;
       laneModel = model;
+      laneHarness = String(spec?.harness ?? "");
       break;
     }
   }
@@ -285,8 +352,10 @@ Answer only these questions from the ticket and code:
     const detail = (waited.out + waited.err).trim();
     die(`fresh reader ${lane} failed or did not finish (exit ${waited.code})${detail ? `: ${detail}` : ""}`);
   }
-  if (!existsSync(last)) die(`fresh reader ${lane} exited without a final message`);
-  const response = readFileSync(last, "utf8");
+  const response = existsSync(last)
+    ? readFileSync(last, "utf8")
+    : finalFromStream(laneHarness, out);
+  if (!response.trim()) die(`fresh reader ${lane} exited without a final message`);
   process.stdout.write(response);
   console.log(`reader: ${lane} (${laneModel})`);
   return 0;

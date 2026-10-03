@@ -68,7 +68,7 @@ report that last for a turn that did run, and a harness just started can look re
 takes input and drop what it is sent, so read the session before sending the message again.
 `spawn` refuses a handle a live session already has, and says so when the harness stops on its
 first start to ask something, such as whether to trust the folder: the user answers it in the
-pane. A spec session is spawned the same way (`postmaster.md`, Spec review).
+pane. A booking clerk is spawned the same way (`postmaster.md`, Stage B).
 `spawn`, `send`, `wait` and `read` exit 3 on `none`.
 
 ## Run, on every host

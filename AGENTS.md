@@ -194,8 +194,7 @@ metaphor expresses them.
 
 **waybill** the brief that travels with a load · **harness** the CLI wrapping a model ·
 **blinkers** worktree isolation between lanes · **workhorse** a lane that implements the ticket,
-as against a reviewer · **workhorse spec** a workhorse's own plan for the ticket, committed before
-its code (`WORKHORSE-SPEC.md`) · **lead horse / wheeler** the ranked lanes ·
+as against a reviewer · **lead horse / wheeler** the ranked lanes ·
 **turnpike** a check a run must pass through before it ships, named by its ticket: `default` is
 the style, bug and security reviews, and the project's gate always runs besides them ·
 **remount** resuming a stalled run ·
@@ -292,7 +291,7 @@ the workhorses decide the files and the tasks.
 **Comment auto-replies stay off.** Publishing or watching an artifact turns on automatic replies to comments sent to Claude,
 and a reply can land in a thread the conversation never sees. Right after each publish or watch, stop the session's watch on
 that artifact. The user says when they have left comments; then read each thread, answer it there, and make the change it asks for.
-**Show a change or a spec's code on a page made for the phone.** When the user reviews a change with automatic merging off,
-or opens the files a spec links to, publish it with the `review-pages` skill (`skills/review-pages/SKILL.md`): a review page
-with the ticket, the spec, the summary, the diff and the files as they stand, or a code viewer at the lines the spec cites.
+**Show a change or ticket-linked code on a page made for the phone.** When the user reviews a change with automatic merging off,
+or opens files named in the ticket's technical notes, publish it with the `review-pages` skill (`skills/review-pages/SKILL.md`): a review page
+with the ticket, the summary, the diff and the files as they stand, or a code viewer at the cited lines.
 The user comments on the page and gives the verdict in the chat. Claude Code only, until the dashboard shows changes.

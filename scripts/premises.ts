@@ -27,11 +27,6 @@ const LINK_RE = /https?:\/\/[^\s)\]>]+/gu;
 const CODE_RE = /`([^`\n]+)`/gu;
 const PATH_RE = /(?:^|[^\p{L}\p{N}_.-])((?:[\p{L}\p{N}_.-]+\/)*[\p{L}\p{N}_.-]+\.[\p{L}\p{N}_.-]+)(#L[0-9]+(?:-L[0-9]+)?)?(?=$|[^\p{L}\p{N}_-])/gu;
 
-function fail(message: string, code = 1): never {
-  console.error(`premises: ${message}`);
-  process.exit(code);
-}
-
 function splitRef(ref: string): { start?: number; end?: number } {
   const match = ref.match(/^#L([0-9]+)(?:-L([0-9]+))?$/u);
   if (!match) return {};

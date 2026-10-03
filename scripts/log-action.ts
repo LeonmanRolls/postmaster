@@ -1,7 +1,8 @@
 // Append one structured action to a run's audit log and to the project's ledger.
 //
 //   log-action.sh <dispatch-dir> <actor> <action> <target> [detail...]
-//   log-action.sh --project <repo> <actor> note <target> [detail...]
+//   log-action.sh --project <repo> clerk note <target> [detail...]
+//   log-action.sh --project <repo> postmaster dispatch clerk [detail...]
 //   log-action.sh <dispatch-dir> <actor> tool-fault <postmaster-file> --ran <what ran>
 //                 --failed <what failed> --error <the error, or none> --diagnosis <why>
 //                 --fix <the fix proposed> [--workaround <what was done instead>] [--control <kind>]
@@ -10,13 +11,11 @@
 //   action   a verb from a fixed set, enforced, so the log is computable:
 //            dispatch resume refuse harvest synthesize review-launch review-harvest finding apply
 //            escalate rule ticket-check ticket-create ticket-edit ticket-state ticket-comment
-//            gate verify merge teardown degrade handoff-accept handoff stage spec-review premises
+//            gate verify merge teardown degrade handoff-accept handoff stage premises
 //            tool-fault note
 //   target   what the action was done to: a lane, a ticket id, a branch, a path, a round
 //   detail   free text; everything after the target, joined by spaces. A finding's opens with its
-//            class, gating or style, so the style findings can be told apart. A spec-review's
-//            opens with the decision, approved, changes or dropped, then the spec commit the
-//            user saw, then the user's words where the decision is changes or dropped
+//            class, gating or style, so the style findings can be told apart.
 //
 // A tool-fault is postmaster itself misbehaving: a script, a runbook step or a harness adapter.
 // Its target is the postmaster file, relative to the checkout this script is in or absolute,
@@ -35,8 +34,8 @@
 // to learn from it; it reads these lines.
 //
 //   exit 0  written to both files
-//   exit 1  usage, an action outside the set, a finding with no class, a spec-review with no
-//           decision, a tool-fault missing a field or naming no postmaster file, or a file
+//   exit 1  usage, an action outside the set, a finding with no class, a premises result with
+//           no verified commit or base, a tool-fault missing a field or naming no postmaster file, or a file
 //           could not be appended
 import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
@@ -44,7 +43,7 @@ import { toolRoot } from "./lib/paths.ts";
 import { argvDecoded } from "./lib/proc.ts";
 
 const VERBS =
-  " dispatch resume refuse harvest synthesize review-launch review-harvest finding apply escalate rule ticket-check ticket-create ticket-edit ticket-state ticket-comment gate verify merge teardown degrade handoff-accept handoff stage spec-review premises tool-fault note ";
+  " dispatch resume refuse harvest synthesize review-launch review-harvest finding apply escalate rule ticket-check ticket-create ticket-edit ticket-state ticket-comment gate verify merge teardown degrade handoff-accept handoff stage premises tool-fault note ";
 const CONTROLS = join(toolRoot(import.meta), "skills/postmaster/controls.md");
 
 // JSON string escaping: drop control chars, escape separators. Bytes that
@@ -245,12 +244,10 @@ function logAction(
       return 1;
     }
   }
-  if (action === "spec-review") {
-    const firstWord = detail.split(" ")[0] ?? "";
-    if (firstWord !== "approved" && firstWord !== "changes" && firstWord !== "dropped") {
-      console.error(
-        "log-action: a spec-review's detail opens with its decision, approved, changes or dropped",
-      );
+  if (action === "premises") {
+    const result = /(?:^|[ \t])result=(same|moved|unknown|changed|missing)(?:[ \t]|$)/u.test(detail);
+    if (actor !== "coachman" || !target.trim() || !/(?:^|[ \t])base=\S+/u.test(detail) || !result) {
+      console.error("log-action: premises needs the coachman, a verified commit, base=<commit> and result=<state>");
       return 1;
     }
   }
@@ -308,9 +305,17 @@ function logAction(
   return 0;
 }
 
-function logProjectNote(repo: string, actor: string, target: string, detailParts: string[]): number {
-  if (actor !== "clerk" || !target) {
-    console.error("usage: log-action.sh --project <repo> clerk note <target> [detail...]");
+function logProjectEvent(
+  repo: string,
+  actor: string,
+  action: string,
+  target: string,
+  detailParts: string[],
+): number {
+  const note = actor === "clerk" && action === "note" && target !== "";
+  const dispatch = actor === "postmaster" && action === "dispatch" && target === "clerk";
+  if (!note && !dispatch) {
+    console.error("usage: log-action.sh --project <repo> clerk note <target> | postmaster dispatch clerk [detail...]");
     return 1;
   }
   let project = "";
@@ -322,10 +327,16 @@ function logProjectNote(repo: string, actor: string, target: string, detailParts
     mkdirSync(runs, { recursive: true });
     const ledger = join(runs, "ledger.jsonl");
     const ts = new Date().toISOString().replace(/\.[0-9]+Z$/u, "Z");
-    const line = `{"ts":"${ts}","project":"${jsonStr(project)}","run":"booking-clerk","actor":"clerk","action":"note","target":"${jsonStr(target)}","detail":"${jsonStr(detailParts.join(" "))}"}`;
+    const runName = note ? "booking-clerk" : "postmaster";
+    const line = `{"ts":"${ts}","project":"${jsonStr(project)}","run":"${runName}","actor":"${actor}","action":"${action}","target":"${jsonStr(target)}","detail":"${jsonStr(detailParts.join(" "))}"}`;
+    if (dispatch) {
+      const logDir = join(runs, "postmaster");
+      mkdirSync(logDir, { recursive: true });
+      appendFileSync(join(logDir, "actions.jsonl"), `${line}\n`);
+    }
     appendFileSync(ledger, `${line}\n`);
   } catch {
-    console.error(`log-action: cannot append the booking clerk note to ${repo}/.postmaster/runs/ledger.jsonl`);
+    console.error(`log-action: cannot append the project action under ${repo}/.postmaster/runs`);
     return 1;
   }
   return 0;
@@ -335,11 +346,22 @@ function logProjectNote(repo: string, actor: string, target: string, detailParts
 const argv = argvDecoded();
 if (import.meta.main) {
   if (argv[0] === "--project") {
-    if (argv.length < 5 || argv[2] !== "clerk" || argv[3] !== "note") {
-      console.error("usage: log-action.sh --project <repo> clerk note <target> [detail...]");
+    if (argv.length < 5) {
+      console.error("usage: log-action.sh --project <repo> clerk note <target> | postmaster dispatch clerk [detail...]");
       process.exit(1);
     }
-    process.exit(logProjectNote(argv[1] as string, argv[2] as string, argv[4] as string, argv.slice(5) as string[]));
+    if (argv[2] === "clerk" && argv[3] === "note") {
+      process.exit(
+        logProjectEvent(argv[1] as string, argv[2] as string, argv[3] as string, argv[4] as string, argv.slice(5) as string[]),
+      );
+    }
+    if (argv[2] === "postmaster" && argv[3] === "dispatch" && argv[4] === "clerk") {
+      process.exit(
+        logProjectEvent(argv[1] as string, argv[2] as string, argv[3] as string, argv[4] as string, argv.slice(5) as string[]),
+      );
+    }
+    console.error("usage: log-action.sh --project <repo> clerk note <target> | postmaster dispatch clerk [detail...]");
+    process.exit(1);
   }
   if (argv.length < 4 || !argv[0] || !argv[1] || !argv[2] || !argv[3]) {
     console.error("usage: log-action.sh <dispatch-dir> <actor> <action> <target> [detail...]");

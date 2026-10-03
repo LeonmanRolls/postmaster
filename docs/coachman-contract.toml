@@ -61,24 +61,16 @@ path = "scripts/ticket-check.sh"
 holds = "the flow's one reading of whether a ticket mentions a user journey"
 
 [[files]]
-path = "skills/postmaster/spec-session.md"
-holds = "the spec session role: its brief, the spec copy it edits, the approval handoff"
+path = "scripts/premises.sh"
+holds = "the ticket premise comparison invoked before workhorse dispatch"
 
 [[files]]
-path = "scripts/spec-session.sh"
-holds = "the spec session entrypoint the runbooks invoke"
+path = "scripts/premises.ts"
+holds = "the cited-source comparison between the ticket's verified commit and the run base"
 
 [[files]]
-path = "scripts/spec-session.ts"
-holds = "the spec brief shape and the approval commit and record"
-
-[[files]]
-path = "scripts/spec-decisions.sh"
-holds = "the spec decisions entrypoint the runbooks invoke"
-
-[[files]]
-path = "scripts/spec-decisions.ts"
-holds = "the approval stanza shape and the count vocabulary Spec review branches on"
+path = "scripts/log-action.ts"
+holds = "the audit record for premise verification before any workhorse dispatch"
 
 [[files]]
 path = "scripts/launch.sh"
@@ -91,10 +83,6 @@ holds = "the fixture entrypoint the flow invokes"
 [[files]]
 path = "scripts/fixture.ts"
 holds = "the fixture-copy mark new writes, and scoring a run from its records"
-
-[[files]]
-path = "skills/postmaster/workhorse-spec-template.md"
-holds = "the workhorse spec shape, including the per-criterion checks section the brief's loop rests on"
 
 [[files]]
 path = "scripts/summary-evidence.ts"

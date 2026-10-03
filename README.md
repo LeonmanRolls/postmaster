@@ -120,9 +120,9 @@ scripts/review-round.sh start|wait|teardown <dispatch> <round> … # a review ro
 scripts/log-action.sh <dispatch> <actor> <action> <target> …     # one JSON line per action
 scripts/tool-faults.sh harvest|comment|file|decline <dispatch> …  # a closed run's tool faults, as tickets
 scripts/stage.sh <dispatch> <stage>                               # the one way a run changes stage
-scripts/spec-review-link.sh <dispatch> <spec-folder>              # resolve a reviewed spec's code-server link
-scripts/spec-decisions.sh <dispatch> fresh|record|count           # record the spec decision, count the package
-scripts/spec-session.sh brief|approve <dispatch>                  # the spec session's brief; approve commits and records
+scripts/clerk.sh brief|start|reader …                             # prepare a ticket and test its plain part
+scripts/ticket-ready.sh <repo> <id> | mark|queue|pending …        # check, sign off, and queue tickets
+scripts/premises.sh <repo> <waybill> <base>                       # compare ticket premises with the run base
 scripts/run-times.sh <dispatch>                                   # how long each stage took, from the log
 scripts/run-log.sh <dispatch> <text> | --section <title> | --close # the narrative, timestamped
 scripts/run-meta.sh <dispatch> <repo> | path|check|release <dispatch> # run.json and the pinned tool a run started from

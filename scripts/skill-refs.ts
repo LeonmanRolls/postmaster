@@ -3,14 +3,14 @@
 // and a session reaches the repo only as <tool>, the path SKILL.md finds from that link once.
 // A reference resolves from any working directory only when it goes through <tool> and names
 // a script the repo has. The run's pinned checkout goes through <rt> instead, resolved per run
-// by run-meta.sh path; it is a checkout of the same repo, so the same existence check applies.
+// by run-meta.sh path; it may predate this checkout, so its existence is checked by that run.
 //
 //   skill-refs.sh [<file>...]          default: skills/postmaster/*.md beside this script's repo
 //   skill-refs.sh --fix [<file>...]    put <tool>/ before every bare scripts/ path, in place
 //
 // A reference is any scripts/ path. It is a fault when it is bare (scripts/x.sh, which resolves
 // only from the repo's own root), when it reaches scripts/ some other way (../../scripts/x.sh),
-// or when it goes through <tool> or <rt> to a script the repo does not have. A path under
+// or when it goes through <tool> to a script the repo does not have. A path under
 // another placeholder or variable, such as <repo>/scripts/, is that directory's and not the tool's.
 // --fix rewrites the bare form only, so it can be run again after a rebase and changes nothing
 // the second time; the check that follows it names whatever it could not fix.
@@ -68,16 +68,17 @@ export function refs(
           continue; // part of a longer name
         }
         const name = ref.slice("scripts/".length);
-        if (before.endsWith("<tool>/") || before.endsWith("<rt>/")) {
-          const which = before.endsWith("<tool>/") ? "<tool>/" : "<rt>/";
+        if (before.endsWith("<tool>/")) {
           if (name !== "" && !isFile(join(root, "scripts", name))) {
             faults.push({
               file: f,
               line: i + 1,
               why: "no such script in the postmaster repo",
-              ref: `${which}${ref}`,
+              ref: `<tool>${ref}`,
             });
           }
+        } else if (before.endsWith("<rt>/")) {
+          // The run's actual pinned checkout is known only from its run.json at runtime.
         } else if (OTHER.test(before)) {
         } else if (before.endsWith("/")) {
           faults.push({

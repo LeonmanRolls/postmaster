@@ -46,63 +46,45 @@ the action for anything without its own verb.
    board; propose `store init` to the user instead.
 1. **Read what exists.** List the tracker's open tickets (`trackers.md`) and read the ones the
    stream touches. The stream may already be ticketed in part.
-2. **Decompose.** One ticket per independently shippable change, in the ticket shape
-   (`trackers.md`): a title, the problem or feature, numbered acceptance criteria each
-   answerable yes or no, the direction, the turnpikes, and notes. A ticket that changes
-   something a person uses carries a `User journey`. The direction is the user's: take it from
-   the stream or the ticket's own text, or ask the user for it, and never write one yourself,
-   not even "None". The turnpikes are the user's too: take them from the stream or the ticket,
-   or propose `default`; the ticket names the turnpikes for its run and may name fewer than the
-   project's defaults, other turnpikes, or `none` when the user says so. Project settings only
-   define what `default` means. A ticket is
-   dispatchable when its criteria can be tested at the ticket's
-   own interface and its scope names what is out. Anything else is not yet a ticket; it is a
-   question for the user.
-3. **Check every ticket's shape** before you accept it or propose it:
-   `<tool>/scripts/ticket-check.sh <repo> <id>` for a ticket in the tracker, and
-   `<tool>/scripts/ticket-check.sh --body <file> --title "<title>" --project <repo>` for one you drafted. Log
-   `ticket-check` with the ticket's id, or the draft's file, as the target, and the exit and
-   the parts named, or the `turnpikes:` line it prints, as the detail. Exit 0 means the shape
-   is complete; whether the ticket is dispatchable is still step 2's test. Exit 1 means it
-   could not be read, and the message says why. Exit 2 names each missing or malformed part on
-   its own line: save the ticket's body as your base with the adapter's `read <id> --body` (a
-   draft is its own base), draft each part from the stream and the ticket's own text, and put
-   the ticket, the check's lines and your drafts to the user together. A missing
-   `## Turnpikes` is proposed as `default`, with what the target project's
-   `<tool>/scripts/turnpikes.sh resolve --project <repo> default` says it stands for; the user
-   may name fewer, others, or `none`.
-4. **Write back the user's answer and nothing else.** Write the parts as the user gave or
-   approved them, each under its `##` heading, to a sections file, and splice them into the
-   base: `<tool>/scripts/ticket-check.sh --splice <base> <sections> > <new>` changes those sections
-   and no other line. Check `<new>` with `<tool>/scripts/ticket-check.sh --body <new> --project <repo>`. Write it with
-   the adapter's `edit <id> <new> <base>` (`trackers.md`), log `ticket-edit`, and check the
-   ticket again by its id; a draft's `<new>` replaces its file. `edit` never changes a title,
-   so a missing one is the user's to set in the tracker. On exit 4 the ticket changed after
-   you saved the base: go back to step 3. A user who edits the ticket in the tracker has
-   answered: check it again and write nothing. A ticket that still fails stays out of the
-   plan, and `plan.md` says what it waits on.
-   [Why a ticket is checked, and only the user's answer written back](../../wiki/concepts/ticket-shape.md)
-5. **Propose before creating** unless `tracker.postmaster_may_create` is true. Show the
-   user each ticket's title, priority, direction, turnpikes and one-line rationale, then create
-   the ones they approve through the tracker adapter, logging `ticket-create` per ticket, and
-   check each one again by its new id. Never create a ticket on your own initiative. A ticket
-   whose turnpikes leave out a project default, which `<tool>/scripts/turnpikes.sh short --project
-   <repo> '<its turnpikes: line>'` names, is shown to the user before it is created whatever
-   `tracker.postmaster_may_create` says, and their word on its turnpikes is logged as a `note`
-   naming the ticket and the line.
-6. **Order them.** Dependencies first: a ticket that needs another's change waits for it to
+   Before decomposing, read `<tool>/wiki/index.md` and the concepts the stream touches.
+2. **Decompose.** One ticket per independently shippable change. Keep the user's request and
+   the problem it describes; do not draft missing acceptance criteria, decisions, direction,
+   checks or technical notes. The booking clerk prepares those parts with the user when the
+   user asks to implement the ticket.
+3. **Do not fill gaps yourself.** Keep a ticket in the plan even when its parts are missing.
+   The user chooses when it is ready to be prepared by asking you to implement it.
+4. **Propose before creating** unless `tracker.postmaster_may_create` is true. Show the user
+   each new title, the user's request, priority and one-line rationale, then create approved
+   tickets through the tracker adapter and log `ticket-create`. Do not draft missing ticket
+   parts or create a ticket on your own initiative.
+5. **Order them.** Dependencies first: a ticket that needs another's change waits for it to
    land. Record the order and the reason in `<runs>/postmaster/plan.md`, current state only.
 
 ## Stage B: the waybill
 
-For the next ticket in order, when the run ceiling (`team.max_runs`) has room:
+For every ticket the user asks you to implement, check readiness even when the run ceiling is
+full. Start a booking clerk for an unready ticket without consuming a run slot. A ready ticket
+waits in the ready queue until the watcher sees room under `team.max_runs`.
 
-1. **Check the ticket once more:** `<tool>/scripts/ticket-check.sh <repo> <id>` exits 0, logged as
-   `ticket-check`. On exit 2 it goes back to Stage A, step 3, and the next ticket in order is
-   taken instead. When `<tool>/scripts/turnpikes.sh short --project <repo> '<the turnpikes: line it printed>'`
-   names any project default, the ledger must hold the user's word on this ticket's turnpikes
-   (Stage A, step 5); if it does not, ask them, and log their word, before going on.
-2. **Base pre-flight.** `<tool>/scripts/check-target.sh <repo>` exits 0 and the main checkout is on
+1. **Check readiness:** `<tool>/scripts/ticket-ready.sh <repo> <id>` exits 0 only when the
+   ticket passes both ticket checks and has the `ready` label. Log the result as `ticket-check`.
+   On exit 1, report the adapter error. On exit 2, start a booking clerk with
+   `<tool>/scripts/clerk.sh start <repo> <id>`. The command records `dispatch` with target
+   `clerk` in the postmaster log. Do not create a run directory, branch or worktree for this
+   ticket. Continue with other tickets the
+   user asked you to implement. If a clerk is already open, tell the user and do not start a
+   second one. If there is no session host, put the ticket id and a request to start
+   `/clerk <id>` in `ESCALATION.md` and ask the user to do so. Do not start a clerk for a ticket
+   the user did not ask you to implement.
+   A `ready` label on its own is insufficient: every dispatch, including one from the ready
+   queue, repeats this check before writing anything for the run.
+   If the ticket is ready and a run slot is not free, run
+   `<tool>/scripts/ticket-ready.sh queue <repo> <id>`; the watcher dispatches it when a slot
+   opens. Continue with other tickets the user asked you to implement.
+2. **Use sign-off as the user's word on turnpikes.** The booking clerk writes the ticket's
+   `turnpikes:` line as a `note` in the project ledger when it marks the ticket ready. Do not
+   ask about turnpikes again.
+3. **Base pre-flight.** `<tool>/scripts/check-target.sh <repo>` exits 0 and the main checkout is on
    the default branch. On 2, the dirty-tree question goes to the user (`SKILL.md`); you
    never stash, reset or discard anything. The config is checked too, for the legs this run
    will have, `<tool>/scripts/turnpikes.sh legs --line '<the turnpikes: line step 1 printed>'`:
@@ -117,17 +99,17 @@ For the next ticket in order, when the run ceiling (`team.max_runs`) has room:
    change: it goes to the user, and nothing is dispatched. The project's declared checks are
    checked too: `<tool>/scripts/verify.sh checks <repo>` exits 0, and a refusal, naming what
    `.postmaster/project.toml` must change, goes to the user the same way.
-3. **Clash check, before anything is written for this run.** `bun
+4. **Clash check, before anything is written for this run.** `bun
    <tool>/scripts/run-clash.ts <repo> <TICKET>` exits 0. On exit 2 it names the run directory
    and each branch that already exist; put that to the user and stop, writing nothing: there
    is no run yet to log to, and the old run's records are the user's to dispose of.
    The postmaster renames or removes nothing itself: the user decides what happens
    to the old run — archive it, rename it, or pick another id — and Stage B starts again on
    their word. On exit 1 the refusal goes to the user the same way.
-4. **Exclude worktrees without a commit,** before any is cut, or the next pre-flight reads
+5. **Exclude worktrees without a commit,** before any is cut, or the next pre-flight reads
    them as dirt: `grep -qxF '.worktrees/' <repo>/.git/info/exclude || echo '.worktrees/' >>
    <repo>/.git/info/exclude`.
-5. **Create the run directory** `<runs>/<TICKET>/` with `logs/`, `audit/` and `render/`, and the
+6. **Create the run directory** `<runs>/<TICKET>/` with `logs/`, `audit/` and `render/`, and the
    manifest: `{"stage": "dispatched", "leg": 1, "base": "<sha>", "lanes": {}, "coachman":
    {"legs": {}}}`. You own `leg`, `base`, `coachman` and the terminal stages, `done` and
    `abandoned`; the coachman owns `lanes` and every stage before those; both update fields in
@@ -142,31 +124,29 @@ For the next ticket in order, when the run ceiling (`team.max_runs`) has room:
    `<tool>/scripts/verify.sh record
    <repo> <dispatch> --gate '<gate>'` writes `checks.json`, the checks the run is held to, and
    prints them for the waybill; a gate the project declares wins over the launch card's, and
-   `record` says so. `<tool>/scripts/spec-review-link.sh --validate <dispatch>` also exits 0:
-   the captured `planning.review_link`, if set, must contain `{path}`. On refusal, log a `note`
-   with the config error, tell the user what to fix, set the undispatched run to `abandoned`,
-   and do not cut worktrees or move the ticket in progress.
-6. **Cut the synthesis worktree** at BASE, the sha you recorded from `git -C <repo> rev-parse
+   `record` says so. On refusal, log a `note` with the config error, tell the user what to fix,
+   set the undispatched run to `abandoned`, and do not cut worktrees or move the ticket in progress.
+7. **Cut the synthesis worktree** at BASE, the sha you recorded from `git -C <repo> rev-parse
    HEAD` on the default branch: `git -C <repo> worktree add .worktrees/<TICKET> -b <TICKET>
    <sha>`. The coachman's cwd is that worktree from its first leg, so the project's ambient
    context loads for it.
-7. **Write `brief.md`** from the template in `SKILL.md`: the `turnpikes:` line step 1's check
+8. **Write `brief.md`** from the template in `SKILL.md`: the `turnpikes:` line step 1's check
    printed, whole, under the waybill's title, then the ticket verbatim, the project profile (gate,
    build, browser suite, landing (`pull-request` or `local`), the checks as `verify.sh record`
    printed them, docs to read first, tracker, risk surfaces), the team from `run.json` — the
-   resolved machine config step 5 recorded — with its reviewer lines as
+   resolved machine config step 6 recorded — with its reviewer lines as
    `<tool>/scripts/reviewers.sh lines --project <repo>` prints them, and the `efforts:` line
    pasted from `<tool>/scripts/run-meta.sh efforts <dispatch>`, never composed by hand; each
    project's facts sourced as discovered, shared or local, `CHECKPOINT_MODE`
    from `ship.checkpoint_mode` and `MERGE_AUTHORITY` from `ship.merge_authority`, either
    overridden only where the user said so for this run, the dispatch path and the run's pinned
-   tool — `<tool>/scripts/run-meta.sh path <dispatch>`, the checkout step 5 cut, which the
+   tool — `<tool>/scripts/run-meta.sh path <dispatch>`, the checkout step 7 cut, which the
    template names as `tool:` and the coachman uses as its `<tool>`. Then
    `<tool>/scripts/turnpikes.sh legs <dispatch> --expect '<that turnpikes: line>'` exits 0 and
-   prints the legs step 2 checked, before anything is launched.
+   prints the legs for the `turnpikes:` line step 1 printed, before anything is launched.
    Record `coachman contract fixture: pending` and `contract fixture check: -`; no
    implementation branch exists yet to classify.
-8. **Move the ticket to in-progress** through the tracker adapter and log `ticket-state`. Under
+9. **Move the ticket to in-progress** through the tracker adapter and log `ticket-state`. Under
    contract 2 the coachman never touches the ticket's state and the postmaster marks it done
    after the merge; under the legacy contract the coachman touches it only at stage 3's merge.
 
@@ -236,7 +216,8 @@ Keep `<tool>/scripts/runs-watch.sh <runs>` running in the background, one per pr
 (`harnesses.md`, Keeping the watcher running). It looks every `postmaster.poll_seconds`
 (default 120), **takes the steps that need no judgment itself**, and only then wakes you.
 It prints `<tool>/scripts/runs-status.sh`'s table, names each run that still needs you with
-its `NEXT`, and exits 0. Wait for its return as harnesses.md says, then act on what it names,
+its `NEXT`, and names queued ready tickets as `READY <id>` when a run slot is free. Wait for its
+return as harnesses.md says, then act on what it names,
 run by run, and log every action; then start it again at once. If it names nothing it failed:
 the reason is in `<runs>/postmaster/watch.err` — fix the cause (harnesses.md, Keeping the
 watcher running) before starting it again. A watcher that is not running is a run nobody
@@ -257,6 +238,14 @@ with `the watcher took it` in the detail:
   three times per leg (the count is in `<dispatch>/watcher.json` and survives a restart).
   A fourth such end, a non-transient end, or a resume it cannot complete is named to you.
 
+When `READY <id>` is named, repeat the readiness check and dispatch through Stage B without
+asking the user again. Consume its queue marker with
+`<tool>/scripts/ticket-ready.sh consume <repo> <id>` after the run is dispatched. If the ticket
+no longer passes readiness, remove its mark and tell the user; never dispatch it from the old
+queue entry. The watcher keeps waiting when the run ceiling is full, then wakes you as soon as a
+run closes and frees a slot. A clerk started in the user's own session writes the same queue
+marker and follows this path.
+
 The list of runs waiting on the user is `<runs>/postmaster/ESCALATION.md`, kept by
 `<tool>/scripts/host.sh leg waiting`, never by hand. Read it with
 `<tool>/scripts/host.sh leg waiting list <runs>` when the user asks which runs are waiting.
@@ -271,10 +260,10 @@ pause — never to stop a wake you have not acted on.
 Each `NEXT` names the act. The watcher has already taken the mechanical ones; what it names
 is what needs judgment or what it could not complete:
 
-- **USER:** the run waits on the user, and its `.waiting-on-user` holds the question (Stage E
-  step 3, current Stage F step 2, Legacy Stage F step 2, or Spec review). Put the question to the user again if you have not in this session;
+  - **USER:** the run waits on the user, and its `.waiting-on-user` holds the question (Stage E
+  step 3, current Stage F step 2 or Legacy Stage F step 2). Put the question to the user again if you have not in this session;
   otherwise nothing to do until they answer. When they answer, remove the marker and follow the
-  action for the recorded outcome (or the spec-review step, for a package). The watcher never
+  action for the recorded outcome. The watcher never
   wakes you on USER.
 - **ASK:** a recorded `refused`, `pre-thread` or fallback `walled` attempt needs the user.
   Read the attempt record and `.err` only to explain what happened; outcome classification comes
@@ -289,7 +278,8 @@ is what needs judgment or what it could not complete:
 - **RULE:** an escalation is waiting. Stage E.
 - **GATE:** the ship card is complete. Contract 2 goes to current Stage F; an older run goes to
   Legacy Stage F.
-- **SPEC:** a spec review package is waiting (`.spec-review-ready`). Spec review, below.
+- **SPEC:** an older run's spec review package is waiting (`.spec-review-ready`); follow that
+  run's pinned postmaster's Spec review section, as the older-run instructions below say.
 - **DISPATCH:** the watcher could not take the dispatch. If the hand-off check fails, leg `n`
   is not finished: remove its `.leg-<n>-done` marker and resume leg `n` (Stage C step 5, with
   `n` in place of the next leg), the prompt naming the missing sections and saying "Complete
@@ -348,86 +338,11 @@ the exited marker lands. `runs-status.sh` reads this record and never classifies
 `.err`. Every transition is one `log-action` line; the narrative in your own notes is for the
 user, never the record.
 
-## Spec review: one spec for the run, to the user before any code
+## Older-run spec review
 
-On `.spec-review-ready`, the planning stage has paused for the user. Read
-`<dispatch>/spec-review.md`: one entry for the run's spec, with the commit of the
-coachman's `WORKHORSE-SPEC.md`, and the link that opens it in the user's editor. The coachman
-built the link with `<tool>/scripts/spec-review-link.sh` from the run's recorded
-`planning.review_link` template, as `ship.review_link` is for the ship card; `{path}` is the
-folder that holds the copy under review, `<dispatch>/spec-review/`, and with no template it
-is the file's path. A revised spec comes back as a new entry at its new commit. In a fixture
-run (`<tool>/scripts/fixture.sh`) there is no user to ask: you sign the one spec off yourself,
-deciding approved, changes or dropped as the user would, through the same `fresh`, `record`
-and `count` steps below, and no spec session and no `.waiting-on-user` are written. Every
-other line of this section holds.
-
-1. **Start a spec session.** A new package starts a new `spec-decisions.md`:
-   `<tool>/scripts/spec-decisions.sh <dispatch> fresh`, so no stanza from an earlier package
-   survives into this one. In a run with a person to ask, run
-   `<tool>/scripts/spec-session.sh brief <dispatch>`, which writes the session's brief to
-   `<dispatch>/spec-session-brief.md`: the ticket as the waybill carries it, the editor link
-   and the copy's path, the lanes' drafts by commit, with the draft text, where the run
-   has any, the user's standing
-   preferences from `preferences.md` beside the machine config, and the path of the session's
-   runbook, `<tool>/skills/postmaster/spec-session.md`. Start the session with
-   `<tool>/scripts/host.sh spawn`, rooted in the project so it opens in the project's space,
-   in the interactive form `harnesses.md` gives for the harness, model and effort the run
-   recorded for `team.postmaster`, labelled `<ticket name> · spec` with the ticket
-   name from `<tool>/scripts/host.sh name <dispatch>`. The handle carries the package's
-   spec commit, short, so a revised package spawns a new session instead of colliding
-   with the earlier one, which stays open until the user closes it: `spawn` refuses a
-   handle a live session already has.
-
-   ```sh
-   SHA=$(git -C <repo> rev-parse --short <the spec commit from spec-review.md>)
-   <tool>/scripts/host.sh spawn "spec-$(<tool>/scripts/host.sh name <dispatch>)-$SHA" <repo> \
-       --label "$(<tool>/scripts/host.sh name <dispatch>) · spec" -- <interactive form>
-   ```
-
-   Write a one-line prompt file telling it to read `<dispatch>/spec-session-brief.md` and work
-   on the copy with the user, send it with `<tool>/scripts/host.sh send <handle> <prompt-file>`
-   on the session's handle (`hosts.md`), and log `dispatch` with the target `spec-session`.
-   Write `.waiting-on-user` naming the session and the link, and add the run to the waiting
-   list with `<tool>/scripts/host.sh leg waiting add <runs> <ticket>
-   <dispatch>/.waiting-on-user`: while the marker is set the poll reports USER, not SPEC, so
-   the package is never taken twice. With no session host (`spawn` exits 3), there is no session
-   to send to: do not send a prompt and do not log a `dispatch` line. Put the spec to the
-   user in this conversation instead, showing the link and the commit, and ask for a
-   decision: approved; changes requested in their words; or stop the run. Write
-   `.waiting-on-user` with the link and the commit in this path too, and add the run to the
-   waiting list the same way, so the poll reports USER while the user decides. Never show
-   any of it to a workhorse. A fixture run gets no session.
-2. **On the user's word, record the decision** with `<tool>/scripts/spec-session.sh approve
-   <dispatch>` when they approve the copy the session worked on: it commits the copy as
-   `WORKHORSE-SPEC.md` in the synthesis worktree when it differs from what is committed
-   there, commits nothing when it does not, records `approved` at the resulting commit
-   through `<tool>/scripts/spec-decisions.sh`, and prints that commit. For changes in the
-   user's words, or a stop, record them directly with
-   `<tool>/scripts/spec-decisions.sh <dispatch> record <decision> <commit> <the user's words>`,
-   where `<decision>` is `changes` or `dropped`, `<commit>` the spec commit the user saw, and
-   the words are the user's own, carried verbatim. One decision per call, at the moment it is
-   given. The script appends the `## spec` stanza and logs the `spec-review` line; it refuses
-   a second stanza, a `changes` with no words, and a decision with no commit. The file holds
-   this package's decision only.
-3. **When the package is decided, send it back.** Remove `.waiting-on-user` and
-   `.spec-review-ready`, remove the run from the waiting list with
-   `<tool>/scripts/host.sh leg waiting remove <runs> <ticket>`, then resume the current leg
-   (Stage C step 5) with the decisions file as what it must read. The marker is consumed
-   here, on every path, before the resume, as `.card-ready` is before a word is delivered:
-   a fresh package touches it afresh, so SPEC always means a package nobody has taken yet.
-   Read the numbers first:
-   `<tool>/scripts/spec-decisions.sh <dispatch> count` prints `approved 0|1` and
-   `changes 0|1`. Branch on the numbers, never by reading the files:
-   - **`changes` above zero:** the coachman revises the spec from the user's words and pauses
-     with a fresh package, which goes to a spec session the same way, until the spec is
-     approved or the run stops.
-   - **No changes, not approved (`dropped`):** the run stops. Tell the user why, carrying
-     their words; the coachman stops on resume and writes an escalation; the user alone
-     abandons the run.
-   - **No changes, approved:** the coachman goes on to implementation.
-   Log every step; the planning span the stage timings show is this stage, drafting through
-   the last decision, with the user's review inside it.
+When NEXT SPEC belongs to a run dispatched before this change, continue it with its own checkout:
+read the Spec review section of `<rt>/skills/postmaster/postmaster.md` and use
+`<rt>/scripts/spec-decisions.sh`. The run's pinned instructions govern its review and hand-off.
 
 ## Stage E: rulings
 
@@ -448,9 +363,17 @@ other line of this section holds.
    for something the config gives you. On the user's answer, remove `.waiting-on-user`, remove
    the run from the list with `<tool>/scripts/host.sh leg waiting remove <runs> <ticket>`, and
    act on the answer as the record named.
-4. **Deliver the ruling:** remove `.escalation-ready`, then resume the current leg (Stage C,
-   step 5) with the ruling as the prompt. The ruling is a prompt to a resumed thread, never
-   text typed into anything.
+4. **For a premise ruling, follow the user's choice.** Log either answer with
+   `<tool>/scripts/log-action.sh <dispatch> postmaster rule <TICKET> "premises <choice>"`.
+   On `go on`, deliver that ruling to the coachman. On `send it back`, set the run to `abandoned` with
+   `<tool>/scripts/stage.sh <dispatch> abandoned postmaster`, remove the ready mark with
+   `<tool>/scripts/ticket-ready.sh unmark <repo> <TICKET>`, log the ruling, and start a clerk
+   with `<tool>/scripts/clerk.sh start <repo> <TICKET>`. The coachman already stopped before
+   any workhorse branch or worktree existed; do not resume it.
+5. **Deliver the ruling:** remove `.escalation-ready`. On `go on`, resume the current leg
+   (Stage C, step 5) with the ruling as the prompt. The ruling is a prompt to a resumed thread,
+   never text typed into anything. On `send it back`, leave the leg stopped and let the clerk
+   prepare the ticket again.
 
 ## Stage F (contract 2): verify and land the ship card
 
@@ -782,10 +705,10 @@ only with the user's word for that specific thing, and the word is logged. A loc
 
 ## Hard rules
 
-- Never implement or judge a workhorse, or launch one; facilitate the user's spec review as
-  Spec review says. Never edit source or write a coachman's hand-off or card for it.
+- Never implement or judge a workhorse, or launch one. Never edit source or write a coachman's
+  hand-off or card for it.
 - Never create a ticket without the user's word unless the config says you may.
-- Never dispatch a ticket that `<tool>/scripts/ticket-check.sh` fails, and never change a ticket's
+- Never dispatch a ticket that `<tool>/scripts/ticket-ready.sh` does not report ready, and never change a ticket's
   text without the user's word for that text.
 - For contract 2, merge locally only on the `MERGE_AUTHORITY` path in Stage F; never merge a
   pull request on the user's behalf. For a legacy run, never say the merge word without

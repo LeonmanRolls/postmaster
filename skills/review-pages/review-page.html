@@ -3,8 +3,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Red+Hat+Display:wght@600;700&family=Red+Hat+Mono:wght@400;500&family=Red+Hat+Text:wght@400;500;600&display=swap">
 <style>
-/* Layout: phone = four tabs (Ticket, Spec, Changes, Files), one at a time, and a bar at the bottom;
-   900px and up = the ticket and spec in a column beside the changes and files. */
+/* Layout: phone = ticket, summary, changes or files, one at a time, and a bar at the bottom;
+   900px and up = the ticket and summary in a column beside the changes and files. */
 :root {
   --bg: #f5f6f8; --panel: #ffffff; --ink: #1c2230; --muted: #5a6475; --rule: #dfe3ea;
   --accent: #1d5ca8; --accent-soft: #e5eefa; --on-accent: #ffffff;
@@ -114,7 +114,7 @@ details.file[open] > summary { border-bottom: 1px solid var(--rule); }
 @media (min-width: 900px) {
   .app { grid-template-columns: minmax(320px, 0.8fr) minmax(0, 1.6fr); grid-template-areas: "top top" "side tabs" "side main"; column-gap: 24px; align-items: start; }
   .top { grid-area: top; } .tabs { grid-area: tabs; }
-  .tabs [data-tab="ticket"], .tabs [data-tab="spec"], .tabs [data-tab="summary"] { display: none; }
+  .tabs [data-tab="ticket"], .tabs [data-tab="summary"] { display: none; }
   .tabs button { font-size: 14px; }
   .side { grid-area: side; position: sticky; top: 12px; max-height: calc(100vh - 24px); overflow: auto; padding-right: 4px; }
   .sidetabs { display: flex; position: sticky; top: 0; }
@@ -137,20 +137,17 @@ details.file[open] > summary { border-bottom: 1px solid var(--rule); }
 
   <nav class="tabs" role="tablist" aria-label="Views">
     <button type="button" role="tab" data-tab="ticket" id="tab-ticket">Ticket</button>
-    <button type="button" role="tab" data-tab="spec" id="tab-spec">Spec</button>
     <button type="button" role="tab" data-tab="summary" id="tab-summary">Summary</button>
     <button type="button" role="tab" data-tab="changes" id="tab-changes">Diff</button>
     <button type="button" role="tab" data-tab="files" id="tab-files">Files</button>
   </nav>
 
   <aside class="side">
-    <nav class="tabs sidetabs" role="tablist" aria-label="Ticket and spec">
+    <nav class="tabs sidetabs" role="tablist" aria-label="Ticket and summary">
       <button type="button" role="tab" data-side="ticket" id="side-ticket">Ticket</button>
-      <button type="button" role="tab" data-side="spec" id="side-spec">Spec</button>
       <button type="button" role="tab" data-side="summary" id="side-summary">Summary</button>
     </nav>
     <div class="pane" id="pane-ticket"><div class="prose" id="ticket"></div></div>
-    <div class="pane" id="pane-spec" hidden><p class="label" id="spec-label"></p><div class="prose" id="spec"></div></div>
     <div class="pane" id="pane-summary" hidden><p class="label" id="summary-label">What the change does.</p><div class="prose" id="body"></div></div>
   </aside>
 
@@ -306,25 +303,23 @@ function wide() { return window.matchMedia("(min-width: 900px)").matches; }
 function applyTabs(focus) {
   for (const b of document.querySelectorAll(".tabs [data-tab]")) { const t = b.dataset.tab; const on = wide() ? t === mainTab : (focus === "side" ? t === sideTab : t === mainTab); b.setAttribute("aria-selected", String(on)); }
   for (const b of document.querySelectorAll("[data-side]")) b.setAttribute("aria-selected", String(b.dataset.side === sideTab));
-  $("pane-ticket").hidden = sideTab !== "ticket"; $("pane-spec").hidden = sideTab !== "spec"; $("pane-summary").hidden = sideTab !== "summary";
+  $("pane-ticket").hidden = sideTab !== "ticket"; $("pane-summary").hidden = sideTab !== "summary";
   $("pane-changes").hidden = mainTab !== "changes"; $("pane-files").hidden = mainTab !== "files";
   document.body.classList.toggle("focus-side", focus === "side"); document.body.classList.toggle("focus-main", focus !== "side");
 }
 let focus = "main";
 for (const b of document.querySelectorAll(".tabs [data-tab]")) b.addEventListener("click", () => {
   const t = b.dataset.tab;
-  if (t === "ticket" || t === "spec" || t === "summary") { sideTab = t; focus = "side"; } else { mainTab = t; focus = "main"; if (t === "files") renderFile(); }
+  if (t === "ticket" || t === "summary") { sideTab = t; focus = "side"; } else { mainTab = t; focus = "main"; if (t === "files") renderFile(); }
   clearSel(); applyTabs(focus); window.scrollTo({ top: 0 });
 });
 for (const b of document.querySelectorAll("[data-side]")) b.addEventListener("click", () => { sideTab = b.dataset.side; applyTabs(focus); });
 window.matchMedia("(min-width: 900px)").addEventListener("change", () => applyTabs(focus));
 
-// ---------- ticket, spec, summary ----------
+// ---------- ticket and summary ----------
 function renderTexts() {
   if (R.ticket) $("ticket").append(el("h3", null, "#" + R.ticket + ", " + R.ticketTitle));
   markdown(R.ticketBody || "No ticket text was given for this change.", $("ticket"));
-  if (R.spec) { $("spec-label").textContent = "The run's approved spec."; markdown(R.spec, $("spec")); }
-  else { $("spec-label").textContent = "No spec was given for this change."; }
   if (R.body) markdown(R.body.replace(/^Closes #\d+\.\s*/i, ""), $("body"));
   else $("summary-label").textContent = "No summary was given for this change.";
 }

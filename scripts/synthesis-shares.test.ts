@@ -295,10 +295,9 @@ test("oracle, lane records, lockfiles, and generated paths are excluded exactly"
       "kept.ts": "bright copper river sleeps beyond quiet\n",
       "lib.ts": "first base line content here\nlane appended feature line here\n",
       "oracle-answer.ts": "orchid comet valley bronze window spring\n",
-      "WORKHORSE-SPEC.md": "purple meadow silver candle green ocean\n",
       "WORKHORSE-SUMMARY.md": "amber forest quiet river candle comet\n",
       "WORKHORSE-BLOCKED.md": "silver meadow winter planet harbor velvet\n",
-      "nested/WORKHORSE-SPEC.md": "nested spec words count here today\n",
+      "nested/WORKHORSE-SUMMARY.md": "nested spec words count here today\n",
       "acceptance-probe.ts": "acceptance probe words count here today\n",
       "bun.lock": "lockfile orchid comet valley bronze window\n",
       "uv.lock": "uv lock orchid comet valley bronze\n",
@@ -328,14 +327,13 @@ test("oracle, lane records, lockfiles, and generated paths are excluded exactly"
     ]);
     expect(result.report.exclusions.byRange.synthesis.map(({ path }) => path).toSorted()).toEqual([
       "WORKHORSE-BLOCKED.md",
-      "WORKHORSE-SPEC.md",
       "WORKHORSE-SUMMARY.md",
       "acceptance-probe.ts",
       "bun.lock",
       "generated.ts",
       "lib.ts",
       "linguist.ts",
-      "nested/WORKHORSE-SPEC.md",
+      "nested/WORKHORSE-SUMMARY.md",
       "oracle-answer.ts",
       "uv.lock",
     ]);
