@@ -504,7 +504,9 @@ describe("C8-C9: escalation boundary", () => {
     const layout = makeLayout();
     before(layout);
     writeReviewer(layout, "mimo", [mimo("write_file", { path: join(layout.home, "outside.txt") })]);
-    expect(check(layout, "r1").code).toBe(2);
+    const round = check(layout, "r1");
+    expect(round.code).toBe(2);
+    expect(round.out).toContain("r1: finding");
     writeFileSync(join(layout.dispatch, ".escalation-ready"), "");
     const result = run("bash", [RUNS_STATUS, join(layout.repo, ".postmaster", "runs")]);
     expect(result.code).toBe(0);
@@ -550,7 +552,9 @@ describe("C10-C12: review rounds, verdicts and restore", () => {
     const commit = addCommit(layout.repo, layout.reviewers.mimo, "reviewed.txt");
     git(layout.repo, "-C", layout.synth, "merge", "--ff-only", commit);
     writeReviewer(layout, "mimo", [mimo("bash", { command: `git -C ${layout.synth} merge --ff-only ${commit}` })]);
-    expect(check(layout, "r1").code).toBe(2);
+    const round = check(layout, "r1");
+    expect(round.code).toBe(2);
+    expect(round.out).toContain("r1: finding");
     writeFileSync(join(layout.synth, "u.txt"), "preserve me\n");
     expect(call(layout, ["restore", layout.dispatch, "r1"]).code).toBe(0);
     expect(git(layout.repo, "rev-parse", "refs/heads/T")).toBe(layout.base);
@@ -590,9 +594,12 @@ describe("C13-C15: card, contract and balanced controls", () => {
     writeReviewer(layout, "mimo", [mimo("bash", { command: `cat ${join(layout.repo, "README.md")}` })]);
     writeFileSync(join(layout.synth, "untracked-synthesis.txt"), "new\n");
     writeFileSync(join(layout.repo, "untracked-main.txt"), "new\n");
-    expect(check(layout, "r1").code).toBe(2);
+    const round = check(layout, "r1");
+    expect(round.code).toBe(2);
+    expect(round.out).toContain("r1: note");
     expect(actionLines(layout).some((line) => line.action === "degrade")).toBe(false);
     const card = check(layout, "card");
+    expect(card.out).toContain("card: note");
     expect(card.out).toContain("README.md");
     expect(card.out).toContain("untracked-synthesis.txt");
     expect(card.out).toContain("untracked-main.txt");

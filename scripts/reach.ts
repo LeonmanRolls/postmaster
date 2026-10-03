@@ -1127,7 +1127,7 @@ function logPoint(info: RunInfo, point: string, reads: LaneRead[], touches: Touc
   const hasFinding = all.some((event) => event.kind === "finding");
   const hasNote = all.some((event) => event.kind === "note");
   const notChecked = reads.some((read) => read.status === "not checked");
-  const status = hasFinding || result.code === 2 ? "finding" : hasNote || notChecked ? "note" : "clean";
+  const status = hasFinding ? "finding" : hasNote || notChecked ? "note" : "clean";
   writeAction(info, "coachman", "reach", point, JSON.stringify({
     kind: "point",
     point,
