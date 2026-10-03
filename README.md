@@ -14,6 +14,7 @@ the merge authority in the config.
 
 | role | does | never does |
 |---|---|---|
+| **booking clerk** | prepares every ticket with the user before it runs: one document that is both the ticket and the run's spec | write code, dispatch a run |
 | **postmaster** | splits a stream into tickets, dispatches one coachman per ticket, supervises, answers escalations, grants merges | run a model lane, edit source |
 | **coachman** | drives one leg of a ticket; at most two legs, synthesis and review, each a fresh coachman, carry it from waybill to ship card with a written hand-off between them; the last leg ends the run ready for merge | take a second leg, merge |
 | **the team** | several lanes implementing the same ticket in blinkers | see each other's work |

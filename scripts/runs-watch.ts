@@ -1368,8 +1368,22 @@ function watch(root: string, config: string, timeout: number | null): never {
       die(`runs-watch: runs-status.sh failed on ${root}`, 1);
     }
     const table = r.out.replace(/\n+$/u, "");
-    if (steps.needs.length > 0) {
-      process.stdout.write(`${table}\n${steps.needs.join("\n")}\n`);
+    // Ready markers under the run root wake the postmaster: a ticket the clerk
+    // marked ready is dispatched when a run slot is free.
+    const readyMarkers: string[] = [];
+    try {
+      for (const name of readdirSync(root)) {
+        if (name.startsWith(".ready-")) {
+          const ticket = name.slice(".ready-".length);
+          readyMarkers.push(`needs ${ticket} READY`);
+        }
+      }
+    } catch {
+      /* no run root entries */
+    }
+    const allNeeds = [...steps.needs, ...readyMarkers];
+    if (allNeeds.length > 0) {
+      process.stdout.write(`${table}\n${allNeeds.join("\n")}\n`);
       process.exit(0);
     }
     if (timeout !== null && left <= 0) {

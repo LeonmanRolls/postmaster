@@ -180,10 +180,9 @@ function gh(path: string): Record<string, unknown> {
   return JSON.parse(r.out) as Record<string, unknown>;
 }
 
-/** The run's spec as the head commits it at its root, where a run puts it; null without one. */
-function committedSpec(head: string): string | null {
-  const r = run("git", ["show", `${head}:WORKHORSE-SPEC.md`]);
-  return r.code === 0 ? r.out : null;
+/** The run's spec is the ticket; no copy is committed on any branch. */
+function committedSpec(_head: string): string | null {
+  return null;
 }
 
 function flag(args: string[], name: string): string | undefined {

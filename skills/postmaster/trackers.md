@@ -24,8 +24,7 @@ Numbered. Each one answerable yes or no. What "done" looks like.
 
 ## Direction
 The high-level technical direction the user wants: the approach, the constraints on how, and
-anything the workhorses must not decide differently. Not a design: the coachman drafts the
-run's one spec from it. "None: any approach that meets the criteria" is a direction; leaving the
+anything the workhorses must not decide differently. Not a design. "None: any approach that meets the criteria" is a direction; leaving the
 heading out is not.
 
 ## Turnpikes
@@ -43,8 +42,8 @@ in its User journey: a fenced block whose `$ ` lines are commands, each followed
 other than 0, a line `[exit N]`.
 ```
 
-A ticket brought to ready in a ticket session has two parts: a plain part the user signs off, which holds the headings
-above, and a `## For the agents` section after them. [ticket-template.md](ticket-template.md) is its shape. The four
+A ticket brought to ready by the booking clerk has two parts: a plain part the user signs off, which holds the headings
+above, and a `## For the agents` section after them. [../clerk/ticket-template.md](../clerk/ticket-template.md) is its shape. The four
 required headings stay required, in the order above.
 
 [Why a ticket carries a direction, and is checked before it is accepted](../../wiki/concepts/ticket-shape.md)

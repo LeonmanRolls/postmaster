@@ -568,10 +568,10 @@ provide custom review instructions` (trial).
 Given no target it reviewed uncommitted changes, found none in a clean scratch, and exited 0
 (trial). Named `<BASE>...HEAD` it reviewed the range and reported the planted bug at its line.
 
-## Interactive form: the postmaster and a spec session
+## Interactive form: the postmaster and a booking clerk
 
 The postmaster is an interactive session (`SKILL.md` spawns it through `host.sh spawn`), and a
-spec session is another (`postmaster.md`, Spec review): both run in their harness's bypass
+booking clerk is another (`clerk.md`): both run in their harness's bypass
 mode, like every launch, named for their project or their ticket. The same table serves both.
 
 | harness | interactive form | checked here |

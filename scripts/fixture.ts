@@ -245,7 +245,17 @@ export function makeAndFile(dest: string, ticket: string): number {
   // file the ticket: local.sh create takes a body file, not the body text
   const body = ticketBody(ticket);
   const title = ticketTitle(ticket);
-  const bodyFile = makeBodyFile(body);
+  // Write the copy's first commit as the ticket's Verified at before filing it.
+  const destHeadFull = run("git", ["-C", dest, "rev-parse", "HEAD"]).out.trim();
+  const verified = destHeadFull.slice(0, 7);
+  const bodyWithVerified = body.replace(
+    /(^|\n)(### Verified at )[0-9a-f]+/mu,
+    `$1$2${verified}`,
+  );
+  const finalBody = bodyWithVerified.includes("### Verified at")
+    ? bodyWithVerified
+    : `${bodyWithVerified.trimEnd()}\n\n### Verified at ${verified}\n\n- The fixture copy's first commit.\n`;
+  const bodyFile = makeBodyFile(finalBody);
   const createR = run("bash", [localSh, dest, "create", title, bodyFile]);
   rmSync(bodyFile, { force: true });
   const number = createR.out.trim().split("\n").pop() ?? "";
@@ -257,6 +267,8 @@ export function makeAndFile(dest: string, ticket: string): number {
     );
     return 1;
   }
+  // Mark it ready: a fixture run has no person to sign a ticket off.
+  run("bash", [localSh, dest, "label", number, "add", "ready"]);
   const mark = run("git", ["-C", dest, "config", "--local", "postmaster.fixture", ticket]);
   if (mark.code !== 0) {
     unmake();
@@ -434,6 +446,7 @@ export function score(dispatch: string, repo: string): { code: number; out: stri
     { name: "handoffs", ...checkHandoffs(dispatch, legs), out: "" },
     { name: "run.json", ...checkRunJson(dispatch), out: "" },
     { name: "efforts", ...checkWaybillEfforts(dispatch), out: "" },
+    { name: "premises", ...checkPremises(dispatch), out: "" },
     { name: "ship-card", ...checkCard(dispatch), out: "" },
   ];
   rmSync(scratch, { recursive: true, force: true });
@@ -746,6 +759,31 @@ export function checkWaybillEfforts(dispatch: string): { ok: boolean; detail: st
   }
   if (!seen) return { ok: false, detail: "no Team workhorses or coachman entries" };
   return { ok: true, detail: "waybill Team efforts match run.json" };
+}
+
+/** The first `premises` line precedes the first workhorse `dispatch` line. */
+export function checkPremises(dispatch: string): { ok: boolean; detail: string } {
+  const path = join(dispatch, "actions.jsonl");
+  if (!existsSync(path)) return { ok: false, detail: "no actions.jsonl" };
+  const lines = readFileSync(path, "utf8")
+    .split("\n")
+    .filter((l) => l.trim() !== "");
+  let firstPremises = -1;
+  let firstWbDispatch = -1;
+  for (let i = 0; i < lines.length; i++) {
+    try {
+      const entry = JSON.parse(lines[i]!);
+      if (entry.action === "premises" && firstPremises < 0) firstPremises = i;
+      if (entry.action === "dispatch" && String(entry.target ?? "").startsWith("wb/") && firstWbDispatch < 0)
+        firstWbDispatch = i;
+    } catch {
+      /* not JSON */
+    }
+  }
+  if (firstPremises < 0) return { ok: false, detail: "no premises line" };
+  if (firstWbDispatch >= 0 && firstWbDispatch < firstPremises)
+    return { ok: false, detail: "workhorse dispatch precedes premises" };
+  return { ok: true, detail: "premises precedes workhorse dispatch" };
 }
 
 function checkCard(dispatch: string): { ok: boolean; detail: string } {
