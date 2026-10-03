@@ -100,6 +100,9 @@ export function controlOf(text: string, t: string): string | undefined {
     if (c === `\`${t}\`` || c === `\`<tool>/${t}\``) {
       return (cells[2] ?? "").replace(/[ \t\n\v\f\r]/gu, "");
     }
+    const entry = /^`(?:<tool>\/)?scripts\/run ([A-Za-z0-9_-]+)(?: [^`]*)?`$/u.exec(c);
+    if (entry && (t === `scripts/${entry[1]}.ts` || t === `scripts/${entry[1]}.sh`))
+      return (cells[2] ?? "").replace(/[ \t\n\v\f\r]/gu, "");
   }
   return undefined;
 }

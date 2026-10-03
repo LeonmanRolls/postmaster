@@ -24,7 +24,7 @@ A fault in one of these is a fault in a control, whatever the step that ran it.
 | `<tool>/scripts/run wait-for-markers` | wait | a round is collected only when every marker is in |
 | `<tool>/scripts/run review-round` | wait | a review round is collected by its deadline, its reviewers that miss it are recorded and stopped, and its scratches are removed only once nothing of it runs there |
 | `<tool>/scripts/run review-findings` | check | native bug-review output is normalized, and an unrecognized report cannot count as clean |
-| `<tool>/scripts/run runs-status` | marker | the next action from each run's markers and outcome record; the waiting list it reports is kept by `host.sh leg waiting` |
+| `<tool>/scripts/run runs-status` | marker | the next action from each run's markers and outcome record; the waiting list it reports is kept by `run host leg waiting` |
 | `<tool>/scripts/run runs-watch` | wait | a run needs the postmaster only when its NEXT is not WAIT, USER or `-`, and never when its ticket is on the held list |
 | `<tool>/scripts/run host leg` | marker | launch, resume and takeover lifecycle, including the recorded attempt outcome |
 | `<tool>/scripts/run launch` | marker | whether the harness started; a preflight or env-file failure remains refused |
@@ -49,4 +49,4 @@ step in `--ran`, and the kind in `--control`.
 | `coachman.md`, `postmaster.md`: touching or reading a marker | marker |
 | `<tool>/scripts/run host`: clearing and landing a leg's done/exited markers and recording its outcome | marker |
 | `coachman.md`: the wait in the same command as the launch, and the stall cutoffs | wait |
-| `coachman.md`, `postmaster.md`: a `log-action.sh` line a step writes | action-log |
+| `coachman.md`, `postmaster.md`: a `run log-action` line a step writes | action-log |

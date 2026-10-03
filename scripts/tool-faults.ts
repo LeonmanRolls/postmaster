@@ -593,6 +593,12 @@ function controlsList(): Record<string, string> {
       const m = cells[0]?.match(/^`(?:<tool>\/)?([^`]+)`$/u);
       if (m && CONTROLS_VALUE_RE.test(cells[1]!)) {
         out[m[1]!] = cells[1]!;
+        const entry = /^scripts\/run ([A-Za-z0-9_-]+)(?:\s|$)/u.exec(m[1]!);
+        if (entry) {
+          out[`scripts/${entry[1]}.ts`] = cells[1]!;
+          // Runs pinned before the entry migration still log the wrapper file.
+          out[`scripts/${entry[1]}.sh`] = cells[1]!;
+        }
       }
     }
   }
@@ -676,7 +682,7 @@ class GitHub {
   }
   search(text: string): Array<[string, string, string]> {
     const r = this.call("search", text);
-    if (r.code !== 0) throw new Unreached(`github.sh search: ${whyR(r)}`);
+    if (r.code !== 0) throw new Unreached(`run github search: ${whyR(r)}`);
     // text.ts: BASE walks stdout.splitlines().
     return pySplitLines(r.out)
       .filter(Boolean)
@@ -688,7 +694,7 @@ class GitHub {
   }
   read(number: string): string {
     const r = this.call("read", number.replace(/^#/u, ""));
-    if (r.code !== 0) throw new Unreached(`github.sh read ${number}: ${whyR(r)}`);
+    if (r.code !== 0) throw new Unreached(`run github read ${number}: ${whyR(r)}`);
     return r.out;
   }
 }
@@ -703,12 +709,12 @@ function reach(): { tracker: GitHub | null; reason: string } {
   }
   const a = runCmd([join(HERE, "run"), "github", TOOL, "access"]);
   if (a.code !== 0) {
-    return { tracker: null, reason: `github.sh access: ${whyR(a)}` };
+    return { tracker: null, reason: `run github access: ${whyR(a)}` };
   }
   if (a.out.trim() !== "ADMIN") {
     return {
       tracker: null,
-      reason: `the user does not own postmaster's repository (github.sh access: ${a.out.trim()})`,
+      reason: `the user does not own postmaster's repository (run github access: ${a.out.trim()})`,
     };
   }
   return { tracker: new GitHub(), reason: "" };
@@ -774,7 +780,7 @@ function draft(g: FaultGroup, rid: string, safe: Safe, runJsonPath: string): [st
     "default",
     "",
     "## Notes",
-    `Filed from run ${rid} by \`scripts/tool-faults.sh\`. The run's own records keep the full evidence: ` +
+    `Filed from run ${rid} by \`scripts/run tool-faults\`. The run's own records keep the full evidence: ` +
       "what ran, the error and the diagnosis. This ticket carries only the file, the failure and the " +
       "proposed fix. The postmaster's contract checker decides from the final branch whether a " +
       `fixture run is required; this ticket's wording does not decide it.`,
@@ -809,7 +815,9 @@ function checked(titlePath: string, bodyPath: string, safe: Safe, sha: string): 
   }
   const r = runCmd([join(HERE, "run"), "ticket-check", "--body", bodyPath, "--title", title]);
   // text.ts: BASE rstrips the failure tail Python-style.
-  return r.code === 0 ? "" : `the draft fails scripts/ticket-check.sh:\n${pyRstrip(r.out + r.err)}`;
+  return r.code === 0
+    ? ""
+    : `the draft fails scripts/run ticket-check:\n${pyRstrip(r.out + r.err)}`;
 }
 
 // --- the commands -------------------------------------------------------------------------------

@@ -21,11 +21,12 @@ export function pinnedCommand(
   const scripts = join(checkout, "scripts");
   const entry = join(scripts, "run");
   if (executable(entry)) {
-    try {
-      if (statSync(join(scripts, `${name}.ts`)).isFile())
-        return { path: entry, args: [name, ...args] };
-    } catch {
-      return null;
+    for (const source of [join(scripts, `${name}.ts`), join(scripts, "lib", `${name}.ts`)]) {
+      try {
+        if (statSync(source).isFile()) return { path: entry, args: [name, ...args] };
+      } catch {
+        // Try the next source path.
+      }
     }
     return null;
   }

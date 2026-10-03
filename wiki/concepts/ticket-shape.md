@@ -61,7 +61,7 @@ The ticket shape in `skills/postmaster/trackers.md` gains `## Direction`, and
 `scripts/run ticket-check` is the shape's executable form. Stage A of
 `skills/postmaster/postmaster.md` runs the check on every ticket before it is accepted, and
 Stage B runs it again before a ticket is dispatched. Only the user's answer is written back:
-`ticket-check.sh --splice` changes the sections the user approved and no other line, and the
+`run ticket-check --splice` changes the sections the user approved and no other line, and the
 `edit` command added to each tracker adapter replaces the body alone, never the title, and
 writes nothing if the ticket changed since it was read.
 

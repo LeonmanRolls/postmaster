@@ -80,7 +80,9 @@ afterAll(() => {
 });
 
 function watch(root: string, timeout = "2", config?: string): { rc: number; out: string } {
-  const r = run(self, ["runs-watch", "--timeout", timeout, root],
+  const r = run(
+    self,
+    ["runs-watch", "--timeout", timeout, root],
     config === undefined ? {} : { env: { POSTMASTER_CONFIG: config } },
   );
   return { rc: r.code, out: `${r.out}${r.err}` };
@@ -1388,7 +1390,7 @@ describe("config: a missing or unusable poll interval falls back to the default"
 
 describe("usage", () => {
   test("no run root is refused with the usage", () => {
-    const r = run(self, ["runs-watch", ]);
+    const r = run(self, ["runs-watch"]);
     const out = `${r.out}${r.err}`;
     expect(r.code).toBe(1);
     expect(out).toContain("usage:");

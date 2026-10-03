@@ -137,7 +137,7 @@ For the next ticket in order, when the run ceiling (`team.max_runs`) has room:
    config, project settings and their sources, and the harness versions, and nothing edits it
    afterwards. The pin is a worktree of this repo at the dispatch commit, shared by every run
    dispatched at it; the waybill names it as `tool:`, and every leg of this run reads its
-   runbooks and runs its scripts from there. Log the `run-meta.sh` output as a `note`.
+   runbooks and runs its scripts from there. Log the `run run-meta` output as a `note`.
    `<tool>/scripts/run verify record
    <repo> <dispatch> --gate '<gate>'` writes `checks.json`, the checks the run is held to, and
    prints them for the waybill; a gate the project declares wins over the launch card's, and
@@ -151,7 +151,7 @@ For the next ticket in order, when the run ceiling (`team.max_runs`) has room:
    context loads for it.
 7. **Write `brief.md`** from the template in `SKILL.md`: the `turnpikes:` line step 1's check
    printed, whole, under the waybill's title, then the ticket verbatim, the project profile (gate,
-   build, browser suite, landing (`pull-request` or `local`), the checks as `verify.sh record`
+   build, browser suite, landing (`pull-request` or `local`), the checks as `run verify record`
    printed them, docs to read first, tracker, risk surfaces), the team from the resolved
    machine config with its reviewer lines as `<tool>/scripts/run reviewers lines --project <repo>`
    prints them, each project's facts sourced as discovered, shared or local, `CHECKPOINT_MODE`
@@ -179,7 +179,7 @@ run passes `--run <dispatch>`, so it runs on the config in its `run.json`, never
 Below, `<p>` is the leg before leg `<n>` in that list, and **`<rt>` is the run's
 tool checkout** — `<tool>/scripts/run run-meta path <dispatch>`, the waybill's `tool:`, never
 the live `<tool>`. Every launch, resume and takeover of this run's legs runs from `<rt>`:
-its `host.sh`, its `launch.sh`, and the runbook the prompt names. Before anything is launched
+its `run host`, its `run launch`, and the runbook the prompt names. Before anything is launched
 or resumed, `<tool>/scripts/run run-meta check <dispatch>` exits 0; on a refusal, stop and
 take its message to the user (Stage E step 3), because the checkout no longer serves the
 versions the run was dispatched from. Expand `<rt>` to its absolute path in every prompt
@@ -246,7 +246,7 @@ with `the watcher took it` in the detail:
 - **A dispatch whose hand-off checks out.** When `.leg-<n>-done` is present and
   `<tool>/scripts/run handoff-check <dispatch>/handoff-<n>.md` exits 0, it dispatches the next
   leg `<tool>/scripts/run turnpikes legs <dispatch>` lists, exactly as Stage C says. A hand-off
-  that fails, a `turnpikes.sh legs` that exits non-zero, no next leg after the ship leg, or a
+  that fails, a `run turnpikes legs` that exits non-zero, no next leg after the ship leg, or a
   launch it cannot complete are steps it could not complete: it names the run and you act.
 - **A resume on a transient provider error.** When a leg's process ended with no hand-off,
   escalation or card and its end is a positively known transient — a signature the harness
@@ -291,7 +291,7 @@ is what needs judgment or what it could not complete:
 - **DISPATCH:** the watcher could not take the dispatch. If the hand-off check fails, leg `n`
   is not finished: remove its `.leg-<n>-done` marker and resume leg `n` (Stage C step 5, with
   `n` in place of the next leg), the prompt naming the missing sections and saying "Complete
-  the hand-off and end the leg as `coachman.md` says." If `turnpikes.sh legs` exits other than
+  the hand-off and end the leg as `coachman.md` says." If `run turnpikes legs` exits other than
   0, nothing is dispatched: its message goes to the user as Stage E step 3 says. If the new
   leg's attempt record says `refused`, its launch was refused: handle it as ASK. Where no leg
   follows `n` in `<tool>/scripts/run turnpikes legs <dispatch>`: at stage `shipped`
@@ -336,13 +336,13 @@ is what needs judgment or what it could not complete:
 `<rt>/skills/postmaster/coachman.md`, `<dispatch>/handoff-<p>.md` (none for leg 1), then `run-log.md` and
 `actions.jsonl` for what this leg did before you, then the synthesis worktree's `git log` and
 `git status`. Treat every uncommitted change as unverified. Log `handoff-accept` and finish the
-leg." `host.sh leg takeover` moves the existing stream aside and starts the fallback on a fresh
+leg." `run host leg takeover` moves the existing stream aside and starts the fallback on a fresh
 stream; it also records the fallback role and thread id, and the coachman-fallback usage record
 carries the leg.
 
 The fixed attempt outcomes are `refused`, `pre-thread`, `walled`, `incomplete` and `finished`.
-`launch.sh` records whether it reached the harness; the leg command records the outcome before
-the exited marker lands. `runs-status.sh` reads this record and never classifies an attempt from
+`run launch` records whether it reached the harness; the leg command records the outcome before
+the exited marker lands. `run runs-status` reads this record and never classifies an attempt from
 `.err`. Every transition is one `log-action` line; the narrative in your own notes is for the
 user, never the record.
 
@@ -463,7 +463,7 @@ read the two fields as the ref, then the remote: a blank answer means no upstrea
 branch. On the pull-request route, `git fetch` each named remote before asking `fresh`,
 and again after the user's merge word (on the `landing: local` route no fetch is needed:
 every call below reads the local branch). A failed fetch stops the stage like a
-`landing.sh` exit 1: fix the inputs and re-run, never decide on possibly-stale refs.
+`run landing` exit 1: fix the inputs and re-run, never decide on possibly-stale refs.
 Pass the upstream short ref wherever a landing call in Stage F or Stage G takes
 `--default` on the pull-request route, and the local branch on the `landing: local`
 route, which is what the merge lands on; `fresh` takes the route's own ref.
@@ -701,7 +701,7 @@ On `.card-ready`, read `<dispatch>/card.md` and `<dispatch>/handoff-3.md`:
    worktree with `git -C <repo> worktree remove .worktrees/<TICKET>`, never with force unless
    the tree is clean and the card confirmed it, and log `teardown`. The workhorse worktrees are
    the coachman's; if any survive, remove them the same way after preserving any stray file into
-   `<dispatch>/stray/`. Teardown uses the live checkout's host.sh, never the run's pinned one: it
+   `<dispatch>/stray/`. Teardown uses the live checkout's run host, never the run's pinned one: it
    must work even when the pin is gone or fails its check.
 3. **Close the run** with `<tool>/scripts/run stage <dispatch> done postmaster`, then release the
    run's pinned tool: `<tool>/scripts/run run-meta release <dispatch>`. It removes the checkout

@@ -57,7 +57,9 @@ function answers(name: string, extra?: string): void {
 }
 
 function runSetup(name: string): number {
-  const r = run(SELF, ["setup", "--answers", join(tmp, `${name}.answers`), "--config", join(tmp, `${name}.toml`)],
+  const r = run(
+    SELF,
+    ["setup", "--answers", join(tmp, `${name}.answers`), "--config", join(tmp, `${name}.toml`)],
     {
       env: {
         ...(process.env as Record<string, string>),

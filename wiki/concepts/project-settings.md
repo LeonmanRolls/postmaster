@@ -70,7 +70,7 @@ whole, and sharing is one narrow file a project chooses to commit. The machine's
 `scripts/run project-settings` reads and writes the two files and refuses a credential or a
 path in either. `scripts/run turnpikes` expands `default` from a project's declared set.
 `scripts/run discover-project` reports whether the target has one. Run artifacts live at
-`<project>/.postmaster/runs/`, and `log-action.sh` names the project from its root.
+`<project>/.postmaster/runs/`, and `run log-action` names the project from its root.
 `settings.example.toml` and `project.example.toml` document the shapes. The setup
 conversation offers a project decision for `.postmaster/` and says which file it proposes.
 A run resolves the target's local roles at dispatch, and every run launch's durable session

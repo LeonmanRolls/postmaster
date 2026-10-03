@@ -107,7 +107,7 @@ export function branchName(ticket: string, lane: string): string {
   return `wb/${ticket}-${lane}`;
 }
 
-/** Counts on a fixture.sh hidden report line, or null when it printed none. Only a full `hidden-tests` line counts: a counts-shaped fragment in noise is not a run, and reads as failed to build rather than as a pass. */
+/** Counts on a run fixture hidden report line, or null when it printed none. Only a full `hidden-tests` line counts: a counts-shaped fragment in noise is not a run, and reads as failed to build rather than as a pass. */
 export function parseHiddenCounts(out: string): Counts | null {
   const rows = [
     ...out.matchAll(
@@ -120,7 +120,7 @@ export function parseHiddenCounts(out: string): Counts | null {
   return { passed: Number(last[1]), failed: Number(last[2]) };
 }
 
-/** What fixture.sh hidden's output says about a lane's tree. */
+/** What run fixture hidden's output says about a lane's tree. */
 export function hiddenStatusFromOutput(out: string): LaneStatus {
   const counts = parseHiddenCounts(out);
   if (counts) return { kind: "counts", passed: counts.passed, failed: counts.failed };

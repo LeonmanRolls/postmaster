@@ -22,7 +22,7 @@ if (noIconv) {
 
 const FIELDS = [
   "--ran",
-  "scripts/wait-for-markers.sh <dispatch>/logs 'r1-*.done' 2 60",
+  "scripts/run wait-for-markers <dispatch>/logs 'r1-*.done' 2 60",
   "--failed",
   "returned before every marker was in",
   "--error",
@@ -35,7 +35,7 @@ const FIELDS = [
 const FAULT_EVERY = [
   "coachman",
   "tool-fault",
-  "scripts/verify.sh",
+  "scripts/verify.ts",
   ...FIELDS,
   "--workaround",
   "launched in the recorded form by hand",
@@ -43,7 +43,7 @@ const FAULT_EVERY = [
 const FAULT_ABS = [
   "coachman",
   "tool-fault",
-  join(TOOL, "scripts/log-action.sh"),
+  join(TOOL, "scripts/log-action.ts"),
   ...FIELDS,
   "--failed",
   "first",
@@ -51,7 +51,7 @@ const FAULT_ABS = [
 const FAULT_OTHER = [
   "coachman",
   "tool-fault",
-  "scripts/log-action.sh",
+  "scripts/log-action.ts",
   ...FIELDS,
   "--failed",
   "second",
@@ -71,7 +71,7 @@ const FAULT_STEP = [
 const FAULT_SPELL = [
   "coachman",
   "tool-fault",
-  "scripts//./wait-for-markers.sh",
+  "scripts//./wait-for-markers.ts",
   ...FIELDS,
   "--failed",
   "fourth",
@@ -79,7 +79,7 @@ const FAULT_SPELL = [
 const FAULT_DOTDOT = [
   "coachman",
   "tool-fault",
-  "scripts/../scripts/log-action.sh",
+  "scripts/../scripts/log-action.ts",
   ...FIELDS,
   "--failed",
   "fifth",
@@ -123,7 +123,7 @@ function rawDetail(
   target: string,
 ): { code: number; err: string } {
   const q = (a: string): string => `'${a.replace(/'/gu, `'\\''`)}'`;
-  const cmd = `${q(SELF)} ${q(d)} ${q(actor)} ${q(action)} ${q(target)} "$(printf '${octalDetail}')"`;
+  const cmd = `${q(SELF)} log-action ${q(d)} ${q(actor)} ${q(action)} ${q(target)} "$(printf '${octalDetail}')"`;
   const r = spawnSync("bash", ["-c", cmd], { encoding: "utf8" });
   return { code: r.status ?? -1, err: r.stderr ?? "" };
 }
@@ -133,7 +133,7 @@ function rawDetail(
 function mixedRawWrite(): { code: number; err: string } {
   const q = (a: string): string => `'${a.replace(/'/gu, `'\\''`)}'`;
   const cmd =
-    `${q(SELF)} ${q(d)} ${q("postmaster")} ${q("note")} ${q("RUN-1")} "$(printf 'x\\377y')" ` +
+    `${q(SELF)} log-action ${q(d)} ${q("postmaster")} ${q("note")} ${q("RUN-1")} "$(printf 'x\\377y')" ` +
     q("keep \uFFFDhere");
   const r = spawnSync("bash", ["-c", cmd], { encoding: "utf8" });
   return { code: r.status ?? -1, err: r.stderr ?? "" };
@@ -170,7 +170,7 @@ describe("unicode primitives", () => {
     const fields = [...FIELDS];
     fields[7] = "\u00a0";
     const before = lines();
-    const r = logAction(["coachman", "tool-fault", "scripts/launch.sh", ...fields]);
+    const r = logAction(["coachman", "tool-fault", "scripts/launch.ts", ...fields]);
     expect(r.code).toBe(0);
     expect(lines()).toBe(before + 1);
   }, 30000);
@@ -227,7 +227,7 @@ describe("positive controls", () => {
     expect(
       last !== null &&
         last.action === "tool-fault" &&
-        last.target === "scripts/verify.sh" &&
+        last.target === "scripts/verify.ts" &&
         last.detail === "returned before every marker was in" &&
         last.fault?.failed === "returned before every marker was in" &&
         last.fault?.error === "exit 0\n\tall 2 markers present, [1mone a directory[0m" &&
@@ -256,7 +256,7 @@ describe("positive controls", () => {
     expect(
       last !== null &&
         last.fault?.failed === "first" &&
-        last.target === "scripts/log-action.sh" &&
+        last.target === "scripts/log-action.ts" &&
         last.fault?.control === "action-log",
     ).toBe(true);
   }, 30000);
@@ -264,7 +264,7 @@ describe("positive controls", () => {
   test("and the message says to stop", () => {
     const r = logAction(FAULT_ABS);
     expect(r.code).toBe(0);
-    expect(r.err.includes("scripts/log-action.sh is a control (action-log): stop the leg")).toBe(
+    expect(r.err.includes("scripts/log-action.ts is a control (action-log): stop the leg")).toBe(
       true,
     );
   }, 30000);
@@ -318,7 +318,7 @@ describe("positive controls", () => {
     expect(
       last !== null &&
         last.fault?.failed === "fourth" &&
-        last.target === "scripts/wait-for-markers.sh" &&
+        last.target === "scripts/wait-for-markers.ts" &&
         last.fault?.control === "wait",
     ).toBe(true);
   }, 30000);
@@ -337,7 +337,7 @@ describe("positive controls", () => {
     expect(
       last !== null &&
         last.fault?.failed === "fifth" &&
-        last.target === "scripts/log-action.sh" &&
+        last.target === "scripts/log-action.ts" &&
         last.fault?.control === "action-log",
     ).toBe(true);
   }, 30000);
@@ -347,7 +347,7 @@ describe("positive controls", () => {
     const r = logAction([
       "coachman",
       "tool-fault",
-      join(tmp, "link/scripts/verify.sh"),
+      join(tmp, "link/scripts/verify.ts"),
       ...FIELDS,
       "--failed",
       "sixth",
@@ -360,7 +360,7 @@ describe("positive controls", () => {
     const r = logAction([
       "coachman",
       "tool-fault",
-      join(tmp, "link/scripts/verify.sh"),
+      join(tmp, "link/scripts/verify.ts"),
       ...FIELDS,
       "--failed",
       "sixth",
@@ -368,7 +368,7 @@ describe("positive controls", () => {
     expect(r.code).toBe(0);
     const last = lastLine();
     expect(
-      last !== null && last.fault?.failed === "sixth" && last.target === "scripts/verify.sh",
+      last !== null && last.fault?.failed === "sixth" && last.target === "scripts/verify.ts",
     ).toBe(true);
   }, 30000);
 
@@ -650,7 +650,7 @@ describe("positive controls", () => {
 describe("negative controls: nothing is written", () => {
   test("an action outside the set", () => {
     const before = lines();
-    const r = logAction(["coachman", "tool-faults", "scripts/launch.sh", "x"]);
+    const r = logAction(["coachman", "tool-faults", "scripts/launch.ts", "x"]);
     expect(r.code).toBe(1);
     expect(lines()).toBe(before);
     expect(r.err.includes("is not an action")).toBe(true);
@@ -698,7 +698,7 @@ describe("negative controls: nothing is written", () => {
 
   test("a tool-fault with no fix", () => {
     const before = lines();
-    const r = logAction(["coachman", "tool-fault", "scripts/launch.sh", ...FIELDS.slice(0, 8)]);
+    const r = logAction(["coachman", "tool-fault", "scripts/launch.ts", ...FIELDS.slice(0, 8)]);
     expect(r.code).toBe(1);
     expect(lines()).toBe(before);
     expect(r.err.includes("needs --fix")).toBe(true);
@@ -709,7 +709,7 @@ describe("negative controls: nothing is written", () => {
     const r = logAction([
       "coachman",
       "tool-fault",
-      "scripts/launch.sh",
+      "scripts/launch.ts",
       ...FIELDS,
       "--diagnosis",
       "  ",
@@ -724,7 +724,7 @@ describe("negative controls: nothing is written", () => {
     const r = logAction([
       "coachman",
       "tool-fault",
-      "scripts/launch.sh",
+      "scripts/launch.ts",
       "the",
       "wait",
       "returned",
@@ -737,7 +737,7 @@ describe("negative controls: nothing is written", () => {
 
   test("a flag with no value", () => {
     const before = lines();
-    const r = logAction(["coachman", "tool-fault", "scripts/launch.sh", ...FIELDS, "--workaround"]);
+    const r = logAction(["coachman", "tool-fault", "scripts/launch.ts", ...FIELDS, "--workaround"]);
     expect(r.code).toBe(1);
     expect(lines()).toBe(before);
     expect(r.err.includes("--workaround needs a value")).toBe(true);

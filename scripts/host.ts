@@ -1083,7 +1083,7 @@ function herdrFinishPlacement(space: string, tab: string, pane: string): number 
     case "missing":
       break;
     case "unowned":
-      warn(`completed launch pane ${pane} is no longer owned by host.sh; left it open`);
+      warn(`completed launch pane ${pane} is no longer owned by run host; left it open`);
       return 2;
     case "pane":
       if (herdr(["pane", "close", pane]).code !== 0) {
@@ -1096,7 +1096,7 @@ function herdrFinishPlacement(space: string, tab: string, pane: string): number 
       // closing its last tab would destroy the space, which run host never does.
       if (!herdrSpaceOpened(space)) {
         warn(
-          `completed launch tab ${tab} is in space ${space}, which host.sh did not open; left it open`,
+          `completed launch tab ${tab} is in space ${space}, which run host did not open; left it open`,
         );
         return 2;
       }
@@ -1145,11 +1145,11 @@ function tmuxFinishPlacement(window: string, pane: string): number {
   // The recorded pane is gone but the window stands: only panes run host did not
   // open remain, so this refuses like a split rather than reporting success.
   if (!present) {
-    warn(`tmux window ${window} holds only panes host.sh did not open; left them open`);
+    warn(`tmux window ${window} holds only panes run host did not open; left them open`);
     return 2;
   }
   if (!found) {
-    warn(`completed tmux pane ${pane} is no longer owned by host.sh; left it open`);
+    warn(`completed tmux pane ${pane} is no longer owned by run host; left it open`);
     return 2;
   }
   if (total === 1) {
@@ -1162,7 +1162,7 @@ function tmuxFinishPlacement(window: string, pane: string): number {
       warn(`tmux could not close completed pane ${pane}; left it open`);
       return 2;
     }
-    warn(`tmux window ${window} holds panes host.sh did not open; left them open`);
+    warn(`tmux window ${window} holds panes run host did not open; left them open`);
     return 2;
   }
   return 0;
@@ -2944,7 +2944,7 @@ async function closeCmd(args: string[]): Promise<void> {
   let code = 0;
   if (has("tmux")) code = closeTmux(path) || code;
   if (herdrUp()) code = closeHerdr(path) || code;
-  if (!code) console.log(`closed what host.sh opened for ${path}`);
+  if (!code) console.log(`closed what run host opened for ${path}`);
   if (code) throw hostError("", code);
 }
 
@@ -5195,11 +5195,11 @@ function herdrClosePlacements(worktree: string): number {
         return 2;
       }
       markerRemove(file);
-      warn(`launch tab ${tab} in space ${space} holds panes host.sh did not open; left it open`);
+      warn(`launch tab ${tab} in space ${space} holds panes run host did not open; left it open`);
       return 2;
     }
     if (ownership === "mixed") {
-      warn(`launch tab ${tab} in space ${space} holds panes host.sh cannot place; left it open`);
+      warn(`launch tab ${tab} in space ${space} holds panes run host cannot place; left it open`);
       return 2;
     }
     if (ownership === "idless") {
@@ -5212,7 +5212,7 @@ function herdrClosePlacements(worktree: string): number {
       continue;
     }
     if (ownership !== "owned") {
-      warn(`launch tab ${tab} in space ${space} is no longer owned by host.sh; left it open`);
+      warn(`launch tab ${tab} in space ${space} is no longer owned by run host; left it open`);
       return 2;
     }
     if (herdr(["tab", "close", tab]).code !== 0) {
@@ -5248,7 +5248,7 @@ function spaceVerdict(infoText: string, panesText: string): string {
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) throw new Error("bad panes");
   if (tokensOf(ws).postmaster !== "opened") {
     if (ws.workspace_id === undefined || ws.workspace_id === null) throw new Error("bad space");
-    return `refuse\tspace ${jsonValue(ws.workspace_id)} was not opened by host.sh`;
+    return `refuse\tspace ${jsonValue(ws.workspace_id)} was not opened by run host`;
   }
   for (const entry of panes) {
     const tokens = tokensOf(entry);
@@ -5264,7 +5264,7 @@ function spaceVerdict(infoText: string, panesText: string): string {
       ws.workspace_id === null
     )
       throw new Error("bad panes");
-    return `refuse\tpane ${jsonValue(entry.pane_id)} in space ${jsonValue(ws.workspace_id)} was not opened by host.sh`;
+    return `refuse\tpane ${jsonValue(entry.pane_id)} in space ${jsonValue(ws.workspace_id)} was not opened by run host`;
   }
   return "ok";
 }
@@ -5647,11 +5647,11 @@ function runSpaceVerdict(infoText: string, panesText: string): string {
     if (entry === null || typeof entry !== "object" || Array.isArray(entry))
       throw new Error("bad panes");
   }
-  if (tokensOf(ws).postmaster !== "opened") return "space was not opened by host.sh";
+  if (tokensOf(ws).postmaster !== "opened") return "space was not opened by run host";
   for (const entry of panes) {
     const tokens = tokensOf(entry);
     if (tokens.postmaster !== "launch" && tokens.postmaster !== "root")
-      return `pane ${pyStrScalar(entry.pane_id)} was not opened by host.sh`;
+      return `pane ${pyStrScalar(entry.pane_id)} was not opened by run host`;
     if (tokens.postmaster === "launch" && tokens.state !== "done")
       return `launch pane ${pyStrScalar(entry.pane_id)} is still running`;
   }

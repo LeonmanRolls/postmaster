@@ -114,7 +114,7 @@ type Meta = {
 };
 function needStore(store: string): void {
   if (!existsSync(store) || !statSync(store).isDirectory())
-    die(`no ticket store at ${store}; with the user's word, run: local.sh <repo> store init`, 3);
+    die(`no ticket store at ${store}; with the user's word, run: run local <repo> store init`, 3);
 }
 export function ticketPath(store: string, number: bigint, ext: string): string {
   return join(store, `${number}.${ext}`);

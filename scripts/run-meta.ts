@@ -87,7 +87,7 @@ import { pySplitLines, pyTrim } from "./lib/text.ts";
 const TOOL = toolRoot(import.meta);
 
 const USAGE =
-  "usage: run run-meta <dispatch> <repo> | pin <repo> <commit> | path <dispatch> | check <dispatch> | release <dispatch>";
+  "usage: run run-meta <dispatch> <repo> | pin <repo> <commit> | path <dispatch> | script <dispatch> <name> [args...] | check <dispatch> | release <dispatch>";
 
 // Every command returns its exit code with the bytes for each stream; the CLI boundary writes
 // them, and the tests inspect them. stdout carries results (the pin path, the checkout,

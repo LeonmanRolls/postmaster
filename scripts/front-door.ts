@@ -53,7 +53,7 @@ function repoOf(path: string): string {
   return r.code === 0 ? r.out.trim() : "";
 }
 
-/** Whether fixture.sh marked the target repository in its own git config. */
+/** Whether run fixture marked the target repository in its own git config. */
 function isFixtureCopy(path: string): boolean {
   if (!path) return false;
   const r = run("git", ["-C", path, "config", "--local", "--get", "postmaster.fixture"]);
@@ -103,7 +103,7 @@ function route(
           "and the user is at the terminal\n",
         ].join("");
   return reasons.length > 0 && fixtureCopy
-    ? `${spawn}headless the target is a fixture copy made by fixture.sh new\n`
+    ? `${spawn}headless the target is a fixture copy made by run fixture new\n`
     : spawn;
 }
 

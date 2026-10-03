@@ -34,7 +34,12 @@ function runCli(args: string[], env?: Record<string, string | undefined>, cwd?: 
       else merged[k] = v;
     }
   }
-  const r = spawnSync(SELF, ["export-session", ...args], { encoding: "utf8", timeout: 10000, env: merged, cwd });
+  const r = spawnSync(SELF, ["export-session", ...args], {
+    encoding: "utf8",
+    timeout: 10000,
+    env: merged,
+    cwd,
+  });
   return { code: r.status ?? 1, out: String(r.stdout ?? ""), err: String(r.stderr ?? "") };
 }
 

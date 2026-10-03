@@ -251,7 +251,7 @@ export function makeAndFile(dest: string, ticket: string): number {
     `fixture: filed ticket ${ticket} in ${dest}'s own ticket store as #${number}: ${title}`,
   );
   console.log(
-    `fixture: dispatch ticket #${number} against ${dest}, then: scripts/fixture.sh score <its dispatch directory> ${dest}`,
+    `fixture: dispatch ticket #${number} against ${dest}, then: scripts/run fixture score <its dispatch directory> ${dest}`,
   );
   return 0;
 }
@@ -514,7 +514,7 @@ function checkGate(
     .find((l) => l.startsWith("gate="))
     ?.slice(5);
   if (!gate)
-    return { ok: false, detail: "scripts/discover-project.sh found no gate", out: r.out ?? "" };
+    return { ok: false, detail: "scripts/run discover-project found no gate", out: r.out ?? "" };
   const install = (r.out ?? "")
     .split("\n")
     .find((l) => l.startsWith("install="))
@@ -534,12 +534,12 @@ function checkStages(dispatch: string): { ok: boolean; detail: string } {
   const r = sh([join(HERE, "run"), "stage", "--list"]);
   const listed = pyWords(r.out ?? "");
   if (r.code !== 0 || !listed.includes("done")) {
-    return { ok: false, detail: "scripts/stage.sh --list names no done stage" };
+    return { ok: false, detail: "scripts/run stage --list names no done stage" };
   }
   let expected = listed.slice(0, listed.indexOf("done") + 1);
   const legsR = sh([join(HERE, "run"), "turnpikes", "legs", dispatch]);
   if (legsR.code !== 0)
-    return { ok: false, detail: `scripts/turnpikes.sh legs: ${tail(legsR.out ?? "")}` };
+    return { ok: false, detail: `scripts/run turnpikes legs: ${tail(legsR.out ?? "")}` };
   const hasReview = pySplitLines(legsR.out ?? "").some((line) => {
     const words = pyWords(line);
     return words.length > 1 && words[1] === "review";
@@ -620,7 +620,7 @@ function checkHandoffs(dispatch: string, legs: number[]): { ok: boolean; detail:
     }
   }
   if (bad.length > 0) return { ok: false, detail: bad.join("; ") };
-  return { ok: true, detail: `${legs.length} hand-offs pass scripts/handoff-check.sh` };
+  return { ok: true, detail: `${legs.length} hand-offs pass scripts/run handoff-check` };
 }
 
 function checkRunJson(dispatch: string): { ok: boolean; detail: string } {

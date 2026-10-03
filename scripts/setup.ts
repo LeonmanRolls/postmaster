@@ -488,7 +488,7 @@ if (PWS) TRACKER_EXTRA = `url = "${PURL}"\nworkspace = "${PWS}"\nenv_file = "${P
 if (OTHER) TRACKER_EXTRA = `name = "${OTHER}"`;
 
 const dateStr = new Date().toISOString().slice(0, 10);
-const OUT = `# Written by scripts/setup.sh on ${dateStr}. Shape: config.example.toml.
+const OUT = `# Written by scripts/run setup on ${dateStr}. Shape: config.example.toml.
 projects_roots = ${tomlList(ROOTS)}
 ${LANE_BLOCKS}
 

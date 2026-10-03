@@ -62,6 +62,6 @@ configuration.
 ## What changed because of it
 
 `scripts/clean-checkout.ts` and its colocated tests; a new step in `coachman.md`'s Legacy Stage 3 that
-gates the merged default branch through the helper; `fixture.sh` scoring's gate runs the same
+gates the merged default branch through the helper; `run fixture` scoring's gate runs the same
 way. Related: issue #107 may still confine each lane to its own worktree or clone; that would
 narrow what a hand-run gate sees, but the clean checkout keeps its purpose either way.

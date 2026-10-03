@@ -85,7 +85,7 @@ if (Bun.which("git") !== null) {
   row(
     "local",
     "yes",
-    "no service, no login; a repo's store is made with: scripts/local.sh <repo> store init",
+    "no service, no login; a repo's store is made with: scripts/run local <repo> store init",
   );
 } else {
   row("local", "no", "needs git");

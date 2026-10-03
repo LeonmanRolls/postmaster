@@ -945,7 +945,7 @@ function prepareDispatch(d: string, runName: string, current: string, root: stri
   if (legs.code !== 0) {
     return {
       rc: 1,
-      error: `turnpikes.sh legs failed: ${(legs.out + legs.err).replace(/\n+$/u, "")}`,
+      error: `run turnpikes legs failed: ${(legs.out + legs.err).replace(/\n+$/u, "")}`,
     };
   }
   // The manifest leg is validated before anything uses it: it must be a canonical
@@ -1077,7 +1077,7 @@ function resumeTransient(d: string, runName: string, number: string, root: strin
   if (legs.code !== 0) {
     return {
       rc: 2,
-      error: `turnpikes.sh legs failed: ${(legs.out + legs.err).replace(/\n+$/u, "")}`,
+      error: `run turnpikes legs failed: ${(legs.out + legs.err).replace(/\n+$/u, "")}`,
     };
   }
   if (!isCanonicalLeg(number)) {
@@ -1087,7 +1087,7 @@ function resumeTransient(d: string, runName: string, number: string, root: strin
     };
   }
   const leg = listedLeg(legs.out, number);
-  if (!leg) return { rc: 2, error: `turnpikes.sh legs has no entry for current leg ${number}` };
+  if (!leg) return { rc: 2, error: `run turnpikes legs has no entry for current leg ${number}` };
   let name = "";
   let thread = "";
   try {
@@ -1354,7 +1354,7 @@ function watch(root: string, config: string, timeout: number | null): never {
     let r = run(statusSh, ["runs-status", root]);
     if (r.code !== 0) {
       if (r.err) process.stderr.write(r.err);
-      die(`runs-watch: runs-status.sh failed on ${root}`, 1);
+      die(`runs-watch: run runs-status failed on ${root}`, 1);
     }
     const first = r.out.replace(/\n+$/u, "");
     // The waking read fires only for its held warnings; the steps below fill NEEDS.
@@ -1364,7 +1364,7 @@ function watch(root: string, config: string, timeout: number | null): never {
     r = run(statusSh, ["runs-status", root]);
     if (r.code !== 0) {
       if (r.err) process.stderr.write(r.err);
-      die(`runs-watch: runs-status.sh failed on ${root}`, 1);
+      die(`runs-watch: run runs-status failed on ${root}`, 1);
     }
     const table = r.out.replace(/\n+$/u, "");
     if (steps.needs.length > 0) {

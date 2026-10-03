@@ -175,7 +175,7 @@ if (!existsSync("AGENTS.md")) {
 }
 if (kind === "github" && run("git", ["remote", "get-url", "origin"]).code !== 0) {
   console.error(
-    "warn=no origin remote, so no github board: with the user's word, scripts/local.sh <repo> store init gives it a local store",
+    "warn=no origin remote, so no github board: with the user's word, scripts/run local <repo> store init gives it a local store",
   );
 }
 process.exit(0);

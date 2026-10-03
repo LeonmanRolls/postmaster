@@ -1570,7 +1570,9 @@ exit "$rc"
       if (!recordLane && NAME !== "coachman_fallback") recordLane = NAME;
     }
     if (recordRole && recordLane) {
-      const u = run(join(scriptsDir(import.meta), "run"), ["usage", "record",
+      const u = run(join(scriptsDir(import.meta), "run"), [
+        "usage",
+        "record",
         stream,
         HARNESS,
         NAME,

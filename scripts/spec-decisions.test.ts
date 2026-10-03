@@ -272,7 +272,10 @@ function oneSpecGo(
   d: string,
   ...args: string[]
 ): { status: number | null; stdout: string; stderr: string } {
-  const result = spawnSync(SELF, ["spec-decisions", d, ...args], { encoding: "utf8", timeout: 15_000 });
+  const result = spawnSync(SELF, ["spec-decisions", d, ...args], {
+    encoding: "utf8",
+    timeout: 15_000,
+  });
   return { status: result.status, stdout: result.stdout ?? "", stderr: result.stderr ?? "" };
 }
 

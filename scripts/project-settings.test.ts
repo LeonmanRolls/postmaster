@@ -157,7 +157,9 @@ describe("missing profiles and ensure", () => {
 describe("shared and local profiles", () => {
   test("inspect stays bounded when POSTMASTER_PROJECT is inherited", () => {
     writeShared();
-    const guarded = runCli(SELF, ["project-settings", "inspect", repo], { env: { POSTMASTER_PROJECT: repo } });
+    const guarded = runCli(SELF, ["project-settings", "inspect", repo], {
+      env: { POSTMASTER_PROJECT: repo },
+    });
     expect(guarded.code).toBe(0);
   }, 30000);
 

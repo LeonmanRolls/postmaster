@@ -139,7 +139,7 @@ it prints. A plane tracker needs the target's project identifier: the discovered
 `tracker_prefix` when the target has shipped a ticket, otherwise `<tool>/scripts/run plane projects`
 lists the candidates and the user picks. A local tracker needs its store: exit 3 from
 `<tool>/scripts/run local "$TARGET" store` means there is none yet, so propose `store init` to the
-user. A github target with no origin remote can have no board, and `discover-project.sh` warns
+user. A github target with no origin remote can have no board, and `run discover-project` warns
 of it: propose `<tool>/scripts/run local "$TARGET" store init` to the user instead. Report what
 you found on the launch card, and ask only about what you could not determine.
 **If the project has no `AGENTS.md` or equivalent, say so.** Lanes that read no ambient
@@ -156,8 +156,8 @@ holds this person's choices on this checkout, including which machine-defined la
 roles. It cannot set harnesses, models, env files, credentials or paths. Both are optional; a
 missing file is normal and is never a reason to create an empty one or pause discovery.
 
-Follow the resolved values and source labels from `discover-project.sh` and
-`project-settings.sh inspect` when composing the launch card and waybill. Mark each fact as
+Follow the resolved values and source labels from `run discover-project` and
+`run project-settings inspect` when composing the launch card and waybill. Mark each fact as
 discovered, shared or local. A ticket still names its own turnpikes: project settings define only
 the meaning of `default`.
 
@@ -192,7 +192,7 @@ Never put paths or credentials in either file.
    started. `spawn` means a separate postmaster session is needed, and the reasons say
    which conditions failed: the harness or the model differs from `team.postmaster`, the
    target is another repo, or nobody is at the terminal. When the decision is `spawn` and the
-   target is a fixture copy (`fixture.sh new` marked it), it also prints `headless`: that
+   target is a fixture copy (`run fixture new` marked it), it also prints `headless`: that
    postmaster starts headless on every host, in the form `hosts.md` gives under none, so it
    never meets a trust prompt. `self` stays `self` in a fixture copy. If it exits non-zero instead,
    stop and tell the user what it said: the config is missing, does not parse, or has no
@@ -235,10 +235,10 @@ Never put paths or credentials in either file.
    ```
 
 7. **`self`: carry on as the postmaster.** Read `<tool>/skills/postmaster/postmaster.md` and
-   run the stream in this conversation. Log every action through `log-action.sh` under
+   run the stream in this conversation. Log every action through `run log-action` under
    `<runs>/postmaster/`, as that runbook says. Do not start a second session.
 8. **`spawn`: start a new postmaster session.** If the route has a `headless` line, use the
-   headless form from `hosts.md` through `host.sh run` on every host. It starts the configured
+   headless form from `hosts.md` through `run host run` on every host. It starts the configured
    harness headless with the brief as its prompt, writes events and errors under
    `$RUNS/postmaster/`, and has no terminal to stop at a question:
 
@@ -294,7 +294,7 @@ landing: pull-request | local   (whether the postmaster opens a pull request or 
 docs to read first: <files, in order>
 tracker: <kind, and how a ticket is read and written>
 risk surfaces: <what the project binds, allowlists, spawns, serves; from its docs or the user>
-checks: <as `verify.sh record` printed them: each check's name, where it came from, its command and what it shows>
+checks: <as `run verify record` printed them: each check's name, where it came from, its command and what it shows>
 
 ## Team
 workhorses: <lane>=<harness>/<model>/<effort>, <lane>=…

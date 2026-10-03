@@ -134,7 +134,10 @@ function linkWithFixture(
 }
 
 function linkGo(...args: string[]): { status: number | null; stdout: string; stderr: string } {
-  const result = spawnSync(wrapper, ["spec-review-link", ...args], { encoding: "utf8", timeout: 15_000 });
+  const result = spawnSync(wrapper, ["spec-review-link", ...args], {
+    encoding: "utf8",
+    timeout: 15_000,
+  });
   return { status: result.status, stdout: result.stdout ?? "", stderr: result.stderr ?? "" };
 }
 

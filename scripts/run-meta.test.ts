@@ -96,7 +96,10 @@ beforeAll(async () => {
       args: string[],
       env?: Record<string, string | undefined>,
     ): { code: number; out: string } => {
-      const r = env === undefined ? run(wrapper, ["run-meta", ...args]) : run(wrapper, ["run-meta", ...args], { env });
+      const r =
+        env === undefined
+          ? run(wrapper, ["run-meta", ...args])
+          : run(wrapper, ["run-meta", ...args], { env });
       return { code: r.code, out: r.out + r.err };
     };
     const spawnCli = (

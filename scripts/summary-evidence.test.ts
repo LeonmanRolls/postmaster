@@ -99,14 +99,10 @@ function runCheck(summary: string, worktree: string, extra: string[] = []) {
   for (const [k, v] of Object.entries(process.env)) {
     if (v !== undefined && k !== "POSTMASTER_VERIFY") env[k] = v;
   }
-  const r = spawnSync(
-    script,
-    ["summary-evidence", summary, worktree, ...extra],
-    {
-      encoding: "utf8",
-      env,
-    },
-  );
+  const r = spawnSync(script, ["summary-evidence", summary, worktree, ...extra], {
+    encoding: "utf8",
+    env,
+  });
   return { code: r.status ?? -1, out: `${r.stdout ?? ""}${r.stderr ?? ""}` };
 }
 

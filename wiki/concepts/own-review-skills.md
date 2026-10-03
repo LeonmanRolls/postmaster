@@ -59,7 +59,7 @@ Under the bug lens, only lanes whose harness has a code-review skill review. Eac
 through `<tool>/scripts/run launch review <lane> <scratch> <BASE>`, on the same snapshot and in
 its own worktree scratch, at the harness's top level (`max` for claude and codex, `high` for
 MiMo Code on MiMo V2.6 Pro). No bug brief is written. A lane whose harness has none does not
-review for bugs; `setup.sh` names such lanes at setup and warns when none of the chosen bug
+review for bugs; `run setup` names such lanes at setup and warns when none of the chosen bug
 reviewers has one, and a run whose turnpikes include the bug review and whose config gives it
 no such lane is refused at the pre-flight.
 
@@ -75,7 +75,7 @@ change. So every review form names the change.
 
 ## What each harness's code-review skill needs
 
-| harness | form (`launch.sh review`) | what it needs to review the run's change | findings | known findings | its own tool calls |
+| harness | form (`run launch review`) | what it needs to review the run's change | findings | known findings | its own tool calls |
 |---|---|---|---|---|---|
 | claude | `/code-review max <BASE>...HEAD` through its launch form | the range in the prompt; without it the skill looked at the last commit alone first and reached further only through the branch list | at `max`, a JSON array in the final message (read from the 2.1.283 binary); at `low`, one `path:line — …` line per finding; at `medium`, a findings tool call in the forked task plus a final message of its own shape | cannot be given: the argument parser reads the first word as the level and joins the rest into the target | the forked task's output file under `/tmp/claude-<uid>/`, named by the stream's `task_notification`; the harvest copies it |
 | codex | `codex exec review --base <BASE>` with its launch form's flags | `--base <BASE>`; it computes the merge base itself. No target: exits 1 before any model call | `- [P<n>] <title> — <absolute path>:<start>-<end>` with a body; the session file holds `review_output` structured | a custom prompt is an alternative to `--base`; whether they combine is untested | commands in the `--json` stream; model, effort and prompt in `~/.codex/sessions/YYYY/MM/DD/` |
@@ -92,7 +92,7 @@ commits, each harness at the level criterion 3 of #38 sets — yields a normaliz
 
 ## What Claude Code's security skill needs
 
-Launched as the flow launches a reviewer lane, with the prompt `launch.sh skill` prints,
+Launched as the flow launches a reviewer lane, with the prompt `run launch skill` prints,
 Claude Code 2.1.283's `/security-review`:
 
 - in a scratch clone whose `origin/HEAD` leads back to the base, reported the planted command
@@ -140,12 +140,12 @@ level, and exits 3 for a harness with no form. `scripts/run review-forms has` is
 who has one. `scripts/run review-findings` turns each form's report into the finding contract.
 `skills/postmaster/harnesses.md` records which harnesses have each skill and where each answer
 came from. The coachman launches a security lane through its skill where it has one, and from
-the brief otherwise; it launches every bug lane through `launch.sh review` and writes no bug
+the brief otherwise; it launches every bug lane through `run launch review` and writes no bug
 brief. `scripts/run cut-scratch` cuts the security lens's scratches as clones, checks every
 scratch before a lane is launched into it, tells a scratch from anything else, and removes a
 scratch of either kind. `scripts/run host` hosts a clone in a space of its
 own, which it closes like a worktree's. `scripts/run reviewers` names as bug reviewers only the
-configured ones whose harness has a form; `setup.sh` warns when none has one; the pre-flight
+configured ones whose harness has a form; `run setup` warns when none has one; the pre-flight
 refuses a bug turnpike with no such lane. No reviewer runs the project's full gate: the
 coachman runs it once per round on the snapshot, and a reviewer checks a finding with a
 targeted probe.

@@ -30,14 +30,14 @@ in that file.
 3. When the user says the spec is ready, remove every comment from the copy, check that the
    text meets every acceptance criterion the brief's ticket names, and tell the user to tell
    the postmaster that it is ready. Do not record anything yourself: the postmaster runs
-   `spec-session.sh approve` on their word.
+   `run spec-session approve` on their word.
 4. Stay open until the user closes you. The postmaster does not close your tab.
 
 ## Hard rules
 
 - Edit only `<dispatch>/spec-review/WORKHORSE-SPEC.md`. Touch nothing else in the run, the
   project or the machine.
-- Commit nothing. The approval commit is the postmaster's, through `spec-session.sh approve`.
+- Commit nothing. The approval commit is the postmaster's, through `run spec-session approve`.
 - Never resume, stop or message a run, a coachman, a workhorse or another session.
 - Nothing you write into the spec identifies the user or the machine.
 - Do not implement. The workhorses do that, from the approved spec, in blinkers.

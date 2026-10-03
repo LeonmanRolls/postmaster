@@ -145,10 +145,10 @@ harness-specific and the flow does not rely on it.
 
 | Marker or artifact | Writer | Meaning / reader |
 |---|---|---|
-| `logs/<lane>.done` | `host.sh` | A workhorse process exited; the coachman collects its result. |
-| `logs/review-r<round>-$LENS-<lane>.done` | `host.sh` | A reviewer process exited; the coachman collects that round. |
-| `.leg-<n>-exited` | `host.sh` | The launch ended: its process exited or startup failed after recording the reason. Cleared before a relaunch or resume. |
-| `.leg-<n>-done` | Coachman, after `handoff-check.sh` exits 0 | The hand-off is complete; the postmaster may dispatch the next leg. |
+| `logs/<lane>.done` | `run host` | A workhorse process exited; the coachman collects its result. |
+| `logs/review-r<round>-$LENS-<lane>.done` | `run host` | A reviewer process exited; the coachman collects that round. |
+| `.leg-<n>-exited` | `run host` | The launch ended: its process exited or startup failed after recording the reason. Cleared before a relaunch or resume. |
+| `.leg-<n>-done` | Coachman, after `run handoff-check` exits 0 | The hand-off is complete; the postmaster may dispatch the next leg. |
 | `.checkpoint-<n>-ready` | Coachman | `checkpoint-<n>.md` is ready for the postmaster to read. |
 | `.checkpoint-review-ready` | Coachman | `checkpoint-review.md` is ready for the postmaster to read. |
 | `.escalation-ready` | Coachman | `ESCALATION.md` asks for a ruling; the postmaster resumes the same leg. |
@@ -157,8 +157,8 @@ harness-specific and the flow does not rely on it.
 
 Markers report the state of their paired artifact or process. They never replace it.
 
-The coachman supplies `.leg-<n>-exited` to `host.sh` for its own process. Its lane and
-reviewer launches give `host.sh` the corresponding `logs/*.done` path; the host owns marker
+The coachman supplies `.leg-<n>-exited` to `run host` for its own process. Its lane and
+reviewer launches give `run host` the corresponding `logs/*.done` path; the host owns marker
 clearing and writing after exit.
 
 ## Legs and hand-offs
@@ -434,12 +434,12 @@ the same as it always was:
        --run <dispatch>
 ```
 
-The tab name comes from the lane and its recorded model through `host.sh name`; the dispatch
+The tab name comes from the lane and its recorded model through `run host name`; the dispatch
 makes its synthesis worktree space carry the ticket name. Neither name is typed into a shell.
 A resume runs the same way with `--append`, and the command
 `<tool>/scripts/run launch resume <lane> <workhorse-wt> <thread-id> <prompt-file>
 --last <dispatch>/logs/<lane>-last.md --run <dispatch>`;
-`host.sh` clears the old marker itself. Resume a lane only once its marker has landed: until
+`run host` clears the old marker itself. Resume a lane only once its marker has landed: until
 then it is still running. No composer, no interactive session, no registration.
 The streaming output format is load-bearing: the thread id and the final message are harvested
 from it.
@@ -463,7 +463,7 @@ from it.
   review leg, the reviewers see these tests with the synthesis and may challenge them like any
   other line.
 - **Harvest.** Each lane's final message is the last result line of its events stream
-  (`harnesses.md` gives the per-harness location). `launch.sh` exports each completed thread into
+  (`harnesses.md` gives the per-harness location). `run launch` exports each completed thread into
   `<dispatch>/sessions/` beside its event stream. For every workhorse, `WORKHORSE-SUMMARY.md` at
   the worktree root is the authoritative final act.
 - **Monitor: three exit shapes.** Each workhorse's final act is writing `WORKHORSE-SUMMARY.md` at its
@@ -498,7 +498,7 @@ from it.
   what the workhorse left uncommitted on the card. Where a check's source names `web-journey`,
   first walk the ticket's User journey on that branch, in the format
   `<tool>/scripts/run verify-journey --format` gives, to the path `<tool>/scripts/run verify
-  journey-path <workhorse-wt> <dispatch>` prints. A `verify.sh run` that can outlast your harness's
+  journey-path <workhorse-wt> <dispatch>` prints. A `run verify run` that can outlast your harness's
   command cap (`harnesses.md`) runs through `<tool>/scripts/run host run` with `--under <dispatch>`,
   `--role coachman`, `--run <dispatch>`, `--out`, `--err` and
   `--marker`, as a lane does, and you wait for its marker with `<tool>/scripts/run wait-for-markers`. Then hold its
@@ -512,7 +512,7 @@ from it.
   which the lane can edit. Exit 2 names each criterion missing
   evidence, citing evidence that does not exist or lies outside `.postmaster/verify/`, or
   claimed shown with no evidence; those names go on the checkpoint 1 card beside the
-  `verify.sh summary` verdict, and a criterion claimed as shown without evidence counts against
+  `run verify summary` verdict, and a criterion claimed as shown without evidence counts against
   that lane.
   [Why a project defines its own checks](../../wiki/concepts/verification.md)
 - **Run audit, automatic.** Once the workhorses are harvested (at the stall cutoff, whatever
@@ -620,7 +620,7 @@ from it.
   choice; the convention gaps found; what was dropped; gate status; the checks, as
   `<tool>/scripts/run landing results <dispatch> <wt>` prints them for each workhorse's branch
   (`<wt>` the workhorse worktree) and then for the committed synthesis, the journey walked
-  first where there is one, with each workhorse's `verify.sh summary` verdict and its `summary-evidence.ts`
+  first where there is one, with each workhorse's `run verify summary` verdict and its `summary-evidence.ts`
   result. A card that presents a
   finished diff without saying which lane each part came from is the defaulting failure
   wearing a verdict. Set the stage, `<tool>/scripts/run stage <dispatch> checkpoint-1`, then write it to
@@ -735,13 +735,13 @@ Set the stage first, `<tool>/scripts/run stage <dispatch> review`, then:
    VERIFY_EXIT=0
    <tool>/scripts/run verify run <synthesis-wt> <dispatch> > <dispatch>/logs/review-r<round>-checks.txt || VERIFY_EXIT=$?
    cat <dispatch>/logs/review-r<round>-checks.txt
-   <tool>/scripts/run log-action <dispatch> coachman gate "$SNAP" "review round <round>, verify.sh exit $VERIFY_EXIT"
+   <tool>/scripts/run log-action <dispatch> coachman gate "$SNAP" "review round <round>, run verify exit $VERIFY_EXIT"
    case "$VERIFY_EXIT" in
      0|3) ;;
      *) exit 1 ;;
-   esac   # 0 green and 3 not-run proceed; 2 (a check failed), 1 (verify unrunnable), a signal, or verify.sh itself unstartable (126/127) stops the round
+   esac   # 0 green and 3 not-run proceed; 2 (a check failed), 1 (verify unrunnable), a signal, or run verify itself unstartable (126/127) stops the round
    # A 126/127 inside a check is that check's `not run` ("bash could not start it"),
-   # which aggregates to 3 and proceeds; only verify.sh itself failing to start stops
+   # which aggregates to 3 and proceeds; only run verify itself failing to start stops
    # the round on 126/127
    if [ "$VERIFY_EXIT" -eq 3 ]; then
      awk '/: not run, /{print; p=1; next} p==1 && /^  /{print; next} {p=0}' <dispatch>/logs/review-r<round>-checks.txt | while IFS= read -r NOTRUN; do
@@ -749,7 +749,7 @@ Set the stage first, `<tool>/scripts/run stage <dispatch> review`, then:
      done
    fi
    # A check not run is never read as passed: each goes on the card as `not run` with
-   # verify.sh's reason. Example: a ticket with no User journey makes the journey check
+   # run verify's reason. Example: a ticket with no User journey makes the journey check
    # `not run` (`journey: not run, exit 3, ...` plus its reason line); the round proceeds,
    # the run log carries those lines, and the card records `journey: not run`. On a stopping
    # exit, fix the cause on the synthesis worktree and repeat this step
@@ -782,10 +782,10 @@ Set the stage first, `<tool>/scripts/run stage <dispatch> review`, then:
    synthesis worktree.
 
    Then do every open lens's preparation, and launch every reviewer under every open lens in the
-   same breath, each through its lens's launch step run by `host.sh` (`hosts.md`). The command
-   first checks every scratch with `cut-scratch.sh --check`: at the snapshot, and under the
+   same breath, each through its lens's launch step run by `run host` (`hosts.md`). The command
+   first checks every scratch with `run cut-scratch --check`: at the snapshot, and under the
    security lens a clone whose `origin/HEAD` leads back to BASE. It launches nothing if one
-   fails; then it starts the round, which clears its markers and fixes its deadline. `host.sh`
+   fails; then it starts the round, which clears its markers and fixes its deadline. `run host`
    lands each marker, naming the round, the lens and the lane, when its process exits, whatever
    its exit, and the command ends in the wait for the whole round, given every reviewer the loop
    launched. A wait cut short, as by the harness's cap on background tasks, is run again alone:
@@ -880,7 +880,7 @@ Set the stage first, `<tool>/scripts/run stage <dispatch> review`, then:
 
    **On `WAIT-TIMEOUT` (exit 3), close the round without the reviewers that had not finished.**
    The script has recorded each one in `run-log.md` as `<lane> <lens>: DEGRADED, timeout` and in
-   its `degrade` line, and stopped it with `host.sh stop`; one it names STILL RUNNING could not
+   its `degrade` line, and stopped it with `run host stop`; one it names STILL RUNNING could not
    be stopped: escalate. Harvest the others, and treat each timed-out lane as a review lane
    killed mid-run (hard rules): DEGRADED on the checkpoint card, with `timeout` as its cause,
    and back in the next round. A round in which no lane actually reviewed under a gating lens
@@ -905,8 +905,8 @@ Set the stage first, `<tool>/scripts/run stage <dispatch> review`, then:
    <tool>/scripts/run review-round teardown <dispatch> <round> <repo>
    ```
 
-   For each scratch it stops what still runs there (`host.sh stop`), closes its space
-   (`host.sh close`) and removes it (`cut-scratch.sh --remove`, which takes away a scratch of
+   For each scratch it stops what still runs there (`run host stop`), closes its space
+   (`run host close`) and removes it (`run cut-scratch --remove`, which takes away a scratch of
    either kind and refuses anything else), each only once the one before has succeeded, and
    logs `teardown`. A reviewer it names as stopped before it had finished is DEGRADED for the
    round. A scratch it leaves in place is named with its reason, such as the user having its
@@ -1110,7 +1110,7 @@ Set the stage first: `<tool>/scripts/run stage <dispatch> shipping`.
 
    **The ship card carries the checks,** as `<tool>/scripts/run verify run <synthesis-wt> <dispatch>`
    printed them on the final synthesis, with step 3's walk as the journey report where there is
-   one, written to the path `verify.sh journey-path <synthesis-wt> <dispatch>` prints.
+   one, written to the path `run verify journey-path <synthesis-wt> <dispatch>` prints.
 
    **The ship card carries the Style residue:** how many style findings go to aftercare, as
    `<tool>/scripts/run style-findings count <dispatch>` prints it, then each one as its `list` prints
@@ -1197,7 +1197,7 @@ Run `<tool>/scripts/run usage sum <dispatch>` and put its output verbatim under 
 ship card and in the final `run-log.md` entry with the per-lane win record and findings counts.
 Do not hand-recompute a figure or write a missing figure as zero. If the sum command fails, put
 the error on the card and in the log as unreadable. When the postmaster sets `done` after this
-leg exits, `stage.sh` refreshes both records from all launch usage records, including this leg's
+leg exits, `run stage` refreshes both records from all launch usage records, including this leg's
 final resume. Leave the stage at `shipped` until then; the postmaster's terminal stage appends
 the run's stage timings to `run-log.md`. Never write timings by hand. A closing dated comment
 on the ticket carries the run summary.
@@ -1265,7 +1265,7 @@ ticket that needs another's change waits for it to land.
   paste, Enter as a separate send-keys, and check the working indicator before trusting a
   dispatch.
 - **Know your own harness's background-task lifetime** (`harnesses.md`). A launch through
-  `host.sh` outlives it: a "stopped" notification without a quota error is the cap ending a
+  `run host` outlives it: a "stopped" notification without a quota error is the cap ending a
   command you ran, such as a wait, never a lane. Run the wait again. Never resume a lane whose
   marker has not landed; it is still running, and a second process on one thread corrupts it.
 - **Workhorses must not read other branches or `.worktrees/`.** Those hold other runs' work,

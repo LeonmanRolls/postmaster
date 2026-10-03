@@ -214,7 +214,11 @@ describe("negative controls", () => {
   });
 
   test("an explicitly empty --project is refused, never read as no project", () => {
-    check(run(SELF, ["reviewers", "lines", "--config", join(tmp, "one.toml"), "--project", ""]), 1, "");
+    check(
+      run(SELF, ["reviewers", "lines", "--config", join(tmp, "one.toml"), "--project", ""]),
+      1,
+      "",
+    );
   });
 
   test("and the refusal names the project", () => {
@@ -224,14 +228,30 @@ describe("negative controls", () => {
 
   test("an explicitly empty --project is refused for eligible too", () => {
     check(
-      run(SELF, ["reviewers", "eligible", "bug", "--config", join(tmp, "one.toml"), "--project", ""]),
+      run(SELF, [
+        "reviewers",
+        "eligible",
+        "bug",
+        "--config",
+        join(tmp, "one.toml"),
+        "--project",
+        "",
+      ]),
       1,
       "",
     );
   });
 
   test("and the eligible refusal names the project", () => {
-    const r = run(SELF, ["reviewers", "eligible", "bug", "--config", join(tmp, "one.toml"), "--project", ""]);
+    const r = run(SELF, [
+      "reviewers",
+      "eligible",
+      "bug",
+      "--config",
+      join(tmp, "one.toml"),
+      "--project",
+      "",
+    ]);
     expect(r.err.includes("no such project directory")).toBe(true);
   });
 

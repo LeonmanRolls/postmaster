@@ -61,7 +61,9 @@ beforeAll(async () => {
     console.log = origLog;
   }
   if (failures > 0) {
-    for (const line of lines.filter((line) => line.includes("FAIL") || line.includes("setup failed")))
+    for (const line of lines.filter(
+      (line) => line.includes("FAIL") || line.includes("setup failed"),
+    ))
       process.stderr.write(`${line}\n`);
   }
 }, 600000);

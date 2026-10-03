@@ -556,7 +556,9 @@ describe("positive controls", () => {
     const created = readFileSync(join(temp, "stdin-number"), "utf8");
     const stdinBase = invoke(repo, "read", created, "--body");
     put(join(temp, "stdin-base.md"), stdinBase.out);
-    const stdinEdit = run(self, ["local", repo, "edit", created, "/dev/stdin", join(temp, "stdin-base.md")],
+    const stdinEdit = run(
+      self,
+      ["local", repo, "edit", created, "/dev/stdin", join(temp, "stdin-base.md")],
       { input: readFileSync(newPath, "utf8") },
     );
     const afterStdin = invoke(repo, "read", created, "--body");
@@ -671,7 +673,10 @@ describe("controls: what the caller's environment must not change", () => {
   }, 30000);
 
   test("an exported CDPATH does not move a relative <repo>", () => {
-    const cdp = run(self, ["local", "repo", "store"], { cwd: temp, env: { CDPATH: ".:/nonexistent" } });
+    const cdp = run(self, ["local", "repo", "store"], {
+      cwd: temp,
+      env: { CDPATH: ".:/nonexistent" },
+    });
     expect(cdp.code).toBe(0);
     expect(cdp.out.trim()).toBe(store);
   }, 30000);
@@ -849,7 +854,8 @@ describe("controls: a ticket file that is not as this script writes it", () => {
   test("list prints the tickets it can read, names the one it cannot, and exits 1", () => {
     newRepo(damaged());
     run(self, ["local", damaged(), "store", "init"]);
-    for (const title of ["One", "Two", "Three"]) run(self, ["local", damaged(), "create", title, bodyPath]);
+    for (const title of ["One", "Two", "Three"])
+      run(self, ["local", damaged(), "create", title, bodyPath]);
     copyFileSync(join(damagedStore(), "2.json"), join(temp, "2.json"));
     put(join(damagedStore(), "2.json"), '{"title": "Two", "state": "todo",\n');
     const damagedList = run(self, ["local", damaged(), "list"]);

@@ -240,7 +240,7 @@ function count(d: string): void {
 
 function usage(): never {
   console.error("usage: run spec-decisions <dispatch> fresh|record|count");
-  console.error("       spec-decisions.sh <dispatch> record <decision> <commit> [<words>...]");
+  console.error("       run spec-decisions <dispatch> record <decision> <commit> [<words>...]");
   process.exit(1);
   throw new Error("unreachable");
 }

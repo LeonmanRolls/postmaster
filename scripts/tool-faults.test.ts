@@ -5,6 +5,7 @@
 import { beforeAll, describe, expect, test } from "bun:test";
 import {
   appendFileSync,
+  chmodSync,
   copyFileSync,
   existsSync,
   mkdirSync,
@@ -57,6 +58,28 @@ import {
 const HERE = scriptsDir(import.meta);
 const TOOL = toolRoot(import.meta);
 
+// These records came from runs pinned before the single-entry migration. Keep their logged
+// targets in each copied tool so the harvest still recognizes files from that pinned version.
+function plantLegacyTargets(copy: string): void {
+  for (const name of [
+    "cut-scratch",
+    "github",
+    "handoff-check",
+    "host",
+    "launch",
+    "log-action",
+    "runs-status",
+    "stage",
+    "ticket-check",
+    "tool-faults",
+    "wait-for-markers",
+  ]) {
+    const script = join(copy, "scripts", `${name}.sh`);
+    writeFileSync(script, `#!/bin/sh\nexec "$(dirname "$0")/run" ${name} "$@"\n`);
+    chmodSync(script, 0o755);
+  }
+}
+
 const skipPython = run("sh", ["-c", "command -v python3"]).code !== 0;
 if (skipPython) {
   console.log(
@@ -69,10 +92,12 @@ if (skipPython) {
 // The port's own wording is asserted directly by the contract-checker control, so the
 // remap never runs on the port side.
 function note163(body: string): string {
-  return body.replace(
-    "proposed fix. If the fix changes the coachman contract (markers, the waybill shape, completion detection), a fixture run confirms it before it merges.",
-    "proposed fix. The postmaster's contract checker decides from the final branch whether a fixture run is required; this ticket's wording does not decide it.",
-  );
+  return body
+    .replace(
+      "proposed fix. If the fix changes the coachman contract (markers, the waybill shape, completion detection), a fixture run confirms it before it merges.",
+      "proposed fix. The postmaster's contract checker decides from the final branch whether a fixture run is required; this ticket's wording does not decide it.",
+    )
+    .replace("by `scripts/tool-faults.sh`", "by `scripts/run tool-faults`");
 }
 
 function normRid(s: string): string {
@@ -316,6 +341,7 @@ beforeAll(() => {
 
     // Copy scripts and skills (plus the bunfig the copied wrappers resolve beside themselves)
     run("cp", ["-R", HERE, join(T, "scripts")]);
+    plantLegacyTargets(T);
     copyFileSync(join(TOOL, "bunfig.toml"), join(T, "bunfig.toml"));
     run("cp", ["-R", join(TOOL, "skills/postmaster"), join(T, "skills/postmaster")]);
     run("git", ["-C", T, "init", "-q"]);
@@ -401,7 +427,7 @@ if (a[0] === "api" && a[1] === "graphql") {
     };
 
     const tf = (...args: string[]): RunR => {
-      return run("bash", [join(T, "scripts", "tool-faults.sh"), ...args], {
+      return run(join(T, "scripts", "run"), ["tool-faults", ...args], {
         env: {
           ...process.env,
           PATH: `${join(tmp, "bin")}:${process.env.PATH}`,
@@ -411,7 +437,7 @@ if (a[0] === "api" && a[1] === "graphql") {
     };
 
     const logf = (d: string, ...args: string[]): void => {
-      run("bash", [join(T, "scripts", "log-action.sh"), d, ...args]);
+      run(join(T, "scripts", "run"), ["log-action", d, ...args]);
     };
 
     const writes = (prefix: string): number => {
@@ -703,6 +729,8 @@ if (a[0] === "api" && a[1] === "graphql") {
     const C = idWhere(out, String.raw`scripts/wait-for-markers.sh  control \(wait\)  once`);
     const D1 = idWhere(out, String.raw`skills/postmaster/coachman.md  control \(action-log\)`);
     const D2 = idWhere(out, String.raw`skills/postmaster/coachman.md  control \(check\)`);
+    if (!A || !B || !C || !D1 || !D2)
+      throw new Error(`harvest exit ${rc}; A=${A} B=${B} C=${C} D1=${D1} D2=${D2}\n${out}`);
     const faultCount = out.split("\n").filter((l: string) => /^tf-[0-9a-f]{8} {2}/u.test(l)).length;
     check(
       "seven fault lines are five faults: one seen three ways, and two naming different scripts kept apart",
@@ -766,8 +794,8 @@ if (a[0] === "api" && a[1] === "graphql") {
       let shape = 0;
       for (const fid of [A, B, C]) {
         const f = draftOf(d, fid);
-        const r = run("bash", [
-          join(T, "scripts", "ticket-check.sh"),
+        const r = run(join(T, "scripts", "run"), [
+          "ticket-check",
           "--body",
           f,
           "--title",
@@ -1418,17 +1446,13 @@ if (a[0] === "api" && a[1] === "graphql") {
       "--fix",
       "use the new flag",
     );
-    outR = run(
-      "bash",
-      [join(REPO, "tools/postmaster/scripts/tool-faults.sh"), "harvest", vendDir],
-      {
-        env: {
-          ...process.env,
-          PATH: `${join(tmp, "bin")}:${process.env.PATH}`,
-          TOOL_FAULTS_STUB: S,
-        },
+    outR = run(join(REPO, "tools/postmaster/scripts/run"), ["tool-faults", "harvest", vendDir], {
+      env: {
+        ...process.env,
+        PATH: `${join(tmp, "bin")}:${process.env.PATH}`,
+        TOOL_FAULTS_STUB: S,
       },
-    );
+    });
     out = outR.out + outR.err;
     rc = outR.code;
     {
@@ -1604,8 +1628,17 @@ if (a[0] === "api" && a[1] === "graphql") {
       const T2 = join(tmp, "tool2");
       mkdirSync(join(T2, "skills"), { recursive: true });
       run("cp", ["-R", HERE, join(T2, "scripts")]);
+      plantLegacyTargets(T2);
       copyFileSync(join(TOOL, "bunfig.toml"), join(T2, "bunfig.toml"));
       run("cp", ["-R", join(TOOL, "skills/postmaster"), join(T2, "skills/postmaster")]);
+      const oldControls = run("git", [
+        "-C",
+        TOOL,
+        "show",
+        "bb782a973e69427c820ce16a676718e87f51995b:skills/postmaster/controls.md",
+      ]);
+      if (oldControls.code !== 0) throw new Error(oldControls.err);
+      writeFileSync(join(T2, "skills/postmaster/controls.md"), oldControls.out);
       writeFileSync(
         join(T2, "skills/postmaster/probe.md"),
         "see docs/straße.md and straße.md for the probe\nthe straße word lives here\nref https://straße.example/x here\n",
@@ -1691,7 +1724,7 @@ if (a[0] === "api" && a[1] === "graphql") {
         const base = run("bash", [baseTf, "harvest", dB], {
           env: { ...process.env, PATH: `${binB}:${process.env.PATH}`, TOOL_FAULTS_STUB: S2B },
         });
-        const port = run("bash", [join(T2, "scripts", "tool-faults.sh"), "harvest", dP], {
+        const port = run(join(T2, "scripts", "run"), ["tool-faults", "harvest", dP], {
           env: {
             ...process.env,
             PATH: `${join(tmp, "bin")}:${process.env.PATH}`,
@@ -1852,7 +1885,7 @@ if (a[0] === "api" && a[1] === "graphql") {
         const bOut = run("bash", [baseTf, "harvest", pB], {
           env: { ...process.env, PATH: `${binB}:${process.env.PATH}`, TOOL_FAULTS_STUB: S10B },
         });
-        const pOut = run("bash", [join(T2, "scripts", "tool-faults.sh"), "harvest", pP], {
+        const pOut = run(join(T2, "scripts", "run"), ["tool-faults", "harvest", pP], {
           env: {
             ...process.env,
             PATH: `${join(tmp, "bin")}:${process.env.PATH}`,
@@ -1973,7 +2006,7 @@ if (a[0] === "api" && a[1] === "graphql") {
           const bOut = run("bash", [join(T3, "scripts", "base-tf.sh"), "harvest", dB], {
             env: { ...process.env, PATH: `${binB}:${process.env.PATH}`, TOOL_FAULTS_STUB: S11B },
           });
-          const pOut = run("bash", [join(T3, "scripts", "tool-faults.sh"), "harvest", dP], {
+          const pOut = run(join(T3, "scripts", "run"), ["tool-faults", "harvest", dP], {
             env: {
               ...process.env,
               PATH: `${join(tmp, "bin")}:${process.env.PATH}`,

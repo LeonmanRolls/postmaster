@@ -200,7 +200,7 @@ worktree included:
 
 - **Store:** `store init` makes one and `store remove` removes one that holds no ticket, each
   only on the user's word and only from the repo's main checkout; from a linked worktree both
-  refuse. Every other command on a repo without a store exits 3. `discover-project.sh` warns
+  refuse. Every other command on a repo without a store exits 3. `run discover-project` warns
   when a github target has no origin remote, and so can have no board: a store is the one to
   propose.
 - **Read:** `read` prints the ticket, with a `path:` line naming its body file. `read --body`

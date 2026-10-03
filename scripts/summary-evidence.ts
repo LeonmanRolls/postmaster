@@ -12,9 +12,8 @@
 //
 // The ticket defaults to the armed copy at <worktree>/.postmaster/verify/ticket.md. A ticket
 // that is a waybill is read from its `## Ticket` heading to its `## Project profile` heading.
-// Run it as the coachman does, `bun --no-env-file --config=/dev/null
-// <tool>/scripts/summary-evidence.ts …`, beside `run verify summary`, so no .env or bunfig.toml
-// from a worktree is read.
+// Run it as the coachman does, `<tool>/scripts/run summary-evidence …`, beside
+// `run verify summary`, so no .env or bunfig.toml from a worktree is read.
 //
 //   exit 0  each ticket criterion has existing evidence or a not shown reason
 //   exit 1  usage, unreadable input, or the reader cannot run

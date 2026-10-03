@@ -1904,7 +1904,7 @@ export async function runControls(): Promise<number> {
       listedCalls,
     );
     await pass(
-      "host.sh marks the space it opened as its own",
+      "run host marks the space it opened as its own",
       () => state.spaces[spaceId]?.tokens?.postmaster === "opened",
     );
     await marker(markerPath("h1"));
@@ -1916,7 +1916,7 @@ export async function runControls(): Promise<number> {
       herdrOut,
     );
     await pass(
-      "and with its caller's environment, handed over by host.sh",
+      "and with its caller's environment, handed over by run host",
       () => field(herdrOut, "var") === "v" && field(herdrOut, "from") === f.caller,
       JSON.stringify({
         from: field(herdrOut, "from"),
@@ -2041,7 +2041,7 @@ export async function runControls(): Promise<number> {
     console.log("stop and close, Herdr (stub)");
     const closedHerdr = execHost(["close", worktree], stubs, root);
     await pass(
-      "a space host.sh opened, its launches done, is closed",
+      "a space run host opened, its launches done, is closed",
       () =>
         closedHerdr.code === 0 &&
         (json(join(stub, "herdr.json"), { open: {} }).open[worktree] ?? "") === "",
@@ -2083,7 +2083,7 @@ export async function runControls(): Promise<number> {
     save(herdrStatePath, currentState);
     const userSpaceClose = execHost(["close", revLuna], stubs, root);
     await pass(
-      "a space host.sh did not open is refused, and left open",
+      "a space run host did not open is refused, and left open",
       () =>
         userSpaceClose.code === 2 &&
         !calls(root, "herdr").includes(`workspace\tclose\t${userSpace}`),
@@ -2136,7 +2136,7 @@ export async function runControls(): Promise<number> {
         cloneCalls.some((line) => line.includes(`--cwd\t${f.clone}\t--label\t${f.name}`)),
     );
     await pass(
-      "host.sh marks that space as its own",
+      "run host marks that space as its own",
       () =>
         json(join(stub, "herdr.json"), { spaces: {} }).spaces[cloneSpace]?.tokens?.postmaster ===
         "opened",
@@ -3014,10 +3014,10 @@ export async function runControls(): Promise<number> {
       }
       const unopenedClose = execHost(["close", sol], stubs, root);
       await pass(
-        "close names a space host.sh did not open instead of failing to read it",
+        "close names a space run host did not open instead of failing to read it",
         () =>
           unopenedClose.code === 2 &&
-          `${unopenedClose.out}${unopenedClose.err}`.includes("was not opened by host.sh"),
+          `${unopenedClose.out}${unopenedClose.err}`.includes("was not opened by run host"),
         `${unopenedClose.out}${unopenedClose.err}`,
       );
       await pass("and it leaves that space open", () => "w9" in (herdrState().spaces ?? {}));
@@ -4184,7 +4184,7 @@ export async function runControls(): Promise<number> {
     writeFileSync(prompt, "skill-caller mid-leg\n");
     r = await legRun(["launch", legD, legWt, "synthesis", "1", prompt]);
     await pass(
-      "a launch.sh call mid-leg does not overwrite the attempt's phase",
+      "a run launch call mid-leg does not overwrite the attempt's phase",
       () => r.code === 0 && lastRecord(attemptsPath).outcome === "incomplete",
       safeOutcome(attemptsPath),
     );
@@ -4313,7 +4313,7 @@ export async function runControls(): Promise<number> {
       ...legEnv(extra),
     });
     const spawnLeg = (args: string[], extra?: Record<string, string>) =>
-      spawn(SELF, args, { cwd: f.caller, env: spawnEnv(extra), stdio: "ignore" });
+      spawn(SELF, ["host", ...args], { cwd: f.caller, env: spawnEnv(extra), stdio: "ignore" });
     // Attached in the same tick as the spawn or the kill check, so the exit event can
     // never have fired already: a late attach after the event would never resolve.
     const exited = (child: ReturnType<typeof spawn>): Promise<number | null> =>
@@ -4594,12 +4594,12 @@ export async function runControls(): Promise<number> {
     for (let i = 0; i < 50; i++) {
       writeFileSync(join(root, "pair.lock"), "999999999 0\n");
       callsBefore = legCalls();
-      const p1 = spawn(SELF, directArgs(join(root, "pair.lock"), "999999999", "0"), {
+      const p1 = spawn(SELF, ["host", ...directArgs(join(root, "pair.lock"), "999999999", "0")], {
         cwd: f.caller,
         env: spawnEnv(directEnv()),
         stdio: "ignore",
       });
-      const p2 = spawn(SELF, directArgs(join(root, "pair.lock"), "999999999", "0"), {
+      const p2 = spawn(SELF, ["host", ...directArgs(join(root, "pair.lock"), "999999999", "0")], {
         cwd: f.caller,
         env: spawnEnv(directEnv()),
         stdio: "ignore",
@@ -4972,7 +4972,7 @@ export async function runControls(): Promise<number> {
               `T-FUZZ-${i}`,
               join(fuzzD, "prompt.txt"),
             ];
-      const starter = spawn(SELF, fuzzArgs, {
+      const starter = spawn(SELF, ["host", ...fuzzArgs], {
         cwd: f.caller,
         env: spawnEnv({
           TEST_DONE: join(fuzzD, ".leg-1-done"),
@@ -6208,7 +6208,7 @@ function liveHost(
   root: string,
   env: Record<string, string> = {},
 ): Result {
-  return exec(SELF, [...args], {
+  return exec(SELF, ["host", ...args], {
     cwd,
     env: {
       ...process.env,

@@ -440,7 +440,7 @@ function recordedChecks(dispatch: string): Check[] {
   const d = loadJson(join(dispatch, "checks.json"));
   if (!d || typeof d !== "object" || !Array.isArray((d as any).checks)) {
     dieV(
-      `no checks recorded at ${join(dispatch, "checks.json")}: the postmaster records them at dispatch with verify.sh record`,
+      `no checks recorded at ${join(dispatch, "checks.json")}: the postmaster records them at dispatch with run verify record`,
     );
   }
   return (d as any).checks;
@@ -768,7 +768,7 @@ function runChecks(wt: string, dispatch: string | null): never {
     const d = loadJson(join(spec, "spec.json"));
     if (!d || typeof d !== "object" || !Array.isArray((d as any).checks)) {
       dieV(
-        `${top} is not armed: ${join(spec, "spec.json")} is missing; the coachman arms each workhorse worktree with verify.sh arm`,
+        `${top} is not armed: ${join(spec, "spec.json")} is missing; the coachman arms each workhorse worktree with run verify arm`,
       );
     }
     checks = (d as any).checks;
@@ -778,7 +778,7 @@ function runChecks(wt: string, dispatch: string | null): never {
     dieV(
       `${top} has files git sees that its commit does not hold, so no result would belong to a commit: ${listedFiles(dirt)}. ` +
         `Commit what belongs to the change and keep what a tool wrote out of git's sight` +
-        (dispatch ? ", or run on a scratch cut at the branch's HEAD with cut-scratch.sh" : "") +
+        (dispatch ? ", or run on a scratch cut at the branch's HEAD with run cut-scratch" : "") +
         ", then run again.",
     );
   }

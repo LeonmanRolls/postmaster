@@ -63,7 +63,7 @@ max_runs = 2                                    # concurrent runs per project
 # [team.lens_reviewers]
 # security = ["luna", "deepseek", "sentinel"]   # sentinel: a third lane, defined under [lanes]
 
-# Per-launch resource limits. On Linux with a working systemd user manager, each host.sh run
+# Per-launch resource limits. On Linux with a working systemd user manager, each run host run
 # gets its own cgroup. Role values override either default; omitted values inherit from [limits].
 [limits]
 memory_max = "8G"

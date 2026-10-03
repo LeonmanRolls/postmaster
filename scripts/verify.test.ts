@@ -377,12 +377,26 @@ describe("discovery: which defaults a project gets", () => {
   });
 
   test("the suite's command is the project's own script", () => {
-    const r = run(SELF, ["verify", "checks", join(tmp, "web"), "--gate", "npm run check", "--lines"]);
+    const r = run(SELF, [
+      "verify",
+      "checks",
+      join(tmp, "web"),
+      "--gate",
+      "npm run check",
+      "--lines",
+    ]);
     expect(r.out.includes("browser\tdefault:browser-suite\tnpm run e2e\t")).toBe(true);
   });
 
   test("the gate is the one it was given", () => {
-    const r = run(SELF, ["verify", "checks", join(tmp, "web"), "--gate", "npm run check", "--lines"]);
+    const r = run(SELF, [
+      "verify",
+      "checks",
+      join(tmp, "web"),
+      "--gate",
+      "npm run check",
+      "--lines",
+    ]);
     expect(r.out.includes("gate\tdefault:gate\tnpm run check\t")).toBe(true);
   });
 
@@ -420,7 +434,7 @@ describe("declaration", () => {
 
   test("a check that uses a default runs its script and says what it shows", () => {
     const r = run(SELF, ["verify", "checks", join(tmp, "decl"), "--gate", "make check"]);
-    expect(r.out.includes("verify-examples.sh")).toBe(true);
+    expect(r.out.includes("scripts/run verify-examples")).toBe(true);
     expect(r.out.includes("shows: the ticket's example transcripts")).toBe(true);
   });
 
@@ -438,7 +452,8 @@ describe("declaration", () => {
   test("record says when the project's declared gate overrides the one it was given", () => {
     mkdirSync(join(tmp, "decl", ".postmaster", "runs", "T-0"), { recursive: true });
     writeFileSync(join(tmp, "decl", ".postmaster", "runs", "T-0", "brief.md"), "## Ticket\nx\n");
-    const r = run(SELF, ["verify",
+    const r = run(SELF, [
+      "verify",
       "record",
       join(tmp, "decl"),
       join(tmp, "decl", ".postmaster", "runs", "T-0"),
@@ -777,7 +792,8 @@ describe("results and summaries", () => {
   test("a summary that pastes the run's lines holds, signals, backticks and several lines included", () => {
     const d = join(tmp, "proj", ".postmaster", "runs", "T-1");
     writeFileSync(join(tmp, "summary.md"), `# Summary\n\n## Checks\n${laneOut}\n`);
-    const r = run(SELF, ["verify",
+    const r = run(SELF, [
+      "verify",
       "summary",
       join(tmp, "summary.md"),
       d,
@@ -795,7 +811,8 @@ describe("results and summaries", () => {
       .filter((l) => !l.startsWith("slow:"))
       .join("\n");
     writeFileSync(join(tmp, "missing.md"), missing);
-    const r = run(SELF, ["verify",
+    const r = run(SELF, [
+      "verify",
       "summary",
       join(tmp, "missing.md"),
       d,
@@ -832,7 +849,8 @@ describe("results and summaries", () => {
       "gate: pass, exit 0, $1s: make",
     );
     writeFileSync(join(tmp, "other.md"), other);
-    const r = run(SELF, ["verify",
+    const r = run(SELF, [
+      "verify",
       "summary",
       join(tmp, "other.md"),
       d,
@@ -903,7 +921,9 @@ describe("a check sees what it would from a terminal", () => {
     const np = join(tmp, "named");
     const nd = join(tmp, "runs/named/T-11");
     run(SELF, ["verify", "record", np, nd]);
-    const r = run(SELF, ["verify", "run", np, nd], { env: { POSTMASTER_LAUNCH_NAME: "#11, a run" } });
+    const r = run(SELF, ["verify", "run", np, nd], {
+      env: { POSTMASTER_LAUNCH_NAME: "#11, a run" },
+    });
     expect(r.code).toBe(0);
   }, 60000);
 });
@@ -985,7 +1005,7 @@ describe("a result belongs to a commit", () => {
     }
     run("bash", [
       "-c",
-      `cd "${q}" && "${SELF}" checks . --lines >/dev/null 2>&1; "${join(HERE, "discover-project.sh")}" . >/dev/null 2>&1`,
+      `cd "${q}" && "${SELF}" verify checks . --lines >/dev/null 2>&1; "${join(HERE, "run")}" discover-project . >/dev/null 2>&1`,
     ]);
     rmSync(join(q, "json.py"), { force: true });
     rmSync(join(q, "re.py"), { force: true });
@@ -1002,7 +1022,7 @@ describe("a result belongs to a commit", () => {
     writeFileSync(join(q, ".env"), "VERIFY_ISOLATION_PROBE=loaded\n");
     run("bash", [
       "-c",
-      `cd "${q}" && "${SELF}" checks . --lines >/dev/null 2>&1; "${join(HERE, "discover-project.sh")}" . >/dev/null 2>&1`,
+      `cd "${q}" && "${SELF}" verify checks . --lines >/dev/null 2>&1; "${join(HERE, "run")}" discover-project . >/dev/null 2>&1`,
     ]);
     rmSync(join(q, "bunfig.toml"), { force: true });
     rmSync(join(q, "scary.ts"), { force: true });
@@ -1010,18 +1030,12 @@ describe("a result belongs to a commit", () => {
     expect(existsSync(join(tmp, "preloaded"))).toBe(false);
   });
 
-  test("every wrapper isolates bun from the working directory", () => {
-    const badWrappers: string[] = [];
-    for (const w of readdirSync(HERE).filter((f) => f.endsWith(".sh"))) {
-      const text = readFileSync(join(HERE, w), "utf8");
-      if (
-        !text.includes("--no-env-file") ||
-        !text.includes("--config=") ||
-        !text.includes("bunfig.toml")
-      )
-        badWrappers.push(w);
-    }
-    expect(badWrappers).toEqual([]);
+  test("the single script entry isolates bun from the working directory", () => {
+    expect(readdirSync(HERE).filter((f) => f.endsWith(".sh"))).toEqual([]);
+    const entry = readFileSync(join(HERE, "run"), "utf8");
+    expect(entry).toContain("--no-env-file");
+    expect(entry).toContain("--config=");
+    expect(entry).toContain("bunfig.toml");
   });
 
   test("--no-env-file suppresses .env where bare bun loads it", () => {
@@ -1040,7 +1054,7 @@ describe("a result belongs to a commit", () => {
 
   test("discover runs verify from the tool root against the absolute target", () => {
     const src = readFileSync(join(HERE, "discover-project.ts"), "utf8");
-    expect(src.includes('["checks", ABS,')).toBe(true);
+    expect(src.includes('["verify", "checks", ABS,')).toBe(true);
     expect(src.includes("cwd: toolRoot(import.meta)")).toBe(true);
   });
 

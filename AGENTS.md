@@ -117,7 +117,7 @@ scripts/run project-settings report <chosen>  # shared/local presence and per-fa
 ```
 
 **When a decision belongs to the project rather than the machine, offer it for
-`.postmaster/` and write it there on agreement, never silently.** `discover-project.sh`
+`.postmaster/` and write it there on agreement, never silently.** `run discover-project`
 reports whether the target already has settings. If a fact is one every run against this
 project needs — the default turnpikes, the tracker binding by name, the risk surfaces —
 propose the shared `project.toml` and say which file you are proposing, since that one is
@@ -258,5 +258,5 @@ ticket, run `gh pr list` and check whether the work belongs in one of them.
 **A script command in `skills/postmaster/` goes through `<tool>`**, the repo the skill finds from
 its link: `<tool>/scripts/run stage`, never `scripts/run stage`, which resolves only from this
 repo's root. The run's own pinned tool goes through `<rt>`, resolved per run by
-`run-meta.sh path`. `scripts/run skill-refs` names every other path that does not go through
+`run run-meta path`. `scripts/run skill-refs` names every other path that does not go through
 `<tool>`, and `--fix` rewrites the bare ones; run both after writing a runbook and after a rebase.

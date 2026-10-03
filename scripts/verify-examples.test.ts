@@ -408,9 +408,13 @@ describe("negative controls", () => {
   });
 
   test("a build whose package manager is not installed is not run", () => {
-    const r = run(SELF, ["verify-examples", join(tmp, "built"), "--ticket", join(tmp, "built.md")], {
-      env: { ...process.env, PATH: join(tmp, "fewtools") },
-    });
+    const r = run(
+      SELF,
+      ["verify-examples", join(tmp, "built"), "--ticket", join(tmp, "built.md")],
+      {
+        env: { ...process.env, PATH: join(tmp, "fewtools") },
+      },
+    );
     const out = r.out + r.err;
     expect(r.code).toBe(3);
     expect(out.includes("run through npm, which is not on PATH")).toBe(true);

@@ -129,9 +129,13 @@ const localsh = (script: string): void => {
 };
 
 const spliceRun = (): { code: number; out: string } => {
-  const r = run(SELF, ["ticket-check", "--splice", join(tmp, "base.md"), join(tmp, "sections.md")], {
-    env: process.env as Record<string, string>,
-  });
+  const r = run(
+    SELF,
+    ["ticket-check", "--splice", join(tmp, "base.md"), join(tmp, "sections.md")],
+    {
+      env: process.env as Record<string, string>,
+    },
+  );
   return { code: r.code, out: r.out + r.err };
 };
 
@@ -379,9 +383,13 @@ describe("positive controls", () => {
       "## Direction\nStore TODO items in the existing database.",
       K,
     );
-    const r = run(SELF, ["ticket-check", "--body", join(tmp, "body.md"), "--title", "Add a TODO list"], {
-      env: { ...(process.env as Record<string, string>), TURNPIKES: join(HERE, "run") },
-    });
+    const r = run(
+      SELF,
+      ["ticket-check", "--body", join(tmp, "body.md"), "--title", "Add a TODO list"],
+      {
+        env: { ...(process.env as Record<string, string>), TURNPIKES: join(HERE, "run") },
+      },
+    );
     expect(r.code).toBe(0);
   });
 
@@ -429,7 +437,10 @@ describe("positive controls", () => {
 describe("positive controls: the turnpikes, as scripts/turnpikes.sh reads them", () => {
   test("default is checked against the target project's declaration", () => {
     body(P, A, D, K);
-    const r = run(SELF, ["ticket-check",
+    const r = run(
+      SELF,
+      [
+        "ticket-check",
         "--body",
         join(tmp, "body.md"),
         "--title",
@@ -450,7 +461,17 @@ describe("positive controls: the turnpikes, as scripts/turnpikes.sh reads them",
 
   test("an empty project default does not add a review floor", () => {
     body(P, A, D, K);
-    const r = run(SELF, ["ticket-check", "--body", join(tmp, "body.md"), "--title", T, "--project", join(tmp, "empty-project")],
+    const r = run(
+      SELF,
+      [
+        "ticket-check",
+        "--body",
+        join(tmp, "body.md"),
+        "--title",
+        T,
+        "--project",
+        join(tmp, "empty-project"),
+      ],
       {
         env: {
           ...(process.env as Record<string, string>),
@@ -464,9 +485,13 @@ describe("positive controls: the turnpikes, as scripts/turnpikes.sh reads them",
 
   test("an explicitly empty --project is refused, never checked as discovery", () => {
     body(P, A, D, K);
-    const r = run(SELF, ["ticket-check", "--body", join(tmp, "body.md"), "--title", T, "--project", ""], {
-      env: { ...(process.env as Record<string, string>), TURNPIKES: join(HERE, "run") },
-    });
+    const r = run(
+      SELF,
+      ["ticket-check", "--body", join(tmp, "body.md"), "--title", T, "--project", ""],
+      {
+        env: { ...(process.env as Record<string, string>), TURNPIKES: join(HERE, "run") },
+      },
+    );
     expect(r.code).toBe(1);
     expect((r.out + r.err).includes("no such project directory")).toBe(true);
   });
@@ -504,12 +529,16 @@ describe("negative controls: each part is named on its own", () => {
 
   test("a title in another script has words", () => {
     body(P, A, D, K, N);
-    const r = run(SELF, ["ticket-check", "--body", join(tmp, "body.md"), "--title", "日本語のタイトル"], {
-      env: {
-        ...(process.env as Record<string, string>),
-        TURNPIKES: join(HERE, "run"),
+    const r = run(
+      SELF,
+      ["ticket-check", "--body", join(tmp, "body.md"), "--title", "日本語のタイトル"],
+      {
+        env: {
+          ...(process.env as Record<string, string>),
+          TURNPIKES: join(HERE, "run"),
+        },
       },
-    });
+    );
     expect(r.code).toBe(0);
     expect(r.out.includes("title: missing")).toBe(false);
   });

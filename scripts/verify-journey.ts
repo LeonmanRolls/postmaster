@@ -180,7 +180,7 @@ function steps(lines: string[]): string[] | null {
 
 function format(): void {
   console.log(`Walk the ticket's User journey in a browser, through the project's own browser library, at the
-commit you are reporting on. Write the report to the path \`verify.sh journey-path\` prints for
+commit you are reporting on. Write the report to the path \`run verify journey-path\` prints for
 that commit. For each step, in the ticket's order: a \`## \` heading holding the step as the
 ticket words it; under it a line \`did\`, or \`did not: <what happened instead>\`; then a line
 \`screenshot: <path>\`, the path, relative to the report, of a screenshot of that step saved in the
@@ -224,7 +224,7 @@ function journey(mode: "path" | "judge", wtArg: string, ...rest: string[]): numb
   try {
     text = readFileSync(ticket, "utf8");
   } catch {
-    notRun(`no ticket at ${ticket}; scripts/verify.sh arm copies the run's there`);
+    notRun(`no ticket at ${ticket}; scripts/run verify arm copies the run's there`);
   }
   const want = steps(ticketLines(text!));
   if (want === null) notRun("the ticket has no User journey");

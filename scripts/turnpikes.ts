@@ -204,7 +204,7 @@ export function named(table: string, line: string): string[] | null {
   const value2 = line.replace(/^[ \t]*turnpikes[ \t]*:/u, "");
   if (wordsOf(value2).includes("default")) {
     console.log(
-      "the waybill's turnpikes line says default; it carries the names ticket-check.sh printed for the ticket",
+      "the waybill's turnpikes line says default; it carries the names run ticket-check printed for the ticket",
     );
     process.exit(2);
   }

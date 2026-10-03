@@ -157,7 +157,7 @@ function trackerBinding(): string | null {
 function boardOf(nwo: string, owner: string, name: string): Board {
   const boards = linkedBoards(owner, name);
   if (boards.length === 0) {
-    dieGh(`${nwo} has no linked board; run: github.sh <repo> board init`, 3);
+    dieGh(`${nwo} has no linked board; run: run github <repo> board init`, 3);
   }
   const binding = trackerBinding();
   const named = boards.filter((b) => b.title === (binding || name));
@@ -168,7 +168,7 @@ function boardOf(nwo: string, owner: string, name: string): Board {
       dieGh(`the project's tracker binding '${binding}' matches more than one linked board`);
   }
   const b = boards.length > 1 && named.length > 0 ? named[0] : boards[0];
-  if (!b) dieGh(`${nwo} has no linked board; run: github.sh <repo> board init`, 3);
+  if (!b) dieGh(`${nwo} has no linked board; run: run github <repo> board init`, 3);
   b.ownerLogin = b.owner?.login || owner;
   return b;
 }

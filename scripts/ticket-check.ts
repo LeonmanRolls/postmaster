@@ -414,7 +414,7 @@ function turnpikesCheck(
     return said[0]!;
   }
   dieT(
-    `turnpikes.sh resolve gave no verdict (exit ${r.code}): ${r.err.trim() || r.out.trim() || "no output"}`,
+    `run turnpikes resolve gave no verdict (exit ${r.code}): ${r.err.trim() || r.out.trim() || "no output"}`,
   );
 }
 
@@ -730,7 +730,7 @@ function main(argv: string[]): number {
       readCode = r.code;
     } else {
       console.error(
-        `ticket-check: tracker kind '${kind}' has no adapter script; read the ticket with its own tooling (trackers.md, other), write its body to a file, and run: ticket-check.sh --body <file> --title <title>`,
+        `ticket-check: tracker kind '${kind}' has no adapter script; read the ticket with its own tooling (trackers.md, other), write its body to a file, and run: run ticket-check --body <file> --title <title>`,
       );
       return 1;
     }

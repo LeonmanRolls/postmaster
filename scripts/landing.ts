@@ -268,12 +268,12 @@ function load(path: string): string {
 // --- results and checkpoints -------------------------------------------------------------
 type CheckResult = [string, string];
 
-/** [(name, result)]: verify.sh results with the mapping read. Only exit 1 fails the
+/** [(name, result)]: run verify results with the mapping read. Only exit 1 fails the
  * read; any other exit still parses the lines, as BASE does. */
 function recordedResults(dispatch: string, wt: string): CheckResult[] {
   const r = run(VERIFY, ["verify", "results", dispatch, wt], { env: UNSET_GIT });
   if (r.code === 1)
-    die(`verify.sh results failed: ${pyTrim(r.err) || pyTrim(r.out) || "no output"}`);
+    die(`run verify results failed: ${pyTrim(r.err) || pyTrim(r.out) || "no output"}`);
   const out: CheckResult[] = [];
   for (const line of pySplitLines(r.out)) {
     const m = RESULT_LINE.exec(line);
@@ -286,7 +286,7 @@ function recordedResults(dispatch: string, wt: string): CheckResult[] {
       out.push([m[1] ?? "", w[1] ?? ""]);
     }
   }
-  if (out.length === 0) die("verify.sh results reported no checks");
+  if (out.length === 0) die("run verify results reported no checks");
   return out;
 }
 
@@ -588,7 +588,7 @@ function journey(dispatch: string, wt: string, waybill: string): number {
   }
   const v = run(VERIFY, ["verify", "journey-path", wt, dispatch], { env: UNSET_GIT });
   if (v.code !== 0 || pyTrim(v.out) === "") {
-    die(`verify.sh journey-path failed: ${pyTrim(v.err) || "no output"}`);
+    die(`run verify journey-path failed: ${pyTrim(v.err) || "no output"}`);
   }
   const report = pySplitLines(pyTrim(v.out))[0] ?? "";
   let missing: boolean;

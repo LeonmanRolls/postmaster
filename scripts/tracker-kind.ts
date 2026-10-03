@@ -35,7 +35,7 @@ if (looked.code === 0) {
 }
 if (looked.code !== 3) {
   console.error(
-    `tracker-kind: cannot look for a local store in ${repo} (local.sh exit ${looked.code}): ${
+    `tracker-kind: cannot look for a local store in ${repo} (run local exit ${looked.code}): ${
       why === "" ? "no message" : why
     }`,
   );

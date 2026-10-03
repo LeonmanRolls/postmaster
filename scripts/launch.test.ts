@@ -383,7 +383,17 @@ beforeAll(() => {
     chmodSync(join(tmp, "phasebin/claude"), 0o755);
     rmSync(phasefile, { force: true });
     {
-      const r = spawnSync(self, ["launch", "launch", "coachman", join(tmp, "wt"), join(tmp, "prompt.txt"), "--leg", "synthesis"],
+      const r = spawnSync(
+        self,
+        [
+          "launch",
+          "launch",
+          "coachman",
+          join(tmp, "wt"),
+          join(tmp, "prompt.txt"),
+          "--leg",
+          "synthesis",
+        ],
         {
           encoding: "utf8",
           env: {
@@ -551,7 +561,10 @@ beforeAll(() => {
     );
     {
       // Unicode primitives, BASE run launch python: every expectation python3-verified.
-      writeFileSync(join(tmp, "uni.md"), "```sh\nscripts/run\x1flaunch\x1flaunch u1 <wt> <p>\n```\n");
+      writeFileSync(
+        join(tmp, "uni.md"),
+        "```sh\nscripts/run\x1flaunch\x1flaunch u1 <wt> <p>\n```\n",
+      );
       const u1 = calls(join(tmp, "uni.md"));
       check("calls finds an invocation spaced with U+001F", u1.out.includes("u1"), u1.out);
       writeFileSync(join(tmp, "uni2.md"), "```sh\nscripts/run\rlaunch\rlaunch u2 <wt> <p>\n```\n");
@@ -1084,7 +1097,9 @@ beforeAll(() => {
       const got = `${out
         .replace(/\n+$/u, "")
         .split("\n")
-        .map((l) => l.replace(/^([a-z]+) .*scripts\/run launch (?:launch|resume) ([a-z]) .*/u, "$1 $2"))
+        .map((l) =>
+          l.replace(/^([a-z]+) .*scripts\/run launch (?:launch|resume) ([a-z]) .*/u, "$1 $2"),
+        )
         .join(",")},`;
       if (got === "unrun a,run b,unrun c,run d,") {
         ok("a runbook launch or resume with no --run is found, fenced or inline");
@@ -1114,14 +1129,18 @@ beforeAll(() => {
       const claude = join(tmp, "bin", "claude");
       const saved = readFileSync(claude, "utf8");
       writeFileSync(claude, "#!/bin/sh\nkill -TERM $$\n");
-      const r = spawnSync(self, ["launch", "launch", "one", join(tmp, "wt"), join(tmp, "prompt.txt")], {
-        encoding: "utf8",
-        env: {
-          ...process.env,
-          POSTMASTER_CONFIG: join(tmp, "legs.toml"),
-          PATH: `${join(tmp, "bin")}:${process.env.PATH ?? ""}`,
+      const r = spawnSync(
+        self,
+        ["launch", "launch", "one", join(tmp, "wt"), join(tmp, "prompt.txt")],
+        {
+          encoding: "utf8",
+          env: {
+            ...process.env,
+            POSTMASTER_CONFIG: join(tmp, "legs.toml"),
+            PATH: `${join(tmp, "bin")}:${process.env.PATH ?? ""}`,
+          },
         },
-      });
+      );
       writeFileSync(claude, saved);
       check(
         "a SIGTERM harness kills the launch by SIGTERM",
@@ -2595,14 +2614,18 @@ beforeAll(() => {
     symlinkSync(join(here, "lib"), join(tmp, "lib"));
 
     const bypassed = (script: string, flag: string, ...formArgs: string[]): boolean => {
-      const r = spawnSync(script, script === self ? ["launch", "form", ...formArgs] : ["form", ...formArgs], {
-        encoding: "utf8",
-        env: {
-          ...process.env,
-          POSTMASTER_CONFIG: join(tmp, "team.toml"),
-          PATH: `${join(tmp, "bin")}:${process.env.PATH ?? ""}`,
+      const r = spawnSync(
+        script,
+        script === self ? ["launch", "form", ...formArgs] : ["form", ...formArgs],
+        {
+          encoding: "utf8",
+          env: {
+            ...process.env,
+            POSTMASTER_CONFIG: join(tmp, "team.toml"),
+            PATH: `${join(tmp, "bin")}:${process.env.PATH ?? ""}`,
+          },
         },
-      });
+      );
       out = r.stdout ?? "";
       rc = r.status ?? 1;
       let n = 0;

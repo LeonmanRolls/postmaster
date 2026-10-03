@@ -16,9 +16,11 @@ beforeAll(() => {
   mkdirSync(join(current, "scripts"), { recursive: true });
   writeFileSync(join(old, "scripts", "stage.sh"), "#!/bin/sh\nprintf 'old:%s\\n' \"$1\"\n");
   chmodSync(join(old, "scripts", "stage.sh"), 0o755);
-  writeFileSync(join(current, "scripts", "run"), "#!/bin/sh\nprintf 'new:%s:%s\\n' \"$1\" \"$2\"\n");
+  writeFileSync(join(current, "scripts", "run"), '#!/bin/sh\nprintf \'new:%s:%s\\n\' "$1" "$2"\n');
   chmodSync(join(current, "scripts", "run"), 0o755);
   writeFileSync(join(current, "scripts", "stage.ts"), "");
+  mkdirSync(join(current, "scripts", "lib"));
+  writeFileSync(join(current, "scripts", "lib", "text.ts"), "");
 });
 
 afterAll(() => {
@@ -43,6 +45,10 @@ test("a newer pinned copy uses its entry and passes the name first", () => {
   const result = runPinned(current, "stage", ["list"]);
   expect(result.code).toBe(0);
   expect(result.out).toBe("new:stage:list\n");
+  expect(pinnedCommand(current, "text", ["show"])).toEqual({
+    path: join(current, "scripts", "run"),
+    args: ["text", "show"],
+  });
 });
 
 test("missing and unsafe names fail closed", () => {
