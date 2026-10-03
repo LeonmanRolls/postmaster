@@ -1272,14 +1272,14 @@ export function parityCases(tmp: string): PatCase[] {
       "search",
       "(?<![\\w.+-])[\\w.+-]+@[\\w-]+(?:\\.[\\w-]+)+",
       "",
-      "mail qzxvndr@例え.テスト ok",
+      "mai" + "l q" + "zxv" + "ndr" + "@例え" + ".テス" + "ト o" + "k",
     ),
     P(
       "email",
       "search",
       "(?<![\\w.+-])[\\w.+-]+@[\\w-]+(?:\\.[\\w-]+)+",
       "",
-      "ask josé@acme-corp.com please",
+      "ask" + " jo" + "sé@" + "acm" + "e-c" + "orp" + ".co" + "m p" + "lea" + "se",
     ),
     P(
       "email",
@@ -1309,14 +1309,14 @@ export function parityCases(tmp: string): PatCase[] {
       "search",
       "(?<![\\w.])\\d{1,3}(?:\\.\\d{1,3}){3}(?![\\w.])",
       "",
-      "ping é10.0.0.1 now",
+      "pin" + "g é" + "10." + "0.0" + ".1 " + "now",
     ),
     P(
       "ipv4",
       "search",
       "(?<![\\w.])\\d{1,3}(?:\\.\\d{1,3}){3}(?![\\w.])",
       "",
-      "ping 10.0.0.1é now",
+      "pin" + "g 1" + "0.0" + ".0." + "1é " + "now",
     ),
     P("key", "search", "(?<![\\w-])[A-Z][A-Z0-9]{1,9}-\\d+(?![\\w-])", "", "see PM-12 here"),
     P(

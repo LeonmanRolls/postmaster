@@ -496,7 +496,13 @@ from it.
   `<tool>/scripts/verify.sh run <workhorse-wt> <dispatch>`, which runs the run's checks whatever the
   worktree's copy says, and logs each result. It refuses a worktree with uncommitted changes: run
   it on a scratch cut at the branch's HEAD with `<tool>/scripts/cut-scratch.sh` instead, and put
-  what the workhorse left uncommitted on the card. Where a check's source names `web-journey`,
+  what the workhorse left uncommitted on the card. If the gate reports a private-data finding,
+  fix it in the branch without asking the user, then run the gate again. Remove real data,
+  rebuild made-up test values from fragments or mark them beside the finding with its rule and
+  reason, and append one `detections-resolved.jsonl` row per finding with its rule, redacted
+  file, line, commit and `resolution` (`removed`, `marked` or `scrubbed`). If a finding is
+  already in a pushed commit, do not rewrite it; escalate it under Stage E. Where a check's
+  source names `web-journey`,
   first walk the ticket's User journey on that branch, in the format
   `<tool>/scripts/verify-journey.sh --format` gives, to the path `<tool>/scripts/verify.sh
   journey-path <workhorse-wt> <dispatch>` prints. A `verify.sh run` that can outlast your harness's
@@ -568,7 +574,9 @@ from it.
   with the synthesis.
 
   Then build the synthesis commit by commit with a reason for each choice. Amend commit
-  messages to review grade; run the project's FULL gate with its real command.
+  messages to review grade; run the project's FULL gate with its real command. If its
+  private-data check finds anything, fix each finding on the synthesis branch and rerun the
+  full gate before proceeding; ordinary findings do not go to the user.
 
   **Measure the committed synthesis before recording the SYNTHESIS line.** From the synthesis
   worktree, run the pinned script with explicit commit IDs: the base from the manifest, the
@@ -741,6 +749,8 @@ Set the stage first, `<tool>/scripts/stage.sh <dispatch> review`, then:
      0|3) ;;
      *) exit 1 ;;
    esac   # 0 green and 3 not-run proceed; 2 (a check failed), 1 (verify unrunnable), a signal, or verify.sh itself unstartable (126/127) stops the round
+   # For a private-data finding, repair the synthesis branch, record its resolution, and repeat
+   # this gate step before opening the next review round. Escalate only a finding in pushed history.
    # A 126/127 inside a check is that check's `not run` ("bash could not start it"),
    # which aggregates to 3 and proceeds; only verify.sh itself failing to start stops
    # the round on 126/127
@@ -1008,6 +1018,11 @@ Set the stage first: `<tool>/scripts/stage.sh <dispatch> shipping`.
 1. **Verify the final HEAD.** Run `<tool>/scripts/verify.sh run <synthesis-wt> <dispatch>` after
    the last code change; the gate must
    pass before the card is ready. No P1 or P2 finding may remain open.
+   If the private-data check fails, fix each finding in the synthesis worktree, record its
+   resolution and rerun the gate; do not ask the user to repair an ordinary finding. Before the
+   card, run `<rt>/scripts/scrub-rewrite.sh <main-or-base>` to remove findings that survive only
+   in earlier unpushed commits. A refusal for pushed history or a finding that needs a manual
+   rewrite is escalated under Stage E.
    If a new P1 or P2 issue appears during final QA, fix it and pass the gate again; when the
    review loop has a gating lens, run another review round and rewrite `checkpoint-review.md`
    with the loop's rounds and outcome before writing the card.
@@ -1044,6 +1059,11 @@ Set the stage first: `<tool>/scripts/stage.sh <dispatch> shipping`.
    `<tool>/scripts/style-findings.sh list <dispatch>`; every branch created by the run and its
    state; lane outcomes; and the review link. Finding titles and notes, where the reader
    wants them, go in prose outside the pasted block, which carries only ids and severities.
+   Add `<tool>/scripts/landing.sh private-data-block <dispatch>` verbatim as the card's
+   `## Private data findings` block. It lists every logged finding and its resolution, and any
+   census counts by rule and by made-up or real verdict without the census paths or commits.
+   The postmaster checks it with `landing.sh private-data-card`; a missing finding or a dirty
+   card is withheld.
    The card's branch state is before merge: the
    ticket branch is ready, and every other branch is either retained or abandoned. The gate is
    listed as the gate, never as a turnpike.

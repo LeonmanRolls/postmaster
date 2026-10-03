@@ -18,7 +18,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { run } from "./lib/proc.ts";
-import { findingState, isFindingShaped, pyRepr } from "./landing.ts";
+import { findingState, isFindingShaped, privateDataBlock, pyRepr } from "./landing.ts";
 
 const SELF = join(import.meta.dir, "landing.sh");
 const HERE = import.meta.dir;
@@ -1517,6 +1517,42 @@ describe("card-results", () => {
       1,
       "landing: card: contains an HTML comment",
     );
+  });
+});
+
+describe("private-data-card", () => {
+  test("C13 the ship card lists removed, marked and scrubbed findings", () => {
+    const dispatch = join(tmp, "private-data-dispatch");
+    mkdirSync(dispatch, { recursive: true });
+    const items = [
+      { rule: "email", file: "notes.txt", line: 1, commit: "a".repeat(40), resolution: "removed" },
+      { rule: "token", file: "settings.json", line: 2, commit: "b".repeat(40), resolution: "marked" },
+      { rule: "private-host", file: "records.jsonl", line: 3, commit: "c".repeat(40), resolution: "scrubbed" },
+    ];
+    writeFileSync(join(dispatch, "detections.jsonl"), `${items.map(({ resolution: _resolution, ...item }) => JSON.stringify(item)).join("\n")}\n`);
+    writeFileSync(join(dispatch, "detections-resolved.jsonl"), `${items.map((item) => JSON.stringify(item)).join("\n")}\n`);
+    writeFileSync(join(dispatch, "private-data-census.jsonl"), [
+      JSON.stringify({ rule: "email", file: "census-path-one", line: 7, commit: "d".repeat(40), verdict: "made-up" }),
+      JSON.stringify({ rule: "token", file: "census-path-two", line: 8, commit: "e".repeat(40), verdict: "real" }),
+    ].join("\n") + "\n");
+    const block = privateDataBlock(dispatch);
+    expect(block).toContain("- email at notes.txt:1 (aaaaaaaaaaaa) - removed");
+    expect(block).toContain("- token at settings.json:2 (bbbbbbbbbbbb) - marked as made-up");
+    expect(block).toContain("- private-host at records.jsonl:3 (cccccccccccc) - scrubbed");
+    expect(block).toContain("- made-up: 1\n- real: 1");
+    expect(block).toContain("- 1 suspect(s): email\n- 1 suspect(s): token");
+    expect(block).toContain("- heldout: 33/33 found, 2/27 raised");
+    expect(block).toContain("- heldout2: 25/37 found, 4/23 raised");
+    const censusBlock = block.split("## Main history census\n\n")[1]?.split("\n## Personal-data held-out checks")[0] ?? "";
+    expect(censusBlock).not.toContain("census-path");
+    expect(censusBlock).not.toContain("dddddddddddd");
+    const card = join(dispatch, "card.md");
+    writeFileSync(card, `# Ship card\n\n${block}\nTrailing prose.\n`);
+    check(["private-data-card", dispatch, card], 0, "match");
+
+    const missing = join(dispatch, "card-missing.md");
+    writeFileSync(missing, `# Ship card\n\n${block.replace("- token at settings.json:2 (bbbbbbbbbbbb) - marked as made-up\n", "")}\n`);
+    check(["private-data-card", dispatch, missing], 1, "landing: card: private-data findings do not match the run record");
   });
 });
 

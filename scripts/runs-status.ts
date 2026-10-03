@@ -6,7 +6,8 @@
 //
 //   runs-status.sh <project-run-root>        e.g. <project>/.postmaster/runs
 //
-//   next   USER      the postmaster has put this run's question to the user and waits for the
+//   next   TELL      an untold finding from the run needs to be told to the user once
+//          USER      the postmaster has put this run's question to the user and waits for the
 //                    answer (.waiting-on-user)
 //          RULE      an escalation is waiting (.escalation-ready)
 //          GATE      the ship card is complete (.card-ready)
@@ -39,6 +40,32 @@ interface RunRow {
   markers: string[];
   idleMin: number;
   next: string;
+}
+
+function detectionKeys(path: string): Set<string> {
+  const keys = new Set<string>();
+  let lines: string[];
+  try { lines = readFileSync(path, "utf8").split("\n"); }
+  catch { return keys; }
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    try {
+      const record: unknown = JSON.parse(line);
+      if (typeof record !== "object" || record === null || Array.isArray(record)) continue;
+      const row = record as Record<string, unknown>;
+      if (typeof row.rule !== "string" || typeof row.file !== "string" || typeof row.commit !== "string" || typeof row.line !== "number") continue;
+      keys.add(JSON.stringify([row.rule, row.file, row.line, row.commit]));
+    } catch { /* an incomplete last append is ignored until the writer finishes */ }
+  }
+  return keys;
+}
+
+export function hasUntoldDetections(dispatch: string): boolean {
+  const found = detectionKeys(join(dispatch, "detections.jsonl"));
+  if (!found.size) return false;
+  const told = detectionKeys(join(dispatch, ".detections-told"));
+  for (const key of found) if (!told.has(key)) return true;
+  return false;
 }
 
 // Python's str() for a manifest value, as the table prints it: True, None and
@@ -240,7 +267,8 @@ export function status(root: string): number {
     const intentMax = tailMax(`coachman-leg-${leg}-intent-`, ".json");
     const gap = phaseMax > lastAttempt || intentMax > lastAttempt;
     let next: string;
-    if (stage === "done" || stage === "abandoned") next = "-";
+    if (hasUntoldDetections(d)) next = "TELL";
+    else if (stage === "done" || stage === "abandoned") next = "-";
     else if (markers.includes(".waiting-on-user")) next = "USER";
     else if (markers.includes(".escalation-ready")) next = "RULE";
     else if (markers.includes(".card-ready")) next = "GATE";

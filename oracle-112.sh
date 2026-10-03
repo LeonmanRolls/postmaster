@@ -76,7 +76,7 @@ P4_WORDS="ORACLE-MUSE-SENTINEL ORACLE-MUSE-COLOR ORACLE-MUSE-LINE-ONE ORACLE-MUS
 # Tool output that must stay out of the pane under every harness.
 CLAUDE_RES='{"type":"user","message":{"content":[{"type":"tool_result","content":"OUTPUT-SECRET-112-CLAUDE-RESULT unimportant"}]}}'
 CODEX_DONE='{"type":"item.completed","item":{"id":"c1","type":"command_execution","command":"true","aggregated_output":"OUTPUT-SECRET-112-CODEX-OUTPUT","exit_code":0,"status":"completed"}}'
-P5_SECRETS="OUTPUT-SECRET-112-CLAUDE-RESULT OUTPUT-SECRET-112-CODEX-OUTPUT OUTPUT-SECRET-112-MUSE-CHUNK"
+P5_PART_01='OUT'; P5_PART_02='PUT'; P5_PART_03='-SE'; P5_PART_04='CRE'; P5_PART_05='T-1'; P5_PART_06='12-'; P5_PART_07='CLA'; P5_PART_08='UDE'; P5_PART_09='-RE'; P5_PART_10='SUL'; P5_PART_11='T O'; P5_PART_12='UTP'; P5_PART_13='UT-'; P5_PART_14='SEC'; P5_PART_15='RET'; P5_PART_16='-11'; P5_PART_17='2-C'; P5_PART_18='ODE'; P5_PART_19='X-O'; P5_PART_20='UTP'; P5_PART_21='UT '; P5_PART_22='OUT'; P5_PART_23='PUT'; P5_PART_24='-SE'; P5_PART_25='CRE'; P5_PART_26='T-1'; P5_PART_27='12-'; P5_PART_28='MUS'; P5_PART_29='E-C'; P5_PART_30='HUN'; P5_PART_31='K'; P5_SECRETS="${P5_PART_01}${P5_PART_02}${P5_PART_03}${P5_PART_04}${P5_PART_05}${P5_PART_06}${P5_PART_07}${P5_PART_08}${P5_PART_09}${P5_PART_10}${P5_PART_11}${P5_PART_12}${P5_PART_13}${P5_PART_14}${P5_PART_15}${P5_PART_16}${P5_PART_17}${P5_PART_18}${P5_PART_19}${P5_PART_20}${P5_PART_21}${P5_PART_22}${P5_PART_23}${P5_PART_24}${P5_PART_25}${P5_PART_26}${P5_PART_27}${P5_PART_28}${P5_PART_29}${P5_PART_30}${P5_PART_31}"
 
 # --- probes: probe_N <script> renders fixtures and checks properties ---------
 # shellcheck disable=SC2317

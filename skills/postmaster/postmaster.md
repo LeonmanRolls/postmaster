@@ -271,6 +271,13 @@ pause — never to stop a wake you have not acted on.
 Each `NEXT` names the act. The watcher has already taken the mechanical ones; what it names
 is what needs judgment or what it could not complete:
 
+- **TELL:** read `<dispatch>/detections.jsonl` and `.detections-told`, then tell the user once
+  for each untold finding, including one hidden by a valid made-up-data marker. State only its
+  rule and redacted place; never include scanned text or a path value. Append each told record
+  to `.detections-told` with the same rule, file, line and commit fields, omitting its timestamp.
+  Do this before any other action for the run, including when it is waiting for the user or is
+  already done. Then poll again. A later gate run may log the same finding again; the matching
+  rule, file, line and commit mean it is already told.
 - **USER:** the run waits on the user, and its `.waiting-on-user` holds the question (Stage E
   step 3, current Stage F step 2, Legacy Stage F step 2, or Spec review). Put the question to the user again if you have not in this session;
   otherwise nothing to do until they answer. When they answer, remove the marker and follow the
@@ -478,6 +485,12 @@ answers that. When a branch has no upstream, pass the branch itself: with nothin
 tracking it there is no fresher ref, and remote movement it does not track can be
 missed.
 
+Before every pull-request description or ticket comment written for this run, save the exact
+draft in a file and scan it with the run-pinned `<rt>/scripts/scrub-check.sh --pr-description
+<draft>` while `POSTMASTER_DETECTIONS_LOG=<dispatch>/detections.jsonl` is set. If it finds
+anything, reword the draft and scan it again; post only after exit 0. Markers are inert in
+posted text. This applies in every project and does not change that project's gate.
+
 1. **Verify the card's claims against the code**, never against the card.
    `<tool>/scripts/landing.sh fresh --repo <repo> --default <branch> --ticket
    <ticket-branch> --dispatch <dispatch> --wt <synthesis-wt>` must print `fresh`: the
@@ -500,6 +513,9 @@ missed.
    must print `match`: the card holds the rendered block exactly once (the leg's
    checkpoint is `<dispatch>/checkpoint-review.md` after a review leg,
    `<dispatch>/checkpoint-1.md` otherwise). Then
+   `<tool>/scripts/landing.sh private-data-card <dispatch> <dispatch>/card.md` must print
+   `match`; withhold the card if a finding or resolution is missing or the card text is not
+   clean. Then
    `<tool>/scripts/landing.sh journey <dispatch> <synthesis-wt> <dispatch>/brief.md` must
    not print `blocked`: a journey with no report, or one that did not run where the
    waybill mentions a user journey, holds landing until the journey runs or the user
@@ -596,7 +612,8 @@ missed.
      (`gh pr create` on a GitHub project). Include the card, final checks, diff stat,
      preview and review links, and thread ids. Log a `note` with the push and
      pull-request URL, and leave a dated tracker comment linking the pull request and
-     summarizing the same evidence, logging `ticket-comment`. Put the pull-request URL and its
+     summarizing the same evidence, logging `ticket-comment`; scan the PR description and
+     comment as above and fix every finding before posting. Put the pull-request URL and its
      merge instructions in `.waiting-on-user`; the user merges it in the project's review
      surface and says so, and that word is the answer step 3 waits on.
      Do not use `MERGE_AUTHORITY` to merge a pull request on the user's behalf.
@@ -606,8 +623,12 @@ missed.
      `.waiting-on-user` on the `user` path. Verify the default checkout is still clean and on
      its default branch; if it is not, stop and tell the user. Leave a dated ready-to-merge
      tracker comment with the evidence (what the change does, branch name, gate output summary,
-     diff stat, review link, thread ids), logging `ticket-comment`. Merge the ticket branch
-     with `git merge --no-ff`; never rebase. Log `merge`, move the ticket to done, logging
+     diff stat, review link, thread ids), logging `ticket-comment`; scan it as above and fix
+     every finding before posting. Merge the ticket branch
+     with `git merge --no-ff`; never rebase. Then run
+     `<tool>/scripts/verify-merge.sh <repo> HEAD`. On a finding, keep the merge local and
+     withhold landing; resume the coachman with the safe finding lines, then repeat the card
+     check and merge verification after the correction. Log `merge`, move the ticket to done, logging
      `ticket-state`, remove `.card-ready`, and set the stage with
      `<tool>/scripts/stage.sh <dispatch> shipped postmaster`.
    - An unknown landing route is a dispatch fault to resolve before this point. Do not infer
@@ -643,7 +664,8 @@ missed.
    until exit 0; it does not resume a coachman leg that already handed off. Log a `note` with
    the check's last line.
 2. **Finish the record.** Final `run-log.md` entry (per-lane win record, findings counts, cost)
-   plus a closing dated comment on the ticket, logging `ticket-comment`. Archive finished
+   plus a closing dated comment on the ticket, logging `ticket-comment`; scan it as above and
+   fix every finding before posting. Archive finished
    threads where the harness has an archive form (`harnesses.md`).
 3. Once `.leg-<leg>-exited` is present, close every run-created worktree's host space with
    `<tool>/scripts/host.sh close-run <dispatch>`; on exit 2, stop and report. Remove

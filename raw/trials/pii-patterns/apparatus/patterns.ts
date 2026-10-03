@@ -6,6 +6,8 @@
  * field or a sign-off line. Every exclusion is made here, in code.
  */
 
+import { BOUND_R, PY_S_CLASS } from "../../../../scripts/lib/text.ts";
+
 export type Kind = "person" | "email" | "phone" | "postal-address" | "other-personal";
 
 export const KINDS: Kind[] = ["person", "email", "phone", "postal-address", "other-personal"];
@@ -186,8 +188,23 @@ const SLOTS: Slot[] = [
   },
 ];
 
+const SLOT_CUES = [
+  "signed-off-by", "co-authored-by", "reviewed-by", "acked-by", "tested-by", "reported-by",
+  "suggested-by", "helped-by", "author", "maintainer", "contributor", "committer", "owner",
+  "assignee", "reporter", "signer", "contact", "copyright", "user.name", "git_author",
+  "git_committer", "mr ", "mrs ", "ms ", "miss ", "mx ", "dr ", "prof ", "sir ", "dame ",
+  "my name is", "i am ", "i'm ", "i’m ", "mother", "father", "mum", "mom", "dad", "wife",
+  "husband", "partner", "spouse", "sister", "brother", "son", "daughter", "grandmother",
+  "grandfather", "aunt", "uncle", "cousin", "niece", "nephew", "thanks", "thank you", "kudos",
+  "cheers", "assigned to", "reported by", "written by", "created by", "maintained by",
+  "contributed by", "reviewed by", "signed by", "on behalf of", "courtesy of", "according to",
+  "ask ", "cc ", "name",
+];
+const SLOT_SIGNAL = new RegExp(SLOT_CUES.map((cue) => cue.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")).join("|"), "iu");
+
 const slots: Rule = (line, context) => {
   const out: Finding[] = [];
+  if (!(line.includes("<") && line.includes("@")) && !SLOT_SIGNAL.test(line)) return out;
   for (const slot of SLOTS) {
     for (const key of line.matchAll(slot.key)) {
       const at = (key.index ?? 0) + key[0].length;
@@ -199,9 +216,11 @@ const slots: Rule = (line, context) => {
       if (slot.family) out.push(finding("other-personal", slot.rule, key.index ?? 0, span[1]));
     }
   }
-  const identity = new RegExp(String.raw`(${WORD}(?:${GAP}${WORD})+)\s*<[^<>\s@]+@[^<>\s]+>`, "gu");
-  for (const match of line.matchAll(identity)) {
-    if (personName(match[1])) out.push(finding("person", "name-and-address", match.index ?? 0, (match.index ?? 0) + match[1].length));
+  if (line.includes("<") && line.includes("@")) {
+    const identity = new RegExp(String.raw`(${WORD}(?:${GAP}${WORD})+)\s*<[^<>\s@]+@[^<>\s]+>`, "gu");
+    for (const match of line.matchAll(identity)) {
+      if (personName(match[1])) out.push(finding("person", "name-and-address", match.index ?? 0, (match.index ?? 0) + match[1].length));
+    }
   }
   return out;
 };
@@ -487,8 +506,32 @@ const PLACEHOLDER_PLACE = /\b(?:fake|example|sample|dummy|placeholder|anytown|no
 const UK_POSTCODE = new RegExp(String.raw`${WORD},?\s+((?:[A-Z]{1,2}\d[A-Z\d]?|GIR)\s?\d[ABD-HJLNP-UW-Z]{2})\b`, "gu");
 const US_STATES =
   "AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|DC";
-const US_CITY_ZIP = new RegExp(String.raw`${WORD}(?:\s${WORD})*,\s(?:${US_STATES})\s\d{5}(?:-\d{4})?\b`, "gu");
 const PO_BOX = /\bP\.?\s?O\.?\s?Box\s+\d+/giu;
+const US_CITY_WORD = new RegExp(`^(?:${WORD})$`, "u");
+const US_CITY_SUFFIX = new RegExp(`,[${PY_S_CLASS}]*(?:${US_STATES})[${PY_S_CLASS}]+[0-9]{5}(?:-[0-9]{4})?${BOUND_R}`, "gu");
+const PY_SPACE = new RegExp(`[${PY_S_CLASS}]`, "u");
+
+function usCityZip(line: string): Finding[] {
+  const out: Finding[] = [];
+  for (const suffix of line.matchAll(US_CITY_SUFFIX)) {
+    const comma = suffix.index ?? 0;
+    let end = comma;
+    while (end > 0 && PY_SPACE.test(line[end - 1]!)) end--;
+    let cursor = end;
+    let start = -1;
+    while (cursor > 0) {
+      let wordStart = cursor;
+      while (wordStart > 0 && !PY_SPACE.test(line[wordStart - 1]!)) wordStart--;
+      if (!US_CITY_WORD.test(line.slice(wordStart, cursor))) break;
+      start = wordStart;
+      cursor = wordStart;
+      while (cursor > 0 && PY_SPACE.test(line[cursor - 1]!)) cursor--;
+      if (cursor === wordStart || cursor === 0) break;
+    }
+    if (start >= 0) out.push(finding("postal-address", "postcode", start, comma + suffix[0].length));
+  }
+  return out;
+}
 
 const address: Rule = (line) => {
   const out: Finding[] = [];
@@ -501,7 +544,6 @@ const address: Rule = (line) => {
     ["street", STREET_ROMANCE],
     ["street", STREET_COMMA],
     ["postcode", UK_POSTCODE],
-    ["postcode", US_CITY_ZIP],
     ["po-box", PO_BOX],
     ["address-field", ADDRESS_FIELD],
   ] as const) {
@@ -509,6 +551,7 @@ const address: Rule = (line) => {
       out.push(finding("postal-address", rule, match.index ?? 0, (match.index ?? 0) + match[0].length));
     }
   }
+  out.push(...usCityZip(line));
   if (JP_PLACE.test(line)) {
     for (const match of line.matchAll(JP_POSTCODE)) {
       out.push(finding("postal-address", "postcode", match.index ?? 0, (match.index ?? 0) + match[0].length));
@@ -519,8 +562,14 @@ const address: Rule = (line) => {
 
 const RULES: Rule[] = [slots, mailboxes, phone, card, iban, ssn, idNumber, birth, phrases, address];
 
+// Lines with no numeric or semantic signal cannot match a rule above: bare
+// names are intentionally out of scope. This gate avoids making name-shaped
+// patterns walk long documentation lines that carry no personal-data cue.
+const SCAN_SIGNAL = /@|[0-9]|(?:signed-off-by|co-authored-by|reviewed-by|acked-by|tested-by|reported-by|suggested-by|helped-by|author|maintainer|contributor|committer|owner|assignee|reporter|signer|contact|copyright|user\.name|GIT_AUTHOR|GIT_COMMITTER|\b(?:Mr|Mrs|Ms|Miss|Mx|Dr|Prof|Sir|Dame)\b|my name is|\bI am\b|\bI['’]m\b|mother|father|mum|mom|dad|wife|husband|partner|spouse|girlfriend|boyfriend|fianc[ée]e?|son|daughter|kids|children|baby|toddler|parents|siblings?|grandmother|grandfather|aunt|uncle|cousin|niece|nephew|thanks|thank you|kudos|cheers|assigned to|written by|created by|maintained by|contributed by|reviewed by|signed by|on behalf of|courtesy of|according to|credit|\bask\b|\bcc\b|phone|telephone|mobile|cell|whatsapp|signal|fax|ssn|social security|passport|licen[cs]e|national insurance|nino|nhs number|tax id|tax number|national id|identity number|id number|customer number|account number|membership number|patient number|date of birth|birth ?date|dob|birthday|diagnosed|suffer|treated|hospital|therapy|rehab|antidepressant|chemo|dialysis|medication|disability|illness|pregnan|salary|income|wages|compensation|earnings|net.?worth|my home|our home|my house|my address|my hometown|work(?:ed|ing)?\s+(?:at|for)|workplace|employer|\biban\b|credit card|po\.?\s?box|street|road|avenue|lane|drive|court|terrace|postcode|postal address|address\s*[:=])/iu;
+
 /** Every finding on one line; the context is the lines around it, which only the author field reads. */
 export function scan(line: string, context = ""): Finding[] {
+  if (!/[0-9@]/u.test(line) && !SCAN_SIGNAL.test(line)) return [];
   return RULES.flatMap((rule) => rule(line, context));
 }
 
