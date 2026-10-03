@@ -1,0 +1,9 @@
+The Jev trial's 71 made-up lines (v6), scanned once; line numbers as in ../../jev-pii/results/v6/corpus.txt.
+
+personal-data lines found: 32/34, with the right kind: 32/34
+negatives raised: 1/37
+missed: 9 (person), 68 (person)
+found with another kind only: none
+negatives raised: 53 (postal-address: street)
+lines each rule fired on: credit 2, author-field 4, title 3, sign-off 1, self-introduction 1, email 4, phone 5, postcode 1, street 5, address-field 1, date-of-birth 1, ssn 1, card 1, iban 1, health 1, id-number 1, income 1, copyright 1
+control, ten plain lines raised: 0

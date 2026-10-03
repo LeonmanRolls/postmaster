@@ -26,8 +26,8 @@ const finding = (kind: Kind, rule: string, start: number, end: number): Finding 
 /** One word of a personal name: capitalised, with Mc, Mac, O' or D' and hyphenated parts allowed. */
 const PART = String.raw`(?:Mc|Mac|O['’]|D['’])?\p{Lu}\p{Ll}+`;
 const WORD = String.raw`${PART}(?:-${PART})*`;
-/** What may stand between two words of a name: initials, and particles such as "van" or "al". */
-const GAP = String.raw`\s+(?:\p{Lu}\.\s+)*(?:(?:van|von|der|den|de|del|della|da|di|du|le|la|al|el|bin|ibn|ter|ten|zu|y)\s+)*`;
+/** What may stand between two words of a name: a nickname in quotes, initials, and particles such as "van" or "al". */
+const GAP = String.raw`\s+(?:["“'][\p{L}.\s-]{1,20}["”']\s+)?(?:\p{Lu}\.\s+)*(?:(?:van|von|der|den|de|del|della|da|di|du|le|la|al|el|bin|ibn|ter|ten|zu|y)\s+)*`;
 const FULL_NAME = new RegExp(String.raw`${WORD}(?:${GAP}${WORD})+`, "uy");
 const ANY_NAME = new RegExp(String.raw`${WORD}(?:${GAP}${WORD})*`, "uy");
 
@@ -147,6 +147,8 @@ interface Slot {
   rule: string;
   key: RegExp;
   full: boolean;
+  /** A named relative is a family detail as well as a name. */
+  family?: boolean;
 }
 
 /** Places a name sits: each key is matched without regard to case; the name after it with it. */
@@ -158,7 +160,7 @@ const SLOTS: Slot[] = [
   },
   {
     rule: "author-field",
-    key: /(?:^|[\s{,([])["']?(?:authors?|maintainers?|contributors?|committer|owner|assignee|reporter|signer|(?:full|display|real|first|last|given|family|author|owner|contact|legal)[_-]?name)["']?\s*[:=]\s*[["'\s]*/giu,
+    key: /(?:^|[\s{,([])["']?[\w-]*?(?:authors?|maintainers?|contributors?|committer|owner|assignee|reporter|signer|contact|(?:full|display|real|first|last|given|family|author|owner|contact|legal)[_-]?name)["']?\s*[:=]\s*[["'\s]*/giu,
     full: true,
   },
   {
@@ -169,10 +171,16 @@ const SLOTS: Slot[] = [
   { rule: "git-identity", key: /(?:\buser\.name|\bGIT_(?:AUTHOR|COMMITTER)_NAME)\s*[= ]\s*["']?/gu, full: true },
   { rule: "title", key: /\b(?:Mr|Mrs|Ms|Miss|Mx|Dr|Prof|Sir|Dame)\.?\s+/gu, full: false },
   { rule: "self-introduction", key: /\bmy name is\s+/giu, full: false },
+  {
+    rule: "relative",
+    key: /\b(?:mother|father|mum|mom|dad|wife|husband|partner|spouse|sister|brother|son|daughter|grandmother|grandfather|grandma|grandpa|aunt|uncle|cousin|niece|nephew|fianc[ée]e?|stepmother|stepfather)\b[,:]?\s+/giu,
+    full: true,
+    family: true,
+  },
   { rule: "self-introduction", key: /\b(?:I am|I'm|I’m)\s+/gu, full: true },
   {
     rule: "credit",
-    key: /\b(?:thanks to|thank you|assigned to|reported by|written by|created by|maintained by|contributed by|reviewed by|signed by|on behalf of|courtesy of|according to|ask|contact|cc)\b[,:]?\s+/giu,
+    key: /\b(?:thanks to|thanks|thank you|kudos to|kudos|cheers|assigned to|reported by|written by|created by|maintained by|contributed by|reviewed by|signed by|on behalf of|courtesy of|according to|ask|contact|cc)\b[,:]?\s+/giu,
     full: true,
   },
 ];
@@ -187,6 +195,7 @@ const slots: Rule = (line, context) => {
       if (slot.rule === "author-field" && /author/i.test(key[0]) && citation(context)) continue;
       if (slot.rule === "copyright" && COMPANY_AFTER.test(line.slice(span[1]))) continue;
       out.push(finding("person", slot.rule, span[0], span[1]));
+      if (slot.family) out.push(finding("other-personal", slot.rule, key.index ?? 0, span[1]));
     }
   }
   const identity = new RegExp(String.raw`(${WORD}(?:${GAP}${WORD})+)\s*<[^<>\s@]+@[^<>\s]+>`, "gu");
@@ -264,7 +273,8 @@ const mailboxes: Rule = (line) => {
 
 // Phone numbers
 
-const PHONE_WORD = /\b(?:tel|telephone|phone|mobile|cell|cellphone|call|ring|whatsapp|whats app|signal|fax|landline|text me)\b|phone_?number|phoneNumber/i;
+const PHONE_WORD =
+  /\b(?:tel|telephone|phone|mobile|cell|cellphone|call|ring|whatsapp|whats app|signal|fax|landline|text me)\b|phone_?number|phoneNumber|\b(?:contact|home|work|office|emergency)\s+(?:number|no\.?)/i;
 const PHONE = /(?<![\w+./:@-])(?:\+\d|\(\d{2,5}\)|\d)[\d ().-]{6,22}\d(?![\w/:@-]|\.\w)/g;
 const TOLL_FREE = /^(?:800|888|877|866|855|844|833)/;
 
@@ -276,6 +286,7 @@ const phone: Rule = (line) => {
     const digits = text.replace(/\D/g, "");
     if (digits.length < 8 || digits.length > 15) continue;
     if (/\d{4}-\d{2}-\d{2}|\d{2}:\d{2}/.test(text) || /^\d{1,3}(?:\.\d{1,3}){3}$/.test(text)) continue;
+    if (/^[\d.]+$/.test(text) && text.split(".").length === 2) continue; // a decimal number
     const national = digits.length === 11 && digits.startsWith("1") ? digits.slice(1) : digits;
     if (national.length === 10 && TOLL_FREE.test(national)) continue; // a business's free line
     const international = text.startsWith("+");
@@ -414,6 +425,14 @@ const PHRASES: [string, RegExp][] = [
     /\b(?:[Mm]y|[Hh]is|[Hh]er)\s+(?:diagnosis|prescription|medication|meds|therapist|psychiatrist|oncologist|disability|illness|miscarriage|pregnancy|cancer|diabetes|depression|anxiety|ADHD|autism|HIV)\b/gu,
   ],
   [
+    "health",
+    /\bdiagnosed with\s+(?:(?:type [12]|early[- ]onset|chronic|severe|stage \w+)\s+)?(?:diabetes|cancer|asthma|adhd|autism|depression|anxiety|bipolar|schizophrenia|hiv|aids|epilepsy|dementia|alzheimer['’]?s|parkinson['’]?s|multiple sclerosis|long covid|covid|leukaemia|leukemia|lymphoma|tumou?r|coeliac|celiac|crohn['’]?s|arthritis|hypertension|heart disease|ptsd|ocd|dyslexia|an? \w+ disorder)/giu,
+  ],
+  [
+    "income",
+    /\b[\w-]*(?:salary|income|wages?|compensation|earnings|net_?worth)[\w-]*["']?\s*[:=]\s*["']?[$£€]?\s?\d/giu,
+  ],
+  [
     "income",
     /\b(?:[Mm]y|[Hh]is|[Hh]er)\s+(?:salary|income|pay|wages?|earnings|pension|rent|mortgage|debt)\s+(?:is|was|of|comes to)\b|\b(?:I|[Hh]e|[Ss]he)\s+(?:earn|earns|earned|make|makes|made)\s+[$£€]?\s?\d/gu,
   ],
@@ -450,6 +469,20 @@ const STREET_EU = new RegExp(
   String.raw`(?<![\w-])(?:\p{Lu}\p{Ll}+(?:straße|strasse|weg|gasse|platz|allee|damm|ufer|steig|pfad)|\p{Lu}\p{Ll}+\s+(?:Straße|Strasse|Weg|Gasse|Platz|Allee|Damm|Ufer)|(?:Rue|Avenue|Boulevard|Via|Viale|Calle|Avenida|Rua|Piazza|Chemin|Allée)\s+(?:(?:de|du|des|la|le|del|della|di|da|do|dos)\s+)*${WORD}(?:\s+${WORD})*)\s+\d{1,4}[a-z]?\b`,
   "gu",
 );
+const STREET_ROMANCE =
+  /(?<![\w.-])\d{1,4}(?:\s?(?:bis|ter))?,?\s+(?:[Rr]ue|[Aa]venue|[Bb]oulevard|[Cc]hemin|[Aa]llée|[Ii]mpasse|[Qq]uai|[Cc]alle|[Aa]venida|[Rr]ua|[Vv]ia|[Vv]iale|[Pp]iazza|[Cc]orso|[Cc]arrer)\s+(?:(?:de|du|des|la|le|les|l['’]|d['’]|del|della|di|da|do|dos|das)\s*)*\p{Lu}[\p{L}'’-]*/gu;
+const STREET_COMMA = new RegExp(
+  String.raw`(?:Av\.|Avda\.|Avenida|Rua|Calle|Carrer|Praça|Plaza|Travessa|Alameda)\s+(?:(?:de|da|do|dos|das|del|la)\s+)*${WORD}(?:\s+${WORD})*,\s*(?:n[º°.]?\s*)?\d{1,5}\b`,
+  "gu",
+);
+/** A Japanese address in Latin letters: a chome or a ward or city name, and a postcode. */
+const JP_PLACE = /\b\d{1,2}-chome\b|\b\p{Lu}\p{Ll}+-(?:ku|shi)\b/u;
+const JP_POSTCODE = /(?<![\w-])\d{3}-\d{4}(?![\w-])/gu;
+/** A field whose name says it holds an address, with a value that reads as one. */
+const ADDRESS_FIELD =
+  /\b(?![\w-]*(?:email|mail|ip|mac|url|web|host|server|listen|bind|remote|local|wallet|contract|memory|base|socket|proxy))[\w-]*(?:address|addr)["']?\s*[:=]\s*["']([^"']*\d[^"']*,[^"']*)["']/giu;
+/** Words that make an address a placeholder. */
+const PLACEHOLDER_PLACE = /\b(?:fake|example|sample|dummy|placeholder|anytown|nowhere)\w*/i;
 const UK_POSTCODE = new RegExp(String.raw`${WORD},?\s+((?:[A-Z]{1,2}\d[A-Z\d]?|GIR)\s?\d[ABD-HJLNP-UW-Z]{2})\b`, "gu");
 const US_STATES =
   "AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|DC";
@@ -464,15 +497,23 @@ const address: Rule = (line) => {
   }
   for (const [rule, pattern] of [
     ["street", STREET_EU],
+    ["street", STREET_ROMANCE],
+    ["street", STREET_COMMA],
     ["postcode", UK_POSTCODE],
     ["postcode", US_CITY_ZIP],
     ["po-box", PO_BOX],
+    ["address-field", ADDRESS_FIELD],
   ] as const) {
     for (const match of line.matchAll(pattern)) {
       out.push(finding("postal-address", rule, match.index ?? 0, (match.index ?? 0) + match[0].length));
     }
   }
-  return out;
+  if (JP_PLACE.test(line)) {
+    for (const match of line.matchAll(JP_POSTCODE)) {
+      out.push(finding("postal-address", "postcode", match.index ?? 0, (match.index ?? 0) + match[0].length));
+    }
+  }
+  return out.filter((f) => !PLACEHOLDER_PLACE.test(line.slice(f.start, f.end)));
 };
 
 const RULES: Rule[] = [slots, mailboxes, phone, card, iban, ssn, idNumber, birth, phrases, address];
