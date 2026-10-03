@@ -1030,18 +1030,11 @@ describe("a result belongs to a commit", () => {
     expect(existsSync(join(tmp, "preloaded"))).toBe(false);
   });
 
-  test("every wrapper isolates bun from the working directory", () => {
-    const badWrappers: string[] = [];
-    for (const w of readdirSync(HERE).filter((f) => f.endsWith(".sh"))) {
-      const text = readFileSync(join(HERE, w), "utf8");
-      if (
-        !text.includes("--no-env-file") ||
-        !text.includes("--config=") ||
-        !text.includes("bunfig.toml")
-      )
-        badWrappers.push(w);
-    }
-    expect(badWrappers).toEqual([]);
+  test("the entry isolates bun from the working directory", () => {
+    const text = readFileSync(join(HERE, "run"), "utf8");
+    expect(text.includes("--no-env-file")).toBe(true);
+    expect(text.includes("--config=")).toBe(true);
+    expect(text.includes("bunfig.toml")).toBe(true);
   });
 
   test("--no-env-file suppresses .env where bare bun loads it", () => {

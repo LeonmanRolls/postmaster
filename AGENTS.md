@@ -222,10 +222,12 @@ whole system.
    `scripts/run log-action`, per run and per project. The narrative is for reading; the log
    is what a run is audited from and what the flow is improved from.
 
-The scripts run on Bun 1.4.2 or newer: each `scripts/<name>.sh` is a one-line wrapper that
-hands its arguments to `scripts/<name>.ts`. Runtime imports are Bun's built-ins and Node's
-standard modules only; `typescript`, `@biomejs/biome` and `oxlint` are the development dependencies,
-and `bun run check` is the type check, Oxlint, the Biome format check, and the tests beside every script.
+The scripts run on Bun 1.4.2 or newer: `scripts/run <name> [args]` is the one entry for every
+tool script; it execs Bun with `--no-env-file` and the tool's own `bunfig.toml`, so a script run
+inside a target project never loads that project's `.env` or Bun config. Runtime imports are
+Bun's built-ins and Node's standard modules only; `typescript`, `@biomejs/biome` and `oxlint`
+are the development dependencies, and `bun run check` is the type check, Oxlint, the Biome
+format check, the tests beside every script, the runbook reference check and the wiki lint.
 
 ### Where a setting comes from
 
