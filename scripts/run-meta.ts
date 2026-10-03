@@ -401,6 +401,48 @@ function pathOf(d: string): Outcome {
   return ok(`${canonical}\n`);
 }
 
+// check_confinement <run.json>: the recorded mode agrees with the recorded config.
+// Mode disagreeing with config.confine fails; a run without the object is accepted
+// only when its config resolves to off.
+function checkConfinement(runJson: string): Outcome {
+  let r: unknown;
+  try {
+    r = JSON.parse(readFileSync(runJson, "utf8")) as unknown;
+  } catch {
+    return fail(`run-meta: ${runJson} cannot be read\n`);
+  }
+  if (typeof r !== "object" || r === null || Array.isArray(r)) {
+    return fail(`run-meta: ${runJson} is not an object\n`);
+  }
+  const rec = r as Record<string, unknown>;
+  const cfg = rec.config;
+  const configConfine =
+    typeof cfg === "object" && cfg !== null && !Array.isArray(cfg)
+      ? String((cfg as Record<string, unknown>).confine ?? "") === "on"
+      : false;
+  const conf = rec.confinement;
+  if (conf === undefined || conf === null) {
+    // A run without the object is accepted only when its config resolves to off.
+    if (configConfine) {
+      return fail(
+        `run-meta: ${runJson} records no confinement object but its config has confine on\n`,
+      );
+    }
+    return ok();
+  }
+  if (typeof conf !== "object" || Array.isArray(conf)) {
+    return fail(`run-meta: ${runJson} records a confinement that is not an object\n`);
+  }
+  const mode = (conf as Record<string, unknown>).mode;
+  const recordedOn = mode === "on";
+  if (recordedOn !== configConfine) {
+    return fail(
+      `run-meta: ${runJson} records confinement mode "${String(mode)}" but its config confine is ${configConfine ? "on" : "not on"}\n`,
+    );
+  }
+  return ok();
+}
+
 // check_pin <dispatch>: the run's checkout still serves its dispatch commit. Silent on success.
 function checkPin(d: string): Outcome {
   const runJson = join(d, "run.json");
@@ -436,7 +478,7 @@ function checkPin(d: string): Outcome {
         "it does not serve that commit's versions\n",
     );
   }
-  return ok();
+  return checkConfinement(runJson);
 }
 
 // --- pin scan -------------------------------------------------------------------------------
@@ -736,6 +778,8 @@ function buildRecord(
   const harnessVersions: Record<string, string> = {};
   for (const h of collectHarnesses(cfg.value as Record<string, unknown>))
     harnessVersions[h] = version(h);
+  const confineVal = (cfg.value as Record<string, unknown>).confine;
+  const confinementMode = String(confineVal ?? "") === "on" ? "on" : "off";
   return {
     ok: true,
     record: {
@@ -754,6 +798,7 @@ function buildRecord(
         checkout,
       },
       config: cfg.value,
+      confinement: { mode: confinementMode },
       harness_versions: harnessVersions,
     },
   };
