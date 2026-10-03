@@ -326,48 +326,10 @@ function exerciseSelfTest(sourceRoot: string): number {
     "scripts/ticket-check.sh",
     "the journey reading",
   );
-  runCase(
-    "a wording fix in the spec session runbook answers yes",
-    (repo) =>
-      replaceOnce(
-        repo,
-        "skills/postmaster/spec-session.md",
-        "**You edit only the copy** named in the brief,",
-        "**You edit only that copy** named in the brief,",
-      ),
-    "skills/postmaster/spec-session.md",
-  );
   wrapperCase(
-    "a wording fix in spec-session.sh answers yes",
-    "scripts/spec-session.sh",
-    "the spec session's verbs",
-  );
-  runCase(
-    "a wording fix in spec-session.ts answers yes",
-    (repo) =>
-      replaceOnce(
-        repo,
-        "scripts/spec-session.ts",
-        "// The spec session's two verbs: brief writes the interactive session's brief, and approve",
-        "// The spec session's two verbs: brief writes the session's brief, and approve",
-      ),
-    "scripts/spec-session.ts",
-  );
-  wrapperCase(
-    "a wording fix in spec-decisions.sh answers yes",
-    "scripts/spec-decisions.sh",
-    "the approval record's verbs",
-  );
-  runCase(
-    "a wording fix in spec-decisions.ts answers yes",
-    (repo) =>
-      replaceOnce(
-        repo,
-        "scripts/spec-decisions.ts",
-        "// Own the planning stage's spec decisions: one file per package, one stanza for the run's",
-        "// Own the planning stage's spec decisions: one file per package, and one stanza for the run's",
-      ),
-    "scripts/spec-decisions.ts",
+    "a wording fix in ticket-ready.sh answers yes",
+    "scripts/ticket-ready.sh",
+    "the readiness check",
   );
   wrapperCase("a wording fix in launch.sh answers yes", "scripts/launch.sh", "the attempt phase");
   wrapperCase(
@@ -387,15 +349,15 @@ function exerciseSelfTest(sourceRoot: string): number {
     "scripts/fixture.ts",
   );
   runCase(
-    "a wording fix in the workhorse spec template answers yes",
+    "a wording fix in premises.sh answers yes",
     (repo) =>
       replaceOnce(
         repo,
-        "skills/postmaster/workhorse-spec-template.md",
-        "`## Showing each criterion` is how the lanes check their work: for each acceptance criterion,",
-        "`## Showing each criterion` is how the lanes check their work: for every acceptance criterion,",
+        "scripts/premises.sh",
+        "# Check the ticket's premises still hold at the run's base.",
+        "# Check the ticket's premises still hold at the run's base",
       ),
-    "skills/postmaster/workhorse-spec-template.md",
+    "scripts/premises.sh",
   );
   runCase(
     "a wording fix in summary-evidence.ts answers yes",
