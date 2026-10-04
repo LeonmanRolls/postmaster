@@ -1,7 +1,8 @@
 import { existsSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, isAbsolute, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
-import { mkstempSync } from "./lib/proc.ts";
+import { scriptsDir } from "./lib/paths.ts";
+import { mkstempSync, run } from "./lib/proc.ts";
 import { jsWords } from "./lib/text.ts";
 
 const WORDS_PER_RUN = 6;
@@ -83,11 +84,13 @@ type Report = Readonly<{
 }>;
 
 const USAGE = `Usage: <tool>/scripts/run synthesis-shares \\
-  --base <commit> --synthesis <commit> [--lane <name>=<commit> ...] \\
+  --base <commit> [--synthesis <commit>] [--lane <name>=<commit> ...] \\
   [--oracle <commit>] [--record <dispatch-dir>]
 
-The command reads committed Git diffs in the current repository. --record writes
-<dispatch-dir>/shares.json once and refuses to overwrite an existing record.`;
+The command reads committed Git diffs in the current repository. Without
+--synthesis the measured synthesis is HEAD there. --record writes
+<dispatch-dir>/shares.json once, refuses to overwrite an existing record, and
+appends the SHARES line to that dispatch's run log.`;
 
 const fail = (message: string): never => {
   throw new Error(message);
@@ -177,9 +180,7 @@ const parseInputs = (args: readonly string[]): Inputs => {
   };
 
   const inputs = read(args);
-  return inputs.base && inputs.synthesis
-    ? inputs
-    : fail(`--base and --synthesis are required\n\n${USAGE}`);
+  return inputs.base ? inputs : fail(`--base is required\n\n${USAGE}`);
 };
 
 const resolveCommit = (repo: string, value: string, label: string): string => {
@@ -511,12 +512,30 @@ const main = (): number => {
     const parsed = parseInputs(args);
     const normalized = {
       ...parsed,
+      synthesis:
+        parsed.synthesis === ""
+          ? gitText(process.cwd(), ["rev-parse", "HEAD"]).trim()
+          : parsed.synthesis,
       record:
         parsed.record && (isAbsolute(parsed.record) ? parsed.record : resolve(root, parsed.record)),
     };
     const report = buildReport(root, normalized);
+    const line = sharesLine(report);
     if (normalized.record !== null) writeRecord(normalized.record, report);
-    console.log(sharesLine(report));
+    console.log(line);
+    if (normalized.record !== null) {
+      const logged = run(join(scriptsDir(import.meta), "run"), [
+        "run-log",
+        normalized.record,
+        line,
+      ]);
+      if (logged.code !== 0) {
+        process.stderr.write(
+          `synthesis-shares: the SHARES line was not recorded in the run log: ${logged.err.trim()}\n`,
+        );
+        return 1;
+      }
+    }
     return 0;
   } catch (error) {
     console.error(`synthesis-shares: ${error instanceof Error ? error.message : String(error)}`);
