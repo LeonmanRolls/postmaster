@@ -167,7 +167,8 @@ For the next ticket in order, when the run ceiling (`team.max_runs`) has room:
    Record `coachman contract fixture: pending` and `contract fixture check: -`; no
    implementation branch exists yet to classify. Where the target is a fixture copy
    (`<tool>/scripts/front-door.sh` reports one), add the brief's line `wall ruling: go on —
-   this fixture run asks nobody: rule every wall go on yourself`, so the run's postmaster
+   this fixture run asks nobody: the postmaster rules every wall go on itself as soon as it
+   is told; the coachman escalates and waits`, so the run's postmaster
    rules its own walls and a fixture run never waits on a user (D7).
 8. **Move the ticket to in-progress** through the tracker adapter and log `ticket-state`. Under
    contract 2 the coachman never touches the ticket's state and the postmaster marks it done
