@@ -122,7 +122,7 @@ mk_tool_copy() {
   cp "$ROOT/package.json" "$ROOT/bunfig.toml" "$dest/"
   cp -r "$ROOT/scripts" "$dest/scripts"
   printf '%s\n' 'console.log("stand-in 258 ok");' > "$dest/scripts/oracle-258-standin-good.ts"
-  printf '%s\n' 'import { __oracle_missing_258__ } from "./lib/proc.ts";' 'console.log("no");' > "$dest/scripts/oracle-258-standin-bad.ts"
+  printf '%s\n' 'import { __oracle_missing_258__ } from "./lib/proc.ts";' 'console.log(__oracle_missing_258__);' > "$dest/scripts/oracle-258-standin-bad.ts"
 }
 bump_minimum() {
   file=$1
@@ -178,11 +178,15 @@ fi
 # --- C3, C4: a planted skip and a planted vacuous test fail the check, named.
 mk_scratch; T1=$MKSCRATCH
 cp -r "$ROOT/." "$T1/tree"
+# Sibling target: the gate's test-beside-target rule needs it beside the plant.
+printf '%s\n' 'export const oracle258Plant = "plant";' > "$T1/tree/scripts/oracle-258-plant.ts"
 cat > "$T1/tree/scripts/oracle-258-plant.test.ts" <<'EOF'
 import { describe, expect, test } from "bun:test";
 
 describe("oracle 258 plant", () => {
-  test.skip("planted skip 258", () => {
+  // skipIf(true): the repo's bun:test types expose no test.skip, and the gate
+  // runs tsc first. The ticket verified skipIf marks <skipped/> like skip.
+  test.skipIf(true)("planted skip 258", () => {
     expect(1).toBe(1);
   });
   test("planted vacuous 258", () => {
