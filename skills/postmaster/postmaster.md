@@ -561,7 +561,10 @@ missed.
    (resume the last leg with the open findings as the exact discrepancy, not with a
    default-branch merge), whatever the card matches — open P3 residue lands; the blind
    acceptance
-   tests are the first commit or the hand-off records why they were not written; the Style
+   tests are the first commit or the hand-off records why they were not written, and that
+   first commit's files — the acceptance tests — run the change at its boundary and import no
+   module of the change, while every later commit that touches those files touches nothing
+   else and says in its message why; the Style
    residue's count is what
    `<tool>/scripts/run style-findings count <dispatch>` prints, and the residues the card
    lists are exactly what `<tool>/scripts/run style-findings list <dispatch>` prints; all
