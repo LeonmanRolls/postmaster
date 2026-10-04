@@ -4,7 +4,7 @@
 // score's platform line and tool list, and Bun started by its running path.
 // Where a test forces the Mac path on Linux it says so; it never claims to
 // have run on a Mac.
-import { afterEach, beforeAll, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import { spawn, spawnSync } from "node:child_process";
 import {
   chmodSync,

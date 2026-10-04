@@ -4,15 +4,7 @@
 // variable unquoted fails here: bash word-splits it and zsh does not, so the
 // recorded arguments differ.
 import { beforeAll, describe, expect, test } from "bun:test";
-import {
-  chmodSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { run } from "./lib/proc.ts";
@@ -149,15 +141,6 @@ function runBlock(shell: string, body: string, dir: string): { out: string; exit
     exit: r.code,
     err: r.err + r.out,
   };
-}
-
-/** Blocks that hold a multi-word variable expansion the fix changed. */
-function blocksWithMultiWord(body: string): boolean {
-  return (
-    body.includes("CLONE=()") ||
-    body.includes("REVIEWERS=()") ||
-    body.includes("NORMALIZE_FAILED=()")
-  );
 }
 
 describe("coachman.md's sh blocks agree between bash and zsh", () => {
