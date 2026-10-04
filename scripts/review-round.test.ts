@@ -4,6 +4,7 @@
 // The process-exit cleanup is an afterAll; withTempDir still owns the temp dir.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import {
+  appendFileSync,
   chmodSync,
   existsSync,
   mkdirSync,
@@ -467,6 +468,41 @@ esac
         run("git", ["-C", repo, "rev-parse", "-q", "--verify", "refs/heads/probe"]).code === 0,
     );
 
+    // A wall: both reviewers' launches end on their provider's usage limit, which the
+    // launches recorded as `wall` lines before their markers landed (C11). The round
+    // closes without them, each DEGRADED with the provider's message, and nothing escalates.
+    limit("60");
+    cutScratch("bug", "stub");
+    cutScratch("security", "sec");
+    runSelf("start", d, "5");
+    launch(5, "bug", "stub", "fast");
+    launch(5, "security", "sec", "fast");
+    const codexWall = "You’ve hit your usage limit. try again at 2:29 AM.";
+    const claudeWall = "You've hit your weekly limit · resets 3am (UTC)";
+    appendFileSync(
+      join(d, "actions.jsonl"),
+      `${JSON.stringify({ ts: new Date().toISOString(), project: "p", run: "T-1", actor: "lane:stub", action: "wall", target: "stub", detail: `reviewer bug 5 none ${codexWall}` })}\n` +
+        `${JSON.stringify({ ts: new Date().toISOString(), project: "p", run: "T-1", actor: "lane:sec", action: "wall", target: "sec", detail: `reviewer security 5 none ${claudeWall}` })}\n`,
+    );
+    runSelf("wait", d, "5", repo, "bug:stub security:sec");
+    let wallRunLog = "";
+    try {
+      wallRunLog = readFileSync(join(d, "run-log.md"), "utf8");
+    } catch {
+      wallRunLog = "";
+    }
+    check(
+      "a walled reviewer is DEGRADED with the provider's message and the round closes (C11)",
+      rc === 0 &&
+        wallRunLog.includes(`stub bug: DEGRADED, provider wall: "${codexWall}"`) &&
+        wallRunLog.includes(`sec security: DEGRADED, provider wall: "${claudeWall}"`) &&
+        has(`WALL bug stub: DEGRADED, provider wall: "${codexWall}"`) &&
+        actionsLines('"action":"degrade"') === 4 &&
+        actionsLines('"target":"stub","detail":"bug r5: provider wall:') === 1 &&
+        actionsLines('"target":"sec","detail":"security r5: provider wall:') === 1 &&
+        !existsSync(join(d, ".escalation-ready")),
+    );
+
     console.log("negative controls");
     out = waitOut;
     rc = waitRc;
@@ -709,6 +745,7 @@ describe("positive controls", () => {
     "when every marker is in, wait exits 0 and records nothing",
     "teardown stops what a finished reviewer's launch left running, and says so",
     "a scratch a reviewer switched onto a branch is still removed, and the branch kept",
+    "a walled reviewer is DEGRADED with the provider's message and the round closes (C11)",
   ];
   for (const label of labels) {
     test(label, () => {

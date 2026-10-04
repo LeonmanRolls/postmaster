@@ -182,7 +182,7 @@ function workhorses(dispatch: string): string[] {
 function runRepo(dispatch: string): string {
   try {
     const text = readFileSync(join(dispatch, "brief.md"), "utf8");
-    const m = /^repo:[ \t]*(\/[^ \t]+)*/mu.exec(text);
+    const m = /^repo:[ \t]*(\/[^ \t\n]+)/mu.exec(text);
     if (m && m[1]) return m[1];
   } catch {
     /* no waybill */
