@@ -1608,7 +1608,11 @@ describe("private-data-card", () => {
     const saved = process.env.SCRUB_CHECK_DISABLE;
     try {
       process.env.SCRUB_CHECK_DISABLE = "email";
-      check(["private-data-card", dispatch, card], 1, "landing: card: private-data scan is not clean");
+      check(
+        ["private-data-card", dispatch, card],
+        1,
+        "landing: card: private-data scan is not clean",
+      );
     } finally {
       if (saved === undefined) delete process.env.SCRUB_CHECK_DISABLE;
       else process.env.SCRUB_CHECK_DISABLE = saved;

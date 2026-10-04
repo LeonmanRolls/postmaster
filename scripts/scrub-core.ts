@@ -438,7 +438,15 @@ function patternSpan(line: string): [number, number] | null {
   i++;
   while (i < line.length && REGEX_FLAGS.has(line[i]!)) i++;
   const rest = line.slice(i, i + 1);
-  if (rest !== "" && rest !== ";" && rest !== "," && rest !== ")" && rest !== " " && rest !== "\t" && rest !== "/")
+  if (
+    rest !== "" &&
+    rest !== ";" &&
+    rest !== "," &&
+    rest !== ")" &&
+    rest !== " " &&
+    rest !== "\t" &&
+    rest !== "/"
+  )
     return null;
   return [m.index + m[0].length - 1, i];
 }
