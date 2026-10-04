@@ -547,7 +547,9 @@ missed.
    lists exists and has the stated state; `run-log.md`'s
    SYNTHESIS line accounts for each lane; every DEGRADED lane matches `degrade` actions; the
    turnpikes match the waybill, `actions.jsonl` has `review-launch` lines under each review lens
-   the run's legs name and under no other lens, and each other turnpike's result on the card is
+   the run's legs name and under no other lens and, where the run has a review leg, a `gate`
+   line for each review round that ran (the coachman's own round-snapshot line beside
+   `verify`'s per-check lines), and each other turnpike's result on the card is
    in the record its step writes; when `<tool>/scripts/run turnpikes short '<the waybill's
    turnpikes: line>'` names any default turnpike, the ledger holds the user's word on this
    ticket's turnpikes; where the run has a review leg, `checkpoint-review.md` exists and
