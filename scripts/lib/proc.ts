@@ -3,7 +3,7 @@
 import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { closeSync, mkdtempSync, openSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { constants as osConstants, tmpdir } from "node:os";
 import { join } from "node:path";
 
 export interface RunResult {
@@ -15,46 +15,19 @@ export interface RunResult {
   timedOut: boolean;
 }
 
-/** Linux signal numbers, so a child dead by a signal reports 128 plus its
- * number, as a shell reports it. */
-const SIGNAL_NUMBERS: Record<string, number> = {
-  SIGHUP: 1,
-  SIGINT: 2,
-  SIGQUIT: 3,
-  SIGILL: 4,
-  SIGTRAP: 5,
-  SIGABRT: 6,
-  SIGBUS: 7,
-  SIGFPE: 8,
-  SIGKILL: 9,
-  SIGUSR1: 10,
-  SIGSEGV: 11,
-  SIGUSR2: 12,
-  SIGPIPE: 13,
-  SIGALRM: 14,
-  SIGTERM: 15,
-  SIGSTKFLT: 16,
-  SIGCHLD: 17,
-  SIGCONT: 18,
-  SIGSTOP: 19,
-  SIGTSTP: 20,
-  SIGTTIN: 21,
-  SIGTTOU: 22,
-  SIGURG: 23,
-  SIGXCPU: 24,
-  SIGXFSZ: 25,
-  SIGVTALRM: 26,
-  SIGPROF: 27,
-  SIGWINCH: 28,
-  SIGIO: 29,
-  SIGPWR: 30,
-  SIGSYS: 31,
-};
-
-/** The exit code for a child dead by a signal: 128 plus the signal's
- * number, as a shell reports it; 128 when the signal names no number. */
-export function signalExitCode(signal: string): number {
-  return 128 + (SIGNAL_NUMBERS[signal] ?? 0);
+/** The exit code for a child dead by a signal: 128 plus the signal's number
+ * as this system numbers it (`os.constants.signals`, which a shell reports
+ * it with), 128 when the signal names no number. A signal the runtime names
+ * by its number alone (`SIG16`) carries that number. */
+export function signalExitCode(
+  signal: string,
+  numbers: Readonly<Record<string, number>> = osConstants.signals,
+): number {
+  const known = numbers[signal];
+  if (known !== undefined) return 128 + known;
+  const numeric = /^SIG([0-9]+)$/u.exec(signal);
+  if (numeric) return 128 + Number(numeric[1]);
+  return 128;
 }
 
 /** Run a command; never throws on a non-zero exit.

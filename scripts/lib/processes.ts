@@ -171,3 +171,53 @@ export function processCommandLine(pid: number): string {
     return run("ps", ["-o", "args=", "-p", String(pid)], { env: { LC_ALL: "C" } }).out.trim();
   }
 }
+
+/** `sysctl -n kern.boottime`'s whole seconds, or null when it cannot be read.
+ * The seconds survive a corrected clock, which the microseconds and the local
+ * date text do not. */
+function macBootSeconds(): number | null {
+  // ASCII: sysctl kern.boottime is kernel-emitted ASCII on macOS.
+  const text = run("sysctl", ["-n", "kern.boottime"], { env: { LC_ALL: "C" } }).out;
+  // ASCII: the words of kernel-emitted ASCII, split on spaces.
+  const words = text.replace(/,/gu, " ").split(/\s+/u);
+  const at = words.indexOf("sec");
+  if (at < 0 || at + 2 >= words.length) return null;
+  const seconds = Number(words[at + 2]);
+  return Number.isInteger(seconds) ? seconds : null;
+}
+
+/** The machine's boot id: the Linux file when the proc root holds it (the
+ * test setting sends a run down the portable path), else macOS's
+ * `kern.bootsessionuuid`, which a corrected clock leaves alone, else the whole
+ * seconds of `kern.boottime`. Empty when none can be read. */
+export function bootId(): string {
+  try {
+    return readFileSync(`${procRoot()}/sys/kernel/random/boot_id`, "utf8").trim();
+  } catch {
+    // A missing proc root forces the portable path used on macOS.
+  }
+  const session = run("sysctl", ["-n", "kern.bootsessionuuid"], { env: { LC_ALL: "C" } });
+  const uuid = session.out.trim();
+  if (session.code === 0 && uuid !== "") return uuid;
+  const seconds = macBootSeconds();
+  return seconds === null ? "" : String(seconds);
+}
+
+/** A recorded `sysctl kern.boottime` text, as this module's seconds form. */
+function recordedBootSeconds(text: string): number | null {
+  if (/^[0-9]+$/u.test(text)) return Number(text);
+  // ASCII: `sec = <n>` is sysctl's kernel-emitted ASCII.
+  const match = /sec\s*=\s*([0-9]+)/u.exec(text);
+  return match ? Number(match[1]) : null;
+}
+
+/** Whether a recorded boot id names the current boot. Equal ids match; a
+ * record in the older `kern.boottime` text form matches while its whole
+ * seconds still name this boot, so a run already going keeps its launches. */
+export function sameBoot(recorded: string, current: string): boolean {
+  if (recorded === current) return true;
+  const recordedSeconds = recordedBootSeconds(recorded);
+  if (recordedSeconds === null) return false;
+  const currentSeconds = recordedBootSeconds(current) ?? macBootSeconds();
+  return currentSeconds !== null && recordedSeconds === currentSeconds;
+}
