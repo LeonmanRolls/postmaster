@@ -24,6 +24,7 @@ import {
 import { basename, dirname, join } from "node:path";
 import { scriptsDir } from "./lib/paths.ts";
 import { mkstempSync, run } from "./lib/proc.ts";
+import { bootId, sameBoot } from "./lib/processes.ts";
 import { PY_S_CLASS } from "./lib/text.ts";
 
 const HERE = scriptsDir(import.meta);
@@ -43,16 +44,6 @@ export function monotonic(): number {
     return parseFloat(up ?? "0");
   } catch {
     return Date.now() / 1000;
-  }
-}
-
-function bootId(): string {
-  try {
-    return readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim();
-  } catch {
-    // BASE reads sysctl's stdout unchecked: a sysctl that fails still yields
-    // whatever it printed, and a missing one yields nothing. run() never throws.
-    return run("sysctl", ["-n", "kern.boottime"]).out.trim();
   }
 }
 
@@ -163,7 +154,7 @@ function stateCmd(
   if (what === "check") {
     const st = stateLoad(path);
     const b = bootId();
-    if (st.boot && b && st.boot !== b) {
+    if (st.boot && b && !sameBoot(st.boot, b)) {
       die(
         "the machine has restarted since the round started, so none of its reviewers runs; start the round again",
       );
