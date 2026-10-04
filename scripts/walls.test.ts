@@ -441,7 +441,7 @@ describe("walls.sh told, escalate and carry", () => {
 
 describe("usage", () => {
   test("every command checks its shape", () => {
-    expect(run(self).code).toBe(1);
+    expect(run(self, []).code).toBe(1);
     expect(run(self, ["show"]).code).toBe(1);
     expect(run(self, ["show", join(tmp, "no-such-dispatch")]).code).toBe(1);
     expect(run(self, ["carry", join(tmp)]).code).toBe(1);
