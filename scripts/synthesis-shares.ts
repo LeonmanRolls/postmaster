@@ -1,5 +1,7 @@
-import { existsSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, isAbsolute, join, resolve } from "node:path";
+import { tmpdir } from "node:os";
+import { mkstempSync } from "./lib/proc.ts";
 import { jsWords } from "./lib/text.ts";
 
 const WORDS_PER_RUN = 6;
@@ -96,10 +98,16 @@ const decode = (bytes: Uint8Array): string => new TextDecoder().decode(bytes);
 const gitResult = (
   repo: string,
   args: readonly string[],
+  extraEnv: Record<string, string | undefined> = {},
 ): Readonly<{ code: number; stdout: string; stderr: string }> => {
+  const env = { ...process.env };
+  for (const [key, value] of Object.entries(extraEnv)) {
+    if (value === undefined) delete env[key];
+    else env[key] = value;
+  }
   const result = Bun.spawnSync(
     ["git", "-c", "core.attributesFile=/dev/null", "--no-pager", "-C", repo, ...args],
-    { stdout: "pipe", stderr: "pipe" },
+    { stdout: "pipe", stderr: "pipe", env },
   );
   return {
     code: result.exitCode,
@@ -236,15 +244,26 @@ const generatedPaths = (
   paths: readonly string[],
 ): ReadonlySet<string> => {
   if (paths.length === 0) return new Set();
-  const output = gitText(repo, [
-    "check-attr",
-    "--source",
-    commit,
-    "-z",
-    ...GENERATED_ATTRIBUTES,
-    "--",
-    ...paths,
-  ]);
+  const index = mkstempSync(tmpdir(), "postmaster-attributes-index-");
+  let output: string;
+  try {
+    const env = { GIT_INDEX_FILE: index };
+    const readTree = gitResult(repo, ["read-tree", commit], env);
+    if (readTree.code !== 0)
+      fail(`git read-tree ${commit} exited ${readTree.code}: ${readTree.stderr.trim()}`);
+    const attributes = gitResult(
+      repo,
+      ["check-attr", "--cached", "-z", ...GENERATED_ATTRIBUTES, "--", ...paths],
+      env,
+    );
+    if (attributes.code !== 0)
+      fail(`git check-attr --cached exited ${attributes.code}: ${attributes.stderr.trim()}`);
+    output = attributes.stdout;
+  } finally {
+    try {
+      unlinkSync(index);
+    } catch {}
+  }
   // Mutation of this parse's local list only: one batched check-attr call per range
   // instead of one git spawn per file, and the list never escapes except as the set.
   const fields = output.split("\0");

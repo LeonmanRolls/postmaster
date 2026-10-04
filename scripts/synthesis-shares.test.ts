@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -110,6 +110,7 @@ const runScript = (
   synthesis: string,
   lanes: readonly Lane[],
   oracle: string | null = null,
+  env: Record<string, string | undefined> = process.env,
 ): Output => {
   const dispatch = join(directory, ".postmaster", "runs", "fixture");
   mkdirSync(dispatch, { recursive: true });
@@ -127,7 +128,7 @@ const runScript = (
     "--record",
     dispatch,
   ];
-  const result = Bun.spawnSync(args, { cwd: directory, stdout: "pipe", stderr: "pipe" });
+  const result = Bun.spawnSync(args, { cwd: directory, env, stdout: "pipe", stderr: "pipe" });
   return {
     stdout: new TextDecoder().decode(result.stdout),
     stderr: new TextDecoder().decode(result.stderr),
@@ -339,6 +340,42 @@ test("oracle, lane records, lockfiles, and generated paths are excluded exactly"
       "oracle-answer.ts",
       "uv.lock",
     ]);
+  }));
+
+test("generated attributes use the index with git that has no --source option", () =>
+  withWorkspace((directory) => {
+    const base = initializeRepo(directory);
+    const synthesis = commitFiles(directory, base, "synthesis", {
+      ".gitattributes": "marked.ts linguist-generated\n",
+      "kept.ts": "bright copper river sleeps beyond quiet mountains\n",
+      "marked.ts": "velvet lantern dances under midnight winter\n",
+    });
+    const lanes = [{ name: "alpha", head: synthesis }];
+    const expected = runScenario(directory, base, synthesis, lanes);
+    rmSync(expected.recordPath);
+
+    const bin = join(directory, "old-git-bin");
+    mkdirSync(bin);
+    const actualGit = Bun.which("git");
+    if (!actualGit) throw new Error("git is not on PATH");
+    const fakeGit = join(bin, "git");
+    writeFileSync(
+      fakeGit,
+      `#!/bin/sh\ncase "$*" in *"check-attr --source"*) echo "unknown option 'source'" >&2; exit 129 ;; esac\nexec "${actualGit}" "$@"\n`,
+    );
+    chmodSync(fakeGit, 0o755);
+    const output = runScript(directory, base, synthesis, lanes, null, {
+      ...process.env,
+      PATH: `${bin}:${process.env.PATH ?? ""}`,
+    });
+    const recordPath = join(directory, ".postmaster", "runs", "fixture", "shares.json");
+    const report = JSON.parse(readFileSync(recordPath, "utf8")) as Report;
+    expect(output.code).toBe(0);
+    expect(output.stderr).toBe("");
+    expect(output.stdout.trim()).toBe(expected.line);
+    expect(report).toEqual(expected.report);
+    expect(report.exclusions.byRange.synthesis.map(({ path }) => path)).toContain("marked.ts");
+    expect(report.exclusions.byRange.synthesis.map(({ path }) => path)).not.toContain("kept.ts");
   }));
 
 test("three lanes are counted by name, with any overlap grouped as shared", () =>

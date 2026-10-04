@@ -20,7 +20,7 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
+import { machine, release, tmpdir, type as osType } from "node:os";
 import { dirname, join } from "node:path";
 import {
   appFiles,
@@ -330,7 +330,8 @@ function expectScore(key: string, failing: string, failText?: string): void {
   const lines = out.split("\n").filter((l) => l.trim()).length;
   expect(rc).toBe(failing === "none" ? 0 : 2);
   expect(failingChecks).toBe(failing);
-  expect(lines).toBe(8);
+  expect(lines).toBe(9);
+  expect(out.split("\n", 1)[0]).toMatch(/^platform: (Darwin|Linux) .+ bun \S+, git \S+$/u);
   if (failText !== undefined) {
     expect(
       out
@@ -341,8 +342,50 @@ function expectScore(key: string, failing: string, failText?: string): void {
   }
 }
 
-function runScore(dispatch: string, repo: string): { code: number; out: string } {
-  const r = spawnSync(wrapper, ["score", dispatch, repo], { encoding: "utf8" });
+function scorePath(without: readonly string[] = []): string {
+  const bin = join(scratch, `path-${Math.random().toString(36).slice(2)}`);
+  mkdirSync(bin);
+  const names = [
+    "awk",
+    "bash",
+    "bun",
+    "cat",
+    "cp",
+    "date",
+    "dirname",
+    "env",
+    "find",
+    "git",
+    "grep",
+    "head",
+    "mkdir",
+    "mktemp",
+    "node",
+    "npm",
+    "rm",
+    "sed",
+    "sh",
+    "sort",
+    "tar",
+    "tail",
+    "tr",
+    "xargs",
+    "jq",
+  ];
+  for (const name of names) {
+    if (without.includes(name)) continue;
+    const target = Bun.which(name);
+    if (target) symlinkSync(target, join(bin, name));
+  }
+  return bin;
+}
+
+function runScore(
+  dispatch: string,
+  repo: string,
+  env: Record<string, string | undefined> = process.env,
+): { code: number; out: string } {
+  const r = spawnSync(wrapper, ["score", dispatch, repo], { encoding: "utf8", env });
   return { code: r.status ?? -1, out: `${r.stdout ?? ""}${r.stderr ?? ""}` };
 }
 
@@ -803,6 +846,70 @@ describe("score: a recorded run that meets every check scores clean", () => {
   test("a three-leg run dispatched before this change scores clean", () => {
     expectScore("clean-three", "none");
   }, 30000);
+
+  test("fixture score passes without jq on PATH and still requires npm", () => {
+    const repo = join(tmp, `clean-${first}`, "repo");
+    const dispatch = join(repo, ".postmaster", "runs", "7");
+    const path = scorePath(["jq"]);
+    expect(run("bash", ["-c", 'command -v jq'], { env: { PATH: path } }).code).toBe(1);
+    const clean = runScore(dispatch, repo, { ...process.env, PATH: path });
+    expect(clean.code).toBe(0);
+    const lines = clean.out.trim().split("\n");
+    expect(lines).toHaveLength(9);
+    expect(lines.slice(1).every((line) => line.startsWith("ok  "))).toBe(true);
+    console.log(`score without jq:\n${clean.out.trimEnd()}`);
+
+    const withoutNpm = scorePath(["jq", "npm"]);
+    const missing = runScore(dispatch, repo, { ...process.env, PATH: withoutNpm });
+    expect(missing.code).toBe(1);
+    expect(missing.out).toContain("fixture: npm is not on PATH");
+
+    const withoutNode = scorePath(["jq", "node"]);
+    const missingNode = runScore(dispatch, repo, { ...process.env, PATH: withoutNode });
+    expect(missingNode.code).toBe(1);
+    expect(missingNode.out).toContain("fixture: node is not on PATH");
+  }, 120000);
+
+  test("score's platform line names the OS, release, architecture and tool versions", () => {
+    const result = bgResults.get(`clean-${first}`);
+    const git = run("git", ["--version"]).out.trim().replace(/^git version\s+/u, "");
+    expect(result?.out.split("\n", 1)[0]).toBe(
+      `platform: ${osType()} ${release()} ${machine()}, bun ${Bun.version}, git ${git}`,
+    );
+  });
+
+  test("a failing record keeps the platform line first", () => {
+    const out = bgResults.get("break-gate")?.out ?? "";
+    const cleanOut = bgResults.get(`clean-${first}`)?.out ?? "";
+    expect(out.split("\n", 1)[0]).toBe(cleanOut.split("\n", 1)[0]);
+    expect(out.split("\n")).toHaveLength(10);
+    console.log(`failing score:\n${out.trimEnd()}`);
+  });
+
+  test("score's platform line excludes home, user and host environment values", () => {
+    const repo = join(tmp, `clean-${first}`, "repo");
+    const dispatch = join(repo, ".postmaster", "runs", "7");
+    const home = join(scratch, "probe-home");
+    mkdirSync(home);
+    const probes = [
+      home,
+      "postmaster-probe-user-0620",
+      "postmaster-probe-logname-0620",
+      "postmaster-probe-host-0620",
+    ];
+    const result = runScore(dispatch, repo, {
+      ...process.env,
+      HOME: home,
+      USER: probes[1],
+      LOGNAME: probes[2],
+      HOSTNAME: probes[3],
+    });
+    expect(result.code).toBe(0);
+    for (const probe of probes) expect(result.out).not.toContain(probe);
+    expect(result.out.split("\n", 1)[0]).toBe(
+      bgResults.get(`clean-${first}`)?.out.split("\n", 1)[0],
+    );
+  }, 120000);
 });
 
 describe("score: a record's stages are entered by the legs the contract names", () => {
