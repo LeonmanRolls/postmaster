@@ -473,7 +473,9 @@ interface TimedStage {
 }
 
 function secondsOfDuration(value: string): number | null {
-  const match = /^(?:(\d+)h(?:\s+|$))?(?:(\d+)m(?:\s+|$))?(?:(\d+)s)?$/u.exec(value.trim());
+  const match = /^(?:([0-9]+)h(?:[ \t]+|$))?(?:([0-9]+)m(?:[ \t]+|$))?(?:([0-9]+)s)?$/u.exec(
+    value.trim(),
+  );
   if (!match || !value.trim()) return null;
   return Number(match[1] ?? 0) * 3600 + Number(match[2] ?? 0) * 60 + Number(match[3] ?? 0);
 }
@@ -496,7 +498,7 @@ function stageRows(output: string): { rows: TimedStage[]; total: string | null }
   let total: string | null = null;
   for (const line of output.split(/\r?\n/u)) {
     if (!line.trim() || line.startsWith("stage ")) continue;
-    const fields = line.trim().split(/\s{2,}/u);
+    const fields = line.trim().split(/[ \t]{2,}/u);
     if (fields[0] === "total") {
       total = fields[1] ?? null;
     } else if (fields.length >= 4) {
