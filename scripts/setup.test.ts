@@ -57,20 +57,44 @@ function answers(name: string, extra?: string): void {
 }
 
 function runSetup(name: string, extraEnv: Record<string, string> = {}): number {
+  const platformBin = unameBin("Linux");
+  const path = extraEnv.PATH ?? `${join(tmp, "bin")}:${process.env.PATH ?? ""}`;
   const r = run(
     SELF,
     ["setup", "--answers", join(tmp, `${name}.answers`), "--config", join(tmp, `${name}.toml`)],
     {
       env: {
         ...(process.env as Record<string, string>),
-        PATH: `${join(tmp, "bin")}:${process.env.PATH}`,
         ...extraEnv,
+        PATH: `${platformBin}:${path}`,
       },
     },
   );
   writeFileSync(join(tmp, `${name}.out`), r.out + r.err, "utf8");
   return r.code;
 }
+
+function unameBin(system: string): string {
+  const bin = join(tmp, `${system.toLowerCase()}-bin`);
+  mkdirSync(bin, { recursive: true });
+  const uname = join(bin, "uname");
+  writeFileSync(uname, `#!/bin/sh\nprintf '${system}\\n'\n`, "utf8");
+  chmodSync(uname, 0o755);
+  return bin;
+}
+
+function macEnv(): Record<string, string> {
+  const bin = unameBin("Darwin");
+  return { PATH: `${bin}:${join(tmp, "bin")}:${process.env.PATH ?? ""}` };
+}
+
+function linuxEnv(): Record<string, string> {
+  const bin = unameBin("Linux");
+  return { PATH: `${bin}:${join(tmp, "bin")}:${process.env.PATH ?? ""}` };
+}
+
+const noticeCount = (text: string): number =>
+  text.match(/^Launches on this system run without memory or process limits\.$/gmu)?.length ?? 0;
 
 function confineEnv(bwrapExit: number): Record<string, string> {
   const bin = join(tmp, `confine-${bwrapExit}`);
@@ -123,6 +147,61 @@ describe("positive controls", () => {
     expect(cfg?.confine).toBe("off");
     expect(out).toContain("lane confinement:");
     expect(out.match(/Run lanes confined \(on\/off\)/gu)?.length).toBe(1);
+    expect(out).not.toContain("Launches on this system run without memory or process limits.");
+  }, 30000);
+
+  test("macOS omits launch limits from keys and setup, ignores limit answers, and reports uncapped launches once", () => {
+    const env = macEnv();
+    answers("mac-limits", "limits.memory_max=bogus\nlimits.tasks_max=bogus");
+    const keys = run(SELF, ["setup", "--keys"], { env });
+    const configured = run(
+      SELF,
+      ["setup", "--answers", join(tmp, "mac-limits.answers"), "--dry-run"],
+      { env },
+    );
+    expect(keys.code).toBe(0);
+    expect(keys.out).not.toContain("limits.");
+    expect(configured.code).toBe(0);
+    expect(configured.out).not.toContain("Launch limits:");
+    expect(configured.out).not.toContain("[limits]");
+    expect(noticeCount(configured.out + configured.err)).toBe(1);
+  }, 30000);
+
+  test("Linux keeps its eight launch limit settings and refuses an invalid memory cap", () => {
+    const env = linuxEnv();
+    answers("linux-limits", "limits.memory_max=bogus");
+    const keys = run(SELF, ["setup", "--keys"], { env });
+    const configured = run(
+      SELF,
+      ["setup", "--answers", join(tmp, "linux-limits.answers"), "--dry-run"],
+      { env },
+    );
+    expect(keys.code).toBe(0);
+    expect(keys.out.match(/^limits\./gmu)?.length).toBe(8);
+    expect(configured.code).toBe(1);
+    expect(configured.out + configured.err).toContain("memory_max must be");
+  }, 30000);
+
+  test("interactive setup on macOS reports uncapped launches once", () => {
+    const env = macEnv();
+    const answers = [
+      "", "", // roots and lane names
+      "bash", "lane-alpha", "", "", // alpha
+      "bash", "lane-beta", "", "", // beta
+      "", "", // workhorses and reviewers
+      "", "", "", // style, bug and security reviewer overrides
+      "bash", "coachman", "", "", // coachman
+      "bash", "fallback", "", "", // fallback
+      "bash", "postmaster", "", "", // postmaster
+      "", "", // run count and poll interval
+      "", "", // tracker and confinement
+      "", "", "", "", "", "", "", "", // create tickets, timeout, merge, checkpoint, links
+    ].join("\n");
+    const interactive = run(SELF, ["setup", "--dry-run"], { env, input: `${answers}\n` });
+    expect(interactive.code).toBe(0);
+    expect(interactive.out).not.toContain("Launch limits:");
+    expect(interactive.out).not.toContain("[limits]");
+    expect(noticeCount(interactive.out + interactive.err)).toBe(1);
   }, 30000);
 
   test("confine=on is written when Bubblewrap starts", () => {

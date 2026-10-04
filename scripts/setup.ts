@@ -27,6 +27,18 @@ import { scriptsDir } from "./lib/paths.ts";
 import { die, run } from "./lib/proc.ts";
 
 const HERE = scriptsDir(import.meta);
+const LINUX = run("uname", ["-s"]).out.trim() === "Linux";
+const LIMIT_KEYS = LINUX
+  ? `limits.memory_max          8G                 default memory cap per launch (K, M, G or T)
+limits.tasks_max           512                default process cap per launch
+limits.lane.memory_max?    (default)          lane memory cap override
+limits.lane.tasks_max?     (default)          lane process cap override
+limits.coachman.memory_max? (default)         coachman memory cap override
+limits.coachman.tasks_max?  (default)         coachman process cap override
+limits.reviewer.memory_max? (default)         reviewer memory cap override
+limits.reviewer.tasks_max?  (default)         reviewer process cap override
+`
+  : "";
 
 function tomlList(s: string): string {
   const items = s
@@ -173,15 +185,7 @@ postmaster.effort?         (none)
 postmaster.env_file?       (none)
 max_runs                   2                  concurrent runs per project
 poll_seconds               120                postmaster poll interval
-limits.memory_max          8G                 default memory cap per launch (K, M, G or T)
-limits.tasks_max           512                default process cap per launch
-limits.lane.memory_max?    (default)          lane memory cap override
-limits.lane.tasks_max?     (default)          lane process cap override
-limits.coachman.memory_max? (default)         coachman memory cap override
-limits.coachman.tasks_max? (default)         coachman process cap override
-limits.reviewer.memory_max? (default)         reviewer memory cap override
-limits.reviewer.tasks_max? (default)          reviewer process cap override
-tracker                    github             github, plane, local or other
+${LIMIT_KEYS}tracker                    github             github, plane, local or other
 confine                    off                lane confinement, on or off (see run probe-confine)
 plane.url                  https://api.plane.so   plane only
 plane.workspace                               plane only; the slug in the workspace's web URL
@@ -370,39 +374,46 @@ const PEF = ask(
 const MR = ask("  concurrent runs per project", "2", "max_runs", opts);
 const PS = ask("  postmaster poll interval, seconds", "120", "poll_seconds", opts);
 
-console.log("");
-console.log("== Launch limits: per-launch memory and process caps when the host supports them. ==");
-const LM = ask("  default memory cap (number plus K, M, G or T)", "8G", "limits.memory_max", opts);
-if (!/^[1-9][0-9]*[KMGT]$/u.test(LM))
-  die("setup: memory_max must be a positive whole number followed by K, M, G or T", 1);
-const LT = ask("  default process cap (whole number)", "512", "limits.tasks_max", opts);
-if (!validTasks(LT)) die("setup: tasks_max must be a whole number from 1 to 2147483647", 1);
+let LM = "";
+let LT = "";
 let LIMIT_ROLE_TABLES = "";
-for (const limitRole of ["lane", "coachman", "reviewer"]) {
-  const LR_MEM = ask(
-    `  ${limitRole} memory cap override (blank inherits the default)`,
-    "",
-    `limits.${limitRole}.memory_max?`,
-    opts,
-  );
-  if (LR_MEM && !/^[1-9][0-9]*[KMGT]$/u.test(LR_MEM))
-    die(
-      `setup: limits.${limitRole}.memory_max must be a positive whole number followed by K, M, G or T`,
-      1,
+if (LINUX) {
+  console.log("");
+  console.log("== Launch limits: per-launch memory and process caps when the host supports them. ==");
+  LM = ask("  default memory cap (number plus K, M, G or T)", "8G", "limits.memory_max", opts);
+  if (!/^[1-9][0-9]*[KMGT]$/u.test(LM))
+    die("setup: memory_max must be a positive whole number followed by K, M, G or T", 1);
+  LT = ask("  default process cap (whole number)", "512", "limits.tasks_max", opts);
+  if (!validTasks(LT)) die("setup: tasks_max must be a whole number from 1 to 2147483647", 1);
+  for (const limitRole of ["lane", "coachman", "reviewer"]) {
+    const LR_MEM = ask(
+      `  ${limitRole} memory cap override (blank inherits the default)`,
+      "",
+      `limits.${limitRole}.memory_max?`,
+      opts,
     );
-  const LR_TASKS = ask(
-    `  ${limitRole} process cap override (blank inherits the default)`,
-    "",
-    `limits.${limitRole}.tasks_max?`,
-    opts,
-  );
-  if (LR_TASKS && !validTasks(LR_TASKS))
-    die(`setup: limits.${limitRole}.tasks_max must be a whole number from 1 to 2147483647`, 1);
-  if (LR_MEM || LR_TASKS) {
-    LIMIT_ROLE_TABLES += `\n[limits.${limitRole}]\n`;
-    if (LR_MEM) LIMIT_ROLE_TABLES += `memory_max = "${LR_MEM}"\n`;
-    if (LR_TASKS) LIMIT_ROLE_TABLES += `tasks_max = ${LR_TASKS}\n`;
+    if (LR_MEM && !/^[1-9][0-9]*[KMGT]$/u.test(LR_MEM))
+      die(
+        `setup: limits.${limitRole}.memory_max must be a positive whole number followed by K, M, G or T`,
+        1,
+      );
+    const LR_TASKS = ask(
+      `  ${limitRole} process cap override (blank inherits the default)`,
+      "",
+      `limits.${limitRole}.tasks_max?`,
+      opts,
+    );
+    if (LR_TASKS && !validTasks(LR_TASKS))
+      die(`setup: limits.${limitRole}.tasks_max must be a whole number from 1 to 2147483647`, 1);
+    if (LR_MEM || LR_TASKS) {
+      LIMIT_ROLE_TABLES += `\n[limits.${limitRole}]\n`;
+      if (LR_MEM) LIMIT_ROLE_TABLES += `memory_max = "${LR_MEM}"\n`;
+      if (LR_TASKS) LIMIT_ROLE_TABLES += `tasks_max = ${LR_TASKS}\n`;
+    }
   }
+} else {
+  console.log("");
+  console.log("Launches on this system run without memory or process limits.");
 }
 
 console.log("");
@@ -505,6 +516,9 @@ if (PRL && !PRL.includes("{path}")) die("setup: planning.review_link must contai
 let TRACKER_EXTRA = "";
 if (PWS) TRACKER_EXTRA = `url = "${PURL}"\nworkspace = "${PWS}"\nenv_file = "${PENV}"`;
 if (OTHER) TRACKER_EXTRA = `name = "${OTHER}"`;
+const LIMITS_CONFIG = LINUX
+  ? `[limits]\nmemory_max = "${LM}"\ntasks_max = ${LT}\n${LIMIT_ROLE_TABLES}`
+  : "";
 
 const dateStr = new Date().toISOString().slice(0, 10);
 const OUT = `# Written by scripts/run setup on ${dateStr}. Shape: config.example.toml.
@@ -521,10 +535,7 @@ postmaster = { harness = "${PH}", model = "${PM}"${roleExtra(PE, PEF)} }
 max_runs = ${MR}
 ${LENS_TABLE}
 
-[limits]
-memory_max = "${LM}"
-tasks_max = ${LT}
-${LIMIT_ROLE_TABLES}
+${LIMITS_CONFIG}
 [postmaster]
 poll_seconds = ${PS}
 

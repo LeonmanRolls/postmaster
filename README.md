@@ -182,6 +182,19 @@ needs to run its gate.
 Python 3.11 or newer, which the bash scripts use to read the config, and for discovering a
 JavaScript project's gate.
 
+## On macOS
+
+These differences remain on macOS:
+
+- Launches have no memory or process limits. Setup says this once; the launch continues uncapped.
+- It is not known yet whether Muse and MiMo keep each lane's data separate under confinement. Until that is checked on a Mac, do not rely on that separation.
+- If `flock` is unavailable, the waiting list uses a lock file. Two runs adding entries at the same time can rarely lose one entry. Installing a `flock` command lets it use the system lock.
+- A path such as `~another-user/project` stays literal. If it cannot be used, the error shows that literal path.
+- Invalid text bytes in a command-line argument are replaced by Bun; the argument is not refused.
+- A review round's time limit follows the clock. Correcting the clock during a round can shorten or lengthen it, and time asleep counts toward the limit.
+- Changing the time zone while a run is active can make postmaster lose track of that run's launches.
+- Archived trial scripts and old ticket oracles run on Linux only. On macOS, those checks do not run.
+
 ## Installing the skills
 
 Skills are installed as links, never as copies. `scripts/run link-skills` links each directory
