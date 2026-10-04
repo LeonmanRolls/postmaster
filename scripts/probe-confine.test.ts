@@ -2,7 +2,7 @@
 // each forced through stubbed tools on PATH and the probe's test seams. The same lookups
 // every time; a control that could have come out the other way.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { run } from "./lib/proc.ts";
@@ -224,7 +224,16 @@ describe("the probe says ready, partial or unavailable", () => {
   });
 
   test("a bwrap is vetted only on a root-owned chain", () => {
-    expect(isSecureBwrapPath("/bin/sh")).toBe(true);
+    // The rule follows the machine's own ownership, so the control states it: a system shell
+    // vetts where the filesystem root is root-owned, and vetts nothing in a container whose
+    // root is owned by an unmapped uid (nobody under a rootless id map), which no path vets.
+    let rootOwned = false;
+    try {
+      rootOwned = statSync("/").uid === 0;
+    } catch {
+      rootOwned = false;
+    }
+    expect(isSecureBwrapPath("/bin/sh")).toBe(rootOwned);
     expect(isSecureBwrapPath(join(tmp, "missing-bwrap"))).toBe(false);
   });
 });

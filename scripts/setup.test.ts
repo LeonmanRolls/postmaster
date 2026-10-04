@@ -136,7 +136,7 @@ describe("positive controls", () => {
     const keys = run(SELF, ["setup", "--keys"]);
     expect(keys.code).toBe(0);
     expect(keys.out).toContain("dispatch mode: synthesis, single-thread or alternate");
-    expect(keys.out).toMatch(/mode\s+synthesis\s+dispatch mode:/u);
+    expect(keys.out).toMatch(/mode +synthesis +dispatch mode:/u);
     for (const mode of ["synthesis", "single-thread", "alternate"]) {
       answers(`mode-${mode}`, `mode=${mode}`);
       expect(runSetup(`mode-${mode}`)).toBe(0);

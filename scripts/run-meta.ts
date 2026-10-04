@@ -939,12 +939,13 @@ function checkMode(d: string): Outcome {
 // is not the run's mode.
 export function teamModeLine(brief: string): string {
   const lines = brief.split("\n");
-  const start = lines.findIndex((l) => /^##[ \t]+Team[ \t]*$/i.test(l));
+  const start = lines.findIndex((l) => /^##[ \t]+Team[ \t]*$/iu.test(l));
   if (start < 0) return "";
   const rest = lines.slice(start + 1);
-  const end = rest.findIndex((l) => /^##[ \t]+/.test(l));
+  const end = rest.findIndex((l) => /^##[ \t]+/u.test(l));
   const team = (end < 0 ? rest : rest.slice(0, end)).join("\n");
-  const m = /^mode:[ \t]*(\S+)/im.exec(team);
+  // ASCII: the waybill's mode token is template-written, so \S with this marker reads ASCII-only.
+  const m = /^mode:[ \t]*(\S+)/imu.exec(team);
   return m ? (m[1] as string) : "";
 }
 
