@@ -2,7 +2,7 @@
 // The self-test staged shared state between controls (armed reports, a second commit); each
 // test below stages its own directories so it passes alone as well as in file order.
 // The spaced-path control re-runs this file with bun test instead of --self-test. Conditional
-// controls are gated by test.skipIf with a top notice.
+// controls are gated by test.skipIf; skips.toml carries the reasons.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -26,20 +26,10 @@ import {
 const SELF = join(import.meta.dir, "run");
 const BASE_BLOB = "bb782a973e69427c820ce16a676718e87f51995b:scripts/verify-journey.sh";
 
-const hasPy = run("sh", ["-c", "command -v python3"]).code === 0;
+const hasPy = run("python3", ["-c", "pass"]).code === 0;
 const baseShown = run("git", ["-C", toolRoot(import.meta), "show", BASE_BLOB]);
 const foldSkip = !hasPy || baseShown.code !== 0;
-if (foldSkip) {
-  console.log(
-    `skip step matching folds as BASE's norm does: ${!hasPy ? "python3 not on PATH: the casefold step match was not compared" : "BASE could not be extracted here: the casefold step match was not compared"}`,
-  );
-}
 const spacedDone = process.env.POSTMASTER_SPACED_DONE === "1";
-if (spacedDone) {
-  console.log(
-    "skip the self-test passes from a path with a space: POSTMASTER_SPACED_DONE is set (nested run)",
-  );
-}
 
 let tmp = "";
 let wt = "";

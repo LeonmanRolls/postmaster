@@ -15,6 +15,7 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
   statSync,
   symlinkSync,
@@ -46,11 +47,6 @@ const outerProxy =
   process.env.http_proxy ??
   process.env.HTTPS_PROXY ??
   process.env.https_proxy;
-if (outerProxy !== undefined) {
-  console.log(
-    "skip restoreEnv leaves fetch direct: a proxy is set here, so directness was not compared",
-  );
-}
 
 // BASE is the newest scripts/run local in history that is a real script rather than the
 // port's one-line wrapper, and it must still carry the strict ticket read.
@@ -82,17 +78,11 @@ let baseLocal = "";
     }
   }
 }
-const hasPy3 = run("sh", ["-c", "command -v python3"]).code === 0;
+const hasPy3 = run("python3", ["-c", "pass"]).code === 0;
 const noBaseReplay = baseLocal === "" || !hasPy3;
-if (noBaseReplay) {
-  console.log(
-    `skip BASE local.sh strict-read replay: ${
-      baseLocal === ""
-        ? "BASE local.sh not found in history"
-        : "python3 not on PATH: the 0xff refusal was not compared against BASE"
-    }`,
-  );
-}
+// Without /proc/self/cmdline the raw non-UTF-8 argv tests cannot tell raw bytes
+// from U+FFFD, so they skip on macOS; skips.toml carries the reason.
+const skipRawArgv = !existsSync("/proc/self/cmdline");
 
 let temp = "";
 let bodyPath = "";
@@ -253,7 +243,9 @@ function restoreEnv(): void {
 
 beforeAll(() => {
   try {
-    temp = mkdtempSync(join(tmpdir(), "local-self-test-"));
+    // Realpath once, so every path below is the path the tool reports back: macOS
+    // makes /var/folders a symlink to /private/var/folders, and the two differ.
+    temp = realpathSync(mkdtempSync(join(tmpdir(), "local-self-test-")));
     for (const key of envKeys) oldEnv.set(key, process.env[key]);
     mkdirSync(join(temp, "bin"), { recursive: true });
     mkdirSync(join(temp, "home", ".config"), { recursive: true });
@@ -760,31 +752,39 @@ describe("negative controls: nothing is written", () => {
     refused(1, "no ticket #99", repo, "comment", "99", "coachman", "hello");
   }, 30000);
 
-  test("a comment that is not UTF-8 exits 1", () => {
-    refusedRaw(
-      1,
-      "comment is not UTF-8",
-      repo,
-      "na\\357ve",
-      "comment",
-      "1",
-      "coachman",
-      "<RAW-BYTES>",
-    );
-  }, 30000);
+  test.skipIf(skipRawArgv)(
+    "a comment that is not UTF-8 exits 1",
+    () => {
+      refusedRaw(
+        1,
+        "comment is not UTF-8",
+        repo,
+        "na\\357ve",
+        "comment",
+        "1",
+        "coachman",
+        "<RAW-BYTES>",
+      );
+    },
+    30000,
+  );
 
-  test("an actor that is not UTF-8 exits 1", () => {
-    refusedRaw(
-      1,
-      "actor is not UTF-8",
-      repo,
-      "r\\351viewer",
-      "comment",
-      "1",
-      "<RAW-BYTES>",
-      "hello",
-    );
-  }, 30000);
+  test.skipIf(skipRawArgv)(
+    "an actor that is not UTF-8 exits 1",
+    () => {
+      refusedRaw(
+        1,
+        "actor is not UTF-8",
+        repo,
+        "r\\351viewer",
+        "comment",
+        "1",
+        "<RAW-BYTES>",
+        "hello",
+      );
+    },
+    30000,
+  );
 
   test("create with an empty body exits 1", () => {
     refused(1, "is empty", repo, "create", "A title", emptyPath);
@@ -798,9 +798,13 @@ describe("negative controls: nothing is written", () => {
     refused(1, "more than one line", repo, "create", "Two\nlines", bodyPath);
   }, 30000);
 
-  test("create with a title that is not UTF-8 exits 1", () => {
-    refusedRaw(1, "title is not UTF-8", repo, "caf\\351", "create", "<RAW-BYTES>", bodyPath);
-  }, 30000);
+  test.skipIf(skipRawArgv)(
+    "create with a title that is not UTF-8 exits 1",
+    () => {
+      refusedRaw(1, "title is not UTF-8", repo, "caf\\351", "create", "<RAW-BYTES>", bodyPath);
+    },
+    30000,
+  );
 
   test("title with an empty title exits 1", () => {
     refused(1, "title is empty", repo, "title", "1", " ");
@@ -810,9 +814,13 @@ describe("negative controls: nothing is written", () => {
     refused(1, "more than one line", repo, "title", "1", "Two\nlines");
   }, 30000);
 
-  test("title that is not UTF-8 exits 1", () => {
-    refusedRaw(1, "title is not UTF-8", repo, "\\377", "title", "1", "<RAW-BYTES>");
-  }, 30000);
+  test.skipIf(skipRawArgv)(
+    "title that is not UTF-8 exits 1",
+    () => {
+      refusedRaw(1, "title is not UTF-8", repo, "\\377", "title", "1", "<RAW-BYTES>");
+    },
+    30000,
+  );
 
   test("title on an unknown ticket exits 1", () => {
     refused(1, "no ticket #99", repo, "title", "99", "A title");

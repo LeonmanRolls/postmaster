@@ -19,7 +19,14 @@ import {
 } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { scriptsDir } from "./lib/paths.ts";
-import { processCommandLine, processInfo, processStart, processState } from "./lib/processes.ts";
+import {
+  bootId,
+  bootTime,
+  processCommandLine,
+  processInfo,
+  processStart,
+  processState,
+} from "./lib/processes.ts";
 import { pyWords } from "./lib/text.ts";
 
 const HERE = scriptsDir(import.meta);
@@ -811,6 +818,10 @@ async function makeHarness(
     "mkfifo",
     "mktemp",
     "sleep",
+    // The escapee's session makers: setsid(1) where it exists, else python's
+    // setsid. symlinkCommand passes over whichever is missing.
+    "setsid",
+    "python3",
     "date",
     "touch",
     "wc",
@@ -1521,7 +1532,13 @@ export async function runControls(): Promise<number> {
       [
         "#!/usr/bin/env bash",
         "trap 'echo term >> \"$TREE/term\"; exit 0' TERM",
-        'setsid sleep 120 & echo $! > "$TREE/escapee.pid"',
+        // A session of its own: setsid(1) where it exists, else python's setsid, since
+        // macOS ships no setsid binary. Either way $! is the escapee's pid.
+        "if command -v setsid >/dev/null 2>&1; then",
+        '  setsid sleep 120 & echo $! > "$TREE/escapee.pid"',
+        "else",
+        '  python3 -c \'import os, sys; os.setsid(); os.execvp("sleep", ["sleep", "120"])\' & echo $! > "$TREE/escapee.pid"',
+        "fi",
         'sh -c \'trap "" TERM; while :; do sleep 1; done\' & echo $! > "$TREE/deaf.pid"',
         "sleep 120 & wait",
         "",
@@ -1551,25 +1568,33 @@ export async function runControls(): Promise<number> {
       i++
     )
       await sleep(100);
+    const alive = (pid: string) => processState(Number(pid)) === "live";
+    const escapee = readFileSync(join(root, "tree/escapee.pid"), "utf8").trim();
+    const deaf = readFileSync(join(root, "tree/deaf.pid"), "utf8").trim();
+    // Both must be running as the stop begins: without this the controls below would
+    // pass on a machine where neither ever started.
+    const escapeeRan = alive(escapee);
+    const deafRan = alive(deaf);
+    const ranBeforeStop = escapeeRan && deafRan;
     const outsider = spawn("sleep", ["60"], { cwd: sol, detached: true, stdio: "ignore" });
     outsider.unref();
     const termStop = execHost(["stop", join(f.repo, ".worktrees/T-1-luna")], noHost, root, {
       POSTMASTER_HOST_STOP_WAIT: "2",
     });
-    const alive = (pid: string) => processState(Number(pid)) === "live";
-    const escapee = readFileSync(join(root, "tree/escapee.pid"), "utf8").trim();
-    const deaf = readFileSync(join(root, "tree/deaf.pid"), "utf8").trim();
     await pass(
       "the launch got TERM first, and a child deaf to it is killed after the wait",
       () =>
         termRun.code === 0 &&
         termStop.code === 0 &&
+        ranBeforeStop &&
         existsSync(join(root, "tree/term")) &&
         !alive(deaf),
+      `termRun=${termRun.code} termStop=${termStop.code} before=${ranBeforeStop} deafRan=${deafRan} term=${existsSync(join(root, "tree/term"))}`,
     );
     await pass(
       "a process that works in the worktree but that no launch started is left alone",
-      () => !!outsider.pid && alive(String(outsider.pid)) && !alive(escapee),
+      () => !!outsider.pid && ranBeforeStop && alive(String(outsider.pid)) && !alive(escapee),
+      `before=${ranBeforeStop} escapeeRan=${escapeeRan} deafRan=${deafRan} outsiderAlive=${!!outsider.pid && alive(String(outsider.pid))} escapeeAlive=${alive(escapee)} escapee=${escapee} err=${termRun.err.slice(0, 400)}`,
     );
     try {
       if (outsider.pid) process.kill(outsider.pid, "SIGKILL");
@@ -1579,13 +1604,8 @@ export async function runControls(): Promise<number> {
     console.log("stop: registry identity and process membership");
     const launchDir = join(root, "state", "launches");
     mkdirSync(launchDir, { recursive: true });
-    const boot = readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim();
-    const bootLine =
-      readFileSync("/proc/stat", "utf8")
-        .split("\n")
-        .find((line: string) => line.startsWith("btime ")) ?? "btime 0";
-    // ASCII: /proc/stat is kernel-emitted ASCII; btime's fields split on spaces.
-    const bootSeconds = Number(bootLine.split(/\s+/u)[1]);
+    const boot = bootId();
+    const bootSeconds = bootTime() ?? 0;
     const ticks = Number(exec("getconf", ["CLK_TCK"]).out.trim()) || 100;
     const procStart = (pid: string): string => processStart(Number(pid)) ?? "";
     const startedSeconds = (pid: string) => {
@@ -3955,7 +3975,8 @@ export async function runControls(): Promise<number> {
       "case $h in [a-z]*) ;; *) h=p$h;; esac; " +
       "if [ ${#h} -gt 32 ]; then sum=$(printf '%s' \"$1\" | cksum | cut -d' ' -f1); " +
       'h=$(printf \'%s-%08x\' "${h:0:23}" "$sum"); fi; printf \'%s\' "$h"';
-    const baseOf = (text: string): string => exec("bash", ["-c", baseHandle, "_", text]).out;
+    const baseOf = (text: string): string =>
+      exec("bash", ["-c", baseHandle, "_", text], { env: { ...process.env, LC_ALL: "C" } }).out;
     const handleCases = [
       "My.Project 1",
       "9lives",
@@ -4223,7 +4244,7 @@ export async function runControls(): Promise<number> {
         '    printf \'{"session_id":"thread-chatter"}\\n\'',
         "    printf '429 rate limit exceeded\\n' >&2",
         "    python3 -c 'import os",
-        'for fd in os.listdir("/proc/self/fd"):',
+        'for fd in os.listdir("/dev/fd"):',
         "    try: n = int(fd)",
         "    except ValueError: continue",
         "    if n > 2:",

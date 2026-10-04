@@ -125,6 +125,8 @@ import { parseTomlText } from "./lib/data.ts";
 import { scriptsDir } from "./lib/paths.ts";
 import { mkstempSync, run, signalExitCode } from "./lib/proc.ts";
 import {
+  bootId,
+  bootTime,
   processCommandLine,
   processStart,
   processState,
@@ -503,32 +505,6 @@ type Registry = {
   boot: string;
   members: Array<[number, string]>;
 };
-function runBoot(...args: string[]): string {
-  return run(args[0]!, args.slice(1), { env: { LC_ALL: "C" } }).out.trim();
-}
-function bootId(): string {
-  try {
-    return readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim();
-  } catch {
-    // ASCII: sysctl kern.boottime is kernel-emitted ASCII on macOS.
-    return runBoot("sysctl", "-n", "kern.boottime").split(/\s+/u).join(" ");
-  }
-}
-function bootTime(): number | null {
-  try {
-    const text = readFileSync("/proc/stat", "utf8");
-    const line = text.split("\n").find((row: string) => row.startsWith("btime "));
-    // ASCII: /proc/stat btime is kernel-emitted ASCII.
-    if (line) return Number(line.split(/\s+/u)[1]);
-  } catch {}
-  // ASCII: sysctl kern.boottime is kernel-emitted ASCII on macOS.
-  const words = runBoot("sysctl", "-n", "kern.boottime").replace(/,/gu, " ").split(/\s+/u);
-  // `{ sec = <t>, ... }`: the value sits two words past `sec`, as main reads it.
-  const at = words.indexOf("sec");
-  if (at < 0 || at + 2 >= words.length) return null;
-  const seconds = Number(words[at + 2]);
-  return Number.isInteger(seconds) ? seconds : null;
-}
 function startOf(pid: number): string {
   return processStart(pid) ?? "";
 }

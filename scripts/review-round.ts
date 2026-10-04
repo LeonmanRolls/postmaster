@@ -46,7 +46,7 @@ export function monotonic(): number {
   }
 }
 
-function bootId(): string {
+export function bootId(): string {
   try {
     return readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim();
   } catch {

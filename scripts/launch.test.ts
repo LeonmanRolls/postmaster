@@ -34,24 +34,40 @@ function shellQuote(value: string): string {
   return `'${value.replace(/'/gu, "'\\''")}'`;
 }
 
-const skipPython = run("sh", ["-c", "command -v python3"]).code !== 0;
-if (skipPython) {
-  console.log(
-    "skip parity: and handed-environment comparisons (16) and the resume PWD/OLDPWD/SHLVL match and the battery socket checks (4): python3 not on PATH",
-  );
+/** The stub harness's handed-environment dump: every exported variable, records
+ * sorted byte for byte as `env -0 | LC_ALL=C sort -z` produced them, NUL-separated.
+ * python does the dump on both systems, since BSD env has no -0 and BSD sort no -z.
+ * `-` writes to stdout instead of the file. */
+function envDumpStub(dest: string, preamble = ""): string {
+  return [
+    "#!/bin/sh",
+    ...(preamble === "" ? [] : [preamble]),
+    `python3 - '${dest}' <<'PYEOF'`,
+    "import os, sys",
+    'rows = sorted(k + "=" + os.environ[k] for k in os.environ)',
+    'data = b"\\0".join(r.encode("utf-8", "surrogateescape") for r in rows)',
+    'if sys.argv[1] == "-":',
+    "    sys.stdout.buffer.write(data)",
+    "else:",
+    '    with open(sys.argv[1], "wb") as f:',
+    "        f.write(data)",
+    "PYEOF",
+    "",
+  ].join("\n");
 }
 
-// The confinement battery's confined checks run only when the mechanism
-// starts; a machine without one skips them loudly, never as silent passes.
+// The parity comparisons run BASE launch.sh, which refuses anything below python
+// 3.11 (tomllib): gate on the import itself, so an Apple 3.9 or a python3 that
+// cannot run skips instead of failing. The socket probes only need a python3 that
+// runs. Which tests skip on which system, and why, lives in scripts/skips.toml.
+const skipToml = run("python3", ["-c", "import tomllib"]).code !== 0;
+const skipPython = run("python3", ["-c", "pass"]).code !== 0;
+
+// The confinement battery's confined checks run only when the mechanism starts;
+// a machine without one skips them, listed with its cause.
 const confinementAvail = startCheck();
 const skipConfined = !confinementAvail.ok;
-if (skipConfined) {
-  console.log(`skip confinement battery confined checks (11): ${confinementAvail.cause}`);
-}
 const skipLinuxOnly = process.platform !== "linux";
-if (skipLinuxOnly) {
-  console.log("skip Linux-only confinement battery checks (6): not Linux");
-}
 
 interface ControlRecord {
   label: string;
@@ -1456,7 +1472,7 @@ beforeAll(() => {
           break;
         }
       }
-      hasPy3 = !skipPython;
+      hasPy3 = !skipToml;
       check(
         "BASE launch.sh extracts with its source-and-exec tail",
         baseLaunch !== "",
@@ -1470,10 +1486,7 @@ beforeAll(() => {
       // NUL byte the file prints would glue onto the dump there. Stdout stays
       // pure file output, as BASE leaves it.
       const handedPath = join(tmp, "parity-handed.out");
-      writeFileSync(
-        claude,
-        `#!/bin/sh\necho STUB-RAN >&2\nenv -0 | LC_ALL=C sort -z > "${handedPath}"\n`,
-      );
+      writeFileSync(claude, envDumpStub(handedPath, "echo STUB-RAN >&2"));
       const savedEnvx = envx;
       envx = { HOME: join(tmp, "home") };
       // `_` is each launcher's own last command and always differs; a shell's
@@ -1703,17 +1716,19 @@ beforeAll(() => {
         "port refuses rc 1 naming the unfindable harness, harness never ran",
       );
       {
+        // 4,000 exports ≈ 840 KB: a big environment, and under the 1 MiB argument
+        // limit macOS puts on exec, so the control runs on both systems.
         const lines = ["export PARITY_BIG=yes"];
-        for (let i = 0; i < 6000; i++)
+        for (let i = 0; i < 4000; i++)
           lines.push(`export PAD${String(i).padStart(4, "0")}=${"x".repeat(200)}`);
         parity(
-          "a roughly 1.2 MB environment launches whole",
+          "a roughly 840 KB environment launches whole",
           `${lines.join("\n")}\n`,
           (rc, out, err, handed) =>
             rc === 0 &&
             ran(rc, out, err, handed) &&
             handed.includes("PARITY_BIG=yes") &&
-            handed.includes(`PAD5999=${"x".repeat(200)}`),
+            handed.includes(`PAD3999=${"x".repeat(200)}`),
           "rc 0 with the first and last variables handed on",
         );
       }
@@ -1748,7 +1763,7 @@ beforeAll(() => {
       // that exports a variable and a negative that unsets everything but PATH.
       const claude2 = join(tmp, "bin", "claude");
       const saved2 = readFileSync(claude2, "utf8");
-      writeFileSync(claude2, "#!/bin/sh\nenv -0 | LC_ALL=C sort -z\n");
+      writeFileSync(claude2, envDumpStub("-"));
       const handed = (key: string, val: string): boolean =>
         out.split("\0").includes(`${key}=${val}`);
       writeFileSync(join(tmp, "handedpos.env"), "export HANDED_OK=yes\n");
@@ -1926,11 +1941,15 @@ beforeAll(() => {
           `port rc=${sPRc} base rc=${sBRc}\nport ${sPOut}\nbase ${sBOut}`,
         );
         writeFileSync(pi, savedPi);
-        // A prompt travelling as argv reaches it byte for byte: /proc/self/cmdline
-        // is the witness, since the runtimes decode argv as UTF-8 themselves.
+        // A prompt travelling as argv reaches it byte for byte: python's own argv,
+        // re-encoded byte for byte, is the witness, since the runtimes decode argv
+        // as UTF-8 themselves and macOS has no /proc/self/cmdline to ask instead.
         writeFileSync(
           codex,
-          '#!/usr/bin/env bun\nimport { readFileSync } from "node:fs";\nconsole.log("cmdline-hex=" + readFileSync("/proc/self/cmdline").toString("hex"));\n',
+          "#!/usr/bin/env python3\n" +
+            "import sys\n" +
+            'args = b"\\0".join(a.encode("utf-8", "surrogateescape") for a in sys.argv[1:]) + b"\\0"\n' +
+            'print("cmdline-hex=" + args.hex())\n',
         );
         const argvBytes = Buffer.concat([
           Buffer.from("Hello ", "utf8"),
@@ -1963,7 +1982,11 @@ beforeAll(() => {
         // hijack the read, which runs before the source, as BASE orders it.
         writeFileSync(
           codex,
-          '#!/usr/bin/env bun\nimport { readFileSync } from "node:fs";\nconsole.log("cmdline-hex=" + readFileSync("/proc/self/cmdline").toString("hex"));\nconsole.log("FOO=" + (process.env.FOO ?? "unset"));\n',
+          "#!/usr/bin/env python3\n" +
+            "import os, sys\n" +
+            'args = b"\\0".join(a.encode("utf-8", "surrogateescape") for a in sys.argv[1:]) + b"\\0"\n' +
+            'print("cmdline-hex=" + args.hex())\n' +
+            'print("FOO=" + os.environ.get("FOO", "unset"))\n',
         );
         writeFileSync(
           join(tmp, "catguard.env"),
@@ -4783,7 +4806,7 @@ describe("negative controls", () => {
   test("BASE launch.sh extracts with its source-and-exec tail", () => {
     assertControl("BASE launch.sh extracts with its source-and-exec tail");
   });
-  test.skipIf(skipPython)(
+  test.skipIf(skipToml)(
     "parity: an echo in the file reaches stdout and the full env reaches the harness",
     () => {
       assertControl(
@@ -4791,46 +4814,46 @@ describe("negative controls", () => {
       );
     },
   );
-  test.skipIf(skipPython)(
+  test.skipIf(skipToml)(
     "parity: a printed NUL byte is file output, never a handed variable",
     () => {
       assertControl("parity: a printed NUL byte is file output, never a handed variable");
     },
   );
-  test.skipIf(skipPython)("parity: exit 0 in the file exits 0 without launching", () => {
+  test.skipIf(skipToml)("parity: exit 0 in the file exits 0 without launching", () => {
     assertControl("parity: exit 0 in the file exits 0 without launching");
   });
-  test.skipIf(skipPython)("parity: exec /bin/true in the file exits 0 without launching", () => {
+  test.skipIf(skipToml)("parity: exec /bin/true in the file exits 0 without launching", () => {
     assertControl("parity: exec /bin/true in the file exits 0 without launching");
   });
-  test.skipIf(skipPython)("parity: file output on stderr reaches the launch's stderr", () => {
+  test.skipIf(skipToml)("parity: file output on stderr reaches the launch's stderr", () => {
     assertControl("parity: file output on stderr reaches the launch's stderr");
   });
-  test.skipIf(skipPython)(
+  test.skipIf(skipToml)(
     "parity: a file that unsets everything hands on the emptied environment",
     () => {
       assertControl("parity: a file that unsets everything hands on the emptied environment");
     },
   );
-  test.skipIf(skipPython)("parity: a roughly 1.2 MB environment launches whole", () => {
-    assertControl("parity: a roughly 1.2 MB environment launches whole");
+  test.skipIf(skipToml)("parity: a roughly 840 KB environment launches whole", () => {
+    assertControl("parity: a roughly 840 KB environment launches whole");
   });
-  test.skipIf(skipPython)("parity: a file that unsets PATH applies instead of ignored", () => {
+  test.skipIf(skipToml)("parity: a file that unsets PATH applies instead of ignored", () => {
     assertControl("parity: a file that unsets PATH applies instead of ignored");
   });
-  test.skipIf(skipPython)("parity: a file that empties PATH applies instead of ignored", () => {
+  test.skipIf(skipToml)("parity: a file that empties PATH applies instead of ignored", () => {
     assertControl("parity: a file that empties PATH applies instead of ignored");
   });
-  test.skipIf(skipPython)("a file that exports a variable hands it to the harness", () => {
+  test.skipIf(skipToml)("a file that exports a variable hands it to the harness", () => {
     assertControl("a file that exports a variable hands it to the harness");
   });
-  test.skipIf(skipPython)(
+  test.skipIf(skipToml)(
     "a file that unsets everything but PATH hands the harness no trace of it",
     () => {
       assertControl("a file that unsets everything but PATH hands the harness no trace of it");
     },
   );
-  test.skipIf(skipPython)(
+  test.skipIf(skipToml)(
     "a harness name holding $(...) is refused as not on PATH on both sides, and runs nothing",
     () => {
       assertControl(
@@ -4838,7 +4861,7 @@ describe("negative controls", () => {
       );
     },
   );
-  test.skipIf(skipPython)(
+  test.skipIf(skipToml)(
     "parity: without an env file the harness's full environment matches BASE, PWD naming the worktree",
     () => {
       assertControl(
@@ -4846,7 +4869,7 @@ describe("negative controls", () => {
       );
     },
   );
-  test.skipIf(skipPython)(
+  test.skipIf(skipToml)(
     "parity: a prompt holding \\xff\\xfe and NUL reaches stdin byte for byte on both sides",
     () => {
       assertControl(
@@ -4854,7 +4877,7 @@ describe("negative controls", () => {
       );
     },
   );
-  test.skipIf(skipPython)(
+  test.skipIf(skipToml)(
     "parity: a prompt holding \\xff\\xfe reaches argv byte for byte, trailing newlines stripped, on both sides",
     () => {
       assertControl(
@@ -4862,7 +4885,7 @@ describe("negative controls", () => {
       );
     },
   );
-  test.skipIf(skipPython)(
+  test.skipIf(skipToml)(
     "parity: with an env file the prompt still reaches argv byte for byte and the file applies",
     () => {
       assertControl(
@@ -5529,33 +5552,60 @@ describe("confinement wiring: form shows the wrap, fallback warns and logs", () 
   });
   test("form with confine on wraps the launch line", () => {
     const r = records.find((x) => x.label === "form with confine on wraps the launch line");
-    if (r === undefined) return; // no row on this system: the bare-form record holds instead
+    // No row on this system: the bare-form record holds instead, and says so.
+    if (r === undefined) {
+      expect(
+        records.find((x) => x.label === "form with confine on stays bare on a system with no row"),
+      ).toBeDefined();
+      return;
+    }
     assertControl("form with confine on wraps the launch line");
   });
   test("form with confine on wraps the resume line", () => {
     const r = records.find((x) => x.label === "form with confine on wraps the resume line");
-    if (r === undefined) return; // no row on this system: the bare-form record holds instead
+    if (r === undefined) {
+      expect(
+        records.find((x) => x.label === "form with confine on stays bare on a system with no row"),
+      ).toBeDefined();
+      return;
+    }
     assertControl("form with confine on wraps the resume line");
   });
   test("form with confine on stays bare on a system with no row", () => {
     const r = records.find(
       (x) => x.label === "form with confine on stays bare on a system with no row",
     );
-    if (r === undefined) return; // this system has a row: the wrap records hold instead
+    // This system has a row: the wrap records hold instead, and say so.
+    if (r === undefined) {
+      expect(
+        records.find((x) => x.label === "form with confine on wraps the launch line"),
+      ).toBeDefined();
+      return;
+    }
     assertControl("form with confine on stays bare on a system with no row");
   });
   test("the wrapped launch line carries the bare harness argv", () => {
     const r = records.find(
       (x) => x.label === "the wrapped launch line carries the bare harness argv",
     );
-    if (r === undefined) return; // no row on this system
+    if (r === undefined) {
+      expect(
+        records.find((x) => x.label === "form with confine on stays bare on a system with no row"),
+      ).toBeDefined();
+      return;
+    }
     assertControl("the wrapped launch line carries the bare harness argv");
   });
   test("the wrapped resume line carries the bare harness argv", () => {
     const r = records.find(
       (x) => x.label === "the wrapped resume line carries the bare harness argv",
     );
-    if (r === undefined) return; // no row on this system
+    if (r === undefined) {
+      expect(
+        records.find((x) => x.label === "form with confine on stays bare on a system with no row"),
+      ).toBeDefined();
+      return;
+    }
     assertControl("the wrapped resume line carries the bare harness argv");
   });
   test("form for the coachman stays bare with confine on", () => {

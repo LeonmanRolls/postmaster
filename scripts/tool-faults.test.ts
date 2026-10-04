@@ -80,12 +80,9 @@ function plantLegacyTargets(copy: string): void {
   }
 }
 
-const skipPython = run("sh", ["-c", "command -v python3"]).code !== 0;
-if (skipPython) {
-  console.log(
-    "skip folding parity, unicode primitives, stub tracker search, planted-marker search: python3 not on PATH",
-  );
-}
+// The parity comparisons run BASE's pinned script through a python3 that runs;
+// a Command Line Tools stub that cannot run skips instead. skips.toml says so.
+const skipPython = run("python3", ["-c", "pass"]).code !== 0;
 
 // #163 deliberately reworded the draft's Notes on main; the pinned BASE still carries
 // the old sentence, so parity remaps BASE's drafts to the new wording before comparing.

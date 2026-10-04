@@ -25,6 +25,10 @@ import { isDir, meta, pin, TRAIL_NL_RE } from "./run-meta.ts";
 
 const TOOL = toolRoot(import.meta);
 
+// The bash flow's flock(1) holder cannot exist where flock(1) does not: macOS
+// ships none, so the wait it would cause was not compared; skips.toml says so.
+const noFlock = Bun.which("flock") === null;
+
 interface ControlRecord {
   label: string;
   ok: boolean;
@@ -2002,48 +2006,52 @@ describe("pin lock beside the bash flow", () => {
       expect(r.code).toBe(0);
     });
   }, 180000);
-  test("an empty .pin.lock still flocked by the bash flow is waited on, not stolen", () => {
-    withTempDir((raw: string) => {
-      const tmp = realpathSync(raw);
-      const tools = join(tmp, "tools");
-      mkdirSync(tools, { recursive: true });
-      // The bash flow mid-critical-section: the lock empty, old, and flocked
-      // by a live holder. The pin must wait for the holder, not steal past it.
-      const lock = join(tools, ".pin.lock");
-      writeFileSync(lock, "");
-      const past = new Date(Date.now() - 60000);
-      utimesSync(lock, past, past);
-      const holder: any = Bun.spawn(["flock", "-x", lock, "sleep", "8"], {
-        stdout: "ignore",
-        stderr: "ignore",
+  test.skipIf(noFlock)(
+    "an empty .pin.lock still flocked by the bash flow is waited on, not stolen",
+    () => {
+      withTempDir((raw: string) => {
+        const tmp = realpathSync(raw);
+        const tools = join(tmp, "tools");
+        mkdirSync(tools, { recursive: true });
+        // The bash flow mid-critical-section: the lock empty, old, and flocked
+        // by a live holder. The pin must wait for the holder, not steal past it.
+        const lock = join(tools, ".pin.lock");
+        writeFileSync(lock, "");
+        const past = new Date(Date.now() - 60000);
+        utimesSync(lock, past, past);
+        const holder: any = Bun.spawn(["flock", "-x", lock, "sleep", "8"], {
+          stdout: "ignore",
+          stderr: "ignore",
+        });
+        try {
+          const repo = join(tmp, "repo");
+          mkdirSync(repo, { recursive: true });
+          run("git", ["-C", repo, "init", "-q", "-b", "main"]);
+          run("git", [
+            "-C",
+            repo,
+            "-c",
+            "user.name=t",
+            "-c",
+            "user.email=t@t",
+            "commit",
+            "-q",
+            "--allow-empty",
+            "-m",
+            "first",
+          ]);
+          const commit = run("git", ["-C", repo, "rev-parse", "HEAD"]).out.trim();
+          const t0 = Date.now();
+          const r = pin(repo, commit, tools);
+          expect(Date.now() - t0).toBeGreaterThanOrEqual(6000);
+          expect(r.code).toBe(0);
+        } finally {
+          holder.kill();
+        }
       });
-      try {
-        const repo = join(tmp, "repo");
-        mkdirSync(repo, { recursive: true });
-        run("git", ["-C", repo, "init", "-q", "-b", "main"]);
-        run("git", [
-          "-C",
-          repo,
-          "-c",
-          "user.name=t",
-          "-c",
-          "user.email=t@t",
-          "commit",
-          "-q",
-          "--allow-empty",
-          "-m",
-          "first",
-        ]);
-        const commit = run("git", ["-C", repo, "rev-parse", "HEAD"]).out.trim();
-        const t0 = Date.now();
-        const r = pin(repo, commit, tools);
-        expect(Date.now() - t0).toBeGreaterThanOrEqual(6000);
-        expect(r.code).toBe(0);
-      } finally {
-        holder.kill();
-      }
-    });
-  }, 180000);
+    },
+    180000,
+  );
 });
 
 describe("confinement mode recording", () => {

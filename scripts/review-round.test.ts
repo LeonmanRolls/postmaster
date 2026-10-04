@@ -1,6 +1,6 @@
 // Tests beside scripts/review-round.ts, moved from its --self-test on #109: 38 controls.
 // The sequence runs once in beforeAll with a recording check(); one test per recorded label.
-// Skip branches use the top-level conds; their in-sequence skip logs are replaced by those notices.
+// Skip branches use the top-level conds; skips.toml carries each reason.
 // The process-exit cleanup is an afterAll; withTempDir still owns the temp dir.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import {
@@ -15,22 +15,14 @@ import {
 import { join } from "node:path";
 import { run, withTempDir } from "./lib/proc.ts";
 import { processState } from "./lib/processes.ts";
-import { ARG_SPLIT_RE, monotonic } from "./review-round.ts";
+import { ARG_SPLIT_RE, bootId, monotonic } from "./review-round.ts";
 
 const self = join(import.meta.dir, "run");
 
-const skipBootId = !existsSync("/proc/sys/kernel/random/boot_id");
-if (skipBootId) {
-  console.log(
-    "skip a round started before the machine restarted is not waited on: no /proc/sys/kernel/random/boot_id",
-  );
-}
+// The implementation falls back to sysctl's stdout where the proc file is absent,
+// so this only skips when neither source reports a boot id at all; skips.toml says so.
+const skipBootId = bootId() === "";
 const skipRoot = process.getuid?.() === 0;
-if (skipRoot) {
-  console.log(
-    "skip a timeout whose degrade line cannot be written exits 4, and says what was not recorded: root writes anywhere",
-  );
-}
 
 interface ControlRecord {
   label: string;
@@ -124,7 +116,17 @@ beforeAll(() => {
 case $1 in
   fast) exit 0 ;;
   leaves) sleep 300 & echo $! > "$2"; exit 0 ;;
-  slow) setsid sleep 300 & echo $! > "$2"; exec sleep 300 ;;
+  slow)
+    # A session of its own: setsid(1) where it exists, else python's setsid,
+    # since macOS ships no setsid binary. Either way $! is the child's pid.
+    if command -v setsid >/dev/null 2>&1; then
+      setsid sleep 300 &
+    else
+      python3 -c 'import os, sys; os.setsid(); os.execvp("sleep", ["sleep", "300"])' &
+    fi
+    echo $! > "$2"
+    exec sleep 300
+    ;;
 esac
 `,
     );
@@ -331,6 +333,9 @@ esac
     } catch {
       /* handled by checks */
     }
+    // The sessioned child must be running before the stop: without this the
+    // control below would pass on a machine where it never started.
+    const childRanBeforeStop = child > 0 && alive(child);
     runSelf("wait", d, "1", repo, "bug:one bug:two");
     const waitOut = out;
     const waitRc = rc;
@@ -367,7 +372,7 @@ esac
     );
     check(
       "host.sh stop ends it, and its child in a session of its own",
-      dead(slow, 60) && dead(child, 60),
+      childRanBeforeStop && dead(slow, 60) && dead(child, 60),
     );
     runSelf("teardown", d, "1", repo);
     check(

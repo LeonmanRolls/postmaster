@@ -9,7 +9,7 @@
 // ticket holding waybill-like headers keeps every line in the brief.
 import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -161,7 +161,11 @@ describe("a brief", () => {
       expect(body).toContain("Do the thing.");
       expect(body).toContain("## Problem / feature");
       expect(body).toContain("Accept it when it works.");
-      expect(body).toContain(`https://code.example/?folder=${join(s.d, "spec-review")}`);
+      // The link's folder is realpath'd by spec-review-link, and macOS's
+      // /var/folders is a symlink to /private/var/folders.
+      expect(body).toContain(
+        `https://code.example/?folder=${realpathSync(join(s.d, "spec-review"))}`,
+      );
       expect(body).toContain(join(s.d, "spec-review", "WORKHORSE-SPEC.md"));
       expect(body).toContain("There are no lane drafts.");
       expect(body).toContain("None are set.");

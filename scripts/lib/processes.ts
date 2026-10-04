@@ -171,3 +171,41 @@ export function processCommandLine(pid: number): string {
     return run("ps", ["-o", "args=", "-p", String(pid)], { env: { LC_ALL: "C" } }).out.trim();
   }
 }
+
+function runC(...args: string[]): string {
+  return run(args[0]!, args.slice(1), { env: { LC_ALL: "C" } }).out.trim();
+}
+
+/** The machine's boot id: the proc file where it exists, else kern.boottime, which
+ * macOS reads through sysctl and which differs at every boot. The root defaults to the
+ * real /proc — POSTMASTER_PROC_ROOT forces the process queries, never the machine's own
+ * identity, which every writer and reader must share — and a test passes another root to
+ * exercise the sysctl reading on Linux. */
+export function bootId(procRoot = "/proc"): string {
+  try {
+    return readFileSync(`${procRoot}/sys/kernel/random/boot_id`, "utf8").trim();
+  } catch {
+    // ASCII: sysctl kern.boottime is kernel-emitted ASCII on macOS.
+    return runC("sysctl", "-n", "kern.boottime").split(/\s+/u).join(" ");
+  }
+}
+
+/** The boot time in epoch seconds, or null when neither source holds one. Takes the
+ * same root as bootId for the same reason. */
+export function bootTime(procRoot = "/proc"): number | null {
+  try {
+    const text = readFileSync(`${procRoot}/stat`, "utf8");
+    const line = text.split("\n").find((row) => row.startsWith("btime "));
+    // ASCII: /proc/stat btime is kernel-emitted ASCII.
+    if (line) return Number(line.split(/\s+/u)[1]);
+  } catch {
+    // A missing root forces the sysctl reading macOS uses.
+  }
+  // ASCII: sysctl kern.boottime is kernel-emitted ASCII on macOS.
+  const words = runC("sysctl", "-n", "kern.boottime").replace(/,/gu, " ").split(/\s+/u);
+  // `{ sec = <t>, ... }`: the value sits two words past `sec`.
+  const at = words.indexOf("sec");
+  if (at < 0 || at + 2 >= words.length) return null;
+  const seconds = Number(words[at + 2]);
+  return Number.isInteger(seconds) ? seconds : null;
+}

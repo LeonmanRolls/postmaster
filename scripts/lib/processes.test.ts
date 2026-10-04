@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   chmodSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
@@ -10,7 +11,14 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { processInfo, processStart, processState, processTable } from "./processes.ts";
+import {
+  bootId,
+  bootTime,
+  processInfo,
+  processStart,
+  processState,
+  processTable,
+} from "./processes.ts";
 
 const SCRIPTS = join(import.meta.dir, "..");
 
@@ -214,6 +222,58 @@ describe("portable process state", () => {
       else process.env.PATH = previousPath;
       if (previousRoot === undefined) delete process.env.POSTMASTER_PROC_ROOT;
       else process.env.POSTMASTER_PROC_ROOT = previousRoot;
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("boot identity without a proc tree, as macOS reads it", () => {
+  // A stub sysctl, so the fallback is proved on any machine: what the stub
+  // prints is what the reading must return, forced the way macOS reads it.
+  const stubbed = <T>(root: string, action: () => T): T => {
+    const bin = join(root, "bin");
+    mkdirSync(bin, { recursive: true });
+    const sysctl = join(bin, "sysctl");
+    writeFileSync(
+      sysctl,
+      [
+        "#!/bin/sh",
+        'case "$*" in',
+        "  *kern.boottime*) printf '{ sec = 1760000000, usec = 0 } Sun Oct  5 00:00:00 2025\\n' ;;",
+        "  *) exit 1 ;;",
+        "esac",
+        "",
+      ].join("\n"),
+    );
+    chmodSync(sysctl, 0o755);
+    const previousPath = process.env.PATH;
+    process.env.PATH = `${bin}:${previousPath ?? ""}`;
+    try {
+      return withProcRoot(join(root, "missing-proc"), action);
+    } finally {
+      if (previousPath === undefined) delete process.env.PATH;
+      else process.env.PATH = previousPath;
+    }
+  };
+
+  test("the boot id falls back to sysctl, reading what it prints", () => {
+    const root = mkdtempSync(join(tmpdir(), "process-noboot-"));
+    try {
+      const real = bootId();
+      const forced = stubbed(root, () => bootId(join(root, "missing-proc")));
+      expect(forced).toBe("{ sec = 1760000000, usec = 0 } Sun Oct 5 00:00:00 2025");
+      expect(forced).not.toBe(real);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("the boot time falls back to sysctl, two words past sec", () => {
+    const root = mkdtempSync(join(tmpdir(), "process-noboot-"));
+    try {
+      const forced = stubbed(root, () => bootTime(join(root, "missing-proc")));
+      expect(forced).toBe(1760000000);
+    } finally {
       rmSync(root, { recursive: true, force: true });
     }
   });

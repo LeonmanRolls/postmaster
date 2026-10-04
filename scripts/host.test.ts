@@ -20,7 +20,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runControls } from "./host-self-test.ts";
-import { processStart, processState } from "./lib/processes.ts";
+import { bootId, processStart, processState } from "./lib/processes.ts";
 
 const SECTIONS: Array<{ name: string; count: number }> = [
   { name: "preamble", count: 6 },
@@ -375,21 +375,8 @@ test("a background runner that dies before reading its spec is rejected", async 
   }
 });
 
-// The boot id as host.ts reads it: the Linux file, else macOS kern.boottime
-// under LC_ALL=C, so the test's record matches on either system.
-function currentBootId(): string {
-  try {
-    return readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim();
-  } catch {
-    const booted = spawnSync("sysctl", ["-n", "kern.boottime"], {
-      encoding: "utf8",
-      env: { ...process.env, LC_ALL: "C" },
-    });
-    // ASCII: sysctl kern.boottime is kernel-emitted ASCII on macOS.
-    return (booted.stdout ?? "").trim().split(/\s+/u).join(" ");
-  }
-}
-
+// The boot id as host.ts reads it — the shared reading, so a record written
+// under a forced POSTMASTER_PROC_ROOT matches the child that reads it back.
 test("a member with a five-word start matches its process, and close refuses while it lives", async () => {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), "host-member-start-")));
   const state = join(dir, "state");
@@ -413,7 +400,7 @@ test("a member with a five-word start matches its process, and close refuses whi
     expect(processState(groupPid)).toBe("absent");
     writeFileSync(
       join(state, "launches", String(groupPid)),
-      `${dir}\nmember-probe\nmember ${memberPid} ${start}\nboot ${currentBootId()}\n`,
+      `${dir}\nmember-probe\nmember ${memberPid} ${start}\nboot ${bootId()}\n`,
     );
     const env = {
       ...process.env,
