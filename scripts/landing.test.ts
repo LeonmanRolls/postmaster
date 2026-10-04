@@ -8,6 +8,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import {
   appendFileSync,
+  chmodSync,
   copyFileSync,
   mkdirSync,
   mkdtempSync,
@@ -22,6 +23,10 @@ import { findingState, isFindingShaped, pyRepr } from "./landing.ts";
 
 const SELF = join(import.meta.dir, "run");
 const HERE = import.meta.dir;
+
+// APFS refuses a file name that is not valid UTF-8, so the raw-byte fixture
+// cannot be made on a Mac; skips.toml carries the reason.
+const skipRawName = process.platform === "darwin";
 
 delete process.env.GIT_DIR;
 delete process.env.GIT_WORK_TREE;
@@ -1001,7 +1006,7 @@ describe("anything-to-land", () => {
     );
   });
 
-  test("AH4: a raw-byte path answers without a traceback", () => {
+  test.skipIf(skipRawName)("AH4: a raw-byte path answers without a traceback", () => {
     S.bp = join(tmp, "bp");
     mkrepo(S.bp);
     git(S.bp, "config", "core.quotePath", "false");
@@ -2077,4 +2082,105 @@ describe("pure pins", () => {
     expect(pyRepr("\x7f")).toBe("'\\x7f'");
     expect(pyRepr("caf\u00e9")).toBe("'caf\u00e9'");
   });
+});
+
+describe("pr-checks at the card's head", () => {
+  const restoreEnv = (key: string, value: string | undefined): void => {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  };
+
+  // A stand-in gh, first on PATH: it answers what the scenario sets, so every
+  // branch of the question is checked without a live pull request.
+  const standInGh = (dir: string): void => {
+    mkdirSync(dir, { recursive: true });
+    const gh = join(dir, "gh");
+    writeFileSync(
+      gh,
+      [
+        "#!/bin/sh",
+        'case "$1 $2" in',
+        '  "pr view") printf \'{"headRefOid":"%s"}\\n\' "$FAKE_PR_HEAD" ;;',
+        '  "pr checks") printf \'%s\\n\' "$FAKE_PR_CHECKS" ;;',
+        '  *) echo "stand-in gh: unexpected: $*" >&2; exit 1 ;;',
+        "esac",
+        "",
+      ].join("\n"),
+    );
+    chmodSync(gh, 0o755);
+  };
+
+  test("all passed is pass, one running is pending, one failed is fail with its name and link, no checks is none", () => {
+    const repo = join(tmp, "prgh-repo");
+    mkrepo(repo);
+    commitFile(repo, "a", "one", "A");
+    const head = sha(repo);
+    const bin = join(tmp, "prgh-bin");
+    standInGh(bin);
+    const savedPath = process.env.PATH;
+    const savedHead = process.env.FAKE_PR_HEAD;
+    const savedChecks = process.env.FAKE_PR_CHECKS;
+    process.env.PATH = `${bin}:${savedPath ?? ""}`;
+    process.env.FAKE_PR_HEAD = head;
+    try {
+      const args = ["pr-checks", "--repo", repo, "--head", head, "--pr", "7"];
+      process.env.FAKE_PR_CHECKS = JSON.stringify([
+        { name: "linux", state: "SUCCESS", bucket: "pass", link: "https://ci/1" },
+        { name: "macos", state: "SUCCESS", bucket: "pass", link: "https://ci/2" },
+      ]);
+      check(args, 0, "pass");
+
+      process.env.FAKE_PR_CHECKS = JSON.stringify([
+        { name: "linux", state: "SUCCESS", bucket: "pass", link: "https://ci/1" },
+        { name: "macos", state: "IN_PROGRESS", bucket: "pending", link: "https://ci/2" },
+      ]);
+      check(args, 0, "pending");
+
+      process.env.FAKE_PR_CHECKS = JSON.stringify([
+        { name: "linux", state: "FAILURE", bucket: "fail", link: "https://ci/1" },
+        { name: "macos", state: "SUCCESS", bucket: "pass", link: "https://ci/2" },
+      ]);
+      check(args, 2, "fail: linux https://ci/1");
+
+      process.env.FAKE_PR_CHECKS = "[]";
+      check(args, 0, "none");
+    } finally {
+      restoreEnv("PATH", savedPath);
+      restoreEnv("FAKE_PR_HEAD", savedHead);
+      restoreEnv("FAKE_PR_CHECKS", savedChecks);
+    }
+  }, 30000);
+
+  test("checks reported for another head never say pass", () => {
+    const repo = join(tmp, "prgh-other");
+    mkrepo(repo);
+    commitFile(repo, "a", "one", "A");
+    const cardHead = sha(repo);
+    commitFile(repo, "b", "two", "B");
+    const movedHead = sha(repo);
+    const bin = join(tmp, "prgh-bin2");
+    standInGh(bin);
+    const savedPath = process.env.PATH;
+    const savedHead = process.env.FAKE_PR_HEAD;
+    const savedChecks = process.env.FAKE_PR_CHECKS;
+    process.env.PATH = `${bin}:${savedPath ?? ""}`;
+    process.env.FAKE_PR_HEAD = movedHead;
+    process.env.FAKE_PR_CHECKS = JSON.stringify([
+      { name: "linux", state: "SUCCESS", bucket: "pass", link: "https://ci/1" },
+    ]);
+    try {
+      check(["pr-checks", "--repo", repo, "--head", cardHead, "--pr", "7"], 0, "pending");
+    } finally {
+      restoreEnv("PATH", savedPath);
+      restoreEnv("FAKE_PR_HEAD", savedHead);
+      restoreEnv("FAKE_PR_CHECKS", savedChecks);
+    }
+  }, 30000);
+
+  test("with no pull request to ask it says none, as the local route reads", () => {
+    const repo = join(tmp, "prgh-none");
+    mkrepo(repo);
+    commitFile(repo, "a", "one", "A");
+    check(["pr-checks", "--repo", repo, "--head", sha(repo)], 0, "none");
+  }, 30000);
 });

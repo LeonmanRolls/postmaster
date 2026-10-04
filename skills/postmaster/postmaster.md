@@ -596,14 +596,26 @@ missed.
      (`gh pr create` on a GitHub project). Include the card, final checks, diff stat,
      preview and review links, and thread ids. Log a `note` with the push and
      pull-request URL, and leave a dated tracker comment linking the pull request and
-     summarizing the same evidence, logging `ticket-comment`. Put the pull-request URL and its
-     merge instructions in `.waiting-on-user`; the user merges it in the project's review
-     surface and says so, and that word is the answer step 3 waits on.
+     summarizing the same evidence, logging `ticket-comment`. Then ask the pull
+     request's own checks at the card's HEAD: `<tool>/scripts/run landing pr-checks
+     --repo <repo> --pr <n> --head <the card's HEAD>`, `n` the pull request's number.
+     Move on only on `pass` or `none`. On `fail`, withdraw the way a failed claim
+     does: remove `.card-ready` and `.leg-<n>-done` for the manifest's current leg
+     `<n>`, then resume that last leg with the failing job's name and link as the
+     exact discrepancy, and wait for its corrected card. On `pending`, the checks are
+     still running: wait, ask again at the stage's next look, and write nothing to
+     `.waiting-on-user` until the answer is `pass` or `none`. Only then put the
+     pull-request URL and its merge instructions in `.waiting-on-user`; the user
+     merges it in the project's review surface and says so, and that word is the
+     answer step 3 waits on.
      Do not use `MERGE_AUTHORITY` to merge a pull request on the user's behalf.
    - For `landing: local`, obey `MERGE_AUTHORITY`. With `user`, put the card and
      verification in front of the user, write the requested merge word to `.waiting-on-user`,
      and wait. With `postmaster`, record the grant. After the required word or grant, remove
-     `.waiting-on-user` on the `user` path. Verify the default checkout is still clean and on
+     `.waiting-on-user` on the `user` path. Before the merge itself, ask
+     `<tool>/scripts/run landing pr-checks --repo <repo> --head <the card's HEAD>` with
+     no `--pr`: the local route opens no pull request, so it answers `none`, and the
+     merge waits for `pass` or `none` exactly as the pull-request route does. Verify the default checkout is still clean and on
      its default branch; if it is not, stop and tell the user. Leave a dated ready-to-merge
      tracker comment with the evidence (what the change does, branch name, gate output summary,
      diff stat, review link, thread ids), logging `ticket-comment`. Merge the ticket branch
