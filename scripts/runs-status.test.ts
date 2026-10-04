@@ -95,7 +95,7 @@ function age(name: string): void {
   });
 }
 
-function nextOf(name: string): string {
+function captured(): string[] {
   const origLog = console.log;
   let out = "";
   console.log = (s: string) => {
@@ -106,7 +106,11 @@ function nextOf(name: string): string {
   } finally {
     console.log = origLog;
   }
-  for (const line of out.split("\n")) {
+  return out.split("\n");
+}
+
+function nextOf(name: string): string {
+  for (const line of captured()) {
     const parts = pyWords(line);
     if (parts[0] === name) return parts[parts.length - 1] ?? "";
   }
@@ -259,6 +263,15 @@ describe("positive controls", () => {
   test("a told finding waits for the user and a repeated log entry does not tell again", () => {
     expect(nextOf("told-waiting")).toBe("USER");
     expect(nextOf("repeat-told")).toBe("USER");
+  });
+
+  test("tell rows list before every other state", () => {
+    const rows = captured().filter((line) => line && !line.startsWith("RUN"));
+    const firstTell = rows.findIndex((line) => line.endsWith("TELL"));
+    const firstOther = rows.findIndex((line) => !line.endsWith("TELL"));
+    expect(firstTell).toBeGreaterThanOrEqual(0);
+    expect(firstTell).toBeLessThan(firstOther);
+    expect(rows.filter((line) => line.endsWith("TELL"))).toHaveLength(2);
   });
 
   test("an escalation waiting is RULE", () => {

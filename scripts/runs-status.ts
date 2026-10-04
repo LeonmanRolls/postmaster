@@ -301,6 +301,8 @@ export function status(root: string): number {
 
     rows.push({ run, stage, leg, markers, idleMin, next });
   }
+  // Untold findings list first: the postmaster's eye lands on TELL.
+  rows.sort((a, b) => Number(b.next === "TELL") - Number(a.next === "TELL"));
 
   const hdr = (a: string, b: string, c: string, d: string, e: string, f: string) =>
     `${a.padEnd(14)} ${b.padEnd(16)} ${c.padEnd(4)} ${d.padEnd(44)} ${e.padStart(6)}  ${f}`;
