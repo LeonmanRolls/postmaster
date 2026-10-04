@@ -1743,8 +1743,8 @@ exit "$rc"
   }
 
   if (!attemptPhase("started")) die("cannot record that the harness started");
-  // Where this launch's own stream lines begin, and when: a resumed stream keeps the lines
-  // it held when the launch started, and the wall's reset counts from this moment.
+  // Where this launch's own stream lines begin: a resumed stream keeps the lines it held
+  // when the launch started, and the wall is read only past them.
   const streamStart = (() => {
     const p = process.env.POSTMASTER_EVENT_STREAM ?? "";
     if (p === "") return 0;
@@ -1754,7 +1754,6 @@ exit "$rc"
       return 0;
     }
   })();
-  const launchStartMs = Date.now();
   const child = spawnSync(cmd, cmdArgs, {
     stdio: STDIN_FILE ? ["ignore", "inherit", "inherit"] : ["inherit", "inherit", "inherit"],
     // Raw bytes, as main's `exec < file` hands them: no UTF-8 decode.
