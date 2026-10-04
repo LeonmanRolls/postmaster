@@ -207,7 +207,9 @@ function text(value: unknown): string {
 function hasStyleNote(actions: Record<string, unknown>[]): boolean {
   return actions.some(
     (a) =>
-      text(a.actor) === "postmaster" && text(a.action) === "note" && text(a.target) === "style-sort",
+      text(a.actor) === "postmaster" &&
+      text(a.action) === "note" &&
+      text(a.target) === "style-sort",
   );
 }
 
@@ -483,7 +485,10 @@ function saveFolder(dispatch: string, folder: string, name: string, dryRun: bool
       bytes: () => Buffer.from(gitText(folder, ["diff", "--cached", "--binary"], folder), "utf8"),
     });
   if (presence.untracked.length)
-    wanted.push({ part: "untracked.tar", bytes: () => untrackedTarBytes(folder, presence.untracked) });
+    wanted.push({
+      part: "untracked.tar",
+      bytes: () => untrackedTarBytes(folder, presence.untracked),
+    });
   if (presence.commits.length)
     wanted.push({ part: "commits.patch", bytes: () => commitPatchBytes(folder, presence.commits) });
   if (!wanted.length) return [];
@@ -628,7 +633,14 @@ function flaggedFiles(repo: string, folder: string): string[] {
     .split("\n")
     .filter((line) => line !== "");
   for (const commit of commits) {
-    const r = gitIn(folder, ["diff-tree", "-r", "--root", "--no-commit-id", "--no-renames", commit]);
+    const r = gitIn(folder, [
+      "diff-tree",
+      "-r",
+      "--root",
+      "--no-commit-id",
+      "--no-renames",
+      commit,
+    ]);
     if (r.code !== 0)
       throw new Fault(
         1,
@@ -654,7 +666,6 @@ function flaggedFiles(repo: string, folder: string): string[] {
   }
   return [...flagged].sort();
 }
-
 
 // --- acting on a folder ------------------------------------------------------------------------
 
@@ -709,7 +720,11 @@ function closeFolder(path: string, dryRun: boolean): { ok: boolean; why: string 
 
 /** Remove the saved folder: a scratch through cut-scratch, a branch worktree with git, from
  * outside it. A refusal leaves the folder in place; the caller names it. */
-function removeFolder(repo: string, path: string, mode: "scratch" | "worktree"): {
+function removeFolder(
+  repo: string,
+  path: string,
+  mode: "scratch" | "worktree",
+): {
   ok: boolean;
   why: string;
 } {
@@ -793,7 +808,12 @@ function stopPreview(dispatch: string, dryRun: boolean): Preview {
         path: null,
         next: `stop the process at pid ${pid} yourself if it is the preview, then run again`,
       };
-    return { status: "already", detail: "no launch record and no process; already stopped", path: null, next: "" };
+    return {
+      status: "already",
+      detail: "no launch record and no process; already stopped",
+      path: null,
+      next: "",
+    };
   }
   const bootOk = rec.boot === "" || rec.boot === boot;
   const recorded =
@@ -808,7 +828,12 @@ function stopPreview(dispatch: string, dryRun: boolean): Preview {
         path: null,
         next: `stop the preview's process group yourself, then run again`,
       };
-    return { status: "already", detail: "the preview's process is gone; already stopped", path: null, next: "" };
+    return {
+      status: "already",
+      detail: "the preview's process is gone; already stopped",
+      path: null,
+      next: "",
+    };
   }
   const path = phys(rec.dir);
   if (dryRun)
@@ -919,15 +944,13 @@ function mainFlow(args: Args): Result {
     steps.push({ name: "close-run", status: "waiting", detail: "waiting for the stop above" });
   };
 
-
   function finish(
     endCode: Code,
     doneSteps: Step[],
     doneFolders: Folder[],
     doneStops: Stop[],
   ): Result {
-    const next =
-      doneStops.length === 0 ? null : doneStops.map((stop) => stop.next).join("; ");
+    const next = doneStops.length === 0 ? null : doneStops.map((stop) => stop.next).join("; ");
     return {
       code: endCode,
       run: dispatch,
@@ -994,7 +1017,10 @@ function mainFlow(args: Args): Result {
       throw new Fault(
         2,
         "ready",
-        full(style).split("\n").filter((line) => line !== "").join("; "),
+        full(style)
+          .split("\n")
+          .filter((line) => line !== "")
+          .join("; "),
         `write ${join(dispatch, "style-sort.md")} as coachman.md's sorting rules say, then run again`,
       );
     if (style.code !== 0)
@@ -1005,8 +1031,15 @@ function mainFlow(args: Args): Result {
         "repair the run's records (the message above), then run again",
       );
     const styleLast =
-      full(style).split("\n").filter((line) => line !== "").pop() ?? "no style findings";
-    steps.push({ name: "ready", status: "done", detail: `stage ${stage}; leg ${String(leg)} exited; ${styleLast}` });
+      full(style)
+        .split("\n")
+        .filter((line) => line !== "")
+        .pop() ?? "no style findings";
+    steps.push({
+      name: "ready",
+      status: "done",
+      detail: `stage ${stage}; leg ${String(leg)} exited; ${styleLast}`,
+    });
 
     // Closing words: required while any closing step remains.
     const commentPosted = hasClosingComment(actions, basename(dispatch));
@@ -1177,7 +1210,13 @@ function mainFlow(args: Args): Result {
       entry.result = "removed";
       if (entry.flagged) {
         entry.why = `flagged: ${flagged.join(" ")}`;
-        logAction(dispatch, "teardown", path, `removed; flagged: ${flagged.join(" ")}`, `folder ${path}`);
+        logAction(
+          dispatch,
+          "teardown",
+          path,
+          `removed; flagged: ${flagged.join(" ")}`,
+          `folder ${path}`,
+        );
       } else {
         logAction(dispatch, "teardown", path, "removed", `folder ${path}`);
       }
@@ -1212,7 +1251,11 @@ function mainFlow(args: Args): Result {
         });
         return finish(3, steps, folders, stops);
       }
-      steps.push({ name: "close-run", status: "done", detail: "the run's spaces and windows closed" });
+      steps.push({
+        name: "close-run",
+        status: "done",
+        detail: "the run's spaces and windows closed",
+      });
     }
 
     // Closing steps, in order: the run-log line, the ticket's state, the comment, done, release.
@@ -1246,11 +1289,7 @@ function mainFlow(args: Args): Result {
       steps.push({ name: "run-log", status: "would", detail: `would write: ${runLogText}` });
     } else {
       runClosing(() => {
-        const written = run("bash", [
-          beside(import.meta, "run-log.sh"),
-          dispatch,
-          runLogText,
-        ]);
+        const written = run("bash", [beside(import.meta, "run-log.sh"), dispatch, runLogText]);
         if (written.code !== 0)
           throw new Fault(
             1,
@@ -1267,7 +1306,13 @@ function mainFlow(args: Args): Result {
     const kindResult = run("bash", [beside(import.meta, "tracker-kind.sh"), set.repo]);
     const kind = kindResult.code === 0 ? kindResult.out.trim() : "";
     const adapter =
-      kind === "local" ? "local.sh" : kind === "github" ? "github.sh" : kind === "plane" ? "plane.sh" : null;
+      kind === "local"
+        ? "local.sh"
+        : kind === "github"
+          ? "github.sh"
+          : kind === "plane"
+            ? "plane.sh"
+            : null;
     const ticket = basename(dispatch);
     if (adapter === null) {
       const why =
@@ -1298,7 +1343,11 @@ function mainFlow(args: Args): Result {
           `set the ticket to done yourself if it should close, then run again`,
         );
       } else if (dryRun) {
-        steps.push({ name: "ticket-state", status: "would", detail: `would set ticket ${ticket} to done` });
+        steps.push({
+          name: "ticket-state",
+          status: "would",
+          detail: `would set ticket ${ticket} to done`,
+        });
       } else {
         runClosing(() => {
           const set_ = run("bash", [
@@ -1309,10 +1358,19 @@ function mainFlow(args: Args): Result {
             "done",
           ]);
           if (set_.code !== 0)
-            throw new Fault(3, "ticket-state", tail(set_), "fix the tracker (the message above), then run again");
+            throw new Fault(
+              3,
+              "ticket-state",
+              tail(set_),
+              "fix the tracker (the message above), then run again",
+            );
           logAction(dispatch, "ticket-state", ticket, `done from ${state}`, "ticket-state");
         });
-        steps.push({ name: "ticket-state", status: "done", detail: `ticket ${ticket}: ${state} -> done` });
+        steps.push({
+          name: "ticket-state",
+          status: "done",
+          detail: `ticket ${ticket}: ${state} -> done`,
+        });
       }
       // comment
       closingIndex = 2;
@@ -1339,7 +1397,12 @@ function mainFlow(args: Args): Result {
             args.comment ?? "",
           ]);
           if (posted.code !== 0)
-            throw new Fault(3, "ticket-comment", tail(posted), "fix the tracker (the message above), then run again");
+            throw new Fault(
+              3,
+              "ticket-comment",
+              tail(posted),
+              "fix the tracker (the message above), then run again",
+            );
           logAction(
             dispatch,
             "ticket-comment",
@@ -1348,7 +1411,11 @@ function mainFlow(args: Args): Result {
             "ticket-comment",
           );
         });
-        steps.push({ name: "ticket-comment", status: "done", detail: `posted once for ticket ${ticket}` });
+        steps.push({
+          name: "ticket-comment",
+          status: "done",
+          detail: `posted once for ticket ${ticket}`,
+        });
       }
     }
 
@@ -1407,11 +1474,7 @@ function mainFlow(args: Args): Result {
       });
     } else {
       runClosing(() => {
-        const released = run("bash", [
-          beside(import.meta, "run-meta.sh"),
-          "release",
-          dispatch,
-        ]);
+        const released = run("bash", [beside(import.meta, "run-meta.sh"), "release", dispatch]);
         if (released.code !== 0)
           throw new Fault(
             3,
@@ -1474,7 +1537,6 @@ function mainFlow(args: Args): Result {
       }
     }
   }
-
 }
 
 // --- the summary -------------------------------------------------------------------------------
@@ -1488,7 +1550,9 @@ function printPlain(result: Result): void {
     if (folder.saves.length)
       bits.push(`${result.dryRun ? "would save" : "saved"} ${folder.saves.join(" ")}`);
     if (folder.why) bits.push(folder.why);
-    console.log(`folder ${folder.path}: ${folder.result}${bits.length ? ` — ${bits.join(" — ")}` : ""}`);
+    console.log(
+      `folder ${folder.path}: ${folder.result}${bits.length ? ` — ${bits.join(" — ")}` : ""}`,
+    );
   }
   for (const folder of result.folders)
     if (folder.flagged && folder.result !== "already removed" && folder.result !== "already gone")

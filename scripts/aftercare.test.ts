@@ -4,7 +4,14 @@
 // fall. Nothing here touches a live Herdr or tmux: herdr and tmux are stubs on PATH and the
 // host state lives under the temp folder.
 import { describe, expect, test } from "bun:test";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { run } from "./lib/proc.ts";
@@ -155,7 +162,10 @@ function makeR(): Fixture {
   writeFileSync(join(D, "actions.jsonl"), `${actions.join("\n")}\n`);
   for (const marker of [".leg-1-done", ".leg-1-exited", ".leg-2-done", ".leg-2-exited"])
     writeFileSync(join(D, marker), "");
-  writeFileSync(join(D, "run-log.md"), "# Run 7\n\n## Dispatch (2026-10-01 00:00:00 UTC)\n\nfixture\n");
+  writeFileSync(
+    join(D, "run-log.md"),
+    "# Run 7\n\n## Dispatch (2026-10-01 00:00:00 UTC)\n\nfixture\n",
+  );
   writeFileSync(
     join(D, "logs/review-r1.json"),
     `${JSON.stringify({ round: 1, reviewers: [["bug", "mimo"]] })}\n`,
@@ -174,15 +184,19 @@ function makeR(): Fixture {
 }
 
 function aftercare(r: Fixture, args: string[]): { code: number; out: string } {
-  const result = run("bun", ["--no-env-file", "--config=/dev/null", join(HERE, "aftercare.ts"), r.D, ...args], {
-    env: {
-      PATH: `${join(r.T, "bin")}:${process.env.PATH ?? ""}`,
-      POSTMASTER_HOST_STATE: join(r.T, "state"),
-      POSTMASTER_HOST_FIXTURE: r.T,
-      POSTMASTER_HOST_CLOSE_WAIT: "1",
-      POSTMASTER_TOOL_PINS: join(r.T, "pins"),
+  const result = run(
+    "bun",
+    ["--no-env-file", "--config=/dev/null", join(HERE, "aftercare.ts"), r.D, ...args],
+    {
+      env: {
+        PATH: `${join(r.T, "bin")}:${process.env.PATH ?? ""}`,
+        POSTMASTER_HOST_STATE: join(r.T, "state"),
+        POSTMASTER_HOST_FIXTURE: r.T,
+        POSTMASTER_HOST_CLOSE_WAIT: "1",
+        POSTMASTER_TOOL_PINS: join(r.T, "pins"),
+      },
     },
-  });
+  );
   return { code: result.code, out: `${result.out}${result.err}` };
 }
 
@@ -227,7 +241,9 @@ describe("aftercare on a landed run record", () => {
     const run1 = aftercare(r, WORDS);
     expect(run1.code).toBe(0);
     // the folders the run made are gone; control: the worktrees that are not the run's stay
-    const left = changedFolders(r).map((path) => path.split("/").pop()).sort();
+    const left = changedFolders(r)
+      .map((path) => path.split("/").pop())
+      .sort();
     expect(left).toEqual(["70-x", "ticket-7-base"]);
     // the run is done, the ticket done, the pin released, the branches kept
     expect(JSON.parse(readFileSync(join(r.D, "manifest.json"), "utf8")).stage).toBe("done");
