@@ -329,7 +329,7 @@ describe("record and sum", () => {
       );
       copyFileSync(
         join(fixtures, "muse-with-usage.session.json"),
-        join(tmp, "sessions", "coachman", "madeup-session-1.json"),
+        join(tmp, "sessions", "coachman", "madeup-session-a.json"),
       );
       const result = run(
         "record",
