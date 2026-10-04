@@ -39,6 +39,7 @@ half, how a run is prepared and what the waybill carries, is `SKILL.md`. You do 
 | `<dispatch>/.leg-<n>-done`, `.leg-<n>-exited` | leg `n` finished its hand-off; leg `n`'s process exited |
 | `<repo>/.worktrees/<TICKET>` | synthesis worktree, branch `<TICKET>` |
 | `<repo>/.worktrees/<TICKET>-<lane>` | workhorse worktree, branch `wb/<TICKET>-<lane>` (`wb` for workhorse branch) |
+| `<repo>/.worktrees/<TICKET>-oracle-<lane>` | detached blind-test oracle scratch for that workhorse |
 | `<dispatch>/checkpoint-<n>.md` | checkpoint cards: `1` and `review` |
 | `<dispatch>/spec-review.md` | the planning stage's review package: one entry for the run's spec, its commit and the link the postmaster puts to the user; written before `.spec-review-ready` |
 | `<dispatch>/spec-review/WORKHORSE-SPEC.md` | the review copy of the run's one spec; the spec session edits this copy, never the committed spec |
@@ -466,7 +467,8 @@ from it.
 - **Harvest.** Each lane's final message is the last result line of its events stream
   (`harnesses.md` gives the per-harness location). `launch.sh` exports each completed thread into
   `<dispatch>/sessions/` beside its event stream. For every workhorse, `WORKHORSE-SUMMARY.md` at
-  the worktree root is the authoritative final act.
+  the worktree root is the authoritative final act. The blind-test oracle scratch for lane
+  `<lane>` is `<repo>/.worktrees/<TICKET>-oracle-<lane>`; keep it there so aftercare can find it.
 - **Monitor: three exit shapes.** Each workhorse's final act is writing `WORKHORSE-SUMMARY.md` at its
   worktree root. `WORKHORSE-SPEC.md` is a coachman-authored input committed before launch,
   not an exit shape: a workhorse that exits with the spec and no summary has not finished

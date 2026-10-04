@@ -2892,6 +2892,109 @@ async function stopTree(
     .join(" ");
   return { code: survivors.size ? 2 : 0, text: `${known.size}\t${names}` };
 }
+
+export type PreviewLaunch = {
+  status: "missing" | "unregistered" | "stopped" | "running";
+  pid?: number;
+  dir?: string;
+  start?: string;
+  detail: string;
+};
+
+/** Read the registry without pruning it; aftercare uses this in a dry run. */
+export function inspectLaunches(directory: string): string[] {
+  const wanted = realpathLoose(directory);
+  const currentBoot = bootId();
+  const table = processTable();
+  let entries: string[] = [];
+  try {
+    entries = readdirSync(registryDir()).sort();
+  } catch {
+    return [];
+  }
+  const names: string[] = [];
+  for (const entry of entries) {
+    if (!/^[0-9]+$/u.test(entry)) continue;
+    const record = loadRecord(join(registryDir(), entry));
+    if (!record || record.dir !== wanted || record.boot !== currentBoot) continue;
+    const group = Number(entry);
+    const leader = table.get(group);
+    const live = !!leader && leader.group === group && leader.start === record.start;
+    const member = record.members.some(
+      ([pid, start]) => table.get(pid)?.start === start,
+    );
+    if ((live || member) && record.name && !names.includes(record.name)) names.push(record.name);
+  }
+  return names;
+}
+
+/** A pid file is only a hint. A process is a preview only while the host registry
+ * still names its pid, start time, boot and exact synthesis folder. */
+export function inspectPreviewLaunch(pidfile: string, expectedDir: string): PreviewLaunch {
+  if (!existsSync(pidfile)) return { status: "missing", detail: "no preview pid file" };
+  let raw: string;
+  try {
+    raw = readFileSync(pidfile, "utf8").trim();
+  } catch (error) {
+    return { status: "unregistered", detail: `cannot read preview pid file: ${String(error)}` };
+  }
+  if (!/^[1-9][0-9]*$/u.test(raw) || !Number.isSafeInteger(Number(raw)))
+    return { status: "unregistered", detail: "preview pid file does not name a process id" };
+  const pid = Number(raw);
+  const record = loadRecord(recordPath(pid));
+  if (
+    !record ||
+    record.dir !== realpathLoose(expectedDir) ||
+    record.name !== "preview server" ||
+    !record.start ||
+    !record.boot
+  )
+    return {
+      status: "unregistered",
+      pid,
+      detail: `pid ${pid} has no matching preview launch record; left running`,
+    };
+  const proc = processTable().get(pid);
+  if (
+    record.boot !== bootId() ||
+    !proc ||
+    proc.zombie ||
+    proc.group !== pid ||
+    proc.start !== record.start
+  )
+    return {
+      status: "stopped",
+      pid,
+      dir: record.dir,
+      start: record.start,
+      detail: "preview already stopped",
+    };
+  return {
+    status: "running",
+    pid,
+    dir: record.dir,
+    start: record.start,
+    detail: `registered preview launch ${pid} is running in ${record.dir}`,
+  };
+}
+
+/** Stop only the registered preview process group. stopTree rechecks the recorded
+ * start identity before it signals anything and refuses unsafe process trees. */
+export async function stopPreviewLaunch(
+  pidfile: string,
+  expectedDir: string,
+): Promise<{ code: number; detail: string }> {
+  const preview = inspectPreviewLaunch(pidfile, expectedDir);
+  if (preview.status !== "running" || preview.pid === undefined || preview.start === undefined)
+    return { code: 0, detail: preview.detail };
+  const grace = count(process.env.POSTMASTER_HOST_STOP_WAIT ?? "20", "POSTMASTER_HOST_STOP_WAIT");
+  const most = count(process.env.POSTMASTER_HOST_STOP_MAX ?? "512", "POSTMASTER_HOST_STOP_MAX");
+  const result = await stopTree(grace, most, [`group|${preview.pid}|${preview.start}`]);
+  if (result.code !== 0)
+    return { code: result.code, detail: `could not stop preview launch ${preview.pid}: ${result.text}` };
+  return { code: 0, detail: `stopped preview launch ${preview.pid}` };
+}
+
 async function stopCmd(args: string[]): Promise<void> {
   const path = worktreeArg(args[0] ?? "", "stop");
   if ((resolve(process.cwd()) + sep).startsWith(path + sep))
@@ -5025,14 +5128,6 @@ async function main(): Promise<void> {
       );
   }
 }
-main().catch((error: unknown) => {
-  if (isHostError(error)) {
-    if (error.message) console.error(`host: ${error.message}`);
-    process.exit(hostCode(error));
-  }
-  console.error(`host: ${String((error as Error)?.message ?? error)}`);
-  process.exit(1);
-});
 function tmuxCloseWindow(window: string, pane: string): number {
   if (pane) return tmuxFinishPlacement(window, pane);
   // A window from before panes were recorded: a lone pane is the host's own
@@ -5475,7 +5570,7 @@ function pyStrScalar(value: unknown): string {
 }
 
 // NUL-separated worktrees made for one dispatch, from its waybill and records.
-function runWorktreePaths(givenDispatch: string): string[] {
+export function runWorktreePaths(givenDispatch: string): string[] {
   // One parser for the waybill: dispatch_info takes the last ## Dispatch
   // section, so ticket text quoting a waybill cannot redirect teardown.
   const dispatch = realpathLoose(givenDispatch);
@@ -5835,4 +5930,15 @@ async function closeRunCmd(args: string[]): Promise<void> {
     if (tmuxCloseRunWindows(dispatch) !== 0) rc = 2;
   }
   if (rc !== 0) throw hostError("", rc);
+}
+
+if (import.meta.main) {
+  main().catch((error: unknown) => {
+    if (isHostError(error)) {
+      if (error.message) console.error(`host: ${error.message}`);
+      process.exit(hostCode(error));
+    }
+    console.error(`host: ${String((error as Error)?.message ?? error)}`);
+    process.exit(1);
+  });
 }

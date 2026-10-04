@@ -25,6 +25,7 @@ A fault in one of these is a fault in a control, whatever the step that ran it.
 | `<tool>/scripts/wait-for-markers.sh` | wait | a round is collected only when every marker is in |
 | `<tool>/scripts/review-round.sh` | wait | a review round is collected by its deadline, its reviewers that miss it are recorded and stopped, and its scratches are removed only once nothing of it runs there |
 | `<tool>/scripts/review-findings.sh` | check | native bug-review output is normalized, and an unrecognized report cannot count as clean |
+| `<tool>/scripts/aftercare.ts` | check | a shipped run is ready, every run folder is saved and closed before removal, work no branch holds is flagged, and closing steps wait until teardown finishes |
 | `<tool>/scripts/runs-status.sh` | marker | the next action from each run's markers and outcome record; the waiting list it reports is kept by `host.sh leg waiting` |
 | `<tool>/scripts/runs-watch.sh` | wait | a run needs the postmaster only when its NEXT is not WAIT, USER or `-`, and never when its ticket is on the held list |
 | `<tool>/scripts/host.sh leg` | marker | launch, resume and takeover lifecycle, including the recorded attempt outcome |
