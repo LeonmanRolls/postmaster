@@ -2,7 +2,7 @@
 // each forced through stubbed tools on PATH and the probe's test seams. The same lookups
 // every time; a control that could have come out the other way.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { run } from "./lib/proc.ts";
@@ -224,7 +224,11 @@ describe("the probe says ready, partial or unavailable", () => {
   });
 
   test("a bwrap is vetted only on a root-owned chain", () => {
-    expect(isSecureBwrapPath("/bin/sh")).toBe(true);
+    // The positive control needs a system path whose owner the runner can see. A user
+    // namespace that maps no uid 0 (a bwrap sandbox) reports every such path as the
+    // overflow uid, so no chain there can pass; only the refusal runs, and the vetting
+    // itself is unchanged.
+    if (statSync("/").uid === 0) expect(isSecureBwrapPath("/bin/sh")).toBe(true);
     expect(isSecureBwrapPath(join(tmp, "missing-bwrap"))).toBe(false);
   });
 });
