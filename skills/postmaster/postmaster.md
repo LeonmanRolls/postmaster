@@ -73,8 +73,8 @@ the action for anything without its own verb.
    may name fewer, others, or `none`.
 4. **Write back the user's answer and nothing else.** Write the parts as the user gave or
    approved them, each under its `##` heading, to a sections file, and splice them into the
-   base: `<tool>/scripts/run ticket-check --splice <base> <sections> > <new>` changes those sections
-   and no other line. Check `<new>` with `<tool>/scripts/run ticket-check --body <new> --project <repo>`. Write it with
+   base: `<tool>/scripts/run ticket-check --splice <base> <sections> --out <new>` changes those
+   sections and no other line, writing `<new>`. Check `<new>` with `<tool>/scripts/run ticket-check --body <new> --project <repo>`. Write it with
    the adapter's `edit <id> <new> <base>` (`trackers.md`), log `ticket-edit`, and check the
    ticket again by its id; a draft's `<new>` replaces its file. `edit` never changes a title,
    so a missing one is the user's to set in the tracker. On exit 4 the ticket changed after
@@ -124,8 +124,8 @@ For the next ticket in order, when the run ceiling (`team.max_runs`) has room:
    to the old run — archive it, rename it, or pick another id — and Stage B starts again on
    their word. On exit 1 the refusal goes to the user the same way.
 4. **Exclude worktrees without a commit,** before any is cut, or the next pre-flight reads
-   them as dirt: `grep -qxF '.worktrees/' <repo>/.git/info/exclude || echo '.worktrees/' >>
-   <repo>/.git/info/exclude`.
+   them as dirt: `<tool>/scripts/run project-settings exclude-worktrees <repo>` keeps
+   `.worktrees/` in the repository's own git exclude.
 5. **Create the run directory** `<runs>/<TICKET>/` with `logs/`, `audit/` and `render/`, and the
    manifest: `{"stage": "dispatched", "leg": 1, "base": "<sha>", "lanes": {}, "coachman":
    {"legs": {}}}`. You own `leg`, `base`, `coachman` and the terminal stages, `done` and
@@ -371,21 +371,19 @@ other line of this section holds.
    has any, the user's standing
    preferences from `preferences.md` beside the machine config, and the path of the session's
    runbook, `<tool>/skills/postmaster/spec-session.md`. Start the session with
-   `<tool>/scripts/run host spawn`, rooted in the project so it opens in the project's space,
-   in the interactive form `harnesses.md` gives for the harness, model and effort the run
-   recorded for `team.postmaster`, labelled `<ticket name> · spec` with the ticket
-   name from `<tool>/scripts/run host name <dispatch>`. The handle carries the package's
-   spec commit, short, so a revised package spawns a new session instead of colliding
-   with the earlier one, which stays open until the user closes it: `spawn` refuses a
-   handle a live session already has.
+   `spec-session spawn`, below. The handle it prints carries the package's spec commit, short,
+   so a revised package spawns a new session instead of colliding with the earlier one, which
+   stays open until the user closes it: `spawn` refuses a handle a live session already has.
 
    ```sh
-   SHA=$(git -C <repo> rev-parse --short <the spec commit from spec-review.md>)
-   <tool>/scripts/run host spawn "spec-$(<tool>/scripts/run host name <dispatch>)-$SHA" <repo> \
-       --label "$(<tool>/scripts/run host name <dispatch>) · spec" -- <interactive form>
+   <tool>/scripts/run spec-session spawn <dispatch> <repo>
    ```
 
-   Write a one-line prompt file telling it to read `<dispatch>/spec-session-brief.md` and work
+   The call takes the spec commit from `<dispatch>/spec-review.md`, spawns the session with
+   `host name`'s run name and the short spec commit in the handle, labelled `<ticket name> · spec`,
+   in the interactive form `harnesses.md` gives for the harness, model and effort the run
+   recorded for `team.postmaster`, rooted in the project so it opens in the project's space,
+   and prints the handle. Write a one-line prompt file telling it to read `<dispatch>/spec-session-brief.md` and work
    on the copy with the user, send it with `<tool>/scripts/run host send <handle> <prompt-file>`
    on the session's handle (`hosts.md`), and log `dispatch` with the target `spec-session`.
    Write `.waiting-on-user` naming the session and the link, and add the run to the waiting
@@ -417,8 +415,8 @@ other line of this section holds.
    here, on every path, before the resume, as `.card-ready` is before a word is delivered:
    a fresh package touches it afresh, so SPEC always means a package nobody has taken yet.
    Read the numbers first:
-   `<tool>/scripts/run spec-decisions <dispatch> count` prints `approved 0|1` and
-   `changes 0|1`. Branch on the numbers, never by reading the files:
+   `<tool>/scripts/run spec-decisions <dispatch> count` prints `approved` and `changes`, each
+   followed by `0` or `1`. Branch on the numbers, never by reading the files:
    - **`changes` above zero:** the coachman revises the spec from the user's words and pauses
      with a fresh package, which goes to a spec session the same way, until the spec is
      approved or the run stops.

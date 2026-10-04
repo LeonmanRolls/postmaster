@@ -13,7 +13,7 @@ risk_surfaces = [
 
 [checks.gate]
 command = '''bun run check'''
-shows = "tsc strict, Oxlint with the project's rules, the Biome format check, the Bun tests beside every script and lint rule, the runbook references and wiki lint pass."
+shows = "tsc strict, Oxlint with the project's rules, the Biome format check, the Bun tests beside every script and lint rule, the runbook references, the runbooks holding no code, and wiki lint pass."
 
 # Main's gate beside the port's: everything it runs lives inside `bun run check`
 # except the coachman-contract detector's own self-test, which keeps its entry.

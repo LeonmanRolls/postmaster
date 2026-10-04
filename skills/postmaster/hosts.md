@@ -48,9 +48,11 @@ way on every row, only less visibly on the last.
 <tool>/scripts/run host name <dispatch> review <lane> <lens> <round>
 <tool>/scripts/run host name <dispatch> postmaster
 <tool>/scripts/run host name <dispatch> role <text...>
-<tool>/scripts/run host leg launch|resume|takeover|retry|outcome|backfill|waiting ...
-<tool>/scripts/run host run <name> <cwd> [--under <dispatch>] [--role lane|coachman|reviewer] [--run <dispatch>] [--out <file>] [--err <file>] [--append] [--marker <file>] [--pidfile <file>] -- <command...>
+<tool>/scripts/run host leg <launch|resume|takeover|retry|outcome|backfill|waiting> ...
+<tool>/scripts/run host run <name> <cwd> [--under <dispatch>] [--role <lane|coachman|reviewer>] [--run <dispatch>] [--out <file>] [--err <file>] [--append] [--marker <file>] [--pidfile <file>] -- <command...>
+<tool>/scripts/run host workhorse <dispatch> <lane> <worktree>
 <tool>/scripts/run host stop <worktree>
+<tool>/scripts/run host stop-pidfile <pidfile>
 <tool>/scripts/run host close <worktree>
 <tool>/scripts/run host stop-run <dispatch>
 <tool>/scripts/run host close-run <dispatch>
@@ -288,7 +290,7 @@ with `herdr agent start`. It is a pane whose agent `run host` reports. So when i
 
 - A launch is a detached process in a session of its own, with no terminal. There is nothing to
   watch but its files: `<tool>/scripts/run runs-status`, the events file, and
-  `<tool>/scripts/run view-stream < <events-file>` for the readable form.
+  `<tool>/scripts/run view-stream <events-file>` for the readable form.
 - **The postmaster runs headless, as a native session**, like every other role:
   `<tool>/scripts/run host run "postmaster" <repo> --out <runs>/postmaster/events.jsonl
   --err <runs>/postmaster/postmaster.err --marker <runs>/postmaster/.exited -- <tool>/scripts/run launch

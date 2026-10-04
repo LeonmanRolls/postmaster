@@ -25,14 +25,12 @@ a link into it, never as a copy. Find it once, from `<skill>`: the absolute path
 your harness loaded this file from, or `skills/postmaster` when `AGENTS.md` sent a session in
 the repo here.
 
-```sh
-t=$(CDPATH= cd -P -- "<skill>/../.." 2>/dev/null && pwd) && test -x "$t/scripts/run" && echo "$t" || { echo "postmaster: <skill> is not a link into a postmaster checkout" >&2; false; }
-```
-
-It prints `<tool>`. Write that absolute path wherever these runbooks say `<tool>`, and give it to
-every session you brief. If it prints the error instead, stop and tell the user: the skill was
-copied, or its link points somewhere else. `<checkout>/scripts/run link-skills`, where
-`<checkout>` is their postmaster checkout, links it again.
+Resolve it with `realpath <skill>/../..`, and check that the result holds an executable
+`<tool>/scripts/run`. It prints `<tool>`. Write that absolute path wherever these runbooks say
+`<tool>`, and give it to every session you brief. If there is no such `<tool>/scripts/run`, stop and
+tell the user: the skill was copied, or its link points somewhere else.
+`<checkout>/scripts/run link-skills`, where `<checkout>` is their postmaster checkout, links it
+again.
 
 [Why a skill is a link, and the repo is found from it](../../wiki/concepts/skill-links.md)
 
@@ -42,8 +40,10 @@ You are reached two ways, and they arrive in different states. A session opened 
 comes through `AGENTS.md`, which may already have set the machine up and chosen a target.
 Someone typing `/postmaster` arrives cold. **Assume neither. Check.**
 
+Read `~/.postmaster/config.toml` yourself — a missing file means the machine is not set up —
+then:
+
 ```sh
-cat ~/.postmaster/config.toml 2>/dev/null || echo "NOT SET UP"
 <tool>/scripts/run link-skills --check
 ```
 
@@ -97,7 +97,7 @@ Adjust the search roots to the machine. `~/Code` is one convention, not a rule.
 **The chosen project must be a git repository.**
 
 ```sh
-<tool>/scripts/run check-target "$TARGET"   # 0 usable · 1 not a repo · 2 dirty, ask first
+<tool>/scripts/run check-target <target>   # 0 usable · 1 not a repo · 2 dirty, ask first
 ```
 
 **Read its exit code and stop on 1.** Do not offer to `git init`, do not walk up looking for
@@ -127,20 +127,20 @@ The flow is general and carries no assumptions about build tools, docs layout or
 config file before it runs on a plain git repo is a tool nobody adopts.
 
 ```sh
-<tool>/scripts/run discover-project "$TARGET"   # gate=… docs=… tracker=… tracker_prefix=… ambient_context=… check.<name>=…
-<tool>/scripts/run project-settings inspect "$TARGET" # optional project facts and their source
+<tool>/scripts/run discover-project <target>   # gate=… docs=… tracker=… tracker_prefix=… ambient_context=… check.<name>=…
+<tool>/scripts/run project-settings inspect <target> # optional project facts and their source
 ```
 
 The target's tracker is the kind `tracker` names: `local` when the target's own ticket store
 exists, whatever the config names, and the config's kind otherwise (`trackers.md`, local).
-A github tracker needs the target's board: `<tool>/scripts/run github "$TARGET" board` names it, and
+A github tracker needs the target's board: `<tool>/scripts/run github <target> board` names it, and
 exit 3 means there is none yet, so propose `board init` to the user and hand them the URL
 it prints. A plane tracker needs the target's project identifier: the discovered
 `tracker_prefix` when the target has shipped a ticket, otherwise `<tool>/scripts/run plane projects`
 lists the candidates and the user picks. A local tracker needs its store: exit 3 from
-`<tool>/scripts/run local "$TARGET" store` means there is none yet, so propose `store init` to the
+`<tool>/scripts/run local <target> store` means there is none yet, so propose `store init` to the
 user. A github target with no origin remote can have no board, and `run discover-project` warns
-of it: propose `<tool>/scripts/run local "$TARGET" store init` to the user instead. Report what
+of it: propose `<tool>/scripts/run local <target> store init` to the user instead. Report what
 you found on the launch card, and ask only about what you could not determine.
 **If the project has no `AGENTS.md` or equivalent, say so.** Lanes that read no ambient
 context start blind, and that has silently handicapped a lane before. Ask the user for
@@ -165,7 +165,7 @@ When the conversation settles a project decision that should stay on this checko
 `.postmaster/settings.toml` and show its contents before writing it. When maintainers should set
 the same requirement for everyone, offer `.postmaster/project.toml` instead and say that is the
 shared file being proposed. Wait for agreement, then write the agreed file with
-`<tool>/scripts/run project-settings write "$TARGET" local <file>` or `project <file>`.
+`<tool>/scripts/run project-settings write <target> local <file>` or `project <file>`.
 The script validates the file and keeps `.postmaster/` ignored. A shared file is ignored by
 default too; commit only that file deliberately with `git add -f .postmaster/project.toml`.
 Never put paths or credentials in either file.
@@ -183,7 +183,7 @@ Never put paths or credentials in either file.
    session reports `no`. Do not copy the configured harness or model into the report.
 
    ```sh
-   <tool>/scripts/run front-door "<harness>" "<model>" "<cwd>" <yes|no> "$TARGET"
+   <tool>/scripts/run front-door "<harness>" "<model>" "<cwd>" <yes|no> <target>
    ```
 
    It prints `self` or `spawn` with every reason a separate session is needed. `self` means
@@ -208,22 +208,20 @@ Never put paths or credentials in either file.
    (`pull-request` or `local`), the session host the fleet will run on
    (`<tool>/scripts/run host detect`), and the project facts above. Launch nothing before the user
    picks.
-5. **Create the project-local run root** and keep it in one variable for the steps below. The
-   project path, not its basename, identifies this run root:
+5. **Create the project-local run root** and keep what the call prints for the steps below.
+   The project path, not its basename, identifies this run root:
 
    ```sh
-   TARGET_ROOT=$(git -C "$TARGET" rev-parse --show-toplevel)
-   RUNS=$TARGET_ROOT/.postmaster/runs
-   mkdir -p "$RUNS/postmaster"
-   <tool>/scripts/run project-settings ensure "$TARGET_ROOT"
+   <tool>/scripts/run project-settings run-root <target>
    ```
 
-   `<tool>/scripts/run log-action` needs the directory to exist, so the postmaster's own
-   actions go under `$RUNS/postmaster/`. Log from your first action there. A postmaster
-   that is this session keeps the same records as one you spawn. `ensure` creates the folder's
-   ignore rule only; it never creates settings. A run already in flight under the old
+   It creates `<target root>/.postmaster/runs/postmaster` and the folder's ignore rule, and
+   prints `<target root>/.postmaster/runs`. `<tool>/scripts/run log-action` needs the directory
+   to exist, so the postmaster's own actions go under `<runs>/postmaster/`. Log from your first
+   action there. A postmaster that is this session keeps the same records as one you spawn. The
+   call never creates settings. A run already in flight under the old
    `~/.postmaster/runs/<basename>/` layout is not migrated.
-6. **Write the brief** to `$RUNS/postmaster/brief.md`: "You are the postmaster for <project>.
+6. **Write the brief** to `<runs>/postmaster/brief.md`: "You are the postmaster for <project>.
    Read `<tool>/skills/postmaster/postmaster.md` first", then the stream paragraph, the project
    profile, the configured team, who says the merge word, the session host, `<tool>` and the
    config path, plus this session's report and the route result, and, when the route says
@@ -233,7 +231,7 @@ Never put paths or credentials in either file.
    and what a postmaster restarted from nothing reads to carry on. Then log the first action:
 
    ```sh
-   <tool>/scripts/run log-action "$RUNS/postmaster" postmaster note launch "<route result>"
+   <tool>/scripts/run log-action <runs>/postmaster postmaster note launch "<route result>"
    ```
 
 7. **`self`: carry on as the postmaster.** Read `<tool>/skills/postmaster/postmaster.md` and
@@ -242,12 +240,12 @@ Never put paths or credentials in either file.
 8. **`spawn`: start a new postmaster session.** If the route has a `headless` line, use the
    headless form from `hosts.md` through `run host run` on every host. It starts the configured
    harness headless with the brief as its prompt, writes events and errors under
-   `$RUNS/postmaster/`, and has no terminal to stop at a question:
+   `<runs>/postmaster/`, and has no terminal to stop at a question:
 
    ```sh
-   <tool>/scripts/run host run "postmaster" "$TARGET_ROOT" --out "$RUNS/postmaster/events.jsonl" \
-     --err "$RUNS/postmaster/postmaster.err" --marker "$RUNS/postmaster/.exited" -- \
-     <tool>/scripts/run launch launch postmaster "$TARGET_ROOT" "$RUNS/postmaster/brief.md"
+   <tool>/scripts/run host run "postmaster" <target root> --out <runs>/postmaster/events.jsonl \
+     --err <runs>/postmaster/postmaster.err --marker <runs>/postmaster/.exited -- \
+     <tool>/scripts/run launch launch postmaster <target root> <runs>/postmaster/brief.md
    ```
 
    That form needs a harness with a resume form (`hosts.md`, none), so the user can answer an
@@ -257,7 +255,7 @@ Never put paths or credentials in either file.
    interactive session of the postmaster's harness (`team.postmaster` in the config), rooted in
    the target repo, in the harness's interactive form from `harnesses.md`: its bypass mode, named
    `postmaster`. Hand it a
-   one-line prompt file that says to read the brief at `$RUNS/postmaster/brief.md` first:
+   one-line prompt file that says to read the brief at `<runs>/postmaster/brief.md` first:
 
    ```sh
    <tool>/scripts/run host spawn postmaster-<project> <repo> --label "postmaster" -- <interactive form>

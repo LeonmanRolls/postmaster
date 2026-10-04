@@ -4,7 +4,9 @@
 // one to a line, and a command in the text holds no shell syntax, so the linter can read every
 // line and an agent copies nothing untested.
 //
-//   scripts/run runbook-code [<file>...]   default: AGENTS.md and every .md under skills/
+//   scripts/run runbook-code [--root <dir>] [<file>...]
+//                                     default: AGENTS.md and every .md under <dir>'s skills/,
+//                                     the root being the checkout this script lives in
 //
 // A block fenced sh, bash, zsh, shell or console holds steps. Its lines, continuations
 // joined, are blank, a # comment, or one call whose program is scripts/run: bare in
@@ -346,12 +348,20 @@ export function runbookCode(root: string, files?: string[]): { faults: Fault[]; 
 
 // --- entry -----------------------------------------------------------------------------------
 if (import.meta.main) {
-  const argv = process.argv.slice(2);
+  let argv = process.argv.slice(2);
+  let root = toolRoot(import.meta);
+  if (argv[0] === "--root") {
+    if (argv[1] === undefined) {
+      process.stderr.write("usage: scripts/run runbook-code [--root <dir>] [<file>...]\n");
+      process.exit(2);
+    }
+    root = argv[1];
+    argv = argv.slice(2);
+  }
   if (argv[0]?.startsWith("-")) {
-    process.stderr.write("usage: scripts/run runbook-code [<file>...]\n");
+    process.stderr.write("usage: scripts/run runbook-code [--root <dir>] [<file>...]\n");
     process.exit(2);
   }
-  const root = toolRoot(import.meta);
   const { faults, code } = runbookCode(root, argv.length > 0 ? argv : undefined);
   for (const f of faults) console.log(`${f.file}:${f.line}: ${f.what}: ${f.ref}`);
   process.exit(code);

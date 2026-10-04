@@ -243,8 +243,6 @@ const CODEX_LINE = new RegExp(
   "u",
 );
 const PREFIX_SANITIZE = /[^A-Za-z0-9_.-]+/gu;
-export const SH_BLOCKS = new RegExp("```sh\\n(" + DOT_ALL + "*?)```", "gsu");
-export const FOR_LOOP = /for L in \$\([^;]*?; do/gu;
 const LEAD_HASH = /^#+/u;
 const JSON_NUM = /-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?/uy;
 const HEX4 = /^[0-9a-fA-F]{4}$/u;

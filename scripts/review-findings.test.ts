@@ -18,15 +18,7 @@ import { basename, join } from "node:path";
 import { toolRoot } from "./lib/paths.ts";
 import { run } from "./lib/proc.ts";
 import { pyTrim } from "./lib/text.ts";
-import {
-  errMsg,
-  FOR_LOOP,
-  harvest,
-  isObj,
-  isReportError,
-  SH_BLOCKS,
-  SUPPORTED,
-} from "./review-findings.ts";
+import { errMsg, harvest, isObj, isReportError, SUPPORTED } from "./review-findings.ts";
 
 const SELF = join(import.meta.dir, "run");
 const TOOL = toolRoot(import.meta);
@@ -620,54 +612,6 @@ describe("degrade", () => {
     expect(found[0]!["file"]).toBe("src/page.js");
     expect(found[0]!["line"]).toBe(8);
   });
-
-  test("executing the sample on the missing-file fixture writes both lines", () => {
-    const coachman = readFileSync(join(TOOL, "skills", "postmaster", "coachman.md"), "utf8");
-    const blocks = [...coachman.matchAll(SH_BLOCKS)].map((m) => m[1]!);
-    const samples = blocks.filter(
-      (block) => block.includes("NORMALIZE_FAILED=()") && block.includes("HARVEST_ERR"),
-    );
-    expect(samples.length).toBe(1);
-    const sampleDispatch = join(root, "sample-dispatch");
-    mkdirSync(join(sampleDispatch, "logs"), { recursive: true });
-    writeFileSync(
-      join(sampleDispatch, "logs", "review-r9-bug-one.jsonl"),
-      JSON.stringify({
-        type: "system",
-        subtype: "task_notification",
-        output_file: join(taskHome, "absent.txt"),
-      }) +
-        "\n" +
-        JSON.stringify({ type: "result", subtype: "success", result: "[]" }) +
-        "\n",
-    );
-    let sample = samples[0]!.split("<tool>").join(TOOL);
-    sample = sample.split("<dispatch>").join(sampleDispatch).split("<repo>").join(root);
-    sample = sample.split("<TICKET>").join("T").split("<round>").join("9");
-    sample = sample.replace(FOR_LOOP, "for L in one; do");
-    sample = sample.split(`DEST=${root}/.worktrees/T-rev-bug-$L`).join(`DEST=${scratch}`);
-    writeFileSync(join(root, "sample.sh"), sample);
-    const ran = run("bash", [join(root, "sample.sh")]);
-    const logged: unknown[] = [];
-    if (existsSync(join(sampleDispatch, "actions.jsonl"))) {
-      for (const raw of readFileSync(join(sampleDispatch, "actions.jsonl"), "utf8").split("\n")) {
-        try {
-          logged.push(JSON.parse(raw) as unknown);
-        } catch {
-          // a non-JSON line is not a logged action
-        }
-      }
-    }
-    const degraded = logged.filter(
-      (entry) => isObj(entry) && entry["action"] === "degrade" && entry["target"] === "one",
-    );
-    const narrative = existsSync(join(sampleDispatch, "run-log.md"))
-      ? readFileSync(join(sampleDispatch, "run-log.md"), "utf8")
-      : "";
-    expect(ran.code).toBe(0);
-    expect(degraded.length).toBe(1);
-    expect(narrative.includes("one bug: DEGRADED,")).toBe(true);
-  }, 60000);
 });
 
 describe("JSON lists", () => {
