@@ -865,9 +865,7 @@ interface TimedLine {
 
 /** The lines slowest first; a lane that could not be timed comes last, as named. */
 function slowestFirst(entries: TimedLine[]): string[] {
-  return [...entries]
-    .sort((a, b) => (b.secs ?? -1) - (a.secs ?? -1))
-    .map((e) => e.line);
+  return [...entries].sort((a, b) => (b.secs ?? -1) - (a.secs ?? -1)).map((e) => e.line);
 }
 
 /** `workhorses: …`, one entry per lane the coachman launched: its dispatch to its
@@ -983,7 +981,9 @@ export function timeReport(dispatch: string): string {
   if (workhorses !== null) lines.push(workhorses);
   lines.push(...reviewRoundLines(dispatch, events));
   if (times.ok) {
-    const longWaits = times.table.rows.filter((r) => r.waitSec !== null && r.waitSec > LONG_WAIT_SEC);
+    const longWaits = times.table.rows.filter(
+      (r) => r.waitSec !== null && r.waitSec > LONG_WAIT_SEC,
+    );
     if (longWaits.length > 0) {
       lines.push(`long wait: ${longWaits.map((r) => `${r.stage} ${fmt(r.waitSec!)}`).join(", ")}`);
     }

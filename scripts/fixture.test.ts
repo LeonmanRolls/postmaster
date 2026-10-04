@@ -939,9 +939,9 @@ describe("score: a recorded run that meets every check scores clean", () => {
     const out = bgResults.get("break-gate")?.out ?? "";
     const cleanOut = bgResults.get(`clean-${first}`)?.out ?? "";
     expect(out.split("\n", 1)[0]).toBe(cleanOut.split("\n", 1)[0]);
-    expect(out.split("\n").filter((l) => l.startsWith("ok  ") || l.startsWith("FAIL"))).toHaveLength(
-      9,
-    );
+    expect(
+      out.split("\n").filter((l) => l.startsWith("ok  ") || l.startsWith("FAIL")),
+    ).toHaveLength(9);
     console.log(`failing score:\n${out.trimEnd()}`);
   });
 
