@@ -48,6 +48,9 @@ test("C20 promotion removes all encrypted reasoning forms, including one nested 
     JSON.stringify({ type: "redacted_thinking", data: ["cipher", "text"].join("") }),
     JSON.stringify({ encrypted_content: ["sealed", "text"].join("") }),
     JSON.stringify({ nested: JSON.stringify({ encrypted_content: ["nested", "seal"].join("") }) }),
+    JSON.stringify({
+      note: ["says {", '"encrypted', '_content"', ": ", '"prose', 'seal"', "} aloud"].join(""),
+    }),
   ];
   writeFileSync(join(source, "trace.jsonl"), `${lines.join("\n")}\n`);
   const copied = runScript("raw-promote", [source, "raw/trace"], repo);
@@ -57,7 +60,7 @@ test("C20 promotion removes all encrypted reasoning forms, including one nested 
       .trim()
       .split("\n")
       .filter((line) => line.includes("encrypted-reasoning scrubbed")),
-  ).toHaveLength(4);
+  ).toHaveLength(5);
   const promoted = readFileSync(join(repo, "raw/trace", "trace.jsonl"), "utf8")
     .trim()
     .split("\n");
@@ -69,7 +72,9 @@ test("C20 promotion removes all encrypted reasoning forms, including one nested 
   expect(JSON.parse(parsed[3]!.nested as string)).toEqual({
     encrypted_content: "<redacted:encrypted-reasoning>",
   });
+  expect(parsed[4]!.note as string).toContain("<redacted:encrypted-reasoning>");
   expect(promoted.join("\n").includes("sealedtext")).toBe(false);
+  expect(promoted.join("\n").includes("proseseal")).toBe(false);
 });
 
 test("C21 promotion rescans clean, refuses repeats and copies nothing on a marker fault", () => {

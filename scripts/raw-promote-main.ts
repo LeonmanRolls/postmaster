@@ -62,6 +62,62 @@ interface FileScan {
   faults: string[];
 }
 
+function balancedEnd(text: string, start: number): number {
+  let depth = 0;
+  let inString = false;
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i]!;
+    if (inString) {
+      if (ch === "\\") i++;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') inString = true;
+    else if (ch === "{") depth++;
+    else if (ch === "}") {
+      depth--;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
+}
+
+function spliceEmbedded(value: string): { value: string; count: number } {
+  let count = 0;
+  let out = "";
+  let cursor = 0;
+  let i = 0;
+  while (i < value.length) {
+    if (value[i] !== "{") {
+      i++;
+      continue;
+    }
+    const end = balancedEnd(value, i);
+    if (end === -1) {
+      i++;
+      continue;
+    }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(value.slice(i, end + 1)) as unknown;
+    } catch {
+      i++;
+      continue;
+    }
+    const transformed = transformReasoning(parsed);
+    if (!transformed.count) {
+      i++;
+      continue;
+    }
+    out += value.slice(cursor, i) + JSON.stringify(transformed.value);
+    cursor = end + 1;
+    i = end + 1;
+    count += transformed.count;
+  }
+  if (!count) return { value, count: 0 };
+  return { value: out + value.slice(cursor), count };
+}
+
 function transformReasoning(value: unknown): { value: unknown; count: number } {
   if (typeof value === "string") {
     const trimmed = value.trim();
@@ -71,11 +127,12 @@ function transformReasoning(value: unknown): { value: unknown; count: number } {
         const transformed = transformReasoning(nested);
         if (transformed.count)
           return { value: JSON.stringify(transformed.value), count: transformed.count };
+        return { value, count: 0 };
       } catch {
-        /* ordinary text */
+        /* not pure JSON; scan for embedded objects below */
       }
     }
-    return { value, count: 0 };
+    return spliceEmbedded(value);
   }
   if (Array.isArray(value)) {
     let count = 0;
