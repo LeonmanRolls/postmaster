@@ -100,13 +100,15 @@ const dirs = lsNames(["-d", "wiki", "docs", ".github"]);
 // The tracker is visible in how the project already writes commits; nothing to configure.
 const oneline = run("git", ["log", "--oneline", "-200"]).out;
 const counts = new Map<string, number>();
-// BASE pipes git log through grep -oE (locale word-boundaries); spawn it exactly.
-const ticketOut = run("grep", ["-oE", "--", "\\b[A-Z][A-Z0-9]{1,9}-[0-9]+\\b"], {
-  input: oneline,
-}).out;
-for (const m of ticketOut.split("\n")) {
-  if (!m) continue;
-  const prefix = m.replace(/-[0-9]*$/u, "");
+// In-process, with GNU grep's word boundaries in a UTF-8 locale: a letter, digit or
+// underscore on either side blocks a match, so the search never depends on the grep
+// this machine happens to have.
+const TICKET_RE = new RegExp(
+  "(?<![\\p{L}\\p{N}_])[A-Z][A-Z0-9]{1,9}-[0-9]+(?![\\p{L}\\p{N}_])",
+  "gu",
+);
+for (const match of oneline.matchAll(TICKET_RE)) {
+  const prefix = match[0].replace(/-[0-9]*$/u, "");
   counts.set(prefix, (counts.get(prefix) ?? 0) + 1);
 }
 // sort | uniq -c | sort -rn | head -1 | awk '{print $2}': ties break descending, as sort -rn does.
