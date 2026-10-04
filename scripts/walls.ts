@@ -88,7 +88,7 @@ export function readWalls(dispatch: string): Wall[] {
     index += 1;
   }
   return raw.map((w) => {
-    const m = /^(\S+) (\S+) (\S+) (\S+) ([\s\S]*)$/u.exec(w.detail);
+    const m = /^([^ ]+) ([^ ]+) ([^ ]+) ([^ ]+) (.*)$/u.exec(w.detail);
     const role = m ? m[1]! : "workhorse";
     const lens = m ? m[2]! : "-";
     const round = m ? m[3]! : "-";

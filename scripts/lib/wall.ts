@@ -86,7 +86,7 @@ function zonedInstant(
 }
 
 function hour12(h: number, ap: string | undefined): number {
-  const lower = (ap ?? "").toLowerCase();
+  const lower = (ap ?? "").toLowerCase(); // ASCII: am/pm is ASCII however the message cases it
   if (lower === "pm" && h < 12) return h + 12;
   if (lower === "am" && h === 12) return 0;
   return h;
@@ -113,17 +113,20 @@ export function parseWallReset(message: string, nowMs: number): string | null {
   let text = message;
 
   // `in N minutes|hours`, counted from when the lane stopped.
-  text = text.replace(/\bin\s+(\d+)\s+(minutes?|hours?)\b/giu, (m, n: string, unit: string) => {
-    const step = /^hour/iu.test(unit) ? 3600 : 60;
-    cands.push(nowMs + Number(n) * step * 1000);
-    return blank(m);
-  });
+  text = text.replace(
+    /(?:^|[^0-9A-Za-z_])in[ \t\n\f\r\v]+([0-9]+)[ \t\n\f\r\v]+(minutes?|hours?)(?:$|[^0-9A-Za-z_])/giu,
+    (m, n: string, unit: string) => {
+      const step = /^hour/iu.test(unit) ? 3600 : 60;
+      cands.push(nowMs + Number(n) * step * 1000);
+      return blank(m);
+    },
+  );
 
   // `Oct 5th, 2026 2:29 AM` and `Oct 5, 2026 2:29 AM`, in the zone beside them else the
   // machine's. A zone that is an abbreviation makes this time unreadable, so the whole
   // match is masked out rather than left for the bare scan to read as machine time.
   text = text.replace(
-    /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+(\d{1,2})(?:st|nd|rd|th)?\s*,?\s+(\d{4})\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b(?:\s*\(([^)]*)\))?/giu,
+    /(?:^|[^0-9A-Za-z_])(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[ \t\n\f\r\v]+([0-9]{1,2})(?:st|nd|rd|th)?[ \t\n\f\r\v]*,?[ \t\n\f\r\v]+([0-9]{4})[ \t\n\f\r\v]+([0-9]{1,2})(?::([0-9]{2}))?[ \t\n\f\r\v]*(am|pm)(?:$|[^0-9A-Za-z_])(?:[ \t\n\f\r\v]*\(([^)]*)\))?/giu,
     (
       m,
       mon: string,
@@ -136,7 +139,7 @@ export function parseWallReset(message: string, nowMs: number): string | null {
     ) => {
       const tz = zone === undefined ? "" : (validZone(zone) ?? "");
       if (zone !== undefined && tz === "") return blank(m);
-      const month = MONTHS[mon.slice(0, 3).toLowerCase()] ?? 0;
+      const month = MONTHS[mon.slice(0, 3).toLowerCase()] ?? 0; // ASCII: month names are ASCII
       const hour = hour12(Number(h), ap);
       const minute = Number(mi ?? "0");
       const instant =
@@ -151,7 +154,7 @@ export function parseWallReset(message: string, nowMs: number): string | null {
   // `3am (UTC)`: a time with an explicit zone, whose zone is the message's own. A bare
   // time there follows the same today-or-tomorrow rule in that zone.
   text = text.replace(
-    /\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*\(([^)]*)\)/giu,
+    /(?:^|[^0-9A-Za-z_])([0-9]{1,2})(?::([0-9]{2}))?[ \t\n\f\r\v]*(am|pm)?[ \t\n\f\r\v]*\(([^)]*)\)/giu,
     (m, h: string, mi: string | undefined, ap: string | undefined, zone: string) => {
       const tz = validZone(zone);
       if (tz === null) return blank(m); // an abbreviation: the time is unreadable
@@ -172,7 +175,7 @@ export function parseWallReset(message: string, nowMs: number): string | null {
 
   // A time alone: 2:29 today, or tomorrow once it is more than five minutes past (D4).
   text = text.replace(
-    /\b(\d{1,2}):(\d{2})\s*(am|pm)?\b|\b(\d{1,2})\s*(am|pm)\b/giu,
+    /(?:^|[^0-9A-Za-z_])([0-9]{1,2}):([0-9]{2})[ \t\n\f\r\v]*(am|pm)?(?:$|[^0-9A-Za-z_])|(?:^|[^0-9A-Za-z_])([0-9]{1,2})[ \t\n\f\r\v]+(am|pm)(?:$|[^0-9A-Za-z_])/giu,
     (
       m,
       h1: string | undefined,
