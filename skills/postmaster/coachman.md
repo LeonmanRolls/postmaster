@@ -1010,7 +1010,17 @@ Set the stage first: `<tool>/scripts/run stage <dispatch> shipping`.
    pass before the card is ready. No P1 or P2 finding may remain open.
    If a new P1 or P2 issue appears during final QA, fix it and pass the gate again; when the
    review loop has a gating lens, run another review round and rewrite `checkpoint-review.md`
-   with the loop's rounds and outcome before writing the card.
+   with the loop's rounds and outcome before writing the card. Then run
+   `<tool>/scripts/run landing switch-offs --repo <synthesis-wt> --default <default ref from
+   run.json> --ticket HEAD --dispatch <dispatch>`. This compares the final HEAD with its merge
+   base against the default branch and prints the switch-offs and settings changes for the card.
+   On exit 3, remove any ineffective Biome directive, and remove or add the reason beside each
+   active TypeScript or linter directive that has none; rerun the gate and this call after the
+   edit. On exit 4, remove every refused switch-off, then rerun the gate and this call. Exit 2
+   is the expected result for reasoned comments and settings changes awaiting approval at
+   landing; keep the entries the ticket needs, and make no claim that they are approved. Exit 0
+   means there are no entries left or every entry already has a recorded approval. Any other
+   exit is an input fault to resolve.
 2. **Browser suite and QA when the project has a UI.** Run its browser suite blocking and
    unpiped. Serve the production build with a throwaway database seeded from project fixtures,
    on loopback at a throwaway port, through `<tool>/scripts/run host run` with
@@ -1046,7 +1056,11 @@ Set the stage first: `<tool>/scripts/run stage <dispatch> shipping`.
    wants them, go in prose outside the pasted block, which carries only ids and severities.
    The card's branch state is before merge: the
    ticket branch is ready, and every other branch is either retained or abandoned. The gate is
-   listed as the gate, never as a turnpike.
+   listed as the gate, never as a turnpike. After the rendered `## Not re-reviewed` section, add
+   `## Check switch-offs` and paste the output of the same `landing switch-offs` call after its
+   first status line, including both `## Comments` and `## Settings changes`. Keep `none` when a
+   section is empty. This list is outside `card-block`, so a card from a run pinned before this
+   change still passes `card-results` and `card-findings`.
 5. **Write the final hand-off.** Write
    `<dispatch>/handoff-<n>.md` with the verified results, all decisions and open findings, and
    state that no coachman leg follows and the postmaster must verify the card and handle

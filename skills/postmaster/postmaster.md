@@ -562,6 +562,25 @@ missed.
    branch. If a claim
    fails, remove `.card-ready` and `.leg-<n>-done` for the manifest's current leg `<n>`, then
    resume that last leg with the exact discrepancy and wait for its corrected card.
+   **Check switch-offs before following the landing route.** Run
+   `<tool>/scripts/run landing switch-offs --repo <repo> --default <default ref> --ticket
+   <ticket ref> --dispatch <dispatch>`, using the same fetched or local refs resolved above.
+   Exit 0 (`clear`) continues to step 2. Exit 2 (`held`) means every listed comment has a reason;
+   listed settings changes also need the user's word. Show the ship card and the call's complete
+   list, ask the user to approve or refuse each listed identity, write that question to
+   `<dispatch>/.waiting-on-user`,
+   add it to the waiting list, and stop before opening a pull request or merging. The merge
+   authority never approves these entries. On the user's answer, remove the waiting marker and
+   list entry, then record one action per decision with
+   `<tool>/scripts/run log-action <dispatch> postmaster switch-off <identity> approved <user's
+   words>` or `... refused <user's words>`; keep the words verbatim. Run the check again. A
+   remaining `held` waits for the user's word on the outstanding identities; `clear` continues
+   to step 2. Exit 3 (`reason-required`) is not a question for the user: log `merge` with
+   `withheld` and the listed missing-reason discrepancy, remove `.card-ready` and
+   `.leg-<n>-done`, then resume the last leg with that exact discrepancy. Exit 4 (`refused`)
+   likewise withholds with the refused entry as the exact discrepancy. Check the corrected card
+   from step 1 again before the route. Any other exit is an input fault. This check also holds
+   runs whose coachman was pinned before it existed; their cards may have no switch-off section.
 2. **Follow the landing route in the waybill.** First ask whether the ticket already landed:
    `<tool>/scripts/run landing already-landed --repo <repo> --default <branch> --ticket
    <the ticket ref> --base <the manifest's base> --card-head <the card's final HEAD>`, adding
@@ -674,6 +693,21 @@ On `.card-ready`, read `<dispatch>/card.md` and `<dispatch>/handoff-3.md`:
    the synthesis HEAD, and the card gives each one that did not pass as its result is; a
    check that did not run is `not run`, never passed and never omitted; the Style
    residue's count is what `<tool>/scripts/run style-findings count <dispatch>` prints.
+   Before granting, run
+   `<tool>/scripts/run landing switch-offs --repo <repo> --default <default ref> --ticket
+   <ticket ref> --dispatch <dispatch>`. Use the current refs for this run. `clear` continues to
+   step 2. On `held`, show the card and the full list, ask the user for a separate approval or
+   refusal for every identity, write the question to `.waiting-on-user`, add the run to the
+   waiting list, and do not grant or merge. The merge authority does not approve switch-offs.
+   When the user answers, remove the marker and list entry and record each decision through
+   `<tool>/scripts/run log-action <dispatch> postmaster switch-off <identity> approved|refused
+   <the user's words>`, one line per identity with the words carried verbatim. Re-run the check;
+   continue only on `clear`, and keep waiting on any outstanding approval. On `reason-required`,
+   do not ask the user: log `merge` with `withheld`, remove `.card-ready` and `.leg-3-done`, and
+   resume leg 3 with the exact missing-reason discrepancy. On `refused`, withhold the same way
+   with the refused entry as the exact discrepancy. Check the corrected card's claims and
+   switch-offs again from step 1. A run pinned before this change is held by this check even if
+   its card has no switch-off section. Any other exit is an input fault.
 2. **Grant or withhold.** Every word is delivered by resuming leg 3 (Stage C, step 5), and
    `.card-ready` is removed before it is; the coachman touches it afresh when the card changes.
    `MERGE_AUTHORITY: postmaster` and every check above holds: deliver "MERGE GRANTED" and log
