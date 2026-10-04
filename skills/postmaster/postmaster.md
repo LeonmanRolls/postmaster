@@ -631,30 +631,29 @@ missed.
 
 ## Stage G (contract 2): after merge
 
-1. Confirm the default branch contains the merge and the ticket is done — or, where the
-   ticket closed on nothing-to-land with no merge, that `anything-to-land --repo <repo>
-   --default <branch> --ticket <the ticket ref> --base <the manifest's base>` still says
-   `nothing-to-land` and the `merge` line holds the step's evidence: the user's word that
-   there was nothing to land (step 2), or the merge word with the no-diff evidence
-   (step 3). Stop the preview
-   process group from `<dispatch>/render/preview.pid`, if one was started. Run
-   `<tool>/scripts/style-findings.sh check <dispatch>`. The postmaster writes or corrects
-   `<dispatch>/style-sort.md` using the sorting rules in `coachman.md`, then checks it again
-   until exit 0; it does not resume a coachman leg that already handed off. Log a `note` with
-   the check's last line.
-2. **Finish the record.** Final `run-log.md` entry (per-lane win record, findings counts, cost)
-   plus a closing dated comment on the ticket, logging `ticket-comment`. Archive finished
-   threads where the harness has an archive form (`harnesses.md`).
-3. Once `.leg-<leg>-exited` is present, close every run-created worktree's host space with
-   `<tool>/scripts/host.sh close-run <dispatch>`; on exit 2, stop and report. Remove
-   the worktree from outside it, never with force unless it is clean and the card confirmed it,
-   and log `teardown`. Remove any surviving workhorse worktrees the same way after preserving
-   stray files in `<dispatch>/stray/`. Keep the run-created branches as the local archive.
-4. Close the run with `<tool>/scripts/stage.sh <dispatch> done postmaster`. This appends stage
-   timings from `actions.jsonl`; never write timings by hand. Never delete the dispatch or
-   manifest.
-5. Put tool faults and style-sort proposals to the user once aftercare ends, as Legacy Stage G
-   steps 4 and 5 describe, then dispatch the next ticket.
+1. **Write what needs judgment.** Run `<tool>/scripts/style-findings.sh check <dispatch>`.
+   The postmaster writes or corrects `<dispatch>/style-sort.md` using the sorting rules in
+   `coachman.md`, then checks it again until exit 0; it does not resume a coachman leg that
+   already handed off. On exit 1, tell the user what it printed. Compose the closing words
+   here too: a closing line for `run-log.md` and a dated closing comment for the ticket.
+   The shipped mark is the proof of the landing; confirm nothing by hand again.
+2. **Run the cleanup command, first as a dry run.**
+   `bun --no-env-file --config=/dev/null <tool>/scripts/aftercare.ts <dispatch> --dry-run
+   --comment "<text>" --run-log "<text>"` prints its plan and changes nothing; read it, then
+   run the same command without `--dry-run`. The command saves each run folder's leftovers
+   into `<dispatch>/stray/`, closes the folder's windows, removes the folder, stops the
+   preview, closes the run's windows, writes the closing line, moves the ticket to done
+   (leaving a cancelled ticket as it is) and posts the closing comment, marks the run done
+   and releases its pinned tool, logging every action as it happens. On exit 2 or 3, do the
+   next step it prints and run it again; on exit 1, or any fault it reports, put the fault
+   to the user as Tool faults says and stop — never work the cleanup's steps by hand, which
+   would bring the judgment calls back. With `--json` its summary is one record a script
+   can read. Never delete the dispatch or manifest; the run's branches stay.
+3. **Put what needs the user to the user once aftercare ends:** every folder aftercare's
+   summary flags as holding work no branch's commits have, then tool faults and style-sort
+   proposals as Legacy Stage G steps 4 and 5 describe. Archive finished threads where the
+   harness has an archive form (`harnesses.md`).
+4. Dispatch the next ticket.
 
 ## Legacy Stage F: the gate (run.json has no coachman_contract 2)
 

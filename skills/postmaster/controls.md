@@ -33,6 +33,7 @@ A fault in one of these is a fault in a control, whatever the step that ran it.
 | `<tool>/scripts/stage.sh` | action-log | every stage change is recorded, and the run is timed from the record |
 | `<tool>/scripts/run-meta.sh` | action-log | what a run started from, and the pinned checkout it runs on |
 | `<tool>/scripts/tool-faults.sh` | action-log | every fault a run met reaches a ticket or the run's records |
+| `<tool>/scripts/aftercare.ts` | check | a run folder is removed only after everything in it that git would lose is saved, and work that never landed is flagged, so a fault in it stops the cleanup and goes to the user |
 
 ## Steps within a file
 

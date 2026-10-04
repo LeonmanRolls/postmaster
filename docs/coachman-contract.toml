@@ -99,3 +99,7 @@ holds = "the workhorse spec shape, including the per-criterion checks section th
 [[files]]
 path = "scripts/summary-evidence.ts"
 holds = "the evidence-shape enforcement the runbook invokes at harvest"
+
+[[files]]
+path = "scripts/aftercare.ts"
+holds = "the run's cleanup: which folders go, how they are saved, the closing steps and the summary"
