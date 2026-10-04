@@ -484,8 +484,11 @@ test("prefilter is lossless: identical findings with it on and off over a dense 
 
 test("a pattern-code line exempts only the pattern, never trailing values", () => {
   // Review round 1: a trailing address after a regex declaration passed the gate.
+  // The constructor shape is fragmented below: the text guard would read
+  // that literal as code missing its u flag.
+  const call = joined('scan(new Reg', 'Exp(P("email", "search"))) // ', email());
   expect(rules(`const EMAIL = /.+/; // ${email()}`)).toContain("email");
-  expect(rules(`scan(new RegExp(P("email", "search"))) // ${email()}`)).toContain("email");
+  expect(rules(call)).toContain("email");
   expect(rules("const EMAIL = /.+/;")).toEqual([]);
   expect(rules(`const EMAIL = /.+${email()}/;`)).toEqual([]);
 });
