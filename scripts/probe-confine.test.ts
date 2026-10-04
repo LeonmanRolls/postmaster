@@ -2,9 +2,17 @@
 // each forced through stubbed tools on PATH and the probe's test seams. The same lookups
 // every time; a control that could have come out the other way.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { run } from "./lib/proc.ts";
 import {
   isSafeProfilePath,
@@ -224,7 +232,17 @@ describe("the probe says ready, partial or unavailable", () => {
   });
 
   test("a bwrap is vetted only on a root-owned chain", () => {
-    expect(isSecureBwrapPath("/bin/sh")).toBe(true);
+    const rootOwnedChain = (path: string): boolean => {
+      for (let current = path; ; ) {
+        if (statSync(current).uid !== 0) return false;
+        const parent = dirname(current);
+        if (parent === current) return true;
+        current = parent;
+      }
+    };
+    const shell = realpathSync("/bin/sh");
+    const shellIsRootOwned = rootOwnedChain(dirname("/bin/sh")) && rootOwnedChain(shell);
+    expect(isSecureBwrapPath("/bin/sh")).toBe(shellIsRootOwned);
     expect(isSecureBwrapPath(join(tmp, "missing-bwrap"))).toBe(false);
   });
 });

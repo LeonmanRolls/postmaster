@@ -75,7 +75,8 @@ function runSetup(name: string, extraEnv: Record<string, string> = {}): number {
 }
 
 function unameBin(system: string): string {
-  const bin = join(tmp, `${system.toLowerCase()}-bin`);
+  const label = system === "Darwin" ? "darwin" : "linux";
+  const bin = join(tmp, `${label}-bin`);
   mkdirSync(bin, { recursive: true });
   const uname = join(bin, "uname");
   writeFileSync(uname, `#!/bin/sh\nprintf '${system}\\n'\n`, "utf8");

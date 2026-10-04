@@ -22,7 +22,7 @@ function procRoot(): string {
 export type BootIdentity = Readonly<{ id: string; seconds: string | null }>;
 
 const bootSeconds = (text: string): string | null =>
-  /\bsec\s*=\s*([0-9]+)\b/u.exec(text)?.[1] ?? null;
+  /(?:^|[^A-Za-z0-9_])sec[ \t\r\n]*=[ \t\r\n]*([0-9]+)(?![A-Za-z0-9_])/u.exec(text)?.[1] ?? null;
 
 /** Read a boot identity on either platform. POSTMASTER_PROC_ROOT forces the
  * sysctl path so Linux tests can exercise the macOS identity used by runs. */
