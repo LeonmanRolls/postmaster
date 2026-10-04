@@ -55,6 +55,12 @@ async function scanBlob(
 ): Promise<string[]> {
   const child = runGit(["show", object], root);
   if (!child.stdout) fail("the tree could not be read");
+  // The close listener goes on before the first read: a small blob's git
+  // exits before the drain ends, and a listener attached after misses it.
+  const closed = new Promise<number>((resolve) => {
+    child.once("close", (value) => resolve(value ?? 1));
+    child.once("error", () => resolve(1));
+  });
   const scanner = new StreamScanner();
   const failures: string[] = [];
   let line = 0;
@@ -80,9 +86,7 @@ async function scanBlob(
     for (const marker of result.markers) failures.push(`${safePath(path)}:${line}: marker`);
   }
   for (const marker of scanner.flush()) failures.push(`${safePath(path)}:${line || 1}: marker`);
-  const status = await new Promise<number>((resolve) =>
-    child.on("close", (code) => resolve(code ?? 1)),
-  );
+  const status = await closed;
   if (status !== 0) fail("the tree could not be read");
   return failures;
 }

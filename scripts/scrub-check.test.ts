@@ -202,6 +202,24 @@ test("range scan completes while per-file lookups await inside the diff read", (
   expect(scan.stdout).toContain("key.txt:1: token");
 });
 
+test("child close listeners attach before the first read, so a fast exit cannot strand a scan", () => {
+  const cases = [
+    { file: "scrub-check-main.ts", fn: "async function commitHasExactLine" },
+    { file: "tree-check.ts", fn: "async function scanBlob" },
+  ];
+  for (const { file, fn } of cases) {
+    const source = readFileSync(join(ROOT, "scripts", file), "utf8");
+    const start = source.indexOf(fn);
+    expect(start).toBeGreaterThanOrEqual(0);
+    const body = source.slice(start);
+    const listen = body.indexOf('("close"');
+    const drain = body.indexOf("for await");
+    expect(listen).toBeGreaterThanOrEqual(0);
+    expect(drain).toBeGreaterThanOrEqual(0);
+    expect(listen).toBeLessThan(drain);
+  }
+});
+
 test("C3 --files decodes nested and cut-off JSON transcript values", () => {
   const repo = initRepo();
   const path = join(repo, "session.jsonl");
