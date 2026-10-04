@@ -1,0 +1,389 @@
+# Every test skip, on both systems, in one list: scripts/skip-check.ts holds each
+# observed skip against this file, and a skip it does not find here fails the check.
+# An entry names the test file, the test's full name (its describes outermost first,
+# joined with " > ", then the test itself), why it skips, and the systems it skips on
+# ("linux", "darwin", or both).
+
+[[skip]]
+file = "scripts/landing.test.ts"
+name = "anything-to-land > AH4: a raw-byte path answers without a traceback"
+reason = "APFS cannot hold a file name that is not valid UTF-8"
+systems = ["darwin"]
+
+[[skip]]
+file = "scripts/launch.test.ts"
+name = "negative controls > parity: an echo in the file reaches stdout and the full env reaches the harness"
+reason = "BASE's script refuses python below 3.11 (tomllib), which is not runnable on this machine"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/launch.test.ts"
+name = "negative controls > parity: a printed NUL byte is file output, never a handed variable"
+reason = "BASE's script refuses python below 3.11 (tomllib), which is not runnable on this machine"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/launch.test.ts"
+name = "negative controls > parity: exit 0 in the file exits 0 without launching"
+reason = "BASE's script refuses python below 3.11 (tomllib), which is not runnable on this machine"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/launch.test.ts"
+name = "negative controls > parity: exec /bin/true in the file exits 0 without launching"
+reason = "BASE's script refuses python below 3.11 (tomllib), which is not runnable on this machine"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/launch.test.ts"
+name = "negative controls > parity: file output on stderr reaches the launch's stderr"
+reason = "BASE's script refuses python below 3.11 (tomllib), which is not runnable on this machine"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/launch.test.ts"
+name = "negative controls > parity: a file that unsets everything hands on the emptied environment"
+reason = "BASE's script refuses python below 3.11 (tomllib), which is not runnable on this machine"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/launch.test.ts"
+name = "negative controls > parity: a roughly 840 KB environment launches whole"
+reason = "BASE's script refuses python below 3.11 (tomllib), which is not runnable on this machine"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/launch.test.ts"
+name = "negative controls > parity: a file that unsets PATH applies instead of ignored"
+reason = "BASE's script refuses python below 3.11 (tomllib), which is not runnable on this machine"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/launch.test.ts"
+name = "negative controls > parity: a file that empties PATH applies instead of ignored"
+reason = "BASE's script refuses python below 3.11 (tomllib), which is not runnable on this machine"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/launch.test.ts"
+name = "negative controls > a file that exports a variable hands it to the harness"
+reason = "BASE's script refuses python below 3.11 (tomllib), which is not runnable on this machine"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/launch.test.ts"
+name = "negative controls > a file that unsets everything but PATH hands the harness no trace of it"
+reason = "BASE's script refuses python below 3.11 (tomllib), which is not runnable on this machine"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/launch.test.ts"
+name = "negative controls > a harness name holding $(...) is refused as not on PATH on both sides, and runs nothing"
+reason = "BASE's script refuses python below 3.11 (tomllib), which is not runnable on this machine"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/launch.test.ts"
+name = "negative controls > parity: without an env file the harness's full environment matches BASE, PWD naming the worktree"
+reason = "BASE's script refuses python below 3.11 (tomllib), which is not runnable on this machine"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/launch.test.ts"
+name = "negative controls > parity: a prompt holding \\xff\\xfe and NUL reaches stdin byte for byte on both sides"
+reason = "BASE's script refuses python below 3.11 (tomllib), which is not runnable on this machine"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/launch.test.ts"
+name = "negative controls > parity: a prompt holding \\xff\\xfe reaches argv byte for byte, trailing newlines stripped, on both sides"
+reason = "BASE's script refuses python below 3.11 (tomllib), which is not runnable on this machine"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/launch.test.ts"
+name = "negative controls > parity: with an env file the prompt still reaches argv byte for byte and the file applies"
+reason = "BASE's script refuses python below 3.11 (tomllib), which is not runnable on this machine"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/launch.test.ts"
+name = "bug review forms > a resume's check and harness match main's PWD, OLDPWD and SHLVL"
+reason = "python3 runs BASE's pinned script for the parity comparison and cannot run here"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/launch.test.ts"
+name = "confinement battery: every AC2 and AC3 item unconfined and confined > the gate: confined"
+reason = "the confinement mechanism does not start on this machine"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/launch.test.ts"
+name = "confinement battery: every AC2 and AC3 item unconfined and confined > a commit in its own worktree: confined"
+reason = "the confinement mechanism does not start on this machine"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/launch.test.ts"
+name = "confinement battery: every AC2 and AC3 item unconfined and confined > a write outside its worktree: confined"
+reason = "the confinement mechanism does not start on this machine"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/launch.test.ts"
+name = "confinement battery: every AC2 and AC3 item unconfined and confined > a network reach: unconfined"
+reason = "the probe is a python3 one-liner and python3 is not runnable here"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/launch.test.ts"
+name = "confinement battery: every AC2 and AC3 item unconfined and confined > a network reach: confined"
+reason = "no runnable python3, or the confinement mechanism does not start on this machine"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/launch.test.ts"
+name = "confinement battery: every AC2 and AC3 item unconfined and confined > a Unix socket connection: unconfined"
+reason = "the probe is a python3 one-liner and python3 is not runnable here"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/launch.test.ts"
+name = "confinement battery: every AC2 and AC3 item unconfined and confined > a Unix socket connection: confined"
+reason = "no runnable python3, or the confinement mechanism does not start on this machine"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/launch.test.ts"
+name = "confinement battery: every AC2 and AC3 item unconfined and confined > a consistent /proc: unconfined"
+reason = "the probe reads Linux's /proc, which macOS does not have"
+systems = ["darwin"]
+
+[[skip]]
+file = "scripts/launch.test.ts"
+name = "confinement battery: every AC2 and AC3 item unconfined and confined > a consistent /proc: confined"
+reason = "the probe reads Linux's /proc, or the confinement mechanism does not start here"
+systems = ["darwin"]
+
+[[skip]]
+file = "scripts/launch.test.ts"
+name = "confinement battery: every AC2 and AC3 item unconfined and confined > a host device node: unconfined"
+reason = "the probe needs Linux's /dev/shm, which macOS does not have"
+systems = ["darwin"]
+
+[[skip]]
+file = "scripts/launch.test.ts"
+name = "confinement battery: every AC2 and AC3 item unconfined and confined > a host device node: confined"
+reason = "the probe needs Linux's /dev/shm, or the confinement mechanism does not start here"
+systems = ["darwin"]
+
+[[skip]]
+file = "scripts/launch.test.ts"
+name = "confinement battery: every AC2 and AC3 item unconfined and confined > signalling a process started outside: confined"
+reason = "the confinement mechanism does not start on this machine"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/launch.test.ts"
+name = "confinement battery: every AC2 and AC3 item unconfined and confined > signalling a process started outside: still running afterwards"
+reason = "the confinement mechanism does not start on this machine"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/launch.test.ts"
+name = "confinement battery: every AC2 and AC3 item unconfined and confined > signalling a process the lane started: confined"
+reason = "the confinement mechanism does not start on this machine"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/launch.test.ts"
+name = "confinement battery: every AC2 and AC3 item unconfined and confined > kill 0 from inside: unconfined"
+reason = "the group-signal probe is built on setsid(1) and Linux's process groups"
+systems = ["darwin"]
+
+[[skip]]
+file = "scripts/launch.test.ts"
+name = "confinement battery: every AC2 and AC3 item unconfined and confined > kill 0 from inside: confined"
+reason = "the group-signal probe needs setsid(1) and Linux's process groups, or confinement does not start here"
+systems = ["darwin"]
+
+[[skip]]
+file = "scripts/local.test.ts"
+name = "positive controls > a 0xff byte in a title refuses the ticket on both sides, as BASE does"
+reason = "the replay needs an extractable BASE local.sh and a python3 that runs"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/local.test.ts"
+name = "negative controls: nothing is written > a comment that is not UTF-8 exits 1"
+reason = "raw non-UTF-8 argv is only tellable through /proc/self/cmdline, which macOS lacks"
+systems = ["darwin"]
+
+[[skip]]
+file = "scripts/local.test.ts"
+name = "negative controls: nothing is written > an actor that is not UTF-8 exits 1"
+reason = "raw non-UTF-8 argv is only tellable through /proc/self/cmdline, which macOS lacks"
+systems = ["darwin"]
+
+[[skip]]
+file = "scripts/local.test.ts"
+name = "negative controls: nothing is written > create with a title that is not UTF-8 exits 1"
+reason = "raw non-UTF-8 argv is only tellable through /proc/self/cmdline, which macOS lacks"
+systems = ["darwin"]
+
+[[skip]]
+file = "scripts/local.test.ts"
+name = "negative controls: nothing is written > title that is not UTF-8 exits 1"
+reason = "raw non-UTF-8 argv is only tellable through /proc/self/cmdline, which macOS lacks"
+systems = ["darwin"]
+
+[[skip]]
+file = "scripts/local.test.ts"
+name = "fetch-proxy snapshot regression > restoreEnv leaves fetch direct"
+reason = "a proxy is set in this environment, so directness was not compared"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/log-action.test.ts"
+name = "positive controls > the separator escaped and the byte dropped"
+reason = "raw non-UTF-8 argv is only tellable through /proc/self/cmdline, which macOS lacks"
+systems = ["darwin"]
+
+[[skip]]
+file = "scripts/log-action.test.ts"
+name = "positive controls > the damage dropped and the legitimate character kept"
+reason = "raw non-UTF-8 argv is only tellable through /proc/self/cmdline, which macOS lacks"
+systems = ["darwin"]
+
+[[skip]]
+file = "scripts/log-action.test.ts"
+name = "positive controls > the decoder matches iconv -c on 300 seeded cases"
+reason = "the differential pins glibc's iconv: macOS ships libiconv, or iconv is missing"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/probe-confine.test.ts"
+name = "the probe says ready, partial or unavailable > a bwrap is vetted only on a root-owned chain"
+reason = "this machine's system directories are not root-owned, so the vetting chain cannot pass"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/review-round.test.ts"
+name = "negative controls > a round started before the machine restarted is not waited on"
+reason = "the machine reports no boot id from either source"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/review-round.test.ts"
+name = "negative controls > a timeout whose degrade line cannot be written exits 4, and says what was not recorded"
+reason = "root writes anywhere, so the refusal could not be produced"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/run-meta.test.ts"
+name = "pin lock beside the bash flow > an empty .pin.lock still flocked by the bash flow is waited on, not stolen"
+reason = "flock(1) is not installed, so the bash flow's holder cannot exist"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/tool-faults.test.ts"
+name = "negative controls > folding parity: BASE and port harvests agree on ids and drafts, ß/İ/ς alike"
+reason = "python3 runs BASE's pinned script for the parity comparison and cannot run here"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/tool-faults.test.ts"
+name = "negative controls > unicode primitives: BASE and port harvests agree, email/digits/ſßİ alike"
+reason = "python3 runs BASE's pinned script for the parity comparison and cannot run here"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/tool-faults.test.ts"
+name = "negative controls > the stub tracker search folds as BASE's stub does, ß/İ/ς alike"
+reason = "python3 runs BASE's pinned script for the parity comparison and cannot run here"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/tool-faults.test.ts"
+name = "negative controls > the planted-marker search matches grep -qiF marker for marker, ß/İ/ς alike"
+reason = "python3 runs BASE's pinned script for the parity comparison and cannot run here"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/turnpikes.test.ts"
+name = "negative controls: a run's legs > an unreadable brief.md names the read error"
+reason = "this user reads every file, so no denial could be produced"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/verify-examples.test.ts"
+name = "negative controls > the self-test passes from a path with a space"
+reason = "POSTMASTER_SPACED_DONE is set: this is the nested run from a path with a space"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/verify-examples.test.ts"
+name = "#! line splitting > a quoted #! program splits as shlex splits, and runs"
+reason = "/bin/echo is not here, so quoted interpreters were not compared"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/verify-examples.test.ts"
+name = "#! line splitting > an unbalanced #! quote fails as BASE's shlex raises"
+reason = "/bin/echo is not here, so quoted interpreters were not compared"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/verify-journey.test.ts"
+name = "negative controls > step matching folds as BASE's norm does, ß/İ/ς alike"
+reason = "python3 cannot run, or BASE's script cannot be extracted, so the fold was not compared"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/verify-journey.test.ts"
+name = "negative controls > the self-test passes from a path with a space"
+reason = "POSTMASTER_SPACED_DONE is set: this is the nested run from a path with a space"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/verify-library.test.ts"
+name = "negative controls > the self-test passes from a path with a space"
+reason = "POSTMASTER_SPACED_DONE is set: this is the nested run from a path with a space"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/wait-for-markers.test.ts"
+name = "negative controls > a reader that cannot see its own planted marker stops the wait"
+reason = "root writes anywhere, so the reader could not be blocked"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/lib/confine.test.ts"
+name = "confinement table > the linux wrap binds the root before mounting the fresh /proc"
+reason = "the bwrap wrap's flags are Linux's; the Seatbelt wrap takes a different shape"
+systems = ["darwin"]
+
+[[skip]]
+file = "scripts/lib/confine.test.ts"
+name = "confinement table > the linux wrap keeps the host device tree"
+reason = "the bwrap wrap's flags are Linux's; the Seatbelt wrap takes a different shape"
+systems = ["darwin"]
+
+[[skip]]
+file = "scripts/lib/confine.test.ts"
+name = "confinement table > the linux wrap starts a new session"
+reason = "the bwrap wrap's flags are Linux's; the Seatbelt wrap takes a different shape"
+systems = ["darwin"]
+
+[[skip]]
+file = "scripts/lib/confine.test.ts"
+name = "confinement table > startCheck agrees with a real no-op through the wrap"
+reason = "the confinement mechanism does not start on this machine"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/lib/confine.test.ts"
+name = "confinement table > a confined child can signal a process it started itself"
+reason = "the confinement mechanism does not start on this machine"
+systems = ["linux", "darwin"]
