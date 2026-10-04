@@ -12,7 +12,10 @@
 // wakes the postmaster instead.
 //
 //   DISPATCH  the leg is done and its hand-off passes handoff-check.sh: dispatch the next leg
-//             turnpikes.sh legs lists, through `host.sh leg launch` (Stage C). The thread id
+//             turnpikes.sh legs lists, through `host.sh leg launch` (Stage C) — but never
+//             while `walls.sh open <dispatch>` exits 1: an unruled provider wall stops the
+//             next leg, and the run is named with the open walls as the reason instead (D8).
+//             The thread id
 //             lands in the attempt record when the attempt ends, never at dispatch. A hand-off
 //             that fails, a turnpikes.sh legs that exits non-zero, no next leg after the ship
 //             leg, or a launch it cannot complete are steps it could not complete: they wake
@@ -25,8 +28,15 @@
 //             and survives a restart). A start that fails spends no retry: the count is
 //             restored and the refusal is logged. A fourth such end, a non-transient end, or
 //             a resume it cannot complete wakes the postmaster.
+//   RULE      when `.wall-pause` marks the escalation as a pause for a provider wall and
+//             `walls.sh open` exits 0 — every wall ruled — the pause is delivered here:
+//             `.wall-pause` and `.escalation-ready` come off and the leg resumes through
+//             `host.sh leg resume` with a prompt naming every wall's ruling, logged with
+//             "the watcher took it". A pause still open, or a delivery it cannot make, wakes
+//             the postmaster.
 //
-// Everything that needs judgment still wakes the postmaster: RULE (an escalation), GATE (a
+// Everything that needs judgment still wakes the postmaster: WALL (an untold provider wall),
+// RULE (an escalation), GATE (a
 // ship card), READ (a checkpoint card), SPEC (a spec package), ASK (a recorded refusal or
 // pre-thread exit, or a wall on the fallback), TAKEOVER (a recorded wall on the primary),
 // INSPECT (a stall, or an attempt without its record), and any step the watcher could not
