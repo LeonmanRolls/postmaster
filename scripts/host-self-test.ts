@@ -19,7 +19,12 @@ import {
 } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { scriptsDir } from "./lib/paths.ts";
-import { processCommandLine, processInfo, processStart, processState } from "./lib/process-state.ts";
+import {
+  processCommandLine,
+  processInfo,
+  processStart,
+  processState,
+} from "./lib/process-state.ts";
 import { pyWords } from "./lib/text.ts";
 
 const HERE = scriptsDir(import.meta);
@@ -786,7 +791,9 @@ async function setup(
 function shellQuote(value: string): string {
   return `'${value.replace(/'/gu, "'\\''")}'`;
 }
-async function makeHarness(root: string): Promise<{ sys: string; stubs: string; paneNoBun: string }> {
+async function makeHarness(
+  root: string,
+): Promise<{ sys: string; stubs: string; paneNoBun: string }> {
   const bin = join(root, "bin"),
     sys = join(root, "sys"),
     paneNoBun = join(root, "pane-no-bun");
@@ -1290,7 +1297,11 @@ export async function runControls(): Promise<number> {
       { CALLER_VAR: "v", HERDR_PANE_ID: "caller-pane", TMUX_PANE: "%9", EMIT_SLEEP: "2" },
     );
     const probePath = join(logs, "n3.out");
-    for (let i = 0; i < 40 && (!existsSync(probePath) || !readFileSync(probePath, "utf8").includes("from=")); i++)
+    for (
+      let i = 0;
+      i < 40 && (!existsSync(probePath) || !readFileSync(probePath, "utf8").includes("from="));
+      i++
+    )
       await sleep(50);
     const probeText = readFileSync(probePath, "utf8");
     await pass(
@@ -1583,9 +1594,7 @@ export async function runControls(): Promise<number> {
     const procStart = (pid: string): string => processStart(Number(pid)) ?? "";
     const startedSeconds = (pid: string) => {
       const start = procStart(pid);
-      return /^\d+$/u.test(start)
-        ? bootSeconds + Number(start) / ticks
-        : Date.parse(start) / 1000;
+      return /^\d+$/u.test(start) ? bootSeconds + Number(start) / ticks : Date.parse(start) / 1000;
     };
     const record = (pid: string) => join(launchDir, pid);
     const stale = spawn("sleep", ["60"], { detached: true, stdio: "ignore" });
@@ -1953,7 +1962,8 @@ export async function runControls(): Promise<number> {
     const noBunPaneOut = join(stub, `pane-${noBunPane}.out`);
     for (
       let i = 0;
-      i < 40 && (!existsSync(noBunPaneOut) || !readFileSync(noBunPaneOut, "utf8").includes("says: step one"));
+      i < 40 &&
+      (!existsSync(noBunPaneOut) || !readFileSync(noBunPaneOut, "utf8").includes("says: step one"));
       i++
     )
       await sleep(50);
@@ -1976,11 +1986,7 @@ export async function runControls(): Promise<number> {
       `${noBunHerdr.out}\n${paneText}`,
     );
     await marker(markerPath("h-bunless"), 15);
-    for (
-      let i = 0;
-      i < 40 && noBunPane in json(join(stub, "herdr.json"), { panes: {} }).panes;
-      i++
-    )
+    for (let i = 0; i < 40 && noBunPane in json(join(stub, "herdr.json"), { panes: {} }).panes; i++)
       await sleep(50);
     const doneHerdrCalls = readCalls("herdr");
     await pass(
@@ -2257,7 +2263,17 @@ export async function runControls(): Promise<number> {
     console.log("run, stop and close, tmux (stub)");
     resetHarness(root);
     const tmuxLive = execHost(
-      ["run", f.name, worktree, "--out", "../logs/t-live.out", "--marker", "../logs/t-live.done", "--", "./fixed.sh"],
+      [
+        "run",
+        f.name,
+        worktree,
+        "--out",
+        "../logs/t-live.out",
+        "--marker",
+        "../logs/t-live.done",
+        "--",
+        "./fixed.sh",
+      ],
       stubs,
       f.caller,
       {
@@ -2269,7 +2285,8 @@ export async function runControls(): Promise<number> {
     const livePaneOut = join(stub, "win-1.out");
     for (
       let i = 0;
-      i < 40 && (!existsSync(livePaneOut) || !readFileSync(livePaneOut, "utf8").includes("step one"));
+      i < 40 &&
+      (!existsSync(livePaneOut) || !readFileSync(livePaneOut, "utf8").includes("step one"));
       i++
     )
       await sleep(50);
@@ -2286,11 +2303,7 @@ export async function runControls(): Promise<number> {
       `${tmuxLive.out}\n${JSON.stringify(liveTmuxState)}\n${liveTmuxPane}`,
     );
     await marker(markerPath("t-live"), 15);
-    for (
-      let i = 0;
-      i < 40 && "@1" in json(join(stub, "tmux.json"), { windows: {} }).windows;
-      i++
-    )
+    for (let i = 0; i < 40 && "@1" in json(join(stub, "tmux.json"), { windows: {} }).windows; i++)
       await sleep(50);
     const doneTmuxState = json(join(stub, "tmux.json"), { windows: {} });
     await pass(
@@ -6443,13 +6456,17 @@ export async function live(): Promise<void> {
           "../logs/l6.done",
           "--",
           "./probe.sh",
-      ],
-      f.caller,
-      root,
-      { EMIT_SLEEP: "2" },
-    );
+        ],
+        f.caller,
+        root,
+        { EMIT_SLEEP: "2" },
+      );
       const l6Path = join(f.logs, "l6.out");
-      for (let i = 0; i < 40 && (!existsSync(l6Path) || !readFileSync(l6Path, "utf8").includes("from=")); i++)
+      for (
+        let i = 0;
+        i < 40 && (!existsSync(l6Path) || !readFileSync(l6Path, "utf8").includes("from="));
+        i++
+      )
         await sleep(50);
       const probe = readFileSync(l6Path, "utf8");
       const probePid = Number(field(probe, "pid"));

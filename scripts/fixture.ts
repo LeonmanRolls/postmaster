@@ -338,10 +338,14 @@ export function hidden(
   ticket: string,
   app: string,
 ): { passed: boolean; detail: string; out: string } {
-  const r = sh([process.execPath, "test", "--timeout", "120000", "./"], join(TICKETS, ticket, "hidden"), {
-    ...(process.env as Record<string, string>),
-    FIXTURE_APP: app,
-  });
+  const r = sh(
+    [process.execPath, "test", "--timeout", "120000", "./"],
+    join(TICKETS, ticket, "hidden"),
+    {
+      ...(process.env as Record<string, string>),
+      FIXTURE_APP: app,
+    },
+  );
   const counts: Record<string, number> = {};
   for (const m of (r.out ?? "").matchAll(HIDDEN_RE)) {
     counts[m[2]!] = parseInt(digitValue(m[1]!), 10);

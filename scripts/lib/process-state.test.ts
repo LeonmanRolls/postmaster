@@ -1,5 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { chmodSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { processInfo, processStart, processState, processTable } from "./process-state.ts";
@@ -33,7 +41,10 @@ function processProbeViolations(source: string): string[] {
   return checks.filter(([, pattern]) => pattern.test(source)).map(([name]) => name);
 }
 
-async function startZombieChild(): Promise<{ parent: ReturnType<typeof Bun.spawn>; childPid: number }> {
+async function startZombieChild(): Promise<{
+  parent: ReturnType<typeof Bun.spawn>;
+  childPid: number;
+}> {
   const parent = Bun.spawn(["sh", "-c", "sleep 0.2 & echo $!; exec sleep 30"], {
     stdout: "pipe",
     stderr: "ignore",
@@ -92,7 +103,10 @@ describe("portable process state", () => {
         await parent.exited;
       }
       const deadline = Date.now() + 5000;
-      while (Date.now() < deadline && withProcRoot(root, () => processState(childPid)) !== "absent") {
+      while (
+        Date.now() < deadline &&
+        withProcRoot(root, () => processState(childPid)) !== "absent"
+      ) {
         await Bun.sleep(50);
       }
       expect(withProcRoot(root, () => processState(childPid))).toBe("absent");
@@ -131,7 +145,9 @@ describe("portable process state", () => {
   });
 
   test("process probes live in this shared module", () => {
-    const sources = scriptFiles(SCRIPTS).filter((path) => path !== join(SCRIPTS, "lib/process-state.ts"));
+    const sources = scriptFiles(SCRIPTS).filter(
+      (path) => path !== join(SCRIPTS, "lib/process-state.ts"),
+    );
     const paths = sources.map((path) => path.slice(SCRIPTS.length + 1));
     expect(paths).toContain("host-self-test.ts");
     expect(paths).toContain("host.ts");

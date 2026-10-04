@@ -851,7 +851,7 @@ describe("score: a recorded run that meets every check scores clean", () => {
     const repo = join(tmp, `clean-${first}`, "repo");
     const dispatch = join(repo, ".postmaster", "runs", "7");
     const path = scorePath(["jq"]);
-    expect(run("bash", ["-c", 'command -v jq'], { env: { PATH: path } }).code).toBe(1);
+    expect(run("bash", ["-c", "command -v jq"], { env: { PATH: path } }).code).toBe(1);
     const clean = runScore(dispatch, repo, { ...process.env, PATH: path });
     expect(clean.code).toBe(0);
     const lines = clean.out.trim().split("\n");
@@ -872,7 +872,9 @@ describe("score: a recorded run that meets every check scores clean", () => {
 
   test("score's platform line names the OS, release, architecture and tool versions", () => {
     const result = bgResults.get(`clean-${first}`);
-    const git = run("git", ["--version"]).out.trim().replace(/^git version\s+/u, "");
+    const git = run("git", ["--version"])
+      .out.trim()
+      .replace(/^git version\s+/u, "");
     expect(result?.out.split("\n", 1)[0]).toBe(
       `platform: ${osType()} ${release()} ${machine()}, bun ${Bun.version}, git ${git}`,
     );

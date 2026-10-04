@@ -538,7 +538,8 @@ function startOf(pid: number): string {
 function processes(): Map<number, ProcessInfo> {
   const table = new Map<number, ProcessInfo>();
   for (const [pid, info] of sharedProcessTable()) {
-    if (info.state === "live" && info.start) table.set(pid, { group: info.group, start: info.start });
+    if (info.state === "live" && info.start)
+      table.set(pid, { group: info.group, start: info.start });
   }
   return table;
 }

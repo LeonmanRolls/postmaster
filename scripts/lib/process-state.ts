@@ -93,16 +93,11 @@ function parseLinuxProcess(pid: number, stat: ProcStat): ProcessInfo | null {
 }
 
 function psProcessInfo(pid: number): ProcessInfo | null {
-  const result = run(
-    "ps",
-    ["-o", "pid=,ppid=,pgid=,sid=,stat=,lstart=,comm=", "-p", String(pid)],
-    { env: { LC_ALL: "C" } },
-  );
+  const result = run("ps", ["-o", "pid=,ppid=,pgid=,sid=,stat=,lstart=,comm=", "-p", String(pid)], {
+    env: { LC_ALL: "C" },
+  });
   const fields = result.out.trim().split(/\s+/u);
-  if (
-    fields.length < 11 ||
-    !fields.slice(0, 4).every((field) => /^[0-9]+$/u.test(field))
-  )
+  if (fields.length < 11 || !fields.slice(0, 4).every((field) => /^[0-9]+$/u.test(field)))
     return null;
   return {
     pid: Number(fields[0]),
@@ -137,17 +132,12 @@ export function processTable(): Map<number, ProcessInfo> {
     // A missing or non-proc root forces the portable ps path used on macOS.
   }
 
-  const result = run(
-    "ps",
-    ["-A", "-o", "pid=,ppid=,pgid=,sid=,stat=,lstart=,comm="],
-    { env: { LC_ALL: "C" } },
-  );
+  const result = run("ps", ["-A", "-o", "pid=,ppid=,pgid=,sid=,stat=,lstart=,comm="], {
+    env: { LC_ALL: "C" },
+  });
   for (const line of result.out.split(/\r?\n/u)) {
     const fields = line.trim().split(/\s+/u, 11);
-    if (
-      fields.length !== 11 ||
-      !fields.slice(0, 4).every((field) => /^[0-9]+$/u.test(field))
-    )
+    if (fields.length !== 11 || !fields.slice(0, 4).every((field) => /^[0-9]+$/u.test(field)))
       continue;
     table.set(Number(fields[0]), {
       pid: Number(fields[0]),
