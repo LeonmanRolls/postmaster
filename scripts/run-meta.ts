@@ -469,8 +469,9 @@ function checkModeAgreement(dispatch: string): Outcome {
       const rest = lines.slice(start + 1);
       const end = rest.findIndex((line) => /^##[ \t]+/u.test(line));
       const team = end < 0 ? rest : rest.slice(0, end);
-      const match = /^mode:[ \t]*(\S+)[ \t]*$/imu.exec(team.join("\n"));
-      if (match) waybill = match[1];
+      const modeLine = team.find((line) => line.startsWith("mode:"));
+      const value = modeLine?.slice("mode:".length).trim();
+      if (value) waybill = value;
     }
   } catch {
     // Old runs can predate a brief or the mode line; the two absent values agree.
