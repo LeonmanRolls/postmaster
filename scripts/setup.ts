@@ -131,6 +131,10 @@ function hasKey(file: string, key: string): boolean {
 
 // --- entry -----------------------------------------------------------------------------------
 const argv = process.argv.slice(2);
+// Launch caps are applied only where postmaster can cap a launch: Linux, as
+// systemdCapability() reads it (uname -s on PATH). Everywhere else setup neither
+// asks about limits nor lists them, and says once that launches run without them.
+const onLinux = run("uname", ["-s"]).out.replace(/\n+$/u, "") === "Linux";
 let DRY = 0;
 let ANSWERS = "";
 let CONFIG = join(process.env.HOME ?? "~", ".postmaster", "config.toml");
@@ -172,7 +176,9 @@ postmaster.model
 postmaster.effort?         (none)
 postmaster.env_file?       (none)
 max_runs                   2                  concurrent runs per project
-poll_seconds               120                postmaster poll interval
+poll_seconds               120                postmaster poll interval${
+      onLinux
+        ? `
 limits.memory_max          8G                 default memory cap per launch (K, M, G or T)
 limits.tasks_max           512                default process cap per launch
 limits.lane.memory_max?    (default)          lane memory cap override
@@ -180,7 +186,9 @@ limits.lane.tasks_max?     (default)          lane process cap override
 limits.coachman.memory_max? (default)         coachman memory cap override
 limits.coachman.tasks_max? (default)         coachman process cap override
 limits.reviewer.memory_max? (default)         reviewer memory cap override
-limits.reviewer.tasks_max? (default)          reviewer process cap override
+limits.reviewer.tasks_max? (default)          reviewer process cap override`
+        : ""
+    }
 tracker                    github             github, plane, local or other
 confine                    off                lane confinement, on or off (see run probe-confine)
 plane.url                  https://api.plane.so   plane only
@@ -371,38 +379,48 @@ const MR = ask("  concurrent runs per project", "2", "max_runs", opts);
 const PS = ask("  postmaster poll interval, seconds", "120", "poll_seconds", opts);
 
 console.log("");
-console.log("== Launch limits: per-launch memory and process caps when the host supports them. ==");
-const LM = ask("  default memory cap (number plus K, M, G or T)", "8G", "limits.memory_max", opts);
-if (!/^[1-9][0-9]*[KMGT]$/u.test(LM))
-  die("setup: memory_max must be a positive whole number followed by K, M, G or T", 1);
-const LT = ask("  default process cap (whole number)", "512", "limits.tasks_max", opts);
-if (!validTasks(LT)) die("setup: tasks_max must be a whole number from 1 to 2147483647", 1);
+let LM = "8G";
+let LT = "512";
 let LIMIT_ROLE_TABLES = "";
-for (const limitRole of ["lane", "coachman", "reviewer"]) {
-  const LR_MEM = ask(
-    `  ${limitRole} memory cap override (blank inherits the default)`,
-    "",
-    `limits.${limitRole}.memory_max?`,
-    opts,
+if (onLinux) {
+  console.log(
+    "== Launch limits: per-launch memory and process caps when the host supports them. ==",
   );
-  if (LR_MEM && !/^[1-9][0-9]*[KMGT]$/u.test(LR_MEM))
-    die(
-      `setup: limits.${limitRole}.memory_max must be a positive whole number followed by K, M, G or T`,
-      1,
+  LM = ask("  default memory cap (number plus K, M, G or T)", "8G", "limits.memory_max", opts);
+  if (!/^[1-9][0-9]*[KMGT]$/u.test(LM))
+    die("setup: memory_max must be a positive whole number followed by K, M, G or T", 1);
+  LT = ask("  default process cap (whole number)", "512", "limits.tasks_max", opts);
+  if (!validTasks(LT)) die("setup: tasks_max must be a whole number from 1 to 2147483647", 1);
+  for (const limitRole of ["lane", "coachman", "reviewer"]) {
+    const LR_MEM = ask(
+      `  ${limitRole} memory cap override (blank inherits the default)`,
+      "",
+      `limits.${limitRole}.memory_max?`,
+      opts,
     );
-  const LR_TASKS = ask(
-    `  ${limitRole} process cap override (blank inherits the default)`,
-    "",
-    `limits.${limitRole}.tasks_max?`,
-    opts,
-  );
-  if (LR_TASKS && !validTasks(LR_TASKS))
-    die(`setup: limits.${limitRole}.tasks_max must be a whole number from 1 to 2147483647`, 1);
-  if (LR_MEM || LR_TASKS) {
-    LIMIT_ROLE_TABLES += `\n[limits.${limitRole}]\n`;
-    if (LR_MEM) LIMIT_ROLE_TABLES += `memory_max = "${LR_MEM}"\n`;
-    if (LR_TASKS) LIMIT_ROLE_TABLES += `tasks_max = ${LR_TASKS}\n`;
+    if (LR_MEM && !/^[1-9][0-9]*[KMGT]$/u.test(LR_MEM))
+      die(
+        `setup: limits.${limitRole}.memory_max must be a positive whole number followed by K, M, G or T`,
+        1,
+      );
+    const LR_TASKS = ask(
+      `  ${limitRole} process cap override (blank inherits the default)`,
+      "",
+      `limits.${limitRole}.tasks_max?`,
+      opts,
+    );
+    if (LR_TASKS && !validTasks(LR_TASKS))
+      die(`setup: limits.${limitRole}.tasks_max must be a whole number from 1 to 2147483647`, 1);
+    if (LR_MEM || LR_TASKS) {
+      LIMIT_ROLE_TABLES += `\n[limits.${limitRole}]\n`;
+      if (LR_MEM) LIMIT_ROLE_TABLES += `memory_max = "${LR_MEM}"\n`;
+      if (LR_TASKS) LIMIT_ROLE_TABLES += `tasks_max = ${LR_TASKS}\n`;
+    }
   }
+} else {
+  // Nothing here can cap a launch, so setup asks no question about it, and its
+  // list of settings leaves the limit settings out with the questions.
+  console.log("launches on this system run without memory or process limits");
 }
 
 console.log("");
@@ -507,6 +525,11 @@ if (PWS) TRACKER_EXTRA = `url = "${PURL}"\nworkspace = "${PWS}"\nenv_file = "${P
 if (OTHER) TRACKER_EXTRA = `name = "${OTHER}"`;
 
 const dateStr = new Date().toISOString().slice(0, 10);
+// The list of settings matches the questions: the limit table appears only
+// where setup asked for it.
+const LIMITS_BLOCK = onLinux
+  ? `[limits]\nmemory_max = "${LM}"\ntasks_max = ${LT}\n${LIMIT_ROLE_TABLES}\n`
+  : "";
 const OUT = `# Written by scripts/run setup on ${dateStr}. Shape: config.example.toml.
 projects_roots = ${tomlList(ROOTS)}
 confine = "${CONFINE}"
@@ -521,11 +544,7 @@ postmaster = { harness = "${PH}", model = "${PM}"${roleExtra(PE, PEF)} }
 max_runs = ${MR}
 ${LENS_TABLE}
 
-[limits]
-memory_max = "${LM}"
-tasks_max = ${LT}
-${LIMIT_ROLE_TABLES}
-[postmaster]
+${LIMITS_BLOCK}[postmaster]
 poll_seconds = ${PS}
 
 [tracker]
