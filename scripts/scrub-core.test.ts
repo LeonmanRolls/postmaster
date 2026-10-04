@@ -113,6 +113,13 @@ test("private context finds concrete paths, machine names, network addresses, id
   expect(rules('join(home, "note.txt")')).toEqual([]);
   expect(rules("const session_id = process.env.SESSION_ID")).toEqual([]);
   expect(rules("/home/user/trial/home/note.txt")).toEqual([]);
+  expect(rules(joined("/home/", "some", "one/notes.txt"))).toEqual([]);
+  expect(rules(joined("url: https://paper", "s.example/edu/~", "blue", "jay/paper.pdf"))).toEqual(
+    [],
+  );
+  expect(rules(joined('{"thread_id":"', "123e4567-e89b-", "12d3-a456-426614174000", '"}'))).toEqual(
+    [],
+  );
   expect(rules("ssh host")).toEqual([]);
   expect(rules("a tailnet name may end in `.ts.net`.")).toEqual([]);
 });

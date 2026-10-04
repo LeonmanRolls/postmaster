@@ -115,7 +115,7 @@ const SECRET_KEY_ENDINGS = new Set(["email", "mail", "session"]);
 const SECRET_KEY_SUFFIXES = ["email", "session"];
 const SECRET_ID_ENDINGS = new Set(["id", "ids", "uuid", "guid"]);
 const PLACEHOLDER =
-  /^(?:user|username|host|hostname|example|test|fixture|placeholder|remote|node|server|machine|myhost|yourhost|examplehost|\*|\$USER|\$\{USER\}|<[^<>]*>)$/iu;
+  /^(?:user|username|host|hostname|example|test|fixture|placeholder|someone|remote|node|server|machine|myhost|yourhost|examplehost|\*|\$USER|\$\{USER\}|<[^<>]*>)$/iu;
 const SSH_PRIVATE_HEADER = "---- BEGIN SSH2 ENCRYPTED PRIV" + "ATE KEY ----";
 const KEY_HEADER = new RegExp(
   "-----BEGIN (?:[A-Z0-9 ]*PRIV" +
@@ -223,7 +223,11 @@ function kindForField(name: string): string | null {
     return "token";
   if (SECRET_KEY_ENDINGS.has(last) || SECRET_KEY_SUFFIXES.some((suffix) => flat.endsWith(suffix)))
     return "key";
-  if (SECRET_ID_ENDINGS.has(last)) return "account-id";
+  if (SECRET_ID_ENDINGS.has(last)) {
+    // Thread ids are run records, not private context; session ids stay.
+    if (parts.includes("thread")) return null;
+    return "account-id";
+  }
   return null;
 }
 
@@ -462,8 +466,9 @@ function tokenFindings(line: string, out: Finding[]): void {
 
 function privateFindings(line: string, out: Finding[]): void {
   if (!PRIVATE_SIGNAL.test(line)) return;
+  // A tilde user after a slash is a public URL segment, not a home folder.
   const path = new RegExp(
-    `(?<![\\p{L}\\p{N}_.$}~.>/@])(?:/home/|/Users/)([A-Za-z0-9._-]+)(?:/[^${PY_S_CLASS}"'<>),;]*)?|(?<![\\p{L}\\p{N}_.$}~.>/@])/root/[A-Za-z0-9._-]+|(?<![\\p{L}\\p{N}_])~([A-Za-z0-9._-]+)/[^${PY_S_CLASS}"'<>),;]*|(?<![\\p{L}\\p{N}_])[A-Za-z]:\\\\Users\\\\([A-Za-z0-9._-]+)(?:\\\\[^${PY_S_CLASS}"'<>),;]*)?`,
+    `(?<![\\p{L}\\p{N}_.$}~.>/@])(?:/home/|/Users/)([A-Za-z0-9._-]+)(?:/[^${PY_S_CLASS}"'<>),;]*)?|(?<![\\p{L}\\p{N}_.$}~.>/@])/root/[A-Za-z0-9._-]+|(?<![\\p{L}\\p{N}_/])~([A-Za-z0-9._-]+)/[^${PY_S_CLASS}"'<>),;]*|(?<![\\p{L}\\p{N}_])[A-Za-z]:\\\\Users\\\\([A-Za-z0-9._-]+)(?:\\\\[^${PY_S_CLASS}"'<>),;]*)?`,
     "giu",
   );
   for (const m of line.matchAll(path)) {
@@ -538,7 +543,7 @@ function privateFindings(line: string, out: Finding[]): void {
   }
 
   const context = new RegExp(
-    `${BOUND_L}(?:account|org(?:anization)?s?|user|identity|credential|session|thread)s?${BOUND_R}`,
+    `${BOUND_L}(?:account|org(?:anization)?s?|user|identity|credential|session)s?${BOUND_R}`,
     "iu",
   ).test(line);
   if (context) {
@@ -556,7 +561,7 @@ function privateFindings(line: string, out: Finding[]): void {
   while ((field = FIELD_VALUE.exec(line)) !== null) {
     const name = pyLower(field.groups?.name ?? "").replace(/[-.]/gu, "_");
     if (
-      !/(?:account|org|organization|session|thread|credential|identity|user)_?(?:id|uuid|guid)$/u.test(
+      !/(?:account|org|organization|session|credential|identity|user)_?(?:id|uuid|guid)$/u.test(
         name,
       )
     )
