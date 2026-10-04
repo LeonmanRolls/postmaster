@@ -485,11 +485,14 @@ answers that. When a branch has no upstream, pass the branch itself: with nothin
 tracking it there is no fresher ref, and remote movement it does not track can be
 missed.
 
-Before every pull-request description or ticket comment written for this run, save the exact
-draft in a file and scan it with the run-pinned `<rt>/scripts/scrub-check.sh --pr-description
-<draft>` while `POSTMASTER_DETECTIONS_LOG=<dispatch>/detections.jsonl` is set. If it finds
-anything, reword the draft and scan it again; post only after exit 0. Markers are inert in
-posted text. This applies in every project and does not change that project's gate.
+Before every pull-request description written for this run, save the exact draft in a
+file and scan it with the run-pinned `<rt>/scripts/scrub-check.sh --pr-description <draft>`
+while `POSTMASTER_DETECTIONS_LOG=<dispatch>/detections.jsonl` is set. If it finds anything,
+reword the draft and scan it again; post only after exit 0. Do the same for every ticket
+comment: save the exact text and scan it with `<rt>/scripts/scrub-check.sh --pr-description
+<comment>` under the same log, reword on any finding, and post only after exit 0. Markers
+are inert in posted text. This applies in every project and does not change that project's
+gate.
 
 1. **Verify the card's claims against the code**, never against the card.
    `<tool>/scripts/landing.sh fresh --repo <repo> --default <branch> --ticket
