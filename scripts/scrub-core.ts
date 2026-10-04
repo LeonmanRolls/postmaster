@@ -142,11 +142,13 @@ const PATTERN_CODE = new RegExp(
   "u",
 );
 const TOKEN_SIGNAL =
+  // ASCII: token prefixes are fixed ASCII spellings; the boundary is on ASCII keywords.
   /(?:gh[pours]_|github_pat_|sk[_-](?:live|test)|sk-|xox|ya29\.|\bbearer\b|AKIA|ASIA|PRIVATE KEY|SSH2 ENCRYPTED|PuTTY-User-Key|AGE-SECRET-KEY|[:=])|^[A-Za-z0-9+/=]{20,}$/iu;
 const PRIVATE_SIGNAL =
+  // ASCII: ssh/scp/bearer are ASCII keywords; hosts match explicit classes.
   /\/(?:home|Users)\/|~\/|~[A-Za-z0-9._-]+\/|[A-Za-z]:\\|\b(?:ssh|scp)\s|(?:account|org(?:anization)?|session|thread|credential|identity|user)[_-]?(?:id|uuid|guid)\b|co-authored-by|generated-with|(?:generated|created|written|drafted)\s+(?:with|by)|\.(?:internal|local|lan|home|tailnet|intranet|private|corp|ts\.net)\b|(?<![0-9.])(?:[0-9]{1,3}\.){3}[0-9]{1,3}(?![0-9.])|[0-9a-f]{0,4}(?::[0-9a-f]{0,4}){2,7}|[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}|(?:org|acct|account|sess|ses|session)[_-][A-Za-z0-9]{6,}/iu;
 const PLAIN_LOWER_WORDS = /^[a-z ]+$/u;
-const PLAIN_SHAPE_CUE = /\b(?:ssh|scp|bearer)\b/iu;
+const PLAIN_SHAPE_CUE = /\b(?:ssh|scp|bearer)\b/iu; // ASCII: cue words are ASCII.
 const PLAIN_CUE_WORDS = new Set([
   "my",
   "our",
@@ -535,8 +537,8 @@ function privateFindings(line: string, out: Finding[]): void {
     if (value.length >= 6 && /[0-9]/u.test(value) && !ABSENT.test(value) && !/[(){}$]/u.test(value))
       add(out, start, start + value.length, "account-id", value);
   }
-  // ASCII: attribution labels are fixed English names and ASCII punctuation.
   for (const m of line.matchAll(
+    // ASCII: attribution labels are fixed English names and ASCII punctuation.
     /^\s*(?:Co-Authored-By:\s*(?:(?:OpenAI|Anthropic|GitHub|Google)\s+)?(?:Codex|ChatGPT|Claude|Copilot|Cursor|Gemini|GPT|OpenAI|Anthropic)\b|(?:Generated|Created|Written|Drafted)\s+(?:with|by)\s+(?:Anthropic|ChatGPT|Claude|Codex|Copilot|Cursor|Gemini|GPT|OpenAI)\b|generated-with\s*:)\s*.*$/giu,
   )) {
     add(out, m.index ?? 0, (m.index ?? 0) + m[0].length, "assistant-attribution", m[0]);

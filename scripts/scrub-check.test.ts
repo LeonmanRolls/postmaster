@@ -297,7 +297,7 @@ test("C4 --files and range scans find private-key body lines, even when changed 
   expect(shapes.status).toBe(1);
   const lines = new Set(
     shapes.stdout.split("\n").flatMap((line) => {
-      const match = /^\[redacted\]:(\d+): (?:token|dotenv)$/u.exec(line);
+      const match = /^\[redacted\]:([0-9]+): (?:token|dotenv)$/u.exec(line);
       return match ? [Number(match[1])] : [];
     }),
   );
@@ -524,7 +524,7 @@ test("C6 held-out personal-data results meet both recorded thresholds", () => {
     const scanned = runScript("scrub-check", ["--files", input], ROOT);
     const lines = new Set(
       scanned.stdout.split("\n").flatMap((line) => {
-        const match = /^\[redacted\]:(\d+): (.+)$/u.exec(line);
+        const match = /^\[redacted\]:([0-9]+): (.+)$/u.exec(line);
         return match && personalRules.has(match[2]!) ? [match[1]!] : [];
       }),
     );

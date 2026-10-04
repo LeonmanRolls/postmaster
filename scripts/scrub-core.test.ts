@@ -201,6 +201,7 @@ test("C23 every rule has three positive and negative fixtures and its disable co
     return joined("GB", String(98 - remainder).padStart(2, "0"), bank, digits);
   };
   const ssn = (suffix: string) => joined("392-84-61", suffix);
+  // ASCII: opaque ids are [A-Za-z0-9], so uppercasing is locale-free.
   const account = () => opaqueId().toUpperCase();
   const fixtures: Record<string, string[]> = {
     key: [
