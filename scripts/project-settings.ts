@@ -5,6 +5,8 @@
 //   run project-settings effective <repo> [<machine-config>]
 //                                             machine config with local role choices applied
 //   run project-settings ensure <repo>         create .postmaster/.gitignore, no settings
+//   run project-settings prepare-run-root <repo> create the postmaster run root and ignore rule
+//   run project-settings exclude-worktrees <repo> ignore the repo's .worktrees/ directory
 //   run project-settings write <repo> project|local [<toml-file>]
 //                                             validate, then write the agreed settings
 //
@@ -50,7 +52,7 @@ import {
 const HERE = scriptsDir(import.meta);
 const USAGE =
   "usage: run project-settings inspect|report <repo> | effective <repo> [<machine-config>]" +
-  " | ensure <repo> | write <repo> project|local [<toml-file>]";
+  " | ensure|prepare-run-root|exclude-worktrees <repo> | write <repo> project|local [<toml-file>]";
 
 // --- failure ----------------------------------------------------------------------------
 // Internal failures throw a branded value the entry point catches; anything else
@@ -800,6 +802,41 @@ export const ensureIgnore = (repo: string, quiet = false): void => {
   if (!quiet) console.log(`project-settings: ensured ${ignore}`);
 };
 
+export const prepareRunRoot = (repo: string): string => {
+  const root = settingsDir(repo);
+  ensureIgnore(repo, true);
+  const runs = join(root, "runs", "postmaster");
+  mkdirSync(runs, { recursive: true });
+  return runs;
+};
+
+export const excludeWorktrees = (repo: string): string => {
+  const top = run("git", ["-C", repo, "rev-parse", "--show-toplevel"]);
+  if (top.code !== 0) fail(`${repo} is not a git repository`);
+  const path = run("git", [
+    "-C",
+    top.out.trim(),
+    "rev-parse",
+    "--path-format=absolute",
+    "--git-path",
+    "info/exclude",
+  ]);
+  if (path.code !== 0) fail(`cannot locate the git info/exclude file for ${repo}`);
+  const exclude = path.out.trim();
+  let existing = "";
+  try {
+    existing = strictRead(exclude);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT")
+      fail(`cannot read ${exclude}: ${errText(error)}`);
+  }
+  if (!existing.split(/\r?\n/u).includes(".worktrees/")) {
+    const separator = existing !== "" && !existing.endsWith("\n") ? "\n" : "";
+    writeFileSync(exclude, `${existing}${separator}.worktrees/\n`);
+  }
+  return exclude;
+};
+
 export const writeProfile = (repo: string, layer: string, source: string): void => {
   if (layer !== "project" && layer !== "local") fail("write layer must be project or local");
   const d = settingsDir(repo);
@@ -864,6 +901,10 @@ const main = (): void => {
   const rest = argv.slice(1);
   if (cmd === "ensure" && rest.length === 1) {
     ensureIgnore(projectRoot(rest[0]!));
+  } else if (cmd === "prepare-run-root" && rest.length === 1) {
+    console.log(prepareRunRoot(projectRoot(rest[0]!)));
+  } else if (cmd === "exclude-worktrees" && rest.length === 1) {
+    excludeWorktrees(projectRoot(rest[0]!));
   } else if ((cmd === "inspect" || cmd === "report") && rest.length === 1) {
     const repo = projectRoot(rest[0]!);
     if (cmd === "report") report(repo);

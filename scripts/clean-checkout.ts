@@ -5,6 +5,8 @@
 //
 //   scripts/run clean-checkout <repo> <branch> <command> [<command>...]
 //
+//   scripts/run clean-checkout <repo> <branch> --files <command-file> [<command-file>...]
+//
 // Makes a detached git worktree of <branch> (a branch, tag, or commit) in a temporary
 // directory outside the project folder, populates its submodules where the branch has any,
 // runs each <command> there in turn through bash -e -o pipefail (the project check
@@ -24,7 +26,15 @@
 //                command is run), or cleanup residue left behind after passing commands
 //   exit 124     a command outlived its bound (its whole process group was killed)
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, lstatSync, mkdtempSync, realpathSync, rmSync, rmdirSync } from "node:fs";
+import {
+  existsSync,
+  lstatSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  rmdirSync,
+} from "node:fs";
 import { dirname, isAbsolute, join, relative, sep } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -242,11 +252,21 @@ export const cleanCheckout = async (
 if (import.meta.main) {
   const args = process.argv.slice(2);
   if (args.length < 3) {
-    process.stderr.write("usage: clean-checkout.ts <repo> <branch> <command> [<command>...]\n");
+    process.stderr.write(
+      "usage: clean-checkout.ts <repo> <branch> <command> [<command>...] | <repo> <branch> --files <command-file> [<command-file>...]\n",
+    );
     process.exitCode = 1;
   } else {
     try {
-      process.exitCode = (await cleanCheckout(args[0], args[1], ...args.slice(2))).exitCode;
+      const commands =
+        args[2] === "--files"
+          ? args.slice(3).map((path) => {
+              const command = readFileSync(path, "utf8");
+              if (command.trim() === "") throw new Error(`${path} contains no command`);
+              return command;
+            })
+          : args.slice(2);
+      process.exitCode = (await cleanCheckout(args[0], args[1], ...commands)).exitCode;
     } catch (error) {
       process.stderr.write(`clean-checkout: ${String(error)}\n`);
       process.exitCode = 1;

@@ -81,6 +81,38 @@ path = "scripts/launch.ts"
 holds = "the attempt phase: refused before preflight, started once the harness is callable"
 
 [[files]]
+path = "scripts/review-round.ts"
+holds = "the coachman's review-round cut, prompt preparation, launches and wait"
+
+[[files]]
+path = "scripts/cut-scratch.ts"
+holds = "review scratch teardown, cut and readiness checks"
+
+[[files]]
+path = "scripts/verify.ts"
+holds = "the snapshot checks and results the coachman records for each review round"
+
+[[files]]
+path = "scripts/reviewers.ts"
+holds = "the reviewer lanes resolved for each open review lens"
+
+[[files]]
+path = "scripts/review-findings.ts"
+holds = "bug review harvesting, degradation records and normalization"
+
+[[files]]
+path = "scripts/synthesis-shares.ts"
+holds = "the synthesis shares record and its run-log line"
+
+[[files]]
+path = "scripts/project-settings.ts"
+holds = "run-root preparation and worktree exclusion for a coachman run"
+
+[[files]]
+path = "scripts/runbook-host.ts"
+holds = "workhorse, postmaster and spec session launch details moved from the runbooks"
+
+[[files]]
 path = "scripts/fixture.ts"
 holds = "the fixture command the flow invokes; the fixture-copy mark new writes, and scoring a run from its records"
 

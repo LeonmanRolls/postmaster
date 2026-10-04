@@ -86,7 +86,7 @@ A health check. Run it before committing any change to the wiki.
 
 ```sh
 <tool>/scripts/run wiki-lint      # faults on stdout, exit 1 if any
-bun test scripts/wiki-lint.test.ts  # each check fails on its own fault; a clean tree passes
+<tool>/scripts/run test <tool>/scripts/wiki-lint.test.ts  # each check fails on its own fault; a clean tree passes
 ```
 
 **What the script checks.** The tests beside it have a failing case for every item here:

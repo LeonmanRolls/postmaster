@@ -2,9 +2,17 @@
 // each forced through stubbed tools on PATH and the probe's test seams. The same lookups
 // every time; a control that could have come out the other way.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { run } from "./lib/proc.ts";
 import {
   isSafeProfilePath,
@@ -18,6 +26,20 @@ const UBUNTU_2404 = 'ID=ubuntu\nVERSION_ID="24.04"\n';
 const DEBIAN_13 = 'ID=debian\nVERSION_ID="13"\n';
 
 let tmp = "";
+
+function rootOwnedChain(path: string): boolean {
+  let current = path;
+  for (;;) {
+    try {
+      if (statSync(current).uid !== 0) return false;
+    } catch {
+      return false;
+    }
+    const parent = dirname(current);
+    if (parent === current) return true;
+    current = parent;
+  }
+}
 
 beforeAll(() => {
   tmp = mkdtempSync(join(tmpdir(), "postmaster-confine-"));
@@ -224,7 +246,16 @@ describe("the probe says ready, partial or unavailable", () => {
   });
 
   test("a bwrap is vetted only on a root-owned chain", () => {
-    expect(isSecureBwrapPath("/bin/sh")).toBe(true);
+    const discovered = "/bin/sh";
+    let resolved = "";
+    try {
+      resolved = realpathSync(discovered);
+    } catch {
+      // The test below expects the same fail-closed result as production.
+    }
+    expect(isSecureBwrapPath(discovered)).toBe(
+      resolved !== "" && rootOwnedChain(dirname(discovered)) && rootOwnedChain(resolved),
+    );
     expect(isSecureBwrapPath(join(tmp, "missing-bwrap"))).toBe(false);
   });
 });

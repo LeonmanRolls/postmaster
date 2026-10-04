@@ -12,10 +12,12 @@ import { parseTomlText } from "./lib/data";
 import {
   asTable,
   effectiveConfig,
+  excludeWorktrees,
   ensureIgnore,
   inspect,
   isDie,
   loadMachine,
+  prepareRunRoot,
   pyTruthy,
   scanMachineData,
   validateCommon,
@@ -116,6 +118,37 @@ describe("missing profiles and ensure", () => {
     );
     expect(existsSync(join(repo, ".postmaster", "settings.toml"))).toBe(false);
   }, 30000);
+
+  test("run-root setup creates and prints the instance run root", () => {
+    const root = prepareRunRoot(repo);
+    expect(root).toBe(join(repo, ".postmaster", "runs", "postmaster"));
+    expect(existsSync(root)).toBe(true);
+    expect(runCli(SELF, ["project-settings", "prepare-run-root", repo])).toEqual({
+      code: 0,
+      out: `${root}\n`,
+      err: "",
+    });
+    expect(readFileSync(join(repo, ".postmaster", ".gitignore"), "utf8").endsWith("*\n")).toBe(
+      true,
+    );
+    expect(existsSync(join(repo, ".postmaster", "settings.toml"))).toBe(false);
+  });
+
+  test("worktree exclusion preserves existing rules and adds its rule once", () => {
+    const excluded = at("excluded-repo");
+    mkdirSync(excluded, { recursive: true });
+    expect(git(["init", "-q", excluded])).toBe(0);
+    const info = join(excluded, ".git", "info", "exclude");
+    write(info, "# local excludes\nkeep-me\n");
+    expect(runCli(SELF, ["project-settings", "exclude-worktrees", excluded])).toEqual({
+      code: 0,
+      out: "",
+      err: "",
+    });
+    expect(excludeWorktrees(excluded)).toBe(info);
+    expect(excludeWorktrees(excluded)).toBe(info);
+    expect(readFileSync(info, "utf8")).toBe("# local excludes\nkeep-me\n.worktrees/\n");
+  });
 
   test("ensure completes an existing ignore file without discarding its rules", () => {
     write(join(repo, ".postmaster", ".gitignore"), "# existing local rules\n!keep-me\n");

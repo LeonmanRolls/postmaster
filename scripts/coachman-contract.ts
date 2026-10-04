@@ -417,6 +417,38 @@ function exerciseSelfTest(sourceRoot: string): number {
   );
   scriptCase("a wording fix in launch.ts answers yes", "scripts/launch.ts", "the attempt phase");
   scriptCase(
+    "a wording fix in review-round.ts answers yes",
+    "scripts/review-round.ts",
+    "the round step",
+  );
+  scriptCase(
+    "a wording fix in cut-scratch.ts answers yes",
+    "scripts/cut-scratch.ts",
+    "reviewer scratches",
+  );
+  scriptCase("a wording fix in verify.ts answers yes", "scripts/verify.ts", "snapshot checks");
+  scriptCase("a wording fix in reviewers.ts answers yes", "scripts/reviewers.ts", "reviewer lanes");
+  scriptCase(
+    "a wording fix in review-findings.ts answers yes",
+    "scripts/review-findings.ts",
+    "review findings",
+  );
+  scriptCase(
+    "a wording fix in synthesis-shares.ts answers yes",
+    "scripts/synthesis-shares.ts",
+    "shares record",
+  );
+  scriptCase(
+    "a wording fix in project-settings.ts answers yes",
+    "scripts/project-settings.ts",
+    "run-root preparation",
+  );
+  scriptCase(
+    "a wording fix in runbook-host.ts answers yes",
+    "scripts/runbook-host.ts",
+    "session launch",
+  );
+  scriptCase(
     "a wording fix in fixture.ts answers yes",
     "scripts/fixture.ts",
     "fixture copies and scores",

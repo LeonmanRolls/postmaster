@@ -16,15 +16,14 @@ import {
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { toolRoot } from "./lib/paths.ts";
-import { run } from "./lib/proc.ts";
+import { run, withTempDir } from "./lib/proc.ts";
 import { pyTrim } from "./lib/text.ts";
 import {
   errMsg,
-  FOR_LOOP,
   harvest,
+  harvestReviewRound,
   isObj,
   isReportError,
-  SH_BLOCKS,
   SUPPORTED,
 } from "./review-findings.ts";
 
@@ -621,53 +620,83 @@ describe("degrade", () => {
     expect(found[0]!["line"]).toBe(8);
   });
 
-  test("executing the sample on the missing-file fixture writes both lines", () => {
-    const coachman = readFileSync(join(TOOL, "skills", "postmaster", "coachman.md"), "utf8");
-    const blocks = [...coachman.matchAll(SH_BLOCKS)].map((m) => m[1]!);
-    const samples = blocks.filter(
-      (block) => block.includes("NORMALIZE_FAILED=()") && block.includes("HARVEST_ERR"),
-    );
-    expect(samples.length).toBe(1);
-    const sampleDispatch = join(root, "sample-dispatch");
-    mkdirSync(join(sampleDispatch, "logs"), { recursive: true });
-    writeFileSync(
-      join(sampleDispatch, "logs", "review-r9-bug-one.jsonl"),
-      JSON.stringify({
-        type: "system",
-        subtype: "task_notification",
-        output_file: join(taskHome, "absent.txt"),
-      }) +
-        "\n" +
-        JSON.stringify({ type: "result", subtype: "success", result: "[]" }) +
-        "\n",
-    );
-    let sample = samples[0]!.split("<tool>").join(TOOL);
-    sample = sample.split("<dispatch>").join(sampleDispatch).split("<repo>").join(root);
-    sample = sample.split("<TICKET>").join("T").split("<round>").join("9");
-    sample = sample.replace(FOR_LOOP, "for L in one; do");
-    sample = sample.split(`DEST=${root}/.worktrees/T-rev-bug-$L`).join(`DEST=${scratch}`);
-    writeFileSync(join(root, "sample.sh"), sample);
-    const ran = run("bash", [join(root, "sample.sh")]);
-    const logged: unknown[] = [];
-    if (existsSync(join(sampleDispatch, "actions.jsonl"))) {
-      for (const raw of readFileSync(join(sampleDispatch, "actions.jsonl"), "utf8").split("\n")) {
-        try {
-          logged.push(JSON.parse(raw) as unknown);
-        } catch {
-          // a non-JSON line is not a logged action
-        }
-      }
-    }
-    const degraded = logged.filter(
-      (entry) => isObj(entry) && entry["action"] === "degrade" && entry["target"] === "one",
-    );
-    const narrative = existsSync(join(sampleDispatch, "run-log.md"))
-      ? readFileSync(join(sampleDispatch, "run-log.md"), "utf8")
-      : "";
-    expect(ran.code).toBe(0);
-    expect(degraded.length).toBe(1);
-    expect(narrative.includes("one bug: DEGRADED,")).toBe(true);
-  }, 60000);
+  test("round harvest preserves degrade logs, removes failed output and writes successful findings", () => {
+    withTempDir((tmp) => {
+      const repo = join(tmp, "repo");
+      const dispatch = join(repo, ".postmaster", "runs", "T-1");
+      const logs = join(dispatch, "logs");
+      mkdirSync(logs, { recursive: true });
+      writeFileSync(join(dispatch, "brief.md"), `## Project profile\nrepo: ${repo}\n`);
+      const failed = join(logs, "review-r9-bug-two-findings.json");
+      writeFileSync(failed, "stale findings\n");
+      const calls: Array<{ program: string; args: string[] }> = [];
+      const runner = (program: string, args: readonly string[]) => {
+        calls.push({ program, args: [...args] });
+        if (args[0] === "reviewers")
+          return { code: 0, out: "one\ntwo\nthree\n", err: "", timedOut: false };
+        if (
+          args[0] === "review-findings" &&
+          args[1] === "harvest" &&
+          args[5] === "review-r9-bug-one"
+        )
+          return { code: 1, out: "", err: "harvest failed\n", timedOut: false };
+        if (args[0] === "review-findings" && args[1] === "normalize" && args[2] === "two")
+          return { code: 1, out: "partial\n", err: "normalize failed\n", timedOut: false };
+        if (args[0] === "review-findings" && args[1] === "normalize" && args[2] === "three")
+          return { code: 0, out: '[{"severity":"P2"}]\n', err: "", timedOut: false };
+        return { code: 0, out: "", err: "", timedOut: false };
+      };
+      const result = harvestReviewRound(dispatch, "9", runner);
+      expect(result.code).toBe(0);
+      expect(
+        calls.some(
+          ({ args }) =>
+            args[0] === "log-action" &&
+            args[2] === "coachman" &&
+            args[3] === "degrade" &&
+            args[4] === "one" &&
+            args[5] === "bug round 9: harvest failed",
+        ),
+      ).toBe(true);
+      expect(
+        calls.some(
+          ({ args }) => args[0] === "run-log" && args[2] === "one bug: DEGRADED, harvest failed",
+        ),
+      ).toBe(true);
+      expect(
+        calls.some(
+          ({ args }) =>
+            args[0] === "review-findings" && args[1] === "normalize" && args[2] === "one",
+        ),
+      ).toBe(false);
+      expect(
+        calls.some(
+          ({ args }) =>
+            args[0] === "run-log" &&
+            args[2] === "review round 9 two: normalize failed; reading the raw report by hand",
+        ),
+      ).toBe(true);
+      expect(existsSync(failed)).toBe(false);
+      expect(readFileSync(join(logs, "review-r9-bug-three-findings.json"), "utf8")).toBe(
+        '[{"severity":"P2"}]\n',
+      );
+      const normalize = calls.find(
+        ({ args }) =>
+          args[0] === "review-findings" && args[1] === "normalize" && args[2] === "three",
+      );
+      expect(normalize?.args).toEqual([
+        "review-findings",
+        "normalize",
+        "three",
+        join(repo, ".worktrees", "T-1-rev-bug-three"),
+        join(logs, "review-r9-bug-three.jsonl"),
+        "--last",
+        join(logs, "review-r9-bug-three-last.md"),
+        "--run",
+        dispatch,
+      ]);
+    });
+  });
 });
 
 describe("JSON lists", () => {

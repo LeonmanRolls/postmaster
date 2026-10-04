@@ -21,7 +21,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { scriptsDir } from "./lib/paths.ts";
 import { mkstempSync, run } from "./lib/proc.ts";
 import { PY_S_CLASS } from "./lib/text.ts";
@@ -30,7 +30,7 @@ const HERE = scriptsDir(import.meta);
 const DEFAULT_LIMIT = 2400;
 const MAX_LIMIT = 86400;
 const USAGE =
-  "usage: run review-round start <dispatch> <round> | wait|teardown <dispatch> <round> <repo> [<lens>:<lane>...]";
+  "usage: run review-round cut|launch <dispatch> <round> | start <dispatch> <round> | wait|teardown <dispatch> <round> <repo> [<lens>:<lane>...]";
 
 function die(msg: string): never {
   console.error(`review-round: ${msg}`);
@@ -231,11 +231,322 @@ function unswitch(s: string, ticket: string): string {
   return "";
 }
 
+type ReviewResult = Readonly<{ code: number; out: string; err: string }>;
+type ReviewRunner = (program: string, args: readonly string[]) => ReviewResult;
+
+const TOOL_RUN = join(HERE, "run");
+const runScript: ReviewRunner = (program, args) => run(program, [...args]);
+
+interface ReviewContext {
+  dispatch: string;
+  repo: string;
+  synthesis: string;
+  base: string;
+  ticket: string;
+  lenses: string[];
+}
+
+function field(text: string, label: string): string {
+  const escaped = label.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  return new RegExp(`^${escaped}:[\\t ]*(.+)$`, "mu").exec(text)?.[1]?.trim() ?? "";
+}
+
+function reviewContext(dispatch: string): ReviewContext {
+  const brief = readFileSync(join(dispatch, "brief.md"), "utf8");
+  const record = JSON.parse(readFileSync(join(dispatch, "run.json"), "utf8")) as Record<
+    string,
+    unknown
+  >;
+  const beforeTicket = brief.split(/^## /mu, 1)[0] ?? "";
+  const turnpikes = field(beforeTicket, "turnpikes");
+  const lenses = turnpikes === "none" ? [] : turnpikes.split(",").map((lens) => lens.trim());
+  const context = {
+    dispatch: resolve(dispatch),
+    repo: field(brief, "repo"),
+    synthesis: field(brief, "synthesis worktree"),
+    base: typeof record.base === "string" ? record.base : "",
+    ticket: basename(dispatch),
+    lenses,
+  };
+  if (!context.repo || !context.synthesis || !context.base)
+    throw new Error(`review-round: ${dispatch} is missing repo, synthesis worktree or base`);
+  if (lenses.some((lens) => !["style", "bug", "security"].includes(lens)))
+    throw new Error(`review-round: ${dispatch} has an unknown review turnpike`);
+  return context;
+}
+
+function laneNames(
+  dispatch: string,
+  lens: string,
+  runner: ReviewRunner,
+  failed?: (result: ReviewResult) => void,
+): string[] | null {
+  const lanes = runner(TOOL_RUN, ["reviewers", "lanes", join(dispatch, "brief.md"), lens]);
+  if (lanes.code !== 0) {
+    failed?.(lanes);
+    return null;
+  }
+  return lanes.out
+    .split(/\r?\n/u)
+    .map((lane) => lane.trim())
+    .filter((lane) => lane !== "");
+}
+
+export function cutReviewRound(
+  dispatch: string,
+  round: string,
+  runner: ReviewRunner = runScript,
+): ReviewResult {
+  const context = reviewContext(dispatch);
+  const output: string[] = [];
+  const errors: string[] = [];
+  const head = runner("git", ["-C", context.synthesis, "rev-parse", "HEAD"]);
+  if (head.code !== 0) return head;
+  const snapshot = head.out.trim();
+  const checkPath = join(context.dispatch, "logs", `review-r${round}-checks.txt`);
+  const verified = runner(TOOL_RUN, ["verify", "run", context.synthesis, context.dispatch]);
+  writeFileSync(checkPath, verified.out, "utf8");
+  output.push(verified.out);
+  errors.push(verified.err);
+  const gate = runner(TOOL_RUN, [
+    "log-action",
+    context.dispatch,
+    "coachman",
+    "gate",
+    snapshot,
+    `review round ${round}, run verify exit ${verified.code}`,
+  ]);
+  output.push(gate.out);
+  errors.push(gate.err);
+  if (gate.code !== 0) return { code: gate.code, out: output.join(""), err: errors.join("") };
+  if (verified.code !== 0 && verified.code !== 3)
+    return { code: 1, out: output.join(""), err: errors.join("") };
+  if (verified.code === 3) {
+    let inNotRun = false;
+    for (const line of verified.out.split(/\r?\n/u)) {
+      if (/: not run, /u.test(line)) inNotRun = true;
+      else if (!inNotRun || !/^  /u.test(line)) inNotRun = false;
+      if (inNotRun) {
+        const logged = runner(TOOL_RUN, [
+          "run-log",
+          context.dispatch,
+          `review round ${round} gate not run: ${line}`,
+        ]);
+        output.push(logged.out);
+        errors.push(logged.err);
+        if (logged.code !== 0)
+          return { code: logged.code, out: output.join(""), err: errors.join("") };
+      }
+    }
+  }
+  const pruned = runner("git", ["-C", context.repo, "worktree", "prune"]);
+  output.push(pruned.out);
+  errors.push(pruned.err);
+  for (const lens of context.lenses) {
+    const lanes = laneNames(context.dispatch, lens, runner, (result) => errors.push(result.err));
+    if (lanes === null) return { code: 1, out: output.join(""), err: errors.join("") };
+    for (const lane of lanes) {
+      const dest = scratch(context.repo, context.ticket, lens, lane);
+      if (existsSync(dest)) {
+        const changed = runner("git", ["-C", dest, "diff", "--name-only", snapshot]);
+        for (const file of changed.out.split(/\r?\n/u).filter((line) => line !== ""))
+          output.push(`LEFT BEHIND AND MODIFIED, ${dest}: ${file}\n`);
+        errors.push(changed.err);
+        const removed = runner(TOOL_RUN, [
+          "review-round",
+          "teardown",
+          context.dispatch,
+          round,
+          context.repo,
+          `${lens}:${lane}`,
+        ]);
+        output.push(removed.out);
+        errors.push(removed.err);
+        if (removed.code !== 0) return { code: 1, out: output.join(""), err: errors.join("") };
+      }
+      const args = ["cut-scratch", context.repo, context.synthesis, dest, snapshot];
+      if (lens === "security") args.push("--clone", context.base);
+      const cut = runner(TOOL_RUN, args);
+      output.push(cut.out);
+      errors.push(cut.err);
+      if (cut.code !== 0)
+        output.push(
+          `SCRATCH BROKEN: ${dest} is not cut at ${snapshot}; fix before launching ${lane} under ${lens}\n`,
+        );
+    }
+  }
+  return { code: 0, out: output.join(""), err: errors.join("") };
+}
+
+export function launchReviewRound(
+  dispatch: string,
+  round: string,
+  runner: ReviewRunner = runScript,
+): ReviewResult {
+  const context = reviewContext(dispatch);
+  const reviewers: string[] = [];
+  const output: string[] = [];
+  const errors: string[] = [];
+  const head = runner("git", ["-C", context.synthesis, "rev-parse", "HEAD"]);
+  if (head.code !== 0) return head;
+  const snapshot = head.out.trim();
+  const prompts = new Map<string, string>();
+  for (const lens of context.lenses) {
+    const briefPath = resolve(context.dispatch, `review-${lens}-brief.md`);
+    const prompt = `Read ${briefPath} and execute it. Report findings as your final message. Do not modify any file you are reviewing.\n`;
+    const promptPath = join(context.dispatch, `review-r${round}-${lens}-prompt.txt`);
+    writeFileSync(promptPath, prompt, "utf8");
+    prompts.set(lens, promptPath);
+    const lanes = laneNames(context.dispatch, lens, runner, (result) => errors.push(result.err));
+    if (lanes === null) return { code: 1, out: output.join(""), err: errors.join("") };
+    if (lens === "security") {
+      for (const lane of lanes) {
+        const skill = runner(TOOL_RUN, [
+          "launch",
+          "skill",
+          lane,
+          "security-review",
+          "--run",
+          context.dispatch,
+        ]);
+        errors.push(skill.err);
+        const path = join(context.dispatch, `review-r${round}-security-${lane}-prompt.txt`);
+        if (skill.code === 0) writeFileSync(path, skill.out, "utf8");
+        else if (skill.code === 3) writeFileSync(path, prompt, "utf8");
+        else {
+          output.push(`NO SECURITY PROMPT FOR ${lane}; nothing launched\n`);
+          return { code: 1, out: output.join(""), err: errors.join("") };
+        }
+      }
+    }
+  }
+  for (const lens of context.lenses) {
+    const lanes = laneNames(context.dispatch, lens, runner, (result) => errors.push(result.err));
+    if (lanes === null) return { code: 1, out: output.join(""), err: errors.join("") };
+    for (const lane of lanes) {
+      const dest = scratch(context.repo, context.ticket, lens, lane);
+      const args = ["cut-scratch", "--check", dest, snapshot];
+      if (lens === "security") args.push("--clone", context.base);
+      const checked = runner(TOOL_RUN, args);
+      errors.push(checked.err);
+      output.push(checked.out);
+      if (checked.code !== 0) {
+        output.push(`SCRATCH NOT READY: ${context.ticket}-rev-${lens}-${lane}; nothing launched\n`);
+        return { code: 1, out: output.join(""), err: errors.join("") };
+      }
+    }
+  }
+  const started = runner(TOOL_RUN, ["review-round", "start", context.dispatch, round]);
+  output.push(started.out);
+  errors.push(started.err);
+  if (started.code !== 0) return { code: started.code, out: output.join(""), err: errors.join("") };
+  for (const lens of context.lenses) {
+    const lanes = laneNames(context.dispatch, lens, runner, (result) => errors.push(result.err));
+    if (lanes === null) return { code: 1, out: output.join(""), err: errors.join("") };
+    for (const lane of lanes) {
+      const dest = scratch(context.repo, context.ticket, lens, lane);
+      const name = runner(TOOL_RUN, [
+        "host",
+        "name",
+        context.dispatch,
+        "review",
+        lane,
+        lens,
+        round,
+      ]);
+      errors.push(name.err);
+      if (name.code !== 0)
+        return { code: name.code, out: output.join("") + name.out, err: errors.join("") };
+      const events = join(context.dispatch, "logs", `review-r${round}-${lens}-${lane}.jsonl`);
+      const errorPath = join(context.dispatch, "logs", `review-r${round}-${lens}-${lane}.err`);
+      const marker = join(context.dispatch, "logs", `review-r${round}-${lens}-${lane}.done`);
+      const launch =
+        lens === "bug"
+          ? [
+              TOOL_RUN,
+              "launch",
+              "review",
+              lane,
+              dest,
+              context.base,
+              "--last",
+              join(context.dispatch, "logs", `review-r${round}-bug-${lane}-last.md`),
+              "--run",
+              context.dispatch,
+            ]
+          : [
+              TOOL_RUN,
+              "launch",
+              "launch",
+              lane,
+              dest,
+              lens === "security"
+                ? join(context.dispatch, `review-r${round}-security-${lane}-prompt.txt`)
+                : (prompts.get(lens) ?? ""),
+              "--run",
+              context.dispatch,
+            ];
+      const startedLane = runner(TOOL_RUN, [
+        "host",
+        "run",
+        name.out.trim(),
+        dest,
+        "--under",
+        context.dispatch,
+        "--role",
+        "reviewer",
+        "--run",
+        context.dispatch,
+        "--out",
+        events,
+        "--err",
+        errorPath,
+        "--marker",
+        marker,
+        "--",
+        ...launch,
+      ]);
+      output.push(startedLane.out);
+      errors.push(startedLane.err);
+      if (startedLane.code !== 0)
+        return { code: startedLane.code, out: output.join(""), err: errors.join("") };
+      reviewers.push(`${lens}:${lane}`);
+    }
+  }
+  const waited = runner(TOOL_RUN, [
+    "review-round",
+    "wait",
+    context.dispatch,
+    round,
+    context.repo,
+    ...reviewers,
+  ]);
+  return {
+    code: waited.code,
+    out: output.join("") + waited.out,
+    err: errors.join("") + waited.err,
+  };
+}
+
 // --- entry ------------------------------------------------------------------------------
 if (import.meta.main) {
   const argv = process.argv.slice(2);
 
   const cmd = argv[0];
+  if ((cmd === "cut" || cmd === "launch") && argv.length === 3) {
+    const roundArg = argv[2] ?? "";
+    if (!/^[0-9]+$/u.test(roundArg) || roundArg.startsWith("0") || roundArg.length > 6)
+      die(`a round is a whole number from 1: ${roundArg}`);
+    try {
+      const result =
+        cmd === "cut" ? cutReviewRound(argv[1]!, roundArg) : launchReviewRound(argv[1]!, roundArg);
+      process.stdout.write(result.out);
+      process.stderr.write(result.err);
+      process.exit(result.code);
+    } catch (error) {
+      die(error instanceof Error ? error.message : String(error));
+    }
+  }
   if (cmd !== "start" && cmd !== "wait" && cmd !== "teardown") die(USAGE);
   if (cmd === "start" && argv.length !== 3) die(USAGE);
   if ((cmd === "wait" || cmd === "teardown") && argv.length < 4) die(USAGE);

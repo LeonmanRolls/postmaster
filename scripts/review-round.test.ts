@@ -15,7 +15,7 @@ import {
 import { join } from "node:path";
 import { run, withTempDir } from "./lib/proc.ts";
 import { processState } from "./lib/processes.ts";
-import { ARG_SPLIT_RE, monotonic } from "./review-round.ts";
+import { ARG_SPLIT_RE, cutReviewRound, launchReviewRound, monotonic } from "./review-round.ts";
 
 const self = join(import.meta.dir, "run");
 
@@ -56,6 +56,46 @@ const savedEnv: Record<string, string | undefined> = {
 };
 
 const cleanupPids: number[] = [];
+const TOOL_RUN = join(import.meta.dir, "run");
+
+function reviewFixture(root: string): {
+  repo: string;
+  dispatch: string;
+  synth: string;
+  base: string;
+} {
+  const repo = join(root, "repo");
+  mkdirSync(repo, { recursive: true });
+  run("git", ["init", "-q", "-b", "main", repo]);
+  run("git", [
+    "-C",
+    repo,
+    "-c",
+    "user.name=t",
+    "-c",
+    "user.email=t@t",
+    "commit",
+    "-q",
+    "--allow-empty",
+    "-m",
+    "first",
+  ]);
+  const base = run("git", ["-C", repo, "rev-parse", "HEAD"]).out.trim();
+  const synth = join(repo, ".worktrees", "T-1-synthesis");
+  run("git", ["-C", repo, "worktree", "add", "-q", "--detach", synth, "HEAD"]);
+  const dispatch = join(repo, ".postmaster", "runs", "T-1");
+  mkdirSync(join(dispatch, "logs"), { recursive: true });
+  writeFileSync(
+    join(dispatch, "brief.md"),
+    `# Waybill: T-1\nturnpikes: style, bug, security\n\n## Ticket\nname: T-1\n\n## Project profile\nrepo: ${repo}\n\n## Dispatch\nsynthesis worktree: ${synth}\n`,
+  );
+  writeFileSync(join(dispatch, "run.json"), JSON.stringify({ base }) + "\n");
+  return { repo, dispatch, synth, base };
+}
+
+type StepResult = { code: number; out: string; err: string };
+type StepCall = { program: string; args: string[] };
+const stepResult = (code = 0, out = "", err = ""): StepResult => ({ code, out, err });
 
 const killPids = (): void => {
   for (const pid of cleanupPids) {
@@ -684,6 +724,196 @@ afterAll(() => {
     if (v === undefined) delete process.env[k];
     else process.env[k] = v;
   }
+});
+
+describe("runbook review steps", () => {
+  test("cut logs the snapshot gate, records not-run lines and cuts security as a clone", () => {
+    withTempDir((tmp) => {
+      const fixture = reviewFixture(tmp);
+      const calls: StepCall[] = [];
+      let scratchCuts = 0;
+      const runner = (program: string, args: readonly string[]): StepResult => {
+        calls.push({ program, args: [...args] });
+        if (program === "git" && args[2] === "rev-parse") return stepResult(0, `${fixture.base}\n`);
+        if (program === "git" && args[2] === "worktree") return stepResult(0, "", "prune notice\n");
+        if (program === "git") return stepResult();
+        if (program !== TOOL_RUN) throw new Error(`unexpected program ${program}`);
+        if (args[0] === "verify")
+          return stepResult(
+            3,
+            "journey: not run, exit 3, no path\n  the ticket has no journey\nunit: pass\n",
+          );
+        if (args[0] === "reviewers") return stepResult(0, "one\n");
+        if (args[0] === "log-action") return stepResult(0, "action recorded\n");
+        if (args[0] === "run-log") return stepResult(0, "run log recorded\n");
+        if (args[0] === "cut-scratch" && ++scratchCuts === 1) return stepResult(1, "cut failed\n");
+        return stepResult();
+      };
+      const cut = cutReviewRound(fixture.dispatch, "1", runner);
+      expect(cut.code).toBe(0);
+      expect(readFileSync(join(fixture.dispatch, "logs", "review-r1-checks.txt"), "utf8")).toBe(
+        "journey: not run, exit 3, no path\n  the ticket has no journey\nunit: pass\n",
+      );
+      expect(
+        calls.some(
+          ({ args }) =>
+            args[0] === "log-action" && args[4] === fixture.base && args[5]?.includes("exit 3"),
+        ),
+      ).toBe(true);
+      expect(
+        calls.some(({ args }) => args[0] === "run-log" && args[2]?.includes("journey: not run")),
+      ).toBe(true);
+      expect(
+        calls.some(
+          ({ args }) =>
+            args[0] === "cut-scratch" && args[5] === "--clone" && args[6] === fixture.base,
+        ),
+      ).toBe(true);
+      expect(cut.out).toContain("journey: not run");
+      expect(cut.out).toContain("action recorded");
+      expect(cut.out).toContain("run log recorded");
+      expect(cut.out).toContain("SCRATCH BROKEN:");
+      expect(cut.err).toContain("prune notice");
+      expect(calls.filter(({ args }) => args[0] === "cut-scratch")).toHaveLength(3);
+    });
+  });
+
+  test("a failed snapshot gate stops before pruning or cutting reviewers", () => {
+    withTempDir((tmp) => {
+      const fixture = reviewFixture(tmp);
+      const calls: StepCall[] = [];
+      const runner = (program: string, args: readonly string[]): StepResult => {
+        calls.push({ program, args: [...args] });
+        if (program === "git") return stepResult(0, `${fixture.base}\n`);
+        if (args[0] === "verify") return stepResult(2, "unit: fail\n");
+        return stepResult();
+      };
+      const cut = cutReviewRound(fixture.dispatch, "2", runner);
+      expect(cut.code).toBe(1);
+      expect(
+        calls.some(({ args }) => args[0] === "log-action" && args[5]?.includes("exit 2")),
+      ).toBe(true);
+      expect(calls.some(({ args }) => args[0] === "cut-scratch")).toBe(false);
+      expect(calls.some(({ args }) => args[2] === "worktree" && args[3] === "prune")).toBe(false);
+    });
+  });
+
+  test("leftover changes are printed, and a failed teardown stops the next cut", () => {
+    withTempDir((tmp) => {
+      const fixture = reviewFixture(tmp);
+      const scratch = join(fixture.repo, ".worktrees", "T-1-rev-style-one");
+      mkdirSync(scratch, { recursive: true });
+      const calls: StepCall[] = [];
+      const runner = (program: string, args: readonly string[]): StepResult => {
+        calls.push({ program, args: [...args] });
+        if (program === "git" && args.includes("rev-parse"))
+          return stepResult(0, `${fixture.base}\n`);
+        if (program === "git" && args.includes("--name-only")) return stepResult(0, "changed.ts\n");
+        if (program !== TOOL_RUN) return stepResult();
+        if (args[0] === "verify") return stepResult();
+        if (args[0] === "reviewers") return stepResult(0, "one\n");
+        if (args[0] === "review-round" && args[1] === "teardown")
+          return stepResult(1, "teardown failed\n");
+        return stepResult();
+      };
+      const cut = cutReviewRound(fixture.dispatch, "4", runner);
+      expect(cut.code).toBe(1);
+      expect(cut.out).toContain(`LEFT BEHIND AND MODIFIED, ${scratch}: changed.ts`);
+      expect(calls.some(({ args }) => args[0] === "review-round" && args[1] === "teardown")).toBe(
+        true,
+      );
+      expect(calls.some(({ args }) => args[0] === "cut-scratch")).toBe(false);
+    });
+  });
+
+  test("launch prepares prompts, checks scratches, starts every lens, and waits once", () => {
+    withTempDir((tmp) => {
+      const fixture = reviewFixture(tmp);
+      const calls: StepCall[] = [];
+      const runner = (program: string, args: readonly string[]): StepResult => {
+        calls.push({ program, args: [...args] });
+        if (program === "git") return stepResult(0, `${fixture.base}\n`);
+        if (program !== TOOL_RUN) throw new Error(`unexpected program ${program}`);
+        if (args[0] === "reviewers") return stepResult(0, "one\n");
+        if (args[0] === "launch" && args[1] === "skill") return stepResult(3);
+        if (args[0] === "review-round" && args[1] === "wait") return stepResult(3, "wait ended\n");
+        if (args[0] === "host" && args[1] === "name")
+          return stepResult(0, `T-1 ${args[4]} ${args[5]}\n`);
+        return stepResult();
+      };
+      const launched = launchReviewRound(fixture.dispatch, "1", runner);
+      expect(launched.code).toBe(3);
+      expect(launched.out).toContain("wait ended");
+      expect(readFileSync(join(fixture.dispatch, "review-r1-style-prompt.txt"), "utf8")).toBe(
+        `Read ${join(fixture.dispatch, "review-style-brief.md")} and execute it. Report findings as your final message. Do not modify any file you are reviewing.\n`,
+      );
+      expect(
+        readFileSync(join(fixture.dispatch, "review-r1-security-one-prompt.txt"), "utf8"),
+      ).toBe(readFileSync(join(fixture.dispatch, "review-r1-security-prompt.txt"), "utf8"));
+      const hostRuns = calls.filter(({ args }) => args[0] === "host" && args[1] === "run");
+      expect(hostRuns).toHaveLength(3);
+      const bugRun = hostRuns.find(
+        ({ args }) => args.includes("--role") && args[args.indexOf("--out") + 1]?.includes("bug"),
+      );
+      expect(bugRun?.args.slice(-10)).toEqual([
+        TOOL_RUN,
+        "launch",
+        "review",
+        "one",
+        join(fixture.repo, ".worktrees", "T-1-rev-bug-one"),
+        fixture.base,
+        "--last",
+        join(fixture.dispatch, "logs", "review-r1-bug-one-last.md"),
+        "--run",
+        fixture.dispatch,
+      ]);
+      const wait = calls.find(({ args }) => args[0] === "review-round" && args[1] === "wait");
+      expect(wait?.args.slice(-3)).toEqual(["style:one", "bug:one", "security:one"]);
+    });
+  });
+
+  test("launch stops before starting when one scratch is not ready", () => {
+    withTempDir((tmp) => {
+      const fixture = reviewFixture(tmp);
+      const calls: StepCall[] = [];
+      const runner = (program: string, args: readonly string[]): StepResult => {
+        calls.push({ program, args: [...args] });
+        if (program === "git") return stepResult(0, `${fixture.base}\n`);
+        if (args[0] === "reviewers") return stepResult(0, "one\n");
+        if (args[0] === "cut-scratch") return stepResult(1, "not ready\n");
+        return stepResult();
+      };
+      const launched = launchReviewRound(fixture.dispatch, "3", runner);
+      expect(launched.code).toBe(1);
+      expect(launched.out).toContain("SCRATCH NOT READY: T-1-rev-style-one; nothing launched");
+      expect(calls.some(({ args }) => args[0] === "review-round" && args[1] === "start")).toBe(
+        false,
+      );
+      expect(calls.some(({ args }) => args[0] === "host" && args[1] === "run")).toBe(false);
+    });
+  });
+
+  test("launch stops when security prompt generation fails", () => {
+    withTempDir((tmp) => {
+      const fixture = reviewFixture(tmp);
+      const calls: StepCall[] = [];
+      const runner = (program: string, args: readonly string[]): StepResult => {
+        calls.push({ program, args: [...args] });
+        if (program === "git") return stepResult(0, `${fixture.base}\n`);
+        if (args[0] === "reviewers") return stepResult(0, "one\n");
+        if (args[0] === "launch" && args[1] === "skill") return stepResult(2, "", "skill error\n");
+        return stepResult();
+      };
+      const launched = launchReviewRound(fixture.dispatch, "5", runner);
+      expect(launched.code).toBe(1);
+      expect(launched.out).toContain("NO SECURITY PROMPT FOR one; nothing launched");
+      expect(launched.err).toContain("skill error");
+      expect(calls.some(({ args }) => args[0] === "review-round" && args[1] === "start")).toBe(
+        false,
+      );
+      expect(calls.some(({ args }) => args[0] === "host" && args[1] === "run")).toBe(false);
+    });
+  });
 });
 
 describe("reviewer pairs", () => {

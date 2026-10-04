@@ -73,8 +73,9 @@ the action for anything without its own verb.
    may name fewer, others, or `none`.
 4. **Write back the user's answer and nothing else.** Write the parts as the user gave or
    approved them, each under its `##` heading, to a sections file, and splice them into the
-   base: `<tool>/scripts/run ticket-check --splice <base> <sections> > <new>` changes those sections
-   and no other line. Check `<new>` with `<tool>/scripts/run ticket-check --body <new> --project <repo>`. Write it with
+   base with `<tool>/scripts/run ticket-check --splice <base> <sections>`. Its output is the
+   new body; it changes those sections and no other line. Check that body with
+   `<tool>/scripts/run ticket-check --body <new> --project <repo>`. Write it with
    the adapter's `edit <id> <new> <base>` (`trackers.md`), log `ticket-edit`, and check the
    ticket again by its id; a draft's `<new>` replaces its file. `edit` never changes a title,
    so a missing one is the user's to set in the tracker. On exit 4 the ticket changed after
@@ -124,8 +125,7 @@ For the next ticket in order, when the run ceiling (`team.max_runs`) has room:
    to the old run — archive it, rename it, or pick another id — and Stage B starts again on
    their word. On exit 1 the refusal goes to the user the same way.
 4. **Exclude worktrees without a commit,** before any is cut, or the next pre-flight reads
-   them as dirt: `grep -qxF '.worktrees/' <repo>/.git/info/exclude || echo '.worktrees/' >>
-   <repo>/.git/info/exclude`.
+   them as dirt: `<tool>/scripts/run project-settings exclude-worktrees <repo>`.
 5. **Create the run directory** `<runs>/<TICKET>/` with `logs/`, `audit/` and `render/`, and the
    manifest: `{"stage": "dispatched", "leg": 1, "base": "<sha>", "lanes": {}, "coachman":
    {"legs": {}}}`. You own `leg`, `base`, `coachman` and the terminal stages, `done` and
@@ -380,9 +380,7 @@ other line of this section holds.
    handle a live session already has.
 
    ```sh
-   SHA=$(git -C <repo> rev-parse --short <the spec commit from spec-review.md>)
-   <tool>/scripts/run host spawn "spec-$(<tool>/scripts/run host name <dispatch>)-$SHA" <repo> \
-       --label "$(<tool>/scripts/run host name <dispatch>) · spec" -- <interactive form>
+   <tool>/scripts/run runbook-host spec <dispatch> <repo> <spec-commit> -- <interactive form>
    ```
 
    Write a one-line prompt file telling it to read `<dispatch>/spec-session-brief.md` and work
@@ -417,8 +415,9 @@ other line of this section holds.
    here, on every path, before the resume, as `.card-ready` is before a word is delivered:
    a fresh package touches it afresh, so SPEC always means a package nobody has taken yet.
    Read the numbers first:
-   `<tool>/scripts/run spec-decisions <dispatch> count` prints `approved 0|1` and
-   `changes 0|1`. Branch on the numbers, never by reading the files:
+   `<tool>/scripts/run spec-decisions <dispatch> count` prints whether the package is
+   approved and whether it has changes, as numeric counts. Branch on the numbers, never by
+   reading the files:
    - **`changes` above zero:** the coachman revises the spec from the user's words and pauses
      with a fresh package, which goes to a spec session the same way, until the spec is
      approved or the run stops.

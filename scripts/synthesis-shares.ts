@@ -1,10 +1,12 @@
 import { existsSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, isAbsolute, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
-import { mkstempSync } from "./lib/proc.ts";
+import { mkstempSync, run, type RunResult } from "./lib/proc.ts";
+import { scriptsDir } from "./lib/paths.ts";
 import { jsWords } from "./lib/text.ts";
 
 const WORDS_PER_RUN = 6;
+const HERE = scriptsDir(import.meta);
 const DOC_SUFFIXES = [".md", ".mdx", ".rst", ".adoc", ".txt"] as const;
 const ROOT_RECORDS = ["WORKHORSE-SPEC.md", "WORKHORSE-SUMMARY.md", "WORKHORSE-BLOCKED.md"] as const;
 const GENERATED_NAMES = [
@@ -83,7 +85,7 @@ type Report = Readonly<{
 }>;
 
 const USAGE = `Usage: <tool>/scripts/run synthesis-shares \\
-  --base <commit> --synthesis <commit> [--lane <name>=<commit> ...] \\
+  --base <commit> [--synthesis <commit>] [--lane <name>=<commit> ...] \\
   [--oracle <commit>] [--record <dispatch-dir>]
 
 The command reads committed Git diffs in the current repository. --record writes
@@ -177,9 +179,7 @@ const parseInputs = (args: readonly string[]): Inputs => {
   };
 
   const inputs = read(args);
-  return inputs.base && inputs.synthesis
-    ? inputs
-    : fail(`--base and --synthesis are required\n\n${USAGE}`);
+  return inputs.base ? inputs : fail(`--base is required\n\n${USAGE}`);
 };
 
 const resolveCommit = (repo: string, value: string, label: string): string => {
@@ -500,8 +500,16 @@ const writeRecord = (dispatch: string, report: Report): void => {
   writeFileSync(path, `${JSON.stringify(report, null, 2)}\n`, { encoding: "utf8", flag: "wx" });
 };
 
-const main = (): number => {
-  const args = Bun.argv.slice(2);
+export function recordSharesLine(
+  dispatch: string,
+  line: string,
+  runner: (program: string, args: readonly string[]) => RunResult = (program, args) =>
+    run(program, [...args]),
+): RunResult {
+  return runner(join(HERE, "run"), ["run-log", dispatch, line]);
+}
+
+export const main = (args: readonly string[] = Bun.argv.slice(2)): number => {
   if (args.includes("--help")) {
     console.log(USAGE);
     return 0;
@@ -511,12 +519,21 @@ const main = (): number => {
     const parsed = parseInputs(args);
     const normalized = {
       ...parsed,
+      synthesis: parsed.synthesis || gitText(root, ["rev-parse", "HEAD"]).trim(),
       record:
         parsed.record && (isAbsolute(parsed.record) ? parsed.record : resolve(root, parsed.record)),
     };
     const report = buildReport(root, normalized);
     if (normalized.record !== null) writeRecord(normalized.record, report);
-    console.log(sharesLine(report));
+    const line = sharesLine(report);
+    if (normalized.record !== null) {
+      const logged = recordSharesLine(normalized.record, line);
+      if (logged.code !== 0) {
+        process.stderr.write(logged.err || logged.out);
+        return logged.code;
+      }
+    }
+    console.log(line);
     return 0;
   } catch (error) {
     console.error(`synthesis-shares: ${error instanceof Error ? error.message : String(error)}`);
@@ -525,4 +542,4 @@ const main = (): number => {
 };
 
 // The process exit status is a CLI edge effect; measurement functions above remain pure.
-process.exit(main());
+if (import.meta.main) process.exit(main());

@@ -2,11 +2,23 @@
 //
 //   run review-findings normalize <lane> <scratch> <events> --run <dispatch> [--last <file>]
 //   run review-findings harvest <events> <logs-dir> --prefix <name>
+//   run review-findings round <dispatch> <round>    harvest and normalize a bug review round
 //
 //   exit 0  printed
 //   exit 1  usage; a report that cannot be read; a harvest that cannot be completed
-import { copyFileSync, existsSync, mkdirSync, readFileSync, realpathSync, statSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { basename, isAbsolute, join, relative, resolve } from "node:path";
+import { scriptsDir } from "./lib/paths.ts";
+import { run, type RunResult } from "./lib/proc.ts";
 import {
   BOUND_L,
   BOUND_R,
@@ -23,7 +35,7 @@ import {
 } from "./lib/text.ts";
 
 const USAGE =
-  "usage: run review-findings normalize <lane> <scratch> <events> --run <dispatch> [--last <file>] | harvest <events> <logs-dir> --prefix <name>";
+  "usage: run review-findings normalize <lane> <scratch> <events> --run <dispatch> [--last <file>] | harvest <events> <logs-dir> --prefix <name> | round <dispatch> <round>";
 
 // --- failures ---------------------------------------------------------------------------
 // BASE raises ReportError; a ported method that returns it cannot also fail loudly, so the
@@ -1344,8 +1356,102 @@ export function harvest(
   return copied;
 }
 
+type RoundRunner = (program: string, args: readonly string[]) => RunResult;
+const HERE = scriptsDir(import.meta);
+const TOOL_RUN = join(HERE, "run");
+const runScript: RoundRunner = (program, args) => run(program, [...args]);
+
+export function harvestReviewRound(
+  dispatch: string,
+  round: string,
+  runner: RoundRunner = runScript,
+): RunResult {
+  const brief = join(dispatch, "brief.md");
+  const text = readFileSync(brief, "utf8");
+  const repoLine = /^repo:[\t ]*(.+)$/mu.exec(text)?.[1]?.trim() ?? "";
+  if (!repoLine)
+    return { code: 1, out: "", err: `review-findings: no repo in ${brief}\n`, timedOut: false };
+  const lanes = runner(TOOL_RUN, ["reviewers", "lanes", brief, "bug"]);
+  if (lanes.code !== 0)
+    return { code: 1, out: lanes.out, err: lanes.err, timedOut: lanes.timedOut };
+  const output: string[] = [];
+  const errors: string[] = [];
+  const normalizeFailed: string[] = [];
+  const logs = join(dispatch, "logs");
+  for (const lane of lanes.out
+    .split(/\r?\n/u)
+    .map((value) => value.trim())
+    .filter(Boolean)) {
+    const events = join(logs, `review-r${round}-bug-${lane}.jsonl`);
+    const prefix = `review-r${round}-bug-${lane}`;
+    const harvested = runner(TOOL_RUN, [
+      "review-findings",
+      "harvest",
+      events,
+      logs,
+      "--prefix",
+      prefix,
+    ]);
+    if (harvested.code !== 0) {
+      const error = `${harvested.out}${harvested.err}`.trimEnd();
+      const action = runner(TOOL_RUN, [
+        "log-action",
+        dispatch,
+        "coachman",
+        "degrade",
+        lane,
+        `bug round ${round}: ${error}`,
+      ]);
+      const narrative = runner(TOOL_RUN, ["run-log", dispatch, `${lane} bug: DEGRADED, ${error}`]);
+      errors.push(action.err, narrative.err);
+      continue;
+    }
+    const dest = join(repoLine, ".worktrees", `${basename(dispatch)}-rev-bug-${lane}`);
+    const last = join(logs, `review-r${round}-bug-${lane}-last.md`);
+    const normalizedPath = join(logs, `review-r${round}-bug-${lane}-findings.json`);
+    const normalized = runner(TOOL_RUN, [
+      "review-findings",
+      "normalize",
+      lane,
+      dest,
+      events,
+      "--last",
+      last,
+      "--run",
+      dispatch,
+    ]);
+    if (normalized.code === 0) writeFileSync(normalizedPath, normalized.out, "utf8");
+    else {
+      rmSync(normalizedPath, { force: true });
+      normalizeFailed.push(lane);
+      errors.push(normalized.err);
+    }
+  }
+  for (const lane of normalizeFailed) {
+    const narrative = runner(TOOL_RUN, [
+      "run-log",
+      dispatch,
+      `review round ${round} ${lane}: normalize failed; reading the raw report by hand`,
+    ]);
+    output.push(narrative.out);
+    errors.push(narrative.err);
+  }
+  return {
+    code: 0,
+    out: output.join(""),
+    err: errors.join(""),
+    timedOut: false,
+  };
+}
+
 // --- entry ------------------------------------------------------------------------------
 function main(argv: string[]): number {
+  if (argv[0] === "round" && argv.length === 3) {
+    const result = harvestReviewRound(argv[1]!, argv[2]!);
+    process.stdout.write(result.out);
+    process.stderr.write(result.err);
+    return result.code;
+  }
   if (argv.length > 0 && argv[0] === "normalize" && argv.length >= 6) {
     const lane = argv[1]!;
     const scratch = argv[2]!;

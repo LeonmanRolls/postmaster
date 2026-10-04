@@ -2,10 +2,11 @@
 
 Every harness-specific fact in the flow lives here and nowhere else. The runbooks say "launch
 form", "resume form", "thread id", "final message" and "ambient context"; this file says what
-each of those means for each harness. When a harness changes, this file changes and the
-runbooks do not. `<tool>` is the postmaster repo, as the runbook that sent you here found it.
+each of those means for each harness. `<tool>/scripts/run launch form <lane>` prints the exact launch
+and resume forms for a configured lane. When a harness changes, this file and the launch adapter
+change together. `<tool>` is the postmaster repo, as the runbook that sent you here found it.
 
-**Every form below runs in the foreground and writes its event stream to stdout.**
+**A launch form runs in the foreground and writes its event stream to stdout.**
 `<tool>/scripts/run host run` adds the redirect to the lane's events file, runs it where the user can
 watch it, and lands its marker on exit (`hosts.md`); that is what makes one wrapper in the
 runbooks correct for every harness and every host.
@@ -17,8 +18,8 @@ attempt `refused` before its preflight and marks it `started` only after the env
 the harness is still callable. The leg command records the final outcome before the host lands
 the exited marker.
 
-**`<tool>/scripts/run launch` is the executable form of this file.** `run launch form <name>` prints the
-exact launch and resume commands for a configured lane or role; `launch` and `resume` run them;
+**`<tool>/scripts/run launch` is the executable form of this file.** `run launch form <lane>` prints the
+exact launch and resume forms for a configured lane; `launch` and `resume` run them;
 `review` runs a lane's bug-review form at the effort the run recorded for that lane on the
 named base-to-HEAD range; `skill` prints the prompt that invokes a harness's own security
 review skill (Own review skills, below). The script and this file change together, and a form
@@ -208,70 +209,41 @@ keeps one per name, and muse lists it once.
 
 ## codex
 
-Launch, workhorse or reviewer:
-
-```sh
-# Mark the worktree trusted first. The grep guard is idempotent on purpose:
-# duplicate [projects] tables are invalid TOML.
-grep -qF "[projects.\"<abs wt>\"]" ~/.codex/config.toml \
-  || printf '\n[projects."%s"]\ntrust_level = "trusted"\n' "<abs wt>" >> ~/.codex/config.toml
-codex exec -C <wt> --json -o <dispatch>/logs/<lane>-last.md -m <model> \
-  -c model_reasoning_effort="<effort>" --dangerously-bypass-approvals-and-sandbox \
-  "$(cat <dispatch>/<lane>-prompt.txt)"
-```
+Use the launch or resume form printed by `<tool>/scripts/run launch form <lane>`.
 
 - A detached reviewer scratch needs `--skip-git-repo-check`.
 - Thread id: `grep '"thread_id"'` in the events stream.
 - Final message: `<lane>-last.md` from `-o`, plus the last result line of the events stream.
-- Resume, from the worktree the thread was launched in, appending to the same stream:
+- A resume runs from the worktree where the thread started and appends to the same stream.
 
-  ```sh
-  cd <wt> && codex exec resume <thread_id> --json -o <dispatch>/logs/<lane>-last.md \
-    -m <model> -c model_reasoning_effort="<effort>" --dangerously-bypass-approvals-and-sandbox \
-    -- "<prompt>"
-  ```
-
-  These are the launch's flags without `-C` and `--skip-git-repo-check`, with `--` before the
-  prompt. After `resume`, codex refuses `-C` and `-s` with "unexpected argument", and reads a
-  prompt that starts with `-` as a flag and exits 2 unless `--` comes first. A resume that
-  names no model or effort runs on codex's configured default, not on the thread's own, so both
-  go on every resume. Without the bypass flag a resume runs `workspace-write` in a trusted
-  worktree and read-only in an untrusted one, so the bypass goes on every resume, reviewers
-  included. The resumed stream opens with the launch's `thread.started`. codex's own `--last`,
-  in place of the id, is safe only when no other codex thread has run since; otherwise recover
-  the id from the events log or `~/.codex/sessions/YYYY/MM/DD/`.
+- A resume omits the launch-only working-directory and scratch-skip options. The adapter puts
+  the prompt after the argument separator so a leading hyphen stays text. It also specifies the
+  recorded model and effort again, because otherwise Codex uses its configured default, and
+  retains bypass mode for trusted and untrusted worktrees. The resumed stream opens with the
+  launch's `thread.started`. Codex's last-thread shortcut is safe only when no other Codex
+  thread has run since; otherwise recover the id from the events log or
+  `~/.codex/sessions/YYYY/MM/DD/`.
   [Why every resume names its model](../../wiki/concepts/codex-resume-model.md)
-- Durable record: rollout jsonl under `~/.codex/sessions/YYYY/MM/DD/`. `codex resume
-  <thread_id>` opens the full TUI on a finished thread. `codex archive <thread_id>` at teardown.
+- Durable record: rollout jsonl under `~/.codex/sessions/YYYY/MM/DD/`. The full TUI can open a
+  finished thread; archive it at teardown.
 - Headless `codex exec` exposes no browser backend. A workhorse on codex cannot run the render gate;
   the coachman runs it.
 
 ## grok
 
-Launch, coachman or lane:
-
-```sh
-cd <wt> && grok --prompt-file <dispatch>/<lane>-prompt.txt -m <model> \
-  --reasoning-effort <effort> --max-turns 1000 --always-approve \
-  --output-format streaming-json
-```
+Use the launch or resume form printed by `<tool>/scripts/run launch form <lane>`.
 
 - Thread id: the session uuid in the stream, minted at launch.
 - Final message: the last result line of the events stream.
-- Resume: `grok --resume <uuid> -p "<prompt>"` with the same flags, the caller appending to
-  the same stream. This is the coachman's own resume form when the coachman runs on grok: the
-  postmaster delivers a ruling this way.
+- A resume continues the recorded thread and appends to the same stream. This is also the
+  coachman's resume form when its harness is grok.
 - Durable record: its session store; `grok export` renders a thread as Markdown. Threads persist
   harmlessly; nothing to archive.
 - No cross-session messaging.
 
 ## agy (Antigravity CLI)
 
-```sh
-cd <wt> && agy -p "$(cat <dispatch>/<lane>-prompt.txt)" \
-  --model <model> --output-format stream-json \
-  --dangerously-skip-permissions --add-dir <wt>
-```
+Use the launch or resume form printed by `<tool>/scripts/run launch form <lane>`.
 
 - No `--effort` flag for any model: effort is baked into the model NAME, so the lane's model
   string carries it (`gemini-3.7-flash-high`; the effort suffix is part of the id, and an id
@@ -291,10 +263,7 @@ cd <wt> && agy -p "$(cat <dispatch>/<lane>-prompt.txt)" \
 
 ## claude
 
-```sh
-cd <wt> && claude -p "$(cat <dispatch>/<lane>-prompt.txt)" --model <model> \
-  --output-format stream-json --verbose --dangerously-skip-permissions
-```
+Use the launch or resume form printed by `<tool>/scripts/run launch form <lane>`.
 
 - `--output-format stream-json` in print mode requires `--verbose`. `--effort <effort>` sets the
   effort where the lane has one.
@@ -308,7 +277,7 @@ cd <wt> && claude -p "$(cat <dispatch>/<lane>-prompt.txt)" --model <model> \
 - Thread name: `--name <text>`, which `run launch` passes from `POSTMASTER_LAUNCH_NAME` when
   `run host` sets it. Headless, it names the thread in the resume picker and does not set the
   pane's terminal title; `run host` sets that itself.
-- Resume: `claude -p --resume <session_id> "<prompt>"` with the same flags.
+- A resume continues the recorded session and appends to the same stream.
 - Ambient context: reads `CLAUDE.md` in the repo and the files it imports. A project that keeps
   its context in `AGENTS.md` needs a `CLAUDE.md` pointing at it; a symlink works.
 - As the coachman's own harness: background tasks are reaped at about 29 minutes, and a long
@@ -321,10 +290,7 @@ cd <wt> && claude -p "$(cat <dispatch>/<lane>-prompt.txt)" --model <model> \
 
 ## pi
 
-```sh
-cd <wt> && pi --mode json --approve --model <provider/model> \
-  --thinking <effort> < <dispatch>/<lane>-prompt.txt
-```
+Use the launch or resume form printed by `<tool>/scripts/run launch form <lane>`.
 
 - **The prompt goes in on stdin, never as `@<file>`.** An `@file` argument is an attachment:
   pi sends it as `<file name="/abs/path">…</file>` with no instruction around it, so the
@@ -342,8 +308,8 @@ cd <wt> && pi --mode json --approve --model <provider/model> \
 - Thread name: `--name <text>`, passed from `POSTMASTER_LAUNCH_NAME` as for claude.
 - Final message: the last `message_end` record whose message has role `assistant`. The
   stream also emits `message_end` for the system and user messages.
-- Resume: `pi --mode json --approve --session <id> --model <provider/model>
-  --thinking <effort> < <prompt-file>`, appending to the same stream.
+- A resume continues the recorded session from its original working directory and appends to
+  the same stream.
 - **Resume from the directory the thread was launched in.** `--session` looks in the current
   working directory's sessions first. Given an id that exists only under another directory,
   pi prints "Session found in different project", asks "Fork this session into current
@@ -356,10 +322,7 @@ cd <wt> && pi --mode json --approve --model <provider/model> \
 
 ## muse (Muse Code)
 
-```sh
-cd <wt> && env XDG_DATA_HOME=<harness-data>/muse/<key> muse exec --json \
-  --prompt-file <abs prompt-file> --model <model> --reasoning-effort <effort> --yolo < /dev/null
-```
+Use the launch or resume form printed by `<tool>/scripts/run launch form <lane>`.
 
 - `--yolo` is the bypass form. It turns off tool approval and Muse Code's sandbox, and trusts
   the workspace for the run. The sandbox uses Bubblewrap, which needs unprivileged user
@@ -373,8 +336,8 @@ cd <wt> && env XDG_DATA_HOME=<harness-data>/muse/<key> muse exec --json \
 - `--json` writes one JSON record per line. Each carries `stream` (`kind` `session`, and its
   `id`), a `sequence`, and a `payload_type` with its `payload`.
 - Thread id: `stream.id` of the first record, a UUID.
-- Resume: the launch form with `--session-id <thread id>`, the model and the effort passed
-  again. `muse resume` opens the interactive picker and is not used. Given an id its data
+- A resume passes the recorded session id, model and effort again. `muse resume` opens the
+  interactive picker and is not used. Given an id its data
   directory does not hold, Muse Code opens a new thread under that id and exits 0. So
   `run launch` refuses a resume unless Muse Code's own export (`muse export --session <id>`)
   finds the thread in the launch's data directory. It is only there from the same directory,
@@ -409,11 +372,7 @@ cd <wt> && env XDG_DATA_HOME=<harness-data>/muse/<key> muse exec --json \
 
 ## mimo (MiMo Code)
 
-```sh
-cd <wt> && env XDG_DATA_HOME=<harness-data>/mimo/<key> MIMOCODE_DISABLE_CLAUDE_IMPORT=1 \
-  mimo run --format json -m <provider/model> --variant <effort> --dangerously-skip-permissions \
-  < <abs prompt-file>
-```
+Use the launch or resume form printed by `<tool>/scripts/run launch form <lane>`.
 
 - The prompt arrives on stdin. MiMo Code reads its stdin to the end before it starts, so an
   open pipe holds a launch, and the prompt file is the only stdin a launch ever has. The model
@@ -427,8 +386,8 @@ cd <wt> && env XDG_DATA_HOME=<harness-data>/mimo/<key> MIMOCODE_DISABLE_CLAUDE_I
 - `--format json` writes one event per line: `step_start`, `text`, `tool_use` and `step_finish`,
   each with its `sessionID` and a `part`. A `tool_use` names its tool and input in `part`.
 - Thread id: the `sessionID` on the first event.
-- Resume: the launch form with `-s <thread id>`, the model and the variant passed again. A
-  resume that names no variant runs without one, as `mimo export <session>` shows: it records
+- A resume passes the recorded session id, model and variant again. A resume that names no
+  variant runs without one, as `mimo export <session>` shows: it records
   each message's provider, model and variant. Given an id its data directory does not hold, it
   exits 0 with no event at all, having sent nothing, and says `Session not found` only on
   stderr. Resumed from another directory with its launch's data, it continues the thread and
@@ -538,14 +497,14 @@ reached the whole change only because the branch list showed the target's defaul
 reported the planted bug at its line, in 2 runs of 2 (trial).
 
 **codex's `codex exec review`.** The form is `codex exec review --base <BASE>` with its launch
-form's flags (`--json`, `-o`, `-m`, `-c model_reasoning_effort="<level>"`, the bypass flag, and
+form's flags (`--json`, `-o`, `-m`, `-c` with the model_reasoning_effort setting, the bypass flag, and
 `--skip-git-repo-check` in a detached scratch):
 
 | | |
 |---|---|
-| command | `codex exec review --base <BASE> --json -o <last> -m <model> -c model_reasoning_effort="<level>" --dangerously-bypass-approvals-and-sandbox [--skip-git-repo-check]` |
+| command | `codex exec review --base <BASE> --json -o <last> -m <model> -c <effort-setting> --dangerously-bypass-approvals-and-sandbox [--skip-git-repo-check]` |
 | the change | `--base <BASE>`; codex takes a commit and computes the merge base itself, then the review thread runs `git diff` against the base commit |
-| level | `-c model_reasoning_effort="<level>"`, the lane's recorded effort or the harness top level (`max`) when the lane names none |
+| level | `-c` carries model_reasoning_effort at the lane's recorded effort or the harness top level (`max`) when the lane names none |
 | findings | the `-o` message is `- [P<n>] <title> — <absolute path>:<start>-<end>` with a body; its session file holds the same findings structured (`review_output`: title, body, priority, confidence, file, line range) |
 | known findings | a custom prompt is an alternative to `--base`; whether the two combine is untested. The form does not pass one |
 | tool calls | in the `--json` stream (`command_execution`); the review thread's model, effort and prompt are in the rollouts under `~/.codex/sessions/YYYY/MM/DD/` |
@@ -578,7 +537,7 @@ mode, like every launch, named for their project or their ticket. The same table
 |---|---|---|
 | claude | `claude --model <model> --effort <effort> --name "<name>" --dangerously-skip-permissions` | yes |
 | pi | `pi --model <provider/model> --thinking <effort> --name "<name>" --approve`; pi has no permission prompts | flags from its help |
-| codex | `codex -m <model> -c model_reasoning_effort="<effort>" --dangerously-bypass-approvals-and-sandbox` | no |
+| codex | `codex -m <model> -c <effort-setting> --dangerously-bypass-approvals-and-sandbox` | no |
 | grok | `grok -m <model> --reasoning-effort <effort> --always-approve` | no |
 | agy | `agy --model <model> --dangerously-skip-permissions` | no |
 | muse | `muse --model <model> --reasoning-effort <effort> --yolo` | flags from its help |
@@ -603,7 +562,7 @@ session of its own: a host's pane where there is one, a detached process where t
 <tool>/scripts/run host run "watch · <project>" "<repo>" \
     --out "<runs>/postmaster/watch.out" --err "<runs>/postmaster/watch.err" \
     --marker "<runs>/postmaster/.watch-exited" \
-    -- "<tool>/scripts/run" runs-watch "<runs>"
+    -- <tool>/scripts/run runs-watch <runs>
 ```
 
 Wait for its return in the conversation with `<tool>/scripts/run wait-for-markers`:

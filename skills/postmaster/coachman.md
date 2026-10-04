@@ -329,7 +329,8 @@ A workhorse commits incrementally as it goes, never pushes, never reads other br
    cut worktrees from a base that is not the one the postmaster dispatched, or that would
    silently drop uncommitted work.
 3. **Exclude worktrees without a commit:**
-   `grep -qxF '.worktrees/' <repo>/.git/info/exclude || echo '.worktrees/' >> <repo>/.git/info/exclude`.
+   `<tool>/scripts/run project-settings exclude-worktrees <repo>` adds `.worktrees/` to the
+   repository's exclude file when it is not already there.
 4. **Check the run's directories exist** (`mkdir -p <dispatch>/logs <dispatch>/audit
    <dispatch>/render` is idempotent) and that the synthesis worktree the postmaster cut is at
    BASE and is your cwd; then cut one workhorse worktree per workhorse from BASE, and arm each
@@ -424,15 +425,10 @@ pause, the package and the decisions file work the same.
 carries that spec in its own worktree.** Launch each workhorse to implement from the spec
 the user approved, in blinkers, through the host script and the launch script so no form is
 ever copied by hand. The launch carries the instruction to implement from the approved spec
-at `WORKHORSE-SPEC.md` in its worktree and finish with `WORKHORSE-SUMMARY.md`. The form is
-the same as it always was:
+at `WORKHORSE-SPEC.md` in its worktree and finish with `WORKHORSE-SUMMARY.md`.
 
 ```sh
-<tool>/scripts/run host run "$(<tool>/scripts/run host name <dispatch> workhorse <lane>)" <workhorse-wt> \
-    --under <dispatch> --role lane --run <dispatch> \
-    --out <dispatch>/logs/<lane>-events.jsonl --err <dispatch>/logs/<lane>.err --marker <dispatch>/logs/<lane>.done \
-    -- <tool>/scripts/run launch launch <lane> <workhorse-wt> <dispatch>/<lane>-prompt.txt --last <dispatch>/logs/<lane>-last.md \
-       --run <dispatch>
+<tool>/scripts/run runbook-host workhorse <dispatch> <lane> <workhorse-wt>
 ```
 
 The tab name comes from the lane and its recorded model through `run host name`; the dispatch
@@ -578,12 +574,7 @@ from it.
   the script disables external diff drivers and textconv when it reads Git:
 
   ```sh
-  SYNTHESIS_HEAD=$(git rev-parse HEAD)
-  SHARES_LINE=$(<tool>/scripts/run synthesis-shares \
-    --base <base> --synthesis "$SYNTHESIS_HEAD" \
-    --lane <lane>=<harvested-head> [--lane <lane>=<harvested-head> ...] \
-    [--oracle <oracle-commit>] --record <dispatch>)
-  <tool>/scripts/run run-log <dispatch> "$SHARES_LINE"
+  <tool>/scripts/run synthesis-shares --base <base> --lane <lane>=<harvested-head> [--lane <lane>=<harvested-head> ...] [--oracle <oracle-commit>] --record <dispatch>
   ```
 
   The command writes `<dispatch>/shares.json` once and prints the greppable `SHARES:` line.
@@ -679,151 +670,44 @@ Set the stage first, `<tool>/scripts/run stage <dispatch> review`, then:
    - **Bug lens** (gating): correctness, logic, absence-versus-relative checks (does any check
      pass vacuously when a row, file or entry is missing?), and defects in the change. Only
      lanes whose harness has a code-review form review for bugs; no brief is written and no
-     fallback is used. Launch: `<tool>/scripts/run launch review "$L" "$DEST" <BASE> --last
-     <dispatch>/logs/review-r<round>-bug-$L-last.md --run <dispatch>`. The form names the
-     base-to-HEAD change at the run-recorded lane effort. Normalize its
-     report with `<tool>/scripts/run review-findings`; missing fields such as severity stay
-     `not provided`.
+     fallback is used. The review-round launch call uses each eligible harness's code-review form against the
+     base-to-HEAD change at the run-recorded lane effort. The harvest call normalizes its report;
+     missing fields such as severity stay `not provided`.
      [Why a lane may review through its harness's own skill](../../wiki/concepts/own-review-skills.md)
    - **Security lens** (gating): general exploit hunting plus the project's specific surfaces
      as the waybill names them: how it binds and authenticates, what it allowlists, how it
      handles secrets, what it spawns and with what arguments, what it serves from disk.
-     Launch: each lane from a prompt file of its own, which runs its harness's own security
-     review skill where it has one and the lens's brief where it has none, so the lens never
-     loses a lane (the security lens's launch, below).
+     The review-round launch call gives each lane its own prompt, using its harness's security
+     review skill where available and the lens brief otherwise, so the lens never loses a lane.
      [Why a lane may review through its harness's own skill](../../wiki/concepts/own-review-skills.md)
 
-   **A launch from a brief** has two parts. Its preparation, once per round and before any
-   reviewer starts, writes the lens's prompt file verbatim:
+   **Run every reviewer under every open lens on the same synthesis snapshot, from a fresh
+   scratch each round**, with installed dependencies cloned in so every lane is a full lane.
+   First cut the round. The call runs the project's checks once on the synthesis HEAD, records
+   and prints the result, logs each `not run` line on exit 3, and stops on any other non-zero
+   exit. It prunes stale worktrees, then tears down and recuts each reviewer scratch at the
+   snapshot. Security scratches are clones of BASE. A failed cut prints `SCRATCH BROKEN` and
+   proceeds to the launch check; an unrecoverable teardown stops the round.
 
    ```sh
-   cat > <dispatch>/review-r<round>-<lens>-prompt.txt <<'EOF'
-   Read <abs>/review-<lens>-brief.md and execute it. Report findings as your final message. Do not modify any file you are reviewing.
-   EOF
+   <tool>/scripts/run review-round cut <dispatch> <round>
    ```
 
-   Its launch step starts reviewer lane `$L` in its scratch `$DEST`:
-   `<tool>/scripts/run launch launch "$L" "$DEST" <dispatch>/review-r<round>-<lens>-prompt.txt --run <dispatch>`.
-
-   **The security lens's launch** has the same two parts, with a prompt file for each lane. Its
-   preparation writes the lens's prompt file as above, then each lane's own, and stops the round
-   on any exit but 0 (the lane's harness has the skill) and 3 (it has none):
+   The launch call writes each lens prompt before starting reviewers. For security, it asks each
+   lane for its own security skill prompt and uses the lens prompt if the skill is absent. It
+   validates every scratch before launching anything, starts the round, launches every reviewer
+   through `host run`, and waits for all launched reviewers. It stops before launch if prompt
+   generation, lane resolution or scratch validation fails.
 
    ```sh
-   for L in $(<tool>/scripts/run reviewers lanes <dispatch>/brief.md security); do
-     <tool>/scripts/run launch skill "$L" security-review --run <dispatch> > <dispatch>/review-r<round>-security-$L-prompt.txt
-     case $? in
-       0) ;;
-       3) cp <dispatch>/review-r<round>-security-prompt.txt <dispatch>/review-r<round>-security-$L-prompt.txt ;;
-       *) echo "NO SECURITY PROMPT FOR $L; nothing launched"; exit 1 ;;
-     esac
-   done
+   <tool>/scripts/run review-round launch <dispatch> <round>
    ```
 
-   Its launch step starts lane `$L` in its scratch `$DEST`:
-   `<tool>/scripts/run launch launch "$L" "$DEST" <dispatch>/review-r<round>-security-$L-prompt.txt --run <dispatch>`.
-   A skill reads no brief. Its findings arrive as its final message, and step 3 verifies them
-   like any other lane's.
-2. **Run every reviewer under every open lens on the same snapshot, from a fresh scratch each
-   round**, pinned to the synthesis HEAD, with the installed dependencies cloned in so every
-   lane is a full lane:
-
-   ```sh
-   SNAP=$(git -C <synthesis-wt> rev-parse HEAD)
-   # Where a check's source names web-journey, walk the ticket's User journey on the synthesis
-   # worktree first, to the path <tool>/scripts/run verify journey-path <synthesis-wt> <dispatch>
-   # prints; then the run's checks, once, on the snapshot:
-   VERIFY_EXIT=0
-   <tool>/scripts/run verify run <synthesis-wt> <dispatch> > <dispatch>/logs/review-r<round>-checks.txt || VERIFY_EXIT=$?
-   cat <dispatch>/logs/review-r<round>-checks.txt
-   <tool>/scripts/run log-action <dispatch> coachman gate "$SNAP" "review round <round>, run verify exit $VERIFY_EXIT"
-   case "$VERIFY_EXIT" in
-     0|3) ;;
-     *) exit 1 ;;
-   esac   # 0 green and 3 not-run proceed; 2 (a check failed), 1 (verify unrunnable), a signal, or run verify itself unstartable (126/127) stops the round
-   # A 126/127 inside a check is that check's `not run` ("bash could not start it"),
-   # which aggregates to 3 and proceeds; only run verify itself failing to start stops
-   # the round on 126/127
-   if [ "$VERIFY_EXIT" -eq 3 ]; then
-     awk '/: not run, /{print; p=1; next} p==1 && /^  /{print; next} {p=0}' <dispatch>/logs/review-r<round>-checks.txt | while IFS= read -r NOTRUN; do
-       <tool>/scripts/run run-log <dispatch> "review round <round> gate not run: $NOTRUN"
-     done
-   fi
-   # A check not run is never read as passed: each goes on the card as `not run` with
-   # run verify's reason. Example: a ticket with no User journey makes the journey check
-   # `not run` (`journey: not run, exit 3, ...` plus its reason line); the round proceeds,
-   # the run log carries those lines, and the card records `journey: not run`. On a stopping
-   # exit, fix the cause on the synthesis worktree and repeat this step
-   git -C <repo> worktree prune
-   for LENS in <open lenses>; do   # a lens whose lanes do not resolve stops the round here
-     <tool>/scripts/run reviewers lanes <dispatch>/brief.md "$LENS" >/dev/null || exit 1
-   done
-   for LENS in <open lenses>; do
-     for L in $(<tool>/scripts/run reviewers lanes <dispatch>/brief.md "$LENS"); do
-       DEST=<repo>/.worktrees/<TICKET>-rev-$LENS-$L
-       # A scratch an interrupted round left behind is checked like any other, then torn down;
-       # one that cannot be stops the cut, and nothing is launched.
-       if [ -e "$DEST" ]; then
-         git -C "$DEST" diff --name-only "$SNAP" | sed "s|^|LEFT BEHIND AND MODIFIED, $DEST: |"
-         <tool>/scripts/run review-round teardown <dispatch> <round> <repo> "$LENS:$L" || exit 1
-       fi
-       # The security lens reviews from clones, whose origin/HEAD leads back to BASE, which a
-       # harness's own security review skill needs (harnesses.md, Own review skills).
-       CLONE=(); [ "$LENS" = security ] && CLONE=(--clone <BASE>)
-       # ASSERT the scratch is cut at SNAP before launching a lane into it. The coachman runs
-       # the project's recorded checks once on the snapshot; reviewers do not build or run them.
-       <tool>/scripts/run cut-scratch <repo> <synthesis-wt> "$DEST" "$SNAP" "${CLONE[@]}" \
-         || echo "SCRATCH BROKEN: $DEST is not cut at $SNAP; fix before launching $L under $LENS"
-     done
-   done
-   ```
-
-   Never install into a scratch. If the synthesis worktree has no installed dependencies,
-   install there first and clone from it. Every reviewer reviews from a scratch, never from the
-   synthesis worktree.
-
-   Then do every open lens's preparation, and launch every reviewer under every open lens in the
-   same breath, each through its lens's launch step run by `run host` (`hosts.md`). The command
-   first checks every scratch with `run cut-scratch --check`: at the snapshot, and under the
-   security lens a clone whose `origin/HEAD` leads back to BASE. It launches nothing if one
-   fails; then it starts the round, which clears its markers and fixes its deadline. `run host`
-   lands each marker, naming the round, the lens and the lane, when its process exits, whatever
-   its exit, and the command ends in the wait for the whole round, given every reviewer the loop
-   launched. A wait cut short, as by the harness's cap on background tasks, is run again alone:
-   `<tool>/scripts/run review-round wait <dispatch> <round> <repo>` keeps the round's reviewers
-   and its deadline. A round interrupted before its launches were done is re-run whole, from the
-   cut, which tears down whatever its first attempt left:
-
-   ```sh
-   SNAP=$(git -C <synthesis-wt> rev-parse HEAD)
-   for LENS in <open lenses>; do
-     <tool>/scripts/run reviewers lanes <dispatch>/brief.md "$LENS" >/dev/null || exit 1
-     CLONE=(); [ "$LENS" = security ] && CLONE=(--clone <BASE>)
-     for L in $(<tool>/scripts/run reviewers lanes <dispatch>/brief.md "$LENS"); do
-       <tool>/scripts/run cut-scratch --check <repo>/.worktrees/<TICKET>-rev-$LENS-$L "$SNAP" "${CLONE[@]}" \
-         || { echo "SCRATCH NOT READY: <TICKET>-rev-$LENS-$L; nothing launched"; exit 1; }
-     done
-   done
-   <tool>/scripts/run review-round start <dispatch> <round> || exit 1
-   REVIEWERS=()
-   for LENS in <open lenses>; do
-     for L in $(<tool>/scripts/run reviewers lanes <dispatch>/brief.md "$LENS"); do
-       DEST=<repo>/.worktrees/<TICKET>-rev-$LENS-$L
-       if [ "$LENS" = bug ]; then
-         LAUNCH=(<tool>/scripts/run launch review "$L" "$DEST" <BASE> --last <dispatch>/logs/review-r<round>-bug-$L-last.md --run <dispatch>)
-       else
-         LAUNCH=(<the launch step of $LENS, for "$L" in "$DEST">)
-       fi
-       <tool>/scripts/run host run "$(<tool>/scripts/run host name <dispatch> review "$L" "$LENS" <round>)" "$DEST" \
-           --under <dispatch> --role reviewer --run <dispatch> \
-           --out <dispatch>/logs/review-r<round>-$LENS-$L.jsonl --err <dispatch>/logs/review-r<round>-$LENS-$L.err \
-           --marker <dispatch>/logs/review-r<round>-$LENS-$L.done \
-           -- "${LAUNCH[@]}"
-       REVIEWERS+=("$LENS:$L")
-     done
-   done
-   <tool>/scripts/run review-round wait <dispatch> <round> <repo> "${REVIEWERS[@]}"
-   ```
+   If the wait is cut short, run `<tool>/scripts/run review-round wait <dispatch> <round> <repo>`;
+   it keeps the original deadline. If launch is interrupted before every reviewer starts, repeat
+   the cut and launch calls. Never install into a scratch. If the synthesis worktree has no
+   installed dependencies, install there first and clone from it. Every reviewer reviews from a
+   scratch, never from the synthesis worktree.
 
    **Normalize the bug reports before triage.** For each lane under the bug lens, copy any
    forked task record the stream's `task_notification` named and normalize the native report
@@ -838,18 +722,7 @@ Set the stage first, `<tool>/scripts/run stage <dispatch> review`, then:
    the hand-written one where normalization failed.
 
    ```sh
-   NORMALIZE_FAILED=()
-   for L in $(<tool>/scripts/run reviewers lanes <dispatch>/brief.md bug); do
-     DEST=<repo>/.worktrees/<TICKET>-rev-bug-$L
-     EVENTS=<dispatch>/logs/review-r<round>-bug-$L.jsonl
-     HARVEST_ERR=$(<tool>/scripts/run review-findings harvest "$EVENTS" <dispatch>/logs --prefix review-r<round>-bug-$L 2>&1) \
-       || { <tool>/scripts/run log-action <dispatch> coachman degrade "$L" "bug round <round>: $HARVEST_ERR"; <tool>/scripts/run run-log <dispatch> "$L bug: DEGRADED, $HARVEST_ERR"; continue; }
-     <tool>/scripts/run review-findings normalize "$L" "$DEST" "$EVENTS" --last <dispatch>/logs/review-r<round>-bug-$L-last.md --run <dispatch> \
-       > <dispatch>/logs/review-r<round>-bug-$L-findings.json || { NORMALIZE_FAILED+=("$L"); rm -f <dispatch>/logs/review-r<round>-bug-$L-findings.json; }
-   done
-   for L in "${NORMALIZE_FAILED[@]}"; do   # a report the normalizer cannot read is read by hand, with its path; never dropped, never clean
-     <tool>/scripts/run run-log <dispatch> "review round <round> $L: normalize failed; reading the raw report by hand"
-   done
+   <tool>/scripts/run review-findings round <dispatch> <round>
    ```
 
    For each such lane, read its raw report — the `--last` file for codex, else the final
@@ -1083,7 +956,7 @@ Set the stage first: `<tool>/scripts/run stage <dispatch> shipping`.
    `--run <dispatch>` and `--pidfile <dispatch>/render/preview.pid`, named for its role alone
    (`preview server`), which
    keeps it alive past a harness turn and in the user's view, and put stopping it on the
-   teardown checklist: `kill -- -$(cat <dispatch>/render/preview.pid)`, its whole process group,
+   teardown checklist: `<tool>/scripts/run host stop <preview-worktree>` stops its whole process group,
    so no child of a package script survives. The preview link goes on the ship card and the
    tracker comment beside the review link. **Then QA that preview build before shipping it:
    click through the new surface like a person**, at phone width, working the actual task
@@ -1145,14 +1018,12 @@ Set the stage first: `<tool>/scripts/run stage <dispatch> shipping`.
    only the branch's committed content — no untracked files and no installed dependencies —
    so derive `<install>` from the main checkout with
    `<tool>/scripts/run discover-project <repo>` (the `install=` line; empty where the project
-   needs no install step). Write each non-empty part (`<install>` from discovery, `<build>`
-   and `<gate>` from the profile, a `none` build left out) to its own file under
-   `<dispatch>` with a quoted heredoc, which carries `$`, quotes and newlines literally,
-   and pass them as separate arguments — never joined with `&&` into one shell string, in
-   which a failed preparation would hide behind a later statement:
-   `<tool>/scripts/run clean-checkout <repo> <default-branch> "$(cat
-   <dispatch>/ship-install.txt)" "$(cat <dispatch>/ship-build.txt)" "$(cat
-   <dispatch>/ship-gate.txt)"`, leaving out the empty parts. The helper runs them in turn
+   needs no install step). Write non-empty `<install>`, `<build>` and `<gate>` parts to
+   `<dispatch>/ship-install.txt`, `<dispatch>/ship-build.txt` and `<dispatch>/ship-gate.txt`
+   with your file-writing tools; leave out the build file when the profile says `none` and
+   omit any empty part. Pass the remaining file paths to
+   `<tool>/scripts/run clean-checkout <repo> <default-branch> --files <command-file> [<command-file> ...]`.
+   The helper reads and runs each file's command in turn
    and stops at the first failure. Where the profile names no gate, there is nothing to
    verify. Log the result when a gate ran
    (`<tool>/scripts/run log-action <dispatch> coachman gate <default-branch> "post-merge,
@@ -1258,10 +1129,10 @@ ticket that needs another's change waits for it to land.
   killed in a standard run. Record every thread id at dispatch; prefer resuming a thread over
   re-briefing a fresh one, since the thread carries its own context. Threads stay unarchived
   until stage 4. The rare interactive workhorse (live mid-run steering genuinely needed) runs in its
-  own named tmux session, is captured (scrollback to the dispatch dir) and killed as soon as
+  own named tmux session, is captured (scrollback to the dispatch dir) and stopped as soon as
   harvested, never left to linger, never your own session (confirm with
-  `tmux display-message -p '#S'`); kill only sessions YOU spawned, and inspect the pane first
-  (`tmux capture-pane -p -t <name> | tail`), since a similarly named session can be a different
+  `tmux display-message -p '#S'`); stop only sessions YOU spawned, and inspect the pane first
+  with `<tool>/scripts/run host read <handle>`, since a similarly named session can be a different
   live run holding an unsent draft. If so, leave it and report. Composer gotchas: bracketed
   paste, Enter as a separate send-keys, and check the working indicator before trusting a
   dispatch.
@@ -1282,9 +1153,8 @@ ticket that needs another's change waits for it to land.
   `<tool>/scripts/run landing results` prints for them, never reworded and never left out; a
   check that did not run is `not run`, never passed. An exit 1 from the call is a fault in
   its inputs: fix them and re-run; never proceed past it.
-- Never gate-then-commit through a masking pipe: `<gate> 2>&1 | tail && git commit` reports the
-  tail's exit, not the suite's, and will commit a RED tree. Check `${pipestatus[1]}` (zsh) or
-  `${PIPESTATUS[0]}` (bash), or run the gate unpiped and commit only on its own exit 0.
+- Never hide a gate failure behind a later command. Run the gate on its own, check its exit,
+  and commit only after it exits 0.
 - Always run project scripts through the package manager's explicit run form (`pnpm run
   <script>`, `npm run <script>`): a builtin can shadow a script name, and a builtin's misfire
   can delete files before erroring. After any misfire, check `git status` for collateral

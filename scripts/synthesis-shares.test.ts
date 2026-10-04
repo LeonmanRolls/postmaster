@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { chmodSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { recordSharesLine } from "./synthesis-shares.ts";
 
 type Lane = Readonly<{ name: string; head: string }>;
 type Output = Readonly<{ stdout: string; stderr: string; code: number }>;
@@ -493,4 +494,28 @@ test("the record pins commits and is written once", () =>
     expect(second.code).not.toBe(0);
     expect(second.stderr).toContain("EEXIST");
     expect(readFileSync(result.recordPath, "utf8")).toBe(original);
+  }));
+
+test("the shares line is appended through run-log as part of the shares step", () =>
+  withWorkspace((directory) => {
+    const base = initializeRepo(directory);
+    const phrase = "maple orchard river silver candle meadow";
+    const alpha = commitFiles(directory, base, "alpha work", { "file.ts": `${phrase}\n` });
+    const synthesis = commitFiles(directory, base, "synthesis", { "file.ts": `${phrase}\n` });
+    const result = runScenario(directory, base, synthesis, [{ name: "alpha", head: alpha }]);
+    const narrative = readFileSync(join(dirname(result.recordPath), "run-log.md"), "utf8");
+    expect(narrative).toContain(result.line);
+
+    const calls: Array<{ program: string; args: readonly string[] }> = [];
+    const logged = recordSharesLine("/dispatch", result.line, (program, args) => {
+      calls.push({ program, args });
+      return { code: 0, out: "", err: "", timedOut: false };
+    });
+    expect(logged.code).toBe(0);
+    expect(calls).toEqual([
+      {
+        program: join(import.meta.dir, "run"),
+        args: ["run-log", "/dispatch", result.line],
+      },
+    ]);
   }));

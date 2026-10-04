@@ -328,6 +328,26 @@ describe("cleanCheckout", () => {
     });
   });
 
+  test("the CLI reads each command from its file and stops at the first failure", async () => {
+    await withRepo(async (repo) => {
+      const dir = mkdtempSync(join(tmpdir(), "clean-checkout-command-files-"));
+      roots.push(dir);
+      const first = join(dir, "first");
+      const second = join(dir, "second");
+      const firstFile = join(dir, "install.txt");
+      const secondFile = join(dir, "gate.txt");
+      const thirdFile = join(dir, "unused.txt");
+      writeFileSync(firstFile, `touch ${first}\n`);
+      writeFileSync(secondFile, "exit 3\n");
+      writeFileSync(thirdFile, `touch ${second}\n`);
+
+      const result = runHelper([repo, "main", "--files", firstFile, secondFile, thirdFile]);
+      expect(result.status).toBe(3);
+      expect(existsSync(first)).toBe(true);
+      expect(existsSync(second)).toBe(false);
+    });
+  });
+
   test("a command that finishes inside its bound passes as before", async () => {
     await withRepo(async (repo) => {
       const quick = runHelper([repo, "main", "true"], { CLEAN_CHECKOUT_TIMEOUT: "60" });

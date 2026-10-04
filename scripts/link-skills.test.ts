@@ -179,14 +179,37 @@ function state(): string {
 let resolver = "";
 let documented = "";
 
+function toolFromSkill(skillDir: string): string {
+  let resolved: string;
+  try {
+    resolved = realpathSync(skillDir);
+  } catch {
+    throw new Error(`skill link cannot be resolved: ${skillDir}`);
+  }
+  const tool = dirname(dirname(resolved));
+  if (resolved !== join(tool, "skills", "postmaster") || !existsSync(join(tool, "scripts", "run")))
+    throw new Error(`skill link does not lead to a postmaster checkout: ${skillDir}`);
+  return tool;
+}
+
 function through(skillDir: string): { code: number; out: string } {
-  const findTool = resolver.replace(/<skill>/gu, skillDir);
-  const command = documented.replace(/<repo>/gu, join(tmp, "target")).replace(/<tool>/gu, "$tool");
-  const r = run("bash", ["-c", `tool=$(${findTool}) && ${command}`], {
-    cwd: elsewhere,
-    env: { ...process.env, PATH: bin, HOME: home },
-  });
-  return { code: r.code, out: r.out + r.err };
+  try {
+    const tool = toolFromSkill(skillDir);
+    const prefix = "<tool>/scripts/run ";
+    if (!documented.startsWith(prefix))
+      throw new Error(`undocumented board command: ${documented}`);
+    const args = documented
+      .slice(prefix.length)
+      .replace(/<repo>/gu, join(tmp, "target"))
+      .split(/[ \t]+/u);
+    const r = run(join(tool, "scripts", "run"), args, {
+      cwd: elsewhere,
+      env: { ...process.env, PATH: bin, HOME: home },
+    });
+    return { code: r.code, out: r.out + r.err };
+  } catch (error) {
+    return { code: 1, out: `${error instanceof Error ? error.message : String(error)}\n` };
+  }
 }
 
 function expectNamedFailure(link: string): void {
@@ -396,7 +419,7 @@ describe("positive control: from an unrelated directory, a documented command re
       resolver =
         readFileSync(skillMd, "utf8")
           .split("\n")
-          .find((l) => l.includes('test -x "$t/scripts/run"')) ?? "";
+          .find((l) => l.includes("Resolve `<tool>` from the link target of `<skill>`")) ?? "";
       documented =
         readFileSync(trackersMd, "utf8")
           .split("\n")
@@ -435,12 +458,7 @@ esac
   }, 30000);
 
   test("<tool> is the checkout the link leads to", () => {
-    const r = run("bash", ["-c", resolver.replace(/<skill>/gu, join(C, "postmaster"))], {
-      cwd: elsewhere,
-      env: { ...process.env, PATH: bin, HOME: home },
-    });
-    expect(r.code).toBe(0);
-    expect(r.out.trim()).toBe(TOOL);
+    expect(toolFromSkill(join(C, "postmaster"))).toBe(TOOL);
   }, 30000);
 
   test("the board command runs through the link", () => {
@@ -450,12 +468,7 @@ esac
   }, 30000);
 
   test("a session in the checkout itself, sent to skills/postmaster, finds that checkout", () => {
-    const r = run("bash", ["-c", resolver.replace(/<skill>/gu, "skills/postmaster")], {
-      cwd: TOOL,
-      env: { ...process.env, PATH: bin, HOME: home },
-    });
-    expect(r.code).toBe(0);
-    expect(r.out.trim()).toBe(TOOL);
+    expect(toolFromSkill(join(TOOL, "skills", "postmaster"))).toBe(TOOL);
   }, 30000);
 });
 
