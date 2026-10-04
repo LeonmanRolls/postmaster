@@ -182,6 +182,37 @@ needs to run its gate.
 Python 3.11 or newer, which the bash scripts use to read the config, and for discovering a
 JavaScript project's gate.
 
+## On a Mac
+
+The flow runs on macOS. What still differs from Linux, and what you see for it:
+
+- **Launches run without memory or process limits.** Caps need Linux with systemd, so a Mac
+  launch says `launch running uncapped (no supported per-launch limits available)` and runs
+  as it is. [#140](https://github.com/brindlewick/postmaster/issues/140) plans to cap them
+  there.
+- **Whether Muse and MiMo keep each lane's data apart is not known.** Only a Mac with those
+  agents logged in can show it, so until
+  [#205](https://github.com/brindlewick/postmaster/issues/205) runs that trial there, nothing
+  here claims they do or do not.
+- **Without `flock`, two runs adding a waiting question at once can rarely lose one entry.**
+  macOS ships no flock, and the waiting list then falls back to its lock-file guard. Installing
+  flock (Homebrew's) gives it the kernel lock again; until then, one of two simultaneous
+  additions may be dropped.
+- **A path written as `~username` for another user stays as written.** macOS keeps its users
+  outside the file Linux reads them from, so such a command fails with an error naming the
+  path exactly as you wrote it.
+- **An argument that is not valid text is taken with its bad bytes replaced, not refused.**
+  macOS shows a program its raw arguments only through native code, and terminals send valid
+  text, so you will not normally see it; if it happened, the argument would arrive with
+  replacement characters instead of an error.
+- **A review round's time limit follows the clock.** Setting the clock while a round runs
+  shortens or lengthens its time left. Time spent asleep counts just as it does on Linux.
+- **Changing the time zone while a run is going makes the run lose track of its launches.**
+  Stop and close no longer find the launches that were started before the change, so they are
+  left running. Change the time zone between runs.
+- **The archived trial scripts under `raw/trials/` and the root `oracle-*.sh` files run on
+  Linux only.** On a Mac they produce no result.
+
 ## Installing the skills
 
 Skills are installed as links, never as copies. `scripts/run link-skills` links each directory
