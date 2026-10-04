@@ -337,14 +337,18 @@ that one model wrote the change alone may review it differently.
    synthesis worktree the postmaster cut is at BASE and is your cwd. Stage 0 step 6 sets
    `bootstrapped` and adds no `lanes` entry. Stage 0 step 7 writes no workhorse brief.
 3. Set the stage `synthesis` as you start the acceptance tests, and write them under the rules
-   for every run below. Commit them first: the commit that adds the acceptance tests comes
+   for every run below — for a command-line tool, spawn the command as a subprocess; an import
+   from the change's own source is wrong whatever it tests. Commit them first: the commit that
+   adds the acceptance tests comes
    before every commit that changes any other file, and it touches nothing but those tests
    (D6). Where the ticket's design question is the interface, settle the interface as a
    decision first — recorded in `run-log.md` — then write the tests, then the code; the first
    commit is still the tests.
 4. Implement the change yourself in the synthesis worktree, in the workhorse's loop (D9):
    build, run each check of the ticket's `### Checks` (your acceptance tests encode them), fix
-   what fails, and repeat until every check passes or you are stuck. Run the run's own checks
+   what fails, and repeat until every check passes or you are stuck. Stage the code files by
+   name and keep the formatter away from the acceptance tests, as the rules below say, so no
+   commit after the first ever touches them. Run the run's own checks
    on the worktree each pass with `<tool>/scripts/run verify run <synthesis-wt> <dispatch>`,
    which logs each result; the last pass before checkpoint 1 must be all green, or its
    failures stopped on as a workhorse would stop them (the escalation rule below). What you
@@ -379,7 +383,10 @@ second implementer wrote (single-thread).
   used** (D7): the commands, files and outputs a check names — a browser walk for a web app,
   the public interface for a library (what other code calls), and for a command-line tool the
   command itself, run as a user runs it, reading what it prints and stores — never a function
-  inside the change, whose shape the ticket left free. Unit tests are coupled to the code
+  inside the change, whose shape the ticket left free. An acceptance test that imports a
+  module of the change (`import { main } from "../src/cli.ts"` on a command-line tool, say) is
+  wrong whatever it tests: spawn the command as a subprocess and assert on what it prints and
+  writes. Unit tests are coupled to the code
   beside them and come with the change, not here.
 - **They are committed before any of the change.** In synthesis mode, they are written while
   the lanes run, before you read any lane's diff, and committed on the ticket branch before
@@ -387,6 +394,12 @@ second implementer wrote (single-thread).
   gets none there (#280 takes that up). In single-thread mode, the first commit on the branch
   adds them and touches nothing else (D6). Where the ticket's design question is the
   interface, the interface is settled first, then the tests, then the code.
+- **A code commit never touches them.** A whole-tree formatter (`npm run format`, `biome
+  check --write`) will reflow an acceptance-test file that is already committed and fold it
+  into a code commit, which the next rule forbids: before staging a code commit,
+  `git diff --name-only` must list no acceptance-test file; if the formatter changed one,
+  `git restore` that file back to the tests commit. Stage the code files by name, never
+  everything at once.
 - **A test changed after it was committed is changed in a commit of its own that says why**
   (D8): the commit touches the acceptance tests alone and its message carries the reason, so
    the reviewers see the change in the diff they review. Never fold it into a commit that also
