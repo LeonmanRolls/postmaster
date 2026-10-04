@@ -26,4 +26,5 @@ if [ ! -f "$script" ]; then
   exit 2
 fi
 
-exec bun --no-env-file "--config=$scripts_dir/../bunfig.toml" "$script" "$@"
+exec bun --no-env-file "--config=$scripts_dir/../bunfig.toml" \
+  "--preload=$scripts_dir/check-bun-version.ts" "$script" "$@"
