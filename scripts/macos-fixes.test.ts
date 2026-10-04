@@ -13,6 +13,7 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -350,7 +351,7 @@ describe("C11/C12/C13: the fixture score's tool list and platform line", () => {
         if (r.code === 0) {
           const real = r.out.trim();
           try {
-            require("fs").symlinkSync(real, join(bin, tool));
+            symlinkSync(real, join(bin, tool));
           } catch {}
         }
       }
