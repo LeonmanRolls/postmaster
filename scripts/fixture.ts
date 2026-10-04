@@ -457,7 +457,242 @@ export function score(dispatch: string, repo: string): { code: number; out: stri
   ];
   rmSync(scratch, { recursive: true, force: true });
   const scored = report(results);
-  return { code: scored.code, out: `${platformLine()}\n${scored.out}` };
+  const timing = scoreTimings(dispatch);
+  return {
+    code: scored.code,
+    out: `${platformLine()}\n${scored.out}${timing.length > 0 ? `${timing.join("\n")}\n` : ""}`,
+  };
+}
+
+const LONG_RUN_SECONDS = 60 * 60;
+const LONG_WAIT_SECONDS = 10 * 60;
+
+interface TimedStage {
+  name: string;
+  waiting: string;
+}
+
+function secondsOfDuration(value: string): number | null {
+  const match = /^(?:(\d+)h(?:\s+|$))?(?:(\d+)m(?:\s+|$))?(?:(\d+)s)?$/u.exec(value.trim());
+  if (!match || !value.trim()) return null;
+  return Number(match[1] ?? 0) * 3600 + Number(match[2] ?? 0) * 60 + Number(match[3] ?? 0);
+}
+
+function duration(seconds: number): string {
+  const rounded = Math.max(0, Math.round(seconds));
+  const hours = Math.floor(rounded / 3600);
+  const remaining = rounded % 3600;
+  const minutes = Math.floor(remaining / 60);
+  const secs = remaining % 60;
+  return hours
+    ? `${hours}h ${String(minutes).padStart(2, "0")}m`
+    : minutes
+      ? `${minutes}m ${String(secs).padStart(2, "0")}s`
+      : `${secs}s`;
+}
+
+function stageRows(output: string): { rows: TimedStage[]; total: string | null } {
+  const rows: TimedStage[] = [];
+  let total: string | null = null;
+  for (const line of output.split(/\r?\n/u)) {
+    if (!line.trim() || line.startsWith("stage ")) continue;
+    const fields = line.trim().split(/\s{2,}/u);
+    if (fields[0] === "total") {
+      total = fields[1] ?? null;
+    } else if (fields.length >= 4) {
+      rows.push({ name: fields[0]!, waiting: fields[3]! });
+    }
+  }
+  return { rows, total };
+}
+
+function safeTimingName(value: unknown): value is string {
+  return (
+    typeof value === "string" && value !== "." && value !== ".." && /^[A-Za-z0-9._-]+$/u.test(value)
+  );
+}
+
+function actionTime(action: Record<string, unknown>): number | null {
+  if (typeof action.ts !== "string") return null;
+  const time = new Date(action.ts).getTime();
+  return Number.isFinite(time) ? time : null;
+}
+
+function timingToMarker(
+  dispatch: string,
+  marker: string,
+  start: number | null,
+): { seconds: number | null; missing: string | null } {
+  if (!safeTimingName(marker)) return { seconds: null, missing: "no exit marker" };
+  let ended: number;
+  try {
+    const file = lstatSync(join(dispatch, "logs", `${marker}.done`));
+    if (!file.isFile()) return { seconds: null, missing: "no exit marker" };
+    ended = file.mtimeMs;
+  } catch {
+    return { seconds: null, missing: "no exit marker" };
+  }
+  if (start === null) return { seconds: null, missing: "no launch action" };
+  return { seconds: Math.max(0, Math.round((ended - start) / 1000)), missing: null };
+}
+
+function slowestFirst<T extends { lane: string; seconds: number | null }>(items: T[]): T[] {
+  return items.sort((a, b) => {
+    if (a.seconds === null && b.seconds !== null) return 1;
+    if (a.seconds !== null && b.seconds === null) return -1;
+    if (a.seconds !== null && b.seconds !== null && a.seconds !== b.seconds) {
+      return b.seconds - a.seconds;
+    }
+    if ((a.lane === "mimo") !== (b.lane === "mimo")) return a.lane === "mimo" ? -1 : 1;
+    return a.lane.localeCompare(b.lane);
+  });
+}
+
+function workhorseTimingLines(
+  dispatch: string,
+  actions: Record<string, unknown>[] | null,
+): string[] {
+  if (!actions) return [];
+  const starts = new Map<string, number>();
+  for (const action of actions) {
+    if (
+      action.actor !== "coachman" ||
+      action.action !== "dispatch" ||
+      !safeTimingName(action.target)
+    )
+      continue;
+    const time = actionTime(action);
+    if (time !== null && (!starts.has(action.target) || time < starts.get(action.target)!)) {
+      starts.set(action.target, time);
+    }
+  }
+  const lanes = slowestFirst(
+    [...starts.entries()].map(([lane, start]) => ({
+      lane,
+      ...timingToMarker(dispatch, lane, start),
+    })),
+  );
+  if (lanes.length === 0) return [];
+  return [
+    `workhorses (slowest first): ${lanes
+      .map(
+        ({ lane, seconds, missing }) =>
+          `${lane} ${seconds === null ? (missing ?? "untimed") : duration(seconds)}`,
+      )
+      .join("; ")}`,
+  ];
+}
+
+function reviewTimingLines(dispatch: string, actions: Record<string, unknown>[] | null): string[] {
+  const logs = join(dispatch, "logs");
+  let entries: string[];
+  try {
+    entries = readdirSync(logs);
+  } catch {
+    return [];
+  }
+  const launches = new Map<string, number>();
+  for (const action of actions ?? []) {
+    if (action.action !== "review-launch" || !safeTimingName(action.target)) continue;
+    const detail = typeof action.detail === "string" ? action.detail : "";
+    const match = /^(style|bug|security) r([1-9][0-9]*)$/u.exec(detail);
+    const start = actionTime(action);
+    if (!match || start === null) continue;
+    launches.set(`${match[2]}\t${match[1]}\t${action.target}`, start);
+  }
+
+  const rounds = entries
+    .flatMap((entry) => {
+      const match = /^review-r([1-9][0-9]*)\.json$/u.exec(entry);
+      return match ? [{ entry, number: Number(match[1]), name: match[1]! }] : [];
+    })
+    .sort((a, b) => a.number - b.number);
+  const lines: string[] = [];
+  for (const { entry, name: round } of rounds) {
+    let record: Record<string, unknown>;
+    try {
+      const parsed: unknown = JSON.parse(readFileSync(join(logs, entry), "utf8"));
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) continue;
+      record = parsed as Record<string, unknown>;
+    } catch {
+      continue;
+    }
+    if (!Array.isArray(record.reviewers)) continue;
+    const reviewers: Array<{
+      lane: string;
+      lens: string;
+      seconds: number | null;
+      missing: string | null;
+    }> = [];
+    for (const pair of record.reviewers) {
+      if (
+        !Array.isArray(pair) ||
+        pair.length !== 2 ||
+        !["style", "bug", "security"].includes(String(pair[0])) ||
+        !safeTimingName(pair[1])
+      ) {
+        continue;
+      }
+      const lens = String(pair[0]);
+      const lane = pair[1];
+      const start = launches.get(`${round}\t${lens}\t${lane}`) ?? null;
+      const marker = `review-r${round}-${lens}-${lane}`;
+      reviewers.push({ lane, lens, ...timingToMarker(dispatch, marker, start) });
+    }
+    if (reviewers.length === 0) continue;
+    reviewers.sort((a, b) => {
+      if (a.seconds === null && b.seconds !== null) return 1;
+      if (a.seconds !== null && b.seconds === null) return -1;
+      if (a.seconds !== null && b.seconds !== null && a.seconds !== b.seconds) {
+        return b.seconds - a.seconds;
+      }
+      if ((a.lane === "mimo") !== (b.lane === "mimo")) return a.lane === "mimo" ? -1 : 1;
+      return a.lane.localeCompare(b.lane) || a.lens.localeCompare(b.lens);
+    });
+    lines.push(
+      `review round ${round} reviewers (slowest first): ${reviewers
+        .map(
+          ({ lane, lens, seconds, missing }) =>
+            `${lane} (${lens}) ${seconds === null ? (missing ?? "untimed") : duration(seconds)}`,
+        )
+        .join("; ")}`,
+    );
+  }
+  return lines;
+}
+
+function scoreTimings(dispatch: string): string[] {
+  const timing = sh([join(HERE, "run"), "run-times", dispatch]);
+  const lines: string[] = [];
+  let stages: TimedStage[] = [];
+  let total: string | null = null;
+  if (timing.code === 0) {
+    lines.push(timing.out.trimEnd());
+    ({ rows: stages, total } = stageRows(timing.out));
+  } else if (timing.code === 3) {
+    lines.push("timing: run could not be timed (no stage changes logged)");
+  } else {
+    lines.push("timing: run could not be timed");
+  }
+
+  const actions = readActions(dispatch);
+  lines.push(...workhorseTimingLines(dispatch, actions));
+  lines.push(...reviewTimingLines(dispatch, actions));
+
+  const longWaits = stages.filter((stage) => {
+    const waiting = secondsOfDuration(stage.waiting);
+    return waiting !== null && waiting > LONG_WAIT_SECONDS;
+  });
+  if (longWaits.length > 0) {
+    lines.push(
+      `long waits (>10m): ${longWaits.map((stage) => `${stage.name} ${stage.waiting}`).join("; ")}`,
+    );
+  }
+  const totalSeconds = total === null ? null : secondsOfDuration(total);
+  if (totalSeconds !== null && totalSeconds > LONG_RUN_SECONDS) {
+    lines.push(`run took longer than an hour: ${total}`);
+  }
+  return lines;
 }
 
 export function gitVersionNumber(output: string): string {

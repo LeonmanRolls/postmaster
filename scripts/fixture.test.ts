@@ -18,6 +18,7 @@ import {
   rmSync,
   statSync,
   symlinkSync,
+  utimesSync,
   writeFileSync,
 } from "node:fs";
 import { machine, release, tmpdir, type as osType } from "node:os";
@@ -69,6 +70,135 @@ let dest = "";
 const savedEnv: Record<string, string | undefined> = {};
 const bgResults = new Map<string, { code: number; out: string }>();
 const hiddenResults: Record<string, number> = {};
+
+function timestamp(seconds: number): string {
+  return new Date(Date.UTC(2026, 0, 1, 0, 0, seconds)).toISOString().replace(/\.000Z$/u, "Z");
+}
+
+function writeMarker(path: string, seconds: number): void {
+  writeFileSync(path, "");
+  const date = new Date(Date.UTC(2026, 0, 1, 0, 0, seconds));
+  utimesSync(path, date, date);
+}
+
+function timedCopy(name: string, kind: "floor" | "short" | "long-wait" | "no-stages"): void {
+  const source = join(tmp, `clean-${first}`, "repo");
+  const repo = join(tmp, name, "repo");
+  mkdirSync(dirname(repo), { recursive: true });
+  cpSync(source, repo, { recursive: true, preserveTimestamps: true });
+  const dispatch = join(repo, ".postmaster", "runs", "7");
+  const actionsPath = join(dispatch, "actions.jsonl");
+  const events = readFileSync(actionsPath, "utf8")
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as Record<string, unknown>);
+  const stageSeconds =
+    kind === "short"
+      ? {
+          bootstrapped: 120,
+          "workhorses-running": 600,
+          synthesis: 1320,
+          "checkpoint-1": 2040,
+          review: 2400,
+          shipping: 2880,
+          shipped: 3300,
+          done: 3441,
+        }
+      : kind === "long-wait"
+        ? {
+            bootstrapped: 120,
+            "workhorses-running": 720,
+            synthesis: 1560,
+            "checkpoint-1": 2520,
+            review: 3872,
+            shipping: 4200,
+            shipped: 4986,
+            done: 5580,
+          }
+        : {
+            bootstrapped: 120,
+            "workhorses-running": 720,
+            synthesis: 1560,
+            "checkpoint-1": 2520,
+            review: 2880,
+            shipping: 3600,
+            shipped: 3900,
+            done: 3960,
+          };
+  const legOneHandoff = kind === "short" ? 2220 : 2700;
+  const legTwoAccept = kind === "long-wait" ? 3871 : kind === "short" ? 2340 : 2820;
+  const legTwoHandoff = kind === "long-wait" ? 4201 : kind === "short" ? 3120 : 3720;
+  for (const event of events) {
+    let seconds = 0;
+    if (event.action === "stage" && typeof event.target === "string") {
+      seconds = stageSeconds[event.target as keyof typeof stageSeconds] ?? 0;
+    } else if (event.action === "handoff-accept") {
+      seconds = event.target === "leg-1" ? 60 : legTwoAccept;
+    } else if (event.action === "handoff") {
+      seconds = event.target === "leg-1" ? legOneHandoff : legTwoHandoff;
+    } else if (event.action === "dispatch" && event.actor === "postmaster") {
+      seconds = event.detail === "leg 2" ? legOneHandoff + 60 : 0;
+    } else if (event.action === "dispatch" && event.actor === "coachman") {
+      seconds = event.target === "two" ? 1 : 0;
+    }
+    event.ts = timestamp(seconds);
+  }
+  if (kind === "no-stages") {
+    writeFileSync(
+      actionsPath,
+      `${events
+        .filter((event) => event.action !== "stage")
+        .map((event) => JSON.stringify(event))
+        .join("\n")}\n`,
+    );
+    return;
+  }
+
+  const logs = join(dispatch, "logs");
+  mkdirSync(logs, { recursive: true });
+  writeMarker(join(logs, "one.done"), 600);
+  writeMarker(join(logs, "two.done"), 241);
+  const reviewStart = stageSeconds.review + 1;
+  for (const [lens, lane, elapsed] of [
+    ["bug", "mimo", 900],
+    ["bug", "codex", 180],
+  ] as const) {
+    events.push({
+      ts: timestamp(reviewStart),
+      project: "repo",
+      run: "7",
+      actor: "coachman",
+      action: "review-launch",
+      target: lane,
+      detail: `${lens} r1`,
+    });
+    const doneSeconds =
+      kind === "long-wait"
+        ? Math.min(stageSeconds.done - 1, reviewStart + elapsed)
+        : reviewStart + elapsed;
+    writeMarker(join(logs, `review-r1-${lens}-${lane}.done`), doneSeconds);
+  }
+  writeFileSync(
+    join(logs, "review-r1.json"),
+    JSON.stringify({
+      started: timestamp(reviewStart),
+      reviewers: [
+        ["bug", "mimo"],
+        ["bug", "codex"],
+      ],
+    }),
+  );
+  writeFileSync(actionsPath, `${events.map((event) => JSON.stringify(event)).join("\n")}\n`);
+  if (kind === "long-wait") {
+    writeFileSync(
+      join(dispatch, "brief.md"),
+      readFileSync(join(dispatch, "brief.md"), "utf8").replace(
+        /^efforts:.*$/mu,
+        "efforts: one=wrong",
+      ),
+    );
+  }
+}
 
 function background(name: string, fn: () => number | { code: number; out: string }): void {
   const r = fn();
@@ -349,10 +479,9 @@ function expectScore(key: string, failing: string, failText?: string): void {
     .filter((l) => l.startsWith("FAIL"))
     .map((l) => pyWords(l)[1] ?? "");
   const failingChecks = failLines.join(",") || "none";
-  const lines = out.split("\n").filter((l) => l.trim()).length;
   expect(rc).toBe(failing === "none" ? 0 : 2);
   expect(failingChecks).toBe(failing);
-  expect(lines).toBe(10);
+  expect(out.split("\n").filter((line) => /^(?:ok {2}|FAIL)/u.test(line))).toHaveLength(9);
   expect(
     out
       .split("\n", 1)[0]
@@ -485,6 +614,28 @@ beforeAll(() => {
   }
   background("clean-one", () => recorded("clean-one", first, "reference", 1));
   background("clean-three", () => recorded("clean-three", first, "reference", 3));
+  for (const kind of ["floor", "short", "long-wait", "no-stages"] as const) {
+    const name = `timing-${kind}`;
+    timedCopy(name, kind);
+    const repo = join(tmp, name, "repo");
+    background(name, () => runScore(join(repo, ".postmaster", "runs", "7"), repo));
+  }
+  const cardRepo = join(tmp, "timing-card", "repo");
+  cpSync(join(tmp, "timing-floor", "repo"), cardRepo, {
+    recursive: true,
+    preserveTimestamps: true,
+  });
+  const cardDispatch = join(cardRepo, ".postmaster", "runs", "7");
+  rmSync(join(cardDispatch, "card.md"), { force: true });
+  background("timing-card", () => runScore(cardDispatch, cardRepo));
+  const missingMarkerRepo = join(tmp, "timing-missing-marker", "repo");
+  cpSync(join(tmp, "timing-floor", "repo"), missingMarkerRepo, {
+    recursive: true,
+    preserveTimestamps: true,
+  });
+  const missingMarkerDispatch = join(missingMarkerRepo, ".postmaster", "runs", "7");
+  rmSync(join(missingMarkerDispatch, "logs", "one.done"), { force: true });
+  background("timing-missing-marker", () => runScore(missingMarkerDispatch, missingMarkerRepo));
   background("break-hidden", () => recorded("break-hidden", first, "app"));
   background("break-gate", () => recorded("break-gate", first, "broken"));
 
@@ -882,8 +1033,7 @@ describe("score: a recorded run that meets every check scores clean", () => {
     const clean = runScore(dispatch, repo, { ...process.env, PATH: path });
     expect(clean.code).toBe(0);
     const lines = clean.out.trim().split("\n");
-    expect(lines).toHaveLength(10);
-    expect(lines.slice(1).every((line) => line.startsWith("ok  "))).toBe(true);
+    expect(lines.filter((line) => line.startsWith("ok  "))).toHaveLength(9);
     console.log(`score without jq:\n${clean.out.trimEnd()}`);
 
     const withoutNpm = scorePath(["jq", "npm"]);
@@ -914,7 +1064,7 @@ describe("score: a recorded run that meets every check scores clean", () => {
     const out = bgResults.get("break-gate")?.out ?? "";
     const cleanOut = bgResults.get(`clean-${first}`)?.out ?? "";
     expect(out.split("\n", 1)[0]).toBe(cleanOut.split("\n", 1)[0]);
-    expect(out.split("\n")).toHaveLength(11);
+    expect(out.split("\n").filter((line) => /^(?:ok {2}|FAIL)/u.test(line))).toHaveLength(9);
     console.log(`failing score:\n${out.trimEnd()}`);
   });
 
@@ -942,6 +1092,87 @@ describe("score: a recorded run that meets every check scores clean", () => {
       bgResults.get(`clean-${first}`)?.out.split("\n", 1)[0],
     );
   }, 120000);
+});
+
+describe("score: timing is informational and comes from the run records", () => {
+  const result = (name: string): { code: number; out: string } => bgResults.get(name)!;
+  const dispatchFor = (name: string): string => join(tmp, name, "repo", ".postmaster", "runs", "7");
+
+  test("the over-hour clean copy prints the run-times table, lane times and round times", () => {
+    const scored = result("timing-floor");
+    const dispatch = dispatchFor("timing-floor");
+    const repo = join(tmp, "timing-floor", "repo");
+    const direct = run(join(HERE, "run"), ["run-times", dispatch]);
+    expect(scored.code).toBe(0);
+    expect(scored.out).toContain(direct.out.trimEnd());
+    expect(scored.out).toContain("total                                            1h 06m");
+    expect(scored.out).toContain("workhorses (slowest first): one 10m 00s; two 4m 00s");
+    expect(scored.out).toContain(
+      "review round 1 reviewers (slowest first): mimo (bug) 15m 00s; codex (bug) 3m 00s",
+    );
+    expect(scored.out).toContain("run took longer than an hour: 1h 06m");
+    expect(scored.out).not.toContain("long waits (>10m):");
+    console.log(
+      `$ scripts/run fixture score ${dispatch} ${repo}\n${scored.out.trimEnd()}\nexit: ${scored.code}`,
+    );
+    console.log(
+      `$ scripts/run run-times ${dispatch}\n${direct.out.trimEnd()}\nexit: ${direct.code}`,
+    );
+  }, 30000);
+
+  test("the short copy has no over-hour line", () => {
+    const scored = result("timing-short");
+    expect(scored.code).toBe(0);
+    expect(scored.out).toContain("total                                            57m 21s");
+    expect(scored.out).not.toContain("run took longer than an hour");
+    console.log(
+      `$ scripts/run fixture score ${dispatchFor("timing-short")} ${join(tmp, "timing-short", "repo")}\n${scored.out.trimEnd()}\nexit: ${scored.code}`,
+    );
+  }, 30000);
+
+  test("long waits are named and an efforts failure stays the only failure", () => {
+    const scored = result("timing-long-wait");
+    const failures = scored.out.split("\n").filter((line) => line.startsWith("FAIL"));
+    expect(scored.code).toBe(2);
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toContain("efforts");
+    expect(scored.out).toContain("checkpoint-1 19m 31s; shipping 13m 05s");
+    console.log(
+      `$ scripts/run fixture score ${dispatchFor("timing-long-wait")} ${join(tmp, "timing-long-wait", "repo")}\n${scored.out.trimEnd()}\nexit: ${scored.code}`,
+    );
+  }, 30000);
+
+  test("a missing card still fails while the over-hour line remains", () => {
+    const scored = result("timing-card");
+    expect(scored.code).toBe(2);
+    expect(scored.out).toContain("FAIL ship-card");
+    expect(scored.out).toContain("run took longer than an hour: 1h 06m");
+    console.log(
+      `$ scripts/run fixture score ${dispatchFor("timing-card")} ${join(tmp, "timing-card", "repo")}\n${scored.out.trimEnd()}\nexit: ${scored.code}`,
+    );
+  }, 30000);
+
+  test("without stage lines the score says it could not time the run and keeps its check verdict", () => {
+    const scored = result("timing-no-stages");
+    expect(scored.code).toBe(2);
+    expect(scored.out).toContain("timing: run could not be timed (no stage changes logged)");
+    expect(scored.out).toContain("FAIL stages");
+    expect(scored.out).not.toContain("run took longer than an hour");
+    console.log(
+      `$ scripts/run fixture score ${dispatchFor("timing-no-stages")} ${join(tmp, "timing-no-stages", "repo")}\n${scored.out.trimEnd()}\nexit: ${scored.code}`,
+    );
+  }, 30000);
+
+  test("a workhorse with no marker is named and receives no inferred duration", () => {
+    const scored = result("timing-missing-marker");
+    expect(scored.code).toBe(0);
+    expect(scored.out).toContain("workhorses (slowest first): two 4m 00s; one no exit marker");
+  }, 30000);
+
+  test("a one-leg run has no review-round timing line", () => {
+    const scored = bgResults.get("clean-one")!;
+    expect(scored.out).not.toContain("review round");
+  }, 30000);
 });
 
 describe("score: premises are checked before workhorse dispatch", () => {
