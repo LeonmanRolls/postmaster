@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   chmodSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
@@ -10,7 +11,14 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { processInfo, processStart, processState, processTable } from "./processes.ts";
+import {
+  bootIdentity,
+  bootMatches,
+  processInfo,
+  processStart,
+  processState,
+  processTable,
+} from "./processes.ts";
 
 const SCRIPTS = join(import.meta.dir, "..");
 
@@ -214,6 +222,72 @@ describe("portable process state", () => {
       else process.env.PATH = previousPath;
       if (previousRoot === undefined) delete process.env.POSTMASTER_PROC_ROOT;
       else process.env.POSTMASTER_PROC_ROOT = previousRoot;
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("boot checks use the boot session UUID and keep legacy records across clock changes", () => {
+    const root = mkdtempSync(join(tmpdir(), "process-boot-id-"));
+    const sysctl = join(root, "sysctl");
+    const state = join(root, "state");
+    mkdirSync(state);
+    writeFileSync(
+      sysctl,
+      [
+        "#!/bin/sh",
+        'case "$*" in',
+        '  "-n kern.bootsessionuuid") [ -f "$BOOT_STATE/refuse-uuid" ] && exit 1; cat "$BOOT_STATE/uuid" ;;',
+        '  "-n kern.boottime") printf \'{ sec = %s, usec = %s } %s\\n\' "$(cat "$BOOT_STATE/sec")" "$(cat "$BOOT_STATE/usec")" "$(cat "$BOOT_STATE/date")" ;;',
+        "  *) exit 1 ;;",
+        "esac",
+        "",
+      ].join("\n"),
+    );
+    chmodSync(sysctl, 0o755);
+    const previousPath = process.env.PATH;
+    const previousRoot = process.env.POSTMASTER_PROC_ROOT;
+    const previousState = process.env.BOOT_STATE;
+    process.env.PATH = `${root}:${previousPath ?? ""}`;
+    process.env.POSTMASTER_PROC_ROOT = join(root, "missing-proc");
+    process.env.BOOT_STATE = state;
+    const bootText = (sec: string, usec: string, date: string): string => {
+      writeFileSync(join(state, "sec"), `${sec}\n`);
+      writeFileSync(join(state, "usec"), `${usec}\n`);
+      writeFileSync(join(state, "date"), `${date}\n`);
+      return `{ sec = ${sec}, usec = ${usec} } ${date}`;
+    };
+    try {
+      writeFileSync(join(state, "uuid"), "session-a\n");
+      const oldText = bootText("1800000000", "10", "Tue Nov 14 22:13:20 2026");
+      const first = bootIdentity();
+      expect(first.id).toBe("mac:session-a");
+      expect(bootMatches(oldText, first)).toBe(true);
+
+      bootText("1800000000", "987654", "Wed Nov 15 14:13:20 2026");
+      const correctedClock = bootIdentity();
+      expect(correctedClock.id).toBe(first.id);
+      expect(bootMatches(oldText, correctedClock)).toBe(true);
+
+      writeFileSync(join(state, "uuid"), "session-b\n");
+      bootText("1800000001", "1", "Wed Nov 15 14:13:21 2026");
+      const restarted = bootIdentity();
+      expect(bootMatches(first.id, restarted)).toBe(false);
+      expect(bootMatches(oldText, restarted)).toBe(false);
+
+      writeFileSync(join(state, "refuse-uuid"), "");
+      const fallback = bootIdentity();
+      expect(fallback.id).toBe("mac:1800000001");
+      expect(bootMatches("{ sec = 1800000001, usec = 999 } Mon Jan 1 00:00:00 2024", fallback)).toBe(
+        true,
+      );
+      expect(bootMatches(oldText, fallback)).toBe(false);
+    } finally {
+      if (previousPath === undefined) delete process.env.PATH;
+      else process.env.PATH = previousPath;
+      if (previousRoot === undefined) delete process.env.POSTMASTER_PROC_ROOT;
+      else process.env.POSTMASTER_PROC_ROOT = previousRoot;
+      if (previousState === undefined) delete process.env.BOOT_STATE;
+      else process.env.BOOT_STATE = previousState;
       rmSync(root, { recursive: true, force: true });
     }
   });

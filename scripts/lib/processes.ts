@@ -19,6 +19,42 @@ function procRoot(): string {
   return process.env.POSTMASTER_PROC_ROOT || "/proc";
 }
 
+export type BootIdentity = Readonly<{ id: string; seconds: string | null }>;
+
+const bootSeconds = (text: string): string | null =>
+  /\bsec\s*=\s*([0-9]+)\b/u.exec(text)?.[1] ?? null;
+
+/** Read a boot identity on either platform. POSTMASTER_PROC_ROOT forces the
+ * sysctl path so Linux tests can exercise the macOS identity used by runs. */
+export function bootIdentity(): BootIdentity {
+  if (process.env.POSTMASTER_PROC_ROOT === undefined) {
+    try {
+      const id = readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim();
+      if (id) return { id, seconds: null };
+    } catch {
+      // macOS has no procfs; use its boot-session identity below.
+    }
+  }
+
+  const options = { env: { LC_ALL: "C" } };
+  const session = run("sysctl", ["-n", "kern.bootsessionuuid"], options);
+  const boot = run("sysctl", ["-n", "kern.boottime"], options);
+  const seconds = bootSeconds(boot.out);
+  if (session.code === 0 && session.out.trim())
+    return { id: `mac:${session.out.trim()}`, seconds };
+  if (seconds !== null) return { id: `mac:${seconds}`, seconds };
+  return { id: "", seconds: null };
+}
+
+/** Older macOS records stored kern.boottime's full, local-time text. Match
+ * those by the boot's whole seconds so clock corrections and zone changes do
+ * not discard a run; new records use the session UUID when available. */
+export function bootMatches(recorded: string, current: BootIdentity): boolean {
+  if (recorded === current.id) return true;
+  const previousSeconds = bootSeconds(recorded);
+  return previousSeconds !== null && current.seconds !== null && previousSeconds === current.seconds;
+}
+
 function validPid(pid: number): boolean {
   return Number.isSafeInteger(pid) && pid > 0;
 }

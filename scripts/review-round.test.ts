@@ -14,16 +14,14 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { run, withTempDir } from "./lib/proc.ts";
-import { processState } from "./lib/processes.ts";
+import { bootIdentity, processState } from "./lib/processes.ts";
 import { ARG_SPLIT_RE, monotonic } from "./review-round.ts";
 
 const self = join(import.meta.dir, "run");
 
-const skipBootId = !existsSync("/proc/sys/kernel/random/boot_id");
+const skipBootId = bootIdentity().id === "";
 if (skipBootId) {
-  console.log(
-    "skip a round started before the machine restarted is not waited on: no /proc/sys/kernel/random/boot_id",
-  );
+  console.log("skip a round started before the machine restarted is not waited on: no boot identity");
 }
 const skipRoot = process.getuid?.() === 0;
 if (skipRoot) {
