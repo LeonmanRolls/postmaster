@@ -392,6 +392,7 @@ describe("C15: a launch in a pane runs there even when the pane cannot find Bun"
   test("host.ts starts Bun by its running path, never by name", () => {
     const hostSrc = readFileSync(join(HERE, "host.ts"), "utf8");
     // startDetached, the follower and the leg launch use process.execPath.
+    // ASCII: matches ASCII source text.
     expect(hostSrc).not.toMatch(/spawn\(\s*"bun"/u);
     expect(hostSrc).toContain("process.execPath");
     // The pane lines quote the running path.
@@ -399,7 +400,9 @@ describe("C15: a launch in a pane runs there even when the pane cannot find Bun"
     // launch.ts, stage.ts and fixture.ts likewise.
     for (const f of ["launch.ts", "stage.ts", "fixture.ts"]) {
       const src = readFileSync(join(HERE, f), "utf8");
+      // ASCII: matches ASCII source text.
       expect(src).not.toMatch(/run\(\s*"bun"/u);
+      // ASCII: matches ASCII source text.
       expect(src).not.toMatch(/sh\(\[\s*"bun"/u);
     }
   });

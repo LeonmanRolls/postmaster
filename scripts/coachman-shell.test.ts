@@ -25,11 +25,13 @@ function shBlocks(): Block[] {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]!;
     if (open < 0) {
+      // ASCII: matches ASCII markdown fences.
       if (/^\s*```sh\s*$/u.test(line)) {
         open = i;
         body = [];
         index++;
       }
+      // ASCII: matches ASCII markdown fences.
     } else if (/^\s*```\s*$/u.test(line)) {
       blocks.push({ index, body: body.join("\n") });
       open = -1;

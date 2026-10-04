@@ -190,10 +190,15 @@ export function commandLine(pid: number): string {
 export type ProcessHit = { file: string; line: number; kind: string; text: string };
 
 const CONTAINMENT_KINDS: Array<[string, RegExp]> = [
+  // ASCII: the patterns match ASCII source text.
   ["proc-stat", /\/proc\/(?:\$\{[^}]+\}|[0-9]+)\/stat/u],
+  // ASCII: the patterns match ASCII source text.
   ["proc-list", /readdirSync\(\s*(?:["'`]\/proc["'`]|procRoot\(\))/u],
+  // ASCII: the patterns match ASCII source text.
   ["proc-cmdline", /\/proc\/(?:\$\{[^}]+\}|[0-9]+)\/cmdline/u],
+  // ASCII: the patterns match ASCII source text.
   ["ps-call", /(?:run|spawn|spawnSync)\(\s*["']ps["']|Bun\.spawn\(\s*\[\s*["']ps["']/u],
+  // ASCII: the patterns match ASCII source text.
   ["kill-probe", /process\.kill\([^,]+,\s*0\s*\)/u],
 ];
 

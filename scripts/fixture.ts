@@ -435,6 +435,7 @@ export function score(dispatch: string, repo: string): { code: number; out: stri
   // Mac run's output has to show it ran on a Mac. Nothing here names the
   // machine, the user or their home folder. (D6)
   const gitVersionOut = run("git", ["--version"]).out.trim();
+  // ASCII: the version digits are tool-printed ASCII.
   const gitVersion = /\b([0-9]+(?:\.[0-9]+)+)/u.exec(gitVersionOut)?.[1] ?? gitVersionOut;
   // os.machine() and Bun.version are runtime facts the bundled types may not name.
   const osMachine = (nodeOs as unknown as { machine: () => string }).machine();
