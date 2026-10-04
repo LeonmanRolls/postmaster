@@ -702,7 +702,7 @@ with a limit word counts even when it is about something else (D3).
 The reset is read from the message only in the shapes providers have used (D4, D5): `2:29 AM`
 in the machine's zone, today or tomorrow once it is more than five minutes past; `Oct 5th,
 2026 2:29 AM` and `Oct 5, 2026 2:29 AM` as written; `resets 3am (UTC)` or another IANA zone
-in that zone; `in 20 minutes|hours` from the moment the lane stopped; of two times the later
+in that zone; `in N minutes|hours` from the moment the lane stopped; of two times the later
 counts. A zone that is an abbreviation such as PST, or no time at all, means no reset time.
 
 The record holds the lane, its role (a reviewer's with its lens and round), the message's
