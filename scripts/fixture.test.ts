@@ -18,6 +18,7 @@ import {
   rmSync,
   statSync,
   symlinkSync,
+  utimesSync,
   writeFileSync,
 } from "node:fs";
 import { machine, release, tmpdir, type as osType } from "node:os";
@@ -46,6 +47,7 @@ import {
   ticketBody,
   tickets,
   ticketTitle,
+  timeReport,
 } from "./fixture";
 import { scriptsDir, toolRoot } from "./lib/paths.ts";
 import { run } from "./lib/proc.ts";
@@ -240,6 +242,22 @@ function breaks(cleanDir: string, repo: string): void {
   }
   writeFileSync(actionsPath, `${kept.join("\n")}\n`);
 
+  d = brokenCopy("break-notime", cleanDir);
+  writeFileSync(
+    join(d, "actions.jsonl"),
+    `${readFileSync(actionsPath, "utf-8")
+      .split("\n")
+      .filter((line) => {
+        if (!line.trim()) return false;
+        try {
+          return JSON.parse(line).action !== "stage";
+        } catch {
+          return true;
+        }
+      })
+      .join("\n")}\n`,
+  );
+
   d = brokenCopy("break-markers", cleanDir);
   rmSync(join(d, ".leg-2-done"), { force: true });
 
@@ -278,6 +296,7 @@ function breaks(cleanDir: string, repo: string): void {
 
   for (const b of [
     "stages",
+    "notime",
     "markers",
     "handoffs",
     "runjson",
@@ -349,14 +368,19 @@ function expectScore(key: string, failing: string, failText?: string): void {
     .filter((l) => l.startsWith("FAIL"))
     .map((l) => pyWords(l)[1] ?? "");
   const failingChecks = failLines.join(",") || "none";
-  const lines = out.split("\n").filter((l) => l.trim()).length;
+  const lines = out.split("\n").filter((l) => l.trim());
   expect(rc).toBe(failing === "none" ? 0 : 2);
   expect(failingChecks).toBe(failing);
-  expect(lines).toBe(10);
+  // platform + nine check lines, then the score's time section (#265)
+  expect(lines.filter((l) => l.startsWith("ok  ") || l.startsWith("FAIL"))).toHaveLength(9);
+  expect(lines.length).toBeGreaterThanOrEqual(11);
   expect(
-    out
-      .split("\n", 1)[0]
-      ?.startsWith(`platform: ${osType()} ${release()} ${machine()}, bun ${Bun.version}, git `),
+    lines[0]?.startsWith(
+      `platform: ${osType()} ${release()} ${machine()}, bun ${Bun.version}, git `,
+    ),
+  ).toBe(true);
+  expect(
+    lines.slice(10).some((l) => l.startsWith("stage ") || l.includes("could not be timed")),
   ).toBe(true);
   if (failText !== undefined) {
     expect(
@@ -882,8 +906,9 @@ describe("score: a recorded run that meets every check scores clean", () => {
     const clean = runScore(dispatch, repo, { ...process.env, PATH: path });
     expect(clean.code).toBe(0);
     const lines = clean.out.trim().split("\n");
-    expect(lines).toHaveLength(10);
-    expect(lines.slice(1).every((line) => line.startsWith("ok  "))).toBe(true);
+    expect(lines.slice(1, 10).every((line) => line.startsWith("ok  "))).toBe(true);
+    expect(lines[10]?.startsWith("stage ")).toBe(true);
+    expect(lines.length).toBeGreaterThan(10);
     console.log(`score without jq:\n${clean.out.trimEnd()}`);
 
     const withoutNpm = scorePath(["jq", "npm"]);
@@ -914,7 +939,9 @@ describe("score: a recorded run that meets every check scores clean", () => {
     const out = bgResults.get("break-gate")?.out ?? "";
     const cleanOut = bgResults.get(`clean-${first}`)?.out ?? "";
     expect(out.split("\n", 1)[0]).toBe(cleanOut.split("\n", 1)[0]);
-    expect(out.split("\n")).toHaveLength(11);
+    expect(out.split("\n").filter((l) => l.startsWith("ok  ") || l.startsWith("FAIL"))).toHaveLength(
+      9,
+    );
     console.log(`failing score:\n${out.trimEnd()}`);
   });
 
@@ -1037,6 +1064,10 @@ describe("score: negative controls, the same record with one check broken at a t
   test("a stage change never logged: stages alone fails", () => {
     expectScore("break-stages", "stages", ", not ");
   }, 30000);
+  test("no stage lines at all: stages alone fails, and the score could not time the run", () => {
+    expectScore("break-notime", "stages");
+    expect(bgResults.get("break-notime")?.out ?? "").toContain("could not be timed");
+  }, 30000);
   test("a leg's done marker missing: markers alone fails", () => {
     expectScore("break-markers", "markers", ".leg-2-done");
   }, 30000);
@@ -1054,6 +1085,144 @@ describe("score: negative controls, the same record with one check broken at a t
   }, 30000);
   test("a waybill with mismatched efforts: efforts alone fails", () => {
     expectScore("break-efforts", "efforts", "efforts:");
+  }, 30000);
+});
+
+describe("score: the time lines after the checks (#265)", () => {
+  const T0 = Date.UTC(2026, 0, 5, 10, 0, 0);
+  const at = (sec: number): string => `${new Date(T0 + sec * 1000).toISOString().slice(0, 19)}Z`;
+
+  const act = (
+    sec: number,
+    actor: string,
+    action: string,
+    target: string,
+    detail = "",
+  ): Record<string, unknown> => ({ ts: at(sec), actor, action, target, detail });
+
+  function plant(
+    name: string,
+    events: Array<Record<string, unknown>>,
+    markers: Array<[string, number]> = [],
+    files: Record<string, string> = {},
+  ): string {
+    const d = join(scratch, `time-${name}`);
+    mkdirSync(join(d, "logs"), { recursive: true });
+    writeFileSync(
+      join(d, "actions.jsonl"),
+      `${events.map((e) => JSON.stringify({ project: "p", run: "1", ...e })).join("\n")}\n`,
+    );
+    for (const [rel, content] of Object.entries(files)) {
+      writeFileSync(join(d, rel), content);
+    }
+    for (const [rel, sec] of markers) {
+      const p = join(d, rel);
+      writeFileSync(p, "");
+      const when = new Date(T0 + sec * 1000);
+      utimesSync(p, when, when);
+    }
+    return d;
+  }
+
+  /** 12m 20s total; checkpoint-1 waits 11m 00s across a leg gap. */
+  function waitRun(): string {
+    return plant(
+      "wait",
+      [
+        act(0, "postmaster", "dispatch", "7"),
+        act(1, "coachman", "dispatch", "slow", "thread-slow"),
+        act(2, "coachman", "dispatch", "fast", "thread-fast"),
+        act(3, "coachman", "dispatch", "ghost", "thread-ghost"),
+        act(5, "coachman", "handoff-accept", "leg-1"),
+        act(10, "coachman", "stage", "bootstrapped"),
+        act(20, "coachman", "stage", "checkpoint-1"),
+        act(30, "coachman", "handoff", "leg-1"),
+        act(70, "coachman", "review-launch", "fast", "bug round 1"),
+        act(72, "coachman", "review-launch", "slow", "bug round 1"),
+        act(690, "coachman", "handoff-accept", "leg-2"),
+        act(700, "coachman", "stage", "review"),
+        act(710, "coachman", "handoff", "leg-2"),
+        act(720, "coachman", "stage", "shipping"),
+        act(730, "coachman", "stage", "shipped"),
+        act(740, "coachman", "stage", "done"),
+      ],
+      [
+        ["logs/slow.done", 60],
+        ["logs/fast.done", 15],
+        ["logs/review-r1-bug-fast.done", 170],
+        ["logs/review-r1-bug-slow.done", 102],
+      ],
+      {
+        "logs/review-r1.json": `${JSON.stringify({
+          started: at(66),
+          reviewers: [
+            ["bug", "fast"],
+            ["bug", "slow"],
+          ],
+        })}\n`,
+      },
+    );
+  }
+
+  /** 1h 00m total; no wait over a minute; no review leg, no markers. */
+  function hourRun(): string {
+    return plant("hour", [
+      act(0, "postmaster", "dispatch", "7"),
+      act(5, "coachman", "handoff-accept", "leg-1"),
+      act(10, "coachman", "stage", "bootstrapped"),
+      act(20, "coachman", "stage", "workhorses-running"),
+      act(30, "coachman", "handoff", "leg-1"),
+      act(40, "coachman", "handoff-accept", "leg-2"),
+      act(50, "coachman", "stage", "synthesis"),
+      act(60, "coachman", "stage", "review"),
+      act(3600, "coachman", "handoff", "leg-2"),
+      act(3610, "coachman", "stage", "shipping"),
+      act(3620, "coachman", "stage", "shipped"),
+      act(3630, "coachman", "stage", "done"),
+    ]);
+  }
+
+  test("the stage table follows the checks with each stage's waiting and the total", () => {
+    const out = timeReport(waitRun());
+    expect(out).toMatch(/^stage\s+started \(UTC\)/mu);
+    expect(out).toContain("11m 20s");
+    expect(out).toMatch(/^total\s+12m 20s/mu);
+  }, 30000);
+
+  test("a wait over ten minutes names the stage, and no hour is claimed", () => {
+    const out = timeReport(waitRun());
+    expect(out).toContain("long wait: checkpoint-1 11m 00s");
+    expect(out).not.toContain("longer than an hour");
+  }, 30000);
+
+  test("a total over an hour is named, and no short wait is", () => {
+    const out = timeReport(hourRun());
+    expect(out).toContain("the run took longer than an hour: 1h 00m");
+    expect(out).not.toContain("long wait:");
+  }, 30000);
+
+  test("workhorses read slowest first, and the lane with no marker is named as such", () => {
+    expect(timeReport(waitRun())).toContain("workhorses: slow 59s, fast 13s, ghost no marker");
+  }, 30000);
+
+  test("a reviewer is named with its lens, slowest first", () => {
+    expect(timeReport(waitRun())).toContain("review round 1: fast bug 1m 40s, slow bug 30s");
+  }, 30000);
+
+  test("a run with no review round files says nothing about rounds", () => {
+    expect(timeReport(hourRun())).not.toContain("review round");
+  }, 30000);
+
+  test("a log with no stage lines could not be timed, and prints no table", () => {
+    const d = plant("notiming", [
+      act(0, "postmaster", "dispatch", "7"),
+      act(5, "coachman", "dispatch", "slow", "thread-slow"),
+      act(10, "coachman", "note", "x"),
+    ]);
+    const out = timeReport(d);
+    expect(out).toContain("the run could not be timed");
+    expect(out).not.toContain("started (UTC)");
+    expect(out).toContain("workhorses: slow no marker");
   }, 30000);
 });
 

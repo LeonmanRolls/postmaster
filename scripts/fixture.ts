@@ -37,6 +37,7 @@ import { tryJsonFile } from "./lib/data.ts";
 import { effortsLine } from "./run-meta.ts";
 import { scriptsDir, toolRoot } from "./lib/paths.ts";
 import { die, run } from "./lib/proc.ts";
+import { computeTimes, fmt, parseTs } from "./run-times.ts";
 import {
   DOT_ALL,
   digitValue,
@@ -457,7 +458,7 @@ export function score(dispatch: string, repo: string): { code: number; out: stri
   ];
   rmSync(scratch, { recursive: true, force: true });
   const scored = report(results);
-  return { code: scored.code, out: `${platformLine()}\n${scored.out}` };
+  return { code: scored.code, out: `${platformLine()}\n${scored.out}${timeReport(dispatch)}` };
 }
 
 export function gitVersionNumber(output: string): string {
@@ -839,6 +840,151 @@ function report(results: CheckResult[]): { code: number; out: string } {
     }
   }
   return { code: results.every((r) => r.ok) ? 0 : 2, out: `${lines.join("\n")}\n` };
+}
+
+// --- time lines (#265) -------------------------------------------------------------------
+// The stage table and the lane times report where the run's time went; they print after the
+// checks and never change the exit, which comes from the checks alone. A wait over 10 minutes
+// and a run over an hour are named, not failed: the providers and the machine's load are not
+// the change the run was proving.
+const LONG_WAIT_SEC = 600;
+const HOUR_SEC = 3600;
+
+function markerMtime(path: string): number | null {
+  try {
+    return statSync(path).mtimeMs;
+  } catch {
+    return null;
+  }
+}
+
+interface TimedLine {
+  line: string;
+  secs: number | null;
+}
+
+/** The lines slowest first; a lane that could not be timed comes last, as named. */
+function slowestFirst(entries: TimedLine[]): string[] {
+  return [...entries]
+    .sort((a, b) => (b.secs ?? -1) - (a.secs ?? -1))
+    .map((e) => e.line);
+}
+
+/** `workhorses: …`, one entry per lane the coachman launched: its dispatch to its
+ * `.done` marker, or the lane named as having no marker. */
+function workhorseLine(dispatch: string, events: Array<Record<string, unknown>>): string | null {
+  const launched = new Map<string, Date>();
+  for (const e of events) {
+    if (e.action !== "dispatch" || e.actor !== "coachman" || typeof e.target !== "string") continue;
+    const ts = typeof e.ts === "string" ? parseTs(e.ts) : null;
+    if (ts !== null && !launched.has(e.target)) launched.set(e.target, ts);
+  }
+  if (launched.size === 0) return null;
+  const entries: TimedLine[] = [];
+  for (const [lane, launch] of launched) {
+    const marker = markerMtime(join(dispatch, "logs", `${lane}.done`));
+    if (marker === null) {
+      entries.push({ line: `${lane} no marker`, secs: null });
+      continue;
+    }
+    const secs = Math.max(0, (marker - launch.getTime()) / 1000);
+    entries.push({ line: `${lane} ${fmt(secs)}`, secs });
+  }
+  return `workhorses: ${slowestFirst(entries).join(", ")}`;
+}
+
+/** The `review-launch` that started this reviewer's attempt: target the lane, detail the
+ * lens and the round, at or after the round's own start; before it only if nothing else
+ * was logged. */
+function reviewLaunch(
+  events: Array<Record<string, unknown>>,
+  lane: string,
+  lens: string,
+  round: number,
+  since: Date | null,
+): Date | null {
+  const lensRe = new RegExp(`\\b${lens.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`);
+  const roundRe = new RegExp(`\\bround\\s*${round}\\b|\\br${round}\\b`);
+  let found: Date | null = null;
+  let any = false;
+  for (const e of events) {
+    if (e.action !== "review-launch" || e.target !== lane || typeof e.detail !== "string") continue;
+    if (!lensRe.test(e.detail) || !roundRe.test(e.detail)) continue;
+    const ts = typeof e.ts === "string" ? parseTs(e.ts) : null;
+    if (ts === null) continue;
+    any = true;
+    if (since !== null && ts < since) continue;
+    if (found === null || ts < found) found = ts;
+  }
+  if (found === null && any) return reviewLaunch(events, lane, lens, round, null);
+  return found;
+}
+
+/** One `review round N:` line per round json, each reviewer named with its lens and its
+ * launch-to-marker time, slowest first; a lane with no marker is named, never timed. */
+function reviewRoundLines(dispatch: string, events: Array<Record<string, unknown>>): string[] {
+  const logs = join(dispatch, "logs");
+  let files: string[] = [];
+  try {
+    files = readdirSync(logs);
+  } catch {
+    return [];
+  }
+  const rounds = files
+    .map((f) => /^review-r(\d+)\.json$/u.exec(f))
+    .filter((m): m is RegExpExecArray => m !== null)
+    .sort((a, b) => parseInt(a[1]!, 10) - parseInt(b[1]!, 10));
+  const lines: string[] = [];
+  for (const m of rounds) {
+    const n = parseInt(m[1]!, 10);
+    const data = tryJsonFile<Record<string, unknown>>(join(logs, `review-r${n}.json`));
+    if (!data) continue;
+    const since = typeof data.started === "string" ? parseTs(data.started) : null;
+    const reviewers = Array.isArray(data.reviewers) ? data.reviewers : [];
+    const entries: TimedLine[] = [];
+    for (const r of reviewers) {
+      if (!Array.isArray(r) || typeof r[0] !== "string" || typeof r[1] !== "string") continue;
+      const [lens, lane] = [r[0], r[1]];
+      const marker = markerMtime(join(logs, `review-r${n}-${lens}-${lane}.done`));
+      if (marker === null) {
+        entries.push({ line: `${lane} ${lens} no marker`, secs: null });
+        continue;
+      }
+      const launch = reviewLaunch(events, lane, lens, n, since);
+      if (launch === null) {
+        entries.push({ line: `${lane} ${lens} no launch`, secs: null });
+        continue;
+      }
+      const secs = Math.max(0, (marker - launch.getTime()) / 1000);
+      entries.push({ line: `${lane} ${lens} ${fmt(secs)}`, secs });
+    }
+    if (entries.length > 0) lines.push(`review round ${n}: ${slowestFirst(entries).join(", ")}`);
+  }
+  return lines;
+}
+
+/** Everything the score prints after its checks: the run-times stage table (the same
+ * figures `run run-times` prints), the lane lines, then the named waits and the total.
+ * A log with no stage changes is said, and the verdict is the checks' own. */
+export function timeReport(dispatch: string): string {
+  const lines: string[] = [];
+  const times = computeTimes(dispatch);
+  if (times.ok) lines.push(...times.table.text.replace(/\n$/u, "").split("\n"));
+  else lines.push(`the run could not be timed: ${times.message}`);
+  const events = readActions(dispatch) ?? [];
+  const workhorses = workhorseLine(dispatch, events);
+  if (workhorses !== null) lines.push(workhorses);
+  lines.push(...reviewRoundLines(dispatch, events));
+  if (times.ok) {
+    const longWaits = times.table.rows.filter((r) => r.waitSec !== null && r.waitSec > LONG_WAIT_SEC);
+    if (longWaits.length > 0) {
+      lines.push(`long wait: ${longWaits.map((r) => `${r.stage} ${fmt(r.waitSec!)}`).join(", ")}`);
+    }
+    if (times.table.totalSec > HOUR_SEC) {
+      lines.push(`the run took longer than an hour: ${fmt(times.table.totalSec)}`);
+    }
+  }
+  return lines.map((l) => `${l}\n`).join("");
 }
 
 // --- entry -----------------------------------------------------------------------------------

@@ -10,6 +10,10 @@
 // A terminal stage (done, abandoned) is a moment, not a span. A last stage that is not
 // terminal is open, and is measured to the last logged action.
 //
+// `computeTimes` is the same computation for a caller that wants the figures rather than the
+// print: the fixture score appends this table and compares its waiting and total, so both
+// read the log exactly once, through this.
+//
 //   exit 0  printed
 //   exit 1  usage, or the log is missing or unreadable
 //   exit 3  the log has no stage changes to time
@@ -22,14 +26,14 @@ interface Event {
   target: string;
 }
 
-function parseTs(s: string): Date | null {
+export function parseTs(s: string): Date | null {
   // BASE format is %Y-%m-%dT%H:%M:%SZ; accept that form, and the space-separated one too.
   const iso = s.endsWith("Z") ? s : `${s.replace(" ", "T")}Z`;
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
-function fmt(sec: number): string {
+export function fmt(sec: number): string {
   const s = Math.round(sec);
   const h = Math.floor(s / 3600);
   const rem = s % 3600;
@@ -42,11 +46,31 @@ function fmt(sec: number): string {
       : `${ss}s`;
 }
 
-export function times(dispatch: string): number {
+/** One stage's figures: `tookSec` and `waitSec` are null where the table shows "-". */
+export interface StageRow {
+  stage: string;
+  started: Date;
+  tookSec: number | null;
+  waitSec: number | null;
+}
+
+export interface TimesTable {
+  /** The table exactly as `run run-times` prints it, with a trailing newline. */
+  text: string;
+  rows: StageRow[];
+  totalSec: number;
+  /** null where the log has no legs, so waiting shows "-". */
+  waitedSec: number | null;
+}
+
+export type TimesResult =
+  | { ok: true; table: TimesTable }
+  | { ok: false; code: 1 | 3; message: string; stream: "stdout" | "stderr" };
+
+export function computeTimes(dispatch: string): TimesResult {
   const log = join(dispatch, "actions.jsonl");
   if (!existsSync(log)) {
-    console.error(`run-times: no action log at ${log}`);
-    return 1;
+    return { ok: false, code: 1, message: `run-times: no action log at ${log}`, stream: "stderr" };
   }
   const events: Event[] = [];
   const lines = readFileSync(log, "utf8").split("\n");
@@ -59,13 +83,16 @@ export function times(dispatch: string): number {
       if (ts === null || typeof e.action !== "string") throw new Error("bad");
       events.push({ ts, action: e.action, target: typeof e.target === "string" ? e.target : "" });
     } catch {
-      console.error(`run-times: ${log} line ${n + 1} is not a log line`);
-      return 1;
+      return {
+        ok: false,
+        code: 1,
+        message: `run-times: ${log} line ${n + 1} is not a log line`,
+        stream: "stderr",
+      };
     }
   }
   if (events.length === 0) {
-    console.error(`run-times: ${log} is empty`);
-    return 1;
+    return { ok: false, code: 1, message: `run-times: ${log} is empty`, stream: "stderr" };
   }
 
   const TERMINAL = new Set(["done", "abandoned"]);
@@ -77,8 +104,12 @@ export function times(dispatch: string): number {
     starts.unshift([dispatchEv.ts, "dispatched"]);
   }
   if (starts.length < 2 && !events.some((e) => e.action === "stage")) {
-    console.log(`no stage changes logged in ${log}`);
-    return 3;
+    return {
+      ok: false,
+      code: 3,
+      message: `no stage changes logged in ${log}`,
+      stream: "stdout",
+    };
   }
   const last = events[events.length - 1]?.ts;
 
@@ -103,13 +134,15 @@ export function times(dispatch: string): number {
       return sum + Math.max(0, (hi - lo) / 1000);
     }, 0);
 
-  const rows: Array<[string, Date, string, string]> = [];
+  const rows: StageRow[] = [];
+  const display: Array<[string, Date, string, string]> = [];
   let total = 0;
   let waited = 0;
   for (let i = 0; i < starts.length; i++) {
     const [t, stage] = starts[i]!;
     if (TERMINAL.has(stage)) {
-      rows.push([stage, t, "-", "-"]);
+      rows.push({ stage, started: t, tookSec: null, waitSec: null });
+      display.push([stage, t, "-", "-"]);
       continue;
     }
     const end = i + 1 < starts.length ? starts[i + 1]?.[0] : last;
@@ -117,25 +150,49 @@ export function times(dispatch: string): number {
     const span = (end.getTime() - t.getTime()) / 1000;
     total += span;
     let wait: string;
+    let waitSec: number | null = null;
     if (knownLegs) {
       const w = span - working(t, end);
       waited += w;
+      waitSec = w;
       wait = fmt(w);
     } else {
       wait = "-";
     }
-    rows.push([stage + note, t, fmt(span), wait]);
+    rows.push({ stage: stage + note, started: t, tookSec: span, waitSec });
+    display.push([stage + note, t, fmt(span), wait]);
   }
 
   const hdr = (s: string, t: string, took: string, w: string) =>
     `${s.padEnd(26)} ${t.padEnd(21)} ${took.padEnd(10)} ${w}`;
-  console.log(hdr("stage", "started (UTC)", "took", "waiting"));
-  for (const [stage, t, took, wait] of rows) {
+  const textLines = [hdr("stage", "started (UTC)", "took", "waiting")];
+  for (const [stage, t, took, wait] of display) {
     const ts = t.toISOString().slice(0, 19).replace("T", " ");
-    console.log(hdr(stage, ts, took, wait));
+    textLines.push(hdr(stage, ts, took, wait));
   }
-  console.log(hdr("total", "", fmt(total), knownLegs ? fmt(waited) : "-"));
-  return 0;
+  textLines.push(hdr("total", "", fmt(total), knownLegs ? fmt(waited) : "-"));
+  return {
+    ok: true,
+    table: {
+      text: `${textLines.join("\n")}\n`,
+      rows,
+      totalSec: total,
+      waitedSec: knownLegs ? waited : null,
+    },
+  };
+}
+
+export function times(dispatch: string): number {
+  const r = computeTimes(dispatch);
+  if (r.ok) {
+    // console.log of the table minus its trailing newline prints the same bytes as one
+    // line per call, and stays capturable beside the script.
+    console.log(r.table.text.replace(/\n$/u, ""));
+    return 0;
+  }
+  if (r.stream === "stdout") console.log(r.message);
+  else console.error(r.message);
+  return r.code;
 }
 
 // --- entry ------------------------------------------------------------------------------
