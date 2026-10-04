@@ -14,6 +14,7 @@ import { readFileSync } from "node:fs";
 
 /** The first `X.Y.Z` a range like `>=1.4.2` names, or null when it names none. */
 export function minimumOf(range: string): string | null {
+  // ASCII: a version is ASCII digits, dots and a suffix, never text from elsewhere.
   const m = /(\d+(?:\.\d+){1,2}(?:[-+][0-9A-Za-z.-]+)?)/u.exec(range);
   return m === null ? null : m[1]!;
 }
@@ -35,6 +36,7 @@ export function compareVersions(a: string, b: string): number | null {
 }
 
 function parts(version: string): number[] | null {
+  // ASCII: a version's parts are ASCII digits.
   const m = /^(\d+)(?:\.(\d+))?(?:\.(\d+))?/u.exec(version.trim());
   if (m === null) return null;
   return [Number(m[1]), Number(m[2] ?? 0), Number(m[3] ?? 0)];

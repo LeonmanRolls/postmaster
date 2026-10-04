@@ -47,9 +47,7 @@ test("the running Bun passes the manifest's own minimum, and a raised one does n
     const refused = run("bun", [join(here, "bun-min.ts"), raised]);
     expect(refused.code).toBe(1);
     expect(refused.out).toBe("");
-    expect(refused.err.trim()).toBe(
-      bunVersionMessage("postmaster", "9.0.0", Bun.version),
-    );
+    expect(refused.err.trim()).toBe(bunVersionMessage("postmaster", "9.0.0", Bun.version));
   });
 });
 
