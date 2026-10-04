@@ -1,8 +1,9 @@
 import { afterEach, expect, test } from "bun:test";
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { KINDS, scan as scanPersonal } from "../raw/trials/pii-patterns/apparatus/patterns.ts";
-import { keyBlockStep, RULES, scanLine, StreamScanner } from "./scrub-core.ts";
+import { scan as scanPort } from "./scrub-patterns.ts";
+import { keyBlockStep, needsFullScan, RULES, scanLine, StreamScanner } from "./scrub-core.ts";
 import {
   cleanupScratch,
   email,
@@ -393,4 +394,90 @@ test("opaque ids need a digit in the body; host lookup passes flags and ports", 
   expect(rules(joined("org", "_abc", "123"))).toContain("account-id");
   expect(rules(joined("ses", "s_abcdef", " no digit here"))).not.toContain("account-id");
   expect(rules(joined("ssh -p 22", "22 alice@we", "b01 uptime"))).toContain("private-host");
+});
+
+test("prefilter triggers on every rule signal the audit found, skips digit log lines", () => {
+  // Each firing line is built from inert fragments, so this file scans clean.
+  const firing: Array<[string, string]> = [
+    [joined("assigned to Alice ", "Quinn"), "credit"],
+    [joined("my part", "ner Alice Quinn"), "relative"],
+    [joined("my par", "ents"), "family"],
+    [joined("my grand", "father was here"), "family"],
+    [joined("she is in ther", "apy"), "health"],
+    [joined("she is on antidepre", "ssants"), "health"],
+    [joined("he is undergoing ch", "emo"), "health"],
+    [joined("he is undergoing trea", "tment"), "health"],
+    [joined("he is undergoing sur", "gery"), "health"],
+    [joined("he is undergoing dia", "lysis"), "health"],
+    [joined("we are living in ", "Paris"), "residence"],
+    [joined("text ", "me 415 555 2671"), joined("ph", "one")],
+    [joined("whats ", "app 415 555 2671"), joined("ph", "one")],
+    [joined("license number AB12", "345"), "id-number"],
+    [joined("AKIAIOSFODNN7EXA", "MPLE"), "token"],
+    [joined("ASIAIOSFODNN7EXA", "MPLE"), "token"],
+    [joined("4111 1111 111", "1 1111"), "card"],
+  ];
+  for (const [line, rule] of firing) {
+    expect(needsFullScan(line)).toBe(true);
+    expect(rules(line)).toContain(rule);
+  }
+  const clean = [
+    `n12345 clean log line number 12345 with words to fill bytes ${"x".repeat(2400)}`,
+    "the quick brown fox jumps over the lazy dog",
+    "plain words here about nothing at all",
+    "version 2 release 14 build 99 shipped tuesday",
+  ];
+  for (const line of clean) {
+    expect(needsFullScan(line)).toBe(false);
+    expect(rules(line)).toEqual([]);
+  }
+});
+
+test("port matches the first version line for line, including gate-edge signals", () => {
+  // The port's scan gate once dropped these; each is built from inert
+  // fragments, so this file scans clean.
+  const edges = [
+    joined("he is undergoing trea", "tment"),
+    joined("he is undergoing sur", "gery"),
+    joined("he is undergoing ch", "emo"),
+    joined("she is in ther", "apy"),
+    joined("we are living in ", "Paris"),
+    joined("text ", "me 415 555 2671"),
+    joined("license number AB12", "345"),
+    joined("4111 1111 111", "1 1111"),
+    joined("assigned to Alice ", "Quinn"),
+    joined("my part", "ner Alice Quinn"),
+    joined("my par", "ents"),
+    joined("my grand", "father was here"),
+  ];
+  const firstshot = (line: string) =>
+    JSON.stringify(scanPersonal(line).map((f) => [f.rule, f.start, f.end]));
+  const portshot = (line: string) =>
+    JSON.stringify(scanPort(line).map((f) => [f.rule, f.start, f.end]));
+  for (const line of edges) expect(portshot(line)).toBe(firstshot(line));
+  const self = readFileSync(new URL(import.meta.url).pathname, "utf8").split("\n");
+  const port = readFileSync(join(import.meta.dir, "scrub-patterns.ts"), "utf8").split("\n");
+  const first = readFileSync(
+    join(import.meta.dir, "..", "raw", "trials", "pii-patterns", "apparatus", "patterns.ts"),
+    "utf8",
+  ).split("\n");
+  for (const line of [...self, ...port, ...first]) expect(portshot(line)).toBe(firstshot(line));
+});
+
+test("prefilter is lossless: identical findings with it on and off over a dense corpus", () => {
+  const self = readFileSync(new URL(import.meta.url).pathname, "utf8").split("\n");
+  const patterns = readFileSync(join(import.meta.dir, "scrub-patterns.ts"), "utf8").split("\n");
+  const core = readFileSync(join(import.meta.dir, "scrub-core.ts"), "utf8").split("\n");
+  const corpus = [...self, ...patterns, ...core];
+  const saved = process.env.SCRUB_PREFILTER;
+  try {
+    process.env.SCRUB_PREFILTER = "0";
+    const off = corpus.map((line) => JSON.stringify(scanLine(line)));
+    delete process.env.SCRUB_PREFILTER;
+    const on = corpus.map((line) => JSON.stringify(scanLine(line)));
+    expect(on).toEqual(off);
+  } finally {
+    if (saved === undefined) delete process.env.SCRUB_PREFILTER;
+    else process.env.SCRUB_PREFILTER = saved;
+  }
 });

@@ -116,6 +116,241 @@ const SECRET_KEY_SUFFIXES = ["email", "session"];
 const SECRET_ID_ENDINGS = new Set(["id", "ids", "uuid", "guid"]);
 const PLACEHOLDER =
   /^(?:user|username|host|hostname|example|test|fixture|placeholder|someone|remote|node|server|machine|myhost|yourhost|examplehost|\*|\$USER|\$\{USER\}|<[^<>]*>)$/iu;
+// A line needs the full rules only when it shows a trigger: punctuation a
+// rule needs, an ANSI opener, curly quotes, capitals beside a digit (AKIA,
+// IBAN, postcodes), or a cue word. Every trigger below names a literal
+// every match of its rule contains; a line with none of them cannot carry
+// a finding. The gate (C4-C7, C23, C28), the held-out counts (C6) and a
+// census diff prove no finding is lost. Key-block lines never skip: their
+// caller passes keyBlock, and scanLine honors it before this check.
+const PREFILTER_WORDS = [
+  "account",
+  "addr",
+  "adhd",
+  "according",
+  "akia",
+  "amex",
+  "american express",
+  "anxiety",
+  "apartment",
+  "asia",
+  "ask",
+  "assigned",
+  "assignee",
+  "aunt",
+  "autism",
+  "author",
+  "baby",
+  "based",
+  "bearer",
+  "behalf",
+  "birth",
+  "birthday",
+  "born",
+  "boss",
+  "box",
+  "boyfriend",
+  "brother",
+  "call",
+  "cancer",
+  "card",
+  "cc",
+  "cell",
+  "cheers",
+  "chemo",
+  "children",
+  "committer",
+  "compensation",
+  "contact",
+  "contribut",
+  "copyright",
+  "courtesy",
+  "cousin",
+  "created",
+  "credit",
+  "customer",
+  "dad",
+  "dame",
+  "daughter",
+  "day job",
+  "debit",
+  "debt",
+  "depression",
+  "diabetes",
+  "diagnosed",
+  "diagnosis",
+  "dialysis",
+  "disability",
+  "dob",
+  "drafted",
+  "dr",
+  "driver",
+  "earn",
+  "emergency",
+  "employer",
+  "fax",
+  "father",
+  "fianc",
+  "flat",
+  "generated",
+  "girlfriend",
+  "grandfather",
+  "grandma",
+  "grandpa",
+  "grew up",
+  "hiv",
+  "home",
+  "hospital",
+  "hometown",
+  "house",
+  "husband",
+  "i am",
+  "id number",
+  "identity",
+  "illness",
+  "income",
+  "kid",
+  "kudos",
+  "landline",
+  "licen",
+  "live",
+  "living",
+  "made",
+  "maintain",
+  "make",
+  "manager",
+  "mastercard",
+  "medication",
+  "meds",
+  "membership",
+  "miscarriage",
+  "miss",
+  "mobile",
+  "mom",
+  "mother",
+  "mortgage",
+  "mr",
+  "ms",
+  "mum",
+  "mx",
+  "name",
+  "national",
+  "national insurance",
+  "nephew",
+  "networth",
+  "nhs",
+  "ni number",
+  "niece",
+  "nino",
+  "office",
+  "oncologist",
+  "owner",
+  "parent",
+  "partner",
+  "passport",
+  "patient",
+  "pay",
+  "pension",
+  "phone",
+  "pregnancy",
+  "pregnant",
+  "prescription",
+  "prof",
+  "psychiatrist",
+  "rehab",
+  "rent",
+  "report",
+  "reside",
+  "review",
+  "ring",
+  "salary",
+  "scp",
+  "sibling",
+  "signal",
+  "signed",
+  "signer",
+  "sir",
+  "sister",
+  "son",
+  "social security",
+  "spouse",
+  "ssh",
+  "ssn",
+  "suffer",
+  "surgery",
+  "tax",
+  "tel",
+  "text me",
+  "thank",
+  "therapist",
+  "therapy",
+  "toddler",
+  "treated",
+  "treatment",
+  "uncle",
+  "undergoing",
+  "visa",
+  "wage",
+  "whatsapp",
+  "whats",
+  "wife",
+  "work",
+  "workplace",
+  "written",
+  "antidepressant",
+];
+// Substring search, not one big alternation: under a virtual-memory limit
+// the engine's JIT stays off and a 150-branch match-all-positions scan
+// costs milliseconds per line, while memmem stays microseconds (C27).
+// A spaced card number is digits and spaces alone: no word or case signal
+// opens it, so its digit groups trigger on their own.
+const PREFILTER_PUNCT = [
+  "@",
+  "/",
+  "~",
+  "\\",
+  '"',
+  "'",
+  ":",
+  "=",
+  "-",
+  "_",
+  ".",
+  "+",
+  "(",
+  ")",
+  "{",
+  "}",
+  "[",
+  "]",
+  "‘",
+  "’",
+  "“",
+  "”",
+  "\x1b",
+  "\x9b",
+  "\x9d",
+];
+const PREFILTER_SPACED_CARD = /[0-9]{4} [0-9]/u;
+const PREFILTER_UPPER = /[A-Z]/u;
+const PREFILTER_DIGIT = /[0-9]/u;
+const PREFILTER_NON_ASCII = /[^\x00-\x7F]/u;
+export function needsFullScan(line: string): boolean {
+  for (const p of PREFILTER_PUNCT) if (line.includes(p)) return true;
+  if (PREFILTER_SPACED_CARD.test(line)) return true;
+  // Uppercase plus a digit together: an IBAN head, a street or postcode, a key.
+  const upper = PREFILTER_UPPER.test(line);
+  if (upper && PREFILTER_DIGIT.test(line)) return true;
+  // Lowercasing is the identity on ASCII without capitals, so those lines
+  // search raw and allocate nothing; the rest lowercase once and share it.
+  if (!upper && !PREFILTER_NON_ASCII.test(line)) {
+    for (const w of PREFILTER_WORDS) if (line.includes(w)) return true;
+    return false;
+  }
+  const lower = pyLower(line);
+  for (const w of PREFILTER_WORDS) if (lower.includes(w)) return true;
+  return false;
+}
 const SSH_PRIVATE_HEADER = "---- BEGIN SSH2 ENCRYPTED PRIV" + "ATE KEY ----";
 const KEY_HEADER = new RegExp(
   "-----BEGIN (?:[A-Z0-9 ]*PRIV" +
@@ -828,12 +1063,8 @@ export function scanLine(
   line: string,
   opts: { markers?: boolean; context?: string; keyBlock?: boolean } = {},
 ): ScanResult {
-  if (!opts.keyBlock && line.includes(" ") && PLAIN_LOWER_WORDS.test(line)) {
-    const firstWord = line.trimStart().split(" ", 1)[0] ?? "";
-    const hasPlainShape = (line.includes("s") || line.includes("b")) && PLAIN_SHAPE_CUE.test(line);
-    if (!PLAIN_CUE_WORDS.has(firstWord) && !hasPlainShape)
-      return { findings: [], suppressed: [], markers: [], nextLineMarkers: [] };
-  }
+  if (!opts.keyBlock && process.env.SCRUB_PREFILTER !== "0" && !needsFullScan(line))
+    return { findings: [], suppressed: [], markers: [], nextLineMarkers: [] };
   const units = lineUnits(line);
   const all: Finding[][] = units.map((unit) =>
     detectLine(unit.text, opts.context ?? "").map((f) => ({
@@ -1229,6 +1460,11 @@ export function keyBlockStep(
   line: string,
   inBlock: boolean,
 ): { inBlock: boolean; flagged: boolean } {
+  // Outside a block only a header, a PuTTY line or a bare body line flags,
+  // so a line with whitespace strictly inside skips the trim and the tests.
+  // ASCII: inner whitespace breaks the base64 shape; dashes/PuTTY excluded above.
+  if (!inBlock && !line.includes("----") && !/putty/iu.test(line) && /\S\s\S/u.test(line))
+    return { inBlock: false, flagged: false };
   const stripped = line.trim();
   if (KEY_HEADER.test(stripped)) return { inBlock: true, flagged: true };
   // A lone body line flags (C4), but a run of one character is a rule,
