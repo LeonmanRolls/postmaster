@@ -3,7 +3,14 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { KINDS, scan as scanPersonal } from "../raw/trials/pii-patterns/apparatus/patterns.ts";
 import { scan as scanPort } from "./scrub-patterns.ts";
-import { keyBlockStep, needsFullScan, RULES, scanLine, StreamScanner } from "./scrub-core.ts";
+import {
+  decodeChildText,
+  keyBlockStep,
+  needsFullScan,
+  RULES,
+  scanLine,
+  StreamScanner,
+} from "./scrub-core.ts";
 import {
   cleanupScratch,
   email,
@@ -480,6 +487,20 @@ test("prefilter is lossless: identical findings with it on and off over a dense 
     if (saved === undefined) delete process.env.SCRUB_PREFILTER;
     else process.env.SCRUB_PREFILTER = saved;
   }
+});
+
+test("diff lines from UTF-16 files decode, anything else scans as it arrived", () => {
+  // Review round 2: NUL-interleaved diff lines missed their findings.
+  // Surrogateescape chars stand where decodeUtf8 put the raw bytes.
+  expect(decodeChildText("plain line")).toBe("plain line");
+  expect(decodeChildText("a\0b\0")).toBe("ab");
+  expect(decodeChildText("\udcff\udcfea\0b\0")).toBe("ab");
+  expect(decodeChildText("\0a\0b\0")).toBe("ab");
+  expect(decodeChildText("\0a\0b")).toBe("ab");
+  expect(decodeChildText("\udcfe\udcff\0a\0b")).toBe("ab");
+  expect(decodeChildText("\0a\0b\0")).toBe("ab");
+  expect(decodeChildText("a\0b")).toBe("a\0b");
+  expect(decodeChildText("\0\0\0\0")).toBe("\0\0");
 });
 
 test("a pattern-code line exempts only the pattern, never trailing values", () => {

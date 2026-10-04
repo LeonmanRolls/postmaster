@@ -6,6 +6,7 @@ import {
   childLines,
   codePointOffset,
   decodeBytes,
+  decodeChildText,
   detectLine,
   keyBlockStep,
   logFinding,
@@ -93,9 +94,9 @@ async function keyBlockLines(commit: string, path: string, root: string): Promis
   const result = new Set<number>();
   let inBlock = false;
   let number = 0;
-  for await (const line of childLines(child.stdout)) {
+  for await (const raw of childLines(child.stdout)) {
     number++;
-    const step = keyBlockStep(line, inBlock);
+    const step = keyBlockStep(decodeChildText(raw), inBlock);
     inBlock = step.inBlock;
     if (step.flagged) result.add(number);
   }
@@ -370,7 +371,7 @@ async function scanPatchSection(
       continue;
     }
     if (lineNumber === null || !line.startsWith("+")) continue;
-    const text = line.slice(1);
+    const text = decodeChildText(line.slice(1));
     if (
       keyLines === null &&
       (/^[A-Za-z0-9+/=]{20,}$/u.test(text.trim()) ||

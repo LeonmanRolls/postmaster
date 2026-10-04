@@ -1505,6 +1505,50 @@ export function decodeBytes(bytes: Buffer): string {
   return decodeUtf8(bytes);
 }
 
+// A diff or blob line from a UTF-16 file arrives NUL-interleaved; decode it
+// so the scan reads the text, not the storage. Only strict shapes decode —
+// anything else scans as it arrived, as before. A line number stays the
+// diff's, so a finding in a UTF-16 file points at the file and the
+// approximate line, never silently nowhere.
+export function decodeChildText(text: string): string {
+  if (!text.includes("\0")) return text;
+  // Rebuild the byte view: surrogateescape chars map back to bytes exactly,
+  // ASCII maps to itself, and anything else aborts the decode.
+  const bytes: number[] = [];
+  for (const ch of text) {
+    const code = ch.codePointAt(0)!;
+    if (code >= 0xdc80 && code <= 0xdcff) bytes.push(code - 0xdc00);
+    else if (code < 0x80) bytes.push(code);
+    else return text;
+  }
+  const decode = (le: boolean): string | null => {
+    let rest = bytes;
+    if (le && rest.length >= 2 && rest[0] === 0xff && rest[1] === 0xfe) rest = rest.slice(2);
+    if (!le && rest.length >= 2 && rest[0] === 0xfe && rest[1] === 0xff) rest = rest.slice(2);
+    if (rest.length % 2 === 1) {
+      // A split fragment keeps half of a newline pair: LE continuations
+      // open with NUL, BE fragments close with one.
+      if (le && rest[0] === 0x00) rest = rest.slice(1);
+      else if (rest[rest.length - 1] === 0x00 || rest[rest.length - 1] === 0x0a)
+        rest = rest.slice(0, -1);
+      else return null;
+    }
+    if (!rest.length) return "";
+    for (let i = 0; i < rest.length; i++) {
+      const half = le ? i % 2 === 1 : i % 2 === 0;
+      if (half && rest[i] !== 0x00) return null;
+    }
+    let out = "";
+    for (let i = 0; i < rest.length; i += 2) {
+      const low = le ? rest[i]! : rest[i + 1]!;
+      const high = le ? rest[i + 1]! : rest[i]!;
+      out += String.fromCharCode(low | (high << 8));
+    }
+    return out.endsWith("\r") ? out.slice(0, -1) : out;
+  };
+  return decode(true) ?? decode(false) ?? text;
+}
+
 export async function* childLines(readable: NodeJS.ReadableStream): AsyncGenerator<string> {
   // A manual splitter, not readline: when the loop body awaits a slow git
   // child, the child feeding this stream can finish and close it first, and

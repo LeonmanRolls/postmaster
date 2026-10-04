@@ -2,6 +2,7 @@
 // Checks the private run folder and new raw records in a project change.
 import {
   childLines,
+  decodeChildText,
   git,
   keyBlockStep,
   logFinding,
@@ -65,8 +66,9 @@ async function scanBlob(
   const failures: string[] = [];
   let line = 0;
   let inBlock = false;
-  for await (const text of childLines(child.stdout)) {
+  for await (const raw of childLines(child.stdout)) {
     line++;
+    const text = decodeChildText(raw);
     if (!DISABLED.has("encrypted-reasoning")) {
       try {
         const parsed = JSON.parse(text) as unknown;

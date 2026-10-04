@@ -186,6 +186,37 @@ test("C2 range scan sees added then deleted lines, file names, messages, identit
   ).toBe(true);
 });
 
+test("range scan reads UTF-16 added lines like --files does", () => {
+  // Review round 2: the range scan decoded diff bytes as UTF-8 only, so a
+  // UTF-16 file's findings passed the gate while --files found them.
+  for (const encoding of ["utf16le", "utf16be"] as const) {
+    const repo = initRepo();
+    const base = spawnSync("git", ["rev-parse", "HEAD"], {
+      cwd: repo,
+      encoding: "utf8",
+    }).stdout.trim();
+    const body = `contact ${email()} here\n`;
+    const bytes =
+      encoding === "utf16le"
+        ? Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(body, "utf16le")])
+        : Buffer.concat([
+            Buffer.from([0xfe, 0xff]),
+            Buffer.from(Buffer.from(body, "utf16le")).swap16(),
+          ]);
+    writeFileSync(join(repo, "note.txt"), bytes);
+    const added = commit(repo, "add encoded note");
+    const scanned = runScript("scrub-check", [base, "HEAD"], repo);
+    expect(scanned.status).toBe(1);
+    expect(
+      scanned.stdout
+        .trim()
+        .split("\n")
+        .some((line) => line.startsWith(`${added}:note.txt:`) && line.endsWith(": email")),
+    ).toBe(true);
+    expect(!scanned.stdout.includes(email())).toBe(true);
+  }
+});
+
 test("range scan completes while per-file lookups await inside the diff read", () => {
   const repo = initRepo();
   const base = spawnSync("git", ["rev-parse", "HEAD"], {
