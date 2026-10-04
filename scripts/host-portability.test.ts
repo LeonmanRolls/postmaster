@@ -20,7 +20,7 @@ test("_watch touches its marker for a zombie while the zombie's parent still run
         if (!parent.stdout) return reject(new Error("shell stdout is unavailable"));
         const reader = createInterface({ input: parent.stdout });
         const timeout = setTimeout(() => reject(new Error("shell did not print its child pid")), 5000);
-        reader.once("line", (line) => {
+        reader.on("line", (line) => {
           clearTimeout(timeout);
           reader.close();
           resolve(line);
@@ -101,7 +101,6 @@ test("a background runner that dies before reading its spec is rejected", async 
       break;
     }
   }, 1);
-  remover.unref();
   try {
     const code = await new Promise<number | null>((resolve, reject) => {
       const timeout = setTimeout(() => {

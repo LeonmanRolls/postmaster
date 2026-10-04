@@ -38,6 +38,7 @@ async function startZombieChild(): Promise<{ parent: ReturnType<typeof Bun.spawn
     stdout: "pipe",
     stderr: "ignore",
   });
+  if (!parent.stdout) throw new Error("shell stdout is unavailable");
   const reader = parent.stdout.getReader();
   let text = "";
   while (!text.includes("\n")) {

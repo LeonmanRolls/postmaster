@@ -30,6 +30,10 @@ import { BOUND_R, DOT_ALL, PY_M_START, PY_S_CLASS, pySplitLines, pyWords } from 
 const self = join(import.meta.dir, "launch.sh");
 const here = import.meta.dir;
 
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/gu, "'\\''")}'`;
+}
+
 const skipPython = run("sh", ["-c", "command -v python3"]).code !== 0;
 if (skipPython) {
   console.log(
@@ -4052,9 +4056,9 @@ s.close()
       // AC2 item: a consistent /proc (Linux: the lane's PIDs match what its
       // /proc shows, so ps and friends see the lane, not the host's table)
       if (process.platform === "linux") {
-        const processModule = join(HERE, "lib", "process-state.ts");
+        const processModule = join(here, "lib", "process-state.ts");
         const probeSource = `import { processInfo } from ${JSON.stringify(processModule)}; const info = processInfo(process.pid); process.exit(info?.pid === process.pid ? 0 : 1);`;
-        const selfProbe = `${shlexQuote(process.execPath)} -e ${shlexQuote(probeSource)}`;
+        const selfProbe = `${shellQuote(process.execPath)} -e ${shellQuote(probeSource)}`;
         items.push({
           name: "a consistent /proc",
           bare: () => run("sh", ["-c", selfProbe]).code === 0,
