@@ -14,6 +14,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { run, withTempDir } from "./lib/proc.ts";
+import { processState } from "./lib/process-state.ts";
 import { ARG_SPLIT_RE, monotonic } from "./review-round.ts";
 
 const self = join(import.meta.dir, "review-round.sh");
@@ -163,13 +164,7 @@ esac
       }
     };
     const alive = (pid: number): boolean => {
-      try {
-        const r = run("ps", ["-o", "stat=", "-p", String(pid)]);
-        const s = r.out.trim();
-        return s !== "" && !s.startsWith("Z");
-      } catch {
-        return false;
-      }
+      return processState(pid) === "live";
     };
     // dead <pid> [<seconds>]: wait until a process is gone (or a zombie).
     // An empty pid is a failed fixture, never a dead process: fail, do not pass.

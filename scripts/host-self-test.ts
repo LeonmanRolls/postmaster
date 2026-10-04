@@ -19,6 +19,7 @@ import {
 } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { scriptsDir } from "./lib/paths.ts";
+import { processCommandLine, processInfo, processStart, processState } from "./lib/process-state.ts";
 import { pyWords } from "./lib/text.ts";
 
 const HERE = scriptsDir(import.meta);
@@ -334,7 +335,7 @@ function herdrStubInner(args: string[], stateDir: string): void {
     if (flag(join(stateDir, "pane.dead"))) return;
     const prefix = flag(join(stateDir, "pane.late")) ? "sleep 5; " : "";
     const env = {
-      PATH: process.env.PATH,
+      PATH: process.env.POSTMASTER_STUB_PANE_PATH ?? process.env.PATH,
       HOME: process.env.HOME,
       STUB: stateDir,
       HERDR_ENV: "pane-env",
@@ -570,6 +571,7 @@ function host(
   cwd = `${root}/caller`,
   env: Record<string, string> = {},
 ): Result {
+  const procRoot = process.env.POSTMASTER_PROC_ROOT;
   const environment: Record<string, string> = {
     HOME: process.env.HOME ?? "/",
     PATH: path,
@@ -580,6 +582,7 @@ function host(
     POSTMASTER_HOST_CLAIM_WAIT: "3",
     POSTMASTER_HOST_CLOSE_WAIT: "3",
     POSTMASTER_HOST_FINISH_DELAY: finishDelay,
+    ...(procRoot === undefined ? {} : { POSTMASTER_PROC_ROOT: procRoot }),
     ...env,
   };
   return exec(SELF, [...args], { cwd, env: environment });
@@ -592,12 +595,7 @@ function testStopFinishers(root: string): void {
     const pidText = tab < 0 ? line : line.slice(0, tab);
     const marker = tab < 0 ? "" : line.slice(tab + 1);
     if (!/^[0-9]+$/u.test(pidText) || !marker) continue;
-    let command = "";
-    try {
-      command = readFileSync(`/proc/${pidText}/cmdline`, "utf8").replace(/\0/gu, " ");
-    } catch {
-      continue;
-    }
+    const command = processCommandLine(Number(pidText));
     if (command.includes(marker)) {
       try {
         process.kill(Number(pidText));
@@ -726,7 +724,7 @@ async function setup(
       "#!/usr/bin/env bash",
       'printf \'{"type":"system","subtype":"init","session_id":"probe-1","model":"m"}\\n\'',
       "if (: < /dev/tty) 2>/dev/null; then tty=yes; else tty=no; fi",
-      'printf \'from=%s|name=%s|pane=%s|tmuxpane=%s|var=%s|sid=%s|pid=%s|pgid=%s|tty=%s\\n\' "$PWD" "$POSTMASTER_LAUNCH_NAME" "$HERDR_PANE_ID" "$TMUX_PANE" "$CALLER_VAR" "$(ps -o sid= -p $$ | tr -d \' \')" "$$" "$(ps -o pgid= -p $$ | tr -d \' \')" "$tty"',
+      'printf \'from=%s|name=%s|pane=%s|tmuxpane=%s|var=%s|sid=|pid=%s|pgid=|tty=%s\\n\' "$PWD" "$POSTMASTER_LAUNCH_NAME" "$HERDR_PANE_ID" "$TMUX_PANE" "$CALLER_VAR" "$$" "$tty"',
       'count_path=$(printenv COUNT); if [ -n "$count_path" ]; then echo x >> "$count_path"; fi',
       'sleep "$(printenv EMIT_SLEEP || printf 0)"',
       "",
@@ -788,11 +786,13 @@ async function setup(
 function shellQuote(value: string): string {
   return `'${value.replace(/'/gu, "'\\''")}'`;
 }
-async function makeHarness(root: string): Promise<{ sys: string; stubs: string }> {
+async function makeHarness(root: string): Promise<{ sys: string; stubs: string; paneNoBun: string }> {
   const bin = join(root, "bin"),
-    sys = join(root, "sys");
+    sys = join(root, "sys"),
+    paneNoBun = join(root, "pane-no-bun");
   mkdirSync(bin);
   mkdirSync(sys);
+  mkdirSync(paneNoBun);
   mkdirSync(join(root, "stub"));
   const tools = [
     "bun",
@@ -836,13 +836,17 @@ async function makeHarness(root: string): Promise<{ sys: string; stubs: string }
     "mv",
     "tee",
   ];
-  for (const tool of tools) symlinkCommand(tool, sys);
+  for (const tool of tools) {
+    symlinkCommand(tool, sys);
+    if (tool !== "bun") symlinkCommand(tool, paneNoBun);
+  }
   for (const tool of ["herdr", "tmux"]) {
-    const script = `#!/bin/sh\nexec bun ${shellQuote(SCRIPT)} --stub ${tool} "$@"\n`;
+    const script = `#!/bin/sh\nexec ${shellQuote(process.execPath)} ${shellQuote(SCRIPT)} --stub ${tool} "$@"\n`;
     const path = join(bin, tool);
     writeFileSync(path, script, { mode: 0o755 });
+    symlinkSync(path, join(paneNoBun, tool));
   }
-  return { sys, stubs: `${bin}:${sys}` };
+  return { sys, stubs: `${bin}:${sys}`, paneNoBun };
 }
 function resetHarness(root: string): void {
   testStopFinishers(root);
@@ -1283,10 +1287,12 @@ export async function runControls(): Promise<number> {
       ],
       noHost,
       f.caller,
-      { CALLER_VAR: "v", HERDR_PANE_ID: "caller-pane", TMUX_PANE: "%9" },
+      { CALLER_VAR: "v", HERDR_PANE_ID: "caller-pane", TMUX_PANE: "%9", EMIT_SLEEP: "2" },
     );
-    await marker(markerPath("n3"));
-    const probeText = readFileSync(join(logs, "n3.out"), "utf8");
+    const probePath = join(logs, "n3.out");
+    for (let i = 0; i < 40 && (!existsSync(probePath) || !readFileSync(probePath, "utf8").includes("from=")); i++)
+      await sleep(50);
+    const probeText = readFileSync(probePath, "utf8");
     await pass(
       "it runs from the caller's directory, with the caller's environment and its name",
       () =>
@@ -1308,15 +1314,18 @@ export async function runControls(): Promise<number> {
     );
     await pass(
       "it is a session of its own: its group is its pid, not the caller's session",
-      () =>
-        field(probeText, "pgid") === field(probeText, "pid") &&
-        field(probeText, "sid") === field(probeText, "pid"),
-      probeText,
+      () => {
+        const pid = Number(field(probeText, "pid"));
+        const info = processInfo(pid);
+        return info?.group === pid && info.session === pid;
+      },
+      `${probeText}\n${JSON.stringify(processInfo(Number(field(probeText, "pid"))))}`,
     );
     await pass(
       "--pidfile holds the launch's pid",
       () => readFileSync(join(logs, "n3.pid"), "utf8").trim() === field(probeText, "pid"),
     );
+    await marker(markerPath("n3"));
     writeFileSync(
       join(f.caller, "argv.sh"),
       ["#!/usr/bin/env bash", 'printf "<%s>\\n" "$@"', ""].join("\n"),
@@ -1540,16 +1549,7 @@ export async function runControls(): Promise<number> {
     const termStop = execHost(["stop", join(f.repo, ".worktrees/T-1-luna")], noHost, root, {
       POSTMASTER_HOST_STOP_WAIT: "2",
     });
-    const alive = (pid: string) => {
-      try {
-        return !readFileSync(`/proc/${pid}/stat`, "utf8")
-          .slice(readFileSync(`/proc/${pid}/stat`, "utf8").lastIndexOf(")") + 1)
-          .trim()
-          .startsWith("Z");
-      } catch {
-        return false;
-      }
-    };
+    const alive = (pid: string) => processState(Number(pid)) === "live";
     const escapee = readFileSync(join(root, "tree/escapee.pid"), "utf8").trim();
     const deaf = readFileSync(join(root, "tree/deaf.pid"), "utf8").trim();
     await pass(
@@ -1580,17 +1580,13 @@ export async function runControls(): Promise<number> {
     // ASCII: /proc/stat is kernel-emitted ASCII; btime's fields split on spaces.
     const bootSeconds = Number(bootLine.split(/\s+/u)[1]);
     const ticks = Number(exec("getconf", ["CLK_TCK"]).out.trim()) || 100;
-    const procStart = (pid: string): string => {
-      const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
-      return (
-        stat
-          .slice(stat.lastIndexOf(")") + 1)
-          .trim()
-          // ASCII: /proc/<pid>/stat past the name is kernel-emitted ASCII numerics.
-          .split(/\s+/u)[19] ?? ""
-      );
+    const procStart = (pid: string): string => processStart(Number(pid)) ?? "";
+    const startedSeconds = (pid: string) => {
+      const start = procStart(pid);
+      return /^\d+$/u.test(start)
+        ? bootSeconds + Number(start) / ticks
+        : Date.parse(start) / 1000;
     };
-    const startedSeconds = (pid: string) => bootSeconds + Number(procStart(pid)) / ticks;
     const record = (pid: string) => join(launchDir, pid);
     const stale = spawn("sleep", ["60"], { detached: true, stdio: "ignore" });
     stale.unref();
@@ -1792,15 +1788,11 @@ export async function runControls(): Promise<number> {
     const unrelatedStop = execHost(["stop", sol], noHost, root, { POSTMASTER_HOST_STOP_WAIT: "0" });
     await pass(
       "a process that works in the worktree but that no launch started is left alone",
-      () => {
-        if (unrelatedRun.code !== 0 || unrelatedStop.code !== 0 || !unrelated.pid) return false;
-        try {
-          process.kill(unrelated.pid, 0);
-          return true;
-        } catch {
-          return false;
-        }
-      },
+      () =>
+        unrelatedRun.code === 0 &&
+        unrelatedStop.code === 0 &&
+        !!unrelated.pid &&
+        processState(unrelated.pid) === "live",
     );
     try {
       if (unrelated.pid) process.kill(unrelated.pid, "SIGKILL");
@@ -1936,6 +1928,67 @@ export async function runControls(): Promise<number> {
         reportCalls.includes(`pane\treport-agent\t${pane}`) &&
         reportCalls.includes(`pane\trelease-agent\t${pane}`),
       reportCalls,
+    );
+    const noBunHerdr = execHost(
+      [
+        "run",
+        f.name,
+        worktree,
+        "--out",
+        "../logs/h-bunless.out",
+        "--marker",
+        "../logs/h-bunless.done",
+        "--",
+        "./fixed.sh",
+      ],
+      stubs,
+      f.caller,
+      {
+        EMIT_SLEEP: "5",
+        POSTMASTER_STUB_PANE_PATH: paths.paneNoBun,
+        POSTMASTER_HOST_FINISH_DELAY: "0.2",
+      },
+    );
+    const noBunPane = TRIPLE_RE.exec(noBunHerdr.out)?.[3] ?? "";
+    const noBunPaneOut = join(stub, `pane-${noBunPane}.out`);
+    for (
+      let i = 0;
+      i < 40 && (!existsSync(noBunPaneOut) || !readFileSync(noBunPaneOut, "utf8").includes("says: step one"));
+      i++
+    )
+      await sleep(50);
+    const paneHasNoBun =
+      exec("bash", ["-c", "command -v bun"], { env: { PATH: paths.paneNoBun } }).code !== 0;
+    const paneText = existsSync(noBunPaneOut) ? readFileSync(noBunPaneOut, "utf8") : "";
+    const runningHerdr = json(join(stub, "herdr.json"), { panes: {} });
+    const liveHerdrCalls = readCalls("herdr");
+    await pass(
+      "with no Bun in its PATH, the Herdr pane runs the launch, shows output, and stays open",
+      () =>
+        noBunHerdr.code === 0 &&
+        noBunHerdr.out.startsWith("host=herdr ") &&
+        paneHasNoBun &&
+        !existsSync(markerPath("h-bunless")) &&
+        noBunPane in (runningHerdr.panes ?? {}) &&
+        liveHerdrCalls.includes(`pane\treport-agent\t${noBunPane}`) &&
+        !liveHerdrCalls.includes(`pane\trelease-agent\t${noBunPane}`) &&
+        paneText.includes("says: step one"),
+      `${noBunHerdr.out}\n${paneText}`,
+    );
+    await marker(markerPath("h-bunless"), 15);
+    for (
+      let i = 0;
+      i < 40 && noBunPane in json(join(stub, "herdr.json"), { panes: {} }).panes;
+      i++
+    )
+      await sleep(50);
+    const doneHerdrCalls = readCalls("herdr");
+    await pass(
+      "the Herdr pane closes after the launch marker lands",
+      () =>
+        existsSync(markerPath("h-bunless")) &&
+        !(noBunPane in json(join(stub, "herdr.json"), { panes: {} }).panes) &&
+        doneHerdrCalls.includes(`pane\trelease-agent\t${noBunPane}`),
     );
     const secondHerdr = execHost(
       ["run", f.name, worktree, "--marker", "../logs/h2.done", "--", "./fixed.sh"],
@@ -2202,6 +2255,53 @@ export async function runControls(): Promise<number> {
     );
 
     console.log("run, stop and close, tmux (stub)");
+    resetHarness(root);
+    const tmuxLive = execHost(
+      ["run", f.name, worktree, "--out", "../logs/t-live.out", "--marker", "../logs/t-live.done", "--", "./fixed.sh"],
+      stubs,
+      f.caller,
+      {
+        POSTMASTER_HOST: "tmux",
+        EMIT_SLEEP: "5",
+        POSTMASTER_HOST_FINISH_DELAY: "0.2",
+      },
+    );
+    const livePaneOut = join(stub, "win-1.out");
+    for (
+      let i = 0;
+      i < 40 && (!existsSync(livePaneOut) || !readFileSync(livePaneOut, "utf8").includes("step one"));
+      i++
+    )
+      await sleep(50);
+    const liveTmuxState = json(join(stub, "tmux.json"), { windows: {} });
+    const liveTmuxPane = readFileSync(livePaneOut, "utf8");
+    await pass(
+      "a live launch keeps its tmux window open and marked running while its output is shown",
+      () =>
+        tmuxLive.code === 0 &&
+        tmuxLive.out.includes("host=tmux") &&
+        !existsSync(markerPath("t-live")) &&
+        liveTmuxState.windows["@1"]?.opts?.["@postmaster_state"] === "running" &&
+        liveTmuxPane.includes("step one"),
+      `${tmuxLive.out}\n${JSON.stringify(liveTmuxState)}\n${liveTmuxPane}`,
+    );
+    await marker(markerPath("t-live"), 15);
+    for (
+      let i = 0;
+      i < 40 && "@1" in json(join(stub, "tmux.json"), { windows: {} }).windows;
+      i++
+    )
+      await sleep(50);
+    const doneTmuxState = json(join(stub, "tmux.json"), { windows: {} });
+    await pass(
+      "the tmux window is marked done and closes after the launch ends",
+      () =>
+        existsSync(markerPath("t-live")) &&
+        calls(root, "tmux").includes("set-option\t-w\t-t\t%1\t@postmaster_state\tdone") &&
+        !("@1" in doneTmuxState.windows),
+      JSON.stringify(doneTmuxState),
+    );
+
     resetHarness(root);
     const tmuxEnvRun = execHost(
       [
@@ -4268,18 +4368,22 @@ export async function runControls(): Promise<number> {
     writeFileSync(join(legD, ".leg-1-exited"), "");
     prompt = join(legD, "race.txt");
     writeFileSync(prompt, "race for the lock\n");
-    const spawnEnv = (extra: Record<string, string> = {}): Record<string, string | undefined> => ({
-      HOME: process.env.HOME ?? "/",
-      PATH: legPath,
-      STUB: join(root, "stub"),
-      TMPDIR: root,
-      POSTMASTER_HOST_STATE: join(root, "state"),
-      POSTMASTER_HOST_FIXTURE: root,
-      POSTMASTER_HOST_CLAIM_WAIT: "3",
-      POSTMASTER_HOST_CLOSE_WAIT: "3",
-      POSTMASTER_HOST_FINISH_DELAY: finishDelay,
-      ...legEnv(extra),
-    });
+    const spawnEnv = (extra: Record<string, string> = {}): Record<string, string | undefined> => {
+      const procRoot = process.env.POSTMASTER_PROC_ROOT;
+      return {
+        HOME: process.env.HOME ?? "/",
+        PATH: legPath,
+        STUB: join(root, "stub"),
+        TMPDIR: root,
+        POSTMASTER_HOST_STATE: join(root, "state"),
+        POSTMASTER_HOST_FIXTURE: root,
+        POSTMASTER_HOST_CLAIM_WAIT: "3",
+        POSTMASTER_HOST_CLOSE_WAIT: "3",
+        POSTMASTER_HOST_FINISH_DELAY: finishDelay,
+        ...(procRoot === undefined ? {} : { POSTMASTER_PROC_ROOT: procRoot }),
+        ...legEnv(extra),
+      };
+    };
     const spawnLeg = (args: string[], extra?: Record<string, string>) =>
       spawn(SELF, args, { cwd: f.caller, env: spawnEnv(extra), stdio: "ignore" });
     // Attached in the same tick as the spawn or the kill check, so the exit event can
@@ -4312,8 +4416,7 @@ export async function runControls(): Promise<number> {
       safeOutcome(attemptsPath),
     );
     rmSync(join(legD, ".leg-1-exited"), { force: true });
-    const selfStat = readFileSync(`/proc/${process.pid}/stat`, "utf8");
-    const selfStart = pyWords(selfStat.slice(selfStat.lastIndexOf(")") + 1))[19] ?? "";
+    const selfStart = processStart(process.pid) ?? "";
     writeFileSync(activePath, `${process.pid} ${selfStart}\n`);
     before = nonEmptyLines(attemptsPath).length;
     prompt = join(legD, "livetest.txt");
@@ -4422,7 +4525,7 @@ export async function runControls(): Promise<number> {
     }
     let lockAlive = false;
     try {
-      if (/^[0-9]+$/u.test(lockpid)) process.kill(Number(lockpid), 0);
+      if (/^[0-9]+$/u.test(lockpid) && processState(Number(lockpid)) !== "live") lockpid = "";
       lockAlive = /^[0-9]+$/u.test(lockpid);
     } catch {
       lockAlive = false;
@@ -4914,11 +5017,7 @@ export async function runControls(): Promise<number> {
         pp = readFileSync(join(fuzzD, "logs", "coachman-leg-1.pid"), "utf8").trim();
       } catch {}
       if (lp !== "" && lp === pp && /^[0-9]+$/u.test(lp)) {
-        try {
-          process.kill(Number(lp), 0);
-        } catch {
-          return;
-        }
+        if (processState(Number(lp)) !== "live") return;
         try {
           process.kill(Number(lp), "SIGKILL");
         } catch {}
@@ -6344,17 +6443,23 @@ export async function live(): Promise<void> {
           "../logs/l6.done",
           "--",
           "./probe.sh",
-        ],
-        f.caller,
-        root,
-      );
-      await marker(join(f.logs, "l6.done"), 30);
-      const probe = readFileSync(join(f.logs, "l6.out"), "utf8");
+      ],
+      f.caller,
+      root,
+      { EMIT_SLEEP: "2" },
+    );
+      const l6Path = join(f.logs, "l6.out");
+      for (let i = 0; i < 40 && (!existsSync(l6Path) || !readFileSync(l6Path, "utf8").includes("from=")); i++)
+        await sleep(50);
+      const probe = readFileSync(l6Path, "utf8");
+      const probePid = Number(field(probe, "pid"));
+      const procInfo = processInfo(probePid);
       await pass(
         "the launch has no terminal, and a group of its own",
-        () => field(probe, "tty") === "no" && field(probe, "pgid") === field(probe, "pid"),
-        `${noTty.out}\n${probe}`,
+        () => field(probe, "tty") === "no" && procInfo?.group === probePid,
+        `${noTty.out}\n${probe}\n${JSON.stringify(procInfo)}`,
       );
+      await marker(join(f.logs, "l6.done"), 30);
 
       const stopped = liveHost(
         [
@@ -6573,13 +6678,7 @@ export async function live(): Promise<void> {
 }
 
 function processExists(pid: number): boolean {
-  if (!pid) return false;
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return (error as { code?: string }).code !== "ESRCH";
-  }
+  return pid > 0 && processState(pid) === "live";
 }
 
 if (resolve(process.argv[1] ?? "") === resolve(SCRIPT)) {

@@ -22,6 +22,7 @@
 import { closeSync, existsSync, openSync, readFileSync, readSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { scriptsDir } from "./lib/paths.ts";
+import { processIsLive } from "./lib/process-state.ts";
 import { digitValue, PY_S_CLASS, pySplitLines, pyTrim } from "./lib/text.ts";
 
 // --- the renderer (ported from the embedded Python) ---------------------------------------
@@ -904,22 +905,7 @@ function show(line: string, stamp: boolean): void {
 }
 
 function alive(p: number): boolean {
-  // A zombie has exited; nothing has reaped it yet. It is not alive for follow's purposes.
-  try {
-    const stat = readFileSync(`/proc/${p}/stat`, "utf8");
-    const state = stat.split(") ")[1]?.[0];
-    if (state === "Z") return false;
-  } catch {
-    // no /proc entry: the process is gone
-    return false;
-  }
-  try {
-    process.kill(p, 0);
-    return true;
-  } catch (e) {
-    const err = e as NodeJS.ErrnoException;
-    return err.code === "EPERM";
-  }
+  return processIsLive(p);
 }
 
 const INT_SIGN_BODY = /^([+-]?)(.+)$/u;

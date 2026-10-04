@@ -15,6 +15,7 @@ import {
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { argvHasUndecodableBytes, run } from "./lib/proc.ts";
+import { processState } from "./lib/process-state.ts";
 import { digitValue, pyWords } from "./lib/text.ts";
 
 const states = ["todo", "in-progress", "blocked", "done", "cancelled"];
@@ -244,12 +245,7 @@ function writeMeta(store: string, number: bigint, meta: Meta): void {
   );
 }
 function alive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return (error as any)?.code === "EPERM";
-  }
+  return processState(pid) === "live";
 }
 function locked<T>(store: string, action: () => T): T {
   needStore(store);

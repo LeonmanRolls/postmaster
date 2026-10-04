@@ -393,6 +393,7 @@ printf '{"type":"result","subtype":"success"}' >> "$1"
     const r = spawnSync(viewer, ["--follow", f, "--pid", String(writerPid)], {
       encoding: "utf8",
       timeout: 30000,
+      env: { ...process.env, POSTMASTER_PROC_ROOT: join(tmp, "no-proc") },
     });
     const out = r.stdout ?? "";
     const lineRe = /^[0-9]{2}:[0-9]{2}:[0-9]{2} (says: step [123]|result: success)$/u;

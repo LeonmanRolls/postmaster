@@ -19,6 +19,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { run } from "./lib/proc.ts";
+import { processState } from "./lib/process-state.ts";
 import { DETAIL_RE, RESULT_RE, shlexQuote, ticketPart } from "./verify.ts";
 
 const SELF = join(import.meta.dir, "verify.sh");
@@ -1065,9 +1066,7 @@ describe("nothing a check starts outlives it", () => {
     const pid = parseInt(readFileSync(join(lp, "leftover.pid"), "utf-8").trim() || "0", 10);
     let gone = false;
     for (let i = 0; i < 40; i++) {
-      try {
-        process.kill(pid, 0);
-      } catch {
+      if (processState(pid) !== "live") {
         gone = true;
         break;
       }

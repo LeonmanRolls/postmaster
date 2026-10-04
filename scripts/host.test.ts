@@ -17,10 +17,10 @@ const SECTIONS: Array<{ name: string; count: number }> = [
   { name: "a run launch without a named run space is refused", count: 1 },
   { name: "stop: owned process trees and refusal controls", count: 5 },
   { name: "stop: registry identity and process membership", count: 16 },
-  { name: "run, Herdr (stub): pane placement and environment handover", count: 13 },
+  { name: "run, Herdr (stub): pane placement and environment handover", count: 15 },
   { name: "stop and close, Herdr (stub)", count: 6 },
   { name: "a reviewer's scratch clone, Herdr (stub)", count: 5 },
-  { name: "run, stop and close, tmux (stub)", count: 8 },
+  { name: "run, stop and close, tmux (stub)", count: 10 },
   { name: "completion cleanup controls, Herdr (stub)", count: 3 },
   { name: "finished review round cleanup, Herdr (stub)", count: 1 },
   { name: "run-wide teardown, Herdr (stub)", count: 2 },
@@ -84,8 +84,12 @@ const assertSection = (name: string, count: number): void => {
   const part = sectionLines(name);
   const oks = part.filter((l) => l.startsWith("  ok   "));
   const bad = part.filter((l) => l.startsWith("  FAIL "));
+  const badDetails = bad.map((line) => {
+    const at = part.indexOf(line);
+    return `${line}\n${part[at + 1] ?? ""}`;
+  });
+  expect(badDetails).toEqual([]);
   expect(`${name}: ${oks.length} ok of ${count}`).toBe(`${name}: ${count} ok of ${count}`);
-  expect(bad).toEqual([]);
 };
 
 describe("host self-test sections", () => {

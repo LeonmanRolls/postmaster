@@ -29,7 +29,7 @@
 //   exit 1  usage, or no such root
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
-import { run } from "./lib/proc.ts";
+import { processStart } from "./lib/process-state.ts";
 import { pyWords } from "./lib/text.ts";
 
 interface RunRow {
@@ -104,23 +104,7 @@ function ownerAlive(d: string, leg: string): boolean {
     return false;
   }
   const pid = Number(pidS.replace(/_/gu, ""));
-  try {
-    if (statSync("/proc/self").isDirectory()) {
-      let rest: string[];
-      try {
-        const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
-        rest = pyWords(stat.slice(stat.lastIndexOf(")") + 1));
-      } catch {
-        return false;
-      }
-      return rest.length > 0 && rest[0] !== "Z" && rest.length > 19 && rest[19] === start;
-    }
-  } catch {
-    // No /proc/self: fall through to ps.
-  }
-  const r = run("ps", ["-o", "stat=,lstart=", "-p", String(pid)], { env: { LC_ALL: "C" } });
-  const f = pyWords(r.out);
-  return f.length >= 6 && !f[0]!.startsWith("Z") && f.slice(1, 6).join(" ") === start;
+  return processStart(pid) === start;
 }
 
 export function status(root: string): number {

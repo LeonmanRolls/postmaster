@@ -13,7 +13,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { run } from "./lib/proc";
+import { processStart } from "./lib/process-state";
 import { pyWords } from "./lib/text";
 import { status, walkFiles } from "./runs-status";
 
@@ -68,14 +68,8 @@ function intent(name: string, n: number, request = "launch"): void {
 
 function liveowner(name: string): void {
   // The lock's owner is this test run, alive throughout it.
-  let start: string;
-  try {
-    const stat = readFileSync(`/proc/${process.pid}/stat`, "utf8");
-    start = pyWords(stat.slice(stat.lastIndexOf(")") + 1))[19]!;
-  } catch {
-    const r = run("ps", ["-o", "lstart=", "-p", String(process.pid)], {});
-    start = pyWords(r.out).slice(0, 5).join(" ");
-  }
+  const start = processStart(process.pid);
+  if (!start) throw new Error("could not read this process's start time");
   writeFileSync(join(root, name, ".leg-2-active"), `${process.pid} ${start}\n`);
 }
 

@@ -4052,9 +4052,9 @@ s.close()
       // AC2 item: a consistent /proc (Linux: the lane's PIDs match what its
       // /proc shows, so ps and friends see the lane, not the host's table)
       if (process.platform === "linux") {
-        // Fork-free: read runs in this shell, so /proc/self is the shell
-        // itself, not a subshell a $() would fork.
-        const selfProbe = 'read pid rest < /proc/self/stat; test "$pid" = "$$"';
+        const processModule = join(HERE, "lib", "process-state.ts");
+        const probeSource = `import { processInfo } from ${JSON.stringify(processModule)}; const info = processInfo(process.pid); process.exit(info?.pid === process.pid ? 0 : 1);`;
+        const selfProbe = `${shlexQuote(process.execPath)} -e ${shlexQuote(probeSource)}`;
         items.push({
           name: "a consistent /proc",
           bare: () => run("sh", ["-c", selfProbe]).code === 0,

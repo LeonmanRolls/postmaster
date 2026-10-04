@@ -82,6 +82,7 @@ import { basename, dirname, join } from "node:path";
 import { tryJsonFile, tryTomlFile } from "./lib/data.ts";
 import { toolRoot } from "./lib/paths.ts";
 import { mkstempSync, run, signalExitCode } from "./lib/proc.ts";
+import { processState } from "./lib/process-state.ts";
 import { pySplitLines, pyTrim } from "./lib/text.ts";
 
 const TOOL = toolRoot(import.meta);
@@ -215,12 +216,7 @@ function lockOwnerDead(lockPath: string): boolean {
   }
   const pid = Number(text.trim());
   if (!Number.isInteger(pid) || pid <= 0) return false;
-  try {
-    process.kill(pid, 0);
-    return false;
-  } catch (e) {
-    return (e as NodeJS.ErrnoException)?.code === "ESRCH";
-  }
+  return processState(pid) !== "live";
 }
 
 function withPinLock<T>(
@@ -569,8 +565,6 @@ function scanHoldMs(): number {
 }
 
 function runScanChild(root: string, checkout: string): { code: number; out: string; err: string } {
-  const bun = Bun.which("bun");
-  if (bun === null) return { code: 127, out: "", err: "" };
   const args = [
     "--no-env-file",
     `--config=${join(TOOL, "bunfig.toml")}`,
@@ -584,7 +578,10 @@ function runScanChild(root: string, checkout: string): { code: number; out: stri
   // The scan runs where the caller's environment cannot reach it: PATH alone crosses over,
   // and the tool bunfig.toml anchors config discovery, so no HOME, no startup file and no
   // working-directory config reaches the scan.
-  const r = spawnSync(bun, args, { encoding: "utf8", env: { PATH: process.env.PATH ?? "" } });
+  const r = spawnSync(process.execPath, args, {
+    encoding: "utf8",
+    env: { PATH: process.env.PATH ?? "" },
+  });
   let code: number;
   if (r.status !== null && r.status !== undefined) code = r.status;
   else if (r.signal) code = signalExitCode(r.signal);
