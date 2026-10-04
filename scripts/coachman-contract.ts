@@ -394,8 +394,8 @@ function exerciseSelfTest(sourceRoot: string): number {
       replaceOnce(
         repo,
         "scripts/spec-session.ts",
+        "// The spec session's verbs: brief writes the interactive session's brief, approve commits",
         "// The spec session's two verbs: brief writes the interactive session's brief, and approve",
-        "// The spec session's two verbs: brief writes the session's brief, and approve",
       ),
     "scripts/spec-session.ts",
   );
