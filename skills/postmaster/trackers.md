@@ -173,7 +173,7 @@ projects, and `<tool>/scripts/run probe-trackers` runs it.
 ## local
 
 Tickets in the target repository's own git directory, for a repo with no remote, or a user
-with no network or no login. Nothing is installed or configured beyond bash, git and python3.
+with no network or no login. Nothing is installed or configured beyond bash and git.
 The store is `postmaster/tickets/` in the repository's common git directory
 (`.git/postmaster/tickets/` in a plain checkout): outside the working tree and every branch,
 the same for every worktree, and removed with the repository. A ticket is `<n>.md`, its body

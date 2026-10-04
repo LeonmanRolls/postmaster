@@ -173,14 +173,14 @@ settings only say what `default` means for that project.
 
 ## What it needs
 
-At least two agent CLIs that can run headless. Any git repository as a target. A session host
+**Linux and macOS** are the supported systems; CI runs the check on both for every pull
+request, on Apple silicon, and Intel Macs are not tested. At least two agent CLIs that can
+run headless. Any git repository as a target. A session host
 to watch the fleet in: [Herdr](https://herdr.dev) by default wherever it is running, where each
 launch appears in its worktree's space under the project's, or tmux. With neither, launches run
 in the background and the flow still works (`skills/postmaster/hosts.md`). Bun 1.4.2 or newer, which
 runs the TypeScript scripts and reads the config, and Node and npm, which the fixture flow
 needs to run its gate.
-Python 3.11 or newer, which the bash scripts use to read the config, and for discovering a
-JavaScript project's gate.
 
 ## Installing the skills
 
