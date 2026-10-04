@@ -649,10 +649,11 @@ missed.
    to the user as Tool faults says and stop — never work the cleanup's steps by hand, which
    would bring the judgment calls back. With `--json` its summary is one record a script
    can read. Never delete the dispatch or manifest; the run's branches stay.
-3. **Put what needs the user to the user once aftercare ends:** every folder aftercare's
-   summary flags as holding work no branch's commits have, then tool faults and style-sort
-   proposals as Legacy Stage G steps 4 and 5 describe. Archive finished threads where the
-   harness has an archive form (`harnesses.md`).
+3. **Put what needs the user to the user once aftercare ends:** each flagged folder — the
+   ones aftercare's summary flags as holding work no branch's commits have, with the files
+   it names — then tool faults and style-sort proposals as Legacy Stage G steps 4 and 5
+   describe. Archive finished threads where the harness has an archive form
+   (`harnesses.md`).
 4. Dispatch the next ticket.
 
 ## Legacy Stage F: the gate (run.json has no coachman_contract 2)
