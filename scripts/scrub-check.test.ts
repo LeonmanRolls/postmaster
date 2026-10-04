@@ -196,13 +196,17 @@ test("range scan reads UTF-16 added lines like --files does", () => {
       encoding: "utf8",
     }).stdout.trim();
     const body = `contact ${email()} here\n`;
+    const little = Buffer.from(body, "utf16le");
+    const big = Buffer.from(little);
+    for (let i = 0; i + 1 < big.length; i += 2) {
+      const lo = big[i]!;
+      big[i] = big[i + 1]!;
+      big[i + 1] = lo;
+    }
     const bytes =
       encoding === "utf16le"
-        ? Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(body, "utf16le")])
-        : Buffer.concat([
-            Buffer.from([0xfe, 0xff]),
-            Buffer.from(Buffer.from(body, "utf16le")).swap16(),
-          ]);
+        ? Buffer.concat([Buffer.from([0xff, 0xfe]), little])
+        : Buffer.concat([Buffer.from([0xfe, 0xff]), big]);
     writeFileSync(join(repo, "note.txt"), bytes);
     const added = commit(repo, "add encoded note");
     const scanned = runScript("scrub-check", [base, "HEAD"], repo);
