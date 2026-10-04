@@ -2920,9 +2920,7 @@ export function inspectLaunches(directory: string): string[] {
     const group = Number(entry);
     const leader = table.get(group);
     const live = !!leader && leader.group === group && leader.start === record.start;
-    const member = record.members.some(
-      ([pid, start]) => table.get(pid)?.start === start,
-    );
+    const member = record.members.some(([pid, start]) => table.get(pid)?.start === start);
     if ((live || member) && record.name && !names.includes(record.name)) names.push(record.name);
   }
   return names;
@@ -2991,7 +2989,10 @@ export async function stopPreviewLaunch(
   const most = count(process.env.POSTMASTER_HOST_STOP_MAX ?? "512", "POSTMASTER_HOST_STOP_MAX");
   const result = await stopTree(grace, most, [`group|${preview.pid}|${preview.start}`]);
   if (result.code !== 0)
-    return { code: result.code, detail: `could not stop preview launch ${preview.pid}: ${result.text}` };
+    return {
+      code: result.code,
+      detail: `could not stop preview launch ${preview.pid}: ${result.text}`,
+    };
   return { code: 0, detail: `stopped preview launch ${preview.pid}` };
 }
 
