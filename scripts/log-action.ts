@@ -10,7 +10,7 @@
 //            dispatch resume refuse harvest synthesize review-launch review-harvest finding apply
 //            escalate rule ticket-check ticket-create ticket-edit ticket-state ticket-comment
 //            gate verify merge teardown degrade handoff-accept handoff stage spec-review
-//            tool-fault note
+//            tool-fault note switch-off
 //   target   what the action was done to: a lane, a ticket id, a branch, a path, a round
 //   detail   free text; everything after the target, joined by spaces. A finding's opens with its
 //            class, gating or style, so the style findings can be told apart. A spec-review's
@@ -43,7 +43,7 @@ import { toolRoot } from "./lib/paths.ts";
 import { argvDecoded } from "./lib/proc.ts";
 
 const VERBS =
-  " dispatch resume refuse harvest synthesize review-launch review-harvest finding apply escalate rule ticket-check ticket-create ticket-edit ticket-state ticket-comment gate verify merge teardown degrade handoff-accept handoff stage spec-review tool-fault note ";
+  " dispatch resume refuse harvest synthesize review-launch review-harvest finding apply escalate rule ticket-check ticket-create ticket-edit ticket-state ticket-comment gate verify merge teardown degrade handoff-accept handoff stage spec-review tool-fault note switch-off ";
 const CONTROLS = join(toolRoot(import.meta), "skills/postmaster/controls.md");
 
 // JSON string escaping: drop control chars, escape separators. Bytes that
@@ -252,6 +252,19 @@ function logAction(
     if (firstWord !== "approved" && firstWord !== "changes" && firstWord !== "dropped") {
       console.error(
         "log-action: a spec-review's detail opens with its decision, approved, changes or dropped",
+      );
+      return 1;
+    }
+  }
+  if (action === "switch-off") {
+    const decision = detail.startsWith("approved ")
+      ? "approved"
+      : detail.startsWith("refused ")
+        ? "refused"
+        : "";
+    if (decision === "" || detail.slice(decision.length + 1).trim() === "") {
+      console.error(
+        "log-action: a switch-off action needs approved or refused followed by the user's words",
       );
       return 1;
     }

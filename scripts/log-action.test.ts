@@ -143,7 +143,7 @@ beforeAll(() => {
   tmp = mkdtempSync(join(tmpdir(), "postmaster-"));
   d = join(tmp, "proj", ".postmaster", "runs", "RUN-1");
   mkdirSync(d, { recursive: true });
-  const setup = `ln -s "${TOOL}" "${join(tmp, "link")}" && : > "${join(tmp, "outside.sh")}"`;
+  const setup = `ln -s "${TOOL}" "${join(tmp, "link")}"`;
   const link = spawnSync("bash", ["-c", setup], { encoding: "utf8" });
   if (link.status !== 0) throw new Error(`setup link failed: ${link.stderr}`);
 });
@@ -211,6 +211,19 @@ describe("positive controls", () => {
         last.run === "RUN-1" &&
         !last.fault,
     ).toBe(true);
+  }, 30000);
+
+  test("a switch-off approval records the identity and the user's words in both files", () => {
+    const words = "approved I approve this exception because the generated file is not hand-edited";
+    const r = logAction(["postmaster", "switch-off", "comment:abc123", words]);
+    expect(r.code).toBe(0);
+    const actions = readFileSync(join(d, "actions.jsonl"), "utf8");
+    const ledger = readFileSync(join(tmp, "proj", ".postmaster", "runs", "ledger.jsonl"), "utf8");
+    expect(actions).toBe(ledger);
+    const last = lastLine();
+    expect(last?.action).toBe("switch-off");
+    expect(last?.target).toBe("comment:abc123");
+    expect(last?.detail).toBe(words);
   }, 30000);
 
   test("a tool-fault with every field is written", () => {
@@ -704,6 +717,17 @@ describe("negative controls: nothing is written", () => {
     expect(r.err.includes("opens with its decision, approved, changes or dropped")).toBe(true);
   }, 30000);
 
+  test("a switch-off action needs a decision and the user's words", () => {
+    const before = lines();
+    const missing = logAction(["postmaster", "switch-off", "comment:abc123", "approved"]);
+    expect(missing.code).toBe(1);
+    expect(lines()).toBe(before);
+    expect(missing.err).toContain("needs approved or refused");
+    const unknown = logAction(["postmaster", "switch-off", "comment:abc123", "maybe words"]);
+    expect(unknown.code).toBe(1);
+    expect(lines()).toBe(before);
+  }, 30000);
+
   test("a tool-fault with no fix", () => {
     const before = lines();
     const r = logAction(["coachman", "tool-fault", "scripts/launch.ts", ...FIELDS.slice(0, 8)]);
@@ -761,7 +785,7 @@ describe("negative controls: nothing is written", () => {
 
   test("a file outside the checkout", () => {
     const before = lines();
-    const r = logAction(["coachman", "tool-fault", join(tmp, "outside.sh"), ...FIELDS]);
+    const r = logAction(["coachman", "tool-fault", "/tmp/postmaster-outside.sh", ...FIELDS]);
     expect(r.code).toBe(1);
     expect(lines()).toBe(before);
     expect(r.err.includes("names the postmaster file")).toBe(true);
@@ -772,7 +796,7 @@ describe("negative controls: nothing is written", () => {
     const r = logAction([
       "coachman",
       "tool-fault",
-      relative(TOOL, join(tmp, "outside.sh")),
+      relative(TOOL, "/tmp/postmaster-outside.sh"),
       ...FIELDS,
     ]);
     expect(r.code).toBe(1);

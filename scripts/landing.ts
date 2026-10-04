@@ -84,6 +84,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { scriptsDir } from "./lib/paths.ts";
 import { run } from "./lib/proc.ts";
+import { inspectSwitchOffs } from "./lib/switch-offs.ts";
 import {
   D_CLASS,
   END_OF_STRING,
@@ -378,7 +379,8 @@ const TOP_USAGE =
   "--ticket <ref> --dispatch <dispatch> --wt <synthesis-wt> | results <dispatch> <synthesis-wt> | " +
   "card-block <dispatch> <synthesis-wt> <checkpoint> | card-results <dispatch> <synthesis-wt> " +
   "<checkpoint> <card> | card-findings <dispatch> <synthesis-wt> <checkpoint> <card> | " +
-  "card-open <checkpoint> | journey <dispatch> <synthesis-wt> <waybill>";
+  "card-open <checkpoint> | journey <dispatch> <synthesis-wt> <waybill> | " +
+  "switch-offs --repo <repo> --default <branch> --ticket <ref> [--dispatch <dispatch>]";
 const ALREADY_USAGE =
   "usage: run landing already-landed --repo <repo> --default <branch> --ticket <ref> --base <sha> " +
   "--card-head <sha> [--local-ticket <branch>] [--pr-merge <sha> --pr-head <sha>]";
@@ -395,6 +397,36 @@ const CFINDINGS_USAGE =
   "usage: run landing card-findings <dispatch> <synthesis-wt> <checkpoint> <card>";
 const OPEN_USAGE = "usage: run landing card-open <checkpoint>";
 const JOURNEY_USAGE = "usage: run landing journey <dispatch> <synthesis-wt> <waybill>";
+const SWITCH_OFFS_USAGE =
+  "usage: run landing switch-offs --repo <repo> --default <branch> --ticket <ref> [--dispatch <dispatch>]";
+
+function switchOffs(o: string[]): number {
+  if (
+    ![6, 8].includes(o.length) ||
+    o[0] !== "--repo" ||
+    o[2] !== "--default" ||
+    o[4] !== "--ticket" ||
+    (o.length === 8 && o[6] !== "--dispatch")
+  ) {
+    usage(SWITCH_OFFS_USAGE);
+  }
+  try {
+    const report = inspectSwitchOffs({
+      repo: o[1]!,
+      defaultRef: o[3]!,
+      ticketRef: o[5]!,
+      ...(o.length === 8 ? { dispatch: o[7]! } : {}),
+    });
+    console.log(report.status);
+    process.stdout.write(report.output);
+    if (report.status === "clear") return 0;
+    if (report.status === "held") return 2;
+    if (report.status === "reason-required") return 3;
+    return 4;
+  } catch (e) {
+    die(`switch-offs: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
 
 function alreadyLanded(o: string[]): number {
   if (
@@ -653,6 +685,7 @@ function main(argv: string[]): number {
       if (argv.length !== 4) usage(JOURNEY_USAGE);
       return journey(argv[1]!, argv[2]!, argv[3]!);
     }
+    if (mode === "switch-offs") return switchOffs(argv.slice(1));
     usage(TOP_USAGE);
   } catch (e) {
     if (e instanceof LandingFailure) {

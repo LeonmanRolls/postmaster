@@ -45,7 +45,7 @@ beforeAll(() => {
   scratch = join(root, "scratch");
   mkdirSync(join(scratch, "src"), { recursive: true });
   logs = join(root, "logs");
-  taskHome = join(`/tmp/claude-${process.getuid?.() ?? 0}`, `postmaster-test-${process.pid}`);
+  taskHome = join(root, "claude-home");
   mkdirSync(taskHome, { recursive: true });
   external = join(taskHome, "claude-task-output.txt");
   writeFileSync(external, "review task tools\n");
@@ -69,6 +69,20 @@ const runConfig = (name: string, harness: string): string => {
 
 const cli = (...args: string[]): { code: number; out: string; err: string } =>
   run(SELF, ["review-findings", ...args]);
+
+const harvestCli = (
+  eventsPath: string,
+  logsDir: string,
+  prefix: string,
+): { code: number; out: string; err: string } => {
+  try {
+    const paths = harvest(eventsPath, logsDir, prefix, taskHome);
+    return { code: 0, out: paths.length > 0 ? `${paths.join("\n")}\n` : "", err: "" };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { code: 1, out: "", err: `review-findings: ${message}\n` };
+  }
+};
 
 const writeEvents = (name: string, events: unknown[]): string => {
   const eventFile = join(root, name);
@@ -184,7 +198,7 @@ describe("separator characters inside JSON strings", () => {
   };
 
   test("a stream holding U+2028, U+2029, CR, VT and FF inside a JSON string harvests as valid", () => {
-    const harvested = cli("harvest", separatorsFile(), logs, "--prefix", "separators");
+    const harvested = harvestCli(separatorsFile(), logs, "separators");
     expect(harvested.code).toBe(0);
   });
 
@@ -210,7 +224,7 @@ describe("separator characters inside JSON strings", () => {
       broken,
       `${JSON.stringify({ type: "text", part: { type: "text", text: "No findings." } })}\n{"type": "text", "part": "broken\n`,
     );
-    const refused = cli("harvest", broken, logs, "--prefix", "broken");
+    const refused = harvestCli(broken, logs, "broken");
     expect(refused.code).toBe(1);
     expect(refused.err).toContain("is not JSON");
   });
@@ -412,7 +426,7 @@ describe("harvest", () => {
     const harvestEvents = writeEvents("harvest.events", [
       { type: "system", subtype: "task_notification", output_file: external },
     ]);
-    const r = cli("harvest", harvestEvents, logs, "--prefix", "r1-bug-one");
+    const r = harvestCli(harvestEvents, logs, "r1-bug-one");
     const copied = join(logs, `r1-bug-one-claude-task-01-${basename(external)}`);
     expect(r.code).toBe(0);
     expect(existsSync(copied)).toBe(true);
@@ -425,7 +439,7 @@ describe("harvest", () => {
       { type: "system", subtype: "task_notification", output_file: join(taskHome, "absent.txt") },
     ]);
     const partialLogs = join(root, "logs-partial");
-    const r = cli("harvest", partial, partialLogs, "--prefix", "partial");
+    const r = harvestCli(partial, partialLogs, "partial");
     expect(r.code).toBe(1);
     expect(r.err.includes("missing")).toBe(true);
     expect(readdirSync(partialLogs).length).toBe(0);
@@ -436,8 +450,8 @@ describe("harvest", () => {
       { type: "system", subtype: "task_notification", output_file: external },
     ]);
     const retryLogs = join(root, "logs-retry");
-    const first = cli("harvest", one, retryLogs, "--prefix", "retry");
-    const again = cli("harvest", one, retryLogs, "--prefix", "retry");
+    const first = harvestCli(one, retryLogs, "retry");
+    const again = harvestCli(one, retryLogs, "retry");
     expect(first.code).toBe(0);
     expect(again.code).toBe(0);
     expect(again.out).toBe(first.out);
@@ -448,9 +462,9 @@ describe("harvest", () => {
       { type: "system", subtype: "task_notification", output_file: external },
     ]);
     const retryLogs = join(root, "logs-retry");
-    cli("harvest", one, retryLogs, "--prefix", "retry");
+    harvestCli(one, retryLogs, "retry");
     writeFileSync(join(retryLogs, `retry-claude-task-01-${basename(external)}`), "changed\n");
-    const clobber = cli("harvest", one, retryLogs, "--prefix", "retry");
+    const clobber = harvestCli(one, retryLogs, "retry");
     expect(clobber.code).toBe(1);
     expect(clobber.err.includes("refusing to overwrite")).toBe(true);
   });
@@ -491,7 +505,7 @@ describe("harvest", () => {
             }
           : notification;
       const events = writeEvents(`harvest-neg-${number}.events`, [note]);
-      const r = cli("harvest", events, logs, "--prefix", "neg");
+      const r = harvestCli(events, logs, "neg");
       expect(r.code).toBe(1);
       expect(r.err.includes(message)).toBe(true);
     });
@@ -535,7 +549,7 @@ describe("harvest", () => {
 
   test("a stream with no task_notification harvests nothing and exits 0", () => {
     const quiet = writeEvents("harvest-quiet.events", [{ type: "turn.completed" }]);
-    const r = cli("harvest", quiet, logs, "--prefix", "quiet");
+    const r = harvestCli(quiet, logs, "quiet");
     expect(r.code).toBe(0);
     expect(r.out).toBe("");
   });
@@ -594,13 +608,7 @@ describe("degrade", () => {
       { type: "system", subtype: "task_notification", output_file: external },
       { type: "result", subtype: "success", result: claudeResult },
     ]);
-    const presentHarvest = cli(
-      "harvest",
-      presentEvents,
-      join(root, "logs-degrade-present"),
-      "--prefix",
-      "present",
-    );
+    const presentHarvest = harvestCli(presentEvents, join(root, "logs-degrade-present"), "present");
     const presentJson = join(root, "logs-degrade-present-findings.json");
     rmSync(presentJson, { force: true });
     if (presentHarvest.code === 0) {
@@ -1510,7 +1518,7 @@ describe("harvest conflicts", () => {
       { type: "system", subtype: "task_notification", output_file: external },
       { type: "system", subtype: "task_notification", output_file: secondTask },
     ]);
-    const r = cli("harvest", clash, clashLogs, "--prefix", "clash");
+    const r = harvestCli(clash, clashLogs, "clash");
     expect(r.code).toBe(1);
     expect(r.err.includes("refusing to overwrite")).toBe(true);
     expect(existsSync(join(clashLogs, `clash-claude-task-01-${basename(external)}`))).toBe(false);
