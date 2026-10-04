@@ -492,7 +492,7 @@ test("Herdr checks time out when timeout is absent, and keep working when it is 
       ["run", ["host", "run", "timeout-probe", cwd, "--", "/bin/true"]],
     ] as const) {
       const started = Date.now();
-      const result = spawnSync(join(import.meta.dir, "run"), args, {
+      const result = spawnSync(join(import.meta.dir, "run"), [...args], {
         encoding: "utf8",
         env,
         timeout: 10000,
