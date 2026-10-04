@@ -946,6 +946,19 @@ function nextLeg(list: string, current: string): [string, string] | null {
 /** Dispatch the next leg, or report why it could not. 0 took the step, 1 wakes, 3 held. */
 function prepareDispatch(d: string, runName: string, current: string, root: string): StepResult {
   const heldDir = join(root, "postmaster");
+  const wallGate = run(beside(import.meta, "walls.sh"), ["open", d]);
+  if (wallGate.code === 1) {
+    return {
+      rc: 1,
+      error: `run ${runName} has unresolved provider walls: ${(wallGate.out + wallGate.err).replace(/\n+$/u, "")}`,
+    };
+  }
+  if (wallGate.code !== 0) {
+    return {
+      rc: 1,
+      error: `walls.sh open failed (exit ${wallGate.code}): ${(wallGate.out + wallGate.err).replace(/\n+$/u, "")}`,
+    };
+  }
   const legs = run(beside(import.meta, "turnpikes.sh"), ["legs", d]);
   if (legs.code !== 0) {
     return {
@@ -1215,6 +1228,108 @@ function resumeTransient(d: string, runName: string, number: string, root: strin
   return { rc: 0, error: "" };
 }
 
+/** Deliver an already-recorded wall ruling to the coachman paused for walls. */
+function resumeWallPause(d: string, runName: string, number: string, root: string): StepResult {
+  const heldDir = join(root, "postmaster");
+  const held = isHeldRun(runName, heldDir);
+  if (held === 0) return { rc: 3, error: "" };
+  if (held !== 1) return { rc: 1, error: "cannot read the held list" };
+
+  const open = run(beside(import.meta, "walls.sh"), ["open", d]);
+  if (open.code !== 0) {
+    return {
+      rc: 1,
+      error: `provider wall ruling is still open or unreadable: ${(open.out + open.err).replace(/\n+$/u, "")}`,
+    };
+  }
+  const shown = run(beside(import.meta, "walls.sh"), ["show", d]);
+  if (shown.code !== 0 || !shown.out.trim()) {
+    return {
+      rc: 1,
+      error: `could not read provider wall rulings: ${(shown.out + shown.err).trim()}`,
+    };
+  }
+  const legs = run(beside(import.meta, "turnpikes.sh"), ["legs", d]);
+  if (legs.code !== 0) {
+    return {
+      rc: 1,
+      error: `turnpikes.sh legs failed: ${(legs.out + legs.err).replace(/\n+$/u, "")}`,
+    };
+  }
+  if (!isCanonicalLeg(number)) return { rc: 1, error: `manifest leg '${number}' is not canonical` };
+  const leg = listedLeg(legs.out, number);
+  if (!leg) return { rc: 1, error: `turnpikes.sh legs has no entry for current leg ${number}` };
+
+  let name = "";
+  let thread = "";
+  try {
+    const manifest: unknown = JSON.parse(readFileSync(join(d, "manifest.json"), "utf8"));
+    if (!isRecord(manifest) || !isRecord(manifest.coachman) || !isRecord(manifest.coachman.legs))
+      throw new Error("no coachman leg record");
+    const entry = manifest.coachman.legs[number];
+    if (!isRecord(entry)) throw new Error("no coachman leg entry");
+    name = entry.name === undefined ? "" : pyPrint(entry.name);
+    thread = entry.thread_id === undefined ? "" : pyPrint(entry.thread_id);
+  } catch {
+    return { rc: 1, error: `cannot read coachman leg ${number} from manifest.json` };
+  }
+  if (name !== "coachman" && name !== "coachman_fallback")
+    return { rc: 1, error: `leg ${number} has no recorded coachman name` };
+  if (!thread) return { rc: 1, error: `leg ${number} has no recorded thread id` };
+
+  const repo = runRepo(d);
+  if (!repo) return { rc: 1, error: "neither the waybill nor checks.json names the project repo" };
+  const worktree = join(repo, ".worktrees", runName);
+  try {
+    if (!statSync(worktree).isDirectory()) throw new Error("missing");
+  } catch {
+    return { rc: 1, error: `the synthesis worktree is missing: ${worktree}` };
+  }
+  const rt = legRt(d);
+  if (rt.error) return { rc: 1, error: rt.error };
+
+  let prompt = join(d, `leg-${number}-provider-walls-${utcStamp()}.txt`);
+  while (existsSync(prompt)) {
+    const retryHeld = isHeldRun(runName, heldDir);
+    if (retryHeld === 0) return { rc: 3, error: "" };
+    if (retryHeld !== 1) return { rc: 1, error: "cannot re-read the held list" };
+    sleepSync(1000);
+    prompt = join(d, `leg-${number}-provider-walls-${utcStamp()}.txt`);
+  }
+  const content =
+    `The postmaster recorded the user's provider-wall rulings. Continue leg ${number} without ` +
+    `the lanes ruled go-on. Do not ask for these rulings again.\n\n${shown.out}`;
+  try {
+    writeFileSync(prompt, content);
+  } catch {
+    return { rc: 1, error: `cannot write provider-wall resume prompt: ${prompt}` };
+  }
+  const recheck = isHeldRun(runName, heldDir);
+  if (recheck === 0) return { rc: 3, error: "" };
+  if (recheck !== 1) return { rc: 1, error: "cannot re-read the held list" };
+
+  rmSync(join(d, ".provider-walls-paused"), { force: true });
+  rmSync(join(d, ".escalation-ready"), { force: true });
+  const resumed = watchLeg("resume", rt.rt, d, worktree, leg, number, thread, prompt);
+  if (resumed.code !== 0) {
+    writeFileSync(join(d, ".provider-walls-paused"), "");
+    writeFileSync(join(d, ".escalation-ready"), "");
+    return {
+      rc: 1,
+      error: `could not resume leg ${number} after provider-wall rulings: ${resumed.text.split("\n")[0] || "no message"}`,
+    };
+  }
+  const logged = run(beside(import.meta, "log-action.sh"), [
+    d,
+    "postmaster",
+    "resume",
+    "coachman",
+    `leg ${number}, thread ${thread}; provider walls ruled go-on; the watcher took it`,
+  ]);
+  if (logged.code !== 0) return { rc: 1, error: `could not log resume of leg ${number}` };
+  return { rc: 0, error: "" };
+}
+
 /** Python's print() for a manifest scalar, as the leg read joins it. */
 function pyPrint(v: unknown): string {
   if (v === null || v === undefined) return "None";
@@ -1283,6 +1398,11 @@ function processTable(root: string, table: string): TableResult {
       if (r.rc === 0 || r.rc === 3) {
         // taken, or held before its first mutation
       } else markNeeds(needs, runName, "RESUME", r.error);
+    } else if (next === "WALL-RESUME") {
+      const r = resumeWallPause(join(root, runName), runName, leg, root);
+      if (r.rc === 0 || r.rc === 3) {
+        // taken, or held before its first mutation
+      } else markNeeds(needs, runName, "WALL-RESUME", r.error);
     } else if (next === "WAIT" || next === "USER" || next === "-") {
       // a leg at work, already put to the user, or closed: never wakes
     } else {

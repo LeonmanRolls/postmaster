@@ -152,6 +152,7 @@ harness-specific and the flow does not rely on it.
 | `.checkpoint-<n>-ready` | Coachman | `checkpoint-<n>.md` is ready for the postmaster to read. |
 | `.checkpoint-review-ready` | Coachman | `checkpoint-review.md` is ready for the postmaster to read. |
 | `.escalation-ready` | Coachman | `ESCALATION.md` asks for a ruling; the postmaster resumes the same leg. |
+| `.provider-walls-paused` | Coachman | A wall ruling was escalated; the watcher resumes this leg after every wall is ruled. |
 | `.card-ready` | Coachman | `card.md` and the leg's hand-off are ready for the postmaster's gate. |
 | `.waiting-on-user` | Postmaster | A question is waiting; the postmaster removes it when the answer arrives. |
 
@@ -451,6 +452,17 @@ from it.
   thread is a needle in a haystack: the ids are the handles for answers, fix loops, follow-ups
   and debugging. Set the stage: `<tool>/scripts/stage.sh <dispatch> workhorses-running` when
   implementation begins, after the planning stage has its one approved spec.
+- **Wait for every launched workhorse marker before harvesting.** A wall is logged by
+  `<tool>/scripts/launch.sh` before `<tool>/scripts/host.sh` lands `logs/<lane>.done`. Let the other workhorses finish.
+  When any workhorse has an unruly wall, do not use the stall cutoff to begin synthesis: after
+  every workhorse has a marker, run `<tool>/scripts/walls.sh open <dispatch>`. If it exits 1,
+  run `<tool>/scripts/walls.sh escalate <dispatch>` and end the leg there. Do not set the
+  synthesis stage, write `checkpoint-1.md`, or write a synthesis commit while a workhorse wall
+  has no ruling. The escalation names each lane, its provider message, its reset or no reset
+  time, and asks for go-on. After the resume, run `<tool>/scripts/walls.sh open <dispatch>` again; when it exits 0, run
+  `<tool>/scripts/walls.sh carry <dispatch> <lane>` for every workhorse before composing. A carry never calls
+  the harness; it records the lane as DEGRADED with the provider message. A ruling already
+  recorded while the workhorses were running takes effect here without an escalation.
 - **While the workhorses run, write the acceptance tests, blind.** Before you read any lane's diff
   or log beyond its thread id, turn the ticket's acceptance criteria and `User journey` into
   tests at the ticket's own interface: the route, flag, file, or visible behaviour the ticket
@@ -467,7 +479,7 @@ from it.
   (`harnesses.md` gives the per-harness location). `launch.sh` exports each completed thread into
   `<dispatch>/sessions/` beside its event stream. For every workhorse, `WORKHORSE-SUMMARY.md` at
   the worktree root is the authoritative final act.
-- **Monitor: three exit shapes.** Each workhorse's final act is writing `WORKHORSE-SUMMARY.md` at its
+- **Monitor: four exit shapes.** Each workhorse's final act is writing `WORKHORSE-SUMMARY.md` at its
   worktree root. `WORKHORSE-SPEC.md` is a coachman-authored input committed before launch,
   not an exit shape: a workhorse that exits with the spec and no summary has not finished
   implementing. On exit, read the lane's harvest plus its worktree root:
@@ -483,6 +495,13 @@ from it.
   (resume) or re-dispatch. A lane silent for about 15 minutes with no exit is inspected. Stall cutoff 90
   minutes: stop waiting and bring partial results to checkpoint 1 rather than blocking;
   synthesis from the completed workhorses is an option there. Manifest `outcome: stalled`.
+  (d) **Provider wall.** The launch records a terminal provider wall before its marker lands.
+  Do not remount or treat it as a normal failure. Wait for every other workhorse to finish.
+  After all workhorse markers are in, run `<tool>/scripts/walls.sh open <dispatch>`. If it exits
+  1, run `<tool>/scripts/walls.sh escalate <dispatch>` and end the leg before setting the
+  synthesis stage, writing `checkpoint-1.md` or composing. When every wall is ruled, resume
+  this leg; run `<tool>/scripts/walls.sh carry <dispatch> <lane>` for each workhorse and show each result as
+  DEGRADED with its provider message on the checkpoint and ship cards.
 - **Reap = let the thread exit.** Nothing to kill: workhorse threads end themselves and their
   conversations are durable in each harness's own store. Verification runs against the code,
   never by interrogating a workhorse. Keep threads UNARCHIVED while the run lives; that preserves
@@ -614,8 +633,8 @@ from it.
 
   **Check which branches actually moved off BASE before comparing anything.** A walled or
   failed workhorse leaves its branch at BASE and has contributed nothing to read. Record that lane
-  DEGRADED rather than absent, say so on the card, and compose from the lanes that produced
-  work.
+  DEGRADED rather than absent, include the exact provider message from `<tool>/scripts/walls.sh show <dispatch>` on the
+  card, and compose from the lanes that produced work.
 - **Checkpoint 1 card, then the hand-off:** per-workhorse outcome (or stall); **the SYNTHESIS and SHARES lines, the ranking, what
   was taken from each lane, what was rejected and why**; the code-verified evidence behind each
   choice; the convention gaps found; what was dropped; gate status; the checks, as
@@ -879,6 +898,11 @@ Set the stage first, `<tool>/scripts/stage.sh <dispatch> review`, then:
    earlier round's files. An unbounded wait and an absent wait fail the same way. Same rule for
    the stage 1 workhorses.
 
+   A reviewer whose launch records a provider wall is DEGRADED for this round. `review-round.sh
+   wait` records the exact provider message in `run-log.md` and a `degrade` action, then closes
+   the round without waiting for that reviewer's marker. Do not count it as a verdict. Keep it
+   in the waybill's reviewer set and launch it again in the next round as usual.
+
    **On `WAIT-TIMEOUT` (exit 3), close the round without the reviewers that had not finished.**
    The script has recorded each one in `run-log.md` as `<lane> <lens>: DEGRADED, timeout` and in
    its `degrade` line, and stopped it with `host.sh stop`; one it names STILL RUNNING could not
@@ -1002,6 +1026,15 @@ Set the stage first, `<tool>/scripts/stage.sh <dispatch> review`, then:
 This section runs at the end of synthesis when there is no review leg, or at the end of review
 after the loop has no P1 or P2 finding left and the gates pass. The postmaster owns the landing
 route and any merge. You do not push, open a pull request, wait for a merge word, or merge.
+
+Before any stage-3 work, run `<tool>/scripts/walls.sh open <dispatch>`. If it exits 1, run
+`<tool>/scripts/walls.sh escalate <dispatch>` and end the leg before `card.md`, `.card-ready`,
+or the hand-off. The postmaster cannot land while any wall has no ruling. When it exits 0,
+record every ruled workhorse wall once with `<tool>/scripts/walls.sh carry <dispatch> <lane>`.
+The checkpoint-review and ship cards include the corresponding `<tool>/scripts/walls.sh show <dispatch>` line,
+which carries the DEGRADED state, quoted provider message and reset time. This guard runs at
+the end of review too: a walled reviewer may close the round without its marker, but its wall
+must be ruled before the card or next leg.
 
 Set the stage first: `<tool>/scripts/stage.sh <dispatch> shipping`.
 

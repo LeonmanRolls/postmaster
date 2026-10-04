@@ -23,6 +23,8 @@ import { streamLines } from "./runs-watch.ts";
 import { run } from "./lib/proc.ts";
 
 const self = join(import.meta.dir, "runs-watch.sh");
+const logAction = join(import.meta.dir, "log-action.sh");
+const walls = join(import.meta.dir, "walls.sh");
 const savedConfig = process.env.POSTMASTER_CONFIG;
 
 let tmp = "";
@@ -86,6 +88,31 @@ function watch(root: string, timeout = "2", config?: string): { rc: number; out:
     config === undefined ? {} : { env: { POSTMASTER_CONFIG: config } },
   );
   return { rc: r.code, out: `${r.out}${r.err}` };
+}
+
+function addWall(
+  dispatch: string,
+  lane: string,
+  role: "workhorse" | "reviewer",
+  message: string,
+  lens = "",
+  round = "",
+): void {
+  const args = [
+    dispatch,
+    `lane:${lane}`,
+    "wall",
+    lane,
+    "--role",
+    role,
+    "--message",
+    message,
+    "--reset",
+    "none",
+  ];
+  if (role === "reviewer") args.push("--lens", lens, "--round", round);
+  const r = run(logAction, args);
+  if (r.code !== 0) throw new Error(r.err || r.out || "could not add wall action");
 }
 
 function mkrun(root: string, name: string, stage: string, leg: number, ...markers: string[]): void {
@@ -1049,6 +1076,93 @@ describe("postmaster wake controls: recorded walls and refusals", () => {
   }, 60000);
 });
 
+describe("provider wall watcher controls", () => {
+  test("one look names every new wall across runs, then told walls stop waking", () => {
+    const root = join(tmp, "wall-notices");
+    mkdirSync(root, { recursive: true });
+    const workhorse = join(root, "workhorse");
+    const reviewer = join(root, "reviewer");
+    for (const [name, d] of [
+      ["workhorse", workhorse],
+      ["reviewer", reviewer],
+    ] as const) {
+      mkrun(root, name, "review", 2);
+      writeFileSync(join(d, "actions.jsonl"), "");
+    }
+    addWall(workhorse, "stub", "workhorse", "You’ve hit your usage limit");
+    addWall(reviewer, "sec", "reviewer", "You've hit your weekly limit", "security", "1");
+
+    const first = watch(root, "5");
+    expect(first.rc).toBe(0);
+    expect(first.out).toContain("needs workhorse WALL");
+    expect(first.out).toContain("needs reviewer WALL");
+    expect(run(walls, ["show", workhorse, "--untold"]).out).toContain("workhorse");
+    expect(run(walls, ["show", reviewer, "--untold"]).out).toContain("security");
+
+    expect(run(walls, ["told", workhorse, "stub"]).code).toBe(0);
+    expect(run(walls, ["told", reviewer, "sec"]).code).toBe(0);
+    const second = watch(root, "5");
+    expect(second.rc).toBe(3);
+    expect(second.out).not.toContain("needs ");
+  }, 60_000);
+
+  test("held runs do not notify until released", () => {
+    const root = join(tmp, "wall-held");
+    mkdirSync(root, { recursive: true });
+    const d = join(root, "held-wall");
+    mkrun(root, "held-wall", "review", 2);
+    writeFileSync(join(d, "actions.jsonl"), "");
+    addWall(d, "stub", "workhorse", "usage limit reached");
+    mkdirSync(join(root, "postmaster"), { recursive: true });
+    writeFileSync(join(root, "postmaster", "held"), "held-wall\n");
+    const held = watch(root, "0");
+    expect(held.rc).toBe(3);
+    expect(held.out).not.toContain("needs held-wall");
+    writeFileSync(join(root, "postmaster", "held"), "");
+    const released = watch(root, "0");
+    expect(released.rc).toBe(0);
+    expect(released.out).toContain("needs held-wall WALL");
+  }, 60_000);
+
+  test("an untold wall blocks dispatch even when the current leg is done", () => {
+    const root = join(tmp, "wall-blocks-dispatch");
+    mkdirSync(root, { recursive: true });
+    autoRun(root, "wall-done", 1, "thread-wall");
+    const d = join(root, "wall-done");
+    addWall(d, "stub", "workhorse", "usage limit reached");
+    writeFileSync(join(d, ".leg-1-done"), "");
+    writeFileSync(join(d, ".leg-1-exited"), "");
+    const result = watchStub(root);
+    expect(result.rc).toBe(0);
+    expect(result.out).toContain("needs wall-done WALL");
+    expect(actionCount(d, "dispatch")).toBe(0);
+    expect(existsSync(join(d, ".leg-1-done"))).toBe(true);
+  }, 60_000);
+
+  test("after the user rules every wall, the watcher resumes the paused leg with the ruling", () => {
+    const root = join(tmp, "wall-resume");
+    mkdirSync(root, { recursive: true });
+    autoRun(root, "wall-resume", 1, "thread-wall-resume");
+    const d = join(root, "wall-resume");
+    addWall(d, "sec", "reviewer", "weekly limit reached", "security", "1");
+    expect(run(walls, ["escalate", d]).code).toBe(0);
+    expect(run(walls, ["told", d, "sec"]).code).toBe(0);
+    expect(run(walls, ["rule", d, "sec", "go-on"]).code).toBe(0);
+
+    const result = watchStub(root);
+    expect(result.rc).toBe(3);
+    expect(actionCount(d, "resume")).toBe(1);
+    expect(readFileSync(join(d, "actions.jsonl"), "utf8")).toContain("the watcher took it");
+    const call = readFileSync(join(tmp, "calls", "resume-wall-resume-1"), "utf8");
+    expect(call).toContain("kind=resume");
+    const prompt = readFileSync(call.split("prompt=")[1]!.trim(), "utf8");
+    expect(prompt).toContain("ruled go-on");
+    expect(prompt).toContain("weekly limit reached");
+    expect(existsSync(join(d, ".provider-walls-paused"))).toBe(false);
+    expect(existsSync(join(d, ".escalation-ready"))).toBe(false);
+  }, 60_000);
+});
+
 describe("postmaster wake controls: incomplete watcher steps", () => {
   test("a failed hand-off check wakes the postmaster and launches nothing", () => {
     const root = join(tmp, "wake-handoff");
@@ -1245,7 +1359,7 @@ describe("postmaster wake controls: incomplete watcher steps", () => {
     expect(watcher.resume_attempts["1"]).toBe(0);
   }, 60000);
 
-  test("a dispatch whose action cannot be logged wakes the postmaster", () => {
+  test("a dispatch with unreadable action history is inspected before it can launch", () => {
     const root = join(tmp, "wake-log");
     mkdirSync(root, { recursive: true });
     autoRun(root, "log-failure", 1, "");
@@ -1256,11 +1370,11 @@ describe("postmaster wake controls: incomplete watcher steps", () => {
     mkdirSync(join(root, "log-failure", "actions.jsonl"));
     const { rc, out } = watchStub(root);
     expect(rc).toBe(0);
-    expect(out).toContain("needs log-failure DISPATCH");
-    expect(existsSync(join(tmp, "calls", "dispatch-log-failure-2"))).toBe(true);
+    expect(out).toContain("needs log-failure INSPECT");
+    expect(existsSync(join(tmp, "calls", "dispatch-log-failure-2"))).toBe(false);
   }, 60000);
 
-  test("a resume whose action cannot be logged wakes the postmaster", () => {
+  test("a resume with unreadable action history is inspected before it can resume", () => {
     const root = join(tmp, "wake-resume-log");
     mkdirSync(root, { recursive: true });
     autoRun(root, "resume-log", 1, "thread-resume-log");
@@ -1274,13 +1388,10 @@ describe("postmaster wake controls: incomplete watcher steps", () => {
     rmSync(join(root, "resume-log", "actions.jsonl"));
     mkdirSync(join(root, "resume-log", "actions.jsonl"));
     const { rc, out } = watchStub(root);
-    const watcher = JSON.parse(readFileSync(join(root, "resume-log", "watcher.json"), "utf8")) as {
-      resume_attempts: Record<string, number>;
-    };
     expect(rc).toBe(0);
-    expect(out).toContain("needs resume-log RESUME");
-    expect(existsSync(join(tmp, "calls", "resume-resume-log-1"))).toBe(true);
-    expect(watcher.resume_attempts["1"]).toBe(1);
+    expect(out).toContain("needs resume-log INSPECT");
+    expect(existsSync(join(tmp, "calls", "resume-resume-log-1"))).toBe(false);
+    expect(existsSync(join(root, "resume-log", "watcher.json"))).toBe(false);
   }, 60000);
 });
 

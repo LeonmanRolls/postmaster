@@ -31,6 +31,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { run } from "./lib/proc.ts";
 import { pyWords } from "./lib/text.ts";
+import { readWalls } from "./walls.ts";
 
 interface RunRow {
   run: string;
@@ -186,6 +187,28 @@ export function status(root: string): number {
     // is stale, with or without its exited marker, and a legacy directory lock
     // holds no owner and is stale too.
     const active = existsSync(join(d, `.leg-${leg}-active`)) && !exited && ownerAlive(d, leg);
+    let wallReadFailed = false;
+    let walls: ReturnType<typeof readWalls> = [];
+    try {
+      walls = readWalls(d);
+    } catch {
+      wallReadFailed = true;
+    }
+    const untoldWalls = walls.filter((wall) => !wall.told);
+    const openWalls = walls.filter((wall) => !wall.ruling);
+    const wallPause = existsSync(join(d, ".provider-walls-paused"));
+    const newestUntold = untoldWalls.reduce((latest, wall) => {
+      const ts = Date.parse(wall.ts);
+      return Number.isFinite(ts) ? Math.max(latest, ts) : latest;
+    }, 0);
+    let waitingTime = 0;
+    if (markers.includes(".waiting-on-user")) {
+      try {
+        waitingTime = statSync(join(d, ".waiting-on-user")).mtimeMs;
+      } catch {
+        waitingTime = 0;
+      }
+    }
     // Only the last record decides; a corrupt middle line is superseded
     // history. A last line that is not a record is fail-closed INSPECT.
     let outcome: unknown = "";
@@ -241,11 +264,15 @@ export function status(root: string): number {
     const gap = phaseMax > lastAttempt || intentMax > lastAttempt;
     let next: string;
     if (stage === "done" || stage === "abandoned") next = "-";
+    else if (newestUntold > 0 && waitingTime > newestUntold) next = "USER";
+    else if (untoldWalls.length > 0) next = "WALL";
+    else if (openWalls.length > 0) next = "USER";
+    else if (wallPause && !markers.includes(".waiting-on-user")) next = "WALL-RESUME";
     else if (markers.includes(".waiting-on-user")) next = "USER";
     else if (markers.includes(".escalation-ready")) next = "RULE";
     else if (markers.includes(".card-ready")) next = "GATE";
     else if (active) next = "WAIT";
-    else if (gap || corrupt) next = "INSPECT";
+    else if (wallReadFailed || gap || corrupt) next = "INSPECT";
     // A waiting spec package beats the whole outcome block: the pause writes an
     // incomplete record by design, and that record must never beat its marker.
     else if (markers.includes(".spec-review-ready")) next = "SPEC";

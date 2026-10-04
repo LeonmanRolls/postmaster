@@ -21,13 +21,15 @@ import {
   writeFileSync,
 } from "node:fs";
 import { basename, dirname, join } from "node:path";
-import { harnessData, makeHeldDir } from "./launch.ts";
+import { harnessData, makeHeldDir, providerWall, resetTime } from "./launch.ts";
 import { startCheck, wrapCommand } from "./lib/confine.ts";
 import { toolRoot } from "./lib/paths.ts";
 import { run, withTempDir } from "./lib/proc.ts";
 import { BOUND_R, DOT_ALL, PY_M_START, PY_S_CLASS, pySplitLines, pyWords } from "./lib/text.ts";
 
 const self = join(import.meta.dir, "launch.sh");
+const LAUNCH = self;
+const HOST = join(import.meta.dir, "host.sh");
 const here = import.meta.dir;
 
 const skipPython = run("sh", ["-c", "command -v python3"]).code !== 0;
@@ -3557,7 +3559,7 @@ beforeAll(() => {
       ok(`quote corpus: ${quotes} phrasings wake alone and beside every transient`);
     } else {
       fail(
-        "quote corpus: 23 phrasings wake alone and beside every transient",
+        "quote corpus: 25 phrasings wake alone and beside every transient",
         matrixBad.join("; ") || "empty corpus",
       );
     }
@@ -5326,8 +5328,8 @@ describe("structured values: known transients resume, anything else wakes", () =
 });
 
 describe("quote corpus: real wall phrasings wake, alone and beside every transient", () => {
-  test("quote corpus: 23 phrasings wake alone and beside every transient", () => {
-    assertControl("quote corpus: 23 phrasings wake alone and beside every transient");
+  test("quote corpus: 25 phrasings wake alone and beside every transient", () => {
+    assertControl("quote corpus: 25 phrasings wake alone and beside every transient");
   });
   test("a missing error file is refused", () => {
     assertControl("a missing error file is refused");
@@ -5544,4 +5546,377 @@ describe("confinement wiring: form shows the wrap, fallback warns and logs", () 
   test("a fallback that cannot be logged refuses to run", () => {
     assertControl("a fallback that cannot be logged refuses to run");
   });
+});
+
+describe("provider wall records", () => {
+  const stopped = new Date("2026-10-02T01:02:11.000Z");
+
+  test("reads only supported terminal provider error records", () => {
+    const codex =
+      '{"type":"turn.failed","error":{"message":"You’ve hit your usage limit. Upgrade to Pro; try again at 2:29 AM."}}';
+    const claude =
+      '{"type":"result","subtype":"success","is_error":true,"result":"You\'ve hit your weekly limit · resets 3am (UTC)","api_error_status":429}';
+    const mimo = '{"type":"error","message":"usage limit reached; retry in 20 minutes"}';
+    const muse =
+      '{"payload_type":"run.terminal.failed","payload":{"reason":"quota exceeded; resets Oct 5th, 2026 2:29 AM"}}';
+    expect(providerWall("codex", codex, stopped, "UTC")?.message).toBe(
+      "You’ve hit your usage limit. Upgrade to Pro; try again at 2:29 AM.",
+    );
+    expect(providerWall("claude", claude, stopped, "UTC")?.message).toBe(
+      "You've hit your weekly limit · resets 3am (UTC)",
+    );
+    expect(providerWall("mimo", mimo, stopped, "UTC")?.reset).toBe("2026-10-02T01:22:11.000Z");
+    expect(providerWall("muse", muse, stopped, "UTC")?.reset).toBe("2026-10-05T02:29:00.000Z");
+  });
+
+  test("rejects later success, prose, tool failures, 504 and 401 endings", () => {
+    expect(
+      providerWall(
+        "codex",
+        '{"type":"turn.failed","error":{"message":"usage limit reached"}}\n{"type":"turn.completed"}',
+        stopped,
+        "UTC",
+      ),
+    ).toBeNull();
+    expect(
+      providerWall(
+        "codex",
+        '{"type":"item.completed","item":{"type":"error","message":"usage limit reached"}}',
+        stopped,
+      ),
+    ).toBeNull();
+    expect(
+      providerWall(
+        "mimo",
+        '{"type":"tool_use","part":{"status":"error","text":"usage limit reached"}}',
+        stopped,
+      ),
+    ).toBeNull();
+    expect(
+      providerWall("claude", '{"type":"assistant","message":"usage limit reached"}', stopped),
+    ).toBeNull();
+    expect(
+      providerWall(
+        "codex",
+        '{"type":"turn.failed","error":{"message":"504 Gateway Timeout"}}',
+        stopped,
+      ),
+    ).toBeNull();
+    expect(
+      providerWall(
+        "codex",
+        '{"type":"turn.failed","error":{"message":"401 unauthorized"}}',
+        stopped,
+      ),
+    ).toBeNull();
+    for (const harness of ["grok", "agy", "pi"]) {
+      expect(
+        providerWall(harness, '{"type":"error","message":"usage limit reached"}', stopped),
+      ).toBeNull();
+    }
+  });
+
+  test("reads supported reset shapes, respects the five-minute boundary, and takes the later time", () => {
+    expect(resetTime("resets at 2:29 AM", stopped, "UTC")).toBe("2026-10-02T02:29:00.000Z");
+    expect(resetTime("resets at 2:29 AM", new Date("2026-10-02T02:30:00.000Z"), "UTC")).toBe(
+      "2026-10-02T02:29:00.000Z",
+    );
+    expect(resetTime("resets at 2:29 AM", new Date("2026-10-02T02:35:01.000Z"), "UTC")).toBe(
+      "2026-10-03T02:29:00.000Z",
+    );
+    expect(resetTime("resets 3am (UTC)", stopped, "America/Los_Angeles")).toBe(
+      "2026-10-02T03:00:00.000Z",
+    );
+    expect(resetTime("Oct 5th, 2026 2:29 AM", stopped, "UTC")).toBe("2026-10-05T02:29:00.000Z");
+    expect(resetTime("Oct 5, 2026 2:29 AM", stopped, "UTC")).toBe("2026-10-05T02:29:00.000Z");
+    expect(resetTime("wait 20 minutes or until 2:00 AM", stopped, "UTC")).toBe(
+      "2026-10-02T02:00:00.000Z",
+    );
+    expect(resetTime("resets 3am (PST)", stopped, "UTC")).toBe("none");
+    expect(resetTime("the limit has no reset time", stopped, "UTC")).toBe("none");
+  });
+});
+
+describe("launch records provider walls before the host marker", () => {
+  interface LaunchCase {
+    id: string;
+    harness: "codex" | "claude" | "mimo";
+    role: "lane" | "reviewer";
+    lens?: "bug" | "security";
+    message: string;
+    output: string;
+    exit: number;
+    deliver?: boolean;
+    stop?: boolean;
+    wall: boolean;
+  }
+
+  const launchCase = async (
+    root: string,
+    spec: LaunchCase,
+  ): Promise<{ dispatch: string; marker: string; code: number }> => {
+    const repo = join(root, "repo");
+    const dispatch = join(repo, ".postmaster", "runs", spec.id);
+    const worktree = join(repo, ".worktrees", spec.id);
+    const logs = join(dispatch, "logs");
+    const bin = join(root, "bin");
+    mkdirSync(logs, { recursive: true });
+    mkdirSync(worktree, { recursive: true });
+    mkdirSync(bin, { recursive: true });
+    const lane = { harness: spec.harness, model: `${spec.harness}-model`, effort: "low" };
+    const config = join(root, `${spec.id}.toml`);
+    const data = {
+      config: {
+        lanes: { stub: lane },
+        team: { workhorses: ["stub", "mimo"], coachman: { harness: "codex", model: "coach" } },
+      },
+    };
+    writeFileSync(join(dispatch, "run.json"), `${JSON.stringify(data)}\n`);
+    writeFileSync(
+      join(dispatch, "brief.md"),
+      `# Waybill: ${spec.id}\n\n## Project profile\nrepo: ${repo}\n\n## Dispatch\nname: ${spec.id}\nsynthesis worktree: ${worktree}\n`,
+    );
+    writeFileSync(
+      config,
+      `[lanes.stub]\nharness = "${spec.harness}"\nmodel = "${spec.harness}-model"\neffort = "low"\n`,
+    );
+    writeFileSync(join(root, "prompt.txt"), "Continue.\n");
+    if (spec.deliver) writeFileSync(join(worktree, "WORKHORSE-SUMMARY.md"), "already delivered\n");
+
+    const harness = join(bin, spec.harness);
+    const script = spec.stop
+      ? "#!/bin/sh\nsleep 30\n"
+      : spec.harness === "mimo"
+        ? `#!/bin/sh\nif [ "$1" = export ]; then echo 'Session not found: stub' >&2; exit 1; fi\nprintf '%s\\n' ${JSON.stringify(spec.output)}\nexit ${spec.exit}\n`
+        : `#!/bin/sh\n${spec.deliver ? "printf 'delivered\\n' > \"$PWD/WORKHORSE-SUMMARY.md\"\n" : ""}printf '%s\\n' ${JSON.stringify(spec.output)}\nexit ${spec.exit}\n`;
+    writeFileSync(harness, script);
+    chmodSync(harness, 0o755);
+
+    const round = "1";
+    const outputName =
+      spec.role === "reviewer"
+        ? `review-r${round}-${spec.lens}-${spec.id}.jsonl`
+        : `${spec.id}-events.jsonl`;
+    const marker =
+      spec.role === "reviewer"
+        ? join(logs, `review-r${round}-${spec.lens}-${spec.id}.done`)
+        : join(logs, "stub.done");
+    const display =
+      spec.role === "reviewer"
+        ? `stub · ${spec.lens} review · ${spec.harness}-model · r${round}`
+        : `stub · workhorse · ${spec.harness}-model`;
+    const env = {
+      HOME: join(root, "home"),
+      PATH: `${bin}:${process.env.PATH ?? ""}`,
+      POSTMASTER_CONFIG: config,
+      POSTMASTER_HOST: "none",
+      POSTMASTER_HOST_STATE: join(root, "host-state"),
+      POSTMASTER_HARNESS_DATA: join(root, "harness-data"),
+    };
+    const result = run(
+      HOST,
+      [
+        "run",
+        display,
+        worktree,
+        "--under",
+        dispatch,
+        "--role",
+        spec.role,
+        "--run",
+        dispatch,
+        "--out",
+        join(logs, outputName),
+        "--err",
+        join(logs, `${spec.id}.err`),
+        "--marker",
+        marker,
+        "--",
+        LAUNCH,
+        "launch",
+        "stub",
+        worktree,
+        join(root, "prompt.txt"),
+        "--run",
+        dispatch,
+      ],
+      { env, timeout: 30_000 },
+    );
+    if (result.timedOut) throw new Error(`host launch timed out: ${result.out}\n${result.err}`);
+    if (spec.stop) {
+      await Bun.sleep(150);
+      const stopped = run(HOST, ["stop", worktree], { env, timeout: 30_000 });
+      if (stopped.code !== 0) throw new Error(`host stop failed: ${stopped.out}\n${stopped.err}`);
+    }
+    for (let i = 0; i < 1_200 && !existsSync(marker); i++) await Bun.sleep(25);
+    if (!existsSync(marker))
+      throw new Error(`host launch did not land its marker: ${result.out}\n${result.err}`);
+    return { dispatch, marker, code: result.code };
+  };
+
+  const wallsAt = (dispatch: string): string[] => {
+    try {
+      return readFileSync(join(dispatch, "actions.jsonl"), "utf8")
+        .split("\n")
+        .filter(Boolean)
+        .filter((line) => (JSON.parse(line) as { action?: string }).action === "wall");
+    } catch {
+      return [];
+    }
+  };
+
+  const positive: LaunchCase[] = [
+    {
+      id: "codex-workhorse",
+      harness: "codex",
+      role: "lane",
+      message:
+        "You’ve hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at 2:29 AM.",
+      output:
+        '{"type":"turn.failed","error":{"message":"You’ve hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at 2:29 AM."}}',
+      exit: 1,
+      wall: true,
+    },
+    {
+      id: "claude-bug",
+      harness: "claude",
+      role: "reviewer",
+      lens: "bug",
+      message: "You've hit your weekly limit · resets 3am (UTC)",
+      output:
+        '{"type":"result","subtype":"success","is_error":true,"result":"You\'ve hit your weekly limit · resets 3am (UTC)","api_error_status":429}',
+      exit: 1,
+      wall: true,
+    },
+    {
+      id: "mimo-security",
+      harness: "mimo",
+      role: "reviewer",
+      lens: "security",
+      message: "usage limit reached; retry in 20 minutes",
+      output: '{"type":"error","message":"usage limit reached; retry in 20 minutes"}',
+      exit: 0,
+      wall: true,
+    },
+  ];
+
+  for (const spec of positive) {
+    test(`records the ${spec.harness} ${spec.role} wall exactly once before its marker`, async () => {
+      await withTempDir(async (root) => {
+        const result = await launchCase(root, spec);
+        expect(result.code).toBe(0);
+        expect(readFileSync(result.marker, "utf8")).toBe("");
+        const lines = wallsAt(result.dispatch);
+        expect(lines.length).toBe(1);
+        const row = JSON.parse(lines[0]!) as {
+          action: string;
+          wall: {
+            lane: string;
+            role: string;
+            lens: string;
+            round: number | null;
+            message: string;
+            reset: string;
+          };
+        };
+        expect(row.action).toBe("wall");
+        expect(row.wall.lane).toBe("stub");
+        expect(row.wall.role).toBe(spec.role === "lane" ? "workhorse" : "reviewer");
+        expect(row.wall.message).toBe(spec.message);
+        expect(row.wall.reset).toMatch(
+          /^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{3})?Z$/u,
+        );
+        if (spec.role === "reviewer") {
+          expect(row.wall.lens).toBe(spec.lens);
+          expect(row.wall.round).toBe(1);
+        }
+        expect(
+          statSync(join(result.dispatch, "actions.jsonl")).mtimeMs <=
+            statSync(result.marker).mtimeMs,
+        ).toBe(true);
+      });
+    }, 60_000);
+  }
+
+  test("excludes gateway, authorization, command, prose, stop, and delivered endings", async () => {
+    await withTempDir(async (root) => {
+      const cases: LaunchCase[] = [
+        {
+          id: "gateway",
+          harness: "codex",
+          role: "lane",
+          message: "504 Gateway Timeout",
+          output: '{"type":"turn.failed","error":{"message":"504 Gateway Timeout"}}',
+          exit: 1,
+          wall: false,
+        },
+        {
+          id: "failed-command",
+          harness: "codex",
+          role: "lane",
+          message: "Command failed",
+          output:
+            '{"type":"item.completed","item":{"type":"command_execution","status":"failed","aggregated_output":"usage limit"}}\n{"type":"turn.failed","error":{"message":"Command failed"}}',
+          exit: 1,
+          wall: false,
+        },
+        {
+          id: "mimo-failed-tool",
+          harness: "mimo",
+          role: "lane",
+          message: "tool failed",
+          output: '{"type":"tool_use","part":{"status":"error","text":"usage limit"}}',
+          exit: 0,
+          wall: false,
+        },
+        {
+          id: "final-prose",
+          harness: "codex",
+          role: "lane",
+          message: "The usage limit is not reached",
+          output:
+            '{"type":"item.completed","item":{"type":"agent_message","text":"The usage limit is not reached"}}\n{"type":"turn.completed"}',
+          exit: 0,
+          wall: false,
+        },
+        {
+          id: "unauthorized",
+          harness: "claude",
+          role: "reviewer",
+          lens: "bug",
+          message: "401 unauthorized",
+          output:
+            '{"type":"result","is_error":true,"result":"401 unauthorized","api_error_status":401}',
+          exit: 1,
+          wall: false,
+        },
+        {
+          id: "stopped",
+          harness: "codex",
+          role: "lane",
+          message: "",
+          output: "",
+          exit: 0,
+          stop: true,
+          wall: false,
+        },
+        {
+          id: "delivered",
+          harness: "codex",
+          role: "lane",
+          message: "You’ve hit your usage limit. try again at 2:29 AM",
+          output:
+            '{"type":"turn.failed","error":{"message":"You’ve hit your usage limit. try again at 2:29 AM"}}',
+          exit: 1,
+          deliver: true,
+          wall: false,
+        },
+      ];
+      for (const spec of cases) {
+        const result = await launchCase(root, spec);
+        expect(result.code).toBe(0);
+        expect(wallsAt(result.dispatch)).toHaveLength(0);
+      }
+    });
+  }, 90_000);
 });

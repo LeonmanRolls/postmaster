@@ -25,6 +25,7 @@ import { basename, dirname, join } from "node:path";
 import { scriptsDir } from "./lib/paths.ts";
 import { mkstempSync, run } from "./lib/proc.ts";
 import { PY_S_CLASS } from "./lib/text.ts";
+import { readWalls } from "./walls.ts";
 
 const HERE = scriptsDir(import.meta);
 const DEFAULT_LIMIT = 2400;
@@ -81,6 +82,26 @@ function stateSave(path: string, st: RoundState): void {
   const tmp = mkstempSync(dirname(path), "tmp");
   writeFileSync(tmp, `${JSON.stringify(st, null, 2)}\n`);
   renameSync(tmp, path);
+}
+
+function actionsSafe(dispatch: string): Array<Record<string, unknown>> {
+  try {
+    return readFileSync(join(dispatch, "actions.jsonl"), "utf8")
+      .split("\n")
+      .filter((line) => line.trim() !== "")
+      .flatMap((line) => {
+        try {
+          const row: unknown = JSON.parse(line);
+          return typeof row === "object" && row !== null && !Array.isArray(row)
+            ? [row as Record<string, unknown>]
+            : [];
+        } catch {
+          return [];
+        }
+      });
+  } catch {
+    return [];
+  }
 }
 
 export const ARG_SPLIT_RE = new RegExp(`[${PY_S_CLASS},]+`, "u");
@@ -323,23 +344,92 @@ if (import.meta.main) {
     const [attempt, leftStr, lim, src] = check.out.trim().split("\t");
     const reviewers = readReviewers("reviewers", ...reviewerArgs);
     const n = reviewers.length;
+    let wallRows: ReturnType<typeof readWalls> = [];
+    try {
+      wallRows = readWalls(D);
+    } catch (error) {
+      die(`cannot read provider walls before review wait: ${(error as Error).message}`);
+    }
+    const isWalled = (lens: string, lane: string): boolean =>
+      wallRows.some(
+        (wall) =>
+          wall.role === "reviewer" &&
+          wall.lane === lane &&
+          wall.lens === lens &&
+          wall.round === Number(R),
+      );
+    const walledIndexes = new Set<number>();
+    for (let i = 0; i < reviewers.length; i++) {
+      const [lens, lane] = reviewers[i]!;
+      if (isWalled(lens, lane)) walledIndexes.add(i);
+    }
     console.log(
       `review-round: round ${R}, ${n} reviewers, ${leftStr}s left of its ${lim}s limit (${src})`,
     );
-    const wf = run(join(HERE, "wait-for-markers.sh"), [
-      LOGS,
-      `review-r${R}-*.done`,
-      String(n),
-      leftStr ?? "0",
-    ]);
-    const rc = wf.code;
-    if (rc !== 0 && rc !== 3) die(`the wait ended with exit ${rc}, so nothing is recorded`);
+    const deadline = monotonic() + Number(leftStr ?? "0");
+    const sleeper = new Int32Array(new SharedArrayBuffer(4));
+    let rc = 0;
     const missing: number[] = [];
     let expected = "";
-    for (let i = 0; i < n; i++) {
-      const f = `review-r${R}-${reviewers[i]?.[0]}-${reviewers[i]?.[1]}.done`;
-      expected += ` ${f} `;
-      if (!existsSync(join(LOGS, f))) missing.push(i);
+    while (true) {
+      try {
+        wallRows = readWalls(D);
+      } catch (error) {
+        die(`cannot read provider walls during review wait: ${(error as Error).message}`);
+      }
+      missing.length = 0;
+      expected = "";
+      for (let i = 0; i < n; i++) {
+        const [lens, lane] = reviewers[i]!;
+        const marker = `review-r${R}-${lens}-${lane}.done`;
+        expected += ` ${marker} `;
+        if (isWalled(lens, lane)) walledIndexes.add(i);
+        if (!walledIndexes.has(i) && !existsSync(join(LOGS, marker))) missing.push(i);
+      }
+      if (missing.length === 0) break;
+      const left = deadline - monotonic();
+      if (left <= 0) {
+        rc = 3;
+        break;
+      }
+      Atomics.wait(sleeper, 0, 0, Math.min(250, Math.ceil(left * 1000)));
+    }
+    try {
+      wallRows = readWalls(D);
+    } catch (error) {
+      die(`cannot read provider walls after review wait: ${(error as Error).message}`);
+    }
+    for (let i = 0; i < reviewers.length; i++) {
+      const [lens, lane] = reviewers[i]!;
+      if (isWalled(lens, lane)) walledIndexes.add(i);
+    }
+    for (const i of [...missing]) if (walledIndexes.has(i)) missing.splice(missing.indexOf(i), 1);
+
+    const recorded = actionsSafe(D);
+    for (const i of walledIndexes) {
+      const [lens, lane] = reviewers[i]!;
+      const wall = wallRows.find(
+        (entry) =>
+          entry.role === "reviewer" &&
+          entry.lane === lane &&
+          entry.lens === lens &&
+          entry.round === Number(R),
+      );
+      if (!wall) continue;
+      const already = recorded.some(
+        (row) =>
+          row.action === "degrade" &&
+          row.target === lane &&
+          String(row.detail).startsWith(`${lens} r${R}: provider wall:`),
+      );
+      if (!already) {
+        record(
+          `${lane} ${lens}: DEGRADED, provider wall: "${wall.message}"`,
+          "degrade",
+          lane,
+          `${lens} r${R}: provider wall: "${wall.message}"`,
+        );
+      }
     }
     if (missing.length === 0) {
       if (rc === 3) {
@@ -347,6 +437,7 @@ if (import.meta.main) {
           "review-round: every marker was in by the time the reviewers were named; none timed out",
         );
       }
+      if ((globalThis as Record<string, unknown>).UNRECORDED) process.exit(4);
       process.exit(0);
     }
     if (rc === 0) {
@@ -368,7 +459,7 @@ if (import.meta.main) {
     }
 
     (globalThis as Record<string, unknown>).UNRECORDED = 0;
-    const reported = n - missing.length;
+    const reported = n - missing.length - walledIndexes.size;
     record(
       `round ${R}: WAIT-TIMEOUT after ${lim}s; ${reported} of ${n} reviewers reported`,
       "note",

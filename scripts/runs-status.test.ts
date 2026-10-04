@@ -17,6 +17,8 @@ import { run } from "./lib/proc";
 import { pyWords } from "./lib/text";
 import { status, walkFiles } from "./runs-status";
 
+const LOG_ACTION = join(import.meta.dir, "log-action.sh");
+
 let tmp: string;
 let root: string;
 
@@ -53,6 +55,26 @@ function recordn(name: string, attempt: number, outcome: string, role: string): 
   const p = join(root, name, "logs", "coachman-leg-2-attempts.jsonl");
   const line = `{"attempt":${attempt},"outcome":"${outcome}","role":"${role}"}\n`;
   writeFileSync(p, (existsSync(p) ? readFileSync(p, "utf8") : "") + line);
+}
+
+function addWall(name: string, lane = "stub"): void {
+  const r = run(
+    LOG_ACTION,
+    [
+      join(root, name),
+      "stub",
+      "wall",
+      lane,
+      "--role",
+      "workhorse",
+      "--message",
+      "usage limit reached",
+      "--reset",
+      "none",
+    ],
+    {},
+  );
+  if (r.code !== 0) throw new Error(`cannot add test wall: ${r.err || r.out}`);
 }
 
 function phase(name: string, n: number): void {
@@ -347,6 +369,31 @@ describe("positive controls", () => {
   test("a corrupt middle line does not hide the last good record", () => {
     expect(nextOf("corruptmid")).toBe("RESUME");
   }, 10000);
+});
+
+describe("provider wall priority", () => {
+  test("an untold wall wins over a live lock and an older user question", () => {
+    mkCurrent("wall-priority", "review", 2, ".waiting-on-user");
+    addWall("wall-priority");
+    liveowner("wall-priority");
+    const actions = JSON.parse(
+      readFileSync(join(root, "wall-priority", "actions.jsonl"), "utf8").trim(),
+    ) as { ts: string };
+    const wait = new Date(Date.parse(actions.ts) - 10_000);
+    utimesSync(join(root, "wall-priority", ".waiting-on-user"), wait, wait);
+    expect(nextOf("wall-priority")).toBe("WALL");
+
+    const newer = new Date(Date.parse(actions.ts) + 10_000);
+    utimesSync(join(root, "wall-priority", ".waiting-on-user"), newer, newer);
+    expect(nextOf("wall-priority")).toBe("USER");
+  }, 10_000);
+
+  test("an old run paused for a wall is not reported stalled", () => {
+    mkCurrent("wall-idle", "review", 2, ".provider-walls-paused");
+    addWall("wall-idle");
+    age("wall-idle");
+    expect(nextOf("wall-idle")).toBe("WALL");
+  }, 10_000);
 });
 
 describe("negative controls", () => {

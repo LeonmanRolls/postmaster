@@ -668,6 +668,8 @@ const WALL_TOKENS = [
 // wild, each quote alone and beside every transient exemplar. When a run meets a
 // wall phrasing, append it here verbatim with where it was found.
 const WALL_QUOTES = [
+  "You’ve hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at 2:29 AM.",
+  "You've hit your weekly limit · resets 3am (UTC)",
   "You exceeded your current quota, please check your plan and billing details.",
   "quota was exceeded for this key",
   "Error: insufficient_quota",
@@ -713,6 +715,248 @@ function vetoed(text: string): boolean {
   if (TEXT_STEMS.some((tok) => norm.includes(tok))) return true;
   if (CODE_RE !== null && CODE_RE.test(text.replace(CODE_SEP_RE, " "))) return true;
   return false;
+}
+
+function zoneParts(
+  date: Date,
+  zone: string,
+): { year: number; month: number; day: number; hour: number; minute: number; second: number } {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: zone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const value = (type: string): number =>
+    Number(parts.find((part) => part.type === type)?.value ?? "0");
+  return {
+    year: value("year"),
+    month: value("month"),
+    day: value("day"),
+    hour: value("hour"),
+    minute: value("minute"),
+    second: value("second"),
+  };
+}
+
+function zoneInstant(
+  parts: { year: number; month: number; day: number; hour: number; minute: number; second: number },
+  zone: string,
+): Date | null {
+  let guess = Date.UTC(
+    parts.year,
+    parts.month - 1,
+    parts.day,
+    parts.hour,
+    parts.minute,
+    parts.second,
+  );
+  try {
+    for (let i = 0; i < 5; i++) {
+      const here = zoneParts(new Date(guess), zone);
+      const shown = Date.UTC(
+        here.year,
+        here.month - 1,
+        here.day,
+        here.hour,
+        here.minute,
+        here.second,
+      );
+      const wanted = Date.UTC(
+        parts.year,
+        parts.month - 1,
+        parts.day,
+        parts.hour,
+        parts.minute,
+        parts.second,
+      );
+      const delta = wanted - shown;
+      if (delta === 0) break;
+      guess += delta;
+    }
+    const check = zoneParts(new Date(guess), zone);
+    if (
+      check.year !== parts.year ||
+      check.month !== parts.month ||
+      check.day !== parts.day ||
+      check.hour !== parts.hour ||
+      check.minute !== parts.minute ||
+      check.second !== parts.second
+    )
+      return null;
+    return new Date(guess);
+  } catch {
+    return null;
+  }
+}
+
+const MONTHS: Record<string, number> = {
+  jan: 1,
+  january: 1,
+  feb: 2,
+  february: 2,
+  mar: 3,
+  march: 3,
+  apr: 4,
+  april: 4,
+  may: 5,
+  jun: 6,
+  june: 6,
+  jul: 7,
+  july: 7,
+  aug: 8,
+  august: 8,
+  sep: 9,
+  sept: 9,
+  september: 9,
+  oct: 10,
+  october: 10,
+  nov: 11,
+  november: 11,
+  dec: 12,
+  december: 12,
+};
+
+function clockParts(
+  hourText: string,
+  minuteText: string | undefined,
+  ampm: string,
+): { hour: number; minute: number } | null {
+  let hour = Number(hourText);
+  const minute = Number(minuteText ?? "0");
+  if (hour < 1 || hour > 12 || minute > 59) return null;
+  hour = (hour % 12) + (ampm.toLowerCase() === "pm" ? 12 : 0); // LOWER: AM/PM are the parser's ASCII tokens.
+  return { hour, minute };
+}
+
+function localDate(date: Date, zone: string): { year: number; month: number; day: number } | null {
+  try {
+    const { year, month, day } = zoneParts(date, zone);
+    return { year, month, day };
+  } catch {
+    return null;
+  }
+}
+
+function nextCalendarDay(date: { year: number; month: number; day: number }): {
+  year: number;
+  month: number;
+  day: number;
+} {
+  const next = new Date(Date.UTC(date.year, date.month - 1, date.day + 1));
+  return { year: next.getUTCFullYear(), month: next.getUTCMonth() + 1, day: next.getUTCDate() };
+}
+
+/** Parse only reset shapes providers have used. Unknown zones and prose are ignored. */
+export function resetTime(message: string, stoppedAt: Date, defaultZone?: string): string {
+  const zone =
+    defaultZone || Intl.DateTimeFormat().resolvedOptions().timeZone || process.env.TZ || "UTC";
+  const candidates: Date[] = [];
+  const relative = /(?<![A-Za-z0-9_])in[ \t]+([0-9]+)[ \t]+(minutes?|hours?)(?![A-Za-z0-9_])/gu;
+  for (const match of message.matchAll(relative)) {
+    const count = Number(match[1]);
+    const unit = match[2] === "hour" || match[2] === "hours" ? 3_600_000 : 60_000;
+    const date = new Date(stoppedAt.getTime() + count * unit);
+    if (Number.isFinite(date.getTime())) candidates.push(date);
+  }
+
+  const pattern =
+    /(?<![A-Za-z0-9_])(?:(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)[ \t]+([0-9]{1,2})(?:st|nd|rd|th)?[,]?[ \t]+([0-9]{4})[ \t]+)?([0-9]{1,2})(?::([0-9]{2}))?[ \t]*(AM|PM)(?![A-Za-z0-9_])(?:[ \t]*\(([^)]+)\))?/giu;
+  for (const match of message.matchAll(pattern)) {
+    const [, monthText, dayText, yearText, hourText, minuteText, ampm, zoneText] = match;
+    const clock = clockParts(hourText ?? "", minuteText, ampm ?? "");
+    if (!clock) continue;
+    const timeZone = zoneText?.trim() || zone;
+    if (zoneText && timeZone !== "UTC" && !timeZone.includes("/")) continue;
+    let day: { year: number; month: number; day: number } | null;
+    if (monthText && dayText && yearText) {
+      const month = MONTHS[monthText.toLowerCase()]; // LOWER: parsed provider month names use the ASCII list above.
+      day = month ? { year: Number(yearText), month, day: Number(dayText) } : null;
+    } else {
+      day = localDate(stoppedAt, timeZone);
+    }
+    if (!day) continue;
+    let candidate = zoneInstant({ ...day, ...clock, second: 0 }, timeZone);
+    if (!candidate) continue;
+    if (!monthText && candidate.getTime() < stoppedAt.getTime() - 5 * 60_000) {
+      candidate = zoneInstant({ ...nextCalendarDay(day), ...clock, second: 0 }, timeZone);
+    }
+    if (candidate) candidates.push(candidate);
+  }
+  if (!candidates.length) return "none";
+  return new Date(Math.max(...candidates.map((date) => date.getTime()))).toISOString();
+}
+
+function stringMessage(value: unknown): string | null {
+  if (typeof value === "string" && value !== "") return value.split("\n", 1)[0] ?? "";
+  if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+    const rec = value as Record<string, unknown>;
+    return stringMessage(rec.message) ?? stringMessage(rec.reason);
+  }
+  return null;
+}
+
+export interface ProviderWall {
+  message: string;
+  reset: string;
+}
+
+/** Read only a provider's terminal error record, never tool output or final prose. */
+export function providerWall(
+  harness: string,
+  streamText: string,
+  stoppedAt = new Date(),
+  defaultZone?: string,
+): ProviderWall | null {
+  if (!["codex", "claude", "mimo", "muse"].includes(harness)) return null;
+  const records: Record<string, unknown>[] = [];
+  for (const line of streamText.split("\n")) {
+    if (!line.trim()) continue;
+    try {
+      const record: unknown = JSON.parse(line);
+      if (typeof record === "object" && record !== null && !Array.isArray(record)) {
+        records.push(record as Record<string, unknown>);
+      }
+    } catch {
+      // Non-JSON chunks are not provider error records.
+    }
+  }
+  let message: string | null = null;
+  if (harness === "codex") {
+    const terminals = records.filter((record) =>
+      ["turn.completed", "turn.failed", "turn.interrupted", "turn.cancelled"].includes(
+        String(record.type),
+      ),
+    );
+    const last = terminals[terminals.length - 1];
+    if (last?.type === "turn.failed")
+      message = stringMessage((last.error as Record<string, unknown> | undefined)?.message);
+  } else if (harness === "claude") {
+    const results = records.filter((record) => record.type === "result");
+    const last = results[results.length - 1];
+    if (last?.is_error === true) message = stringMessage(last.result);
+  } else if (harness === "mimo") {
+    const errors = records.filter((record) => record.type === "error");
+    const last = errors[errors.length - 1];
+    if (last)
+      message =
+        stringMessage(last.error) ?? stringMessage(last.message) ?? stringMessage(last.text);
+  } else {
+    const terminals = records.filter((record) =>
+      String(record.payload_type ?? "").startsWith("run.terminal."),
+    );
+    const last = terminals[terminals.length - 1];
+    if (last?.payload_type === "run.terminal.failed") {
+      const payload = last.payload as Record<string, unknown> | undefined;
+      message = stringMessage(payload?.reason) ?? stringMessage(payload?.text);
+    }
+  }
+  if (message === null || !vetoed(message)) return null;
+  return { message, reset: resetTime(message, stoppedAt, defaultZone) };
 }
 
 function normKey(key: unknown): string {
@@ -1006,6 +1250,17 @@ function readRegularFile(path: string, missing: string): string {
   }
 }
 
+function streamLineCount(path: string): number {
+  try {
+    const text = readFileSync(path, "utf8");
+    if (text === "") return 0;
+    const lines = text.split("\n");
+    return lines.length - (text.endsWith("\n") ? 1 : 0);
+  } catch {
+    return 0;
+  }
+}
+
 // --- entry ------------------------------------------------------------------------------
 const argv = process.argv.slice(2);
 
@@ -1294,6 +1549,9 @@ if (import.meta.main) {
       });
     }
   }
+  const eventStreamPath = process.env.POSTMASTER_EVENT_STREAM
+    ? resolve(process.env.POSTMASTER_EVENT_STREAM)
+    : "";
   // For pi/muse/mimo, the prompt file is resolved to an absolute path (read after the cd),
   // and for the harnesses that take the prompt text as argv (codex, claude, agy, and grok's
   // resume), whose text is spliced from the file after the cd.
@@ -1557,6 +1815,7 @@ exit "$rc"
   // The role is read before the spawn: an env file the child sources can
   // neither change nor export it, as main's save/restore and unset do.
   const launchRole = process.env.POSTMASTER_LAUNCH_ROLE ?? "";
+  const launchName = process.env.POSTMASTER_LAUNCH_NAME ?? "";
   delete process.env.POSTMASTER_LAUNCH_NAME;
   delete process.env.POSTMASTER_LAUNCH_ROLE;
   delete process.env.POSTMASTER_ATTEMPT_PHASE;
@@ -1596,6 +1855,7 @@ exit "$rc"
     }
   }
 
+  const eventStartLines = eventStreamPath ? streamLineCount(eventStreamPath) : 0;
   if (!attemptPhase("started")) die("cannot record that the harness started");
   const child = spawnSync(cmd, cmdArgs, {
     stdio: STDIN_FILE ? ["ignore", "inherit", "inherit"] : ["inherit", "inherit", "inherit"],
@@ -1610,7 +1870,68 @@ exit "$rc"
       : child.signal
         ? signalExitCode(child.signal)
         : 1;
-  const stream = process.env.POSTMASTER_EVENT_STREAM ?? "";
+  const stoppedAt = new Date();
+  const stream = eventStreamPath;
+  if (
+    child.signal === null &&
+    RUN &&
+    stream &&
+    (launchRole === "lane" || launchRole === "reviewer") &&
+    ((launchRole === "lane" && (CMD === "launch" || CMD === "resume")) ||
+      (launchRole === "reviewer" && (CMD === "launch" || CMD === "resume" || CMD === "review")))
+  ) {
+    let tail = "";
+    try {
+      tail = readFileSync(stream, "utf8").split("\n").slice(eventStartLines).join("\n");
+    } catch {
+      tail = "";
+    }
+    const wall = providerWall(HARNESS, tail, stoppedAt);
+    const delivered =
+      launchRole === "lane" &&
+      (existsSync(join(CWD, "WORKHORSE-SUMMARY.md")) ||
+        existsSync(join(CWD, "WORKHORSE-BLOCKED.md")));
+    if (wall && !delivered) {
+      let lens = "";
+      let round = "";
+      if (launchRole === "reviewer") {
+        const pieces = launchName.split(" · ");
+        const lensLabel = pieces.find((part) => /^(style|bug|security) review$/u.test(part));
+        lens = lensLabel?.split(" ")[0] ?? "";
+        round = pieces.find((part) => /^r[1-9][0-9]*$/u.test(part))?.slice(1) ?? "";
+        if (!lens || !round) {
+          const match = /(?:^|\/)review-r([1-9][0-9]*)-(style|bug|security)-[^/]+\.jsonl$/u.exec(
+            stream,
+          );
+          round = match?.[1] ?? "";
+          lens = match?.[2] ?? "";
+        }
+      }
+      if (launchRole !== "reviewer" || (lens && round)) {
+        const wallArgs = [
+          RUN,
+          `lane:${NAME}`,
+          "wall",
+          NAME,
+          "--role",
+          launchRole === "lane" ? "workhorse" : "reviewer",
+          "--message",
+          wall.message,
+          "--reset",
+          wall.reset,
+        ];
+        if (launchRole === "reviewer") wallArgs.push("--lens", lens, "--round", round);
+        const recorded = run(join(scriptsDir(import.meta), "log-action.sh"), wallArgs);
+        if (recorded.code !== 0) {
+          console.error(
+            `launch: provider wall was detected but could not be recorded (${(recorded.err || recorded.out).trim() || recorded.code})`,
+          );
+        }
+      } else {
+        console.error("launch: provider wall was detected but reviewer lens and round are missing");
+      }
+    }
+  }
   if (RUN && stream) {
     const r = run(join(scriptsDir(import.meta), "export-session.sh"), [
       RUN,

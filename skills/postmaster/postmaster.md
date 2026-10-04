@@ -256,6 +256,11 @@ with `the watcher took it` in the detail:
   `harnesses.md`) — it resumes the leg on its own thread with the remount prompt, at most
   three times per leg (the count is in `<dispatch>/watcher.json` and survives a restart).
   A fourth such end, a non-transient end, or a resume it cannot complete is named to you.
+- **A wall pause whose rulings are complete.** When `runs-status.sh` reports `WALL-RESUME`,
+  the watcher has checked that no wall is open and no separate user question is still waiting.
+  It resumes the current leg through `<tool>/scripts/host.sh leg resume`, with a prompt
+  containing the provider messages and go-on rulings, and logs `resume` with `the watcher took
+  it`.
 
 The list of runs waiting on the user is `<runs>/postmaster/ESCALATION.md`, kept by
 `<tool>/scripts/host.sh leg waiting`, never by hand. Read it with
@@ -270,6 +275,33 @@ pause — never to stop a wake you have not acted on.
 
 Each `NEXT` names the act. The watcher has already taken the mechanical ones; what it names
 is what needs judgment or what it could not complete:
+
+- **WALL:** this look found one or more new provider walls. For every `needs <run> WALL`, read
+  `<dispatch>/brief.md`, then run `<tool>/scripts/walls.sh show <dispatch> --untold`. Combine
+  every new wall from every named run into one message in this turn. Name each run, lane and
+  role, quote the provider message, and include the reset date and time `<tool>/scripts/walls.sh show <dispatch>` prints
+  in the machine's time zone; say `no reset time` when it prints that. Tell all of them before
+  logging any as told. Then run `<tool>/scripts/walls.sh told <dispatch> <lane>` once for each
+  wall line, including repeated calls for a lane that walled again. Append the wall rulings to
+  `<dispatch>/.waiting-on-user`, preserving every question already there, and update the run's
+  entry with `<tool>/scripts/host.sh leg waiting add <runs> <ticket>
+  <dispatch>/.waiting-on-user`; its one entry must contain both the earlier question and all new
+  wall questions. The run is not stalled while a wall is waiting.
+
+  Read each answer separately. For a clear go-on, run
+  `<tool>/scripts/walls.sh rule <dispatch> <lane> [<lens>] go-on`. For repeated walls on one
+  lane, call it once per wall. If it exits 2, tell the user the refusal reason, record nothing,
+  and ask again. Words that do not clearly ask for go-on record nothing; ask which ruling the
+  user wants. On an accepted ruling, remove only that wall's question from `.waiting-on-user`.
+  Keep the earlier question and the waiting-list entry until it too is answered. When every
+  wall is ruled and no other question remains, remove `.waiting-on-user` and the run's waiting
+  entry. A paused coachman then has `WALL-RESUME`; the watcher delivers the ruling prompt and
+  resumes it at its next look. If a workhorse marker has not landed yet, its coachman applies
+  the ruling when the harvest pause begins.
+
+  A fixture run has no user: record each wall as told and rule go-on itself, as the fixture
+  waybill says. Do not create a user question. The ruling is still recorded, and the coachman
+  carries a ruled workhorse wall without calling that lane again.
 
 - **USER:** the run waits on the user, and its `.waiting-on-user` holds the question (Stage E
   step 3, current Stage F step 2, Legacy Stage F step 2, or Spec review). Put the question to the user again if you have not in this session;
@@ -319,6 +351,9 @@ is what needs judgment or what it could not complete:
   "Continue leg <n>; your last written state is in the dispatch directory and the worktree",
   then use Stage C step 5. A fourth transient end is judgment: resume again, take the leg over
   on the fallback, or wait out the provider — say which and why.
+- **WALL-RESUME:** the watcher could not resume a fully ruled wall pause. Read its reason and
+  the wall actions, fix the failed input or control, then let the next look retry. Do not land
+  or dispatch a leg while `<tool>/scripts/walls.sh open <dispatch>` exits 1.
 - **READ:** a checkpoint card is waiting. Read it, log `note` with its one-line summary, and
   remove its `.checkpoint-*-ready` marker. In consult mode the card comes with an escalation,
   which RULE handles.
@@ -432,10 +467,13 @@ other line of this section holds.
 ## Stage E: rulings
 
 1. **Read `<dispatch>/ESCALATION.md`.** It carries the question, the options the coachman
-   sees, its recommendation, and the state of the branches.
+   sees, its recommendation, and the state of the branches. If `.provider-walls-paused` exists,
+   the wall pause follows Stage D's WALL step: the user rules each wall through
+   `<tool>/scripts/walls.sh rule <dispatch> <lane> [<lens>] go-on`, and the watcher resumes the coachman after all wall rulings are recorded.
 2. **Decide within the user's standing instructions** when the question is about the
    work: a within-brief ambiguity, a scope call the ticket's own criteria answer, a lane to
-   drop as DEGRADED, a round to stop at the cap. Log `escalate` with your ruling.
+   drop as DEGRADED (except a walled lane, whose only ruling for this ticket is go-on through
+   WALL), or a round to stop at the cap. Log `escalate` with your ruling.
 3. **Send it up** when it is genuinely destructive, changes the ticket's scope, touches
    anything outside the repo, is a fault in a control (Tool faults), asks whether to fix a
    gating finding in a loop with no gating lens (`coachman.md`, Stage 2 step 5), or the user
@@ -448,9 +486,11 @@ other line of this section holds.
    for something the config gives you. On the user's answer, remove `.waiting-on-user`, remove
    the run from the list with `<tool>/scripts/host.sh leg waiting remove <runs> <ticket>`, and
    act on the answer as the record named.
-4. **Deliver the ruling:** remove `.escalation-ready`, then resume the current leg (Stage C,
-   step 5) with the ruling as the prompt. The ruling is a prompt to a resumed thread, never
-   text typed into anything.
+4. **Deliver the ruling:** for an ordinary escalation, remove `.escalation-ready`, then resume
+   the current leg (Stage C, step 5) with the ruling as the prompt. For `.provider-walls-paused`,
+   leave the pause markers in place; the watcher resumes the leg after every wall is ruled and
+   no other user question remains. The ruling is a prompt to a resumed thread, never text typed
+   into anything.
 
 ## Stage F (contract 2): verify and land the ship card
 
@@ -458,7 +498,9 @@ On `.card-ready`, read `run.json`, the manifest's current `leg`, `card.md`, and
 `handoff-<leg>.md`. Do not use this route for a run without `coachman_contract: 2`; its legacy
 route follows below. An exit 1 from any `<tool>/scripts/landing.sh` call in Stage F or
 Stage G below is a fault in its inputs, not an answer: fix the inputs and re-run; never
-proceed past it. Resolve the default branch's upstream ref and remote with one command,
+proceed past it. First run `<tool>/scripts/walls.sh open <dispatch>`. If it exits 1, do not
+verify, push, merge, or otherwise land: return to Stage D's WALL step and get every ruling.
+Resolve the default branch's upstream ref and remote with one command,
 `git for-each-ref --format='%(upstream:short) %(upstream:remotename)' refs/heads/<branch>`;
 read the two fields as the ref, then the remote: a blank answer means no upstream, and a
 `.` remote means a local upstream, which needs no fetch. Do the same for the ticket

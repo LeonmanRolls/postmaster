@@ -85,6 +85,14 @@ path = "scripts/launch.sh"
 holds = "the attempt phase: refused before preflight, started once the harness is callable"
 
 [[files]]
+path = "scripts/walls.sh"
+holds = "provider-wall notification, rulings, carry-out and pause escalation"
+
+[[files]]
+path = "scripts/walls.ts"
+holds = "provider-wall records and the ruling lifecycle"
+
+[[files]]
 path = "scripts/fixture.sh"
 holds = "the fixture entrypoint the flow invokes"
 

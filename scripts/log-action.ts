@@ -10,7 +10,7 @@
 //            dispatch resume refuse harvest synthesize review-launch review-harvest finding apply
 //            escalate rule ticket-check ticket-create ticket-edit ticket-state ticket-comment
 //            gate verify merge teardown degrade handoff-accept handoff stage spec-review
-//            tool-fault note
+//            tool-fault note wall told carry
 //   target   what the action was done to: a lane, a ticket id, a branch, a path, a round
 //   detail   free text; everything after the target, joined by spaces. A finding's opens with its
 //            class, gating or style, so the style findings can be told apart. A spec-review's
@@ -43,7 +43,7 @@ import { toolRoot } from "./lib/paths.ts";
 import { argvDecoded } from "./lib/proc.ts";
 
 const VERBS =
-  " dispatch resume refuse harvest synthesize review-launch review-harvest finding apply escalate rule ticket-check ticket-create ticket-edit ticket-state ticket-comment gate verify merge teardown degrade handoff-accept handoff stage spec-review tool-fault note ";
+  " dispatch resume refuse harvest synthesize review-launch review-harvest finding apply escalate rule ticket-check ticket-create ticket-edit ticket-state ticket-comment gate verify merge teardown degrade handoff-accept handoff stage spec-review tool-fault note wall told carry ";
 const CONTROLS = join(toolRoot(import.meta), "skills/postmaster/controls.md");
 
 // JSON string escaping: drop control chars, escape separators. Bytes that
@@ -257,6 +257,79 @@ function logAction(
   let finalTarget = target;
   let finalDetail = detail;
   let faultJson = "";
+  let wallJson = "";
+
+  if (action === "wall") {
+    const fields: Record<string, string> = {};
+    for (let i = 0; i < detailParts.length; i += 2) {
+      const key = detailParts[i];
+      const value = detailParts[i + 1];
+      if (
+        !key ||
+        !value ||
+        !["--role", "--message", "--reset", "--lens", "--round"].includes(key) ||
+        key in fields
+      ) {
+        console.error(
+          "log-action: wall needs --role, --message and --reset, with optional --lens and --round",
+        );
+        return 1;
+      }
+      fields[key.slice(2)] = value;
+    }
+    const role = fields.role;
+    const message = fields.message;
+    const reset = fields.reset;
+    const reviewer = role === "reviewer";
+    const round = fields.round ? Number(fields.round) : 0;
+    if (
+      !target ||
+      (role !== "workhorse" && !reviewer) ||
+      message === undefined ||
+      message === "" ||
+      reset === undefined ||
+      (reset !== "none" &&
+        !/^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{3})?(?:Z|[+-][0-9]{2}:[0-9]{2})$/u.test(
+          reset,
+        )) ||
+      (reviewer &&
+        (!fields.lens ||
+          !["style", "bug", "security"].includes(fields.lens) ||
+          !Number.isSafeInteger(round) ||
+          round < 1)) ||
+      (!reviewer && (fields.lens !== undefined || fields.round !== undefined))
+    ) {
+      console.error("log-action: wall fields do not describe a workhorse or reviewer wall");
+      return 1;
+    }
+    let sequence = 1;
+    try {
+      const existing = readFileSync(join(resolve(dispatch), "actions.jsonl"), "utf8");
+      for (const line of existing.split("\n")) {
+        try {
+          const rec = JSON.parse(line) as Record<string, unknown>;
+          const wall = rec.wall as Record<string, unknown> | undefined;
+          if (
+            rec.action === "wall" &&
+            rec.target === target &&
+            wall?.role === role &&
+            wall?.lens === (fields.lens ?? "")
+          ) {
+            const prior = wall.sequence;
+            if (typeof prior === "number" && Number.isSafeInteger(prior) && prior > 0) {
+              sequence = Math.max(sequence, prior + 1);
+            }
+          }
+        } catch {
+          /* ignore malformed history; the action reader reports it independently */
+        }
+      }
+    } catch {
+      /* the first wall has sequence one */
+    }
+    wallJson = `,"wall":{"lane":"${jsonStr(target)}","role":"${jsonStr(role)}","message":"${jsonStr(message)}","reset":"${jsonStr(reset)}","lens":"${jsonStr(fields.lens ?? "")}","round":${reviewer ? String(round) : "null"},"sequence":${sequence}}`;
+    finalDetail = "provider wall";
+  }
 
   if (action === "tool-fault") {
     const result = toolFault(target, detailParts, TOOL);
@@ -290,7 +363,7 @@ function logAction(
       : basename(parent);
   const ts = new Date().toISOString().replace(/\.[0-9]+Z$/u, "Z");
 
-  const line = `{"ts":"${ts}","project":"${jsonStr(project)}","run":"${jsonStr(runName)}","actor":"${jsonStr(actor)}","action":"${jsonStr(action)}","target":"${jsonStr(finalTarget)}","detail":"${jsonStr(finalDetail)}"${faultJson}}`;
+  const line = `{"ts":"${ts}","project":"${jsonStr(project)}","run":"${jsonStr(runName)}","actor":"${jsonStr(actor)}","action":"${jsonStr(action)}","target":"${jsonStr(finalTarget)}","detail":"${jsonStr(finalDetail)}"${faultJson}${wallJson}}`;
 
   try {
     appendFileSync(join(dispatchReal, "actions.jsonl"), `${line}\n`);

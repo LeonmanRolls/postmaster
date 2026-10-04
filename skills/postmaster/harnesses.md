@@ -680,7 +680,31 @@ shows badly gets its rules there, and a line here saying they were checked.
 
 ## Walls, any harness
 
-A lane that never launched is lame for that round: DEGRADED. Recognise a wall by the provider's
-own error string and quote it in `run-log.md`: a `402 Payment Required`, a usage-limit message,
-a quota wall, a spawn misfire, a stale session lock. The fix is restoring the lane on the next
-round, never suppressing the label.
+A provider wall is an error record at the end of the harness turn whose first line contains one
+of the wall tokens in `<tool>/scripts/launch.sh`. The launch records it in `actions.jsonl`
+before `host.sh` lands the lane's marker. A final assistant message, a failed command, tool
+output, a host stop and any earlier error record are not walls. The last terminal error record
+is authoritative; a workhorse that already wrote `WORKHORSE-SUMMARY.md` or
+`WORKHORSE-BLOCKED.md` has delivered its result and is not walled.
+
+| harness | ending record read | message |
+|---|---|---|
+| codex | last `turn.failed` terminal event; later terminal events supersede it | `error.message` |
+| claude | last `result` record, only when `is_error: true` | `result`; `api_error_status` is retained by the stream |
+| mimo | last top-level `error` event | its `error`, `message` or `text` value |
+| muse | last `run.terminal.*` event, only when `run.terminal.failed` | `payload.reason` or `payload.text` |
+| grok, Antigravity, pi | not read | no wall action; continue as today |
+
+The recorded message is its first line, byte for byte. Reset times are read only in the provider
+forms seen so far: a time such as `2:29 AM`, a dated time such as `Oct 5th, 2026 2:29 AM`,
+`resets 3am (UTC)`, or `in 20 minutes`. A time with no date uses the message's zone or the
+machine's zone; it means today unless it is more than five minutes past, in which case it
+means tomorrow. IANA zones and UTC are understood; abbreviations such as PST are not. When
+more than one supported time appears, the later one is recorded. Otherwise reset is `none`.
+`<tool>/scripts/walls.sh show <dispatch>` renders a known reset with its date in the machine's time zone.
+
+A lane that never launched is lame for that round: DEGRADED. A walled reviewer is DEGRADED
+for that round and is not waited for; the reviewer takes part in the next round as usual.
+Quote its provider message in `run-log.md` and on the cards. A walled workhorse pauses before
+synthesis until the user rules go-on; after that the run continues without it and records the
+degraded lane and message.

@@ -3,6 +3,7 @@
 // Skip branches use the top-level conds; their in-sequence skip logs are replaced by those notices.
 // The process-exit cleanup is an afterAll; withTempDir still owns the temp dir.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { spawn } from "node:child_process";
 import {
   chmodSync,
   existsSync,
@@ -17,6 +18,8 @@ import { run, withTempDir } from "./lib/proc.ts";
 import { ARG_SPLIT_RE, monotonic } from "./review-round.ts";
 
 const self = join(import.meta.dir, "review-round.sh");
+const logAction = join(import.meta.dir, "log-action.sh");
+const walls = join(import.meta.dir, "walls.sh");
 
 const skipBootId = !existsSync("/proc/sys/kernel/random/boot_id");
 if (skipBootId) {
@@ -787,5 +790,139 @@ describe("negative controls", () => {
   }
   test("reviewers on several lines, one given twice, are each waited on once", () => {
     assertControl("reviewers on several lines, one given twice, are each waited on once");
+  });
+});
+
+describe("provider walls in review rounds", () => {
+  test("a wall written during the wait closes the round before its marker lands", () => {
+    withTempDir((tmp) => {
+      const repo = join(tmp, "repo");
+      const dispatch = join(repo, ".postmaster", "runs", "T");
+      const logs = join(dispatch, "logs");
+      mkdirSync(logs, { recursive: true });
+      run("git", ["init", "-q", "-b", "main", repo]);
+      writeFileSync(
+        join(dispatch, "run.json"),
+        '{"config":{"review":{"round_timeout_seconds":30}}}\n',
+      );
+      writeFileSync(join(dispatch, "run-log.md"), "");
+      writeFileSync(join(dispatch, "actions.jsonl"), "");
+      expect(run(self, ["start", dispatch, "1"]).code).toBe(0);
+      writeFileSync(join(logs, "review-r1-bug-stub.done"), "");
+      const writer = join(tmp, "write-wall.sh");
+      writeFileSync(writer, ["#!/bin/sh", "sleep 0.5", 'exec "$@"', ""].join("\n"));
+      chmodSync(writer, 0o755);
+      const delayedWall = spawn(
+        writer,
+        [
+          logAction,
+          dispatch,
+          "lane:sec",
+          "wall",
+          "sec",
+          "--role",
+          "reviewer",
+          "--message",
+          "weekly usage limit",
+          "--reset",
+          "none",
+          "--lens",
+          "security",
+          "--round",
+          "1",
+        ],
+        { stdio: "ignore" },
+      );
+      const started = Date.now();
+      const result = run(self, ["wait", dispatch, "1", repo, "bug:stub", "security:sec"]);
+      try {
+        if (result.code !== 0) throw new Error(result.err || result.out);
+        expect(result.code).toBe(0);
+        expect(Date.now() - started).toBeLessThan(5000);
+        expect(readFileSync(join(dispatch, "run-log.md"), "utf8")).toContain(
+          'sec security: DEGRADED, provider wall: "weekly usage limit"',
+        );
+      } finally {
+        delayedWall.kill();
+      }
+    });
+  });
+
+  test("a walled reviewer closes its round, joins the next, and needs a fresh ruling when walled again", () => {
+    withTempDir((tmp) => {
+      const repo = join(tmp, "repo");
+      const dispatch = join(repo, ".postmaster", "runs", "T");
+      const logs = join(dispatch, "logs");
+      mkdirSync(logs, { recursive: true });
+      mkdirSync(join(repo, ".worktrees"), { recursive: true });
+      const init = run("git", ["init", "-q", "-b", "main", repo]);
+      if (init.code !== 0) throw new Error(init.err || init.out);
+      writeFileSync(
+        join(dispatch, "run.json"),
+        '{"config":{"review":{"round_timeout_seconds":30}}}\n',
+      );
+      writeFileSync(join(dispatch, "run-log.md"), "");
+      writeFileSync(join(dispatch, "actions.jsonl"), "");
+      const addReviewerWall = (round: number): void => {
+        const wall = run(logAction, [
+          dispatch,
+          "lane:sec",
+          "wall",
+          "sec",
+          "--role",
+          "reviewer",
+          "--message",
+          "weekly usage limit · resets 3am (UTC)",
+          "--reset",
+          "2026-10-05T03:00:00.000Z",
+          "--lens",
+          "security",
+          "--round",
+          String(round),
+        ]);
+        if (wall.code !== 0) throw new Error(wall.err || wall.out);
+      };
+
+      addReviewerWall(1);
+      expect(run(self, ["start", dispatch, "1"]).code).toBe(0);
+      writeFileSync(join(logs, "review-r1-bug-stub.done"), "");
+      const first = run(self, ["wait", dispatch, "1", repo, "bug:stub", "security:sec"]);
+      if (first.code !== 0) throw new Error(first.err || first.out);
+      expect(first.code).toBe(0);
+      expect(readFileSync(join(dispatch, "run-log.md"), "utf8")).toContain(
+        'sec security: DEGRADED, provider wall: "weekly usage limit · resets 3am (UTC)"',
+      );
+      const firstActions = readFileSync(join(dispatch, "actions.jsonl"), "utf8");
+      expect(firstActions).toContain(
+        '"action":"degrade","target":"sec","detail":"security r1: provider wall:',
+      );
+      expect(existsSync(join(dispatch, ".escalation-ready"))).toBe(false);
+      const roundOne = JSON.parse(readFileSync(join(logs, "review-r1.json"), "utf8")) as {
+        reviewers: string[][];
+      };
+      expect(roundOne.reviewers).toEqual([
+        ["bug", "stub"],
+        ["security", "sec"],
+      ]);
+
+      expect(run(self, ["start", dispatch, "2"]).code).toBe(0);
+      writeFileSync(join(logs, "review-r2-bug-stub.done"), "");
+      addReviewerWall(2);
+      const second = run(self, ["wait", dispatch, "2", repo, "bug:stub", "security:sec"]);
+      if (second.code !== 0) throw new Error(second.err || second.out);
+      expect(second.code).toBe(0);
+      const shown = run(walls, ["show", dispatch]);
+      expect(shown.out.match(/sec security: DEGRADED, provider wall:/gu)).toHaveLength(2);
+      expect(run(walls, ["open", dispatch]).code).toBe(1);
+      expect(run(walls, ["told", dispatch, "sec"]).code).toBe(0);
+      expect(run(walls, ["told", dispatch, "sec"]).code).toBe(0);
+      expect(run(walls, ["rule", dispatch, "sec", "security", "go-on"]).code).toBe(0);
+      expect(run(walls, ["open", dispatch]).code).toBe(1);
+      expect(run(walls, ["rule", dispatch, "sec", "security", "go-on"]).code).toBe(0);
+      expect(run(walls, ["open", dispatch]).code).toBe(0);
+      const finalActions = readFileSync(join(dispatch, "actions.jsonl"), "utf8");
+      expect(finalActions.match(/"action":"wall"/gu)).toHaveLength(2);
+      expect(finalActions.match(/"action":"rule"/gu)).toHaveLength(2);
+    });
   });
 });
