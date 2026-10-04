@@ -439,8 +439,17 @@ second implementer wrote (single-thread).
 5. **Check the run's directories exist** (`mkdir -p <dispatch>/logs <dispatch>/audit
    <dispatch>/render` is idempotent) and that the synthesis worktree the postmaster cut is at
    BASE and is your cwd; then, in synthesis mode, cut one workhorse worktree per workhorse
-   from BASE, and arm each
-   with the run's checks: `<tool>/scripts/run verify arm <workhorse-wt> <dispatch>`. In
+   from BASE **on that lane's own `wb/` branch**, the archive branch the Where-things-live
+   table names and the harvest keeps:
+
+   ```sh
+   git -C <repo> worktree add .worktrees/<TICKET>-<lane> -b wb/<TICKET>-<lane> <BASE>
+   ```
+
+   A worktree cut without `-b` leaves the lane on a detached head and the run with no
+   `wb/` branch to keep. Arm each
+   worktree with the run's checks: `<tool>/scripts/run verify arm <workhorse-wt> <dispatch>`.
+   In
    single-thread mode cut no workhorse worktree (The run's mode, above).
 6. **Update the manifest** the postmaster created: set the stage with `<tool>/scripts/run stage
    <dispatch> bootstrapped`, and, in synthesis mode, add one `lanes` entry per lane, in place,
