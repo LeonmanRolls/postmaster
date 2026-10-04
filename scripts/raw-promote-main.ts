@@ -60,6 +60,7 @@ function fail(message: string, code = 2): never {
 interface FileScan {
   changed: boolean;
   faults: string[];
+  findings: string[];
 }
 
 function balancedEnd(text: string, start: number): number {
@@ -184,22 +185,31 @@ async function inspectFile(path: string, report: boolean): Promise<FileScan> {
   let inKeyBlock = false;
   let changed = false;
   const faults: string[] = [];
+  const findings: string[] = [];
   for await (const line of streamLines(path)) {
-    if (redactReasoning(line.text).count) changed = true;
+    const reasoned = redactReasoning(line.text);
+    if (reasoned.count) {
+      changed = true;
+      findings.push(`${line.number}: encrypted-reasoning`);
+    }
     const key = keyBlockStep(line.text, inKeyBlock);
     inKeyBlock = key.inBlock;
     const result = scanner.feed(line.number, line.text, { keyBlock: key.flagged });
     if (result.findings.length || result.suppressed.length || result.markers.length)
       changed = changed || result.findings.length > 0 || result.suppressed.length > 0;
     for (const marker of result.markers) faults.push(`${line.number}: marker`);
+    for (const finding of result.findings) findings.push(`${line.number}: ${finding.rule}`);
     if (report) {
       for (const finding of result.findings) logFinding(finding.rule, path, line.number, "");
       for (const finding of result.suppressed)
         logFinding(finding.rule, path, line.number, "", "marker");
     }
   }
-  for (const marker of scanner.flush()) faults.push(`${marker.line ?? 1}: marker`);
-  return { changed, faults };
+  for (const marker of scanner.flush()) {
+    faults.push(`${marker.line ?? 1}: marker`);
+    findings.push(`${marker.line ?? 1}: marker`);
+  }
+  return { changed, faults, findings };
 }
 
 function entries(source: string): Array<{ source: string; relative: string }> {
@@ -281,25 +291,13 @@ async function writeScrubbed(source: string, target: string, destLabel: string):
 }
 
 async function verifyFiles(files: string[]): Promise<string[]> {
+  // One pass: inspectFile already computes every finding the old second
+  // loop recomputed, in the same order, so the rescan reads each file once.
   const found: string[] = [];
   for (const file of files) {
     const scan = await inspectFile(file, false);
     if (scan.faults.length) found.push(...scan.faults.map((fault) => `${safePath(file)}:${fault}`));
-    else {
-      const scanner = new StreamScanner();
-      let keyState = false;
-      for await (const line of streamLines(file)) {
-        if (redactReasoning(line.text).count)
-          found.push(`${safePath(file)}:${line.number}: encrypted-reasoning`);
-        const key = keyBlockStep(line.text, keyState);
-        keyState = key.inBlock;
-        const result = scanner.feed(line.number, line.text, { keyBlock: key.flagged });
-        for (const finding of result.findings)
-          found.push(`${safePath(file)}:${line.number}: ${finding.rule}`);
-      }
-      for (const marker of scanner.flush())
-        found.push(`${safePath(file)}:${marker.line ?? 1}: marker`);
-    }
+    else found.push(...scan.findings.map((finding) => `${safePath(file)}:${finding}`));
   }
   return found;
 }
