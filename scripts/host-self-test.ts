@@ -2102,18 +2102,18 @@ export async function runControls(): Promise<number> {
         "--",
         "sh",
         "-c",
-        "echo big=${#BIG}",
+        "echo big=${#BIG} small=${#SMALL}",
       ],
       stubs,
       f.caller,
-      { BIG: "x".repeat(100_000) },
+      { BIG: "x".repeat(100_000), SMALL: "y".repeat(1_000) },
     );
     await marker(markerPath("h-big"));
     await pass(
       "an environment larger than the FIFO arrives whole, and the launch runs",
       () =>
         bigHerdr.code === 0 &&
-        readFileSync(join(logs, "h-big.out"), "utf8").trim() === "big=100000",
+        readFileSync(join(logs, "h-big.out"), "utf8").trim() === "big=100000 small=1000",
       `${bigHerdr.out}${bigHerdr.err}${
         existsSync(join(logs, "h-big.out")) ? readFileSync(join(logs, "h-big.out"), "utf8") : ""
       }`,
@@ -2476,17 +2476,18 @@ export async function runControls(): Promise<number> {
         "--",
         "sh",
         "-c",
-        "echo big=${#BIG}",
+        "echo big=${#BIG} small=${#SMALL}",
       ],
       stubs,
       f.caller,
-      { POSTMASTER_HOST: "tmux", BIG: "x".repeat(100_000) },
+      { POSTMASTER_HOST: "tmux", BIG: "x".repeat(100_000), SMALL: "y".repeat(1_000) },
     );
     await marker(markerPath("t-big"));
     await pass(
       "an environment larger than the FIFO arrives whole in the tmux window",
       () =>
-        bigTmux.code === 0 && readFileSync(join(logs, "t-big.out"), "utf8").trim() === "big=100000",
+        bigTmux.code === 0 &&
+        readFileSync(join(logs, "t-big.out"), "utf8").trim() === "big=100000 small=1000",
       `${bigTmux.out}${bigTmux.err}${
         existsSync(join(logs, "t-big.out")) ? readFileSync(join(logs, "t-big.out"), "utf8") : ""
       }`,
