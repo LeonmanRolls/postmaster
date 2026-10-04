@@ -1500,6 +1500,42 @@ describe("fenced clean", () => {
 });
 
 describe("harvest conflicts", () => {
+  test("harvest accepts the Claude task folder under this user's TMPDIR and refuses outside both roots", () => {
+    const previousTmpdir = process.env.TMPDIR;
+    const tempRoot = join(root, "mac-user-tmp");
+    const userTasks = join(tempRoot, `claude-${process.getuid?.() ?? 0}`);
+    mkdirSync(userTasks, { recursive: true });
+    const task = join(userTasks, "task-output.txt");
+    writeFileSync(task, "from the user's temporary folder\n");
+    const events = writeEvents("harvest-user-tmp.events", [
+      { type: "system", subtype: "task_notification", output_file: task },
+    ]);
+    process.env.TMPDIR = tempRoot;
+    try {
+      const r = cli("harvest", events, join(root, "logs-user-tmp"), "--prefix", "user-tmp");
+      expect(r.code).toBe(0);
+      expect(r.out).toContain("user-tmp-claude-task-01-task-output.txt");
+
+      const outside = join(root, "outside-both-task-output.txt");
+      writeFileSync(outside, "outside both roots\n");
+      const outsideEvents = writeEvents("harvest-outside-both.events", [
+        { type: "system", subtype: "task_notification", output_file: outside },
+      ]);
+      const refused = cli(
+        "harvest",
+        outsideEvents,
+        join(root, "logs-outside-both"),
+        "--prefix",
+        "outside-both",
+      );
+      expect(refused.code).toBe(1);
+      expect(refused.err).toContain("Claude task output is outside");
+    } finally {
+      if (previousTmpdir === undefined) delete process.env.TMPDIR;
+      else process.env.TMPDIR = previousTmpdir;
+    }
+  });
+
   test("a refused harvest copies nothing", () => {
     const secondTask = join(taskHome, "second-task-output.txt");
     writeFileSync(secondTask, "second task tools\n");

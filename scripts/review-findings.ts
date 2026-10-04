@@ -6,6 +6,7 @@
 //   exit 0  printed
 //   exit 1  usage; a report that cannot be read; a harvest that cannot be completed
 import { copyFileSync, existsSync, mkdirSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { basename, isAbsolute, join, relative, resolve } from "node:path";
 import {
   BOUND_L,
@@ -1295,9 +1296,12 @@ export function harvest(
   mkdirSync(logsDir, { recursive: true });
   const scrubbed = stripChars(prefix.replace(PREFIX_SANITIZE, "-"), ".-");
   const clean = scrubbed === "" ? "review" : scrubbed;
-  // The root is resolved before comparing: the task path always is, so an unresolved root
-  // under a symlinked /tmp would refuse its own files. The override exists for fixtures.
-  const root = taskRoot !== null ? pyResolve(taskRoot) : pyResolve(`/tmp/claude-${uid()}`);
+  // Resolve each root before comparing: task paths always are, so a symlinked temp folder
+  // would otherwise refuse its own files. The override exists for fixtures.
+  const roots =
+    taskRoot !== null
+      ? [pyResolve(taskRoot)]
+      : [pyResolve(`/tmp/claude-${uid()}`), pyResolve(join(tmpdir(), `claude-${uid()}`))];
   const planned: Array<[string, string]> = [];
   wanted.forEach((path, n) => {
     const index = n + 1;
@@ -1307,10 +1311,11 @@ export function harvest(
     } catch {
       fail(`Claude task output named by task_notification is missing: ${path}`);
     }
-    const rel = relative(root, resolved);
-    if (rel === ".." || rel.startsWith("../") || isAbsolute(rel)) {
-      fail(`Claude task output is outside ${root}: ${path}`);
-    }
+    const root = roots.find((candidate) => {
+      const rel = relative(candidate, resolved);
+      return rel !== ".." && !rel.startsWith("../") && !isAbsolute(rel);
+    });
+    if (root === undefined) fail(`Claude task output is outside ${roots.join(" or ")}: ${path}`);
     let isFile = false;
     try {
       isFile = statSync(resolved).isFile();

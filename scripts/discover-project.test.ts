@@ -1,7 +1,7 @@
 // Tests beside scripts/discover-project.ts, ported from its --self-test on #110: 10 controls.
 // Each family agrees with itself: install= and the gate runner name one manager.
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { run, withTempDir } from "./lib/proc.ts";
 
@@ -127,6 +127,45 @@ describe("install line: one manager for install and gate", () => {
       const r = run(self, ["discover-project", d]);
       expect(r.code).toBe(0);
       expect(r.out.split("\n").filter((l) => l.startsWith("gate=")).length).toBe(1);
+    });
+  });
+});
+
+describe("tracker prefix from commit messages", () => {
+  test("the prefix is found in-process when grep is unavailable or fails", () => {
+    withTempDir((tmp) => {
+      const repo = join(tmp, "repo");
+      const bin = join(tmp, "bin");
+      mkdirSync(repo);
+      mkdirSync(bin);
+      expect(run("git", ["init", "-q", repo]).code).toBe(0);
+      for (const ticket of ["ABC-1", "ABC-2", "ABC-3"]) {
+        const commit = run("git", [
+          "-C",
+          repo,
+          "-c",
+          "user.name=brindlewick",
+          "-c",
+          "user.email=332054101+brindlewick@users.noreply.github.com",
+          "commit",
+          "--allow-empty",
+          "-m",
+          ticket,
+        ]);
+        expect(commit.code).toBe(0);
+      }
+      const grep = join(bin, "grep");
+      writeFileSync(grep, "#!/bin/sh\nexit 2\n");
+      chmodSync(grep, 0o755);
+
+      const normal = run(self, ["discover-project", repo]);
+      const failedGrep = run(self, ["discover-project", repo], {
+        env: { ...process.env, PATH: `${bin}:${process.env.PATH ?? ""}` },
+      });
+      expect(normal.code).toBe(0);
+      expect(failedGrep.code).toBe(0);
+      expect(lineOf(normal.out, "tracker_prefix")).toBe("ABC");
+      expect(lineOf(failedGrep.out, "tracker_prefix")).toBe("ABC");
     });
   });
 });
