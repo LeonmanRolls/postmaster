@@ -1,0 +1,71 @@
+# The check on every pull request, on both systems the tool supports: Linux and a Mac on
+# Apple silicon, each running the full check, plus the refusal a too-old Bun must print
+# from the start command before any script loads. The Mac job keeps the bash every Mac
+# comes with; the old-Bun job installs no dependencies, so nothing can mask a version
+# check that does not run first.
+name: check
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  linux:
+    name: linux
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The tests read old commits.
+          fetch-depth: 0
+      - name: The minimum Bun the manifest names
+        id: bun
+        run: |
+          min=$(node -e "const m = require('./package.json').engines.bun.match(/[0-9]+(\.[0-9]+)+/); console.log(m[0])")
+          echo "version=$min" >> "$GITHUB_OUTPUT"
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ steps.bun.outputs.version }}
+      - name: zsh, so the bash and zsh comparison runs here too
+        run: sudo apt-get update && sudo apt-get install -y zsh
+      - run: bun install --frozen-lockfile
+      - run: bun run check
+  macos:
+    name: macos
+    runs-on: macos-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The tests read old commits.
+          fetch-depth: 0
+      - name: The bash every Mac comes with
+        run: |
+          ver=$(/usr/bin/env bash -c 'printf %s "$BASH_VERSION"')
+          echo "/usr/bin/env bash is $ver"
+          case "$ver" in
+            3.2.*) ;;
+            *) echo "expected the macOS system bash 3.2, found $ver" >&2; exit 1 ;;
+          esac
+      - name: The minimum Bun the manifest names
+        id: bun
+        run: |
+          min=$(node -e "const m = require('./package.json').engines.bun.match(/[0-9]+(\.[0-9]+)+/); console.log(m[0])")
+          echo "version=$min" >> "$GITHUB_OUTPUT"
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ steps.bun.outputs.version }}
+      - run: bun install --frozen-lockfile
+      - run: bun run check
+  old-bun:
+    name: old-bun
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      # 1.3.14 is the Bun the report behind #217 ran: a real older Bun, no install, so
+      # every script started through the start command must stop on the version message.
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - run: bun scripts/old-bun.ts

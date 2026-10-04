@@ -26,4 +26,9 @@ if [ ! -f "$script" ]; then
   exit 2
 fi
 
+# Refuse a Bun below engines.bun before the script loads: the check runs in its own
+# process, so it holds even when this Bun could not load the script at all.
+bun --no-env-file "--config=$scripts_dir/../bunfig.toml" \
+  "$scripts_dir/lib/bun-min.ts" "$scripts_dir/../package.json" || exit $?
+
 exec bun --no-env-file "--config=$scripts_dir/../bunfig.toml" "$script" "$@"
