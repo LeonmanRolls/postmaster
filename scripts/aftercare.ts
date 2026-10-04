@@ -23,6 +23,7 @@ import {
   stopPreviewLaunch,
 } from "./host.ts";
 import { run } from "./lib/proc.ts";
+import { PY_S_CLASS } from "./lib/text.ts";
 import { scriptsDir } from "./lib/paths.ts";
 
 type StepStatus = "planned" | "done" | "already done" | "waiting" | "blocked" | "skipped";
@@ -375,7 +376,7 @@ function changedObjects(rawDiff: Buffer): Array<{ oid: string; path: string }> {
   for (let at = 0; at < fields.length; ) {
     const header = fields[at++] ?? "";
     if (!header) continue;
-    const parsed = /^:(\d{6}) (\d{6}) ([0-9a-f]+) ([0-9a-f]+) ([A-Z][0-9]*)$/u.exec(header);
+    const parsed = /^:([0-9]{6}) ([0-9]{6}) ([0-9a-f]+) ([0-9a-f]+) ([A-Z][0-9]*)$/u.exec(header);
     if (!parsed) continue;
     const newMode = parsed[2]!;
     const oid = parsed[4]!;
@@ -1452,7 +1453,9 @@ async function execute(args: Args, summary: Summary): Promise<number> {
           .filter((folder) => {
             if (folder.result === "already gone") return false;
             const escaped = folder.path.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
-            return new RegExp(`(?:^|[\\s:])${escaped}(?=$|[\\s:;,])`, "u").test(failureText);
+            return new RegExp(`(?:^|[${PY_S_CLASS}:])${escaped}(?=$|[${PY_S_CLASS}:;,])`, "u").test(
+              failureText,
+            );
           })
           .map((folder) => folder.path);
         const knownBlocked = [...new Set([...owners, ...namedPaths, ...blockedPaths])];
