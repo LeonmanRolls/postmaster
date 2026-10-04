@@ -277,9 +277,9 @@ describe("portable process state", () => {
       writeFileSync(join(state, "refuse-uuid"), "");
       const fallback = bootIdentity();
       expect(fallback.id).toBe("mac:1800000001");
-      expect(bootMatches("{ sec = 1800000001, usec = 999 } Mon Jan 1 00:00:00 2024", fallback)).toBe(
-        true,
-      );
+      expect(
+        bootMatches("{ sec = 1800000001, usec = 999 } Mon Jan 1 00:00:00 2024", fallback),
+      ).toBe(true);
       expect(bootMatches(oldText, fallback)).toBe(false);
     } finally {
       if (previousPath === undefined) delete process.env.PATH;

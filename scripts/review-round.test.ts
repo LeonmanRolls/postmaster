@@ -21,7 +21,9 @@ const self = join(import.meta.dir, "run");
 
 const skipBootId = bootIdentity().id === "";
 if (skipBootId) {
-  console.log("skip a round started before the machine restarted is not waited on: no boot identity");
+  console.log(
+    "skip a round started before the machine restarted is not waited on: no boot identity",
+  );
 }
 const skipRoot = process.getuid?.() === 0;
 if (skipRoot) {

@@ -40,8 +40,7 @@ export function bootIdentity(): BootIdentity {
   const session = run("sysctl", ["-n", "kern.bootsessionuuid"], options);
   const boot = run("sysctl", ["-n", "kern.boottime"], options);
   const seconds = bootSeconds(boot.out);
-  if (session.code === 0 && session.out.trim())
-    return { id: `mac:${session.out.trim()}`, seconds };
+  if (session.code === 0 && session.out.trim()) return { id: `mac:${session.out.trim()}`, seconds };
   if (seconds !== null) return { id: `mac:${seconds}`, seconds };
   return { id: "", seconds: null };
 }
@@ -52,7 +51,9 @@ export function bootIdentity(): BootIdentity {
 export function bootMatches(recorded: string, current: BootIdentity): boolean {
   if (recorded === current.id) return true;
   const previousSeconds = bootSeconds(recorded);
-  return previousSeconds !== null && current.seconds !== null && previousSeconds === current.seconds;
+  return (
+    previousSeconds !== null && current.seconds !== null && previousSeconds === current.seconds
+  );
 }
 
 function validPid(pid: number): boolean {

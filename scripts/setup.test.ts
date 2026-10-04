@@ -185,17 +185,45 @@ describe("positive controls", () => {
   test("interactive setup on macOS reports uncapped launches once", () => {
     const env = macEnv();
     const answers = [
-      "", "", // roots and lane names
-      "bash", "lane-alpha", "", "", // alpha
-      "bash", "lane-beta", "", "", // beta
-      "", "", // workhorses and reviewers
-      "", "", "", // style, bug and security reviewer overrides
-      "bash", "coachman", "", "", // coachman
-      "bash", "fallback", "", "", // fallback
-      "bash", "postmaster", "", "", // postmaster
-      "", "", // run count and poll interval
-      "", "", // tracker and confinement
-      "", "", "", "", "", "", "", "", // create tickets, timeout, merge, checkpoint, links
+      "",
+      "", // roots and lane names
+      "bash",
+      "lane-alpha",
+      "",
+      "", // alpha
+      "bash",
+      "lane-beta",
+      "",
+      "", // beta
+      "",
+      "", // workhorses and reviewers
+      "",
+      "",
+      "", // style, bug and security reviewer overrides
+      "bash",
+      "coachman",
+      "",
+      "", // coachman
+      "bash",
+      "fallback",
+      "",
+      "", // fallback
+      "bash",
+      "postmaster",
+      "",
+      "", // postmaster
+      "",
+      "", // run count and poll interval
+      "",
+      "", // tracker and confinement
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "", // create tickets, timeout, merge, checkpoint, links
     ].join("\n");
     const interactive = run(SELF, ["setup", "--dry-run"], { env, input: `${answers}\n` });
     expect(interactive.code).toBe(0);

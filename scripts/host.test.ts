@@ -474,7 +474,7 @@ test("Herdr checks time out when timeout is absent, and keep working when it is 
   ])
     symlinkSync(target, join(bin, name));
   const herdr = join(bin, "herdr");
-  writeFileSync(herdr, "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$HERDR_CALLS\"\nexec /bin/sleep 30\n");
+  writeFileSync(herdr, '#!/bin/sh\nprintf \'%s\\n\' "$*" >> "$HERDR_CALLS"\nexec /bin/sleep 30\n');
   chmodSync(herdr, 0o755);
 
   const env: Record<string, string | undefined> = {

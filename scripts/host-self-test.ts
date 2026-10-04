@@ -733,7 +733,7 @@ async function setup(
   );
   writeFileSync(
     join(caller, "env-length.sh"),
-    ["#!/bin/sh", 'printf \'%s\\n\' "${#CALLER_BLOB}"', ""].join("\n"),
+    ["#!/bin/sh", "printf '%s\\n' \"${#CALLER_BLOB}\"", ""].join("\n"),
   );
   for (const path of [
     join(caller, "fixed.sh"),
@@ -1957,7 +1957,10 @@ export async function runControls(): Promise<number> {
       const error = readFileSync(join(logs, `h-${size}.err`), "utf8");
       await pass(
         `${label} caller environment bytes reach the Herdr pane and its marker lands`,
-        () => largeEnv.code === 0 && value === String(size) && !error.includes("environment never arrived"),
+        () =>
+          largeEnv.code === 0 &&
+          value === String(size) &&
+          !error.includes("environment never arrived"),
         `${largeEnv.out}${largeEnv.err} value=${value} err=${error}`,
       );
     }

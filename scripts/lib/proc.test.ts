@@ -14,9 +14,13 @@ describe("platform signal exit codes", () => {
     for (const name of ["SIGTERM", "SIGUSR1", "SIGBUS", "SIGSYS"]) {
       const number = signals[name];
       if (number === undefined) continue;
-      const child = run(process.execPath, ["-e", `process.kill(process.pid, ${JSON.stringify(name)})`], {
-        timeout: 5000,
-      });
+      const child = run(
+        process.execPath,
+        ["-e", `process.kill(process.pid, ${JSON.stringify(name)})`],
+        {
+          timeout: 5000,
+        },
+      );
       expect(child.timedOut).toBe(false);
       expect(child.code).toBe(128 + number);
     }

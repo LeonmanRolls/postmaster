@@ -379,7 +379,9 @@ let LT = "";
 let LIMIT_ROLE_TABLES = "";
 if (LINUX) {
   console.log("");
-  console.log("== Launch limits: per-launch memory and process caps when the host supports them. ==");
+  console.log(
+    "== Launch limits: per-launch memory and process caps when the host supports them. ==",
+  );
   LM = ask("  default memory cap (number plus K, M, G or T)", "8G", "limits.memory_max", opts);
   if (!/^[1-9][0-9]*[KMGT]$/u.test(LM))
     die("setup: memory_max must be a positive whole number followed by K, M, G or T", 1);
