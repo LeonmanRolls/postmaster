@@ -481,11 +481,11 @@ export function privateDataBlock(dispatch: string): string {
         .map(([rule, count]) => `- ${count} suspect(s): ${rule}`)
         .join("\n")}\n`
     : "";
-  const benchmark =
-    "\n## Personal-data held-out checks\n\n- heldout: 33/33 found, 2/27 raised\n- heldout2: 25/37 found, 4/23 raised\n";
-  const portDecisions =
-    "\n## Port decisions\n\n- D1: the scan runs inside this project's gate.\n- D8: untold findings take priority in the status poll.\n- D9: the steps are in stages current runs use.\n- D19: a finding is told once, even when the gate sees it again.\n";
-  return `## Private data findings\n\n${lines.join("\n") || "none"}\n${censusBlock}${benchmark}${portDecisions}`;
+  // The block carries only what the run's own records say: its findings with
+  // their resolutions, and its census counts. Run-specific evidence such as
+  // held-out scores or port decisions goes on that run's card as prose, never
+  // as literals here, or every future card would repeat them.
+  return `## Private data findings\n\n${lines.join("\n") || "none"}\n${censusBlock}`;
 }
 
 function checkPrivateDataCard(dispatch: string, card: string): number {
@@ -495,7 +495,10 @@ function checkPrivateDataCard(dispatch: string, card: string): number {
   const count = text.split(expected).length - 1;
   if (count !== 1) die("card: private-data findings do not match the run record");
   const scanned = run(join(SCRIPTS, "scrub-check.sh"), ["--pr-description", card], {
-    env: { POSTMASTER_DETECTIONS_LOG: join(dispatch, "detections.jsonl") },
+    env: {
+      POSTMASTER_DETECTIONS_LOG: join(dispatch, "detections.jsonl"),
+      SCRUB_CHECK_DISABLE: undefined,
+    },
   });
   if (scanned.code !== 0) die("card: private-data scan is not clean");
   console.log("match");

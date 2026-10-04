@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { writeFileSync } from "node:fs";
+import { readdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   cleanupScratch,
@@ -59,4 +59,30 @@ test("C18 rewrite refuses any finding in a commit already pushed and preserves H
   expect(refused.stdout + refused.stderr).toContain("already pushed");
   expect(refused.stdout + refused.stderr).not.toContain(email());
   expect(gitAt(repo, ["rev-parse", "HEAD"])).toBe(head);
+});
+
+test("rewrite still removes the finding when SCRUB_CHECK_DISABLE hides email", () => {
+  // Review round 1: the rewrite's scan inherited SCRUB_CHECK_DISABLE and silently kept history.
+  const { repo, base, tree } = addThenDelete();
+  const rewritten = runScript("scrub-rewrite", [base], repo, { SCRUB_CHECK_DISABLE: "email" });
+  expect(rewritten.status).toBe(0);
+  expect(rewritten.stdout).toContain(":notes.txt:1: email removed");
+  expect(gitAt(repo, ["rev-parse", "HEAD^{tree}"])).toBe(tree);
+  expect(runScript("scrub-check", [base, "HEAD"], repo).status).toBe(0);
+});
+
+test("rewrite refuses to write through a symlinked path", () => {
+  // Review round 1: the snapshot write followed a link out of the worktree.
+  const repo = initRepo();
+  const base = gitAt(repo, ["rev-parse", "HEAD"]);
+  const target = `${email()}\nsecond-line`;
+  symlinkSync(target, join(repo, "P"));
+  commit(repo, "add link");
+  gitAt(repo, ["rm", "-q", "P"]);
+  commit(repo, "drop link");
+  const refused = runScript("scrub-rewrite", [base], repo);
+  expect(refused.status).toBe(2);
+  expect(refused.stdout + refused.stderr).toContain("symlink");
+  expect(refused.stdout + refused.stderr).not.toContain(email());
+  expect(readdirSync(repo)).not.toContain(target);
 });

@@ -481,3 +481,11 @@ test("prefilter is lossless: identical findings with it on and off over a dense 
     else process.env.SCRUB_PREFILTER = saved;
   }
 });
+
+test("a pattern-code line exempts only the pattern, never trailing values", () => {
+  // Review round 1: a trailing address after a regex declaration passed the gate.
+  expect(rules(`const EMAIL = /.+/; // ${email()}`)).toContain("email");
+  expect(rules(`scan(new RegExp(P("email", "search"))) // ${email()}`)).toContain("email");
+  expect(rules("const EMAIL = /.+/;")).toEqual([]);
+  expect(rules(`const EMAIL = /.+${email()}/;`)).toEqual([]);
+});

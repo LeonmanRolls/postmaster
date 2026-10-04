@@ -2,6 +2,7 @@
 // Rewrites unpushed history without findings that have already left the tip tree.
 import {
   existsSync,
+  lstatSync,
   mkdirSync,
   readFileSync,
   renameSync,
@@ -86,7 +87,7 @@ function parseFindings(root: string, base: string, head: string): Item[] {
       head,
     ],
     root,
-    { POSTMASTER_DETECTIONS_LOG: "" },
+    { POSTMASTER_DETECTIONS_LOG: "", SCRUB_CHECK_DISABLE: undefined },
   );
   if (result.code !== 0 && result.code !== 1) fail("the range could not be scanned");
   try {
@@ -260,7 +261,11 @@ function applySnapshot(
     if (!changed.changed) continue;
     const target = join(root, path);
     if (changed.empty) unlinkSync(target);
-    else writeFileSync(target, changed.text, "utf8");
+    else {
+      // The write follows a link: refuse one rather than writing out of the worktree.
+      if (lstatSync(target).isSymbolicLink()) fail("a symlinked path needs a manual resolution");
+      writeFileSync(target, changed.text, "utf8");
+    }
     changedPaths.add(path);
   }
   for (const [path, sourceCommits] of namePaths) {

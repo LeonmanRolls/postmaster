@@ -376,6 +376,77 @@ const PATTERN_CODE = new RegExp(
   `${BOUND_L}new${SPACE}+RegExp${SPACE}*\\(${BOUND_L}P\\(${SPACE}*["'](?:email|ipv4|ipv6|phone|address)["']${SPACE}*,${SPACE}*["']search["']|^(?:export${SPACE}+)?const${SPACE}+[A-Z_]+${SPACE}*=${SPACE}*\\/`,
   "u",
 );
+// Flags a regex literal may carry; anything else after the closing slash
+// means the line is not the declaration the exemption is for.
+const REGEX_FLAGS = new Set(["d", "g", "i", "m", "s", "u", "v", "y"]);
+
+// The span a pattern-code line exempts: the regex literal or RegExp call
+// alone, never the whole line. Null when the construct does not validate,
+// so an unrecognized shape scans in full rather than passing unseen.
+function patternSpan(line: string): [number, number] | null {
+  const m = PATTERN_CODE.exec(line);
+  if (!m || m.index === undefined) return null;
+  if (m[0].startsWith("new")) {
+    const open = line.indexOf("(", m.index);
+    if (open < 0) return null;
+    let depth = 0;
+    let quote = "";
+    for (let i = open; i < line.length; i++) {
+      const ch = line[i]!;
+      if (quote) {
+        if (ch === "\\") i++;
+        else if (ch === quote) quote = "";
+        continue;
+      }
+      if (ch === "'" || ch === '"' || ch === "`") {
+        quote = ch;
+        continue;
+      }
+      if (ch === "(") depth++;
+      else if (ch === ")") {
+        depth--;
+        if (depth === 0) return [m.index, i + 1];
+      }
+    }
+    return null;
+  }
+  let i = m.index + m[0].length - 1;
+  if (line[i] !== "/") return null;
+  i++;
+  let inClass = false;
+  while (i < line.length) {
+    const ch = line[i]!;
+    if (ch === "\\") {
+      i += 2;
+      continue;
+    }
+    if (ch === "[") {
+      inClass = true;
+      i++;
+      continue;
+    }
+    if (ch === "]") {
+      inClass = false;
+      i++;
+      continue;
+    }
+    if (ch === "/" && !inClass) break;
+    if (ch === "\n" || ch === "\r") return null;
+    i++;
+  }
+  if (i >= line.length || line[i] !== "/") return null;
+  i++;
+  while (i < line.length && REGEX_FLAGS.has(line[i]!)) i++;
+  const rest = line.slice(i, i + 1);
+  if (rest !== "" && rest !== ";" && rest !== "," && rest !== ")" && rest !== " " && rest !== "\t" && rest !== "/")
+    return null;
+  return [m.index + m[0].length - 1, i];
+}
+
+function blankSpan(line: string, span: [number, number] | null): string {
+  if (!span) return line;
+  return line.slice(0, span[0]) + " ".repeat(span[1] - span[0]) + line.slice(span[1]);
+}
 const TOKEN_SIGNAL =
   // ASCII: token prefixes are fixed ASCII spellings; the boundary is on ASCII keywords.
   /(?:gh[pours]_|github_pat_|sk[_-](?:live|test)|sk-|xox|ya29\.|\bbearer\b|AKIA|ASIA|PRIVATE KEY|SSH2 ENCRYPTED|PuTTY-User-Key|AGE-SECRET-KEY|[:=])|^[A-Za-z0-9+/=]{20,}$/iu;
@@ -819,21 +890,21 @@ function privateFindings(line: string, out: Finding[]): void {
 
 export function detectLine(line: string, context = ""): Finding[] {
   const found: Finding[] = [];
-  const codePattern = PATTERN_CODE.test(line);
-  const plainLower = line.includes(" ") && PLAIN_LOWER_WORDS.test(line);
-  const firstWord = plainLower ? (line.trimStart().split(" ", 1)[0] ?? "") : "";
+  const text = blankSpan(line, patternSpan(line));
+  const plainLower = text.includes(" ") && PLAIN_LOWER_WORDS.test(text);
+  const firstWord = plainLower ? (text.trimStart().split(" ", 1)[0] ?? "") : "";
   const plainPersonalCue = plainLower && PLAIN_CUE_WORDS.has(firstWord);
-  if (!codePattern && (!plainLower || plainPersonalCue)) {
-    for (const f of scanPersonal(line, context)) {
-      const value = line.slice(f.start, f.end);
+  if (!plainLower || plainPersonalCue) {
+    for (const f of scanPersonal(text, context)) {
+      const value = text.slice(f.start, f.end);
       const domain = value.split("@")[1] ?? "";
       if (f.rule === "email" && isPrivateName(domain)) continue;
       add(found, f.start, f.end, f.rule, value);
     }
   }
-  if (codePattern || (plainLower && !plainPersonalCue && !PLAIN_SHAPE_CUE.test(line))) return found;
-  privateFindings(line, found);
-  tokenFindings(line, found);
+  if (plainLower && !plainPersonalCue && !PLAIN_SHAPE_CUE.test(text)) return found;
+  privateFindings(text, found);
+  tokenFindings(text, found);
   const unique = new Map<string, Finding>();
   for (const f of found) unique.set(`${f.start}\0${f.end}\0${f.rule}`, f);
   return [...unique.values()].sort(
@@ -1005,18 +1076,15 @@ function logicalUnits(
 
 export function lineUnits(line: string): Unit[] {
   const cleaned = stripAnsi(line, null);
-  const units: Unit[] = [{ text: cleaned.text, map: cleaned.map, source: null, physical: true }];
+  const text = blankSpan(cleaned.text, patternSpan(cleaned.text));
+  const units: Unit[] = [{ text, map: cleaned.map, source: null, physical: true }];
   for (const extra of cleaned.extras) units.push({ ...extra, source: null, physical: false });
-  if (PATTERN_CODE.test(cleaned.text)) return units;
-  if (
-    !cleaned.text.includes('"') ||
-    (!cleaned.text.includes("\\") && !cleaned.text.includes("private-data:allow"))
-  )
+  if (!text.includes('"') || (!text.includes("\\") && !text.includes("private-data:allow")))
     return units;
   let source = 0;
-  for (const match of jsonStringTokens(cleaned.text)) {
+  for (const match of jsonStringTokens(text)) {
     const start = match.start;
-    const inner = cleaned.text.slice(start + 1, match.end - (match.closed ? 1 : 0));
+    const inner = text.slice(start + 1, match.end - (match.closed ? 1 : 0));
     const decoded = decodeEscape(inner, start + 1, cleaned.map);
     for (const unit of logicalUnits(decoded.text, decoded.map, source++, 0)) units.push(unit);
   }

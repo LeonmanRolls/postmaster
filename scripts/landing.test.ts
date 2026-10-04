@@ -19,6 +19,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { run } from "./lib/proc.ts";
 import { findingState, isFindingShaped, privateDataBlock, pyRepr } from "./landing.ts";
+import { email } from "./scrub-test-kit.ts";
 
 const SELF = join(import.meta.dir, "landing.sh");
 const HERE = import.meta.dir;
@@ -1574,12 +1575,11 @@ describe("private-data-card", () => {
     expect(block).toContain("- private-host at records.jsonl:3 (cccccccccccc) - scrubbed");
     expect(block).toContain("- made-up: 1\n- real: 1");
     expect(block).toContain("- 1 suspect(s): email\n- 1 suspect(s): token");
-    expect(block).toContain("- heldout: 33/33 found, 2/27 raised");
-    expect(block).toContain("- heldout2: 25/37 found, 4/23 raised");
-    const censusBlock =
-      block
-        .split("## Main history census\n\n")[1]
-        ?.split("\n## Personal-data held-out checks")[0] ?? "";
+    // Review round 1: the block must not freeze run-specific evidence. Held-out
+    // scores and port decisions go on the run's own card as prose.
+    expect(block).not.toContain("heldout");
+    expect(block).not.toContain("Port decisions");
+    const censusBlock = block.split("## Main history census\n\n")[1] ?? "";
     expect(censusBlock).not.toContain("census-path");
     expect(censusBlock).not.toContain("dddddddddddd");
     const card = join(dispatch, "card.md");
@@ -1596,6 +1596,23 @@ describe("private-data-card", () => {
       1,
       "landing: card: private-data findings do not match the run record",
     );
+  });
+
+  test("the card scan still refuses a card when SCRUB_CHECK_DISABLE hides email", () => {
+    // Review round 1: the scan inherited SCRUB_CHECK_DISABLE from the environment.
+    const dispatch = join(tmp, "private-data-disable");
+    mkdirSync(dispatch, { recursive: true });
+    const block = privateDataBlock(dispatch);
+    const card = join(dispatch, "card.md");
+    writeFileSync(card, `# Ship card\n\n${block}\nProse with ${email()} inside.\n`);
+    const saved = process.env.SCRUB_CHECK_DISABLE;
+    try {
+      process.env.SCRUB_CHECK_DISABLE = "email";
+      check(["private-data-card", dispatch, card], 1, "landing: card: private-data scan is not clean");
+    } finally {
+      if (saved === undefined) delete process.env.SCRUB_CHECK_DISABLE;
+      else process.env.SCRUB_CHECK_DISABLE = saved;
+    }
   });
 });
 

@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   cleanupScratch,
@@ -97,4 +97,20 @@ test("C21 promotion rescans clean, refuses repeats and copies nothing on a marke
   expect(fault.stdout).toContain("marker");
   expect(fault.stdout + fault.stderr).not.toContain(email());
   expect(() => readFileSync(join(repo, "raw/fault", "fault.txt"))).toThrow();
+});
+
+test("promotion refuses a destination under a symlinked directory", () => {
+  // Review round 1: a symlinked raw/archive let the copy escape the repository.
+  const repo = initRepo();
+  const outside = join(scratchDir(), "outside");
+  mkdirSync(outside);
+  mkdirSync(join(repo, "raw"));
+  symlinkSync(outside, join(repo, "raw/archive"));
+  const source = join(scratchDir(), "source");
+  mkdirSync(source);
+  writeFileSync(join(source, "note.txt"), "clean line\n");
+  const refused = runScript("raw-promote", [source, "raw/archive/record"], repo);
+  expect(refused.status).toBe(2);
+  expect(refused.stdout + refused.stderr).toContain("symlink");
+  expect(readdirSync(outside)).toEqual([]);
 });

@@ -320,6 +320,19 @@ async function main(args: string[]): Promise<number> {
     relDest === "raw/"
   )
     fail("destination must be a new path under raw/");
+  // A lexical check cannot see through symlinks: refuse ancestors that leave
+  // the checkout before mkdir or rename follows them.
+  const parts = relDest.split("/");
+  for (let i = 1; i < parts.length; i++) {
+    const ancestor = join(root, ...parts.slice(0, i));
+    let linked = false;
+    try {
+      linked = lstatSync(ancestor).isSymbolicLink();
+    } catch {
+      continue; // not created yet; mkdir below makes a real directory
+    }
+    if (linked) fail("destination must not pass through a symlink");
+  }
   if (existsSync(dest)) fail("destination already exists");
   let sourceFiles: Array<{ source: string; relative: string }>;
   try {
