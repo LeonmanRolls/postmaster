@@ -203,6 +203,11 @@ function gitFixture(repo: string, sourceRoot: string, files: Array<{ path: strin
   mkdirSync(join(repo, "scripts"), { recursive: true });
   copyFileSync(join(sourceRoot, "scripts", "run"), join(repo, "scripts", "run"));
   copyFileSync(
+    join(sourceRoot, "scripts", "check-bun-version.ts"),
+    join(repo, "scripts", "check-bun-version.ts"),
+  );
+  copyFileSync(join(sourceRoot, "package.json"), join(repo, "package.json"));
+  copyFileSync(
     join(sourceRoot, "scripts", "coachman-contract.ts"),
     join(repo, "scripts", "coachman-contract.ts"),
   );
@@ -502,10 +507,15 @@ function exerciseSelfTest(sourceRoot: string): number {
         if (shown.code !== 0) throw new ContractError(`cannot read scripts/${name} at ${base}`);
         writeFileSync(join(honestDir, "scripts", name), shown.out);
       }
+      copyFileSync(
+        join(sourceRoot, "scripts", "check-bun-version.ts"),
+        join(honestDir, "scripts", "check-bun-version.ts"),
+      );
       cpSync(join(sourceRoot, "scripts", "lib"), join(honestDir, "scripts", "lib"), {
         recursive: true,
       });
       copyFileSync(join(sourceRoot, "bunfig.toml"), join(honestDir, "bunfig.toml"));
+      copyFileSync(join(sourceRoot, "package.json"), join(honestDir, "package.json"));
       chmodSync(join(honestDir, "scripts", "run"), 0o755);
       replaceOnce(
         repo,

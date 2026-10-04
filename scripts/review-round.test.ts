@@ -19,10 +19,16 @@ import { ARG_SPLIT_RE, monotonic } from "./review-round.ts";
 
 const self = join(import.meta.dir, "run");
 
-const skipBootId = !existsSync("/proc/sys/kernel/random/boot_id");
+const skipBootId = (() => {
+  try {
+    return readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim() === "";
+  } catch {
+    return run("sysctl", ["-n", "kern.boottime"], { env: { LC_ALL: "C" } }).out.trim() === "";
+  }
+})();
 if (skipBootId) {
   console.log(
-    "skip a round started before the machine restarted is not waited on: no /proc/sys/kernel/random/boot_id",
+    "skip a round started before the machine restarted is not waited on: no portable boot identity is available",
   );
 }
 const skipRoot = process.getuid?.() === 0;
@@ -124,7 +130,7 @@ beforeAll(() => {
 case $1 in
   fast) exit 0 ;;
   leaves) sleep 300 & echo $! > "$2"; exit 0 ;;
-  slow) setsid sleep 300 & echo $! > "$2"; exec sleep 300 ;;
+  slow) { if command -v setsid >/dev/null 2>&1; then setsid sleep 300; else python3 -c 'import os; os.setsid(); os.execlp("sleep", "sleep", "300")'; fi; } & echo $! > "$2"; exec sleep 300 ;;
 esac
 `,
     );

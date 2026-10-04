@@ -80,10 +80,18 @@ function plantLegacyTargets(copy: string): void {
   }
 }
 
-const skipPython = run("sh", ["-c", "command -v python3"]).code !== 0;
+const skipPython =
+  run("python3", ["-c", "import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)"])
+    .code !== 0;
+const skipBaseParity = skipPython || process.platform === "darwin";
 if (skipPython) {
   console.log(
-    "skip folding parity, unicode primitives, stub tracker search, planted-marker search: python3 not on PATH",
+    "skip BASE tool-faults parity: Python 3.11 or newer is unavailable for the extracted shell scripts",
+  );
+}
+if (process.platform === "darwin") {
+  console.log(
+    "skip BASE tool-faults parity: the extracted script uses Bash 4 syntax unavailable in system Bash 3.2",
   );
 }
 
@@ -343,6 +351,7 @@ beforeAll(() => {
     run("cp", ["-R", HERE, join(T, "scripts")]);
     plantLegacyTargets(T);
     copyFileSync(join(TOOL, "bunfig.toml"), join(T, "bunfig.toml"));
+    copyFileSync(join(TOOL, "package.json"), join(T, "package.json"));
     run("cp", ["-R", join(TOOL, "skills/postmaster"), join(T, "skills/postmaster")]);
     run("git", ["-C", T, "init", "-q"]);
     run("git", ["-C", T, "remote", "add", "origin", "https://github.com/o/postmaster.git"]);
@@ -1429,6 +1438,7 @@ if (a[0] === "api" && a[1] === "graphql") {
     run("cp", ["-R", join(T, "scripts"), join(REPO, "tools/postmaster/")]);
     run("cp", ["-R", join(T, "skills"), join(REPO, "tools/postmaster/")]);
     copyFileSync(join(T, "bunfig.toml"), join(REPO, "tools/postmaster/bunfig.toml"));
+    copyFileSync(join(T, "package.json"), join(REPO, "tools/postmaster/package.json"));
     const vendDir = newrun(NAME, `${NAME_UP}-18`, "done");
     logf(
       vendDir,
@@ -1630,6 +1640,7 @@ if (a[0] === "api" && a[1] === "graphql") {
       run("cp", ["-R", HERE, join(T2, "scripts")]);
       plantLegacyTargets(T2);
       copyFileSync(join(TOOL, "bunfig.toml"), join(T2, "bunfig.toml"));
+      copyFileSync(join(TOOL, "package.json"), join(T2, "package.json"));
       run("cp", ["-R", join(TOOL, "skills/postmaster"), join(T2, "skills/postmaster")]);
       const oldControls = run("git", [
         "-C",
@@ -2057,7 +2068,7 @@ if (a[0] === "api" && a[1] === "graphql") {
         );
       }
     }
-    if (!skipPython) {
+    if (!skipBaseParity) {
       const shown = run("git", [
         "-C",
         TOOL,
@@ -2329,7 +2340,7 @@ describe("negative controls", () => {
   test("casefold folds as Python's str.casefold", () => {
     assertControl("casefold folds as Python's str.casefold");
   });
-  test.skipIf(skipPython)(
+  test.skipIf(skipBaseParity)(
     "folding parity: BASE and port harvests agree on ids and drafts, \u00df/\u0130/\u03c2 alike",
     () => {
       assertControl(
@@ -2337,7 +2348,7 @@ describe("negative controls", () => {
       );
     },
   );
-  test.skipIf(skipPython)(
+  test.skipIf(skipBaseParity)(
     "unicode primitives: BASE and port harvests agree, email/digits/\u017f\u00df\u0130 alike",
     () => {
       assertControl(
@@ -2351,7 +2362,7 @@ describe("negative controls", () => {
   test("sameRepo folds remotes as BASE: own-repo waybill public, foreign withheld", () => {
     assertControl("sameRepo folds remotes as BASE: own-repo waybill public, foreign withheld");
   });
-  test.skipIf(skipPython)(
+  test.skipIf(skipBaseParity)(
     "the stub tracker search folds as BASE's stub does, \u00df/\u0130/\u03c2 alike",
     () => {
       assertControl(
@@ -2359,7 +2370,7 @@ describe("negative controls", () => {
       );
     },
   );
-  test.skipIf(skipPython)(
+  test.skipIf(skipBaseParity)(
     "the planted-marker search matches grep -qiF marker for marker, \u00df/\u0130/\u03c2 alike",
     () => {
       assertControl(

@@ -1,0 +1,75 @@
+name: Check
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  linux:
+    name: Linux
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
+      - run: bun run check
+
+  macos:
+    name: macOS
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - name: Verify the system Bash
+        run: |
+          version=$(/usr/bin/env bash --version | head -n 1)
+          printf 'Bash via /usr/bin/env bash: %s\n' "$version"
+          case "$version" in
+            "GNU bash, version 3.2."*) ;;
+            *) printf 'Expected Bash 3.2, found %s\n' "$version" >&2; exit 1 ;;
+          esac
+      - run: bun install --frozen-lockfile
+      - run: bun run check
+
+  old-bun:
+    name: Bun 1.3.14 minimum guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - name: Refuse every script before it loads
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected='postmaster requires Bun 1.4.2 or newer; found 1.3.14'
+          for source in scripts/*.ts scripts/lib/*.ts; do
+            [[ -f "$source" ]] || continue
+            [[ "$source" == *.test.ts || "$source" == *.d.ts ]] && continue
+            name=${source##*/}
+            name=${name%.ts}
+            stdout=$(mktemp)
+            stderr=$(mktemp)
+            set +e
+            scripts/run "$name" >"$stdout" 2>"$stderr"
+            status=$?
+            set -e
+            actual=$(cat "$stderr")
+            if [[ "$status" -eq 0 || -s "$stdout" || "$actual" != "$expected" ]]; then
+              printf 'FAIL %s: exit=%s stdout=%s stderr=%s\n' \
+                "$source" "$status" "$(cat "$stdout")" "$actual" >&2
+              exit 1
+            fi
+            printf '%s: refused before load\n' "$source"
+            rm "$stdout" "$stderr"
+          done

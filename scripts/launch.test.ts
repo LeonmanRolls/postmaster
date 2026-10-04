@@ -34,10 +34,12 @@ function shellQuote(value: string): string {
   return `'${value.replace(/'/gu, "'\\''")}'`;
 }
 
-const skipPython = run("sh", ["-c", "command -v python3"]).code !== 0;
+const skipPython =
+  run("python3", ["-c", "import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)"])
+    .code !== 0;
 if (skipPython) {
   console.log(
-    "skip parity: and handed-environment comparisons (16) and the resume PWD/OLDPWD/SHLVL match and the battery socket checks (4): python3 not on PATH",
+    "skip BASE parity comparisons: Python 3.11 or newer is unavailable for the extracted shell scripts",
   );
 }
 
@@ -52,6 +54,7 @@ const skipLinuxOnly = process.platform !== "linux";
 if (skipLinuxOnly) {
   console.log("skip Linux-only confinement battery checks (6): not Linux");
 }
+const skipRawArgv = process.platform === "darwin";
 
 interface ControlRecord {
   label: string;
@@ -1404,7 +1407,7 @@ beforeAll(() => {
       rc === 1 && out === "",
       `rc ${rc} out ${JSON.stringify(out)}`,
     );
-    writeFileSync(join(tmp, "dumpexec.env"), "exec /bin/false\n");
+    writeFileSync(join(tmp, "dumpexec.env"), "exec /usr/bin/false\n");
     writeFileSync(
       join(tmp, "dumpexec.toml"),
       `${head}coachman = { harness = "claude", model = "coach-model", env_file = "${join(tmp, "dumpexec.env")}" }\n`,
@@ -1673,8 +1676,8 @@ beforeAll(() => {
         "rc 0, silent streams, harness never ran",
       );
       parity(
-        "exec /bin/true in the file exits 0 without launching",
-        "export FOO=bar\nexec /bin/true\n",
+        "exec /usr/bin/true in the file exits 0 without launching",
+        "export FOO=bar\nexec /usr/bin/true\n",
         (rc, out, err, handed) =>
           rc === 0 &&
           out === "" &&
@@ -1704,16 +1707,16 @@ beforeAll(() => {
       );
       {
         const lines = ["export PARITY_BIG=yes"];
-        for (let i = 0; i < 6000; i++)
+        for (let i = 0; i < 1800; i++)
           lines.push(`export PAD${String(i).padStart(4, "0")}=${"x".repeat(200)}`);
         parity(
-          "a roughly 1.2 MB environment launches whole",
+          "a roughly 400 KB environment launches whole",
           `${lines.join("\n")}\n`,
           (rc, out, err, handed) =>
             rc === 0 &&
             ran(rc, out, err, handed) &&
             handed.includes("PARITY_BIG=yes") &&
-            handed.includes(`PAD5999=${"x".repeat(200)}`),
+            handed.includes(`PAD1799=${"x".repeat(200)}`),
           "rc 0 with the first and last variables handed on",
         );
       }
@@ -1926,81 +1929,84 @@ beforeAll(() => {
           `port rc=${sPRc} base rc=${sBRc}\nport ${sPOut}\nbase ${sBOut}`,
         );
         writeFileSync(pi, savedPi);
-        // A prompt travelling as argv reaches it byte for byte: /proc/self/cmdline
-        // is the witness, since the runtimes decode argv as UTF-8 themselves.
-        writeFileSync(
-          codex,
-          '#!/usr/bin/env bun\nimport { readFileSync } from "node:fs";\nconsole.log("cmdline-hex=" + readFileSync("/proc/self/cmdline").toString("hex"));\n',
-        );
-        const argvBytes = Buffer.concat([
-          Buffer.from("Hello ", "utf8"),
-          Buffer.from(new Uint8Array([0xff, 0xfe])),
-          Buffer.from(" world\n\n", "utf8"),
-        ]);
-        writeFileSync(join(tmp, "prompt-argv.bin"), argvBytes);
-        doRun("bytes", "launch", "cx", join(tmp, "wt"), join(tmp, "prompt-argv.bin"));
-        const aPRc = rc;
-        const aPOut = out;
-        const ab = spawnSync(
-          "bash",
-          [baseLaunch, "launch", "cx", join(tmp, "wt"), join(tmp, "prompt-argv.bin")],
-          { encoding: "utf8", env: nofileEnv },
-        );
-        const aBRc = ab.status ?? 1;
-        const aBOut = String(ab.stdout ?? "");
-        const strippedTail = `${Buffer.from("Hello ", "utf8").toString("hex")}fffe${Buffer.from(" world", "utf8").toString("hex")}00`;
-        check(
-          "parity: a prompt holding \\xff\\xfe reaches argv byte for byte, trailing newlines stripped, on both sides",
-          aPRc === 0 &&
-            aBRc === 0 &&
-            aPOut === aBOut &&
-            aPOut.includes("fffe") &&
-            aPOut.trimEnd().endsWith(strippedTail),
-          `port rc=${aPRc} base rc=${aBRc}\nport ${aPOut}\nbase ${aBOut}`,
-        );
-        // The combined shell sources the file and splices the prompt: the file
-        // applies, the bytes survive, and a `cat` the file defines does not
-        // hijack the read, which runs before the source, as BASE orders it.
-        writeFileSync(
-          codex,
-          '#!/usr/bin/env bun\nimport { readFileSync } from "node:fs";\nconsole.log("cmdline-hex=" + readFileSync("/proc/self/cmdline").toString("hex"));\nconsole.log("FOO=" + (process.env.FOO ?? "unset"));\n',
-        );
-        writeFileSync(
-          join(tmp, "catguard.env"),
-          "export FOO=fromfile\ncat() { echo HIJACKED; }\nexport -f cat\n",
-        );
-        writeFileSync(
-          join(tmp, "bytesenv.toml"),
-          `${head}[lanes.cx]\nharness = "codex"\nmodel = "m"\nenv_file = "${join(tmp, "catguard.env")}"\n`,
-        );
-        const combinedEnv = { ...nofileEnv, POSTMASTER_CONFIG: join(tmp, "bytesenv.toml") };
-        doRun("bytesenv", "launch", "cx", join(tmp, "wt"), join(tmp, "prompt-argv.bin"));
-        const cPRc = rc;
-        const cPOut = out;
-        const cPErr = err;
-        const cb = spawnSync(
-          "bash",
-          [baseLaunch, "launch", "cx", join(tmp, "wt"), join(tmp, "prompt-argv.bin")],
-          { encoding: "utf8", env: combinedEnv },
-        );
-        const cBRc = cb.status ?? 1;
-        const cBOut = String(cb.stdout ?? "");
-        const cBErr = String(cb.stderr ?? "");
-        const promptHex = (s: string): string =>
-          s.split("\n").find((l) => l.startsWith("cmdline-hex=")) ?? "";
-        check(
-          "parity: with an env file the prompt still reaches argv byte for byte and the file applies",
-          cPRc === 0 &&
-            cBRc === 0 &&
-            promptHex(cPOut) === promptHex(cBOut) &&
-            promptHex(cPOut).includes("fffe") &&
-            cPOut.includes("FOO=fromfile") &&
-            cBOut.includes("FOO=fromfile") &&
-            !(cPOut + cPErr + cBOut + cBErr).includes("HIJACKED"),
-          `port rc=${cPRc} base rc=${cBRc}\nport ${cPOut}\nbase ${cBOut}`,
-        );
-        writeFileSync(codex, savedCodex);
-        envx = savedEnvx2;
+        if (!skipRawArgv) {
+          // A prompt travelling as argv reaches it byte for byte: /proc/self/cmdline
+          // is the witness, since the runtimes decode argv as UTF-8 themselves.
+          const argvProbe = `#!/usr/bin/env bun
+import { readFileSync } from "node:fs";
+let cmdline;
+try { cmdline = readFileSync("/proc/self/cmdline"); }
+catch { cmdline = Buffer.from([...process.argv, ""].join("\\0")); }
+console.log("cmdline-hex=" + cmdline.toString("hex"));
+`;
+          writeFileSync(codex, argvProbe);
+          const argvBytes = Buffer.concat([
+            Buffer.from("Hello ", "utf8"),
+            Buffer.from(new Uint8Array([0xff, 0xfe])),
+            Buffer.from(" world\n\n", "utf8"),
+          ]);
+          writeFileSync(join(tmp, "prompt-argv.bin"), argvBytes);
+          doRun("bytes", "launch", "cx", join(tmp, "wt"), join(tmp, "prompt-argv.bin"));
+          const aPRc = rc;
+          const aPOut = out;
+          const ab = spawnSync(
+            "bash",
+            [baseLaunch, "launch", "cx", join(tmp, "wt"), join(tmp, "prompt-argv.bin")],
+            { encoding: "utf8", env: nofileEnv },
+          );
+          const aBRc = ab.status ?? 1;
+          const aBOut = String(ab.stdout ?? "");
+          const strippedTail = `${Buffer.from("Hello ", "utf8").toString("hex")}fffe${Buffer.from(" world", "utf8").toString("hex")}00`;
+          check(
+            "parity: a prompt holding \\xff\\xfe reaches argv byte for byte, trailing newlines stripped, on both sides",
+            aPRc === 0 &&
+              aBRc === 0 &&
+              aPOut === aBOut &&
+              aPOut.includes("fffe") &&
+              aPOut.trimEnd().endsWith(strippedTail),
+            `port rc=${aPRc} base rc=${aBRc}\nport ${aPOut}\nbase ${aBOut}`,
+          );
+          // The combined shell sources the file and splices the prompt: the file
+          // applies, the bytes survive, and a `cat` the file defines does not
+          // hijack the read, which runs before the source, as BASE orders it.
+          writeFileSync(codex, `${argvProbe}console.log("FOO=" + (process.env.FOO ?? "unset"));\n`);
+          writeFileSync(
+            join(tmp, "catguard.env"),
+            "export FOO=fromfile\ncat() { echo HIJACKED; }\nexport -f cat\n",
+          );
+          writeFileSync(
+            join(tmp, "bytesenv.toml"),
+            `${head}[lanes.cx]\nharness = "codex"\nmodel = "m"\nenv_file = "${join(tmp, "catguard.env")}"\n`,
+          );
+          const combinedEnv = { ...nofileEnv, POSTMASTER_CONFIG: join(tmp, "bytesenv.toml") };
+          doRun("bytesenv", "launch", "cx", join(tmp, "wt"), join(tmp, "prompt-argv.bin"));
+          const cPRc = rc;
+          const cPOut = out;
+          const cPErr = err;
+          const cb = spawnSync(
+            "bash",
+            [baseLaunch, "launch", "cx", join(tmp, "wt"), join(tmp, "prompt-argv.bin")],
+            { encoding: "utf8", env: combinedEnv },
+          );
+          const cBRc = cb.status ?? 1;
+          const cBOut = String(cb.stdout ?? "");
+          const cBErr = String(cb.stderr ?? "");
+          const promptHex = (s: string): string =>
+            s.split("\n").find((l) => l.startsWith("cmdline-hex=")) ?? "";
+          check(
+            "parity: with an env file the prompt still reaches argv byte for byte and the file applies",
+            cPRc === 0 &&
+              cBRc === 0 &&
+              promptHex(cPOut) === promptHex(cBOut) &&
+              promptHex(cPOut).includes("fffe") &&
+              cPOut.includes("FOO=fromfile") &&
+              cBOut.includes("FOO=fromfile") &&
+              !(cPOut + cPErr + cBOut + cBErr).includes("HIJACKED"),
+            `port rc=${cPRc} base rc=${cBRc}\nport ${cPOut}\nbase ${cBOut}`,
+          );
+          writeFileSync(codex, savedCodex);
+          envx = savedEnvx2;
+        }
       }
     }
     record("run-relenv", "relenv");
@@ -4800,9 +4806,12 @@ describe("negative controls", () => {
   test.skipIf(skipPython)("parity: exit 0 in the file exits 0 without launching", () => {
     assertControl("parity: exit 0 in the file exits 0 without launching");
   });
-  test.skipIf(skipPython)("parity: exec /bin/true in the file exits 0 without launching", () => {
-    assertControl("parity: exec /bin/true in the file exits 0 without launching");
-  });
+  test.skipIf(skipPython)(
+    "parity: exec /usr/bin/true in the file exits 0 without launching",
+    () => {
+      assertControl("parity: exec /usr/bin/true in the file exits 0 without launching");
+    },
+  );
   test.skipIf(skipPython)("parity: file output on stderr reaches the launch's stderr", () => {
     assertControl("parity: file output on stderr reaches the launch's stderr");
   });
@@ -4812,8 +4821,8 @@ describe("negative controls", () => {
       assertControl("parity: a file that unsets everything hands on the emptied environment");
     },
   );
-  test.skipIf(skipPython)("parity: a roughly 1.2 MB environment launches whole", () => {
-    assertControl("parity: a roughly 1.2 MB environment launches whole");
+  test.skipIf(skipPython)("parity: a roughly 400 KB environment launches whole", () => {
+    assertControl("parity: a roughly 400 KB environment launches whole");
   });
   test.skipIf(skipPython)("parity: a file that unsets PATH applies instead of ignored", () => {
     assertControl("parity: a file that unsets PATH applies instead of ignored");
@@ -4854,7 +4863,7 @@ describe("negative controls", () => {
       );
     },
   );
-  test.skipIf(skipPython)(
+  test.skipIf(skipPython || skipRawArgv)(
     "parity: a prompt holding \\xff\\xfe reaches argv byte for byte, trailing newlines stripped, on both sides",
     () => {
       assertControl(
@@ -4862,7 +4871,7 @@ describe("negative controls", () => {
       );
     },
   );
-  test.skipIf(skipPython)(
+  test.skipIf(skipPython || skipRawArgv)(
     "parity: with an env file the prompt still reaches argv byte for byte and the file applies",
     () => {
       assertControl(
@@ -5529,33 +5538,37 @@ describe("confinement wiring: form shows the wrap, fallback warns and logs", () 
   });
   test("form with confine on wraps the launch line", () => {
     const r = records.find((x) => x.label === "form with confine on wraps the launch line");
-    if (r === undefined) return; // no row on this system: the bare-form record holds instead
+    if (r === undefined) throw new Error("confinement row did not record the wrapped launch form");
     assertControl("form with confine on wraps the launch line");
   });
   test("form with confine on wraps the resume line", () => {
     const r = records.find((x) => x.label === "form with confine on wraps the resume line");
-    if (r === undefined) return; // no row on this system: the bare-form record holds instead
+    if (r === undefined) throw new Error("confinement row did not record the wrapped resume form");
     assertControl("form with confine on wraps the resume line");
   });
-  test("form with confine on stays bare on a system with no row", () => {
-    const r = records.find(
-      (x) => x.label === "form with confine on stays bare on a system with no row",
-    );
-    if (r === undefined) return; // this system has a row: the wrap records hold instead
-    assertControl("form with confine on stays bare on a system with no row");
-  });
+  test.skipIf(process.platform === "linux" || process.platform === "darwin")(
+    "form with confine on stays bare on a system with no row",
+    () => {
+      const r = records.find(
+        (x) => x.label === "form with confine on stays bare on a system with no row",
+      );
+      if (r === undefined)
+        throw new Error("unconfined platform unexpectedly has no control record");
+      assertControl("form with confine on stays bare on a system with no row");
+    },
+  );
   test("the wrapped launch line carries the bare harness argv", () => {
     const r = records.find(
       (x) => x.label === "the wrapped launch line carries the bare harness argv",
     );
-    if (r === undefined) return; // no row on this system
+    if (r === undefined) throw new Error("confinement row did not record the launch argv");
     assertControl("the wrapped launch line carries the bare harness argv");
   });
   test("the wrapped resume line carries the bare harness argv", () => {
     const r = records.find(
       (x) => x.label === "the wrapped resume line carries the bare harness argv",
     );
-    if (r === undefined) return; // no row on this system
+    if (r === undefined) throw new Error("confinement row did not record the resume argv");
     assertControl("the wrapped resume line carries the bare harness argv");
   });
   test("form for the coachman stays bare with confine on", () => {

@@ -1,0 +1,400 @@
+{
+  "skips": [
+    {
+      "file": "scripts/tool-faults.test.ts",
+      "name": "positive controls > folding parity: BASE and port harvests agree on ids and drafts, ß/İ/ς alike",
+      "reason": "BASE parity uses Python 3.11 or newer and its Bash 4 syntax is unavailable in macOS system Bash.",
+      "systems": ["linux", "darwin"]
+    },
+    {
+      "file": "scripts/tool-faults.test.ts",
+      "name": "positive controls > unicode primitives: BASE and port harvests agree, email/digits/ſßİ alike",
+      "reason": "BASE parity uses Python 3.11 or newer and its Bash 4 syntax is unavailable in macOS system Bash.",
+      "systems": ["linux", "darwin"]
+    },
+    {
+      "file": "scripts/tool-faults.test.ts",
+      "name": "positive controls > the stub tracker search folds as BASE's stub does, ß/İ/ς alike",
+      "reason": "BASE parity uses Python 3.11 or newer and its Bash 4 syntax is unavailable in macOS system Bash.",
+      "systems": ["linux", "darwin"]
+    },
+    {
+      "file": "scripts/tool-faults.test.ts",
+      "name": "positive controls > the planted-marker search matches grep -qiF marker for marker, ß/İ/ς alike",
+      "reason": "BASE parity uses Python 3.11 or newer and its Bash 4 syntax is unavailable in macOS system Bash.",
+      "systems": ["linux", "darwin"]
+    },
+    {
+      "file": "scripts/landing.test.ts",
+      "name": "anything-to-land > AH4: a raw-byte path answers without a traceback",
+      "reason": "APFS does not permit the non-UTF-8 filename used by this control.",
+      "systems": ["darwin"]
+    },
+    {
+      "file": "scripts/run-meta.test.ts",
+      "name": "pin lock beside the bash flow > an empty .pin.lock still flocked by the bash flow is waited on, not stolen",
+      "reason": "The legacy holder uses the flock utility, which macOS does not provide by default.",
+      "systems": ["darwin"]
+    },
+    {
+      "file": "scripts/wait-for-markers.test.ts",
+      "name": "negative controls > a reader that cannot see its own planted marker stops the wait",
+      "reason": "Root can read and write through the permission change that this control needs.",
+      "systems": ["linux", "darwin"]
+    },
+    {
+      "file": "scripts/review-round.test.ts",
+      "name": "negative controls > a round started before the machine restarted is not waited on",
+      "reason": "Neither /proc boot identity nor the macOS sysctl boot time is available.",
+      "systems": ["linux", "darwin"]
+    },
+    {
+      "file": "scripts/review-round.test.ts",
+      "name": "negative controls > a timeout whose degrade line cannot be written exits 4, and says what was not recorded",
+      "reason": "Root can write through the permission change that this control needs.",
+      "systems": ["linux", "darwin"]
+    },
+    {
+      "file": "scripts/lib/confine.test.ts",
+      "name": "confinement table > the linux wrap binds the root before mounting the fresh /proc",
+      "reason": "This control checks Linux bubblewrap mount ordering.",
+      "systems": ["darwin"]
+    },
+    {
+      "file": "scripts/lib/confine.test.ts",
+      "name": "confinement table > the linux wrap keeps the host device tree",
+      "reason": "This control checks Linux bubblewrap device mounts.",
+      "systems": ["darwin"]
+    },
+    {
+      "file": "scripts/lib/confine.test.ts",
+      "name": "confinement table > the linux wrap starts a new session",
+      "reason": "This control checks Linux bubblewrap session setup.",
+      "systems": ["darwin"]
+    },
+    {
+      "file": "scripts/lib/confine.test.ts",
+      "name": "confinement table > startCheck agrees with a real no-op through the wrap",
+      "reason": "The system has no working confinement mechanism to run this control through.",
+      "systems": ["linux", "darwin"]
+    },
+    {
+      "file": "scripts/lib/confine.test.ts",
+      "name": "confinement table > a confined child can signal a process it started itself",
+      "reason": "The system has no working confinement mechanism to run this control through.",
+      "systems": ["linux", "darwin"]
+    },
+    {
+      "file": "scripts/local.test.ts",
+      "name": "positive controls > a 0xff byte in a title refuses the ticket on both sides, as BASE does",
+      "reason": "The BASE replay needs Python 3.11 or newer and the historical shell script at the test's base commit.",
+      "systems": ["linux", "darwin"]
+    },
+    {
+      "file": "scripts/local.test.ts",
+      "name": "negative controls: nothing is written > a comment that is not UTF-8 exits 1",
+      "reason": "macOS cannot preserve raw non-UTF-8 command-line arguments.",
+      "systems": ["darwin"]
+    },
+    {
+      "file": "scripts/local.test.ts",
+      "name": "negative controls: nothing is written > an actor that is not UTF-8 exits 1",
+      "reason": "macOS cannot preserve raw non-UTF-8 command-line arguments.",
+      "systems": ["darwin"]
+    },
+    {
+      "file": "scripts/local.test.ts",
+      "name": "negative controls: nothing is written > create with a title that is not UTF-8 exits 1",
+      "reason": "macOS cannot preserve raw non-UTF-8 command-line arguments.",
+      "systems": ["darwin"]
+    },
+    {
+      "file": "scripts/local.test.ts",
+      "name": "negative controls: nothing is written > title that is not UTF-8 exits 1",
+      "reason": "macOS cannot preserve raw non-UTF-8 command-line arguments.",
+      "systems": ["darwin"]
+    },
+    {
+      "file": "scripts/local.test.ts",
+      "name": "fetch-proxy snapshot regression > restoreEnv leaves fetch direct",
+      "reason": "The test cannot isolate Bun's fetch proxy snapshot while an outer proxy is configured.",
+      "systems": ["linux", "darwin"]
+    },
+    {
+      "file": "scripts/log-action.test.ts",
+      "name": "positive controls > a line separator and a byte that is not UTF-8 are written",
+      "reason": "macOS cannot preserve raw non-UTF-8 command-line arguments.",
+      "systems": ["darwin"]
+    },
+    {
+      "file": "scripts/log-action.test.ts",
+      "name": "positive controls > the separator escaped and the byte dropped",
+      "reason": "macOS cannot preserve raw non-UTF-8 command-line arguments.",
+      "systems": ["darwin"]
+    },
+    {
+      "file": "scripts/log-action.test.ts",
+      "name": "positive controls > a mixed bad byte and literal U+FFFD are written",
+      "reason": "macOS cannot preserve raw non-UTF-8 command-line arguments.",
+      "systems": ["darwin"]
+    },
+    {
+      "file": "scripts/log-action.test.ts",
+      "name": "positive controls > the damage dropped and the legitimate character kept",
+      "reason": "macOS cannot preserve raw non-UTF-8 command-line arguments.",
+      "systems": ["darwin"]
+    },
+    {
+      "file": "scripts/log-action.test.ts",
+      "name": "positive controls > the decoder matches iconv -c on 300 seeded cases",
+      "reason": "This differential is against glibc iconv; macOS iconv has different behavior, and iconv may be unavailable.",
+      "systems": ["linux", "darwin"]
+    },
+    {
+      "file": "scripts/turnpikes.test.ts",
+      "name": "negative controls: a ticket's section > an unreadable brief.md names the read error",
+      "reason": "Root can read through the permission change that this control needs.",
+      "systems": ["linux", "darwin"]
+    },
+    {
+      "file": "scripts/verify-library.test.ts",
+      "name": "negative controls > the self-test passes from a path with a space",
+      "reason": "The nested test sets POSTMASTER_SPACED_DONE to avoid recursively launching itself.",
+      "systems": ["linux", "darwin"]
+    },
+    {
+      "file": "scripts/verify-journey.test.ts",
+      "name": "negative controls > step matching folds as BASE's norm does, ß/İ/ς alike",
+      "reason": "The BASE replay needs Python 3.11 or newer and the historical shell script at the test's base commit.",
+      "systems": ["linux", "darwin"]
+    },
+    {
+      "file": "scripts/verify-journey.test.ts",
+      "name": "negative controls > the self-test passes from a path with a space",
+      "reason": "The nested test sets POSTMASTER_SPACED_DONE to avoid recursively launching itself.",
+      "systems": ["linux", "darwin"]
+    },
+    {
+      "file": "scripts/verify-examples.test.ts",
+      "name": "negative controls > the self-test passes from a path with a space",
+      "reason": "The nested test sets POSTMASTER_SPACED_DONE to avoid recursively launching itself.",
+      "systems": ["linux", "darwin"]
+    },
+    {
+      "file": "scripts/verify-examples.test.ts",
+      "name": "#! line splitting > a quoted #! program splits as shlex splits, and runs",
+      "reason": "The quoted interpreter control requires /bin/echo.",
+      "systems": ["linux", "darwin"]
+    },
+    {
+      "file": "scripts/verify-examples.test.ts",
+      "name": "#! line splitting > an unbalanced #! quote fails as BASE's shlex raises",
+      "reason": "The quoted interpreter control requires /bin/echo.",
+      "systems": ["linux", "darwin"]
+    },
+    {
+      "file": "scripts/launch.test.ts",
+      "name": "positive controls > parity: an echo in the file reaches stdout and the full env reaches the harness",
+      "reason": "The BASE replay uses Python 3.11 or newer to read its configuration.",
+      "systems": ["linux", "darwin"]
+    },
+    {
+      "file": "scripts/launch.test.ts",
+      "name": "positive controls > parity: a printed NUL byte is file output, never a handed variable",
+      "reason": "The BASE replay uses Python 3.11 or newer to read its configuration.",
+      "systems": ["linux", "darwin"]
+    },
+    {
+      "file": "scripts/launch.test.ts",
+      "name": "positive controls > parity: exit 0 in the file exits 0 without launching",
+      "reason": "The BASE replay uses Python 3.11 or newer to read its configuration.",
+      "systems": ["linux", "darwin"]
+    },
+    {
+      "file": "scripts/launch.test.ts",
+      "name": "positive controls > parity: exec /usr/bin/true in the file exits 0 without launching",
+      "reason": "The BASE replay uses Python 3.11 or newer to read its configuration.",
+      "systems": ["linux", "darwin"]
+    },
+    {
+      "file": "scripts/launch.test.ts",
+      "name": "positive controls > parity: file output on stderr reaches the launch's stderr",
+      "reason": "The BASE replay uses Python 3.11 or newer to read its configuration.",
+      "systems": ["linux", "darwin"]
+    },
+    {
+      "file": "scripts/launch.test.ts",
+      "name": "positive controls > parity: a file that unsets everything hands on the emptied environment",
+      "reason": "The BASE replay uses Python 3.11 or newer to read its configuration.",
+      "systems": ["linux", "darwin"]
+    },
+    {
+      "file": "scripts/launch.test.ts",
+      "name": "positive controls > parity: a roughly 400 KB environment launches whole",
+      "reason": "The BASE replay uses Python 3.11 or newer to read its configuration.",
+      "systems": ["linux", "darwin"]
+    },
+    {
+      "file": "scripts/launch.test.ts",
+      "name": "positive controls > parity: a file that unsets PATH applies instead of ignored",
+      "reason": "The BASE replay uses Python 3.11 or newer to read its configuration.",
+      "systems": ["linux", "darwin"]
+    },
+    {
+      "file": "scripts/launch.test.ts",
+      "name": "positive controls > parity: a file that empties PATH applies instead of ignored",
+      "reason": "The BASE replay uses Python 3.11 or newer to read its configuration.",
+      "systems": ["linux", "darwin"]
+    },
+    {
+      "file": "scripts/launch.test.ts",
+      "name": "positive controls > a file that exports a variable hands it to the harness",
+      "reason": "The BASE replay uses Python 3.11 or newer to read its configuration.",
+      "systems": ["linux", "darwin"]
+    },
+    {
+      "file": "scripts/launch.test.ts",
+      "name": "positive controls > a file that unsets everything but PATH hands the harness no trace of it",
+      "reason": "The BASE replay uses Python 3.11 or newer to read its configuration.",
+      "systems": ["linux", "darwin"]
+    },
+    {
+      "file": "scripts/launch.test.ts",
+      "name": "positive controls > a harness name holding $(...) is refused as not on PATH on both sides, and runs nothing",
+      "reason": "The BASE replay uses Python 3.11 or newer to read its configuration.",
+      "systems": ["linux", "darwin"]
+    },
+    {
+      "file": "scripts/launch.test.ts",
+      "name": "positive controls > parity: without an env file the harness's full environment matches BASE, PWD naming the worktree",
+      "reason": "The BASE replay uses Python 3.11 or newer to read its configuration.",
+      "systems": ["linux", "darwin"]
+    },
+    {
+      "file": "scripts/launch.test.ts",
+      "name": "positive controls > parity: a prompt holding \\xff\\xfe and NUL reaches stdin byte for byte on both sides",
+      "reason": "The BASE replay uses Python 3.11 or newer to read its configuration.",
+      "systems": ["linux", "darwin"]
+    },
+    {
+      "file": "scripts/launch.test.ts",
+      "name": "positive controls > parity: a prompt holding \\xff\\xfe reaches argv byte for byte, trailing newlines stripped, on both sides",
+      "reason": "The BASE replay uses Python 3.11 or newer and raw invalid argv bytes need Linux /proc/self/cmdline.",
+      "systems": ["linux", "darwin"]
+    },
+    {
+      "file": "scripts/launch.test.ts",
+      "name": "positive controls > parity: with an env file the prompt still reaches argv byte for byte and the file applies",
+      "reason": "The BASE replay uses Python 3.11 or newer and raw invalid argv bytes need Linux /proc/self/cmdline.",
+      "systems": ["linux", "darwin"]
+    },
+    {
+      "file": "scripts/launch.test.ts",
+      "name": "positive controls > a resume's check and harness match main's PWD, OLDPWD and SHLVL",
+      "reason": "The BASE replay uses Python 3.11 or newer to read its configuration.",
+      "systems": ["linux", "darwin"]
+    },
+    {
+      "file": "scripts/launch.test.ts",
+      "name": "confinement battery: every AC2 and AC3 item unconfined and confined > the gate: confined",
+      "reason": "This control needs a working confinement mechanism, which macOS does not provide.",
+      "systems": ["linux", "darwin"]
+    },
+    {
+      "file": "scripts/launch.test.ts",
+      "name": "confinement battery: every AC2 and AC3 item unconfined and confined > a commit in its own worktree: confined",
+      "reason": "This control needs a working confinement mechanism, which macOS does not provide.",
+      "systems": ["linux", "darwin"]
+    },
+    {
+      "file": "scripts/launch.test.ts",
+      "name": "confinement battery: every AC2 and AC3 item unconfined and confined > a write outside its worktree: confined",
+      "reason": "This control needs a working confinement mechanism, which macOS does not provide.",
+      "systems": ["linux", "darwin"]
+    },
+    {
+      "file": "scripts/launch.test.ts",
+      "name": "confinement battery: every AC2 and AC3 item unconfined and confined > a network reach: unconfined",
+      "reason": "The BASE replay uses Python 3.11 or newer to read its configuration.",
+      "systems": ["linux", "darwin"]
+    },
+    {
+      "file": "scripts/launch.test.ts",
+      "name": "confinement battery: every AC2 and AC3 item unconfined and confined > a network reach: confined",
+      "reason": "The BASE replay needs Python 3.11 or newer and this control needs working confinement.",
+      "systems": ["linux", "darwin"]
+    },
+    {
+      "file": "scripts/launch.test.ts",
+      "name": "confinement battery: every AC2 and AC3 item unconfined and confined > a Unix socket connection: unconfined",
+      "reason": "The BASE replay uses Python 3.11 or newer to read its configuration.",
+      "systems": ["linux", "darwin"]
+    },
+    {
+      "file": "scripts/launch.test.ts",
+      "name": "confinement battery: every AC2 and AC3 item unconfined and confined > a Unix socket connection: confined",
+      "reason": "The BASE replay needs Python 3.11 or newer and this control needs working confinement.",
+      "systems": ["linux", "darwin"]
+    },
+    {
+      "file": "scripts/launch.test.ts",
+      "name": "confinement battery: every AC2 and AC3 item unconfined and confined > a consistent /proc: unconfined",
+      "reason": "This control reads Linux /proc and has no equivalent behavior on macOS.",
+      "systems": ["darwin"]
+    },
+    {
+      "file": "scripts/launch.test.ts",
+      "name": "confinement battery: every AC2 and AC3 item unconfined and confined > a consistent /proc: confined",
+      "reason": "This control reads Linux /proc and needs working confinement.",
+      "systems": ["linux", "darwin"]
+    },
+    {
+      "file": "scripts/launch.test.ts",
+      "name": "confinement battery: every AC2 and AC3 item unconfined and confined > a host device node: unconfined",
+      "reason": "This control inspects a Linux host device node that macOS does not provide.",
+      "systems": ["darwin"]
+    },
+    {
+      "file": "scripts/launch.test.ts",
+      "name": "confinement battery: every AC2 and AC3 item unconfined and confined > a host device node: confined",
+      "reason": "This control inspects a Linux host device node and needs working confinement.",
+      "systems": ["linux", "darwin"]
+    },
+    {
+      "file": "scripts/launch.test.ts",
+      "name": "confinement battery: every AC2 and AC3 item unconfined and confined > signalling a process started outside: confined",
+      "reason": "This control needs a working confinement mechanism, which macOS does not provide.",
+      "systems": ["linux", "darwin"]
+    },
+    {
+      "file": "scripts/launch.test.ts",
+      "name": "confinement battery: every AC2 and AC3 item unconfined and confined > signalling a process started outside: still running afterwards",
+      "reason": "This control needs a working confinement mechanism, which macOS does not provide.",
+      "systems": ["linux", "darwin"]
+    },
+    {
+      "file": "scripts/launch.test.ts",
+      "name": "confinement battery: every AC2 and AC3 item unconfined and confined > signalling a process the lane started: confined",
+      "reason": "This control needs a working confinement mechanism, which macOS does not provide.",
+      "systems": ["linux", "darwin"]
+    },
+    {
+      "file": "scripts/launch.test.ts",
+      "name": "confinement battery: every AC2 and AC3 item unconfined and confined > kill 0 from inside: unconfined",
+      "reason": "This control relies on Linux process-group signaling behavior.",
+      "systems": ["darwin"]
+    },
+    {
+      "file": "scripts/launch.test.ts",
+      "name": "confinement battery: every AC2 and AC3 item unconfined and confined > kill 0 from inside: confined",
+      "reason": "This control relies on Linux process-group signaling behavior and needs working confinement.",
+      "systems": ["linux", "darwin"]
+    },
+    {
+      "file": "scripts/launch.test.ts",
+      "name": "confinement wiring: form shows the wrap, fallback warns and logs > form with confine on stays bare on a system with no row",
+      "reason": "Linux and macOS both have a confinement row; this control applies only to unsupported systems.",
+      "systems": ["linux", "darwin"]
+    }
+  ]
+}

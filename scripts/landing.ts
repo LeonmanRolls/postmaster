@@ -29,6 +29,10 @@
 //       results` shows the gate passing at that head. Otherwise one fault line each for the
 //       head the worktree is not at, the default branch the ticket lacks, and the gate
 //       that is not passing.
+//   run landing pull-request-checks --repo <repo> --pr <pull-request> --card-head <sha>
+//       whether GitHub's current pull-request head matches the card and every reported check
+//       passes. Prints `pass`, `pending: ...`, `fail: ... <link>`, or `none` when no checks
+//       exist. A head mismatch is a failure, never a pass.
 //   run landing results <dispatch> <synthesis-wt>
 //       every recorded check's result at the worktree's HEAD, one `name: result` line each,
 //       as the cards carry them. This is the one place the vocabulary mapping lives:
@@ -67,7 +71,7 @@
 //       journey check failed with its report written: the postmaster weighs it like any
 //       other non-pass.
 //
-//   exit 0  already-landed, anything-to-land, results, card-block, card-open: the answer,
+//   exit 0  already-landed, anything-to-land, pull-request-checks, results, card-block, card-open: the answer,
 //           printed; card-results, card-findings: `match`; journey: `clear` or `judge`;
 //           fresh: `fresh`
 //   exit 1  usage; a resolving input that does not resolve (--default, --base,
@@ -375,7 +379,8 @@ const TOP_USAGE =
   "usage: run landing already-landed --repo <repo> --default <branch> --ticket <ref> --base <sha> " +
   "--card-head <sha> [--local-ticket <branch>] [--pr-merge <sha> --pr-head <sha>] | anything-to-land " +
   "--repo <repo> --default <branch> --ticket <ref> --base <sha> | fresh --repo <repo> --default <branch> " +
-  "--ticket <ref> --dispatch <dispatch> --wt <synthesis-wt> | results <dispatch> <synthesis-wt> | " +
+  "--ticket <ref> --dispatch <dispatch> --wt <synthesis-wt> | pull-request-checks --repo <repo> " +
+  "--pr <pull-request> --card-head <sha> | results <dispatch> <synthesis-wt> | " +
   "card-block <dispatch> <synthesis-wt> <checkpoint> | card-results <dispatch> <synthesis-wt> " +
   "<checkpoint> <card> | card-findings <dispatch> <synthesis-wt> <checkpoint> <card> | " +
   "card-open <checkpoint> | journey <dispatch> <synthesis-wt> <waybill>";
@@ -395,6 +400,106 @@ const CFINDINGS_USAGE =
   "usage: run landing card-findings <dispatch> <synthesis-wt> <checkpoint> <card>";
 const OPEN_USAGE = "usage: run landing card-open <checkpoint>";
 const JOURNEY_USAGE = "usage: run landing journey <dispatch> <synthesis-wt> <waybill>";
+const PR_CHECKS_USAGE =
+  "usage: run landing pull-request-checks --repo <repo> --pr <pull-request> --card-head <sha>";
+
+type PullRequestCheck = {
+  name?: unknown;
+  state?: unknown;
+  bucket?: unknown;
+  link?: unknown;
+};
+
+function pullRequestChecks(o: string[]): number {
+  if (
+    o.length !== 6 ||
+    o[0] !== "--repo" ||
+    o[2] !== "--pr" ||
+    o[4] !== "--card-head" ||
+    o[1] === "" ||
+    o[3] === "" ||
+    o[5] === ""
+  ) {
+    usage(PR_CHECKS_USAGE);
+  }
+  const repo = o[1]!;
+  const pr = o[3]!;
+  const cardHead = commitOf(repo, o[5]!, "--card-head");
+  const readPullRequestHead = (): string => {
+    const view = run("gh", ["pr", "view", pr, "--json", "headRefOid"], { cwd: repo });
+    if (view.code !== 0) die(`cannot read pull request head: ${pyTrim(view.err || view.out)}`);
+    try {
+      const head = (JSON.parse(view.out) as { headRefOid?: unknown }).headRefOid;
+      if (typeof head === "string" && head !== "") return head;
+    } catch {
+      // Use the same closed failure below for an absent or malformed head.
+    }
+    die("GitHub did not report a pull request head");
+  };
+  const printHeadMismatch = (head: string): void => {
+    console.log(`fail: pull request head ${head} does not match card ${cardHead} ${pr}`);
+  };
+  const initialHead = readPullRequestHead();
+  if (initialHead !== cardHead) {
+    printHeadMismatch(initialHead);
+    return 0;
+  }
+
+  const result = run("gh", ["pr", "checks", pr, "--json", "name,state,bucket,link"], {
+    cwd: repo,
+  });
+  if (![0, 1, 8].includes(result.code) || (result.code !== 0 && result.out.trim() === "")) {
+    die(`cannot read pull request checks: ${pyTrim(result.err || result.out)}`);
+  }
+  let checks: PullRequestCheck[];
+  try {
+    const parsed: unknown = result.out.trim() === "" ? [] : JSON.parse(result.out);
+    if (!Array.isArray(parsed)) throw new Error("not an array");
+    checks = parsed as PullRequestCheck[];
+  } catch {
+    die(
+      `cannot read pull request checks: ${pyTrim(result.err || "GitHub returned malformed JSON")}`,
+    );
+  }
+  const finalHead = readPullRequestHead();
+  if (finalHead !== cardHead) {
+    printHeadMismatch(finalHead);
+    return 0;
+  }
+  if (checks.length === 0) {
+    console.log("none");
+    return 0;
+  }
+
+  const bucketOf = (check: PullRequestCheck): "pass" | "pending" | "fail" => {
+    if (check.bucket === "pass") return "pass";
+    if (check.bucket === "pending") return "pending";
+    if (check.bucket === "fail") return "fail";
+    if (check.state === "SUCCESS") return "pass";
+    if (["PENDING", "QUEUED", "IN_PROGRESS", "WAITING", "REQUESTED"].includes(String(check.state)))
+      return "pending";
+    return "fail";
+  };
+  const failing = checks.find((check) => bucketOf(check) === "fail");
+  if (failing !== undefined) {
+    const name =
+      typeof failing.name === "string" && failing.name !== "" ? failing.name : "unnamed check";
+    const state = String(failing.state ?? failing.bucket ?? "did not pass");
+    const link = typeof failing.link === "string" && failing.link !== "" ? failing.link : pr;
+    console.log(`fail: ${name} (${state}) ${link}`);
+    return 0;
+  }
+  const pending = checks.filter((check) => bucketOf(check) === "pending");
+  if (pending.length > 0) {
+    const names = pending.map((check) =>
+      typeof check.name === "string" && check.name !== "" ? check.name : "unnamed check",
+    );
+    console.log(`pending: ${names.join(", ")}`);
+    return 0;
+  }
+  console.log("pass");
+  return 0;
+}
 
 function alreadyLanded(o: string[]): number {
   if (
@@ -625,6 +730,7 @@ function main(argv: string[]): number {
     if (mode === "already-landed") return alreadyLanded(argv.slice(1));
     if (mode === "anything-to-land") return anythingToLand(argv.slice(1));
     if (mode === "fresh") return fresh(argv.slice(1));
+    if (mode === "pull-request-checks") return pullRequestChecks(argv.slice(1));
     if (mode === "results") {
       if (argv.length !== 3) usage(RESULTS_USAGE);
       for (const [name, result] of recordedResults(argv[1]!, argv[2]!)) {

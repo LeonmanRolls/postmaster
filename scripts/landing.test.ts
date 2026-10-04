@@ -8,6 +8,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import {
   appendFileSync,
+  chmodSync,
   copyFileSync,
   mkdirSync,
   mkdtempSync,
@@ -22,6 +23,7 @@ import { findingState, isFindingShaped, pyRepr } from "./landing.ts";
 
 const SELF = join(import.meta.dir, "run");
 const HERE = import.meta.dir;
+const skipNonUtf8Filename = process.platform === "darwin";
 
 delete process.env.GIT_DIR;
 delete process.env.GIT_WORK_TREE;
@@ -1001,7 +1003,7 @@ describe("anything-to-land", () => {
     );
   });
 
-  test("AH4: a raw-byte path answers without a traceback", () => {
+  test.skipIf(skipNonUtf8Filename)("AH4: a raw-byte path answers without a traceback", () => {
     S.bp = join(tmp, "bp");
     mkrepo(S.bp);
     git(S.bp, "config", "core.quotePath", "false");
@@ -2076,5 +2078,119 @@ describe("pure pins", () => {
     expect(pyRepr("\x00")).toBe("'\\x00'");
     expect(pyRepr("\x7f")).toBe("'\\x7f'");
     expect(pyRepr("caf\u00e9")).toBe("'caf\u00e9'");
+  });
+});
+
+describe("pull-request checks", () => {
+  const pr = "https://github.com/example/postmaster/pull/1";
+
+  function askChecks(
+    label: string,
+    remoteHead: string | null,
+    checks: unknown[],
+    checksExit = 0,
+    headAfter: string | null = null,
+  ): { output: string; head: string } {
+    const repo = join(tmp, `pr-checks-${label}`);
+    mkrepo(repo);
+    commitFile(repo, "tracked.txt", "card", "card");
+    const head = sha(repo);
+    const bin = join(tmp, `pr-checks-bin-${label}`);
+    mkdirSync(bin, { recursive: true });
+    const gh = join(bin, "gh");
+    writeFileSync(
+      gh,
+      [
+        "#!/bin/sh",
+        'case "$2" in',
+        '  view) if [ -f "$GH_VIEW_MARK" ]; then printf \'{"headRefOid":"%s"}\\n\' "$GH_HEAD_AFTER"; else : > "$GH_VIEW_MARK"; printf \'{"headRefOid":"%s"}\\n\' "$GH_HEAD"; fi ;;',
+        '  checks) cat "$GH_CHECKS_FILE"; exit "$GH_CHECKS_EXIT" ;;',
+        '  *) echo "unexpected gh call: $*" >&2; exit 2 ;;',
+        "esac",
+        "",
+      ].join("\n"),
+    );
+    chmodSync(gh, 0o755);
+    const checksPath = join(tmp, `pr-checks-${label}.json`);
+    writeFileSync(checksPath, `${JSON.stringify(checks)}\n`);
+    const r = run(
+      join(HERE, "run"),
+      ["landing", "pull-request-checks", "--repo", repo, "--pr", pr, "--card-head", head],
+      {
+        env: {
+          ...process.env,
+          PATH: `${bin}:${process.env.PATH ?? ""}`,
+          GH_HEAD: remoteHead ?? head,
+          GH_HEAD_AFTER: headAfter ?? remoteHead ?? head,
+          GH_VIEW_MARK: join(tmp, `pr-checks-${label}.viewed`),
+          GH_CHECKS_FILE: checksPath,
+          GH_CHECKS_EXIT: String(checksExit),
+        },
+      },
+    );
+    expect(r.code).toBe(0);
+    return { output: r.out.trim(), head };
+  }
+
+  test("all checks passed on the card head", () => {
+    expect(
+      askChecks("pass", null, [
+        { name: "linux", state: "SUCCESS", bucket: "pass", link: "https://example.test/linux" },
+        { name: "macos", state: "SUCCESS", bucket: "pass", link: "https://example.test/macos" },
+      ]).output,
+    ).toBe("pass");
+  });
+
+  test("a running check remains pending", () => {
+    expect(
+      askChecks(
+        "pending",
+        null,
+        [
+          {
+            name: "macos",
+            state: "IN_PROGRESS",
+            bucket: "pending",
+            link: "https://example.test/macos",
+          },
+        ],
+        8,
+      ).output,
+    ).toBe("pending: macos");
+  });
+
+  test("a failed check names its job and link", () => {
+    expect(
+      askChecks(
+        "fail",
+        null,
+        [{ name: "macos", state: "FAILURE", bucket: "fail", link: "https://example.test/macos" }],
+        1,
+      ).output,
+    ).toBe("fail: macos (FAILURE) https://example.test/macos");
+  });
+
+  test("no reported checks answers none", () => {
+    expect(askChecks("none", null, [], 1).output).toBe("none");
+  });
+
+  test("checks for a different head never pass", () => {
+    const result = askChecks("head", "another-head", []);
+    expect(result.output).toBe(
+      `fail: pull request head another-head does not match card ${result.head} ${pr}`,
+    );
+  });
+
+  test("checks are refused when the pull request moves while they are read", () => {
+    const result = askChecks(
+      "head-race",
+      null,
+      [{ name: "linux", state: "SUCCESS", bucket: "pass", link: "https://example.test/linux" }],
+      0,
+      "another-head",
+    );
+    expect(result.output).toBe(
+      `fail: pull request head another-head does not match card ${result.head} ${pr}`,
+    );
   });
 });

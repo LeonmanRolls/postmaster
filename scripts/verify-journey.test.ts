@@ -26,12 +26,14 @@ import {
 const SELF = join(import.meta.dir, "run");
 const BASE_BLOB = "bb782a973e69427c820ce16a676718e87f51995b:scripts/verify-journey.sh";
 
-const hasPy = run("sh", ["-c", "command -v python3"]).code === 0;
+const hasPy =
+  run("python3", ["-c", "import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)"])
+    .code === 0;
 const baseShown = run("git", ["-C", toolRoot(import.meta), "show", BASE_BLOB]);
 const foldSkip = !hasPy || baseShown.code !== 0;
 if (foldSkip) {
   console.log(
-    `skip step matching folds as BASE's norm does: ${!hasPy ? "python3 not on PATH: the casefold step match was not compared" : "BASE could not be extracted here: the casefold step match was not compared"}`,
+    `skip step matching folds as BASE's norm does: ${!hasPy ? "Python 3.11 or newer is unavailable for BASE's tomllib parser" : "BASE could not be extracted here: the casefold step match was not compared"}`,
   );
 }
 const spacedDone = process.env.POSTMASTER_SPACED_DONE === "1";
@@ -387,6 +389,7 @@ describe("negative controls", () => {
       const spaced = join(tmp, "my dir", "scripts");
       cpSync(import.meta.dir, spaced, { recursive: true });
       cpSync(join(import.meta.dir, "..", "bunfig.toml"), join(spaced, "..", "bunfig.toml"));
+      cpSync(join(import.meta.dir, "..", "package.json"), join(spaced, "..", "package.json"));
       const r = run("bun", ["test", join(spaced, "verify-journey.test.ts")], {
         env: { ...process.env, POSTMASTER_SPACED_DONE: "1" },
       });

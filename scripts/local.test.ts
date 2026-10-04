@@ -15,6 +15,7 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
   statSync,
   symlinkSync,
@@ -82,14 +83,17 @@ let baseLocal = "";
     }
   }
 }
-const hasPy3 = run("sh", ["-c", "command -v python3"]).code === 0;
-const noBaseReplay = baseLocal === "" || !hasPy3;
+const hasPython311 =
+  run("python3", ["-c", "import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)"])
+    .code === 0;
+const noBaseReplay = baseLocal === "" || !hasPython311;
+const skipRawArgv = process.platform === "darwin";
 if (noBaseReplay) {
   console.log(
     `skip BASE local.sh strict-read replay: ${
       baseLocal === ""
         ? "BASE local.sh not found in history"
-        : "python3 not on PATH: the 0xff refusal was not compared against BASE"
+        : "Python 3.11 or newer is unavailable for the extracted BASE launcher"
     }`,
   );
 }
@@ -253,7 +257,7 @@ function restoreEnv(): void {
 
 beforeAll(() => {
   try {
-    temp = mkdtempSync(join(tmpdir(), "local-self-test-"));
+    temp = realpathSync(mkdtempSync(join(tmpdir(), "local-self-test-")));
     for (const key of envKeys) oldEnv.set(key, process.env[key]);
     mkdirSync(join(temp, "bin"), { recursive: true });
     mkdirSync(join(temp, "home", ".config"), { recursive: true });
@@ -760,31 +764,39 @@ describe("negative controls: nothing is written", () => {
     refused(1, "no ticket #99", repo, "comment", "99", "coachman", "hello");
   }, 30000);
 
-  test("a comment that is not UTF-8 exits 1", () => {
-    refusedRaw(
-      1,
-      "comment is not UTF-8",
-      repo,
-      "na\\357ve",
-      "comment",
-      "1",
-      "coachman",
-      "<RAW-BYTES>",
-    );
-  }, 30000);
+  test.skipIf(skipRawArgv)(
+    "a comment that is not UTF-8 exits 1",
+    () => {
+      refusedRaw(
+        1,
+        "comment is not UTF-8",
+        repo,
+        "na\\357ve",
+        "comment",
+        "1",
+        "coachman",
+        "<RAW-BYTES>",
+      );
+    },
+    30000,
+  );
 
-  test("an actor that is not UTF-8 exits 1", () => {
-    refusedRaw(
-      1,
-      "actor is not UTF-8",
-      repo,
-      "r\\351viewer",
-      "comment",
-      "1",
-      "<RAW-BYTES>",
-      "hello",
-    );
-  }, 30000);
+  test.skipIf(skipRawArgv)(
+    "an actor that is not UTF-8 exits 1",
+    () => {
+      refusedRaw(
+        1,
+        "actor is not UTF-8",
+        repo,
+        "r\\351viewer",
+        "comment",
+        "1",
+        "<RAW-BYTES>",
+        "hello",
+      );
+    },
+    30000,
+  );
 
   test("create with an empty body exits 1", () => {
     refused(1, "is empty", repo, "create", "A title", emptyPath);
@@ -798,9 +810,13 @@ describe("negative controls: nothing is written", () => {
     refused(1, "more than one line", repo, "create", "Two\nlines", bodyPath);
   }, 30000);
 
-  test("create with a title that is not UTF-8 exits 1", () => {
-    refusedRaw(1, "title is not UTF-8", repo, "caf\\351", "create", "<RAW-BYTES>", bodyPath);
-  }, 30000);
+  test.skipIf(skipRawArgv)(
+    "create with a title that is not UTF-8 exits 1",
+    () => {
+      refusedRaw(1, "title is not UTF-8", repo, "caf\\351", "create", "<RAW-BYTES>", bodyPath);
+    },
+    30000,
+  );
 
   test("title with an empty title exits 1", () => {
     refused(1, "title is empty", repo, "title", "1", " ");
@@ -810,9 +826,13 @@ describe("negative controls: nothing is written", () => {
     refused(1, "more than one line", repo, "title", "1", "Two\nlines");
   }, 30000);
 
-  test("title that is not UTF-8 exits 1", () => {
-    refusedRaw(1, "title is not UTF-8", repo, "\\377", "title", "1", "<RAW-BYTES>");
-  }, 30000);
+  test.skipIf(skipRawArgv)(
+    "title that is not UTF-8 exits 1",
+    () => {
+      refusedRaw(1, "title is not UTF-8", repo, "\\377", "title", "1", "<RAW-BYTES>");
+    },
+    30000,
+  );
 
   test("title on an unknown ticket exits 1", () => {
     refused(1, "no ticket #99", repo, "title", "99", "A title");

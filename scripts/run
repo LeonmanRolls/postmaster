@@ -16,7 +16,7 @@ case "$name" in
     ;;
 esac
 
-scripts_dir=$(dirname "$0")
+scripts_dir=$(cd -- "$(dirname -- "$0")" && pwd -P)
 script=$scripts_dir/$name.ts
 if [ ! -f "$script" ]; then
   script=$scripts_dir/lib/$name.ts

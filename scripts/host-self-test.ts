@@ -20,7 +20,7 @@ import {
 import { basename, dirname, join, resolve } from "node:path";
 import { scriptsDir } from "./lib/paths.ts";
 import { processCommandLine, processInfo, processStart, processState } from "./lib/processes.ts";
-import { pyWords } from "./lib/text.ts";
+import { bootId, bootTime } from "./host.ts";
 
 const HERE = scriptsDir(import.meta);
 const SELF = join(HERE, "run");
@@ -833,6 +833,8 @@ async function makeHarness(
     "ps",
     "sysctl",
     "getconf",
+    "python3",
+    "setsid",
     "chmod",
     "ln",
     "cp",
@@ -1521,7 +1523,12 @@ export async function runControls(): Promise<number> {
       [
         "#!/usr/bin/env bash",
         "trap 'echo term >> \"$TREE/term\"; exit 0' TERM",
-        'setsid sleep 120 & echo $! > "$TREE/escapee.pid"',
+        // Record the escaped sleep's pid, not the background shell that starts setsid.
+        "if command -v setsid >/dev/null 2>&1; then",
+        "  setsid sh -c 'echo $$ > \"$TREE/escapee.pid\"; exec sleep 120'",
+        "else",
+        '  python3 -c \'import os; os.setsid(); os.execlp("sh", "sh", "-c", "echo $$ > \\"$TREE/escapee.pid\\"; exec sleep 120")\'',
+        "fi &",
         'sh -c \'trap "" TERM; while :; do sleep 1; done\' & echo $! > "$TREE/deaf.pid"',
         "sleep 120 & wait",
         "",
@@ -1553,12 +1560,19 @@ export async function runControls(): Promise<number> {
       await sleep(100);
     const outsider = spawn("sleep", ["60"], { cwd: sol, detached: true, stdio: "ignore" });
     outsider.unref();
+    const escapee = readFileSync(join(root, "tree/escapee.pid"), "utf8").trim();
+    let escapeeRanBeforeStop = false;
+    for (let i = 0; i < 50 && !escapeeRanBeforeStop; i++) {
+      escapeeRanBeforeStop = processState(Number(escapee)) === "live";
+      if (!escapeeRanBeforeStop) await sleep(100);
+    }
     const termStop = execHost(["stop", join(f.repo, ".worktrees/T-1-luna")], noHost, root, {
       POSTMASTER_HOST_STOP_WAIT: "2",
     });
     const alive = (pid: string) => processState(Number(pid)) === "live";
-    const escapee = readFileSync(join(root, "tree/escapee.pid"), "utf8").trim();
     const deaf = readFileSync(join(root, "tree/deaf.pid"), "utf8").trim();
+    const outsiderState = outsider.pid ? processState(outsider.pid) : "no pid";
+    const escapeeState = processState(Number(escapee));
     await pass(
       "the launch got TERM first, and a child deaf to it is killed after the wait",
       () =>
@@ -1569,7 +1583,12 @@ export async function runControls(): Promise<number> {
     );
     await pass(
       "a process that works in the worktree but that no launch started is left alone",
-      () => !!outsider.pid && alive(String(outsider.pid)) && !alive(escapee),
+      () =>
+        escapeeRanBeforeStop &&
+        !!outsider.pid &&
+        outsiderState === "live" &&
+        escapeeState !== "live",
+      `escapee before stop=${escapeeRanBeforeStop}, escapee after stop=${escapeeState}, outsider pid=${outsider.pid ?? "none"}, outsider after stop=${outsiderState}`,
     );
     try {
       if (outsider.pid) process.kill(outsider.pid, "SIGKILL");
@@ -1579,13 +1598,8 @@ export async function runControls(): Promise<number> {
     console.log("stop: registry identity and process membership");
     const launchDir = join(root, "state", "launches");
     mkdirSync(launchDir, { recursive: true });
-    const boot = readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim();
-    const bootLine =
-      readFileSync("/proc/stat", "utf8")
-        .split("\n")
-        .find((line: string) => line.startsWith("btime ")) ?? "btime 0";
-    // ASCII: /proc/stat is kernel-emitted ASCII; btime's fields split on spaces.
-    const bootSeconds = Number(bootLine.split(/\s+/u)[1]);
+    const boot = bootId();
+    const bootSeconds = bootTime() ?? 0;
     const ticks = Number(exec("getconf", ["CLK_TCK"]).out.trim()) || 100;
     const procStart = (pid: string): string => processStart(Number(pid)) ?? "";
     const startedSeconds = (pid: string) => {
@@ -4223,7 +4237,7 @@ export async function runControls(): Promise<number> {
         '    printf \'{"session_id":"thread-chatter"}\\n\'',
         "    printf '429 rate limit exceeded\\n' >&2",
         "    python3 -c 'import os",
-        'for fd in os.listdir("/proc/self/fd"):',
+        'for fd in os.listdir("/dev/fd"):',
         "    try: n = int(fd)",
         "    except ValueError: continue",
         "    if n > 2:",

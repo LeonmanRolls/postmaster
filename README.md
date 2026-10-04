@@ -179,8 +179,7 @@ launch appears in its worktree's space under the project's, or tmux. With neithe
 in the background and the flow still works (`skills/postmaster/hosts.md`). Bun 1.4.2 or newer, which
 runs the TypeScript scripts and reads the config, and Node and npm, which the fixture flow
 needs to run its gate.
-Python 3.11 or newer, which the bash scripts use to read the config, and for discovering a
-JavaScript project's gate.
+Linux and macOS are supported. Apple silicon Macs are tested; Intel Macs are not tested.
 
 ## Installing the skills
 

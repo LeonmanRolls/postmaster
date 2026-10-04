@@ -506,7 +506,7 @@ type Registry = {
 function runBoot(...args: string[]): string {
   return run(args[0]!, args.slice(1), { env: { LC_ALL: "C" } }).out.trim();
 }
-function bootId(): string {
+export function bootId(): string {
   try {
     return readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim();
   } catch {
@@ -514,7 +514,7 @@ function bootId(): string {
     return runBoot("sysctl", "-n", "kern.boottime").split(/\s+/u).join(" ");
   }
 }
-function bootTime(): number | null {
+export function bootTime(): number | null {
   try {
     const text = readFileSync("/proc/stat", "utf8");
     const line = text.split("\n").find((row: string) => row.startsWith("btime "));
@@ -4900,14 +4900,16 @@ async function main(): Promise<void> {
       );
   }
 }
-main().catch((error: unknown) => {
-  if (isHostError(error)) {
-    if (error.message) console.error(`host: ${error.message}`);
-    process.exit(hostCode(error));
-  }
-  console.error(`host: ${String((error as Error)?.message ?? error)}`);
-  process.exit(1);
-});
+if (import.meta.main) {
+  main().catch((error: unknown) => {
+    if (isHostError(error)) {
+      if (error.message) console.error(`host: ${error.message}`);
+      process.exit(hostCode(error));
+    }
+    console.error(`host: ${String((error as Error)?.message ?? error)}`);
+    process.exit(1);
+  });
+}
 function tmuxCloseWindow(window: string, pane: string): number {
   if (pane) return tmuxFinishPlacement(window, pane);
   // A window from before panes were recorded: a lone pane is the host's own

@@ -13,10 +13,15 @@ import { controlOf, kindsOf } from "./log-action";
 
 const SELF = join(import.meta.dir, "run");
 const TOOL = toolRoot(import.meta);
-const noIconv = spawnSync("bash", ["-c", "command -v iconv"], { encoding: "utf8" }).status !== 0;
+const skipRawArgv = process.platform === "darwin";
+const noIconv =
+  process.platform !== "linux" ||
+  spawnSync("bash", ["-c", "command -v iconv"], { encoding: "utf8" }).status !== 0;
 if (noIconv) {
   console.log(
-    "skip the decoder matches iconv -c on 300 seeded cases: no iconv here; BASE skips it too",
+    process.platform === "darwin"
+      ? "skip the decoder matches iconv -c on 300 seeded cases: macOS iconv is not glibc iconv"
+      : "skip the decoder matches iconv -c on 300 seeded cases: iconv is unavailable",
   );
 }
 
@@ -518,19 +523,27 @@ describe("positive controls", () => {
     ).toBe(true);
   }, 30000);
 
-  test("a line separator and a byte that is not UTF-8 are written", () => {
-    const before = lines();
-    const r = rawDetail("one\\342\\200\\250two \\377 three", "postmaster", "note", "RUN-1");
-    expect(r.code).toBe(0);
-    expect(lines()).toBe(before + 1);
-  }, 30000);
+  test.skipIf(skipRawArgv)(
+    "a line separator and a byte that is not UTF-8 are written",
+    () => {
+      const before = lines();
+      const r = rawDetail("one\\342\\200\\250two \\377 three", "postmaster", "note", "RUN-1");
+      expect(r.code).toBe(0);
+      expect(lines()).toBe(before + 1);
+    },
+    30000,
+  );
 
-  test("the separator escaped and the byte dropped", () => {
-    const r = rawDetail("one\\342\\200\\250two \\377 three", "postmaster", "note", "RUN-1");
-    expect(r.code).toBe(0);
-    const last = lastLine();
-    expect(last !== null && last.detail === "one\u2028two  three").toBe(true);
-  }, 30000);
+  test.skipIf(skipRawArgv)(
+    "the separator escaped and the byte dropped",
+    () => {
+      const r = rawDetail("one\\342\\200\\250two \\377 three", "postmaster", "note", "RUN-1");
+      expect(r.code).toBe(0);
+      const last = lastLine();
+      expect(last !== null && last.detail === "one\u2028two  three").toBe(true);
+    },
+    30000,
+  );
 
   test("a literal U+FFFD is a legitimate character and is kept", () => {
     const before = lines();
@@ -546,19 +559,27 @@ describe("positive controls", () => {
     expect(last !== null && last.detail === "one\u2028two \uFFFD three").toBe(true);
   }, 30000);
 
-  test("a mixed bad byte and literal U+FFFD are written", () => {
-    const before = lines();
-    const r = mixedRawWrite();
-    expect(r.code).toBe(0);
-    expect(lines()).toBe(before + 1);
-  }, 30000);
+  test.skipIf(skipRawArgv)(
+    "a mixed bad byte and literal U+FFFD are written",
+    () => {
+      const before = lines();
+      const r = mixedRawWrite();
+      expect(r.code).toBe(0);
+      expect(lines()).toBe(before + 1);
+    },
+    30000,
+  );
 
-  test("the damage dropped and the legitimate character kept", () => {
-    const r = mixedRawWrite();
-    expect(r.code).toBe(0);
-    const last = lastLine();
-    expect(last !== null && last.detail === "xy keep \uFFFDhere").toBe(true);
-  }, 30000);
+  test.skipIf(skipRawArgv)(
+    "the damage dropped and the legitimate character kept",
+    () => {
+      const r = mixedRawWrite();
+      expect(r.code).toBe(0);
+      const last = lastLine();
+      expect(last !== null && last.detail === "xy keep \uFFFDhere").toBe(true);
+    },
+    30000,
+  );
 
   test("the decoder drops damage and keeps valid edges", () => {
     const edges: Array<[number[], string]> = [

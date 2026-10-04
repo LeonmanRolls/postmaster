@@ -596,9 +596,18 @@ missed.
      (`gh pr create` on a GitHub project). Include the card, final checks, diff stat,
      preview and review links, and thread ids. Log a `note` with the push and
      pull-request URL, and leave a dated tracker comment linking the pull request and
-     summarizing the same evidence, logging `ticket-comment`. Put the pull-request URL and its
+     summarizing the same evidence, logging `ticket-comment`. Before saying it is ready to
+     merge or writing merge instructions, ask the pull request's checks at the card's HEAD:
+     `<tool>/scripts/run landing pull-request-checks --repo <repo> --pr <pull-request-url>
+     --card-head <the card's final HEAD>`. On `pass` or `none`, put the pull-request URL and
      merge instructions in `.waiting-on-user`; the user merges it in the project's review
-     surface and says so, and that word is the answer step 3 waits on.
+     surface and says so, and that word is the answer step 3 waits on. On `pending`, write
+     that checks are still pending to `.waiting-on-user`, do not say it is ready or provide
+     merge instructions, and wait; at the next look, ask the same question again. On
+     `fail: <name> (<state>) <link>` or a reported head that differs from the card, remove
+     `.card-ready` and `.leg-<n>-done` for the manifest's current leg `<n>`, then resume
+     that last leg on the same branch with the exact `fail:` line as the discrepancy and
+     wait for its corrected card.
      Do not use `MERGE_AUTHORITY` to merge a pull request on the user's behalf.
    - For `landing: local`, obey `MERGE_AUTHORITY`. With `user`, put the card and
      verification in front of the user, write the requested merge word to `.waiting-on-user`,

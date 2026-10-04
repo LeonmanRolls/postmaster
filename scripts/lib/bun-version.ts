@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 type Version = readonly [number, number, number];
 
 function parseVersion(value: string): Version | null {
-  const match = /^(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/u.exec(value);
+  const match = /^([0-9]+)\.([0-9]+)\.([0-9]+)(?:[-+].*)?$/u.exec(value);
   if (match === null) return null;
   const version = [Number(match[1]), Number(match[2]), Number(match[3])] as const;
   return version.every(Number.isSafeInteger) ? version : null;
@@ -24,7 +24,7 @@ export function versionAtLeast(found: string, minimum: string): boolean {
 export function minimumBunVersion(manifestText: string): string {
   const manifest = JSON.parse(manifestText) as { engines?: { bun?: unknown } };
   const engine = manifest.engines?.bun;
-  const match = typeof engine === "string" ? /^>=(\d+\.\d+\.\d+)$/u.exec(engine) : null;
+  const match = typeof engine === "string" ? /^>=([0-9]+[.][0-9]+[.][0-9]+)$/u.exec(engine) : null;
   if (match === null || parseVersion(match[1]!) === null) {
     throw new Error("package.json engines.bun must be a >=major.minor.patch range");
   }

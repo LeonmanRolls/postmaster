@@ -442,6 +442,7 @@ describe("negative controls", () => {
       const spaced = join(tmp, "my dir", "scripts");
       cpSync(import.meta.dir, spaced, { recursive: true });
       cpSync(join(import.meta.dir, "..", "bunfig.toml"), join(spaced, "..", "bunfig.toml"));
+      cpSync(join(import.meta.dir, "..", "package.json"), join(spaced, "..", "package.json"));
       const r = run("bun", ["test", join(spaced, "verify-examples.test.ts")], {
         env: { ...process.env, POSTMASTER_SPACED_DONE: "1" },
       });

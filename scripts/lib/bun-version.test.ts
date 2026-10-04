@@ -8,7 +8,9 @@ import {
   minimumBunVersion,
   toolPackageJson,
   versionAtLeast,
-} from "./lib/bun-version.ts";
+} from "./bun-version.ts";
+
+const scriptsDir = join(import.meta.dir, "..");
 
 describe("Bun minimum", () => {
   test("compares numeric major, minor and patch components", () => {
@@ -34,17 +36,20 @@ describe("Bun minimum", () => {
     const lib = join(scripts, "lib");
     try {
       mkdirSync(lib, { recursive: true });
-      writeFileSync(join(scripts, "run"), readFileSync(join(import.meta.dir, "run"), "utf8"));
+      writeFileSync(join(scripts, "run"), readFileSync(join(scriptsDir, "run"), "utf8"));
       chmodSync(join(scripts, "run"), 0o755);
       writeFileSync(
         join(scripts, "check-bun-version.ts"),
-        readFileSync(join(import.meta.dir, "check-bun-version.ts"), "utf8"),
+        readFileSync(join(scriptsDir, "check-bun-version.ts"), "utf8"),
       );
       writeFileSync(
         join(lib, "bun-version.ts"),
-        readFileSync(join(import.meta.dir, "lib", "bun-version.ts"), "utf8"),
+        readFileSync(join(import.meta.dir, "bun-version.ts"), "utf8"),
       );
-      writeFileSync(join(scripts, "not-supported.ts"), 'import { missingExport } from "node:fs";\n');
+      writeFileSync(
+        join(scripts, "not-supported.ts"),
+        'import { missingExport } from "node:fs";\n',
+      );
       writeFileSync(join(root, "package.json"), '{"engines":{"bun":">=999.0.0"}}\n');
       writeFileSync(join(root, "bunfig.toml"), "");
 

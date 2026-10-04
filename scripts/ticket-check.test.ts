@@ -163,11 +163,17 @@ const addTurnpike = (row: string, dir: string): void => {
   writeFileSync(join(dir, "turnpikes.ts"), out);
 };
 
+const copyRunGuard = (dir: string): void => {
+  copyFileSync(join(HERE, "check-bun-version.ts"), join(dir, "check-bun-version.ts"));
+  copyFileSync(join(HERE, "lib", "bun-version.ts"), join(dir, "lib", "bun-version.ts"));
+};
+
 beforeAll(() => {
   tmp = mkdtempSync(join(tmpdir(), "postmaster-"));
   if (run("git", ["init", "-q", tmp]).code !== 0) throw new Error("git init failed");
 
   copyFileSync(join(toolRoot(import.meta), "bunfig.toml"), join(tmp, "bunfig.toml"));
+  copyFileSync(join(toolRoot(import.meta), "package.json"), join(tmp, "package.json"));
 
   const listR = run(join(HERE, "run"), ["turnpikes", "--list"]);
   if (listR.code !== 0) throw new Error("test setup: turnpikes.sh --list failed");
@@ -198,9 +204,10 @@ beforeAll(() => {
   copyFileSync(join(HERE, "project-settings.ts"), join(tmp, "bin", "project-settings.ts"));
   copyFileSync(join(HERE, "tracker-kind.ts"), join(tmp, "bin", "tracker-kind.ts"));
   mkdirSync(join(tmp, "bin", "lib"), { recursive: true });
-  for (const f of ["paths.ts", "proc.ts", "data.ts", "text.ts"]) {
+  for (const f of ["paths.ts", "proc.ts", "data.ts", "text.ts", "bun-version.ts"]) {
     copyFileSync(join(HERE, "lib", f), join(tmp, "bin", "lib", f));
   }
+  copyRunGuard(join(tmp, "bin"));
   for (const name of ["github", "local"]) {
     writeFileSync(
       join(tmp, "bin", `${name}.ts`),
@@ -231,9 +238,10 @@ beforeAll(() => {
     copyFileSync(SELF, join(tmp, d, "run"));
     copyFileSync(join(HERE, "ticket-check.ts"), join(tmp, d, "ticket-check.ts"));
     mkdirSync(join(tmp, d, "lib"), { recursive: true });
-    for (const f of ["paths.ts", "proc.ts", "data.ts", "text.ts"]) {
+    for (const f of ["paths.ts", "proc.ts", "data.ts", "text.ts", "bun-version.ts"]) {
       copyFileSync(join(HERE, "lib", f), join(tmp, d, "lib", f));
     }
+    copyRunGuard(join(tmp, d));
   }
   addTurnpike(`${NOPE}  -        ship    a check the table does not have yet`, join(tmp, "added"));
   addTurnpike("none       -        review  nothing", join(tmp, "broken"));
@@ -242,9 +250,10 @@ beforeAll(() => {
   copyFileSync(SELF, join(tmp, "silent", "run"));
   copyFileSync(join(HERE, "ticket-check.ts"), join(tmp, "silent", "ticket-check.ts"));
   mkdirSync(join(tmp, "silent", "lib"), { recursive: true });
-  for (const f of ["paths.ts", "proc.ts", "data.ts", "text.ts"]) {
+  for (const f of ["paths.ts", "proc.ts", "data.ts", "text.ts", "bun-version.ts"]) {
     copyFileSync(join(HERE, "lib", f), join(tmp, "silent", "lib", f));
   }
+  copyRunGuard(join(tmp, "silent"));
   writeFileSync(join(tmp, "silent", "turnpikes.ts"), "process.exit(2);\n");
 
   writeFileSync(join(tmp, "other.toml"), '[tracker]\nkind = "other"\nname = "notes"\n');

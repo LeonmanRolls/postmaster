@@ -9,7 +9,7 @@
 // ticket holding waybill-like headers keeps every line in the brief.
 import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -28,7 +28,7 @@ interface Scratch {
 }
 
 function scratch(): Scratch {
-  const tmp = mkdtempSync(join(tmpdir(), "spec-session-test-"));
+  const tmp = realpathSync(mkdtempSync(join(tmpdir(), "spec-session-test-")));
   const root = join(tmp, "project");
   const d = join(root, ".postmaster", "runs", "RUN-1");
   const synth = join(root, ".worktrees", "RUN-1");
