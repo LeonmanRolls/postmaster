@@ -32,11 +32,11 @@ function scriptFiles(directory: string): string[] {
 function processProbeViolations(source: string): string[] {
   const checks: Array<[string, RegExp]> = [
     ["pid stat", /\/proc\/(?:\$\{[^}]+\}|[0-9]+)\/stat/u],
-    ["proc listing", /\b(?:readdirSync|readdir)\s*\(\s*["'`]\/proc["'`]/u],
+    ["proc listing", /(?:^|[^A-Za-z0-9_$])(?:readdirSync|readdir)[ \t]*\([ \t]*["'`]\/proc["'`]/u],
     ["other pid command line", /\/proc\/(?:\$\{[^}]+\}|[0-9]+)\/cmdline/u],
-    ["ps invocation", /\b(?:run|spawn|spawnSync)\s*\(\s*["'`]ps["'`]/u],
-    ["ps shell command", /\bps\s+-[A-Za-z]/u],
-    ["kill liveness probe", /process\.kill\s*\([^,]+,\s*0\s*\)/u],
+    ["ps invocation", /(?:^|[^A-Za-z0-9_$])(?:run|spawn|spawnSync)[ \t]*\([ \t]*["'`]ps["'`]/u],
+    ["ps shell command", /(?:^|[^A-Za-z0-9_$])ps[ \t]+-[A-Za-z]/u],
+    ["kill liveness probe", /process\.kill[ \t]*\([^,]+,[ \t]*0[ \t]*\)/u],
   ];
   return checks.filter(([, pattern]) => pattern.test(source)).map(([name]) => name);
 }
@@ -87,7 +87,7 @@ describe("portable process state", () => {
         const zombieState = withProcRoot(root, () => processState(childPid));
         expect(liveState).toBe("live");
         expect(liveStart).not.toBeNull();
-        expect(liveStart!.split(/\s+/u).length).toBe(forced ? 5 : 1);
+        expect(liveStart!.split(/[ \t]+/u).length).toBe(forced ? 5 : 1);
         expect(zombieState).toBe("zombie");
         if (forced) {
           const info = withProcRoot(root, () => processInfo(parent.pid));
@@ -96,7 +96,7 @@ describe("portable process state", () => {
           expect(info?.group).toBeGreaterThan(0);
           expect(info?.session).toBeGreaterThan(0);
           expect(tableRow?.pid).toBe(parent.pid);
-          expect(tableRow?.start.split(/\s+/u).length).toBe(5);
+          expect(tableRow?.start.split(/[ \t]+/u).length).toBe(5);
         }
       } finally {
         parent.kill("SIGKILL");

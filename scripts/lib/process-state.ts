@@ -52,7 +52,7 @@ function canSignal(pid: number): boolean {
 
 function psState(pid: number): ProcessState | null {
   const result = run("ps", ["-o", "stat=", "-p", String(pid)], { env: { LC_ALL: "C" } });
-  const state = result.out.trim().split(/\s+/u)[0];
+  const state = result.out.trim().split(" ")[0];
   if (state) return state.startsWith("Z") ? "zombie" : "live";
   return result.code === 0 ? null : "absent";
 }
@@ -74,7 +74,10 @@ export function processStart(pid: number): string | null {
   const stat = readProcStat(pid);
   if (stat) return stat.fields[19] || null;
   const result = run("ps", ["-o", "lstart=", "-p", String(pid)], { env: { LC_ALL: "C" } });
-  const words = result.out.trim().split(/\s+/u).filter(Boolean);
+  const words = result.out
+    .trim()
+    .split(/[ \t]+/u)
+    .filter(Boolean);
   return words.length === 5 ? words.join(" ") : null;
 }
 
@@ -96,7 +99,7 @@ function psProcessInfo(pid: number): ProcessInfo | null {
   const result = run("ps", ["-o", "pid=,ppid=,pgid=,sid=,stat=,lstart=,comm=", "-p", String(pid)], {
     env: { LC_ALL: "C" },
   });
-  const fields = result.out.trim().split(/\s+/u);
+  const fields = result.out.trim().split(/[ \t]+/u);
   if (fields.length < 11 || !fields.slice(0, 4).every((field) => /^[0-9]+$/u.test(field)))
     return null;
   return {
@@ -136,7 +139,7 @@ export function processTable(): Map<number, ProcessInfo> {
     env: { LC_ALL: "C" },
   });
   for (const line of result.out.split(/\r?\n/u)) {
-    const fields = line.trim().split(/\s+/u, 11);
+    const fields = line.trim().split(/[ \t]+/u, 11);
     if (fields.length !== 11 || !fields.slice(0, 4).every((field) => /^[0-9]+$/u.test(field)))
       continue;
     table.set(Number(fields[0]), {

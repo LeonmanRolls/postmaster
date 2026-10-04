@@ -447,7 +447,7 @@ export function score(dispatch: string, repo: string): { code: number; out: stri
 
 function platformLine(): string {
   const git = run("git", ["--version"]);
-  const version = /^git version\s+(.+)$/mu.exec(git.out.trim())?.[1] ?? git.out.trim();
+  const version = /^git version +(.+)$/mu.exec(git.out.trim())?.[1] ?? git.out.trim();
   return `platform: ${osType()} ${release()} ${machine()}, bun ${Bun.version}, git ${version}`;
 }
 

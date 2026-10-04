@@ -331,7 +331,11 @@ function expectScore(key: string, failing: string, failText?: string): void {
   expect(rc).toBe(failing === "none" ? 0 : 2);
   expect(failingChecks).toBe(failing);
   expect(lines).toBe(9);
-  expect(out.split("\n", 1)[0]).toMatch(/^platform: (Darwin|Linux) .+ bun \S+, git \S+$/u);
+  expect(
+    out
+      .split("\n", 1)[0]
+      ?.startsWith(`platform: ${osType()} ${release()} ${machine()}, bun ${Bun.version}, git `),
+  ).toBe(true);
   if (failText !== undefined) {
     expect(
       out
@@ -874,7 +878,7 @@ describe("score: a recorded run that meets every check scores clean", () => {
     const result = bgResults.get(`clean-${first}`);
     const git = run("git", ["--version"])
       .out.trim()
-      .replace(/^git version\s+/u, "");
+      .replace(/^git version +/u, "");
     expect(result?.out.split("\n", 1)[0]).toBe(
       `platform: ${osType()} ${release()} ${machine()}, bun ${Bun.version}, git ${git}`,
     );

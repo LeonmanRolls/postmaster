@@ -1594,7 +1594,9 @@ export async function runControls(): Promise<number> {
     const procStart = (pid: string): string => processStart(Number(pid)) ?? "";
     const startedSeconds = (pid: string) => {
       const start = procStart(pid);
-      return /^\d+$/u.test(start) ? bootSeconds + Number(start) / ticks : Date.parse(start) / 1000;
+      return /^[0-9]+$/u.test(start)
+        ? bootSeconds + Number(start) / ticks
+        : Date.parse(start) / 1000;
     };
     const record = (pid: string) => join(launchDir, pid);
     const stale = spawn("sleep", ["60"], { detached: true, stdio: "ignore" });

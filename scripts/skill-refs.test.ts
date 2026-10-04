@@ -152,11 +152,11 @@ function blocksFrom(markdown: string): Array<{ indent: number; source: string }>
   const lines = markdown.split("\n");
   const blocks: Array<{ indent: number; source: string }> = [];
   for (let i = 0; i < lines.length; i++) {
-    const open = /^([ \t]*)```sh\s*$/u.exec(lines[i] ?? "");
+    const open = /^([ \t]*)```sh[ \t]*$/u.exec(lines[i] ?? "");
     if (!open) continue;
     const indent = open[1]!.length;
     const body: string[] = [];
-    for (i++; i < lines.length && !/^[ \t]*```\s*$/u.test(lines[i] ?? ""); i++) {
+    for (i++; i < lines.length && !/^[ \t]*```[ \t]*$/u.test(lines[i] ?? ""); i++) {
       const line = lines[i] ?? "";
       body.push(line.startsWith(" ".repeat(indent)) ? line.slice(indent) : line);
     }
@@ -188,7 +188,7 @@ function filled(source: string, root: string, tool: string): string {
   ];
   let out = source;
   for (const [placeholder, value] of replacements) out = out.replaceAll(placeholder, value);
-  out = out.replace(/\s+\[(--[^\]]+)\]/gu, "");
+  out = out.replace(/[ \t]+\[(--[^\]]+)\]/gu, "");
   return out.replace(/<[^>\n]+>/gu, "value");
 }
 
