@@ -44,11 +44,13 @@ The eight fixes:
 ## Checks
 
 `/home/brindlewick/.postmaster/tool-pins/40d50ce0cac2952e98c434cb1b705e5f29082045/scripts/verify.sh run .`
-printed (see `.postmaster/verify/verify-run.txt`).
+printed (see `.postmaster/verify/verify-run.txt`):
 
-- **gate** (`bun run check`): exit 0 after formatting and ASCII markers.
-  The full suite: 2745 pass, 1 fail (`probe-confine.test.ts`'s bwrap path
-  test, which pre-exists this change).
+- **gate** (`bun run check`): exit 1. The full suite: 2745 pass, 1 fail —
+  `probe-confine.test.ts`'s bwrap path test, which fails on this machine
+  before this change (verified by running it on a clean tree). The 13 hidden
+  tests inside the fixture app's `remove` ticket fail as expected: the ticket
+  is to implement the feature. Every test this change added or touched passes.
 - **coachman-contract** (`scripts/coachman-contract.sh --self-test`): exit 0.
 
 Other commands run:
