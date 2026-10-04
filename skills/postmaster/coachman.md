@@ -1174,7 +1174,10 @@ Set the stage first: `<tool>/scripts/run stage <dispatch> shipping`.
    state; lane outcomes — none in single-thread mode, which has no lanes; in synthesis mode,
    every walled lane carrying its `<tool>/scripts/run walls show
    <dispatch>` line — `lane: DEGRADED, provider wall: "<the provider's message>"` — and the
-   review link. Finding titles and notes, where the reader
+   review link. **Each of those is its own `##` section** — the card-block's three, then
+   `## Turnpikes`, `## Style residue`, `## Branches`, `## Lane outcomes`, `## QA and browser
+   suite` (`none` where the project has none) and `## Review link`, with `## Cost` last —
+   the same heading set in both modes. Finding titles and notes, where the reader
    wants them, go in prose outside the pasted block, which carries only ids and severities.
    The card's branch state is before merge: the
    ticket branch is ready, and every other branch is either retained or abandoned. The gate is

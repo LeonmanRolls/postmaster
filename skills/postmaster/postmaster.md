@@ -662,7 +662,9 @@ missed.
    and log `teardown`. Remove any surviving workhorse worktrees the same way after preserving
    stray files in `<dispatch>/stray/`. Keep the run-created branches as the local archive.
 4. Close the run with `<tool>/scripts/run stage <dispatch> done postmaster`. This appends stage
-   timings from `actions.jsonl`; never write timings by hand. Never delete the dispatch or
+   timings from `actions.jsonl`; never write timings by hand. `run stage` writes the only
+   `stage` line each stage ever has: a closure detail after it goes in a `note` line, never a
+   second `stage` line for a stage the run has already entered. Never delete the dispatch or
    manifest.
 5. Put tool faults and style-sort proposals to the user once aftercare ends, as Legacy Stage G
    steps 4 and 5 describe, then dispatch the next ticket.
