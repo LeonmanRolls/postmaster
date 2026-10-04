@@ -307,7 +307,7 @@ A workhorse commits incrementally as it goes, never pushes, never reads other br
 ## Stage 0 (leg 1): bootstrap
 
 1. **Read the waybill.** It names the ticket, the project profile (gate command, docs to read
-   first, tracker, the project's own risk surfaces), the team (workhorses, reviewers, the coachman),
+   first, tracker, the project's own risk surfaces), the mode, the team (workhorses, reviewers, the coachman),
    `CHECKPOINT_MODE`, `MERGE_AUTHORITY`, and the turnpikes the run passes through (`turnpikes:`,
    under its title).
 2. **Base pre-flight.** The waybill's BASE is authoritative. The main checkout must be on the
@@ -315,7 +315,7 @@ A workhorse commits incrementally as it goes, never pushes, never reads other br
    (`<tool>/scripts/run check-target <repo>` exits 0). On either failing, stop and escalate rather than
    cut worktrees from a base that is not the one the postmaster dispatched, or that would
    silently drop uncommitted work.
-3. **Check the ticket's premises before any workhorse starts.** Run
+3. **Check the ticket's premises before implementation starts.** Run
    `<tool>/scripts/run premises <repo> <dispatch>/brief.md <BASE>` and record its output with
    `<tool>/scripts/run log-action <dispatch> coachman premises <verified-commit> "base=<BASE>"
    "result=<result>"`.
@@ -330,20 +330,24 @@ A workhorse commits incrementally as it goes, never pushes, never reads other br
    `grep -qxF '.worktrees/' <repo>/.git/info/exclude || echo '.worktrees/' >> <repo>/.git/info/exclude`.
 5. **Check the run's directories exist** (`mkdir -p <dispatch>/logs <dispatch>/audit
    <dispatch>/render` is idempotent) and that the synthesis worktree the postmaster cut is at
-   BASE and is your cwd; then cut one workhorse worktree per workhorse from BASE, and arm each
-   with the run's checks: `<tool>/scripts/run verify arm <workhorse-wt> <dispatch>`.
+   BASE and is your cwd. Arm it with the run's checks:
+   `<tool>/scripts/run verify arm <synthesis-wt> <dispatch>`. In synthesis mode, also cut one
+   workhorse worktree per workhorse from BASE and arm each with the same command using its
+   `<workhorse-wt>`. In single-thread mode, cut no other worktree.
 6. **Update the manifest** the postmaster created: set the stage with `<tool>/scripts/run stage
-   <dispatch> bootstrapped`, and add one `lanes` entry per lane, in place, never rewriting the
-   file (the postmaster owns `leg`, `base` and `coachman`). Keep thread ids and outcomes current
-   at every transition. The stage changes only through `<tool>/scripts/run stage`, in this order:
-   `bootstrapped`, `workhorses-running`, `synthesis`, `checkpoint-1`, `review` (in a
-   run with a review leg), `shipping`, `shipped`; the last leg carries the run to `shipping` with the ship
+   <dispatch> bootstrapped`. In synthesis mode, add one `lanes` entry per workhorse, in place;
+   in single-thread mode leave `lanes` empty. Never rewrite the file (the postmaster owns `leg`,
+   `base` and `coachman`). Keep thread ids and outcomes current
+   at every transition. The stage changes only through `<tool>/scripts/run stage`. Synthesis
+   mode enters `bootstrapped`, `workhorses-running`, `synthesis`, `checkpoint-1`, `review` (in a
+   run with a review leg), `shipping`, `shipped`; single-thread enters `bootstrapped`, `synthesis`,
+   `checkpoint-1`, then the same review and shipping stages. The last leg carries the run to `shipping` with the ship
    card, and the postmaster sets `shipped` after the merge and `done` when it closes the run. Each
    change is logged, and the run's timings are computed from those lines by
    `<tool>/scripts/run run-times <dispatch>`.
    Never delete the manifest. It is the run's history, and
    the postmaster's poll reads it.
-7. **Write each workhorse's brief** to `<dispatch>/<lane>-prompt.txt`: the ticket verbatim, the
+7. **In synthesis mode, write each workhorse's brief** to `<dispatch>/<lane>-prompt.txt`: the ticket verbatim, the
    project profile, the docs to read first named explicitly, the `WORKHORSE-SUMMARY.md` /
    `WORKHORSE-BLOCKED.md` contract, and the line that the ready ticket is the run's contract,
    the autonomous-defaults rule (decide within-brief questions
@@ -372,7 +376,17 @@ A workhorse commits incrementally as it goes, never pushes, never reads other br
 
 ## Stage 1 (leg 1): implement, then synthesize
 
-**Every workhorse starts only after the ticket's premises are checked.** Launch each workhorse
+Use the synthesis path below only when `run.json.mode` is `synthesis`; use the single-thread
+path after it when the mode is `single-thread`. In either mode, acceptance tests exercise the
+feature at the boundary where a person or calling code uses it: run the browser journey for a
+web app, call a library's public interface, or use the named command, file or output for a CLI.
+Do not import implementation modules for acceptance tests; unit tests belong beside the code.
+If an acceptance test changes after its first commit, make that a separate commit touching only
+acceptance tests, with the reason in the commit message. If a ticket check cannot pass as written
+or contradicts the ticket, escalate to the postmaster naming that check; do not change or waive
+the check on your own.
+
+**Synthesis mode: every workhorse starts only after the ticket's premises are checked.** Launch each workhorse
 to implement the ready ticket, in blinkers, through the host script and the launch script so no
 form is ever copied by hand. The launch carries the ticket in its brief and the instruction to
 finish with `WORKHORSE-SUMMARY.md`. The form is
@@ -404,14 +418,14 @@ from it.
   implementation begins, after the premise check.
 - **While the workhorses run, write the acceptance tests, blind.** Before you read any lane's diff
   or log beyond its thread id, turn the ticket's `### Checks` into tests at the ticket's own
-  interface: the route, flag, file, or visible behaviour the check names, never a function shape,
+  interface: the command, route, flag, file, or visible behaviour the check names, never a function shape,
   which is what the lanes were dispatched to choose. Commit
   them on the ticket branch before any synthesis code. They are the run's only oracle no lane
   wrote, and they stay that only if they are finished before you open a diff. At harvest,
   cherry-pick that commit onto a scratch of each lane and run it: the result ranks
   the lanes on the ticket's criteria before you have read a line of either. Where the ticket's
-  design question IS the interface, do not write them, say so on the checkpoint 1 card, and
-  compose on reading alone. Your reading of the ticket is a single reading: in a run with a
+  design question is the interface the lanes must choose, do not write tests yet; say so on the
+  checkpoint 1 card and compose on reading alone. Your reading of the ticket is a single reading: in a run with a
   review leg, the reviewers see these tests with the synthesis and may challenge them like any
   other line.
 - **Harvest.** Each lane's final message is the last result line of its events stream
@@ -540,7 +554,7 @@ from it.
   **Record it in one greppable line in `run-log.md`:**
 
   ```
-  SYNTHESIS: ranked=<lane>,<lane> took=<lane>:<what>;<lane>:<what> rejected=<lane>:<what> basis=<short phrase> oracle=<lane>:pass|fail,<lane>:pass|fail | none
+  SYNTHESIS: mode=synthesis ranked=<lane>,<lane> took=<lane>:<what>;<lane>:<what> rejected=<lane>:<what> basis=<short phrase> oracle=<lane>:pass|fail,<lane>:pass|fail | none
   ```
 
   `took=` must name a contribution from every lane that produced work, or say explicitly why a
@@ -604,6 +618,45 @@ from it.
   the ruling arrives as a resume, follow the same branch. The checkpoint card is informational
   and never replaces the ship card.
 
+## Single-thread path (Stage 1)
+
+The coachman implements directly in the synthesis worktree on the ticket branch. Do not cut a
+workhorse worktree, write a workhorse brief, start a lane, add a `lanes` entry, or create a
+workhorse event stream. The manifest's `lanes` remains empty. After recording the premises,
+enter `synthesis` directly from `bootstrapped` and log the resolved mode with the implementation
+action; do not enter `workhorses-running`.
+
+1. **Settle the interface, then write the acceptance tests.** Read the ticket's `### Checks` and
+   the project profile. If the ticket leaves the interface as a design question, decide the
+   interface first, record the decision, then write tests at that boundary. For a CLI, run the
+   command and check what it prints or stores; for a web app, use a browser journey; for a
+   library, call its public interface. Do not import a module from the implementation. Run the
+   acceptance tests against BASE and confirm they fail for the expected missing behavior.
+   Commit only those test files, before changing any implementation or other file. This is the
+   branch's first commit. Record its commit and the failing baseline in `run-log.md`.
+2. **Implement on the same branch.** Build and run every check in the ticket's `### Checks`,
+   then run `<tool>/scripts/run verify run <synthesis-wt> <dispatch>`. Fix failures and repeat
+   the build, ticket checks and run verification until every ticket check and recorded run check
+   passes. `run verify run` records each check as a `verify` action. Do not depart from a ticket
+   check without the postmaster's ruling. If a check cannot pass as written or contradicts the
+   ticket, write `ESCALATION.md` naming it, touch `.escalation-ready`, and stop for the ruling.
+   If implementation is stuck, record the failing check and what blocks it for the checkpoint
+   and ship card. Commit implementation changes incrementally. Any later acceptance-test change
+   is a separate test-only commit with its reason in the message, then the loop runs again.
+3. **Record the implementation.** Log one `synthesize` action. In `run-log.md`, write a
+   greppable line such as
+   `SYNTHESIS: mode=single-thread ranked=none took=coachman:implemented rejected=none basis=ticket checks oracle=pass`.
+   `oracle=pass` means the acceptance tests pass on the final branch; include the test commit,
+   baseline result, final check results and any unresolved check in the detail. There are no lane
+   rankings, shares, workhorse audits or workhorse outcomes. Do not put the mode in a review
+   brief; the review brief names the diff and findings without explaining who implemented it.
+4. **Checkpoint and hand off.** Write `checkpoint-1.md` with the acceptance-test commit and
+   baseline, the interface decision if one was needed, the implementation commits, the final
+   results of every ticket check and run check, the `SYNTHESIS` line, and any unresolved check.
+   Set `checkpoint-1` and follow the same autonomous or consult hand-off path as synthesis mode.
+   When this is the last leg, continue to the existing Stage 3 card instructions. The card lists
+   `Mode: single-thread` and says that there were no workhorse lanes.
+
 ## Stage 2 (leg 2): review, every lens in one loop
 
 One loop, in one leg. The lenses are the turnpikes `<tool>/scripts/run turnpikes legs <dispatch>` lists
@@ -621,7 +674,7 @@ Set the stage first, `<tool>/scripts/run stage <dispatch> review`, then:
 1. **Prepare each open lens from its entry below.** The style brief and security brief,
    `review-<lens>-brief.md` in the dispatch dir, carry their diff scope (synthesis worktree,
    `git diff <BASE>...HEAD`); the project profile plus the lens's specific pointers from it;
-   findings already known (the hand-off's deferred findings, workhorse divergences) so
+   findings already known (the hand-off's deferred findings and implementation divergences) so
    reviewers hunt residues and new holes; and their output contract: a proposed severity,
    file:line, quoted code as evidence, confidence, and for security an exploit path. The
    coachman chooses the verified severity after checking each finding and records it on its
@@ -1027,7 +1080,7 @@ Set the stage first: `<tool>/scripts/run stage <dispatch> shipping`.
    count as
    `<tool>/scripts/run style-findings count <dispatch>` prints it, then every Style residue from
    `<tool>/scripts/run style-findings list <dispatch>`; every branch created by the run and its
-   state; lane outcomes, every walled lane carrying its `<tool>/scripts/run walls show
+   state; `Mode: <mode>` from `run.json`; lane outcomes in synthesis mode, every walled lane carrying its `<tool>/scripts/run walls show
    <dispatch>` line — `lane: DEGRADED, provider wall: "<the provider's message>"` — and the
    review link. Finding titles and notes, where the reader
    wants them, go in prose outside the pasted block, which carries only ids and severities.

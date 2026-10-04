@@ -85,6 +85,7 @@ function record(
   t: string,
   shipped: "reference" | "app" | "broken",
   legs = 2,
+  mode: "synthesis" | "single-thread" = "synthesis",
 ): number {
   const repo = join(tmp, name, "repo");
   const d = join(tmp, name, "repo", ".postmaster", "runs", "7");
@@ -95,6 +96,33 @@ function record(
   mkdirSync(join(d, "render"), { recursive: true });
   const base = run("git", ["-C", repo, "rev-parse", "HEAD"]).out.trim();
   if (run("git", ["-C", repo, "checkout", "-q", "-b", "7"]).code !== 0) return 1;
+  const acceptanceAsset = join(TICKETS, t, "acceptance.cli.test.ts");
+  let hasAcceptance = false;
+  if (existsSync(acceptanceAsset) && (shipped === "reference" || shipped === "broken")) {
+    const acceptancePath = join(repo, "test", "acceptance.cli.test.ts");
+    cpSync(acceptanceAsset, acceptancePath);
+    if (
+      run("git", ["-C", repo, "add", "test/acceptance.cli.test.ts"]).code !== 0 ||
+      run("git", ["-C", repo, "commit", "-q", "-m", "Test remove through CLI"]).code !== 0
+    )
+      return 1;
+    const baseline = run(process.execPath, ["test", "test/acceptance.cli.test.ts"], {
+      cwd: repo,
+      timeout: 120000,
+    });
+    const baselineOutput = `${baseline.out}${baseline.err}`;
+    if (
+      baseline.code === 0 ||
+      !baselineOutput.includes("Expected: 0") ||
+      !baselineOutput.includes("Received: 2")
+    )
+      return 1;
+    writeFileSync(
+      join(d, "acceptance-baseline.txt"),
+      `command: ${process.execPath} test test/acceptance.cli.test.ts\n${baselineOutput}exit: ${baseline.code}\n`,
+    );
+    hasAcceptance = true;
+  }
   const patchPath = join(TICKETS, t, "reference.patch");
   if (shipped === "reference" || shipped === "broken") {
     if (run("git", ["-C", repo, "apply", patchPath]).code !== 0) return 1;
@@ -111,6 +139,17 @@ function record(
     0
   )
     return 1;
+  if (hasAcceptance && shipped === "reference") {
+    const final = run(process.execPath, ["test", "test/acceptance.cli.test.ts"], {
+      cwd: repo,
+      timeout: 120000,
+    });
+    writeFileSync(
+      join(d, "acceptance-final.txt"),
+      `command: ${process.execPath} test test/acceptance.cli.test.ts\n${final.out}${final.err}exit: ${final.code}\n`,
+    );
+    if (final.code !== 0) return 1;
+  }
   if (run("git", ["-C", repo, "checkout", "-q", "main"]).code !== 0) return 1;
   if (run("git", ["-C", repo, "merge", "-q", "--no-ff", "-m", "Merge branch 7", "7"]).code !== 0)
     return 1;
@@ -124,9 +163,13 @@ function record(
     join(d, "brief.md"),
     `# Waybill: 7\n${turnpikes}\n\n## Ticket\n\n${ticketBody(t)}\n## Project profile\nrepo: ${repo}\n`,
   );
-  run(join(HERE, "run"), ["run-meta", d, repo]);
-  const recordedConfig = JSON.parse(readFileSync(join(d, "run.json"), "utf8")).config;
-  const workhorses = (recordedConfig.team.workhorses ?? [])
+  const runMetaArgs = ["run-meta", d, repo];
+  if (mode === "single-thread") runMetaArgs.push("--mode", mode);
+  run(join(HERE, "run"), runMetaArgs);
+  const runRecord = JSON.parse(readFileSync(join(d, "run.json"), "utf8"));
+  const recordedConfig = runRecord.config;
+  const configuredWorkhorses = (recordedConfig.team.workhorses ?? []) as string[];
+  const workhorses = (mode === "single-thread" ? [] : configuredWorkhorses)
     .map((name: string) => {
       const lane = recordedConfig.lanes[name];
       return `${name}=${lane.harness}/${lane.model}/${lane.effort ?? ""}`;
@@ -136,8 +179,14 @@ function record(
   const efforts = run(join(HERE, "run"), ["run-meta", "efforts", d]).out.trim();
   writeFileSync(
     join(d, "brief.md"),
-    `${readFileSync(join(d, "brief.md"), "utf8")}\n## Team\nworkhorses: ${workhorses}\ncoachman: ${coachman.harness}/${coachman.model}/${coachman.effort ?? ""}\n${efforts}\n`,
+    `${readFileSync(join(d, "brief.md"), "utf8")}\n## Team\nmode: ${mode}\nworkhorses: ${workhorses}\ncoachman: ${coachman.harness}/${coachman.model}/${coachman.effort ?? ""}\n${efforts}\n`,
   );
+  const manifestBeforeStages = JSON.parse(readFileSync(join(d, "manifest.json"), "utf8"));
+  manifestBeforeStages.lanes = Object.fromEntries(
+    (mode === "single-thread" ? [] : configuredWorkhorses).map((lane) => [lane, { outcome: "harvested" }]),
+  );
+  writeFileSync(join(d, "manifest.json"), `${JSON.stringify(manifestBeforeStages)}\n`);
+  run(join(HERE, "run"), ["log-action", d, "coachman", "note", "mode", `mode=${mode}`]);
   if (legs === 3) {
     const runJson = JSON.parse(readFileSync(join(d, "run.json"), "utf-8"));
     delete runJson.coachman_contract;
@@ -157,7 +206,11 @@ function record(
   )
     return 1;
   for (const lane of recordedConfig.team.workhorses as string[]) {
+    if (mode === "synthesis") {
+      run("git", ["-C", repo, "branch", `wb/7-${lane}`, "7"]);
+    }
     if (
+      mode === "synthesis" &&
       run("bash", [join(HERE, "run"), "log-action", d, "coachman", "dispatch", lane, "workhorse"])
         .code !== 0
     )
@@ -168,7 +221,8 @@ function record(
   // Leg 1 enters every stage through checkpoint-1; each later leg its own slice of the rest;
   // the postmaster closes. A current run's shipped is the postmaster's; a pre-change ship leg
   // sets its own, as the runbooks have it.
-  const walked = legs === 1 ? stageList.filter((s) => s !== "review") : stageList;
+  let walked = legs === 1 ? stageList.filter((s) => s !== "review") : stageList;
+  if (mode === "single-thread") walked = walked.filter((s) => s !== "workhorses-running");
   const cpIdx = walked.indexOf("checkpoint-1");
   const through1 = cpIdx < 0 ? [...walked] : walked.slice(0, cpIdx + 1);
   const rest = cpIdx < 0 ? [] : walked.slice(cpIdx + 1);
@@ -203,7 +257,10 @@ function record(
   for (const s of postStages) {
     run(join(HERE, "run"), ["stage", d, s, "postmaster"]);
   }
-  writeFileSync(join(d, "card.md"), "# Ship card: 7\n\nBranch 7 is merged into main.\n");
+  writeFileSync(
+    join(d, "card.md"),
+    `# Ship card: 7\n\nMode: ${mode}\n\nBranch 7 is merged into main.\n`,
+  );
   const manifest = JSON.parse(readFileSync(join(d, "manifest.json"), "utf-8"));
   manifest.leg = legs;
   manifest.coachman.legs = {};
@@ -290,6 +347,68 @@ function breaks(cleanDir: string, repo: string): void {
       score(join(tmp, `break-${b}`, "repo", ".postmaster", "runs", "7"), repo),
     );
   }
+  const noWorkhorseDispatch = brokenCopy("break-mode-synthesis-dispatch", cleanDir);
+  const actionFile = join(noWorkhorseDispatch, "actions.jsonl");
+  const actions = readFileSync(actionFile, "utf8")
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as Record<string, unknown>)
+    .filter((event) => !(event.actor === "coachman" && event.action === "dispatch"));
+  writeFileSync(actionFile, `${actions.map((event) => JSON.stringify(event)).join("\n")}\n`);
+  background("break-mode-synthesis-dispatch", () =>
+    score(noWorkhorseDispatch, repo),
+  );
+}
+
+function copyFixtureProject(name: string, sourceRepo: string): { repo: string; dispatch: string } {
+  const root = join(tmp, name);
+  const repo = join(root, "repo");
+  mkdirSync(root, { recursive: true });
+  cpSync(sourceRepo, repo, { recursive: true });
+  return { repo, dispatch: join(repo, ".postmaster", "runs", "7") };
+}
+
+function modeBreaks(): void {
+  const singleRepo = join(tmp, "clean-single", "repo");
+  const singleDispatch = join(singleRepo, ".postmaster", "runs", "7");
+
+  const started = copyFixtureProject("break-mode-single-dispatch", singleRepo);
+  run(join(HERE, "run"), [
+    "log-action",
+    started.dispatch,
+    "coachman",
+    "dispatch",
+    "one",
+    "workhorse",
+  ]);
+  background("break-mode-single-dispatch", () => score(started.dispatch, started.repo));
+
+  const branched = copyFixtureProject("break-mode-single-branch", singleRepo);
+  run("git", ["-C", branched.repo, "branch", "wb/7-extra", "7"]);
+  background("break-mode-single-branch", () => score(branched.dispatch, branched.repo));
+
+  const extraStage = copyFixtureProject("break-mode-single-stage", singleRepo);
+  run(join(HERE, "run"), [
+    "log-action",
+    extraStage.dispatch,
+    "coachman",
+    "stage",
+    "workhorses-running",
+    "negative control",
+  ]);
+  background("break-mode-single-stage", () => score(extraStage.dispatch, extraStage.repo));
+
+  const missingStage = copyFixtureProject("break-mode-synthesis-stage", join(tmp, `clean-${first}`, "repo"));
+  const stageFile = join(missingStage.dispatch, "actions.jsonl");
+  const kept = readFileSync(stageFile, "utf8")
+    .split("\n")
+    .filter(Boolean)
+    .filter((line) => {
+      const event = JSON.parse(line) as Record<string, unknown>;
+      return !(event.actor === "coachman" && event.action === "stage" && event.target === "workhorses-running");
+    });
+  writeFileSync(stageFile, `${kept.join("\n")}\n`);
+  background("break-mode-synthesis-stage", () => score(missingStage.dispatch, missingStage.repo));
 }
 
 function recorded(
@@ -297,8 +416,9 @@ function recorded(
   t: string,
   shipped: "reference" | "app" | "broken",
   legs = 2,
+  mode: "synthesis" | "single-thread" = "synthesis",
 ): number | { code: number; out: string } {
-  const rc = record(name, t, shipped, legs);
+  const rc = record(name, t, shipped, legs, mode);
   if (rc !== 0) {
     console.log(`the record could not be built for ${name}`);
     return 1;
@@ -352,7 +472,7 @@ function expectScore(key: string, failing: string, failText?: string): void {
   const lines = out.split("\n").filter((l) => l.trim()).length;
   expect(rc).toBe(failing === "none" ? 0 : 2);
   expect(failingChecks).toBe(failing);
-  expect(lines).toBe(10);
+  expect(lines).toBe(11);
   expect(
     out
       .split("\n", 1)[0]
@@ -485,6 +605,8 @@ beforeAll(() => {
   }
   background("clean-one", () => recorded("clean-one", first, "reference", 1));
   background("clean-three", () => recorded("clean-three", first, "reference", 3));
+  background("clean-single", () => recorded("clean-single", first, "reference", 2, "single-thread"));
+  modeBreaks();
   background("break-hidden", () => recorded("break-hidden", first, "app"));
   background("break-gate", () => recorded("break-gate", first, "broken"));
 
@@ -873,6 +995,54 @@ describe("score: a recorded run that meets every check scores clean", () => {
   test("a three-leg run dispatched before this change scores clean", () => {
     expectScore("clean-three", "none");
   }, 30000);
+  test("a single-thread run scores clean and its hidden suite reports no lane", () => {
+    expectScore("clean-single", "none");
+    const output = bgResults.get("clean-single")?.out ?? "";
+    const hidden = output.split("\n").find((line) => line.includes("hidden-tests")) ?? "";
+    expect(hidden).toContain("on main");
+    expect(hidden).not.toContain("; one:");
+    expect(hidden).not.toContain("; two:");
+  }, 30000);
+
+  test("single-thread commits the blind CLI acceptance test first, red at base and green at head", () => {
+    const repo = join(tmp, "clean-single", "repo");
+    const dispatch = join(repo, ".postmaster", "runs", "7");
+    const manifest = JSON.parse(readFileSync(join(dispatch, "manifest.json"), "utf8")) as {
+      base: string;
+    };
+    const commits = run("git", ["-C", repo, "log", "--reverse", "--format=%H", `${manifest.base}..7`]);
+    expect(commits.code).toBe(0);
+    const firstCommit = commits.out.trim().split("\n")[0] ?? "";
+    const firstFiles = run("git", ["-C", repo, "diff-tree", "--no-commit-id", "--name-only", "-r", firstCommit]);
+    expect(firstFiles.out.trim().split("\n")).toEqual(["test/acceptance.cli.test.ts"]);
+
+    const baseline = readFileSync(join(dispatch, "acceptance-baseline.txt"), "utf8");
+    const final = readFileSync(join(dispatch, "acceptance-final.txt"), "utf8");
+    expect(baseline).toContain("Expected: 0");
+    expect(baseline).toContain("Received: 2");
+    expect(final).toContain("1 pass");
+    expect(final).toContain("exit: 0");
+    console.log(
+      `blind acceptance first commit:\n${run("git", ["-C", repo, "log", "--reverse", "--format=%H %s", "--name-only", `${manifest.base}..7`]).out.trimEnd()}\nBASE test:\n${baseline.trimEnd()}\nbranch test:\n${final.trimEnd()}`,
+    );
+  }, 30000);
+
+  test("both fixture modes exercise the CLI acceptance test without importing src", () => {
+    const synthesisRepo = join(tmp, `clean-${first}`, "repo");
+    const synthesisDispatch = join(synthesisRepo, ".postmaster", "runs", "7");
+    const singleDispatch = join(tmp, "clean-single", "repo", ".postmaster", "runs", "7");
+    for (const dispatch of [synthesisDispatch, singleDispatch]) {
+      const transcript = readFileSync(join(dispatch, "acceptance-final.txt"), "utf8");
+      expect(transcript).toContain("exit: 0");
+      expect(transcript).toContain("removed 2");
+    }
+    const acceptance = readFileSync(join(TICKETS, first, "acceptance.cli.test.ts"), "utf8");
+    expect(acceptance).not.toMatch(/from ["'][^"']*src\//u);
+    expect(acceptance).toContain("src/cli.ts");
+    console.log(
+      `command: Bun test test/acceptance.cli.test.ts, in synthesis and single-thread fixture repos\n${readFileSync(join(synthesisDispatch, "acceptance-final.txt"), "utf8").trimEnd()}\n${readFileSync(join(singleDispatch, "acceptance-final.txt"), "utf8").trimEnd()}`,
+    );
+  }, 30000);
 
   test("fixture score passes without jq on PATH and still requires npm", () => {
     const repo = join(tmp, `clean-${first}`, "repo");
@@ -882,7 +1052,7 @@ describe("score: a recorded run that meets every check scores clean", () => {
     const clean = runScore(dispatch, repo, { ...process.env, PATH: path });
     expect(clean.code).toBe(0);
     const lines = clean.out.trim().split("\n");
-    expect(lines).toHaveLength(10);
+    expect(lines).toHaveLength(11);
     expect(lines.slice(1).every((line) => line.startsWith("ok  "))).toBe(true);
     console.log(`score without jq:\n${clean.out.trimEnd()}`);
 
@@ -914,7 +1084,7 @@ describe("score: a recorded run that meets every check scores clean", () => {
     const out = bgResults.get("break-gate")?.out ?? "";
     const cleanOut = bgResults.get(`clean-${first}`)?.out ?? "";
     expect(out.split("\n", 1)[0]).toBe(cleanOut.split("\n", 1)[0]);
-    expect(out.split("\n")).toHaveLength(11);
+    expect(out.split("\n")).toHaveLength(12);
     console.log(`failing score:\n${out.trimEnd()}`);
   });
 
@@ -1054,6 +1224,24 @@ describe("score: negative controls, the same record with one check broken at a t
   }, 30000);
   test("a waybill with mismatched efforts: efforts alone fails", () => {
     expectScore("break-efforts", "efforts", "efforts:");
+  }, 30000);
+});
+
+describe("score: mode-specific dispatch and stage controls", () => {
+  test("single-thread rejects a workhorse dispatch", () => {
+    expectScore("break-mode-single-dispatch", "mode", "single-thread expected workhorses none");
+  }, 30000);
+  test("single-thread rejects a workhorse branch", () => {
+    expectScore("break-mode-single-branch", "mode", "single-thread expected workhorses none");
+  }, 30000);
+  test("synthesis rejects missing workhorse dispatches", () => {
+    expectScore("break-mode-synthesis-dispatch", "mode", "synthesis expected workhorses");
+  }, 30000);
+  test("single-thread skips workhorses-running", () => {
+    expectScore("break-mode-single-stage", "stages");
+  }, 30000);
+  test("synthesis requires workhorses-running", () => {
+    expectScore("break-mode-synthesis-stage", "stages");
   }, 30000);
 });
 

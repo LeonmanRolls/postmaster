@@ -301,6 +301,7 @@ risk surfaces: <what the project binds, allowlists, spawns, serves; from its doc
 checks: <as `run verify record` printed them: each check's name, where it came from, its command and what it shows>
 
 ## Team
+mode: <synthesis | single-thread>
 workhorses: <lane>=<harness>/<model>/<effort>, <lane>=…
 reviewers: <lane>, <lane>
 bug reviewers: <lane>, <lane>             (always; only the chosen bug reviewers whose harness has a code-review form, which is the bug lens's whole team)

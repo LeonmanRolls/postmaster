@@ -2,12 +2,14 @@
 // postmaster commit it was dispatched from. Written once and never edited: the manifest is the
 // run's current state, this is what the run started from and the checkout it runs on.
 //
-//   run run-meta <dispatch> <repo>   <repo> is the target project's checkout; also cuts the pin
+//   run run-meta <dispatch> <repo> [--mode synthesis|single-thread]
+//                                    <repo> is the target project's checkout; also cuts the pin
 //   run run-meta pin <repo> <commit> a shared checkout of <repo> at <commit> under $POSTMASTER_TOOL_PINS
 //   run run-meta path <dispatch>     print the canonical path of the run's tool checkout
 //   run run-meta check <dispatch>    the run's checkout still serves its dispatch commit
 //   run run-meta release <dispatch>  remove the pin when no claimed run is in flight
 //   run run-meta efforts <dispatch>  print the waybill's efforts line from run.json
+//   run run-meta mode <dispatch>     print the resolved mode, its source and setting
 //   run run-meta run-pinned <dispatch> <name> [args...]  run a script from the run's pinned checkout
 //
 // Records when it was written; the run and project; the target repo's HEAD and branch; the
@@ -91,7 +93,20 @@ const TOOL = toolRoot(import.meta);
 const SCRIPT = import.meta.path;
 
 const USAGE =
-  "usage: run run-meta <dispatch> <repo> | pin <repo> <commit> | path <dispatch> | run-pinned <dispatch> <name> [args...] | check <dispatch> | release <dispatch> | efforts <dispatch>";
+  "usage: run run-meta <dispatch> <repo> [--mode synthesis|single-thread] | pin <repo> <commit> | path <dispatch> | run-pinned <dispatch> <name> [args...] | check <dispatch> | release <dispatch> | efforts <dispatch> | mode <dispatch>";
+
+const RUN_MODES = ["synthesis", "single-thread"] as const;
+const SETTING_MODES = [...RUN_MODES, "alternate"] as const;
+type RunMode = (typeof RUN_MODES)[number];
+type SettingMode = (typeof SETTING_MODES)[number];
+
+function isRunMode(value: unknown): value is RunMode {
+  return typeof value === "string" && (RUN_MODES as readonly string[]).includes(value);
+}
+
+function isSettingMode(value: unknown): value is SettingMode {
+  return typeof value === "string" && (SETTING_MODES as readonly string[]).includes(value);
+}
 
 // Every command returns its exit code with the bytes for each stream; the CLI boundary writes
 // them, and the tests inspect them. stdout carries results (the pin path, the checkout,
@@ -442,6 +457,33 @@ function checkConfinement(runJson: string): Outcome {
   return ok();
 }
 
+function checkModeAgreement(dispatch: string): Outcome {
+  const record = tryJsonFile<Record<string, unknown>>(join(dispatch, "run.json"));
+  if (!record) return fail(`run-meta: ${dispatch}/run.json cannot be read\n`);
+  const recorded = typeof record.mode === "string" ? record.mode : undefined;
+  let waybill: string | undefined;
+  try {
+    const lines = readFileSync(join(dispatch, "brief.md"), "utf8").split(/\r?\n/u);
+    const start = lines.findIndex((line) => /^##[ \t]+Team[ \t]*$/iu.test(line));
+    if (start >= 0) {
+      const rest = lines.slice(start + 1);
+      const end = rest.findIndex((line) => /^##[ \t]+/u.test(line));
+      const team = end < 0 ? rest : rest.slice(0, end);
+      const match = /^mode:[ \t]*(\S+)[ \t]*$/imu.exec(team.join("\n"));
+      if (match) waybill = match[1];
+    }
+  } catch {
+    // Old runs can predate a brief or the mode line; the two absent values agree.
+  }
+  if (recorded === undefined && waybill === undefined) return ok();
+  if (!isRunMode(recorded) || !isRunMode(waybill) || recorded !== waybill) {
+    return fail(
+      `run-meta: waybill mode "${waybill ?? "<missing>"}" does not match run.json mode "${recorded ?? "<missing>"}"\n`,
+    );
+  }
+  return ok();
+}
+
 // check_pin <dispatch>: the run's checkout still serves its dispatch commit,
 // and its recorded confinement mode agrees with its config. Silent on success.
 function checkPinAndConfinement(d: string): Outcome {
@@ -458,7 +500,8 @@ function checkPinAndConfinement(d: string): Outcome {
     if (git(checkout, "rev-parse", "--git-dir") === null) {
       return fail(`run-meta: ${checkout} is not a git checkout\n`);
     }
-    return checkConfinement(runJson);
+    const confinement = checkConfinement(runJson);
+    return confinement.code === 0 ? checkModeAgreement(d) : confinement;
   }
   const commit = fieldCommit(runJson);
   if (commit === "") return fail(`run-meta: ${d}/run.json records no postmaster commit\n`);
@@ -478,7 +521,8 @@ function checkPinAndConfinement(d: string): Outcome {
         "it does not serve that commit's versions\n",
     );
   }
-  return checkConfinement(runJson);
+  const confinement = checkConfinement(runJson);
+  return confinement.code === 0 ? checkModeAgreement(d) : confinement;
 }
 
 // --- pin scan -------------------------------------------------------------------------------
@@ -794,6 +838,75 @@ export function efforts(d: string): Outcome {
   return ok(`${effortsLine(cfg as Record<string, unknown>)}\n`);
 }
 
+export function readMode(d: string): Outcome {
+  const record = tryJsonFile<Record<string, unknown>>(join(d, "run.json"));
+  if (!record) return fail(`run-meta: no readable run.json in ${d}\n`);
+  const actual = isRunMode(record.mode) ? record.mode : "synthesis";
+  const source = typeof record.mode_source === "string" ? record.mode_source : "setting";
+  const setting = isSettingMode(record.mode_setting) ? record.mode_setting : "synthesis";
+  return ok(`mode: ${actual}\nsource: ${source}\nsetting: ${setting}\n`);
+}
+
+function previousRunMode(dispatch: string): RunMode | null {
+  const root = dirname(dispatch);
+  let names: string[];
+  try {
+    names = readdirSync(root).sort();
+  } catch {
+    return null;
+  }
+  let latest: { written: number; mtime: number; name: string; mode: RunMode } | null = null;
+  for (const name of names) {
+    const candidate = join(root, name);
+    if (candidate === dispatch || !isDir(candidate)) continue;
+    const path = join(candidate, "run.json");
+    const record = tryJsonFile<Record<string, unknown>>(path);
+    if (!record) continue;
+    let mtime = 0;
+    try {
+      mtime = statSync(path).mtimeMs;
+    } catch {
+      continue;
+    }
+    const parsed = typeof record.written === "string" ? Date.parse(record.written) : Number.NaN;
+    const written = Number.isFinite(parsed) ? parsed : mtime;
+    const mode: RunMode = record.mode === "single-thread" ? "single-thread" : "synthesis";
+    if (
+      latest === null ||
+      written > latest.written ||
+      (written === latest.written &&
+        (mtime > latest.mtime || (mtime === latest.mtime && name > latest.name)))
+    ) {
+      latest = { written, mtime, name, mode };
+    }
+  }
+  return latest?.mode ?? null;
+}
+
+function resolveRunMode(
+  config: Record<string, unknown>,
+  dispatch: string,
+  requested: RunMode | undefined,
+): { mode: RunMode; source: "user" | "setting"; setting: SettingMode } | { error: string } {
+  const team = config.team;
+  const configured =
+    typeof team === "object" && team !== null && !Array.isArray(team)
+      ? (team as Record<string, unknown>).mode
+      : undefined;
+  const setting = configured === undefined ? "synthesis" : configured;
+  if (!isSettingMode(setting)) {
+    return { error: "run-meta: team.mode must be synthesis, single-thread or alternate" };
+  }
+  if (requested !== undefined) return { mode: requested, source: "user", setting };
+  if (setting !== "alternate") return { mode: setting, source: "setting", setting };
+  const previous = previousRunMode(dispatch);
+  return {
+    mode: previous === "single-thread" ? "synthesis" : "single-thread",
+    source: "setting",
+    setting,
+  };
+}
+
 type Built =
   | { ok: true; record: Record<string, unknown>; warnings: string[] }
   | { ok: false; messages: string[] };
@@ -817,6 +930,7 @@ function buildRecord(
   config: string,
   checkout: string,
   pinnedCommit: string,
+  requestedMode: RunMode | undefined,
 ): Built {
   if (tryTomlFile(config) === null) return { ok: false, messages: [] };
   const settingsScript = join(TOOL, "scripts", "run");
@@ -836,6 +950,8 @@ function buildRecord(
   const cfg = parseSettingsJson(effective.out, "effective machine config");
   if ("error" in cfg) return { ok: false, messages: [cfg.error] };
   const resolvedConfig = cfg.value as Record<string, unknown>;
+  const mode = resolveRunMode(resolvedConfig, d, requestedMode);
+  if ("error" in mode) return { ok: false, messages: [mode.error] };
   const warnings = existsSync(join(resolvedRepo, ".postmaster", "fixture"))
     ? fixtureEfforts(resolvedConfig)
     : [];
@@ -863,6 +979,9 @@ function buildRecord(
       },
       config: resolvedConfig,
       confinement: { mode: confinementMode },
+      mode: mode.mode,
+      mode_source: mode.source,
+      mode_setting: mode.setting,
       harness_versions: harnessVersions,
     },
   };
@@ -877,7 +996,10 @@ function readTools(): string {
 }
 
 // meta <dispatch> <repo>
-export function meta(d: string, repo: string): Outcome {
+export function meta(d: string, repo: string, requestedMode?: string): Outcome {
+  if (requestedMode !== undefined && !isRunMode(requestedMode)) {
+    return fail("run-meta: --mode must be synthesis or single-thread\n");
+  }
   const config = readConfig();
   const tools = readTools();
   if (!isDir(d)) return fail(`run-meta: no such dispatch directory: ${d}\n`);
@@ -914,7 +1036,7 @@ export function meta(d: string, repo: string): Outcome {
     }
     let built: Built;
     try {
-      built = buildRecord(d, resolvedRepo, config, checkout, commit);
+      built = buildRecord(d, resolvedRepo, config, checkout, commit, requestedMode as RunMode | undefined);
     } catch {
       built = { ok: false, messages: [] };
     }
@@ -1098,7 +1220,7 @@ if (import.meta.main) {
   }
   {
     const cmd = argv[0];
-    const verbs = ["pin", "path", "check", "release", "efforts", "run-pinned"];
+    const verbs = ["pin", "path", "check", "release", "efforts", "run-pinned", "mode"];
     let outcome: Outcome;
     if (cmd === "pin" && argv.length === 3)
       outcome = pin(argv[1] as string, argv[2] as string, readTools());
@@ -1106,6 +1228,7 @@ if (import.meta.main) {
     else if (cmd === "check" && argv.length === 2)
       outcome = checkPinAndConfinement(argv[1] as string);
     else if (cmd === "release" && argv.length === 2) outcome = releasePin(argv[1] as string);
+    else if (cmd === "mode" && argv.length === 2) outcome = readMode(argv[1] as string);
     else if (cmd === "run-pinned" && argv.length >= 3) {
       const pinned = pathOf(argv[1] as string);
       if (pinned.code !== 0) outcome = pinned;
@@ -1114,8 +1237,9 @@ if (import.meta.main) {
         outcome = { code: result.code, out: result.out, err: result.err };
       }
     } else if (cmd === "efforts" && argv.length === 2) outcome = efforts(argv[1] as string);
-    else if (cmd !== undefined && !verbs.includes(cmd) && argv.length === 2) {
-      outcome = meta(argv[0] as string, argv[1] as string);
+    else if (cmd !== undefined && !verbs.includes(cmd) && (argv.length === 2 || argv.length === 4)) {
+      if (argv.length === 4 && argv[2] !== "--mode") usage();
+      outcome = meta(argv[0] as string, argv[1] as string, argv[3]);
     } else usage();
     if (outcome.out !== "") process.stdout.write(outcome.out);
     if (outcome.err !== "") process.stderr.write(outcome.err);

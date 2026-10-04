@@ -121,14 +121,44 @@ describe("positive controls", () => {
     const cfg = tryTomlFile(join(tmp, "plain.toml"));
     expect(keys.code).toBe(0);
     expect(keys.out).toContain("confine                    off");
+    expect(keys.out).toContain("team.mode                  synthesis");
     expect(keys.out).toContain("clerk.harness");
     expect(keys.out).toContain("clerk.model");
     expect(keys.out).toContain("clerk.effort?");
     expect(keys.out).toContain("clerk.env_file?");
     expect(plainRc).toBe(0);
     expect(cfg?.confine).toBe("off");
+    expect((cfg?.team as Record<string, unknown>).mode).toBe("synthesis");
     expect(out).toContain("lane confinement:");
     expect(out.match(/Run lanes confined \(on\/off\)/gu)?.length).toBe(1);
+  }, 30000);
+
+  test("setup accepts the three dispatch modes and names invalid values", () => {
+    for (const mode of ["synthesis", "single-thread", "alternate"]) {
+      const name = `mode-${mode}`;
+      answers(name, `team.mode=${mode}`);
+      const result = run(SELF, [
+        "setup",
+        "--answers",
+        join(tmp, `${name}.answers`),
+        "--config",
+        join(tmp, `${name}.toml`),
+        "--dry-run",
+      ], { env: { ...process.env, PATH: `${join(tmp, "bin")}:${process.env.PATH}` } });
+      expect(result.code).toBe(0);
+      expect(result.out).toContain(`mode = "${mode}"`);
+    }
+    answers("mode-invalid", "team.mode=two-lanes");
+    const invalid = run(SELF, [
+      "setup",
+      "--answers",
+      join(tmp, "mode-invalid.answers"),
+      "--config",
+      join(tmp, "mode-invalid.toml"),
+      "--dry-run",
+    ], { env: { ...process.env, PATH: `${join(tmp, "bin")}:${process.env.PATH}` } });
+    expect(invalid.code).toBe(1);
+    expect(invalid.err).toContain("synthesis, single-thread or alternate");
   }, 30000);
 
   test("the adding verb inserts clerk in [team] and preserves the other config lines", () => {

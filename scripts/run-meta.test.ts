@@ -150,6 +150,7 @@ beforeAll(async () => {
     console.log("positive controls");
     if (meta(d, repo).code === 0) ok("run.json is written");
     else fail("run.json is written");
+    writeFileSync(join(d, "brief.md"), "## Team\nmode: synthesis\n");
     checkJson("it names the postmaster commit", (r) => r.postmaster.commit === headOf(TOOL));
     checkJson("it records the current coachman contract", (r) => r.coachman_contract === 2);
     checkJson(
@@ -1212,6 +1213,7 @@ beforeAll(async () => {
     await Bun.sleep(1000);
     const g1rel = cli(["release", g1done], { PATH: stubPath });
     const g1m = await g1meta;
+    writeFileSync(join(g1new, "brief.md"), "## Team\nmode: synthesis\n");
     const newco = (() => {
       try {
         return (runJson(g1new).postmaster.checkout as string) ?? "";
@@ -1441,6 +1443,7 @@ beforeAll(async () => {
       mkdirSync(dir, { recursive: true });
       const r = cli([dir, repo], { ...process.env, POSTMASTER_CONFIG: cfg });
       check(`dispatch with confine ${tag} writes run.json`, r.code === 0, r.out);
+      writeFileSync(join(dir, "brief.md"), "## Team\nmode: synthesis\n");
       return dir;
     };
     const dOn = mkConfRun("on", 'confine = "on"\n');
@@ -1469,6 +1472,7 @@ beforeAll(async () => {
       const r = JSON.parse(readFileSync(join(src, "run.json"), "utf8")) as Record<string, any>;
       edit(r);
       writeFileSync(join(dir, "run.json"), JSON.stringify(r));
+      writeFileSync(join(dir, "brief.md"), "## Team\nmode: synthesis\n");
       return dir;
     };
     {
@@ -1511,7 +1515,7 @@ beforeAll(async () => {
       delete (r.postmaster as Record<string, any>).checkout;
       edit(r);
       writeFileSync(join(dir, "run.json"), JSON.stringify(r));
-      writeFileSync(join(dir, "brief.md"), `## Dispatch\ntool: ${checkout}\n`);
+      writeFileSync(join(dir, "brief.md"), `## Team\nmode: synthesis\n\n## Dispatch\ntool: ${checkout}\n`);
       return dir;
     };
     {
@@ -2086,3 +2090,167 @@ describe("confinement mode recording", () => {
     );
   });
 });
+
+describe("work mode dispatch", () => {
+  const root = (): string => join(import.meta.dir, "run");
+
+  function project(
+    base: string,
+    name: string,
+    modeSetting: string | undefined,
+  ): { repo: string; runs: string; env: Record<string, string> } {
+    const repo = join(base, name, "repo");
+    mkdirSync(repo, { recursive: true });
+    run("git", ["-C", repo, "init", "-q", "-b", "main"]);
+    run("git", ["-C", repo, "config", "user.name", "fixture"]);
+    run("git", ["-C", repo, "config", "user.email", "fixture@example.invalid"]);
+    run("git", ["-C", repo, "commit", "-q", "--allow-empty", "-m", "base"]);
+    const setting = modeSetting === undefined ? "" : `mode = "${modeSetting}"\n`;
+    const config = join(base, `${name}.toml`);
+    writeFileSync(
+      config,
+      '[lanes.one]\nharness = "bash"\nmodel = "one"\n' +
+        '[lanes.two]\nharness = "bash"\nmodel = "two"\n[team]\n' +
+        `workhorses = ["one", "two"]\n${setting}` +
+        'coachman = { harness = "bash", model = "judge" }\n',
+    );
+    const runs = join(repo, ".postmaster", "runs");
+    mkdirSync(runs, { recursive: true });
+    return {
+      repo,
+      runs,
+      env: {
+        ...(process.env as Record<string, string>),
+        POSTMASTER_CONFIG: config,
+        POSTMASTER_TOOL_PINS: join(base, "pins"),
+      },
+    };
+  }
+
+  function dispatch(
+    repo: string,
+    runs: string,
+    env: Record<string, string>,
+    name: string,
+    mode?: string,
+  ): { dir: string; code: number; out: string; record: Record<string, unknown> | null } {
+    const dir = join(runs, name);
+    mkdirSync(dir, { recursive: true });
+    const args = ["run-meta", dir, repo];
+    if (mode !== undefined) args.push("--mode", mode);
+    const result = run(root(), args, { env });
+    let record: Record<string, unknown> | null = null;
+    try {
+      record = JSON.parse(readFileSync(join(dir, "run.json"), "utf8")) as Record<string, unknown>;
+    } catch {
+      record = null;
+    }
+    return { dir, code: result.code, out: result.out + result.err, record };
+  }
+
+  test("an absent setting records and reads synthesis", () => {
+    withTempDir((raw: string) => {
+      const base = realpathSync(raw);
+      const p = project(base, "default", undefined);
+      const made = dispatch(p.repo, p.runs, p.env, "RUN-1");
+      expect(made.code).toBe(0);
+      expect(made.record?.mode).toBe("synthesis");
+      expect(made.record?.mode_source).toBe("setting");
+      expect(made.record?.mode_setting).toBe("synthesis");
+      const read = run(root(), ["run-meta", "mode", made.dir], { env: p.env });
+      expect(read.code).toBe(0);
+      expect(read.out).toContain("mode: synthesis");
+      expect(read.out).toContain("source: setting");
+      expect(read.out).toContain("setting: synthesis");
+    });
+  });
+
+  test("alternate uses the latest written run mode and ignores its stage", () => {
+    withTempDir((raw: string) => {
+      const base = realpathSync(raw);
+      const p = project(base, "alternate", "alternate");
+      const first = dispatch(p.repo, p.runs, p.env, "RUN-1");
+      expect(first.record?.mode).toBe("single-thread");
+
+      const noMode = project(base, "legacy", "alternate");
+      makePriorAt(noMode.runs, "RUN-OLD", "2026-10-01T00:00:00Z", undefined);
+      const legacy = dispatch(noMode.repo, noMode.runs, noMode.env, "RUN-1");
+      expect(legacy.record?.mode).toBe("single-thread");
+
+      const single = project(base, "after-single", "alternate");
+      makePriorAt(single.runs, "RUN-SINGLE", "2026-10-01T00:00:00Z", "single-thread");
+      const afterSingle = dispatch(single.repo, single.runs, single.env, "RUN-1");
+      expect(afterSingle.record?.mode).toBe("synthesis");
+
+      const synthesis = project(base, "after-synthesis", "alternate");
+      makePriorAt(synthesis.runs, "RUN-SYNTHESIS", "2026-10-01T00:00:00Z", "synthesis");
+      const afterSynthesis = dispatch(synthesis.repo, synthesis.runs, synthesis.env, "RUN-1");
+      expect(afterSynthesis.record?.mode).toBe("single-thread");
+
+      const latest = project(base, "latest-written", "alternate");
+      makePriorAt(latest.runs, "RUN-OLDER", "2026-10-01T00:00:00Z", "single-thread");
+      makePriorAt(latest.runs, "RUN-LATEST", "2026-10-02T00:00:00Z", "synthesis", "workhorses-running");
+      const latestRun = dispatch(latest.repo, latest.runs, latest.env, "RUN-NEXT");
+      expect(latestRun.record?.mode).toBe("single-thread");
+    });
+  });
+
+  test("a user mode wins and becomes the next alternate run's previous mode", () => {
+    withTempDir((raw: string) => {
+      const base = realpathSync(raw);
+      const p = project(base, "user-mode", "alternate");
+      const selected = dispatch(p.repo, p.runs, p.env, "RUN-1", "single-thread");
+      expect(selected.code).toBe(0);
+      expect(selected.record?.mode).toBe("single-thread");
+      expect(selected.record?.mode_source).toBe("user");
+      expect(selected.record?.mode_setting).toBe("alternate");
+      const next = dispatch(p.repo, p.runs, p.env, "RUN-2");
+      expect(next.record?.mode).toBe("synthesis");
+      const invalid = run(root(), ["run-meta", join(p.runs, "BAD"), p.repo, "--mode", "two-lanes"], {
+        env: p.env,
+      });
+      expect(invalid.code).toBe(1);
+      expect(invalid.err).toContain("synthesis or single-thread");
+    });
+  });
+
+  test("check holds the waybill to the recorded mode and accepts legacy runs", () => {
+    withTempDir((raw: string) => {
+      const base = realpathSync(raw);
+      const p = project(base, "check-mode", "synthesis");
+      const made = dispatch(p.repo, p.runs, p.env, "RUN-1", "single-thread");
+      writeFileSync(join(made.dir, "brief.md"), "## Team\nmode: single-thread\n");
+      expect(run(root(), ["run-meta", "check", made.dir], { env: p.env }).code).toBe(0);
+      writeFileSync(join(made.dir, "brief.md"), "## Team\nmode: synthesis\n");
+      const mismatch = run(root(), ["run-meta", "check", made.dir], { env: p.env });
+      expect(mismatch.code).toBe(1);
+      expect(mismatch.err).toContain("single-thread");
+      expect(mismatch.err).toContain("synthesis");
+      const legacy = JSON.parse(readFileSync(join(made.dir, "run.json"), "utf8")) as Record<
+        string,
+        unknown
+      >;
+      delete legacy.mode;
+      delete legacy.mode_source;
+      delete legacy.mode_setting;
+      writeFileSync(join(made.dir, "run.json"), JSON.stringify(legacy));
+      writeFileSync(join(made.dir, "brief.md"), "## Team\nworkhorses: one, two\n");
+      expect(run(root(), ["run-meta", "check", made.dir], { env: p.env }).code).toBe(0);
+    });
+  });
+});
+
+function makePriorAt(
+  root: string,
+  name: string,
+  written: string,
+  mode: string | undefined,
+  stage = "done",
+): void {
+  const dir = join(root, name);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(
+    join(dir, "run.json"),
+    JSON.stringify({ written, stage, ...(mode === undefined ? {} : { mode }) }),
+  );
+}

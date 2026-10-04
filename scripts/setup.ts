@@ -179,6 +179,7 @@ clerk.model
 clerk.effort?              (none)
 clerk.env_file?            (none)             env file for its key or backend
 max_runs                   2                  concurrent runs per project
+team.mode                  synthesis          synthesis, single-thread or alternate
 poll_seconds               120                postmaster poll interval
 limits.memory_max          8G                 default memory cap per launch (K, M, G or T)
 limits.tasks_max           512                default process cap per launch
@@ -441,6 +442,14 @@ const CLEF = ask(
   opts,
 );
 const MR = ask("  concurrent runs per project", "2", "max_runs", opts);
+const MODE = ask(
+  "  dispatch mode (synthesis, single-thread or alternate)",
+  "synthesis",
+  "team.mode",
+  opts,
+);
+if (!["synthesis", "single-thread", "alternate"].includes(MODE))
+  die("setup: team.mode must be synthesis, single-thread or alternate", 1);
 const PS = ask("  postmaster poll interval, seconds", "120", "poll_seconds", opts);
 
 console.log("");
@@ -593,6 +602,7 @@ coachman_fallback = { harness = "${FH}", model = "${FM}"${roleExtra(FE, FEF)} }
 postmaster = { harness = "${PH}", model = "${PM}"${roleExtra(PE, PEF)} }
 clerk = { harness = "${CLH}", model = "${CLM}"${roleExtra(CLE, CLEF)} }
 max_runs = ${MR}
+mode = "${MODE}"
 ${LENS_TABLE}
 
 [limits]

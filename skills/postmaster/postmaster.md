@@ -110,11 +110,11 @@ waits in the ready queue until the watcher sees room under `team.max_runs`.
    must exit 0; its refusal explains that no configured bug reviewer has a code-review form.
    The run is not dispatched without one.
    `<tool>/scripts/run launch form coachman --leg <leg> --project <repo>` for each of those legs,
-   `<tool>/scripts/run launch form coachman_fallback --project <repo>`, `<tool>/scripts/run launch form <lane> --project <repo>` for
-   each lane in `team.workhorses`, and, when the legs include `review`,
+   `<tool>/scripts/run launch form coachman_fallback --project <repo>`, and, when the legs include `review`,
    `<tool>/scripts/run reviewers lines --project <repo>` and `<tool>/scripts/run launch form <lane> --project <repo>` for each lane in
    `team.reviewers` and `team.lens_reviewers`, each exit 0. A refusal names what the config must
-   change: it goes to the user, and nothing is dispatched. The project's declared checks are
+   change: it goes to the user, and nothing is dispatched. Workhorse launch forms are checked
+   after step 6 resolves the mode, and only for synthesis runs. The project's declared checks are
    checked too: `<tool>/scripts/run verify checks <repo>` exits 0, and a refusal, naming what
    `.postmaster/project.toml` must change, goes to the user the same way.
 4. **Clash check, before anything is written for this run.** `<tool>/scripts/run run-clash <repo> <TICKET>` exits 0. On exit 2 it names the run directory
@@ -131,11 +131,17 @@ waits in the ready queue until the watcher sees room under `team.max_runs`.
    {"legs": {}}}`. You own `leg`, `base`, `coachman` and the terminal stages, `done` and
    `abandoned`; the coachman owns `lanes` and every stage before those; both update fields in
    place and neither rewrites the file. Then record what the run starts from, once:
-   `<tool>/scripts/run run-meta <dispatch> <repo>` writes `run.json` with the postmaster commit,
-   the pinned checkout of that commit, the coachman contract version, the resolved machine
-   config (with fixture efforts lowered for a marked copy), project settings and their sources,
-   and the harness versions, and nothing edits it
-   afterwards. The pin is a worktree of this repo at the dispatch commit, shared by every run
+   If the user named `synthesis` or `single-thread` for this ticket, pass it as `--mode`;
+   otherwise leave the option off so the machine setting decides. Run
+   `<tool>/scripts/run run-meta <dispatch> <repo> [--mode <user-named-mode>]`. It writes
+   `run.json` with the postmaster commit, the pinned checkout of that commit, the coachman
+   contract version, the resolved machine config (with fixture efforts lowered for a marked
+   copy), project settings and their sources, harness versions, the resolved mode, its source
+   (`user` or `setting`), and the setting's value at dispatch. Nothing edits it afterwards.
+   Then run `<tool>/scripts/run run-meta mode <dispatch>` and log its output as a `note`; it
+   names the actual mode and why it was chosen. When it says `mode: synthesis`, check
+   `<tool>/scripts/run launch form <lane> --project <repo>` for every configured workhorse.
+   Do not check or launch workhorses for `single-thread`. The pin is a worktree of this repo at the dispatch commit, shared by every run
    dispatched at it; the waybill names it as `tool:`, and every leg of this run reads its
    runbooks and runs its scripts from there. Log the `run run-meta` output as a `note`.
    `<tool>/scripts/run verify record
@@ -153,13 +159,15 @@ waits in the ready queue until the watcher sees room under `team.max_runs`.
    `<tool>/scripts/run verify record` printed them, docs to read first, tracker, risk
    surfaces), the team from `run.json` — the resolved machine config step 6 recorded — with
    its reviewer lines as `<tool>/scripts/run reviewers lines --project <repo>` prints them,
+   and `mode:` from `<tool>/scripts/run run-meta mode <dispatch>`,
    and the `efforts:` line pasted from `<tool>/scripts/run run-meta efforts <dispatch>`,
    never composed by hand; each project's facts sourced as discovered, shared or local,
    `CHECKPOINT_MODE` from `ship.checkpoint_mode` and `MERGE_AUTHORITY` from
    `ship.merge_authority`, either overridden only where the user said so for this run, the
    dispatch path and the run's pinned tool — `<tool>/scripts/run run-meta path <dispatch>`,
    the checkout step 7 cut, which the template names as `tool:` and the coachman uses as
-   its `<tool>`. Then `<tool>/scripts/run turnpikes legs <dispatch> --expect '<that
+   its `<tool>`. In single-thread mode, the Team section has `workhorses:` with no entries.
+   Then `<tool>/scripts/run turnpikes legs <dispatch> --expect '<that
    turnpikes: line>'` exits 0 and
    prints the legs for the `turnpikes:` line step 1 printed, before anything is launched.
    Record `coachman contract fixture: pending` and `contract fixture check: -`; no
@@ -529,8 +537,9 @@ missed.
    the earlier score. Where dispatch BASE has no copy to run, the no-copy rule above ends
    the comparison in a fixture without classifying.
    Verify that every branch the card
-   lists exists and has the stated state; `run-log.md`'s
-   SYNTHESIS line accounts for each lane; every DEGRADED lane matches `degrade` actions; the
+   lists exists and has the stated state; `run-log.md`'s SYNTHESIS line accounts for each
+   workhorse in synthesis mode, or says `mode=single-thread` with no workhorses in single-thread
+   mode; the mode in `run.json`, the waybill and the card agree; every DEGRADED lane matches `degrade` actions; the
    turnpikes match the waybill, `actions.jsonl` has `review-launch` lines under each review lens
    the run's legs name and under no other lens, and each other turnpike's result on the card is
    in the record its step writes; when `<tool>/scripts/run turnpikes short '<the waybill's

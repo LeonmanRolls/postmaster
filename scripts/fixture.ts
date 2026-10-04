@@ -35,6 +35,7 @@ import { homedir, machine, release, tmpdir, type as osType } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { tryJsonFile } from "./lib/data.ts";
 import { effortsLine } from "./run-meta.ts";
+import { laneNamesFromBranches, ticketIdFromWaybill } from "./fixture-lanes.ts";
 import { scriptsDir, toolRoot } from "./lib/paths.ts";
 import { die, run } from "./lib/proc.ts";
 import {
@@ -77,6 +78,7 @@ const _CHECKS = [
   "markers",
   "handoffs",
   "run.json",
+  "mode",
   "efforts",
   "ship-card",
 ];
@@ -444,6 +446,12 @@ export function score(dispatch: string, repo: string): { code: number; out: stri
     };
   }
   const legs = legsOf(dispatch, manifest);
+  const briefText = existsSync(join(dispatch, "brief.md"))
+    ? readFileSync(join(dispatch, "brief.md"), "utf8")
+    : "";
+  const ticket = ticketIdFromWaybill(briefText) ?? "";
+  const refs = sh(["git", "-C", repo, "for-each-ref", "refs/heads/wb/", "--format=%(refname:short)"]);
+  const workhorseBranches = laneNamesFromBranches(pySplitLines(refs.out), ticket);
   const results: CheckResult[] = [
     { name: "hidden-tests", ...checkHidden(dispatch, repo, app) },
     { name: "gate", ...checkGate(app, repo, main) },
@@ -451,6 +459,7 @@ export function score(dispatch: string, repo: string): { code: number; out: stri
     { name: "markers", ...checkMarkers(dispatch, legs), out: "" },
     { name: "handoffs", ...checkHandoffs(dispatch, legs), out: "" },
     { name: "run.json", ...checkRunJson(dispatch), out: "" },
+    { name: "mode", ...checkMode(dispatch, workhorseBranches), out: "" },
     { name: "premises-order", ...checkPremisesOrder(dispatch), out: "" },
     { name: "efforts", ...checkWaybillEfforts(dispatch), out: "" },
     { name: "ship-card", ...checkCard(dispatch), out: "" },
@@ -458,6 +467,57 @@ export function score(dispatch: string, repo: string): { code: number; out: stri
   rmSync(scratch, { recursive: true, force: true });
   const scored = report(results);
   return { code: scored.code, out: `${platformLine()}\n${scored.out}` };
+}
+
+export function checkMode(
+  dispatch: string,
+  branchLanes: string[],
+): { ok: boolean; detail: string } {
+  const record = tryJsonFile<Record<string, unknown>>(join(dispatch, "run.json"));
+  if (!record) return { ok: true, detail: "skipped: no run.json" };
+  const mode = record.mode === undefined ? "synthesis" : record.mode;
+  if (mode !== "synthesis" && mode !== "single-thread") {
+    return { ok: false, detail: `unrecognized run mode ${String(mode)}` };
+  }
+  const config = record.config;
+  const team =
+    typeof config === "object" && config !== null && !Array.isArray(config)
+      ? (config as Record<string, unknown>).team
+      : undefined;
+  const configured =
+    typeof team === "object" && team !== null && !Array.isArray(team)
+      ? (team as Record<string, unknown>).workhorses
+      : undefined;
+  const expected = Array.isArray(configured) ? configured.map(String).sort() : [];
+  const manifest = tryJsonFile<Record<string, unknown>>(join(dispatch, "manifest.json"));
+  const lanes =
+    typeof manifest?.lanes === "object" && manifest.lanes !== null && !Array.isArray(manifest.lanes)
+      ? Object.keys(manifest.lanes as Record<string, unknown>).sort()
+      : [];
+  const events = readActions(dispatch);
+  if (events === null) return { ok: false, detail: "no readable actions.jsonl" };
+  const started = events
+    .filter((event) => event.actor === "coachman" && event.action === "dispatch")
+    .map((event) => String(event.target))
+    .sort();
+  const want = mode === "single-thread" ? [] : expected;
+  if (
+    JSON.stringify(started) !== JSON.stringify(want) ||
+    JSON.stringify(branchLanes) !== JSON.stringify(want) ||
+    JSON.stringify(lanes) !== JSON.stringify(want)
+  ) {
+    return {
+      ok: false,
+      detail:
+        `${mode} expected workhorses ${want.join(",") || "none"}; ` +
+        `dispatches ${started.join(",") || "none"}; branches ${branchLanes.join(",") || "none"}; ` +
+        `manifest lanes ${lanes.join(",") || "none"}`,
+    };
+  }
+  return {
+    ok: true,
+    detail: `${mode}: ${started.length} workhorse dispatches, ${branchLanes.length} branches, ${lanes.length} manifest lanes`,
+  };
 }
 
 export function gitVersionNumber(output: string): string {
@@ -610,6 +670,8 @@ function checkStages(dispatch: string): { ok: boolean; detail: string } {
     return words.length > 1 && words[1] === "review";
   });
   expected = expected.filter((s) => s !== "review" || hasReview);
+  const mode = tryJsonFile<Record<string, unknown>>(join(dispatch, "run.json"))?.mode;
+  if (mode === "single-thread") expected = expected.filter((s) => s !== "workhorses-running");
   const events = readActions(dispatch);
   if (events === null) return { ok: false, detail: "no actions.jsonl" };
   const entered = events.filter((e) => e.action === "stage").map((e) => e.target);
