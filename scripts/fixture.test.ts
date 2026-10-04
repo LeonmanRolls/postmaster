@@ -144,11 +144,34 @@ function record(
       cwd: repo,
       timeout: 120000,
     });
+    const cliDir = join(tmp, `${name}-acceptance-cli`);
+    mkdirSync(cliDir, { recursive: true });
+    const listPath = join(cliDir, "todo.json");
+    writeFileSync(
+      listPath,
+      `${JSON.stringify({
+        tasks: [
+          { id: 1, text: "buy milk", done: false },
+          { id: 2, text: "walk the dog", done: true },
+          { id: 3, text: "water the plants", done: false },
+        ],
+        lastId: 3,
+      })}\n`,
+    );
+    const cli = run(process.execPath, [join(repo, "src", "cli.ts"), "remove", "2"], {
+      cwd: cliDir,
+      env: { TODO_FILE: listPath },
+    });
+    const stored = readFileSync(listPath, "utf8");
     writeFileSync(
       join(d, "acceptance-final.txt"),
-      `command: ${process.execPath} test test/acceptance.cli.test.ts\n${final.out}${final.err}exit: ${final.code}\n`,
+      `command: ${process.execPath} test test/acceptance.cli.test.ts\n${final.out}${final.err}exit: ${final.code}\n` +
+        `command: ${process.execPath} ${join(repo, "src", "cli.ts")} remove 2\n` +
+        `stdout: ${JSON.stringify(cli.out)}\nstderr: ${JSON.stringify(cli.err)}\n` +
+        `exit: ${cli.code}\nstored: ${JSON.stringify(JSON.parse(stored))}\n`,
     );
-    if (final.code !== 0) return 1;
+    if (final.code !== 0 || cli.code !== 0 || cli.out !== "removed 2\n" || cli.err !== "")
+      return 1;
   }
   if (run("git", ["-C", repo, "checkout", "-q", "main"]).code !== 0) return 1;
   if (run("git", ["-C", repo, "merge", "-q", "--no-ff", "-m", "Merge branch 7", "7"]).code !== 0)
@@ -177,9 +200,11 @@ function record(
     .join(", ");
   const coachman = recordedConfig.team.coachman;
   const efforts = run(join(HERE, "run"), ["run-meta", "efforts", d]).out.trim();
+  const reviewers = run(join(HERE, "run"), ["reviewers", "lines", "--project", repo]);
+  if (reviewers.code !== 0) return 1;
   writeFileSync(
     join(d, "brief.md"),
-    `${readFileSync(join(d, "brief.md"), "utf8")}\n## Team\nmode: ${mode}\nworkhorses: ${workhorses}\ncoachman: ${coachman.harness}/${coachman.model}/${coachman.effort ?? ""}\n${efforts}\n`,
+    `${readFileSync(join(d, "brief.md"), "utf8")}\n## Team\nmode: ${mode}\nworkhorses: ${workhorses}\n${reviewers.out.trim()}\ncoachman: ${coachman.harness}/${coachman.model}/${coachman.effort ?? ""}\n${efforts}\n`,
   );
   const manifestBeforeStages = JSON.parse(readFileSync(join(d, "manifest.json"), "utf8"));
   manifestBeforeStages.lanes = Object.fromEntries(
@@ -243,7 +268,25 @@ function record(
     run(join(HERE, "run"), ["log-action", d, "postmaster", "dispatch", "7", `leg ${n}`]);
     run(join(HERE, "run"), ["log-action", d, "coachman", "handoff-accept", `leg-${n}`]);
     for (const s of slices[n - 1] ?? []) {
+      if (s === "checkpoint-1" && mode === "single-thread" && n === 1) {
+        const sha = run("git", ["-C", repo, "rev-parse", "7"]).out.trim();
+        for (const check of ["gate", "coachman-contract"]) {
+          if (
+            run(join(HERE, "run"), [
+              "log-action",
+              d,
+              "coachman",
+              "verify",
+              check,
+              `on=7@${sha.slice(0, 12)} result=pass exit=0 secs=1`,
+            ]).code !== 0
+          )
+            return 1;
+        }
+      }
       run(join(HERE, "run"), ["stage", d, s]);
+      if (s === "review" && legs > 1 && recordReviewRound(d, repo, recordedConfig) !== 0)
+        return 1;
     }
     const handoffSections = sections.split("\n").filter(Boolean);
     writeFileSync(
@@ -269,6 +312,66 @@ function record(
   }
   writeFileSync(join(d, "manifest.json"), JSON.stringify(manifest, null, 2));
   return 0;
+}
+
+function recordReviewRound(
+  dispatch: string,
+  repo: string,
+  config: Record<string, unknown>,
+): number {
+  const team = config.team as Record<string, unknown>;
+  const perLens = team.lens_reviewers as Record<string, unknown>;
+  for (const lens of ["style", "bug", "security"]) {
+    const configured = perLens[lens];
+    const names = Array.isArray(configured) ? configured.map(String) : [];
+    if (names.length === 0) return 1;
+    const waybillLanes = run(join(HERE, "run"), [
+      "reviewers",
+      "lanes",
+      join(dispatch, "brief.md"),
+      lens,
+    ]);
+    if (
+      waybillLanes.code !== 0 ||
+      JSON.stringify(waybillLanes.out.trim().split("\n")) !== JSON.stringify(names)
+    )
+      return 1;
+    writeFileSync(
+      join(dispatch, `review-${lens}-brief.md`),
+      `# ${lens} review brief\n\nReview the implementation diff and report verified findings.\n`,
+    );
+    for (const lane of names) {
+      if (
+        run(join(HERE, "run"), [
+          "log-action",
+          dispatch,
+          "coachman",
+          "review-launch",
+          lane,
+          `${lens} r1`,
+        ]).code !== 0
+      )
+        return 1;
+    }
+  }
+  const sha = run("git", ["-C", repo, "rev-parse", "7"]).out.trim();
+  if (
+    run(join(HERE, "run"), [
+      "log-action",
+      dispatch,
+      "coachman",
+      "gate",
+      sha,
+      "review round 1, run verify exit 0",
+    ]).code !== 0
+  )
+    return 1;
+  const decision = run(join(HERE, "run"), ["review-decide", dispatch, "1"]);
+  writeFileSync(
+    join(dispatch, "review-decision-r1.txt"),
+    `command: scripts/run review-decide ${dispatch} 1\n${decision.out}${decision.err}exit: ${decision.code}\n`,
+  );
+  return decision.code;
 }
 
 function brokenCopy(name: string, cleanDir: string): string {
@@ -569,7 +672,10 @@ beforeAll(() => {
     configPath,
     '[lanes.one]\nharness = "bash"\nmodel = "m1"\n' +
       '[lanes.two]\nharness = "bash"\nmodel = "m2"\n' +
+      '[lanes.review]\nharness = "codex"\nmodel = "reviewer"\n' +
       '[team]\nworkhorses = ["one", "two"]\n' +
+      'reviewers = ["review"]\n' +
+      'lens_reviewers = { style = ["review"], bug = ["review"], security = ["review"] }\n' +
       'coachman = { harness = "bash", model = "judge" }\n' +
       '[tracker]\nkind = "github"\n',
   );
@@ -1042,6 +1148,113 @@ describe("score: a recorded run that meets every check scores clean", () => {
     console.log(
       `command: Bun test test/acceptance.cli.test.ts, in synthesis and single-thread fixture repos\n${readFileSync(join(synthesisDispatch, "acceptance-final.txt"), "utf8").trimEnd()}\n${readFileSync(join(singleDispatch, "acceptance-final.txt"), "utf8").trimEnd()}`,
     );
+  }, 30000);
+
+  test("single-thread records passing synthesis-worktree checks before checkpoint-1", () => {
+    const dispatch = join(tmp, "clean-single", "repo", ".postmaster", "runs", "7");
+    const actions = readFileSync(join(dispatch, "actions.jsonl"), "utf8")
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => JSON.parse(line) as Record<string, string>);
+    const verify = actions.filter((event) => event.action === "verify");
+    const checkpoint = actions.findIndex(
+      (event) => event.actor === "coachman" && event.action === "stage" && event.target === "checkpoint-1",
+    );
+    const verifyIndices = actions.flatMap((event, index) => (event.action === "verify" ? [index] : []));
+    expect(verify.map((event) => event.target)).toEqual(["gate", "coachman-contract"]);
+    expect(verify.every((event) => event.detail.includes("on=7@") && event.detail.includes("result=pass exit=0"))).toBe(true);
+    expect(verifyIndices.every((index) => index < checkpoint)).toBe(true);
+    console.log(
+      `verify actions before checkpoint-1:\n${verify.map((event) => JSON.stringify(event)).join("\n")}\ncheckpoint action: ${JSON.stringify(actions[checkpoint])}`,
+    );
+  }, 30000);
+
+  test("the record, log and card name each mode and single-thread leaves no lane artifacts", () => {
+    const synthesisRepo = join(tmp, `clean-${first}`, "repo");
+    const synthesisDispatch = join(synthesisRepo, ".postmaster", "runs", "7");
+    const singleRepo = join(tmp, "clean-single", "repo");
+    const singleDispatch = join(singleRepo, ".postmaster", "runs", "7");
+    for (const [mode, repo, dispatch] of [
+      ["synthesis", synthesisRepo, synthesisDispatch],
+      ["single-thread", singleRepo, singleDispatch],
+    ]) {
+      const record = JSON.parse(readFileSync(join(dispatch, "run.json"), "utf8")) as {
+        mode: string;
+      };
+      const actions = readFileSync(join(dispatch, "actions.jsonl"), "utf8")
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line) as Record<string, string>);
+      const card = readFileSync(join(dispatch, "card.md"), "utf8");
+      expect(record.mode).toBe(mode);
+      expect(card).toContain(`Mode: ${mode}`);
+      expect(actions.some((event) => event.action === "note" && event.detail === `mode=${mode}`)).toBe(true);
+      if (mode === "single-thread") {
+        const manifest = JSON.parse(readFileSync(join(dispatch, "manifest.json"), "utf8")) as {
+          lanes: Record<string, unknown>;
+        };
+        const refs = run("git", ["-C", repo, "for-each-ref", "refs/heads/wb/", "--format=%(refname:short)"]);
+        expect(Object.keys(manifest.lanes)).toEqual([]);
+        expect(refs.out.trim()).toBe("");
+        expect(readdirSync(join(dispatch, "logs"))).toEqual([]);
+        expect(actions.some((event) => event.actor === "coachman" && event.action === "dispatch")).toBe(false);
+        expect(run("git", ["-C", repo, "branch", "--list", "7"]).out.trim()).toBe("7");
+      }
+    }
+  }, 30000);
+
+  test("both modes retain the same review team, gate and mode-free briefs", () => {
+    const dispatches = [
+      join(tmp, `clean-${first}`, "repo", ".postmaster", "runs", "7"),
+      join(tmp, "clean-single", "repo", ".postmaster", "runs", "7"),
+    ];
+    const summaries: Array<{ reviewers: unknown; lenses: unknown; launch: string[]; gate: string[] }> = [];
+    const headings: string[][] = [];
+    for (const dispatch of dispatches) {
+      const record = JSON.parse(readFileSync(join(dispatch, "run.json"), "utf8")) as {
+        config: { team: { reviewers: unknown; lens_reviewers: unknown } };
+      };
+      const actions = readFileSync(join(dispatch, "actions.jsonl"), "utf8")
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line) as Record<string, string>);
+      const launches = actions.filter((event) => event.action === "review-launch");
+      const gate = actions.filter(
+        (event) => event.action === "gate" && event.detail.includes("review round 1"),
+      );
+      const decision = readFileSync(join(dispatch, "review-decision-r1.txt"), "utf8");
+      const reviewFiles = readdirSync(dispatch)
+        .filter((name) => name.startsWith("review-"))
+        .map((name) => join(dispatch, name));
+      const hiddenMode = run("grep", ["-il", "-e", "single-thread", "-e", "synthesis mode", ...reviewFiles]);
+      const cardHeadings = readFileSync(join(dispatch, "card.md"), "utf8")
+        .split("\n")
+        .filter((line) => /^#+ /u.test(line));
+      expect(launches.map((event) => event.detail).sort()).toEqual([
+        "bug r1",
+        "security r1",
+        "style r1",
+      ]);
+      expect(launches.every((event) => event.target === "review")).toBe(true);
+      expect(gate).toHaveLength(1);
+      expect(decision).toContain("STOP 1: round 1 applied no fixes");
+      expect(decision).toContain("exit: 0");
+      expect(hiddenMode.code).toBe(1);
+      expect(hiddenMode.out).toBe("");
+      summaries.push({
+        reviewers: record.config.team.reviewers,
+        lenses: record.config.team.lens_reviewers,
+        launch: launches.map((event) => event.detail).sort(),
+        gate: gate.map((event) => event.detail),
+      });
+      headings.push(cardHeadings);
+    }
+    expect(summaries[0]?.reviewers).toEqual(summaries[1]?.reviewers);
+    expect(summaries[0]?.lenses).toEqual(summaries[1]?.lenses);
+    expect(summaries[0]?.launch).toEqual(summaries[1]?.launch);
+    expect(summaries[0]?.gate).toEqual(summaries[1]?.gate);
+    expect(headings[0]).toEqual(headings[1]);
+    console.log(`review records in synthesis and single-thread:\n${JSON.stringify(summaries, null, 2)}`);
   }, 30000);
 
   test("fixture score passes without jq on PATH and still requires npm", () => {
