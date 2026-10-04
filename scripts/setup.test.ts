@@ -137,26 +137,34 @@ describe("positive controls", () => {
     for (const mode of ["synthesis", "single-thread", "alternate"]) {
       const name = `mode-${mode}`;
       answers(name, `team.mode=${mode}`);
-      const result = run(SELF, [
-        "setup",
-        "--answers",
-        join(tmp, `${name}.answers`),
-        "--config",
-        join(tmp, `${name}.toml`),
-        "--dry-run",
-      ], { env: { ...process.env, PATH: `${join(tmp, "bin")}:${process.env.PATH}` } });
+      const result = run(
+        SELF,
+        [
+          "setup",
+          "--answers",
+          join(tmp, `${name}.answers`),
+          "--config",
+          join(tmp, `${name}.toml`),
+          "--dry-run",
+        ],
+        { env: { ...process.env, PATH: `${join(tmp, "bin")}:${process.env.PATH}` } },
+      );
       expect(result.code).toBe(0);
       expect(result.out).toContain(`mode = "${mode}"`);
     }
     answers("mode-invalid", "team.mode=two-lanes");
-    const invalid = run(SELF, [
-      "setup",
-      "--answers",
-      join(tmp, "mode-invalid.answers"),
-      "--config",
-      join(tmp, "mode-invalid.toml"),
-      "--dry-run",
-    ], { env: { ...process.env, PATH: `${join(tmp, "bin")}:${process.env.PATH}` } });
+    const invalid = run(
+      SELF,
+      [
+        "setup",
+        "--answers",
+        join(tmp, "mode-invalid.answers"),
+        "--config",
+        join(tmp, "mode-invalid.toml"),
+        "--dry-run",
+      ],
+      { env: { ...process.env, PATH: `${join(tmp, "bin")}:${process.env.PATH}` } },
+    );
     expect(invalid.code).toBe(1);
     expect(invalid.err).toContain("synthesis, single-thread or alternate");
   }, 30000);

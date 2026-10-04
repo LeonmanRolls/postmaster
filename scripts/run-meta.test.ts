@@ -1515,7 +1515,10 @@ beforeAll(async () => {
       delete (r.postmaster as Record<string, any>).checkout;
       edit(r);
       writeFileSync(join(dir, "run.json"), JSON.stringify(r));
-      writeFileSync(join(dir, "brief.md"), `## Team\nmode: synthesis\n\n## Dispatch\ntool: ${checkout}\n`);
+      writeFileSync(
+        join(dir, "brief.md"),
+        `## Team\nmode: synthesis\n\n## Dispatch\ntool: ${checkout}\n`,
+      );
       return dir;
     };
     {
@@ -2189,7 +2192,13 @@ describe("work mode dispatch", () => {
 
       const latest = project(base, "latest-written", "alternate");
       makePriorAt(latest.runs, "RUN-OLDER", "2026-10-01T00:00:00Z", "single-thread");
-      makePriorAt(latest.runs, "RUN-LATEST", "2026-10-02T00:00:00Z", "synthesis", "workhorses-running");
+      makePriorAt(
+        latest.runs,
+        "RUN-LATEST",
+        "2026-10-02T00:00:00Z",
+        "synthesis",
+        "workhorses-running",
+      );
       const latestRun = dispatch(latest.repo, latest.runs, latest.env, "RUN-NEXT");
       expect(latestRun.record?.mode).toBe("single-thread");
     });
@@ -2206,9 +2215,13 @@ describe("work mode dispatch", () => {
       expect(selected.record?.mode_setting).toBe("alternate");
       const next = dispatch(p.repo, p.runs, p.env, "RUN-2");
       expect(next.record?.mode).toBe("synthesis");
-      const invalid = run(root(), ["run-meta", join(p.runs, "BAD"), p.repo, "--mode", "two-lanes"], {
-        env: p.env,
-      });
+      const invalid = run(
+        root(),
+        ["run-meta", join(p.runs, "BAD"), p.repo, "--mode", "two-lanes"],
+        {
+          env: p.env,
+        },
+      );
       expect(invalid.code).toBe(1);
       expect(invalid.err).toContain("synthesis or single-thread");
     });

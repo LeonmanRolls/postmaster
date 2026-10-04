@@ -450,7 +450,14 @@ export function score(dispatch: string, repo: string): { code: number; out: stri
     ? readFileSync(join(dispatch, "brief.md"), "utf8")
     : "";
   const ticket = ticketIdFromWaybill(briefText) ?? "";
-  const refs = sh(["git", "-C", repo, "for-each-ref", "refs/heads/wb/", "--format=%(refname:short)"]);
+  const refs = sh([
+    "git",
+    "-C",
+    repo,
+    "for-each-ref",
+    "refs/heads/wb/",
+    "--format=%(refname:short)",
+  ]);
   const workhorseBranches = laneNamesFromBranches(pySplitLines(refs.out), ticket);
   const results: CheckResult[] = [
     { name: "hidden-tests", ...checkHidden(dispatch, repo, app) },

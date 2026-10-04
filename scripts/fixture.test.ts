@@ -170,8 +170,7 @@ function record(
         `stdout: ${JSON.stringify(cli.out)}\nstderr: ${JSON.stringify(cli.err)}\n` +
         `exit: ${cli.code}\nstored: ${JSON.stringify(JSON.parse(stored))}\n`,
     );
-    if (final.code !== 0 || cli.code !== 0 || cli.out !== "removed 2\n" || cli.err !== "")
-      return 1;
+    if (final.code !== 0 || cli.code !== 0 || cli.out !== "removed 2\n" || cli.err !== "") return 1;
   }
   if (run("git", ["-C", repo, "checkout", "-q", "main"]).code !== 0) return 1;
   if (run("git", ["-C", repo, "merge", "-q", "--no-ff", "-m", "Merge branch 7", "7"]).code !== 0)
@@ -208,7 +207,10 @@ function record(
   );
   const manifestBeforeStages = JSON.parse(readFileSync(join(d, "manifest.json"), "utf8"));
   manifestBeforeStages.lanes = Object.fromEntries(
-    (mode === "single-thread" ? [] : configuredWorkhorses).map((lane) => [lane, { outcome: "harvested" }]),
+    (mode === "single-thread" ? [] : configuredWorkhorses).map((lane) => [
+      lane,
+      { outcome: "harvested" },
+    ]),
   );
   writeFileSync(join(d, "manifest.json"), `${JSON.stringify(manifestBeforeStages)}\n`);
   run(join(HERE, "run"), ["log-action", d, "coachman", "note", "mode", `mode=${mode}`]);
@@ -285,8 +287,7 @@ function record(
         }
       }
       run(join(HERE, "run"), ["stage", d, s]);
-      if (s === "review" && legs > 1 && recordReviewRound(d, repo, recordedConfig) !== 0)
-        return 1;
+      if (s === "review" && legs > 1 && recordReviewRound(d, repo, recordedConfig) !== 0) return 1;
     }
     const handoffSections = sections.split("\n").filter(Boolean);
     writeFileSync(
@@ -458,9 +459,7 @@ function breaks(cleanDir: string, repo: string): void {
     .map((line) => JSON.parse(line) as Record<string, unknown>)
     .filter((event) => !(event.actor === "coachman" && event.action === "dispatch"));
   writeFileSync(actionFile, `${actions.map((event) => JSON.stringify(event)).join("\n")}\n`);
-  background("break-mode-synthesis-dispatch", () =>
-    score(noWorkhorseDispatch, repo),
-  );
+  background("break-mode-synthesis-dispatch", () => score(noWorkhorseDispatch, repo));
 }
 
 function copyFixtureProject(name: string, sourceRepo: string): { repo: string; dispatch: string } {
@@ -501,14 +500,21 @@ function modeBreaks(): void {
   ]);
   background("break-mode-single-stage", () => score(extraStage.dispatch, extraStage.repo));
 
-  const missingStage = copyFixtureProject("break-mode-synthesis-stage", join(tmp, `clean-${first}`, "repo"));
+  const missingStage = copyFixtureProject(
+    "break-mode-synthesis-stage",
+    join(tmp, `clean-${first}`, "repo"),
+  );
   const stageFile = join(missingStage.dispatch, "actions.jsonl");
   const kept = readFileSync(stageFile, "utf8")
     .split("\n")
     .filter(Boolean)
     .filter((line) => {
       const event = JSON.parse(line) as Record<string, unknown>;
-      return !(event.actor === "coachman" && event.action === "stage" && event.target === "workhorses-running");
+      return !(
+        event.actor === "coachman" &&
+        event.action === "stage" &&
+        event.target === "workhorses-running"
+      );
     });
   writeFileSync(stageFile, `${kept.join("\n")}\n`);
   background("break-mode-synthesis-stage", () => score(missingStage.dispatch, missingStage.repo));
@@ -711,7 +717,9 @@ beforeAll(() => {
   }
   background("clean-one", () => recorded("clean-one", first, "reference", 1));
   background("clean-three", () => recorded("clean-three", first, "reference", 3));
-  background("clean-single", () => recorded("clean-single", first, "reference", 2, "single-thread"));
+  background("clean-single", () =>
+    recorded("clean-single", first, "reference", 2, "single-thread"),
+  );
   modeBreaks();
   background("break-hidden", () => recorded("break-hidden", first, "app"));
   background("break-gate", () => recorded("break-gate", first, "broken"));
@@ -1116,10 +1124,25 @@ describe("score: a recorded run that meets every check scores clean", () => {
     const manifest = JSON.parse(readFileSync(join(dispatch, "manifest.json"), "utf8")) as {
       base: string;
     };
-    const commits = run("git", ["-C", repo, "log", "--reverse", "--format=%H", `${manifest.base}..7`]);
+    const commits = run("git", [
+      "-C",
+      repo,
+      "log",
+      "--reverse",
+      "--format=%H",
+      `${manifest.base}..7`,
+    ]);
     expect(commits.code).toBe(0);
     const firstCommit = commits.out.trim().split("\n")[0] ?? "";
-    const firstFiles = run("git", ["-C", repo, "diff-tree", "--no-commit-id", "--name-only", "-r", firstCommit]);
+    const firstFiles = run("git", [
+      "-C",
+      repo,
+      "diff-tree",
+      "--no-commit-id",
+      "--name-only",
+      "-r",
+      firstCommit,
+    ]);
     expect(firstFiles.out.trim().split("\n")).toEqual(["test/acceptance.cli.test.ts"]);
 
     const baseline = readFileSync(join(dispatch, "acceptance-baseline.txt"), "utf8");
@@ -1158,11 +1181,18 @@ describe("score: a recorded run that meets every check scores clean", () => {
       .map((line) => JSON.parse(line) as Record<string, string>);
     const verify = actions.filter((event) => event.action === "verify");
     const checkpoint = actions.findIndex(
-      (event) => event.actor === "coachman" && event.action === "stage" && event.target === "checkpoint-1",
+      (event) =>
+        event.actor === "coachman" && event.action === "stage" && event.target === "checkpoint-1",
     );
-    const verifyIndices = actions.flatMap((event, index) => (event.action === "verify" ? [index] : []));
+    const verifyIndices = actions.flatMap((event, index) =>
+      event.action === "verify" ? [index] : [],
+    );
     expect(verify.map((event) => event.target)).toEqual(["gate", "coachman-contract"]);
-    expect(verify.every((event) => event.detail.includes("on=7@") && event.detail.includes("result=pass exit=0"))).toBe(true);
+    expect(
+      verify.every(
+        (event) => event.detail.includes("on=7@") && event.detail.includes("result=pass exit=0"),
+      ),
+    ).toBe(true);
     expect(verifyIndices.every((index) => index < checkpoint)).toBe(true);
     console.log(
       `verify actions before checkpoint-1:\n${verify.map((event) => JSON.stringify(event)).join("\n")}\ncheckpoint action: ${JSON.stringify(actions[checkpoint])}`,
@@ -1188,16 +1218,26 @@ describe("score: a recorded run that meets every check scores clean", () => {
       const card = readFileSync(join(dispatch, "card.md"), "utf8");
       expect(record.mode).toBe(mode);
       expect(card).toContain(`Mode: ${mode}`);
-      expect(actions.some((event) => event.action === "note" && event.detail === `mode=${mode}`)).toBe(true);
+      expect(
+        actions.some((event) => event.action === "note" && event.detail === `mode=${mode}`),
+      ).toBe(true);
       if (mode === "single-thread") {
         const manifest = JSON.parse(readFileSync(join(dispatch, "manifest.json"), "utf8")) as {
           lanes: Record<string, unknown>;
         };
-        const refs = run("git", ["-C", repo, "for-each-ref", "refs/heads/wb/", "--format=%(refname:short)"]);
+        const refs = run("git", [
+          "-C",
+          repo,
+          "for-each-ref",
+          "refs/heads/wb/",
+          "--format=%(refname:short)",
+        ]);
         expect(Object.keys(manifest.lanes)).toEqual([]);
         expect(refs.out.trim()).toBe("");
         expect(readdirSync(join(dispatch, "logs"))).toEqual([]);
-        expect(actions.some((event) => event.actor === "coachman" && event.action === "dispatch")).toBe(false);
+        expect(
+          actions.some((event) => event.actor === "coachman" && event.action === "dispatch"),
+        ).toBe(false);
         expect(run("git", ["-C", repo, "branch", "--list", "7"]).out.trim()).toBe("7");
       }
     }
@@ -1208,7 +1248,12 @@ describe("score: a recorded run that meets every check scores clean", () => {
       join(tmp, `clean-${first}`, "repo", ".postmaster", "runs", "7"),
       join(tmp, "clean-single", "repo", ".postmaster", "runs", "7"),
     ];
-    const summaries: Array<{ reviewers: unknown; lenses: unknown; launch: string[]; gate: string[] }> = [];
+    const summaries: Array<{
+      reviewers: unknown;
+      lenses: unknown;
+      launch: string[];
+      gate: string[];
+    }> = [];
     const headings: string[][] = [];
     for (const dispatch of dispatches) {
       const record = JSON.parse(readFileSync(join(dispatch, "run.json"), "utf8")) as {
@@ -1226,7 +1271,14 @@ describe("score: a recorded run that meets every check scores clean", () => {
       const reviewFiles = readdirSync(dispatch)
         .filter((name) => name.startsWith("review-"))
         .map((name) => join(dispatch, name));
-      const hiddenMode = run("grep", ["-il", "-e", "single-thread", "-e", "synthesis mode", ...reviewFiles]);
+      const hiddenMode = run("grep", [
+        "-il",
+        "-e",
+        "single-thread",
+        "-e",
+        "synthesis mode",
+        ...reviewFiles,
+      ]);
       const cardHeadings = readFileSync(join(dispatch, "card.md"), "utf8")
         .split("\n")
         .filter((line) => /^#+ /u.test(line));
@@ -1254,7 +1306,9 @@ describe("score: a recorded run that meets every check scores clean", () => {
     expect(summaries[0]?.launch).toEqual(summaries[1]?.launch);
     expect(summaries[0]?.gate).toEqual(summaries[1]?.gate);
     expect(headings[0]).toEqual(headings[1]);
-    console.log(`review records in synthesis and single-thread:\n${JSON.stringify(summaries, null, 2)}`);
+    console.log(
+      `review records in synthesis and single-thread:\n${JSON.stringify(summaries, null, 2)}`,
+    );
   }, 30000);
 
   test("fixture score passes without jq on PATH and still requires npm", () => {

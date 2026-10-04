@@ -1036,7 +1036,14 @@ export function meta(d: string, repo: string, requestedMode?: string): Outcome {
     }
     let built: Built;
     try {
-      built = buildRecord(d, resolvedRepo, config, checkout, commit, requestedMode as RunMode | undefined);
+      built = buildRecord(
+        d,
+        resolvedRepo,
+        config,
+        checkout,
+        commit,
+        requestedMode as RunMode | undefined,
+      );
     } catch {
       built = { ok: false, messages: [] };
     }
@@ -1237,7 +1244,11 @@ if (import.meta.main) {
         outcome = { code: result.code, out: result.out, err: result.err };
       }
     } else if (cmd === "efforts" && argv.length === 2) outcome = efforts(argv[1] as string);
-    else if (cmd !== undefined && !verbs.includes(cmd) && (argv.length === 2 || argv.length === 4)) {
+    else if (
+      cmd !== undefined &&
+      !verbs.includes(cmd) &&
+      (argv.length === 2 || argv.length === 4)
+    ) {
       if (argv.length === 4 && argv[2] !== "--mode") usage();
       outcome = meta(argv[0] as string, argv[1] as string, argv[3]);
     } else usage();
