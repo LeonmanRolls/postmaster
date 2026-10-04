@@ -10,3 +10,4 @@ config.toml
 .postmaster/
 
 node_modules/
+scripts/.host-self-test-*
