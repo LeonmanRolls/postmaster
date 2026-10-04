@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { spawn, spawnSync } from "node:child_process";
 import { createInterface } from "node:readline";
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -20,7 +21,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runControls } from "./host-self-test.ts";
-import { processStart, processState } from "./lib/processes.ts";
+import { bootId, processStart, processState } from "./lib/processes.ts";
 
 const SECTIONS: Array<{ name: string; count: number }> = [
   { name: "preamble", count: 6 },
@@ -31,10 +32,10 @@ const SECTIONS: Array<{ name: string; count: number }> = [
   { name: "a run launch without a named run space is refused", count: 1 },
   { name: "stop: owned process trees and refusal controls", count: 5 },
   { name: "stop: registry identity and process membership", count: 16 },
-  { name: "run, Herdr (stub): pane placement and environment handover", count: 15 },
+  { name: "run, Herdr (stub): pane placement and environment handover", count: 16 },
   { name: "stop and close, Herdr (stub)", count: 6 },
   { name: "a reviewer's scratch clone, Herdr (stub)", count: 5 },
-  { name: "run, stop and close, tmux (stub)", count: 10 },
+  { name: "run, stop and close, tmux (stub)", count: 11 },
   { name: "completion cleanup controls, Herdr (stub)", count: 3 },
   { name: "finished review round cleanup, Herdr (stub)", count: 1 },
   { name: "run-wide teardown, Herdr (stub)", count: 2 },
@@ -375,19 +376,27 @@ test("a background runner that dies before reading its spec is rejected", async 
   }
 });
 
-// The boot id as host.ts reads it: the Linux file, else macOS kern.boottime
-// under LC_ALL=C, so the test's record matches on either system.
-function currentBootId(): string {
-  try {
-    return readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim();
-  } catch {
-    const booted = spawnSync("sysctl", ["-n", "kern.boottime"], {
-      encoding: "utf8",
-      env: { ...process.env, LC_ALL: "C" },
-    });
-    // ASCII: sysctl kern.boottime is kernel-emitted ASCII on macOS.
-    return (booted.stdout ?? "").trim().split(/\s+/u).join(" ");
-  }
+// The boot id as host.ts reads it under this test's forced proc root: the
+// portable path, with a stand-in sysctl answering the macOS keys, so the
+// record matches what the spawned host computes.
+function installStandInSysctl(dir: string): string {
+  const bin = join(dir, "bin");
+  mkdirSync(bin, { recursive: true });
+  const sysctl = join(bin, "sysctl");
+  writeFileSync(
+    sysctl,
+    [
+      "#!/bin/sh",
+      'case "$*" in',
+      '  *"kern.bootsessionuuid"*) echo "0B00D005-7E57-40DE-AD10-C0FFEE0C0DE5" ;;',
+      '  *"kern.boottime"*) echo "{ sec = 1700000000, usec = 123456 } Mon Jan  1 00:00:00 2024" ;;',
+      "  *) exit 1 ;;",
+      "esac",
+      "",
+    ].join("\n"),
+  );
+  chmodSync(sysctl, 0o755);
+  return bin;
 }
 
 test("a member with a five-word start matches its process, and close refuses while it lives", async () => {
@@ -395,10 +404,14 @@ test("a member with a five-word start matches its process, and close refuses whi
   const state = join(dir, "state");
   mkdirSync(join(state, "launches"), { recursive: true });
   const priorProcRoot = process.env.POSTMASTER_PROC_ROOT;
+  const priorPath = process.env.PATH;
   const sleep = spawn("sleep", ["30"], { detached: true, stdio: "ignore" });
   sleep.unref();
   try {
-    // Forced: the registry holds ps lstart's five words, not a tick count.
+    // Forced: the registry holds ps lstart's five words, not a tick count, and
+    // the boot id comes from the portable sysctl path with its stand-in.
+    const standIn = installStandInSysctl(dir);
+    process.env.PATH = `${standIn}:${priorPath ?? ""}`;
     process.env.POSTMASTER_PROC_ROOT = join(dir, "missing-proc");
     await new Promise((resolve) => setTimeout(resolve, 200));
     const memberPid = sleep.pid ?? 0;
@@ -413,7 +426,7 @@ test("a member with a five-word start matches its process, and close refuses whi
     expect(processState(groupPid)).toBe("absent");
     writeFileSync(
       join(state, "launches", String(groupPid)),
-      `${dir}\nmember-probe\nmember ${memberPid} ${start}\nboot ${currentBootId()}\n`,
+      `${dir}\nmember-probe\nmember ${memberPid} ${start}\nboot ${bootId()}\n`,
     );
     const env = {
       ...process.env,
@@ -444,6 +457,8 @@ test("a member with a five-word start matches its process, and close refuses whi
     } catch {}
     if (priorProcRoot === undefined) delete process.env.POSTMASTER_PROC_ROOT;
     else process.env.POSTMASTER_PROC_ROOT = priorProcRoot;
+    if (priorPath === undefined) delete process.env.PATH;
+    else process.env.PATH = priorPath;
     rmSync(dir, { recursive: true, force: true });
   }
 }, 60000);

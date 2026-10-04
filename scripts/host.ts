@@ -125,10 +125,12 @@ import { parseTomlText } from "./lib/data.ts";
 import { scriptsDir } from "./lib/paths.ts";
 import { mkstempSync, run, signalExitCode } from "./lib/proc.ts";
 import {
+  bootId,
   processCommandLine,
   processStart,
   processState,
   processTable as sharedProcessTable,
+  sameBoot,
 } from "./lib/processes.ts";
 import {
   BOUND_L,
@@ -211,7 +213,12 @@ function hasOwn(obj: object, key: string): boolean {
   return Object.hasOwn(obj, key);
 }
 function limit(seconds: number, program: string, args: string[] = []) {
-  return has("timeout") ? run("timeout", [String(seconds), program, ...args]) : run(program, args);
+  // timeout(1) where it exists; otherwise run()'s own millisecond timeout, so
+  // a program that never answers cannot hold a launch or a close forever on a
+  // system without coreutils.
+  return has("timeout")
+    ? run("timeout", [String(seconds), program, ...args])
+    : run(program, args, { timeout: seconds * 1000 });
 }
 function clean(value: string): string {
   return [...value]
@@ -506,14 +513,6 @@ type Registry = {
 function runBoot(...args: string[]): string {
   return run(args[0]!, args.slice(1), { env: { LC_ALL: "C" } }).out.trim();
 }
-function bootId(): string {
-  try {
-    return readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim();
-  } catch {
-    // ASCII: sysctl kern.boottime is kernel-emitted ASCII on macOS.
-    return runBoot("sysctl", "-n", "kern.boottime").split(/\s+/u).join(" ");
-  }
-}
 function bootTime(): number | null {
   try {
     const text = readFileSync("/proc/stat", "utf8");
@@ -653,7 +652,7 @@ function recordRoots(
     rec.boot = boot;
     saveRecord(path, rec);
   }
-  if (!rec.boot || rec.boot !== boot) return [];
+  if (!rec.boot || !sameBoot(rec.boot, boot)) return [];
   if (procs.has(group) && rec.start && procs.get(group)!.start === rec.start)
     return [`group|${group}|${rec.start}`];
   return rec.members
@@ -1955,28 +1954,45 @@ async function watch(pid: number, marker: string): Promise<void> {
 async function envWrite(path: string): Promise<void> {
   const until = Date.now() + 120_000;
   while (Date.now() < until && existsSync(dirname(path))) {
+    let fd: number;
     try {
-      const fd = openSync(path, constants.O_WRONLY | constants.O_NONBLOCK);
-      try {
-        const data = new TextEncoder().encode(
-          `${Object.entries(process.env)
-            .filter((entry): entry is [string, string] => entry[1] !== undefined)
-            .map(([key, value]) => `${key}=${value}\0`)
-            .join("")}POSTMASTER_ENV_OK=1\0`,
-        );
-        let at = 0;
-        while (at < data.length) at += writeSync(fd, data, at, data.length - at);
-      } finally {
-        closeSync(fd);
-      }
-      return;
+      fd = openSync(path, constants.O_WRONLY | constants.O_NONBLOCK);
     } catch (error) {
+      // ENXIO: no reader yet; ENOENT: no FIFO yet. Anything else cannot arrive.
       if (
         (error as { code?: string }).code !== "ENXIO" &&
         (error as { code?: string }).code !== "ENOENT"
       )
         return;
       await Bun.sleep(100);
+      continue;
+    }
+    try {
+      const data = new TextEncoder().encode(
+        `${Object.entries(process.env)
+          .filter((entry): entry is [string, string] => entry[1] !== undefined)
+          .map(([key, value]) => `${key}=${value}\0`)
+          .join("")}POSTMASTER_ENV_OK=1\0`,
+      );
+      let at = 0;
+      while (at < data.length) {
+        try {
+          at += writeSync(fd, data, at, data.length - at);
+        } catch (error) {
+          const code = (error as { code?: string }).code;
+          // The FIFO is full: wait for the reader to drain it and write the
+          // rest, so an environment larger than the pipe arrives whole.
+          if (code === "EAGAIN" || code === "EWOULDBLOCK") {
+            if (Date.now() >= until) return;
+            await Bun.sleep(10);
+            continue;
+          }
+          return; // the reader is gone; nothing more can arrive
+        }
+      }
+      return;
+    } finally {
+      closeSync(fd);
     }
   }
 }
@@ -4448,7 +4464,7 @@ function legWaitingRemoveInner(f: string, ticket: string): void {
 function legWaitingUnderFlock(lockPath: string, inner: string[]): boolean {
   if (Bun.which("flock") === null) return false;
   const self = fileURLToPath(import.meta.url);
-  const r = spawnSync("flock", ["--exclusive", lockPath, process.execPath, self, ...inner], {
+  const r = spawnSync("flock", ["-x", lockPath, process.execPath, self, ...inner], {
     stdio: "inherit",
   });
   if (r.error) return false;

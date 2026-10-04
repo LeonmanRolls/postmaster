@@ -2090,6 +2090,34 @@ export async function runControls(): Promise<number> {
         readFileSync(join(logs, "h5.count"), "utf8").trim().split("\n").length === 1,
     );
     rmSync(join(stub, "pane.late"), { force: true });
+    const bigHerdr = execHost(
+      [
+        "run",
+        f.name,
+        worktree,
+        "--out",
+        "../logs/h-big.out",
+        "--marker",
+        "../logs/h-big.done",
+        "--",
+        "sh",
+        "-c",
+        "echo big=${#BIG}",
+      ],
+      stubs,
+      f.caller,
+      { BIG: "x".repeat(100_000) },
+    );
+    await marker(markerPath("h-big"));
+    await pass(
+      "an environment larger than the FIFO arrives whole, and the launch runs",
+      () =>
+        bigHerdr.code === 0 &&
+        readFileSync(join(logs, "h-big.out"), "utf8").trim() === "big=100000",
+      `${bigHerdr.out}${bigHerdr.err}${
+        existsSync(join(logs, "h-big.out")) ? readFileSync(join(logs, "h-big.out"), "utf8") : ""
+      }`,
+    );
     await pass("no launch leaves its hand-over directory behind", () =>
       readdir(root).every((name) => !name.startsWith("postmaster-host.")),
     );
@@ -2435,6 +2463,35 @@ export async function runControls(): Promise<number> {
       dottedRun.out,
     );
     execHost(["close", dotted], stubs, root, { POSTMASTER_HOST: "tmux" });
+
+    const bigTmux = execHost(
+      [
+        "run",
+        f.name,
+        worktree,
+        "--out",
+        "../logs/t-big.out",
+        "--marker",
+        "../logs/t-big.done",
+        "--",
+        "sh",
+        "-c",
+        "echo big=${#BIG}",
+      ],
+      stubs,
+      f.caller,
+      { POSTMASTER_HOST: "tmux", BIG: "x".repeat(100_000) },
+    );
+    await marker(markerPath("t-big"));
+    await pass(
+      "an environment larger than the FIFO arrives whole in the tmux window",
+      () =>
+        bigTmux.code === 0 && readFileSync(join(logs, "t-big.out"), "utf8").trim() === "big=100000",
+      `${bigTmux.out}${bigTmux.err}${
+        existsSync(join(logs, "t-big.out")) ? readFileSync(join(logs, "t-big.out"), "utf8") : ""
+      }`,
+    );
+    execHost(["close", worktree], stubs, root, { POSTMASTER_HOST: "tmux" });
 
     {
       // Completion, review-round and run-wide teardown controls, Herdr then tmux.
