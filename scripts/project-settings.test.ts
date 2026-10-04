@@ -459,3 +459,50 @@ describe("repo profile", () => {
     }).not.toThrow();
   }, 30000);
 });
+
+describe("run-root and exclude-worktrees", () => {
+  const gitIn = (dir: string, ...args: string[]): number =>
+    spawnSync("git", ["-C", dir, ...args], { encoding: "utf8", timeout: 10000 }).status ?? 1;
+
+  test("run-root creates the runs folder and its ignore rule, and prints the run root", () => {
+    const target = at("run-root-target");
+    mkdirSync(target, { recursive: true });
+    expect(gitIn(target, "init", "-q")).toBe(0);
+    const r = runCli(SELF, ["project-settings", "run-root", target]);
+    expect(r.code).toBe(0);
+    expect(r.out.trim().endsWith(join(".postmaster", "runs"))).toBe(true);
+    expect(existsSync(join(r.out.trim(), "postmaster"))).toBe(true);
+    expect(existsSync(join(target, ".postmaster", ".gitignore"))).toBe(true);
+    expect(gitIn(target, "check-ignore", "-q", ".postmaster/runs/T-1/card.md")).toBe(0);
+  }, 30000);
+
+  test("run-root refuses a directory that is not a repository", () => {
+    const plain = at("run-root-plain");
+    mkdirSync(plain, { recursive: true });
+    const r = runCli(SELF, ["project-settings", "run-root", plain]);
+    expect(r.code).toBe(1);
+    expect(r.err).toContain("not a git repository");
+  }, 30000);
+
+  test("exclude-worktrees keeps exactly one line in the repo's exclude, run twice", () => {
+    const target = at("exclude-target");
+    mkdirSync(target, { recursive: true });
+    expect(gitIn(target, "init", "-q")).toBe(0);
+    const first = runCli(SELF, ["project-settings", "exclude-worktrees", target]);
+    expect(first.code).toBe(0);
+    expect(first.out).toContain("excluded .worktrees/");
+    const second = runCli(SELF, ["project-settings", "exclude-worktrees", target]);
+    expect(second.code).toBe(0);
+    const text = readFileSync(join(target, ".git", "info", "exclude"), "utf8");
+    expect(text.split("\n").filter((line) => line === ".worktrees/").length).toBe(1);
+    expect(gitIn(target, "status", "--porcelain")).toBe(0);
+  }, 30000);
+
+  test("exclude-worktrees refuses a directory that is not a repository", () => {
+    const plain = at("exclude-plain");
+    mkdirSync(plain, { recursive: true });
+    const r = runCli(SELF, ["project-settings", "exclude-worktrees", plain]);
+    expect(r.code).toBe(1);
+    expect(r.err).toContain("not a git repository");
+  }, 30000);
+});

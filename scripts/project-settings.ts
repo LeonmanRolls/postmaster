@@ -5,6 +5,10 @@
 //   run project-settings effective <repo> [<machine-config>]
 //                                             machine config with local role choices applied
 //   run project-settings ensure <repo>         create .postmaster/.gitignore, no settings
+//   run project-settings run-root <target>      create <root>/.postmaster/runs/postmaster and
+//                                               the ignore rule; print <root>/.postmaster/runs
+//   run project-settings exclude-worktrees <repo>
+//                                               keep `.worktrees/` in the repo's git exclude
 //   run project-settings write <repo> project|local [<toml-file>]
 //                                             validate, then write the agreed settings
 //
@@ -50,7 +54,8 @@ import {
 const HERE = scriptsDir(import.meta);
 const USAGE =
   "usage: run project-settings inspect|report <repo> | effective <repo> [<machine-config>]" +
-  " | ensure <repo> | write <repo> project|local [<toml-file>]";
+  " | ensure <repo> | write <repo> project|local [<toml-file>]" +
+  " | run-root <target> | exclude-worktrees <repo>";
 
 // --- failure ----------------------------------------------------------------------------
 // Internal failures throw a branded value the entry point catches; anything else
@@ -774,6 +779,46 @@ const report = (repo: string): void => {
   if (Object.hasOwn(tracker, "binding")) console.log(`tracker_binding=${String(tracker.binding)}`);
 };
 
+/** The project's git toplevel: the run root lives at its <root>/.postmaster/runs. */
+const gitToplevel = (raw: string): string => {
+  const target = projectRoot(raw);
+  const g = run("git", ["-C", target, "rev-parse", "--show-toplevel"]);
+  if (g.code !== 0) fail(`not a git repository: ${raw}`);
+  return g.out.trim();
+};
+
+/**
+ * runRootPath <target>: create <root>/.postmaster/runs/postmaster and the folder's
+ * ignore rule, and return <root>/.postmaster/runs, which names this project's runs.
+ */
+export const runRootPath = (raw: string): string => {
+  const root = gitToplevel(raw);
+  mkdirSync(join(root, ".postmaster", "runs", "postmaster"), { recursive: true });
+  ensureIgnore(root, true);
+  return join(root, ".postmaster", "runs");
+};
+
+/**
+ * ensureWorktreesExcluded <repo>: keep `.worktrees/` in the repository's own
+ * git exclude, so a pre-flight never reads the run's working copies as dirt.
+ * Idempotent, and returns the file it holds.
+ */
+export const ensureWorktreesExcluded = (raw: string): string => {
+  const repo = projectRoot(raw);
+  const g = run("git", ["-C", repo, "rev-parse", "--absolute-git-dir"]);
+  if (g.code !== 0) fail(`not a git repository: ${raw}`);
+  const file = join(g.out.trim(), "info", "exclude");
+  const existing = existsSync(file) ? strictRead(file) : "";
+  if (!pySplitLines(existing).includes(".worktrees/")) {
+    let text = existing;
+    if (text !== "" && !text.endsWith("\n")) text += "\n";
+    text += ".worktrees/\n";
+    mkdirSync(join(g.out.trim(), "info"), { recursive: true });
+    writeFileSync(file, text);
+  }
+  return file;
+};
+
 export const ensureIgnore = (repo: string, quiet = false): void => {
   const d = settingsDir(repo);
   mkdirSync(d, { recursive: true });
@@ -864,6 +909,11 @@ const main = (): void => {
   const rest = argv.slice(1);
   if (cmd === "ensure" && rest.length === 1) {
     ensureIgnore(projectRoot(rest[0]!));
+  } else if (cmd === "run-root" && rest.length === 1) {
+    console.log(runRootPath(rest[0]!));
+  } else if (cmd === "exclude-worktrees" && rest.length === 1) {
+    const file = ensureWorktreesExcluded(rest[0]!);
+    console.log(`project-settings: excluded .worktrees/ in ${file}`);
   } else if ((cmd === "inspect" || cmd === "report") && rest.length === 1) {
     const repo = projectRoot(rest[0]!);
     if (cmd === "report") report(repo);
