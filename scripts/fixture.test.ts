@@ -1209,6 +1209,24 @@ describe("score: the time lines after the checks (#265)", () => {
     expect(timeReport(waitRun())).toContain("review round 1: fast bug 1m 40s, slow bug 30s");
   }, 30000);
 
+  test("a launch logged after its own marker times from the round's start", () => {
+    const d = plant(
+      "late-launch",
+      [
+        act(0, "postmaster", "dispatch", "7"),
+        act(200, "coachman", "review-launch", "slow", "bug round 1 thread x"),
+      ],
+      [["logs/review-r1-bug-slow.done", 170]],
+      {
+        "logs/review-r1.json": `${JSON.stringify({
+          started: at(66),
+          reviewers: [["bug", "slow"]],
+        })}\n`,
+      },
+    );
+    expect(timeReport(d)).toContain("review round 1: slow bug 1m 44s");
+  }, 30000);
+
   test("a run with no review round files says nothing about rounds", () => {
     expect(timeReport(hourRun())).not.toContain("review round");
   }, 30000);

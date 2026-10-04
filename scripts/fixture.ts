@@ -955,7 +955,14 @@ function reviewRoundLines(dispatch: string, events: Array<Record<string, unknown
         entries.push({ line: `${lane} ${lens} no launch`, secs: null });
         continue;
       }
-      const secs = Math.max(0, (marker - launch.getTime()) / 1000);
+      // A launch logged after its own marker — a batched harvest log — is a late
+      // record, not a zero-length review: time it from the round's own start,
+      // which the round json names.
+      let start = launch.getTime();
+      if (start >= marker && since !== null && since.getTime() < marker) {
+        start = since.getTime();
+      }
+      const secs = Math.max(0, (marker - start) / 1000);
       entries.push({ line: `${lane} ${lens} ${fmt(secs)}`, secs });
     }
     if (entries.length > 0) lines.push(`review round ${n}: ${slowestFirst(entries).join(", ")}`);
