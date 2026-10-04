@@ -370,7 +370,10 @@ if (import.meta.main) {
     const sleeper = new Int32Array(new SharedArrayBuffer(4));
     let rc = 0;
     const missing: number[] = [];
-    let expected = "";
+    const expectedFiles = new Set(
+      reviewers.map(([lens, lane]) => `review-r${R}-${lens}-${lane}.done`),
+    );
+    const expected = [...expectedFiles].map((marker) => ` ${marker} `).join("");
     while (true) {
       try {
         wallRows = readWalls(D);
@@ -378,13 +381,27 @@ if (import.meta.main) {
         die(`cannot read provider walls during review wait: ${(error as Error).message}`);
       }
       missing.length = 0;
-      expected = "";
       for (let i = 0; i < n; i++) {
         const [lens, lane] = reviewers[i]!;
         const marker = `review-r${R}-${lens}-${lane}.done`;
-        expected += ` ${marker} `;
         if (isWalled(lens, lane)) walledIndexes.add(i);
         if (!walledIndexes.has(i) && !existsSync(join(LOGS, marker))) missing.push(i);
+      }
+      let markerFiles: string[];
+      try {
+        markerFiles = readdirSync(LOGS);
+      } catch (error) {
+        die(`cannot read reviewer marker directory during wait: ${(error as Error).message}`);
+      }
+      const prefix = `review-r${R}-`;
+      const strayMarkers = markerFiles.filter(
+        (marker) =>
+          marker.startsWith(prefix) && marker.endsWith(".done") && !expectedFiles.has(marker),
+      );
+      if (strayMarkers.length > 0) {
+        die(
+          `the count was made up by markers no reviewer of round ${R} lands: ${strayMarkers.join(" ")}`,
+        );
       }
       if (missing.length === 0) break;
       const left = deadline - monotonic();
