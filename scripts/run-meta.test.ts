@@ -20,6 +20,7 @@ import {
 import { delimiter, join } from "node:path";
 import { toolRoot } from "./lib/paths.ts";
 import { run, withTempDir } from "./lib/proc.ts";
+import { commandLine } from "./lib/processes.ts";
 import { isDir, meta, pin, TRAIL_NL_RE } from "./run-meta.ts";
 
 const TOOL = toolRoot(import.meta);
@@ -739,12 +740,7 @@ beforeAll(async () => {
         const pg = run("pgrep", ["-f", "run-meta-scan"]);
         const pids = pg.out.trim() === "" ? [] : pg.out.trim().split("\n");
         for (const pid of pids) {
-          let cmd = "";
-          try {
-            cmd = readFileSync(`/proc/${pid}/cmdline`, "utf8");
-          } catch {
-            continue;
-          }
+          const cmd = commandLine(Number(pid));
           if (cmd.includes(tmp)) {
             try {
               process.kill(Number(pid), 9);

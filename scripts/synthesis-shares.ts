@@ -1,4 +1,4 @@
-import { existsSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, isAbsolute, join, resolve } from "node:path";
 import { jsWords } from "./lib/text.ts";
 
@@ -236,15 +236,43 @@ const generatedPaths = (
   paths: readonly string[],
 ): ReadonlySet<string> => {
   if (paths.length === 0) return new Set();
-  const output = gitText(repo, [
-    "check-attr",
-    "--source",
-    commit,
-    "-z",
-    ...GENERATED_ATTRIBUTES,
-    "--",
-    ...paths,
-  ]);
+  // git check-attr --source arrived in 2.40; Apple's git is older. A temporary
+  // index holding the commit's tree gives the same answer via --cached, which
+  // every git has. (D4)
+  const tmpIndex = `${repo}/.git/postmaster-check-attr-index`;
+  const load = Bun.spawnSync(
+    ["git", "-C", repo, "read-tree", commit],
+    { stdout: "pipe", stderr: "pipe", env: { ...process.env, GIT_INDEX_FILE: tmpIndex } },
+  );
+  if (load.exitCode !== 0) {
+    try {
+      rmSync(tmpIndex, { force: true });
+    } catch {}
+    fail(`git read-tree ${commit} exited ${load.exitCode}: ${decode(load.stderr).trim()}`);
+  }
+  const result = Bun.spawnSync(
+    [
+      "git",
+      "-c",
+      "core.attributesFile=/dev/null",
+      "--no-pager",
+      "-C",
+      repo,
+      "check-attr",
+      "--cached",
+      "-z",
+      ...GENERATED_ATTRIBUTES,
+      "--",
+      ...paths,
+    ],
+    { stdout: "pipe", stderr: "pipe", env: { ...process.env, GIT_INDEX_FILE: tmpIndex } },
+  );
+  try {
+    rmSync(tmpIndex, { force: true });
+  } catch {}
+  const output = result.exitCode === 0 ? decode(result.stdout) : fail(
+    `git check-attr --cached exited ${result.exitCode}: ${decode(result.stderr).trim()}`,
+  );
   // Mutation of this parse's local list only: one batched check-attr call per range
   // instead of one git spawn per file, and the list never escapes except as the set.
   const fields = output.split("\0");

@@ -327,10 +327,13 @@ function expectScore(key: string, failing: string, failText?: string): void {
     .filter((l) => l.startsWith("FAIL"))
     .map((l) => pyWords(l)[1] ?? "");
   const failingChecks = failLines.join(",") || "none";
-  const lines = out.split("\n").filter((l) => l.trim()).length;
+  const all = out.split("\n").filter((l) => l.trim());
+  // The score's first line is the platform, then the eight check lines.
+  expect(all[0]?.startsWith("platform: ")).toBe(true);
+  const lines = all.length;
+  expect(lines).toBe(9);
   expect(rc).toBe(failing === "none" ? 0 : 2);
   expect(failingChecks).toBe(failing);
-  expect(lines).toBe(8);
   if (failText !== undefined) {
     expect(
       out

@@ -82,6 +82,7 @@ import { basename, dirname, join } from "node:path";
 import { tryJsonFile, tryTomlFile } from "./lib/data.ts";
 import { toolRoot } from "./lib/paths.ts";
 import { mkstempSync, run, signalExitCode } from "./lib/proc.ts";
+import { processAlive } from "./lib/processes.ts";
 import { pySplitLines, pyTrim } from "./lib/text.ts";
 
 const TOOL = toolRoot(import.meta);
@@ -215,12 +216,7 @@ function lockOwnerDead(lockPath: string): boolean {
   }
   const pid = Number(text.trim());
   if (!Number.isInteger(pid) || pid <= 0) return false;
-  try {
-    process.kill(pid, 0);
-    return false;
-  } catch (e) {
-    return (e as NodeJS.ErrnoException)?.code === "ESRCH";
-  }
+  return !processAlive(pid);
 }
 
 function withPinLock<T>(
@@ -569,8 +565,7 @@ function scanHoldMs(): number {
 }
 
 function runScanChild(root: string, checkout: string): { code: number; out: string; err: string } {
-  const bun = Bun.which("bun");
-  if (bun === null) return { code: 127, out: "", err: "" };
+  const bun = process.execPath;
   const args = [
     "--no-env-file",
     `--config=${join(TOOL, "bunfig.toml")}`,

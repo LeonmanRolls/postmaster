@@ -19,6 +19,12 @@ import {
 } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { scriptsDir } from "./lib/paths.ts";
+import {
+  commandLine,
+  processAlive,
+  processStart,
+  processState,
+} from "./lib/processes.ts";
 import { pyWords } from "./lib/text.ts";
 
 const HERE = scriptsDir(import.meta);
@@ -592,12 +598,8 @@ function testStopFinishers(root: string): void {
     const pidText = tab < 0 ? line : line.slice(0, tab);
     const marker = tab < 0 ? "" : line.slice(tab + 1);
     if (!/^[0-9]+$/u.test(pidText) || !marker) continue;
-    let command = "";
-    try {
-      command = readFileSync(`/proc/${pidText}/cmdline`, "utf8").replace(/\0/gu, " ");
-    } catch {
-      continue;
-    }
+    const command = commandLine(Number(pidText));
+    if (!command) continue;
     if (command.includes(marker)) {
       try {
         process.kill(Number(pidText));
@@ -1540,16 +1542,7 @@ export async function runControls(): Promise<number> {
     const termStop = execHost(["stop", join(f.repo, ".worktrees/T-1-luna")], noHost, root, {
       POSTMASTER_HOST_STOP_WAIT: "2",
     });
-    const alive = (pid: string) => {
-      try {
-        return !readFileSync(`/proc/${pid}/stat`, "utf8")
-          .slice(readFileSync(`/proc/${pid}/stat`, "utf8").lastIndexOf(")") + 1)
-          .trim()
-          .startsWith("Z");
-      } catch {
-        return false;
-      }
-    };
+    const alive = (pid: string) => processAlive(Number(pid));
     const escapee = readFileSync(join(root, "tree/escapee.pid"), "utf8").trim();
     const deaf = readFileSync(join(root, "tree/deaf.pid"), "utf8").trim();
     await pass(
@@ -1581,14 +1574,7 @@ export async function runControls(): Promise<number> {
     const bootSeconds = Number(bootLine.split(/\s+/u)[1]);
     const ticks = Number(exec("getconf", ["CLK_TCK"]).out.trim()) || 100;
     const procStart = (pid: string): string => {
-      const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
-      return (
-        stat
-          .slice(stat.lastIndexOf(")") + 1)
-          .trim()
-          // ASCII: /proc/<pid>/stat past the name is kernel-emitted ASCII numerics.
-          .split(/\s+/u)[19] ?? ""
-      );
+      return processStart(Number(pid)) ?? "";
     };
     const startedSeconds = (pid: string) => bootSeconds + Number(procStart(pid)) / ticks;
     const record = (pid: string) => join(launchDir, pid);
@@ -1794,12 +1780,7 @@ export async function runControls(): Promise<number> {
       "a process that works in the worktree but that no launch started is left alone",
       () => {
         if (unrelatedRun.code !== 0 || unrelatedStop.code !== 0 || !unrelated.pid) return false;
-        try {
-          process.kill(unrelated.pid, 0);
-          return true;
-        } catch {
-          return false;
-        }
+        return processAlive(unrelated.pid);
       },
     );
     try {
@@ -4312,8 +4293,7 @@ export async function runControls(): Promise<number> {
       safeOutcome(attemptsPath),
     );
     rmSync(join(legD, ".leg-1-exited"), { force: true });
-    const selfStat = readFileSync(`/proc/${process.pid}/stat`, "utf8");
-    const selfStart = pyWords(selfStat.slice(selfStat.lastIndexOf(")") + 1))[19] ?? "";
+    const selfStart = processStart(process.pid) ?? "";
     writeFileSync(activePath, `${process.pid} ${selfStart}\n`);
     before = nonEmptyLines(attemptsPath).length;
     prompt = join(legD, "livetest.txt");
@@ -4421,12 +4401,7 @@ export async function runControls(): Promise<number> {
       await sleep(200);
     }
     let lockAlive = false;
-    try {
-      if (/^[0-9]+$/u.test(lockpid)) process.kill(Number(lockpid), 0);
-      lockAlive = /^[0-9]+$/u.test(lockpid);
-    } catch {
-      lockAlive = false;
-    }
+    if (/^[0-9]+$/u.test(lockpid)) lockAlive = processAlive(Number(lockpid));
     let lockContent = "";
     try {
       lockContent = readFileSync(activePath, "utf8").trim();
@@ -4914,11 +4889,7 @@ export async function runControls(): Promise<number> {
         pp = readFileSync(join(fuzzD, "logs", "coachman-leg-1.pid"), "utf8").trim();
       } catch {}
       if (lp !== "" && lp === pp && /^[0-9]+$/u.test(lp)) {
-        try {
-          process.kill(Number(lp), 0);
-        } catch {
-          return;
-        }
+        if (!processAlive(Number(lp))) return;
         try {
           process.kill(Number(lp), "SIGKILL");
         } catch {}
@@ -6573,13 +6544,7 @@ export async function live(): Promise<void> {
 }
 
 function processExists(pid: number): boolean {
-  if (!pid) return false;
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return (error as { code?: string }).code !== "ESRCH";
-  }
+  return processAlive(pid);
 }
 
 if (resolve(process.argv[1] ?? "") === resolve(SCRIPT)) {
