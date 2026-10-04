@@ -3,7 +3,8 @@
 // (scripts/run host). Event formats are harness-specific, so this script belongs to the harness
 // adapter beside run launch, and harnesses.md says which harness's events it knows.
 //
-//   run view-stream < <events-file>                           render a stream, then stop
+//   run view-stream [<events-file>]                           render a stream (the file, else
+//                                                           stdin), then stop
 //   run view-stream --follow <file> --pid <pid> [--from <byte>] render the file as it grows,
 //                                                           and stop once <pid> has exited
 //                                                           and everything it wrote is shown
@@ -983,18 +984,28 @@ function view(args: string[]): number {
   let follow: string | null = null;
   let pid: number | null = null;
   let start = 0;
+  let file: string | null = null;
   while (args.length > 0) {
     const a = args.shift()!;
     if (a === "--follow") follow = args.shift() ?? null;
     else if (a === "--pid") pid = parseInt(args.shift() ?? "", 10);
     else if (a === "--from") start = parseInt(args.shift() ?? "", 10);
-    else {
+    else if (a.startsWith("-")) {
       console.error(`view-stream: unknown argument: ${a}`);
+      return 1;
+    } else if (file === null) {
+      file = a;
+    } else {
+      console.error(`view-stream: one stream at a time, not ${file} and ${a}`);
       return 1;
     }
   }
   if (follow && pid === null) {
     console.error("view-stream: --follow needs --pid");
+    return 1;
+  }
+  if (follow && file !== null) {
+    console.error("view-stream: the stream is --follow's file; take a second argument for it");
     return 1;
   }
   if (follow) {
@@ -1008,7 +1019,15 @@ function view(args: string[]): number {
 
   if (!follow) {
     const utf8 = utf8Stream();
-    const fd = 0;
+    let fd = 0;
+    if (file !== null) {
+      try {
+        fd = openSync(file, "r");
+      } catch (error) {
+        console.error(`view-stream: cannot read ${file}: ${String(error)}`);
+        return 1;
+      }
+    }
     const buf = Buffer.alloc(65536);
     let pending = "";
     for (;;) {
@@ -1029,6 +1048,7 @@ function view(args: string[]): number {
     pending += utf8.feed(new Uint8Array(0), true);
     if (pending !== "") show(pending, false);
     flushSaid(false);
+    if (file !== null) closeSync(fd);
     return 0;
   }
 

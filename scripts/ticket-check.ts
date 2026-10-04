@@ -9,9 +9,11 @@
 //   run ticket-check --body <body-file> [--title <title>] [--project <repo>] a body file, as an adapter's create
 //                                                         takes it; the title is judged only when
 //                                                         --title gives one
-//   run ticket-check --splice <base-body> <sections>       print <base-body> with each `##` section
-//                                                         of <sections> in place of the one it
-//                                                         names, or added where the shape puts it
+//   run ticket-check --splice <base-body> <sections> [--out <file>]
+//                                                         <base-body> with each `##` section of
+//                                                         <sections> in place of the one it names,
+//                                                         or added where the shape puts it: to
+//                                                         <file> when --out gives one, else stdout
 //   run ticket-check --has-journey <file>                  print `journey` or `no journey`: whether
 //                                                         the phrase "user journey" occurs anywhere in
 //                                                         the text, case-insensitively, with whitespace
@@ -66,7 +68,7 @@
 //           could not be run or gave no verdict; or, with --splice, a sections file that is not a
 //           list of `##` sections, or a part it would write named inside a later part of the base
 //   exit 2  malformed; one line per missing or malformed part on stdout, the part named first
-import { readFileSync, realpathSync, statSync } from "node:fs";
+import { readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { scriptsDir } from "./lib/paths.ts";
 import { run } from "./lib/proc.ts";
@@ -587,7 +589,8 @@ function _checkPrinted(text: string, turnpikesPath: string): number {
 const TURNPIKES = join(scriptsDir(import.meta), "run");
 
 const USAGE =
-  "usage: run ticket-check <repo> <ticket-id> | --body <body-file> [--title <title>] [--project <repo>] | --splice <base-body> <sections> | --has-journey <file>";
+  "usage: run ticket-check <repo> <ticket-id> | --body <body-file> [--title <title>] [--project <repo>]" +
+  " | --splice <base-body> <sections> [--out <file>] | --has-journey <file>";
 
 function usage(): never {
   console.error(USAGE);
@@ -660,13 +663,16 @@ function main(argv: string[]): number {
     usage();
   }
   if (mode === "--splice") {
-    if (argv.length !== 3) {
+    const wantsOut = argv.length === 5 && argv[3] === "--out";
+    if (argv.length !== 3 && !wantsOut) {
       usage();
     }
     try {
       const baseText = loadText(argv[1]!);
       const sectionsText = loadText(argv[2]!);
-      process.stdout.write(splice(baseText, sectionsText, TURNPIKES));
+      const spliced = splice(baseText, sectionsText, TURNPIKES);
+      if (wantsOut) writeFileSync(argv[4]!, spliced);
+      else process.stdout.write(spliced);
       return 0;
     } catch (e) {
       if (e instanceof DieError) {
