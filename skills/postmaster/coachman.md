@@ -79,7 +79,10 @@ last; `stage` whenever the run enters a stage, written by `<tool>/scripts/stage.
 `spec-review` per user decision on the run's one spec, written by the postmaster from the
 interactive session and never by you (target `spec`, detail `approved|changes|dropped` then
 the spec commit then the user's words); `tool-fault` as soon as postmaster itself misbehaves
-(Tool faults, below); `note` for anything else worth a line. A lone dissenter, a convergent fix,
+(Tool faults, below); `note` for anything else worth a line. A provider wall is one `wall`
+line per launch, written by `launch.sh` itself as the launch ends — lane, role, a reviewer's
+lens and round, the provider's message and the reset — and `walls.sh` writes the `told`,
+`rule` and `carry` lines beside it. A lone dissenter, a convergent fix,
 a wall: each is one line here, computable later, rather than a sentence in prose that cannot be
 counted.
 
@@ -121,6 +124,7 @@ by files in its own dispatch directory.
 | `run-log.md` | running narrative |
 | `card.md` + `.card-ready` | the ship card is complete; the postmaster may gate |
 | `ESCALATION.md` + `.escalation-ready` | it needs a ruling and has stopped |
+| `.wall-pause` | the pause is for a provider wall (`walls.sh escalate`); the watcher resumes the leg once every wall in the run is ruled |
 | `spec-review.md` + `.spec-review-ready` | the planning stage paused for the user's spec review |
 | `logs/coachman-leg-<n>-events.jsonl` | its own stream for leg `n`; errors in `logs/coachman-leg-<n>.err` |
 | `checkpoint-<n>.md` + `.checkpoint-<n>-ready` | a checkpoint card is complete; informational in autonomous mode, a stop in consult mode |
@@ -616,7 +620,30 @@ from it.
   failed workhorse leaves its branch at BASE and has contributed nothing to read. Record that lane
   DEGRADED rather than absent, say so on the card, and compose from the lanes that produced
   work.
-- **Checkpoint 1 card, then the hand-off:** per-workhorse outcome (or stall); **the SYNTHESIS and SHARES lines, the ranking, what
+
+  **Pause on every walled workhorse before the synthesis (D1).** A lane that stops because
+  its provider's usage limit ran out leaves a `wall` line, written by its launch as it ends
+  (`harnesses.md`, Walls). When every workhorse marker has landed, before
+  `<tool>/scripts/stage.sh <dispatch> synthesis`:
+
+  ```sh
+  <tool>/scripts/walls.sh show <dispatch>    # every wall, as the cards print it
+  <tool>/scripts/walls.sh open <dispatch>    # exit 1 while any wall has no ruling
+  ```
+
+  On exit 1 from `open`, run `<tool>/scripts/walls.sh escalate <dispatch>` — it writes
+  `ESCALATION.md` naming each walled workhorse with its message and its reset or
+  `no reset time`, and the ruling go on, touches `.escalation-ready` and `.wall-pause` — and
+  exit the leg with no `checkpoint-1.md` and the stage unchanged. The ruling arrives as a
+  resume of this thread; the watcher delivers it once every wall in the run is ruled. On
+  resume, run `open` again: with exit 0, carry each walled workhorse with
+  `<tool>/scripts/walls.sh carry <dispatch> <lane>` (no harness call, and each go-on is
+  carried out once), put its `<tool>/scripts/walls.sh show <dispatch>` line on checkpoint 1
+  and on the ship card, and go on. An ending that is not a wall keeps the remount path: only
+  a `wall` line pauses the run.
+- **Checkpoint 1 card, then the hand-off:** per-workhorse outcome (or stall), each walled lane
+  carrying its `<tool>/scripts/walls.sh show <dispatch>` line — `stub: DEGRADED, provider
+  wall: "<the provider's message>"` — as its outcome; **the SYNTHESIS and SHARES lines, the ranking, what
   was taken from each lane, what was rejected and why**; the code-verified evidence behind each
   choice; the convention gaps found; what was dropped; gate status; the checks, as
   `<tool>/scripts/landing.sh results <dispatch> <wt>` prints them for each workhorse's branch
@@ -890,6 +917,13 @@ Set the stage first, `<tool>/scripts/stage.sh <dispatch> review`, then:
    leg and escalate (Tool faults). Exit 1 collects nothing, and the output says why; unless the
    round was started again, re-run it whole.
 
+   **A wall closes the round without its reviewer.** When a reviewer's launch ends on its
+   provider's usage limit, `<tool>/scripts/review-round.sh wait` records it as
+   `<lane> <lens>: DEGRADED, provider wall: "<the provider's message>"` in `run-log.md` with
+   its `degrade` line, and exits 0: the round closes without waiting for it, its verdict
+   counts for nothing, and it is launched again in the next round like any DEGRADED lane.
+   Its `wall` line was written as its launch ended, with the message and the reset.
+
    **At harvest, classify every lane under every lens REVIEWED or DEGRADED.** A lane that
    never launched, died and was not recovered, had not finished by the round's deadline, or ran
    without tool use is DEGRADED: record it, unless the wait already has, and do not count its
@@ -1003,6 +1037,12 @@ This section runs at the end of synthesis when there is no review leg, or at the
 after the loop has no P1 or P2 finding left and the gates pass. The postmaster owns the landing
 route and any merge. You do not push, open a pull request, wait for a merge word, or merge.
 
+**No card while a wall has no ruling (D8).** `<tool>/scripts/walls.sh open <dispatch>` must
+exit 0 before this stage runs. On exit 1, run `<tool>/scripts/walls.sh escalate <dispatch>`
+and exit the leg without `card.md`, as at the Stage 1 harvest: the ruling arrives as a resume
+of this thread, `open` exits 0, and this stage starts from the top. A walled reviewer's
+`<tool>/scripts/walls.sh show <dispatch>` line goes on the card with the lane outcomes.
+
 Set the stage first: `<tool>/scripts/stage.sh <dispatch> shipping`.
 
 1. **Verify the final HEAD.** Run `<tool>/scripts/verify.sh run <synthesis-wt> <dispatch>` after
@@ -1042,7 +1082,9 @@ Set the stage first: `<tool>/scripts/stage.sh <dispatch> shipping`.
    count as
    `<tool>/scripts/style-findings.sh count <dispatch>` prints it, then every Style residue from
    `<tool>/scripts/style-findings.sh list <dispatch>`; every branch created by the run and its
-   state; lane outcomes; and the review link. Finding titles and notes, where the reader
+   state; lane outcomes, every walled lane carrying its `<tool>/scripts/walls.sh show
+   <dispatch>` line — `lane: DEGRADED, provider wall: "<the provider's message>"` — and the
+   review link. Finding titles and notes, where the reader
    wants them, go in prose outside the pasted block, which carries only ids and severities.
    The card's branch state is before merge: the
    ticket branch is ready, and every other branch is either retained or abandoned. The gate is

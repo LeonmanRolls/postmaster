@@ -53,6 +53,14 @@ path = "scripts/runs-watch.sh"
 holds = "the mechanical leg steps, next-leg dispatch and transient remounts, and what wakes the postmaster"
 
 [[files]]
+path = "scripts/walls.sh"
+holds = "the wall's entrypoint: show, open, told, rule, escalate, carry"
+
+[[files]]
+path = "scripts/walls.ts"
+holds = "the wall record's shape, the reset forms, the ruling refusals, and the escalation a pause writes"
+
+[[files]]
 path = "scripts/run-meta.sh"
 holds = "the coachman contract version recorded in run.json"
 

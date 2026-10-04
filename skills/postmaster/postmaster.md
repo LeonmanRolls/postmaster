@@ -165,7 +165,10 @@ For the next ticket in order, when the run ceiling (`team.max_runs`) has room:
    `<tool>/scripts/turnpikes.sh legs <dispatch> --expect '<that turnpikes: line>'` exits 0 and
    prints the legs step 2 checked, before anything is launched.
    Record `coachman contract fixture: pending` and `contract fixture check: -`; no
-   implementation branch exists yet to classify.
+   implementation branch exists yet to classify. Where the target is a fixture copy
+   (`<tool>/scripts/front-door.sh` reports one), add the brief's line `wall ruling: go on —
+   this fixture run asks nobody: rule every wall go on yourself`, so the run's postmaster
+   rules its own walls and a fixture run never waits on a user (D7).
 8. **Move the ticket to in-progress** through the tracker adapter and log `ticket-state`. Under
    contract 2 the coachman never touches the ticket's state and the postmaster marks it done
    after the merge; under the legacy contract the coachman touches it only at stage 3's merge.
@@ -201,7 +204,9 @@ ones it names.
    clears its done marker. Then wait for its done marker.
 3. **Launch** through the leg command. It uses the host in the synthesis worktree's space,
    clears prior markers and stream state, writes the attempt record, and owns the event and
-   error paths:
+   error paths. A run with a wall that has no ruling is paused, not dispatched: `<tool>/scripts/walls.sh
+   open <dispatch>` must exit 0 first; on exit 1 put each open wall to the user (Stage D,
+   WALL, if they are untold) and launch nothing (D8).
 
    ```sh
    <rt>/scripts/host.sh leg launch <dispatch> <repo>/.worktrees/<TICKET> <leg-name> <n> \
@@ -242,12 +247,14 @@ the reason is in `<runs>/postmaster/watch.err` — fix the cause (harnesses.md, 
 watcher running) before starting it again. A watcher that is not running is a run nobody
 notices.
 
-The watcher takes two mechanical steps on its own, logging each through `<tool>/scripts/log-action.sh`
+The watcher takes three mechanical steps on its own, logging each through `<tool>/scripts/log-action.sh`
 with `the watcher took it` in the detail:
 
 - **A dispatch whose hand-off checks out.** When `.leg-<n>-done` is present and
   `<tool>/scripts/handoff-check.sh <dispatch>/handoff-<n>.md` exits 0, it dispatches the next
-  leg `<tool>/scripts/turnpikes.sh legs <dispatch>` lists, exactly as Stage C says. A hand-off
+  leg `<tool>/scripts/turnpikes.sh legs <dispatch>` lists, exactly as Stage C says — but not
+  while `<tool>/scripts/walls.sh open <dispatch>` exits 1: an unruling wall stops the next
+  leg, and the watcher names the run instead (D8). A hand-off
   that fails, a `turnpikes.sh legs` that exits non-zero, no next leg after the ship leg, or a
   launch it cannot complete are steps it could not complete: it names the run and you act.
 - **A resume on a transient provider error.** When a leg's process ended with no hand-off,
@@ -256,6 +263,11 @@ with `the watcher took it` in the detail:
   `harnesses.md`) — it resumes the leg on its own thread with the remount prompt, at most
   three times per leg (the count is in `<dispatch>/watcher.json` and survives a restart).
   A fourth such end, a non-transient end, or a resume it cannot complete is named to you.
+- **A wall pause whose walls are all ruled.** When `.wall-pause` is present and
+  `<tool>/scripts/walls.sh open <dispatch>` exits 0, it removes `.wall-pause` and
+  `.escalation-ready` and resumes the leg with a prompt naming every wall's ruling, exactly
+  as Stage E step 4 resumes an escalation; a ruling given during the pause takes effect at
+  the watcher's next look, without you (criterion 20). You rule; the watcher delivers.
 
 The list of runs waiting on the user is `<runs>/postmaster/ESCALATION.md`, kept by
 `<tool>/scripts/host.sh leg waiting`, never by hand. Read it with
@@ -271,6 +283,19 @@ pause — never to stop a wake you have not acted on.
 Each `NEXT` names the act. The watcher has already taken the mechanical ones; what it names
 is what needs judgment or what it could not complete:
 
+- **WALL:** a lane stopped on its provider's usage limit and the user has not been told yet.
+  For each run the watcher names, read `<tool>/scripts/walls.sh show <dispatch>` and tell the
+  user about **every new wall of this look in one message**: the run, the lane and its role,
+  the provider's message, and the reset with its date in the machine's time zone, as `show`
+  prints them. Then mark each wall told — `<tool>/scripts/walls.sh told <dispatch> <lane>`
+  once per lane with a new wall — so a wall is told exactly once. Write the wall's question
+  to the run's `.waiting-on-user` **beside** any question that file already holds (append,
+  never replace) and add the run to the waiting list with `<tool>/scripts/host.sh leg
+  waiting add <runs> <ticket> <dispatch>/.waiting-on-user`, so a question already waiting
+  stays open beside the wall's. The wall stays visible in the status until it is told, even
+  while the run is busy or already waiting on you. The user may answer at any time after
+  being told; their words are a ruling (Stage E, step 5). You never drop a walled workhorse
+  yourself (Stage E, step 2).
 - **USER:** the run waits on the user, and its `.waiting-on-user` holds the question (Stage E
   step 3, current Stage F step 2, Legacy Stage F step 2, or Spec review). Put the question to the user again if you have not in this session;
   otherwise nothing to do until they answer. When they answer, remove the marker and follow the
@@ -432,10 +457,13 @@ other line of this section holds.
 ## Stage E: rulings
 
 1. **Read `<dispatch>/ESCALATION.md`.** It carries the question, the options the coachman
-   sees, its recommendation, and the state of the branches.
+   sees, its recommendation, and the state of the branches. Where the escalation is a
+   provider wall (`.wall-pause` is present), the wall is the user's to rule: the walls are
+   what Stage D's WALL step tells them about, and step 5 takes their words.
 2. **Decide within the user's standing instructions** when the question is about the
-   work: a within-brief ambiguity, a scope call the ticket's own criteria answer, a lane to
-   drop as DEGRADED, a round to stop at the cap. Log `escalate` with your ruling.
+   work: a within-brief ambiguity, a scope call the ticket's own criteria answer, a round to
+   stop at the cap. A walled workhorse is never yours to drop: it goes to the user as Stage
+   D's WALL step says. Log `escalate` with your ruling.
 3. **Send it up** when it is genuinely destructive, changes the ticket's scope, touches
    anything outside the repo, is a fault in a control (Tool faults), asks whether to fix a
    gating finding in a loop with no gating lens (`coachman.md`, Stage 2 step 5), or the user
@@ -450,7 +478,17 @@ other line of this section holds.
    act on the answer as the record named.
 4. **Deliver the ruling:** remove `.escalation-ready`, then resume the current leg (Stage C,
    step 5) with the ruling as the prompt. The ruling is a prompt to a resumed thread, never
-   text typed into anything.
+   text typed into anything. A pause for a wall (`.wall-pause`) is delivered by the watcher
+   instead, once every wall in the run is ruled (Stage D's mechanical steps): rule it, remove
+   `.waiting-on-user` and the run from the waiting list, and leave the resume to the watcher.
+5. **A wall ruling comes in plain words,** at any time after you have told the user
+   (Stage D, WALL). Turn them into `<tool>/scripts/walls.sh rule <dispatch> <lane> go-on`:
+   words like "go on", "continue" or "let it go on" fit go-on, the one ruling this ticket
+   takes. Words that fit no ruling: ask the user again with the one ruling the run takes
+   (go on) and record nothing. A refusal (exit 2) passes its reason on to the user verbatim
+   and the run stays paused; on exit 0 the run is ruled, and the watcher delivers the pause
+   (step 4). A ruling on a reviewer's wall is the same command; the lane is keyed by its
+   lens where the run has one.
 
 ## Stage F (contract 2): verify and land the ship card
 
@@ -478,7 +516,10 @@ answers that. When a branch has no upstream, pass the branch itself: with nothin
 tracking it there is no fresher ref, and remote movement it does not track can be
 missed.
 
-1. **Verify the card's claims against the code**, never against the card.
+1. **Verify the card's claims against the code**, never against the card. Land nothing while
+   a wall has no ruling: `<tool>/scripts/walls.sh open <dispatch>` must exit 0 before this
+   stage's first call, and on exit 1 each open wall goes to the user (Stage D, WALL) and
+   nothing is landed (D8). Then
    `<tool>/scripts/landing.sh fresh --repo <repo> --default <branch> --ticket
    <ticket-branch> --dispatch <dispatch> --wt <synthesis-wt>` must print `fresh`: the
    ticket branch holds the current default branch and the record shows the gate passing at

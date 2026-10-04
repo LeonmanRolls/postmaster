@@ -946,6 +946,16 @@ function nextLeg(list: string, current: string): [string, string] | null {
 /** Dispatch the next leg, or report why it could not. 0 took the step, 1 wakes, 3 held. */
 function prepareDispatch(d: string, runName: string, current: string, root: string): StepResult {
   const heldDir = join(root, "postmaster");
+  // No next leg starts while a wall has no ruling (D8): the run is named instead, with
+  // the open walls as the reason, and nothing is dispatched until they are ruled.
+  const open = run(beside(import.meta, "walls.sh"), ["open", d]);
+  if (open.code === 1) {
+    const listed = (open.out + open.err).trim().replace(/\n+/gu, "; ");
+    return { rc: 1, error: `provider walls have no ruling: ${listed}` };
+  }
+  if (open.code !== 0) {
+    return { rc: 1, error: `walls.sh open could not read the run's walls (exit ${open.code})` };
+  }
   const legs = run(beside(import.meta, "turnpikes.sh"), ["legs", d]);
   if (legs.code !== 0) {
     return {
@@ -1215,6 +1225,105 @@ function resumeTransient(d: string, runName: string, number: string, root: strin
   return { rc: 0, error: "" };
 }
 
+/** Deliver a wall pause whose walls are all ruled: remove the pause's markers and resume
+ * the leg with the rulings named in the prompt, as Stage E step 4 does. 0 took the step,
+ * 1 wakes, 3 held. */
+function deliverWallPause(d: string, runName: string, root: string): StepResult {
+  const heldDir = join(root, "postmaster");
+  let number = "";
+  let thread = "";
+  try {
+    const m: unknown = JSON.parse(readFileSync(join(d, "manifest.json"), "utf8"));
+    if (!isRecord(m)) throw new Error("no manifest");
+    number = manifestLegValue(join(d, "manifest.json"));
+    const coachman = m.coachman;
+    if (isRecord(coachman) && isRecord(coachman.legs)) {
+      const entry = coachman.legs[number];
+      if (isRecord(entry) && typeof entry.thread_id === "string") thread = entry.thread_id;
+    }
+  } catch {
+    return { rc: 1, error: "cannot read the manifest for the wall pause" };
+  }
+  if (!/^[1-9][0-9]*$/u.test(number)) {
+    return { rc: 1, error: "the manifest's leg is unreadable, so the wall pause is not delivered" };
+  }
+  if (thread === "") {
+    return { rc: 1, error: `leg ${number} has no recorded thread id for the wall pause` };
+  }
+  const legs = run(beside(import.meta, "turnpikes.sh"), ["legs", d]);
+  if (legs.code !== 0) {
+    return {
+      rc: 1,
+      error: `turnpikes.sh legs failed: ${(legs.out + legs.err).replace(/\n+$/u, "")}`,
+    };
+  }
+  const leg = listedLeg(legs.out, number);
+  if (!leg) return { rc: 1, error: `turnpikes.sh legs has no entry for leg ${number}` };
+  const repo = runRepo(d);
+  if (!repo) {
+    return {
+      rc: 1,
+      error: "neither the waybill nor the recorded checks name an absolute repo path",
+    };
+  }
+  const worktree = join(repo, ".worktrees", runName);
+  try {
+    if (!statSync(worktree).isDirectory()) throw new Error("missing");
+  } catch {
+    return { rc: 1, error: `the synthesis worktree is missing: ${worktree}` };
+  }
+  const rt = legRt(d);
+  if (rt.error) return { rc: 1, error: rt.error };
+  // The prompt names every wall's ruling, so the coachman knows exactly what it carries on with.
+  const shown = run(beside(import.meta, "walls.sh"), ["show", d]);
+  if (shown.code !== 0) {
+    return { rc: 1, error: `walls.sh show failed (exit ${shown.code})` };
+  }
+  const rulings = shown.out.trim().replace(/\n/gu, "\n  ");
+  let held = isHeldRun(runName, heldDir);
+  if (held === 0) return { rc: 3, error: "" };
+  if (held !== 1) return { rc: 1, error: "cannot re-read the held list" };
+  let prompt = join(d, `leg-${number}-resume-${utcStamp()}.txt`);
+  if (existsSync(prompt)) prompt = join(d, `leg-${number}-resume-${utcStamp()}-${process.pid}.txt`);
+  try {
+    writeFileSync(
+      prompt,
+      `Continue leg ${number}; every provider wall in this run has been ruled go on:\n  ${rulings}\nThe run goes on without each walled lane, DEGRADED with the provider's message.\n`,
+    );
+  } catch {
+    return { rc: 1, error: `cannot write the wall-pause resume prompt: ${prompt}` };
+  }
+  held = isHeldRun(runName, heldDir);
+  if (held === 0) return { rc: 3, error: "" };
+  if (held !== 1) return { rc: 1, error: "cannot re-read the held list" };
+  // The pause's markers go before the resume, as Stage E step 4 does, so the run never
+  // reads RULE twice; a resume that fails is named to the postmaster below.
+  rmSync(join(d, ".escalation-ready"), { force: true });
+  rmSync(join(d, ".wall-pause"), { force: true });
+  const resumed = watchLeg("resume", rt.rt, d, worktree, leg, number, thread, prompt);
+  if (resumed.code !== 0) {
+    const first = resumed.text.split("\n")[0] || "no message";
+    const logged = run(beside(import.meta, "log-action.sh"), [
+      d,
+      "postmaster",
+      "refuse",
+      "coachman",
+      `leg ${number}, thread ${thread}; the wall-pause resume did not start (${first})`,
+    ]);
+    if (logged.code !== 0) return { rc: 1, error: `could not log the refused wall-pause resume` };
+    return { rc: 1, error: `could not resume leg ${number} after the wall ruling: ${first}` };
+  }
+  const logged = run(beside(import.meta, "log-action.sh"), [
+    d,
+    "postmaster",
+    "resume",
+    "coachman",
+    `leg ${number}, thread ${thread}, wall pause lifted, every wall ruled go-on; the watcher took it`,
+  ]);
+  if (logged.code !== 0) return { rc: 1, error: `could not log the resume of leg ${number}` };
+  return { rc: 0, error: "" };
+}
+
 /** Python's print() for a manifest scalar, as the leg read joins it. */
 function pyPrint(v: unknown): string {
   if (v === null || v === undefined) return "None";
@@ -1283,6 +1392,25 @@ function processTable(root: string, table: string): TableResult {
       if (r.rc === 0 || r.rc === 3) {
         // taken, or held before its first mutation
       } else markNeeds(needs, runName, "RESUME", r.error);
+    } else if (next === "RULE" && existsSync(join(root, runName, ".wall-pause"))) {
+      // A pause for a wall the user has now ruled: the watcher delivers it itself, with
+      // the rulings named in the resume prompt, and wakes the postmaster only when it
+      // cannot (D8, criterion 20).
+      const d = join(root, runName);
+      const open = run(beside(import.meta, "walls.sh"), ["open", d]);
+      if (open.code === 0) {
+        const r = deliverWallPause(d, runName, root);
+        if (r.rc !== 0 && r.rc !== 3) markNeeds(needs, runName, "RULE", r.error);
+      } else if (open.code === 1) {
+        markNeeds(
+          needs,
+          runName,
+          "RULE",
+          "the pause is for provider walls that still have no ruling",
+        );
+      } else {
+        markNeeds(needs, runName, "RULE", `walls.sh open failed (exit ${open.code})`);
+      }
     } else if (next === "WAIT" || next === "USER" || next === "-") {
       // a leg at work, already put to the user, or closed: never wakes
     } else {

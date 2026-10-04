@@ -10,12 +10,16 @@
 //            dispatch resume refuse harvest synthesize review-launch review-harvest finding apply
 //            escalate rule ticket-check ticket-create ticket-edit ticket-state ticket-comment
 //            gate verify merge teardown degrade handoff-accept handoff stage spec-review
-//            tool-fault note
+//            tool-fault note wall told carry
 //   target   what the action was done to: a lane, a ticket id, a branch, a path, a round
 //   detail   free text; everything after the target, joined by spaces. A finding's opens with its
 //            class, gating or style, so the style findings can be told apart. A spec-review's
 //            opens with the decision, approved, changes or dropped, then the spec commit the
-//            user saw, then the user's words where the decision is changes or dropped
+//            user saw, then the user's words where the decision is changes or dropped.
+//            A wall's opens with `<role> <lens> <round> <reset> <the provider's first line>`,
+//            a told's with the same role/lens/round of the wall it marks, a wall ruling with
+//            `wall go-on`, and a carry's with `wall go-on` too, so the wall lines of a run
+//            read back computably (walls.ts)
 //
 // A tool-fault is postmaster itself misbehaving: a script, a runbook step or a harness adapter.
 // Its target is the postmaster file, relative to the checkout this script is in or absolute,
@@ -43,7 +47,7 @@ import { toolRoot } from "./lib/paths.ts";
 import { argvDecoded } from "./lib/proc.ts";
 
 const VERBS =
-  " dispatch resume refuse harvest synthesize review-launch review-harvest finding apply escalate rule ticket-check ticket-create ticket-edit ticket-state ticket-comment gate verify merge teardown degrade handoff-accept handoff stage spec-review tool-fault note ";
+  " dispatch resume refuse harvest synthesize review-launch review-harvest finding apply escalate rule ticket-check ticket-create ticket-edit ticket-state ticket-comment gate verify merge teardown degrade handoff-accept handoff stage spec-review tool-fault note wall told carry ";
 const CONTROLS = join(toolRoot(import.meta), "skills/postmaster/controls.md");
 
 // JSON string escaping: drop control chars, escape separators. Bytes that

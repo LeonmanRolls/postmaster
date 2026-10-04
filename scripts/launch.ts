@@ -66,6 +66,7 @@ import { startCheck, wrapCommand } from "./lib/confine.ts";
 import { scriptsDir } from "./lib/paths.ts";
 import { mkstempSync, run, signalExitCode } from "./lib/proc.ts";
 import { BOUND_L, BOUND_R, PY_S_CLASS } from "./lib/text.ts";
+import { parseWallReset } from "./lib/wall.ts";
 
 const CONFIG =
   process.env.POSTMASTER_CONFIG ?? join(process.env.HOME ?? "", ".postmaster/config.toml");
@@ -991,6 +992,151 @@ function classifyTransient(
   return { out: "not-transient", code: 1 };
 }
 
+// --- walls: a lane stopped on its provider's usage limit ------------------------------------------
+// A wall is read from the turn's last error record, per harness (harnesses.md, Walls), and
+// nothing else: a final message in prose is not an error record, a failed command's output
+// and a tool's error are not the provider ending the turn, and grok, agy and pi have no
+// recorded shape and are not read (D2). The first line of that record's message is tested
+// with the one token list transient vetoes on, so the flow keeps one list of limit words
+// (D3). The line is written as the launch ends, before host.sh lands its marker.
+export function isWallMessage(firstLine: string): boolean {
+  return vetoed(firstLine);
+}
+
+function recMessage(v: unknown): string | null {
+  return typeof v === "string" && v.trim() !== "" ? v : null;
+}
+
+function obj(v: unknown): Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v)
+    ? (v as Record<string, unknown>)
+    : {};
+}
+
+/** The message of the last error record in the stream this launch's harness ended on. */
+export function endingWallMessage(text: string, harness: string): string | null {
+  let found: string | null = null;
+  for (const raw of text.split("\n")) {
+    if (raw.trim() === "") continue;
+    let event: unknown;
+    try {
+      event = JSON.parse(raw);
+    } catch {
+      continue;
+    }
+    if (typeof event !== "object" || event === null || Array.isArray(event)) continue;
+    const ev = event as Record<string, unknown>;
+    let msg: string | null = null;
+    if (harness === "codex") {
+      // {"type":"turn.failed","error":{"message":"..."}}
+      if (ev.type === "turn.failed") msg = recMessage(obj(ev.error).message);
+    } else if (harness === "claude") {
+      // {"type":"result","is_error":true,"result":"...","api_error_status":429}
+      if (ev.type === "result" && pyTruthy(ev.is_error)) {
+        msg = recMessage(ev.result);
+        if (msg === null && ev.api_error_status !== undefined && ev.api_error_status !== null) {
+          msg = `error ${pyStr(ev.api_error_status)}`;
+        }
+      }
+    } else if (harness === "mimo") {
+      // {"type":"error","error":{"name":"...","data":{"message":"..."}}} — exits 0 on a
+      // failed turn, so the ending error record alone marks it.
+      if (ev.type === "error") {
+        const err = obj(ev.error);
+        msg = recMessage(obj(err.data).message) ?? recMessage(err.message) ?? recMessage(err.name);
+      }
+    } else if (harness === "muse") {
+      // {"payload_type":"run.terminal.failed","payload":{"reason":"..."}}
+      if (ev.payload_type === "run.terminal.failed") {
+        const p = obj(ev.payload);
+        msg = recMessage(p.reason) ?? recMessage(p.text);
+      }
+    }
+    // grok, agy and pi have no recorded shape: never read.
+    if (msg !== null) found = msg;
+  }
+  return found;
+}
+
+/** The stream's bytes past what the launch found when it started: a resumed stream keeps
+ * its history, and a partial line the earlier attempt left is skipped whole. */
+function readStreamTail(path: string, offset: number): string {
+  let buf: Buffer;
+  try {
+    buf = readFileSync(path);
+  } catch {
+    return "";
+  }
+  if (offset <= 0) return buf.toString("utf8");
+  if (offset >= buf.length) return "";
+  let start = offset;
+  if (buf[start - 1] !== 0x0a) {
+    const nl = buf.indexOf(0x0a, start);
+    start = nl === -1 ? buf.length : nl + 1;
+  }
+  return new TextDecoder("utf-8").decode(buf.subarray(start));
+}
+
+/** The clock a wall's reset counts from: POSTMASTER_CLOCK is the tests' clock. */
+function wallClockNow(): number {
+  const c = process.env.POSTMASTER_CLOCK;
+  if (c !== undefined && /^[0-9]+$/u.test(c)) return Number(c);
+  return Date.now();
+}
+
+/** Record the provider wall this launch ended on, if it ended on one. */
+function recordWallIfAny(o: {
+  dispatch: string;
+  streamPath: string;
+  offset: number;
+  harness: string;
+  lane: string;
+  role: string; // lane | reviewer
+  cwd: string;
+  stopped: boolean;
+}): void {
+  if (o.stopped) return; // stopped mid-run is not a wall (criterion 3)
+  const text = readStreamTail(o.streamPath, o.offset);
+  if (text === "") return;
+  const message = endingWallMessage(text, o.harness);
+  if (message === null) return;
+  const first = message.split("\n")[0] ?? "";
+  if (!isWallMessage(first)) return;
+  if (
+    o.role === "lane" &&
+    (existsSync(join(o.cwd, "WORKHORSE-SUMMARY.md")) ||
+      existsSync(join(o.cwd, "WORKHORSE-BLOCKED.md")))
+  ) {
+    return; // it had delivered its result first
+  }
+  let lens = "-";
+  let round = "-";
+  if (o.role === "reviewer") {
+    const m = /^review-r([0-9]+)-([^-]+)-(.+)$/u.exec(
+      basename(o.streamPath).replace(/\.jsonl$/u, ""),
+    );
+    if (m) {
+      round = m[1]!;
+      lens = m[2]!;
+    }
+  }
+  const roleWord = o.role === "lane" ? "workhorse" : "reviewer";
+  const reset = parseWallReset(message, wallClockNow()) ?? "none";
+  const detail = `${roleWord} ${lens} ${round} ${reset} ${first}`;
+  const r = run(join(scriptsDir(import.meta), "log-action.sh"), [
+    o.dispatch,
+    `lane:${o.lane}`,
+    "wall",
+    o.lane,
+    detail,
+  ]);
+  if (r.code !== 0) {
+    console.error(
+      `launch: the provider wall on ${o.lane} was not recorded: ${(r.err || r.out).trim()}`,
+    );
+  }
+}
+
 function readRegularFile(path: string, missing: string): string {
   let st;
   try {
@@ -1597,6 +1743,18 @@ exit "$rc"
   }
 
   if (!attemptPhase("started")) die("cannot record that the harness started");
+  // Where this launch's own stream lines begin, and when: a resumed stream keeps the lines
+  // it held when the launch started, and the wall's reset counts from this moment.
+  const streamStart = (() => {
+    const p = process.env.POSTMASTER_EVENT_STREAM ?? "";
+    if (p === "") return 0;
+    try {
+      return statSync(p).size;
+    } catch {
+      return 0;
+    }
+  })();
+  const launchStartMs = Date.now();
   const child = spawnSync(cmd, cmdArgs, {
     stdio: STDIN_FILE ? ["ignore", "inherit", "inherit"] : ["inherit", "inherit", "inherit"],
     // Raw bytes, as main's `exec < file` hands them: no UTF-8 decode.
@@ -1612,6 +1770,20 @@ exit "$rc"
         : 1;
   const stream = process.env.POSTMASTER_EVENT_STREAM ?? "";
   if (RUN && stream) {
+    // Before anything else the wall is read and recorded: host.sh lands the marker when
+    // this process exits, so the line has to be in actions.jsonl by then.
+    if (launchRole === "lane" || launchRole === "reviewer") {
+      recordWallIfAny({
+        dispatch: RUN,
+        streamPath: stream,
+        offset: streamStart,
+        harness: HARNESS,
+        lane: NAME,
+        role: launchRole,
+        cwd: CWD,
+        stopped: child.signal !== null && child.signal !== undefined,
+      });
+    }
     const r = run(join(scriptsDir(import.meta), "export-session.sh"), [
       RUN,
       NAME,

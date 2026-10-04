@@ -25,6 +25,7 @@ import { basename, dirname, join } from "node:path";
 import { scriptsDir } from "./lib/paths.ts";
 import { mkstempSync, run } from "./lib/proc.ts";
 import { PY_S_CLASS } from "./lib/text.ts";
+import { wallFor } from "./walls.ts";
 
 const HERE = scriptsDir(import.meta);
 const DEFAULT_LIMIT = 2400;
@@ -341,12 +342,33 @@ if (import.meta.main) {
       expected += ` ${f} `;
       if (!existsSync(join(LOGS, f))) missing.push(i);
     }
+    // A reviewer whose launch ended on a provider wall is recorded as DEGRADED with the
+    // provider's message, as a timeout is: the round closes without waiting for it (C11).
+    // A walled reviewer takes part in the next round as any DEGRADED lane does (C12).
+    (globalThis as Record<string, unknown>).UNRECORDED = 0;
+    const wallLines: Array<[string, string, string]> = [];
+    for (let i = 0; i < n; i++) {
+      if (missing.includes(i)) continue;
+      const [lens, lane] = reviewers[i]!;
+      const w = wallFor(D, lane, lens, R);
+      if (w !== null) wallLines.push([lane, lens, w.message]);
+    }
     if (missing.length === 0) {
       if (rc === 3) {
         console.log(
           "review-round: every marker was in by the time the reviewers were named; none timed out",
         );
       }
+      for (const [lane, lens, message] of wallLines) {
+        console.log(`WALL ${lens} ${lane}: DEGRADED, provider wall: "${message}"`);
+        record(
+          `${lane} ${lens}: DEGRADED, provider wall: "${message}"`,
+          "degrade",
+          lane,
+          `${lens} r${R}: provider wall: "${message}"`,
+        );
+      }
+      if ((globalThis as Record<string, unknown>).UNRECORDED) process.exit(4);
       process.exit(0);
     }
     if (rc === 0) {
@@ -367,7 +389,6 @@ if (import.meta.main) {
       );
     }
 
-    (globalThis as Record<string, unknown>).UNRECORDED = 0;
     const reported = n - missing.length;
     record(
       `round ${R}: WAIT-TIMEOUT after ${lim}s; ${reported} of ${n} reviewers reported`,
@@ -379,6 +400,15 @@ if (import.meta.main) {
       const [lens, lane] = reviewers[i]!;
       console.log(`TIMEOUT ${lens} ${lane}: DEGRADED, timeout`);
       record(`${lane} ${lens}: DEGRADED, timeout`, "degrade", lane, `${lens} r${R}: timeout`);
+    }
+    for (const [lane, lens, message] of wallLines) {
+      console.log(`WALL ${lens} ${lane}: DEGRADED, provider wall: "${message}"`);
+      record(
+        `${lane} ${lens}: DEGRADED, provider wall: "${message}"`,
+        "degrade",
+        lane,
+        `${lens} r${R}: provider wall: "${message}"`,
+      );
     }
     const stopPids: Array<number | null> = [];
     for (const i of missing) {

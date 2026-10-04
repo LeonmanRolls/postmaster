@@ -680,7 +680,36 @@ shows badly gets its rules there, and a line here saying they were checked.
 
 ## Walls, any harness
 
-A lane that never launched is lame for that round: DEGRADED. Recognise a wall by the provider's
-own error string and quote it in `run-log.md`: a `402 Payment Required`, a usage-limit message,
-a quota wall, a spawn misfire, a stale session lock. The fix is restoring the lane on the next
-round, never suppressing the label.
+A lane that stops because its provider's usage limit ran out is a wall. `launch.sh` reads it
+from the turn's **last error record**, per harness, and writes the run's `wall` line as the
+launch ends, before `host.sh` lands its marker:
+
+| harness | the last error record |
+|---|---|
+| codex | `turn.failed`, its `error.message` |
+| claude | `result` with `is_error`, its `result` (else `api_error_status`) |
+| mimo | its last `error` event — `error.data.message`, `error.message`, else `error.name`; it exits 0 on a failed turn |
+| muse | `run.terminal.failed`, its `payload.reason` else `payload.text` |
+| grok, agy, pi | no recorded shape: never read |
+
+Nothing else is read (D2): a final message in prose is not an error record, a failed
+command's output and a tool's error are the lane's, not the provider ending the turn, and a
+workhorse whose root holds its `WORKHORSE-SUMMARY.md` or `WORKHORSE-BLOCKED.md` had already
+delivered its result. The record's first line is tested with the token stems and the 429 and
+402 codes in `launch.sh` — the one list, shared with the transient veto — so an ending error
+with a limit word counts even when it is about something else (D3).
+
+The reset is read from the message only in the shapes providers have used (D4, D5): `2:29 AM`
+in the machine's zone, today or tomorrow once it is more than five minutes past; `Oct 5th,
+2026 2:29 AM` and `Oct 5, 2026 2:29 AM` as written; `resets 3am (UTC)` or another IANA zone
+in that zone; `in 20 minutes|hours` from the moment the lane stopped; of two times the later
+counts. A zone that is an abbreviation such as PST, or no time at all, means no reset time.
+
+The record holds the lane, its role (a reviewer's with its lens and round), the message's
+first line byte for byte, and the reset as an ISO time or `none` — `walls.sh show` prints
+each one, and the user is told the reset with its date in the machine's time zone. A lane
+that never launched is lame for that round: DEGRADED, with the provider's own error string
+quoted in `run-log.md` where there is one (`review-round.sh wait` records a walled reviewer
+as `provider wall: "<message>"`). A `402 Payment Required`, a usage-limit message, a quota
+wall, a spawn misfire or a stale session lock are all DEGRADED causes; the fix is the user's
+ruling and restoring the lane on the next round, never suppressing the label.
