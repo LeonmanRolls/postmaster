@@ -117,7 +117,11 @@ exit 0
   return bin;
 }
 
-function runBlock(shell: string, body: string, dir: string): { out: string; exit: number; err: string } {
+function runBlock(
+  shell: string,
+  body: string,
+  dir: string,
+): { out: string; exit: number; err: string } {
   const bin = installStubs(dir);
   const record = join(dir, "record.txt");
   writeFileSync(record, "");
@@ -229,7 +233,9 @@ describe("coachman.md's sh blocks agree between bash and zsh", () => {
       // Both lanes fail normalize (the stub normalize writes nothing to stdout
       // but the redirect target is created; the `||` arm needs a non-zero). Make
       // the stub's normalize fail so the arm runs.
-      const lines = r.out.split("\n").filter((l) => l.includes("run-log") && l.includes("normalize failed"));
+      const lines = r.out
+        .split("\n")
+        .filter((l) => l.includes("run-log") && l.includes("normalize failed"));
       // With both lanes failing we expect one line each.
       expect(lines.length).toBe(2);
     } finally {
