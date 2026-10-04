@@ -656,8 +656,12 @@ mk_repo "$TMP/c22e"
 (cd "$TMP/c22e" && mkdir -p raw/trial && printf '{"x": {"encrypted_content": "%s"}}\n' "$ENC1" > raw/trial/s.jsonl && git add -A && git commit -qm "reasoning under raw") || bad "C22 fixture" "fixture setup failed"
 T22_E=$(cd "$TMP/c22e" && "$TREE" HEAD~1 HEAD 2>/dev/null) && T22_E_CODE=$? || T22_E_CODE=$?
 if [ "$T22_E_CODE" -eq 1 ]; then ok "reasoning added under raw fails"; else bad "reasoning added under raw fails" "exit $T22_E_CODE"; fi
-(cd "$C9D" && mkdir -p .postmaster/runs && echo record > .postmaster/runs/stale.json && git add -f .postmaster/runs/stale.json && git commit -qm "run file") || bad "C22 fixture" "fixture setup failed"
-T22_G=$(cd "$C9D" && bun run check 2>&1) && T22_G_CODE=$? || T22_G_CODE=$?
+# Fresh clone: $C9D still holds C9's planted note, whose finding the gate
+# reports first, hiding the run file this check names.
+C22G="$TMP/c22gclone"
+git clone -q "$ROOT" "$C22G" 2>/dev/null || bad "C22 fixture" "clone failed"
+(cd "$C22G" && git update-ref refs/remotes/origin/main "$C9_BASE" && git config user.name "Oracle" && git config user.email "oracle@$RESERVED" && mkdir -p .postmaster/runs && echo record > .postmaster/runs/stale.json && git add -f .postmaster/runs/stale.json && git commit -qm "run file") || bad "C22 fixture" "fixture setup failed"
+T22_G=$(cd "$C22G" && bun run check 2>&1) && T22_G_CODE=$? || T22_G_CODE=$?
 if [ "$T22_G_CODE" -ne 0 ] && printf '%s' "$T22_G" | grep -q ".postmaster/runs/stale.json"; then
   ok "gate fails on a committed run file"
 else
