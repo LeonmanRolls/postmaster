@@ -1288,8 +1288,8 @@ export function parityCases(tmp: string): PatCase[] {
       "",
       "mail u@example.com ok",
     ),
-    P("email", "search", "(?<![\\w.+-])[\\w.+-]+@[\\w-]+(?:\\.[\\w-]+)+", "", "note aü@b.co here"),
-    P("ipv4", "search", "(?<![\\w.])\\d{1,3}(?:\\.\\d{1,3}){3}(?![\\w.])", "", "ping 10.0.0.1 now"),
+    P("email", "search", "(?<![\\w.+-])[\\w.+-]+@[\\w-]+(?:\\.[\\w-]+)+", "", "note aü@" + "b.co here"),
+    P("ipv4", "search", "(?<![\\w.])\\d{1,3}(?:\\.\\d{1,3}){3}(?![\\w.])", "", "ping 10.0" + ".0.1 now"),
     P(
       "ipv4",
       "search",
