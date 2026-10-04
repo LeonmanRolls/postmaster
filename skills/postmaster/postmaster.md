@@ -562,7 +562,27 @@ missed.
    branch. If a claim
    fails, remove `.card-ready` and `.leg-<n>-done` for the manifest's current leg `<n>`, then
    resume that last leg with the exact discrepancy and wait for its corrected card.
-2. **Follow the landing route in the waybill.** First ask whether the ticket already landed:
+2. **Follow the landing route in the waybill.** First hold the branch's switch-offs, before
+   either route opens a pull request or merges, on every run and whatever `MERGE_AUTHORITY`
+   says: `<tool>/scripts/run landing switch-offs --repo <repo> --default <the route's
+   default, as this stage passes it> --ticket <ticket-branch>` must print `clear`. Its
+   `## Switch-offs` section lists every switch-off comment and settings change the branch
+   adds; a run whose card predates the list has none on it and is still checked here. On
+   exit 3, its first line reads `no reason`: withhold under the claim-fail clause above —
+   remove `.card-ready` and `.leg-<n>-done` for the manifest's current leg `<n>`, resume
+   that last leg with each line whose reason reads `missing` as the exact discrepancy (give
+   the comment its reason or remove the switch-off) and wait for its corrected card; never
+   ask the user first. On exit 2, its first line reads `held`: put the section and the card
+   to the user, write the question — the section, asking for each entry's word — to
+   `.waiting-on-user`, tell the user in the session, and wait. On their answer, remove
+   `.waiting-on-user`; for each entry they refuse, log `<tool>/scripts/run log-action
+   <dispatch> postmaster switch-off <the entry's id> refused <the listing line> <their
+   words>` and withhold under the claim-fail clause above with that entry as the exact
+   discrepancy (the leg removes it and raises a corrected card, checked again from the
+   start). Otherwise log the same line with `approved` for each entry they approve, then ask
+   the call again: `held` repeats this ask, `no reason` withholds as above, and `clear`
+   continues. The word is theirs alone: a `note`, a merge grant, or the config naming the
+   postmaster never approves a switch-off. Then ask whether the ticket already landed:
    `<tool>/scripts/run landing already-landed --repo <repo> --default <branch> --ticket
    <the ticket ref> --base <the manifest's base> --card-head <the card's final HEAD>`, adding
    `--local-ticket <ticket-branch>` on the pull-request route, and `--pr-merge <sha>

@@ -18,7 +18,14 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { run } from "./lib/proc.ts";
-import { findingState, isFindingShaped, pyRepr } from "./landing.ts";
+import {
+  findingState,
+  isFindingShaped,
+  packageSettingsDiffer,
+  parseSwitchOff,
+  pyRepr,
+  scanComments,
+} from "./landing.ts";
 
 const SELF = join(import.meta.dir, "run");
 const HERE = import.meta.dir;
@@ -1398,6 +1405,27 @@ describe("card-results", () => {
     );
   });
 
+  test("a Switch-offs section after the block still matches", () => {
+    // A card written by a run that carries this ticket's list, and a card
+    // written before it (the faithful card above): the rendered block is the
+    // same either way, so both answer match.
+    writeFileSync(
+      join(S.d!, "card-switch.md"),
+      `${S.card!}\n## Switch-offs\n\n- comment scripts/x.ts:1 ts-ignore every rule -- ` +
+        `reason: r (id comment:0123456789abcdef)\n`,
+    );
+    check(
+      ["card-results", S.d!, S.w!, join(S.d!, "checkpoint.md"), join(S.d!, "card-switch.md")],
+      0,
+      "match",
+    );
+    check(
+      ["card-findings", S.d!, S.w!, join(S.d!, "checkpoint.md"), join(S.d!, "card-switch.md")],
+      0,
+      "match",
+    );
+  });
+
   test("a block edited in one character is an input fault", () => {
     writeFileSync(join(S.d!, "card-edited.md"), S.card!.replace("- gate: pass", "- gate: pasz"));
     check(
@@ -2028,6 +2056,333 @@ describe("journey", () => {
       action("journey", `main@${S.jsha12!}`, "pass", 0, "2026-01-01T00:00:02Z"),
     );
     check(journey(join(S.j!, "journey.md")), 0, `clear: journey walked: report at ${S.jrep!}`);
+  });
+});
+
+describe("switch-offs", () => {
+  const sw = (repo: string, def: string, tick: string): { code: number; out: string } =>
+    sh(["switch-offs", "--repo", repo, "--default", def, "--ticket", tick]);
+
+  test("a branch that adds no switch-off is clear, even for main's own comments", () => {
+    const R = join(tmp, "sw");
+    mkrepo(R);
+    commitFile(R, "f", "A", "A");
+    mkdirSync(join(R, "scripts"), { recursive: true });
+    commitFile(
+      R,
+      "scripts/so-base.ts",
+      "// oxlint-disable-line no-debugger -- from main\n;",
+      "base",
+    );
+    git(R, "checkout", "-qb", "t");
+    commitFile(R, "plain.ts", "export const x = 1;", "plain");
+    const r = sw(R, "main", "t");
+    expect(r.code).toBe(0);
+    expect(r.out).toBe("clear\n## Switch-offs\n\nnone");
+    // Touching the file without touching the comment still lists nothing.
+    appendFileSync(join(R, "scripts/so-base.ts"), "export const more = 2;\n");
+    git(R, "add", "-A");
+    git(R, "commit", "-qm", "touch the base file");
+    const r2 = sw(R, "main", "t");
+    expect(r2.code).toBe(0);
+    expect(r2.out).toBe("clear\n## Switch-offs\n\nnone");
+  });
+
+  test("every comment form is listed once with file, line, form, rules and reason", () => {
+    const R = join(tmp, "sw");
+    const plants: Array<[string, string, string]> = [
+      ["so-a.ts", "// @ts-ignore reason-a", "reason-a"],
+      ["so-b.ts", "/* @ts-ignore reason-b */", "reason-b"],
+      ["so-c.ts", "// @ts-expect-error reason-c", "reason-c"],
+      ["so-d.ts", "// @ts-nocheck reason-d", "reason-d"],
+      ["so-e.ts", "// eslint-disable-next-line no-debugger -- reason-e", "reason-e"],
+      ["so-f.ts", "debugger; // oxlint-disable-line no-debugger -- reason-f", "reason-f"],
+      ["so-g.ts", "/* eslint-disable -- reason-g */", "reason-g"],
+      ["so-h.ts", "/* oxlint-disable no-debugger -- reason-h */", "reason-h"],
+      ["so-i.ts", "// biome-ignore format: reason-i", "reason-i"],
+      ["so-j.ts", "// biome-ignore-all format: reason-j", "reason-j"],
+    ];
+    git(R, "checkout", "-q", "main");
+    git(R, "checkout", "-qb", "forms");
+    for (const [file, body] of plants) {
+      commitFile(R, `scripts/${file}`, `${body}\nconst x = 1;`, file);
+    }
+    const r = sw(R, "main", "forms");
+    expect(r.code).toBe(2);
+    expect(r.out.startsWith("held\n## Switch-offs\n\n")).toBe(true);
+    for (const [file, , reason] of plants) {
+      expect(r.out.split(`scripts/${file}:`).length - 1).toBe(1);
+      expect(r.out.includes(reason)).toBe(true);
+    }
+    expect(r.out.includes("scripts/so-a.ts:1 ts-ignore every rule -- reason: reason-a")).toBe(true);
+    expect(
+      r.out.includes("scripts/so-f.ts:1 oxlint-disable-line no-debugger -- reason: reason-f"),
+    ).toBe(true);
+    expect(r.out.includes("scripts/so-i.ts:1 biome-ignore format -- reason: reason-i")).toBe(true);
+    expect(r.out.includes("(id comment:")).toBe(true);
+  });
+
+  test("text that only looks like a switch-off is not listed", () => {
+    const R = join(tmp, "sw");
+    git(R, "checkout", "-q", "main");
+    git(R, "checkout", "-qb", "strings");
+    commitFile(
+      R,
+      "scripts/so-str.ts",
+      [
+        'const s1 = "// @ts-ignore fake-a";',
+        "const s2 = '// oxlint-disable-line no-debugger -- fake-b';",
+        "const s3 = `/* eslint-disable fake-c */`;",
+        "const re = /eslint-disable fake-d/;",
+        "export const who = `value ${1} // biome-ignore format: fake-e`;",
+      ].join("\n"),
+      "strings",
+    );
+    commitFile(
+      R,
+      "scripts/so-real.ts",
+      "// eslint-disable-next-line no-debugger -- so-real-reason\n;",
+      "real",
+    );
+    const r = sw(R, "main", "strings");
+    expect(r.code).toBe(2);
+    expect(r.out.split("scripts/so-str.ts").length - 1).toBe(0);
+    expect(r.out.includes("scripts/so-real.ts:1")).toBe(true);
+    expect(r.out.includes("so-real-reason")).toBe(true);
+  });
+
+  test("a switch-off with no reason is listed as missing and holds at exit 3", () => {
+    const R = join(tmp, "sw");
+    git(R, "checkout", "-q", "main");
+    git(R, "checkout", "-qb", "bare");
+    commitFile(R, "scripts/so-bare.ts", "// @ts-ignore\n;", "bare");
+    const r = sw(R, "main", "bare");
+    expect(r.code).toBe(3);
+    expect(r.out.startsWith("no reason\n")).toBe(true);
+    expect(r.out.includes("scripts/so-bare.ts:1 ts-ignore every rule -- reason: missing")).toBe(
+      true,
+    );
+  });
+
+  test("a Biome comment with no reason switches nothing off", () => {
+    const R = join(tmp, "sw");
+    git(R, "checkout", "-q", "main");
+    git(R, "checkout", "-qb", "bare-biome");
+    commitFile(R, "scripts/so-bi.ts", "// biome-ignore format\n;", "biome");
+    const r = sw(R, "main", "bare-biome");
+    expect(r.code).toBe(0);
+    expect(r.out).toBe("clear\n## Switch-offs\n\nnone");
+  });
+
+  test("a settings change is listed with its diff, a dependency is not", () => {
+    const R = join(tmp, "sw");
+    git(R, "checkout", "-q", "main");
+    writeFileSync(
+      join(R, "tsconfig.json"),
+      `${JSON.stringify({ compilerOptions: { strict: true } }, null, 2)}\n`,
+    );
+    writeFileSync(
+      join(R, "package.json"),
+      `${JSON.stringify({ name: "sw", scripts: { check: "original-check" } }, null, 2)}\n`,
+    );
+    git(R, "add", "-A");
+    git(R, "commit", "-qm", "base settings on main");
+    git(R, "checkout", "-qb", "settings");
+    const ts = JSON.parse(readFileSync(join(R, "tsconfig.json"), "utf8")) as {
+      compilerOptions: Record<string, unknown>;
+    };
+    ts.compilerOptions.strict = false;
+    writeFileSync(join(R, "tsconfig.json"), `${JSON.stringify(ts, null, 2)}\n`);
+    const pkg = JSON.parse(readFileSync(join(R, "package.json"), "utf8")) as {
+      dependencies?: Record<string, string>;
+    };
+    pkg.dependencies = { "so-probe": "1.0.0" };
+    writeFileSync(join(R, "package.json"), `${JSON.stringify(pkg, null, 2)}\n`);
+    git(R, "add", "-A");
+    git(R, "commit", "-qm", "settings");
+    const r = sw(R, "main", "settings");
+    expect(r.code).toBe(2);
+    expect(r.out.includes("- settings tsconfig.json (id settings:")).toBe(true);
+    expect(r.out.includes("```diff")).toBe(true);
+    expect(r.out.includes("+++ b/tsconfig.json")).toBe(true);
+    expect(r.out.split("package.json").length - 1).toBe(0);
+  });
+
+  test("a package.json that only changes its gate script is listed", () => {
+    const R = join(tmp, "sw");
+    git(R, "checkout", "-q", "main");
+    git(R, "checkout", "-qb", "pkgscripts");
+    const pkg = JSON.parse(readFileSync(join(R, "package.json"), "utf8")) as {
+      scripts: Record<string, string>;
+    };
+    pkg.scripts.check = "true";
+    writeFileSync(join(R, "package.json"), `${JSON.stringify(pkg, null, 2)}\n`);
+    git(R, "add", "-A");
+    git(R, "commit", "-qm", "gate script");
+    const r = sw(R, "main", "pkgscripts");
+    expect(r.code).toBe(2);
+    expect(r.out.includes("- settings package.json (id settings:")).toBe(true);
+  });
+
+  test("a switch-off that main gains is not listed after the merge", () => {
+    const R = join(tmp, "sw");
+    git(R, "checkout", "-qb", "twork", "main");
+    commitFile(R, "scripts/so-work.ts", "export const w = 1;", "work");
+    git(R, "checkout", "-q", "main");
+    commitFile(
+      R,
+      "scripts/so-main.ts",
+      "// eslint-disable-next-line no-debugger -- main-reason\n;",
+      "main gain",
+    );
+    git(R, "checkout", "-q", "twork");
+    git(R, "merge", "-q", "-m", "merge main", "main");
+    const r = sw(R, "main", "twork");
+    expect(r.code).toBe(0);
+    expect(r.out).toBe("clear\n## Switch-offs\n\nnone");
+  });
+
+  test("an approval in the project's ledger clears the entry", () => {
+    const R = join(tmp, "sw");
+    git(R, "checkout", "-q", "main");
+    git(R, "checkout", "-qb", "approve");
+    commitFile(R, "scripts/so-ap.ts", "// @ts-ignore so-ap reason\n;", "approve");
+    const before = sw(R, "main", "approve");
+    expect(before.code).toBe(2);
+    const id = /id (comment:[0-9a-f]{16})/u.exec(before.out)?.[1];
+    expect(typeof id).toBe("string");
+    const runs = join(R, ".postmaster", "runs");
+    mkdirSync(runs, { recursive: true });
+    appendFileSync(
+      join(runs, "ledger.jsonl"),
+      `${JSON.stringify({
+        ts: "2026-01-01T00:00:00Z",
+        project: "sw",
+        run: "t",
+        actor: "postmaster",
+        action: "switch-off",
+        target: id,
+        detail: "approved scripts/so-ap.ts:1 ts-ignore -- yes, keep it",
+      })}\n`,
+    );
+    const after = sw(R, "main", "approve");
+    expect(after.code).toBe(0);
+    expect(after.out.startsWith("clear\n## Switch-offs\n\n- comment scripts/so-ap.ts:1")).toBe(
+      true,
+    );
+    expect(after.out.includes("(approved)")).toBe(true);
+  });
+
+  test("removing the close that ended a block lists its open as added", () => {
+    const R = join(tmp, "sw");
+    git(R, "checkout", "-q", "main");
+    commitFile(
+      R,
+      "scripts/so-block.ts",
+      "/* eslint-disable no-debugger -- block reason */\ndebugger;\n/* eslint-enable no-debugger */\n;",
+      "block",
+    );
+    git(R, "checkout", "-qb", "widen");
+    writeFileSync(
+      join(R, "scripts/so-block.ts"),
+      "/* eslint-disable no-debugger -- block reason */\ndebugger;\n;",
+    );
+    git(R, "add", "-A");
+    git(R, "commit", "-qm", "drop the close");
+    const r = sw(R, "main", "widen");
+    expect(r.code).toBe(2);
+    expect(
+      r.out.includes("scripts/so-block.ts:1 eslint-disable no-debugger -- reason: block reason"),
+    ).toBe(true);
+  });
+
+  test("the scanner tells comments from strings, templates and regexes", () => {
+    const text = [
+      'const a = "// @ts-ignore in-string";',
+      "const b = `tpl // oxlint-disable-line x -- in-template ${1 /* real */}`;",
+      "const c = /eslint-disable in-regex/;",
+      "// eslint-disable-next-line no-debugger -- real-reason",
+      "debugger;",
+    ].join("\n");
+    const cs = scanComments(text);
+    expect(cs.length).toBe(2);
+    expect(cs[0]!.line).toBe(2);
+    expect(cs[0]!.raw).toBe("/* real */");
+    expect(cs[1]!.line).toBe(4);
+    expect(cs[1]!.raw).toBe("// eslint-disable-next-line no-debugger -- real-reason");
+  });
+
+  test("parseSwitchOff reads each form and its reason", () => {
+    expect(parseSwitchOff("// @ts-ignore")).toEqual({
+      form: "ts-ignore",
+      scope: "next",
+      tool: "ts",
+      rules: "every rule",
+      reason: "",
+    });
+    expect(parseSwitchOff("/** @ts-ignore JSDoc reason */")).toEqual({
+      form: "ts-ignore",
+      scope: "next",
+      tool: "ts",
+      rules: "every rule",
+      reason: "JSDoc reason",
+    });
+    expect(parseSwitchOff("// @ts-nocheck")).toEqual({
+      form: "ts-nocheck",
+      scope: "file",
+      tool: "ts",
+      rules: "every rule",
+      reason: "",
+    });
+    expect(parseSwitchOff("/* eslint-disable -- a reason */")).toEqual({
+      form: "eslint-disable",
+      scope: "open",
+      tool: "eslint",
+      rules: "every rule",
+      reason: "a reason",
+    });
+    expect(parseSwitchOff("// eslint-disable-line no-console")).toEqual({
+      form: "eslint-disable-line",
+      scope: "line",
+      tool: "eslint",
+      rules: "no-console",
+      reason: "",
+    });
+    expect(parseSwitchOff("/* oxlint-enable no-debugger */")).toEqual({
+      form: "oxlint-enable",
+      scope: "close",
+      tool: "oxlint",
+      rules: "no-debugger",
+      reason: "",
+    });
+    expect(parseSwitchOff("// biome-ignore-all lint/suspicious: why")).toEqual({
+      form: "biome-ignore-all",
+      scope: "file",
+      tool: "biome",
+      rules: "lint/suspicious",
+      reason: "why",
+    });
+    expect(parseSwitchOff("// biome-ignore format")).toBeNull();
+    expect(parseSwitchOff("// biome-ignore format: ")).toBeNull();
+    expect(parseSwitchOff("// a plain comment")).toBeNull();
+  });
+
+  test("package.json differs only on scripts or a tool's settings block", () => {
+    expect(packageSettingsDiffer(null, '{"dependencies":{"x":"1"}}')).toBe(false);
+    expect(packageSettingsDiffer('{"scripts":{"check":"a"}}', '{"scripts":{"check":"b"}}')).toBe(
+      true,
+    );
+    expect(
+      packageSettingsDiffer(
+        '{"scripts":{"check":"a"},"dependencies":{"x":"1"}}',
+        '{"scripts":{"check":"a"},"dependencies":{"x":"2"}}',
+      ),
+    ).toBe(false);
+    expect(packageSettingsDiffer(null, '{"scripts":{"check":"a"}}')).toBe(true);
+    expect(packageSettingsDiffer("{broken", '{"scripts":{}}')).toBe(true);
+    expect(
+      packageSettingsDiffer('{"prettier":{"x":1}}', '{"prettier":{"x":2},"scripts":{"c":"a"}}'),
+    ).toBe(true);
   });
 });
 

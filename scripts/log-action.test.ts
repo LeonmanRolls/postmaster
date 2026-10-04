@@ -471,6 +471,74 @@ describe("positive controls", () => {
     expect(lines()).toBe(before + 1);
   }, 30000);
 
+  test("an approved switch-off is written", () => {
+    const before = lines();
+    const r = logAction([
+      "postmaster",
+      "switch-off",
+      "comment:0123456789abcdef",
+      "approved",
+      "scripts/a.ts:1",
+      "eslint-disable-next-line",
+      "--",
+      "yes,",
+      "it",
+      "is",
+      "test-only",
+    ]);
+    expect(r.code).toBe(0);
+    expect(lines()).toBe(before + 1);
+  }, 30000);
+
+  test("with its identity, decision and the user's words", () => {
+    const r = logAction([
+      "postmaster",
+      "switch-off",
+      "settings:89abcdef01234567",
+      "approved",
+      "bunfig.toml",
+      "keep",
+      "the",
+      "test",
+      "table",
+    ]);
+    expect(r.code).toBe(0);
+    const last = lastLine();
+    expect(
+      last !== null &&
+        last.action === "switch-off" &&
+        last.target === "settings:89abcdef01234567" &&
+        last.detail === "approved bunfig.toml keep the test table",
+    ).toBe(true);
+  }, 30000);
+
+  test("a refused switch-off is written", () => {
+    const before = lines();
+    const r = logAction([
+      "postmaster",
+      "switch-off",
+      "comment:fedcba9876543210",
+      "refused",
+      "scripts/a.ts:1",
+      "ts-ignore",
+      "--",
+      "not",
+      "while",
+      "it",
+      "hides",
+      "a",
+      "failure",
+    ]);
+    expect(r.code).toBe(0);
+    expect(lines()).toBe(before + 1);
+    const last = lastLine();
+    expect(
+      last !== null &&
+        last.action === "switch-off" &&
+        last.detail.startsWith("refused scripts/a.ts:1 ts-ignore"),
+    ).toBe(true);
+  }, 30000);
+
   test("with the drop decision", () => {
     const args = ["postmaster", "spec-review", "luna", "dropped abc123 we only need one lane"];
     const r = logAction(args);
@@ -702,6 +770,30 @@ describe("negative controls: nothing is written", () => {
     expect(r.code).toBe(1);
     expect(lines()).toBe(before);
     expect(r.err.includes("opens with its decision, approved, changes or dropped")).toBe(true);
+  }, 30000);
+
+  test("a switch-off with a target out of shape", () => {
+    const before = lines();
+    const r = logAction(["coachman", "switch-off", "scripts/a.ts:1", "approved fine by me"]);
+    expect(r.code).toBe(1);
+    expect(lines()).toBe(before);
+    expect(r.err.includes("comment:<16 hex> or settings:<16 hex>")).toBe(true);
+  }, 30000);
+
+  test("a switch-off whose decision is another word", () => {
+    const before = lines();
+    const r = logAction(["coachman", "switch-off", "comment:0123456789abcdef", "maybe yes"]);
+    expect(r.code).toBe(1);
+    expect(lines()).toBe(before);
+    expect(r.err.includes("opens with its decision, approved or refused")).toBe(true);
+  }, 30000);
+
+  test("a switch-off with the decision and nothing after it", () => {
+    const before = lines();
+    const r = logAction(["coachman", "switch-off", "comment:0123456789abcdef", "approved"]);
+    expect(r.code).toBe(1);
+    expect(lines()).toBe(before);
+    expect(r.err.includes("carries the decision")).toBe(true);
   }, 30000);
 
   test("a tool-fault with no fix", () => {

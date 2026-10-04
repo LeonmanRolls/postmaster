@@ -1005,6 +1005,17 @@ route and any merge. You do not push, open a pull request, wait for a merge word
 
 Set the stage first: `<tool>/scripts/run stage <dispatch> shipping`.
 
+**List the branch's switch-offs before anything else here.** Run
+`<tool>/scripts/run landing switch-offs --repo <the waybill's repo> --default <the waybill's
+default branch> --ticket <ticket-branch>`: its `## Switch-offs` section lists every
+switch-off comment and settings change the branch adds, with each entry's identity. Exit 1 is
+an input fault to fix and re-run. On exit 3, its first line reads `no reason`: every line
+whose reason reads `missing` is yours now — remove any switch-off the code does not need, give
+each one you keep its reason beside the comment, and re-run until none is missing. On exit 2
+(`held`) you are done with it: approvals come later, from the user, at landing. Run this
+before the gate below, and after any code change it makes; whatever the final run prints, its
+section (everything after the first line) goes on the card in step 4.
+
 1. **Verify the final HEAD.** Run `<tool>/scripts/run verify run <synthesis-wt> <dispatch>` after
    the last code change; the gate must
    pass before the card is ready. No P1 or P2 finding may remain open.
@@ -1035,7 +1046,9 @@ Set the stage first: `<tool>/scripts/run stage <dispatch> shipping`.
    anywhere in the card; a card quoting `<!--`, in a commit subject or finding title,
    escapes it, for example as `&lt;!--` (the leg's checkpoint is
    `<dispatch>/checkpoint-review.md` after a review leg, `<dispatch>/checkpoint-1.md`
-   when this leg is synthesis); browser suite and QA when
+   when this leg is synthesis); then the `## Switch-offs` section from the final run of the
+   switch-off call above, whole — its bullets or its `none`, pasted after the block as its
+   own section, never retyped; browser suite and QA when
    present; the journey report path where a
    check's source names `web-journey`; every ticket turnpike with its
    rounds and result from its checkpoint record, or `none`; the Style residue

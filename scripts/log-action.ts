@@ -10,12 +10,19 @@
 //            dispatch resume refuse harvest synthesize review-launch review-harvest finding apply
 //            escalate rule ticket-check ticket-create ticket-edit ticket-state ticket-comment
 //            gate verify merge teardown degrade handoff-accept handoff stage spec-review
-//            tool-fault note
+//            switch-off tool-fault note
 //   target   what the action was done to: a lane, a ticket id, a branch, a path, a round
 //   detail   free text; everything after the target, joined by spaces. A finding's opens with its
 //            class, gating or style, so the style findings can be told apart. A spec-review's
 //            opens with the decision, approved, changes or dropped, then the spec commit the
 //            user saw, then the user's words where the decision is changes or dropped
+//
+// A switch-off is the user's word on one switch-off comment or settings change a run adds
+// (`run landing switch-offs` lists them and prints each identity). Its target is that
+// identity, `comment:<16 hex>` or `settings:<16 hex>`, enforced; its detail opens with the
+// decision, approved or refused, then the listing line naming the entry and the user's
+// words. The run's actions.jsonl and the project's ledger each hold the same line, and
+// `run landing switch-offs` reads approved lines back to clear the branch.
 //
 // A tool-fault is postmaster itself misbehaving: a script, a runbook step or a harness adapter.
 // Its target is the postmaster file, relative to the checkout this script is in or absolute,
@@ -35,15 +42,16 @@
 //
 //   exit 0  written to both files
 //   exit 1  usage, an action outside the set, a finding with no class, a spec-review with no
-//           decision, a tool-fault missing a field or naming no postmaster file, or a file
-//           could not be appended
+//           decision, a switch-off with a target or detail out of shape, a tool-fault missing
+//           a field or naming no postmaster file, or a file could not be appended
 import { appendFileSync, existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { toolRoot } from "./lib/paths.ts";
 import { argvDecoded } from "./lib/proc.ts";
+import { pyWords } from "./lib/text.ts";
 
 const VERBS =
-  " dispatch resume refuse harvest synthesize review-launch review-harvest finding apply escalate rule ticket-check ticket-create ticket-edit ticket-state ticket-comment gate verify merge teardown degrade handoff-accept handoff stage spec-review tool-fault note ";
+  " dispatch resume refuse harvest synthesize review-launch review-harvest finding apply escalate rule ticket-check ticket-create ticket-edit ticket-state ticket-comment gate verify merge teardown degrade handoff-accept handoff stage spec-review switch-off tool-fault note ";
 const CONTROLS = join(toolRoot(import.meta), "skills/postmaster/controls.md");
 
 // JSON string escaping: drop control chars, escape separators. Bytes that
@@ -252,6 +260,27 @@ function logAction(
     if (firstWord !== "approved" && firstWord !== "changes" && firstWord !== "dropped") {
       console.error(
         "log-action: a spec-review's detail opens with its decision, approved, changes or dropped",
+      );
+      return 1;
+    }
+  }
+  if (action === "switch-off") {
+    if (!/^(?:comment|settings):[0-9a-f]{16}$/u.test(target)) {
+      console.error(
+        "log-action: a switch-off's target is its identity from run landing switch-offs, comment:<16 hex> or settings:<16 hex>",
+      );
+      return 1;
+    }
+    const words = pyWords(detail);
+    if (words[0] !== "approved" && words[0] !== "refused") {
+      console.error(
+        "log-action: a switch-off's detail opens with its decision, approved or refused",
+      );
+      return 1;
+    }
+    if (words.length < 2) {
+      console.error(
+        "log-action: a switch-off's detail carries the decision, then the entry's naming and the user's words",
       );
       return 1;
     }

@@ -66,10 +66,24 @@
 //       evidence, not a result to weigh. `judge` when the waybill mentions none, or the
 //       journey check failed with its report written: the postmaster weighs it like any
 //       other non-pass.
-//
+//   run landing switch-offs --repo <repo> --default <branch> --ticket <ref>
+//       every switch-off comment and check-settings change the ticket's head adds over the
+//       merge base of the ticket and the default branch. Only real comments count: strings,
+//       template-literal text and regex literals are not comments, and only TypeScript's,
+//       the linter's (eslint and oxlint spellings) and Biome's forms switch anything off. A
+//       settings file anywhere in the tree (the tsconfig*, jsconfig*, oxlint, eslint, biome,
+//       prettier and bunfig names, plus package.json when its scripts or a tool's settings
+//       block changes) is one entry with its diff when its content changes. Prints a status
+//       line — `clear`, `held` or `no reason` — then the `## Switch-offs` section: one line
+//       per added comment with its file, line, form, rules, reason and identity, one line
+//       per added settings file with its diff, or `none`. What the merge base already holds
+//       is not added, so a switch-off that main has is never listed, and removing a
+//       switch-off is not listed either. An identity the project's ledger at the repo holds
+//       an `approved` switch-off line for is marked `(approved)` and does not hold the
+//       branch; a `refused` line does not clear it.
 //   exit 0  already-landed, anything-to-land, results, card-block, card-open: the answer,
 //           printed; card-results, card-findings: `match`; journey: `clear` or `judge`;
-//           fresh: `fresh`
+//           fresh: `fresh`; switch-offs: `clear`, every added entry approved or none added
 //   exit 1  usage; a resolving input that does not resolve (--default, --base,
 //           --card-head, --local-ticket, --pr-merge, and --ticket without a
 //           report: --pr-head answers `re-verify` instead); a file that cannot
@@ -78,8 +92,12 @@
 //           `run ticket-check --has-journey` failing; a checkpoint whose structure cannot
 //           be read (a duplicate id, a finding-shaped line that is not a finding, an
 //           unreadable state, a fence marker line, or a quoted line); a card holding an
-//           HTML comment or not holding the rendered block exactly once
-//   exit 2  fresh: the faults, one line each; journey: `blocked`
+//           HTML comment or not holding the rendered block exactly once; switch-offs: a
+//           ticket or default that does not resolve, no merge base, a diff that fails
+//   exit 2  fresh: the faults, one line each; journey: `blocked`; switch-offs: `held`,
+//           every unapproved entry carries its reason
+//   exit 3  switch-offs: `no reason`, an unapproved entry has no reason beside it
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { scriptsDir } from "./lib/paths.ts";
@@ -90,8 +108,10 @@ import {
   PY_DOT,
   PY_S_CLASS,
   pyLower,
+  pyRstrip,
   pySplitLines,
   pyTrim,
+  pyWords,
 } from "./lib/text.ts";
 
 const SCRIPTS = scriptsDir(import.meta);
@@ -370,6 +390,611 @@ function checkBlock(dispatch: string, wt: string, checkpoint: string, card: stri
   return 0;
 }
 
+// --- switch-offs ------------------------------------------------------------------
+
+/** One comment found in source text: its 1-based start line and the comment as
+ * written, delimiters included. Strings, template-literal text and regex literals
+ * are not comments. */
+export interface SwitchComment {
+  line: number;
+  raw: string;
+}
+
+/** The tokens after which a `/` starts a regex rather than dividing. The last
+ * significant token in code decides; identifiers and values divide. */
+const REGEX_AFTER = new Set([
+  "",
+  "(",
+  ",",
+  "=",
+  ":",
+  "[",
+  "!",
+  "&",
+  "|",
+  "?",
+  "{",
+  "}",
+  ";",
+  "+",
+  "-",
+  "*",
+  "/",
+  "%",
+  "^",
+  "~",
+  "<",
+  ">",
+  "return",
+  "typeof",
+  "instanceof",
+  "in",
+  "of",
+  "new",
+  "delete",
+  "void",
+  "case",
+  "do",
+  "else",
+  "yield",
+  "await",
+  "throw",
+]);
+
+/** The comments in source text, told apart from strings, template literals (with
+ * `${}` scanned as code) and regex literals. A small scanner, because runtime
+ * imports are Bun's built-ins and Node's standard modules: no parser at run time. */
+export function scanComments(text: string): SwitchComment[] {
+  const out: SwitchComment[] = [];
+  const n = text.length;
+  let i = 0;
+  let line = 1;
+  let last = "";
+  const frames: { tpl: boolean; interp: boolean; brace: number }[] = [
+    { tpl: false, interp: false, brace: 0 },
+  ];
+  while (i < n) {
+    const f = frames[frames.length - 1]!;
+    const ch = text[i]!;
+    if (f.tpl) {
+      if (ch === "\\") {
+        if (text[i + 1] === "\n") line++;
+        i += 2;
+        continue;
+      }
+      if (ch === "`") {
+        frames.pop();
+        last = "value";
+        i++;
+        continue;
+      }
+      if (ch === "$" && text[i + 1] === "{") {
+        frames.push({ tpl: false, interp: true, brace: 0 });
+        i += 2;
+        continue;
+      }
+      if (ch === "\n") line++;
+      i++;
+      continue;
+    }
+    if (ch === "\n") {
+      line++;
+      i++;
+      continue;
+    }
+    if (ch === " " || ch === "\t" || ch === "\r") {
+      i++;
+      continue;
+    }
+    if (ch === "/" && text[i + 1] === "/") {
+      const start = line;
+      const s = i;
+      i += 2;
+      while (i < n && text[i] !== "\n") i++;
+      out.push({ line: start, raw: text.slice(s, i).replace(/[ \t]+$/u, "") });
+      continue;
+    }
+    if (ch === "/" && text[i + 1] === "*") {
+      const start = line;
+      const s = i;
+      i += 2;
+      while (i < n && !(text[i] === "*" && text[i + 1] === "/")) {
+        if (text[i] === "\n") line++;
+        i++;
+      }
+      i = i < n ? i + 2 : i;
+      out.push({ line: start, raw: pyRstrip(text.slice(s, i)) });
+      continue;
+    }
+    if (ch === "'" || ch === '"') {
+      i++;
+      while (i < n && text[i] !== ch) {
+        if (text[i] === "\n") break;
+        if (text[i] === "\\") {
+          i++;
+          if (i < n && text[i] === "\n") line++;
+          i++;
+          continue;
+        }
+        i++;
+      }
+      if (i < n && text[i] === ch) i++;
+      last = "value";
+      continue;
+    }
+    if (ch === "`") {
+      frames.push({ tpl: true, interp: false, brace: 0 });
+      i++;
+      continue;
+    }
+    if (ch === "/") {
+      if (REGEX_AFTER.has(last)) {
+        i++;
+        let cls = false;
+        let closed = false;
+        while (i < n && text[i] !== "\n") {
+          const r = text[i]!;
+          if (r === "\\") {
+            i += 2;
+            continue;
+          }
+          if (r === "[") cls = true;
+          else if (r === "]") cls = false;
+          else if (r === "/" && !cls) {
+            i++;
+            while (i < n && /[a-z]/iu.test(text[i]!)) i++;
+            closed = true;
+            break;
+          }
+          i++;
+        }
+        last = closed ? "value" : "/";
+        continue;
+      }
+      last = "/";
+      i++;
+      continue;
+    }
+    if (ch === "{") {
+      if (f.interp) f.brace++;
+      last = "{";
+      i++;
+      continue;
+    }
+    if (ch === "}") {
+      if (f.interp && f.brace === 0) {
+        frames.pop();
+        last = "value";
+        i++;
+        continue;
+      }
+      if (f.interp) f.brace--;
+      last = "}";
+      i++;
+      continue;
+    }
+    if (/[A-Za-z_$]/u.test(ch)) {
+      const s = i;
+      while (i < n && /[A-Za-z0-9_$]/u.test(text[i]!)) i++;
+      last = text.slice(s, i);
+      continue;
+    }
+    if (/[0-9]/u.test(ch)) {
+      while (i < n && /[0-9a-fA-FxXoObB._]/u.test(text[i]!)) i++;
+      last = "value";
+      continue;
+    }
+    last = ch;
+    i++;
+  }
+  return out;
+}
+
+/** What a comment switches off, and how far. `line` covers its own line, `next`
+ * the following one, `open` a block to its matching `close`, `file` the whole
+ * file; `line-enable` closes a line directive and is never a switch-off. */
+export interface SwitchOff {
+  form: string;
+  scope: "line" | "next" | "open" | "close" | "file" | "line-enable";
+  tool: "ts" | "eslint" | "oxlint" | "biome";
+  rules: string;
+  reason: string;
+}
+
+const LINTER_RE =
+  /^(eslint|oxlint)-(disable-line|disable-next-line|enable-line|enable-next-line|disable|enable)(?![A-Za-z0-9_-])/u;
+const BIOME_RE =
+  /^(biome-ignore-all|biome-ignore-start|biome-ignore-end|biome-ignore)(?![A-Za-z0-9_-])/u;
+const TS_RE = /^@(ts-ignore|ts-expect-error|ts-nocheck)(?![A-Za-z0-9_-])/u;
+
+/** Parse one comment as a switch-off directive, or null when it is not one (or,
+ * for Biome, when it carries no `category: reason`, which switches nothing off).
+ * A reason is the text after ` -- ` in a linter comment (or after a leading
+ * `--`), any text after a TypeScript directive (a leading `--` or `:` dropped),
+ * and the text after the colon in Biome's. Empty or blank text is no reason. */
+export function parseSwitchOff(raw: string): SwitchOff | null {
+  let body: string;
+  let block = false;
+  if (raw.startsWith("//")) {
+    body = raw.slice(2);
+  } else if (raw.startsWith("/*")) {
+    block = true;
+    body = raw.endsWith("*/") ? raw.slice(2, -2) : raw.slice(2);
+  } else {
+    return null;
+  }
+  body = body.trim();
+  if (block) body = body.replace(/^\*+[ \t]*/u, "").trim();
+
+  const ts = TS_RE.exec(body);
+  if (ts !== null) {
+    const rest = body.slice(ts[0].length).trim();
+    const reason = rest.replace(/^(?:--|:)[ \t]*/u, "").trim();
+    return {
+      form: ts[1]!,
+      scope: ts[1] === "ts-nocheck" ? "file" : "next",
+      tool: "ts",
+      rules: "every rule",
+      reason,
+    };
+  }
+  const lint = LINTER_RE.exec(body);
+  if (lint !== null) {
+    const what = lint[2]!;
+    const scope: SwitchOff["scope"] =
+      what === "disable"
+        ? "open"
+        : what === "enable"
+          ? "close"
+          : what === "disable-line"
+            ? "line"
+            : what === "disable-next-line"
+              ? "next"
+              : "line-enable";
+    let rest = body.slice(lint[0].length).trim();
+    let reason = "";
+    if (rest.startsWith("-- ")) {
+      reason = rest.slice(3).trim();
+      rest = "";
+    } else {
+      const k = rest.indexOf(" -- ");
+      if (k >= 0) {
+        reason = rest.slice(k + 4).trim();
+        rest = rest.slice(0, k).trim();
+      }
+    }
+    return {
+      form: `${lint[1]}-${what}`,
+      scope,
+      tool: lint[1] as "eslint" | "oxlint",
+      rules: rest === "" ? "every rule" : rest,
+      reason,
+    };
+  }
+  const biome = BIOME_RE.exec(body);
+  if (biome !== null) {
+    const rest = body.slice(biome[0].length).trim();
+    const colon = rest.indexOf(":");
+    if (colon < 0) return null;
+    const rules = rest.slice(0, colon).trim();
+    const reason = rest.slice(colon + 1).trim();
+    if (rules === "" || reason === "") return null;
+    const what = biome[1]!;
+    return {
+      form: what,
+      scope:
+        what === "biome-ignore"
+          ? "next"
+          : what === "biome-ignore-all"
+            ? "file"
+            : what === "biome-ignore-start"
+              ? "open"
+              : "close",
+      tool: "biome",
+      rules,
+      reason,
+    };
+  }
+  return null;
+}
+
+/** The identity of an added switch-off: its file, its comment text and, for a
+ * line or next-line form, the trimmed text of the line it covers. The line
+ * number is for the listing only: an approval holds wherever the comment moves.
+ * Settings use the file's content object id at the head instead. */
+function switchOffId(kind: "comment" | "settings", parts: string[]): string {
+  const hex = createHash("sha256").update(parts.join("\0")).digest("hex").slice(0, 16);
+  return `${kind}:${hex}`;
+}
+
+interface SwitchEntry {
+  kind: "comment" | "settings";
+  file: string;
+  line: number;
+  form: string;
+  rules: string;
+  reason: string;
+  hasReason: boolean;
+  raw: string;
+  covered: string;
+  scope: SwitchOff["scope"];
+  tool: SwitchOff["tool"] | "";
+  id: string;
+}
+
+/** Every directive comment in one file's text: the listed switch-offs and the
+ * closes (eslint-enable, oxlint-enable, biome-ignore-end), which are never
+ * listed but end the blocks an open starts. */
+function commentSwitches(file: string, text: string): SwitchEntry[] {
+  const lines = pySplitLines(text);
+  const out: SwitchEntry[] = [];
+  for (const c of scanComments(text)) {
+    const off = parseSwitchOff(c.raw);
+    if (off === null) continue;
+    let covered = "";
+    if (off.scope === "line") covered = lines[c.line - 1] ?? "";
+    else if (off.scope === "next") covered = lines[c.line] ?? "";
+    const trimmed = pyTrim(covered);
+    out.push({
+      kind: "comment",
+      file,
+      line: c.line,
+      form: off.form,
+      rules: off.rules,
+      reason: off.reason,
+      hasReason: off.reason !== "",
+      raw: c.raw,
+      covered: trimmed,
+      scope: off.scope,
+      tool: off.tool,
+      id: switchOffId("comment", [file, c.raw, trimmed]),
+    });
+  }
+  return out;
+}
+
+const LISTED_SCOPES = new Set<SwitchOff["scope"]>(["line", "next", "open", "file"]);
+
+/** The switch-offs the head adds over the base, file by file: a head that holds
+ * more of an identity than the base does. Removing the close that ended a block
+ * widens it, so the block's open counts as added then. */
+function addedSwitches(base: SwitchEntry[], head: SwitchEntry[]): SwitchEntry[] {
+  const baseListed = base.filter((e) => LISTED_SCOPES.has(e.scope));
+  const headListed = head.filter((e) => LISTED_SCOPES.has(e.scope));
+  const have = new Map<string, number>();
+  for (const e of baseListed) have.set(e.id, (have.get(e.id) ?? 0) + 1);
+  const seen = new Set<string>();
+  const added: SwitchEntry[] = [];
+  for (const e of headListed) {
+    const left = have.get(e.id) ?? 0;
+    if (left > 0) {
+      have.set(e.id, left - 1);
+      continue;
+    }
+    if (seen.has(e.id)) continue;
+    seen.add(e.id);
+    added.push(e);
+  }
+  const closes = (xs: SwitchEntry[]): Map<string, number> => {
+    const m = new Map<string, number>();
+    for (const e of xs) if (e.scope === "close") m.set(e.id, (m.get(e.id) ?? 0) + 1);
+    return m;
+  };
+  const headClose = closes(head);
+  const gone = new Set<string>();
+  for (const [id, count] of closes(base)) {
+    if (count > (headClose.get(id) ?? 0)) gone.add(id);
+  }
+  if (gone.size > 0) {
+    const stacks = new Map<string, string[]>();
+    const events = base
+      .filter((e) => e.scope === "open" || e.scope === "close")
+      .sort((a, b) => a.line - b.line);
+    for (const e of events) {
+      const stack = stacks.get(e.tool) ?? [];
+      if (e.scope === "open") {
+        stack.push(e.id);
+      } else {
+        const open = stack.pop();
+        if (open !== undefined && gone.has(e.id) && !added.some((a) => a.id === open)) {
+          const at = head.find((h) => h.id === open);
+          if (at !== undefined) added.push(at);
+        }
+      }
+      stacks.set(e.tool, stack);
+    }
+  }
+  return added.sort((a, b) => (a.file === b.file ? a.line - b.line : a.file < b.file ? -1 : 1));
+}
+
+/** The settings files a check reads, by basename anywhere in the tree. */
+function settingsKind(path: string): "plain" | "package" | null {
+  const base = path.split("/").pop() ?? path;
+  if (base === "package.json") return "package";
+  if (
+    /^tsconfig.*\.json$/u.test(base) ||
+    /^jsconfig.*\.json$/u.test(base) ||
+    base === ".oxlintrc.json" ||
+    base.startsWith(".eslintrc") ||
+    base.startsWith("eslint.config.") ||
+    base === ".eslintignore" ||
+    /^biome\.jsonc?$/u.test(base) ||
+    base.startsWith(".prettierrc") ||
+    base.startsWith("prettier.config.") ||
+    base === ".prettierignore" ||
+    base === "bunfig.toml"
+  ) {
+    return "plain";
+  }
+  return null;
+}
+
+/** Stable JSON for comparing parsed blocks: object keys in order. */
+function canonJson(v: unknown): string {
+  if (v === undefined) return "<undefined>";
+  if (Array.isArray(v)) return `[${v.map(canonJson).join(",")}]`;
+  if (v !== null && typeof v === "object") {
+    const o = v as Record<string, unknown>;
+    return `{${Object.keys(o)
+      .sort()
+      .map((k) => `${JSON.stringify(k)}:${canonJson(o[k])}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(v) ?? "null";
+}
+
+/** Whether a package.json change touches what a check runs or a tool's settings:
+ * its scripts, eslintConfig or prettier block, not a dependency. Text that does
+ * not parse compares whole, so an unreadable file is never waved through. */
+export function packageSettingsDiffer(a: string | null, b: string | null): boolean {
+  if (a === null || b === null) {
+    if (a === null && b === null) return false;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse((a ?? b)!);
+    } catch {
+      return true;
+    }
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) return true;
+    const o = parsed as Record<string, unknown>;
+    return ["scripts", "eslintConfig", "prettier"].some((k) => o[k] !== undefined);
+  }
+  if (a === b) return false;
+  let pa: unknown;
+  let pb: unknown;
+  try {
+    pa = JSON.parse(a);
+    pb = JSON.parse(b);
+  } catch {
+    return true;
+  }
+  if (pa === null || typeof pa !== "object" || Array.isArray(pa)) return true;
+  if (pb === null || typeof pb !== "object" || Array.isArray(pb)) return true;
+  const oa = pa as Record<string, unknown>;
+  const ob = pb as Record<string, unknown>;
+  return ["scripts", "eslintConfig", "prettier"].some((k) => canonJson(oa[k]) !== canonJson(ob[k]));
+}
+
+function blobAt(repo: string, rev: string, path: string): string | null {
+  const r = run("git", ["-C", repo, "cat-file", "blob", `${rev}:${path}`], { env: UNSET_GIT });
+  if (r.code !== 0) return null;
+  return r.out;
+}
+
+function blobShaAt(repo: string, rev: string, path: string): string | null {
+  const r = gitOut(repo, ["rev-parse", "--verify", "--quiet", `${rev}:${path}`]);
+  if (r.code !== 0 || r.out === "") return null;
+  return r.out.split("\n")[0]!;
+}
+
+/** Every approval in the project's ledger: an approved switch-off line's
+ * identity, whatever run it was recorded for. */
+function approvalIds(repo: string): Set<string> {
+  const out = new Set<string>();
+  let text: string;
+  try {
+    text = readFileSync(join(repo, ".postmaster", "runs", "ledger.jsonl"), "utf8");
+  } catch {
+    return out;
+  }
+  for (const line of pySplitLines(text)) {
+    if (pyTrim(line) === "") continue;
+    let rec: unknown;
+    try {
+      rec = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (rec === null || typeof rec !== "object") continue;
+    const r = rec as Record<string, unknown>;
+    if (r["action"] !== "switch-off") continue;
+    if (typeof r["target"] !== "string" || typeof r["detail"] !== "string") continue;
+    if ((pyWords(r["detail"])[0] ?? "") !== "approved") continue;
+    out.add(r["target"]);
+  }
+  return out;
+}
+
+function switchOffs(o: string[]): number {
+  if (o.length !== 6 || o[0] !== "--repo" || o[2] !== "--default" || o[4] !== "--ticket") {
+    usage(SWITCH_USAGE);
+  }
+  const repo = o[1]!;
+  const head = commitOf(repo, o[5]!, "--ticket");
+  const tip = commitOf(repo, o[3]!, "--default");
+  const mb = gitOut(repo, ["merge-base", tip, head]);
+  if (mb.code !== 0 || mb.out === "") die(`no merge base of ${o[3]} and ${o[5]}`);
+  const base = mb.out.split("\n")[0]!;
+  const paths = [...changed(repo, base, head)].sort();
+  const comments: SwitchEntry[] = [];
+  interface SettingsEntry {
+    file: string;
+    id: string;
+    diff: string;
+  }
+  const settings: SettingsEntry[] = [];
+  for (const file of paths) {
+    const kind = settingsKind(file);
+    if (kind !== null) {
+      const atBase = blobAt(repo, base, file);
+      const atHead = blobAt(repo, head, file);
+      const differs =
+        kind === "package" ? packageSettingsDiffer(atBase, atHead) : atBase !== atHead;
+      if (differs) {
+        const sha = blobShaAt(repo, head, file) ?? "absent";
+        const d = run("git", ["-C", repo, "diff", "--no-renames", base, head, "--", file], {
+          env: UNSET_GIT,
+        });
+        if (d.code !== 0) die(`cannot diff ${file}: ${pyTrim(d.err)}`);
+        settings.push({ file, id: switchOffId("settings", [file, sha]), diff: d.out });
+      }
+    }
+    if (/\.(?:ts|tsx|mts|cts|js|jsx|mjs|cjs)$/u.test(file)) {
+      const atBase = blobAt(repo, base, file);
+      const atHead = blobAt(repo, head, file);
+      const baseList = atBase === null ? [] : commentSwitches(file, atBase);
+      const headList = atHead === null ? [] : commentSwitches(file, atHead);
+      comments.push(...addedSwitches(baseList, headList));
+    }
+  }
+  const approved = approvalIds(repo);
+  const marked = (id: string): string => (approved.has(id) ? " (approved)" : "");
+  const linesOut: string[] = [];
+  for (const c of comments) {
+    linesOut.push(
+      `- comment ${c.file}:${c.line} ${c.form} ${c.rules} -- reason: ` +
+        `${c.hasReason ? c.reason : "missing"} (id ${c.id})${marked(c.id)}`,
+    );
+  }
+  settings.sort((a, b) => (a.file < b.file ? -1 : a.file > b.file ? 1 : 0));
+  for (const s of settings) {
+    linesOut.push(
+      "",
+      `- settings ${s.file} (id ${s.id})${marked(s.id)}`,
+      "```diff",
+      s.diff.replace(/\n+$/u, ""),
+      "```",
+    );
+  }
+  const openComments = comments.filter((c) => !approved.has(c.id));
+  const openSettings = settings.filter((s) => !approved.has(s.id));
+  let status: string;
+  let code: number;
+  if (openComments.length === 0 && openSettings.length === 0) {
+    status = "clear";
+    code = 0;
+  } else if (openComments.some((c) => !c.hasReason)) {
+    status = "no reason";
+    code = 3;
+  } else {
+    status = "held";
+    code = 2;
+  }
+  console.log(status);
+  process.stdout.write(`## Switch-offs\n\n${linesOut.length > 0 ? linesOut.join("\n") : "none"}\n`);
+  return code;
+}
+
 // --- modes --------------------------------------------------------------------------------
 const TOP_USAGE =
   "usage: run landing already-landed --repo <repo> --default <branch> --ticket <ref> --base <sha> " +
@@ -378,7 +1003,8 @@ const TOP_USAGE =
   "--ticket <ref> --dispatch <dispatch> --wt <synthesis-wt> | results <dispatch> <synthesis-wt> | " +
   "card-block <dispatch> <synthesis-wt> <checkpoint> | card-results <dispatch> <synthesis-wt> " +
   "<checkpoint> <card> | card-findings <dispatch> <synthesis-wt> <checkpoint> <card> | " +
-  "card-open <checkpoint> | journey <dispatch> <synthesis-wt> <waybill>";
+  "card-open <checkpoint> | journey <dispatch> <synthesis-wt> <waybill> | switch-offs " +
+  "--repo <repo> --default <branch> --ticket <ref>";
 const ALREADY_USAGE =
   "usage: run landing already-landed --repo <repo> --default <branch> --ticket <ref> --base <sha> " +
   "--card-head <sha> [--local-ticket <branch>] [--pr-merge <sha> --pr-head <sha>]";
@@ -395,6 +1021,8 @@ const CFINDINGS_USAGE =
   "usage: run landing card-findings <dispatch> <synthesis-wt> <checkpoint> <card>";
 const OPEN_USAGE = "usage: run landing card-open <checkpoint>";
 const JOURNEY_USAGE = "usage: run landing journey <dispatch> <synthesis-wt> <waybill>";
+const SWITCH_USAGE =
+  "usage: run landing switch-offs --repo <repo> --default <branch> --ticket <ref>";
 
 function alreadyLanded(o: string[]): number {
   if (
@@ -652,6 +1280,10 @@ function main(argv: string[]): number {
     if (mode === "journey") {
       if (argv.length !== 4) usage(JOURNEY_USAGE);
       return journey(argv[1]!, argv[2]!, argv[3]!);
+    }
+    if (mode === "switch-offs") {
+      if (argv.length !== 7) usage(SWITCH_USAGE);
+      return switchOffs(argv.slice(1));
     }
     usage(TOP_USAGE);
   } catch (e) {
