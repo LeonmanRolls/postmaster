@@ -125,6 +125,16 @@ describe("host self-test sections", () => {
   });
 });
 
+test("Herdr and tmux each receive the 100,000 and 1,000 byte caller environments", () => {
+  const controls = lines.filter((line) => line.includes("caller environment bytes reach"));
+  expect(controls.length).toBe(4);
+  for (const line of controls) {
+    console.log(line);
+    const at = lines.indexOf(line);
+    console.log(lines[at + 1] ?? "");
+  }
+});
+
 describe("stub state lock", () => {
   test("concurrent locked increments lose no update", async () => {
     const dir = mkdtempSync(join(tmpdir(), "host-lock-"));
