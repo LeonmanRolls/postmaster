@@ -901,7 +901,9 @@ function reviewLaunch(
   round: number,
   since: Date | null,
 ): Date | null {
+  // ASCII: the lens names are ASCII words, matched at their edges
   const lensRe = new RegExp(`\\b${lens.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`);
+  // ASCII: the launch detail reads `round N` or `rN`, ASCII either way
   const roundRe = new RegExp(`\\bround\\s*${round}\\b|\\br${round}\\b`);
   let found: Date | null = null;
   let any = false;
@@ -929,7 +931,7 @@ function reviewRoundLines(dispatch: string, events: Array<Record<string, unknown
     return [];
   }
   const rounds = files
-    .map((f) => /^review-r(\d+)\.json$/u.exec(f))
+    .map((f) => /^review-r([0-9]+)\.json$/u.exec(f))
     .filter((m): m is RegExpExecArray => m !== null)
     .sort((a, b) => parseInt(a[1]!, 10) - parseInt(b[1]!, 10));
   const lines: string[] = [];

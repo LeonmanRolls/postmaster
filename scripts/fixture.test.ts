@@ -1184,9 +1184,9 @@ describe("score: the time lines after the checks (#265)", () => {
 
   test("the stage table follows the checks with each stage's waiting and the total", () => {
     const out = timeReport(waitRun());
-    expect(out).toMatch(/^stage\s+started \(UTC\)/mu);
+    expect(out).toMatch(/^stage\s+started \(UTC\)/mu); // ASCII: the header is machine-printed
     expect(out).toContain("11m 20s");
-    expect(out).toMatch(/^total\s+12m 20s/mu);
+    expect(out).toMatch(/^total\s+12m 20s/mu); // ASCII: the total row is machine-printed
   }, 30000);
 
   test("a wait over ten minutes names the stage, and no hour is claimed", () => {
