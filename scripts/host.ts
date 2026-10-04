@@ -540,7 +540,8 @@ function startOf(pid: number): string {
 function processes(): Map<number, ProcessInfo> {
   const table = new Map<number, ProcessInfo>();
   for (const [pid, row] of processTable()) {
-    if (!row.zombie && row.group && row.start) table.set(pid, { group: row.group, start: row.start });
+    if (!row.zombie && row.group && row.start)
+      table.set(pid, { group: row.group, start: row.start });
   }
   return table;
 }

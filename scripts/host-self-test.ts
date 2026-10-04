@@ -19,13 +19,7 @@ import {
 } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { scriptsDir } from "./lib/paths.ts";
-import {
-  commandLine,
-  processAlive,
-  processStart,
-  processState,
-} from "./lib/processes.ts";
-import { pyWords } from "./lib/text.ts";
+import { commandLine, processAlive, processStart } from "./lib/processes.ts";
 
 const HERE = scriptsDir(import.meta);
 const SELF = join(HERE, "host.sh");

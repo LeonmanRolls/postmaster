@@ -31,7 +31,8 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { homedir, machine, release, tmpdir, type as osType } from "node:os";
+import * as nodeOs from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { tryJsonFile } from "./lib/data.ts";
 import { effortsLine } from "./run-meta.ts";
@@ -338,10 +339,14 @@ export function hidden(
   ticket: string,
   app: string,
 ): { passed: boolean; detail: string; out: string } {
-  const r = sh([process.execPath, "test", "--timeout", "120000", "./"], join(TICKETS, ticket, "hidden"), {
-    ...(process.env as Record<string, string>),
-    FIXTURE_APP: app,
-  });
+  const r = sh(
+    [process.execPath, "test", "--timeout", "120000", "./"],
+    join(TICKETS, ticket, "hidden"),
+    {
+      ...(process.env as Record<string, string>),
+      FIXTURE_APP: app,
+    },
+  );
   const counts: Record<string, number> = {};
   for (const m of (r.out ?? "").matchAll(HIDDEN_RE)) {
     counts[m[2]!] = parseInt(digitValue(m[1]!), 10);
@@ -431,7 +436,10 @@ export function score(dispatch: string, repo: string): { code: number; out: stri
   // machine, the user or their home folder. (D6)
   const gitVersionOut = run("git", ["--version"]).out.trim();
   const gitVersion = /\b([0-9]+(?:\.[0-9]+)+)/u.exec(gitVersionOut)?.[1] ?? gitVersionOut;
-  const platformLine = `platform: ${osType()} ${release()} ${machine()}, bun ${Bun.version}, git ${gitVersion}`;
+  // os.machine() and Bun.version are runtime facts the bundled types may not name.
+  const osMachine = (nodeOs as unknown as { machine: () => string }).machine();
+  const bunVersion = (globalThis as unknown as { Bun: { version: string } }).Bun.version;
+  const platformLine = `platform: ${nodeOs.type()} ${nodeOs.release()} ${osMachine}, bun ${bunVersion}, git ${gitVersion}`;
   const results: CheckResult[] = [
     { name: "hidden-tests", ...checkHidden(dispatch, repo, app) },
     { name: "gate", ...checkGate(app, repo, main) },

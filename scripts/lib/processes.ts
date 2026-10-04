@@ -193,10 +193,7 @@ const CONTAINMENT_KINDS: Array<[string, RegExp]> = [
   ["proc-stat", /\/proc\/(?:\$\{[^}]+\}|[0-9]+)\/stat/u],
   ["proc-list", /readdirSync\(\s*(?:["'`]\/proc["'`]|procRoot\(\))/u],
   ["proc-cmdline", /\/proc\/(?:\$\{[^}]+\}|[0-9]+)\/cmdline/u],
-  [
-    "ps-call",
-    /(?:run|spawn|spawnSync)\(\s*["']ps["']|Bun\.spawn\(\s*\[\s*["']ps["']/u,
-  ],
+  ["ps-call", /(?:run|spawn|spawnSync)\(\s*["']ps["']|Bun\.spawn\(\s*\[\s*["']ps["']/u],
   ["kill-probe", /process\.kill\([^,]+,\s*0\s*\)/u],
 ];
 

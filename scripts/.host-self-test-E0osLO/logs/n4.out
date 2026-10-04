@@ -1,0 +1,4 @@
+before
+{"type":"system","subtype":"init","session_id":"fixed-1","model":"m"}
+{"type":"assistant","message":{"content":[{"type":"text","text":"step one"}]}}
+{"type":"result","subtype":"success","num_turns":1}

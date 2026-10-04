@@ -1,0 +1,2 @@
+{"type":"system","subtype":"init","session_id":"probe-1","model":"m"}
+from=/home/brindlewick/postmaster/.worktrees/217-mimo/scripts/.host-self-test-E0osLO/caller|name=#1, Stop `touch /home/brindlewick/postmaster/.worktrees/217-mimo/scripts/.host-self-test-E0osLO/canary` $(touch /home/brindlewick/postmaster/.worktrees/217-mimo/scripts/.host-self-test-E0osLO/canary) "breaking" a shell|pane=p4|tmuxpane=|var=v|sid=73323|pid=73323|pgid=73323|tty=no

@@ -1,0 +1,2 @@
+#!/bin/sh
+exec bun '/home/brindlewick/postmaster/.worktrees/217-mimo/scripts/host-self-test.ts' --stub herdr "$@"

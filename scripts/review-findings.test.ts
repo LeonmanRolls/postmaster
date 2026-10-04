@@ -624,7 +624,7 @@ describe("degrade", () => {
     const coachman = readFileSync(join(TOOL, "skills", "postmaster", "coachman.md"), "utf8");
     const blocks = [...coachman.matchAll(SH_BLOCKS)].map((m) => m[1]!);
     const samples = blocks.filter(
-      (block) => block.includes('NORMALIZE_FAILED=""') && block.includes("HARVEST_ERR"),
+      (block) => block.includes("NORMALIZE_FAILED=()") && block.includes("HARVEST_ERR"),
     );
     expect(samples.length).toBe(1);
     const sampleDispatch = join(root, "sample-dispatch");

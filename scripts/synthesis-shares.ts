@@ -240,10 +240,11 @@ const generatedPaths = (
   // index holding the commit's tree gives the same answer via --cached, which
   // every git has. (D4)
   const tmpIndex = `${repo}/.git/postmaster-check-attr-index`;
-  const load = Bun.spawnSync(
-    ["git", "-C", repo, "read-tree", commit],
-    { stdout: "pipe", stderr: "pipe", env: { ...process.env, GIT_INDEX_FILE: tmpIndex } },
-  );
+  const load = Bun.spawnSync(["git", "-C", repo, "read-tree", commit], {
+    stdout: "pipe",
+    stderr: "pipe",
+    env: { ...process.env, GIT_INDEX_FILE: tmpIndex },
+  });
   if (load.exitCode !== 0) {
     try {
       rmSync(tmpIndex, { force: true });
@@ -270,9 +271,10 @@ const generatedPaths = (
   try {
     rmSync(tmpIndex, { force: true });
   } catch {}
-  const output = result.exitCode === 0 ? decode(result.stdout) : fail(
-    `git check-attr --cached exited ${result.exitCode}: ${decode(result.stderr).trim()}`,
-  );
+  const output =
+    result.exitCode === 0
+      ? decode(result.stdout)
+      : fail(`git check-attr --cached exited ${result.exitCode}: ${decode(result.stderr).trim()}`);
   // Mutation of this parse's local list only: one batched check-attr call per range
   // instead of one git spawn per file, and the list never escapes except as the set.
   const fields = output.split("\0");

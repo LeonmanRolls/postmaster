@@ -189,8 +189,10 @@ describe("containment: every process check goes through the module", () => {
     }
     if (dirty.length) {
       const lines = dirty
-        .map((h: { file: string; line: number; kind: string; text: string }) =>
-          `${h.file}:${h.line} ${h.kind}: ${h.text}`)
+        .map(
+          (h: { file: string; line: number; kind: string; text: string }) =>
+            `${h.file}:${h.line} ${h.kind}: ${h.text}`,
+        )
         .join("\n");
       throw new Error(`process checks outside scripts/lib/processes.ts:\n${lines}`);
     }

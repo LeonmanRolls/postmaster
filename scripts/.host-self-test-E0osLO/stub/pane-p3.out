@@ -1,0 +1,10 @@
+host: launch running uncapped (no supported per-launch limits available)
+{"type":"system","subtype":"init","session_id":"fixed-1","model":"m"}
+{"type":"assistant","message":{"content":[{"type":"text","text":"step one"}]}}
+a line on stderr
+]0;#1, Stop `touch /home/brindlewick/postmaster/.worktrees/217-mimo/scripts/.host-self-test-E0osLO/canary` $(touch /home/brindlewick/postmaster/.worktrees/217-mimo/scripts/.host-self-test-E0osLO/canary) "breaking" a shell#1, Stop `touch /home/brindlewick/postmaster/.worktrees/217-mimo/scripts/.host-self-test-E0osLO/canary` $(touch /home/brindlewick/postmaster/.worktrees/217-mimo/scripts/.host-self-test-E0osLO/canary) "breaking" a shell
+started 00:26:38 in /home/brindlewick/postmaster/.worktrees/217-mimo/scripts/.host-self-test-E0osLO/caller
+----
+{"type":"result","subtype":"success","num_turns":1}
+----
+exit 3 at 00:26:39 after 0s, marker /home/brindlewick/postmaster/.worktrees/217-mimo/scripts/.host-self-test-E0osLO/caller/../logs/c2.done
