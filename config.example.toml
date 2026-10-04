@@ -48,6 +48,12 @@ env_file = "~/.postmaster/lanes/mimo.env"       # XIAOMI_API_KEY=<key>
 [team]
 workhorses = ["luna", "deepseek"]
 reviewers = ["luna", "deepseek"]
+mode = "synthesis"                           # how runs dispatch: "synthesis" (the default) has the
+                                              # coachman harness the workhorse lanes; "single-thread"
+                                              # has the coachman write the change itself; "alternate"
+                                              # gives each ticket of a project the mode the project's
+                                              # previous run did not have. A mode the user names for a
+                                              # ticket wins over this setting.
 coachman = { harness = "grok", model = "grok-4.6", effort = "xhigh" }
 coachman_fallback = { harness = "codex", model = "gpt-6-astra", effort = "max" }
 postmaster = { harness = "agy", model = "gemini-3.8-flash-high" }   # interactive, in tmux

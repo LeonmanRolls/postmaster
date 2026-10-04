@@ -301,7 +301,8 @@ risk surfaces: <what the project binds, allowlists, spawns, serves; from its doc
 checks: <as `run verify record` printed them: each check's name, where it came from, its command and what it shows>
 
 ## Team
-workhorses: <lane>=<harness>/<model>/<effort>, <lane>=…
+mode: <synthesis | single-thread>           (pasted whole from the `mode:` line `<tool>/scripts/run run-meta mode <dispatch>` printed: the run's mode; under single-thread the coachman writes the change itself, so this section names no workhorse lane)
+workhorses: <lane>=<harness>/<model>/<effort>, <lane>=…   (synthesis mode only; the line is left out in single-thread mode, so nothing downstream finds a workhorse lane to run)
 reviewers: <lane>, <lane>
 bug reviewers: <lane>, <lane>             (always; only the chosen bug reviewers whose harness has a code-review form, which is the bug lens's whole team)
 <lens> reviewers: <lane>, <lane>          (one line for each lens the config gives its own lanes)

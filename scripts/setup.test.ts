@@ -127,9 +127,23 @@ describe("positive controls", () => {
     expect(keys.out).toContain("clerk.env_file?");
     expect(plainRc).toBe(0);
     expect(cfg?.confine).toBe("off");
+    expect((cfg?.team as Record<string, unknown> | undefined)?.mode).toBe("synthesis");
     expect(out).toContain("lane confinement:");
     expect(out.match(/Run lanes confined \(on\/off\)/gu)?.length).toBe(1);
   }, 30000);
+
+  test("setup lists the mode key with its three values and default, and writes each", () => {
+    const keys = run(SELF, ["setup", "--keys"]);
+    expect(keys.code).toBe(0);
+    expect(keys.out).toContain("dispatch mode: synthesis, single-thread or alternate");
+    expect(keys.out).toMatch(/mode\s+synthesis\s+dispatch mode:/u);
+    for (const mode of ["synthesis", "single-thread", "alternate"]) {
+      answers(`mode-${mode}`, `mode=${mode}`);
+      expect(runSetup(`mode-${mode}`)).toBe(0);
+      const cfg = tryTomlFile(join(tmp, `mode-${mode}.toml`));
+      expect((cfg?.team as Record<string, unknown> | undefined)?.mode).toBe(mode);
+    }
+  }, 120000);
 
   test("the adding verb inserts clerk in [team] and preserves the other config lines", () => {
     const before = `[team]\nworkhorses = ["alpha", "beta"]\npostmaster = { harness = "claude", model = "pm" }\n\n[postmaster]\npoll_seconds = 9\n`;
@@ -396,6 +410,15 @@ describe("negative controls", () => {
     expect(rc).toBe(1);
     expect(out).toContain("confine must be on or off");
     expect(existsSync(join(tmp, "confine-invalid.toml"))).toBe(false);
+  }, 30000);
+
+  test("a mode other than synthesis, single-thread or alternate is refused, naming the three", () => {
+    answers("mode-invalid", "mode=two-lanes");
+    const rc = runSetup("mode-invalid");
+    const out = readFileSync(join(tmp, "mode-invalid.out"), "utf8");
+    expect(rc).toBe(1);
+    expect(out).toContain("mode must be synthesis, single-thread or alternate");
+    expect(existsSync(join(tmp, "mode-invalid.toml"))).toBe(false);
   }, 30000);
 
   const badLimits = [

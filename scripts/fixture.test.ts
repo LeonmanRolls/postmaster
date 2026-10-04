@@ -6,6 +6,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import {
+  appendFileSync,
   chmodSync,
   cpSync,
   existsSync,
@@ -26,6 +27,7 @@ import {
   appFiles,
   checkWaybillEfforts,
   checkPremisesOrder,
+  checkMode,
   FIXTURE_MARKER,
   HIDDEN_RE,
   gitVersionNumber,
@@ -37,6 +39,7 @@ import {
   makeRepo,
   makeScoreDir,
   onPath,
+  runMode,
   score,
   sectionOf,
   sh,
@@ -85,6 +88,7 @@ function record(
   t: string,
   shipped: "reference" | "app" | "broken",
   legs = 2,
+  mode: "synthesis" | "single-thread" = "synthesis",
 ): number {
   const repo = join(tmp, name, "repo");
   const d = join(tmp, name, "repo", ".postmaster", "runs", "7");
@@ -124,7 +128,12 @@ function record(
     join(d, "brief.md"),
     `# Waybill: 7\n${turnpikes}\n\n## Ticket\n\n${ticketBody(t)}\n## Project profile\nrepo: ${repo}\n`,
   );
-  run(join(HERE, "run"), ["run-meta", d, repo]);
+  run(join(HERE, "run"), [
+    "run-meta",
+    d,
+    repo,
+    ...(mode === "single-thread" ? ["--mode", "single-thread"] : []),
+  ]);
   const recordedConfig = JSON.parse(readFileSync(join(d, "run.json"), "utf8")).config;
   const workhorses = (recordedConfig.team.workhorses ?? [])
     .map((name: string) => {
@@ -134,9 +143,10 @@ function record(
     .join(", ");
   const coachman = recordedConfig.team.coachman;
   const efforts = run(join(HERE, "run"), ["run-meta", "efforts", d]).out.trim();
+  const workhorsesLine = mode === "single-thread" ? "" : `workhorses: ${workhorses}\n`;
   writeFileSync(
     join(d, "brief.md"),
-    `${readFileSync(join(d, "brief.md"), "utf8")}\n## Team\nworkhorses: ${workhorses}\ncoachman: ${coachman.harness}/${coachman.model}/${coachman.effort ?? ""}\n${efforts}\n`,
+    `${readFileSync(join(d, "brief.md"), "utf8")}\n## Team\nmode: ${mode}\n${workhorsesLine}coachman: ${coachman.harness}/${coachman.model}/${coachman.effort ?? ""}\n${efforts}\n`,
   );
   if (legs === 3) {
     const runJson = JSON.parse(readFileSync(join(d, "run.json"), "utf-8"));
@@ -157,18 +167,25 @@ function record(
   )
     return 1;
   for (const lane of recordedConfig.team.workhorses as string[]) {
+    if (mode === "single-thread") continue;
     if (
       run("bash", [join(HERE, "run"), "log-action", d, "coachman", "dispatch", lane, "workhorse"])
         .code !== 0
     )
       return 1;
+    // The harvested archive branch each workhorse keeps; a synthesis run has one per lane and
+    // a single-thread run none.
+    if (run("git", ["-C", repo, "branch", `wb/7-${lane}`, "7"]).code !== 0) return 1;
   }
 
   const stageList = stages.split("\n").filter(Boolean);
   // Leg 1 enters every stage through checkpoint-1; each later leg its own slice of the rest;
   // the postmaster closes. A current run's shipped is the postmaster's; a pre-change ship leg
-  // sets its own, as the runbooks have it.
-  const walked = legs === 1 ? stageList.filter((s) => s !== "review") : stageList;
+  // sets its own, as the runbooks have it. A single-thread run never enters
+  // workhorses-running, so its walk leaves that stage out.
+  const schedule =
+    mode === "single-thread" ? stageList.filter((s) => s !== "workhorses-running") : stageList;
+  const walked = legs === 1 ? schedule.filter((s) => s !== "review") : schedule;
   const cpIdx = walked.indexOf("checkpoint-1");
   const through1 = cpIdx < 0 ? [...walked] : walked.slice(0, cpIdx + 1);
   const rest = cpIdx < 0 ? [] : walked.slice(cpIdx + 1);
@@ -276,6 +293,38 @@ function breaks(cleanDir: string, repo: string): void {
     readFileSync(join(d, "brief.md"), "utf-8").replace(/^efforts:.*$/mu, "efforts: one=wrong"),
   );
 
+  // A synthesis run with its workhorse dispatch lines removed: the mode check fails it (D14).
+  d = brokenCopy("break-syn-dispatch", cleanDir);
+  const noDispatchPath = join(d, "actions.jsonl");
+  const noDispatch = readFileSync(noDispatchPath, "utf-8")
+    .split("\n")
+    .filter((line) => {
+      if (!line.trim()) return false;
+      try {
+        const e = JSON.parse(line) as Record<string, unknown>;
+        return !(e.action === "dispatch" && e.actor === "coachman");
+      } catch {
+        return true;
+      }
+    });
+  writeFileSync(noDispatchPath, `${noDispatch.join("\n")}\n`);
+
+  // A synthesis run that never entered workhorses-running: the stages check fails it.
+  d = brokenCopy("break-syn-stages", cleanDir);
+  const noStagePath = join(d, "actions.jsonl");
+  const noStage = readFileSync(noStagePath, "utf-8")
+    .split("\n")
+    .filter((line) => {
+      if (!line.trim()) return false;
+      try {
+        const e = JSON.parse(line) as Record<string, unknown>;
+        return !(e.action === "stage" && e.target === "workhorses-running");
+      } catch {
+        return true;
+      }
+    });
+  writeFileSync(noStagePath, `${noStage.join("\n")}\n`);
+
   for (const b of [
     "stages",
     "markers",
@@ -285,6 +334,8 @@ function breaks(cleanDir: string, repo: string): void {
     "waybill",
     "legs",
     "efforts",
+    "syn-dispatch",
+    "syn-stages",
   ]) {
     background(`break-${b}`, () =>
       score(join(tmp, `break-${b}`, "repo", ".postmaster", "runs", "7"), repo),
@@ -292,13 +343,76 @@ function breaks(cleanDir: string, repo: string): void {
   }
 }
 
+/** The single-thread run's negatives, scored against its own repo: a workhorse dispatch line,
+ * a wb/ branch, or the workhorses-running stage each fail the run that records single-thread.
+ * The branch is removed again so later re-scores of the clean record stay clean. */
+function singleThreadBreaks(cleanDir: string, repo: string): void {
+  const copy = (name: string): string => {
+    const d = join(tmp, name, "repo", ".postmaster", "runs", "7");
+    mkdirSync(dirname(d), { recursive: true });
+    cpSync(cleanDir, d, { recursive: true });
+    return d;
+  };
+
+  let d = copy("break-st-dispatch");
+  const dispatchPath = join(d, "actions.jsonl");
+  appendFileSync(
+    dispatchPath,
+    `${JSON.stringify({
+      ts: "2026-01-01T00:00:00Z",
+      actor: "coachman",
+      action: "dispatch",
+      target: "one",
+      detail: "workhorse",
+    })}\n`,
+  );
+  background("break-st-dispatch", () => score(d, repo));
+
+  // The branch control copies the repo whole, so the clean record's own refs never change.
+  const branchRepo = join(tmp, "break-st-branch", "repo");
+  mkdirSync(dirname(branchRepo), { recursive: true });
+  cpSync(repo, branchRepo, { recursive: true });
+  d = join(branchRepo, ".postmaster", "runs", "7");
+  if (run("git", ["-C", branchRepo, "branch", "wb/7-one", "7"]).code !== 0) {
+    console.log("could not make wb/7-one for the single-thread branch control");
+  }
+  background("break-st-branch", () => score(d, branchRepo));
+
+  d = copy("break-st-stages");
+  const stagePath = join(d, "actions.jsonl");
+  // Insert a workhorses-running stage line after bootstrapped, as a run that entered it logs.
+  const rows: string[] = [];
+  for (const line of readFileSync(stagePath, "utf-8").split("\n")) {
+    if (line.trim()) rows.push(line);
+    try {
+      const e = JSON.parse(line) as Record<string, unknown>;
+      if (e.action === "stage" && e.target === "bootstrapped") {
+        rows.push(
+          JSON.stringify({
+            ts: "2026-01-01T00:00:01Z",
+            actor: "coachman",
+            action: "stage",
+            target: "workhorses-running",
+            detail: "from bootstrapped",
+          }),
+        );
+      }
+    } catch {
+      /* keep */
+    }
+  }
+  writeFileSync(stagePath, `${rows.join("\n")}\n`);
+  background("break-st-stages", () => score(d, repo));
+}
+
 function recorded(
   name: string,
   t: string,
   shipped: "reference" | "app" | "broken",
   legs = 2,
+  mode: "synthesis" | "single-thread" = "synthesis",
 ): number | { code: number; out: string } {
-  const rc = record(name, t, shipped, legs);
+  const rc = record(name, t, shipped, legs, mode);
   if (rc !== 0) {
     console.log(`the record could not be built for ${name}`);
     return 1;
@@ -352,7 +466,7 @@ function expectScore(key: string, failing: string, failText?: string): void {
   const lines = out.split("\n").filter((l) => l.trim()).length;
   expect(rc).toBe(failing === "none" ? 0 : 2);
   expect(failingChecks).toBe(failing);
-  expect(lines).toBe(10);
+  expect(lines).toBe(11);
   expect(
     out
       .split("\n", 1)[0]
@@ -487,6 +601,13 @@ beforeAll(() => {
   background("clean-three", () => recorded("clean-three", first, "reference", 3));
   background("break-hidden", () => recorded("break-hidden", first, "app"));
   background("break-gate", () => recorded("break-gate", first, "broken"));
+  background("clean-single", () =>
+    recorded("clean-single", first, "reference", 2, "single-thread"),
+  );
+  singleThreadBreaks(
+    join(tmp, "clean-single", "repo", ".postmaster", "runs", "7"),
+    join(tmp, "clean-single", "repo"),
+  );
 
   for (const t of tickets()) {
     const appDir = join(tmp, `app-${t}`);
@@ -873,6 +994,9 @@ describe("score: a recorded run that meets every check scores clean", () => {
   test("a three-leg run dispatched before this change scores clean", () => {
     expectScore("clean-three", "none");
   }, 30000);
+  test("a single-thread run scores clean", () => {
+    expectScore("clean-single", "none");
+  }, 30000);
 
   test("fixture score passes without jq on PATH and still requires npm", () => {
     const repo = join(tmp, `clean-${first}`, "repo");
@@ -882,7 +1006,7 @@ describe("score: a recorded run that meets every check scores clean", () => {
     const clean = runScore(dispatch, repo, { ...process.env, PATH: path });
     expect(clean.code).toBe(0);
     const lines = clean.out.trim().split("\n");
-    expect(lines).toHaveLength(10);
+    expect(lines).toHaveLength(11);
     expect(lines.slice(1).every((line) => line.startsWith("ok  "))).toBe(true);
     console.log(`score without jq:\n${clean.out.trimEnd()}`);
 
@@ -914,7 +1038,7 @@ describe("score: a recorded run that meets every check scores clean", () => {
     const out = bgResults.get("break-gate")?.out ?? "";
     const cleanOut = bgResults.get(`clean-${first}`)?.out ?? "";
     expect(out.split("\n", 1)[0]).toBe(cleanOut.split("\n", 1)[0]);
-    expect(out.split("\n")).toHaveLength(11);
+    expect(out.split("\n")).toHaveLength(12);
     console.log(`failing score:\n${out.trimEnd()}`);
   });
 
@@ -987,6 +1111,59 @@ describe("score: premises are checked before workhorse dispatch", () => {
     const result = checkPremisesOrder(recordOrder("stopped", [premise]));
     expect(result.ok).toBe(true);
     expect(result.detail).toContain("no workhorse dispatched");
+  });
+});
+
+describe("score: the run kept its mode (D14)", () => {
+  const dispatchOf = (name: string): string => join(tmp, name, "repo", ".postmaster", "runs", "7");
+  const repoOf = (name: string): string => join(tmp, name, "repo");
+
+  test("a single-thread run with a workhorse dispatch line fails the mode check", () => {
+    expectScore("break-st-dispatch", "mode", "workhorse dispatch");
+  }, 30000);
+  test("a single-thread run with a wb/ branch fails the mode check", () => {
+    expectScore("break-st-branch", "mode", "workhorse branches");
+  }, 30000);
+  test("a synthesis run with its workhorse dispatch lines removed fails the mode check", () => {
+    expectScore("break-syn-dispatch", "mode", "never dispatched");
+  }, 30000);
+  test("a single-thread run that entered workhorses-running fails the stages check", () => {
+    expectScore("break-st-stages", "stages", "workhorses-running");
+  }, 30000);
+  test("a synthesis run that never entered workhorses-running fails the stages check", () => {
+    expectScore("break-syn-stages", "stages", "workhorses-running");
+  }, 30000);
+  test("the recorded mode reads the schedule: single-thread skips workhorses-running", () => {
+    expect(runMode(dispatchOf("clean-single"))).toBe("single-thread");
+    expect(runMode(dispatchOf(`clean-${first}`))).toBe("synthesis");
+  });
+  test("a record with no mode reads as synthesis and keeps its lanes", () => {
+    const d = brokenCopy("no-mode", dispatchOf(`clean-${first}`));
+    const path = join(d, "run.json");
+    const rec = JSON.parse(readFileSync(path, "utf-8")) as Record<string, unknown>;
+    delete rec.mode;
+    delete rec.mode_source;
+    delete rec.mode_setting;
+    writeFileSync(path, JSON.stringify(rec));
+    expect(runMode(d)).toBe("synthesis");
+    const result = checkMode(d, repoOf(`clean-${first}`));
+    expect(result.ok).toBe(true);
+    expect(result.detail).toContain("dispatched and branched");
+  });
+  test("a record naming an unknown mode fails the mode check", () => {
+    const d = brokenCopy("bad-mode", dispatchOf(`clean-${first}`));
+    const path = join(d, "run.json");
+    const rec = JSON.parse(readFileSync(path, "utf-8")) as Record<string, unknown>;
+    rec.mode = "two-lanes";
+    writeFileSync(path, JSON.stringify(rec));
+    const result = checkMode(d, repoOf(`clean-${first}`));
+    expect(result.ok).toBe(false);
+    expect(result.detail).toContain("two-lanes");
+  });
+  test("a single-thread dispatch with nothing pulled passes the mode check", () => {
+    const result = checkMode(dispatchOf("clean-single"), repoOf("clean-single"));
+    expect(result.ok).toBe(true);
+    expect(result.detail).toContain("no workhorse dispatch");
   });
 });
 

@@ -134,10 +134,18 @@ waits in the ready queue until the watcher sees room under `team.max_runs`.
    `<tool>/scripts/run run-meta <dispatch> <repo>` writes `run.json` with the postmaster commit,
    the pinned checkout of that commit, the coachman contract version, the resolved machine
    config (with fixture efforts lowered for a marked copy), project settings and their sources,
-   and the harness versions, and nothing edits it
-   afterwards. The pin is a worktree of this repo at the dispatch commit, shared by every run
+   the harness versions, and the run's dispatch mode with its source and the setting's value at
+   dispatch, and nothing edits it
+   afterwards. The mode comes from the machine config's `team.mode` — synthesis when the key is
+   absent, or single-thread, or alternate, which gives this project the mode its latest run did
+   not have — **except that a mode the user named for this ticket wins: pass it as
+   `<tool>/scripts/run run-meta <dispatch> <repo> --mode <synthesis|single-thread>`**, and a
+   refusal naming the two values goes to the user. The pin is a worktree of this repo at the
+   dispatch commit, shared by every run
    dispatched at it; the waybill names it as `tool:`, and every leg of this run reads its
-   runbooks and runs its scripts from there. Log the `run run-meta` output as a `note`.
+   runbooks and runs its scripts from there. Log the `run run-meta` output as a `note`, keeping
+   its trailing `mode=<...>` field in the detail, so the run's log says which mode the run runs
+   in and where it came from.
    `<tool>/scripts/run verify record
    <repo> <dispatch> --gate '<gate>'` writes `checks.json`, the checks the run is held to, and
    prints them for the waybill; a gate the project declares wins over the launch card's, and
@@ -153,6 +161,10 @@ waits in the ready queue until the watcher sees room under `team.max_runs`.
    `<tool>/scripts/run verify record` printed them, docs to read first, tracker, risk
    surfaces), the team from `run.json` — the resolved machine config step 6 recorded — with
    its reviewer lines as `<tool>/scripts/run reviewers lines --project <repo>` prints them,
+   the `mode:` line pasted whole from the `mode:` line `<tool>/scripts/run run-meta mode
+   <dispatch>` printed (the Team section's first line), and the `workhorses:` line **only when
+   that mode is `synthesis`**: a single-thread waybill names no workhorse lane, so nothing
+   downstream finds one to run,
    and the `efforts:` line pasted from `<tool>/scripts/run run-meta efforts <dispatch>`,
    never composed by hand; each project's facts sourced as discovered, shared or local,
    `CHECKPOINT_MODE` from `ship.checkpoint_mode` and `MERGE_AUTHORITY` from
@@ -184,9 +196,12 @@ Below, `<p>` is the leg before leg `<n>` in that list, and **`<rt>` is the run's
 tool checkout** — `<tool>/scripts/run run-meta path <dispatch>`, the waybill's `tool:`, never
 the live `<tool>`. Every launch, resume and takeover of this run's legs runs from `<rt>`:
 its `run host`, its `run launch`, and the runbook the prompt names. Before anything is launched
-or resumed, `<tool>/scripts/run run-meta check <dispatch>` exits 0; on a refusal, stop and
+or resumed, `<tool>/scripts/run run-meta check <dispatch>` exits 0; it checks the pin, the
+recorded confinement and the waybill's `mode:` line against the run's mode, so a waybill that
+names a different mode from the run's record refuses the leg here and it does not start. On a
+refusal, stop and
 take its message to the user (Stage E step 3), because the checkout no longer serves the
-versions the run was dispatched from. Expand `<rt>` to its absolute path in every prompt
+versions the run was dispatched from, or the run's records disagree about its mode. Expand `<rt>` to its absolute path in every prompt
 file; the postmaster keeps using its main `<tool>` for every other supervision script.
 The watcher takes a dispatch whose hand-off checks out on its own (Stage D); you take the
 ones it names.
@@ -632,7 +647,8 @@ missed.
    `<dispatch>/style-sort.md` using the sorting rules in `coachman.md`, then checks it again
    until exit 0; it does not resume a coachman leg that already handed off. Log a `note` with
    the check's last line.
-2. **Finish the record.** Final `run-log.md` entry (per-lane win record, findings counts, cost)
+2. **Finish the record.** Final `run-log.md` entry (per-lane win record — none in a
+   single-thread run, which has no lanes — findings counts, cost)
    plus a closing dated comment on the ticket, logging `ticket-comment`. Archive finished
    threads where the harness has an archive form (`harnesses.md`).
 3. Once `.leg-<leg>-exited` is present, close every run-created worktree's host space with

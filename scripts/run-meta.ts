@@ -2,13 +2,23 @@
 // postmaster commit it was dispatched from. Written once and never edited: the manifest is the
 // run's current state, this is what the run started from and the checkout it runs on.
 //
-//   run run-meta <dispatch> <repo>   <repo> is the target project's checkout; also cuts the pin
+//   run run-meta <dispatch> <repo> [--mode <synthesis|single-thread>]
 //   run run-meta pin <repo> <commit> a shared checkout of <repo> at <commit> under $POSTMASTER_TOOL_PINS
 //   run run-meta path <dispatch>     print the canonical path of the run's tool checkout
+//   run run-meta mode <dispatch>     print the run's mode, its source and the setting at dispatch
 //   run run-meta check <dispatch>    the run's checkout still serves its dispatch commit
 //   run run-meta release <dispatch>  remove the pin when no claimed run is in flight
 //   run run-meta efforts <dispatch>  print the waybill's efforts line from run.json
 //   run run-meta run-pinned <dispatch> <name> [args...]  run a script from the run's pinned checkout
+//
+// The dispatch mode resolves at dispatch: the user's --mode first, then the machine config's
+// team.mode (synthesis, the default; single-thread; or alternate, which gives this project the
+// mode its latest run did not have, a run that records no mode counting as synthesis and a
+// project with no run starting at single-thread). The record keeps the mode, its source
+// (user or setting) and the setting's value at dispatch as top-level keys beside confinement;
+// a config without team.mode reads as synthesis. `mode` prints the three. `check` also compares
+// the waybill's Team section `mode:` line with the record: both present and different fails
+// naming both, and a run with neither, or only one, is accepted.
 //
 // Records when it was written; the run and project; the target repo's HEAD and branch; the
 // postmaster commit that dispatched it, and whether that checkout had uncommitted changes,
@@ -91,7 +101,7 @@ const TOOL = toolRoot(import.meta);
 const SCRIPT = import.meta.path;
 
 const USAGE =
-  "usage: run run-meta <dispatch> <repo> | pin <repo> <commit> | path <dispatch> | run-pinned <dispatch> <name> [args...] | check <dispatch> | release <dispatch> | efforts <dispatch>";
+  "usage: run run-meta <dispatch> <repo> [--mode <synthesis|single-thread>] | pin <repo> <commit> | path <dispatch> | mode <dispatch> | run-pinned <dispatch> <name> [args...] | check <dispatch> | release <dispatch> | efforts <dispatch>";
 
 // Every command returns its exit code with the bytes for each stream; the CLI boundary writes
 // them, and the tests inspect them. stdout carries results (the pin path, the checkout,
@@ -321,6 +331,80 @@ function fieldCommit(runJson: string): string {
   if (typeof commit === "boolean") return commit ? "True" : "False";
   if (typeof commit === "number") return String(commit);
   return JSON.stringify(commit) ?? "";
+}
+
+// --- dispatch mode ---------------------------------------------------------------------------
+// The values the machine config's team.mode takes, and the values a run's mode takes.
+export const SETTING_MODES = ["synthesis", "single-thread", "alternate"];
+export const RUN_MODES = ["synthesis", "single-thread"];
+
+// alternate_mode <dispatch>: the mode an `alternate` setting gives this run — the opposite of
+// the project's latest run under the run root (the dispatch's parent), by the `written` time in
+// its run.json, whatever its stage. A latest run that records no mode is a synthesis run, and a
+// project with no run starts at single-thread.
+function alternateMode(d: string): string {
+  let root: string;
+  try {
+    root = dirname(realpathSync(d));
+  } catch {
+    root = dirname(d);
+  }
+  const self = canon(d);
+  let entries: string[] = [];
+  try {
+    entries = readdirSync(root);
+  } catch {
+    entries = [];
+  }
+  let latestWritten = "";
+  let latestMode = "";
+  let found = false;
+  for (const e of entries) {
+    const dir = join(root, e);
+    if (!isDir(dir)) continue;
+    if (self !== null && canon(dir) === self) continue;
+    const runJson = join(dir, "run.json");
+    if (!isFile(runJson)) continue;
+    let rec: unknown;
+    try {
+      rec = JSON.parse(readFileSync(runJson, "utf8")) as unknown;
+    } catch {
+      continue;
+    }
+    if (typeof rec !== "object" || rec === null || Array.isArray(rec)) continue;
+    const written =
+      typeof (rec as Record<string, unknown>).written === "string"
+        ? ((rec as Record<string, unknown>).written as string)
+        : "";
+    if (!found || written > latestWritten) {
+      found = true;
+      latestWritten = written;
+      const mode = (rec as Record<string, unknown>).mode;
+      latestMode = typeof mode === "string" ? mode : "";
+    }
+  }
+  if (!found) return "single-thread";
+  return latestMode === "single-thread" ? "synthesis" : "single-thread";
+}
+
+// resolve_mode <setting> <user-mode> <dispatch>: the run's mode and its source. The user's
+// mode wins; otherwise the setting, with alternate resolved against the project's latest run.
+// The setting's value must be one of SETTING_MODES; anything else is a question back to the
+// caller, never a silent default.
+function resolveMode(
+  setting: string,
+  userMode: string | null,
+  d: string,
+): { mode: string; source: string } | { error: string } {
+  if (userMode !== null) {
+    if (!RUN_MODES.includes(userMode)) return { error: `mode must be ${RUN_MODES.join(" or ")}` };
+    return { mode: userMode, source: "user" };
+  }
+  if (!SETTING_MODES.includes(setting)) {
+    return { error: `team.mode must be ${SETTING_MODES.join(", ")}, not ${setting}` };
+  }
+  if (setting === "alternate") return { mode: alternateMode(d), source: "setting" };
+  return { mode: setting, source: "setting" };
 }
 
 // --- waybill fallback ---------------------------------------------------------------------------
@@ -794,6 +878,76 @@ export function efforts(d: string): Outcome {
   return ok(`${effortsLine(cfg as Record<string, unknown>)}\n`);
 }
 
+// mode <dispatch>: the run's mode, its source and the setting's value at dispatch. A record
+// with no mode is a synthesis run written before the mode existed, so its mode prints as
+// synthesis and its sources as unrecorded.
+export function mode(d: string): Outcome {
+  const runJson = join(d, "run.json");
+  if (!isFile(runJson)) return fail(`run-meta: no run.json in ${d}\n`);
+  let rec: unknown;
+  try {
+    rec = JSON.parse(readFileSync(runJson, "utf8")) as unknown;
+  } catch {
+    return fail(`run-meta: ${runJson} cannot be read\n`);
+  }
+  if (typeof rec !== "object" || rec === null || Array.isArray(rec)) {
+    return fail(`run-meta: ${runJson} is not an object\n`);
+  }
+  const r = rec as Record<string, unknown>;
+  const m = typeof r.mode === "string" && r.mode !== "" ? r.mode : "synthesis";
+  const source =
+    typeof r.mode_source === "string" && r.mode_source !== "" ? r.mode_source : "unrecorded";
+  const setting =
+    typeof r.mode_setting === "string" && r.mode_setting !== "" ? r.mode_setting : "unrecorded";
+  return ok(`mode: ${m}\nmode source: ${source}\nmode setting: ${setting}\n`);
+}
+
+// check_mode <dispatch>: the waybill's Team section `mode:` line and the record's mode agree.
+// A mismatch fails naming both; a run that names neither, or only one, is accepted, so a
+// dispatch from before the mode existed still passes.
+function checkMode(d: string): Outcome {
+  const runJson = join(d, "run.json");
+  let rec: unknown;
+  try {
+    rec = JSON.parse(readFileSync(runJson, "utf8")) as unknown;
+  } catch {
+    return ok(); // an unreadable record is the pin check's refusal, not this one's
+  }
+  const recorded =
+    typeof rec === "object" &&
+    rec !== null &&
+    !Array.isArray(rec) &&
+    typeof (rec as Record<string, unknown>).mode === "string" &&
+    (rec as Record<string, unknown>).mode !== ""
+      ? ((rec as Record<string, unknown>).mode as string)
+      : "";
+  let waybill = "";
+  try {
+    waybill = teamModeLine(readFileSync(join(d, "brief.md"), "utf8"));
+  } catch {
+    waybill = "";
+  }
+  if (recorded === "" || waybill === "") return ok();
+  if (recorded === waybill) return ok();
+  return fail(
+    `run-meta: the waybill names mode ${waybill}, and the run records mode ${recorded}\n`,
+  );
+}
+
+// teamModeLine <brief>: the value of the `mode:` line in the waybill's Team section, "" when
+// the section or the line is absent. Read only from that section, so a line the ticket quotes
+// is not the run's mode.
+export function teamModeLine(brief: string): string {
+  const lines = brief.split("\n");
+  const start = lines.findIndex((l) => /^##[ \t]+Team[ \t]*$/i.test(l));
+  if (start < 0) return "";
+  const rest = lines.slice(start + 1);
+  const end = rest.findIndex((l) => /^##[ \t]+/.test(l));
+  const team = (end < 0 ? rest : rest.slice(0, end)).join("\n");
+  const m = /^mode:[ \t]*(\S+)/im.exec(team);
+  return m ? (m[1] as string) : "";
+}
+
 type Built =
   | { ok: true; record: Record<string, unknown>; warnings: string[] }
   | { ok: false; messages: string[] };
@@ -817,6 +971,7 @@ function buildRecord(
   config: string,
   checkout: string,
   pinnedCommit: string,
+  userMode: string | null,
 ): Built {
   if (tryTomlFile(config) === null) return { ok: false, messages: [] };
   const settingsScript = join(TOOL, "scripts", "run");
@@ -843,6 +998,17 @@ function buildRecord(
   for (const h of collectHarnesses(resolvedConfig)) harnessVersions[h] = version(h);
   const confineVal = resolvedConfig.confine;
   const confinementMode = String(confineVal ?? "") === "on" ? "on" : "off";
+  const teamCfg = resolvedConfig.team;
+  const settingRaw =
+    teamCfg &&
+    typeof teamCfg === "object" &&
+    !Array.isArray(teamCfg) &&
+    (teamCfg as Record<string, unknown>).mode !== undefined &&
+    (teamCfg as Record<string, unknown>).mode !== null
+      ? String((teamCfg as Record<string, unknown>).mode)
+      : "synthesis";
+  const resolved = resolveMode(settingRaw, userMode, d);
+  if ("error" in resolved) return { ok: false, messages: [`run-meta: ${resolved.error}`] };
   return {
     ok: true,
     warnings,
@@ -861,6 +1027,9 @@ function buildRecord(
         uncommitted_changes: (git(TOOL, "status", "--porcelain") ?? "") !== "",
         checkout,
       },
+      mode: resolved.mode,
+      mode_source: resolved.source,
+      mode_setting: settingRaw,
       config: resolvedConfig,
       confinement: { mode: confinementMode },
       harness_versions: harnessVersions,
@@ -876,8 +1045,8 @@ function readTools(): string {
   return process.env.POSTMASTER_TOOL_PINS ?? join(homedir(), ".postmaster/tool-pins");
 }
 
-// meta <dispatch> <repo>
-export function meta(d: string, repo: string): Outcome {
+// meta <dispatch> <repo> [--mode <mode>]
+export function meta(d: string, repo: string, userMode: string | null = null): Outcome {
   const config = readConfig();
   const tools = readTools();
   if (!isDir(d)) return fail(`run-meta: no such dispatch directory: ${d}\n`);
@@ -887,6 +1056,9 @@ export function meta(d: string, repo: string): Outcome {
   if (!isFile(config)) return fail(`run-meta: no config at ${config}\n`);
   const resolvedRepo = canon(repo);
   if (resolvedRepo === null) return fail(`run-meta: cannot resolve project ${repo}\n`);
+  if (userMode !== null && !RUN_MODES.includes(userMode)) {
+    return fail(`run-meta: mode must be ${RUN_MODES.join(" or ")}, not ${userMode}\n`);
+  }
   const runJson = join(d, "run.json");
   if (existsSync(runJson)) return ok(`run-meta: ${d}/run.json already written; left alone\n`);
   const head = run("git", ["-C", TOOL, "rev-parse", "HEAD"]);
@@ -914,7 +1086,7 @@ export function meta(d: string, repo: string): Outcome {
     }
     let built: Built;
     try {
-      built = buildRecord(d, resolvedRepo, config, checkout, commit);
+      built = buildRecord(d, resolvedRepo, config, checkout, commit, userMode);
     } catch {
       built = { ok: false, messages: [] };
     }
@@ -945,7 +1117,7 @@ export function meta(d: string, repo: string): Outcome {
     const commit12 = (commit === "" ? "?" : commit).slice(0, 12);
     return {
       code: 0,
-      out: `run-meta: wrote ${runJson} (postmaster ${commit12}, pinned at ${checkout})\n`,
+      out: `run-meta: wrote ${runJson} (postmaster ${commit12}, pinned at ${checkout}, mode=${String(built.record.mode)})\n`,
       err: built.warnings.map((warning) => `${warning}\n`).join(""),
     };
   });
@@ -1098,14 +1270,16 @@ if (import.meta.main) {
   }
   {
     const cmd = argv[0];
-    const verbs = ["pin", "path", "check", "release", "efforts", "run-pinned"];
+    const verbs = ["pin", "path", "mode", "check", "release", "efforts", "run-pinned"];
     let outcome: Outcome;
     if (cmd === "pin" && argv.length === 3)
       outcome = pin(argv[1] as string, argv[2] as string, readTools());
     else if (cmd === "path" && argv.length === 2) outcome = pathOf(argv[1] as string);
-    else if (cmd === "check" && argv.length === 2)
-      outcome = checkPinAndConfinement(argv[1] as string);
-    else if (cmd === "release" && argv.length === 2) outcome = releasePin(argv[1] as string);
+    else if (cmd === "mode" && argv.length === 2) outcome = mode(argv[1] as string);
+    else if (cmd === "check" && argv.length === 2) {
+      const pinCheck = checkPinAndConfinement(argv[1] as string);
+      outcome = pinCheck.code !== 0 ? pinCheck : checkMode(argv[1] as string);
+    } else if (cmd === "release" && argv.length === 2) outcome = releasePin(argv[1] as string);
     else if (cmd === "run-pinned" && argv.length >= 3) {
       const pinned = pathOf(argv[1] as string);
       if (pinned.code !== 0) outcome = pinned;
@@ -1114,8 +1288,24 @@ if (import.meta.main) {
         outcome = { code: result.code, out: result.out, err: result.err };
       }
     } else if (cmd === "efforts" && argv.length === 2) outcome = efforts(argv[1] as string);
-    else if (cmd !== undefined && !verbs.includes(cmd) && argv.length === 2) {
-      outcome = meta(argv[0] as string, argv[1] as string);
+    else if (
+      cmd !== undefined &&
+      !verbs.includes(cmd) &&
+      (argv.length === 2 || (argv.length === 4 && argv[2] === "--mode"))
+    ) {
+      // A named mode is validated before anything is read, so a bad one is the answer
+      // wherever the dispatch is.
+      let userMode: string | null = null;
+      if (argv.length === 4) {
+        userMode = argv[3] as string;
+        if (!RUN_MODES.includes(userMode)) {
+          process.stderr.write(
+            `run-meta: mode must be ${RUN_MODES.join(" or ")}, not ${userMode}\n`,
+          );
+          process.exit(1);
+        }
+      }
+      outcome = meta(argv[0] as string, argv[1] as string, userMode);
     } else usage();
     if (outcome.out !== "") process.stdout.write(outcome.out);
     if (outcome.err !== "") process.stderr.write(outcome.err);

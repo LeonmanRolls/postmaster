@@ -15,7 +15,8 @@
 //   exit 1  a harness was named that is not on PATH, the coachman shares a lane's model, fewer
 //           than two lanes were given, a reviewer is not a lane, an answer was missing, a round
 //           time limit was not a whole number of seconds from 1 to 86400, a planning review link
-//           omitted {path}, or an existing config was not overwritten
+//           omitted {path}, a mode other than synthesis, single-thread or alternate, or an
+//           existing config was not overwritten
 //
 // Control: the written file is parsed back as TOML where a parser is available, and its reviewer
 // lanes are resolved through scripts/run reviewers, so a config that would fail to load is never
@@ -179,6 +180,7 @@ clerk.model
 clerk.effort?              (none)
 clerk.env_file?            (none)             env file for its key or backend
 max_runs                   2                  concurrent runs per project
+mode                       synthesis          dispatch mode: synthesis, single-thread or alternate
 poll_seconds               120                postmaster poll interval
 limits.memory_max          8G                 default memory cap per launch (K, M, G or T)
 limits.tasks_max           512                default process cap per launch
@@ -441,6 +443,15 @@ const CLEF = ask(
   opts,
 );
 const MR = ask("  concurrent runs per project", "2", "max_runs", opts);
+const MODE = ask(
+  "  dispatch mode (synthesis, single-thread or alternate)",
+  "synthesis",
+  "mode",
+  opts,
+);
+if (MODE !== "synthesis" && MODE !== "single-thread" && MODE !== "alternate") {
+  die(`setup: mode must be synthesis, single-thread or alternate, not ${MODE}`, 1);
+}
 const PS = ask("  postmaster poll interval, seconds", "120", "poll_seconds", opts);
 
 console.log("");
@@ -593,6 +604,7 @@ coachman_fallback = { harness = "${FH}", model = "${FM}"${roleExtra(FE, FEF)} }
 postmaster = { harness = "${PH}", model = "${PM}"${roleExtra(PE, PEF)} }
 clerk = { harness = "${CLH}", model = "${CLM}"${roleExtra(CLE, CLEF)} }
 max_runs = ${MR}
+mode = "${MODE}"
 ${LENS_TABLE}
 
 [limits]

@@ -2086,3 +2086,209 @@ describe("confinement mode recording", () => {
     );
   });
 });
+
+describe("dispatch mode", () => {
+  const wrapper = join(import.meta.dir, "run");
+
+  function machine(
+    tmp: string,
+    name: string,
+    teamTail = "",
+  ): {
+    env: Record<string, string>;
+    repo: string;
+    runsRoot: string;
+    dispatch: string;
+    config: string;
+  } {
+    const config = join(tmp, `${name}.toml`);
+    writeFileSync(
+      config,
+      '[lanes.one]\nharness = "bash"\nmodel = "m1"\n' +
+        '[lanes.two]\nharness = "bash"\nmodel = "m2"\n' +
+        '[team]\nworkhorses = ["one", "two"]\n' +
+        'coachman = { harness = "bash", model = "judge" }\n' +
+        'coachman_fallback = { harness = "bash", model = "spare" }\n' +
+        'postmaster = { harness = "bash", model = "pm" }\n' +
+        teamTail,
+    );
+    const repo = join(tmp, `${name}-repo`);
+    mkdirSync(repo, { recursive: true });
+    run("git", ["-C", repo, "init", "-q", "-b", "main"]);
+    run("git", [
+      "-C",
+      repo,
+      "-c",
+      "user.name=t",
+      "-c",
+      "user.email=t@t",
+      "commit",
+      "-q",
+      "--allow-empty",
+      "-m",
+      "first",
+    ]);
+    const runsRoot = join(tmp, `${name}-runs`);
+    const dispatch = join(runsRoot, "T1");
+    mkdirSync(dispatch, { recursive: true });
+    const env = {
+      ...(process.env as Record<string, string>),
+      POSTMASTER_CONFIG: config,
+      POSTMASTER_TOOL_PINS: join(tmp, `${name}-pins`),
+    };
+    return { env, repo, runsRoot, dispatch, config };
+  }
+
+  const recordOf = (dispatch: string): Record<string, any> =>
+    JSON.parse(readFileSync(join(dispatch, "run.json"), "utf8")) as Record<string, any>;
+
+  const seedRun = (
+    root: string,
+    name: string,
+    written: string,
+    extra: Record<string, unknown>,
+  ): void => {
+    const dir = join(root, name);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "run.json"), `${JSON.stringify({ written, ...extra }, null, 2)}\n`);
+  };
+
+  test("a config with no team.mode records synthesis from the setting, and the mode verb prints the three", () => {
+    withTempDir((raw) => {
+      const tmp = realpathSync(raw);
+      const m = machine(tmp, "plain");
+      const r = run(wrapper, ["run-meta", m.dispatch, m.repo], { env: m.env });
+      expect(r.code).toBe(0);
+      expect(r.out).toContain("mode=synthesis");
+      const rec = recordOf(m.dispatch);
+      expect(rec.mode).toBe("synthesis");
+      expect(rec.mode_source).toBe("setting");
+      expect(rec.mode_setting).toBe("synthesis");
+      const v = run(wrapper, ["run-meta", "mode", m.dispatch], { env: m.env });
+      expect(v.code).toBe(0);
+      expect(v.out).toBe("mode: synthesis\nmode source: setting\nmode setting: synthesis\n");
+    });
+  }, 60000);
+
+  test("the setting single-thread is recorded as the mode, from the setting", () => {
+    withTempDir((raw) => {
+      const tmp = realpathSync(raw);
+      const m = machine(tmp, "st", 'mode = "single-thread"\n');
+      const r = run(wrapper, ["run-meta", m.dispatch, m.repo], { env: m.env });
+      expect(r.code).toBe(0);
+      expect(r.out).toContain("mode=single-thread");
+      const rec = recordOf(m.dispatch);
+      expect(rec.mode).toBe("single-thread");
+      expect(rec.mode_source).toBe("setting");
+      expect(rec.mode_setting).toBe("single-thread");
+    });
+  }, 60000);
+
+  test("a mode the user names wins over the setting, and the record says so", () => {
+    withTempDir((raw) => {
+      const tmp = realpathSync(raw);
+      const m = machine(tmp, "win", 'mode = "synthesis"\n');
+      const r = run(wrapper, ["run-meta", m.dispatch, m.repo, "--mode", "single-thread"], {
+        env: m.env,
+      });
+      expect(r.code).toBe(0);
+      expect(r.out).toContain("mode=single-thread");
+      const rec = recordOf(m.dispatch);
+      expect(rec.mode).toBe("single-thread");
+      expect(rec.mode_source).toBe("user");
+      expect(rec.mode_setting).toBe("synthesis");
+      const v = run(wrapper, ["run-meta", "mode", m.dispatch], { env: m.env });
+      expect(v.code).toBe(0);
+      expect(v.out).toBe("mode: single-thread\nmode source: user\nmode setting: synthesis\n");
+    });
+  }, 60000);
+
+  test("--mode two-lanes exits 1 naming synthesis and single-thread, and writes nothing", () => {
+    withTempDir((raw) => {
+      const tmp = realpathSync(raw);
+      const m = machine(tmp, "badmode");
+      const r = run(wrapper, ["run-meta", m.dispatch, m.repo, "--mode", "two-lanes"], {
+        env: m.env,
+      });
+      expect(r.code).toBe(1);
+      expect(r.out + r.err).toContain("synthesis");
+      expect(r.out + r.err).toContain("single-thread");
+      expect(existsSync(join(m.dispatch, "run.json"))).toBe(false);
+    });
+  }, 60000);
+
+  test("alternate gives each dispatch the mode the project's latest run did not have", () => {
+    withTempDir((raw) => {
+      const tmp = realpathSync(raw);
+      // (a) no run at all starts at single-thread
+      let m = machine(tmp, "alt-none", 'mode = "alternate"\n');
+      expect(run(wrapper, ["run-meta", m.dispatch, m.repo], { env: m.env }).code).toBe(0);
+      expect(recordOf(m.dispatch).mode).toBe("single-thread");
+      expect(recordOf(m.dispatch).mode_source).toBe("setting");
+      expect(recordOf(m.dispatch).mode_setting).toBe("alternate");
+
+      // (b) a latest run that records no mode is a synthesis run, so this one is single-thread
+      m = machine(tmp, "alt-old", 'mode = "alternate"\n');
+      seedRun(m.runsRoot, "T0", "2026-01-01T00:00:00Z", { coachman_contract: 2 });
+      expect(run(wrapper, ["run-meta", m.dispatch, m.repo], { env: m.env }).code).toBe(0);
+      expect(recordOf(m.dispatch).mode).toBe("single-thread");
+
+      // (c) a latest run that is single-thread (named by the user) flips to synthesis
+      m = machine(tmp, "alt-st", 'mode = "alternate"\n');
+      seedRun(m.runsRoot, "T0", "2026-01-01T00:00:00Z", {
+        mode: "single-thread",
+        mode_source: "user",
+      });
+      expect(run(wrapper, ["run-meta", m.dispatch, m.repo], { env: m.env }).code).toBe(0);
+      expect(recordOf(m.dispatch).mode).toBe("synthesis");
+
+      // (d) a latest run that is synthesis flips to single-thread
+      m = machine(tmp, "alt-syn", 'mode = "alternate"\n');
+      seedRun(m.runsRoot, "T0", "2026-01-01T00:00:00Z", { mode: "synthesis" });
+      expect(run(wrapper, ["run-meta", m.dispatch, m.repo], { env: m.env }).code).toBe(0);
+      expect(recordOf(m.dispatch).mode).toBe("single-thread");
+
+      // (e) the latest run is the one whose run.json was written last, whatever its stage
+      m = machine(tmp, "alt-last", 'mode = "alternate"\n');
+      seedRun(m.runsRoot, "T0", "2026-01-01T00:00:00Z", { mode: "single-thread" });
+      seedRun(m.runsRoot, "T1-old", "2026-02-01T00:00:00Z", { mode: "synthesis" });
+      expect(run(wrapper, ["run-meta", m.dispatch, m.repo], { env: m.env }).code).toBe(0);
+      expect(recordOf(m.dispatch).mode).toBe("single-thread");
+    });
+  }, 120000);
+
+  test("check compares the waybill's mode line with the record, and a run with neither passes", () => {
+    withTempDir((raw) => {
+      const tmp = realpathSync(raw);
+      const m = machine(tmp, "check");
+      const r = run(wrapper, ["run-meta", m.dispatch, m.repo, "--mode", "single-thread"], {
+        env: m.env,
+      });
+      expect(r.code).toBe(0);
+      const brief = join(m.dispatch, "brief.md");
+      const team = ["# Waybill: T1", "", "## Team", "mode: single-thread", ""].join("\n");
+      writeFileSync(brief, team);
+      expect(run(wrapper, ["run-meta", "check", m.dispatch], { env: m.env }).code).toBe(0);
+
+      writeFileSync(brief, team.replace("mode: single-thread", "mode: synthesis"));
+      const mismatch = run(wrapper, ["run-meta", "check", m.dispatch], { env: m.env });
+      expect(mismatch.code).toBe(1);
+      expect(mismatch.out + mismatch.err).toContain("synthesis");
+      expect(mismatch.out + mismatch.err).toContain("single-thread");
+
+      // A dispatch from before the change: no mode in run.json and none in the waybill.
+      const path = join(m.dispatch, "run.json");
+      const rec = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
+      delete rec.mode;
+      delete rec.mode_source;
+      delete rec.mode_setting;
+      writeFileSync(path, JSON.stringify(rec));
+      writeFileSync(brief, "# Waybill: T1\n\n## Team\nreviewers: one\n");
+      expect(run(wrapper, ["run-meta", "check", m.dispatch], { env: m.env }).code).toBe(0);
+      const verb = run(wrapper, ["run-meta", "mode", m.dispatch], { env: m.env });
+      expect(verb.code).toBe(0);
+      expect(verb.out).toContain("mode: synthesis");
+      expect(verb.out).toContain("mode source: unrecorded");
+    });
+  }, 60000);
+});

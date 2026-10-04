@@ -659,7 +659,7 @@ function legRt(d: string): { rt: string; error: string } {
   if (c.code !== 0) {
     return {
       rt: "",
-      error: `the run's tool checkout does not serve its dispatch commit: ${(c.out + c.err).replace(/\n+$/u, "")}`,
+      error: `the run's tool checkout does not serve its dispatch commit, or the waybill's mode disagrees with the run's record: ${(c.out + c.err).replace(/\n+$/u, "")}`,
     };
   }
   return { rt: (p.out + p.err).replace(/\n+$/u, ""), error: "" };
