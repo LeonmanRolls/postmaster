@@ -359,6 +359,8 @@ function tokenFindings(line: string, out: Finding[]): void {
     if (!value || ABSENT.test(value)) continue;
     if (FIELD_EXPANSION.test(value)) continue;
     const quoted = match.groups?.double !== undefined || match.groups?.single !== undefined;
+    // A bare value holding an escape is format debris, not data.
+    if (!quoted && value.includes("\\")) continue;
     const compact = value.replaceAll(" ", "");
     const property =
       /^[A-Za-z_$][A-Za-z0-9_$]*(?:(?:\?\.)|\.)(?:[A-Za-z_$][A-Za-z0-9_$]*)(?:(?:\?\.|\.)[A-Za-z_$][A-Za-z0-9_$]*)*$/u.test(
@@ -1224,7 +1226,13 @@ export function keyBlockStep(
 ): { inBlock: boolean; flagged: boolean } {
   const stripped = line.trim();
   if (KEY_HEADER.test(stripped)) return { inBlock: true, flagged: true };
-  if (!inBlock) return { inBlock: false, flagged: KEY_BODY.test(stripped) };
+  // A lone body line flags (C4), but a run of one character is a rule,
+  // not key material.
+  if (!inBlock)
+    return {
+      inBlock: false,
+      flagged: KEY_BODY.test(stripped) && !/^(.)\1*$/u.test(stripped),
+    };
   if (KEY_END.test(stripped)) return { inBlock: false, flagged: true };
   if (!stripped || KEY_FIELD.test(stripped)) return { inBlock: true, flagged: false };
   if (KEY_BODY.test(stripped)) return { inBlock: true, flagged: true };
