@@ -1598,6 +1598,52 @@ describe("private-data-card", () => {
     );
   });
 
+  test("the block aggregates a census past the 50-suspect budget", () => {
+    // Review round 3: the generator died over 50, so an accepted census
+    // could not reach any card.
+    const dispatch = join(tmp, "private-data-big-census");
+    mkdirSync(dispatch, { recursive: true });
+    const records = [];
+    for (let i = 0; i < 51; i++) {
+      records.push(
+        JSON.stringify({
+          rule: "email",
+          file: `census-path-${i}`,
+          line: i + 1,
+          commit: `${i}`.padStart(40, "a"),
+          verdict: "made-up",
+        }),
+      );
+    }
+    writeFileSync(join(dispatch, "private-data-census.jsonl"), `${records.join("\n")}\n`);
+    const block = privateDataBlock(dispatch);
+    expect(block).toContain("- suspects: 51");
+    expect(block).toContain("- 51 suspect(s): email");
+  });
+
+  test("the block redacts values even when SCRUB_CHECK_DISABLE is set", () => {
+    // Review round 3: the block's in-process redaction honored ambient DISABLE.
+    const dispatch = join(tmp, "private-data-disable-block");
+    mkdirSync(dispatch, { recursive: true });
+    const record = { rule: "email", file: email(), line: 1, commit: "a".repeat(40) };
+    writeFileSync(join(dispatch, "detections.jsonl"), `${JSON.stringify(record)}\n`);
+    writeFileSync(
+      join(dispatch, "detections-resolved.jsonl"),
+      `${JSON.stringify({ ...record, resolution: "removed" })}\n`,
+    );
+    const saved = process.env.SCRUB_CHECK_DISABLE;
+    try {
+      process.env.SCRUB_CHECK_DISABLE = "email";
+      const r = sh(["private-data-block", dispatch]);
+      expect(r.code).toBe(0);
+      expect(r.out).toContain("[redacted]");
+      expect(r.out).not.toContain(email());
+    } finally {
+      if (saved === undefined) delete process.env.SCRUB_CHECK_DISABLE;
+      else process.env.SCRUB_CHECK_DISABLE = saved;
+    }
+  });
+
   test("the card scan still refuses a card when SCRUB_CHECK_DISABLE hides email", () => {
     // Review round 1: the scan inherited SCRUB_CHECK_DISABLE from the environment.
     const dispatch = join(tmp, "private-data-disable");

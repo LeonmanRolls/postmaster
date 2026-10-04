@@ -52,6 +52,17 @@ const PLACEHOLDER = "<redacted:encrypted-reasoning>";
 const ALLOW_MARKER =
   /(?:<!--|#|\/\/)?[ \t]*private-data:allow(?:-next-line)?[ \t]+[^ \t]+[ \t]+--[ \t]+[^\r\n]*(?:-->)?$/gu;
 
+function parsesAsJson(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return false;
+  try {
+    JSON.parse(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function fail(message: string, code = 2): never {
   console.error(`raw-promote: ${message}`);
   process.exit(code);
@@ -199,6 +210,14 @@ async function inspectFile(path: string, report: boolean): Promise<FileScan> {
       changed = changed || result.findings.length > 0 || result.suppressed.length > 0;
     for (const marker of result.markers) faults.push(`${line.number}: marker`);
     for (const finding of result.findings) findings.push(`${line.number}: ${finding.rule}`);
+    // A valid marker is stripped on copy; when the strip would break a JSON
+    // row's syntax the placement is refused instead of publishing a
+    // malformed record.
+    ALLOW_MARKER.lastIndex = 0;
+    const stripped = line.text.replace(ALLOW_MARKER, "");
+    ALLOW_MARKER.lastIndex = 0;
+    if (stripped !== line.text && parsesAsJson(line.text) && !parsesAsJson(stripped))
+      faults.push(`${line.number}: marker`);
     if (report) {
       for (const finding of result.findings) logFinding(finding.rule, path, line.number, "");
       for (const finding of result.suppressed)
@@ -303,6 +322,8 @@ async function verifyFiles(files: string[]): Promise<string[]> {
 }
 
 async function main(args: string[]): Promise<number> {
+  // A production entrypoint: shed the test hook before the first scan.
+  delete process.env.SCRUB_CHECK_DISABLE;
   if (args.length === 1 && args[0] === "--help") {
     console.error(USAGE);
     return 0;

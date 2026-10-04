@@ -514,8 +514,11 @@ function add(out: Finding[], start: number, end: number, rule: string, value: st
   if (end > start && !disabled(rule)) out.push({ start, end, rule, value });
 }
 
-const DISABLED = new Set(pyWords((process.env.SCRUB_CHECK_DISABLE ?? "").replaceAll(",", " ")));
+// Read lazily: production entrypoints shed SCRUB_CHECK_DISABLE on entry,
+// before the first scan, so only scrub-check honors the test hook (C23).
+let DISABLED: Set<string> | null = null;
 function disabled(rule: string): boolean {
+  DISABLED ??= new Set(pyWords((process.env.SCRUB_CHECK_DISABLE ?? "").replaceAll(",", " ")));
   return DISABLED.has(rule);
 }
 
@@ -1164,7 +1167,7 @@ export function scanLine(
       return true;
     });
   }
-  if (opts.markers === false || DISABLED.has("marker") || DISABLED.has("markers"))
+  if (opts.markers === false || disabled("marker") || disabled("markers"))
     return { findings: all.flat(), suppressed: [], markers: [], nextLineMarkers: [] };
   const stringRanges: Array<[number, number]> = [];
   if (line.includes("private-data:allow")) {

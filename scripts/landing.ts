@@ -472,7 +472,9 @@ export function privateDataBlock(dispatch: string): string {
     censusRules.set(record.rule, (censusRules.get(record.rule) ?? 0) + 1);
     censusVerdicts.set(record.verdict, (censusVerdicts.get(record.verdict) ?? 0) + 1);
   }
-  if (census.length > 50) die("private-data census exceeds 50 suspects");
+  // No cap: the ticket's 50 is an escalation threshold for the census
+  // count, judged by the postmaster, not a limit on what the block can
+  // carry. An accepted overage must still reach the card, aggregated.
   const censusBlock = census.length
     ? `\n## Main history census\n\n- suspects: ${census.length}\n- made-up: ${censusVerdicts.get("made-up") ?? 0}\n- real: ${censusVerdicts.get("real") ?? 0}\n\n${[
         ...censusRules.entries(),
@@ -756,6 +758,8 @@ function journey(dispatch: string, wt: string, waybill: string): number {
 }
 
 function main(argv: string[]): number {
+  // A production entrypoint: shed the test hook before the first scan.
+  delete process.env.SCRUB_CHECK_DISABLE;
   try {
     const mode = argv[0];
     if (mode === "already-landed") return alreadyLanded(argv.slice(1));

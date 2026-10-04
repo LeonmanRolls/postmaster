@@ -99,6 +99,33 @@ test("C21 promotion rescans clean, refuses repeats and copies nothing on a marke
   expect(() => readFileSync(join(repo, "raw/fault", "fault.txt"))).toThrow();
 });
 
+test("promotion scrubs even when SCRUB_CHECK_DISABLE is set", () => {
+  // Review round 3: ambient DISABLE turned the scrub into a straight copy.
+  const repo = initRepo();
+  const source = join(scratchDir(), "source");
+  mkdirSync(source);
+  writeFileSync(join(source, "note.txt"), `hello ${email()}\n`);
+  const copied = runScript("raw-promote", [source, "raw/disabled"], repo, {
+    SCRUB_CHECK_DISABLE: "email",
+  });
+  expect(copied.status).toBe(0);
+  expect(copied.stdout).toContain("email scrubbed");
+  expect(readFileSync(join(repo, "raw/disabled", "note.txt"), "utf8")).not.toContain(email());
+});
+
+test("promotion refuses a marker whose strip would break a JSON row", () => {
+  // Review round 3: stripping the marker ate the closing syntax, exit 0.
+  const repo = initRepo();
+  const source = join(scratchDir(), "source");
+  mkdirSync(source);
+  writeFileSync(join(source, "row.jsonl"), `{"note": "${email()} ${marker("email")}"}\n`);
+  const refused = runScript("raw-promote", [source, "raw/marks"], repo);
+  expect(refused.status).toBe(1);
+  expect(refused.stdout).toContain("marker");
+  expect(refused.stdout + refused.stderr).not.toContain(email());
+  expect(() => readFileSync(join(repo, "raw/marks", "row.jsonl"))).toThrow();
+});
+
 test("promotion refuses a destination under a symlinked directory", () => {
   // Review round 1: a symlinked raw/archive let the copy escape the repository.
   const repo = initRepo();

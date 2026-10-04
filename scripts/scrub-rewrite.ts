@@ -290,6 +290,8 @@ function applySnapshot(
 }
 
 async function main(args: string[]): Promise<number> {
+  // A production entrypoint: shed the test hook before the first scan.
+  delete process.env.SCRUB_CHECK_DISABLE;
   if (args.length === 1 && args[0] === "--help") {
     console.error(USAGE);
     return 0;

@@ -15,37 +15,51 @@ import { pyWords } from "./lib/text.ts";
 
 const EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 const USAGE = "usage: tree-check.sh [<base> [<head>]] | --help";
-const DISABLED = new Set(
-  (process.env.SCRUB_CHECK_DISABLE ?? "").replaceAll(",", " ").split(" ").filter(Boolean),
-);
+// Read lazily, like the core's set: main sheds the test hook first.
+let DISABLED: Set<string> | null = null;
+function disabled(rule: string): boolean {
+  DISABLED ??= new Set(
+    (process.env.SCRUB_CHECK_DISABLE ?? "").replaceAll(",", " ").split(" ").filter(Boolean),
+  );
+  return DISABLED.has(rule);
+}
 
 function fail(message: string): never {
   console.error(`tree-check: ${message}`);
   process.exit(2);
 }
 
-function hasReasoning(value: unknown, depth = 0): boolean {
-  if (depth > 64) return false;
-  if (typeof value === "string") {
-    const trimmed = value.trim();
-    if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return false;
-    try {
-      return hasReasoning(JSON.parse(value) as unknown, depth + 1);
-    } catch {
-      return false;
+function hasReasoning(value: unknown): boolean {
+  // Iterative and uncapped: a depth limit here is a bypass by nesting.
+  const stack: unknown[] = [value];
+  while (stack.length) {
+    const current = stack.pop()!;
+    if (typeof current === "string") {
+      const trimmed = current.trim();
+      if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) continue;
+      try {
+        stack.push(JSON.parse(current) as unknown);
+      } catch {
+        /* not pure JSON; the text scan covers the line */
+      }
+      continue;
     }
+    if (Array.isArray(current)) {
+      for (const item of current) stack.push(item);
+      continue;
+    }
+    if (typeof current !== "object" || current === null) continue;
+    const object = current as Record<string, unknown>;
+    const type = typeof object.type === "string" ? object.type : "";
+    if (
+      "encrypted_content" in object ||
+      (type === "thinking" && "signature" in object) ||
+      (type === "redacted_thinking" && "data" in object)
+    )
+      return true;
+    for (const item of Object.values(object)) stack.push(item);
   }
-  if (Array.isArray(value)) return value.some((item) => hasReasoning(item, depth + 1));
-  if (typeof value !== "object" || value === null) return false;
-  const object = value as Record<string, unknown>;
-  const type = typeof object.type === "string" ? object.type : "";
-  if (
-    "encrypted_content" in object ||
-    (type === "thinking" && "signature" in object) ||
-    (type === "redacted_thinking" && "data" in object)
-  )
-    return true;
-  return Object.values(object).some((item) => hasReasoning(item, depth + 1));
+  return false;
 }
 
 async function scanBlob(
@@ -69,7 +83,7 @@ async function scanBlob(
   for await (const raw of childLines(child.stdout)) {
     line++;
     const text = decodeChildText(raw);
-    if (!DISABLED.has("encrypted-reasoning")) {
+    if (!disabled("encrypted-reasoning")) {
       try {
         const parsed = JSON.parse(text) as unknown;
         if (hasReasoning(parsed)) failures.push(`${safePath(path)}:${line}: encrypted-reasoning`);
@@ -181,6 +195,8 @@ export async function checkTree(root: string, base: string, head: string): Promi
 }
 
 async function main(args: string[]): Promise<number> {
+  // A production entrypoint: shed the test hook before the first scan.
+  delete process.env.SCRUB_CHECK_DISABLE;
   if (args.length === 1 && args[0] === "--help") {
     console.error(USAGE);
     return 0;

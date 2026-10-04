@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { cleanupScratch, commit, gitAt, initRepo, runScript } from "./scrub-test-kit.ts";
+import { cleanupScratch, commit, email, gitAt, initRepo, runScript } from "./scrub-test-kit.ts";
 
 afterEach(cleanupScratch);
 
@@ -48,4 +48,33 @@ test("C22 merge commits are checked against each parent", () => {
   const checked = runScript("tree-check", [base, "HEAD"], repo);
   expect(checked.status).toBe(1);
   expect(checked.stdout).toContain(".postmaster/detections.jsonl");
+});
+
+test("tree check finds encrypted reasoning nested past any depth", () => {
+  // Review round 3: the traversal gave up past 64 levels and passed the gate.
+  const repo = initRepo();
+  const base = gitAt(repo, ["rev-parse", "HEAD"]);
+  mkdirSync(join(repo, "raw"));
+  let row = '{"encrypted_content": "sssh-secret"}';
+  for (let i = 0; i < 70; i++) row = `{"w": ${row}}`;
+  writeFileSync(join(repo, "raw", "deep.jsonl"), `${row}\n`);
+  commit(repo, "add deep record");
+  const checked = runScript("tree-check", [base, "HEAD"], repo);
+  expect(checked.status).toBe(1);
+  expect(checked.stdout).toContain("raw/deep.jsonl:1: encrypted-reasoning");
+});
+
+test("tree check flags raw content even when SCRUB_CHECK_DISABLE is set", () => {
+  // Review round 3: ambient DISABLE silenced the tree scan in-process.
+  const repo = initRepo();
+  const base = gitAt(repo, ["rev-parse", "HEAD"]);
+  mkdirSync(join(repo, "raw"));
+  writeFileSync(join(repo, "raw", "record.jsonl"), `{"note": "hello ${email()}"}\n`);
+  commit(repo, "add raw record");
+  const checked = runScript("tree-check", [base, "HEAD"], repo, {
+    SCRUB_CHECK_DISABLE: "email",
+  });
+  expect(checked.status).toBe(1);
+  expect(checked.stdout).toContain("raw/record.jsonl:1: email");
+  expect(checked.stdout + checked.stderr).not.toContain(email());
 });
