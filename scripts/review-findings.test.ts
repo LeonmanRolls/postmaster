@@ -455,6 +455,40 @@ describe("harvest", () => {
     expect(clobber.err.includes("refusing to overwrite")).toBe(true);
   });
 
+  test("a task output under this system's per-user temporary folder is harvested", () => {
+    const userTmp = join(root, "user-tmp");
+    const taskDir = join(userTmp, `claude-${process.getuid?.() ?? 0}`);
+    mkdirSync(taskDir, { recursive: true });
+    const localOutput = join(taskDir, "task-out.txt");
+    writeFileSync(localOutput, "per-user temp output\n");
+    const events = writeEvents("harvest-tmpdir.events", [
+      { type: "system", subtype: "task_notification", output_file: localOutput },
+    ]);
+    const tmpLogs = join(root, "logs-tmpdir");
+    const r = run(SELF, ["review-findings", "harvest", events, tmpLogs, "--prefix", "tmpdir"], {
+      env: { TMPDIR: userTmp },
+    });
+    expect(r.code).toBe(0);
+    expect(existsSync(join(tmpLogs, "tmpdir-claude-task-01-task-out.txt"))).toBe(true);
+  });
+
+  test("a task output under neither the shared folder nor the per-user one is refused", () => {
+    const elsewhere = join(root, "elsewhere");
+    mkdirSync(elsewhere);
+    const loose = join(elsewhere, "loose.txt");
+    writeFileSync(loose, "loose\n");
+    const events = writeEvents("harvest-loose.events", [
+      { type: "system", subtype: "task_notification", output_file: loose },
+    ]);
+    const looseLogs = join(root, "logs-loose");
+    const r = run(SELF, ["review-findings", "harvest", events, looseLogs, "--prefix", "loose"], {
+      env: { TMPDIR: join(root, "user-tmp") },
+    });
+    expect(r.code).toBe(1);
+    expect(r.err).toContain("Claude task output is outside");
+    expect(readdirSync(looseLogs).length).toBe(0);
+  });
+
   const negatives: Array<[string, unknown, string]> = [
     [
       "a task_notification without an output file fails",

@@ -6,6 +6,7 @@
 //   exit 0  printed
 //   exit 1  usage; a report that cannot be read; a harvest that cannot be completed
 import { copyFileSync, existsSync, mkdirSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { basename, isAbsolute, join, relative, resolve } from "node:path";
 import {
   BOUND_L,
@@ -1295,9 +1296,20 @@ export function harvest(
   mkdirSync(logsDir, { recursive: true });
   const scrubbed = stripChars(prefix.replace(PREFIX_SANITIZE, "-"), ".-");
   const clean = scrubbed === "" ? "review" : scrubbed;
-  // The root is resolved before comparing: the task path always is, so an unresolved root
-  // under a symlinked /tmp would refuse its own files. The override exists for fixtures.
-  const root = taskRoot !== null ? pyResolve(taskRoot) : pyResolve(`/tmp/claude-${uid()}`);
+  // The roots are resolved before comparing: the task path always is, so an unresolved
+  // root under a symlinked /tmp would refuse its own files. Each root is a folder this
+  // system gives the user for Claude's task outputs: the shared one and, where the system
+  // gives each user a temporary folder of their own, that one too. The override exists
+  // for fixtures.
+  const roots =
+    taskRoot !== null
+      ? [pyResolve(taskRoot)]
+      : [
+          ...new Set([
+            pyResolve(`/tmp/claude-${uid()}`),
+            pyResolve(join(tmpdir(), `claude-${uid()}`)),
+          ]),
+        ];
   const planned: Array<[string, string]> = [];
   wanted.forEach((path, n) => {
     const index = n + 1;
@@ -1307,9 +1319,12 @@ export function harvest(
     } catch {
       fail(`Claude task output named by task_notification is missing: ${path}`);
     }
-    const rel = relative(root, resolved);
-    if (rel === ".." || rel.startsWith("../") || isAbsolute(rel)) {
-      fail(`Claude task output is outside ${root}: ${path}`);
+    const inside = roots.some((root) => {
+      const rel = relative(root, resolved);
+      return !(rel === ".." || rel.startsWith("../") || isAbsolute(rel));
+    });
+    if (!inside) {
+      fail(`Claude task output is outside ${roots[0]}: ${path}`);
     }
     let isFile = false;
     try {
