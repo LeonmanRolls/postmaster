@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { spawn, spawnSync } from "node:child_process";
 import { createInterface } from "node:readline";
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -20,7 +21,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runControls } from "./host-self-test.ts";
-import { processStart, processState } from "./lib/processes.ts";
+import { bootIdentity, processStart, processState } from "./lib/processes.ts";
 
 const SECTIONS: Array<{ name: string; count: number }> = [
   { name: "preamble", count: 6 },
@@ -31,10 +32,10 @@ const SECTIONS: Array<{ name: string; count: number }> = [
   { name: "a run launch without a named run space is refused", count: 1 },
   { name: "stop: owned process trees and refusal controls", count: 5 },
   { name: "stop: registry identity and process membership", count: 16 },
-  { name: "run, Herdr (stub): pane placement and environment handover", count: 15 },
+  { name: "run, Herdr (stub): pane placement and environment handover", count: 17 },
   { name: "stop and close, Herdr (stub)", count: 6 },
   { name: "a reviewer's scratch clone, Herdr (stub)", count: 5 },
-  { name: "run, stop and close, tmux (stub)", count: 10 },
+  { name: "run, stop and close, tmux (stub)", count: 12 },
   { name: "completion cleanup controls, Herdr (stub)", count: 3 },
   { name: "finished review round cleanup, Herdr (stub)", count: 1 },
   { name: "run-wide teardown, Herdr (stub)", count: 2 },
@@ -375,30 +376,29 @@ test("a background runner that dies before reading its spec is rejected", async 
   }
 });
 
-// The boot id as host.ts reads it: the Linux file, else macOS kern.boottime
-// under LC_ALL=C, so the test's record matches on either system.
 function currentBootId(): string {
-  try {
-    return readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim();
-  } catch {
-    const booted = spawnSync("sysctl", ["-n", "kern.boottime"], {
-      encoding: "utf8",
-      env: { ...process.env, LC_ALL: "C" },
-    });
-    // ASCII: sysctl kern.boottime is kernel-emitted ASCII on macOS.
-    return (booted.stdout ?? "").trim().split(/\s+/u).join(" ");
-  }
+  return bootIdentity().id;
 }
 
 test("a member with a five-word start matches its process, and close refuses while it lives", async () => {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), "host-member-start-")));
   const state = join(dir, "state");
+  const bin = join(dir, "bin");
   mkdirSync(join(state, "launches"), { recursive: true });
+  mkdirSync(bin);
+  const sysctl = join(bin, "sysctl");
+  writeFileSync(
+    sysctl,
+    "#!/bin/sh\ncase \"$*\" in\n  *kern.bootsessionuuid*) printf 'host-test-session\\n' ;;\n  *kern.boottime*) printf '{ sec = 1800000000, usec = 1 } Tue Nov 14 22:13:20 2026\\n' ;;\n  *) exit 1 ;;\nesac\n",
+  );
+  chmodSync(sysctl, 0o755);
+  const priorPath = process.env.PATH;
   const priorProcRoot = process.env.POSTMASTER_PROC_ROOT;
   const sleep = spawn("sleep", ["30"], { detached: true, stdio: "ignore" });
   sleep.unref();
   try {
     // Forced: the registry holds ps lstart's five words, not a tick count.
+    process.env.PATH = `${bin}:${priorPath ?? ""}`;
     process.env.POSTMASTER_PROC_ROOT = join(dir, "missing-proc");
     await new Promise((resolve) => setTimeout(resolve, 200));
     const memberPid = sleep.pid ?? 0;
@@ -442,8 +442,75 @@ test("a member with a five-word start matches its process, and close refuses whi
     try {
       sleep.kill("SIGKILL");
     } catch {}
+    if (priorPath === undefined) delete process.env.PATH;
+    else process.env.PATH = priorPath;
     if (priorProcRoot === undefined) delete process.env.POSTMASTER_PROC_ROOT;
     else process.env.POSTMASTER_PROC_ROOT = priorProcRoot;
     rmSync(dir, { recursive: true, force: true });
   }
 }, 60000);
+
+test("Herdr checks time out when timeout is absent, and keep working when it is present", () => {
+  const dir = mkdtempSync(join(tmpdir(), "host-herdr-timeout-"));
+  const bin = join(dir, "bin");
+  const cwd = join(dir, "worktree");
+  const calls = join(dir, "herdr.calls");
+  mkdirSync(bin);
+  mkdirSync(cwd);
+  for (const [name, target] of [
+    ["bash", Bun.which("bash") ?? "/bin/bash"],
+    ["bun", process.execPath],
+    ["dirname", Bun.which("dirname") ?? "/usr/bin/dirname"],
+  ])
+    symlinkSync(target, join(bin, name));
+  const herdr = join(bin, "herdr");
+  writeFileSync(herdr, "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$HERDR_CALLS\"\nexec /bin/sleep 30\n");
+  chmodSync(herdr, 0o755);
+
+  const env: Record<string, string | undefined> = {
+    ...process.env,
+    HOME: dir,
+    HERDR_CALLS: calls,
+    PATH: bin,
+    POSTMASTER_HOST_STATE: join(dir, "state"),
+    POSTMASTER_HOST_FIXTURE: dir,
+  };
+  delete env.POSTMASTER_HOST;
+  try {
+    for (const [label, args] of [
+      ["close", ["host", "close", cwd]],
+      ["run", ["host", "run", "timeout-probe", cwd, "--", "/bin/true"]],
+    ] as const) {
+      const started = Date.now();
+      const result = spawnSync(join(import.meta.dir, "run"), args, {
+        encoding: "utf8",
+        env,
+        timeout: 10000,
+      });
+      expect(result.error).toBeUndefined();
+      expect(result.status).toBe(0);
+      expect(Date.now() - started).toBeLessThan(10000);
+      if (label === "close") expect(result.stdout).toContain("closed what run host opened");
+      else expect(result.stdout).toContain("host=none");
+    }
+    const requests = readFileSync(calls, "utf8");
+    expect(requests).toContain("workspace list");
+    expect(requests).not.toMatch(/pane|workspace close/u);
+
+    const timeout = Bun.which("timeout");
+    if (timeout) {
+      symlinkSync(timeout, join(bin, "timeout"));
+      const started = Date.now();
+      const detected = spawnSync(join(import.meta.dir, "run"), ["host", "detect"], {
+        encoding: "utf8",
+        env,
+        timeout: 10000,
+      });
+      expect(detected.status).toBe(0);
+      expect(detected.stdout?.trim()).toBe("none");
+      expect(Date.now() - started).toBeLessThan(10000);
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}, 45000);

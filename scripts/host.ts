@@ -125,6 +125,8 @@ import { parseTomlText } from "./lib/data.ts";
 import { scriptsDir } from "./lib/paths.ts";
 import { mkstempSync, run, signalExitCode } from "./lib/proc.ts";
 import {
+  bootIdentity,
+  bootMatches,
   processCommandLine,
   processStart,
   processState,
@@ -211,7 +213,9 @@ function hasOwn(obj: object, key: string): boolean {
   return Object.hasOwn(obj, key);
 }
 function limit(seconds: number, program: string, args: string[] = []) {
-  return has("timeout") ? run("timeout", [String(seconds), program, ...args]) : run(program, args);
+  return has("timeout")
+    ? run("timeout", [String(seconds), program, ...args])
+    : run(program, args, { timeout: seconds * 1000 });
 }
 function clean(value: string): string {
   return [...value]
@@ -506,21 +510,15 @@ type Registry = {
 function runBoot(...args: string[]): string {
   return run(args[0]!, args.slice(1), { env: { LC_ALL: "C" } }).out.trim();
 }
-function bootId(): string {
-  try {
-    return readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim();
-  } catch {
-    // ASCII: sysctl kern.boottime is kernel-emitted ASCII on macOS.
-    return runBoot("sysctl", "-n", "kern.boottime").split(/\s+/u).join(" ");
-  }
-}
 function bootTime(): number | null {
-  try {
-    const text = readFileSync("/proc/stat", "utf8");
-    const line = text.split("\n").find((row: string) => row.startsWith("btime "));
-    // ASCII: /proc/stat btime is kernel-emitted ASCII.
-    if (line) return Number(line.split(/\s+/u)[1]);
-  } catch {}
+  if (process.env.POSTMASTER_PROC_ROOT === undefined) {
+    try {
+      const text = readFileSync("/proc/stat", "utf8");
+      const line = text.split("\n").find((row: string) => row.startsWith("btime "));
+      // ASCII: /proc/stat btime is kernel-emitted ASCII.
+      if (line) return Number(line.split(/\s+/u)[1]);
+    } catch {}
+  }
   // ASCII: sysctl kern.boottime is kernel-emitted ASCII on macOS.
   const words = runBoot("sysctl", "-n", "kern.boottime").replace(/,/gu, " ").split(/\s+/u);
   // `{ sec = <t>, ... }`: the value sits two words past `sec`, as main reads it.
@@ -636,7 +634,7 @@ function recordRoots(
   group: number,
   rec: Registry,
   procs: Map<number, ProcessInfo>,
-  boot: string,
+  boot: ReturnType<typeof bootIdentity>,
 ): string[] {
   if (!rec.start && !rec.boot) {
     const booted = bootTime();
@@ -650,10 +648,10 @@ function recordRoots(
     const began = startedAt(procs.get(group)!.start);
     if (began === null || began > written + 2) return [];
     rec.start = procs.get(group)!.start;
-    rec.boot = boot;
+    rec.boot = boot.id;
     saveRecord(path, rec);
   }
-  if (!rec.boot || rec.boot !== boot) return [];
+  if (!rec.boot || !bootMatches(rec.boot, boot)) return [];
   if (procs.has(group) && rec.start && procs.get(group)!.start === rec.start)
     return [`group|${group}|${rec.start}`];
   return rec.members
@@ -669,7 +667,7 @@ function fixtureGuard(): void {
 }
 function registryAdd(group: number, dir: string, name: string): void {
   fixtureGuard();
-  const rec: Registry = { dir, name, start: startOf(group), boot: bootId(), members: [] };
+  const rec: Registry = { dir, name, start: startOf(group), boot: bootIdentity().id, members: [] };
   saveRecord(recordPath(group), rec);
 }
 function registryMembers(group: number): void {
@@ -687,7 +685,7 @@ function registryMembers(group: number): void {
 function registryScan(dir: string): Array<{ group: string; name: string; roots: string[] }> {
   fixtureGuard();
   const procs = processes();
-  const boot = bootId();
+  const boot = bootIdentity();
   let names: string[] = [];
   try {
     names = readdirSync(registryDir()).sort();
@@ -1847,77 +1845,27 @@ function markerRemove(path: string): void {
       rmSync(path, { force: true });
     } catch {}
 }
-function _writeEnvPipe(path: string): void {
-  let fd = -1;
-  const deadline = Date.now() + 120_000;
-  while (fd < 0 && Date.now() < deadline && existsSync(dirname(path))) {
-    try {
-      fd = openSync(path, constants.O_WRONLY | constants.O_NONBLOCK);
-    } catch (error) {
-      if ((error as { code?: string }).code !== "ENXIO") return;
-      sleepSync(100);
-    }
-  }
-  if (fd < 0) return;
-  try {
-    const body = new TextEncoder().encode(
-      `${Object.entries(process.env)
-        .filter((entry): entry is [string, string] => entry[1] !== undefined)
-        .map(([key, value]) => `${key}=${value}\0`)
-        .join("")}POSTMASTER_ENV_OK=1\0`,
-    );
-    let at = 0;
-    while (at < body.length) at += writeSync(fd, body, at, body.length - at);
-  } finally {
-    closeSync(fd);
-  }
+function writeLaunchEnvironment(path: string): void {
+  const temporary = mkstempSync(dirname(path), "env-");
+  writeFileSync(temporary, JSON.stringify(process.env), "utf8");
+  renameSync(temporary, path);
 }
-function readEnvPipe(path: string): Record<string, string> | null {
-  let fd: number;
-  try {
-    fd = openSync(path, constants.O_RDONLY | constants.O_NONBLOCK);
-  } catch {
-    return null;
-  }
-  const chunks: Uint8Array[] = [];
-  let total = 0;
+function readLaunchEnvironment(path: string): Record<string, string> | null {
   const deadline = Date.now() + 30_000;
-  try {
-    while (Date.now() < deadline) {
-      const part = new Uint8Array(65536);
-      let read = 0;
-      try {
-        read = readSync(fd, part, 0, part.length, null);
-      } catch (error) {
-        if (
-          (error as { code?: string }).code !== "EAGAIN" &&
-          (error as { code?: string }).code !== "EWOULDBLOCK"
-        )
-          throw error;
+  while (Date.now() < deadline) {
+    try {
+      const value: unknown = JSON.parse(readFileSync(path, "utf8"));
+      if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
+      const env: Record<string, string> = {};
+      for (const [key, item] of Object.entries(value)) {
+        if (typeof item !== "string") return null;
+        env[key] = item;
       }
-      if (read > 0) {
-        chunks.push(part.slice(0, read));
-        total += read;
-        const joined = new Uint8Array(total);
-        let pos = 0;
-        for (const chunk of chunks) {
-          joined.set(chunk, pos);
-          pos += chunk.length;
-        }
-        if (new TextDecoder().decode(joined).includes("POSTMASTER_ENV_OK=1\0")) {
-          const env: Record<string, string> = {};
-          for (const kv of new TextDecoder().decode(joined).split("\0")) {
-            const at = kv.indexOf("=");
-            if (at > 0) env[kv.slice(0, at)] = kv.slice(at + 1);
-          }
-          delete env.POSTMASTER_ENV_OK;
-          return env;
-        }
-      }
-      sleepSync(50);
+      return env;
+    } catch (error) {
+      if ((error as { code?: string }).code !== "ENOENT") return null;
     }
-  } finally {
-    closeSync(fd);
+    sleepSync(50);
   }
   return null;
 }
@@ -1952,34 +1900,6 @@ async function watch(pid: number, marker: string): Promise<void> {
   }
   touch(marker);
 }
-async function envWrite(path: string): Promise<void> {
-  const until = Date.now() + 120_000;
-  while (Date.now() < until && existsSync(dirname(path))) {
-    try {
-      const fd = openSync(path, constants.O_WRONLY | constants.O_NONBLOCK);
-      try {
-        const data = new TextEncoder().encode(
-          `${Object.entries(process.env)
-            .filter((entry): entry is [string, string] => entry[1] !== undefined)
-            .map(([key, value]) => `${key}=${value}\0`)
-            .join("")}POSTMASTER_ENV_OK=1\0`,
-        );
-        let at = 0;
-        while (at < data.length) at += writeSync(fd, data, at, data.length - at);
-      } finally {
-        closeSync(fd);
-      }
-      return;
-    } catch (error) {
-      if (
-        (error as { code?: string }).code !== "ENXIO" &&
-        (error as { code?: string }).code !== "ENOENT"
-      )
-        return;
-      await Bun.sleep(100);
-    }
-  }
-}
 function spawnStrerror(error: unknown): string {
   const code = (error as { code?: string }).code;
   if (code === "ENOENT") return "No such file or directory";
@@ -2007,7 +1927,7 @@ async function runLaunch(specDir: string, mode: string): Promise<number> {
     appendFailure("", "", "launch specification is incomplete");
   }
   STATE = spec.state;
-  const paneEnv = mode === "bg" ? { ...process.env } : readEnvPipe(join(specDir, "env"));
+  const paneEnv = mode === "bg" ? { ...process.env } : readLaunchEnvironment(join(specDir, "env"));
   dropSpec(specDir);
   if (!paneEnv) {
     const message = `the caller's environment never arrived, so '${spec.name}' did not start`;
@@ -2500,8 +2420,7 @@ async function runCmd(args: string[]): Promise<void> {
       : herdrPlace(launchName, cwd, "worktree", dispatch);
     if (placed) {
       startFinishWatcher("herdr", placed.space, placed.tab, placed.pane, cwd, marker);
-      run("mkfifo", [join(specDir, "env")]);
-      startDetached(["_env-write", join(specDir, "env")]);
+      writeLaunchEnvironment(join(specDir, "env"));
       const line = ` cd -- ${quote(cwd)} && ${quote(process.execPath)} ${quote(join(HERE, "host.ts"))} _run herdr ${quote(specDir)}`;
       if (herdr(["pane", "run", placed.pane, line]).code === 0)
         where = `host=herdr space=${placed.space} tab=${placed.tab} pane=${placed.pane}`;
@@ -2509,8 +2428,7 @@ async function runCmd(args: string[]): Promise<void> {
     if (!where) warn(`Herdr could not place '${launchName}'; running it in the background`);
   } else if (host === "tmux") {
     const session = tmuxSession(cwd);
-    run("mkfifo", [join(specDir, "env")]);
-    startDetached(["_env-write", join(specDir, "env")]);
+    writeLaunchEnvironment(join(specDir, "env"));
     const argsForPane = [
       "bash",
       "-c",
@@ -4884,9 +4802,6 @@ async function main(): Promise<void> {
     }
     case "_handle":
       console.log(handleOf(args[0] ?? ""));
-      return;
-    case "_env-write":
-      await envWrite(args[0] ?? "");
       return;
     case "_watch":
       await watch(Number(args[0]), args[1] ?? "");

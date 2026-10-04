@@ -731,7 +731,15 @@ async function setup(
       "",
     ].join("\n"),
   );
-  for (const path of [join(caller, "fixed.sh"), join(caller, "probe.sh")])
+  writeFileSync(
+    join(caller, "env-length.sh"),
+    ["#!/bin/sh", 'printf \'%s\\n\' "${#CALLER_BLOB}"', ""].join("\n"),
+  );
+  for (const path of [
+    join(caller, "fixed.sh"),
+    join(caller, "probe.sh"),
+    join(caller, "env-length.sh"),
+  ])
     exec("chmod", ["+x", path]);
   const run = join(root, "run-1");
   const canary = join(root, "canary");
@@ -1922,6 +1930,37 @@ export async function runControls(): Promise<number> {
         var: field(herdrOut, "var"),
       }),
     );
+    for (const [label, size] of [
+      ["100,000", 100000],
+      ["1,000", 1000],
+    ] as const) {
+      const largeEnv = execHost(
+        [
+          "run",
+          f.name,
+          worktree,
+          "--out",
+          `../logs/h-${size}.out`,
+          "--err",
+          `../logs/h-${size}.err`,
+          "--marker",
+          `../logs/h-${size}.done`,
+          "--",
+          "./env-length.sh",
+        ],
+        stubs,
+        f.caller,
+        { CALLER_BLOB: "x".repeat(size) },
+      );
+      await marker(markerPath(`h-${size}`));
+      const value = readFileSync(join(logs, `h-${size}.out`), "utf8").trim();
+      const error = readFileSync(join(logs, `h-${size}.err`), "utf8");
+      await pass(
+        `${label} caller environment bytes reach the Herdr pane and its marker lands`,
+        () => largeEnv.code === 0 && value === String(size) && !error.includes("environment never arrived"),
+        `${largeEnv.out}${largeEnv.err} value=${value} err=${error}`,
+      );
+    }
     await pass(
       "the pane shows the name and the rendered stream, not raw JSON",
       () =>
@@ -2435,6 +2474,41 @@ export async function runControls(): Promise<number> {
       dottedRun.out,
     );
     execHost(["close", dotted], stubs, root, { POSTMASTER_HOST: "tmux" });
+
+    for (const [label, size] of [
+      ["100,000", 100000],
+      ["1,000", 1000],
+    ] as const) {
+      const largeEnv = execHost(
+        [
+          "run",
+          f.name,
+          worktree,
+          "--out",
+          `../logs/t-${size}.out`,
+          "--err",
+          `../logs/t-${size}.err`,
+          "--marker",
+          `../logs/t-${size}.done`,
+          "--",
+          "./env-length.sh",
+        ],
+        stubs,
+        f.caller,
+        { POSTMASTER_HOST: "tmux", CALLER_BLOB: "x".repeat(size) },
+      );
+      await marker(markerPath(`t-${size}`));
+      const value = readFileSync(join(logs, `t-${size}.out`), "utf8").trim();
+      const error = readFileSync(join(logs, `t-${size}.err`), "utf8");
+      await pass(
+        `${label} caller environment bytes reach the tmux pane and its marker lands`,
+        () =>
+          largeEnv.code === 0 &&
+          value === String(size) &&
+          !error.includes("environment never arrived"),
+        `${largeEnv.out}${largeEnv.err} value=${value} err=${error}`,
+      );
+    }
 
     {
       // Completion, review-round and run-wide teardown controls, Herdr then tmux.
