@@ -348,6 +348,7 @@ test("C23 every rule has three positive and negative fixtures and its disable co
   const repo = initRepo();
   const path = join(repo, "rule-fixtures.txt");
   const ruleLines: string[] = [];
+  const activeLines: string[] = [];
   for (const rule of expectedRules) {
     const positives = fixtures[rule]!;
     expect(positives).toHaveLength(3);
@@ -357,15 +358,19 @@ test("C23 every rule has three positive and negative fixtures and its disable co
       expect(got).toContain(rule);
     }
     for (const sample of negatives) expect(rules(sample)).not.toContain(rule);
-    writeFileSync(path, `${positives[0]}\n`);
-    const active = runScript("scrub-check", ["--files", path], repo);
-    expect(active.status).toBe(1);
-    expect(active.stdout.split("\n").some((line) => line.endsWith(`: ${rule}`))).toBe(true);
-    const disabled = runScript("scrub-check", ["--files", path], repo, {
-      SCRUB_CHECK_DISABLE: rule,
-    });
-    expect(disabled.stdout.split("\n").some((line) => line.endsWith(`: ${rule}`))).toBe(false);
+    activeLines.push(positives[0]!);
     ruleLines.push(`${rule}:${positives.length}:${negatives.length}`);
+  }
+  // One subprocess per mode, not per rule: dozens of spawns time out under load.
+  writeFileSync(path, `${activeLines.join("\n")}\n`);
+  const active = runScript("scrub-check", ["--files", path], repo);
+  expect(active.status).toBe(1);
+  const disabled = runScript("scrub-check", ["--files", path], repo, {
+    SCRUB_CHECK_DISABLE: expectedRules.join(" "),
+  });
+  for (const rule of expectedRules) {
+    expect(active.stdout.split("\n").some((line) => line.endsWith(`: ${rule}`))).toBe(true);
+    expect(disabled.stdout.split("\n").some((line) => line.endsWith(`: ${rule}`))).toBe(false);
   }
   writeFileSync(path, `${negatives.join("\n")}\n`);
   const clean = runScript("scrub-check", ["--files", path], repo);

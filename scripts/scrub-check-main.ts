@@ -109,6 +109,23 @@ function parseHunk(line: string): number | null {
   return match ? Number(match[1]) : null;
 }
 
+function parseDiffPath(line: string): string {
+  const rest = line.slice("diff --git ".length);
+  if (rest.startsWith('"')) {
+    const end = rest.indexOf('" "');
+    if (end === -1 || !rest.endsWith('"')) return "";
+    return rest.slice(end + 3, -1);
+  }
+  // No-prefix form repeats the name twice; the halves are identical.
+  if (rest.length % 2 === 1) {
+    const half = (rest.length - 1) / 2;
+    if (rest[half] === " " && rest.slice(0, half) === rest.slice(half + 1))
+      return rest.slice(0, half);
+  }
+  const at = rest.lastIndexOf(" b/");
+  return at === -1 ? "" : rest.slice(at + 3);
+}
+
 const LOG_FORMAT = "%x00SCRUB COMMIT %H %P%x00%n%an <%ae>%n%cn <%ce>%n%B%x00SCRUB END MESSAGE%x00";
 const COMMIT_SENTINEL = "\0SCRUB COMMIT ";
 const MESSAGE_SENTINEL = "\0SCRUB END MESSAGE\0";
@@ -302,11 +319,20 @@ async function scanPatchSection(
   const nameRows: FindingRow[] = [];
   const rows: FindingRow[] = [];
   let path = "";
+  let diffPath = "";
   let newFile = false;
   let lineNumber: number | null = null;
   let scanner = new StreamScanner();
   let keyLines: Set<number> | null = null;
   let context = "";
+  const pushNameRows = (name: string): void => {
+    for (const finding of detectLine(name))
+      nameRows.push({ commit, path: name, line: 0, rule: finding.rule, content: name });
+  };
+  const flushEmptyName = (): void => {
+    // An added empty file has no +++ line; its name comes from the header.
+    if (newFile && !path && diffPath) pushNameRows(diffPath);
+  };
   for (const line of patch) {
     if (line.startsWith("diff --git ")) {
       for (const marker of scanner.flush())
@@ -316,8 +342,10 @@ async function scanPatchSection(
           line: marker.line ?? Math.max(1, (lineNumber ?? 1) - 1),
           rule: "marker",
         });
+      flushEmptyName();
       scanner = new StreamScanner();
       path = "";
+      diffPath = parseDiffPath(line);
       lineNumber = null;
       newFile = false;
       keyLines = null;
@@ -333,10 +361,7 @@ async function scanPatchSection(
     }
     if (line.startsWith("+++ ") && lineNumber === null) {
       path = line.slice(4);
-      if (newFile && path !== "/dev/null") {
-        for (const finding of detectLine(path))
-          nameRows.push({ commit, path, line: 0, rule: finding.rule, content: path });
-      }
+      if (newFile && path !== "/dev/null") pushNameRows(path);
       if (path !== "/dev/null") context = await cite(path);
       continue;
     }
@@ -372,6 +397,7 @@ async function scanPatchSection(
       rows.push({ commit, path, line: marker.line ?? lineNumber, rule: "marker" });
     lineNumber++;
   }
+  flushEmptyName();
   for (const marker of scanner.flush())
     rows.push({
       commit,

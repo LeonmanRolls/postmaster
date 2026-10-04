@@ -144,6 +144,23 @@ const PATTERN_CODE = new RegExp(
 const TOKEN_SIGNAL =
   // ASCII: token prefixes are fixed ASCII spellings; the boundary is on ASCII keywords.
   /(?:gh[pours]_|github_pat_|sk[_-](?:live|test)|sk-|xox|ya29\.|\bbearer\b|AKIA|ASIA|PRIVATE KEY|SSH2 ENCRYPTED|PuTTY-User-Key|AGE-SECRET-KEY|[:=])|^[A-Za-z0-9+/=]{20,}$/iu;
+// A dotenv value that opens one of these is composed in code, not assigned.
+const DOTENV_SPLIT = new RegExp(`["'(){}\\[\\x60]|\\$[{A-Za-z_(]`, "u");
+// A value that only names names holds no secret (oracle-102's PASS_NAMES).
+const DOTENV_LIST = new RegExp(
+  `^[A-Za-z_][A-Za-z0-9_-]*(?:[,${PY_S_CLASS}]+[A-Za-z_][A-Za-z0-9_-]*)+$`,
+  "u",
+);
+const WS_CHAR = new RegExp(`^[${PY_S_CLASS}]$`, "u");
+const WS_RUN = new RegExp(`[${PY_S_CLASS}]+`, "u");
+// A field value that expands or substitutes is an expression, not a leak.
+const FIELD_EXPANSION = new RegExp(`\\$[{A-Za-z_(]|\\x60`, "u");
+const DOTENV_LINE = new RegExp(
+  `^${SPACE}*(?:export${SPACE}+)?([A-Za-z_][A-Za-z0-9_-]*)${SPACE}*=${SPACE}*(.+?)${SPACE}*$`,
+  "ud",
+);
+const DOTENV_COMMENT_ONLY = new RegExp(`^#(?:${SPACE}|$)`, "u");
+const DOTENV_COMMENT_CUT = new RegExp(`${SPACE}+#`, "u");
 const PRIVATE_SIGNAL =
   // ASCII: ssh/scp/bearer are ASCII keywords; hosts match explicit classes.
   /\/(?:home|Users)\/|~\/|~[A-Za-z0-9._-]+\/|[A-Za-z]:\\|\b(?:ssh|scp)\s|(?:account|org(?:anization)?|session|thread|credential|identity|user)[_-]?(?:id|uuid|guid)\b|co-authored-by|generated-with|(?:generated|created|written|drafted)\s+(?:with|by)|\.(?:internal|local|lan|home|tailnet|intranet|private|corp|ts\.net)\b|(?<![0-9.])(?:[0-9]{1,3}\.){3}[0-9]{1,3}(?![0-9.])|[0-9a-f]{0,4}(?::[0-9a-f]{0,4}){2,7}|[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}|(?:org|acct|account|sess|ses|session)[_-][A-Za-z0-9]{6,}/iu;
@@ -340,6 +357,7 @@ function tokenFindings(line: string, out: Finding[]): void {
     if (!kind) continue;
     const { value, start } = valueFromField(match);
     if (!value || ABSENT.test(value)) continue;
+    if (FIELD_EXPANSION.test(value)) continue;
     const quoted = match.groups?.double !== undefined || match.groups?.single !== undefined;
     const compact = value.replaceAll(" ", "");
     const property =
@@ -367,14 +385,12 @@ function tokenFindings(line: string, out: Finding[]): void {
         new RegExp(`[(){};]|${SPACE}`, "u").test(value))
     )
       continue;
-    if (kind === "account-id" && value.length < 6) continue;
+    if (kind === "account-id" && (value.length < 6 || !/[0-9]/u.test(value))) continue;
     add(out, start, start + value.length, kind, value);
   }
 
-  const env = new RegExp(
-    `^${SPACE}*(?:export${SPACE}+)?([A-Za-z_][A-Za-z0-9_-]*)${SPACE}*=${SPACE}*(.+?)${SPACE}*$`,
-    "u",
-  ).exec(line);
+  DOTENV_LINE.lastIndex = 0;
+  const env = DOTENV_LINE.exec(line);
   if (env) {
     const name = pyLower(env[1]!);
     const words = name.split(/[_-]+/u);
@@ -404,24 +420,36 @@ function tokenFindings(line: string, out: Finding[]): void {
     const valueStart = line.indexOf(value, env.index + env[0].indexOf(value));
     if (keyLike && !pointer) {
       let scan = value;
+      let quoted: string | null = null;
       const quote = value[0];
       if ((quote === "'" || quote === '"') && value.length >= 2) {
         const end = value.indexOf(quote, 1);
         if (end > 0) {
           const rest = value.slice(end + 1).trim();
           if (!rest || rest.startsWith("#")) {
+            quoted = quote;
             scan = value.slice(1, end);
             if (quote === '"' && /\$[({]|`/u.test(scan)) scan = "";
           }
         }
-      } else {
-        if (new RegExp(`^#(?:${SPACE}|$)`, "u").test(value)) scan = "";
-        else scan = value.split(new RegExp(`${SPACE}+#`, "u"), 1)[0] ?? "";
-        const expression =
-          /^\$(?:[({]|[A-Za-z_])|^[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)+$|[(){}]|(?:\|\||&&|\?\?|=>)/u;
-        const listOfNames = /^[A-Za-z_][A-Za-z0-9_-]*(?:,[A-Za-z_][A-Za-z0-9_-]*)+$/u;
-        if (expression.test(scan) || listOfNames.test(scan)) scan = "";
       }
+      if (!quoted) {
+        // The first version's unquoted path, which a quote-started value
+        // that composes (text after its closing quote) falls through to:
+        // spaced from its sign with a split character it is code, else
+        // only its first token assigns.
+        if (DOTENV_COMMENT_ONLY.test(scan)) scan = "";
+        else scan = scan.split(DOTENV_COMMENT_CUT, 1)[0] ?? "";
+        const indices = (env as unknown as { indices?: Array<[number, number]> }).indices;
+        const gap = indices ? line.slice(indices[1]![1], indices[2]![0]) : "=";
+        if (WS_CHAR.test(gap[0] ?? "") && WS_CHAR.test(gap.at(-1) ?? "")) {
+          if (DOTENV_SPLIT.test(scan) || /[|&]/u.test(scan)) scan = "";
+        } else {
+          const token = scan.split(WS_RUN, 1)[0] ?? "";
+          scan = token.split(DOTENV_SPLIT, 1)[0] ?? "";
+        }
+      }
+      if (DOTENV_LIST.test(scan)) scan = "";
       if (scan.length >= 8 && !ABSENT.test(scan)) {
         const at = line.indexOf(scan, valueStart);
         add(out, at, at + scan.length, "dotenv", scan);
@@ -433,12 +461,14 @@ function tokenFindings(line: string, out: Finding[]): void {
 function privateFindings(line: string, out: Finding[]): void {
   if (!PRIVATE_SIGNAL.test(line)) return;
   const path = new RegExp(
-    `(?<![\\p{L}\\p{N}_.$}~.>/])(?:/home/|/Users/)([A-Za-z0-9._-]+)(?:/[^${PY_S_CLASS}"'<>),;]*)?|(?<![\\p{L}\\p{N}_.$}~.>/])/root/[A-Za-z0-9._-]+|(?<![\\p{L}\\p{N}_])~([A-Za-z0-9._-]+)/[^${PY_S_CLASS}"'<>),;]*|(?<![\\p{L}\\p{N}_])[A-Za-z]:\\\\Users\\\\([A-Za-z0-9._-]+)(?:\\\\[^${PY_S_CLASS}"'<>),;]*)?`,
+    `(?<![\\p{L}\\p{N}_.$}~.>/@])(?:/home/|/Users/)([A-Za-z0-9._-]+)(?:/[^${PY_S_CLASS}"'<>),;]*)?|(?<![\\p{L}\\p{N}_.$}~.>/@])/root/[A-Za-z0-9._-]+|(?<![\\p{L}\\p{N}_])~([A-Za-z0-9._-]+)/[^${PY_S_CLASS}"'<>),;]*|(?<![\\p{L}\\p{N}_])[A-Za-z]:\\\\Users\\\\([A-Za-z0-9._-]+)(?:\\\\[^${PY_S_CLASS}"'<>),;]*)?`,
     "giu",
   );
   for (const m of line.matchAll(path)) {
     const before = line.slice(0, m.index ?? 0);
     if ((before.match(/`/gu)?.length ?? 0) % 2 === 1 && line.includes("${")) continue;
+    // A path that continues into an expansion is composed in code.
+    if (line[(m.index ?? 0) + m[0].length] === "$") continue;
     const user = m[1] ?? m[2] ?? m[3];
     if (user && PLACEHOLDER.test(user)) continue;
     const value = m[0].replace(/[.!?:\]}"`]+$/u, "");
