@@ -19,6 +19,11 @@
 //   run host run <name> <cwd> [--under <dispatch>] [--role lane|coachman|reviewer] [--run <dispatch>]
 //               [--out <file>] [--err <file>] [--append] [--marker <file>]
 //               [--pidfile <file>] -- <command...>
+//   run host workhorse <dispatch> <lane> <worktree>
+//                                         launch one workhorse into its worktree: its name from
+//                                         `name ... workhorse`, its events/err/marker under the
+//                                         dispatch's logs, `run launch launch` with --run
+//   run host stop-pidfile <pidfile>        stop the whole process group the pidfile names
 //   run host stop <worktree>               stop every launch still running in a worktree, and
 //                                         everything each one started
 //   run host close <worktree>              close its tabs/space (Herdr) and its windows (tmux)
@@ -2803,6 +2808,77 @@ async function stopTree(
     .join(" ");
   return { code: survivors.size ? 2 : 0, text: `${known.size}\t${names}` };
 }
+/** One workhorse, named and placed as the runbook's block did: the host owns the composition. */
+async function workhorseCmd(args: string[]): Promise<void> {
+  const [dispatch, lane, worktree] = args;
+  if (!dispatch || !lane || !worktree)
+    die("usage: run host workhorse <dispatch> <lane> <worktree>");
+  const d = absolute(dispatch);
+  const name = nameCmd(d, "workhorse", lane);
+  await runCmd([
+    name,
+    worktree,
+    "--under",
+    d,
+    "--role",
+    "lane",
+    "--run",
+    d,
+    "--out",
+    join(d, "logs", `${lane}-events.jsonl`),
+    "--err",
+    join(d, "logs", `${lane}.err`),
+    "--marker",
+    join(d, "logs", `${lane}.done`),
+    "--",
+    join(HERE, "run"),
+    "launch",
+    "launch",
+    lane,
+    worktree,
+    join(d, `${lane}-prompt.txt`),
+    "--last",
+    join(d, "logs", `${lane}-last.md`),
+    "--run",
+    d,
+  ]);
+}
+
+/** The process group a pidfile names, stopped as `stop` stops a worktree's launches. */
+async function stopPidfileCmd(args: string[]): Promise<void> {
+  const file = args[0] ?? "";
+  if (!file) die("usage: run host stop-pidfile <pidfile>");
+  let text = "";
+  try {
+    text = readFileSync(file, "utf8");
+  } catch {
+    die(`no such pidfile: ${file}`);
+  }
+  const pid = Number.parseInt(text.trim(), 10);
+  if (!Number.isInteger(pid) || pid <= 0) die(`${file} does not hold a pid: ${text.trim()}`);
+  const table = processTable();
+  const row = table.get(pid);
+  if (row === undefined || row.zombie) {
+    console.log(`no process group of ${pid} is running`);
+    return;
+  }
+  const grace = count(process.env.POSTMASTER_HOST_STOP_WAIT ?? "20", "POSTMASTER_HOST_STOP_WAIT");
+  const most = count(process.env.POSTMASTER_HOST_STOP_MAX ?? "512", "POSTMASTER_HOST_STOP_MAX");
+  const result = await stopTree(grace, most, [`group|${pid}|${row.start}`]);
+  const fields = result.text.split("\t");
+  if (result.code === 0)
+    console.log(`stopped the process group of ${pid}: ${fields[0]} process(es)`);
+  else if (result.code === 2) {
+    warn(`stopped the process group of ${pid}, but these still run: ${fields[1] ?? ""}`);
+    throw hostError("", 2);
+  } else if (result.code === 3) {
+    warn(
+      `refused to stop the process group of ${pid}, and left it running: ${fields.slice(1).join("\t")}`,
+    );
+    throw hostError("", 2);
+  } else die(`could not stop the process group of ${pid}: ${result.text}`);
+}
+
 async function stopCmd(args: string[]): Promise<void> {
   const path = worktreeArg(args[0] ?? "", "stop");
   if ((resolve(process.cwd()) + sep).startsWith(path + sep))
@@ -4811,8 +4887,14 @@ async function main(): Promise<void> {
     case "run":
       await runCmd(args);
       return;
+    case "workhorse":
+      await workhorseCmd(args);
+      return;
     case "stop":
       await stopCmd(args);
+      return;
+    case "stop-pidfile":
+      await stopPidfileCmd(args);
       return;
     case "close":
       await closeCmd(args);

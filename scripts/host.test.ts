@@ -447,3 +447,109 @@ test("a member with a five-word start matches its process, and close refuses whi
     rmSync(dir, { recursive: true, force: true });
   }
 }, 60000);
+
+describe("workhorse and stop-pidfile", () => {
+  test("host workhorse composes the workhorse launch and lands its marker", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "host-workhorse-"));
+    try {
+      const repo = join(dir, "repo");
+      const dispatch = join(repo, ".postmaster", "runs", "T-1");
+      const wt = join(repo, ".worktrees", "T-1");
+      mkdirSync(join(dispatch, "logs"), { recursive: true });
+      mkdirSync(wt, { recursive: true });
+      writeFileSync(
+        join(dispatch, "run.json"),
+        `${JSON.stringify({
+          config: {
+            lanes: { luna: { harness: "no-such-harness", model: "m" } },
+            team: { workhorses: ["luna"] },
+          },
+        })}\n`,
+      );
+      writeFileSync(
+        join(dispatch, "brief.md"),
+        `# Waybill: T-1\n\n## Dispatch\nname: T-1, test ticket\nsynthesis worktree: ${wt}\n`,
+      );
+      writeFileSync(join(dispatch, "luna-prompt.txt"), "the brief\n");
+      const r = spawnSync(
+        join(import.meta.dir, "run"),
+        ["host", "workhorse", dispatch, "luna", wt],
+        {
+          encoding: "utf8",
+          env: {
+            ...process.env,
+            POSTMASTER_HOST: "none",
+            POSTMASTER_HOST_STATE: join(dir, "state"),
+            POSTMASTER_CONFIG: join(dir, "missing-config.toml"),
+          },
+          timeout: 30000,
+        },
+      );
+      expect(r.status).toBe(0);
+      expect(existsSync(join(dispatch, "logs", "luna-events.jsonl"))).toBe(true);
+      const marker = join(dispatch, "logs", "luna.done");
+      const deadline = Date.now() + 20000;
+      while (!existsSync(marker) && Date.now() < deadline) await Bun.sleep(50);
+      expect(existsSync(marker)).toBe(true);
+      // The composed child is run launch with the lane, the worktree and the run.
+      expect(readFileSync(join(dispatch, "logs", "luna.err"), "utf8")).toContain(
+        "harness 'no-such-harness' is not on PATH",
+      );
+      // The name is the one `host name ... workhorse` prints.
+      const name = spawnSync(
+        join(import.meta.dir, "run"),
+        ["host", "name", dispatch, "workhorse", "luna"],
+        {
+          encoding: "utf8",
+          timeout: 10000,
+        },
+      );
+      expect(name.stdout.trim()).toBe("luna · workhorse · m");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 40000);
+
+  test("host stop-pidfile stops the whole group the file names", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "host-pidfile-"));
+    try {
+      const child = spawn("sleep", ["300"], { stdio: "ignore", detached: true });
+      const pid = child.pid!;
+      const exited = new Promise<void>((resolve) => child.once("exit", () => resolve()));
+      const pidfile = join(dir, "preview.pid");
+      writeFileSync(pidfile, `${pid}\n`);
+      const r = spawnSync(join(import.meta.dir, "run"), ["host", "stop-pidfile", pidfile], {
+        encoding: "utf8",
+        timeout: 30000,
+      });
+      expect(r.status).toBe(0);
+      expect(r.stdout).toContain(`stopped the process group of ${pid}`);
+      await Promise.race([exited, Bun.sleep(15000)]);
+      expect(processState(pid)).not.toBe("live");
+
+      // A dead group says so and exits 0; a bad or missing file exits 1.
+      const again = spawnSync(join(import.meta.dir, "run"), ["host", "stop-pidfile", pidfile], {
+        encoding: "utf8",
+        timeout: 10000,
+      });
+      expect(again.status).toBe(0);
+      expect(again.stdout).toContain("no process group");
+      writeFileSync(pidfile, "not-a-pid\n");
+      const bad = spawnSync(join(import.meta.dir, "run"), ["host", "stop-pidfile", pidfile], {
+        encoding: "utf8",
+        timeout: 10000,
+      });
+      expect(bad.status).toBe(1);
+      expect(bad.stderr).toContain("does not hold a pid");
+      const missing = spawnSync(
+        join(import.meta.dir, "run"),
+        ["host", "stop-pidfile", join(dir, "nowhere.pid")],
+        { encoding: "utf8", timeout: 10000 },
+      );
+      expect(missing.status).toBe(1);
+      expect(missing.stderr).toContain("no such pidfile");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 40000);
+});
