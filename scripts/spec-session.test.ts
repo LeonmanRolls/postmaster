@@ -13,6 +13,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { spawnPlan } from "./spec-session";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const tool = dirname(here);
@@ -442,6 +443,173 @@ describe("an approval", () => {
       expect(readFileSync(join(s.d, "spec-decisions.md"), "utf8")).toBe("");
     } finally {
       s.cleanup();
+    }
+  });
+});
+
+describe("a spawn plan", () => {
+  const gitAt = (path: string, ...args: string[]): string => {
+    const r = spawnSync("git", ["-C", path, ...args], { encoding: "utf8" });
+    if (r.status !== 0) throw new Error(`git ${args.join(" ")}: ${r.stderr}`);
+    return String(r.stdout ?? "").trim();
+  };
+
+  const spawnFixture = (): { d: string; root: string; cleanup: () => void } => {
+    const tmp = mkdtempSync(join(tmpdir(), "spec-spawn-"));
+    const root = join(tmp, "project");
+    const d = join(root, ".postmaster", "runs", "RUN-1");
+    mkdirSync(join(d, "spec-review"), { recursive: true });
+    gitAt(root, "init", "-q", "-b", "main");
+    gitAt(root, "config", "user.name", "test");
+    gitAt(root, "config", "user.email", "test@example.invalid");
+    gitAt(root, "commit", "-q", "--allow-empty", "-m", "spec");
+    const sha = gitAt(root, "rev-parse", "HEAD");
+    writeFileSync(join(d, "spec-review.md"), `commit: ${sha}\n`);
+    return { d, root, cleanup: () => rmSync(tmp, { recursive: true, force: true }) };
+  };
+
+  const setPostmaster = (d: string, harness: string, effort?: string): void => {
+    writeFileSync(
+      join(d, "run.json"),
+      `${JSON.stringify({
+        config: {
+          team: {
+            postmaster: {
+              harness,
+              model: `${harness}-model`,
+              ...(effort === undefined ? {} : { effort }),
+            },
+          },
+        },
+      })}\n`,
+    );
+  };
+
+  test("the handle carries the short spec commit and the label is the name and spec", () => {
+    const f = spawnFixture();
+    try {
+      setPostmaster(f.d, "claude", "max");
+      const plan = spawnPlan(f.d, f.root);
+      const short = gitAt(f.root, "rev-parse", "--short", gitAt(f.root, "rev-parse", "HEAD"));
+      expect(plan.handle).toBe(`spec-RUN-1-${short}`);
+      expect(plan.label).toBe("RUN-1 · spec");
+      expect(plan.form).toEqual([
+        "claude",
+        "--model",
+        "claude-model",
+        "--effort",
+        "max",
+        "--name",
+        "RUN-1 · spec",
+        "--dangerously-skip-permissions",
+      ]);
+    } finally {
+      f.cleanup();
+    }
+  });
+
+  const forms: Array<
+    [
+      harness: string,
+      effort: string | undefined,
+      form: (m: string, e: string, n: string) => string[],
+    ]
+  > = [
+    [
+      "codex",
+      "high",
+      (m, e) => [
+        "codex",
+        "-m",
+        m,
+        "-c",
+        `model_reasoning_effort="${e}"`,
+        "--dangerously-bypass-approvals-and-sandbox",
+      ],
+    ],
+    ["grok", "high", (m, e) => ["grok", "-m", m, "--reasoning-effort", e, "--always-approve"]],
+    ["agy", undefined, (m) => ["agy", "--model", m, "--dangerously-skip-permissions"]],
+    [
+      "claude",
+      "max",
+      (m, e, n) => [
+        "claude",
+        "--model",
+        m,
+        "--effort",
+        e,
+        "--name",
+        n,
+        "--dangerously-skip-permissions",
+      ],
+    ],
+    ["pi", "high", (m, e, n) => ["pi", "--model", m, "--thinking", e, "--name", n, "--approve"]],
+    ["muse", "high", (m, e) => ["muse", "--model", m, "--reasoning-effort", e, "--yolo"]],
+    ["mimo", undefined, (m) => ["mimo", "-m", m, "--dangerously-skip-permissions"]],
+  ];
+  for (const [harness, effort, form] of forms) {
+    test(`the ${harness} form matches harnesses.md's table`, () => {
+      const f = spawnFixture();
+      try {
+        setPostmaster(f.d, harness, effort);
+        const plan = spawnPlan(f.d, f.root);
+        expect(plan.form).toEqual(form(`${harness}-model`, effort ?? "", "RUN-1 · spec"));
+      } finally {
+        f.cleanup();
+      }
+    });
+  }
+
+  test("spawn refuses a missing spec review and a form whose effort the run did not record", () => {
+    const f = spawnFixture();
+    try {
+      const missing = spawnSync(script, ["spec-session", "spawn", join(f.d, "nowhere"), f.root], {
+        encoding: "utf8",
+      });
+      expect(missing.status).toBe(1);
+      expect(missing.stderr).toContain("no such dir");
+      rmSync(join(f.d, "spec-review.md"));
+      const noReview = spawnSync(script, ["spec-session", "spawn", f.d, f.root], {
+        encoding: "utf8",
+      });
+      expect(noReview.status).toBe(1);
+      expect(noReview.stderr).toContain("no spec review");
+      writeFileSync(join(f.d, "spec-review.md"), "no commit here\n");
+      const noCommit = spawnSync(script, ["spec-session", "spawn", f.d, f.root], {
+        encoding: "utf8",
+      });
+      expect(noCommit.status).toBe(1);
+      expect(noCommit.stderr).toContain("no spec commit");
+    } finally {
+      f.cleanup();
+    }
+  });
+
+  test("spawn without a recorded effort dies for a harness that needs one", () => {
+    const f = spawnFixture();
+    try {
+      setPostmaster(f.d, "claude");
+      const r = spawnSync(script, ["spec-session", "spawn", f.d, f.root], { encoding: "utf8" });
+      expect(r.status).toBe(1);
+      expect(r.stderr).toContain("no effort for team.postmaster");
+    } finally {
+      f.cleanup();
+    }
+  });
+
+  test("spawn reaches host spawn and carries its exit: no session host is exit 3", () => {
+    const f = spawnFixture();
+    try {
+      setPostmaster(f.d, "claude", "max");
+      const r = spawnSync(script, ["spec-session", "spawn", f.d, f.root], {
+        encoding: "utf8",
+        env: { ...process.env, POSTMASTER_HOST: "none" },
+      });
+      expect(r.status).toBe(3);
+      expect(r.stderr).toContain("no Herdr or tmux");
+      expect(r.stdout).not.toContain("spec-RUN-1-");
+    } finally {
+      f.cleanup();
     }
   });
 });
