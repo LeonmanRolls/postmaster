@@ -81,6 +81,16 @@ lens and round, the provider's message and the reset — and `run walls` writes 
 a wall: each is one line here, computable later, rather than a sentence in prose that cannot be
 counted.
 
+**Both logs are append-only.** Never rewrite, delete, relabel or move a line in
+`actions.jsonl` or the project's `ledger.jsonl` — not to tidy a garbled detail, not to retype
+a target. A line that came out garbled stays as it was written; a correction is a new `note`
+line that names it and says what it should have said. A finding's target is its file:line as
+you verified it, taken when you log the `finding` line: two findings at one place take
+differing targets then — a line and a column — never by moving a line that is already logged.
+The ledger beside the run directories holds the same lines and is the control: Stage F reads
+the two against each other, and an `actions.jsonl` that no longer matches it refuses the
+merge.
+
 ## Tool faults: when postmaster itself misbehaves
 
 A tool fault is postmaster misbehaving: a script that fails or answers wrong, a runbook step
@@ -933,6 +943,7 @@ Set the stage first, `<tool>/scripts/run stage <dispatch> review`, then:
            --out <dispatch>/logs/review-r<round>-$LENS-$L.jsonl --err <dispatch>/logs/review-r<round>-$LENS-$L.err \
            --marker <dispatch>/logs/review-r<round>-$LENS-$L.done \
            -- "${LAUNCH[@]}"
+       <tool>/scripts/run log-action <dispatch> coachman review-launch "$L" "$LENS round <round>"
        REVIEWERS+=("$LENS:$L")
      done
    done

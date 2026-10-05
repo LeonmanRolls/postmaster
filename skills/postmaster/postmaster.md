@@ -549,7 +549,9 @@ missed.
    turnpikes match the waybill, `actions.jsonl` has `review-launch` lines under each review lens
    the run's legs name and under no other lens and, where the run has a review leg, a `gate`
    line for each review round that ran (the coachman's own round-snapshot line beside
-   `verify`'s per-check lines), and each other turnpike's result on the card is
+   `verify`'s per-check lines), `actions.jsonl` still matching this run's own lines in
+   `<runs>/ledger.jsonl` — both logs are append-only, so a rewritten or deleted action line
+   refuses the merge — and each other turnpike's result on the card is
    in the record its step writes; when `<tool>/scripts/run turnpikes short '<the waybill's
    turnpikes: line>'` names any default turnpike, the ledger holds the user's word on this
    ticket's turnpikes; where the run has a review leg, `checkpoint-review.md` exists and
