@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { cleanupScratch, commit, email, gitAt, initRepo, runScript } from "./scrub-test-kit.ts";
 
@@ -77,4 +77,36 @@ test("tree check flags raw content even when SCRUB_CHECK_DISABLE is set", () => 
   expect(checked.status).toBe(1);
   expect(checked.stdout).toContain("raw/record.jsonl:1: email");
   expect(checked.stdout + checked.stderr).not.toContain(email());
+});
+
+test("tree check passes a promoter-scrubbed placeholder and logs live reasoning", () => {
+  // Review round 4: the placeholder kept its field, so a promoted record the
+  // promoter accepted still failed the gate; and neither script logged the
+  // reasoning finding, so TELL and the card never saw it.
+  const repo = initRepo();
+  const base = gitAt(repo, ["rev-parse", "HEAD"]);
+  mkdirSync(join(repo, "raw"));
+  writeFileSync(
+    join(repo, "raw", "scrubbed.jsonl"),
+    '{"encrypted_content": "<redacted:encrypted-reasoning>"}\n',
+  );
+  writeFileSync(
+    join(repo, "raw", "live.jsonl"),
+    `${JSON.stringify({ encrypted_content: ["sealed", "text"].join("") })}\n`,
+  );
+  commit(repo, "add scrubbed and live records");
+  const log = join(repo, "detections.jsonl");
+  const checked = runScript("tree-check", [base, "HEAD"], repo, {
+    POSTMASTER_DETECTIONS_LOG: log,
+  });
+  expect(checked.status).toBe(1);
+  expect(checked.stdout).not.toContain("scrubbed.jsonl");
+  expect(checked.stdout).toContain("raw/live.jsonl:1: encrypted-reasoning");
+  const rows = readFileSync(log, "utf8")
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line) as { rule: string; file: string });
+  expect(rows).toHaveLength(1);
+  expect(rows[0]?.rule).toBe("encrypted-reasoning");
+  expect(rows[0]?.file).toBe("raw/live.jsonl");
 });

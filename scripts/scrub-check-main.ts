@@ -9,15 +9,14 @@ import {
   decodeChildText,
   detectLine,
   keyBlockStep,
-  logFinding,
   repositoryRoot,
   resolveCommit,
   runGit,
-  safePath,
   scanLine,
   StreamScanner,
   streamLines,
 } from "./scrub-core.ts";
+import { fail, findingRow, logFinding, safePath } from "./scrub-report.ts";
 
 const USAGE =
   "usage: scrub-check.sh <base> <head> | --files <path>... | --files-inert <path>... | --pr-description <file> | --spans <path>... | --findings <base> <head> | --safe-path <path>... | --log-detection <rule> <file> <line> [<commit>] | --help";
@@ -32,11 +31,6 @@ interface FindingRow {
   content?: string;
   via?: string;
   logOnly?: boolean;
-}
-
-function safeError(message: string): never {
-  console.error(`scrub-check: ${message}`);
-  process.exit(2);
 }
 
 async function citationContext(path: string): Promise<string> {
@@ -61,7 +55,7 @@ async function citationContext(path: string): Promise<string> {
         source = true;
     }
   } catch {
-    safeError(`could not read ${safePath(path)}`);
+    fail("scrub-check", `could not read ${safePath(path)}`);
   }
   return title && source ? "title: citation\nurl: citation" : "";
 }
@@ -79,14 +73,14 @@ function outRows(rows: FindingRow[], machine: boolean): number {
       console.log(
         JSON.stringify({ commit: row.commit, path: row.path, line: row.line, rule: row.rule }),
       );
-    else console.log(`${row.commit}:${safePath(row.path)}:${row.line}: ${row.rule}`);
+    else console.log(`${row.commit}:${findingRow(row.path, row.line, row.rule)}`);
   }
   return rows.length ? 1 : 0;
 }
 
 async function keyBlockLines(commit: string, path: string, root: string): Promise<Set<number>> {
   const child = runGit(["show", `${commit}:${path}`], root);
-  if (!child.stdout) safeError("the requested history could not be read");
+  if (!child.stdout) fail("scrub-check", "the requested history could not be read");
   const closed = new Promise<number>((resolve) => {
     child.once("close", (value) => resolve(value ?? 1));
     child.once("error", () => resolve(1));
@@ -101,7 +95,7 @@ async function keyBlockLines(commit: string, path: string, root: string): Promis
     if (step.flagged) result.add(number);
   }
   const code = await closed;
-  if (code !== 0) safeError("the requested history could not be read");
+  if (code !== 0) fail("scrub-check", "the requested history could not be read");
   return result;
 }
 
@@ -167,7 +161,7 @@ async function* logSections(
   merges: boolean,
 ): AsyncGenerator<LogSection> {
   const child = runGit(logArgs(range, merges), root);
-  if (!child.stdout) safeError("the requested history could not be read");
+  if (!child.stdout) fail("scrub-check", "the requested history could not be read");
   const closed = new Promise<number>((resolve) => {
     child.once("close", (value) => resolve(value ?? 1));
     child.once("error", () => resolve(1));
@@ -221,7 +215,7 @@ async function* logSections(
   }
   const last = emit();
   const code = await closed;
-  if (code !== 0) safeError("the requested history could not be read");
+  if (code !== 0) fail("scrub-check", "the requested history could not be read");
   if (last) yield last;
 }
 
@@ -238,7 +232,8 @@ class CatBatch {
       cwd: this.root,
       stdio: ["pipe", "pipe", "ignore"],
     });
-    if (!child.stdout || !child.stdin) safeError("the requested history could not be read");
+    if (!child.stdout || !child.stdin)
+      fail("scrub-check", "the requested history could not be read");
     this.child = child;
     const stdout = child.stdout as unknown as AsyncIterable<Uint8Array>;
     this.iterator = stdout[Symbol.asyncIterator]();
@@ -247,7 +242,7 @@ class CatBatch {
   private async fill(need: number): Promise<void> {
     while (this.buffer.length < need) {
       const next = await this.iterator!.next();
-      if (next.done) safeError("the requested history could not be read");
+      if (next.done) fail("scrub-check", "the requested history could not be read");
       const chunk = Buffer.from(next.value);
       this.buffer = this.buffer.length ? Buffer.concat([this.buffer, chunk]) : chunk;
     }
@@ -268,12 +263,13 @@ class CatBatch {
   async content(rev: string, path: string): Promise<Buffer | null> {
     await this.ensure();
     const child = this.child!;
-    if (!child.stdin) safeError("the requested history could not be read");
+    if (!child.stdin) fail("scrub-check", "the requested history could not be read");
     child.stdin.write(`${rev}:${path}\n`);
     const header = await this.takeLine();
     if (header.endsWith(" missing")) return null;
     const size = Number(header.split(" ")[2]);
-    if (!Number.isInteger(size) || size < 0) safeError("the requested history could not be read");
+    if (!Number.isInteger(size) || size < 0)
+      fail("scrub-check", "the requested history could not be read");
     await this.fill(size + 1);
     const body = Buffer.from(this.buffer.slice(0, size));
     this.buffer = this.buffer.slice(size + 1);
@@ -442,11 +438,11 @@ async function commitHasExactLine(
       cwd: root,
       stdio: "ignore",
     });
-    if (treeExists.status !== 0) safeError("the requested history could not be read");
+    if (treeExists.status !== 0) fail("scrub-check", "the requested history could not be read");
     return false;
   }
   const child = runGit(["show", `${commit}:${path}`], root);
-  if (!child.stdout) safeError("the requested history could not be read");
+  if (!child.stdout) fail("scrub-check", "the requested history could not be read");
   // The close listener goes on before the first read: a small blob's git
   // exits before the drain ends, and a listener attached after misses it.
   const closed = new Promise<number>((resolve) => {
@@ -456,7 +452,7 @@ async function commitHasExactLine(
   let found = false;
   for await (const line of childLines(child.stdout)) if (line === expected) found = true;
   const code = await closed;
-  if (code !== 0) safeError("the requested history could not be read");
+  if (code !== 0) fail("scrub-check", "the requested history could not be read");
   return found;
 }
 
@@ -563,7 +559,7 @@ async function rangeScan(
 }
 
 async function scanFiles(paths: string[], inert = false, spans = false): Promise<number> {
-  if (paths.length === 0) safeError(USAGE);
+  if (paths.length === 0) fail("scrub-check", USAGE);
   const rows: Array<{
     path: string;
     line: number;
@@ -624,7 +620,7 @@ async function scanFiles(paths: string[], inert = false, spans = false): Promise
           index,
         });
     } catch {
-      safeError(`could not read ${safePath(path)}`);
+      fail("scrub-check", `could not read ${safePath(path)}`);
     }
   }
   rows.sort(
@@ -639,7 +635,7 @@ async function scanFiles(paths: string[], inert = false, spans = false): Promise
       console.log(
         `${row.index}:${row.line}:${codePointOffset(row.text ?? "", row.start ?? 0)}:${codePointOffset(row.text ?? "", row.end ?? 0)}:${row.rule}`,
       );
-    else console.log(`${safePath(row.path)}:${row.line}: ${row.rule}`);
+    else console.log(findingRow(row.path, row.line, row.rule));
   }
   return spans ? 0 : rows.length ? 1 : 0;
 }
@@ -655,7 +651,7 @@ async function prDescription(path: string): Promise<number> {
       }
     }
   } catch {
-    safeError(`could not read ${safePath(path)}`);
+    fail("scrub-check", `could not read ${safePath(path)}`);
   }
   rows.sort((a, b) => a.line - b.line || a.rule.localeCompare(b.rule));
   for (const row of rows) console.log(`(pr-description):${row.line}: ${row.rule}`);
@@ -663,14 +659,14 @@ async function prDescription(path: string): Promise<number> {
 }
 
 function logOne(args: string[]): number {
-  if (args.length < 3 || args.length > 4) safeError(USAGE);
+  if (args.length < 3 || args.length > 4) fail("scrub-check", USAGE);
   const [rule, file, line, commit = ""] = args;
   if (!rule || !file || !/^[0-9]+$/u.test(line ?? "") || !/^(?:[0-9a-f]{40})?$/u.test(commit))
-    safeError("invalid detection record");
+    fail("scrub-check", "invalid detection record");
   try {
     logFinding(rule, file, Number(line), commit);
   } catch {
-    safeError("could not write detections log");
+    fail("scrub-check", "could not write detections log");
   }
   return 0;
 }
@@ -704,7 +700,7 @@ async function main(args: string[]): Promise<number> {
       resolveCommit(args[1]!, root),
       false,
     );
-  safeError(USAGE);
+  fail("scrub-check", USAGE);
 }
 
 if (import.meta.main) {
@@ -716,4 +712,5 @@ if (import.meta.main) {
   }
 }
 
-export { scanLine, streamLines, detectLine, safePath, decodeBytes, codePointOffset };
+export { scanLine, streamLines, detectLine, decodeBytes, codePointOffset };
+export { safePath } from "./scrub-report.ts";

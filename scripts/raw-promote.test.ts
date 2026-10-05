@@ -3,7 +3,9 @@ import { mkdirSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from
 import { join } from "node:path";
 import {
   cleanupScratch,
+  commit,
   email,
+  gitAt,
   initRepo,
   marker,
   runScript,
@@ -140,4 +142,33 @@ test("promotion refuses a destination under a symlinked directory", () => {
   expect(refused.status).toBe(2);
   expect(refused.stdout + refused.stderr).toContain("symlink");
   expect(readdirSync(outside)).toEqual([]);
+});
+
+test("promotion logs its reasoning redactions and the copy passes the tree check", () => {
+  // Review round 4: the promoter never logged its encrypted-reasoning
+  // redactions, and the tree check flagged the placeholder it writes, so a
+  // promotion that returned success still failed the gate.
+  const repo = initRepo();
+  const base = gitAt(repo, ["rev-parse", "HEAD"]);
+  const source = join(scratchDir(), "source");
+  mkdirSync(source);
+  writeFileSync(
+    join(source, "trace.jsonl"),
+    `${JSON.stringify({ encrypted_content: ["sealed", "text"].join("") })}\n`,
+  );
+  const log = join(scratchDir(), "detections.jsonl");
+  const copied = runScript("raw-promote", [source, "raw/trace"], repo, {
+    POSTMASTER_DETECTIONS_LOG: log,
+  });
+  expect(copied.status).toBe(0);
+  const rows = readFileSync(log, "utf8")
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line) as { rule: string });
+  expect(rows).toHaveLength(1);
+  expect(rows[0]?.rule).toBe("encrypted-reasoning");
+  commit(repo, "promote scrubbed trace");
+  const checked = runScript("tree-check", [base, "HEAD"], repo);
+  expect(checked.status).toBe(0);
+  expect(checked.stdout).toBe("");
 });

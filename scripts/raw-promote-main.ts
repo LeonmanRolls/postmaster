@@ -14,15 +14,16 @@ import {
 } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { randomBytes } from "node:crypto";
-import {
-  git,
-  keyBlockStep,
-  logFinding,
-  safePath,
-  StreamScanner,
-  streamLines,
-} from "./scrub-core.ts";
+import { git, keyBlockStep, StreamScanner, streamLines } from "./scrub-core.ts";
 import { pyLower } from "./lib/text.ts";
+import {
+  fail,
+  findingRow,
+  logFinding,
+  replaceReset,
+  REASONING_PLACEHOLDER,
+  safePath,
+} from "./scrub-report.ts";
 
 const USAGE = "usage: raw-promote.sh <src> <dest> | --help";
 
@@ -48,7 +49,6 @@ function repoRoot(): string {
   return git(["rev-parse", "--show-toplevel"]).toString("utf8").trim();
 }
 
-const PLACEHOLDER = "<redacted:encrypted-reasoning>";
 const ALLOW_MARKER =
   /(?:<!--|#|\/\/)?[ \t]*private-data:allow(?:-next-line)?[ \t]+[^ \t]+[ \t]+--[ \t]+[^\r\n]*(?:-->)?$/gu;
 
@@ -61,11 +61,6 @@ function parsesAsJson(text: string): boolean {
   } catch {
     return false;
   }
-}
-
-function fail(message: string, code = 2): never {
-  console.error(`raw-promote: ${message}`);
-  process.exit(code);
 }
 
 interface FileScan {
@@ -166,8 +161,8 @@ function transformReasoning(value: unknown): { value: unknown; count: number } {
       (type === "thinking" && key === "signature") ||
       (type === "redacted_thinking" && key === "data")
     ) {
-      result[key] = item === PLACEHOLDER ? item : PLACEHOLDER;
-      if (item !== PLACEHOLDER) count++;
+      result[key] = item === REASONING_PLACEHOLDER ? item : REASONING_PLACEHOLDER;
+      if (item !== REASONING_PLACEHOLDER) count++;
     } else {
       const next = transformReasoning(item);
       result[key] = next.value;
@@ -213,12 +208,11 @@ async function inspectFile(path: string, report: boolean): Promise<FileScan> {
     // A valid marker is stripped on copy; when the strip would break a JSON
     // row's syntax the placement is refused instead of publishing a
     // malformed record.
-    ALLOW_MARKER.lastIndex = 0;
-    const stripped = line.text.replace(ALLOW_MARKER, "");
-    ALLOW_MARKER.lastIndex = 0;
+    const stripped = replaceReset(ALLOW_MARKER, line.text, "");
     if (stripped !== line.text && parsesAsJson(line.text) && !parsesAsJson(stripped))
       faults.push(`${line.number}: marker`);
     if (report) {
+      if (reasoned.count) logFinding("encrypted-reasoning", path, line.number, "");
       for (const finding of result.findings) logFinding(finding.rule, path, line.number, "");
       for (const finding of result.suppressed)
         logFinding(finding.rule, path, line.number, "", "marker");
@@ -284,15 +278,14 @@ async function writeScrubbed(source: string, target: string, destLabel: string):
       const reasoned = redactReasoning(line.text);
       let text = reasoned.text;
       if (reasoned.count)
-        reports.push(`${safePath(destLabel)}:${line.number}: encrypted-reasoning scrubbed`);
+        reports.push(`${findingRow(destLabel, line.number, "encrypted-reasoning")} scrubbed`);
       const key = keyBlockStep(text, inKeyBlock);
       inKeyBlock = key.inBlock;
       const result = scanner.feed(line.number, text, { keyBlock: key.flagged });
       const replaced = replaceFindings(text, [...result.findings, ...result.suppressed]);
       for (const rule of replaced.rules)
-        reports.push(`${safePath(destLabel)}:${line.number}: ${rule} scrubbed`);
-      ALLOW_MARKER.lastIndex = 0;
-      text = replaced.text.replace(ALLOW_MARKER, "");
+        reports.push(`${findingRow(destLabel, line.number, rule)} scrubbed`);
+      text = replaceReset(ALLOW_MARKER, replaced.text, "");
       writeFileSync(fd, text, "utf8");
       if (line.newline) writeFileSync(fd, "\n", "utf8");
     }
@@ -328,7 +321,7 @@ async function main(args: string[]): Promise<number> {
     console.error(USAGE);
     return 0;
   }
-  if (args.length !== 2) fail(USAGE);
+  if (args.length !== 2) fail("raw-promote", USAGE);
   const root = repoRoot();
   const source = resolve(args[0]!);
   const dest = resolve(root, args[1]!);
@@ -340,7 +333,7 @@ async function main(args: string[]): Promise<number> {
     !relDest.startsWith("raw/") ||
     relDest === "raw/"
   )
-    fail("destination must be a new path under raw/");
+    fail("raw-promote", "destination must be a new path under raw/");
   // A lexical check cannot see through symlinks: refuse ancestors that leave
   // the checkout before mkdir or rename follows them.
   const parts = relDest.split("/");
@@ -352,15 +345,15 @@ async function main(args: string[]): Promise<number> {
     } catch {
       continue; // not created yet; mkdir below makes a real directory
     }
-    if (linked) fail("destination must not pass through a symlink");
+    if (linked) fail("raw-promote", "destination must not pass through a symlink");
   }
-  if (existsSync(dest)) fail("destination already exists");
+  if (existsSync(dest)) fail("raw-promote", "destination already exists");
   let sourceFiles: Array<{ source: string; relative: string }>;
   try {
     sourceFiles = entries(source);
-    if (!sourceFiles.length) fail("source is empty");
+    if (!sourceFiles.length) fail("raw-promote", "source is empty");
   } catch {
-    fail(`source is not a regular file or directory: ${safePath(args[0]!)}`);
+    fail("raw-promote", `source is not a regular file or directory: ${safePath(args[0]!)}`);
   }
   const issues: string[] = [];
   const changed = new Set<string>();
@@ -407,7 +400,7 @@ async function main(args: string[]): Promise<number> {
     }
     if (existsSync(dest)) {
       rmSync(staging, { recursive: true, force: true });
-      fail("destination already exists");
+      fail("raw-promote", "destination already exists");
     }
     renameSync(staging, dest);
     reports.sort();
@@ -415,7 +408,7 @@ async function main(args: string[]): Promise<number> {
     return 0;
   } catch {
     if (existsSync(staging)) rmSync(staging, { recursive: true, force: true });
-    fail("copy could not be completed");
+    fail("raw-promote", "copy could not be completed");
   }
 }
 

@@ -5,13 +5,12 @@ import {
   decodeChildText,
   git,
   keyBlockStep,
-  logFinding,
   resolveCommit,
   runGit,
-  safePath,
   StreamScanner,
 } from "./scrub-core.ts";
 import { pyWords } from "./lib/text.ts";
+import { fail, findingRow, logFinding, REASONING_PLACEHOLDER, safePath } from "./scrub-report.ts";
 
 const EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 const USAGE = "usage: tree-check.sh [<base> [<head>]] | --help";
@@ -22,11 +21,6 @@ function disabled(rule: string): boolean {
     (process.env.SCRUB_CHECK_DISABLE ?? "").replaceAll(",", " ").split(" ").filter(Boolean),
   );
   return DISABLED.has(rule);
-}
-
-function fail(message: string): never {
-  console.error(`tree-check: ${message}`);
-  process.exit(2);
 }
 
 function hasReasoning(value: unknown): boolean {
@@ -51,10 +45,14 @@ function hasReasoning(value: unknown): boolean {
     if (typeof current !== "object" || current === null) continue;
     const object = current as Record<string, unknown>;
     const type = typeof object.type === "string" ? object.type : "";
+    // A field the promoter already scrubbed holds exactly the placeholder and
+    // nothing else, so it flags nothing; anything else in the field still flags.
     if (
-      "encrypted_content" in object ||
-      (type === "thinking" && "signature" in object) ||
-      (type === "redacted_thinking" && "data" in object)
+      ("encrypted_content" in object && object.encrypted_content !== REASONING_PLACEHOLDER) ||
+      (type === "thinking" &&
+        "signature" in object &&
+        object.signature !== REASONING_PLACEHOLDER) ||
+      (type === "redacted_thinking" && "data" in object && object.data !== REASONING_PLACEHOLDER)
     )
       return true;
     for (const item of Object.values(object)) stack.push(item);
@@ -69,7 +67,7 @@ async function scanBlob(
   commit: string,
 ): Promise<string[]> {
   const child = runGit(["show", object], root);
-  if (!child.stdout) fail("the tree could not be read");
+  if (!child.stdout) fail("tree-check", "the tree could not be read");
   // The close listener goes on before the first read: a small blob's git
   // exits before the drain ends, and a listener attached after misses it.
   const closed = new Promise<number>((resolve) => {
@@ -86,7 +84,10 @@ async function scanBlob(
     if (!disabled("encrypted-reasoning")) {
       try {
         const parsed = JSON.parse(text) as unknown;
-        if (hasReasoning(parsed)) failures.push(`${safePath(path)}:${line}: encrypted-reasoning`);
+        if (hasReasoning(parsed)) {
+          failures.push(findingRow(path, line, "encrypted-reasoning"));
+          logFinding("encrypted-reasoning", path, line, commit);
+        }
       } catch {
         /* non-JSON raw records are scanned as text */
       }
@@ -95,15 +96,15 @@ async function scanBlob(
     inBlock = key.inBlock;
     const result = scanner.feed(line, text, { keyBlock: key.flagged });
     for (const f of result.findings) {
-      failures.push(`${safePath(path)}:${line}: ${f.rule}`);
+      failures.push(findingRow(path, line, f.rule));
       if (f.rule !== "marker") logFinding(f.rule, path, line, commit);
     }
     for (const f of result.suppressed) logFinding(f.rule, path, line, commit, "marker");
-    for (const marker of result.markers) failures.push(`${safePath(path)}:${line}: marker`);
+    for (const marker of result.markers) failures.push(findingRow(path, line, "marker"));
   }
-  for (const marker of scanner.flush()) failures.push(`${safePath(path)}:${line || 1}: marker`);
+  for (const marker of scanner.flush()) failures.push(findingRow(path, line || 1, "marker"));
   const status = await closed;
-  if (status !== 0) fail("the tree could not be read");
+  if (status !== 0) fail("tree-check", "the tree could not be read");
   return failures;
 }
 
@@ -183,7 +184,7 @@ export async function checkTree(root: string, base: string, head: string): Promi
   for (const { commit, path } of rawAdds) {
     const nameFindings = await import("./scrub-core.ts").then((m) => m.detectLine(path));
     for (const finding of nameFindings) {
-      failures.push(`${safePath(path)}:0: ${finding.rule}`);
+      failures.push(findingRow(path, 0, finding.rule));
       logFinding(finding.rule, path, 0, commit);
     }
     const object = commit ? `${commit}:${path}` : `:${path}`;
@@ -201,7 +202,7 @@ async function main(args: string[]): Promise<number> {
     console.error(USAGE);
     return 0;
   }
-  if (args.length > 2) fail(USAGE);
+  if (args.length > 2) fail("tree-check", USAGE);
   const root = git(["rev-parse", "--show-toplevel"]).toString("utf8").trim();
   const base = args[0] ? resolveCommit(args[0], root) : resolveCommit("origin/main", root);
   const head = args[1] ? resolveCommit(args[1], root) : resolveCommit("HEAD", root);

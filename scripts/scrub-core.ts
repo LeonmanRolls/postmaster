@@ -1,8 +1,7 @@
-import { closeSync, mkdirSync, openSync, writeFileSync } from "node:fs";
 import { spawn, spawnSync } from "node:child_process";
-import { dirname } from "node:path";
 import { scan as scanPersonal } from "./scrub-patterns.ts";
 import { BOUND_L, BOUND_R, PY_S_CLASS, pyLower, pyWords } from "./lib/text.ts";
+import { execReset, scanReset, testReset } from "./scrub-report.ts";
 
 export const RULES = new Set([
   "key",
@@ -671,9 +670,7 @@ function tokenFindings(line: string, out: Finding[]): void {
       add(out, m.index ?? 0, (m.index ?? 0) + m[0].length, "token", m[0]);
   }
 
-  FIELD_VALUE.lastIndex = 0;
-  let match: RegExpExecArray | null;
-  while ((match = FIELD_VALUE.exec(line)) !== null) {
+  for (const match of scanReset(FIELD_VALUE, line)) {
     const kind = kindForField(match.groups?.name ?? "");
     if (!kind) continue;
     const { value, start } = valueFromField(match);
@@ -697,11 +694,10 @@ function tokenFindings(line: string, out: Finding[]): void {
         new RegExp(`^${SPACE}*(?:const|let|var|return|export)${BOUND_R}`, "u").test(line))
     )
       continue;
-    if (kind === "key" && !quoted && !/[0-9]/u.test(value) && !MAIL.test(value)) continue;
+    if (kind === "key" && !quoted && !/[0-9]/u.test(value) && !testReset(MAIL, value)) continue;
     if (kind === "key" && !value.includes("@") && /[,;]/u.test(value)) continue;
     if (value.startsWith("/") || value.startsWith("[") || /[(){}]/u.test(value)) continue;
-    MAIL.lastIndex = 0;
-    if (kind === "key" && MAIL.test(value) && isPublicAddress(value)) continue;
+    if (kind === "key" && testReset(MAIL, value) && isPublicAddress(value)) continue;
     if (
       kind === "token" &&
       (!/^[A-Za-z0-9_./+=&;|$`()\]<>"'-]{20,}$/u.test(value) ||
@@ -712,8 +708,7 @@ function tokenFindings(line: string, out: Finding[]): void {
     add(out, start, start + value.length, kind, value);
   }
 
-  DOTENV_LINE.lastIndex = 0;
-  const env = DOTENV_LINE.exec(line);
+  const env = execReset(DOTENV_LINE, line);
   if (env) {
     const name = pyLower(env[1]!);
     const words = name.split(/[_-]+/u);
@@ -873,9 +868,7 @@ function privateFindings(line: string, out: Finding[]): void {
       add(out, m.index ?? 0, (m.index ?? 0) + m[0].length, "account-id", m[0]);
     }
   }
-  FIELD_VALUE.lastIndex = 0;
-  let field: RegExpExecArray | null;
-  while ((field = FIELD_VALUE.exec(line)) !== null) {
+  for (const field of scanReset(FIELD_VALUE, line)) {
     const name = pyLower(field.groups?.name ?? "").replace(/[-.]/gu, "_");
     if (
       !/(?:account|org|organization|session|credential|identity|user)_?(?:id|uuid|guid)$/u.test(
@@ -937,8 +930,7 @@ function stripAnsi(
   const nextMap: Array<[number, number]> | null = map === null ? [] : [];
   const extras: Array<{ text: string; map: Array<[number, number]> | null }> = [];
   let cursor = 0;
-  ANSI.lastIndex = 0;
-  for (const match of text.matchAll(ANSI)) {
+  for (const match of scanReset(ANSI, text)) {
     const start = match.index ?? 0;
     chunks.push(text.slice(cursor, start));
     for (let i = cursor; i < start; i++) nextMap.push(map?.[i] ?? [i, i + 1]);
@@ -1123,7 +1115,7 @@ interface ParsedMarker {
 }
 function markersIn(text: string): ParsedMarker[] {
   if (!text.includes("private-data:allow")) return [];
-  const starts = [...text.matchAll(MARKER_HEAD)].map((m) => m.index ?? 0);
+  const starts = [...scanReset(MARKER_HEAD, text)].map((m) => m.index ?? 0);
   return starts.map((start, i) => {
     const end = starts[i + 1] ?? text.length;
     const body = MARKER_BODY.exec(text.slice(start, end));
@@ -1246,42 +1238,6 @@ export function scanLine(
       valid,
     })),
   };
-}
-
-export function safePath(path: string): string {
-  const matches = detectLine(path).sort((a, b) => a.start - b.start || b.end - a.end);
-  let out = "";
-  let cursor = 0;
-  for (const f of matches) {
-    if (f.start < cursor) continue;
-    out += path.slice(cursor, f.start) + "[redacted]";
-    cursor = f.end;
-  }
-  return out + path.slice(cursor);
-}
-
-export function logFinding(rule: string, file: string, line: number, commit = "", via = ""): void {
-  const log = process.env.POSTMASTER_DETECTIONS_LOG;
-  if (!log) return;
-  const record: Record<string, unknown> = {
-    rule,
-    file: safePath(file),
-    line,
-    commit,
-    time: new Date().toISOString(),
-  };
-  if (via) record.via = via;
-  try {
-    mkdirSync(dirname(log), { recursive: true });
-    const fd = openSync(log, "a", 0o600);
-    try {
-      writeFileSync(fd, `${JSON.stringify(record)}\n`, "utf8");
-    } finally {
-      closeSync(fd);
-    }
-  } catch {
-    throw new Error("could not write detections log");
-  }
 }
 
 export class StreamScanner {

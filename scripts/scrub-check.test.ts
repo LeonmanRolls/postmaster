@@ -3,6 +3,7 @@ import {
   accessSync,
   closeSync,
   constants,
+  existsSync,
   mkdirSync,
   openSync,
   readFileSync,
@@ -410,6 +411,21 @@ test("C14 and C16 marked file values pass, while marked messages and post text r
   expect(comment.status).toBe(1);
   expect(comment.stdout.trim()).toBe("(pr-description):1: email");
   expect(!comment.stdout.includes(email())).toBe(true);
+});
+
+test("a dirty draft scan reports its rows but leaves the detections log clean", () => {
+  // Review round 4: the draft rows landed in detections.jsonl, fired TELL and
+  // died the card block, although a draft is reworded, never resolved.
+  const repo = initRepo();
+  const draftPath = join(repo, "draft.txt");
+  writeFileSync(draftPath, `draft ${email()}\n`);
+  const log = join(repo, "detections.jsonl");
+  const draft = runScript("scrub-check", ["--pr-description", draftPath], repo, {
+    POSTMASTER_DETECTIONS_LOG: log,
+  });
+  expect(draft.status).toBe(1);
+  expect(draft.stdout.trim()).toBe("(pr-description):1: email");
+  expect(existsSync(log)).toBe(false);
 });
 
 test("C15 stale and malformed markers fault only beside findings", () => {

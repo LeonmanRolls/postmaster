@@ -1,17 +1,10 @@
 #!/usr/bin/env bun
 // Rewrites unpushed history without findings that have already left the tip tree.
-import {
-  existsSync,
-  lstatSync,
-  mkdirSync,
-  readFileSync,
-  renameSync,
-  unlinkSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, lstatSync, mkdirSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { createHash, randomBytes } from "node:crypto";
 import { dirname, join, resolve } from "node:path";
-import { git, repositoryRoot, resolveCommit, safePath } from "./scrub-core.ts";
+import { git, repositoryRoot, resolveCommit } from "./scrub-core.ts";
+import { errorText, findingRow, safePath } from "./scrub-report.ts";
 import { run } from "./lib/proc.ts";
 import { pyWords } from "./lib/text.ts";
 
@@ -37,7 +30,7 @@ interface SuspectLine {
 
 class RewriteError extends Error {}
 function fail(message: string): never {
-  throw new RewriteError(`scrub-rewrite: ${message}`);
+  throw new RewriteError(errorText("scrub-rewrite", message));
 }
 
 function runCommand(
@@ -198,8 +191,17 @@ function originalCommitMetadata(
     committerName: fields[3]!,
     committerEmail /*split*/: fields[4]!,
     committerDate: fields[5]!,
-    message: git(["show", "-s", "--format=%B", commit], root).toString("utf8"),
+    message: commitMessage(commit, root),
   };
+}
+
+function commitMessage(commit: string, root: string): string {
+  // show -s --format=%B appends one newline past the stored message, so every
+  // recreated commit gained a newline and a new id; cat-file reads it byte-exact.
+  const raw = git(["cat-file", "commit", commit], root).toString("utf8");
+  const at = raw.indexOf("\n\n");
+  if (at < 0) fail("the original history could not be read");
+  return raw.slice(at + 2);
 }
 
 function createCommit(
@@ -421,7 +423,7 @@ async function main(args: string[]): Promise<number> {
     }
   }
   for (const item of found)
-    console.log(`${item.commit}:${safePath(item.path)}:${item.line}: ${item.rule} removed`);
+    console.log(`${item.commit}:${findingRow(item.path, item.line, item.rule)} removed`);
   return 0;
 }
 

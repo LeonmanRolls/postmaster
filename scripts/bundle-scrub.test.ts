@@ -27,3 +27,44 @@ test("bundle check fails when a bundle body is edited under a kept header", () =
   const fresh = runScript("bundle-scrub", ["--check"], import.meta.dir);
   expect(fresh.status).toBe(0);
 });
+
+test("bundle check fails when the header's second line is replaced", () => {
+  // Review round 4: the body digest started below the second header line, so
+  // code placed there passed --check. The tamper is a comment: inert if
+  // another test executes the bundle inside the window, and always restored.
+  const original = readFileSync(BUNDLE, "utf8");
+  try {
+    const lines = original.split("\n");
+    const at = lines[0]?.startsWith("#!") ? 1 : 0;
+    lines[at + 1] = "// tampered second header line";
+    writeFileSync(BUNDLE, lines.join("\n"));
+    const checked = runScript("bundle-scrub", ["--check"], import.meta.dir);
+    expect(checked.status).toBe(1);
+    expect(checked.stderr).toContain("is stale");
+  } finally {
+    writeFileSync(BUNDLE, original);
+  }
+  const fresh = runScript("bundle-scrub", ["--check"], import.meta.dir);
+  expect(fresh.status).toBe(0);
+});
+
+test("bundle check fails when code trails the header's first line", () => {
+  // Review round 4: the header pattern had no end anchor, so trailing code
+  // on the GENERATED line passed --check. The tamper is a trailing comment:
+  // inert if another test executes the bundle inside the window, and always
+  // restored.
+  const original = readFileSync(BUNDLE, "utf8");
+  try {
+    const lines = original.split("\n");
+    const at = lines[0]?.startsWith("#!") ? 1 : 0;
+    lines[at] = `${lines[at]} // tampered`;
+    writeFileSync(BUNDLE, lines.join("\n"));
+    const checked = runScript("bundle-scrub", ["--check"], import.meta.dir);
+    expect(checked.status).toBe(1);
+    expect(checked.stderr).toContain("is stale");
+  } finally {
+    writeFileSync(BUNDLE, original);
+  }
+  const fresh = runScript("bundle-scrub", ["--check"], import.meta.dir);
+  expect(fresh.status).toBe(0);
+});

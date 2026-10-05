@@ -84,7 +84,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { scriptsDir } from "./lib/paths.ts";
 import { run } from "./lib/proc.ts";
-import { safePath } from "./scrub-core.ts";
+import { errorText, safePath } from "./scrub-report.ts";
 import {
   D_CLASS,
   END_OF_STRING,
@@ -121,7 +121,7 @@ class LandingFailure extends Error {
 }
 
 function die(msg: string): never {
-  throw new LandingFailure(`landing: ${msg}`, 1);
+  throw new LandingFailure(errorText("landing", msg), 1);
 }
 
 function usage(msg: string): never {

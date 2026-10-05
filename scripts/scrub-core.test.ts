@@ -513,3 +513,11 @@ test("a pattern-code line exempts only the pattern, never trailing values", () =
   expect(rules("const EMAIL = /.+/;")).toEqual([]);
   expect(rules(`const EMAIL = /.+${email()}/;`)).toEqual([]);
 });
+
+test("successive bare key fields each flag key: no lastIndex leaks between lines", () => {
+  // Review round 4: MAIL.test on the shared global regex left lastIndex dirty,
+  // so the second of two bare key-kind fields passed unseen.
+  expect(rules(`email: ${email()}`)).toContain("key");
+  expect(rules(`mail: ${email()}`)).toContain("key");
+  expect(rules(`email: ${email()}`)).toContain("key");
+});

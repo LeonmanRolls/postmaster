@@ -86,3 +86,42 @@ test("rewrite refuses to write through a symlinked path", () => {
   expect(refused.stdout + refused.stderr).not.toContain(email());
   expect(readdirSync(repo)).not.toContain(target);
 });
+
+test("rewrite refusal redacts a value carried in a parenthesized file name", () => {
+  // Review round 4: the manual-reword refusal printed the raw path, showing
+  // the finding's value on stderr against the ticket's rule 10.
+  const repo = initRepo();
+  const base = gitAt(repo, ["rev-parse", "HEAD"]);
+  writeFileSync(join(repo, `(${email()}`), "clean\n");
+  commit(repo, "add parenthesized name");
+  const refused = runScript("scrub-rewrite", [base], repo);
+  expect(refused.status).toBe(2);
+  expect(refused.stderr).toContain("needs a manual reword");
+  expect(refused.stdout + refused.stderr).not.toContain(email());
+});
+
+test("rewrite keeps untouched commits byte-identical, with or without a trailing newline", () => {
+  // Review round 4: show --format=%B appends one newline past the stored
+  // message, so every recreated commit gained a newline and a new id.
+  const repo = initRepo();
+  const base = gitAt(repo, ["rev-parse", "HEAD"]);
+  writeFileSync(join(repo, "plain.txt"), "plain\n");
+  gitAt(repo, ["add", "-A"]);
+  gitAt(repo, ["commit", "-q", "-m", "normal ancestor"]);
+  const normal = gitAt(repo, ["rev-parse", "HEAD"]);
+  writeFileSync(join(repo, "odd.txt"), "odd\n");
+  gitAt(repo, ["add", "-A"]);
+  const tree = gitAt(repo, ["write-tree"]);
+  writeFileSync(join(repo, "msg.txt"), "no trailing newline");
+  const bare = gitAt(repo, ["commit-tree", tree, "-p", "HEAD", "-F", "msg.txt"]);
+  gitAt(repo, ["update-ref", "refs/heads/main", bare]);
+  gitAt(repo, ["reset", "-q", "--hard", bare]);
+  writeFileSync(join(repo, "notes.txt"), email());
+  commit(repo, "add temporary note");
+  writeFileSync(join(repo, "notes.txt"), "clean\n");
+  commit(repo, "remove temporary note");
+  const rewritten = runScript("scrub-rewrite", [base], repo);
+  expect(rewritten.status).toBe(0);
+  expect(gitAt(repo, ["log", "--format=%H", "--grep=normal ancestor", "HEAD"])).toBe(normal);
+  expect(gitAt(repo, ["log", "--format=%H", "--grep=no trailing newline", "HEAD"])).toBe(bare);
+});
