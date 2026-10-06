@@ -10,7 +10,8 @@ import {
   StreamScanner,
 } from "./scrub-core.ts";
 import { pyWords } from "./lib/text.ts";
-import { fail, findingRow, logFinding, REASONING_PLACEHOLDER, safePath } from "./scrub-report.ts";
+import { hasReasoning } from "./scrub-reasoning.ts";
+import { fail, findingRow, logFinding, safePath } from "./scrub-report.ts";
 
 const EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 const USAGE = "usage: tree-check.sh [<base> [<head>]] | --help";
@@ -21,43 +22,6 @@ function disabled(rule: string): boolean {
     (process.env.SCRUB_CHECK_DISABLE ?? "").replaceAll(",", " ").split(" ").filter(Boolean),
   );
   return DISABLED.has(rule);
-}
-
-function hasReasoning(value: unknown): boolean {
-  // Iterative and uncapped: a depth limit here is a bypass by nesting.
-  const stack: unknown[] = [value];
-  while (stack.length) {
-    const current = stack.pop()!;
-    if (typeof current === "string") {
-      const trimmed = current.trim();
-      if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) continue;
-      try {
-        stack.push(JSON.parse(current) as unknown);
-      } catch {
-        /* not pure JSON; the text scan covers the line */
-      }
-      continue;
-    }
-    if (Array.isArray(current)) {
-      for (const item of current) stack.push(item);
-      continue;
-    }
-    if (typeof current !== "object" || current === null) continue;
-    const object = current as Record<string, unknown>;
-    const type = typeof object.type === "string" ? object.type : "";
-    // A field the promoter already scrubbed holds exactly the placeholder and
-    // nothing else, so it flags nothing; anything else in the field still flags.
-    if (
-      ("encrypted_content" in object && object.encrypted_content !== REASONING_PLACEHOLDER) ||
-      (type === "thinking" &&
-        "signature" in object &&
-        object.signature !== REASONING_PLACEHOLDER) ||
-      (type === "redacted_thinking" && "data" in object && object.data !== REASONING_PLACEHOLDER)
-    )
-      return true;
-    for (const item of Object.values(object)) stack.push(item);
-  }
-  return false;
 }
 
 async function scanBlob(
@@ -150,15 +114,17 @@ export async function checkTree(root: string, base: string, head: string): Promi
       return { commit: commit!, parents };
     });
   const privatePaths = new Map<string, string>();
-  const rawAdds: Array<{ commit: string; path: string }> = [];
+  const rawScans: Array<{ commit: string; path: string }> = [];
   for (const { commit, parents } of commits) {
     const compare = parents.length ? parents : [EMPTY_TREE];
     for (const parent of compare) {
       for (const item of commitPaths(root, parent, commit)) {
         if (item.path.startsWith(".postmaster/") && item.path !== ".postmaster/project.toml")
           privatePaths.set(item.path, commit);
-        if (item.status === "A" && item.path.startsWith("raw/"))
-          rawAdds.push({ commit, path: item.path });
+        // Additions and modifications alike: an edit can smuggle reasoning
+        // into a record the promoter already wrote.
+        if ((item.status === "A" || item.status === "M") && item.path.startsWith("raw/"))
+          rawScans.push({ commit, path: item.path });
       }
     }
   }
@@ -174,14 +140,15 @@ export async function checkTree(root: string, base: string, head: string): Promi
     const path = staged[i + 1]!;
     if (path.startsWith(".postmaster/") && path !== ".postmaster/project.toml")
       privatePaths.set(path, "staged");
-    if (status === "A" && path.startsWith("raw/")) rawAdds.push({ commit: "", path });
+    if ((status === "A" || status === "M") && path.startsWith("raw/"))
+      rawScans.push({ commit: "", path });
   }
   const failures: string[] = [];
   for (const [path, commit] of privatePaths)
     failures.push(
       `${safePath(path)}: ${commit === "staged" ? "staged" : "committed under .postmaster/"}`,
     );
-  for (const { commit, path } of rawAdds) {
+  for (const { commit, path } of rawScans) {
     const nameFindings = await import("./scrub-core.ts").then((m) => m.detectLine(path));
     for (const finding of nameFindings) {
       failures.push(findingRow(path, 0, finding.rule));

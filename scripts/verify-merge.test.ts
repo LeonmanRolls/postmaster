@@ -1,8 +1,16 @@
 import { afterEach, expect, test } from "bun:test";
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
-import { cleanupScratch, commit, gitAt, initRepo, phone, runScript } from "./scrub-test-kit.ts";
+import {
+  cleanupScratch,
+  commit,
+  gitAt,
+  initRepo,
+  phone,
+  runScript,
+  scratchDir,
+} from "./scrub-test-kit.ts";
 
 afterEach(cleanupScratch);
 
@@ -52,4 +60,20 @@ test("verify-merge rejects a merge resolution that adds private data", () => {
   expect(result.stdout).toContain(":base.txt:1: phone");
   expect(result.stdout).not.toContain(phone());
   expect(result.stderr).toBe("");
+});
+
+test("verify-merge logs its findings to the named dispatch", () => {
+  // Review round 5: the merge scans ran with no detections log, so a
+  // merge-only finding printed but TELL and the card never saw it.
+  const repo = mergedChange(phone(), true);
+  const dispatch = scratchDir();
+  const result = runScript("verify-merge", [repo, "HEAD", "--dispatch", dispatch], repo);
+  expect(result.status).toBe(1);
+  const rows = readFileSync(join(dispatch, "detections.jsonl"), "utf8")
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line) as { rule: string; file: string });
+  expect(rows).toHaveLength(1);
+  expect(rows[0]?.rule).toBe("phone");
+  expect(rows[0]?.file).toBe("base.txt");
 });

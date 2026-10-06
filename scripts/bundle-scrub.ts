@@ -20,7 +20,13 @@ import { fileURLToPath } from "node:url";
 import { errorText, fail } from "./scrub-report.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const SOURCES = ["scrub-core.ts", "scrub-patterns.ts", "scrub-report.ts", join("lib", "text.ts")];
+const SOURCES = [
+  "scrub-core.ts",
+  "scrub-patterns.ts",
+  "scrub-reasoning.ts",
+  "scrub-report.ts",
+  join("lib", "text.ts"),
+];
 const ENTRIES = [
   { main: "scrub-check-main.ts", out: "scrub-check.ts" },
   { main: "raw-promote-main.ts", out: "raw-promote.ts" },

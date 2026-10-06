@@ -631,7 +631,7 @@ gate.
      diff stat, review link, thread ids), logging `ticket-comment`; scan it as above and fix
      every finding before posting. Merge the ticket branch
      with `git merge --no-ff`; never rebase. Then run
-     `<tool>/scripts/verify-merge.sh <repo> HEAD`. On a finding, keep the merge local and
+     `<tool>/scripts/verify-merge.sh <repo> HEAD --dispatch <dispatch>`. On a finding, keep the merge local and
      withhold landing; resume the coachman with the safe finding lines, then repeat the card
      check and merge verification after the correction. Log `merge`, move the ticket to done, logging
      `ticket-state`, remove `.card-ready`, and set the stage with

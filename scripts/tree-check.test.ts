@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { cleanupScratch, commit, email, gitAt, initRepo, runScript } from "./scrub-test-kit.ts";
 
@@ -109,4 +109,54 @@ test("tree check passes a promoter-scrubbed placeholder and logs live reasoning"
   expect(rows).toHaveLength(1);
   expect(rows[0]?.rule).toBe("encrypted-reasoning");
   expect(rows[0]?.file).toBe("raw/live.jsonl");
+});
+
+test("tree check flags reasoning whatever the record type's case", () => {
+  // Review round 5: the detector compared the type exact-case while the
+  // promoter lowercases it, so Thinking/signature passed the gate.
+  const repo = initRepo();
+  const base = gitAt(repo, ["rev-parse", "HEAD"]);
+  mkdirSync(join(repo, "raw"));
+  writeFileSync(
+    join(repo, "raw", "mixed.jsonl"),
+    `${JSON.stringify({ type: "Thinking", signature: ["live", "sig"].join("-") })}\n`,
+  );
+  commit(repo, "add mixed-case record");
+  const checked = runScript("tree-check", [base, "HEAD"], repo);
+  expect(checked.status).toBe(1);
+  expect(checked.stdout).toContain("raw/mixed.jsonl:1: encrypted-reasoning");
+});
+
+test("tree check flags reasoning inside prose-embedded JSON", () => {
+  // Review round 5: the detector skipped strings that were not pure JSON
+  // while the promoter splices embedded objects out of them.
+  const repo = initRepo();
+  const base = gitAt(repo, ["rev-parse", "HEAD"]);
+  mkdirSync(join(repo, "raw"));
+  writeFileSync(
+    join(repo, "raw", "embedded.jsonl"),
+    `${JSON.stringify({ note: `says {"encrypted_content": "${["live", "seal"].join("-")}"} aloud` })}\n`,
+  );
+  commit(repo, "add embedded record");
+  const checked = runScript("tree-check", [base, "HEAD"], repo);
+  expect(checked.status).toBe(1);
+  expect(checked.stdout).toContain("raw/embedded.jsonl:1: encrypted-reasoning");
+});
+
+test("tree check scans modified raw blobs like added ones", () => {
+  // Review round 5: only additions were scanned, so an edit smuggling
+  // reasoning into an existing record passed the gate.
+  const repo = initRepo();
+  const base = gitAt(repo, ["rev-parse", "HEAD"]);
+  mkdirSync(join(repo, "raw"));
+  writeFileSync(join(repo, "raw", "record.jsonl"), '{"note": "clean"}\n');
+  commit(repo, "add clean record");
+  appendFileSync(
+    join(repo, "raw", "record.jsonl"),
+    `${JSON.stringify({ type: "thinking", signature: ["added", "later"].join("-") })}\n`,
+  );
+  commit(repo, "edit the record");
+  const checked = runScript("tree-check", [base, "HEAD"], repo);
+  expect(checked.status).toBe(1);
+  expect(checked.stdout).toContain("raw/record.jsonl:2: encrypted-reasoning");
 });
