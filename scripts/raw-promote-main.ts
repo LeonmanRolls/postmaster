@@ -186,7 +186,7 @@ async function writeScrubbed(source: string, target: string, destLabel: string):
   return reports;
 }
 
-async function verifyFiles(files: string[]): Promise<string[]> {
+export async function verifyFiles(files: string[]): Promise<string[]> {
   // One pass: inspectFile already computes every finding the old second
   // loop recomputed, in the same order, so the rescan reads each file once.
   const found: string[] = [];

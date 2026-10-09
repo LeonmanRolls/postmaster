@@ -5,6 +5,7 @@ import { KINDS, scan as scanPersonal } from "../raw/trials/pii-patterns/apparatu
 import { scan as scanPort } from "./scrub-patterns.ts";
 import {
   keyBlockStep,
+  lineUnits,
   needsFullScan,
   RefusedError,
   refuseUnlessText,
@@ -92,6 +93,27 @@ test("secret shapes include access tokens, bearer credentials, fields, dotenv va
   expect(rules("token = config.readToken() ")).not.toContain("token");
 });
 
+test("dotenv spans cover the value, never the name or an earlier copy", () => {
+  // Review round 8: the span came from indexOf, landing on the name when
+  // the value repeated it, so the scrub redacted the name and kept the
+  // secret.
+  const dotenvSpan = (line: string): [number, number] | null => {
+    const found = scanLine(line, {}).findings.find((finding) => finding.rule === "dotenv");
+    return found ? [found.start, found.end] : null;
+  };
+  const name = joined("pass", "word");
+  const line = `${name}=${name}`;
+  expect(dotenvSpan(line)).toEqual([name.length + 1, line.length]);
+  const namey = `${joined("db_", "pass", "word")}=${name}`;
+  expect(dotenvSpan(namey)).toEqual([namey.indexOf("=") + 1, namey.length]);
+  const exported = `${joined("export ", "pass", "word")}=${name}`;
+  expect(dotenvSpan(exported)).toEqual([exported.indexOf("=") + 1, exported.length]);
+  const quoted = `${joined("to", "ken")}="${joined("abc", "12345")}"`;
+  expect(dotenvSpan(quoted)).toEqual([quoted.indexOf("=") + 2, quoted.length - 1]);
+  expect(dotenvSpan(joined("notes", "=", name))).toBeNull();
+  expect(dotenvSpan(joined("pass", "word_path", "=/", "x"))).toBeNull();
+});
+
 test("a dotenv assignment inside a multiline JSON string flags like the plain line", () => {
   // Review round 6: the decoded string stayed one multi-line unit, so the
   // anchored dotenv rule never saw its logical lines.
@@ -99,6 +121,36 @@ test("a dotenv assignment inside a multiline JSON string flags like the plain li
   const line = JSON.stringify({ type: "tool_result", content: `PORT=3000\n${assignment}\n` });
   expect(rules(line)).toContain("dotenv");
   expect(rules(assignment)).toContain("dotenv");
+});
+
+test("a dotenv assignment inside an escape-free JSON string flags like the plain line", () => {
+  // Review round 8: the unit gate required a backslash before a JSON string
+  // became a unit, so an escape-free string was never scanned as one and the
+  // anchored dotenv rule never saw it. Sibling of the round-6 multiline case.
+  const assignment = joined("DB_PASSWORD=", "Summer2024!");
+  expect(rules(JSON.stringify({ content: assignment }))).toContain("dotenv");
+  expect(rules(JSON.stringify([assignment, "other"]))).toContain("dotenv");
+  const pair = JSON.stringify({ a: assignment, b: assignment });
+  expect(scanLine(pair).findings.filter((f) => f.rule === "dotenv")).toHaveLength(2);
+  expect(rules(JSON.stringify({ content: "nothing here" }))).toEqual([]);
+  const marked = `{"contact": "${email()}"} ${marker("email")}`;
+  expect(rules(marked)).toEqual([]);
+  const markedDotenv = `{"content": "${assignment}"} ${marker("dotenv")}`;
+  expect(rules(markedDotenv)).toEqual([]);
+});
+
+test("escape-free JSON units stay proportional to the longest line", () => {
+  // Review round 8: dropping the backslash gate tokenizes every quoted line.
+  // The units of a one-megabyte line must stay linear in time and in text.
+  const piece = JSON.stringify({ key: "safe value here" });
+  const line = `${piece} `.repeat(Math.ceil((1024 * 1024) / (piece.length + 1)));
+  const started = Date.now();
+  const units = lineUnits(line);
+  const elapsed = Date.now() - started;
+  const total = units.reduce((n, unit) => n + unit.text.length, 0);
+  expect(rules(line)).toEqual([]);
+  expect(elapsed).toBeLessThan(1000);
+  expect(total).toBeLessThan(line.length * 3);
 });
 
 test("private context finds concrete paths, machine names, network addresses, ids and tool credits", () => {

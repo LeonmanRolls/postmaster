@@ -237,6 +237,71 @@ test("closed input refuses any other encoding loudly by name, exit 2", () => {
   expect(range.stderr).toContain("refused note.txt: not UTF-8 text");
 });
 
+test("an invalid byte in commit metadata refuses by name like file content", () => {
+  // Review round 8: metadata values passed through closed-input matching
+  // without the refusal file content gets, so an invalid byte silently
+  // broke the match instead of refusing. Crafted objects are the vector:
+  // the git CLI transcodes -F input, but the walker delivers stored raw
+  // bytes unchanged.
+  const local = ["mail", "box"].join("");
+  const head = ["north"].join("");
+  const tail = ["star", ".org"].join("");
+  const craft = (field: string): { repo: string; base: string; sha: string } => {
+    const repo = initRepo();
+    const rev = (args: string[]): string =>
+      spawnSync("git", args, { cwd: repo, encoding: "utf8" }).stdout.trim();
+    const base = rev(["rev-parse", "HEAD"]);
+    const tree = rev(["rev-parse", "HEAD^{tree}"]);
+    const who = `t <${local}@${head}${tail}> 1791530610 +0000`;
+    const authorLine = `author ${who}`;
+    const committerLine = `committer ${who}`;
+    const parts: Buffer[] = [
+      Buffer.from(`tree ${tree}\nparent ${base}\n`, "utf8"),
+      field === "author"
+        ? Buffer.concat([
+            Buffer.from(`author t <${local}@${head}`, "utf8"),
+            Buffer.from([0x80]),
+            Buffer.from(`${tail}> 1791530610 +0000\n`, "utf8"),
+          ])
+        : Buffer.from(`${authorLine}\n`, "utf8"),
+      field === "committer"
+        ? Buffer.concat([
+            Buffer.from(`committer t <${local}@${head}`, "utf8"),
+            Buffer.from([0x80]),
+            Buffer.from(`${tail}> 1791530610 +0000\n`, "utf8"),
+          ])
+        : Buffer.from(`${committerLine}\n`, "utf8"),
+      Buffer.from("\n", "utf8"),
+      field === "message"
+        ? Buffer.concat([
+            Buffer.from(`contact ${local}@${head}`, "utf8"),
+            Buffer.from([0x80]),
+            Buffer.from(`${tail} here\n`, "utf8"),
+          ])
+        : Buffer.from(`contact ${local}@${head}${tail} here\n`, "utf8"),
+    ];
+    const sha = spawnSync("git", ["hash-object", "-t", "commit", "--stdin", "-w"], {
+      cwd: repo,
+      input: Buffer.concat(parts),
+      encoding: "utf8",
+    }).stdout.trim();
+    spawnSync("git", ["update-ref", "refs/heads/main", sha], { cwd: repo });
+    return { repo, base, sha };
+  };
+  for (const field of ["message", "author", "committer"]) {
+    const { repo, base, sha } = craft(field);
+    const scan = runScript("scrub-check", [base, "HEAD"], repo);
+    expect(scan.status).toBe(2);
+    expect(scan.stderr).toContain(`refused ${sha}:(${field}): not UTF-8 text`);
+    expect(scan.stderr).not.toContain(local);
+    expect(scan.stdout).not.toContain(local);
+  }
+  const clean = craft("none");
+  const pass = runScript("scrub-check", [clean.base, "HEAD"], clean.repo);
+  expect(pass.status).toBe(1);
+  expect(pass.stdout).toContain(clean.sha.slice(0, 7));
+});
+
 test("range scan strips git's trailing tab on spaced +++ paths", () => {
   // Review round 7: the slice kept the tab, so the key lookup died exit 2
   // and finding rows carried a path no later lookup could resolve.

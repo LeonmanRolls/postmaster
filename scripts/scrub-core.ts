@@ -734,7 +734,11 @@ function tokenFindings(line: string, out: Finding[]): void {
       ) || words.some((w) => SECRET_TOKEN_SUFFIXES.some((s) => w.endsWith(s)));
     const pointer = /_(?:path|file|dir|url|type|host|port)$/u.test(name);
     let value = env[2] ?? "";
-    const valueStart = line.indexOf(value, env.index + env[0].indexOf(value));
+    // The value's position comes from the match indices, never from
+    // searching for the value: indexOf lands on the name when the value
+    // repeats it, and the scrub then redacts the name and keeps the secret.
+    const indices = (env as unknown as { indices?: Array<[number, number]> }).indices;
+    const valueStart = indices![2]![0];
     if (keyLike && !pointer) {
       let scan = value;
       let quoted: string | null = null;
@@ -757,7 +761,6 @@ function tokenFindings(line: string, out: Finding[]): void {
         // only its first token assigns.
         if (DOTENV_COMMENT_ONLY.test(scan)) scan = "";
         else scan = scan.split(DOTENV_COMMENT_CUT, 1)[0] ?? "";
-        const indices = (env as unknown as { indices?: Array<[number, number]> }).indices;
         const gap = indices ? line.slice(indices[1]![1], indices[2]![0]) : "=";
         if (WS_CHAR.test(gap[0] ?? "") && WS_CHAR.test(gap.at(-1) ?? "")) {
           if (DOTENV_SPLIT.test(scan) || /[|&]/u.test(scan)) scan = "";
@@ -768,7 +771,9 @@ function tokenFindings(line: string, out: Finding[]): void {
       }
       if (DOTENV_LIST.test(scan)) scan = "";
       if (scan.length >= 8 && !ABSENT.test(scan)) {
-        const at = line.indexOf(scan, valueStart);
+        // Unquoted cuts keep the front, so the scan starts where the value
+        // does; a quoted scan starts past its opening quote. No search.
+        const at = quoted ? valueStart + 1 : valueStart;
         add(out, at, at + scan.length, "dotenv", scan);
       }
     }
@@ -1040,14 +1045,12 @@ function logicalUnits(
   const emitSegment = (): void => {
     if (!segText && segMap.length === 0) return;
     result.push({ text: segText, map: segMap, source, physical: false });
-    if (
-      depth < MAX_JSON_DEPTH &&
-      segText.includes('"') &&
-      (segText.includes("\\") || segText.includes("private-data:allow"))
-    ) {
+    if (depth < MAX_JSON_DEPTH && segText.includes('"')) {
+      const pre = process.env.SCRUB_PREFILTER !== "0";
       for (const match of jsonStringTokens(segText)) {
         const start = match.start;
         const inner = segText.slice(start + 1, match.end - (match.closed ? 1 : 0));
+        if (pre && !inner.includes("\\") && !needsFullScan(inner)) continue;
         const decoded = decodeEscape(inner, start + 1, segMap);
         let partText = "";
         let partMap: Array<[number, number]> = [];
@@ -1087,12 +1090,18 @@ export function lineUnits(line: string): Unit[] {
   const cleaned = stripAnsi(line, null);
   const text = blankSpan(cleaned.text, patternSpan(cleaned.text));
   const units: Unit[] = [{ text, map: cleaned.map, source: null, physical: true }];
-  if (!text.includes('"') || (!text.includes("\\") && !text.includes("private-data:allow")))
-    return units;
+  // Review round 8: every JSON string becomes a unit, escape-free or not.
+  // The backslash gate left anchored rules blind inside plain strings.
+  if (!text.includes('"')) return units;
+  // An escape-free string the prefilter clears holds no finding and no
+  // marker (every marker carries a dash), and no quote to recurse into,
+  // so decoding it is pure overhead. Off with SCRUB_PREFILTER=0, as one.
+  const pre = process.env.SCRUB_PREFILTER !== "0";
   let source = 0;
   for (const match of jsonStringTokens(text)) {
     const start = match.start;
     const inner = text.slice(start + 1, match.end - (match.closed ? 1 : 0));
+    if (pre && !inner.includes("\\") && !needsFullScan(inner)) continue;
     const decoded = decodeEscape(inner, start + 1, cleaned.map);
     for (const unit of logicalUnits(decoded.text, decoded.map, source++, 0)) units.push(unit);
   }
@@ -1179,6 +1188,10 @@ export function scanLine(
   const faults: MarkerFault[] = [];
   const nextBySource = new Map<number, ParsedMarker[]>();
   const physicalNext: ParsedMarker[] = [];
+  const lineMarkers: ParsedMarker[] = [];
+  const lineCandidates: ParsedMarker[] = [];
+  const covered = new Set<string>();
+  const coverKey = (marker: ParsedMarker): string => `${marker.rule ?? ""}\0${marker.start}`;
   for (let i = 0; i < units.length; i++) {
     const unit = units[i]!;
     const found = all[i]!;
@@ -1194,6 +1207,9 @@ export function scanLine(
       });
     const pending = unit.source === null ? [] : (nextBySource.get(unit.source) ?? []);
     if (unit.source !== null) nextBySource.delete(unit.source);
+    if (i === 0)
+      for (const marker of sourceMarkers)
+        if (marker.valid && !marker.next) lineMarkers.push(marker);
     const live = [...found];
     const hitsFor = (rule: string, before?: number): Finding[] =>
       live.filter((f) => f.rule === rule && (before === undefined || f.end <= before));
@@ -1210,8 +1226,13 @@ export function scanLine(
         } else if (marker.valid) faults.push({ start: marker.start, end: marker.end });
       } else if (marker.valid) {
         const hits = hitsFor(marker.rule!, marker.start);
-        if (!hits.length) faults.push({ start: marker.start, end: marker.end });
-        else {
+        if (!hits.length) {
+          // A line marker may still cover an inner-unit finding below; its
+          // fault waits until every unit has been judged.
+          if (i === 0) lineCandidates.push(marker);
+          else faults.push({ start: marker.start, end: marker.end });
+        } else {
+          covered.add(coverKey(marker));
           suppressed.push(...hits);
           for (const hit of hits) live.splice(live.indexOf(hit), 1);
         }
@@ -1222,13 +1243,32 @@ export function scanLine(
         const hits = hitsFor(marker.rule!);
         if (!hits.length) faults.push({ start: marker.start, end: marker.end });
         else {
+          covered.add(coverKey(marker));
           suppressed.push(...hits);
           for (const hit of hits) live.splice(live.indexOf(hit), 1);
         }
       } else if (found.length) faults.push({ start: marker.start, end: marker.end });
     }
+    if (i > 0) {
+      // Review round 8: a same-line marker lives on the physical unit, while
+      // the finding it allows may survive only on an inner string unit (the
+      // dedup keeps the later copy). The line's own markers cover inner units
+      // positionally, as they always covered the physical line. Cover only
+      // suppresses: the physical unit's own pass judges empty markers.
+      for (const marker of lineMarkers) {
+        const hits = hitsFor(marker.rule!, marker.start);
+        if (hits.length) {
+          covered.add(coverKey(marker));
+          suppressed.push(...hits);
+          for (const hit of hits) live.splice(live.indexOf(hit), 1);
+        }
+      }
+    }
     for (const item of live) aggregate.push(item);
   }
+  for (const marker of lineCandidates)
+    if (!covered.has(coverKey(marker)))
+      faults.push({ start: marker.start, end: marker.end });
   if (physicalNext.length) {
     // A physical next-line marker is resolved by the streaming caller when its next line arrives.
     for (const marker of physicalNext)

@@ -1,6 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 import { mkdirSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { verifyFiles } from "./raw-promote-main.ts";
 import {
   cleanupScratch,
   commit,
@@ -142,6 +143,37 @@ test("promotion refuses a destination under a symlinked directory", () => {
   expect(refused.status).toBe(2);
   expect(refused.stdout + refused.stderr).toContain("symlink");
   expect(readdirSync(outside)).toEqual([]);
+});
+
+test("promotion replaces a dotenv value that repeats its name, and the copy scans clean", async () => {
+  // Review round 8: the span mis-hit redacted the name, and the surviving
+  // secret passed the rescan, --files and tree-check alike.
+  const repo = initRepo();
+  const name = ["pass", "word"].join("");
+  const source = join(scratchDir(), "source");
+  mkdirSync(source);
+  const dirty = join(source, "record.txt");
+  writeFileSync(dirty, `${name}=${name}\n`);
+  expect(await verifyFiles([dirty])).not.toHaveLength(0);
+  const filesDirty = runScript("scrub-check", ["--files", dirty], repo);
+  expect(filesDirty.status).toBe(1);
+  const base = gitAt(repo, ["rev-parse", "HEAD"]);
+  mkdirSync(join(repo, "raw", "before"), { recursive: true });
+  writeFileSync(join(repo, "raw", "before", "record.txt"), `${name}=${name}\n`);
+  commit(repo, "dirty dotenv record");
+  const treeDirty = runScript("tree-check", [base, "HEAD"], repo);
+  expect(treeDirty.status).toBe(1);
+  const copied = runScript("raw-promote", [source, "raw/fixed"], repo);
+  expect(copied.status).toBe(0);
+  const copy = join(repo, "raw/fixed", "record.txt");
+  expect(readFileSync(copy, "utf8")).toBe(`${name}=<redacted:dotenv>\n`);
+  expect(await verifyFiles([copy])).toHaveLength(0);
+  const filesClean = runScript("scrub-check", ["--files", "raw/fixed/record.txt"], repo);
+  expect(filesClean.status).toBe(0);
+  const mid = gitAt(repo, ["rev-parse", "HEAD"]);
+  commit(repo, "promoted dotenv record");
+  const treeClean = runScript("tree-check", [mid, "HEAD"], repo);
+  expect(treeClean.status).toBe(0);
 });
 
 test("promotion logs its reasoning redactions and the copy passes the tree check", () => {

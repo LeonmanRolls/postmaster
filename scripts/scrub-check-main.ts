@@ -480,6 +480,10 @@ async function scanTextBlock(commit: string, place: string, raw: string): Promis
   const lines = raw.split(/\r?\n/u);
   for (let i = 0; i < lines.length; i++) {
     const text = lines[i]!;
+    // Review round 8: metadata gets the same closed-input refusal as file
+    // content. An invalid byte used to break the match silently; it refuses
+    // by name now, and the citation carries no scanned text.
+    refuseUnlessText(text, `${commit}:${place}`);
     const result = feedKeyLine(feed, i + 1, text, { markers: false });
     for (const finding of result.findings)
       rows.push({ commit, path: place, line: i + 1, rule: finding.rule });
