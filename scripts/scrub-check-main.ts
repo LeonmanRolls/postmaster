@@ -122,6 +122,51 @@ async function keyBlockLines(commit: string, path: string, root: string): Promis
   return result;
 }
 
+// The new path off a +++ line: git appends one trailing tab when the name
+// holds a space, and C-quotes names with control characters (even with
+// quotePath off). Both decode here, so lookups and rows carry the real name.
+function diffNewPath(line: string): string {
+  const rest = line.slice("+++ ".length);
+  if (!rest.startsWith('"')) return rest.endsWith("\t") ? rest.slice(0, -1) : rest;
+  const simple: Record<string, string> = {
+    "\\": "\\",
+    '"': '"',
+    a: "\x07",
+    b: "\b",
+    t: "\t",
+    n: "\n",
+    v: "\v",
+    f: "\f",
+    r: "\r",
+  };
+  let out = "";
+  let i = 1;
+  while (i < rest.length) {
+    const ch = rest[i]!;
+    if (ch === '"') break;
+    if (ch !== "\\" || i + 1 >= rest.length) {
+      out += ch;
+      i++;
+      continue;
+    }
+    const next = rest[i + 1]!;
+    if (next in simple) {
+      out += simple[next]!;
+      i += 2;
+      continue;
+    }
+    const octal = rest.slice(i + 1, i + 4);
+    if (/^[0-7]{3}$/u.test(octal)) {
+      out += String.fromCharCode(Number.parseInt(octal, 8));
+      i += 4;
+      continue;
+    }
+    out += ch + next;
+    i += 2;
+  }
+  return out;
+}
+
 function parseHunk(line: string): number | null {
   const match = /^@@ [^ ]+ \+([0-9]+)(?:,[0-9]+)? @@/u.exec(line);
   return match ? Number(match[1]) : null;
@@ -380,7 +425,7 @@ async function scanPatchSection(
       continue;
     }
     if (line.startsWith("+++ ") && lineNumber === null) {
-      path = line.slice(4);
+      path = diffNewPath(line);
       if (newFile && path !== "/dev/null") pushNameRows(path);
       if (path !== "/dev/null") context = await cite(path);
       continue;

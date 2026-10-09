@@ -237,6 +237,26 @@ test("closed input refuses any other encoding loudly by name, exit 2", () => {
   expect(range.stderr).toContain("refused note.txt: not UTF-8 text");
 });
 
+test("range scan strips git's trailing tab on spaced +++ paths", () => {
+  // Review round 7: the slice kept the tab, so the key lookup died exit 2
+  // and finding rows carried a path no later lookup could resolve.
+  const repo = initRepo();
+  const base = spawnSync("git", ["rev-parse", "HEAD"], {
+    cwd: repo,
+    encoding: "utf8",
+  }).stdout.trim();
+  const name = "Meeting notes.md";
+  writeFileSync(
+    join(repo, name),
+    `contact ${email()} here\n0123456789abcdef0123456789abcdef01234567\n`,
+  );
+  commit(repo, "add spaced note");
+  const scanned = runScript("scrub-check", [base, "HEAD"], repo);
+  expect(scanned.status).toBe(1);
+  expect(scanned.stdout).toContain(`${name}:1: email`);
+  expect(scanned.stdout).not.toContain("\t");
+});
+
 test("range scan completes while per-file lookups await inside the diff read", () => {
   const repo = initRepo();
   const base = spawnSync("git", ["rev-parse", "HEAD"], {
