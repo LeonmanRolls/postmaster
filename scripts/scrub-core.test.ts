@@ -165,7 +165,7 @@ test("private context finds concrete paths, machine names, network addresses, id
   const footer = joined("Generated ", "with Claude");
 
   expect(rules(privatePath())).toContain("private-path");
-  expect(rules("ssh bluejay")).toContain("private-host");
+  expect(rules(joined("ss", "h bluejay"))).toContain("private-host");
   expect(rules(joined("sc", "p bluejay:/tmp/report ."))).toContain("private-host");
   expect(rules(joined("scp ops@", networkName, ":/tmp"))).toContain("private-host");
   expect(rules(joined('host: "', tailnet, '"'))).toContain("private-host");

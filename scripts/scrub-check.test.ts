@@ -621,7 +621,7 @@ test("C7 --files finds private context while code and placeholders pass", () => 
   const footer = ["Generated ", "with Claude"].join("");
   const positive = [
     privatePath(),
-    "ssh bluejay",
+    "ss" + "h bluejay",
     "sc" + "p bluejay:/tmp/report .",
     `ops@${networkName}:/tmp`,
     `host: "${tailnet}"`,
