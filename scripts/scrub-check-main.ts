@@ -6,9 +6,10 @@ import {
   childLines,
   codePointOffset,
   decodeBytes,
-  decodeChildText,
   detectLine,
   keyBlockStep,
+  RefusedError,
+  refuseUnlessText,
   repositoryRoot,
   resolveCommit,
   runGit,
@@ -16,7 +17,7 @@ import {
   StreamScanner,
   streamLines,
 } from "./scrub-core.ts";
-import { fail, findingRow, logFinding, safePath } from "./scrub-report.ts";
+import { errorText, fail, findingRow, logFinding, safePath } from "./scrub-report.ts";
 
 const USAGE =
   "usage: scrub-check.sh <base> <head> | --files <path>... | --files-inert <path>... | --pr-description <file> | --spans <path>... | --findings <base> <head> | --safe-path <path>... | --log-detection <rule> <file> <line> [<commit>] | --help";
@@ -54,7 +55,8 @@ async function citationContext(path: string): Promise<string> {
       )
         source = true;
     }
-  } catch {
+  } catch (error) {
+    if (error instanceof RefusedError) fail("scrub-check", error.message);
     fail("scrub-check", `could not read ${safePath(path)}`);
   }
   return title && source ? "title: citation\nurl: citation" : "";
@@ -78,6 +80,26 @@ function outRows(rows: FindingRow[], machine: boolean): number {
   return rows.length ? 1 : 0;
 }
 
+// The one line feed: thread key-block state and the marker scanner together,
+// so every caller that walks lines in order decides key material the same
+// way. (The range walker cannot use it: its key lines come from a blob
+// pre-pass, since a hunk shows only added lines.)
+interface KeyFeed {
+  keyState: boolean;
+  scanner: StreamScanner;
+}
+
+function feedKeyLine(
+  feed: KeyFeed,
+  number: number,
+  text: string,
+  opts: { markers?: boolean; context?: string } = {},
+): ReturnType<StreamScanner["feed"]> {
+  const step = keyBlockStep(text, feed.keyState);
+  feed.keyState = step.inBlock;
+  return feed.scanner.feed(number, text, { ...opts, keyBlock: step.flagged });
+}
+
 async function keyBlockLines(commit: string, path: string, root: string): Promise<Set<number>> {
   const child = runGit(["show", `${commit}:${path}`], root);
   if (!child.stdout) fail("scrub-check", "the requested history could not be read");
@@ -90,7 +112,8 @@ async function keyBlockLines(commit: string, path: string, root: string): Promis
   let number = 0;
   for await (const raw of childLines(child.stdout)) {
     number++;
-    const step = keyBlockStep(decodeChildText(raw), inBlock);
+    refuseUnlessText(raw, path);
+    const step = keyBlockStep(raw, inBlock);
     inBlock = step.inBlock;
     if (step.flagged) result.add(number);
   }
@@ -367,7 +390,8 @@ async function scanPatchSection(
       continue;
     }
     if (lineNumber === null || !line.startsWith("+")) continue;
-    const text = decodeChildText(line.slice(1));
+    const text = line.slice(1);
+    refuseUnlessText(text, path);
     if (
       keyLines === null &&
       (/^[A-Za-z0-9+/=]{20,}$/u.test(text.trim()) ||
@@ -407,18 +431,15 @@ async function scanPatchSection(
 
 async function scanTextBlock(commit: string, place: string, raw: string): Promise<FindingRow[]> {
   const rows: FindingRow[] = [];
-  let keyState = false;
-  const scanner = new StreamScanner();
+  const feed: KeyFeed = { keyState: false, scanner: new StreamScanner() };
   const lines = raw.split(/\r?\n/u);
   for (let i = 0; i < lines.length; i++) {
     const text = lines[i]!;
-    const key = keyBlockStep(text, keyState);
-    keyState = key.inBlock;
-    const result = scanner.feed(i + 1, text, { keyBlock: key.flagged, markers: false });
+    const result = feedKeyLine(feed, i + 1, text, { markers: false });
     for (const finding of result.findings)
       rows.push({ commit, path: place, line: i + 1, rule: finding.rule });
   }
-  for (const marker of scanner.flush())
+  for (const marker of feed.scanner.flush())
     rows.push({ commit, path: place, line: lines.length, rule: "marker" });
   return rows;
 }
@@ -572,17 +593,13 @@ async function scanFiles(paths: string[], inert = false, spans = false): Promise
   for (let index = 0; index < paths.length; index++) {
     const path = paths[index]!;
     const context = await citationContext(path);
-    let scanner = new StreamScanner();
-    let keyState = false;
+    const feed: KeyFeed = { keyState: false, scanner: new StreamScanner() };
     let lastLine = 0;
     try {
       for await (const line of streamLines(path)) {
         lastLine = line.number;
-        const step = keyBlockStep(line.text, keyState);
-        keyState = step.inBlock;
-        const result = scanner.feed(line.number, line.text, {
+        const result = feedKeyLine(feed, line.number, line.text, {
           markers: !inert,
-          keyBlock: step.flagged,
           context,
         });
         for (const f of result.findings) {
@@ -609,7 +626,7 @@ async function scanFiles(paths: string[], inert = false, spans = false): Promise
             index,
           });
       }
-      for (const marker of scanner.flush())
+      for (const marker of feed.scanner.flush())
         rows.push({
           path,
           line: marker.line ?? (lastLine || 1),
@@ -619,7 +636,8 @@ async function scanFiles(paths: string[], inert = false, spans = false): Promise
           text: "",
           index,
         });
-    } catch {
+    } catch (error) {
+      if (error instanceof RefusedError) fail("scrub-check", error.message);
       fail("scrub-check", `could not read ${safePath(path)}`);
     }
   }
@@ -642,15 +660,17 @@ async function scanFiles(paths: string[], inert = false, spans = false): Promise
 
 async function prDescription(path: string): Promise<number> {
   const rows: Array<{ line: number; rule: string }> = [];
+  const feed: KeyFeed = { keyState: false, scanner: new StreamScanner() };
   try {
     for await (const line of streamLines(path)) {
-      const result = scanLine(line.text, { markers: false });
+      const result = feedKeyLine(feed, line.number, line.text, { markers: false });
       for (const f of result.findings) {
         rows.push({ line: line.number, rule: f.rule });
         logFinding(f.rule, "(pr-description)", line.number, "");
       }
     }
-  } catch {
+  } catch (error) {
+    if (error instanceof RefusedError) fail("scrub-check", error.message);
     fail("scrub-check", `could not read ${safePath(path)}`);
   }
   rows.sort((a, b) => a.line - b.line || a.rule.localeCompare(b.rule));
@@ -706,7 +726,11 @@ async function main(args: string[]): Promise<number> {
 if (import.meta.main) {
   try {
     process.exit(await main(process.argv.slice(2)));
-  } catch {
+  } catch (error) {
+    if (error instanceof RefusedError) {
+      console.error(errorText("scrub-check", error.message));
+      process.exit(2);
+    }
     console.error("scrub-check: scan failed");
     process.exit(2);
   }

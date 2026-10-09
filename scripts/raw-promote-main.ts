@@ -14,9 +14,10 @@ import {
 } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { randomBytes } from "node:crypto";
-import { git, keyBlockStep, StreamScanner, streamLines } from "./scrub-core.ts";
+import { git, keyBlockStep, RefusedError, StreamScanner, streamLines } from "./scrub-core.ts";
 import { redactReasoning } from "./scrub-reasoning.ts";
 import {
+  errorText,
   fail,
   findingRow,
   logFinding,
@@ -289,8 +290,9 @@ async function main(args: string[]): Promise<number> {
     reports.sort();
     for (const line of reports) console.log(line);
     return 0;
-  } catch {
+  } catch (error) {
     if (existsSync(staging)) rmSync(staging, { recursive: true, force: true });
+    if (error instanceof RefusedError) fail("raw-promote", error.message);
     fail("raw-promote", "copy could not be completed");
   }
 }
@@ -298,7 +300,11 @@ async function main(args: string[]): Promise<number> {
 if (import.meta.main) {
   try {
     process.exit(await main(process.argv.slice(2)));
-  } catch {
+  } catch (error) {
+    if (error instanceof RefusedError) {
+      console.error(errorText("raw-promote", error.message));
+      process.exit(2);
+    }
     console.error("raw-promote: copy could not be completed");
     process.exit(2);
   }

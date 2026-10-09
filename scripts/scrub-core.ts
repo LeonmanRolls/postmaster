@@ -369,7 +369,6 @@ const MARKER_BODY = new RegExp(
 const MARKER_BOUNDARY = /[A-Za-z0-9_-]/u;
 const ANSI =
   /(?:\x1b\[[0-9:;<=>?]*[ -/]*[@-~]|\x9b[0-9:;<=>?]*[ -/]*[@-~]|\x1b\][^\x07\x1b\x9c]*(?:\x07|\x1b\\|\x9c)|\x9d[^\x07\x1b\x9c]*(?:\x07|\x1b\\|\x9c)|\x1b[()][0-9A-Za-z]|\x1b[0-~]|\x1b)/gu;
-const ANSI_OSC_PARAMS = /(?:\x1b\]|\x9d)([^\x07\x1b\x9c]*)(?:\x07|\x1b\\|\x9c)/gu;
 const MAX_JSON_DEPTH = 64;
 const PATTERN_CODE = new RegExp(
   `${BOUND_L}new${SPACE}+RegExp${SPACE}*\\(${BOUND_L}P\\(${SPACE}*["'](?:email|ipv4|ipv6|phone|address)["']${SPACE}*,${SPACE}*["']search["']|^(?:export${SPACE}+)?const${SPACE}+[A-Z_]+${SPACE}*=${SPACE}*\\/`,
@@ -916,41 +915,30 @@ export function detectLine(line: string, context = ""): Finding[] {
   );
 }
 
+// Escape sequences strip first and their payloads are never scanned: a
+// marker or guard-shaped text hidden inside one is not seen at all. One
+// treatment for markers and guards alike, since both read these units.
 function stripAnsi(
   text: string,
   map: Array<[number, number]> | null,
 ): {
   text: string;
   map: Array<[number, number]> | null;
-  extras: Array<{ text: string; map: Array<[number, number]> | null }>;
 } {
   if (!text.includes("\x1b") && !text.includes("\x9b") && !text.includes("\x9d"))
-    return { text, map, extras: [] };
+    return { text, map };
   const chunks: string[] = [];
-  const nextMap: Array<[number, number]> | null = map === null ? [] : [];
-  const extras: Array<{ text: string; map: Array<[number, number]> | null }> = [];
+  const nextMap: Array<[number, number]> = [];
   let cursor = 0;
   for (const match of scanReset(ANSI, text)) {
     const start = match.index ?? 0;
     chunks.push(text.slice(cursor, start));
     for (let i = cursor; i < start; i++) nextMap.push(map?.[i] ?? [i, i + 1]);
-    const maybeOsc = match[0].startsWith("\x1b]") || match[0].startsWith("\x9d");
-    ANSI_OSC_PARAMS.lastIndex = start;
-    const osc = maybeOsc ? ANSI_OSC_PARAMS.exec(text) : null;
-    if (osc && osc.index === start) {
-      const at = osc.index + osc[0].indexOf(osc[1]!);
-      extras.push({
-        text: osc[1]!,
-        map: map
-          ? map.slice(at, at + osc[1]!.length)
-          : Array.from({ length: osc[1]!.length }, (_, i) => [at + i, at + i + 1]),
-      });
-    }
     cursor = start + match[0].length;
   }
   chunks.push(text.slice(cursor));
   for (let i = cursor; i < text.length; i++) nextMap.push(map?.[i] ?? [i, i + 1]);
-  return { text: chunks.join(""), map: nextMap, extras };
+  return { text: chunks.join(""), map: nextMap };
 }
 
 function decodeEscape(
@@ -1044,36 +1032,54 @@ function logicalUnits(
   depth: number,
 ): Unit[] {
   const cleaned = stripAnsi(text, map);
-  const result: Unit[] = [{ text: cleaned.text, map: cleaned.map, source, physical: false }];
-  for (const extra of cleaned.extras) result.push({ ...extra, source: null, physical: false });
-  if (
-    depth >= MAX_JSON_DEPTH ||
-    !cleaned.text.includes('"') ||
-    (!cleaned.text.includes("\\") && !cleaned.text.includes("private-data:allow"))
-  )
-    return result;
-  for (const match of jsonStringTokens(cleaned.text)) {
-    const start = match.start;
-    const inner = cleaned.text.slice(start + 1, match.end - (match.closed ? 1 : 0));
-    const decoded = decodeEscape(inner, start + 1, cleaned.map);
-    let partText = "";
-    let partMap: Array<[number, number]> = [];
-    const emit = (): void => {
-      if (!partText && partMap.length === 0) return;
-      for (const unit of logicalUnits(partText, partMap, source, depth + 1)) result.push(unit);
-      partText = "";
-      partMap = [];
-    };
-    for (let i = 0; i < decoded.text.length; i++) {
-      const ch = decoded.text[i]!;
-      if (ch === "\n" || ch === "\r") emit();
-      else {
-        partText += ch;
-        partMap.push(decoded.map[i]!);
+  const result: Unit[] = [];
+  // A decoded string can hold real newlines: anchored rules see logical
+  // lines, so the string is segmented first and each segment scans whole.
+  let segText = "";
+  let segMap: Array<[number, number]> = [];
+  const emitSegment = (): void => {
+    if (!segText && segMap.length === 0) return;
+    result.push({ text: segText, map: segMap, source, physical: false });
+    if (
+      depth < MAX_JSON_DEPTH &&
+      segText.includes('"') &&
+      (segText.includes("\\") || segText.includes("private-data:allow"))
+    ) {
+      for (const match of jsonStringTokens(segText)) {
+        const start = match.start;
+        const inner = segText.slice(start + 1, match.end - (match.closed ? 1 : 0));
+        const decoded = decodeEscape(inner, start + 1, segMap);
+        let partText = "";
+        let partMap: Array<[number, number]> = [];
+        const emit = (): void => {
+          if (!partText && partMap.length === 0) return;
+          for (const unit of logicalUnits(partText, partMap, source, depth + 1)) result.push(unit);
+          partText = "";
+          partMap = [];
+        };
+        for (let i = 0; i < decoded.text.length; i++) {
+          const ch = decoded.text[i]!;
+          if (ch === "\n" || ch === "\r") emit();
+          else {
+            partText += ch;
+            partMap.push(decoded.map[i]!);
+          }
+        }
+        emit();
       }
     }
-    emit();
+    segText = "";
+    segMap = [];
+  };
+  for (let i = 0; i < cleaned.text.length; i++) {
+    const ch = cleaned.text[i]!;
+    if (ch === "\n" || ch === "\r") emitSegment();
+    else {
+      segText += ch;
+      segMap.push(cleaned.map?.[i] ?? [i, i + 1]);
+    }
   }
+  emitSegment();
   return result;
 }
 
@@ -1081,7 +1087,6 @@ export function lineUnits(line: string): Unit[] {
   const cleaned = stripAnsi(line, null);
   const text = blankSpan(cleaned.text, patternSpan(cleaned.text));
   const units: Unit[] = [{ text, map: cleaned.map, source: null, physical: true }];
-  for (const extra of cleaned.extras) units.push({ ...extra, source: null, physical: false });
   if (!text.includes('"') || (!text.includes("\\") && !text.includes("private-data:allow")))
     return units;
   let source = 0;
@@ -1161,9 +1166,13 @@ export function scanLine(
   }
   if (opts.markers === false || disabled("marker") || disabled("markers"))
     return { findings: all.flat(), suppressed: [], markers: [], nextLineMarkers: [] };
+  // String ranges come from the stripped physical text, in the coordinates
+  // markers are parsed in: an ANSI prefix must not shift what counts as
+  // quoted.
   const stringRanges: Array<[number, number]> = [];
-  if (line.includes("private-data:allow")) {
-    for (const m of jsonStringTokens(line)) stringRanges.push([m.start, m.end]);
+  const stripped = units[0]!.text;
+  if (stripped.includes("private-data:allow")) {
+    for (const m of jsonStringTokens(stripped)) stringRanges.push([m.start, m.end]);
   }
   const aggregate: Finding[] = [];
   const suppressed: Finding[] = [];
@@ -1360,30 +1369,18 @@ function decodeUtf8(bytes: Buffer): string {
   return out;
 }
 
-function decodeLine(bytes: Buffer, encoding: "utf8" | "utf16le" | "utf16be"): string {
-  if (encoding === "utf8") return decodeUtf8(bytes);
-  const even = bytes.length - (bytes.length % 2);
-  let out = "";
-  for (let i = 0; i < even; i += 2) {
-    const low = encoding === "utf16le" ? bytes[i]! : bytes[i + 1]!;
-    const high = encoding === "utf16le" ? bytes[i + 1]! : bytes[i]!;
-    out += String.fromCharCode(low | (high << 8));
-  }
-  return out;
-}
-
 export async function* streamLines(path: string): AsyncGenerator<TextLine> {
   // Bun.file's stream, not node:fs: Bun's node:fs read paths grow the
   // process past a 512 MB virtual limit on a 175 MB file (C27), while the
   // Bun-native stream holds flat. A missing path throws on first read, as
-  // the callers' "could not read" catches expect.
+  // the callers' "could not read" catches expect. Closed input: only UTF-8
+  // text is read, so any other encoding is refused loudly by name.
   const stream = Bun.file(path).stream();
-  let encoding: "utf8" | "utf16le" | "utf16be" = "utf8";
-  let initialized = false;
+  const fatal = new TextDecoder("utf-8", { fatal: true });
   let parts: Uint8Array[] = [];
   let lineSize = 0;
   let number = 0;
-  let utf16Carry: Buffer | null = null;
+  let first = true;
   const pushPart = (part: Uint8Array): void => {
     if (part.length) {
       parts.push(part);
@@ -1391,72 +1388,33 @@ export async function* streamLines(path: string): AsyncGenerator<TextLine> {
     }
   };
   const emit = (newline: boolean): TextLine => {
-    let bytes = Buffer.concat(parts, lineSize);
+    const bytes = Buffer.concat(parts, lineSize);
     parts = [];
     lineSize = 0;
-    if (encoding === "utf8" && bytes.at(-1) === 0x0d)
-      bytes = Buffer.from(bytes.slice(0, bytes.length - 1));
-    if (encoding !== "utf8" && bytes.length >= 2 && bytes.at(-2) === 0x0d && bytes.at(-1) === 0)
-      bytes = Buffer.from(bytes.slice(0, bytes.length - 2));
-    else if (
-      encoding !== "utf8" &&
-      bytes.length >= 2 &&
-      bytes.at(-2) === 0 &&
-      bytes.at(-1) === 0x0d
-    )
-      bytes = Buffer.from(bytes.slice(0, bytes.length - 2));
-    return { number: ++number, text: decodeLine(bytes, encoding), bytes, newline };
+    if (bytes.includes(0x00)) throw new RefusedError(path);
+    let text: string;
+    try {
+      text = fatal.decode(bytes);
+    } catch {
+      throw new RefusedError(path);
+    }
+    if (text.endsWith("\r")) text = text.slice(0, -1);
+    if (first) {
+      first = false;
+      if (text.startsWith("\uFEFF")) text = text.slice(1);
+    }
+    return { number: ++number, text, bytes, newline };
   };
   for await (const raw of stream) {
-    let chunk: Uint8Array = Buffer.from(raw);
-    if (!initialized) {
-      initialized = true;
-      if (chunk.length >= 2 && chunk[0] === 0xff && chunk[1] === 0xfe) {
-        encoding = "utf16le";
-        chunk = Buffer.from(chunk.slice(2));
-      } else if (chunk.length >= 2 && chunk[0] === 0xfe && chunk[1] === 0xff) {
-        encoding = "utf16be";
-        chunk = Buffer.from(chunk.slice(2));
-      } else if (chunk.length >= 3 && chunk[0] === 0xef && chunk[1] === 0xbb && chunk[2] === 0xbf)
-        chunk = Buffer.from(chunk.slice(3));
-    }
-    if (encoding === "utf8") {
-      let start = 0;
-      for (let at = chunk.indexOf(0x0a, start); at >= 0; at = chunk.indexOf(0x0a, start)) {
-        pushPart(chunk.subarray(start, at));
-        yield emit(true);
-        start = at + 1;
-      }
-      pushPart(chunk.subarray(start));
-      continue;
-    }
-    if (utf16Carry) {
-      chunk = Buffer.concat([utf16Carry, chunk]);
-      utf16Carry = null;
-    }
-    if (chunk.length % 2) {
-      utf16Carry = Buffer.from(chunk.subarray(-1));
-      chunk = chunk.subarray(0, -1);
-    }
-    const firstNewlineByte = encoding === "utf16le" ? 0x0a : 0x00;
-    const secondNewlineByte = encoding === "utf16le" ? 0x00 : 0x0a;
+    const chunk = Buffer.from(raw);
     let start = 0;
-    for (
-      let at = chunk.indexOf(firstNewlineByte, start);
-      at >= 0;
-      at = chunk.indexOf(firstNewlineByte, start)
-    ) {
-      if (at % 2 !== 0 || chunk[at + 1] !== secondNewlineByte) {
-        start = at + 1;
-        continue;
-      }
+    for (let at = chunk.indexOf(0x0a, start); at >= 0; at = chunk.indexOf(0x0a, start)) {
       pushPart(chunk.subarray(start, at));
       yield emit(true);
-      start = at + 2;
+      start = at + 1;
     }
     pushPart(chunk.subarray(start));
   }
-  if (utf16Carry) pushPart(utf16Carry);
   if (lineSize || parts.length || number === 0) yield emit(false);
 }
 
@@ -1464,48 +1422,20 @@ export function decodeBytes(bytes: Buffer): string {
   return decodeUtf8(bytes);
 }
 
-// A diff or blob line from a UTF-16 file arrives NUL-interleaved; decode it
-// so the scan reads the text, not the storage. Only strict shapes decode —
-// anything else scans as it arrived, as before. A line number stays the
-// diff's, so a finding in a UTF-16 file points at the file and the
-// approximate line, never silently nowhere.
-export function decodeChildText(text: string): string {
-  if (!text.includes("\0")) return text;
-  // Rebuild the byte view: surrogateescape chars map back to bytes exactly,
-  // ASCII maps to itself, and anything else aborts the decode.
-  const bytes: number[] = [];
-  for (const ch of text) {
-    const code = ch.codePointAt(0)!;
-    if (code >= 0xdc80 && code <= 0xdcff) bytes.push(code - 0xdc00);
-    else if (code < 0x80) bytes.push(code);
-    else return text;
+// Closed input refuses loudly: a file in any encoding but UTF-8 text names
+// itself and fails the check, exit 2. Nothing is decoded.
+export class RefusedError extends Error {
+  constructor(place: string) {
+    super(`refused ${place}: not UTF-8 text`);
+    this.name = "RefusedError";
   }
-  const decode = (le: boolean): string | null => {
-    let rest = bytes;
-    if (le && rest.length >= 2 && rest[0] === 0xff && rest[1] === 0xfe) rest = rest.slice(2);
-    if (!le && rest.length >= 2 && rest[0] === 0xfe && rest[1] === 0xff) rest = rest.slice(2);
-    if (rest.length % 2 === 1) {
-      // A split fragment keeps half of a newline pair: LE continuations
-      // open with NUL, BE fragments close with one.
-      if (le && rest[0] === 0x00) rest = rest.slice(1);
-      else if (rest[rest.length - 1] === 0x00 || rest[rest.length - 1] === 0x0a)
-        rest = rest.slice(0, -1);
-      else return null;
-    }
-    if (!rest.length) return "";
-    for (let i = 0; i < rest.length; i++) {
-      const half = le ? i % 2 === 1 : i % 2 === 0;
-      if (half && rest[i] !== 0x00) return null;
-    }
-    let out = "";
-    for (let i = 0; i < rest.length; i += 2) {
-      const low = le ? rest[i]! : rest[i + 1]!;
-      const high = le ? rest[i + 1]! : rest[i]!;
-      out += String.fromCharCode(low | (high << 8));
-    }
-    return out.endsWith("\r") ? out.slice(0, -1) : out;
-  };
-  return decode(true) ?? decode(false) ?? text;
+}
+
+// Diff and blob lines arrive through the lossy byte decode, which maps bytes
+// outside UTF-8 to surrogateescape markers; a NUL or a marker refuses the
+// line's file instead of scanning storage bytes as text.
+export function refuseUnlessText(text: string, place: string): void {
+  if (text.includes("\0") || /[\uDC80-\uDCFF]/u.test(text)) throw new RefusedError(place);
 }
 
 export async function* childLines(readable: NodeJS.ReadableStream): AsyncGenerator<string> {

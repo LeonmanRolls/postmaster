@@ -84,7 +84,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { scriptsDir } from "./lib/paths.ts";
 import { run } from "./lib/proc.ts";
-import { errorText, safePath } from "./scrub-report.ts";
+import { errorText, isDraftRecord, safePath } from "./scrub-report.ts";
 import {
   D_CLASS,
   END_OF_STRING,
@@ -428,6 +428,9 @@ export function privateDataBlock(dispatch: string): string {
   const resolutions = jsonLines(join(dispatch, "detections-resolved.jsonl"));
   const found = new Map<string, PrivateFinding>();
   for (const record of detections) {
+    // Draft rows log but never resolve: a draft is reworded and scanned
+    // again, so the block skips them instead of dying for no resolution.
+    if (isDraftRecord(record)) continue;
     const finding = privateFinding(record);
     found.set(privateFindingKey(finding), finding);
   }

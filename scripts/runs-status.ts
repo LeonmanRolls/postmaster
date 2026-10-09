@@ -32,6 +32,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { run } from "./lib/proc.ts";
 import { pyWords } from "./lib/text.ts";
+import { isDraftRecord } from "./scrub-report.ts";
 
 interface RunRow {
   run: string;
@@ -56,6 +57,9 @@ function detectionKeys(path: string): Set<string> {
       const record: unknown = JSON.parse(line);
       if (typeof record !== "object" || record === null || Array.isArray(record)) continue;
       const row = record as Record<string, unknown>;
+      // Draft rows log but are never told: TELL fires on findings, and a
+      // draft is reworded and scanned again.
+      if (isDraftRecord(row)) continue;
       if (
         typeof row.rule !== "string" ||
         typeof row.file !== "string" ||

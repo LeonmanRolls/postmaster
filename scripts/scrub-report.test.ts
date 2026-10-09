@@ -7,6 +7,7 @@ import {
   execReset,
   findingRow,
   isDraftPlace,
+  isDraftRecord,
   logFinding,
   replaceReset,
   scanReset,
@@ -42,7 +43,7 @@ test("logFinding writes one row with the file redacted", () => {
   }
 });
 
-test("logFinding writes nothing without the log env or for a draft-only scan", () => {
+test("logFinding writes nothing without the log env", () => {
   const previous = process.env.POSTMASTER_DETECTIONS_LOG;
   delete process.env.POSTMASTER_DETECTIONS_LOG;
   try {
@@ -50,12 +51,24 @@ test("logFinding writes nothing without the log env or for a draft-only scan", (
   } finally {
     if (previous !== undefined) process.env.POSTMASTER_DETECTIONS_LOG = previous;
   }
+});
+
+test("logFinding marks a draft-only scan via draft, and the readers skip it", () => {
+  // Review round 6: dropping draft rows broke C29's one line per finding,
+  // so drafts log marked and the block and TELL skip them instead.
   const { log, restore } = withLog();
   try {
     expect(isDraftPlace("(pr-description)")).toBe(true);
     expect(isDraftPlace("(message)")).toBe(false);
     logFinding("email", "(pr-description)", 2, "");
-    expect(existsSync(log)).toBe(false);
+    const row = JSON.parse(readFileSync(log, "utf8")) as Record<string, unknown>;
+    expect(row.rule).toBe("email");
+    expect(row.via).toBe("draft");
+    expect(isDraftRecord(row)).toBe(true);
+    expect(isDraftRecord({ rule: "email", file: "a.ts", line: 1, commit: "" })).toBe(false);
+    expect(isDraftRecord({ rule: "email", file: "a.ts", line: 1, commit: "", via: "marker" })).toBe(
+      false,
+    );
   } finally {
     restore();
   }

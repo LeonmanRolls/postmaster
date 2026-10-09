@@ -247,6 +247,9 @@ beforeAll(() => {
     detection("first") + detection("second"),
   );
   writeFileSync(join(root, "repeat-told", ".detections-told"), detection("first"));
+  // Review round 6: draft rows log marked via draft and are never told.
+  mkRun("draft-waiting", "review", 2, ".waiting-on-user");
+  writeFileSync(join(root, "draft-waiting", "detections.jsonl"), detection("first", "draft"));
   mkdirSync(join(root, "postmaster"), { recursive: true });
 });
 
@@ -263,6 +266,10 @@ describe("positive controls", () => {
   test("a told finding waits for the user and a repeated log entry does not tell again", () => {
     expect(nextOf("told-waiting")).toBe("USER");
     expect(nextOf("repeat-told")).toBe("USER");
+  });
+
+  test("a draft-only log never tells", () => {
+    expect(nextOf("draft-waiting")).toBe("USER");
   });
 
   test("tell rows list before every other state", () => {

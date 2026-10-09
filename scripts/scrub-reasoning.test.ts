@@ -50,6 +50,8 @@ test("detection and redaction agree line for line", () => {
     JSON.stringify({ encrypted_content: REASONING_PLACEHOLDER }),
     JSON.stringify({ note: "nothing sensitive here" }),
     JSON.stringify(JSON.stringify({ encrypted_content: sealed() })),
+    JSON.stringify({ note: `stray { brace then {"encrypted_content": "${sealed()}"}` }),
+    JSON.stringify({ note: `x {y {"encrypted_content": "${sealed()}"}}` }),
     "not json at all",
     "",
   ];

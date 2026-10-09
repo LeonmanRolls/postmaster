@@ -185,9 +185,9 @@ mkdir -p "$C3D"
   printf '{"a": "{\\"b\\": "%s' "$MAIL1"
 } > "$C3D/session.jsonl"
 bun -e 'const fs=require("fs");const t="contact "+process.argv[1];fs.writeFileSync(process.argv[2],"\ufeff"+t,"utf16le")' "$MAIL2" "$C3D/uni.txt"
-C3_OUT=$("$SCRUB" --files "$C3D/session.jsonl" "$C3D/uni.txt" 2>"$TMP/c3.err") && C3_CODE=$? || C3_CODE=$?
+C3_OUT=$("$SCRUB" --files "$C3D/session.jsonl" 2>"$TMP/c3.err") && C3_CODE=$? || C3_CODE=$?
 C3_LINES=$(printf '%s' "$C3_OUT" | grep -c . || true)
-if [ "$C3_CODE" -eq 1 ] && [ "$C3_LINES" -eq 7 ]; then
+if [ "$C3_CODE" -eq 1 ] && [ "$C3_LINES" -eq 6 ]; then
   ok "one line per hidden value, exit 1"
 else
   bad "one line per hidden value, exit 1" "exit $C3_CODE, $C3_LINES lines: $C3_OUT"
@@ -196,7 +196,12 @@ for d in 1 2 3 4; do
   if printf '%s' "$C3_OUT" | grep -q "session.jsonl:$((d + 1)):"; then ok "depth $d decoded"; else bad "depth $d decoded" "$C3_OUT"; fi
 done
 if printf '%s' "$C3_OUT" | grep -q "session.jsonl:6:"; then ok "cut-off last record decoded"; else bad "cut-off last record decoded" "$C3_OUT"; fi
-if printf '%s' "$C3_OUT" | grep -q "uni.txt:1:"; then ok "UTF-16 by its mark"; else bad "UTF-16 by its mark" "$C3_OUT"; fi
+C3U_OUT=$(cd "$C3D" && "$SCRUB" --files uni.txt 2>"$TMP/c3u.err") && C3U_CODE=$? || C3U_CODE=$?
+if [ "$C3U_CODE" -eq 2 ] && grep -q "refused uni.txt: not UTF-8 text" "$TMP/c3u.err"; then
+  ok "UTF-16 refused loudly by name, exit 2"
+else
+  bad "UTF-16 refused loudly by name, exit 2" "exit $C3U_CODE: $(cat "$TMP/c3u.err")"
+fi
 
 # --- C4: secrets as the first version. ---
 echo "C4: secrets"

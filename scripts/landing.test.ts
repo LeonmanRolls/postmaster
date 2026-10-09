@@ -1644,6 +1644,24 @@ describe("private-data-card", () => {
     }
   });
 
+  test("draft-only rows log but the block carries none", () => {
+    // Review round 6: drafts log marked via draft; the block skips them
+    // instead of dying for no resolution.
+    const dispatch = join(tmp, "private-data-drafts");
+    mkdirSync(dispatch, { recursive: true });
+    const record = {
+      rule: "email",
+      file: "(pr-description)",
+      line: 1,
+      commit: "",
+      via: "draft",
+    };
+    writeFileSync(join(dispatch, "detections.jsonl"), `${JSON.stringify(record)}\n`);
+    const block = privateDataBlock(dispatch);
+    expect(block).toContain("none");
+    expect(block).not.toContain("(pr-description)");
+  });
+
   test("the card scan still refuses a card when SCRUB_CHECK_DISABLE hides email", () => {
     // Review round 1: the scan inherited SCRUB_CHECK_DISABLE from the environment.
     const dispatch = join(tmp, "private-data-disable");

@@ -4,9 +4,10 @@ import { join } from "node:path";
 import { KINDS, scan as scanPersonal } from "../raw/trials/pii-patterns/apparatus/patterns.ts";
 import { scan as scanPort } from "./scrub-patterns.ts";
 import {
-  decodeChildText,
   keyBlockStep,
   needsFullScan,
+  RefusedError,
+  refuseUnlessText,
   RULES,
   scanLine,
   StreamScanner,
@@ -91,6 +92,15 @@ test("secret shapes include access tokens, bearer credentials, fields, dotenv va
   expect(rules("token = config.readToken() ")).not.toContain("token");
 });
 
+test("a dotenv assignment inside a multiline JSON string flags like the plain line", () => {
+  // Review round 6: the decoded string stayed one multi-line unit, so the
+  // anchored dotenv rule never saw its logical lines.
+  const assignment = joined("DB_PASSWORD=", "Summer2024!");
+  const line = JSON.stringify({ type: "tool_result", content: `PORT=3000\n${assignment}\n` });
+  expect(rules(line)).toContain("dotenv");
+  expect(rules(assignment)).toContain("dotenv");
+});
+
 test("private context finds concrete paths, machine names, network addresses, ids and tool credits", () => {
   const networkName = joined("relay", ".", "internal");
   const tailnet = joined("node", ".", "ts", ".", "net");
@@ -132,7 +142,7 @@ test("private context finds concrete paths, machine names, network addresses, id
   expect(rules("a tailnet name may end in `.ts.net`.")).toEqual([]);
 });
 
-test("JSON transcript values decode through nested strings, ANSI controls, truncation and UTF-16", async () => {
+test("JSON transcript values decode through nested strings, ANSI controls and truncation", async () => {
   const nested = (depth: number): string => {
     let value = JSON.stringify({ content: email() });
     for (let i = 0; i < depth; i++) value = JSON.stringify(value);
@@ -152,12 +162,15 @@ test("JSON transcript values decode through nested strings, ANSI controls, trunc
     return [code & 255, code >> 8];
   });
   writeFileSync(path, Uint8Array.from([0xff, 0xfe, ...units]));
-  const { streamLines } = await import("./scrub-core.ts");
-  const scanner = new StreamScanner();
-  const rows: string[] = [];
-  for await (const line of streamLines(path))
-    rows.push(...scanner.feed(line.number, line.text).findings.map((finding) => finding.rule));
-  expect(rows).toContain("email");
+  const { RefusedError: Refused, streamLines } = await import("./scrub-core.ts");
+  let error: unknown = null;
+  try {
+    for await (const line of streamLines(path)) line.number;
+  } catch (e) {
+    error = e;
+  }
+  expect(error instanceof Refused).toBe(true);
+  expect((error as Error).message).toBe(`refused ${path}: not UTF-8 text`);
 });
 
 test("markers suppress only their named value and faults are local to findings", () => {
@@ -186,6 +199,34 @@ test("markers inside JSON escapes are inert", () => {
   const line = JSON.stringify(joined(email(), "\n", markerText));
   expect(rules(line)).toContain("email");
   expect(rules(line)).not.toContain("marker");
+});
+
+test("markers and guards inside escape sequences are not seen at all", () => {
+  // Review round 6, closed input: escape sequences strip first, by one
+  // treatment for markers and guards alike.
+  const tok = token();
+  const osc = joined(
+    "\x1b]0;",
+    "private-data",
+    ":allow-next-line token -- synthetic fixture",
+    "\x07",
+  );
+  const hidden = new StreamScanner();
+  hidden.feed(1, osc);
+  const leaked = hidden.feed(2, `leaked ${tok} here`);
+  expect(leaked.findings.map((finding) => finding.rule)).toContain("token");
+  expect(leaked.suppressed).toEqual([]);
+
+  const shown = new StreamScanner();
+  shown.feed(1, joined("private-data", ":allow-next-line token -- synthetic fixture"));
+  const covered = shown.feed(2, `leaked ${tok} here`);
+  expect(covered.findings).toEqual([]);
+  expect(covered.suppressed.map((finding) => finding.rule)).toContain("token");
+
+  const prefix = "\x1b[0m".repeat(8);
+  const quoted = `${tok} "${tok} ${marker("token")}"`;
+  expect(rules(prefix + quoted)).toContain("token");
+  expect(rules(prefix + quoted)).toEqual(rules(quoted));
 });
 
 test("private-key block classification is line-oriented", () => {
@@ -489,18 +530,20 @@ test("prefilter is lossless: identical findings with it on and off over a dense 
   }
 });
 
-test("diff lines from UTF-16 files decode, anything else scans as it arrived", () => {
-  // Review round 2: NUL-interleaved diff lines missed their findings.
-  // Surrogateescape chars stand where decodeUtf8 put the raw bytes.
-  expect(decodeChildText("plain line")).toBe("plain line");
-  expect(decodeChildText("a\0b\0")).toBe("ab");
-  expect(decodeChildText("\udcff\udcfea\0b\0")).toBe("ab");
-  expect(decodeChildText("\0a\0b\0")).toBe("ab");
-  expect(decodeChildText("\0a\0b")).toBe("ab");
-  expect(decodeChildText("\udcfe\udcff\0a\0b")).toBe("ab");
-  expect(decodeChildText("\0a\0b\0")).toBe("ab");
-  expect(decodeChildText("a\0b")).toBe("a\0b");
-  expect(decodeChildText("\0\0\0\0")).toBe("\0\0");
+test("closed input refuses anything but UTF-8 text loudly by name", () => {
+  // Review round 6: nothing is decoded; a NUL or a surrogateescape marker
+  // refuses the line's file and the check fails closed.
+  expect(() => refuseUnlessText("plain line", "a.txt")).not.toThrow();
+  for (const text of ["a\0b", "\0\0", "a\udcffb", "\udc80"]) {
+    let error: unknown = null;
+    try {
+      refuseUnlessText(text, "a.txt");
+    } catch (e) {
+      error = e;
+    }
+    expect(error instanceof RefusedError).toBe(true);
+    expect((error as Error).message).toBe("refused a.txt: not UTF-8 text");
+  }
 });
 
 test("a pattern-code line exempts only the pattern, never trailing values", () => {

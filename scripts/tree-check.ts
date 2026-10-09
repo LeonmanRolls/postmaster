@@ -2,16 +2,17 @@
 // Checks the private run folder and new raw records in a project change.
 import {
   childLines,
-  decodeChildText,
   git,
   keyBlockStep,
+  RefusedError,
+  refuseUnlessText,
   resolveCommit,
   runGit,
   StreamScanner,
 } from "./scrub-core.ts";
 import { pyWords } from "./lib/text.ts";
 import { hasReasoning } from "./scrub-reasoning.ts";
-import { fail, findingRow, logFinding, safePath } from "./scrub-report.ts";
+import { errorText, fail, findingRow, logFinding, safePath } from "./scrub-report.ts";
 
 const EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 const USAGE = "usage: tree-check.sh [<base> [<head>]] | --help";
@@ -44,7 +45,8 @@ async function scanBlob(
   let inBlock = false;
   for await (const raw of childLines(child.stdout)) {
     line++;
-    const text = decodeChildText(raw);
+    refuseUnlessText(raw, path);
+    const text = raw;
     if (!disabled("encrypted-reasoning")) {
       try {
         const parsed = JSON.parse(text) as unknown;
@@ -179,7 +181,11 @@ async function main(args: string[]): Promise<number> {
 if (import.meta.main) {
   try {
     process.exit(await main(process.argv.slice(2)));
-  } catch {
+  } catch (error) {
+    if (error instanceof RefusedError) {
+      console.error(errorText("tree-check", error.message));
+      process.exit(2);
+    }
     console.error("tree-check: the tree could not be read");
     process.exit(2);
   }

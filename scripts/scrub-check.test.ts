@@ -187,15 +187,11 @@ test("C2 range scan sees added then deleted lines, file names, messages, identit
   ).toBe(true);
 });
 
-test("range scan reads UTF-16 added lines like --files does", () => {
-  // Review round 2: the range scan decoded diff bytes as UTF-8 only, so a
-  // UTF-16 file's findings passed the gate while --files found them.
+test("closed input refuses any other encoding loudly by name, exit 2", () => {
+  // Review round 6: UTF-16, binary and invalid bytes are refused, never
+  // decoded; the refusal names the file and fails closed.
   for (const encoding of ["utf16le", "utf16be"] as const) {
     const repo = initRepo();
-    const base = spawnSync("git", ["rev-parse", "HEAD"], {
-      cwd: repo,
-      encoding: "utf8",
-    }).stdout.trim();
     const body = `contact ${email()} here\n`;
     const little = Buffer.from(body, "utf16le");
     const big = Buffer.from(little);
@@ -208,18 +204,37 @@ test("range scan reads UTF-16 added lines like --files does", () => {
       encoding === "utf16le"
         ? Buffer.concat([Buffer.from([0xff, 0xfe]), little])
         : Buffer.concat([Buffer.from([0xfe, 0xff]), big]);
-    writeFileSync(join(repo, "note.txt"), bytes);
-    const added = commit(repo, "add encoded note");
-    const scanned = runScript("scrub-check", [base, "HEAD"], repo);
-    expect(scanned.status).toBe(1);
-    expect(
-      scanned.stdout
-        .trim()
-        .split("\n")
-        .some((line) => line.startsWith(`${added}:note.txt:`) && line.endsWith(": email")),
-    ).toBe(true);
-    expect(!scanned.stdout.includes(email())).toBe(true);
+    const notePath = join(repo, "note.txt");
+    writeFileSync(notePath, bytes);
+    const files = runScript("scrub-check", ["--files", "note.txt"], repo);
+    expect(files.status).toBe(2);
+    expect(files.stderr).toContain("refused note.txt: not UTF-8 text");
+    expect(files.stdout).not.toContain(email());
   }
+  const repo = initRepo();
+  const binaryPath = join(repo, "blob.bin");
+  writeFileSync(binaryPath, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x01]));
+  const binary = runScript("scrub-check", ["--files", "blob.bin"], repo);
+  expect(binary.status).toBe(2);
+  expect(binary.stderr).toContain("refused blob.bin: not UTF-8 text");
+  const brokenPath = join(repo, "broken.txt");
+  writeFileSync(brokenPath, Buffer.from([0x61, 0xff, 0x62, 0x0a]));
+  const broken = runScript("scrub-check", ["--files", "broken.txt"], repo);
+  expect(broken.status).toBe(2);
+  expect(broken.stderr).toContain("refused broken.txt: not UTF-8 text");
+  const rangeRepo = initRepo();
+  const base = spawnSync("git", ["rev-parse", "HEAD"], {
+    cwd: rangeRepo,
+    encoding: "utf8",
+  }).stdout.trim();
+  writeFileSync(
+    join(rangeRepo, "note.txt"),
+    Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(`contact ${email()} here\n`, "utf16le")]),
+  );
+  commit(rangeRepo, "add encoded note");
+  const range = runScript("scrub-check", [base, "HEAD"], rangeRepo);
+  expect(range.status).toBe(2);
+  expect(range.stderr).toContain("refused note.txt: not UTF-8 text");
 });
 
 test("range scan completes while per-file lookups await inside the diff read", () => {
@@ -268,7 +283,7 @@ test("C3 --files decodes nested and cut-off JSON transcript values", () => {
   expect(!result.stdout.includes(email())).toBe(true);
 });
 
-test("C3 --files decodes ANSI, JSON depths one through four and the depth limit, truncation and UTF-16", () => {
+test("C3 --files decodes ANSI, JSON depths one through four and the depth limit, and truncation", () => {
   const repo = initRepo();
   const path = join(repo, "transcript.jsonl");
   const value = email();
@@ -285,12 +300,10 @@ test("C3 --files decodes ANSI, JSON depths one through four and the depth limit,
     path,
     `${[1, 2, 3, 4].map(nested).join("\n")}\n${atLimit}\n${ansi}\n${truncated}\n`,
   );
-  const utf16 = join(repo, "transcript-utf16.jsonl");
-  writeFileSync(utf16, Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(value, "utf16le")]));
-  const result = runScript("scrub-check", ["--files", path, utf16], repo);
+  const result = runScript("scrub-check", ["--files", path], repo);
   expect(result.status).toBe(1);
-  expect(result.stdout.trim().split("\n")).toHaveLength(8);
-  expect(result.stdout.split("\n").filter((line) => line.endsWith(": email"))).toHaveLength(8);
+  expect(result.stdout.trim().split("\n")).toHaveLength(7);
+  expect(result.stdout.split("\n").filter((line) => line.endsWith(": email"))).toHaveLength(7);
   expect(result.stdout).not.toContain(value);
   expect(result.stderr).toBe("");
 });
@@ -413,9 +426,9 @@ test("C14 and C16 marked file values pass, while marked messages and post text r
   expect(!comment.stdout.includes(email())).toBe(true);
 });
 
-test("a dirty draft scan reports its rows but leaves the detections log clean", () => {
-  // Review round 4: the draft rows landed in detections.jsonl, fired TELL and
-  // died the card block, although a draft is reworded, never resolved.
+test("a dirty draft scan reports its rows and logs one marked line per finding", () => {
+  // Review round 6: dropping draft rows broke C29, so drafts log marked
+  // via draft and the block and TELL skip them instead of resolving them.
   const repo = initRepo();
   const draftPath = join(repo, "draft.txt");
   writeFileSync(draftPath, `draft ${email()}\n`);
@@ -425,7 +438,28 @@ test("a dirty draft scan reports its rows but leaves the detections log clean", 
   });
   expect(draft.status).toBe(1);
   expect(draft.stdout.trim()).toBe("(pr-description):1: email");
-  expect(existsSync(log)).toBe(false);
+  const rows = readFileSync(log, "utf8").trim().split("\n");
+  expect(rows).toHaveLength(1);
+  expect((JSON.parse(rows[0]!) as Record<string, unknown>).via).toBe("draft");
+});
+
+test("--pr-description threads key-block state like --files", () => {
+  // Review round 6: --pr-description scanned each line stateless, so an END
+  // line that --files flagged through keyBlock passed silently.
+  const repo = initRepo();
+  const head = ["-----BEGIN RSA PRIV", "ATE KEY-----"].join("");
+  const end = ["-----END RSA PRIV", "ATE KEY-----"].join("");
+  const keyPath = join(repo, "key.txt");
+  writeFileSync(keyPath, `${head}\n${end}\n`);
+  const files = runScript("scrub-check", ["--files", keyPath], repo);
+  expect(files.status).toBe(1);
+  expect(files.stdout.trim().split("\n")).toHaveLength(2);
+  const pr = runScript("scrub-check", ["--pr-description", keyPath], repo);
+  expect(pr.status).toBe(1);
+  expect(pr.stdout.trim().split("\n")).toEqual([
+    "(pr-description):1: token",
+    "(pr-description):2: token",
+  ]);
 });
 
 test("C15 stale and malformed markers fault only beside findings", () => {

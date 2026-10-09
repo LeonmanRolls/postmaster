@@ -3,9 +3,10 @@
 // and state-safe redaction matching. Every scrub script calls it; no script
 // keeps its own copy.
 //
-// - Logging: logFinding writes detections.jsonl, and drops draft-only scans:
-//   a draft is reworded and scanned again, never resolved, so a draft row
-//   must never sit in the log waiting for a resolution.
+// - Logging: logFinding writes detections.jsonl, marking draft-only scans
+//   via "draft": a draft is reworded and scanned again, never resolved, so
+//   the rows log (one line per finding) and the readers skip them instead
+//   of resolving them. isDraftRecord is the one test both readers use.
 // - Printing: findingRow formats a finding row with its path redacted, and
 //   errorText/fail redact the whole message, so no message a person reads
 //   shows a finding's value, even when the value is in a file name.
@@ -28,10 +29,14 @@ export function isDraftPlace(file: string): boolean {
   return DRAFT_PLACES.has(file);
 }
 
+export function isDraftRecord(row: Record<string, unknown>): boolean {
+  return row.via === "draft";
+}
+
 export function logFinding(rule: string, file: string, line: number, commit = "", via = ""): void {
-  if (isDraftPlace(file)) return;
   const log = process.env.POSTMASTER_DETECTIONS_LOG;
   if (!log) return;
+  if (isDraftPlace(file)) via = "draft";
   const record: Record<string, unknown> = {
     rule,
     file: safePath(file),

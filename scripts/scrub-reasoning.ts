@@ -8,7 +8,8 @@
 // The two traversals differ on purpose and must stay that way: the
 // transform recurses, so extreme nesting throws and fails closed at the
 // gate; the detector walks iteratively and uncapped, so no nesting depth
-// is a bypass. What they share is the match below and the brace scan.
+// is a bypass. What they share is the match below, the brace scan and the
+// embedded walk: neither side scans prose for JSON on its own.
 import { pyLower } from "./lib/text.ts";
 import { REASONING_PLACEHOLDER } from "./scrub-report.ts";
 
@@ -42,38 +43,48 @@ export function balancedEnd(text: string, start: number): number {
   return -1;
 }
 
-function spliceEmbedded(value: string): { value: string; count: number } {
-  let count = 0;
-  let out = "";
-  let cursor = 0;
+// The one walk over prose-embedded JSON: both the detector and the
+// transform visit every balanced parseable span through here, so the two
+// cannot advance differently again (an unbalanced brace is stepped past,
+// never a stop). A visit that consumes its span advances past it.
+export function scanEmbedded(
+  text: string,
+  visit: (parsed: unknown, start: number, end: number) => boolean,
+): void {
   let i = 0;
-  while (i < value.length) {
-    if (value[i] !== "{") {
+  while (i < text.length) {
+    if (text[i] !== "{") {
       i++;
       continue;
     }
-    const end = balancedEnd(value, i);
+    const end = balancedEnd(text, i);
     if (end === -1) {
       i++;
       continue;
     }
     let parsed: unknown;
     try {
-      parsed = JSON.parse(value.slice(i, end + 1)) as unknown;
+      parsed = JSON.parse(text.slice(i, end + 1)) as unknown;
     } catch {
       i++;
       continue;
     }
-    const transformed = transformReasoning(parsed);
-    if (!transformed.count) {
-      i++;
-      continue;
-    }
-    out += value.slice(cursor, i) + JSON.stringify(transformed.value);
-    cursor = end + 1;
-    i = end + 1;
-    count += transformed.count;
+    i = visit(parsed, i, end) ? end + 1 : i + 1;
   }
+}
+
+function spliceEmbedded(value: string): { value: string; count: number } {
+  let count = 0;
+  let out = "";
+  let cursor = 0;
+  scanEmbedded(value, (parsed, start, end) => {
+    const transformed = transformReasoning(parsed);
+    if (!transformed.count) return false;
+    out += value.slice(cursor, start) + JSON.stringify(transformed.value);
+    cursor = end + 1;
+    count += transformed.count;
+    return true;
+  });
   if (!count) return { value, count: 0 };
   return { value: out + value.slice(cursor), count };
 }
@@ -152,21 +163,10 @@ export function hasReasoning(value: unknown): boolean {
           /* not pure JSON; scan for embedded objects below */
         }
       }
-      let i = 0;
-      while (i < current.length) {
-        if (current[i] !== "{") {
-          i++;
-          continue;
-        }
-        const end = balancedEnd(current, i);
-        if (end === -1) break;
-        try {
-          stack.push(JSON.parse(current.slice(i, end + 1)) as unknown);
-        } catch {
-          /* not JSON; keep scanning past the brace */
-        }
-        i++;
-      }
+      scanEmbedded(current, (parsed) => {
+        stack.push(parsed);
+        return false;
+      });
       continue;
     }
     if (Array.isArray(current)) {
