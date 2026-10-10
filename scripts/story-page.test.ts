@@ -317,6 +317,15 @@ describe("parseCited", () => {
     expect(parseCited(cite("#L2-L3"), "abc1234").cited).toEqual(["f.ts@2", "f.ts@3"]);
   });
 
+  test("an end past the safe integers is refused, not looped on", () => {
+    expect(() =>
+      parseCited(
+        "a [cite](https://github.com/o/r/blob/abc1234/f.ts#L9007199254740992) here",
+        "abc1234",
+      ),
+    ).toThrow("past the last line a story counts");
+  });
+
   test("gaps fold runs and skip shown lines", () => {
     const gaps = computeGaps(["a@1", "a@2", "a@4", "b@9"], new Set(["a@2"]));
     expect(gaps).toEqual([

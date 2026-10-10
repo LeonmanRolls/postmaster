@@ -495,6 +495,12 @@ export function parseCited(body: string, atSha: string): Cited {
     }
     const from = Number(m[3]);
     const to = Number(m[4] ?? m[3]);
+    // Past the safe integers the counter rounds back and the loop below
+    // never ends, so such ends are refused before anything counts them.
+    if (!Number.isSafeInteger(from) || !Number.isSafeInteger(to))
+      throw new Error(
+        `the ticket cites ${m[2]}#L${m[3]}${m[4] ? `-L${m[4]}` : ""}, past the last line a story counts`,
+      );
     // A whole file is cited by a link without lines; a line range names
     // the lines the page shows or lists, so it must name some.
     if (from < 1) throw new Error(`the ticket cites line ${from} of ${m[2]}, and lines start at 1`);
