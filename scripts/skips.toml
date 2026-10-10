@@ -453,3 +453,33 @@ file = "scripts/acceptance-407.test.ts"
 name = "C5: fixture runs > with no key scores clean"
 reason = "needs a model run from this branch; the postmaster dispatches and scores it at landing"
 systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/acceptance-409.test.ts"
+name = "C1: the held-back notice > C5's briefs carry the notice and a given run's do not"
+reason = "needs a dispatched held-back run; the postmaster reads C5's run at landing"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/acceptance-409.test.ts"
+name = "C2: nothing sent quotes the notes > C5's prompt and ruling files hold no section line"
+reason = "needs a dispatched held-back run; the postmaster reads C5's run at landing"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/acceptance-409.test.ts"
+name = "C3: the check's edges > copies of C5's run folder read as the ticket says"
+reason = "needs C5's dispatched run; the postmaster runs the check on copies at landing"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/acceptance-409.test.ts"
+name = "C4: the run's log records the outcome > C5's run log holds the check's outcome"
+reason = "needs C5's dispatched run; the postmaster reads C5's run at landing"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/acceptance-409.test.ts"
+name = "C5: fixture runs > without the notes scores clean and the log holds the outcome"
+reason = "needs a model run from this branch; the postmaster dispatches and scores it at landing"
+systems = ["linux", "darwin"]
