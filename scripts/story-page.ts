@@ -796,12 +796,13 @@ export function tagSvg(
   else tag = tag.replace(/^<svg/u, `<svg id="${id}"`);
   // The page switches state through svg.dg, so a diagram without the
   // class would never change: add it where it is missing.
+  // ASCII: tag attribute names are ASCII.
   const have = /\bclass="([^"]*)"/u.exec(tag);
   // ASCII: class lists split on ASCII whitespace.
   const names = have?.[1]?.split(/\s+/u).filter((c) => c.length > 0) ?? [];
   if (!have) tag = tag.replace(/^<svg/u, `<svg class="dg"`);
   else if (!names.includes("dg"))
-    tag = tag.replace(/\bclass="[^"]*"/u, `class="${[...names, "dg"].join(" ")}"`);
+    tag = tag.replace(/\bclass="[^"]*"/u, `class="${[...names, "dg"].join(" ")}"`); // ASCII: tag attribute names are ASCII.
   tag = tag.replace(/^<svg/u, `<svg data-state="${esc(state)}"`);
   // ASCII: tag attribute names are ASCII.
   if (!/\brole="/u.test(tag)) tag = tag.replace(/^<svg/u, `<svg role="img"`);
