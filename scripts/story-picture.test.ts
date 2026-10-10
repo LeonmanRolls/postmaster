@@ -76,6 +76,7 @@ cp "$1" "$4"
 `;
 
 const PYTHON_STUB = `#!/bin/sh
+PATH=$PATH:/bin
 pwd >> "$STUB_PYTHON_PWD"
 if [ $# -eq 2 ]; then exit 0; fi
 cp "$3" "$4"
