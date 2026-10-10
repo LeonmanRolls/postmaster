@@ -70,7 +70,9 @@ describe("C1: the skill", () => {
     }
     expect(tags.size).toBeGreaterThan(0);
     for (const tag of tags) {
-      const found = r.out.split("\n").some((l) => l.includes("skills/surveyor") && l.includes(`(${tag})`));
+      const found = r.out
+        .split("\n")
+        .some((l) => l.includes("skills/surveyor") && l.includes(`(${tag})`));
       expect(found).toBe(true);
     }
   });
@@ -268,9 +270,7 @@ describe("C3: the materials gate", () => {
       const held = readdirSync(folder).sort();
       expect(held.length).toBe(4);
       expect(held[0]).toBe("question.md");
-      expect(
-        held.slice(1).every((n: string) => n.startsWith("material-")),
-      ).toBe(true);
+      expect(held.slice(1).every((n: string) => n.startsWith("material-"))).toBe(true);
       expect(readFileSync(join(folder, "question.md"), "utf8")).toBe(
         readFileSync(question, "utf8"),
       );

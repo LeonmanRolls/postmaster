@@ -271,8 +271,7 @@ export function setStub(lay: SurveyLayout, harness: string, c: StubCase): void {
   writeFileSync(join(lay.stubDir, `${harness}.events`), `${(c.events ?? []).join("\n")}\n`);
   writeFileSync(join(lay.stubDir, `${harness}.exit`), `${c.exit ?? 0}\n`);
   rmSync(join(lay.stubDir, `${harness}.setup`), { force: true });
-  if (c.setup !== undefined)
-    writeFileSync(join(lay.stubDir, `${harness}.setup`), `${c.setup}\n`);
+  if (c.setup !== undefined) writeFileSync(join(lay.stubDir, `${harness}.setup`), `${c.setup}\n`);
   rmSync(join(lay.stubDir, `${harness}.last`), { force: true });
   if (c.last !== undefined) writeFileSync(join(lay.stubDir, `${harness}.last`), c.last);
 }
@@ -345,11 +344,7 @@ export function patchRunJson(dispatch: string, patch: Record<string, unknown>): 
   writeFileSync(path, `${JSON.stringify(data, null, 2)}\n`);
 }
 
-export function surveyor(
-  lay: SurveyLayout,
-  args: string[],
-  cwd?: string,
-): Run {
+export function surveyor(lay: SurveyLayout, args: string[], cwd?: string): Run {
   return sh(RUN, ["surveyor", ...args], lay.env, cwd ?? lay.tmp);
 }
 
