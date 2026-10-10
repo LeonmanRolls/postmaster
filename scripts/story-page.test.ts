@@ -544,6 +544,18 @@ describe("diagrams", () => {
     expect(tagged).toContain('id="dg-d"');
     expect(() => tagSvg("nope", "dg-d", "a", "Cap", "d")).toThrow("scene d: its diagram is no SVG");
   });
+
+  test("a diagram without the dg class gains it, once", () => {
+    expect(tagSvg('<svg viewBox="0 0 1 1"><rect/></svg>', "dg-d", "a", "Cap", "d")).toContain(
+      'class="dg"',
+    );
+    expect(tagSvg('<svg class="plate"><rect/></svg>', "dg-d", "a", "Cap", "d")).toContain(
+      'class="plate dg"',
+    );
+    const kept = tagSvg('<svg class="dg"><rect/></svg>', "dg-d", "a", "Cap", "d");
+    expect(kept).toContain('class="dg"');
+    expect(kept).not.toContain("dg dg");
+  });
 });
 
 describe("page pieces", () => {
