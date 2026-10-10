@@ -464,56 +464,76 @@ export interface Cited {
 /** The most lines one cited range may name; whole files link without lines. */
 const MAX_CITED_RANGE = 100_000;
 
-// A cited link matches any ref but a template placeholder, so a branch
-// link is refused naming the link instead of skipped; column anchors
-// cite their whole lines; a second end without -L is matched so it can
-// be refused, since the ticket's form needs -L on both ends.
+// A cited link matches any owner, repo and ref but a template
+// placeholder, so a branch link is refused naming the link instead of
+// skipped; column anchors cite their whole lines; a second end without
+// -L is matched so it can be refused, since the ticket's form needs -L
+// on both ends.
 const LINK =
   // ASCII: blob URLs and line numbers are ASCII by GitHub's form.
-  /https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/blob\/([^<>/\s][^/\s]*)\/([^)\s#]+)(?:#L(\d+)(?:C\d+)?(?:-L(\d+)(?:C\d+)?|-(\d*))?)?/gu;
+  /https:\/\/github\.com\/([^/\s]+)\/([^/\s]+)\/blob\/([^<>/\s][^/\s]*)\/([^)\s#]+)(?:#L(\d+)(?:C\d+)?(?:-L(\d+)(?:C\d+)?|-(\d*))?)?/gu;
+
+/** Owner and repo from a GitHub repository URL, else undefined. */
+export function repoOf(url: string): { owner: string; repo: string } | undefined {
+  // ASCII: repository URLs are ASCII by GitHub's form.
+  const m = /^https:\/\/github\.com\/([^/\s]+)\/([^/\s]+?)(?:\.git)?\/?$/u.exec(url.trim());
+  if (!m?.[1] || !m[2]) return undefined;
+  return { owner: m[1], repo: m[2] };
+}
 
 /**
- * The code a ticket cites: every link into the repository's files at a
- * commit. A link with lines names those lines; a link without names the whole
- * file, listed but not counted. A link at another commit is refused.
+ * The code a ticket cites: every link into the target repository's files
+ * at a commit. A link with lines names those lines; a link without names
+ * the whole file, listed but not counted. A link at another commit is
+ * refused. Links outside the target repository are context, not
+ * citations, and are skipped.
  */
-export function parseCited(body: string, atSha: string): Cited {
+export function parseCited(
+  body: string,
+  atSha: string,
+  target?: { owner: string; repo: string },
+): Cited {
   const lines = new Set<string>();
   const named: { path: string; url: string }[] = [];
+  // ASCII: owner and repo names compare ASCII-case-insensitively, as GitHub reads them.
+  const want =
+    target === undefined ? undefined : `${target.owner.toLowerCase()}/${target.repo.toLowerCase()}`;
   for (const m of body.matchAll(LINK)) {
-    const ref = m[1] ?? "";
+    // ASCII: owner and repo names compare ASCII-case-insensitively, as GitHub reads them.
+    if (want !== undefined && `${m[1]?.toLowerCase()}/${m[2]?.toLowerCase()}` !== want) continue;
+    const ref = m[3] ?? "";
     // Only a SHA prefix counts as the story's commit; anything else,
     // a branch or a stub too short to be one, is refused naming the link.
     // ASCII: commit SHAs are hex by git's form.
     if (!atSha.startsWith(ref) || !/^[0-9a-f]{7,40}$/u.test(ref)) {
       throw new Error(
-        `the ticket cites ${m[2]} at ${ref}, not at the story's commit ${atSha.slice(0, 7)}`,
+        `the ticket cites ${m[4]} at ${ref}, not at the story's commit ${atSha.slice(0, 7)}`,
       );
     }
-    if (!m[3]) {
-      if (!named.some((x) => x.path === m[2])) named.push({ path: m[2] ?? "", url: m[0] ?? "" });
+    if (!m[5]) {
+      if (!named.some((x) => x.path === m[4])) named.push({ path: m[4] ?? "", url: m[0] ?? "" });
       continue;
     }
-    if (m[5] !== undefined)
+    if (m[7] !== undefined)
       throw new Error(
-        `the ticket cites ${m[2]}#L${m[3]}-${m[5]}, and the range's second end needs -L`,
+        `the ticket cites ${m[4]}#L${m[5]}-${m[7]}, and the range's second end needs -L`,
       );
-    const from = Number(m[3]);
-    const to = Number(m[4] ?? m[3]);
+    const from = Number(m[5]);
+    const to = Number(m[6] ?? m[5]);
     // Past the safe integers the counter rounds back and the loop below
     // never ends, so such ends are refused before anything counts them.
     if (!Number.isSafeInteger(from) || !Number.isSafeInteger(to))
       throw new Error(
-        `the ticket cites ${m[2]}#L${m[3]}${m[4] ? `-L${m[4]}` : ""}, past the last line a story counts`,
+        `the ticket cites ${m[4]}#L${m[5]}${m[6] ? `-L${m[6]}` : ""}, past the last line a story counts`,
       );
     // A whole file is cited by a link without lines; a line range names
     // the lines the page shows or lists, so it must name some.
-    if (from < 1) throw new Error(`the ticket cites line ${from} of ${m[2]}, and lines start at 1`);
+    if (from < 1) throw new Error(`the ticket cites line ${from} of ${m[4]}, and lines start at 1`);
     if (to < from)
-      throw new Error(`the ticket cites ${m[2]}#L${from}-L${to}, and the range ends first`);
+      throw new Error(`the ticket cites ${m[4]}#L${from}-L${to}, and the range ends first`);
     if (to - from >= MAX_CITED_RANGE)
-      throw new Error(`the ticket cites ${m[2]}#L${from}-L${to}, over ${MAX_CITED_RANGE} lines`);
-    for (let n = from; n <= to; n++) lines.add(`${m[2]}@${n}`);
+      throw new Error(`the ticket cites ${m[4]}#L${from}-L${to}, over ${MAX_CITED_RANGE} lines`);
+    for (let n = from; n <= to; n++) lines.add(`${m[4]}@${n}`);
   }
   const cited = [...lines].sort((a, b) => {
     const [pa, na] = a.split("@") as [string, string];
@@ -1774,7 +1794,7 @@ export function build(o: BuildOptions): string {
     rowsOf.set(sc.id, refRows(sc.file, sc.from, sc.to, fileLines(sc.file)));
   }
   const ownBody = metaOf("issue", story.ticket);
-  const { cited, named } = parseCited(ownBody.body, atSha);
+  const { cited, named } = parseCited(ownBody.body, atSha, repoOf(story.repoUrl));
   const shown = new Set<string>();
   for (const rows of rowsOf.values()) for (const r of rows) shown.add(r.key);
   for (const sc of usedScenes) {

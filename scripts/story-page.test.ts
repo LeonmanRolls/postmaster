@@ -19,6 +19,7 @@ import {
   refRows,
   renderDoc,
   renderMd,
+  repoOf,
   sceneBlocks,
   scrubStory,
   startsInFence,
@@ -330,6 +331,26 @@ describe("parseCited", () => {
         "abc1234",
       ),
     ).toThrow("past the last line a story counts");
+  });
+
+  test("links outside the target repository are skipped, not refused", () => {
+    const target = { owner: "o", repo: "r" };
+    const body = [
+      "a [foreign](https://github.com/other/dep/blob/fffffffffffff/x.ts#L1) cite",
+      "and [local](https://github.com/o/r/blob/abc1234/f.ts#L2-L3) cite",
+      "plus [cased](https://github.com/O/R/blob/abc1234/g.ts#L4) cite",
+    ].join("\n");
+    expect(parseCited(body, "abc1234", target).cited).toEqual(["f.ts@2", "f.ts@3", "g.ts@4"]);
+    const same = "a [x](https://github.com/other/dep/blob/abc1234/x.ts#L1) cite";
+    expect(parseCited(same, "abc1234", target).cited).toEqual([]);
+    expect(parseCited(same, "abc1234", undefined).cited).toEqual(["x.ts@1"]);
+  });
+
+  test("owner and repo read from a repository URL", () => {
+    expect(repoOf("https://github.com/o/r")).toEqual({ owner: "o", repo: "r" });
+    expect(repoOf("https://github.com/o/r.git/")).toEqual({ owner: "o", repo: "r" });
+    expect(repoOf("not a url")).toBeUndefined();
+    expect(repoOf("https://github.com/o")).toBeUndefined();
   });
 
   test("gaps fold runs and skip shown lines", () => {
