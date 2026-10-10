@@ -341,7 +341,7 @@ interface IssueUrl {
 function issueUrls(segment: string): IssueUrl[] {
   const found: IssueUrl[] = [];
   const re =
-    /https?:\/\/github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+?)(?:\.git)?\/issues\/(\d+)(?=[\/?#\s"'`;&|()]|$)/giu;
+    /https?:\/\/github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+?)(?:\.git)?\/issues\/(\d+)(?=[/?#\s"'`;&|()]|$)/giu;
   for (const match of segment.matchAll(re)) {
     found.push({ nwo: `${match[1]}/${match[2]}`, number: match[3]! });
   }
@@ -965,7 +965,7 @@ function main(argv: string[]): number {
   const line = outcomeLine(reads, unknowns, titles);
   console.log(line);
   for (const finding of [...reads, ...titles]) console.log(detailLine(finding));
-  for (const reason of [...new Set(unknowns)]) console.log(`  unknown ${reason}`);
+  for (const reason of new Set(unknowns)) console.log(`  unknown ${reason}`);
   if (!record) return 0;
   return recordOutcome(dispatch, line);
 }
