@@ -68,6 +68,7 @@ export function pickStep(boxes: StepBox[], viewportH: number, narrow: boolean): 
 
 /** A WxH viewport: narrow below 900 pixels wide, like the page's own rule. */
 export function parseViewport(viewport: string): { w: number; h: number; narrow: boolean } {
+  // ASCII: viewports are ASCII digits by the WxH form, which \d matches exactly.
   const m = /^(\d+)x(\d+)$/u.exec(viewport);
   if (!m) throw new Error(`viewport ${viewport} is not WxH`);
   const w = Number(m[1]);
@@ -84,7 +85,8 @@ export function parseBoxes(json: string): StepBox[] {
   }
   if (!Array.isArray(value)) throw new Error("boxes are not [[top, bottom], ...]");
   return value.map((pair: unknown): StepBox => {
-    if (!Array.isArray(pair) || pair.length !== 2) throw new Error("boxes are not [[top, bottom], ...]");
+    if (!Array.isArray(pair) || pair.length !== 2)
+      throw new Error("boxes are not [[top, bottom], ...]");
     const [top, bottom] = pair as [unknown, unknown];
     if (typeof top !== "number" || typeof bottom !== "number") {
       throw new Error("boxes are not [[top, bottom], ...]");
@@ -220,7 +222,8 @@ export function parseStory(text: string): Story {
   }
   if (!isRecord(value)) throw new Error("story.json names no story");
   const mode = optStr(value, "mode");
-  if (mode !== undefined && mode !== "ticket") throw new Error(`mode "${mode}" is not a ticket story`);
+  if (mode !== undefined && mode !== "ticket")
+    throw new Error(`mode "${mode}" is not a ticket story`);
   const scenes = arr("story", value, "scenes").map((raw, i): Scene => {
     const where = `scene ${i}`;
     if (!isRecord(raw)) throw new Error(`${where} names no scene`);
@@ -238,7 +241,8 @@ export function parseStory(text: string): Story {
     }
     if (kind === "doc") {
       const from = str(at, raw, "from");
-      if (from !== "issue" && from !== "pr") throw new Error(`${at}: from "${from}" is neither issue nor pr`);
+      if (from !== "issue" && from !== "pr")
+        throw new Error(`${at}: from "${from}" is neither issue nor pr`);
       const scene: DocScene = {
         id,
         kind,
@@ -290,7 +294,9 @@ export function parseStory(text: string): Story {
       return scene;
     }
     if (kind === "head" || kind === "base") {
-      throw new Error(`${at}: kind "${kind}" is a change story's; ticket stories show code with kind "ref"`);
+      throw new Error(
+        `${at}: kind "${kind}" is a change story's; ticket stories show code with kind "ref"`,
+      );
     }
     throw new Error(`${at}: kind "${kind}" is no scene`);
   });
@@ -308,7 +314,8 @@ export function parseStory(text: string): Story {
     };
     const kind = optStr(raw, "kind");
     if (kind !== undefined) {
-      if (kind !== "title" && kind !== "criterion") throw new Error(`${at}: kind "${kind}" is neither title nor criterion`);
+      if (kind !== "title" && kind !== "criterion")
+        throw new Error(`${at}: kind "${kind}" is neither title nor criterion`);
       step.kind = kind;
     }
     const focus = (raw as Record<string, unknown>).focus;
@@ -328,7 +335,8 @@ export function parseStory(text: string): Story {
         if (!isRecord(mark)) throw new Error(`${at} names no marks`);
         const line = mark.line;
         const text = mark.text;
-        if (typeof line !== "number" || !Array.isArray(text)) throw new Error(`${at} names no marks`);
+        if (typeof line !== "number" || !Array.isArray(text))
+          throw new Error(`${at} names no marks`);
         for (const t of text) {
           if (typeof t !== "string") throw new Error(`${at} names no marks`);
         }
@@ -359,7 +367,11 @@ export function parseStory(text: string): Story {
     sections: arr("story", value, "sections").map((raw, i) => {
       const where = `section ${i}`;
       if (!isRecord(raw)) throw new Error(`${where} names no section`);
-      return { id: str(where, raw, "id"), label: str(where, raw, "label"), title: str(where, raw, "title") };
+      return {
+        id: str(where, raw, "id"),
+        label: str(where, raw, "label"),
+        title: str(where, raw, "title"),
+      };
     }),
     scenes,
     steps,
@@ -399,6 +411,7 @@ export interface Cited {
 }
 
 const LINK =
+  // ASCII: blob URLs and line numbers are ASCII by GitHub's form.
   /https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/blob\/([0-9a-f]{7,40})\/([^)\s#]+)(?:#L(\d+)(?:-L(\d+))?)?/gu;
 
 /**
@@ -411,7 +424,9 @@ export function parseCited(body: string, atSha: string): Cited {
   const named: { path: string; url: string }[] = [];
   for (const m of body.matchAll(LINK)) {
     if (!atSha.startsWith(m[1] ?? "")) {
-      throw new Error(`the ticket cites ${m[2]} at ${m[1]}, not at the story's commit ${atSha.slice(0, 7)}`);
+      throw new Error(
+        `the ticket cites ${m[2]} at ${m[1]}, not at the story's commit ${atSha.slice(0, 7)}`,
+      );
     }
     if (!m[3]) {
       if (!named.some((x) => x.path === m[2])) named.push({ path: m[2] ?? "", url: m[0] ?? "" });
@@ -439,7 +454,11 @@ export function computeGaps(cited: string[], shown: Set<string>): Gap[] {
   for (const k of cited) {
     if (shown.has(k)) continue;
     const at = k.lastIndexOf("@");
-    const g: Gap = { file: k.slice(0, at), from: Number(k.slice(at + 1)), to: Number(k.slice(at + 1)) };
+    const g: Gap = {
+      file: k.slice(0, at),
+      from: Number(k.slice(at + 1)),
+      to: Number(k.slice(at + 1)),
+    };
     const last = gaps.at(-1);
     if (last && last.file === g.file && last.to + 1 === g.from) last.to = g.from;
     else gaps.push(g);
@@ -454,13 +473,16 @@ export const esc = (s: string): string =>
 
 function inline(s: string): string {
   return esc(s)
-    .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/gu, '<a href="$2">$1</a>')
+    .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/gu, '<a href="$2">$1</a>') // ASCII: link destinations are ASCII URLs here.
     .replace(/`([^`]+)`/gu, "<code>$1</code>")
     .replace(/\*\*([^*]+)\*\*/gu, "<strong>$1</strong>");
 }
 
 const plainText = (s: string): string =>
-  s.replace(/\[([^\]]+)\]\([^)]*\)/gu, "$1").replace(/\*\*/gu, "").replace(/`/gu, "");
+  s
+    .replace(/\[([^\]]+)\]\([^)]*\)/gu, "$1")
+    .replace(/\*\*/gu, "")
+    .replace(/`/gu, "");
 
 export interface Doc {
   html: string;
@@ -472,7 +494,9 @@ export interface Doc {
 // is one block a step can light.
 export function renderDoc(md: string, eyebrow: string, title: string): Doc {
   const blocks: string[] = [title];
-  const out: string[] = [`<p class="deye">${esc(eyebrow)}</p><h2 class="b dtitle" data-b="0">${inline(title)}</h2>`];
+  const out: string[] = [
+    `<p class="deye">${esc(eyebrow)}</p><h2 class="b dtitle" data-b="0">${inline(title)}</h2>`,
+  ];
   let para: string[] = [];
   let list: "ol" | "ul" | null = null;
   const block = (tag: string, text: string, cls = ""): string => {
@@ -497,8 +521,10 @@ export function renderDoc(md: string, eyebrow: string, title: string): Doc {
       flushPara();
       closeList();
       out.push(block(m[1] === "##" ? "h3" : "h4", m[2] ?? ""));
+      // ASCII: list numbers are ASCII digits, which \d matches exactly.
     } else if ((m = /^(\d+)\. (.*)$/u.exec(line)) || (m = /^- (.*)$/u.exec(line))) {
       flushPara();
+      // ASCII: list numbers are ASCII digits, which \d matches exactly.
       const want = /^\d+\. /u.test(line) ? "ol" : "ul";
       if (list !== want) {
         closeList();
@@ -506,6 +532,7 @@ export function renderDoc(md: string, eyebrow: string, title: string): Doc {
         list = want;
       }
       out.push(block("li", want === "ol" ? (m[2] ?? "") : (m[1] ?? "")));
+      // ASCII: Markdown indentation is ASCII whitespace.
     } else if (list && /^\s+\S/u.test(raw)) {
       // A continuation line of a list item: fold it into the item.
       const last = out.pop();
@@ -543,8 +570,10 @@ export function renderMd(lines: string[], from: number): { html: string; spans: 
   };
   lines.forEach((raw, i) => {
     const n = from + i;
+    // ASCII: trailing runs trimmed are ASCII whitespace; Unicode spaces trim alike.
     const line = raw.replace(/\s+$/u, "");
     if (fence) {
+      // ASCII: fence indentation is ASCII whitespace.
       if (/^\s*```/u.test(line)) {
         block("pre", esc(fence.text.join("\n")), fence.from, n, " mdcode");
         fence = null;
@@ -552,6 +581,7 @@ export function renderMd(lines: string[], from: number): { html: string; spans: 
       return;
     }
     let m: RegExpExecArray | null;
+    // ASCII: fence indentation is ASCII whitespace.
     if (/^\s*```/u.test(line)) {
       flush();
       fence = { text: [], from: n };
@@ -559,10 +589,12 @@ export function renderMd(lines: string[], from: number): { html: string; spans: 
     else if ((m = /^(#{1,4}) (.*)$/u.exec(line))) {
       flush();
       block((m[1] ?? "").length <= 2 ? "h3" : "h4", inline(m[2] ?? ""), n, n);
+      // ASCII: list indentation and numbers are ASCII.
     } else if ((m = /^(\s*)(?:[-*]|\d+\.) (.*)$/u.exec(line))) {
       flush();
       const depth = Math.min(3, Math.floor((m[1] ?? "").length / 2));
       block("p", inline(m[2] ?? ""), n, n, ` li d${depth}`);
+      // ASCII: continuation indentation is ASCII whitespace.
     } else if (/^\s+\S/u.test(raw) && spans.length && (out.at(-1) ?? "").includes(" li d")) {
       // A continuation of the list item above it.
       const last = out.pop() ?? "";
@@ -620,13 +652,15 @@ export function prepareDiagram(svgText: string, scene: DiagramScene, first: stri
   if (scene.states.length === 0) faults.push(`scene ${scene.id}: names no states`);
   const classes = new Set<string>();
   for (const m of svg.matchAll(/class="([^"]*)"/gu)) {
+    // ASCII: class lists split on ASCII whitespace.
     for (const c of (m[1] ?? "").split(/\s+/u)) if (c) classes.add(c);
   }
   const named = (prefix: string): string[] =>
     [...classes].filter((c) => c.startsWith(prefix)).map((c) => c.slice(prefix.length));
   for (const prefix of ["on-", "hl-", "dim-"]) {
     for (const st of named(prefix)) {
-      if (!scene.states.includes(st)) faults.push(`scene ${scene.id}: ${prefix}${st} names no state of it`);
+      if (!scene.states.includes(st))
+        faults.push(`scene ${scene.id}: ${prefix}${st} names no state of it`);
     }
   }
   const css: string[] = [];
@@ -646,6 +680,7 @@ export function prepareDiagram(svgText: string, scene: DiagramScene, first: stri
   }
   const shifts = [...svg.matchAll(/data-shift-/gu)].length;
   const moved = [
+    // ASCII: attribute names, state names and shifts are ASCII.
     ...svg.matchAll(/<[^>]*\bid="([^"]+)"[^>]*\bdata-shift-([\w-]+)="(-?[\d.]+) (-?[\d.]+)"/gu),
   ];
   if (moved.length !== shifts) {
@@ -655,7 +690,9 @@ export function prepareDiagram(svgText: string, scene: DiagramScene, first: stri
     if (!scene.states.includes(m[2] ?? "")) {
       faults.push(`scene ${scene.id}: data-shift-${m[2]} names no state of it`);
     }
-    css.push(`${sel}[data-state="${m[2]}"] #${m[1]} { transform: translate(${m[3]}px, ${m[4]}px); }`);
+    css.push(
+      `${sel}[data-state="${m[2]}"] #${m[1]} { transform: translate(${m[3]}px, ${m[4]}px); }`,
+    );
   }
   if (faults.length) throw new Error(`diagram faults:\n${faults.join("\n")}`);
   return {
@@ -667,15 +704,24 @@ export function prepareDiagram(svgText: string, scene: DiagramScene, first: stri
 }
 
 /** The svg open tag with its id, state, role and label, unless already there. */
-export function tagSvg(svg: string, id: string, state: string, label: string, where: string): string {
+export function tagSvg(
+  svg: string,
+  id: string,
+  state: string,
+  label: string,
+  where: string,
+): string {
   const open = /^<svg[^>]*>/u.exec(svg.trim());
   if (!open) throw new Error(`scene ${where}: its diagram is no SVG`);
   const rest = svg.trim().slice(open[0].length);
   let tag = open[0];
+  // ASCII: tag attribute names are ASCII.
   if (/\bid="/u.test(tag)) tag = tag.replace(/\bid="[^"]*"/u, `id="${id}"`);
   else tag = tag.replace(/^<svg/u, `<svg id="${id}"`);
   tag = tag.replace(/^<svg/u, `<svg data-state="${esc(state)}"`);
+  // ASCII: tag attribute names are ASCII.
   if (!/\brole="/u.test(tag)) tag = tag.replace(/^<svg/u, `<svg role="img"`);
+  // ASCII: tag attribute names are ASCII.
   if (!/\baria-label="/u.test(tag)) tag = tag.replace(/^<svg/u, `<svg aria-label="${esc(label)}"`);
   return tag + rest;
 }
@@ -707,8 +753,7 @@ export function gapRows(gap: Gap, lines: string[]): Row[] {
   return rows;
 }
 
-const inRanges = (n: number, ranges: Range[]): boolean =>
-  ranges.some(([a, b]) => n >= a && n <= b);
+const inRanges = (n: number, ranges: Range[]): boolean => ranges.some(([a, b]) => n >= a && n <= b);
 
 export interface StepDatum {
   i: number;
@@ -718,7 +763,7 @@ export interface StepDatum {
   kind: "code" | "doc" | "diagram" | "image" | "leftovers";
   lit: number[];
   marks: { row: number; text: string[] }[];
-  excerpt: boolean;
+  excerpt?: boolean;
   state?: string;
   label: string;
   chip: string;
@@ -739,8 +784,7 @@ export function buildSteps(
     const sc = scenes.get(s.scene);
     if (!sc) throw new Error(`step ${s.id}: no scene ${s.scene}`);
     if (!sectionIds.includes(s.section)) throw new Error(`step ${s.id}: no section ${s.section}`);
-    const kind =
-      sc.kind === "ref" ? "code" : sc.kind === "md" ? "doc" : sc.kind;
+    const kind: StepDatum["kind"] = sc.kind === "ref" ? "code" : sc.kind === "md" ? "doc" : sc.kind;
     const base = { i, id: s.id, scene: sc.id, section: s.section, kind };
     if (sc.kind === "md") {
       const md = mds.get(sc.id);
@@ -749,7 +793,8 @@ export function buildSteps(
       const lit = md.spans.flatMap(([a, b], j) =>
         focus.some(([x, y]) => a <= y && x <= b) ? [j] : [],
       );
-      if (focus.length && !lit.length) throw new Error(`step ${s.id}: its focus lights no block of ${sc.file}`);
+      if (focus.length && !lit.length)
+        throw new Error(`step ${s.id}: its focus lights no block of ${sc.file}`);
       return {
         ...base,
         lit,
@@ -794,10 +839,19 @@ export function buildSteps(
       if (!doc) throw new Error(`step ${s.id}: no scene ${s.scene}`);
       const lit = (s.find ?? []).map((f) => {
         const hits = doc.blocks.flatMap((b, j) => (b.includes(f) ? [j] : []));
-        if (hits.length !== 1) throw new Error(`step ${s.id}: "${f}" is in ${hits.length} blocks of ${sc.id}`);
+        if (hits.length !== 1)
+          throw new Error(`step ${s.id}: "${f}" is in ${hits.length} blocks of ${sc.id}`);
         return hits[0] ?? 0;
       });
-      return { ...base, lit, marks: [], excerpt: !!s.excerpt, label: sc.label, chip: sc.chip, lines: "" };
+      return {
+        ...base,
+        lit,
+        marks: [],
+        excerpt: !!s.excerpt,
+        label: sc.label,
+        chip: sc.chip,
+        lines: "",
+      };
     }
     if (sc.kind === "diagram") {
       if (!s.state || !sc.states.includes(s.state)) {
@@ -805,7 +859,15 @@ export function buildSteps(
           `step ${s.id}: state ${s.state ?? "(none)"} is not one of ${sc.id}'s: ${sc.states.join(", ")}`,
         );
       }
-      return { ...base, lit: [], marks: [], state: s.state, label: sc.label, chip: sc.chip, lines: "" };
+      return {
+        ...base,
+        lit: [],
+        marks: [],
+        state: s.state,
+        label: sc.label,
+        chip: sc.chip,
+        lines: "",
+      };
     }
     return { ...base, lit: [], marks: [], label: sc.label, chip: sc.chip, lines: "" };
   });
@@ -1104,7 +1166,9 @@ function scenesHtml(p: PageParts): string {
       if (sc.kind === "md") {
         const md = p.mds.get(sc.id);
         if (!md) throw new Error(`no scene ${sc.id}`);
-        const srcs = md.spans.map(([a, b]) => (a === b ? `${sc.file}@${a}` : `${sc.file}@${a}-${b}`));
+        const srcs = md.spans.map(([a, b]) =>
+          a === b ? `${sc.file}@${a}` : `${sc.file}@${a}-${b}`,
+        );
         const tagged = sceneBlocks(md.html, sc.id, srcs);
         return `${open.replace('class="scene md', 'class="scene doc md')}<div class="docin mdin">${tagged}</div></div>`;
       }
@@ -1112,7 +1176,10 @@ function scenesHtml(p: PageParts): string {
         const pic = p.pictures.get(sc.id);
         if (!pic) throw new Error(`no scene ${sc.id}`);
         const over = p.overlays.get(sc.id) ?? "";
-        return `${open}<div class="posterwrap"><figure class="poster">${sc.banner ? `<p class="ribbon">${esc(sc.banner)}</p>` : ""}<div class="art"><img src="data:${pic.mime};base64,${pic.b64}" alt="${esc(sc.alt)}">${over}</div>${sc.subtitle ? `<p class="ribbon sub">${esc(sc.subtitle)}</p>` : ""}</figure></div></div>`;
+        const banner = sc.banner ? `<p class="ribbon">${esc(sc.banner)}</p>` : "";
+        const sub = sc.subtitle ? `<p class="ribbon sub">${esc(sc.subtitle)}</p>` : "";
+        const art = `<div class="art"><img src="data:${pic.mime};base64,${pic.b64}" alt="${esc(sc.alt)}">${over}</div>`;
+        return `${open}<div class="posterwrap"><figure class="poster">${banner}${art}${sub}</figure></div></div>`;
       }
       if (sc.kind === "diagram") {
         const dg = p.diagrams.get(sc.id);
@@ -1132,7 +1199,10 @@ function secsHtml(p: PageParts): string {
   const current = p.story.steps[0]?.section;
   return p.story.sections
     .filter((s) => firstOf.has(s.id))
-    .map((s) => `<a href="#s${(firstOf.get(s.id) ?? 0) + 1}" data-sec="${esc(s.id)}"${s.id === current ? ' aria-current="step"' : ""}>${esc(s.label)}</a>`)
+    .map(
+      (s) =>
+        `<a href="#s${(firstOf.get(s.id) ?? 0) + 1}" data-sec="${esc(s.id)}"${s.id === current ? ' aria-current="step"' : ""}>${esc(s.label)}</a>`,
+    )
     .join("");
 }
 
@@ -1170,6 +1240,7 @@ export function pageHtml(p: PageParts, diagramCss: string[]): string {
     kind: s.kind,
     ...(s.kind === "diagram" ? { states: s.states } : {}),
   }));
+  const head = `<div class="stagehead"><span class="slabel" id="slabel">${esc(first.label)}</span><span class="schip" id="schip">${esc(first.chip)}</span><span id="slines">${esc(first.lines)}</span><span class="scount" id="scount">Step 1 of ${N}</span></div>`;
   return `<title>${esc(story.title ?? `Story of #${story.ticket}`)}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1180,7 +1251,7 @@ ${pageStyle(diagramCss)}
   <section class="scrolly" id="story" aria-label="The change, step by step">
     <div class="stage">
       <nav class="secs" aria-label="Sections">${secsHtml(p)}</nav>
-      <div class="stagehead"><span class="slabel" id="slabel">${esc(first.label)}</span><span class="schip" id="schip">${esc(first.chip)}</span><span id="slines">${esc(first.lines)}</span><span class="scount" id="scount">Step 1 of ${N}</span></div>
+      ${head}
       <div class="scenes">
 ${scenesHtml(p)}
       </div>
@@ -1207,7 +1278,7 @@ ${stepsHtml(p)}
   const $ = (id) => document.getElementById(id);
   const plain = new WeakMap();
   const colored = new WeakMap();
-  const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const esc = (s) => s.replace(/&/gu, "&amp;").replace(/</gu, "&lt;").replace(/>/gu, "&gt;");
 
   // Highlight a block as one text, then split the result back into rows, closing and reopening
   // the spans that cross a line break, so a comment or string over several rows stays coloured.
@@ -1215,7 +1286,7 @@ ${stepsHtml(p)}
     const out = [];
     const open = [];
     let cur = "";
-    const re = /(<span[^>]*>)|(<\\/span>)|(\\n)|([^<\\n]+)/g;
+    const re = /(<span[^>]*>)|(<[/]span>)|(\\n)|([^<\\n]+)/gu;
     let m;
     while ((m = re.exec(html))) {
       if (m[1]) { open.push(m[1]); cur += m[1]; }
@@ -1318,7 +1389,7 @@ ${stepsHtml(p)}
     s.addEventListener("focus", () => activate(Number(s.dataset.i)));
   }
   highlight();
-  const hash = /^#s(\\d+)$/.exec(location.hash);
+  const hash = /^#s([0-9]+)$/u.exec(location.hash);
   if (hash) activate(Math.min(S.n, Number(hash[1])) - 1, true);
   else activate(0, true);
   addEventListener("scroll", onScroll, { passive: true });
@@ -1358,12 +1429,20 @@ export function sheetHtml(p: PageParts, diagramCss: string[]): string {
         if (!dg) throw new Error(`no scene ${sc.id}`);
         return sc.states
           .map((st) => {
-            const svg = tagSvg(dg.original, `sheet-${sc.id}-${st}`, st, sc.caption ?? sc.label, sc.id);
+            const svg = tagSvg(
+              dg.original,
+              `sheet-${sc.id}-${st}`,
+              st,
+              sc.caption ?? sc.label,
+              sc.id,
+            );
             return `<figure><figcaption>${esc(sc.label)} · ${esc(st)}</figcaption>${svg}</figure>`;
           })
           .join("\n");
       })
       .join("\n");
+  const light = `<section data-theme="light"><h2>Light</h2>${figures()}</section>`;
+  const dark = `<section data-theme="dark"><h2>Dark</h2>${figures()}</section>`;
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -1376,8 +1455,8 @@ ${sheetThemeCss()}
 <body>
 <div class="sheetwrap">
 <h1>Drawings for #${p.story.ticket}</h1>
-<section data-theme="light"><h2>Light</h2>${figures()}</section>
-<section data-theme="dark"><h2>Dark</h2>${figures()}</section>
+${light}
+${dark}
 </div>
 </body>
 </html>
@@ -1394,7 +1473,8 @@ function git(repo: string, args: string[]): string {
 
 function gh(repo: string, kind: string, number: number): { title: string; body: string } {
   const r = run("gh", [kind, "view", String(number), "--json", "title,body"], { cwd: repo });
-  if (r.code !== 0) throw new Error(`gh ${kind} view ${number}: ${r.err.trim() || `exit ${r.code}`}`);
+  if (r.code !== 0)
+    throw new Error(`gh ${kind} view ${number}: ${r.err.trim() || `exit ${r.code}`}`);
   const meta = JSON.parse(r.out) as { title?: unknown; body?: unknown };
   if (typeof meta.title !== "string" || typeof meta.body !== "string") {
     throw new Error(`gh ${kind} view ${number}: no title and body`);
@@ -1423,7 +1503,13 @@ function ticketFileBody(file: string): { title: string; body: string } {
 
 /** The picture's kind from its magic bytes, refused when it is no image. */
 export function mimeOf(bytes: Uint8Array): "image/png" | "image/jpeg" | "image/webp" {
-  if (bytes.length >= 4 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) {
+  if (
+    bytes.length >= 4 &&
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47
+  ) {
     return "image/png";
   }
   if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
@@ -1445,9 +1531,23 @@ export function mimeOf(bytes: Uint8Array): "image/png" | "image/jpeg" | "image/w
   throw new Error("the picture adapter wrote no PNG, JPEG or WebP image");
 }
 
-function drawPicture(adapter: string[], promptFile: string, styleFile: string, outFile: string): void {
-  const r = run(adapter[0], [...adapter.slice(1), "--prompt", promptFile, "--style", styleFile, "--out", outFile]);
-  if (r.code === 127) throw new Error(`no picture adapter available: ${adapter[0]}: command not found`);
+function drawPicture(
+  adapter: string[],
+  promptFile: string,
+  styleFile: string,
+  outFile: string,
+): void {
+  const r = run(adapter[0], [
+    ...adapter.slice(1),
+    "--prompt",
+    promptFile,
+    "--style",
+    styleFile,
+    "--out",
+    outFile,
+  ]);
+  if (r.code === 127)
+    throw new Error(`no picture adapter available: ${adapter[0]}: command not found`);
   if (r.code !== 0) throw new Error(`picture adapter failed: ${r.err.trim() || `exit ${r.code}`}`);
   if (!existsSync(outFile)) throw new Error("picture adapter failed: it wrote no picture");
 }
@@ -1552,7 +1652,8 @@ export function build(o: BuildOptions): string {
   const listed = new Set<string>();
   for (const rows of gapRowsList) for (const r of rows) listed.add(r.key);
   const missing = cited.filter((k) => !shown.has(k) && !listed.has(k));
-  if (missing.length) throw new Error(`cited lines on no step and in no list: ${missing.join(", ")}`);
+  if (missing.length)
+    throw new Error(`cited lines on no step and in no list: ${missing.join(", ")}`);
   const left = cited.filter((k) => !shown.has(k)).length;
   if (left && !story.steps.some((s) => scenes.get(s.scene)?.kind === "leftovers")) {
     throw new Error(`${left} cited lines are on no step, and no step shows the list of them`);

@@ -61,16 +61,18 @@ function picture(args: string[], path: string): { code: number; out: string; err
 }
 
 const CODEX_STUB = `#!/bin/sh
+PATH=$PATH:/bin
 echo "$*" >> "$STUB_CODEX_ARGS"
-/bin/cat > "$STUB_CODEX_STDIN"
+cat > "$STUB_CODEX_STDIN"
 if [ "$STUB_CODEX_MODE" = "fail" ]; then echo "quota wall" >&2; exit 3; fi
 if [ "$STUB_CODEX_MODE" = "nodraw" ]; then exit 0; fi
-/bin/cp "$STUB_CODEX_IMAGE" ./picture.png
+cp "$STUB_CODEX_IMAGE" ./picture.png
 `;
 
 const CONVERT_STUB = `#!/bin/sh
+PATH=$PATH:/bin
 echo "$*" >> "$STUB_CONVERT_ARGS"
-/bin/cp "$1" "$4"
+cp "$1" "$4"
 `;
 
 describe("selectConverter", () => {
@@ -80,9 +82,7 @@ describe("selectConverter", () => {
     expect(selectConverter({ ...all, magick: false })).toBe("convert");
     expect(selectConverter({ ...all, magick: false, convert: false })).toBe("sips");
     expect(selectConverter({ magick: false, convert: false, sips: false, pil: true })).toBe("pil");
-    expect(
-      selectConverter({ magick: false, convert: false, sips: false, pil: false }),
-    ).toBeNull();
+    expect(selectConverter({ magick: false, convert: false, sips: false, pil: false })).toBeNull();
   });
 });
 
@@ -105,7 +105,14 @@ describe("story-picture", () => {
     expect(r.code).toBe(1);
     expect(r.err).toContain(missing);
     const r2 = picture(
-      ["--prompt", join(dir, "prompt.txt"), "--style", join(dir, "no-style.jpg"), "--out", join(dir, "o.jpg")],
+      [
+        "--prompt",
+        join(dir, "prompt.txt"),
+        "--style",
+        join(dir, "no-style.jpg"),
+        "--out",
+        join(dir, "o.jpg"),
+      ],
       path,
     );
     expect(r2.code).toBe(1);
@@ -181,24 +188,28 @@ describe("story-picture", () => {
     stub("codex", CODEX_STUB);
     stub("python3", "#!/bin/sh\nexit 1\n");
     const out = join(dir, "pic.jpg");
-    const r = run(process.execPath, [
-      script,
-      "--prompt",
-      join(dir, "prompt.txt"),
-      "--style",
-      join(dir, "style.jpg"),
-      "--out",
-      out,
-    ], {
-      cwd: dir,
-      env: {
-        PATH: bin,
-        STUB_CODEX_ARGS: join(dir, "codex-args.txt"),
-        STUB_CODEX_STDIN: join(dir, "codex-stdin.txt"),
-        STUB_CODEX_IMAGE: join(dir, "known.png"),
+    const r = run(
+      process.execPath,
+      [
+        script,
+        "--prompt",
+        join(dir, "prompt.txt"),
+        "--style",
+        join(dir, "style.jpg"),
+        "--out",
+        out,
+      ],
+      {
+        cwd: dir,
+        env: {
+          PATH: bin,
+          STUB_CODEX_ARGS: join(dir, "codex-args.txt"),
+          STUB_CODEX_STDIN: join(dir, "codex-stdin.txt"),
+          STUB_CODEX_IMAGE: join(dir, "known.png"),
+        },
+        timeout: 60_000,
       },
-      timeout: 60_000,
-    });
+    );
     expect(r.code).toBe(1);
     expect(r.err).toContain("converter");
     expect(existsSync(out)).toBe(false);
@@ -209,24 +220,28 @@ describe("story-picture", () => {
     stub("convert", "#!/bin/sh\necho broken >&2\nexit 1\n");
     stub("python3", "#!/bin/sh\nexit 1\n");
     const out = join(dir, "pic.jpg");
-    const r = run(process.execPath, [
-      script,
-      "--prompt",
-      join(dir, "prompt.txt"),
-      "--style",
-      join(dir, "style.jpg"),
-      "--out",
-      out,
-    ], {
-      cwd: dir,
-      env: {
-        PATH: bin,
-        STUB_CODEX_ARGS: join(dir, "codex-args.txt"),
-        STUB_CODEX_STDIN: join(dir, "codex-stdin.txt"),
-        STUB_CODEX_IMAGE: join(dir, "known.png"),
+    const r = run(
+      process.execPath,
+      [
+        script,
+        "--prompt",
+        join(dir, "prompt.txt"),
+        "--style",
+        join(dir, "style.jpg"),
+        "--out",
+        out,
+      ],
+      {
+        cwd: dir,
+        env: {
+          PATH: bin,
+          STUB_CODEX_ARGS: join(dir, "codex-args.txt"),
+          STUB_CODEX_STDIN: join(dir, "codex-stdin.txt"),
+          STUB_CODEX_IMAGE: join(dir, "known.png"),
+        },
+        timeout: 60_000,
       },
-      timeout: 60_000,
-    });
+    );
     expect(r.code).toBe(1);
     expect(r.err).toContain("convert");
     expect(existsSync(out)).toBe(false);

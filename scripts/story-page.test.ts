@@ -22,7 +22,7 @@ import {
   sceneBlocks,
   tagSvg,
 } from "./story-page.ts";
-import type { Doc, Row, Scene, Story } from "./story-page.ts";
+import type { DiagramScene, Doc, Row, Scene, Story } from "./story-page.ts";
 
 describe("the reading line", () => {
   test("below the panel on a phone, above the middle beside it", () => {
@@ -31,17 +31,75 @@ describe("the reading line", () => {
   });
 
   test("the step on the line, else the nearest, else none", () => {
-    const boxes = [{ top: 0, bottom: 100 }, { top: 600, bottom: 700 }, { top: 800, bottom: 900 }];
+    const boxes = [
+      { top: 0, bottom: 100 },
+      { top: 600, bottom: 700 },
+      { top: 800, bottom: 900 },
+    ];
     expect(pickStep(boxes, 844, true)).toBe(1);
-    expect(pickStep([{ top: 0, bottom: 100 }, { top: 700, bottom: 800 }], 844, true)).toBe(1);
-    expect(pickStep([{ top: 700, bottom: 800 }, { top: 900, bottom: 1000 }], 844, true)).toBe(0);
-    expect(pickStep([{ top: 0, bottom: 100 }, { top: 200, bottom: 300 }], 844, true)).toBe(1);
+    expect(
+      pickStep(
+        [
+          { top: 0, bottom: 100 },
+          { top: 700, bottom: 800 },
+        ],
+        844,
+        true,
+      ),
+    ).toBe(1);
+    expect(
+      pickStep(
+        [
+          { top: 700, bottom: 800 },
+          { top: 900, bottom: 1000 },
+        ],
+        844,
+        true,
+      ),
+    ).toBe(0);
+    expect(
+      pickStep(
+        [
+          { top: 0, bottom: 100 },
+          { top: 200, bottom: 300 },
+        ],
+        844,
+        true,
+      ),
+    ).toBe(1);
   });
 
   test("ties go to the first step, offscreen steps are skipped", () => {
-    expect(pickStep([{ top: 0, bottom: 700 }, { top: 600, bottom: 900 }], 844, true)).toBe(0);
-    expect(pickStep([{ top: -200, bottom: -100 }, { top: 700, bottom: 800 }], 844, true)).toBe(1);
-    expect(pickStep([{ top: -200, bottom: -100 }, { top: 900, bottom: 1000 }], 844, true)).toBe(-1);
+    expect(
+      pickStep(
+        [
+          { top: 0, bottom: 700 },
+          { top: 600, bottom: 900 },
+        ],
+        844,
+        true,
+      ),
+    ).toBe(0);
+    expect(
+      pickStep(
+        [
+          { top: -200, bottom: -100 },
+          { top: 700, bottom: 800 },
+        ],
+        844,
+        true,
+      ),
+    ).toBe(1);
+    expect(
+      pickStep(
+        [
+          { top: -200, bottom: -100 },
+          { top: 900, bottom: 1000 },
+        ],
+        844,
+        true,
+      ),
+    ).toBe(-1);
   });
 
   test("the embedded source is plain script with the same rule", () => {
@@ -87,9 +145,7 @@ describe("parseStory", () => {
     ticket: 1,
     at: "abc",
     sections: [{ id: "open", label: "Start", title: "The ticket" }],
-    scenes: [
-      { id: "hero", kind: "image", label: "T", chip: "c", prompt: "art/p.txt", alt: "a" },
-    ],
+    scenes: [{ id: "hero", kind: "image", label: "T", chip: "c", prompt: "art/p.txt", alt: "a" }],
     steps: [{ id: "t", section: "open", scene: "hero", kind: "title", title: "T", text: "x" }],
   };
 
@@ -100,17 +156,20 @@ describe("parseStory", () => {
   });
 
   test("a change story, a file picture and change scenes are refused", () => {
-    expect(() => parseStory(JSON.stringify({ ...minimal, mode: "change" }))).toThrow('mode "change"');
-    const src = structuredClone(minimal);
-    const hero = src.scenes[0] as Record<string, unknown>;
+    expect(() => parseStory(JSON.stringify({ ...minimal, mode: "change" }))).toThrow(
+      'mode "change"',
+    );
+    const clone = (): typeof minimal => JSON.parse(JSON.stringify(minimal)) as typeof minimal;
+    const src = clone();
+    const hero = src.scenes[0] as unknown as Record<string, unknown>;
     delete hero.prompt;
     hero.src = "art/opening.jpg";
     expect(() => parseStory(JSON.stringify(src))).toThrow("name a prompt");
-    const base = structuredClone(minimal);
-    (base.scenes[0] as Record<string, unknown>).kind = "base";
+    const base = clone();
+    (base.scenes[0] as unknown as Record<string, unknown>).kind = "base";
     expect(() => parseStory(JSON.stringify(base))).toThrow('kind "base"');
-    const bogus = structuredClone(minimal);
-    (bogus.scenes[0] as Record<string, unknown>).kind = "bogus";
+    const bogus = clone();
+    (bogus.scenes[0] as unknown as Record<string, unknown>).kind = "bogus";
     expect(() => parseStory(JSON.stringify(bogus))).toThrow('kind "bogus"');
   });
 
@@ -154,9 +213,9 @@ describe("checkDrawings", () => {
   });
 
   test("code with no drawing before it names the section", () => {
-    expect(() =>
-      checkDrawings(story([{ id: "skill", section: "c1", scene: "doc" }])),
-    ).toThrow('section c1 (Criterion 1): step "skill" shows code with no drawing');
+    expect(() => checkDrawings(story([{ id: "skill", section: "c1", scene: "doc" }]))).toThrow(
+      'section c1 (Criterion 1): step "skill" shows code with no drawing',
+    );
   });
 });
 
@@ -251,10 +310,7 @@ describe("rows and steps", () => {
     const all: [string, Scene][] = [
       ["code", { id: "code", kind: "ref", file: "f.ts", from: 1, to: 3 }],
       ["md", { id: "md", kind: "md", file: "f.md", from: 1, to: 2 }],
-      [
-        "ticket",
-        { id: "ticket", kind: "doc", from: "issue", number: 1, label: "T", chip: "c" },
-      ],
+      ["ticket", { id: "ticket", kind: "doc", from: "issue", number: 1, label: "T", chip: "c" }],
       ["dg", { id: "dg", kind: "diagram", label: "D", chip: "c", svg: "d.svg", states: ["all"] }],
     ];
     const docs = new Map<string, Doc>([["ticket", renderDoc("a needle here\n", "T", "Title")]]);
@@ -277,8 +333,7 @@ describe("rows and steps", () => {
       scenes: [],
       steps: [],
     };
-    const one = (step: unknown): Story =>
-      ({ ...base, steps: [step] }) as unknown as Story;
+    const one = (step: unknown): Story => ({ ...base, steps: [step] }) as unknown as Story;
     const all = new Map<string, Scene>([
       ["code", { id: "code", kind: "ref", file: "f.ts", from: 1, to: 3 }],
       ["dg", { id: "dg", kind: "diagram", label: "D", chip: "c", svg: "d.svg", states: ["all"] }],
@@ -364,7 +419,9 @@ describe("rows and steps", () => {
         },
       ],
     } as unknown as Story;
-    expect(() => buildSteps(bad, all, new Map(), new Map(), rows, "a")).toThrow('"absent" is not on line 2');
+    expect(() => buildSteps(bad, all, new Map(), new Map(), rows, "a")).toThrow(
+      '"absent" is not on line 2',
+    );
   });
 
   test("coverage counts fill the text", () => {
@@ -373,7 +430,7 @@ describe("rows and steps", () => {
 });
 
 describe("diagrams", () => {
-  const scene = {
+  const scene: DiagramScene = {
     id: "d",
     kind: "diagram",
     label: "D",
@@ -381,13 +438,15 @@ describe("diagrams", () => {
     svg: "d.svg",
     states: ["a", "b"],
     caption: "Cap",
-  } as const;
+  };
 
   test("marks become CSS per state", () => {
     const svg = `<svg class="dg" viewBox="0 0 10 10"><rect id="r" class="on-a hl-b" data-shift-b="1 2"/><text class="dim-a">t</text></svg>`;
     const ready = prepareDiagram(svg, { ...scene }, "a");
-    expect(ready.css.join("\n")).toContain('#dg-d .on-a { opacity: 0; }');
-    expect(ready.css.join("\n")).toContain('#dg-d[data-state="b"] #r { transform: translate(1px, 2px); }');
+    expect(ready.css.join("\n")).toContain("#dg-d .on-a { opacity: 0; }");
+    expect(ready.css.join("\n")).toContain(
+      '#dg-d[data-state="b"] #r { transform: translate(1px, 2px); }',
+    );
     expect(ready.svg).toContain('id="dg-d"');
     expect(ready.svg).toContain('data-state="a"');
     expect(ready.svg).toContain('aria-label="Cap"');
@@ -404,7 +463,13 @@ describe("diagrams", () => {
   });
 
   test("an existing label is kept, a missing svg refused", () => {
-    const tagged = tagSvg('<svg class="dg" aria-label="Kept"><rect/></svg>', "dg-d", "a", "Cap", "d");
+    const tagged = tagSvg(
+      '<svg class="dg" aria-label="Kept"><rect/></svg>',
+      "dg-d",
+      "a",
+      "Cap",
+      "d",
+    );
     expect(tagged).toContain('aria-label="Kept"');
     expect(tagged).toContain('id="dg-d"');
     expect(() => tagSvg("nope", "dg-d", "a", "Cap", "d")).toThrow("scene d: its diagram is no SVG");

@@ -49,9 +49,7 @@ function flag(args: string[], name: string): string | undefined {
 
 function onPath(bin: string): boolean {
   const path = process.env.PATH ?? "";
-  return path
-    .split(":")
-    .some((dir) => dir.length > 0 && existsSync(join(dir, bin)));
+  return path.split(":").some((dir) => dir.length > 0 && existsSync(join(dir, bin)));
 }
 
 function hasPil(): boolean {
@@ -138,7 +136,9 @@ export function main(args: string[]): number {
       }
       const png = join(scratch, PICTURE_NAME);
       if (!existsSync(png)) {
-        throw new Error("codex drew no picture.png: the prompt must ask for one image saved as picture.png");
+        throw new Error(
+          "codex drew no picture.png: the prompt must ask for one image saved as picture.png",
+        );
       }
       const jpg = join(scratch, "picture.jpg");
       convertPng(png, jpg, available());
