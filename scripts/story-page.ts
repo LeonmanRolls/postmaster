@@ -466,10 +466,11 @@ const MAX_CITED_RANGE = 100_000;
 
 // A cited link matches any ref but a template placeholder, so a branch
 // link is refused naming the link instead of skipped; column anchors
-// cite their whole lines.
+// cite their whole lines; a second end without -L is matched so it can
+// be refused, since the ticket's form needs -L on both ends.
 const LINK =
   // ASCII: blob URLs and line numbers are ASCII by GitHub's form.
-  /https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/blob\/([^<>/\s][^/\s]*)\/([^)\s#]+)(?:#L(\d+)(?:C\d+)?(?:-L(\d+)(?:C\d+)?)?)?/gu;
+  /https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/blob\/([^<>/\s][^/\s]*)\/([^)\s#]+)(?:#L(\d+)(?:C\d+)?(?:-L(\d+)(?:C\d+)?|-(\d*))?)?/gu;
 
 /**
  * The code a ticket cites: every link into the repository's files at a
@@ -493,6 +494,10 @@ export function parseCited(body: string, atSha: string): Cited {
       if (!named.some((x) => x.path === m[2])) named.push({ path: m[2] ?? "", url: m[0] ?? "" });
       continue;
     }
+    if (m[5] !== undefined)
+      throw new Error(
+        `the ticket cites ${m[2]}#L${m[3]}-${m[5]}, and the range's second end needs -L`,
+      );
     const from = Number(m[3]);
     const to = Number(m[4] ?? m[3]);
     // Past the safe integers the counter rounds back and the loop below

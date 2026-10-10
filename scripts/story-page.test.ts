@@ -306,6 +306,12 @@ describe("parseCited", () => {
       "f.ts@11",
       "f.ts@12",
     ]);
+    expect(() => parseCited(cite("abc1234", "#L10-20"), "abc1234")).toThrow(
+      "the range's second end needs -L",
+    );
+    expect(() => parseCited(cite("abc1234", "#L10-"), "abc1234")).toThrow(
+      "the range's second end needs -L",
+    );
   });
 
   test("a line 0, a reversed range and a huge range are refused", () => {
