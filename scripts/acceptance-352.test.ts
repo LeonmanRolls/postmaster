@@ -464,6 +464,19 @@ describe("C5: every cited line shown or listed", () => {
     expect(coverageMissing(TICKET_271.body, page(B.b271))).toEqual([]);
   });
 
+  test("271 step text and closing list agree on the lines on steps", () => {
+    const html = page(B.b271);
+    // ASCII: the filled counts are ASCII digits.
+    const step = /cite (\d+) lines[\s\S]*?and (\d+) of them are on the steps above/u.exec(html);
+    expect(step).not.toBeNull();
+    // ASCII: the closing counts are ASCII digits.
+    const list = /(\d+) of the (\d+) lines the ticket cites are on the steps/u.exec(html);
+    expect(list).not.toBeNull();
+    expect(step?.[1]).toBe("225");
+    expect(list?.[2]).toBe("225");
+    expect(step?.[2]).toBe(list?.[1]);
+  });
+
   test("352 names its whole file in the list", () => {
     expect(page(B.b352)).toContain("skills/review-pages/SKILL.md");
   });
