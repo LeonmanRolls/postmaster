@@ -329,7 +329,7 @@ const slots: Rule = (line, context) => {
 // Email addresses
 
 const MAILBOX =
-  /(?<![\p{L}\p{N}._%+-])([\p{L}\p{N}._%+-]+)@((?:[\p{L}\p{N}-]+\.)+\p{L}{2,})(?![\p{L}\p{N}-])/gu;
+  /(?<![\p{L}\p{N}._%+-])([\p{L}\p{N}._%+-]+)@((?:[\p{L}\p{N}-]+\.)+\p{L}{2,}|\[(?:[0-9]{1,3}\.){3}[0-9]{1,3}\]|(?:[0-9]{1,3}\.){3}[0-9]{1,3})(?![\p{L}\p{N}-])/gu;
 const NOREPLY = new Set([
   "noreply",
   "no-reply",

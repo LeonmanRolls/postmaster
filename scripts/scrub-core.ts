@@ -489,6 +489,9 @@ const WS_CHAR = new RegExp(`^[${PY_S_CLASS}]$`, "u");
 const WS_RUN = new RegExp(`[${PY_S_CLASS}]+`, "u");
 // A field value that expands or substitutes is an expression, not a leak.
 const FIELD_EXPANSION = new RegExp(`\\$[{A-Za-z_(]|\\x60`, "u");
+// Standard or URL-safe base64 at credential length, optional padding:
+// shaped like this, a value is never an expression. Review round 15.
+const CREDENTIAL_SHAPED = /^[A-Za-z0-9+/_-]{20,}={0,2}$/u;
 const DOTENV_LINE = new RegExp(
   `^${SPACE}*(?:export${SPACE}+)?([A-Za-z_][A-Za-z0-9_-]*)${SPACE}*=${SPACE}*(.+?)${SPACE}*$`,
   "ud",
@@ -706,7 +709,10 @@ function tokenFindings(line: string, out: Finding[]): void {
         compact,
       );
     const callOrExpression = /[(){}]|(?:\?\.|\+\+|--|\+|\||&&?|\?|=>)/u.test(value);
-    if (property || callOrExpression) continue;
+    // Inside quotes operator characters are data, not code (half of
+    // base64 secrets carry one), and a credential-shaped value is never
+    // an expression. Review round 15 (bug-101).
+    if (!quoted && (property || callOrExpression) && !CREDENTIAL_SHAPED.test(value)) continue;
     if (
       kind === "account-id" &&
       (!new RegExp(`^${SPACE}*(?:\\{|[\"'][A-Za-z][A-Za-z0-9_-]*[\"']?${SPACE}*:)`, "u").test(
@@ -938,10 +944,11 @@ export function detectLine(line: string, context = ""): Finding[] {
   const firstWord = plainLower ? (text.trimStart().split(" ", 1)[0] ?? "") : "";
   const plainPersonalCue = plainLower && PLAIN_CUE_WORDS.has(firstWord);
   if (!plainLower || plainPersonalCue) {
+    // Both rules fire on a private-domain address: dropping the email
+    // span left the mailbox local part unscanned downstream (promote
+    // redacted only the host and rescanned clean). Review round 15.
     for (const f of scanPersonal(text, context)) {
       const value = text.slice(f.start, f.end);
-      const domain = value.split("@")[1] ?? "";
-      if (f.rule === "email" && isPrivateName(domain)) continue;
       add(found, f.start, f.end, f.rule, value);
     }
   }

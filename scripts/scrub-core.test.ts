@@ -177,7 +177,10 @@ test("private context finds concrete paths, machine names, network addresses, id
   expect(rules(credit)).toContain("assistant-attribution");
   expect(rules(footer)).toContain("assistant-attribution");
   expect(rules(joined("ops@relay", ".", "internal"))).toContain("private-host");
-  expect(rules(joined("ops@relay", ".", "internal"))).not.toContain("email");
+  // Review round 15 (bug-95): this used to assert no email finding, but
+  // dropping the email span leaked the mailbox local part downstream, so
+  // both rules fire now.
+  expect(rules(joined("ops@relay", ".", "internal"))).toContain("email");
 
   expect(rules("process.env.HOME")).toEqual([]);
   expect(rules('join(home, "note.txt")')).toEqual([]);
@@ -672,4 +675,37 @@ test("a code span flags a path beside a non-adjacent expansion, either order", (
   expect(rules(afterTouching)).not.toContain("private-path");
   const beforeTouching = joined("run `echo ", "${d}", "/home/", "alice", "/x` now");
   expect(rules(beforeTouching)).not.toContain("private-path");
+});
+
+test("a private-domain email reports the whole address, not just its host", () => {
+  // Review round 15 (bug-95): dropping the email span left the mailbox
+  // local part in promoted copies, rescanning clean. Both rules fire now.
+  const corp = joined("contact ", "alice", "@corp.", "internal", " for x");
+  expect(rules(corp)).toContain("email");
+  expect(rules(corp)).toContain("private-host");
+  const ip = joined("contact ", "alice", "@", "10", ".", "0", ".", "0", ".", "2", " for x");
+  expect(rules(ip)).toContain("email");
+  expect(rules(ip)).toContain("private-host");
+  const bracketed = joined("contact ", "alice", "@[", "10", ".", "0", ".", "0", ".", "2", "] for x");
+  expect(rules(bracketed)).toContain("email");
+  expect(rules(bracketed)).toContain("private-host");
+  const pub = joined("contact ", "alice", "@northstar.", "org", " for x");
+  expect(rules(pub)).toContain("email");
+  expect(rules(pub)).not.toContain("private-host");
+});
+
+test("a quoted token value with operator characters still flags", () => {
+  // Review round 15 (bug-101): inside quotes + / | & are data, not
+  // operators; half of base64 secrets carry one. Unquoted expressions
+  // and short values stay exempt as the negative controls.
+  const secret = joined("q8Z+Jw3kT9vLm2Xp", "/Rb7NcYd5Hs0Ae4Gf1Ui6", "Ko=");
+  expect(rules(joined('"client_secret": "', secret, '"'))).toContain("token");
+  expect(rules(joined("client_secret: ", secret))).toContain("token");
+  expect(rules(joined("const client_secret = ", '"', secret, '";'))).toContain("token");
+  expect(rules(joined("api_key: ", secret))).toContain("token");
+  expect(rules(joined('"token": "', "a+b", '"'))).toEqual([]);
+  expect(rules(joined("password: ", "a+b"))).toEqual([]);
+  expect(rules(joined('"secret": "', "not a secret at all yes sir", '"'))).toEqual([]);
+  expect(rules(joined("token: ", "f(x)+g(y)+h(z)+k(w)+m"))).toEqual([]);
+  expect(rules(joined("key: ", "a.b.c.d.e.f.g.h.i.j.k.l"))).toEqual([]);
 });

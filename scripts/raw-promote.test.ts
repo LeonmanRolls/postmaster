@@ -302,3 +302,24 @@ test("promotion logs its reasoning redactions and the copy passes the tree check
   expect(checked.status).toBe(0);
   expect(checked.stdout).toBe("");
 });
+
+test("promotion redacts the whole private-domain email, local part included", () => {
+  // Review round 15 (bug-95): the host-only span left alice@ in the copy,
+  // rescanning clean. The email span survives now, so nothing remains.
+  const repo = initRepo();
+  const source = join(scratchDir(), "source");
+  mkdirSync(source);
+  const mailbox = ["alice", "@corp.", "internal"].join("");
+  const localPart = ["alice", "@"].join("");
+  const domainPart = ["corp.", "internal"].join("");
+  writeFileSync(join(source, "note.md"), `contact ${mailbox} for x\n`);
+  const copied = runScript("raw-promote", [source, "raw/copied"], repo);
+  expect(copied.status).toBe(0);
+  expect(copied.stdout).toContain("email scrubbed");
+  const promoted = readFileSync(join(repo, "raw/copied", "note.md"), "utf8");
+  expect(promoted).not.toContain(localPart);
+  expect(promoted).not.toContain(domainPart);
+  const clean = runScript("scrub-check", ["--files", join(repo, "raw/copied", "note.md")], repo);
+  expect(clean.status).toBe(0);
+  expect(clean.stdout).toBe("");
+});
