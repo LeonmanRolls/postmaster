@@ -461,6 +461,9 @@ export interface Cited {
   named: { path: string; url: string }[];
 }
 
+/** The most lines one cited range may name; whole files link without lines. */
+const MAX_CITED_RANGE = 100_000;
+
 const LINK =
   // ASCII: blob URLs and line numbers are ASCII by GitHub's form.
   /https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/blob\/([0-9a-f]{7,40})\/([^)\s#]+)(?:#L(\d+)(?:-L(\d+))?)?/gu;
@@ -483,7 +486,16 @@ export function parseCited(body: string, atSha: string): Cited {
       if (!named.some((x) => x.path === m[2])) named.push({ path: m[2] ?? "", url: m[0] ?? "" });
       continue;
     }
-    for (let n = Number(m[3]); n <= Number(m[4] ?? m[3]); n++) lines.add(`${m[2]}@${n}`);
+    const from = Number(m[3]);
+    const to = Number(m[4] ?? m[3]);
+    // A whole file is cited by a link without lines; a line range names
+    // the lines the page shows or lists, so it must name some.
+    if (from < 1) throw new Error(`the ticket cites line ${from} of ${m[2]}, and lines start at 1`);
+    if (to < from)
+      throw new Error(`the ticket cites ${m[2]}#L${from}-L${to}, and the range ends first`);
+    if (to - from >= MAX_CITED_RANGE)
+      throw new Error(`the ticket cites ${m[2]}#L${from}-L${to}, over ${MAX_CITED_RANGE} lines`);
+    for (let n = from; n <= to; n++) lines.add(`${m[2]}@${n}`);
   }
   const cited = [...lines].sort((a, b) => {
     const [pa, na] = a.split("@") as [string, string];

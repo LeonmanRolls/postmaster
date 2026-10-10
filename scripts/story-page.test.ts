@@ -292,6 +292,15 @@ describe("parseCited", () => {
     );
   });
 
+  test("a line 0, a reversed range and a huge range are refused", () => {
+    const cite = (lines: string): string =>
+      `a [cite](https://github.com/o/r/blob/abc1234/f.ts${lines}) here`;
+    expect(() => parseCited(cite("#L0"), "abc1234")).toThrow("line 0 of f.ts");
+    expect(() => parseCited(cite("#L5-L2"), "abc1234")).toThrow("the range ends first");
+    expect(() => parseCited(cite("#L1-L999999999"), "abc1234")).toThrow("over 100000 lines");
+    expect(parseCited(cite("#L2-L3"), "abc1234").cited).toEqual(["f.ts@2", "f.ts@3"]);
+  });
+
   test("gaps fold runs and skip shown lines", () => {
     const gaps = computeGaps(["a@1", "a@2", "a@4", "b@9"], new Set(["a@2"]));
     expect(gaps).toEqual([
