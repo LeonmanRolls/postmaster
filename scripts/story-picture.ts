@@ -123,7 +123,7 @@ export function main(args: string[]): number {
           "--skip-git-repo-check",
           "--dangerously-bypass-approvals-and-sandbox",
           "-c",
-          `model_reasoning_effort='"low"'`,
+          "model_reasoning_effort=low",
           "-i",
           resolve(styleFile),
           "-",

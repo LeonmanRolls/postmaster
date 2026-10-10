@@ -136,6 +136,8 @@ describe("story-picture", () => {
       "exec",
       "--skip-git-repo-check",
       "--dangerously-bypass-approvals-and-sandbox",
+      "-c",
+      "model_reasoning_effort=low",
       "-i",
       join(dir, "style.jpg"),
     ]) {
