@@ -22,9 +22,11 @@
 // What counts as unknown, never clean. A record that is missing or cannot be
 // read, a harness with no reader, a tracker of a kind beyond github and
 // local, and a command that names the ticket in a form the check does not
-// know: another gh issue verb, another adapter verb, another issues subpath,
-// a --json field beyond title and state, a listing of the ticket file, a
-// search across the ticket store. A failed command read nothing and counts
+// know: another gh issue verb beyond comment, close and reopen, an adapter
+// search or a verb the adapters do not have, another issues subpath, a
+// --json field beyond title and state, a listing of the ticket file, a
+// search across the ticket store. Known writes show no ticket text and count
+// for nothing. A failed command read nothing and counts
 // for nothing; where the record carries no exit, the invocation counts.
 // Only the run's own ticket in its own tracker counts: another number,
 // another repo and the wrong tracker are ignored, and so is a number in a
@@ -363,6 +365,8 @@ function classifyGh(ctx: Ctx, segment: string, head: Head): Finding | null {
   const flags = scanFlags(words.slice(head.at));
   if (sub === "issue") {
     const verb = words[skipFlags(words, i + 1)] ?? "";
+    // A known write shows no ticket text; any other verb may display it.
+    if (verb === "comment" || verb === "close" || verb === "reopen") return null;
     if (verb !== "view") {
       if (!hasNumberToken(segment, ctx.ticket)) return null;
       return { agent: "", finding: "unknown", form: `gh issue ${verb}`.trim(), detail: "" };
@@ -506,6 +510,23 @@ function classifyAdapter(
   if (verb === "state") {
     if (target !== ctx.ticket) return null;
     return { agent: "", finding: "title", form: `run ${tool} state`, detail: "" };
+  }
+  // Known writes and metadata show no ticket text; verbs without a ticket
+  // reference never name it. A search may surface its title; anything else
+  // naming it is a form the check does not know.
+  if (
+    verb === "comment" ||
+    verb === "edit" ||
+    verb === "title" ||
+    verb === "label" ||
+    verb === "has-label" ||
+    verb === "create" ||
+    verb === "list" ||
+    verb === "board" ||
+    verb === "access" ||
+    verb === "store"
+  ) {
+    return null;
   }
   if (!hasNumberToken(segment, ctx.ticket)) return null;
   return { agent: "", finding: "unknown", form: `run ${tool} ${verb}`, detail: "" };
@@ -785,7 +806,7 @@ function readAgents(dispatch: string, manifest: RecordOf, runJson: RecordOf): { 
     }
     const record = rec(event);
     if (record.action !== "review-launch") continue;
-    const detail = /^(\S+) round (\d+)$/u.exec(text(record.detail));
+    const detail = /^(\S+) round (\d+)\b/u.exec(text(record.detail));
     const lane = text(record.target);
     if (!detail || !lane) return { agents, broken: "a review launch cannot be read" };
     const key = `${detail[2]}:${detail[1]}:${lane}`;
