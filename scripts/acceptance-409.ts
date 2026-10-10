@@ -146,7 +146,7 @@ export function fixtureDispatch(tmp: string, name: string, opts: FixtureOptions 
   const actions: string[] = [];
   for (const agent of opts.agents ?? []) {
     lanes[agent.lane] = { harness: agent.harness, model: "m" };
-    manifestLanes[agent.lane] = { outcome: "harvested" };
+    if ((agent.reviews ?? []).length === 0) manifestLanes[agent.lane] = { outcome: "harvested" };
     const file = agent.file ?? `${agent.lane}-events.jsonl`;
     writeFileSync(
       join(dispatch, "logs", file),
