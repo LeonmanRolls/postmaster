@@ -464,9 +464,12 @@ export interface Cited {
 /** The most lines one cited range may name; whole files link without lines. */
 const MAX_CITED_RANGE = 100_000;
 
+// A cited link matches any ref but a template placeholder, so a branch
+// link is refused naming the link instead of skipped; column anchors
+// cite their whole lines.
 const LINK =
   // ASCII: blob URLs and line numbers are ASCII by GitHub's form.
-  /https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/blob\/([0-9a-f]{7,40})\/([^)\s#]+)(?:#L(\d+)(?:-L(\d+))?)?/gu;
+  /https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/blob\/([^<>/\s][^/\s]*)\/([^)\s#]+)(?:#L(\d+)(?:C\d+)?(?:-L(\d+)(?:C\d+)?)?)?/gu;
 
 /**
  * The code a ticket cites: every link into the repository's files at a
@@ -477,9 +480,13 @@ export function parseCited(body: string, atSha: string): Cited {
   const lines = new Set<string>();
   const named: { path: string; url: string }[] = [];
   for (const m of body.matchAll(LINK)) {
-    if (!atSha.startsWith(m[1] ?? "")) {
+    const ref = m[1] ?? "";
+    // Only a SHA prefix counts as the story's commit; anything else,
+    // a branch or a stub too short to be one, is refused naming the link.
+    // ASCII: commit SHAs are hex by git's form.
+    if (!atSha.startsWith(ref) || !/^[0-9a-f]{7,40}$/u.test(ref)) {
       throw new Error(
-        `the ticket cites ${m[2]} at ${m[1]}, not at the story's commit ${atSha.slice(0, 7)}`,
+        `the ticket cites ${m[2]} at ${ref}, not at the story's commit ${atSha.slice(0, 7)}`,
       );
     }
     if (!m[3]) {

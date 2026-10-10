@@ -292,6 +292,22 @@ describe("parseCited", () => {
     );
   });
 
+  test("a branch link is refused, column anchors cite whole lines", () => {
+    const cite = (ref: string, lines: string): string =>
+      `a [cite](https://github.com/o/r/blob/${ref}/f.ts${lines}) here`;
+    expect(() => parseCited(cite("main", "#L10-L12"), "abc1234")).toThrow(
+      "the ticket cites f.ts at main, not at the story's commit abc1234",
+    );
+    expect(() => parseCited(cite("abc", "#L1"), "abc1234")).toThrow(
+      "the ticket cites f.ts at abc, not at the story's commit abc1234",
+    );
+    expect(parseCited(cite("abc1234", "#L10C5-L12C3"), "abc1234").cited).toEqual([
+      "f.ts@10",
+      "f.ts@11",
+      "f.ts@12",
+    ]);
+  });
+
   test("a line 0, a reversed range and a huge range are refused", () => {
     const cite = (lines: string): string =>
       `a [cite](https://github.com/o/r/blob/abc1234/f.ts${lines}) here`;
