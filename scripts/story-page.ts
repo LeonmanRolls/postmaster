@@ -1792,7 +1792,7 @@ export function build(o: BuildOptions): string {
     named,
     changed: cited.length,
     left,
-    shown: shown.size,
+    shown: cited.length - left,
     diagrams,
     pictures,
     overlays,
@@ -1813,7 +1813,7 @@ export function build(o: BuildOptions): string {
   const bySection = story.sections
     .map((s) => `${s.label} ${story.steps.filter((x) => x.section === s.id).length}`)
     .join(", ");
-  return `story of #${story.ticket}: ${steps.length} steps (${bySection}), ${usedScenes.length} scenes, ${cited.length} cited lines, ${shown.size} on steps, ${left} listed (${gaps.length} groups), page ${Buffer.byteLength(page)} bytes, sheet ${Buffer.byteLength(sheet)} bytes, picture ${pictureBytes} bytes, ${removed} address(es) removed`;
+  return `story of #${story.ticket}: ${steps.length} steps (${bySection}), ${usedScenes.length} scenes, ${cited.length} cited lines, ${cited.length - left} on steps, ${left} listed (${gaps.length} groups), page ${Buffer.byteLength(page)} bytes, sheet ${Buffer.byteLength(sheet)} bytes, picture ${pictureBytes} bytes, ${removed} address(es) removed`;
 }
 
 function flag(args: string[], name: string): string | undefined {
