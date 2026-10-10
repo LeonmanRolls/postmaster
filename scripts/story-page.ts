@@ -1298,7 +1298,7 @@ export function ticketDocId(story: Story): string | undefined {
     ?.id;
 }
 
-function stepsHtml(p: PageParts): string {
+export function stepsHtml(p: PageParts): string {
   const { story, steps } = p;
   const N = steps.length;
   const minutes = Math.max(3, Math.round(N * 0.33));
@@ -1315,7 +1315,7 @@ function stepsHtml(p: PageParts): string {
       const chap = firstOf.get(s.section) === i ? `<p class="chap">${esc(sec.title)}</p>` : "";
       const num = `<p class="snum">Step ${i + 1} of ${N}</p>`;
       if (s.kind === "title") {
-        return `<article class="step title${i === 0 ? " on" : ""}" id="s${i + 1}" data-i="${i}"><p class="eyebrow">Ticket #${story.ticket} · ${esc(story.status ?? "")}</p><h1 class="plate-h">${inline(s.title)}</h1><p class="txt">${inline(fill(s.text, p.shown, p.changed, p.left))}</p><p class="meta"><a href="${story.repoUrl}/issues/${story.ticket}">#${story.ticket}, ${inline(ticketTitle)}</a> · ${N} steps, about ${minutes} minutes</p><p class="hint">Scroll to begin.</p></article>`;
+        return `<article class="step title${i === 0 ? " on" : ""}" id="s${i + 1}" data-i="${i}"><p class="eyebrow">Ticket #${story.ticket} · ${esc(story.status ?? "")}</p><h1 class="plate-h">${inline(s.title)}</h1><p class="txt">${inline(fill(s.text, p.shown, p.changed, p.left))}</p><p class="meta"><a href="${esc(story.repoUrl)}/issues/${story.ticket}">#${story.ticket}, ${inline(ticketTitle)}</a> · ${N} steps, about ${minutes} minutes</p><p class="hint">Scroll to begin.</p></article>`;
       }
       return `<article class="step${s.kind === "criterion" ? " crit" : ""}${i === 0 ? " on" : ""}" id="s${i + 1}" data-i="${i}">${chap}${num}<h3>${inline(s.title)}</h3><p class="txt">${inline(fill(s.text, p.shown, p.changed, p.left))}</p></article>`;
     })

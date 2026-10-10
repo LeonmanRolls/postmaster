@@ -22,10 +22,11 @@ import {
   sceneBlocks,
   scrubStory,
   startsInFence,
+  stepsHtml,
   tagSvg,
   ticketDocId,
 } from "./story-page.ts";
-import type { DiagramScene, Doc, Row, Scene, Story } from "./story-page.ts";
+import type { DiagramScene, Doc, PageParts, Row, Scene, Story } from "./story-page.ts";
 
 describe("the reading line", () => {
   test("below the panel on a phone, above the middle beside it", () => {
@@ -592,6 +593,21 @@ describe("page pieces", () => {
     } as Story;
     expect(ticketDocId(story)).toBe("brief");
     expect(ticketDocId({ ticket: 1, scenes: [] } as Story)).toBeUndefined();
+  });
+
+  test("the title step escapes the repo link", () => {
+    const story = {
+      repoUrl: "https://host/u/r?a=b&c=d",
+      ticket: 1,
+      at: "a",
+      status: "open",
+      sections: [{ id: "open", label: "S", title: "Start" }],
+      scenes: [{ id: "t", kind: "doc", from: "issue", number: 1, label: "T", chip: "c" }],
+      steps: [{ id: "w", section: "open", scene: "t", kind: "title", title: "T", text: "x" }],
+    } as unknown as Story;
+    const docs = new Map<string, Doc>([["t", renderDoc("words\n", "T", "Title")]]);
+    const html = stepsHtml({ story, steps: [{}], docs } as unknown as PageParts);
+    expect(html).toContain('href="https://host/u/r?a=b&amp;c=d/issues/1"');
   });
 
   test("blocks take their scene and source lines", () => {
