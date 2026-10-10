@@ -623,6 +623,12 @@ export function renderMd(lines: string[], from: number): { html: string; spans: 
     if (para) block("p", inline(para.text.join(" ")), para.from, para.to);
     para = null;
   };
+  const flushOpen = (): void => {
+    // A range ending inside a fence still shows its lines: the builder
+    // counts every line of the range as shown, so none may be dropped.
+    if (fence)
+      block("pre", esc(fence.text.join("\n")), fence.from, from + lines.length - 1, " mdcode");
+  };
   lines.forEach((raw, i) => {
     const n = from + i;
     // ASCII: trailing runs trimmed are ASCII whitespace; Unicode spaces trim alike.
@@ -666,11 +672,7 @@ export function renderMd(lines: string[], from: number): { html: string; spans: 
     }
   });
   flush();
-  if (fence) {
-    // A range ending inside a fence still shows its lines: the builder
-    // counts every line of the range as shown, so none may be dropped.
-    block("pre", esc(fence.text.join("\n")), fence.from, from + lines.length - 1, " mdcode");
-  }
+  flushOpen();
   return { html: out.join(""), spans };
 }
 

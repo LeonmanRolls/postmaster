@@ -347,7 +347,10 @@ describe("renderMd", () => {
     const { html, spans } = renderMd(["# t", "```", "code-x", "code-y"], 10);
     expect(html).toContain("code-x");
     expect(html).toContain("code-y");
-    expect(spans).toContainEqual([11, 13]);
+    expect(spans).toEqual([
+      [10, 10],
+      [11, 13],
+    ]);
   });
 
   test("a range starting inside a fence is detected", () => {
@@ -597,7 +600,7 @@ describe("page pieces", () => {
       ],
     } as Story;
     expect(ticketDocId(story)).toBe("brief");
-    expect(ticketDocId({ ticket: 1, scenes: [] } as Story)).toBeUndefined();
+    expect(ticketDocId({ ticket: 1, scenes: [] } as unknown as Story)).toBeUndefined();
   });
 
   test("the title step escapes the repo link", () => {
