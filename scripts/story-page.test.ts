@@ -198,18 +198,22 @@ describe("checkDrawings", () => {
     }) as Story;
 
   test("a drawing before the first code step passes, md counts as code", () => {
-    checkDrawings(
-      story([
-        { id: "a", section: "c1", scene: "d" },
-        { id: "b", section: "c1", scene: "code" },
-      ]),
-    );
-    checkDrawings(
-      story([
-        { id: "a", section: "c1", scene: "d" },
-        { id: "b", section: "c1", scene: "doc" },
-      ]),
-    );
+    expect(() =>
+      checkDrawings(
+        story([
+          { id: "a", section: "c1", scene: "d" },
+          { id: "b", section: "c1", scene: "code" },
+        ]),
+      ),
+    ).not.toThrow();
+    expect(() =>
+      checkDrawings(
+        story([
+          { id: "a", section: "c1", scene: "d" },
+          { id: "b", section: "c1", scene: "doc" },
+        ]),
+      ),
+    ).not.toThrow();
   });
 
   test("code with no drawing before it names the section", () => {
