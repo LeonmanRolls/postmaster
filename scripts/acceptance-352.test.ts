@@ -177,7 +177,7 @@ describe("C2: the opening picture comes from the adapter", () => {
   test("with no adapter the builder says so and writes no page", () => {
     const b = B.noadapter;
     expect(b.code).not.toBe(0);
-    expect(b.err).toMatch(/adapter/i);
+    expect(b.err).toMatch(/adapter/iu);
     expect(existsSync(join(b.outDir, "index.html"))).toBe(false);
     expect(existsSync(join(b.outDir, "sheet.html"))).toBe(false);
     expect(b.html).toBeNull();
@@ -186,18 +186,104 @@ describe("C2: the opening picture comes from the adapter", () => {
 
 describe("C3: the panel follows the outlined step", () => {
   const cases: [string, [number, number][], number][] = [
-    ["390x844", [[0, 100], [600, 700], [800, 900]], 1],
-    ["390x844", [[0, 100], [700, 800]], 1],
-    ["390x844", [[700, 800], [900, 1000]], 0],
-    ["390x844", [[0, 100], [200, 300]], 1],
-    ["1180x820", [[0, 100], [300, 400], [500, 600]], 1],
-    ["1180x820", [[0, 100], [400, 500]], 1],
-    ["1180x820", [[400, 500], [600, 700]], 0],
-    ["1180x820", [[0, 100], [200, 300]], 1],
-    ["900x800", [[380, 420], [600, 650]], 0],
-    ["899x800", [[380, 420], [600, 650]], 1],
-    ["390x844", [[-200, -100], [700, 800]], 1],
-    ["390x844", [[-200, -100], [900, 1000]], -1],
+    [
+      "390x844",
+      [
+        [0, 100],
+        [600, 700],
+        [800, 900],
+      ],
+      1,
+    ],
+    [
+      "390x844",
+      [
+        [0, 100],
+        [700, 800],
+      ],
+      1,
+    ],
+    [
+      "390x844",
+      [
+        [700, 800],
+        [900, 1000],
+      ],
+      0,
+    ],
+    [
+      "390x844",
+      [
+        [0, 100],
+        [200, 300],
+      ],
+      1,
+    ],
+    [
+      "1180x820",
+      [
+        [0, 100],
+        [300, 400],
+        [500, 600],
+      ],
+      1,
+    ],
+    [
+      "1180x820",
+      [
+        [0, 100],
+        [400, 500],
+      ],
+      1,
+    ],
+    [
+      "1180x820",
+      [
+        [400, 500],
+        [600, 700],
+      ],
+      0,
+    ],
+    [
+      "1180x820",
+      [
+        [0, 100],
+        [200, 300],
+      ],
+      1,
+    ],
+    [
+      "900x800",
+      [
+        [380, 420],
+        [600, 650],
+      ],
+      0,
+    ],
+    [
+      "899x800",
+      [
+        [380, 420],
+        [600, 650],
+      ],
+      1,
+    ],
+    [
+      "390x844",
+      [
+        [-200, -100],
+        [700, 800],
+      ],
+      1,
+    ],
+    [
+      "390x844",
+      [
+        [-200, -100],
+        [900, 1000],
+      ],
+      -1,
+    ],
   ];
   for (const [viewport, boxes, want] of cases) {
     test(`pick-step ${viewport} ${JSON.stringify(boxes)} -> ${want}`, () => {
@@ -269,7 +355,7 @@ describe("C4: drawn before code", () => {
       const isCode = (id: string): boolean => kinds.get(id) === "ref" || kinds.get(id) === "md";
       const isDraw = (id: string): boolean => kinds.get(id) === "diagram";
       const violations: string[] = [];
-      for (const section of [...new Set(data.steps.map((s) => s.section))]) {
+      for (const section of new Set(data.steps.map((s) => s.section))) {
         const steps = data.steps.filter((s) => s.section === section);
         const firstCode = steps.findIndex((s) => isCode(s.scene));
         if (firstCode < 0) continue;
@@ -285,7 +371,7 @@ describe("C4: drawn before code", () => {
     const b = B.nodraw;
     expect(b.code).not.toBe(0);
     expect(b.err).toContain("c1");
-    expect(b.err).toMatch(/drawing/i);
+    expect(b.err).toMatch(/drawing/iu);
     expect(existsSync(join(b.outDir, "index.html"))).toBe(false);
     expect(b.html).toBeNull();
   });
@@ -331,11 +417,11 @@ describe("C4: drawn before code", () => {
   test("352 switches the layout drawing between its states", () => {
     const html = page(B.b352);
     const data = storyData(html);
-    const states = [
-      ...new Set(
-        data.steps.filter((s) => s.scene === "structure").map((s) => s.state ?? ""),
-      ),
-    ].sort();
+    const states = data.steps
+      .filter((s) => s.scene === "structure")
+      .map((s) => s.state ?? "")
+      .filter((v, i, a) => a.indexOf(v) === i)
+      .sort();
     expect(states).toEqual(["page", "section"]);
     expect(scriptSwitches(html)).toBe(true);
   });
