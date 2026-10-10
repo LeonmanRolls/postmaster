@@ -100,7 +100,7 @@ describe("C1: a story page per ticket, a section per criterion", () => {
       const html = page(get());
       const data = storyData(html);
       const first = data.steps[0];
-      expect(first.kind).toBe("title");
+      expect(first.kind).toBe("image");
       const hero = data.scenes.find((s) => s.id === first.scene);
       expect(hero?.kind).toBe("image");
       const div = sceneDivs(html).find((d) => d.id === first.scene);
@@ -123,8 +123,10 @@ describe("C1: a story page per ticket, a section per criterion", () => {
     test(`352 section C${i + 1} tells criterion ${i + 1}`, () => {
       const html = page(B.b352);
       const data = storyData(html);
-      const step = data.steps.find((s) => s.section === `c${i + 1}` && s.kind === "criterion");
+      const step = data.steps.find((s) => s.section === `c${i + 1}`);
       expect(step).toBeDefined();
+      const art = articles(html).find((a) => a.num === (step?.i ?? -1));
+      expect(art?.cls.includes("crit")).toBe(true);
       expect(litText(html, step?.scene ?? "", step?.lit ?? [])).toContain(needle);
     });
   }
@@ -143,8 +145,10 @@ describe("C1: a story page per ticket, a section per criterion", () => {
     test(`271 section C${i + 1} tells criterion ${i + 1}`, () => {
       const html = page(B.b271);
       const data = storyData(html);
-      const step = data.steps.find((s) => s.section === `c${i + 1}` && s.kind === "criterion");
+      const step = data.steps.find((s) => s.section === `c${i + 1}`);
       expect(step).toBeDefined();
+      const art = articles(html).find((a) => a.num === (step?.i ?? -1));
+      expect(art?.cls.includes("crit")).toBe(true);
       expect(litText(html, step?.scene ?? "", step?.lit ?? [])).toContain(needle);
     });
   }
