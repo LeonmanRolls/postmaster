@@ -34,11 +34,11 @@ afterAll(() => {
   removeDir(tmp);
 });
 
-/** The text around an anchor: 1500 chars before it, 500 after. */
+/** The text around an anchor: 500 chars before it, 2000 after, the step it starts. */
 function near(text: string, anchor: string): string {
   const at = text.indexOf(anchor);
   expect(at).toBeGreaterThanOrEqual(0);
-  return text.slice(Math.max(0, at - 1500), at + 500);
+  return text.slice(Math.max(0, at - 500), at + 2000);
 }
 
 function repoOf(dispatch: string): string {
