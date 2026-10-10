@@ -20,6 +20,7 @@ import {
   renderDoc,
   renderMd,
   sceneBlocks,
+  startsInFence,
   tagSvg,
 } from "./story-page.ts";
 import type { DiagramScene, Doc, Row, Scene, Story } from "./story-page.ts";
@@ -279,6 +280,20 @@ describe("renderMd", () => {
       [12, 13],
       [15, 17],
     ]);
+  });
+
+  test("an unclosed fence at the range end still shows its lines", () => {
+    const { html, spans } = renderMd(["# t", "```", "code-x", "code-y"], 10);
+    expect(html).toContain("code-x");
+    expect(html).toContain("code-y");
+    expect(spans).toContainEqual([11, 13]);
+  });
+
+  test("a range starting inside a fence is detected", () => {
+    const all = ["# t", "```", "code-x", "```", "after"];
+    expect(startsInFence(all, 3)).toBe(true);
+    expect(startsInFence(all, 5)).toBe(false);
+    expect(startsInFence(all, 1)).toBe(false);
   });
 });
 

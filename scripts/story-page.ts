@@ -609,7 +609,22 @@ export function renderMd(lines: string[], from: number): { html: string; spans: 
     }
   });
   flush();
+  if (fence) {
+    // A range ending inside a fence still shows its lines: the builder
+    // counts every line of the range as shown, so none may be dropped.
+    block("pre", esc(fence.text.join("\n")), fence.from, from + lines.length - 1, " mdcode");
+  }
   return { html: out.join(""), spans };
+}
+
+/** Whether line `from` (1-based) falls inside a fenced block of the whole file. */
+export function startsInFence(all: string[], from: number): boolean {
+  let open = false;
+  for (const raw of all.slice(0, Math.max(0, from - 1))) {
+    // ASCII: fence indentation is ASCII whitespace.
+    if (/^\s*```/u.test(raw.replace(/\s+$/u, ""))) open = !open;
+  }
+  return open;
 }
 
 /** Cut a ticket's body to the part a doc scene shows. */
@@ -1628,6 +1643,9 @@ export function build(o: BuildOptions): string {
   for (const sc of usedScenes) {
     if (sc.kind !== "md") continue;
     const all = fileLines(sc.file);
+    if (startsInFence(all, sc.from)) {
+      throw new Error(`scene ${sc.id}: its range starts inside a fenced block of ${sc.file}`);
+    }
     mds.set(sc.id, renderMd(all.slice(sc.from - 1, Math.min(sc.to, all.length)), sc.from));
   }
 
