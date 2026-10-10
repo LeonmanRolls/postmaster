@@ -495,9 +495,8 @@ export function parseCited(
 ): Cited {
   const lines = new Set<string>();
   const named: { path: string; url: string }[] = [];
-  // ASCII: owner and repo names compare ASCII-case-insensitively, as GitHub reads them.
   const want =
-    target === undefined ? undefined : `${target.owner.toLowerCase()}/${target.repo.toLowerCase()}`;
+    target === undefined ? undefined : `${target.owner.toLowerCase()}/${target.repo.toLowerCase()}`; // ASCII: owner and repo names compare ASCII-case-insensitively, as GitHub reads them.
   for (const m of body.matchAll(LINK)) {
     // ASCII: owner and repo names compare ASCII-case-insensitively, as GitHub reads them.
     if (want !== undefined && `${m[1]?.toLowerCase()}/${m[2]?.toLowerCase()}` !== want) continue;
