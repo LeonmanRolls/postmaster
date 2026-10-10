@@ -19,7 +19,8 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { run } from "./lib/proc.ts";
-import { findingState, isFindingShaped, pyRepr } from "./landing.ts";
+import { findingState, isFindingShaped, privateDataBlock, pyRepr } from "./landing.ts";
+import { email } from "./scrub-test-kit.ts";
 
 const SELF = join(import.meta.dir, "run");
 const HERE = import.meta.dir;
@@ -53,6 +54,14 @@ function git(dir: string, ...args: string[]): string {
   const r = run("git", ["-C", dir, ...args]);
   if (r.code !== 0) throw new Error(`git ${args.join(" ")} failed: ${r.err}${r.out}`);
   return strip(r.out);
+}
+
+function markedResolutions(text: string): boolean {
+  const start = text.indexOf("Run the checks on each workhorse's branch");
+  const end = text.indexOf("- **", start + 1);
+  if (start === -1 || end === -1 || end < start) return false;
+  const section = text.slice(start, end);
+  return section.includes("via: marker") && section.includes("detections-resolved.jsonl");
 }
 
 function identify(dir: string): void {
@@ -1584,6 +1593,201 @@ describe("card-results", () => {
       1,
       "landing: card: contains an HTML comment",
     );
+  });
+});
+
+describe("private-data-card", () => {
+  test("C13 the ship card lists removed, marked and scrubbed findings", () => {
+    const dispatch = join(tmp, "private-data-dispatch");
+    mkdirSync(dispatch, { recursive: true });
+    const items = [
+      { rule: "email", file: "notes.txt", line: 1, commit: "a".repeat(40), resolution: "removed" },
+      {
+        rule: "token",
+        file: "settings.json",
+        line: 2,
+        commit: "b".repeat(40),
+        resolution: "marked",
+      },
+      {
+        rule: "private-host",
+        file: "records.jsonl",
+        line: 3,
+        commit: "c".repeat(40),
+        resolution: "scrubbed",
+      },
+    ];
+    writeFileSync(
+      join(dispatch, "detections.jsonl"),
+      `${items.map(({ resolution: _resolution, ...item }) => JSON.stringify(item)).join("\n")}\n`,
+    );
+    writeFileSync(
+      join(dispatch, "detections-resolved.jsonl"),
+      `${items.map((item) => JSON.stringify(item)).join("\n")}\n`,
+    );
+    writeFileSync(
+      join(dispatch, "private-data-census.jsonl"),
+      [
+        JSON.stringify({
+          rule: "email",
+          file: "census-path-one",
+          line: 7,
+          commit: "d".repeat(40),
+          verdict: "made-up",
+        }),
+        JSON.stringify({
+          rule: "token",
+          file: "census-path-two",
+          line: 8,
+          commit: "e".repeat(40),
+          verdict: "real",
+        }),
+      ].join("\n") + "\n",
+    );
+    const block = privateDataBlock(dispatch);
+    expect(block).toContain("- email at notes.txt:1 (aaaaaaaaaaaa) - removed");
+    expect(block).toContain("- token at settings.json:2 (bbbbbbbbbbbb) - marked as made-up");
+    expect(block).toContain("- private-host at records.jsonl:3 (cccccccccccc) - scrubbed");
+    expect(block).toContain("- made-up: 1\n- real: 1");
+    expect(block).toContain("- 1 suspect(s): email\n- 1 suspect(s): token");
+    // Review round 1: the block must not freeze run-specific evidence. Held-out
+    // scores and port decisions go on the run's own card as prose.
+    expect(block).not.toContain("heldout");
+    expect(block).not.toContain("Port decisions");
+    const censusBlock = block.split("## Main history census\n\n")[1] ?? "";
+    expect(censusBlock).not.toContain("census-path");
+    expect(censusBlock).not.toContain("dddddddddddd");
+    const card = join(dispatch, "card.md");
+    writeFileSync(card, `# Ship card\n\n${block}\nTrailing prose.\n`);
+    check(["private-data-card", dispatch, card], 0, "match");
+
+    const missing = join(dispatch, "card-missing.md");
+    writeFileSync(
+      missing,
+      `# Ship card\n\n${block.replace("- token at settings.json:2 (bbbbbbbbbbbb) - marked as made-up\n", "")}\n`,
+    );
+    check(
+      ["private-data-card", dispatch, missing],
+      1,
+      "landing: card: private-data findings do not match the run record",
+    );
+  });
+
+  test("the block aggregates a census past the 50-suspect budget", () => {
+    // Review round 3: the generator died over 50, so an accepted census
+    // could not reach any card.
+    const dispatch = join(tmp, "private-data-big-census");
+    mkdirSync(dispatch, { recursive: true });
+    const records = [];
+    for (let i = 0; i < 51; i++) {
+      records.push(
+        JSON.stringify({
+          rule: "email",
+          file: `census-path-${i}`,
+          line: i + 1,
+          commit: `${i}`.padStart(40, "a"),
+          verdict: "made-up",
+        }),
+      );
+    }
+    writeFileSync(join(dispatch, "private-data-census.jsonl"), `${records.join("\n")}\n`);
+    const block = privateDataBlock(dispatch);
+    expect(block).toContain("- suspects: 51");
+    expect(block).toContain("- 51 suspect(s): email");
+  });
+
+  test("the block redacts values even when SCRUB_CHECK_DISABLE is set", () => {
+    // Review round 3: the block's in-process redaction honored ambient DISABLE.
+    const dispatch = join(tmp, "private-data-disable-block");
+    mkdirSync(dispatch, { recursive: true });
+    const record = { rule: "email", file: email(), line: 1, commit: "a".repeat(40) };
+    writeFileSync(join(dispatch, "detections.jsonl"), `${JSON.stringify(record)}\n`);
+    writeFileSync(
+      join(dispatch, "detections-resolved.jsonl"),
+      `${JSON.stringify({ ...record, resolution: "removed" })}\n`,
+    );
+    const saved = process.env.SCRUB_CHECK_DISABLE;
+    try {
+      process.env.SCRUB_CHECK_DISABLE = "email";
+      const r = sh(["private-data-block", dispatch]);
+      expect(r.code).toBe(0);
+      expect(r.out).toContain("[redacted]");
+      expect(r.out).not.toContain(email());
+    } finally {
+      if (saved === undefined) delete process.env.SCRUB_CHECK_DISABLE;
+      else process.env.SCRUB_CHECK_DISABLE = saved;
+    }
+  });
+
+  test("draft-only rows log but the block carries none", () => {
+    // Review round 6: drafts log marked via draft; the block skips them
+    // instead of dying for no resolution.
+    const dispatch = join(tmp, "private-data-drafts");
+    mkdirSync(dispatch, { recursive: true });
+    const record = {
+      rule: "email",
+      file: "(pr-description)",
+      line: 1,
+      commit: "",
+      via: "draft",
+    };
+    writeFileSync(join(dispatch, "detections.jsonl"), `${JSON.stringify(record)}\n`);
+    const block = privateDataBlock(dispatch);
+    expect(block).toContain("none");
+    expect(block).not.toContain("(pr-description)");
+  });
+
+  test("the block dies on a marked finding with no resolution", () => {
+    // Review round 12 (bug-67): unlike drafts, marker-suppressed rows need
+    // a resolution; the die below is what the missing procedure runs into.
+    const dispatch = join(tmp, "private-data-marked");
+    mkdirSync(dispatch, { recursive: true });
+    const record = {
+      rule: "email",
+      file: "notes.txt",
+      line: 1,
+      commit: "b".repeat(40),
+      via: "marker",
+    };
+    writeFileSync(join(dispatch, "detections.jsonl"), `${JSON.stringify(record)}\n`);
+    const r = sh(["private-data-block", dispatch]);
+    expect(r.code).toBe(1);
+    expect(r.out).toContain("has no resolution");
+  });
+
+  test("the synthesis procedure resolves marked findings the gate never reports", () => {
+    // Review round 12 (bug-67): a valid marker silences the gate but still
+    // logs the finding, so the leg-1 procedure must resolve via: marker
+    // rows even when the gate passes.
+    const doc = readFileSync(join(import.meta.dir, "../skills/postmaster/coachman.md"), "utf8");
+    expect(markedResolutions(doc)).toBe(true);
+    // Negative control: the pre-fix wording only resolves reported findings.
+    const old =
+      "- **Run the checks on each workhorse's branch** once its thread has exited. " +
+      "If the gate reports a private-data finding, fix it and append one " +
+      "`detections-resolved.jsonl` row per finding.\n- **Next step.**";
+    expect(markedResolutions(old)).toBe(false);
+  });
+
+  test("the card scan still refuses a card when SCRUB_CHECK_DISABLE hides email", () => {
+    // Review round 1: the scan inherited SCRUB_CHECK_DISABLE from the environment.
+    const dispatch = join(tmp, "private-data-disable");
+    mkdirSync(dispatch, { recursive: true });
+    const block = privateDataBlock(dispatch);
+    const card = join(dispatch, "card.md");
+    writeFileSync(card, `# Ship card\n\n${block}\nProse with ${email()} inside.\n`);
+    const saved = process.env.SCRUB_CHECK_DISABLE;
+    try {
+      process.env.SCRUB_CHECK_DISABLE = "email";
+      check(
+        ["private-data-card", dispatch, card],
+        1,
+        "landing: card: private-data scan is not clean",
+      );
+    } finally {
+      if (saved === undefined) delete process.env.SCRUB_CHECK_DISABLE;
+      else process.env.SCRUB_CHECK_DISABLE = saved;
+    }
   });
 });
 

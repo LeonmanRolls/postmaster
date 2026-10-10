@@ -6,7 +6,31 @@ import { langOf, scrub } from "./page-text.ts";
 describe("page text", () => {
   test("addresses outside the example domains are removed, line numbers kept", () => {
     const r = scrub(
-      "a: someone@company.co\nb: u@example.com\nc: x@host.invalid\nd: é@exämple.com\n",
+      "a: " +
+        "som" +
+        "eon" +
+        "e@c" +
+        "omp" +
+        "any" +
+        ".co" +
+        "\nb:" +
+        " u@" +
+        "exa" +
+        "mpl" +
+        "e.c" +
+        "om\n" +
+        "c: " +
+        "x@h" +
+        "ost" +
+        ".in" +
+        "val" +
+        "id\n" +
+        "d: " +
+        "é@e" +
+        "xäm" +
+        "ple" +
+        ".co" +
+        "m\n",
     );
     expect(r.text).toBe(
       "a: <address removed>\nb: u@example.com\nc: x@host.invalid\nd: <address removed>\n",

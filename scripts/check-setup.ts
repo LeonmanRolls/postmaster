@@ -98,14 +98,18 @@ function postmasterSource(
   return globalPath;
 }
 
-export function main(argv: string[]): number {
-  if (argv.length !== 1 || !argv[0]) usage();
-  const target = argv[0] as string;
+export interface SetupVerdict {
+  code: number;
+  notice: string | null;
+  lines: string[];
+}
+
+/** check <target>: the set-up verdict as data; main prints it. */
+export function check(target: string): SetupVerdict {
   // A subdirectory reads its repository's settings; a path git cannot place
   // keeps its own .postmaster, as front-door reads it.
   const root = repoTopLevel(target) || target;
   const resolved = effectiveConfigForProject(root);
-  if (resolved.notice !== null) console.error(resolved.notice);
   if (resolved.config === null || resolved.error !== null) {
     const problems = [resolved.error ?? "no effective config"];
     // The one failure that is the absence of both layers: name the project's
@@ -114,8 +118,7 @@ export function main(argv: string[]): number {
     if (problems[0].startsWith("no config at ")) {
       problems.push(`no usable project settings in ${join(root, ".postmaster", "settings.toml")}`);
     }
-    console.log(`not set up: ${root}\n${problems.join("\n")}`);
-    return 1;
+    return { code: 1, notice: resolved.notice, lines: [`not set up: ${root}`, ...problems] };
   }
   const mergedTeam = isTable(resolved.config.team) ? resolved.config.team : {};
   const source = postmasterSource(
@@ -127,11 +130,17 @@ export function main(argv: string[]): number {
   );
   const problems = checkMerged(resolved.config, source);
   if (problems.length > 0) {
-    console.log(`not set up: ${root}\n${problems.join("\n")}`);
-    return 1;
+    return { code: 1, notice: resolved.notice, lines: [`not set up: ${root}`, ...problems] };
   }
-  console.log(`set up: ${root}`);
-  return 0;
+  return { code: 0, notice: resolved.notice, lines: [`set up: ${root}`] };
+}
+
+export function main(argv: string[]): number {
+  if (argv.length !== 1 || !argv[0]) usage();
+  const verdict = check(argv[0] as string);
+  if (verdict.notice !== null) console.error(verdict.notice);
+  console.log(verdict.lines.join("\n"));
+  return verdict.code;
 }
 
 if (import.meta.main) process.exit(main(process.argv.slice(2)));

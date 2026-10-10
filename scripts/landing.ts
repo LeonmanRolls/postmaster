@@ -108,6 +108,7 @@ import { inspectSwitchOffs } from "./lib/switch-offs.ts";
 import { run } from "./lib/proc.ts";
 import { runMode } from "./lib/run-mode.ts";
 import { physical, reachActions } from "./reach.ts";
+import { errorText, isDraftRecord, safePath } from "./scrub-report.ts";
 import {
   D_CLASS,
   END_OF_STRING,
@@ -144,7 +145,7 @@ class LandingFailure extends Error {
 }
 
 function die(msg: string): never {
-  throw new LandingFailure(`landing: ${msg}`, 1);
+  throw new LandingFailure(errorText("landing", msg), 1);
 }
 
 function usage(msg: string): never {
@@ -509,13 +510,153 @@ function checkBlock(dispatch: string, wt: string, checkpoint: string, card: stri
   return 0;
 }
 
+interface PrivateFinding {
+  rule: string;
+  file: string;
+  line: number;
+  commit: string;
+}
+type PrivateResolution = "removed" | "marked" | "scrubbed";
+
+function privateFindingKey(row: PrivateFinding): string {
+  return JSON.stringify([row.rule, row.file, row.line, row.commit]);
+}
+
+function jsonLines(path: string): Record<string, unknown>[] {
+  let source: string;
+  try {
+    source = readFileSync(path, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException)?.code === "ENOENT") return [];
+    die("private-data record could not be read");
+  }
+  const records: Record<string, unknown>[] = [];
+  for (const line of source.split("\n")) {
+    if (!line.trim()) continue;
+    try {
+      const value: unknown = JSON.parse(line);
+      if (typeof value !== "object" || value === null || Array.isArray(value))
+        die("private-data record is invalid");
+      records.push(value as Record<string, unknown>);
+    } catch {
+      die("private-data record is invalid");
+    }
+  }
+  return records;
+}
+
+function privateFinding(record: Record<string, unknown>): PrivateFinding {
+  if (
+    typeof record.rule !== "string" ||
+    typeof record.file !== "string" ||
+    typeof record.line !== "number" ||
+    typeof record.commit !== "string"
+  ) {
+    die("private-data record is invalid");
+  }
+  return {
+    rule: record.rule,
+    file: safePath(record.file),
+    line: record.line,
+    commit: record.commit,
+  };
+}
+
+export function privateDataBlock(dispatch: string): string {
+  const detections = jsonLines(join(dispatch, "detections.jsonl"));
+  const resolutions = jsonLines(join(dispatch, "detections-resolved.jsonl"));
+  const found = new Map<string, PrivateFinding>();
+  for (const record of detections) {
+    // Draft rows log but never resolve: a draft is reworded and scanned
+    // again, so the block skips them instead of dying for no resolution.
+    if (isDraftRecord(record)) continue;
+    const finding = privateFinding(record);
+    found.set(privateFindingKey(finding), finding);
+  }
+  const resolved = new Map<string, PrivateResolution>();
+  for (const record of resolutions) {
+    const finding = privateFinding(record);
+    const key = privateFindingKey(finding);
+    if (!found.has(key)) die("private-data resolution has no finding");
+    const resolution = record.resolution;
+    if (resolution !== "removed" && resolution !== "marked" && resolution !== "scrubbed")
+      die("private-data resolution is invalid");
+    const previous = resolved.get(key);
+    if (previous && previous !== resolution)
+      die("private-data finding has conflicting resolutions");
+    resolved.set(key, resolution);
+  }
+  const lines = [...found.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, finding]) => {
+      const resolution = resolved.get(key);
+      if (!resolution) die("private-data finding has no resolution");
+      const label = resolution === "marked" ? "marked as made-up" : resolution;
+      return `- ${finding.rule} at ${finding.file}:${finding.line} (${finding.commit.slice(0, 12)}) - ${label}`;
+    });
+  const census = jsonLines(join(dispatch, "private-data-census.jsonl"));
+  const censusRules = new Map<string, number>();
+  const censusVerdicts = new Map<string, number>();
+  const censusPlaces = new Set<string>();
+  for (const record of census) {
+    if (
+      typeof record.rule !== "string" ||
+      (record.verdict !== "made-up" && record.verdict !== "real") ||
+      typeof record.file !== "string" ||
+      typeof record.line !== "number" ||
+      typeof record.commit !== "string"
+    ) {
+      die("private-data census is invalid");
+    }
+    const key = JSON.stringify([record.file, record.line, record.commit]);
+    if (censusPlaces.has(key)) die("private-data census repeats a suspect");
+    censusPlaces.add(key);
+    censusRules.set(record.rule, (censusRules.get(record.rule) ?? 0) + 1);
+    censusVerdicts.set(record.verdict, (censusVerdicts.get(record.verdict) ?? 0) + 1);
+  }
+  // No cap: the ticket's 50 is an escalation threshold for the census
+  // count, judged by the postmaster, not a limit on what the block can
+  // carry. An accepted overage must still reach the card, aggregated.
+  const censusBlock = census.length
+    ? `\n## Main history census\n\n- suspects: ${census.length}\n- made-up: ${censusVerdicts.get("made-up") ?? 0}\n- real: ${censusVerdicts.get("real") ?? 0}\n\n${[
+        ...censusRules.entries(),
+      ]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([rule, count]) => `- ${count} suspect(s): ${rule}`)
+        .join("\n")}\n`
+    : "";
+  // The block carries only what the run's own records say: its findings with
+  // their resolutions, and its census counts. Run-specific evidence such as
+  // held-out scores or port decisions goes on that run's card as prose, never
+  // as literals here, or every future card would repeat them.
+  return `## Private data findings\n\n${lines.join("\n") || "none"}\n${censusBlock}`;
+}
+
+function checkPrivateDataCard(dispatch: string, card: string): number {
+  const text = load(card);
+  refuseComments(text, "card");
+  const expected = privateDataBlock(dispatch);
+  const count = text.split(expected).length - 1;
+  if (count !== 1) die("card: private-data findings do not match the run record");
+  const scanned = run(join(SCRIPTS, "run"), ["scrub-check", "--pr-description", card], {
+    env: {
+      POSTMASTER_DETECTIONS_LOG: join(dispatch, "detections.jsonl"),
+      SCRUB_CHECK_DISABLE: undefined,
+    },
+  });
+  if (scanned.code !== 0) die("card: private-data scan is not clean");
+  console.log("match");
+  return 0;
+}
+
 // --- modes --------------------------------------------------------------------------------
 const TOP_USAGE =
   "usage: run landing already-landed --repo <repo> --default <branch> --ticket <ref> --base <sha> " +
   "--card-head <sha> [--local-ticket <branch>] [--pr-merge <sha> --pr-head <sha>] | anything-to-land " +
   "--repo <repo> --default <branch> --ticket <ref> --base <sha> | fresh --repo <repo> --default <branch> " +
   "--ticket <ref> --dispatch <dispatch> --wt <synthesis-wt> | pull-request-checks --repo <repo> " +
-  "--pr <pull-request> --card-head <sha> | results <dispatch> <synthesis-wt> | " +
+  "--pr <pull-request> --card-head <sha> | private-data-block <dispatch> | " +
+  "private-data-card <dispatch> <card> | results <dispatch> <synthesis-wt> | " +
   "card-block <dispatch> <synthesis-wt> <checkpoint> | card-results <dispatch> <synthesis-wt> " +
   "<checkpoint> <card> | card-findings <dispatch> <synthesis-wt> <checkpoint> <card> | " +
   "card-open <checkpoint> | journey <dispatch> <synthesis-wt> <waybill> | switch-offs " +
@@ -534,6 +675,8 @@ const CRESULTS_USAGE =
   "usage: run landing card-results <dispatch> <synthesis-wt> <checkpoint> <card>";
 const CFINDINGS_USAGE =
   "usage: run landing card-findings <dispatch> <synthesis-wt> <checkpoint> <card>";
+const PDATA_BLOCK_USAGE = "usage: run landing private-data-block <dispatch>";
+const PDATA_CARD_USAGE = "usage: run landing private-data-card <dispatch> <card>";
 const OPEN_USAGE = "usage: run landing card-open <checkpoint>";
 const JOURNEY_USAGE = "usage: run landing journey <dispatch> <synthesis-wt> <waybill>";
 const PR_CHECKS_USAGE =
@@ -906,6 +1049,8 @@ function switchOffs(o: string[]): number {
 }
 
 function main(argv: string[]): number {
+  // A production entrypoint: shed the test hook before the first scan.
+  delete process.env.SCRUB_CHECK_DISABLE;
   try {
     const mode = argv[0];
     if (mode === "already-landed") return alreadyLanded(argv.slice(1));
@@ -927,6 +1072,15 @@ function main(argv: string[]): number {
     if (mode === "card-results" || mode === "card-findings") {
       if (argv.length !== 5) usage(mode === "card-results" ? CRESULTS_USAGE : CFINDINGS_USAGE);
       return checkBlock(argv[1]!, argv[2]!, argv[3]!, argv[4]!);
+    }
+    if (mode === "private-data-block") {
+      if (argv.length !== 2) usage(PDATA_BLOCK_USAGE);
+      process.stdout.write(privateDataBlock(argv[1]!));
+      return 0;
+    }
+    if (mode === "private-data-card") {
+      if (argv.length !== 3) usage(PDATA_CARD_USAGE);
+      return checkPrivateDataCard(argv[1]!, argv[2]!);
     }
     if (mode === "card-open") {
       if (argv.length !== 2) usage(OPEN_USAGE);

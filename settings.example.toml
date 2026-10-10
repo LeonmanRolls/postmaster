@@ -7,10 +7,10 @@
 # here; a key itself stays in its env file, never here. A project whose file is complete
 # needs no global config. This file is an example, not a file to copy whole.
 #
-# The folder's own .gitignore covers the whole of .postmaster/, so this file is never
-# committed unless the project chooses to share it, with git add -f. A tracked file is
-# used only after the user has accepted it, and again after it changes:
-# scripts/run project-settings accept <project>.
+# The folder's own .gitignore covers the run records and drafts; this file is
+# ignored only on the user's yes, during setup, so it is committed like any
+# file to share it. A tracked file is used only after the user has accepted
+# it, and again after it changes: scripts/run project-settings accept <project>.
 #
 # [lanes.luna]
 # model = "gpt-other"

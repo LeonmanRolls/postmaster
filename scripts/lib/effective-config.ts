@@ -80,7 +80,7 @@ export const acceptanceStorePath = (configPath: string): string =>
   join(dirname(configPath), "accepted-project-settings.json");
 
 // --- filesystem edges ---------------------------------------------------------------------
-const isSymlink = (p: string): boolean => {
+export const isSymlink = (p: string): boolean => {
   try {
     return lstatSync(p).isSymbolicLink();
   } catch {
@@ -88,7 +88,7 @@ const isSymlink = (p: string): boolean => {
   }
 };
 
-const isFile = (p: string): boolean => {
+export const isFile = (p: string): boolean => {
   try {
     return statSync(p).isFile();
   } catch {
@@ -809,7 +809,7 @@ const SETTINGS_REL = join(".postmaster", "settings.toml");
 
 /** Write text to dest through a temp file in dir, fsynced and renamed, so a
  * crash cannot leave a truncation behind. The caller creates dir first. */
-const atomicWriteFileSync = (dir: string, dest: string, text: string): void => {
+export const atomicWriteFileSync = (dir: string, dest: string, text: string): void => {
   const tmpName = mkstempSync(dir, `.${basename(dest)}.`);
   try {
     const fd = openSync(tmpName, "w");
@@ -1266,6 +1266,88 @@ export const inspect = (repo: string, opts?: { storePath?: string }): Rec => {
 };
 
 // --- writes ----------------------------------------------------------------------------------------
+// The folder's own ignore rules: run records and drafts stay ignored whatever the
+// user answers. The person's settings file is never ignored here: setup offers to
+// have git ignore it, and only the user's yes adds that rule (ignoreSettings).
+const IGNORE_RECORDS = ["runs/", "clerk/", "project.toml", ".gitignore"] as const;
+
+const IGNORE_HEADER =
+  "# .postmaster/ holds this instance's settings and every run's full record.\n" +
+  "# Run records and drafts stay ignored. settings.toml is ignored only on the\n" +
+  "# user's yes, during setup. To share what a run requires of everyone,\n" +
+  "# commit project.toml with: git add -f .postmaster/project.toml\n";
+
+/** ruleMatches <rule> <path>: whether one ignore rule matches a path under
+ * .postmaster/. Enough of gitignore for the rules this file writes and the
+ * negations around them: a star matches all, a trailing slash matches the
+ * directory and all below it, `dir/**` matches all below it, and anything
+ * else matches that path. */
+const ruleMatches = (rule: string, path: string): boolean => {
+  if (rule === "*") return true;
+  if (rule.endsWith("/**")) {
+    const dir = rule.slice(0, -3);
+    return path === dir || path.startsWith(`${dir}/`);
+  }
+  if (rule.endsWith("/")) {
+    const dir = rule.slice(0, -1);
+    return path === dir || path.startsWith(`${dir}/`);
+  }
+  return path === rule || path.startsWith(`${rule}/`);
+};
+
+/** effectiveRules <text>: the ignore file's rules, blanks and comments out. */
+const effectiveRules = (text: string): string[] =>
+  pySplitLines(text)
+    .map((line) => pyTrim(line))
+    .filter((line) => line !== "" && !line.startsWith("#"));
+
+/** coveringRule <rule> <target>: whether one positive rule covers a record
+ * target wholesale: the whole directory for runs/ and clerk/, the file for
+ * project.toml and .gitignore. A narrow rule such as runs/T-1/ covers only
+ * part of a directory and never counts. */
+const coveringRule = (rule: string, target: string): boolean => {
+  const bare = rule.startsWith("/") ? rule.slice(1) : rule;
+  if (bare === "*") return true;
+  if (target.endsWith("/")) {
+    const dir = target.slice(0, -1);
+    return bare === dir || bare === target || bare === `${dir}/**`;
+  }
+  return bare === target;
+};
+
+/** negationHits <rule> <target>: whether one negation reaches a record
+ * target: the file itself, the directory itself, or anything below it. */
+const negationHits = (rule: string, target: string): boolean => {
+  if (target.endsWith("/")) {
+    const dir = target.slice(0, -1);
+    return (
+      rule === "*" ||
+      rule === dir ||
+      rule === target ||
+      rule === `/${dir}` ||
+      rule === `/${target}` ||
+      rule.startsWith(target) ||
+      rule.startsWith(`/${target}`)
+    );
+  }
+  return ruleMatches(rule, target);
+};
+
+/** coveredBy <rules> <target>: the last word on a record target. A positive
+ * rule covering it counts until a negation reaching it, and a later
+ * covering rule counts again. */
+const coveredBy = (rules: string[], target: string): boolean => {
+  let covered = false;
+  for (const line of rules) {
+    if (line.startsWith("!")) {
+      if (negationHits(line.slice(1), target)) covered = false;
+    } else if (coveringRule(line, target)) {
+      covered = true;
+    }
+  }
+  return covered;
+};
+
 export const ensureIgnore = (repo: string, quiet = false): void => {
   const d = settingsDir(repo);
   mkdirSync(d, { recursive: true });
@@ -1273,23 +1355,60 @@ export const ensureIgnore = (repo: string, quiet = false): void => {
   if (isSymlink(ignore)) fail(`${ignore} must not be a symlink`);
   if (existsSync(ignore) && !isFile(ignore)) fail(`${ignore} is not a regular file`);
   const existing = existsSync(ignore) ? strictRead(ignore) : "";
-  // A bare star anywhere is not enough: a later negation (!settings.toml) re-includes
-  // what it ignored. The last effective rule decides, so it must be the star.
-  const effective = pySplitLines(existing)
-    .map((line) => pyTrim(line))
-    .filter((line) => line !== "" && !line.startsWith("#"));
-  if (effective.length === 0 || effective[effective.length - 1] !== "*") {
+  const effective = effectiveRules(existing);
+  // Append each record rule no covering rule holds; a target already
+  // ignored, by a star or by an earlier line, is left alone. No rule added
+  // here ever ignores the person's settings file. Git is the truth where
+  // the matcher cannot read a rule: a glob negation can expose a target
+  // the matcher calls covered. A git that fails reads as covered, so a
+  // directory git cannot see never grows duplicates.
+  const missing = IGNORE_RECORDS.filter(
+    (rule) =>
+      !coveredBy(effective, rule) || gitIgnores(repo, join(settingsDir(repo), rule)) === false,
+  );
+  if (missing.length > 0) {
     let prefix = existing;
     if (prefix !== "" && !prefix.endsWith("\n")) prefix += "\n";
-    if (prefix === "") {
-      prefix =
-        "# .postmaster/ holds this instance's settings and every run's full record.\n" +
-        "# Nothing in it is committed by default. To share what a run requires of\n" +
-        "# everyone, commit project.toml with: git add -f .postmaster/project.toml\n";
-    }
-    writeFileSync(ignore, `${prefix}*\n`);
+    if (prefix === "") prefix = IGNORE_HEADER;
+    writeFileSync(ignore, `${prefix}${missing.join("\n")}\n`);
   }
   if (!quiet) console.log(`project-settings: ensured ${ignore}`);
+};
+
+/** gitIgnores <repo> <path>: whether git ignores a path: true, false, or null
+ * when git itself fails. */
+const gitIgnores = (repo: string, path: string): boolean | null => {
+  const env: Record<string, string | undefined> = {};
+  for (const k of GIT_ENV_KEYS) env[k] = undefined;
+  const r = run("git", ["-C", repo, "check-ignore", "-q", path], { env });
+  if (r.code === 0) return true;
+  if (r.code === 1) return false;
+  return null;
+};
+
+/** settingsIgnored <repo>: whether git ignores the person's settings file. A path
+ * git cannot place, or a git that fails, reads as not ignored. */
+export const settingsIgnored = (repo: string): boolean =>
+  gitIgnores(repo, join(settingsDir(repo), "settings.toml")) ?? false;
+
+/** ignoreSettings <repo>: ignore the person's settings file, on the user's yes.
+ * Setup asks; this applies. Idempotent: a literal already last, or a file
+ * git already ignores through another rule, stays as it is. Git is the
+ * truth where this file's matcher cannot read a rule. */
+export const ignoreSettings = (repo: string): void => {
+  ensureIgnore(repo, true);
+  const ignore = join(settingsDir(repo), ".gitignore");
+  const effective = effectiveRules(strictRead(ignore));
+  let last: string | null = null;
+  for (const r of effective) {
+    const body = r.startsWith("!") ? r.slice(1) : r;
+    if (ruleMatches(body, "settings.toml")) last = r;
+  }
+  if (last === "settings.toml") return;
+  if (settingsIgnored(repo)) return;
+  let prefix = strictRead(ignore);
+  if (prefix !== "" && !prefix.endsWith("\n")) prefix += "\n";
+  writeFileSync(ignore, `${prefix}settings.toml\n`);
 };
 
 export const writeProfile = (repo: string, layer: string, source: string): void => {

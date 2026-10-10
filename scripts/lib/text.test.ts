@@ -2,10 +2,11 @@
 // The golden cases, tsGolden and the fixture diff stay one control of 35099 cases, as before.
 // The golden-case builders stay in the module: the regen note in scripts/fixtures/
 // text-goldens.json runs them through run text --dump-golden-cases, so only the controls
-// moved. The guard scan walks the same file set with the same exclusion (the module itself).
+// moved. The guard scan walks the same file set with the same exclusion (the module itself),
+// plus the generated bundles and the #208 port, which are not hand-written text-port code.
 import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import {
   digitValue,
   goldenCases,
@@ -31,7 +32,10 @@ const collectTargets = (): string[] => {
     }
   };
   walk(scriptsDir);
-  return files.filter((f) => f !== modulePath);
+  // Generated bundles carry text.ts inside them, and the #208 port carries
+  // #208's own classes; neither is hand-written text-port code.
+  const excepted = new Set(["scrub-check.ts", "raw-promote.ts", "scrub-patterns.ts"]);
+  return files.filter((f) => f !== modulePath && !excepted.has(basename(f)));
 };
 
 const goldenCasesBuilt = goldenCases();

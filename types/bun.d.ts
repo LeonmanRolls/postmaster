@@ -1,7 +1,15 @@
 // Ambient declarations for the Bun and Node standard APIs the scripts use.
 // Development dependencies are only typescript and @biomejs/biome, so these live here.
 
-type BufferEncoding = "utf8" | "utf-8" | "hex" | "base64" | "ascii" | "binary" | "latin1";
+type BufferEncoding =
+  | "utf8"
+  | "utf-8"
+  | "hex"
+  | "base64"
+  | "ascii"
+  | "binary"
+  | "latin1"
+  | "utf16le";
 
 interface Dirent {
   name: string;
@@ -18,6 +26,7 @@ type Buffer = Uint8Array & {
 
 declare const Buffer: {
   from(data: string | Uint8Array | ArrayBuffer, encoding?: BufferEncoding): Buffer;
+  from(data: ArrayLike<number>): Buffer;
   alloc(size: number, fill?: string | number, encoding?: BufferEncoding): Buffer;
   concat(list: Array<Uint8Array | Buffer>, totalLength?: number): Buffer;
   isBuffer(obj: unknown): obj is Buffer;
@@ -134,12 +143,14 @@ declare const Bun: {
   version: string;
   TOML: {
     parse(text: string): Record<string, unknown>;
+    stringify(data: Record<string, unknown>): string;
   };
   file(path: string | URL): {
     exists(): Promise<boolean>;
     text(): Promise<string>;
     json<T = unknown>(): Promise<T>;
     arrayBuffer(): Promise<ArrayBuffer>;
+    stream(): AsyncIterable<Uint8Array>;
   };
   write(path: string | URL, data: string | Uint8Array | Blob): Promise<number>;
   which(cmd: string): string | null;
@@ -228,6 +239,7 @@ declare module "bun" {
   };
   export const TOML: {
     parse(text: string): Record<string, unknown>;
+    stringify(data: Record<string, unknown>): string;
   };
   export function file(path: string | URL): {
     exists(): Promise<boolean>;

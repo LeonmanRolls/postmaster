@@ -140,6 +140,7 @@ describe("positive controls: each NEXT that needs the postmaster names its run",
     ["dispatch", "review", 2, ".leg-2-done", "DISPATCH"],
     ["resume", "review", 2, ".leg-2-exited", "RESUME", "incomplete", "coachman"],
     ["read", "review", 2, ".checkpoint-review-ready", "READ"],
+    ["tell", "review", 2, ".waiting-on-user", "TELL"],
   ];
   for (const [name, stage, leg, marker, want, outcome, role] of specs) {
     test(`NEXT ${want} names ${name}`, () => {
@@ -150,6 +151,12 @@ describe("positive controls: each NEXT that needs the postmaster names its run",
         writeFileSync(
           join(root, name, "logs", `coachman-leg-${leg}-attempts.jsonl`),
           `{"outcome":"${outcome}","role":"${role}"}\n`,
+        );
+      }
+      if (want === "TELL") {
+        writeFileSync(
+          join(root, name, "detections.jsonl"),
+          `${JSON.stringify({ rule: "email", file: "notes.txt", line: 1, commit: "a".repeat(40), time: "first" })}\n`,
         );
       }
       const { rc, out } = watch(root);

@@ -88,6 +88,12 @@ what a user sees, then exactly these four H2 sections, in this order:
 - Driving it
 - Traps
 
+Carry one line starting with `Files:` in features/README.md, naming the project
+files and folders whose change can break this verifier's claims,
+comma-separated, each relative to the top of the working copy. Name files and
+folders both; write only paths that exist at the commit you prove, and check
+each one is there before you write the line.
+
 Say what the feature is, every way a user reaches it, how to drive each way, and what
 observable state proves it worked. The map is the maintained source: driving one handy
 entry while the map lists others is half a proof.

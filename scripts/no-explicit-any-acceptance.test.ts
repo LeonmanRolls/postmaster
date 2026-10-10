@@ -65,8 +65,15 @@ function plant(dir: string, oxlintrc: unknown, check: string): void {
   writeFileSync(join(dir, "package.json"), JSON.stringify({ scripts: { check } }));
 }
 
+const ALLOWED_IGNORES = [
+  "fixtures/**",
+  "scripts/scrub-check.ts",
+  "scripts/raw-promote.ts",
+  "scripts/lib/vendor/**",
+];
+
 function cleanConfig(): unknown {
-  return { rules: { [RULE]: "error" }, ignorePatterns: ["fixtures/**", "scripts/lib/vendor/**"] };
+  return { rules: { [RULE]: "error" }, ignorePatterns: ALLOWED_IGNORES };
 }
 
 function stub(canned: {
@@ -108,11 +115,7 @@ describe("a clean tree", () => {
 describe("the rule's setting", () => {
   test("off fails naming the config", () => {
     const dir = fresh();
-    plant(
-      dir,
-      { rules: { [RULE]: "off" }, ignorePatterns: ["fixtures/**", "scripts/lib/vendor/**"] },
-      CHECK,
-    );
+    plant(dir, { rules: { [RULE]: "off" }, ignorePatterns: ALLOWED_IGNORES }, CHECK);
     const r = accept(dir, stub(GOOD));
     expect(r.code).toBe(1);
     expect(r.out).toContain(".oxlintrc.json");
@@ -120,7 +123,7 @@ describe("the rule's setting", () => {
 
   test("missing fails", () => {
     const dir = fresh();
-    plant(dir, { rules: {}, ignorePatterns: ["fixtures/**", "scripts/lib/vendor/**"] }, CHECK);
+    plant(dir, { rules: {}, ignorePatterns: ALLOWED_IGNORES }, CHECK);
     const r = accept(dir, stub(GOOD));
     expect(r.code).toBe(1);
     expect(r.out).toContain(RULE);
@@ -132,7 +135,7 @@ describe("the rule's setting", () => {
       dir,
       {
         rules: { [RULE]: "error" },
-        ignorePatterns: ["fixtures/**", "scripts/lib/vendor/**"],
+        ignorePatterns: ALLOWED_IGNORES,
         overrides: [{ files: ["x.ts"], rules: { [RULE]: "off" } }],
       },
       CHECK,
@@ -148,7 +151,7 @@ describe("the rule's setting", () => {
       dir,
       {
         rules: { [RULE]: "error" },
-        ignorePatterns: ["fixtures/**", "scripts/lib/vendor/**"],
+        ignorePatterns: ALLOWED_IGNORES,
         overrides: [{ files: ["x.ts"], rules: { [RULE]: "warn" } }],
       },
       CHECK,
@@ -164,7 +167,7 @@ describe("the rule's setting", () => {
       dir,
       {
         rules: { [RULE]: "error" },
-        ignorePatterns: ["fixtures/**", "scripts/lib/vendor/**"],
+        ignorePatterns: ALLOWED_IGNORES,
         overrides: [{ files: ["x.ts"], rules: { [RULE]: 1 } }],
       },
       CHECK,
@@ -180,7 +183,7 @@ describe("the rule's setting", () => {
       dir,
       {
         rules: { [RULE]: "error" },
-        ignorePatterns: ["fixtures/**", "scripts/lib/vendor/**"],
+        ignorePatterns: ALLOWED_IGNORES,
         overrides: [{ files: ["x.ts"], rules: { [RULE]: "error" } }],
       },
       CHECK,
@@ -195,7 +198,7 @@ describe("the rule's setting", () => {
       dir,
       {
         rules: { [RULE]: "error" },
-        ignorePatterns: ["fixtures/**", "scripts/lib/vendor/**"],
+        ignorePatterns: ALLOWED_IGNORES,
         overrides: [{ files: ["x.ts"], rules: { "no-debugger": "off" } }],
       },
       CHECK,
@@ -210,6 +213,22 @@ describe("the rule's setting", () => {
     const r = accept(dir, stub(GOOD));
     expect(r.code).toBe(1);
     expect(r.out).toContain("ignorePatterns");
+  });
+
+  test("exactly the allowed ignores pass, a third path fails", () => {
+    const dir = fresh();
+    plant(dir, { rules: { [RULE]: "error" }, ignorePatterns: ALLOWED_IGNORES }, CHECK);
+    const r = accept(dir, stub(GOOD));
+    expect(r.code).toBe(0);
+    const extra = fresh();
+    plant(
+      extra,
+      { rules: { [RULE]: "error" }, ignorePatterns: [...ALLOWED_IGNORES, "scripts/extra.ts"] },
+      CHECK,
+    );
+    const r2 = accept(extra, stub(GOOD));
+    expect(r2.code).toBe(1);
+    expect(r2.out).toContain("ignorePatterns");
   });
 });
 
@@ -245,7 +264,7 @@ describe("the gate's shape", () => {
     const dir = fresh();
     plant(
       dir,
-      { rules: {}, ignorePatterns: ["fixtures/**", "scripts/lib/vendor/**"] },
+      { rules: {}, ignorePatterns: ALLOWED_IGNORES },
       "tsc --noEmit && bunx oxlint --deny-warnings",
     );
     const r = accept(dir, stub(GOOD));

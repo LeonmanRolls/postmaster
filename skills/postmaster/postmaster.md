@@ -306,6 +306,13 @@ pause — never to stop a wake you have not acted on.
 Each `NEXT` names the act. The watcher has already taken the mechanical ones; what it names
 is what needs judgment or what it could not complete:
 
+- **TELL:** read `<dispatch>/detections.jsonl` and `.detections-told`, then tell the user once
+  for each untold finding, including one hidden by a valid made-up-data marker. State only its
+  rule and redacted place; never include scanned text or a path value. Append each told record
+  to `.detections-told` with the same rule, file, line and commit fields, omitting its timestamp.
+  Do this before any other action for the run, including when it is waiting for the user or is
+  already done. Then poll again. A later gate run may log the same finding again; the matching
+  rule, file, line and commit mean it is already told.
 - **WALL:** a lane stopped on its provider's usage limit and the user has not been told yet.
   For each run the watcher names, read `<tool>/scripts/run walls show <dispatch>` and tell the
   user about **every new wall of this look in one message**: the run, the lane and its role,
@@ -484,6 +491,20 @@ answers that. When a branch has no upstream, pass the branch itself: with nothin
 tracking it there is no fresher ref, and remote movement it does not track can be
 missed.
 
+Before every pull-request description written for this run, save the exact draft in a
+file and scan it with the run-pinned `env -u SCRUB_CHECK_DISABLE
+<rt>/scripts/run scrub-check --pr-description <draft>` while
+`POSTMASTER_DETECTIONS_LOG=<dispatch>/detections.jsonl` is set: the test hook must not
+leak into a production scan. If it finds anything, reword the draft and scan it again;
+post only after exit 0. Do the same for every ticket comment: save the exact text and
+scan it with `env -u SCRUB_CHECK_DISABLE <rt>/scripts/run scrub-check --pr-description
+<comment>` under the same log, reword on any finding, and post only after exit 0. Do the
+same for the exact pull-request title: the provider sends it separately from the
+description, so save the exact title and scan it with `env -u SCRUB_CHECK_DISABLE
+<rt>/scripts/run scrub-check --pr-description <title>` under the same log, reword on any
+finding, and post only after exit 0. Markers are inert in posted text. This applies in
+every project and does not change that project's gate.
+
 1. **Verify the card's claims against the code**, never against the card. Land nothing while
    a wall has no ruling: `<tool>/scripts/run walls open <dispatch>` must exit 0 before this
    stage's first call, and on exit 1 each open wall goes to the user (Stage D, WALL) and
@@ -509,6 +530,9 @@ missed.
    must print `match`: the card holds the rendered block exactly once (the leg's
    checkpoint is `<dispatch>/checkpoint-review.md` after a review leg,
    `<dispatch>/checkpoint-1.md` otherwise). Then
+   `<tool>/scripts/run landing private-data-card <dispatch> <dispatch>/card.md` must print
+   `match`; withhold the card if a finding or resolution is missing or the card text is not
+   clean. Then
    `<tool>/scripts/run landing journey <dispatch> <synthesis-wt> <dispatch>/brief.md` must
    not print `blocked`: a journey with no report, or one that did not run where the
    waybill mentions a user journey, holds landing until the journey runs or the user
@@ -654,7 +678,12 @@ missed.
      its default branch; if it is not, stop and tell the user. Leave a dated ready-to-merge
      tracker comment with the evidence (what the change does, branch name, gate output summary,
      diff stat, review link, thread ids), logging `ticket-comment`. Merge the ticket branch
-     with `git merge --no-ff`; never rebase. Log `merge`, move the ticket to done, logging
+     with `git merge --no-ff`; never rebase. Then scan the merge:
+     `<tool>/scripts/run verify-merge <repo> --dispatch <dispatch>` reads HEAD, which must
+     be the merge. Exit 0, the resolution is clean. Exit 1 names a finding the resolution
+     introduced: undo the merge with `git reset --hard` to the pre-merge tip, merge again
+     resolving cleanly, and scan again. Any other exit is an input fault: stop, fix the
+     inputs and re-run. Log `merge`, move the ticket to done, logging
      `ticket-state`, remove `.card-ready`, and set the stage with
      `<tool>/scripts/run stage <dispatch> shipped postmaster`.
    - An unknown landing route is a dispatch fault to resolve before this point. Do not infer
@@ -690,7 +719,9 @@ missed.
    1, tell the user what it printed. Compose the closing words here too: a closing line
    for `run-log.md` (per-lane win record — none in a single-thread run, which has no
    lanes — findings counts, cost) and a dated closing
-   comment for the ticket. The shipped mark is the proof of the landing; confirm nothing
+   comment for the ticket, scanned with the pre-post procedure above with every
+   finding fixed before aftercare posts it. The shipped mark is the proof of the landing;
+   confirm nothing
    by hand again.
 2. **Run the cleanup command, first as a dry run.**
    `<tool>/scripts/run aftercare <dispatch> --dry-run --comment "<text>" --run-log

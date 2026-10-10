@@ -3,15 +3,15 @@ title: A project's .postmaster/ holds its settings and every run's record
 type: concept
 standing: claimed
 sources: []
-updated: 2026-09-28
+updated: 2026-10-10
 ---
 
 # A project's .postmaster/ holds its settings and every run's record
 
 **Claim.** Everything the flow learns about a project, and everything a run against it
-produces, belongs under the project's own `.postmaster/`. The folder is optional, gitignored
-whole, and sharing is one narrow file a project chooses to commit. The machine's
-`~/.postmaster/` stays the machine's own.
+produces, belongs under the project's own `.postmaster/`. The folder is optional, its run
+records and drafts always ignored, and sharing is a file the project chooses to commit.
+The machine's `~/.postmaster/` stays the machine's own.
 
 **Standing: claimed.** This is a decision taken in
 [issue #18](https://github.com/brindlewick/postmaster/issues/18), before any run bears on it.
@@ -26,10 +26,11 @@ whole, and sharing is one narrow file a project chooses to commit. The machine's
 - **Run artifacts belong with the run's target.** Keying a run's home on the repo's basename
   under `~/.postmaster/runs/` made two projects named `widgets` share a ledger, silently.
   Keying it on the project's own path removes that by construction.
-- **Nothing is committed by default, settings included.** The folder carries a `.gitignore`
-  covering the whole of it, so a checkout never brings another instance's ledgers, paths,
-  ticket text, harness sessions or choices. A project that has never been run against looks
-  exactly like one that has.
+- **Run records and drafts are never committed.** The folder carries a `.gitignore`
+  covering them, so a checkout never brings another instance's ledgers, paths, ticket
+  text or harness sessions. The person's settings file is ignored only on the user's yes
+  during setup, so it is committed like any file to share it. A project that has never
+  been run against looks exactly like one that has.
 - **Sharing is opt-in and narrow.** One file, `project.toml`, holds what the project requires
   of a run: the checks, the default turnpikes, the tracker binding by name, the risk
   surfaces. It carries no credential, no filesystem path, no machine name and no role

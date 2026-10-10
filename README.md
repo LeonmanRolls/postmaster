@@ -99,14 +99,17 @@ first question is which project to work on, postmaster itself or another, and th
 is the postmaster in the chosen project's folder, or starts one there when it cannot be.
 Or run the postmaster command in a session already in that project: setup offers that
 project first. Either way setup asks one question at a time (which agent CLIs fill which
-role, where tickets live, where your projects are, who says the merge word), and links the
-skills into your agent CLIs. The first start in a new folder may ask whether to trust it.
+role, where tickets live, where your projects are, who says the merge word), offers the
+global config, which can be set up or skipped, and then the project's own settings or the
+global config as it is, and links the skills into your agent CLIs. The first start in a
+new folder may ask whether to trust it.
 
 ```sh
 scripts/run probe-harnesses      # which agent CLIs are installed
 scripts/run probe-trackers       # which ticket sources are reachable
 scripts/run probe-confine        # whether lane confinement can run, and what would finish it
-scripts/run setup --answers <file> # writes the config from the agent's collected answers (--keys lists them)
+scripts/run setup --answers <file> # writes the config from the agent's collected answers (--keys lists them; --project writes one project's settings)
+scripts/run setup-next <project> # where setup stands and what comes next: global, project or done
 scripts/run link-skills [--dry-run | --check | --remove]            # the skills, as links into each CLI's skills folder
 scripts/run skill-refs [--fix]                                      # every script path in the skill goes through <tool>
 scripts/run find-projects        # your git projects, most recent first
@@ -156,17 +159,18 @@ A project may carry a `.postmaster/` folder. It holds the project's settings and
 full record — the ledger, the narrative, the cards, each lane's harness events stream and its
 exported durable session — under `runs/`. The runs are never committed: the folder carries
 its own `.gitignore`, so a checkout never brings another instance's ledgers, paths, ticket
-text or harness sessions. The two settings files are the exception: each may be committed on
-purpose with `git add -f` to share it. A project that has never been run against looks
-exactly like one that has.
+text or harness sessions. The person's settings file is the exception: it is ignored only
+on the user's yes during setup, so it is committed like any file, while the shared file is
+committed on purpose with `git add -f` to share it. A project that has never been run
+against looks exactly like one that has.
 
 What a project may declare to everyone who works on it is one file, `.postmaster/project.toml`,
 committed on purpose with `git add -f`: the checks that show a change works, the default
 turnpikes, the tracker binding by name, and the risk surfaces. It names no credential, no
 filesystem path, no machine name and no role assignment. This person's choices for the
 project are in `.postmaster/settings.toml`, written like the global config: they override it
-setting by setting, models and env files included. The file may be committed with `git add -f`
-to share it; a tracked file is used only after the user has accepted it. The
+setting by setting, models and env files included. Share it by committing it; a tracked
+file is used only after the user has accepted it. The
 shapes are `project.example.toml` and `settings.example.toml`. With neither file, the flow
 discovers what it can and the agent conducts the rest in conversation: a missing settings file
 is never an error and never a prompt to create one.

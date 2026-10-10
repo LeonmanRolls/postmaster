@@ -281,6 +281,12 @@ reason = "flock(1) is not installed, so the bash flow's holder cannot exist"
 systems = ["linux", "darwin"]
 
 [[skip]]
+file = "scripts/scrub-check.test.ts"
+name = "C27 --files and raw promotion stream a 175 MB file below 512 MB"
+reason = "macOS cannot set a virtual-memory limit with ulimit -v, which the streaming proof needs"
+systems = ["darwin"]
+
+[[skip]]
 file = "scripts/tool-faults.test.ts"
 name = "negative controls > folding parity: BASE and port harvests agree on ids and drafts, ß/İ/ς alike"
 reason = "BASE's pinned script needs python 3.11 and bash 4: it cannot run here, or this is a Mac"

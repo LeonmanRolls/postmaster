@@ -209,10 +209,10 @@ onto the fragment it supersedes.
   log, including workhorse and scratch clones that Git does not list as worktrees, plus any pane
   or window still tagged for the run. Either exits 2 when the run's records cannot be read; a round
   record or action-log line it can read but not use is named in the refusal.
-- On a fixture copy (`run fixture new`), which exists for one run, the run's entries include the
-  copy's own space with its postmaster's and watcher's tabs: the first launch marks that space
-  opened, `stop-run` stops the copy's root launches, and `close-run` closes the space with the
-  run's. The project's own watcher is told apart from the copy's by the checkout recorded at
+- On a fixture copy (`run fixture new`), which exists for one run, the run's entries are the
+  copy's one tab in the postmaster project's space: the copy never gets a space of its own.
+  `stop-run` stops the copy's root launches, and `close-run` closes the tab with the run's
+  panes. The project's own watcher is told apart from the copy's by the checkout recorded at
   launch, never by a label, and stays.
 - **It degrades rather than refuses.** If the host cannot place the launch, or its pane has not
   started it within 20 seconds, it runs in the background instead, exactly once, and `run host`
@@ -231,7 +231,11 @@ onto the fragment it supersedes.
   keeps the tab listed between launches. A failure before the launch lands rolls back
   instead — the run tab while the launch pane does not exist yet, the launch pane after —
   so a failed placement leaves nothing a later close could refuse. A run launch without
-  `--under` is refused instead of opening a top-level space.
+  `--under` is refused instead of opening a top-level space. A fixture copy's launches join the
+  copy's one tab in the postmaster project's space instead: the space is found through
+  `herdr worktree list --cwd <tool>`, the tab is labelled `fixture · <copy folder name>` in the
+  same 30 characters, and the copy's postmaster, its watcher and the run's launches each take
+  a pane of it, whatever order they arrive in.
 - **The tree** is project space → ticket-labeled run tab → live launch panes. The project space holds
   the postmaster and the run tab; the run tab holds all coachman legs, workhorses and review
   launches for that ticket, and each launch's label starts with its role and lane. When its
@@ -240,7 +244,8 @@ onto the fragment it supersedes.
   space keeps its shell tab:
   Herdr closes a workspace with its last tab, and refuses the close once a worktree nests under
   it, so run host never closes it. The panes are entries under the run; Herdr 0.9.1 cannot nest one
-  agent under another.
+  agent under another. A fixture run is one tab in the postmaster project's space, labelled for
+  the fixture, holding the copy's postmaster, watcher and every run launch as panes.
 - **Ownership.** `run host` marks what it opens with Herdr metadata tokens: a space
   `postmaster=opened`, a pane `postmaster=launch`. It remembers each launch pane in the host state,
   and each run's tab beside them. `run host close <worktree>` closes panes it opened for that
@@ -257,8 +262,8 @@ onto the fragment it supersedes.
   never the tab. Closing a reviewer scratch therefore removes its panes
   without closing the run tab. `run host close-run` closes every launch pane and then the run
   tab itself, while every pane in it is run host's own; a user pane inside keeps it open,
-  named in the refusal. It never closes a repository's own space, a scratch clone's or a fixture copy's
-  aside, never uses `workspace close --group`, and never runs `herdr worktree remove`, which
+  named in the refusal. It never closes a repository's own space or a scratch clone's,
+  never uses `workspace close --group`, and never runs `herdr worktree remove`, which
   deletes the checkout. Close a space before removing its worktree.
 - **State.** The pane reports its launch `working` as it starts, under the agent label
   `headless`, and releases it (`pane release-agent`, same label) when the launch exits. Left to
@@ -272,7 +277,8 @@ onto the fragment it supersedes.
   no hand-off or summary and treats the launch as spent.
 - **`spawn`** passes the caller's `POSTMASTER_*` settings to the new pane, so the postmaster
   runs on the same config and host as the session that started it. Its tab label is `postmaster`;
-  the project's space already names the project.
+  the project's space already names the project. At a fixture copy it is a pane of the fixture
+  tab instead, labelled the same.
 - **Never** prompt, close, move or rename a pane, tab, space or agent `run host` did not open, and
   never stop or restart the Herdr server.
 

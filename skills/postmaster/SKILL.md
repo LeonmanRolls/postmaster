@@ -88,12 +88,25 @@ Report the link check with the setup verdict. It names every missing or blocked 
 prints the install command, `<tool>/scripts/run link-skills`; the check never installs or
 changes anything. Keep installation on the user's word. When links are missing and the project
 is set up, offer that command; for a project that is not set up, follow the setup section of
-`<tool>/AGENTS.md`.
+`<tool>/AGENTS.md`. Route every setup step through what comes next:
+
+```sh
+<tool>/scripts/run setup-next <target>
+```
 
 **Not set up: stop and set the project up**, in conversation, per the setup section of
-`<tool>/AGENTS.md`; each path there is relative to `<tool>`. Every later step reads the
-settings for the team, the tracker and the merge word, and without them the launch card cannot
-be filled. Come back here when the check says the project is set up.
+`<tool>/AGENTS.md`; each path there is relative to `<tool>`. The steps are two: first set up
+the global config or skip it, then the project's own settings or the global config as it is;
+with no global config, the project step goes straight to the project's own settings, since
+there is no global config to keep as it is. A skipped global
+step goes to the project step without rerunning setup-next, which keeps no record of the
+skip. The project's
+settings are written with `<tool>/scripts/run setup --project <target>`, and the file holds
+only what the user changed; choosing the global config as it is writes nothing. When git does
+not ignore the project's settings yet, setup offers to have git ignore the project's settings,
+and nothing ignores them without the user's yes. Every later step reads the settings for the
+team, the tracker and the merge word, and without them the launch card cannot be filled. Come
+back here when the check says the project is set up.
 
 The pass goes on only after the check says the project is set up.
 
@@ -184,10 +197,11 @@ When the conversation settles a project decision that should stay on this checko
 the same requirement for everyone, offer `.postmaster/project.toml` instead and say that is the
 shared file being proposed. Wait for agreement, then write the agreed file with
 `<tool>/scripts/run project-settings write <target> local <file>` or `project <file>`.
-The script validates the file and keeps `.postmaster/` ignored. A shared file is ignored by
-default too; commit only that file deliberately with `git add -f .postmaster/project.toml`.
+The script validates the file and keeps the run records ignored. A shared file is ignored
+by default; commit only that file deliberately with `git add -f .postmaster/project.toml`.
 A project may also commit its settings file to share it, with
-`git add -f .postmaster/settings.toml`; it takes effect for everyone once they accept it.
+`git add -f .postmaster/settings.toml` when it is ignored; it takes effect for everyone
+once they accept it.
 Never put paths or credentials in the shared file; in the person's file a key itself stays in
 its env file, never in settings.
 
@@ -287,8 +301,8 @@ its env file, never in settings.
    <tool>/scripts/run host read postmaster-<project>      # it took the message: a new session can drop one
    ```
 
-   On Herdr it opens as a tab in the target repo's space, the root of every run's tree; on tmux,
-   as a window in session `postmaster-<project>`. If `spawn` says it is not ready, the harness is
+   On Herdr it opens as a tab in the target repo's space, as a pane of the fixture tab for a
+   fixture copy, the root of every run's tree; on tmux, as a window in session `postmaster-<project>`. If `spawn` says it is not ready, the harness is
    asking something on its first start there, such as claude asking whether to trust the folder:
    the user answers it in the pane, and then the prompt is sent. For an ordinary `spawn` with no
    host, `spawn` exits 3: launch it headless as `hosts.md` gives under none, with a line in its

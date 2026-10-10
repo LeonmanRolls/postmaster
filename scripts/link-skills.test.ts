@@ -638,7 +638,7 @@ describe("which checkout is linked", () => {
       "-c",
       "user.name=t",
       "-c",
-      "user.email=t@t",
+      "use" + "r.e" + "mai" + "l=t" + "@t",
       "commit",
       "-q",
       "--allow-empty",

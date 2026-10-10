@@ -27,6 +27,9 @@
 //
 // What it judges, and nothing more:
 //   - The title has words: the one the adapter read, or the one --title gives.
+//     The title holds no private data: it passes the same pre-post scan as a
+//     pull-request description (`run scrub-check --pr-description`), markers
+//     inert, and a finding or an unscannable title is refused before posting.
 //   - `## Problem / feature`, `## Acceptance criteria`, `## Direction` and `## Turnpikes` are
 //     each present once, at level two, in that order, with words under them. Headings match
 //     ignoring case, a trailing colon, a closing run of # and the spacing around the slash.
@@ -68,7 +71,8 @@
 //           could not be run or gave no verdict; or, with --splice, a sections file that is not a
 //           list of `##` sections, or a part it would write named inside a later part of the base
 //   exit 2  malformed; one line per missing or malformed part on stdout, the part named first
-import { readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { scriptsDir } from "./lib/paths.ts";
 import { run } from "./lib/proc.ts";
@@ -420,6 +424,28 @@ function turnpikesCheck(
   );
 }
 
+function scanTitle(
+  title: string,
+  dispatcher: string,
+  fault: (part: string, msg: string) => void,
+): void {
+  // Review round 9 (bug-35): a title travels to the tracker like a
+  // description, so it passes the same pre-post scan. The title file is
+  // thrown away; only the verdict stays.
+  const dir = mkdtempSync(join(tmpdir(), "ticket-title-"));
+  try {
+    const file = join(dir, "title.txt");
+    writeFileSync(file, `${title}\n`, "utf8");
+    const r = run(dispatcher, ["scrub-check", "--pr-description", file], {
+      env: { ...(process.env as Record<string, string>), SCRUB_CHECK_DISABLE: undefined },
+    });
+    if (r.code === 1) fault("title", "holds private data");
+    else if (r.code !== 0) fault("title", "could not be scanned");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
 function check(
   title: string | null,
   text: string,
@@ -435,6 +461,7 @@ function check(
   if (title !== null && !/[\p{L}\p{N}]/u.test(title)) {
     fault("title", "missing");
   }
+  if (title !== null) scanTitle(title, turnpikesPath, fault);
   const at: Record<string, number> = {};
   let count = 0,
     named = "";

@@ -145,7 +145,7 @@ Why the design is shaped as it is.
   A project declares its checks or gets defaults by discovery; every workhorse runs them before
   it reports, and the coachman runs them again on each branch and on the synthesis.
 - [A project's .postmaster/ holds its settings and every run's record](concepts/project-settings.md):
-  **claimed**. Optional, gitignored whole, shared through one narrow file; run artifacts live
+  **claimed**. Optional, records ignored, shared through one narrow file; run artifacts live
   with the project so two checkouts with the same basename no longer share a ledger.
 - [A gate on the default branch after a merge runs from a clean checkout](concepts/clean-checkout-gates.md):
   **claimed**. The run's working copies stay under `.worktrees/`; the flow's post-merge gate

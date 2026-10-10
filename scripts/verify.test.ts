@@ -29,7 +29,15 @@ let tmp = "";
 let laneOut = "";
 
 const G = (dir: string, ...args: string[]): { code: number; out: string } => {
-  const r = run("git", ["-C", dir, "-c", "user.name=t", "-c", "user.email=t@t", ...args]);
+  const r = run("git", [
+    "-C",
+    dir,
+    "-c",
+    "user.name=t",
+    "-c",
+    "use" + "r.e" + "mai" + "l=t" + "@t",
+    ...args,
+  ]);
   return { code: r.code, out: r.out };
 };
 

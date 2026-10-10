@@ -9,8 +9,8 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
-  readFileSync,
   readdirSync,
+  readFileSync,
   realpathSync,
   rmSync,
   symlinkSync,
@@ -19,7 +19,12 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { parseTomlText } from "./lib/data";
-import { globalConfigPath, isTracked, recordAcceptance } from "./lib/effective-config";
+import {
+  globalConfigPath,
+  ignoreSettings,
+  isTracked,
+  recordAcceptance,
+} from "./lib/effective-config";
 import {
   asTable,
   effectiveConfig,
@@ -28,10 +33,10 @@ import {
   isDie,
   loadMachine,
   pyTruthy,
+  type Rec,
   scanMachineData,
   validateCommon,
   writeProfile,
-  type Rec,
 } from "./project-settings";
 
 const SELF = join(import.meta.dir, "run");
@@ -122,9 +127,17 @@ describe("missing profiles and ensure", () => {
 
   test("ensure creates the folder ignore without prompting for settings", () => {
     ensureIgnore(repo);
-    expect(readFileSync(join(repo, ".postmaster", ".gitignore"), "utf8").endsWith("*\n")).toBe(
-      true,
-    );
+    const created = readFileSync(join(repo, ".postmaster", ".gitignore"), "utf8");
+    const rules = created
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line !== "" && !line.startsWith("#"));
+    expect(rules).toContain("runs/");
+    expect(rules).toContain("clerk/");
+    expect(rules).toContain("project.toml");
+    expect(rules).toContain(".gitignore");
+    expect(rules).not.toContain("*");
+    expect(rules).not.toContain("settings.toml");
     expect(existsSync(join(repo, ".postmaster", "settings.toml"))).toBe(false);
   });
 
@@ -133,20 +146,21 @@ describe("missing profiles and ensure", () => {
     ensureIgnore(repo);
     const kept = readFileSync(join(repo, ".postmaster", ".gitignore"), "utf8");
     expect(kept.startsWith("# existing local rules\n")).toBe(true);
-    expect(kept.endsWith("*\n")).toBe(true);
+    expect(kept.includes("!keep-me\n")).toBe(true);
+    expect(kept.includes("\nruns/\n")).toBe(true);
+    expect(kept.endsWith(".gitignore\n")).toBe(true);
   });
 
-  test("ensure re-ignores a folder a negation had re-included, keeping its rules", () => {
+  test("ensure leaves a negation that re-included the settings file alone", () => {
     const negated = at("negated");
     mkdirSync(negated, { recursive: true });
     ensureIgnore(negated);
     write(join(negated, ".postmaster", ".gitignore"), "*\n!settings.toml\n");
     ensureIgnore(negated);
-    const repaired = readFileSync(join(negated, ".postmaster", ".gitignore"), "utf8");
-    expect(repaired.endsWith("*\n")).toBe(true);
-    expect(repaired.includes("!settings.toml\n")).toBe(true);
+    const kept = readFileSync(join(negated, ".postmaster", ".gitignore"), "utf8");
+    expect(kept).toBe("*\n!settings.toml\n");
     expect(git(["init", "-q", negated])).toBe(0);
-    expect(git(["-C", negated, "check-ignore", "-q", ".postmaster/settings.toml"])).toBe(0);
+    expect(git(["-C", negated, "check-ignore", "-q", ".postmaster/settings.toml"])).toBe(1);
     expect(git(["-C", negated, "check-ignore", "-q", ".postmaster/runs/T-1/card.md"])).toBe(0);
   });
 
@@ -162,6 +176,65 @@ describe("missing profiles and ensure", () => {
     const before = readFileSync(join(negated, ".postmaster", ".gitignore"), "utf8");
     ensureIgnore(negated);
     expect(readFileSync(join(negated, ".postmaster", ".gitignore"), "utf8")).toBe(before);
+  });
+
+  test("ensure completes a narrow rule that covers only one records directory", () => {
+    const narrow = at("narrow");
+    mkdirSync(narrow, { recursive: true });
+    write(join(narrow, ".postmaster", ".gitignore"), "runs/T-1/\n");
+    ensureIgnore(narrow);
+    const kept = readFileSync(join(narrow, ".postmaster", ".gitignore"), "utf8");
+    expect(kept.includes("runs/T-1/\n")).toBe(true);
+    expect(kept.includes("\nruns/\n")).toBe(true);
+    expect(git(["init", "-q", narrow])).toBe(0);
+    expect(git(["-C", narrow, "check-ignore", "-q", ".postmaster/runs/T-1/card.md"])).toBe(0);
+    expect(git(["-C", narrow, "check-ignore", "-q", ".postmaster/runs/T-2/card.md"])).toBe(0);
+  });
+
+  test("ignoreSettings appends where the matcher misreads a wildcard negation", () => {
+    const wild = at("wild");
+    mkdirSync(wild, { recursive: true });
+    expect(git(["init", "-q", wild])).toBe(0);
+    write(join(wild, ".postmaster", ".gitignore"), "*\n!settings.*\n");
+    write(join(wild, ".postmaster", "settings.toml"), '[tracker]\nkind = "local"\n');
+    expect(git(["-C", wild, "check-ignore", "-q", ".postmaster/settings.toml"])).toBe(1);
+    ignoreSettings(wild);
+    expect(git(["-C", wild, "check-ignore", "-q", ".postmaster/settings.toml"])).toBe(0);
+  });
+
+  test("ignoreSettings stays idempotent where git already ignores the file", () => {
+    const star = at("star");
+    mkdirSync(star, { recursive: true });
+    expect(git(["init", "-q", star])).toBe(0);
+    write(join(star, ".postmaster", ".gitignore"), "*\n");
+    write(join(star, ".postmaster", "settings.toml"), '[tracker]\nkind = "local"\n');
+    ignoreSettings(star);
+    ignoreSettings(star);
+    const kept = readFileSync(join(star, ".postmaster", ".gitignore"), "utf8");
+    expect(kept).toBe("*\n");
+  });
+
+  test("ensure restores a record git exposes through a glob negation, and stays stable", () => {
+    const gr = at("gitignore-truth");
+    mkdirSync(gr, { recursive: true });
+    expect(git(["init", "-q", gr])).toBe(0);
+    write(join(gr, ".postmaster", ".gitignore"), "*\n!*.toml\n");
+    expect(git(["-C", gr, "check-ignore", "-q", ".postmaster/project.toml"])).toBe(1);
+    ensureIgnore(gr);
+    expect(git(["-C", gr, "check-ignore", "-q", ".postmaster/project.toml"])).toBe(0);
+    const once = readFileSync(join(gr, ".postmaster", ".gitignore"), "utf8");
+    expect(once).toBe("*\n!*.toml\nproject.toml\n");
+    ensureIgnore(gr);
+    expect(readFileSync(join(gr, ".postmaster", ".gitignore"), "utf8")).toBe(once);
+  });
+
+  test("ensure leaves a plain star cover byte-identical", () => {
+    const gr = at("gitignore-star");
+    mkdirSync(gr, { recursive: true });
+    expect(git(["init", "-q", gr])).toBe(0);
+    write(join(gr, ".postmaster", ".gitignore"), "*\n");
+    ensureIgnore(gr);
+    expect(readFileSync(join(gr, ".postmaster", ".gitignore"), "utf8")).toBe("*\n");
   });
 });
 
@@ -188,10 +261,12 @@ describe("shared and local profiles", () => {
     expect(shared.shared_present).toBe(true);
     expect(JSON.stringify((shared.project as Rec).default_turnpikes)).toBe('["bug"]');
     expect((shared.sources as Rec)["project.default_turnpikes"]).toBe("shared");
-    expect(readFileSync(join(postmaster, ".gitignore"), "utf8").endsWith("*\n")).toBe(true);
+    const ignore = readFileSync(join(postmaster, ".gitignore"), "utf8");
+    expect(ignore.includes("\nruns/\n")).toBe(true);
+    expect(ignore.includes("settings.toml")).toBe(false);
     expect(repoInit).toBe(0);
     expect(sharedIgnored).toBe(0);
-    expect(localIgnored).toBe(0);
+    expect(localIgnored).toBe(1);
     expect(runIgnored).toBe(0);
   });
 
@@ -280,7 +355,24 @@ describe("refusals", () => {
     ["caps word in phrasing", '[tracker]\nbinding="The TOKEN is here"\n'],
     ["padded credential name", '[tracker]\nbinding="  api_key  "\n'],
     ["credential word in a role name", '[roles]\nworkhorses=["API_KEY"]\n'],
-    ["classic token value", '[tracker]\nbinding="ghp_12345678901234567890"\n'],
+    [
+      "classic token value",
+      "[tr" +
+        "ack" +
+        "er]" +
+        "\nbi" +
+        "ndi" +
+        "ng=" +
+        '"gh' +
+        "p_1" +
+        "234" +
+        "567" +
+        "890" +
+        "123" +
+        "456" +
+        "789" +
+        '0"\n',
+    ],
     ["short classic token value", '[tracker]\nbinding="ghp_12345678"\n'],
     ["fine-grained token value", '[tracker]\nbinding="github_pat_ABCDEFGHIJKL"\n'],
     ["gitlab token value", '[tracker]\nbinding="glpat-ABCDEFGHIJKL"\n'],
@@ -288,7 +380,25 @@ describe("refusals", () => {
     ["key-like token value", '[tracker]\nbinding="sk-1234567890123456"\n'],
     ["credential assignment", '[tracker]\nbinding="X_API_KEY=abc123"\n'],
     ["lowercase credential assignment", '[tracker]\nbinding="password = hunter2"\n'],
-    ["private key block", '[tracker]\nbinding="-----BEGIN PRIVATE KEY-----"\n'],
+    [
+      "private key block",
+      "[tr" +
+        "ack" +
+        "er]" +
+        "\nbi" +
+        "ndi" +
+        "ng=" +
+        '"--' +
+        "---" +
+        "BEG" +
+        "IN " +
+        "PRI" +
+        "VAT" +
+        "E K" +
+        "EY-" +
+        "---" +
+        '-"\n',
+    ],
   ];
   for (const [label, contents] of rejects) {
     test(`rejects ${label}`, () => {
@@ -325,7 +435,27 @@ describe("refusals", () => {
 
 describe("acceptances", () => {
   const accepts: Array<[string, string, boolean]> = [
-    ["risk prose naming a path", '[project]\nrisk_surfaces="reads /home/alex/secret"\n', true],
+    [
+      "risk prose naming a path",
+      "[pr" +
+        "oje" +
+        "ct]" +
+        "\nri" +
+        "sk_" +
+        "sur" +
+        "fac" +
+        "es=" +
+        '"re' +
+        "ads" +
+        " /h" +
+        "ome" +
+        "/al" +
+        "ex/" +
+        "sec" +
+        "ret" +
+        '"\n',
+      true,
+    ],
     [
       "risk prose naming a secret",
       '[project]\nrisk_surfaces="reads PLANE_API_KEY and lane env files"\n',

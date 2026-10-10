@@ -194,6 +194,7 @@ beforeAll(() => {
   mkdirSync(join(tmp, "bin"), { recursive: true });
   copyFileSync(SELF, join(tmp, "bin", "run"));
   copyFileSync(join(HERE, "ticket-check.ts"), join(tmp, "bin", "ticket-check.ts"));
+  copyFileSync(join(HERE, "scrub-check.ts"), join(tmp, "bin", "scrub-check.ts"));
   copyFileSync(join(HERE, "turnpikes.ts"), join(tmp, "bin", "turnpikes.ts"));
   copyFileSync(join(HERE, "project-settings.ts"), join(tmp, "bin", "project-settings.ts"));
   copyFileSync(join(HERE, "tracker-kind.ts"), join(tmp, "bin", "tracker-kind.ts"));
@@ -230,6 +231,7 @@ beforeAll(() => {
     mkdirSync(join(tmp, d), { recursive: true });
     copyFileSync(SELF, join(tmp, d, "run"));
     copyFileSync(join(HERE, "ticket-check.ts"), join(tmp, d, "ticket-check.ts"));
+    copyFileSync(join(HERE, "scrub-check.ts"), join(tmp, d, "scrub-check.ts"));
     mkdirSync(join(tmp, d, "lib"), { recursive: true });
     for (const f of ["paths.ts", "proc.ts", "data.ts", "text.ts"]) {
       copyFileSync(join(HERE, "lib", f), join(tmp, d, "lib", f));
@@ -241,6 +243,7 @@ beforeAll(() => {
   mkdirSync(join(tmp, "silent"), { recursive: true });
   copyFileSync(SELF, join(tmp, "silent", "run"));
   copyFileSync(join(HERE, "ticket-check.ts"), join(tmp, "silent", "ticket-check.ts"));
+  copyFileSync(join(HERE, "scrub-check.ts"), join(tmp, "silent", "scrub-check.ts"));
   mkdirSync(join(tmp, "silent", "lib"), { recursive: true });
   for (const f of ["paths.ts", "proc.ts", "data.ts", "text.ts"]) {
     copyFileSync(join(HERE, "lib", f), join(tmp, "silent", "lib", f));
@@ -525,6 +528,18 @@ describe("negative controls: each part is named on its own", () => {
     });
     expect(r.code).toBe(2);
     expect(r.out.includes("title: missing")).toBe(true);
+  });
+
+  test("a title holding private data is refused, a clean title passes", () => {
+    // Review round 9 (bug-35): titles travelled to the tracker unscanned
+    // while descriptions and comments passed the pre-post scan.
+    body(P, A, D, K, N);
+    const hay = ["mail", "box", "@", "north", "star", ".org"].join("");
+    const bad = runCheck(`Contact ${hay} today`);
+    expect(bad.code).toBe(2);
+    expect(bad.out.includes("title: holds private data")).toBe(true);
+    const good = runCheck("Contact the team today");
+    expect(good.code).toBe(0);
   });
 
   test("a title in another script has words", () => {

@@ -9,7 +9,6 @@ import { basename, join } from "node:path";
 import {
   SELF,
   TWO_PART,
-  addWorktree,
   calls,
   clerkRecord,
   clerkRepo,
@@ -40,7 +39,9 @@ import {
   touchesId,
   writeDispatch,
 } from "./acceptance-373.ts";
-import { killStateLoops, testStopFinishers, waitFor } from "./host-self-test.ts";
+import { runTabRecords } from "./acceptance-374.ts";
+import { fixTabRecords, mainRepoOf, toolCheckout } from "./acceptance-375.ts";
+import { testStopFinishers, waitFor } from "./host-self-test.ts";
 import { processState } from "./lib/processes.ts";
 describe("C1: close-run", () => {
   test("every run entry closes once, and the project's own watcher tab stays", () => {
@@ -235,11 +236,18 @@ describe("C3: user entries stay", () => {
     }
   });
 });
-describe("a fixture copy's space is marked opened when the flow creates it", () => {
-  test("spawn on a fixture copy tags the project space and records its handle", () => {
-    const fx = makeFx("create-spawn");
+describe("a fixture copy's spawn joins its tab in the project space", () => {
+  // A run launch on a fixture copy is covered by the #375 oracle beside it,
+  // which pins the shared tab, the missing create for the copy and the close.
+  test("spawn on a fixture copy opens the fixture tab and records its handle", () => {
+    const fx = makeFx("fixture-spawn");
     try {
+      const tool = toolCheckout();
+      const pmRoot = mainRepoOf(tool);
+      expect(pmRoot).not.toBe("");
       const fix = makeFixtureRepo(fx, "fixcopy");
+      saveHerdr(fx, freshHerdr());
+      saveTmux(fx, freshTmux());
       const env = fxEnv(fx, { POSTMASTER_CONFIG: stubConfig(fx) });
       const r = sh(
         SELF,
@@ -248,83 +256,45 @@ describe("a fixture copy's space is marked opened when the flow creates it", () 
         fx.caller,
       );
       expect(r.code).toBe(0);
+      // The project space is created for a repository with no space yet, and
+      // never marked: it is shared, and no close may sweep it. The copy gets
+      // no space at all.
       const hcalls = calls(fx, "herdr");
-      const created = hcalls.find((line) => line.startsWith("workspace\tcreate\t"));
-      expect(created).not.toBeUndefined();
+      const creates = hcalls.filter((line) => line.startsWith("workspace\tcreate"));
+      expect(creates.length).toBe(1);
+      const cells = creates[0]!.split("\t");
+      expect(cells[cells.indexOf("--cwd") + 1]).toBe(pmRoot);
+      expect(cells[cells.indexOf("--label") + 1]).toBe(basename(pmRoot));
+      expect(creates[0]!.includes(fix)).toBe(false);
+      expect(hcalls.some((line) => line.includes("postmaster=opened"))).toBe(false);
       const st = readHerdr(fx);
       const spaces = Object.keys(st.spaces);
       expect(spaces.length).toBe(1);
-      expect(st.spaces[spaces[0]!]!.tokens).toEqual({ postmaster: "opened" });
-      expect(
-        hcalls.some(
-          (line) =>
-            line.startsWith(`workspace\treport-metadata\t${spaces[0]}\t`) &&
-            line.includes("postmaster=opened"),
-        ),
-      ).toBe(true);
-      // A project-level launch reuses the first pane: one tab, carrying the launch token.
-      expect(st.spaces[spaces[0]!]!.tabs.length).toBe(1);
-      const tab = st.spaces[spaces[0]!]!.tabs[0]!;
-      expect(st.panes[st.tabs[tab]!.pane]!.tokens).toEqual({ postmaster: "launch" });
-      expect(placementTabs(fx)).toEqual([tab]);
-      expect(readPlacement(fx, st.tabs[tab]!.pane).handle).toBe("pm-one");
+      expect(st.spaces[spaces[0]!]!.tokens).toEqual({});
+      const tabs = st.spaces[spaces[0]!]!.tabs;
+      expect(tabs.length).toBe(2);
+      const fixTab = tabs.find((tab) => st.tabs[tab]!.label === "fixture · fixcopy");
+      expect(fixTab).not.toBeUndefined();
+      const panes = st.spaces[spaces[0]!]!.panes.filter((pane) => st.panes[pane]!.tab === fixTab);
+      expect(panes.length).toBe(2);
+      const launched = panes.find((pane) => st.panes[pane]!.label === "postmaster");
+      expect(launched).not.toBeUndefined();
+      expect(st.panes[launched!]!.cwd).toBe(fix);
+      expect(st.panes[launched!]!.title).toBe("postmaster");
+      expect(st.panes[launched!]!.tokens).toEqual({ postmaster: "launch" });
+      const holding = panes.find((pane) => pane !== launched);
+      expect(st.panes[holding!]!.tokens).toEqual({ postmaster: "launch" });
+      expect(placementTabs(fx)).toEqual([fixTab]);
+      expect(readPlacement(fx, launched!).handle).toBe("pm-one");
+      expect(fixTabRecords(fx).length).toBe(1);
+      expect(runTabRecords(fx)).toEqual([]);
     } finally {
       testStopFinishers(fx.root);
       rmSync(fx.root, { recursive: true, force: true });
     }
   });
-
-  test("a run launch on a fixture copy tags the source space and its root pane", async () => {
-    const fx = makeFx("create-run");
-    try {
-      const fix = makeFixtureRepo(fx, "fixcopy");
-      const synth = addWorktree(fix, "1", "1");
-      const dispatch = join(fx.root, "dispatch", "1");
-      writeDispatch(dispatch, synth, [], []);
-      const env = fxEnv(fx, {
-        POSTMASTER_CONFIG: stubConfig(fx),
-        POSTMASTER_HOST_FINISH_DELAY: "3600",
-      });
-      const marker = join(fx.logs, "l.done");
-      const r = sh(
-        SELF,
-        [
-          "host",
-          "run",
-          "luna · workhorse · m",
-          synth,
-          "--under",
-          dispatch,
-          "--run",
-          dispatch,
-          "--out",
-          join(fx.logs, "l.out"),
-          "--err",
-          join(fx.logs, "l.err"),
-          "--marker",
-          marker,
-          "--",
-          "/bin/true",
-        ],
-        env,
-        fx.caller,
-      );
-      expect(`${r.out}\n${r.err}`).toContain("host=herdr");
-      expect(r.code).toBe(0);
-      expect(await waitFor(() => existsSync(marker), 30)).toBe(true);
-      const st = readHerdr(fx);
-      const source = st.open[fix] ?? "";
-      expect(source).not.toBe("");
-      expect(st.spaces[source]!.tokens).toEqual({ postmaster: "opened" });
-      const rootPane = st.spaces[source]!.panes[0]!;
-      expect(st.panes[rootPane]!.tokens).toEqual({ postmaster: "root" });
-    } finally {
-      testStopFinishers(fx.root);
-      killStateLoops(fx.stub);
-      rmSync(fx.root, { recursive: true, force: true });
-    }
-  });
-
+});
+describe("spawn on an ordinary project", () => {
   test("spawn on an ordinary project leaves the project space unmarked", () => {
     const fx = makeFx("create-plain");
     try {

@@ -35,8 +35,8 @@
 //             "the watcher took it". A pause still open, or a delivery it cannot make, wakes
 //             the postmaster.
 //
-// Everything that needs judgment still wakes the postmaster: WALL (an untold provider wall),
-// RULE (an escalation), GATE (a
+// Everything that needs judgment still wakes the postmaster: TELL (an untold private-data
+// finding), WALL (an untold provider wall), RULE (an escalation), GATE (a
 // ship card), READ (a checkpoint card), SPEC (a spec package), READY (a signed-off ticket and
 // a free run slot), ASK (a recorded refusal or
 // pre-thread exit, or a wall on the fallback), TAKEOVER (a recorded wall on the primary),

@@ -77,9 +77,9 @@ beforeAll(() => {
     GIT_COMMITTER_EMAIL: process.env.GIT_COMMITTER_EMAIL,
   };
   process.env.GIT_AUTHOR_NAME = "t";
-  process.env.GIT_AUTHOR_EMAIL = "t@t";
+  process.env.GIT_AUTHOR_EMAIL = "t@example.com";
   process.env.GIT_COMMITTER_NAME = "t";
-  process.env.GIT_COMMITTER_EMAIL = "t@t";
+  process.env.GIT_COMMITTER_EMAIL = "t@example.com";
   const tmpRaw = mkdtempSync(join(tmpdir(), "cut-scratch-"));
   let phys = "";
   try {

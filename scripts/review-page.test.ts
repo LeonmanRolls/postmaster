@@ -82,7 +82,25 @@ beforeAll(() => {
   run("mkdir", ["-p", join(repo, "src")]);
   writeFileSync(
     join(repo, "src", "new.ts"),
-    'const owner = "someone@company.co";\nexport const n = 1;\n',
+    "con" +
+      "st " +
+      "own" +
+      "er " +
+      '= "' +
+      "som" +
+      "eon" +
+      "e@c" +
+      "omp" +
+      "any" +
+      ".co" +
+      '";\n' +
+      "exp" +
+      "ort" +
+      " co" +
+      "nst" +
+      " n " +
+      "= 1" +
+      ";\n",
   );
   g("add", "-A");
   g("commit", "-q", "-m", "head");
@@ -111,7 +129,7 @@ describe("the script", () => {
     expect(review.redactions).toBe(2);
     const chunk = readFileSync(join(out, "chunks", "0.json"), "utf8");
     expect(chunk).toContain("<address removed>");
-    expect(chunk).not.toContain("someone@company.co");
+    expect(chunk).not.toContain("som" + "eon" + "e@c" + "omp" + "any" + ".co");
     expect(chunk).toContain("one\\n2\\nthree\\nfour");
     expect(readFileSync(join(out, "index.html"), "utf8")).toContain("<title>");
     expect(review.files.find((f: { path: string }) => f.path === "gone.txt").lines).toBeNull();

@@ -22,6 +22,31 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runControls, waitFor } from "./host-self-test.ts";
 import { runTabLockOwnerAlive, runWorktreePaths } from "./host.ts";
+import {
+  SELF,
+  addWorktree,
+  calls,
+  freshHerdr,
+  freshTmux,
+  fxEnv,
+  makeFixtureRepo,
+  makeFx,
+  readHerdr,
+  saveHerdr,
+  saveTmux,
+  sh,
+  stubConfig,
+} from "./acceptance-373.ts";
+import { cleanup, placementRecords, runLaunch, runTabRecords } from "./acceptance-374.ts";
+import {
+  copyWatcher,
+  fixTabRecords,
+  headlessPostmaster,
+  mainRepoOf,
+  seedProjectSpace,
+  toolCheckout,
+  writeFixtureDispatch,
+} from "./acceptance-375.ts";
 import { bootId, processStart, processState } from "./lib/processes.ts";
 import { launchRound, type StepChild, type StepDeps } from "./review-round.ts";
 
@@ -1244,4 +1269,109 @@ test("a run-tab lock reads live only for its own started owner", () => {
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+describe("375 review round 1 fixes", () => {
+  test("spawn on a fixture copy passes the caller POSTMASTER_* settings to its pane, and a run launch takes none", () => {
+    const fx = makeFx("375-spawn-env");
+    try {
+      const tool = toolCheckout();
+      const pmRoot = mainRepoOf(tool);
+      expect(pmRoot).not.toBe("");
+      const fix = makeFixtureRepo(fx, "fixcopy");
+      saveHerdr(fx, freshHerdr());
+      saveTmux(fx, freshTmux());
+      const config = stubConfig(fx);
+      const env = fxEnv(fx, { POSTMASTER_CONFIG: config });
+      const r = sh(
+        SELF,
+        ["host", "spawn", "pm-env", fix, "--label", "postmaster", "--", "true"],
+        env,
+        fx.caller,
+      );
+      expect(r.code).toBe(0);
+      // The spawn's pane is a split off the fixture tab: it carries the
+      // caller settings a fresh tab would, as hosts.md promises.
+      const splits = calls(fx, "herdr").filter((line) => line.startsWith("pane\tsplit\t"));
+      expect(splits.length).toBe(1);
+      const cells = splits[0]!.split("\t");
+      expect(cells).toContain("--env");
+      expect(cells).toContain(`POSTMASTER_CONFIG=${config}`);
+      // A run launch in the same tab takes no caller env, as before.
+      const synth = addWorktree(fix, "1", "1");
+      const dispatch = join(fx.root, "dispatch", "1");
+      writeFixtureDispatch(dispatch, synth, tool);
+      const marker = join(fx.logs, "coach.done");
+      const launched = runLaunch(fx, env, "coachman", synth, dispatch, marker);
+      expect(launched.code).toBe(0);
+      const splitsAfter = calls(fx, "herdr").filter((line) => line.startsWith("pane\tsplit\t"));
+      expect(splitsAfter.length).toBe(2);
+      expect(splitsAfter[1]!.includes("--env")).toBe(false);
+    } finally {
+      cleanup(fx);
+    }
+  });
+
+  test("close-run with a stale run record still closes the live fixture tab", async () => {
+    const fx = makeFx("375-close-stale");
+    try {
+      const tool = toolCheckout();
+      const pmRoot = mainRepoOf(tool);
+      expect(pmRoot).not.toBe("");
+      const fix = makeFixtureRepo(fx, "fixcopy");
+      const projSpace = seedProjectSpace(fx, pmRoot);
+      const seeded = readHerdr(fx);
+      const shellTab = seeded.spaces[projSpace]!.tabs[0]!;
+      const synth = addWorktree(fix, "1", "1");
+      const dispatch = join(fx.root, "dispatch", "1");
+      writeFixtureDispatch(dispatch, synth, tool);
+      const env = fxEnv(fx, {
+        POSTMASTER_CONFIG: stubConfig(fx),
+        POSTMASTER_HOST_FINISH_DELAY: "3600",
+      });
+      const pmMarker = join(fx.logs, "pm.done");
+      expect(headlessPostmaster(fx, env, fix, pmMarker).code).toBe(0);
+      const coachMarker = join(fx.logs, "coach.done");
+      expect(runLaunch(fx, env, "coachman", synth, dispatch, coachMarker).code).toBe(0);
+      for (const marker of [pmMarker, coachMarker])
+        expect(await waitFor(() => existsSync(marker), 30)).toBe(true);
+      const before = readHerdr(fx);
+      const dead = before.spaces[projSpace]!.tabs.find(
+        (tab) => before.tabs[tab]!.label === "fixture · fixcopy",
+      );
+      expect(dead).not.toBeUndefined();
+      const tabPanes = before.spaces[projSpace]!.panes.filter(
+        (pane) => before.panes[pane]!.tab === dead,
+      );
+      expect(tabPanes.length).toBe(3);
+      expect(runTabRecords(fx).map((item) => item.tab)).toEqual([dead]);
+      expect(fixTabRecords(fx).map((item) => item.tab)).toEqual([dead]);
+      // Every pane of the tab closed by hand: the tab is gone, while both
+      // records still name it.
+      const stubHerdr = join(fx.bin, "herdr");
+      for (const pane of tabPanes)
+        expect(sh(stubHerdr, ["pane", "close", pane], env, fx.caller).code).toBe(0);
+      const emptied = readHerdr(fx);
+      expect(emptied.spaces[projSpace]!.tabs).toEqual([shellTab]);
+      // A copy-level launch recreates the tab; only the fixture record
+      // follows it, and the run record still names the dead tab.
+      const watchMarker = join(fx.logs, "watch.done");
+      expect(copyWatcher(fx, env, fix, watchMarker).code).toBe(0);
+      expect(await waitFor(() => existsSync(watchMarker), 30)).toBe(true);
+      const live = fixTabRecords(fx).map((item) => item.tab);
+      expect(live.length).toBe(1);
+      expect(live[0]).not.toBe(dead);
+      expect(runTabRecords(fx).map((item) => item.tab)).toEqual([dead]);
+      const closed = sh(SELF, ["host", "close-run", dispatch], env, fx.root);
+      expect(closed.code).toBe(0);
+      const after = readHerdr(fx);
+      expect(after.spaces[projSpace]).not.toBeUndefined();
+      expect(after.spaces[projSpace]!.tabs).toEqual([shellTab]);
+      expect(placementRecords(fx)).toEqual([]);
+      expect(runTabRecords(fx)).toEqual([]);
+      expect(fixTabRecords(fx)).toEqual([]);
+    } finally {
+      cleanup(fx);
+    }
+  }, 600000);
 });

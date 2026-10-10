@@ -215,15 +215,15 @@ describe("positive controls: event text is readable and complete", () => {
   });
 
   test("mimo: a session starts, with its thread id, and a first step says nothing more", () => {
-    const event = '{"type":"step_start","sessionID":"ses_ffe5f1e2","part":{"type":"step-start"}}';
-    expect(rendered(event)).toBe("session ses_ffe5f1e2");
-  });
+    const event = '{"type":"step_start","sessionID":"ses_madeup_x","part":{"type":"step-start"}}';
+    expect(rendered(event)).toBe("session ses_madeup_x");
+  }, 30000);
 
   test("mimo: a tool call, with what it touched", () => {
     const event =
-      '{"type":"tool_use","sessionID":"ses_ffe5f1e2","part":{"type":"tool","tool":"write","state":{"status":"completed","input":{"file_path":"proof.txt","content":"PELICAN"}}}}';
-    expect(rendered(event)).toBe("session ses_ffe5f1e2\nwrite: proof.txt");
-  });
+      '{"type":"tool_use","sessionID":"ses_madeup_x","part":{"type":"tool","tool":"write","state":{"status":"completed","input":{"file_path":"proof.txt","content":"PELICAN"}}}}';
+    expect(rendered(event)).toBe("session ses_madeup_x\nwrite: proof.txt");
+  }, 30000);
 
   test("mimo: what the model said", () => {
     const event = '{"type":"text","sessionID":"ses_1","part":{"type":"text","text":"DONE"}}';

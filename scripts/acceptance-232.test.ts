@@ -94,6 +94,17 @@ describe("C3: nothing is silenced instead of fixed", () => {
     expect(config.ignorePatterns).toEqual(BASE_IGNORE_PATTERNS);
   });
 
+  test("the pin lists exactly the base two plus the two generated entries", () => {
+    const allowed = [
+      "fixtures/**",
+      "scripts/scrub-check.ts",
+      "scripts/raw-promote.ts",
+      "scripts/lib/vendor/**",
+    ];
+    expect(BASE_IGNORE_PATTERNS).toEqual(allowed);
+    expect([...allowed, "scripts/extra.ts"]).not.toEqual(BASE_IGNORE_PATTERNS);
+  });
+
   test("effective levels allow nothing but the base two", () => {
     const rules = printConfigRules();
     expect(rules["no-control-regex"]).toBe("allow");
