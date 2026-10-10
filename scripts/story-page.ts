@@ -627,9 +627,13 @@ export function renderMd(lines: string[], from: number): { html: string; spans: 
   const spans: Range[] = [];
   let para: { text: string[]; from: number; to: number } | null = null;
   let fence: { text: string[]; from: number } | null = null;
+  // Whether the last block emitted is a list item, which an indented line
+  // continues; read from the builder's own state, never from the HTML.
+  let lastIsItem = false;
   const block = (tag: string, html: string, a: number, b: number, cls = ""): void => {
     spans.push([a, b]);
     out.push(`<${tag} class="b${cls}" data-b="${spans.length - 1}">${html}</${tag}>`);
+    lastIsItem = tag === "p" && cls !== "";
   };
   const flush = (): void => {
     if (para) block("p", inline(para.text.join(" ")), para.from, para.to);
@@ -668,7 +672,7 @@ export function renderMd(lines: string[], from: number): { html: string; spans: 
       const depth = Math.min(3, Math.floor((m[1] ?? "").length / 2));
       block("p", inline(m[2] ?? ""), n, n, ` li d${depth}`);
       // ASCII: continuation indentation is ASCII whitespace.
-    } else if (/^\s+\S/u.test(raw) && spans.length && (out.at(-1) ?? "").includes(" li d")) {
+    } else if (/^\s+\S/u.test(raw) && lastIsItem) {
       // A continuation of the list item above it.
       const last = out.pop() ?? "";
       void last;

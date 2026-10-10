@@ -373,6 +373,15 @@ describe("renderMd", () => {
     const { html } = renderMd(["- item one", "  costs $& dollars"], 1);
     expect(html).toContain("costs $&amp; dollars");
   });
+
+  test("an indented line after a fence starts a new block", () => {
+    const { html, spans } = renderMd(["```", "  li d", "```", "  continued text"], 1);
+    expect(html).toContain("continued text");
+    expect(spans).toEqual([
+      [1, 3],
+      [4, 4],
+    ]);
+  });
 });
 
 describe("rows and steps", () => {
