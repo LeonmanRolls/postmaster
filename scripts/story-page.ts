@@ -542,6 +542,7 @@ export interface Doc {
 // is one block a step can light.
 export function renderDoc(md: string, eyebrow: string, title: string): Doc {
   const blocks: string[] = [title];
+  const raws: (string | null)[] = [null];
   const out: string[] = [
     `<p class="deye">${esc(eyebrow)}</p><h2 class="b dtitle" data-b="0">${inline(title)}</h2>`,
   ];
@@ -549,6 +550,7 @@ export function renderDoc(md: string, eyebrow: string, title: string): Doc {
   let list: "ol" | "ul" | null = null;
   const block = (tag: string, text: string, cls = ""): string => {
     blocks.push(plainText(text));
+    raws.push(tag === "li" ? text : null);
     return `<${tag} class="b${cls}" data-b="${blocks.length - 1}">${inline(text)}</${tag}>`;
   };
   const flushPara = (): void => {
@@ -582,12 +584,14 @@ export function renderDoc(md: string, eyebrow: string, title: string): Doc {
       out.push(block("li", want === "ol" ? (m[2] ?? "") : (m[1] ?? "")));
       // ASCII: Markdown indentation is ASCII whitespace.
     } else if (list && /^\s+\S/u.test(raw)) {
-      // A continuation line of a list item: fold it into the item.
+      // A continuation line of a list item: fold it into the item's raw
+      // words, so the item's links and formatting survive the rebuild.
       const last = out.pop();
       void last;
       const b = blocks.length - 1;
-      const text = `${blocks[b]} ${line.trim()}`;
+      const text = `${raws[b] ?? blocks[b]} ${line.trim()}`;
       blocks.pop();
+      raws.pop();
       out.push(block("li", text));
     } else {
       closeList();

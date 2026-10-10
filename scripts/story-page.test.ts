@@ -301,6 +301,18 @@ describe("renderDoc", () => {
     expect(folded.blocks).toContain("one continued");
   });
 
+  test("a continued list item keeps its link and bold", () => {
+    const doc = renderDoc(
+      "- [#434, x](https://example.org/y) makes **a story**\n  continued here\n",
+      "T",
+      "Title",
+    );
+    expect(doc.html).toContain('<a href="https://example.org/y">#434, x</a>');
+    expect(doc.html).toContain("<strong>a story</strong>");
+    expect(doc.html).toContain("continued here");
+    expect(doc.blocks).toContain("#434, x makes a story continued here");
+  });
+
   test("cutDoc keeps the part the scene shows", () => {
     expect(cutDoc("a\n## For the agents\nb", "s", undefined, "## For the agents")).toBe("a\n");
     expect(cutDoc("a\n## For the agents\nb", "s", "## For the agents", undefined)).toBe(
