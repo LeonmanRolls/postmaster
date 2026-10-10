@@ -366,6 +366,9 @@ describe("rows and steps", () => {
     expect(gapRows({ file: "f.ts", from: 2, to: 2 }, ["a", "b"])).toEqual([
       { type: "ctx", n: 2, text: "b", key: "f.ts@2" },
     ]);
+    expect(gapRows({ file: "f.ts", from: 2, to: 5 }, ["a", "b"])).toEqual([
+      { type: "ctx", n: 2, text: "b", key: "f.ts@2" },
+    ]);
   });
 
   test("steps light rows, blocks and states, and refuse the rest", () => {

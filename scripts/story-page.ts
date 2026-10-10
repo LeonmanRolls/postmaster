@@ -827,7 +827,10 @@ export function refRows(file: string, from: number, to: number, lines: string[])
 /** A closing-list range's rows, keyed the same way. */
 export function gapRows(gap: Gap, lines: string[]): Row[] {
   const rows: Row[] = [];
-  for (let n = gap.from; n <= gap.to; n++) {
+  // Clamped like refRows: lines past the end fall through to the
+  // coverage check, which refuses the broken citation, instead of
+  // passing as blank rows.
+  for (let n = gap.from; n <= Math.min(gap.to, lines.length); n++) {
     rows.push({ type: "ctx", n, text: lines[n - 1] ?? "", key: `${gap.file}@${n}` });
   }
   return rows;
