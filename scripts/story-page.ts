@@ -1298,8 +1298,9 @@ function secsHtml(p: PageParts): string {
 
 /** The story's ticket document: the doc scene for this issue, whatever its id. */
 export function ticketDocId(story: Story): string | undefined {
-  return story.scenes.find((s) => s.kind === "doc" && s.from === "issue" && s.number === story.ticket)
-    ?.id;
+  return story.scenes.find(
+    (s) => s.kind === "doc" && s.from === "issue" && s.number === story.ticket,
+  )?.id;
 }
 
 export function stepsHtml(p: PageParts): string {
