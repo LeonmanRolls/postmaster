@@ -436,15 +436,30 @@ describe("C3: what the check cannot tell is unknown", () => {
     }
   });
 
-  test("an adapter verb beyond read and state is unknown", () => {
-    const dispatch = fixtureDispatch(tmp, "c3-comment", {
+  test("an adapter search naming the ticket is unknown", () => {
+    const dispatch = fixtureDispatch(tmp, "c3-searchverb", {
       agents: [{ lane: "luna", harness: "codex", lines: [] }],
     });
     const repo = repoOf(dispatch);
     appendLine(
       dispatch,
       "luna-events.jsonl",
-      codexExec(`scripts/run github ${repo} comment 409 coachman "hi"`),
+      codexExec(`scripts/run github ${repo} search 409`),
+    );
+    const r = ticketReads(dispatch);
+    expect(r.code).toBe(0);
+    expect(outcomeOf(r.out)).toContain("ticket-reads: unknown");
+  });
+
+  test("an adapter verb the adapters do not have is unknown", () => {
+    const dispatch = fixtureDispatch(tmp, "c3-strangeverb", {
+      agents: [{ lane: "opus", harness: "claude", lines: [] }],
+    });
+    const repo = repoOf(dispatch);
+    appendLine(
+      dispatch,
+      "opus-events.jsonl",
+      claudeUse("Bash", { command: `scripts/run github ${repo} frobnicate 409` }),
     );
     const r = ticketReads(dispatch);
     expect(r.code).toBe(0);
@@ -506,6 +521,52 @@ describe("C3: the check's edges", () => {
     const r = ticketReads(dispatch);
     expect(r.code).toBe(0);
     expect(outcomeOf(r.out)).toBe("ticket-reads: not read");
+  });
+
+  test("known writes show no ticket text and count for nothing", () => {
+    const dispatch = fixtureDispatch(tmp, "c3-writes", {
+      agents: [{ lane: "luna", harness: "codex", lines: [] }],
+    });
+    const repo = repoOf(dispatch);
+    appendLine(
+      dispatch,
+      "luna-events.jsonl",
+      codexExec(`scripts/run github ${repo} comment 409 coachman "hi"`),
+    );
+    appendLine(dispatch, "luna-events.jsonl", codexExec("gh issue close 409"));
+    appendLine(
+      dispatch,
+      "luna-events.jsonl",
+      codexExec(`scripts/run github ${repo} edit 409 body.md base.md`),
+    );
+    const r = ticketReads(dispatch);
+    expect(r.code).toBe(0);
+    expect(outcomeOf(r.out)).toBe("ticket-reads: not read");
+  });
+
+  test("a relaunched review parses its round", () => {
+    const dispatch = fixtureDispatch(tmp, "c3-relaunch", {
+      agents: [
+        {
+          lane: "opus",
+          harness: "claude",
+          file: "review-r1-bug-opus.jsonl",
+          reviews: ["r1 bug"],
+          lines: [claudeUse("Bash", { command: "gh issue view 409" })],
+        },
+      ],
+    });
+    const actions = join(dispatch, "actions.jsonl");
+    const relaunched = readFileSync(actions, "utf8").replace(
+      "bug round 1",
+      "bug round 1, relaunched after reset",
+    );
+    writeFileSync(actions, relaunched, "utf8");
+    const r = ticketReads(dispatch);
+    expect(r.code).toBe(0);
+    expect(outcomeOf(r.out)).toBe(
+      "ticket-reads: read by review r1 bug opus (gh issue view)",
+    );
   });
 
   test("a read through the wrong tracker is not this ticket", () => {
