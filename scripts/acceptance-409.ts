@@ -81,11 +81,7 @@ export function claudeUse(
 
 /** A muse tool result whose text is the command's JSON report, pretty as the harness prints it. */
 export function museExec(command: string, code = 0): string {
-  const text = JSON.stringify(
-    { chunk_id: "exec-1-1", command, exit_code: code, output: "" },
-    null,
-    2,
-  );
+  const text = JSON.stringify({ command, exit_code: code, output: "" }, null, 2);
   return JSON.stringify({
     payload_type: "tool.result",
     payload: {
