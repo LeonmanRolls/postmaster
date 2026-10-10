@@ -180,6 +180,15 @@ describe("parseStory", () => {
     expect(() => parseStory("nope")).toThrow("not JSON");
     expect(() => parseStory(JSON.stringify({ ...minimal, at: undefined }))).toThrow("no at");
   });
+
+  test("an empty mark is refused", () => {
+    const clone = JSON.parse(JSON.stringify(minimal)) as typeof minimal;
+    const step = clone.steps[0] as unknown as Record<string, unknown>;
+    step.marks = [{ line: 1, text: [""] }];
+    expect(() => parseStory(JSON.stringify(clone))).toThrow("names an empty mark");
+    step.marks = [{ line: 1, text: ["word"] }];
+    expect(() => parseStory(JSON.stringify(clone))).not.toThrow();
+  });
 });
 
 describe("checkDrawings", () => {

@@ -339,6 +339,9 @@ export function parseStory(text: string): Story {
           throw new Error(`${at} names no marks`);
         for (const t of text) {
           if (typeof t !== "string") throw new Error(`${at} names no marks`);
+          // An empty mark would hang the page: its loop searches from the
+          // same place forever.
+          if (t.length === 0) throw new Error(`${at} names an empty mark`);
         }
         return { line, text: text as string[] };
       });
