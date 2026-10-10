@@ -678,8 +678,9 @@ test("C7 --files finds private context while code and placeholders pass", () => 
   const rules = new Set(rows.map((row) => row.split(": ").at(-1)));
   for (const rule of ["private-path", "private-host", "account-id", "assistant-attribution"])
     expect(rules.has(rule)).toBe(true);
-  // Review round 15 (bug-95): ops@relay.internal reports email as well as
-  // private-host now, since dropping the email span leaked the local part.
+  // Review round 15 (bug-95): a private-domain mailbox reports email as
+  // well as private-host now, since dropping the email span leaked the
+  // local part.
   expect(rows.some((row) => row.endsWith(": email"))).toBe(true);
   expect(!found.stdout.includes(credit) && !found.stdout.includes(footer)).toBe(true);
   expect(!found.stderr.includes(credit) && !found.stderr.includes(footer)).toBe(true);
