@@ -52,22 +52,25 @@ function onPath(bin: string): boolean {
   return path.split(":").some((dir) => dir.length > 0 && existsSync(join(dir, bin)));
 }
 
-function hasPil(): boolean {
+// Python imports from the working directory first, so the probe and the
+// conversion both run in the adapter's scratch, never in the caller's
+// checkout, where a PIL.py of its own would be imported instead of Pillow.
+function hasPil(cwd: string): boolean {
   if (!onPath("python3")) return false;
-  const r = run("python3", ["-c", "import PIL.Image"], { timeout: PROBE_TIMEOUT_MS });
+  const r = run("python3", ["-c", "import PIL.Image"], { cwd, timeout: PROBE_TIMEOUT_MS });
   return r.code === 0;
 }
 
-function available(): Record<Converter, boolean> {
+function available(cwd: string): Record<Converter, boolean> {
   return {
     magick: onPath("magick"),
     convert: onPath("convert"),
     sips: onPath("sips"),
-    pil: hasPil(),
+    pil: hasPil(cwd),
   };
 }
 
-function convertWith(which: Converter, png: string, jpg: string): void {
+function convertWith(which: Converter, png: string, jpg: string, cwd: string): void {
   let r: { code: number; err: string };
   if (which === "magick" || which === "convert") {
     r = run(which, [png, "-quality", String(JPEG_QUALITY), jpg], {
@@ -80,18 +83,23 @@ function convertWith(which: Converter, png: string, jpg: string): void {
       { timeout: PROBE_TIMEOUT_MS * 6 },
     );
   } else {
-    r = run("python3", ["-c", PIL_CONVERT, png, jpg], { timeout: PROBE_TIMEOUT_MS * 6 });
+    r = run("python3", ["-c", PIL_CONVERT, png, jpg], { cwd, timeout: PROBE_TIMEOUT_MS * 6 });
   }
   if (r.code !== 0) throw new Error(`${which}: ${r.err.trim() || `exit ${r.code}`}`);
 }
 
 /** Convert the PNG to a JPEG near 80% quality, trying each converter in turn. */
-export function convertPng(png: string, jpg: string, has: Record<Converter, boolean>): Converter {
+export function convertPng(
+  png: string,
+  jpg: string,
+  has: Record<Converter, boolean>,
+  cwd: string,
+): Converter {
   const failures: string[] = [];
   for (const name of ["magick", "convert", "sips", "pil"] as const) {
     if (!has[name]) continue;
     try {
-      convertWith(name, png, jpg);
+      convertWith(name, png, jpg, cwd);
       return name;
     } catch (e) {
       failures.push(e instanceof Error ? e.message : String(e));
@@ -141,7 +149,7 @@ export function main(args: string[]): number {
         );
       }
       const jpg = join(scratch, "picture.jpg");
-      convertPng(png, jpg, available());
+      convertPng(png, jpg, available(scratch), scratch);
       mkdirSync(dirname(resolve(outFile)), { recursive: true });
       cpSync(jpg, outFile);
       const bytes = readFileSync(outFile).length;

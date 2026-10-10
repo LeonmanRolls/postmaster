@@ -75,6 +75,12 @@ echo "$*" >> "$STUB_CONVERT_ARGS"
 cp "$1" "$4"
 `;
 
+const PYTHON_STUB = `#!/bin/sh
+pwd >> "$STUB_PYTHON_PWD"
+if [ $# -eq 2 ]; then exit 0; fi
+cp "$3" "$4"
+`;
+
 describe("selectConverter", () => {
   test("preference order then nothing", () => {
     const all = { magick: true, convert: true, sips: true, pil: true };
@@ -215,6 +221,43 @@ describe("story-picture", () => {
     expect(r.code).toBe(1);
     expect(r.err).toContain("converter");
     expect(existsSync(out)).toBe(false);
+  });
+
+  test("python3 runs in the scratch, not the caller directory", () => {
+    stub("codex", CODEX_STUB);
+    stub("python3", PYTHON_STUB);
+    const out = join(dir, "pic.jpg");
+    const r = run(
+      process.execPath,
+      [
+        script,
+        "--prompt",
+        join(dir, "prompt.txt"),
+        "--style",
+        join(dir, "style.jpg"),
+        "--out",
+        out,
+      ],
+      {
+        cwd: dir,
+        env: {
+          PATH: bin,
+          STUB_CODEX_ARGS: join(dir, "codex-args.txt"),
+          STUB_CODEX_STDIN: join(dir, "codex-stdin.txt"),
+          STUB_CODEX_IMAGE: join(dir, "known.png"),
+          STUB_PYTHON_PWD: join(dir, "python-pwd.txt"),
+        },
+        timeout: 60_000,
+      },
+    );
+    expect(r.code).toBe(0);
+    expect(readFileSync(out).equals(KNOWN)).toBe(true);
+    const pwds = readFileSync(join(dir, "python-pwd.txt"), "utf8").trim().split("\n");
+    expect(pwds.length).toBe(2);
+    for (const p of pwds) {
+      expect(p).not.toBe(dir);
+      expect(p).toContain("story-picture-");
+    }
   });
 
   test("a converter that fails is reported", () => {
