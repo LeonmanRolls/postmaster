@@ -165,7 +165,7 @@ function readJson(path: string): RecordOf | null {
 
 /** A ticket number token: split on shell punctuation, never on dots, so 1.409 stays one token. */
 function hasNumberToken(segment: string, ticket: string): boolean {
-  return segment.split(/[\s;&|()<>=:,"'`#]+/u).some((token) => token === ticket);
+  return segment.split(/[\s;&|()<>=:,"'`#]+/u).some((token) => token === ticket); // ASCII: shell words split on ASCII whitespace and metacharacters
 }
 
 function stripQuotes(value: string): string {
@@ -250,7 +250,7 @@ interface Head {
 
 /** The segment's command word, past sudo, env and assignments. */
 function segmentHead(segment: string): Head {
-  const words = segment.trim().split(/\s+/u).filter(Boolean);
+  const words = segment.trim().split(/\s+/u).filter(Boolean); // ASCII: shell words split on ASCII whitespace
   let at = 0;
   while (at < words.length) {
     const word = words[at]!;
@@ -301,7 +301,7 @@ function scanFlags(words: string[]): GhFlags {
       i++;
     } else if (word.startsWith("--repo=")) {
       repo = stripQuotes(word.slice("--repo=".length));
-    } else if (/^-R[^-\s]/u.test(word)) {
+    } else if (/^-R[^-\s]/u.test(word)) { // ASCII: flag letters match ASCII
       repo = stripQuotes(word.slice(2));
     } else if (word === "--json") {
       json = quotedValue(words, i + 1);
@@ -324,7 +324,7 @@ function scanFlags(words: string[]): GhFlags {
 }
 
 function sameNwo(left: string, right: string): boolean {
-  return left.toLowerCase() === right.toLowerCase();
+  return left.toLowerCase() === right.toLowerCase(); // ASCII: GitHub owner and repo names are ASCII
 }
 
 /** An -R/--repo value as owner/repo, or "" when it names none. */
@@ -343,7 +343,7 @@ interface IssueUrl {
 function issueUrls(segment: string): IssueUrl[] {
   const found: IssueUrl[] = [];
   const re =
-    /https?:\/\/github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+?)(?:\.git)?\/issues\/(\d+)(?=[/?#\s"'`;&|()]|$)/giu;
+    /https?:\/\/github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+?)(?:\.git)?\/issues\/(\d+)(?=[/?#\s"'`;&|()]|$)/giu; // ASCII: issue addresses are machine-made ASCII
   for (const match of segment.matchAll(re)) {
     found.push({ nwo: `${match[1]}/${match[2]}`, number: match[3]! });
   }
@@ -352,7 +352,7 @@ function issueUrls(segment: string): IssueUrl[] {
 
 function ghRepoOverride(segment: string, flagRepo: string | null): string | null {
   if (flagRepo !== null) return flagRepo;
-  const env = /(?:^|[\s;&|()])GH_REPO=([^\s;&|()"'`]+)/u.exec(segment);
+  const env = /(?:^|[\s;&|()])GH_REPO=([^\s;&|()"'`]+)/u.exec(segment); // ASCII: env assignments match ASCII
   return env ? stripQuotes(env[1]!) : null;
 }
 
@@ -372,7 +372,7 @@ function classifyGh(ctx: Ctx, segment: string, head: Head): Finding | null {
       return { agent: "", finding: "unknown", form: `gh issue ${verb}`.trim(), detail: "" };
     }
     // A number inside another repo's address is not a bare target.
-    const deurl = segment.replace(/https?:\/\/github\.com\/\S+/gu, " ");
+    const deurl = segment.replace(/https?:\/\/github\.com\/\S+/gu, " "); // ASCII: issue addresses are machine-made ASCII
     const bare = hasNumberToken(deurl, ctx.ticket);
     let sameUrl = false;
     for (const url of issueUrls(segment)) {
@@ -417,7 +417,7 @@ function classifyGh(ctx: Ctx, segment: string, head: Head): Finding | null {
     }
     const endpoints = [
       ...segment.matchAll(
-        /repos\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+?)(?:\.git)?\/issues\/(\d+)((?:\/[A-Za-z0-9_.-]+)*)/gu,
+        /repos\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+?)(?:\.git)?\/issues\/(\d+)((?:\/[A-Za-z0-9_.-]+)*)/gu, // ASCII: API paths are machine-made ASCII
       ),
     ];
     let otherRepo = false;
@@ -548,11 +548,11 @@ function classifyFetch(ctx: Ctx, segment: string): Finding | null {
 }
 
 const STORE_FILE_RE =
-  /(?:^|[ \t\r\n;&|()<>"'`])([~$A-Za-z0-9_@./-]*postmaster\/tickets\/\d+\.(?:md|json))/gu;
+  /(?:^|[ \t\r\n;&|()<>"'`])([~$A-Za-z0-9_@./-]*postmaster\/tickets\/\d+\.(?:md|json))/gu; // ASCII: store paths match ASCII
 const CLERK_FILE_RE =
   /(?:^|[ \t\r\n;&|()<>"'`])([~$A-Za-z0-9_@./-]*\.postmaster\/clerk\/[^ \t\r\n;&|()<>"'`]+)/gu;
-const STORE_DIR_RE = /[~$A-Za-z0-9_@./-]*postmaster\/tickets(?=[/\s"'`;&|()]|$)/u;
-const CLERK_DIR_RE = /[~$A-Za-z0-9_@./-]*\.postmaster\/clerk(?=[/\s"'`;&|()]|$)/u;
+const STORE_DIR_RE = /[~$A-Za-z0-9_@./-]*postmaster\/tickets(?=[/\s"'`;&|()]|$)/u; // ASCII: store paths match ASCII
+const CLERK_DIR_RE = /[~$A-Za-z0-9_@./-]*\.postmaster\/clerk(?=[/\s"'`;&|()]|$)/u; // ASCII: clerk paths match ASCII
 
 /** Where a store or clerk path points: the ticket's file, its meta, the dir, or elsewhere. */
 function placePath(
@@ -679,7 +679,7 @@ function classifySegment(ctx: Ctx, segment: string, own: string, depth = 0): Fin
 function failedExit(exitCode: unknown): boolean {
   if (typeof exitCode === "number") return exitCode !== 0;
   if (typeof exitCode === "string") {
-    const clean = exitCode.trim().toLowerCase();
+    const clean = exitCode.trim().toLowerCase(); // ASCII: harness outcome words are ASCII
     if (clean === "" || clean === "0" || clean === "success" || clean === "ok") return false;
     return /^(fail|failure|failed|error|timeout|timed-?out|killed|aborted)$/u.test(clean);
   }
@@ -738,9 +738,9 @@ function classifyCall(ctx: Ctx, call: ToolCall, own: string): Finding[] {
 function parseTracker(scope: string): { kind: string; ticket: string } {
   const line = scope
     .split("\n")
-    .find((row) => row.toLowerCase().startsWith("tracker:")) ?? "";
-  const kind = /^tracker:[ \t]*([A-Za-z]+)/u.exec(line)?.[1]?.toLowerCase() ?? "";
-  const ticket = /issue[ \t]+#?(\d+)/iu.exec(line)?.[1] ?? "";
+    .find((row) => row.toLowerCase().startsWith("tracker:")) ?? ""; // ASCII: waybill headings are ASCII
+  const kind = /^tracker:[ \t]*([A-Za-z]+)/u.exec(line)?.[1]?.toLowerCase() ?? ""; // ASCII: tracker kinds are ASCII
+  const ticket = /issue[ \t]+#?(\d+)/iu.exec(line)?.[1] ?? ""; // ASCII: issue numbers are ASCII digits
   return { kind, ticket };
 }
 
@@ -768,7 +768,7 @@ function readAgents(dispatch: string, manifest: RecordOf, runJson: RecordOf): { 
   const agents: Agent[] = [];
   const legs = rec(rec(manifest.coachman).legs);
   const legNumbers = Object.keys(legs)
-    .filter((key) => /^\d+$/u.test(key))
+    .filter((key) => /^\d+$/u.test(key)) // ASCII: manifest leg keys are ASCII digits
     .sort((a, b) => Number(a) - Number(b));
   for (const n of legNumbers) {
     agents.push({
@@ -806,7 +806,7 @@ function readAgents(dispatch: string, manifest: RecordOf, runJson: RecordOf): { 
     }
     const record = rec(event);
     if (record.action !== "review-launch") continue;
-    const detail = /^(\S+) round (\d+)\b/u.exec(text(record.detail));
+    const detail = /^(\S+) round (\d+)\b/u.exec(text(record.detail)); // ASCII: review-launch details are machine-logged lines
     const lane = text(record.target);
     if (!detail || !lane) return { agents, broken: "a review launch cannot be read" };
     const key = `${detail[2]}:${detail[1]}:${lane}`;
@@ -855,7 +855,7 @@ function ownFolder(ctx: Ctx, ticket: string, agent: Agent, review: { round: stri
 }
 
 function reviewOf(agent: Agent): { round: string; lens: string } | null {
-  const match = /^review r(\d+) (\S+) \S+$/u.exec(agent.name);
+  const match = /^review r(\d+) (\S+) \S+$/u.exec(agent.name); // ASCII: reviewer names are machine-made
   return match ? { round: match[1]!, lens: match[2]! } : null;
 }
 
@@ -933,7 +933,7 @@ function main(argv: string[]): number {
   }
   const scope = briefSection(brief, "## Project profile") || brief;
   const tracker = parseTracker(scope);
-  const ticket = tracker.ticket || (/^\d+$/u.test(basename(dispatch)) ? basename(dispatch) : "");
+  const ticket = tracker.ticket || (/^\d+$/u.test(basename(dispatch)) ? basename(dispatch) : ""); // ASCII: ticket numbers are ASCII digits
   if (!ticket) return failed("the ticket cannot be told");
   if (tracker.kind !== "github" && tracker.kind !== "local") {
     return failed(tracker.kind ? `tracker kind ${tracker.kind}` : "the tracker cannot be told");
