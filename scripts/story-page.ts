@@ -656,7 +656,9 @@ export function renderMd(lines: string[], from: number): { html: string; spans: 
       void last;
       const span = spans.at(-1) ?? [n, n];
       span[1] = n;
-      out.push(last.replace(/<\/p>$/u, ` ${inline(line.trim())}</p>`));
+      // A function, not a string: $ patterns in the repository's words
+      // would expand in a replacement string.
+      out.push(last.replace(/<\/p>$/u, () => ` ${inline(line.trim())}</p>`));
     } else {
       if (!para) para = { text: [], from: n, to: n };
       para.text.push(line.trim());

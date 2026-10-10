@@ -356,6 +356,11 @@ describe("renderMd", () => {
     expect(startsInFence(all, 5)).toBe(false);
     expect(startsInFence(all, 1)).toBe(false);
   });
+
+  test("a continuation keeps dollar patterns literal", () => {
+    const { html } = renderMd(["- item one", "  costs $& dollars"], 1);
+    expect(html).toContain("costs $&amp; dollars");
+  });
 });
 
 describe("rows and steps", () => {
