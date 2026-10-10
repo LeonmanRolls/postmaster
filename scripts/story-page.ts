@@ -10,8 +10,8 @@
 //   scripts/run story-page pick-step --viewport <WxH> --boxes <json>
 //
 // build reads <story-dir>/story.json and the files it names, draws the
-// opening picture through the picture adapter with the repository's
-// docs/poster.jpg as its style, and writes <out-dir>/index.html (the page),
+// opening picture through the picture adapter with the postmaster poster as
+// its style, and writes <out-dir>/index.html (the page),
 // <out-dir>/sheet.html (every drawing in every state) and the picture file.
 // --ticket-body is a {title, body} JSON file; without it the ticket comes
 // from gh. --picture-adapter replaces the default story-picture call.
@@ -23,7 +23,7 @@
 //   exit 1  usage, or anything the story, the ticket or the code refuses
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { langOf, scrub } from "./lib/page-text.ts";
 import { run } from "./lib/proc.ts";
 
@@ -1581,7 +1581,7 @@ export function build(o: BuildOptions): string {
   const adapter = o.pictureAdapter
     ? [o.pictureAdapter]
     : [join(import.meta.dir, "run"), "story-picture"];
-  const styleFile = join(o.repo, "docs/poster.jpg");
+  const styleFile = join(dirname(import.meta.dir), "docs/poster.jpg");
   const imageScenes = usedScenes.filter((s): s is ImageScene => s.kind === "image");
   if (imageScenes.length > 0 && !existsSync(styleFile)) {
     throw new Error(`no style file ${styleFile}`);
