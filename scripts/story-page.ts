@@ -384,6 +384,54 @@ export function parseStory(text: string): Story {
   return story;
 }
 
+/**
+ * The story's rendered prose with addresses removed: the title, sections,
+ * steps and scene labels. Ids, states, paths, links and match keys (find,
+ * marks, cut, start) stay exact, since the builder matches on them.
+ */
+export function scrubStory(story: Story): { story: Story; removed: number } {
+  let removed = 0;
+  const clean = (s: string): string => {
+    const r = scrub(s);
+    removed += r.removed;
+    return r.text;
+  };
+  const opt = (s: string | undefined): string | undefined =>
+    s === undefined ? undefined : clean(s);
+  return {
+    story: {
+      ...story,
+      title: opt(story.title),
+      status: opt(story.status),
+      sections: story.sections.map((s) => ({
+        ...s,
+        label: clean(s.label),
+        title: clean(s.title),
+      })),
+      scenes: story.scenes.map((sc) => {
+        if (sc.kind === "ref" || sc.kind === "md") return sc;
+        if (sc.kind === "diagram") {
+          return { ...sc, label: clean(sc.label), chip: clean(sc.chip), caption: opt(sc.caption) };
+        }
+        if (sc.kind === "image") {
+          // The overlay and prompt stay exact: they are file paths, not prose.
+          return {
+            ...sc,
+            label: clean(sc.label),
+            chip: clean(sc.chip),
+            alt: clean(sc.alt),
+            banner: opt(sc.banner),
+            subtitle: opt(sc.subtitle),
+          };
+        }
+        return { ...sc, label: clean(sc.label), chip: clean(sc.chip) };
+      }),
+      steps: story.steps.map((s) => ({ ...s, title: clean(s.title), text: clean(s.text) })),
+    },
+    removed,
+  };
+}
+
 /** Every section that shows code draws before its first code step, else refused. */
 export function checkDrawings(story: Story): void {
   const kinds = new Map(story.scenes.map((s) => [s.id, s.kind]));
@@ -1586,7 +1634,8 @@ export function build(o: BuildOptions): string {
   } catch {
     throw new Error(`no story file ${join(o.storyDir, "story.json")}`);
   }
-  const story = parseStory(storyText);
+  const parsed = parseStory(storyText);
+  const { story, removed: storyRemoved } = scrubStory(parsed);
   checkDrawings(story);
   const scenes = new Map(story.scenes.map((s) => [s.id, s]));
   const usedScenes = story.scenes.filter((s) => story.steps.some((st) => st.scene === s.id));
@@ -1608,7 +1657,7 @@ export function build(o: BuildOptions): string {
   };
 
   // Code at the base, scrubbed before anything is shown.
-  let removed = 0;
+  let removed = storyRemoved;
   const fileCache = new Map<string, string[]>();
   const fileLines = (path: string): string[] => {
     const k = `${atSha}:${path}`;

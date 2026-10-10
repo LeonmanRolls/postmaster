@@ -20,6 +20,7 @@ import {
   renderDoc,
   renderMd,
   sceneBlocks,
+  scrubStory,
   startsInFence,
   tagSvg,
 } from "./story-page.ts";
@@ -221,6 +222,43 @@ describe("checkDrawings", () => {
     expect(() => checkDrawings(story([{ id: "skill", section: "c1", scene: "doc" }]))).toThrow(
       'section c1 (Criterion 1): step "skill" shows code with no drawing',
     );
+  });
+});
+
+describe("scrubStory", () => {
+  test("rendered prose is scrubbed, keys and paths stay exact", () => {
+    const { story, removed } = scrubStory({
+      repoUrl: "https://host/u/r",
+      ticket: 1,
+      at: "a",
+      title: "Ask a@b.co anything",
+      sections: [{ id: "open", label: "Start", title: "Mail c@d.co here" }],
+      scenes: [
+        { id: "d", kind: "diagram", label: "D", chip: "e@f.co", svg: "d.svg", states: ["all"] },
+        { id: "r", kind: "ref", file: "f.ts", from: 1, to: 2 },
+      ],
+      steps: [
+        {
+          id: "w",
+          section: "open",
+          scene: "r",
+          title: "Write g@h.co",
+          text: "words",
+          find: ["g@h.co"],
+        },
+      ],
+    } as Story);
+    expect(removed).toBe(4);
+    expect(story.title).toBe("Ask <address removed> anything");
+    expect(story.sections[0]?.title).toBe("Mail <address removed> here");
+    expect(story.steps[0]?.title).toBe("Write <address removed>");
+    expect(story.steps[0]?.find).toEqual(["g@h.co"]);
+    const diagram = story.scenes[0];
+    expect(diagram?.kind).toBe("diagram");
+    if (diagram?.kind === "diagram") {
+      expect(diagram.chip).toBe("<address removed>");
+      expect(diagram.svg).toBe("d.svg");
+    }
   });
 });
 
