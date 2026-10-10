@@ -727,7 +727,9 @@ export function prepareDiagram(svgText: string, scene: DiagramScene, first: stri
     }
   }
   const css: string[] = [];
-  const sel = `#dg-${scene.id}`;
+  // The page holds the drawing once as #dg-<id>; the sheet holds one copy
+  // per state, so every rule names the page id and each sheet id exactly.
+  const sel = `:is(#dg-${scene.id}${scene.states.map((st) => `, #sheet-${scene.id}-${st}`).join("")})`;
   const on = named("on-");
   if (on.length) css.push(`${on.map((st) => `${sel} .on-${st}`).join(", ")} { opacity: 0; }`);
   for (const st of scene.states) {

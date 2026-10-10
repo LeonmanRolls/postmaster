@@ -500,9 +500,10 @@ describe("diagrams", () => {
   test("marks become CSS per state", () => {
     const svg = `<svg class="dg" viewBox="0 0 10 10"><rect id="r" class="on-a hl-b" data-shift-b="1 2"/><text class="dim-a">t</text></svg>`;
     const ready = prepareDiagram(svg, { ...scene }, "a");
-    expect(ready.css.join("\n")).toContain("#dg-d .on-a { opacity: 0; }");
+    const sel = ":is(#dg-d, #sheet-d-a, #sheet-d-b)";
+    expect(ready.css.join("\n")).toContain(`${sel} .on-a { opacity: 0; }`);
     expect(ready.css.join("\n")).toContain(
-      '#dg-d[data-state="b"] #r { transform: translate(1px, 2px); }',
+      `${sel}[data-state="b"] #r { transform: translate(1px, 2px); }`,
     );
     expect(ready.svg).toContain('id="dg-d"');
     expect(ready.svg).toContain('data-state="a"');
