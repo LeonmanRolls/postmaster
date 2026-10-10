@@ -1283,11 +1283,18 @@ function secsHtml(p: PageParts): string {
     .join("");
 }
 
+/** The story's ticket document: the doc scene for this issue, whatever its id. */
+export function ticketDocId(story: Story): string | undefined {
+  return story.scenes.find((s) => s.kind === "doc" && s.from === "issue" && s.number === story.ticket)
+    ?.id;
+}
+
 function stepsHtml(p: PageParts): string {
   const { story, steps } = p;
   const N = steps.length;
   const minutes = Math.max(3, Math.round(N * 0.33));
-  const ticketTitle = p.docs.get("ticket")?.blocks[0] ?? "";
+  const ticketScene = ticketDocId(story);
+  const ticketTitle = (ticketScene ? p.docs.get(ticketScene) : undefined)?.blocks[0] ?? "";
   const firstOf = new Map<string, number>();
   story.steps.forEach((s, i) => {
     if (!firstOf.has(s.section)) firstOf.set(s.section, i);

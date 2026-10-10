@@ -23,6 +23,7 @@ import {
   scrubStory,
   startsInFence,
   tagSvg,
+  ticketDocId,
 } from "./story-page.ts";
 import type { DiagramScene, Doc, Row, Scene, Story } from "./story-page.ts";
 
@@ -559,6 +560,18 @@ describe("diagrams", () => {
 });
 
 describe("page pieces", () => {
+  test("the ticket document is found by issue and number, not by id", () => {
+    const story = {
+      ticket: 352,
+      scenes: [
+        { id: "brief", kind: "doc", from: "issue", number: 352, label: "T", chip: "c" },
+        { id: "other", kind: "doc", from: "issue", number: 271, label: "T", chip: "c" },
+      ],
+    } as Story;
+    expect(ticketDocId(story)).toBe("brief");
+    expect(ticketDocId({ ticket: 1, scenes: [] } as Story)).toBeUndefined();
+  });
+
   test("blocks take their scene and source lines", () => {
     const html = '<h2 class="b dtitle" data-b="0">T</h2><p class="b" data-b="1">x</p>';
     expect(sceneBlocks(html, "ticket")).toContain('data-b="0" data-scene="ticket"');
