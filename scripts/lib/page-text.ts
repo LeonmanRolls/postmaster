@@ -23,7 +23,7 @@ export function langOf(path: string): string {
   return dot > 0 ? (LANG[name.slice(dot)] ?? "plaintext") : "plaintext";
 }
 
-const EMAIL = /[\p{L}\p{N}._%+-]+@[\p{L}\p{N}.-]+\.[A-Za-z]{2,6}(?![A-Za-z])/gu;
+const EMAIL = /[\p{L}\p{N}._%+-]+@[\p{L}\p{N}.-]+\.[A-Za-z]{2,}(?![A-Za-z])/gu;
 const KEEP = /(^|\.)example\.(com|org|net)$|\.(invalid|test|example)$/iu;
 
 /** Replace every email address outside the reserved example domains; line numbers stay. */

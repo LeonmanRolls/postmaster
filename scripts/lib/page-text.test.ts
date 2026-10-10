@@ -19,6 +19,12 @@ describe("page text", () => {
     expect(scrub("@contextlib.contextmanager\n").removed).toBe(0);
   });
 
+  test("long top-level domains are removed, one-letter ones kept", () => {
+    const r = scrub("a: reviewer@host.photography\nb: a@b.c\n");
+    expect(r.text).toBe("a: <address removed>\nb: a@b.c\n");
+    expect(r.removed).toBe(1);
+  });
+
   test("languages come from the extension", () => {
     expect(langOf("scripts/x.ts")).toBe("typescript");
     expect(langOf("a/b.sh")).toBe("bash");
