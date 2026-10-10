@@ -452,6 +452,16 @@ describe("rows and steps", () => {
         "a",
       ),
     ).toThrow("state (none) is not one of dg's");
+    expect(() =>
+      buildSteps(
+        one({ id: "e", section: "c1", scene: "ticket", excerpt: true, title: "t", text: "x" }),
+        all,
+        docs,
+        mds,
+        rows,
+        "a",
+      ),
+    ).toThrow("an excerpt with no find shows an empty panel");
   });
 
   test("marks name rows and words that are there", () => {

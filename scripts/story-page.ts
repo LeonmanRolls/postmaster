@@ -920,6 +920,9 @@ export function buildSteps(
           throw new Error(`step ${s.id}: "${f}" is in ${hits.length} blocks of ${sc.id}`);
         return hits[0] ?? 0;
       });
+      if (s.excerpt && lit.length === 0) {
+        throw new Error(`step ${s.id}: an excerpt with no find shows an empty panel`);
+      }
       return {
         ...base,
         lit,
