@@ -1,7 +1,7 @@
 // Oracle helpers for #467: the flow's commands take over the steps a coachman
 // missed at the lowest effort. The tests spawn git and scripts/run as
 // subprocesses; nothing here imports the change.
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { beside, toolRoot } from "./lib/paths.ts";
 import { run } from "./lib/proc.ts";
@@ -121,12 +121,16 @@ export function machine(root: string, opts: FixtureOptions = {}): Machine {
     join(dispatch, "manifest.json"),
     `${JSON.stringify({ stage, leg: 1, base, lanes: {}, coachman: { legs: {} } })}\n`,
   );
+  const laneSpecs: Record<string, LaneSpec> = {
+    ghost: { harness: "none-such", model: "m" },
+    ...opts.lanes,
+  };
   const runRecord: Record<string, unknown> = {
     coachman_contract: 2,
     target: { branch: "main", head: base },
     postmaster: { commit: base, checkout: TOOL },
     config: {
-      lanes: { ghost: { harness: "none-such", model: "m" }, ...opts.lanes },
+      lanes: laneSpecs,
       review: { round_timeout_seconds: opts.timeoutSecs ?? 120 },
     },
   };
@@ -171,11 +175,24 @@ export function machine(root: string, opts: FixtureOptions = {}): Machine {
   }
   const host = join(root, "host");
   mkdirSync(host, { recursive: true });
+  // Stub every harness the config names on a PATH with nothing else of the
+  // host: the launch probes harness existence before the brief gate, so the
+  // probe must answer from the fixture on every machine, never from a real
+  // install CI lacks. The stubs are never executed, only found.
+  const bin = join(root, "bin");
+  mkdirSync(bin, { recursive: true });
+  symlinkSync(process.execPath, join(bin, "bun"));
+  for (const lane of Object.values(laneSpecs)) {
+    const stub = join(bin, lane.harness);
+    writeFileSync(stub, "#!/bin/sh\nexit 0\n");
+    chmodSync(stub, 0o755);
+  }
   const env: Record<string, string | undefined> = {
     POSTMASTER_HOST: "none",
     POSTMASTER_HOST_STATE: host,
     POSTMASTER_HOST_STOP_WAIT: "2",
     POSTMASTER_HOST_CLOSE_WAIT: "2",
+    PATH: `${bin}:/usr/bin:/bin`,
   };
   return { root, repo, ticket, dispatch, synthesis, base, snap, env };
 }
