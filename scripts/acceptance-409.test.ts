@@ -7,7 +7,7 @@
 // model run and stays hand-verified by the postmaster at landing. Every case
 // drives scripts/run as a subprocess or reads a runbook file.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   NOTICE,
@@ -1337,6 +1337,336 @@ describe("C3: the unplaced rule", () => {
     const r = ticketReads(dispatch);
     expect(r.code).toBe(0);
     expect(outcomeOf(r.out)).toBe("ticket-reads: not read");
+  });
+});
+
+describe("C3: review round 3 fixes", () => {
+  test("a structured tool input naming the ticket is unknown", () => {
+    const mcp = fixtureDispatch(tmp, "c3c-mcp", {
+      agents: [
+        {
+          lane: "luna",
+          harness: "claude",
+          lines: [
+            claudeUse("mcp__github__issue_read", {
+              owner: "example",
+              repo: "shop",
+              issue_number: 409,
+            }),
+          ],
+        },
+      ],
+    });
+    const r = ticketReads(mcp);
+    expect(r.code).toBe(0);
+    expect(outcomeOf(r.out).startsWith("ticket-reads: unknown")).toBe(true);
+    expect(outcomeOf(r.out)).toContain("structured tool");
+    const codex = fixtureDispatch(tmp, "c3c-codexmcp", {
+      agents: [{ lane: "luna", harness: "codex", lines: [] }],
+    });
+    appendLine(
+      codex,
+      "luna-events.jsonl",
+      JSON.stringify({
+        type: "item.completed",
+        item: {
+          id: "item_0",
+          type: "mcp_tool_call",
+          server: "github",
+          tool: "issue_read",
+          arguments: { owner: "example", repo: "shop", issue_number: 409 },
+        },
+      }),
+    );
+    const r2 = ticketReads(codex);
+    expect(r2.code).toBe(0);
+    expect(outcomeOf(r2.out).startsWith("ticket-reads: unknown")).toBe(true);
+    expect(outcomeOf(r2.out)).toContain("structured tool");
+  });
+
+  test("a PATCH on the issue resource reads, elsewhere it does not", () => {
+    const issue = fixtureDispatch(tmp, "c3c-patch", {
+      agents: [
+        {
+          lane: "luna",
+          harness: "codex",
+          lines: [
+            codexExec("gh api -X PATCH repos/example/shop/issues/409 -f state=closed", "{}", 0),
+          ],
+        },
+      ],
+    });
+    const r = ticketReads(issue);
+    expect(r.code).toBe(0);
+    expect(outcomeOf(r.out)).toBe("ticket-reads: read by luna (gh api)");
+    const comment = fixtureDispatch(tmp, "c3c-patchedit", {
+      agents: [
+        {
+          lane: "luna",
+          harness: "codex",
+          lines: [
+            codexExec(
+              "gh api -X PATCH repos/example/shop/issues/409/comments/1 -f body=x",
+              "{}",
+              0,
+            ),
+          ],
+        },
+      ],
+    });
+    const r2 = ticketReads(comment);
+    expect(r2.code).toBe(0);
+    expect(outcomeOf(r2.out)).toBe("ticket-reads: not read");
+    const fetch = fixtureDispatch(tmp, "c3c-patchfetch", {
+      agents: [
+        {
+          lane: "luna",
+          harness: "codex",
+          lines: [
+            codexExec(
+              "curl -X PATCH https://api.github.com/repos/example/shop/issues/409 -d '{}'",
+              "{}",
+              0,
+            ),
+          ],
+        },
+      ],
+    });
+    const r3 = ticketReads(fetch);
+    expect(r3.code).toBe(0);
+    expect(outcomeOf(r3.out)).toBe("ticket-reads: read by luna (issue fetch)");
+  });
+
+  test("an unmatched start reads, a paired failed start stays excused", () => {
+    const lone = fixtureDispatch(tmp, "c3c-start", {
+      agents: [{ lane: "luna", harness: "codex", lines: [] }],
+    });
+    appendLine(
+      lone,
+      "luna-events.jsonl",
+      JSON.stringify({
+        type: "item.started",
+        item: { id: "item_0", type: "command_execution", command: "gh issue view 409" },
+      }),
+    );
+    const r = ticketReads(lone);
+    expect(r.code).toBe(0);
+    expect(outcomeOf(r.out)).toBe("ticket-reads: read by luna (gh issue view)");
+    const paired = fixtureDispatch(tmp, "c3c-paired", {
+      agents: [{ lane: "luna", harness: "codex", lines: [] }],
+    });
+    appendLine(
+      paired,
+      "luna-events.jsonl",
+      JSON.stringify({
+        type: "item.started",
+        item: { id: "item_0", type: "command_execution", command: "cat /missing" },
+      }),
+    );
+    appendLine(
+      paired,
+      "luna-events.jsonl",
+      JSON.stringify({
+        type: "item.completed",
+        item: { id: "item_0", type: "command_execution", command: "cat /missing", exit_code: 1 },
+      }),
+    );
+    const r2 = ticketReads(paired);
+    expect(r2.code).toBe(0);
+    expect(outcomeOf(r2.out)).toBe("ticket-reads: not read");
+  });
+
+  test("a web search naming the ticket is unknown, otherwise it is nothing", () => {
+    const hit = fixtureDispatch(tmp, "c3c-search", {
+      agents: [{ lane: "luna", harness: "codex", lines: [] }],
+    });
+    appendLine(
+      hit,
+      "luna-events.jsonl",
+      JSON.stringify({
+        type: "item.completed",
+        item: { id: "item_0", type: "web_search", query: "postmaster issue 409 notes" },
+      }),
+    );
+    const r = ticketReads(hit);
+    expect(r.code).toBe(0);
+    expect(outcomeOf(r.out).startsWith("ticket-reads: unknown")).toBe(true);
+    expect(outcomeOf(r.out)).toContain("structured tool");
+    const miss = fixtureDispatch(tmp, "c3c-searchmiss", {
+      agents: [{ lane: "luna", harness: "codex", lines: [] }],
+    });
+    appendLine(
+      miss,
+      "luna-events.jsonl",
+      JSON.stringify({
+        type: "item.completed",
+        item: { id: "item_0", type: "web_search", query: "postmaster docs" },
+      }),
+    );
+    const r2 = ticketReads(miss);
+    expect(r2.code).toBe(0);
+    expect(outcomeOf(r2.out)).toBe("ticket-reads: not read");
+  });
+
+  test("a failed read excuses one operand, scans and several never", () => {
+    const multi = fixtureDispatch(tmp, "c3c-multifail", {
+      legs: [{ n: 1, harness: "codex", lines: [] }],
+    });
+    const multiRepo = repoOf(multi);
+    appendLine(
+      multi,
+      "coachman-leg-1-events.jsonl",
+      codexExec(`cat ${multiRepo}/.postmaster/clerk/409.md nope.md`, "T", 1),
+    );
+    const r = ticketReads(multi);
+    expect(r.code).toBe(0);
+    expect(outcomeOf(r.out)).toBe("ticket-reads: read by coachman leg 1 (clerk draft)");
+    for (const [name, command] of [
+      ["c3c-grepfail", (_repo: string) => "grep pattern /missing"],
+      ["c3c-headfail", (_repo: string) => "head -n 5 /missing"],
+      ["c3c-singlefail", (repo: string) => `cat ${repo}/.postmaster/clerk/409.md`],
+    ] as Array<[string, (repo: string) => string]>) {
+      const dispatch = fixtureDispatch(tmp, name, {
+        agents: [{ lane: "luna", harness: "codex", lines: [] }],
+      });
+      appendLine(dispatch, "luna-events.jsonl", codexExec(command(repoOf(dispatch)), "", 1));
+      const one = ticketReads(dispatch);
+      expect(one.code).toBe(0);
+      expect(outcomeOf(one.out)).toBe("ticket-reads: not read");
+    }
+    const scan = fixtureDispatch(tmp, "c3c-scanfail", {
+      tracker: "local",
+      ticket: 1,
+      agents: [{ lane: "luna", harness: "codex", lines: [] }],
+    });
+    appendLine(scan, "luna-events.jsonl", codexExec(`find ${storeOf(scan)} -name x -print`, "", 1));
+    const r2 = ticketReads(scan);
+    expect(r2.code).toBe(0);
+    expect(outcomeOf(r2.out).startsWith("ticket-reads: unknown")).toBe(true);
+  });
+
+  test("a heredoc body fed to a shell runs, any other body is data", () => {
+    const shell = fixtureDispatch(tmp, "c3c-heredoc", {
+      agents: [
+        {
+          lane: "luna",
+          harness: "codex",
+          lines: [codexExec("bash <<'EOF'\ngh issue view 409 --comments\nEOF", "T", 0)],
+        },
+      ],
+    });
+    const r = ticketReads(shell);
+    expect(r.code).toBe(0);
+    expect(outcomeOf(r.out)).toBe("ticket-reads: read by luna (gh issue view)");
+    const piped = fixtureDispatch(tmp, "c3c-heredocpipe", {
+      agents: [
+        {
+          lane: "luna",
+          harness: "codex",
+          lines: [codexExec("cat <<'EOF' | bash\ngh issue view 409\nEOF", "T", 0)],
+        },
+      ],
+    });
+    const r2 = ticketReads(piped);
+    expect(r2.code).toBe(0);
+    expect(outcomeOf(r2.out)).toBe("ticket-reads: read by luna (gh issue view)");
+    const data = fixtureDispatch(tmp, "c3c-heredocdata", {
+      agents: [
+        {
+          lane: "luna",
+          harness: "codex",
+          lines: [codexExec("bash -c 'echo done' <<'EOF'\nhi 409\nEOF", "", 0)],
+        },
+      ],
+    });
+    const r3 = ticketReads(data);
+    expect(r3.code).toBe(0);
+    expect(outcomeOf(r3.out)).toBe("ticket-reads: not read");
+  });
+
+  test("a bare piped shell is unknown, a shell with arguments is not", () => {
+    const piped = fixtureDispatch(tmp, "c3c-pipeshell", {
+      agents: [{ lane: "luna", harness: "codex", lines: [codexExec("echo hi | bash", "hi", 0)] }],
+    });
+    const r = ticketReads(piped);
+    expect(r.code).toBe(0);
+    expect(outcomeOf(r.out).startsWith("ticket-reads: unknown")).toBe(true);
+    expect(outcomeOf(r.out)).toContain("stdin shell");
+    const version = fixtureDispatch(tmp, "c3c-shellargs", {
+      agents: [{ lane: "luna", harness: "codex", lines: [codexExec("bash --version", "v", 0)] }],
+    });
+    const r2 = ticketReads(version);
+    expect(r2.code).toBe(0);
+    expect(outcomeOf(r2.out)).toBe("ticket-reads: not read");
+  });
+
+  test("data flags make a gh api call a POST unless the method says otherwise", () => {
+    for (const [name, command, clean] of [
+      ["c3c-dashf", "gh api repos/example/shop/issues/409 -f body=x", true],
+      ["c3c-dashF", "gh api repos/example/shop/issues/409 -F body=x", true],
+      ["c3c-input", "gh api repos/example/shop/issues/409 --input body.json", true],
+      ["c3c-explicit", "gh api --method GET repos/example/shop/issues/409 -f body=x", false],
+    ] as Array<[string, string, boolean]>) {
+      const dispatch = fixtureDispatch(tmp, name, {
+        agents: [{ lane: "luna", harness: "codex", lines: [codexExec(command, "{}", 0)] }],
+      });
+      const r = ticketReads(dispatch);
+      expect(r.code).toBe(0);
+      expect(outcomeOf(r.out)).toBe(
+        clean ? "ticket-reads: not read" : "ticket-reads: read by luna (gh api)",
+      );
+    }
+  });
+
+  test("unreadable attempts with a differing fallback read as unknown", () => {
+    const dispatch = fixtureDispatch(tmp, "c3c-attempts", {
+      legs: [
+        {
+          n: 1,
+          harness: "codex",
+          lines: [codexExec("gh issue view 409 --json body", "B", 0)],
+        },
+      ],
+    });
+    const runJson = JSON.parse(readFileSync(join(dispatch, "run.json"), "utf8")) as Record<
+      string,
+      unknown
+    >;
+    const team = (runJson.config as Record<string, unknown>).team as Record<string, unknown>;
+    team.coachman = { harness: "claude", model: "m" };
+    team.coachman_fallback = { harness: "codex", model: "m" };
+    writeFileSync(join(dispatch, "run.json"), JSON.stringify(runJson), "utf8");
+    mkdirSync(join(dispatch, "logs", "coachman-leg-1-attempts.jsonl"));
+    const r = ticketReads(dispatch);
+    expect(r.code).toBe(0);
+    expect(outcomeOf(r.out).startsWith("ticket-reads: unknown")).toBe(true);
+    expect(outcomeOf(r.out)).toContain("attempts cannot be read");
+  });
+
+  test("a write to the ticket file is placed, a print still reads", () => {
+    for (const [name, command] of [
+      ["c3c-sedinplace", (repo: string) => `sed -i 's/x/y/' ${repo}/.postmaster/clerk/409.md`],
+      ["c3c-teewrite", (repo: string) => `echo hi | tee ${repo}/.postmaster/clerk/409.md`],
+    ] as Array<[string, (repo: string) => string]>) {
+      const dispatch = fixtureDispatch(tmp, name, {
+        agents: [{ lane: "luna", harness: "codex", lines: [] }],
+      });
+      appendLine(dispatch, "luna-events.jsonl", codexExec(command(repoOf(dispatch)), "", 0));
+      const r = ticketReads(dispatch);
+      expect(r.code).toBe(0);
+      expect(outcomeOf(r.out)).toBe("ticket-reads: not read");
+    }
+    const print = fixtureDispatch(tmp, "c3c-sedprint", {
+      agents: [{ lane: "luna", harness: "codex", lines: [] }],
+    });
+    appendLine(
+      print,
+      "luna-events.jsonl",
+      codexExec(`sed -n '1,5p' ${repoOf(print)}/.postmaster/clerk/409.md`, "T", 0),
+    );
+    const r2 = ticketReads(print);
+    expect(r2.code).toBe(0);
+    expect(outcomeOf(r2.out)).toBe("ticket-reads: read by luna (clerk draft)");
   });
 });
 
