@@ -353,6 +353,7 @@ everything the coachman needs and nothing it must go and find:
 
 ## Ticket
 <the ticket whole when the run's ticket notes are given, and without its technical notes and verified facts when they are held back, as <tool>/scripts/run ticket-cut prints it: problem, acceptance criteria, direction, turnpikes, notes where kept, User journey if it has one>
+<when the run's ticket notes are held back, this line follows the cut ticket: The ticket's technical notes are held back on purpose and are not to be looked up, in the tracker or anywhere else.>
 
 ## Project profile
 repo: <abs path>          default branch: <name>       BASE: <sha>

@@ -90,6 +90,7 @@ interface HerdrStubState {
   agents: Array<string | undefined>;
   agentPanes: Record<string, string>;
   prompt?: string[][];
+  paneRuns: Record<string, number>;
 }
 // The stub tmux server's state file.
 interface TmuxWindow {
@@ -288,14 +289,38 @@ function herdrStubInner(args: string[], stateDir: string): void {
     agents: [],
     agentPanes: {},
     prompt: [],
+    paneRuns: {},
   });
   if (!Array.isArray(st.agents)) st.agents = [];
   // The file's content is untrusted, so the shape check reads through unknown.
   const panes: unknown = st.agentPanes;
   if (panes === null || typeof panes !== "object" || Array.isArray(panes)) st.agentPanes = {};
+  const runs: unknown = st.paneRuns;
+  if (runs === null || typeof runs !== "object" || Array.isArray(runs)) st.paneRuns = {};
+  // An agent shows in a pane some seconds after `pane run` starts its
+  // command there, unnamed until something names it, as on the live
+  // server. The delay is `agent.delay-ms`, in milliseconds, default 2000;
+  // `agent.never` holds a pane with no harness at all, where no agent
+  // ever shows.
+  const agentDelayMs = (): number => {
+    try {
+      const raw = readFileSync(join(stateDir, "agent.delay-ms"), "utf8").trim();
+      if (/^[0-9]+$/u.test(raw)) return Number(raw);
+    } catch {}
+    return 2000;
+  };
+  const paneHasAgent = (pane: string): boolean => {
+    if (!st.panes[pane]) return false;
+    for (const at of Object.values(st.agentPanes)) if (at === pane) return true;
+    if (flag(join(stateDir, "agent.never"))) return false;
+    const at = st.paneRuns[pane];
+    return typeof at === "number" && Date.now() - at >= agentDelayMs();
+  };
+  const agentStatus = (): string => (flag(join(stateDir, "agent.blocked")) ? "blocked" : "idle");
   // An agent name follows its pane's occupant and clears when that pane goes,
   // as the server does; a spawn under the freed handle starts a new session.
   const dropAgents = (): void => {
+    for (const pane of Object.keys(st.paneRuns)) if (!st.panes[pane]) delete st.paneRuns[pane];
     st.agents = st.agents.filter((name: string | undefined) => {
       if (typeof name !== "string") return false;
       const pane = st.agentPanes[name];
@@ -474,6 +499,8 @@ function herdrStubInner(args: string[], stateDir: string): void {
       ws = st.panes[pane].ws;
     save(path, st);
     if (flag(join(stateDir, "pane.dead"))) return;
+    st.paneRuns[pane] = Date.now();
+    save(path, st);
     const late = flag(join(stateDir, "pane.late"));
     const prefix = late ? "sleep 5; " : "";
     // The late pane leaves a note once its command has run, so a test can wait for that and not for a timer.
@@ -501,13 +528,17 @@ function herdrStubInner(args: string[], stateDir: string): void {
     return;
   }
   if (command === "agent get") {
-    if (!st.agents.includes(args[2])) fail("agent_not_found");
-    out({
-      agent: {
-        name: args[2],
-        agent_status: flag(join(stateDir, "agent.blocked")) ? "blocked" : "idle",
-      },
-    });
+    const target = args[2] ?? "";
+    // The agent commands take a pane id as their target, as on the live
+    // server, and answer for the agent showing there, named or not.
+    if (st.agents.includes(target)) {
+      out({ agent: { name: target, agent_status: agentStatus() } });
+      return;
+    }
+    if (!paneHasAgent(target)) fail("agent_not_found");
+    let name: string | null = null;
+    for (const [known, at] of Object.entries(st.agentPanes)) if (at === target) name = known;
+    out({ agent: { name, agent_status: agentStatus() } });
     return;
   }
   if (command === "agent start") {
@@ -524,10 +555,9 @@ function herdrStubInner(args: string[], stateDir: string): void {
     // The name follows the pane's occupant: whatever it was called before is freed.
     // A pane with no agent takes no name: the server registers nothing there, so a
     // shell spawn stays unregistered, as on the live server.
-    let hosted = false;
+    const hosted = paneHasAgent(pane);
     for (const [known, at] of Object.entries(st.agentPanes)) {
       if (at === pane) {
-        hosted = true;
         st.agents = st.agents.filter((entry: string | undefined) => entry !== known);
         delete st.agentPanes[known];
       }
@@ -538,21 +568,27 @@ function herdrStubInner(args: string[], stateDir: string): void {
     return;
   }
   if (command === "agent prompt") {
+    const target = args[2] ?? "";
+    // A prompt to a name no agent has fails, as on the live server; only a
+    // prompt the server accepts is received.
+    if (!st.agents.includes(target) && !paneHasAgent(target)) fail("agent_not_found");
+    if (flag(join(stateDir, "agent.blocked"))) fail("agent_blocked");
     st.prompt!.push(args.slice(2));
     save(path, st);
-    if (flag(join(stateDir, "agent.blocked"))) fail("agent_blocked");
     out({ accepted: true });
     return;
   }
   if (command === "agent wait") {
-    if (!st.agents.includes(args[2])) fail("agent_not_found");
+    const target = args[2] ?? "";
+    if (!st.agents.includes(target) && !paneHasAgent(target)) fail("agent_not_found");
     if (flag(join(stateDir, "agent.blocked"))) fail("agent_blocked");
     out({ settled: true });
     return;
   }
   if (command === "agent read") {
-    if (!st.agents.includes(args[2])) fail("agent_not_found");
-    console.log(`stub screen of ${args[2]}`);
+    const target = args[2] ?? "";
+    if (!st.agents.includes(target) && !paneHasAgent(target)) fail("agent_not_found");
+    console.log(`stub screen of ${target}`);
     return;
   }
   return;
@@ -3097,6 +3133,7 @@ export async function runControls(): Promise<number> {
         const panes = ["p1", "p2", "p3", "p4"];
         const st: HerdrStubState = {
           n: 10,
+          paneRuns: {},
           spaces: {
             w1: {
               label: basename(f.repo),
@@ -3683,6 +3720,7 @@ export async function runControls(): Promise<number> {
       {
         const st: HerdrStubState = {
           n: 9,
+          paneRuns: {},
           spaces: {
             w9: { label: "T-1", tokens: {}, panes: ["p9"], tabs: ["w9:t1"], path: solReal },
           },
@@ -3913,6 +3951,7 @@ export async function runControls(): Promise<number> {
       {
         const st: HerdrStubState = {
           n: 9,
+          paneRuns: {},
           spaces: {
             w9: {
               label: "T-1",
@@ -3983,6 +4022,7 @@ export async function runControls(): Promise<number> {
       {
         const st: HerdrStubState = {
           n: 10,
+          paneRuns: {},
           spaces: {
             w9: {
               label: "T-1",
@@ -4209,6 +4249,7 @@ export async function runControls(): Promise<number> {
         if (rogue) panes.rogue = { ws: "w1", cwd: realpathSync(f.repo), tokens: {} };
         return {
           n: 10,
+          paneRuns: {},
           spaces: {
             w1: {
               label: basename(f.repo),
@@ -4776,6 +4817,186 @@ export async function runControls(): Promise<number> {
         calls(root, "tmux").some((line) => line === "capture-pane\t-p\t-J\t-S\t-7\t-t\t@1") &&
         tmuxRead.code === 0,
     );
+    // #412: the sessions the flow opens in a tab behind a shell wrapper take
+    // a message by their handle: the postmaster's env-wrapped form and the
+    // verifier's cd-and-exec wrapper alike.
+    const d2env = join(root, "d2-lane.env");
+    writeFileSync(d2env, "D2_PROBE=1\n");
+    const d2cfg = join(root, "d2-config.toml");
+    writeFileSync(
+      d2cfg,
+      `[lanes.one]\nharness = "claude"\nmodel = "lane-model"\n\n[team]\npostmaster = { harness = "claude", model = "pm-model", env_file = "${d2env}" }\n`,
+    );
+    const { splitCommand } = await import("./clerk.ts");
+    const { spawnCommand } = await import("./verifier.ts");
+    // The launch refuses when its harness is not on PATH, and CI has no
+    // claude: give the form call a stub claude of its own, first on its
+    // PATH, instead of the ambient one. The form embeds the bare harness
+    // name, so the shim satisfies the PATH proof without leaking into the
+    // spawn the control then drives.
+    const d2bin = join(root, "d2bin");
+    mkdirSync(d2bin);
+    writeFileSync(join(d2bin, "claude"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+    const pmForm = exec(
+      SELF,
+      ["launch", "interactive", "postmaster", "--project", f.repo, "--name", "postmaster"],
+      { env: { ...process.env, POSTMASTER_CONFIG: d2cfg, PATH: `${d2bin}:${stubs}` } },
+    );
+    const pmWords = pmForm.code === 0 ? splitCommand(pmForm.out) : [];
+    const pmSpawn = execHost(
+      ["spawn", "d2-postmaster", f.repo, "--label", "postmaster", "--", ...pmWords],
+      stubs,
+      root,
+    );
+    const d2message = join(root, "d2-message.txt");
+    writeFileSync(d2message, "Read the brief.");
+    const pmSend = execHost(["send", "d2-postmaster", d2message], stubs, root);
+    const pmRead = execHost(["read", "d2-postmaster", "5"], stubs, root);
+    await pass(
+      "a postmaster session behind its env wrapper takes a message by its handle",
+      () =>
+        pmWords[0] === "bash" &&
+        pmSpawn.code === 0 &&
+        pmSend.code === 0 &&
+        pmRead.code === 0 &&
+        calls(root, "herdr").some(
+          (line) => line === "agent\tprompt\td2-postmaster\tRead the brief.",
+        ),
+      `${pmForm.out}\n${pmSpawn.out}\n${pmSend.err}\n${pmRead.err}`,
+    );
+    const vWords = spawnCommand(f.repo, ["sh", "-c", "exit 0"]);
+    const vSpawn = execHost(
+      ["spawn", "d2-verifier", f.repo, "--label", "verifier", "--", ...vWords],
+      stubs,
+      root,
+    );
+    const vSend = execHost(["send", "d2-verifier", d2message], stubs, root);
+    const vRead = execHost(["read", "d2-verifier", "5"], stubs, root);
+    await pass(
+      "a verifier session behind its cd-and-exec wrapper takes a message by its handle",
+      () =>
+        vWords[0] === "bash" &&
+        vSpawn.code === 0 &&
+        vSend.code === 0 &&
+        vRead.code === 0 &&
+        calls(root, "herdr").some((line) => line === "agent\tprompt\td2-verifier\tRead the brief."),
+      `${vSpawn.out}\n${vSend.err}\n${vRead.err}`,
+    );
+    // #412 review round 1: a handle resolves through its placement's pane
+    // only while that pane still belongs to the launch: it carries the
+    // launch token and sits in the recorded tab. A stale record (its tab
+    // closed by hand, its pane id since reused) refuses instead of
+    // renaming another session.
+    const spawnUnnamed = (
+      handle: string,
+    ): { space: string; tab: string; pane: string; code: number; err: string } => {
+      writeFileSync(join(stub, "agent.never"), "");
+      const spawned = execHost(
+        ["spawn", handle, f.repo, "--label", handle, "--", "true"],
+        stubs,
+        root,
+        { POSTMASTER_HOST_SPAWN_WAIT: "1" },
+      );
+      rmSync(join(stub, "agent.never"), { force: true });
+      return {
+        space: kvOf(spawned.out, "space"),
+        tab: kvOf(spawned.out, "tab"),
+        pane: kvOf(spawned.out, "pane"),
+        code: spawned.code,
+        err: `${spawned.out}\n${spawned.err}`,
+      };
+    };
+    const agentDelayMs = (): number => {
+      try {
+        const raw = readFileSync(join(stub, "agent.delay-ms"), "utf8").trim();
+        if (/^[0-9]+$/u.test(raw)) return Number(raw);
+      } catch {}
+      return 2000;
+    };
+    const paneShown = (pane: string): boolean => {
+      try {
+        const st = JSON.parse(readFileSync(join(stub, "herdr.json"), "utf8")) as {
+          paneRuns?: Record<string, number>;
+        };
+        const at = st.paneRuns?.[pane];
+        return typeof at === "number" && Date.now() - at >= agentDelayMs();
+      } catch {
+        return false;
+      }
+    };
+    const rewriteRecordPane = (handle: string, pane: string): void => {
+      for (const name of readdir(join(root, "state", "placements"))) {
+        const file = join(root, "state", "placements", name);
+        const rec = JSON.parse(readFileSync(file, "utf8")) as Record<string, unknown>;
+        if (rec.handle === handle) {
+          rec.pane = pane;
+          save(file, rec);
+        }
+      }
+    };
+    const ownPlaced = spawnUnnamed("own412a");
+    for (let i = 0; i < 100 && !paneShown(ownPlaced.pane); i++) await sleep(100);
+    const ownMessage = join(root, "own-message.txt");
+    writeFileSync(ownMessage, "Read the brief.");
+    const ownSend = execHost(["send", "own412a", ownMessage], stubs, root);
+    await pass(
+      "an owned unnamed session takes a message by its handle and is named from then on",
+      () =>
+        ownPlaced.code === 0 &&
+        paneShown(ownPlaced.pane) &&
+        ownSend.code === 0 &&
+        calls(root, "herdr").some((line) => line === `agent\trename\t${ownPlaced.pane}\town412a`) &&
+        calls(root, "herdr").some((line) => line === "agent\tprompt\town412a\tRead the brief."),
+      `${ownPlaced.err}\n${ownSend.out}\n${ownSend.err}`,
+    );
+    const stalePlaced = spawnUnnamed("stale412a");
+    const otherSpawn = execHost(
+      ["spawn", "other412b", f.repo, "--label", "other412b", "--", "true"],
+      stubs,
+      root,
+    );
+    const otherPane = kvOf(otherSpawn.out, "pane");
+    const otherTab = kvOf(otherSpawn.out, "tab");
+    for (let i = 0; i < 100 && !paneShown(stalePlaced.pane); i++) await sleep(100);
+    rewriteRecordPane("stale412a", otherPane);
+    const staleSend = execHost(["send", "stale412a", ownMessage], stubs, root);
+    const otherRead = execHost(["read", "other412b", "5"], stubs, root);
+    await pass(
+      "a stale record pointing at another launch's pane refuses and renames nothing",
+      () =>
+        stalePlaced.code === 0 &&
+        otherSpawn.code === 0 &&
+        paneShown(stalePlaced.pane) &&
+        otherTab !== "" &&
+        otherTab !== stalePlaced.tab &&
+        staleSend.code !== 0 &&
+        !calls(root, "herdr").some((line) => line === `agent\trename\t${otherPane}\tstale412a`) &&
+        otherRead.code === 0,
+      `${stalePlaced.tab} vs ${otherTab}\n${staleSend.out}\n${staleSend.err}\n${otherRead.err}`,
+    );
+    const barePlaced = spawnUnnamed("bare412a");
+    for (let i = 0; i < 100 && !paneShown(barePlaced.pane); i++) await sleep(100);
+    let barePane = "";
+    if (barePlaced.code === 0 && barePlaced.space !== "") {
+      updateHerdrJson(root, (st) => {
+        st.n++;
+        barePane = `p${st.n}`;
+        st.panes[barePane] = { ws: barePlaced.space, tab: barePlaced.tab, cwd: "/tmp", tokens: {} };
+        st.spaces[barePlaced.space].panes.push(barePane);
+        st.paneRuns[barePane] = Date.now() - 5000;
+      });
+    }
+    rewriteRecordPane("bare412a", barePane);
+    const bareSend = execHost(["send", "bare412a", ownMessage], stubs, root);
+    await pass(
+      "a record pointing at a pane without the launch token refuses and renames nothing",
+      () =>
+        barePlaced.code === 0 &&
+        barePane !== "" &&
+        bareSend.code !== 0 &&
+        !calls(root, "herdr").some((line) => line.startsWith(`agent\trename\t${barePane}\t`)),
+      `${barePlaced.err}\n${bareSend.out}\n${bareSend.err}`,
+    );
 
     console.log("clerk close");
     const writeClerkRecord = (repo: string, id: string, handle: string): void => {
@@ -4800,7 +5021,12 @@ export async function runControls(): Promise<number> {
       }
     };
     resetHarness(root);
-    const shellSpawn = execHost(["spawn", "clerk-shell", f.repo, "--", "true"], stubs, root);
+    // This pane holds no harness at all, so no agent ever shows in it; the
+    // spawn's naming budget is short, since there is nothing to name.
+    writeFileSync(join(stub, "agent.never"), "");
+    const shellSpawn = execHost(["spawn", "clerk-shell", f.repo, "--", "true"], stubs, root, {
+      POSTMASTER_HOST_SPAWN_WAIT: "2",
+    });
     const shellTab = kvOf(shellSpawn.out, "tab");
     const shellRead = execHost(["read", "clerk-shell", "5"], stubs, root);
     await pass(
@@ -5573,7 +5799,9 @@ export async function runControls(): Promise<number> {
     mkdirSync(activePath);
     writeFileSync(join(legD, ".leg-1-exited"), "");
     prompt = join(legD, "race.txt");
-    writeFileSync(prompt, "race for the lock\n");
+    writeFileSync(prompt, "race for the lock at the pair-gate\n");
+    const raceGate = join(legD, "race.gate");
+    rmSync(raceGate, { force: true });
     const spawnEnv = (extra: Record<string, string> = {}): Record<string, string | undefined> => {
       const procRoot = process.env.POSTMASTER_PROC_ROOT;
       return {
@@ -5600,10 +5828,54 @@ export async function runControls(): Promise<number> {
         child.once("error", () => resolve(null));
       });
     const callsBeforeRace = legCalls();
-    const racers = Array.from({ length: 8 }, () =>
-      spawnLeg(["leg", "launch", legD, legWt, "synthesis", "1", prompt]),
-    );
-    await Promise.all(racers.map(exited));
+    // Staggered over several seconds, so that some racers arrive after an
+    // ungated first start would have finished: the winner holds its harness
+    // stand-in at the gate until the other seven have been turned away, so
+    // every loser meets a held lock however late it arrives.
+    const ends: Array<number | null | undefined> = [
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    ];
+    // Kept referenced until the case ends: an unreferenced child could
+    // lose its exit listener before it fires.
+    const racers: Array<ReturnType<typeof spawn>> = [];
+    for (let i = 0; i < 8; i++) {
+      if (i > 0) await sleep(500);
+      const racer = spawnLeg(["leg", "launch", legD, legWt, "synthesis", "1", prompt], {
+        TEST_GATE: raceGate,
+      });
+      racers.push(racer);
+      // The listener attaches at spawn: a loser refused during the next
+      // pause would otherwise exit before it is ever recorded.
+      const k = i;
+      void exited(racer).then((code) => {
+        ends[k] = code;
+      });
+    }
+    // The seven losers are refused and end; the winner waits at the gate.
+    // Seven refusals, not seven exits: a racer whose spawn failed exits
+    // without refusing, and must not open the gate while a slow arrival
+    // is still on its way. Every die() exits 1, so a 1 is a refusal.
+    // The first wait's result stays unread: a double grant refuses six
+    // here and fails loud on the delta below, while a hang fails here.
+    await waitFor(() => ends.filter((end) => end === 1).length === 7);
+    writeFileSync(raceGate, "");
+    const allEnded = await waitFor(() => ends.every((end) => end !== undefined));
+    const failedSpawns = ends.filter((end) => end === null).length;
+    if (failedSpawns > 0)
+      throw new Error(
+        `race for the lock: ${failedSpawns} of eight racers failed to spawn: ${ends.map((end) => String(end)).join(",")}`,
+      );
+    if (!allEnded)
+      throw new Error(
+        `race for the lock: only ${ends.filter((end) => end !== undefined).length} of eight racers ended: ${ends.map((end) => String(end)).join(",")}`,
+      );
     await marker(join(legD, ".leg-1-exited"), 30);
     const callsAfterRace = legCalls();
     await pass(
@@ -8105,6 +8377,8 @@ export async function live(): Promise<void> {
         ["spawn", liveHandle, f.repo, "--label", "live close probe", "--", "sh"],
         f.caller,
         root,
+        // A shell hosts no agent, so the spawn's naming budget is short.
+        { POSTMASTER_HOST_SPAWN_WAIT: "5" },
       );
       const placed = spawned.out.trim();
       const liveSpace = kvOf(placed, "space");
@@ -8136,7 +8410,9 @@ export async function live(): Promise<void> {
           !tabsAfter.out.includes(liveTab),
         `${closed.out}\n${closed.err}\n${tabsAfter.out}`,
       );
-      const respawned = liveHost(["spawn", liveHandle, f.repo, "--", "sh"], f.caller, root);
+      const respawned = liveHost(["spawn", liveHandle, f.repo, "--", "sh"], f.caller, root, {
+        POSTMASTER_HOST_SPAWN_WAIT: "5",
+      });
       await pass("the handle spawns again", () => respawned.code === 0, respawned.out);
       const closedAgain = liveHost(["close-handle", liveHandle], f.caller, root);
       await pass("closing it again leaves nothing behind", () => closedAgain.code === 0);
@@ -8150,6 +8426,92 @@ export async function live(): Promise<void> {
         () => missing.code === 0 && missing.out.includes("no session"),
         missing.out,
       );
+
+      console.log("wrapped harness spawn, the positive control");
+      // #412: a session whose harness starts behind a shell wrapper takes a
+      // message by its handle. The probe runs the machine's own clerk form in
+      // a checkout the harness trusts: the checkout under test by default, or
+      // POSTMASTER_LIVE_PROBE_CWD. It starts one short turn, killed with the
+      // tab once the message shows on the screen.
+      const probeCwd = process.env.POSTMASTER_LIVE_PROBE_CWD ?? dirname(HERE);
+      const probeHandle = `liveprobe-${process.pid % 100000}`;
+      const probeForm = exec(SELF, [
+        "launch",
+        "interactive",
+        "clerk",
+        "--project",
+        probeCwd,
+        "--name",
+        `live probe ${probeHandle}`,
+      ]);
+      if (probeForm.code !== 0) {
+        console.log("no clerk role on this machine; skipping the wrapped-harness probe");
+      } else {
+        const { splitCommand } = await import("./clerk.ts");
+        const { spawnCommand } = await import("./verifier.ts");
+        let probeWords = splitCommand(probeForm.out);
+        if (probeWords[0] !== "bash") probeWords = spawnCommand(probeCwd, probeWords);
+        const spacesBefore = liveHerdr("workspace", "list").out;
+        const probeSpawn = liveHost(
+          ["spawn", probeHandle, probeCwd, "--label", "live probe", "--", ...probeWords],
+          f.caller,
+          root,
+        );
+        const probePlaced = probeSpawn.out.trim();
+        const probeSpace = kvOf(probePlaced, "space");
+        const probeTab = kvOf(probePlaced, "tab");
+        const probeGot = liveHerdr("agent", "get", probeHandle);
+        await pass(
+          "spawn names the wrapped harness session",
+          () => probeSpawn.code === 0 && probeGot.code === 0,
+          `${probePlaced}\n${probeSpawn.err}\n${probeGot.err}`,
+        );
+        const probeRead = liveHost(["read", probeHandle, "30"], f.caller, root);
+        await pass(
+          "the session reads by its handle",
+          () => probeRead.code === 0,
+          `${probeRead.out}\n${probeRead.err}`,
+        );
+        const probeStatus = value(probeGot.out, ["result", "agent", "agent_status"]);
+        if (probeStatus === "blocked" || /trust/iu.test(probeRead.out)) {
+          console.log(
+            "the probe harness asks something; answer it once in its tab and re-run (skipping send)",
+          );
+        } else {
+          const marker = `live-probe-${probeHandle}`;
+          const probeFile = join(root, "probe-message.txt");
+          writeFileSync(probeFile, `Reply with exactly the word ${marker} and nothing else.\n`);
+          const probeSend = liveHost(["send", probeHandle, probeFile], f.caller, root);
+          await pass(
+            "the session takes a message by its handle",
+            () => probeSend.code === 0,
+            `${probeSend.out}\n${probeSend.err}`,
+          );
+          let shown = "";
+          for (let i = 0; i < 24 && !shown.includes(marker); i++) {
+            await sleep(2500);
+            shown = liveHost(["read", probeHandle, "30"], f.caller, root).out;
+          }
+          await pass(
+            "the message shows on its screen",
+            () => shown.includes(marker),
+            shown.slice(-2000),
+          );
+        }
+        const probeClosed = liveHost(["close-handle", probeHandle], f.caller, root);
+        const probeTabsAfter =
+          probeSpace && probeTab ? liveHerdr("tab", "list", "--workspace", probeSpace).out : "";
+        await pass(
+          "close-handle closes the probe tab",
+          () =>
+            probeClosed.code === 0 &&
+            (!probeTab || (probeTabsAfter !== "" && !probeTabsAfter.includes(probeTab))),
+          `${probeClosed.out}\n${probeClosed.err}\n${probeTabsAfter}`,
+        );
+        // A space this probe created goes with it; a space it joined stays.
+        if (probeSpace && !spacesBefore.includes(probeSpace))
+          liveHerdr("workspace", "close", probeSpace);
+      }
 
       console.log("Herdr run launches share one tab, and close-run takes it");
       const liveRun = join(root, "run-1");
