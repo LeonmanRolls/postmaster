@@ -4,7 +4,7 @@
 // run ticket-ready mark) with stub herdr first on PATH, and a clerk role with
 // an env file so the spawn takes the shell path, as the real clerk does.
 // Covered: C1-C4. Not covered: C5 (the fixture run, scored at landing).
-import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { type Fx, readHerdr, SELF, sh, TWO_PART } from "./acceptance-373.ts";
 
@@ -110,7 +110,9 @@ export async function waitFor(done: () => boolean, secs: number): Promise<boolea
 }
 
 // A session as the base leaves one: spawned through the shell path with no
-// time to be named, its agent showing afterwards, never named.
+// agent able to show while the spawn names, its agent showing afterwards,
+// never named. The unnamed premise holds by construction, not by a sleep
+// winning a race, and both halves are asserted below.
 export async function legacySession(
   fx: Fx,
   repo: string,
@@ -118,15 +120,23 @@ export async function legacySession(
   env: Record<string, string>,
 ): Promise<{ handle: string; tab: string; pane: string }> {
   const handle = `clerk-${basename(repo)}-${id}-legacy`;
+  writeFileSync(join(fx.stub, "agent.never"), "");
   const spawned = sh(
     SELF,
     ["host", "spawn", handle, repo, "--label", `#${id}, legacy`, "--", "bash", "-c", "exit 0"],
     env,
     fx.root,
   );
+  rmSync(join(fx.stub, "agent.never"), { force: true });
   if (spawned.code !== 0) throw new Error(`spawn: ${spawned.err}`);
-  await Bun.sleep(3000);
   const placed = placementFor(fx, handle);
+  const shown = await waitFor(
+    () => sh("herdr", ["agent", "get", placed.pane], env, fx.root).code === 0,
+    15,
+  );
+  if (!shown) throw new Error(`agent never showed in ${placed.pane}`);
+  if (sh("herdr", ["agent", "get", handle], env, fx.root).code === 0)
+    throw new Error(`${handle} was named; the legacy premise needs it unnamed`);
   mkdirSync(join(repo, ".postmaster", "runs", "postmaster", "clerks"), { recursive: true });
   writeFileSync(
     join(repo, ".postmaster", "runs", "postmaster", "clerks", `${encodeURIComponent(id)}.json`),

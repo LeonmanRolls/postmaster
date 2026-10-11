@@ -95,6 +95,26 @@ describe("C2: when the session cannot take the brief", () => {
     }
   }, 240000);
 
+  test("a session that never shows is still attempted once", () => {
+    const fx = makeFx("412-c2-tried");
+    try {
+      const { repo, id } = clerkRepo(fx);
+      writeFileSync(join(fx.stub, "agent.never"), "");
+      const env = fxEnv(fx, {
+        POSTMASTER_CONFIG: clerkEnvConfig(fx),
+        POSTMASTER_CLERK_SEND_WAIT: "3",
+      });
+      const started = sh(SELF, ["clerk", "start", repo, id], env, fx.root);
+      expect(started.code).toBe(1);
+      expect(promptEntries(fx).length).toBe(0);
+      expect(
+        calls(fx, "herdr").filter((line) => line.startsWith("agent\tprompt\t")).length,
+      ).toBeGreaterThanOrEqual(1);
+    } finally {
+      rmSync(fx.root, { recursive: true, force: true });
+    }
+  }, 120000);
+
   test("a session that never shows fails named with one command, which delivers once shown", () => {
     const fx = makeFx("412-c2-never");
     try {
