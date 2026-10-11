@@ -14,7 +14,7 @@ import {
   readFileSync,
   writeFileSync,
 } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import {
   both,
   callLines,
@@ -75,9 +75,16 @@ describe("C1: the skill", () => {
   test("link-skills --dry-run lists surveyor for each harness with a skills folder", () => {
     // link-skills links the main checkout even from a worktree, so the
     // branch's own links are read from a checkout copy whose main it is.
+    // The scripts copy skips dot entries: a host self-test running in
+    // parallel keeps a scripts/.host-self-test-* folder with a nested
+    // repository in it, which git add would refuse.
     const dir = scratchDir("surveyor-links-");
     try {
-      for (const n of ["scripts", "skills", "bunfig.toml", "package.json"]) {
+      cpSync(join(ROOT, "scripts"), join(dir, "scripts"), {
+        recursive: true,
+        filter: (src) => !basename(src).startsWith("."),
+      });
+      for (const n of ["skills", "bunfig.toml", "package.json"]) {
         cpSync(join(ROOT, n), join(dir, n), { recursive: true });
       }
       chmodSync(join(dir, "scripts", "run"), 0o755);
