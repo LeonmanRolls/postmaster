@@ -955,11 +955,15 @@ Set the stage first, `<tool>/scripts/run stage <dispatch> review`, then:
    keeps the first starting state its first attempt saved. A wait cut short, as by the
    harness's cap on background tasks, is run again alone:
    `<tool>/scripts/run review-round wait <dispatch> <round> <repo>` keeps the round's reviewers
-   and its deadline, and ends with the round's check like any wait. A round interrupted before
+   and its deadline, and ends with the round's check like any wait: a collection cut short
+   after its point completes its restore instead of repeating its check, and a finished
+   collection is never repeated. A round interrupted before
    its launches were done is re-run whole, from the
    cut, which tears down whatever its first attempt left.
 
-   **Normalize the bug reports before triage.** For each lane under the bug lens, copy any
+   **Normalize the bug reports before triage.** The wait already copied each bug lane's
+   forked task records best-effort before its check, so the check ties what it finds.
+   For each lane under the bug lens, copy any
    forked task record the stream's `task_notification` named and normalize the native report
    from the same events stream.
    Codex reads the `--last` file; the other forms read their final event message. A verdict
