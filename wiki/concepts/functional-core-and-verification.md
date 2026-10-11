@@ -64,7 +64,7 @@ measures any of this in TypeScript, apart from the case studies of LemmaScript's
 
 **What follows.** Four changes are proposed to the design rules and the ticket template (give rule 8 a mechanical
 check, which asks the user to reverse a decision they gave in #298, with a possible second part against mutating what escapes a function; one program for the dry run, the tests and the real run of anything that runs dry or undoes;
-a law over generated inputs for each reader of text; a state table for each undo), and five trials, none run: four of 2 to 12 hours each, and a fifth in three steps of 4 to 12 hours, each later step run
+a law over generated inputs for each reader of text, which the user set aside after the first trial; a state table for each undo), and five trials, of which the first and the fourth have run: four of 2 to 12 hours each, and a fifth in three steps of 4 to 12 hours, each later step run
 only if the one before did not fail. One of the four prices LemmaScript on a single function. The fifth writes a cleanup script's
 decisions once, with git passed in and swapped for a mock that is checked against real git, and compares a plain version
 with an Effect version. A proof tool is not proposed yet, and neither are the Effect and fp-ts libraries as dependencies: nothing
@@ -973,6 +973,10 @@ compiler, the formatter, git), or the closed list of inputs the criterion covers
 of the 84 findings, which sat between the examples the tests held. The cost is about 50 lines for a seeded
 generator, which the repository already has once, or a development dependency, which would change the list
 that `AGENTS.md` gives as `typescript`, `@biomejs/biome` and `oxlint`. That choice is the user's.
+*Set aside after trial 1, by the user's decision on 2026-10-11:* tickets stay as they are. Laws written blind described
+seven of the eight first-round classifier findings, but their generators reached only two of them, and nothing showed
+that a line in the template would supply the inputs that were missing. A clerk may still add a law where a ticket has a
+reader of text: trial 1's laws raised no false alarm and found one defect no review round found.
 
 **4. In the template's Checks, give an undo or a cleanup its state table.** For a criterion that restores,
 undoes or removes, propose that the checks list the states it must handle and the expected result for each:

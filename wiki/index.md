@@ -99,7 +99,7 @@ What would find a defect in postmaster's own scripts before a reviewer does, and
   `main`, an estimated 312 of them not hazards, and reaches the function of 8 of the 78 findings that cite a line, about
   as many as random placement would give.
   The first trial ran: laws written blind from the ticket found 2 of 8 first-round findings of #202's
-  classifier, 1 of the 5 counted cheap.
+  classifier, 1 of the 5 counted cheap, and the proposal of a law for each reader of text is set aside.
 
 ## Decisions
 
