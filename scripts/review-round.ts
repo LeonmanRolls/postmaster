@@ -1385,7 +1385,9 @@ if (import.meta.main) {
     const check = stateCmd("check", STATE, []);
     if (check.code !== 0) process.exit(1);
     const [attempt, leftStr, lim, src] = check.out.trim().split("\t");
-    const reviewers = readReviewers("reviewers", ...reviewerArgs);
+    // Pairs stay call-local: only start records the round's reviewers, so a
+    // subset wait must not narrow what later bare calls see.
+    const reviewers = readReviewers("pairs", ...reviewerArgs);
     const n = reviewers.length;
     console.log(
       `review-round: round ${R}, ${n} reviewers, ${leftStr}s left of its ${lim}s limit (${src})`,
@@ -1451,7 +1453,9 @@ if (import.meta.main) {
     const check = stateCmd("check", STATE, []);
     if (check.code !== 0) process.exit(1);
     const [attempt, leftStr, lim, src] = check.out.trim().split("\t");
-    const reviewers = readReviewers("reviewers", ...reviewerArgs);
+    // Pairs stay call-local: only start records the round's reviewers, so a
+    // subset wait must not narrow what later bare calls see.
+    const reviewers = readReviewers("pairs", ...reviewerArgs);
     const n = reviewers.length;
     console.log(
       `review-round: round ${R}, ${n} reviewers, ${leftStr}s left of its ${lim}s limit (${src})`,

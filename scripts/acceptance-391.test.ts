@@ -765,4 +765,40 @@ describe("R1: round 1 review regressions", () => {
     expect(recut1.out).toContain("reuses the gate pass");
     expect(checks("1")).toContain("FIRST-PASS");
   });
+
+  test("a subset wait-next leaves the round's recorded reviewers alone", () => {
+    const layout = makeLayout(
+      [
+        { lens: "bug", lane: "a", harness: "codex" },
+        { lens: "bug", lane: "b", harness: "codex" },
+      ],
+      { timeoutSeconds: 30 },
+    );
+    expect(
+      tool(layout, "review-round", "start", layout.dispatch, "1", "bug:a", "bug:b").code,
+    ).toBe(0);
+    writeFileSync(join(layout.dispatch, "logs", "review-r1-bug-a.done"), "");
+    const subset = tool(
+      layout,
+      "review-round",
+      "wait-next",
+      layout.dispatch,
+      "1",
+      layout.repo,
+      "bug:a",
+    );
+    expect(subset.code).toBe(0);
+    expect(subset.out).toContain("FINISHED bug a");
+    const state = JSON.parse(
+      readFileSync(join(layout.dispatch, "logs", "review-r1.json"), "utf8"),
+    ) as { reviewers: Array<[string, string]> };
+    expect(state.reviewers).toEqual([
+      ["bug", "a"],
+      ["bug", "b"],
+    ]);
+    writeFileSync(join(layout.dispatch, "logs", "review-r1-bug-b.done"), "");
+    const bare = tool(layout, "review-round", "wait-next", layout.dispatch, "1", layout.repo);
+    expect(bare.code).toBe(0);
+    expect(bare.out).toContain("FINISHED bug b");
+  });
 });
