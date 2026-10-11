@@ -509,9 +509,11 @@ const REUSE_PASS_RE =
  * under logs/gate-<commit>.txt by the cut or mid-round gate that recorded it. The
  * text lives under its commit, never under the round: a later cut of the same round
  * at another commit rewrites the round's checks file, and must not move it.
- * The latest verify evidence decides: a fail row on the commit after the newest
- * pass reuses nothing, and the cut runs verify again. A reuse row carries no
- * fresh evidence, so only cut and mid-round rows move the decision.
+ * The latest verify evidence decides: a fail row (exit 2: the checks ran and a
+ * check failed) on the commit after the newest pass reuses nothing, and the
+ * cut runs verify again. A refusal (exit 1: verify never ran) is not evidence
+ * about the commit and moves nothing, and a reuse row carries no fresh
+ * evidence, so only exit-2 cut and mid-round rows move the decision.
  * Anything unreadable yields no pass: the cut runs verify, as today. The log's
  * strict reader stays review-decide.
  */
@@ -546,7 +548,7 @@ export function findGatePass(dispatch: string, snap: string): GatePass | null {
       if (exit === 0 || exit === 3) {
         candidates.push({ exit, fromRound: run[1] ?? "", file });
         newestPass = i;
-      } else {
+      } else if (exit === 2) {
         newestFail = i;
       }
       continue;

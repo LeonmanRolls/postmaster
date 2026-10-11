@@ -1307,6 +1307,37 @@ describe("the round's three steps", () => {
         }, "review-round-reuse-failpass-");
       });
 
+      test("a refused run after a pass on the snapshot still reuses: a refusal is not evidence", () => {
+        withTempDir((root) => {
+          const p = paths(root);
+          writeFileSync(
+            join(p.dispatch, "actions.jsonl"),
+            gateRow(SHA, "review round 1, run verify exit 0") +
+              gateRow(SHA, "review round 1, run verify exit 1"),
+          );
+          writeFileSync(join(p.dispatch, "logs", `gate-${SHA}.txt`), "gate: pass\n");
+          let verified = false;
+          const { calls, deps } = stand(
+            shaHandler((name, _args) => {
+              if (name === "verify") {
+                verified = true;
+                return { code: 0, out: "gate: pass\n", err: "" };
+              }
+              return null;
+            }),
+          );
+          const res = cutRound(
+            { dispatch: p.dispatch, round: "2", repo: p.repo, synthesis: p.synthesis },
+            deps,
+          );
+          expect(res.code).toBe(0);
+          expect(verified).toBe(false);
+          expect(one(calls, "log-action", (c) => c.args[2] === "gate")?.args[4]).toBe(
+            "review round 2, gate pass reused from round 1 (run verify exit 0)",
+          );
+        }, "review-round-reuse-refused-");
+      });
+
       test("a cut pass reads its commit's kept text, not the round's rewritten checks file", () => {
         withTempDir((root) => {
           const p = paths(root);
