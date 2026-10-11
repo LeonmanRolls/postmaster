@@ -43,18 +43,22 @@ afterAll(() => {
 describe("C1: the brief says the clerk makes a story with the draft", () => {
   test("a three-criterion ticket with no stories setting gets a story and its files", () => {
     const repo = fixtureRepo();
-    const id = localTicket(repo, "The shelf lists every book", [
-      "## Problem / feature",
-      "",
-      "The shelf shows a reader's books in the order they were shelved.",
-      "",
-      "## Acceptance criteria",
-      "",
-      "1. The shelf lists every book on it.",
-      "2. A new book lands at the end of the shelf.",
-      "3. A book taken off the shelf is gone from the list.",
-      "",
-    ].join("\n"));
+    const id = localTicket(
+      repo,
+      "The shelf lists every book",
+      [
+        "## Problem / feature",
+        "",
+        "The shelf shows a reader's books in the order they were shelved.",
+        "",
+        "## Acceptance criteria",
+        "",
+        "1. The shelf lists every book on it.",
+        "2. A new book lands at the end of the shelf.",
+        "3. A book taken off the shelf is gone from the list.",
+        "",
+      ].join("\n"),
+    );
     const brief = briefFor(repo, id, stubConfig());
     expect(brief).toContain("Stories: on");
     expect(brief).toContain("Make a story with the draft");

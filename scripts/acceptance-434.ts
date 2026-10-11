@@ -4,14 +4,7 @@
 // story-page build and check, and setup as subprocesses. It never imports the
 // change: every assertion reads command output, the brief, the built page, or
 // the staged files.
-import {
-  chmodSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { run } from "./lib/proc.ts";
@@ -395,11 +388,9 @@ export function machineSetup(extra: string): Sh & { toml: string } {
   const answersPath = join(dir, "answers.txt");
   writeFileSync(answersPath, `${[...SETUP_BASE, extra].join("\n")}\n`, "utf8");
   const toml = join(dir, "config.toml");
-  const r = run(
-    RUN,
-    ["setup", "--answers", answersPath, "--config", toml],
-    { env: { PATH: `${setupBin()}:${process.env.PATH ?? ""}` } },
-  );
+  const r = run(RUN, ["setup", "--answers", answersPath, "--config", toml], {
+    env: { PATH: `${setupBin()}:${process.env.PATH ?? ""}` },
+  });
   return { code: r.code, out: r.out ?? "", err: r.err ?? "", toml };
 }
 
