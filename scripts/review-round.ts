@@ -23,7 +23,8 @@
 //           recorded and stopped
 //   exit 4  wait and wait-next: a record could not be written
 //   exit 1  usage; the round was not started, or the machine restarted or the round was started
-//           again since the wait began; a marker no reviewer of the round lands;
+//           again since the wait began; a marker no reviewer of the round lands; start: the
+//           round already reported finishers, resume it with wait-next;
 //           wait-next: the action log cannot be read; teardown: a
 //           scratch left in place; cut: run verify exited other than 0 or 3, the run's legs or
 //           a lens's lanes did not resolve, or a left-behind scratch did not tear down;
@@ -1142,6 +1143,15 @@ if (import.meta.main) {
   const STATE = join(D, "logs", `review-r${R}.json`);
 
   if (cmd === "start") {
+    // Finish rows are wait-next's memory and carry no attempt: starting again
+    // after any was reported would make the new attempt misreport the old
+    // reviewers as collected. Refuse before touching anything, and resume.
+    const collected = reportedFinishers(D, R);
+    if (collected.size > 0) {
+      die(
+        `round ${R} already reported ${collected.size} finisher${collected.size === 1 ? "" : "s"}; resume it with wait-next instead of starting it again`,
+      );
+    }
     mkdirSync(LOGS, { recursive: true });
     for (const f of readdirSync(LOGS)) {
       if (f.startsWith(`review-r${R}-`) && f.endsWith(".done")) {

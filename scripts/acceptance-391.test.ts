@@ -3,7 +3,8 @@
 // per-reviewer wait, the atomic fix step and the round close as subprocesses
 // over a scratch run; C2 the gate reuse at the next cut; C3 the fix step
 // against the integrity check; C4 a reviewer's swept-in change; C5 the
-// later-report record in review-decide. Covered: C1-C5. Not covered: C6,
+// later-report record in review-decide. R1 pins the round 1 review
+// regressions. Covered: C1-C5, R1. Not covered: C6,
 // the fixture run from the final head, which landing dispatches and scores.
 import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -642,5 +643,37 @@ describe("C5: a finding reported again in its round is counted once", () => {
     const r = decide(d, "2");
     expect(r.code).toBe(1);
     expect(r.out).toContain("not the finding's");
+  });
+});
+
+describe("R1: round 1 review regressions", () => {
+  test("starting a round that already reported finishers is refused, and the resume path still collects", () => {
+    const layout = makeLayout(
+      [
+        { lens: "bug", lane: "fast", harness: "codex" },
+        { lens: "bug", lane: "slow", harness: "codex" },
+      ],
+      { timeoutSeconds: 30 },
+    );
+    const startArgs = [
+      "review-round",
+      "start",
+      layout.dispatch,
+      "1",
+      "bug:fast",
+      "bug:slow",
+    ];
+    expect(tool(layout, ...startArgs).code).toBe(0);
+    writeFileSync(join(layout.dispatch, "logs", "review-r1-bug-fast.done"), "");
+    const first = tool(layout, "review-round", "wait-next", layout.dispatch, "1", layout.repo);
+    expect(first.code).toBe(0);
+    expect(first.out).toContain("FINISHED bug fast");
+    const again = tool(layout, ...startArgs);
+    expect(again.code).toBe(1);
+    expect(out(again)).toContain("resume it with wait-next");
+    writeFileSync(join(layout.dispatch, "logs", "review-r1-bug-slow.done"), "");
+    const second = tool(layout, "review-round", "wait-next", layout.dispatch, "1", layout.repo);
+    expect(second.code).toBe(0);
+    expect(second.out).toContain("FINISHED bug slow");
   });
 });
