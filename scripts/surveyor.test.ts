@@ -223,10 +223,7 @@ describe("config example placement", () => {
           : l,
       )
       .join("\n");
-    const data = Bun.TOML.parse(uncommented) as unknown as Record<
-      string,
-      Record<string, unknown>
-    >;
+    const data = Bun.TOML.parse(uncommented) as unknown as Record<string, Record<string, unknown>>;
     const team = data.team ?? {};
     expect(team.surveyor).toBe("luna");
     const lenses = (team.lens_reviewers ?? {}) as Record<string, unknown>;
