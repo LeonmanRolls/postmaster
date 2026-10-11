@@ -28,8 +28,8 @@ could be placed in the history, 44% were in the change when round 1 reviewed it 
 named them, 48% are in lines an earlier round's fix wrote, and 5% are outside the change. By two
 readers' marks the ticket left a point open for 8% to 20% of the 309 marked later findings, most
 often a state or an input case: what a step does when it fails or is edited, or what an option
-means. No one cause a ticket could settle accounts for more than about a twentieth of the rounds,
-and the three of them together, counted once, for 5% to 7%. At the five-criteria cut, the 32 runs
+means. No one cause a ticket could settle (open points, pairs that must agree, sites) accounts
+for more than about a twentieth of the rounds, and the three together, counted once, for 5% to 7%. At the five-criteria cut, the 32 runs
 with more criteria took 76 rounds above the median of the smaller tickets, counting only the runs
 above it (68 net), an upper bound. The booking clerk's two-part tickets carried a median four times the
 change of the one-part tickets before them and had a fifth of the serious findings per changed
@@ -38,9 +38,9 @@ records that its next round would be clean: the best single signal reached about
 of five or more serious findings was followed by a clean one in 1 of 51 cases in the 61 runs and
 in none of 9 in the later set.
 
-**Standing: mixed.** The counts are of this fleet's own records, with controls, and agree with the
-lane audit's table for 17 of its 18 runs and with the 21-run count's for 17 of 21, the differences
-being named in the record: that part is **supported**. The later set read the same way agrees on
+**Standing: mixed.** The counts are of this fleet's own records, with controls, and agree on finding
+lines with the lane audit's table for 17 of its 18 runs and with the 21-run count's for 17 of 21,
+the differences being named in the record: that part is **supported**. The later set read the same way agrees on
 the criteria count and on how weak the stop signals are, and differs on some single signals.
 What the planning stage could remove is **claimed**. The association
 between a ticket's preparation and its findings is confounded with date, reviewers and the run's

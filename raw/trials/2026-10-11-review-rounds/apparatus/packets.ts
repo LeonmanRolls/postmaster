@@ -225,7 +225,10 @@ const main = (args: string[]): void => {
       i.text.replace(/[\t\n]+/gu, " "),
     ].join("\t"),
   );
-  writeFileSync(resolve(itemsFile), `${header}\n${rows.join("\n")}\n`);
+  const itemsText = `${header}\n${rows.join("\n")}\n`;
+  const itemsFaults = privacyFaults(itemsText);
+  if (itemsFaults.length > 0) throw new Error(`the items hold ${itemsFaults.join(" and ")}`);
+  writeFileSync(resolve(itemsFile), itemsText);
   console.error(
     `${items.length} later findings, ${items.filter((i) => i.text !== "").length} with text`,
   );

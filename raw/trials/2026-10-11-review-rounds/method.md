@@ -249,6 +249,9 @@ bun --no-env-file --config=/dev/null apparatus/trace.ts --repo <checkout> --proj
 bun --no-env-file --config=/dev/null apparatus/lanes.ts --project <repo> --legacy <dir> \
     --runs results/runs.json --findings results/findings.json --cut 2026-10-09T22:30:00Z \
     --out results/lane-rounds.json
+bun --no-env-file --config=/dev/null apparatus/lanes.ts --project <repo> --legacy <dir> \
+    --runs results/runs.json --findings results/findings-later.json \
+    --after 2026-10-09T22:30:00Z --cut 2026-10-11T07:30:00Z --out results/lane-rounds-later.json
 bun --no-env-file --config=/dev/null apparatus/packets.ts --project <repo> --legacy <dir> \
     --runs results/runs.json --findings results/findings.json --out <packets dir> \
     --items results/items.tsv
@@ -262,7 +265,8 @@ bun test apparatus/
 ```
 
 The run folders are needed for `inventory.ts`, `trace.ts`, `lanes.ts` and `packets.ts` and for
-nothing else. A reader without them runs `render.ts` and `controls.ts` on the committed data, from
-`results/runs.json`, `findings.json`, `findings-later.json`, `lane-rounds.json` and the readers'
-marks, and gets every table. `inventory.ts`, `trace.ts`, `lanes.ts` and `packets.ts` refuse to
-write anything that names a path, a thread or a session.
+nothing else. A reader without them runs `render.ts` and `controls.ts` on the committed data:
+`results/runs.json`, `findings.json`, `findings-later.json`, `lane-rounds.json`,
+`lane-rounds-later.json`, and `readers/` with the readers' marks and `adjudication.tsv`. They write
+every table of `results/`. `inventory.ts`, `trace.ts`, `lanes.ts` and `packets.ts` refuse to write
+anything that names a path, a thread or a session.

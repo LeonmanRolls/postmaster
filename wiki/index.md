@@ -156,12 +156,12 @@ Why the design is shaped as it is.
   of three rounds as a backstop; many bugs reaching production stays the signal to revisit.
 - [Why runs take the review rounds they do, and what the planning stage could cut](concepts/review-rounds.md):
   **mixed**. Of 61 runs the median took 3 rounds, and a fifth of them hold 44% of the rounds; rounds
-  follow the first round's serious findings (rho 0.83), and criteria and change size go with them
-  through it. Of 335 later findings that could be placed, 44% were in the change and not named
+  follow the first round's serious findings (rho 0.83), and across the 61 runs criteria and change
+  size go with them through it, though not in the 15 single-thread runs. Of 335 later findings that could be placed, 44% were in the change and not named
   before and 48% are in lines an earlier fix wrote. Two readers say a ticket left a point open for 8%
   to 20% of the marked later findings, most often a state or an input case. No one cause a ticket
   could settle accounts for more than about a twentieth of the rounds, and runs with more than five
-  criteria took 76 rounds above the smaller tickets' median; no stop signal tried predicts a clean
+  criteria took 76 rounds above the smaller tickets' median (68 net); no stop signal tried predicts a clean
   next round above about half, and five or more serious findings in a round was followed by a clean
   one in 1 of 51 and then none of 9. From
   [#400](https://github.com/brindlewick/postmaster/issues/400); nothing was changed, and six
