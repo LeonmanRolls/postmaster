@@ -6,8 +6,9 @@
 // with a three-second stuck wait: the check fails within seconds saying the
 // run did not end. C3 reads the same run's process list. C4 runs a test that
 // awaits a sleep-30 child under two seconds: its failure names the child
-// with pid, command and state. C5 runs a manual two-file run whose second
-// file carries a ten-second test with no limit of its own: both pass.
+// with pid, command and state. C5 runs a manual two-file run where each file
+// carries a slow test with no limit of its own: both pass, on any filesystem
+// order, since whichever file runs second still holds its slow test.
 // Covered: C1a (mechanism), C2, C3, C4, C5. Not covered: C1b (ten manual
 // macOS dispatches, a postmaster step after push: it needs a pushed branch).
 import { describe, expect, test } from "bun:test";
@@ -112,20 +113,52 @@ suite("C4: a test that runs out of time names what it was awaiting", () => {
   }, 30_000);
 });
 
+// Outside every suite block, so it runs in nested runs too: the C5 pair's
+// own slow test. It must stay slow and limitless: the pin below fails loud
+// if it ever gains a limit or runs short, instead of going vacuous.
+test("C5 probe: six seconds with no stated limit", async () => {
+  await Bun.sleep(6000);
+});
+
 suite("C5: a manual run gives every named file the check's limit", () => {
-  test("the second file's ten-second test passes", () => {
-    // Directory order runs review-forms first and clean-checkout second; the
-    // order is the filesystem's, not the argument list's.
+  test("both slow files pass", () => {
+    // Each file carries a slow test with no limit of its own, so the
+    // separation holds whichever the filesystem runs second: at the base
+    // the second file's slow test fails on the bare five-second default.
     const r = run("bun", ["scripts/manual-test-files.ts"], {
       cwd: ROOT,
       env: {
         ...CLEAN_ENV,
-        FILES: "scripts/review-forms.test.ts scripts/clean-checkout.test.ts",
+        ACCEPTANCE_414_NESTED: "1",
+        FILES: "scripts/clean-checkout.test.ts scripts/acceptance-414.test.ts",
       },
     });
     const output = r.out + r.err;
     expect(r.code).toBe(0);
     expect(output).toContain("0 fail");
     expect(output).not.toContain("timed out");
+  }, 420_000);
+
+  test("both slow tests still exceed the bare five-second default", () => {
+    // Pins the probes: under an explicit five-second default both slow
+    // tests fail, so a future limit or speedup fails here, loud, instead
+    // of hollowing the pair above into a pass at the base.
+    const r = run(
+      "bun",
+      [
+        "test",
+        "--timeout=5000",
+        "scripts/clean-checkout.test.ts",
+        "scripts/acceptance-414.test.ts",
+      ],
+      {
+        cwd: ROOT,
+        env: { ...CLEAN_ENV, ACCEPTANCE_414_NESTED: "1" },
+      },
+    );
+    const output = r.out + r.err;
+    expect(r.code).not.toBe(0);
+    expect(output).toMatch(/outlives its bound.*timed out after 5000ms/su);
+    expect(output).toMatch(/C5 probe: six seconds.*timed out after 5000ms/su);
   }, 420_000);
 });
