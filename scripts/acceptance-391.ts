@@ -241,9 +241,9 @@ export function addCommit(
 
 /** Land a marker file after ms, from a process of its own, and return at once. */
 export function landMarkerAfter(marker: string, ms: number): void {
-  const child = Bun.spawn(["bash", "-c", `sleep ${(ms / 1000).toFixed(1)}; touch '${marker}'`], {
+  // Fire and forget: the sleeper exits on its own well before the test does.
+  Bun.spawn(["bash", "-c", `sleep ${(ms / 1000).toFixed(1)}; touch '${marker}'`], {
     stdout: "ignore",
     stderr: "ignore",
   });
-  child.unref();
 }
