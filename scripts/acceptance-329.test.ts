@@ -47,12 +47,7 @@ function check(name: string, fn: () => void): void {
   test(name, fn, 60000);
 }
 
-function withCopy(
-  run: string,
-  stop: number,
-  opts: CopyOpts,
-  fn: (lay: CopyLayout) => void,
-): void {
+function withCopy(run: string, stop: number, opts: CopyOpts, fn: (lay: CopyLayout) => void): void {
   const lay = makeCopy(run, stop, opts);
   try {
     fn(lay);
@@ -113,51 +108,54 @@ describe("C1: the step surveys a rise, and only a rise", () => {
   });
 
   for (const rise of RISES) {
-    check(`${rise.run} after round ${rise.round} starts one survey call named for its round`, () => {
-      withCopy(rise.run, rise.round, {}, (lay) => {
-        setStandin(lay, "answer", { answer: FULL_ANSWER });
-        const before = readFileSync(join(lay.dispatch, "actions.jsonl"), "utf8");
-        const r = reviewSurvey(lay, [
-          "survey",
-          lay.dispatch,
-          lay.repo,
-          String(rise.round),
-          "--snapshot",
-          rise.sha,
-        ]);
-        expect(both(r)).toBe(r.out);
-        expect(r.code).toBe(0);
-        const record = join(lay.dispatch, "surveys", `rise-r${rise.round}.md`);
-        expect(r.out.trim()).toBe(record);
-        expect(readFileSync(record, "utf8")).toBe(FULL_ANSWER);
+    check(
+      `${rise.run} after round ${rise.round} starts one survey call named for its round`,
+      () => {
+        withCopy(rise.run, rise.round, {}, (lay) => {
+          setStandin(lay, "answer", { answer: FULL_ANSWER });
+          const before = readFileSync(join(lay.dispatch, "actions.jsonl"), "utf8");
+          const r = reviewSurvey(lay, [
+            "survey",
+            lay.dispatch,
+            lay.repo,
+            String(rise.round),
+            "--snapshot",
+            rise.sha,
+          ]);
+          expect(both(r)).toBe(r.out);
+          expect(r.code).toBe(0);
+          const record = join(lay.dispatch, "surveys", `rise-r${rise.round}.md`);
+          expect(r.out.trim()).toBe(record);
+          expect(readFileSync(record, "utf8")).toBe(FULL_ANSWER);
 
-        const calls = standinCalls(lay.record);
-        expect(calls.length).toBe(1);
-        const argv = calls[0]?.argv ?? [];
-        expect(argv.slice(0, 4)).toEqual(["surveyor", "call", lay.dispatch, lay.repo]);
-        expect(flagOf(argv, "--name")).toBe(`rise-r${rise.round}`);
-        expect(flagOf(argv, "--snapshot")).toBe(rise.sha);
-        expect(flagOf(argv, "--question")).toBe(QUESTION);
-        expect(flagOf(argv, "--timeout")).toBe("2400");
-        const materials = materialsOf(argv);
-        const reports = expectedReports(rise.run, rise.round).map((f) =>
-          join(lay.dispatch, "logs", f),
-        );
-        expect(materials[0]).toBe(join(lay.dispatch, "ticket-body.md"));
-        expect(materials.slice(1, -1)).toEqual(reports);
-        expect(materials.length).toBe(reports.length + 2);
-        const staged = materials[materials.length - 1] ?? "";
-        expect(staged.startsWith(lay.dispatch)).toBe(false);
+          const calls = standinCalls(lay.record);
+          expect(calls.length).toBe(1);
+          const argv = calls[0]?.argv ?? [];
+          expect(argv.slice(0, 4)).toEqual(["surveyor", "call", lay.dispatch, lay.repo]);
+          expect(flagOf(argv, "--name")).toBe(`rise-r${rise.round}`);
+          expect(flagOf(argv, "--snapshot")).toBe(rise.sha);
+          expect(flagOf(argv, "--question")).toBe(QUESTION);
+          expect(flagOf(argv, "--timeout")).toBe("2400");
+          const materials = materialsOf(argv);
+          const reports = expectedReports(rise.run, rise.round).map((f) =>
+            join(lay.dispatch, "logs", f),
+          );
+          expect(materials[0]).toBe(join(lay.dispatch, "ticket-body.md"));
+          expect(materials.slice(1, -1)).toEqual(reports);
+          expect(materials.length).toBe(reports.length + 2);
+          const staged = materials[materials.length - 1] ?? "";
+          expect(staged.startsWith(lay.dispatch)).toBe(false);
 
-        // The call waits: the answer is recorded before the step returns,
-        // and the escalation is not the step's to write: the decoy stands untouched.
-        expect(readFileSync(join(lay.dispatch, "ESCALATION.md"), "utf8")).toContain("Decoy");
-        expect(existsSync(join(lay.dispatch, ".escalation-ready"))).toBe(false);
-        const after = readFileSync(join(lay.dispatch, "actions.jsonl"), "utf8");
-        expect(after.startsWith(before)).toBe(true);
-        expect(after.slice(before.length)).toContain(`rise-r${rise.round}`);
-      });
-    });
+          // The call waits: the answer is recorded before the step returns,
+          // and the escalation is not the step's to write: the decoy stands untouched.
+          expect(readFileSync(join(lay.dispatch, "ESCALATION.md"), "utf8")).toContain("Decoy");
+          expect(existsSync(join(lay.dispatch, ".escalation-ready"))).toBe(false);
+          const after = readFileSync(join(lay.dispatch, "actions.jsonl"), "utf8");
+          expect(after.startsWith(before)).toBe(true);
+          expect(after.slice(before.length)).toContain(`rise-r${rise.round}`);
+        });
+      },
+    );
   }
 
   for (const control of CONTROLS) {
@@ -181,10 +179,7 @@ describe("C1: the step surveys a rise, and only a rise", () => {
       const { dispatch, repo } = makeFalling(tmp);
       const lay = makeCopy("218", 3, { reports: false, ticket: false, decoys: false });
       try {
-        const r = reviewSurvey(
-          { ...lay, dispatch, repo },
-          ["survey", dispatch, repo, "4"],
-        );
+        const r = reviewSurvey({ ...lay, dispatch, repo }, ["survey", dispatch, repo, "4"]);
         expect(r.code).toBe(2);
         expect(both(r)).toContain("RULING no-working-reviewer");
         expect(standinCalls(lay.record)).toEqual([]);
@@ -666,9 +661,7 @@ describe("C5: a missing survey never holds up the question", () => {
       ]);
       expect(s.code).toBe(3);
       const record = join(lay.dispatch, "surveys", `rise-r${r342.round}.md`);
-      expect(readFileSync(record, "utf8")).toBe(
-        "No answer: no such commit in the repo: deadbee\n",
-      );
+      expect(readFileSync(record, "utf8")).toBe("No answer: no such commit in the repo: deadbee\n");
       surveyedMissing(lay, "no such commit in the repo: deadbee");
     });
   });
@@ -687,9 +680,7 @@ describe("C5: a missing survey never holds up the question", () => {
       ]);
       expect(s.code).toBe(3);
       const record = join(lay.dispatch, "surveys", `rise-r${r342.round}.md`);
-      expect(readFileSync(record, "utf8")).toBe(
-        "No answer: the surveyor did not start: no host\n",
-      );
+      expect(readFileSync(record, "utf8")).toBe("No answer: the surveyor did not start: no host\n");
       surveyedMissing(lay, "the surveyor did not start: no host");
     });
   });
@@ -809,7 +800,12 @@ describe("snapshots: gate derivation and override", () => {
         target: "src/a.ts:1",
         detail: "gating P2 r1 bug luna, verified by reading",
       }),
-      JSON.stringify({ actor: "coachman", action: "review-launch", target: "luna", detail: "bug round 1" }),
+      JSON.stringify({
+        actor: "coachman",
+        action: "review-launch",
+        target: "luna",
+        detail: "bug round 1",
+      }),
       JSON.stringify({
         actor: "coachman",
         action: "gate",
@@ -846,7 +842,12 @@ describe("snapshots: gate derivation and override", () => {
         target: "src/c.ts:1",
         detail: "gating P2 r2 bug luna, verified by reading",
       }),
-      JSON.stringify({ actor: "coachman", action: "review-launch", target: "luna", detail: "bug round 2" }),
+      JSON.stringify({
+        actor: "coachman",
+        action: "review-launch",
+        target: "luna",
+        detail: "bug round 2",
+      }),
     ];
     writeFileSync(join(lay.dispatch, "actions.jsonl"), `${lines.join("\n")}\n`, "utf8");
     writeFileSync(join(lay.dispatch, "ticket-body.md"), "# Ticket\n\nA ticket.\n", "utf8");
@@ -909,39 +910,49 @@ describe("snapshots: gate derivation and override", () => {
 describe("timeout", () => {
   check("run.json review.round_timeout_seconds reaches the call", () => {
     const r342 = RISES[4]!;
-    withCopy(r342.run, r342.round, { runJson: { config: { review: { round_timeout_seconds: 1234 } } } }, (lay) => {
-      setStandin(lay, "answer", { answer: FULL_ANSWER });
-      const r = reviewSurvey(lay, [
-        "survey",
-        lay.dispatch,
-        lay.repo,
-        String(r342.round),
-        "--snapshot",
-        r342.sha,
-      ]);
-      expect(r.code).toBe(0);
-      const argv = standinCalls(lay.record)[0]?.argv ?? [];
-      expect(flagOf(argv, "--timeout")).toBe("1234");
-    });
+    withCopy(
+      r342.run,
+      r342.round,
+      { runJson: { config: { review: { round_timeout_seconds: 1234 } } } },
+      (lay) => {
+        setStandin(lay, "answer", { answer: FULL_ANSWER });
+        const r = reviewSurvey(lay, [
+          "survey",
+          lay.dispatch,
+          lay.repo,
+          String(r342.round),
+          "--snapshot",
+          r342.sha,
+        ]);
+        expect(r.code).toBe(0);
+        const argv = standinCalls(lay.record)[0]?.argv ?? [];
+        expect(flagOf(argv, "--timeout")).toBe("1234");
+      },
+    );
   });
 
   check("an invalid timeout falls back to the default", () => {
     const r342 = RISES[4]!;
-    withCopy(r342.run, r342.round, { runJson: { config: { review: { round_timeout_seconds: "soon" } } } }, (lay) => {
-      setStandin(lay, "answer", { answer: FULL_ANSWER });
-      const r = reviewSurvey(lay, [
-        "survey",
-        lay.dispatch,
-        lay.repo,
-        String(r342.round),
-        "--snapshot",
-        r342.sha,
-      ]);
-      expect(r.code).toBe(0);
-      const argv = standinCalls(lay.record)[0]?.argv ?? [];
-      expect(flagOf(argv, "--timeout")).toBe("2400");
-      expect(r.err).toContain("default");
-    });
+    withCopy(
+      r342.run,
+      r342.round,
+      { runJson: { config: { review: { round_timeout_seconds: "soon" } } } },
+      (lay) => {
+        setStandin(lay, "answer", { answer: FULL_ANSWER });
+        const r = reviewSurvey(lay, [
+          "survey",
+          lay.dispatch,
+          lay.repo,
+          String(r342.round),
+          "--snapshot",
+          r342.sha,
+        ]);
+        expect(r.code).toBe(0);
+        const argv = standinCalls(lay.record)[0]?.argv ?? [];
+        expect(flagOf(argv, "--timeout")).toBe("2400");
+        expect(r.err).toContain("default");
+      },
+    );
   });
 });
 
