@@ -69,7 +69,7 @@ export interface StartInput {
   look: string;
 }
 
-const DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/u;
+const DATE_RE = /^([0-9]{4})-([0-9]{2})-([0-9]{2})$/u;
 const ID_RE = /^e([1-9][0-9]*)$/u;
 
 /** parseDate <s>: the day itself when s is a real UTC calendar date, else null. */
