@@ -167,6 +167,7 @@ describe("C1: the step surveys a rise, and only a rise", () => {
         const before = readFileSync(join(lay.dispatch, "actions.jsonl"), "utf8");
         const r = reviewSurvey(lay, ["survey", lay.dispatch, lay.repo, String(control.round)]);
         expect(r.code).toBe(2);
+        expect(both(r)).toContain(control.cause);
         expect(standinCalls(lay.record)).toEqual([]);
         expect(existsSync(join(lay.dispatch, "surveys"))).toBe(false);
         expect(readFileSync(join(lay.dispatch, "actions.jsonl"), "utf8")).toBe(before);
@@ -185,6 +186,7 @@ describe("C1: the step surveys a rise, and only a rise", () => {
           ["survey", dispatch, repo, "4"],
         );
         expect(r.code).toBe(2);
+        expect(both(r)).toContain("RULING no-working-reviewer");
         expect(standinCalls(lay.record)).toEqual([]);
         expect(existsSync(join(dispatch, "surveys"))).toBe(false);
       } finally {
@@ -573,6 +575,7 @@ ${BODIES.advice}
     withCopy(r342.run, r342.round, {}, (lay) => {
       const q = reviewSurvey(lay, ["question", lay.dispatch]);
       expect(q.code).toBe(2);
+      expect(both(q)).toContain("no survey named");
       expect(existsSync(join(lay.dispatch, ".waiting-on-user"))).toBe(false);
     });
   });
