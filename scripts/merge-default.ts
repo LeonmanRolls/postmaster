@@ -29,6 +29,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { scriptsDir } from "./lib/paths.ts";
 import { run } from "./lib/proc.ts";
+import { PY_DOT, PY_S_CLASS } from "./lib/text.ts";
 
 const HERE = scriptsDir(import.meta);
 const RUN = join(HERE, "run");
@@ -92,14 +93,20 @@ export interface MergeDetail {
 }
 
 /** A merge line this step logged: main=<sha> into <branch>[ conflict=<files>].
- * Hand-logged prose matches nothing and counts without parsing. */
+ * Hand-logged prose matches nothing and counts without parsing. The branch is
+ * non-space like verify's on= claim; the files split on the space they join. */
+const MERGE_DETAIL_RE = new RegExp(
+  `^main=([0-9a-f]{40}) into ([^${PY_S_CLASS}]+)(?: conflict=(${PY_DOT}*))?$`,
+  "u",
+);
+
 export function parseMergeDetail(detail: string): MergeDetail | null {
-  const m = /^main=([0-9a-f]{40}) into (\S+)(?: conflict=(.*))?$/.exec(detail);
+  const m = MERGE_DETAIL_RE.exec(detail);
   if (!m) return null;
   return {
     main: m[1] ?? "",
     branch: m[2] ?? "",
-    conflict: (m[3] ?? "").split(/\s+/).filter((p) => p !== ""),
+    conflict: (m[3] ?? "").split(" ").filter((p) => p !== ""),
   };
 }
 
@@ -277,11 +284,11 @@ function main(argv: string[]): number {
     env: UNSET_GIT,
   });
   if (st.code !== 0) die(`cannot read the worktree status: ${wt}`);
-  const clean = parsePorcelainZ(st.out);
-  if (clean.unmerged) {
+  const state = parsePorcelainZ(st.out);
+  if (state.unmerged) {
     die(`${wt} has a merge in progress: resolve it, commit the merge, then call this step again`);
   }
-  if (clean.dirtyTracked) {
+  if (state.dirtyTracked) {
     die(`${wt} has uncommitted tracked changes: commit or remove them, then call this step again`);
   }
   const fresh = run(RUN, ["landing", "fresh", ...o], { env: UNSET_GIT });
@@ -300,7 +307,7 @@ function main(argv: string[]): number {
   }
   const merges = countAttemptMerges(readStepActions(dispatch));
   if (headLine !== null) {
-    const hm = /^head: the worktree is at ([0-9a-f]+), the ticket at ([0-9a-f]+)$/.exec(headLine);
+    const hm = /^head: the worktree is at ([0-9a-f]+), the ticket at ([0-9a-f]+)$/u.exec(headLine);
     const where = hm ? `the worktree is at ${hm[1]}, the ticket at ${hm[2]}` : headLine;
     console.log(`HEAD: ${where}; move the worktree to the ticket head, then call this step again`);
     return 2;
@@ -366,7 +373,7 @@ function main(argv: string[]): number {
     return 2;
   }
   if (gateLine !== null) {
-    const gm = /^gate: (.+) at ([0-9a-f]+)$/.exec(gateLine);
+    const gm = /^gate: (.+) at ([0-9a-f]+)$/u.exec(gateLine);
     const result = gm ? (gm[1] ?? "") : "";
     if (gm && result === "not run") {
       console.log(
