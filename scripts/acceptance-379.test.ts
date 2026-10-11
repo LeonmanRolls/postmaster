@@ -152,7 +152,7 @@ describe("C3: conflicts and a failing gate stop the step", () => {
     const actions = readActions(layout.dispatch);
     const merges = actions.filter((a) => a.actor === "coachman" && a.action === "merge");
     expect(merges.length).toBe(1);
-    expect(merges[0]?.detail).toBe(`main=${main} into ${TICKET} conflict=clash.txt`);
+    expect(merges[0]?.detail).toBe(`main=${main} into ${TICKET} conflict=["clash.txt"]`);
     writeFileSync(join(layout.wt, "clash.txt"), "resolved\n", "utf8");
     gitOrThrow(layout.wt, "add", "clash.txt");
     gitOrThrow(layout.wt, "commit", "-q", "--no-edit");
