@@ -1,0 +1,11 @@
+# Restricting the global Date and performance, scoped to scripts/lib/ and *-core.ts, on main at e3bbb3c.
+# Oxlint no-restricted-globals and Biome style/noRestrictedGlobals, configurations in apparatus/lint/probe-date-global/.
+# reports per file; wall.ts holds no clock read (the check flags 0 places in it)
+oxlint	12	scripts/lib/wall.ts
+biome	12	scripts/lib/wall.ts
+# text count in wall.ts: lines with "new Date(" 9, with "new Date()" 0
+# the same two configurations on the controls tree (scratch copy of controls/, see method.md):
+# reports per file: every-rule.ts 6 (lines 25, 26, 27, 34, 37, 39: Date.now, performance.now, new Date(), new Date and two more Date.now),
+# effectful.ts 1 (line 8, Date.now), not-flagged.ts 3 (line 21: new Date(0), new Date("2026-10-09"), new Date(2026, 9, 9): all with an argument, so false alarms)
+oxlint	controls	every-rule.ts 6	effectful.ts 1	not-flagged.ts 3
+biome	controls	every-rule.ts 6	effectful.ts 1	not-flagged.ts 3

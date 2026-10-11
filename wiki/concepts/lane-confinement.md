@@ -3,7 +3,7 @@ title: A lane stays inside its worktree only when a sandbox wraps its harness
 type: concept
 standing: claimed
 sources: [trials/confine-lanes, trials/mimo-headless-forms, trials/2026-10-05-lane-isolation-scan]
-updated: 2026-10-05
+updated: 2026-10-08
 ---
 
 # A lane stays inside its worktree only when a sandbox wraps its harness
@@ -67,6 +67,8 @@ sandbox that blocks Unix sockets keeps a lane from using the user's SSH agent.
 | a container per lane | everything not mounted into it | the image must carry every harness and the target project's own toolchain for the gate; a Keychain login does not reach it | a container runtime and an image per project | only inside a Linux VM |
 
 The Unix-user and container rows, and the harness's own report to a host's socket in the first row, are reasoned from how each works and not tried here (unverified).
+What a container or virtual machine per lane would stop, set against the reaches the [lane isolation scan](https://github.com/brindlewick/postmaster/blob/cff24d1e493bf3083f04a0548808b4343c8a2d4a/raw/trials/2026-10-05-lane-isolation-scan/results.md)
+found, and what Cloudflare's container offer adds and costs, is in [running the flow on Cloudflare](running-the-flow-on-cloudflare.md).
 
 On this evidence sandbox-runtime is the one way that covers both systems at no cost to the work:
 the four model lanes and pi passed the gate and committed inside it, and none reached outside
