@@ -72,9 +72,30 @@ form was not run here.
 
 The functions are not exported at `3abedd7` (the module exports only `reachActions`). Each version
 is taken whole with `git archive <commit> scripts`, and `export` is added to the declarations above
-and to nothing else; the diff is in `apparatus/`. A law runs in a folder holding the frozen laws
-and a `classifier.ts` that re-exports that version's functions, with fast-check's seed fixed so a
-run can be repeated.
+and to nothing else; the diffs are in [`results/`](results/). A law runs in a folder holding the frozen
+laws and a `classifier.ts` that re-exports that version's functions, in a process of its own, with
+fast-check's seed fixed at 367 so a run can be repeated:
+[`apparatus/run-laws.ts`](apparatus/run-laws.ts), whose transforms have tests beside it.
+
+    bun apparatus/run-laws.ts 3abedd7 laws
+    bun apparatus/run-laws.ts b8056c9 laws
+    bun apparatus/run-laws.ts b8056c9 apparatus/control
+    bun apparatus/run-laws.ts b8056c9 apparatus/control --without-newline-split
+
+## The census and the call record
+
+Added after the laws first ran, with the laws unchanged. fast-check stops at a law's first failing
+input, and four of the seven failing laws stopped on the same defect, which could hide whatever else
+they reach. `--census 400` runs each law's own predicate on 400 inputs from its own generator and keeps
+every failure: fast-check is swapped, in the throwaway folder only, for a package that re-exports it
+with an `assert` that does not stop. Its control, through the identical command: the newline law fails
+on 0 of 300 inputs at `b8056c9` and on 70 of 300 without the newline. `--record` writes every call the
+laws make to `commandTouches`, and [`apparatus/shapes.ts`](apparatus/shapes.ts) counts in them the inputs
+that could show each finding.
+
+    bun apparatus/run-laws.ts <commit> laws --census 400
+    bun apparatus/run-laws.ts b8056c9 laws --census 400 --record calls.jsonl
+    bun apparatus/shapes.ts calls.jsonl
 
 ## Counting
 
@@ -122,6 +143,17 @@ later found clean (read here as a false alarm), or if the generators take more t
   sandbox, with two scripts it deleted afterwards. The brief allows that: it bars running the
   laws against any code but the stand-in.
 
+## Result
+
+[`results/reading.md`](results/reading.md). The laws found 2 of the 8 findings (bug-4 and style-1) and
+1 of the 5 cheap ones (style-1). Five of the other six are stated by a law whose generator never produced
+an input that shows them; bug-2 is stated by none, because #202's list of separators leaves out the
+newline. No failure was a false alarm, and law 4 found a defect that no review round found. By the page's
+tests the trial failed on the first (fewer than a third found) and passed the other two.
+
 ## Deviations
 
-None.
+- The census and the call record were added after the laws first ran, as above. The laws did not change,
+  and the count is the same with or without them: the first failing inputs alone show bug-4 and style-1.
+- Law 7 was also run on 4,000 inputs, ten times its own number
+  ([`results/law7-4000.txt`](results/law7-4000.txt)). It is reported and not counted.
