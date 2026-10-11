@@ -398,8 +398,8 @@ function collectReports(dispatch: string, stop: number): string[] {
 /** buildRounds: the rounds file's text, with counts and per-round snapshots. */
 export function buildRounds(lines: ActionLine[], stop: number, snapshot: string): string {
   const kept: string[] = [];
-  const counts = new Array<number>(stop).fill(0);
-  const snaps = new Array<string | null>(stop).fill(null);
+  const counts = Array.from({ length: stop }, () => 0);
+  const snaps = Array.from({ length: stop }, (): string | null => null);
   lines.forEach((line) => {
     if (line.action === "finding") {
       const round = findingRound(line.detail);
@@ -519,7 +519,11 @@ function surveyCmd(argv: string[]): never {
     }
   }
   if (snapshot === "") {
-    const kept = writeRecord(dispatch, round, `No answer: no recorded snapshot for round ${round}\n`);
+    const kept = writeRecord(
+      dispatch,
+      round,
+      `No answer: no recorded snapshot for round ${round}\n`,
+    );
     surveyNote(dispatch, name, `no answer (no recorded snapshot for round ${round})`);
     runLog(dispatch, `rise survey ${name}: no answer (no recorded snapshot for round ${round})`);
     console.log(kept);
@@ -569,18 +573,16 @@ function surveyCmd(argv: string[]): never {
       content = null;
     }
     const usable =
-      content !== null && content.trim() !== "" && (call.code === 0 || content.startsWith(NO_ANSWER));
+      content !== null &&
+      content.trim() !== "" &&
+      (call.code === 0 || content.startsWith(NO_ANSWER));
     if (!usable) {
       const kept = writeRecord(
         dispatch,
         round,
         "No answer: the surveyor ended without an answer or a record\n",
       );
-      surveyNote(
-        dispatch,
-        name,
-        "no answer (the surveyor ended without an answer or a record)",
-      );
+      surveyNote(dispatch, name, "no answer (the surveyor ended without an answer or a record)");
       runLog(
         dispatch,
         `rise survey ${name}: no answer (the surveyor ended without an answer or a record)`,
@@ -594,7 +596,8 @@ function surveyCmd(argv: string[]): never {
       console.log(record);
       process.exit(0);
     }
-    const reason = noAnswerReason(content ?? "") ?? "the surveyor ended without an answer or a record";
+    const reason =
+      noAnswerReason(content ?? "") ?? "the surveyor ended without an answer or a record";
     surveyNote(dispatch, name, `no answer (${reason})`);
     runLog(dispatch, `rise survey ${name}: no answer (${reason})`);
     console.log(record);
@@ -740,9 +743,7 @@ function questionCmd(argv: string[]): never {
       } else {
         const plain = plainWords(content);
         first =
-          plain === ""
-            ? `Survey missing: the survey record ${pointer} holds no words`
-            : plain;
+          plain === "" ? `Survey missing: the survey record ${pointer} holds no words` : plain;
       }
     }
   }

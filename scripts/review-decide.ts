@@ -341,7 +341,11 @@ function decide(dispatch: string, roundS: string, causeOnly: boolean): void {
   if (r === "1") {
     const lacking1 = lacking("1");
     if (lacking1.length > 0) {
-      say("RUN", "no-working-reviewer", `RUN 2: round 1 had no working reviewer for ${lacking1.join(" and ")}`);
+      say(
+        "RUN",
+        "no-working-reviewer",
+        `RUN 2: round 1 had no working reviewer for ${lacking1.join(" and ")}`,
+      );
     } else if (appliedIn("1")) {
       say("RUN", "applied", "RUN 2: round 1 applied a fix");
     } else {
@@ -368,11 +372,19 @@ function decide(dispatch: string, roundS: string, causeOnly: boolean): void {
   const before = countSerious(prev);
   const next = incStr(r);
   if (count === 0 && lackingR.length > 0) {
-    say("RUN", "no-working-reviewer", `RUN ${next}: round ${r} had no working reviewer for ${lackingR.join(" and ")}`);
+    say(
+      "RUN",
+      "no-working-reviewer",
+      `RUN ${next}: round ${r} had no working reviewer for ${lackingR.join(" and ")}`,
+    );
   } else if (count === 0) {
     say("STOP", "clean", `STOP ${r}: round ${r} logged no P1 or P2 finding`);
   } else if (count <= before) {
-    say("RUN", "converging", `RUN ${next}: round ${r} logged no more P1 or P2 findings than round ${prev}`);
+    say(
+      "RUN",
+      "converging",
+      `RUN ${next}: round ${r} logged no more P1 or P2 findings than round ${prev}`,
+    );
   } else {
     say(
       "RULING",
