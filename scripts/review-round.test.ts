@@ -9,6 +9,7 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  readdirSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -869,6 +870,9 @@ describe("the round's three steps", () => {
     const dispatch = join(root, "repo", ".postmaster", "runs", "T-1");
     mkdirSync(join(dispatch, "logs"), { recursive: true });
     writeFileSync(join(dispatch, "manifest.json"), `${JSON.stringify({ base: "BASESHA" })}\n`);
+    for (const lens of ["style", "security"]) {
+      writeFileSync(join(dispatch, `review-${lens}-brief.md`), `# ${lens} brief\n`);
+    }
     return {
       dispatch,
       repo: join(root, "repo"),
@@ -1182,6 +1186,9 @@ describe("the round's three steps", () => {
           join(p.dispatch, "logs", "review-r1-bug-luna-last.md"),
         );
         expect(bug?.args.join(" ")).toContain("--run");
+        const before = one(calls, "reach");
+        expect(before?.args).toEqual(["before", p.dispatch, "1"]);
+        expect(calls.indexOf(before!)).toBeLessThan(startAt);
         const wait = calls.find((c) => c.name === "review-round" && c.args[0] === "wait");
         expect(wait?.args).toEqual([
           "wait",
@@ -1316,6 +1323,81 @@ describe("the round's three steps", () => {
         expect(of(calls, "reviewers").map((c) => c.args[2])).toEqual(["bug", "security"]);
         expect(existsSync(join(p.dispatch, "review-r2-style-prompt.txt"))).toBe(false);
       }, "review-round-launchr2-");
+    });
+
+    test("a missing brief stops it before anything is written or started", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        rmSync(join(p.dispatch, "review-style-brief.md"));
+        const { calls, deps } = stand(green);
+        const res = launchRound(
+          { dispatch: p.dispatch, round: "1", repo: p.repo, synthesis: p.synthesis },
+          deps,
+        );
+        expect(res.code).toBe(1);
+        expect(res.err.join("\n")).toContain("review-style-brief.md");
+        expect(res.err.join("\n")).toContain("nothing launched");
+        expect(readdirSync(p.dispatch).filter((f) => f.startsWith("review-r1-")).length).toBe(0);
+        expect(of(calls, "review-round").length).toBe(0);
+        expect(of(calls, "host").length).toBe(0);
+        expect(of(calls, "reach").length).toBe(0);
+        expect(of(calls, "log-action").length).toBe(0);
+      }, "review-round-launchbrief-");
+    });
+
+    test("a security lane with its own skill needs no brief", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        rmSync(join(p.dispatch, "review-security-brief.md"));
+        const { deps } = stand((name, args) => {
+          if (name === "launch" && args[0] === "skill")
+            return { code: 0, out: "SECURITY TEXT\n", err: "" };
+          return green(name, args);
+        });
+        const res = launchRound(
+          { dispatch: p.dispatch, round: "1", repo: p.repo, synthesis: p.synthesis },
+          deps,
+        );
+        expect(res.code).toBe(0);
+      }, "review-round-launchskill-");
+    });
+
+    test("a security lane without a skill is refused on the missing brief", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        rmSync(join(p.dispatch, "review-security-brief.md"));
+        const { calls, deps } = stand((name, args) => {
+          if (name === "launch" && args[0] === "skill") return { code: 3, out: "", err: "" };
+          return green(name, args);
+        });
+        const res = launchRound(
+          { dispatch: p.dispatch, round: "1", repo: p.repo, synthesis: p.synthesis },
+          deps,
+        );
+        expect(res.code).toBe(1);
+        expect(res.err.join("\n")).toContain("review-security-brief.md");
+        expect(of(calls, "review-round").length).toBe(0);
+        expect(of(calls, "host").length).toBe(0);
+      }, "review-round-launchsecbrief-");
+    });
+
+    test("a starting state that cannot be saved launches nothing", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        const { calls, deps } = stand((name, args) =>
+          name === "reach"
+            ? { code: 1, out: "", err: "reach: cannot save\n" }
+            : green(name, args),
+        );
+        const res = launchRound(
+          { dispatch: p.dispatch, round: "1", repo: p.repo, synthesis: p.synthesis },
+          deps,
+        );
+        expect(res.code).toBe(1);
+        expect(res.err.join("\n")).toContain("starting state could not be saved");
+        expect(of(calls, "review-round").length).toBe(0);
+        expect(of(calls, "host").length).toBe(0);
+      }, "review-round-launchbefore-");
     });
   });
 
@@ -1516,5 +1598,57 @@ describe("teardown and the round's reach check", () => {
     expect(t.code).toBe(1);
     expect(t.out).toContain("cannot read the reach record to teardown round 1");
     expect(t.runLog).not.toContain("round 1: removed");
+  });
+});
+
+describe("wait and the round's reach check", () => {
+  test("a timed-out round still ends with the round's check", () => {
+    withTempDir((root) => {
+      const repo = join(root, "repo");
+      const ticket = "T-9";
+      mkdirSync(repo, { recursive: true });
+      const git = (...args: string[]): void => {
+        const r = run("git", ["-C", repo, ...args]);
+        if (r.code !== 0) throw new Error(`git ${args.join(" ")}: ${r.err.trim()}`);
+      };
+      git("init", "-q", "-b", "main");
+      git("config", "user.name", "t");
+      git("config", "user.email", "t@t");
+      git("config", "commit.gpgsign", "false");
+      writeFileSync(join(repo, "file.txt"), "base\n");
+      git("add", "file.txt");
+      git("commit", "-q", "-m", "base");
+      const base = run("git", ["-C", repo, "rev-parse", "HEAD"]).out.trim();
+      git("checkout", "-q", "-b", ticket);
+      git("checkout", "-q", "main");
+      const synthesis = join(repo, ".worktrees", ticket);
+      git("worktree", "add", "-q", synthesis, ticket);
+      const d = join(repo, ".postmaster", "runs", ticket);
+      mkdirSync(join(d, "logs"), { recursive: true });
+      mkdirSync(join(d, "reach"), { recursive: true });
+      writeFileSync(
+        join(d, "manifest.json"),
+        `${JSON.stringify({ stage: "review", leg: 2, base, lanes: {}, coachman: { legs: {} } })}\n`,
+      );
+      writeFileSync(
+        join(d, "run.json"),
+        `${JSON.stringify({ coachman_contract: 2, config: { review: { round_timeout_seconds: 2 } } })}\n`,
+      );
+      writeFileSync(
+        join(d, "brief.md"),
+        `# Waybill: ${ticket}\nturnpikes: style\n\n## Project profile\nrepo: ${repo}          default branch: main       BASE: ${base}\n`,
+      );
+      writeFileSync(join(d, "actions.jsonl"), "");
+      writeFileSync(join(d, "run-log.md"), "");
+      expect(run(self, ["reach", "before", d, "1"]).code).toBe(0);
+      expect(run(self, ["review-round", "start", d, "1"]).code).toBe(0);
+      writeFileSync(join(d, "logs", "review-r1-style-ghost.done"), "");
+      const r = run(self, ["review-round", "wait", d, "1", repo, "style:ghost", "bug:ghost"]);
+      expect(r.code).toBe(3);
+      expect(r.out).toContain("r1: ");
+      const journal = readFileSync(join(d, "actions.jsonl"), "utf8");
+      expect(journal).toContain('"target":"r1"');
+      expect(journal).toContain("TIMEOUT");
+    }, "review-round-waitcheck-");
   });
 });
