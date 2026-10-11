@@ -178,6 +178,25 @@ async function snapshot(pm: Pm): Promise<void> {
   snapshots[pm] = { plain, scripts };
 }
 
+const haveGit = run("git", ["--version"]).code === 0;
+
+/** Commit the project as the run's base and record the head in the dispatch. */
+function mkGitBase(project: string, dispatch: string): string {
+  for (const args of [
+    ["init"],
+    ["config", "user.email", "oracle@test"],
+    ["config", "user.name", "oracle"],
+    ["add", "-A"],
+    ["commit", "-m", "base"],
+  ]) {
+    const r = run("git", ["-C", project, ...args]);
+    if (r.code !== 0) throw new Error(`git ${args.join(" ")}: ${r.err.trim() || r.out.trim()}`);
+  }
+  const head = run("git", ["-C", project, "rev-parse", "HEAD"]).out.trim();
+  writeFileSync(join(dispatch, "run.json"), JSON.stringify({ target: { head } }));
+  return head;
+}
+
 function fromSnapshot(pm: Pm, which: "plain" | "scripts", name: string): string {
   const snap = snapshots[pm]?.[which];
   if (snap === undefined) throw new Error(`no ${pm} ${which} snapshot`);
@@ -617,6 +636,102 @@ describe("bare syncs install the locked tree and nothing else", () => {
       const r = await guarded(registry, dispatch, project, pm, ["install"], { markerDir: markers });
       expect(r.code).toBe(0);
       expect(existsSync(join(markers, "g-scripts"))).toBe(true);
+    });
+  }
+});
+
+describe("syncs and adds diff the tree against the recorded base", () => {
+  for (const pm of PMS) {
+    const skip = () => !avail[pm] || !haveGit;
+    const lockName = (project: string): string => {
+      for (const file of ["package-lock.json", "pnpm-lock.yaml", "yarn.lock", "bun.lock"]) {
+        if (existsSync(join(project, file))) return file;
+      }
+      throw new Error(`no readable lockfile in ${project}`);
+    };
+    test.skipIf(skip())(`${pm}: a sync at the base installs`, async () => {
+      const dispatch = mkDispatch(tmp, `base-ok-${pm}`, [], []);
+      const project = fromSnapshot(pm, "plain", `base-ok-${pm}-p`);
+      mkGitBase(project, dispatch);
+      const r = await guarded(registry, dispatch, project, pm, ["install"]);
+      expect(r.code).toBe(0);
+      expect(installedVersion(project, "g-clean")).toBe("1.0.0");
+    });
+    test.skipIf(skip())(`${pm}: a sync past a smuggled lock version fails`, async () => {
+      const dispatch = mkDispatch(tmp, `base-smuggle-${pm}`, [], []);
+      const project = fromSnapshot(pm, "plain", `base-smuggle-${pm}-p`);
+      mkGitBase(project, dispatch);
+      const manifestFile = join(project, "package.json");
+      const pkg = JSON.parse(readFileSync(manifestFile, "utf8")) as {
+        dependencies: Record<string, string>;
+      };
+      pkg.dependencies["g-clean"] = "^1.0.0";
+      writeFileSync(manifestFile, JSON.stringify(pkg));
+      const lock = join(project, lockName(project));
+      writeFileSync(lock, readFileSync(lock, "utf8").replaceAll("1.0.0", "1.1.0"));
+      const before = tarballHits(registry.log).length;
+      const r = await guarded(registry, dispatch, project, pm, ["install"]);
+      expectRefused(r, "g-clean");
+      expect(installedVersion(project, "g-clean")).toBeNull();
+      expect(tarballHits(registry.log).length).toBe(before);
+    });
+    test.skipIf(skip())(`${pm}: an add past a manifest stowaway fails`, async () => {
+      const dispatch = mkDispatch(
+        tmp,
+        `base-stow-${pm}`,
+        ["- g-depscripts@1.0.0 vetted: tiny"],
+        [yes("g-depscripts@1.0.0"), allowance("g-scripts")],
+      );
+      const project = fromSnapshot(pm, "plain", `base-stow-${pm}-p`);
+      mkGitBase(project, dispatch);
+      const manifestFile = join(project, "package.json");
+      const pkg = JSON.parse(readFileSync(manifestFile, "utf8")) as {
+        dependencies: Record<string, string>;
+      };
+      pkg.dependencies["g-trans"] = "^1.0.0";
+      writeFileSync(manifestFile, JSON.stringify(pkg));
+      const r = await guarded(registry, dispatch, project, pm, ["add", "g-depscripts@1.0.0"]);
+      expectRefused(r, "g-trans");
+      expect(installedVersion(project, "g-depscripts")).toBeNull();
+    });
+    test.skipIf(skip())(`${pm}: an add past a fresh override fails`, async () => {
+      const dispatch = mkDispatch(
+        tmp,
+        `base-over-${pm}`,
+        ["- g-depscripts@1.0.0 vetted: tiny"],
+        [yes("g-depscripts@1.0.0"), allowance("g-scripts")],
+      );
+      const project = fromSnapshot(pm, "plain", `base-over-${pm}-p`);
+      mkGitBase(project, dispatch);
+      const manifestFile = join(project, "package.json");
+      const pkg = JSON.parse(readFileSync(manifestFile, "utf8")) as Record<string, unknown>;
+      pkg.overrides = { "g-trans": "1.0.0" };
+      writeFileSync(manifestFile, JSON.stringify(pkg));
+      const r = await guarded(registry, dispatch, project, pm, ["add", "g-depscripts@1.0.0"]);
+      expectRefused(r, "g-trans");
+      expect(installedVersion(project, "g-depscripts")).toBeNull();
+    });
+    test.skipIf(skip())(`${pm}: a checked add then a sync both pass`, async () => {
+      const dispatch = mkDispatch(
+        tmp,
+        `base-flow-${pm}`,
+        ["- g-depscripts@1.0.0 vetted: tiny"],
+        [yes("g-depscripts@1.0.0"), allowance("g-scripts")],
+      );
+      const project = fromSnapshot(pm, "plain", `base-flow-${pm}-p`);
+      mkGitBase(project, dispatch);
+      const markers = join(tmp, `markers-base-${pm}`);
+      mkdirSync(markers, { recursive: true });
+      const add = await guarded(registry, dispatch, project, pm, ["add", "g-depscripts@1.0.0"], {
+        markerDir: markers,
+      });
+      expect(add.code).toBe(0);
+      expect(installedVersion(project, "g-depscripts")).toBe("1.0.0");
+      const sync = await guarded(registry, dispatch, project, pm, ["install"], {
+        markerDir: markers,
+      });
+      expect(sync.code).toBe(0);
+      expect(installedVersion(project, "g-clean")).toBe("1.0.0");
     });
   }
 });
