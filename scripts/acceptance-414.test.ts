@@ -120,7 +120,9 @@ suite("C4: a test that runs out of time names what it was awaiting", () => {
 // own slow test. It must stay slow and limitless: the pin below fails loud
 // if it ever gains a limit or runs short, instead of going vacuous.
 test("C5 probe: six seconds with no stated limit", async () => {
+  const started = Date.now();
   await Bun.sleep(6000);
+  expect(Date.now() - started).toBeGreaterThan(5000);
 });
 
 suite("C5: a manual run gives every named file the check's limit", () => {
