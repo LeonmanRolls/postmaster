@@ -321,6 +321,13 @@ queue entry. The watcher keeps waiting when the run ceiling is full, then wakes 
 run closes and frees a slot. A clerk started in the user's own session writes the same ready
 marker and follows this path.
 
+**Check the project's experiments while you supervise.** Each look, run
+`<tool>/scripts/run experiments list --project <repo>` for the project. When an experiment is
+due, tell the user once: its question, its levels, what was measured. The user decides whether
+it concludes or gets a new date, and only on their word run `experiments conclude` or
+`experiments move`, then write the change to the page at once, as the Experiments section
+says.
+
 The list of runs waiting on the user is `<runs>/postmaster/ESCALATION.md`, kept by
 `<tool>/scripts/run host leg waiting`, never by hand. Read it with
 `<tool>/scripts/run host leg waiting list <runs>` when the user asks which runs are waiting.
@@ -432,6 +439,28 @@ The fixed attempt outcomes are `refused`, `pre-thread`, `walled`, `incomplete` a
 the exited marker lands. `run runs-status` reads this record and never classifies an attempt from
 `.err`. Every transition is one `log-action` line; the narrative in your own notes is for the
 user, never the record.
+
+## Experiments
+
+A project learns what works by trying flows, not by being handed one. An experiment is a
+change to the flow, or a trial of one, made to see its effect, with levels to compare and a
+date to look. Decisions made once and studies of past runs stay off the page: it is for what
+waits on a result. One command keeps them, in every harness:
+
+- `<tool>/scripts/run experiments start --project <repo> --question <q> --level <a> --level <b>
+  --measure <m> --look <date>`
+- `<tool>/scripts/run experiments move --project <repo> <id> --look <date>`
+- `<tool>/scripts/run experiments conclude --project <repo> <id> --result <r> --evidence <addr>`
+
+**Start one when the user asks to try a flow change as an experiment.** Settle what it
+compares and when to look, run `experiments start`, and write the change to the page at once,
+as below. **Conclude one on the user's verdict.** Run `experiments conclude` with the result
+and where its evidence is, and write the change to the page at once.
+
+Each project has its own page (`skills/experiments/SKILL.md`): private, read on the phone,
+what is due first. Publish it once; after each change print the rows with `experiments
+push-docs` and write them to the page's store with ArtifactData at once, so the page is
+current whenever it is opened. When an experiment falls due, Stage D says what happens.
 
 ## Spec review: older runs only
 
