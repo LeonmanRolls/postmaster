@@ -1,0 +1,103 @@
+{"ts":"2026-10-08T18:28:10Z","project":"postmaster","run":"335","actor":"coachman","action":"review-launch","target":"luna","detail":"style round 1"}
+{"ts":"2026-10-08T18:28:11Z","project":"postmaster","run":"335","actor":"coachman","action":"review-launch","target":"mimo","detail":"style round 1"}
+{"ts":"2026-10-08T18:28:12Z","project":"postmaster","run":"335","actor":"coachman","action":"review-launch","target":"luna","detail":"bug round 1"}
+{"ts":"2026-10-08T18:28:14Z","project":"postmaster","run":"335","actor":"coachman","action":"review-launch","target":"mimo","detail":"bug round 1"}
+{"ts":"2026-10-08T18:28:15Z","project":"postmaster","run":"335","actor":"coachman","action":"review-launch","target":"opus","detail":"security round 1"}
+{"ts":"2026-10-08T19:02:00Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"scripts/reviewers.ts:74","detail":"gating P2 r1 bug luna mimo, style mimo, verified by execution"}
+{"ts":"2026-10-08T19:02:00Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"scripts/lib/effective-config.ts:1126","detail":"gating P2 r1 bug luna mimo, verified by execution"}
+{"ts":"2026-10-08T19:02:00Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"scripts/lib/effective-config.ts:758","detail":"gating P2 r1 bug luna mimo, verified by execution"}
+{"ts":"2026-10-08T19:02:01Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"scripts/lib/effective-config.ts:1017","detail":"gating P2 r1 bug luna mimo, verified by execution"}
+{"ts":"2026-10-08T19:02:01Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"scripts/runs-watch.ts:567","detail":"gating P2 r1 bug luna mimo, style mimo, verified by execution"}
+{"ts":"2026-10-08T19:02:01Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"skills/postmaster/SKILL.md:260","detail":"gating P2 r1 bug mimo, verified by reading"}
+{"ts":"2026-10-08T19:02:01Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"scripts/lib/effective-config.ts:683","detail":"gating P2 r1 security opus, verified by execution"}
+{"ts":"2026-10-08T19:02:01Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"README.md:170","detail":"gating P3 r1 style luna mimo, verified by reading"}
+{"ts":"2026-10-08T19:02:01Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"skills/postmaster/postmaster.md:24","detail":"gating P3 r1 style luna mimo, verified by reading"}
+{"ts":"2026-10-08T19:02:01Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"scripts/plane.ts:1059","detail":"gating P3 r1 style mimo, verified by execution"}
+{"ts":"2026-10-08T19:02:01Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"AGENTS.md:245","detail":"gating P3 r1 style mimo, verified by reading"}
+{"ts":"2026-10-08T19:02:01Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"scripts/lib/effective-config.ts:766","detail":"gating P3 r1 style mimo, verified by reading"}
+{"ts":"2026-10-08T19:02:01Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"scripts/lib/effective-config.ts:977","detail":"style P3 r1 style luna mimo, verified by reading"}
+{"ts":"2026-10-08T19:02:01Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"AGENTS.md:253","detail":"style P3 r1 style mimo, verified by reading"}
+{"ts":"2026-10-08T19:02:01Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"scripts/lib/effective-config.ts:985","detail":"style P3 r1 style mimo, verified by reading"}
+{"ts":"2026-10-08T19:02:01Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"scripts/plane.ts:1031","detail":"style P3 r1 style mimo, verified by reading"}
+{"ts":"2026-10-08T19:02:01Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"scripts/runs-watch.ts:548","detail":"style P3 r1 style mimo, verified by reading"}
+{"ts":"2026-10-08T19:02:01Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"scripts/project-settings.ts:43","detail":"style P3 r1 style mimo, verified by reading"}
+{"ts":"2026-10-08T19:02:01Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"scripts/front-door.ts:22","detail":"style P3 r1 style mimo, verified by execution"}
+{"ts":"2026-10-08T20:01:42Z","project":"postmaster","run":"335","actor":"coachman","action":"review-launch","target":"luna","detail":"bug round 2"}
+{"ts":"2026-10-08T20:01:44Z","project":"postmaster","run":"335","actor":"coachman","action":"review-launch","target":"mimo","detail":"bug round 2"}
+{"ts":"2026-10-08T20:01:45Z","project":"postmaster","run":"335","actor":"coachman","action":"review-launch","target":"opus","detail":"security round 2"}
+{"ts":"2026-10-08T20:41:31Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"scripts/lib/effective-config.ts:664","detail":"gating P2 r2 bug luna, verified by reading"}
+{"ts":"2026-10-08T20:41:31Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"scripts/lib/effective-config.ts:971","detail":"gating P3 r2 bug luna mimo, verified by reading"}
+{"ts":"2026-10-08T20:41:31Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"scripts/lib/effective-config.ts:1078","detail":"gating P2 r2 bug luna, verified by reading"}
+{"ts":"2026-10-08T20:41:31Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"scripts/runs-watch.ts:426","detail":"gating P3 r2 bug mimo, verified by reading"}
+{"ts":"2026-10-08T20:41:32Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"scripts/launch.ts:175","detail":"gating P3 r2 bug mimo, verified by reading"}
+{"ts":"2026-10-08T20:41:32Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"scripts/project-settings.ts:111","detail":"gating P3 r2 bug mimo, verified by reading"}
+{"ts":"2026-10-08T20:41:32Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"scripts/lib/effective-config.ts:684","detail":"gating P2 r2 security opus, verified by reading"}
+{"ts":"2026-10-08T20:41:32Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"scripts/runs-watch.ts:504","detail":"style P3 r2 bug mimo, verified by reading"}
+{"ts":"2026-10-08T21:34:28Z","project":"postmaster","run":"335","actor":"coachman","action":"review-launch","target":"luna","detail":"bug round 3"}
+{"ts":"2026-10-08T21:34:29Z","project":"postmaster","run":"335","actor":"coachman","action":"review-launch","target":"mimo","detail":"bug round 3"}
+{"ts":"2026-10-08T21:34:31Z","project":"postmaster","run":"335","actor":"coachman","action":"review-launch","target":"opus","detail":"security round 3"}
+{"ts":"2026-10-08T22:03:08Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"scripts/front-door.ts:141","detail":"gating P2 r3 bug luna, verified by execution"}
+{"ts":"2026-10-08T22:03:08Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"scripts/lib/effective-config.ts:898","detail":"gating P2 r3 security opus, verified by execution"}
+{"ts":"2026-10-08T22:03:08Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"scripts/lib/effective-config.ts:971","detail":"gating P3 r3 bug luna mimo, verified by reading"}
+{"ts":"2026-10-08T22:03:08Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"scripts/plane.ts:1039","detail":"gating P3 r3 bug mimo, verified by execution"}
+{"ts":"2026-10-08T22:03:08Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"scripts/lib/effective-config.ts:1108","detail":"gating P3 r3 bug mimo, verified by execution"}
+{"ts":"2026-10-08T22:03:08Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"skills/postmaster/SKILL.md:258","detail":"gating P3 r3 bug luna mimo, verified by reading"}
+{"ts":"2026-10-09T01:12:58Z","project":"postmaster","run":"335","actor":"coachman","action":"review-launch","target":"luna","detail":"style round 4"}
+{"ts":"2026-10-09T01:13:00Z","project":"postmaster","run":"335","actor":"coachman","action":"review-launch","target":"mimo","detail":"style round 4"}
+{"ts":"2026-10-09T01:13:01Z","project":"postmaster","run":"335","actor":"coachman","action":"review-launch","target":"luna","detail":"bug round 4"}
+{"ts":"2026-10-09T01:13:03Z","project":"postmaster","run":"335","actor":"coachman","action":"review-launch","target":"mimo","detail":"bug round 4"}
+{"ts":"2026-10-09T01:13:05Z","project":"postmaster","run":"335","actor":"coachman","action":"review-launch","target":"opus","detail":"security round 4"}
+{"ts":"2026-10-09T02:11:15Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"scripts/lib/effective-config.ts:714","detail":"gating P2 r4 security opus, verified by reading"}
+{"ts":"2026-10-09T02:11:15Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"scripts/lib/effective-config.ts:966","detail":"gating P3 r4 bug mimo, verified by reading"}
+{"ts":"2026-10-09T02:11:15Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"scripts/lib/effective-config.ts:810","detail":"gating P3 r4 style luna, verified by reading"}
+{"ts":"2026-10-09T02:11:15Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"scripts/front-door.ts:156","detail":"gating P3 r4 style mimo, verified by execution"}
+{"ts":"2026-10-09T02:11:15Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"scripts/lib/effective-config.ts:980","detail":"gating P3 r4 bug luna, style luna mimo, verified by execution"}
+{"ts":"2026-10-09T02:11:15Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"scripts/plane.ts:1039","detail":"gating P3 r4 style luna, verified by reading"}
+{"ts":"2026-10-09T02:11:15Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"scripts/launch.ts:175","detail":"gating P3 r4 style luna, verified by reading"}
+{"ts":"2026-10-09T02:11:15Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"skills/postmaster/SKILL.md:259","detail":"gating P3 r4 bug luna, verified by reading"}
+{"ts":"2026-10-09T02:11:16Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"scripts/lib/effective-config.ts:1041","detail":"style P3 r4 style mimo, verified by reading"}
+{"ts":"2026-10-09T02:11:16Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"scripts/lib/effective-config.ts:113","detail":"style P3 r4 style mimo, verified by reading"}
+{"ts":"2026-10-09T02:11:16Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"scripts/project-settings.ts:112","detail":"style P3 r4 style mimo, verified by execution"}
+{"ts":"2026-10-09T02:11:16Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"scripts/project-settings.ts:64","detail":"style P3 r4 style mimo, verified by reading"}
+{"ts":"2026-10-09T02:11:16Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"scripts/project-settings.ts:43","detail":"style P3 r4 style mimo, verified by reading"}
+{"ts":"2026-10-09T02:11:16Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"skills/postmaster/SKILL.md:216","detail":"style P3 r4 style mimo, verified by reading"}
+{"ts":"2026-10-09T02:11:16Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"scripts/plane.ts:1046","detail":"style P3 r4 style mimo, verified by reading"}
+{"ts":"2026-10-09T02:11:16Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"scripts/front-door.test.ts:1","detail":"style P3 r4 style mimo, verified by reading"}
+{"ts":"2026-10-09T02:11:16Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"scripts/plane.test.ts:1","detail":"style P3 r4 style mimo, verified by reading"}
+{"ts":"2026-10-09T02:11:16Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"scripts/lib/effective-config.ts:1046","detail":"style P3 r4 style luna, verified by reading"}
+{"ts":"2026-10-09T04:37:11Z","project":"postmaster","run":"335","actor":"coachman","action":"review-launch","target":"luna","detail":"bug round 5 on 52654d7"}
+{"ts":"2026-10-09T04:37:12Z","project":"postmaster","run":"335","actor":"coachman","action":"review-launch","target":"mimo","detail":"bug round 5 on 52654d7"}
+{"ts":"2026-10-09T04:37:14Z","project":"postmaster","run":"335","actor":"coachman","action":"review-launch","target":"opus","detail":"security round 5 on 52654d7"}
+{"ts":"2026-10-09T05:11:22Z","project":"postmaster","run":"335","actor":"coachman","action":"degrade","target":"opus","detail":"security round 5: review-findings: Claude task output is outside /tmp/claude-1001: /tmp/claude-1001/-home-brindlewick-postmaster--worktrees-335-rev-security-opus/76f955f0-6301-473b-8131-9a632ebc2185/tasks/aa67e562265fa6cd8.output"}
+{"ts":"2026-10-09T05:52:51Z","project":"postmaster","run":"335","actor":"coachman","action":"degrade","target":"mimo","detail":"bug r5: timeout"}
+{"ts":"2026-10-09T05:55:02Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"skills/postmaster/SKILL.md:261","detail":"gating P2 r5 bug luna, verified by reading"}
+{"ts":"2026-10-09T06:34:33Z","project":"postmaster","run":"335","actor":"coachman","action":"review-launch","target":"luna","detail":"bug round 6 on ad29bc3c"}
+{"ts":"2026-10-09T06:34:34Z","project":"postmaster","run":"335","actor":"coachman","action":"review-launch","target":"haiku","detail":"bug round 6 on ad29bc3c"}
+{"ts":"2026-10-09T06:34:37Z","project":"postmaster","run":"335","actor":"coachman","action":"review-launch","target":"opus","detail":"security round 6 on ad29bc3c"}
+{"ts":"2026-10-09T07:02:55Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"scripts/launch.ts:1464","detail":"gating P2 r6 bug haiku, verified by execution"}
+{"ts":"2026-10-09T07:02:55Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"scripts/lib/effective-config.ts:1117","detail":"gating P2 r6 bug luna, verified by execution"}
+{"ts":"2026-10-09T07:02:55Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"scripts/lib/effective-config.ts:309","detail":"gating P3 r6 bug haiku, verified by execution"}
+{"ts":"2026-10-09T07:02:55Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"scripts/lib/effective-config.ts:1135","detail":"gating P3 r6 bug haiku, verified by reading"}
+{"ts":"2026-10-09T07:02:55Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"scripts/run-meta.ts:1000","detail":"gating P3 r6 bug haiku, verified by execution"}
+{"ts":"2026-10-09T07:02:55Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"scripts/lib/effective-config.ts:821","detail":"gating P3 r6 bug luna, verified by reading"}
+{"ts":"2026-10-09T07:44:20Z","project":"postmaster","run":"335","actor":"coachman","action":"review-launch","target":"luna","detail":"bug round 7 on 907f81ec"}
+{"ts":"2026-10-09T07:44:22Z","project":"postmaster","run":"335","actor":"coachman","action":"review-launch","target":"haiku","detail":"bug round 7 on 907f81ec"}
+{"ts":"2026-10-09T07:44:24Z","project":"postmaster","run":"335","actor":"coachman","action":"review-launch","target":"opus","detail":"security round 7 on 907f81ec"}
+{"ts":"2026-10-09T08:10:29Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"scripts/lib/effective-config.ts:1105","detail":"gating P2 r7 bug haiku, verified by execution"}
+{"ts":"2026-10-09T08:10:29Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"scripts/launch.ts:140","detail":"gating P2 r7 security opus, verified by execution"}
+{"ts":"2026-10-09T08:10:29Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"scripts/lib/effective-config.ts:1096","detail":"gating P3 r7 bug luna, verified by reading"}
+{"ts":"2026-10-09T08:10:29Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"scripts/plane.ts:1054","detail":"gating P3 r7 bug haiku, verified by reading"}
+{"ts":"2026-10-09T08:51:39Z","project":"postmaster","run":"335","actor":"coachman","action":"review-launch","target":"luna","detail":"bug round 8 on a131c5c5"}
+{"ts":"2026-10-09T08:51:40Z","project":"postmaster","run":"335","actor":"coachman","action":"review-launch","target":"haiku","detail":"bug round 8 on a131c5c5"}
+{"ts":"2026-10-09T08:51:42Z","project":"postmaster","run":"335","actor":"coachman","action":"review-launch","target":"opus","detail":"security round 8 on a131c5c5"}
+{"ts":"2026-10-09T09:24:34Z","project":"postmaster","run":"335","actor":"coachman","action":"degrade","target":"opus","detail":"security round 8: review-findings: task_notification names no output file"}
+{"ts":"2026-10-09T09:25:15Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"scripts/lib/effective-config.ts:696","detail":"gating P2 r8 bug haiku, verified by execution"}
+{"ts":"2026-10-09T09:56:29Z","project":"postmaster","run":"335","actor":"coachman","action":"review-launch","target":"luna","detail":"bug round 9 on 98e48f02"}
+{"ts":"2026-10-09T09:56:31Z","project":"postmaster","run":"335","actor":"coachman","action":"review-launch","target":"haiku","detail":"bug round 9 on 98e48f02"}
+{"ts":"2026-10-09T09:56:33Z","project":"postmaster","run":"335","actor":"coachman","action":"review-launch","target":"opus","detail":"security round 9 on 98e48f02"}
+{"ts":"2026-10-09T10:45:30Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"scripts/runs-watch.ts:548","detail":"gating P3 r9 bug haiku, verified by reading"}
+{"ts":"2026-10-09T10:45:30Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"scripts/setup.ts:142","detail":"gating P3 r9 bug haiku, verified by reading"}
+{"ts":"2026-10-09T10:45:30Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"scripts/lib/effective-config.ts:775","detail":"gating P3 r9 bug haiku, verified by reading"}
+{"ts":"2026-10-09T10:45:30Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"scripts/lib/effective-config.ts:1081","detail":"style r9 bug haiku, verified by reading"}
+{"ts":"2026-10-09T10:45:30Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"scripts/run-meta.ts:988","detail":"gating P3 r9 bug haiku, verified by reading"}
+{"ts":"2026-10-09T10:45:31Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"scripts/lib/effective-config.ts:711","detail":"gating P3 r9 security opus, hypothesis needs macOS"}
