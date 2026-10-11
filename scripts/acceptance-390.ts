@@ -63,6 +63,23 @@ const reachLine = (event: Record<string, unknown>): string =>
     detail: JSON.stringify(event),
   })}\n`;
 
+const censusRow = (
+  rule: string,
+  file: string,
+  line: number,
+  commitPad: string,
+  verdict: string,
+): string => JSON.stringify({ rule, file, line, commit: commitPad.repeat(40), verdict });
+
+/** One more census suspect on a layout that already has its census. */
+export function addCensusRow(layout: Layout): void {
+  appendFileSync(
+    join(layout.dispatch, "private-data-census.jsonl"),
+    `${censusRow("email", "census-path-three", 9, "f", "made-up")}\n`,
+    "utf8",
+  );
+}
+
 function coachmanCard(head12: string, main12: string, wt: string): string {
   return (
     "# Ship card\n\nMode: synthesis\n\n" +
@@ -83,8 +100,14 @@ function coachmanCard(head12: string, main12: string, wt: string): string {
  * checkpoint holding one open and one user-applied finding, reach records
  * with notes (one naming the record root, which renders as an empty name),
  * a switch-off entry with its reason, and a private-data finding with its
- * resolution. The card holds only the coachman's sections. */
-export function scratchLayout(tmp: string, name: string): Layout {
+ * resolution. The card holds only the coachman's sections. `reach: false`
+ * leaves the run with no reach records, so the block ends at Not
+ * re-reviewed; `census: true` gives the private-data part its census. */
+export function scratchLayout(
+  tmp: string,
+  name: string,
+  opts?: { reach?: boolean; census?: boolean },
+): Layout {
   const dir = join(tmp, name);
   const repo = join(dir, "repo");
   const wt = join(dir, "wt");
@@ -113,30 +136,34 @@ export function scratchLayout(tmp: string, name: string): Layout {
   const head12 = gitOrThrow(wt, "rev-parse", "HEAD").slice(0, 12);
   const recordRoot = realpathSync(resolve(dispatch, "..", "..", ".."));
   writeFileSync(join(dispatch, "checks.json"), CHECKS, "utf8");
+  const reach =
+    opts?.reach === false
+      ? ""
+      : reachLine({ kind: "point", point: "workhorses", result: "clean", lanes: [] }) +
+        reachLine({ kind: "point", point: "card", result: "note", lanes: ["haiku", "luna"] }) +
+        reachLine({
+          kind: "note",
+          point: "card",
+          lane: "haiku",
+          access: "read",
+          place: "main checkout",
+          path: recordRoot,
+          reason: "reads the project folder itself",
+        }) +
+        reachLine({
+          kind: "note",
+          point: "card",
+          lane: "luna",
+          access: "read",
+          place: "worktree",
+          path: join(wt, "scripts", "switch.ts"),
+          reason: "reads the ticket file",
+        });
   writeFileSync(
     join(dispatch, "actions.jsonl"),
     verifyLine("gate", `${ticket}@${head12}`, "pass", 0) +
       verifyLine("unit", `${ticket}@${head12}`, "pass", 0) +
-      reachLine({ kind: "point", point: "workhorses", result: "clean", lanes: [] }) +
-      reachLine({ kind: "point", point: "card", result: "note", lanes: ["haiku", "luna"] }) +
-      reachLine({
-        kind: "note",
-        point: "card",
-        lane: "haiku",
-        access: "read",
-        place: "main checkout",
-        path: recordRoot,
-        reason: "reads the project folder itself",
-      }) +
-      reachLine({
-        kind: "note",
-        point: "card",
-        lane: "luna",
-        access: "read",
-        place: "worktree",
-        path: join(wt, "scripts", "switch.ts"),
-        reason: "reads the ticket file",
-      }),
+      reach,
     "utf8",
   );
   writeFileSync(join(dispatch, "run.json"), `${JSON.stringify({ mode: "synthesis" })}\n`, "utf8");
@@ -147,6 +174,16 @@ export function scratchLayout(tmp: string, name: string): Layout {
     `${JSON.stringify({ ...finding, resolution: "removed" })}\n`,
     "utf8",
   );
+  if (opts?.census === true) {
+    writeFileSync(
+      join(dispatch, "private-data-census.jsonl"),
+      [
+        censusRow("email", "census-path-one", 7, "d", "made-up"),
+        censusRow("token", "census-path-two", 8, "e", "real"),
+      ].join("\n") + "\n",
+      "utf8",
+    );
+  }
   const checkpoint = join(dispatch, "checkpoint.md");
   writeFileSync(
     checkpoint,

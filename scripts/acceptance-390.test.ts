@@ -8,6 +8,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import {
   TICKET,
+  addCensusRow,
   cardWrite,
   checkFindings,
   checkPrivateData,
@@ -210,6 +211,46 @@ describe("C2: running it again replaces the parts", () => {
     expect(refused.code).toBe(4);
     expect(`${refused.out}${refused.err}`).toContain("refused");
     expect(readCard(layout)).toBe(card);
+  });
+
+  test("a block without reach records ends at Not re-reviewed and gains Reach when notes land", () => {
+    const layout = scratchLayout(tmp, "c2i", { reach: false });
+    expect(cardWrite(layout).code).toBe(0);
+    const card = readCard(layout);
+    expect(card).not.toContain("## Reach");
+    expect(checkResults(layout).out.trim()).toBe("match");
+    const before = card;
+    const intro = before.slice(0, before.indexOf("## Checks"));
+    const rest = before.slice(before.indexOf("## Merge"));
+    moveRecords(layout);
+    expect(cardWrite(layout).code).toBe(0);
+    const grown = readCard(layout);
+    const parts = rendered(layout);
+    expect(grown).toContain("## Reach");
+    expect(countOccurrences(grown, parts.block)).toBe(1);
+    expect(checkResults(layout).out.trim()).toBe("match");
+    expect(checkFindings(layout).out.trim()).toBe("match");
+    expect(grown.slice(0, grown.indexOf("## Checks"))).toBe(intro);
+    expect(grown.endsWith(rest)).toBe(true);
+  });
+
+  test("a census block replaces cleanly when suspects land", () => {
+    const layout = scratchLayout(tmp, "c2j", { census: true });
+    expect(cardWrite(layout).code).toBe(0);
+    expect(readCard(layout)).toContain("## Main history census");
+    expect(checkPrivateData(layout).out.trim()).toBe("match");
+    const before = readCard(layout);
+    const intro = before.slice(0, before.indexOf("## Checks"));
+    const rest = before.slice(before.indexOf("## Merge"));
+    addCensusRow(layout);
+    expect(cardWrite(layout).code).toBe(0);
+    const grown = readCard(layout);
+    const parts = rendered(layout);
+    expect(parts.privateData).toContain("- suspects: 3");
+    expect(countOccurrences(grown, parts.privateData)).toBe(1);
+    expect(checkPrivateData(layout).out.trim()).toBe("match");
+    expect(grown.slice(0, grown.indexOf("## Checks"))).toBe(intro);
+    expect(grown.endsWith(rest)).toBe(true);
   });
 });
 
