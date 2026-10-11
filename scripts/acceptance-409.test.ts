@@ -12,6 +12,7 @@ import { join } from "node:path";
 import {
   NOTICE,
   NO_QUOTE,
+  claudeResult,
   claudeUse,
   codexExec,
   fixtureDispatch,
@@ -594,6 +595,208 @@ describe("C3: the check's edges", () => {
     // planted in one agent's stream reads naming the agent and the form, and a
     // title read alone reads not read with the title named. The postmaster
     // runs the check on copies at landing.
+  });
+});
+
+describe("C3: review round 1 fixes", () => {
+  test("a read on a later line of a multi-line command reads", () => {
+    const dispatch = fixtureDispatch(tmp, "c3-multiline", {
+      legs: [
+        {
+          n: 1,
+          harness: "codex",
+          lines: [codexExec("set -e\ngh issue view 409 --json body", "B", 0)],
+        },
+      ],
+    });
+    const r = ticketReads(dispatch);
+    expect(r.code).toBe(0);
+    expect(outcomeOf(r.out)).toBe("ticket-reads: read by coachman leg 1 (gh issue view)");
+  });
+
+  test("a read inside a quoted command substitution reads", () => {
+    const dispatch = fixtureDispatch(tmp, "c3-subst", {
+      legs: [
+        {
+          n: 1,
+          harness: "codex",
+          lines: [codexExec('cat "$(gh issue view 409 --json body -q .body)"', "B", 0)],
+        },
+      ],
+    });
+    const r = ticketReads(dispatch);
+    expect(r.code).toBe(0);
+    expect(outcomeOf(r.out)).toBe("ticket-reads: read by coachman leg 1 (gh issue view)");
+  });
+
+  test("a relative read after cd to the repo reads", () => {
+    const probe = fixtureDispatch(tmp, "c3-cd-probe", { legs: [] });
+    const repo = repoOf(probe);
+    const dispatch = fixtureDispatch(tmp, "c3-cd", {
+      repo,
+      legs: [
+        {
+          n: 1,
+          harness: "codex",
+          lines: [codexExec(`cd ${repo} && cat .postmaster/clerk/409.md`, "T", 0)],
+        },
+      ],
+    });
+    const r = ticketReads(dispatch);
+    expect(r.code).toBe(0);
+    expect(outcomeOf(r.out)).toBe("ticket-reads: read by coachman leg 1 (clerk draft)");
+  });
+
+  test("a walled leg's renamed stream reads beside its fresh one", () => {
+    const dispatch = fixtureDispatch(tmp, "c3-walled", {
+      legs: [{ n: 1, harness: "codex", lines: [codexExec("echo hi", "hi", 0)] }],
+    });
+    const stream =
+      `${JSON.stringify({ type: "thread.started", thread_id: "t" })}\n` +
+      `${codexExec("gh issue view 409 --json body", "B", 0)}\n`;
+    writeFileSync(join(dispatch, "logs", "coachman-leg-1-walled-events.jsonl"), stream, "utf8");
+    const r = ticketReads(dispatch);
+    expect(r.code).toBe(0);
+    expect(outcomeOf(r.out)).toBe("ticket-reads: read by coachman leg 1 walled (gh issue view)");
+  });
+
+  test("a leg on its own harness reads with it", () => {
+    const dispatch = fixtureDispatch(tmp, "c3-perleg", {
+      legs: [
+        { n: 1, harness: "muse", lines: [] },
+        {
+          n: 2,
+          harness: "codex",
+          lines: [codexExec("gh issue view 409 --json body", "B", 0)],
+        },
+      ],
+    });
+    const runJson = JSON.parse(readFileSync(join(dispatch, "run.json"), "utf8")) as Record<
+      string,
+      unknown
+    >;
+    const team = (runJson.config as Record<string, unknown>).team as Record<string, unknown>;
+    team.coachman = { harness: "muse", model: "m" };
+    team.coachman_legs = { review: { harness: "codex", model: "m" } };
+    writeFileSync(join(dispatch, "run.json"), JSON.stringify(runJson), "utf8");
+    const r = ticketReads(dispatch);
+    expect(r.code).toBe(0);
+    expect(outcomeOf(r.out)).toBe("ticket-reads: read by coachman leg 2 (gh issue view)");
+  });
+
+  test("an unreadable run.json is unknown, never not checked", () => {
+    const dispatch = fixtureDispatch(tmp, "c3-badrunjson", {
+      legs: [{ n: 1, harness: "codex", lines: [codexExec("echo hi", "hi", 0)] }],
+    });
+    writeFileSync(join(dispatch, "run.json"), "{corrupt", "utf8");
+    const r = ticketReads(dispatch);
+    expect(r.code).toBe(0);
+    expect(outcomeOf(r.out)).toBe("ticket-reads: unknown (run.json cannot be read)");
+  });
+
+  test("a mutating gh api call shows no ticket text", () => {
+    const dispatch = fixtureDispatch(tmp, "c3-apipost", {
+      legs: [
+        {
+          n: 1,
+          harness: "codex",
+          lines: [
+            codexExec("gh api -X POST repos/example/shop/issues/409/comments -f body=hi", "", 0),
+          ],
+        },
+      ],
+    });
+    const r = ticketReads(dispatch);
+    expect(r.code).toBe(0);
+    expect(outcomeOf(r.out)).toBe("ticket-reads: not read");
+  });
+
+  test("a graphql read matches the run's repository", () => {
+    const other = 'query { repository(owner:"other",name:"box") { issue(number:409) { body } } }';
+    const foreign = fixtureDispatch(tmp, "c3-gqlforeign", {
+      legs: [
+        {
+          n: 1,
+          harness: "codex",
+          lines: [codexExec(`gh api graphql -f query='${other}'`, "{}", 0)],
+        },
+      ],
+    });
+    const r = ticketReads(foreign);
+    expect(r.code).toBe(0);
+    expect(outcomeOf(r.out)).toBe("ticket-reads: not read");
+    const own = 'query { repository(owner:"example",name:"shop") { issue(number:409) { body } } }';
+    const home = fixtureDispatch(tmp, "c3-gqlown", {
+      legs: [
+        {
+          n: 1,
+          harness: "codex",
+          lines: [codexExec(`gh api graphql -f query='${own}'`, "{}", 0)],
+        },
+      ],
+    });
+    const r2 = ticketReads(home);
+    expect(r2.code).toBe(0);
+    expect(outcomeOf(r2.out)).toBe("ticket-reads: read by coachman leg 1 (gh api graphql)");
+  });
+
+  test("another local ticket's file is ignored, not unknown", () => {
+    const probe = fixtureDispatch(tmp, "c3-sibling-probe", {
+      ticket: 1,
+      tracker: "local",
+      legs: [],
+    });
+    const dispatch = fixtureDispatch(tmp, "c3-sibling", {
+      ticket: 1,
+      tracker: "local",
+      repo: repoOf(probe),
+      legs: [
+        {
+          n: 1,
+          harness: "codex",
+          lines: [codexExec(`cat ${storeOf(probe)}/2.md`, "T", 0)],
+        },
+      ],
+    });
+    const r = ticketReads(dispatch);
+    expect(r.code).toBe(0);
+    expect(outcomeOf(r.out)).toBe("ticket-reads: not read");
+  });
+
+  test("a find scan of the ticket store is unknown, never clean", () => {
+    const probe = fixtureDispatch(tmp, "c3-find-probe", { tracker: "local", legs: [] });
+    const dispatch = fixtureDispatch(tmp, "c3-find", {
+      tracker: "local",
+      repo: repoOf(probe),
+      legs: [
+        {
+          n: 1,
+          harness: "codex",
+          lines: [codexExec(`find ${storeOf(probe)} -name 409.md -exec cat {} \\;`, "T", 0)],
+        },
+      ],
+    });
+    const r = ticketReads(dispatch);
+    expect(r.code).toBe(0);
+    expect(outcomeOf(r.out).startsWith("ticket-reads: unknown")).toBe(true);
+  });
+
+  test("a failed call counts for nothing", () => {
+    const dispatch = fixtureDispatch(tmp, "c3-failedcall", {
+      agents: [
+        {
+          lane: "w",
+          harness: "claude",
+          lines: [
+            claudeUse("Bash", { command: "gh issue view 409 --json body" }, "toolu_9"),
+            claudeResult("toolu_9", "failed", true),
+          ],
+        },
+      ],
+    });
+    const r = ticketReads(dispatch);
+    expect(r.code).toBe(0);
+    expect(outcomeOf(r.out)).toBe("ticket-reads: not read");
   });
 });
 

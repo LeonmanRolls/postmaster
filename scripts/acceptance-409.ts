@@ -75,6 +75,16 @@ export function claudeUse(name: string, input: Record<string, unknown>, id = "to
   });
 }
 
+/** A claude tool_result block answering a tool_use, in the stream's shape. */
+export function claudeResult(id: string, content: string, isError = false): string {
+  return JSON.stringify({
+    type: "user",
+    message: {
+      content: [{ type: "tool_result", tool_use_id: id, content, is_error: isError }],
+    },
+  });
+}
+
 /** A muse tool result whose text is the command's JSON report, pretty as the harness prints it. */
 export function museExec(command: string, code = 0): string {
   const text = JSON.stringify({ command, exit_code: code, output: "" }, null, 2);
