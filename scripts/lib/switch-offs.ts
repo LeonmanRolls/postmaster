@@ -691,8 +691,15 @@ function git(repo: string, args: string[]): string {
   return r.out;
 }
 
-function commitOfRef(repo: string, ref: string): string {
+export function commitOfRef(repo: string, ref: string): string {
   return git(repo, ["rev-parse", "--verify", `${ref}^{commit}`]).trim();
+}
+
+/** The merge base of two commits, or a refusal when they share none. */
+export function mergeBase(repo: string, a: string, b: string): string {
+  const base = git(repo, ["merge-base", a, b]).trim();
+  if (base === "") throw new Error(`no merge base of ${a} and ${b}`);
+  return base;
 }
 
 function isSource(path: string): boolean {
@@ -725,7 +732,7 @@ function changedPaths(repo: string, base: string, head: string): string[] {
     .filter((path) => path !== "");
 }
 
-function blobAt(repo: string, rev: string, path: string): string | null {
+export function blobAt(repo: string, rev: string, path: string): string | null {
   const r = run("git", ["-C", repo, "cat-file", "blob", `${rev}:${path}`], { env: UNSET_GIT });
   if (r.code !== 0) return null;
   return r.out;
