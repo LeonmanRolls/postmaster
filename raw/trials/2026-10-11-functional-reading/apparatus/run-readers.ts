@@ -10,11 +10,12 @@
 // For sample i it writes <out>/<model>/<module>/<arrangement>/s<i>.json (the session's whole JSON
 // result: reply, usage and cost) and s<i>.answers.json (the answers read out of the reply, or
 // null). A sample that already has its file is skipped, so a run can be repeated or resumed and
-// nothing recorded is overwritten. --mode says how the reader is asked to work (careful: trace
+// nothing recorded is overwritten. The prompt, the same for every sample of an arrangement and
+// mode, is kept once as prompt.txt beside the sessions. --mode says how the reader is asked to work (careful: trace
 // step by step; quick: write nothing but the answers) and --thinking caps its thinking tokens. The prompt goes in on standard input, because a module is longer
 // than an argument may be.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { buildPrompt, extractAnswers, type Mode, type Question } from "./reading.ts";
 
 const SYSTEM = "You are a careful reader of source code. You cannot run code.";
@@ -37,8 +38,8 @@ async function runOne(
   job: Readonly<{ prompt: string; stem: string }>,
   config: Config,
 ): Promise<void> {
-  const promptPath = `${job.stem}.prompt.txt`;
-  writeFileSync(promptPath, job.prompt);
+  const promptPath = join(dirname(job.stem), "prompt.txt");
+  if (!existsSync(promptPath)) writeFileSync(promptPath, job.prompt);
   const outPath = `${job.stem}.json`;
   const proc = Bun.spawn(
     [
