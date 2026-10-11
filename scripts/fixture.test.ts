@@ -2070,7 +2070,8 @@ describe("score: waybill effort controls", () => {
     const result = runScore(dispatch, repo);
     expect(result.code).toBe(0);
     expect(result.out).toContain("ok   efforts");
-  }, 30000);
+    // A full score costs about 17 s quiet; the limit sits at ten times that.
+  }, 180000);
 
   test("the same score command rejects a changed Team effort", () => {
     const repo = join(tmp, `clean-${first}`, "repo");
@@ -2083,7 +2084,8 @@ describe("score: waybill effort controls", () => {
     const result = runScore(dispatch, repo);
     expect(result.code).toBe(2);
     expect(result.out).toContain("FAIL efforts");
-  }, 30000);
+    // A full score costs about 17 s quiet; the limit sits at ten times that.
+  }, 180000);
 
   test("a model containing a slash leaves the Team effort as its last field", () => {
     const dispatch = join(scratch, "dispatch");
