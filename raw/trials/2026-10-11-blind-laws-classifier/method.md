@@ -100,6 +100,28 @@ out again (negative and positive). It counts toward nothing.
 The trial failed if the laws find fewer than a third of the eight, if they fail on code the review
 later found clean (read here as a false alarm), or if the generators take more than a day.
 
+## The writer's run
+
+- **Time.** From its first event at 2026-10-11 04:35:53 UTC to its last at 05:41:18 UTC: 65
+  minutes, 62 tool calls, about 511,000 tokens. That covers reading the ticket, writing the ten
+  laws and checking their generators.
+- **What it wrote.** [`laws/laws.ts`](laws/laws.ts) and [`laws/LAWS.md`](laws/LAWS.md), copied
+  byte for byte from its folder and committed before any law ran against any version of the
+  classifier. Its own account is [`results/writer-report.md`](results/writer-report.md).
+- **What it read and ran.** [`results/writer-calls.tsv`](results/writer-calls.tsv), from its
+  transcript by [`apparatus/reads.ts`](apparatus/reads.ts): 62 calls, every file read, written
+  or edited inside its folder. The check marks five shell commands as naming a place outside;
+  read by hand, none reads anything outside. Two set `HOME` inside a Bun process to made-up
+  paths to see how Bun follows it; one sends errors to `/dev/null`; two run real bash only
+  through `sandboxed`, in temporary folders inside the writer's folder, one of them trying a
+  write to `/etc` that the sandbox refused. Nothing they named exists afterwards.
+- **What else it may have seen.** A sub-agent starts with the harness's own instructions, which
+  can include the project's `CLAUDE.md` and the session memory's index. Neither names any of the
+  eight findings or anything about the classifier's defects.
+- **It tested its generators against real bash, never against a classifier,** through the
+  sandbox, with two scripts it deleted afterwards. The brief allows that: it bars running the
+  laws against any code but the stand-in.
+
 ## Deviations
 
-None yet.
+None.
