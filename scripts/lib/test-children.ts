@@ -26,6 +26,13 @@ export function countsTowardReport(entry: ProcessSnapshot, t0: number): boolean 
   return !entry.stat.startsWith("Z") && startedDuringTest(entry.started, t0);
 }
 
+/** Whether two sightings are the same process: both starts read and agree.
+ * A pid reused between sightings reads as ended, never as the unrelated
+ * process that took its number. */
+export function sameProcess(a: ProcessSnapshot, b: ProcessSnapshot): boolean {
+  return a.started !== null && a.started === b.started;
+}
+
 const POLL_MS = 500;
 const GRACE_MS = 100;
 
@@ -69,13 +76,18 @@ afterEach(async () => {
   const end = await snapshotDescendants(process.pid);
   const candidates = new Map<number, ProcessSnapshot>();
   for (const entry of [...seen.values(), ...end.values()]) {
-    if (countsTowardReport(entry, t0)) candidates.set(entry.pid, end.get(entry.pid) ?? entry);
+    if (!countsTowardReport(entry, t0)) continue;
+    const first = seen.get(entry.pid);
+    const atEnd = end.get(entry.pid);
+    const same = first !== undefined && atEnd !== undefined && sameProcess(first, atEnd);
+    candidates.set(entry.pid, same ? atEnd : (first ?? entry));
   }
   if (candidates.size === 0) return;
   const noun = candidates.size === 1 ? "1 child process" : `${candidates.size} child processes`;
   console.error(`test-children: ${noun} still running at the test's last check:`);
   for (const [pid, entry] of [...candidates].sort(([a], [b]) => a - b)) {
-    const live = end.get(pid);
+    const atEnd = end.get(pid);
+    const live = atEnd !== undefined && sameProcess(entry, atEnd) ? atEnd : undefined;
     const state =
       live === undefined
         ? "reaped as the test ended"
