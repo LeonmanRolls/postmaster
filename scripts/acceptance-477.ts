@@ -22,9 +22,8 @@ export interface LocalSurface {
   name: string;
 }
 
-/** Shell lines writing one verifier's folder under a root, with three pages. */
-export function verifierWork(root: string, surface: LocalSurface): string[] {
-  const dir = `${root}/${surface.seg}`;
+/** Shell lines writing one verifier's folder, with three pages. */
+export function verifierWork(dir: string, surface: LocalSurface): string[] {
   return [
     `mkdir -p ${dir}/features`,
     `printf "# ${surface.seg} verifier\\n\\nFor the ${surface.prose}.\\n\\n${UPKEEP_SENTENCE}\\n" > ${dir}/README.md`,
@@ -41,10 +40,10 @@ export function indexBullet(root: string, surface: LocalSurface): string {
 }
 
 /** Shell lines appending one proven hand-over section, its proof under ORACLE_ROOT. */
-export function provenSection(root: string, surface: LocalSurface): string[] {
+export function provenSection(folder: string, surface: LocalSurface): string[] {
   return [
     `printf 'driven ok\\n' > "$ORACLE_ROOT/proof-${surface.seg}.log"`,
-    `printf '## Verifier: ${surface.name}\\nFolder: ${root}/${surface.seg}\\nProof: %s\\n\\n' "$ORACLE_ROOT/proof-${surface.seg}.log" >> HANDOVER.md`,
+    `printf '## Verifier: ${surface.name}\\nFolder: ${folder}\\nProof: %s\\n\\n' "$ORACLE_ROOT/proof-${surface.seg}.log" >> HANDOVER.md`,
   ];
 }
 
@@ -68,15 +67,15 @@ export function localWork(
 ): string[] {
   const root = ".postmaster/verifier";
   const lines = ["SHA=$(git rev-parse HEAD)"];
-  for (const s of proven) lines.push(...verifierWork(root, s));
+  for (const s of proven) lines.push(...verifierWork(`${root}/${s.seg}`, s));
   for (const s of unproven) {
-    lines.push(...verifierWork(root, s));
+    lines.push(...verifierWork(`${root}/${s.seg}`, s));
     lines.push(`rm -rf ${root}/${s.seg}`);
   }
   lines.push(`printf '# Verifiers\\n\\n' > ${root}/README.md`);
   for (const s of [...proven, ...dangling]) lines.push(indexBullet(root, s));
   lines.push(`printf '# Handover\\n\\n' > HANDOVER.md`);
-  for (const s of proven) lines.push(...provenSection(root, s));
+  for (const s of proven) lines.push(...provenSection(`${root}/${s.seg}`, s));
   for (const s of unproven) lines.push(...unprovenSection(root, s));
   return lines;
 }
@@ -105,12 +104,12 @@ export function repoSingleWork(surface: LocalSurface): string[] {
 export function repoMultiWork(surfaces: LocalSurface[]): string[] {
   const root = "verifier";
   const lines = ["SHA=$(git rev-parse HEAD)"];
-  for (const s of surfaces) lines.push(...verifierWork(root, s));
+  for (const s of surfaces) lines.push(...verifierWork(`${root}/${s.seg}`, s));
   lines.push(`printf '# Verifiers\\n\\n' > ${root}/README.md`);
   for (const s of surfaces) lines.push(indexBullet(root, s));
   lines.push("git add -A", "git commit -qm stub");
   lines.push(`printf '# Handover\\n\\n' > HANDOVER.md`);
-  for (const s of surfaces) lines.push(...provenSection(root, s));
+  for (const s of surfaces) lines.push(...provenSection(`${root}/${s.seg}`, s));
   return lines;
 }
 
