@@ -44,6 +44,25 @@ export function runTool(args: string[], env: Record<string, string> = {}): RunRe
   );
 }
 
+/** Async, for commands that transitively reach the in-process stub registry:
+ * a synchronous spawn would deadlock the server. */
+export async function runToolAsync(
+  args: string[],
+  env: Record<string, string> = {},
+): Promise<RunResult> {
+  const root = repoRoot();
+  const child = Bun.spawn([join(root, "scripts", "run"), ...args], {
+    cwd: root,
+    env: { ...process.env, ...env },
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const code = await child.exited;
+  const out = await new Response(child.stdout).text();
+  const err = await new Response(child.stderr).text();
+  return { code, out, err };
+}
+
 /** Async, so the stub registry serving this bun call keeps answering while
  * the child runs; a synchronous spawn would deadlock the in-process server. */
 export async function runBun(

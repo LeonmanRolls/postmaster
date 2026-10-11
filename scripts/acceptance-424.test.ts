@@ -23,6 +23,7 @@ import {
   repoRoot,
   runBun,
   runTool,
+  runToolAsync,
   startStubRegistry,
   writeApprovals,
   writeFactsFixture,
@@ -221,7 +222,7 @@ describe("C3: nothing installs or copies in without the recorded yes", () => {
           "yes, take it",
         ]);
         expect(approval.code).toBe(0);
-        const r = runTool(
+        const r = await runToolAsync(
           ["libraries", "record", "is-odd", "3.0.1", "--dispatch", dispatch, "--wt", dir],
           { POSTMASTER_SCAN_FIXTURE: scan },
         );
