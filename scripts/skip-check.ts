@@ -299,6 +299,20 @@ async function runSuite(argv: string[], stuckSecs: number): Promise<number | nul
     stdio: ["ignore", "pipe", "pipe"],
     detached: true,
   });
+  // The suite runs in its own group, so an interrupt to this check's
+  // group never reaches it: forward the signal, and the exit path
+  // below ends the check once the suite dies.
+  for (const signal of ["SIGINT", "SIGTERM"] as const) {
+    process.once(signal, () => {
+      if (child.pid !== undefined) {
+        try {
+          process.kill(-child.pid, signal);
+        } catch {
+          // Already gone.
+        }
+      }
+    });
+  }
   const decoder = new TextDecoder("utf-8");
   // Raw bytes split on line breaks, each line decoded whole: a multibyte
   // character never holds a break byte, so no character is ever split.
