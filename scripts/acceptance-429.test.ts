@@ -5,7 +5,15 @@
 // stays hand-run by the coachman during synthesis; C5 the record and the lane
 // failures. Every case drives scripts/run as a subprocess.
 import { describe, expect, test } from "bun:test";
-import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import {
   both,
@@ -14,11 +22,15 @@ import {
   claudeResult,
   codexDone,
   codexThread,
+  git,
   makeSurveyLayout,
+  need,
   patchRunJson,
   readActions,
+  removeDir,
   ROOT,
   RUN,
+  scratchDir,
   setStub,
   setupDryRun,
   sh,
@@ -60,20 +72,40 @@ describe("C1: the skill", () => {
   });
 
   test("link-skills --dry-run lists surveyor for each harness with a skills folder", () => {
-    const r = sh(RUN, ["link-skills", "--dry-run"], process.env as Record<string, string>);
-    expect(r.code).toBe(0);
-    const tags = new Set<string>();
-    for (const line of r.out.split("\n")) {
-      if (!line.includes("skills/clerk") && !line.includes("skills/postmaster")) continue;
-      const m = /\(([a-z]+)\)\s*$/u.exec(line);
-      if (m?.[1]) tags.add(m[1]);
-    }
-    expect(tags.size).toBeGreaterThan(0);
-    for (const tag of tags) {
-      const found = r.out
-        .split("\n")
-        .some((l) => l.includes("skills/surveyor") && l.includes(`(${tag})`));
-      expect(found).toBe(true);
+    // link-skills links the main checkout even from a worktree, so the
+    // branch's own links are read from a checkout copy whose main it is.
+    const dir = scratchDir("surveyor-links-");
+    try {
+      for (const n of ["scripts", "skills", "bunfig.toml", "package.json"]) {
+        cpSync(join(ROOT, n), join(dir, n), { recursive: true });
+      }
+      chmodSync(join(dir, "scripts", "run"), 0o755);
+      need(git("init", "-q", "-b", "main", dir), "init links repo");
+      need(git("-C", dir, "add", "."), "add links tree");
+      need(git("-C", dir, "commit", "-qm", "tree"), "commit links tree");
+      // A clean home: the machine's own links point at its main checkout
+      // and would read as in the way.
+      const home = join(dir, "home");
+      mkdirSync(home, { recursive: true });
+      const env: Record<string, string | undefined> = { ...process.env, HOME: home };
+      delete env.CLAUDE_CONFIG_DIR;
+      const r = sh(join(dir, "scripts", "run"), ["link-skills", "--dry-run"], env);
+      expect(r.code).toBe(0);
+      const tags = new Set<string>();
+      for (const line of r.out.split("\n")) {
+        if (!line.includes("skills/clerk") && !line.includes("skills/postmaster")) continue;
+        const m = /\(([a-z]+)\)\s*$/u.exec(line);
+        if (m?.[1]) tags.add(m[1]);
+      }
+      expect(tags.size).toBeGreaterThan(0);
+      for (const tag of tags) {
+        const found = r.out
+          .split("\n")
+          .some((l) => l.includes(join(dir, "skills", "surveyor")) && l.includes(`(${tag})`));
+        expect(found).toBe(true);
+      }
+    } finally {
+      removeDir(dir);
     }
   });
 
@@ -269,15 +301,14 @@ describe("C3: the materials gate", () => {
       }
       const held = readdirSync(folder).sort();
       expect(held.length).toBe(4);
-      expect(held[0]).toBe("question.md");
-      expect(held.slice(1).every((n: string) => n.startsWith("material-"))).toBe(true);
+      expect(held).toContain("question.md");
+      const mats = held.filter((n: string) => n !== "question.md");
+      expect(mats.length).toBe(3);
+      expect(mats.every((n: string) => n.startsWith("material-"))).toBe(true);
       expect(readFileSync(join(folder, "question.md"), "utf8")).toBe(
         readFileSync(question, "utf8"),
       );
-      const copies = held
-        .slice(1)
-        .map((n: string) => readFileSync(join(folder, n), "utf8"))
-        .sort();
+      const copies = mats.map((n: string) => readFileSync(join(folder, n), "utf8")).sort();
       const originals = [
         readFileSync(join(lay.dispatch, "ticket-body.md"), "utf8"),
         readFileSync(join(lay.dispatch, "logs", "review-r1-bug-luna-last.md"), "utf8"),
@@ -408,7 +439,7 @@ describe("C5: the record and the failures", () => {
       const r = opusCall(lay, "first", ANSWER);
       expect(r.code).toBe(0);
       expect(r.out.trim()).toBe(join(lay.dispatch, "surveys", "first.md"));
-      expect(readFileSync(join(lay.dispatch, "surveys", "first.md"), "utf8")).toBe(`${ANSWER}\n`);
+      expect(readFileSync(join(lay.dispatch, "surveys", "first.md"), "utf8")).toBe(ANSWER);
       const harvests = readActions(lay.dispatch).filter((a) => a.action === "harvest");
       expect(harvests.length).toBe(1);
       expect(harvests[0]!.target).toBe("first");
@@ -423,8 +454,8 @@ describe("C5: the record and the failures", () => {
       expect(opusCall(lay, "one", ANSWER).code).toBe(0);
       const second = "## Conclusion\nAnother answer.\n";
       expect(opusCall(lay, "two", second).code).toBe(0);
-      expect(readFileSync(join(lay.dispatch, "surveys", "one.md"), "utf8")).toBe(`${ANSWER}\n`);
-      expect(readFileSync(join(lay.dispatch, "surveys", "two.md"), "utf8")).toBe(`${second}\n`);
+      expect(readFileSync(join(lay.dispatch, "surveys", "one.md"), "utf8")).toBe(ANSWER);
+      expect(readFileSync(join(lay.dispatch, "surveys", "two.md"), "utf8")).toBe(second);
       expect(readActions(lay.dispatch).filter((a) => a.action === "harvest").length).toBe(2);
     },
     420000,
@@ -450,7 +481,7 @@ describe("C5: the record and the failures", () => {
       ]);
       expect(again.code).toBe(2);
       expect(both(again)).toContain("taken");
-      expect(readFileSync(join(lay.dispatch, "surveys", "taken.md"), "utf8")).toBe(`${ANSWER}\n`);
+      expect(readFileSync(join(lay.dispatch, "surveys", "taken.md"), "utf8")).toBe(ANSWER);
       expect(callLines(lay).length).toBe(callsBefore);
     },
     300000,

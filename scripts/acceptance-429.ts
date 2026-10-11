@@ -152,15 +152,15 @@ export interface SurveyLayout {
 }
 
 function writeRecordingStub(bin: string, harness: string): void {
-  // Log the call, print the case's events, honor codex -o with the case's
-  // last-file content, run the case's setup, exit its code.
+  // Log the call on one line, print the case's events, honor codex -o with
+  // the case's last-file content, run the case's setup, exit its code.
   const oHonor =
     harness === "codex"
       ? 'last=""; prev=""; for a in "$@"; do if [ "$prev" = "-o" ]; then last="$a"; fi; prev="$a"; done; if [ -n "$last" ] && [ -f "$SURVEY_STUB_DIR/codex.last" ]; then cat "$SURVEY_STUB_DIR/codex.last" > "$last"; fi\n'
       : "";
   writeFileSync(
     join(bin, harness),
-    `#!/bin/sh\necho "${harness} $@" >> "$SURVEY_CALLS"\n${oHonor}cat "$SURVEY_STUB_DIR/${harness}.events" 2>/dev/null\nif [ -f "$SURVEY_STUB_DIR/${harness}.setup" ]; then . "$SURVEY_STUB_DIR/${harness}.setup"; fi\ncode=$(cat "$SURVEY_STUB_DIR/${harness}.exit" 2>/dev/null)\nexit "\${code:-0}"\n`,
+    `#!/bin/sh\necho "${harness} $@" | tr '\\n' ' ' >> "$SURVEY_CALLS"\necho >> "$SURVEY_CALLS"\n${oHonor}cat "$SURVEY_STUB_DIR/${harness}.events" 2>/dev/null\nif [ -f "$SURVEY_STUB_DIR/${harness}.setup" ]; then . "$SURVEY_STUB_DIR/${harness}.setup"; fi\ncode=$(cat "$SURVEY_STUB_DIR/${harness}.exit" 2>/dev/null)\nexit "\${code:-0}"\n`,
   );
   chmodSync(join(bin, harness), 0o755);
 }
@@ -181,10 +181,12 @@ export function makeSurveyLayout(): SurveyLayout {
   const calls = join(tmp, "calls.log");
   const repo = join(tmp, "proj");
   const dispatch = join(tmp, "runs", "T");
+  const syn = join(repo, ".worktrees", "T");
   mkdirSync(home, { recursive: true });
   mkdirSync(bin, { recursive: true });
   mkdirSync(stubDir, { recursive: true });
   mkdirSync(join(dispatch, "logs"), { recursive: true });
+  mkdirSync(syn, { recursive: true });
   for (const h of ["claude", "codex"]) writeRecordingStub(bin, h);
   for (const h of ["grok", "agy", "muse", "pi", "mimo", "herdr", "tmux"]) writeDead(bin, h);
 
@@ -200,6 +202,7 @@ export function makeSurveyLayout(): SurveyLayout {
     join(dispatch, "run.json"),
     `${JSON.stringify(
       {
+        postmaster: { checkout: ROOT },
         config: {
           confine: "off",
           lanes: {
@@ -221,7 +224,7 @@ export function makeSurveyLayout(): SurveyLayout {
   );
   writeFileSync(
     join(dispatch, "brief.md"),
-    `# Waybill: T\nturnpikes: style, bug, security\n\n## Team\nmode: single-thread\nreviewers: luna, haiku\nbug reviewers: luna, haiku\nsecurity reviewers: opus\n\n## Dispatch\nname: #1, Oracle fixture\n`,
+    `# Waybill: T\nturnpikes: style, bug, security\n\n## Team\nmode: single-thread\nreviewers: luna, haiku\nbug reviewers: luna, haiku\nsecurity reviewers: opus\n\n## Dispatch\nname: #1, Oracle fixture\nsynthesis worktree: ${syn}\n`,
   );
   writeFileSync(join(dispatch, "run-log.md"), "");
   writeFileSync(join(dispatch, "actions.jsonl"), "");
