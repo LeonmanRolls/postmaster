@@ -271,8 +271,7 @@ function roundRecords(dispatch: string, round: string): RoundRecords {
   try {
     contents = readFileSync(join(dispatch, "actions.jsonl"), "utf8");
   } catch (e) {
-    if ((e as NodeJS.ErrnoException).code === "ENOENT")
-      return { finished, harvested, degraded };
+    if ((e as NodeJS.ErrnoException).code === "ENOENT") return { finished, harvested, degraded };
     die(`cannot read the action log at ${join(dispatch, "actions.jsonl")}: ${String(e)}`);
   }
   for (const line of contents.split("\n")) {
@@ -1519,9 +1518,7 @@ if (import.meta.main) {
     let newly = fresh();
     // Every reviewer of this call, not the row count: a subset call must not
     // read another reviewer's finish row as its own reviewers reported.
-    const allReported = reviewers.every(([lens, lane]) =>
-      records.finished.has(`${lens}\0${lane}`),
-    );
+    const allReported = reviewers.every(([lens, lane]) => records.finished.has(`${lens}\0${lane}`));
     if (newly.length === 0 && allReported) {
       console.log(`review-round: round ${R}, every reviewer reported`);
       process.exit(0);
