@@ -1,0 +1,1 @@
+{"name":"g-binpkg","version":"0.0.0-dev","main":"index.js","bin":{"g-bin":"./cli.js"}}
