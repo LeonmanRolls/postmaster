@@ -270,7 +270,9 @@ async function stopStuck(
     }
   }
   await new Promise<void>((resolve) => {
-    if (child.exitCode !== null) return resolve();
+    // A suite dead by signal holds no exit code; without this its
+    // already-fired exit is waited out in full.
+    if (child.exitCode !== null || child.signalCode !== null) return resolve();
     const timer = setTimeout(() => resolve(), 5000);
     child.once("exit", () => {
       clearTimeout(timer);
