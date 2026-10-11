@@ -5799,7 +5799,9 @@ export async function runControls(): Promise<number> {
     mkdirSync(activePath);
     writeFileSync(join(legD, ".leg-1-exited"), "");
     prompt = join(legD, "race.txt");
-    writeFileSync(prompt, "race for the lock\n");
+    writeFileSync(prompt, "race for the lock at the pair-gate\n");
+    const raceGate = join(legD, "race.gate");
+    rmSync(raceGate, { force: true });
     const spawnEnv = (extra: Record<string, string> = {}): Record<string, string | undefined> => {
       const procRoot = process.env.POSTMASTER_PROC_ROOT;
       return {
@@ -5826,10 +5828,54 @@ export async function runControls(): Promise<number> {
         child.once("error", () => resolve(null));
       });
     const callsBeforeRace = legCalls();
-    const racers = Array.from({ length: 8 }, () =>
-      spawnLeg(["leg", "launch", legD, legWt, "synthesis", "1", prompt]),
-    );
-    await Promise.all(racers.map(exited));
+    // Staggered over several seconds, so that some racers arrive after an
+    // ungated first start would have finished: the winner holds its harness
+    // stand-in at the gate until the other seven have been turned away, so
+    // every loser meets a held lock however late it arrives.
+    const ends: Array<number | null | undefined> = [
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    ];
+    // Kept referenced until the case ends: an unreferenced child could
+    // lose its exit listener before it fires.
+    const racers: Array<ReturnType<typeof spawn>> = [];
+    for (let i = 0; i < 8; i++) {
+      if (i > 0) await sleep(500);
+      const racer = spawnLeg(["leg", "launch", legD, legWt, "synthesis", "1", prompt], {
+        TEST_GATE: raceGate,
+      });
+      racers.push(racer);
+      // The listener attaches at spawn: a loser refused during the next
+      // pause would otherwise exit before it is ever recorded.
+      const k = i;
+      void exited(racer).then((code) => {
+        ends[k] = code;
+      });
+    }
+    // The seven losers are refused and end; the winner waits at the gate.
+    // Seven refusals, not seven exits: a racer whose spawn failed exits
+    // without refusing, and must not open the gate while a slow arrival
+    // is still on its way. Every die() exits 1, so a 1 is a refusal.
+    // The first wait's result stays unread: a double grant refuses six
+    // here and fails loud on the delta below, while a hang fails here.
+    await waitFor(() => ends.filter((end) => end === 1).length === 7);
+    writeFileSync(raceGate, "");
+    const allEnded = await waitFor(() => ends.every((end) => end !== undefined));
+    const failedSpawns = ends.filter((end) => end === null).length;
+    if (failedSpawns > 0)
+      throw new Error(
+        `race for the lock: ${failedSpawns} of eight racers failed to spawn: ${ends.map((end) => String(end)).join(",")}`,
+      );
+    if (!allEnded)
+      throw new Error(
+        `race for the lock: only ${ends.filter((end) => end !== undefined).length} of eight racers ended: ${ends.map((end) => String(end)).join(",")}`,
+      );
     await marker(join(legD, ".leg-1-exited"), 30);
     const callsAfterRace = legCalls();
     await pass(

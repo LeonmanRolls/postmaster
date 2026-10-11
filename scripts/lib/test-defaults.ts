@@ -3,6 +3,7 @@
 // on a loaded machine, where every test runs at half speed or less. A test or a hook states a limit
 // only when it needs more than this.
 import { setDefaultTimeout } from "bun:test";
+import "./test-children.ts";
 
 export const DEFAULT_TEST_TIMEOUT_MS = 60_000;
 
