@@ -1602,6 +1602,23 @@ describe("indexNames", () => {
     expect(indexNames("- [cli](cli/)\n- the command line verifier", "cli")).toBe(false);
   });
 
+  test("a bullet wrapped past its first line still reads named", () => {
+    expect(
+      indexNamesFolder(
+        "- The command line verifier in\n  .postmaster/verifier/cli/: drives it.",
+        "command line",
+        ".postmaster/verifier/cli",
+      ),
+    ).toBe(true);
+    expect(
+      indexNamesFolder(
+        "- The command line verifier in\n  .postmaster/verifier/cli/: drives it.",
+        "web pages",
+        ".postmaster/verifier/cli",
+      ),
+    ).toBe(false);
+  });
+
   test("a named folder and prose together read named", () => {
     expect(
       indexNamesFolder(
@@ -1657,6 +1674,15 @@ describe("spanSegs", () => {
     ).toEqual(["cli"]);
     expect(spanSegs(["- [api](api/ 'title') verifies the backend service."])).toEqual(["api"]);
   });
+
+  test("a folder on a wrapped continuation line is named", () => {
+    expect(
+      spanSegs(["- The command line verifier in", "  .postmaster/verifier/cli/: drives it."]),
+    ).toEqual(["cli"]);
+    expect(
+      spanSegs(["- The command line verifier in", "  .postmaster/verifier/cli/ and src/x.ts"]),
+    ).toEqual(["cli"]);
+  });
 });
 
 describe("indexStrays", () => {
@@ -1691,6 +1717,23 @@ describe("indexStrays", () => {
       "",
     ].join("\n");
     expect(indexStrays(text, ["cli"], ["cli"])).toEqual({ dangling: [], unlisted: [] });
+  });
+
+  test("wrapped folders still dangle and stray", () => {
+    const text = [
+      "# Verifiers",
+      "",
+      "- The command line verifier in .postmaster/verifier/cli/: drives it.",
+      "- The web pages verifier in",
+      "  .postmaster/verifier/web/: drives it.",
+      "- The backend service verifier in",
+      "  .postmaster/verifier/gone/: drives it.",
+      "",
+    ].join("\n");
+    expect(indexStrays(text, ["cli", "web"], ["cli"])).toEqual({
+      dangling: ["web"],
+      unlisted: ["gone"],
+    });
   });
 });
 

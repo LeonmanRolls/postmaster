@@ -751,12 +751,17 @@ export function indexNamesFolder(text: string, prose: string, folder: string): b
   const escFolder = folder.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
   const escSeg = seg.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
   const re = new RegExp(`${escFolder}(?![A-Za-z0-9_-])|\\]\\( *${escSeg}/`, "u");
-  return text.split("\n").some((line) => {
+  // LOWER: lowered for an ASCII keyword match
+  const want = prose.toLowerCase();
+  const hits = (chunk: string): boolean => {
     // LOWER: lowered for an ASCII keyword match
-    const lower = line.toLowerCase();
+    const lower = chunk.toLowerCase();
     // ASCII: the prose and folders matched are ASCII alone
-    return lower.includes(prose.toLowerCase()) && re.test(lower);
-  });
+    return lower.includes(want) && re.test(lower);
+  };
+  if (text.split("\n").some(hits)) return true;
+  // A bullet wrapped past its first line still names its folder.
+  return indexBullets(text).some((span) => span.length > 1 && hits(span.join("\n")));
 }
 
 export interface VerifierEntry {
@@ -3719,14 +3724,14 @@ function validateSession(
   }
 }
 
-/** Folder segments an index bullet's first line names, lowercased. */
+/** Folder segments an index bullet names, lowercased, wrapped lines included. */
 export function spanSegs(span: string[]): string[] {
-  const first = span[0] ?? "";
+  const text = span.join("\n");
   const segs: string[] = [];
   // A verifier root starts at a boundary, never mid-path: src/verifier/run.ts
   // is a project file, while .postmaster/verifier/cli/ is the cli verifier.
   // ASCII: boundaries, roots and segments are ASCII alone
-  for (const m of first.matchAll(
+  for (const m of text.matchAll(
     /(?:^|[^A-Za-z0-9_./-])(?:\.postmaster\/)?verifier\/([A-Za-z0-9_-]+)/giu,
   )) {
     // LOWER: lowered for an ASCII folder-segment match
@@ -3734,7 +3739,7 @@ export function spanSegs(span: string[]): string[] {
   }
   // A relative folder link ends at its slash: [cli](cli/) names cli, while
   // [docs](docs/x.md) is a page link. ASCII: link gaps are ASCII spaces
-  for (const m of first.matchAll(/\]\(\s*([A-Za-z0-9_-]+)\/(?:\s*["']|\))/giu)) {
+  for (const m of text.matchAll(/\]\(\s*([A-Za-z0-9_-]+)\/(?:\s*["']|\))/giu)) {
     // LOWER: lowered for an ASCII folder-segment match
     segs.push((m[1] as string).toLowerCase());
   }
