@@ -160,7 +160,7 @@ const EXACT = /^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$/u;
 export function isExactVersion(version: string): boolean {
   return EXACT.test(version);
 }
-const BULLET_RE = /^[ \t]*[-*][ \t]+(\S+)[ \t]+(\S+)(?:[ \t]+(.*))?$/u;
+const BULLET_RE = /^[ \t]*[-*][ \t]+([^ \t]+)[ \t]+([^ \t]+)(?:[ \t]+(.*))?$/u;
 
 /** The ticket's ## Libraries list: one line per library with its name, its
  * exact version and the clerk's vetting, in the plain part only. A line out
