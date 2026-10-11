@@ -4871,9 +4871,7 @@ export async function runControls(): Promise<number> {
         vSpawn.code === 0 &&
         vSend.code === 0 &&
         vRead.code === 0 &&
-        calls(root, "herdr").some(
-          (line) => line === "agent\tprompt\td2-verifier\tRead the brief.",
-        ),
+        calls(root, "herdr").some((line) => line === "agent\tprompt\td2-verifier\tRead the brief."),
       `${vSpawn.out}\n${vSend.err}\n${vRead.err}`,
     );
 
@@ -8333,9 +8331,7 @@ export async function live(): Promise<void> {
         }
         const probeClosed = liveHost(["close-handle", probeHandle], f.caller, root);
         const probeTabsAfter =
-          probeSpace && probeTab
-            ? liveHerdr("tab", "list", "--workspace", probeSpace).out
-            : "";
+          probeSpace && probeTab ? liveHerdr("tab", "list", "--workspace", probeSpace).out : "";
         await pass(
           "close-handle closes the probe tab",
           () =>
