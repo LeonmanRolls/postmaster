@@ -4984,3 +4984,25 @@ describe("run-copy keep confirmation", () => {
     }
   });
 });
+
+describe("run-copy keep pruning", () => {
+  test("removing a verifier prunes the empty directories it leaves", () => {
+    const app = scratchApp();
+    try {
+      expectCode(run(RUN, ["verifier", "record", app.repo, app.dispatch]), 0);
+      const syn = cutWorktree(app.repo, app.dir, "syn", "wsyn");
+      expectCode(run(RUN, ["verifier", "arm", syn, app.dispatch]), 0);
+      rmSync(join(syn, ".postmaster/verifier/cli"), { recursive: true, force: true });
+      const idx = join(syn, ".postmaster/verifier/README.md");
+      writeFileSync(
+        idx,
+        readFileSync(idx, "utf8").split("\n").filter((l) => !l.includes("verifier/cli")).join("\n"),
+      );
+      expectCode(run(RUN, ["verifier", "changes", syn, app.dispatch, "--freeze"]), 0);
+      expectCode(run(RUN, ["verifier", "keep", app.repo, "--run", app.dispatch, "--at", app.sha]), 0);
+      expect(existsSync(join(app.repo, ".postmaster/verifier/cli"))).toBe(false);
+    } finally {
+      rmSync(app.dir, { recursive: true, force: true });
+    }
+  });
+});

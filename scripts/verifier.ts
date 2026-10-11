@@ -191,6 +191,7 @@ import {
   realpathSync,
   renameSync,
   rmSync,
+  rmdirSync,
   statSync,
   writeFileSync,
 } from "node:fs";
@@ -5256,7 +5257,7 @@ function pruneEmptyDirs(root: string, rels: string[]): void {
   const ordered = [...dirs].sort((a, b) => b.length - a.length || (a < b ? -1 : 1));
   for (const d of ordered) {
     try {
-      if (readdirSync(join(root, d)).length === 0) rmSync(join(root, d));
+      if (readdirSync(join(root, d)).length === 0) rmdirSync(join(root, d));
     } catch {
       // Gone or busy: a leftover empty directory harms nothing.
     }
