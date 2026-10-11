@@ -4,7 +4,7 @@
 //   run libraries list --ticket <file>
 //   run libraries identity <name> <version>
 //   run libraries facts <name> <version>
-//   run libraries record <name> <version> --dispatch <dispatch> [--wt <dir>]
+//   run libraries record <name> <version> --dispatch <dispatch> [--wt <dir>] [--vendored]
 //
 // list prints the ticket's ## Libraries section, one library per line with
 // its name, its exact version and the clerk's vetting; nothing when the
@@ -15,7 +15,8 @@
 // recorded verdict. record caches an approved library with the packages it
 // brings, so the install takes them: it refuses without the user's
 // recorded word, or when Socket flags the library, and never caches what
-// it was not asked to record.
+// it was not asked to record. --vendored caches a copied-in library,
+// which no install resolves, without running one.
 //
 //   exit 0  listed; the identity printed; the facts printed; recorded
 //   exit 1  usage; an unreadable ticket, dispatch or worktree; the install failed
@@ -36,7 +37,7 @@ import { run } from "./lib/proc.ts";
 import { readApprovals } from "./lib/switch-offs.ts";
 
 const USAGE =
-  "usage: run libraries list --ticket <file> | identity <name> <version> | facts <name> <version> | record <name> <version> --dispatch <dispatch> [--wt <dir>]";
+  "usage: run libraries list --ticket <file> | identity <name> <version> | facts <name> <version> | record <name> <version> --dispatch <dispatch> [--wt <dir>] [--vendored]";
 
 function usage(): never {
   console.error(USAGE);
@@ -99,22 +100,30 @@ interface RecordArgs {
   version: string;
   dispatch: string;
   wt: string;
+  vendored: boolean;
 }
 
 function recordArgs(argv: string[]): RecordArgs {
-  if (argv.length < 4 || argv.length > 6) usage();
+  if (argv.length < 4) usage();
   const name = argv[0]!;
   const version = argv[1]!;
   if (name === "" || version === "") usage();
   if (argv[2] !== "--dispatch" || argv[3] === undefined || argv[3] === "") usage();
-  if (argv.length === 6 && (argv[4] !== "--wt" || argv[5] === undefined || argv[5] === "")) usage();
-  if (argv.length === 5) usage();
-  return {
-    name,
-    version,
-    dispatch: argv[3],
-    wt: argv.length === 6 ? argv[5]! : process.cwd(),
-  };
+  let wt = process.cwd();
+  let vendored = false;
+  let i = 4;
+  while (i < argv.length) {
+    if (argv[i] === "--wt" && argv[i + 1] !== undefined && argv[i + 1] !== "") {
+      wt = argv[i + 1]!;
+      i += 2;
+    } else if (argv[i] === "--vendored") {
+      vendored = true;
+      i += 1;
+    } else {
+      usage();
+    }
+  }
+  return { name, version, dispatch: argv[3], wt, vendored };
 }
 
 /** The cache with keys added, each covered by the given approval identity.
@@ -174,6 +183,10 @@ function recordCmd(argv: string[]): void {
   const wt = resolve(a.wt);
   const runId = basename(resolve(a.dispatch));
   writeCache(wt, [`${a.name}@${a.version}`], identity, runId);
+  if (a.vendored) {
+    console.log(`recorded: ${a.name}@${a.version}`);
+    return;
+  }
   const recordPath = join(
     tmpdir(),
     `postmaster-libraries-record-${process.pid}-${Date.now()}.json`,
