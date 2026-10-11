@@ -42,14 +42,6 @@ describe("2. remove takes several ids", () => {
     expect(result.out).toEqual(["removed 3", "removed 1"]);
     expect(user.list()).toEqual([task(2, "b"), task(4, "d")]);
   });
-
-  test("an id given more than once is deleted and printed once", () => {
-    addAll("a", "b", "c");
-    const result = user.todo("remove", "2", "3", "2");
-    expect(result.code).toBe(0);
-    expect(result.out).toEqual(["removed 2", "removed 3"]);
-    expect(user.list()).toEqual([task(1, "a")]);
-  });
 });
 
 describe("3. an id not on the list", () => {

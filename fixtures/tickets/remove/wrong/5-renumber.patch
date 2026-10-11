@@ -1,0 +1,13 @@
+diff --git a/src/tasks.ts b/src/tasks.ts
+index 6ad76fb..6e3ad5b 100644
+--- a/src/tasks.ts
++++ b/src/tasks.ts
+@@ -49,7 +49,7 @@ export function removeTasks(
+   }
+   const removed = [...ids];
+   return {
+-    list: { ...list, tasks: list.tasks.filter((task) => !removed.includes(task.id)) },
++    list: { ...list, tasks: list.tasks.filter((task) => !removed.includes(task.id)).map((task, index) => ({ ...task, id: index + 1 })) },
+     removed,
+   };
+ }
