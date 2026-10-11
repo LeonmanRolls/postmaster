@@ -26,30 +26,32 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
-  realpathSync,
   renameSync,
   statSync,
   writeFileSync,
 } from "node:fs";
 import { homedir } from "node:os";
-import { basename, dirname, isAbsolute, join, normalize, relative, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { reachTarget } from "./check-target.ts";
-import { toolRoot } from "./lib/paths.ts";
+import { briefSection, profileRepo } from "./lib/brief.ts";
+import { physical, toolRoot } from "./lib/paths.ts";
 import { run } from "./lib/proc.ts";
+import {
+  array,
+  claudeTaskPrefix,
+  inputCommand,
+  inputPath,
+  parseEventFile,
+  rec,
+  text,
+  toolCallsFromEvents,
+  type Access,
+  type Harness,
+  type RecordOf,
+  type ToolCall,
+} from "./lib/tool-calls.ts";
 
-type RecordOf<T = unknown> = Record<string, T>;
-type Harness = "codex" | "claude" | "muse" | "mimo" | "pi" | string;
-/** Observed changes read "read" or "write"; a named path reads "names", never either. */
-type Access = "read" | "write" | "names";
 type Place = "inside" | "main checkout" | "synthesis worktree" | "another worktree" | "elsewhere";
-
-interface ToolCall {
-  name: string;
-  input: RecordOf;
-  output: string;
-  exitCode: unknown;
-  direct: Array<{ path: string; access: Access }>;
-}
 
 interface Touch {
   path: string;
@@ -119,22 +121,6 @@ interface ReachEvent {
 const TOOL = toolRoot(import.meta);
 const RUN = join(TOOL, "scripts", "run");
 
-const DATA_RE = /^[ \t\r\n]*\{[^]*\}[ \t\r\n]*$/u;
-
-function rec(value: unknown): RecordOf {
-  return value !== null && typeof value === "object" && !Array.isArray(value)
-    ? (value as RecordOf)
-    : {};
-}
-
-function array(value: unknown): unknown[] {
-  return Array.isArray(value) ? value : [];
-}
-
-function text(value: unknown): string {
-  return typeof value === "string" ? value : "";
-}
-
 function readJson(path: string, what: string): RecordOf {
   let parsed: unknown;
   try {
@@ -148,44 +134,9 @@ function readJson(path: string, what: string): RecordOf {
   return parsed as RecordOf;
 }
 
-export function physical(path: string): string {
-  const absolute = resolve(path);
-  const suffix: string[] = [];
-  let probe = absolute;
-  while (!existsSync(probe)) {
-    const parent = dirname(probe);
-    if (parent === probe) return normalize(absolute);
-    suffix.unshift(basename(probe));
-    probe = parent;
-  }
-  try {
-    return normalize(join(realpathSync(probe), ...suffix));
-  } catch {
-    return normalize(absolute);
-  }
-}
-
 function inside(path: string, dir: string): boolean {
   const rel = relative(dir, path);
   return rel === "" || (rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
-}
-
-/** A waybill section by heading; the last one wins, since the ticket may quote one. */
-function briefSection(brief: string, heading: string): string {
-  const lines = brief.split("\n");
-  let start = -1;
-  for (let i = 0; i < lines.length; i++) {
-    if (lines[i]?.startsWith(heading)) start = i + 1;
-  }
-  if (start < 0) return "";
-  let end = lines.length;
-  for (let i = start; i < lines.length; i++) {
-    if (lines[i]?.startsWith("## ")) {
-      end = i;
-      break;
-    }
-  }
-  return lines.slice(start, end).join("\n");
 }
 
 function pathFromBrief(
@@ -197,15 +148,10 @@ function pathFromBrief(
   // The ticket travels in the waybill verbatim and may quote a repo: line, so
   // only the Project profile section counts; a waybill without one reads whole.
   const scope = briefSection(brief, "## Project profile") || brief;
-  // The path runs to the end of the line: it may itself hold spaces, and only
-  // a "default branch:" marker ends it early.
-  const profile =
-    /^repo:[ \t]*([^ \r\n]*(?:[ \t]+(?!default branch:)[^ \t\r\n]+)*)(?:[ \t]+default branch:[ \t]*([^ \t\r\n]+))?/mu.exec(
-      scope,
-    );
-  const namedRepo = profile?.[1] ? physical(profile[1]) : repo;
+  const profile = profileRepo(scope);
+  const namedRepo = profile.repo ? physical(profile.repo) : repo;
   const target = rec(run.target);
-  let defaultBranch = profile?.[2] ?? text(target.branch);
+  let defaultBranch = profile.branch || text(target.branch);
   if (!defaultBranch || defaultBranch === "(detached HEAD)") {
     const originHead = runGit(namedRepo, ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"]);
     if (originHead.code === 0) defaultBranch = originHead.out.trim().replace(/^origin\//u, "");
@@ -295,141 +241,8 @@ function expandPath(token: string, cwd: string): string | null {
   return physical(value);
 }
 
-function toolCallsFromEvents(harness: Harness, events: unknown[]): ToolCall[] {
-  const calls: ToolCall[] = [];
-  const add = (
-    name: unknown,
-    input: unknown,
-    output = "",
-    exitCode: unknown = undefined,
-    direct: ToolCall["direct"] = [],
-  ): number => {
-    calls.push({ name: text(name) || "tool", input: rec(input), output, exitCode, direct });
-    return calls.length - 1;
-  };
-  const linked = new Map<string, number>();
-  const pending = new Map<string, number>();
-  for (const raw of events) {
-    const event = rec(raw);
-    if (harness === "codex") {
-      if (event.type !== "item.completed") continue;
-      const item = rec(event.item);
-      if (item.type === "command_execution") {
-        add(
-          "shell",
-          { command: text(item.command) },
-          `${text(item.aggregated_output)}\n${text(item.output)}`,
-          item.exit_code,
-        );
-      } else if (item.type === "file_change") {
-        const direct = array(item.changes).flatMap((entry) => {
-          const path = text(rec(entry).path);
-          return path ? [{ path, access: "write" as const }] : [];
-        });
-        add("file_change", {}, "", undefined, direct);
-      } else if (item.type === "mcp_tool_call") {
-        add("mcp", item);
-      }
-    } else if (harness === "claude") {
-      const msg = rec(event.message);
-      for (const blockValue of array(msg.content)) {
-        const block = rec(blockValue);
-        if (event.type === "assistant" && block.type === "tool_use") {
-          const index = add(block.name, block.input);
-          if (typeof block.id === "string") linked.set(block.id, index);
-        } else if (event.type === "user" && block.type === "tool_result") {
-          const id = text(block.tool_use_id);
-          const index = linked.get(id);
-          if (index !== undefined) {
-            const body =
-              typeof block.content === "string"
-                ? block.content
-                : JSON.stringify(block.content ?? "");
-            calls[index]!.output += `\n${body}`;
-          }
-        }
-      }
-    } else if (harness === "mimo") {
-      if (event.type !== "tool_use") continue;
-      const part = rec(event.part);
-      const state = rec(part.state);
-      add(part.tool, state.input, text(state.output), rec(state.metadata).exit);
-    } else if (harness === "pi") {
-      if (event.type === "tool_execution_start") {
-        const index = add(event.toolName, event.args);
-        const id = text(event.toolCallId || event.callId || event.id);
-        if (id) linked.set(id, index);
-        else pending.set(text(event.toolName), index);
-      } else if (event.type === "tool_execution_end") {
-        const id = text(event.toolCallId || event.callId || event.id);
-        const index = linked.get(id) ?? pending.get(text(event.toolName));
-        if (index !== undefined) calls[index]!.output = text(event.result ?? event.output);
-      }
-    } else if (harness === "muse") {
-      if (event.payload_type !== "tool.result") continue;
-      const payload = rec(event.payload);
-      const facts = rec(payload.correlation_facts);
-      const editFacts = rec(payload.edit_facts);
-      let input: RecordOf = { ...editFacts };
-      const resultText = text(payload.text);
-      if (resultText.trimStart().startsWith("{")) {
-        const first = resultText.trimStart().split("\n", 1)[0] ?? "";
-        if (DATA_RE.test(first)) {
-          try {
-            input = { ...(JSON.parse(first) as RecordOf), ...input };
-          } catch {
-            // Non-JSON result text can still carry the edit_facts record.
-          }
-        }
-      } else {
-        const readFile = /^Read text file `([^`]+)`/u.exec(resultText.trimStart());
-        if (readFile?.[1] && !input.path && !input.file_path) input.path = readFile[1];
-      }
-      const direct: ToolCall["direct"] = [];
-      const toolName = text(facts.tool_name);
-      const access: Access =
-        /write|edit|create|patch|apply|delete|remove|move|copy|install|save/iu.test(toolName)
-          ? "write"
-          : "read";
-      for (const field of ["path", "file_path"]) {
-        const p = text(input[field]);
-        if (p) direct.push({ path: p, access });
-      }
-      add(toolName, input, resultText, facts.outcome, direct);
-    }
-  }
-  return calls;
-}
-
-function parseEventFile(path: string): unknown[] | null {
-  let contents: string;
-  try {
-    contents = readFileSync(path, "utf8");
-  } catch {
-    return null;
-  }
-  const events: unknown[] = [];
-  for (const line of contents.split(/\r?\n/u)) {
-    if (!line.trim()) continue;
-    try {
-      events.push(JSON.parse(line) as unknown);
-    } catch {
-      return null;
-    }
-  }
-  return events;
-}
-
 function parseTaskFile(path: string): unknown[] | null {
   return parseEventFile(path);
-}
-
-function inputPath(input: RecordOf): string | null {
-  for (const key of ["file_path", "path", "filePath", "filename", "target"]) {
-    const value = text(input[key]);
-    if (value) return value;
-  }
-  return null;
 }
 
 /**
@@ -541,7 +354,7 @@ function directCallMentions(
   const touches: Touch[] = [];
   const refs: string[] = [];
   for (const call of calls) {
-    const command = text(call.input.command ?? call.input.cmd);
+    const command = inputCommand(call.input);
     if (command) {
       const named = commandMentions(command, info, lane, ownFolder, lens);
       touches.push(...named.touches);
@@ -607,10 +420,7 @@ function readLane(
   const allEvents = [...parsed];
   if (harness === "claude") {
     const logs = join(info.dispatch, "logs");
-    // The review harvester prefixes copied Claude fork records with the bug lane's stream name.
-    const streamName = basename(events).replace(/\.jsonl$/u, "");
-    const taskPrefix = streamName.startsWith("review-r") ? streamName : lane;
-    const taskName = `${taskPrefix}-claude-task-`;
+    const taskName = claudeTaskPrefix(basename(events), lane);
     try {
       for (const name of readdirSync(logs)) {
         if (name.startsWith(taskName)) {

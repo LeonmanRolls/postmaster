@@ -475,8 +475,10 @@ second implementer wrote (single-thread).
    `<tool>/scripts/run run-times <dispatch>`.
    Never delete the manifest. It is the run's history, and
    the postmaster's poll reads it.
-7. **In synthesis mode, write each workhorse's brief** to `<dispatch>/<lane>-prompt.txt`: the waybill's `## Ticket` part verbatim, the
-   project profile, the docs to read first named explicitly, the `WORKHORSE-SUMMARY.md` /
+7. **In synthesis mode, write each workhorse's brief** to `<dispatch>/<lane>-prompt.txt`: the waybill's `## Ticket` part verbatim, followed,
+   when `<tool>/scripts/run run-meta ticket-notes <dispatch>` prints held-back, by this line:
+   The ticket's technical notes are held back on purpose and are not to be looked up, in the tracker or anywhere else. Then the project profile, the docs
+   to read first named explicitly, the `WORKHORSE-SUMMARY.md` /
    `WORKHORSE-BLOCKED.md` contract, and the line that the ready ticket is the run's contract,
    the autonomous-defaults rule (decide within-brief questions
    yourself and record the decision in `WORKHORSE-SUMMARY.md`), the capability statement above, the
