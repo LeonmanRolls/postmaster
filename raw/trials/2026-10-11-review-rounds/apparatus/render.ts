@@ -7,6 +7,7 @@
 // signals are tried on.
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { type Adjudication, parseAdjudication } from "./adjudicate.ts";
 import {
   bands,
   CHANGE_BANDS,
@@ -541,6 +542,7 @@ export function marksMarkdown(
   runs: readonly LeverRun[],
   eraOfRun: ReadonlyMap<string, string>,
   criteriaOfRun: ReadonlyMap<string, number | null>,
+  adjudication: readonly Adjudication[],
 ): string {
   const out: string[] = ["# The readers' marks of the later findings", ""];
   const withText = items.filter((i) => i.text !== "");
@@ -593,6 +595,49 @@ export function marksMarkdown(
     ),
     "",
   );
+  if (adjudication.length > 0) {
+    const split = adjudication.filter((x) => x.set === "split");
+    const both = adjudication.filter((x) => x.set === "both-yes");
+    out.push("## The session's reading", "");
+    out.push(
+      `Of the findings on which one reader says yes to *ticket open* and the other does not, a seeded sample of ${split.length} was read by the session against the rubric, and so were all ${both.length} on which both readers say yes ([readers/adjudication.tsv](../readers/adjudication.tsv)).`,
+      "",
+    );
+    out.push(
+      table(
+        [
+          "Set",
+          "Findings read",
+          "Session says yes",
+          "Session says no",
+          "Session says unclear",
+          "Sides with A",
+          "Sides with B",
+        ],
+        [
+          [
+            "readers differ",
+            String(split.length),
+            String(split.filter((x) => x.session === "yes").length),
+            String(split.filter((x) => x.session === "no").length),
+            String(split.filter((x) => x.session === "unclear").length),
+            String(split.filter((x) => x.sidesWith === "A").length),
+            String(split.filter((x) => x.sidesWith === "B").length),
+          ],
+          [
+            "both say yes",
+            String(both.length),
+            String(both.filter((x) => x.session === "yes").length),
+            String(both.filter((x) => x.session === "no").length),
+            String(both.filter((x) => x.session === "unclear").length),
+            "–",
+            "–",
+          ],
+        ],
+      ),
+      "",
+    );
+  }
   out.push("## Kind", "");
   out.push(
     table(
@@ -606,6 +651,31 @@ export function marksMarkdown(
     ),
     "",
   );
+  {
+    const openRows = rows.filter((c) => c.openBoth);
+    const kinds = [...KINDS, "readers differ"] as const;
+    const byKind = kinds.map((k) => {
+      const n = openRows.filter((c) =>
+        k === "readers differ" ? c.kind === null : c.kind === k,
+      ).length;
+      return [k, String(n)];
+    });
+    const perRun = new Map<string, number>();
+    for (const c of openRows) {
+      const run = c.id.split(".")[0] as string;
+      perRun.set(run, (perRun.get(run) ?? 0) + 1);
+    }
+    const counts = [...perRun.values()].sort((x, y) => y - x);
+    out.push("## What the ticket left open, by kind and by run", "");
+    out.push(
+      table(["Kind of the findings both readers say the ticket left open", "Findings"], byKind),
+      "",
+    );
+    out.push(
+      `They are in ${perRun.size} of the ${runs.length} runs: ${counts.join(", ")} findings each, so a clerk who settled each point before dispatch would have had ${num(openRows.length / Math.max(1, runs.length), 2)} points to settle per ticket on average, and ${num(median(counts), 0)} in a median ticket that had any.`,
+      "",
+    );
+  }
   out.push("## By how the run's ticket was prepared", "");
   {
     const eras = [...new Set(eraOfRun.values())].sort();
@@ -1051,6 +1121,11 @@ const main = (args: string[]): void => {
         runsInput,
         eraOfRun,
         new Map(inputs.map((r) => [r.run, r.criteria])),
+        parseAdjudication(
+          existsSync(join(readersDir, "adjudication.tsv"))
+            ? readFileSync(join(readersDir, "adjudication.tsv"), "utf8")
+            : "",
+        ),
       ),
     );
   }

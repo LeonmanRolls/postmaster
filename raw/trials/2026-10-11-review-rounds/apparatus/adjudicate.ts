@@ -56,6 +56,33 @@ export function splitOnOpen(a: readonly Mark[], b: readonly Mark[]): string[] {
     .map((m) => m.id);
 }
 
+export type Adjudication = {
+  id: string;
+  set: "split" | "both-yes";
+  session: "yes" | "no" | "unclear";
+  sidesWith: "A" | "B" | "";
+  note: string;
+};
+
+/** The session's own readings, as `readers/adjudication.tsv` holds them. */
+export function parseAdjudication(tsv: string): Adjudication[] {
+  const out: Adjudication[] = [];
+  for (const line of tsv.split("\n").slice(1)) {
+    const c = line.split("\t");
+    if (c.length < 3 || c[0] === "") continue;
+    if (!["split", "both-yes"].includes(c[1] ?? "")) continue;
+    if (!["yes", "no", "unclear"].includes(c[2] ?? "")) continue;
+    out.push({
+      id: c[0] as string,
+      set: c[1] as Adjudication["set"],
+      session: c[2] as Adjudication["session"],
+      sidesWith: (c[3] ?? "") as Adjudication["sidesWith"],
+      note: c[4] ?? "",
+    });
+  }
+  return out;
+}
+
 const arg = (args: string[], name: string): string | undefined => {
   const at = args.indexOf(name);
   return at >= 0 ? args[at + 1] : undefined;

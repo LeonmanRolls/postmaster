@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseItems, sampleIds, splitOnOpen } from "./adjudicate.ts";
+import { parseAdjudication, parseItems, sampleIds, splitOnOpen } from "./adjudicate.ts";
 import { parseMarks } from "./marks.ts";
 
 describe("the adjudication sample", () => {
@@ -31,5 +31,14 @@ describe("the adjudication sample", () => {
       target: "a.ts:1",
       text: "the text",
     });
+  });
+  test("the session's readings are read with the set they belong to, and a bad row is dropped", () => {
+    const rows = parseAdjudication(
+      "id\tset\tsession\tsides_with\tnote\n1.2.1\tsplit\tno\tA\tfine\n1.2.2\tboth-yes\tyes\t\t\nbad\tother\tyes\tA\tx\n",
+    );
+    expect(rows.map((r) => [r.id, r.set, r.session, r.sidesWith])).toEqual([
+      ["1.2.1", "split", "no", "A"],
+      ["1.2.2", "both-yes", "yes", ""],
+    ]);
   });
 });
