@@ -1361,10 +1361,15 @@ describe(REMOVE_HEAD, () => {
     }, 30000);
   }
   test("the ticket and its hidden tests say nothing about a repeated id", () => {
+    // Tripwire phrases for repeat-pinning language. "Used twice" stays
+    // allowed: criterion 6 keeps it for id reuse, which is not a repeat in
+    // one command.
     const banned = [
       /repeat/iu,
       /more than once/iu,
-      /twice/iu,
+      /given twice/iu,
+      /reported twice/iu,
+      /printed twice/iu,
       /reported once/iu,
       /printed once/iu,
       /each once/iu,
