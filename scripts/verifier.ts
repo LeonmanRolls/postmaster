@@ -4919,8 +4919,20 @@ export function segOfRel(rel: string): string | null {
 /**
  * Replace a tree with a copy of another: copy aside, remove the destination,
  * rename into place, so a failed copy leaves the destination as it was.
+ * Refuses symlinks and special files: a copied link would read live bytes
+ * instead of the frozen tree, in the record and in every lane's copy.
  */
 function replaceTree(src: string, dest: string): void {
+  if (isSymlink(src)) {
+    throw new RunError(`cannot copy ${src}: the root must not be a symlink`);
+  }
+  const tree = readVerifierTree(src);
+  const bad = sortedRels(tree).filter((rel) => (tree.get(rel) as TreeValue).kind !== "file");
+  if (bad.length > 0) {
+    throw new RunError(
+      `cannot copy ${src}: must not hold symlinks or special files: ${bad.join(", ")}`,
+    );
+  }
   const tmp = `${dest}.new-${process.pid}`;
   rmSync(tmp, { recursive: true, force: true });
   try {

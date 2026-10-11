@@ -7,6 +7,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   realpathSync,
   rmSync,
   symlinkSync,
@@ -16,6 +17,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { commitAll, gitOrThrow, initRepo, RUN, writeRepoFile } from "./acceptance-323.ts";
+import { cutWorktree, expectCode, scratchApp } from "./acceptance-478.ts";
 import { run } from "./lib/proc.ts";
 import {
   UNLIMITED_WAIT_CHUNK_SECONDS,
@@ -4815,5 +4817,56 @@ describe("segOfRel", () => {
   test("takes the first segment", () => {
     expect(segOfRel("cli/features/f1.md")).toBe("cli");
     expect(segOfRel("README.md")).toBeNull();
+  });
+});
+
+describe("run-copy symlink refusal", () => {
+  test("record refuses a verifier folder holding a symlink", () => {
+    const app = scratchApp();
+    try {
+      symlinkSync("cli/features/f1.md", join(app.repo, ".postmaster/verifier", "link.md"));
+      const r = run(RUN, ["verifier", "record", app.repo, app.dispatch]);
+      expect(r.code).toBe(1);
+      expect(r.err).toContain("must not hold symlinks");
+      expect(existsSync(join(app.dispatch, "verifier-at-dispatch"))).toBe(false);
+    } finally {
+      rmSync(app.dir, { recursive: true, force: true });
+    }
+  });
+
+  test("freeze refuses a copy holding a symlink", () => {
+    const app = scratchApp();
+    try {
+      expectCode(run(RUN, ["verifier", "record", app.repo, app.dispatch]), 0);
+      const syn = cutWorktree(app.repo, app.dir, "syn", "wsyn");
+      expectCode(run(RUN, ["verifier", "arm", syn, app.dispatch]), 0);
+      symlinkSync("cli/features/f1.md", join(syn, ".postmaster/verifier", "link.md"));
+      const r = run(RUN, ["verifier", "changes", syn, app.dispatch, "--freeze"]);
+      expect(r.code).toBe(1);
+      expect(r.err).toContain("must not hold symlinks");
+    } finally {
+      rmSync(app.dir, { recursive: true, force: true });
+    }
+  });
+
+  test("keep aborts before applying when the project holds a symlink", () => {
+    const app = scratchApp();
+    try {
+      expectCode(run(RUN, ["verifier", "record", app.repo, app.dispatch]), 0);
+      const syn = cutWorktree(app.repo, app.dir, "syn", "wsyn");
+      expectCode(run(RUN, ["verifier", "arm", syn, app.dispatch]), 0);
+      writeRepoFile(syn, ".postmaster/verifier/cli/features/f1.md", "# run edit\n");
+      expectCode(run(RUN, ["verifier", "changes", syn, app.dispatch, "--freeze"]), 0);
+      symlinkSync("cli/features/f1.md", join(app.repo, ".postmaster/verifier", "link.md"));
+      const before = readFileSync(join(app.repo, ".postmaster/verifier/cli/features/f1.md"), "utf8");
+      const r = run(RUN, ["verifier", "keep", app.repo, "--run", app.dispatch, "--at", app.sha]);
+      expect(r.code).toBe(1);
+      expect(r.err).toContain("must not hold symlinks");
+      expect(readFileSync(join(app.repo, ".postmaster/verifier/cli/features/f1.md"), "utf8")).toBe(
+        before,
+      );
+    } finally {
+      rmSync(app.dir, { recursive: true, force: true });
+    }
   });
 });
