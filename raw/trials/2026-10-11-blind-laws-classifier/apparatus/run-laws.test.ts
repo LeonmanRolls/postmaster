@@ -53,5 +53,5 @@ test("the adapter re-exports the version's functions and types", () => {
 });
 
 test("the home folder is written as ~", () => {
-  expect(redactHome("at /home/u/x and /home/u", "/home/u")).toBe("at ~/x and ~");
+  expect(redactHome("at /h/x and /h", "/h")).toBe("at ~/x and ~");
 });
