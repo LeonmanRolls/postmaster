@@ -50,7 +50,12 @@ export function main(env: Record<string, string | undefined>, cwd: string): numb
     console.error(`manual-test-files: ${(err as Error).message}`);
     return 1;
   }
-  const ran = spawnSync("bun", ["test", ...files], { cwd, stdio: "inherit" });
+  // The check's own limit on every file: a serial run keeps Bun's 5 s
+  // default for every file after the first, whatever the preload sets.
+  const ran = spawnSync("bun", ["test", "--timeout=60000", ...files], {
+    cwd,
+    stdio: "inherit",
+  });
   return ran.status ?? 1;
 }
 
