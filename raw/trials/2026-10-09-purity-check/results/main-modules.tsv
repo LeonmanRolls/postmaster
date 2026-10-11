@@ -1,0 +1,10 @@
+scripts/lib/confine.ts	3
+scripts/lib/data.ts	1
+scripts/lib/paths.ts	1
+scripts/lib/pinned.ts	1
+scripts/lib/proc.ts	5
+scripts/lib/processes.ts	2
+scripts/lib/run-mode.ts	0
+scripts/lib/test-defaults.ts	0
+scripts/lib/text.ts	0
+scripts/lib/wall.ts	0

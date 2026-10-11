@@ -41,10 +41,21 @@ function expectLint(passOrFail: "pass" | "fail", wantIn = ""): void {
   if (code !== 0 && wantIn !== "") expect(out).toContain(wantIn);
 }
 
+// Folders besides wiki/ and raw/ that a page may link into. The real tree has them, so the
+// copy the controls lint must hold them too, or "the unmodified wiki passes" fails on a
+// link that resolves in the repository.
+const LINKED_FOLDERS = ["skills"];
+
 function fresh(): void {
   rmSync(join(tmpRoot, "wiki"), { recursive: true, force: true });
   rmSync(join(tmpRoot, "raw"), { recursive: true, force: true });
+  for (const dir of LINKED_FOLDERS) rmSync(join(tmpRoot, dir), { recursive: true, force: true });
   cpSync(join(REPO_ROOT, "wiki"), join(tmpRoot, "wiki"), { recursive: true });
+  for (const dir of LINKED_FOLDERS) {
+    if (existsSync(join(REPO_ROOT, dir))) {
+      cpSync(join(REPO_ROOT, dir), join(tmpRoot, dir), { recursive: true });
+    }
+  }
   if (existsSync(join(REPO_ROOT, "raw"))) {
     cpSync(join(REPO_ROOT, "raw"), join(tmpRoot, "raw"), { recursive: true });
   } else {

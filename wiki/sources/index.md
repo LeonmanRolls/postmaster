@@ -1,7 +1,7 @@
 ---
 title: Sources
 type: source
-updated: 2026-10-05
+updated: 2026-10-09
 ---
 
 # Sources
@@ -12,6 +12,28 @@ captured into `raw/`, saying what it claims and what it would mean here if true.
 
 ## Articles
 
+Read on 2026-10-08 and 2026-10-09 for [running the flow on Cloudflare](../concepts/running-the-flow-on-cloudflare.md), newest first:
+
+- [Price pages, limits and lifecycle documents of container and sandbox platforms](on-demand-containers-and-sandboxes.md): what a container costs on each platform that bills it by the second, and what stops one holding a launch.
+- [Hosted CI machines, free tiers, Tailscale, phones and owned hardware](ci-runners-free-tiers-and-phones.md): what else could run a ticket's work, and what stops it.
+- [Price lists and billing rules of hourly-billed virtual machine providers](on-demand-virtual-machines.md): what an hour of a plain machine costs, and what stops one being bought.
+- [The vendors' price pages](model-api-prices.md): what a million tokens cost on each lane's model.
+- [pi, Grok Build and the Antigravity CLI](other-harnesses-login-and-terms.md): headless logins, endpoints and terms.
+- [Xiaomi on MiMo Code](xiaomi-mimo-code-login-and-terms.md): keys, the Token Plan's "programming tools" clause.
+- [Meta on Muse Code](meta-muse-code-login-and-terms.md): API keys, the subscription credential, the contributor tier.
+- [Anthropic on Claude Code](anthropic-claude-code-login-and-terms.md): the one-year CI token, what third parties may not do with plan credentials.
+- [OpenAI on Codex](openai-codex-login-and-terms.md): one `auth.json` per runner, single-use refresh tokens, the terms.
+- [Cloudflare AI Gateway](cloudflare-ai-gateway.md): how a model key stays outside a sandbox.
+- [Cloudflare Workers, Durable Objects, Workflows, the Agents SDK, R2, D1 and Queues](cloudflare-control-plane.md): what a Worker can and cannot be.
+- [User reports on Cloudflare Containers and Sandboxes](cloudflare-containers-issue-reports.md): what people ran into.
+- [Cloudflare Containers and Sandboxes](cloudflare-containers-sandboxes.md): a microVM per instance, lifetimes, deploys, credential injection.
+
+Earlier reading:
+
+- [Sources read for tickets and acceptance criteria](../concepts/ticket-and-criteria-design.md#the-map):
+  69 papers and pages on requirements, acceptance criteria, formal limits and coding-agent specs, read
+  on 2026-10-04. They have no page here, and the page that cites them lists each with the day it was
+  read.
 - [Sources read for mixing models for coding](../concepts/mixing-models-for-coding.md#sources): 107 papers
   and 139 project pages, vendor posts and repositories, read on 2026-10-04. They have no page here, and
   the page that cites them lists each with the day it was read.

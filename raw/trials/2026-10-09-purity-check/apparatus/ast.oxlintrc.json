@@ -1,0 +1,5 @@
+{
+  "jsPlugins": ["./purity-ast.ts"],
+  "categories": { "correctness": "off" },
+  "rules": { "purity/flag": "error" }
+}

@@ -1,0 +1,5298 @@
+{
+  "launches": [
+    {
+      "run": "57",
+      "role": "workhorse",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 606765,
+        "cacheRead": 37602816,
+        "cacheWrite": 0,
+        "output": 192614,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "57",
+      "role": "workhorse",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 274314,
+        "cacheRead": 18782208,
+        "cacheWrite": 0,
+        "output": 77736,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "57",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 207446,
+        "cacheRead": 6203904,
+        "cacheWrite": 0,
+        "output": 48142,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "57",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 163978,
+        "cacheRead": 2073344,
+        "cacheWrite": 0,
+        "output": 41585,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "57",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 30,
+        "cacheRead": 1416148,
+        "cacheWrite": 128336,
+        "output": 41782,
+        "reportedUsd": 4.3061252
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 64,
+          "output": 86311,
+          "cacheRead": 3282906,
+          "cacheWrite": 307612
+        }
+      }
+    },
+    {
+      "run": "57",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 180611,
+        "cacheRead": 4297984,
+        "cacheWrite": 0,
+        "output": 59000,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "57",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 175879,
+        "cacheRead": 1674752,
+        "cacheWrite": 0,
+        "output": 20538,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "57",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 160929,
+        "cacheRead": 2266112,
+        "cacheWrite": 0,
+        "output": 32328,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "57",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 185191,
+        "cacheRead": 3704960,
+        "cacheWrite": 0,
+        "output": 59557,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "57",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 30,
+        "cacheRead": 1173028,
+        "cacheWrite": 142207,
+        "output": 39706,
+        "reportedUsd": 5.792558800000001
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 84,
+          "output": 99033,
+          "cacheRead": 3408659,
+          "cacheWrite": 540642
+        }
+      }
+    },
+    {
+      "run": "57",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 203038,
+        "cacheRead": 5073152,
+        "cacheWrite": 0,
+        "output": 51843,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "57",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 195125,
+        "cacheRead": 3717376,
+        "cacheWrite": 0,
+        "output": 53051,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "57",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 20,
+        "cacheRead": 538498,
+        "cacheWrite": 71443,
+        "output": 10851,
+        "reportedUsd": 0.8963435999999999
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 20,
+          "output": 10851,
+          "cacheRead": 538498,
+          "cacheWrite": 71443
+        }
+      }
+    },
+    {
+      "run": "57",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 371854,
+        "cacheRead": 6845440,
+        "cacheWrite": 0,
+        "output": 58934,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "57",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 319451,
+        "cacheRead": 3307136,
+        "cacheWrite": 0,
+        "output": 40988,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "57",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 12,
+        "cacheRead": 269284,
+        "cacheWrite": 50752,
+        "output": 15159,
+        "reportedUsd": 3.1007069999999994
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 68,
+          "output": 58548,
+          "cacheRead": 3146445,
+          "cacheWrite": 229586
+        }
+      }
+    },
+    {
+      "run": "57",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 167466,
+        "cacheRead": 2433024,
+        "cacheWrite": 0,
+        "output": 40041,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "57",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 157460,
+        "cacheRead": 3072384,
+        "cacheWrite": 0,
+        "output": 42185,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "57",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 14,
+        "cacheRead": 371277,
+        "cacheWrite": 61522,
+        "output": 20641,
+        "reportedUsd": 3.9859736
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 54,
+          "output": 81642,
+          "cacheRead": 3287333,
+          "cacheWrite": 302177
+        }
+      }
+    },
+    {
+      "run": "57",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "output": 0,
+        "reportedUsd": 0
+      },
+      "modelUsage": {}
+    },
+    {
+      "run": "57",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "output": 0,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "57",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 145233,
+        "cacheRead": 2944000,
+        "cacheWrite": 0,
+        "output": 29472,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "57",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 24,
+        "cacheRead": 844700,
+        "cacheWrite": 100645,
+        "output": 20888,
+        "reportedUsd": 3.1347410000000004
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 62,
+          "output": 54654,
+          "cacheRead": 2347465,
+          "cacheWrite": 253997
+        }
+      }
+    },
+    {
+      "run": "57",
+      "role": "coachman",
+      "lane": "coachman",
+      "harness": "muse",
+      "tokens": {
+        "uncached": 22952818,
+        "cacheRead": 304482795,
+        "cacheWrite": 0,
+        "output": 1115670,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "75",
+      "role": "workhorse",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 171271,
+        "cacheRead": 6513664,
+        "cacheWrite": 0,
+        "output": 73759,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "75",
+      "role": "workhorse",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 142238,
+        "cacheRead": 4185728,
+        "cacheWrite": 0,
+        "output": 32651,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "75",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "output": 0,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "75",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 114909,
+        "cacheRead": 1843328,
+        "cacheWrite": 0,
+        "output": 24252,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "75",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 6,
+        "cacheRead": 129364,
+        "cacheWrite": 70981,
+        "output": 31764,
+        "reportedUsd": 4.4344022
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 64,
+          "output": 99286,
+          "cacheRead": 4166416,
+          "cacheWrite": 280440
+        }
+      }
+    },
+    {
+      "run": "75",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 71124,
+        "cacheRead": 563968,
+        "cacheWrite": 0,
+        "output": 20136,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "75",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 138171,
+        "cacheRead": 1263872,
+        "cacheWrite": 0,
+        "output": 25346,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "75",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "output": 0,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "75",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 73030,
+        "cacheRead": 507520,
+        "cacheWrite": 0,
+        "output": 20819,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "75",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 22,
+        "cacheRead": 891164,
+        "cacheWrite": 106554,
+        "output": 40205,
+        "reportedUsd": 5.830468800000001
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 76,
+          "output": 145059,
+          "cacheRead": 4784264,
+          "cacheWrite": 330494
+        }
+      }
+    },
+    {
+      "run": "75",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "output": 0,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "75",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 74005,
+        "cacheRead": 835072,
+        "cacheWrite": 0,
+        "output": 20182,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "75",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 50,
+        "cacheRead": 3195190,
+        "cacheWrite": 163364,
+        "output": 100459,
+        "reportedUsd": 7.4761207999999995
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 88,
+          "output": 187956,
+          "cacheRead": 6104484,
+          "cacheWrite": 401132
+        }
+      }
+    },
+    {
+      "run": "75",
+      "role": "coachman",
+      "lane": "coachman",
+      "harness": "muse",
+      "tokens": {
+        "uncached": 2356572,
+        "cacheRead": 52062877,
+        "cacheWrite": 0,
+        "output": 226905,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "98",
+      "role": "workhorse",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 430786,
+        "cacheRead": 13184000,
+        "cacheWrite": 0,
+        "output": 125784,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "98",
+      "role": "workhorse",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 326418,
+        "cacheRead": 16608384,
+        "cacheWrite": 0,
+        "output": 59837,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "98",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "output": 0,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "98",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 122394,
+        "cacheRead": 2402176,
+        "cacheWrite": 0,
+        "output": 24131,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "98",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 30,
+        "cacheRead": 1110905,
+        "cacheWrite": 110921,
+        "output": 22194,
+        "reportedUsd": 4.072135800000001
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 74,
+          "output": 78650,
+          "cacheRead": 3619909,
+          "cacheWrite": 288419
+        }
+      }
+    },
+    {
+      "run": "98",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 101508,
+        "cacheRead": 472576,
+        "cacheWrite": 0,
+        "output": 25880,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "98",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 96237,
+        "cacheRead": 1242880,
+        "cacheWrite": 0,
+        "output": 27617,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "98",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "output": 0,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "98",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 112153,
+        "cacheRead": 2270080,
+        "cacheWrite": 0,
+        "output": 25497,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "98",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 16,
+        "cacheRead": 365836,
+        "cacheWrite": 65988,
+        "output": 25572,
+        "reportedUsd": 4.5742024
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 82,
+          "output": 101854,
+          "cacheRead": 4609252,
+          "cacheWrite": 283396
+        }
+      }
+    },
+    {
+      "run": "98",
+      "role": "coachman",
+      "lane": "coachman",
+      "harness": "muse",
+      "tokens": {
+        "uncached": 5349046,
+        "cacheRead": 110806831,
+        "cacheWrite": 0,
+        "output": 342793,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "110",
+      "role": "workhorse",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 437673,
+        "cacheRead": 19906048,
+        "cacheWrite": 0,
+        "output": 97228,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "110",
+      "role": "workhorse",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 228731,
+        "cacheRead": 17258112,
+        "cacheWrite": 0,
+        "output": 78617,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "110",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "output": 0,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "110",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 103762,
+        "cacheRead": 1687040,
+        "cacheWrite": 0,
+        "output": 28842,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "110",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 6,
+        "cacheRead": 129904,
+        "cacheWrite": 71080,
+        "output": 30106,
+        "reportedUsd": 3.3456927999999997
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 34,
+          "output": 83443,
+          "cacheRead": 1518159,
+          "cacheWrite": 231965
+        }
+      }
+    },
+    {
+      "run": "110",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 58743,
+        "cacheRead": 285696,
+        "cacheWrite": 0,
+        "output": 20006,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "110",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 98459,
+        "cacheRead": 1386112,
+        "cacheWrite": 0,
+        "output": 27891,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "110",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "output": 0,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "110",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 94878,
+        "cacheRead": 919552,
+        "cacheWrite": 0,
+        "output": 36649,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "110",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 10,
+        "cacheRead": 292551,
+        "cacheWrite": 101266,
+        "output": 44079,
+        "reportedUsd": 3.4520276
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 28,
+          "output": 86026,
+          "cacheRead": 1028638,
+          "cacheWrite": 244374
+        }
+      }
+    },
+    {
+      "run": "110",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "output": 0,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "110",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 73148,
+        "cacheRead": 554880,
+        "cacheWrite": 0,
+        "output": 22361,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "110",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 14,
+        "cacheRead": 673062,
+        "cacheWrite": 149999,
+        "output": 84818,
+        "reportedUsd": 9.4634898
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 52,
+          "output": 243610,
+          "cacheRead": 3210424,
+          "cacheWrite": 655212
+        },
+        "claude-haiku-4-5-20251001": {
+          "input": 203285,
+          "output": 3931,
+          "cacheRead": 0,
+          "cacheWrite": 0
+        }
+      }
+    },
+    {
+      "run": "110",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "output": 0,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "110",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 90257,
+        "cacheRead": 573440,
+        "cacheWrite": 0,
+        "output": 23447,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "110",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 10,
+        "cacheRead": 316852,
+        "cacheWrite": 93470,
+        "output": 30415,
+        "reportedUsd": 5.7320806000000015
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 76,
+          "output": 142512,
+          "cacheRead": 3602983,
+          "cacheWrite": 376106
+        }
+      }
+    },
+    {
+      "run": "110",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "output": 0,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "110",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 110150,
+        "cacheRead": 864640,
+        "cacheWrite": 0,
+        "output": 25953,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "110",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 10,
+        "cacheRead": 321946,
+        "cacheWrite": 90147,
+        "output": 28143,
+        "reportedUsd": 5.2815392
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 56,
+          "output": 126494,
+          "cacheRead": 2502521,
+          "cacheWrite": 396098
+        }
+      }
+    },
+    {
+      "run": "110",
+      "role": "coachman",
+      "lane": "coachman",
+      "harness": "muse",
+      "tokens": {
+        "uncached": 6234560,
+        "cacheRead": 107181977,
+        "cacheWrite": 0,
+        "output": 448425,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "158",
+      "role": "workhorse",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 520552,
+        "cacheRead": 22410496,
+        "cacheWrite": 0,
+        "output": 123864,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "158",
+      "role": "workhorse",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 350690,
+        "cacheRead": 19318400,
+        "cacheWrite": 0,
+        "output": 77476,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "158",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "output": 0,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "158",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 120595,
+        "cacheRead": 910208,
+        "cacheWrite": 0,
+        "output": 34740,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "158",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 22,
+        "cacheRead": 1157162,
+        "cacheWrite": 162503,
+        "output": 71493,
+        "reportedUsd": 8.168955599999999
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 40,
+          "output": 160857,
+          "cacheRead": 1960543,
+          "cacheWrite": 813075
+        },
+        "claude-haiku-4-5-20251001": {
+          "input": 5118,
+          "output": 309,
+          "cacheRead": 0,
+          "cacheWrite": 0
+        }
+      }
+    },
+    {
+      "run": "158",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 62739,
+        "cacheRead": 434688,
+        "cacheWrite": 0,
+        "output": 12126,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "158",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 122178,
+        "cacheRead": 2748032,
+        "cacheWrite": 0,
+        "output": 37349,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "158",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "output": 0,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "158",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 90580,
+        "cacheRead": 1334784,
+        "cacheWrite": 0,
+        "output": 34286,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "158",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 18,
+        "cacheRead": 545320,
+        "cacheWrite": 84173,
+        "output": 26585,
+        "reportedUsd": 3.627164400000001
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 78,
+          "output": 79772,
+          "cacheRead": 3348042,
+          "cacheWrite": 221857
+        }
+      }
+    },
+    {
+      "run": "158",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "output": 0,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "158",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 98982,
+        "cacheRead": 717440,
+        "cacheWrite": 0,
+        "output": 28012,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "158",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 12,
+        "cacheRead": 435279,
+        "cacheWrite": 100800,
+        "output": 27911,
+        "reportedUsd": 3.3861704000000006
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 56,
+          "output": 69396,
+          "cacheRead": 2625882,
+          "cacheWrite": 234090
+        }
+      }
+    },
+    {
+      "run": "158",
+      "role": "coachman",
+      "lane": "coachman",
+      "harness": "muse",
+      "tokens": {
+        "uncached": 4464925,
+        "cacheRead": 80843299,
+        "cacheWrite": 0,
+        "output": 291428,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "159",
+      "role": "workhorse",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 175649,
+        "cacheRead": 6532352,
+        "cacheWrite": 0,
+        "output": 54487,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "159",
+      "role": "workhorse",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 231945,
+        "cacheRead": 4966400,
+        "cacheWrite": 0,
+        "output": 47905,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "159",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "output": 0,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "159",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 88003,
+        "cacheRead": 314240,
+        "cacheWrite": 0,
+        "output": 12479,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "159",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 14,
+        "cacheRead": 718746,
+        "cacheWrite": 137556,
+        "output": 58145,
+        "reportedUsd": 5.9585121999999995
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 52,
+          "output": 154326,
+          "cacheRead": 3279181,
+          "cacheWrite": 360656
+        }
+      }
+    },
+    {
+      "run": "159",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 65067,
+        "cacheRead": 259328,
+        "cacheWrite": 0,
+        "output": 11405,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "159",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 105025,
+        "cacheRead": 1293696,
+        "cacheWrite": 0,
+        "output": 25493,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "159",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "output": 0,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "159",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 126278,
+        "cacheRead": 1346176,
+        "cacheWrite": 0,
+        "output": 40588,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "159",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 8,
+        "cacheRead": 245813,
+        "cacheWrite": 81887,
+        "output": 31575,
+        "reportedUsd": 2.9234970000000002
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 30,
+          "output": 68963,
+          "cacheRead": 1148180,
+          "cacheWrite": 213764
+        }
+      }
+    },
+    {
+      "run": "159",
+      "role": "coachman",
+      "lane": "coachman",
+      "harness": "muse",
+      "tokens": {
+        "uncached": 3069283,
+        "cacheRead": 38330317,
+        "cacheWrite": 0,
+        "output": 201436,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "160",
+      "role": "workhorse",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 842168,
+        "cacheRead": 30959872,
+        "cacheWrite": 0,
+        "output": 141160,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "160",
+      "role": "workhorse",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 288422,
+        "cacheRead": 21886976,
+        "cacheWrite": 0,
+        "output": 78787,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "160",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "output": 0,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "160",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 108299,
+        "cacheRead": 549632,
+        "cacheWrite": 0,
+        "output": 13729,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "160",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 24,
+        "cacheRead": 1300273,
+        "cacheWrite": 164456,
+        "output": 45562,
+        "reportedUsd": 8.073651199999999
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 110,
+          "output": 153824,
+          "cacheRead": 7121946,
+          "cacheWrite": 613081
+        },
+        "claude-haiku-4-5-20251001": {
+          "input": 11149,
+          "output": 484,
+          "cacheRead": 0,
+          "cacheWrite": 0
+        }
+      }
+    },
+    {
+      "run": "160",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 84587,
+        "cacheRead": 509184,
+        "cacheWrite": 0,
+        "output": 17413,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "160",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 152618,
+        "cacheRead": 1627904,
+        "cacheWrite": 0,
+        "output": 26715,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "160",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "output": 0,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "160",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 145502,
+        "cacheRead": 1180288,
+        "cacheWrite": 0,
+        "output": 34081,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "160",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 12,
+        "cacheRead": 475614,
+        "cacheWrite": 138045,
+        "output": 44130,
+        "reportedUsd": 5.8697372
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 66,
+          "output": 127210,
+          "cacheRead": 4711066,
+          "cacheWrite": 393785
+        }
+      }
+    },
+    {
+      "run": "160",
+      "role": "coachman",
+      "lane": "coachman",
+      "harness": "muse",
+      "tokens": {
+        "uncached": 3239751,
+        "cacheRead": 52500049,
+        "cacheWrite": 0,
+        "output": 243213,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "163",
+      "role": "workhorse",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 324458,
+        "cacheRead": 25791744,
+        "cacheWrite": 0,
+        "output": 110801,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "163",
+      "role": "workhorse",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 224387,
+        "cacheRead": 17126912,
+        "cacheWrite": 0,
+        "output": 82526,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "163",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "output": 0,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "163",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 88423,
+        "cacheRead": 430848,
+        "cacheWrite": 0,
+        "output": 15684,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "163",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 12,
+        "cacheRead": 370541,
+        "cacheWrite": 101517,
+        "output": 34925,
+        "reportedUsd": 5.904639800000001
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 64,
+          "output": 146151,
+          "cacheRead": 2495489,
+          "cacheWrite": 435543
+        }
+      }
+    },
+    {
+      "run": "163",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 64298,
+        "cacheRead": 368128,
+        "cacheWrite": 0,
+        "output": 10523,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "163",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 118271,
+        "cacheRead": 1696640,
+        "cacheWrite": 0,
+        "output": 28413,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "163",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "output": 0,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "163",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 89527,
+        "cacheRead": 686336,
+        "cacheWrite": 0,
+        "output": 26899,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "163",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 14,
+        "cacheRead": 458274,
+        "cacheWrite": 88894,
+        "output": 19256,
+        "reportedUsd": 3.083109
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 62,
+          "output": 61347,
+          "cacheRead": 2582720,
+          "cacheWrite": 214539
+        }
+      }
+    },
+    {
+      "run": "163",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "output": 0,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "163",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 98601,
+        "cacheRead": 612096,
+        "cacheWrite": 0,
+        "output": 36465,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "163",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 12,
+        "cacheRead": 302626,
+        "cacheWrite": 60480,
+        "output": 23855,
+        "reportedUsd": 2.3471696
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 32,
+          "output": 58499,
+          "cacheRead": 953883,
+          "cacheWrite": 160969
+        }
+      }
+    },
+    {
+      "run": "163",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "output": 0,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "163",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 83587,
+        "cacheRead": 719360,
+        "cacheWrite": 0,
+        "output": 21423,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "163",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "output": 0,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "163",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 82250,
+        "cacheRead": 537216,
+        "cacheWrite": 0,
+        "output": 18399,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "163",
+      "role": "coachman",
+      "lane": "coachman",
+      "harness": "muse",
+      "tokens": {
+        "uncached": 7559073,
+        "cacheRead": 138581204,
+        "cacheWrite": 0,
+        "output": 435541,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "165",
+      "role": "workhorse",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "output": 0,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "165",
+      "role": "workhorse",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 491190,
+        "cacheRead": 2166528,
+        "cacheWrite": 0,
+        "output": 290913,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "165",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "output": 0,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "165",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 150119,
+        "cacheRead": 1528192,
+        "cacheWrite": 0,
+        "output": 37794,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "165",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 16,
+        "cacheRead": 630380,
+        "cacheWrite": 102617,
+        "output": 27711,
+        "reportedUsd": 3.6134804000000003
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 46,
+          "output": 62882,
+          "cacheRead": 2375177,
+          "cacheWrite": 314554
+        }
+      }
+    },
+    {
+      "run": "165",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 136369,
+        "cacheRead": 1259008,
+        "cacheWrite": 0,
+        "output": 26235,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "165",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 131057,
+        "cacheRead": 1818368,
+        "cacheWrite": 0,
+        "output": 23154,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "165",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "output": 0,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "165",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 130293,
+        "cacheRead": 1388032,
+        "cacheWrite": 0,
+        "output": 32009,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "165",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 16,
+        "cacheRead": 626652,
+        "cacheWrite": 120488,
+        "output": 30987,
+        "reportedUsd": 6.2945416000000005
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 98,
+          "output": 122010,
+          "cacheRead": 5200228,
+          "cacheWrite": 490488
+        }
+      }
+    },
+    {
+      "run": "165",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "output": 0,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "165",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 128773,
+        "cacheRead": 1233024,
+        "cacheWrite": 0,
+        "output": 27286,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "165",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 18,
+        "cacheRead": 706839,
+        "cacheWrite": 122037,
+        "output": 27469,
+        "reportedUsd": 5.875258599999999
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 92,
+          "output": 97791,
+          "cacheRead": 5014798,
+          "cacheWrite": 510000
+        }
+      }
+    },
+    {
+      "run": "165",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "output": 0,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "165",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 171583,
+        "cacheRead": 1735424,
+        "cacheWrite": 0,
+        "output": 41397,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "165",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 16,
+        "cacheRead": 670072,
+        "cacheWrite": 131972,
+        "output": 27487,
+        "reportedUsd": 5.0051756
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 80,
+          "output": 96244,
+          "cacheRead": 4880623,
+          "cacheWrite": 341587
+        }
+      }
+    },
+    {
+      "run": "165",
+      "role": "coachman",
+      "lane": "coachman",
+      "harness": "muse",
+      "tokens": {
+        "uncached": 9161797,
+        "cacheRead": 117965890,
+        "cacheWrite": 0,
+        "output": 506738,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "170",
+      "role": "workhorse",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 893159,
+        "cacheRead": 38396160,
+        "cacheWrite": 0,
+        "output": 225699,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "170",
+      "role": "workhorse",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 407597,
+        "cacheRead": 26951296,
+        "cacheWrite": 0,
+        "output": 117897,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "170",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "output": 0,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "170",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 127274,
+        "cacheRead": 1194112,
+        "cacheWrite": 0,
+        "output": 14200,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "170",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 20,
+        "cacheRead": 596394,
+        "cacheWrite": 80809,
+        "output": 19655,
+        "reportedUsd": 3.5616909999999993
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 70,
+          "output": 71135,
+          "cacheRead": 3306045,
+          "cacheWrite": 247015
+        }
+      }
+    },
+    {
+      "run": "170",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 136487,
+        "cacheRead": 1750784,
+        "cacheWrite": 0,
+        "output": 27028,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "170",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 151899,
+        "cacheRead": 3042432,
+        "cacheWrite": 0,
+        "output": 32159,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "170",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "output": 0,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "170",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 252729,
+        "cacheRead": 889600,
+        "cacheWrite": 0,
+        "output": 19019,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "170",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 30,
+        "cacheRead": 1024891,
+        "cacheWrite": 94795,
+        "output": 23869,
+        "reportedUsd": 3.890943599999999
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 66,
+          "output": 78791,
+          "cacheRead": 3078298,
+          "cacheWrite": 282963
+        }
+      }
+    },
+    {
+      "run": "170",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "output": 0,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "170",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 208225,
+        "cacheRead": 1384448,
+        "cacheWrite": 0,
+        "output": 45399,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "170",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 20,
+        "cacheRead": 770634,
+        "cacheWrite": 113729,
+        "output": 23920,
+        "reportedUsd": 4.7775582000000005
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 110,
+          "output": 81991,
+          "cacheRead": 6491081,
+          "cacheWrite": 299579
+        }
+      }
+    },
+    {
+      "run": "170",
+      "role": "coachman",
+      "lane": "coachman",
+      "harness": "muse",
+      "tokens": {
+        "uncached": 3393720,
+        "cacheRead": 70354869,
+        "cacheWrite": 0,
+        "output": 260296,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "179",
+      "role": "workhorse",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 450335,
+        "cacheRead": 14440960,
+        "cacheWrite": 0,
+        "output": 128027,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "179",
+      "role": "workhorse",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 240297,
+        "cacheRead": 11477504,
+        "cacheWrite": 0,
+        "output": 62882,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "179",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "output": 0,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "179",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 62903,
+        "cacheRead": 296576,
+        "cacheWrite": 0,
+        "output": 11060,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "179",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 16,
+        "cacheRead": 613619,
+        "cacheWrite": 100037,
+        "output": 31035,
+        "reportedUsd": 3.7232708000000003
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 60,
+          "output": 75244,
+          "cacheRead": 2266624,
+          "cacheWrite": 292943
+        }
+      }
+    },
+    {
+      "run": "179",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 73637,
+        "cacheRead": 509952,
+        "cacheWrite": 0,
+        "output": 15741,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "179",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 89680,
+        "cacheRead": 915328,
+        "cacheWrite": 0,
+        "output": 19853,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "179",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "output": 0,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "179",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 52976,
+        "cacheRead": 405376,
+        "cacheWrite": 0,
+        "output": 14258,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "179",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 14,
+        "cacheRead": 323139,
+        "cacheWrite": 58134,
+        "output": 17874,
+        "reportedUsd": 2.084197
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 52,
+          "output": 43569,
+          "cacheRead": 1473660,
+          "cacheWrite": 148695
+        }
+      }
+    },
+    {
+      "run": "179",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "output": 0,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "179",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 69853,
+        "cacheRead": 753536,
+        "cacheWrite": 0,
+        "output": 22222,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "179",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 8,
+        "cacheRead": 196189,
+        "cacheWrite": 71259,
+        "output": 19123,
+        "reportedUsd": 1.9693257999999998
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 38,
+          "output": 38887,
+          "cacheRead": 1061584,
+          "cacheWrite": 153068
+        }
+      }
+    },
+    {
+      "run": "179",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "output": 0,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "179",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 82172,
+        "cacheRead": 687232,
+        "cacheWrite": 0,
+        "output": 29541,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "179",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 16,
+        "cacheRead": 588118,
+        "cacheWrite": 89754,
+        "output": 25144,
+        "reportedUsd": 3.3741363999999994
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 64,
+          "output": 63760,
+          "cacheRead": 3202942,
+          "cacheWrite": 237766
+        }
+      }
+    },
+    {
+      "run": "179",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "output": 0,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "179",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 65122,
+        "cacheRead": 521344,
+        "cacheWrite": 0,
+        "output": 20005,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "179",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 12,
+        "cacheRead": 294323,
+        "cacheWrite": 69839,
+        "output": 21599,
+        "reportedUsd": 2.575767
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 50,
+          "output": 53030,
+          "cacheRead": 1733000,
+          "cacheWrite": 191770
+        }
+      }
+    },
+    {
+      "run": "179",
+      "role": "coachman",
+      "lane": "coachman",
+      "harness": "muse",
+      "tokens": {
+        "uncached": 5118582,
+        "cacheRead": 99980372,
+        "cacheWrite": 0,
+        "output": 435920,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "182",
+      "role": "workhorse",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 232929,
+        "cacheRead": 21723904,
+        "cacheWrite": 0,
+        "output": 56924,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "182",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 111442,
+        "cacheRead": 1083136,
+        "cacheWrite": 0,
+        "output": 33605,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "182",
+      "role": "reviewer",
+      "lane": "sol",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "output": 0,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "182",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 16,
+        "cacheRead": 619259,
+        "cacheWrite": 102606,
+        "output": 24074,
+        "reportedUsd": 2.7569792
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 58,
+          "output": 45952,
+          "cacheRead": 2175796,
+          "cacheWrite": 218946
+        }
+      }
+    },
+    {
+      "run": "182",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 131506,
+        "cacheRead": 1569280,
+        "cacheWrite": 0,
+        "output": 33124,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "182",
+      "role": "reviewer",
+      "lane": "sol",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 112667,
+        "cacheRead": 1129856,
+        "cacheWrite": 0,
+        "output": 16695,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "182",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 115112,
+        "cacheRead": 1790848,
+        "cacheWrite": 0,
+        "output": 35736,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "182",
+      "role": "reviewer",
+      "lane": "sol",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "output": 0,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "182",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 14,
+        "cacheRead": 323246,
+        "cacheWrite": 53333,
+        "output": 13601,
+        "reportedUsd": 2.4992924000000007
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 68,
+          "output": 39633,
+          "cacheRead": 2815182,
+          "cacheWrite": 196665
+        }
+      }
+    },
+    {
+      "run": "182",
+      "role": "workhorse",
+      "lane": "sol",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 210231,
+        "cacheRead": 25270784,
+        "cacheWrite": 0,
+        "output": 50600,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "182",
+      "role": "coachman",
+      "lane": "coachman",
+      "harness": "muse",
+      "tokens": {
+        "uncached": 1691044,
+        "cacheRead": 68112555,
+        "cacheWrite": 0,
+        "output": 223962,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "200",
+      "role": "workhorse",
+      "lane": "astra",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 122191,
+        "cacheRead": 3436544,
+        "cacheWrite": 0,
+        "output": 15605,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "200",
+      "role": "workhorse",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 458706,
+        "cacheRead": 25563648,
+        "cacheWrite": 0,
+        "output": 71962,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "200",
+      "role": "reviewer",
+      "lane": "astra",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "output": 0,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "200",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 17421,
+        "cacheRead": 48256,
+        "cacheWrite": 0,
+        "output": 1987,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "200",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 14,
+        "cacheRead": 534692,
+        "cacheWrite": 113687,
+        "output": 39532,
+        "reportedUsd": 8.059232999999999
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 106,
+          "output": 178702,
+          "cacheRead": 5910490,
+          "cacheWrite": 592322
+        }
+      }
+    },
+    {
+      "run": "200",
+      "role": "reviewer",
+      "lane": "astra",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 108193,
+        "cacheRead": 1042688,
+        "cacheWrite": 0,
+        "output": 10993,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "200",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 110561,
+        "cacheRead": 2675968,
+        "cacheWrite": 0,
+        "output": 23392,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "200",
+      "role": "reviewer",
+      "lane": "astra",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "output": 0,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "200",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 129729,
+        "cacheRead": 3534976,
+        "cacheWrite": 0,
+        "output": 37392,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "200",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 12,
+        "cacheRead": 423675,
+        "cacheWrite": 96266,
+        "output": 21971,
+        "reportedUsd": 3.7261694000000003
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 64,
+          "output": 78348,
+          "cacheRead": 2931652,
+          "cacheWrite": 256765
+        }
+      }
+    },
+    {
+      "run": "200",
+      "role": "reviewer",
+      "lane": "astra",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "output": 0,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "200",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 171365,
+        "cacheRead": 3769088,
+        "cacheWrite": 0,
+        "output": 56223,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "200",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 36,
+        "cacheRead": 1226914,
+        "cacheWrite": 90362,
+        "output": 40796,
+        "reportedUsd": 4.304836200000001
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 70,
+          "output": 112601,
+          "cacheRead": 2759051,
+          "cacheWrite": 245928
+        }
+      }
+    },
+    {
+      "run": "200",
+      "role": "reviewer",
+      "lane": "sol",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "output": 0,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "200",
+      "role": "coachman",
+      "lane": "coachman",
+      "harness": "muse",
+      "tokens": {
+        "uncached": 2269167,
+        "cacheRead": 82091401,
+        "cacheWrite": 0,
+        "output": 279679,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "201",
+      "role": "workhorse",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 242605,
+        "cacheRead": 7395584,
+        "cacheWrite": 0,
+        "output": 51417,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "201",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 89503,
+        "cacheRead": 669952,
+        "cacheWrite": 0,
+        "output": 22403,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "201",
+      "role": "reviewer",
+      "lane": "sol",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "output": 0,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "201",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 10,
+        "cacheRead": 268950,
+        "cacheWrite": 82499,
+        "output": 30936,
+        "reportedUsd": 3.8061870000000004
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 48,
+          "output": 80323,
+          "cacheRead": 1325340,
+          "cacheWrite": 337394
+        }
+      }
+    },
+    {
+      "run": "201",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 95155,
+        "cacheRead": 832896,
+        "cacheWrite": 0,
+        "output": 13687,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "201",
+      "role": "reviewer",
+      "lane": "sol",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 101421,
+        "cacheRead": 1042816,
+        "cacheWrite": 0,
+        "output": 14775,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "201",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 89357,
+        "cacheRead": 1439616,
+        "cacheWrite": 0,
+        "output": 35225,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "201",
+      "role": "reviewer",
+      "lane": "sol",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "output": 0,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "201",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 6,
+        "cacheRead": 112455,
+        "cacheWrite": 71780,
+        "output": 23574,
+        "reportedUsd": 2.3845778
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 26,
+          "output": 56388,
+          "cacheRead": 792569,
+          "cacheWrite": 176572
+        }
+      }
+    },
+    {
+      "run": "201",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 64317,
+        "cacheRead": 244224,
+        "cacheWrite": 0,
+        "output": 16281,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "201",
+      "role": "reviewer",
+      "lane": "sol",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "output": 0,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "201",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 10,
+        "cacheRead": 279520,
+        "cacheWrite": 80011,
+        "output": 29216,
+        "reportedUsd": 2.9979936
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 46,
+          "output": 71583,
+          "cacheRead": 1744008,
+          "cacheWrite": 195463
+        }
+      }
+    },
+    {
+      "run": "201",
+      "role": "workhorse",
+      "lane": "sol",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 203976,
+        "cacheRead": 6926976,
+        "cacheWrite": 0,
+        "output": 39551,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "201",
+      "role": "coachman",
+      "lane": "coachman",
+      "harness": "muse",
+      "tokens": {
+        "uncached": 2102551,
+        "cacheRead": 75763622,
+        "cacheWrite": 0,
+        "output": 241010,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "109",
+      "role": "workhorse",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 3067548,
+        "cacheRead": 116179968,
+        "cacheWrite": 0,
+        "output": 856792,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "109",
+      "role": "workhorse",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 2963962,
+        "cacheRead": 167670656,
+        "cacheWrite": 0,
+        "output": 1241706,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "109",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 157153,
+        "cacheRead": 2985216,
+        "cacheWrite": 0,
+        "output": 43969,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "109",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 597772,
+        "cacheRead": 9785472,
+        "cacheWrite": 0,
+        "output": 137822,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "109",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 50,
+        "cacheRead": 1806796,
+        "cacheWrite": 132614,
+        "output": 65524,
+        "reportedUsd": 19.570146999999984
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 456,
+          "output": 384680,
+          "cacheRead": 24908830,
+          "cacheWrite": 1299023
+        }
+      }
+    },
+    {
+      "run": "109",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 96502,
+        "cacheRead": 1367040,
+        "cacheWrite": 0,
+        "output": 21566,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "109",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 99173,
+        "cacheRead": 1723008,
+        "cacheWrite": 0,
+        "output": 22331,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "109",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 150958,
+        "cacheRead": 2995200,
+        "cacheWrite": 0,
+        "output": 48815,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "109",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 187103,
+        "cacheRead": 4460672,
+        "cacheWrite": 0,
+        "output": 42483,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "109",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 66,
+        "cacheRead": 2750613,
+        "cacheWrite": 158307,
+        "output": 72875,
+        "reportedUsd": 22.547254599999995
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 468,
+          "output": 442116,
+          "cacheRead": 29148383,
+          "cacheWrite": 1479693
+        }
+      }
+    },
+    {
+      "run": "109",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "output": 0,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "109",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 752911,
+        "cacheRead": 8541568,
+        "cacheWrite": 0,
+        "output": 156884,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "109",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 72,
+        "cacheRead": 3189197,
+        "cacheWrite": 181140,
+        "output": 82984,
+        "reportedUsd": 27.089982399999997
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 438,
+          "output": 508162,
+          "cacheRead": 33480427,
+          "cacheWrite": 1937097
+        }
+      }
+    },
+    {
+      "run": "109",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "output": 0,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "109",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 158947,
+        "cacheRead": 3017856,
+        "cacheWrite": 0,
+        "output": 30147,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "109",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 60,
+        "cacheRead": 1923490,
+        "cacheWrite": 121008,
+        "output": 59306,
+        "reportedUsd": 21.135733600000002
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 372,
+          "output": 354751,
+          "cacheRead": 29804658,
+          "cacheWrite": 1543054
+        }
+      }
+    },
+    {
+      "run": "109",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "output": 0,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "109",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 139646,
+        "cacheRead": 781952,
+        "cacheWrite": 0,
+        "output": 16354,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "109",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 36,
+        "cacheRead": 1276759,
+        "cacheWrite": 117519,
+        "output": 49133,
+        "reportedUsd": 11.797766599999997
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 258,
+          "output": 263297,
+          "cacheRead": 11611038,
+          "cacheWrite": 771206
+        }
+      }
+    },
+    {
+      "run": "109",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 145743,
+        "cacheRead": 2516736,
+        "cacheWrite": 0,
+        "output": 40366,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "109",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 144126,
+        "cacheRead": 2722944,
+        "cacheWrite": 0,
+        "output": 63150,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "109",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 70,
+        "cacheRead": 3665483,
+        "cacheWrite": 219723,
+        "output": 117855,
+        "reportedUsd": 35.93179219999998
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 672,
+          "output": 795770,
+          "cacheRead": 37601026,
+          "cacheWrite": 2366866
+        }
+      }
+    },
+    {
+      "run": "109",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 145318,
+        "cacheRead": 3844864,
+        "cacheWrite": 0,
+        "output": 46237,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "109",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 177001,
+        "cacheRead": 5502464,
+        "cacheWrite": 0,
+        "output": 52977,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "109",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 30,
+        "cacheRead": 1613360,
+        "cacheWrite": 170433,
+        "output": 89897,
+        "reportedUsd": 25.241798550000006
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 384,
+          "output": 481118,
+          "cacheRead": 26153889,
+          "cacheWrite": 1631741
+        },
+        "claude-opus-5": {
+          "input": 2,
+          "output": 10567,
+          "cacheRead": 202821,
+          "cacheWrite": 0
+        },
+        "claude-opus-4-8": {
+          "input": 2,
+          "output": 2187,
+          "cacheRead": 6768,
+          "cacheWrite": 206953
+        }
+      }
+    },
+    {
+      "run": "109",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 171949,
+        "cacheRead": 7117824,
+        "cacheWrite": 0,
+        "output": 44542,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "109",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 107325,
+        "cacheRead": 3839360,
+        "cacheWrite": 0,
+        "output": 46003,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "109",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 60,
+        "cacheRead": 2551213,
+        "cacheWrite": 153840,
+        "output": 69408,
+        "reportedUsd": 22.896871849999993
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 430,
+          "output": 465042,
+          "cacheRead": 25678463,
+          "cacheWrite": 1474309
+        },
+        "claude-opus-5": {
+          "input": 2,
+          "output": 14182,
+          "cacheRead": 29076,
+          "cacheWrite": 41033
+        }
+      }
+    },
+    {
+      "run": "109",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 183559,
+        "cacheRead": 5726208,
+        "cacheWrite": 0,
+        "output": 32948,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "109",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 139314,
+        "cacheRead": 3549056,
+        "cacheWrite": 0,
+        "output": 42816,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "109",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 54,
+        "cacheRead": 1980743,
+        "cacheWrite": 134880,
+        "output": 63503,
+        "reportedUsd": 26.587636450000005
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 474,
+          "output": 480148,
+          "cacheRead": 28435516,
+          "cacheWrite": 1837476
+        },
+        "claude-opus-5": {
+          "input": 2,
+          "output": 7130,
+          "cacheRead": 187245,
+          "cacheWrite": 0
+        },
+        "claude-opus-4-8": {
+          "input": 4,
+          "output": 4813,
+          "cacheRead": 201472,
+          "cacheWrite": 193711
+        }
+      }
+    },
+    {
+      "run": "109",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 204297,
+        "cacheRead": 3813376,
+        "cacheWrite": 0,
+        "output": 41875,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "109",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 149882,
+        "cacheRead": 4262144,
+        "cacheWrite": 0,
+        "output": 53042,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "109",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 60,
+        "cacheRead": 2147060,
+        "cacheWrite": 154763,
+        "output": 80026,
+        "reportedUsd": 22.487502000000003
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 424,
+          "output": 470563,
+          "cacheRead": 24509935,
+          "cacheWrite": 1541654
+        }
+      }
+    },
+    {
+      "run": "109",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 125945,
+        "cacheRead": 2392320,
+        "cacheWrite": 0,
+        "output": 25762,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "109",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 182880,
+        "cacheRead": 6339456,
+        "cacheWrite": 0,
+        "output": 57979,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "109",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 56,
+        "cacheRead": 1895086,
+        "cacheWrite": 135800,
+        "output": 68675,
+        "reportedUsd": 18.5456886
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 378,
+          "output": 369765,
+          "cacheRead": 22571783,
+          "cacheWrite": 1245424
+        }
+      }
+    },
+    {
+      "run": "109",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 131314,
+        "cacheRead": 3994112,
+        "cacheWrite": 0,
+        "output": 30060,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "109",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 134019,
+        "cacheRead": 5163648,
+        "cacheWrite": 0,
+        "output": 46517,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "109",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 62,
+        "cacheRead": 2516732,
+        "cacheWrite": 140272,
+        "output": 66239,
+        "reportedUsd": 19.982864399999997
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 406,
+          "output": 401418,
+          "cacheRead": 23227647,
+          "cacheWrite": 1377307
+        }
+      }
+    },
+    {
+      "run": "109",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 124506,
+        "cacheRead": 1819904,
+        "cacheWrite": 0,
+        "output": 48694,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "109",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 182867,
+        "cacheRead": 3780736,
+        "cacheWrite": 0,
+        "output": 39214,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "109",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 50,
+        "cacheRead": 1977177,
+        "cacheWrite": 135937,
+        "output": 65616,
+        "reportedUsd": 19.702732999999995
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 410,
+          "output": 391623,
+          "cacheRead": 26060260,
+          "cacheWrite": 1249754
+        }
+      }
+    },
+    {
+      "run": "122",
+      "role": "workhorse",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 359467,
+        "cacheRead": 23619584,
+        "cacheWrite": 0,
+        "output": 120583,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "122",
+      "role": "workhorse",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 223510,
+        "cacheRead": 12078208,
+        "cacheWrite": 0,
+        "output": 64804,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "122",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 107502,
+        "cacheRead": 790016,
+        "cacheWrite": 0,
+        "output": 24571,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "122",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 120933,
+        "cacheRead": 1890432,
+        "cacheWrite": 0,
+        "output": 33391,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "122",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 22,
+        "cacheRead": 1067630,
+        "cacheWrite": 131691,
+        "output": 47010,
+        "reportedUsd": 6.725886150000001
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 82,
+          "output": 95730,
+          "cacheRead": 3757392,
+          "cacheWrite": 384687
+        },
+        "claude-opus-5": {
+          "input": 2,
+          "output": 13391,
+          "cacheRead": 112388,
+          "cacheWrite": 0
+        },
+        "claude-opus-4-8": {
+          "input": 12,
+          "output": 8458,
+          "cacheRead": 660253,
+          "cacheWrite": 129337
+        }
+      }
+    },
+    {
+      "run": "122",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 125985,
+        "cacheRead": 1453312,
+        "cacheWrite": 0,
+        "output": 20088,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "122",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 169393,
+        "cacheRead": 1145472,
+        "cacheWrite": 0,
+        "output": 18987,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "122",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 208900,
+        "cacheRead": 3296000,
+        "cacheWrite": 0,
+        "output": 51357,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "122",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 154675,
+        "cacheRead": 3263232,
+        "cacheWrite": 0,
+        "output": 53462,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "122",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 203281,
+        "cacheRead": 2139648,
+        "cacheWrite": 0,
+        "output": 52806,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "122",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 154246,
+        "cacheRead": 3222912,
+        "cacheWrite": 0,
+        "output": 49092,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "122",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 194595,
+        "cacheRead": 3303936,
+        "cacheWrite": 0,
+        "output": 56574,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "122",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 178216,
+        "cacheRead": 2190720,
+        "cacheWrite": 0,
+        "output": 43114,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "122",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 185213,
+        "cacheRead": 1758464,
+        "cacheWrite": 0,
+        "output": 49044,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "122",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 235711,
+        "cacheRead": 3347712,
+        "cacheWrite": 0,
+        "output": 52628,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "122",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 162080,
+        "cacheRead": 2910208,
+        "cacheWrite": 0,
+        "output": 50050,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "122",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 139144,
+        "cacheRead": 2495744,
+        "cacheWrite": 0,
+        "output": 50034,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "122",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 16,
+        "cacheRead": 559833,
+        "cacheWrite": 123442,
+        "output": 43717,
+        "reportedUsd": 8.28212175
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 84,
+          "output": 103596,
+          "cacheRead": 4150260,
+          "cacheWrite": 515452
+        },
+        "claude-opus-5": {
+          "input": 4,
+          "output": 11680,
+          "cacheRead": 206736,
+          "cacheWrite": 4052
+        },
+        "claude-opus-4-8": {
+          "input": 6,
+          "output": 27702,
+          "cacheRead": 353282,
+          "cacheWrite": 182767
+        }
+      }
+    },
+    {
+      "run": "122",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 226569,
+        "cacheRead": 5500928,
+        "cacheWrite": 0,
+        "output": 79534,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "122",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 164352,
+        "cacheRead": 2961024,
+        "cacheWrite": 0,
+        "output": 40704,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "122",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 24,
+        "cacheRead": 1129240,
+        "cacheWrite": 147370,
+        "output": 57611,
+        "reportedUsd": 12.176260399999997
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 188,
+          "output": 217967,
+          "cacheRead": 10571967,
+          "cacheWrite": 1051933
+        }
+      }
+    },
+    {
+      "run": "122",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 194714,
+        "cacheRead": 3610368,
+        "cacheWrite": 0,
+        "output": 48552,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "122",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 148960,
+        "cacheRead": 3165440,
+        "cacheWrite": 0,
+        "output": 49044,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "122",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 171133,
+        "cacheRead": 2197504,
+        "cacheWrite": 0,
+        "output": 46377,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "122",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 145302,
+        "cacheRead": 2581376,
+        "cacheWrite": 0,
+        "output": 47654,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "122",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 122932,
+        "cacheRead": 1679616,
+        "cacheWrite": 0,
+        "output": 31238,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "122",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 145910,
+        "cacheRead": 3034240,
+        "cacheWrite": 0,
+        "output": 49797,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "122",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 145627,
+        "cacheRead": 1779712,
+        "cacheWrite": 0,
+        "output": 30321,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "122",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 124043,
+        "cacheRead": 2918144,
+        "cacheWrite": 0,
+        "output": 48066,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "122",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 180503,
+        "cacheRead": 2361088,
+        "cacheWrite": 0,
+        "output": 55366,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "122",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 199806,
+        "cacheRead": 3505920,
+        "cacheWrite": 0,
+        "output": 50543,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "122",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 158479,
+        "cacheRead": 2045440,
+        "cacheWrite": 0,
+        "output": 43151,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "122",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 150601,
+        "cacheRead": 3767552,
+        "cacheWrite": 0,
+        "output": 38000,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "124",
+      "role": "workhorse",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 328092,
+        "cacheRead": 17039360,
+        "cacheWrite": 0,
+        "output": 94077,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "124",
+      "role": "workhorse",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 280427,
+        "cacheRead": 25099520,
+        "cacheWrite": 0,
+        "output": 82553,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "124",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 155752,
+        "cacheRead": 1804800,
+        "cacheWrite": 0,
+        "output": 53943,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "124",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 326888,
+        "cacheRead": 2801408,
+        "cacheWrite": 0,
+        "output": 50189,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "124",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 18,
+        "cacheRead": 489771,
+        "cacheWrite": 75416,
+        "output": 29047,
+        "reportedUsd": 3.3576963999999996
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 58,
+          "output": 78037,
+          "cacheRead": 2261507,
+          "cacheWrite": 223635
+        }
+      }
+    },
+    {
+      "run": "124",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 145567,
+        "cacheRead": 3225856,
+        "cacheWrite": 0,
+        "output": 24672,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "124",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 148227,
+        "cacheRead": 3030400,
+        "cacheWrite": 0,
+        "output": 32047,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "124",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 110463,
+        "cacheRead": 1158144,
+        "cacheWrite": 0,
+        "output": 35679,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "124",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 131680,
+        "cacheRead": 2123136,
+        "cacheWrite": 0,
+        "output": 43121,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "124",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 151879,
+        "cacheRead": 2893312,
+        "cacheWrite": 0,
+        "output": 37231,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "124",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 122461,
+        "cacheRead": 886400,
+        "cacheWrite": 0,
+        "output": 64547,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "124",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 158143,
+        "cacheRead": 2541568,
+        "cacheWrite": 0,
+        "output": 28583,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "124",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 133019,
+        "cacheRead": 2622336,
+        "cacheWrite": 0,
+        "output": 49128,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "124",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 226758,
+        "cacheRead": 3521024,
+        "cacheWrite": 0,
+        "output": 58278,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "124",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 112736,
+        "cacheRead": 1830016,
+        "cacheWrite": 0,
+        "output": 33360,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "124",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 126730,
+        "cacheRead": 1267456,
+        "cacheWrite": 0,
+        "output": 38150,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "124",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 113004,
+        "cacheRead": 1923200,
+        "cacheWrite": 0,
+        "output": 37410,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "124",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 178167,
+        "cacheRead": 2428160,
+        "cacheWrite": 0,
+        "output": 68366,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "124",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 135773,
+        "cacheRead": 3739776,
+        "cacheWrite": 0,
+        "output": 42265,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "124",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 68908,
+        "cacheRead": 355840,
+        "cacheWrite": 0,
+        "output": 18484,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "124",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 142759,
+        "cacheRead": 3446912,
+        "cacheWrite": 0,
+        "output": 47375,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "124",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 99017,
+        "cacheRead": 1548032,
+        "cacheWrite": 0,
+        "output": 34132,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "124",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 151723,
+        "cacheRead": 2478336,
+        "cacheWrite": 0,
+        "output": 39011,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "124",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 195405,
+        "cacheRead": 5152768,
+        "cacheWrite": 0,
+        "output": 53767,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "124",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 163613,
+        "cacheRead": 5365248,
+        "cacheWrite": 0,
+        "output": 53639,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "124",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 217799,
+        "cacheRead": 11239680,
+        "cacheWrite": 0,
+        "output": 43466,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "124",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 284051,
+        "cacheRead": 2740480,
+        "cacheWrite": 0,
+        "output": 116923,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "124",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 202874,
+        "cacheRead": 10175744,
+        "cacheWrite": 0,
+        "output": 40687,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "124",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 143214,
+        "cacheRead": 2659072,
+        "cacheWrite": 0,
+        "output": 43102,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "124",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 22,
+        "cacheRead": 827847,
+        "cacheWrite": 105509,
+        "output": 25339,
+        "reportedUsd": 2.8833729999999997
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 54,
+          "output": 48745,
+          "cacheRead": 2228600,
+          "cacheWrite": 229202
+        }
+      }
+    },
+    {
+      "run": "124",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 118215,
+        "cacheRead": 408832,
+        "cacheWrite": 0,
+        "output": 24288,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "124",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 182070,
+        "cacheRead": 1680000,
+        "cacheWrite": 0,
+        "output": 33356,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "124",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 209295,
+        "cacheRead": 9043456,
+        "cacheWrite": 0,
+        "output": 32438,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "124",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 137163,
+        "cacheRead": 2120320,
+        "cacheWrite": 0,
+        "output": 29371,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "124",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 18,
+        "cacheRead": 484031,
+        "cacheWrite": 77992,
+        "output": 16396,
+        "reportedUsd": 2.5076882
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 54,
+          "output": 38472,
+          "cacheRead": 2129706,
+          "cacheWrite": 215623
+        }
+      }
+    },
+    {
+      "run": "124",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 138990,
+        "cacheRead": 1088512,
+        "cacheWrite": 0,
+        "output": 31924,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "124",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 154448,
+        "cacheRead": 4063616,
+        "cacheWrite": 0,
+        "output": 55927,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "124",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 182379,
+        "cacheRead": 2633472,
+        "cacheWrite": 0,
+        "output": 56363,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "124",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 131021,
+        "cacheRead": 2674304,
+        "cacheWrite": 0,
+        "output": 45870,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "124",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 207887,
+        "cacheRead": 3096832,
+        "cacheWrite": 0,
+        "output": 103247,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "124",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 119292,
+        "cacheRead": 1779200,
+        "cacheWrite": 0,
+        "output": 46843,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "124",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 170986,
+        "cacheRead": 3601920,
+        "cacheWrite": 0,
+        "output": 63660,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "124",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 144025,
+        "cacheRead": 1832320,
+        "cacheWrite": 0,
+        "output": 42408,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "124",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 164528,
+        "cacheRead": 4591360,
+        "cacheWrite": 0,
+        "output": 53501,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "124",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 109833,
+        "cacheRead": 2334208,
+        "cacheWrite": 0,
+        "output": 40853,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "124",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 152765,
+        "cacheRead": 3325184,
+        "cacheWrite": 0,
+        "output": 42875,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "124",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 117547,
+        "cacheRead": 1263616,
+        "cacheWrite": 0,
+        "output": 59124,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "135",
+      "role": "workhorse",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 371405,
+        "cacheRead": 20404736,
+        "cacheWrite": 0,
+        "output": 132094,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "135",
+      "role": "workhorse",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 224018,
+        "cacheRead": 10547328,
+        "cacheWrite": 0,
+        "output": 75544,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "135",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 156505,
+        "cacheRead": 2623232,
+        "cacheWrite": 0,
+        "output": 57204,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "135",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 122792,
+        "cacheRead": 4012416,
+        "cacheWrite": 0,
+        "output": 50923,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "135",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 24,
+        "cacheRead": 538616,
+        "cacheWrite": 65362,
+        "output": 25660,
+        "reportedUsd": 7.513795799999998
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 116,
+          "output": 154698,
+          "cacheRead": 6178354,
+          "cacheWrite": 597523
+        }
+      }
+    },
+    {
+      "run": "135",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 115542,
+        "cacheRead": 1652480,
+        "cacheWrite": 0,
+        "output": 27170,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "135",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 153612,
+        "cacheRead": 2808192,
+        "cacheWrite": 0,
+        "output": 38190,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "135",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 248975,
+        "cacheRead": 3553792,
+        "cacheWrite": 0,
+        "output": 38365,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "135",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 150269,
+        "cacheRead": 3740288,
+        "cacheWrite": 0,
+        "output": 54111,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "135",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 20,
+        "cacheRead": 600666,
+        "cacheWrite": 84950,
+        "output": 31275,
+        "reportedUsd": 8.3362998
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 124,
+          "output": 177032,
+          "cacheRead": 5759019,
+          "cacheWrite": 677702
+        }
+      }
+    },
+    {
+      "run": "135",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 249690,
+        "cacheRead": 6946560,
+        "cacheWrite": 0,
+        "output": 80985,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "135",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 182960,
+        "cacheRead": 4400640,
+        "cacheWrite": 0,
+        "output": 60217,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "135",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 96,
+        "cacheRead": 7779748,
+        "cacheWrite": 251413,
+        "output": 148960,
+        "reportedUsd": 32.26821040000001
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 478,
+          "output": 694485,
+          "cacheRead": 36371447,
+          "cacheWrite": 2069614
+        }
+      }
+    },
+    {
+      "run": "135",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 279463,
+        "cacheRead": 13194752,
+        "cacheWrite": 0,
+        "output": 73825,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "135",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 127451,
+        "cacheRead": 3162624,
+        "cacheWrite": 0,
+        "output": 27757,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "135",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 212960,
+        "cacheRead": 5463296,
+        "cacheWrite": 0,
+        "output": 51236,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "135",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 293472,
+        "cacheRead": 4649344,
+        "cacheWrite": 0,
+        "output": 79523,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "135",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 6,
+        "cacheRead": 636520,
+        "cacheWrite": 335254,
+        "output": 63137,
+        "reportedUsd": 17.3219666
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 372,
+          "output": 375427,
+          "cacheRead": 16547233,
+          "cacheWrite": 1099346
+        }
+      }
+    },
+    {
+      "run": "135",
+      "role": "reviewer",
+      "lane": "luna",
+      "harness": "codex",
+      "tokens": {
+        "uncached": 262003,
+        "cacheRead": 10158592,
+        "cacheWrite": 0,
+        "output": 78370,
+        "reportedUsd": null
+      }
+    },
+    {
+      "run": "135",
+      "role": "reviewer",
+      "lane": "mimo",
+      "harness": "mimo",
+      "tokens": {
+        "uncached": 79673,
+        "cacheRead": 865664,
+        "cacheWrite": 0,
+        "output": 8102,
+        "reportedUsd": 0
+      }
+    },
+    {
+      "run": "135",
+      "role": "reviewer",
+      "lane": "opus",
+      "harness": "claude",
+      "tokens": {
+        "uncached": 130,
+        "cacheRead": 10487748,
+        "cacheWrite": 311870,
+        "output": 167178,
+        "reportedUsd": 47.781743399999996
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "input": 660,
+          "output": 856157,
+          "cacheRead": 33743702,
+          "cacheWrite": 3290832
+        },
+        "claude-opus-4-8": {
+          "input": 68,
+          "output": 89335,
+          "cacheRead": 4713826,
+          "cacheWrite": 308292
+        }
+      }
+    }
+  ],
+  "missing": []
+}
