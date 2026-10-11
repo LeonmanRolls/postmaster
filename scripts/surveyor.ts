@@ -66,8 +66,10 @@ const USAGE =
 
 // The harnesses whose final message harnesses.md records a shape for, and the
 // surveyor reads. grok and agy have none recorded: a lane on one is refused
-// before anything launches, so no call ever records a guessed answer.
-const SUPPORTED = new Set(["codex", "claude", "pi", "muse", "mimo"]);
+// before anything launches, so no call ever records a guessed answer. Setup
+// reads the same set, so a surveyor it accepts is one a call can launch.
+export const SURVEYOR_HARNESSES = new Set(["codex", "claude", "pi", "muse", "mimo"]);
+export const SURVEYOR_HARNESS_HELP = "claude, codex, pi, muse or mimo";
 
 const REPORT_RE = new RegExp(
   "^logs/review-r[0-9]+-(?:style|bug|security)-[A-Za-z0-9._-]+-(?:last\\.md|findings\\.json|findings\\.md)$",
@@ -170,6 +172,11 @@ export function finalMessage(
         error: `claude run did not succeed (subtype: ${String(field(last, "subtype") ?? "missing")})`,
       };
     }
+    // harnesses.md marks is_error on result records as the claude error
+    // marker: a provider failure can arrive with a success subtype.
+    if (field(last, "is_error")) {
+      return { error: "claude run ended with is_error set" };
+    }
     const result = field(last, "result");
     if (typeof result !== "string" || result.trim() === "") {
       return { error: "claude run ended with no result text" };
@@ -211,6 +218,12 @@ export function finalMessage(
     return { message: text };
   }
   if (harness === "mimo") {
+    // harnesses.md: a failed run exits 0 with an error event, so the text
+    // is trusted only when the stream holds no error event. No step_finish
+    // shape is required: the recorded close is informative, not a gate.
+    if (events.some((e) => field(e, "type") === "error")) {
+      return { error: "mimo run emitted an error event" };
+    }
     const texts = events.filter(
       (e) => field(e, "type") === "text" && typeof field(field(e, "part"), "text") === "string",
     );
@@ -520,9 +533,9 @@ function callCmd(argv: string[]): never {
   if (!isTable(spec)) refuse(`reviewer ${lane} is not a lane in run.json`);
   const harness = typeof spec.harness === "string" ? spec.harness : "";
   if (harness === "") refuse(`lane ${lane} names no harness in run.json`);
-  if (!SUPPORTED.has(harness)) {
+  if (!SURVEYOR_HARNESSES.has(harness)) {
     refuse(
-      `${harness} has no recorded final-message shape; name a lane on claude, codex, pi, muse or mimo`,
+      `${harness} has no recorded final-message shape; name a lane on ${SURVEYOR_HARNESS_HELP}`,
     );
   }
 

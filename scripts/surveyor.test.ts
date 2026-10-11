@@ -116,6 +116,23 @@ describe("finalMessage", () => {
     expect("error" in finalMessage("claude", `${empty}\n`, null)).toBe(true);
   });
 
+  test("claude refuses a success result with is_error set, and keeps one without it", () => {
+    const failed = JSON.stringify({
+      type: "result",
+      subtype: "success",
+      is_error: true,
+      result: "API Error: overloaded",
+    });
+    expect("error" in finalMessage("claude", `${failed}\n`, null)).toBe(true);
+    const ok = JSON.stringify({
+      type: "result",
+      subtype: "success",
+      is_error: false,
+      result: "said",
+    });
+    expect(finalMessage("claude", `${ok}\n`, null)).toEqual({ message: "said" });
+  });
+
   test("codex trusts -o only with a completed turn and no failed one", () => {
     const thread = JSON.stringify({ type: "thread.started", thread_id: "t" });
     const done = JSON.stringify({ type: "turn.completed" });
@@ -174,6 +191,12 @@ describe("finalMessage", () => {
     expect(finalMessage("mimo", `${first}\n${last}\n`, null)).toEqual({ message: "late" });
     const finish = JSON.stringify({ type: "step_finish", sessionID: "s", part: {} });
     expect("error" in finalMessage("mimo", `${finish}\n`, null)).toBe(true);
+  });
+
+  test("mimo refuses text beside an error event", () => {
+    const said = JSON.stringify({ type: "text", sessionID: "s", part: { text: "partial" } });
+    const failed = JSON.stringify({ type: "error", sessionID: "s", part: {} });
+    expect("error" in finalMessage("mimo", `${said}\n${failed}\n`, null)).toBe(true);
   });
 
   test("a harness with no recorded shape errors", () => {
