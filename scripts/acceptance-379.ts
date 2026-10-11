@@ -1,14 +1,7 @@
 // Oracle helpers for #379: the coachman merges main and runs the gate as the
 // last step before it raises its card. The tests spawn git and scripts/run as
 // subprocesses; nothing here imports the change.
-import {
-  chmodSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beside } from "./lib/paths.ts";
