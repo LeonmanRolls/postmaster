@@ -174,12 +174,10 @@ function tildeUpper(major: number, minor: number): ParsedVersion {
   return { major, minor: minor + 1, patch: 0, pre: [] };
 }
 
-/** One comparator set (space-separated comparators, ANDed) plus whether the
- * range names a prerelease. Returns null when the range is not one the guard
- * resolves. */
-export function parseRangeSet(text: string): { cmps: Cmp[]; prerelease: boolean } | null {
+/** One comparator set (space-separated comparators, ANDed). Returns null
+ * when the range is not one the guard resolves. */
+export function parseRangeSet(text: string): { cmps: Cmp[] } | null {
   const cmps: Cmp[] = [];
-  let prerelease = false;
   const parts = text
     .trim()
     .split(/[ \t\n\r\f\v]+/u)
@@ -209,10 +207,12 @@ export function parseRangeSet(text: string): { cmps: Cmp[]; prerelease: boolean 
     if (op === "^" || op === "~") {
       const p = parsePartial(rest);
       if (p === null || p.major < 0) return null;
-      if (p.pre !== null) prerelease = true;
+      // The lower bound keeps a named prerelease: the same-release gate
+      // below matches prerelease versions against it.
+      const lowerPre = p.pre === null ? [] : (parseVersion(`0.0.0${p.pre}`)?.pre ?? []);
       const minor = p.minor ?? 0;
       const patch = p.patch ?? 0;
-      cmps.push({ op: ">=", version: { major: p.major, minor, patch, pre: [] } });
+      cmps.push({ op: ">=", version: { major: p.major, minor, patch, pre: lowerPre } });
       cmps.push({
         op: "<",
         version:
@@ -223,7 +223,6 @@ export function parseRangeSet(text: string): { cmps: Cmp[]; prerelease: boolean 
     if (op === "<" || op === "<=" || op === ">" || op === ">=" || op === "=") {
       const v = parseVersion(rest);
       if (v === null) return null;
-      if (v.pre.length > 0) prerelease = true;
       cmps.push({ op, version: v });
       continue;
     }
@@ -247,14 +246,16 @@ export function parseRangeSet(text: string): { cmps: Cmp[]; prerelease: boolean 
     }
     const v = parseVersion(rest);
     if (v === null) return null;
-    if (v.pre.length > 0) prerelease = true;
     cmps.push({ op: "=", version: v });
   }
-  return { cmps, prerelease };
+  return { cmps };
 }
 
-function satisfiesSet(version: ParsedVersion, set: { cmps: Cmp[]; prerelease: boolean }): boolean {
-  if (version.pre.length > 0 && !set.prerelease) {
+/** Whether a version passes one comparator set, with npm's prerelease
+ * rule: a prerelease version satisfies only beside a comparator that
+ * names a prerelease of the same release. */
+function satisfiesSet(version: ParsedVersion, set: { cmps: Cmp[] }): boolean {
+  if (version.pre.length > 0) {
     const sameRelease = set.cmps.some(
       (c) =>
         c.version.pre.length > 0 &&
@@ -312,7 +313,7 @@ export function maxSatisfying(versions: string[], range: string): string | null 
     );
     return finals[0]?.s ?? null;
   }
-  const sets: Array<{ cmps: Cmp[]; prerelease: boolean }> = [];
+  const sets: Array<{ cmps: Cmp[] }> = [];
   for (const alt of trimmed.split("||")) {
     const set = parseRangeSet(alt);
     if (set === null) return null;
@@ -2300,8 +2301,8 @@ export async function fetchVerdict(
 }
 
 /** A scanner answer read as a verdict: unreachable, a bad status, an empty
- * or unparseable body, and a synthetic placeholder all read unknown, while
- * any non-monitor alert flags. */
+ * or unparseable body, a synthetic placeholder, and a body without alerts
+ * all read unknown, while any non-monitor alert flags. */
 export function verdictOf(failed: string, status: number, text: string): Verdict {
   if (failed !== "") {
     return { status: "unknown", why: `the Socket scanner is unreachable (${failed})` };
@@ -2329,7 +2330,10 @@ export function verdictOf(failed: string, status: number, text: string): Verdict
   if (typeof artifact.id === "string" && artifact.id.startsWith("synthetic:")) {
     return { status: "unknown", why: "the Socket scanner has no verdict for it" };
   }
-  const alerts = Array.isArray(artifact.alerts) ? artifact.alerts : [];
+  if (!Array.isArray(artifact.alerts)) {
+    return { status: "unknown", why: "the Socket scanner's answer carries no alerts" };
+  }
+  const alerts = artifact.alerts;
   const types = alerts
     .filter(
       (a): a is Record<string, unknown> =>

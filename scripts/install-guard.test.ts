@@ -52,6 +52,7 @@ import {
   runBaseHead,
   sameOrigin,
   sanitize,
+  satisfiesRange,
   scopeFlags,
   scopeOfName,
   scopePins,
@@ -810,6 +811,31 @@ test("the delta cores name unapproved pairs and stowaways", () => {
       new Set(["locked@1.2.3", "moved@1.2.3"]),
     ),
   ).toEqual(["loose", "moved"]);
+});
+
+test("prereleases satisfy only beside a same-release comparator", () => {
+  // npm's rule, checked against its bundled semver: a prerelease
+  // version passes only when a comparator names a prerelease of the
+  // same release, and the comparators pass.
+  expect(satisfiesRange("1.3.0-beta", "^1.2.3-beta")).toBe(false);
+  expect(satisfiesRange("1.2.4-beta", "^1.2.3-beta")).toBe(false);
+  expect(satisfiesRange("1.2.3-beta", "^1.2.3-beta")).toBe(true);
+  expect(satisfiesRange("1.2.3", "^1.2.3-beta")).toBe(true);
+  expect(satisfiesRange("1.2.3-alpha", "^1.2.3-beta")).toBe(false);
+  expect(satisfiesRange("1.2.5-beta", "~1.2.3-beta")).toBe(false);
+  expect(satisfiesRange("1.2.3-gamma", "~1.2.3-beta")).toBe(true);
+  expect(satisfiesRange("1.2.3-beta", ">=1.2.3-alpha <1.2.3")).toBe(true);
+  expect(satisfiesRange("1.5.0-beta", ">=1.2.3-alpha <2.0.0")).toBe(false);
+  expect(satisfiesRange("1.2.3-beta", "*")).toBe(false);
+  expect(satisfiesRange("1.2.3", "^1.0.0")).toBe(true);
+});
+
+test("a scanner answer without alerts reads unknown", () => {
+  expect(verdictOf("", 200, JSON.stringify({ id: "pkg:npm/foo@1.0.0" }))).toEqual({
+    status: "unknown",
+    why: "the Socket scanner's answer carries no alerts",
+  });
+  expect(verdictOf("", 200, JSON.stringify({ alerts: [] }))).toEqual({ status: "clean" });
 });
 
 test("lock parsers keep every distinct pair and skip workspace members", () => {
