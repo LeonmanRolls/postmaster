@@ -5,7 +5,7 @@
 //
 // `--cut` ends the set the tables are about and `--after`, with it, makes the later set the stop
 // signals are tried on.
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   bands,
@@ -515,6 +515,8 @@ export function marksMarkdown(
   a: readonly Mark[],
   b: readonly Mark[],
   runs: readonly LeverRun[],
+  eraOfRun: ReadonlyMap<string, string>,
+  criteriaOfRun: ReadonlyMap<string, number | null>,
 ): string {
   const out: string[] = ["# The readers' marks of the later findings", ""];
   const withText = items.filter((i) => i.text !== "");
@@ -580,6 +582,40 @@ export function marksMarkdown(
     ),
     "",
   );
+  out.push("## By how the run's ticket was prepared", "");
+  {
+    const eras = [...new Set(eraOfRun.values())].sort();
+    const rowsOut: string[][] = [];
+    for (const e of eras) {
+      const ids = new Set(items.filter((i) => eraOfRun.get(i.run) === e).map((i) => i.id));
+      const mine = rows.filter((c) => ids.has(c.id));
+      const runsHere = runs.filter((r) => eraOfRun.get(r.run) === e);
+      const criteria = sum(runsHere.map((r) => criteriaOfRun.get(r.run) ?? 0));
+      const open = mine.filter((c) => c.openBoth).length;
+      rowsOut.push([
+        e,
+        String(runsHere.length),
+        String(mine.length),
+        `${open} (${pct(open, mine.length)})`,
+        `${mine.filter((c) => c.openEither).length}`,
+        criteria === 0 ? "–" : num((100 * open) / criteria, 0),
+      ]);
+    }
+    out.push(
+      table(
+        [
+          "Group",
+          "Runs",
+          "Later findings marked",
+          "Ticket open, both readers",
+          "Ticket open, either",
+          "Both-reader findings per 100 criteria",
+        ],
+        rowsOut,
+      ),
+      "",
+    );
+  }
   out.push("## By how the finding came to be found", "");
   const groups = [...new Set(items.map((i) => i.group))].filter(
     (g): g is NonNullable<typeof g> => g !== null,
@@ -849,18 +885,34 @@ const main = (args: string[]): void => {
       later: laterTraced ? yieldOf(laterTraced, laterIds) : [],
     }),
   );
-  const aFile = join(dir, "..", "readers", "reader-a.tsv");
-  const bFile = join(dir, "..", "readers", "reader-b.tsv");
-  if (existsSync(aFile) && existsSync(bFile)) {
-    const a = parseMarks(readFileSync(aFile, "utf8")).marks;
-    const b = parseMarks(readFileSync(bFile, "utf8")).marks;
+  const readersDir = join(dir, "..", "readers");
+  const readMarks = (prefix: string): Mark[] =>
+    existsSync(readersDir)
+      ? readdirSync(readersDir)
+          .filter((f) => f.startsWith(prefix) && f.endsWith(".tsv"))
+          .sort()
+          .flatMap((f) => parseMarks(readFileSync(join(readersDir, f), "utf8")).marks)
+      : [];
+  const a = readMarks("reader-a-");
+  const b = readMarks("reader-b-");
+  if (a.length > 0 && b.length > 0) {
     const items = itemsOf(traced.findings);
     const runsInput: LeverRun[] = first.map((r) => ({
       run: r.run,
       rounds: r.rounds,
       best: r.seriousBest,
     }));
-    writeFileSync(join(dir, "marks.md"), marksMarkdown(items, a, b, runsInput));
+    writeFileSync(
+      join(dir, "marks.md"),
+      marksMarkdown(
+        items,
+        a,
+        b,
+        runsInput,
+        eraOfRun,
+        new Map(inputs.map((r) => [r.run, r.criteria])),
+      ),
+    );
   }
 };
 

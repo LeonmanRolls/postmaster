@@ -1,0 +1,121 @@
+75.2.1	no	no	input	Criterion 2 requires the named repo checked; an inherited GIT_DIR defeating -C is a defect.
+75.2.2	unclear	no	other	Text only names a function and line range; no defect stated.
+218.2.1	yes	no	contract	Ticket covers pinned in-flight runs, not recorded paths into main that the merge deletes; fix chose mitigation.
+218.2.2	no	no	input	Criterion 3 requires skill-refs to check the new form; the regex accepts stage.sh wrongly.
+218.2.3	no	no	input	Dangling lib refs must not pass; the matcher wrongly accepts top-level scripts and .bak suffixes.
+218.2.4	no	no	input	Criterion 3 fix mode must rewrite correctly; treating a colon as boundary corrupts line-number suffixes.
+200.2.1	no	no	other	Direction leaves files as they are; replacing the host device tree contradicts it.
+200.2.3	yes	no	state	Criterion 7 requires logging the fallback but never says what happens when the log write fails.
+165.2.1	unclear	no	other	Text reads "not provided"; no defect is stated.
+165.3.1	no	no	site	Sibling inspection failures return 2; consistency is the one sane answer, so this branch must not report success.
+165.3.2	no	no	state	A race with the finish watcher; one sane answer is to treat the already-closed placement as settled.
+108.2.1	no	no	input	Criterion 2 spawns only when harness or model differs; truncating a value at a newline mis-compares.
+108.2.2	no	no	input	Acceptance script argument handling is outside the ticket; one sane answer is rejecting extra arguments.
+108.2.3	no	no	input	Criterion 6 check must see the claim in any layout; folding carriage returns is the one sane fix.
+108.2.4	no	no	input	Criterion 1 needs the target to be the repo it runs in; an unresolvable path cannot qualify.
+108.2.5	no	no	input	Criterion 6 forbids the claim itself; a check passing paraphrases misses what the criterion states.
+108.3.1	no	no	input	Criterion 2 requires spawn for another repo; an inherited GIT_DIR makes both resolve alike.
+108.3.2	no	no	input	Empty harness or model must be refused; whitespace-only is empty, one sane answer.
+108.3.3	no	no	prose	Runbook example breaks on values with spaces; quoting is the one sane fix.
+108.3.4	no	no	prose	Runbook assignment breaks on paths with spaces; quoting is the one sane fix.
+108.4.1	no	no	prose	Under the self route the user is at the terminal; the headless sentence is wrong.
+113.2.1	no	no	input	Criterion 4 requires a sweep that scans; a root path with a pipe scans nothing and passes.
+113.2.2	no	no	input	Acceptance check is outside the ticket; one sane answer tolerates a reflowed bullet.
+113.2.3	no	no	site	Criterion 4 covers every file; checking six stale sentences only in home files leaves other places unchecked.
+113.3.1	no	no	input	Criterion 4 forbids the claim in any form; a capitalized stale claim must not pass.
+113.3.2	no	no	test	The check passes on a quotation outside the Hard rules section, so it does not verify criterion 2.
+113.3.3	no	no	input	Criterion 4 covers everything under skills and wiki; symlinked files are in the tree and must be scanned.
+113.4.1	no	no	input	Criterion 4 forbids stale claims anywhere; filenames with newlines split the loop and let decoys pass.
+113.4.2	no	no	input	Same defect as its neighbour: the line-based loop splits a filename containing a newline.
+266.2.1	no	no	input	Runs must behave as before; inherited GIT_DIR or GIT_WORK_TREE redirecting git to another repo is a defect.
+266.2.2	no	no	input	Criterion 4 names the root instructions exactly; a nested AGENTS.md matched by basename is misclassified.
+266.2.3	no	no	prose	Runs must behave as before; dropping the quotes breaks paths with spaces, one sane fix.
+266.3.1	yes	no	state	Ticket never says what stop does when the leader is gone but members remain; fix chose identity checking.
+266.3.2	no	no	contract	Stale sentence: the document still describes a raw kill while the code writes three-line pidfiles.
+266.4.1	no	no	state	Skipping the identity check on a zombie leader is a missing guard; killing foreign processes is never intended.
+323.2.1	no	no	input	Rendering must copy values verbatim; rescanning inserted placeholder-shaped values is a wrong substitution.
+323.2.2	no	no	site	Success check looks only at the worktree, the same presence-only defect as the earlier handover finding.
+323.2.3	yes	no	state	Ticket never says what happens to the provisioned worktree and branch when a run fails midway.
+323.3.1	no	no	state	Deleting a possibly live session checkout is a missing guard; one sane answer is not to clean up.
+323.3.2	yes	yes	state	Ticket is silent on keeping failed work; asks to undo the cleanup the previous round's fix added.
+323.3.3	no	no	input	Inherited GIT_DIR redirecting the session's commits is a defect; one sane answer scrubs it.
+323.4.1	no	no	site	Criterion 3 requires feature pages; the committed-files check covers only the README, the same gap as before.
+323.4.2	yes	no	prose	Ticket does not say how drives on surfaces that cannot run two copies get state of their own.
+323.4.3	no	no	state	A hand-deleted worktree's leftover registration breaks later runs; one sane answer prunes or picks another path.
+323.5.1	no	no	site	Same defect as the earlier handover finding at one more place: a file already in base counts as written.
+323.5.2	no	no	input	Counting pages must handle non-ASCII names; quoted paths are undercounted, one sane fix.
+323.5.3	yes	yes	prose	Ticket silent on drives of single-copy surfaces; asks to restore what the previous round's reword made conditional.
+38.4.1	no	no	input	Criteria 6 and 7 require findings kept; ignoring a declared list beside a valid one loses a bug.
+38.4.2	no	no	input	Criterion 7 forbids counting unparseable output as clean; a trailing error result must not be filtered out.
+38.6.1	no	no	state	Criterion 7 forbids counting failed output as clean; a verdict from a failed harvest must not count.
+38.6.2	yes	no	contract	Ticket does not say what a non-zero review exit means; fix chose between implementing the rule and dropping it.
+38.7.1	no	no	state	Criterion 7 forbids counting failed output as clean; a stale last-message file from a failed turn counted clean.
+38.7.2	no	no	prose	Missing run-log line in a degrade step; ticket does not reach it and one sane fix adds it.
+38.7.3	no	no	input	Criterion 6 requires findings kept faithfully; stripping fences inside JSON strings corrupts them.
+38.8.1	no	no	input	Criterion 6 requires findings kept; failure_scenario carries the body and has one sane mapping.
+38.8.2	yes	no	input	Ticket does not say which location shapes count; tightening trades against names like Makefile:8.
+105.2.1	yes	no	input	Label carries the leg where it has one; a legacy launch with no resolvable leg is unstated.
+105.2.2	no	no	state	Ticket does not reach placement failure paths; stranding a space that close can never close is wrong.
+105.2.3	no	no	state	Ticket does not reach this ordering; closing before validating ids and orphaning an empty space is wrong anyway.
+105.3.1	no	no	state	Ticket does not reach partial placement failure; stranding an uncloseable run space is wrong under any reading.
+105.3.2	yes	no	input	Label carries the leg where it has one; an empty leg number on a typed coachman is unstated.
+105.3.3	yes	yes	site	Ticket never says a model-less coachman must be refused; finding calls the earlier round's scoping wrong.
+105.4.1	no	no	state	Ticket does not reach this failure path; leaving an untagged pane that close refuses is wrong anyway.
+105.4.2	no	no	state	Ticket does not reach it; a failed mark write orphaning the just-opened space is wrong anyway.
+105.5.1	no	no	state	Ticket does not reach it; a bare return after a post-create failure strands an uncloseable tab.
+105.6.1	no	no	input	Destroying a user's pane is never intended; rows missing tab_id are misread as owned.
+105.7.1	no	no	input	An empty-string tab_id is misread as owned; same class as before, one sane fix.
+109.2.1	no	no	input	Criterion 2 requires BASE's output; a legitimate U+FFFD is stripped when another field has a bad byte.
+109.2.2	no	no	input	Criterion 2 requires BASE's exit codes; a signaled child must report 128 plus the signal number.
+109.2.3	no	no	input	Criterion 2 requires BASE's exit behaviour; a harness killed by a signal must not become exit 1.
+109.2.4	no	no	input	Criterion 2 requires BASE's observable environment; the inherited SHLVL must be kept.
+109.3.1	no	no	input	Criterion 2 requires BASE's exits; an env file ending the dump shell must abort, not launch.
+109.3.2	no	yes	other	BASE ran nothing from the target; running its preload and env file differs from BASE, overturning round 1.
+109.3.3	no	no	input	Criterion 2 requires BASE's exit codes; leading tabs must be refused as BASE does.
+109.3.4	no	no	input	Criterion 1 forbids Python anywhere under scripts; the oracle pattern misses versioned interpreters.
+109.4.1	no	no	input	Criterion 2 requires BASE's behaviour; env-file stdout must not be parsed as the dump.
+109.4.2	no	no	input	Criterion 2 requires BASE's exit 0 without launching; an early exit in the env file must not launch.
+109.4.3	no	no	input	A large environment crashing the launch is a defect under any reading.
+109.4.4	no	no	test	The control asserts the wrong thing and is vacuous; any reading requires it to check the environment.
+109.4.5	no	no	input	Criterion 2 requires BASE's refusal with rc 1 for undecodable bytes.
+109.4.6	no	no	state	Criterion 2 requires BASE's order; the env file is sourced before entering the working directory.
+109.5.1	no	no	input	Criterion 2 requires BASE's working directory; a stale PWD is handed on instead.
+109.5.2	no	no	input	Executing a harness name as shell is a defect; BASE treated it literally.
+109.5.3	no	no	input	Executing a path as shell is a defect; BASE treated it literally.
+109.5.4	no	no	input	Criterion 2 requires raw bytes handed on as BASE does; decoding replaces them.
+109.6.1	no	no	contract	Session key must match what BASE laid down, or resume cannot find BASE-laid sessions.
+109.6.2	no	no	input	Criterion 2 requires BASE's message and no side effect for a file given as working directory.
+109.6.3	no	no	state	Criterion 2 requires BASE's order; the export check must run after entering the directory.
+109.6.4	no	no	contract	Criterion 2 requires BASE's 1200 second timeout and abort message.
+109.6.5	no	no	contract	Criterion 2 requires BASE's 60 second timeout report.
+109.6.6	no	no	contract	Criterion 2 requires BASE's 30 second deadline on fetch.
+109.6.7	no	no	state	Criterion 2 requires BASE's failure on a git error; ignoring the exit code hides it.
+109.6.8	no	no	input	Criterion 2 requires BASE's shlex-style splitting; quoted arguments break.
+109.8.1	no	no	input	Criterion 2 requires BASE's output; casefold and Unicode word class differ on non-ASCII text.
+109.8.2	yes	yes	test	Ticket does not say whether tests may replay BASE through Python; finding conflicts with the earlier BASE-control ruling.
+109.9.1	no	no	input	Criterion 2 requires BASE's output; non-ASCII addresses must be masked as BASE does.
+109.9.2	no	no	input	Criterion 2 requires BASE's Unicode digit and word handling in the address matcher.
+109.9.3	no	no	input	Criterion 2 requires BASE's Unicode word handling; false ticket key after non-ASCII letters.
+109.9.4	no	no	input	Criterion 2 requires BASE's Unicode word boundary; fault ids are split.
+109.9.5	no	no	input	Criterion 2 requires BASE's casefold; remotes differing by case folding are rejected.
+109.9.6	no	no	input	Criterion 2 requires BASE's case-insensitive matching; special-case letters are missed.
+109.9.7	no	no	input	Criterion 2 requires BASE's Unicode digit handling; Arabic digits are mishandled.
+109.9.8	no	no	input	Criterion 2 requires BASE's end-of-text anchor; section reads only the first line.
+109.10.1	no	no	other	Criterion 5 requires bun run check to exit 0; it exits 1 at head.
+109.10.2	no	no	input	Criterion 2 requires BASE's rejection; a code point is matched and converted inconsistently.
+109.10.3	no	no	input	The guard is the run's own, outside the ticket; five source forms slip past it.
+109.10.4	no	yes	input	Criterion 2 requires BASE's line splitting; finding explicitly overturns an earlier card decision on these sites.
+109.10.5	no	no	input	Criterion 1 forbids executable Python; the classifier flags comments and misses execFileSync.
+109.12.1	no	no	contract	Nothing may change for the user; a launch without --under is refused by host, breaking dispatch.
+109.12.2	no	no	contract	Transient prose must classify; the table's capitalized key never matches the lowercased lookup.
+109.12.3	no	no	input	Criterion 2 requires BASE's fence handling; longer fences are misread.
+109.12.4	no	no	input	Criterion 2 requires BASE's newline-only anchors; U+2028 and U+2029 are treated as breaks.
+252.2.1	no	no	input	Criterion 5 requires uncommitted changes saved; dirty submodule contents are lost on removal.
+252.2.2	no	no	input	Criterion 5 requires unbranched commits saved; format-patch omits merge commits.
+252.2.3	no	no	contract	Criterion 3 requires the dry run to match the real run; it promises removing a locked worktree.
+252.2.4	no	no	input	Criterion 9 requires closing words once; substring matching skips posting when a longer comment exists.
+252.2.5	no	no	contract	D9 requires the dry run to end with the real run's exit status; it exits 3 instead.
+252.3.1	no	no	input	Criterion 4 and 5 need the right checkout scanned; inherited GIT_DIR overrides git -C.
+252.3.2	no	no	contract	D9 requires the dry run to match the real run; it promises a release a lock refuses.
+252.3.3	no	no	input	Criterion 6 requires flagging unlanded work; quoted non-ASCII paths fail hashing and flags are silently missed.
+252.3.4	no	no	contract	D2 requires the ticket's done state; the call passes a repo argument the Plane adapter does not take.

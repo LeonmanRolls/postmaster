@@ -168,3 +168,58 @@ arbitrary program, so the question is which observable signs do in these runs.
 - **The cost of a round** is read from launch lines: the time from one round's first launch to the
   next, which holds the reviewers, the coachman's judging and fixing, the gate and any wait for the
   user, and a reviewer lane's own time from its launch line to its `.done` marker.
+
+## The readers
+
+Three marks of each later finding that has text, 309 of the 382, are judgements about prose and are
+not computed: **ticket open**, **disagrees** and **kind**, defined in [rule.md](rule.md#marks-judged-by-reading).
+
+- **Two readers, each a helper that returned its answer as text.** Each was given
+  [readers/brief.md](readers/brief.md) and, for each run, a packet: the ticket as it was dispatched
+  (the plain part the user signed off and its checks, not the technical notes), the run's own lines
+  about rulings, and each later finding with its round, severity, lens, lanes, target, text, the code
+  at the cited lines, where git says those lines came from, and the earlier findings in the same
+  file. A packet holds no group. Each reader marked every finding in 37 packets, in three batches of
+  12 or 13 runs, and the second reader had the runs of a batch in the reverse order.
+- **Only the marks are judged.** The groups are computed and are not read, so the agreement is on
+  the marks. It is in [results/marks.md](results/marks.md): the share of identical marks, the
+  Wilson interval of that share, and Cohen's kappa. Where one label is nearly all of them, as with
+  *disagrees*, kappa says little and the share is the figure.
+- **Where they differ.** A count of findings the ticket left open is given twice: *both readers*,
+  the lower bound, and *at least one reader*, the upper. A kind is kept only where both give the
+  same. The session read a seeded sample of the findings on which the readers differ on *ticket
+  open* and recorded its own reading ([readers/adjudication.tsv](readers/adjudication.tsv)); that
+  says which reader the session sides with, and it is a third reading and not the truth.
+- **Packets and replies.** The packets are built by `apparatus/packets.ts` from the run folders and
+  are not committed, since they hold the tickets, which are on the tracker, and the run records.
+  [results/items.tsv](results/items.tsv) holds each finding as the readers saw it, less the ticket.
+  One reader's reply came back with its first lines cut off, and the helper was asked to send it
+  again whole; that second reply is the one kept.
+- **Neither reader is free of hindsight.** Both read the finding, which says what went wrong, and
+  both are models. A mark of *ticket open* is whether the ticket could have settled the point, and
+  a reader who knows the defect is quick to say it could have.
+
+## Limits
+
+- **61 runs, one repository, one flow that changed under them.** The groups A, B and C differ in
+  date, in reviewer lanes (luna and mimo, then luna and haiku, with opus and then sonnet on
+  security), in whether the cap of three rounds stood, and in who prepared the ticket. A
+  difference between them is not a measure of one change.
+- **The finding lines are the coachman's verified list.** They say what the loop acted on and not
+  what the reviewers wrote, and they are a floor where a run logged a round elsewhere. Five runs
+  are filled from their own cards. Another run could be low where no record says so.
+- **Where a line came from is not why it was missed.** A line in the change that no round named
+  may be there because the defect needed a later fix to show, or because a reviewer's attention
+  went elsewhere. The group says how the lines came to be, and the readers' marks say nothing about
+  a reviewer's attention.
+- **A round past the third ran on the user's ruling** in the runs before the cap went on 9 October,
+  so a run's rounds are partly a decision to go on.
+- **The rounds a change would have removed are bounds and not experiments.** The strict figure
+  leaves a round standing wherever one other serious finding remains in it, so it reads low. The
+  figure from the fitted relation takes each serious finding as worth 0.18 of a round, which is an
+  average over runs and not a rule for one.
+- **The signals are tried after the fact.** A transition exists only where the loop ran another
+  round, and the loop ran it because the round before held a finding or the user ruled so. The
+  later set was not used to choose a signal, and is two days of runs, 17 of them single thread.
+- **The marks are two models' readings** (see above), on 309 findings, 73 of which have no text and
+  are not marked.
