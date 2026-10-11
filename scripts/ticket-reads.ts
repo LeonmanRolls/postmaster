@@ -5,41 +5,50 @@
 //
 // The agents are the manifest's coachman legs and workhorse lanes, and the
 // reviewers its review-launch lines name. Each leg reads with its own harness
-// where team.coachman_legs names one, and a walled leg's renamed streams read
-// beside its fresh one. Each agent's record is its event stream in
-// <dispatch>/logs/, read with the per-harness tool-call reader the reach
-// control shares, plus a claude lane's fork transcripts beside it. The check
-// classifies executed tool calls, never prose: brief and prompt text sits in
-// the same records and names the same read forms.
+// where team.coachman_legs names one, and with the attempt role's harness
+// where takeovers happened, and a walled leg's renamed streams read beside
+// its fresh one. Each agent's record is its event stream in <dispatch>/logs/,
+// read with the per-harness tool-call reader the reach control shares, plus
+// a claude lane's fork transcripts beside it. A stream-shaped record the
+// inventory never names reads as unknown. The check classifies executed tool
+// calls, never prose: brief and prompt text sits in the same records and
+// names the same read forms.
 //
 // What counts as a read of the text, by tracker kind. GitHub: gh issue view
 // printing the body or comments; gh api on repos/<owner>/<repo>/issues/<n>
 // or its comments with a reading method; gh api graphql naming the issue in
-// the run's repository; scripts/run github <repo> read <n>; and a fetch of
-// the issue's web address. Local: scripts/run local <repo> read <n>, and a
-// read of the ticket's file in the store under
+// the run's repository; scripts/run github <repo> read <n>; a fetch of the
+// issue's web address or its API address; and a fetch POSTing a query for
+// the issue to the graphql endpoint. Local: scripts/run local <repo> read
+// <n>, and a read of the ticket's file in the store under
 // <git-common-dir>/postmaster/tickets/. Any kind: a read of
 // .postmaster/clerk/<n>.md in the project. A read of the title or state
 // alone is named and is not a read of the text.
 //
 // What counts as unknown, never clean. A record that is missing or cannot be
 // read, a run whose run.json cannot be read, a harness with no reader, a
-// tracker of a kind beyond github and local, and a command that names the
-// ticket in a form the check does not know: another gh issue verb beyond
-// comment, close and reopen, an adapter search or a verb the adapters do not
-// have, another issues subpath, a --json field beyond title and state, a
-// listing of the ticket file, a search across the ticket store, a graphql
-// query whose repository cannot be told, and a relative path after a cd the
-// check cannot follow. Known writes and mutating api calls show no ticket
-// text and count for nothing. A failed command read nothing and counts
-// for nothing; where the record carries no exit, the invocation counts.
-// Only the run's own ticket in its own tracker counts: another number,
-// another repo and the wrong tracker are ignored, and so is a number in a
-// command that reads nothing. The thread exports in <dispatch>/sessions/
-// are the same threads in harness-native form and are not read. Segments
-// split on newlines as well as shell separators; (...) groups, cd and
-// command substitutions are followed, and find and xargs scans of the ticket
-// directories read as unknown, since their -exec is not followed.
+// tracker of a kind beyond github and local, attempts that cannot be read or
+// span roles, and a command that names the ticket in a form the check does
+// not know: another gh issue verb beyond comment, close and reopen, a
+// listing or search that can print bodies without naming the ticket, an
+// adapter search or a verb the adapters do not have, another issues subpath,
+// a --json field beyond title and state, a listing of the ticket file, a
+// search across the ticket store, a graphql query whose repository cannot be
+// told, a ticket position holding a variable, a ticket path joined to a live
+// substitution, a query POSTed from a data file, and a relative path after a
+// cd the check cannot follow. Known writes and mutating api calls show no
+// ticket text and count for nothing. A failed single-segment command shows
+// no text and counts for nothing, except diff, which prints the differing
+// lines while exiting 1; a failure proves nothing about one segment of
+// several, so those classify by invocation. Where the record carries no
+// exit, the invocation counts. Only the run's own ticket in its own tracker
+// counts: another number, another repo and the wrong tracker are ignored,
+// and so is a number in a command that reads nothing. The thread exports in
+// <dispatch>/sessions/ are the same threads in harness-native form and are
+// not read. Segments split on newlines as well as shell separators; (...)
+// groups, cd and command substitutions are followed, and find and xargs
+// scans of the ticket directories read as unknown, since their -exec is not
+// followed.
 //
 //   exit 0  the check ran; stdout holds the outcome line first:
 //           ticket-reads: not read | read by <agent> (<form>) | unknown (<reason>)
@@ -177,6 +186,11 @@ function hasNumberToken(segment: string, ticket: string): boolean {
   return segment.split(/[\s;&|()<>=:,"'`#]+/u).some((token) => token === ticket); // ASCII: shell words split on ASCII whitespace and metacharacters
 }
 
+/** A shell word that is a bare variable: its value cannot be told. */
+function isVar(word: string): boolean {
+  return /^\$[{(]?[A-Za-z_]/u.test(stripQuotes(word));
+}
+
 function stripQuotes(value: string): string {
   return value.replace(/^['"]+/u, "").replace(/['"]+$/u, "");
 }
@@ -206,11 +220,11 @@ function quotedValue(words: string[], i: number): string {
 }
 
 function unwrapCodex(command: string): string {
-  if (command.startsWith("/bin/bash -lc '")) {
-    const inner = command.slice("/bin/bash -lc '".length);
-    return inner.endsWith("'") ? inner.slice(0, -1) : inner;
-  }
-  return command;
+  const wrapped = /^\/bin\/bash\s+-([A-Za-z]*c[A-Za-z]*)\s*(['"])/u.exec(command); // ASCII: the codex wrapper is machine-made
+  if (!wrapped) return command;
+  const quote = wrapped[2]!;
+  const inner = command.slice(wrapped[0].length);
+  return inner.endsWith(quote) ? inner.slice(0, -1) : inner;
 }
 
 /**
@@ -226,16 +240,48 @@ function dropHeredocs(command: string): string {
       if (line.trim() === terminator) terminator = null;
       continue;
     }
-    const heredoc = /<<-?[ \t]*['"]?([A-Za-z0-9_]+)['"]?/u.exec(line);
-    if (heredoc) {
-      terminator = heredoc[1]!;
-      const head = line.slice(0, heredoc.index);
-      if (head.trim()) kept.push(head);
+    const opener = heredocOpener(line);
+    if (!opener) {
+      kept.push(line);
       continue;
     }
-    kept.push(line);
+    terminator = opener.word;
+    // The operator goes, the rest of the line stays: redirection and later
+    // commands on the same line still run.
+    const rest = `${line.slice(0, opener.at)} ${line.slice(opener.end)}`;
+    if (rest.trim()) kept.push(rest);
   }
   return kept.join("\n");
+}
+
+/** Whether the offset sits inside single or double quotes. */
+function inQuotes(line: string, at: number): boolean {
+  let quote: string | null = null;
+  for (let i = 0; i < at; i++) {
+    const char = line[i]!;
+    if (quote !== null) {
+      if (char === quote) quote = null;
+    } else if (char === '"' || char === "'") {
+      quote = char;
+    }
+  }
+  return quote !== null;
+}
+
+/** A heredoc operator outside quotes: its offset, end, and delimiter word. */
+function heredocOpener(line: string): { at: number; end: number; word: string } | null {
+  const pattern = /<<-?[ \t]*['"]?([A-Za-z0-9_]+)['"]?/gu; // ASCII: heredoc operators are ASCII
+  for (const match of line.matchAll(pattern)) {
+    const at = match.index ?? 0;
+    if (at > 0 && line[at - 1] === "<") continue; // a here-string, not a heredoc
+    if (inQuotes(line, at)) continue;
+    const before = line.slice(0, at);
+    const opens = (before.match(/\$\(/gu) ?? []).length + (before.match(/\(\(/gu) ?? []).length;
+    const closes = (before.match(/\)/gu) ?? []).length;
+    if (opens > closes) continue; // inside $(( )) arithmetic or a substitution
+    return { at, end: at + match[0].length, word: match[1]! };
+  }
+  return null;
 }
 
 /**
@@ -280,6 +326,84 @@ interface CommandPart {
 }
 
 /**
+ * A segment glued to a substitution's paren reads dynamic: its first word
+ * continues the group's value, so a leading slash is not a filesystem root.
+ * The $ marks it for touchPath, which cannot tell such a path.
+ */
+const GLUED_MARKER = "$DYNAMIC";
+
+/** A ticket directory named anywhere in the word. */
+const TICKET_DIR_RE = /postmaster\/tickets|\.postmaster\/clerk/u; // ASCII: ticket paths are ASCII
+
+/** Shell words: split on whitespace outside quotes, backquotes and $( ). */
+function splitWords(text: string): string[] {
+  const words: string[] = [];
+  let current = "";
+  let quote: string | null = null;
+  let depth = 0;
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i]!;
+    if (quote !== null) {
+      current += char;
+      if (char === quote && !isEscaped(text, i)) quote = null;
+    } else if (char === '"' || char === "'" || char === "`") {
+      if (!isEscaped(text, i)) quote = char;
+      current += char;
+    } else if (
+      char === "$" &&
+      (text[i + 1] === "(" || text[i + 1] === "{") &&
+      !isEscaped(text, i)
+    ) {
+      depth++;
+      current += char;
+    } else if ((char === ")" || char === "}") && depth > 0) {
+      depth--;
+      current += char;
+    } else if (char === " " || char === "\t" || char === "\n" || char === "\r") {
+      if (depth === 0) {
+        if (current !== "") {
+          words.push(current);
+          current = "";
+        }
+      } else {
+        current += char;
+      }
+    } else {
+      current += char;
+    }
+  }
+  if (current !== "") words.push(current);
+  return words;
+}
+
+/** A ticket path joined to a live substitution: one word holds both. */
+function dynamicPath(segment: string): boolean {
+  return splitWords(segment).some((word) => hasDynamic(word) && TICKET_DIR_RE.test(word));
+}
+
+/** An unescaped substitution or expansion marker outside single quotes. */
+function hasDynamic(segment: string): boolean {
+  let single = false;
+  for (let i = 0; i < segment.length; i++) {
+    const char = segment[i]!;
+    if (single) {
+      if (char === "'") single = false;
+      continue;
+    }
+    if (char === "'") {
+      single = true;
+      continue;
+    }
+    if (char === "`" && !isEscaped(segment, i)) return true;
+    if (char === "$" && !isEscaped(segment, i)) {
+      const next = segment[i + 1];
+      if (next === "(" || next === "{") return true;
+    }
+  }
+  return false;
+}
+
+/**
  * A command's parts in order: plain segments split as splitSegments splits
  * them, with each top-level (...) group as its own subshell part, so a cd
  * inside one never leaks out. A $( group is a substitution, not a subshell,
@@ -297,6 +421,8 @@ function splitParts(command: string): CommandPart[] {
     current = "";
   };
   const flat = dropHeredocs(command);
+  let glued = false;
+  let groupSubst = false;
   for (let i = 0; i < flat.length; i++) {
     const char = flat[i]!;
     if (depth > 0) {
@@ -314,6 +440,7 @@ function splitParts(command: string): CommandPart[] {
         if (depth === 0) {
           parts.push({ kind: "subshell", text: group });
           group = "";
+          glued = groupSubst;
         } else {
           group += char;
         }
@@ -328,21 +455,31 @@ function splitParts(command: string): CommandPart[] {
     } else if (char === '"' || char === "'" || char === "`") {
       quote = char;
       current += char;
+      glued = false;
     } else if (char === "(") {
       // An escaped \$ is literal text, not a substitution.
       if (current.endsWith("$") && isEscaped(flat, i - 1)) {
         current += char;
       } else {
+        groupSubst = current.endsWith("$");
         if (current.endsWith("$")) current = current.slice(0, -1);
         pushCurrent();
         depth = 1;
       }
+      glued = false;
     } else if (char === ")") {
       pushCurrent();
+      glued = false;
     } else if (char === ";" || char === "|" || char === "&" || char === "\n") {
       pushCurrent();
-    } else {
+      glued = false;
+    } else if (char === " " || char === "\t" || char === "\r") {
       current += char;
+      glued = false;
+    } else {
+      if (glued && current === "") current = GLUED_MARKER;
+      current += char;
+      glued = false;
     }
   }
   if (depth > 0) {
@@ -499,16 +636,89 @@ interface Head {
   at: number;
 }
 
-/** The segment's command word, past sudo, env and assignments. */
+/** Command wrappers whose own words hide the real command word. */
+const WRAPPERS = new Set(["sudo", "env", "time", "timeout", "command", "nohup", "nice", "exec"]);
+
+/** Wrapper options that take a value in the next word. */
+const WRAPPER_VALUE_OPTS = new Set([
+  "-o",
+  "--output",
+  "-a",
+  "-s",
+  "--signal",
+  "-k",
+  "--kill-after",
+  "-n",
+  "--adjustment",
+  "-u",
+  "--user",
+  "-g",
+  "--group",
+  "-U",
+  "--other-user",
+  "-C",
+  "--close-from",
+  "-D",
+  "--chdir",
+  "-R",
+  "--chroot",
+  "-h",
+  "--host",
+  "-p",
+  "--prompt",
+  "-r",
+  "--role",
+  "-t",
+  "--type",
+  "-T",
+  "--command-timeout",
+  "-S",
+  "--split-string",
+  "--unset",
+]);
+
+/** Signal names a timeout -s can carry, bare or SIG-prefixed. */
+const SIGNAL_RE =
+  /^(SIG)?(HUP|INT|QUIT|ILL|TRAP|ABRT|BUS|FPE|KILL|USR1|SEGV|USR2|PIPE|ALRM|TERM|STKFLT|CHLD|CONT|STOP|TSTP|TTIN|TTOU|URG|XCPU|XFSZ|VTALRM|PROF|WINCH|POLL|PWR|SYS)$/u; // ASCII: signal names are ASCII
+
+/** Past a wrapper's own options: flags, durations, levels and signal names. */
+function skipWrapperArgs(words: string[], at: number): number {
+  while (at < words.length) {
+    const word = stripQuotes(words[at]!);
+    if (WRAPPER_VALUE_OPTS.has(word)) {
+      at += 2;
+    } else if (/^--[A-Za-z][A-Za-z0-9_-]*(=.*)?$/u.test(word)) {
+      at++;
+      // ASCII: wrapper flags are ASCII
+    } else if (/^-[A-Za-z]+\d*$/u.test(word)) {
+      at++;
+      // ASCII: durations and levels are ASCII
+    } else if (/^[+-]?\d+[smhd]?$/u.test(word)) {
+      at++;
+    } else if (SIGNAL_RE.test(word)) {
+      at++;
+    } else {
+      break;
+    }
+  }
+  return at;
+}
+
+/** The segment's command word, past wrappers and assignments. */
 function segmentHead(segment: string): Head {
-  const words = segment.trim().split(/\s+/u).filter(Boolean); // ASCII: shell words split on ASCII whitespace
+  const words = splitWords(segment.trim()); // ASCII: shell words split on ASCII whitespace
   let at = 0;
   while (at < words.length) {
-    const word = words[at]!;
-    if (word === "sudo" || word === "env" || /^[A-Za-z_][A-Za-z0-9_]*=/u.test(word)) at++;
-    else break;
+    const word = stripQuotes(words[at]!);
+    if (WRAPPERS.has(baseVerb(word))) {
+      at = skipWrapperArgs(words, at + 1);
+    } else if (/^[A-Za-z_][A-Za-z0-9_]*=/u.test(word)) {
+      at++;
+    } else {
+      break;
+    }
   }
-  return { verb: baseVerb(words[at] ?? ""), words, at };
+  return { verb: baseVerb(stripQuotes(words[at] ?? "")), words, at };
 }
 
 /** Skip pflag-style flags from i, past their values. */
@@ -634,19 +844,37 @@ function ghApiMethod(segment: string): string | null {
   return null;
 }
 
+/**
+ * Whether the segment runs a graphql mutation operation. A query whose
+ * operation is NAMED mutation is still a query; only the mutation keyword
+ * in operation position counts, so a preceding query or subscription name
+ * disqualifies the match.
+ */
+function isGraphqlMutation(segment: string): boolean {
+  const keyword = /\bmutation\b/giu; // ASCII: graphql keywords are ASCII
+  for (const match of segment.matchAll(keyword)) {
+    const before = segment.slice(0, match.index ?? 0);
+    const prev = /([A-Za-z_][\w$]*)\s*$/u.exec(before)?.[1]?.toLowerCase(); // ASCII: graphql words are ASCII
+    if (prev === "query" || prev === "subscription") continue;
+    const after = segment.slice((match.index ?? 0) + match[0].length);
+    if (/^\s*(\{|\(|[A-Za-z_][\w$]*\s*[{(])/u.test(after)) return true; // ASCII: graphql shapes are ASCII
+  }
+  return false;
+}
+
 /** A graphql issue read against the run's repository: read, ignored, or unknown. */
-function graphqlRepoFinding(ctx: Ctx, segment: string): Finding | null {
+function graphqlRepoFinding(ctx: Ctx, segment: string, form: string): Finding | null {
   const repos = new Set<string>();
   const ownerFirst = /owner\s*:\s*"([^"]+)"\s*,\s*name\s*:\s*"([^"]+)"/giu; // ASCII: graphql names are ASCII
   const nameFirst = /name\s*:\s*"([^"]+)"\s*,\s*owner\s*:\s*"([^"]+)"/giu; // ASCII: graphql names are ASCII
   for (const match of segment.matchAll(ownerFirst)) repos.add(`${match[1]}/${match[2]}`);
   for (const match of segment.matchAll(nameFirst)) repos.add(`${match[2]}/${match[1]}`);
   if (repos.size !== 1 || ctx.nwo === null) {
-    return { agent: "", finding: "unknown", form: "gh api graphql", detail: "repo unknown" };
+    return { agent: "", finding: "unknown", form, detail: "repo unknown" };
   }
   const [nwo] = [...repos];
   if (!sameNwo(nwo!, ctx.nwo)) return null;
-  return { agent: "", finding: "read", form: "gh api graphql", detail: "" };
+  return { agent: "", finding: "read", form, detail: "" };
 }
 
 /** Classify one gh segment; null when it is not this ticket. */
@@ -661,8 +889,23 @@ function classifyGh(ctx: Ctx, segment: string, head: Head): Finding | null {
     // A known write shows no ticket text; any other verb may display it.
     if (verb === "comment" || verb === "close" || verb === "reopen") return null;
     if (verb !== "view") {
-      if (!hasNumberToken(segment, ctx.ticket)) return null;
-      return { agent: "", finding: "unknown", form: `gh issue ${verb}`.trim(), detail: "" };
+      if (hasNumberToken(segment, ctx.ticket)) {
+        return { agent: "", finding: "unknown", form: `gh issue ${verb}`.trim(), detail: "" };
+      }
+      // A numberless listing that can print bodies may dump the ticket's
+      // text without naming it; a title-only listing cannot show text.
+      if (verb === "list" && outputShowsBodies(flags)) {
+        const override = ghRepoOverride(segment, flags.repo);
+        if (override !== null) {
+          const want = repoValue(override);
+          if (!want || ctx.nwo === null) {
+            return { agent: "", finding: "unknown", form: "gh issue list", detail: "repo unknown" };
+          }
+          if (!sameNwo(want, ctx.nwo)) return null;
+        }
+        return { agent: "", finding: "unknown", form: "gh issue list", detail: "" };
+      }
+      return null;
     }
     // A number inside another repo's address is not a bare target.
     const deurl = segment.replace(/https?:\/\/github\.com\/\S+/gu, " "); // ASCII: issue addresses are machine-made ASCII
@@ -675,7 +918,13 @@ function classifyGh(ctx: Ctx, segment: string, head: Head): Finding | null {
       }
       if (sameNwo(url.nwo, ctx.nwo)) sameUrl = true;
     }
-    if (!bare && !sameUrl) return null;
+    if (!bare && !sameUrl) {
+      // A ticket position holding a variable may hold this ticket's number.
+      if (words.some((word) => isVar(word))) {
+        return { agent: "", finding: "unknown", form: "gh issue view", detail: "variable" };
+      }
+      return null;
+    }
     const override = ghRepoOverride(segment, flags.repo);
     if (override !== null) {
       const want = repoValue(override);
@@ -721,14 +970,7 @@ function classifyGh(ctx: Ctx, segment: string, head: Head): Finding | null {
   }
   if (sub === "api") {
     if (/graphql/u.test(segment)) {
-      if (!hasNumberToken(segment, ctx.ticket)) return null;
-      // A mutation writes; its payload carries no issue text back.
-      // ASCII: graphql keywords are ASCII
-      if (/\bmutation\s*(\{|\(|[A-Za-z_])/iu.test(segment)) return null;
-      if (!/issues?/iu.test(segment)) {
-        return { agent: "", finding: "unknown", form: "gh api graphql", detail: "" };
-      }
-      return graphqlRepoFinding(ctx, segment);
+      return classifyGraphqlSegment(ctx, segment, "gh api graphql");
     }
     const method = ghApiMethod(segment);
     if (method !== null && method !== "GET") {
@@ -745,6 +987,40 @@ function classifyGh(ctx: Ctx, segment: string, head: Head): Finding | null {
       }
       if (hasNumberToken(segment, ctx.ticket)) {
         return { agent: "", finding: "unknown", form: "gh api", detail: method };
+      }
+      return null;
+    }
+    // A GET on the issues collection or the search API dumps bodies without
+    // naming the ticket; another repository's collection is not this run's.
+    const collectionRe =
+      /repos\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+?)(?:\.git)?\/issues(\/comments)?(?![A-Za-z0-9_./-])/gu; // ASCII: API paths are machine-made ASCII
+    let collectionOther = false;
+    for (const match of segment.matchAll(collectionRe)) {
+      const nwo = `${match[1]}/${match[2]}`;
+      if (ctx.nwo === null) {
+        return { agent: "", finding: "unknown", form: "gh api", detail: "repo unknown" };
+      }
+      if (!sameNwo(nwo, ctx.nwo)) {
+        collectionOther = true;
+        continue;
+      }
+      return { agent: "", finding: "unknown", form: "gh api", detail: "collection" };
+    }
+    // ASCII: API paths are machine-made ASCII
+    if (/\/search\/issues(?![A-Za-z0-9_./-])/u.test(segment)) {
+      return { agent: "", finding: "unknown", form: "gh api", detail: "search" };
+    }
+    // An endpoint number holding a variable may hold this ticket's number.
+    const varNumber =
+      /repos\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+?)(?:\.git)?\/issues\/\$[{(]?[A-Za-z_]/u; // ASCII: API paths are machine-made ASCII
+    const varMatch = varNumber.exec(segment);
+    if (varMatch) {
+      const nwo = `${varMatch[1]}/${varMatch[2]}`;
+      if (ctx.nwo === null) {
+        return { agent: "", finding: "unknown", form: "gh api", detail: "repo unknown" };
+      }
+      if (sameNwo(nwo, ctx.nwo)) {
+        return { agent: "", finding: "unknown", form: "gh api", detail: "variable" };
       }
       return null;
     }
@@ -772,17 +1048,33 @@ function classifyGh(ctx: Ctx, segment: string, head: Head): Finding | null {
       return { agent: "", finding: "unknown", form: "gh api", detail: rest };
     }
     // Another repo's issue explains the number; anything else naming it is unknown.
-    if (otherRepo) return null;
+    if (otherRepo || collectionOther) return null;
     if (hasNumberToken(segment, ctx.ticket)) {
       return { agent: "", finding: "unknown", form: "gh api", detail: "" };
     }
     return null;
   }
   if (sub === "search" || sub === "browse") {
-    if (!hasNumberToken(segment, ctx.ticket)) return null;
-    return { agent: "", finding: "unknown", form: `gh ${sub}`, detail: "" };
+    if (hasNumberToken(segment, ctx.ticket)) {
+      return { agent: "", finding: "unknown", form: `gh ${sub}`, detail: "" };
+    }
+    // An issue search printing bodies may dump the ticket without naming it.
+    if (sub === "search" && /issues?/iu.test(segment) && outputShowsBodies(flags)) {
+      return { agent: "", finding: "unknown", form: "gh search", detail: "" };
+    }
+    return null;
   }
   return null;
+}
+
+/** Whether gh flags can print bodies: --json naming body or comment, --comments, or a selector. */
+function outputShowsBodies(flags: GhFlags): boolean {
+  if (flags.comments || flags.select) return true;
+  if (flags.json === null) return false;
+  return flags.json
+    .split(",")
+    .map((field) => field.trim())
+    .some((field) => TEXT_FIELD_RE.test(field));
 }
 
 function expandHome(value: string): string {
@@ -839,6 +1131,9 @@ function classifyAdapter(
   }
   const target = stripQuotes(words[at + 2] ?? "").replace(/^#+/u, "");
   if (verb === "read") {
+    if (isVar(target)) {
+      return { agent: "", finding: "unknown", form: `run ${tool} read`, detail: "variable" };
+    }
     if (target !== ctx.ticket) return null;
     return { agent: "", finding: "read", form: `run ${tool} read`, detail: "" };
   }
@@ -879,7 +1174,111 @@ function classifyFetch(ctx: Ctx, segment: string): Finding | null {
       return { agent: "", finding: "read", form: "issue fetch", detail: "" };
     }
   }
+  return classifyApiFetch(ctx, segment);
+}
+
+/**
+ * The fetch HTTP method, uppercase, read outside quoted data so a payload
+ * naming a flag cannot spoof it; null when the call reads as a GET. Data
+ * flags imply POST unless -G sends them as a query string.
+ */
+function fetchMethod(segment: string): string | null {
+  const bare = segment.replace(/"[^"]*"/gu, " ").replace(/'[^']*'/gu, " ");
+  const words = bare.trim().split(/\s+/u).filter(Boolean); // ASCII: shell words split on ASCII whitespace
+  let data = false;
+  let get = false;
+  for (let i = 0; i < words.length; i++) {
+    const word = words[i]!;
+    if (word === "-X" || word === "--request" || word === "--method") {
+      const value = words[i + 1] ?? "";
+      return value ? value.toUpperCase() : "?"; // ASCII: HTTP methods are ASCII
+    }
+    const stuck = /^-X([A-Za-z]+)$/u.exec(word); // ASCII: HTTP methods are ASCII
+    if (stuck) return stuck[1]!.toUpperCase(); // ASCII: HTTP methods are ASCII
+    if (word.startsWith("--request=") || word.startsWith("--method=")) {
+      const value = word.slice(word.indexOf("=") + 1);
+      return value ? value.toUpperCase() : "?"; // ASCII: HTTP methods are ASCII
+    }
+    if (word === "-I" || word === "--head") return "HEAD";
+    if (word === "-d" || word === "--data" || word === "--post-data" || word === "--post-file") {
+      data = true;
+    } else if (word === "-G" || word === "--get") {
+      get = true;
+    }
+  }
+  if (get || !data) return null;
+  return "POST";
+}
+
+/** A REST issue URL through the API host: read, ignored, or unknown. */
+function classifyApiRest(ctx: Ctx, text: string): Finding | null {
+  const rest =
+    /https?:\/\/api\.github\.com\/repos\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+?)(?:\.git)?\/issues\/(\d+)((?:\/[A-Za-z0-9_.-]+)*)/gu; // ASCII: API addresses are machine-made ASCII
+  let otherRepo = false;
+  for (const match of text.matchAll(rest)) {
+    const nwo = `${match[1]}/${match[2]}`;
+    const number = match[3]!;
+    const restPath = match[4] ?? "";
+    if (number !== ctx.ticket) continue;
+    if (ctx.nwo === null) {
+      return { agent: "", finding: "unknown", form: "issue fetch", detail: "repo unknown" };
+    }
+    if (!sameNwo(nwo, ctx.nwo)) {
+      otherRepo = true;
+      continue;
+    }
+    if (restPath === "" || restPath === "/comments") {
+      return { agent: "", finding: "read", form: "issue fetch", detail: "" };
+    }
+    return { agent: "", finding: "unknown", form: "issue fetch", detail: restPath };
+  }
+  if (otherRepo) return null;
   return null;
+}
+
+/** A fetch of the API for this ticket: REST issue URLs and the graphql endpoint. */
+function classifyApiFetch(ctx: Ctx, segment: string): Finding | null {
+  if (!/api\.github\.com/u.test(segment)) return null;
+  const method = fetchMethod(segment);
+  if (method !== null && method !== "GET") {
+    if (method === "HEAD") return null;
+    if (method === "POST" || method === "PUT" || method === "PATCH" || method === "DELETE") {
+      // A mutating fetch shows no ticket text — except a graphql query POSTed as data.
+      if (!/graphql/u.test(segment)) return null;
+    } else if (hasNumberToken(segment, ctx.ticket)) {
+      return { agent: "", finding: "unknown", form: "issue fetch", detail: method };
+    } else {
+      return null;
+    }
+  }
+  const rest = classifyApiRest(ctx, segment);
+  if (rest) return rest;
+  // A POST to the graphql endpoint runs the query it carries as data.
+  if (/api\.github\.com\/graphql/u.test(segment)) {
+    // ASCII: curl data flags are ASCII
+    if (/(?:^|\s)(?:-d|--data(?:=|\s+))@/u.test(segment)) {
+      return { agent: "", finding: "unknown", form: "issue fetch", detail: "data file" };
+    }
+    return classifyGraphqlSegment(ctx, segment, "issue fetch");
+  }
+  return null;
+}
+
+/** A graphql call carrying its query as text: read, ignored, or unknown. */
+function classifyGraphqlSegment(ctx: Ctx, segment: string, form: string): Finding | null {
+  if (!hasNumberToken(segment, ctx.ticket)) {
+    // An issue number holding a variable may hold this ticket's number.
+    // ASCII: graphql shapes are ASCII
+    if (/number\s*:\s*\$[{(]?[A-Za-z_]/u.test(segment) && /issues?/iu.test(segment)) {
+      return { agent: "", finding: "unknown", form, detail: "variable" };
+    }
+    return null;
+  }
+  if (isGraphqlMutation(segment)) return null;
+  if (!/issues?/iu.test(segment)) {
+    return { agent: "", finding: "unknown", form, detail: "" };
+  }
+  return graphqlRepoFinding(ctx, segment, form);
 }
 
 const STORE_FILE_RE =
@@ -928,6 +1327,33 @@ function classifyPaths(ctx: Ctx, segment: string, verb: string, own: string | nu
   // A scan can run a reader over the directory unseen; its -exec is not followed.
   const scanning = reading || SCAN_VERBS.has(verb);
   const seen = new Set<string>();
+  // A ticket path joined to a live substitution cannot be resolved: its root
+  // is the substitution's value, so it reads as unknown, never clean.
+  if (dynamicPath(segment)) {
+    const files = [...segment.matchAll(STORE_FILE_RE), ...segment.matchAll(CLERK_FILE_RE)];
+    if (files.length > 0) {
+      const clerk = files.some((match) => match[1]!.includes(".postmaster/clerk/"));
+      findings.push({
+        agent: "",
+        finding: "unknown",
+        form: clerk ? "clerk draft" : "ticket file",
+        detail: "dynamic path",
+      });
+      return findings;
+    }
+    for (const re of [STORE_DIR_RE, CLERK_DIR_RE]) {
+      const dir = re.exec(segment)?.[0];
+      if (!dir) continue;
+      findings.push({
+        agent: "",
+        finding: "unknown",
+        form: dir.includes("clerk") ? "clerk draft dir" : "ticket file dir",
+        detail: "dynamic path",
+      });
+      return findings;
+    }
+    return findings;
+  }
   const fileRes = [...segment.matchAll(STORE_FILE_RE), ...segment.matchAll(CLERK_FILE_RE)];
   for (const match of fileRes) {
     const candidate = match[1]!;
@@ -986,11 +1412,19 @@ function classifySegment(ctx: Ctx, segment: string, own: string | null, depth = 
   const findings: Finding[] = [];
   const head = segmentHead(segment);
   if (!head.verb) return findings;
-  // A -c string runs its own command; classify what it runs instead.
+  // A -c string runs its own command; classify what it runs instead. The c
+  // must be last in its cluster: in -cl the c takes l, not the next word.
   if (SHELL_WRAPPERS.has(head.verb) && depth < 2) {
     const next = head.words[head.at + 1] ?? "";
-    if (head.verb === "eval" || next === "-c") {
+    const cluster = /^-([A-Za-z]*c)$/u.exec(next); // ASCII: shell flags are ASCII
+    const attached = /^-([A-Za-z]*c)(['"])(.*)$/u.exec(next); // ASCII: shell flags are ASCII
+    if (head.verb === "eval" || next === "-c" || cluster) {
       const inner = head.words.slice(head.at + (head.verb === "eval" ? 1 : 2)).join(" ");
+      findings.push(...classifyCommand(ctx, stripQuotes(inner.trim()), own, depth + 1));
+      return findings;
+    }
+    if (attached) {
+      const inner = [attached[3], ...head.words.slice(head.at + 2)].join(" ");
       findings.push(...classifyCommand(ctx, stripQuotes(inner.trim()), own, depth + 1));
       return findings;
     }
@@ -1052,13 +1486,32 @@ function inputUrl(input: RecordOf): string | null {
   return null;
 }
 
+/**
+ * Whether a failed call excuses its command: failure is recorded per call,
+ * so it proves nothing about one segment of several or one substitution of
+ * one, and diff prints the differing lines while exiting 1. A failed
+ * single-segment atomic read shows no text and still counts for nothing.
+ */
+function excusesCall(command: string, exitCode: unknown): boolean {
+  if (!failedExit(exitCode)) return false;
+  const parts = splitParts(command);
+  if (parts.length !== 1) return false;
+  const only = parts[0]!;
+  if (only.kind === "subshell") return excusesCall(only.text, exitCode);
+  if (substitutionBodies(only.text).length > 0) return false;
+  if (exitCode === 1 && segmentHead(only.text).verb === "diff") return false;
+  return true;
+}
+
 /** Classify one tool call's command, paths and fetches. */
 function classifyCall(ctx: Ctx, call: ToolCall, own: string): Finding[] {
-  if (failedExit(call.exitCode)) return [];
   const findings: Finding[] = [];
   const command = inputCommand(call.input);
   if (command) {
+    if (excusesCall(command, call.exitCode)) return findings;
     findings.push(...classifyCommand(ctx, command, own));
+  } else if (failedExit(call.exitCode)) {
+    return findings;
   }
   const url = inputUrl(call.input);
   if (url) {
@@ -1074,6 +1527,11 @@ function classifyCall(ctx: Ctx, call: ToolCall, own: string): Finding[] {
       } else if (sameNwo(hit.nwo, ctx.nwo)) {
         findings.push({ agent: "", finding: "read", form: "issue fetch", detail: "" });
       }
+    }
+    // A fetch tool reads with a GET.
+    if (ctx.kind === "github") {
+      const api = classifyApiRest(ctx, url);
+      if (api) findings.push(api);
     }
   }
   const paths: Array<{ path: string; write: boolean }> = call.direct.map((item) => ({
@@ -1118,16 +1576,41 @@ function storeDirOf(repo: string): string | null {
   return join(r.out.trim(), "postmaster", "tickets");
 }
 
+/** A leg's attempt roles in order; [] when no attempts file, null when unreadable. */
+function attemptRoles(dispatch: string, n: string): string[] | null {
+  const file = join(dispatch, "logs", `coachman-leg-${n}-attempts.jsonl`);
+  if (!existsSync(file)) return [];
+  let raw: string;
+  try {
+    raw = readFileSync(file, "utf8");
+  } catch {
+    return null;
+  }
+  const roles: string[] = [];
+  for (const line of raw.split("\n")) {
+    if (!line.trim()) continue;
+    try {
+      const row = JSON.parse(line) as Record<string, unknown>;
+      if (typeof row.role === "string" && row.role !== "") roles.push(row.role);
+    } catch {
+      continue;
+    }
+  }
+  return roles;
+}
+
 function readAgents(
   dispatch: string,
   manifest: RecordOf,
   runJson: RecordOf,
-): { agents: Agent[]; broken: string | null } {
+): { agents: Agent[]; broken: string | null; extra: Finding[] } {
   const config = rec(runJson.config);
   const lanes = rec(config.lanes);
   const team = rec(config.team);
   const coachman = rec(team.coachman);
+  const fallback = rec(team.coachman_fallback);
   const agents: Agent[] = [];
+  const extra: Finding[] = [];
   const legs = rec(rec(manifest.coachman).legs);
   const legNumbers = Object.keys(legs)
     .filter((key) => /^\d+$/u.test(key)) // ASCII: manifest leg keys are ASCII digits
@@ -1144,17 +1627,16 @@ function readAgents(
     const attempt = /-walled-attempt-(\d+)-events\.jsonl$/u.exec(file)?.[1]; // ASCII: stream names are machine-made
     return attempt === undefined ? 0 : Number(attempt);
   };
+  const walledName = (n: string, file: string): string => {
+    const attempt = /-walled-attempt-(\d+)-events\.jsonl$/u.exec(file)?.[1]; // ASCII: stream names are machine-made
+    return attempt ? `coachman leg ${n} walled attempt ${attempt}` : `coachman leg ${n} walled`;
+  };
   for (const n of legNumbers) {
     // A leg on its own harness reads with it; the base is the fallback.
     const legName = legNames[Number(n) - 1] ?? "";
-    const harness = text(rec(perLeg[legName]).harness) || text(coachman.harness);
-    agents.push({
-      name: `coachman leg ${n}`,
-      file: `coachman-leg-${n}-events.jsonl`,
-      harness,
-      lane: "coachman",
-      own: "",
-    });
+    const own = text(rec(perLeg[legName]).harness) || text(coachman.harness);
+    const roleHarness = (role: string): string =>
+      role === "coachman" ? own : role === "coachman_fallback" ? text(fallback.harness) : "";
     // A walled leg's renamed streams read beside its fresh one; their absence
     // is normal, so only present files join.
     const walled = logNames
@@ -1162,15 +1644,110 @@ function readAgents(
         (name) => name.startsWith(`coachman-leg-${n}-walled`) && name.endsWith("-events.jsonl"),
       )
       .sort((a, b) => walledOrder(a) - walledOrder(b));
-    for (const file of walled) {
-      const attempt = /-walled-attempt-(\d+)-events\.jsonl$/u.exec(file)?.[1]; // ASCII: stream names are machine-made
+    // Takeovers rename the old stream, so a fresh stream with no walled
+    // files beside it is the original attempt's. Where takeovers happened,
+    // the attempts file attributes each stream to the role that wrote it.
+    const roles = attemptRoles(dispatch, n);
+    const spanning = roles !== null && new Set(roles).size > 1;
+    if (walled.length === 0 && !spanning) {
       agents.push({
-        name: attempt ? `coachman leg ${n} walled attempt ${attempt}` : `coachman leg ${n} walled`,
-        file,
-        harness,
+        name: `coachman leg ${n}`,
+        file: `coachman-leg-${n}-events.jsonl`,
+        harness: own,
         lane: "coachman",
         own: "",
       });
+      continue;
+    }
+    if (spanning && walled.length === 0) {
+      extra.push({
+        agent: `coachman leg ${n}`,
+        finding: "unknown",
+        form: "record",
+        detail: "attempts span roles",
+      });
+      continue;
+    }
+    // No attempt roles and no second harness: every attempt ran as the leg's
+    // own, so the streams read with it.
+    const unambiguous = text(fallback.harness) === "" || text(fallback.harness) === own;
+    if (roles === null || roles.length === 0) {
+      if (unambiguous) {
+        agents.push({
+          name: `coachman leg ${n}`,
+          file: `coachman-leg-${n}-events.jsonl`,
+          harness: own,
+          lane: "coachman",
+          own: "",
+        });
+        for (const file of walled) {
+          agents.push({ name: walledName(n, file), file, harness: own, lane: "coachman", own: "" });
+        }
+      } else {
+        extra.push({
+          agent: `coachman leg ${n}`,
+          finding: "unknown",
+          form: "record",
+          detail: "attempts cannot be read",
+        });
+        for (const file of walled) {
+          extra.push({
+            agent: walledName(n, file),
+            finding: "unknown",
+            form: "record",
+            detail: "attempts cannot be read",
+          });
+        }
+      }
+      continue;
+    }
+    const last = roles[roles.length - 1]!;
+    const fresh = roleHarness(last);
+    if (!fresh) {
+      extra.push({
+        agent: `coachman leg ${n}`,
+        finding: "unknown",
+        form: "record",
+        detail: `role ${last} has no harness`,
+      });
+    } else {
+      agents.push({
+        name: `coachman leg ${n}`,
+        file: `coachman-leg-${n}-events.jsonl`,
+        harness: fresh,
+        lane: "coachman",
+        own: "",
+      });
+    }
+    if (spanning) {
+      for (const file of walled) {
+        extra.push({
+          agent: walledName(n, file),
+          finding: "unknown",
+          form: "record",
+          detail: "attempts span roles",
+        });
+      }
+    } else {
+      const only = roleHarness(roles[0]!);
+      for (const file of walled) {
+        if (!only) {
+          extra.push({
+            agent: walledName(n, file),
+            finding: "unknown",
+            form: "record",
+            detail: `role ${roles[0]} has no harness`,
+          });
+        } else {
+          agents.push({
+            name: walledName(n, file),
+            file,
+            harness: only,
+            lane: "coachman",
+            own: "",
+          });
+        }
+      }
     }
   }
   const laneNames = Object.keys(rec(manifest.lanes)).sort();
@@ -1187,7 +1764,7 @@ function readAgents(
   try {
     actions = readFileSync(join(dispatch, "actions.jsonl"), "utf8");
   } catch {
-    return { agents, broken: "actions.jsonl cannot be read" };
+    return { agents, broken: "actions.jsonl cannot be read", extra };
   }
   const seen = new Set<string>();
   for (const line of actions.split("\n")) {
@@ -1196,13 +1773,13 @@ function readAgents(
     try {
       event = JSON.parse(line) as unknown;
     } catch {
-      return { agents, broken: "actions.jsonl cannot be read" };
+      return { agents, broken: "actions.jsonl cannot be read", extra };
     }
     const record = rec(event);
     if (record.action !== "review-launch") continue;
     const detail = /^(\S+) round (\d+)\b/u.exec(text(record.detail)); // ASCII: review-launch details are machine-logged lines
     const lane = text(record.target);
-    if (!detail || !lane) return { agents, broken: "a review launch cannot be read" };
+    if (!detail || !lane) return { agents, broken: "a review launch cannot be read", extra };
     const key = `${detail[2]}:${detail[1]}:${lane}`;
     if (seen.has(key)) continue;
     seen.add(key);
@@ -1214,7 +1791,35 @@ function readAgents(
       own: "",
     });
   }
-  return { agents, broken: null };
+  // A stream-shaped record the inventory never names is still an agent's
+  // record; it reads as unknown, never silently skipped. The inventory is
+  // the manifest's files, not the attributed agents: a stream the check
+  // cannot attribute is already reported once, under its own reason.
+  const known = new Set(agents.map((agent) => agent.file));
+  for (const n of legNumbers) {
+    known.add(`coachman-leg-${n}-events.jsonl`);
+    for (const name of logNames) {
+      if (name.startsWith(`coachman-leg-${n}-walled`) && name.endsWith("-events.jsonl")) {
+        known.add(name);
+      }
+    }
+  }
+  for (const name of logNames.sort()) {
+    if (!name.endsWith(".jsonl")) continue;
+    if (known.has(name)) continue;
+    if (name.endsWith("-usage.json")) continue;
+    if (/^review-r\d+\.jsonl$/u.test(name)) continue; // ASCII: round records are machine-made
+    if (name.endsWith("-attempts.jsonl")) continue;
+    if (name.includes("-claude-task-")) continue;
+    if (!name.endsWith("-events.jsonl") && !/^review-r\d+-/u.test(name)) continue; // ASCII: stream names are machine-made
+    extra.push({
+      agent: "inventory",
+      finding: "unknown",
+      form: "record",
+      detail: `unlisted ${name}`,
+    });
+  }
+  return { agents, broken: null, extra };
 }
 
 /** An agent's events: its stream, and a claude lane's fork transcripts beside it. */
@@ -1375,6 +1980,9 @@ function main(argv: string[]): number {
   const reads: Finding[] = [];
   const titles: Finding[] = [];
   const seen = new Set<string>();
+  for (const finding of enumerated.extra) {
+    unknowns.push(`${finding.agent}: ${finding.form}${finding.detail ? ` ${finding.detail}` : ""}`);
+  }
   for (const agent of enumerated.agents) {
     const own = ownFolder(ctx, ticket, agent, reviewOf(agent));
     if (!KNOWN_HARNESSES.includes(agent.harness)) {
