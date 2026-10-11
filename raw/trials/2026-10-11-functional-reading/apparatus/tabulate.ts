@@ -179,9 +179,9 @@ export function ratioOfMeans(
 const pct = (x: number): string => (100 * x).toFixed(1);
 const num = (x: number): string => x.toFixed(2);
 
-type Loaded = Readonly<{ valid: Session[]; invalid: Session[] }>;
+export type Loaded = Readonly<{ valid: Session[]; invalid: Session[] }>;
 
-function load(trial: string, readers: string): Loaded {
+export function load(trial: string, readers: string): Loaded {
   const all: Session[] = [];
   for (const model of readdirSync(readers)) {
     for (const module of readdirSync(join(readers, model))) {
