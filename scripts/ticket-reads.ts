@@ -622,13 +622,13 @@ function ghApiMethod(segment: string): string | null {
     const word = words[i]!;
     if (word === "-X" || word === "--method") {
       const value = words[i + 1] ?? "";
-      return value ? value.toUpperCase() : "?";
+      return value ? value.toUpperCase() : "?"; // ASCII: HTTP methods are ASCII
     }
     const stuck = /^-X([A-Za-z]+)$/u.exec(word); // ASCII: HTTP methods are ASCII
-    if (stuck) return stuck[1]!.toUpperCase();
+    if (stuck) return stuck[1]!.toUpperCase(); // ASCII: HTTP methods are ASCII
     if (word.startsWith("--method=")) {
       const value = word.slice("--method=".length);
-      return value ? value.toUpperCase() : "?";
+      return value ? value.toUpperCase() : "?"; // ASCII: HTTP methods are ASCII
     }
   }
   return null;
@@ -638,7 +638,7 @@ function ghApiMethod(segment: string): string | null {
 function graphqlRepoFinding(ctx: Ctx, segment: string): Finding | null {
   const repos = new Set<string>();
   const ownerFirst = /owner\s*:\s*"([^"]+)"\s*,\s*name\s*:\s*"([^"]+)"/giu; // ASCII: graphql names are ASCII
-  const nameFirst = /name\s*:\s*"([^"]+)"\s*,\s*owner\s*:\s*"([^"]+)"/giu;
+  const nameFirst = /name\s*:\s*"([^"]+)"\s*,\s*owner\s*:\s*"([^"]+)"/giu; // ASCII: graphql names are ASCII
   for (const match of segment.matchAll(ownerFirst)) repos.add(`${match[1]}/${match[2]}`);
   for (const match of segment.matchAll(nameFirst)) repos.add(`${match[2]}/${match[1]}`);
   if (repos.size !== 1 || ctx.nwo === null) {
@@ -723,6 +723,7 @@ function classifyGh(ctx: Ctx, segment: string, head: Head): Finding | null {
     if (/graphql/u.test(segment)) {
       if (!hasNumberToken(segment, ctx.ticket)) return null;
       // A mutation writes; its payload carries no issue text back.
+      // ASCII: graphql keywords are ASCII
       if (/\bmutation\s*(\{|\(|[A-Za-z_])/iu.test(segment)) return null;
       if (!/issues?/iu.test(segment)) {
         return { agent: "", finding: "unknown", form: "gh api graphql", detail: "" };
@@ -890,7 +891,7 @@ const CLERK_DIR_RE = /[~$A-Za-z0-9_@./-]*\.postmaster\/clerk(?=[/\s"'`;&|()]|$)/
 
 /** Another ticket's file under a ticket directory: numbered, and not this run's. */
 function isSiblingTicketFile(absolute: string, ticket: string): boolean {
-  const sibling = /^(\d+)\.(md|json)$/u.exec(basename(absolute));
+  const sibling = /^(\d+)\.(md|json)$/u.exec(basename(absolute)); // ASCII: ticket numbers are ASCII digits
   return sibling !== null && sibling[1] !== ticket;
 }
 
@@ -1140,7 +1141,7 @@ function readAgents(
     logNames = [];
   }
   const walledOrder = (file: string): number => {
-    const attempt = /-walled-attempt-(\d+)-events\.jsonl$/u.exec(file)?.[1];
+    const attempt = /-walled-attempt-(\d+)-events\.jsonl$/u.exec(file)?.[1]; // ASCII: stream names are machine-made
     return attempt === undefined ? 0 : Number(attempt);
   };
   for (const n of legNumbers) {
@@ -1162,7 +1163,7 @@ function readAgents(
       )
       .sort((a, b) => walledOrder(a) - walledOrder(b));
     for (const file of walled) {
-      const attempt = /-walled-attempt-(\d+)-events\.jsonl$/u.exec(file)?.[1];
+      const attempt = /-walled-attempt-(\d+)-events\.jsonl$/u.exec(file)?.[1]; // ASCII: stream names are machine-made
       agents.push({
         name: attempt ? `coachman leg ${n} walled attempt ${attempt}` : `coachman leg ${n} walled`,
         file,
