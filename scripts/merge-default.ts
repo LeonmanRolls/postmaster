@@ -226,7 +226,10 @@ function unmergedPaths(wt: string): string[] {
     env: UNSET_GIT,
   });
   if (r.code !== 0) die("cannot list the conflicted files");
-  return r.out.split("\0").filter((p) => p !== "").sort();
+  return r.out
+    .split("\0")
+    .filter((p) => p !== "")
+    .sort();
 }
 
 function logMerge(dispatch: string, ticket: string, detail: string): boolean {
@@ -305,9 +308,13 @@ function main(argv: string[]): number {
   if (stale) {
     if (merges.count >= BUDGET) {
       const holds =
-        merges.lastMain ?? mergeBase(repo, head, tip) ?? die(`the branch is stale after ${
-          merges.count
-        } merges but no logged main says which main it holds`);
+        merges.lastMain ??
+        mergeBase(repo, head, tip) ??
+        die(
+          `the branch is stale after ${
+            merges.count
+          } merges but no logged main says which main it holds`,
+        );
       cardOut(
         `CARD-ANYWAY: the branch holds main ${holds} but ${def} moved to ${tip}; ${merges.count} merges made, the card may be raised anyway`,
         buildReport({ ref: def, holds, tip, count: merges.count, hand: merges.hand }),
@@ -319,14 +326,18 @@ function main(argv: string[]): number {
       die(`the worktree is not on a branch: check out ${ticket}, then call this step again`);
     }
     if (sym.out !== ticket) {
-      die(`the worktree is on ${sym.out}, not ${ticket}: check out ${ticket}, then call this step again`);
+      die(
+        `the worktree is on ${sym.out}, not ${ticket}: check out ${ticket}, then call this step again`,
+      );
     }
     const msg = `Merge ${def} ${tip12} into ${ticket}`;
     const m = run("git", ["-C", wt, "merge", "--no-ff", "-m", msg, tip], { env: UNSET_GIT });
     if (m.code === 0) {
       const detail = `main=${tip} into ${ticket}`;
       if (!logMerge(dispatch, ticket, detail)) {
-        die(`merged ${def} ${tip12} into ${ticket} but the merge was not logged: log it with run log-action ${dispatch} coachman merge ${ticket} "${detail}", then call this step again`);
+        die(
+          `merged ${def} ${tip12} into ${ticket} but the merge was not logged: log it with run log-action ${dispatch} coachman merge ${ticket} "${detail}", then call this step again`,
+        );
       }
       console.log(
         `MERGED ${tip}: merged ${def} ${tip12} into ${ticket}; run the gate at the merged head, then call this step again`,
@@ -338,11 +349,14 @@ function main(argv: string[]): number {
       die(`the merge failed: ${firstLine(m.err) || firstLine(m.out) || `exit ${m.code}`}`);
     }
     const files = unmergedPaths(wt);
-    const detail = files.length > 0
-      ? `main=${tip} into ${ticket} conflict=${files.join(" ")}`
-      : `main=${tip} into ${ticket}`;
+    const detail =
+      files.length > 0
+        ? `main=${tip} into ${ticket} conflict=${files.join(" ")}`
+        : `main=${tip} into ${ticket}`;
     if (!logMerge(dispatch, ticket, detail)) {
-      die(`the merge conflicts but the conflict was not logged: log it with run log-action ${dispatch} coachman merge ${ticket} "${detail}", resolve by hand, commit the merge, then call this step again`);
+      die(
+        `the merge conflicts but the conflict was not logged: log it with run log-action ${dispatch} coachman merge ${ticket} "${detail}", resolve by hand, commit the merge, then call this step again`,
+      );
     }
     console.log(
       `CONFLICT ${tip}: ${
