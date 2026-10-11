@@ -1,17 +1,24 @@
-// Socket's install scan behind the shape Bun loads, composed with a recorded
-// verdict for tests. Installs run Socket's module directly (bunfig.toml),
-// which Bun bootstraps on a fresh clone where a wrapper importing a package
-// that is not installed yet cannot load; refresh-parser scans through this
-// module, so it can prove the scan against a fixture, and #424 extends this
-// module into the joined install check.
+// The joined install check: Socket's install scan behind the shape Bun
+// loads, with the ticket-approval scan concatenated after it. Installs run
+// this module directly (bunfig.toml). A package outside the approved set —
+// the worktree's bun.lock plus the run's cached yeses — is a fatal finding,
+// refused before anything downloads. POSTMASTER_RECORD_FILE=<path> writes
+// the refused set beside the verdict instead of only printing it, so the
+// record command can cache an approved library with the packages it brings.
 //
 // POSTMASTER_SCAN_FIXTURE names the recorded verdict, JSON of the shape
 // { error?: string, advisories?: { "<name>@<version>": Advisory[] } }: an
 // error throws as if the scanner were unreachable, else the recorded
 // advisories answer for each scanned package. Unset everywhere else, where
-// the scan goes to Socket (free mode without SOCKET_API_TOKEN). Anything
-// the scan cannot check throws, and Bun cancels the install.
-import { readFileSync } from "node:fs";
+// the scan goes to Socket (free mode without SOCKET_API_TOKEN).
+//
+// A scan Socket cannot answer throws when the install brings anything new,
+// and warns past the pinned set when it brings nothing: a fresh clone
+// reproduces its lockfile with the scanner not installed yet, while a new
+// package is never taken unscanned. Anything else the scan cannot check
+// throws, and Bun cancels the install.
+import { readFileSync, writeFileSync } from "node:fs";
+import { approvedSet } from "./library-approvals.ts";
 
 export interface ScanPackage {
   name: string;
@@ -83,22 +90,81 @@ export function recordedScan(path: string, packages: ScanPackage[]): ScanAdvisor
   return found;
 }
 
-async function socketScan(packages: ScanPackage[]): Promise<ScanAdvisory[]> {
-  const mod = (await import("@socketsecurity/bun-security-scanner")) as unknown as {
-    scanner: SocketScanner;
-  };
-  return mod.scanner.scan({ packages });
+async function liveScan(packages: ScanPackage[]): Promise<ScanAdvisory[]> {
+  let mod: unknown;
+  try {
+    mod = await import("@socketsecurity/bun-security-scanner");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`install-scanner: cannot load the Socket scanner: ${message}`);
+  }
+  return (mod as { scanner: SocketScanner }).scanner.scan({ packages });
+}
+
+/** Socket's scan alone, without the approval check: the refresh and the
+ * facts read the verdict for one package through this, keeping their own
+ * approval step beside it. */
+export async function socketScanOnly(packages: ScanPackage[]): Promise<ScanAdvisory[]> {
+  const fixture = process.env["POSTMASTER_SCAN_FIXTURE"];
+  if (fixture !== undefined) {
+    console.error(`install-scanner: using the recorded verdict at ${fixture}`);
+    return recordedScan(fixture, packages);
+  }
+  return liveScan(packages);
+}
+
+/** The approval refusals: one fatal finding per package outside the worktree's
+ * approved set. */
+export function approvalScan(root: string, packages: ScanPackage[]): ScanAdvisory[] {
+  const approved = approvedSet(root);
+  const found: ScanAdvisory[] = [];
+  for (const pkg of packages) {
+    if (approved.has(`${pkg.name}@${pkg.version}`)) continue;
+    found.push({
+      level: "fatal",
+      package: pkg.name,
+      url: null,
+      description:
+        `refusing ${pkg.name}@${pkg.version}: the ticket lists no approval for it; ` +
+        `stop this line of work and report it to the coachman`,
+    });
+  }
+  return found;
+}
+
+export interface RecordedRefusal {
+  refused: string[];
+  socketFlagged: boolean;
 }
 
 export const scanner: Scanner = {
   version: "1",
   async scan({ packages }) {
-    const fixture = process.env["POSTMASTER_SCAN_FIXTURE"];
-    if (fixture !== undefined) {
-      console.error(`install-scanner: using the recorded verdict at ${fixture}`);
-      return recordedScan(fixture, packages);
+    const root = process.cwd();
+    const refusals = approvalScan(root, packages);
+    let advisories: ScanAdvisory[];
+    try {
+      advisories = await socketScanOnly(packages);
+    } catch (error) {
+      if (refusals.length > 0) throw error;
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(
+        `install-scanner: cannot scan, allowing the pinned set without a scan: ${message}`,
+      );
+      return refusals;
     }
-    // #424 adds the ticket-approval scan here, concatenated after Socket's.
-    return socketScan(packages);
+    const record = process.env["POSTMASTER_RECORD_FILE"];
+    if (record !== undefined) {
+      const refused = refusals.map((advisory) => {
+        const description = advisory.description ?? "";
+        return description.slice("refusing ".length).split(":")[0]!;
+      });
+      const report: RecordedRefusal = {
+        refused,
+        socketFlagged: advisories.length > 0,
+      };
+      writeFileSync(record, JSON.stringify(report));
+    }
+    return [...advisories, ...refusals];
   },
 };
