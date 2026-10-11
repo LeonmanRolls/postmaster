@@ -1,7 +1,7 @@
 // The trial's controls (see ../method.md): each count is run on a case whose answer is known, one that
 // must read non-zero and one that must read zero, through the same code. `bun controls.ts` writes
 // results/controls.md and exits 1 if any control fails; controls.test.ts runs the same checks.
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import type { Extract } from "../../2026-10-03-lane-audit/apparatus/extract.ts";
 import { median } from "../../2026-10-03-lane-audit/apparatus/analyze.ts";
@@ -17,10 +17,22 @@ import { cost, INSTANCE_TYPES, type InstanceType, perHour } from "./cost.ts";
 import { covered, runTime, seconds, summarizeRole } from "./instance-time.ts";
 import type { Launch } from "./measure.ts";
 import { CONTRIBUTOR_TIER, type Prices, roleDollars, STANDARD_TIER, withRatesOf } from "./model-bill.ts";
-import { auditTotals, totalsCost } from "./tables.ts";
-import { AGENT, breakEvenRuns, fits, GATE, hourly, type Machine, profileHours, type Rate } from "./providers.ts";
+import { auditTotals, breakEven, isoSpan, totalsCost } from "./tables.ts";
+import { AGENT, breakEvenRuns, fits, GATE, hourly, type Machine, profileHours, type Rate, runCost } from "./providers.ts";
 import { totalInput } from "./tokens.ts";
 import type { RunUptime } from "./uptime.ts";
+import { consistent, type DayCounts, windowCount } from "./pace.ts";
+import {
+  admitted,
+  breakEvenTickets,
+  DURABLE_OBJECT_PER_HOUR,
+  type Launch as FlowLaunch,
+  monthCost,
+  monthlyPace,
+  overflowSeconds,
+  sessionRates,
+  sessionsMonth,
+} from "./whole-flow.ts";
 
 export type Control = {
   id: string;
@@ -38,6 +50,7 @@ export type Inputs = {
   prices: Prices;
   providers: Rate[];
   machines: Machine[];
+  pace: { total?: number; ticketTitledTotal?: number; days: Record<string, DayCounts> } | null;
 };
 
 const within = (got: number, want: number, tolerance: number): boolean => Math.abs(got - want) <= tolerance;
@@ -525,6 +538,121 @@ export function runControls(inp: Inputs): Control[] {
     got: `${onePeak} against ${allPeak}`,
     pass: onePeak >= 1 && onePeak <= allPeak,
   });
+  // 13. what a whole flow costs
+  const realCount = covered(inp.audit.runs, "real").length;
+  const sizedAverageControl =
+    cloudflareRow && realCount > 0 ? runCost(cloudflareRow, split.agent, split.gate) / realCount : 0;
+  if (cloudflareRow && realCount > 0) {
+    const sessions = sessionsMonth(sessionRates(cloudflareRow, DURABLE_OBJECT_PER_HOUR), 9, 2, "asleep");
+    const n = breakEvenTickets(100, sizedAverageControl, sessions, 5) as number;
+    const noSessions = breakEvenTickets(50, sizedAverageControl, 0, 5) as number;
+    const older = breakEven([50], sizedAverageControl, 5)[0] as number;
+    add({
+      id: "C38",
+      kind: "positive",
+      what: "the break-even against $100 with nine sessions asleep, put back into the month; and with no sessions, against the earlier break-even for $50",
+      expected: "the month at the break-even costs $100, one ticket fewer costs less and one more costs more; the two break-evens agree",
+      got: `${monthCost(n, sizedAverageControl, sessions, 5).toFixed(2)} at ${n.toFixed(2)} tickets, ${monthCost(n - 1, sizedAverageControl, sessions, 5).toFixed(2)} and ${monthCost(n + 1, sizedAverageControl, sessions, 5).toFixed(2)} either side; ${noSessions.toFixed(3)} against ${older.toFixed(3)}`,
+      pass:
+        within(monthCost(n, sizedAverageControl, sessions, 5), 100, 1e-9) &&
+        monthCost(n - 1, sizedAverageControl, sessions, 5) < 100 &&
+        monthCost(n + 1, sizedAverageControl, sessions, 5) > 100 &&
+        within(noSessions, older, 1e-9),
+    });
+  }
+  const launchHist = loadOf([...kinds.lanes, ...kinds.reviewers, ...kinds.gates]);
+  const launchLengths = secondsOf([...kinds.lanes, ...kinds.reviewers, ...kinds.gates]);
+  add({
+    id: "C39",
+    kind: "positive",
+    what: "the launch-seconds above zero at once, from the histogram of the load, against the sum of the lengths of the lanes, reviewers and gate runs",
+    expected: "equal to a second: the area under the load curve is the sum of the intervals",
+    got: `${fmt(overflowSeconds(launchHist.hist, 0) / 3600, 2)} and ${fmt(launchLengths / 3600, 2)} hours`,
+    pass: within(overflowSeconds(launchHist.hist, 0), launchLengths, 1),
+  });
+  add({
+    id: "C40",
+    kind: "negative",
+    what: "the launch-seconds above the most that ran at once, through the same code",
+    expected: "zero",
+    got: `${overflowSeconds(launchHist.hist, launchHist.peak)} seconds above ${launchHist.peak}`,
+    pass: overflowSeconds(launchHist.hist, launchHist.peak) === 0,
+  });
+  if (cloudflareRow) {
+    const rates = sessionRates(cloudflareRow, DURABLE_OBJECT_PER_HOUR);
+    const monthKept = sessionsMonth(rates, 9, 2, "kept-up");
+    add({
+      id: "C41",
+      kind: "negative",
+      what: "a month of no tickets, and a flat price below what the sessions and the plan fee cost, through the month and break-even code",
+      expected: "the month is the sessions and the plan alone, and there is no break-even",
+      got: `${monthCost(0, 2.97, monthKept, 5).toFixed(2)} against ${(monthKept + 5).toFixed(2)}, break-even ${String(breakEvenTickets(100, 2.97, monthKept, 5))}`,
+      pass: within(monthCost(0, 2.97, monthKept, 5), monthKept + 5, 1e-9) && breakEvenTickets(100, 2.97, monthKept, 5) === null,
+    });
+  }
+  const spanAll = isoSpan(covered(inp.audit.runs, "real"));
+  if (spanAll && cloudflareRow && realCount > 0) {
+    const days = (Date.parse(spanAll.last) - Date.parse(spanAll.first)) / 86_400_000;
+    const monthOfTotal = (runCost(cloudflareRow, split.agent, split.gate) * 30) / days;
+    const monthOfAverage = monthCost(monthlyPace(realCount, days), sizedAverageControl, 0, 0);
+    add({
+      id: "C42",
+      kind: "positive",
+      what: "a month of launches at the audited pace, as tickets times the average run, against the cost of all the audited runs together scaled from their span to 30 days",
+      expected: "the same dollars, and a span with no length has no pace",
+      got: `${fmt(monthOfAverage, 2)} against ${fmt(monthOfTotal, 2)} (${realCount} runs in ${fmt(days, 2)} days)`,
+      pass: within(monthOfAverage, monthOfTotal, 1e-6) && monthlyPace(realCount, 0) === 0,
+    });
+  }
+  const flowLaunches: FlowLaunch[] = [
+    ...kinds.lanes.map(([start, end]): FlowLaunch => ({ start, end, kind: "lanes" })),
+    ...kinds.reviewers.map(([start, end]): FlowLaunch => ({ start, end, kind: "reviewers" })),
+    ...kinds.gates.map(([start, end]): FlowLaunch => ({ start, end, kind: "gates" })),
+  ];
+  const cloudSeconds = (k: number): number => {
+    const c = admitted(flowLaunches, k);
+    return c.lanes + c.reviewers + c.gates;
+  };
+  const checkedKs = [2, 4, 6, 8];
+  const neverLess = checkedKs.every((k) => cloudSeconds(k) >= overflowSeconds(launchHist.hist, k) - 1e-6);
+  add({
+    id: "C43",
+    kind: "positive",
+    what: "the launch-seconds sent to the cloud by a launch that finds the machine full, against the least that could go, for room for 2, 4, 6 and 8; and with room for none, against the sum of the launches' lengths",
+    expected: "never fewer than the least, and all of them with no room",
+    got: `${checkedKs.map((k) => `${fmt(cloudSeconds(k) / 3600)} against ${fmt(overflowSeconds(launchHist.hist, k) / 3600)}`).join(", ")} hours; ${fmt(cloudSeconds(0) / 3600, 2)} against ${fmt(launchLengths / 3600, 2)}`,
+    pass: neverLess && within(cloudSeconds(0), launchLengths, 1e-6),
+  });
+  add({
+    id: "C44",
+    kind: "negative",
+    what: "the launch-seconds sent to the cloud when the machine has room for the most launches that ran at once",
+    expected: "zero",
+    got: `${fmt(cloudSeconds(launchHist.peak), 2)} seconds with room for ${launchHist.peak}`,
+    pass: cloudSeconds(launchHist.peak) === 0,
+  });
+  if (inp.pace) {
+    const dayKeys = Object.keys(inp.pace.days).sort();
+    const first = dayKeys[0] as string;
+    const last = dayKeys[dayKeys.length - 1] as string;
+    const merged = windowCount(inp.pace.days, first, last, "merged");
+    const titled = windowCount(inp.pace.days, first, last, "ticketTitled");
+    const bad = { ...inp.pace.days, "9999-01-01": { merged: 1, ticketTitled: 2 } };
+    add({
+      id: "C45",
+      kind: "positive",
+      what: "the file of merged pull requests by day: the days added up against the totals the tool counted straight from the rows (merged and ticket-titled), on no day more ticket-titled than merged, and the same check on a made-up day with more ticket-titled than merged",
+      expected: "the days agree with the totals, the file passes and the made-up day fails",
+      got: `${dayKeys.length} days, ${merged} against ${String(inp.pace.total)} merged and ${titled} against ${String(inp.pace.ticketTitledTotal)} ticket-titled; made-up day passes: ${String(consistent(bad))}`,
+      pass:
+        inp.pace.total !== undefined &&
+        inp.pace.ticketTitledTotal !== undefined &&
+        merged === inp.pace.total &&
+        titled === inp.pace.ticketTitledTotal &&
+        consistent(inp.pace.days) &&
+        !consistent(bad),
+    });
+  }
   return out;
 }
 
@@ -553,6 +681,9 @@ export function load(results: string, audit: string): Inputs {
     prices: read<Prices>(join(results, "prices.json")),
     providers: read<{ rates: Rate[] }>(join(results, "providers.json")).rates,
     machines: read<{ machines: Machine[] }>(join(results, "machines.json")).machines,
+    pace: existsSync(join(results, "pace.json"))
+      ? read<{ total?: number; ticketTitledTotal?: number; days: Record<string, DayCounts> }>(join(results, "pace.json"))
+      : null,
   };
 }
 

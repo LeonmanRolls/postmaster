@@ -1,0 +1,15 @@
+{
+  "read": "2026-10-11T04:27Z",
+  "source": "the list of open interactive sessions on the machine, at one moment",
+  "note": "A snapshot. It says how many sessions are open and how many were working at that moment. It does not say how many hours each is awake in a day.",
+  "open": 18,
+  "working": 4,
+  "kinds": {
+    "postmaster": 1,
+    "ticketClerks": 8,
+    "research": 6,
+    "design": 3
+  },
+  "youngestHours": 22,
+  "oldestDays": 9
+}

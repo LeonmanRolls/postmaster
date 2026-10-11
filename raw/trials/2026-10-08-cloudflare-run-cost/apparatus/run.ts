@@ -8,10 +8,10 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import type { Extract } from "../../2026-10-03-lane-audit/apparatus/extract.ts";
 import { median } from "../../2026-10-03-lane-audit/apparatus/analyze.ts";
-import { intervalsOfRuns, loadTable, longerThan, peakInOneRun, runHours } from "./concurrency.ts";
+import { type Interval, intervalsOfRuns, load, loadTable, longerThan, peakInOneRun, runHours } from "./concurrency.ts";
 import { covered, runTime, type RunTime, summarizeRole } from "./instance-time.ts";
 import { PLAN_FEE_PER_MONTH } from "./cost.ts";
-import { type Machine, machinesTable, profileHours, type Rate, ratesTable, runCost } from "./providers.ts";
+import { GATE, hourly, type Machine, machinesTable, profileHours, type Rate, ratesTable, runCost } from "./providers.ts";
 import {
   auditTotals,
   breakEven,
@@ -27,6 +27,18 @@ import {
   totalsTable,
 } from "./tables.ts";
 import type { RunUptime } from "./uptime.ts";
+import { windowCount } from "./pace.ts";
+import {
+  controlPlane,
+  DURABLE_OBJECT_PER_HOUR,
+  flatTable,
+  type Launch,
+  monthlyPace,
+  monthTable,
+  peaksTable,
+  sessionRates,
+  sessionsMonth,
+} from "./whole-flow.ts";
 
 const here = dirname(new URL(import.meta.url).pathname);
 const arg = (name: string, fallback: string): string => {
@@ -242,6 +254,164 @@ $${averageAt("standard-4").toFixed(2)} when every launch is a standard-4. The ru
 ${sizedRows}
 `;
 writeFileSync(join(outDir, "providers.md"), providersText);
+
+// what the whole flow costs: the launches, the interactive roles around them and the control plane
+type PaceFile = { read: string; days: Record<string, { merged: number; ticketTitled: number }> };
+type SessionsFile = { open: number; working: number; kinds: Record<string, number> };
+const readJson = <T>(name: string): T | null =>
+  existsSync(join(outDir, name)) ? (JSON.parse(readFileSync(join(outDir, name), "utf8")) as T) : null;
+const paceData = readJson<PaceFile>("pace.json");
+const sessionsData = readJson<SessionsFile>("sessions.json");
+const spanDays = span ? (Date.parse(span.last) - Date.parse(span.first)) / 86_400_000 : 0;
+const auditedPace = monthlyPace(totals.runs, spanDays);
+// the ticket-titled pull requests from the day titles began to carry numbers to the last whole day before the read
+const paceDays = paceData?.days ?? {};
+const lastFullDay =
+  Object.keys(paceDays)
+    .filter((d) => d < (paceData?.read ?? ""))
+    .sort()
+    .pop() ?? "2026-09-26";
+const ticketedFrom = "2026-09-26";
+const ticketedDays = Math.round((Date.parse(`${lastFullDay}T00:00:00Z`) - Date.parse(`${ticketedFrom}T00:00:00Z`)) / 86_400_000) + 1;
+const ticketedMerged = windowCount(paceDays, ticketedFrom, lastFullDay, "ticketTitled");
+const ticketedPace = monthlyPace(ticketedMerged, ticketedDays);
+const auditFrom = span?.first.slice(0, 10) ?? ticketedFrom;
+const auditTo = span?.last.slice(0, 10) ?? lastFullDay;
+const ticketedInAudit = windowCount(paceDays, auditFrom, auditTo, "ticketTitled");
+const flowSessions = sessionsData ? (sessionsData.kinds.postmaster ?? 0) + (sessionsData.kinds.ticketClerks ?? 0) : 0;
+const openSessions = sessionsData?.open ?? 0;
+const workingNow = sessionsData?.working ?? 0;
+// the two readings of how long a session is awake in a day: an assumption, and the share working at the snapshot
+const AWAKE_ASSUMED = 2;
+const AWAKE_SNAPSHOT = openSessions > 0 ? (24 * workingNow) / openSessions : AWAKE_ASSUMED;
+const sessionRate = cloudflareRate ? sessionRates(cloudflareRate, DURABLE_OBJECT_PER_HOUR) : { awake: 0, idle: 0 };
+const monthOf = (count: number, hours: number, policy: "asleep" | "kept-up"): number => sessionsMonth(sessionRate, count, hours, policy);
+const flowSessionsMonth = {
+  asleep: { low: monthOf(flowSessions, AWAKE_ASSUMED, "asleep"), high: monthOf(flowSessions, AWAKE_SNAPSHOT, "asleep") },
+  keptUp: { low: monthOf(flowSessions, AWAKE_ASSUMED, "kept-up"), high: monthOf(flowSessions, AWAKE_SNAPSHOT, "kept-up") },
+};
+const allSessionsMonth = {
+  asleep: { low: monthOf(openSessions, AWAKE_ASSUMED, "asleep"), high: monthOf(openSessions, AWAKE_SNAPSHOT, "asleep") },
+  keptUp: { low: monthOf(openSessions, AWAKE_ASSUMED, "kept-up"), high: monthOf(openSessions, AWAKE_SNAPSHOT, "kept-up") },
+};
+// a ticket's own compute: the launches, and the priced parts of the control plane
+const PLANE_COUNTS = { requests: 10_000, workflowSteps: 1_000 };
+const floorHours = profileHours({ lanesAndReviewers: totals.lanesAndReviewers, coachman: totals.coachmanFloor, gates: gatesTotal });
+const launchesAvg = {
+  low: cloudflareRate ? runCost(cloudflareRate, floorHours.agent, floorHours.gate) / totals.runs : 0,
+  high: sizedAverage,
+};
+const planeAvg = {
+  low: controlPlane({ ...PLANE_COUNTS, doHours: (floorHours.agent + floorHours.gate) / totals.runs }),
+  high: controlPlane({ ...PLANE_COUNTS, doHours: (allHours.agent + allHours.gate) / totals.runs }),
+};
+const perTicket = { low: launchesAvg.low + planeAvg.low, high: launchesAvg.high + planeAvg.high };
+const typical = {
+  launches: {
+    low: cloudflareRate ? runCost(cloudflareRate, medianRunHours.agentLow, medianRunHours.gate) : 0,
+    high: cloudflareRate ? runCost(cloudflareRate, medianRunHours.agentHigh, medianRunHours.gate) : 0,
+  },
+  plane: {
+    low: controlPlane({ ...PLANE_COUNTS, doHours: medianRunHours.agentLow + medianRunHours.gate }),
+    high: controlPlane({ ...PLANE_COUNTS, doHours: medianRunHours.agentHigh + medianRunHours.gate }),
+  },
+};
+const shareOf = (month: number): number => (auditedPace > 0 ? month / auditedPace : 0);
+const share = {
+  asleep: { low: shareOf(flowSessionsMonth.asleep.low), high: shareOf(flowSessionsMonth.asleep.high) },
+  keptUp: { low: shareOf(flowSessionsMonth.keptUp.low), high: shareOf(flowSessionsMonth.keptUp.high) },
+};
+// the 24 fixture runs, with the coachman at its ceiling (no session uptime is held for them)
+const fixtureTotals = auditTotals(fixture, new Map());
+const fixtureGates = fixture.reduce((a, t) => a + t.gatesOnLanes.each.concat(t.gatesOnSynthesis.each).reduce((x, y) => x + y, 0), 0);
+const fixtureHours = profileHours({ lanesAndReviewers: fixtureTotals.lanesAndReviewers, coachman: fixtureTotals.coachmanCeiling, gates: fixtureGates });
+const fixtureTotal = cloudflareRate ? runCost(cloudflareRate, fixtureHours.agent, fixtureHours.gate) : 0;
+const fixtureEach = fixture.length > 0 ? fixtureTotal / fixture.length : 0;
+// the real runs that were set aside or never reached synthesis, at the coachman's ceiling
+const coveredIds = new Set(covered(data.runs, "real").map((r) => r.id));
+const others = data.runs.filter((r) => r.kind === "real" && !coveredIds.has(r.id)).map(runTime);
+const othersTotals = auditTotals(others, new Map());
+const othersGates = others.reduce((a, t) => a + t.gatesOnLanes.each.concat(t.gatesOnSynthesis.each).reduce((x, y) => x + y, 0), 0);
+const othersHours = profileHours({ lanesAndReviewers: othersTotals.lanesAndReviewers, coachman: othersTotals.coachmanCeiling, gates: othersGates });
+const othersTotal = cloudflareRate ? runCost(cloudflareRate, othersHours.agent, othersHours.gate) : 0;
+// the peaks: what the cloud would take if the machine holds k launches at once
+const kinds = intervalsOfRuns(covered(data.runs, "real"));
+const launches: Launch[] = [
+  ...kinds.lanes.map(([start, end]): Launch => ({ start, end, kind: "lanes" })),
+  ...kinds.reviewers.map(([start, end]): Launch => ({ start, end, kind: "reviewers" })),
+  ...kinds.gates.map(([start, end]): Launch => ({ start, end, kind: "gates" })),
+];
+const launchSeconds = launches.reduce((a, l) => a + (l.end - l.start), 0);
+const launchLoad = load(launches.map((l): Interval => [l.start, l.end]));
+const gateHourRate = cloudflareRate ? hourly(cloudflareRate, GATE) : 0;
+const money = (d: number): string => (d < 10 ? d.toFixed(2) : d < 100 ? d.toFixed(1) : d.toFixed(0));
+const span$ = (s: { low: number; high: number }): string => (money(s.low) === money(s.high) ? `$${money(s.low)}` : `$${money(s.low)} to $${money(s.high)}`);
+const wholeFlowText = `# What a whole flow costs in the cloud
+
+One ticket from the booking clerk to the merge, and a month of them, on Cloudflare's list rates, with agents sized to what
+they use (a waiting agent is 1 vCPU and 4 GiB with a fifth of the CPU busy; a gate is 4 vCPU and 12 GiB with every vCPU
+busy; see providers.md). The model bill is the same on any host and is left out. Nothing here was run on Cloudflare.
+Every figure with two ends is bracketed, not known: the low end counts the coachman at its floor and a session awake
+${AWAKE_ASSUMED} hours a day; the high end counts the coachman at its ceiling and a session awake ${AWAKE_SNAPSHOT.toFixed(1)} hours a day.
+
+## What is measured and what is assumed
+
+| Part | Where it comes from | Kind |
+| --- | --- | --- |
+| Launches of a run: lanes, reviewers, coachman legs, gate runs | The ${totals.runs} audited real runs, from their records | Measured; the coachman's time is bracketed by its floor and its ceiling |
+| The pace of tickets | The audited runs: ${totals.runs} in ${spanDays.toFixed(1)} days of records is ${auditedPace.toFixed(0)} a month. The merged pull requests whose title starts with a ticket number: ${ticketedMerged} from ${ticketedFrom} to ${lastFullDay}, ${ticketedPace.toFixed(0)} a month, of which ${ticketedInAudit} fall in the audited runs' days, against ${totals.runs} audited runs. It also counts hand-made, research and documentation pull requests, and leaves out runs that were set aside or never merged | Measured; two readings, neither exact |
+| Open interactive sessions | ${openSessions} at one moment: ${flowSessions} of the flow's own roles (the postmaster and the clerks) and ${openSessions - flowSessions} research and design sessions; ${workingNow} were working at that moment | A snapshot, not a time series |
+| Hours each session is awake in a day | ${AWAKE_ASSUMED} is assumed; ${workingNow} of ${openSessions} working at the snapshot reads as ${AWAKE_SNAPSHOT.toFixed(1)}. The ${workingNow} are not split by kind, and the snapshot was taken a week after the audited runs. Neither is a measurement of a day | Assumed, and one reading |
+| The control plane | 10,000 requests and 1,000 workflow steps a ticket, which are assumed counts, at list rates, and the Durable Object in front of each container for the hours it is up. The stores are unpriced | Assumed counts, list rates |
+
+## One ticket
+
+| Part | Typical ticket | Average ticket |
+| --- | --- | --- |
+| Launches | $${money(typical.launches.low)} to $${money(typical.launches.high)} | ${span$(launchesAvg)} |
+| Control plane: requests, steps and the Durable Object in front of each container | $${money(typical.plane.low)} to $${money(typical.plane.high)} | ${span$(planeAvg)} |
+| The postmaster and the clerks, a share of ${flowSessions} sessions at ${auditedPace.toFixed(0)} tickets a month, asleep when idle | ${span$(share.asleep)} | ${span$(share.asleep)} |
+| The same, kept up between turns | ${span$(share.keptUp)} | ${span$(share.keptUp)} |
+| **A ticket, sessions asleep when idle** | **$${money(typical.launches.low + typical.plane.low + share.asleep.low)} to $${money(typical.launches.high + typical.plane.high + share.asleep.high)}** | **${span$({ low: perTicket.low + share.asleep.low, high: perTicket.high + share.asleep.high })}** |
+| **A ticket, sessions kept up** | **$${money(typical.launches.low + typical.plane.low + share.keptUp.low)} to $${money(typical.launches.high + typical.plane.high + share.keptUp.high)}** | **${span$({ low: perTicket.low + share.keptUp.low, high: perTicket.high + share.keptUp.high })}** |
+
+A session awake costs $${sessionRate.awake.toFixed(4)} an hour and kept up and idle $${sessionRate.idle.toFixed(4)} an hour (memory and disk, and the
+Durable Object in front of the container). The ${fixture.length} fixture runs in the same records cost about $${money(fixtureEach)} each with the coachman at its
+ceiling, $${money(fixtureTotal)} in all. ${others.length} further real runs, set aside or never reaching synthesis, would add at least $${money(othersTotal)} with the coachman at its
+ceiling (the set-aside runs have no lane or reviewer time in the audit), ${Math.round((100 * othersTotal) / Math.max(launchesAvg.high * totals.runs, 1))}% of the audited runs' launches at their ceiling, and are in no figure here.
+
+## A month
+
+The ${flowSessions} sessions of the flow's own roles: ${span$(flowSessionsMonth.asleep)} a month asleep when idle,
+${span$(flowSessionsMonth.keptUp)} kept up. All ${openSessions} open sessions, research and design too: ${span$(allSessionsMonth.asleep)} and ${span$(allSessionsMonth.keptUp)}. The plan
+fee is $${PLAN_FEE_PER_MONTH} a month. The number of sessions is not scaled with the number of tickets.
+
+${monthTable([20, auditedPace, ticketedPace], perTicket, flowSessionsMonth, PLAN_FEE_PER_MONTH)}
+
+Tickets a month at which a flat monthly price costs the same (the example prices of the earlier tables):
+
+${flatTable(FLAT_PRICES, perTicket, flowSessionsMonth, PLAN_FEE_PER_MONTH)}
+
+Awake hours a day, for the ${flowSessions} sessions, with the sessions' month in dollars:
+
+| Awake hours a day | Asleep when idle | Kept up |
+| --- | --- | --- |
+${[1, 2, 4, 6, 8]
+  .map((h) => `| ${h} | ${money(monthOf(flowSessions, h, "asleep"))} | ${money(monthOf(flowSessions, h, "kept-up"))} |`)
+  .join("\n")}
+
+## Only the peaks
+
+If the machine holds k launches at once (lanes, reviewers and gate runs) and the cloud takes the rest. The records' ${spanDays.toFixed(1)} days
+held ${(launchSeconds / 3600).toFixed(0)} launch-hours. The first column is the least that could go, if launches could move as the count rises and
+falls. The second is a launch that starts while the machine is full going to the cloud and staying there, from the longer first to
+the shorter first of launches that start in the same second. Lane and reviewer
+hours are priced at $${sessionRate.awake.toFixed(3)} and gate hours at $${(gateHourRate + DURABLE_OBJECT_PER_HOUR).toFixed(3)}, each with its Durable Object. The coachman, one for each run in flight, is
+not counted, nor is the plan fee.
+
+${peaksTable([2, 4, 6, 8], launchLoad.hist, launches, { agentHour: sessionRate.awake, gateHour: gateHourRate + DURABLE_OBJECT_PER_HOUR }, spanDays)}
+`;
+writeFileSync(join(outDir, "whole-flow.md"), wholeFlowText);
 writeFileSync(join(outDir, "instance-time.md"), instanceTime);
 writeFileSync(join(outDir, "cost.md"), cost);
 process.stdout.write(`wrote ${outDir}\n`);

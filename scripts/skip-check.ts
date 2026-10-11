@@ -223,8 +223,10 @@ function main(argv: string[]): number {
         `--parallel=${process.env.POSTMASTER_TEST_WORKERS || "4"}`,
         "--timings=test-timings.json",
         "--timeout=60000",
-        "scripts/",
-        "lint/",
+        // Path prefixes, not substrings: a bare `scripts/` also matches test files that sit
+        // under a record's own `scripts/` folder, such as raw/trials/*/controls/*/scripts/.
+        "./scripts/",
+        "./lint/",
         "--reporter=junit",
         `--reporter-outfile=${report}`,
       ],
