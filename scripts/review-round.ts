@@ -252,17 +252,27 @@ function scratch(repo: string, ticket: string, lens: string, lane: string): stri
 }
 
 /**
- * The reviewers with a finish row for a round, as `lens\\0lane`. The finish rows are
- * wait-next's memory of whom it already reported. A missing log reads as none reported;
- * an unreadable or malformed one stops the wait rather than report twice or skip one.
+ * The round's collection records, as `lens\\0lane`: finish rows are wait-next's
+ * memory of whom it reported, harvest rows of whom the coachman collected, and
+ * degrade rows of whom is out. A missing log reads as none; an unreadable or
+ * malformed one stops the wait rather than report twice or skip one.
  */
-function reportedFinishers(dispatch: string, round: string): Set<string> {
-  const out = new Set<string>();
+interface RoundRecords {
+  finished: Set<string>;
+  harvested: Set<string>;
+  degraded: Set<string>;
+}
+
+function roundRecords(dispatch: string, round: string): RoundRecords {
+  const finished = new Set<string>();
+  const harvested = new Set<string>();
+  const degraded = new Set<string>();
   let contents: string;
   try {
     contents = readFileSync(join(dispatch, "actions.jsonl"), "utf8");
   } catch (e) {
-    if ((e as NodeJS.ErrnoException).code === "ENOENT") return out;
+    if ((e as NodeJS.ErrnoException).code === "ENOENT")
+      return { finished, harvested, degraded };
     die(`cannot read the action log at ${join(dispatch, "actions.jsonl")}: ${String(e)}`);
   }
   for (const line of contents.split("\n")) {
@@ -277,14 +287,24 @@ function reportedFinishers(dispatch: string, round: string): Set<string> {
       die("actions.jsonl has a line that is not an action object");
     }
     const row = parsed as Record<string, unknown>;
-    if (row.action !== "review-finish") continue;
     if (typeof row.target !== "string" || row.target === "") continue;
     const words = typeof row.detail === "string" ? row.detail.trim().split(/[ \t\r\n]+/u) : [];
-    if (words.length >= 3 && words[1] === "round" && words[2] === round && words[0] !== "") {
-      out.add(`${words[0]}\0${row.target}`);
+    const lens = words[0] ?? "";
+    if (lens === "") continue;
+    const key = `${lens}\0${row.target}`;
+    if (row.action === "review-finish" || row.action === "review-harvest") {
+      if (words.length >= 3 && words[1] === "round" && words[2] === round) {
+        (row.action === "review-finish" ? finished : harvested).add(key);
+      }
+    } else if (row.action === "degrade") {
+      // `<lens> r<N>: ...` (timeout, wall, reach) or `bug round <N>: ...`
+      // (a harvest that failed): every shape that takes a reviewer out.
+      if (words[1] === `r${round}:` || (words[1] === "round" && words[2] === round)) {
+        degraded.add(key);
+      }
     }
   }
-  return out;
+  return { finished, harvested, degraded };
 }
 
 function unswitch(s: string, ticket: string): string {
@@ -1184,7 +1204,7 @@ if (import.meta.main) {
     // Finish rows are wait-next's memory and carry no attempt: starting again
     // after any was reported would make the new attempt misreport the old
     // reviewers as collected. Refuse before touching anything, and resume.
-    const collected = reportedFinishers(D, R);
+    const collected = roundRecords(D, R).finished;
     if (collected.size > 0) {
       die(
         `round ${R} already reported ${collected.size} finisher${collected.size === 1 ? "" : "s"}; resume it with wait-next instead of starting it again`,
@@ -1483,15 +1503,25 @@ if (import.meta.main) {
       `review-round: round ${R}, ${n} reviewers, ${leftStr}s left of its ${lim}s limit (${src})`,
     );
     (globalThis as Record<string, unknown>).UNRECORDED = 0;
-    const reported = reportedFinishers(D, R);
+    const records = roundRecords(D, R);
     const markerIn = (lens: string, lane: string): boolean =>
       existsSync(join(LOGS, `review-r${R}-${lens}-${lane}.done`));
+    // A finisher without a harvest row is said again: the coachman was
+    // interrupted before collecting its report, and a resume must replay it
+    // rather than drop it. A degraded reviewer stays out either way.
     const fresh = (): Array<[string, string]> =>
-      reviewers.filter(([lens, lane]) => markerIn(lens, lane) && !reported.has(`${lens}\0${lane}`));
+      reviewers.filter(([lens, lane]) => {
+        const key = `${lens}\0${lane}`;
+        if (records.harvested.has(key) || records.degraded.has(key)) return false;
+        if (!records.finished.has(key)) return markerIn(lens, lane);
+        return true;
+      });
     let newly = fresh();
     // Every reviewer of this call, not the row count: a subset call must not
     // read another reviewer's finish row as its own reviewers reported.
-    const allReported = reviewers.every(([lens, lane]) => reported.has(`${lens}\0${lane}`));
+    const allReported = reviewers.every(([lens, lane]) =>
+      records.finished.has(`${lens}\0${lane}`),
+    );
     if (newly.length === 0 && allReported) {
       console.log(`review-round: round ${R}, every reviewer reported`);
       process.exit(0);
@@ -1512,16 +1542,24 @@ if (import.meta.main) {
       }
       for (const [lens, lane] of newly) {
         console.log(`FINISHED ${lens} ${lane}`);
-        record(`${lane} ${lens}: finished round ${R}`, "review-finish", lane, `${lens} round ${R}`);
-        const w = wallFor(D, lane, lens, R);
-        if (w !== null) {
-          console.log(`WALL ${lens} ${lane}: DEGRADED, provider wall: "${w.message}"`);
+        // A replayed finisher keeps its first row: the row times the finish.
+        if (!records.finished.has(`${lens}\0${lane}`)) {
           record(
-            `${lane} ${lens}: DEGRADED, provider wall: "${w.message}"`,
-            "degrade",
+            `${lane} ${lens}: finished round ${R}`,
+            "review-finish",
             lane,
-            `${lens} r${R}: provider wall: "${w.message}"`,
+            `${lens} round ${R}`,
           );
+          const w = wallFor(D, lane, lens, R);
+          if (w !== null) {
+            console.log(`WALL ${lens} ${lane}: DEGRADED, provider wall: "${w.message}"`);
+            record(
+              `${lane} ${lens}: DEGRADED, provider wall: "${w.message}"`,
+              "degrade",
+              lane,
+              `${lens} r${R}: provider wall: "${w.message}"`,
+            );
+          }
         }
       }
       if ((globalThis as Record<string, unknown>).UNRECORDED) process.exit(4);

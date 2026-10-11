@@ -826,6 +826,60 @@ describe("R1: round 1 review regressions", () => {
     expect(bare.out).toContain("FINISHED bug b");
   });
 
+  test("a finisher without a harvest row replays instead of dropping", () => {
+    const layout = makeLayout(
+      [
+        { lens: "bug", lane: "a", harness: "codex" },
+        { lens: "bug", lane: "b", harness: "codex" },
+      ],
+      { timeoutSeconds: 5 },
+    );
+    expect(
+      tool(layout, "review-round", "start", layout.dispatch, "1", "bug:a", "bug:b").code,
+    ).toBe(0);
+    writeFileSync(join(layout.dispatch, "logs", "review-r1-bug-a.done"), "");
+    const first = tool(layout, "review-round", "wait-next", layout.dispatch, "1", layout.repo);
+    expect(first.code).toBe(0);
+    expect(first.out).toContain("FINISHED bug a");
+    const replay = tool(layout, "review-round", "wait-next", layout.dispatch, "1", layout.repo);
+    expect(replay.code).toBe(0);
+    expect(replay.out).toContain("FINISHED bug a");
+    expect(replay.out).not.toContain("every reviewer reported");
+    writeAction(layout, "coachman", "review-harvest", "a", "bug round 1 thread t-a");
+    writeFileSync(join(layout.dispatch, "logs", "review-r1-bug-b.done"), "");
+    const next = tool(layout, "review-round", "wait-next", layout.dispatch, "1", layout.repo);
+    expect(next.code).toBe(0);
+    expect(next.out).toContain("FINISHED bug b");
+    expect(next.out).not.toContain("FINISHED bug a");
+    writeAction(layout, "coachman", "review-harvest", "b", "bug round 1 thread t-b");
+    const last = tool(layout, "review-round", "wait-next", layout.dispatch, "1", layout.repo);
+    expect(last.code).toBe(0);
+    expect(last.out).toContain("every reviewer reported");
+  });
+
+  test("a walled finisher does not replay", () => {
+    const layout = makeLayout(
+      [
+        { lens: "bug", lane: "fast", harness: "codex" },
+        { lens: "bug", lane: "slow", harness: "codex" },
+      ],
+      { timeoutSeconds: 3 },
+    );
+    expect(
+      tool(layout, "review-round", "start", layout.dispatch, "1", "bug:fast", "bug:slow").code,
+    ).toBe(0);
+    writeAction(layout, "coachman", "wall", "slow", "reviewer bug 1 none usage limit hit");
+    writeFileSync(join(layout.dispatch, "logs", "review-r1-bug-slow.done"), "");
+    const first = tool(layout, "review-round", "wait-next", layout.dispatch, "1", layout.repo);
+    expect(first.code).toBe(0);
+    expect(first.out).toContain("FINISHED bug slow");
+    const again = tool(layout, "review-round", "wait-next", layout.dispatch, "1", layout.repo);
+    expect(again.code).toBe(3);
+    expect(out(again)).not.toContain("FINISHED bug slow");
+    expect(out(again)).toContain("TIMEOUT bug fast: DEGRADED, timeout");
+    expect(degrades(layout)).toEqual(["fast", "slow"]);
+  });
+
   test("a commit refused by a hook leaves the index clean and the work in the tree", () => {
     const layout = makeLayout([{ lens: "bug", lane: "codex", harness: "codex" }]);
     const parent = git(layout.repo, "-C", layout.synth, "rev-parse", "HEAD");
