@@ -1447,9 +1447,8 @@ function classifyApiFetch(ctx: Ctx, segment: string): Placed {
 function classifyGraphqlSegment(ctx: Ctx, segment: string, form: string): Placed {
   if (!hasNumberToken(segment, ctx.ticket)) {
     // An issue number holding a variable may hold this ticket's number.
-    // ASCII: graphql shapes are ASCII
     if (
-      /number\s*:\s*\$(?:[{(]?[A-Za-z_]|[@*#?$!0-9])/u.test(segment) &&
+      /number\s*:\s*\$(?:[{(]?[A-Za-z_]|[@*#?$!0-9])/u.test(segment) && // ASCII: graphql shapes are ASCII
       /issues?/iu.test(segment)
     ) {
       return { agent: "", finding: "unknown", form, detail: "variable" };
