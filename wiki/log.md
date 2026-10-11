@@ -8,6 +8,24 @@ updated: 2026-10-11
 
 Append-only. Newest first. One entry per operation, prefixed so it can be parsed.
 
+## [2026-10-11] query | why runs take so many review rounds, and what planning could cut
+
+Issue #400. The user asked why runs take so many review rounds and what the planning stage could do
+about it, and on 10 October added one question: which signals of a loop predict that the next
+round finds nothing worth fixing. Read 61 runs' own records (28 September to 9 October) and 18
+that ended their review after, counted rounds and serious findings with controls, traced each of
+the 382 serious findings after round 1 to the commit that wrote its lines by a rule committed
+beforehand, had two helper readers mark 309 of them for what the ticket left open, and tried 12
+signals and four stopping rules on the 61 runs and then on the 18. Added
+[Why runs take the review rounds they do, and what the planning stage could cut](concepts/review-rounds.md),
+standing mixed, and the trial `2026-10-11-review-rounds`. The new counts agree with the lane audit's
+table for 17 of its 18 runs and with the 21-run count's for 17 of 21; the differences are #135, which
+reads 44 where the audit read 32 (severity in the target field), #202 (the finding lines miss two
+rounds, which the run's escalation lines give), and #216 and #252, which that count read while they
+were running. No rule, runbook, template or gate changed, and six changes to the planning stage are
+proposed. No stop signal tried predicted a clean next round above about half. No other standing
+changed.
+
 ## [2026-10-11] query | what a whole flow costs in the cloud
 
 Issue #341. The user asked what a whole flow costs to run in the cloud, not only individual lanes and legs. Added "What the

@@ -6,6 +6,7 @@ import {
   RULES,
   type RunFacts,
   roundFacts,
+  roundGaps,
   signalRows,
   simulate,
   transitions,
@@ -119,11 +120,28 @@ describe("what a round's fix commits bring", () => {
   ];
   test("a commit counts for the next round where a finding in its lines is in the next round", () => {
     const rows = fixYield(commits, findings);
-    expect(rows[0]).toEqual({ round: "1", commits: 2, nextRound: 1, anyLater: 1 });
+    expect(rows[0]).toEqual({
+      round: "1",
+      commits: 2,
+      nextRound: 1,
+      anyLater: 1,
+      nextRoundFindings: 0,
+    });
+  });
+  test("the next round's serious findings are summed for the runs that went on", () => {
+    const rows = fixYield(commits, findings, [{ run: "1", rounds: 4, best: [3, 2, 1, 0] }]);
+    expect(rows[0]?.nextRoundFindings).toBe(2);
+    expect(rows[1]?.nextRoundFindings).toBe(1);
   });
   test("a commit that changed no line is left out and a later round is counted apart", () => {
     const rows = fixYield(commits, findings);
-    expect(rows[1]).toEqual({ round: "2", commits: 1, nextRound: 0, anyLater: 1 });
+    expect(rows[1]).toEqual({
+      round: "2",
+      commits: 1,
+      nextRound: 0,
+      anyLater: 1,
+      nextRoundFindings: 0,
+    });
   });
 });
 
@@ -159,5 +177,20 @@ describe("what the overlap says was left", () => {
       overlapCheck([{ pair: null, findings: [{ round: 1, lanes: ["luna"], group: null }] }]).runs,
     ).toBe(0);
     expect(overlapCheck([{ pair: ["luna", "mimo"], findings: [] }]).runs).toBe(0);
+  });
+});
+
+describe("the time from one round to the next", () => {
+  test("minutes between consecutive rounds' first launches, and none across a missing round", () => {
+    const gaps = roundGaps({
+      "1": "2026-10-09T10:00:00Z",
+      "2": "2026-10-09T11:10:00Z",
+      "3": "2026-10-09T11:40:00Z",
+      "5": "2026-10-09T15:00:00Z",
+    });
+    expect(gaps).toEqual([70, 30]);
+  });
+  test("a run with one round has no gap (negative control)", () => {
+    expect(roundGaps({ "1": "2026-10-09T10:00:00Z" })).toEqual([]);
   });
 });

@@ -65,6 +65,42 @@ export function compareCounts(
   return { compared, differ };
 }
 
+/**
+ * For each `apply` line whose commit is among the run's own, whether the commit's inferred phase is
+ * the fix phase of the last round launched before the line (or, after the last launch, that fix
+ * phase or later). Lines whose commit is not among the run's own are counted apart.
+ */
+export function applyPhaseCheck(
+  meta: ReadonlyArray<{
+    launches: Readonly<Record<string, string>>;
+    commits: ReadonlyArray<{ sha: string; phase: string }>;
+    applies: ReadonlyArray<{ sha: string; at: string }>;
+  }>,
+): { agree: number; differ: number; notOwn: number } {
+  let agree = 0;
+  let differ = 0;
+  let notOwn = 0;
+  for (const m of meta) {
+    const rounds = Object.entries(m.launches)
+      .map(([r, t]) => [Number(r), Date.parse(t)] as const)
+      .sort((a, b) => a[0] - b[0]);
+    const last = rounds[rounds.length - 1]?.[0] ?? 0;
+    for (const a of m.applies) {
+      const c = m.commits.find((x) => x.sha.startsWith(a.sha) || a.sha.startsWith(x.sha));
+      if (!c) {
+        notOwn += 1;
+        continue;
+      }
+      const at = Date.parse(a.at);
+      const k = Math.max(0, ...rounds.filter(([, t]) => t <= at).map(([r]) => r));
+      const ok = c.phase === `fix:${k}` || (k === last && c.phase === "later");
+      if (ok) agree += 1;
+      else differ += 1;
+    }
+  }
+  return { agree, differ, notOwn };
+}
+
 /** Whether the line text appears among the added lines of a patch of one file. */
 export function addedIn(patch: string, text: string): boolean {
   const want = text.trim();
@@ -98,6 +134,11 @@ const main = (args: string[]): void => {
   );
   const traced = JSON.parse(readFileSync(join(dir, "findings.json"), "utf8")) as {
     findings: TracedFinding[];
+    runs: Array<{
+      launches: Record<string, string>;
+      commits: Array<{ sha: string; phase: string }>;
+      applies: Array<{ sha: string; at: string }>;
+    }>;
   };
   const rows: Row[] = [];
 
@@ -135,6 +176,37 @@ const main = (args: string[]): void => {
       cmp.differ.length === 0
         ? "none differ"
         : `${cmp.differ.map((d) => `#${d.run}: ${d.mine.join("/")} here, ${d.theirs.join("/")} in the audit`).join("; ")} (severity in the target field, see method.md)`,
+  });
+
+  // 2b. Agreement with the 21-run count's finding-line totals, for the runs it covered.
+  const count21 = parseCriteriaCount(
+    readFileSync(
+      join(here, "..", "2026-10-04-unbounded-criteria-count", "results", "severe-by-round.md"),
+      "utf8",
+    ),
+  );
+  const asAudit = new Map(
+    [...count21].map(([run, v]) => [run, { rounds: v.rounds, r1: v.r1, all: v.total }]),
+  );
+  const allRows = runs.filter((r) => r.rounds > 0);
+  const cmp21 = compareCounts(allRows, asAudit);
+  rows.push({
+    ok: cmp21.compared > 0 && cmp21.differ.length <= 6,
+    what: "rounds, round 1 and the finding-line total agree with the 21-run count's table",
+    positive: `${cmp21.compared - cmp21.differ.length} of ${cmp21.compared} runs agree on all three`,
+    negative:
+      cmp21.differ.length === 0
+        ? "none differ"
+        : `${cmp21.differ.map((d) => `#${d.run}: ${d.mine.join("/")} here, ${d.theirs.join("/")} there`).join("; ")} (a run read while running, a run whose severity sat in the target field, or one whose later rounds the lines miss)`,
+  });
+
+  // 2c. The phase of a commit an apply line names.
+  const phase = applyPhaseCheck(traced.runs as unknown as Parameters<typeof applyPhaseCheck>[0]);
+  rows.push({
+    ok: phase.agree + phase.differ > 0 && phase.agree / (phase.agree + phase.differ) >= 0.95,
+    what: "the inferred phase of a commit an apply line names is the fix phase of the last round launched before the line",
+    positive: `${phase.agree} of ${phase.agree + phase.differ} apply lines whose commit is among the run's own`,
+    negative: `${phase.differ} differ, within a minute of a launch; ${phase.notOwn} name a commit that is not among the run's own`,
   });
 
   // 3. Silent rounds.

@@ -106,3 +106,12 @@ Rounds against all of a run's serious findings: rounds = 1.8 + 0.19 × serious f
 | serious findings per 1,000 lines changed | 10.8 (mean 17.1) | 1.3 (mean 3.1) | 0.000 |
 
 Runs with 3 criteria or fewer took a median 2 rounds (8 runs, most 2); the rest 4 (53 runs). One-sided permutation p for the mean, 20,000 shuffles, seed 400: 0.0000.
+
+# Tickets of five criteria or fewer, and more
+
+The five-criteria rule of the booking clerk took effect on 2026-10-10. The rows count runs by what their ticket carried, whatever rule applied then. *Rounds above the median* sums, over the runs with more than five, the rounds each took above the median of the runs with five or fewer in the same set: an upper bound on what a split would have removed, since each slice has a first round and a clean round of its own.
+
+| Set | Runs, five or fewer | Rounds, median | Runs of 6 or more | Runs, more than five | Rounds, median | Runs of 6 or more | Rounds above the median |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| The 61 runs | 29 | 3.0 (mean 3.3) | 3 of 29 | 32 | 4.0 (mean 5.1) | 9 of 32 | 76 |
+| The later set | 13 | 3.0 (mean 2.9) | 1 of 13 | 5 | 6.0 (mean 7.2) | 3 of 5 | 21 |

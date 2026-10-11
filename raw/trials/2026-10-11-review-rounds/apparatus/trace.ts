@@ -74,6 +74,8 @@ export type RunMeta = {
   launches: Record<string, string>;
   /** rounds up to the last that have no launch time */
   launchesMissing: number[];
+  /** the commits the run's `apply` lines name, with the time of each line */
+  applies: Array<{ sha: string; at: string }>;
 };
 
 type Git = (args: string[]) => { ok: boolean; out: string };
@@ -476,6 +478,9 @@ function traceRun(
     }),
     launches: Object.fromEntries([...launches].map(([r, t]) => [String(r), iso(t)])),
     launchesMissing: missing,
+    applies: actions
+      .filter((a) => a.action === "apply" && /^[0-9a-f]{6,40}$/u.test(a.target))
+      .map((a) => ({ sha: a.target.slice(0, 8), at: a.ts })),
   };
   return { findings: out, meta };
 }

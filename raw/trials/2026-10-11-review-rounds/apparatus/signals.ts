@@ -365,6 +365,8 @@ export type FixYieldRow = {
   nextRound: number;
   /** commits with one in any later round */
   anyLater: number;
+  /** serious findings in the next round of the runs that went on, for these rounds */
+  nextRoundFindings: number;
 };
 
 /**
@@ -387,6 +389,7 @@ export function fixYield(
     originKind: string;
     originSha: string | null;
   }>,
+  runs: ReadonlyArray<{ run: string; rounds: number; best: readonly number[] }> = [],
 ): FixYieldRow[] {
   const hits = new Map<string, Set<number>>();
   for (const f of findings) {
@@ -399,12 +402,24 @@ export function fixYield(
     if (c.onMain || !c.phase.startsWith("fix:") || c.added + c.deleted === 0) continue;
     const k = Number(c.phase.slice(4));
     const label = k >= 5 ? "5 and after" : String(k);
-    const row = rows.get(label) ?? { round: label, commits: 0, nextRound: 0, anyLater: 0 };
+    const row = rows.get(label) ?? {
+      round: label,
+      commits: 0,
+      nextRound: 0,
+      anyLater: 0,
+      nextRoundFindings: 0,
+    };
     const rounds = hits.get(`${c.run}|${c.sha}`) ?? new Set<number>();
     row.commits += 1;
     if (rounds.has(k + 1)) row.nextRound += 1;
     if ([...rounds].some((r) => r > k)) row.anyLater += 1;
     rows.set(label, row);
+  }
+  for (const r of runs) {
+    for (let k = 1; k < r.rounds; k += 1) {
+      const row = rows.get(k >= 5 ? "5 and after" : String(k));
+      if (row) row.nextRoundFindings += r.best[k] ?? 0;
+    }
   }
   return ["1", "2", "3", "4", "5 and after"].flatMap((l) =>
     rows.has(l) ? [rows.get(l) as FixYieldRow] : [],
@@ -420,6 +435,8 @@ export type OverlapCheck = {
   found: number;
   /** what the Chapman estimate says the pair left unseen after round 1, summed over runs */
   estimatedUnseen: number;
+  /** of that sum, the part from runs where the two lanes named nothing in common */
+  estimatedUnseenNoOverlap: number;
   /** findings in the change that no round named before and a later round did */
   laterMissed: number;
 };
@@ -439,6 +456,7 @@ export function overlapCheck(
   let noOverlap = 0;
   let found = 0;
   let unseen = 0;
+  let unseenNone = 0;
   let later = 0;
   for (const r of runs) {
     if (!r.pair) continue;
@@ -451,8 +469,37 @@ export function overlapCheck(
     n += 1;
     if (m === 0) noOverlap += 1;
     found += na + nb - m;
-    unseen += unseenEstimate({ first: na, second: nb, both: m });
+    const u = unseenEstimate({ first: na, second: nb, both: m });
+    unseen += u;
+    if (m === 0) unseenNone += u;
     later += r.findings.filter((f) => f.round >= 2 && (f.group ?? "").startsWith("missed")).length;
   }
-  return { runs: n, noOverlap, found, estimatedUnseen: unseen, laterMissed: later };
+  return {
+    runs: n,
+    noOverlap,
+    found,
+    estimatedUnseen: unseen,
+    estimatedUnseenNoOverlap: unseenNone,
+    laterMissed: later,
+  };
+}
+
+/**
+ * Minutes from one round's first launch to the next round's, for each pair of consecutive rounds:
+ * the reviewers, the coachman's judging and fixing, the gate and any wait for the user.
+ */
+export function roundGaps(launches: Readonly<Record<string, string>>): number[] {
+  const rounds = Object.keys(launches)
+    .map(Number)
+    .sort((a, b) => a - b);
+  const out: number[] = [];
+  for (let i = 0; i + 1 < rounds.length; i += 1) {
+    const here = rounds[i] as number;
+    const next = rounds[i + 1] as number;
+    if (next !== here + 1) continue;
+    const a = Date.parse(launches[String(here)] as string);
+    const b = Date.parse(launches[String(next)] as string);
+    if (Number.isFinite(a) && Number.isFinite(b) && b >= a) out.push((b - a) / 60000);
+  }
+  return out;
 }

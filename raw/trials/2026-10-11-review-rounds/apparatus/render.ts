@@ -7,7 +7,7 @@
 // signals are tried on.
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { type Adjudication, parseAdjudication } from "./adjudicate.ts";
+import { type Adjudication, parseAdjudication, splitOnOpen } from "./adjudicate.ts";
 import {
   bands,
   CHANGE_BANDS,
@@ -33,6 +33,7 @@ import {
   overlapCheck,
   RULES,
   type RunFacts,
+  roundGaps,
   signalRows,
   simulate,
   transitions,
@@ -43,6 +44,7 @@ import {
   partialSpearman,
   pct,
   permutationP,
+  quantile,
   spearman,
   sum,
   wilson,
@@ -571,6 +573,13 @@ export function marksMarkdown(
   const byId = new Map(items.map((i) => [i.id, i]));
   const countOf = (pick: (c: Combined) => boolean): number => rows.filter(pick).length;
   out.push("## Ticket open", "");
+  {
+    const differing = ag.n - ag.ticketOpen.same;
+    out.push(
+      `The readers give a different mark in ${differing} of the ${rows.length} findings. In ${splitOnOpen(a, b).length} of those one says yes and the other does not, and in the rest they differ between no and unclear.`,
+      "",
+    );
+  }
   out.push(
     table(
       ["Reading", "Findings", "Share of the marked"],
@@ -588,6 +597,31 @@ export function marksMarkdown(
           String(countOf((c) => c.openEither)),
           pct(
             countOf((c) => c.openEither),
+            rows.length,
+          ),
+        ],
+      ],
+    ),
+    "",
+  );
+  out.push("## Disagrees", "");
+  out.push(
+    table(
+      ["Reading", "Findings", "Share of the marked"],
+      [
+        [
+          "both readers say it asks for the reverse of an earlier change or ruling",
+          String(countOf((c) => c.disagreesBoth)),
+          pct(
+            countOf((c) => c.disagreesBoth),
+            rows.length,
+          ),
+        ],
+        [
+          "at least one says so",
+          String(countOf((c) => c.disagreesEither)),
+          pct(
+            countOf((c) => c.disagreesEither),
             rows.length,
           ),
         ],
@@ -641,13 +675,29 @@ export function marksMarkdown(
   out.push("## Kind", "");
   out.push(
     table(
-      ["Kind", "Reader A", "Reader B", "Both the same"],
-      KINDS.map((k) => [
-        k,
-        String(a.filter((m) => m.kind === k).length),
-        String(b.filter((m) => m.kind === k).length),
-        String(countOf((c) => c.kind === k)),
-      ]),
+      ["Kind", "Reader A", "Reader B", "Both the same", "Share of the marked"],
+      [
+        ...KINDS.map((k) => [
+          k as string,
+          String(a.filter((m) => m.kind === k).length),
+          String(b.filter((m) => m.kind === k).length),
+          String(countOf((c) => c.kind === k)),
+          pct(
+            countOf((c) => c.kind === k),
+            rows.length,
+          ),
+        ]),
+        [
+          "readers differ",
+          "–",
+          "–",
+          String(countOf((c) => c.kind === null)),
+          pct(
+            countOf((c) => c.kind === null),
+            rows.length,
+          ),
+        ],
+      ],
     ),
     "",
   );
@@ -832,6 +882,15 @@ export function laneSharesMarkdown(findings: readonly TracedFinding[], label: st
       count("no lane named"),
     ];
   });
+  const later = findings.filter((f) => f.round >= 2);
+  const alone = (lane: string): number =>
+    later.filter((f) => f.lanes.length === 1 && f.lanes[0] === lane).length;
+  const aloneLanes = [
+    ...new Set(later.filter((f) => f.lanes.length === 1).map((f) => f.lanes[0] as string)),
+  ]
+    .filter((l) => later.some((f) => f.lanes.length === 1 && f.lanes[0] === l))
+    .sort((a, b) => alone(b) - alone(a));
+  const aloneRows = aloneLanes.map((l) => [l, String(alone(l)), pct(alone(l), later.length)]);
   return [
     `## ${label}`,
     "",
@@ -848,7 +907,55 @@ export function laneSharesMarkdown(findings: readonly TracedFinding[], label: st
       rows,
     ),
     "",
+    `Named alone, by lane, among the ${later.length} serious findings of rounds 2 and after:`,
+    "",
+    table(["Lane", "Findings it alone named", "Share of those findings"], aloneRows),
+    "",
   ].join("\n");
+}
+
+/** Runs whose ticket had five criteria or fewer against those with more, in each set. */
+export function fiveCriteriaMarkdown(sets: ReadonlyArray<[string, readonly RunInput[]]>): string {
+  const out: string[] = ["# Tickets of five criteria or fewer, and more", ""];
+  out.push(
+    "The five-criteria rule of the booking clerk took effect on 2026-10-10. The rows count runs by what their ticket carried, whatever rule applied then. *Rounds above the median* sums, over the runs with more than five, the rounds each took above the median of the runs with five or fewer in the same set: an upper bound on what a split would have removed, since each slice has a first round and a clean round of its own.",
+    "",
+  );
+  const rows: string[][] = [];
+  for (const [name, runs] of sets) {
+    const withCriteria = runs.filter((r) => r.criteria !== null);
+    const few = withCriteria.filter((r) => (r.criteria as number) <= 5);
+    const many = withCriteria.filter((r) => (r.criteria as number) > 5);
+    const m = median(few.map((r) => r.rounds));
+    const longN = (rs: readonly RunInput[]): number => rs.filter((r) => r.rounds >= 6).length;
+    rows.push([
+      name,
+      `${few.length}`,
+      `${num(m, 1)} (mean ${num(sum(few.map((r) => r.rounds)) / Math.max(1, few.length), 1)})`,
+      `${longN(few)} of ${few.length}`,
+      `${many.length}`,
+      `${num(median(many.map((r) => r.rounds)), 1)} (mean ${num(sum(many.map((r) => r.rounds)) / Math.max(1, many.length), 1)})`,
+      `${longN(many)} of ${many.length}`,
+      String(sum(many.map((r) => Math.max(0, r.rounds - m)))),
+    ]);
+  }
+  out.push(
+    table(
+      [
+        "Set",
+        "Runs, five or fewer",
+        "Rounds, median",
+        "Runs of 6 or more",
+        "Runs, more than five",
+        "Rounds, median",
+        "Runs of 6 or more",
+        "Rounds above the median",
+      ],
+      rows,
+    ),
+    "",
+  );
+  return out.join("\n");
 }
 
 export function signalsMarkdown(
@@ -856,6 +963,7 @@ export function signalsMarkdown(
   later: readonly RunFacts[],
   yields: { first: FixYieldRow[]; later: FixYieldRow[] },
   overlaps: { first: OverlapCheck; later: OverlapCheck },
+  gaps: { first: number[]; later: number[] },
 ): string {
   const out: string[] = [];
   out.push("# Stop signals", "");
@@ -882,9 +990,9 @@ export function signalsMarkdown(
         String(s.flagged),
         s.flagged === 0
           ? "–"
-          : `${pct(s.flaggedClean, s.flagged)} (${Math.round(100 * lo)}–${Math.round(100 * hi)}%)`,
+          : `${s.flaggedClean} of ${s.flagged}, ${pct(s.flaggedClean, s.flagged)} (${Math.round(100 * lo)}–${Math.round(100 * hi)}%)`,
         String(s.other),
-        s.other === 0 ? "–" : pct(s.otherClean, s.other),
+        s.other === 0 ? "–" : `${s.otherClean} of ${s.other}, ${pct(s.otherClean, s.other)}`,
       ];
     });
     out.push(
@@ -900,6 +1008,28 @@ export function signalsMarkdown(
       ),
       "",
     );
+    out.push("### By the round's serious findings", "");
+    {
+      const bandsN: Array<[string, (n: number) => boolean]> = [
+        ["0", (n) => n === 0],
+        ["1", (n) => n === 1],
+        ["2", (n) => n === 2],
+        ["3", (n) => n === 3],
+        ["4", (n) => n === 4],
+        ["5 or more", (n) => n >= 5],
+      ];
+      out.push(
+        table(
+          ["Serious findings in round r", "Transitions", "Next round clean"],
+          bandsN.map(([label, inBand]) => {
+            const t = ts.filter((x) => inBand(x.facts.n));
+            const c = t.filter((x) => x.clean).length;
+            return [label, String(t.length), `${c} of ${t.length}, ${pct(c, t.length)}`];
+          }),
+        ),
+        "",
+      );
+    }
     out.push("### Stopping rules, applied after each round to each run", "");
     out.push(
       table(
@@ -926,6 +1056,34 @@ export function signalsMarkdown(
       "",
     );
   }
+  out.push("## What a round costs", "");
+  out.push(
+    "The time from one round's first launch to the next round's holds the reviewers, the coachman's judging and fixing, the gate and any wait for the user.",
+    "",
+  );
+  out.push(
+    table(
+      ["Runs", "Round-to-round gaps", "Median, minutes", "Quartiles", "90th percentile"],
+      [
+        ["The 61 runs", gaps.first],
+        ["The later set", gaps.later],
+      ].flatMap(([name, g]) => {
+        const v = g as number[];
+        return v.length === 0
+          ? []
+          : [
+              [
+                name as string,
+                String(v.length),
+                num(median(v), 0),
+                `${num(quantile(v, 0.25), 0)} to ${num(quantile(v, 0.75), 0)}`,
+                num(quantile(v, 0.9), 0),
+              ],
+            ];
+      }),
+    ),
+    "",
+  );
   out.push("## What the two lanes' overlap leaves unseen", "");
   out.push(
     "For each run with two reviewer lanes that named a serious finding in round 1, the Chapman estimate of how many serious findings were present and unseen by both, summed, against the findings in the change that later rounds named and round 1 had not.",
@@ -939,6 +1097,7 @@ export function signalsMarkdown(
         "Of those, the lanes named nothing in common",
         "Round-1 findings the pair named",
         "Estimated left unseen",
+        "Of that, from the runs with nothing in common",
         "Findings in the change named in rounds 2 and after",
       ],
       [
@@ -955,6 +1114,7 @@ export function signalsMarkdown(
                 String(c.noOverlap),
                 String(c.found),
                 num(c.estimatedUnseen, 0),
+                num(c.estimatedUnseenNoOverlap, 0),
                 String(c.laterMissed),
               ],
             ];
@@ -981,12 +1141,14 @@ export function signalsMarkdown(
           "Commits",
           "A serious finding in the next round",
           "In any later round",
+          "Serious findings in the next round, per fix commit",
         ],
         rows.map((r) => [
           r.round,
           String(r.commits),
           `${r.nextRound} (${pct(r.nextRound, r.commits)})`,
           `${r.anyLater} (${pct(r.anyLater, r.commits)})`,
+          num(r.nextRoundFindings / Math.max(1, r.commits), 2),
         ]),
       ),
       "",
@@ -1013,7 +1175,21 @@ const main = (args: string[]): void => {
   );
   const inputs = inputsOf(first, traced);
   writeFileSync(join(dir, "rounds.md"), roundsMarkdown(inputs));
-  writeFileSync(join(dir, "features.md"), featuresMarkdown(inputs));
+  const laterRowsForFeatures = (() => {
+    const f = arg(args, "--later");
+    if (!f || !existsSync(join(dir, f))) return null;
+    const t = JSON.parse(readFileSync(join(dir, f), "utf8")) as Traced & { runIds: string[] };
+    return inputsOf(
+      runs.filter((r) => t.runIds.includes(r.run)),
+      t,
+    );
+  })();
+  const criteriaSets: Array<[string, readonly RunInput[]]> = [["The 61 runs", inputs]];
+  if (laterRowsForFeatures) criteriaSets.push(["The later set", laterRowsForFeatures]);
+  writeFileSync(
+    join(dir, "features.md"),
+    `${featuresMarkdown(inputs)}\n${fiveCriteriaMarkdown(criteriaSets)}`,
+  );
   const eraOfRun = new Map(inputs.map((r) => [r.run, eraOf(r).slice(0, 1)]));
   const filledSerious = sum(first.map((r) => sum(r.seriousBest) - sum(r.seriousByRound)));
   writeFileSync(
@@ -1055,7 +1231,11 @@ const main = (args: string[]): void => {
     lanesText += `${laneSharesMarkdown(laterTracedForLanes.findings, "Who named the findings, the later set")}\n`;
   }
   writeFileSync(join(dir, "lanes.md"), lanesText);
-  const yieldOf = (t: Traced, ids: ReadonlySet<string>): FixYieldRow[] =>
+  const yieldOf = (
+    t: Traced,
+    ids: ReadonlySet<string>,
+    runsFacts: readonly RunFacts[],
+  ): FixYieldRow[] =>
     fixYield(
       t.runs
         .filter((m) => ids.has(m.run))
@@ -1068,6 +1248,7 @@ const main = (args: string[]): void => {
           originKind: f.origin.kind,
           originSha: f.origin.sha ?? null,
         })),
+      runsFacts.map((r) => ({ run: r.run, rounds: r.rounds, best: r.best })),
     );
   const firstIds = new Set(first.map((r) => r.run));
   const laterIds = new Set(laterFacts.map((r) => r.run));
@@ -1081,8 +1262,8 @@ const main = (args: string[]): void => {
       factsOf(first, traced),
       laterFacts,
       {
-        first: yieldOf(traced, firstIds),
-        later: laterTraced ? yieldOf(laterTraced, laterIds) : [],
+        first: yieldOf(traced, firstIds, factsOf(first, traced)),
+        later: laterTraced ? yieldOf(laterTraced, laterIds, laterFacts) : [],
       },
       {
         first: overlapCheck(
@@ -1092,6 +1273,14 @@ const main = (args: string[]): void => {
           })),
         ),
         later: overlapCheck(laterFacts.map((r) => ({ pair: r.pair, findings: r.findings }))),
+      },
+      {
+        first: traced.runs.filter((m) => firstIds.has(m.run)).flatMap((m) => roundGaps(m.launches)),
+        later: laterTraced
+          ? laterTraced.runs
+              .filter((m) => laterIds.has(m.run))
+              .flatMap((m) => roundGaps(m.launches))
+          : [],
       },
     ),
   );

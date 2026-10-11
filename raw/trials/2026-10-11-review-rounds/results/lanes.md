@@ -43,6 +43,18 @@ A lane's serious findings, its time and its share named by it alone, per lane-ro
 | rounds 2 and 3 | 221 | 161 (73%) | 31 (14%) | 20 (9%) | 7 (3%) | 2 (1%) |
 | round 4 and after | 161 | 116 (72%) | 23 (14%) | 18 (11%) | 2 (1%) | 2 (1%) |
 
+Named alone, by lane, among the 382 serious findings of rounds 2 and after:
+
+| Lane | Findings it alone named | Share of those findings |
+| --- | --- | --- |
+| luna | 132 | 35% |
+| mimo | 132 | 35% |
+| opus | 38 | 10% |
+| haiku | 8 | 2% |
+| coachman | 3 | 1% |
+| sol | 3 | 1% |
+| astra | 2 | 1% |
+
 ## Who named the findings, the later set
 
 | Rounds | Serious findings | One reviewer lane alone | Both reviewer lanes | Security alone | One reviewer lane and security | No lane named |
@@ -50,4 +62,13 @@ A lane's serious findings, its time and its share named by it alone, per lane-ro
 | round 1 | 58 | 46 (79%) | 12 (21%) | 0 (0%) | 0 (0%) | 0 (0%) |
 | rounds 2 and 3 | 43 | 36 (84%) | 4 (9%) | 2 (5%) | 1 (2%) | 0 (0%) |
 | round 4 and after | 55 | 43 (78%) | 2 (4%) | 10 (18%) | 0 (0%) | 0 (0%) |
+
+Named alone, by lane, among the 98 serious findings of rounds 2 and after:
+
+| Lane | Findings it alone named | Share of those findings |
+| --- | --- | --- |
+| luna | 45 | 46% |
+| haiku | 24 | 24% |
+| opus | 12 | 12% |
+| mimo | 10 | 10% |
 

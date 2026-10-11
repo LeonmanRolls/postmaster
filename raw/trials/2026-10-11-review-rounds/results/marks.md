@@ -10,10 +10,19 @@
 
 ## Ticket open
 
+The readers give a different mark in 42 of the 309 findings. In 37 of those one says yes and the other does not, and in the rest they differ between no and unclear.
+
 | Reading | Findings | Share of the marked |
 | --- | --- | --- |
 | both readers say yes | 26 | 8% |
 | at least one says yes | 63 | 20% |
+
+## Disagrees
+
+| Reading | Findings | Share of the marked |
+| --- | --- | --- |
+| both readers say it asks for the reverse of an earlier change or ruling | 9 | 3% |
+| at least one says so | 11 | 4% |
 
 ## The session's reading
 
@@ -26,15 +35,16 @@ Of the findings on which one reader says yes to *ticket open* and the other does
 
 ## Kind
 
-| Kind | Reader A | Reader B | Both the same |
-| --- | --- | --- | --- |
-| input | 163 | 172 | 159 |
-| state | 58 | 58 | 55 |
-| contract | 43 | 30 | 27 |
-| site | 14 | 13 | 11 |
-| prose | 13 | 14 | 10 |
-| test | 5 | 6 | 5 |
-| other | 13 | 16 | 10 |
+| Kind | Reader A | Reader B | Both the same | Share of the marked |
+| --- | --- | --- | --- | --- |
+| input | 163 | 172 | 159 | 51% |
+| state | 58 | 58 | 55 | 18% |
+| contract | 43 | 30 | 27 | 9% |
+| site | 14 | 13 | 11 | 4% |
+| prose | 13 | 14 | 10 | 3% |
+| test | 5 | 6 | 5 | 2% |
+| other | 13 | 16 | 10 | 3% |
+| readers differ | – | – | 32 | 10% |
 
 ## What the ticket left open, by kind and by run
 

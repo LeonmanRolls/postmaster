@@ -1,7 +1,7 @@
 ---
 title: postmaster wiki
 type: schema
-updated: 2026-10-10
+updated: 2026-10-11
 ---
 
 # postmaster wiki
@@ -152,6 +152,17 @@ Why the design is shaped as it is.
   fixed again. From the review of #36 and outside work. The user chose: fix as much as can be
   fixed in the first round, then repeat until there are no more P1 and P2 findings, with the cap
   of three rounds as a backstop; many bugs reaching production stays the signal to revisit.
+- [Why runs take the review rounds they do, and what the planning stage could cut](concepts/review-rounds.md):
+  **mixed**. Of 61 runs the median took 3 rounds, and a fifth of them hold 44% of the rounds; rounds
+  follow the first round's serious findings (rho 0.83), and criteria and change size go with them
+  through it. Of 335 later findings that could be placed, 44% were in the change and not named
+  before and 48% are in lines an earlier fix wrote. Two readers say a ticket left a point open for 8%
+  to 20% of the marked later findings, most often a state or an input case. No one cause a ticket
+  could settle accounts for more than about a twentieth of the rounds, the ticket's size going with
+  the most; no stop signal tried predicts a clean next round above about half, and five or more
+  serious findings in a round was followed by a clean one in 1 of 51 and then none of 9. From
+  [#400](https://github.com/brindlewick/postmaster/issues/400); nothing was changed, and six
+  changes are proposed.
 - [Each project defines how a change to it is verified](concepts/verification.md): **claimed**.
   A project declares its checks or gets defaults by discovery; every workhorse runs them before
   it reports, and the coachman runs them again on each branch and on the synthesis.

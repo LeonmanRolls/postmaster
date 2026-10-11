@@ -37,7 +37,7 @@ September to 9 October. Left out, with the reason:
 | --- | --- | --- |
 | parked, aborted, misdispatched | a folder named with a suffix after its ticket number | the work they began is in the run that finished it |
 | fixture runs | `todo-fixture-*` | not this repository's tickets; kept apart in every earlier record |
-| abandoned in review | #132 | its review never ended |
+| abandoned in review | #132 | its review never ended; #135, abandoned on 10 October after its review ended on 2 October and its work redone elsewhere, is in the set |
 | reviewing at the cut | #216, #339, #344, #348 | still in review when the set was fixed with the user; read apart, at their end |
 | no review round yet | four runs dispatched on 11 October | none to count |
 
@@ -126,9 +126,15 @@ Every count has a control in [results/controls.md](results/controls.md), made by
   all style or P3 reads 0 through the same command;
 - rounds, round 1 and the total agree with the lane audit's table for 17 of its 18 runs, and the
   18th, #135, reads 44 where the audit read 32 for the reason given above;
+- the finding-line totals of the 21-run count agree for 17 of its 21 runs, and the four that differ
+  are [#135](https://github.com/brindlewick/postmaster/issues/135) (severity in the target field),
+  [#202](https://github.com/brindlewick/postmaster/issues/202) (31 on lines, 34 with the escalation
+  lines of rounds 8 and 9), and [#216](https://github.com/brindlewick/postmaster/issues/216) and
+  [#252](https://github.com/brindlewick/postmaster/issues/252), which that count read while they
+  were running;
 - the inferred phase of a commit named by an `apply` line is the fix phase of the last round
-  launched before the line for 230 of 233 such lines, the three that differ within a minute of a
-  launch;
+  launched before the line for 236 of 239 such lines, the three that differ within a minute of a
+  launch, and 12 more name a commit that is not among the run's own;
 - the inferred snapshot of a round is the commit its reviewers' permalinks name, for all 8 rounds
   whose reports carry one;
 - the commit named as the origin of a cited line added that line, read with `git show` and not
