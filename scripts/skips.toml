@@ -485,6 +485,18 @@ reason = "needs a model run from this branch; the postmaster dispatches and scor
 systems = ["linux", "darwin"]
 
 [[skip]]
+file = "scripts/acceptance-390.test.ts"
+name = "C4: the coachman runs the command each time it raises the card > the fixture run's events show the command last"
+reason = "needs the C5 fixture run; the postmaster checks the leg's events at landing"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/acceptance-390.test.ts"
+name = "C5: the fixture run scores clean > a run from the t390 branch scores clean"
+reason = "needs a model run from this branch; the postmaster dispatches and scores it at landing"
+systems = ["linux", "darwin"]
+
+[[skip]]
 file = "scripts/acceptance-409.test.ts"
 name = "C1: the held-back notice > C5's briefs carry the notice and a given run's do not"
 reason = "needs a dispatched held-back run; the postmaster reads C5's run at landing"
