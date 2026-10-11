@@ -26,7 +26,10 @@
 // `escalate` name it with its repair, and it is removed by hand once the wall is
 // re-recorded. A missing log reads as no walls; an unreadable one refuses every
 // command but open, which reads it as no walls so the watcher's pinned
-// act-and-wake on unloggable actions still holds.
+// act-and-wake on unloggable actions still holds. A survey's wall is shown but
+// never open: the surveyor launches as a reviewer, its stream never matches a
+// review round, the call fails closed with its own degrade line, and the
+// caller carries the no-answer path, so no ruling is ever asked for it.
 //
 // The reset arrives on the `wall` line: run launch parses it from the message the provider
 // ended the turn with (lib/wall.ts, D4 and D5), and show prints it in the machine's zone.
@@ -155,6 +158,13 @@ export function lostWalls(dispatch: string): Array<{ lane: string; details: stri
     out.push({ lane: f.slice(0, -".wall-lost".length), details: lines });
   }
   return out;
+}
+
+/** A survey's wall: reviewer role with no lens or round, since the surveyor's stream
+ * never matches a review round. Genuine review streams always parse, so no other
+ * wall reads this way. Shown as telemetry, never waiting on a ruling. */
+export function isSurveyWall(w: Wall): boolean {
+  return w.role === "reviewer" && w.lens === "-" && w.round === "-";
 }
 
 /** The run's wall for a reviewer under a lens in a round, or null. */
@@ -312,7 +322,7 @@ export function wallsCommand(argv: string[]): number {
   }
 
   if (cmd === "open") {
-    const open = walls.filter((w) => !w.ruled);
+    const open = walls.filter((w) => !w.ruled && !isSurveyWall(w));
     for (const w of open) {
       const lens = w.role === "reviewer" && w.lens !== "-" ? ` ${w.lens}` : "";
       console.log(`${w.lane}${lens}: no ruling: "${w.message}"`);
@@ -325,7 +335,7 @@ export function wallsCommand(argv: string[]): number {
   }
 
   if (cmd === "escalate") {
-    const open = walls.filter((w) => !w.ruled);
+    const open = walls.filter((w) => !w.ruled && !isSurveyWall(w));
     const lost = lostWalls(dispatch);
     if (open.length === 0 && lost.length === 0) {
       console.error("walls: no wall is waiting on a ruling");
@@ -403,7 +413,7 @@ export function wallsCommand(argv: string[]): number {
       console.error(`walls: no wall for ${lane}`);
       return 1;
     }
-    if (laneWalls.some((w) => !w.ruled)) {
+    if (laneWalls.some((w) => !w.ruled && !isSurveyWall(w))) {
       console.error(`walls: refused: ${lane} has a wall with no ruling to carry`);
       return 2;
     }

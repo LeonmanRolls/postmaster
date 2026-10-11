@@ -1,0 +1,13 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index a035d34..a486223 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -72,7 +72,7 @@ async function run(args: readonly string[], path: string, { out, err }: Output):
+         return 1;
+       }
+       await save(path, result.list);
+-      for (const id of result.removed) {
++      for (const id of [...result.removed].reverse()) {
+         out(`removed ${id}`);
+       }
+       return 0;

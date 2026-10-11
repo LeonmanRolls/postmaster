@@ -16,7 +16,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { run } from "./lib/proc.ts";
-import { readWalls } from "./walls.ts";
+import { isSurveyWall, readWalls } from "./walls.ts";
 
 const self = join(import.meta.dir, "run");
 const HERE = import.meta.dir;
@@ -211,6 +211,21 @@ describe("the wall lines, read back in file order", () => {
     expect(w.ruled).toBe(false);
   });
 
+  test("a reviewer wall with no lens or round reads as a survey's, and no other does", () => {
+    const d = dispatch("survey-shape");
+    writeFileSync(
+      join(d, "actions.jsonl"),
+      line("wall", "stub", "reviewer - - none stuck in survey", "lane:stub") +
+        line("wall", "mimo", "reviewer bug 1 none stuck in review", "lane:mimo") +
+        line("wall", "opus", "workhorse - - none stuck", "lane:opus"),
+    );
+    const walls = readWalls(d);
+    expect(walls.length).toBe(3);
+    expect(isSurveyWall(walls[0]!)).toBe(true);
+    expect(isSurveyWall(walls[1]!)).toBe(false);
+    expect(isSurveyWall(walls[2]!)).toBe(false);
+  });
+
   test("a U+2028 in the message keeps the wall's role, lens and round", () => {
     const d = dispatch("u2028");
     const detail = `reviewer security 1 none msg${String.fromCharCode(0x2028)}split`;
@@ -292,6 +307,8 @@ describe("run walls open: the pause gate", () => {
   const write = (body: string): void => writeFileSync(join(d, "actions.jsonl"), body);
   const wall = (lane: string): string =>
     `${JSON.stringify({ ts: "2026-10-05T00:00:00Z", actor: `lane:${lane}`, action: "wall", target: lane, detail: "workhorse - - none stuck" })}\n`;
+  const surveyWall = (lane: string): string =>
+    `${JSON.stringify({ ts: "2026-10-05T00:00:00Z", actor: `lane:${lane}`, action: "wall", target: lane, detail: "reviewer - - none stuck in survey" })}\n`;
 
   beforeAll(() => {
     d = join(tmp, "open-run");
@@ -316,6 +333,18 @@ describe("run walls open: the pause gate", () => {
     write(wall("stub") + line2("rule", "stub", "wall go-on"));
     const r = run(self, ["walls", "open", d]);
     expect(r.code).toBe(0);
+  });
+
+  test("a survey wall waits on no ruling: exit 0, listed nowhere", () => {
+    write(surveyWall("stub"));
+    const r = run(self, ["walls", "open", d]);
+    expect(r.code).toBe(0);
+    expect(r.out).toBe("");
+    write(surveyWall("stub") + wall("mimo"));
+    const r2 = run(self, ["walls", "open", d]);
+    expect(r2.code).toBe(1);
+    expect(r2.out).toContain("mimo: no ruling");
+    expect(r2.out).not.toContain("stub");
   });
 
   test("a lost-wall marker keeps open refusing, naming the lane", () => {
@@ -555,6 +584,8 @@ describe("run walls told, escalate and carry", () => {
   let d = "";
   const wallLine = (lane: string, reset = "none", msg = "stuck"): string =>
     `${JSON.stringify({ ts: "2026-10-05T00:00:00Z", actor: `lane:${lane}`, action: "wall", target: lane, detail: `workhorse - - ${reset} ${msg}` })}\n`;
+  const surveyLine = (lane: string, msg = "stuck in survey"): string =>
+    `${JSON.stringify({ ts: "2026-10-05T00:00:00Z", actor: `lane:${lane}`, action: "wall", target: lane, detail: `reviewer - - none ${msg}` })}\n`;
   const count = (action: string): number =>
     readFileSync(join(d, "actions.jsonl"), "utf8")
       .split("\n")
@@ -613,6 +644,24 @@ describe("run walls told, escalate and carry", () => {
     expect(run(self, ["walls", "escalate", d]).code).toBe(0);
     const esc = readFileSync(join(d, "ESCALATION.md"), "utf8");
     expect(esc).toContain("Reset: no reset time");
+  });
+
+  test("escalate with only a survey wall is refused (exit 1)", () => {
+    writeFileSync(join(d, "actions.jsonl"), surveyLine("stub"));
+    const r = run(self, ["walls", "escalate", d]);
+    expect(r.code).toBe(1);
+    expect(r.err).toContain("no wall is waiting on a ruling");
+  });
+
+  test("carry is not blocked by a survey wall beside a ruled one", () => {
+    writeFileSync(
+      join(d, "actions.jsonl"),
+      wallLine("stub") +
+        surveyLine("stub") +
+        `${JSON.stringify({ ts: "2026-10-05T00:00:01Z", actor: "postmaster", action: "rule", target: "stub", detail: "wall go-on" })}\n`,
+    );
+    expect(run(self, ["walls", "carry", d, "stub"]).code).toBe(0);
+    expect(count("carry")).toBe(1);
   });
 
   test("carry records each go-on once, and refuses one that is unruled (C16, C20)", () => {

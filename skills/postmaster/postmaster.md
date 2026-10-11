@@ -234,7 +234,10 @@ ones it names.
 1. **Write the leg prompt** to `<runs>/<TICKET>/leg-<n>-prompt.txt`: "You are the coachman
    for leg <n> of <TICKET>. Read `<dispatch>/brief.md`, then `<rt>/skills/postmaster/coachman.md`,
    then `<dispatch>/handoff-<p>.md`" (omit the hand-off for leg 1), plus the one line naming
-   the leg's job from the legs table. Nothing else: the runbook and the files carry the rest.
+   the leg's job from the legs table. When the run's ticket notes are held back — `<tool>/scripts/run run-meta ticket-notes <dispatch>`
+   prints held-back — the prompt carries this line too:
+   The ticket's technical notes are held back on purpose and are not to be looked up, in the tracker or anywhere else.
+   When the run's ticket notes are held back, nothing sent to the coachman quotes the technical notes: not a leg's prompt, a ruling, or a resume. Nothing else: the runbook and the files carry the rest.
 2. **From leg 2 on, verify the hand-off before dispatching on it:** `<tool>/scripts/run handoff-check
    <dispatch>/handoff-<p>.md` exits 0. If it exits 2, leg `p` is not finished: resume leg `p`
    (step 5, with `p` in place of `n`), the prompt naming the missing sections
@@ -476,7 +479,8 @@ spec and pauses for no spec review.
    any workhorse branch or worktree existed; do not resume it.
 5. **Deliver the ruling:** remove `.escalation-ready`. On `go on`, resume the current leg
    (Stage C, step 5) with the ruling as the prompt. The ruling is a prompt to a resumed thread,
-   never text typed into anything. On `send it back`, leave the leg stopped and let the clerk
+   never text typed into anything.
+   When the run's ticket notes are held back, nothing sent to the coachman quotes the technical notes: not a leg's prompt, a ruling, or a resume. On `send it back`, leave the leg stopped and let the clerk
    prepare the ticket again. A pause for a wall (`.wall-pause`) is delivered by the watcher
    instead, once every wall in the run is ruled (Stage D's mechanical steps): rule it, remove
    `.waiting-on-user` and the run from the waiting list, and leave the resume to the watcher.
@@ -543,7 +547,9 @@ every project and does not change that project's gate.
    exact discrepancy. On `stale`,
    withhold: remove `.card-ready` and `.leg-<n>-done` for the manifest's current leg `<n>`,
    then resume that last leg with the stale line as the exact discrepancy, asking it to
-   repeat its merge step and raise the card again, and wait for the corrected card. The
+   repeat its merge step and raise the card again, and wait for the corrected card; the
+   re-raise runs the card step's `card-write` over the stale card, so the printed parts
+   match the merged head. The
    resume carries no trial merge and no merge instructions of its own: the leg's step
    merges, resolves and gates. Log it with the leg, the thread id and the stale line
    as `send-back: <stale line>`: the leg's step restarts its merge count only on a
@@ -750,7 +756,9 @@ every project and does not change that project's gate.
    comment for the ticket, scanned with the pre-post procedure above with every
    finding fixed before aftercare posts it. The shipped mark is the proof of the landing;
    confirm nothing
-   by hand again.
+   by hand again. When the run's ticket notes are held back, check whether the notes stayed away before the cleanup:
+   `<tool>/scripts/run ticket-reads <dispatch> --record` looks through every agent's record for a read of the ticket and writes its
+   outcome to the run log and a note action.
 2. **Run the cleanup command, first as a dry run.**
    `<tool>/scripts/run aftercare <dispatch> --dry-run --comment "<text>" --run-log
    "<text>"` prints its plan and changes nothing; read it, then run the same command
