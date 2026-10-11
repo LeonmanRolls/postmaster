@@ -123,3 +123,7 @@ holds = "the run's cleanup: which folders go, how they are saved, the closing st
 [[files]]
 path = "scripts/take-in.ts"
 holds = "the take-in step: quiescence and commit identity before synthesis"
+
+[[files]]
+path = "scripts/merge-default.ts"
+holds = "the pre-card merge step: the freshness question, the merge and its log, the count, and the card's report"
