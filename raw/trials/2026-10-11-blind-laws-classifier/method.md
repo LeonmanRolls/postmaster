@@ -58,7 +58,9 @@ ones are bug-2, bug-3, bug-5, sec-3 and style-1; bug-4 and sec-2 are heavy; bug-
 Installed only in the writer's folder with `bun add --exact --minimum-release-age=604800
 fast-check@4.10.2`: 4.10.2 was published 2026-09-19 and was the newest release at least seven
 days old. Its one dependency resolved to pure-rand 8.4.2. The project's own `package.json` does
-not change.
+not change. The trial predates #425: re-running the record installs these two, pinned in its lock file, at
+least a week old and with no install script, into a throwaway folder outside the repository, without the
+Socket scan that #425 adds to the repository's own installs.
 
 ## The sandbox
 
