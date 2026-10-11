@@ -5606,15 +5606,6 @@ export async function runControls(): Promise<number> {
     // ungated first start would have finished: the winner holds its harness
     // stand-in at the gate until the other seven have been turned away, so
     // every loser meets a held lock however late it arrives.
-    const racers: Array<ReturnType<typeof spawn>> = [];
-    for (let i = 0; i < 8; i++) {
-      if (i > 0) await sleep(500);
-      racers.push(
-        spawnLeg(["leg", "launch", legD, legWt, "synthesis", "1", prompt], {
-          TEST_GATE: raceGate,
-        }),
-      );
-    }
     const ends: Array<number | null | undefined> = [
       undefined,
       undefined,
@@ -5625,15 +5616,28 @@ export async function runControls(): Promise<number> {
       undefined,
       undefined,
     ];
-    racers.forEach((racer, k) => {
+    for (let i = 0; i < 8; i++) {
+      if (i > 0) await sleep(500);
+      const racer = spawnLeg(["leg", "launch", legD, legWt, "synthesis", "1", prompt], {
+        TEST_GATE: raceGate,
+      });
+      // The listener attaches at spawn: a loser refused during the next
+      // pause would otherwise exit before it is ever recorded.
+      const k = i;
       void exited(racer).then((code) => {
         ends[k] = code;
       });
-    });
+    }
     // The seven losers are refused and end; the winner waits at the gate.
+    // The first wait's result is deliberately unread: a double grant ends
+    // six here and fails loud on the delta below, while a hang fails here.
     await waitFor(() => ends.filter((end) => end !== undefined).length === 7);
     writeFileSync(raceGate, "");
-    await waitFor(() => ends.every((end) => end !== undefined));
+    const allEnded = await waitFor(() => ends.every((end) => end !== undefined));
+    if (!allEnded)
+      throw new Error(
+        `race for the lock: only ${ends.filter((end) => end !== undefined).length} of eight racers ended: ${ends.map((end) => String(end)).join(",")}`,
+      );
     await marker(join(legD, ".leg-1-exited"), 30);
     const callsAfterRace = legCalls();
     await pass(
