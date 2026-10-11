@@ -1286,7 +1286,11 @@ export async function fetchVerdict(
       }
     }
   }
-  writeCache(cacheFile(ctx.cacheDir, "verdicts", key), JSON.stringify(verdict));
+  // Only a verdict is cached: an unknown scanner answer is retried on the
+  // next invocation, so one network blip never refuses a package for the run.
+  if (verdict.status !== "unknown") {
+    writeCache(cacheFile(ctx.cacheDir, "verdicts", key), JSON.stringify(verdict));
+  }
   return verdict;
 }
 
@@ -1416,11 +1420,13 @@ export async function resolveClosure(
           `install-guard: refusing to install ${raw}: the registry has no ${item.name}@${version}`,
         );
       }
-      resolved.set(`${item.name}@${version}`, {
+      const key = `${item.name}@${version}`;
+      const prev = resolved.get(key);
+      resolved.set(key, {
         name: item.name,
         version,
         scripts: entry.scripts ?? null,
-        direct: item.direct,
+        direct: item.direct || prev?.direct === true,
       });
       const deps: Array<[Record<string, string> | undefined, boolean]> = [
         [entry.dependencies, false],
@@ -1943,7 +1949,7 @@ export function manifestRange(project: string, name: string): string | null {
 export function findLockfile(pm: Pm, project: string): string | null {
   const candidates =
     pm === "npm"
-      ? ["package-lock.json", "npm-shrinkwrap.json"]
+      ? ["npm-shrinkwrap.json", "package-lock.json"]
       : pm === "pnpm"
         ? ["pnpm-lock.yaml"]
         : pm === "yarn"

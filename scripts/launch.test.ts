@@ -6449,4 +6449,16 @@ describe("the install guard arms lanes", () => {
       }
     });
   });
+
+  test("ensureGuardBin repairs a dangling shim link instead of throwing EEXIST", () => {
+    withTempDir((tmp) => {
+      const d = join(tmp, "run");
+      const bin = ensureGuardBin(d, TOOL);
+      const victim = join(bin, GUARD_SHIM_NAMES[0] ?? "npm");
+      rmSync(victim, { force: true });
+      symlinkSync(join(tmp, "tool-gone", "scripts", "install-guard-shim"), victim);
+      expect(() => ensureGuardBin(d, TOOL)).not.toThrow();
+      expect(readlinkSync(victim)).toBe(join(TOOL, "scripts", "install-guard-shim"));
+    });
+  });
 });

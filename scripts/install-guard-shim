@@ -27,8 +27,11 @@ name=$(basename "$prog")
 real_bun=""
 old_ifs=$IFS
 IFS=:
-for d in $PATH; do
-  [ -n "$d" ] || d="."
+set -f
+for d in ${PATH:-}; do
+  # Empty entries never count, as in the guard's own lookup: a bun in the
+  # working directory must not become the guard's interpreter.
+  [ -n "$d" ] || continue
   case "$d" in
     "/"*) abs_d=$d ;;
     *) abs_d=$(cd "$d" 2>/dev/null && pwd) || continue ;;
@@ -39,6 +42,7 @@ for d in $PATH; do
     break
   fi
 done
+set +f
 IFS=$old_ifs
 if [ -z "$real_bun" ]; then
   echo "install-guard: no bun outside the guard's shims" >&2
