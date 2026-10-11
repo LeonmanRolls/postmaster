@@ -126,7 +126,7 @@ export function machine(root: string, opts: FixtureOptions = {}): Machine {
     target: { branch: "main", head: base },
     postmaster: { commit: base, checkout: TOOL },
     config: {
-      lanes: { ghost: { harness: "none-such", model: "m" }, ...(opts.lanes ?? {}) },
+      lanes: { ghost: { harness: "none-such", model: "m" }, ...opts.lanes },
       review: { round_timeout_seconds: opts.timeoutSecs ?? 120 },
     },
   };
