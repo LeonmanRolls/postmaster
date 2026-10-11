@@ -15,7 +15,7 @@
 //   run verifier prompt <repo> <surface>... [--headless]
 //   run verifier list <repo>
 //   run verifier stale <repo> [--at <commit>]
-//   run verifier make <repo> <surface>... --run <dispatch> [--timeout <seconds>]
+//   run verifier make <repo> <surface>... --run <dispatch> [--timeout <seconds>] [--repository]
 //   run verifier check <repo> <branch> --run <dispatch> (--handover <file>|--report <file>)
 //     [--folder <dir>] [--timeout <seconds>]
 //   run verifier land <repo> <branch> --run <dispatch> (--handover <file>|--report <file>)
@@ -25,30 +25,43 @@
 //   run verifier upkeep-prompt <repo> [--headless] [--folder <dir>] [--correct]
 //   run verifier upkeep-report <repo> --run <dispatch> --report <file> [--folder <dir>]
 //
-//   surface    one or more of cli, web, library, cli-examples, browser-suite,
-//              web-journey, library-tests. cli-examples is the command line,
-//              browser-suite and web-journey are web pages, library-tests is
-//              the library interface; names of one surface make one verifier.
-//   prompt     print the session's instructions for the repo and surfaces, the
-//              interactive form, or with --headless the no-host form, which lists
-//              each question it could not ask in HANDOVER.md instead of asking
-//   list       print the verifiers the repo holds: one index: line per read-first
-//              entry, then one verifier:/surface:/features: block per verifier, or
-//              verifiers: none. The clerk's brief and discovery read this (#327)
+//   surface    one or more of cli, web, library, backend, cli-examples,
+//              browser-suite, web-journey, library-tests, each a kind or
+//              kind:name. cli-examples is the command line, browser-suite and
+//              web-journey are web pages, library-tests is the library
+//              interface; backend takes a name, as backend:api, and names the
+//              service's requests. Exact duplicates make one verifier; two
+//              surfaces sharing one folder are refused.
+//   prompt     print the session's repository instructions for the repo and
+//              surfaces, the interactive form, or with --headless the no-host
+//              form, which lists each question it could not ask in HANDOVER.md
+//              instead of asking
+//   list       print the verifiers the repo holds, committed and local: one
+//              index: line per read-first entry, then one
+//              verifier:/surface:/features: block per verifier, or verifiers:
+//              none. The clerk's brief and discovery read this (#327)
 //   stale      print the verifiers that may have gone stale: each verifier with a
 //              file its index lists (#318) changed between the commit it was made
 //              or confirmed at (#328) and --at, HEAD when --at is absent, naming
 //              the files, or unconfirmed with the cause when its entry lacks its
 //              Files list, its Confirmed commit, or names a commit the repo does
-//              not hold. Prints stale: none when no verifier is marked. The
+//              not hold. Prints stale: none when no verifier is marked. Local
+//              verifiers are skipped: their staleness is #479's slice. The
 //              clerk's brief and the postmaster's after-merge offer read this (#355)
-//   make       cut a worktree on a branch of its own beside the repo, removed again
-//              when make fails before any session starts, render the prompt, and open
-//              the coachman role's interactive form through run launch in a fresh tab
-//              through run host spawn, the way the booking clerk opens; send it the
-//              instructions and wait for HANDOVER.md, leaving the tab open when done.
-//              With no session host (spawn exits 3) run headless instead: launch the
-//              coachman role through run launch under run host, wait, fall back to
+//   make       by default, cut a detached working copy beside the repo, run the
+//              session in it, and keep the verifiers it proved under the repo's
+//              .postmaster/verifier/, one folder per surface with an index,
+//              saving HANDOVER.md into the run's logs and removing the working
+//              copy, so the repository shows nothing new. With --repository,
+//              cut a worktree on a branch of its own beside the repo instead,
+//              removed again when make fails before any session starts, and
+//              leave the branch for check and land. Either way, render the
+//              prompt, and open the coachman role's interactive form through
+//              run launch in a fresh tab through run host spawn, the way the
+//              booking clerk opens; send it the instructions and wait for
+//              HANDOVER.md, leaving the tab open when done. With no session
+//              host (spawn exits 3) run headless instead: launch the coachman
+//              role through run launch under run host, wait, fall back to
 //              coachman_fallback on a provider wall read from the session stream,
 //              stop the session at the limit by the pid host recorded, and log one
 //              dispatch action per launch either way
@@ -103,6 +116,8 @@
 //              merges without consulting merge authority (setup's launch-card yes)
 //   --at       the commit stale compares each confirmation against (default HEAD)
 //
+//   --repository  make commits the verifiers on a branch for check and land, as
+//           before; without it they are kept under .postmaster/verifier/ instead
 //   exit 0  prompt, list or stale printed; make: HANDOVER.md validated, the interactive session
 //           left open in its tab, the headless one ended with no wall;
 //           check: the branch lands; land: merged, or the pull request waits for the word;
@@ -110,7 +125,8 @@
 //   exit 1  make failed: the launch would not start, the session was still running at the
 //           limit, both roles walled, the handover, commit, verifier, upkeep line or
 //           index entry is missing, a verifier was made for an unlisted surface,
-//           verifier files landed outside the folder, or the action was not logged;
+//           verifier files landed outside the folder, no verifier was proved, or the
+//           action was not logged;
 //           check, land: the branch lands nothing, or the landing failed after it
 //           was accepted;
 //           upkeep, upkeep-report: a claim is left uncorrected or unchecked, the report
@@ -123,6 +139,7 @@
 //           a verifier branch
 import { createHash } from "node:crypto";
 import {
+  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -137,6 +154,7 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { splitCommand } from "./clerk.ts";
 import { endingWallMessage, isWallMessage } from "./launch.ts";
+import { ensureIgnore } from "./lib/effective-config.ts";
 import { beside, scriptsDir } from "./lib/paths.ts";
 import { run, type RunResult } from "./lib/proc.ts";
 import { RESULT_RE } from "./verify.ts";
@@ -144,7 +162,7 @@ import { RESULT_RE } from "./verify.ts";
 const USAGE = `usage: run verifier prompt <repo> <surface>... [--headless]
        run verifier list <repo>
        run verifier stale <repo> [--at <commit>]
-       run verifier make <repo> <surface>... --run <dispatch> [--timeout <seconds>]
+       run verifier make <repo> <surface>... --run <dispatch> [--timeout <seconds>] [--repository]
        run verifier check <repo> <branch> --run <dispatch> (--handover <file>|--report <file>)
          [--folder <dir>] [--timeout <seconds>]
        run verifier land <repo> <branch> --run <dispatch> (--handover <file>|--report <file>)
@@ -154,23 +172,31 @@ const USAGE = `usage: run verifier prompt <repo> <surface>... [--headless]
        run verifier upkeep-prompt <repo> [--headless] [--folder <dir>] [--correct]
        run verifier upkeep-report <repo> --run <dispatch> --report <file> [--folder <dir>]
 
-       each surface is cli, web, library, cli-examples, browser-suite, web-journey or library-tests;
+       each surface is a kind or kind:name: cli, web, library, backend, cli-examples,
+       browser-suite, web-journey or library-tests; backend takes a name, as backend:api;
        landing is local or pull-request; make's timeout 0 waits without a limit`;
 
 /** The accepted surface names as the unknown-surface error lists them. */
 const KNOWN_SURFACES =
-  "cli, web, library, cli-examples, browser-suite, web-journey or library-tests";
+  "cli, web, library, backend, cli-examples, browser-suite, web-journey or library-tests";
 
 const RUN = beside(import.meta, "run");
 const DEFAULT_TIMEOUT = 3600;
 
-export const SURFACES = ["cli", "web", "library"] as const;
+/** The local verifiers' root inside a project: every local verifier lives under it. */
+export const LOCAL_VERIFIER_ROOT = ".postmaster/verifier";
+
+export const SURFACES = ["cli", "web", "library", "backend"] as const;
 export type Surface = (typeof SURFACES)[number];
+
+/** The trio the no-verifier sentence guards; named backends are never wandered onto. */
+const TRIO: readonly Surface[] = ["cli", "web", "library"];
 
 const PROSE: Record<Surface, string> = {
   cli: "command line",
   web: "web pages",
   library: "library interface",
+  backend: "backend service",
 };
 
 export function isSurface(s: string): s is Surface {
@@ -200,15 +226,116 @@ export function surfaceKind(name: string): Surface | null {
   return DISCOVERY_SURFACES[name] ?? null;
 }
 
-/** Distinct kinds in canonical cli, web, library order. */
+/** Distinct kinds in canonical cli, web, library, backend order. */
 export function orderKinds(kinds: Surface[]): Surface[] {
   return SURFACES.filter((k) => kinds.includes(k));
+}
+
+/** One surface to make: a kind with an optional name, as kind or kind:name. */
+export interface NamedSurface {
+  kind: Surface;
+  /** The user-given name, or "" for a bare kind. */
+  name: string;
+}
+
+/** The label a surface is named by: the kind, or kind:name when named. */
+export function surfaceLabel(surface: NamedSurface): string {
+  return surface.name === "" ? surface.kind : `${surface.kind}:${surface.name}`;
+}
+
+/** The surface's folder segment: the name when named, else the kind. */
+export function surfaceFolder(surface: NamedSurface): string {
+  return surface.name === "" ? surface.kind : surface.name;
+}
+
+/** A name is one path segment, lowercase, starting alphanumerically. */
+const SURFACE_NAME_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/u;
+
+/** Whether a token is a kind or discovery name, hence reserved as a surface name. */
+function isReservedName(name: string): boolean {
+  return surfaceKind(name) !== null;
+}
+
+export type SurfaceParse = { ok: true; surface: NamedSurface } | { ok: false; error: string };
+
+/**
+ * One surface token: a kind, a discovery name, or kind:name. A backend takes
+ * a name, since a bare one says which service of several; the trio's bare
+ * forms keep working as they do today.
+ */
+export function parseSurfaceName(token: string): SurfaceParse {
+  const at = token.indexOf(":");
+  const kindToken = at === -1 ? token : token.slice(0, at);
+  const kind = surfaceKind(kindToken);
+  if (kind === null) return { ok: false, error: `unknown surface: ${token} (${KNOWN_SURFACES})` };
+  if (at === -1) {
+    if (kind === "backend") {
+      return { ok: false, error: "backend takes a name, as backend:api" };
+    }
+    return { ok: true, surface: { kind, name: "" } };
+  }
+  const name = token.slice(at + 1);
+  if (name === "") {
+    return {
+      ok: false,
+      error: `bad surface name: ${token} (a name follows the colon, as web:admin)`,
+    };
+  }
+  if (!SURFACE_NAME_RE.test(name)) {
+    return {
+      ok: false,
+      error: `bad surface name: ${name} in ${token} (letters, digits, - and _, as web:admin)`,
+    };
+  }
+  if (isReservedName(name)) {
+    return { ok: false, error: `bad surface name: ${name} is a surface kind` };
+  }
+  return { ok: true, surface: { kind, name } };
+}
+
+export type SurfacesParse = { ok: true; surfaces: NamedSurface[] } | { ok: false; error: string };
+
+/**
+ * The session's surfaces: parsed, exact duplicates dropped, two surfaces
+ * sharing one folder refused, in canonical kind order with names sorted, so
+ * one set of names always renders one prompt.
+ */
+export function parseSurfaces(tokens: string[]): SurfacesParse {
+  const seen = new Set<string>();
+  const surfaces: NamedSurface[] = [];
+  for (const token of tokens) {
+    const parsed = parseSurfaceName(token);
+    if (!parsed.ok) return parsed;
+    const key = `${parsed.surface.kind}:${parsed.surface.name}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    surfaces.push(parsed.surface);
+  }
+  const folders = new Map<string, string>();
+  for (const s of surfaces) {
+    const folder = surfaceFolder(s);
+    const other = folders.get(folder);
+    if (other !== undefined) {
+      return {
+        ok: false,
+        error: `surfaces ${other} and ${surfaceLabel(s)} share a folder: verifier/${folder}/`,
+      };
+    }
+    folders.set(folder, surfaceLabel(s));
+  }
+  const order = new Map<Surface, number>(SURFACES.map((k, n) => [k, n]));
+  surfaces.sort(
+    (a, b) =>
+      (order.get(a.kind) ?? 0) - (order.get(b.kind) ?? 0) ||
+      (a.name < b.name ? -1 : a.name > b.name ? 1 : 0),
+  );
+  return { ok: true, surfaces };
 }
 
 export interface ParsedPrompt {
   cmd: "prompt";
   repo: string;
-  surfaces: Surface[];
+  surfaces: NamedSurface[];
   headless: boolean;
 }
 
@@ -227,9 +354,11 @@ export interface ParsedStale {
 export interface ParsedMake {
   cmd: "make";
   repo: string;
-  surfaces: Surface[];
+  surfaces: NamedSurface[];
   dispatch: string;
   timeout: number;
+  /** Set only with --repository: commit on a branch for landing, as before. */
+  repository?: boolean;
 }
 
 export interface ParsedCheck {
@@ -430,15 +559,9 @@ export function parseArgs(argv: string[]): Parsed {
       names.push(token);
     }
     if (names.length === 0) return { ok: false, error: `${cmd} takes a repo and a surface` };
-    const kinds: Surface[] = [];
-    for (const name of names) {
-      const kind = surfaceKind(name);
-      if (kind === null) {
-        return { ok: false, error: `unknown surface: ${name} (${KNOWN_SURFACES})` };
-      }
-      kinds.push(kind);
-    }
-    const surfaces = orderKinds(kinds);
+    const parsedSurfaces = parseSurfaces(names);
+    if (!parsedSurfaces.ok) return parsedSurfaces;
+    const surfaces = parsedSurfaces.surfaces;
     if (cmd === "prompt") {
       const rest = argv.slice(i);
       if (rest.length > 1) return { ok: false, error: "prompt takes a repo and a surface" };
@@ -449,6 +572,7 @@ export function parseArgs(argv: string[]): Parsed {
     }
     let dispatch: string | null = null;
     let timeout = DEFAULT_TIMEOUT;
+    let repository = false;
     const rest = argv.slice(i);
     for (let j = 0; j < rest.length; j++) {
       const flag = rest[j] as string;
@@ -462,12 +586,16 @@ export function parseArgs(argv: string[]): Parsed {
         if (!parsed.ok) return parsed;
         timeout = parsed.timeout;
         j++;
+      } else if (flag === "--repository") {
+        repository = true;
       } else {
         return { ok: false, error: `unknown flag for make: ${flag}` };
       }
     }
     if (dispatch === null) return { ok: false, error: "make needs --run <dispatch>" };
-    return { ok: true, req: { cmd, repo, surfaces, dispatch, timeout } };
+    const req: ParsedMake = { cmd, repo, surfaces, dispatch, timeout };
+    if (repository) req.repository = true;
+    return { ok: true, req };
   }
   const second = argv[2];
   if (repo === undefined || second === undefined) {
@@ -555,6 +683,10 @@ export interface PromptVars {
   secretsRule: string;
   handoverUnasked: string;
   handoverRule?: string;
+  /** The commit line: commit the branch, or commit nothing in a local session. */
+  commitLine?: string;
+  /** The kind's own rule: how a backend is driven; empty for the trio. */
+  surfaceRule?: string;
   /** The commit the session proves against, for the index's Confirmed line. */
   proved?: string;
 }
@@ -584,6 +716,8 @@ export function renderPrompt(template: string, vars: PromptVars): string {
     HANDOVER_UNASKED: vars.handoverUnasked,
   };
   if (vars.handoverRule !== undefined) known.HANDOVER_RULE = vars.handoverRule;
+  if (vars.commitLine !== undefined) known.COMMIT_LINE = vars.commitLine;
+  if (vars.surfaceRule !== undefined) known.SURFACE_RULE = vars.surfaceRule;
   if (vars.proved !== undefined) known.PROVED = vars.proved;
   return renderTemplate(template, known);
 }
@@ -604,14 +738,24 @@ export function hasUpkeepLine(text: string): boolean {
 
 /** One index entry names the kind's folder and its surface prose together. */
 export function indexNames(text: string, kind: Surface): boolean {
-  const prose = PROSE[kind];
+  return indexNamesFolder(text, PROSE[kind], `verifier/${kind}`);
+}
+
+/**
+ * One index entry names a verifier folder and its surface prose together:
+ * a full folder path bounded past its end, so verifier/cli-extra/ never
+ * reads as the cli verifier, or a relative folder link [cli](cli/).
+ */
+export function indexNamesFolder(text: string, prose: string, folder: string): boolean {
+  const seg = folder.split("/").pop() ?? folder;
+  const escFolder = folder.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  const escSeg = seg.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  const re = new RegExp(`${escFolder}(?![A-Za-z0-9_-])|\\]\\( *${escSeg}/`, "u");
   return text.split("\n").some((line) => {
     // LOWER: lowered for an ASCII keyword match
     const lower = line.toLowerCase();
-    if (!lower.includes(prose)) return false;
-    // A full verifier/<kind>/ path bounded past the kind, so verifier/cli-extra/
-    // never reads as the cli verifier, or a relative folder link [cli](cli/).
-    return new RegExp(`verifier/${kind}(?![A-Za-z0-9_-])|\\]\\( *${kind}/`, "u").test(lower);
+    // ASCII: the prose and folders matched are ASCII alone
+    return lower.includes(prose.toLowerCase()) && re.test(lower);
   });
 }
 
@@ -648,6 +792,7 @@ export function surfaceFromReadme(text: string): string | null {
     ["command line", "cli"],
     ["web pages", "web"],
     ["library interface", "library"],
+    ["backend service", "backend"],
   ];
   let best: { at: number; surface: Surface } | null = null;
   for (const [phrase, surface] of phrases) {
@@ -656,7 +801,8 @@ export function surfaceFromReadme(text: string): string | null {
   }
   if (best !== null) return PROSE[best.surface];
   // A minimal README may name only the short token, as src/cli.ts does. No
-  // library token: a bare "library" is usually the project's own code.
+  // library or backend token: a bare "library" or "backend" is usually the
+  // project's own code.
   const tokens: Array<[RegExp, Surface]> = [
     [/\bcli\b/u, "cli"], // ASCII: ASCII literals; an adjacent ASCII word char joins them
     [/\bweb\b/u, "web"], // ASCII: ASCII literals; an adjacent ASCII word char joins them
@@ -737,21 +883,24 @@ function readVerifier(repo: string, folder: string, kind: string | null): Verifi
  * The repo's verifiers from its working tree, in both shapes: the multi
  * verifier/ folder with its index, and any top-level folder starting with
  * verify- that holds a README.md. A renamed repo keeps its old slug, so the
- * single shape matches the prefix, never the slug of today.
+ * single shape matches the prefix, never the slug of today. Local verifiers
+ * under .postmaster/verifier/ read the same way, with repo-relative paths.
  */
 export function listVerifiers(repo: string): VerifierListing {
   const verifiers: VerifierEntry[] = [];
   const indexes: string[] = [];
-  const multiIndex = isFilePath(join(repo, "verifier", "README.md"));
-  if (multiIndex) indexes.push("verifier/README.md");
-  if (isDirPath(join(repo, "verifier"))) {
-    for (const kind of childNames(join(repo, "verifier")).sort()) {
-      if (!isDirPath(join(repo, "verifier", kind))) continue;
-      const entry = readVerifier(repo, `verifier/${kind}`, kind);
-      if (entry !== null) {
-        verifiers.push(entry);
-        // No shared index: each verifier's README is the read-first entry.
-        if (!multiIndex) indexes.push(`verifier/${kind}/README.md`);
+  for (const root of ["verifier", LOCAL_VERIFIER_ROOT]) {
+    const multiIndex = isFilePath(join(repo, root, "README.md"));
+    if (multiIndex) indexes.push(`${root}/README.md`);
+    if (isDirPath(join(repo, root))) {
+      for (const kind of childNames(join(repo, root)).sort()) {
+        if (!isDirPath(join(repo, root, kind))) continue;
+        const entry = readVerifier(repo, `${root}/${kind}`, kind);
+        if (entry !== null) {
+          verifiers.push(entry);
+          // No shared index: each verifier's README is the read-first entry.
+          if (!multiIndex) indexes.push(`${root}/${kind}/README.md`);
+        }
       }
     }
   }
@@ -856,19 +1005,30 @@ export function modeBlocks(
   };
 }
 
-/** The kinds as prose for the multi header: "command line, web pages". */
-export function proseList(kinds: Surface[]): string {
-  return kinds.map((k) => PROSE[k]).join(", ");
+/** The surfaces as prose with labels for the multi header: "web pages (web:admin), ...". */
+export function surfaceList(surfaces: NamedSurface[]): string {
+  return surfaces.map((s) => `${PROSE[s.kind]} (${surfaceLabel(s)})`).join(", ");
 }
 
-/** One mapping line per kind for the multi header. */
-export function dirLines(kinds: Surface[]): string {
-  return kinds.map((k) => `- the ${PROSE[k]} (${k}) verifier goes in verifier/${k}/`).join("\n");
+/** One mapping line per surface for the multi header, under a verifiers root. */
+export function dirLines(surfaces: NamedSurface[], root = "verifier"): string {
+  return surfaces
+    .map(
+      (s) =>
+        `- the ${PROSE[s.kind]} (${surfaceLabel(s)}) verifier goes in ${root}/${surfaceFolder(s)}/`,
+    )
+    .join("\n");
 }
 
-/** The no-verifier sentence for the kinds left out, or "" when none are. */
-export function unlistedSentence(kinds: Surface[]): string {
-  const left = SURFACES.filter((k) => !kinds.includes(k)).map((k) => `the ${PROSE[k]}`);
+/**
+ * The no-verifier sentence for the trio's kinds left out, or "" when none
+ * are. Named backends are never listed: a session told to make only named
+ * surfaces cannot wander onto an unnamed service, and the ONLY line above it
+ * covers the named ones.
+ */
+export function unlistedSentence(surfaces: NamedSurface[]): string {
+  const kinds = surfaces.map((s) => s.kind);
+  const left = TRIO.filter((k) => !kinds.includes(k)).map((k) => `the ${PROSE[k]}`);
   if (left.length === 0) return "";
   const last = left.slice(-1).join("");
   const names = left.length === 1 ? last : `${left.slice(0, -1).join(", ")} and ${last}`;
@@ -877,12 +1037,12 @@ export function unlistedSentence(kinds: Surface[]): string {
 }
 
 /** The per-surface sections, numbered, separated by rules. */
-export function joinBodies(bodies: { kind: Surface; text: string }[]): string {
+export function joinBodies(bodies: { surface: NamedSurface; text: string }[]): string {
   const total = bodies.length;
   return bodies
     .map(
       (b, n) =>
-        `---\n\n**Verifier ${n + 1} of ${total}: ${PROSE[b.kind]} (${b.kind}).**\n\n${b.text}`,
+        `---\n\n**Verifier ${n + 1} of ${total}: ${PROSE[b.surface.kind]} (${surfaceLabel(b.surface)}).**\n\n${b.text}`,
     )
     .join("\n\n");
 }
@@ -896,17 +1056,22 @@ export function verifyDirName(repoPath: string): string {
   return slug === "" ? "verify-app" : `verify-${slug}`;
 }
 
-/** The session's verifiers folder: one surface keeps #323's folder, several share one. */
-export function sessionFolder(repo: string, surfaces: Surface[]): string {
+/** The session's repository folder: one surface keeps #323's folder, several share one. */
+export function sessionFolder(repo: string, surfaces: NamedSurface[]): string {
   return surfaces.length === 1 ? verifyDirName(repo) : "verifier";
 }
 
-/** The verifier folders present at the repo top: the shared one, the single one, or both. */
+/**
+ * The verifier folders present: the shared one, the single one, the local
+ * one. The local folder joins the list whatever shape it holds, so setup's
+ * refusal and discovery's verifiers= line read it like a committed one.
+ */
 export function presentVerifierFolders(repo: string): string[] {
   const out: string[] = [];
   if (existsSync(join(repo, "verifier"))) out.push("verifier");
   const single = verifyDirName(repo);
   if (existsSync(join(repo, single))) out.push(single);
+  if (existsSync(join(repo, LOCAL_VERIFIER_ROOT))) out.push(LOCAL_VERIFIER_ROOT);
   return out;
 }
 
@@ -1234,11 +1399,12 @@ export function outsideAdded(added: string[]): string[] {
 }
 
 /** Added verifier/ paths outside the listed verifiers and the index. */
-export function strayVerifierPaths(added: string[], surfaces: Surface[]): string[] {
+export function strayVerifierPaths(added: string[], surfaces: NamedSurface[]): string[] {
+  const segs = new Set(surfaces.map(surfaceFolder));
   return addedUnder(added, "verifier").filter((p) => {
     if (p === "verifier/README.md") return false;
     const seg = p.slice("verifier/".length).split("/")[0] ?? "";
-    return !(surfaces as string[]).includes(seg);
+    return !segs.has(seg);
   });
 }
 
@@ -2136,51 +2302,111 @@ const SINGLE_HANDOVER_RULE =
 const MULTI_HANDOVER_RULE =
   "Commit only verifiers with proof: a verifier whose drive left no proof file stays out\nof the branch — remove its folder rather than committing it. Prove this verifier as\nabove before going on to the next; write the single HANDOVER.md only after every\nverifier in this session is proven, covering each verifier: what you proved and under\nwhich drive name, where each proof file sits as an absolute path (or why there is none),\nand what you left undone. Give each verifier its own `## Verifier: <name>` section\ncarrying a `Folder:` line with the verifier's folder relative to the top of the working\ncopy and a `Proof:` line with the proof file's absolute path alone, or `none` and the\nreason when there is no proof file. Send the same text as your final message.";
 
+/** The handover paragraph for one local verifier: keep, never commit. */
+const LOCAL_SINGLE_HANDOVER_RULE =
+  "Keep only verifiers with proof: a verifier whose drive left no proof file stays out\n— remove its folder rather than keeping it. Then write HANDOVER.md at\nthe top of this working copy: what you proved and under which drive name, where the\nproof file sits as an absolute path (or why there is none), and what you left undone.\nGive each verifier its own `## Verifier: <name>` section carrying a `Folder:` line with\nthe verifier's folder relative to the top of the working copy and a `Proof:` line with\nthe proof file's absolute path alone, or `none` and the reason when there is no proof\nfile. Send the same text as your final message.";
+
+/** The handover paragraph per verifier when one local session makes several. */
+const LOCAL_MULTI_HANDOVER_RULE =
+  "Keep only verifiers with proof: a verifier whose drive left no proof file stays out\n— remove its folder rather than keeping it. Prove this verifier as\nabove before going on to the next; write the single HANDOVER.md only after every\nverifier in this session is proven, covering each verifier: what you proved and under\nwhich drive name, where each proof file sits as an absolute path (or why there is none),\nand what you left undone. Give each verifier its own `## Verifier: <name>` section\ncarrying a `Folder:` line with the verifier's folder relative to the top of the working\ncopy and a `Proof:` line with the proof file's absolute path alone, or `none` and the\nreason when there is no proof file. Send the same text as your final message.";
+
+/** The commit line a repository session reads: byte for byte as before. */
+const REPO_COMMIT_LINE = "Commit the verifier on this branch. ";
+
+/** The commit line a local session reads: nothing is committed. */
+const LOCAL_COMMIT_LINE = "Commit nothing in this working copy. ";
+
+/** The multi commit bullet a repository session reads: byte for byte as before. */
+const REPO_COMMIT_BULLET = "- Commit the verifiers on this branch as you go.";
+
+/** The multi commit bullet a local session reads. */
+const LOCAL_COMMIT_BULLET =
+  "- Commit nothing: leave every verifier uncommitted in this working copy.";
+
+/**
+ * The rule a kind carries of its own: how a backend is driven. The trio's
+ * sessions drive pages, commands or library calls, which the body already
+ * covers; a backend has none of those, so its section says what it has.
+ */
+export function surfaceRule(kind: Surface): string {
+  if (kind !== "backend") return "";
+  return (
+    "This surface is a backend: it has no pages, command line or library interface of its " +
+    "own. Drive it through the requests it answers — its API calls, jobs or messages — with " +
+    "the real routes and payloads from this project, and check the state each request leaves " +
+    "(rows stored, files written, messages sent) beside the reply it returns."
+  );
+}
+
 function readMultiTemplate(): string {
   return readFileSync(join(scriptsDir(import.meta), "verifier-multi-prompt.md"), "utf8");
 }
 
-/** The session prompt: one body for one surface, a header plus one body per kind. */
+/** The count noun for the multi header: "1 verifier", "3 verifiers". */
+export function countNoun(count: number): string {
+  return count === 1 ? "1 verifier" : `${count} verifiers`;
+}
+
+/**
+ * The session prompt: one body for one repository surface, a header plus one
+ * body per surface otherwise. A local session always takes the shared shape,
+ * even for one surface, writing under .postmaster/verifier/ and committing
+ * nothing; a repository session keeps #323's folder for one surface.
+ */
 function renderSessionPrompt(
   repo: string,
-  surfaces: Surface[],
+  surfaces: NamedSurface[],
   base: string,
   proved: string,
   headless: boolean,
+  local: boolean,
 ): string {
   const body = readTemplate();
-  if (surfaces.length === 1) {
-    const kind = surfaces[0] as Surface;
+  const commitLine = local ? LOCAL_COMMIT_LINE : REPO_COMMIT_LINE;
+  if (!local && surfaces.length === 1) {
+    const surface = surfaces[0] as NamedSurface;
     return renderPrompt(body, {
       repo,
-      surface: kind,
-      surfaceProse: surfaceProse(kind),
+      surface: surfaceLabel(surface),
+      surfaceProse: surfaceProse(surface.kind),
       verifyDir: verifyDirName(repo),
       base,
       proved,
+      commitLine,
+      surfaceRule: surfaceRule(surface.kind),
       handoverRule: SINGLE_HANDOVER_RULE,
       ...modeBlocks(headless),
     });
   }
-  const bodies = surfaces.map((kind) => ({
-    kind,
+  const root = local ? LOCAL_VERIFIER_ROOT : "verifier";
+  const handoverRule = local
+    ? surfaces.length === 1
+      ? LOCAL_SINGLE_HANDOVER_RULE
+      : LOCAL_MULTI_HANDOVER_RULE
+    : MULTI_HANDOVER_RULE;
+  const bodies = surfaces.map((surface) => ({
+    surface,
     text: renderPrompt(body, {
       repo,
-      surface: kind,
-      surfaceProse: surfaceProse(kind),
-      verifyDir: `verifier/${kind}`,
+      surface: surfaceLabel(surface),
+      surfaceProse: surfaceProse(surface.kind),
+      verifyDir: `${root}/${surfaceFolder(surface)}`,
       base,
       proved,
-      handoverRule: MULTI_HANDOVER_RULE,
+      commitLine,
+      surfaceRule: surfaceRule(surface.kind),
+      handoverRule,
       ...modeBlocks(headless),
     }),
   }));
   return renderTemplate(readMultiTemplate(), {
-    SURFACE_LIST: proseList(surfaces),
-    COUNT: String(surfaces.length),
-    DIR_LINES: dirLines(surfaces),
+    SURFACE_LIST: surfaceList(surfaces),
+    COUNT_NOUN: countNoun(surfaces.length),
+    DIR_LINES: dirLines(surfaces, root),
     UNLISTED_SENTENCE: unlistedSentence(surfaces),
     PER_SURFACE: joinBodies(bodies),
+    VERIFIER_ROOT: root,
+    COMMIT_LINE_MULTI: local ? LOCAL_COMMIT_BULLET : REPO_COMMIT_BULLET,
     BASE: base,
     PROVED: proved,
   });
@@ -2201,8 +2427,10 @@ function runPrompt(req: ParsedPrompt): number {
   if (!isRepoTop(repo)) throw new UsageError(`not the top of its repository: ${req.repo}`);
   const base = defaultBase(repo);
   if (base === null) throw new UsageError(`no commit to cut from in ${req.repo}`);
+  // The repository instructions: prompt takes no word, so it shows the
+  // committed shape, while make's local session reads its own rendering.
   process.stdout.write(
-    renderSessionPrompt(repo, req.surfaces, base, provedCommit(repo, base), req.headless),
+    renderSessionPrompt(repo, req.surfaces, base, provedCommit(repo, base), req.headless, false),
   );
   return 0;
 }
@@ -2365,6 +2593,11 @@ function runStaleCmd(req: ParsedStale): number {
   const shared = isFilePath(join(repo, "verifier", "README.md"));
   const marks: string[] = [];
   for (const v of listing.verifiers) {
+    // Local verifiers read as confirmed: their staleness is #479's slice, so
+    // this slice says nothing about them, as the listing used to.
+    if (v.folder === LOCAL_VERIFIER_ROOT || v.folder.startsWith(`${LOCAL_VERIFIER_ROOT}/`)) {
+      continue;
+    }
     const detail = staleDetail(repo, v.folder, shared, at);
     if (detail !== null) marks.push(`stale: ${v.folder}: ${detail}`);
   }
@@ -2408,7 +2641,10 @@ interface LaunchOpts {
   wt: string;
   name: string;
   logs: string;
-  branch: string;
+  /** The branch, or null for a detached local working copy. */
+  branch: string | null;
+  /** The file and handle tag: the branch, or the surfaces' label when local. */
+  tag: string;
   surface: string;
   promptFile: string;
   dispatch: string;
@@ -2460,7 +2696,7 @@ export function waitForMarker(
 }
 
 function launchAndWait(o: LaunchOpts, sessionStarted: { started: boolean }): Attempt {
-  const base = join(o.logs, `verifier-${o.branch}-${o.role}`);
+  const base = join(o.logs, `verifier-${o.tag}-${o.role}`);
   const stream = `${base}-events.jsonl`;
   const errFile = `${base}.err`;
   const marker = `${base}.done`;
@@ -2548,9 +2784,10 @@ function launchAndWait(o: LaunchOpts, sessionStarted: { started: boolean }): Att
   };
 }
 
-function logLaunch(dispatch: string, surface: string, branch: string, a: Attempt): void {
+function logLaunch(dispatch: string, surface: string, branch: string | null, a: Attempt): void {
   const outcome = a.failed !== "" ? ` failed: ${a.failed}` : a.walled ? " walled" : "";
-  const detail = `thread ${a.thread} role ${a.role} branch ${branch}${outcome}`;
+  const where = branch === null ? "local" : `branch ${branch}`;
+  const detail = `thread ${a.thread} role ${a.role} ${where}${outcome}`;
   const r = run(RUN, [
     "log-action",
     dispatch,
@@ -2577,14 +2814,17 @@ function attempt(o: LaunchOpts, sessionStarted: { started: boolean }): Attempt {
 
 /**
  * Best-effort removal of a failed make's worktree and branch: "" when clean,
- * otherwise the failure to append to the error that caused the cleanup.
+ * otherwise the failure to append to the error that caused the cleanup. A
+ * null branch is a detached working copy: only the worktree goes.
  */
-export function removeProvisioning(repo: string, wt: string, branch: string): string {
+export function removeProvisioning(repo: string, wt: string, branch: string | null): string {
   const problems: string[] = [];
   const rm = git(repo, ["worktree", "remove", "--force", wt]);
   if (rm.code !== 0) problems.push(rm.err.trim() || rm.out.trim() || `exit ${rm.code}`);
-  const del = git(repo, ["branch", "-D", branch]);
-  if (del.code !== 0) problems.push(del.err.trim() || del.out.trim() || `exit ${del.code}`);
+  if (branch !== null) {
+    const del = git(repo, ["branch", "-D", branch]);
+    if (del.code !== 0) problems.push(del.err.trim() || del.out.trim() || `exit ${del.code}`);
+  }
   return problems.length === 0 ? "" : `; the cleanup failed too: ${problems.join("; ")}`;
 }
 
@@ -2597,17 +2837,21 @@ export interface FailureOutcome {
 /**
  * A failure before any session started cleans up pure scaffolding; once a
  * session ran, its work may hold the diagnosis, so the worktree and branch
- * stay, named in the error for the operator.
+ * stay, named in the error for the operator. A null branch names the
+ * detached working copy alone.
  */
 export function failureOutcome(
   sessionStarted: boolean,
   wt: string,
-  branch: string,
+  branch: string | null,
 ): FailureOutcome {
   if (sessionStarted) {
     return {
       cleanup: false,
-      suffix: `; the worktree ${wt} and branch ${branch} were left behind`,
+      suffix:
+        branch === null
+          ? `; the worktree ${wt} was left behind`
+          : `; the worktree ${wt} and branch ${branch} were left behind`,
     };
   }
   return { cleanup: true, suffix: "" };
@@ -2624,33 +2868,69 @@ function runMake(req: ParsedMake): number {
   const base = defaultBase(repo);
   if (base === null) throw new UsageError(`no commit to cut from in ${req.repo}`);
   const proved = provedCommit(repo, base);
+  // Before any session starts: a destination that already holds a kept
+  // folder or the index refuses now, not after the session proved it again.
+  if (req.repository !== true) {
+    const collisions = localDestCollisions(repo, req.surfaces);
+    if (collisions.length > 0) {
+      throw new UsageError(`${repo} already holds ${collisions.join(", ")}`);
+    }
+  }
   pruneWorktrees(repo);
-  const label = req.surfaces.join("-");
-  const branch = pickBranch((name) => branchTaken(repo, name), label);
+  const label = sessionLabel(req.surfaces);
   const wt = pickWorktree(repo, label, existsSync);
-  const vdir = sessionFolder(repo, req.surfaces);
-  const added = git(repo, ["worktree", "add", wt, "-b", branch, base]);
+  if (req.repository === true) {
+    const branch = pickBranch((name) => branchTaken(repo, name), label);
+    const vdir = sessionFolder(repo, req.surfaces);
+    const added = git(repo, ["worktree", "add", wt, "-b", branch, base]);
+    if (added.code !== 0) {
+      throw new RunError(`the worktree would not cut: ${added.err.trim() || added.out.trim()}`);
+    }
+    const sessionStarted = { started: false };
+    const cutAt = Date.now();
+    try {
+      return runMakeLaunches(
+        req,
+        repo,
+        dispatch,
+        base,
+        proved,
+        branch,
+        wt,
+        vdir,
+        sessionStarted,
+        cutAt,
+      );
+    } catch (e) {
+      const outcome = failureOutcome(sessionStarted.started, wt, branch);
+      const extra = outcome.cleanup ? removeProvisioning(repo, wt, branch) : outcome.suffix;
+      if (e instanceof RunError && extra !== "") throw new RunError(`${e.message}${extra}`);
+      throw e;
+    }
+  }
+  // Detached, so no branch is made: the session writes under the local root
+  // and commits nothing, and the keep removes the working copy again.
+  const added = git(repo, ["worktree", "add", "--detach", wt, base]);
   if (added.code !== 0) {
     throw new RunError(`the worktree would not cut: ${added.err.trim() || added.out.trim()}`);
   }
   const sessionStarted = { started: false };
   const cutAt = Date.now();
   try {
-    return runMakeLaunches(
+    return runMakeLocalLaunches(
       req,
       repo,
       dispatch,
       base,
       proved,
-      branch,
+      label,
       wt,
-      vdir,
       sessionStarted,
       cutAt,
     );
   } catch (e) {
-    const outcome = failureOutcome(sessionStarted.started, wt, branch);
-    const extra = outcome.cleanup ? removeProvisioning(repo, wt, branch) : outcome.suffix;
+    const outcome = failureOutcome(sessionStarted.started, wt, null);
+    const extra = outcome.cleanup ? removeProvisioning(repo, wt, null) : outcome.suffix;
     if (e instanceof RunError && extra !== "") throw new RunError(`${e.message}${extra}`);
     throw e;
   }
@@ -2820,6 +3100,7 @@ function runUpkeepLaunches(
     repo,
     dispatch,
     branch,
+    tag: branch,
     wt,
     timeout: req.timeout,
     cutAt,
@@ -2939,7 +3220,7 @@ export function checkMultiVerifiers(
   repo: string,
   branch: string,
   base: string,
-  surfaces: Surface[],
+  surfaces: NamedSurface[],
 ): void {
   // Added past the base, never the branch tree: content the base already
   // carries is not this session's work, and must neither satisfy nor fail it.
@@ -2952,24 +3233,26 @@ export function checkMultiVerifiers(
     throw new RunError(`the session added no verifier/README.md on ${branch}`);
   }
   const index = branchFileText(repo, branch, "verifier/README.md") ?? "";
-  for (const kind of surfaces) {
-    if (!has(`verifier/${kind}/README.md`)) {
-      throw new RunError(`the session added no verifier/${kind}/README.md on ${branch}`);
+  for (const surface of surfaces) {
+    const seg = surfaceFolder(surface);
+    const label = surfaceLabel(surface);
+    if (!has(`verifier/${seg}/README.md`)) {
+      throw new RunError(`the session added no verifier/${seg}/README.md on ${branch}`);
     }
-    if (!has(`verifier/${kind}/features/README.md`)) {
-      throw new RunError(`the session added no verifier/${kind}/features/README.md on ${branch}`);
+    if (!has(`verifier/${seg}/features/README.md`)) {
+      throw new RunError(`the session added no verifier/${seg}/features/README.md on ${branch}`);
     }
-    const pages = addedFeaturePages(added, `verifier/${kind}`);
+    const pages = addedFeaturePages(added, `verifier/${seg}`);
     if (pages.length < 3) {
-      throw new RunError(`the session added fewer than 3 feature pages for ${kind} on ${branch}`);
+      throw new RunError(`the session added fewer than 3 feature pages for ${label} on ${branch}`);
     }
-    const main = branchFileText(repo, branch, `verifier/${kind}/README.md`) ?? "";
+    const main = branchFileText(repo, branch, `verifier/${seg}/README.md`) ?? "";
     if (!hasUpkeepLine(main)) {
-      throw new RunError(`the verifier/${kind}/README.md on ${branch} carries no upkeep line`);
+      throw new RunError(`the verifier/${seg}/README.md on ${branch} carries no upkeep line`);
     }
-    if (!indexNames(index, kind)) {
+    if (!indexNamesFolder(index, surfaceProse(surface.kind), `verifier/${seg}`)) {
       throw new RunError(
-        `the verifier/README.md on ${branch} names no ${surfaceProse(kind)} (${kind}) verifier`,
+        `the verifier/README.md on ${branch} names no ${surfaceProse(surface.kind)} (${label}) verifier`,
       );
     }
   }
@@ -2992,7 +3275,8 @@ function runRoles(
     wt: string;
     name: string;
     logs: string;
-    branch: string;
+    branch: string | null;
+    tag: string;
     surface: string;
     promptFile: string;
     dispatch: string;
@@ -3025,7 +3309,10 @@ interface PrintCtx {
 interface SessionOpts {
   repo: string;
   dispatch: string;
-  branch: string;
+  /** The branch, or null for a detached local working copy. */
+  branch: string | null;
+  /** The file and handle tag: the branch, or the surfaces' label when local. */
+  tag: string;
   wt: string;
   timeout: number;
   cutAt: number;
@@ -3048,7 +3335,7 @@ interface SessionOpts {
 function runSessionLaunches(o: SessionOpts): number {
   const logs = join(o.dispatch, "logs");
   mkdirSync(logs, { recursive: true });
-  const promptFile = join(logs, `verifier-${o.branch}-prompt.txt`);
+  const promptFile = join(logs, `verifier-${o.tag}-prompt.txt`);
   writeFileSync(promptFile, o.renderPrompt(false));
   const named = run(RUN, ["host", "name", o.dispatch, "role", `verifier-${o.logLabel}`]);
   if (named.code !== 0) {
@@ -3056,7 +3343,7 @@ function runSessionLaunches(o: SessionOpts): number {
   }
   const name = named.out.trim();
   const form = formOrNull(o.wt, name);
-  const handle = verifierHandle(o.repo, o.branch);
+  const handle = verifierHandle(o.repo, o.tag);
   const spawned =
     form === null
       ? null
@@ -3088,7 +3375,7 @@ function runSessionLaunches(o: SessionOpts): number {
     );
   }
   o.sessionStarted.started = true;
-  const sendFile = join(logs, `verifier-${o.branch}-send.txt`);
+  const sendFile = join(logs, `verifier-${o.tag}-send.txt`);
   writeFileSync(sendFile, o.sendFileText(promptFile));
   const delivery = deliverInstructions((args) => run(RUN, args), handle, sendFile);
   if (!delivery.delivered) {
@@ -3134,6 +3421,7 @@ function runSessionHeadless(
       name,
       logs,
       branch: o.branch,
+      tag: o.tag,
       surface: o.logLabel,
       promptFile,
       dispatch: o.dispatch,
@@ -3145,7 +3433,12 @@ function runSessionHeadless(
   return o.print({ final, handle: "", promptFile });
 }
 
-/** Make's briefing: the making instructions, the handover wait, the handover summary. */
+/** The session's label: its surfaces' folder segments joined, for branches and files. */
+export function sessionLabel(surfaces: NamedSurface[]): string {
+  return surfaces.map(surfaceFolder).join("-");
+}
+
+/** Make's repository briefing: the making instructions, the handover wait, the summary. */
 function runMakeLaunches(
   req: ParsedMake,
   repo: string,
@@ -3162,13 +3455,15 @@ function runMakeLaunches(
     repo,
     dispatch,
     branch,
+    tag: branch,
     wt,
     timeout: req.timeout,
     cutAt,
     sessionStarted,
-    logLabel: req.surfaces.join("-"),
+    logLabel: sessionLabel(req.surfaces),
     sessionNoun: "verifier",
-    renderPrompt: (headless) => renderSessionPrompt(repo, req.surfaces, base, proved, headless),
+    renderPrompt: (headless) =>
+      renderSessionPrompt(repo, req.surfaces, base, proved, headless, false),
     sendFileText: (promptFile) => sendText(promptFile),
     waitFile: "HANDOVER.md",
     validate: () => validateSession(wt, base, branch, vdir, cutAt, req.surfaces),
@@ -3182,6 +3477,59 @@ function runMakeLaunches(
       lines.push(`prompt ${promptFile}`);
       if (final !== null) lines.push(`stream ${final.stream}`);
       lines.push(`handover ${join(wt, "HANDOVER.md")}`);
+      for (const line of lines) console.log(line);
+      return 0;
+    },
+  });
+}
+
+/** Make's local briefing: the local instructions, the keep, the kept summary. */
+function runMakeLocalLaunches(
+  req: ParsedMake,
+  repo: string,
+  dispatch: string,
+  base: string,
+  proved: string,
+  label: string,
+  wt: string,
+  sessionStarted: { started: boolean },
+  cutAt: number,
+): number {
+  let kept: { folders: string[]; leftOut: ClassifiedEntry[]; handover: string } | null = null;
+  return runSessionLaunches({
+    repo,
+    dispatch,
+    branch: null,
+    tag: label,
+    wt,
+    timeout: req.timeout,
+    cutAt,
+    sessionStarted,
+    logLabel: label,
+    sessionNoun: "verifier",
+    renderPrompt: (headless) =>
+      renderSessionPrompt(repo, req.surfaces, base, proved, headless, true),
+    sendFileText: (promptFile) => sendText(promptFile),
+    waitFile: "HANDOVER.md",
+    validate: () => {
+      kept = keepLocalSession(repo, dispatch, wt, label, cutAt, req.surfaces);
+    },
+    print: ({ final, handle, promptFile }) => {
+      const done = kept as { folders: string[]; leftOut: ClassifiedEntry[]; handover: string };
+      const lines = [`kept ${LOCAL_VERIFIER_ROOT}`, `base ${base}`];
+      if (final === null) {
+        lines.push("role coachman", `handle ${handle}`);
+      } else {
+        lines.push(`role ${final.role}`, `thread ${final.thread}`);
+      }
+      lines.push(`prompt ${promptFile}`);
+      if (final !== null) lines.push(`stream ${final.stream}`);
+      lines.push(`handover ${done.handover}`);
+      lines.push(
+        done.leftOut.length === 0
+          ? "left out: none"
+          : `left out: ${done.leftOut.map((e) => `${e.name} (${e.failReason})`).join(", ")}`,
+      );
       for (const line of lines) console.log(line);
       return 0;
     },
@@ -3250,12 +3598,13 @@ function formOrNull(wt: string, name: string): string[] | null {
 function logInteractive(
   dispatch: string,
   surface: string,
-  branch: string,
+  branch: string | null,
   handle: string,
   failed: string,
 ): void {
+  const where = branch === null ? "local" : `branch ${branch}`;
   const detail =
-    `interactive handle ${handle} branch ${branch}` + (failed === "" ? "" : ` failed: ${failed}`);
+    `interactive handle ${handle} ${where}` + (failed === "" ? "" : ` failed: ${failed}`);
   const r = run(RUN, [
     "log-action",
     dispatch,
@@ -3278,7 +3627,7 @@ function validateSession(
   branch: string,
   vdir: string,
   cutAt: number,
-  surfaces: Surface[],
+  surfaces: NamedSurface[],
 ): void {
   const handover = join(wt, "HANDOVER.md");
   const written = handoverMtimeMs(handover);
@@ -3306,6 +3655,220 @@ function validateSession(
   } else {
     checkMultiVerifiers(wt, branch, base, surfaces);
   }
+}
+
+/** Folder segments an index bullet's first line names, lowercased. */
+export function spanSegs(span: string[]): string[] {
+  const first = span[0] ?? "";
+  const segs: string[] = [];
+  for (const m of first.matchAll(/verifier\/([A-Za-z0-9_-]+)/giu)) {
+    // LOWER: lowered for an ASCII folder-segment match
+    segs.push((m[1] as string).toLowerCase());
+  }
+  // ASCII: link gaps are ASCII spaces
+  for (const m of first.matchAll(/\]\(\s*([A-Za-z0-9_-]+)\//giu)) {
+    // LOWER: lowered for an ASCII folder-segment match
+    segs.push((m[1] as string).toLowerCase());
+  }
+  return segs;
+}
+
+export interface IndexStrays {
+  /** Session segments the index names without proof. */
+  dangling: string[];
+  /** Segments the index names that no surface lists. */
+  unlisted: string[];
+}
+
+/**
+ * The index's bullets against the session's folders: a bullet naming a
+ * dropped folder dangles, and one naming a folder no surface lists is
+ * unlisted, like a stray file. Prose bullets naming no folder pass.
+ */
+export function indexStrays(text: string, sessionSegs: string[], keptSegs: string[]): IndexStrays {
+  const session = new Set(sessionSegs);
+  const kept = new Set(keptSegs);
+  const dangling = new Set<string>();
+  const unlisted = new Set<string>();
+  for (const span of indexBullets(text)) {
+    for (const seg of spanSegs(span)) {
+      if (!session.has(seg)) unlisted.add(seg);
+      else if (!kept.has(seg)) dangling.add(seg);
+    }
+  }
+  return { dangling: [...dangling].sort(), unlisted: [...unlisted].sort() };
+}
+
+/**
+ * The working copy's changed paths outside the local root and HANDOVER.md,
+ * in the order git listed them. The copy is cut clean, so every entry is
+ * this session's: untracked, modified, deleted or renamed, either side.
+ */
+export function localScopeStrays(wt: string): string[] {
+  // --untracked-files=all: a new directory would otherwise list as one
+  // collapsed dir/ entry instead of the files the session wrote in it.
+  const status = git(wt, ["status", "--porcelain", "-z", "--untracked-files=all"]);
+  if (status.code !== 0) throw new RunError("the session worktree could not be read");
+  const strays: string[] = [];
+  for (const part of status.out.split("\0")) {
+    if (part === "") continue;
+    const path = part.length > 3 && part[2] === " " ? part.slice(3) : part;
+    if (path === "HANDOVER.md") continue;
+    if (path.startsWith(`${LOCAL_VERIFIER_ROOT}/`)) continue;
+    strays.push(path);
+  }
+  return strays;
+}
+
+/**
+ * The local destinations a make would collide with: the shared index and
+ * each session surface's folder, whichever already exist.
+ */
+export function localDestCollisions(repo: string, surfaces: NamedSurface[]): string[] {
+  const collisions: string[] = [];
+  if (existsSync(join(repo, LOCAL_VERIFIER_ROOT, "README.md"))) {
+    collisions.push(`${LOCAL_VERIFIER_ROOT}/README.md`);
+  }
+  for (const s of surfaces) {
+    const folder = `${LOCAL_VERIFIER_ROOT}/${surfaceFolder(s)}`;
+    if (existsSync(join(repo, folder))) collisions.push(folder);
+  }
+  return collisions;
+}
+
+export interface LocalJudged {
+  kept: ClassifiedEntry[];
+  leftOut: ClassifiedEntry[];
+}
+
+/**
+ * The local session's deliverables on disk: a fresh hand-over naming at
+ * least one proven verifier, each proven folder complete under the local
+ * root with its upkeep line, the index naming each kept surface and no
+ * other, and nothing changed outside the root besides HANDOVER.md. Unproven
+ * folders are dropped, with the reason the hand-over gives.
+ */
+export function validateLocalSession(
+  wt: string,
+  cutAt: number,
+  surfaces: NamedSurface[],
+): LocalJudged {
+  const handover = join(wt, "HANDOVER.md");
+  const written = handoverMtimeMs(handover);
+  if (written === null) {
+    throw new RunError(`the session ended with no HANDOVER.md in ${wt}`);
+  }
+  if (!handoverFresh(written, cutAt)) {
+    throw new RunError(`the HANDOVER.md in ${wt} predates this session`);
+  }
+  const parsed = parseHandover(readFileSync(handover, "utf8"));
+  if (!parsed.ok) throw new RunError(parsed.error);
+  if (parsed.entries.length === 0) {
+    throw new RunError("the hand-over names no verifier");
+  }
+  const classified = classifyEntries(parsed.entries, proofIsFile);
+  const kept = classified.filter((e) => e.proven);
+  const leftOut = classified.filter((e) => !e.proven);
+  if (kept.length === 0) {
+    throw new RunError("the session proved no verifier");
+  }
+  const byFolder = new Map(surfaces.map((s) => [`${LOCAL_VERIFIER_ROOT}/${surfaceFolder(s)}`, s]));
+  for (const e of kept) {
+    const surface = byFolder.get(e.folder);
+    if (surface === undefined) {
+      throw new RunError(`the hand-over names an unlisted folder for ${e.name}: ${e.folder}`);
+    }
+    if (!isFilePath(join(wt, e.folder, "README.md"))) {
+      throw new RunError(`the session left no ${e.folder}/README.md`);
+    }
+    if (!isFilePath(join(wt, e.folder, "features", "README.md"))) {
+      throw new RunError(`the session left no ${e.folder}/features/README.md`);
+    }
+    const pages = featurePageNames(childNames(join(wt, e.folder, "features")));
+    if (pages.length < 3) {
+      throw new RunError(
+        `the session left fewer than 3 feature pages for ${surfaceLabel(surface)}`,
+      );
+    }
+    if (!hasUpkeepLine(readmeText(join(wt, e.folder, "README.md")))) {
+      throw new RunError(`the ${e.folder}/README.md carries no upkeep line`);
+    }
+  }
+  const indexPath = join(wt, LOCAL_VERIFIER_ROOT, "README.md");
+  if (!isFilePath(indexPath)) {
+    throw new RunError(`the session left no ${LOCAL_VERIFIER_ROOT}/README.md`);
+  }
+  const index = readmeText(indexPath);
+  for (const e of kept) {
+    const surface = byFolder.get(e.folder) as NamedSurface;
+    if (!indexNamesFolder(index, surfaceProse(surface.kind), e.folder)) {
+      throw new RunError(
+        `the ${LOCAL_VERIFIER_ROOT}/README.md names no ${surfaceProse(surface.kind)} (${surfaceLabel(surface)}) verifier`,
+      );
+    }
+  }
+  const sessionSegs = surfaces.map(surfaceFolder);
+  const keptSegs = kept.map((e) => e.folder.split("/").pop() ?? e.folder);
+  const strays = indexStrays(index, sessionSegs, keptSegs);
+  if (strays.dangling.length > 0) {
+    throw new RunError(
+      `the index names ${strays.dangling.join(", ")} with no proof; prove or drop ${strays.dangling.length === 1 ? "it" : "them"}`,
+    );
+  }
+  if (strays.unlisted.length > 0) {
+    throw new RunError(`the index names an unlisted verifier: ${strays.unlisted.join(", ")}`);
+  }
+  const outside = localScopeStrays(wt);
+  if (outside.length > 0) {
+    const shown = outside.slice(0, 10).join(", ");
+    const more = outside.length > 10 ? ` and ${outside.length - 10} more` : "";
+    throw new RunError(`the session left files outside ${LOCAL_VERIFIER_ROOT}/: ${shown}${more}`);
+  }
+  return { kept, leftOut };
+}
+
+/**
+ * Keep a judged local session: refuse a destination that already holds a
+ * kept folder or the index, ensure the folder's ignore rules, copy the kept
+ * folders and the index, save HANDOVER.md into the run's logs, and remove
+ * the working copy, so the repository shows nothing new.
+ */
+function keepLocalSession(
+  repo: string,
+  dispatch: string,
+  wt: string,
+  label: string,
+  cutAt: number,
+  surfaces: NamedSurface[],
+): { folders: string[]; leftOut: ClassifiedEntry[]; handover: string } {
+  const judged = validateLocalSession(wt, cutAt, surfaces);
+  for (const e of judged.kept) {
+    if (existsSync(join(repo, e.folder))) {
+      throw new RunError(`${repo} already holds ${e.folder}`);
+    }
+  }
+  const index = `${LOCAL_VERIFIER_ROOT}/README.md`;
+  if (existsSync(join(repo, index))) {
+    throw new RunError(`${repo} already holds ${index}`);
+  }
+  ensureIgnore(repo, true);
+  mkdirSync(join(repo, LOCAL_VERIFIER_ROOT), { recursive: true });
+  for (const e of judged.kept) {
+    cpSync(join(wt, e.folder), join(repo, e.folder), { recursive: true });
+  }
+  cpSync(join(wt, index), join(repo, index));
+  const logs = join(dispatch, "logs");
+  mkdirSync(logs, { recursive: true });
+  const saved = join(logs, `verifier-${label}-handover.md`);
+  cpSync(join(wt, "HANDOVER.md"), saved);
+  const rm = git(repo, ["worktree", "remove", "--force", wt]);
+  if (rm.code !== 0) {
+    throw new RunError(
+      `the verifiers were kept but the worktree ${wt} could not be removed: ${rm.err.trim() || rm.out.trim() || `exit ${rm.code}`}`,
+    );
+  }
+  pruneWorktrees(repo);
+  return { folders: judged.kept.map((e) => e.folder), leftOut: judged.leftOut, handover: saved };
 }
 
 /** The ticket the project's checks read: none, so ticket checks report not run. */

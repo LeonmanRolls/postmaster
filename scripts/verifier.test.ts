@@ -2,7 +2,15 @@
 // detection and the wall scan. The live session stays out; acceptance-323 covers the
 // command boundary as a subprocess.
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { commitAll, gitOrThrow, initRepo, RUN, writeRepoFile } from "./acceptance-323.ts";
@@ -26,6 +34,7 @@ import {
   committedFeaturePages,
   confirmedSha,
   correctedClaims,
+  countNoun,
   decideCheap,
   decideChecks,
   defaultBase,
@@ -42,6 +51,8 @@ import {
   indexBullets,
   indexFileFor,
   indexNames,
+  indexNamesFolder,
+  indexStrays,
   isFeaturePage,
   isSetupDispatch,
   isSurface,
@@ -50,9 +61,12 @@ import {
   landTarget,
   lastLine,
   listVerifiers,
+  localDestCollisions,
+  localScopeStrays,
   matchDependedFiles,
   mergeAuthorityOf,
   modeBlocks,
+  type NamedSurface,
   normalizeFolder,
   orderKinds,
   outsideAdded,
@@ -62,6 +76,8 @@ import {
   parseArgs,
   parseFilesList,
   parseHandover,
+  parseSurfaceName,
+  parseSurfaces,
   parseUpkeepReport,
   parseVerifyResults,
   pickBranch,
@@ -69,7 +85,6 @@ import {
   pickUpkeepWorktree,
   pickWorktree,
   presentVerifierFolders,
-  proseList,
   pruneWorktrees,
   refuseLine,
   remoteFromSymbolicRef,
@@ -84,13 +99,19 @@ import {
   sendText,
   sendVerdict,
   sessionFolder,
+  sessionLabel,
   spanNamesDir,
+  spanSegs,
   spawnCommand,
   strayUncommitted,
   strayVerifierPaths,
+  surfaceFolder,
   surfaceFromReadme,
   surfaceKind,
+  surfaceLabel,
+  surfaceList,
   surfaceProse,
+  surfaceRule,
   timeoutMs,
   UPKEEP_LINE,
   unlistedSentence,
@@ -101,6 +122,7 @@ import {
   upkeepScope,
   upkeepSendText,
   UPKEEP_HEADLESS_UNASKED,
+  validateLocalSession,
   verdictUpkeep,
   verifierHandle,
   verifyDirName,
@@ -121,22 +143,46 @@ describe("parseArgs", () => {
   test("prompt takes a repo and a surface", () => {
     expect(parseArgs(["prompt", "/r", "cli"])).toEqual({
       ok: true,
-      req: { cmd: "prompt", repo: "/r", surfaces: ["cli"], headless: false },
+      req: { cmd: "prompt", repo: "/r", surfaces: [{ kind: "cli", name: "" }], headless: false },
     });
   });
 
   test("prompt takes several surfaces as distinct kinds in canonical order", () => {
     expect(parseArgs(["prompt", "/r", "web", "cli"])).toEqual({
       ok: true,
-      req: { cmd: "prompt", repo: "/r", surfaces: ["cli", "web"], headless: false },
+      req: {
+        cmd: "prompt",
+        repo: "/r",
+        surfaces: [
+          { kind: "cli", name: "" },
+          { kind: "web", name: "" },
+        ],
+        headless: false,
+      },
     });
     expect(parseArgs(["prompt", "/r", "cli", "cli-examples"])).toEqual({
       ok: true,
-      req: { cmd: "prompt", repo: "/r", surfaces: ["cli"], headless: false },
+      req: { cmd: "prompt", repo: "/r", surfaces: [{ kind: "cli", name: "" }], headless: false },
     });
     expect(parseArgs(["prompt", "/r", "browser-suite", "web-journey"])).toEqual({
       ok: true,
-      req: { cmd: "prompt", repo: "/r", surfaces: ["web"], headless: false },
+      req: { cmd: "prompt", repo: "/r", surfaces: [{ kind: "web", name: "" }], headless: false },
+    });
+  });
+
+  test("prompt takes named surfaces, ordered by kind then name", () => {
+    expect(parseArgs(["prompt", "/r", "web:shop", "backend:api", "web:admin"])).toEqual({
+      ok: true,
+      req: {
+        cmd: "prompt",
+        repo: "/r",
+        surfaces: [
+          { kind: "web", name: "admin" },
+          { kind: "web", name: "shop" },
+          { kind: "backend", name: "api" },
+        ],
+        headless: false,
+      },
     });
   });
 
@@ -153,7 +199,7 @@ describe("parseArgs", () => {
     expect(parseArgs(["prompt", "/r", "telegraph"])).toEqual({
       ok: false,
       error:
-        "unknown surface: telegraph (cli, web, library, cli-examples, browser-suite, web-journey or library-tests)",
+        "unknown surface: telegraph (cli, web, library, backend, cli-examples, browser-suite, web-journey or library-tests)",
     });
     expect(parseArgs(["prompt", "/r", "cli", "telegraph"]).ok).toBe(false);
   });
@@ -168,7 +214,7 @@ describe("parseArgs", () => {
   test("prompt takes --headless and refuses any other flag", () => {
     expect(parseArgs(["prompt", "/r", "cli", "--headless"])).toEqual({
       ok: true,
-      req: { cmd: "prompt", repo: "/r", surfaces: ["cli"], headless: true },
+      req: { cmd: "prompt", repo: "/r", surfaces: [{ kind: "cli", name: "" }], headless: true },
     });
     expect(parseArgs(["prompt", "/r", "cli", "--fresh"])).toEqual({
       ok: false,
@@ -178,27 +224,62 @@ describe("parseArgs", () => {
       ok: false,
       error: "prompt takes a repo and a surface",
     });
+    expect(parseArgs(["prompt", "/r", "cli", "--repository"])).toEqual({
+      ok: false,
+      error: "unknown flag for prompt: --repository",
+    });
   });
 
   test("make needs --run and defaults the timeout", () => {
     expect(parseArgs(["make", "/r", "web", "--run", "/d"])).toEqual({
       ok: true,
-      req: { cmd: "make", repo: "/r", surfaces: ["web"], dispatch: "/d", timeout: 3600 },
+      req: {
+        cmd: "make",
+        repo: "/r",
+        surfaces: [{ kind: "web", name: "" }],
+        dispatch: "/d",
+        timeout: 3600,
+      },
     });
     expect(parseArgs(["make", "/r", "web", "--run", "/d", "--timeout", "60"])).toEqual({
       ok: true,
-      req: { cmd: "make", repo: "/r", surfaces: ["web"], dispatch: "/d", timeout: 60 },
+      req: {
+        cmd: "make",
+        repo: "/r",
+        surfaces: [{ kind: "web", name: "" }],
+        dispatch: "/d",
+        timeout: 60,
+      },
     });
     expect(parseArgs(["make", "/r", "cli-examples", "browser-suite", "--run", "/d"])).toEqual({
       ok: true,
       req: {
         cmd: "make",
         repo: "/r",
-        surfaces: ["cli", "web"],
+        surfaces: [
+          { kind: "cli", name: "" },
+          { kind: "web", name: "" },
+        ],
         dispatch: "/d",
         timeout: 3600,
       },
     });
+  });
+
+  test("make takes --repository, unset when absent", () => {
+    expect(parseArgs(["make", "/r", "web", "--run", "/d", "--repository"])).toEqual({
+      ok: true,
+      req: {
+        cmd: "make",
+        repo: "/r",
+        surfaces: [{ kind: "web", name: "" }],
+        dispatch: "/d",
+        timeout: 3600,
+        repository: true,
+      },
+    });
+    const local = parseArgs(["make", "/r", "web", "--run", "/d"]);
+    expect(local.ok && "repository" in (local as { ok: true; req: object }).req).toBe(false);
   });
 
   test("make without --run fails", () => {
@@ -240,7 +321,13 @@ describe("parseArgs", () => {
   test("make takes 0 to wait without a limit; check and land need seconds past zero", () => {
     expect(parseArgs(["make", "/r", "web", "--run", "/d", "--timeout", "0"])).toEqual({
       ok: true,
-      req: { cmd: "make", repo: "/r", surfaces: ["web"], dispatch: "/d", timeout: 0 },
+      req: {
+        cmd: "make",
+        repo: "/r",
+        surfaces: [{ kind: "web", name: "" }],
+        dispatch: "/d",
+        timeout: 0,
+      },
     });
     expect(
       parseArgs(["check", "/r", "b", "--run", "/d", "--handover", "/h", "--timeout", "0"]),
@@ -328,15 +415,106 @@ describe("matchDependedFiles", () => {
 });
 
 describe("surfaces", () => {
-  test("the three surfaces and their prose", () => {
+  test("the four surfaces and their prose", () => {
     expect(isSurface("cli")).toBe(true);
     expect(isSurface("web")).toBe(true);
     expect(isSurface("library")).toBe(true);
+    expect(isSurface("backend")).toBe(true);
     expect(isSurface("telegraph")).toBe(false);
     expect(surfaceProse("cli")).toBe("command line");
     expect(surfaceProse("web")).toBe("web pages");
     expect(surfaceProse("library")).toBe("library interface");
+    expect(surfaceProse("backend")).toBe("backend service");
     expect(() => surfaceProse("telegraph")).toThrow("unknown surface: telegraph");
+  });
+});
+
+describe("parseSurfaceName", () => {
+  test("a kind parses unnamed, a kind:name parses named", () => {
+    expect(parseSurfaceName("cli")).toEqual({ ok: true, surface: { kind: "cli", name: "" } });
+    expect(parseSurfaceName("web:admin")).toEqual({
+      ok: true,
+      surface: { kind: "web", name: "admin" },
+    });
+    expect(parseSurfaceName("backend:api")).toEqual({
+      ok: true,
+      surface: { kind: "backend", name: "api" },
+    });
+    expect(parseSurfaceName("browser-suite:shop")).toEqual({
+      ok: true,
+      surface: { kind: "web", name: "shop" },
+    });
+  });
+
+  test("a bare backend, a bad name and a reserved name fail", () => {
+    expect(parseSurfaceName("backend")).toEqual({
+      ok: false,
+      error: "backend takes a name, as backend:api",
+    });
+    expect(parseSurfaceName("web:")).toEqual({
+      ok: false,
+      error: "bad surface name: web: (a name follows the colon, as web:admin)",
+    });
+    expect(parseSurfaceName("web:Admin").ok).toBe(false);
+    expect(parseSurfaceName("web:a:b").ok).toBe(false);
+    expect(parseSurfaceName("web:cli")).toEqual({
+      ok: false,
+      error: "bad surface name: cli is a surface kind",
+    });
+    expect(parseSurfaceName("web:cli-examples")).toEqual({
+      ok: false,
+      error: "bad surface name: cli-examples is a surface kind",
+    });
+    expect(parseSurfaceName("telegraph:x").ok).toBe(false);
+  });
+});
+
+describe("parseSurfaces", () => {
+  test("exact duplicates drop, kind order wins, names sort within a kind", () => {
+    expect(parseSurfaces(["web", "cli", "web", "cli-examples"])).toEqual({
+      ok: true,
+      surfaces: [
+        { kind: "cli", name: "" },
+        { kind: "web", name: "" },
+      ],
+    });
+    expect(parseSurfaces(["web:shop", "backend:api", "web:admin"])).toEqual({
+      ok: true,
+      surfaces: [
+        { kind: "web", name: "admin" },
+        { kind: "web", name: "shop" },
+        { kind: "backend", name: "api" },
+      ],
+    });
+  });
+
+  test("two surfaces sharing one folder fail", () => {
+    expect(parseSurfaces(["web:admin", "cli:admin"])).toEqual({
+      ok: false,
+      error: "surfaces web:admin and cli:admin share a folder: verifier/admin/",
+    });
+  });
+
+  test("labels and folders read from the surface", () => {
+    expect(surfaceLabel({ kind: "cli", name: "" })).toBe("cli");
+    expect(surfaceLabel({ kind: "web", name: "admin" })).toBe("web:admin");
+    expect(surfaceFolder({ kind: "cli", name: "" })).toBe("cli");
+    expect(surfaceFolder({ kind: "web", name: "admin" })).toBe("admin");
+    expect(
+      sessionLabel([
+        { kind: "web", name: "admin" },
+        { kind: "backend", name: "api" },
+      ]),
+    ).toBe("admin-api");
+    expect(countNoun(1)).toBe("1 verifier");
+    expect(countNoun(3)).toBe("3 verifiers");
+  });
+
+  test("only a backend carries a rule of its own", () => {
+    expect(surfaceRule("cli")).toBe("");
+    expect(surfaceRule("web")).toBe("");
+    expect(surfaceRule("library")).toBe("");
+    expect(surfaceRule("backend")).toContain("through the requests it answers");
   });
 });
 
@@ -1075,9 +1253,21 @@ describe("waitForMarker", () => {
 
 describe("sessionFolder", () => {
   test("one surface keeps its own folder, several share one", () => {
-    expect(sessionFolder("/x/app", ["cli"])).toBe("verify-app");
-    expect(sessionFolder("/x/app", ["cli", "web"])).toBe("verifier");
-    expect(sessionFolder("/x/app", ["cli", "web", "library"])).toBe("verifier");
+    expect(sessionFolder("/x/app", [{ kind: "cli", name: "" }])).toBe("verify-app");
+    expect(
+      sessionFolder("/x/app", [
+        { kind: "cli", name: "" },
+        { kind: "web", name: "" },
+      ]),
+    ).toBe("verifier");
+    expect(
+      sessionFolder("/x/app", [
+        { kind: "cli", name: "" },
+        { kind: "web", name: "" },
+        { kind: "library", name: "" },
+      ]),
+    ).toBe("verifier");
+    expect(sessionFolder("/x/app", [{ kind: "backend", name: "api" }])).toBe("verify-app");
   });
 });
 
@@ -1104,6 +1294,19 @@ describe("presentVerifierFolders", () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  test("the local folder reports last, whatever it holds", () => {
+    const dir = tempDir();
+    try {
+      const repo = join(dir, "app");
+      mkdirSync(join(repo, ".postmaster", "verifier"), { recursive: true });
+      expect(presentVerifierFolders(repo)).toEqual([".postmaster/verifier"]);
+      mkdirSync(join(repo, "verifier"), { recursive: true });
+      expect(presentVerifierFolders(repo)).toEqual(["verifier", ".postmaster/verifier"]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("failureOutcome", () => {
@@ -1116,6 +1319,17 @@ describe("failureOutcome", () => {
 
   test("a failure before any session cleans up", () => {
     expect(failureOutcome(false, "/x/app-verify-cli", "verify-cli")).toEqual({
+      cleanup: true,
+      suffix: "",
+    });
+  });
+
+  test("a detached working copy is named alone, with no branch", () => {
+    expect(failureOutcome(true, "/x/app-verify-cli", null)).toEqual({
+      cleanup: false,
+      suffix: "; the worktree /x/app-verify-cli was left behind",
+    });
+    expect(failureOutcome(false, "/x/app-verify-cli", null)).toEqual({
       cleanup: true,
       suffix: "",
     });
@@ -1135,6 +1349,23 @@ describe("removeProvisioning", () => {
       expect(removeProvisioning(repo, wt, "verify-cli")).toBe("");
       expect(existsSync(wt)).toBe(false);
       expect(gitOrThrow(repo, "branch", "--list", "verify-cli").trim()).toBe("");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("a null branch removes only the detached working copy", () => {
+    const dir = tempDir();
+    try {
+      const repo = join(dir, "app");
+      initRepo(repo);
+      writeRepoFile(repo, "README.md", "# app\n");
+      commitAll(repo, "first");
+      const wt = join(dir, "app-verify-cli");
+      gitOrThrow(repo, "worktree", "add", "--detach", wt, "main");
+      expect(removeProvisioning(repo, wt, null)).toBe("");
+      expect(existsSync(wt)).toBe(false);
+      expect(gitOrThrow(repo, "branch", "--list", "verify-*").trim()).toBe("");
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -1277,6 +1508,7 @@ describe("surfaceKind", () => {
     expect(surfaceKind("cli")).toBe("cli");
     expect(surfaceKind("web")).toBe("web");
     expect(surfaceKind("library")).toBe("library");
+    expect(surfaceKind("backend")).toBe("backend");
     expect(surfaceKind("cli-examples")).toBe("cli");
     expect(surfaceKind("browser-suite")).toBe("web");
     expect(surfaceKind("web-journey")).toBe("web");
@@ -1291,9 +1523,10 @@ describe("surfaceKind", () => {
 });
 
 describe("orderKinds", () => {
-  test("dedups to canonical cli, web, library order", () => {
+  test("dedups to canonical cli, web, library, backend order", () => {
     expect(orderKinds(["web", "cli"])).toEqual(["cli", "web"]);
     expect(orderKinds(["library", "library", "cli"])).toEqual(["cli", "library"]);
+    expect(orderKinds(["backend", "cli"])).toEqual(["cli", "backend"]);
     expect(orderKinds([])).toEqual([]);
   });
 });
@@ -1360,36 +1593,335 @@ describe("indexNames", () => {
   test("folder and prose on different lines read unnamed", () => {
     expect(indexNames("- [cli](cli/)\n- the command line verifier", "cli")).toBe(false);
   });
+
+  test("a named folder and prose together read named", () => {
+    expect(
+      indexNamesFolder(
+        "- The web pages verifier in .postmaster/verifier/admin/: drives it.",
+        "web pages",
+        ".postmaster/verifier/admin",
+      ),
+    ).toBe(true);
+    expect(
+      indexNamesFolder(
+        "- [api](api/) verifies the backend service.",
+        "backend service",
+        ".postmaster/verifier/api",
+      ),
+    ).toBe(true);
+    expect(
+      indexNamesFolder(
+        "- The web pages verifier in .postmaster/verifier/admin-extra/: drives it.",
+        "web pages",
+        ".postmaster/verifier/admin",
+      ),
+    ).toBe(false);
+    expect(
+      indexNamesFolder(
+        "- The web pages verifier in .postmaster/verifier/admin/: drives it.",
+        "command line",
+        ".postmaster/verifier/admin",
+      ),
+    ).toBe(false);
+  });
 });
 
-describe("proseList", () => {
-  test("joins the prose with commas", () => {
-    expect(proseList(["cli", "web"])).toBe("command line, web pages");
-    expect(proseList(["library"])).toBe("library interface");
+describe("spanSegs", () => {
+  test("names the folders a bullet's first line carries", () => {
+    expect(
+      spanSegs(["- The command line verifier in .postmaster/verifier/cli/: drives it."]),
+    ).toEqual(["cli"]);
+    expect(spanSegs(["- [api](api/) verifies the backend service."])).toEqual(["api"]);
+    expect(spanSegs(["- See also the index."])).toEqual([]);
+    expect(spanSegs([])).toEqual([]);
+  });
+});
+
+describe("indexStrays", () => {
+  test("kept folders pass, dropped dangle, unlisted fail", () => {
+    const text = [
+      "# Verifiers",
+      "",
+      "- [cli](cli/) verifies the command line.",
+      "- [web](web/) verifies the web pages.",
+      "- [eve](eve/) verifies the web pages.",
+      "- See also the guide.",
+    ].join("\n");
+    expect(indexStrays(text, ["cli", "web"], ["cli", "web"])).toEqual({
+      dangling: [],
+      unlisted: ["eve"],
+    });
+    expect(indexStrays(text, ["cli", "web", "eve"], ["cli"])).toEqual({
+      dangling: ["eve", "web"],
+      unlisted: [],
+    });
+    expect(indexStrays(text, ["cli", "web", "eve"], ["cli", "web", "eve"])).toEqual({
+      dangling: [],
+      unlisted: [],
+    });
+  });
+});
+
+describe("localScopeStrays", () => {
+  test("the root and the hand-over pass, everything else strays", () => {
+    const dir = tempDir();
+    try {
+      const repo = join(dir, "app");
+      initRepo(repo);
+      writeRepoFile(repo, "README.md", "# app\n");
+      commitAll(repo, "first");
+      expect(localScopeStrays(repo)).toEqual([]);
+      writeRepoFile(repo, ".postmaster/verifier/cli/README.md", "# cli\n");
+      writeRepoFile(repo, "HANDOVER.md", "# handover\n");
+      expect(localScopeStrays(repo)).toEqual([]);
+      writeRepoFile(repo, "stray.md", "stray\n");
+      writeRepoFile(repo, "README.md", "# app changed\n");
+      expect(localScopeStrays(repo).sort()).toEqual(["README.md", "stray.md"]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("localDestCollisions", () => {
+  test("the held index and folders collide, the rest do not", () => {
+    const dir = tempDir();
+    try {
+      const repo = join(dir, "app");
+      initRepo(repo);
+      const surfaces: NamedSurface[] = [
+        { kind: "cli", name: "" },
+        { kind: "web", name: "shop" },
+      ];
+      expect(localDestCollisions(repo, surfaces)).toEqual([]);
+      writeRepoFile(repo, ".postmaster/verifier/cli/README.md", "# cli\n");
+      expect(localDestCollisions(repo, surfaces)).toEqual([".postmaster/verifier/cli"]);
+      writeRepoFile(repo, ".postmaster/verifier/README.md", "# Verifiers\n");
+      writeRepoFile(repo, ".postmaster/verifier/shop/README.md", "# shop\n");
+      expect(localDestCollisions(repo, surfaces)).toEqual([
+        ".postmaster/verifier/README.md",
+        ".postmaster/verifier/cli",
+        ".postmaster/verifier/shop",
+      ]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("validateLocalSession", () => {
+  const CLI: NamedSurface = { kind: "cli", name: "" };
+  const WEB: NamedSurface = { kind: "web", name: "" };
+
+  function seed(files: Record<string, string>): { dir: string; repo: string; cutAt: number } {
+    const dir = tempDir();
+    const repo = join(dir, "app");
+    initRepo(repo);
+    writeRepoFile(repo, "README.md", "# app\n");
+    commitAll(repo, "first");
+    // Ten seconds in the past: these tests judge content, and a cut taken at
+    // the wall clock flakes when the clock steps under load. Freshness itself
+    // is handoverFresh's unit-covered job, plus the backdated case below.
+    const cutAt = Date.now() - 10_000;
+    for (const [rel, text] of Object.entries(files)) writeRepoFile(repo, rel, text);
+    return { dir, repo, cutAt };
+  }
+
+  function goodFiles(proof: string): Record<string, string> {
+    return {
+      ".postmaster/verifier/README.md":
+        "# Verifiers\n\n- The command line verifier in .postmaster/verifier/cli/: drives it.\n",
+      ".postmaster/verifier/cli/README.md": `# cli\n\nDrives it.\n\n${UPKEEP_LINE}\n`,
+      ".postmaster/verifier/cli/features/README.md": "# features\n",
+      ".postmaster/verifier/cli/features/a.md": "# a\n",
+      ".postmaster/verifier/cli/features/b.md": "# b\n",
+      ".postmaster/verifier/cli/features/c.md": "# c\n",
+      "HANDOVER.md": `# Handover\n\n## Verifier: cli\nFolder: .postmaster/verifier/cli\nProof: ${proof}\n`,
+    };
+  }
+
+  test("a proven verifier judges kept, an unproven one judges left out", () => {
+    const { dir, repo, cutAt } = seed({});
+    try {
+      const proof = join(dir, "proof.log");
+      writeFileSync(proof, "driven\n");
+      const files = goodFiles(proof);
+      files["HANDOVER.md"] +=
+        "\n## Verifier: web\nFolder: .postmaster/verifier/web\nProof: none: no drive\n";
+      for (const [rel, text] of Object.entries(files)) writeRepoFile(repo, rel, text);
+      const judged = validateLocalSession(repo, cutAt, [CLI, WEB]);
+      expect(judged.kept.map((e) => e.name)).toEqual(["cli"]);
+      expect(judged.leftOut.map((e) => e.name)).toEqual(["web"]);
+      expect(judged.leftOut[0]?.failReason).toBe("no proof file");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("no proven verifier, no hand-over and no index fail", () => {
+    const { dir, repo, cutAt } = seed({});
+    try {
+      const none = goodFiles("none: no drive");
+      for (const [rel, text] of Object.entries(none)) writeRepoFile(repo, rel, text);
+      expect(() => validateLocalSession(repo, cutAt, [CLI])).toThrow(/proved no verifier/u);
+      rmSync(join(repo, "HANDOVER.md"));
+      expect(() => validateLocalSession(repo, cutAt, [CLI])).toThrow(/no HANDOVER/u);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("an incomplete folder, a dangling index and a stray file fail", () => {
+    const { dir, repo, cutAt } = seed({});
+    try {
+      const proof = join(dir, "proof.log");
+      writeFileSync(proof, "driven\n");
+      const incomplete = goodFiles(proof);
+      delete incomplete[".postmaster/verifier/cli/features/c.md"];
+      for (const [rel, text] of Object.entries(incomplete)) writeRepoFile(repo, rel, text);
+      expect(() => validateLocalSession(repo, cutAt, [CLI])).toThrow(/fewer than 3 feature pages/u);
+      writeRepoFile(repo, ".postmaster/verifier/cli/features/c.md", "# c\n");
+      writeRepoFile(
+        repo,
+        ".postmaster/verifier/README.md",
+        "# Verifiers\n\n- The command line verifier in .postmaster/verifier/cli/: drives it.\n- [web](web/) verifies the web pages.\n",
+      );
+      const handover =
+        `# Handover\n\n## Verifier: cli\nFolder: .postmaster/verifier/cli\nProof: ${proof}\n\n` +
+        "## Verifier: web\nFolder: .postmaster/verifier/web\nProof: none: no drive\n";
+      writeRepoFile(repo, "HANDOVER.md", handover);
+      expect(() => validateLocalSession(repo, cutAt, [CLI, WEB])).toThrow(/with no proof/u);
+      writeRepoFile(
+        repo,
+        ".postmaster/verifier/README.md",
+        "# Verifiers\n\n- The command line verifier in .postmaster/verifier/cli/: drives it.\n",
+      );
+      writeRepoFile(repo, "stray.md", "stray\n");
+      expect(() => validateLocalSession(repo, cutAt, [CLI])).toThrow(/outside/u);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("an unlisted folder and an unlisted index entry fail", () => {
+    const { dir, repo, cutAt } = seed({});
+    try {
+      const proof = join(dir, "proof.log");
+      writeFileSync(proof, "driven\n");
+      const files = goodFiles(proof);
+      files["HANDOVER.md"] =
+        `# Handover\n\n## Verifier: eve\nFolder: .postmaster/verifier/eve\nProof: ${proof}\n`;
+      for (const [rel, text] of Object.entries(files)) writeRepoFile(repo, rel, text);
+      expect(() => validateLocalSession(repo, cutAt, [CLI])).toThrow(/unlisted folder/u);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("a hand-over backdated past the cut fails as predating", () => {
+    const { dir, repo } = seed({});
+    try {
+      const proof = join(dir, "proof.log");
+      writeFileSync(proof, "driven\n");
+      const files = goodFiles(proof);
+      for (const [rel, text] of Object.entries(files)) writeRepoFile(repo, rel, text);
+      const past = new Date(Date.now() - 60_000);
+      utimesSync(join(repo, "HANDOVER.md"), past, past);
+      expect(() => validateLocalSession(repo, Date.now(), [CLI])).toThrow(/predates/u);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("surfaceList", () => {
+  test("joins each surface as prose with its label", () => {
+    expect(
+      surfaceList([
+        { kind: "cli", name: "" },
+        { kind: "web", name: "" },
+      ]),
+    ).toBe("command line (cli), web pages (web)");
+    expect(surfaceList([{ kind: "library", name: "" }])).toBe("library interface (library)");
+    expect(
+      surfaceList([
+        { kind: "web", name: "admin" },
+        { kind: "backend", name: "api" },
+      ]),
+    ).toBe("web pages (web:admin), backend service (backend:api)");
   });
 });
 
 describe("dirLines", () => {
   test("one mapping line per kind", () => {
-    expect(dirLines(["cli", "web"])).toBe(
+    expect(
+      dirLines([
+        { kind: "cli", name: "" },
+        { kind: "web", name: "" },
+      ]),
+    ).toBe(
       "- the command line (cli) verifier goes in verifier/cli/\n- the web pages (web) verifier goes in verifier/web/",
+    );
+  });
+
+  test("named surfaces map to their own folders under a root", () => {
+    expect(
+      dirLines(
+        [
+          { kind: "web", name: "admin" },
+          { kind: "backend", name: "api" },
+        ],
+        ".postmaster/verifier",
+      ),
+    ).toBe(
+      "- the web pages (web:admin) verifier goes in .postmaster/verifier/admin/\n- the backend service (backend:api) verifier goes in .postmaster/verifier/api/",
     );
   });
 });
 
 describe("unlistedSentence", () => {
   test("none left out leaves no sentence", () => {
-    expect(unlistedSentence(["cli", "web", "library"])).toBe("");
+    expect(
+      unlistedSentence([
+        { kind: "cli", name: "" },
+        { kind: "web", name: "" },
+        { kind: "library", name: "" },
+      ]),
+    ).toBe("");
+  });
+
+  test("a named backend changes nothing: the sentence guards the trio", () => {
+    expect(
+      unlistedSentence([
+        { kind: "cli", name: "" },
+        { kind: "web", name: "" },
+        { kind: "library", name: "" },
+        { kind: "backend", name: "api" },
+      ]),
+    ).toBe("");
+    expect(
+      unlistedSentence([
+        { kind: "backend", name: "api" },
+        { kind: "cli", name: "" },
+      ]),
+    ).toBe(
+      "- Make no verifier for the web pages and the library interface. If you notice them while you work, leave them out.",
+    );
   });
 
   test("one left out is named", () => {
-    expect(unlistedSentence(["cli", "web"])).toBe(
+    expect(
+      unlistedSentence([
+        { kind: "cli", name: "" },
+        { kind: "web", name: "" },
+      ]),
+    ).toBe(
       "- Make no verifier for the library interface. If you notice it while you work, leave it out.",
     );
   });
 
   test("two left out share the sentence", () => {
-    expect(unlistedSentence(["web"])).toBe(
+    expect(unlistedSentence([{ kind: "web", name: "" }])).toBe(
       "- Make no verifier for the command line and the library interface. If you notice them while you work, leave them out.",
     );
   });
@@ -1399,11 +1931,11 @@ describe("joinBodies", () => {
   test("numbers each body and separates with rules", () => {
     expect(
       joinBodies([
-        { kind: "cli", text: "CLI BODY" },
-        { kind: "web", text: "WEB BODY" },
+        { surface: { kind: "cli", name: "" }, text: "CLI BODY" },
+        { surface: { kind: "web", name: "admin" }, text: "WEB BODY" },
       ]),
     ).toBe(
-      "---\n\n**Verifier 1 of 2: command line (cli).**\n\nCLI BODY\n\n---\n\n**Verifier 2 of 2: web pages (web).**\n\nWEB BODY",
+      "---\n\n**Verifier 1 of 2: command line (cli).**\n\nCLI BODY\n\n---\n\n**Verifier 2 of 2: web pages (web:admin).**\n\nWEB BODY",
     );
   });
 });
@@ -1479,10 +2011,24 @@ describe("strayVerifierPaths", () => {
           "verifier/api/README.md",
           "verifier/notes.md",
         ],
-        ["cli", "web"],
+        [
+          { kind: "cli", name: "" },
+          { kind: "web", name: "" },
+        ],
       ).sort(),
     ).toEqual(["verifier/api/README.md", "verifier/library/README.md", "verifier/notes.md"]);
-    expect(strayVerifierPaths(["verifier/README.md", "verifier/cli/x.md"], ["cli"])).toEqual([]);
+    expect(
+      strayVerifierPaths(["verifier/README.md", "verifier/cli/x.md"], [{ kind: "cli", name: "" }]),
+    ).toEqual([]);
+    expect(
+      strayVerifierPaths(
+        ["verifier/README.md", "verifier/admin/x.md", "verifier/shop/x.md"],
+        [
+          { kind: "web", name: "admin" },
+          { kind: "web", name: "shop" },
+        ],
+      ),
+    ).toEqual([]);
   });
 });
 
@@ -1511,25 +2057,35 @@ function seedMultiBranch(
   return { base, branch: "verify-cli-web" };
 }
 
-function goodVerifiers(
-  kinds: ("cli" | "web" | "library")[] = ["cli", "web"],
-): Record<string, string> {
+const CLI_WEB: NamedSurface[] = [
+  { kind: "cli", name: "" },
+  { kind: "web", name: "" },
+];
+
+const CLI_LIBRARY: NamedSurface[] = [
+  { kind: "cli", name: "" },
+  { kind: "library", name: "" },
+];
+
+function goodVerifiers(surfaces: NamedSurface[] = CLI_WEB): Record<string, string> {
   const prose: Record<string, string> = {
     cli: "command line",
     web: "web pages",
     library: "library interface",
+    backend: "backend service",
   };
+  const seg = (s: NamedSurface): string => (s.name === "" ? s.kind : s.name);
   const files: Record<string, string> = {
-    "verifier/README.md": `# Verifiers\n\n${kinds
-      .map((k) => `- [${k}](${k}/) verifies the ${prose[k]}.`)
+    "verifier/README.md": `# Verifiers\n\n${surfaces
+      .map((s) => `- [${seg(s)}](${seg(s)}/) verifies the ${prose[s.kind]}.`)
       .join("\n")}\n`,
     "HANDOVER.md": "proved both\n",
   };
-  for (const kind of kinds) {
-    files[`verifier/${kind}/README.md`] = `# ${kind}\n\nDrives it.\n\n${UPKEEP_LINE}\n`;
-    files[`verifier/${kind}/features/README.md`] = "# features\n";
+  for (const s of surfaces) {
+    files[`verifier/${seg(s)}/README.md`] = `# ${seg(s)}\n\nDrives it.\n\n${UPKEEP_LINE}\n`;
+    files[`verifier/${seg(s)}/features/README.md`] = "# features\n";
     for (const page of ["a.md", "b.md", "c.md"]) {
-      files[`verifier/${kind}/features/${page}`] = "# f\n";
+      files[`verifier/${seg(s)}/features/${page}`] = "# f\n";
     }
   }
   return files;
@@ -1538,7 +2094,7 @@ function goodVerifiers(
 function checkBranch(
   baseFiles: Record<string, string>,
   branchFiles: Record<string, string>,
-  surfaces: ("cli" | "web" | "library")[],
+  surfaces: NamedSurface[],
 ): () => void {
   const dir = tempDir();
   const repo = join(dir, "app");
@@ -1555,41 +2111,41 @@ function checkBranch(
 
 describe("checkMultiVerifiers", () => {
   test("a branch adding two complete verifiers passes", () => {
-    expect(checkBranch({ "README.md": "# app\n" }, goodVerifiers(), ["cli", "web"])).not.toThrow();
+    expect(checkBranch({ "README.md": "# app\n" }, goodVerifiers(), CLI_WEB)).not.toThrow();
   });
 
   test("a missing index fails", () => {
     const files = goodVerifiers();
     delete files["verifier/README.md"];
-    expect(checkBranch({ "README.md": "# app\n" }, files, ["cli", "web"])).toThrow();
+    expect(checkBranch({ "README.md": "# app\n" }, files, CLI_WEB)).toThrow();
   });
 
   test("a missing verifier README fails", () => {
     const files = goodVerifiers();
     delete files["verifier/cli/README.md"];
-    expect(checkBranch({ "README.md": "# app\n" }, files, ["cli", "web"])).toThrow();
+    expect(checkBranch({ "README.md": "# app\n" }, files, CLI_WEB)).toThrow();
   });
 
   test("a missing features index fails", () => {
     const files = goodVerifiers();
     delete files["verifier/cli/features/README.md"];
-    expect(checkBranch({ "README.md": "# app\n" }, files, ["cli", "web"])).toThrow();
+    expect(checkBranch({ "README.md": "# app\n" }, files, CLI_WEB)).toThrow();
   });
 
   test("a missing feature page fails", () => {
     const files = goodVerifiers();
     delete files["verifier/cli/features/c.md"];
-    expect(checkBranch({ "README.md": "# app\n" }, files, ["cli", "web"])).toThrow();
+    expect(checkBranch({ "README.md": "# app\n" }, files, CLI_WEB)).toThrow();
   });
 
   test("a missing upkeep line and a wrong index entry fail", () => {
     const noUpkeep = goodVerifiers();
     noUpkeep["verifier/cli/README.md"] = "# cli\n\nDrives it.\n";
-    expect(checkBranch({ "README.md": "# app\n" }, noUpkeep, ["cli", "web"])).toThrow(/upkeep/u);
+    expect(checkBranch({ "README.md": "# app\n" }, noUpkeep, CLI_WEB)).toThrow(/upkeep/u);
     const wrongIndex = goodVerifiers();
     wrongIndex["verifier/README.md"] =
       "# Verifiers\n\n- [cli](verifier/cli-extra/): command line.\n- [web](web/) verifies the web pages.\n";
-    expect(checkBranch({ "README.md": "# app\n" }, wrongIndex, ["cli", "web"])).toThrow(
+    expect(checkBranch({ "README.md": "# app\n" }, wrongIndex, CLI_WEB)).toThrow(
       /names no command line/u,
     );
   });
@@ -1597,14 +2153,12 @@ describe("checkMultiVerifiers", () => {
   test("an added unlisted verifier fails, pre-existing content passes", () => {
     const stray = goodVerifiers();
     stray["verifier/library/README.md"] = "# library\n";
-    expect(checkBranch({ "README.md": "# app\n" }, stray, ["cli", "web"])).toThrow(
-      /unlisted library/u,
-    );
+    expect(checkBranch({ "README.md": "# app\n" }, stray, CLI_WEB)).toThrow(/unlisted library/u);
     expect(
       checkBranch(
         { "README.md": "# app\n", "verifier/web/README.md": "# old web\n" },
-        goodVerifiers(["cli", "library"]),
-        ["cli", "library"],
+        goodVerifiers(CLI_LIBRARY),
+        CLI_LIBRARY,
       ),
     ).not.toThrow();
   });
@@ -1612,10 +2166,10 @@ describe("checkMultiVerifiers", () => {
   test("an unknown verifier folder and a stray index sibling fail", () => {
     const api = goodVerifiers();
     api["verifier/api/README.md"] = "# api\n";
-    expect(checkBranch({ "README.md": "# app\n" }, api, ["cli", "web"])).toThrow(/unlisted api/u);
+    expect(checkBranch({ "README.md": "# app\n" }, api, CLI_WEB)).toThrow(/unlisted api/u);
     const sibling = goodVerifiers();
     sibling["verifier/notes.md"] = "stray\n";
-    expect(checkBranch({ "README.md": "# app\n" }, sibling, ["cli", "web"])).toThrow(
+    expect(checkBranch({ "README.md": "# app\n" }, sibling, CLI_WEB)).toThrow(
       /unlisted notes\.md/u,
     );
   });
@@ -1623,16 +2177,11 @@ describe("checkMultiVerifiers", () => {
   test("files added outside verifier/ fail, wherever they land", () => {
     const top = goodVerifiers();
     top["verifier-cli/README.md"] = "# stray\n";
-    expect(checkBranch({ "README.md": "# app\n" }, top, ["cli", "web"])).toThrow(
-      /outside verifier/u,
-    );
+    expect(checkBranch({ "README.md": "# app\n" }, top, CLI_WEB)).toThrow(/outside verifier/u);
     const nested = goodVerifiers();
     nested["verify-app/extra.md"] = "stray\n";
     expect(
-      checkBranch({ "README.md": "# app\n", "verify-app/README.md": "# old\n" }, nested, [
-        "cli",
-        "web",
-      ]),
+      checkBranch({ "README.md": "# app\n", "verify-app/README.md": "# old\n" }, nested, CLI_WEB),
     ).toThrow(/outside verifier/u);
   });
 
@@ -1642,12 +2191,31 @@ describe("checkMultiVerifiers", () => {
       const repo = join(dir, "app");
       initRepo(repo);
       const { base } = seedMultiBranch(repo, { "README.md": "# app\n" }, goodVerifiers());
-      expect(() => checkMultiVerifiers(repo, "nope", base, ["cli", "web"])).toThrow(
-        /cannot be compared/u,
-      );
+      expect(() => checkMultiVerifiers(repo, "nope", base, CLI_WEB)).toThrow(/cannot be compared/u);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  test("named surfaces check their own folders and prose", () => {
+    const surfaces: NamedSurface[] = [
+      { kind: "web", name: "admin" },
+      { kind: "backend", name: "api" },
+    ];
+    expect(
+      checkBranch({ "README.md": "# app\n" }, goodVerifiers(surfaces), surfaces),
+    ).not.toThrow();
+    const missing = goodVerifiers(surfaces);
+    delete missing["verifier/api/README.md"];
+    expect(checkBranch({ "README.md": "# app\n" }, missing, surfaces)).toThrow(
+      /no verifier\/api\/README/u,
+    );
+    const wrongIndex = goodVerifiers(surfaces);
+    wrongIndex["verifier/README.md"] =
+      "# Verifiers\n\n- [admin](admin/) verifies the web pages.\n- [api](api/) verifies the web pages.\n";
+    expect(checkBranch({ "README.md": "# app\n" }, wrongIndex, surfaces)).toThrow(
+      /names no backend service \(backend:api\)/u,
+    );
   });
 });
 
@@ -2121,6 +2689,7 @@ describe("kindProse", () => {
     expect(kindProse("cli")).toBe("command line");
     expect(kindProse("web")).toBe("web pages");
     expect(kindProse("library")).toBe("library interface");
+    expect(kindProse("backend")).toBe("backend service");
     expect(kindProse("telegraph")).toBeNull();
   });
 });
@@ -2130,6 +2699,7 @@ describe("surfaceFromReadme", () => {
     expect(surfaceFromReadme("# todo on the command line\n")).toBe("command line");
     expect(surfaceFromReadme("# Driving the web pages\n")).toBe("web pages");
     expect(surfaceFromReadme("# Notes on the library interface\n")).toBe("library interface");
+    expect(surfaceFromReadme("# Driving the backend service\n")).toBe("backend service");
   });
 
   test("the earliest phrase wins over a later aside", () => {
@@ -2147,6 +2717,10 @@ describe("surfaceFromReadme", () => {
 
   test("a bare library names nothing: it is usually the project's own code", () => {
     expect(surfaceFromReadme("Driven through the project's own library.\n")).toBeNull();
+  });
+
+  test("a bare backend names nothing, like a bare library", () => {
+    expect(surfaceFromReadme("Driven through the project's own backend.\n")).toBeNull();
   });
 
   test("past the head, and an empty file, name nothing", () => {
@@ -2281,6 +2855,30 @@ describe("listVerifiers", () => {
       plant(root, "verify-notes.txt", "not a verifier\n");
       mkdirSync(join(root, "verify-empty"));
       expect(listVerifiers(root)).toEqual({ indexes: [], verifiers: [] });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("local: the .postmaster index with one verifier per folder", () => {
+    const root = tempDir();
+    try {
+      plant(root, ".postmaster/verifier/README.md", "# Verifiers\n");
+      plant(root, ".postmaster/verifier/api/README.md", "# Driving the backend service\n");
+      plant(root, ".postmaster/verifier/api/features/add.md", "# add\n");
+      plant(root, ".postmaster/verifier/api/features/README.md", "# features\n");
+      plant(root, ".postmaster/verifier/cli/README.md", "# cli\n");
+      expect(listVerifiers(root)).toEqual({
+        indexes: [".postmaster/verifier/README.md"],
+        verifiers: [
+          {
+            folder: ".postmaster/verifier/api",
+            surface: "backend service",
+            pages: [".postmaster/verifier/api/features/add.md"],
+          },
+          { folder: ".postmaster/verifier/cli", surface: "command line", pages: [] },
+        ],
+      });
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
