@@ -2,7 +2,9 @@
 // and the ticket-reads check: each stream becomes the tool calls its thread
 // ran, whatever harness wrote it. A call carries its tool name, its input,
 // its output and its exit, so a check classifies what the thread did, never
-// prose that mentions doing it.
+// prose that mentions doing it. A codex command that started pairs with its
+// completion by item id; an unmatched start reads as a call with an unknown
+// exit, and a web search reads as a call carrying its query.
 import { readFileSync } from "node:fs";
 
 export type RecordOf<T = unknown> = Record<string, T>;
@@ -48,11 +50,26 @@ export function toolCallsFromEvents(harness: Harness, events: unknown[]): ToolCa
   };
   const linked = new Map<string, number>();
   const pending = new Map<string, number>();
+  const starts = new Map<string, string>();
   for (const raw of events) {
     const event = rec(raw);
     if (harness === "codex") {
+      // A started command pairs with its completion by item id; an
+      // unmatched start ran with an unknown exit, so it reads as a call.
+      // A start without an id cannot pair and reads as before: dropped.
+      if (event.type === "item.started") {
+        const started = rec(event.item);
+        if (started.type === "command_execution") {
+          const id = text(started.id);
+          const command = text(started.command);
+          if (id && command) starts.set(id, command);
+        }
+        continue;
+      }
       if (event.type !== "item.completed") continue;
       const item = rec(event.item);
+      const id = text(item.id);
+      if (id) starts.delete(id);
       if (item.type === "command_execution") {
         add(
           "shell",
@@ -68,6 +85,9 @@ export function toolCallsFromEvents(harness: Harness, events: unknown[]): ToolCa
         add("file_change", {}, "", undefined, direct);
       } else if (item.type === "mcp_tool_call") {
         add("mcp", item);
+      } else if (item.type === "web_search") {
+        const query = text(item.query);
+        if (query) add("web_search", { query });
       }
     } else if (harness === "claude") {
       const msg = rec(event.message);
@@ -148,6 +168,7 @@ export function toolCallsFromEvents(harness: Harness, events: unknown[]): ToolCa
       add(toolName, input, resultText, facts.outcome, direct);
     }
   }
+  for (const command of starts.values()) add("shell", { command });
   return calls;
 }
 

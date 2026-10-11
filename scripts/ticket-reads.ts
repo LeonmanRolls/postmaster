@@ -16,7 +16,8 @@
 //
 // What counts as a read of the text, by tracker kind. GitHub: gh issue view
 // printing the body or comments; gh api on repos/<owner>/<repo>/issues/<n>
-// or its comments with a reading method; gh api graphql naming the issue in
+// or its comments with a reading method; a PATCH on the issue resource,
+// which returns the issue with its body; gh api graphql naming the issue in
 // the run's repository; scripts/run github <repo> read <n>; a fetch of the
 // issue's web address or its API address; and a fetch POSTing a query for
 // the issue to the graphql endpoint. Local: scripts/run local <repo> read
@@ -35,20 +36,27 @@
 // a --json field beyond title and state, a listing of the ticket file, a
 // search across the ticket store, a graphql query whose repository cannot be
 // told, a ticket position holding a variable, a ticket path joined to a live
-// substitution, a query POSTed from a data file, and a relative path after a
-// cd the check cannot follow. Known writes and mutating api calls show no
-// ticket text and count for nothing. A failed single-segment command shows
-// no text and counts for nothing, except diff, which prints the differing
-// lines while exiting 1; a failure proves nothing about one segment of
-// several, so those classify by invocation. Where the record carries no
-// exit, the invocation counts. Only the run's own ticket in its own tracker
+// substitution, a query POSTed from a data file, a relative path after a
+// cd the check cannot follow, a structured tool input naming the ticket, a
+// codex command that started without completing, a codex web search naming
+// the ticket, and a bare shell reading stdin. Known writes and mutating api
+// calls show no ticket text and count for nothing, except a PATCH on the
+// issue resource, which returns it. A failed single-segment command shows
+// no text and counts for nothing when it read atomically: one file operand
+// at most, and never a scan; diff prints the differing lines while exiting
+// 1, while any other diff exit, like cmp and comm failing, shows nothing,
+// and a failure proves nothing about one segment of several, so those
+// classify by invocation. Where the record carries no exit, the invocation
+// counts. Only the run's own ticket in its own tracker
 // counts: another number, another repo and the wrong tracker are ignored,
 // and so is a number in a command that reads nothing. The thread exports in
 // <dispatch>/sessions/ are the same threads in harness-native form and are
 // not read. Segments split on newlines as well as shell separators; (...)
 // groups, cd and command substitutions are followed, and find and xargs
 // scans of the ticket directories read as unknown, since their -exec is not
-// followed. Above every named form sits the unplaced rule: a segment carrying
+// followed. A heredoc body fed to a shell on stdin runs as shell and is
+// classified as commands; any other heredoc body is data and is dropped.
+// Above every named form sits the unplaced rule: a segment carrying
 // any marker of this run's own ticket — its number, its clerk or store path,
 // the tracker's host, or a read-capable gh or adapter call with a target —
 // and placed as none of a text read, a title read, a known write, or another
@@ -122,7 +130,6 @@ const READ_VERBS = new Set([
   "sort",
   "uniq",
   "wc",
-  "tee",
   "tac",
   "nl",
   "fold",
@@ -143,6 +150,8 @@ const FETCH_VERBS = new Set([
   "xdg-open",
 ]);
 const SHELL_WRAPPERS = new Set(["bash", "sh", "dash", "zsh", "eval"]);
+/** Shells that read stdin when bare: a bare one executes what it is fed. */
+const SHELLS = new Set(["bash", "sh", "dash", "zsh"]);
 /** Verbs that can walk a directory and run a reader over it, unseen. */
 const SCAN_VERBS = new Set(["find", "fd", "fdfind", "xargs"]);
 
@@ -265,6 +274,14 @@ function dropHeredocs(command: string): string {
       kept.push(line);
       continue;
     }
+    // A body fed to a shell on stdin runs as shell: keep its lines as
+    // commands, with the fed shell neutralized — its stdin is the kept
+    // body, already classified, not an unknown.
+    const runs = heredocRunRest(line, opener);
+    if (runs !== null) {
+      if (runs.trim()) kept.push(runs);
+      continue;
+    }
     terminator = opener.word;
     // The operator goes, the rest of the line stays: redirection and later
     // commands on the same line still run.
@@ -272,6 +289,65 @@ function dropHeredocs(command: string): string {
     if (rest.trim()) kept.push(rest);
   }
   return kept.join("\n");
+}
+
+/** Split on single pipes; || stays whole, quoted pipes stay literal. */
+function pipeCells(text: string): string[] {
+  const cells: string[] = [];
+  let current = "";
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]!;
+    if (ch === "|" && text[i + 1] !== "|" && text[i - 1] !== "|" && !inQuotes(text, i)) {
+      cells.push(current);
+      current = "";
+    } else {
+      current += ch;
+    }
+  }
+  cells.push(current);
+  return cells;
+}
+
+/** A shell invocation reading stdin: bare, -s, or flags alone, never -c or a script. */
+function stdinShell(head: Head): boolean {
+  if (!SHELLS.has(head.verb)) return false;
+  let dashdash = false;
+  let sawS = false;
+  for (const raw of head.words.slice(head.at + 1)) {
+    const word = stripQuotes(raw);
+    if (!dashdash && word === "--") {
+      dashdash = true;
+      continue;
+    }
+    if (word === "-") continue;
+    if (!dashdash && /^-[^-]/u.test(word)) {
+      // A -c shell runs its string, never its stdin.
+      if (word === "-c" || /^-[A-Za-z]*c($|['"])/u.test(word)) return false;
+      if (word.includes("s")) sawS = true;
+      continue;
+    }
+    // -s forces stdin; its positionals become $0, not a script.
+    if (sawS) continue;
+    return false;
+  }
+  return true;
+}
+
+/**
+ * The opener line with its stdin shell neutralized, when the heredoc body
+ * runs as shell: the line's own verb, or a shell later in its pipeline,
+ * reads the body. Null when the body is data.
+ */
+function heredocRunRest(line: string, opener: { at: number; end: number }): string | null {
+  const rest = `${line.slice(0, opener.at)} ${line.slice(opener.end)}`;
+  const cells = pipeCells(rest);
+  for (let i = 0; i < cells.length; i++) {
+    if (stdinShell(segmentHead(cells[i]!))) {
+      cells[i] = ":";
+      return cells.join(" | ");
+    }
+  }
+  return null;
 }
 
 /** Whether the offset sits inside single or double quotes. */
@@ -1002,6 +1078,19 @@ function ghApiMethod(segment: string): string | null {
       return value ? value.toUpperCase() : "?"; // ASCII: HTTP methods are ASCII
     }
   }
+  // Data flags imply POST unless an explicit method said otherwise.
+  for (const word of words) {
+    if (word.startsWith("-f") || word.startsWith("-F")) return "POST";
+    if (word === "--field" || word === "--raw-field" || word === "--input") return "POST";
+    if (
+      word.startsWith("--field=") ||
+      word.startsWith("--raw-field=") ||
+      word.startsWith("--input=")
+    ) {
+      return "POST";
+    }
+    if (word === "-raw-field" || word === "-input") return "POST";
+  }
   return null;
 }
 
@@ -1142,16 +1231,14 @@ function classifyGh(ctx: Ctx, segment: string, head: Head): Placed {
       return classifyGraphqlSegment(ctx, segment, "gh api graphql");
     }
     const method = ghApiMethod(segment);
-    if (method !== null && method !== "GET") {
+    // A PATCH returns its resource: an issue PATCH returns the issue with
+    // its body, so it reads through the endpoint analysis below, never as
+    // a write. Collection and search dumps do not apply to it.
+    const patch = method === "PATCH";
+    if (method !== null && method !== "GET" && !patch) {
       // A mutating call shows no ticket text; HEAD returns headers alone.
       // An unreadable method naming the ticket cannot be told.
-      if (
-        method === "POST" ||
-        method === "PUT" ||
-        method === "PATCH" ||
-        method === "DELETE" ||
-        method === "HEAD"
-      ) {
+      if (method === "POST" || method === "PUT" || method === "DELETE" || method === "HEAD") {
         return "placed";
       }
       if (hasNumberToken(segment, ctx.ticket)) {
@@ -1164,34 +1251,36 @@ function classifyGh(ctx: Ctx, segment: string, head: Head): Placed {
     const collectionRe =
       /repos\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+?)(?:\.git)?\/issues(\/comments)?(?![A-Za-z0-9_./-])/gu; // ASCII: API paths are machine-made ASCII
     let collectionOther = false;
-    for (const match of segment.matchAll(collectionRe)) {
-      const nwo = `${match[1]}/${match[2]}`;
-      if (ctx.nwo === null) {
-        return { agent: "", finding: "unknown", form: "gh api", detail: "repo unknown" };
+    if (!patch) {
+      for (const match of segment.matchAll(collectionRe)) {
+        const nwo = `${match[1]}/${match[2]}`;
+        if (ctx.nwo === null) {
+          return { agent: "", finding: "unknown", form: "gh api", detail: "repo unknown" };
+        }
+        if (!sameNwo(nwo, ctx.nwo)) {
+          collectionOther = true;
+          continue;
+        }
+        return { agent: "", finding: "unknown", form: "gh api", detail: "collection" };
       }
-      if (!sameNwo(nwo, ctx.nwo)) {
-        collectionOther = true;
-        continue;
+      // ASCII: API paths are machine-made ASCII
+      if (/\/search\/issues(?![A-Za-z0-9_./-])/u.test(segment)) {
+        return { agent: "", finding: "unknown", form: "gh api", detail: "search" };
       }
-      return { agent: "", finding: "unknown", form: "gh api", detail: "collection" };
-    }
-    // ASCII: API paths are machine-made ASCII
-    if (/\/search\/issues(?![A-Za-z0-9_./-])/u.test(segment)) {
-      return { agent: "", finding: "unknown", form: "gh api", detail: "search" };
-    }
-    // An endpoint number holding a variable may hold this ticket's number.
-    const varNumber =
-      /repos\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+?)(?:\.git)?\/issues\/\$(?:[{(]?[A-Za-z_]|[@*#?$!0-9])/u; // ASCII: API paths are machine-made ASCII
-    const varMatch = varNumber.exec(segment);
-    if (varMatch) {
-      const nwo = `${varMatch[1]}/${varMatch[2]}`;
-      if (ctx.nwo === null) {
-        return { agent: "", finding: "unknown", form: "gh api", detail: "repo unknown" };
+      // An endpoint number holding a variable may hold this ticket's number.
+      const varNumber =
+        /repos\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+?)(?:\.git)?\/issues\/\$(?:[{(]?[A-Za-z_]|[@*#?$!0-9])/u; // ASCII: API paths are machine-made ASCII
+      const varMatch = varNumber.exec(segment);
+      if (varMatch) {
+        const nwo = `${varMatch[1]}/${varMatch[2]}`;
+        if (ctx.nwo === null) {
+          return { agent: "", finding: "unknown", form: "gh api", detail: "repo unknown" };
+        }
+        if (sameNwo(nwo, ctx.nwo)) {
+          return { agent: "", finding: "unknown", form: "gh api", detail: "variable" };
+        }
+        return "placed";
       }
-      if (sameNwo(nwo, ctx.nwo)) {
-        return { agent: "", finding: "unknown", form: "gh api", detail: "variable" };
-      }
-      return "placed";
     }
     const endpoints = [
       ...segment.matchAll(
@@ -1211,6 +1300,12 @@ function classifyGh(ctx: Ctx, segment: string, head: Head): Placed {
         otherRepo = true;
         continue;
       }
+      // A PATCH returns the issue itself; a PATCH anywhere else is invalid
+      // or edits a comment the agent wrote, and shows no ticket text.
+      if (patch) {
+        if (rest === "") return { agent: "", finding: "read", form: "gh api", detail: "" };
+        return "placed";
+      }
       if (rest === "" || rest === "/comments") {
         return { agent: "", finding: "read", form: "gh api", detail: rest || "" };
       }
@@ -1219,7 +1314,7 @@ function classifyGh(ctx: Ctx, segment: string, head: Head): Placed {
     // Another repo's issue explains the number; anything else naming it is unknown.
     if (otherRepo || collectionOther) return "placed";
     if (hasNumberToken(segment, ctx.ticket)) {
-      return { agent: "", finding: "unknown", form: "gh api", detail: "" };
+      return { agent: "", finding: "unknown", form: "gh api", detail: patch ? "PATCH" : "" };
     }
     return null;
   }
@@ -1415,13 +1510,37 @@ function classifyApiRest(ctx: Ctx, text: string): Placed {
   return other || otherRepo ? "placed" : null;
 }
 
+/** A PATCH fetch of an issue URL: the issue itself reads, anything else is placed. */
+function patchRestResource(ctx: Ctx, segment: string): Placed {
+  const rest =
+    /https?:\/\/api\.github\.com\/repos\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+?)(?:\.git)?\/issues\/(\d+)((?:\/[A-Za-z0-9_.-]+)*)/gu; // ASCII: API addresses are machine-made ASCII
+  for (const match of segment.matchAll(rest)) {
+    const nwo = `${match[1]}/${match[2]}`;
+    const number = match[3]!;
+    const restPath = match[4] ?? "";
+    if (number !== ctx.ticket) continue;
+    if (ctx.nwo === null) {
+      return { agent: "", finding: "unknown", form: "issue fetch", detail: "repo unknown" };
+    }
+    if (!sameNwo(nwo, ctx.nwo)) continue;
+    if (restPath === "") return { agent: "", finding: "read", form: "issue fetch", detail: "" };
+  }
+  // A PATCH of another endpoint shows that resource, never the ticket.
+  return "placed";
+}
+
 /** A fetch of the API for this ticket: REST issue URLs and the graphql endpoint. */
 function classifyApiFetch(ctx: Ctx, segment: string): Placed {
   if (!/api\.github\.com/u.test(segment)) return null;
   const method = fetchMethod(segment);
+  // A PATCH returns its resource; graphql over PATCH is invalid.
+  if (method === "PATCH") {
+    if (/graphql/u.test(segment)) return "placed";
+    return patchRestResource(ctx, segment);
+  }
   if (method !== null && method !== "GET") {
     if (method === "HEAD") return "placed";
-    if (method === "POST" || method === "PUT" || method === "PATCH" || method === "DELETE") {
+    if (method === "POST" || method === "PUT" || method === "DELETE") {
       // A mutating fetch shows no ticket text — except a graphql query POSTed as data.
       if (!/graphql/u.test(segment)) return "placed";
     } else if (hasNumberToken(segment, ctx.ticket)) {
@@ -1501,17 +1620,32 @@ function placePath(
   return "elsewhere";
 }
 
+/** Whether the segment writes its file operands: tee, or sed in place. */
+function writesFile(segment: string, verb: string): boolean {
+  if (verb === "tee") return true;
+  if (verb !== "sed") return false;
+  const bare = segment.replace(/"[^"]*"/gu, " ").replace(/'[^']*'/gu, " ");
+  // ASCII: shell words split on ASCII whitespace
+  for (const word of bare.trim().split(/\s+/u)) {
+    if (word === "--in-place" || word.startsWith("--in-place=")) return true;
+    if (/^-[A-Za-z]*i/u.test(word)) return true;
+  }
+  return false;
+}
+
 /** Classify the store and clerk paths one segment names. */
 function classifyPaths(ctx: Ctx, segment: string, verb: string, own: string | null): Placement {
   const findings: Finding[] = [];
   let placed = false;
   const reading = READ_VERBS.has(verb);
+  const writing = writesFile(segment, verb);
   // A scan can run a reader over the directory unseen; its -exec is not followed.
   const scanning = reading || SCAN_VERBS.has(verb);
   const seen = new Set<string>();
   // A ticket path joined to a live substitution cannot be resolved: its root
   // is the substitution's value, so it reads as unknown, never clean.
   if (dynamicPath(segment)) {
+    if (writing) return { findings, placed: true };
     const files = [...segment.matchAll(STORE_FILE_RE), ...segment.matchAll(CLERK_FILE_RE)];
     if (files.length > 0) {
       const clerk = files.some((match) => match[1]!.includes(".postmaster/clerk/"));
@@ -1544,20 +1678,31 @@ function classifyPaths(ctx: Ctx, segment: string, verb: string, own: string | nu
     const place = placePath(ctx, candidate, own);
     const form = candidate.includes(".postmaster/clerk/") ? "clerk draft" : "ticket file";
     if (place === "file") {
-      findings.push(
-        reading
-          ? { agent: "", finding: "read", form, detail: "" }
-          : { agent: "", finding: "unknown", form, detail: verb || "bare" },
-      );
+      if (writing) {
+        placed = true;
+      } else {
+        findings.push(
+          reading
+            ? { agent: "", finding: "read", form, detail: "" }
+            : { agent: "", finding: "unknown", form, detail: verb || "bare" },
+        );
+      }
     } else if (place === "meta") {
-      findings.push(
-        reading
-          ? { agent: "", finding: "title", form, detail: "" }
-          : { agent: "", finding: "unknown", form, detail: verb || "bare" },
-      );
+      if (writing) {
+        placed = true;
+      } else {
+        findings.push(
+          reading
+            ? { agent: "", finding: "title", form, detail: "" }
+            : { agent: "", finding: "unknown", form, detail: verb || "bare" },
+        );
+      }
     } else if (place === "dir") {
-      if (scanning)
+      if (writing) {
+        placed = true;
+      } else if (scanning) {
         findings.push({ agent: "", finding: "unknown", form: `${form} dir`, detail: "" });
+      }
     } else if (place === "unknown") {
       findings.push({ agent: "", finding: "unknown", form, detail: "path unknown" });
     } else {
@@ -1573,7 +1718,9 @@ function classifyPaths(ctx: Ctx, segment: string, verb: string, own: string | nu
       // A directory already read as part of a file path is not read again.
       if ([...seen].some((file) => file.startsWith(dir))) continue;
       const place = placePath(ctx, dir, own);
-      if (place === "dir" && scanning) {
+      if (writing && (place === "dir" || place === "unknown")) {
+        placed = true;
+      } else if (place === "dir" && scanning) {
         findings.push({
           agent: "",
           finding: "unknown",
@@ -1623,6 +1770,14 @@ function classifySegment(ctx: Ctx, segment: string, own: string | null, depth = 
       const placement = classifyCommand(ctx, stripQuotes(inner.trim()), own, depth + 1);
       findings.push(...placement.findings);
       placed = placed || placement.placed;
+      return { findings, placed };
+    }
+    // A bare shell reads its stdin: piped or redirected commands it executes
+    // are not in its words, so what it ran cannot be told. A shell with a
+    // script or other arguments runs that file, a repo artifact outside the
+    // record, and reads nothing here.
+    if (stdinShell(head)) {
+      findings.push({ agent: "", finding: "unknown", form: "stdin shell", detail: head.verb });
       return { findings, placed };
     }
   }
@@ -1693,8 +1848,55 @@ function excusesCall(command: string, exitCode: unknown): boolean {
   const only = parts[0]!;
   if (only.kind === "subshell") return excusesCall(only.text, exitCode);
   if (substitutionBodies(only.text).length > 0) return false;
-  if (exitCode === 1 && segmentHead(only.text).verb === "diff") return false;
+  const head = segmentHead(only.text);
+  // Only diff exiting 1 prints: any other diff exit, like cmp and comm
+  // failing, shows nothing or metadata, never file content.
+  if (head.verb === "diff") return exitCode !== 1;
+  if (head.verb === "cmp" || head.verb === "comm") return true;
+  // A failed read shows nothing only when it read atomically: a scan may
+  // have printed matches before it failed, and a reader with several file
+  // operands prints what it can before the one that fails.
+  if (SCAN_VERBS.has(head.verb)) return false;
+  if (READ_VERBS.has(head.verb)) return readOperands(head) <= 1;
   return true;
+}
+
+/** Verbs whose first operand is a pattern, program or filter, not a file. */
+const FIRST_IS_PATTERN = new Set([
+  "grep",
+  "egrep",
+  "fgrep",
+  "rg",
+  "ag",
+  "ack",
+  "sed",
+  "awk",
+  "gawk",
+  "mawk",
+  "jq",
+  "yq",
+]);
+
+/**
+ * File operands of a failed read: words past the verb, without flags, bare
+ * numbers, or a leading pattern. Flag values the check cannot tell from
+ * files (an awk -v value, a cut separator) count as files.
+ */
+function readOperands(head: Head): number {
+  const operands: string[] = [];
+  let dashdash = false;
+  for (const raw of head.words.slice(head.at + 1)) {
+    const word = stripQuotes(raw);
+    if (!dashdash && word === "--") {
+      dashdash = true;
+      continue;
+    }
+    if (!dashdash && word.startsWith("-") && word.length > 1) continue;
+    if (/^[+-]?[0-9]+$/u.test(word)) continue; // ASCII: counts and line offsets are ASCII digits
+    operands.push(word);
+  }
+  if (FIRST_IS_PATTERN.has(head.verb) && operands.length > 0) operands.shift();
+  return operands.length;
 }
 
 /** Classify one tool call's command, paths and fetches. */
@@ -1745,7 +1947,22 @@ function classifyCall(ctx: Ctx, call: ToolCall, own: string): Finding[] {
       findings.push({ agent: "", finding: "unknown", form: `${form} dir`, detail: "" });
     }
   }
+  // A structured tool input naming the ticket: no command, URL or path, so
+  // no named form sees it. An issue, ticket, search or MCP tool may have
+  // shown its text; what the tool returned cannot be told.
+  if (!command && !url && !direct && call.direct.length === 0) {
+    if (/issue|ticket|search|mcp/iu.test(call.name) && hasJsonNumber(call.input, ctx.ticket)) {
+      findings.push({ agent: "", finding: "unknown", form: "structured tool", detail: call.name });
+    }
+  }
   return findings;
+}
+
+/** The ticket's number as a JSON value: a number or string, never part of another. */
+function hasJsonNumber(input: RecordOf, ticket: string): boolean {
+  return JSON.stringify(input)
+    .split(/[":,\s[\]{}]+/u) // ASCII: JSON punctuation is ASCII
+    .some((token) => token === ticket);
 }
 
 function parseTracker(scope: string): { kind: string; ticket: string } {
@@ -1843,7 +2060,20 @@ function readAgents(
     // the attempts file attributes each stream to the role that wrote it.
     const roles = attemptRoles(dispatch, n);
     const spanning = roles !== null && new Set(roles).size > 1;
+    // No attempt roles and no second harness: every attempt ran as the leg's
+    // own, so the streams read with it. Unreadable attempts with a fallback
+    // that differs cannot attribute the stream at all.
+    const unambiguous = text(fallback.harness) === "" || text(fallback.harness) === own;
     if (walled.length === 0 && !spanning) {
+      if (roles === null && !unambiguous) {
+        extra.push({
+          agent: `coachman leg ${n}`,
+          finding: "unknown",
+          form: "record",
+          detail: "attempts cannot be read",
+        });
+        continue;
+      }
       agents.push({
         name: `coachman leg ${n}`,
         file: `coachman-leg-${n}-events.jsonl`,
@@ -1862,9 +2092,6 @@ function readAgents(
       });
       continue;
     }
-    // No attempt roles and no second harness: every attempt ran as the leg's
-    // own, so the streams read with it.
-    const unambiguous = text(fallback.harness) === "" || text(fallback.harness) === own;
     if (roles === null || roles.length === 0) {
       if (unambiguous) {
         agents.push({
