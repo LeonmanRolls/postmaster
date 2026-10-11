@@ -1246,6 +1246,33 @@ describe("the round's three steps", () => {
         }, "review-round-reuse-kept-");
       });
 
+      test("a failing verify on a passed commit leaves the kept pass text alone", () => {
+        withTempDir((root) => {
+          const p = paths(root);
+          writeFileSync(
+            join(p.dispatch, "actions.jsonl"),
+            gateRow(SHA, "review round 1, run verify exit 0"),
+          );
+          writeFileSync(join(p.dispatch, "logs", `gate-${SHA}.txt`), "gate: pass\n");
+          const { deps } = stand(
+            shaHandler((name, args) => {
+              if (name === "git" && args.includes("status"))
+                return { code: 0, out: " M src/dirty.ts\n", err: "" };
+              if (name === "verify") return { code: 1, out: "REFUSED\n", err: "" };
+              return null;
+            }),
+          );
+          const res = cutRound(
+            { dispatch: p.dispatch, round: "2", repo: p.repo, synthesis: p.synthesis },
+            deps,
+          );
+          expect(res.code).toBe(1);
+          expect(readFileSync(join(p.dispatch, "logs", `gate-${SHA}.txt`), "utf8")).toBe(
+            "gate: pass\n",
+          );
+        }, "review-round-reuse-keptfail-");
+      });
+
       test("a cut pass with no kept text runs verify instead of reading the round's file", () => {
         withTempDir((root) => {
           const p = paths(root);
@@ -2000,13 +2027,30 @@ describe("the round's three steps", () => {
         });
         const res = gateRound({ dispatch: p.dispatch, round: "1", synthesis: p.synthesis }, deps);
         expect(res.code).toBe(1);
-        expect(readFileSync(join(p.dispatch, "logs", `gate-${SHA}.txt`), "utf8")).toBe(
-          "gate: fail\n",
-        );
+        expect(res.out).toContain("gate: fail");
         expect(one(calls, "log-action", (c) => c.args[2] === "gate")?.args[4]).toBe(
           "review round 1, run verify exit 2, mid-round gate",
         );
       }, "review-round-gategail-");
+    });
+
+    test("a failing gate leaves an earlier kept pass text alone", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        writeFileSync(join(p.dispatch, "logs", `gate-${SHA}.txt`), "gate: pass\n");
+        const { deps } = stand((name, args) => {
+          if (name === "git" && args.includes("rev-parse"))
+            return { code: 0, out: `${SHA}\n`, err: "" };
+          if (name === "git" && args.includes("status")) return { code: 0, out: "", err: "" };
+          if (name === "verify") return { code: 2, out: "gate: fail\n", err: "" };
+          return green(name, args);
+        });
+        const res = gateRound({ dispatch: p.dispatch, round: "1", synthesis: p.synthesis }, deps);
+        expect(res.code).toBe(1);
+        expect(readFileSync(join(p.dispatch, "logs", `gate-${SHA}.txt`), "utf8")).toBe(
+          "gate: pass\n",
+        );
+      }, "review-round-gatekeptfail-");
     });
   });
 });

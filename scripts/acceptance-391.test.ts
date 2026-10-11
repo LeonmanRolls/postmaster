@@ -7,7 +7,7 @@
 // regressions. Covered: C1-C5, R1. Not covered: C6,
 // the fixture run from the final head, which landing dispatches and scores.
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   RUN,
@@ -764,6 +764,25 @@ describe("R1: round 1 review regressions", () => {
     expect(recut1.code).toBe(0);
     expect(recut1.out).toContain("reuses the gate pass");
     expect(checks("1")).toContain("FIRST-PASS");
+  });
+
+  test("a refused cut on a passed commit does not poison its kept text", () => {
+    const layout = makeLayout([{ lens: "bug", lane: "luna", harness: "codex" }]);
+    checksWith(layout, "echo COMMIT-PASS");
+    const cut = (round: string) =>
+      tool(layout, "review-round", "cut", layout.dispatch, round, layout.repo, layout.synth);
+    expect(cut("1").code).toBe(0);
+    writeFileSync(join(layout.synth, "src", "dirty.txt"), "uncommitted\n");
+    const refused = cut("2");
+    expect(refused.code).toBe(1);
+    expect(out(refused)).toContain("dirty.txt");
+    rmSync(join(layout.synth, "src", "dirty.txt"));
+    const cut3 = cut("3");
+    expect(cut3.code).toBe(0);
+    expect(cut3.out).toContain("reuses the gate pass");
+    expect(
+      readFileSync(join(layout.dispatch, "logs", "review-r3-checks.txt"), "utf8"),
+    ).toContain("COMMIT-PASS");
   });
 
   test("a subset wait-next leaves the round's recorded reviewers alone", () => {

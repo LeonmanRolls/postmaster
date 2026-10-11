@@ -575,15 +575,18 @@ export function cutRound(a: StepArgs, deps: StepDeps): StepResult {
   }
   // Keep the pass text under its commit, beside the round's view of it, so a
   // later cut finds it whatever round file was rewritten since. A reuse writes
-  // the same text it read.
+  // the same text it read. Anything but a pass keeps its hands off the kept
+  // text: a failure must not pose as the pass an older row points at.
   let wrotePass = true;
-  try {
-    writeFileSync(join(a.dispatch, "logs", `gate-${snap}.txt`), verifyOut);
-  } catch (e) {
-    res.err.push(
-      `review-round: gate-${snap}.txt cannot be written (${e instanceof Error ? e.message : String(e)})`,
-    );
-    wrotePass = false;
+  if (verifyCode === 0 || verifyCode === 3) {
+    try {
+      writeFileSync(join(a.dispatch, "logs", `gate-${snap}.txt`), verifyOut);
+    } catch (e) {
+      res.err.push(
+        `review-round: gate-${snap}.txt cannot be written (${e instanceof Error ? e.message : String(e)})`,
+      );
+      wrotePass = false;
+    }
   }
   res.out.push(...lineList(verifyOut));
   if (reusedFrom !== null) {
@@ -1052,14 +1055,18 @@ export function gateRound(a: GateArgs, deps: StepDeps): StepResult {
   const verifyOut = v.out;
   passErr(res, v);
   const passFile = join(a.dispatch, "logs", `gate-${snap}.txt`);
+  // A failure keeps its hands off the kept text: only a pass may write it, so
+  // a failing rerun never poses as the pass an older row points at.
   let wrotePass = true;
-  try {
-    writeFileSync(passFile, verifyOut);
-  } catch (e) {
-    res.err.push(
-      `review-round: ${passFile} cannot be written (${e instanceof Error ? e.message : String(e)})`,
-    );
-    wrotePass = false;
+  if (verifyCode === 0 || verifyCode === 3) {
+    try {
+      writeFileSync(passFile, verifyOut);
+    } catch (e) {
+      res.err.push(
+        `review-round: ${passFile} cannot be written (${e instanceof Error ? e.message : String(e)})`,
+      );
+      wrotePass = false;
+    }
   }
   res.out.push(...lineList(verifyOut));
   recordStep(res, deps, "log-action", [
