@@ -181,6 +181,17 @@ function stripQuotes(value: string): string {
   return value.replace(/^['"]+/u, "").replace(/['"]+$/u, "");
 }
 
+/** Whether the char at i is backslash-escaped: an odd run of backslashes before it. */
+function isEscaped(text: string, i: number): boolean {
+  let slashes = 0;
+  let j = i - 1;
+  while (j >= 0 && text[j] === "\\") {
+    slashes++;
+    j--;
+  }
+  return slashes % 2 === 1;
+}
+
 /** Join shell words from i while an opening quote stays open. */
 function quotedValue(words: string[], i: number): string {
   let value = words[i] ?? "";
@@ -286,7 +297,8 @@ function splitParts(command: string): CommandPart[] {
     current = "";
   };
   const flat = dropHeredocs(command);
-  for (const char of flat) {
+  for (let i = 0; i < flat.length; i++) {
+    const char = flat[i]!;
     if (depth > 0) {
       if (groupQuote !== null) {
         group += char;
@@ -317,9 +329,14 @@ function splitParts(command: string): CommandPart[] {
       quote = char;
       current += char;
     } else if (char === "(") {
-      if (current.endsWith("$")) current = current.slice(0, -1);
-      pushCurrent();
-      depth = 1;
+      // An escaped \$ is literal text, not a substitution.
+      if (current.endsWith("$") && isEscaped(flat, i - 1)) {
+        current += char;
+      } else {
+        if (current.endsWith("$")) current = current.slice(0, -1);
+        pushCurrent();
+        depth = 1;
+      }
     } else if (char === ")") {
       pushCurrent();
     } else if (char === ";" || char === "|" || char === "&" || char === "\n") {
@@ -362,7 +379,8 @@ function balancedBody(text: string, start: number): [string, number] {
 /**
  * The bodies of command substitutions the segment runs: $(...) outside single
  * quotes, and `...` spans. A quoted body still runs, so it is classified
- * beside the segment that carries it.
+ * beside the segment that carries it. An escaped \$ or backquote is literal
+ * text and runs nothing.
  */
 function substitutionBodies(segment: string): string[] {
   const bodies: string[] = [];
@@ -375,7 +393,7 @@ function substitutionBodies(segment: string): string[] {
       i++;
     } else if (quote === "`") {
       if (char === "`") quote = null;
-      else if (char === "$" && segment[i + 1] === "(") {
+      else if (char === "$" && segment[i + 1] === "(" && !isEscaped(segment, i)) {
         const [body, end] = balancedBody(segment, i + 2);
         bodies.push(body);
         i = end;
@@ -384,12 +402,12 @@ function substitutionBodies(segment: string): string[] {
       i++;
     } else if (quote === '"') {
       if (char === '"') quote = null;
-      else if (char === "$" && segment[i + 1] === "(") {
+      else if (char === "$" && segment[i + 1] === "(" && !isEscaped(segment, i)) {
         const [body, end] = balancedBody(segment, i + 2);
         bodies.push(body);
         i = end;
         continue;
-      } else if (char === "`") {
+      } else if (char === "`" && !isEscaped(segment, i)) {
         const end = segment.indexOf("`", i + 1);
         bodies.push(end < 0 ? segment.slice(i + 1) : segment.slice(i + 1, end));
         i = end < 0 ? segment.length : end + 1;
@@ -399,7 +417,7 @@ function substitutionBodies(segment: string): string[] {
     } else if (char === "'" || char === '"' || char === "`") {
       quote = char;
       i++;
-    } else if (char === "$" && segment[i + 1] === "(") {
+    } else if (char === "$" && segment[i + 1] === "(" && !isEscaped(segment, i)) {
       const [body, end] = balancedBody(segment, i + 2);
       bodies.push(body);
       i = end;
@@ -418,7 +436,7 @@ function substitutionBodies(segment: string): string[] {
     } else if (char === "'") {
       quote = char;
       i++;
-    } else if (char === "`") {
+    } else if (char === "`" && !isEscaped(segment, i)) {
       const end = segment.indexOf("`", i + 1);
       bodies.push(end < 0 ? segment.slice(i + 1) : segment.slice(i + 1, end));
       i = end < 0 ? segment.length : end + 1;
