@@ -298,6 +298,28 @@ function writeBrief(repo: string, id: string): Brief {
           ...verifiersOut.split("\n"),
           "```",
         ];
+  // The verifiers that may have gone stale since they were confirmed, from one
+  // stale call at the brief's base. Silent when nothing is marked, so the entry
+  // says nothing of the kind; the clerk's runbook says what a marked verifier
+  // means for the checks.
+  const staleArgs = ["stale", top, "--at", base];
+  const staleOut =
+    verifiersOut === "verifiers: none"
+      ? "stale: none"
+      : requireScript("verifier", staleArgs, `run verifier ${staleArgs.join(" ")} failed`).replace(
+          /\n+$/u,
+          "",
+        );
+  const staleBlock =
+    staleOut === "stale: none"
+      ? []
+      : [
+          `The following verifiers may be stale, as \`${cite(["verifier", ...staleArgs])}\` prints them:`,
+          "",
+          "```text",
+          ...staleOut.split("\n"),
+          "```",
+        ];
   const lines = [
     `# Brief: booking clerk for ${session}`,
     "",
@@ -327,6 +349,7 @@ function writeBrief(repo: string, id: string): Brief {
     "```",
     "",
     ...verifiersBlock,
+    ...(staleBlock.length > 0 ? ["", ...staleBlock] : []),
     "",
   ];
   if (ticket.title) lines.push(`## The ticket as read`, "", `Title: ${ticket.title}`, "");

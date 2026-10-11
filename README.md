@@ -90,6 +90,12 @@ is not made.
 The claims above about combining models start there marked as claims, and the wiki grows one
 record at a time. `skills/wiki` carries the three operations: ingest, query, lint.
 
+Setting up a project makes its verifiers, based on
+[pstack](https://github.com/cursor/plugins/tree/23e4138daa01c42d4969f7a5465f82704e64f798/pstack)'s
+create- and maintain-verification skills: each verifier is a small folder that tells an agent
+arriving cold how to start one surface of the project, drive it the way a user does, and keep
+proof. See [#273](https://github.com/brindlewick/postmaster/issues/273).
+
 ## Getting started
 
 Clone this repo, open your agent in it, and say hi. Any first message starts the flow.

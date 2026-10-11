@@ -107,4 +107,8 @@ proof gone after cleanup fails this step. Mend what fails, and run your own clea
 after every failed round too, so broken rounds strand no processes and no ports. A
 verifier nobody has run is a draft, not a handover.
 
+Once the proof holds, carry `Confirmed: {{PROVED}}` in features/README.md beside
+the `Files:` line: the confirmation says this verifier was proved at that
+commit, and a verifier without one reads as possibly stale.
+
 Commit the verifier on this branch. {{HANDOVER_RULE}}{{HANDOVER_UNASKED}}

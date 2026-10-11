@@ -8,10 +8,13 @@
 // reports each claim that no longer holds and each it could not check (#318);
 // in its correcting mode it corrects the stale claims inside the verifiers'
 // folders only, confirms every verifier at the commit it drove, and proposes the
-// branch for the same landing (#328).
+// branch for the same landing (#328). A verifier reads as possibly stale once a
+// file its index lists changed since the commit it was proved or confirmed at,
+// until a pass confirms it again (#355).
 //
 //   run verifier prompt <repo> <surface>... [--headless]
 //   run verifier list <repo>
+//   run verifier stale <repo> [--at <commit>]
 //   run verifier make <repo> <surface>... --run <dispatch> [--timeout <seconds>]
 //   run verifier check <repo> <branch> --run <dispatch> (--handover <file>|--report <file>)
 //     [--folder <dir>] [--timeout <seconds>]
@@ -32,6 +35,13 @@
 //   list       print the verifiers the repo holds: one index: line per read-first
 //              entry, then one verifier:/surface:/features: block per verifier, or
 //              verifiers: none. The clerk's brief and discovery read this (#327)
+//   stale      print the verifiers that may have gone stale: each verifier with a
+//              file its index lists (#318) changed between the commit it was made
+//              or confirmed at (#328) and --at, HEAD when --at is absent, naming
+//              the files, or unconfirmed with the cause when its entry lacks its
+//              Files list, its Confirmed commit, or names a commit the repo does
+//              not hold. Prints stale: none when no verifier is marked. The
+//              clerk's brief and the postmaster's after-merge offer read this (#355)
 //   make       cut a worktree on a branch of its own beside the repo, removed again
 //              when make fails before any session starts, render the prompt, and open
 //              the coachman role's interactive form through run launch in a fresh tab
@@ -91,8 +101,9 @@
 //              land need a whole number of seconds past zero
 //   --word      the user gave the merge word for this landing, so a local landing
 //              merges without consulting merge authority (setup's launch-card yes)
+//   --at       the commit stale compares each confirmation against (default HEAD)
 //
-//   exit 0  prompt or list printed; make: HANDOVER.md validated, the interactive session
+//   exit 0  prompt, list or stale printed; make: HANDOVER.md validated, the interactive session
 //           left open in its tab, the headless one ended with no wall;
 //           check: the branch lands; land: merged, or the pull request waits for the word;
 //           upkeep, upkeep-report: every claim holds or is corrected
@@ -132,6 +143,7 @@ import { RESULT_RE } from "./verify.ts";
 
 const USAGE = `usage: run verifier prompt <repo> <surface>... [--headless]
        run verifier list <repo>
+       run verifier stale <repo> [--at <commit>]
        run verifier make <repo> <surface>... --run <dispatch> [--timeout <seconds>]
        run verifier check <repo> <branch> --run <dispatch> (--handover <file>|--report <file>)
          [--folder <dir>] [--timeout <seconds>]
@@ -205,6 +217,13 @@ export interface ParsedList {
   repo: string;
 }
 
+export interface ParsedStale {
+  cmd: "stale";
+  repo: string;
+  /** The comparison commit, or null for the repo's HEAD. */
+  at: string | null;
+}
+
 export interface ParsedMake {
   cmd: "make";
   repo: string;
@@ -272,6 +291,7 @@ export type Parsed =
       req:
         | ParsedPrompt
         | ParsedList
+        | ParsedStale
         | ParsedMake
         | ParsedCheck
         | ParsedLand
@@ -363,6 +383,7 @@ export function parseArgs(argv: string[]): Parsed {
   if (
     cmd !== "prompt" &&
     cmd !== "list" &&
+    cmd !== "stale" &&
     cmd !== "make" &&
     cmd !== "check" &&
     cmd !== "land" &&
@@ -378,6 +399,23 @@ export function parseArgs(argv: string[]): Parsed {
       return { ok: false, error: "list takes a repo" };
     }
     return { ok: true, req: { cmd, repo } };
+  }
+  if (cmd === "stale") {
+    if (repo === undefined) return { ok: false, error: "stale takes a repo" };
+    let at: string | null = null;
+    const rest = argv.slice(2);
+    for (let j = 0; j < rest.length; j++) {
+      const flag = rest[j] as string;
+      if (flag === "--at") {
+        const value = rest[j + 1];
+        if (value === undefined) return { ok: false, error: "stale needs --at <commit>" };
+        at = value;
+        j++;
+      } else {
+        return { ok: false, error: `unknown flag for stale: ${flag}` };
+      }
+    }
+    return { ok: true, req: { cmd, repo, at } };
   }
   if (cmd === "upkeep" || cmd === "upkeep-prompt" || cmd === "upkeep-report") {
     return parseUpkeepArgs(cmd, repo, argv.slice(2));
@@ -517,6 +555,8 @@ export interface PromptVars {
   secretsRule: string;
   handoverUnasked: string;
   handoverRule?: string;
+  /** The commit the session proves against, for the index's Confirmed line. */
+  proved?: string;
 }
 
 /** Fill a template from explicit names and values. A leftover placeholder throws. */
@@ -544,6 +584,7 @@ export function renderPrompt(template: string, vars: PromptVars): string {
     HANDOVER_UNASKED: vars.handoverUnasked,
   };
   if (vars.handoverRule !== undefined) known.HANDOVER_RULE = vars.handoverRule;
+  if (vars.proved !== undefined) known.PROVED = vars.proved;
   return renderTemplate(template, known);
 }
 
@@ -1833,6 +1874,56 @@ export function indexFileFor(vdir: string, shared: boolean): string {
   return `${vdir}/features/README.md`;
 }
 
+/**
+ * The project paths a verifier's index scope lists after its `Files:` label,
+ * comma-separated, each relative to the repo top, or null when the scope names
+ * none. The scope is one features-index line or one shared-index bullet span.
+ * The value ends at a `Confirmed:` label or the scope's end; each entry drops
+ * markdown framing from the outside in — wrapping backticks and one trailing
+ * full stop (the sentence's, as the shared bullets read), nesting in either
+ * order — then a leading `./` and trailing slashes, so a folder last in the
+ * list matches. A bare `.` names no path and is dropped. The label is
+ * case-sensitive, as the instructions write it.
+ */
+export function parseFilesList(scope: string): string[] | null {
+  const at = scope.indexOf("Files:");
+  if (at === -1) return null;
+  let value = scope.slice(at + "Files:".length);
+  const confirmed = value.indexOf("Confirmed:");
+  if (confirmed !== -1) value = value.slice(0, confirmed);
+  const entries: string[] = [];
+  // ASCII: widening to Unicode whitespace only folds more runs, never splits an entry
+  for (const raw of value.replace(/\s+/gu, " ").split(",")) {
+    // Framing the sentences and markdown add is not the path: wrapping
+    // backticks and one sentence dot, nesting in either order, so both strip
+    // twice from the outside, then a leading ./ and trailing slashes.
+    let entry = raw.trim();
+    for (let pass = 0; pass < 2; pass++) {
+      entry = entry.replace(/^`+|`+$/gu, "");
+      if (entry.endsWith(".") && entry.length > 1) entry = entry.slice(0, -1);
+    }
+    if (entry.startsWith("./")) entry = entry.slice("./".length);
+    entry = entry.replace(/\/+$/u, "");
+    if (entry !== "" && entry !== ".") entries.push(entry);
+  }
+  return entries;
+}
+
+/**
+ * The changed files that fall under the verifier's listed paths, sorted: a
+ * listed file matches itself, a listed folder matches every changed file
+ * beneath it. Both sides are repo-relative paths, as git names them.
+ */
+export function matchDependedFiles(changed: string[], entries: string[]): string[] {
+  const matched = new Set<string>();
+  for (const file of changed) {
+    for (const entry of entries) {
+      if (entry !== "" && (file === entry || file.startsWith(`${entry}/`))) matched.add(file);
+    }
+  }
+  return [...matched].sort();
+}
+
 export interface VerifySummary {
   gate: string | null;
   failed: string[];
@@ -2054,6 +2145,7 @@ function renderSessionPrompt(
   repo: string,
   surfaces: Surface[],
   base: string,
+  proved: string,
   headless: boolean,
 ): string {
   const body = readTemplate();
@@ -2065,6 +2157,7 @@ function renderSessionPrompt(
       surfaceProse: surfaceProse(kind),
       verifyDir: verifyDirName(repo),
       base,
+      proved,
       handoverRule: SINGLE_HANDOVER_RULE,
       ...modeBlocks(headless),
     });
@@ -2077,6 +2170,7 @@ function renderSessionPrompt(
       surfaceProse: surfaceProse(kind),
       verifyDir: `verifier/${kind}`,
       base,
+      proved,
       handoverRule: MULTI_HANDOVER_RULE,
       ...modeBlocks(headless),
     }),
@@ -2087,7 +2181,18 @@ function renderSessionPrompt(
     DIR_LINES: dirLines(surfaces),
     UNLISTED_SENTENCE: unlistedSentence(surfaces),
     PER_SURFACE: joinBodies(bodies),
+    BASE: base,
+    PROVED: proved,
   });
+}
+
+/** The commit the base names: the sha a session proves against. */
+function provedCommit(repo: string, base: string): string {
+  const sha = git(repo, ["rev-parse", base]);
+  if (sha.code !== 0 || sha.out.trim() === "") {
+    throw new RunError(`the commit of ${base} could not be read`);
+  }
+  return sha.out.trim();
 }
 
 function runPrompt(req: ParsedPrompt): number {
@@ -2096,7 +2201,9 @@ function runPrompt(req: ParsedPrompt): number {
   if (!isRepoTop(repo)) throw new UsageError(`not the top of its repository: ${req.repo}`);
   const base = defaultBase(repo);
   if (base === null) throw new UsageError(`no commit to cut from in ${req.repo}`);
-  process.stdout.write(renderSessionPrompt(repo, req.surfaces, base, req.headless));
+  process.stdout.write(
+    renderSessionPrompt(repo, req.surfaces, base, provedCommit(repo, base), req.headless),
+  );
   return 0;
 }
 
@@ -2188,6 +2295,84 @@ function runListCmd(req: ParsedList): number {
   if (!isRepo(repo)) throw new UsageError(`not a git repository: ${req.repo}`);
   if (!isRepoTop(repo)) throw new UsageError(`not the top of its repository: ${req.repo}`);
   console.log(renderListing(listVerifiers(repo)));
+  return 0;
+}
+
+/**
+ * Why the verifier reads as possibly stale, or null when it does not: the
+ * changed depended files, comma-separated, or the unconfirmed cause. The index
+ * is read from the working tree; the comparison is history, the confirmed
+ * commit against `at`. An entry that lacks its Files list or its Confirmed
+ * commit, or that names a commit the repo does not hold, counts as marked,
+ * since nothing shows it was confirmed.
+ */
+function staleDetail(repo: string, vdir: string, shared: boolean, at: string): string | null {
+  const indexFile = indexFileFor(vdir, shared);
+  const text = readmeText(join(repo, indexFile));
+  let scope: string | null = null;
+  let sha: string | null = null;
+  if (indexFile === "verifier/README.md") {
+    const spans = indexBullets(text).filter((span) => spanNamesDir(span, vdir));
+    if (spans.length === 0) return "unconfirmed (not in the shared index)";
+    if (spans.length > 1) return "unconfirmed (ambiguous shared index entry)";
+    scope = (spans[0] ?? []).join("\n");
+    sha = confirmedSha(scope);
+  } else {
+    // ASCII: indentation before the label is plain spaces
+    scope = text.split("\n").find((l) => /^\s*Files:/u.test(l)) ?? null;
+    sha = featuresConfirm(text);
+  }
+  const files = scope === null ? null : parseFilesList(scope);
+  if (files === null || files.length === 0) return "unconfirmed (no Files: list)";
+  if (sha === null) return "unconfirmed (no Confirmed: commit)";
+  if (git(repo, ["rev-parse", "--verify", "--quiet", `${sha}^{commit}`]).code !== 0)
+    return `unconfirmed (unknown commit ${sha})`;
+  // Rename detection would report only the destination, hiding the listed
+  // source path the verifier depends on; -z lists every name as written,
+  // NUL-separated and never quoted.
+  const diff = git(repo, ["diff", "--name-only", "--no-renames", "-z", sha, at]);
+  if (diff.code !== 0) throw new RunError(`the commits ${sha} and ${at} could not be compared`);
+  const changed = diff.out.split("\0").filter((l) => l !== "");
+  const matched = matchDependedFiles(changed, files);
+  return matched.length === 0 ? null : matched.join(", ");
+}
+
+function runStaleCmd(req: ParsedStale): number {
+  const repo = resolve(req.repo);
+  if (!isRepo(repo)) throw new UsageError(`not a git repository: ${req.repo}`);
+  if (!isRepoTop(repo)) throw new UsageError(`not the top of its repository: ${req.repo}`);
+  // An explicit comparison commit is always validated, even where the repo
+  // holds no verifier to compare.
+  if (req.at !== null) {
+    const resolved = git(repo, ["rev-parse", "--verify", "--quiet", `${req.at}^{commit}`]);
+    if (resolved.code !== 0 || resolved.out.trim() === "") {
+      throw new UsageError(`unknown commit: ${req.at}`);
+    }
+  }
+  const listing = listVerifiers(repo);
+  if (listing.verifiers.length === 0) {
+    console.log("stale: none");
+    return 0;
+  }
+  let at = req.at;
+  if (at === null) {
+    const head = git(repo, ["rev-parse", "HEAD"]);
+    if (head.code !== 0 || head.out.trim() === "") {
+      throw new UsageError(`stale needs a commit to compare against: ${req.repo} holds no commit`);
+    }
+    at = head.out.trim();
+  }
+  const shared = isFilePath(join(repo, "verifier", "README.md"));
+  const marks: string[] = [];
+  for (const v of listing.verifiers) {
+    const detail = staleDetail(repo, v.folder, shared, at);
+    if (detail !== null) marks.push(`stale: ${v.folder}: ${detail}`);
+  }
+  if (marks.length === 0) {
+    console.log("stale: none");
+    return 0;
+  }
+  for (const mark of marks) console.log(mark);
   return 0;
 }
 
@@ -2438,6 +2623,7 @@ function runMake(req: ParsedMake): number {
   }
   const base = defaultBase(repo);
   if (base === null) throw new UsageError(`no commit to cut from in ${req.repo}`);
+  const proved = provedCommit(repo, base);
   pruneWorktrees(repo);
   const label = req.surfaces.join("-");
   const branch = pickBranch((name) => branchTaken(repo, name), label);
@@ -2450,7 +2636,18 @@ function runMake(req: ParsedMake): number {
   const sessionStarted = { started: false };
   const cutAt = Date.now();
   try {
-    return runMakeLaunches(req, repo, dispatch, base, branch, wt, vdir, sessionStarted, cutAt);
+    return runMakeLaunches(
+      req,
+      repo,
+      dispatch,
+      base,
+      proved,
+      branch,
+      wt,
+      vdir,
+      sessionStarted,
+      cutAt,
+    );
   } catch (e) {
     const outcome = failureOutcome(sessionStarted.started, wt, branch);
     const extra = outcome.cleanup ? removeProvisioning(repo, wt, branch) : outcome.suffix;
@@ -2954,6 +3151,7 @@ function runMakeLaunches(
   repo: string,
   dispatch: string,
   base: string,
+  proved: string,
   branch: string,
   wt: string,
   vdir: string,
@@ -2970,7 +3168,7 @@ function runMakeLaunches(
     sessionStarted,
     logLabel: req.surfaces.join("-"),
     sessionNoun: "verifier",
-    renderPrompt: (headless) => renderSessionPrompt(repo, req.surfaces, base, headless),
+    renderPrompt: (headless) => renderSessionPrompt(repo, req.surfaces, base, proved, headless),
     sendFileText: (promptFile) => sendText(promptFile),
     waitFile: "HANDOVER.md",
     validate: () => validateSession(wt, base, branch, vdir, cutAt, req.surfaces),
@@ -3681,6 +3879,7 @@ function main(argv: string[]): number {
     if (!parsed.ok) throw new UsageError(parsed.error);
     if (parsed.req.cmd === "prompt") return runPrompt(parsed.req);
     if (parsed.req.cmd === "list") return runListCmd(parsed.req);
+    if (parsed.req.cmd === "stale") return runStaleCmd(parsed.req);
     if (parsed.req.cmd === "check") return runCheckCmd(parsed.req);
     if (parsed.req.cmd === "land") return runLandCmd(parsed.req);
     if (parsed.req.cmd === "upkeep") return runUpkeep(parsed.req);
