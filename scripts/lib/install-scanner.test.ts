@@ -1,11 +1,12 @@
 // Tests beside scripts/lib/install-scanner.ts: the recorded verdict the
-// scanner answers from under POSTMASTER_SCAN_FIXTURE. The live Socket path
-// and the install behavior sit in the #425 oracle.
+// scanner answers from under POSTMASTER_SCAN_FIXTURE, and the approval
+// half of the joined scan. The live Socket path and the install behavior
+// sit in the #425 and #424 oracles.
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { recordedScan } from "./install-scanner.ts";
+import { approvalScan, recordedScan, scanner } from "./install-scanner.ts";
 
 const PACKAGES = [{ name: "left-pad", version: "1.3.0" }];
 
@@ -94,6 +95,152 @@ describe("recordedScan", () => {
       );
       expect(() => recordedScan(path, PACKAGES)).toThrow("malformed");
     } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+const LOCK = `{
+  "lockfileVersion": 2,
+  "workspaces": {
+    "": {
+      "name": "probe",
+      "dependencies": {
+        "left-pad": "1.3.0",
+      },
+    },
+  },
+  "packages": {
+    "left-pad": ["left-pad@1.3.0", "", {}, "sha512-x"],
+  },
+}
+`;
+
+function scanRoot(): string {
+  const dir = mkdtempSync(join(tmpdir(), "postmaster-install-scan-"));
+  writeFileSync(join(dir, "bun.lock"), LOCK);
+  return dir;
+}
+
+describe("approvalScan", () => {
+  test("a package outside the approved set is a fatal refusal", () => {
+    const dir = scanRoot();
+    try {
+      const found = approvalScan(dir, [
+        { name: "left-pad", version: "1.3.0" },
+        { name: "is-odd", version: "3.0.1" },
+      ]);
+      expect(found).toHaveLength(1);
+      expect(found[0]!.level).toBe("fatal");
+      expect(found[0]!.package).toBe("is-odd");
+      expect(found[0]!.description).toContain("is-odd@3.0.1");
+      expect(found[0]!.description).toContain("stop");
+      expect(found[0]!.description).toContain("report");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("a cached yes approves", () => {
+    const dir = scanRoot();
+    try {
+      mkdirSync(join(dir, ".postmaster"), { recursive: true });
+      writeFileSync(
+        join(dir, ".postmaster", "library-approvals.json"),
+        JSON.stringify({ version: 1, approvals: { "is-odd@3.0.1": {} } }),
+      );
+      expect(approvalScan(dir, [{ name: "is-odd", version: "3.0.1" }])).toEqual([]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("scanner.scan", () => {
+  test("concatenates Socket's advisories with the approval refusals", async () => {
+    const dir = scanRoot();
+    const verdict = join(dir, "verdict.json");
+    writeFileSync(
+      verdict,
+      JSON.stringify({
+        advisories: {
+          "left-pad@1.3.0": [
+            {
+              level: "warn",
+              package: "left-pad",
+              url: null,
+              description: "left-pad is noted",
+            },
+          ],
+        },
+      }),
+    );
+    const cwd = process.cwd();
+    process.chdir(dir);
+    process.env["POSTMASTER_SCAN_FIXTURE"] = verdict;
+    delete process.env["POSTMASTER_RECORD_FILE"];
+    try {
+      const found = await scanner.scan({
+        packages: [
+          { name: "left-pad", version: "1.3.0" },
+          { name: "is-odd", version: "3.0.1" },
+        ],
+      });
+      expect(found).toHaveLength(2);
+      expect(found[0]!.description).toContain("noted");
+      expect(found[1]!.level).toBe("fatal");
+    } finally {
+      delete process.env["POSTMASTER_SCAN_FIXTURE"];
+      process.chdir(cwd);
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("an unreachable scan throws with anything new and warns past the pinned set", async () => {
+    const dir = scanRoot();
+    const verdict = join(dir, "verdict.json");
+    writeFileSync(verdict, JSON.stringify({ error: "socket unreachable" }));
+    const cwd = process.cwd();
+    process.chdir(dir);
+    process.env["POSTMASTER_SCAN_FIXTURE"] = verdict;
+    delete process.env["POSTMASTER_RECORD_FILE"];
+    try {
+      let thrown = "";
+      try {
+        await scanner.scan({ packages: [{ name: "is-odd", version: "3.0.1" }] });
+      } catch (error) {
+        thrown = error instanceof Error ? error.message : String(error);
+      }
+      expect(thrown).toContain("socket unreachable");
+      const pinned = await scanner.scan({ packages: [{ name: "left-pad", version: "1.3.0" }] });
+      expect(pinned).toEqual([]);
+    } finally {
+      delete process.env["POSTMASTER_SCAN_FIXTURE"];
+      process.chdir(cwd);
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("record mode writes the refused set beside the verdict", async () => {
+    const dir = scanRoot();
+    const verdict = join(dir, "verdict.json");
+    writeFileSync(verdict, JSON.stringify({ advisories: {} }));
+    const record = join(dir, "record.json");
+    const cwd = process.cwd();
+    process.chdir(dir);
+    process.env["POSTMASTER_SCAN_FIXTURE"] = verdict;
+    process.env["POSTMASTER_RECORD_FILE"] = record;
+    try {
+      const found = await scanner.scan({ packages: [{ name: "is-odd", version: "3.0.1" }] });
+      expect(found).toHaveLength(1);
+      expect(JSON.parse(readFileSync(record, "utf8"))).toEqual({
+        refused: ["is-odd@3.0.1"],
+        socketFlagged: false,
+      });
+    } finally {
+      delete process.env["POSTMASTER_SCAN_FIXTURE"];
+      delete process.env["POSTMASTER_RECORD_FILE"];
+      process.chdir(cwd);
       rmSync(dir, { recursive: true, force: true });
     }
   });
