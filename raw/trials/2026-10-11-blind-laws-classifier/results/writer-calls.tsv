@@ -1,0 +1,63 @@
+1	Bash	inside	cd <writer> && ls -la
+2	Bash	inside	cd <writer> && cat BRIEF.md
+3	Bash	inside	cd <writer> && cat signatures.ts && echo ---- && cat classifier.ts && echo ---- && cat sandbox.ts && echo ---- && cat run-stub.ts && echo ---- && cat laws.ts && echo ---- && cat package.json && echo ---- && cat bun.lock && ls node_modules node_modules/*
+4	Read	inside	<writer>/ticket-202.md
+5	Bash	OUTSIDE	cd <writer> && bun --version && bun -e 'import os from "node:os"; console.log("tmpdir", os.tmpdir()); console.log("TMPDIR set:", process.env.TMPDIR !== undefined, process.env.TMPDIR ?? ""); const h1 = os.homedir(); process.env.HOME = "/zz/fakehome"; console.log("homedir follows env:", os.homedir() === "/zz/fakehome", h1 === process.env.HOME);' && which bwrap git sh bash; bun -e 'import { sandboxUsable } from "./sandbox.ts"; console.log("sandbox usable:", sandboxUsable());'
+6	Bash	OUTSIDE	cd <writer> && HOME=/zz/startuphome bun -e 'import os from "node:os"; console.log("homedir at startup:", os.homedir()); console.log("env HOME:", process.env.HOME); process.env.HOME = "/zz/other"; console.log("after set, homedir:", os.homedir(), "env:", process.env.HOME);'
+7	Bash	OUTSIDE	cd <writer> && cat node_modules/fast-check/package.json | head -40 && ls node_modules/fast-check/lib && ls node_modules/fast-check/lib/types 2>/dev/null | head
+8	Bash	inside	cd <writer> && wc -c node_modules/fast-check/lib/fast-check.d.ts && grep -n "declare function \(string\|stringMatching\|constantFrom\|oneof\|record\|array\|tuple\|integer\|nat\|boolean\|option\|subarray\|shuffledSubarray\|uniqueArray\|constant\|assert\|property\|sample\|mapToConstant\|letrec\)\b" node_modules/fast-check/lib/fast-check.d.ts | head -60
+9	Bash	inside	cd <writer> && sed -n 3000,3062p node_modules/fast-check/lib/fast-check.d.ts && grep -n "interface Parameters<" node_modules/fast-check/lib/fast-check.d.ts && grep -n "numRuns\|endOnFailure\|seed?:\|verbose?:" node_modules/fast-check/lib/fast-check.d.ts | head -20
+10	Bash	inside	cd <writer> && mkdir -p probe-dir && bun -e '
+11	Bash	OUTSIDE	cd <writer> && bun -e '
+12	Bash	inside	cd <writer> && bun -e '
+13	Bash	inside	cd <writer> && grep -n "includeErrorInReport" -A6 node_modules/fast-check/lib/fast-check.d.ts | head -20 && bun -e '
+14	Write	inside	<writer>/laws.ts
+15	Bash	inside	cd <writer> && time bun run-stub.ts 2>&1 | tail -20 && ls -la
+16	Write	inside	<writer>/laws.ts
+17	Write	inside	<writer>/check-generators.ts
+18	Bash	inside	cd <writer> && time bun check-generators.ts 300 2>&1 | tail -80
+19	Bash	OUTSIDE	cd <writer> && cat > check-generators-2.ts <<'EOF'
+20	Bash	inside	cd <writer> && grep -n "interface OptionConstraints" -A 22 node_modules/fast-check/lib/fast-check.d.ts | grep -v "^\s*$" | head -30 && grep -n "interface WeightedArbitrary" -A 12 node_modules/fast-check/lib/fast-check.d.ts | head -16
+21	Edit	inside	<writer>/laws.ts
+22	Edit	inside	<writer>/laws.ts
+23	Edit	inside	<writer>/laws.ts
+24	Edit	inside	<writer>/laws.ts
+25	Edit	inside	<writer>/laws.ts
+26	Edit	inside	<writer>/laws.ts
+27	Read	inside	<writer>/laws.ts
+28	Read	inside	<writer>/laws.ts
+29	Edit	inside	<writer>/laws.ts
+30	Bash	inside	cd <writer> && bun check-generators-2.ts 150 2>&1 | grep -v "^drwx\|^-rw\|^lrwx\|^total" | tail -12 && bun run-stub.ts && ls -a
+31	Edit	inside	<writer>/laws.ts
+32	Edit	inside	<writer>/laws.ts
+33	Edit	inside	<writer>/laws.ts
+34	Edit	inside	<writer>/laws.ts
+35	Edit	inside	<writer>/laws.ts
+36	Edit	inside	<writer>/laws.ts
+37	Edit	inside	<writer>/laws.ts
+38	Edit	inside	<writer>/laws.ts
+39	Edit	inside	<writer>/laws.ts
+40	Edit	inside	<writer>/laws.ts
+41	Edit	inside	<writer>/laws.ts
+42	Edit	inside	<writer>/laws.ts
+43	Edit	inside	<writer>/laws.ts
+44	Edit	inside	<writer>/laws.ts
+45	Bash	inside	cd <writer> && timeout 600 bun check-generators.ts 300 2>&1 | grep -E "^law|SYNTAX|WRAP|^    (git|cd|GIT_DIR|echo|cat|touch|head|wc|ls|rm|cp|install|mkdir)" | grep -E "^law|SYNTAX|WRAP" ; bun -e '
+46	Bash	inside	cd <writer> && bun -e '
+47	Edit	inside	<writer>/laws.ts
+48	Edit	inside	<writer>/laws.ts
+49	Edit	inside	<writer>/laws.ts
+50	Edit	inside	<writer>/laws.ts
+51	Edit	inside	<writer>/laws.ts
+52	Edit	inside	<writer>/laws.ts
+53	Bash	inside	cd <writer> && rm check-generators.ts check-generators-2.ts && grep -n "__debug\|TEMPORARY\|console\." laws.ts; time bun run-stub.ts && ls -a
+54	Bash	inside	cd <writer> && for id in existsSync lstatSync mkdirSync mkdtempSync readdirSync readFileSync readlinkSync realpathSync rmSync symlinkSync writeFileSync homedir tmpdir basename dirname join relative resolve fileURLToPath Access commandTouches Place RunInfo Touch sandboxed HOME TAG HERE norm within canonical samePath related pick PLAIN sq dq word WRAPS OWNS makeLayout layouts inFreshFolder placeOf targetPath target express LOCAL_STYLES classify reported touchesAt RANK strongest merged sameStrongest show fail expectWriteFinding expectReadNote TICKET OWN onLayouts READ_PARTS WRITE_PARTS GIT_READS GIT_WRITES GIT_OWN_WRITES gitRoots gitSub SEPS partArb renderPart compound cdDirs one two many WRITERS used sources READERS INERT INERT_SINGLE CARRIERS LINKED L7_WRITERS FILLERS WRITE_ATTEMPTS READ_ATTEMPTS WRITE_REFUSALS READ_REFUSALS WRITE_FAILURES READ_FAILURES NOISE REFUSAL_LIKE noiseLine normalWrites DEV_NULL_WRITES NORMAL_READS NORMAL_READERS INSIDE_PATHS INSIDE_READERS unresolvable UNRESOLVABLE_USES snapshot changed RUN_ACTIONS RUN_SEPS REFUSED runTarget runInSandbox sandboxWorks HOME_RELS HOME_READ_RELS MAIN_OLD MAIN_NEW TREE_OLD TREE_NEW OWN_OLD OWN_NEW SYSTEM_PATHS WORKTREE_FILES MAIN_FILES put judgeGit AIMS AIM_READS AIM_WRITES; do n=$(grep -cw -- "$id" laws.ts); if [ "$n" -lt 2 ]; then echo "only once: $id"; fi; done; echo "fields:"; for f in "\.N\b" "\.tool\b" "\.data\b" "\.wt\b" "\.T\b" "\.root\b" "\.lens\b"; do echo "$f $(grep -cP -- "L$f|Lx$f" laws.ts)"; done
+55	Edit	inside	<writer>/laws.ts
+56	Edit	inside	<writer>/laws.ts
+57	Read	inside	<writer>/laws.ts
+58	Edit	inside	<writer>/laws.ts
+59	Edit	inside	<writer>/laws.ts
+60	Write	inside	<writer>/LAWS.md
+61	Edit	inside	<writer>/LAWS.md
+62	Bash	inside	cd <writer> && bun run-stub.ts && ls -a && grep -c "" laws.ts LAWS.md && grep -n ": any\|as any\|<any>" laws.ts; grep -n "\.test\.ts" laws.ts LAWS.md; echo "checked"
+calls	62	outside	5

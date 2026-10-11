@@ -1,0 +1,88 @@
+--- a/scripts/reach.ts@b8056c9
++++ b/scripts/reach.ts
+@@ -29,10 +29,10 @@
+ import { run } from "./lib/proc.ts";
+ 
+ type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
+-type RecordOf<T = unknown> = Record<string, T>;
++export type RecordOf<T = unknown> = Record<string, T>;
+ type Harness = "codex" | "claude" | "muse" | "mimo" | "pi" | string;
+-type Access = "read" | "write" | "refused";
+-type Place = "inside" | "main checkout" | "synthesis worktree" | "another worktree" | "elsewhere";
++export type Access = "read" | "write" | "refused";
++export type Place = "inside" | "main checkout" | "synthesis worktree" | "another worktree" | "elsewhere";
+ 
+ interface ToolCall {
+   name: string;
+@@ -42,7 +42,7 @@
+   direct: Array<{ path: string; access: Access }>;
+ }
+ 
+-interface Touch {
++export interface Touch {
+   path: string;
+   access: Access;
+   place: Place;
+@@ -66,7 +66,7 @@
+   reason?: string;
+ }
+ 
+-interface RunInfo {
++export interface RunInfo {
+   dispatch: string;
+   repo: string;
+   ticket: string;
+@@ -361,7 +361,7 @@
+   return "elsewhere";
+ }
+ 
+-function expandPath(token: string, cwd: string): string | null {
++export function expandPath(token: string, cwd: string): string | null {
+   if (!token || /[*?\[\]]/u.test(token)) return null;
+   let value = token;
+   if (value.startsWith("~")) {
+@@ -376,7 +376,7 @@
+   return physical(value);
+ }
+ 
+-function isPathToken(token: string, cwd: string): boolean {
++export function isPathToken(token: string, cwd: string): boolean {
+   if (!token || token.startsWith("-") || token.includes("=") || /^[0-9]+>&?[0-9]*$/u.test(token))
+     return false;
+   if (/^(?:https?|mailto|data):/iu.test(token)) return false;
+@@ -418,7 +418,7 @@
+   return false;
+ }
+ 
+-function splitShell(source: string, outerWrite = false): ShellGroup[] {
++export function splitShell(source: string, outerWrite = false): ShellGroup[] {
+   const out: ShellGroup[] = [];
+   const push = (text: string, write: boolean): void => {
+     if (text.trim()) out.push({ text, outerWrite: write });
+@@ -491,7 +491,7 @@
+   return out;
+ }
+ 
+-function shellWords(segment: string): string[] {
++export function shellWords(segment: string): string[] {
+   const words: string[] = [];
+   let word = "";
+   let quote = "";
+@@ -543,7 +543,7 @@
+   return words;
+ }
+ 
+-function unwrapShell(command: string): ShellGroup[] {
++export function unwrapShell(command: string): ShellGroup[] {
+   const words = shellWords(command.trim());
+   if (words.length >= 3 && /(?:^|\/)(?:ba)?sh$/u.test(words[0] ?? "")) {
+     const flag = words[1];
+@@ -772,7 +772,7 @@
+   return null;
+ }
+ 
+-function commandTouches(
++export function commandTouches(
+   command: string,
+   result: string,
+   code: unknown,
