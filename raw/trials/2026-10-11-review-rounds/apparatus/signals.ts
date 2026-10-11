@@ -356,3 +356,57 @@ export function simulate(rule: StopRule, runs: readonly RunFacts[]): Simulation 
     confirmingRounds: confirming,
   };
 }
+
+export type FixYieldRow = {
+  /** the round whose fix commits these are; the last row pools round 5 and after */
+  round: string;
+  commits: number;
+  /** commits with a serious finding in their lines in the next round */
+  nextRound: number;
+  /** commits with one in any later round */
+  anyLater: number;
+};
+
+/**
+ * How often a round's fix commits get a serious finding in lines they wrote, in the next round or
+ * later. A commit that changed no line is not counted. `origin` names a finding's origin commit
+ * by its first 8 characters, for findings whose lines a fix wrote.
+ */
+export function fixYield(
+  commits: ReadonlyArray<{
+    run: string;
+    sha: string;
+    phase: string;
+    added: number;
+    deleted: number;
+    onMain: boolean;
+  }>,
+  findings: ReadonlyArray<{
+    run: string;
+    round: number;
+    originKind: string;
+    originSha: string | null;
+  }>,
+): FixYieldRow[] {
+  const hits = new Map<string, Set<number>>();
+  for (const f of findings) {
+    if (f.originKind !== "fix" || f.originSha === null) continue;
+    const key = `${f.run}|${f.originSha}`;
+    hits.set(key, (hits.get(key) ?? new Set()).add(f.round));
+  }
+  const rows = new Map<string, FixYieldRow>();
+  for (const c of commits) {
+    if (c.onMain || !c.phase.startsWith("fix:") || c.added + c.deleted === 0) continue;
+    const k = Number(c.phase.slice(4));
+    const label = k >= 5 ? "5 and after" : String(k);
+    const row = rows.get(label) ?? { round: label, commits: 0, nextRound: 0, anyLater: 0 };
+    const rounds = hits.get(`${c.run}|${c.sha}`) ?? new Set<number>();
+    row.commits += 1;
+    if (rounds.has(k + 1)) row.nextRound += 1;
+    if ([...rounds].some((r) => r > k)) row.anyLater += 1;
+    rows.set(label, row);
+  }
+  return ["1", "2", "3", "4", "5 and after"].flatMap((l) =>
+    rows.has(l) ? [rows.get(l) as FixYieldRow] : [],
+  );
+}

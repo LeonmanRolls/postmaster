@@ -1,5 +1,16 @@
 import { describe, expect, test } from "bun:test";
-import { kappa, mean, median, permutationP, quantile, ranks, spearman, wilson } from "./stats.ts";
+import {
+  kappa,
+  lineFit,
+  mean,
+  median,
+  partialSpearman,
+  permutationP,
+  quantile,
+  ranks,
+  spearman,
+  wilson,
+} from "./stats.ts";
 
 describe("summaries", () => {
   test("median of odd and even lists", () => {
@@ -54,5 +65,23 @@ describe("permutation test", () => {
     const a = [3, 5, 4, 8];
     const b = [2, 3, 1, 4, 2];
     expect(permutationP(a, b, 2000, 7)).toBe(permutationP(a, b, 2000, 7));
+  });
+});
+
+describe("partial correlation and line fit", () => {
+  test("x and y that both follow z lose most of their correlation once z is held (positive control)", () => {
+    const z = Array.from({ length: 16 }, (_, i) => i + 1);
+    const x = z.map((v, i) => v + ((i * 7) % 5) - 2);
+    const y = z.map((v, i) => v + ((i * 3) % 5) - 2);
+    expect(spearman(x, y)).toBeGreaterThan(0.8);
+    expect(Math.abs(partialSpearman(x, y, z))).toBeLessThan(0.6);
+  });
+  test("a straight line is fitted exactly by both methods", () => {
+    const x = [0, 1, 2, 3, 4];
+    const y = x.map((v) => 2 + 0.5 * v);
+    const fit = lineFit(x, y);
+    expect(fit.theilSen.slope).toBeCloseTo(0.5, 10);
+    expect(fit.theilSen.intercept).toBeCloseTo(2, 10);
+    expect(fit.ols.slope).toBeCloseTo(0.5, 10);
   });
 });

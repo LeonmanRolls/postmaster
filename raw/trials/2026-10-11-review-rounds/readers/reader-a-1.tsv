@@ -1,0 +1,67 @@
+251.2.1	no	no	contract	Criterion 7 and C7 dispatch only when the postmaster has room for another run; emitting every READY breaks it.
+251.2.2	yes	no	contract	Ticket never says how readiness is read on a tracker kind with no adapter; several options exist.
+251.2.3	no	no	contract	Ticket does not reach logging of the readiness result; the existing log-every-action rule requires the logger to accept it.
+251.2.4	no	no	contract	C4 names only the turnpikes note; the existing every-write-logged rule in trackers.md, not the ticket, requires the other writes logged.
+251.2.5	yes	no	input	Ticket's same, moved, changed and missing results do not say what a cite past end of file reports.
+251.2.6	no	no	contract	C5 allows one clerk per ticket; colliding handles across projects wrongly refuse a second project's clerk under any reading.
+251.2.7	no	no	input	Criterion 18 fails only a run that started a workhorse before checking premises; a premise-stop run started none.
+251.3.1	no	no	input	The ready mark is a label named ready; a single label 'blocked, ready' is not that under any reading.
+251.3.2	no	no	prose	Criterion 7 requires dispatch with no further word from the user; a path that stalls without a watcher contradicts it.
+251.3.3	no	no	state	A failed read must not skip the unmark D4 requires; failing closed is the one sane answer.
+251.3.4	yes	no	state	Ticket never says what a sign-off covers when the text is edited afterwards; D4 rejected unmarking on any edit.
+251.4.1	no	no	input	A corrupted marker must fail closed; reading it as no marker lets a changed ticket pass, which any reading rejects.
+251.4.2	yes	no	contract	C14 states the end result but not how send-back works on a tracker kind where unmark refuses.
+251.4.3	no	no	input	A comment after sign-off is not a ticket change; hashing the Log trailer is a wrong comparison under any reading.
+251.5.1	no	no	contract	Signing off a commented ticket must succeed; the edit base and the adapters' stored-body comparison disagree, wrong under any reading.
+251.5.2	no	no	input	The Log-trailer heuristic mis-binds Log-tailed bodies; a wrong comparison any reading rejects, fixed by digesting the stored body.
+251.5.3	no	no	input	Ready is a label named ready; a lone comma flag making 'blocked, ready' read ready is wrong under any reading.
+251.6.1	no	no	contract	Queue and check digest different bodies, so a commented ticket falsely refuses; a wrong comparison under any reading.
+251.6.2	yes	no	state	Ticket never says what happens when the issue text changes between sign-off and binding; roll-back is one of several options.
+124.2.1	no	no	state	Criterion 7's landed predicate includes a provider-reported merged pull request; re-entry after a crash must use it.
+124.2.2	no	no	contract	Criterion 7 requires the card's check results to match verify.sh results; omitting passing ones violates that.
+124.2.3	no	no	contract	The runbook's shipped write omits the actor the script requires; wrong against the script, outside the ticket.
+124.2.4	yes	no	state	Ticket never says how a restart tells a post-landing crash from an interrupted correction.
+124.2.5	yes	no	state	Ticket never says what a crash between landing and marker removal does on restart.
+124.3.1	no	no	input	Criterion 7 requires the default branch to contain HEAD and HEAD not be BASE; an empty branch must not skip.
+124.3.2	yes	no	prose	Ticket says browser suite and QA only where the project has them; which checks are required is unstated.
+124.3.3	no	no	input	Criterion 7 lists a provider-reported squash merge as a landed shape; stalling it contradicts the ticket.
+124.3.4	no	no	contract	Criterion 7 requires card and verify results to match; differing shapes make that comparison impossible.
+124.3.5	no	no	contract	Card reconciliation labels must match the checkpoint's own vocabulary; a mismatch is wrong under any reading.
+124.4.1	no	no	input	Criterion 7 names an empty branch after the default branch moves as a shape that must not count as landed.
+124.4.2	no	no	input	Criterion 7 lists a check with no result logged; the ruling judged it a non-pass, so it must be decidable.
+124.4.3	yes	no	prose	Ticket does not define the final states of findings on the card; a ruling asked for explicit ones.
+124.19.1	yes	no	input	Ticket never says what the landed check does when the provider's pull request head cannot be resolved locally.
+124.20.1	yes	no	state	Ticket never says what re-verify does when card head and ticket ref differ for a cause other than movement.
+270.2.1	no	no	input	C16 compares the waybill's generated Team mode line; a quoted Team heading in ticket text must not be read.
+335.2.1	no	no	input	The code's own message requires on or off; a typo silently running lanes unconfined is wrong under any reading.
+335.2.2	no	no	input	Existing stdin handling of the dash argument worked before; breaking it is a regression no reading allows.
+335.3.1	no	no	input	Criterion 2 covers every step; resolving a subdirectory target to the repository root is the one sane answer.
+335.5.1	no	no	contract	Criterion 2 and C2 require each launch's limits to follow project settings; the flag placement misses host run.
+335.6.1	yes	no	input	Ticket never says what a relative env_file is relative to, including with no global config; the user ruled it.
+335.6.2	no	no	input	Criterion 3 requires settings to be complete; a legacy-facts-only file is not complete, and the base reported missing config.
+335.7.1	no	no	input	Run line calls it a regression from the base; silently dropping the machine's config has one sane answer.
+335.7.2	yes	no	site	Ticket never says what a relative env_file is relative to; the same choice must reach --run launches.
+335.8.1	no	no	state	Criterion 4 gates tracked files on acceptance; failing open when git refuses has one sane answer, failing closed.
+217.2.1	unclear	no	input	Text is only a target and severity line, with no claim about what is wrong.
+237.2.1	no	no	state	D1 and D8 stop the run until ruled; a wall lost on log failure must still gate, under any reading.
+237.2.2	no	no	input	Reading the repo line from the waybill must handle spaced paths and ignore ticket text; wrong under any reading.
+237.2.3	no	no	input	D5 says a reset time is understood only in known shapes, otherwise none; fabricated times contradict it.
+237.2.4	no	no	state	D8 stops the run until ruled; an unreadable log reading as no walls must fail closed, the one sane answer.
+258.3.1	no	no	input	Ticket does not reach workflow dispatch inputs; interpolating an input into a script is a security fault under any reading.
+163.2.1	yes	no	input	Ticket never says what the card step does for target repositories without the contract index or checker.
+163.2.2	yes	no	contract	Ticket never says which copy or location names the detector file, or whose version is trusted.
+163.2.3	yes	no	prose	Ticket does not say which copy of the checker a re-check runs, the branch's or the base's.
+163.3.1	no	no	contract	Criterion 1 says each listed file is covered whole; a region map leaving the entrypoint out contradicts it.
+163.4.1	no	no	contract	Criterion 4 requires a change to any listed file, wording fixes included, to answer yes; unmapped sentences answer no.
+163.4.2	yes	no	prose	Ticket never says what a re-check does on the branch that introduces the checker, where no base copy exists.
+163.5.1	no	no	state	Reporting no change when git could not read is wrong; failing closed is the one sane answer.
+112.4.1	no	no	other	Text calls it pre-existing error-path design, which the ticket's change does not reach; criterion 4 covers tool output only.
+112.4.2	yes	no	input	Ticket never says whether a result event restating the last message prints; several behaviours are reasonable.
+112.4.3	unclear	no	other	Text is only a disposition, dismissed as synthetic-only, with no statement of the behaviour.
+112.4.4	no	no	input	Run line shows blank codex text printing as None; wrong output under any reading, same class as M2.
+112.5.1	no	no	test	Criterion 5 requires each control to fail on the old behaviour; the N2 control passed on the mutant.
+112.5.2	unclear	no	other	Text is only a disposition, dismissed as synthetic-only, with no statement of the behaviour.
+373.2.1	no	no	state	A cleanup must not close a space holding a live launch under any reading; the stale settled state is a defect.
+201.2.1	no	no	input	Criterion 2 names a rule that lets only Bubblewrap create namespaces; a user-writable path breaks that.
+170.2.1	no	no	input	Truncating the brief's ticket at a heading named Team or Dispatch drops requirements; wrong under any reading of criterion 1.
+92.2.1	no	no	contract	A stale line pin in an old oracle after an insert is a mismatch with no ticket behaviour behind it.

@@ -26,13 +26,24 @@ import { type Item, itemsOf } from "./packets.ts";
 import {
   type CommitFact,
   type FindingFact,
+  type FixYieldRow,
+  fixYield,
   RULES,
   type RunFacts,
   signalRows,
   simulate,
   transitions,
 } from "./signals.ts";
-import { median, pct, permutationP, sum, wilson } from "./stats.ts";
+import {
+  lineFit,
+  median,
+  partialSpearman,
+  pct,
+  permutationP,
+  spearman,
+  sum,
+  wilson,
+} from "./stats.ts";
 import type { RunMeta, TracedFinding } from "./trace.ts";
 
 type Traced = { cut: string; runs: RunMeta[]; findings: TracedFinding[] };
@@ -208,6 +219,43 @@ export function featuresMarkdown(inputs: readonly RunInput[]): string {
     ),
     "",
   );
+  out.push("## What a feature adds beyond round 1", "");
+  {
+    const feats: Array<[string, (r: RunInput) => number | null]> = [
+      ["acceptance criteria", (r) => r.criteria],
+      ["lines changed before review", (r) => r.changeLines],
+      ["decisions", (r) => r.decisions],
+      ["checks", (r) => r.checks],
+    ];
+    const rows = feats.map(([name, pick]) => {
+      const use = inputs.filter((r) => pick(r) !== null);
+      const x = use.map((r) => pick(r) as number);
+      const rounds = use.map((r) => r.rounds);
+      const first = use.map((r) => r.best[0] ?? 0);
+      return [name, num(spearman(x, rounds)), num(partialSpearman(x, rounds, first))];
+    });
+    const first = inputs.map((r) => r.best[0] ?? 0);
+    const rounds = inputs.map((r) => r.rounds);
+    const crit = inputs.map((r) => r.criteria ?? 0);
+    rows.push([
+      "serious findings in round 1, holding criteria",
+      num(spearman(first, rounds)),
+      num(partialSpearman(first, rounds, crit)),
+    ]);
+    out.push(
+      table(
+        ["Feature", "rho with rounds", "rho with rounds, holding round 1's serious findings"],
+        rows,
+      ),
+      "",
+    );
+    const total = inputs.map((r) => sum(r.best));
+    const fit = lineFit(total, rounds);
+    out.push(
+      `Rounds against all of a run's serious findings: rounds = ${num(fit.theilSen.intercept, 1)} + ${num(fit.theilSen.slope)} × serious findings by the Theil–Sen line, ${num(fit.ols.intercept, 1)} + ${num(fit.ols.slope)} × by least squares, over ${inputs.length} runs. About five serious findings add a round.`,
+      "",
+    );
+  }
   out.push("## Rounds by the number of acceptance criteria", "");
   for (const [label, sel] of [
     ["all runs", () => true],
@@ -620,7 +668,11 @@ export function marksMarkdown(
   return out.join("\n");
 }
 
-export function signalsMarkdown(first: readonly RunFacts[], later: readonly RunFacts[]): string {
+export function signalsMarkdown(
+  first: readonly RunFacts[],
+  later: readonly RunFacts[],
+  yields: { first: FixYieldRow[]; later: FixYieldRow[] },
+): string {
   const out: string[] = [];
   out.push("# Stop signals", "");
   out.push(
@@ -690,6 +742,36 @@ export function signalsMarkdown(first: readonly RunFacts[], later: readonly RunF
       "",
     );
   }
+  out.push("## What a round's fix commits bring", "");
+  out.push(
+    "A fix commit is an own commit made after a round was launched and before the next. The columns count the commits that changed at least one line, and those with a serious finding in lines they wrote in the next round or in any later round.",
+    "",
+  );
+  for (const [label, rows] of [
+    ["The 61 runs", yields.first],
+    ["The later set", yields.later],
+  ] as const) {
+    if (rows.length === 0) continue;
+    out.push(
+      `**${label}**`,
+      "",
+      table(
+        [
+          "Fix commits of round",
+          "Commits",
+          "A serious finding in the next round",
+          "In any later round",
+        ],
+        rows.map((r) => [
+          r.round,
+          String(r.commits),
+          `${r.nextRound} (${pct(r.nextRound, r.commits)})`,
+          `${r.anyLater} (${pct(r.anyLater, r.commits)})`,
+        ]),
+      ),
+      "",
+    );
+  }
   return out.join("\n");
 }
 
@@ -740,7 +822,33 @@ const main = (args: string[]): void => {
     lanesText += lanesMarkdown(rows, "The later set");
   }
   writeFileSync(join(dir, "lanes.md"), lanesText);
-  writeFileSync(join(dir, "signals.md"), signalsMarkdown(factsOf(first, traced), laterFacts));
+  const yieldOf = (t: Traced, ids: ReadonlySet<string>): FixYieldRow[] =>
+    fixYield(
+      t.runs
+        .filter((m) => ids.has(m.run))
+        .flatMap((m) => m.commits.map((c) => ({ run: m.run, ...c }))),
+      t.findings
+        .filter((f) => ids.has(f.run))
+        .map((f) => ({
+          run: f.run,
+          round: f.round,
+          originKind: f.origin.kind,
+          originSha: f.origin.sha ?? null,
+        })),
+    );
+  const firstIds = new Set(first.map((r) => r.run));
+  const laterIds = new Set(laterFacts.map((r) => r.run));
+  const laterTraced =
+    laterFile && existsSync(join(dir, laterFile))
+      ? (JSON.parse(readFileSync(join(dir, laterFile), "utf8")) as Traced)
+      : null;
+  writeFileSync(
+    join(dir, "signals.md"),
+    signalsMarkdown(factsOf(first, traced), laterFacts, {
+      first: yieldOf(traced, firstIds),
+      later: laterTraced ? yieldOf(laterTraced, laterIds) : [],
+    }),
+  );
   const aFile = join(dir, "..", "readers", "reader-a.tsv");
   const bFile = join(dir, "..", "readers", "reader-b.tsv");
   if (existsSync(aFile) && existsSync(bFile)) {

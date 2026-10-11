@@ -29,6 +29,18 @@ Spearman's rho over the runs that have the feature. A rank correlation is a roug
 | single thread | files changed before review | 15 | 0.11 | -0.13 |
 | single thread | serious findings in round 1 | 15 | 0.81 | 1.00 |
 
+## What a feature adds beyond round 1
+
+| Feature | rho with rounds | rho with rounds, holding round 1's serious findings |
+| --- | --- | --- |
+| acceptance criteria | 0.43 | 0.08 |
+| lines changed before review | 0.23 | -0.01 |
+| decisions | -0.15 | -0.12 |
+| checks | -0.18 | -0.11 |
+| serious findings in round 1, holding criteria | 0.83 | 0.78 |
+
+Rounds against all of a run's serious findings: rounds = 1.8 + 0.19 × serious findings by the Theil–Sen line, 2.1 + 0.18 × by least squares, over 61 runs. About five serious findings add a round.
+
 ## Rounds by the number of acceptance criteria
 
 **all runs**

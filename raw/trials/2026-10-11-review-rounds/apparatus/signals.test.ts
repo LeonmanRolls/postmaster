@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  fixYield,
   pathKind,
   RULES,
   type RunFacts,
@@ -100,5 +101,27 @@ describe("transitions and rules", () => {
   test("the capture-recapture estimate of what two lanes leave unseen", () => {
     expect(unseenEstimate({ first: 2, second: 2, both: 2 })).toBeCloseTo(0, 5);
     expect(unseenEstimate({ first: 3, second: 3, both: 0 })).toBeGreaterThan(5);
+  });
+});
+
+describe("what a round's fix commits bring", () => {
+  const commits = [
+    { run: "1", sha: "aaaaaaaa", phase: "fix:1", added: 10, deleted: 2, onMain: false },
+    { run: "1", sha: "bbbbbbbb", phase: "fix:1", added: 3, deleted: 0, onMain: false },
+    { run: "1", sha: "cccccccc", phase: "fix:2", added: 0, deleted: 0, onMain: false },
+    { run: "1", sha: "dddddddd", phase: "fix:2", added: 4, deleted: 1, onMain: false },
+  ];
+  const findings = [
+    { run: "1", round: 2, originKind: "fix", originSha: "aaaaaaaa" },
+    { run: "1", round: 4, originKind: "fix", originSha: "dddddddd" },
+    { run: "1", round: 2, originKind: "change", originSha: null },
+  ];
+  test("a commit counts for the next round where a finding in its lines is in the next round", () => {
+    const rows = fixYield(commits, findings);
+    expect(rows[0]).toEqual({ round: "1", commits: 2, nextRound: 1, anyLater: 1 });
+  });
+  test("a commit that changed no line is left out and a later round is counted apart", () => {
+    const rows = fixYield(commits, findings);
+    expect(rows[1]).toEqual({ round: "2", commits: 1, nextRound: 0, anyLater: 1 });
   });
 });

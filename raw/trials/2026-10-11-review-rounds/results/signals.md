@@ -57,3 +57,27 @@ A *transition* is a point at which a loop went on: round r ended with its fixes 
 | stop when the round has at most one serious finding and fewer than the round before | 8 of 18 | 29 | 64 | 3 of 8 | 17 |
 | stop when the round's fixes changed no code, only words and tests | 2 of 18 | 3 | 3 | 1 of 2 | 17 |
 | stop after round 2 when it had at most two serious findings | 9 of 18 | 30 | 59 | 3 of 9 | 17 |
+
+## What a round's fix commits bring
+
+A fix commit is an own commit made after a round was launched and before the next. The columns count the commits that changed at least one line, and those with a serious finding in lines they wrote in the next round or in any later round.
+
+**The 61 runs**
+
+| Fix commits of round | Commits | A serious finding in the next round | In any later round |
+| --- | --- | --- | --- |
+| 1 | 138 | 29 (21%) | 39 (28%) |
+| 2 | 90 | 16 (18%) | 20 (22%) |
+| 3 | 45 | 11 (24%) | 14 (31%) |
+| 4 | 41 | 5 (12%) | 6 (15%) |
+| 5 and after | 101 | 15 (15%) | 18 (18%) |
+
+**The later set**
+
+| Fix commits of round | Commits | A serious finding in the next round | In any later round |
+| --- | --- | --- | --- |
+| 1 | 51 | 5 (10%) | 7 (14%) |
+| 2 | 19 | 1 (5%) | 3 (16%) |
+| 3 | 15 | 0 (0%) | 2 (13%) |
+| 4 | 7 | 0 (0%) | 1 (14%) |
+| 5 and after | 39 | 2 (5%) | 4 (10%) |

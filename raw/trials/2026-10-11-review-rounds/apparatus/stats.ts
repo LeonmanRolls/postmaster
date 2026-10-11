@@ -131,3 +131,45 @@ export function kappa(a: readonly string[], b: readonly string[]): number {
 /** A share as a whole percent, or an en dash where there is nothing to divide. */
 export const pct = (part: number, whole: number): string =>
   whole === 0 ? "–" : `${Math.round((100 * part) / whole)}%`;
+
+/** The partial rank correlation of x and y, with z held: Pearson's r of the ranks, then the partial. */
+export function partialSpearman(
+  xs: readonly number[],
+  ys: readonly number[],
+  zs: readonly number[],
+): number {
+  const rxy = spearman(xs, ys);
+  const rxz = spearman(xs, zs);
+  const ryz = spearman(ys, zs);
+  const den = Math.sqrt((1 - rxz * rxz) * (1 - ryz * ryz));
+  return den === 0 ? Number.NaN : (rxy - rxz * ryz) / den;
+}
+
+/** The Theil-Sen slope and the median-based intercept of y on x, and the OLS pair for comparison. */
+export function lineFit(
+  xs: readonly number[],
+  ys: readonly number[],
+): { theilSen: { slope: number; intercept: number }; ols: { slope: number; intercept: number } } {
+  const slopes: number[] = [];
+  for (let i = 0; i < xs.length; i += 1) {
+    for (let j = i + 1; j < xs.length; j += 1) {
+      const dx = (xs[j] as number) - (xs[i] as number);
+      if (dx !== 0) slopes.push(((ys[j] as number) - (ys[i] as number)) / dx);
+    }
+  }
+  const slope = median(slopes);
+  const intercept = median(ys.map((y, i) => y - slope * (xs[i] as number)));
+  const mx = mean(xs);
+  const my = mean(ys);
+  let num = 0;
+  let den = 0;
+  for (let i = 0; i < xs.length; i += 1) {
+    num += ((xs[i] as number) - mx) * ((ys[i] as number) - my);
+    den += ((xs[i] as number) - mx) ** 2;
+  }
+  const olsSlope = den === 0 ? Number.NaN : num / den;
+  return {
+    theilSen: { slope, intercept },
+    ols: { slope: olsSlope, intercept: my - olsSlope * mx },
+  };
+}
