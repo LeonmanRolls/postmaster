@@ -1093,11 +1093,13 @@ if (PROJECT !== "") {
   // A Plane tracker with no API origin cannot work: the merged view is what
   // the Plane commands read, so refusing here covers the answers, the
   // existing file and the global config together, the dry run, and an
-  // update that does not touch the tracker.
+  // update that does not touch the tracker. A degenerate origin counts as
+  // none: plane.ts strips trailing slashes before testing for empty, and
+  // whitespace alone is never an origin.
   const mergedTracker = recOf(merged.tracker);
   if (
     mergedTracker.kind === "plane" &&
-    (typeof mergedTracker.url !== "string" || mergedTracker.url === "")
+    (typeof mergedTracker.url !== "string" || mergedTracker.url.trim().replace(/\/+$/u, "") === "")
   )
     die("setup: a Plane API origin is needed; answer plane.url", 1);
   const mergedLanes = recOf(merged.lanes);

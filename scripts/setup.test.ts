@@ -943,6 +943,24 @@ review_link = ""
     expect(existsSync(join(s.repo, ".postmaster", "settings.toml"))).toBe(false);
   });
 
+  test("a whitespace-only plane origin is refused as no origin", () => {
+    const s = stageProject();
+    const r = runProject(s.repo, s.config, "tracker=plane\nplane.workspace=ws1\nplane.url=   ");
+    expect(r.code).toBe(1);
+    expect(r.out).toContain("API origin");
+    expect(r.out).toContain("plane.url");
+    expect(existsSync(join(s.repo, ".postmaster", "settings.toml"))).toBe(false);
+  });
+
+  test("a slashes-only plane origin is refused as no origin", () => {
+    const s = stageProject();
+    const r = runProject(s.repo, s.config, "tracker=plane\nplane.workspace=ws1\nplane.url=///");
+    expect(r.code).toBe(1);
+    expect(r.out).toContain("API origin");
+    expect(r.out).toContain("plane.url");
+    expect(existsSync(join(s.repo, ".postmaster", "settings.toml"))).toBe(false);
+  });
+
   test("a dry run with only ignore_settings=yes writes nothing", () => {
     const s = stageProject();
     const first = runProject(s.repo, s.config, "tracker=local");
