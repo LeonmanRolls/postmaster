@@ -1,0 +1,54 @@
+[
+  {
+    "file": "scripts/scrub-core.ts",
+    "line": 826,
+    "line_end": 826,
+    "target": "scripts/scrub-core.ts:826",
+    "severity": "P1",
+    "summary": "Scan personal data on regex-declaration lines",
+    "body": "When a scanned line starts with a pattern such as `const EMAIL = /.../` and contains personal data later on that line, `PATTERN_CODE` sets `codePattern` and this branch skips `scanPersonal` for the entire line; for example, `const EMAIL = /.+/; // alice@company.co` produces no finding. This lets personal data pass the privacy gate; restrict the exemption to the regex text instead of suppressing the whole line.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "codex"
+  },
+  {
+    "file": "scripts/landing.ts",
+    "line": 497,
+    "line_end": 499,
+    "target": "scripts/landing.ts:497",
+    "severity": "P2",
+    "summary": "Clear disabled rules before card validation",
+    "body": "`run()` merges this environment with `process.env`, so if the postmaster process has `SCRUB_CHECK_DISABLE=email`, the description scan skips email detection and can accept a card containing an unlogged email. Clear `SCRUB_CHECK_DISABLE` for this security-sensitive scan.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "codex"
+  },
+  {
+    "file": "scripts/raw-promote-main.ts",
+    "line": 345,
+    "line_end": 345,
+    "target": "scripts/raw-promote-main.ts:345",
+    "severity": "P2",
+    "summary": "Reject symlinked promotion destinations",
+    "body": "If `raw/archive` is a symlink to a directory outside the checkout, a destination such as `raw/archive/record` passes the lexical path check; this recursive `mkdir` and the later rename follow the symlink and write the promoted copy outside the project. Reject symlinked destination ancestors or verify the physical destination stays within the repository.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "codex"
+  },
+  {
+    "file": "scripts/bundle-scrub.ts",
+    "line": 92,
+    "line_end": 92,
+    "target": "scripts/bundle-scrub.ts:92",
+    "severity": "P2",
+    "summary": "Verify bundle contents, not only the source hash",
+    "body": "In `--check` mode, a matching hash in the bundle header causes an early return without checking the generated body. Editing or corrupting `scrub-check.ts` or `raw-promote.ts` while retaining that header therefore passes the check even though the wrappers execute divergent code; compare the bundle with a fresh build or verify a digest of its contents.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "codex"
+  }
+]

@@ -1,0 +1,41 @@
+[
+  {
+    "file": "scripts/lib/switch-offs.ts",
+    "line": 677,
+    "line_end": 677,
+    "target": "scripts/lib/switch-offs.ts:677",
+    "severity": "P1",
+    "summary": "Give identical suppressions distinct approval identities",
+    "body": "When two identical directives in the same file cover identical code windows, these hash inputs are identical, so both entries receive the same ID. Approving one then marks both approved, allowing the branch to land without the user's decision on the second suppression. Include a stable per-occurrence discriminator that survives line moves.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "codex"
+  },
+  {
+    "file": "skills/postmaster/postmaster.md",
+    "line": 566,
+    "line_end": 568,
+    "target": "skills/postmaster/postmaster.md:566",
+    "severity": "P2",
+    "summary": "Recheck switch-offs after the merge-word wait",
+    "body": "On the local landing route with user merge authority, this check runs before the postmaster waits for the merge word, but Stage F later merges the current ticket branch without checking it again. If the branch advances during that wait and adds a suppression, the postmaster can merge it without approval; bind the merge to the checked HEAD or rerun the check before merging.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "codex"
+  },
+  {
+    "file": "scripts/lib/switch-offs.ts",
+    "line": 903,
+    "line_end": 903,
+    "target": "scripts/lib/switch-offs.ts:903",
+    "severity": "P2",
+    "summary": "Detect Oxlint JSONC configuration changes",
+    "body": "If a project uses Oxlint with a `.oxlintrc.jsonc` config, changing that file is omitted because this matcher recognizes only `.oxlintrc.json`. Stage F can then report the branch clear without user approval for a check-settings change; include the supported JSONC filename.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "codex"
+  }
+]

@@ -1,0 +1,41 @@
+[
+  {
+    "file": "scripts/scrub-rewrite.ts",
+    "line": 142,
+    "line_end": 167,
+    "target": "scripts/scrub-rewrite.ts:142",
+    "severity": "not provided",
+    "summary": "not provided",
+    "body": "The function keeps the first `originalCount` copies of a suspect line text (count taken from the base) and drops later ones:",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "mimo"
+  },
+  {
+    "file": "scripts/tree-check.ts",
+    "line": 137,
+    "line_end": 147,
+    "target": "scripts/tree-check.ts:137",
+    "severity": "not provided",
+    "summary": "not provided",
+    "body": "`commitPaths` runs against every parent. A path added relative to *both* parents lands in `rawAdds` twice, so `scanBlob` runs twice and `logFinding` writes duplicate rows into `detections.jsonl`. That inflates the census / detection counts shown on the ship card. Detection correctness is unaffected. Dedupe by `commit + path` before scanning.",
+    "evidence": "for (const parent of compare) {\n  for (const item of commitPaths(root, parent, commit)) {\n    ...\n    if (item.status === \"A\" && item.path.startsWith(\"raw/\"))\n      rawAdds.push({ commit, path: item.path });\n  }\n}",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "mimo"
+  },
+  {
+    "file": "scripts/scrub-rewrite.ts",
+    "line": 196,
+    "line_end": "not provided",
+    "target": "scripts/scrub-rewrite.ts:196",
+    "severity": "not provided",
+    "summary": ",199",
+    "body": "Looks like a fragmenting-tool artifact that escaped cleanup. Pure noise.",
+    "evidence": "authorEmail /*split*/: fields[1]!,\n...\ncommitterEmail /*split*/: fields[4]!,",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "mimo"
+  }
+]
