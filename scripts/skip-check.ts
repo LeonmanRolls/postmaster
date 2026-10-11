@@ -271,8 +271,11 @@ async function stopStuck(
   }
   await new Promise<void>((resolve) => {
     // A suite dead by signal holds no exit code; without this its
-    // already-fired exit is waited out in full.
-    if (child.exitCode !== null || child.signalCode !== null) return resolve();
+    // already-fired exit is waited out in full. Bun's types omit the
+    // signal word, but node:child_process sets it at runtime.
+    const signalCode = (child as unknown as { signalCode?: unknown }).signalCode;
+    if (child.exitCode !== null || (signalCode !== null && signalCode !== undefined))
+      return resolve();
     const timer = setTimeout(() => resolve(), 5000);
     child.once("exit", () => {
       clearTimeout(timer);
@@ -362,8 +365,10 @@ async function runSuite(argv: string[], stuckSecs: number): Promise<number | nul
       const graced = setTimeout(finish, 5000);
       function finish(): void {
         clearTimeout(graced);
-        child.stdout?.destroy();
-        child.stderr?.destroy();
+        // Bun types these pipes as web streams; at runtime
+        // node:child_process hands out Node Readables, which destroy.
+        (child.stdout as unknown as { destroy: () => void } | null)?.destroy();
+        (child.stderr as unknown as { destroy: () => void } | null)?.destroy();
         resolve(codeOr);
       }
       child.once("close", finish);
