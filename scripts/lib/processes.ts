@@ -264,7 +264,7 @@ export function parseProcStat(
   const fields = text
     .slice(close + 1)
     .trim()
-    .split(/\s+/u);
+    .split(/[ \t]+/u);
   if (fields.length < 20 || fields[0] === undefined || fields[1] === undefined) return null;
   const ppid = Number(fields[1]);
   if (!Number.isSafeInteger(ppid) || ppid < 0) return null;

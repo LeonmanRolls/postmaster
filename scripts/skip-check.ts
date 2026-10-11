@@ -212,7 +212,7 @@ export function checkReport(xml: string, entries: SkipEntry[], system: string): 
  * Lines that merely mention a file never match: only a bare header at the
  * line's start, unindented and outside a result. */
 export function reportFileOf(line: string): string | null {
-  const m = /^[^\s(].*\.test\.ts:$/u.exec(line);
+  const m = /^[^ \t(].*\.test\.ts:$/u.exec(line);
   return m === null ? null : m[0].slice(0, -1);
 }
 
