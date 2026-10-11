@@ -15,7 +15,9 @@ Rules for the whole session, which win where a per-surface section disagrees:
   line, web pages, library interface). Each bullet carries a `Files:` list of
   the project files and folders whose change can break that verifier's claims,
   comma-separated, each relative to the top of the working copy; write only
-  paths that exist at the commit you prove.
+  paths that exist at the commit you prove. Each bullet also carries
+  `Confirmed: {{PROVED}}`, the commit its verifier was proved at; a verifier
+  without one reads as possibly stale.
 - Each verifier/<kind>/README.md opens with an H1 naming the verifier and one
   paragraph describing it, so a person can link it into a coding tool's skills
   folder. Near the top, where an agent reads first, carry this line verbatim:

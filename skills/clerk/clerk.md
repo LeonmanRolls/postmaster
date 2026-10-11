@@ -97,6 +97,11 @@ project's verifiers and their feature pages. Run the check at the base through t
 put what it showed after **At the base** with the proof file named. A feature with no page yet is
 driven through the verifier's start and drive steps all the same, and the run adds its page.
 
+When you drive a verifier at the base and a step the ticket does not change fails, tell the user
+which verifier and which step failed: the project may have changed under the verifier from outside
+it, through a new tool, browser or service version, or a file the verifier does not list. Do not
+rewrite the check around the failure.
+
 ### Show the draft and work through the user's feedback
 
 Tell the user in two or three plain sentences what the ticket asks for. List each decision you

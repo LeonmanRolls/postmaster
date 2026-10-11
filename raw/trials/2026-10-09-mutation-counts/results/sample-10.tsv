@@ -1,0 +1,11 @@
+item	label	module	line	col	function	fn_start	fn_end	op	how	root	alias	first	fn_tags	module_tags	target	source_line
+30	main	scripts/review-findings.ts	283	11	rawDecodeJson > parseString	269	324	rebind	+=	captured	0	1		env,files,os	i	i += 2;
+1	main	scripts/host.ts	4344	10	legStart	4043	4393	prop	=	global	0	1	env,clock,files	env,clock,files,proc,os	process.env	else process.env.POSTMASTER_ATTEMPT_PHASE = savedPhase;
+21	main	scripts/lib/text.ts	504	3	isDigitChar	503	506	prop	=	module	0	1			ND_ONE	ND_ONE.lastIndex = 0;
+24	main	scripts/launch.ts	916	5	noteStructured	882	920	prop	=	param	0	1		env,clock,files,proc,os	st	st.unknown = true;
+25	main	scripts/style-findings.ts	610	3	subst	609	618	rebind	=	param	0	1		files	line	line = line.replace(/\$\(MAKE\)|\$\{MAKE\}/gu, "make");
+14	main	scripts/plane.ts	847	12	shape > para	840	849	call	push	captured	0	1		env,clock,files	toks	toks.push(open_, ...inner, close);
+18	main	scripts/host-self-test.ts	424	5	tmuxStubInner > launch	420	462	prop	=	captured	0	1	env,files,proc	env,clock,files,proc	st.windows	st.windows[win] = { session, name: opt(args, "-n"), opts: {}, panes: { [pane]: { opts: {} } } };
+20	main	scripts/view-stream.ts	989	49	view	982	1079	call	shift	param	0	1	clock,files	env,clock,files	args	else if (a === "--pid") pid = parseInt(args.shift() ?? "", 10);
+6	main	scripts/fixture.ts	73	3	(module)	0	0	delete	delete	global	0	1	env,files,os	env,files,os	process.env	delete process.env[k];
+2	main	scripts/host-self-test.ts	2959	7	runControls	958	6614	rebind	=	module	0	1	env,clock,files,proc	env,clock,files,proc	finishDelay	finishDelay = "0.1";

@@ -1,0 +1,79 @@
+{
+  "read": "2026-10-08",
+  "unit": "US dollars per million tokens",
+  "note": "Entered by hand from each vendor's own pricing page, read on the date above; the page and tier are named per model. A kind the vendor does not price apart (cache writes, for Meta and Xiaomi, which list none) takes the plain input rate, which is an assumption and not a published rate. OpenAI's rates are on two reads that agree.",
+  "models": {
+    "gpt-6-luna": {
+      "input": 0.1,
+      "cachedInput": 0.01,
+      "cacheWrite": 0.125,
+      "output": 0.5,
+      "source": "https://developers.openai.com/api/docs/pricing",
+      "tier": "Standard, short context",
+      "read": "2026-10-08"
+    },
+    "gpt-6-sol": {
+      "input": 2,
+      "cachedInput": 0.2,
+      "cacheWrite": 2.5,
+      "output": 10,
+      "source": "https://developers.openai.com/api/docs/pricing",
+      "tier": "Standard, short context",
+      "read": "2026-10-08"
+    },
+    "gpt-6-astra": {
+      "input": 10,
+      "cachedInput": 1,
+      "cacheWrite": 12.5,
+      "output": 50,
+      "source": "https://developers.openai.com/api/docs/pricing",
+      "tier": "Standard, short context",
+      "read": "2026-10-08"
+    },
+    "claude-opus-5-5": {
+      "input": 4,
+      "cachedInput": 0.2,
+      "cacheWrite": 5,
+      "output": 20,
+      "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "tier": "base; cache write 5 minutes $5, 1 hour $8; cache hits $0.20 (0.05 x base)",
+      "read": "2026-10-08"
+    },
+    "muse-spark-1.3-contributor": {
+      "input": 0.1,
+      "cachedInput": 0.002,
+      "cacheWrite": 0.1,
+      "output": 0.2,
+      "source": "https://dev.meta.ai/docs/pricing-rate-limits",
+      "tier": "Contributor tier (prompts and completions may train Meta models)",
+      "read": "2026-10-08"
+    },
+    "muse-spark-1.3": {
+      "input": 1.25,
+      "cachedInput": 0.15,
+      "cacheWrite": 1.25,
+      "output": 4.25,
+      "source": "https://dev.meta.ai/docs/pricing-rate-limits",
+      "tier": "Standard tier; read twice, as the model-api-prices capture records. Used only to ask what the coachman would cost off the contributor tier",
+      "read": "2026-10-08"
+    },
+    "xiaomi-token-plan-sgp/mimo-v2.6-pro": {
+      "input": 0.435,
+      "cachedInput": 0.0036,
+      "cacheWrite": 0.435,
+      "output": 0.87,
+      "source": "https://mimo.mi.com/static/docs/price/pay-as-you-go.md",
+      "tier": "pay-as-you-go, overseas USD; the lanes ran on a Token Plan, which is billed in credits, so this is the price of the API alternative",
+      "read": "2026-10-08"
+    },
+    "xiaomi-token-plan-sgp/mimo-v2.6-flash": {
+      "input": 0.14,
+      "cachedInput": 0.0028,
+      "cacheWrite": 0.14,
+      "output": 0.28,
+      "source": "https://mimo.mi.com/static/docs/price/pay-as-you-go.md",
+      "tier": "pay-as-you-go, overseas USD",
+      "read": "2026-10-08"
+    }
+  }
+}

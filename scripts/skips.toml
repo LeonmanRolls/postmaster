@@ -455,6 +455,30 @@ reason = "needs a model run from this branch; the postmaster dispatches and scor
 systems = ["linux", "darwin"]
 
 [[skip]]
+file = "scripts/acceptance-379.test.ts"
+name = "C1: the fixture run takes in a moved main > the card is fresh on a main that moved after dispatch"
+reason = "needs the C5 fixture run with a commit on its main; the postmaster checks the card at landing"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/acceptance-379.test.ts"
+name = "C4: the card carries the step's report > the fixture run's card names the main it holds"
+reason = "needs the C5 fixture run; the postmaster checks the card at landing"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/acceptance-379.test.ts"
+name = "C5: the fixture run scores clean > a run from this branch scores clean"
+reason = "needs a model run from this branch; the postmaster dispatches and scores it at landing"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/acceptance-408.test.ts"
+name = "C4: the scorer reads a user-named held-back record > a fixture run on remove with no key and the user naming held-back scores clean"
+reason = "needs a model run from this branch; the postmaster dispatches and scores it at landing"
+systems = ["linux", "darwin"]
+
+[[skip]]
 file = "scripts/acceptance-409.test.ts"
 name = "C1: the held-back notice > C5's briefs carry the notice and a given run's do not"
 reason = "needs a dispatched held-back run; the postmaster reads C5's run at landing"

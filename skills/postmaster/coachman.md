@@ -1148,7 +1148,8 @@ Set the stage first, `<tool>/scripts/run stage <dispatch> review`, then:
 
 This section runs at the end of synthesis when there is no review leg, or at the end of review
 after the loop has no P1 or P2 finding left and the gates pass. The postmaster owns the landing
-route and any merge. You do not push, open a pull request, wait for a merge word, or merge.
+route and landing the ticket on main. You do not push, open a pull request, wait for a merge word,
+or land the ticket. Taking main into the ticket branch is this stage's merge step, below.
 
 **No card while a wall has no ruling (D8).** `<tool>/scripts/run walls open <dispatch>` must
 exit 0 before this stage runs. On exit 1, run `<tool>/scripts/run walls escalate <dispatch>`
@@ -1170,6 +1171,30 @@ never argue it into the card. Any other exit is an input fault: stop, fix the in
 re-run. This call is the same check the postmaster runs before it lands the run; its first
 line is the status, and everything after it is the `## Switch-offs` section the card
 carries.
+
+Take main into the ticket branch before the gate, so the gate runs once at the merged head.
+On the pull-request route, `git fetch` the default branch's remote first, as Stage F does,
+and pass the default branch's upstream short ref as `--default`; on the `landing: local`
+route pass the local default branch, with no fetch. Never move the local default branch.
+Then call the merge step:
+
+```sh
+<tool>/scripts/run merge-default --repo <repo> --default <branch> --ticket <ticket-branch> --dispatch <dispatch> --wt <synthesis-wt>
+```
+
+Act on its first line. `CARD` and `CARD-ANYWAY` carry the card's `## Merge` section after
+a blank line: keep the latest one for the card and go on. `MERGED` and `GATE-NEEDED`: run the gate as
+step 1 says and call the step again. `CONFLICT` names the main and each conflicted file:
+the run that merges second resolves them, by merge and never by rebase — resolve by hand,
+commit the merge, never abort it, and call the step again. `GATE-FAILED` names the failed
+check: fix what this ticket's change meeting main's caused on the branch, pass the gate
+again and call the step again, and anything else goes to `ESCALATION.md` naming the check
+with `.escalation-ready` and no `.card-ready`. `HEAD`: move the worktree to the ticket head
+and call the step again. `UNCHANGED`: the merge took in nothing, since the branch already
+held that main; call the step again. Exit 1 is an input fault: fix the inputs and re-run, never proceed
+past it. After each merge the step makes, run the switch-offs call above again. No review
+round runs after a merge: main's code was reviewed in its own run, the gate checks the two
+together, and the card names the files the merge needed by hand.
 
 1. **Verify the final HEAD.** Run `<tool>/scripts/run verify run <synthesis-wt> <dispatch>` after
    the last code change; the gate must
@@ -1201,6 +1226,13 @@ carries.
    and record its output. Exit 1 is a fault in the `reach` control: follow Tool faults and
    stop. Findings, notes and `not checked` records at this point are shown on the card and do
    not stop the run.
+
+Ask the freshness question again before the card: fetch as the merge step says and call
+it again. On `CARD`, write the card with the step's `## Merge` section. On any other
+verdict, answer it as the merge step says — a merge here is followed by the gate only,
+then the step again — and write the card once the step answers `CARD` or `CARD-ANYWAY`,
+whatever main has done since.
+
 5. **Write `card.md`.** Include the run's mode as a line `Mode: <synthesis | single-thread>`
    from `run.json` (in both modes; the waybill's `mode:` line says the same — a single-thread
    run's card carries `Mode: single-thread`), then the branch, final HEAD, diff
@@ -1214,7 +1246,9 @@ carries.
    `<dispatch>/checkpoint-review.md` after a review leg, `<dispatch>/checkpoint-1.md`
    when this leg is synthesis); then the `## Switch-offs` section from the call above,
    pasted after the block as its own section, never retyped, so the card shows the
-   branch's list exactly as the check printed it; browser suite and QA when
+   branch's list exactly as the check printed it; then the `## Merge` section from the
+   merge step's card verdict, pasted after it as its own section, never retyped;
+   browser suite and QA when
    present; the journey report path where a
    check's source names `web-journey`; every ticket turnpike with its
    rounds and result from its checkpoint record, or `none`; the Style residue
@@ -1225,8 +1259,8 @@ carries.
    every walled lane carrying its `<tool>/scripts/run walls show
    <dispatch>` line — `lane: DEGRADED, provider wall: "<the provider's message>"` — and the
    review link. **Each of those is its own `##` section** — the card-block's four, then
-   `## Turnpikes`, `## Style residue`, `## Branches`, `## Lane outcomes`, `## QA and browser
-   suite` (`none` where the project has none) and `## Review link` —
+   `## Merge`, `## Turnpikes`, `## Style residue`, `## Branches`, `## Lane outcomes`,
+   `## QA and browser suite` (`none` where the project has none) and `## Review link` —
    the same heading set in both modes. Finding titles and notes, where the reader
    wants them, go in prose outside the pasted block, which carries only ids and severities.
    Add `<tool>/scripts/run landing private-data-block <dispatch>` verbatim as the card's
@@ -1234,7 +1268,7 @@ carries.
    census counts by rule and by made-up or real verdict without the census paths or commits.
    The postmaster checks it with `run landing private-data-card`; a missing finding or a dirty
    card is withheld.
-   The card's branch state is before merge: the
+   The card's branch state is before landing: the
    ticket branch is ready, and every other branch is either retained or abandoned. The gate is
    listed as the gate, never as a turnpike.
 6. **Write the final hand-off.** Write

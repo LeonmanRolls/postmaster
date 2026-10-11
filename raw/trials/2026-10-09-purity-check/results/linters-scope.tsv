@@ -1,0 +1,5 @@
+tree	mode	places	oxlint	biome	biome+plugin	extra-oxlint	extra-biome	extra-biome+plugin
+controls	scoped	34	30	31	33	0	0	0
+main	scoped	13	13	13	13	0	0	0
+controls	unscoped	34	30	31	33	5	5	5
+main	unscoped	13	13	13	13	931	931	961
