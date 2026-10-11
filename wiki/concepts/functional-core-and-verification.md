@@ -2,7 +2,7 @@
 title: What a functional core opens up for checking code, and what it does for coding with AI
 type: concept
 standing: claimed
-sources: [trials/2026-10-04-review-findings-classified, articles/alloy-tools, articles/anthropic-2026-pbt-blog, articles/biome-noprocessenv, articles/dafny-2022, articles/dafny-lang, articles/effect-schema, articles/effect-ts, articles/eslint-plugin-functional, articles/fastcheck-ts, articles/fpts, articles/galois-dodds-2025, articles/hacl-2017, articles/hypothesis-py, articles/isabelle, articles/kiro-2025-pbt, articles/kleppmann-2025, articles/lemmafit-2026, articles/lemmascript-2026, articles/meyer-1992, articles/neverthrow, articles/oxlint-no-process-env, articles/quint, articles/rocq-coq, articles/stryker-js, articles/tlaplus-tla, articles/tokeneer-2013, articles/ts-pattern, articles/zod, papers/agda-2024, papers/agentic-pbt-2025, papers/agentic-proving-2026, papers/algoveri-2026, papers/alphaverus-2024, papers/aria-2026, papers/atlas-2025, papers/autospec-2024, papers/autoverus-2024, papers/aws-2014, papers/axdafny-2026, papers/berger-2019, papers/bicarregui-2009, papers/bisharat-2026-tla-bench, papers/bisharat-2026-tla-write, papers/cardano-2024, papers/cedar-2024, papers/chen-2026-modelbench, papers/cheng-2026-sysmobench, papers/clever-2025, papers/clover-2023, papers/dafny-ir-2025, papers/dafnybench-2024, papers/dafnypro-2026, papers/danso-2026-ltl, papers/erlang-pulse-2009, papers/estler-2014, papers/etna-jfp2026, papers/fakhoury-2024-ticoder-study, papers/fan-2025-verifast, papers/faria-2026, papers/fiatcrypto-2019, papers/fonseca-2017, papers/formalbench-2025, papers/fstar-2016, papers/fstar-neural-2024, papers/fvapps-2025, papers/gleirscher-2020, papers/goedel-code-prover-2026, papers/goldstein-icse2024, papers/he-2025-pgs, papers/hong-2025-alloy, papers/howtospecify-2020, papers/huang-2026, papers/hughes-1989, papers/hughes-2016, papers/ironfleet-2015, papers/jing-2026-pbtbench, papers/kamath-2023-loopy, papers/konstantinou-2024-oracles, papers/lahiri-2024-intent-formalization, papers/lahiri-2026, papers/laurel-2024, papers/lean4-2021, papers/leetproof-2026, papers/leroy-2009, papers/li-2026-probe, papers/liquidhaskell-2025, papers/liu-2023-evalplus, papers/mariposa-2023, papers/matichuk-2015, papers/misu-2024, papers/mongodb-xmodelling-2020, papers/nl2postcond-2024, papers/nl2spec-2023, papers/pei-2023-invariants, papers/prasetya-2026-postconditions, papers/propertygpt-2025, papers/qed-2020, papers/quickcheck-2000, papers/rango-2024, papers/ravi-coblenz-2025, papers/richter-2025-nl2contract, papers/rsc-2016, papers/schneider-2025, papers/sel4-2009, papers/sel4-2014, papers/selene-2024, papers/shefer-2025, papers/specgen-2025, papers/swe-proof-2026, papers/tan-2026, papers/tanaka-2025-pbt-ebt, papers/ticoder-2024, papers/verdi-2015, papers/vericoding-2025, papers/vericontest-2026, papers/verifythisbench-2025, papers/verina-2025, papers/vero-2026, papers/verus-2024, papers/verus-specbench-2026, papers/verusage-2025, papers/vikram-2024-pbt, papers/yang-2011, papers/yuan-2014, papers/zhao-2026-misguidance]
+sources: [trials/2026-10-04-review-findings-classified, trials/2026-10-09-mutation-counts, articles/alloy-tools, articles/anthropic-2026-pbt-blog, articles/biome-noprocessenv, articles/dafny-2022, articles/dafny-lang, articles/effect-schema, articles/effect-ts, articles/eslint-plugin-functional, articles/fastcheck-ts, articles/fpts, articles/galois-dodds-2025, articles/hacl-2017, articles/hypothesis-py, articles/isabelle, articles/kiro-2025-pbt, articles/kleppmann-2025, articles/lemmafit-2026, articles/lemmascript-2026, articles/meyer-1992, articles/neverthrow, articles/oxlint-no-process-env, articles/quint, articles/rocq-coq, articles/stryker-js, articles/tlaplus-tla, articles/tokeneer-2013, articles/ts-pattern, articles/zod, papers/agda-2024, papers/agentic-pbt-2025, papers/agentic-proving-2026, papers/algoveri-2026, papers/alphaverus-2024, papers/aria-2026, papers/atlas-2025, papers/autospec-2024, papers/autoverus-2024, papers/aws-2014, papers/axdafny-2026, papers/berger-2019, papers/bicarregui-2009, papers/bisharat-2026-tla-bench, papers/bisharat-2026-tla-write, papers/cardano-2024, papers/cedar-2024, papers/chen-2026-modelbench, papers/cheng-2026-sysmobench, papers/clever-2025, papers/clover-2023, papers/dafny-ir-2025, papers/dafnybench-2024, papers/dafnypro-2026, papers/danso-2026-ltl, papers/erlang-pulse-2009, papers/estler-2014, papers/etna-jfp2026, papers/fakhoury-2024-ticoder-study, papers/fan-2025-verifast, papers/faria-2026, papers/fiatcrypto-2019, papers/fonseca-2017, papers/formalbench-2025, papers/fstar-2016, papers/fstar-neural-2024, papers/fvapps-2025, papers/gleirscher-2020, papers/goedel-code-prover-2026, papers/goldstein-icse2024, papers/he-2025-pgs, papers/hong-2025-alloy, papers/howtospecify-2020, papers/huang-2026, papers/hughes-1989, papers/hughes-2016, papers/ironfleet-2015, papers/jing-2026-pbtbench, papers/kamath-2023-loopy, papers/konstantinou-2024-oracles, papers/lahiri-2024-intent-formalization, papers/lahiri-2026, papers/laurel-2024, papers/lean4-2021, papers/leetproof-2026, papers/leroy-2009, papers/li-2026-probe, papers/liquidhaskell-2025, papers/liu-2023-evalplus, papers/mariposa-2023, papers/matichuk-2015, papers/misu-2024, papers/mongodb-xmodelling-2020, papers/nl2postcond-2024, papers/nl2spec-2023, papers/pei-2023-invariants, papers/prasetya-2026-postconditions, papers/propertygpt-2025, papers/qed-2020, papers/quickcheck-2000, papers/rango-2024, papers/ravi-coblenz-2025, papers/richter-2025-nl2contract, papers/rsc-2016, papers/schneider-2025, papers/sel4-2009, papers/sel4-2014, papers/selene-2024, papers/shefer-2025, papers/specgen-2025, papers/swe-proof-2026, papers/tan-2026, papers/tanaka-2025-pbt-ebt, papers/ticoder-2024, papers/verdi-2015, papers/vericoding-2025, papers/vericontest-2026, papers/verifythisbench-2025, papers/verina-2025, papers/vero-2026, papers/verus-2024, papers/verus-specbench-2026, papers/verusage-2025, papers/vikram-2024-pbt, papers/yang-2011, papers/yuan-2014, papers/zhao-2026-misguidance]
 updated: 2026-10-09
 ---
 
@@ -687,7 +687,7 @@ of them in review when counted, and 34 of the 84 sit in two families.
 
 ## Trials postmaster could run
 
-Five trials, none run here; the fifth is in three steps, and a later step runs only if the one before did not fail. Each gives its cost in hours, what it would show and what would show it
+Five trials, only the second part of the fourth run here; the fifth is in three steps, and a later step runs only if the one before did not fail. Each gives its cost in hours, what it would show and what would show it
 failed. The costs are estimates, not measurements. The first measures what the count above cannot: how much of
 it is hindsight.
 
@@ -764,6 +764,44 @@ hazards.
 defects. The mutation counts failed if the first count flags more than about twenty places on `main` that are not
 hazards, or flags none of the 84 findings' functions.
 
+*Result of the mutation counts.* Run on 2026-10-09, on `main` at `67d4ae2` and at the 19 review snapshots, by one reader,
+with a second on 10 of the 30 places read [@trials/2026-10-09-mutation-counts]. The first count took every kind of change to
+something the function did not create, as the user chose: an argument, a module-level variable, an imported binding, a
+process-wide object such as `process.env`, the object a method was called on, and a variable of an enclosing function changed
+from a nested one. Nothing was exempt as being at the edge.
+
+- **The counts.** On `main` (79 scripts, 52,522 lines) the first count flags 360 places and the second 3,511. The 360 are 81
+  on arguments, 44 on module-level variables, none on imports, 37 on process-wide objects (29 of them `process.env`, 5 `process.exitCode`, 3 `globalThis`), 32 on
+  the object a method was called on and 166 on a variable of an enclosing function. At the 19 snapshots the first count reads
+  323 to 422 and the second 3,112 to 3,949. Of the 360, 115 lie in a function that reads the environment or the clock,
+  touches files, starts processes or uses the operating system, and 355 in a module that does, so the exemption for edge code would leave 245 places
+  by function and 5 by module [@trials/2026-10-09-mutation-counts/results/counts-by-commit.tsv]
+  [@trials/2026-10-09-mutation-counts/results/edge-tags-main.txt].
+- **Hazards.** Of 30 places drawn at random, the first reader marked 4 hazards and 26 harmless, none unclear. That puts about
+  312 of the 360 places (95% interval 253 to 341) outside the hazards, against the line of about twenty. The second reader
+  gave the same mark on all 10 it read and read both of two made-up places right
+  [@trials/2026-10-09-mutation-counts/results/marks-tally.txt]. The hazards are a delay kept in a module-level variable
+  and set at 16 places in one test, a regex's `lastIndex` reset inside a predicate named `isDigitChar`, a flag kept on
+  `globalThis`, and a `replace` callback that also collects into an outer array. Three of the four are changes to module-level
+  state or a process-wide object (3 of the 7 drawn on those, against 1 of the other 23); none of the 9 drawn on arguments or the
+  3 on a method's receiver was one. That split was made after the fact on small numbers.
+- **The findings.** Of the 78 findings that cite a TypeScript line, 8 sit in a function that holds a place of the first count
+  (1 of 30 in #202, 3 of 17 in #216, 0 of 14 in #252, 4 of 17 in #268) and 21 in such a function or around one; 3 cite a runbook
+  line and 3 no line. If each finding fell on a random line of its own file, 5.9 would sit in a flagged function and 27.1 in or
+  around one, so the count reaches the findings' functions about as often as chance would. In 1 of the 8 the flagged place bears on
+  the defect (216/bug-14, whose cause is the `lastIndex` of global regexes kept in module state), in 1 partly, in 1 it sits beside
+  the defect, and in 5 it has nothing to do with it. The second count reaches 57 of the 78, where 49.2 are expected
+  [@trials/2026-10-09-mutation-counts/results/findings-summary.txt]
+  [@trials/2026-10-09-mutation-counts/results/findings-reading.md].
+- **How sure.** The counts are firm: 105 controls, including the page's four, read as expected, and a spot check of 32 places
+  found none wrong. The share of hazards rests on 30 places, one reader's rubric and a second reader of the same kind with
+  10 places, so its interval is wide; the first failure test holds across it, and on the reading that exempts edge functions
+  (about 206 of the 245 left are not hazards). The reading of the 8 findings is one reader's. Not run: a rule on mutation in the
+  gate, whether it would have found a defect a reviewer found, and whether code without these changes is easier to follow.
+
+*Failure test 1, the first count flags more than about twenty places on `main` that are not hazards: met, about 312. Failure
+test 2, it flags none of the 84 findings' functions: not met, it flags the function of 8 of the 78 that cite a line.*
+
 **5. One program with its git swapped, for the cleanup script's dry run.** Take #252's cleanup at its round-1
 snapshot (`a793251` in the trial's data): 1,624 lines that run ten different git commands (`status`, `diff`,
 `diff-tree`, `ls-files`, `rev-list`, `rev-parse`, `format-patch`, `hash-object`, `log` and `worktree`). Three steps. Step 2
@@ -832,7 +870,10 @@ ban on every mutation is the stricter version, and trial 4 counts both before ei
 is that a name that never changes is easier to follow, for a reader and for a model, and that a check gives an agent
 something to iterate against. Neither is measured here: no study found compares a reader's or a model's grasp of mutable
 and immutable versions of the same code, and the 84 findings were not classified by mutation. The second part is not tied
-to a finding; trial 4 tests whether it connects to any.
+to a finding; trial 4 tests whether it connects to any. It has tested it: the first count flags 360 places on `main`, an
+estimated 312 of them not hazards, and 8 of the 78 findings that cite a TypeScript line sit in a function it flags, about as many as
+random placement would give [@trials/2026-10-09-mutation-counts/results/marks-tally.txt]
+[@trials/2026-10-09-mutation-counts/results/findings-summary.txt].
 *Tied to (the first part):* the 8 findings of kind E, 4 of them the ambient environment in 3 runs, and to #216's round-1 style
 finding that named the environment read in a core module at the lowest severity while two serious findings
 traced to it.

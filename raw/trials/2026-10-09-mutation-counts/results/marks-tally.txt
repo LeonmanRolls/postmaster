@@ -1,0 +1,46 @@
+population: 360 places of the first count
+first reader: 30 marked: 4 hazard, 26 harmless, 0 unclear
+not hazards, harmless alone: 26 of 30 (87%, Wilson 95% 70% to 95%) -> about 312 of 360 places (interval 253 to 341)
+not hazards, harmless and unclear: 26 of 30 (87%, Wilson 95% 70% to 95%) -> about 312 of 360 places (interval 253 to 341)
+test 1 (more than about twenty not hazards): harmless alone above 20 even at the low end; harmless and unclear above 20 even at the low end
+
+root	population	sample	hazard	harmless	unclear
+captured	166	11	1	10	0
+global	37	5	1	4	0
+module	44	2	2	0	0
+param	81	9	0	9	0
+this	32	3	0	3	0
+
+in an edge function: 11 of the sample (1 hazard); in none: 19 (3 hazard)
+with edge functions exempt, 245 places remain: harmless 16 of 19 (Wilson 95% 62% to 94%) -> about 206 not hazards (interval 153 to 231)
+
+second reader on the drawn places: the same mark on 10 of 10 (100%, Wilson 95% 72% to 100%), kappa 1.00
+  hazards among the 10: first reader 2, second reader 2
+reader control scripts/line-collect.ts: expected harmless, read harmless
+reader control scripts/order-summary.ts: expected hazard, read hazard
+
+control for the statistic: a mark list against itself reads 10 of 10, kappa 1.00; against a seeded shuffle of itself 6 of 10, kappa -0.25
+
+summary
+population	360
+hazard	4
+harmless	26
+unclear	0
+not_hazard_harmless	312
+not_hazard_all	312
+test1	above 20 even at the low end
+edge_n	11
+edge_hazard	1
+nonedge_n	19
+nonedge_hazard	3
+nonedge_population	245
+nonedge_not_hazard	206
+same	10
+of	10
+kappa	1.00
+second_hazards	2
+control_harmless	harmless
+control_hazard	hazard
+self_same	10
+self_kappa	1.00
+zero_hazard_estimate	0
