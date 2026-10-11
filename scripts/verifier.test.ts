@@ -4719,7 +4719,7 @@ describe("renderChangesSection", () => {
       [],
     );
     expect(section).toBe(
-      "## Verifier changes\n\nChanged:\n\n- c.md\n@@ -1 +1 @@\n-a\n+b\n\nAdded:\n\n- n.md",
+      "## Verifier changes\n\nChanged:\n\n- c.md\n```diff\n@@ -1 +1 @@\n-a\n+b\n```\n\nAdded:\n\n- n.md",
     );
     expect(section).not.toContain("Removed:");
   });

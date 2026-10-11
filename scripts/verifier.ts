@@ -5024,7 +5024,9 @@ export function renderChangesSection(
     out.push("Changed:", "");
     for (const c of changed) {
       out.push(`- ${c.rel}`);
+      out.push("```diff");
       out.push(...c.diff);
+      out.push("```");
     }
     out.push("");
   }
