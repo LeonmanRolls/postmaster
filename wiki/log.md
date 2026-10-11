@@ -13,8 +13,10 @@ Append-only. Newest first. One entry per operation, prefixed so it can be parsed
 Issue #341. The user asked what a whole flow costs to run in the cloud, not only individual lanes and legs. Added "What the
 whole flow costs" to [running the flow on Cloudflare](concepts/running-the-flow-on-cloudflare.md): one ticket from the booking
 clerk to the merge, a month at the audited pace and at two others, the flat price that month equals, and what the cloud would
-cost if it took only the peaks. The trial `2026-10-08-cloudflare-run-cost` gained the pace of merged pull requests, a snapshot
-of the open interactive sessions, a module for the month and five controls (42 in all). The user's answers to the decisions
+cost if it took only the peaks. The trial `2026-10-08-cloudflare-run-cost` gained the pace of merged pull requests with the
+query that counts it, a snapshot of the open interactive sessions, a module for the month and for admission to the machine,
+and eight controls (45 in all). An independent check of the first version found the month too narrow, since it took the
+coachman at its ceiling only, and the headline silent on the model bill; both are fixed. The user's answers to the decisions
 that followed the report: the four proposed tickets on virtual machines, one store, login or key per role and the security
 review "not yet", the gate-timing ticket dropped, and the question to the vendors after the spike. The criteria for #341 stay
 open for the cost criterion's new wording. No standing changed.

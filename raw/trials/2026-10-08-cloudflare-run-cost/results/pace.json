@@ -2,7 +2,7 @@
   "read": "2026-10-11",
   "source": "the project's closed pull requests on GitHub, read through its REST API: those with a merge time, counted by UTC merge day",
   "how": "a pull request is ticket-titled when its title starts with a ticket number and a comma; no title or number is kept here",
-  "note": "A count of merged pull requests is not a count of runs. It includes hand-made hotfixes, research and documentation pull requests. It is an upper bound on the pace of tickets, and the audited runs are the lower one.",
+  "note": "A count of merged pull requests is not a count of runs. It includes hand-made hotfixes, research and documentation pull requests, and it leaves out runs that were set aside or never merged. It is a second reading of the pace beside the audited runs, not a bound on it.",
   "days": {
     "2026-09-22": {
       "merged": 9,
