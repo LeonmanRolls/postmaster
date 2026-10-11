@@ -5,6 +5,7 @@
 //   run log-action --project <repo> clerk ticket-edit <target> [detail...]
 //   run log-action --project <repo> postmaster dispatch clerk [detail...]
 //   run log-action --project <repo> postmaster ticket-check <target> [detail...]
+//   run log-action --project <repo> postmaster experiment <id> [detail...]
 //   run log-action <dispatch-dir> <actor> tool-fault <postmaster-file> --ran <what ran>
 //                 --failed <what failed> --error <the error, or none> --diagnosis <why>
 //                 --fix <the fix proposed> [--workaround <what was done instead>] [--control <kind>]
@@ -14,7 +15,7 @@
 //            dispatch resume refuse harvest synthesize review-launch review-harvest finding apply
 //            escalate rule ticket-check ticket-create ticket-edit ticket-state ticket-comment
 //            gate verify merge teardown degrade handoff-accept handoff stage premises
-//            tool-fault note wall told carry reach take-in switch-off
+//            tool-fault note wall told carry reach take-in switch-off experiment
 //   target   what the action was done to: a lane, a ticket id, a branch, a path, a round
 //   detail   free text; everything after the target, joined by spaces. A finding's opens with its
 //            class, gating or style, so the style findings can be told apart.
@@ -66,7 +67,7 @@ import { argvDecoded } from "./lib/proc.ts";
 import { pyWords } from "./lib/text.ts";
 
 const VERBS =
-  " dispatch resume refuse harvest synthesize review-launch review-harvest finding apply escalate rule ticket-check ticket-create ticket-edit ticket-state ticket-comment reach gate verify merge teardown degrade handoff-accept handoff stage premises tool-fault note wall told carry take-in switch-off ";
+  " dispatch resume refuse harvest synthesize review-launch review-harvest finding apply escalate rule ticket-check ticket-create ticket-edit ticket-state ticket-comment reach gate verify merge teardown degrade handoff-accept handoff stage premises tool-fault note wall told carry take-in switch-off experiment ";
 const CONTROLS = join(toolRoot(import.meta), "skills/postmaster/controls.md");
 
 // JSON string escaping: drop control chars, escape separators. Bytes that
@@ -361,7 +362,7 @@ function logAction(
   return 0;
 }
 
-function logProjectEvent(
+export function logProjectEvent(
   repo: string,
   actor: string,
   action: string,
@@ -372,9 +373,10 @@ function logProjectEvent(
   const edit = actor === "clerk" && action === "ticket-edit" && target !== "";
   const dispatch = actor === "postmaster" && action === "dispatch" && target === "clerk";
   const check = actor === "postmaster" && action === "ticket-check" && target !== "";
-  if (!note && !edit && !dispatch && !check) {
+  const experiment = actor === "postmaster" && action === "experiment" && target !== "";
+  if (!note && !edit && !dispatch && !check && !experiment) {
     console.error(
-      "usage: run log-action --project <repo> clerk note <target> | clerk ticket-edit <target> [detail...] | postmaster dispatch clerk [detail...] | postmaster ticket-check <target> [detail...]",
+      "usage: run log-action --project <repo> clerk note <target> | clerk ticket-edit <target> [detail...] | postmaster dispatch clerk [detail...] | postmaster ticket-check <target> [detail...] | postmaster experiment <id> [detail...]",
     );
     return 1;
   }
@@ -408,7 +410,7 @@ if (import.meta.main) {
   if (argv[0] === "--project") {
     if (argv.length < 5) {
       console.error(
-        "usage: run log-action --project <repo> clerk note <target> | clerk ticket-edit <target> [detail...] | postmaster dispatch clerk [detail...] | postmaster ticket-check <target> [detail...]",
+        "usage: run log-action --project <repo> clerk note <target> | clerk ticket-edit <target> [detail...] | postmaster dispatch clerk [detail...] | postmaster ticket-check <target> [detail...] | postmaster experiment <id> [detail...]",
       );
       process.exit(1);
     }
@@ -425,7 +427,9 @@ if (import.meta.main) {
     }
     if (
       argv[2] === "postmaster" &&
-      ((argv[3] === "dispatch" && argv[4] === "clerk") || argv[3] === "ticket-check")
+      ((argv[3] === "dispatch" && argv[4] === "clerk") ||
+        argv[3] === "ticket-check" ||
+        argv[3] === "experiment")
     ) {
       process.exit(
         logProjectEvent(
@@ -438,7 +442,7 @@ if (import.meta.main) {
       );
     }
     console.error(
-      "usage: run log-action --project <repo> clerk note <target> | clerk ticket-edit <target> [detail...] | postmaster dispatch clerk [detail...] | postmaster ticket-check <target> [detail...]",
+      "usage: run log-action --project <repo> clerk note <target> | clerk ticket-edit <target> [detail...] | postmaster dispatch clerk [detail...] | postmaster ticket-check <target> [detail...] | postmaster experiment <id> [detail...]",
     );
     process.exit(1);
   }
