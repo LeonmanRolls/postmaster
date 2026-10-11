@@ -23,7 +23,7 @@ import { run } from "./lib/proc.ts";
 export const ROOT = toolRoot(import.meta);
 export const RUN = beside(import.meta, "run");
 export const FIXTURES = join(ROOT, "scripts/fixtures/acceptance-426");
-export const SHIM = join(ROOT, "scripts/install-guard-shim.sh");
+export const SHIM = join(ROOT, "scripts/install-guard-shim");
 export const DEV_BIN = join(ROOT, "node_modules/.bin");
 
 /** The managers the oracle drives for real. Berry is covered by stub-decision
@@ -76,7 +76,15 @@ export function buildTarball(pkgDir: string, destDir: string, version: string): 
   const entries = readdirSync(root).sort();
   const touch = run("touch", ["-t", "202001010000", root, ...entries.map((e) => join(root, e))]);
   if (touch.code !== 0) throw new Error(`touch: ${touch.err.trim() || touch.out.trim()}`);
-  const tar = run("tar", ["--no-recursion", "-cf", join(destDir, "stage.tar"), "-C", stage, "package", ...entries.map((e) => `package/${e}`)]);
+  const tar = run("tar", [
+    "--no-recursion",
+    "-cf",
+    join(destDir, "stage.tar"),
+    "-C",
+    stage,
+    "package",
+    ...entries.map((e) => `package/${e}`),
+  ]);
   if (tar.code !== 0) throw new Error(`tar: ${tar.err.trim() || tar.out.trim()}`);
   const gzip = run("gzip", ["-n", join(destDir, "stage.tar")]);
   if (gzip.code !== 0) throw new Error(`gzip: ${gzip.err.trim() || gzip.out.trim()}`);
@@ -334,7 +342,9 @@ export async function runAsync(
 /** Run a package-manager command the way a lane runs it: through the guard's
  * shim first on the PATH, with the run's dispatch, tool, lane, registry and
  * Socket seams in the environment. A missing shim (the base) fails like any
- * missing command, exit 127, which no oracle case accepts. */
+ * missing command, exit 127, which no oracle case accepts. Each dispatch gets
+ * a fresh HOME, so no manager cache survives from an earlier run to swallow
+ * the downloads the log assertions count. */
 export function guarded(
   registry: Registry,
   dispatch: string,
@@ -351,11 +361,17 @@ export function guarded(
   }
   const markerDir = opts.markerDir ?? join(dispatch, "markers");
   mkdirSync(markerDir, { recursive: true });
+  const home = join(dispatch, "home");
+  mkdirSync(home, { recursive: true });
   return runAsync(join(bin, prog), args, {
     cwd: project,
     env: {
       ...(process.env as Record<string, string>),
       PATH: `${bin}:${DEV_BIN}:${process.env.PATH ?? ""}`,
+      HOME: home,
+      XDG_DATA_HOME: join(home, ".local", "share"),
+      XDG_CACHE_HOME: join(home, ".cache"),
+      XDG_CONFIG_HOME: join(home, ".config"),
       POSTMASTER_DISPATCH: dispatch,
       POSTMASTER_TOOL: ROOT,
       POSTMASTER_GUARD_LANE: "testlane",
@@ -367,15 +383,37 @@ export function guarded(
   });
 }
 
-/** The installed version of a package, or null when it is not installed. */
+/** The installed version of a package, or null when it is not installed.
+ * pnpm links only direct dependencies top-level; anything a package brings
+ * lives under node_modules/.pnpm/<name>@<version>/, so the lookup falls
+ * through to the virtual store. */
 export function installedVersion(project: string, name: string): string | null {
   const manifest = join(project, "node_modules", ...name.split("/"), "package.json");
   try {
     const parsed = JSON.parse(readFileSync(manifest, "utf8")) as { version?: unknown };
-    return typeof parsed.version === "string" ? parsed.version : null;
+    if (typeof parsed.version === "string") return parsed.version;
   } catch {
-    return null;
+    // Fall through to the pnpm virtual store below.
   }
+  try {
+    const escaped = name.replace("/", "+");
+    const store = join(project, "node_modules", ".pnpm");
+    for (const entry of readdirSync(store)) {
+      const open = entry.indexOf("(");
+      const key = open < 0 ? entry : entry.slice(0, open);
+      if (!key.startsWith(`${escaped}@`)) continue;
+      const via = join(store, entry, "node_modules", ...name.split("/"), "package.json");
+      try {
+        const parsed = JSON.parse(readFileSync(via, "utf8")) as { version?: unknown };
+        if (typeof parsed.version === "string") return parsed.version;
+      } catch {
+        continue;
+      }
+    }
+  } catch {
+    // No virtual store.
+  }
+  return null;
 }
 
 /** Refusals name the package and tell the agent to stop and report it, so the
