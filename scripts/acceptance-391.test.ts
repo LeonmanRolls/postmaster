@@ -71,6 +71,7 @@ describe("C1: the wait returns as each reviewer finishes, and the fix lands betw
     expect(first.out).toContain("FINISHED bug fast");
     expect(first.out).not.toContain("FINISHED bug slow");
     expect(existsSync(join(layout.dispatch, "logs", "review-r1-bug-slow.done"))).toBe(false);
+    writeAction(layout, "coachman", "review-harvest", "fast", "bug round 1 thread t-fast");
 
     writeAction(
       layout,
@@ -100,6 +101,7 @@ describe("C1: the wait returns as each reviewer finishes, and the fix lands betw
     const second = tool(layout, "review-round", "wait-next", layout.dispatch, "1", layout.repo);
     expect(second.code).toBe(0);
     expect(second.out).toContain("FINISHED bug slow");
+    writeAction(layout, "coachman", "review-harvest", "slow", "bug round 1 thread t-slow");
     const last = tool(layout, "review-round", "wait-next", layout.dispatch, "1", layout.repo);
     expect(last.code).toBe(0);
     expect(last.out).toContain("every reviewer reported");
@@ -148,6 +150,7 @@ describe("C1: the wait returns as each reviewer finishes, and the fix lands betw
     const first = tool(layout, "review-round", "wait-next", layout.dispatch, "1", layout.repo);
     expect(first.code).toBe(0);
     expect(first.out).toContain("FINISHED bug fast");
+    writeAction(layout, "coachman", "review-harvest", "fast", "bug round 1 thread t-fast");
 
     const late = tool(layout, "review-round", "wait-next", layout.dispatch, "1", layout.repo);
     expect(late.code).toBe(3);
@@ -695,6 +698,8 @@ describe("R1: round 1 review regressions", () => {
     expect(first.code).toBe(0);
     expect(first.out).toContain("FINISHED bug a");
     expect(first.out).toContain("FINISHED bug c");
+    writeAction(layout, "coachman", "review-harvest", "a", "bug round 1 thread t-a");
+    writeAction(layout, "coachman", "review-harvest", "c", "bug round 1 thread t-c");
     const subset = tool(
       layout,
       "review-round",
