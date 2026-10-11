@@ -5381,6 +5381,18 @@ function applyKeep(
     if (seg !== null) touched.add(seg);
   }
   pruneEmptyDirs(dest, removedRels);
+  const finalSegs = new Set<string>();
+  for (const rel of final.keys()) {
+    const seg = segOfRel(rel);
+    if (seg !== null) finalSegs.add(seg);
+  }
+  const clashedSegs = new Set<string>();
+  for (const clash of clashes) {
+    if (!clash.rel.endsWith("/")) {
+      const seg = segOfRel(clash.rel);
+      if (seg !== null) clashedSegs.add(seg);
+    }
+  }
   const confirmed: string[] = [];
   const segs = [...touched].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
   if (segs.length > 0) {
@@ -5392,6 +5404,11 @@ function applyKeep(
       indexText = null;
     }
     for (const seg of segs) {
+      if (!finalSegs.has(seg)) continue;
+      if (clashedSegs.has(seg)) {
+        clashes.push({ rel: `${seg}/`, reason: "confirmation skipped, some files clashed" });
+        continue;
+      }
       if (indexText === null) {
         clashes.push({ rel: `${seg}/`, reason: "no bullet in the index" });
         continue;

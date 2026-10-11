@@ -4927,3 +4927,60 @@ describe("run-copy frozen snapshot presence", () => {
     }
   });
 });
+
+describe("run-copy keep confirmation", () => {
+  test("removing a whole verifier keeps clean with no clash", () => {
+    const app = scratchApp();
+    try {
+      expectCode(run(RUN, ["verifier", "record", app.repo, app.dispatch]), 0);
+      const syn = cutWorktree(app.repo, app.dir, "syn", "wsyn");
+      expectCode(run(RUN, ["verifier", "arm", syn, app.dispatch]), 0);
+      rmSync(join(syn, ".postmaster/verifier/cli"), { recursive: true, force: true });
+      const idx = join(syn, ".postmaster/verifier/README.md");
+      writeFileSync(
+        idx,
+        readFileSync(idx, "utf8").split("\n").filter((l) => !l.includes("verifier/cli")).join("\n"),
+      );
+      expectCode(run(RUN, ["verifier", "changes", syn, app.dispatch, "--freeze"]), 0);
+      const r = run(RUN, ["verifier", "keep", app.repo, "--run", app.dispatch, "--at", app.sha]);
+      expectCode(r, 0);
+      expect(r.out).not.toContain("not kept");
+      expect(existsSync(join(app.repo, ".postmaster/verifier/cli/features/f1.md"))).toBe(false);
+      expect(
+        readFileSync(join(app.repo, ".postmaster/verifier/README.md"), "utf8"),
+      ).not.toContain("verifier/cli");
+    } finally {
+      rmSync(app.dir, { recursive: true, force: true });
+    }
+  });
+
+  test("a segment with clashed files is applied but not confirmed", () => {
+    const app = scratchApp();
+    try {
+      expectCode(run(RUN, ["verifier", "record", app.repo, app.dispatch]), 0);
+      const syn = cutWorktree(app.repo, app.dir, "syn", "wsyn");
+      expectCode(run(RUN, ["verifier", "arm", syn, app.dispatch]), 0);
+      writeRepoFile(syn, ".postmaster/verifier/cli/features/f1.md", "run version of f1\n");
+      writeRepoFile(syn, ".postmaster/verifier/cli/features/f2.md", "run version of f2\n");
+      writeRepoFile(app.repo, ".postmaster/verifier/cli/features/f1.md", "project version of f1\n");
+      writeRepoFile(app.repo, "note.md", "a second commit to keep at\n");
+      commitAll(app.repo, "second");
+      const merge = gitOrThrow(app.repo, "rev-parse", "HEAD").trim();
+      expectCode(run(RUN, ["verifier", "changes", syn, app.dispatch, "--freeze"]), 0);
+      const r = run(RUN, ["verifier", "keep", app.repo, "--run", app.dispatch, "--at", merge]);
+      expect(r.code).toBe(1);
+      expect(r.out).toContain("changed cli/features/f2.md");
+      expect(r.out).toContain("not kept: cli/features/f1.md (changed on both sides)");
+      expect(r.out).toContain("not kept: cli/ (confirmation skipped, some files clashed)");
+      expect(r.out).not.toContain(`confirmed cli at ${merge}`);
+      expect(
+        readFileSync(join(app.repo, ".postmaster/verifier/README.md"), "utf8"),
+      ).not.toContain(`Confirmed: ${merge}`);
+      expect(
+        readFileSync(join(app.repo, ".postmaster/verifier/cli/features/f2.md"), "utf8"),
+      ).toBe("run version of f2\n");
+    } finally {
+      rmSync(app.dir, { recursive: true, force: true });
+    }
+  });
+});
