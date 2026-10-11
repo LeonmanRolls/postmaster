@@ -115,7 +115,7 @@ Runs with 3 criteria or fewer took a median 2 rounds (8 runs, most 2); the rest 
 
 The five-criteria rule of the booking clerk took effect on 2026-10-10. The rows count runs by what their ticket carried, whatever rule applied then. *Rounds above the median* sums, over the runs with more than five, the rounds each took above the median of the runs with five or fewer in the same set: an upper bound on what a split would have removed, since each slice has a first round and a clean round of its own.
 
-| Set | Runs, five or fewer | Rounds, median | Runs of 6 or more | Runs, more than five | Rounds, median | Runs of 6 or more | Rounds above the median |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| The 61 runs | 29 | 3.0 (mean 3.3) | 3 of 29 | 32 | 4.0 (mean 5.1) | 9 of 32 | 76 |
-| The later set | 13 | 3.0 (mean 2.9) | 1 of 13 | 5 | 6.0 (mean 7.2) | 3 of 5 | 21 |
+| Set | Runs, five or fewer | Rounds, median | Runs of 6 or more | Runs, more than five | Rounds, median | Runs of 6 or more | Rounds above the median | Rounds above the median, net of the runs below it |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| The 61 runs | 29 | 3.0 (mean 3.3) | 3 of 29 | 32 | 4.0 (mean 5.1) | 9 of 32 | 76 | 68 |
+| The later set | 13 | 3.0 (mean 2.9) | 1 of 13 | 5 | 6.0 (mean 7.2) | 3 of 5 | 21 | 21 |

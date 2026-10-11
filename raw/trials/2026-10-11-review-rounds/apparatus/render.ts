@@ -992,6 +992,7 @@ export function fiveCriteriaMarkdown(sets: ReadonlyArray<[string, readonly RunIn
       `${num(median(many.map((r) => r.rounds)), 1)} (mean ${num(sum(many.map((r) => r.rounds)) / Math.max(1, many.length), 1)})`,
       `${longN(many)} of ${many.length}`,
       String(sum(many.map((r) => Math.max(0, r.rounds - m)))),
+      String(sum(many.map((r) => r.rounds - m))),
     ]);
   }
   out.push(
@@ -1005,6 +1006,7 @@ export function fiveCriteriaMarkdown(sets: ReadonlyArray<[string, readonly RunIn
         "Rounds, median",
         "Runs of 6 or more",
         "Rounds above the median",
+        "Rounds above the median, net of the runs below it",
       ],
       rows,
     ),
