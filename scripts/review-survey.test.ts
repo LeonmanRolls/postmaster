@@ -34,7 +34,7 @@ describe("round attribution", () => {
     expect(launchRound("security round 10")).toBe(10);
     expect(launchRound("bug r7")).toBe(7);
     expect(launchRound("bug round 2 retry")).toBe(2);
-    expect(launchRound("{\"snapshot\":\"abc\"}")).toBe(null);
+    expect(launchRound('{"snapshot":"abc"}')).toBe(null);
     expect(launchRound("bug round x")).toBe(null);
   });
 
@@ -166,19 +166,29 @@ describe("renders", () => {
 
   test("the escalation carries the survey and its gaps", () => {
     expect(
-      renderEscalation(5, "RULING 5: more; escalate with residue", {
-        record: "surveys/rise-r5.md",
-        missing: ["Where the cause lies"],
-      }, SECTIONS),
+      renderEscalation(
+        5,
+        "RULING 5: more; escalate with residue",
+        {
+          record: "surveys/rise-r5.md",
+          missing: ["Where the cause lies"],
+        },
+        SECTIONS,
+      ),
     ).toBe(
       "# Escalation: review loop stopped at round 5\n\nDecision: RULING 5: more; escalate with residue\nSurvey: surveys/rise-r5.md\nMissing parts: Where the cause lies\n\n## Residue\n\nR.\n\n## Options\n\n1. O.\n\n## Advice\n\nA.\n",
     );
   });
 
   test("the escalation carries a missing survey without gaps", () => {
-    const text = renderEscalation(5, "RULING 5: more; escalate with residue", {
-      reason: "the surveyor lane exited 1.",
-    }, SECTIONS);
+    const text = renderEscalation(
+      5,
+      "RULING 5: more; escalate with residue",
+      {
+        reason: "the surveyor lane exited 1.",
+      },
+      SECTIONS,
+    );
     expect(text).toContain("Survey missing: the surveyor lane exited 1.\n");
     expect(text).not.toContain("Missing parts");
   });
@@ -205,9 +215,19 @@ describe("rounds assembly", () => {
     const text = buildRounds(
       [
         { action: "gate", target: "aaa", detail: "review round 1, run verify exit 0", raw: "g1" },
-        { action: "finding", target: "a.ts:1", detail: "gating P2 r1 bug luna, verified by reading", raw: raw1 },
+        {
+          action: "finding",
+          target: "a.ts:1",
+          detail: "gating P2 r1 bug luna, verified by reading",
+          raw: raw1,
+        },
         { action: "note", target: "x", detail: "aside", raw: "n1" },
-        { action: "finding", target: "b.ts:1", detail: "gating P1 r2 bug luna, verified by reading", raw: raw2 },
+        {
+          action: "finding",
+          target: "b.ts:1",
+          detail: "gating P1 r2 bug luna, verified by reading",
+          raw: raw2,
+        },
       ],
       2,
       "zzz",
@@ -227,7 +247,7 @@ describe("rounds assembly", () => {
         [{ action: "finding", target: "a.ts:1", detail: "gating P9 r1 bug luna", raw: "bad" }],
         1,
         "zzz",
-      )
+      ),
     ).toThrow("severity");
   });
 });
