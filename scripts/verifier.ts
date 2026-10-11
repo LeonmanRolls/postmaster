@@ -826,6 +826,7 @@ export function surfaceFromReadme(text: string): string | null {
  * make validated, recovers it where the folder name cannot.
  */
 export function surfaceFromIndex(indexText: string, seg: string): string | null {
+  // LOWER: lowered for an ASCII folder-segment match
   const want = seg.toLowerCase();
   for (const span of indexBullets(indexText)) {
     if (!spanSegs(span).includes(want)) continue;

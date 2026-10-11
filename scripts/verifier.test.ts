@@ -1831,7 +1831,7 @@ describe("copyKeptIntoProject", () => {
       seedWt(wt);
       chmodSync(join(wt, folders[1], "features", "f1.md"), 0o000);
       expect(() => copyKeptIntoProject(wt, repo, folders, index)).toThrow(
-        /could not be kept.*partial keep was removed/,
+        /could not be kept.*partial keep was removed/u,
       );
       expect(existsSync(join(repo, ".postmaster", "verifier"))).toBe(false);
     } finally {
