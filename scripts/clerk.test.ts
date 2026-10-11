@@ -200,6 +200,46 @@ describe("brief", () => {
     expect(brief).not.toContain("global.example");
   });
 
+  test("brief says the clerk makes a story with the draft and where its files go", () => {
+    const repo = localRepo();
+    const id = localTicket(repo, "Fix the list");
+    const cfgDir = mkdtempSync(join(tmpdir(), "clerk-cfg-"));
+    const cfg = stubConfig(cfgDir);
+    const r = sh(SELF, ["clerk", "brief", repo, id], { POSTMASTER_CONFIG: cfg });
+    expect(r.code).toBe(0);
+    const brief = readFileSync(join(repo, ".postmaster", "clerk", `${id}.brief.md`), "utf8");
+    expect(brief).toContain("Stories: on");
+    expect(brief).toContain("Make a story with the draft");
+    expect(brief).toContain(join(repo, ".postmaster", "clerk", `${id}.story`));
+  });
+
+  test("brief says no story when stories are off", () => {
+    const repo = localRepo();
+    const id = localTicket(repo, "Fix the list");
+    const cfgDir = mkdtempSync(join(tmpdir(), "clerk-cfg-"));
+    const cfg = stubConfig(cfgDir, `[planning]\nstories = "off"`);
+    const r = sh(SELF, ["clerk", "brief", repo, id], { POSTMASTER_CONFIG: cfg });
+    expect(r.code).toBe(0);
+    const brief = readFileSync(join(repo, ".postmaster", "clerk", `${id}.brief.md`), "utf8");
+    expect(brief).toContain("Stories: off");
+    expect(brief).toContain("Make no story");
+    expect(brief).not.toContain("Make a story with the draft");
+  });
+
+  test("brief reads stories from the project settings over the global config", () => {
+    const repo = localRepo();
+    const id = localTicket(repo, "Fix the list");
+    const cfgDir = mkdtempSync(join(tmpdir(), "clerk-cfg-"));
+    const cfg = stubConfig(cfgDir, `[planning]\nstories = "off"`);
+    mkdirSync(join(repo, ".postmaster"), { recursive: true });
+    writeFileSync(join(repo, ".postmaster", "settings.toml"), `[planning]\nstories = "on"\n`);
+    const r = sh(SELF, ["clerk", "brief", repo, id], { POSTMASTER_CONFIG: cfg });
+    expect(r.code).toBe(0);
+    const brief = readFileSync(join(repo, ".postmaster", "clerk", `${id}.brief.md`), "utf8");
+    expect(brief).toContain("Stories: on");
+    expect(brief).toContain("Make a story with the draft");
+  });
+
   test("brief leaves one label holding a comma alone: it is not the ready mark", () => {
     const repo = localRepo();
     const id = localTicket(repo, "Fix the list");
