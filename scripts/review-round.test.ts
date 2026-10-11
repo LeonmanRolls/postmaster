@@ -1458,6 +1458,30 @@ describe("the round's three steps", () => {
       }, "review-round-launchrows-");
     });
 
+    test("a reviewer whose host run fails stops it with no launch row for that reviewer", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        const { calls, deps } = stand((name, args) => {
+          if (name === "launch" && args[0] === "skill")
+            return { code: 0, out: "SECURITY TEXT\n", err: "" };
+          if (name === "host" && args[0] === "name")
+            return { code: 0, out: `${args[4]}-name\n`, err: "" };
+          if (name === "host" && args[0] === "run")
+            return { code: 1, out: "", err: "spawn failed\n" };
+          return green(name, args);
+        });
+        const res = launchRound(
+          { dispatch: p.dispatch, round: "1", repo: p.repo, synthesis: p.synthesis },
+          deps,
+        );
+        expect(res.code).toBe(1);
+        expect(res.err.join("\n")).toContain("style luna did not start");
+        const launches = of(calls, "log-action").filter((c) => c.args[2] === "review-launch");
+        expect(launches.length).toBe(0);
+        expect(res.out.join("\n")).not.toContain("launched, 3 reviewers");
+      }, "review-round-launchfail-");
+    });
+
     test("a scratch that is not ready stops it before the round starts", () => {
       withTempDir((root) => {
         const p = paths(root);

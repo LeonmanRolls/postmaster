@@ -29,7 +29,8 @@
 //           scratch left in place; cut: run verify exited other than 0 or 3, the run's legs or
 //           a lens's lanes did not resolve, or a left-behind scratch did not tear down;
 //           launch: the same resolution failures, a prompt that could not be written, a scratch
-//           that was not ready, or the round did not start; harvest: a named reviewer that is
+//           that was not ready, a reviewer that did not start, or the round did not start;
+//           harvest: a named reviewer that is
 //           not a bug reviewer of the round; gate: a dirty tree, an unwritable pass file, or a
 //           failing gate; fix: unstageable paths, an uncommittable fix, or an unrecorded apply;
 //           the round's own teardown, naming
@@ -796,6 +797,15 @@ export function launchRound(a: StepArgs, deps: StepDeps): StepResult {
       ]);
       passOut(res, started);
       passErr(res, started);
+      // A reviewer that never started is launches not done: stop the round
+      // before its first launch row, and re-run it whole, from the cut.
+      if (started.code !== 0) {
+        res.err.push(
+          `review-round: ${lens} ${lane} did not start; re-run the round whole, from the cut`,
+        );
+        res.code = 1;
+        return res;
+      }
       recordStep(res, deps, "log-action", [
         a.dispatch,
         "coachman",
