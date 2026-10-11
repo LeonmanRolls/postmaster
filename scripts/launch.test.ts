@@ -17,6 +17,7 @@ import {
   openSync,
   readdirSync,
   readFileSync,
+  readlinkSync,
   realpathSync,
   rmSync,
   statSync,
@@ -26,7 +27,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
-import { harnessData, makeHeldDir } from "./launch.ts";
+import { GUARD_SHIM_NAMES, ensureGuardBin, harnessData, makeHeldDir } from "./launch.ts";
 import { startCheck, wrapCommand } from "./lib/confine.ts";
 import { toolRoot } from "./lib/paths.ts";
 import { run, withTempDir } from "./lib/proc.ts";
@@ -6320,5 +6321,134 @@ describe("C4: a grok lane ending on a limit message is handled as today", () => 
     expect(step.rc).toBe(0);
     expect(existsSync(step.marker)).toBe(true);
     expect(wallsIn(step.actions).length).toBe(0);
+  });
+});
+
+describe("the install guard arms lanes", () => {
+  const TOOL = toolRoot(import.meta);
+
+  function runDir(tmp: string): { d: string; wt: string } {
+    const d = join(tmp, "run");
+    const wt = join(tmp, "wt");
+    mkdirSync(join(d, "logs"), { recursive: true });
+    mkdirSync(wt, { recursive: true });
+    writeFileSync(
+      join(d, "run.json"),
+      `${JSON.stringify({
+        config: {
+          lanes: { one: { harness: "claude", model: "m" } },
+          team: { coachman: { harness: "claude", model: "cm" } },
+        },
+      })}\n`,
+    );
+    writeFileSync(join(tmp, "prompt.txt"), "Do the work.\n");
+    return { d, wt };
+  }
+
+  function launchWithRole(
+    tmp: string,
+    d: string,
+    wt: string,
+    role: string,
+    name: string,
+    extra: string[] = [],
+  ): { rc: number; err: string; handed: Record<string, string> } {
+    const bin = join(tmp, "bin");
+    mkdirSync(bin, { recursive: true });
+    const handedPath = join(tmp, "handed.out");
+    writeFileSync(join(bin, "claude"), envDumpStub(handedPath));
+    chmodSync(join(bin, "claude"), 0o755);
+    const env: Record<string, string | undefined> = {
+      ...process.env,
+      PATH: `${bin}:${process.env.PATH ?? ""}`,
+      HOME: join(tmp, "home"),
+      POSTMASTER_LAUNCH_ROLE: role,
+      POSTMASTER_CONFIG: undefined,
+      POSTMASTER_DISPATCH: undefined,
+      POSTMASTER_TOOL: undefined,
+      POSTMASTER_GUARD_LANE: undefined,
+    };
+    const r = spawnSync(
+      join(import.meta.dir, "run"),
+      ["launch", "launch", name, wt, join(tmp, "prompt.txt"), "--run", d, ...extra],
+      { encoding: "utf8", env },
+    );
+    const handed: Record<string, string> = {};
+    try {
+      for (const e of readFileSync(handedPath, "utf8").split("\0")) {
+        const at = e.indexOf("=");
+        if (at > 0) handed[e.slice(0, at)] = e.slice(at + 1);
+      }
+    } catch {
+      // The stub never ran.
+    }
+    return { rc: r.status ?? 1, err: r.stderr ?? "", handed };
+  }
+
+  test.skipIf(skipToml)(
+    "a lane launch arms the guard: shim bin first, dispatch, tool and lane",
+    () => {
+      withTempDir((tmp) => {
+        const { d, wt } = runDir(tmp);
+        const r = launchWithRole(tmp, d, wt, "lane", "one");
+        expect(r.rc).toBe(0);
+        expect(r.handed["PATH"]?.startsWith(`${join(d, "guard", "bin")}:`)).toBe(true);
+        expect(r.handed["POSTMASTER_DISPATCH"]).toBe(d);
+        expect(r.handed["POSTMASTER_TOOL"]).toBe(TOOL);
+        expect(r.handed["POSTMASTER_GUARD_LANE"]).toBe("one");
+        for (const name of GUARD_SHIM_NAMES) {
+          expect(readlinkSync(join(d, "guard", "bin", name))).toBe(
+            join(TOOL, "scripts", "install-guard-shim"),
+          );
+        }
+      });
+    },
+  );
+
+  test.skipIf(skipToml)("a reviewer launch arms the guard the same way", () => {
+    withTempDir((tmp) => {
+      const { d, wt } = runDir(tmp);
+      const r = launchWithRole(tmp, d, wt, "reviewer", "one");
+      expect(r.rc).toBe(0);
+      expect(r.handed["PATH"]?.startsWith(`${join(d, "guard", "bin")}:`)).toBe(true);
+      expect(r.handed["POSTMASTER_DISPATCH"]).toBe(d);
+      expect(r.handed["POSTMASTER_GUARD_LANE"]).toBe("one");
+    });
+  });
+
+  test.skipIf(skipToml)("a coachman launch starts unarmed", () => {
+    withTempDir((tmp) => {
+      const { d, wt } = runDir(tmp);
+      const r = launchWithRole(tmp, d, wt, "coachman", "coachman", ["--leg", "synthesis"]);
+      expect(r.rc).toBe(0);
+      expect(existsSync(join(d, "guard"))).toBe(false);
+      expect(r.handed["PATH"]?.includes("guard/bin") ?? false).toBe(false);
+      expect(r.handed["POSTMASTER_DISPATCH"]).toBeUndefined();
+    });
+  });
+
+  test.skipIf(skipToml)("arming that cannot land refuses the launch", () => {
+    withTempDir((tmp) => {
+      const { d, wt } = runDir(tmp);
+      writeFileSync(join(d, "guard"), "in the way");
+      const r = launchWithRole(tmp, d, wt, "lane", "one");
+      expect(r.rc).not.toBe(0);
+      expect(r.err).toContain("cannot arm the install guard");
+    });
+  });
+
+  test("ensureGuardBin is idempotent and returns the bin dir", () => {
+    withTempDir((tmp) => {
+      const d = join(tmp, "run");
+      const first = ensureGuardBin(d, TOOL);
+      expect(first).toBe(join(d, "guard", "bin"));
+      const second = ensureGuardBin(d, TOOL);
+      expect(second).toBe(first);
+      for (const name of GUARD_SHIM_NAMES) {
+        expect(readlinkSync(join(first, name))).toBe(
+          join(TOOL, "scripts", "install-guard-shim"),
+        );
+      }
+    });
   });
 });

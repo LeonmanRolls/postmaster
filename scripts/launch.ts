@@ -58,6 +58,7 @@ import {
   renameSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
@@ -1296,6 +1297,23 @@ function readRegularFile(path: string, missing: string): string {
   }
 }
 
+/** The names the install guard shims on an armed lane's PATH. */
+export const GUARD_SHIM_NAMES = ["npm", "pnpm", "yarn", "bun", "npx"] as const;
+
+/** Create the run's guard bin dir with its manager shims, idempotently.
+ * Returns the bin dir. Throws when it cannot land; the caller dies, since a
+ * lane that reads as guarded but is not would install unguarded. */
+export function ensureGuardBin(dispatch: string, tool: string): string {
+  const bin = join(dispatch, "guard", "bin");
+  mkdirSync(bin, { recursive: true });
+  const shim = join(tool, "scripts", "install-guard-shim");
+  for (const name of GUARD_SHIM_NAMES) {
+    const link = join(bin, name);
+    if (!existsSync(link)) symlinkSync(shim, link);
+  }
+  return bin;
+}
+
 // --- entry ------------------------------------------------------------------------------
 const argv = process.argv.slice(2);
 
@@ -1882,6 +1900,27 @@ exit "$rc"
   delete process.env.POSTMASTER_LAUNCH_NAME;
   delete process.env.POSTMASTER_LAUNCH_ROLE;
   delete process.env.POSTMASTER_ATTEMPT_PHASE;
+  // A lane or reviewer inside a run starts with the install guard armed: the
+  // run's shim bin dir first on its PATH, and the dispatch, tool and lane
+  // the guard decides from. Anything else (a coachman, the postmaster, a
+  // clerk, or outside a run) starts as before. Arming that cannot land
+  // refuses the launch: a lane that reads as guarded but is not would
+  // install unguarded.
+  if (RUN && (launchRole === "lane" || launchRole === "reviewer")) {
+    const tool = dirname(scriptsDir(import.meta));
+    let guardBin = "";
+    try {
+      guardBin = ensureGuardBin(RUN, tool);
+    } catch (e) {
+      die(
+        `cannot arm the install guard for ${NAME}: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
+    process.env.PATH = `${guardBin}:${process.env.PATH ?? ""}`;
+    process.env.POSTMASTER_DISPATCH = RUN;
+    process.env.POSTMASTER_TOOL = tool;
+    process.env.POSTMASTER_GUARD_LANE = NAME;
+  }
   // Re-hand the cd pair after the deletes: PWD and OLDPWD are the last
   // additions the harness must inherit, so they are set last, closest to
   // the spawn, where no later mutation can drop them unnoticed.
