@@ -211,7 +211,7 @@ describe("C3: nothing installs or copies in without the recorded yes", () => {
         const id = runTool(["libraries", "identity", "is-odd", "3.0.1"]);
         expect(id.code).toBe(0);
         const target = id.out.trim();
-        expect(target).toMatch(/^library:[0-9a-f]{16}$/);
+        expect(target).toMatch(/^library:[0-9a-f]{16}$/u);
         const approval = runTool([
           "log-action",
           dispatch,
@@ -401,7 +401,7 @@ describe("C4: landing holds every added or changed library for the user's word",
     expect(r.out).toContain("source");
     expect(r.out).toContain(SOURCE);
     expect(r.out).toContain("verdict");
-    expect(r.out).toMatch(/\(id library:[0-9a-f]{16}\)/);
+    expect(r.out).toMatch(/\(id library:[0-9a-f]{16}\)/u);
     expect(r.out).not.toContain("(approved)");
   }
 
