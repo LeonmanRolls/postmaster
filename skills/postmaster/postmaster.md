@@ -543,7 +543,9 @@ every project and does not change that project's gate.
    exact discrepancy. On `stale`,
    withhold: remove `.card-ready` and `.leg-<n>-done` for the manifest's current leg `<n>`,
    then resume that last leg with the stale line as the exact discrepancy, asking it to
-   repeat its merge step and raise the card again, and wait for the corrected card. The
+   repeat its merge step and raise the card again, and wait for the corrected card; the
+   re-raise runs the card step's `card-write` over the stale card, so the printed parts
+   match the merged head. The
    resume carries no trial merge and no merge instructions of its own: the leg's step
    merges, resolves and gates. Log it with the leg, the thread id and the stale line
    as `send-back: <stale line>`: the leg's step restarts its merge count only on a
