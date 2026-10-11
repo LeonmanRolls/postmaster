@@ -150,8 +150,8 @@ describe("C1: the step surveys a rise, and only a rise", () => {
         expect(staged.startsWith(lay.dispatch)).toBe(false);
 
         // The call waits: the answer is recorded before the step returns,
-        // and the escalation is not the step's to write.
-        expect(existsSync(join(lay.dispatch, "ESCALATION.md"))).toBe(false);
+        // and the escalation is not the step's to write: the decoy stands untouched.
+        expect(readFileSync(join(lay.dispatch, "ESCALATION.md"), "utf8")).toContain("Decoy");
         expect(existsSync(join(lay.dispatch, ".escalation-ready"))).toBe(false);
         const after = readFileSync(join(lay.dispatch, "actions.jsonl"), "utf8");
         expect(after.startsWith(before)).toBe(true);
@@ -204,6 +204,7 @@ describe("C2: the survey is given the trial's materials", () => {
   check("202 after round 5 is given the question, ticket, reports and rounds", () => {
     withCopy(rise.run, rise.round, {}, (lay) => {
       setStandin(lay, "answer", { answer: FULL_ANSWER });
+      const before = copyActionLines(lay.dispatch);
       const r = reviewSurvey(lay, [
         "survey",
         lay.dispatch,
@@ -223,7 +224,7 @@ describe("C2: the survey is given the trial's materials", () => {
       }
       const staged = materials[materials.length - 1] ?? "";
       const rounds = readFileSync(staged, "utf8");
-      for (const line of copyActionLines(lay.dispatch)) {
+      for (const line of before) {
         expect(rounds).toContain(line);
       }
       expect(rounds).toContain(expectedCountsLine(rise.counts));
