@@ -247,7 +247,13 @@ describe("brief", () => {
     const cfg = stubConfig(cfgDir);
     const r = sh(SELF, ["clerk", "brief", repo, id], { POSTMASTER_CONFIG: cfg });
     expect(r.code).toBe(0);
-    const ignored = sh("git", ["-C", repo, "check-ignore", "-q", join(repo, ".postmaster", "clerk", `${id}.story`, "link.txt")]);
+    const ignored = sh("git", [
+      "-C",
+      repo,
+      "check-ignore",
+      "-q",
+      join(repo, ".postmaster", "clerk", `${id}.story`, "link.txt"),
+    ]);
     expect(ignored.code).toBe(0);
   });
 
