@@ -87,8 +87,8 @@ law whose generator never produced the input, and one, bug-2, is stated by none.
 and 18 of those have no quoted space, so they show bug-3 alone, for example
 `cd "$HOME"; pwd && printf x >> '../..<repo>/.worktrees/4507-codex/up/README.md'`.
 Here `../..<repo>` is the repository's path written relative to the home folder ([`law7-4000.txt`](law7-4000.txt)).
-The other four unreached findings need an input their generators never make: a `-c` option, a ref name in a
-read, refusal words in law 9's results, and a refusal beside a successful write.
+The other four unreached findings need an input their generators never make: a `-c` option, a `refs/heads/` name
+in a read, refusal words in law 9's results, and a refusal beside a successful write.
 
 ## The page's failure tests
 

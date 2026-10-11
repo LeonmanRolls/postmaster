@@ -715,7 +715,7 @@ given #202's text, the classifier's signatures and a stand-in that does nothing,
 in 65 minutes, and the laws were committed before they ran [@trials/2026-10-11-blind-laws-classifier/method.md]. Seven of
 them fail at the round-1 snapshot. They find 2 of the 8 findings, 202/bug-4 (a branch or tag name read as a listing) and
 style-1 (quoted text read as shell syntax), and 1 of the 5 cheap ones. Five of the other six are stated by a law whose
-generator never made an input that shows them: no `git -c`, no ref name in a git read, no refusal words in the results
+generator never made an input that shows them: no `git -c`, no `refs/heads/` name in a git read, no refusal words in the results
 of the law about the lane's own folder, and no refusal beside a successful write; `cd $HOME` before a relative path came
 up only when law 7 ran on ten times its inputs. The sixth, bug-2, is stated by no law: #202 lists the separators and
 leaves out the newline, and the writer kept to the list. No failure was a false alarm, and law 4 found a defect no review
@@ -723,8 +723,8 @@ round found, a `--git-dir` aimed at a worktree reported in the main checkout
 [@trials/2026-10-11-blind-laws-classifier/results/reading.md]. By its tests the trial failed on the first, 2 of 8 against
 a third, and passed the other two: no false alarm, and about an hour for the generators. On this one family, with one
 writer and one seed, most of the cheap label is hindsight. The laws' statements covered seven of the eight; what missed
-was the generators, built from the ticket's closed lists, which never produced the inputs outside them where the defects
-were.
+was the generators, which never made the inputs where the defects were: forms the ticket's lists do not name, refusals
+the laws never produced, and one combination too rare for their 400 runs.
 
 **2. A small model of #202's restore.** Write about 100 lines in TLA+ or Alloy: refs that a round may move,
 a synthesis worktree that may be attached, detached, a link or missing, files that may be dirty, and the
