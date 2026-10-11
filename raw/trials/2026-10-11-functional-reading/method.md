@@ -235,7 +235,13 @@ every arrangement.
   read. The record keeps the calibration sessions.
 - **The reader's thinking could not be capped.** The setting that should have capped it did not, so
   "quick" is an instruction to write no reasoning, not a bound on thinking.
-- **Session identifiers were removed** from the readers' result files before they were committed.
+- **Session identifiers were removed** from the readers' result files, and local paths from the helpers'
+  notes and the briefs' templates, before they were committed.
+- **The questions files are laid out one object per line, each continuation line starting with a comma.**
+  The project's private-data scanner reads `"id": "trace-1"` at the start of a line as an account
+  identifier, and a first-person "I made 318" in a helper's notes as income. The layout and that one
+  phrase were changed before the branch was published; the questions, their order and every other
+  word are as the helpers wrote them.
 - **The reader sessions loaded the machine's standing instructions,** which the project keeps in a
   global file and which say, among other things, how code should be written. The same for every
   arrangement.
