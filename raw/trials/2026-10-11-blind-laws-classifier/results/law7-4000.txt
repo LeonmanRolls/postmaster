@@ -1,0 +1,10 @@
+Law 7 on 4,000 inputs, ten times its own number; not counted.
+bun apparatus/run-laws.ts <commit> laws --census 4000 --only 7
+
+3abedd7: 591 of 4000 inputs fail; 30 put cd $HOME or cd "$HOME" before a write; 18 of those have no quoted space
+    cd .; cd $HOME && cp <repo>/.worktrees/360-rev-bug-mimo/in.txt ../..<repo>/.worktrees/360/out.txt
+    cd <repo>/.worktrees/202-codex; cd "$HOME"; ls -la && echo x >'../..<repo>/.worktrees/202-rev-style-claude/up/src/a.ts'
+    cd "$HOME"; pwd && printf x >> '../..<repo>/.worktrees/4507-codex/up/README.md'
+    cd $HOME; echo x > '../..<repo>/.worktrees/1234-rev-bug-codex/syn/src/a.ts'
+    cd $HOME && git status --short && echo x > ../..<repo>/.worktrees/1234-rev-bug-mimo/../../README.md
+b8056c9: 0 of 4000 inputs fail; 0 put cd $HOME or cd "$HOME" before a write; 0 of those have no quoted space
