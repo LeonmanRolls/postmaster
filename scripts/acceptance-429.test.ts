@@ -625,6 +625,10 @@ describe("C5: the record and the failures", () => {
       expect(degrades.length).toBe(1);
       expect(degrades[0]!.detail).toContain("wall");
       expect(readActions(lay.dispatch).some((a) => a.action === "wall")).toBe(true);
+      // The survey failed closed with its own degrade line: no ruling is
+      // asked, so the wall waits on nothing.
+      const open = sh(RUN, ["walls", "open", lay.dispatch], lay.env, lay.tmp);
+      expect(open.code).toBe(0);
     },
     300000,
   );
