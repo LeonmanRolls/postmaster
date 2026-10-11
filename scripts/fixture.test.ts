@@ -75,6 +75,10 @@ let dest = "";
 const savedEnv: Record<string, string | undefined> = {};
 const bgResults = new Map<string, { code: number; out: string }>();
 const hiddenResults: Record<string, number> = {};
+const wrongHidden: Record<string, { passed: boolean; failed: string[]; passes: number }> = {};
+let doubleHidden = false;
+let doubleTwice = false;
+let doubleDetail = "";
 
 function timestamp(seconds: number): string {
   return new Date(Date.UTC(2026, 0, 1, 0, 0, seconds)).toISOString().replace(/\.000Z$/u, "Z");
@@ -213,6 +217,66 @@ function background(name: string, fn: () => number | { code: number; out: string
 
 function rcOf(name: string): number | "none" {
   return bgResults.has(name) ? (bgResults.get(name)?.code ?? 0) : "none";
+}
+
+/** Wrong-version patches beside the remove ticket's hidden tests, `<criterion>-<slug>.patch`. */
+function wrongPatches(): string[] {
+  try {
+    return readdirSync(join(TICKETS, "remove", "wrong"))
+      .filter((f) => /^[0-9]+-.+\.patch$/u.test(f))
+      .sort();
+  } catch {
+    return [];
+  }
+}
+
+/** The remove ticket's acceptance criterion numbers, from its ticket file. */
+function removeCriteria(): string[] {
+  const section = sectionOf(ticketBody("remove"), "Acceptance criteria");
+  return [...section.matchAll(/^([0-9]+)\./gmu)].map((m) => m[1]!);
+}
+
+/** The describe titles of a hidden run's failing tests, from its output. */
+function failedDescribes(out: string): string[] {
+  const found: string[] = [];
+  for (const line of out.split("\n")) {
+    const d = /^\(fail\) (.+)$/u.exec(line.trim())?.[1]?.split(" > ")[0];
+    if (d && !found.includes(d)) found.push(d);
+  }
+  return found;
+}
+
+/** How many hidden tests passed, from the run's output. */
+function countPasses(out: string): number {
+  return out.split("\n").filter((line) => line.trim().startsWith("(pass)")).length;
+}
+
+/**
+ * Runs the app's remove with a repeated id and reports whether the id is
+ * reported twice. The command is read from the app's package.json, as the
+ * hidden tests read it.
+ */
+function proveDoubleReport(app: string): { twice: boolean; detail: string } {
+  const home = mkdtempSync(join(tmp, "double-home-"));
+  const file = join(home, "todo.json");
+  const manifest = JSON.parse(readFileSync(join(app, "package.json"), "utf8")) as {
+    bin?: string | Record<string, string>;
+  };
+  const bin = typeof manifest.bin === "string" ? manifest.bin : manifest.bin?.todo;
+  if (typeof bin !== "string")
+    return { twice: false, detail: "package.json names no todo command" };
+  const env = { TODO_FILE: file };
+  for (const text of ["a", "b", "c"]) {
+    const added = run(process.execPath, [join(app, bin), "add", text], { cwd: home, env });
+    if (added.code !== 0) return { twice: false, detail: `todo add ${text}: exit ${added.code}` };
+  }
+  const r = run(process.execPath, [join(app, bin), "remove", "2", "3", "2"], { cwd: home, env });
+  const lines = r.out
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+  const twice = r.code === 0 && lines.filter((l) => l === "removed 2").length === 2;
+  return { twice, detail: `exit ${r.code}: ${lines.join(", ")}` };
 }
 
 function record(
@@ -1035,6 +1099,40 @@ beforeAll(() => {
       return h.passed ? 0 : 2;
     });
   }
+
+  // #466: the remove ticket's wrong versions, each the reference solution
+  // with one kept requirement broken; and the repeated-id variant, whose
+  // remove reports a repeated id twice.
+  for (const f of wrongPatches()) {
+    const name = f.replace(/\.patch$/u, "");
+    const dir = join(tmp, `wrong-${name}`);
+    makeRepo(dir);
+    const refR = run("git", ["-C", dir, "apply", join(TICKETS, "remove", "reference.patch")]);
+    const brokeR = run("git", ["-C", dir, "apply", join(TICKETS, "remove", "wrong", f)]);
+    hiddenResults[`applied-wrong-${name}`] = refR.code === 0 && brokeR.code === 0 ? 0 : 1;
+    const h = hidden("remove", dir);
+    wrongHidden[name] = {
+      passed: h.passed,
+      failed: failedDescribes(h.out),
+      passes: countPasses(h.out),
+    };
+  }
+  const dblDir = join(tmp, "double-remove");
+  makeRepo(dblDir);
+  const dblRef = run("git", ["-C", dblDir, "apply", join(TICKETS, "remove", "reference.patch")]);
+  hiddenResults["applied-double-remove"] = dblRef.code;
+  const dblTasks = join(dblDir, "src", "tasks.ts");
+  writeFileSync(
+    dblTasks,
+    readFileSync(dblTasks, "utf8").replace(
+      "const removed = [...new Set(ids)];",
+      "const removed = [...ids];",
+    ),
+  );
+  const proof = proveDoubleReport(dblDir);
+  doubleTwice = proof.twice;
+  doubleDetail = proof.detail;
+  doubleHidden = hidden("remove", dblDir).passed;
 }, 1800000);
 
 afterAll(() => {
@@ -1238,6 +1336,59 @@ describe(TICKETS_HEAD, () => {
       expect(rcOf(`hidden-ref-${t}`)).toBe(0);
     }, 30000);
   }
+});
+
+const REMOVE_HEAD =
+  "the remove ticket: every kept requirement keeps a hidden test, and none pins a repeated id";
+
+describe(REMOVE_HEAD, () => {
+  test("every acceptance criterion has a wrong version beside the hidden tests", () => {
+    const have = wrongPatches()
+      .map((f) => /^([0-9]+)-/u.exec(f)?.[1])
+      .filter((n) => n !== undefined)
+      .sort();
+    expect(have).toEqual(removeCriteria().sort());
+  });
+  for (const f of wrongPatches()) {
+    const n = /^([0-9]+)-/u.exec(f)?.[1] ?? "";
+    const name = f.replace(/\.patch$/u, "");
+    test(`wrong/${f}: the hidden suite fails, in criterion ${n}'s describe`, () => {
+      expect(hiddenResults[`applied-wrong-${name}`]).toBe(0);
+      const r = wrongHidden[name];
+      expect(r?.passed).toBe(false);
+      expect(r?.passes ?? 0).toBeGreaterThan(0);
+      expect(r?.failed.some((d) => d.startsWith(`${n}. `))).toBe(true);
+    });
+  }
+  test("the ticket and its hidden tests say nothing about a repeated id", () => {
+    // Tripwire phrases for repeat-pinning language. "Used twice" stays
+    // allowed: criterion 6 keeps it for id reuse, which is not a repeat in
+    // one command.
+    const banned = [
+      /repeat/iu,
+      /more than once/iu,
+      /given twice/iu,
+      /reported twice/iu,
+      /printed twice/iu,
+      /reported once/iu,
+      /printed once/iu,
+      /each once/iu,
+    ];
+    const hits: string[] = [];
+    for (const rel of ["ticket.md", join("hidden", "remove.test.ts")]) {
+      const file = join(TICKETS, "remove", rel);
+      for (const [i, line] of readFileSync(file, "utf8").split("\n").entries()) {
+        if (banned.some((re) => re.test(line))) hits.push(`${rel}:${i + 1}: ${line.trim()}`);
+      }
+    }
+    expect(hits).toEqual([]);
+  });
+  test("a copy whose remove reports a repeated id twice passes the hidden suite", () => {
+    expect(hiddenResults["applied-double-remove"]).toBe(0);
+    expect(doubleDetail).not.toBe("");
+    expect(doubleTwice).toBe(true);
+    expect(doubleHidden).toBe(true);
+  });
 });
 
 describe("new: a fresh repo outside every other, with its ticket in its own store", () => {
@@ -2070,7 +2221,7 @@ describe("score: waybill effort controls", () => {
     const result = runScore(dispatch, repo);
     expect(result.code).toBe(0);
     expect(result.out).toContain("ok   efforts");
-  }, 30000);
+  }, 120_000);
 
   test("the same score command rejects a changed Team effort", () => {
     const repo = join(tmp, `clean-${first}`, "repo");
@@ -2083,8 +2234,7 @@ describe("score: waybill effort controls", () => {
     const result = runScore(dispatch, repo);
     expect(result.code).toBe(2);
     expect(result.out).toContain("FAIL efforts");
-    // Ten times its 30s alone budget: the score run outlasts 30s under a full gate.
-  }, 300000);
+  }, 120_000);
 
   test("a model containing a slash leaves the Team effort as its last field", () => {
     const dispatch = join(scratch, "dispatch");

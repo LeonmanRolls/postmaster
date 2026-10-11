@@ -1,0 +1,13 @@
+diff --git a/src/store.ts b/src/store.ts
+index 5b88ec6..c73c15a 100644
+--- a/src/store.ts
++++ b/src/store.ts
+@@ -31,7 +31,7 @@ export function parseList(text: string, path: string): TodoList {
+   const highest = tasks.reduce((most, task) => Math.max(most, task.id), 0);
+   return {
+     tasks: tasks.map(({ id, text, done }) => ({ id, text, done })),
+-    lastId: Math.max(lastId, highest),
++    lastId: lastId,
+   };
+ }
+ 

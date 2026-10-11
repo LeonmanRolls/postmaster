@@ -1,0 +1,16 @@
+diff --git a/src/tasks.ts b/src/tasks.ts
+index 6ad76fb..452fb33 100644
+--- a/src/tasks.ts
++++ b/src/tasks.ts
+@@ -20,8 +20,9 @@ export function addTask(
+   list: TodoList,
+   text: string,
+ ): { readonly list: TodoList; readonly task: Task } {
+-  const task: Task = { id: list.lastId + 1, text, done: false };
+-  return { list: { tasks: [...list.tasks, task], lastId: task.id }, task };
++  const id = list.tasks.reduce((highest, task) => Math.max(highest, task.id), 0) + 1;
++  const task: Task = { id, text, done: false };
++  return { list: { tasks: [...list.tasks, task], lastId: Math.max(list.lastId, id) }, task };
+ }
+ 
+ /** Marks a task done, or returns undefined when the list has no task with that id. */
