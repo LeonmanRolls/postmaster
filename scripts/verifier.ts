@@ -3822,6 +3822,34 @@ export function localDestLink(repo: string, folders: string[]): string | null {
   return null;
 }
 
+/**
+ * The first symlink under the kept folders or at the index in the working
+ * copy, repo-relative, or null when the tree holds none. The file checks
+ * follow links and the copy preserves them, so a link would keep content
+ * the validation never saw, or a link the copy's removal leaves dangling.
+ */
+export function keptTreeLink(wt: string, folders: string[], index: string): string | null {
+  for (const rel of [...folders, index]) {
+    if (isSymlink(join(wt, rel))) return rel;
+  }
+  const stack: string[] = [...folders];
+  while (stack.length > 0) {
+    const rel = stack.pop()!;
+    let entries;
+    try {
+      entries = readdirSync(join(wt, rel), { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      const child = `${rel}/${entry.name}`;
+      if (entry.isSymbolicLink()) return child;
+      if (entry.isDirectory()) stack.push(child);
+    }
+  }
+  return null;
+}
+
 export interface LocalJudged {
   kept: ClassifiedEntry[];
   leftOut: ClassifiedEntry[];
@@ -3880,6 +3908,14 @@ export function validateLocalSession(
       throw new RunError(`the ${e.folder}/README.md carries no upkeep line`);
     }
   }
+  const treeLink = keptTreeLink(
+    wt,
+    kept.map((e) => e.folder),
+    `${LOCAL_VERIFIER_ROOT}/README.md`,
+  );
+  if (treeLink !== null) {
+    throw new RunError(`the session left a symlink in the kept tree: ${treeLink}`);
+  }
   const indexPath = join(wt, LOCAL_VERIFIER_ROOT, "README.md");
   if (!isFilePath(indexPath)) {
     throw new RunError(`the session left no ${LOCAL_VERIFIER_ROOT}/README.md`);
@@ -3915,10 +3951,9 @@ export function validateLocalSession(
 
 /**
  * Copy the judged folders and index from the working copy into the project,
- * removing whatever was copied when a copy fails, so a failed keep leaves
- * nothing behind: neither a partial keep nor a root the keep created. The
- * destinations were verified absent before the copies, so the rollback only
- * ever removes what this keep wrote.
+ * removing whatever was copied, the in-progress path included, when a copy
+ * fails, so a failed keep leaves nothing behind: neither a partial keep nor
+ * a root the keep created.
  */
 export function copyKeptIntoProject(
   wt: string,
@@ -3926,39 +3961,56 @@ export function copyKeptIntoProject(
   folders: string[],
   index: string,
 ): void {
-  const root = join(repo, LOCAL_VERIFIER_ROOT);
-  const rootExisted = existsSync(root);
+  const rootExisted = existsSync(join(repo, LOCAL_VERIFIER_ROOT));
   const copied: string[] = [];
+  let current: string | null = null;
   try {
-    mkdirSync(root, { recursive: true });
+    mkdirSync(join(repo, LOCAL_VERIFIER_ROOT), { recursive: true });
     for (const folder of folders) {
+      current = folder;
       cpSync(join(wt, folder), join(repo, folder), { recursive: true });
-      copied.push(join(repo, folder));
+      copied.push(folder);
+      current = null;
     }
+    current = index;
     cpSync(join(wt, index), join(repo, index));
-    copied.push(join(repo, index));
+    copied.push(index);
+    current = null;
   } catch (e) {
-    const problems: string[] = [];
-    for (const p of [...copied].reverse()) {
-      try {
-        rmSync(p, { recursive: true, force: true });
-      } catch (e2) {
-        problems.push(e2 instanceof Error ? e2.message : String(e2));
-      }
-    }
-    if (!rootExisted) {
-      try {
-        rmSync(root, { recursive: true, force: true });
-      } catch (e2) {
-        problems.push(e2 instanceof Error ? e2.message : String(e2));
-      }
-    }
+    const doomed = current === null ? copied : [...copied, current];
+    const problems = removeKeptPaths(repo, doomed, rootExisted);
     const kept = e instanceof Error ? e.message : String(e);
-    const cleanup = problems.length === 0 ? "" : `; the cleanup failed too: ${problems.join("; ")}`;
+    const cleanup = problems === "" ? "" : `; the cleanup failed too: ${problems}`;
     throw new RunError(
       `the verifiers could not be kept: ${kept}; the partial keep was removed${cleanup}`,
     );
   }
+}
+
+/**
+ * Remove repo-relative kept paths and the root when the keep created it: the
+ * rollback half of the keep, shared by the copy failures and the post-copy
+ * failures. "" when clean, otherwise the failures to append to the error.
+ * Every path was verified absent before the copies, so the rollback only
+ * ever removes what this keep wrote.
+ */
+export function removeKeptPaths(repo: string, rels: string[], rootExisted: boolean): string {
+  const problems: string[] = [];
+  for (const rel of [...rels].reverse()) {
+    try {
+      rmSync(join(repo, rel), { recursive: true, force: true });
+    } catch (e) {
+      problems.push(e instanceof Error ? e.message : String(e));
+    }
+  }
+  if (!rootExisted) {
+    try {
+      rmSync(join(repo, LOCAL_VERIFIER_ROOT), { recursive: true, force: true });
+    } catch (e) {
+      problems.push(e instanceof Error ? e.message : String(e));
+    }
+  }
+  return problems.join("; ");
 }
 
 /** The keep's own action line: the folders kept and where the hand-over sits. */
@@ -3978,7 +4030,9 @@ function logKeep(dispatch: string, folders: string[], handover: string): void {
  * Keep a judged local session: refuse a destination that already holds a
  * kept folder or the index, ensure the folder's ignore rules, copy the kept
  * folders and the index, save HANDOVER.md into the run's logs, log the keep,
- * and remove the working copy, so the repository shows nothing new.
+ * and remove the working copy, so the repository shows nothing new. A
+ * failure past the copies rolls the keep back, so a failed keep leaves
+ * nothing a retry would refuse on.
  */
 function keepLocalSession(
   repo: string,
@@ -4007,12 +4061,21 @@ function keepLocalSession(
   }
   ensureIgnore(repo, true);
   const folders = judged.kept.map((e) => e.folder);
+  const rootExisted = existsSync(join(repo, LOCAL_VERIFIER_ROOT));
   copyKeptIntoProject(wt, repo, folders, index);
   const logs = join(dispatch, "logs");
-  mkdirSync(logs, { recursive: true });
   const saved = join(logs, `verifier-${label}-handover.md`);
-  cpSync(join(wt, "HANDOVER.md"), saved);
-  logKeep(dispatch, folders, saved);
+  try {
+    mkdirSync(logs, { recursive: true });
+    cpSync(join(wt, "HANDOVER.md"), saved);
+    logKeep(dispatch, folders, saved);
+  } catch (e) {
+    const problems = removeKeptPaths(repo, [...folders, index], rootExisted);
+    const cleanup = problems === "" ? "" : `; the cleanup failed too: ${problems}`;
+    throw new RunError(
+      `the keep was rolled back: ${e instanceof Error ? e.message : String(e)}${cleanup}`,
+    );
+  }
   const rm = git(repo, ["worktree", "remove", "--force", wt]);
   if (rm.code !== 0) {
     throw new RunError(

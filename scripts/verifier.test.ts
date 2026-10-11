@@ -60,6 +60,7 @@ import {
   isSetupDispatch,
   isSurface,
   joinBodies,
+  keptTreeLink,
   kindProse,
   landTarget,
   lastLine,
@@ -93,6 +94,7 @@ import {
   pruneWorktrees,
   refuseLine,
   remoteFromSymbolicRef,
+  removeKeptPaths,
   removeProvisioning,
   renderListing,
   renderPrompt,
@@ -1839,6 +1841,114 @@ describe("copyKeptIntoProject", () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  test("a failed copy removes the in-progress folder under a held root", () => {
+    const dir = tempDir();
+    try {
+      const wt = join(dir, "wt");
+      const repo = join(dir, "app");
+      mkdirSync(wt, { recursive: true });
+      mkdirSync(repo, { recursive: true });
+      seedWt(wt);
+      writeRepoFile(repo, ".postmaster/verifier/keep-me.txt", "mine\n");
+      chmodSync(join(wt, folders[1], "features", "f1.md"), 0o000);
+      expect(() => copyKeptIntoProject(wt, repo, folders, index)).toThrow(
+        /could not be kept.*partial keep was removed/u,
+      );
+      expect(existsSync(join(repo, folders[0]))).toBe(false);
+      expect(existsSync(join(repo, folders[1]))).toBe(false);
+      expect(existsSync(join(repo, index))).toBe(false);
+      expect(existsSync(join(repo, ".postmaster", "verifier", "keep-me.txt"))).toBe(true);
+    } finally {
+      chmodSync(join(dir, "wt", folders[1], "features", "f1.md"), 0o644);
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("removeKeptPaths", () => {
+  test("removes the paths, and the root only when the keep created it", () => {
+    const dir = tempDir();
+    try {
+      const repo = join(dir, "app");
+      mkdirSync(repo, { recursive: true });
+      writeRepoFile(repo, ".postmaster/verifier/cli/README.md", "# cli\n");
+      writeRepoFile(repo, ".postmaster/verifier/README.md", "# Verifiers\n");
+      const rels = [".postmaster/verifier/cli", ".postmaster/verifier/README.md"];
+      expect(removeKeptPaths(repo, rels, true)).toBe("");
+      expect(existsSync(join(repo, ".postmaster", "verifier"))).toBe(true);
+      writeRepoFile(repo, ".postmaster/verifier/cli/README.md", "# cli\n");
+      expect(removeKeptPaths(repo, rels, false)).toBe("");
+      expect(existsSync(join(repo, ".postmaster", "verifier"))).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("keptTreeLink", () => {
+  const folders = [".postmaster/verifier/cli"];
+  const index = ".postmaster/verifier/README.md";
+
+  function seedWt(wt: string): void {
+    writeRepoFile(wt, `${folders[0]}/README.md`, "# cli\n");
+    writeRepoFile(wt, `${folders[0]}/features/README.md`, "Files: README.md\n");
+    writeRepoFile(wt, `${folders[0]}/features/f1.md`, "# f1\n");
+    writeRepoFile(wt, index, "# Verifiers\n");
+  }
+
+  test("a clean tree reports null", () => {
+    const dir = tempDir();
+    try {
+      const wt = join(dir, "wt");
+      mkdirSync(wt, { recursive: true });
+      seedWt(wt);
+      expect(keptTreeLink(wt, folders, index)).toBeNull();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("a live or dangling page link reports it", () => {
+    const dir = tempDir();
+    try {
+      const wt = join(dir, "wt");
+      const outside = join(dir, "outside.txt");
+      writeFileSync(outside, "elsewhere\n");
+      mkdirSync(wt, { recursive: true });
+      seedWt(wt);
+      const page = join(wt, folders[0], "features", "evil.md");
+      symlinkSync(outside, page);
+      expect(keptTreeLink(wt, folders, index)).toBe(`${folders[0]}/features/evil.md`);
+      rmSync(page);
+      symlinkSync(join(dir, "nowhere.md"), join(wt, folders[0], "features", "ghost.md"));
+      expect(keptTreeLink(wt, folders, index)).toBe(`${folders[0]}/features/ghost.md`);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("a linked folder or index reports it", () => {
+    const dir = tempDir();
+    try {
+      const wt = join(dir, "wt");
+      const outside = join(dir, "outside");
+      mkdirSync(outside, { recursive: true });
+      mkdirSync(wt, { recursive: true });
+      seedWt(wt);
+      rmSync(join(wt, folders[0]), { recursive: true });
+      symlinkSync(outside, join(wt, folders[0]));
+      expect(keptTreeLink(wt, folders, index)).toBe(folders[0]);
+      rmSync(join(wt, folders[0]));
+      mkdirSync(join(wt, folders[0]), { recursive: true });
+      seedWt(wt);
+      rmSync(join(wt, index));
+      symlinkSync(join(outside, "README.md"), join(wt, index));
+      expect(keptTreeLink(wt, folders, index)).toBe(index);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("localTag", () => {
@@ -1955,6 +2065,23 @@ describe("validateLocalSession", () => {
         `# Handover\n\n## Verifier: eve\nFolder: .postmaster/verifier/eve\nProof: ${proof}\n`;
       for (const [rel, text] of Object.entries(files)) writeRepoFile(repo, rel, text);
       expect(() => validateLocalSession(repo, cutAt, [CLI])).toThrow(/unlisted folder/u);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("a symlink in the kept tree fails", () => {
+    const { dir, repo, cutAt } = seed({});
+    try {
+      const proof = join(dir, "proof.log");
+      writeFileSync(proof, "driven\n");
+      const files = goodFiles(proof);
+      for (const [rel, text] of Object.entries(files)) writeRepoFile(repo, rel, text);
+      symlinkSync(
+        join(dir, "proof.log"),
+        join(repo, ".postmaster", "verifier", "cli", "features", "evil.md"),
+      );
+      expect(() => validateLocalSession(repo, cutAt, [CLI])).toThrow(/symlink/u);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
