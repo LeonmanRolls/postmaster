@@ -34,6 +34,7 @@ import {
   projectOf,
   readBaseState,
   readRunChecked,
+  rebuildArgs,
   refuseForeignResolved,
   refuseForeignScopes,
   registryEnvStrips,
@@ -692,6 +693,38 @@ test("install and sync plans pin the scopes they checked", () => {
     "--immutable",
     "--non-interactive",
   ]);
+});
+
+test("covered scripts rebuild exactly the covered set", () => {
+  const reg = "https://r.example";
+  // npm installs with scripts off even covered: the rebuild runs them.
+  const add = installArgs("npm", "classic", ["install", "a"], ["a"], reg, [], []);
+  expect(add.args).toContain("--ignore-scripts");
+  expect(rebuildArgs("npm", "classic", ["a", "b"], reg)).toEqual({
+    args: ["rebuild", "a", "b", "--registry", reg],
+    env: {},
+  });
+  const berry = installArgs("yarn", "berry", ["add", "a"], ["a"], reg, [], []);
+  expect(berry.env).toEqual({ YARN_ENABLE_SCRIPTS: "0", YARN_NPM_REGISTRY_SERVER: reg });
+  expect(rebuildArgs("yarn", "berry", ["a"], reg)).toEqual({
+    args: ["rebuild", "a", "--non-interactive"],
+    env: { YARN_ENABLE_SCRIPTS: "1", YARN_NPM_REGISTRY_SERVER: reg },
+  });
+  expect(rebuildArgs("npm", "classic", [], reg)).toBeNull();
+  expect(rebuildArgs("pnpm", "classic", ["a"], reg)).toBeNull();
+  expect(rebuildArgs("yarn", "classic", ["a"], reg)).toBeNull();
+  expect(rebuildArgs("bun", "classic", ["a"], reg)).toBeNull();
+  expect(syncArgs("npm", "classic", ["a"], reg, [])).toEqual({
+    args: ["ci", "--registry", reg, "--no-audit", "--no-fund", "--ignore-scripts"],
+    env: {},
+  });
+  // Classic runs scripts only on the caller's word that the tree is covered.
+  expect(installArgs("yarn", "classic", ["add", "a"], ["a"], reg, [], []).args).not.toContain(
+    "--ignore-scripts",
+  );
+  expect(installArgs("yarn", "classic", ["add", "a"], [], reg, [], []).args).toContain(
+    "--ignore-scripts",
+  );
 });
 
 test("overrides reduce to exact checked targets", () => {

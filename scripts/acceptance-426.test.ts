@@ -805,6 +805,42 @@ describe("Berry decisions against a stub yarn", () => {
     >;
     expect(record.args).toContain("--ignore-scripts");
   });
+  test("a Berry add with a covered script rebuilds exactly it", async () => {
+    const dir = join(tmp, "berry-stub-rebuild");
+    mkdirSync(dir, { recursive: true });
+    const bin = join(dir, "stubbin");
+    mkdirSync(bin, { recursive: true });
+    const record = join(dir, "yarn-record.jsonl");
+    writeFileSync(
+      join(bin, "yarn"),
+      `#!/bin/sh\nif [ "$1" = "--version" ]; then echo "\${STUB_YARN_VERSION:-1.22.22}"; exit 0; fi\nprintf '{"scripts":"%s","registry":"%s","args":"%s"}\\n' "$YARN_ENABLE_SCRIPTS" "$YARN_NPM_REGISTRY_SERVER" "$*" >> ${record}\n`,
+    );
+    run("chmod", ["+x", join(bin, "yarn")]);
+    const dispatch = mkDispatch(
+      tmp,
+      "berry-rebuild",
+      ["- g-scripts@1.0.0 vetted: tiny"],
+      [yes("g-scripts@1.0.0"), allowance("g-scripts")],
+    );
+    const project = mkProject(tmp, "berry-rebuild-p");
+    writeFileSync(join(project, ".yarnrc.yml"), "nodeLinker: node-modules\n");
+    const r = await guarded(registry, dispatch, project, "yarn", ["add", "g-scripts@1.0.0"], {
+      env: {
+        PATH: `${join(dispatch, "guard", "bin")}:${bin}:${DEV_BIN}:${process.env.PATH ?? ""}`,
+      },
+    });
+    expect(r.code).toBe(0);
+    const calls = readFileSync(record, "utf8")
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as Record<string, string>);
+    expect(calls.length).toBe(2);
+    expect(calls[0]?.scripts).toBe("0");
+    expect(calls[0]?.args).toContain("g-scripts@1.0.0");
+    expect(calls[1]?.scripts).toBe("1");
+    expect(calls[1]?.args ?? "").toMatch(/^rebuild g-scripts /u);
+    expect(calls[1]?.registry).toBe(registry.url);
+  });
   test("an unlisted Berry add never reaches yarn", async () => {
     const dir = join(tmp, "berry-stub-refuse");
     mkdirSync(dir, { recursive: true });

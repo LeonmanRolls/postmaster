@@ -28,12 +28,14 @@
 //
 // How it is enforced per manager (each verified by execution before relying
 // on it): npm runs installs with --ignore-scripts and --no-audit --no-fund,
-// and bare installs run as npm ci after the guard's own drift check; pnpm
-// runs with --ignore-scripts plus one --allow-build per allowed package, and
-// bare installs run --frozen-lockfile; Yarn Classic runs with
-// --ignore-scripts and --frozen-lockfile; Yarn Berry installs with
-// YARN_ENABLE_SCRIPTS=0 and --immutable against YARN_NPM_REGISTRY_SERVER; Bun
-// runs bare installs --frozen-lockfile with dependency scripts blocked by
+// and bare installs run as npm ci after the guard's own drift check, with a
+// second npm rebuild step running exactly the covered scripts; pnpm runs
+// with --ignore-scripts plus one --allow-build per allowed package, and bare
+// installs run --frozen-lockfile; Yarn Classic runs with --ignore-scripts
+// and --frozen-lockfile, keeping scripts off unless every scriptful package
+// is covered; Yarn Berry installs with YARN_ENABLE_SCRIPTS=0 and --immutable
+// against YARN_NPM_REGISTRY_SERVER, then rebuilds the covered set; Bun runs
+// bare installs --frozen-lockfile with dependency scripts blocked by
 // default, and the guard writes exactly the allowed scriptful packages to the
 // manifest's trustedDependencies, since bun pm trust and bun add --trust both
 // crash in Bun 1.4.2. Every install runs against the pinned registry.
@@ -3506,26 +3508,52 @@ export function installArgs(
 ): ExecPlan {
   const pinned = applyPins(kept, pm, pins);
   if (pm === "yarn" && yarnKind === "berry") {
+    // Scripts stay off here; the rebuild step runs exactly the covered set.
     return {
       args: [...pinned, "--non-interactive"],
-      env: {
-        YARN_ENABLE_SCRIPTS: scriptsOn.length > 0 ? "1" : "0",
-        YARN_NPM_REGISTRY_SERVER: registry,
-      },
+      env: { YARN_ENABLE_SCRIPTS: "0", YARN_NPM_REGISTRY_SERVER: registry },
     };
   }
   const args = [...pinned, "--registry", registry];
   if (pm === "npm" || pm === "pnpm") args.push(...scopePins(scopeNames, registry));
   if (pm === "npm") args.push("--no-audit", "--no-fund");
   if (pm === "yarn") args.push("--non-interactive");
-  if (scriptsOn.length > 0) {
-    if (pm === "pnpm") {
-      for (const name of scriptsOn) args.push(`--allow-build=${name}`);
-    }
+  if (pm === "pnpm" && scriptsOn.length > 0) {
+    for (const name of scriptsOn) args.push(`--allow-build=${name}`);
+    return { args, env: {} };
+  }
+  // npm's covered scripts run in the rebuild step, not here: without it the
+  // install would also run the scripts of every neighbor the checks never
+  // covered. Yarn Classic has no rebuild, so it runs scripts only when the
+  // caller verified the whole installed tree is covered.
+  if (pm === "yarn" && yarnKind === "classic" && scriptsOn.length > 0) {
     return { args, env: {} };
   }
   if (pm !== "bun") args.push("--ignore-scripts");
   return { args, env: {} };
+}
+
+/** The second step for an install with covered scripts: run exactly those
+ * packages' install scripts, and nothing else's. npm and Berry rebuild the
+ * named packages (verified by execution); pnpm and Bun gate per package
+ * already, and Yarn Classic has no rebuild, so those three need no step. */
+export function rebuildArgs(
+  pm: Pm,
+  yarnKind: YarnKind,
+  scriptsOn: string[],
+  registry: string,
+): ExecPlan | null {
+  if (scriptsOn.length === 0) return null;
+  if (pm === "npm") {
+    return { args: ["rebuild", ...scriptsOn, "--registry", registry], env: {} };
+  }
+  if (pm === "yarn" && yarnKind === "berry") {
+    return {
+      args: ["rebuild", ...scriptsOn, "--non-interactive"],
+      env: { YARN_ENABLE_SCRIPTS: "1", YARN_NPM_REGISTRY_SERVER: registry },
+    };
+  }
+  return null;
 }
 
 /** The guarded argv for a bare sync: fixed, so no lane flag can drift it or
@@ -3540,16 +3568,19 @@ export function syncArgs(
   if (pm === "yarn" && yarnKind === "berry") {
     return {
       args: ["install", "--immutable", "--non-interactive"],
-      env: {
-        YARN_ENABLE_SCRIPTS: scriptsOn.length > 0 ? "1" : "0",
-        YARN_NPM_REGISTRY_SERVER: registry,
-      },
+      env: { YARN_ENABLE_SCRIPTS: "0", YARN_NPM_REGISTRY_SERVER: registry },
     };
   }
   if (pm === "npm") {
-    const args = ["ci", "--registry", registry, "--no-audit", "--no-fund"];
-    args.push(...scopePins(scopeNames, registry));
-    if (scriptsOn.length === 0) args.push("--ignore-scripts");
+    const args = [
+      "ci",
+      "--registry",
+      registry,
+      "--no-audit",
+      "--no-fund",
+      ...scopePins(scopeNames, registry),
+      "--ignore-scripts",
+    ];
     return { args, env: {} };
   }
   if (pm === "pnpm") {
@@ -4126,14 +4157,33 @@ async function runRun(shimDir: string, rawProg: string, argv: string[]): Promise
         ? parseAddSpecs(classification.specs)
         : expandUpdateSpecs(project, classification.specs);
     const { scriptful, closure } = await checkSpecs(deps, specs);
+    const addLock = findLockfile(pm, project);
     await verifyTreeDelta(
       deps,
       dispatch,
       project,
-      findLockfile(pm, project),
+      addLock,
       new Set([...specNamesOf(specs), ...closure.keys()]),
       true,
     );
+    // Classic runs the install's scripts only when every scriptful neighbor
+    // is covered too; otherwise the covered scripts stay off, and the lane
+    // hears which cover is missing.
+    let addScriptsOn = scriptful;
+    if (pm === "yarn" && yarnKind === "classic" && scriptful.length > 0) {
+      const neighborPairs = (addLock === null ? [] : (lockedOf(addLock) ?? [])).filter(
+        (p) => !closure.has(p.name),
+      );
+      const uncovered = (await syncScriptful(ctx, neighborPairs)).filter(
+        (name) => !deps.approvals.allowances.has(name),
+      );
+      if (uncovered.length > 0) {
+        process.stderr.write(
+          `install-guard: scripts off for this install: no allowance covers ${uncovered.join(", ")}\n`,
+        );
+        addScriptsOn = [];
+      }
+    }
     if (pm === "bun") writeTrustedDeps(project, scriptful);
     if (pm === "yarn" || pm === "bun") refuseForeignScopes(pm, yarnKind, cwd, project, registry);
     const { prefix, cmd, rest } = commandOf(key, effArgv);
@@ -4141,16 +4191,17 @@ async function runRun(shimDir: string, rawProg: string, argv: string[]): Promise
     const post = sanitize(pm, rest);
     noteStripped([...pre.stripped, ...post.stripped]);
     const scopeNames = [...specNamesOf(specs), ...closure.keys()];
+    const installScriptsOn = pm === "yarn" && yarnKind === "classic" ? addScriptsOn : scriptful;
     const plan = installArgs(
       pm,
       yarnKind,
       [...pre.kept, cmd, ...post.kept],
-      scriptful,
+      installScriptsOn,
       registry,
       planPins(specs, closure),
       scopeNames,
     );
-    return execManager(bin, plan.args, execEnv(plan.env));
+    return execInstallPlan(bin, plan, rebuildArgs(pm, yarnKind, installScriptsOn, registry));
   }
   if (classification.kind === "sync") {
     const lock = findLockfile(pm, project);
@@ -4193,6 +4244,14 @@ async function runRun(shimDir: string, rawProg: string, argv: string[]): Promise
     const scriptsOn = scriptful.filter((name) => deps.approvals.allowances.has(name));
     if (scriptsOn.length !== scriptful.length) scriptsOn.splice(0);
     if (pm === "bun") writeTrustedDeps(project, scriptsOn);
+    // Classic cannot rebuild the covered set alone, so a partial cover
+    // installs with every script off, and says which cover is missing.
+    if (pm === "yarn" && yarnKind === "classic" && scriptsOn.length !== scriptful.length) {
+      const missing = scriptful.filter((name) => !deps.approvals.allowances.has(name));
+      process.stderr.write(
+        `install-guard: scripts off for this sync: no allowance covers ${missing.join(", ")}\n`,
+      );
+    }
     const plan = syncArgs(
       pm,
       yarnKind,
@@ -4200,7 +4259,7 @@ async function runRun(shimDir: string, rawProg: string, argv: string[]): Promise
       registry,
       pairs.map((p) => p.name),
     );
-    return execManager(bin, plan.args, execEnv(plan.env));
+    return execInstallPlan(bin, plan, rebuildArgs(pm, yarnKind, scriptsOn, registry));
   }
   if (classification.kind === "rebuild") {
     // npm and pnpm only; the other managers never classify here.
@@ -4287,6 +4346,14 @@ async function runRun(shimDir: string, rawProg: string, argv: string[]): Promise
     cwd,
     project,
   );
+}
+
+/** Run an install plan, then its rebuild step when the install succeeded
+ * and the plan names one. The rebuild's code is the run's code. */
+function execInstallPlan(bin: string, plan: ExecPlan, rebuild: ExecPlan | null): number {
+  const code = execManager(bin, plan.args, execEnv(plan.env));
+  if (code !== 0 || rebuild === null) return code;
+  return execManager(bin, rebuild.args, execEnv(rebuild.env));
 }
 
 /** A one-shot the checks cleared: the lane's args kept, the pinned registry,
