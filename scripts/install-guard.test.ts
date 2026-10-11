@@ -31,8 +31,11 @@ import {
   overrideTarget,
   overridesDelta,
   parseAddSpecs,
+  parsePackageLock,
   parsePackument,
+  parsePnpmLock,
   parseSpec,
+  parseYarnLock,
   planPins,
   policyArgs,
   projectOf,
@@ -45,6 +48,7 @@ import {
   refuseNestedShadowed,
   registryEnvStrips,
   resolveClosure,
+  resolveLockAliases,
   runBaseHead,
   sameOrigin,
   sanitize,
@@ -53,6 +57,7 @@ import {
   scopePins,
   scopesOfWords,
   scriptNestedManagers,
+  yarnDescriptorName,
   stowaways,
   syncArgs,
   unapprovedPairs,
@@ -797,14 +802,140 @@ test("the delta cores name unapproved pairs and stowaways", () => {
         ["loose", "*"],
         ["moved", "^2.0.0"],
       ]),
-      new Map([
-        ["locked", "1.2.3"],
-        ["moved", "1.2.3"],
-      ]),
+      [
+        { name: "locked", version: "1.2.3" },
+        { name: "moved", version: "1.2.3" },
+      ],
       new Set(["spec"]),
       new Set(["locked@1.2.3", "moved@1.2.3"]),
     ),
   ).toEqual(["loose", "moved"]);
+});
+
+test("lock parsers keep every distinct pair and skip workspace members", () => {
+  // Nested duplicates install too, so both versions surface; exact
+  // duplicates collapse; workspace member keys are paths, not installs.
+  expect(
+    parsePackageLock(
+      JSON.stringify({
+        packages: {
+          "": { name: "root", version: "1.0.0" },
+          "apps/web": { name: "web", version: "1.0.0" },
+          "node_modules/a": { version: "1.0.0" },
+          "node_modules/b/node_modules/a": { version: "2.0.0" },
+          "node_modules/c": { version: "3.0.0" },
+        },
+        dependencies: { c: { version: "3.0.0" } },
+      }),
+    ),
+  ).toEqual([
+    { name: "a", version: "1.0.0" },
+    { name: "a", version: "2.0.0" },
+    { name: "c", version: "3.0.0" },
+  ]);
+  expect(parsePackageLock("garbage")).toBeNull();
+  expect(
+    parsePnpmLock("packages:\n  a@1.0.0:\n  a@2.0.0:\n  a@2.0.0:\nlockfileVersion: 9\n"),
+  ).toEqual([
+    { name: "a", version: "1.0.0" },
+    { name: "a", version: "2.0.0" },
+  ]);
+});
+
+test("Berry descriptors resolve through their protocol", () => {
+  expect(yarnDescriptorName("plain@npm:^4.0.0")).toBe("plain");
+  expect(yarnDescriptorName("@s/plain@npm:^4.0.0")).toBe("@s/plain");
+  expect(yarnDescriptorName("my-app@workspace:.")).toBeNull();
+  expect(yarnDescriptorName("x@file:./x")).toBeNull();
+  expect(yarnDescriptorName("foo@patch:foo@npm:1.2.3#./p.patch::locator=x")).toBe("foo");
+  expect(yarnDescriptorName("bar@virtual:abc123#npm:2.0.0")).toBe("bar");
+  expect(yarnDescriptorName("aliased@npm:real@^3.0.0")).toBe("aliased");
+  expect(yarnDescriptorName("classic@^1.2.3")).toBe("classic");
+  expect(yarnDescriptorName("@s/classic@~2.0.0")).toBe("@s/classic");
+  expect(
+    parseYarnLock(
+      // Berry writes 0.0.0-use.local here; scrub-check flags the suffix, value unused.
+      '"my-app@workspace:.":\n  version: 0.0.0\n"foo@patch:foo@npm:1.2.3#./p.patch":\n  version: 1.2.3\n"plain@npm:^4.0.0":\n  version: 4.2.0\n',
+    ),
+  ).toEqual([
+    { name: "foo", version: "1.2.3" },
+    { name: "plain", version: "4.2.0" },
+  ]);
+});
+
+test("alias lock names resolve to their manifest targets", () => {
+  expect(
+    resolveLockAliases(
+      [
+        { name: "mybar", version: "1.2.3" },
+        { name: "plain", version: "1.0.0" },
+      ],
+      new Map([["mybar", "npm:bar@^1.0.0"]]),
+    ),
+  ).toEqual([
+    { name: "bar", version: "1.2.3" },
+    { name: "plain", version: "1.0.0" },
+  ]);
+  expect(resolveLockAliases([{ name: "mybar", version: "1.2.3" }], new Map())).toEqual([
+    { name: "mybar", version: "1.2.3" },
+  ]);
+});
+
+test("v1 locks contribute their nested tarball URLs", () => {
+  withTempDir((tmp) => {
+    const lock = join(tmp, "package-lock.json");
+    writeFileSync(
+      lock,
+      JSON.stringify({
+        lockfileVersion: 1,
+        dependencies: {
+          a: {
+            version: "1.0.0",
+            resolved: "https://evil.example/a.tgz",
+            dependencies: { b: { version: "2.0.0", resolved: "https://r.example/b.tgz" } },
+          },
+        },
+      }),
+    );
+    expect(lockResolved(lock)).toEqual(["https://evil.example/a.tgz", "https://r.example/b.tgz"]);
+    expect(() => refuseForeignResolved(lock, "https://r.example")).toThrow(/outside the guarded/u);
+  });
+});
+
+test("stowaways compare aliases through targets and exempt unrangeable wants", () => {
+  const pairs = [
+    { name: "bar", version: "1.2.3" },
+    { name: "mylib", version: "1.0.0" },
+    { name: "gitdep", version: "2.0.0" },
+    { name: "plain", version: "1.0.0" },
+  ];
+  const approved = new Set(["bar@1.2.3", "mylib@1.0.0", "gitdep@2.0.0", "plain@1.0.0"]);
+  // Aliases, file: and git: wants pass when their pin is approved; a
+  // registry range still has to hold, and an unpinned want still fails.
+  expect(
+    stowaways(
+      new Map([
+        ["aliased", "npm:bar@^1.0.0"],
+        ["mylib", "file:../mylib"],
+        ["gitdep", "git+https://example.invalid/r.git"],
+        ["plain", "^1.0.0"],
+      ]),
+      pairs,
+      new Set(),
+      approved,
+    ),
+  ).toEqual([]);
+  expect(
+    stowaways(
+      new Map([
+        ["aliased", "npm:bar@^2.0.0"],
+        ["fresh", "file:../fresh"],
+      ]),
+      pairs,
+      new Set(),
+      approved,
+    ),
+  ).toEqual(["aliased", "fresh"]);
 });
 
 test("override sources merge under their own keys", () => {

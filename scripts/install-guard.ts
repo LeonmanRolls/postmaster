@@ -2770,6 +2770,23 @@ export interface Locked {
   version: string;
 }
 
+/** Collect locked pairs keeping every distinct name@version: nested
+ * duplicates install too, so first-wins would skip their checks, while
+ * exact duplicates would check twice. */
+function pairCollector(): { add: (name: string, version: string) => void; pairs: () => Locked[] } {
+  const seen = new Set<string>();
+  const out: Locked[] = [];
+  return {
+    add(name: string, version: string): void {
+      const at = `${name}@${version}`;
+      if (seen.has(at)) return;
+      seen.add(at);
+      out.push({ name, version });
+    },
+    pairs: (): Locked[] => out,
+  };
+}
+
 /** Split a name@version pair, scope-aware. */
 export function splitNameVersion(text: string): { name: string; version: string } | null {
   const at = text.lastIndexOf("@");
@@ -2791,12 +2808,15 @@ export function parsePackageLock(text: string): Locked[] | null {
     return null;
   }
   if (typeof lock !== "object" || lock === null) return null;
-  const out = new Map<string, string>();
+  const out = pairCollector();
   const l = lock as Record<string, unknown>;
   const packages = l.packages;
   if (typeof packages === "object" && packages !== null) {
     for (const [key, entry] of Object.entries(packages as Record<string, unknown>)) {
       if (key === "") continue;
+      // Workspace members are paths, not installs: only node_modules
+      // entries name locked packages.
+      if (!key.includes("node_modules/")) continue;
       if (typeof entry !== "object" || entry === null) continue;
       const version = (entry as Record<string, unknown>).version;
       if (typeof version !== "string" || version === "") continue;
@@ -2806,7 +2826,7 @@ export function parsePackageLock(text: string): Locked[] | null {
       const segs = last.split("/");
       const name = last.startsWith("@") ? segs.slice(0, 2).join("/") : (segs[0] ?? "");
       if (name === "" || (last.startsWith("@") && segs.length < 2)) continue;
-      if (!out.has(name)) out.set(name, version);
+      out.add(name, version);
     }
   }
   const deps = l.dependencies;
@@ -2814,16 +2834,16 @@ export function parsePackageLock(text: string): Locked[] | null {
     for (const [name, entry] of Object.entries(deps as Record<string, unknown>)) {
       if (typeof entry !== "object" || entry === null) continue;
       const version = (entry as Record<string, unknown>).version;
-      if (typeof version === "string" && version !== "" && !out.has(name)) out.set(name, version);
+      if (typeof version === "string" && version !== "") out.add(name, version);
     }
   }
-  return [...out].map(([name, version]) => ({ name, version }));
+  return out.pairs();
 }
 
 /** The packages: keys of a pnpm lockfile. A line parser for one section, not
  * YAML: it reads indented key lines under a top-level packages: header. */
 export function parsePnpmLock(text: string): Locked[] {
-  const out = new Map<string, string>();
+  const out = pairCollector();
   let inPackages = false;
   for (const line of text.split("\n")) {
     if (/^packages:[ \t]*(?:#.*)?$/u.test(line)) {
@@ -2839,25 +2859,52 @@ export function parsePnpmLock(text: string): Locked[] {
     if (m?.[1] === undefined) continue;
     const pair = splitNameVersion(stripPeerSuffix(m[1].trim().replace(/^['"]|['"]$/gu, "")));
     if (pair === null || pair.version === "") continue;
-    if (!out.has(pair.name)) out.set(pair.name, pair.version);
+    out.add(pair.name, pair.version);
   }
-  return [...out].map(([name, version]) => ({ name, version }));
+  return out.pairs();
 }
 
-/** One yarn.lock entry header's names: classic "a@^1, b@~2": and Berry
- * "a@npm:^1": alike. */
+/** The registry package a yarn.lock descriptor installs, or null when it
+ * installs local content. Classic ranges have no protocol and keep the
+ * split name; Berry descriptors resolve through theirs: npm: keeps the
+ * name, patch: and virtual: unwrap to the inner descriptor, and
+ * workspace:, file:, portal: and link: install from disk. */
+export function yarnDescriptorName(k: string): string | null {
+  let sep = -1;
+  for (let i = 0; i < k.length; i += 1) {
+    // A name's own @ (a scope's) is never followed by a protocol.
+    if (k[i] === "@" && /^[a-z][a-z0-9+.-]*:/u.test(k.slice(i + 1))) {
+      sep = i;
+      break;
+    }
+  }
+  if (sep < 0) return splitNameVersion(k)?.name ?? null;
+  const name = k.slice(0, sep);
+  const desc = k.slice(sep + 1);
+  if (/^(workspace|file|portal|link):/u.test(desc)) return null;
+  if (desc.startsWith("npm:")) return name === "" ? null : name;
+  let inner = "";
+  if (desc.startsWith("patch:")) inner = (desc.slice("patch:".length).split("#")[0] ?? "").trim();
+  else if (desc.startsWith("virtual:")) {
+    const hash = desc.indexOf("#");
+    inner = (hash < 0 ? "" : desc.slice(hash + 1)).trim();
+  } else {
+    return name === "" ? null : name;
+  }
+  if (inner === "") return name === "" ? null : name;
+  if (!inner.includes("@")) return name === "" ? null : name;
+  return yarnDescriptorName(inner);
+}
+
+/** One yarn.lock entry header's installable names: classic "a@^1, b@~2":
+ * and Berry "a@npm:^1": alike, with local-content descriptors dropped. */
 function yarnHeaderNames(header: string): string[] {
   const inner = header.endsWith(":") ? header.slice(0, -1) : header;
   const names: string[] = [];
   for (const key of inner.split(",")) {
     const k = key.trim().replace(/^"|"$/gu, "");
-    const npmAt = k.indexOf("@npm:");
-    if (npmAt > 0) {
-      names.push(k.slice(0, npmAt));
-      continue;
-    }
-    const pair = splitNameVersion(k);
-    if (pair !== null) names.push(pair.name);
+    const name = yarnDescriptorName(k);
+    if (name !== null) names.push(name);
   }
   return names;
 }
@@ -2865,7 +2912,7 @@ function yarnHeaderNames(header: string): string[] {
 /** The locked versions of a yarn.lock, Classic or Berry. Garbage parses to
  * no entries, which fails a drifted sync through the manager, not the guard. */
 export function parseYarnLock(text: string): Locked[] {
-  const out = new Map<string, string>();
+  const out = pairCollector();
   let names: string[] = [];
   for (const line of text.split("\n")) {
     if (line === "" || line.startsWith("#")) continue;
@@ -2876,12 +2923,12 @@ export function parseYarnLock(text: string): Locked[] {
     const m = /^ {2}version:?[ \t]+"?([^" \t]+)"?[ \t]*$/u.exec(line);
     if (m?.[1] !== undefined && names.length > 0) {
       for (const name of names) {
-        if (!out.has(name)) out.set(name, m[1]);
+        out.add(name, m[1]);
       }
       names = [];
     }
   }
-  return [...out].map(([name, version]) => ({ name, version }));
+  return out.pairs();
 }
 
 /** Parse JSON with comments and trailing commas (bun.lock's shape),
@@ -2943,14 +2990,14 @@ export function parseBunLock(text: string): Locked[] | null {
   if (typeof lock !== "object" || lock === null) return null;
   const packages = (lock as Record<string, unknown>).packages;
   if (typeof packages !== "object" || packages === null) return [];
-  const out: Locked[] = [];
+  const out = pairCollector();
   for (const entry of Object.values(packages as Record<string, unknown>)) {
     if (!Array.isArray(entry) || typeof entry[0] !== "string") continue;
     const pair = splitNameVersion(entry[0]);
     if (pair === null) continue;
-    out.push({ name: pair.name, version: pair.version });
+    out.add(pair.name, pair.version);
   }
-  return out;
+  return out.pairs();
 }
 
 /** The names package.json wants, across every dependency section. */
@@ -2961,18 +3008,37 @@ export function wantedNames(project: string): string[] {
 }
 
 /** Every manifest want as name and range, across all four sections. */
-export function manifestRanges(project: string): Map<string, string> {
+export function manifestRangesOf(manifest: Record<string, unknown>): Map<string, string> {
   const ranges = new Map<string, string>();
-  const manifest = tryJsonFile(join(project, "package.json"));
-  if (typeof manifest !== "object" || manifest === null) return ranges;
   for (const section of DEP_SECTIONS) {
-    const deps = (manifest as Record<string, unknown>)[section];
+    const deps = manifest[section];
     if (typeof deps !== "object" || deps === null) continue;
     for (const [name, range] of Object.entries(deps as Record<string, unknown>)) {
       if (typeof range === "string" && range !== "" && !ranges.has(name)) ranges.set(name, range);
     }
   }
   return ranges;
+}
+
+/** Every manifest want as name and range, across all four sections. */
+export function manifestRanges(project: string): Map<string, string> {
+  const manifest = tryJsonFile(join(project, "package.json"));
+  if (typeof manifest !== "object" || manifest === null) return new Map();
+  return manifestRangesOf(manifest as Record<string, unknown>);
+}
+
+/** Lock pairs with alias names resolved to their manifest targets: the
+ * lock installs the target under the alias, while approvals and the
+ * checked record name the target, so untranslated pairs would read as
+ * new packages on every later check. */
+export function resolveLockAliases(pairs: Locked[], ranges: Map<string, string>): Locked[] {
+  return pairs.map((p) => {
+    const range = ranges.get(p.name);
+    if (range === undefined) return p;
+    const parsed = parseSpec(`${p.name}@${range}`);
+    if (parsed?.kind === "alias") return { name: parsed.target, version: p.version };
+    return p;
+  });
 }
 
 /** The manifest range for a name, or null when the manifest does not depend
@@ -3210,12 +3276,29 @@ export function lockResolved(lockfile: string): string[] {
   }
   if (typeof lock !== "object" || lock === null) return [];
   const packages = (lock as Record<string, unknown>).packages;
-  if (typeof packages !== "object" || packages === null) return [];
-  for (const entry of Object.values(packages as Record<string, unknown>)) {
-    if (typeof entry !== "object" || entry === null) continue;
-    const resolved = (entry as Record<string, unknown>).resolved;
-    if (typeof resolved === "string" && resolved.startsWith("http")) urls.push(resolved);
+  if (typeof packages === "object" && packages !== null) {
+    for (const entry of Object.values(packages as Record<string, unknown>)) {
+      if (typeof entry !== "object" || entry === null) continue;
+      const resolved = (entry as Record<string, unknown>).resolved;
+      if (typeof resolved === "string" && resolved.startsWith("http")) urls.push(resolved);
+    }
+    return urls;
   }
+  // A v1 lock nests its entries under dependencies instead: walk them all,
+  // since npm ci fetches every resolved URL as written.
+  const deps = (lock as Record<string, unknown>).dependencies;
+  if (typeof deps !== "object" || deps === null) return urls;
+  const walk = (entries: Record<string, unknown>): void => {
+    for (const entry of Object.values(entries)) {
+      if (typeof entry !== "object" || entry === null) continue;
+      const e = entry as Record<string, unknown>;
+      if (typeof e.resolved === "string" && e.resolved.startsWith("http")) urls.push(e.resolved);
+      if (typeof e.dependencies === "object" && e.dependencies !== null) {
+        walk(e.dependencies as Record<string, unknown>);
+      }
+    }
+  };
+  walk(deps as Record<string, unknown>);
   return urls;
 }
 
@@ -3377,24 +3460,31 @@ export function unapprovedPairs(
 
 /** Manifest wants the install would resolve unchecked: every wanted name
  * outside the checked specs and closure needs a locked version the base
- * or a checked add accounts for, satisfying its range. */
+ * or a checked add accounts for, satisfying its range. Aliases compare
+ * through their target; local, remote and catalog ranges carry no
+ * registry range, so the approved pin is the check — and checked adds
+ * never add those kinds, so only base pins pass. */
 export function stowaways(
   wanted: Map<string, string>,
-  lockedVersions: Map<string, string>,
+  pairs: Locked[],
   specNames: Set<string>,
   approvedPairs: Set<string>,
 ): string[] {
   const found: string[] = [];
   for (const [name, range] of wanted) {
     if (specNames.has(name)) continue;
-    const version = lockedVersions.get(name);
-    if (
-      version === undefined ||
-      !approvedPairs.has(`${name}@${version}`) ||
-      !satisfiesRange(version, range)
-    ) {
-      found.push(name);
-    }
+    const full = parseSpec(`${name}@${range}`);
+    const ranged = parseSpec(range);
+    const effName = full !== null && full.kind === "alias" ? full.target : name;
+    const ok = pairs.some((p) => {
+      if (p.name !== effName) return false;
+      if (!approvedPairs.has(`${p.name}@${p.version}`)) return false;
+      if (full !== null && full.kind === "alias") return satisfiesRange(p.version, full.range);
+      if (ranged === null || ranged.kind === "local" || ranged.kind === "remote") return true;
+      if (range.startsWith("catalog:")) return true;
+      return satisfiesRange(p.version, range);
+    });
+    if (!ok) found.push(name);
   }
   return found.sort();
 }
@@ -3671,7 +3761,10 @@ export function readBaseState(
   if (lock !== null && !isOpaqueLock(lock)) {
     const lockText = baseFile(project, lock, head);
     if (lockText !== null) {
-      for (const p of lockedOfText(lock, lockText) ?? []) {
+      for (const p of resolveLockAliases(
+        lockedOfText(lock, lockText) ?? [],
+        manifestRangesOf(manifest),
+      )) {
         state.pairs.add(`${p.name}@${p.version}`);
       }
     }
@@ -3702,12 +3795,11 @@ export async function verifyTreeDelta(
       "install-guard: refusing to run: the lockfile fails to parse, so the guard cannot check it against the base. Repair it first",
     );
   }
-  const pairs = current ?? [];
-  const delta = unapprovedPairs(pairs, base.pairs, checked).filter((at) => {
-    const name = splitNameVersion(at)?.name;
-    return name !== undefined && !specNames.has(name);
-  });
   const ranges = manifestRanges(project);
+  const pairs = resolveLockAliases(current ?? [], ranges);
+  // Only the pairs this operation cleared skip the delta: a bare-name
+  // match would also excuse unchecked versions of the same package.
+  const delta = unapprovedPairs(pairs, base.pairs, checked).filter((at) => !specNames.has(at));
   await verifyDeltaPairs(
     deps.libs,
     deps.approvals,
@@ -3718,9 +3810,8 @@ export async function verifyTreeDelta(
     Date.now(),
   );
   if (checkStowaways) {
-    const lockedVersions = new Map(pairs.map((p) => [p.name, p.version]));
     const approved = new Set([...base.pairs, ...checked]);
-    const strays = stowaways(ranges, lockedVersions, specNames, approved);
+    const strays = stowaways(ranges, pairs, specNames, approved);
     if (strays.length > 0) {
       throw refusal(
         `install-guard: refusing to install: package.json wants ${strays.join(", ")}, which no checked add covers and the lockfile does not pin. Add each through a checked add first, or remove it`,
@@ -3953,17 +4044,30 @@ export function expandUpdateSpecs(project: string, specs: string[]): ParsedAddSp
  * version the registry does not know refuses the sync: a sync that cannot
  * see scripts cannot safely run them. */
 async function syncScriptful(ctx: GuardContext, locked: Locked[]): Promise<string[]> {
-  const found = await mapPool(locked, CONCURRENCY, async (l) => {
-    const doc = await fetchPackument(ctx, l.name);
-    const entry = doc.versions[l.version];
-    if (entry === undefined) {
-      throw refusal(
-        `install-guard: refusing to sync: the registry has no ${l.name}@${l.version} the lockfile pins`,
-      );
+  // One document per name: versions of a name share their packument, and
+  // each locked version still reads its own scripts entry.
+  const byName = new Map<string, Locked[]>();
+  for (const l of locked) {
+    const group = byName.get(l.name) ?? [];
+    group.push(l);
+    byName.set(l.name, group);
+  }
+  const found = await mapPool([...byName], CONCURRENCY, async ([name, group]) => {
+    const doc = await fetchPackument(ctx, name);
+    const scriptful: string[] = [];
+    for (const l of group) {
+      const entry = doc.versions[l.version];
+      if (entry === undefined) {
+        throw refusal(
+          `install-guard: refusing to sync: the registry has no ${l.name}@${l.version} the lockfile pins`,
+        );
+      }
+      if (entry.scripts !== undefined && Object.keys(entry.scripts).length > 0)
+        scriptful.push(l.name);
     }
-    return entry.scripts !== undefined && Object.keys(entry.scripts).length > 0 ? l.name : null;
+    return scriptful;
   });
-  return [...new Set(found.filter((f): f is string => f !== null))].sort();
+  return [...new Set(found.flat())].sort();
 }
 
 /** Commands that only read the registry still run against the pinned one;
@@ -4221,9 +4325,10 @@ async function runRun(shimDir: string, rawProg: string, argv: string[]): Promise
     // hears which cover is missing.
     let addScriptsOn = scriptful;
     if (pm === "yarn" && yarnKind === "classic" && scriptful.length > 0) {
-      const neighborPairs = (addLock === null ? [] : (lockedOf(addLock) ?? [])).filter(
-        (p) => !closure.has(p.name),
-      );
+      const neighborPairs = resolveLockAliases(
+        addLock === null ? [] : (lockedOf(addLock) ?? []),
+        manifestRanges(project),
+      ).filter((p) => !closure.has(p.name));
       const uncovered = (await syncScriptful(ctx, neighborPairs)).filter(
         (name) => !deps.approvals.allowances.has(name),
       );
@@ -4284,7 +4389,7 @@ async function runRun(shimDir: string, rawProg: string, argv: string[]): Promise
         "install-guard: refusing to sync: the lockfile fails to parse, so the guard cannot check it. Repair it first",
       );
     }
-    const pairs = locked ?? [];
+    const pairs = resolveLockAliases(locked ?? [], manifestRanges(project));
     await verifyTreeDelta(deps, dispatch, project, lock, new Set(), false);
     if (lock !== null && (pm === "npm" || (pm === "yarn" && yarnKind === "classic"))) {
       refuseForeignResolved(lock, registry);
