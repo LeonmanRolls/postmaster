@@ -1900,6 +1900,74 @@ describe("the round's three steps", () => {
       }, "review-round-fix-");
     });
 
+    test("a failing add unstages what it staged", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        const shas = [PARENT, PARENT];
+        const { calls, deps } = stand((name, args) => {
+          if (name === "git" && args.includes("rev-parse"))
+            return { code: 0, out: `${shas.shift() ?? ""}\n`, err: "" };
+          if (name === "git" && args.includes("add"))
+            return { code: 1, out: "", err: "pathspec did not match\n" };
+          return green(name, args);
+        });
+        const res = fixRound(
+          {
+            dispatch: p.dispatch,
+            synthesis: p.synthesis,
+            message: "Fix the wording",
+            findings: ["a.ts:1"],
+            paths: ["a.ts"],
+          },
+          deps,
+        );
+        expect(res.code).toBe(1);
+        expect(res.err.join("\n")).toContain("cannot stage the fix");
+        expect(one(calls, "git", (c) => c.args.includes("reset"))?.args).toEqual([
+          "-C",
+          p.synthesis,
+          "reset",
+          "-q",
+          "--mixed",
+          PARENT,
+        ]);
+      }, "review-round-fixadd-");
+    });
+
+    test("a failing commit unstages the staged paths", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        const shas = [PARENT, PARENT];
+        const { calls, deps } = stand((name, args) => {
+          if (name === "git" && args.includes("rev-parse"))
+            return { code: 0, out: `${shas.shift() ?? ""}\n`, err: "" };
+          if (name === "git" && args.includes("commit"))
+            return { code: 1, out: "", err: "pre-commit hook declined\n" };
+          return green(name, args);
+        });
+        const res = fixRound(
+          {
+            dispatch: p.dispatch,
+            synthesis: p.synthesis,
+            message: "Fix the wording",
+            findings: ["a.ts:1"],
+            paths: ["a.ts"],
+          },
+          deps,
+        );
+        expect(res.code).toBe(1);
+        expect(res.err.join("\n")).toContain("cannot commit the fix");
+        expect(one(calls, "git", (c) => c.args.includes("reset"))?.args).toEqual([
+          "-C",
+          p.synthesis,
+          "reset",
+          "-q",
+          "--mixed",
+          PARENT,
+        ]);
+      }, "review-round-fixcommit-");
+    });
+
     test("an unrecorded apply rolls the commit back to its parent", () => {
       withTempDir((root) => {
         const p = paths(root);

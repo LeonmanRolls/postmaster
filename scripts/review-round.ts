@@ -960,10 +960,22 @@ export function fixRound(a: FixArgs, deps: StepDeps): StepResult {
     return res;
   }
   const before = parent.out.trim();
+  // Unstage what a failed add or commit staged, so no leftover rides into a
+  // later plain commit with no apply row. True when the index is clean.
+  const unstage = (): boolean => {
+    const now = deps.git(["-C", a.synthesis, "rev-parse", "HEAD"]);
+    if (now.code !== 0 || now.out.trim() !== before) return false;
+    const un = deps.git(["-C", a.synthesis, "reset", "-q", "--mixed", before]);
+    passErr(res, un);
+    return un.code === 0;
+  };
   const add = deps.git(["-C", a.synthesis, "add", "--", ...a.paths]);
   if (add.code !== 0) {
     passErr(res, add);
     res.err.push("review-round: cannot stage the fix");
+    if (!unstage()) {
+      res.err.push("review-round: the staged paths are left staged; unstage them by hand");
+    }
     res.code = 1;
     return res;
   }
@@ -972,6 +984,9 @@ export function fixRound(a: FixArgs, deps: StepDeps): StepResult {
     passOut(res, commit);
     passErr(res, commit);
     res.err.push("review-round: cannot commit the fix");
+    if (!unstage()) {
+      res.err.push("review-round: the staged paths are left staged; unstage them by hand");
+    }
     res.code = 1;
     return res;
   }

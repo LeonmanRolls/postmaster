@@ -7,7 +7,7 @@
 // regressions. Covered: C1-C5, R1. Not covered: C6,
 // the fixture run from the final head, which landing dispatches and scores.
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   RUN,
@@ -819,5 +819,33 @@ describe("R1: round 1 review regressions", () => {
     const bare = tool(layout, "review-round", "wait-next", layout.dispatch, "1", layout.repo);
     expect(bare.code).toBe(0);
     expect(bare.out).toContain("FINISHED bug b");
+  });
+
+  test("a commit refused by a hook leaves the index clean and the work in the tree", () => {
+    const layout = makeLayout([{ lens: "bug", lane: "codex", harness: "codex" }]);
+    const parent = git(layout.repo, "-C", layout.synth, "rev-parse", "HEAD");
+    // Linked worktrees share the main checkout's hooks.
+    const hook = join(layout.repo, ".git", "hooks", "pre-commit");
+    writeFileSync(hook, "#!/bin/sh\nexit 1\n");
+    chmodSync(hook, 0o755);
+    writeFileSync(join(layout.synth, "README.md"), "fixed text\n");
+    const fix = tool(
+      layout,
+      "review-round",
+      "fix",
+      layout.dispatch,
+      layout.synth,
+      "--message",
+      "Fix the README wording",
+      "--findings",
+      "README.md:1",
+      "--",
+      "README.md",
+    );
+    expect(fix.code).toBe(1);
+    expect(out(fix)).toContain("cannot commit the fix");
+    expect(git(layout.repo, "-C", layout.synth, "rev-parse", "HEAD")).toBe(parent);
+    expect(git(layout.repo, "-C", layout.synth, "diff", "--cached", "--name-only")).toBe("");
+    expect(readFileSync(join(layout.synth, "README.md"), "utf8")).toBe("fixed text\n");
   });
 });
