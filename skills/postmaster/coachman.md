@@ -1164,7 +1164,7 @@ List the branch's switch-offs before anything else here: run
 --ticket <ticket-branch> --dispatch <dispatch>` before the gate below, and after any code
 change the run makes. Exit 0, the branch is clear. Exit 2, the entries wait on the user's
 word and already carry their reasons: remove what the run should not switch off, keep what
-it should, and paste the list on the card as below. Exit 3 names the entries missing their
+it should; the step-5 command carries the list onto the card. Exit 3 names the entries missing their
 reasons: give each its reason, or remove what it should not switch off and rerun the gate
 and this call. Exit 4 is the user's recorded refusal of a listed entry: remove the entry,
 never argue it into the card. Any other exit is an input fault: stop, fix the inputs and
@@ -1228,46 +1228,53 @@ together, and the card names the files the merge needed by hand.
    not stop the run.
 
 Ask the freshness question again before the card: fetch as the merge step says and call
-it again. On `CARD`, write the card with the step's `## Merge` section. On any other
+it again. On `CARD`, write the card with the step's `## Merge` section — step 5 below, whose
+`card-write` call writes the printed parts, replacing any the card already holds. On any other
 verdict, answer it as the merge step says — a merge here is followed by the gate only,
 then the step again — and write the card once the step answers `CARD` or `CARD-ANYWAY`,
 whatever main has done since.
 
-5. **Write `card.md`.** Include the run's mode as a line `Mode: <synthesis | single-thread>`
-   from `run.json` (in both modes; the waybill's `mode:` line says the same — a single-thread
-   run's card carries `Mode: single-thread`), then the branch, final HEAD, diff
-   stat and commit list; the output
-   of `<tool>/scripts/run landing card-block <dispatch> <synthesis-wt> <the leg's
-   checkpoint>` pasted verbatim as the card's `## Checks`,
-   `## Open findings`, `## Not re-reviewed` and `## Reach` sections, appearing exactly once —
-   never retyped or indented, never repeated even inside a fence — and no HTML comment
-   anywhere in the card; a card quoting `<!--`, in a commit subject or finding title,
-   escapes it, for example as `&lt;!--` (the leg's checkpoint is
-   `<dispatch>/checkpoint-review.md` after a review leg, `<dispatch>/checkpoint-1.md`
-   when this leg is synthesis); then the `## Switch-offs` section from the call above,
-   pasted after the block as its own section, never retyped, so the card shows the
-   branch's list exactly as the check printed it; then the `## Merge` section from the
-   merge step's card verdict, pasted after it as its own section, never retyped;
-   browser suite and QA when
-   present; the journey report path where a
-   check's source names `web-journey`; every ticket turnpike with its
-   rounds and result from its checkpoint record, or `none`; the Style residue
-   count as
-   `<tool>/scripts/run style-findings count <dispatch>` prints it, then every Style residue from
-   `<tool>/scripts/run style-findings list <dispatch>`; every branch created by the run and its
-   state; lane outcomes — none in single-thread mode, which has no lanes; in synthesis mode,
-   every walled lane carrying its `<tool>/scripts/run walls show
-   <dispatch>` line — `lane: DEGRADED, provider wall: "<the provider's message>"` — and the
-   review link. **Each of those is its own `##` section** — the card-block's four, then
-   `## Merge`, `## Turnpikes`, `## Style residue`, `## Branches`, `## Lane outcomes`,
+5. **Write `card.md`.** First write the coachman's own sections: the run's mode as a line
+   `Mode: <synthesis | single-thread>` from `run.json` (in both modes; the waybill's `mode:` line
+   says the same — a single-thread run's card carries `Mode: single-thread`), then the branch,
+   final HEAD, diff stat and commit list; then the `## Merge` section from the merge step's card
+   verdict, pasted after it as its own section, never retyped; browser suite and QA when
+   present; the journey report path where a check's source names `web-journey`; every ticket
+   turnpike with its rounds and result from its checkpoint record, or `none`; the Style residue
+   count as `<tool>/scripts/run style-findings count <dispatch>` prints it, then every Style
+   residue from `<tool>/scripts/run style-findings list <dispatch>`; every branch created by the
+   run and its state; lane outcomes — none in single-thread mode, which has no lanes; in synthesis
+   mode, every walled lane carrying its `<tool>/scripts/run walls show <dispatch>` line —
+   `lane: DEGRADED, provider wall: "<the provider's message>"` — and the review link; and the
+   coachman's own words about the printed parts in `## Notes`.
+   **Each of those is its own `##` section** — the card-block's four, `## Switch-offs`,
+   `## Private data findings`, `## Notes`,
+   then `## Merge`, `## Turnpikes`, `## Style residue`, `## Branches`, `## Lane outcomes`,
    `## QA and browser suite` (`none` where the project has none) and `## Review link` —
-   the same heading set in both modes. Finding titles and notes, where the reader
-   wants them, go in prose outside the pasted block, which carries only ids and severities.
-   Add `<tool>/scripts/run landing private-data-block <dispatch>` verbatim as the card's
-   `## Private data findings` block. It lists every logged finding and its resolution, and any
-   census counts by rule and by made-up or real verdict without the census paths or commits.
-   The postmaster checks it with `run landing private-data-card`; a missing finding or a dirty
-   card is withheld.
+   the same heading set in both modes. Finding titles and notes, where the reader wants them, go
+   in `## Notes`: it is the one place for the coachman's own words about the printed parts, which
+   carry only ids and severities. Never start a line with one of the printed parts' headings
+   outside the printed region, and no HTML comment anywhere in the card; a card quoting `<!--`,
+   in a commit subject or finding title, escapes it, for example as `&lt;!--`.
+   Then write the printed parts into the card with the command, after the coachman's own
+   sections are written and after any merge, gate or reach check:
+   `<tool>/scripts/run landing card-write <dispatch> <synthesis-wt> <the leg's checkpoint>
+   <dispatch>/card.md --repo <repo> --default <branch> --ticket <ticket-branch>`
+   (the leg's checkpoint is `<dispatch>/checkpoint-review.md` after a review leg,
+   `<dispatch>/checkpoint-1.md` when this leg is synthesis; `--default` and `--ticket` as the
+   switch-offs call above takes them). The command writes the `## Checks`, `## Open findings`,
+   `## Not re-reviewed` and `## Reach` block, the `## Switch-offs` section and the
+   `## Private data findings` block from the run's records after the card's intro, with `## Notes`
+   directly after them, replacing each part already there, so each appears once and matches the
+   records as they stand; everything else is left byte-identical. The private-data block lists
+   every logged finding and its resolution, and any census counts by rule and by made-up or real
+   verdict without the census paths or commits.
+   Run the command last, after any merge, gate or reach check: nothing changes the records or
+   the card between it and step 6 touching the markers. On its refusal, answer it as the
+   switch-offs call above says — reasons given, refusals removed — or remove the extra printed
+   section from the card, and run it again. The postmaster checks the card with
+   `run landing card-results`, `card-findings` and `private-data-card`; a missing finding or a
+   dirty card is withheld.
    The card's branch state is before landing: the
    ticket branch is ready, and every other branch is either retained or abandoned. The gate is
    listed as the gate, never as a turnpike.
