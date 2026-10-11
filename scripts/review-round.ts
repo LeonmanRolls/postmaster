@@ -1057,7 +1057,7 @@ if (import.meta.main) {
   }
   if (reachCheckMissing(waitsForReach, points, R)) {
     record(
-      `round ${R} took its reach snapshot and no reach check r${R} is recorded: nothing was removed. Run reach check and reach restore for r${R} (Check reach and restore before any fix), then teardown again`,
+      `round ${R} took its reach snapshot and no reach check r${R} is recorded: nothing was removed. Collect the round with review-round wait, which runs its check, then teardown again`,
       "note",
       D,
       `r${R}: teardown waits for the reach check`,
