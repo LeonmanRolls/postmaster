@@ -138,9 +138,11 @@ export function isCurrent(d: string): boolean {
 
 /**
  * The first stage the run passes through before newStage that it never
- * entered, from its `stage` lines, or null when none was skipped. Null also
- * when the run's order cannot be read — its legs, its record, or the stage it
- * sits in — so a run the command cannot reason about is never refused.
+ * entered, or null when none was skipped. Entered is the run's position —
+ * every stage up to the one the manifest sits in — with its `stage` lines,
+ * so a run that moved back and advances again is not refused. Null also when
+ * the run's order cannot be read — its legs, its record, or the stage it sits
+ * in — so a run the command cannot reason about is never refused.
  */
 export function skippedStage(
   toolDir: string,
@@ -153,7 +155,7 @@ export function skippedStage(
   if (legs.code !== 0) return null;
   const order = expectedStages(hasReviewLeg(legs.out), runMode(d));
   if (!order.includes(newStage) || !order.includes(old)) return null;
-  const entered = new Set<string>(["dispatched"]);
+  const entered = new Set<string>(order.slice(0, order.indexOf(old) + 1));
   let journal: string;
   try {
     journal = readFileSync(join(d, "actions.jsonl"), "utf8");

@@ -1,4 +1,4 @@
-// Tests beside scripts/stage.ts, moved from its --self-test on #109: 38 controls.
+// Tests beside scripts/stage.ts, moved from its --self-test on #109: 39 controls.
 // The self-test ran its controls in one shared temp run with fresh() resets; each test below
 // repeats its own setup so it passes alone as well as in file order.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
@@ -378,6 +378,15 @@ describe("skipped stages", () => {
       expect(setStage(d, s, "coachman")).toBe(0);
     }
     expect(setStage(d, "synthesis", "coachman")).toBe(0);
+  });
+
+  test("advancing again after moving back is not refused", () => {
+    withBrief("style");
+    for (const s of ["bootstrapped", "workhorses-running", "synthesis", "checkpoint-1", "review"]) {
+      expect(setStage(d, s, "coachman")).toBe(0);
+    }
+    expect(setStage(d, "synthesis", "coachman")).toBe(0);
+    expect(setStage(d, "review", "coachman")).toBe(0);
   });
 
   test("a run whose legs cannot be read is not refused", () => {
