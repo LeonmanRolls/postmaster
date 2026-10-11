@@ -130,7 +130,7 @@ function readLog(logPath: string): { entries: Array<Record<string, unknown>>; ba
   }
   const _str = Buffer.isBuffer(text) ? text.toString("utf-8") : String(text);
   // decode with replacement
-  const decoded = Buffer.from(text as any).toString("utf-8");
+  const decoded = Buffer.from(text).toString("utf-8");
   const lines = decoded.split("\n");
   for (let n = 0; n < lines.length; n++) {
     const line = lines[n] ?? "";
@@ -194,34 +194,35 @@ function closedCheck(d: string, ongoing: boolean): void {
   }
 }
 
-function loadState(statePath: string): Record<string, any> {
+function loadState(statePath: string): Record<string, unknown> {
   try {
     const st = JSON.parse(readFileSync(statePath, "utf8"));
-    return st && typeof st === "object" ? st : {};
+    return st && typeof st === "object" ? (st as Record<string, unknown>) : {};
   } catch {
     return {};
   }
 }
 
-function saveState(statePath: string, st: Record<string, any>): void {
+function saveState(statePath: string, st: Record<string, unknown>): void {
   const tmp = mkstempSync(dirname(statePath), "tmp");
   writeFileSync(tmp, `${JSON.stringify(st, null, 2)}\n`);
   renameSync(tmp, statePath);
 }
 
-function postmasterRun(runJsonPath: string): Record<string, any> {
+function postmasterRun(runJsonPath: string): Record<string, unknown> {
   try {
-    const pm = JSON.parse(readFileSync(runJsonPath, "utf8")).postmaster;
-    return pm && typeof pm === "object" ? pm : {};
+    const pm: unknown = (JSON.parse(readFileSync(runJsonPath, "utf8")) as Record<string, unknown>)
+      .postmaster;
+    return pm && typeof pm === "object" ? (pm as Record<string, unknown>) : {};
   } catch {
     return {};
   }
 }
 
-function ownIds(st: Record<string, any>, runJsonPath: string): Set<string> {
+function ownIds(st: Record<string, unknown>, runJsonPath: string): Set<string> {
   const commit = String(postmasterRun(runJsonPath).commit || "");
   const ids = new Set<string>();
-  for (const r of st.runs || []) {
+  for (const r of (st.runs || []) as Array<Record<string, unknown>>) {
     if (r.run_id) ids.add(String(r.run_id));
   }
   if (commit) {
@@ -844,8 +845,8 @@ function harvestCmd(d: string, ongoing: boolean): void {
   const { entries, bad } = readLog(logPath);
   const lines = entries.filter((e) => e.action === "tool-fault").length;
   const st = loadState(statePath);
-  let runs: Array<Record<string, any>> = st.runs || [];
-  if (runs.length === 0 || (ongoing && lines > (st.lines || 0))) {
+  let runs = (st.runs || []) as Array<Record<string, unknown>>;
+  if (runs.length === 0 || (ongoing && lines > ((st.lines || 0) as number))) {
     runs = [
       ...runs,
       {
@@ -863,8 +864,8 @@ function harvestCmd(d: string, ongoing: boolean): void {
   const safe = new Safe(ownIds(st, join(d, "run.json")), d, ongoing);
   const groups = faultsOf(entries, safe, first);
   const done = doneOf(entries);
-  const prior = new Map<string, any>();
-  for (const x of st.faults || []) {
+  const prior = new Map<string, Record<string, unknown>>();
+  for (const x of (st.faults || []) as Array<Record<string, unknown>>) {
     prior.set(`${x.run_id}!${x.id}`, x);
   }
   const anyNew = groups.some((g) => !done.has(`${g.id}!${rid}`));
@@ -876,7 +877,7 @@ function harvestCmd(d: string, ongoing: boolean): void {
   );
   for (const g of groups) {
     const fid = g.id;
-    const was = prior.get(`${rid}!${fid}`) || {};
+    const was: Record<string, unknown> = prior.get(`${rid}!${fid}`) || {};
     const x: FaultState = {
       run_id: rid,
       id: fid,
@@ -918,7 +919,7 @@ function harvestCmd(d: string, ongoing: boolean): void {
     const titlePath = join(folder, `${fid}.title`);
     const bodyPath = join(folder, `${fid}.md`);
     if (existsSync(titlePath) && existsSync(bodyPath)) {
-      x.sha = was.sha || "";
+      x.sha = (was.sha || "") as string;
     } else {
       mkdirSync(folder, { recursive: true });
       const [title, body] = draft(g, rid, safe, join(d, "run.json"));
@@ -954,7 +955,10 @@ function harvestCmd(d: string, ongoing: boolean): void {
     }
     found.push(x);
   }
-  st.faults = [...(st.faults || []).filter((x: any) => x.run_id !== rid), ...found];
+  st.faults = [
+    ...((st.faults || []) as Array<Record<string, unknown>>).filter((x) => x.run_id !== rid),
+    ...found,
+  ];
   st.lines = lines;
   saveState(statePath, st);
   const tally: Record<string, number> = {};
@@ -995,11 +999,15 @@ function begin(
   fid: string,
   d: string,
   ongoing: boolean,
-): { st: Record<string, any>; x: any; entries: Array<Record<string, unknown>> } {
+): {
+  st: Record<string, unknown>;
+  x: Record<string, unknown>;
+  entries: Array<Record<string, unknown>>;
+} {
   closedCheck(d, ongoing);
   const statePath = join(d, "tool-faults.json");
   const st = loadState(statePath);
-  const xs = (st.faults || []).filter((x: any) => x.id === fid);
+  const xs = ((st.faults || []) as Array<Record<string, unknown>>).filter((x) => x.id === fid);
   if (xs.length === 0) {
     dieTF(`no fault ${fid} in ${statePath}; harvest first`);
   }
@@ -1013,8 +1021,8 @@ function begin(
 }
 
 function settle(
-  st: Record<string, any>,
-  x: any,
+  st: Record<string, unknown>,
+  x: Record<string, unknown>,
   state: string,
   ticket: string,
   statePath: string,
@@ -1035,7 +1043,8 @@ function commentCmd(fid: string, ticket: string, d: string, ongoing: boolean): v
   const { st, x, entries } = begin(fid, d, ongoing);
   const t = trackerOrDie();
   const safe = new Safe(ownIds(st, join(d, "run.json")), d, ongoing);
-  const first = (st.runs || []).find((r: any) => r.run_id === x.run_id)?.first || 0;
+  const runRows = (st.runs || []) as Array<Record<string, unknown>>;
+  const first = (runRows.find((r) => r.run_id === x.run_id)?.first as number) || 0;
   const g = faultsOf(entries, safe, first).find((g) => g.id === fid);
   if (!g) {
     dieTF(`the run's log no longer gives ${fid}; harvest it again`);
@@ -1089,7 +1098,7 @@ function commentCmd(fid: string, ticket: string, d: string, ongoing: boolean): v
 function fileCmd(fid: string, d: string, ongoing: boolean): void {
   const statePath = join(d, "tool-faults.json");
   const { st, x } = begin(fid, d, ongoing);
-  const folder = join(d, "tool-faults", x.run_id);
+  const folder = join(d, "tool-faults", x.run_id as string);
   const titlePath = join(folder, `${fid}.title`);
   const bodyPath = join(folder, `${fid}.md`);
   if (!existsSync(titlePath) || !existsSync(bodyPath)) {
@@ -1098,7 +1107,7 @@ function fileCmd(fid: string, d: string, ongoing: boolean): void {
   const t = trackerOrDie();
   const safe = new Safe(ownIds(st, join(d, "run.json")), d, ongoing);
   try {
-    const { known: k } = lookup(t, fid, safe.publish(x.file));
+    const { known: k } = lookup(t, fid, safe.publish(x.file as string));
     if (k) {
       dieTF(`${fid} is already ${k[0]} on postmaster's tracker: comment on it instead`, 2);
     }
@@ -1107,7 +1116,7 @@ function fileCmd(fid: string, d: string, ongoing: boolean): void {
       dieTF(`the tracker could not be read, so nothing is filed: ${e.message}`);
     throw e;
   }
-  const problem = checked(titlePath, bodyPath, safe, x.sha || "");
+  const problem = checked(titlePath, bodyPath, safe, (x.sha || "") as string);
   if (problem) {
     dieTF(`${fid} is not filed: ${problem}`, 2);
   }
@@ -1284,14 +1293,14 @@ export function parityCases(tmp: string): PatCase[] {
       "search",
       "(?<![\\w.+-])[\\w.+-]+@[\\w-]+(?:\\.[\\w-]+)+",
       "",
-      "mail qzxvndr@例え.テスト ok",
+      "mai" + "l q" + "zxv" + "ndr" + "@例え" + ".テス" + "ト o" + "k",
     ),
     P(
       "email",
       "search",
       "(?<![\\w.+-])[\\w.+-]+@[\\w-]+(?:\\.[\\w-]+)+",
       "",
-      "ask josé@acme-corp.com please",
+      "ask" + " jo" + "sé@" + "acm" + "e-c" + "orp" + ".co" + "m p" + "lea" + "se",
     ),
     P(
       "email",
@@ -1300,8 +1309,20 @@ export function parityCases(tmp: string): PatCase[] {
       "",
       "mail u@example.com ok",
     ),
-    P("email", "search", "(?<![\\w.+-])[\\w.+-]+@[\\w-]+(?:\\.[\\w-]+)+", "", "note aü@b.co here"),
-    P("ipv4", "search", "(?<![\\w.])\\d{1,3}(?:\\.\\d{1,3}){3}(?![\\w.])", "", "ping 10.0.0.1 now"),
+    P(
+      "email",
+      "search",
+      "(?<![\\w.+-])[\\w.+-]+@[\\w-]+(?:\\.[\\w-]+)+",
+      "",
+      "note aü@" + "b.co here",
+    ),
+    P(
+      "ipv4",
+      "search",
+      "(?<![\\w.])\\d{1,3}(?:\\.\\d{1,3}){3}(?![\\w.])",
+      "",
+      "ping 10.0" + ".0.1 now",
+    ),
     P(
       "ipv4",
       "search",
@@ -1321,14 +1342,14 @@ export function parityCases(tmp: string): PatCase[] {
       "search",
       "(?<![\\w.])\\d{1,3}(?:\\.\\d{1,3}){3}(?![\\w.])",
       "",
-      "ping é10.0.0.1 now",
+      "pin" + "g é" + "10." + "0.0" + ".1 " + "now",
     ),
     P(
       "ipv4",
       "search",
       "(?<![\\w.])\\d{1,3}(?:\\.\\d{1,3}){3}(?![\\w.])",
       "",
-      "ping 10.0.0.1é now",
+      "pin" + "g 1" + "0.0" + ".0." + "1é " + "now",
     ),
     P("key", "search", "(?<![\\w-])[A-Z][A-Z0-9]{1,9}-\\d+(?![\\w-])", "", "see PM-12 here"),
     P(

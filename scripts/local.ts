@@ -17,6 +17,7 @@ import { dirname, join, resolve } from "node:path";
 import { argvHasUndecodableBytes, run } from "./lib/proc.ts";
 import { processState } from "./lib/processes.ts";
 import { digitValue, pyLower, pyWords } from "./lib/text.ts";
+import { thrownCode, thrownDetail } from "./lib/thrown.ts";
 
 const states = ["todo", "in-progress", "blocked", "done", "cancelled"];
 const args = process.argv.slice(2);
@@ -129,11 +130,11 @@ function readBytes(path: string, what: string): Uint8Array {
     return readFileSync(path) as Uint8Array;
   } catch (error) {
     const reason =
-      (error as any)?.code === "EACCES"
+      thrownCode(error) === "EACCES"
         ? "Permission denied"
-        : (error as any)?.code === "ENOENT"
+        : thrownCode(error) === "ENOENT"
           ? "No such file or directory"
-          : String((error as any)?.message ?? error);
+          : String(thrownDetail(error));
     die(`cannot read ${what} ${path}: ${reason}`);
   }
 }
@@ -169,10 +170,10 @@ function load(store: string, number: bigint): { meta?: Meta; why?: string } {
   try {
     raw = readFileSync(path) as Uint8Array;
   } catch (error) {
-    const code = (error as any)?.code;
+    const code = thrownCode(error);
     if (code === "ENOENT") return { why: `no ticket #${number} in ${store}` };
     return {
-      why: `cannot read ticket #${number} at ${path}: ${String((error as any)?.message ?? error)}`,
+      why: `cannot read ticket #${number} at ${path}: ${String(thrownDetail(error))}`,
     };
   }
   // Strictly decoded through the file's fatal decoder, as BASE reads it:
@@ -193,7 +194,7 @@ function load(store: string, number: bigint): { meta?: Meta; why?: string } {
     value = JSON.parse(text);
   } catch (error) {
     return {
-      why: `ticket #${number} at ${path} is not valid JSON: ${String((error as any)?.message ?? error)}`,
+      why: `ticket #${number} at ${path} is not valid JSON: ${String(thrownDetail(error))}`,
     };
   }
   if (!value || typeof value !== "object" || Array.isArray(value))
@@ -235,7 +236,7 @@ function atomicFile(path: string, bytes: Uint8Array): void {
     } catch {
       /* The failed temp may already be gone. */
     }
-    die(`cannot write ${path}: ${String((error as any)?.message ?? error)}`);
+    die(`cannot write ${path}: ${String(thrownDetail(error))}`);
   }
 }
 function writeMeta(store: string, number: bigint, meta: Meta): void {
@@ -258,9 +259,9 @@ function locked<T>(store: string, action: () => T): T {
       writeFileSync(fd, `${process.pid}\n`);
       fsyncSync(fd);
     } catch (error) {
-      if ((error as any)?.code !== "EEXIST") {
+      if (thrownCode(error) !== "EEXIST") {
         needStore(store);
-        die(`cannot lock the store ${store}: ${String((error as any)?.message ?? error)}`);
+        die(`cannot lock the store ${store}: ${String(thrownDetail(error))}`);
       }
       try {
         const contents = readFileSync(lock, "utf8").trim();
@@ -340,7 +341,7 @@ function main(args: string[]): number {
       try {
         mkdirSync(store, { recursive: true });
       } catch (error) {
-        die(`cannot make ${store}: ${String((error as any)?.message ?? error)}`);
+        die(`cannot make ${store}: ${String(thrownDetail(error))}`);
       }
       console.log(`store ${existed ? "exists" : "created"}: ${store}`);
       return 0;
@@ -364,7 +365,7 @@ function main(args: string[]): number {
       try {
         rmdirSync(store);
       } catch (error) {
-        die(`cannot remove ${store}: ${String((error as any)?.message ?? error)}`);
+        die(`cannot remove ${store}: ${String(thrownDetail(error))}`);
       }
       try {
         rmdirSync(dirname(store));

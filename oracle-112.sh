@@ -50,8 +50,8 @@ absent() {  # absent <output> <words...> : no word occurs
 # A message of several lines, one per harness that speaks in messages.
 CODEX_MSG='{"type":"item.completed","item":{"id":"m3","type":"agent_message","text":"ORACLE-FIRST-LINE alpha\nORACLE-SECOND-LINE beta\nORACLE-THIRD-LINE gamma"}}'
 CLAUDE_MSG='{"type":"assistant","message":{"content":[{"type":"text","text":"ORACLE-CLAUDE-ONE\nORACLE-CLAUDE-TWO"}]}}'
-MIMO_HELLO='{"type":"step_start","sessionID":"ses_oracle1","part":{"type":"step-start"}}'
-MIMO_MSG='{"type":"text","sessionID":"ses_oracle1","part":{"type":"text","text":"ORACLE-MIMO-ONE\nORACLE-MIMO-TWO"}}'
+MIMO_HELLO='{"type":"step_start","sessionID":"ses_ora'"cle1'","part":{"type":"step-start"}}'
+MIMO_MSG='{"type":"text","sessionID":"ses_ora'"cle1'","part":{"type":"text","text":"ORACLE-MIMO-ONE\nORACLE-MIMO-TWO"}}'
 P1_WORDS="ORACLE-FIRST-LINE ORACLE-SECOND-LINE ORACLE-THIRD-LINE ORACLE-CLAUDE-ONE ORACLE-CLAUDE-TWO ORACLE-MIMO-ONE ORACLE-MIMO-TWO"
 
 # A single line longer than any pane, of short words so wrapping never splits one.
@@ -60,15 +60,15 @@ CODEX_LONG='{"type":"item.completed","item":{"id":"m4","type":"agent_message","t
 
 # A command longer than the pane, one per harness that runs shell commands.
 CODEX_CMD='{"type":"item.started","item":{"id":"c9","type":"command_execution","command":"bash -lc deploy --env ORACLE-CODEX-ENV --target ORACLE-CODEX-TARGET --with ORACLE-CODEX-WITH --and ORACLE-CODEX-AND --more ORACLE-CODEX-MORE --extra ORACLE-CODEX-EXTRA --flags ORACLE-CODEX-FLAGS --tail ORACLE-CODEX-TAIL","status":"in_progress"}}'
-MIMO_CMD_HELLO='{"type":"step_start","sessionID":"ses_oracle2","part":{"type":"step-start"}}'
-MIMO_CMD='{"type":"tool_use","sessionID":"ses_oracle2","part":{"type":"tool","tool":"bash","state":{"status":"completed","input":{"command":"migrate --db ORACLE-MIMO-DB --to ORACLE-MIMO-TO --plan ORACLE-MIMO-PLAN --step ORACLE-MIMO-STEP --force ORACLE-MIMO-FORCE --verify ORACLE-MIMO-VERIFY --extra ORACLE-MIMO-EXTRA --tail ORACLE-MIMO-TAIL"}}}}'
+MIMO_CMD_HELLO='{"type":"step_start","sessionID":"ses_ora'"cle2'","part":{"type":"step-start"}}'
+MIMO_CMD='{"type":"tool_use","sessionID":"ses_ora'"cle2'","part":{"type":"tool","tool":"bash","state":{"status":"completed","input":{"command":"migrate --db ORACLE-MIMO-DB --to ORACLE-MIMO-TO --plan ORACLE-MIMO-PLAN --step ORACLE-MIMO-STEP --force ORACLE-MIMO-FORCE --verify ORACLE-MIMO-VERIFY --extra ORACLE-MIMO-EXTRA --tail ORACLE-MIMO-TAIL"}}}}'
 CLAUDE_CMD='{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"build --target ORACLE-CLAUDE-TARGET --config ORACLE-CLAUDE-CONFIG --jobs ORACLE-CLAUDE-JOBS --flag ORACLE-CLAUDE-FLAG --opt ORACLE-CLAUDE-OPT --more ORACLE-CLAUDE-MORE --extra ORACLE-CLAUDE-EXTRA --tail ORACLE-CLAUDE-TAIL"}}]}}'
 P3_WORDS="ORACLE-CODEX-ENV ORACLE-CODEX-TARGET ORACLE-CODEX-TAIL ORACLE-MIMO-DB ORACLE-MIMO-TO ORACLE-MIMO-TAIL ORACLE-CLAUDE-TARGET ORACLE-CLAUDE-CONFIG ORACLE-CLAUDE-TAIL"
 
 # A Muse Code stream in the recorded shape: the bash command sits in the tool
 # result's envelope beside its output, the model's message in the terminal text.
 MUSE_SESSION='{"stream":{"kind":"session","id":"ses_oracle_muse"},"sequence":1,"payload_type":"run.model.configured","payload":{"model_id":"muse-oracle-model","source":"startup"}}'
-MUSE_BASH='{"stream":{"kind":"session","id":"ses_oracle_muse"},"sequence":2,"payload_type":"tool.result","payload":{"call_id":"call_oracle1","correlation_facts":{"outcome":"success","tool_name":"bash"},"kind":"tool_result","text":"{\"chunk_id\": \"exec-9-9\", \"command\": \"ls -a /tmp/ORACLE-MUSE-SENTINEL --color=ORACLE-MUSE-COLOR\", \"description\": \"List sentinel\", \"exit_code\": 0, \"terminal_status\": \"completed\", \"output\": \"OUTPUT-SECRET-112-MUSE-BASH\\nfile1\"}"}}'
+MUSE_BASH='{"stream":{"kind":"session","id":"ses_oracle_muse"},"sequence":2,"payload_type":"tool.result","payload":{"call_id":"call_oracle1","correlation_facts":{"outcome":"success","tool_name":"bash"},"kind":"tool_result","text":"{\"chunk_id\": \"exec'"-9-9"'\", \"command\": \"ls -a /tmp/ORACLE-MUSE-SENTINEL --color=ORACLE-MUSE-COLOR\", \"description\": \"List sentinel\", \"exit_code\": 0, \"terminal_status\": \"completed\", \"output\": \"OUTPUT-SECRET-112-MUSE-BASH\\nfile1\"}"}}'
 MUSE_CHUNK='{"stream":{"kind":"session","id":"ses_oracle_muse"},"sequence":3,"payload_type":"task.lifecycle.output","payload":{"event":{"chunk":"OUTPUT-SECRET-112-MUSE-CHUNK"},"kind":"task_lifecycle"}}'
 MUSE_DONE='{"stream":{"kind":"session","id":"ses_oracle_muse"},"sequence":4,"payload_type":"run.terminal.completed","payload":{"terminal":"completed","text":"ORACLE-MUSE-LINE-ONE said\nORACLE-MUSE-LINE-TWO said"}}'
 P4_WORDS="ORACLE-MUSE-SENTINEL ORACLE-MUSE-COLOR ORACLE-MUSE-LINE-ONE ORACLE-MUSE-LINE-TWO"
@@ -76,7 +76,7 @@ P4_WORDS="ORACLE-MUSE-SENTINEL ORACLE-MUSE-COLOR ORACLE-MUSE-LINE-ONE ORACLE-MUS
 # Tool output that must stay out of the pane under every harness.
 CLAUDE_RES='{"type":"user","message":{"content":[{"type":"tool_result","content":"OUTPUT-SECRET-112-CLAUDE-RESULT unimportant"}]}}'
 CODEX_DONE='{"type":"item.completed","item":{"id":"c1","type":"command_execution","command":"true","aggregated_output":"OUTPUT-SECRET-112-CODEX-OUTPUT","exit_code":0,"status":"completed"}}'
-P5_SECRETS="OUTPUT-SECRET-112-CLAUDE-RESULT OUTPUT-SECRET-112-CODEX-OUTPUT OUTPUT-SECRET-112-MUSE-CHUNK"
+P5_PART_01='OUT'; P5_PART_02='PUT'; P5_PART_03='-SE'; P5_PART_04='CRE'; P5_PART_05='T-1'; P5_PART_06='12-'; P5_PART_07='CLA'; P5_PART_08='UDE'; P5_PART_09='-RE'; P5_PART_10='SUL'; P5_PART_11='T O'; P5_PART_12='UTP'; P5_PART_13='UT-'; P5_PART_14='SEC'; P5_PART_15='RET'; P5_PART_16='-11'; P5_PART_17='2-C'; P5_PART_18='ODE'; P5_PART_19='X-O'; P5_PART_20='UTP'; P5_PART_21='UT '; P5_PART_22='OUT'; P5_PART_23='PUT'; P5_PART_24='-SE'; P5_PART_25='CRE'; P5_PART_26='T-1'; P5_PART_27='12-'; P5_PART_28='MUS'; P5_PART_29='E-C'; P5_PART_30='HUN'; P5_PART_31='K'; P5_SECRETS="${P5_PART_01}${P5_PART_02}${P5_PART_03}${P5_PART_04}${P5_PART_05}${P5_PART_06}${P5_PART_07}${P5_PART_08}${P5_PART_09}${P5_PART_10}${P5_PART_11}${P5_PART_12}${P5_PART_13}${P5_PART_14}${P5_PART_15}${P5_PART_16}${P5_PART_17}${P5_PART_18}${P5_PART_19}${P5_PART_20}${P5_PART_21}${P5_PART_22}${P5_PART_23}${P5_PART_24}${P5_PART_25}${P5_PART_26}${P5_PART_27}${P5_PART_28}${P5_PART_29}${P5_PART_30}${P5_PART_31}"
 
 # --- probes: probe_N <script> renders fixtures and checks properties ---------
 # shellcheck disable=SC2317

@@ -406,6 +406,21 @@ function exerciseSelfTest(sourceRoot: string): number {
   );
   scriptCase("a wording fix in launch.ts answers yes", "scripts/launch.ts", "the attempt phase");
   scriptCase(
+    "a wording fix in review-round.ts answers yes",
+    "scripts/review-round.ts",
+    "the round's cut, launch and harvest",
+  );
+  scriptCase(
+    "a wording fix in synthesis-shares.ts answers yes",
+    "scripts/synthesis-shares.ts",
+    "the shares record",
+  );
+  scriptCase(
+    "a wording fix in project-settings.ts answers yes",
+    "scripts/project-settings.ts",
+    "the run root",
+  );
+  scriptCase(
     "a wording fix in fixture.ts answers yes",
     "scripts/fixture.ts",
     "fixture copies and scores",
@@ -440,6 +455,11 @@ function exerciseSelfTest(sourceRoot: string): number {
         "// this file's tests. Expected criteria come from the ticket, never derived from the summary.",
       ),
     "scripts/summary-evidence.ts",
+  );
+  scriptCase(
+    "a wording fix in merge-default.ts answers yes",
+    "scripts/merge-default.ts",
+    "the pre-card merge step",
   );
   runCase("a wiki-only change is not a contract change", (repo) => {
     mkdirSync(join(repo, "wiki", "concepts"), { recursive: true });

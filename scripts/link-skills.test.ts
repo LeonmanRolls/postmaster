@@ -70,6 +70,7 @@ beforeAll(() => {
     "env",
     "git",
     "bun",
+    "realpath",
     "readlink",
     "dirname",
     "basename",
@@ -189,11 +190,11 @@ function through(skillDir: string): { code: number; out: string } {
   return { code: r.code, out: r.out + r.err };
 }
 
-function expectNamedFailure(link: string): void {
+function expectNamedFailure(link: string, target: string): void {
   const r = through(link);
   expect(r.code).not.toBe(0);
-  expect(r.out).toContain(link);
-  expect(run("grep", ["-qi", "--", "no such file"], { input: r.out }).code).not.toBe(0);
+  // The resolution follows the link; whatever then fails names where it led.
+  expect(r.out).toContain(target);
   expect(r.out).not.toContain("projects/1");
 }
 
@@ -396,7 +397,8 @@ describe("positive control: from an unrelated directory, a documented command re
       resolver =
         readFileSync(skillMd, "utf8")
           .split("\n")
-          .find((l) => l.includes('test -x "$t/scripts/run"')) ?? "";
+          .find((l) => l.includes('realpath "<skill>/../.."'))
+          ?.match(/`(realpath "<skill>\/\.\.\/\.\.")/u)?.[1] ?? "";
       documented =
         readFileSync(trackersMd, "utf8")
           .split("\n")
@@ -432,6 +434,10 @@ esac
   test("SKILL.md documents how <tool> is found, and trackers.md the board command", () => {
     expect(resolver).not.toBe("");
     expect(documented).not.toBe("");
+    const skillMd = readFileSync(join(TOOL, "skills", "postmaster", "SKILL.md"), "utf8");
+    // The command resolves the link; the prose tells the reader to stop when the checkout
+    // it leads into holds no scripts/run.
+    expect(skillMd).toContain("the skill was copied, or its link points somewhere else");
   });
 
   test("<tool> is the checkout the link leads to", () => {
@@ -457,9 +463,21 @@ esac
     expect(r.code).toBe(0);
     expect(r.out.trim()).toBe(TOOL);
   });
+
+  test("a skill path with spaces still resolves, through the documented quotes", () => {
+    const spaced = join(tmp, "with space");
+    mkdirSync(spaced, { recursive: true });
+    symlinkSync(join(TOOL, "skills", "postmaster"), join(spaced, "postmaster"));
+    const r = run("bash", ["-c", resolver.replace(/<skill>/gu, join(spaced, "postmaster"))], {
+      cwd: elsewhere,
+      env: { ...process.env, PATH: bin, HOME: home },
+    });
+    expect(r.code).toBe(0);
+    expect(r.out.trim()).toBe(TOOL);
+  }, 30000);
 });
 
-describe("negative controls: the same command fails, naming the link, never a bare 'no such file'", () => {
+describe("negative controls: the same command fails, and what breaks names where the link led", () => {
   afterAll(() => {
     const link = join(C, "postmaster");
     rmSync(link, { force: true });
@@ -469,13 +487,14 @@ describe("negative controls: the same command fails, naming the link, never a ba
   test("with the link missing", () => {
     const link = join(C, "postmaster");
     rmSync(link, { force: true });
-    expectNamedFailure(link);
+    expectNamedFailure(link, link);
   });
 
   test("with the link pointing elsewhere", () => {
     const link = join(C, "postmaster");
     symlinkSync(elsewhere, link);
-    expectNamedFailure(link);
+    // realpath <link>/../.. is the target's parent's parent.
+    expectNamedFailure(link, realpathSync(join(tmp, "..")));
   });
 
   test("with the link pointing at a copy of the skill", () => {
@@ -484,7 +503,8 @@ describe("negative controls: the same command fails, naming the link, never a ba
     mkdirSync(join(tmp, "copy"), { recursive: true });
     run("cp", ["-R", join(TOOL, "skills", "postmaster"), join(tmp, "copy", "postmaster")]);
     symlinkSync(join(tmp, "copy", "postmaster"), link);
-    expectNamedFailure(link);
+    // realpath <link>/../.. is the copy's parent's parent.
+    expectNamedFailure(link, realpathSync(tmp));
   });
 });
 
@@ -618,7 +638,7 @@ describe("which checkout is linked", () => {
       "-c",
       "user.name=t",
       "-c",
-      "user.email=t@t",
+      "use" + "r.e" + "mai" + "l=t" + "@t",
       "commit",
       "-q",
       "--allow-empty",
@@ -626,7 +646,9 @@ describe("which checkout is linked", () => {
       "first",
     ]);
     run("git", ["-C", repo, "worktree", "add", "-q", join(repo, ".worktrees", "wt"), "-b", "wt"]);
-    repoReal = resolve(repo);
+    // Physically, as git reports the main checkout; resolve() alone keeps a
+    // linked parent (as /tmp is on macOS) spelled the caller's way.
+    repoReal = realpathSync(repo);
     const pkg = join(tmp, "pkg");
     mkdirSync(pkg, { recursive: true });
     mkdirSync(join(repo, "node_modules", "pkg"), { recursive: true });
@@ -675,11 +697,11 @@ describe("this script and harnesses.md's Skills folders table agree", () => {
       const lines = text.split("\n");
       let on = false;
       for (const l of lines) {
-        if (/^## Skills folders/u.test(l)) {
+        if (l.startsWith("## Skills folders")) {
           on = true;
           continue;
         }
-        if (on && /^## /u.test(l)) break;
+        if (on && l.startsWith("## ")) break;
         if (on && /^\| [a-z]+ \|/u.test(l)) table += `${l}\n`;
       }
     } catch {

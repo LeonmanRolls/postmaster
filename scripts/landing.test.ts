@@ -8,6 +8,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import {
   appendFileSync,
+  chmodSync,
   copyFileSync,
   mkdirSync,
   mkdtempSync,
@@ -18,10 +19,12 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { run } from "./lib/proc.ts";
-import { findingState, isFindingShaped, pyRepr } from "./landing.ts";
+import { findingState, isFindingShaped, privateDataBlock, pyRepr } from "./landing.ts";
+import { email } from "./scrub-test-kit.ts";
 
 const SELF = join(import.meta.dir, "run");
 const HERE = import.meta.dir;
+const skipNonUtf8Filename = process.platform === "darwin";
 
 delete process.env.GIT_DIR;
 delete process.env.GIT_WORK_TREE;
@@ -51,6 +54,14 @@ function git(dir: string, ...args: string[]): string {
   const r = run("git", ["-C", dir, ...args]);
   if (r.code !== 0) throw new Error(`git ${args.join(" ")} failed: ${r.err}${r.out}`);
   return strip(r.out);
+}
+
+function markedResolutions(text: string): boolean {
+  const start = text.indexOf("Run the checks on each workhorse's branch");
+  const end = text.indexOf("- **", start + 1);
+  if (start === -1 || end === -1 || end < start) return false;
+  const section = text.slice(start, end);
+  return section.includes("via: marker") && section.includes("detections-resolved.jsonl");
 }
 
 function identify(dir: string): void {
@@ -932,13 +943,25 @@ describe("anything-to-land", () => {
     git(outer, "-c", "protocol.file.allow=always", "submodule", "-q", "add", "../sub", "sub");
     identify(join(outer, "sub"));
     git(outer, "config", "-f", ".gitmodules", "submodule.sub.ignore", "all");
+    // Ship the ignore line: the bump below must commit with .gitmodules clean.
+    git(outer, "add", ".gitmodules");
     git(outer, "commit", "-qm", "addsub");
     S.sgb = sha(outer);
     git(outer, "checkout", "-qb", "ticket");
     writeFileSync(join(outer, "sub", "f"), "S2\n");
     git(join(outer, "sub"), "commit", "-qam", "s2");
+    const bumped = git(join(outer, "sub"), "rev-parse", "HEAD");
     git(outer, "add", "sub");
+    // Newer git leaves the bump unstaged: with submodule.ignore in effect,
+    // `git add` honors the ignore instead of staging the new gitlink (2.55
+    // does, 2.43 does not). The bump the test needs is the gitlink itself,
+    // so stage it directly when the add left nothing.
+    if (!git(outer, "diff", "--cached", "--name-only").split("\n").includes("sub")) {
+      git(outer, "update-index", "--cacheinfo", `160000,${bumped},sub`);
+    }
     git(outer, "commit", "-qm", "bump");
+    // The setup holds on both: the bump commit carries the new gitlink.
+    expect(git(outer, "rev-parse", "HEAD:sub")).toBe(bumped);
     check(
       [
         "anything-to-land",
@@ -1001,7 +1024,7 @@ describe("anything-to-land", () => {
     );
   });
 
-  test("AH4: a raw-byte path answers without a traceback", () => {
+  test.skipIf(skipNonUtf8Filename)("AH4: a raw-byte path answers without a traceback", () => {
     S.bp = join(tmp, "bp");
     mkrepo(S.bp);
     git(S.bp, "config", "core.quotePath", "false");
@@ -1430,6 +1453,27 @@ describe("card-results", () => {
     );
   });
 
+  test("a Switch-offs section after the block still matches", () => {
+    // A card written by a run that carries this ticket's list, and a card
+    // written before it (the faithful card above): the rendered block is the
+    // same either way, so both answer match.
+    writeFileSync(
+      join(S.d!, "card-switch.md"),
+      `${S.card!}\n## Switch-offs\n\n- comment scripts/x.ts:1 ts-ignore every rule -- ` +
+        `reason: r (id comment:0123456789abcdef)\n`,
+    );
+    check(
+      ["card-results", S.d!, S.w!, join(S.d!, "checkpoint.md"), join(S.d!, "card-switch.md")],
+      0,
+      "match",
+    );
+    check(
+      ["card-findings", S.d!, S.w!, join(S.d!, "checkpoint.md"), join(S.d!, "card-switch.md")],
+      0,
+      "match",
+    );
+  });
+
   test("a block edited in one character is an input fault", () => {
     writeFileSync(join(S.d!, "card-edited.md"), S.card!.replace("- gate: pass", "- gate: pasz"));
     check(
@@ -1549,6 +1593,201 @@ describe("card-results", () => {
       1,
       "landing: card: contains an HTML comment",
     );
+  });
+});
+
+describe("private-data-card", () => {
+  test("C13 the ship card lists removed, marked and scrubbed findings", () => {
+    const dispatch = join(tmp, "private-data-dispatch");
+    mkdirSync(dispatch, { recursive: true });
+    const items = [
+      { rule: "email", file: "notes.txt", line: 1, commit: "a".repeat(40), resolution: "removed" },
+      {
+        rule: "token",
+        file: "settings.json",
+        line: 2,
+        commit: "b".repeat(40),
+        resolution: "marked",
+      },
+      {
+        rule: "private-host",
+        file: "records.jsonl",
+        line: 3,
+        commit: "c".repeat(40),
+        resolution: "scrubbed",
+      },
+    ];
+    writeFileSync(
+      join(dispatch, "detections.jsonl"),
+      `${items.map(({ resolution: _resolution, ...item }) => JSON.stringify(item)).join("\n")}\n`,
+    );
+    writeFileSync(
+      join(dispatch, "detections-resolved.jsonl"),
+      `${items.map((item) => JSON.stringify(item)).join("\n")}\n`,
+    );
+    writeFileSync(
+      join(dispatch, "private-data-census.jsonl"),
+      [
+        JSON.stringify({
+          rule: "email",
+          file: "census-path-one",
+          line: 7,
+          commit: "d".repeat(40),
+          verdict: "made-up",
+        }),
+        JSON.stringify({
+          rule: "token",
+          file: "census-path-two",
+          line: 8,
+          commit: "e".repeat(40),
+          verdict: "real",
+        }),
+      ].join("\n") + "\n",
+    );
+    const block = privateDataBlock(dispatch);
+    expect(block).toContain("- email at notes.txt:1 (aaaaaaaaaaaa) - removed");
+    expect(block).toContain("- token at settings.json:2 (bbbbbbbbbbbb) - marked as made-up");
+    expect(block).toContain("- private-host at records.jsonl:3 (cccccccccccc) - scrubbed");
+    expect(block).toContain("- made-up: 1\n- real: 1");
+    expect(block).toContain("- 1 suspect(s): email\n- 1 suspect(s): token");
+    // Review round 1: the block must not freeze run-specific evidence. Held-out
+    // scores and port decisions go on the run's own card as prose.
+    expect(block).not.toContain("heldout");
+    expect(block).not.toContain("Port decisions");
+    const censusBlock = block.split("## Main history census\n\n")[1] ?? "";
+    expect(censusBlock).not.toContain("census-path");
+    expect(censusBlock).not.toContain("dddddddddddd");
+    const card = join(dispatch, "card.md");
+    writeFileSync(card, `# Ship card\n\n${block}\nTrailing prose.\n`);
+    check(["private-data-card", dispatch, card], 0, "match");
+
+    const missing = join(dispatch, "card-missing.md");
+    writeFileSync(
+      missing,
+      `# Ship card\n\n${block.replace("- token at settings.json:2 (bbbbbbbbbbbb) - marked as made-up\n", "")}\n`,
+    );
+    check(
+      ["private-data-card", dispatch, missing],
+      1,
+      "landing: card: private-data findings do not match the run record",
+    );
+  });
+
+  test("the block aggregates a census past the 50-suspect budget", () => {
+    // Review round 3: the generator died over 50, so an accepted census
+    // could not reach any card.
+    const dispatch = join(tmp, "private-data-big-census");
+    mkdirSync(dispatch, { recursive: true });
+    const records = [];
+    for (let i = 0; i < 51; i++) {
+      records.push(
+        JSON.stringify({
+          rule: "email",
+          file: `census-path-${i}`,
+          line: i + 1,
+          commit: `${i}`.padStart(40, "a"),
+          verdict: "made-up",
+        }),
+      );
+    }
+    writeFileSync(join(dispatch, "private-data-census.jsonl"), `${records.join("\n")}\n`);
+    const block = privateDataBlock(dispatch);
+    expect(block).toContain("- suspects: 51");
+    expect(block).toContain("- 51 suspect(s): email");
+  });
+
+  test("the block redacts values even when SCRUB_CHECK_DISABLE is set", () => {
+    // Review round 3: the block's in-process redaction honored ambient DISABLE.
+    const dispatch = join(tmp, "private-data-disable-block");
+    mkdirSync(dispatch, { recursive: true });
+    const record = { rule: "email", file: email(), line: 1, commit: "a".repeat(40) };
+    writeFileSync(join(dispatch, "detections.jsonl"), `${JSON.stringify(record)}\n`);
+    writeFileSync(
+      join(dispatch, "detections-resolved.jsonl"),
+      `${JSON.stringify({ ...record, resolution: "removed" })}\n`,
+    );
+    const saved = process.env.SCRUB_CHECK_DISABLE;
+    try {
+      process.env.SCRUB_CHECK_DISABLE = "email";
+      const r = sh(["private-data-block", dispatch]);
+      expect(r.code).toBe(0);
+      expect(r.out).toContain("[redacted]");
+      expect(r.out).not.toContain(email());
+    } finally {
+      if (saved === undefined) delete process.env.SCRUB_CHECK_DISABLE;
+      else process.env.SCRUB_CHECK_DISABLE = saved;
+    }
+  });
+
+  test("draft-only rows log but the block carries none", () => {
+    // Review round 6: drafts log marked via draft; the block skips them
+    // instead of dying for no resolution.
+    const dispatch = join(tmp, "private-data-drafts");
+    mkdirSync(dispatch, { recursive: true });
+    const record = {
+      rule: "email",
+      file: "(pr-description)",
+      line: 1,
+      commit: "",
+      via: "draft",
+    };
+    writeFileSync(join(dispatch, "detections.jsonl"), `${JSON.stringify(record)}\n`);
+    const block = privateDataBlock(dispatch);
+    expect(block).toContain("none");
+    expect(block).not.toContain("(pr-description)");
+  });
+
+  test("the block dies on a marked finding with no resolution", () => {
+    // Review round 12 (bug-67): unlike drafts, marker-suppressed rows need
+    // a resolution; the die below is what the missing procedure runs into.
+    const dispatch = join(tmp, "private-data-marked");
+    mkdirSync(dispatch, { recursive: true });
+    const record = {
+      rule: "email",
+      file: "notes.txt",
+      line: 1,
+      commit: "b".repeat(40),
+      via: "marker",
+    };
+    writeFileSync(join(dispatch, "detections.jsonl"), `${JSON.stringify(record)}\n`);
+    const r = sh(["private-data-block", dispatch]);
+    expect(r.code).toBe(1);
+    expect(r.out).toContain("has no resolution");
+  });
+
+  test("the synthesis procedure resolves marked findings the gate never reports", () => {
+    // Review round 12 (bug-67): a valid marker silences the gate but still
+    // logs the finding, so the leg-1 procedure must resolve via: marker
+    // rows even when the gate passes.
+    const doc = readFileSync(join(import.meta.dir, "../skills/postmaster/coachman.md"), "utf8");
+    expect(markedResolutions(doc)).toBe(true);
+    // Negative control: the pre-fix wording only resolves reported findings.
+    const old =
+      "- **Run the checks on each workhorse's branch** once its thread has exited. " +
+      "If the gate reports a private-data finding, fix it and append one " +
+      "`detections-resolved.jsonl` row per finding.\n- **Next step.**";
+    expect(markedResolutions(old)).toBe(false);
+  });
+
+  test("the card scan still refuses a card when SCRUB_CHECK_DISABLE hides email", () => {
+    // Review round 1: the scan inherited SCRUB_CHECK_DISABLE from the environment.
+    const dispatch = join(tmp, "private-data-disable");
+    mkdirSync(dispatch, { recursive: true });
+    const block = privateDataBlock(dispatch);
+    const card = join(dispatch, "card.md");
+    writeFileSync(card, `# Ship card\n\n${block}\nProse with ${email()} inside.\n`);
+    const saved = process.env.SCRUB_CHECK_DISABLE;
+    try {
+      process.env.SCRUB_CHECK_DISABLE = "email";
+      check(
+        ["private-data-card", dispatch, card],
+        1,
+        "landing: card: private-data scan is not clean",
+      );
+    } finally {
+      if (saved === undefined) delete process.env.SCRUB_CHECK_DISABLE;
+      else process.env.SCRUB_CHECK_DISABLE = saved;
+    }
   });
 });
 
@@ -2108,5 +2347,164 @@ describe("pure pins", () => {
     expect(pyRepr("\x00")).toBe("'\\x00'");
     expect(pyRepr("\x7f")).toBe("'\\x7f'");
     expect(pyRepr("caf\u00e9")).toBe("'caf\u00e9'");
+  });
+});
+
+describe("pull-request checks", () => {
+  const pr = "https://github.com/example/postmaster/pull/1";
+
+  function askChecks(
+    label: string,
+    remoteHead: string | null,
+    checks: unknown[],
+    checksExit = 0,
+    headAfter: string | null = null,
+    rawOut: string | null = null,
+    checksErr = "",
+    wantCode = 0,
+  ): { output: string; head: string; code: number; err: string } {
+    const repo = join(tmp, `pr-checks-${label}`);
+    mkrepo(repo);
+    commitFile(repo, "tracked.txt", "card", "card");
+    const head = sha(repo);
+    const bin = join(tmp, `pr-checks-bin-${label}`);
+    mkdirSync(bin, { recursive: true });
+    const gh = join(bin, "gh");
+    writeFileSync(
+      gh,
+      [
+        "#!/bin/sh",
+        'case "$2" in',
+        '  view) if [ -f "$GH_VIEW_MARK" ]; then printf \'{"headRefOid":"%s"}\\n\' "$GH_HEAD_AFTER"; else : > "$GH_VIEW_MARK"; printf \'{"headRefOid":"%s"}\\n\' "$GH_HEAD"; fi ;;',
+        '  checks) cat "$GH_CHECKS_FILE"; printf \'%s\' "$GH_CHECKS_ERR" >&2; exit "$GH_CHECKS_EXIT" ;;',
+        '  *) echo "unexpected gh call: $*" >&2; exit 2 ;;',
+        "esac",
+        "",
+      ].join("\n"),
+    );
+    chmodSync(gh, 0o755);
+    const checksPath = join(tmp, `pr-checks-${label}.json`);
+    writeFileSync(checksPath, rawOut ?? `${JSON.stringify(checks)}\n`);
+    const r = run(
+      join(HERE, "run"),
+      ["landing", "pull-request-checks", "--repo", repo, "--pr", pr, "--card-head", head],
+      {
+        env: {
+          ...process.env,
+          PATH: `${bin}:${process.env.PATH ?? ""}`,
+          GH_HEAD: remoteHead ?? head,
+          GH_HEAD_AFTER: headAfter ?? remoteHead ?? head,
+          GH_VIEW_MARK: join(tmp, `pr-checks-${label}.viewed`),
+          GH_CHECKS_FILE: checksPath,
+          GH_CHECKS_EXIT: String(checksExit),
+          GH_CHECKS_ERR: checksErr,
+        },
+      },
+    );
+    expect(r.code).toBe(wantCode);
+    return { output: r.out.trim(), head, code: r.code, err: r.err };
+  }
+
+  test("all checks passed on the card head", () => {
+    expect(
+      askChecks("pass", null, [
+        { name: "linux", state: "SUCCESS", bucket: "pass", link: "https://example.test/linux" },
+        { name: "macos", state: "SUCCESS", bucket: "pass", link: "https://example.test/macos" },
+      ]).output,
+    ).toBe("pass");
+  });
+
+  test("a skipped check counts as passed", () => {
+    expect(
+      askChecks("skipped", null, [
+        { name: "linux", state: "SUCCESS", bucket: "pass", link: "https://example.test/linux" },
+        { name: "docs", state: "SKIPPED", bucket: "skipping", link: "https://example.test/docs" },
+      ]).output,
+    ).toBe("pass");
+  });
+
+  test("a cancelled check fails with its name and link", () => {
+    expect(
+      askChecks("cancelled", null, [
+        {
+          name: "macos",
+          state: "CANCELLED",
+          bucket: "cancel",
+          link: "https://example.test/macos",
+        },
+      ]).output,
+    ).toBe("fail: macos (CANCELLED) https://example.test/macos");
+  });
+
+  test("a running check remains pending", () => {
+    expect(
+      askChecks(
+        "pending",
+        null,
+        [
+          {
+            name: "macos",
+            state: "IN_PROGRESS",
+            bucket: "pending",
+            link: "https://example.test/macos",
+          },
+        ],
+        8,
+      ).output,
+    ).toBe("pending: macos");
+  });
+
+  test("a failed check names its job and link", () => {
+    expect(
+      askChecks(
+        "fail",
+        null,
+        [{ name: "macos", state: "FAILURE", bucket: "fail", link: "https://example.test/macos" }],
+        1,
+      ).output,
+    ).toBe("fail: macos (FAILURE) https://example.test/macos");
+  });
+
+  test("no reported checks answers none, in gh's real shape", () => {
+    // Real gh with no checks: exit 1, empty stdout, "no checks reported ..."
+    // on stderr (gh 2.101.0) — never exit 1 with `[]` on stdout.
+    expect(
+      askChecks("none", null, [], 1, null, "", "no checks reported on the 'x' branch\n").output,
+    ).toBe("none");
+  });
+
+  test("an empty report with any other message fails closed", () => {
+    const r = askChecks(
+      "none-err",
+      null,
+      [],
+      1,
+      null,
+      "",
+      "GraphQL: Could not resolve to a PullRequest with the number of 99999.\n",
+      1,
+    );
+    expect(r.output).toBe("");
+    expect(r.err).toContain("cannot read pull request checks");
+  });
+
+  test("checks for a different head never pass", () => {
+    const result = askChecks("head", "another-head", []);
+    expect(result.output).toBe(
+      `fail: pull request head another-head does not match card ${result.head} ${pr}`,
+    );
+  });
+
+  test("checks are refused when the pull request moves while they are read", () => {
+    const result = askChecks(
+      "head-race",
+      null,
+      [{ name: "linux", state: "SUCCESS", bucket: "pass", link: "https://example.test/linux" }],
+      0,
+      "another-head",
+    );
+    expect(result.output).toBe(
+      `fail: pull request head another-head does not match card ${result.head} ${pr}`,
+    );
   });
 });

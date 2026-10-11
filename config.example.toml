@@ -6,7 +6,9 @@
 # serves under the harness; confirm each with one trial launch (scripts/run launch form <name>
 # prints the exact command). Every value below is one that scripts/run launch can run today.
 # A run keeps the config it was dispatched with, recorded in its run.json: an edit here
-# reaches the next run, never one already in flight.
+# reaches the next run, never one already in flight. A project may override any setting
+# here from its own .postmaster/settings.toml (see settings.example.toml); a settings
+# file git tracks takes effect once the user has accepted it.
 
 # Where projects live. scripts/run find-projects reads this when given no roots.
 projects_roots = ["~/Code"]
@@ -59,6 +61,12 @@ mode = "synthesis"                           # how runs dispatch: "synthesis" (t
                                               # gives each ticket of a project the mode the project's
                                               # previous run did not have. A mode the user names for a
                                               # ticket wins over this setting.
+ticket_notes = "given"                    # what the coachman and the workhorses get from the
+                                              # ticket: "given" (the default) is the whole ticket, as
+                                              # today; "held-back" holds back its technical notes and
+                                              # verified facts, so they work out the files themselves.
+                                              # Unset reads as given. The postmaster keeps the whole
+                                              # ticket and checks its premises at dispatch.
 
 # A muse coachman takes its key from an env file, as any role may:
 # coachman = { harness = "muse", model = "muse-spark-1.3-contributor", effort = "max",

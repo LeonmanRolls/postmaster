@@ -1,0 +1,26 @@
+<svg class="dg" viewBox="0 0 360 286" role="img" aria-label="What the helper does, in order: set the shell level, find env, load the role's env file, drop the flow's launch names, and become the agent with exec. The agent's environment collects the level, what the file sets, and no launch names.">
+  <rect class="bx hl-level" x="12" y="12" width="214" height="46" rx="8"/>
+  <text class="t1" x="24" y="31">1  Set the shell level</text>
+  <text class="t2 mono" x="24" y="49">SHLVL=$1</text>
+  <rect class="bx hl-findenv" x="12" y="66" width="214" height="46" rx="8"/>
+  <text class="t1" x="24" y="85">2  Find env first</text>
+  <text class="t2 mono" x="24" y="103">command -v env</text>
+  <rect class="bx hl-source" x="12" y="120" width="214" height="46" rx="8"/>
+  <text class="t1" x="24" y="139">3  Load the env file</text>
+  <text class="t2 mono" x="24" y="157">set -a; . "$f"; set +a</text>
+  <rect class="bx hl-source" x="12" y="174" width="214" height="46" rx="8"/>
+  <text class="t1" x="24" y="193">4  Drop launch names</text>
+  <text class="t2 mono" x="24" y="211">unset POSTMASTER_LAUNCH_*</text>
+  <rect class="bx hl-level" x="12" y="228" width="214" height="46" rx="8"/>
+  <text class="t1" x="24" y="247">5  Become the agent</text>
+  <text class="t2 mono" x="24" y="265">exec env SHLVL=… claude</text>
+  <rect class="bx" x="238" y="12" width="110" height="262" rx="10"/>
+  <text class="t1" x="250" y="34">The agent's</text>
+  <text class="t1" x="250" y="51">environment</text>
+  <text class="t2 mono hl-level" x="250" y="84">SHLVL=1</text>
+  <text class="t2 mono hl-source" x="250" y="110">FOO=bar</text>
+  <text class="t2 hl-source" x="250" y="130">a provider key</text>
+  <text class="t2 hl-source" x="250" y="156">no launch names</text>
+  <text class="t2 hl-findenv" x="250" y="190">env from the</text>
+  <text class="t2 hl-findenv" x="250" y="206">flow's PATH</text>
+</svg>

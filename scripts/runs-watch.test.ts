@@ -1,4 +1,4 @@
-// Tests beside scripts/runs-watch.ts, moved from its --self-test on #109: 80 controls.
+// Tests beside scripts/runs-watch.ts, moved from its --self-test on #109: 97 controls.
 // POSTMASTER_CONFIG is pointed at a 1s-poll config for the run and restored in afterAll.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { spawn } from "node:child_process";
@@ -19,8 +19,15 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { recordAcceptance } from "./lib/effective-config.ts";
 import { run } from "./lib/proc.ts";
-import { activeRunCount, pendingReadyTickets, runCapacity, streamLines } from "./runs-watch.ts";
+import {
+  activeRunCount,
+  pendingReadyTickets,
+  runCapacity,
+  streamLines,
+  watchConfig,
+} from "./runs-watch.ts";
 
 const self = join(import.meta.dir, "run");
 const savedConfig = process.env.POSTMASTER_CONFIG;
@@ -133,6 +140,7 @@ describe("positive controls: each NEXT that needs the postmaster names its run",
     ["dispatch", "review", 2, ".leg-2-done", "DISPATCH"],
     ["resume", "review", 2, ".leg-2-exited", "RESUME", "incomplete", "coachman"],
     ["read", "review", 2, ".checkpoint-review-ready", "READ"],
+    ["tell", "review", 2, ".waiting-on-user", "TELL"],
   ];
   for (const [name, stage, leg, marker, want, outcome, role] of specs) {
     test(`NEXT ${want} names ${name}`, () => {
@@ -143,6 +151,12 @@ describe("positive controls: each NEXT that needs the postmaster names its run",
         writeFileSync(
           join(root, name, "logs", `coachman-leg-${leg}-attempts.jsonl`),
           `{"outcome":"${outcome}","role":"${role}"}\n`,
+        );
+      }
+      if (want === "TELL") {
+        writeFileSync(
+          join(root, name, "detections.jsonl"),
+          `${JSON.stringify({ rule: "email", file: "notes.txt", line: 1, commit: "a".repeat(40), time: "first" })}\n`,
         );
       }
       const { rc, out } = watch(root);
@@ -501,7 +515,9 @@ describe("watcher steps: dispatch and resume controls", () => {
     expect(call).toContain("leg=review");
     expect(call).toContain("number=2");
     expect(call).toContain("thread=");
-    expect(call).toContain(`prompt=${join(root, "dispatch", "leg-2-prompt.txt")}`);
+    // Physically, as the watcher resolves the dispatch it was given (like pin
+    // above); the logical spelling differs under a linked parent.
+    expect(call).toContain(`prompt=${join(realpathSync(root), "dispatch", "leg-2-prompt.txt")}`);
     const prompt = readFileSync(join(root, "dispatch", "leg-2-prompt.txt"), "utf8");
     expect(prompt).toContain("Your review leg covers stage 2");
     expect(prompt).toContain(`${pin}/skills/postmaster/coachman.md`);
@@ -1656,4 +1672,97 @@ describe("provider walls: the watcher wakes, gates dispatch, delivers the pause"
     expect(existsSync(join(d, ".escalation-ready"))).toBe(true);
     expect(existsSync(join(d, ".wall-pause"))).toBe(true);
   });
+});
+
+describe("project poll and capacity", () => {
+  const id = ["-c", "user.name=t", "-c", "user.email=t@example.invalid"];
+  function watched(name: string, settings: string | null): { root: string; config: string } {
+    const dir = join(tmp, name);
+    const root = join(dir, ".postmaster", "runs");
+    mkdirSync(root, { recursive: true });
+    if (run("git", ["init", "-q", "-b", "main", dir]).code !== 0) {
+      throw new Error("cannot init the watched fixture");
+    }
+    if (settings !== null) {
+      writeFileSync(join(dir, ".postmaster", "settings.toml"), settings);
+    }
+    const config = join(tmp, `${name}.toml`);
+    writeFileSync(config, "[postmaster]\npoll_seconds = 120\n[team]\nmax_runs = 2\n");
+    return { root, config };
+  }
+
+  test("the project poll interval and capacity win over the global ones", () => {
+    const { root, config } = watched(
+      "wc-proj",
+      "[postmaster]\npoll_seconds = 30\n[team]\nmax_runs = 7\n",
+    );
+    const seen = watchConfig(root, config);
+    expect(seen.poll).toBe(30);
+    expect(seen.capacity).toBe(7);
+  }, 30000);
+
+  test("an invalid project poll falls back to the global one", () => {
+    const { root, config } = watched("wc-badpoll", '[postmaster]\npoll_seconds = "soon"\n');
+    expect(watchConfig(root, config).poll).toBe(120);
+  }, 30000);
+
+  test("an invalid project capacity falls back to the global one", () => {
+    const { root, config } = watched("wc-badcap", '[team]\nmax_runs = "many"\n');
+    expect(watchConfig(root, config).capacity).toBe(2);
+  }, 30000);
+
+  test("a root without settings reads the global config alone", () => {
+    const { root, config } = watched("wc-plain", null);
+    const seen = watchConfig(root, config);
+    expect(seen.poll).toBe(120);
+    expect(seen.capacity).toBe(2);
+  }, 30000);
+
+  test("a root outside any repository reads the global config alone", () => {
+    const root = join(tmp, "wc-norepo", "runs");
+    mkdirSync(root, { recursive: true });
+    const config = join(tmp, "wc-norepo.toml");
+    writeFileSync(config, "[postmaster]\npoll_seconds = 120\n[team]\nmax_runs = 2\n");
+    const seen = watchConfig(root, config);
+    expect(seen.poll).toBe(120);
+    expect(seen.capacity).toBe(2);
+  }, 30000);
+
+  test("a malformed project file falls back loudly, not silently", () => {
+    const { root, config } = watched("wc-broken", "[[[unparseable\n");
+    const errs: string[] = [];
+    const orig = console.error;
+    console.error = (...args: unknown[]) => {
+      errs.push(args.map(String).join(" "));
+    };
+    try {
+      const seen = watchConfig(root, config);
+      expect(seen.poll).toBe(120);
+      expect(seen.capacity).toBe(2);
+    } finally {
+      console.error = orig;
+    }
+    expect(errs.join("\n")).toContain("runs-watch: local project settings does not parse");
+  }, 30000);
+
+  test("a pending file reads the global values until it is accepted", () => {
+    const dir = join(tmp, "wc-pending");
+    const root = join(dir, ".postmaster", "runs");
+    mkdirSync(root, { recursive: true });
+    if (run("git", ["init", "-q", "-b", "main", dir]).code !== 0) {
+      throw new Error("cannot init the pending fixture");
+    }
+    writeFileSync(join(dir, ".postmaster", "settings.toml"), "[postmaster]\npoll_seconds = 30\n");
+    if (run("git", ["-C", dir, "add", "-f", ".postmaster/settings.toml"]).code !== 0) {
+      throw new Error("cannot add the pending fixture");
+    }
+    if (run("git", ["-C", dir, ...id, "commit", "-qm", "settings"]).code !== 0) {
+      throw new Error("cannot commit the pending fixture");
+    }
+    const config = join(tmp, "wc-pending.toml");
+    writeFileSync(config, "[postmaster]\npoll_seconds = 120\n[team]\nmax_runs = 2\n");
+    expect(watchConfig(root, config).poll).toBe(120);
+    recordAcceptance(dir, config);
+    expect(watchConfig(root, config).poll).toBe(30);
+  }, 30000);
 });

@@ -27,6 +27,7 @@ import { lstatSync, readdirSync, readFileSync, readlinkSync, statSync } from "no
 import { resolve } from "node:path";
 import { toolRoot } from "./lib/paths.ts";
 import { casefold } from "./lib/text.ts";
+import { thrownCode, thrownDetail } from "./lib/thrown.ts";
 
 function usage(): never {
   console.error("usage: run parallel-runs-acceptance [repo-root]");
@@ -168,23 +169,23 @@ function walkInto(
   let st;
   try {
     st = statSync(path);
-  } catch (e: any) {
-    if (!top && e?.code === "ENOENT") return null;
-    return `${path}: ${e?.message ?? e}`;
+  } catch (e) {
+    if (!top && thrownCode(e) === "ENOENT") return null;
+    return `${path}: ${thrownDetail(e)}`;
   }
   if (st.isDirectory()) {
     let key: string;
     try {
       key = physicalDir(path);
-    } catch (e: any) {
-      return `${path}: ${e?.message ?? e}`;
+    } catch (e) {
+      return `${path}: ${thrownDetail(e)}`;
     }
     if (ancestry.has(key)) return `${path}: file system loop detected`;
     let entries: string[];
     try {
       entries = readdirSync(path);
-    } catch (e: any) {
-      return `${path}: ${e?.message ?? e}`;
+    } catch (e) {
+      return `${path}: ${thrownDetail(e)}`;
     }
     ancestry.add(key);
     for (const entry of entries) {

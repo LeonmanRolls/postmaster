@@ -1,0 +1,22 @@
+<svg class="dg" viewBox="0 0 360 292" role="img" aria-label="The story page: chips for the opening, each criterion and what is left out; a panel that shows the ticket, a drawing or the code; and below it the step being told, outlined, which the panel follows.">
+  <defs><marker id="ah-sp" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+  <rect class="bx" x="70" y="8" width="220" height="276" rx="18"/>
+  <rect class="bx hot" x="82" y="20" width="40" height="16" rx="8"/><text class="t3" x="102" y="32" text-anchor="middle">Start</text>
+  <rect class="bx" x="126" y="20" width="26" height="16" rx="8"/><text class="t3" x="139" y="32" text-anchor="middle">C1</text>
+  <rect class="bx" x="156" y="20" width="26" height="16" rx="8"/><text class="t3" x="169" y="32" text-anchor="middle">C2</text>
+  <rect class="bx" x="186" y="20" width="26" height="16" rx="8"/><text class="t3" x="199" y="32" text-anchor="middle">C3</text>
+  <rect class="bx" x="216" y="20" width="26" height="16" rx="8"/><text class="t3" x="229" y="32" text-anchor="middle">…</text>
+  <rect class="bx" x="82" y="44" width="196" height="104" rx="8"/>
+  <text class="t1" x="180" y="88" text-anchor="middle">The panel</text>
+  <text class="t2" x="180" y="106" text-anchor="middle">the ticket, a drawing</text>
+  <text class="t2" x="180" y="122" text-anchor="middle">or the code</text>
+  <rect class="bx hot" x="82" y="176" width="196" height="64" rx="8"/>
+  <text class="t3" x="94" y="194">Step 7 of 36</text>
+  <text class="t1" x="94" y="213">The step being told</text>
+  <text class="t2" x="94" y="230">outlined, a few sentences</text>
+  <line class="ln" x1="180" y1="174" x2="180" y2="152" marker-end="url(#ah-sp)"/>
+  <text class="t3" x="188" y="166">the panel follows it</text>
+  <text class="t2" x="94" y="262">the next step, faded</text>
+  <text class="t3" x="296" y="28">one chip</text>
+  <text class="t3" x="296" y="42">per section</text>
+</svg>

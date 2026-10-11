@@ -1,0 +1,36 @@
+<svg class="dg" viewBox="0 0 360 330" role="img" aria-label="The booking clerk prepares a ticket, or you ask any session. The story and its drawings are written, and Codex draws the opening picture. The builder reads them with the code at the ticket's base and the ticket's text, checks them, and writes one page, published as a link beside the draft.">
+  <defs><marker id="ah-pl3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+  <rect class="bx hot" x="16" y="10" width="200" height="40" rx="8"/>
+  <text class="t1" x="28" y="35">The clerk prepares a ticket</text>
+  <text class="t3" x="226" y="27">or you ask</text>
+  <text class="t3" x="226" y="41">any session</text>
+  <line class="ln" x1="116" y1="50" x2="116" y2="70" marker-end="url(#ah-pl3)"/>
+  <rect class="bx" x="16" y="72" width="200" height="46" rx="8"/>
+  <text class="t1" x="28" y="92">It writes the story</text>
+  <text class="t2" x="28" y="109">and the drawings</text>
+  <path class="ln" d="M216,95 H236" marker-end="url(#ah-pl3)"/>
+  <rect class="bx hot" x="238" y="72" width="108" height="46" rx="8"/>
+  <text class="t1" x="250" y="92">Codex</text>
+  <text class="t2" x="250" y="109">the picture</text>
+  <line class="ln" x1="116" y1="118" x2="116" y2="148" marker-end="url(#ah-pl3)"/>
+  <path class="ln" d="M292,118 V134 H124 V146" marker-end="url(#ah-pl3)"/>
+  <rect class="bx hot" x="16" y="150" width="200" height="46" rx="8"/>
+  <text class="t1" x="28" y="170">The builder</text>
+  <text class="t2" x="28" y="187">checks what the story names</text>
+  <rect class="bx" x="244" y="154" width="102" height="40" rx="8"/>
+  <text class="t2" x="256" y="170">code at the</text>
+  <text class="t2" x="256" y="185">ticket's base</text>
+  <rect class="bx" x="244" y="204" width="102" height="40" rx="8"/>
+  <text class="t2" x="256" y="220">the ticket's</text>
+  <text class="t2" x="256" y="235">text</text>
+  <path class="ln" d="M244,174 H218" marker-end="url(#ah-pl3)"/>
+  <path class="ln" d="M244,224 H230 V182 H218" marker-end="url(#ah-pl3)"/>
+  <line class="ln" x1="116" y1="196" x2="116" y2="228" marker-end="url(#ah-pl3)"/>
+  <text class="t3" x="124" y="216">writes</text>
+  <rect class="bx" x="16" y="230" width="200" height="34" rx="8"/>
+  <text class="t1" x="28" y="252">One page, data inside</text>
+  <line class="ln" x1="116" y1="264" x2="116" y2="286" marker-end="url(#ah-pl3)"/>
+  <text class="t3" x="124" y="280">published</text>
+  <rect class="bx ok" x="16" y="288" width="200" height="34" rx="8"/>
+  <text class="t1 ok" x="28" y="310">A link, beside the draft</text>
+</svg>

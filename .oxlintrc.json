@@ -4,7 +4,13 @@
   "rules": {
     "no-control-regex": "off",
     "no-unused-expressions": "off",
-    "postmaster/test-beside-target": "error"
+    "postmaster/test-beside-target": "error",
+    "typescript/no-explicit-any": "error"
   },
-  "ignorePatterns": ["fixtures/**"]
+  "ignorePatterns": [
+    "fixtures/**",
+    "scripts/scrub-check.ts",
+    "scripts/raw-promote.ts",
+    "scripts/lib/vendor/**"
+  ]
 }

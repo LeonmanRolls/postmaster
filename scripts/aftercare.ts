@@ -1,8 +1,9 @@
 // Take a landed run to done in one command, in place of the postmaster's hand steps: save
 // what is left in each of the run's working folders, close and remove them, stop the preview,
-// close the run's windows, write the closing words and the ticket's closing comment, mark the
-// run done and release its pinned tool. It runs from the live checkout of the tool, never the
-// run's pin, and logs every action it takes as it happens.
+// stop a fixture copy's root launches, close the run's windows, write the closing words and
+// the ticket's closing comment, mark the run done and release its pinned tool. It runs from
+// the live checkout of the tool, never the run's pin, and logs every action it takes as it
+// happens.
 //
 //   <tool>/scripts/run aftercare <dispatch>
 //        [--dry-run] [--json] [--comment <text>] [--run-log <text>]
@@ -17,8 +18,8 @@
 //   exit 1  a fault in the call: bad arguments, a run this command does not serve, records
 //           that cannot be read, a log line that cannot be written, a save that cannot be made
 //   exit 2  not ready, nothing changed
-//   exit 3  stopped partway: a folder left in place, the run's windows would not close, a
-//           closing step that failed
+//   exit 3  stopped partway: a folder left in place, the copy's launches or the run's
+//           windows would not stop and close, a closing step that failed
 //
 // The summary is plain lines by default; with --json, stdout holds one object with `run`,
 // `dry_run`, `outcome`, `steps`, `folders` and `next`. Whatever stops it, the command prints a
@@ -40,6 +41,7 @@ import { spawnSync } from "node:child_process";
 import { basename, dirname, join, resolve, sep } from "node:path";
 import {
   dispatchInfo,
+  isFixtureRepo,
   launchRecord,
   liveLaunchNames,
   processes,
@@ -950,7 +952,9 @@ function stopPreview(dispatch: string, dryRun: boolean, synthesis: string): Prev
   if (!existsSync(pidfile)) return { status: "none", detail: "", path: null, next: "" };
   const raw = (() => {
     try {
-      return readFileSync(pidfile, "utf8").trim();
+      // The pid is the first line; later lines carry the start, boot and command
+      // identity, which the registry verification below checks in its own way.
+      return (readFileSync(pidfile, "utf8").trim().split("\n")[0] ?? "").trim();
     } catch {
       return "";
     }
@@ -1504,6 +1508,39 @@ function mainFlow(args: Args): Result {
       pendingWindows();
       pendingClosing(0);
       return finish(3, steps, folders, stops);
+    }
+
+    // A fixture copy exists for its one run: stop the copy's root launches, such
+    // as its watcher, before the close below takes their tabs. The stop runs
+    // from beside the copy, since run host stop refuses from inside it.
+    if (isFixtureRepo(set.repo)) {
+      if (dryRun) {
+        steps.push({
+          name: "stop-run",
+          status: "would",
+          detail: "would stop the copy's launches at its root",
+        });
+      } else {
+        const stopped = run(beside(import.meta, "run"), ["host", "stop-run", dispatch], {
+          cwd: dirname(set.repo),
+        });
+        if (stopped.code !== 0) {
+          steps.push({ name: "stop-run", status: "failed", detail: tail(stopped) });
+          pendingWindows();
+          pendingClosing(0);
+          stops.push({
+            step: "stop-run",
+            reason: `the copy's launches would not stop: ${tail(stopped)}`,
+            next: `stop the run's launches (run host stop-run ${dispatch} reports why), then run again`,
+          });
+          return finish(3, steps, folders, stops);
+        }
+        steps.push({
+          name: "stop-run",
+          status: "done",
+          detail: "the copy's launches at its root stopped",
+        });
+      }
     }
 
     // The run's spaces and windows, once every folder is gone.

@@ -144,9 +144,9 @@ function projectDefaults(): string[] | null {
     console.error(r.err.trim() || "turnpikes: cannot read project settings");
     process.exit(1);
   }
-  let profile: Record<string, any>;
+  let profile: { project?: { default_turnpikes?: string[] | null } | null };
   try {
-    profile = JSON.parse(r.out);
+    profile = JSON.parse(r.out) as typeof profile;
   } catch (e) {
     console.error(
       `turnpikes: project settings gave no JSON: ${e instanceof Error ? e.message : String(e)}`,

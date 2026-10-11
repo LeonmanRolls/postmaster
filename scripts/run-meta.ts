@@ -2,11 +2,12 @@
 // postmaster commit it was dispatched from. Written once and never edited: the manifest is the
 // run's current state, this is what the run started from and the checkout it runs on.
 //
-//   run run-meta <dispatch> <repo> [--mode <synthesis|single-thread>]
+//   run run-meta <dispatch> <repo> [--mode <synthesis|single-thread>] [--ticket-notes <given|held-back>]
 //                                    <repo> is the target project's checkout; also cuts the pin
 //   run run-meta pin <repo> <commit> a shared checkout of <repo> at <commit> under $POSTMASTER_TOOL_PINS
 //   run run-meta path <dispatch>     print the canonical path of the run's tool checkout
 //   run run-meta mode <dispatch>     print the run's mode, its source and the setting at dispatch
+//   run run-meta ticket-notes <dispatch>  print the run's ticket notes, its source and the setting
 //   run run-meta check <dispatch>    the run's checkout still serves its dispatch commit
 //   run run-meta release <dispatch>  remove the pin when no claimed run is in flight
 //   run run-meta efforts <dispatch>  print the waybill's efforts line from run.json
@@ -21,6 +22,13 @@
 // the waybill's Team section `mode:` line with the record: both present and different fails
 // naming both, one side missing fails naming the side that has one, and a run with neither
 // is accepted.
+//
+// The run's ticket notes resolve at dispatch: the user's --ticket-notes first, then the
+// machine config's team.ticket_notes (given, the default; or held-back). The record keeps
+// the value, its source (user or setting) and the setting's value at dispatch as top-level
+// keys beside the mode; a config without team.ticket_notes reads as given. `ticket-notes`
+// prints the three. A record from before the user could name a value prints its config's
+// value with unrecorded sources.
 //
 // Records when it was written; the run and project; the target repo's HEAD and branch; the
 // postmaster commit that dispatched it, and whether that checkout had uncommitted changes,
@@ -92,9 +100,19 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
-import { tryJsonFile, tryTomlFile } from "./lib/data.ts";
+import { tryJsonFile } from "./lib/data.ts";
+import {
+  absolutizeProjectEnvFiles,
+  acceptanceStorePath,
+  effectiveConfigForProject,
+  globalConfigPath,
+  inspect,
+  isDie,
+  sortedJson,
+} from "./lib/effective-config.ts";
 import { runPinned } from "./lib/pinned.ts";
 import { toolRoot } from "./lib/paths.ts";
+import { TICKET_NOTES_VALUES, resolveTicketNotes } from "./lib/ticket-notes.ts";
 import { mkstempSync, run, signalExitCode } from "./lib/proc.ts";
 import { processState } from "./lib/processes.ts";
 import { pySplitLines, pyTrim } from "./lib/text.ts";
@@ -103,7 +121,7 @@ const TOOL = toolRoot(import.meta);
 const SCRIPT = import.meta.path;
 
 const USAGE =
-  "usage: run run-meta <dispatch> <repo> [--mode <synthesis|single-thread>] | pin <repo> <commit> | path <dispatch> | mode <dispatch> | run-pinned <dispatch> <name> [args...] | check <dispatch> | release <dispatch> | efforts <dispatch>";
+  "usage: run run-meta <dispatch> <repo> [--mode <synthesis|single-thread>] [--ticket-notes <given|held-back>] | pin <repo> <commit> | path <dispatch> | mode <dispatch> | run-pinned <dispatch> <name> [args...] | check <dispatch> | release <dispatch> | efforts <dispatch>";
 
 // Every command returns its exit code with the bytes for each stream; the CLI boundary writes
 // them, and the tests inspect them. stdout carries results (the pin path, the checkout,
@@ -342,8 +360,9 @@ export const RUN_MODES = ["synthesis", "single-thread"];
 
 // previousRunMode <dispatch>: the mode of the project's latest run under the run root (the
 // dispatch's parent), by the `written` time in its run.json, whatever its stage. A latest run
-// that records no mode is a synthesis run; null when the project has no run yet. Ties break
-// by file time, then directory name, so the answer never depends on directory order.
+// that records no mode is a synthesis run; null when the project has no run yet. Setup
+// records are not runs and are skipped. Ties break by file time, then directory name,
+// so the answer never depends on directory order.
 function previousRunMode(dispatch: string): string | null {
   const root = dirname(dispatch);
   let names: string[];
@@ -359,6 +378,7 @@ function previousRunMode(dispatch: string): string | null {
     const path = join(candidate, "run.json");
     const record = tryJsonFile<Record<string, unknown>>(path);
     if (!record) continue;
+    if (record.kind === "setup-verifiers") continue;
     let mtime = 0;
     try {
       mtime = statSync(path).mtimeMs;
@@ -905,6 +925,67 @@ export function mode(d: string): Outcome {
   return ok(`mode: ${m}\nmode source: ${source}\nmode setting: ${setting}\n`);
 }
 
+// ticket-notes <dispatch>: the run's ticket notes, its source and the setting's value at
+// dispatch, from the record's top-level keys. A record with none is a run from before the
+// user could name a value, so its config's value prints with unrecorded sources.
+export function ticketNotesVerb(d: string): Outcome {
+  const runJson = join(d, "run.json");
+  if (!isFile(runJson)) return fail(`run-meta: no run.json in ${d}\n`);
+  let rec: unknown;
+  try {
+    rec = JSON.parse(readFileSync(runJson, "utf8")) as unknown;
+  } catch {
+    return fail(`run-meta: ${runJson} cannot be read\n`);
+  }
+  if (typeof rec !== "object" || rec === null || Array.isArray(rec)) {
+    return fail(`run-meta: ${runJson} is not an object\n`);
+  }
+  const r = rec as Record<string, unknown>;
+  const top = r.ticket_notes;
+  if (top !== undefined) {
+    if (top !== "given" && top !== "held-back") {
+      const shown = typeof top === "string" ? top : JSON.stringify(top);
+      return fail(`run-meta: ${runJson} records ticket_notes ${shown}, not given or held-back\n`);
+    }
+    const source =
+      typeof r.ticket_notes_source === "string" && r.ticket_notes_source !== ""
+        ? r.ticket_notes_source
+        : "unrecorded";
+    const setting =
+      typeof r.ticket_notes_setting === "string" && r.ticket_notes_setting !== ""
+        ? r.ticket_notes_setting
+        : "unrecorded";
+    return ok(
+      `ticket-notes: ${top}\nticket-notes source: ${source}\nticket-notes setting: ${setting}\n`,
+    );
+  }
+  const config = r.config;
+  const team =
+    typeof config === "object" && config !== null && !Array.isArray(config)
+      ? (config as Record<string, unknown>).team
+      : undefined;
+  const recorded =
+    typeof team === "object" && team !== null && !Array.isArray(team)
+      ? (team as Record<string, unknown>).ticket_notes
+      : undefined;
+  if (
+    typeof recorded === "string" &&
+    recorded !== "" &&
+    recorded !== "given" &&
+    recorded !== "held-back"
+  ) {
+    return fail(
+      `run-meta: ${runJson} records team.ticket_notes ${recorded}, not given or held-back\n`,
+    );
+  }
+  const v = recorded === "held-back" ? "held-back" : "given";
+  const source = typeof recorded === "string" && recorded !== "" ? "setting" : "unrecorded";
+  const setting = typeof recorded === "string" && recorded !== "" ? recorded : "unrecorded";
+  return ok(
+    `ticket-notes: ${v}\nticket-notes source: ${source}\nticket-notes setting: ${setting}\n`,
+  );
+}
+
 // check_mode <dispatch>: the waybill's Team section `mode:` line and the record's mode agree.
 // A mismatch fails naming both; a run that names neither is accepted, so a dispatch from
 // before the mode existed still passes. One side missing fails too: a missing line reads as
@@ -963,22 +1044,11 @@ export function teamModeLine(brief: string): string {
 }
 
 type Built =
-  | { ok: true; record: Record<string, unknown>; warnings: string[] }
-  | { ok: false; messages: string[] };
+  | { ok: true; record: Record<string, unknown>; warnings: string[]; notice: string | null }
+  | { ok: false; messages: string[]; notice: string | null };
 
-function parseSettingsJson(text: string, what: string): { value: unknown } | { error: string } {
-  try {
-    return { value: JSON.parse(text) as unknown };
-  } catch (e) {
-    // main reports the Python JSON error; V8's text is the documented approximation.
-    return { error: `${what} gave no JSON: ${(e as Error).message}` };
-  }
-}
-
-// The python heredoc: resolve the effective config and project settings, then build the
-// record. Expected failures report their message; unexpected throws fail bare, the way an
-// uncaught exception (including a bad TOML load, whose value main never uses) fails the
-// heredoc with only the traceback main prints and this port does not.
+// Resolve the effective config and project settings, then build the record. Expected
+// failures report their message; unexpected throws fail bare.
 function buildRecord(
   d: string,
   resolvedRepo: string,
@@ -986,27 +1056,45 @@ function buildRecord(
   checkout: string,
   pinnedCommit: string,
   requestedMode: string | undefined,
+  requestedNotes: string | undefined,
 ): Built {
-  if (tryTomlFile(config) === null) return { ok: false, messages: [] };
-  const settingsScript = join(TOOL, "scripts", "run");
-  const inspected = run(settingsScript, ["project-settings", "inspect", resolvedRepo]);
-  if (inspected.code !== 0) {
-    return { ok: false, messages: [pyTrim(inspected.err) || "project settings could not be read"] };
-  }
-  const settings = parseSettingsJson(inspected.out, "project settings");
-  if ("error" in settings) return { ok: false, messages: [settings.error] };
-  const effective = run(settingsScript, ["project-settings", "effective", resolvedRepo, config]);
-  if (effective.code !== 0) {
+  const resolved = effectiveConfigForProject(resolvedRepo, config);
+  if (resolved.config === null || resolved.error !== null) {
     return {
       ok: false,
-      messages: [pyTrim(effective.err) || "effective machine config could not be resolved"],
+      messages: [`run-meta: ${resolved.error ?? "effective config could not be resolved"}`],
+      notice: resolved.notice,
     };
   }
-  const cfg = parseSettingsJson(effective.out, "effective machine config");
-  if ("error" in cfg) return { ok: false, messages: [cfg.error] };
-  const resolvedConfig = cfg.value as Record<string, unknown>;
+  let settings: unknown;
+  try {
+    settings = JSON.parse(
+      sortedJson(inspect(resolvedRepo, { storePath: acceptanceStorePath(config) })),
+    ) as unknown;
+  } catch (e) {
+    if (isDie(e)) {
+      return { ok: false, messages: [`run-meta: ${e.message}`], notice: resolved.notice };
+    }
+    throw e;
+  }
+  // Sorted back through JSON so run.json keeps the key order the printed
+  // project-settings output always had.
+  const resolvedConfig = JSON.parse(sortedJson(resolved.config)) as Record<string, unknown>;
+  // The record carries the project base in its values: project-set relative
+  // env paths resolve against the project root here, so --run launches
+  // agree with --project ones.
+  if (resolved.projectFile !== null) {
+    absolutizeProjectEnvFiles(
+      resolvedConfig,
+      resolved.local,
+      dirname(dirname(resolved.projectFile)),
+    );
+  }
   const mode = resolveRunMode(resolvedConfig, d, requestedMode);
-  if ("error" in mode) return { ok: false, messages: [mode.error] };
+  if ("error" in mode) return { ok: false, messages: [mode.error], notice: resolved.notice };
+  const notes = resolveTicketNotes(resolvedConfig, requestedNotes);
+  if ("error" in notes)
+    return { ok: false, messages: [`run-meta: ${notes.error}`], notice: resolved.notice };
   const warnings = existsSync(join(resolvedRepo, ".postmaster", "fixture"))
     ? fixtureEfforts(resolvedConfig)
     : [];
@@ -1017,12 +1105,13 @@ function buildRecord(
   return {
     ok: true,
     warnings,
+    notice: resolved.notice,
     record: {
       written: utcStamp(new Date()),
       coachman_contract: 2,
       project: projectName(d),
       run: basename(realpathSync(d)),
-      project_settings: settings.value,
+      project_settings: settings,
       target: {
         head: git(resolvedRepo, "rev-parse", "HEAD"),
         branch: git(resolvedRepo, "symbolic-ref", "--short", "-q", "HEAD"),
@@ -1037,23 +1126,37 @@ function buildRecord(
       mode: mode.mode,
       mode_source: mode.source,
       mode_setting: mode.setting,
+      ticket_notes: notes.value,
+      ticket_notes_source: notes.source,
+      ticket_notes_setting: notes.setting,
       harness_versions: harnessVersions,
     },
   };
 }
 
 function readConfig(): string {
-  return process.env.POSTMASTER_CONFIG ?? join(homedir(), ".postmaster/config.toml");
+  return globalConfigPath();
 }
 
 function readTools(): string {
   return process.env.POSTMASTER_TOOL_PINS ?? join(homedir(), ".postmaster/tool-pins");
 }
 
-// meta <dispatch> <repo> [--mode <mode>]
-export function meta(d: string, repo: string, requestedMode?: string): Outcome {
+// meta <dispatch> <repo> [--mode <mode>] [--ticket-notes <notes>]
+export function meta(
+  d: string,
+  repo: string,
+  requestedMode?: string,
+  requestedNotes?: string,
+): Outcome {
   if (requestedMode !== undefined && !RUN_MODES.includes(requestedMode)) {
     return fail(`run-meta: --mode must be synthesis or single-thread, not ${requestedMode}\n`);
+  }
+  if (
+    requestedNotes !== undefined &&
+    !(TICKET_NOTES_VALUES as readonly string[]).includes(requestedNotes)
+  ) {
+    return fail(`run-meta: --ticket-notes must be given or held-back, not ${requestedNotes}\n`);
   }
   const config = readConfig();
   const tools = readTools();
@@ -1061,7 +1164,6 @@ export function meta(d: string, repo: string, requestedMode?: string): Outcome {
   if (git(repo, "rev-parse", "--git-dir") === null) {
     return fail(`run-meta: not a git repo: ${repo}\n`);
   }
-  if (!isFile(config)) return fail(`run-meta: no config at ${config}\n`);
   const resolvedRepo = canon(repo);
   if (resolvedRepo === null) return fail(`run-meta: cannot resolve project ${repo}\n`);
   const runJson = join(d, "run.json");
@@ -1091,12 +1193,12 @@ export function meta(d: string, repo: string, requestedMode?: string): Outcome {
     }
     let built: Built;
     try {
-      built = buildRecord(d, resolvedRepo, config, checkout, commit, requestedMode);
+      built = buildRecord(d, resolvedRepo, config, checkout, commit, requestedMode, requestedNotes);
     } catch {
-      built = { ok: false, messages: [] };
+      built = { ok: false, messages: [], notice: null };
     }
     if (!built.ok) {
-      let err = "";
+      let err = built.notice !== null ? `${built.notice}\n` : "";
       for (const m of built.messages) err += `${m}\n`;
       err += `run-meta: could not write ${d}/run.json\n`;
       err += unclaim(tools, commit, dc).err;
@@ -1120,10 +1222,11 @@ export function meta(d: string, repo: string, requestedMode?: string): Outcome {
       return { code: 1, out: "", err };
     }
     const commit12 = (commit === "" ? "?" : commit).slice(0, 12);
+    const warnings = built.warnings.map((warning) => `${warning}\n`).join("");
     return {
       code: 0,
-      out: `run-meta: wrote ${runJson} (postmaster ${commit12}, pinned at ${checkout}, mode=${String(built.record.mode)}, mode_source=${String(built.record.mode_source)}, mode_setting=${String(built.record.mode_setting)})\n`,
-      err: built.warnings.map((warning) => `${warning}\n`).join(""),
+      out: `run-meta: wrote ${runJson} (postmaster ${commit12}, pinned at ${checkout}, mode=${String(built.record.mode)}, mode_source=${String(built.record.mode_source)}, mode_setting=${String(built.record.mode_setting)}, ticket_notes=${String(built.record.ticket_notes)}, ticket_notes_source=${String(built.record.ticket_notes_source)}, ticket_notes_setting=${String(built.record.ticket_notes_setting)})\n`,
+      err: built.notice !== null ? `${built.notice}\n${warnings}` : warnings,
     };
   });
   if (!held.locked) return fail(`run-meta: could not lock ${tools}\n`);
@@ -1275,12 +1378,23 @@ if (import.meta.main) {
   }
   {
     const cmd = argv[0];
-    const verbs = ["pin", "path", "mode", "check", "release", "efforts", "run-pinned"];
+    const verbs = [
+      "pin",
+      "path",
+      "mode",
+      "ticket-notes",
+      "check",
+      "release",
+      "efforts",
+      "run-pinned",
+    ];
     let outcome: Outcome;
     if (cmd === "pin" && argv.length === 3)
       outcome = pin(argv[1] as string, argv[2] as string, readTools());
     else if (cmd === "path" && argv.length === 2) outcome = pathOf(argv[1] as string);
     else if (cmd === "mode" && argv.length === 2) outcome = mode(argv[1] as string);
+    else if (cmd === "ticket-notes" && argv.length === 2)
+      outcome = ticketNotesVerb(argv[1] as string);
     else if (cmd === "check" && argv.length === 2) {
       const pinCheck = checkPinAndConfinement(argv[1] as string);
       outcome = pinCheck.code !== 0 ? pinCheck : checkMode(argv[1] as string);
@@ -1296,10 +1410,21 @@ if (import.meta.main) {
     else if (
       cmd !== undefined &&
       !verbs.includes(cmd) &&
-      (argv.length === 2 || argv.length === 4)
+      (argv.length === 2 || argv.length === 4 || argv.length === 6)
     ) {
-      if (argv.length === 4 && argv[2] !== "--mode") usage();
-      outcome = meta(argv[0] as string, argv[1] as string, argv[3]);
+      let requestedMode: string | undefined;
+      let requestedNotes: string | undefined;
+      const rest = argv.slice(2);
+      let bad = rest.length % 2 !== 0;
+      for (let i = 0; !bad && i < rest.length; i += 2) {
+        const flag = rest[i];
+        const value = rest[i + 1];
+        if (flag === "--mode" && requestedMode === undefined) requestedMode = value;
+        else if (flag === "--ticket-notes" && requestedNotes === undefined) requestedNotes = value;
+        else bad = true;
+      }
+      if (bad) usage();
+      outcome = meta(argv[0] as string, argv[1] as string, requestedMode, requestedNotes);
     } else usage();
     if (outcome.out !== "") process.stdout.write(outcome.out);
     if (outcome.err !== "") process.stderr.write(outcome.err);

@@ -304,6 +304,33 @@ describe("CLI and API behavior", () => {
     expect(r.err.includes("does not match the machine workspace")).toBe(true);
   });
 
+  test("a project workspace mismatch names the project file, not the global one", () => {
+    const bd = join(root, "binding-project");
+    mkdirSync(join(bd, "proj", ".postmaster"), { recursive: true });
+    const cfg = join(bd, "config.toml");
+    writeFileSync(cfg, '[tracker]\nkind = "plane"\nurl = "http://127.0.0.1:9"\n');
+    writeFileSync(
+      join(bd, "proj", ".postmaster", "project.toml"),
+      '[tracker]\nbinding = "bound-ws"\n',
+    );
+    const settings = join(bd, "proj", ".postmaster", "settings.toml");
+    writeFileSync(settings, '[tracker]\nworkspace = "other-ws"\n');
+    const r = cli(
+      ["read"],
+      {
+        ...process.env,
+        POSTMASTER_CONFIG: cfg,
+        PLANE_API_KEY: "self-test",
+        POSTMASTER_PROJECT: join(bd, "proj"),
+      },
+      bd,
+    );
+    expect(r.code).toBe(1);
+    expect(r.err.includes("does not match the machine workspace")).toBe(true);
+    expect(r.err.includes(settings)).toBe(true);
+    expect(r.err.includes(cfg)).toBe(false);
+  }, 30000);
+
   test("a matching binding reaches usage, with no request", () => {
     const bd = join(root, "binding-good");
     mkdirSync(join(bd, "proj", ".postmaster"), { recursive: true });
@@ -342,6 +369,52 @@ describe("CLI and API behavior", () => {
     expect(r.err.includes("usage:")).toBe(true);
     expect(r.err.includes("does not match")).toBe(false);
   });
+
+  test("a relative tracker env_file the project's settings set is read from the project root", () => {
+    const bd = join(root, "envfile-project");
+    const proj = join(bd, "proj");
+    mkdirSync(join(proj, ".postmaster"), { recursive: true });
+    const cfg = join(bd, "config.toml");
+    writeFileSync(cfg, '[tracker]\nkind = "plane"\nurl = "http://127.0.0.1:9"\nworkspace = "ws"\n');
+    writeFileSync(
+      join(proj, ".postmaster", "settings.toml"),
+      '[tracker]\nenv_file = "plane.env"\n',
+    );
+    writeFileSync(join(proj, "plane.env"), "PLANE_API_KEY=project-key\n");
+    const env: Record<string, string | undefined> = {
+      ...process.env,
+      POSTMASTER_CONFIG: cfg,
+      POSTMASTER_PROJECT: proj,
+    };
+    delete env.PLANE_API_KEY;
+    const r = cli(["read"], env, bd);
+    expect(r.code).toBe(1);
+    expect(r.err.includes("usage:")).toBe(true);
+    expect(r.err.includes("no PLANE_API_KEY")).toBe(false);
+  }, 30000);
+
+  test("a project-set tracker env_file is not read from beside the global config", () => {
+    const bd = join(root, "envfile-global");
+    const proj = join(bd, "proj");
+    mkdirSync(join(proj, ".postmaster"), { recursive: true });
+    const cfg = join(bd, "config.toml");
+    writeFileSync(cfg, '[tracker]\nkind = "plane"\nurl = "http://127.0.0.1:9"\nworkspace = "ws"\n');
+    writeFileSync(
+      join(proj, ".postmaster", "settings.toml"),
+      '[tracker]\nenv_file = "only-global.env"\n',
+    );
+    writeFileSync(join(bd, "only-global.env"), "PLANE_API_KEY=global-key\n");
+    const env: Record<string, string | undefined> = {
+      ...process.env,
+      POSTMASTER_CONFIG: cfg,
+      POSTMASTER_PROJECT: proj,
+    };
+    delete env.PLANE_API_KEY;
+    const r = cli(["read"], env, bd);
+    expect(r.code).toBe(1);
+    expect(r.err.includes("no PLANE_API_KEY")).toBe(true);
+    expect(r.err.includes(join(proj, "only-global.env"))).toBe(true);
+  }, 30000);
 
   test("no arguments prints BASE's usage line without reading any config", () => {
     const env: Record<string, string | undefined> = {

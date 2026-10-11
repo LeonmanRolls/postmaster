@@ -1,0 +1,23 @@
+<svg class="dg" viewBox="0 0 360 176" role="img" aria-label="A plain exec lowers the shell level by one, so the agent would see 0 instead of 1. Running the agent through env with the level set hands back the level the file left.">
+  <defs><marker id="ah-sh" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+  <rect class="bx" x="16" y="16" width="120" height="58" rx="8"/>
+  <text class="t1" x="28" y="38">The helper</text>
+  <text class="t2 mono" x="28" y="58">SHLVL=1</text>
+  <line class="ln" x1="136" y1="45" x2="222" y2="45" marker-end="url(#ah-sh)"/>
+  <text class="t3" x="179" y="37" text-anchor="middle">exec</text>
+  <rect class="bx bad on-plain" x="224" y="16" width="120" height="58" rx="8"/>
+  <rect class="bx ok on-env" x="224" y="16" width="120" height="58" rx="8"/>
+  <text class="t1" x="236" y="38">Agent sees</text>
+  <text class="t1 mono bad on-plain" x="236" y="60">SHLVL=0</text>
+  <text class="t1 mono ok on-env" x="236" y="60">SHLVL=1</text>
+  <g class="on-plain">
+    <text class="t2 mono" x="16" y="108">exec "$@"</text>
+    <text class="t2" x="16" y="128">bash lowers the level by one first:</text>
+    <text class="t2" x="16" y="146">1 becomes 0, a level it never had</text>
+  </g>
+  <g class="on-env">
+    <text class="t2 mono" x="16" y="108">exec env "SHLVL=$SHLVL" "$@"</text>
+    <text class="t2" x="16" y="128">env hands back the level the file left:</text>
+    <text class="t2" x="16" y="146">1 stays 1, and a file that sets 9 keeps 9</text>
+  </g>
+</svg>

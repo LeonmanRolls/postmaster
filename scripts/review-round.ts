@@ -1,17 +1,29 @@
 // A review round's bookkeeping: its time limit, collecting it, recording and stopping the
 // reviewers that do not finish in time, and tearing its scratches down with nothing of the
-// round still running in them.
+// round still running in them. The round itself is three calls: cut prepares the snapshot
+// and the scratches, launch runs the reviewers and waits for them, harvest normalizes the
+// bug reports.
 //
 //   run review-round start    <dispatch> <round>
+//   run review-round cut      <dispatch> <round> <repo> <synthesis-wt>
+//   run review-round launch   <dispatch> <round> <repo> <synthesis-wt>
+//   run review-round harvest  <dispatch> <round> <repo>
 //   run review-round wait     <dispatch> <round> <repo> [<lens>:<lane>...]
 //   run review-round teardown <dispatch> <round> <repo> [<lens>:<lane>...]
 //
-//   exit 0  wait: every marker is in · start and teardown: done
-//   exit 3  wait: the deadline passed; each reviewer with no marker is recorded and stopped
+//   exit 0  wait: every marker is in · start and teardown: done · cut and harvest: done ·
+//           launch: the wait's own exit when every reviewer reported
+//   exit 3  wait: the deadline passed; each reviewer with no marker is recorded and stopped;
+//           launch: the wait's exit 3, as wait itself records it
 //   exit 4  wait: the deadline passed, but a record could not be written
 //   exit 1  usage; the round was not started, or the machine restarted or the round was started
 //           again since the wait began; a marker no reviewer of the round lands; teardown: a
-//           scratch left in place
+//           scratch left in place; cut: run verify exited other than 0 or 3, the run's legs or
+//           a lens's lanes did not resolve, or a left-behind scratch did not tear down;
+//           launch: the same resolution failures, a prompt that could not be written, a scratch
+//           that was not ready, or the round did not start; the round's own teardown, naming
+//           no reviewers, comes before the reach check of a round that took its reach snapshot
+//           (nothing is removed)
 import {
   existsSync,
   mkdirSync,
@@ -26,13 +38,15 @@ import { scriptsDir } from "./lib/paths.ts";
 import { mkstempSync, run } from "./lib/proc.ts";
 import { bootId, sameBoot } from "./lib/processes.ts";
 import { PY_S_CLASS } from "./lib/text.ts";
+import { reachActions } from "./reach.ts";
 import { wallFor } from "./walls.ts";
 
 const HERE = scriptsDir(import.meta);
 const DEFAULT_LIMIT = 2400;
 const MAX_LIMIT = 86400;
 const USAGE =
-  "usage: run review-round start <dispatch> <round> | wait|teardown <dispatch> <round> <repo> [<lens>:<lane>...]";
+  "usage: run review-round start <dispatch> <round> | cut|launch <dispatch> <round> <repo> <synthesis-wt>" +
+  " | harvest <dispatch> <round> <repo> | wait|teardown <dispatch> <round> <repo> [<lens>:<lane>...]";
 
 function die(msg: string): never {
   console.error(`review-round: ${msg}`);
@@ -46,6 +60,18 @@ export function monotonic(): number {
   } catch {
     return Date.now() / 1000;
   }
+}
+
+/**
+ * Whether teardown must still wait for the round's reach check: it is the round's own teardown,
+ * the round took its reach snapshot, and no point named for the round is recorded.
+ */
+export function reachCheckMissing(
+  waitsForReach: boolean,
+  points: readonly string[],
+  round: string,
+): boolean {
+  return waitsForReach && !points.includes(`r${round}`);
 }
 
 interface RoundState {
@@ -223,14 +249,487 @@ function unswitch(s: string, ticket: string): string {
   return "";
 }
 
+// --- the round's three steps: cut, launch, harvest ---------------------------------------------
+// The runbook's review round is these three calls. Each does what its shell block did: the
+// records, the files, the output and the stops. The scripts they run (and git) arrive as
+// StepDeps, so a test can stand in for each and record its arguments.
+
+export interface StepChild {
+  code: number;
+  out: string;
+  err: string;
+}
+
+export interface StepDeps {
+  tool: (name: string, args: string[]) => StepChild;
+  git: (args: string[]) => StepChild;
+}
+
+export interface StepArgs {
+  dispatch: string;
+  round: string;
+  repo: string;
+  synthesis: string;
+}
+
+export interface StepResult {
+  code: number;
+  out: string[];
+  err: string[];
+}
+
+function lineList(s: string): string[] {
+  if (s === "") return [];
+  const t = s.endsWith("\n") ? s.slice(0, -1) : s;
+  return t === "" ? [] : t.split("\n");
+}
+
+function passErr(res: StepResult, child: StepChild): void {
+  res.err.push(...lineList(child.err));
+}
+
+function passOut(res: StepResult, child: StepChild): void {
+  res.out.push(...lineList(child.out));
+}
+
+/** A run-log or log-action line: its stderr shows, and a failure says what was not recorded. */
+function recordStep(
+  res: StepResult,
+  deps: StepDeps,
+  name: "run-log" | "log-action",
+  args: string[],
+): void {
+  const r = deps.tool(name, args);
+  passErr(res, r);
+  if (r.code !== 0) {
+    const what =
+      name === "run-log"
+        ? `run-log.md: ${args[1] ?? ""}`
+        : `actions.jsonl: ${args.slice(2).join(" ")}`;
+    res.out.push(`NOT RECORDED in ${what}`);
+  }
+}
+
+/** manifest.json's base: the sha the round reviews from. */
+function manifestBase(dispatch: string): string {
+  try {
+    const m = JSON.parse(readFileSync(join(dispatch, "manifest.json"), "utf8")) as Record<
+      string,
+      unknown
+    >;
+    if (typeof m.base === "string") return m.base;
+  } catch {
+    // a missing or unreadable manifest gives no base; the caller stops
+  }
+  return "";
+}
+
+/** The checks-file lines run verify marks `not run` and the lines that reason with them. */
+function notRunLines(text: string): string[] {
+  const out: string[] = [];
+  let cont = false;
+  for (const line of text.split("\n")) {
+    if (line.includes(": not run, ")) {
+      out.push(line);
+      cont = true;
+    } else if (cont && line.startsWith("  ")) {
+      out.push(line);
+    } else {
+      cont = false;
+    }
+  }
+  return out;
+}
+
+/**
+ * The open lenses of this round, each with its lanes: the review leg's turnpikes, style
+ * dropped from round 2 on. A turnpikes, waybill or lens that does not resolve stops the
+ * step with res.code 1 and null.
+ */
+function resolveLenses(
+  a: StepArgs,
+  deps: StepDeps,
+  res: StepResult,
+): Array<[string, string[]]> | null {
+  const legs = deps.tool("turnpikes", ["legs", a.dispatch]);
+  if (legs.code !== 0) {
+    passErr(res, legs);
+    res.err.push("review-round: the run's legs cannot be read");
+    res.code = 1;
+    return null;
+  }
+  const review = lineList(legs.out)
+    .map((l) => l.split(/[ \t]+/u))
+    .find((fields) => fields[1] === "review");
+  if (!review) {
+    res.err.push("review-round: the run lists no review leg");
+    res.code = 1;
+    return null;
+  }
+  const names = review.slice(2).filter((n) => a.round === "1" || n !== "style");
+  const pairs: Array<[string, string[]]> = [];
+  for (const lens of names) {
+    const r = deps.tool("reviewers", ["lanes", join(a.dispatch, "brief.md"), lens]);
+    if (r.code !== 0) {
+      passErr(res, r);
+      res.code = 1;
+      return null;
+    }
+    pairs.push([lens, lineList(r.out).filter((x) => x.trim() !== "")]);
+  }
+  return pairs;
+}
+
+function snapshotOf(a: StepArgs, deps: StepDeps, res: StepResult): string {
+  const g = deps.git(["-C", a.synthesis, "rev-parse", "HEAD"]);
+  if (g.code !== 0) {
+    passErr(res, g);
+    res.err.push(`review-round: no snapshot at ${a.synthesis}`);
+    res.code = 1;
+    return "";
+  }
+  return g.out.trim();
+}
+
+function scratchPath(repo: string, ticket: string, lens: string, lane: string): string {
+  return join(repo, ".worktrees", `${ticket}-rev-${lens}-${lane}`);
+}
+
+/** cut: verify the snapshot, log the gate, prune, resolve the lenses, cut every scratch. */
+export function cutRound(a: StepArgs, deps: StepDeps): StepResult {
+  const res: StepResult = { code: 0, out: [], err: [] };
+  const snap = snapshotOf(a, deps, res);
+  if (res.code !== 0) return res;
+  const base = manifestBase(a.dispatch);
+  if (base === "") {
+    res.err.push("review-round: manifest.json gives no base");
+    res.code = 1;
+    return res;
+  }
+  const checks = join(a.dispatch, "logs", `review-r${a.round}-checks.txt`);
+  try {
+    // The shell's redirection opens the file before the command runs.
+    writeFileSync(checks, "");
+  } catch (e) {
+    res.err.push(
+      `review-round: ${checks} cannot be written (${e instanceof Error ? e.message : String(e)})`,
+    );
+    res.code = 1;
+    return res;
+  }
+  const v = deps.tool("verify", ["run", a.synthesis, a.dispatch]);
+  const verifyCode = v.code;
+  const verifyOut = v.out;
+  passErr(res, v);
+  let wroteChecks = true;
+  try {
+    writeFileSync(checks, verifyOut);
+  } catch (e) {
+    res.err.push(
+      `review-round: ${checks} cannot be written (${e instanceof Error ? e.message : String(e)})`,
+    );
+    wroteChecks = false;
+  }
+  res.out.push(...lineList(verifyOut));
+  recordStep(res, deps, "log-action", [
+    a.dispatch,
+    "coachman",
+    "gate",
+    snap,
+    `review round ${a.round}, run verify exit ${verifyCode}`,
+  ]);
+  if (!wroteChecks || (verifyCode !== 0 && verifyCode !== 3)) {
+    res.code = 1;
+    return res;
+  }
+  if (verifyCode === 3) {
+    for (const line of notRunLines(verifyOut)) {
+      recordStep(res, deps, "run-log", [
+        a.dispatch,
+        `review round ${a.round} gate not run: ${line}`,
+      ]);
+    }
+  }
+  const prune = deps.git(["-C", a.repo, "worktree", "prune"]);
+  passErr(res, prune);
+  const lenses = resolveLenses(a, deps, res);
+  if (lenses === null) return res;
+  const ticket = basename(a.dispatch);
+  for (const [lens, lanes] of lenses) {
+    for (const lane of lanes) {
+      const dest = scratchPath(a.repo, ticket, lens, lane);
+      if (existsSync(dest)) {
+        const diff = deps.git(["-C", dest, "diff", "--name-only", snap]);
+        for (const file of lineList(diff.out)) {
+          if (file.trim() !== "") res.out.push(`LEFT BEHIND AND MODIFIED, ${dest}: ${file}`);
+        }
+        const t = deps.tool("review-round", [
+          "teardown",
+          a.dispatch,
+          a.round,
+          a.repo,
+          `${lens}:${lane}`,
+        ]);
+        passOut(res, t);
+        passErr(res, t);
+        if (t.code !== 0) {
+          res.code = 1;
+          return res;
+        }
+      }
+      const cut = deps.tool("cut-scratch", [a.repo, a.synthesis, dest, snap, "--clone", base]);
+      passOut(res, cut);
+      passErr(res, cut);
+      if (cut.code !== 0) {
+        res.out.push(
+          `SCRATCH BROKEN: ${dest} is not cut at ${snap}; fix before launching ${lane} under ${lens}`,
+        );
+      }
+    }
+  }
+  return res;
+}
+
+/** launch: prompt files, ready scratches, the round's start, every reviewer, then the wait. */
+export function launchRound(a: StepArgs, deps: StepDeps): StepResult {
+  const res: StepResult = { code: 0, out: [], err: [] };
+  const snap = snapshotOf(a, deps, res);
+  if (res.code !== 0) return res;
+  const base = manifestBase(a.dispatch);
+  if (base === "") {
+    res.err.push("review-round: manifest.json gives no base");
+    res.code = 1;
+    return res;
+  }
+  const lenses = resolveLenses(a, deps, res);
+  if (lenses === null) return res;
+  const ticket = basename(a.dispatch);
+  const lensPrompt = (lens: string): string =>
+    join(a.dispatch, `review-r${a.round}-${lens}-prompt.txt`);
+  for (const [lens, lanes] of lenses) {
+    if (lens !== "bug") {
+      try {
+        writeFileSync(
+          lensPrompt(lens),
+          `Read ${a.dispatch}/review-${lens}-brief.md and execute it. Report findings as your final message. Do not modify any file you are reviewing.\n`,
+        );
+      } catch (e) {
+        res.err.push(
+          `review-round: ${lensPrompt(lens)} cannot be written (${e instanceof Error ? e.message : String(e)})`,
+        );
+        res.code = 1;
+        return res;
+      }
+    }
+    if (lens === "security") {
+      for (const lane of lanes) {
+        const skill = deps.tool("launch", ["skill", lane, "security-review", "--run", a.dispatch]);
+        const lanePrompt = join(a.dispatch, `review-r${a.round}-security-${lane}-prompt.txt`);
+        if (skill.code === 0) {
+          try {
+            writeFileSync(lanePrompt, skill.out);
+          } catch (e) {
+            res.err.push(
+              `review-round: ${lanePrompt} cannot be written (${e instanceof Error ? e.message : String(e)})`,
+            );
+            res.code = 1;
+            return res;
+          }
+        } else if (skill.code === 3) {
+          try {
+            writeFileSync(lanePrompt, readFileSync(lensPrompt(lens)));
+          } catch (e) {
+            res.err.push(
+              `review-round: ${lanePrompt} cannot be written (${e instanceof Error ? e.message : String(e)})`,
+            );
+            res.code = 1;
+            return res;
+          }
+        } else {
+          passErr(res, skill);
+          res.out.push(`NO SECURITY PROMPT FOR ${lane}; nothing launched`);
+          res.code = 1;
+          return res;
+        }
+      }
+    }
+  }
+  for (const [lens, lanes] of lenses) {
+    for (const lane of lanes) {
+      const dest = scratchPath(a.repo, ticket, lens, lane);
+      const check = deps.tool("cut-scratch", ["--check", dest, snap, "--clone", base]);
+      if (check.code !== 0) {
+        passOut(res, check);
+        passErr(res, check);
+        res.out.push(`SCRATCH NOT READY: ${ticket}-rev-${lens}-${lane}; nothing launched`);
+        res.code = 1;
+        return res;
+      }
+    }
+  }
+  const start = deps.tool("review-round", ["start", a.dispatch, a.round]);
+  passOut(res, start);
+  passErr(res, start);
+  if (start.code !== 0) {
+    res.code = 1;
+    return res;
+  }
+  const entry = join(HERE, "run");
+  const pairs: string[] = [];
+  for (const [lens, lanes] of lenses) {
+    for (const lane of lanes) {
+      const dest = scratchPath(a.repo, ticket, lens, lane);
+      const named = deps.tool("host", ["name", a.dispatch, "review", lane, lens, a.round]);
+      if (named.code !== 0) {
+        passErr(res, named);
+        res.err.push(`review-round: no name for ${lens} ${lane}`);
+        res.code = 1;
+        return res;
+      }
+      const name = named.out.trim();
+      const prompt =
+        lens === "security"
+          ? join(a.dispatch, `review-r${a.round}-security-${lane}-prompt.txt`)
+          : lensPrompt(lens);
+      const launch =
+        lens === "bug"
+          ? [
+              entry,
+              "launch",
+              "review",
+              lane,
+              dest,
+              base,
+              "--last",
+              join(a.dispatch, "logs", `review-r${a.round}-bug-${lane}-last.md`),
+              "--run",
+              a.dispatch,
+            ]
+          : [entry, "launch", "launch", lane, dest, prompt, "--run", a.dispatch];
+      const started = deps.tool("host", [
+        "run",
+        name,
+        dest,
+        "--under",
+        a.dispatch,
+        "--role",
+        "reviewer",
+        "--run",
+        a.dispatch,
+        "--out",
+        join(a.dispatch, "logs", `review-r${a.round}-${lens}-${lane}.jsonl`),
+        "--err",
+        join(a.dispatch, "logs", `review-r${a.round}-${lens}-${lane}.err`),
+        "--marker",
+        join(a.dispatch, "logs", `review-r${a.round}-${lens}-${lane}.done`),
+        "--",
+        ...launch,
+      ]);
+      passOut(res, started);
+      passErr(res, started);
+      recordStep(res, deps, "log-action", [
+        a.dispatch,
+        "coachman",
+        "review-launch",
+        lane,
+        `${lens} round ${a.round}`,
+      ]);
+      pairs.push(`${lens}:${lane}`);
+    }
+  }
+  const wait = deps.tool("review-round", ["wait", a.dispatch, a.round, a.repo, ...pairs]);
+  passOut(res, wait);
+  passErr(res, wait);
+  res.code = wait.code;
+  return res;
+}
+
+/** harvest: each bug lane's report, degrading on a harvest that fails and reading a report the normalizer cannot. */
+export function harvestRound(
+  a: { dispatch: string; round: string; repo: string },
+  deps: StepDeps,
+): StepResult {
+  const res: StepResult = { code: 0, out: [], err: [] };
+  const logs = join(a.dispatch, "logs");
+  const lanesCall = deps.tool("reviewers", ["lanes", join(a.dispatch, "brief.md"), "bug"]);
+  let lanes: string[] = [];
+  if (lanesCall.code === 0) {
+    lanes = lineList(lanesCall.out).filter((x) => x.trim() !== "");
+  } else {
+    // The shell showed the refusal and looped over nothing.
+    passErr(res, lanesCall);
+  }
+  const ticket = basename(a.dispatch);
+  const normalizeFailed: string[] = [];
+  for (const lane of lanes) {
+    const dest = scratchPath(a.repo, ticket, "bug", lane);
+    const events = join(logs, `review-r${a.round}-bug-${lane}.jsonl`);
+    const prefix = `review-r${a.round}-bug-${lane}`;
+    const harvest = deps.tool("review-findings", ["harvest", events, logs, "--prefix", prefix]);
+    if (harvest.code !== 0) {
+      const msg = `${harvest.out}${harvest.err}`.replace(/\n+$/u, "");
+      recordStep(res, deps, "log-action", [
+        a.dispatch,
+        "coachman",
+        "degrade",
+        lane,
+        `bug round ${a.round}: ${msg}`,
+      ]);
+      recordStep(res, deps, "run-log", [a.dispatch, `${lane} bug: DEGRADED, ${msg}`]);
+      continue;
+    }
+    const findings = join(logs, `${prefix}-findings.json`);
+    const last = join(logs, `${prefix}-last.md`);
+    const normalize = deps.tool("review-findings", [
+      "normalize",
+      lane,
+      dest,
+      events,
+      "--last",
+      last,
+      "--run",
+      a.dispatch,
+    ]);
+    passErr(res, normalize);
+    if (normalize.code !== 0) {
+      rmSync(findings, { force: true });
+      normalizeFailed.push(lane);
+      continue;
+    }
+    try {
+      writeFileSync(findings, normalize.out);
+    } catch {
+      rmSync(findings, { force: true });
+      normalizeFailed.push(lane);
+    }
+  }
+  for (const lane of normalizeFailed) {
+    recordStep(res, deps, "run-log", [
+      a.dispatch,
+      `review round ${a.round} ${lane}: normalize failed; reading the raw report by hand`,
+    ]);
+  }
+  return res;
+}
+
 // --- entry ------------------------------------------------------------------------------
 if (import.meta.main) {
   const argv = process.argv.slice(2);
 
   const cmd = argv[0];
-  if (cmd !== "start" && cmd !== "wait" && cmd !== "teardown") die(USAGE);
+  if (
+    cmd !== "start" &&
+    cmd !== "wait" &&
+    cmd !== "teardown" &&
+    cmd !== "cut" &&
+    cmd !== "launch" &&
+    cmd !== "harvest"
+  )
+    die(USAGE);
   if (cmd === "start" && argv.length !== 3) die(USAGE);
   if ((cmd === "wait" || cmd === "teardown") && argv.length < 4) die(USAGE);
+  if ((cmd === "cut" || cmd === "launch") && argv.length !== 5) die(USAGE);
+  if (cmd === "harvest" && argv.length !== 4) die(USAGE);
   const dRaw = argv[1] ?? "";
   const dR = run("bash", ["-c", `cd "$1" 2>/dev/null && pwd -P`, "_", dRaw]);
   const D = dR.code === 0 ? dR.out.trim() : die(`no such dispatch directory: ${dRaw}`);
@@ -270,6 +769,29 @@ if (import.meta.main) {
   const reviewerArgs = argv.slice(4);
   const CALLER = run("bash", ["-c", "pwd -P"]).out.trim();
   process.chdir("/");
+
+  if (cmd === "cut" || cmd === "launch" || cmd === "harvest") {
+    let synthesis = "";
+    if (cmd !== "harvest") {
+      const sRaw = argv[4] ?? "";
+      const sR = run("bash", ["-c", `cd "$1" 2>/dev/null && pwd -P`, "_", sRaw]);
+      synthesis = sR.code === 0 ? sR.out.trim() : die(`no such synthesis worktree: ${sRaw}`);
+    }
+    const deps: StepDeps = {
+      tool: (name, args) => run(join(HERE, "run"), [name, ...args]),
+      git: (args) => run("git", args),
+    };
+    const stepArgs = { dispatch: D, round: R, repo: REPO, synthesis };
+    const result =
+      cmd === "cut"
+        ? cutRound(stepArgs, deps)
+        : cmd === "launch"
+          ? launchRound(stepArgs, deps)
+          : harvestRound({ dispatch: D, round: R, repo: REPO }, deps);
+    for (const line of result.out) console.log(line);
+    for (const line of result.err) console.error(line);
+    process.exit(result.code);
+  }
 
   const record = (text: string, ...logArgs: string[]): void => {
     console.log(text);
@@ -455,6 +977,29 @@ if (import.meta.main) {
 
   // teardown
   const reviewers = readReviewers("pairs", ...reviewerArgs);
+  // A teardown that names its reviewers cleans up named scratches, as the cut does for one an
+  // interrupted round left behind. The round's own teardown names none and follows its reach check.
+  const waitsForReach =
+    reviewerArgs.length === 0 && existsSync(join(D, "reach", `before-r${R}.json`));
+  let points: string[] = [];
+  if (waitsForReach) {
+    try {
+      points = reachActions(D)
+        .filter(({ event }) => event.kind === "point")
+        .map(({ event }) => String(event.point));
+    } catch (e) {
+      die(`cannot read the reach record to teardown round ${R}: ${String(e)}`);
+    }
+  }
+  if (reachCheckMissing(waitsForReach, points, R)) {
+    record(
+      `round ${R} took its reach snapshot and no reach check r${R} is recorded: nothing was removed. Run reach check and reach restore for r${R} (Check reach and restore before any fix), then teardown again`,
+      "note",
+      D,
+      `r${R}: teardown waits for the reach check`,
+    );
+    process.exit(1);
+  }
   let removed = 0;
   let kept = 0;
   let gone = 0;

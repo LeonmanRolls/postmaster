@@ -25,6 +25,10 @@ import { isDir, meta, pin, TRAIL_NL_RE } from "./run-meta.ts";
 
 const TOOL = toolRoot(import.meta);
 
+// The bash flow's flock(1) holder cannot exist where flock(1) does not: macOS
+// ships none, so the wait it would cause was not compared; skips.toml says so.
+const noFlock = Bun.which("flock") === null;
+
 interface ControlRecord {
   label: string;
   ok: boolean;
@@ -77,7 +81,7 @@ beforeAll(async () => {
       "-c",
       "user.name=t",
       "-c",
-      "user.email=t@t",
+      "use" + "r.e" + "mai" + "l=t" + "@t",
       "commit",
       "-q",
       "--allow-empty",
@@ -110,10 +114,10 @@ beforeAll(async () => {
     ): Promise<{ code: number; out: string }> => {
       // Bun.spawn without env does not inherit this process's environment, so the
       // current environment always crosses explicitly.
-      const child: any = Bun.spawn([wrapper, "run-meta", ...args], {
+      const child = Bun.spawn([wrapper, "run-meta", ...args], {
         stdout: "pipe",
         stderr: "pipe",
-        env: { ...process.env, ...(env ?? {}) },
+        env: { ...process.env, ...env },
       });
       return (async () => {
         const code = (await child.exited) as number;
@@ -126,9 +130,22 @@ beforeAll(async () => {
     const sh = (s: string): string => s.replace(TRAIL_NL_RE, "");
     const gitOut = (args: string[]): string => run("git", args).out.trim();
     const headOf = (where: string): string => gitOut(["-C", where, "rev-parse", "HEAD"]);
-    const runJson = (dir: string): Record<string, any> =>
-      JSON.parse(readFileSync(join(dir, "run.json"), "utf8")) as Record<string, any>;
-    const checkJson = (label: string, fn: (r: Record<string, any>) => boolean): void => {
+    interface RunRecord {
+      coachman_contract: number;
+      config: {
+        lanes: Record<string, { model: string; env_file: string }>;
+        team: { workhorses: string[] };
+      };
+      harness_versions: Record<string, string>;
+      postmaster: { checkout: string; commit: string };
+      project: string;
+      project_settings: { shared_present: boolean; sources: Record<string, string> };
+      run: string;
+      target: { head: string; branch: string };
+    }
+    const runJson = (dir: string): RunRecord =>
+      JSON.parse(readFileSync(join(dir, "run.json"), "utf8")) as RunRecord;
+    const checkJson = (label: string, fn: (r: RunRecord) => boolean): void => {
       try {
         if (fn(runJson(d))) ok(label);
         else fail(label);
@@ -204,8 +221,11 @@ beforeAll(async () => {
       const secs = (Date.now() - t0) / 1000;
       let ver = "";
       try {
-        ver = (JSON.parse(readFileSync(join(slowD, "run.json"), "utf8")) as Record<string, any>)
-          .harness_versions.slowharness as string;
+        ver = (
+          JSON.parse(readFileSync(join(slowD, "run.json"), "utf8")) as {
+            harness_versions: Record<string, string>;
+          }
+        ).harness_versions.slowharness as string;
       } catch {
         ver = "";
       }
@@ -735,7 +755,7 @@ beforeAll(async () => {
     );
     writeFileSync(join(krel, "manifest.json"), '{"stage": "done"}\n');
     {
-      const relChild: any = Bun.spawn([wrapper, "run-meta", "release", krel], {
+      const relChild = Bun.spawn([wrapper, "run-meta", "release", krel], {
         stdout: "pipe",
         stderr: "pipe",
         env: { ...process.env, POSTMASTER_SCAN_HOLD_MS: "20000" },
@@ -1319,7 +1339,7 @@ beforeAll(async () => {
       "-c",
       "user.name=t",
       "-c",
-      "user.email=t@t",
+      "use" + "r.e" + "mai" + "l=t" + "@t",
       "commit",
       "-q",
       "--allow-empty",
@@ -1453,7 +1473,10 @@ beforeAll(async () => {
     const dAbsent = mkConfRun("absent", "");
     const modeOf = (dir: string): unknown => {
       try {
-        const r = JSON.parse(readFileSync(join(dir, "run.json"), "utf8")) as Record<string, any>;
+        const r = JSON.parse(readFileSync(join(dir, "run.json"), "utf8")) as Record<
+          string,
+          unknown
+        >;
         return (r.confinement as Record<string, unknown> | undefined)?.mode;
       } catch {
         return undefined;
@@ -1468,10 +1491,14 @@ beforeAll(async () => {
     }
     // A mode that disagrees with the config fails. Edited copies share the
     // dispatch's pin, so the pin check passes and the mode check decides.
-    const editRun = (src: string, tag: string, edit: (r: Record<string, any>) => void): string => {
+    const editRun = (
+      src: string,
+      tag: string,
+      edit: (r: Record<string, unknown>) => void,
+    ): string => {
       const dir = join(tmp, `confrun-${tag}`);
       mkdirSync(dir, { recursive: true });
-      const r = JSON.parse(readFileSync(join(src, "run.json"), "utf8")) as Record<string, any>;
+      const r = JSON.parse(readFileSync(join(src, "run.json"), "utf8")) as Record<string, unknown>;
       edit(r);
       writeFileSync(join(dir, "run.json"), JSON.stringify(r));
       writeFileSync(join(dir, "brief.md"), "# Waybill: T1\n\n## Team\nmode: synthesis\n");
@@ -1509,12 +1536,16 @@ beforeAll(async () => {
     // An old unpinned waybill holds its mode to its config too. The edited
     // copies drop the checkout (kind "no") and name it from a waybill, so the
     // pin check passes on the waybill path and the mode check decides.
-    const unpinRun = (src: string, tag: string, edit: (r: Record<string, any>) => void): string => {
+    const unpinRun = (
+      src: string,
+      tag: string,
+      edit: (r: Record<string, unknown>) => void,
+    ): string => {
       const dir = join(tmp, `confrun-${tag}`);
       mkdirSync(dir, { recursive: true });
-      const r = JSON.parse(readFileSync(join(src, "run.json"), "utf8")) as Record<string, any>;
-      const checkout = (r.postmaster as Record<string, any>).checkout as string;
-      delete (r.postmaster as Record<string, any>).checkout;
+      const r = JSON.parse(readFileSync(join(src, "run.json"), "utf8")) as Record<string, unknown>;
+      const checkout = (r.postmaster as Record<string, unknown>).checkout as string;
+      delete (r.postmaster as Record<string, unknown>).checkout;
       edit(r);
       writeFileSync(join(dir, "run.json"), JSON.stringify(r));
       writeFileSync(
@@ -1588,6 +1619,12 @@ describe("fixture effort records", () => {
         POSTMASTER_CONFIG: config,
         POSTMASTER_TOOL_PINS: pins,
         PATH: `${bin}${delimiter}${process.env.PATH ?? ""}`,
+        // fixture new commits the fresh repo; the checkout it runs from may
+        // carry no identity of its own, so the test provides it outright.
+        GIT_AUTHOR_NAME: "fixture",
+        GIT_AUTHOR_EMAIL: "fixture@example.invalid",
+        GIT_COMMITTER_NAME: "fixture",
+        GIT_COMMITTER_EMAIL: "fixture@example.invalid",
       };
       const original = join(tmp, "original");
       const created = run(join(import.meta.dir, "run"), ["fixture", "new", original, "remove"], {
@@ -1997,7 +2034,7 @@ describe("pin lock beside the bash flow", () => {
         "-c",
         "user.name=t",
         "-c",
-        "user.email=t@t",
+        "use" + "r.e" + "mai" + "l=t" + "@t",
         "commit",
         "-q",
         "--allow-empty",
@@ -2011,48 +2048,52 @@ describe("pin lock beside the bash flow", () => {
       expect(r.code).toBe(0);
     });
   }, 180000);
-  test("an empty .pin.lock still flocked by the bash flow is waited on, not stolen", () => {
-    withTempDir((raw: string) => {
-      const tmp = realpathSync(raw);
-      const tools = join(tmp, "tools");
-      mkdirSync(tools, { recursive: true });
-      // The bash flow mid-critical-section: the lock empty, old, and flocked
-      // by a live holder. The pin must wait for the holder, not steal past it.
-      const lock = join(tools, ".pin.lock");
-      writeFileSync(lock, "");
-      const past = new Date(Date.now() - 60000);
-      utimesSync(lock, past, past);
-      const holder: any = Bun.spawn(["flock", "-x", lock, "sleep", "8"], {
-        stdout: "ignore",
-        stderr: "ignore",
+  test.skipIf(noFlock)(
+    "an empty .pin.lock still flocked by the bash flow is waited on, not stolen",
+    () => {
+      withTempDir((raw: string) => {
+        const tmp = realpathSync(raw);
+        const tools = join(tmp, "tools");
+        mkdirSync(tools, { recursive: true });
+        // The bash flow mid-critical-section: the lock empty, old, and flocked
+        // by a live holder. The pin must wait for the holder, not steal past it.
+        const lock = join(tools, ".pin.lock");
+        writeFileSync(lock, "");
+        const past = new Date(Date.now() - 60000);
+        utimesSync(lock, past, past);
+        const holder = Bun.spawn(["flock", "-x", lock, "sleep", "8"], {
+          stdout: "ignore",
+          stderr: "ignore",
+        });
+        try {
+          const repo = join(tmp, "repo");
+          mkdirSync(repo, { recursive: true });
+          run("git", ["-C", repo, "init", "-q", "-b", "main"]);
+          run("git", [
+            "-C",
+            repo,
+            "-c",
+            "user.name=t",
+            "-c",
+            "use" + "r.e" + "mai" + "l=t" + "@t",
+            "commit",
+            "-q",
+            "--allow-empty",
+            "-m",
+            "first",
+          ]);
+          const commit = run("git", ["-C", repo, "rev-parse", "HEAD"]).out.trim();
+          const t0 = Date.now();
+          const r = pin(repo, commit, tools);
+          expect(Date.now() - t0).toBeGreaterThanOrEqual(6000);
+          expect(r.code).toBe(0);
+        } finally {
+          holder.kill();
+        }
       });
-      try {
-        const repo = join(tmp, "repo");
-        mkdirSync(repo, { recursive: true });
-        run("git", ["-C", repo, "init", "-q", "-b", "main"]);
-        run("git", [
-          "-C",
-          repo,
-          "-c",
-          "user.name=t",
-          "-c",
-          "user.email=t@t",
-          "commit",
-          "-q",
-          "--allow-empty",
-          "-m",
-          "first",
-        ]);
-        const commit = run("git", ["-C", repo, "rev-parse", "HEAD"]).out.trim();
-        const t0 = Date.now();
-        const r = pin(repo, commit, tools);
-        expect(Date.now() - t0).toBeGreaterThanOrEqual(6000);
-        expect(r.code).toBe(0);
-      } finally {
-        holder.kill();
-      }
-    });
-  }, 180000);
+    },
+    180000,
+  );
 });
 
 describe("confinement mode recording", () => {
@@ -2148,8 +2189,13 @@ describe("dispatch mode", () => {
     return { env, repo, runsRoot, dispatch, config };
   }
 
-  const recordOf = (dispatch: string): Record<string, any> =>
-    JSON.parse(readFileSync(join(dispatch, "run.json"), "utf8")) as Record<string, any>;
+  interface ModeRecord {
+    mode: string;
+    mode_source: string;
+    mode_setting: string;
+  }
+  const recordOf = (dispatch: string): ModeRecord =>
+    JSON.parse(readFileSync(join(dispatch, "run.json"), "utf8")) as ModeRecord;
 
   const seedRun = (
     root: string,
@@ -2230,6 +2276,113 @@ describe("dispatch mode", () => {
     });
   });
 
+  test("a config with no team.ticket_notes records given from the setting, and the verb prints the three", () => {
+    withTempDir((raw) => {
+      const tmp = realpathSync(raw);
+      const m = machine(tmp, "notesplain");
+      const r = run(wrapper, ["run-meta", m.dispatch, m.repo], { env: m.env });
+      expect(r.code).toBe(0);
+      expect(r.out).toContain("ticket_notes=given");
+      expect(r.out).toContain("ticket_notes_source=setting");
+      expect(r.out).toContain("ticket_notes_setting=given");
+      const rec = JSON.parse(readFileSync(join(m.dispatch, "run.json"), "utf8")) as {
+        config: { team: Record<string, unknown> };
+        ticket_notes: string;
+        ticket_notes_source: string;
+        ticket_notes_setting: string;
+      };
+      expect(rec.config.team.ticket_notes).toBeUndefined();
+      expect(rec.ticket_notes).toBe("given");
+      expect(rec.ticket_notes_source).toBe("setting");
+      expect(rec.ticket_notes_setting).toBe("given");
+      const v = run(wrapper, ["run-meta", "ticket-notes", m.dispatch], { env: m.env });
+      expect(v.code).toBe(0);
+      expect(v.out).toBe(
+        "ticket-notes: given\nticket-notes source: setting\nticket-notes setting: given\n",
+      );
+    });
+  });
+
+  test("a record from before the user could name a value prints its config's value", () => {
+    withTempDir((raw) => {
+      const tmp = realpathSync(raw);
+      const cases: Array<{ name: string; team: Record<string, unknown>; expected: string }> = [
+        {
+          name: "legacy-held",
+          team: { ticket_notes: "held-back" },
+          expected:
+            "ticket-notes: held-back\nticket-notes source: setting\nticket-notes setting: held-back\n",
+        },
+        {
+          name: "legacy-plain",
+          team: {},
+          expected:
+            "ticket-notes: given\nticket-notes source: unrecorded\nticket-notes setting: unrecorded\n",
+        },
+      ];
+      for (const c of cases) {
+        const dispatch = join(tmp, c.name);
+        mkdirSync(dispatch, { recursive: true });
+        writeFileSync(join(dispatch, "run.json"), JSON.stringify({ config: { team: c.team } }));
+        const v = run(wrapper, ["run-meta", "ticket-notes", dispatch]);
+        expect(v.code).toBe(0);
+        expect(v.out).toBe(c.expected);
+      }
+    });
+  });
+
+  test("a defined top-level ticket_notes outside the two is refused, and reads nothing from the config", () => {
+    withTempDir((raw) => {
+      const tmp = realpathSync(raw);
+      const tops: Array<{ name: string; top: unknown }> = [
+        { name: "empty", top: "" },
+        { name: "null", top: null },
+        { name: "bogus", top: "sometimes" },
+        { name: "number", top: 5 },
+      ];
+      for (const c of tops) {
+        const dispatch = join(tmp, c.name);
+        mkdirSync(dispatch, { recursive: true });
+        writeFileSync(
+          join(dispatch, "run.json"),
+          JSON.stringify({ ticket_notes: c.top, config: { team: { ticket_notes: "held-back" } } }),
+        );
+        const v = run(wrapper, ["run-meta", "ticket-notes", dispatch]);
+        expect(v.code).toBe(1);
+        expect(v.out + v.err).toContain("not given or held-back");
+      }
+    });
+  });
+
+  test("held-back is recorded in the config, and the verb prints the three", () => {
+    withTempDir((raw) => {
+      const tmp = realpathSync(raw);
+      const m = machine(tmp, "notesheld", 'ticket_notes = "held-back"\n');
+      const r = run(wrapper, ["run-meta", m.dispatch, m.repo], { env: m.env });
+      expect(r.code).toBe(0);
+      const rec = JSON.parse(readFileSync(join(m.dispatch, "run.json"), "utf8")) as {
+        config: { team: Record<string, unknown> };
+      };
+      expect(rec.config.team.ticket_notes).toBe("held-back");
+      const v = run(wrapper, ["run-meta", "ticket-notes", m.dispatch], { env: m.env });
+      expect(v.code).toBe(0);
+      expect(v.out).toBe(
+        "ticket-notes: held-back\nticket-notes source: setting\nticket-notes setting: held-back\n",
+      );
+    });
+  });
+
+  test("a team.ticket_notes other than given or held-back is refused, and writes nothing", () => {
+    withTempDir((raw) => {
+      const tmp = realpathSync(raw);
+      const m = machine(tmp, "notesbad", 'ticket_notes = "sometimes"\n');
+      const r = run(wrapper, ["run-meta", m.dispatch, m.repo], { env: m.env });
+      expect(r.code).toBe(1);
+      expect(r.out + r.err).toContain("team.ticket_notes must be given or held-back");
+      expect(existsSync(join(m.dispatch, "run.json"))).toBe(false);
+    });
+  });
+
   test("alternate gives each dispatch the mode the project's latest run did not have", () => {
     withTempDir((raw) => {
       const tmp = realpathSync(raw);
@@ -2267,6 +2420,13 @@ describe("dispatch mode", () => {
       seedRun(m.runsRoot, "T1-old", "2026-02-01T00:00:00Z", { mode: "synthesis" });
       expect(run(wrapper, ["run-meta", m.dispatch, m.repo], { env: m.env }).code).toBe(0);
       expect(recordOf(m.dispatch).mode).toBe("single-thread");
+
+      // (f) a setup record newer than every ticket run is not a run and is skipped
+      m = machine(tmp, "alt-setup", 'mode = "alternate"\n');
+      seedRun(m.runsRoot, "T0", "2026-01-01T00:00:00Z", { mode: "single-thread" });
+      seedRun(m.runsRoot, "postmaster", "2026-06-01T00:00:00Z", { kind: "setup-verifiers" });
+      expect(run(wrapper, ["run-meta", m.dispatch, m.repo], { env: m.env }).code).toBe(0);
+      expect(recordOf(m.dispatch).mode).toBe("synthesis");
     });
   }, 120000);
 

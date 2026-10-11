@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "tsc --noEmit && bunx oxlint && bunx biome format scripts types lint package.json tsconfig.json biome.json .oxlintrc.json && bun test --parallel=${POSTMASTER_TEST_WORKERS:-4} --timings=test-timings.json --timeout=60000 scripts/ lint/ && scripts/run skill-refs && scripts/run wiki-lint"
+    "check": "scripts/run bundle-scrub --check && env -u SCRUB_CHECK_DISABLE scripts/run scrub-check origin/main HEAD && scripts/run tree-check origin/main HEAD && tsc --noEmit && bunx oxlint --deny-warnings && bunx biome format scripts types lint package.json tsconfig.json biome.json .oxlintrc.json && scripts/run skip-check && scripts/run skill-refs && scripts/run runbook-lint && scripts/run wiki-lint"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.14",

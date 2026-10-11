@@ -1,0 +1,25 @@
+<svg class="dg" viewBox="0 0 360 262" role="img" aria-label="A ticket story runs from a picture and a welcome through one section per acceptance criterion and the decisions to the code it cites. Inside a section: the criterion in the ticket's words, a drawing of how it works, the code it builds on with its lines lit, then the check the run must pass.">
+  <defs><marker id="ah-st" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+  <rect class="bx" x="16" y="10" width="120" height="30" rx="7"/><text class="t2" x="76" y="30" text-anchor="middle">A picture, a welcome</text>
+  <rect class="bx hot hl-section" x="16" y="52" width="120" height="30" rx="7"/><text class="t2" x="76" y="72" text-anchor="middle">Criterion 1</text>
+  <rect class="bx" x="16" y="94" width="120" height="30" rx="7"/><text class="t2" x="76" y="114" text-anchor="middle">Criterion 2</text>
+  <rect class="bx" x="16" y="136" width="120" height="30" rx="7"/><text class="t2" x="76" y="156" text-anchor="middle">…</text>
+  <rect class="bx" x="16" y="178" width="120" height="30" rx="7"/><text class="t2" x="76" y="198" text-anchor="middle">Decisions</text>
+  <rect class="bx" x="16" y="220" width="120" height="30" rx="7"/><text class="t2" x="76" y="240" text-anchor="middle">The code it cites</text>
+  <g class="on-page">
+    <text class="t2" x="152" y="30">why, and what it asks for</text>
+    <text class="t2" x="152" y="72">one section each, in the</text>
+    <text class="t2" x="152" y="88">ticket's order</text>
+    <text class="t2" x="152" y="240">any cited line not shown, listed</text>
+  </g>
+  <g class="on-section">
+    <path class="ln" d="M136,67 H160" marker-end="url(#ah-st)"/>
+    <rect class="bx" x="162" y="52" width="182" height="30" rx="7"/><text class="t2" x="174" y="72">1  the criterion, lit in the ticket</text>
+    <line class="ln" x1="252" y1="82" x2="252" y2="96" marker-end="url(#ah-st)"/>
+    <rect class="bx hot" x="162" y="98" width="182" height="30" rx="7"/><text class="t2" x="174" y="118">2  a drawing of how it works</text>
+    <line class="ln" x1="252" y1="128" x2="252" y2="142" marker-end="url(#ah-st)"/>
+    <rect class="bx" x="162" y="144" width="182" height="30" rx="7"/><text class="t2" x="174" y="164">3  the code it builds on, lit</text>
+    <line class="ln" x1="252" y1="174" x2="252" y2="188" marker-end="url(#ah-st)"/>
+    <rect class="bx" x="162" y="190" width="182" height="30" rx="7"/><text class="t2" x="174" y="210">4  the check the run must pass</text>
+  </g>
+</svg>

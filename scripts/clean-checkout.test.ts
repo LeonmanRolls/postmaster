@@ -360,3 +360,40 @@ describe("cleanCheckout", () => {
     });
   });
 });
+
+describe("--file", () => {
+  test("runs the command the file holds, and its exit is the run's", async () => {
+    await withRepo(async (repo) => {
+      const cmdFile = join(repo, "command.txt");
+      writeFileSync(cmdFile, "test -f app.ts\n");
+      expect(runHelper([repo, "main", "--file", cmdFile]).status).toBe(0);
+      writeFileSync(cmdFile, "exit 5\n");
+      expect(runHelper([repo, "main", "--file", cmdFile]).status).toBe(5);
+    });
+  });
+
+  test("a file argument and a plain command run in the order given", async () => {
+    await withRepo(async (repo) => {
+      const cmdFile = join(repo, "command.txt");
+      writeFileSync(cmdFile, "test -f app.ts\n");
+      expect(runHelper([repo, "main", "exit 7", "--file", cmdFile]).status).toBe(7);
+      expect(runHelper([repo, "main", "--file", cmdFile, "test -f app.ts"]).status).toBe(0);
+    });
+  });
+
+  test("a missing, empty or dangling file argument exits 1 and runs nothing", async () => {
+    await withRepo(async (repo) => {
+      const missing = runHelper([repo, "main", "--file", join(repo, "nowhere.txt")]);
+      expect(missing.status).toBe(1);
+      expect(missing.out).toContain("cannot read the command file");
+      const emptyFile = join(repo, "empty.txt");
+      writeFileSync(emptyFile, "\n");
+      const empty = runHelper([repo, "main", "--file", emptyFile]);
+      expect(empty.status).toBe(1);
+      expect(empty.out).toContain("the command file is empty");
+      const dangling = runHelper([repo, "main", "--file"]);
+      expect(dangling.status).toBe(1);
+      expect(dangling.out).toContain("--file needs a path");
+    });
+  });
+});

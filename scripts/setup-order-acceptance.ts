@@ -140,7 +140,7 @@ export function accept(root: string): AcceptResult {
     "AGENTS.md",
     "the setup step still comes before the project question",
     "Which project",
-    "Is this machine set up?",
+    "Is this project set up?",
   );
   ordered(
     skill,

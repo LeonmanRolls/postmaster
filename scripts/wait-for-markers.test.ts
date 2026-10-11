@@ -9,9 +9,6 @@ import { join } from "node:path";
 import { countdown } from "./wait-for-markers";
 
 const isRoot = process.getuid?.() === 0;
-if (isRoot) {
-  console.log("skip a reader that cannot see its own planted marker: root writes anywhere");
-}
 
 const wrapper = join(import.meta.dir, "run");
 

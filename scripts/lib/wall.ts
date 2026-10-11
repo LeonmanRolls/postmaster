@@ -209,7 +209,8 @@ export function parseWallReset(message: string, nowMs: number): string | null {
   );
 
   // A time alone: 2:29 today, or tomorrow once it is more than five minutes past (D4).
-  text = text.replace(
+  // The scan runs for its callback, which collects the candidates; its result is unread.
+  text.replace(
     /(?:^|[^0-9A-Za-z_])([0-9]{1,2}):([0-9]{2})[ \t\n\f\r\v]*(am|pm)?(?:$|[^0-9A-Za-z_])|(?:^|[^0-9A-Za-z_])([0-9]{1,2})[ \t\n\f\r\v]+(am|pm)(?:$|[^0-9A-Za-z_])/giu,
     (
       m,

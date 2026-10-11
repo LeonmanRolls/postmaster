@@ -15,12 +15,14 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { trackerArgv } from "./aftercare.ts";
+import { FIXTURE_MARKER } from "./fixture.ts";
 import { processes } from "./host.ts";
 import { run } from "./lib/proc.ts";
 import { scriptsDir } from "./lib/paths.ts";
@@ -557,7 +559,9 @@ describe("aftercare on a landed run record", () => {
       "300",
     ]);
     expect(started.code).toBe(0);
-    const pid = Number(readFileSync(join(r.D, "render/preview.pid"), "utf8").trim());
+    const pid = Number(
+      (readFileSync(join(r.D, "render/preview.pid"), "utf8").trim().split("\n")[0] ?? "").trim(),
+    );
     expect(processIsLive(pid)).toBe(true);
     try {
       const result = aftercare(r, WORDS);
@@ -589,6 +593,77 @@ describe("aftercare on a landed run record", () => {
       expect(processIsLive(pid)).toBe(true);
       // control: with the start check passing, only the folder check stands between — and
       // the synthesis folder still went, since nothing runs in it
+      expect(existsSync(join(r.repo, ".worktrees/7"))).toBe(false);
+    } finally {
+      killQuiet(pid);
+    }
+  }, 120_000);
+
+  test("on a fixture copy the root launches stop before the close", () => {
+    const r = restoredR();
+    writeFileSync(join(r.repo, ".postmaster", "fixture"), FIXTURE_MARKER);
+    sh("git", ["config", "--local", "postmaster.fixture", "7"], r.repo);
+    const started = hostSh(r, [
+      "run",
+      "watch · repo",
+      r.repo,
+      "--out",
+      join(r.T, "w.out"),
+      "--err",
+      join(r.T, "w.err"),
+      "--pidfile",
+      join(r.T, "watch.pid"),
+      "--",
+      "sleep",
+      "300",
+    ]);
+    expect(started.code).toBe(0);
+    const pid = Number(
+      (readFileSync(join(r.T, "watch.pid"), "utf8").trim().split("\n")[0] ?? "").trim(),
+    );
+    expect(processIsLive(pid)).toBe(true);
+    try {
+      const dry = aftercare(r, ["--dry-run", ...WORDS]);
+      expect(dry.code).toBe(0);
+      expect(dry.out).toContain("step stop-run: would");
+      expect(processIsLive(pid)).toBe(true);
+      const result = aftercare(r, WORDS);
+      expect(result.code).toBe(0);
+      expect(result.out).toContain("step stop-run: done");
+      expect(result.out).toContain("step close-run: done");
+      expect(processIsLive(pid)).toBe(false);
+      expect(existsSync(join(r.repo, ".worktrees/7"))).toBe(false);
+    } finally {
+      killQuiet(pid);
+    }
+  }, 120_000);
+
+  test("control: without the fixture mark the root launches are left alone", () => {
+    const r = restoredR();
+    const started = hostSh(r, [
+      "run",
+      "watch · repo",
+      r.repo,
+      "--out",
+      join(r.T, "w.out"),
+      "--err",
+      join(r.T, "w.err"),
+      "--pidfile",
+      join(r.T, "watch.pid"),
+      "--",
+      "sleep",
+      "300",
+    ]);
+    expect(started.code).toBe(0);
+    const pid = Number(
+      (readFileSync(join(r.T, "watch.pid"), "utf8").trim().split("\n")[0] ?? "").trim(),
+    );
+    expect(processIsLive(pid)).toBe(true);
+    try {
+      const result = aftercare(r, WORDS);
+      expect(result.code).toBe(0);
+      expect(result.out).not.toContain("stop-run");
+      expect(processIsLive(pid)).toBe(true);
       expect(existsSync(join(r.repo, ".worktrees/7"))).toBe(false);
     } finally {
       killQuiet(pid);
@@ -869,7 +944,9 @@ describe("aftercare on a landed run record", () => {
       "300",
     ]);
     expect(started.code).toBe(0);
-    const pid = Number(readFileSync(join(r.D, "render/preview.pid"), "utf8").trim());
+    const pid = Number(
+      (readFileSync(join(r.D, "render/preview.pid"), "utf8").trim().split("\n")[0] ?? "").trim(),
+    );
     try {
       const dry = aftercare(r, ["--dry-run", ...WORDS]);
       expect(dry.code).toBe(0);
@@ -989,11 +1066,15 @@ describe("aftercare on a landed run record", () => {
     expect(result.code).toBe(3);
     expect(result.out).toContain(".worktrees/7-link");
     expect(result.out).toContain("symbolic link");
+    // Aftercare logs folder paths physical, so the want is too: under a
+    // symlinked TMPDIR the as-given spelling never equals the logged one.
+    // The link itself is not resolved, only the directory holding it.
+    const want = join(realpathSync(dirname(link)), basename(link));
     const noted = readFileSync(join(r.D, "actions.jsonl"), "utf8")
       .split("\n")
       .map((line) => (line ? JSON.parse(line) : null))
       .some(
-        (e) => e && e.action === "note" && e.target === link && e.detail.includes("symbolic link"),
+        (e) => e && e.action === "note" && e.target === want && e.detail.includes("symbolic link"),
       );
     expect(noted).toBe(true);
     expect(existsSync(link)).toBe(true);

@@ -36,6 +36,7 @@ import { homedir, machine, release, tmpdir, type as osType } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { tryJsonFile } from "./lib/data.ts";
 import { runMode } from "./lib/run-mode.ts";
+import { ticketNotes } from "./lib/ticket-notes.ts";
 import { effortsLine } from "./run-meta.ts";
 import {
   laneNamesFromBranches,
@@ -738,10 +739,17 @@ function checkStages(dispatch: string): { ok: boolean; detail: string } {
   return { ok: false, detail: `entered ${entered[due.length]} after done` };
 }
 
-/** The coachman must record the base check before its first workhorse dispatch. */
+/**
+ * The base check must be recorded before the first workhorse dispatch: the
+ * coachman's, or the postmaster's in a run without the notes, where the
+ * coachman skips the step and records none. Without the notes the postmaster's
+ * line must also precede the first leg dispatch, since the premises are
+ * checked at dispatch before any leg starts.
+ */
 export function checkPremisesOrder(dispatch: string): { ok: boolean; detail: string } {
   const events = readActions(dispatch);
   if (events === null) return { ok: false, detail: "no readable actions.jsonl" };
+  const heldBack = ticketNotes(dispatch) === "held-back";
   const meta = tryJsonFile<Record<string, unknown>>(join(dispatch, "run.json"));
   const config = meta?.config as Record<string, unknown> | undefined;
   const team = config?.team as Record<string, unknown> | undefined;
@@ -760,8 +768,11 @@ export function checkPremisesOrder(dispatch: string): { ok: boolean; detail: str
     }
   }
   const lanes = new Set(names);
-  const premiseIndex = events.findIndex(
+  const coachmanPremises = events.findIndex(
     (event) => event.action === "premises" && event.actor === "coachman",
+  );
+  const postmasterPremises = events.findIndex(
+    (event) => event.action === "premises" && event.actor === "postmaster",
   );
   const dispatchIndex = events.findIndex(
     (event) =>
@@ -770,8 +781,23 @@ export function checkPremisesOrder(dispatch: string): { ok: boolean; detail: str
       typeof event.target === "string" &&
       lanes.has(event.target),
   );
-  if (premiseIndex < 0) return { ok: false, detail: "no coachman premises action" };
-  if (dispatchIndex >= 0 && premiseIndex >= dispatchIndex)
+  if (heldBack) {
+    if (postmasterPremises < 0) return { ok: false, detail: "no postmaster premises action" };
+    if (coachmanPremises >= 0)
+      return { ok: false, detail: "the coachman recorded premises the postmaster already checked" };
+    const legIndex = events.findIndex(
+      (event) => event.action === "dispatch" && event.actor === "postmaster",
+    );
+    if (legIndex >= 0 && postmasterPremises >= legIndex)
+      return { ok: false, detail: "the first leg dispatch precedes the premises action" };
+    if (dispatchIndex >= 0 && postmasterPremises >= dispatchIndex)
+      return { ok: false, detail: "the first workhorse dispatch precedes the premises action" };
+    if (dispatchIndex < 0)
+      return { ok: true, detail: "premises action recorded and no workhorse dispatched" };
+    return { ok: true, detail: "premises action precedes the first workhorse dispatch" };
+  }
+  if (coachmanPremises < 0) return { ok: false, detail: "no coachman premises action" };
+  if (dispatchIndex >= 0 && coachmanPremises >= dispatchIndex)
     return { ok: false, detail: "the first workhorse dispatch precedes the premises action" };
   // A run that recorded its premises and stopped before any lane (a premise
   // escalation) holds the order: only dispatch-before-premises fails it.

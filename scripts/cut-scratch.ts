@@ -2,11 +2,14 @@
 // CLONED from a source worktree; tell a scratch from anything else; remove one. Nothing is ever
 // installed into a scratch; a lane that opens on a broken scratch reports the breakage as a
 // finding about the diff, or gives up on running the suite and reverts to reading.
+// Cut a workhorse copy on its branch, and check one before its lane starts.
 //
 //   run cut-scratch <repo> <source-worktree> <dest-path> <commit> [--clone <base>]
 //   run cut-scratch --check <dest-path> <commit> [--clone <base>]
 //   run cut-scratch --kind <dir>
 //   run cut-scratch --remove <repo> <dest-path>
+//   run cut-scratch --cut-workhorse <repo> <dest-path> <commit> <branch>
+//   run cut-scratch --check-workhorse <repo> <dest-path> <commit> <branch>
 //
 // A scratch is a detached worktree of <repo> at <commit>. With --clone it is a shared clone of
 // <repo> instead (`git clone --shared`, which copies no objects), detached at <commit>: its
@@ -22,19 +25,30 @@
 //
 // --kind prints `worktree <repo>` for a detached worktree and `clone <repo>` for a shared clone,
 // <repo> being the main checkout it was cut from, and exits 1 for anything else: a worktree on a
-// branch is a lane's or the synthesis, never a scratch. --remove takes away a scratch of <repo>
-// of either kind, a worktree through git and a clone with its directory, and refuses anything
-// else, leaving it alone.
+// branch is the synthesis, never a scratch. A workhorse copy is a shared clone on its branch,
+// so --kind names it `clone <repo>` and --remove takes it away. --remove takes away a scratch
+// of <repo> of either kind, a worktree through git and a clone with its directory, and refuses
+// anything else, leaving it alone.
+//
+// A workhorse copy is a shared clone of <repo> (`git clone --shared`, which copies no objects)
+// on <branch> at <commit>: its origin is <repo>, it borrows <repo>'s objects, and it carries
+// only the commit identity (user.name, user.email) as resolved in <repo>, so the project's
+// hooks, credentials and includes never run on a workhorse's commits. It holds no dependency
+// clone; workhorses install their own. --check-workhorse is the same test, made before a lane
+// is launched into a copy: it is a clone of <repo>, its HEAD is <commit>, and it is on <branch>.
 //
 // Clones each directory named in DEPS_DIRS (default: node_modules) at the root AND under every
 // workspace member (packages/*, apps/*): in a workspace each member carries its own link farm,
-// and cloning only the root leaves a checkout that cannot resolve its own packages.
+// and cloning only the root leaves a checkout that cannot resolve its own packages. Workhorse
+// copies clone none.
 //
 //   exit 0  scratch created, the dependency clone reported per directory; a scratch checked; a
-//           scratch's kind printed; or the scratch removed
-//   exit 1  usage; a dest that exists; git could not create the scratch; a scratch not at
-//           <commit>; a worktree where a clone is needed, or a clone whose origin/HEAD does not
-//           lead back to <base>; not a scratch, or not one of <repo>
+//           scratch's kind printed; the scratch removed; or a workhorse copy cut or checked
+//   exit 1  usage; a dest that exists; a repository that already holds <branch>;
+//           git could not create the scratch or copy; a scratch or copy not at <commit>;
+//           a worktree where a clone is needed, or a clone whose
+//           origin/HEAD does not lead back to <base>; a copy on another branch or of another
+//           repository; not a scratch, or not one of <repo>
 import {
   cpSync,
   existsSync,
@@ -58,7 +72,7 @@ interface CmdResult {
 
 function usage(): never {
   console.error(
-    "usage: run cut-scratch <repo> <source-worktree> <dest-path> <commit> [--clone <base>] | --check <dest-path> <commit> [--clone <base>] | --kind <dir> | --remove <repo> <dest-path>",
+    "usage: run cut-scratch <repo> <source-worktree> <dest-path> <commit> [--clone <base>] | --check <dest-path> <commit> [--clone <base>] | --kind <dir> | --remove <repo> <dest-path> | --cut-workhorse <repo> <dest-path> <commit> <branch> | --check-workhorse <repo> <dest-path> <commit> <branch>",
   );
   process.exit(1);
 }
@@ -247,6 +261,119 @@ function cut(repo: string, src: string, dest: string, snap: string, base = ""): 
   return { code: 0, out: `${out.join("\n")}\n`, err: `${err.join("\n")}\n` };
 }
 
+function workhorseCheck(repoArg: string, dest: string, commit: string, branch: string): CmdResult {
+  const err: string[] = [];
+  const fail = (msg: string): CmdResult => {
+    err.push(`cut-scratch: ${dest} ${msg}`);
+    return { code: 1, out: "", err: `${err.join("\n")}\n` };
+  };
+  const repoCommon = commonOf(repoArg);
+  if (!repoCommon) {
+    err.push(`cut-scratch: not a repository: ${repoArg}`);
+    return { code: 1, out: "", err: `${err.join("\n")}\n` };
+  }
+  const repo = mainOf(repoCommon);
+  const d = phys(dest);
+  if (!d) return fail("is no workhorse copy");
+  const topR = run("git", ["-C", d, "rev-parse", "--show-toplevel"]);
+  if (topR.code !== 0 || phys(topR.out.trim()) !== d) return fail("is no workhorse copy");
+  const gdR = run("git", ["-C", d, "rev-parse", "--path-format=absolute", "--git-dir"]);
+  if (gdR.code !== 0) return fail("is no workhorse copy");
+  if (phys(gdR.out.trim()) !== commonOf(d)) return fail("is a worktree, not a workhorse copy");
+  const urlR = run("git", ["-C", d, "config", "--get", "remote.origin.url"]);
+  const url = urlR.code === 0 ? urlR.out.trim() : "";
+  if (!url || phys(url) !== phys(repo)) {
+    err.push(`cut-scratch: ${dest} is a clone of ${url || "nothing"}, not of ${repo}`);
+    return { code: 1, out: "", err: `${err.join("\n")}\n` };
+  }
+  let alt = "";
+  try {
+    alt = readFileSync(join(commonOf(d), "objects/info/alternates"), "utf8").split("\n")[0] ?? "";
+  } catch {
+    alt = "";
+  }
+  if (!alt || phys(alt) !== join(repoCommon, "objects")) {
+    return fail(`does not borrow ${repo}'s objects`);
+  }
+  const wantR = run("git", ["-C", repo, "rev-parse", "--verify", "-q", `${commit}^{commit}`]);
+  if (wantR.code !== 0) {
+    err.push(`cut-scratch: no such commit in ${repo}: ${commit}`);
+    return { code: 1, out: "", err: `${err.join("\n")}\n` };
+  }
+  const want = wantR.out.trim();
+  const headR = run("git", ["-C", d, "rev-parse", "HEAD"]);
+  if (headR.code !== 0 || headR.out.trim() !== want) {
+    const at = headR.code === 0 ? headR.out.trim().slice(0, 12) : "nothing";
+    return fail(`is not at ${commit} (at ${at})`);
+  }
+  const brR = run("git", ["-C", d, "symbolic-ref", "--short", "-q", "HEAD"]);
+  if (brR.code !== 0) return fail(`is detached, not on ${branch}`);
+  const atBranch = brR.out.trim();
+  if (atBranch !== branch) return fail(`is on ${atBranch}, not on ${branch}`);
+  return { code: 0, out: "", err: "" };
+}
+
+function workhorseCut(repoArg: string, dest: string, commit: string, branch: string): CmdResult {
+  const err: string[] = [];
+  if (!branch) {
+    err.push("cut-scratch: no branch named for the workhorse copy");
+    return { code: 1, out: "", err: `${err.join("\n")}\n` };
+  }
+  if (existsSync(dest)) {
+    err.push(`cut-scratch: ${dest} already exists; a workhorse copy is cut fresh`);
+    return { code: 1, out: "", err: `${err.join("\n")}\n` };
+  }
+  const repoCommon = commonOf(repoArg);
+  if (!repoCommon) {
+    err.push(`cut-scratch: not a repository: ${repoArg}`);
+    return { code: 1, out: "", err: `${err.join("\n")}\n` };
+  }
+  const repo = mainOf(repoCommon);
+  const heldR = run("git", ["-C", repo, "rev-parse", "--verify", "-q", `${branch}^{commit}`]);
+  if (heldR.code === 0) {
+    err.push(`cut-scratch: ${repo} already holds ${branch} at ${heldR.out.trim()}`);
+    return { code: 1, out: "", err: `${err.join("\n")}\n` };
+  }
+  const wantR = run("git", ["-C", repo, "rev-parse", "--verify", "-q", `${commit}^{commit}`]);
+  if (wantR.code !== 0) {
+    err.push(`cut-scratch: no such commit in ${repo}: ${commit}`);
+    return { code: 1, out: "", err: `${err.join("\n")}\n` };
+  }
+  const want = wantR.out.trim();
+  const cloneR = run("git", ["clone", "-q", "--shared", "--no-checkout", repo, dest]);
+  const checkoutR =
+    cloneR.code === 0
+      ? run("git", ["-C", dest, "checkout", "-q", "-b", branch, want])
+      : { code: 1, out: "", err: "" };
+  if (cloneR.code !== 0 || checkoutR.code !== 0) {
+    err.push(`cut-scratch: git could not clone ${repo} to ${dest} on ${branch} at ${commit}`);
+    if (existsSync(dest)) rmSync(dest, { recursive: true, force: true });
+    return { code: 1, out: "", err: `${err.join("\n")}\n` };
+  }
+  for (const key of ["user.name", "user.email"]) {
+    const got = run("git", ["-C", repo, "config", "--get", key]);
+    const value = got.code === 0 ? got.out.trim() : "";
+    if (!value) continue;
+    const set = run("git", ["-C", dest, "config", key, value]);
+    if (set.code !== 0) {
+      err.push(`cut-scratch: could not set ${key} in ${dest}`);
+      rmSync(dest, { recursive: true, force: true });
+      return { code: 1, out: "", err: `${err.join("\n")}\n` };
+    }
+  }
+  const v = workhorseCheck(repo, dest, want, branch);
+  if (v.code !== 0) {
+    rmSync(dest, { recursive: true, force: true });
+    return { code: 1, out: "", err: `${v.err}cut-scratch: removed ${dest}\n` };
+  }
+  const shortR = run("git", ["-C", dest, "rev-parse", "--short", "HEAD"]);
+  return {
+    code: 0,
+    out: `workhorse ${dest} at ${shortR.out.trim()} on ${branch}, a clone of ${repo}\n`,
+    err: "",
+  };
+}
+
 function remove(repoArg: string, dest: string): CmdResult {
   const err: string[] = [];
   const common = commonOf(repoArg);
@@ -299,6 +426,12 @@ if (argv[0] === "--check") {
 } else if (argv[0] === "--remove") {
   if (argv.length !== 3) usage();
   printResult(remove(argv[1] ?? "", argv[2] ?? ""));
+} else if (argv[0] === "--cut-workhorse") {
+  if (argv.length !== 5 || !argv[4]) usage();
+  printResult(workhorseCut(argv[1] ?? "", argv[2] ?? "", argv[3] ?? "", argv[4]));
+} else if (argv[0] === "--check-workhorse") {
+  if (argv.length !== 5 || !argv[4]) usage();
+  printResult(workhorseCheck(argv[1] ?? "", argv[2] ?? "", argv[3] ?? "", argv[4]));
 } else if (argv[0] === undefined || argv[0].startsWith("-")) {
   usage();
 } else {

@@ -272,7 +272,7 @@ function entryBody(): string {
   ].join("\n");
 }
 
-function runBlock(source: string, shell: string): RunResult {
+function runBlock(source: string, shell: string): RunResult & { root: string } {
   const root = mkdtempSync(join(tmpdir(), "coachman-shell-"));
   const tool = join(root, "tool");
   const bin = join(root, "bin");
@@ -308,7 +308,7 @@ function runBlock(source: string, shell: string): RunResult {
       .split("\n")
       .filter(Boolean)
       .map((line) => line.split("\t"));
-    return { code: child.exitCode, calls };
+    return { code: child.exitCode, calls, root };
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -324,6 +324,12 @@ describe("coachman shell blocks", () => {
     const zsh = Bun.which("zsh");
     if (!zsh) console.log("zsh unavailable; shell comparison skipped");
 
+    // Each shell runs in its own temporary root, so the comparison masks the
+    // root out: same arguments and status means same apart from where it ran.
+    const norm = (r: RunResult & { root: string }) => ({
+      code: r.code,
+      calls: r.calls.map((args) => args.map((a) => a.split(r.root).join("<root>"))),
+    });
     for (const [index, block] of blocks.entries()) {
       const bashResult = runBlock(block.source, bash);
       expect({ block: index + 1, calls: bashResult.calls, code: bashResult.code }).toEqual({
@@ -331,44 +337,27 @@ describe("coachman shell blocks", () => {
         calls: bashResult.calls,
         code: 0,
       });
-      if (zsh) expect(runBlock(block.source, zsh)).toEqual(bashResult);
+      if (zsh) expect(norm(runBlock(block.source, zsh))).toEqual(norm(bashResult));
     }
 
-    const reviewers = runBlock(blocks[10]!.source, bash).calls;
-    const cloneCall = reviewers.find(
-      (args) => args[0] === "run" && args[1] === "cut-scratch" && args.includes("--clone"),
-    );
-    expect(cloneCall?.slice(-2)).toEqual(["--clone", "BASE"]);
-    const wait = reviewers.find(
-      (args) => args[0] === "run" && args[1] === "review-round" && args[2] === "wait",
-    );
-    expect(wait?.slice(6)).toEqual(["bug:luna", "bug:mimo", "security:luna", "security:mimo"]);
-
-    const failedLaneLogs = runBlock(blocks[11]!.source, bash).calls.filter(
-      (args) => args[0] === "run" && args[1] === "run-log" && args[3]?.includes("normalize failed"),
-    );
-    expect(failedLaneLogs.map((args) => args[3]?.split(" ")[3])).toEqual(["luna:", "mimo:"]);
+    const sources = blocks.map((b) => b.source);
+    expect(sources.some((s) => s.includes("review-round cut"))).toBe(true);
+    expect(sources.some((s) => s.includes("review-round launch"))).toBe(true);
+    expect(sources.some((s) => s.includes("review-round harvest"))).toBe(true);
+    expect(sources.some((s) => s.includes("--check-workhorse"))).toBe(true);
+    expect(sources.some((s) => s.includes("merge-default"))).toBe(true);
   });
 
-  test("the argument checks reject unquoted expansions of multword shell arrays", () => {
-    const bash = Bun.which("bash");
-    if (!bash) throw new Error("bash is not on PATH");
-    const reviewBlock = blocks[10]!.source;
-    const correct = runBlock(reviewBlock, bash);
-    const cloneMutation = runBlock(reviewBlock.replaceAll('"${CLONE[@]}"', "$CLONE"), bash);
-    const reviewerMutation = runBlock(
-      reviewBlock.replaceAll('"${REVIEWERS[@]}"', "$REVIEWERS"),
-      bash,
-    );
-    expect(cloneMutation.calls).not.toEqual(correct.calls);
-    expect(reviewerMutation.calls).not.toEqual(correct.calls);
-
-    const normalizeBlock = blocks[11]!.source;
-    const normalized = runBlock(normalizeBlock, bash);
-    const mutation = runBlock(
-      normalizeBlock.replaceAll('"${NORMALIZE_FAILED[@]}"', "$NORMALIZE_FAILED"),
-      bash,
-    );
-    expect(mutation.calls).not.toEqual(normalized.calls);
+  test("no shell block holds loops, arrays or pipes: the loop runs through review-round", () => {
+    const bad: number[] = [];
+    for (const [index, block] of blocks.entries()) {
+      const code = block.source
+        .split("\n")
+        .map((line) => line.replace(/#.*$/u, ""))
+        .join("\n");
+      if (/\$\{|\|/u.test(code)) bad.push(index + 1);
+      else if (/(?:^|[ \t\n])(?:for|while|if|case)(?:$|[ \t\n])/u.test(code)) bad.push(index + 1);
+    }
+    expect(bad).toEqual([]);
   });
 });

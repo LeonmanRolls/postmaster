@@ -492,3 +492,36 @@ test("the record pins commits and is written once", () =>
     expect(second.stderr).toContain("EEXIST");
     expect(readFileSync(result.recordPath, "utf8")).toBe(original);
   }));
+
+test("without --synthesis the measured synthesis is HEAD of the current repository", () =>
+  withWorkspace((directory) => {
+    const base = initializeRepo(directory);
+    const phrase = "maple orchard river silver candle meadow";
+    const synthesis = commitFiles(directory, base, "synthesis", { "file.ts": `${phrase}\n` });
+    const dispatch = join(directory, ".postmaster", "runs", "fixture");
+    mkdirSync(dispatch, { recursive: true });
+    const result = Bun.spawnSync(
+      [
+        process.execPath,
+        "--no-env-file",
+        "--config=/dev/null",
+        SCRIPT,
+        "--base",
+        base,
+        "--lane",
+        `alpha=${synthesis}`,
+        "--record",
+        dispatch,
+      ],
+      { cwd: directory, stdout: "pipe", stderr: "pipe" },
+    );
+    const stdout = new TextDecoder().decode(result.stdout);
+    const stderr = new TextDecoder().decode(result.stderr);
+    expect(result.exitCode).toBe(0);
+    expect(stderr).toBe("");
+    const report = JSON.parse(readFileSync(join(dispatch, "shares.json"), "utf8")) as Report;
+    expect(report.synthesis).toEqual({ base, head: synthesis });
+    // --record also appends the printed SHARES line to the dispatch's run log.
+    const log = readFileSync(join(dispatch, "run-log.md"), "utf8");
+    expect(log).toContain(stdout.trim());
+  }));

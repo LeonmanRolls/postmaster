@@ -1,0 +1,31 @@
+<svg class="dg" viewBox="0 0 360 290" role="img" aria-label="Before, the pane's own process is bash, the helper shell, and the agent runs as its child, so the chat app sees a plain terminal. After, the agent has taken the shell's place, so the chat app lists the session.">
+  <defs><marker id="ah-pane" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+  <rect class="bx" x="16" y="12" width="196" height="40" rx="8"/>
+  <text class="t1" x="30" y="37">Pane, in Herdr or tmux</text>
+  <line class="ln" x1="114" y1="52" x2="114" y2="82" marker-end="url(#ah-pane)"/>
+  <text class="t3" x="122" y="71">its own process</text>
+  <g class="on-before">
+    <rect class="bx bad" x="16" y="84" width="196" height="56" rx="8"/>
+    <text class="t1" x="30" y="107">bash, the helper shell</text>
+    <text class="t2" x="30" y="127">loads the env file, then waits</text>
+    <line class="ln" x1="114" y1="140" x2="114" y2="170" marker-end="url(#ah-pane)"/>
+    <text class="t3" x="122" y="159">starts as a child</text>
+  </g>
+  <g id="pane-agent" data-shift-after="0 -88">
+    <rect class="bx hot" x="16" y="172" width="196" height="56" rx="8"/>
+    <text class="t1" x="30" y="195">claude, the agent</text>
+    <text class="t2 on-before" x="30" y="215">one level below the shell</text>
+    <text class="t2 on-after" x="30" y="215">took the shell's place</text>
+  </g>
+  <rect class="bx" x="232" y="12" width="120" height="132" rx="14"/>
+  <text class="t1" x="244" y="35">Your chat app</text>
+  <text class="t2" x="244" y="56">lists the pane's</text>
+  <text class="t2" x="244" y="71">own process</text>
+  <text class="t2 bad on-before" x="244" y="104">sees bash:</text>
+  <text class="t2 bad on-before" x="244" y="120">a plain terminal</text>
+  <text class="t2 ok on-after" x="244" y="104">sees claude:</text>
+  <text class="t2 ok on-after" x="244" y="120">lists the session</text>
+  <line class="ln dash" x1="232" y1="112" x2="216" y2="112" marker-end="url(#ah-pane)"/>
+  <text class="t2 on-before" x="16" y="276">Before: the shell stays, the agent runs below it</text>
+  <text class="t2 on-after" x="16" y="190">After: exec puts the agent in the shell's place</text>
+</svg>

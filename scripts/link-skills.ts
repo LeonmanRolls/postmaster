@@ -48,8 +48,16 @@ export function skillsFolder(h: string): string | null {
 export function checkoutRoot(tree: string): string | null {
   const top = run("git", ["-C", tree, "rev-parse", "--show-toplevel"]);
   if (top.code !== 0) return tree;
-  const t = resolve(top.out.trim());
-  if (t !== resolve(tree)) return tree;
+  const t = top.out.trim();
+  // Physically on both sides: git prints the toplevel resolved, while the
+  // caller may spell it through a link (as /tmp is on macOS).
+  let same = false;
+  try {
+    same = resolve(realpathSync(t)) === resolve(realpathSync(tree));
+  } catch {
+    same = false;
+  }
+  if (!same) return tree;
   const list = run("git", ["-C", tree, "worktree", "list", "--porcelain"]);
   if (list.code !== 0) {
     console.error(`link-skills: git cannot list the worktrees of ${tree}`);

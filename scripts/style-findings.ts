@@ -16,6 +16,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { basename, dirname, join, posix, resolve } from "node:path";
 import { run } from "./lib/proc.ts";
+import { thrownCode, thrownMessage } from "./lib/thrown.ts";
 import {
   BOUND_R,
   DOT_ALL,
@@ -49,9 +50,9 @@ function read(path: string, what: string): string {
   try {
     // BASE opened text with utf-8-sig: a byte-order mark is not part of the content.
     return readFileSync(path, "utf8").replace(/^\uFEFF/u, "");
-  } catch (e: any) {
-    if (e?.code === "ENOENT") die(`no ${what} at ${path}`);
-    die(`cannot read ${path}: ${e?.message ?? "error"}`);
+  } catch (e) {
+    if (thrownCode(e) === "ENOENT") die(`no ${what} at ${path}`);
+    die(`cannot read ${path}: ${thrownMessage(e) ?? "error"}`);
   }
 }
 
@@ -207,9 +208,9 @@ export function findings(dispatch: string): { style: Finding[]; faults: string[]
   for (let n = 0; n < lines.length; n++) {
     const line = lines[n];
     if (!line || line.trim() === "") continue;
-    let e: any;
+    let e: Record<string, unknown>;
     try {
-      e = JSON.parse(line);
+      e = JSON.parse(line) as Record<string, unknown>;
     } catch {
       die(`${path} line ${n + 1} is not JSON`);
     }
@@ -1092,13 +1093,17 @@ class Reach {
 
   workspaces(): string[] {
     const globs: string[] = [];
-    let w: any = this.package("").workspaces;
-    if (w && typeof w === "object" && !Array.isArray(w)) w = (w as any).packages;
-    if (Array.isArray(w)) globs.push(...w.filter((g: any) => typeof g === "string"));
+    let w: unknown = this.package("").workspaces;
+    if (w && typeof w === "object" && !Array.isArray(w))
+      w = (w as Record<string, unknown>).packages;
+    if (Array.isArray(w))
+      globs.push(...w.filter((g: unknown): g is string => typeof g === "string"));
     if (this.t.blobs.has("lerna.json")) {
       try {
-        const v = JSON.parse(this.t.read("lerna.json") ?? "").packages;
-        if (Array.isArray(v)) globs.push(...v.filter((g: any) => typeof g === "string"));
+        const v: unknown = (JSON.parse(this.t.read("lerna.json") ?? "") as Record<string, unknown>)
+          .packages;
+        if (Array.isArray(v))
+          globs.push(...v.filter((g: unknown): g is string => typeof g === "string"));
       } catch {
         /* ignore */
       }
@@ -1401,7 +1406,7 @@ class Reach {
       : this.t.up(cwd, ["justfile", "Justfile", ".justfile", "JUSTFILE"]);
     if (!p) return;
     if (!this.justs.has(p)) this.justs.set(p, parseJust(this.t.read(p) ?? ""));
-    const { recipes, vars, first } = this.justs.get(p)!;
+    const { recipes, first } = this.justs.get(p)!;
     let d = wd ? this.t.dir(cwd, wd) : null;
     if (d === null) d = posix.dirname(p);
     const toRun = names.filter((n) => recipes.has(n));
@@ -1411,7 +1416,7 @@ class Reach {
   }
 
   recipe(p: string, n: string, d: string): void {
-    const { recipes, vars, first } = this.justs.get(p)!;
+    const { recipes, vars } = this.justs.get(p)!;
     const key = `just|${p}|${n}`;
     if (this.seen.has(key) || !recipes.has(n)) return;
     this.seen.add(key);
@@ -1499,9 +1504,9 @@ function states(dispatch: string): Record<string, string> {
     return out;
   }
   for (const row of rows) {
-    let e: any;
+    let e: Record<string, unknown>;
     try {
-      e = JSON.parse(row);
+      e = JSON.parse(row) as Record<string, unknown>;
     } catch {
       continue;
     }
@@ -1632,7 +1637,10 @@ export function core(cmd: string, dispatch: string): number {
     via: string | null;
     newInfo: [string[], boolean] | null;
   }> = [];
-  const checks: Array<{ n: number; id: string; kind: string; lint: string; extra: any }> = [];
+  const checks: Array<
+    | { n: number; id: string; kind: "linter"; lint: string; extra: string | null }
+    | { n: number; id: string; kind: "new"; lint: string; extra: boolean }
+  > = [];
   let badShape = false;
 
   const sortLines = read(SORT, "sort").split("\n");

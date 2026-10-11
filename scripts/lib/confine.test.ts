@@ -17,33 +17,36 @@ describe("confinement table", () => {
 
   test("the wrap preserves the command byte-identically after the separator", () => {
     const wrapped = wrapCommand(["echo", "--dangerously-bypass", "hello"]);
-    if (wrapped === null) return;
-    const sep = wrapped.indexOf("--");
+    expect(wrapped).not.toBeNull();
+    const sep = wrapped!.indexOf("--");
     expect(sep).toBeGreaterThanOrEqual(0);
-    expect(wrapped.slice(sep + 1)).toEqual(["echo", "--dangerously-bypass", "hello"]);
+    expect(wrapped!.slice(sep + 1)).toEqual(["echo", "--dangerously-bypass", "hello"]);
   });
 
   test("the wrap places its own argv before the command", () => {
     const wrapped = wrapCommand(["true"]);
-    if (wrapped === null) return;
-    const sep = wrapped.indexOf("--");
+    expect(wrapped).not.toBeNull();
+    const sep = wrapped!.indexOf("--");
     expect(sep).toBeGreaterThan(0); // at least one wrap argument before --
   });
 
-  test("the linux wrap binds the root before mounting the fresh /proc", () => {
-    if (process.platform !== "linux") return;
-    const wrapped = wrapCommand(["true"]);
-    expect(wrapped).not.toBeNull();
-    // Bubblewrap applies mounts in order: a later --bind / / would cover an
-    // earlier --proc with the host's /proc, and PIDs would mismatch inside.
-    const bindAt = wrapped!.indexOf("--bind");
-    const procAt = wrapped!.indexOf("--proc");
-    expect(bindAt).toBeGreaterThanOrEqual(0);
-    expect(procAt).toBeGreaterThan(bindAt);
-  });
+  // The linux-only wrap flags are checked where they exist; on a Mac these skip,
+  // with the reason in scripts/skips.toml.
+  test.skipIf(process.platform !== "linux")(
+    "the linux wrap binds the root before mounting the fresh /proc",
+    () => {
+      const wrapped = wrapCommand(["true"]);
+      expect(wrapped).not.toBeNull();
+      // Bubblewrap applies mounts in order: a later --bind / / would cover an
+      // earlier --proc with the host's /proc, and PIDs would mismatch inside.
+      const bindAt = wrapped!.indexOf("--bind");
+      const procAt = wrapped!.indexOf("--proc");
+      expect(bindAt).toBeGreaterThanOrEqual(0);
+      expect(procAt).toBeGreaterThan(bindAt);
+    },
+  );
 
-  test("the linux wrap keeps the host device tree", () => {
-    if (process.platform !== "linux") return;
+  test.skipIf(process.platform !== "linux")("the linux wrap keeps the host device tree", () => {
     const wrapped = wrapCommand(["true"]);
     expect(wrapped).not.toBeNull();
     // --dev would replace /dev with a minimal tree, hiding host shared-memory
@@ -52,8 +55,7 @@ describe("confinement table", () => {
     expect(wrapped!.includes("--dev")).toBe(false);
   });
 
-  test("the linux wrap starts a new session", () => {
-    if (process.platform !== "linux") return;
+  test.skipIf(process.platform !== "linux")("the linux wrap starts a new session", () => {
     const wrapped = wrapCommand(["true"]);
     expect(wrapped).not.toBeNull();
     // Without --new-session the lane shares the launcher's process group and
@@ -61,8 +63,7 @@ describe("confinement table", () => {
     expect(wrapped!.includes("--new-session")).toBe(true);
   });
 
-  test("startCheck agrees with a real no-op through the wrap", () => {
-    if (!avail.ok) return;
+  test.skipIf(!avail.ok)("startCheck agrees with a real no-op through the wrap", () => {
     const wrapped = wrapCommand(["true"]);
     expect(wrapped).not.toBeNull();
     const r = spawnSync(wrapped![0]!, wrapped!.slice(1), { encoding: "utf8", timeout: 10000 });
@@ -77,8 +78,7 @@ describe("confinement table", () => {
     }
   });
 
-  test("a confined child can signal a process it started itself", () => {
-    if (!avail.ok) return;
+  test.skipIf(!avail.ok)("a confined child can signal a process it started itself", () => {
     const wrapped = wrapCommand([
       "sh",
       "-c",

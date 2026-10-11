@@ -17,6 +17,7 @@ import {
   makeLayout,
   parseProbe,
   printForm,
+  ptyInvocation,
   runHeadless,
   runPlain,
   runPty,
@@ -184,3 +185,21 @@ for (const harness of ["muse", "claude"]) {
     },
   );
 }
+
+test("pty invocation: macOS takes the form as the command, Linux feeds it through stdin", () => {
+  const mac = ptyInvocation("darwin", "echo hi");
+  expect(mac.args).toEqual([
+    "-q",
+    "/dev/null",
+    "bash",
+    "--norc",
+    "--noprofile",
+    "-i",
+    "-c",
+    "echo hi",
+  ]);
+  expect(mac.input).toBeNull();
+  const linux = ptyInvocation("linux", "echo hi");
+  expect(linux.args).toEqual(["-qec", "bash --norc --noprofile -i", "/dev/null"]);
+  expect(linux.input).toBe("echo hi\nexit\n");
+});

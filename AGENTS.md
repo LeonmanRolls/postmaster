@@ -42,8 +42,8 @@ quality, not about the runs in flight. [Why](wiki/concepts/fixture-runs.md).
 ## When a session opens in this repo, do this
 
 No slash command, and no wizard for the user to run. The user opens their agent in this
-folder and says hi. Any first message starts the flow: choose a target, set the machine
-up if it is not, launch the postmaster. Work out where the user is and pick up from there.
+folder and says hi. Any first message starts the flow: choose a target, check it is set up,
+launch the postmaster. Work out where the user is and pick up from there.
 
 **1. Which project are we working on?**
 
@@ -65,28 +65,55 @@ reports whether the target already has settings. If a fact is one every run agai
 project needs — the default turnpikes, the tracker binding by name, the risk surfaces —
 propose the shared `project.toml` and say which file you are proposing, since that one is
 committed. If it is this person's choice on this machine — which lanes fill the roles —
-propose local `settings.toml`. If the machine has no config yet, hold the local offer
-until step 2 has written it: recording lane roles needs the machine config, and the
-write is refused without it. A missing settings file is never an error and never a
+propose local `settings.toml`. If the machine has no config yet, the local offer still
+stands: the file can hold the roles on its own, and a project whose settings are complete
+needs no global config. A missing settings file is never an error and never a
 prompt to create one; the normal case is nothing written.
 
 **The target may be this repo.** Developing postmaster with postmaster is supported; see
 the section above for the two things that differ.
 
-**2. Is this machine set up?**
+**2. Is this project set up?**
 
 ```sh
-cat ~/.postmaster/config.toml 2>/dev/null || echo "NOT SET UP"
+scripts/run check-setup <chosen>  # 0 set up · 1 not set up, naming what is missing
 scripts/run link-skills --check  # names missing or blocked links; read its exit status
 ```
 
-Include both results when you say whether the machine is set up. The link check is read-only.
-If the config is present but the check names missing or blocked links, report them and offer
+Include both results when you say whether the project is set up. The link check is read-only.
+The pass goes on only after the check says the project is set up.
+If the project is set up but the check names missing or blocked links, report them and offer
 the install step below on the user's word.
 
-If it is missing, set it up now, in conversation, with the target already chosen. You
+If it is not set up, set it up now, in conversation, with the target already chosen. You
 conduct it: probe first, ask one thing at a time, verify each answer, then have the script
-write the config. Do not guess an answer, and do not hand the user a script to run instead.
+write the settings. Do not guess an answer, and do not hand the user a script to run instead.
+Route every step through what comes next:
+
+```sh
+scripts/run setup-next <chosen>  # where setup stands and what comes next: global, project or done
+```
+
+**The global step comes first: set up the global config or skip it.** With no global
+config, the user can set one up or skip it; on skip the project step is next and no global
+config is written. An existing global config is kept as the base, and a broken one is
+replaced or removed on the user's word before going on. The skill-link check stays with
+this step: when the check names missing or blocked links, offer the install step below on
+the user's word.
+
+**Then the project step: the project's own settings or the global config as it is.**
+With no global config, the project step goes straight to the project's own settings,
+offering only them since there is no global config to keep as it is. Choosing the
+project's own settings writes them with `scripts/run setup --project <chosen>`, from the
+same answers file, and the file holds only what the user changed for that project;
+choosing the global config as it is writes nothing. When git does not ignore the project's
+settings yet, setup offers to have git ignore the project's settings, and nothing ignores
+them without the user's yes.
+
+After a step that writes, run the next-step command again. A skipped global step goes
+to the project step without rerunning: the skip lives in the conversation, setup-next keeps
+no record of it and would say global again. A declined project step ends setup there,
+and the pass waits until the check says the project is set up.
 
 ```sh
 scripts/run probe-harnesses     # which agent CLIs exist, and which read no ambient context
@@ -94,7 +121,9 @@ scripts/run probe-trackers      # which ticket sources are reachable, and what w
 scripts/run probe-confine       # whether lane confinement can run, and what would finish it
 ```
 
-What to settle, in this order, and why none of it is guessed:
+What to settle, in this order, and why none of it is guessed. The global step settles all
+of it; the project step settles only what the user changes, or all of it when there is no
+global config:
 
 - **Which harness, model and effort fills each role:** the horses, the reviewers, the coachman and
   its fallback, the booking clerk and the postmaster. Offer only what the probe found, and do not assume: a
@@ -114,19 +143,22 @@ What to settle, in this order, and why none of it is guessed:
   whether `confine` is `on` or `off` (default `off`). `partial` names the next step. Any root
   command is the user's to run, never the flow's; after they run it, probe again before
   continuing. `unavailable` cannot be set to `on`. A config without `confine` reads as off.
-- **Where projects live.** `~/Code` is one convention, not a rule.
+- **Where projects live.** `~/Code` is one convention, not a rule. Global step only:
+  the project step refuses it, since it always comes from the global config.
 - **Who says the merge word.** A person, or the postmaster itself (`ship.merge_authority`).
   A run never merges on its own authority; the config says whose authority that is.
 
 Then put the answers in a file, one `key=value` per line, and let the script write and check
-the config; it refuses a harness that is not on PATH, a coachman on a lane's model and a
-config that does not parse, and a refusal is a question back to the user, not something
+the settings; it refuses a harness that is not on PATH, a coachman on a lane's model and
+settings that do not parse, and a refusal is a question back to the user, not something
 to work around.
 
 ```sh
 scripts/run setup --keys                       # every key, its default and what it asks
 scripts/run setup --answers <file> --dry-run   # the config it would write
 scripts/run setup --answers <file>             # write ~/.postmaster/config.toml
+scripts/run setup --project <chosen> --answers <file> --dry-run  # the project settings it would write
+scripts/run setup --project <chosen> --answers <file>            # write .postmaster/settings.toml
 ```
 
 When the check names missing or blocked links, show the user the dry run output below and ask
@@ -164,9 +196,8 @@ A four-role flow for getting one ticket implemented well by several models at on
 
 The postmaster runs no model lanes and edits no source. A coachman never takes a second
 load. The **waybill** (`<dispatch>/brief.md`) is the only thing that travels between them.
-Harness-specific invocations live in `skills/postmaster/harnesses.md`, and
-`scripts/run launch` is their executable form: the runbooks name a form (launch, resume,
-thread id), that file gives the command, the script runs it. Where a launch runs, and how the
+Harness-specific behavior lives in `skills/postmaster/harnesses.md`; `scripts/run launch form <lane>`
+prints the exact launch and resume forms for a configured lane. Where a launch runs, and how the
 user watches it, is the session host's: `skills/postmaster/hosts.md` records Herdr, tmux and no
 host at all, and `scripts/run host` runs every launch through them. `SKILL.md` is the front door —
 reached from this file or by typing `/postmaster`, it gets the machine ready if it is not and
@@ -242,7 +273,9 @@ whole system.
 The scripts run on Bun 1.4.2 or newer: `scripts/run <name> [args]` is the one entry for every
 tool script; it execs Bun with `--no-env-file` and the tool's own `bunfig.toml`, so a script run
 inside a target project never loads that project's `.env` or Bun config. Runtime imports are
-Bun's built-ins and Node's standard modules only; `typescript`, `@biomejs/biome` and `oxlint`
+Bun's built-ins and Node's standard modules only, except the vendored parser
+(`scripts/lib/vendor/babel-parser.js`, @babel/parser 7.x, the one dependency #268 added with
+the user's word); `typescript`, `@biomejs/biome` and `oxlint`
 are the development dependencies, and `bun run check` is the type check, Oxlint, the Biome
 format check, the tests beside every script, the runbook reference check and the wiki lint.
 
@@ -250,13 +283,18 @@ format check, the tests beside every script, the runbook reference check and the
 
 Precedence, stated once and followed everywhere: **discovery** supplies defaults; the
 shared `.postmaster/project.toml`, where one exists, declares what the project requires of
-every run; local `.postmaster/settings.toml` are this person's choices on this machine;
-`~/.postmaster/config.toml` supplies what is machine-specific and is never overridden by a
-project. None of these sets a floor of turnpikes: a ticket names the turnpikes its run
-passes through (#40), and project settings only say what `default` means for that project.
-A project's settings name no credential and no filesystem path, in either file
-(`scripts/run project-settings`). Nothing in `.postmaster/` is committed by default; the one
-shared file is committed on purpose with `git add -f`.
+every run; the person's `.postmaster/settings.toml` overrides `~/.postmaster/config.toml`
+setting by setting for that project, a group merging and a list or single value replaced
+whole, except `projects_roots`, which always comes from the global config; the global
+config supplies the machine's defaults. None of these sets a floor of
+turnpikes: a ticket names the turnpikes its run passes through (#40), and project settings
+only say what `default` means for that project. The person's file may name models, env
+files and other machine settings; the shared file names no credential and no filesystem
+path (`scripts/run project-settings`). Run records and drafts are never committed;
+project.toml is committed on purpose with `git add -f`, and the person's settings file is
+ignored only on the user's yes during setup, so it is committed like any file to share it.
+A tracked settings.toml is used only after the user has accepted it, and again after it
+changes.
 
 ## Working on this repository
 
@@ -314,6 +352,6 @@ the workhorses decide the files and the tasks.
 and a reply can land in a thread the conversation never sees. Right after each publish or watch, stop the session's watch on
 that artifact. The user says when they have left comments; then read each thread, answer it there, and make the change it asks for.
 **Show a change or ticket-linked code on a page made for the phone.** When the user reviews a change with automatic merging off,
-or opens files named in the ticket's technical notes, publish it with the `review-pages` skill (`skills/review-pages/SKILL.md`): a review page
-with the ticket, the summary, the diff and the files as they stand, or a code viewer at the cited lines.
+opens files named in the ticket's technical notes, or asks for a ticket's story, publish it with the `review-pages` skill (`skills/review-pages/SKILL.md`):
+a review page with the ticket, the summary, the diff and the files as they stand, a code viewer at the cited lines, or a story page for a ticket's story.
 The user comments on the page and gives the verdict in the chat. Claude Code only, until the dashboard shows changes.

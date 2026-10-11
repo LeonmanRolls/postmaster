@@ -1,0 +1,607 @@
+{
+  "repoUrl": "https://github.com/brindlewick/postmaster",
+  "pr": 336,
+  "ticket": 332,
+  "base": "8baf5af9a13cae1dd788cc85b0bc0a30a501a396",
+  "head": "d70c76d9c",
+  "merged": "8 October 2026",
+  "sections": [
+    {
+      "id": "open",
+      "label": "Start",
+      "title": "The change"
+    },
+    {
+      "id": "c1",
+      "label": "C1",
+      "title": "Criterion 1"
+    },
+    {
+      "id": "c2",
+      "label": "C2",
+      "title": "Criterion 2"
+    },
+    {
+      "id": "c3",
+      "label": "C3",
+      "title": "Criterion 3"
+    },
+    {
+      "id": "c4",
+      "label": "C4",
+      "title": "Criterion 4"
+    },
+    {
+      "id": "left",
+      "label": "Left out",
+      "title": "The rest"
+    }
+  ],
+  "scenes": [
+    {
+      "id": "ticket",
+      "kind": "doc",
+      "from": "issue",
+      "number": 332,
+      "label": "Ticket #332",
+      "chip": "the ticket",
+      "cut": "## For the agents"
+    },
+    {
+      "id": "pr",
+      "kind": "doc",
+      "from": "pr",
+      "number": 336,
+      "label": "Pull request 336",
+      "chip": "its text",
+      "cut": "## Open findings"
+    },
+    {
+      "id": "tree",
+      "kind": "diagram",
+      "label": "How the pane runs the agent",
+      "chip": "diagram",
+      "svg": "tree.svg"
+    },
+    {
+      "id": "left",
+      "kind": "leftovers",
+      "label": "What the steps leave out",
+      "chip": "list"
+    },
+    {
+      "id": "baseWrap",
+      "kind": "base",
+      "file": "scripts/launch.ts",
+      "from": 561,
+      "to": 580
+    },
+    {
+      "id": "baseForm",
+      "kind": "base",
+      "file": "scripts/launch.ts",
+      "from": 1599,
+      "to": 1607
+    },
+    {
+      "id": "exec",
+      "kind": "head",
+      "file": "scripts/launch.ts",
+      "from": 578,
+      "to": 617
+    },
+    {
+      "id": "form",
+      "kind": "head",
+      "file": "scripts/launch.ts",
+      "from": 1636,
+      "to": 1644
+    },
+    {
+      "id": "procType",
+      "kind": "head",
+      "file": "scripts/lib/processes.ts",
+      "from": 6,
+      "to": 36
+    },
+    {
+      "id": "procParse",
+      "kind": "head",
+      "file": "scripts/lib/processes.ts",
+      "from": 96,
+      "to": 134
+    },
+    {
+      "id": "procTable",
+      "kind": "head",
+      "file": "scripts/lib/processes.ts",
+      "from": 156,
+      "to": 181
+    },
+    {
+      "id": "stub",
+      "kind": "head",
+      "file": "scripts/launch-interactive-oracle.ts",
+      "from": 21,
+      "to": 32
+    },
+    {
+      "id": "pty",
+      "kind": "head",
+      "file": "scripts/launch-interactive-oracle.ts",
+      "from": 158,
+      "to": 171
+    },
+    {
+      "id": "checks",
+      "kind": "head",
+      "file": "scripts/launch-interactive-oracle.ts",
+      "from": 242,
+      "to": 279
+    },
+    {
+      "id": "tests",
+      "kind": "head",
+      "file": "scripts/launch-interactive-oracle.test.ts",
+      "from": 62,
+      "to": 186
+    }
+  ],
+  "steps": [
+    {
+      "id": "title",
+      "section": "open",
+      "scene": "ticket",
+      "kind": "title",
+      "title": "Pull request 336, told as a story",
+      "text": "This page walks through the change that did #332, one criterion at a time. Scroll, and the panel follows: first the ticket you signed off, then the code that makes each criterion true and the test that shows it."
+    },
+    {
+      "id": "why",
+      "section": "open",
+      "scene": "tree",
+      "state": "before",
+      "title": "Why it changed",
+      "text": "Your chat app lists a session only when the agent is the pane's own process. A clerk the postmaster opened ran as the child of a small helper shell instead, which loaded the clerk's environment file and waited. The app saw the shell and showed a plain terminal, so one clerk waited more than a day for an answer."
+    },
+    {
+      "id": "done",
+      "section": "open",
+      "scene": "tree",
+      "state": "after",
+      "title": "What done looks like",
+      "text": "The agent takes the shell's place, so the pane's own process is the agent and the app lists the session. Its environment stays the same, and the launches that run without you work exactly as before."
+    },
+    {
+      "id": "criteria",
+      "section": "open",
+      "scene": "ticket",
+      "find": [
+        "A booking clerk or a postmaster that the flow opens in a pane",
+        "The agent in such a session starts with the same environment",
+        "The launches that run without the user, which are",
+        "A fixture run from this branch scores clean."
+      ],
+      "title": "Four things had to be true",
+      "text": "The ticket names four criteria. Each gets its own section below, in order, with the code that makes it true and the test that shows it. The ticket's two decisions come up where they shaped the code."
+    },
+    {
+      "id": "c1",
+      "section": "c1",
+      "scene": "ticket",
+      "find": [
+        "A booking clerk or a postmaster that the flow opens in a pane"
+      ],
+      "kind": "criterion",
+      "title": "The agent is the pane's own process",
+      "text": "The first criterion is the fix itself: a clerk or a postmaster opened for you runs its agent as the pane's own process, so the app lists it. First, what stood in the way."
+    },
+    {
+      "id": "helper",
+      "section": "c1",
+      "scene": "baseWrap",
+      "focus": [
+        [
+          563,
+          563
+        ],
+        [
+          574,
+          574
+        ]
+      ],
+      "marks": [
+        {
+          "line": 574,
+          "text": [
+            "\"$@\"; s=$?; exit $s"
+          ]
+        }
+      ],
+      "title": "The helper that hid the agent",
+      "text": "Before this change, every launch with an environment file went through this helper. Its short bash script loads the file, then starts the agent with `\"$@\"`, waits for it, and exits with the agent's status. Bash stays the pane's own process the whole time, and the agent runs one level below it."
+    },
+    {
+      "id": "samepath",
+      "section": "c1",
+      "scene": "baseForm",
+      "focus": [
+        [
+          1603,
+          1603
+        ]
+      ],
+      "title": "Your sessions took the same path",
+      "text": "The interactive form is the command the flow types into a pane to start a clerk or a postmaster you talk to. With an environment file it used the same helper, so your chat app saw a plain terminal."
+    },
+    {
+      "id": "exec",
+      "section": "c1",
+      "scene": "exec",
+      "focus": [
+        [
+          581,
+          587
+        ],
+        [
+          611,
+          611
+        ]
+      ],
+      "marks": [
+        {
+          "line": 611,
+          "text": [
+            "exec \"${__postmaster_exec_env:-/usr/bin/env}\""
+          ]
+        }
+      ],
+      "title": "The new helper ends with exec",
+      "text": "`sourcedExec` keeps the old script's start and changes its end. Instead of starting the agent and waiting, the shell runs `exec`, which replaces the shell with the agent. The agent keeps the shell's process id and its place in the terminal."
+    },
+    {
+      "id": "form",
+      "section": "c1",
+      "scene": "form",
+      "focus": [
+        [
+          1640,
+          1640
+        ]
+      ],
+      "title": "Only the form for your sessions switches",
+      "text": "This is the one call that changes: the interactive form now uses `sourcedExec` where it used `sourcedLaunch`. A session whose role has no environment file was already started as the bare agent command, and stays that way."
+    },
+    {
+      "id": "terminal",
+      "section": "c1",
+      "scene": "procType",
+      "focus": [
+        [
+          11,
+          12
+        ],
+        [
+          28,
+          35
+        ]
+      ],
+      "title": "Seeing who has the terminal",
+      "text": "To test this, a test has to see which process group the terminal is serving. The shared process module now reports that for every process, as `terminal`: the group the terminal hands its input to, or nothing when the process has no terminal."
+    },
+    {
+      "id": "backends",
+      "section": "c1",
+      "scene": "procParse",
+      "focus": [
+        [
+          104,
+          104
+        ],
+        [
+          112,
+          116
+        ],
+        [
+          122,
+          122
+        ],
+        [
+          129,
+          132
+        ]
+      ],
+      "title": "Linux and macOS both report it",
+      "text": "On Linux the number is field 5 of the process's `stat` file. macOS has no such file, so the module asks `ps` for one more column, `tpgid`, and each column after it moves along by one. The minimum column count goes from 11 to 12 to match."
+    },
+    {
+      "id": "table",
+      "section": "c1",
+      "scene": "procTable",
+      "focus": [
+        [
+          159,
+          161
+        ],
+        [
+          167,
+          167
+        ],
+        [
+          174,
+          177
+        ]
+      ],
+      "title": "The full process list reads it too",
+      "text": "The list of every process, which the flow uses to find a run's processes, asks `ps` for the same column and reads it the same way, so the two lookups agree."
+    },
+    {
+      "id": "stub",
+      "section": "c1",
+      "scene": "stub",
+      "focus": [
+        [
+          24,
+          31
+        ]
+      ],
+      "title": "A stand-in agent that reports what it sees",
+      "text": "The acceptance tests start the real interactive form with a stand-in named `claude` first on the path. It prints its process id, its group, the terminal's group, its shell level and the variables the checks look at."
+    },
+    {
+      "id": "pty",
+      "section": "c1",
+      "scene": "pty",
+      "focus": [
+        [
+          158,
+          171
+        ]
+      ],
+      "title": "Typed into a terminal, as a pane does",
+      "text": "Each test types the form into an interactive bash on a pseudo-terminal, using `script`, which takes different arguments on Linux and macOS. A Herdr pane runs the form the same way: typed into the pane's own shell."
+    },
+    {
+      "id": "lead",
+      "section": "c1",
+      "scene": "checks",
+      "focus": [
+        [
+          264,
+          270
+        ]
+      ],
+      "title": "What counts as the pane's own process",
+      "text": "The check passes when three numbers match: the agent's process id, its process group, and the group the terminal serves. Before the change, the last two were the shell's."
+    },
+    {
+      "id": "c1cases",
+      "section": "c1",
+      "scene": "tests",
+      "focus": [
+        [
+          62,
+          70
+        ],
+        [
+          82,
+          90
+        ],
+        [
+          102,
+          111
+        ]
+      ],
+      "title": "A clerk, a postmaster, and a tmux window",
+      "text": "The check runs for a clerk and a postmaster on a pseudo-terminal, and for a clerk as a tmux window's own command. The Herdr case needs a live pane, so it was checked by hand."
+    },
+    {
+      "id": "c2",
+      "section": "c2",
+      "scene": "ticket",
+      "find": [
+        "The agent in such a session starts with the same environment",
+        "A session keeps loading its role's environment file"
+      ],
+      "kind": "criterion",
+      "title": "The same environment as before",
+      "text": "Replacing the shell must not change what the agent starts with, including what the role's environment file sets. Decision 2 keeps loading that file, because it can hold what an agent needs to start at all."
+    },
+    {
+      "id": "envfile",
+      "section": "c2",
+      "scene": "exec",
+      "focus": [
+        [
+          611,
+          611
+        ]
+      ],
+      "marks": [
+        {
+          "line": 611,
+          "text": [
+            "set -a; . \"$f\"; set +a",
+            "unset POSTMASTER_LAUNCH_NAME POSTMASTER_LAUNCH_ROLE"
+          ]
+        }
+      ],
+      "title": "The environment file still loads",
+      "text": "Before the exec, the script loads the role's environment file exactly as the old helper did, with `set -a` so everything the file sets is passed on, such as a provider key. The flow's two internal launch names are removed first, as before."
+    },
+    {
+      "id": "shlvl",
+      "section": "c2",
+      "scene": "exec",
+      "focus": [
+        [
+          589,
+          595
+        ],
+        [
+          611,
+          611
+        ]
+      ],
+      "marks": [
+        {
+          "line": 611,
+          "text": [
+            "\"SHLVL=$SHLVL\"",
+            "-u SHLVL"
+          ]
+        }
+      ],
+      "title": "The shell level survives the exec",
+      "text": "One detail would have changed the environment. When bash runs `exec`, it lowers the exported `SHLVL` by one, so the agent would see 0 where it used to see 1. The script runs the agent through `env \"SHLVL=$SHLVL\"`, which hands back the level the file left, or through `env -u SHLVL` when no level is set. The older bash on macOS behaves the same."
+    },
+    {
+      "id": "findenv",
+      "section": "c2",
+      "scene": "exec",
+      "focus": [
+        [
+          596,
+          603
+        ],
+        [
+          611,
+          611
+        ]
+      ],
+      "marks": [
+        {
+          "line": 611,
+          "text": [
+            "__postmaster_exec_env=$(command -v env)"
+          ]
+        }
+      ],
+      "title": "env is found before the file runs",
+      "text": "The script looks up `env` before it loads the file, while the search path is still the flow's, and keeps it in a variable that is never exported. A file that changes the path or defines its own `env` cannot redirect the launch, and an `exit` in the file still stops it before any agent starts."
+    },
+    {
+      "id": "sameenv",
+      "section": "c2",
+      "scene": "checks",
+      "focus": [
+        [
+          272,
+          279
+        ]
+      ],
+      "title": "What counts as the same environment",
+      "text": "The agent must see shell level 1, the file's `FOO=bar`, the parent's variables, and neither of the flow's internal launch names, exactly as before."
+    },
+    {
+      "id": "c2cases",
+      "section": "c2",
+      "scene": "tests",
+      "focus": [
+        [
+          72,
+          80
+        ],
+        [
+          92,
+          100
+        ],
+        [
+          113,
+          175
+        ]
+      ],
+      "title": "Four kinds of environment file",
+      "text": "The tests try a file that sets a variable, one that sets the shell level to 9, one that exits with status 3 so no agent may start, and a role with no file at all, whose form stays the bare agent command."
+    },
+    {
+      "id": "c3",
+      "section": "c3",
+      "scene": "ticket",
+      "find": [
+        "The launches that run without the user, which are",
+        "Only the sessions opened for the user change"
+      ],
+      "kind": "criterion",
+      "title": "Launches without you work as before",
+      "text": "Workhorses, reviewers, coachmen and a headless postmaster must start and end exactly as they did. Decision 1 keeps them on the old helper."
+    },
+    {
+      "id": "why-old",
+      "section": "c3",
+      "scene": "exec",
+      "focus": [
+        [
+          605,
+          607
+        ]
+      ],
+      "title": "Why they keep the old helper",
+      "text": "Their launcher reads the agent's exit status. An agent killed by a signal comes back as status 128 plus the signal's number, which the wall record relies on. With `exec`, the signal would reach the launcher itself, so the change stays in the one form that needs it."
+    },
+    {
+      "id": "selfkill",
+      "section": "c3",
+      "scene": "checks",
+      "focus": [
+        [
+          242,
+          262
+        ]
+      ],
+      "marks": [
+        {
+          "line": 251,
+          "text": [
+            "kill -TERM $$"
+          ]
+        }
+      ],
+      "title": "A stand-in that kills itself",
+      "text": "The test starts a real background coachman launch with an environment file. Its stand-in agent sends itself the terminate signal straight away."
+    },
+    {
+      "id": "status143",
+      "section": "c3",
+      "scene": "tests",
+      "focus": [
+        [
+          177,
+          186
+        ]
+      ],
+      "title": "The launcher reports it and survives it",
+      "text": "The launcher has to exit with status 143, the code for a terminated child, and not be killed by the signal itself. Both `muse` and `claude` are tried, because an `exec` in the shared helper breaks this for `muse`."
+    },
+    {
+      "id": "c4",
+      "section": "c4",
+      "scene": "ticket",
+      "find": [
+        "A fixture run from this branch scores clean."
+      ],
+      "kind": "criterion",
+      "title": "A fixture run scores clean",
+      "text": "The launcher is part of the coachman's contract, so the change could merge only after a full test run of the flow from its branch scored clean. This one is shown by a run, not by code."
+    },
+    {
+      "id": "fixture",
+      "section": "c4",
+      "scene": "pr",
+      "find": [
+        "Fixture run:",
+        "Gate: pass",
+        "Review: style round 1"
+      ],
+      "title": "11 of 11",
+      "text": "The pull request reports the fixture run clean, 11 of 11 checks, at its final commit, with the gate passing there and no serious review finding open."
+    },
+    {
+      "id": "leftout",
+      "section": "left",
+      "scene": "left",
+      "title": "What the story leaves out",
+      "text": "The steps show {shown} of the {changed} changed lines. The other {left}, mostly test setup and the process module's own tests, are listed in the panel file by file, and each one opens."
+    }
+  ]
+}

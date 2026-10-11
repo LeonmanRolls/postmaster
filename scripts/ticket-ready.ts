@@ -26,15 +26,28 @@
 // the new text off again. The check --body form takes the same --project,
 // --id and --title the marking took, so it verifies that binding; a title
 // passed differently reads as a changed ticket. consume drops the marker when
-// the postmaster dispatches, and unmark drops the mark with it.
+// the postmaster dispatches, and unmark drops the mark with it. A marking with
+// a clerk session recorded arms that session's close: once the clerk's turn
+// ends, the session's tab closes and its record drops.
 //
 // Exit 0 the ticket is ready, or the verb did its work; 2 the ticket is not
 // ready, or the marking was refused; 1 anything else (an unreadable ticket,
 // an unknown tracker, usage).
+import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  closeSync,
+  mkdirSync,
+  mkdtempSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { clerkSessionPath } from "./clerk.ts";
 import { scriptsDir } from "./lib/paths.ts";
 import { run } from "./lib/proc.ts";
 
@@ -295,14 +308,59 @@ function readyViaAdapter(repo: string, id: string, kind: string): boolean {
   return r.out.trim() === "present";
 }
 
-function removeClerkRecord(repo: string, id: string): void {
-  // The clerk's session ends with the marking; a missing record is fine.
-  rmSync(
-    join(repo, ".postmaster", "runs", "postmaster", "clerks", `${encodeURIComponent(id)}.json`),
-    {
-      force: true,
-    },
-  );
+function armClerkClose(repo: string, id: string): boolean {
+  // The clerk marks its own ticket from inside its session, so the session
+  // cannot close yet: keep its record, marked closing, and start the closer
+  // detached. It waits for the turn to end, closes that one session, and drops
+  // the record. A missing record, or none naming a session, arms nothing.
+  let record: Record<string, unknown> = {};
+  try {
+    record = JSON.parse(readFileSync(clerkSessionPath(repo, id), "utf8")) as Record<
+      string,
+      unknown
+    >;
+  } catch {
+    return false;
+  }
+  if (typeof record.handle !== "string" || !record.handle) return false;
+  const handle = record.handle;
+  let log = -1;
+  try {
+    log = openSync(
+      join(dirname(clerkSessionPath(repo, id)), `${encodeURIComponent(id)}.close.log`),
+      "a",
+    );
+  } catch {
+    console.error("ticket-ready: could not open the clerk close log; close the session by hand");
+    return false;
+  }
+  try {
+    const child = spawn(join(HERE, "run"), ["host", "_clerk-close", repo, id, handle], {
+      detached: true,
+      stdio: ["ignore", log, log],
+    });
+    // A spawn failure arrives as async 'error', never as a throw: listen for
+    // it, and read the pid while still synchronous. No pid means no closer.
+    child.on("error", () => {});
+    child.unref();
+    if (child.pid === undefined) throw new Error("the clerk closer did not start");
+  } catch {
+    console.error("ticket-ready: could not start the clerk closer; close the session by hand");
+    try {
+      closeSync(log);
+    } catch {}
+    return false;
+  }
+  try {
+    closeSync(log);
+  } catch {}
+  try {
+    writeFileSync(
+      clerkSessionPath(repo, id),
+      `${JSON.stringify({ ...record, closing: new Date().toISOString() })}\n`,
+    );
+  } catch {}
+  return true;
 }
 
 function logLedgerNote(repo: string, id: string, turnpikes: string): void {
@@ -315,6 +373,23 @@ function logLedgerNote(repo: string, id: string, turnpikes: string): void {
 function logTicketEdit(repo: string, id: string, what: string): void {
   const r = runScript("log-action", ["--project", repo, "clerk", "ticket-edit", id, what]);
   if (r.code !== 0) die(`the ticket-edit line could not be written (${(r.out + r.err).trim()})`);
+}
+
+function stripOneNewline(s: string): string {
+  return s.endsWith("\n") ? s.slice(0, -1) : s;
+}
+
+function firstDifferingLine(
+  a: string,
+  b: string,
+): { line: number; aLine: string | undefined; bLine: string | undefined } {
+  const aLines = a.split("\n");
+  const bLines = b.split("\n");
+  const max = Math.max(aLines.length, bLines.length);
+  for (let i = 0; i < max; i++) {
+    if (aLines[i] !== bLines[i]) return { line: i + 1, aLine: aLines[i], bLine: bLines[i] };
+  }
+  return { line: max, aLine: aLines[max - 1], bLine: bLines[max - 1] };
 }
 
 function markAdapterTicket(
@@ -339,6 +414,7 @@ function markAdapterTicket(
   const base = kind === "plane" ? [] : [repo];
   // The edit decision and base use the stored body: the display read carries
   // the comment trailer, which the adapters do not compare against.
+  let didWriteBody = false;
   if (draftFile && body !== stored) {
     const work = mkdtempSync(join(tmpdir(), "ticket-ready-"));
     try {
@@ -350,6 +426,7 @@ function markAdapterTicket(
       if (r.code !== 0)
         die(`the ${kind} adapter could not write the body (${(r.out + r.err).trim()})`);
       logTicketEdit(repo, id, "body updated");
+      didWriteBody = true;
     } finally {
       rmSync(work, { recursive: true, force: true });
     }
@@ -360,32 +437,62 @@ function markAdapterTicket(
       die(`the ${kind} adapter could not write the title (${(r.out + r.err).trim()})`);
     logTicketEdit(repo, id, "title updated");
   }
-  labelViaAdapter(repo, id, kind, "add");
-  logTicketEdit(repo, id, "label add ready");
-  logLedgerNote(repo, id, turnpikes);
-  removeClerkRecord(repo, id);
-  // Bind the marker to the stored text as the check will read it, not to the
-  // draft bytes, so storage normalization cannot break the comparison.
-  writeQueue(repo, id, title, bodyViaAdapter(repo, id, kind));
-  // An edit that landed between the write and the binding read would bind as
-  // signed. Verify the stored text still matches the signed bytes with the
-  // adapter's own comparison, and roll the mark back (label and marker) on
-  // mismatch; a body the adapter refuses to compare fails the same way, and
-  // retrying converges.
-  const signed = draftFile ? body : stored;
-  const confirm = storedMatches(repo, id, kind, signed);
-  if (confirm !== null) {
-    const baseArgs = kind === "plane" ? [] : [repo];
-    const back = runScript(`${kind}`, [...baseArgs, "label", id, "remove", "ready"]);
-    removeQueue(repo, id);
-    if (back.code === 0) logTicketEdit(repo, id, "label remove ready (mark rolled back)");
-    die(
-      back.code === 0
-        ? `the ticket changed while it was being marked (${confirm}); run mark again`
-        : `the ticket changed while it was being marked (${confirm}); the ready label could not be removed (${(back.out + back.err).trim()}): remove it and run mark again`,
-    );
+  let armed = false;
+  if (kind === "github") {
+    // Read back before the label goes on, and compare without writing
+    // anything: a check that writes can change what it checks, and on GitHub
+    // it does. A failed read or a mismatch leaves neither the label nor the
+    // marker, so there is nothing to roll back.
+    const freshBodyRaw = bodyViaAdapter(repo, id, kind);
+    const freshLive = readViaAdapter(repo, id, kind);
+    const signedBody = draftFile ? body : stored;
+    const diffs: string[] = [];
+    // On either path the stored bytes are the raw read with the one newline
+    // read --body adds taken off: the draft when the mark wrote, else the
+    // bytes the mark started from. A difference names its first line, so a
+    // refusal on a mark that wrote nothing says as much as one that wrote.
+    const freshStored = stripOneNewline(freshBodyRaw);
+    const expectStored = didWriteBody ? signedBody : stripOneNewline(stored);
+    if (freshStored !== expectStored) {
+      const d = firstDifferingLine(expectStored, freshStored);
+      const aDisp = d.aLine === undefined ? "(no line)" : JSON.stringify(d.aLine);
+      const bDisp = d.bLine === undefined ? "(no line)" : JSON.stringify(d.bLine);
+      diffs.push(`the body differs at line ${d.line} (signed ${aDisp} vs stored ${bDisp})`);
+    }
+    if (freshLive.title !== title) {
+      diffs.push(
+        `the title differs (signed ${JSON.stringify(title)} vs stored ${JSON.stringify(freshLive.title)})`,
+      );
+    }
+    if (diffs.length > 0) {
+      die(`the ticket changed while it was being marked: ${diffs.join("; ")}; run mark again`);
+    }
+    labelViaAdapter(repo, id, kind, "add");
+    logTicketEdit(repo, id, "label add ready");
+    logLedgerNote(repo, id, turnpikes);
+    // Bind the marker to the bytes just verified, as the check will read
+    // them, not to the draft bytes.
+    writeQueue(repo, id, freshLive.title, freshBodyRaw);
+    armed = armClerkClose(repo, id);
+  } else {
+    // Bind and confirm with the adapter's own comparison before the label
+    // goes on, so a mismatch or read failure leaves nothing to undo. An edit
+    // that landed between the write and the binding read fails the confirm,
+    // and retrying converges.
+    const boundBody = bodyViaAdapter(repo, id, kind);
+    const signed = draftFile ? body : stored;
+    const confirm = storedMatches(repo, id, kind, signed);
+    if (confirm !== null) {
+      die(`the ticket changed while it was being marked (${confirm}); run mark again`);
+    }
+    labelViaAdapter(repo, id, kind, "add");
+    logTicketEdit(repo, id, "label add ready");
+    logLedgerNote(repo, id, turnpikes);
+    writeQueue(repo, id, title, boundBody);
+    armed = armClerkClose(repo, id);
   }
   console.log(`ticket-ready: ${id} marked ready and queued`);
+  if (armed) console.log(`ticket-ready: its clerk session closes when its turn ends`);
   return 0;
 }
 
@@ -505,9 +612,10 @@ function main(argv: string[]): number {
     }
     if (!turnpikes) die(`checked ${id} but ticket-check printed no turnpikes line`);
     logLedgerNote(repo, id, turnpikes);
-    removeClerkRecord(repo, id);
     writeQueue(repo, id, title, unsignedBody(body));
+    const armed = armClerkClose(repo, id);
     console.log(`ticket-ready: ${id} marked ready and queued`);
+    if (armed) console.log(`ticket-ready: its clerk session closes when its turn ends`);
     return 0;
   }
   if (

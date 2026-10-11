@@ -1,0 +1,30 @@
+<svg class="dg" viewBox="0 0 360 292" role="img" aria-label="The test puts a stand-in claude first on the path and types the form into an interactive bash on a pseudo-terminal. bash runs the helper, which execs into the stand-in. The stand-in prints a PROBE line with its numbers and environment, which the test reads back.">
+  <defs><marker id="ah-rig" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+  <rect class="bx" x="16" y="12" width="196" height="46" rx="8"/>
+  <text class="t1" x="28" y="32">The test</text>
+  <text class="t2" x="28" y="49">stand-in claude on PATH</text>
+  <line class="ln" x1="114" y1="58" x2="114" y2="84" marker-end="url(#ah-rig)"/>
+  <text class="t3" x="122" y="75">types the form into</text>
+  <rect class="bx" x="16" y="86" width="196" height="46" rx="8"/>
+  <text class="t1" x="28" y="106">Interactive bash</text>
+  <text class="t2" x="28" y="123">on a pseudo-terminal</text>
+  <line class="ln" x1="114" y1="132" x2="114" y2="158" marker-end="url(#ah-rig)"/>
+  <text class="t3" x="122" y="149">runs</text>
+  <rect class="bx" x="16" y="160" width="196" height="46" rx="8"/>
+  <text class="t1" x="28" y="180">The helper</text>
+  <text class="t2" x="28" y="197">env file, then exec</text>
+  <line class="ln" x1="114" y1="206" x2="114" y2="232" marker-end="url(#ah-rig)"/>
+  <text class="t3" x="122" y="223">becomes</text>
+  <rect class="bx hot" x="16" y="234" width="196" height="46" rx="8"/>
+  <text class="t1" x="28" y="254">Stand-in claude</text>
+  <text class="t2" x="28" y="271">measures itself</text>
+  <path class="ln" d="M212,257 H292 V198" marker-end="url(#ah-rig)"/>
+  <text class="t3" x="298" y="232">prints</text>
+  <rect class="bx" x="236" y="110" width="112" height="86" rx="8"/>
+  <text class="t1 mono" x="248" y="132">PROBE</text>
+  <text class="t2 mono" x="248" y="152">pid pgid tpgid</text>
+  <text class="t2 mono" x="248" y="170">shlvl foo</text>
+  <text class="t2 mono" x="248" y="188">launch names</text>
+  <path class="ln" d="M292,110 V35 H214" marker-end="url(#ah-rig)"/>
+  <text class="t3" x="298" y="76">read back</text>
+</svg>

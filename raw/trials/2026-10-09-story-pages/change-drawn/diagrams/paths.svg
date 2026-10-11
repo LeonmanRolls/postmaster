@@ -1,0 +1,28 @@
+<svg class="dg" viewBox="0 0 360 226" role="img" aria-label="Before, both the sessions opened for you and the launches that run without you use the forking helper. After, the sessions for you use the new exec helper, and the launches without you keep the forking one.">
+  <defs><marker id="ah-paths" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+  <text class="t3" x="12" y="14">Roles with an env file start through a helper</text>
+  <rect class="bx" x="12" y="26" width="150" height="58" rx="8"/>
+  <text class="t1" x="24" y="50">Sessions for you</text>
+  <text class="t2" x="24" y="70">a clerk, a postmaster</text>
+  <rect class="bx" x="12" y="132" width="150" height="66" rx="8"/>
+  <text class="t1" x="24" y="154">Without you</text>
+  <text class="t2" x="24" y="172">lanes, reviewers,</text>
+  <text class="t2" x="24" y="188">coachmen</text>
+  <g class="on-after">
+    <rect class="bx hot" x="214" y="26" width="134" height="58" rx="8"/>
+    <text class="t1 mono" x="226" y="50">sourcedExec</text>
+    <text class="t2" x="226" y="70">exec: agent leads</text>
+    <line class="ln" x1="162" y1="55" x2="212" y2="55" marker-end="url(#ah-paths)"/>
+    <text class="t3" x="187" y="48" text-anchor="middle">uses</text>
+    <text class="t3" x="281" y="216" text-anchor="middle">unchanged (Decision 1)</text>
+  </g>
+  <g class="on-before">
+    <line class="ln" x1="162" y1="62" x2="212" y2="150" marker-end="url(#ah-paths)"/>
+    <text class="t3" x="194" y="96">uses</text>
+  </g>
+  <rect class="bx" x="214" y="136" width="134" height="58" rx="8"/>
+  <text class="t1 mono" x="226" y="160">sourcedLaunch</text>
+  <text class="t2" x="226" y="180">fork, then wait</text>
+  <line class="ln" x1="162" y1="165" x2="212" y2="165" marker-end="url(#ah-paths)"/>
+  <text class="t3" x="187" y="158" text-anchor="middle">uses</text>
+</svg>

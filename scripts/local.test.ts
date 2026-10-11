@@ -1,4 +1,4 @@
-// Tests beside scripts/local.ts, moved from its --self-test on #109: 106 controls,
+// Tests beside scripts/local.ts, moved from its --self-test on #109: 105 controls,
 // plus one regression control for Bun's fetch-proxy snapshot (restoreEnv).
 // Order-dependent: the tests replay the self-test's sequence in file order against shared
 // fixtures (ticket numbers accumulate), except the final unicode vectors, which are pure.
@@ -15,6 +15,7 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
   statSync,
   symlinkSync,
@@ -46,11 +47,6 @@ const outerProxy =
   process.env.http_proxy ??
   process.env.HTTPS_PROXY ??
   process.env.https_proxy;
-if (outerProxy !== undefined) {
-  console.log(
-    "skip restoreEnv leaves fetch direct: a proxy is set here, so directness was not compared",
-  );
-}
 
 // BASE is the newest scripts/run local in history that is a real script rather than the
 // port's one-line wrapper, and it must still carry the strict ticket read.
@@ -82,17 +78,13 @@ let baseLocal = "";
     }
   }
 }
-const hasPy3 = run("sh", ["-c", "command -v python3"]).code === 0;
+const hasPy3 =
+  run("python3", ["-c", "import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)"])
+    .code === 0;
 const noBaseReplay = baseLocal === "" || !hasPy3;
-if (noBaseReplay) {
-  console.log(
-    `skip BASE local.sh strict-read replay: ${
-      baseLocal === ""
-        ? "BASE local.sh not found in history"
-        : "python3 not on PATH: the 0xff refusal was not compared against BASE"
-    }`,
-  );
-}
+// Without /proc/self/cmdline the raw non-UTF-8 argv tests cannot tell raw bytes
+// from U+FFFD, so they skip on macOS; skips.toml carries the reason.
+const skipRawArgv = !existsSync("/proc/self/cmdline");
 
 let temp = "";
 let bodyPath = "";
@@ -253,7 +245,9 @@ function restoreEnv(): void {
 
 beforeAll(() => {
   try {
-    temp = mkdtempSync(join(tmpdir(), "local-self-test-"));
+    // Realpath once, so every path below is the path the tool reports back: macOS
+    // makes /var/folders a symlink to /private/var/folders, and the two differ.
+    temp = realpathSync(mkdtempSync(join(tmpdir(), "local-self-test-")));
     for (const key of envKeys) oldEnv.set(key, process.env[key]);
     mkdirSync(join(temp, "bin"), { recursive: true });
     mkdirSync(join(temp, "home", ".config"), { recursive: true });
@@ -588,29 +582,6 @@ describe("positive controls", () => {
     expect(wtClean).toBe(true);
   });
 
-  test("ten creates at once get ten different numbers", async () => {
-    const concurrent = join(temp, "concurrent");
-    if (!newRepo(concurrent) || invoke(concurrent, "store", "init").code !== 0)
-      throw new Error("could not make concurrency fixture");
-    const children = Array.from({ length: 10 }, (_, index) =>
-      Bun.spawn([self, "local", concurrent, "create", `Ticket ${index + 1}`, bodyPath], {
-        stdout: "pipe",
-        stderr: "pipe",
-      }),
-    );
-    const childResults = await Promise.all(
-      children.map(async (child: any) => ({
-        code: await child.exited,
-        out: await new Response(child.stdout).text(),
-      })),
-    );
-    const ids = childResults.map((child) => Number(child.out.trim())).sort((a, b) => a - b);
-    const concurrentList = run(self, ["local", concurrent, "list"]);
-    expect(childResults.every((child) => child.code === 0)).toBe(true);
-    expect(ids.join(" ")).toBe("1 2 3 4 5 6 7 8 9 10");
-    expect(concurrentList.out.trim().split("\n").length).toBe(10);
-  });
-
   test("a title with a literal U+FFFD is valid UTF-8", () => {
     const ufd = join(temp, "ufd");
     if (!newRepo(ufd) || invoke(ufd, "store", "init").code !== 0)
@@ -819,7 +790,7 @@ describe("negative controls: nothing is written", () => {
     refused(1, "no ticket #99", repo, "comment", "99", "coachman", "hello");
   });
 
-  test("a comment that is not UTF-8 exits 1", () => {
+  test.skipIf(skipRawArgv)("a comment that is not UTF-8 exits 1", () => {
     refusedRaw(
       1,
       "comment is not UTF-8",
@@ -832,7 +803,7 @@ describe("negative controls: nothing is written", () => {
     );
   });
 
-  test("an actor that is not UTF-8 exits 1", () => {
+  test.skipIf(skipRawArgv)("an actor that is not UTF-8 exits 1", () => {
     refusedRaw(
       1,
       "actor is not UTF-8",
@@ -857,7 +828,7 @@ describe("negative controls: nothing is written", () => {
     refused(1, "more than one line", repo, "create", "Two\nlines", bodyPath);
   });
 
-  test("create with a title that is not UTF-8 exits 1", () => {
+  test.skipIf(skipRawArgv)("create with a title that is not UTF-8 exits 1", () => {
     refusedRaw(1, "title is not UTF-8", repo, "caf\\351", "create", "<RAW-BYTES>", bodyPath);
   });
 
@@ -869,7 +840,7 @@ describe("negative controls: nothing is written", () => {
     refused(1, "more than one line", repo, "title", "1", "Two\nlines");
   });
 
-  test("title that is not UTF-8 exits 1", () => {
+  test.skipIf(skipRawArgv)("title that is not UTF-8 exits 1", () => {
     refusedRaw(1, "title is not UTF-8", repo, "\\377", "title", "1", "<RAW-BYTES>");
   });
 

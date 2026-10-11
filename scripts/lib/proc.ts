@@ -15,13 +15,70 @@ export interface RunResult {
   timedOut: boolean;
 }
 
+/** Linux signal numbers, by name. Used only when the runtime reports Linux
+ * names on another system (below); the live table stays the default. */
+const LINUX_SIGNALS: Readonly<Record<string, number>> = {
+  SIGHUP: 1,
+  SIGINT: 2,
+  SIGQUIT: 3,
+  SIGILL: 4,
+  SIGTRAP: 5,
+  SIGABRT: 6,
+  SIGBUS: 7,
+  SIGFPE: 8,
+  SIGKILL: 9,
+  SIGUSR1: 10,
+  SIGSEGV: 11,
+  SIGUSR2: 12,
+  SIGPIPE: 13,
+  SIGALRM: 14,
+  SIGTERM: 15,
+  SIGSTKFLT: 16,
+  SIGCHLD: 17,
+  SIGCONT: 18,
+  SIGSTOP: 19,
+  SIGTSTP: 20,
+  SIGTTIN: 21,
+  SIGTTOU: 22,
+  SIGURG: 23,
+  SIGXCPU: 24,
+  SIGXFSZ: 25,
+  SIGVTALRM: 26,
+  SIGPROF: 27,
+  SIGWINCH: 28,
+  SIGIO: 29,
+  SIGPWR: 30,
+  SIGSYS: 31,
+};
+
+let calibratedSignals: Readonly<Record<string, number>> | null = null;
+/** The numbers behind the signal names this runtime reports. Bun names a
+ * macOS death by signal 10 `SIGUSR1`, the Linux name for 10, while
+ * `os.constants.signals` carries the macOS numbers — looking the reported
+ * name up in the live table would count 128+30 for a SIGBUS. One probe
+ * death says which table the runtime used: a shell killed by SIGBUS is
+ * reported `SIGUSR1` only where the runtime speaks Linux names. Cached;
+ * a probe that cannot run keeps the live table. */
+function bunSignalNumbers(): Readonly<Record<string, number>> {
+  if (calibratedSignals) return calibratedSignals;
+  calibratedSignals = osConstants.signals;
+  try {
+    const probe = spawnSync("sh", ["-c", "kill -BUS $$"], { encoding: "utf8" });
+    if (probe.signal === "SIGUSR1") calibratedSignals = LINUX_SIGNALS;
+  } catch {
+    /* keep the live table */
+  }
+  return calibratedSignals;
+}
+
 /** The exit code for a child dead by a signal: 128 plus the signal's number
- * as this system numbers it (`os.constants.signals`, which a shell reports
- * it with), 128 when the signal names no number. A signal the runtime names
- * by its number alone (`SIG16`) carries that number. */
+ * as this system numbers it (which a shell reports it with), 128 when the
+ * signal names no number. The name comes from the runtime, whose table the
+ * default follows (above); pass `numbers` to pin another table. A signal
+ * the runtime names by its number alone (`SIG16`) carries that number. */
 export function signalExitCode(
   signal: string,
-  numbers: Readonly<Record<string, number>> = osConstants.signals,
+  numbers: Readonly<Record<string, number>> = bunSignalNumbers(),
 ): number {
   const known = numbers[signal];
   if (known !== undefined) return 128 + known;

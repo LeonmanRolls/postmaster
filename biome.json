@@ -14,7 +14,31 @@
   },
   "overrides": [
     {
+      "includes": ["scripts/lib/vendor/**"],
+      "formatter": {
+        "enabled": false
+      },
+      "linter": {
+        "enabled": false
+      },
+      "assist": {
+        "enabled": false
+      }
+    },
+    {
       "includes": ["scripts/fixtures/**"],
+      "formatter": {
+        "enabled": false
+      },
+      "linter": {
+        "enabled": false
+      },
+      "assist": {
+        "enabled": false
+      }
+    },
+    {
+      "includes": ["scripts/scrub-check.ts", "scripts/raw-promote.ts"],
       "formatter": {
         "enabled": false
       },

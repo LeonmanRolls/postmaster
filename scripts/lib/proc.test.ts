@@ -8,9 +8,9 @@ import { run, signalExitCode } from "./proc.ts";
 describe("signal exit codes", () => {
   test("every signal this system numbers reports 128 plus its number", () => {
     for (const [name, num] of Object.entries(osConstants.signals)) {
-      expect(signalExitCode(name)).toBe(128 + num);
+      expect(signalExitCode(name, osConstants.signals)).toBe(128 + num);
     }
-    expect(signalExitCode("SIGNOTAREAL")).toBe(128);
+    expect(signalExitCode("SIGNOTAREAL", osConstants.signals)).toBe(128);
   });
 
   test("a child stopped by a signal reports it through run(), 128 plus this system's number", () => {
@@ -40,5 +40,12 @@ describe("signal exit codes", () => {
     expect(signalExitCode("SIGUSR1", mac)).toBe(158);
     expect(signalExitCode("SIGBUS", mac)).toBe(138);
     expect(signalExitCode("SIGSYS", mac)).toBe(140);
+    // The numbers a runtime speaks when it reports Linux names on another
+    // system: Bun on macOS reports a signal-10 death as SIGUSR1, which the
+    // Linux table counts 128+10 for, as the shell does.
+    const linux = { SIGUSR1: 10, SIGBUS: 7, SIGPWR: 30 };
+    expect(signalExitCode("SIGUSR1", linux)).toBe(138);
+    expect(signalExitCode("SIGBUS", linux)).toBe(135);
+    expect(signalExitCode("SIGPWR", linux)).toBe(158);
   });
 });

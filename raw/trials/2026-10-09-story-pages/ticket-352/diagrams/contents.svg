@@ -1,0 +1,16 @@
+<svg class="dg" viewBox="0 0 360 262" role="img" aria-label="What the ticket asks for, in five parts: a section for each criterion, a picture to start, the panel follows you, drawn before code, and the code it cites shown. Then nine decisions, three of them yours already.">
+  <text class="t3" x="16" y="16">what must be true</text>
+  <rect class="bx" x="12" y="24" width="336" height="30" rx="7"/>
+  <text class="t1" x="26" y="44">I</text><text class="t2" x="52" y="44">A section for each criterion</text>
+  <rect class="bx" x="12" y="60" width="336" height="30" rx="7"/>
+  <text class="t1" x="26" y="80">II</text><text class="t2" x="52" y="80">A picture to start, in the poster's style</text>
+  <rect class="bx" x="12" y="96" width="336" height="30" rx="7"/>
+  <text class="t1" x="26" y="116">III</text><text class="t2" x="52" y="116">The panel follows the step you read</text>
+  <rect class="bx hot" x="12" y="132" width="336" height="30" rx="7"/>
+  <text class="t1" x="26" y="152">IV</text><text class="t2" x="52" y="152">Drawn before the code is shown</text>
+  <rect class="bx" x="12" y="168" width="336" height="30" rx="7"/>
+  <text class="t1" x="26" y="188">V</text><text class="t2" x="52" y="188">The code it cites, shown as it stands</text>
+  <text class="t3" x="16" y="222">then</text>
+  <rect class="bx dash-b" x="12" y="228" width="336" height="28" rx="7"/>
+  <text class="t2" x="26" y="247">Nine decisions, three of them yours already</text>
+</svg>

@@ -7,9 +7,10 @@
 // Deliberately does NOT filter on having a remote. Plenty of real work is local-only, and
 // filtering on a remote silently hides it. Remote status is shown as information; project
 // instructions or the user establish whether landing uses a pull request or a local merge.
-import { existsSync, statSync } from "node:fs";
+import { existsSync, realpathSync, statSync } from "node:fs";
 import { dirname } from "node:path";
 import { tryTomlFile } from "./lib/data.ts";
+import { globalConfigPath } from "./lib/effective-config.ts";
 import { run } from "./lib/proc.ts";
 
 function isDirectory(p: string): boolean {
@@ -42,7 +43,7 @@ const LIMIT = nat(process.env.LIMIT, 12);
 const DEPTH = nat(process.env.DEPTH, 3);
 const EXCLUDE = envOr("EXCLUDE", "external"); // directory name segment to skip
 const HOME = process.env.HOME ?? "";
-const CONFIG = envOr("POSTMASTER_CONFIG", `${HOME}/.postmaster/config.toml`);
+const CONFIG = globalConfigPath();
 
 let roots = process.argv.slice(2);
 if (roots.length === 0 && existsSync(CONFIG)) {
@@ -96,7 +97,9 @@ for (const root of roots) {
     const isRemote = run("git", ["-C", d, "remote", "get-url", "origin"]).code === 0;
     // ${d/#$HOME/~} is a no-op under bash 5.2's patsub_replacement (the replacement's `~`
     // expands to HOME), so the original prints absolute paths and so does this.
-    const path = d;
+    // Real ones: the root may arrive through a link (macOS TMPDIR, a linked Code
+    // folder), and the list names each project once, canonically.
+    const path = realpathSync(d);
     const remote = isRemote ? "remote" : "local-only";
     rows.push({ ts, key: `${tsText}\t${path}\t${rel}\t${remote}`, path, rel, remote });
   }

@@ -1,0 +1,33 @@
+<svg class="dg" viewBox="0 0 360 262" role="img" aria-label="With the forking helper, a killed agent is seen by bash, which exits with status 143, and the launcher reads that status. With exec there is no shell in between, so the launcher sees the signal itself and re-raises it.">
+  <defs><marker id="ah-kl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+  <rect class="bx" x="16" y="12" width="170" height="44" rx="8"/>
+  <text class="t1" x="28" y="31">The launcher</text>
+  <text class="t2" x="28" y="48">reads the exit</text>
+  <g class="on-fork">
+    <line class="ln" x1="80" y1="56" x2="80" y2="80" marker-end="url(#ah-kl)"/>
+    <text class="t3" x="88" y="72">starts</text>
+    <rect class="bx" x="16" y="82" width="170" height="44" rx="8"/>
+    <text class="t1" x="28" y="101">bash, the helper</text>
+    <text class="t2" x="28" y="118">forks, then waits</text>
+    <line class="ln" x1="80" y1="126" x2="80" y2="150" marker-end="url(#ah-kl)"/>
+    <text class="t3" x="88" y="142">forks</text>
+    <path class="ln dash" d="M186,172 H202 V106 H190" marker-end="url(#ah-kl)"/>
+    <text class="t3 bad" x="210" y="142">killed by TERM</text>
+    <text class="t3 ok" x="210" y="74">exit status 143</text>
+    <text class="t2 ok" x="16" y="228">bash sees the kill and exits 143;</text>
+    <text class="t2 ok" x="16" y="246">the launcher reads a normal status</text>
+  </g>
+  <g class="on-exec">
+    <line class="ln" x1="80" y1="56" x2="80" y2="80" marker-end="url(#ah-kl)"/>
+    <text class="t3" x="88" y="72">starts, then exec</text>
+    <text class="t3 bad" x="210" y="74">dies by the signal</text>
+    <text class="t2 bad" x="16" y="158">no shell in between: the launcher</text>
+    <text class="t2 bad" x="16" y="176">sees the signal and re-raises it</text>
+  </g>
+  <path class="ln dash" d="M186,104 H202 V36 H190" marker-end="url(#ah-kl)"/>
+  <g id="killed-agent" data-shift-exec="0 -70">
+    <rect class="bx hot" x="16" y="152" width="170" height="44" rx="8"/>
+    <text class="t1" x="28" y="171">claude, the agent</text>
+    <text class="t2 bad" x="28" y="188">killed by TERM</text>
+  </g>
+</svg>

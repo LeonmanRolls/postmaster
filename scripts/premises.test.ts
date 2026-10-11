@@ -1,7 +1,7 @@
 // Tests beside scripts/premises.ts: the verdicts between Verified at and base,
 // the unknown cases, and the command's exits.
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { run } from "./lib/proc.ts";
@@ -99,6 +99,51 @@ describe("cite extraction", () => {
     expect(cites[0]?.end).toBe(3);
   });
 
+  test("reads cites below a variant-case agents heading, as readiness accepts", () => {
+    const text = [
+      "## FOR THE AGENTS",
+      "",
+      "- [file](https://github.com/a/b/blob/abc1234/scripts/sample.ts#L2-L3)",
+      "",
+    ].join("\n");
+    const cites = citationsFromText(text);
+    expect(cites).toHaveLength(1);
+    expect(cites[0]?.path).toBe("scripts/sample.ts");
+  });
+
+  test("a fenced ## line does not end the agents part", () => {
+    const text = [
+      "## For the agents",
+      "",
+      "```",
+      "## Example",
+      "```",
+      "",
+      "- [file](https://github.com/a/b/blob/abc1234/scripts/sample.ts#L2-L3)",
+      "",
+    ].join("\n");
+    const cites = citationsFromText(text);
+    expect(cites).toHaveLength(1);
+    expect(cites[0]?.path).toBe("scripts/sample.ts");
+  });
+
+  test("a User journey section does not hide later citations", () => {
+    const text = [
+      "## For the agents",
+      "",
+      "### Technical notes",
+      "",
+      "- [a](https://github.com/a/b/blob/abc1234/scripts/a.ts#L1)",
+      "",
+      "## User journey",
+      "",
+      "- [b](https://github.com/a/b/blob/abc1234/scripts/b.ts#L2)",
+      "",
+    ].join("\n");
+    const cites = citationsFromText(text);
+    expect(cites.map((c) => c.path)).toEqual(["scripts/a.ts", "scripts/b.ts"]);
+  });
+
   test("reads a bare path and the other range forms", () => {
     const text = [
       "## For the agents",
@@ -169,6 +214,14 @@ describe("the verdicts", () => {
     const r = cli([repo, body, verified]);
     expect(r.code).toBe(0);
     expect(r.out).toContain("premise 1: docs/a.md#L5-L5 same");
+    expect(r.out).toContain(`PREMISES verified=${verified} base=${verified} result=same count=1`);
+  });
+
+  test("same: a variant-case Verified at line still anchors, exit 0", () => {
+    const body = ticketBody(verified, `- Renders per ${LINK(verified, "docs/a.md", "L5-L5")}.`);
+    writeFileSync(body, readFileSync(body, "utf8").replace("### Verified at", "### VERIFIED AT"));
+    const r = cli([repo, body, verified]);
+    expect(r.code).toBe(0);
     expect(r.out).toContain(`PREMISES verified=${verified} base=${verified} result=same count=1`);
   });
 

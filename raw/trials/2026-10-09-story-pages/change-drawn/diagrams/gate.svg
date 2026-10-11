@@ -1,0 +1,21 @@
+<svg class="dg" viewBox="0 0 360 312" role="img" aria-label="The change touches the launcher, which is part of the coachman's contract, so a fixture run from the branch had to score clean before merging. It scored 11 of 11, and the change merged on 8 October.">
+  <defs><marker id="ah-gate" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+  <rect class="bx" x="40" y="12" width="280" height="40" rx="8"/>
+  <text class="t1" x="180" y="37" text-anchor="middle">This change touches the launcher</text>
+  <line class="ln" x1="180" y1="52" x2="180" y2="76" marker-end="url(#ah-gate)"/>
+  <text class="t3" x="188" y="68">which is</text>
+  <rect class="bx" x="40" y="78" width="280" height="40" rx="8"/>
+  <text class="t1" x="180" y="103" text-anchor="middle">part of the coachman's contract</text>
+  <line class="ln" x1="180" y1="118" x2="180" y2="142" marker-end="url(#ah-gate)"/>
+  <text class="t3" x="188" y="134">so</text>
+  <rect class="bx" x="40" y="144" width="280" height="50" rx="8"/>
+  <text class="t1" x="180" y="166" text-anchor="middle">A fixture run from the branch</text>
+  <text class="t2" x="180" y="184" text-anchor="middle">must score clean before it merges</text>
+  <line class="ln" x1="180" y1="194" x2="180" y2="218" marker-end="url(#ah-gate)"/>
+  <text class="t3" x="188" y="210">scored</text>
+  <rect class="bx ok" x="40" y="220" width="280" height="40" rx="8"/>
+  <text class="t1 ok" x="180" y="245" text-anchor="middle">11 of 11 checks: clean</text>
+  <line class="ln" x1="180" y1="260" x2="180" y2="284" marker-end="url(#ah-gate)"/>
+  <text class="t3" x="188" y="276">then</text>
+  <text class="t1" x="180" y="304" text-anchor="middle">merged on 8 October</text>
+</svg>

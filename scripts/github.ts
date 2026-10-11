@@ -10,7 +10,7 @@
 //   run github <repo> create <title> <body-file>    new issue on the board in Todo; prints its number
 //                                                  (exit 5: created, but not put on the board)
 //   run github <repo> read <n> [--body]             title, state, labels, body, comments; with
-//                                                  --body, only the body, exactly as stored
+//                                                  read --body prints the stored body followed by one newline
 //   run github <repo> edit <n> <body-file> <base-file>
 //                                                  replace the issue's body; never its title
 //   run github <repo> title <n> <title>             change the issue's title
@@ -51,6 +51,7 @@ import { join } from "node:path";
 import { scriptsDir } from "./lib/paths.ts";
 import { run } from "./lib/proc.ts";
 import { digitValue, END_OF_STRING, pyLower, pyWords, W_CLASS } from "./lib/text.ts";
+import { thrownDetail } from "./lib/thrown.ts";
 
 const STATES = ["todo", "in-progress", "blocked", "done", "cancelled"];
 const COLUMN: Record<string, string> = {
@@ -117,6 +118,47 @@ interface ListItem {
   labels: IssueLabel[];
   items: ProjectItemNode[];
 }
+// An issue as the read query returns it, before its node lists are flattened.
+interface IssueRaw {
+  number: number;
+  title: string;
+  body: string;
+  state: string;
+  stateReason: string | null;
+  url: string;
+  createdAt: string;
+  labels?: { nodes?: IssueLabel[] };
+  comments?: { nodes?: IssueComment[] };
+  projectItems?: { nodes?: ProjectItemNode[] };
+}
+// A node of the list query, before its node lists are flattened.
+interface IssueNode {
+  number: number;
+  title: string;
+  state: string;
+  stateReason?: string | null;
+  labels?: { nodes?: IssueLabel[] };
+  projectItems?: { nodes?: ProjectItemNode[] };
+}
+interface IssuesPage {
+  nodes?: IssueNode[];
+  pageInfo?: { hasNextPage?: boolean; endCursor: string };
+}
+interface BoardsData {
+  data?: { repository?: { projectsV2?: { nodes?: Board[] } } };
+}
+interface IssueData {
+  data?: { repository?: { issue?: IssueRaw } };
+}
+interface IssuesData {
+  data?: { repository?: { issues?: IssuesPage } };
+}
+interface StatusFieldData {
+  data?: { node?: { field?: { id?: string; options?: Array<{ id: string; name: string }> } } };
+}
+interface PermissionData {
+  data?: { repository?: { viewerPermission?: string } };
+}
 
 // --- remote parsing ---------------------------------------------------------------------------
 const REMOTE_RE = /github\.com[:/]([^/]+)\/([^/]+?)(?:\.git)?\/?$/u;
@@ -130,7 +172,7 @@ function gh(argv: string[], ok: number[] = [0]): string {
   return r.out;
 }
 
-function ghj<T = any>(argv: string[]): T {
+function ghj<T = unknown>(argv: string[]): T {
   const out = gh(argv);
   try {
     return JSON.parse(out) as T;
@@ -145,7 +187,7 @@ function linkedBoards(owner: string, name: string): Board[] {
     "query($owner:String!,$name:String!){repository(owner:$owner,name:$name){" +
     "projectsV2(first:20){nodes{id number title closed url " +
     "owner{... on User{login} ... on Organization{login}}}}}}";
-  const data = ghj<any>([
+  const data = ghj<BoardsData>([
     "api",
     "graphql",
     "-f",
@@ -156,7 +198,7 @@ function linkedBoards(owner: string, name: string): Board[] {
     `name=${name}`,
   ]);
   const nodes = data?.data?.repository?.projectsV2?.nodes ?? [];
-  return (nodes as Board[]).filter((n) => !n.closed);
+  return nodes.filter((n) => !n.closed);
 }
 
 let REPO_DIR = "";
@@ -198,7 +240,7 @@ function boardInit(owner: string, name: string, nwo: string, title: string): voi
     console.log(`board exists: #${b.number} ${b.title} ${b.url}`);
     return;
   }
-  const made = ghj<any>([
+  const made = ghj<{ number: number; url?: string }>([
     "project",
     "create",
     "--owner",
@@ -218,14 +260,14 @@ function statusField(b: Board): [string, Record<string, string>] {
   const q =
     "query($id:ID!){node(id:$id){... on ProjectV2{" +
     'field(name:"Status"){... on ProjectV2SingleSelectField{id options{id name}}}}}}';
-  const data = ghj<any>(["api", "graphql", "-f", `query=${q}`, "-F", `id=${b.id}`]);
+  const data = ghj<StatusFieldData>(["api", "graphql", "-f", `query=${q}`, "-F", `id=${b.id}`]);
   const f = data?.data?.node?.field;
   if (!f?.id || !Array.isArray(f.options)) dieGh(`board #${b.number} has no Status field`);
   const opts: Record<string, string> = {};
   for (const o of f.options) {
-    opts[pyLower((o.name as string).replace(NONWORD_RE, ""))] = o.id;
+    opts[pyLower(o.name.replace(NONWORD_RE, ""))] = o.id;
   }
-  return [f.id as string, opts];
+  return [f.id, opts];
 }
 
 // The issue's own project items, asked for in the query that reads the issue (about one point
@@ -248,7 +290,7 @@ function boardItem(
 // idempotent, so an issue that a board workflow added meanwhile gets its existing item back.
 function itemId(b: Board, url: string, item: { id: string } | null): string {
   if (item) return item.id;
-  const added = ghj<any>([
+  const added = ghj<{ id: string }>([
     "project",
     "item-add",
     String(b.number),
@@ -292,24 +334,31 @@ function issueOf(owner: string, name: string, nwo: string, number: number): Issu
     "issue(number:$number){number title body state stateReason url createdAt " +
     "labels(first:50){nodes{name}} comments(first:100){nodes{body createdAt author{login}}} " +
     `${ITEMS_QUERY}}}}`;
-  const data = ghj<any>([
-    "api",
-    "graphql",
-    "-f",
-    `query=${q}`,
-    "-F",
-    `owner=${owner}`,
-    "-F",
-    `name=${name}`,
-    "-F",
-    `number=${number}`,
-  ]);
+  let data: IssueData;
+  try {
+    data = ghj<IssueData>([
+      "api",
+      "graphql",
+      "-f",
+      `query=${q}`,
+      "-F",
+      `owner=${owner}`,
+      "-F",
+      `name=${name}`,
+      "-F",
+      `number=${number}`,
+    ]);
+  } catch (e) {
+    if (e instanceof DieError) dieGh(`could not read issue #${number} in ${nwo}: ${e.msg}`);
+    throw e;
+  }
   const iss = data?.data?.repository?.issue;
   if (!iss) dieGh(`no issue #${number} in ${nwo}`);
-  iss.labels = iss.labels?.nodes ?? [];
-  iss.comments = iss.comments?.nodes ?? [];
-  iss.items = iss.projectItems?.nodes ?? [];
-  return iss as Issue;
+  const shaped = iss as unknown as Issue;
+  shaped.labels = iss.labels?.nodes ?? [];
+  shaped.comments = iss.comments?.nodes ?? [];
+  shaped.items = iss.projectItems?.nodes ?? [];
+  return shaped;
 }
 
 function allIssues(owner: string, name: string): ListItem[] {
@@ -332,7 +381,7 @@ function allIssues(owner: string, name: string): ListItem[] {
       `name=${name}`,
     ];
     if (after) argv.push("-F", `after=${after}`);
-    const page = ghj<any>(argv)?.data?.repository?.issues ?? {};
+    const page: IssuesPage = ghj<IssuesData>(argv)?.data?.repository?.issues ?? {};
     for (const n of page.nodes ?? []) {
       out.push({
         number: n.number,
@@ -417,8 +466,8 @@ function textOf(path: string, what: string): string {
   try {
     const buf = readFileSync(path);
     return new TextDecoder("utf-8", { fatal: true }).decode(buf);
-  } catch (e: any) {
-    dieGh(`cannot read ${what} ${path}: ${e?.message ?? e}`);
+  } catch (e) {
+    dieGh(`cannot read ${what} ${path}: ${thrownDetail(e)}`);
   }
 }
 
@@ -644,7 +693,7 @@ function main(): void {
     if (args.length !== 1) dieGh("usage: run github <repo> access");
     const q =
       "query($owner:String!,$name:String!){repository(owner:$owner,name:$name){viewerPermission}}";
-    const data = ghj<any>([
+    const data = ghj<PermissionData>([
       "api",
       "graphql",
       "-f",

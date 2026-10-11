@@ -2,10 +2,17 @@
 // Prints key=value lines. Empty value means "could not determine, ask the user". Each check a
 // change is verified by is a `check.<name>=<where it came from>: <what it shows>` line: declared in
 // the project's .postmaster/project.toml, or a default and which one (scripts/run verify).
+// surfaces= names the surface kinds to offer verifiers for, from discovery's own found
+// defaults rather than the resolved checks, so a project that declares its checks still
+// names them; a fixture copy names none, since it is never offered verifiers.
+// verifiers= names the verifier folders already at the repo top, or nothing.
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { tryJsonFile } from "./lib/data.ts";
+import { isFixtureCopy } from "./lib/fixture-mark.ts";
 import { beside, toolRoot } from "./lib/paths.ts";
 import { run } from "./lib/proc.ts";
+import { orderKinds, presentVerifierFolders, surfaceKind, type Surface } from "./verifier.ts";
+import { discover } from "./verify.ts";
 
 for (const name of [
   "GIT_DIR",
@@ -96,6 +103,29 @@ const lsNames = (argv: string[]): string => {
 };
 const docs = lsNames(["AGENTS.md", "CLAUDE.md", "README.md", "CONTRIBUTING.md"]);
 const dirs = lsNames(["-d", "wiki", "docs", ".github"]);
+// sed 's/^<prefix> //' | paste -sd' ' -: every line, empty ones included, joined by one space.
+const joinWarn = (text: string, prefix: string | RegExp): string =>
+  text
+    .replace(/\n+$/u, "")
+    .split("\n")
+    .map((l) => l.replace(prefix, ""))
+    .join(" ");
+// The verifiers' read-first entries join the docs, so a run's implementers
+// read the index first. A listing that fails warns and leaves docs= as today:
+// discovery never refuses a project over its verifiers.
+let verifiers = "";
+const listed = run(beside(import.meta, "run"), ["verifier", "list", ABS], {
+  cwd: toolRoot(import.meta),
+});
+if (listed.code === 0) {
+  verifiers = listed.out
+    .split("\n")
+    .filter((l) => l.startsWith("index: "))
+    .map((l) => l.slice("index: ".length))
+    .join(" ");
+} else {
+  console.error(`warn=verifiers: ${joinWarn(listed.out + listed.err, /^verifier: /u)}`);
+}
 
 // The tracker is visible in how the project already writes commits; nothing to configure.
 const oneline = run("git", ["log", "--oneline", "-200"]).out;
@@ -152,18 +182,33 @@ if (verified.code === 0) {
   }
 } else {
   checks = [];
-  // sed 's/^verify: //' | paste -sd' ' -: every line, empty ones included, joined by one space.
-  const text = (verified.out + verified.err).replace(/\n+$/u, "");
-  const joined = text
-    .split("\n")
-    .map((l) => l.replace(/^verify: /u, ""))
-    .join(" ");
-  console.error(`warn=checks: ${joined}`);
+  console.error(`warn=checks: ${joinWarn(verified.out + verified.err, /^verify: /u)}`);
 }
+
+/** The kinds to offer verifiers for: discovery's found names as kinds, in cli, web, library order. */
+const surfaceNames = (repo: string): string[] => {
+  if (isFixtureCopy(repo)) return [];
+  const kinds: Surface[] = [];
+  const unknown: string[] = [];
+  for (const name of discover(repo).found) {
+    const kind = surfaceKind(name);
+    if (kind === null) {
+      if (!unknown.includes(name)) unknown.push(name);
+    } else {
+      kinds.push(kind);
+    }
+  }
+  // A found name with no verifier mapping is passed through raw, never dropped:
+  // setup-verifiers reports it instead of silently offering fewer surfaces.
+  return [...orderKinds(kinds), ...unknown.sort()];
+};
 
 console.log(`gate=${gate}`);
 console.log(`install=${install}`);
-console.log(`docs=${(docs + dirs).replace(/ *$/u, "")}`);
+const extra = verifiers === "" ? "" : `${verifiers} `;
+console.log(`docs=${(docs + dirs + extra).replace(/ *$/u, "")}`);
+console.log(`surfaces=${surfaceNames(ABS).join(",")}`);
+console.log(`verifiers=${presentVerifierFolders(ABS).join(",")}`);
 console.log(`tracker=${kind}`);
 console.log(`tracker_prefix=${trackerPrefix}`);
 for (const l of settings.out.replace(/\n$/u, "").split("\n")) console.log(l);

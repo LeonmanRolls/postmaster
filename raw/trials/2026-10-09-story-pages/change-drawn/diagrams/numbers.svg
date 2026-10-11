@@ -1,0 +1,27 @@
+<svg class="dg" viewBox="0 0 360 196" role="img" aria-label="The agent's process id, its process group and the group the terminal serves. Before, the agent's id differs from the group, which is the shell's, and the terminal serves the shell. After, all three are the agent's.">
+  <text class="t1" x="16" y="20">The agent's three numbers</text>
+  <text class="t3" x="344" y="20" text-anchor="end">example ids</text>
+  <rect class="bx" x="16" y="34" width="96" height="78" rx="8"/>
+  <text class="t2" x="64" y="54" text-anchor="middle">process id</text>
+  <text class="big bad on-before" x="64" y="86" text-anchor="middle">4101</text>
+  <text class="big ok on-after" x="64" y="86" text-anchor="middle">4100</text>
+  <text class="t3" x="64" y="104" text-anchor="middle">claude</text>
+  <text class="t1 bad on-before" x="122" y="80" text-anchor="middle">≠</text>
+  <text class="t1 ok on-after" x="122" y="80" text-anchor="middle">=</text>
+  <rect class="bx" x="132" y="34" width="96" height="78" rx="8"/>
+  <text class="t2" x="180" y="54" text-anchor="middle">its group</text>
+  <text class="big" x="180" y="86" text-anchor="middle">4100</text>
+  <text class="t3 on-before" x="180" y="104" text-anchor="middle">bash's</text>
+  <text class="t3 on-after" x="180" y="104" text-anchor="middle">claude's</text>
+  <text class="t1 on-before" x="238" y="80" text-anchor="middle">=</text>
+  <text class="t1 ok on-after" x="238" y="80" text-anchor="middle">=</text>
+  <rect class="bx" x="248" y="34" width="96" height="78" rx="8"/>
+  <text class="t2" x="296" y="54" text-anchor="middle">terminal serves</text>
+  <text class="big" x="296" y="86" text-anchor="middle">4100</text>
+  <text class="t3 on-before" x="296" y="104" text-anchor="middle">bash's group</text>
+  <text class="t3 on-after" x="296" y="104" text-anchor="middle">claude's group</text>
+  <text class="t2 bad on-before" x="16" y="144">The terminal serves bash's group,</text>
+  <text class="t2 bad on-before" x="16" y="162">so the app sees a plain terminal.</text>
+  <text class="t2 ok on-after" x="16" y="144">All three match: the agent leads,</text>
+  <text class="t2 ok on-after" x="16" y="162">so the app lists the session.</text>
+</svg>

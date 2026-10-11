@@ -26,7 +26,7 @@ holds = "the entry every tool script runs through: name validation, resolution a
 
 [[files]]
 path = "scripts/host.ts"
-holds = "marker writing and clearing, the exit watcher and its call"
+holds = "marker writing and clearing, the exit watcher and its call, the workhorse launch it composes, and the pidfile process-group stop"
 
 [[files]]
 path = "scripts/runs-status.ts"
@@ -105,5 +105,25 @@ path = "scripts/summary-evidence.ts"
 holds = "the evidence-shape enforcement the runbook invokes at harvest"
 
 [[files]]
+path = "scripts/review-round.ts"
+holds = "the review round's cut, launch and harvest: the gate check and its action, the open lenses and scratches, every reviewer through the host, the wait's pairs, and the bug report harvest"
+
+[[files]]
+path = "scripts/synthesis-shares.ts"
+holds = "the SHARES measurement the runbook invokes: the synthesis HEAD it reads, the record, and the line it appends to the run log"
+
+[[files]]
+path = "scripts/project-settings.ts"
+holds = "the run root and the worktree exclude the runbooks invoke, beside the project settings a run reads"
+
+[[files]]
 path = "scripts/aftercare.ts"
 holds = "the run's cleanup: which folders go, how they are saved, the closing steps and the summary"
+
+[[files]]
+path = "scripts/take-in.ts"
+holds = "the take-in step: quiescence and commit identity before synthesis"
+
+[[files]]
+path = "scripts/merge-default.ts"
+holds = "the pre-card merge step: the freshness question, the merge and its log, the count, and the card's report"

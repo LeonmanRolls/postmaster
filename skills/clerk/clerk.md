@@ -59,6 +59,25 @@ simplify the words and move the detail down. Keep every decision that changes wh
 or what the flow does in the plain part. The technical part follows from it and adds no behavior.
 Tag each technical note with the criteria and decisions it follows from, such as (C2, D1).
 
+A ticket has at most five acceptance criteria. Above five there are two ways under the limit, and
+only two: leave work out of the ticket, or split the ticket by outcome
+into slices the user can each check on their own. Getting under five by
+packing ideas into one criterion, or by moving a criterion into the decisions
+or the agents' part, is not one of them.
+
+A split follows outcomes, not a count: each slice is a piece the user can check alone, and a piece
+that cannot be checked alone lands with its neighbour. Write the umbrella's text in the draft the
+brief names and each slice's beside it. The umbrella runs nothing itself and is never marked ready:
+it holds the decisions more than one slice follows, and it has one criterion, that every slice it
+lists has landed. Each slice keeps its own criteria and the decisions only it follows, names the
+slices it needs in its direction, and restates in its technical notes the umbrella decisions that
+bind it. A decision that only one slice follows stays in that slice. The umbrella's text reaches
+the tracker through the adapter's edit, never `ticket-ready mark`, so it gets no ready label.
+
+When the user keeps more than five criteria in one ticket, record it as their word: a decision
+marked `(given by the user)` that says how many criteria it keeps and why, cited by a technical
+note. The parts check still warns.
+
 Check each criterion against the four shapes that cannot be finished, which
 [the template](ticket-template.md) lists under "A criterion must be finishable", and rewrite it in
 its bounded form before the user sees the draft. If the whole point of a ticket is one of those
@@ -71,6 +90,17 @@ order, run it at the base, and put what it showed after **At the base**. If the 
 the stated behavior, or a check cannot tell the fix from a workaround, change the ticket and tell
 the user what changed and why. The user reviews the plain part once; do not ask them to review the
 code details separately.
+
+Where a criterion drives a surface that has a verifier, write its check through that verifier:
+name the verifier and the feature page it uses. The brief's Checks and verifiers section names the
+project's verifiers and their feature pages. Run the check at the base through the verifier, and
+put what it showed after **At the base** with the proof file named. A feature with no page yet is
+driven through the verifier's start and drive steps all the same, and the run adds its page.
+
+When you drive a verifier at the base and a step the ticket does not change fails, tell the user
+which verifier and which step failed: the project may have changed under the verifier from outside
+it, through a new tool, browser or service version, or a file the verifier does not list. Do not
+rewrite the check around the failure.
 
 ### Show the draft and work through the user's feedback
 
@@ -92,8 +122,9 @@ has a `ready` label; your brief command takes that label off first.
 
 ## Mark the ticket ready
 
-Only when the user says it is ready, remove the first-line `DRAFT:` marker from the draft and save
-the final text there. Run both checks again:
+Only when the user says it is ready, read back what they reviewed — the published page when you published one, otherwise the editor's copy — and show them any difference from the draft file. Where the two differ, save the user's version from the document to the draft file and mark that. When you cannot read back what the user reviewed, tell the user so and mark only after they confirm the draft.
+
+Remove the first-line `DRAFT:` marker from the draft and save the final text there. Run both checks again:
 
 ```sh
 <tool>/scripts/run ticket-check --body <draft> --title "<title>" --project <repo>
@@ -118,7 +149,8 @@ which records the sign-off and queues the ticket the same way. Pass `--labels` o
 label, each flag one whole name; a lone flag with a comma is refused as ambiguous.
 
 Tell the user the ticket is ready and the postmaster will pick it up when a run slot is free. They
-do not need to ask the postmaster again.
+do not need to ask the postmaster again. The mark closes this session once your turn ends, so say
+goodbye briefly and start nothing new: the tab closes itself.
 
 ## Safety
 

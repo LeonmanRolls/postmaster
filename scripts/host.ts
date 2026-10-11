@@ -4,12 +4,14 @@
 // form, and the two change together.
 //
 //   run host detect                        herdr, tmux or none, on stdout
-//   run host name <dispatch>               the run's ticket name
+//   run host name <dispatch>               the run's ticket name, cut to 30 characters
 //   run host name <dispatch> coachman <leg-name> <leg-number>
 //   run host name <dispatch> workhorse <lane>
 //   run host name <dispatch> review <lane> <lens> <round>
 //   run host name <dispatch> postmaster
 //   run host name <dispatch> role <text...>                          any other launch, by its role alone
+//   run host run-state [--watch] <dispatch>   the ticket, stage and wait, for the run tab's
+//                                         state pane; --watch reprints every 60 seconds
 //   run host leg launch|takeover <dispatch> <worktree> <leg> <number> <prompt>
 //   run host leg resume <dispatch> <worktree> <leg> <number> <thread-id> <prompt>
 //   run host leg retry <dispatch> <worktree> <leg> <number>
@@ -17,19 +19,33 @@
 //   run host leg backfill <dispatch> <leg> <number>
 //   run host leg waiting add|remove|list <runs> <ticket> [<question-file>]
 //   run host run <name> <cwd> [--under <dispatch>] [--role lane|coachman|reviewer] [--run <dispatch>]
-//               [--out <file>] [--err <file>] [--append] [--marker <file>]
+//               [--project <repo>] [--out <file>] [--err <file>] [--append] [--marker <file>]
 //               [--pidfile <file>] -- <command...>
+//   run host workhorse <dispatch> <lane> <worktree>
+//                                         launch one workhorse into its worktree: its name from
+//                                         `name ... workhorse`, its events/err/marker under the
+//                                         dispatch's logs, `run launch launch` with --run
+//   run host stop-pidfile <pidfile>        stop the recorded launch and its group while its
+//                                         identity matches, else report the leftover members
+//   run host limits [--role lane|coachman|reviewer] [--run <dispatch>|--project <repo>]
+//                                         print the launch limits that would apply:
+//                                         memory=<max> and tasks=<max>
 //   run host stop <worktree>               stop every launch still running in a worktree, and
 //                                         everything each one started
-//   run host close <worktree>              close its tabs/space (Herdr) and its windows (tmux)
-//   run host stop-run <dispatch>           stop launches in every worktree the run created
-//   run host close-run <dispatch>          close spaces/windows for every worktree the run created
+//   run host close <worktree>              close its panes/tabs/space (Herdr) and its windows (tmux)
+//   run host stop-run <dispatch>           stop launches in every worktree the run created,
+//                                         and at a fixture copy's root
+//   run host close-run <dispatch>          close the run tab and every worktree's panes/windows,
+//                                         and for a fixture copy the copy's own space too
 //   run host spawn <handle> <cwd> [--label <text>] -- <command...>   an interactive session;
 //                                         the handle becomes a Herdr agent name
 //   run host send <handle> <file> [--wait [<seconds>]]   submit the file's text to that session,
 //                                         and with --wait block until it settles (default 600)
 //   run host wait <handle> [<seconds>]     block until it settles, when nothing was just sent
 //   run host read <handle> [<lines>]       print what it shows (default 120 lines)
+//   run host close-handle <handle>         close every session recorded under the handle, on each
+//                                         host that answers; a spawned session from before this
+//                                         form exists closes by hand
 //   run host --live-test                   the ticket's controls, against the hosts on this machine
 //
 // run: <command> is the same headless command a caller would otherwise background with `&`. It
@@ -39,20 +55,21 @@
 // --append, and its stderr to --err, which holds only this launch's errors. --marker is removed
 // as it starts and touched when it exits,
 // whatever its exit, and also when run host cannot start it, with the reason in --err. --pidfile
-// gets its pid, which is also its process group: `kill -- -<pid>` stops all of it. <cwd> is the
-// directory the launch belongs to, usually its worktree: in Herdr the launch runs in a new tab of
-// that worktree's space, opened with `herdr worktree open` under the repository's space if it is
-// not open yet; in tmux in a window of session postmaster-<repo>; with no host, detached from
-// the caller. A run launch's <cwd>, including a reviewer's scratch clone, is its tab's working
-// directory inside the run's synthesis-worktree space in Herdr. In tmux a scratch clone joins
-// the session of the repository it was cut from. <name> labels the tab or window and the pane's
-// title, and names the thread where the harness can (POSTMASTER_LAUNCH_NAME, read by run launch).
+// gets its pid, which is also its process group, with the start, boot and command that prove
+// it: stop-pidfile stops all of it while that identity matches, else reports the leftover
+// members. <cwd> is the directory the launch belongs to, usually its worktree: in Herdr the
+// launch runs in a new pane of the run's one tab in the repository's space; in tmux in a
+// window of session postmaster-<repo>; with no host, detached from
+// the caller. A run launch's <cwd>, including a reviewer's scratch clone, is its pane's working
+// directory: a pane's working directory is its own. In tmux a scratch clone joins
+// the session of the repository it was cut from. <name> labels the pane and its title, and
+// names the thread where the harness can (POSTMASTER_LAUNCH_NAME, read by run launch).
 // If --out is set, its absolute path also reaches run launch as POSTMASTER_EVENT_STREAM so that a
 // run can retain the harness's durable session beside that event stream. For a run launch,
 // --role reaches a run's run launch command as POSTMASTER_LAUNCH_ROLE; it is the explicit role
 // used in its usage record, and is removed before the harness starts.
 // Pass a role-specific `run host name` result as the launch name and pass the dispatch separately,
-// so the ticket title labels only the run space and never passes through a shell. A pane shows
+// so the ticket title labels only the run tab and never passes through a shell. A pane shows
 // the stream through run view-stream. A launch carries its own pane's identity (Herdr's six
 // HERDR_* pane values, or TMUX_PANE), never its caller's. It drops caller HERDR_* and Claude
 // session identity: CLAUDECODE, CLAUDE_PID, CLAUDE_CODE_SESSION_ID,
@@ -121,12 +138,17 @@ import {
 import { homedir, tmpdir } from "node:os";
 import { basename, dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { clerkSessionPath } from "./clerk.ts";
 import { parseTomlText } from "./lib/data.ts";
-import { scriptsDir } from "./lib/paths.ts";
+import { effectiveConfigForProject, globalConfigPath } from "./lib/effective-config.ts";
+import { scriptsDir, toolRoot } from "./lib/paths.ts";
 import { mkstempSync, run, signalExitCode } from "./lib/proc.ts";
 import {
   bootId,
   processCommandLine,
+  processCommandLines,
+  processInfo,
+  processIsLive,
   processStart,
   processState,
   processTable as sharedProcessTable,
@@ -145,6 +167,7 @@ import {
 } from "./lib/text.ts";
 
 const HERE = scriptsDir(import.meta);
+const TOOL = toolRoot(import.meta);
 const SOURCE = "custom:postmaster";
 const META = "custom:postmaster-meta";
 let STATE = process.env.POSTMASTER_HOST_STATE ?? join(homedir(), ".postmaster", "host");
@@ -228,6 +251,13 @@ function clean(value: string): string {
     })
     .join("");
 }
+// The run level shows the ticket number and the start of its title, in 30
+// characters at most: the phone's sidebar is narrow, and the number finds
+// the rest. Launch names stay whole.
+const RUN_NAME_LIMIT = 30;
+function shortName(value: string): string {
+  return [...value].slice(0, RUN_NAME_LIMIT).join("");
+}
 function count(value: string | undefined, what: string): number {
   if (value === undefined || !/^[0-9]+$/u.test(value))
     die(`${what} must be a whole number, not '${String(value ?? "")}'`);
@@ -238,9 +268,34 @@ function count(value: string | undefined, what: string): number {
 function quote(value: string): string {
   return `'${value.replace(/'/gu, "'\\''")}'`;
 }
-function parseJson(text: string): any {
+// Shapes of the Herdr CLI's JSON replies, per call site.
+interface HerdrReply {
+  result?: unknown;
+  error?: { code?: unknown };
+}
+interface HerdrTokens {
+  postmaster?: unknown;
+  state?: unknown;
+}
+interface HerdrSpace {
+  workspace_id?: unknown;
+  worktree?: unknown;
+  tokens?: HerdrTokens;
+}
+interface HerdrPane {
+  pane_id?: unknown;
+  tab_id?: unknown;
+  tokens?: HerdrTokens;
+}
+interface HerdrPlaced {
+  workspace?: HerdrSpace;
+  tab?: { tab_id?: unknown };
+  root_pane?: { pane_id?: unknown };
+}
+
+function parseJson<T = HerdrReply>(text: string): T | null {
   try {
-    return JSON.parse(text);
+    return JSON.parse(text) as T;
   } catch {
     return null;
   }
@@ -248,7 +303,7 @@ function parseJson(text: string): any {
 function jsonValue(value: unknown): string {
   return value === undefined || value === null ? "" : String(value);
 }
-function _jsonStdout(text: string, expression: (data: any) => unknown): string {
+function _jsonStdout(text: string, expression: (data: HerdrReply | null) => unknown): string {
   const value = parseJson(text);
   return value === null ? "" : jsonValue(expression(value));
 }
@@ -289,6 +344,26 @@ function repoOf(path: string): string {
 function tmuxSession(path: string): string {
   const repo = repoOf(path) || path;
   return `postmaster-${basename(repo).replace(/[.:]/gu, "_")}`;
+}
+// A fixture copy: made by run fixture new for one run, marked with
+// .postmaster/fixture and postmaster.fixture in its local git config.
+export function isFixtureRepo(root: string): boolean {
+  if (!root) return false;
+  try {
+    if (statSync(join(root, ".postmaster", "fixture")).isFile()) return true;
+  } catch {}
+  const result = run("git", ["-C", root, "config", "--local", "--get", "postmaster.fixture"]);
+  return result.code === 0 && result.out.trim() !== "";
+}
+// The repository a run's synthesis worktree stands in, "" when the waybill
+// names none: the same guards runWorktreePaths applies to the same path.
+function dispatchRepo(givenDispatch: string): string {
+  const dispatch = realpathLoose(givenDispatch);
+  const synthesis = dispatchInfo(dispatch).worktree;
+  if (!synthesis) return "";
+  const synth = realpathLoose(synthesis);
+  if (basename(dirname(synth)) !== ".worktrees") return "";
+  return dirname(dirname(synth));
 }
 function handleOf(text: string): string {
   // Byte for byte the way BASE's tr sees it: tr folds ASCII case and replaces
@@ -355,9 +430,9 @@ function isPathComponent(value: unknown): boolean {
 }
 
 // Stores are third-party text: anything not a mapping is no store at all.
-function asRecord(value: unknown): Record<string, any> {
+function asRecord(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, any>)
+    ? (value as Record<string, unknown>)
     : {};
 }
 
@@ -380,7 +455,7 @@ function nameCmd(dispatch: string, ...args: string[]): string {
     }
   }
   ticket = ticket || basename(dispatch);
-  if (!args.length) return clean(ticket);
+  if (!args.length) return shortName(clean(ticket));
   let runStore: unknown = {};
   try {
     runStore = JSON.parse(readFileSync(join(dispatch, "run.json"), "utf8"));
@@ -403,18 +478,28 @@ function nameCmd(dispatch: string, ...args: string[]): string {
       die("cannot resolve the coachman leg from manifest.json");
     return raw;
   };
-  const needLaneModel = (lane: string, role: string): Record<string, any> => {
-    const spec = hasOwn(lanes, lane) ? lanes[lane] : undefined;
-    if (typeof spec !== "object" || spec === null || Array.isArray(spec) || !spec.model)
+  const needLaneModel = (lane: string, role: string): Record<string, unknown> => {
+    const spec: unknown = hasOwn(lanes, lane) ? lanes[lane] : undefined;
+    if (
+      typeof spec !== "object" ||
+      spec === null ||
+      Array.isArray(spec) ||
+      !(spec as Record<string, unknown>)["model"]
+    )
       die(`no recorded model for ${role} lane ${lane}`);
-    return spec as Record<string, any>;
+    return spec as Record<string, unknown>;
   };
-  const needCoachmanModel = (legName: string): Record<string, any> => {
+  const needCoachmanModel = (legName: string): Record<string, unknown> => {
     const legs = asRecord(team.coachman_legs);
-    const spec = (hasOwn(legs, legName) ? legs[legName] : undefined) || team.coachman;
-    if (typeof spec !== "object" || spec === null || Array.isArray(spec) || !spec.model)
+    const spec: unknown = (hasOwn(legs, legName) ? legs[legName] : undefined) || team.coachman;
+    if (
+      typeof spec !== "object" ||
+      spec === null ||
+      Array.isArray(spec) ||
+      !(spec as Record<string, unknown>)["model"]
+    )
       die(`no recorded model for coachman leg ${legName}`);
-    return spec as Record<string, any>;
+    return spec as Record<string, unknown>;
   };
   const needLens = (lens: string): string => {
     if (lens !== "style" && lens !== "bug" && lens !== "security")
@@ -500,6 +585,93 @@ function nameCmd(dispatch: string, ...args: string[]): string {
   } else if (mode === "role" && args.length >= 2) parts = args.slice(1);
   else die("invalid launch identity; use coachman, workhorse, review, postmaster or role");
   return clean(parts.join(" · "));
+}
+
+// What the run tab's state pane shows while no lane runs: the ticket, the
+// stage and what the run waits for, read from the run's records. It writes
+// nothing. With --watch it reprints every 60 seconds, for the pane.
+function runStateWaiting(dispatch: string, stage: string, pending: string[]): string {
+  switch (stage) {
+    case "dispatched":
+    case "bootstrapped":
+      return "the run to start";
+    case "workhorses-running":
+      return pending.length
+        ? pending.map((lane) => `workhorse ${lane}`).join(", ")
+        : "the coachman to synthesize";
+    case "synthesis":
+      return "the coachman to compose the synthesis";
+    case "checkpoint-1":
+      return "the next leg to start";
+    case "review": {
+      const rounds: bigint[] = [];
+      try {
+        for (const file of readdirSync(join(dispatch, "logs"))) {
+          const match = REVIEW_ROUND_FILE.exec(file);
+          if (match) rounds.push(BigInt(match[1]!));
+        }
+      } catch {}
+      if (!rounds.length) return "the review loop";
+      return `review round ${rounds.reduce((a, b) => (a > b ? a : b))}`;
+    }
+    case "shipping":
+      return "landing";
+    case "shipped":
+    case "done":
+    case "abandoned":
+      return "nothing — the run is complete";
+    default:
+      return "unknown — the run's records name no stage run host knows";
+  }
+}
+
+function runStateLines(dispatch: string): string[] {
+  const info = dispatchInfo(dispatch);
+  const name = clean(info.name || basename(dispatch));
+  let stage = "unknown";
+  let leg = "";
+  let pending: string[] = [];
+  try {
+    const manifest = JSON.parse(readFileSync(join(dispatch, "manifest.json"), "utf8")) as Record<
+      string,
+      unknown
+    > | null;
+    if (manifest && typeof manifest === "object" && !Array.isArray(manifest)) {
+      if (typeof manifest.stage === "string" && manifest.stage) stage = manifest.stage;
+      if (typeof manifest.leg === "number" && Number.isInteger(manifest.leg))
+        leg = ` · leg ${manifest.leg}`;
+      const lanes = asRecord(manifest.lanes);
+      pending = Object.keys(lanes)
+        .filter((lane) => {
+          const outcome = asRecord(lanes[lane]).outcome;
+          return typeof outcome !== "string" || !outcome;
+        })
+        .sort();
+    }
+  } catch {}
+  return [
+    name,
+    `stage: ${stage}${leg}`,
+    `waiting on: ${runStateWaiting(dispatch, stage, pending)}`,
+    `as of ${new Date().toISOString()}`,
+  ];
+}
+
+async function runStateCmd(args: string[]): Promise<void> {
+  let watch = false;
+  const rest: string[] = [];
+  for (const arg of args) {
+    if (arg === "--watch") watch = true;
+    else rest.push(arg);
+  }
+  if (rest.length !== 1 || !rest[0]) die("usage: run host run-state [--watch] <dispatch>");
+  const dispatch = rest[0]!;
+  for (;;) {
+    for (const line of runStateLines(dispatch)) console.log(line);
+    if (!watch) return;
+    console.log("");
+    await Bun.sleep(60000);
+  }
 }
 
 type ProcessInfo = { group: number; start: string };
@@ -707,15 +879,18 @@ function registryScan(dir: string): Array<{ group: string; name: string; roots: 
 function herdr(args: string[], timeout = 0) {
   return timeout ? limit(timeout, "herdr", args) : run("herdr", args);
 }
-function herdrData(args: string[]): any {
+function herdrData(args: string[]): { agent?: { agent_status?: unknown } } | null {
   const result = herdr(args);
-  return result.code === 0 ? (parseJson(result.out)?.result ?? null) : null;
+  return result.code === 0
+    ? ((parseJson(result.out)?.result ?? null) as { agent?: { agent_status?: unknown } } | null)
+    : null;
 }
 function herdrPlace(
   name: string,
   cwd: string,
   where = "worktree",
   dispatch = "",
+  handle = "",
 ): { space: string; tab: string; pane: string } | null {
   const rootResult = run("git", ["-C", cwd, "rev-parse", "--show-toplevel"]);
   const top = rootResult.code === 0 ? resolve(rootResult.out.trim()) : "";
@@ -728,9 +903,9 @@ function herdrPlace(
   const listed = top ? herdr(["worktree", "list", "--cwd", cwd]) : null;
   if (listed?.code === 0) {
     try {
-      const data = parseJson(listed.out)?.result;
+      const data = parseJson<{ result?: Record<string, unknown> }>(listed.out)?.result;
       if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error("bad list");
-      const src = data.source ?? {};
+      const src = (data.source ?? {}) as Record<string, unknown>;
       if (typeof src !== "object" || src === null || Array.isArray(src))
         throw new Error("bad list");
       const rows = data.worktrees ?? [];
@@ -758,6 +933,9 @@ function herdrPlace(
       open = "";
     }
   }
+  // A fixture copy's launches join its one tab in the postmaster project's
+  // space: the copy never gets a space of its own.
+  if (isFixtureRepo(root)) return herdrFixturePlace(name, cwd, root, dispatch, "", handle);
   if (!root || !worktreePath || (!open && top && cloneOrigin(top))) {
     const response = herdr([
       "workspace",
@@ -770,7 +948,7 @@ function herdrPlace(
       ...PLACE_ENV,
     ]);
     if (response.code !== 0) return null;
-    const data = parseJson(response.out)?.result;
+    const data = parseJson<{ result?: HerdrPlaced }>(response.out)?.result;
     const space = jsonValue(data?.workspace?.workspace_id);
     const tab = jsonValue(data?.tab?.tab_id);
     const pane = jsonValue(data?.root_pane?.pane_id);
@@ -813,7 +991,7 @@ function herdrPlace(
       ...PLACE_ENV,
     ]);
     if (response.code !== 0) return null;
-    const created = parseJson(response.out)?.result;
+    const created = parseJson<{ result?: HerdrPlaced }>(response.out)?.result;
     source = jsonValue(created?.workspace?.workspace_id);
     // This is the first pane of the project space. Use it for a project-level launch such as
     // the postmaster, instead of leaving an empty shell beside the launch tab.
@@ -837,7 +1015,7 @@ function herdrPlace(
       "--no-focus",
     ]);
     if (response.code !== 0) return null;
-    const data = parseJson(response.out)?.result;
+    const data = parseJson<{ result?: HerdrPlaced }>(response.out)?.result;
     space = jsonValue(data?.workspace?.workspace_id);
     tab = jsonValue(data?.tab?.tab_id);
     pane = jsonValue(data?.root_pane?.pane_id);
@@ -858,7 +1036,7 @@ function herdrPlace(
       ...PLACE_ENV,
     ]);
     if (response.code !== 0) return null;
-    const data = parseJson(response.out)?.result;
+    const data = parseJson<{ result?: HerdrPlaced }>(response.out)?.result;
     tab = jsonValue(data?.tab?.tab_id);
     pane = jsonValue(data?.root_pane?.pane_id);
   }
@@ -885,7 +1063,7 @@ function herdrPlace(
     "--token",
     "postmaster=launch",
   ]);
-  if (!herdrRecordPlacement(space, tab, pane, cwd, dispatch)) {
+  if (!herdrRecordPlacement(space, tab, pane, cwd, dispatch, handle)) {
     // The pane was tagged but never ran the launch. Keep the ownership token
     // alongside its settled state so a later close can safely remove it.
     herdr([
@@ -912,14 +1090,18 @@ function realpathLoose(path: string): string {
   }
 }
 
-// Remember the tabs this host creates inside shared run spaces. A later `close <worktree>` can
-// then close that checkout's tabs without closing the ticket space or a tab opened by the user.
+// Remember the panes this host opens: each launch of a run has its own pane in
+// the run's one tab, and each spawned session its own tab. A later
+// `close <worktree>` can then close that checkout's panes without closing a
+// tab it shares or one opened by the user. The record is keyed by pane,
+// which is unique per launch; the tab is shared.
 function herdrRecordPlacement(
   space: string,
   tab: string,
   pane: string,
   cwd: string,
   dispatch: string,
+  handle = "",
 ): boolean {
   const directory = join(STATE, "placements");
   try {
@@ -932,11 +1114,11 @@ function herdrRecordPlacement(
     temporary = mkstempSync(directory, ".placement-");
     writeFileSync(
       temporary,
-      `${JSON.stringify({ workspace: space, tab, pane, cwd: realpathLoose(cwd), run: dispatch ? realpathLoose(dispatch) : "" })}\n`,
+      `${JSON.stringify({ workspace: space, tab, pane, cwd: realpathLoose(cwd), run: dispatch ? realpathLoose(dispatch) : "", ...(handle ? { handle } : {}) })}\n`,
     );
     renameSync(
       temporary,
-      join(directory, `${createHash("sha256").update(tab).digest("hex")}.json`),
+      join(directory, `${createHash("sha256").update(pane).digest("hex")}.json`),
     );
     return true;
   } catch {
@@ -945,16 +1127,238 @@ function herdrRecordPlacement(
   }
 }
 
-function rollbackRootTab(tab: string): void {
-  if (herdr(["tab", "close", tab]).code !== 0)
-    warn(
-      `could not roll back the run space's root tab ${tab} after a failed placement; close it by hand`,
+// One run tab per run: the tab a run's launches share in the repository's
+// space, found again across launches and legs through this record. It lives
+// apart from the launch placements: it outlives every launch, from the run's
+// first placement to close-run, while each launch placement goes with its
+// launch. The state pane is the tab's first pane; it shows the run's state
+// and keeps the tab listed between launches.
+function runTabDir(): string {
+  return join(STATE, "runtabs");
+}
+function runTabPath(dispatch: string): string {
+  return join(
+    runTabDir(),
+    `${createHash("sha256").update(realpathLoose(dispatch)).digest("hex")}.json`,
+  );
+}
+function readRunTab(dispatch: string): { workspace: string; tab: string; pane: string } | null {
+  let item: unknown;
+  try {
+    item = JSON.parse(readFileSync(runTabPath(dispatch), "utf8"));
+  } catch {
+    return null;
+  }
+  if (typeof item !== "object" || item === null || Array.isArray(item)) return null;
+  const rec = item as Record<string, unknown>;
+  if (
+    typeof rec.workspace !== "string" ||
+    typeof rec.tab !== "string" ||
+    typeof rec.pane !== "string"
+  )
+    return null;
+  if (!rec.workspace || !rec.tab || !rec.pane) return null;
+  return { workspace: rec.workspace, tab: rec.tab, pane: rec.pane };
+}
+function writeRunTab(dispatch: string, workspace: string, tab: string, pane: string): boolean {
+  const directory = runTabDir();
+  try {
+    mkdirSync(directory, { recursive: true });
+  } catch {
+    return false;
+  }
+  let temporary = "";
+  try {
+    temporary = mkstempSync(directory, ".runtab-");
+    writeFileSync(
+      temporary,
+      `${JSON.stringify({ workspace, tab, pane, run: realpathLoose(dispatch) })}\n`,
     );
+    renameSync(temporary, runTabPath(dispatch));
+    return true;
+  } catch {
+    if (temporary) markerRemove(temporary);
+    return false;
+  }
+}
+function removeRunTab(dispatch: string): void {
+  markerRemove(runTabPath(dispatch));
+}
+function runTabById(tab: string): boolean {
+  for (const directory of [runTabDir(), fixTabDir()]) {
+    let files: string[] = [];
+    try {
+      files = readdirSync(directory).filter((entry) => entry.endsWith(".json"));
+    } catch {
+      continue;
+    }
+    for (const file of files) {
+      try {
+        const item = JSON.parse(readFileSync(join(directory, file), "utf8")) as Record<
+          string,
+          unknown
+        > | null;
+        if (item && typeof item === "object" && !Array.isArray(item) && item.tab === tab)
+          return true;
+      } catch {}
+    }
+  }
+  return false;
 }
 
-function rollbackLaunchTab(tab: string): void {
+// A fixture copy's one tab in the postmaster project's space, labelled for the
+// fixture: the copy's folder name with the word that marks it, in the run
+// level's 30 characters.
+function fixtureLabel(copyRoot: string): string {
+  return shortName(clean(`fixture · ${basename(copyRoot)}`));
+}
+
+// One fixture tab per copy: the tab the copy's own launches and its run's
+// launches share, found again across launches through this record, keyed by
+// the copy's root rather than a dispatch the copy's launches never carry. The
+// flag says a run launch has started the run-state loop in the tab's first
+// pane, so a second adoption never starts a second loop.
+interface FixTab {
+  workspace: string;
+  tab: string;
+  pane: string;
+  stateloop: boolean;
+}
+function fixTabDir(): string {
+  return join(STATE, "fixtabs");
+}
+function fixTabPath(copyRoot: string): string {
+  return join(
+    fixTabDir(),
+    `${createHash("sha256").update(realpathLoose(copyRoot)).digest("hex")}.json`,
+  );
+}
+function readFixTab(copyRoot: string): FixTab | null {
+  let item: unknown;
+  try {
+    item = JSON.parse(readFileSync(fixTabPath(copyRoot), "utf8"));
+  } catch {
+    return null;
+  }
+  if (typeof item !== "object" || item === null || Array.isArray(item)) return null;
+  const rec = item as Record<string, unknown>;
+  if (
+    typeof rec.workspace !== "string" ||
+    typeof rec.tab !== "string" ||
+    typeof rec.pane !== "string"
+  )
+    return null;
+  if (!rec.workspace || !rec.tab || !rec.pane) return null;
+  return {
+    workspace: rec.workspace,
+    tab: rec.tab,
+    pane: rec.pane,
+    stateloop: rec.stateloop === true,
+  };
+}
+function writeFixTab(
+  copyRoot: string,
+  workspace: string,
+  tab: string,
+  pane: string,
+  stateloop: boolean,
+): boolean {
+  const directory = fixTabDir();
+  try {
+    mkdirSync(directory, { recursive: true });
+  } catch {
+    return false;
+  }
+  let temporary = "";
+  try {
+    temporary = mkstempSync(directory, ".fixtab-");
+    writeFileSync(
+      temporary,
+      `${JSON.stringify({ workspace, tab, pane, root: realpathLoose(copyRoot), stateloop })}\n`,
+    );
+    renameSync(temporary, fixTabPath(copyRoot));
+    return true;
+  } catch {
+    if (temporary) markerRemove(temporary);
+    return false;
+  }
+}
+function removeFixTab(copyRoot: string): void {
+  markerRemove(fixTabPath(copyRoot));
+}
+// The first launch of a run creates its tab. Launches start one at a time,
+// so this lock is belt and braces for two shells racing: a mkdir lock, stale
+// after 30 seconds, since a holder this slow already failed its placement.
+// The holder stamps its pid and start time inside; a contender evicts only a
+// stale lock whose owner is gone, never a live holder, however slow its Herdr
+// calls, and releases only a lock it still owns. On a timeout the launch runs
+// in the background instead of risking a second tab.
+function readRunTabLockOwner(lock: string): { pid: number; start: string } | null {
+  let lines: string[];
+  try {
+    lines = readFileSync(join(lock, "owner"), "utf8").split("\n");
+  } catch {
+    return null;
+  }
+  const pid = Number(lines[0]?.trim() ?? "");
+  if (!Number.isInteger(pid) || pid <= 0) return null;
+  return { pid, start: (lines[1] ?? "").trim() };
+}
+export function runTabLockOwnerAlive(lock: string): boolean {
+  const owner = readRunTabLockOwner(lock);
+  if (!owner) return false;
+  if (!processIsLive(owner.pid)) return false;
+  if (!owner.start) return true;
+  return processStart(owner.pid) === owner.start;
+}
+function withRunTabLock<T>(fn: () => T | null): T | null {
+  const directory = runTabDir();
+  try {
+    mkdirSync(directory, { recursive: true });
+  } catch {
+    return null;
+  }
+  const lock = join(directory, ".lock");
+  const me = process.pid;
+  const deadline = Date.now() + 60000;
+  for (;;) {
+    try {
+      mkdirSync(lock);
+      try {
+        writeFileSync(join(lock, "owner"), `${me}\n${processStart(me) ?? ""}\n`);
+      } catch {
+        rmSync(lock, { recursive: true, force: true });
+        return null;
+      }
+      break;
+    } catch {
+      try {
+        if (Date.now() - statSync(lock).mtimeMs > 30000 && !runTabLockOwnerAlive(lock)) {
+          rmSync(lock, { recursive: true, force: true });
+          continue;
+        }
+      } catch {}
+      if (Date.now() > deadline) return null;
+      sleepSync(50);
+    }
+  }
+  try {
+    return fn();
+  } finally {
+    try {
+      if (readRunTabLockOwner(lock)?.pid === me) rmSync(lock, { recursive: true, force: true });
+    } catch {}
+  }
+}
+
+function rollbackRunTab(tab: string): void {
   if (herdr(["tab", "close", tab]).code !== 0)
-    warn(`could not roll back launch tab ${tab} after a failed placement; close it by hand`);
+    warn(`could not roll back run tab ${tab} after a failed placement; close it by hand`);
+}
+
+function rollbackLaunchPane(pane: string): void {
+  if (herdr(["pane", "close", pane]).code !== 0)
+    warn(`could not roll back launch pane ${pane} after a failed placement; close it by hand`);
 }
 
 function undash(value: unknown): string {
@@ -966,13 +1370,20 @@ function undash(value: unknown): string {
 function herdrSpaceOpened(space: string): boolean {
   const info = herdr(["workspace", "get", space]);
   if (info.code !== 0) return false;
-  return _jsonStdout(info.out, (d) => d?.result?.workspace?.tokens?.postmaster) === "opened";
+  return (
+    _jsonStdout(
+      info.out,
+      (d) =>
+        (d as { result?: { workspace?: HerdrSpace } } | null)?.result?.workspace?.tokens
+          ?.postmaster,
+    ) === "opened"
+  );
 }
 
 function herdrSpaceGone(space: string): boolean {
   const list = herdr(["workspace", "list"]);
   if (list.code !== 0) return false;
-  const data = parseJson(list.out);
+  const data = parseJson<{ result?: { workspaces?: HerdrSpace[] } }>(list.out);
   if (data === null || typeof data !== "object" || Array.isArray(data)) return false;
   const result = data.result;
   if (result === null || typeof result !== "object" || Array.isArray(result)) return false;
@@ -1003,23 +1414,25 @@ function tmuxWindowGone(window: string): boolean {
 }
 
 function finishOwnership(panesText: string, target: string, tab: string): string {
-  const rows = parseJson(panesText)?.result?.panes;
+  const rows = parseJson<{ result?: { panes?: HerdrPane[] } }>(panesText)?.result?.panes;
   if (!Array.isArray(rows)) throw new Error("bad panes");
   for (const row of rows) {
     if (row === null || typeof row !== "object" || Array.isArray(row)) throw new Error("bad panes");
   }
-  const pane = rows.find((row: any) => row.pane_id === target) ?? null;
+  const pane = rows.find((row) => row.pane_id === target) ?? null;
   if (pane === null) return "missing";
   if (tokensOf(pane).postmaster !== "launch") return "unowned";
-  if (!HERDR_TAB_ID.test(pane.tab_id ?? "") || pane.tab_id !== tab) return "pane";
-  if (rows.some((row: any) => row.pane_id !== target && !HERDR_TAB_ID.test(row.tab_id ?? "")))
+  if (!HERDR_TAB_ID.test((pane.tab_id ?? "") as string) || pane.tab_id !== tab) return "pane";
+  if (
+    rows.some((row) => row.pane_id !== target && !HERDR_TAB_ID.test((row.tab_id ?? "") as string))
+  )
     return "pane";
-  if (rows.some((row: any) => row.pane_id !== target && row.tab_id === tab)) return "pane";
+  if (rows.some((row) => row.pane_id !== target && row.tab_id === tab)) return "pane";
   return "tab";
 }
 
 function herdrFinishPlacement(space: string, tab: string, pane: string): number {
-  const file = join(STATE, "placements", `${createHash("sha256").update(tab).digest("hex")}.json`);
+  const file = join(STATE, "placements", `${createHash("sha256").update(pane).digest("hex")}.json`);
   const panes = herdr(["pane", "list", "--workspace", space]);
   if (panes.code !== 0) {
     // A space the server says is gone was settled concurrently; anything
@@ -1051,13 +1464,21 @@ function herdrFinishPlacement(space: string, tab: string, pane: string): number 
       }
       break;
     case "tab":
-      // A tab in a space run host did not open keeps the project space's shell:
-      // closing its last tab would destroy the space, which run host never does.
+      // A run tab lives in the repository's space, which run host never
+      // closes: a launch finishing as its tab's last pane still closes only
+      // its pane, and the next launch rebuilds the tab if it went with it.
       if (!herdrSpaceOpened(space)) {
-        warn(
-          `completed launch tab ${tab} is in space ${space}, which run host did not open; left it open`,
-        );
-        return 2;
+        if (!runTabById(tab)) {
+          warn(
+            `completed launch tab ${tab} is in space ${space}, which run host did not open; left it open`,
+          );
+          return 2;
+        }
+        if (herdr(["pane", "close", pane]).code !== 0) {
+          warn(`herdr could not close completed launch pane ${pane}; left it open`);
+          return 2;
+        }
+        break;
       }
       if (herdr(["tab", "close", tab]).code !== 0) {
         warn(`herdr could not close completed launch tab ${tab}; left it open`);
@@ -1170,8 +1591,8 @@ function finishPriorHerdr(cwd: string, runPath: string): void {
       if (panes.code === 0) {
         let present = false;
         try {
-          const rows = parseJson(panes.out)?.result?.panes;
-          present = Array.isArray(rows) && rows.some((row: any) => row?.pane_id === pane);
+          const rows = parseJson<{ result?: { panes?: HerdrPane[] } }>(panes.out)?.result?.panes;
+          present = Array.isArray(rows) && rows.some((row) => row?.pane_id === pane);
         } catch {
           present = false;
         }
@@ -1289,7 +1710,7 @@ function herdrRunPlace(
   dispatch: string,
 ): { space: string; tab: string; pane: string } | null {
   const info = dispatchInfo(dispatch);
-  const runName = clean(info.name);
+  const runName = shortName(clean(info.name));
   const runPath = info.worktree;
   if (!runName || !runPath) return null;
   try {
@@ -1297,38 +1718,38 @@ function herdrRunPlace(
   } catch {
     return null;
   }
+  // A fixture copy's run joins the copy's one tab in the postmaster project's
+  // space, resolved through this tool's checkout rather than the copy.
+  const copyRepo = dispatchRepo(dispatch);
+  if (copyRepo && isFixtureRepo(copyRepo))
+    return herdrFixturePlace(name, cwd, copyRepo, dispatch, runPath, "");
   const listed = herdr(["worktree", "list", "--cwd", runPath]);
   if (listed.code !== 0) return null;
   let source = "";
   let root = "";
   let repoName = "";
-  let runSpace = "";
   try {
-    const data = parseJson(listed.out)?.result;
+    const data = parseJson<{ result?: Record<string, unknown> }>(listed.out)?.result;
     if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error("bad list");
     // Main reads d.get("source", {}): an explicit null is a failure, not an empty source.
     if (data.source === null) throw new Error("bad list");
-    const src = data.source ?? {};
+    const src = (data.source ?? {}) as Record<string, unknown>;
     if (typeof src !== "object" || Array.isArray(src)) throw new Error("bad list");
     const rows = data.worktrees ?? [];
     if (!Array.isArray(rows)) throw new Error("bad list");
-    const runReal = realpathLoose(runPath);
-    let match: any = null;
     for (const entry of rows) {
       if (!entry || typeof entry !== "object" || typeof entry.path !== "string")
         throw new Error("bad list");
-      if (realpathLoose(entry.path) === runReal) {
-        match = entry;
-        break;
-      }
     }
     source = undash(src.source_workspace_id);
     root = undash(src.repo_root);
     repoName = undash(src.repo_name);
-    runSpace = undash(match?.open_workspace_id);
   } catch {
     return null;
   }
+  // A hand-shaped dispatch the waybill guard above could not place still joins
+  // the fixture tab when the run stands in a fixture copy.
+  if (isFixtureRepo(root)) return herdrFixturePlace(name, cwd, root, dispatch, runPath, "");
   if (!source) {
     if (!root || !repoName) return null;
     const response = herdr([
@@ -1341,112 +1762,163 @@ function herdrRunPlace(
       "--no-focus",
     ]);
     if (response.code !== 0) return null;
-    source = jsonValue(parseJson(response.out)?.result?.workspace?.workspace_id);
+    const created = parseJson<{ result?: HerdrPlaced }>(response.out)?.result;
+    source = jsonValue(created?.workspace?.workspace_id);
   }
-  let tab = "";
-  let pane = "";
-  if (!runSpace) {
-    const response = herdr([
-      "worktree",
-      "open",
-      "--workspace",
-      source,
-      "--path",
-      runPath,
-      "--label",
+  if (!source) return null;
+  // The run's one tab in the repository's space, shared by every launch of
+  // the run: found again through the run tab record, created once under the
+  // lock. A launch never opens a space or a tab of its own.
+  const placed = withRunTabLock(() => {
+    const current = readRunTab(dispatch);
+    if (current && current.workspace === source) return current;
+    return createRunTab(source, runName, runPath, dispatch);
+  });
+  if (!placed) return null;
+  let tab = placed.tab;
+  let anchor = placed.pane;
+  let pane = splitRunPane(anchor, cwd);
+  if (!pane) {
+    // The recorded state pane may be gone (closed by hand): split off
+    // another run pane in the tab when one is live, and rebuild the tab
+    // when none is. Whatever fails here runs in the background.
+    anchor = runTabAnchor(source, placed.tab, placed.pane);
+    if (!anchor) {
+      const recreated = withRunTabLock(() => {
+        const current = readRunTab(dispatch);
+        if (current && current.workspace === source && current.tab !== placed.tab) return current;
+        return createRunTab(source, runName, runPath, dispatch);
+      });
+      if (!recreated) return null;
+      tab = recreated.tab;
+      anchor = recreated.pane;
+    }
+    pane = splitRunPane(anchor, cwd);
+    if (!pane) return null;
+  }
+  return finishRunLaunch(source, tab, pane, name, cwd, dispatch);
+}
+
+// Open the run's tab in the repository's space. Its first pane shows the
+// run's state while no lane runs and keeps the tab listed between launches;
+// close-run takes it with the tab. A failure rolls the tab back, so a failed
+// first placement leaves nothing a later close could refuse.
+function createRunTab(
+  source: string,
+  runName: string,
+  runPath: string,
+  dispatch: string,
+): { tab: string; pane: string } | null {
+  const response = herdr([
+    "tab",
+    "create",
+    "--workspace",
+    source,
+    "--cwd",
+    runPath,
+    "--label",
+    runName,
+    "--no-focus",
+  ]);
+  if (response.code !== 0) return null;
+  const created = parseJson<{ result?: HerdrPlaced }>(response.out)?.result;
+  const tab = jsonValue(created?.tab?.tab_id);
+  const rootPane = jsonValue(created?.root_pane?.pane_id);
+  if (!tab || !rootPane) return null;
+  if (herdr(["pane", "rename", rootPane, runName]).code !== 0) {
+    rollbackRunTab(tab);
+    return null;
+  }
+  if (
+    herdr([
+      "pane",
+      "report-metadata",
+      rootPane,
+      "--source",
+      META,
+      "--title",
       runName,
-      "--no-focus",
-    ]);
-    if (response.code !== 0) return null;
-    const opened = parseJson(response.out)?.result;
-    runSpace = jsonValue(opened?.workspace?.workspace_id);
-    const rootTab = jsonValue(opened?.tab?.tab_id);
-    const rootPane = jsonValue(opened?.root_pane?.pane_id);
-    if (!runSpace || !rootTab || !rootPane) return null;
-    // Mark it at once, then roll back on any failure below: a failed first
-    // placement leaves nothing behind, and when the rollback fails too, what
-    // survives is still a marked space close can shut.
-    if (
-      herdr([
-        "workspace",
-        "report-metadata",
-        runSpace,
-        "--source",
-        META,
-        "--token",
-        "postmaster=opened",
-      ]).code !== 0
-    ) {
-      rollbackRootTab(rootTab);
-      return null;
-    }
-    if (
-      herdr([
-        "pane",
-        "report-metadata",
-        rootPane,
-        "--source",
-        META,
-        "--title",
-        name,
-        "--token",
-        "postmaster=root",
-        "--token",
-        "state=done",
-      ]).code !== 0
-    ) {
-      rollbackRootTab(rootTab);
-      return null;
-    }
-    const launched = herdr([
-      "tab",
-      "create",
-      "--workspace",
-      runSpace,
-      "--cwd",
-      cwd,
-      "--label",
-      name,
-      "--no-focus",
-    ]);
-    if (launched.code !== 0) {
-      rollbackRootTab(rootTab);
-      return null;
-    }
-    const created = parseJson(launched.out)?.result;
-    tab = jsonValue(created?.tab?.tab_id);
-    pane = jsonValue(created?.root_pane?.pane_id);
-    if (!tab || !pane) {
-      rollbackRootTab(rootTab);
-      return null;
-    }
-    // Its close is cosmetic: when it fails the launch still runs in the right tab,
-    // and the warning names the tab left behind. Never fail a launch over it.
-    if (herdr(["tab", "close", rootTab]).code !== 0)
-      warn(`could not close the run space's root tab ${rootTab}; leaving it beside the launch tab`);
-  } else {
-    const response = herdr([
-      "tab",
-      "create",
-      "--workspace",
-      runSpace,
-      "--cwd",
-      cwd,
-      "--label",
-      name,
-      "--no-focus",
-    ]);
-    if (response.code !== 0) return null;
-    const created = parseJson(response.out)?.result;
-    tab = jsonValue(created?.tab?.tab_id);
-    pane = jsonValue(created?.root_pane?.pane_id);
+      "--token",
+      "postmaster=launch",
+      "--token",
+      "role=runstate",
+    ]).code !== 0
+  ) {
+    rollbackRunTab(tab);
+    return null;
   }
-  // An id-less create in a later launch names nothing to roll back: without ids
-  // there is nothing to close, and sweeping untagged panes would risk a racing
-  // launch's. The first launch never reaches this line without ids.
-  if (!runSpace || !tab || !pane) return null;
-  if (herdr(["tab", "rename", tab, name]).code !== 0) {
-    rollbackLaunchTab(tab);
+  startStateLoop(rootPane, runPath, dispatch, tab);
+  if (!writeRunTab(dispatch, source, tab, rootPane)) {
+    rollbackRunTab(tab);
+    return null;
+  }
+  return { tab, pane: rootPane };
+}
+
+// Split a launch pane off a pane of the run's tab. A pane's working
+// directory is its own, so each launch keeps its own checkout. The split
+// takes no focus: a launch starting must never steal the user's context.
+// env carries --env pairs for the new pane; a run launch passes none.
+function splitRunPane(anchor: string, cwd: string, env: string[] = []): string {
+  const split = herdr([
+    "pane",
+    "split",
+    anchor,
+    "--direction",
+    "down",
+    "--cwd",
+    cwd,
+    ...env,
+    "--no-focus",
+  ]);
+  if (split.code !== 0) return "";
+  const result = parseJson<{ result?: { pane?: unknown } }>(split.out)?.result?.pane;
+  if (typeof result === "string") return result;
+  if (typeof result === "object" && result !== null)
+    return jsonValue((result as Record<string, unknown>).pane_id);
+  return "";
+}
+
+// A live pane of the run's tab to split off: the recorded state pane when it
+// is live, else another pane run host opened there. Empty when the tab holds
+// no run pane at all, so the caller rebuilds it; the recorded pane when the
+// list cannot be read, for one retry on the same anchor.
+function runTabAnchor(source: string, tab: string, preferred: string): string {
+  const panes = herdr(["pane", "list", "--workspace", source]);
+  if (panes.code !== 0) return preferred;
+  let rows: HerdrPane[] | undefined;
+  try {
+    rows = parseJson<{ result?: { panes?: HerdrPane[] } }>(panes.out)?.result?.panes;
+    if (!Array.isArray(rows)) throw new Error("bad panes");
+    for (const row of rows) {
+      if (row === null || typeof row !== "object" || Array.isArray(row))
+        throw new Error("bad panes");
+      tokensOf(row);
+    }
+  } catch {
+    return preferred;
+  }
+  if (rows.some((row) => row.pane_id === preferred)) return preferred;
+  return jsonValue(
+    rows.find((row) => row.tab_id === tab && tokensOf(row).postmaster === "launch")?.pane_id,
+  );
+}
+
+// Name a split launch pane and record it. An id-less split names nothing to
+// roll back: without an id there is nothing to close, and sweeping untagged
+// panes would risk a racing launch's.
+function finishRunLaunch(
+  space: string,
+  tab: string,
+  pane: string,
+  name: string,
+  cwd: string,
+  dispatch: string,
+  handle = "",
+): { space: string; tab: string; pane: string } | null {
+  if (!pane) return null;
+  if (herdr(["pane", "rename", pane, name]).code !== 0) {
+    rollbackLaunchPane(pane);
     return null;
   }
   if (
@@ -1462,13 +1934,13 @@ function herdrRunPlace(
       "postmaster=launch",
     ]).code !== 0
   ) {
-    rollbackLaunchTab(tab);
+    rollbackLaunchPane(pane);
     return null;
   }
-  // A placement the record refuses still shuts: its tab is tagged, so close
-  // vouches for the space without the record. A control pins it.
-  if (!herdrRecordPlacement(runSpace, tab, pane, cwd, dispatch)) {
-    // Placement will fall back to the background; this host-owned tab never
+  // A placement the record refuses still shuts: its pane is tagged, so close
+  // vouches for the tab without the record. A control pins it.
+  if (!herdrRecordPlacement(space, tab, pane, cwd, dispatch, handle)) {
+    // Placement will fall back to the background; this host-owned pane never
     // ran the launch, so label it settled for a later safe close.
     herdr([
       "pane",
@@ -1483,7 +1955,229 @@ function herdrRunPlace(
     ]);
     return null;
   }
-  return { space: runSpace, tab, pane };
+  return { space, tab, pane };
+}
+
+// The postmaster project's space: the repository this tool checkout stands in,
+// through a worktree list at the checkout itself. Every launch of a fixture
+// run flows through a checkout of that repository, so each resolves the same
+// space. Opened when the repository has no space yet, like any repository's
+// first launch; never tagged, since it is shared and close-run must leave it
+// standing.
+function fixtureProjectSpace(): string {
+  const listed = herdr(["worktree", "list", "--cwd", TOOL]);
+  if (listed.code !== 0) return "";
+  let source = "";
+  let root = "";
+  let repoName = "";
+  try {
+    const data = parseJson<{ result?: Record<string, unknown> }>(listed.out)?.result;
+    if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error("bad list");
+    // Main reads d.get("source", {}): an explicit null is a failure, not an empty source.
+    if (data.source === null) throw new Error("bad list");
+    const src = (data.source ?? {}) as Record<string, unknown>;
+    if (typeof src !== "object" || Array.isArray(src)) throw new Error("bad list");
+    source = undash(src.source_workspace_id);
+    root = undash(src.repo_root);
+    repoName = undash(src.repo_name);
+  } catch {
+    return "";
+  }
+  if (!source) {
+    if (!root || !repoName) return "";
+    const response = herdr([
+      "workspace",
+      "create",
+      "--cwd",
+      root,
+      "--label",
+      repoName,
+      "--no-focus",
+    ]);
+    if (response.code !== 0) return "";
+    const created = parseJson<{ result?: HerdrPlaced }>(response.out)?.result;
+    source = jsonValue(created?.workspace?.workspace_id);
+  }
+  return source;
+}
+
+// Start the run-state loop in a tab's first pane: the pane shows the run's
+// state while no lane runs. A pane that will not take it keeps the tab listed
+// without the display; the launch still runs.
+function startStateLoop(pane: string, runPath: string, dispatch: string, tab: string): void {
+  // Through the isolated entry, never a bare Bun call: the pane starts in the
+  // synthesis worktree, and a bare call would load that project's .env and
+  // Bun config into this flow-owned loop.
+  const loop = `cd -- ${quote(runPath)} && ${quote(join(HERE, "run"))} host run-state --watch ${quote(dispatch)}`;
+  if (herdr(["pane", "run", pane, loop]).code !== 0)
+    warn(`could not start the run state pane in tab ${tab}; leaving it at its prompt`);
+}
+
+// A run launch adopting a fixture tab starts the run-state loop in the tab's
+// first pane and marks it a state pane, so a tab the copy's launches opened
+// first ends identical to one a run launch opened. The record carries the
+// flag, written before the loop starts, so a second adoption never starts a
+// second loop. Both tokens go together: the stub replaces where the server
+// merges, and the pane must keep its launch token either way.
+function adoptStateLoop(
+  current: FixTab,
+  copyRoot: string,
+  runPath: string,
+  dispatch: string,
+): void {
+  if (!dispatch || !runPath || current.stateloop) return;
+  if (!writeFixTab(copyRoot, current.workspace, current.tab, current.pane, true)) {
+    warn(`could not record the run state loop for fixture tab ${current.tab}; leaving it holding`);
+    return;
+  }
+  if (
+    herdr([
+      "pane",
+      "report-metadata",
+      current.pane,
+      "--source",
+      META,
+      "--token",
+      "postmaster=launch",
+      "--token",
+      "role=runstate",
+    ]).code !== 0
+  )
+    warn(`could not mark fixture tab ${current.tab}'s first pane as the run state pane`);
+  startStateLoop(current.pane, runPath, dispatch, current.tab);
+}
+
+// Open a fixture copy's one tab in the postmaster project's space. Its first
+// pane holds the tab from the first launch, whatever kind that launch is. A
+// failure rolls the tab back: it is brand new and unshared.
+function createFixtureTab(
+  source: string,
+  copyRoot: string,
+  dispatch: string,
+  runPath: string,
+): { tab: string; pane: string } | null {
+  const label = fixtureLabel(copyRoot);
+  const response = herdr([
+    "tab",
+    "create",
+    "--workspace",
+    source,
+    "--cwd",
+    runPath || copyRoot,
+    "--label",
+    label,
+    "--no-focus",
+  ]);
+  if (response.code !== 0) return null;
+  const created = parseJson<{ result?: HerdrPlaced }>(response.out)?.result;
+  const tab = jsonValue(created?.tab?.tab_id);
+  const holding = jsonValue(created?.root_pane?.pane_id);
+  if (!tab || !holding) return null;
+  if (herdr(["pane", "rename", holding, label]).code !== 0) {
+    rollbackRunTab(tab);
+    return null;
+  }
+  if (
+    herdr([
+      "pane",
+      "report-metadata",
+      holding,
+      "--source",
+      META,
+      "--title",
+      label,
+      "--token",
+      "postmaster=launch",
+    ]).code !== 0
+  ) {
+    rollbackRunTab(tab);
+    return null;
+  }
+  if (!writeFixTab(copyRoot, source, tab, holding, false)) {
+    rollbackRunTab(tab);
+    return null;
+  }
+  adoptStateLoop(
+    { workspace: source, tab, pane: holding, stateloop: false },
+    copyRoot,
+    runPath,
+    dispatch,
+  );
+  return { tab, pane: holding };
+}
+
+// Find a fixture copy's tab in the project space or open it, under the run tab
+// lock: the copy's launches and the run's launches rendezvous here, whatever
+// order they arrive in. A run launch also records the run's tab, so close-run
+// and the state readers find it by dispatch; only a tab this call opened is
+// ever rolled back, never a shared one.
+function obtainFixtureTab(
+  source: string,
+  copyRoot: string,
+  dispatch: string,
+  runPath: string,
+  excludeTab: string,
+): { tab: string; pane: string } | null {
+  const current = readFixTab(copyRoot);
+  if (current && current.workspace === source && current.tab !== excludeTab) {
+    adoptStateLoop(current, copyRoot, runPath, dispatch);
+    if (dispatch && !writeRunTab(dispatch, source, current.tab, current.pane)) {
+      warn(`could not record the run tab for fixture tab ${current.tab}; the launch still runs`);
+      return null;
+    }
+    return current;
+  }
+  const created = createFixtureTab(source, copyRoot, dispatch, runPath);
+  if (!created) return null;
+  if (dispatch && !writeRunTab(dispatch, source, created.tab, created.pane)) {
+    rollbackRunTab(created.tab);
+    removeFixTab(copyRoot);
+    return null;
+  }
+  return created;
+}
+
+// Place a launch of a fixture copy: the copy's postmaster, its watcher, or a
+// launch of its run. Every one goes to the copy's one tab in the postmaster
+// project's space, split off the tab's first pane or another live one, with
+// its own checkout as the pane's working directory. dispatch is "" for the
+// copy's own launches and the run for a run launch.
+function herdrFixturePlace(
+  name: string,
+  cwd: string,
+  copyRoot: string,
+  dispatch: string,
+  runPath: string,
+  handle: string,
+): { space: string; tab: string; pane: string } | null {
+  const source = fixtureProjectSpace();
+  if (!source) return null;
+  const placed = withRunTabLock(() => obtainFixtureTab(source, copyRoot, dispatch, runPath, ""));
+  if (!placed) return null;
+  // The copy's own launches run with the caller POSTMASTER_* settings, as a
+  // spawn's fresh tab would carry them; run launches take none, as the run
+  // tab's splits never have.
+  const env = dispatch ? [] : PLACE_ENV;
+  let tab = placed.tab;
+  let anchor = placed.pane;
+  let pane = splitRunPane(anchor, cwd, env);
+  if (!pane) {
+    // The recorded first pane may be gone (closed by hand): split off
+    // another run pane in the tab when one is live, and rebuild the tab
+    // when none is. Whatever fails here runs in the background.
+    anchor = runTabAnchor(source, placed.tab, placed.pane);
+    if (!anchor) {
+      const recreated = withRunTabLock(() =>
+        obtainFixtureTab(source, copyRoot, dispatch, runPath, placed.tab),
+      );
+      if (!recreated) return null;
+      tab = recreated.tab;
+      anchor = recreated.pane;
+    }
+    pane = splitRunPane(anchor, cwd, env);
+    if (!pane) return null;
+  }
+  return finishRunLaunch(source, tab, pane, name, cwd, dispatch, handle);
 }
 type Spec = {
   name: string;
@@ -1529,7 +2223,9 @@ const SPEC_FIELDS = [
 function writeSpec(spec: string, fields: Spec): void {
   mkdirSync(spec, { recursive: true, mode: 0o700 });
   for (const name of SPEC_FIELDS.slice(0, -2))
-    writeFileSync(join(spec, name), (fields as any)[name], { mode: 0o600 });
+    writeFileSync(join(spec, name), (fields as unknown as Record<string, string>)[name], {
+      mode: 0o600,
+    });
   writeFileSync(join(spec, "argv"), `${fields.argv.join("\0")}\0`, { mode: 0o600 });
 }
 function readSpec(spec: string): Spec {
@@ -1606,6 +2302,7 @@ function launchLimits(
   role: string,
   dispatch: string,
   configPath: string,
+  project = "",
 ): { memory: string; tasks: number } {
   const memoryDefault = "8G";
   const tasksDefault = 512;
@@ -1626,6 +2323,13 @@ function launchLimits(
     if (typeof top !== "object" || top === null || Array.isArray(top))
       die("run.json must hold an object");
     config = (top as Record<string, unknown>).config ?? {};
+  } else if (project) {
+    const resolved = effectiveConfigForProject(project, configPath);
+    if (resolved.notice !== null) console.error(resolved.notice);
+    if (resolved.config === null || resolved.error !== null) {
+      die(`cannot read launch limits: ${resolved.error ?? "cannot resolve project settings"}`);
+    }
+    config = resolved.config;
   } else if (isRegularFile(configPath)) {
     let text: string;
     try {
@@ -1665,6 +2369,31 @@ function launchLimits(
   if (typeof tasks !== "number" || !Number.isInteger(tasks) || tasks < 1 || tasks > 2147483647)
     die("tasks_max must be a whole number from 1 to 2147483647");
   return { memory, tasks };
+}
+
+function limitsCmd(args: string[]): void {
+  let role = "default";
+  let dispatch = "";
+  let project = "";
+  let at = 0;
+  while (at < args.length) {
+    const option = args[at]!;
+    if (option === "--role" || option === "--run" || option === "--project") {
+      if (at + 1 >= args.length) die(`${option} needs a value`);
+      if (option === "--role") role = args[at + 1]!;
+      else if (option === "--run") dispatch = args[at + 1]!;
+      else project = args[at + 1]!;
+      at += 2;
+    } else {
+      die(
+        "usage: run host limits [--role lane|coachman|reviewer] [--run <dispatch>|--project <repo>]",
+      );
+    }
+  }
+  if (role !== "default" && role !== "lane" && role !== "coachman" && role !== "reviewer")
+    die(`unknown launch role: ${role}`);
+  const limits = launchLimits(role, absolute(dispatch), globalConfigPath(), absolute(project));
+  console.log(`memory=${limits.memory}\ntasks=${limits.tasks}`);
 }
 
 function random31(): number {
@@ -1846,6 +2575,24 @@ function markerRemove(path: string): void {
     try {
       rmSync(path, { force: true });
     } catch {}
+}
+// A reused marker's prior watchers are dead legs walking: the previous
+// launch's _watch polls its payload every 500ms and may still be polling
+// when the marker is reset, and its late touch would read as the new
+// launch's completion, finishing it before its payload prints. Kill them
+// before the reset; the new launch spawns its own during placement.
+// SIGKILL, not SIGTERM: the watcher is stateless, and only a synchronous
+// death closes the race. One listing, not a scan per pid: the portable ps
+// path costs a spawn per process.
+function killPriorWatchers(marker: string): void {
+  if (!marker) return;
+  for (const [pid, line] of processCommandLines()) {
+    if (pid === process.pid) continue;
+    if (!line.split(/[ \t]+/u).includes("_watch") || !line.includes(marker)) continue;
+    try {
+      process.kill(pid, "SIGKILL");
+    } catch {}
+  }
 }
 function _writeEnvPipe(path: string): void {
   let fd = -1;
@@ -2121,9 +2868,13 @@ async function runLaunch(specDir: string, mode: string): Promise<number> {
   const started = Date.now();
   const eventFile = `${specDir}.cap`;
   markerRemove(eventFile);
-  const stdioFor = (fd: number): any => (fd >= 0 ? fd : mode === "bg" ? "ignore" : "inherit");
+  const stdioFor = (fd: number): number | "ignore" | "inherit" =>
+    fd >= 0 ? fd : mode === "bg" ? "ignore" : "inherit";
   let child: ReturnType<typeof spawn> | null = null;
   let spawnError: unknown = null;
+  // The wrapper phase's command-line prefix, where the plain path wraps: the
+  // settled command waits past it, since a python wrapper outlasts the window.
+  let wrapperPrefix: string | null = null;
   try {
     if (spec.capmode === "systemd") {
       child = spawn(
@@ -2149,10 +2900,54 @@ async function runLaunch(specDir: string, mode: string): Promise<number> {
       );
     } else {
       launchNotice("launch running uncapped (no supported per-launch limits available)");
-      child = spawn(spec.argv[0] ?? "", spec.argv.slice(1), {
+      // A session of its own without systemd: setsid(1) where it exists, else
+      // python's setsid, since macOS ships no setsid binary. Either execs the
+      // command in place, so the pidfile still names the launch's own pid —
+      // which is why this spawn is not detached: a detached child is already
+      // a group leader, and setsid would fork past the recorded pid.
+      let bin = spec.argv[0] ?? "";
+      let args = spec.argv.slice(1);
+      let alone = false;
+      const sid = which("setsid");
+      if (sid) {
+        args = [bin, ...args];
+        bin = sid;
+        alone = true;
+        wrapperPrefix = `${sid} `;
+      } else {
+        const py = which("python3");
+        if (py) {
+          // Shed a group leadership first: setsid fails on a group leader,
+          // and a spawn that arrives already leading would die without ever
+          // execing. Either failure still execs, group-led at worst.
+          args = [
+            "-c",
+            [
+              "import os,sys",
+              "try:",
+              " os.setpgid(0,os.getpgid(os.getppid()))",
+              "except Exception:",
+              " pass",
+              "try:",
+              " os.setsid()",
+              "except Exception:",
+              " pass",
+              "os.execvp(sys.argv[1],sys.argv[1:])",
+            ].join("\n"),
+            bin,
+            ...args,
+          ];
+          bin = py;
+          alone = true;
+          // The -c program's first line: only this wrapper's command line
+          // starts this way, so a python target still settles by name.
+          wrapperPrefix = `${py} -c import os,sys`;
+        }
+      }
+      child = spawn(bin, args, {
         cwd: spec.rundir,
         env,
-        detached: true,
+        ...(alone ? {} : { detached: true }),
         stdio: ["ignore", stdioFor(stdoutFd), stdioFor(stderrFd)],
       });
     }
@@ -2191,7 +2986,21 @@ async function runLaunch(specDir: string, mode: string): Promise<number> {
     } catch {}
     if (spec.pidfile) {
       try {
-        writeFileSync(spec.pidfile, `${String(pid)}\n`);
+        // The start, boot and command identity travels with the pid, so stop-pidfile
+        // refuses a number the OS has since reused for another process. Each missing
+        // line weakens the form: without a command it checks start and boot, and a
+        // bare pid checks nothing.
+        const start = startOf(pid);
+        const boot = bootId();
+        const wrapper = spec.capmode === "systemd" && spec.setsid ? basename(spec.setsid) : null;
+        const command = await settledCommand(pid, wrapper, wrapperPrefix);
+        const body =
+          start && boot && command
+            ? `${pid}\n${start}\n${boot}\n${command}\n`
+            : start && boot
+              ? `${pid}\n${start}\n${boot}\n`
+              : `${pid}\n`;
+        writeFileSync(spec.pidfile, body);
       } catch {}
     }
   }
@@ -2329,6 +3138,7 @@ async function runCmd(args: string[]): Promise<void> {
   let under = "";
   let role = "default";
   let dispatch = "";
+  let project = "";
   let out = "";
   let err = "";
   let marker = "";
@@ -2342,6 +3152,7 @@ async function runCmd(args: string[]): Promise<void> {
       option === "--under" ||
       option === "--role" ||
       option === "--run" ||
+      option === "--project" ||
       option === "--out" ||
       option === "--err" ||
       option === "--marker" ||
@@ -2354,6 +3165,7 @@ async function runCmd(args: string[]): Promise<void> {
       if (option === "--under") under = args[at + 1]!;
       else if (option === "--role") role = args[at + 1]!;
       else if (option === "--run") dispatch = args[at + 1]!;
+      else if (option === "--project") project = args[at + 1]!;
       else if (option === "--out") out = args[at + 1]!;
       else if (option === "--err") err = args[at + 1]!;
       else if (option === "--marker") marker = args[at + 1]!;
@@ -2375,6 +3187,7 @@ async function runCmd(args: string[]): Promise<void> {
   marker = absolute(marker);
   pidfile = absolute(pidfile);
   dispatch = absolute(dispatch);
+  project = absolute(project);
   under = absolute(under);
   if (bad) appendFailure(err, marker, bad);
   if (!name || !givenCwd)
@@ -2393,32 +3206,44 @@ async function runCmd(args: string[]): Promise<void> {
   if (role !== "default" && role !== "lane" && role !== "coachman" && role !== "reviewer")
     appendFailure(err, marker, `unknown launch role: ${role}`);
   if ((role === "lane" || role === "coachman" || role === "reviewer") && !under)
-    appendFailure(err, marker, `a ${role} launch needs --under <dispatch> to name its run space`);
+    appendFailure(err, marker, `a ${role} launch needs --under <dispatch> to name its run tab`);
   if (dispatch && !under)
-    appendFailure(err, marker, "--run needs --under <dispatch> to name its run space");
+    appendFailure(err, marker, "--run needs --under <dispatch> to name its run tab");
   if (under) {
     let underIsDir = false;
     try {
       underIsDir = statSync(under).isDirectory();
     } catch {}
-    if (!underIsDir) appendFailure(err, marker, `no run space directory: ${under}`);
+    if (!underIsDir) appendFailure(err, marker, `no run directory: ${under}`);
     try {
       under = realpathSync(under);
     } catch {
-      appendFailure(err, marker, "cannot resolve run space directory");
+      appendFailure(err, marker, "cannot resolve run directory");
     }
     // BASE's dispatch_info fails only when python itself breaks, which the port
     // has no equivalent of; an unreadable waybill reads as no worktree below.
-    const underPath = dispatchInfo(under).worktree;
+    // A dispatch without a waybill still names its space when it carries run.json:
+    // setup launches its verifier session before any ticket run, and its run dir
+    // holds the record but no waybill and no synthesis worktree. But run.json
+    // names the space only for such a waybill-less dispatch: one that names a
+    // worktree needs it live, so a run whose worktree was pruned still refuses
+    // instead of launching into the background.
+    const underInfo = dispatchInfo(under);
+    const underPath = underInfo.worktree;
     let underPathIsDir = false;
     try {
       underPathIsDir = !!underPath && statSync(underPath).isDirectory();
     } catch {}
-    if (!underPathIsDir)
+    let underHasRun = false;
+    try {
+      underHasRun = statSync(join(under, "run.json")).isFile();
+    } catch {}
+    const briefLess = underInfo.name === "" && underInfo.worktree === "";
+    if (!underPathIsDir && !(underHasRun && briefLess))
       appendFailure(
         err,
         marker,
-        `the run at ${under} has no existing synthesis worktree to name its space`,
+        `the run at ${under} has no existing synthesis worktree or run.json to place its tab`,
       );
   }
   if (dispatch) {
@@ -2437,11 +3262,7 @@ async function runCmd(args: string[]): Promise<void> {
   let memory = "";
   let tasks = "";
   try {
-    const limits = launchLimits(
-      role,
-      dispatch,
-      process.env.POSTMASTER_CONFIG || join(homedir(), ".postmaster", "config.toml"),
-    );
+    const limits = launchLimits(role, dispatch, globalConfigPath(), project);
     memory = limits.memory;
     tasks = String(limits.tasks);
   } catch (error) {
@@ -2488,6 +3309,10 @@ async function runCmd(args: string[]): Promise<void> {
     }
   }
   if (pidfile) markerRemove(pidfile);
+  // A marker that already exists may still have the previous launch's
+  // _watch polling behind it; without the kill its late touch lands after
+  // the reset and finishes this launch before its payload prints.
+  if (marker && existsSync(marker)) killPriorWatchers(marker);
   if (marker) markerRemove(marker);
   const specDir = mkdtempSync(join(tmpdir(), "postmaster-host."));
   writeSpec(specDir, {
@@ -2512,9 +3337,17 @@ async function runCmd(args: string[]): Promise<void> {
   });
   let where = "";
   if (host === "herdr") {
-    const placed = under
-      ? herdrRunPlace(launchName, cwd, under)
-      : herdrPlace(launchName, cwd, "worktree", dispatch);
+    // A dispatch with no waybill names no run space: setup launches its
+    // session before any ticket run exists, so place it by the worktree and
+    // keep its tab and its watched wait. A dispatch that names a space keeps
+    // run placement alone.
+    const underBrief = under === "" ? null : dispatchInfo(under);
+    const briefLess = underBrief !== null && (underBrief.name === "" || underBrief.worktree === "");
+    const placed = !under
+      ? herdrPlace(launchName, cwd, "worktree", dispatch)
+      : briefLess
+        ? herdrPlace(launchName, cwd, "worktree", under)
+        : herdrRunPlace(launchName, cwd, under);
     if (placed) {
       startFinishWatcher("herdr", placed.space, placed.tab, placed.pane, cwd, marker);
       run("mkfifo", [join(specDir, "env")]);
@@ -2820,6 +3653,192 @@ async function stopTree(
     .join(" ");
   return { code: survivors.size ? 2 : 0, text: `${known.size}\t${names}` };
 }
+/** One workhorse, named and placed as the runbook's block did: the host owns the composition. */
+async function workhorseCmd(args: string[]): Promise<void> {
+  const [dispatch, lane, worktree] = args;
+  if (args.length !== 3 || !dispatch || !lane || !worktree)
+    die("usage: run host workhorse <dispatch> <lane> <worktree>");
+  const d = absolute(dispatch);
+  const name = nameCmd(d, "workhorse", lane);
+  await runCmd([
+    name,
+    worktree,
+    "--under",
+    d,
+    "--role",
+    "lane",
+    "--run",
+    d,
+    "--out",
+    join(d, "logs", `${lane}-events.jsonl`),
+    "--err",
+    join(d, "logs", `${lane}.err`),
+    "--marker",
+    join(d, "logs", `${lane}.done`),
+    "--",
+    join(HERE, "run"),
+    "launch",
+    "launch",
+    lane,
+    worktree,
+    join(d, `${lane}-prompt.txt`),
+    "--last",
+    join(d, "logs", `${lane}-last.md`),
+    "--run",
+    d,
+  ]);
+}
+
+/** A process name as a pidfile records it: one line, since the form is line-based. */
+function pidfileCommand(name: string): string {
+  return name.split("\n")[0] ?? "";
+}
+
+/**
+ * The leader's command once it is past every exec: a child read before it execs still
+ * looks like its parent (same command line, stably, until it is scheduled), mid-exec
+ * its command line can read empty, and the launch chain execs twice more — the spawned
+ * wrapper becomes systemd-run, which execs the target in place after scope setup, a
+ * D-Bus roundtrip no stability window can outwait — so a reading counts only past the
+ * parent's command line, the transient names and the wrapper's own command line, and
+ * the name is recorded after three such stable readings. "" when the process is gone
+ * or never settles, in which case the pidfile holds no command.
+ */
+async function settledCommand(
+  pid: number,
+  spawned: string | null,
+  wrapperPrefix: string | null,
+): Promise<string> {
+  const parent = processCommandLine(process.pid);
+  // The chain's turning names: the wrapper run spawned, and a --scope systemd-run,
+  // which always becomes its target (or, under a systemd that waits instead, the
+  // record honestly degrades to start and boot). The plain path's wrapper is known
+  // by its command line instead: a setsid phase by name would also match a target
+  // that wraps itself, and a python phase by name would swallow a python target,
+  // while the wrapper's own invocation matches nothing else.
+  const transient = new Set([spawned, "systemd-run"]);
+  let prev: string | null = null;
+  let stable = 0;
+  const end = Date.now() + 2000;
+  for (;;) {
+    const cur = processCommandLine(pid);
+    const name = cur === "" ? "" : pidfileCommand(processInfo(pid)?.name ?? "");
+    const wrapped = wrapperPrefix !== null && cur.startsWith(wrapperPrefix);
+    const ready = cur !== "" && cur !== parent && name !== "" && !transient.has(name) && !wrapped;
+    if (!ready) {
+      if (cur === "" && processState(pid) === "absent") return "";
+      // Unreadable but present (mid-exec, or a zombie awaiting reap), pre-exec, or a
+      // turning name: none of it is the target, so wait it out.
+      stable = 0;
+      prev = null;
+    } else if (cur === prev) {
+      stable += 1;
+      if (stable >= 2) return name;
+    } else {
+      stable = 0;
+      prev = cur;
+    }
+    if (Date.now() >= end) return "";
+    await Bun.sleep(10);
+  }
+}
+
+/** A leftover member for the report: its command line, or its bare name. */
+function describeCommand(pid: number, name: string): string {
+  // ASCII: \s stays ASCII under u; collapsing ASCII runs is the whole of this report line.
+  const line = clean(processCommandLine(pid).replace(/\s+/gu, " ").trim());
+  if (line !== "") return line.slice(0, 200);
+  return name;
+}
+
+/**
+ * The process group a pidfile names, stopped as `stop` stops a worktree's launches.
+ * A pidfile in the form `run` writes (pid, start, boot, command) stops only the launch it
+ * recorded: the leader and its group die only while the recorded start, boot and command
+ * still match the holder of the number, live or zombie. A legacy pidfile without the
+ * command (pid, start, boot) is checked on start and boot alone. A bare pid stops
+ * whatever live holder and group hold the number now. Members no check proves are never
+ * killed: they are reported as leftover members, each pid with its command, and the stop
+ * exits 2 so the caller sees it. Nothing here assumes a dead leader means an owned group:
+ * a stranger's group may hold the number with a zombie leader or with none.
+ */
+async function stopPidfileCmd(args: string[]): Promise<void> {
+  const file = args[0] ?? "";
+  if (!file) die("usage: run host stop-pidfile <pidfile>");
+  let text = "";
+  try {
+    text = readFileSync(file, "utf8");
+  } catch {
+    die(`no such pidfile: ${file}`);
+  }
+  const parts = text.trim().split("\n");
+  const pidText =
+    parts.length === 1 || parts.length === 3 || parts.length === 4 ? (parts[0] ?? "") : "";
+  if (!/^[0-9]+$/u.test(pidText)) die(`${file} does not hold a pid: ${text.trim()}`);
+  const pid = Number(pidText);
+  if (pid <= 0) die(`${file} does not hold a pid: ${text.trim()}`);
+  const recorded = parts.length === 3 || parts.length === 4;
+  const table = processTable();
+  const row = table.get(pid);
+  // The live members of the numbered group, the holder included: the processes a stop
+  // would end. A zombie needs no killing and is never reported as leftover.
+  const members = [...table]
+    .filter(([, r]) => r.group === pid && !r.zombie)
+    .map(([member]) => member)
+    .sort((a, b) => a - b);
+  const matches =
+    recorded &&
+    row !== undefined &&
+    row.start === parts[1] &&
+    sameBoot(parts[2], bootId()) &&
+    (parts.length === 3 || pidfileCommand(row.name) === parts[3]);
+  if (matches || (!recorded && row !== undefined && !row.zombie)) {
+    // Proven, so the leader and its group die: through the group while the leader is
+    // live, else through the proven members one by one, since a stop root needs a
+    // live holder.
+    const roots =
+      row !== undefined && !row.zombie
+        ? [`group|${pid}|${row.start}`]
+        : members.map((member) => `tree|${member}|${table.get(member)!.start}`);
+    if (roots.length === 0) {
+      console.log(`no process group of ${pid} is running`);
+      return;
+    }
+    const grace = count(process.env.POSTMASTER_HOST_STOP_WAIT ?? "20", "POSTMASTER_HOST_STOP_WAIT");
+    const most = count(process.env.POSTMASTER_HOST_STOP_MAX ?? "512", "POSTMASTER_HOST_STOP_MAX");
+    const result = await stopTree(grace, most, roots);
+    const fields = result.text.split("\t");
+    if (result.code === 0)
+      console.log(`stopped the process group of ${pid}: ${fields[0]} process(es)`);
+    else if (result.code === 2) {
+      warn(`stopped the process group of ${pid}, but these still run: ${fields[1] ?? ""}`);
+      throw hostError("", 2);
+    } else if (result.code === 3) {
+      warn(
+        `refused to stop the process group of ${pid}, and left it running: ${fields.slice(1).join("\t")}`,
+      );
+      throw hostError("", 2);
+    } else die(`could not stop the process group of ${pid}: ${result.text}`);
+    return;
+  }
+  if (members.length === 0) {
+    console.log(`no process group of ${pid} is running`);
+    return;
+  }
+  const pairs = members
+    .map((member) => `${member} ${describeCommand(member, table.get(member)!.name)}`)
+    .join(", ");
+  const reason = !recorded
+    ? "the pidfile records no identity and the leader is gone"
+    : row === undefined
+      ? "the recorded leader is gone"
+      : "the recorded identity does not match";
+  warn(
+    `left ${members.length} leftover member(s) of ${pid} running: ${pairs} (${reason}; killed nothing)`,
+  );
+  throw hostError("", 2);
+}
+
 async function stopCmd(args: string[]): Promise<void> {
   const path = worktreeArg(args[0] ?? "", "stop");
   if ((resolve(process.cwd()) + sep).startsWith(path + sep))
@@ -2990,7 +4009,7 @@ function spawnCmd(args: string[]): void {
   if (host === "herdr") {
     if (herdr(["agent", "get", handle]).code === 0)
       die(`a live Herdr agent is already named ${handle}; spawn under another handle`);
-    const placed = herdrPlace(label, cwd, "repo");
+    const placed = herdrPlace(label, cwd, "repo", "", handle);
     if (!placed) die(`Herdr could not open a tab for ${handle}`);
     const kind = basename(commandArgs[0]!);
     if (isKind(kind)) {
@@ -3067,7 +4086,14 @@ function spawnCmd(args: string[]): void {
       ]);
     const window = result.out.trim();
     if (!window) die(`tmux could not start ${handle}`);
+    run("tmux", ["set-option", "-w", "-t", window, "@postmaster_cwd", cwd]);
+    run("tmux", ["set-option", "-w", "-t", window, "@postmaster_handle", handle]);
     run("tmux", ["set-option", "-w", "-t", window, "automatic-rename", "off"]);
+    const pane = run("tmux", ["display-message", "-p", "-t", window, "#{pane_id}"]).out.trim();
+    if (pane) {
+      run("tmux", ["set-option", "-p", "-t", pane, "@postmaster_owned", "yes"]);
+      run("tmux", ["set-option", "-w", "-t", window, "@postmaster_pane", pane]);
+    }
     console.log(`host=tmux session=${session} window=${window} handle=${handle}`);
     return;
   }
@@ -3211,6 +4237,189 @@ function readCmd(args: string[]): void {
     if (result.code) throw hostError("", result.code);
   } else noSessionHost();
 }
+// A spawned session still shows: a live Herdr agent under the handle, a
+// recorded pane that still answers, or a tmux window carrying its tag. A
+// shell spawn registers no agent and a user rename changes the window name,
+// so neither the agent list nor the name decides alone. Gone servers hold no
+// sessions.
+function sessionPresent(handle: string): boolean {
+  if (herdrUp()) {
+    if (herdr(["agent", "get", handle]).code === 0) return true;
+    for (const file of placementFiles()) {
+      let item: Record<string, unknown> | null = null;
+      try {
+        item = JSON.parse(readFileSync(file, "utf8")) as Record<string, unknown>;
+      } catch {
+        continue;
+      }
+      if (item === null || typeof item !== "object" || Array.isArray(item)) continue;
+      if (item.handle !== handle) continue;
+      if (typeof item.pane !== "string" || !item.pane) continue;
+      if (herdr(["pane", "get", item.pane]).code === 0) return true;
+    }
+  }
+  if (has("tmux")) {
+    const rows = run("tmux", [
+      "list-windows",
+      "-a",
+      "-F",
+      "#{window_id}\t#{window_name}\t#{@postmaster_cwd}\t#{@postmaster_handle}\t#{@postmaster_pane}",
+    ]);
+    if (rows.code === 0) {
+      for (const line of pySplitLines(rows.out)) {
+        const cells = line.split("\t");
+        if (cells[0] && cells[3] === handle) return true;
+      }
+    }
+  }
+  return false;
+}
+function closeHandleHerdr(handle: string): { code: number; found: boolean } {
+  const records: Array<{ file: string; space: string; tab: string; pane: string }> = [];
+  for (const file of placementFiles()) {
+    let item: Record<string, unknown> | null = null;
+    try {
+      item = JSON.parse(readFileSync(file, "utf8")) as Record<string, unknown>;
+    } catch {
+      continue;
+    }
+    if (item === null || typeof item !== "object" || Array.isArray(item)) continue;
+    if (item.handle !== handle) continue;
+    if (
+      typeof item.workspace !== "string" ||
+      typeof item.tab !== "string" ||
+      typeof item.pane !== "string"
+    )
+      continue;
+    records.push({ file, space: item.workspace, tab: item.tab, pane: item.pane });
+  }
+  if (!records.length) {
+    if (herdr(["agent", "get", handle]).code === 0) {
+      warn(`session ${handle} is live but run host recorded no tab for it; left it open`);
+      return { code: 2, found: true };
+    }
+    return { code: 0, found: false };
+  }
+  let rc = 0;
+  for (const rec of records) {
+    if (herdrCloseOnePlacement(rec.space, rec.tab, rec.pane, rec.file, "session") !== 0) rc = 2;
+  }
+  return { code: rc, found: true };
+}
+function closeHandleTmux(handle: string): { code: number; found: boolean } {
+  const rows = run("tmux", [
+    "list-windows",
+    "-a",
+    "-F",
+    "#{window_id}\t#{window_name}\t#{@postmaster_cwd}\t#{@postmaster_handle}\t#{@postmaster_pane}",
+  ]);
+  if (rows.code !== 0) {
+    if (run("tmux", ["ls"]).code !== 0) return { code: 0, found: false };
+    warn(`could not inspect tmux windows for session ${handle}; left it open`);
+    return { code: 2, found: true };
+  }
+  const hits: Array<{ window: string; pane: string }> = [];
+  let named = "";
+  for (const line of pySplitLines(rows.out)) {
+    const [w, name, , tag, ...paneRest] = line.split("\t");
+    if (!w) continue;
+    if (tag === handle) hits.push({ window: w, pane: paneRest.join("\t") });
+    if (name === handle) named = w;
+  }
+  if (!hits.length) {
+    if (named) {
+      warn(`tmux window ${named} is named ${handle} but run host did not open it; left it open`);
+      return { code: 2, found: true };
+    }
+    return { code: 0, found: false };
+  }
+  let rc = 0;
+  for (const hit of hits) {
+    if (tmuxCloseWindow(hit.window, hit.pane) !== 0) rc = 2;
+    else console.log(`host=tmux: closed session window ${hit.window}`);
+  }
+  return { code: rc, found: true };
+}
+// Every session recorded under the handle closes, on each host that
+// answers: handles are unique per spawn, so two matches means two spawns
+// under one name, and a close that left one behind would lie about it.
+function closeHandleCore(handle: string): number {
+  let rc = 0;
+  let found = false;
+  if (has("tmux")) {
+    const tm = closeHandleTmux(handle);
+    if (tm.code !== 0) rc = tm.code;
+    found = found || tm.found;
+  }
+  if (herdrUp()) {
+    const hd = closeHandleHerdr(handle);
+    if (hd.code !== 0) rc = hd.code;
+    found = found || hd.found;
+  }
+  if (rc !== 0) return rc;
+  console.log(found ? `closed ${handle}` : `no session ${handle}`);
+  return 0;
+}
+function closeHandleCmd(args: string[]): void {
+  const raw = args[0] ?? "";
+  if (!raw || args.length !== 1) die("usage: run host close-handle <handle>");
+  const rc = closeHandleCore(handleOf(raw));
+  if (rc !== 0) throw hostError("", rc);
+}
+// A booking clerk session after its ticket is marked ready: ticket-ready mark
+// starts this detached, since the mark runs inside the session's own turn. It
+// waits for the turn to end, closes that one session, and drops its record.
+// The handle arrives on the command line, bound at marking: the record is
+// read only to drop it, so a replacement session recorded since is never
+// waited on or closed here. The record goes only when it still names this
+// session: a new clerk for the same ticket starts under another handle and is
+// never touched here.
+async function clerkCloseCmd(args: string[]): Promise<void> {
+  const repo = args[0] ?? "";
+  const id = args[1] ?? "";
+  const handle = args[2] ?? "";
+  if (!repo || !id || !handle || args.length !== 3)
+    die("usage: run host _clerk-close <repo> <id> <handle>");
+  const drop = (): void => {
+    try {
+      const raw = JSON.parse(readFileSync(clerkSessionPath(repo, id), "utf8")) as {
+        handle?: unknown;
+      };
+      if (raw.handle === handle) rmSync(clerkSessionPath(repo, id), { force: true });
+    } catch {}
+  };
+  const settled = handleOf(handle);
+  if (!sessionPresent(settled)) {
+    console.log(`${handle} is already gone; dropping its record`);
+    const gone = closeHandleCore(settled);
+    if (gone !== 0) throw hostError("", gone);
+    drop();
+    return;
+  }
+  let patience = 600;
+  try {
+    patience = count(process.env.POSTMASTER_CLERK_CLOSE_WAIT ?? "600", "seconds");
+  } catch (error) {
+    warn(
+      `POSTMASTER_CLERK_CLOSE_WAIT is not a number; waiting 600s: ${String((error as Error).message)}`,
+    );
+  }
+  try {
+    await waitCmd([handle, String(patience)]);
+  } catch (error) {
+    if (!sessionPresent(settled)) {
+      const gone = closeHandleCore(settled);
+      if (gone !== 0) throw hostError("", gone);
+      drop();
+      return;
+    }
+    throw error;
+  }
+  const rc = closeHandleCore(settled);
+  if (rc !== 0) throw hostError("", rc);
+  drop();
+  console.log(`closed clerk session ${handle}`);
+}
 
 // --- coachman legs ---------------------------------------------------------------------------
 // One attempt at a time per leg, every attempt recorded: a start validates, takes the leg's
@@ -3312,30 +4521,46 @@ function legTerminateTail(path: string): void {
 // empty file is a creator between its creation and its pid write. The mutex serializes the
 // check-and-write sections only — acquire, claim and release each drop it before returning —
 // so a kill mid-section leaves a dead owner's file the next take steals.
-function legMutexOwnerDead(mutexPath: string): boolean {
+type MutexVerdict = "absent" | "live" | "dead";
+function legMutexVerdict(mutexPath: string): { verdict: MutexVerdict; text: string | null } {
   let text: string;
   try {
     text = readFileSync(mutexPath, "utf8");
   } catch (error) {
-    return (error as NodeJS.ErrnoException)?.code === "ENOENT";
+    return {
+      verdict: (error as NodeJS.ErrnoException)?.code === "ENOENT" ? "absent" : "live",
+      text: null,
+    };
   }
   if (text.trim() === "") {
     try {
-      return Date.now() - statSync(mutexPath).mtimeMs > 5000;
+      return {
+        verdict: Date.now() - statSync(mutexPath).mtimeMs > 5000 ? "dead" : "live",
+        text,
+      };
     } catch {
-      return true;
+      return { verdict: "dead", text };
     }
   }
   const pid = Number(text.trim());
-  if (!Number.isInteger(pid) || pid <= 0) return false;
-  return processState(pid) !== "live";
+  if (!Number.isInteger(pid) || pid <= 0) return { verdict: "live", text };
+  return { verdict: processState(pid) !== "live" ? "dead" : "live", text };
 }
 type MutexTake = { status: "taken" } | { status: "busy" } | { status: "error"; error: unknown };
-// The steal races a fresh holder: the liveness verdict names a pid, but the
-// unlink acts on a path, and a new holder can create between the two, losing
-// its file to the unlink and holding the mutex beside the stealer. The window
-// is one read-to-unlink wide; callers whose write must survive verify it
+// The steal re-verifies the file it verdicts: the verdict names a pid, but the
+// unlink acts on a path, and a verdict that spans a drop and a fresh create —
+// the old owner exits after dropping, the liveness check straddles it — would
+// otherwise unlink the fresh holder's file and hold the mutex beside it. Only
+// a file still carrying the dead verdict's content is stolen; anything else
+// waits for the next try. Callers whose write must survive still verify it
 // after the write and redo, rather than trusting the hold alone.
+function legMutexRead(mutexPath: string): string | null {
+  try {
+    return readFileSync(mutexPath, "utf8");
+  } catch {
+    return null;
+  }
+}
 function legMutexTake(mutexPath: string, maxTries: number): MutexTake {
   for (let i = 0; maxTries < 0 || i < maxTries; i++) {
     try {
@@ -3349,7 +4574,11 @@ function legMutexTake(mutexPath: string, maxTries: number): MutexTake {
       return { status: "taken" };
     } catch (error) {
       if ((error as NodeJS.ErrnoException)?.code !== "EEXIST") return { status: "error", error };
-      if (legMutexOwnerDead(mutexPath)) {
+      // A file already gone steals nothing, and a file changed since the
+      // verdict belongs to a fresh holder: unlinking either would take a live
+      // file with it. Only the dead verdict's own content is stolen.
+      const seen = legMutexVerdict(mutexPath);
+      if (seen.verdict === "dead" && seen.text !== null && legMutexRead(mutexPath) === seen.text) {
         try {
           rmSync(mutexPath, { force: true });
         } catch {}
@@ -4429,13 +5658,24 @@ function legWaitingEscape(question: string): string {
     .map((line) => (line.startsWith("## ") ? `\\## ${line.slice(3)}` : line))
     .join("\n");
 }
-function legWaitingAddInner(f: string, ticket: string, escaped: string): void {
-  let text = "";
-  let listIsFile = false;
+function legWaitingRead(f: string): string | null {
   try {
-    listIsFile = statSync(f).isFile();
-  } catch {}
-  if (listIsFile) text = readFileSync(f, "utf8");
+    if (!statSync(f).isFile()) return null;
+  } catch {
+    return null;
+  }
+  try {
+    return readFileSync(f, "utf8");
+  } catch {
+    return null;
+  }
+}
+// The update stores only onto the content it read: a second read past the
+// compute that differs means another writer landed between, so this one
+// reports unwritten and the caller redoes from the newer list. False never
+// means the ticket is missing, only that this write did not land.
+function legWaitingAddInner(f: string, ticket: string, escaped: string): boolean {
+  const text = legWaitingRead(f) ?? "";
   const blocks = text.split(/^## /mu);
   const head = blocks[0] ?? "";
   const rest: string[] = [];
@@ -4444,18 +5684,23 @@ function legWaitingAddInner(f: string, ticket: string, escaped: string): void {
     if (pyTrim(pySplitLines(b)[0] ?? "") !== ticket) rest.push(b);
   }
   rest.push(`${ticket}\n${escaped}\n`);
+  if ((legWaitingRead(f) ?? "") !== text) return false;
   legWaitingStore(f, head + rest.map((b) => `## ${b}`).join(""));
+  return true;
 }
-function legWaitingRemoveInner(f: string, ticket: string): void {
-  const text = readFileSync(f, "utf8");
+function legWaitingRemoveInner(f: string, ticket: string): boolean {
+  const text = legWaitingRead(f);
+  if (text === null) return true;
   const parts = text.split(/^## /mu);
   const keep: string[] = [parts[0] ?? ""];
   for (const b of parts.slice(1)) {
     if (pyTrim(pySplitLines(b)[0] ?? "") !== ticket) keep.push(`## ${b}`);
   }
   const out = keep.join("");
+  if ((legWaitingRead(f) ?? "") !== text) return false;
   legWaitingStore(f, pyTrim(out) === "" ? "" : out);
   if (pyTrim(out) === "") rmSync(f);
+  return true;
 }
 // Run the inner waiting update with the kernel holding the list: flock runs us
 // again as its child, so the read and the write are exclusive by construction —
@@ -4488,10 +5733,10 @@ function legWaitingAdd(runs: string, ticket: string, qfile: string): void {
   // phantom entry and remove takes the whole block. The escape renders identically in markdown.
   const escaped = legWaitingEscape(pyTrim(readFileSync(qfile, "utf8")));
   // Two postmasters adding together read one list and the last write wins, dropping an
-  // entry, and no pid file can close that race: the liveness verdict names a pid while
-  // the steal unlinks a path, so the kernel holds the list instead. Without flock(1)
-  // the pid mutex with verify-and-redo is the fallback — bash's class, a plain RMW
-  // there, which can still drop an entry under contention.
+  // entry, so the kernel holds the list instead: flock runs the inner update
+  // exclusively. Without flock(1) the pid mutex with verify-and-redo is the
+  // fallback, whose steal takes only a stale file — contended files never
+  // age one, so under contention the atomic create alone decides.
   const lock = join(runs, "postmaster", ".waiting.lock");
   if (legWaitingUnderFlock(lock, ["_waiting_add", runs, ticket, qfile])) return;
   for (let attempt = 0; attempt < 10; attempt++) {
@@ -4501,7 +5746,7 @@ function legWaitingAdd(runs: string, ticket: string, qfile: string): void {
         `leg: cannot take the waiting-list mutex: ${spawnStrerror(take.status === "error" ? take.error : null)}`,
       );
     try {
-      legWaitingAddInner(f, ticket, escaped);
+      if (!legWaitingAddInner(f, ticket, escaped)) continue;
       let back = "";
       try {
         back = readFileSync(f, "utf8");
@@ -4529,7 +5774,7 @@ function legWaitingRemove(runs: string, ticket: string): void {
         `leg: cannot take the waiting-list mutex: ${spawnStrerror(take.status === "error" ? take.error : null)}`,
       );
     try {
-      legWaitingRemoveInner(f, ticket);
+      if (!legWaitingRemoveInner(f, ticket)) continue;
       let back: string | null = null;
       try {
         back = readFileSync(f, "utf8");
@@ -4822,14 +6067,26 @@ async function main(): Promise<void> {
     case "name":
       console.log(nameCmd(args[0] ?? "", ...args.slice(1)));
       return;
+    case "run-state":
+      await runStateCmd(args);
+      return;
     case "leg":
       await legCmd(args);
       return;
     case "run":
       await runCmd(args);
       return;
+    case "workhorse":
+      await workhorseCmd(args);
+      return;
+    case "limits":
+      limitsCmd(args);
+      return;
     case "stop":
       await stopCmd(args);
+      return;
+    case "stop-pidfile":
+      await stopPidfileCmd(args);
       return;
     case "close":
       await closeCmd(args);
@@ -4851,6 +6108,12 @@ async function main(): Promise<void> {
       return;
     case "read":
       readCmd(args);
+      return;
+    case "close-handle":
+      closeHandleCmd(args);
+      return;
+    case "_clerk-close":
+      await clerkCloseCmd(args);
       return;
     case "_leg_exec":
       await legExec(args);
@@ -4913,7 +6176,7 @@ async function main(): Promise<void> {
       return;
     default:
       die(
-        "usage: run host leg | detect | name | run [--under <dispatch>] [--role lane|coachman|reviewer] [--run <dispatch>] | stop | close | stop-run | close-run | spawn | send | wait | read | --live-test (see the header)",
+        "usage: run host leg | detect | name | run-state | run [--under <dispatch>] [--role lane|coachman|reviewer] [--run <dispatch>] [--project <repo>] | limits | stop | close | stop-run | close-run | spawn | send | wait | read | close-handle | --live-test (see the header)",
       );
   }
 }
@@ -4995,30 +6258,32 @@ function placementFiles(): string[] {
   }
 }
 
-function tokensOf(entry: any): any {
+function tokensOf(entry: { tokens?: unknown }): Record<string, unknown> {
   const tokens = entry.tokens || {};
   if (typeof tokens !== "object" || tokens === null || Array.isArray(tokens))
     throw new Error("bad tokens");
-  return tokens;
+  return tokens as Record<string, unknown>;
 }
 
 function placementOwnership(panesText: string, paneId: string, tabId: string): string {
-  const panes = (parseJson(panesText) as any)?.result?.panes;
+  const panes = parseJson<{ result?: { panes?: HerdrPane[] } }>(panesText)?.result?.panes;
   if (!Array.isArray(panes)) throw new Error("bad panes");
   for (const entry of panes)
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) throw new Error("bad panes");
   const placed = (value: unknown): boolean => typeof value === "string" && HERDR_TAB_ID.test(value);
-  const pane = panes.find((entry: any) => entry.pane_id === paneId);
+  const pane = panes.find((entry) => entry.pane_id === paneId);
   if (!pane) return "missing";
   if (tokensOf(pane).postmaster !== "launch") return "unowned";
   if (!placed(pane.tab_id)) return "idless";
-  if (panes.some((entry: any) => !placed(entry.tab_id))) return "mixed";
+  if (panes.some((entry) => !placed(entry.tab_id))) return "mixed";
   if (
     panes
-      .filter((entry: any) => entry.tab_id === tabId)
-      .every((entry: any) => tokensOf(entry).postmaster === "launch")
+      .filter((entry) => entry.tab_id === tabId)
+      .every((entry) => tokensOf(entry).postmaster === "launch")
   )
-    return "owned";
+    return panes.some((entry) => entry.tab_id === tabId && entry.pane_id !== paneId)
+      ? "owned-shared"
+      : "owned";
   return "split";
 }
 
@@ -5050,69 +6315,96 @@ function herdrClosePlacements(worktree: string): number {
     } catch {
       continue;
     }
-    if (!space || !tab || !pane) {
-      warn(`invalid launch placement in ${file}; left it open`);
-      return 2;
-    }
-    const panesResult = herdr(["pane", "list", "--workspace", space]);
-    if (panesResult.code !== 0) {
-      if (herdrSpaceGone(space)) {
-        markerRemove(file);
-        continue;
-      }
-      warn(`could not inspect launch tab ${tab} in space ${space}; left it open`);
-      return 2;
-    }
-    let ownership = "";
-    try {
-      ownership = placementOwnership(panesResult.out, pane, tab);
-    } catch {
-      warn(`could not verify ownership of launch tab ${tab}; left it open`);
-      return 2;
-    }
-    if (ownership === "missing") {
+    if (herdrCloseOnePlacement(space, tab, pane, file, "launch") !== 0) return 2;
+  }
+  return 0;
+}
+
+// Close one recorded launch: a run launch's pane, or a spawned session's tab.
+// A tab closes only when it holds the recorded pane alone and every pane in
+// it carries the launch token, as a space does. A tab the list cannot fully
+// place refuses too: a row counts as placed only when its tab_id is a string
+// of the shape Herdr sends (w…:t…), and anything else is unattributable. A
+// split tab keeps the user's pane and stays open, named in the refusal; a
+// shared run tab keeps its other run panes and stays open by design, with
+// only the recorded pane closed. Where the recorded pane itself carries no
+// attributable tab, only that pane closes, never the tab, whose sharers are
+// unknown.
+function herdrCloseOnePlacement(
+  space: string,
+  tab: string,
+  pane: string,
+  file: string,
+  noun: string,
+): number {
+  if (!space || !tab || !pane) {
+    warn(`invalid ${noun} placement in ${file}; left it open`);
+    return 2;
+  }
+  const panesResult = herdr(["pane", "list", "--workspace", space]);
+  if (panesResult.code !== 0) {
+    if (herdrSpaceGone(space)) {
       markerRemove(file);
-      continue;
+      return 0;
     }
-    // A tab closes only when every pane in it carries the launch token, as a
-    // space does: a split tab keeps the user's pane. A tab the list cannot
-    // fully place refuses too: a row counts as placed only when its tab_id
-    // is a string of the shape Herdr sends (w…:t…), and anything else is
-    // unattributable. Where the recorded pane itself carries no attributable
-    // tab, only that pane closes, never the tab, whose sharers are unknown.
-    if (ownership === "split") {
-      if (herdr(["pane", "close", pane]).code !== 0) {
-        warn(`herdr could not close launch pane ${pane}; left it open`);
-        return 2;
-      }
-      markerRemove(file);
-      warn(`launch tab ${tab} in space ${space} holds panes run host did not open; left it open`);
-      return 2;
-    }
-    if (ownership === "mixed") {
-      warn(`launch tab ${tab} in space ${space} holds panes run host cannot place; left it open`);
-      return 2;
-    }
-    if (ownership === "idless") {
-      if (herdr(["pane", "close", pane]).code !== 0) {
-        warn(`herdr could not close launch pane ${pane}; left it open`);
-        return 2;
-      }
-      markerRemove(file);
-      console.log(`host=herdr: closed launch pane ${pane}`);
-      continue;
-    }
-    if (ownership !== "owned") {
-      warn(`launch tab ${tab} in space ${space} is no longer owned by run host; left it open`);
-      return 2;
-    }
-    if (herdr(["tab", "close", tab]).code !== 0) {
-      warn(`herdr could not close launch tab ${tab}; left it open`);
+    warn(`could not inspect ${noun} tab ${tab} in space ${space}; left it open`);
+    return 2;
+  }
+  let ownership = "";
+  try {
+    ownership = placementOwnership(panesResult.out, pane, tab);
+  } catch {
+    warn(`could not verify ownership of ${noun} tab ${tab}; left it open`);
+    return 2;
+  }
+  if (ownership === "missing") {
+    markerRemove(file);
+    return 0;
+  }
+  if (ownership === "split") {
+    if (herdr(["pane", "close", pane]).code !== 0) {
+      warn(`herdr could not close ${noun} pane ${pane}; left it open`);
       return 2;
     }
     markerRemove(file);
-    console.log(`host=herdr: closed launch tab ${tab}`);
+    warn(`${noun} tab ${tab} in space ${space} holds panes run host did not open; left it open`);
+    return 2;
   }
+  if (ownership === "mixed") {
+    warn(`${noun} tab ${tab} in space ${space} holds panes run host cannot place; left it open`);
+    return 2;
+  }
+  if (ownership === "idless") {
+    if (herdr(["pane", "close", pane]).code !== 0) {
+      warn(`herdr could not close ${noun} pane ${pane}; left it open`);
+      return 2;
+    }
+    markerRemove(file);
+    console.log(`host=herdr: closed ${noun} pane ${pane}`);
+    return 0;
+  }
+  // A run tab holds every launch's pane beside the run's state pane: closing
+  // one checkout's pane leaves the shared tab for the rest, by design rather
+  // than as a refusal.
+  if (ownership === "owned-shared") {
+    if (herdr(["pane", "close", pane]).code !== 0) {
+      warn(`herdr could not close ${noun} pane ${pane}; left it open`);
+      return 2;
+    }
+    markerRemove(file);
+    console.log(`host=herdr: closed ${noun} pane ${pane}; its tab holds other run panes`);
+    return 0;
+  }
+  if (ownership !== "owned") {
+    warn(`${noun} tab ${tab} in space ${space} is no longer owned by run host; left it open`);
+    return 2;
+  }
+  if (herdr(["tab", "close", tab]).code !== 0) {
+    warn(`herdr could not close ${noun} tab ${tab}; left it open`);
+    return 2;
+  }
+  markerRemove(file);
+  console.log(`host=herdr: closed ${noun} tab ${tab}`);
   return 0;
 }
 
@@ -5124,15 +6416,15 @@ function herdrForgetSpace(workspace: string): void {
       continue;
     }
     try {
-      const item = JSON.parse(readFileSync(file, "utf8")) as any;
+      const item = JSON.parse(readFileSync(file, "utf8")) as Record<string, unknown> | null;
       if (item?.workspace === workspace) markerRemove(file);
     } catch {}
   }
 }
 
 function spaceVerdict(infoText: string, panesText: string): string {
-  const ws = (parseJson(infoText) as any)?.result?.workspace;
-  const panes = (parseJson(panesText) as any)?.result?.panes;
+  const ws = parseJson<{ result?: { workspace?: HerdrSpace } }>(infoText)?.result?.workspace;
+  const panes = parseJson<{ result?: { panes?: HerdrPane[] } }>(panesText)?.result?.panes;
   if (!ws || typeof ws !== "object" || Array.isArray(ws)) throw new Error("bad space");
   if (!Array.isArray(panes)) throw new Error("bad panes");
   for (const entry of panes)
@@ -5162,9 +6454,9 @@ function spaceVerdict(infoText: string, panesText: string): string {
 
 function herdrPlacementCwd(workspace: string, pane: string): string {
   for (const file of placementFiles()) {
-    let item: any = null;
+    let item: Record<string, unknown> | null = null;
     try {
-      item = JSON.parse(readFileSync(file, "utf8"));
+      item = JSON.parse(readFileSync(file, "utf8")) as Record<string, unknown>;
     } catch {
       continue;
     }
@@ -5191,17 +6483,17 @@ function closeHerdr(path: string): number {
     kind = "main";
   } else {
     try {
-      const data = (parseJson(listText) as any)?.result;
+      const data = parseJson<{ result?: Record<string, unknown> }>(listText)?.result;
       if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error("bad list");
       const rows = data.worktrees ?? [];
       if (!Array.isArray(rows)) throw new Error("bad list");
       const here = realpathLoose(path);
-      let match: any = null;
+      let match: Record<string, unknown> | null = null;
       for (const entry of rows) {
         if (!entry || typeof entry !== "object" || typeof entry.path !== "string")
           throw new Error("bad list");
         if (realpathLoose(entry.path) === here) {
-          match = entry;
+          match = entry as Record<string, unknown>;
           break;
         }
       }
@@ -5218,7 +6510,7 @@ function closeHerdr(path: string): number {
     let candidates: string[] = [];
     if (workspaces.code === 0) {
       try {
-        const data = parseJson(workspaces.out);
+        const data = parseJson<{ result?: { workspaces?: HerdrSpace[] } }>(workspaces.out);
         const result = data?.result;
         if (result === null || typeof result !== "object" || Array.isArray(result))
           throw new Error("bad spaces");
@@ -5242,7 +6534,9 @@ function closeHerdr(path: string): number {
         warn(`could not inspect space ${candidate}; left it open`);
         return 2;
       }
-      const tree = asRecord(parseJson(got.out)?.result?.workspace?.worktree);
+      const tree = asRecord(
+        parseJson<{ result?: { workspace?: HerdrSpace } }>(got.out)?.result?.workspace?.worktree,
+      );
       const actualPath = jsonValue(tree.checkout_path || tree.path);
       let resolved = "";
       try {
@@ -5269,7 +6563,9 @@ function closeHerdr(path: string): number {
     }
     infoText = infoResult.out;
   }
-  const tree = asRecord((parseJson(infoText) as any)?.result?.workspace?.worktree);
+  const tree = asRecord(
+    parseJson<{ result?: { workspace?: HerdrSpace } }>(infoText)?.result?.workspace?.worktree,
+  );
   const actualPath = jsonValue(tree.checkout_path || tree.path);
   if (!actualPath) return 0;
   try {
@@ -5430,7 +6726,7 @@ export function runWorktreePaths(givenDispatch: string): string[] {
   // A missing lane file is a life stage (nothing launched yet); a present one
   // that does not parse is corruption. When files exist but none parses,
   // the lane set is unknown, and silently treating it as empty would skip
-  // workhorse worktrees, so this fails instead.
+  // workhorse copies, so this fails instead.
   if (existsSync(join(dispatch, "run.json"))) {
     laneFiles++;
     try {
@@ -5470,9 +6766,12 @@ export function runWorktreePaths(givenDispatch: string): string[] {
     // Only the round records: findings lists, usage records and anything else
     // that shares the folder are not state for this lookup.
     if (!REVIEW_ROUND_FILE.test(entry)) continue;
-    let state: any = null;
+    let state: Record<string, unknown> | null = null;
     try {
-      state = JSON.parse(readFileSync(join(dispatch, "logs", entry), "utf8"));
+      state = JSON.parse(readFileSync(join(dispatch, "logs", entry), "utf8")) as Record<
+        string,
+        unknown
+      >;
     } catch {
       continue;
     }
@@ -5497,9 +6796,9 @@ export function runWorktreePaths(givenDispatch: string): string[] {
   try {
     const actionLog = join(dispatch, "actions.jsonl");
     for (const [lineIndex, line] of pySplitLines(readFileSync(actionLog, "utf8")).entries()) {
-      let action: any = null;
+      let action: Record<string, unknown> | null = null;
       try {
-        action = JSON.parse(line);
+        action = JSON.parse(line) as Record<string, unknown>;
       } catch {
         continue;
       }
@@ -5566,13 +6865,32 @@ async function stopRunCmd(args: string[]): Promise<void> {
       } else throw error;
     }
   }
+  // A fixture copy exists for its one run: launches at the copy's root, such
+  // as its watcher, stop with the run, so the later close can take their tabs.
+  const repo = dispatchRepo(dispatch);
+  if (repo !== "" && isFixtureRepo(repo)) {
+    let isDir = false;
+    try {
+      isDir = statSync(repo).isDirectory();
+    } catch {}
+    if (isDir) {
+      try {
+        await stopCmd([repo]);
+      } catch (error) {
+        if (isHostError(error)) {
+          if (error.message) console.error(`host: ${error.message}`);
+          rc = hostCode(error);
+        } else throw error;
+      }
+    }
+  }
   if (rc !== 0) throw hostError("", rc);
 }
 
 function runSpaceVerdict(infoText: string, panesText: string): string {
-  const ws = parseJson(infoText)?.result?.workspace;
+  const ws = parseJson<{ result?: { workspace?: HerdrSpace } }>(infoText)?.result?.workspace;
   if (ws === null || typeof ws !== "object" || Array.isArray(ws)) throw new Error("bad space");
-  const panes = parseJson(panesText)?.result?.panes;
+  const panes = parseJson<{ result?: { panes?: HerdrPane[] } }>(panesText)?.result?.panes;
   if (!Array.isArray(panes)) throw new Error("bad panes");
   for (const entry of panes) {
     if (entry === null || typeof entry !== "object" || Array.isArray(entry))
@@ -5589,21 +6907,83 @@ function runSpaceVerdict(infoText: string, panesText: string): string {
   return "ok";
 }
 
-function herdrCloseRunPlacements(givenDispatch: string): number {
-  const dispatch = realpathLoose(givenDispatch);
+// Close the run's tab in the repository's space: only while every pane in it
+// carries the launch token — the state pane and settled launch panes do —
+// and never the space around it. A tab already gone drops its record.
+function herdrCloseRunTab(dispatch: string, space: string, tab: string): number {
+  const panes = herdr(["pane", "list", "--workspace", space]);
+  if (panes.code !== 0) {
+    if (herdrSpaceGone(space)) {
+      removeRunTab(dispatch);
+      return 0;
+    }
+    warn(`could not inspect run tab ${tab} in space ${space}; left it open`);
+    return 2;
+  }
+  let rows: HerdrPane[] | undefined;
   try {
-    if (!statSync(join(STATE, "placements")).isDirectory()) return 0;
+    rows = parseJson<{ result?: { panes?: HerdrPane[] } }>(panes.out)?.result?.panes;
+    if (!Array.isArray(rows)) throw new Error("bad panes");
+    for (const row of rows) {
+      if (row === null || typeof row !== "object" || Array.isArray(row))
+        throw new Error("bad panes");
+      tokensOf(row);
+    }
   } catch {
+    warn(`could not verify ownership of run tab ${tab}; left it open`);
+    return 2;
+  }
+  // A row counts as placed only when its tab_id has the shape Herdr sends;
+  // anything else is unattributable and may sit in this tab, so one such row
+  // refuses the close, as a launch close does.
+  const placed = (value: unknown): boolean => typeof value === "string" && HERDR_TAB_ID.test(value);
+  if (rows.some((row) => !placed(row.tab_id))) {
+    warn(`run tab ${tab} in space ${space} holds panes run host cannot place; left it open`);
+    return 2;
+  }
+  const held = rows.filter((row) => row.tab_id === tab);
+  if (!held.length) {
+    removeRunTab(dispatch);
     return 0;
   }
+  for (const row of held) {
+    if (tokensOf(row).postmaster !== "launch") {
+      warn(`run tab ${tab} in space ${space} holds panes run host did not open; left it open`);
+      return 2;
+    }
+  }
+  if (herdr(["tab", "close", tab]).code !== 0) {
+    warn(`herdr could not close run tab ${tab}; left it open`);
+    return 2;
+  }
+  removeRunTab(dispatch);
+  console.log(`host=herdr: closed run tab ${tab}`);
+  return 0;
+}
+
+function herdrCloseRunPlacements(givenDispatch: string): number {
+  const dispatch = realpathLoose(givenDispatch);
+  const repo = dispatchRepo(dispatch);
+  const fixture = repo !== "" && isFixtureRepo(repo);
+  // A fixture copy exists for its one run: placements recorded with no run and
+  // the copy's checkout as their cwd belong to that run, told apart from the
+  // project's own watcher by the checkout, never by a label.
+  const mine = (item: Record<string, unknown>): boolean => {
+    if (item.run === dispatch) return true;
+    if (!fixture || item.run !== "") return false;
+    return typeof item.cwd === "string" && realpathLoose(item.cwd) === repo;
+  };
+  // No early return when placements are missing: the run tab has its own
+  // record outside them, and it still needs closing. The placement loops
+  // below are no-ops over an empty list.
   // BASE collects, then joins: one non-mapping file, or one non-string
   // workspace id, aborts the print, so no space closes from this list.
   const found = new Set<string>();
   let collectOk = true;
   for (const file of placementFiles()) {
-    let item: any = null;
+    let item: Record<string, unknown> | null = null;
     try {
-      item = JSON.parse(readFileSync(file, "utf8"));
+      item = JSON.parse(readFileSync(file, "utf8")) as Record<string, unknown>;
     } catch {
       continue;
     }
@@ -5611,7 +6991,7 @@ function herdrCloseRunPlacements(givenDispatch: string): number {
       collectOk = false;
       break;
     }
-    if (item.run === dispatch && item.workspace) {
+    if (mine(item) && item.workspace) {
       if (typeof item.workspace !== "string") {
         collectOk = false;
         break;
@@ -5629,9 +7009,9 @@ function herdrCloseRunPlacements(givenDispatch: string): number {
     }
     let fields: string[] | null = null;
     try {
-      const item: any = JSON.parse(readFileSync(file, "utf8"));
+      const item = JSON.parse(readFileSync(file, "utf8")) as Record<string, unknown>;
       if (item === null || typeof item !== "object" || Array.isArray(item)) continue;
-      if (item.run !== dispatch) continue;
+      if (!mine(item)) continue;
       fields = ["workspace", "tab", "pane", "cwd"].map((key) => jsonValue(item[key]));
     } catch {
       continue;
@@ -5647,6 +7027,31 @@ function herdrCloseRunPlacements(givenDispatch: string): number {
     if (herdrFinishPlacement(space, tab, pane) !== 0) {
       if (herdrSpaceGone(space)) markerRemove(file);
       else rc = 2;
+    }
+  }
+  // The run's tab lives in the repository's space: close it once no launch
+  // runs, while its panes are all run host's own. A user pane inside keeps
+  // it open, named in the refusal.
+  if (rc === 0) {
+    const runTab = readRunTab(dispatch);
+    if (runTab) {
+      rc = herdrCloseRunTab(dispatch, runTab.workspace, runTab.tab);
+      if (rc === 0 && fixture) {
+        // A copy-level launch may have recreated the fixture tab after the
+        // run record went stale at a dead tab: close the live tab too, so
+        // its record is never removed from under it.
+        const fix = readFixTab(repo);
+        if (fix && fix.tab !== runTab.tab) rc = herdrCloseRunTab(dispatch, fix.workspace, fix.tab);
+        if (rc === 0) removeFixTab(repo);
+      }
+    } else if (fixture) {
+      // The run never launched, so its tab record was never written, but the
+      // copy's own launches opened the fixture tab. Close it by that record.
+      const fix = readFixTab(repo);
+      if (fix) {
+        rc = herdrCloseRunTab(dispatch, fix.workspace, fix.tab);
+        if (rc === 0) removeFixTab(repo);
+      }
     }
   }
   for (const ws of [...found].sort()) {
@@ -5676,6 +7081,10 @@ function herdrCloseRunPlacements(givenDispatch: string): number {
         continue;
       }
       herdrForgetSpace(ws);
+    } else if (verdict === "space was not opened by run host") {
+      // The repository's space is shared: run host closes the run tab, never
+      // the space, so a space it did not open is simply not its to sweep.
+      continue;
     } else {
       warn(`${verdict}; left run space ${ws} open`);
       rc = 2;
@@ -5686,6 +7095,8 @@ function herdrCloseRunPlacements(givenDispatch: string): number {
 
 function tmuxCloseRunWindows(givenDispatch: string): number {
   const dispatch = realpathLoose(givenDispatch);
+  const repo = dispatchRepo(dispatch);
+  const fixture = repo !== "" && isFixtureRepo(repo);
   const rows = run("tmux", [
     "list-windows",
     "-a",
@@ -5700,7 +7111,12 @@ function tmuxCloseRunWindows(givenDispatch: string): number {
   let rc = 0;
   for (const line of pySplitLines(rows.out)) {
     const [w, cwd, runTag, ...paneRest] = line.split("\t");
-    if (!w || runTag !== dispatch) continue;
+    if (!w) continue;
+    // A fixture copy's untagged windows belong to its one run when their
+    // checkout is the copy's, told apart from the project's own watcher by
+    // the checkout, never by a label.
+    const fixtureOwn = fixture && !runTag && !!cwd && realpathLoose(cwd) === repo;
+    if (runTag !== dispatch && !fixtureOwn) continue;
     if (!cwd) {
       warn(`run window ${w} has no recorded directory; left it open`);
       rc = 2;

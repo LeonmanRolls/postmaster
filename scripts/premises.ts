@@ -21,6 +21,13 @@
 // Usage: run premises <repo> <ticket-file> <base>
 import { readFileSync } from "node:fs";
 import { run } from "./lib/proc.ts";
+import {
+  agentsEnd,
+  agentsIndex,
+  normalizeTicket,
+  verifiedAtSha,
+  verifiedSection,
+} from "./lib/ticket-sections.ts";
 
 export type Citation = {
   path: string;
@@ -75,21 +82,13 @@ const PATH_RE =
   /((?:[\p{L}\p{N}_.-]+\/)*[\p{L}\p{N}_.-]+\.[\p{L}\p{N}_.-]+)(#L[0-9]+(?:-L?[0-9]+)?|(?<![A-Za-z0-9_])L[0-9]+(?:-L?[0-9]+)?)?/gu;
 
 export function agentsPart(body: string): string {
-  const lines = body.split("\n");
-  const start = lines.findIndex((line) => /^## For the agents[ \t]*$/u.test(line.trim()));
+  const lines = normalizeTicket(body).split("\n");
+  const start = agentsIndex(lines);
   if (start < 0) return "";
   // The caller passes the waybill, whose project profile, team and dispatch
-  // sections follow the ticket: the part ends at the next level-two heading.
-  // A fenced ## line inside the part would end it early; tickets keep ## for
-  // sections and ### below them, so none occurs.
-  let end = lines.length;
-  for (let i = start + 1; i < lines.length; i++) {
-    if (/^##([ \t]|$)/u.test((lines[i] ?? "").trim())) {
-      end = i;
-      break;
-    }
-  }
-  return lines.slice(start + 1, end).join("\n");
+  // sections follow the ticket: the part ends where the shared reader says,
+  // past fenced ## lines and the ticket's own User journey.
+  return lines.slice(start + 1, agentsEnd(lines, start + 1)).join("\n");
 }
 
 export function citationsFromText(body: string): Citation[] {
@@ -217,8 +216,10 @@ export function checkPremises(repo: string, ticketFile: string, base: string): P
   } catch {
     die(`cannot read the ticket file ${ticketFile}`);
   }
-  const match = /^### Verified at ([0-9a-f]{7,40})[ \t]*$/mu.exec(body);
-  const verified = match ? match[1]! : "unknown";
+  const ticketLines = normalizeTicket(body).split("\n");
+  const section = verifiedSection(ticketLines, agentsIndex(ticketLines));
+  const sha = section ? verifiedAtSha(section.title) : "";
+  const verified = sha === "" ? "unknown" : sha;
   const cites = citationsFromText(body);
   const known =
     verified !== "unknown" &&

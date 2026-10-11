@@ -26,4 +26,13 @@ if [ ! -f "$script" ]; then
   exit 2
 fi
 
+# Refuse a Bun below engines.bun before the script loads: the check runs in its own
+# process, so it holds even when this Bun could not load the script at all. The check
+# lives with the tool's own manifest: a copy of this file taken outside the tool has
+# neither the manifest nor the check's file, and starts only the files beside it.
+if [ -f "$scripts_dir/lib/bun-min.ts" ] && [ -f "$scripts_dir/../package.json" ]; then
+  bun --no-env-file "--config=$scripts_dir/../bunfig.toml" \
+    "$scripts_dir/lib/bun-min.ts" "$scripts_dir/../package.json" || exit $?
+fi
+
 exec bun --no-env-file "--config=$scripts_dir/../bunfig.toml" "$script" "$@"

@@ -1,0 +1,23 @@
+<svg class="dg" viewBox="0 0 360 300" role="img" aria-label="Today a ticket is one long document: the problem, the criteria, the decisions and the notes for the agents, all at once. The code it will change appears only as links in the notes.">
+  <rect class="bx" x="80" y="6" width="200" height="288" rx="18"/>
+  <text class="t3" x="96" y="30">the ticket's document</text>
+  <rect class="row" x="94" y="38" width="172" height="40" rx="6"/>
+  <text class="t1" x="102" y="54">Problem</text>
+  <rect class="dimbar" x="102" y="62" width="150" height="3"/><rect class="dimbar" x="102" y="69" width="120" height="3"/>
+  <text class="t1" x="102" y="96">Criteria 1 to 5</text>
+  <rect class="dimbar" x="102" y="104" width="154" height="3"/><rect class="dimbar" x="102" y="111" width="138" height="3"/><rect class="dimbar" x="102" y="118" width="146" height="3"/>
+  <text class="t1" x="102" y="140">Decisions D1 to D9</text>
+  <rect class="dimbar" x="102" y="148" width="150" height="3"/><rect class="dimbar" x="102" y="155" width="154" height="3"/><rect class="dimbar" x="102" y="162" width="132" height="3"/><rect class="dimbar" x="102" y="169" width="148" height="3"/>
+  <text class="t1" x="102" y="192">For the agents</text>
+  <rect class="dimbar" x="102" y="200" width="140" height="3"/>
+  <text class="t2 mono" x="102" y="218">review-page.ts L63</text>
+  <text class="t2 mono" x="102" y="234">AGENTS.md L321</text>
+  <text class="t2 mono" x="102" y="250">SKILL.md</text>
+  <rect class="dimbar" x="102" y="262" width="150" height="3"/><rect class="dimbar" x="102" y="269" width="110" height="3"/>
+  <path class="ln dash" d="M232,226 C266,226 280,214 292,196"/>
+  <text class="t2" x="292" y="166">the code</text>
+  <text class="t2" x="292" y="182">is only</text>
+  <text class="t2" x="292" y="198">a link</text>
+  <text class="t2" x="16" y="96">all of it</text>
+  <text class="t2" x="16" y="112">at once</text>
+</svg>

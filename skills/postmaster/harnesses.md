@@ -5,10 +5,12 @@ form", "resume form", "thread id", "final message" and "ambient context"; this f
 each of those means for each harness. When a harness changes, this file changes and the
 runbooks do not. `<tool>` is the postmaster repo, as the runbook that sent you here found it.
 
-**Every form below runs in the foreground and writes its event stream to stdout.**
-`<tool>/scripts/run host run` adds the redirect to the lane's events file, runs it where the user can
-watch it, and lands its marker on exit (`hosts.md`); that is what makes one wrapper in the
-runbooks correct for every harness and every host.
+**Every launch and resume command runs in the foreground and writes its event stream to
+stdout.** `<tool>/scripts/run launch form <lane>` prints the exact commands for a configured lane or
+role — this file does not repeat them — and `launch` and `resume` run them. That is what makes
+one wrapper in the runbooks correct for every harness and every host:
+`<tool>/scripts/run host run` adds the redirect to the lane's events file, runs it where the
+user can watch it, and lands its marker on exit (`hosts.md`).
 
 Coachman legs use `<tool>/scripts/run host leg`, which owns the stream path, marker lifecycle and
 attempt record. It calls the form below through `run launch`; a resume appends to its launch's
@@ -17,8 +19,9 @@ attempt `refused` before its preflight and marks it `started` only after the env
 the harness is still callable. The leg command records the final outcome before the host lands
 the exited marker.
 
-**`<tool>/scripts/run launch` is the executable form of this file.** `run launch form <name>` prints the
-exact launch and resume commands for a configured lane or role; `launch` and `resume` run them;
+**`<tool>/scripts/run launch` is the executable form of this file.** `run launch form <name>` is
+where the exact launch and resume commands for a configured lane or role are written down;
+`launch` and `resume` run them;
 `review` runs a lane's bug-review form at the effort the run recorded for that lane on the
 named base-to-HEAD range; `skill` prints the prompt that invokes a harness's own security
 review skill (Own review skills, below). The script and this file change together, and a form
@@ -207,31 +210,13 @@ keeps one per name, and muse lists it once.
 
 ## codex
 
-Launch, workhorse or reviewer:
+`<tool>/scripts/run launch form <lane>` prints this harness's launch and resume commands. What differs:
 
-```sh
-# Mark the worktree trusted first. The grep guard is idempotent on purpose:
-# duplicate [projects] tables are invalid TOML.
-grep -qF "[projects.\"<abs wt>\"]" ~/.codex/config.toml \
-  || printf '\n[projects."%s"]\ntrust_level = "trusted"\n' "<abs wt>" >> ~/.codex/config.toml
-codex exec -C <wt> --json -o <dispatch>/logs/<lane>-last.md -m <model> \
-  -c model_reasoning_effort="<effort>" --dangerously-bypass-approvals-and-sandbox \
-  "$(cat <dispatch>/<lane>-prompt.txt)"
-```
-
-- A detached reviewer scratch needs `--skip-git-repo-check`.
+- A detached reviewer scratch needs `--skip-git-repo-check` on the launch form.
 - Thread id: `grep '"thread_id"'` in the events stream.
 - Final message: `<lane>-last.md` from `-o`, plus the last result line of the events stream.
-- Resume, from the worktree the thread was launched in, appending to the same stream:
-
-  ```sh
-  cd <wt> && codex exec resume <thread_id> --json -o <dispatch>/logs/<lane>-last.md \
-    -m <model> -c model_reasoning_effort="<effort>" --dangerously-bypass-approvals-and-sandbox \
-    -- "<prompt>"
-  ```
-
-  These are the launch's flags without `-C` and `--skip-git-repo-check`, with `--` before the
-  prompt. After `resume`, codex refuses `-C` and `-s` with "unexpected argument", and reads a
+- Resume runs from the worktree the thread was launched in, appending to the same stream: the
+  launch's flags without `-C` and `--skip-git-repo-check`, with `--` before the prompt. After `resume`, codex refuses `-C` and `-s` with "unexpected argument", and reads a
   prompt that starts with `-` as a flag and exits 2 unless `--` comes first. A resume that
   names no model or effort runs on codex's configured default, not on the thread's own, so both
   go on every resume. Without the bypass flag a resume runs `workspace-write` in a trusted
@@ -240,37 +225,26 @@ codex exec -C <wt> --json -o <dispatch>/logs/<lane>-last.md -m <model> \
   in place of the id, is safe only when no other codex thread has run since; otherwise recover
   the id from the events log or `~/.codex/sessions/YYYY/MM/DD/`.
   [Why every resume names its model](../../wiki/concepts/codex-resume-model.md)
-- Durable record: rollout jsonl under `~/.codex/sessions/YYYY/MM/DD/`. `codex resume
-  <thread_id>` opens the full TUI on a finished thread. `codex archive <thread_id>` at teardown.
+- Durable record: rollout jsonl under `~/.codex/sessions/YYYY/MM/DD/`. `codex resume <thread_id>`
+  opens the full TUI on a finished thread; `codex archive <thread_id>` at teardown.
 - Headless `codex exec` exposes no browser backend. A workhorse on codex cannot run the render gate;
   the coachman runs it.
 
 ## grok
 
-Launch, coachman or lane:
-
-```sh
-cd <wt> && grok --prompt-file <dispatch>/<lane>-prompt.txt -m <model> \
-  --reasoning-effort <effort> --max-turns 1000 --always-approve \
-  --output-format streaming-json
-```
+`<tool>/scripts/run launch form <lane>` prints this harness's launch and resume commands. What differs:
 
 - Thread id: the session uuid in the stream, minted at launch.
 - Final message: the last result line of the events stream.
-- Resume: `grok --resume <uuid> -p "<prompt>"` with the same flags, the caller appending to
-  the same stream. This is the coachman's own resume form when the coachman runs on grok: the
-  postmaster delivers a ruling this way.
+- Resume takes the same flags, the caller appending to the same stream. This is the coachman's
+  own resume form when the coachman runs on grok: the postmaster delivers a ruling this way.
 - Durable record: its session store; `grok export` renders a thread as Markdown. Threads persist
   harmlessly; nothing to archive.
 - No cross-session messaging.
 
 ## agy (Antigravity CLI)
 
-```sh
-cd <wt> && agy -p "$(cat <dispatch>/<lane>-prompt.txt)" \
-  --model <model> --output-format stream-json \
-  --dangerously-skip-permissions --add-dir <wt>
-```
+`<tool>/scripts/run launch form <lane>` prints this harness's launch and resume commands. What differs:
 
 - No `--effort` flag for any model: effort is baked into the model NAME, so the lane's model
   string carries it (`gemini-3.7-flash-high`; the effort suffix is part of the id, and an id
@@ -290,10 +264,7 @@ cd <wt> && agy -p "$(cat <dispatch>/<lane>-prompt.txt)" \
 
 ## claude
 
-```sh
-cd <wt> && claude -p "$(cat <dispatch>/<lane>-prompt.txt)" --model <model> \
-  --output-format stream-json --verbose --dangerously-skip-permissions
-```
+`<tool>/scripts/run launch form <lane>` prints this harness's launch and resume commands. What differs:
 
 - `--output-format stream-json` in print mode requires `--verbose`. `--effort <effort>` sets the
   effort where the lane has one.
@@ -307,7 +278,7 @@ cd <wt> && claude -p "$(cat <dispatch>/<lane>-prompt.txt)" --model <model> \
 - Thread name: `--name <text>`, which `run launch` passes from `POSTMASTER_LAUNCH_NAME` when
   `run host` sets it. Headless, it names the thread in the resume picker and does not set the
   pane's terminal title; `run host` sets that itself.
-- Resume: `claude -p --resume <session_id> "<prompt>"` with the same flags.
+- Resume takes the recorded session id with the same flags; `launch form <lane>` prints it.
 - Ambient context: reads `CLAUDE.md` in the repo and the files it imports. A project that keeps
   its context in `AGENTS.md` needs a `CLAUDE.md` pointing at it; a symlink works.
 - As the coachman's own harness: background tasks are reaped at about 29 minutes, and a long
@@ -320,10 +291,7 @@ cd <wt> && claude -p "$(cat <dispatch>/<lane>-prompt.txt)" --model <model> \
 
 ## pi
 
-```sh
-cd <wt> && pi --mode json --approve --model <provider/model> \
-  --thinking <effort> < <dispatch>/<lane>-prompt.txt
-```
+`<tool>/scripts/run launch form <lane>` prints this harness's launch and resume commands. What differs:
 
 - **The prompt goes in on stdin, never as `@<file>`.** An `@file` argument is an attachment:
   pi sends it as `<file name="/abs/path">…</file>` with no instruction around it, so the
@@ -341,8 +309,7 @@ cd <wt> && pi --mode json --approve --model <provider/model> \
 - Thread name: `--name <text>`, passed from `POSTMASTER_LAUNCH_NAME` as for claude.
 - Final message: the last `message_end` record whose message has role `assistant`. The
   stream also emits `message_end` for the system and user messages.
-- Resume: `pi --mode json --approve --session <id> --model <provider/model>
-  --thinking <effort> < <prompt-file>`, appending to the same stream.
+- Resume appends to the same stream on the recorded session id; `launch form <lane>` prints it.
 - **Resume from the directory the thread was launched in.** `--session` looks in the current
   working directory's sessions first. Given an id that exists only under another directory,
   pi prints "Session found in different project", asks "Fork this session into current
@@ -355,10 +322,7 @@ cd <wt> && pi --mode json --approve --model <provider/model> \
 
 ## muse (Muse Code)
 
-```sh
-cd <wt> && env XDG_DATA_HOME=<harness-data>/muse/<key> muse exec --json \
-  --prompt-file <abs prompt-file> --model <model> --reasoning-effort <effort> --yolo < /dev/null
-```
+`<tool>/scripts/run launch form <lane>` prints this harness's launch and resume commands. What differs:
 
 - `--yolo` is the bypass form. It turns off tool approval and Muse Code's sandbox, and trusts
   the workspace for the run. The sandbox uses Bubblewrap, which needs unprivileged user
@@ -408,11 +372,7 @@ cd <wt> && env XDG_DATA_HOME=<harness-data>/muse/<key> muse exec --json \
 
 ## mimo (MiMo Code)
 
-```sh
-cd <wt> && env XDG_DATA_HOME=<harness-data>/mimo/<key> MIMOCODE_DISABLE_CLAUDE_IMPORT=1 \
-  mimo run --format json -m <provider/model> --variant <effort> --dangerously-skip-permissions \
-  < <abs prompt-file>
-```
+`<tool>/scripts/run launch form <lane>` prints this harness's launch and resume commands. What differs:
 
 - The prompt arrives on stdin. MiMo Code reads its stdin to the end before it starts, so an
   open pipe holds a launch, and the prompt file is the only stdin a launch ever has. The model
@@ -527,7 +487,7 @@ reads a lane's final message.
 
 The bug lens runs each harness's own code-review skill on the run's change, never postmaster's
 brief. Every form below names that change explicitly: a skill left to choose its own diff
-cannot be trusted in a review scratch, which is a worktree detached at the snapshot with no
+cannot be trusted in a review scratch, which is a clone detached at the snapshot with no
 upstream. `<tool>/scripts/run launch review <lane> <cwd> <base>` runs the form on the change
 from `<base>` to the scratch's `HEAD`, and exits 3 for a harness with none. It runs every
 review at the effort the run recorded for that lane, the same source as launch and resume;
@@ -613,7 +573,7 @@ launch, named for their project or their ticket. The same table serves both.
 Bypass mode does not skip claude's question, on first start in a folder it has never opened,
 whether to trust it; headless `claude -p` does not ask. The first spawn in a new target stops
 there, and the user answers it in the pane. A fixture copy's postmaster runs headless
-(`SKILL.md` step 8, `hosts.md` none), so it never meets the question. A row not checked here
+(`SKILL.md` step 9, `hosts.md` none), so it never meets the question. A row not checked here
 takes its bypass flag from the headless form above; run it once before relying on it.
 
 ## Keeping the watcher running
@@ -728,7 +688,7 @@ with a limit word counts even when it is about something else (D3).
 The reset is read from the message only in the shapes providers have used (D4, D5): `2:29 AM`
 in the machine's zone, today or tomorrow once it is more than five minutes past; `Oct 5th,
 2026 2:29 AM` and `Oct 5, 2026 2:29 AM` as written; `resets 3am (UTC)` or another IANA zone
-in that zone; `in N minutes|hours` from the moment the lane stopped; of two times the later
+in that zone; in N minutes|hours from the moment the lane stopped; of two times the later
 counts. A zone that is an abbreviation such as PST, or no time at all, means no reset time.
 
 The record holds the lane, its role (a reviewer's with its lens and round), the message's

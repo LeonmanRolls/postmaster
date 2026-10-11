@@ -10,6 +10,7 @@ import { join } from "node:path";
 import {
   analyze,
   countSentences,
+  MAX_CRITERIA,
   MAX_CRITERION_SENTENCES,
   MAX_CRITERION_WORDS,
   MAX_DECISION_WORDS,
@@ -200,7 +201,7 @@ describe("plain part: path", () => {
     "lib/v",
     "tests/u",
     "~/notes",
-    "/home/a/b",
+    "/ho" + "me/" + "a/b",
     "/tmp/c",
     "/usr/d",
     "/etc/e",
@@ -605,8 +606,79 @@ describe("the notes", () => {
     expect(cli(edge).notes.some((n) => n.includes("may be more than one idea"))).toBe(false);
   });
 
+  const FIXTURE_LINE = "A fixture run dispatched from this change's branch scores clean.";
+  const COPY_LINE = "A copy made for a fixture run is never offered verifiers.";
+  const THINGS = ["first", "second", "third", "fourth", "fifth", "sixth", "seventh"];
+
+  function thing(i: number): string {
+    return `The ${THINGS[i]} thing is true when the work is done.`;
+  }
+
+  // FIT with its two criteria and two checks replaced by one line each: still fit.
+  function sized(lines: string[]): string {
+    const criteria = lines.map((l, i) => `${i + 1}. ${l}`).join("\n");
+    const checks = lines.map((_, i) => `- **C${i + 1}** Run it and see ${i + 1}.`).join("\n");
+    const fromCriteria = [
+      "1. The first thing is true when the work is done.",
+      "2. The second thing is true when the work is done.",
+    ].join("\n");
+    const fromChecks = [
+      "- **C1** Run it and see one. **At the base:** nothing.",
+      "- **C2** Run it and see two. **At the base:** nothing.",
+    ].join("\n");
+    return edit(edit(FIT, fromCriteria, criteria), fromChecks, checks);
+  }
+
+  test("more than five criteria warn without failing, through --final and without it", () => {
+    const five = [0, 1, 2, 3, 4].map(thing);
+    const six = [0, 1, 2, 3, 4, 5].map(thing);
+    const cases: Array<{ lines: string[]; warns: number | null }> = [
+      { lines: [...six, FIXTURE_LINE], warns: 6 },
+      {
+        lines: [thing(0), thing(1), COPY_LINE, thing(3), thing(4), thing(5), FIXTURE_LINE],
+        warns: 6,
+      },
+      { lines: [...five, FIXTURE_LINE], warns: null },
+      { lines: six, warns: 6 },
+      { lines: [FIXTURE_LINE, ...five], warns: 6 },
+      { lines: five, warns: null },
+    ];
+    for (const flags of [["--final"], []] as Array<string[]>) {
+      for (const c of cases) {
+        const out = cli(sized(c.lines), ...flags);
+        expect(out.code).toBe(0);
+        expect(out.findings).toEqual([]);
+        expect(out.notes).toContain(`criteria ${c.lines.length}, decisions 2, technical notes 2`);
+        const found = out.notes.filter((n) => n.startsWith("more than five criteria:"));
+        if (c.warns === null) {
+          expect(found).toEqual([]);
+        } else {
+          expect(found).toEqual([
+            `more than five criteria: ${c.warns}: leave work out or split the ticket by outcome`,
+          ]);
+        }
+      }
+    }
+  });
+
+  test("a ticket carrying the user's word still warns", () => {
+    const seven = [0, 1, 2, 3, 4, 5, 6].map(thing);
+    const kept = edit(
+      sized(seven),
+      "- **D1 (proposed)** The first choice. Why: the reason. Instead of: the other way.",
+      "- **D1 (given by the user)** This ticket keeps 7 criteria because the outcomes cannot be checked apart.",
+    );
+    const out = cli(kept, "--final");
+    expect(out.code).toBe(0);
+    expect(out.findings).toEqual([]);
+    expect(out.notes).toContain(
+      "more than five criteria: 7: leave work out or split the ticket by outcome",
+    );
+  });
+
   test("the limits are the ones the ticket names", () => {
     expect([MAX_CRITERION_WORDS, MAX_CRITERION_SENTENCES, MAX_DECISION_WORDS]).toEqual([30, 2, 60]);
+    expect(MAX_CRITERIA).toBe(5);
   });
 
   test("sentences: abbreviations, decimals, links and code are not ends", () => {

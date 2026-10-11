@@ -1,7 +1,7 @@
 ---
 title: postmaster wiki
 type: schema
-updated: 2026-10-09
+updated: 2026-10-10
 ---
 
 # postmaster wiki
@@ -74,6 +74,15 @@ How the flow is checked, and what each check can and cannot see.
   have hidden tests, scored from the run's own records, catches a broken contract between roles
   and a run that ships the wrong thing, which the offline gate cannot.
 
+## Reading tickets and changes
+
+How the user reads what the flow puts in front of them, on a phone and an iPad.
+
+- [A ticket or a change reads better as a story that scrolls, drawn before it shows code](concepts/story-pages.md):
+  **claimed**. Three trial pages, two of one merged change and one of a ticket, judged by the user in turn: a
+  section for each criterion, drawings before code, a picture and a plain welcome to start, and the ticket's words
+  a step at a time. #352 builds it for tickets, and #434 has the booking clerk make one for every ticket.
+
 ## Checking code
 
 What would find a defect in postmaster's own scripts before a reviewer does, and what it would cost.
@@ -137,7 +146,7 @@ Why the design is shaped as it is.
   A project declares its checks or gets defaults by discovery; every workhorse runs them before
   it reports, and the coachman runs them again on each branch and on the synthesis.
 - [A project's .postmaster/ holds its settings and every run's record](concepts/project-settings.md):
-  **claimed**. Optional, gitignored whole, shared through one narrow file; run artifacts live
+  **claimed**. Optional, records ignored, shared through one narrow file; run artifacts live
   with the project so two checkouts with the same basename no longer share a ledger.
 - [A gate on the default branch after a merge runs from a clean checkout](concepts/clean-checkout-gates.md):
   **claimed**. The run's working copies stay under `.worktrees/`; the flow's post-merge gate

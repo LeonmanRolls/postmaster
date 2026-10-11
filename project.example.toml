@@ -14,9 +14,9 @@
 # security lens must probe. Every other value here is a name and may not be a path.
 #
 # Precedence, stated once and followed everywhere: discovery supplies defaults; this file
-# declares what the project requires; local settings.toml are this person's choices on this
-# machine; ~/.postmaster/config.toml supplies what is machine-specific and is never overridden
-# by a project. None of these sets a floor of turnpikes: a ticket names the turnpikes its run
+# declares what the project requires; local settings.toml overrides the global config
+# setting by setting for this project; ~/.postmaster/config.toml supplies the machine's
+# defaults. None of these sets a floor of turnpikes: a ticket names the turnpikes its run
 # passes through, and this file only says what `default` means for this project.
 #
 # The checks say how a change to the project is shown to work. A project that declares none gets

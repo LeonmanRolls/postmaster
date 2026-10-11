@@ -1,4 +1,4 @@
-{"part":{"id":"prt_madeup_1"},"sessionID":"ses_madeup_1","timestamp":1790000000001,"type":"step_start"}
-{"part":{"cost":0.1,"tokens":{"cache":{"read":512,"write":0},"input":600,"output":120,"reasoning":30,"total":1262}},"sessionID":"ses_madeup_1","timestamp":1790000000002,"type":"step_finish"}
-{"part":{"id":"prt_madeup_2","text":"working"},"sessionID":"ses_madeup_1","timestamp":1790000000003,"type":"text"}
-{"part":{"cost":0.15,"tokens":{"cache":{"read":256,"write":0},"input":400,"output":80,"reasoning":20,"total":756}},"sessionID":"ses_madeup_1","timestamp":1790000000004,"type":"step_finish"}
+{"part":{"id":"prt_madeup_a"},"sessionID":"ses_madeup_a","timestamp":1790000000001,"type":"step_start"}
+{"part":{"cost":0.1,"tokens":{"cache":{"read":512,"write":0},"input":600,"output":120,"reasoning":30,"total":1262}},"sessionID":"ses_madeup_a","timestamp":1790000000002,"type":"step_finish"}
+{"part":{"id":"prt_madeup_b","text":"working"},"sessionID":"ses_madeup_a","timestamp":1790000000003,"type":"text"}
+{"part":{"cost":0.15,"tokens":{"cache":{"read":256,"write":0},"input":400,"output":80,"reasoning":20,"total":756}},"sessionID":"ses_madeup_a","timestamp":1790000000004,"type":"step_finish"}

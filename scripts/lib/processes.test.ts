@@ -13,6 +13,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   bootId,
+  bootTime,
+  processCommandLines,
   processInfo,
   processStart,
   processState,
@@ -84,41 +86,48 @@ function withProcRoot<T>(root: string | undefined, action: () => T): T {
 
 describe("portable process state", () => {
   for (const forced of [false, true]) {
-    test(`${forced ? "forced ps path" : "proc path"} distinguishes live, zombie and reaped pids`, async () => {
-      const absentRoot = join(import.meta.dir, `absent-${process.pid}-${Date.now()}`);
-      const root = forced ? absentRoot : undefined;
-      const { parent, childPid } = await startZombieChild();
-      try {
-        await Bun.sleep(350);
-        const liveState = withProcRoot(root, () => processState(parent.pid));
-        const liveStart = withProcRoot(root, () => processStart(parent.pid));
-        const zombieState = withProcRoot(root, () => processState(childPid));
-        expect(liveState).toBe("live");
-        expect(liveStart).not.toBeNull();
-        expect(liveStart!.split(/[ \t]+/u).length).toBe(forced ? 5 : 1);
-        expect(zombieState).toBe("zombie");
-        if (forced) {
-          const info = withProcRoot(root, () => processInfo(parent.pid));
-          const tableRow = withProcRoot(root, () => processTable().get(parent.pid));
-          expect(info?.pid).toBe(parent.pid);
-          expect(info?.group).toBeGreaterThan(0);
-          expect(info?.session).toBeGreaterThan(0);
-          expect(tableRow?.pid).toBe(parent.pid);
-          expect(tableRow?.start.split(/[ \t]+/u).length).toBe(5);
+    // macOS has no /proc, so the proc path cannot run there; the forced ps
+    // path beside it covers the fallback the module takes instead.
+    test.skipIf(!forced && process.platform === "darwin")(
+      `${forced ? "forced ps path" : "proc path"} distinguishes live, zombie and reaped pids`,
+      async () => {
+        const absentRoot = join(import.meta.dir, `absent-${process.pid}-${Date.now()}`);
+        const root = forced ? absentRoot : undefined;
+        const { parent, childPid } = await startZombieChild();
+        try {
+          await Bun.sleep(350);
+          const liveState = withProcRoot(root, () => processState(parent.pid));
+          const liveStart = withProcRoot(root, () => processStart(parent.pid));
+          const zombieState = withProcRoot(root, () => processState(childPid));
+          expect(liveState).toBe("live");
+          expect(liveStart).not.toBeNull();
+          expect(liveStart!.split(/[ \t]+/u).length).toBe(forced ? 5 : 1);
+          expect(zombieState).toBe("zombie");
+          if (forced) {
+            const info = withProcRoot(root, () => processInfo(parent.pid));
+            const tableRow = withProcRoot(root, () => processTable().get(parent.pid));
+            expect(info?.pid).toBe(parent.pid);
+            expect(info?.group).toBeGreaterThan(0);
+            // Session 0 is real: a launchd daemon's children sit in session 0,
+            // which is what the macOS runner reports.
+            expect(info?.session).toBeGreaterThanOrEqual(0);
+            expect(tableRow?.pid).toBe(parent.pid);
+            expect(tableRow?.start.split(/[ \t]+/u).length).toBe(5);
+          }
+        } finally {
+          parent.kill("SIGKILL");
+          await parent.exited;
         }
-      } finally {
-        parent.kill("SIGKILL");
-        await parent.exited;
-      }
-      const deadline = Date.now() + 5000;
-      while (
-        Date.now() < deadline &&
-        withProcRoot(root, () => processState(childPid)) !== "absent"
-      ) {
-        await Bun.sleep(50);
-      }
-      expect(withProcRoot(root, () => processState(childPid))).toBe("absent");
-    });
+        const deadline = Date.now() + 5000;
+        while (
+          Date.now() < deadline &&
+          withProcRoot(root, () => processState(childPid)) !== "absent"
+        ) {
+          await Bun.sleep(50);
+        }
+        expect(withProcRoot(root, () => processState(childPid))).toBe("absent");
+      },
+    );
   }
 
   test("portable start times always use the C locale", () => {
@@ -193,6 +202,22 @@ describe("portable process state", () => {
         const table = processTable();
         expect(table.size).toBeGreaterThan(0);
         expect(table.get(process.pid)?.state).toBe("live");
+      });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("the command-line listing names this process on both paths", () => {
+    const live = processCommandLines();
+    expect(live.size).toBeGreaterThan(0);
+    expect(live.get(process.pid)?.length ?? 0).toBeGreaterThan(0);
+    const root = mkdtempSync(join(tmpdir(), "process-lines-ps-"));
+    try {
+      withProcRoot(join(root, "missing-proc"), () => {
+        const fallback = processCommandLines();
+        expect(fallback.size).toBeGreaterThan(0);
+        expect(fallback.get(process.pid)?.length ?? 0).toBeGreaterThan(0);
       });
     } finally {
       rmSync(root, { recursive: true, force: true });
@@ -350,6 +375,59 @@ describe("portable process state", () => {
       else process.env.POSTMASTER_PROC_ROOT = previousRoot;
       if (previousState === undefined) delete process.env.BOOT_STATE;
       else process.env.BOOT_STATE = previousState;
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("boot identity without a proc tree, as macOS reads it", () => {
+  // A stub sysctl, so the fallback is proved on any machine: the stub answers
+  // boottime the way macOS would and refuses the session uuid, forced the way
+  // macOS reads it.
+  const stubbed = <T>(root: string, action: () => T): T => {
+    const bin = join(root, "bin");
+    mkdirSync(bin, { recursive: true });
+    const sysctl = join(bin, "sysctl");
+    writeFileSync(
+      sysctl,
+      [
+        "#!/bin/sh",
+        'case "$*" in',
+        "  *kern.boottime*) printf '{ sec = 1760000000, usec = 0 } Sun Oct  5 00:00:00 2025\\n' ;;",
+        "  *) exit 1 ;;",
+        "esac",
+        "",
+      ].join("\n"),
+    );
+    chmodSync(sysctl, 0o755);
+    const previousPath = process.env.PATH;
+    process.env.PATH = `${bin}:${previousPath ?? ""}`;
+    try {
+      return withProcRoot(join(root, "missing-proc"), action);
+    } finally {
+      if (previousPath === undefined) delete process.env.PATH;
+      else process.env.PATH = previousPath;
+    }
+  };
+
+  test("the boot id falls back to sysctl seconds when the session uuid refuses", () => {
+    const root = mkdtempSync(join(tmpdir(), "process-noboot-"));
+    try {
+      const real = bootId();
+      const forced = stubbed(root, () => bootId(join(root, "missing-proc")));
+      expect(forced).toBe("1760000000");
+      expect(forced).not.toBe(real);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("the boot time falls back to sysctl, two words past sec", () => {
+    const root = mkdtempSync(join(tmpdir(), "process-noboot-"));
+    try {
+      const forced = stubbed(root, () => bootTime(join(root, "missing-proc")));
+      expect(forced).toBe(1760000000);
+    } finally {
       rmSync(root, { recursive: true, force: true });
     }
   });

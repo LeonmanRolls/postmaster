@@ -2,7 +2,7 @@
 // The self-test built later fixtures between controls; they are built here in beforeAll
 // instead, so each test passes alone as well as in file order. The spaced-path control
 // re-runs this file with bun test instead of --self-test. Conditional controls are gated
-// by test.skipIf with a top notice.
+// by test.skipIf; skips.toml carries the reasons.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import {
   chmodSync,
@@ -34,17 +34,7 @@ import {
 const SELF = join(import.meta.dir, "run");
 
 const spacedDone = process.env.POSTMASTER_SPACED_DONE === "1";
-if (spacedDone) {
-  console.log(
-    "skip the self-test passes from a path with a space: POSTMASTER_SPACED_DONE is set (nested run)",
-  );
-}
 const hasEcho = existsSync("/bin/echo");
-if (!hasEcho) {
-  console.log(
-    "skip a quoted #! program splits as shlex splits, and runs and an unbalanced #! quote fails as BASE's shlex raises: /bin/echo is not here, so quoted interpreters were not compared",
-  );
-}
 
 let tmp = "";
 

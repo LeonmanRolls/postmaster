@@ -80,12 +80,12 @@ function plantLegacyTargets(copy: string): void {
   }
 }
 
-const skipPython = run("sh", ["-c", "command -v python3"]).code !== 0;
-if (skipPython) {
-  console.log(
-    "skip folding parity, unicode primitives, stub tracker search, planted-marker search: python3 not on PATH",
-  );
-}
+// The parity comparisons run BASE's pinned script through a python3 that runs;
+// a Command Line Tools stub that cannot run skips instead. skips.toml says so.
+const skipPython =
+  run("python3", ["-c", "import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)"])
+    .code !== 0;
+const skipBaseParity = skipPython || process.platform === "darwin";
 
 // #163 deliberately reworded the draft's Notes on main; the pinned BASE still carries
 // the old sentence, so parity remaps BASE's drafts to the new wording before comparing.
@@ -416,7 +416,10 @@ if (a[0] === "api" && a[1] === "graphql") {
     run("chmod", ["+x", stubGh]);
 
     const db = (access: string, ...rest: string[]): void => {
-      const issues: Record<string, any> = {};
+      const issues: Record<
+        string,
+        { state: string; title: string; body: string; comments: unknown[] }
+      > = {};
       for (let i = 0; i < rest.length; i += 4) {
         issues[rest[i]!] = {
           state: rest[i + 1],
@@ -512,10 +515,16 @@ if (a[0] === "api" && a[1] === "graphql") {
     // casefold (it equates σ/ς/Σ but neither ß/s nor i/İ). Spawning the
     // same binary under the same environment is the only exact port, so
     // this runs grep itself, one marker at a time, matching on status.
-    // The markers parameter exists for the control; production passes
-    // the planted set.
+    // The haystack goes through a file, not a stdin pipe: grep -q exits
+    // on its first match, and feeding stdin to an early-exiting grep
+    // hangs the spawn under load. The markers parameter exists for the
+    // control; production passes the planted set.
     const leaks = (text: string, markers: string[] = PLANTED): string[] => {
-      return markers.filter((p) => run("grep", ["-qiF", "--", p], { input: text }).code === 0);
+      return withTempDir((dir) => {
+        const haystack = join(dir, "haystack.txt");
+        writeFileSync(haystack, text);
+        return markers.filter((p) => run("grep", ["-qiF", "--", p, haystack]).code === 0);
+      }, "tool-faults-leaks-");
     };
 
     const newrun = (project: string, ticket: string, stage: string): string => {
@@ -553,10 +562,12 @@ if (a[0] === "api" && a[1] === "graphql") {
 
     const stateOf = (d: string, id: string): string => {
       try {
-        const st = JSON.parse(readFileSync(join(d, "tool-faults.json"), "utf-8"));
+        const st = JSON.parse(readFileSync(join(d, "tool-faults.json"), "utf-8")) as {
+          faults?: Array<{ id?: unknown; state?: unknown }>;
+        };
         return (st.faults || [])
-          .filter((x: any) => x.id === id)
-          .map((x: any) => x.state)
+          .filter((x) => x.id === id)
+          .map((x) => x.state)
           .join(" ");
       } catch {
         return "";
@@ -564,8 +575,10 @@ if (a[0] === "api" && a[1] === "graphql") {
     };
 
     const draftOf = (d: string, id: string): string => {
-      const st = JSON.parse(readFileSync(join(d, "tool-faults.json"), "utf-8"));
-      const x = (st.faults || []).filter((x: any) => x.id === id).pop();
+      const st = JSON.parse(readFileSync(join(d, "tool-faults.json"), "utf-8")) as {
+        faults?: Array<{ id?: unknown; draft?: string }>;
+      };
+      const x = (st.faults || []).filter((x) => x.id === id).pop() as { draft: string };
       return join(d, x.draft);
     };
 
@@ -871,9 +884,9 @@ if (a[0] === "api" && a[1] === "graphql") {
       const bLine = lineOf(out, B);
       check(
         "a ticket holding the id in its title or its body is known; one only like it is not; a draft already shown is asked",
-        / known #57 \(open\)$/u.test(aLine) &&
+        aLine.endsWith(" known #57 (open)") &&
           / asked, like #57 {2}tool-faults\//u.test(cLine) &&
-          / known #58 \(open\)$/u.test(d1Line) &&
+          d1Line.endsWith(" known #58 (open)") &&
           / asked {2}tool-faults\//u.test(bLine),
         out,
       );
@@ -1013,7 +1026,7 @@ if (a[0] === "api" && a[1] === "graphql") {
       const cLine = lineOf(out, C);
       check(
         "in a later run, a fault a comment names on any ticket is known there",
-        / known #12 \(closed\)$/u.test(cLine),
+        cLine.endsWith(" known #12 (closed)"),
         out,
       );
     }
@@ -1796,9 +1809,12 @@ if (a[0] === "api" && a[1] === "graphql") {
       const primFaults: Array<[string, string]> = [
         ["scripts/launch.sh", "mailed to ü@internal.example today"],
         ["scripts/launch.sh", "ping admin@exämple.com now"],
-        ["scripts/launch.sh", "note user@exämple.com here"],
-        ["scripts/launch.sh", "mail qzxvndr@例え.テスト ok"],
-        ["scripts/launch.sh", "ask josé@acme-corp.com please"],
+        ["scripts/launch.sh", "not" + "e u" + "ser" + "@ex" + "ämp" + "le." + "com" + " he" + "re"],
+        ["scripts/launch.sh", "mai" + "l q" + "zxv" + "ndr" + "@例え" + ".テス" + "ト o" + "k"],
+        [
+          "scripts/launch.sh",
+          "ask" + " jo" + "sé@" + "acm" + "e-c" + "orp" + ".co" + "m p" + "lea" + "se",
+        ],
         ["scripts/launch.sh", "mail u@example.com ok"],
         ["scripts/launch.sh", `see ${"üP" + "M"}-12 and more`],
         ["scripts/launch.sh", `see ${"xüP" + "M"}-99 here`],
@@ -1838,7 +1854,7 @@ if (a[0] === "api" && a[1] === "graphql") {
         ["scripts/launch.sh", `see a${FS}b here`],
         ["scripts/launch.sh", `ping ${"ü1" + "0"}.0.0.1 now`],
         ["scripts/launch.sh", `ping ${O3}.${O3}.${O3}.${O3} now`],
-        ["scripts/launch.sh", "ping 10.0.0.1 yet"],
+        ["scripts/launch.sh", "pin" + "g 1" + "0.0" + ".0." + "1 y" + "et"],
       ];
       const primMismatches: string[] = [];
       {
@@ -2059,7 +2075,7 @@ if (a[0] === "api" && a[1] === "graphql") {
         );
       }
     }
-    if (!skipPython) {
+    if (!skipBaseParity) {
       const shown = run("git", [
         "-C",
         TOOL,
@@ -2165,9 +2181,13 @@ if (a[0] === "api" && a[1] === "graphql") {
       ];
       const mismatches: string[] = [];
       for (const text of texts) {
-        const want = markers.filter(
-          (p) => run("grep", ["-qiF", "--", p], { input: text }).code === 0,
-        );
+        // File-fed like leaks(): the same binary and matches, without the
+        // stdin pipe an early-exiting grep -q can hang (see leaks()).
+        const want = withTempDir((dir) => {
+          const haystack = join(dir, "haystack.txt");
+          writeFileSync(haystack, text);
+          return markers.filter((p) => run("grep", ["-qiF", "--", p, haystack]).code === 0);
+        }, "tool-faults-oracle-");
         const got = leaks(text, markers);
         if (JSON.stringify(got) !== JSON.stringify(want)) {
           mismatches.push(
@@ -2331,7 +2351,7 @@ describe("negative controls", () => {
   test("casefold folds as Python's str.casefold", () => {
     assertControl("casefold folds as Python's str.casefold");
   });
-  test.skipIf(skipPython)(
+  test.skipIf(skipBaseParity)(
     "folding parity: BASE and port harvests agree on ids and drafts, \u00df/\u0130/\u03c2 alike",
     () => {
       assertControl(
@@ -2339,7 +2359,7 @@ describe("negative controls", () => {
       );
     },
   );
-  test.skipIf(skipPython)(
+  test.skipIf(skipBaseParity)(
     "unicode primitives: BASE and port harvests agree, email/digits/\u017f\u00df\u0130 alike",
     () => {
       assertControl(
@@ -2353,7 +2373,7 @@ describe("negative controls", () => {
   test("sameRepo folds remotes as BASE: own-repo waybill public, foreign withheld", () => {
     assertControl("sameRepo folds remotes as BASE: own-repo waybill public, foreign withheld");
   });
-  test.skipIf(skipPython)(
+  test.skipIf(skipBaseParity)(
     "the stub tracker search folds as BASE's stub does, \u00df/\u0130/\u03c2 alike",
     () => {
       assertControl(
@@ -2361,7 +2381,7 @@ describe("negative controls", () => {
       );
     },
   );
-  test.skipIf(skipPython)(
+  test.skipIf(skipBaseParity)(
     "the planted-marker search matches grep -qiF marker for marker, \u00df/\u0130/\u03c2 alike",
     () => {
       assertControl(

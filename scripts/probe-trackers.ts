@@ -5,10 +5,11 @@
 //   exit 0 always; the table is the result
 import { existsSync } from "node:fs";
 import { tryTomlFile } from "./lib/data.ts";
+import { globalConfigPath } from "./lib/effective-config.ts";
 import { beside } from "./lib/paths.ts";
 import { run } from "./lib/proc.ts";
 
-const CONFIG = process.env.POSTMASTER_CONFIG || `${process.env.HOME ?? ""}/.postmaster/config.toml`;
+const CONFIG = globalConfigPath();
 
 const row = (a: string, b: string, c: string): void => {
   console.log(`  ${a.padEnd(12)} ${b.padEnd(12)} ${c}`);

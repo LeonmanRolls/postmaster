@@ -155,13 +155,36 @@ function formHarnessArgv(form: string, envFile: string): string[] {
   return argv.slice(at + 1);
 }
 
-function runPty(lay: Layout, form: string): string {
-  const args =
-    process.platform === "darwin"
-      ? ["-q", "/dev/null", "bash", "--norc", "--noprofile", "-i"]
-      : ["-qec", "bash --norc --noprofile -i", "/dev/null"];
-  const r = spawnSync("script", args, {
+/** argv and stdin for `script` to run a shell under a pty, per platform, as
+ * runPty calls it. macOS takes the form as its command: fed through stdin it
+ * dies in tcgetattr on that stdin (a socket under Bun's pipes), prints
+ * nothing and exits 1. The shell stays interactive, as on Linux, so job
+ * control puts the harness in its own foreground group; -c supplies the
+ * form, so stdin stays a pipe nothing reads. Exported so the suite pins the
+ * mac shape where no mac runs. */
+function ptyInvocation(
+  platform: string,
+  form: string,
+): {
+  args: string[];
+  input: string | null;
+} {
+  if (platform === "darwin") {
+    return {
+      args: ["-q", "/dev/null", "bash", "--norc", "--noprofile", "-i", "-c", form],
+      input: null,
+    };
+  }
+  return {
+    args: ["-qec", "bash --norc --noprofile -i", "/dev/null"],
     input: `${form}\nexit\n`,
+  };
+}
+
+function runPty(lay: Layout, form: string): string {
+  const { args, input } = ptyInvocation(process.platform, form);
+  const r = spawnSync("script", args, {
+    ...(input === null ? {} : { input }),
     timeout: 60000,
     encoding: "utf8",
     env: lay.env,
@@ -267,6 +290,9 @@ function expectLead(p: Probe, text: string): void {
       `harness is not the foreground leader: pid=${p.pid} pgid=${p.pgid} tpgid=${p.tpgid}\n${text}`,
     );
   }
+  // A counted assertion, not just a throw: a test whose only checks throw
+  // reports zero assertions and reads as vacuous.
+  expect(p.pid === p.pgid && p.pgid === p.tpgid).toBe(true);
 }
 
 function expectEnv(p: Probe, lay: Layout, wantShlvl: string, wantFoo: string): void {
@@ -287,6 +313,7 @@ export {
   makeLayout,
   parseProbe,
   printForm,
+  ptyInvocation,
   runHeadless,
   runPlain,
   runPty,

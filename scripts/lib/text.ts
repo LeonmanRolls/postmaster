@@ -880,7 +880,7 @@ export function goldenCases(): GoldenCase[] {
     ndSamples.push(...samples);
     if (NEW_ND.has(first)) for (const ch of samples) ndDivergent.add(ch);
   }
-  for (const ch of [...INT_NO_CHARS]) cases.push({ op: "isdigit", s: ch });
+  for (const ch of INT_NO_CHARS) cases.push({ op: "isdigit", s: ch });
   for (const s of [
     ...ndSamples,
     "",
@@ -1059,7 +1059,7 @@ export function scanSource(name: string, src: string): GuardHit[] {
       }
       if (ch === "'" || ch === '"') {
         // A RegExp("...") argument is pattern text: scan its inside.
-        const isArg = /RegExp\($/u.test(code.replace(/\s+$/u, ""));
+        const isArg = code.replace(/\s+$/u, "").endsWith("RegExp(");
         i++;
         let inner = "";
         while (i < raw.length && raw[i] !== ch) {
@@ -1214,7 +1214,14 @@ export const PLANTED_MISS = [
 
 // --- entry: the hidden --dump-golden-cases; silent on import ---
 const entryArg = process.argv[1];
-if (typeof entryArg === "string" && resolve(entryArg) === fileURLToPath(import.meta.url)) {
+const entryPath = fileURLToPath(import.meta.url);
+// The basename check keeps this silent inside a bundle: there argv[1] and the
+// module URL are both the bundle, so the equality alone would fire.
+if (
+  typeof entryArg === "string" &&
+  resolve(entryArg) === entryPath &&
+  entryPath.endsWith("text.ts")
+) {
   const argv = process.argv.slice(2);
   if (argv.length === 1 && argv[0] === "--dump-golden-cases") {
     // Hidden: fixture regen only, not flow. Prints {cases, prog} for

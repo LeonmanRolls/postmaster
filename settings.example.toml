@@ -1,14 +1,33 @@
 # <project>/.postmaster/settings.toml
 #
-# This person's choices on this machine, for this project. Never committed: the folder's own
-# .gitignore covers the whole of .postmaster/. Role names must already exist in the machine's
-# ~/.postmaster/config.toml; harnesses, models, env files and credentials stay there.
-# Uncomment what this checkout needs. This file is an example, not a file to copy whole.
+# This person's choices for this project, written like ~/.postmaster/config.toml: every
+# setting here overrides the same setting of the global config for this project, a group
+# merging and a list or single value replaced whole, except projects_roots, which always
+# comes from the global config. Models, env files and other machine settings may be set
+# here; a key itself stays in its env file, never here. A project whose file is complete
+# needs no global config. This file is an example, not a file to copy whole.
 #
+# The folder's own .gitignore covers the run records and drafts; this file is
+# ignored only on the user's yes, during setup, so it is committed like any
+# file to share it. A tracked file is used only after the user has accepted
+# it, and again after it changes: scripts/run project-settings accept <project>.
+#
+# [lanes.luna]
+# model = "gpt-other"
+#
+# [team]
+# workhorses = ["luna", "mimo"]
+# postmaster = { harness = "codex", model = "gpt-p" }
+#
+# [tracker]
+# kind = "plane"
+#
+# A [roles] table in a file written before project overrides keeps working, read as the
+# team entries it names; entries set explicitly under [team] win.
 # [roles]
 # workhorses = ["luna", "mimo"]
 # reviewers = ["luna", "mimo"]
-# coachman = "coachman" # or "coachman_fallback": which machine coachman entry runs here
+# coachman = "coachman" # or "coachman_fallback": which configured coachman entry runs here
 #
 # [roles.lens_reviewers]
 # security = ["opus"]

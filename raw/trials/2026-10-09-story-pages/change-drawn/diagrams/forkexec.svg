@@ -1,0 +1,24 @@
+<svg class="dg" viewBox="0 0 360 190" role="img" aria-label="Fork: bash, process 4100, starts the agent as a child with a new id, 4101, waits for it and exits with its status. Exec: the shell replaces itself with the agent, which keeps id 4100.">
+  <defs><marker id="ah-fx" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+  <path class="ln on-exec" d="M50,44 C50,12 122,12 122,40" marker-end="url(#ah-fx)"/>
+  <text class="t3 on-exec" x="86" y="16" text-anchor="middle">exec</text>
+  <rect class="bx hl-exec" x="16" y="44" width="140" height="58" rx="8"/>
+  <text class="t1 on-fork" x="30" y="68">bash</text>
+  <text class="t1 on-exec" x="30" y="68">claude</text>
+  <text class="t2 mono" x="30" y="88">pid 4100</text>
+  <g class="on-fork">
+    <line class="ln" x1="156" y1="73" x2="204" y2="73" marker-end="url(#ah-fx)"/>
+    <text class="t3" x="180" y="65" text-anchor="middle">fork</text>
+    <rect class="bx hot" x="206" y="44" width="138" height="58" rx="8"/>
+    <text class="t1" x="220" y="68">claude</text>
+    <text class="t2 mono" x="220" y="88">pid 4101, a child</text>
+    <text class="t2" x="16" y="128">bash waits, then exits with</text>
+    <text class="t2" x="16" y="146">the agent's status</text>
+    <text class="t2 mono" x="16" y="176">"$@"; s=$?; exit $s</text>
+  </g>
+  <g class="on-exec">
+    <text class="t2" x="16" y="128">the shell becomes the agent:</text>
+    <text class="t2" x="16" y="146">same id, same hold on the terminal</text>
+    <text class="t2 mono" x="16" y="176">exec env … claude</text>
+  </g>
+</svg>

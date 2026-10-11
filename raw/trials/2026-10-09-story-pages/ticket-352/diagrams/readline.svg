@@ -1,0 +1,17 @@
+<svg class="dg" viewBox="0 0 360 300" role="img" aria-label="On a phone the panel holds the top half. Steps scroll up beneath it. The step that crosses the reading line is outlined, and the panel shows its scene; the others are faded.">
+  <defs><marker id="ah-rl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+  <rect class="bx" x="80" y="6" width="200" height="288" rx="18"/>
+  <rect class="bx" x="92" y="18" width="176" height="124" rx="8"/>
+  <text class="t1" x="180" y="76" text-anchor="middle">The panel</text>
+  <text class="t2" x="180" y="94" text-anchor="middle">shows step 8's scene</text>
+  <text class="t2" x="104" y="166">step 7, faded</text>
+  <rect class="bx hot" x="92" y="182" width="176" height="44" rx="8"/>
+  <text class="t1" x="104" y="200">step 8, outlined</text>
+  <line class="ln dash" x1="60" y1="214" x2="300" y2="214"/>
+  <text class="t3" x="300" y="208">reading</text>
+  <text class="t3" x="300" y="222">line</text>
+  <text class="t2" x="104" y="252">step 9, faded</text>
+  <path class="ln" d="M272,204 H286 V80 H272" marker-end="url(#ah-rl)"/>
+  <text class="t3" x="16" y="96">scroll</text>
+  <path class="ln" d="M36,140 V108" marker-end="url(#ah-rl)"/>
+</svg>

@@ -1,0 +1,581 @@
+{
+  "title": "Ticket story of #352",
+  "mode": "ticket",
+  "repoUrl": "https://github.com/brindlewick/postmaster",
+  "ticket": 352,
+  "at": "14bd42d",
+  "status": "draft for sign-off",
+  "sections": [
+    {
+      "id": "open",
+      "label": "Start",
+      "title": "The ticket"
+    },
+    {
+      "id": "c1",
+      "label": "C1",
+      "title": "Criterion 1"
+    },
+    {
+      "id": "c2",
+      "label": "C2",
+      "title": "Criterion 2"
+    },
+    {
+      "id": "c3",
+      "label": "C3",
+      "title": "Criterion 3"
+    },
+    {
+      "id": "c4",
+      "label": "C4",
+      "title": "Criterion 4"
+    },
+    {
+      "id": "c5",
+      "label": "C5",
+      "title": "Criterion 5"
+    },
+    {
+      "id": "dec",
+      "label": "Decisions",
+      "title": "Decisions to read"
+    },
+    {
+      "id": "run",
+      "label": "The run",
+      "title": "What binds the run"
+    },
+    {
+      "id": "left",
+      "label": "Cited code",
+      "title": "The code it cites"
+    }
+  ],
+  "scenes": [
+    {
+      "id": "hero",
+      "kind": "image",
+      "label": "Ticket #352",
+      "chip": "for your reading",
+      "src": "art/opening.jpg",
+      "alt": "A Victorian engraved poster: under a red ribbon reading Ticket No. 352, the postmaster unrolls a scroll of framed panels across the counter for the operator in a top hat: a little mail coach, two boxes joined by an arrow, lines of code with one marked, and a tick. A waybill reads Ticket 352, Scope ticket stories, Target main. A green ribbon reads Read a ticket as a story."
+    },
+    {
+      "id": "ticket",
+      "kind": "doc",
+      "from": "issue",
+      "number": 352,
+      "label": "Ticket #352",
+      "chip": "what you sign",
+      "cut": "## For the agents"
+    },
+    {
+      "id": "agents",
+      "kind": "doc",
+      "from": "issue",
+      "number": 352,
+      "label": "Ticket #352, for the agents",
+      "chip": "the run's checks",
+      "start": "## For the agents",
+      "cut": "### Technical notes"
+    },
+    {
+      "id": "today",
+      "kind": "diagram",
+      "label": "Today",
+      "chip": "diagram",
+      "svg": "diagrams/today.svg",
+      "states": [
+        "all"
+      ],
+      "caption": "Everything at once, and the code only a link."
+    },
+    {
+      "id": "storypage",
+      "kind": "diagram",
+      "label": "The story page",
+      "chip": "diagram",
+      "svg": "diagrams/storypage.svg",
+      "states": [
+        "all"
+      ],
+      "caption": "What the ticket asks for, as the trials built it."
+    },
+    {
+      "id": "contents",
+      "kind": "diagram",
+      "label": "What it asks for",
+      "chip": "in brief",
+      "svg": "diagrams/contents.svg",
+      "states": [
+        "all"
+      ],
+      "caption": "Each part has a section below."
+    },
+    {
+      "id": "structure",
+      "kind": "diagram",
+      "label": "How a story is laid out",
+      "chip": "diagram",
+      "svg": "diagrams/structure.svg",
+      "states": [
+        "page",
+        "section"
+      ],
+      "caption": "The page's sections, and the order inside one."
+    },
+    {
+      "id": "pipeline",
+      "kind": "diagram",
+      "label": "How a page gets made",
+      "chip": "diagram",
+      "svg": "diagrams/pipeline.svg",
+      "states": [
+        "all"
+      ],
+      "caption": "From the clerk's draft to the link."
+    },
+    {
+      "id": "picture",
+      "kind": "diagram",
+      "label": "How the picture is made",
+      "chip": "diagram",
+      "svg": "diagrams/picture.svg",
+      "states": [
+        "all"
+      ],
+      "caption": "The opening picture, drawn for each ticket."
+    },
+    {
+      "id": "readline",
+      "kind": "diagram",
+      "label": "The reading line",
+      "chip": "diagram",
+      "svg": "diagrams/readline.svg",
+      "states": [
+        "all"
+      ],
+      "caption": "How the page knows which step you are reading."
+    },
+    {
+      "id": "coverage",
+      "kind": "diagram",
+      "label": "The code it cites",
+      "chip": "diagram",
+      "svg": "diagrams/coverage.svg",
+      "states": [
+        "all"
+      ],
+      "caption": "Where every cited line goes."
+    },
+    {
+      "id": "d1",
+      "kind": "diagram",
+      "label": "Decision 1",
+      "chip": "diagram",
+      "svg": "diagrams/d1.svg",
+      "states": [
+        "all"
+      ],
+      "caption": "Who makes a story, now and after the follow-up."
+    },
+    {
+      "id": "left",
+      "kind": "leftovers",
+      "label": "The code it cites",
+      "chip": "list"
+    },
+    {
+      "id": "rpScrub",
+      "kind": "ref",
+      "file": "scripts/review-page.ts",
+      "from": 52,
+      "to": 73
+    },
+    {
+      "id": "skill",
+      "kind": "md",
+      "file": "skills/review-pages/SKILL.md",
+      "from": 1,
+      "to": 61
+    },
+    {
+      "id": "agentsmd",
+      "kind": "md",
+      "file": "AGENTS.md",
+      "from": 316,
+      "to": 324
+    }
+  ],
+  "steps": [
+    {
+      "id": "title",
+      "section": "open",
+      "scene": "hero",
+      "kind": "title",
+      "title": "Read a ticket as a story",
+      "text": "This ticket asks for a page that tells a ticket the way this one does: a picture to start, a short section for each thing it must do, drawn first, then the code it builds on. It takes a few minutes to scroll."
+    },
+    {
+      "id": "today",
+      "section": "open",
+      "scene": "today",
+      "state": "all",
+      "title": "Today, a ticket is one long document",
+      "text": "You review it in a document that holds everything at once. The code it will change is only a link in its notes, so you have to picture it."
+    },
+    {
+      "id": "asks",
+      "section": "open",
+      "scene": "storypage",
+      "state": "all",
+      "title": "This ticket asks for a story instead",
+      "text": "A picture, then a section for each part of the ticket, and a panel that shows what the step you are reading is about."
+    },
+    {
+      "id": "contents",
+      "section": "open",
+      "scene": "contents",
+      "state": "all",
+      "title": "Five things it must do",
+      "text": "Each has a section below: what the ticket says, a drawing, the code it builds on as it stands today, and how the run will show it. Nine decisions follow."
+    },
+    {
+      "id": "c1",
+      "section": "c1",
+      "scene": "ticket",
+      "excerpt": true,
+      "find": [
+        "A ticket can be published as a story page"
+      ],
+      "kind": "criterion",
+      "title": "A section for each criterion",
+      "text": "The page itself: a ticket, told before it is built, with one section for each thing it must do."
+    },
+    {
+      "id": "layout",
+      "section": "c1",
+      "scene": "structure",
+      "state": "page",
+      "title": "How a story is laid out",
+      "text": "A picture and a welcome, one section per criterion in the ticket's order, the decisions, then the code it cites."
+    },
+    {
+      "id": "inside",
+      "section": "c1",
+      "scene": "structure",
+      "state": "section",
+      "title": "Inside a section",
+      "text": "What the ticket says, a drawing of how it works, the code it builds on with its lines lit, then the check the run must pass."
+    },
+    {
+      "id": "made",
+      "section": "c1",
+      "scene": "pipeline",
+      "state": "all",
+      "title": "How a page gets made",
+      "text": "The booking clerk makes a story for every ticket it prepares, once the follow-up lands, and any session makes one when you ask. The story and its drawings are written, Codex draws the picture, and the builder checks them against the code and the ticket and writes one page, linked beside the draft."
+    },
+    {
+      "id": "skill",
+      "section": "c1",
+      "scene": "skill",
+      "focus": [
+        [
+          14,
+          14
+        ],
+        [
+          39,
+          39
+        ],
+        [
+          56,
+          56
+        ]
+      ],
+      "title": "Where the instructions go",
+      "text": "The review-pages skill holds two pages today, a review page and a code viewer, then its rules. A section on story pages joins them."
+    },
+    {
+      "id": "agentsmd",
+      "section": "c1",
+      "scene": "agentsmd",
+      "focus": [
+        [
+          321,
+          324
+        ]
+      ],
+      "title": "The rule that points sessions there",
+      "text": "This rule sends a session to the review-pages skill to show a change or a ticket's code. It will name the story page for a ticket's story."
+    },
+    {
+      "id": "c1check",
+      "section": "c1",
+      "scene": "agents",
+      "excerpt": true,
+      "find": [
+        "C1 Build a story for this ticket"
+      ],
+      "title": "How the run must show it",
+      "text": "The run builds a story for this ticket and one for #271 at its own base, and checks each opens with its picture, then has one section per criterion, in order."
+    },
+    {
+      "id": "c2",
+      "section": "c2",
+      "scene": "ticket",
+      "excerpt": true,
+      "find": [
+        "The story opens with a picture",
+        "D7 (proposed) Codex draws the picture"
+      ],
+      "kind": "criterion",
+      "title": "A picture to start",
+      "text": "The story opens on a picture of what the ticket asks for, in the poster's style. Decision 7 says who draws it."
+    },
+    {
+      "id": "picture",
+      "section": "c2",
+      "scene": "picture",
+      "state": "all",
+      "title": "How the picture is made",
+      "text": "The session describes the scene, and Codex draws it with the postmaster poster as its style. The session looks at it, lettering included, before it goes on the page, and asks again if a word comes out wrong."
+    },
+    {
+      "id": "c2check",
+      "section": "c2",
+      "scene": "agents",
+      "excerpt": true,
+      "find": [
+        "C2 A story whose opening names a picture"
+      ],
+      "title": "How the run must show it",
+      "text": "A stand-in picture tool proves the page takes what it returns. One real Codex call, made by hand, shows the style and the lettering."
+    },
+    {
+      "id": "c3",
+      "section": "c3",
+      "scene": "ticket",
+      "excerpt": true,
+      "find": [
+        "The panel beside the story always shows"
+      ],
+      "kind": "criterion",
+      "title": "The panel follows the outlined step",
+      "text": "Whichever step is outlined, the panel beside it shows what that step tells."
+    },
+    {
+      "id": "line",
+      "section": "c3",
+      "scene": "readline",
+      "state": "all",
+      "title": "The reading line",
+      "text": "On a phone the panel holds the top half and the steps scroll beneath it. The step crossing the reading line is outlined, and the panel shows its scene."
+    },
+    {
+      "id": "c3check",
+      "section": "c3",
+      "scene": "agents",
+      "excerpt": true,
+      "find": [
+        "C3 The function that picks"
+      ],
+      "title": "How the run must show it",
+      "text": "Choosing the step is a plain function, tested for a step on the line, between two steps, above the first and below the last, at phone and iPad sizes."
+    },
+    {
+      "id": "c4",
+      "section": "c4",
+      "scene": "ticket",
+      "excerpt": true,
+      "find": [
+        "Each section draws what it describes",
+        "D8 (given by the user) Each part is drawn"
+      ],
+      "kind": "criterion",
+      "title": "Drawn before code",
+      "text": "Each section draws what it describes before it shows any code. Decision 8, yours, is the reason."
+    },
+    {
+      "id": "order",
+      "section": "c4",
+      "scene": "structure",
+      "state": "section",
+      "title": "The order the builder keeps",
+      "text": "A section whose first code step comes before any drawing is refused, so a story cannot skip the pictures."
+    },
+    {
+      "id": "c4check",
+      "section": "c4",
+      "scene": "agents",
+      "excerpt": true,
+      "find": [
+        "C4 The story for this ticket"
+      ],
+      "title": "How the run must show it",
+      "text": "The story for this ticket passes. The same story with the first drawing of criterion 1 removed is refused, and the refusal names that section."
+    },
+    {
+      "id": "c5",
+      "section": "c5",
+      "scene": "ticket",
+      "excerpt": true,
+      "find": [
+        "The code the ticket cites is shown",
+        "D9 (proposed) The story shows the code"
+      ],
+      "kind": "criterion",
+      "title": "The code it cites, shown",
+      "text": "Every line the ticket's notes point to is shown as it stands today, on a step or in the list at the end."
+    },
+    {
+      "id": "cover",
+      "section": "c5",
+      "scene": "coverage",
+      "state": "all",
+      "title": "Every cited line goes somewhere",
+      "text": "This ticket cites 19 lines, and this page shows all of them on its steps. It also links one whole file, which the list at the end names."
+    },
+    {
+      "id": "scrub",
+      "section": "c5",
+      "scene": "rpScrub",
+      "focus": [
+        [
+          54,
+          58
+        ],
+        [
+          63,
+          72
+        ]
+      ],
+      "title": "Cleaned before it is shown",
+      "text": "Before any code is shown, the builder removes email addresses with this function from the review page's builder. The one above it names each file's language for highlighting."
+    },
+    {
+      "id": "c5check",
+      "section": "c5",
+      "scene": "agents",
+      "excerpt": true,
+      "find": [
+        "C5 The coverage test reads the links"
+      ],
+      "title": "How the run must show it",
+      "text": "A test reads the ticket's links and the page's rows: no cited line may be on neither. Removing a code step moves its lines into the list."
+    },
+    {
+      "id": "d1",
+      "section": "dec",
+      "scene": "ticket",
+      "excerpt": true,
+      "find": [
+        "D1 (given by the user) Once this lands"
+      ],
+      "title": "Decision 1, yours: the clerk will make them",
+      "text": "With this ticket, a session makes a story when you ask. A follow-up then has the booking clerk make one for every ticket it prepares."
+    },
+    {
+      "id": "d1pic",
+      "section": "dec",
+      "scene": "d1",
+      "state": "all",
+      "title": "Now, and after the follow-up",
+      "text": "The clerk's story will sit beside the draft's document, where you still comment and edit, and a setting can turn it off."
+    },
+    {
+      "id": "d2",
+      "section": "dec",
+      "scene": "ticket",
+      "excerpt": true,
+      "find": [
+        "D2 (proposed) The page is for reading"
+      ],
+      "title": "Decision 2: for reading",
+      "text": "No comments and no verdict on the page; you answer in the chat and edit the ticket in its document, as now."
+    },
+    {
+      "id": "d3",
+      "section": "dec",
+      "scene": "ticket",
+      "excerpt": true,
+      "find": [
+        "D3 (given by the user) The page looks and scrolls"
+      ],
+      "title": "Decision 3, yours: as the trials",
+      "text": "The look and scroll you chose, with drawings that change as the steps go."
+    },
+    {
+      "id": "d4",
+      "section": "dec",
+      "scene": "ticket",
+      "excerpt": true,
+      "find": [
+        "D4 (given by the user) The start is simple"
+      ],
+      "title": "Decision 4, yours: an inviting start",
+      "text": "A picture and a plain welcome first, and the ticket's text after."
+    },
+    {
+      "id": "d5",
+      "section": "dec",
+      "scene": "ticket",
+      "excerpt": true,
+      "find": [
+        "D5 (proposed) The ticket's words appear"
+      ],
+      "title": "Decision 5: a step at a time",
+      "text": "Only the words a step is about, set large, and the whole ticket near the end, as this page does."
+    },
+    {
+      "id": "d6",
+      "section": "dec",
+      "scene": "ticket",
+      "excerpt": true,
+      "find": [
+        "D6 (proposed) Markdown files among"
+      ],
+      "title": "Decision 6: Markdown as text",
+      "text": "Instructions and runbooks show as formatted text, as the skill and the rule did above. Code stays code."
+    },
+    {
+      "id": "d7",
+      "section": "dec",
+      "scene": "ticket",
+      "excerpt": true,
+      "find": [
+        "D7 (proposed) Codex draws the picture"
+      ],
+      "title": "Decision 7: Codex draws the picture",
+      "text": "On your ChatGPT plan, with nothing to paste. Each picture counts against the Codex limit your Codex lanes use."
+    },
+    {
+      "id": "direction",
+      "section": "run",
+      "scene": "ticket",
+      "excerpt": true,
+      "find": [
+        "The story page is a page the review-pages skill publishes",
+        "It starts from the trials' files"
+      ],
+      "title": "What binds the run",
+      "text": "Claude Code only, a phone and an iPad in light and dark, nothing private, and no fixture run. It waits for #321 to put the trials' files in the repository."
+    },
+    {
+      "id": "whole",
+      "section": "run",
+      "scene": "ticket",
+      "title": "Everything you sign",
+      "text": "Here is the whole part you sign, in one place, now that you have seen each piece."
+    },
+    {
+      "id": "leftout",
+      "section": "left",
+      "scene": "left",
+      "title": "The code it cites",
+      "text": "The ticket's notes cite {changed} lines of today's code, and {shown} of them are on the steps above. It also links one whole file, named in the panel."
+    }
+  ]
+}

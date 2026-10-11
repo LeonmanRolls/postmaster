@@ -49,6 +49,14 @@ describe("the default time limit of a test run", () => {
       scripts: Record<string, string>;
     };
     const stated = /--timeout=([0-9]+)/u.exec(pkg.scripts.check ?? "");
-    if (stated) expect(Number(stated[1])).toBe(DEFAULT_TEST_TIMEOUT_MS);
+    if (stated) {
+      expect(Number(stated[1])).toBe(DEFAULT_TEST_TIMEOUT_MS);
+      return;
+    }
+    // The check script runs the suite through skip-check, which states the
+    // timeout in its own invocation instead of the package script.
+    const skipCheck = readFileSync(join(ROOT, "scripts/skip-check.ts"), "utf8");
+    const skipStated = /"--timeout=([0-9]+)"/u.exec(skipCheck);
+    expect(skipStated?.[1]).toBe(String(DEFAULT_TEST_TIMEOUT_MS));
   });
 });

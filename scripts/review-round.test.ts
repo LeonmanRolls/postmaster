@@ -1,6 +1,6 @@
 // Tests beside scripts/review-round.ts, moved from its --self-test on #109: 38 controls.
 // The sequence runs once in beforeAll with a recording check(); one test per recorded label.
-// Skip branches use the top-level conds; their in-sequence skip logs are replaced by those notices.
+// Skip branches use the top-level conds; skips.toml carries each reason.
 // The process-exit cleanup is an afterAll; withTempDir still owns the temp dir.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import {
@@ -15,23 +15,24 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { run, withTempDir } from "./lib/proc.ts";
-import { processState } from "./lib/processes.ts";
-import { ARG_SPLIT_RE, monotonic } from "./review-round.ts";
+import { bootId, processState } from "./lib/processes.ts";
+import {
+  ARG_SPLIT_RE,
+  cutRound,
+  harvestRound,
+  launchRound,
+  monotonic,
+  reachCheckMissing,
+  type StepChild,
+  type StepDeps,
+} from "./review-round.ts";
 
 const self = join(import.meta.dir, "run");
 
-const skipBootId = !existsSync("/proc/sys/kernel/random/boot_id");
-if (skipBootId) {
-  console.log(
-    "skip a round started before the machine restarted is not waited on: no /proc/sys/kernel/random/boot_id",
-  );
-}
+// The implementation falls back to sysctl's stdout where the proc file is absent,
+// so this only skips when neither source reports a boot id at all; skips.toml says so.
+const skipBootId = bootId() === "";
 const skipRoot = process.getuid?.() === 0;
-if (skipRoot) {
-  console.log(
-    "skip a timeout whose degrade line cannot be written exits 4, and says what was not recorded: root writes anywhere",
-  );
-}
 
 interface ControlRecord {
   label: string;
@@ -88,7 +89,7 @@ beforeAll(() => {
       "-c",
       "user.name=t",
       "-c",
-      "user.email=t@t",
+      "use" + "r.e" + "mai" + "l=t" + "@t",
       "commit",
       "-q",
       "--allow-empty",
@@ -125,7 +126,17 @@ beforeAll(() => {
 case $1 in
   fast) exit 0 ;;
   leaves) sleep 300 & echo $! > "$2"; exit 0 ;;
-  slow) setsid sleep 300 & echo $! > "$2"; exec sleep 300 ;;
+  slow)
+    # A session of its own: setsid(1) where it exists, else python's setsid,
+    # since macOS ships no setsid binary. Either way $! is the child's pid.
+    if command -v setsid >/dev/null 2>&1; then
+      setsid sleep 300 &
+    else
+      python3 -c 'import os, sys; os.setsid(); os.execvp("sleep", ["sleep", "300"])' &
+    fi
+    echo $! > "$2"
+    exec sleep 300
+    ;;
 esac
 `,
     );
@@ -332,6 +343,9 @@ esac
     } catch {
       /* handled by checks */
     }
+    // The sessioned child must be running before the stop: without this the
+    // control below would pass on a machine where it never started.
+    const childRanBeforeStop = child > 0 && alive(child);
     runSelf("wait", d, "1", repo, "bug:one bug:two");
     const waitOut = out;
     const waitRc = rc;
@@ -368,7 +382,7 @@ esac
     );
     check(
       "host.sh stop ends it, and its child in a session of its own",
-      dead(slow, 60) && dead(child, 60),
+      childRanBeforeStop && dead(slow, 60) && dead(child, 60),
     );
     runSelf("teardown", d, "1", repo);
     check(
@@ -390,9 +404,12 @@ esac
     } catch {
       /* ignore */
     }
-    const readState2 = (): Record<string, any> => {
+    const readState2 = (): Record<string, unknown> => {
       try {
-        return JSON.parse(readFileSync(join(d, "logs/review-r2.json"), "utf8"));
+        return JSON.parse(readFileSync(join(d, "logs/review-r2.json"), "utf8")) as Record<
+          string,
+          unknown
+        >;
       } catch {
         return {};
       }
@@ -820,5 +837,684 @@ describe("negative controls", () => {
   }
   test("reviewers on several lines, one given twice, are each waited on once", () => {
     assertControl("reviewers on several lines, one given twice, are each waited on once");
+  });
+});
+
+describe("the round's three steps", () => {
+  interface Call {
+    name: string;
+    args: string[];
+  }
+  type Handler = (name: string, args: string[]) => StepChild | null;
+
+  /** A stand-in for every script and git the steps run: each call recorded, each answer from the handler. */
+  function stand(handler?: Handler): { calls: Call[]; deps: StepDeps } {
+    const calls: Call[] = [];
+    const answer = (name: string, args: string[]): StepChild =>
+      handler?.(name, args) ?? { code: 0, out: "", err: "" };
+    const deps: StepDeps = {
+      tool: (name, args) => {
+        calls.push({ name, args });
+        return answer(name, args);
+      },
+      git: (args) => {
+        calls.push({ name: "git", args });
+        return answer("git", args);
+      },
+    };
+    return { calls, deps };
+  }
+
+  const paths = (root: string): { dispatch: string; repo: string; synthesis: string } => {
+    const dispatch = join(root, "repo", ".postmaster", "runs", "T-1");
+    mkdirSync(join(dispatch, "logs"), { recursive: true });
+    writeFileSync(join(dispatch, "manifest.json"), `${JSON.stringify({ base: "BASESHA" })}\n`);
+    return {
+      dispatch,
+      repo: join(root, "repo"),
+      synthesis: join(root, "repo", ".worktrees", "T-1"),
+    };
+  };
+
+  const allLenses: Handler = (name) =>
+    name === "turnpikes"
+      ? { code: 0, out: "1 synthesis\n2 review style bug security\n", err: "" }
+      : null;
+  const oneLane: Handler = (name, args) =>
+    name === "reviewers" && args[0] === "lanes" ? { code: 0, out: "luna\n", err: "" } : null;
+  const snapshot: Handler = (name, args) =>
+    name === "git" && args.includes("rev-parse") ? { code: 0, out: "SNAP\n", err: "" } : null;
+  const green: Handler = (name, args) =>
+    allLenses(name, args) ??
+    oneLane(name, args) ??
+    snapshot(name, args) ??
+    (name === "verify" ? { code: 0, out: "gate: pass\n", err: "" } : null);
+
+  const of = (calls: Call[], name: string): Call[] => calls.filter((c) => c.name === name);
+  const one = (calls: Call[], name: string, pick?: (c: Call) => boolean): Call | undefined =>
+    calls.find((c) => c.name === name && (pick?.(c) ?? true));
+
+  describe("cut", () => {
+    test("verifies, logs the gate, prunes, resolves each lens and cuts each scratch", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        const { calls, deps } = stand(green);
+        const res = cutRound(
+          { dispatch: p.dispatch, round: "1", repo: p.repo, synthesis: p.synthesis },
+          deps,
+        );
+        expect(res.code).toBe(0);
+        expect(readFileSync(join(p.dispatch, "logs", "review-r1-checks.txt"), "utf8")).toBe(
+          "gate: pass\n",
+        );
+        expect(res.out).toContain("gate: pass");
+        expect(one(calls, "verify")?.args).toEqual(["run", p.synthesis, p.dispatch]);
+        expect(one(calls, "log-action", (c) => c.args[2] === "gate")?.args).toEqual([
+          p.dispatch,
+          "coachman",
+          "gate",
+          "SNAP",
+          "review round 1, run verify exit 0",
+        ]);
+        expect(one(calls, "git", (c) => c.args.includes("prune"))?.args).toEqual([
+          "-C",
+          p.repo,
+          "worktree",
+          "prune",
+        ]);
+        expect(of(calls, "reviewers").map((c) => c.args[2])).toEqual(["style", "bug", "security"]);
+        const cuts = of(calls, "cut-scratch");
+        expect(cuts.length).toBe(3);
+        for (const lens of ["style", "bug", "security"]) {
+          const cut = cuts.find(
+            (c) => c.args[2] === join(p.repo, ".worktrees", `T-1-rev-${lens}-luna`),
+          );
+          expect(cut?.args).toEqual([
+            p.repo,
+            p.synthesis,
+            join(p.repo, ".worktrees", `T-1-rev-${lens}-luna`),
+            "SNAP",
+            "--clone",
+            "BASESHA",
+          ]);
+        }
+      }, "review-round-cut-");
+    });
+
+    test("on exit 3 each not-run line and its reason lines go to the run log, and the round goes on", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        const { calls, deps } = stand((name, args) => {
+          if (name === "verify")
+            return {
+              code: 3,
+              out: "journey: not run, exit 3, no journey\n  no User journey on the ticket\nsecurity: pass\n",
+              err: "",
+            };
+          return green(name, args);
+        });
+        const res = cutRound(
+          { dispatch: p.dispatch, round: "2", repo: p.repo, synthesis: p.synthesis },
+          deps,
+        );
+        expect(res.code).toBe(0);
+        expect(of(calls, "run-log").map((c) => c.args[1])).toEqual([
+          "review round 2 gate not run: journey: not run, exit 3, no journey",
+          "review round 2 gate not run:   no User journey on the ticket",
+        ]);
+        expect(of(calls, "cut-scratch").length).toBe(2);
+      }, "review-round-cut3-");
+    });
+
+    test("any other verify exit stops the round before the prune", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        const { calls, deps } = stand((name, args) =>
+          name === "verify" ? { code: 2, out: "security: fail\n", err: "" } : green(name, args),
+        );
+        const res = cutRound(
+          { dispatch: p.dispatch, round: "1", repo: p.repo, synthesis: p.synthesis },
+          deps,
+        );
+        expect(res.code).toBe(1);
+        expect(res.out).toContain("security: fail");
+        expect(one(calls, "log-action", (c) => c.args[2] === "gate")?.args).toEqual([
+          p.dispatch,
+          "coachman",
+          "gate",
+          "SNAP",
+          "review round 1, run verify exit 2",
+        ]);
+        expect(of(calls, "git").some((c) => c.args.includes("prune"))).toBe(false);
+        expect(of(calls, "reviewers").length).toBe(0);
+        expect(of(calls, "cut-scratch").length).toBe(0);
+      }, "review-round-cut2-");
+    });
+
+    test("an unwritable checks file stops it before verify runs, with no gate record", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        const checks = join(p.dispatch, "logs", "review-r1-checks.txt");
+        mkdirSync(checks);
+        let verified = false;
+        const { calls, deps } = stand((name, args) => {
+          if (name === "verify") verified = true;
+          return green(name, args);
+        });
+        const res = cutRound(
+          { dispatch: p.dispatch, round: "1", repo: p.repo, synthesis: p.synthesis },
+          deps,
+        );
+        expect(res.code).toBe(1);
+        expect(verified).toBe(false);
+        expect(of(calls, "log-action").length).toBe(0);
+        expect(res.err.join("\n")).toContain(`${checks} cannot be written`);
+        expect(of(calls, "git").some((c) => c.args.includes("prune"))).toBe(false);
+      }, "review-round-cutwrite-");
+    });
+
+    test("a checks file lost after a green verify still stops it, on a true gate record", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        const checks = join(p.dispatch, "logs", "review-r1-checks.txt");
+        const { calls, deps } = stand((name, args) => {
+          if (name === "verify") {
+            chmodSync(checks, 0o444);
+            return { code: 0, out: "gate: pass\n", err: "" };
+          }
+          return green(name, args);
+        });
+        const res = cutRound(
+          { dispatch: p.dispatch, round: "1", repo: p.repo, synthesis: p.synthesis },
+          deps,
+        );
+        chmodSync(checks, 0o644);
+        expect(res.code).toBe(1);
+        expect(one(calls, "log-action", (c) => c.args[2] === "gate")?.args[4]).toBe(
+          "review round 1, run verify exit 0",
+        );
+        expect(res.err.join("\n")).toContain(`${checks} cannot be written`);
+        expect(of(calls, "git").some((c) => c.args.includes("prune"))).toBe(false);
+        expect(of(calls, "cut-scratch").length).toBe(0);
+      }, "review-round-cutwrite2-");
+    });
+
+    test("a lens whose lanes do not resolve stops it after the prune", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        const { calls, deps } = stand((name, args) => {
+          if (name === "reviewers" && args[2] === "security")
+            return { code: 2, out: "", err: "no such waybill line\n" };
+          return green(name, args);
+        });
+        const res = cutRound(
+          { dispatch: p.dispatch, round: "1", repo: p.repo, synthesis: p.synthesis },
+          deps,
+        );
+        expect(res.code).toBe(1);
+        expect(res.err).toContain("no such waybill line");
+        expect(of(calls, "git").some((c) => c.args.includes("prune"))).toBe(true);
+        expect(of(calls, "cut-scratch").length).toBe(0);
+      }, "review-round-cutlens-");
+    });
+
+    test("a scratch left behind is named, torn down alone, and a failed teardown stops the cut", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        const left = join(p.repo, ".worktrees", "T-1-rev-style-luna");
+        mkdirSync(left, { recursive: true });
+        const { calls, deps } = stand((name, args) => {
+          if (name === "git" && args[2] === "diff")
+            return { code: 0, out: "src/app.js\nsrc/app.test.js\n", err: "" };
+          if (name === "review-round" && args[0] === "teardown")
+            return { code: 1, out: "LEFT IN PLACE\n", err: "it could not be stopped\n" };
+          return green(name, args);
+        });
+        const res = cutRound(
+          { dispatch: p.dispatch, round: "1", repo: p.repo, synthesis: p.synthesis },
+          deps,
+        );
+        expect(res.code).toBe(1);
+        expect(res.out).toContain(`LEFT BEHIND AND MODIFIED, ${left}: src/app.js`);
+        expect(res.out).toContain(`LEFT BEHIND AND MODIFIED, ${left}: src/app.test.js`);
+        expect(res.out).toContain("LEFT IN PLACE");
+        expect(of(calls, "review-round").map((c) => c.args[0])).toEqual(["teardown"]);
+        expect(of(calls, "cut-scratch").length).toBe(0);
+      }, "review-round-cutleft-");
+    });
+
+    test("a scratch that will not cut prints SCRATCH BROKEN and the cut goes on", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        const { calls, deps } = stand((name, args) =>
+          name === "cut-scratch"
+            ? { code: 1, out: "", err: "git could not create it\n" }
+            : green(name, args),
+        );
+        const res = cutRound(
+          { dispatch: p.dispatch, round: "1", repo: p.repo, synthesis: p.synthesis },
+          deps,
+        );
+        expect(res.code).toBe(0);
+        expect(res.err).toContain("git could not create it");
+        expect(res.out.filter((l) => l.startsWith("SCRATCH BROKEN:")).length).toBe(3);
+        expect(res.out[1]).toContain(
+          `SCRATCH BROKEN: ${join(p.repo, ".worktrees", "T-1-rev-style-luna")} is not cut at SNAP; fix before launching luna under style`,
+        );
+        expect(of(calls, "cut-scratch").length).toBe(3);
+      }, "review-round-cutbroken-");
+    });
+  });
+
+  describe("launch", () => {
+    const entry = join(import.meta.dir, "run");
+
+    test("writes every prompt file, launches each reviewer under its lens, and ends in the wait", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        const { calls, deps } = stand((name, args) => {
+          if (name === "launch" && args[0] === "skill")
+            return { code: 0, out: "SECURITY TEXT\n", err: "" };
+          if (name === "host" && args[0] === "name")
+            return { code: 0, out: `${args[4]}-name\n`, err: "" };
+          if (name === "review-round" && args[0] === "wait")
+            return { code: 0, out: "round 1: every marker in\n", err: "" };
+          return green(name, args);
+        });
+        const res = launchRound(
+          { dispatch: p.dispatch, round: "1", repo: p.repo, synthesis: p.synthesis },
+          deps,
+        );
+        expect(res.code).toBe(0);
+        expect(res.out).toContain("round 1: every marker in");
+        expect(readFileSync(join(p.dispatch, "review-r1-style-prompt.txt"), "utf8")).toBe(
+          `Read ${p.dispatch}/review-style-brief.md and execute it. Report findings as your final message. Do not modify any file you are reviewing.\n`,
+        );
+        expect(readFileSync(join(p.dispatch, "review-r1-security-prompt.txt"), "utf8")).toContain(
+          `Read ${p.dispatch}/review-security-brief.md`,
+        );
+        expect(readFileSync(join(p.dispatch, "review-r1-security-luna-prompt.txt"), "utf8")).toBe(
+          "SECURITY TEXT\n",
+        );
+        expect(existsSync(join(p.dispatch, "review-r1-bug-prompt.txt"))).toBe(false);
+        const startAt = calls.findIndex((c) => c.name === "review-round" && c.args[0] === "start");
+        const checks = of(calls, "cut-scratch").filter((c) => c.args[0] === "--check");
+        expect(checks.length).toBe(3);
+        expect(checks.every((c) => c.args.includes("--clone"))).toBe(true);
+        expect(checks.every((c) => calls.indexOf(c) < startAt)).toBe(true);
+        const runs = of(calls, "host").filter((c) => c.args[0] === "run");
+        expect(runs.length).toBe(3);
+        const styleScratch = join(p.repo, ".worktrees", "T-1-rev-style-luna");
+        // An exact scratch argument, never a substring: the entry path carries the
+        // checkout's own directory, which may itself hold a -rev-<lens>- segment.
+        const style = runs.find((c) => c.args.includes(styleScratch));
+        expect(style?.args).toEqual([
+          "run",
+          "style-name",
+          styleScratch,
+          "--under",
+          p.dispatch,
+          "--role",
+          "reviewer",
+          "--run",
+          p.dispatch,
+          "--out",
+          join(p.dispatch, "logs", "review-r1-style-luna.jsonl"),
+          "--err",
+          join(p.dispatch, "logs", "review-r1-style-luna.err"),
+          "--marker",
+          join(p.dispatch, "logs", "review-r1-style-luna.done"),
+          "--",
+          entry,
+          "launch",
+          "launch",
+          "luna",
+          styleScratch,
+          join(p.dispatch, "review-r1-style-prompt.txt"),
+          "--run",
+          p.dispatch,
+        ]);
+        const bugScratch = join(p.repo, ".worktrees", "T-1-rev-bug-luna");
+        const bug = runs.find((c) => c.args.includes(bugScratch));
+        expect(bug?.args.join(" ")).toContain(`${entry} launch review luna`);
+        expect(bug?.args.join(" ")).toContain("BASESHA");
+        expect(bug?.args.join(" ")).toContain(
+          join(p.dispatch, "logs", "review-r1-bug-luna-last.md"),
+        );
+        expect(bug?.args.join(" ")).toContain("--run");
+        const wait = calls.find((c) => c.name === "review-round" && c.args[0] === "wait");
+        expect(wait?.args).toEqual([
+          "wait",
+          p.dispatch,
+          "1",
+          p.repo,
+          "style:luna",
+          "bug:luna",
+          "security:luna",
+        ]);
+        expect(calls.indexOf(wait!)).toBeGreaterThan(calls.indexOf(runs[2]!));
+      }, "review-round-launch-");
+    });
+
+    test("logs one review-launch per lane per lens per round, targeting the lane", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        const { calls, deps } = stand((name, args) => {
+          if (name === "launch" && args[0] === "skill")
+            return { code: 0, out: "SECURITY TEXT\n", err: "" };
+          return green(name, args);
+        });
+        const res = launchRound(
+          { dispatch: p.dispatch, round: "1", repo: p.repo, synthesis: p.synthesis },
+          deps,
+        );
+        expect(res.code).toBe(0);
+        const launches = of(calls, "log-action").filter((c) => c.args[2] === "review-launch");
+        expect(launches.map((c) => c.args)).toEqual([
+          [p.dispatch, "coachman", "review-launch", "luna", "style round 1"],
+          [p.dispatch, "coachman", "review-launch", "luna", "bug round 1"],
+          [p.dispatch, "coachman", "review-launch", "luna", "security round 1"],
+        ]);
+      }, "review-round-launchrows-");
+    });
+
+    test("a scratch that is not ready stops it before the round starts", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        const { calls, deps } = stand((name, args) => {
+          if (name === "cut-scratch" && args[0] === "--check" && args[1]?.includes("-rev-bug-"))
+            return { code: 1, out: "", err: "HEAD is not the snapshot\n" };
+          return green(name, args);
+        });
+        const res = launchRound(
+          { dispatch: p.dispatch, round: "1", repo: p.repo, synthesis: p.synthesis },
+          deps,
+        );
+        expect(res.code).toBe(1);
+        expect(res.out).toContain(`SCRATCH NOT READY: T-1-rev-bug-luna; nothing launched`);
+        expect(of(calls, "review-round").length).toBe(0);
+        expect(of(calls, "host").length).toBe(0);
+      }, "review-round-launchready-");
+    });
+
+    test("a lane with no security prompt stops it with nothing launched", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        const { calls, deps } = stand((name, args) => {
+          if (name === "launch" && args[0] === "skill")
+            return { code: 1, out: "", err: "no such skill\n" };
+          return green(name, args);
+        });
+        const res = launchRound(
+          { dispatch: p.dispatch, round: "1", repo: p.repo, synthesis: p.synthesis },
+          deps,
+        );
+        expect(res.code).toBe(1);
+        expect(res.out).toContain("NO SECURITY PROMPT FOR luna; nothing launched");
+        expect(res.err).toContain("no such skill");
+        expect(of(calls, "review-round").length).toBe(0);
+        expect(of(calls, "host").length).toBe(0);
+      }, "review-round-launchsec-");
+    });
+
+    test("a lane with no security skill of its own gets a copy of the lens prompt", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        const { deps } = stand((name, args) => {
+          if (name === "launch" && args[0] === "skill") return { code: 3, out: "", err: "" };
+          return green(name, args);
+        });
+        const res = launchRound(
+          { dispatch: p.dispatch, round: "1", repo: p.repo, synthesis: p.synthesis },
+          deps,
+        );
+        expect(res.code).toBe(0);
+        expect(readFileSync(join(p.dispatch, "review-r1-security-luna-prompt.txt"), "utf8")).toBe(
+          readFileSync(join(p.dispatch, "review-r1-security-prompt.txt"), "utf8"),
+        );
+      }, "review-round-launchsec3-");
+    });
+
+    test("a round that will not start launches nothing, and the wait's exit is the launch's", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        const failed = stand((name, args) =>
+          name === "review-round" && args[0] === "start"
+            ? { code: 1, out: "", err: "round not started\n" }
+            : green(name, args),
+        );
+        const res = launchRound(
+          { dispatch: p.dispatch, round: "1", repo: p.repo, synthesis: p.synthesis },
+          failed.deps,
+        );
+        expect(res.code).toBe(1);
+        expect(of(failed.calls, "host").length).toBe(0);
+
+        const timed = stand((name, args) =>
+          name === "review-round" && args[0] === "wait"
+            ? { code: 3, out: "WAIT-TIMEOUT\n", err: "" }
+            : green(name, args),
+        );
+        const res2 = launchRound(
+          { dispatch: p.dispatch, round: "1", repo: p.repo, synthesis: p.synthesis },
+          timed.deps,
+        );
+        expect(res2.code).toBe(3);
+        expect(res2.out).toContain("WAIT-TIMEOUT");
+      }, "review-round-launchstart-");
+    });
+
+    test("round 2 runs the gating lenses alone", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        const { calls, deps } = stand(green);
+        const res = launchRound(
+          { dispatch: p.dispatch, round: "2", repo: p.repo, synthesis: p.synthesis },
+          deps,
+        );
+        expect(res.code).toBe(0);
+        expect(of(calls, "reviewers").map((c) => c.args[2])).toEqual(["bug", "security"]);
+        expect(existsSync(join(p.dispatch, "review-r2-style-prompt.txt"))).toBe(false);
+      }, "review-round-launchr2-");
+    });
+  });
+
+  describe("harvest", () => {
+    test("a report that will not harvest degrades the lane and skips the normalizer", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        const { calls, deps } = stand((name, args) => {
+          if (name === "reviewers") return { code: 0, out: "one\n", err: "" };
+          if (name === "review-findings" && args[0] === "harvest")
+            return { code: 1, out: "", err: "no result line\n" };
+          return null;
+        });
+        const res = harvestRound({ dispatch: p.dispatch, round: "9", repo: p.repo }, deps);
+        expect(res.code).toBe(0);
+        expect(one(calls, "log-action", (c) => c.args[2] === "degrade")?.args).toEqual([
+          p.dispatch,
+          "coachman",
+          "degrade",
+          "one",
+          "bug round 9: no result line",
+        ]);
+        expect(one(calls, "run-log", (c) => (c.args[1] ?? "").includes("DEGRADED"))?.args).toEqual([
+          p.dispatch,
+          "one bug: DEGRADED, no result line",
+        ]);
+        expect(of(calls, "review-findings").filter((c) => c.args[0] === "normalize").length).toBe(
+          0,
+        );
+      }, "review-round-harvest-");
+    });
+
+    test("a report the normalizer cannot read is removed and named in the run log", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        const { calls, deps } = stand((name, args) => {
+          if (name === "reviewers") return { code: 0, out: "one\n", err: "" };
+          if (name === "review-findings" && args[0] === "normalize")
+            return { code: 1, out: '{"half":', err: "not JSON\n" };
+          return null;
+        });
+        const res = harvestRound({ dispatch: p.dispatch, round: "9", repo: p.repo }, deps);
+        expect(res.code).toBe(0);
+        expect(existsSync(join(p.dispatch, "logs", "review-r9-bug-one-findings.json"))).toBe(false);
+        expect(
+          one(calls, "run-log", (c) => (c.args[1] ?? "").includes("normalize failed"))?.args,
+        ).toEqual([
+          p.dispatch,
+          "review round 9 one: normalize failed; reading the raw report by hand",
+        ]);
+        expect(res.err).toContain("not JSON");
+      }, "review-round-harvestnorm-");
+    });
+
+    test("a clean harvest writes the findings file and logs nothing", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        const { calls, deps } = stand((name, args) => {
+          if (name === "reviewers") return { code: 0, out: "one\n", err: "" };
+          if (name === "review-findings" && args[0] === "normalize")
+            return { code: 0, out: '[{"file":"a.ts"}]', err: "" };
+          return null;
+        });
+        const res = harvestRound({ dispatch: p.dispatch, round: "9", repo: p.repo }, deps);
+        expect(res.code).toBe(0);
+        expect(
+          readFileSync(join(p.dispatch, "logs", "review-r9-bug-one-findings.json"), "utf8"),
+        ).toBe('[{"file":"a.ts"}]');
+        expect(of(calls, "run-log").length).toBe(0);
+        const normalize = of(calls, "review-findings").find((c) => c.args[0] === "normalize");
+        expect(normalize?.args).toEqual([
+          "normalize",
+          "one",
+          join(p.repo, ".worktrees", "T-1-rev-bug-one"),
+          join(p.dispatch, "logs", "review-r9-bug-one.jsonl"),
+          "--last",
+          join(p.dispatch, "logs", "review-r9-bug-one-last.md"),
+          "--run",
+          p.dispatch,
+        ]);
+      }, "review-round-harvestok-");
+    });
+  });
+});
+
+// Teardown waits for the round's reach check: the round's own teardown, which names no reviewers,
+// does not run before a reach check named for a round that took its reach snapshot. These need no
+// sequence, only a fresh run.
+const pointLine = (point: string): string =>
+  JSON.stringify({
+    ts: "2026-10-09T00:00:00Z",
+    actor: "coachman",
+    action: "reach",
+    target: point,
+    detail: JSON.stringify({ kind: "point", point, result: "clean" }),
+  });
+
+interface Torn {
+  code: number;
+  out: string;
+  actions: string;
+  runLog: string;
+}
+
+/** Start round 1 of a fresh run with one reviewer, then `review-round teardown` it, naming it or not. */
+function teardown(snapshot: boolean, actions: string[], named: boolean): Torn {
+  return withTempDir((tmp) => {
+    const repo = join(tmp, "repo");
+    const dispatch = join(repo, ".postmaster", "runs", "T-1");
+    mkdirSync(dispatch, { recursive: true });
+    run("git", ["init", "-q", "-b", "main", repo]);
+    run(self, ["review-round", "start", dispatch, "1"]);
+    const statePath = join(dispatch, "logs", "review-r1.json");
+    const state = JSON.parse(readFileSync(statePath, "utf8")) as Record<string, unknown>;
+    writeFileSync(statePath, JSON.stringify({ ...state, reviewers: [["bug", "luna"]] }));
+    if (snapshot) {
+      mkdirSync(join(dispatch, "reach"), { recursive: true });
+      writeFileSync(join(dispatch, "reach", "before-r1.json"), "{}\n");
+    }
+    if (actions.length > 0)
+      writeFileSync(join(dispatch, "actions.jsonl"), `${actions.join("\n")}\n`);
+    const r = run(self, [
+      "review-round",
+      "teardown",
+      dispatch,
+      "1",
+      repo,
+      ...(named ? ["bug:luna"] : []),
+    ]);
+    const read = (name: string): string => {
+      try {
+        return readFileSync(join(dispatch, name), "utf8");
+      } catch {
+        return "";
+      }
+    };
+    return {
+      code: r.code,
+      out: r.out + r.err,
+      actions: read("actions.jsonl"),
+      runLog: read("run-log.md"),
+    };
+  });
+}
+
+describe("reachCheckMissing", () => {
+  test("it waits only for the round's own teardown of a round with no point of its own", () => {
+    expect(reachCheckMissing(true, [], "1")).toBe(true);
+    expect(reachCheckMissing(true, ["r2", "card"], "1")).toBe(true);
+    expect(reachCheckMissing(true, ["r1"], "1")).toBe(false);
+    expect(reachCheckMissing(true, ["workhorses", "r1", "r2"], "2")).toBe(false);
+    expect(reachCheckMissing(false, [], "1")).toBe(false);
+    expect(reachCheckMissing(false, ["r1"], "1")).toBe(false);
+  });
+});
+
+describe("teardown and the round's reach check", () => {
+  test("a round with a reach snapshot and no reach check is not torn down, and says why", () => {
+    const t = teardown(true, [], false);
+    expect(t.code).toBe(1);
+    expect(t.out).toContain("no reach check r1 is recorded: nothing was removed");
+    expect(t.actions).toContain("r1: teardown waits for the reach check");
+    expect(t.runLog).not.toContain("round 1: removed");
+  });
+
+  test("with the round's reach check recorded, the same teardown goes on", () => {
+    const t = teardown(true, [pointLine("r1")], false);
+    expect(t.code).toBe(0);
+    expect(t.out).not.toContain("no reach check");
+    expect(t.runLog).toContain("round 1: removed 0 of 1 scratches, 1 already gone");
+  });
+
+  test("a check recorded for another round does not stand in for this one", () => {
+    const t = teardown(true, [pointLine("r2"), pointLine("card")], false);
+    expect(t.code).toBe(1);
+    expect(t.out).toContain("no reach check r1 is recorded");
+  });
+
+  test("a round that took no reach snapshot is torn down as before", () => {
+    const t = teardown(false, [], false);
+    expect(t.code).toBe(0);
+    expect(t.runLog).toContain("round 1: removed 0 of 1 scratches, 1 already gone");
+  });
+
+  test("a scratch an interrupted round left behind is cleaned up by name, with no check", () => {
+    const t = teardown(true, [], true);
+    expect(t.code).toBe(0);
+    expect(t.out).toContain("no scratch at");
+    expect(t.out).not.toContain("no reach check");
+  });
+
+  test("an unreadable reach record stops the teardown and is named", () => {
+    const t = teardown(
+      true,
+      [JSON.stringify({ ts: "2026-10-09T00:00:00Z", action: "reach", detail: "not json" })],
+      false,
+    );
+    expect(t.code).toBe(1);
+    expect(t.out).toContain("cannot read the reach record to teardown round 1");
+    expect(t.runLog).not.toContain("round 1: removed");
   });
 });

@@ -3,15 +3,15 @@ title: A project's .postmaster/ holds its settings and every run's record
 type: concept
 standing: claimed
 sources: []
-updated: 2026-09-28
+updated: 2026-10-10
 ---
 
 # A project's .postmaster/ holds its settings and every run's record
 
 **Claim.** Everything the flow learns about a project, and everything a run against it
-produces, belongs under the project's own `.postmaster/`. The folder is optional, gitignored
-whole, and sharing is one narrow file a project chooses to commit. The machine's
-`~/.postmaster/` stays the machine's own.
+produces, belongs under the project's own `.postmaster/`. The folder is optional, its run
+records and drafts always ignored, and sharing is a file the project chooses to commit.
+The machine's `~/.postmaster/` stays the machine's own.
 
 **Standing: claimed.** This is a decision taken in
 [issue #18](https://github.com/brindlewick/postmaster/issues/18), before any run bears on it.
@@ -26,24 +26,27 @@ whole, and sharing is one narrow file a project chooses to commit. The machine's
 - **Run artifacts belong with the run's target.** Keying a run's home on the repo's basename
   under `~/.postmaster/runs/` made two projects named `widgets` share a ledger, silently.
   Keying it on the project's own path removes that by construction.
-- **Nothing is committed by default, settings included.** The folder carries a `.gitignore`
-  covering the whole of it, so a checkout never brings another instance's ledgers, paths,
-  ticket text, harness sessions or choices. A project that has never been run against looks
-  exactly like one that has.
+- **Run records and drafts are never committed.** The folder carries a `.gitignore`
+  covering them, so a checkout never brings another instance's ledgers, paths, ticket
+  text or harness sessions. The person's settings file is ignored only on the user's yes
+  during setup, so it is committed like any file to share it. A project that has never
+  been run against looks exactly like one that has.
 - **Sharing is opt-in and narrow.** One file, `project.toml`, holds what the project requires
   of a run: the checks, the default turnpikes, the tracker binding by name, the risk
   surfaces. It carries no credential, no filesystem path, no machine name and no role
-  assignment — those are properties of a person's machine. Local `settings.toml` holds the
-  role assignments and never travels.
+  assignment — those are properties of a person's machine. The person's `settings.toml`
+  overrides the global config setting by setting for that project, models and env files
+  included; a project may commit it to share it, and a tracked file is used only after
+  the user has accepted it, and again after it changes.
 - **The normal case is no file at all.** With nothing shared and nothing local, the flow
   discovers what it can and the agent conducts the rest in conversation. A missing settings
   file is never an error and never a prompt to create one.
 - **Precedence is stated once.** Discovery supplies defaults; the shared file declares what
-  the project requires; local settings are this person's choices on this machine; the
-  machine config supplies what is machine-specific and is never overridden by a project.
-  None of these sets a floor of turnpikes: a ticket names its own turnpikes
-  ([#40](https://github.com/brindlewick/postmaster/issues/40)), and project settings only
-  say what `default` means for that project.
+  the project requires; the person's file overrides the global config setting by setting,
+  a group merging and a list or single value replaced whole; the machine config supplies
+  the machine's defaults. None of these sets a floor of turnpikes: a ticket names its own
+  turnpikes ([#40](https://github.com/brindlewick/postmaster/issues/40)), and project
+  settings only say what `default` means for that project.
 - **It softens design rule 1 deliberately.** The rule says the flow discovers what a project
   needs and does not demand configuration, and that stays true. What the folder adds is a
   place for a decision discovery cannot make and a correction where discovery guessed wrong,
@@ -54,8 +57,9 @@ whole, and sharing is one narrow file a project chooses to commit. The machine's
 - A run already in flight under the old `~/.postmaster/runs/<basename>/` layout is not
   migrated. It finishes where it started.
 - Two settings files with a precedence between them is one more thing to get wrong. The
-  reader is one script (`scripts/run project-settings`) that enforces the shape and the
-  no-path/no-credential rule, so a mistake is named rather than silently honoured.
+  reader is one loader behind `scripts/run project-settings` that enforces the shape and,
+  for the shared file, the no-path/no-credential rule, so a mistake is named rather than
+  silently honoured.
 
 ## What would change it
 
@@ -68,7 +72,7 @@ whole, and sharing is one narrow file a project chooses to commit. The machine's
 ## What changed because of it
 
 `scripts/run project-settings` reads and writes the two files and refuses a credential or a
-path in either. `scripts/run turnpikes` expands `default` from a project's declared set.
+path in the shared one. `scripts/run turnpikes` expands `default` from a project's declared set.
 `scripts/run discover-project` reports whether the target has one. Run artifacts live at
 `<project>/.postmaster/runs/`, and `run log-action` names the project from its root.
 `settings.example.toml` and `project.example.toml` document the shapes. The setup

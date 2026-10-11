@@ -8,16 +8,18 @@
 // shows, and tells the user to open the clerk by hand when no host answers.
 // The session is named for the ticket's number and title, as the adapter
 // reads them. The postmaster logs the dispatch; this script records only the
-// open session.
+// open session. Once the ticket is marked ready the session closes when the
+// clerk's turn ends, and a later start opens a new session under a new handle.
 //
 // Exit 0 done; 3 no session host; 1 anything else.
 
+import { randomBytes } from "node:crypto";
 import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
-import { tryTomlFile } from "./lib/data.ts";
+import { effectiveConfigForProject, globalConfigPath } from "./lib/effective-config.ts";
 import { scriptsDir, toolRoot } from "./lib/paths.ts";
 import { run } from "./lib/proc.ts";
+import { shlexQuote } from "./verify.ts";
 
 const HERE = scriptsDir(import.meta);
 const TOOL = toolRoot(import.meta);
@@ -60,18 +62,14 @@ function findString(doc: Record<string, unknown>, path: string[]): string {
   return typeof value === "string" ? value : "";
 }
 
-function configPath(): string {
-  const override = (process.env.POSTMASTER_CONFIG ?? "").trim();
-  if (override) return override;
-  return join(homedir(), ".postmaster", "config.toml");
-}
-
-function readConfig(): { path: string; doc: Record<string, unknown> } {
-  const path = configPath();
-  if (!isFile(path)) die(`no machine config at ${path}; run setup first`);
-  const doc = tryTomlFile(path);
-  if (!doc) die(`cannot parse ${path}`);
-  return { path, doc };
+function readConfig(repo: string): { path: string; doc: Record<string, unknown> } {
+  const path = globalConfigPath();
+  const resolved = effectiveConfigForProject(repo, path);
+  if (resolved.notice !== null) console.error(resolved.notice);
+  if (resolved.config === null || resolved.error !== null) {
+    die(resolved.error ?? "cannot resolve project settings");
+  }
+  return { path, doc: resolved.config };
 }
 
 function runScript(name: string, args: string[]): { code: number; out: string; err: string } {
@@ -83,6 +81,32 @@ function requireScript(name: string, args: string[], what: string): string {
   const r = runScript(name, args);
   if (r.code !== 0) die(`${what} (${(r.out + r.err).trim() || `exit ${r.code}`})`);
   return r.out;
+}
+
+// The listings describe the project, wherever under it the clerk was pointed:
+// a brief for a subdir used to succeed, so it still does, with the project's
+// checks and verifiers rather than the subdir's.
+function repoTop(repo: string): string {
+  const r = run("git", ["-C", repo, "rev-parse", "--show-toplevel"]);
+  const top = (r.out ?? "").replace(/\n+$/u, "");
+  return r.code === 0 && top !== "" ? top : repo;
+}
+
+// The gate discovery finds for the repo, as discover-project prints it: the
+// brief's checks run with it, as every run's do.
+function discoveredGate(top: string): string {
+  const out = requireScript("discover-project", [top], `run discover-project ${top} failed`);
+  for (const l of out.split("\n")) {
+    if (l.startsWith("gate=")) return l.slice("gate=".length);
+  }
+  return "";
+}
+
+// A cited command, quoted per element so the clerk can re-run it as written:
+// absolute, since the clerk runs in the target repo, where a bare scripts/run
+// would miss or hit the target's own script of that name.
+function cite(args: string[]): string {
+  return [join(HERE, "run"), ...args].map((a) => shlexQuote(a)).join(" ");
 }
 
 function trackerKind(repo: string): string {
@@ -230,7 +254,7 @@ function writeBrief(repo: string, id: string): Brief {
       `the ready mark on ${name} could not be removed; the clerk stops so the ticket is not dispatched mid-edit`,
     );
   }
-  const { path: cfgPath, doc } = readConfig();
+  const { path: cfgPath, doc } = readConfig(repo);
   const template = findString(doc, ["planning", "review_link"]);
   const prefsPath = join(dirname(cfgPath), "preferences.md");
   const preferences = isFile(prefsPath)
@@ -244,6 +268,58 @@ function writeBrief(repo: string, id: string): Brief {
   const skill = join(TOOL, "skills", "clerk", "SKILL.md");
   const runbook = join(TOOL, "skills", "clerk", "clerk.md");
   const briefPath = clerkFile(repo, id, ".brief.md");
+  // The checks every run is held to, and the project's verifiers beside them:
+  // a check the clerk writes should fit the checks every run already runs, and
+  // drive a surface with a verifier through it. Both print verbatim, so the
+  // brief never paraphrases what the scripts say. Both run against the project
+  // top with the gate discovery finds, as every run's do.
+  const top = repoTop(repo);
+  const gate = discoveredGate(top);
+  const checksArgs =
+    gate === "" ? ["checks", top, "--lines"] : ["checks", top, "--gate", gate, "--lines"];
+  const checksOut = requireScript(
+    "verify",
+    checksArgs,
+    `run verify ${checksArgs.join(" ")} failed`,
+  ).replace(/\n+$/u, "");
+  const checksBlock = checksOut === "" ? ["(no checks reported)"] : checksOut.split("\n");
+  const verifiersOut = requireScript(
+    "verifier",
+    ["list", top],
+    `run verifier list ${top} failed`,
+  ).replace(/\n+$/u, "");
+  const verifiersBlock =
+    verifiersOut === "verifiers: none"
+      ? ["Verifiers: none."]
+      : [
+          `The project's verifiers, as \`${cite(["verifier", "list", top])}\` prints them:`,
+          "",
+          "```text",
+          ...verifiersOut.split("\n"),
+          "```",
+        ];
+  // The verifiers that may have gone stale since they were confirmed, from one
+  // stale call at the brief's base. Silent when nothing is marked, so the entry
+  // says nothing of the kind; the clerk's runbook says what a marked verifier
+  // means for the checks.
+  const staleArgs = ["stale", top, "--at", base];
+  const staleOut =
+    verifiersOut === "verifiers: none"
+      ? "stale: none"
+      : requireScript("verifier", staleArgs, `run verifier ${staleArgs.join(" ")} failed`).replace(
+          /\n+$/u,
+          "",
+        );
+  const staleBlock =
+    staleOut === "stale: none"
+      ? []
+      : [
+          `The following verifiers may be stale, as \`${cite(["verifier", ...staleArgs])}\` prints them:`,
+          "",
+          "```text",
+          ...staleOut.split("\n"),
+          "```",
+        ];
   const lines = [
     `# Brief: booking clerk for ${session}`,
     "",
@@ -263,6 +339,17 @@ function writeBrief(repo: string, id: string): Brief {
     "",
     `Skill: ${skill}`,
     `Runbook: ${runbook}`,
+    "",
+    "## Checks and verifiers",
+    "",
+    `The checks every run is held to, as \`${cite(["verify", ...checksArgs])}\` prints them:`,
+    "",
+    "```text",
+    ...checksBlock,
+    "```",
+    "",
+    ...verifiersBlock,
+    ...(staleBlock.length > 0 ? ["", ...staleBlock] : []),
     "",
   ];
   if (ticket.title) lines.push(`## The ticket as read`, "", `Title: ${ticket.title}`, "");
@@ -296,21 +383,23 @@ function writeBrief(repo: string, id: string): Brief {
   };
 }
 
-function sessionPath(repo: string, id: string): string {
+export function clerkSessionPath(repo: string, id: string): string {
   return join(sessionDir(repo), `${encodeURIComponent(id)}.json`);
 }
 
 function recordOpen(repo: string, id: string, name: string, brief: string, handle: string): void {
   mkdirSync(sessionDir(repo), { recursive: true });
   writeFileSync(
-    sessionPath(repo, id),
+    clerkSessionPath(repo, id),
     `${JSON.stringify({ ticket: name, brief, handle, opened: new Date().toISOString() })}\n`,
   );
 }
 
 function readSession(repo: string, id: string): { handle: string } | null {
   try {
-    const raw = JSON.parse(readFileSync(sessionPath(repo, id), "utf8")) as { handle?: unknown };
+    const raw = JSON.parse(readFileSync(clerkSessionPath(repo, id), "utf8")) as {
+      handle?: unknown;
+    };
     if (typeof raw.handle !== "string") return null;
     return { handle: raw.handle };
   } catch {
@@ -391,7 +480,11 @@ function cmdStart(repo: string, id: string): number {
   if (form.length === 0) die("run launch printed no interactive command for the clerk");
   // The handle names the project and the ticket's id, since both hosts check
   // session names globally; the tab carries the session's number and title.
-  const handle = clerkHandle(repo, id);
+  // One handle per session, never one per ticket: the closer a mark arms closes
+  // this session only, and a later clerk for the same ticket starts untouched.
+  const stem = clerkHandle(repo, id);
+  const nonce = randomBytes(2).toString("hex");
+  const handle = stem.length + 5 <= 32 ? `${stem}-${nonce}` : `${stem.slice(0, 27)}-${nonce}`;
   const started = runScript("host", [
     "spawn",
     handle,

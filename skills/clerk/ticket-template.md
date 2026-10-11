@@ -86,7 +86,9 @@ default
 
 - **Acceptance criteria** are the contract, in words a person can check the result against. Each is
   one idea: one thing that is true when the work is done, in a sentence or two. An "and" that adds a
-  second behaviour makes two criteria.
+  second behaviour makes two criteria. A ticket has at most five acceptance criteria. The one asking
+  for a fixture run is not counted: it goes last, in its usual words, "A fixture run dispatched from
+  this change's branch scores clean."
 - **A criterion must be finishable.** The run has to be able to show it met in a finite amount of
   work, and no tool can decide in general what an arbitrary command or program will do. Four shapes
   cannot be finished. Each has a bounded form to write instead.
@@ -100,6 +102,14 @@ default
     run. Name the cases that must agree. Any other case may differ, and the output says so.
   - *A reader that must handle any format.* Name the formats it supports, and have it report every
     other as unsupported.
+- **A split** is one umbrella ticket over slice tickets. The umbrella runs nothing itself and is
+  never marked ready: it holds the decisions more than one slice follows, and it has one criterion,
+  that every slice it lists has landed. Each slice is a ticket of its own: it keeps its own criteria
+  and the decisions only it follows, names the slices it needs, and restates in its technical notes
+  the umbrella decisions that bind it.
+- **Keeping more than five** is the user's word: a decision marked `(given by the user)` that says
+  how many criteria it keeps and why, cited by a technical note such as `The parts check warns that
+  this ticket has 7 criteria, and the user kept them. (D9)`. The parts check still warns.
 - **Checks** are labelled with the id of the criterion they show: `C1` for the first criterion,
   `C2` for the second, in order, one for each. The lanes organise their work and their evidence
   around them, and the lane summary check requires one piece of evidence per criterion. A check

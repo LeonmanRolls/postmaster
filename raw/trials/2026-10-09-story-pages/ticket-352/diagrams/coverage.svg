@@ -1,0 +1,16 @@
+<svg class="dg" viewBox="0 0 360 226" role="img" aria-label="Every line the ticket cites goes on a step or into the list at the end. For this ticket, all 19 cited lines are on steps and none is listed; it also links one whole file, which the list names.">
+  <defs><marker id="ah-cv2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+  <rect class="bx" x="100" y="10" width="160" height="48" rx="8"/>
+  <text class="big" x="180" y="38" text-anchor="middle">19</text>
+  <text class="t3" x="180" y="52" text-anchor="middle">lines the ticket cites</text>
+  <path class="ln" d="M150,58 L84,96" marker-end="url(#ah-cv2)"/>
+  <path class="ln" d="M210,58 L276,96" marker-end="url(#ah-cv2)"/>
+  <rect class="bx hot" x="16" y="98" width="140" height="48" rx="8"/>
+  <text class="big" x="86" y="126" text-anchor="middle">19</text>
+  <text class="t3" x="86" y="140" text-anchor="middle">on a step</text>
+  <rect class="bx" x="204" y="98" width="140" height="48" rx="8"/>
+  <text class="big" x="274" y="126" text-anchor="middle">0</text>
+  <text class="t3" x="274" y="140" text-anchor="middle">listed at the end</text>
+  <text class="t2 ok" x="180" y="180" text-anchor="middle">none on neither: the check passes</text>
+  <text class="t3" x="180" y="202" text-anchor="middle">plus one whole file it links, named in the list</text>
+</svg>

@@ -3,7 +3,7 @@
 // tool that walks the whole folder never reads the run's working copies under .worktrees/.
 // Why: wiki/concepts/clean-checkout-gates.md.
 //
-//   scripts/run clean-checkout <repo> <branch> <command> [<command>...]
+//   scripts/run clean-checkout <repo> <branch> (<command> | --file <file>)...
 //
 // Makes a detached git worktree of <branch> (a branch, tag, or commit) in a temporary
 // directory outside the project folder, populates its submodules where the branch has any,
@@ -13,7 +13,10 @@
 // The checkout holds only that branch's content: no .worktrees/, no uncommitted files. A
 // git worktree, rather than an archive export, so gates that read git metadata keep
 // working. Separate commands, rather than one shell string joined with &&, so a failed
-// preparation can never be hidden by a later statement. Each command runs in a process
+// preparation can never be hidden by a later statement. A `--file <file>` argument is one
+// command read from that file, its surrounding whitespace trimmed: the caller writes the
+// file with its own tools rather than quoting a command through a shell. Commands and
+// --file arguments run in the order given. Each command runs in a process
 // group of its own with run verify's bound (1800s, or CLEAN_CHECKOUT_TIMEOUT for a test);
 // the whole group is killed when the bound is reached, and a timeout fails with 124.
 //
@@ -24,7 +27,15 @@
 //                command is run), or cleanup residue left behind after passing commands
 //   exit 124     a command outlived its bound (its whole process group was killed)
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, lstatSync, mkdtempSync, realpathSync, rmSync, rmdirSync } from "node:fs";
+import {
+  existsSync,
+  lstatSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  rmdirSync,
+} from "node:fs";
 import { dirname, isAbsolute, join, relative, sep } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -133,11 +144,13 @@ const runBounded = (
       }
       resolve(code);
     };
-    child.on("error", (error) => {
+    child.once("error", (error) => {
       process.stderr.write(`clean-checkout: ${error.message}\n`);
       finish(1);
     });
-    child.on("close", (code) => finish(code ?? 1));
+    // Settle on exit, as host.ts does for its children: stdio is inherited, so
+    // there are no pipes for a close to wait on, and exit always fires.
+    child.once("exit", (code) => finish(code ?? 1));
   });
 
 export const cleanCheckout = async (
@@ -241,12 +254,44 @@ export const cleanCheckout = async (
 
 if (import.meta.main) {
   const args = process.argv.slice(2);
-  if (args.length < 3) {
-    process.stderr.write("usage: clean-checkout.ts <repo> <branch> <command> [<command>...]\n");
+  const [repo, branch, ...specs] = args;
+  const commands: string[] = [];
+  let problem = "";
+  for (let at = 0; at < specs.length; at++) {
+    const spec = specs[at]!;
+    if (spec === "--file") {
+      const path = specs[at + 1];
+      if (path === undefined) {
+        problem = "--file needs a path";
+        break;
+      }
+      at += 1;
+      let text: string;
+      try {
+        text = readFileSync(path, "utf8");
+      } catch (error) {
+        problem = `cannot read the command file ${path}: ${String(error)}`;
+        break;
+      }
+      const fromFile = text.trim();
+      if (fromFile === "") {
+        problem = `the command file is empty: ${path}`;
+        break;
+      }
+      commands.push(fromFile);
+    } else {
+      commands.push(spec);
+    }
+  }
+  if (repo === undefined || branch === undefined || commands.length === 0 || problem !== "") {
+    if (problem !== "") process.stderr.write(`clean-checkout: ${problem}\n`);
+    process.stderr.write(
+      "usage: clean-checkout.ts <repo> <branch> (<command> | --file <file>)...\n",
+    );
     process.exitCode = 1;
   } else {
     try {
-      process.exitCode = (await cleanCheckout(args[0], args[1], ...args.slice(2))).exitCode;
+      process.exitCode = (await cleanCheckout(repo, branch, ...commands)).exitCode;
     } catch (error) {
       process.stderr.write(`clean-checkout: ${String(error)}\n`);
       process.exitCode = 1;

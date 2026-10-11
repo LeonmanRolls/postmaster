@@ -87,6 +87,8 @@ function expectExit(r: Run, want: number): void {
       `want exit ${want}, got ${r.code}\n--- out ---\n${r.out}\n--- err ---\n${r.err}`,
     );
   }
+  // Counted, so a test using only this helper still checks something.
+  expect(r.code).toBe(want);
 }
 
 function onlyWall(dispatch: string): ActionLine {
@@ -109,6 +111,8 @@ function expectReset(body: string, expectedMs: number, tolMs: number): void {
   if (far.length > 0) {
     throw new Error(`stray timestamp ${far.map((i) => i.raw).join(",")} in: ${body}`);
   }
+  // Counted, so a test using only this helper still checks something.
+  expect(near.length).toBeGreaterThan(0);
 }
 
 function expectNoReset(body: string): void {

@@ -36,8 +36,10 @@
 //     draft       the first non-empty line starts DRAFT:
 //
 // Notes, printed after the findings and never failing: the words in the plain part; the numbers of
-// criteria, decisions and technical notes; and each criterion or decision long enough to be more
-// than one idea (the limits are below).
+// criteria, decisions and technical notes; each criterion or decision long enough to be more
+// than one idea (the limits are below); and, when more than five criteria are counted, a note
+// saying so and what to do instead. The last criterion is not counted when it asks for a fixture
+// run; the counts note still counts every criterion.
 //
 // The ticket reads one file and contacts nothing.
 //
@@ -45,6 +47,16 @@
 //   exit 1  findings
 //   exit 2  not usable: usage, an unreadable file, or no `## For the agents` heading
 import { readFileSync } from "node:fs";
+import {
+  TECH_NOTES_RE,
+  agentsIndex,
+  fenceMap,
+  isFence,
+  level3Sections,
+  normalizeTicket,
+  verifiedAtSha,
+  verifiedSection,
+} from "./lib/ticket-sections.ts";
 
 // --- limits -----------------------------------------------------------------------------------
 // Soft limits for the notes. They were set from the items of a real two-part draft: 14 criteria of
@@ -53,6 +65,9 @@ import { readFileSync } from "node:fs";
 export const MAX_CRITERION_WORDS = 30;
 export const MAX_CRITERION_SENTENCES = 2;
 export const MAX_DECISION_WORDS = 60;
+// A ticket has at most five acceptance criteria. Above five the check warns, in a note that never
+// fails, so the clerk leaves work out or splits the ticket by outcome.
+export const MAX_CRITERIA = 5;
 
 export interface Finding {
   line: number;
@@ -73,11 +88,6 @@ interface Item {
 
 // --- text helpers -----------------------------------------------------------------------------
 const TICK = "`";
-const FENCE = "```";
-
-function isFence(line: string): boolean {
-  return line.trimStart().startsWith(FENCE);
-}
 
 function clip(s: string, n = 70): string {
   const one = s.replace(/[ \t\n]+/gu, " ").trim();
@@ -182,7 +192,6 @@ function plainLineFindings(line: string, n: number, out: Finding[]): void {
 }
 
 // --- parsing ----------------------------------------------------------------------------------
-const AGENTS_RE = /^##[ \t]+for the agents[ \t]*$/iu;
 const CRITERIA_RE = /^##[ \t]+acceptance criteria[ \t]*$/iu;
 const ANY_MARKER_RE = /^(?:[-*]|[0-9]+\.)[ \t]+/u;
 const HEADING_RE = /^#{1,6}[ \t]/u;
@@ -219,20 +228,6 @@ function collectItems(lines: string[], from: number, to: number, startRe: RegExp
   return items;
 }
 
-function fenceMap(lines: string[], from: number, to: number): boolean[] {
-  const map: boolean[] = [];
-  let inside = false;
-  for (let i = from; i < to; i++) {
-    if (isFence(lines[i])) {
-      map.push(true);
-      inside = !inside;
-    } else {
-      map.push(inside);
-    }
-  }
-  return map;
-}
-
 function stripItemHead(item: Item): string {
   return item.text
     .replace(/^[0-9]+\.[ \t]+/u, "")
@@ -240,11 +235,21 @@ function stripItemHead(item: Item): string {
     .trim();
 }
 
+// The last criterion is set aside when it asks for a fixture run: its text says "fixture run" and
+// "scores clean", in any case. No other criterion is set aside, and at most one is: a fixture line
+// worded otherwise, or not last, is counted, so a mistake adds a warning and never hides one.
+function isFixtureLine(criterion: Item | undefined): boolean {
+  if (criterion === undefined) return false;
+  // LOWER: lowered for an ASCII phrase match; a miss only adds a warning
+  const text = stripItemHead(criterion).toLowerCase();
+  return text.includes("fixture run") && text.includes("scores clean");
+}
+
 // --- the check --------------------------------------------------------------------------------
 // null when the ticket has no `## For the agents` heading.
 export function analyze(text: string, final: boolean): Report | null {
   const lines = text.split("\n");
-  const ai = lines.findIndex((l) => AGENTS_RE.test(l));
+  const ai = agentsIndex(lines);
   if (ai < 0) return null;
   const findings: Finding[] = [];
   const notes: string[] = [];
@@ -303,35 +308,19 @@ export function analyze(text: string, final: boolean): Report | null {
   const aStart = ai + 1;
   const fenced = fenceMap(lines, aStart, lines.length);
   const isFenced = (i: number): boolean => fenced[i - aStart];
-  // The level-3 sections of the agents' part: each runs to the next heading of level 3 or above.
-  const heads: Array<{ level: number; title: string; at: number }> = [];
-  for (let i = aStart; i < lines.length; i++) {
-    if (isFenced(i)) continue;
-    const m = /^(#{1,3})[ \t]+(.*?)[ \t]*$/u.exec(lines[i]);
-    if (m) heads.push({ level: m[1].length, title: m[2], at: i });
-  }
-  const subs = heads
-    .map((h, j) => ({
-      level: h.level,
-      title: h.title,
-      at: h.at,
-      end: heads[j + 1]?.at ?? lines.length,
-    }))
-    .filter((s) => s.level === 3);
+  // The level-3 sections of the agents' part, read the shared way: the cut reads them too.
+  const subs = level3Sections(lines, aStart);
   const sub = (re: RegExp): { title: string; at: number; end: number } | undefined =>
     subs.find((s) => re.test(s.title));
   const checks = sub(/^checks$/iu);
-  const techNotes = sub(/^technical notes$/iu);
-  const verified = sub(/^verified at(?:[ \t]|$)/iu);
+  const techNotes = sub(TECH_NOTES_RE);
+  const verified = verifiedSection(lines, ai);
   const where = ai + 1;
   if (!checks) add(where, "part", 'no "### Checks" section under "## For the agents"');
   if (!techNotes) add(where, "part", 'no "### Technical notes" section under "## For the agents"');
   if (!verified) add(where, "part", 'no "### Verified at <sha>" section under "## For the agents"');
-  else {
-    const sha = verified.title.replace(/^verified at/iu, "").trim();
-    if (!/^[0-9a-f]{7,40}$/iu.test(sha))
-      add(verified.at + 1, "part", '"### Verified at" needs a commit of 7 to 40 hex characters');
-  }
+  else if (verifiedAtSha(verified.title) === "")
+    add(verified.at + 1, "part", '"### Verified at" needs a commit of 7 to 40 hex characters');
 
   // The checks: one for each criterion, labelled C1 to CN, in order.
   if (checks && N > 0) {
@@ -429,6 +418,12 @@ export function analyze(text: string, final: boolean): Report | null {
   // The notes.
   notes.push(`plain part: ${plainWords} words`);
   notes.push(`criteria ${N}, decisions ${decisions.length}, technical notes ${noteCount}`);
+  const counted = N - (isFixtureLine(criteria[N - 1]) ? 1 : 0);
+  if (counted > MAX_CRITERIA) {
+    notes.push(
+      `more than five criteria: ${counted}: leave work out or split the ticket by outcome`,
+    );
+  }
   for (const c of criteria) {
     const body = stripItemHead(c);
     const words = wordCount(body);
@@ -475,7 +470,7 @@ function main(argv: string[]): number {
     );
     return 2;
   }
-  const report = analyze(text.replace(/^﻿/u, "").replace(/\r\n/gu, "\n"), final);
+  const report = analyze(normalizeTicket(text), final);
   if (!report) {
     console.error('ticket-parts: no "## For the agents" section');
     return 2;

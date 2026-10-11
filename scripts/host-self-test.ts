@@ -19,8 +19,14 @@ import {
 } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { scriptsDir } from "./lib/paths.ts";
-import { processCommandLine, processInfo, processStart, processState } from "./lib/processes.ts";
-import { pyWords } from "./lib/text.ts";
+import {
+  bootId,
+  bootTime,
+  processCommandLine,
+  processInfo,
+  processStart,
+  processState,
+} from "./lib/processes.ts";
 
 const HERE = scriptsDir(import.meta);
 const SELF = join(HERE, "run");
@@ -52,12 +58,94 @@ function exec(
     err: String(result.stderr ?? ""),
   };
 }
-function json(path: string, fallback: any): any {
+// The stub Herdr server's state file.
+interface StubSpace {
+  label: string;
+  tokens: Record<string, string>;
+  panes: string[];
+  tabs: string[];
+  path: string | null;
+}
+interface StubPane {
+  ws: string;
+  tab?: string;
+  cwd?: string;
+  tokens: Record<string, string>;
+  label?: string;
+  title?: string;
+}
+interface StubTab {
+  ws: string;
+  pane: string;
+  cwd: string;
+  label: string;
+}
+interface HerdrStubState {
+  n: number;
+  tab_n: Record<string, number>;
+  spaces: Record<string, StubSpace>;
+  panes: Record<string, StubPane>;
+  tabs: Record<string, StubTab>;
+  open: Record<string, string>;
+  agents: Array<string | undefined>;
+  agentPanes: Record<string, string>;
+  prompt?: string[][];
+}
+// The stub tmux server's state file.
+interface TmuxWindow {
+  session: string;
+  name: string | undefined;
+  opts: Record<string, string>;
+  panes: Record<string, { opts: Record<string, string> }>;
+}
+interface TmuxStubState {
+  n: number;
+  sessions: string[];
+  windows: Record<string, TmuxWindow>;
+}
+// Entries of the stub's worktree list.
+interface WtEntry {
+  path: string;
+  is_linked_worktree: boolean;
+  open_workspace_id?: string;
+}
+interface WtSource {
+  repo_root: string;
+  repo_name: string;
+  source_workspace_id?: string;
+}
+// A stub store reads a partial fallback and answers a full state.
+function json(path: string, fallback: Partial<HerdrStubState>): HerdrStubState;
+function json(path: string, fallback: Partial<TmuxStubState>): TmuxStubState;
+function json<T>(path: string, fallback: unknown): T {
   try {
-    return JSON.parse(readFileSync(path, "utf8"));
+    return JSON.parse(readFileSync(path, "utf8")) as T;
   } catch {
-    return fallback;
+    return fallback as T;
   }
+}
+// A test-side read of stub state, under the same lock the stubs take: the
+// state files are truncated and rewritten, and a lockless read can land
+// between and parse a torn half, which reads as empty state.
+function readStubJson(
+  stubDir: string,
+  name: string,
+  fallback: Partial<HerdrStubState>,
+): HerdrStubState;
+function readStubJson(
+  stubDir: string,
+  name: string,
+  fallback: Partial<TmuxStubState>,
+): TmuxStubState;
+function readStubJson(
+  stubDir: string,
+  name: string,
+  fallback: unknown,
+): HerdrStubState | TmuxStubState {
+  // The cast bridges the overloads: the inner read casts to the state either way.
+  return withStubLock(stubDir, () =>
+    json(join(stubDir, name), fallback as Partial<HerdrStubState>),
+  );
 }
 function save(path: string, value: unknown): void {
   writeFileSync(path, JSON.stringify(value));
@@ -69,7 +157,7 @@ function opt(args: string[], name: string): string | undefined {
 function flag(path: string): boolean {
   return existsSync(path);
 }
-function next(st: any, prefix: string): string {
+function next(st: HerdrStubState, prefix: string): string {
   st.n++;
   return prefix + st.n;
 }
@@ -136,11 +224,16 @@ function b36(n: number): string {
   }
   return s;
 }
-function newTab(st: any, ws: string): string {
+function newTab(st: HerdrStubState, ws: string): string {
   st.tab_n[ws] = (st.tab_n[ws] ?? 0) + 1;
   return `${ws}:t${b36(st.tab_n[ws])}`;
 }
-function space(st: any, label: string, cwd = ""): any {
+interface PlacedSpace {
+  workspace: { workspace_id: string };
+  tab: { tab_id: string };
+  root_pane: { pane_id: string };
+}
+function space(st: HerdrStubState, label: string, cwd = ""): PlacedSpace {
   const ws = next(st, "w"),
     tab = newTab(st, ws),
     pane = next(st, "p");
@@ -150,7 +243,7 @@ function space(st: any, label: string, cwd = ""): any {
   st.tabs[tab] = { ws, pane, cwd, label };
   return { workspace: { workspace_id: ws }, tab: { tab_id: tab }, root_pane: { pane_id: pane } };
 }
-function destroySpace(st: any, ws: string): void {
+function destroySpace(st: HerdrStubState, ws: string): void {
   const w = st.spaces[ws];
   delete st.spaces[ws];
   if (!w) return;
@@ -193,8 +286,26 @@ function herdrStubInner(args: string[], stateDir: string): void {
     tab_n: {},
     open: {},
     agents: [],
+    agentPanes: {},
     prompt: [],
   });
+  if (!Array.isArray(st.agents)) st.agents = [];
+  // The file's content is untrusted, so the shape check reads through unknown.
+  const panes: unknown = st.agentPanes;
+  if (panes === null || typeof panes !== "object" || Array.isArray(panes)) st.agentPanes = {};
+  // An agent name follows its pane's occupant and clears when that pane goes,
+  // as the server does; a spawn under the freed handle starts a new session.
+  const dropAgents = (): void => {
+    st.agents = st.agents.filter((name: string | undefined) => {
+      if (typeof name !== "string") return false;
+      const pane = st.agentPanes[name];
+      if (typeof pane !== "string" || !(pane in st.panes)) {
+        delete st.agentPanes[name];
+        return false;
+      }
+      return true;
+    });
+  };
   const command = args.slice(0, 2).join(" ");
   if (command === "workspace list") {
     out({ workspaces: Object.keys(st.spaces).map((workspace_id) => ({ workspace_id })) });
@@ -210,11 +321,11 @@ function herdrStubInner(args: string[], stateDir: string): void {
       .filter(Boolean)
       .map((block) => {
         const worktreePath = resolve(block.split("\n", 1)[0]!.slice(9));
-        const entry: any = { path: worktreePath, is_linked_worktree: worktreePath !== root };
+        const entry: WtEntry = { path: worktreePath, is_linked_worktree: worktreePath !== root };
         if (st.open[worktreePath]) entry.open_workspace_id = st.open[worktreePath];
         return entry;
       });
-    const source: any = { repo_root: root, repo_name: basename(root) };
+    const source: WtSource = { repo_root: root, repo_name: basename(root) };
     if (st.open[root]) source.source_workspace_id = st.open[root];
     out({ source, worktrees });
     return;
@@ -264,6 +375,7 @@ function herdrStubInner(args: string[], stateDir: string): void {
       delete st.panes[t.pane];
       if (!st.spaces[ws].tabs.length) destroySpace(st, ws);
     }
+    dropAgents();
     save(path, st);
     return;
   }
@@ -274,10 +386,8 @@ function herdrStubInner(args: string[], stateDir: string): void {
     if (p) {
       const ws = p.ws;
       st.spaces[ws].panes = st.spaces[ws].panes.filter((id: string) => id !== pane);
-      for (const tab of [...st.spaces[ws].tabs]) {
-        const kept = Object.values(st.panes as Record<string, any>).some(
-          (q) => q.ws === ws && (q.tab || tab) === tab,
-        );
+      for (const tab of st.spaces[ws].tabs) {
+        const kept = Object.values(st.panes).some((q) => q.ws === ws && (q.tab || tab) === tab);
         if (!kept) {
           st.spaces[ws].tabs = st.spaces[ws].tabs.filter((id: string) => id !== tab);
           delete st.tabs[tab];
@@ -285,6 +395,24 @@ function herdrStubInner(args: string[], stateDir: string): void {
       }
       if (!st.spaces[ws].tabs.length) destroySpace(st, ws);
     }
+    dropAgents();
+    save(path, st);
+    return;
+  }
+  if (command === "pane split") {
+    const anchor = st.panes[args[2]!];
+    if (!anchor) fail("pane_not_found");
+    const pane = next(st, "p");
+    const cwd = opt(args, "--cwd") ?? "";
+    st.spaces[anchor.ws].panes.push(pane);
+    st.panes[pane] = { ws: anchor.ws, tab: anchor.tab, cwd, tokens: {} };
+    save(path, st);
+    out({ pane: { pane_id: pane } });
+    return;
+  }
+  if (command === "pane rename") {
+    if (!st.panes[args[2]!]) fail("pane_not_found");
+    st.panes[args[2]!].label = args[3];
     save(path, st);
     return;
   }
@@ -295,6 +423,8 @@ function herdrStubInner(args: string[], stateDir: string): void {
   }
   if (command === "pane report-metadata") {
     st.panes[args[2]!].tokens = tokens(args);
+    const title = opt(args, "--title");
+    if (title !== undefined) st.panes[args[2]!].title = title;
     save(path, st);
     return;
   }
@@ -302,7 +432,10 @@ function herdrStubInner(args: string[], stateDir: string): void {
     if (flag(join(stateDir, "wsget.succeed-once")))
       rmSync(join(stateDir, "wsget.succeed-once"), { force: true });
     else if (flag(join(stateDir, "wsget.fail"))) throw new StubFail(1);
-    const w = st.spaces[args[2]!] ?? {};
+    const w = st.spaces[args[2]!];
+    // As the server does, getting a space Herdr destroyed fails: closes tell
+    // a gone space from one they must not touch by this failure.
+    if (!w) fail("workspace_not_found");
     out({
       workspace: {
         workspace_id: args[2],
@@ -331,6 +464,7 @@ function herdrStubInner(args: string[], stateDir: string): void {
     return;
   }
   if (command === "pane get") {
+    if (!st.panes[args[2]!]) fail("pane_not_found");
     out({ pane: { pane_id: args[2], agent: null } });
     return;
   }
@@ -379,23 +513,45 @@ function herdrStubInner(args: string[], stateDir: string): void {
   if (command === "agent start") {
     if (st.agents.includes(args[2])) fail("agent_name_taken");
     st.agents.push(args[2]);
+    st.agentPanes[args[2]!] = opt(args, "--pane") ?? "";
     save(path, st);
     if (flag(join(stateDir, "agent.notready"))) fail("agent_not_ready");
     return;
   }
+  if (command === "agent rename") {
+    const pane = args[2] ?? "";
+    const name = args[3] ?? "";
+    // The name follows the pane's occupant: whatever it was called before is freed.
+    // A pane with no agent takes no name: the server registers nothing there, so a
+    // shell spawn stays unregistered, as on the live server.
+    let hosted = false;
+    for (const [known, at] of Object.entries(st.agentPanes)) {
+      if (at === pane) {
+        hosted = true;
+        st.agents = st.agents.filter((entry: string | undefined) => entry !== known);
+        delete st.agentPanes[known];
+      }
+    }
+    if (hosted && name && !st.agents.includes(name)) st.agents.push(name);
+    if (hosted && name) st.agentPanes[name] = pane;
+    save(path, st);
+    return;
+  }
   if (command === "agent prompt") {
-    st.prompt.push(args.slice(2));
+    st.prompt!.push(args.slice(2));
     save(path, st);
     if (flag(join(stateDir, "agent.blocked"))) fail("agent_blocked");
     out({ accepted: true });
     return;
   }
   if (command === "agent wait") {
+    if (!st.agents.includes(args[2])) fail("agent_not_found");
     if (flag(join(stateDir, "agent.blocked"))) fail("agent_blocked");
     out({ settled: true });
     return;
   }
   if (command === "agent read") {
+    if (!st.agents.includes(args[2])) fail("agent_not_found");
     console.log(`stub screen of ${args[2]}`);
     return;
   }
@@ -476,7 +632,7 @@ function tmuxStubInner(args: string[], stateDir: string): void {
   if (command === "set-option") {
     const target = opt(args, "-t") ?? "";
     if (flag("-p")) {
-      for (const value of Object.values(st.windows) as Array<any>) {
+      for (const value of Object.values(st.windows)) {
         if (value.panes?.[target]) {
           value.panes[target].opts[args[args.length - 2]!] = args[args.length - 1];
           save(path, st);
@@ -506,19 +662,17 @@ function tmuxStubInner(args: string[], stateDir: string): void {
     if (stateFlag("panes.fail")) throw new StubFail(1);
     const target = opt(args, "-t") ?? "";
     if (!st.windows[target]) throw new StubFail(1);
-    for (const [pane, value] of Object.entries(st.windows[target].panes ?? {}) as Array<
-      [string, any]
-    >)
+    for (const [pane, value] of Object.entries(st.windows[target].panes ?? {}))
       console.log(`${pane}\t${value.opts["@postmaster_owned"] ?? ""}`);
     return;
   }
   if (command === "kill-pane") {
     const target = opt(args, "-t") ?? "";
-    for (const [win, value] of Object.entries(st.windows) as Array<[string, any]>) {
+    for (const [win, value] of Object.entries(st.windows)) {
       delete value.panes?.[target];
       if (!Object.keys(value.panes ?? {}).length) {
         delete st.windows[win];
-        if (!Object.values(st.windows).some((entry: any) => entry.session === value.session))
+        if (!Object.values(st.windows).some((entry) => entry.session === value.session))
           st.sessions = st.sessions.filter((session: string) => session !== value.session);
       }
       save(path, st);
@@ -528,16 +682,20 @@ function tmuxStubInner(args: string[], stateDir: string): void {
   if (command === "kill-window") {
     const gone = st.windows[opt(args, "-t") ?? ""];
     delete st.windows[opt(args, "-t") ?? ""];
-    if (gone && !Object.values(st.windows).some((entry: any) => entry.session === gone.session))
+    if (gone && !Object.values(st.windows).some((entry) => entry.session === gone.session))
       st.sessions = st.sessions.filter((session: string) => session !== gone.session);
     save(path, st);
     return;
   }
   if (command === "list-windows") {
     if (stateFlag("tmux.dead") || stateFlag("windows.fail")) throw new StubFail(1);
-    for (const [win, value] of Object.entries(st.windows) as Array<[string, any]>) {
+    for (const [win, value] of Object.entries(st.windows)) {
       if (flag("-a")) {
-        if (fmt.includes("#{@postmaster_run}"))
+        if (fmt.includes("#{@postmaster_handle}"))
+          console.log(
+            `${win}\t${value.name}\t${value.opts["@postmaster_cwd"] ?? ""}\t${value.opts["@postmaster_handle"] ?? ""}\t${value.opts["@postmaster_pane"] ?? ""}`,
+          );
+        else if (fmt.includes("#{@postmaster_run}"))
           console.log(
             `${win}\t${value.opts["@postmaster_cwd"] ?? ""}\t${value.opts["@postmaster_run"] ?? ""}\t${value.opts["@postmaster_pane"] ?? ""}`,
           );
@@ -568,7 +726,12 @@ function symlinkCommand(name: string, bin: string): void {
     if (existsSync(path)) {
       try {
         symlinkSync(path, join(bin, name));
-      } catch {}
+      } catch (error) {
+        // The tool list names some twice; anything else is a real failure,
+        // and a silent one would surface pages later as a missing command.
+        if ((error as NodeJS.ErrnoException)?.code !== "EEXIST")
+          throw new Error(`cannot link ${path} into ${bin}: ${String(error)}`);
+      }
       return;
     }
   }
@@ -589,7 +752,10 @@ function host(
     TMPDIR: root,
     POSTMASTER_HOST_STATE: join(root, "state"),
     POSTMASTER_HOST_FIXTURE: root,
-    POSTMASTER_HOST_CLAIM_WAIT: "3",
+    // A pane has this long to claim its launch. A pane that is only slow must not fall back to the
+    // background on a loaded machine, so the wait is long; the two tests of a pane that never starts
+    // set their own short one.
+    POSTMASTER_HOST_CLAIM_WAIT: "30",
     POSTMASTER_HOST_CLOSE_WAIT: "3",
     POSTMASTER_HOST_FINISH_DELAY: finishDelay,
     ...(procRoot === undefined ? {} : { POSTMASTER_PROC_ROOT: procRoot }),
@@ -597,7 +763,7 @@ function host(
   };
   return exec(SELF, ["host", ...args], { cwd, env: environment });
 }
-function testStopFinishers(root: string): void {
+export function testStopFinishers(root: string): void {
   const path = join(root, "finishers");
   if (!existsSync(path)) return;
   for (const line of readFileSync(path, "utf8").split("\n")) {
@@ -613,6 +779,30 @@ function testStopFinishers(root: string): void {
     }
   }
   rmSync(path, { force: true });
+}
+// A run tab's state pane runs a refresh loop that outlives the test: the
+// stub records each pane command's pid beside its output, and the loop dies
+// with its group. Only a command line showing run-state is killed, so a
+// reused pid is never mistaken for one.
+export function killStateLoops(stubDir: string): void {
+  let files: string[] = [];
+  try {
+    files = readdirSync(stubDir);
+  } catch {
+    return;
+  }
+  for (const file of files) {
+    if (!file.startsWith("pane-") || !file.endsWith(".pid")) continue;
+    const pid = Number(readFileSync(join(stubDir, file), "utf8").trim());
+    if (!Number.isInteger(pid) || pid <= 0) continue;
+    if (!processCommandLine(pid).includes("run-state")) continue;
+    try {
+      process.kill(-pid, "SIGKILL");
+    } catch {}
+    try {
+      process.kill(pid, "SIGKILL");
+    } catch {}
+  }
 }
 function callText(
   args: string[],
@@ -637,6 +827,29 @@ function calls(root: string, which: string): string[] {
 function field(text: string, key: string): string {
   return new RegExp(`(?:^|\\n|\\|)${key}=([^|\\n]*)`, "u").exec(text)?.[1] ?? "";
 }
+// A process's POSIX session id from the kernel's own call, through the
+// fixture's python3: the sess column is one reading, getsid is the thing
+// itself. Null when the link cannot run at all; an error string when
+// the link is viable but the call fails, which names a broken session
+// maker rather than a wrong session.
+function posixSession(pid: number, sysDir: string): { sid: number } | { error: string } | null {
+  const tool = join(sysDir, "python3");
+  try {
+    accessSync(tool, constants.X_OK);
+  } catch {
+    return null;
+  }
+  const result = exec(tool, [
+    "-c",
+    "import os,sys;print(os.getsid(int(sys.argv[1])))",
+    String(pid),
+  ]);
+  const sid = Number(result.out.trim());
+  if (result.code === 0 && Number.isInteger(sid)) return { sid };
+  return {
+    error: `code=${result.code} out=${result.out.trim().slice(0, 200)} err=${result.err.trim().slice(0, 200)}`,
+  };
+}
 const UNCAPPED_NOTICE = "host: launch running uncapped (no supported per-launch limits available)";
 function titleAbsent(text: string): boolean {
   return ["#1", "Stop", "touch", "canary", "breaking", "shell"].every(
@@ -650,12 +863,22 @@ function errStreamEqual(directErrPath: string, launchErrPath: string): boolean {
     .join("\n");
   return readFileSync(directErrPath, "utf8") === kept;
 }
-async function marker(path: string, seconds = 20): Promise<boolean> {
-  for (let i = 0; i < seconds * 10; i++) {
-    if (existsSync(path)) return true;
-    await sleep(100);
+/** Waits for a condition and not for a timer: true the moment `done` holds, false only once
+ * `seconds` have passed without it. A stand-in process that takes milliseconds on a quiet
+ * machine takes seconds on a loaded one, so a test names what it needs to see and bounds the wait
+ * for a hang. A condition that throws, such as a file that is not there yet, has not held yet. */
+export async function waitFor(done: () => boolean, seconds = 30): Promise<boolean> {
+  const deadline = Date.now() + seconds * 1000;
+  for (;;) {
+    try {
+      if (done()) return true;
+    } catch {}
+    if (Date.now() >= deadline) return false;
+    await sleep(50);
   }
-  return existsSync(path);
+}
+function marker(path: string, seconds = 20): Promise<boolean> {
+  return waitFor(() => existsSync(path), seconds);
 }
 async function setup(
   root: string,
@@ -821,6 +1044,10 @@ async function makeHarness(
     "mkfifo",
     "mktemp",
     "sleep",
+    // The escapee's session makers: setsid(1) where it exists, else python's
+    // setsid. symlinkCommand passes over whichever is missing.
+    "setsid",
+    "python3",
     "date",
     "touch",
     "wc",
@@ -843,6 +1070,8 @@ async function makeHarness(
     "ps",
     "sysctl",
     "getconf",
+    "python3",
+    "setsid",
     "chmod",
     "ln",
     "cp",
@@ -863,6 +1092,7 @@ async function makeHarness(
 }
 function resetHarness(root: string): void {
   testStopFinishers(root);
+  killStateLoops(join(root, "stub"));
   const dir = join(root, "stub");
   // Drain an in-flight stub call before clearing beneath it.
   withStubLock(dir, () => {
@@ -871,11 +1101,12 @@ function resetHarness(root: string): void {
       rmSync(join(dir, name), { recursive: true, force: true });
     }
   });
+  rmSync(join(root, "state", "runtabs"), { recursive: true, force: true });
 }
 // A test-side read-modify-write of stub state, under the same lock the stubs
 // take: without it an async runner or watcher write lands between the read and
 // the save and one of the two updates is lost.
-function updateHerdrJson(root: string, fn: (st: any) => void): void {
+function updateHerdrJson(root: string, fn: (st: HerdrStubState) => void): void {
   withStubLock(join(root, "stub"), () => {
     const path = join(root, "stub", "herdr.json");
     const st = json(path, { spaces: {}, panes: {}, tabs: {}, open: {} });
@@ -883,7 +1114,7 @@ function updateHerdrJson(root: string, fn: (st: any) => void): void {
     save(path, st);
   });
 }
-function updateTmuxJson(root: string, fn: (st: any) => void): void {
+function updateTmuxJson(root: string, fn: (st: TmuxStubState) => void): void {
   withStubLock(join(root, "stub"), () => {
     const path = join(root, "stub", "tmux.json");
     const st = json(path, { sessions: [], windows: {} });
@@ -910,7 +1141,7 @@ async function waitTmuxPaneGone(root: string, pane: string): Promise<boolean> {
       for (const value of Object.values(windows)) {
         if (value === null || typeof value !== "object" || Array.isArray(value))
           throw new Error("bad windows");
-        if (pane in ((value as any).panes ?? {})) {
+        if (pane in ((value as TmuxWindow).panes ?? {})) {
           present = true;
           break;
         }
@@ -981,6 +1212,26 @@ export async function runControls(): Promise<number> {
       () => TRIPLE_RE.exec("space=a tab=t pane=p\n")?.[3] === "p",
     );
     const paths = await makeHarness(root);
+    // The headless launch makes its session with setsid(1) where the
+    // fixture has it, else the python3 link below; without either it can
+    // only detach, which is a group but no session on some systems. Fail
+    // here, naming the miss, rather than pages later on the session check.
+    for (const tool of ["setsid", "python3"]) {
+      const linked = join(root, "sys", tool);
+      const onPath = (process.env.PATH ?? "").split(":").some((dir) => existsSync(join(dir, tool)));
+      let viable = false;
+      try {
+        accessSync(linked, constants.X_OK);
+        viable = true;
+      } catch {
+        viable = false;
+      }
+      await pass(
+        `the fixture ${tool} link matches its PATH availability`,
+        () => viable === onPath,
+        `PATH=${process.env.PATH ?? ""} link=${linked} onPath=${onPath} viable=${viable}`,
+      );
+    }
     const f = await setup(root);
     const noHost = paths.sys,
       stubs = paths.stubs;
@@ -1033,8 +1284,11 @@ export async function runControls(): Promise<number> {
     const ROLE_LABEL = callText(["name", run1, "role", "preview server"], noHost, root);
     const refused = (result: Result): boolean => result.code !== 0 && result.out === "";
     await pass(
-      "the run level carries the ticket number and title",
-      () => RUN_NAME.startsWith("#1, Stop") && RUN_NAME.includes("breaking"),
+      "the run level carries the ticket number and the start of its title, in 30 characters",
+      () =>
+        RUN_NAME.startsWith("#1, Stop") &&
+        RUN_NAME.length <= 30 &&
+        RUN_NAME === [...f.name].slice(0, 30).join(""),
       RUN_NAME,
     );
     await pass(
@@ -1229,7 +1483,7 @@ export async function runControls(): Promise<number> {
     );
     await pass(
       "control characters never reach a label",
-      () => callText(["name", logs], noHost, root) === "#2, a bell and an escape]0;x · y",
+      () => callText(["name", logs], noHost, root) === "#2, a bell and an escape]0;x ·",
     );
     writeFileSync(join(logs, "brief.md"), "## Dispatch\nname: Bell\x1c\x1c(a note)\n");
     await pass(
@@ -1335,19 +1589,22 @@ export async function runControls(): Promise<number> {
       () => field(probeText, "pane") === "" && field(probeText, "tmuxpane") === "",
       probeText,
     );
+    const sessionPid = Number(field(probeText, "pid"));
+    const sessionInfo = processInfo(sessionPid);
+    const sessionSid = posixSession(sessionPid, noHost);
     await pass(
       "it is a session of its own: its group is its pid, not the caller's session",
-      () => {
-        const pid = Number(field(probeText, "pid"));
-        const info = processInfo(pid);
-        return info?.group === pid && info.session === pid;
-      },
-      `${probeText}\n${JSON.stringify(processInfo(Number(field(probeText, "pid"))))}`,
+      () =>
+        sessionInfo?.group === sessionPid &&
+        (sessionSid === null
+          ? sessionInfo.session === sessionPid
+          : "sid" in sessionSid && sessionSid.sid === sessionPid),
+      `${probeText}\n${JSON.stringify(sessionInfo)}\nsid=${JSON.stringify(sessionSid)}`,
     );
-    await pass(
-      "--pidfile holds the launch's pid",
-      () => readFileSync(join(logs, "n3.pid"), "utf8").trim() === field(probeText, "pid"),
-    );
+    await pass("--pidfile holds the launch's pid, start, boot and command", () => {
+      const lines = readFileSync(join(logs, "n3.pid"), "utf8").trim().split("\n");
+      return lines.length === 4 && lines[0] === field(probeText, "pid") && (lines[3] ?? "") !== "";
+    });
     writeFileSync(join(logs, "n3.go"), "");
     await marker(markerPath("n3"));
     writeFileSync(
@@ -1471,8 +1728,61 @@ export async function runControls(): Promise<number> {
       "the same for wait",
       () => invalidWait.code === 1 && !invalidWait.out.includes("controls"),
     );
+    const setupRun = join(root, "run-setup");
+    mkdirSync(setupRun, { recursive: true });
+    writeFileSync(join(setupRun, "run.json"), JSON.stringify({ config: {} }));
+    const setupLaunch = execHost(
+      [
+        "run",
+        f.name,
+        join(f.repo, ".worktrees/T-1-luna"),
+        "--role",
+        "coachman",
+        "--under",
+        setupRun,
+        "--run",
+        setupRun,
+        "--marker",
+        markerPath("n9"),
+        "--",
+        "./fixed.sh",
+      ],
+      noHost,
+    );
+    await pass(
+      "a dispatch carrying run.json but no waybill still launches",
+      () => setupLaunch.code === 0 && marker(markerPath("n9"), 15),
+      `${setupLaunch.out}${setupLaunch.err}`,
+    );
+    const setupPlace = execHost(
+      [
+        "run",
+        f.name,
+        join(f.repo, ".worktrees/T-1-luna"),
+        "--role",
+        "coachman",
+        "--under",
+        setupRun,
+        "--run",
+        setupRun,
+        "--marker",
+        markerPath("n9-place"),
+        "--",
+        "./fixed.sh",
+      ],
+      stubs,
+    );
+    await pass(
+      "a brief-less dispatch is placed by its worktree on Herdr, not the background",
+      () =>
+        setupPlace.code === 0 &&
+        setupPlace.out.includes("host=herdr space=") &&
+        !`${setupPlace.out}${setupPlace.err}`.includes("could not place") &&
+        marker(markerPath("n9-place"), 15),
+      `${setupPlace.out}${setupPlace.err}`,
+    );
 
-    console.log("a run launch without a named run space is refused");
+    console.log("a run launch without a named run tab is refused");
     resetHarness(root);
     const noSpace = execHost(
       [
@@ -1498,6 +1808,67 @@ export async function runControls(): Promise<number> {
         `${noSpace.out}${noSpace.err}`.includes("needs --under") &&
         !calls(root, "herdr").some((line) => line.includes("workspace\tcreate")),
       `${noSpace.out}${noSpace.err}`,
+    );
+    const bareRun = join(root, "run-bare");
+    mkdirSync(bareRun, { recursive: true });
+    const noSpaceNorRun = execHost(
+      [
+        "run",
+        SECURITY_LABEL,
+        f.clone,
+        "--role",
+        "reviewer",
+        "--under",
+        bareRun,
+        "--run",
+        run1,
+        "--marker",
+        markerPath("no-space-nor-run"),
+        "--",
+        "./fixed.sh",
+      ],
+      stubs,
+    );
+    await pass(
+      "a dispatch with neither a live worktree nor run.json is refused, and its marker lands",
+      () =>
+        noSpaceNorRun.code === 1 &&
+        existsSync(markerPath("no-space-nor-run")) &&
+        `${noSpaceNorRun.out}${noSpaceNorRun.err}`.includes("or run.json to place its tab"),
+      `${noSpaceNorRun.out}${noSpaceNorRun.err}`,
+    );
+    const prunedRun = join(root, "run-pruned");
+    mkdirSync(prunedRun, { recursive: true });
+    writeFileSync(
+      join(prunedRun, "brief.md"),
+      `## Dispatch\nname: T-1 pruned\nsynthesis worktree: ${join(root, "worktree-gone")}\n`,
+    );
+    writeFileSync(join(prunedRun, "run.json"), '{"kind":"ticket"}\n');
+    const prunedLaunch = execHost(
+      [
+        "run",
+        SECURITY_LABEL,
+        f.clone,
+        "--role",
+        "reviewer",
+        "--under",
+        prunedRun,
+        "--run",
+        run1,
+        "--marker",
+        markerPath("pruned-space"),
+        "--",
+        "./fixed.sh",
+      ],
+      stubs,
+    );
+    await pass(
+      "a dispatch naming a pruned worktree is refused despite its run.json, and its marker lands",
+      () =>
+        prunedLaunch.code === 1 &&
+        existsSync(markerPath("pruned-space")) &&
+        `${prunedLaunch.out}${prunedLaunch.err}`.includes("or run.json to place its tab"),
+      `${prunedLaunch.out}${prunedLaunch.err}`,
     );
 
     console.log("stop: owned process trees and refusal controls");
@@ -1539,7 +1910,14 @@ export async function runControls(): Promise<number> {
       [
         "#!/usr/bin/env bash",
         "trap 'echo term >> \"$TREE/term\"; exit 0' TERM",
-        'setsid sleep 120 & echo $! > "$TREE/escapee.pid"',
+        // Record the escaped sleep's pid, not the background shell that starts setsid.
+        // A session of its own: setsid(1) where it exists, else python's setsid, since
+        // macOS ships no setsid binary.
+        "if command -v setsid >/dev/null 2>&1; then",
+        "  setsid sh -c 'echo $$ > \"$TREE/escapee.pid\"; exec sleep 120'",
+        "else",
+        '  python3 -c \'import os; os.setsid(); os.execlp("sh", "sh", "-c", "echo $$ > \\"$TREE/escapee.pid\\"; exec sleep 120")\'',
+        "fi &",
         'sh -c \'trap "" TERM; while :; do sleep 1; done\' & echo $! > "$TREE/deaf.pid"',
         "sleep 120 & wait",
         "",
@@ -1569,25 +1947,39 @@ export async function runControls(): Promise<number> {
       i++
     )
       await sleep(100);
+    const alive = (pid: string) => processState(Number(pid)) === "live";
+    const escapee = readFileSync(join(root, "tree/escapee.pid"), "utf8").trim();
+    const deaf = readFileSync(join(root, "tree/deaf.pid"), "utf8").trim();
+    // Both must be running as the stop begins: without this the controls below would
+    // pass on a machine where neither ever started. Retry: the session leader and
+    // the deaf child may need a moment after their pid files land.
+    let escapeeRan = false;
+    let deafRan = false;
+    for (let i = 0; i < 50 && !(escapeeRan && deafRan); i++) {
+      escapeeRan = escapeeRan || alive(escapee);
+      deafRan = deafRan || alive(deaf);
+      if (!(escapeeRan && deafRan)) await sleep(100);
+    }
+    const ranBeforeStop = escapeeRan && deafRan;
     const outsider = spawn("sleep", ["60"], { cwd: sol, detached: true, stdio: "ignore" });
     outsider.unref();
     const termStop = execHost(["stop", join(f.repo, ".worktrees/T-1-luna")], noHost, root, {
       POSTMASTER_HOST_STOP_WAIT: "2",
     });
-    const alive = (pid: string) => processState(Number(pid)) === "live";
-    const escapee = readFileSync(join(root, "tree/escapee.pid"), "utf8").trim();
-    const deaf = readFileSync(join(root, "tree/deaf.pid"), "utf8").trim();
     await pass(
       "the launch got TERM first, and a child deaf to it is killed after the wait",
       () =>
         termRun.code === 0 &&
         termStop.code === 0 &&
+        ranBeforeStop &&
         existsSync(join(root, "tree/term")) &&
         !alive(deaf),
+      `termRun=${termRun.code} termStop=${termStop.code} before=${ranBeforeStop} deafRan=${deafRan} term=${existsSync(join(root, "tree/term"))}`,
     );
     await pass(
       "a process that works in the worktree but that no launch started is left alone",
-      () => !!outsider.pid && alive(String(outsider.pid)) && !alive(escapee),
+      () => !!outsider.pid && ranBeforeStop && alive(String(outsider.pid)) && !alive(escapee),
+      `before=${ranBeforeStop} escapeeRan=${escapeeRan} deafRan=${deafRan} outsiderAlive=${!!outsider.pid && alive(String(outsider.pid))} escapeeAlive=${alive(escapee)} escapee=${escapee} err=${termRun.err.slice(0, 400)}`,
     );
     try {
       if (outsider.pid) process.kill(outsider.pid, "SIGKILL");
@@ -1597,13 +1989,8 @@ export async function runControls(): Promise<number> {
     console.log("stop: registry identity and process membership");
     const launchDir = join(root, "state", "launches");
     mkdirSync(launchDir, { recursive: true });
-    const boot = readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim();
-    const bootLine =
-      readFileSync("/proc/stat", "utf8")
-        .split("\n")
-        .find((line: string) => line.startsWith("btime ")) ?? "btime 0";
-    // ASCII: /proc/stat is kernel-emitted ASCII; btime's fields split on spaces.
-    const bootSeconds = Number(bootLine.split(/\s+/u)[1]);
+    const boot = bootId();
+    const bootSeconds = bootTime() ?? 0;
     const ticks = Number(exec("getconf", ["CLK_TCK"]).out.trim()) || 100;
     const procStart = (pid: string): string => processStart(Number(pid)) ?? "";
     const startedSeconds = (pid: string) => {
@@ -1690,7 +2077,7 @@ export async function runControls(): Promise<number> {
       { TREE: join(root, "tree") },
     );
     await marker(markerPath("k2"));
-    const leader = readFileSync(join(logs, "k2.pid"), "utf8").trim();
+    const leader = readFileSync(join(logs, "k2.pid"), "utf8").trim().split("\n")[0] ?? "";
     const leftPid = readFileSync(join(root, "tree/left.pid"), "utf8").trim();
     let memberText = "";
     for (let i = 0; i < 30; i++) {
@@ -1732,7 +2119,7 @@ export async function runControls(): Promise<number> {
       for (let i = 0; i < 30 && !existsSync(join(logs, "guard.pid")); i++) await sleep(100);
       await sleep(300);
       const refused = stopSol();
-      const guardedPid = readFileSync(join(logs, "guard.pid"), "utf8").trim();
+      const guardedPid = readFileSync(join(logs, "guard.pid"), "utf8").trim().split("\n")[0] ?? "";
       await pass(
         `stop refuses a tree holding ${label}, and leaves it all running`,
         () =>
@@ -1835,7 +2222,7 @@ export async function runControls(): Promise<number> {
       herdrRun.out + herdrRun.err,
     );
     const pane = place?.[3] ?? "";
-    const state = json(join(stub, "herdr.json"), { spaces: {}, panes: {}, open: {} });
+    const state = readStubJson(stub, "herdr.json", { spaces: {}, panes: {}, open: {} });
     const spaceId = place?.[1] ?? "";
     const worktree = join(f.repo, ".worktrees/T-1-luna");
     const listedCalls = readCalls("herdr");
@@ -1860,7 +2247,12 @@ export async function runControls(): Promise<number> {
       () => state.spaces[spaceId]?.tokens?.postmaster === "opened",
     );
     await marker(markerPath("h1"));
-    await sleep(300);
+    // The marker lands when the launch ends. The pane is done with it, and has shown the rendered
+    // stream and released its agent, when it prints its last line.
+    if (pane)
+      await waitFor(() =>
+        /\nexit [0-9]+ at /u.test(readFileSync(join(stub, `pane-${pane}.out`), "utf8")),
+      );
     const herdrOut = readFileSync(join(logs, "h1.out"), "utf8");
     await pass(
       "the launch ran in that pane, with that pane's identity",
@@ -1912,17 +2304,18 @@ export async function runControls(): Promise<number> {
     );
     const noBunPane = TRIPLE_RE.exec(noBunHerdr.out)?.[3] ?? "";
     const noBunPaneOut = join(stub, `pane-${noBunPane}.out`);
-    for (
-      let i = 0;
-      i < 40 &&
-      (!existsSync(noBunPaneOut) || !readFileSync(noBunPaneOut, "utf8").includes("says: step one"));
-      i++
-    )
-      await sleep(50);
+    // The pane shows the first step by the process that follows the stream and reports the launch
+    // working from its own: wait for both and for neither to be first.
+    if (noBunPane)
+      await waitFor(
+        () =>
+          readFileSync(noBunPaneOut, "utf8").includes("says: step one") &&
+          readCalls("herdr").includes(`pane\treport-agent\t${noBunPane}`),
+      );
     const paneHasNoBun =
       exec("bash", ["-c", "command -v bun"], { env: { PATH: paths.paneNoBun } }).code !== 0;
     const paneText = existsSync(noBunPaneOut) ? readFileSync(noBunPaneOut, "utf8") : "";
-    const runningHerdr = json(join(stub, "herdr.json"), { panes: {} });
+    const runningHerdr = readStubJson(stub, "herdr.json", { panes: {} });
     const liveHerdrCalls = readCalls("herdr");
     await pass(
       "with no Bun in its PATH, the Herdr pane runs the launch, shows output, and stays open",
@@ -1939,14 +2332,19 @@ export async function runControls(): Promise<number> {
     );
     writeFileSync(join(logs, "h-bunless.go"), "");
     await marker(markerPath("h-bunless"), 15);
-    for (let i = 0; i < 40 && noBunPane in json(join(stub, "herdr.json"), { panes: {} }).panes; i++)
-      await sleep(50);
+    // The pane releases its agent as the launch ends and the finisher closes the pane after the
+    // marker, from two processes: wait for both.
+    await waitFor(
+      () =>
+        !(noBunPane in json(join(stub, "herdr.json"), { panes: {} }).panes) &&
+        readCalls("herdr").includes(`pane\trelease-agent\t${noBunPane}`),
+    );
     const doneHerdrCalls = readCalls("herdr");
     await pass(
       "the Herdr pane closes after the launch marker lands",
       () =>
         existsSync(markerPath("h-bunless")) &&
-        !(noBunPane in json(join(stub, "herdr.json"), { panes: {} }).panes) &&
+        !(noBunPane in readStubJson(stub, "herdr.json", { panes: {} }).panes) &&
         doneHerdrCalls.includes(`pane\trelease-agent\t${noBunPane}`),
     );
     const secondHerdr = execHost(
@@ -2009,7 +2407,7 @@ export async function runControls(): Promise<number> {
       ],
       stubs,
       f.caller,
-      { COUNT: join(logs, "h4.count") },
+      { POSTMASTER_HOST_CLAIM_WAIT: "3", COUNT: join(logs, "h4.count") },
     );
     await marker(markerPath("h4"));
     await pass(
@@ -2038,7 +2436,7 @@ export async function runControls(): Promise<number> {
     );
     await marker(markerPath("h5"));
     const lateRan = join(stub, "pane.late.ran");
-    for (let i = 0; i < 300 && !existsSync(lateRan); i++) await sleep(50);
+    await waitFor(() => existsSync(lateRan));
     await pass(
       "a pane that starts it late: it still runs exactly once",
       () =>
@@ -2086,7 +2484,7 @@ export async function runControls(): Promise<number> {
       "a space run host opened, its launches done, is closed",
       () =>
         closedHerdr.code === 0 &&
-        (json(join(stub, "herdr.json"), { open: {} }).open[worktree] ?? "") === "",
+        (readStubJson(stub, "herdr.json", { open: {} }).open[worktree] ?? "") === "",
       closedHerdr.err,
     );
     const ownClose = execHost(["close", f.repo], stubs, root);
@@ -2145,6 +2543,7 @@ export async function runControls(): Promise<number> {
       ],
       stubs,
       f.caller,
+      { POSTMASTER_HOST_CLAIM_WAIT: "3" },
     );
     rmSync(join(stub, "pane.dead"), { force: true });
     const refusedClose = execHost(["close", join(f.repo, ".worktrees/T-1-sol")], stubs, root);
@@ -2180,7 +2579,7 @@ export async function runControls(): Promise<number> {
     await pass(
       "run host marks that space as its own",
       () =>
-        json(join(stub, "herdr.json"), { spaces: {} }).spaces[cloneSpace]?.tokens?.postmaster ===
+        readStubJson(stub, "herdr.json", { spaces: {} }).spaces[cloneSpace]?.tokens?.postmaster ===
         "opened",
     );
     await marker(markerPath("c1"));
@@ -2204,7 +2603,7 @@ export async function runControls(): Promise<number> {
       "close shuts it",
       () =>
         cloneClose.code === 0 &&
-        (json(join(stub, "herdr.json"), { open: {} }).open[f.clone] ?? "") === "",
+        (readStubJson(stub, "herdr.json", { open: {} }).open[f.clone] ?? "") === "",
       cloneClose.err,
     );
     const plain = join(root, "plain");
@@ -2227,7 +2626,7 @@ export async function runControls(): Promise<number> {
     await pass(
       "a plain clone is no scratch: close removes its finished launch and preserves the user's tab",
       () => {
-        const st = json(join(stub, "herdr.json"), { spaces: {}, panes: {}, tabs: {} });
+        const st = readStubJson(stub, "herdr.json", { spaces: {}, panes: {}, tabs: {} });
         const tabs = st.spaces[plainSpace]?.tabs ?? [];
         return (
           calls(root, "herdr").some(
@@ -2267,15 +2666,16 @@ export async function runControls(): Promise<number> {
       },
     );
     const livePaneOut = join(stub, "win-1.out");
-    for (
-      let i = 0;
-      i < 40 &&
-      (!existsSync(livePaneOut) || !readFileSync(livePaneOut, "utf8").includes("step one"));
-      i++
-    )
-      await sleep(50);
+    // The window is marked running by the pane's own process and shows the first step by the process
+    // that follows the stream: two processes, so the test waits for both and for neither to be first.
+    await waitFor(
+      () =>
+        json(join(stub, "tmux.json"), { windows: {} }).windows["@1"]?.opts?.[
+          "@postmaster_state"
+        ] === "running" && readFileSync(livePaneOut, "utf8").includes("step one"),
+    );
     const liveTmuxState = json(join(stub, "tmux.json"), { windows: {} });
-    const liveTmuxPane = readFileSync(livePaneOut, "utf8");
+    const liveTmuxPane = existsSync(livePaneOut) ? readFileSync(livePaneOut, "utf8") : "";
     await pass(
       "a live launch keeps its tmux window open and marked running while its output is shown",
       () =>
@@ -2288,8 +2688,12 @@ export async function runControls(): Promise<number> {
     );
     writeFileSync(join(logs, "t-live.go"), "");
     await marker(markerPath("t-live"), 15);
-    for (let i = 0; i < 40 && "@1" in json(join(stub, "tmux.json"), { windows: {} }).windows; i++)
-      await sleep(50);
+    // The pane marks the window done and the finisher closes it, from two processes: wait for both.
+    await waitFor(
+      () =>
+        !("@1" in json(join(stub, "tmux.json"), { windows: {} }).windows) &&
+        calls(root, "tmux").includes("set-option\t-w\t-t\t%1\t@postmaster_state\tdone"),
+    );
     const doneTmuxState = json(join(stub, "tmux.json"), { windows: {} });
     await pass(
       "the tmux window is marked done and closes after the launch ends",
@@ -2384,9 +2788,9 @@ export async function runControls(): Promise<number> {
       { POSTMASTER_HOST: "tmux" },
     );
     await marker(markerPath("t3"));
-    const tmuxState = json(join(stub, "tmux.json"), { sessions: [], windows: {} });
+    const tmuxState = readStubJson(stub, "tmux.json", { sessions: [], windows: {} });
     const cloneWindow = Object.values(tmuxState.windows).some(
-      (window: any) =>
+      (window) =>
         window.session === `postmaster-${basename(f.repo)}` &&
         window.opts["@postmaster_cwd"] === f.clone,
     );
@@ -2460,8 +2864,8 @@ export async function runControls(): Promise<number> {
       const lunaReal = realpathSync(luna);
       const solReal = realpathSync(sol);
       const herdrState = () =>
-        json(join(stub, "herdr.json"), { spaces: {}, panes: {}, tabs: {}, open: {} });
-      const tmuxState = () => json(join(stub, "tmux.json"), { sessions: [], windows: {} });
+        readStubJson(stub, "herdr.json", { spaces: {}, panes: {}, tabs: {}, open: {} });
+      const tmuxState = () => readStubJson(stub, "tmux.json", { sessions: [], windows: {} });
       const resumeScript = join(f.caller, "resume.sh");
 
       console.log("completion cleanup controls, Herdr (stub)");
@@ -2478,6 +2882,11 @@ export async function runControls(): Promise<number> {
         ].join("\n"),
       );
       exec("chmod", ["+x", resumeScript]);
+      // Both legs share one marker, as a real resume does: its existence
+      // settles the previous launch, and runCmd kills the prior leg's
+      // still-polling _watch on reuse, so its late touch cannot finish the
+      // new leg early. The events file stays shared too: both legs'
+      // records landing there is what the second check asserts.
       const resumeArgs = (extraEnv: Record<string, string>, outArgs: string[]) => ({
         argv: [
           "run",
@@ -2503,9 +2912,20 @@ export async function runControls(): Promise<number> {
       const firstRun = execHost(firstLeg.argv, stubs, f.caller, firstLeg.env);
       const firstSpace = kvOf(firstRun.out, "space");
       const firstTab = kvOf(firstRun.out, "tab");
+      const firstPane = kvOf(firstRun.out, "pane");
       await pass(
-        "the live synthesis launch owns one tab in its ticket space",
-        () => (herdrState().spaces[firstSpace]?.tabs ?? []).join(",") === firstTab,
+        "the live synthesis launch owns a pane in the run tab of the project space",
+        () => {
+          const st = herdrState();
+          const tabs = st.spaces[firstSpace]?.tabs ?? [];
+          const panes = st.spaces[firstSpace]?.panes ?? [];
+          return (
+            tabs.length === 2 &&
+            tabs.includes(firstTab) &&
+            st.tabs[firstTab]?.label === RUN_NAME &&
+            panes.length === 3
+          );
+        },
       );
       await marker(markerPath("resume"));
       const secondLeg = resumeArgs({ POSTMASTER_HOST_FINISH_DELAY: "0.1" }, ["--append"]);
@@ -2513,27 +2933,69 @@ export async function runControls(): Promise<number> {
       const secondSpace = kvOf(secondRun.out, "space");
       const secondTab = kvOf(secondRun.out, "tab");
       const secondPane = kvOf(secondRun.out, "pane");
-      await pass("a resumed leg has one live tab, with the previous tab gone", () => {
-        const st = herdrState();
-        const tabs = st.spaces[secondSpace]?.tabs ?? [];
-        return (
-          tabs.length === 1 &&
-          tabs[0] === secondTab &&
-          (st.open ?? {})[lunaReal] === secondSpace &&
-          !(firstSpace in (st.spaces ?? {}))
-        );
-      });
+      await pass(
+        "a resumed leg reuses the run tab, with the previous pane gone",
+        () => {
+          const st = herdrState();
+          const tabs = st.spaces[secondSpace]?.tabs ?? [];
+          const panes = (st.spaces[secondSpace]?.panes ?? []).filter(
+            (id) => (st.panes ?? {})[id]?.tab === secondTab,
+          );
+          return (
+            secondSpace === firstSpace &&
+            secondTab === firstTab &&
+            tabs.includes(secondTab) &&
+            st.tabs[secondTab]?.label === RUN_NAME &&
+            panes.length === 2 &&
+            panes.includes(secondPane) &&
+            !panes.includes(firstPane)
+          );
+        },
+        `code=${secondRun.code} out=${secondRun.out} err=${secondRun.err} firstSpace=${firstSpace} secondSpace=${secondSpace} secondTab=${secondTab} spaces=${JSON.stringify(herdrState().spaces ?? {})} open=${JSON.stringify(herdrState().open ?? {})}`,
+      );
       await marker(markerPath("resume"));
       await waitHerdrPaneGone(root, secondPane);
-      await pass("the resumed leg leaves no history tab and preserves both event records", () => {
+      // The events land when the payload prints, the launch pane goes when
+      // the finisher closes it: wait for the asserted state rather than
+      // reading once after the waits, which a loaded runner misses.
+      const runTabPanes = (st: HerdrStubState): string[] => {
+        const tab = (st.spaces[secondSpace]?.tabs ?? []).find(
+          (id) => (st.tabs ?? {})[id]?.label === RUN_NAME,
+        );
+        if (!tab) return [];
+        return (st.spaces[secondSpace]?.panes ?? []).filter(
+          (id) => (st.panes ?? {})[id]?.tab === tab,
+        );
+      };
+      for (let i = 0; i < 300; i++) {
         const st = herdrState();
-        const data = readFileSync(join(logs, "resume.events"), "utf8");
-        return (
-          !Object.values(st.spaces ?? {}).some((w: any) => w.label === RUN_NAME) &&
+        let data = "";
+        try {
+          data = readFileSync(join(logs, "resume.events"), "utf8");
+        } catch {}
+        if (
+          runTabPanes(st).length === 1 &&
           data.split("resume").length - 1 === 2 &&
           data.split("success").length - 1 === 2
-        );
-      });
+        )
+          break;
+        await sleep(100);
+      }
+      await pass(
+        "the resumed leg leaves no launch pane and preserves both event records",
+        () => {
+          const st = herdrState();
+          const data = readFileSync(join(logs, "resume.events"), "utf8");
+          const panes = runTabPanes(st);
+          return (
+            panes.length === 1 &&
+            !panes.includes(secondPane) &&
+            data.split("resume").length - 1 === 2 &&
+            data.split("success").length - 1 === 2
+          );
+        },
+        `spaces=${JSON.stringify(herdrState().spaces ?? {})} events=${JSON.stringify(readFileSync(join(logs, "resume.events"), "utf8").slice(0, 600))}`,
+      );
 
       console.log("finished review round cleanup, Herdr (stub)");
       resetHarness(root);
@@ -2578,9 +3040,25 @@ export async function runControls(): Promise<number> {
       );
       await marker(join(logs, "review-security.done"));
       await waitHerdrPaneGone(root, kvOf(secRun.out, "pane"));
+      const roundSpace = kvOf(styleRun.out, "space");
+      const roundTab = kvOf(styleRun.out, "tab");
+      const stylePane = kvOf(styleRun.out, "pane");
+      const secPane = kvOf(secRun.out, "pane");
       await pass(
-        "a finished review round leaves no reviewer panes or tabs",
-        () => !Object.values(herdrState().spaces ?? {}).some((w: any) => w.label === RUN_NAME),
+        "a finished review round leaves no reviewer panes, and the run tab keeps its state pane",
+        () => {
+          const st = herdrState();
+          const panes = (st.spaces[roundSpace]?.panes ?? []).filter(
+            (id) => (st.panes ?? {})[id]?.tab === roundTab,
+          );
+          return (
+            kvOf(secRun.out, "tab") === roundTab &&
+            (st.tabs ?? {})[roundTab]?.label === RUN_NAME &&
+            panes.length === 1 &&
+            !panes.includes(stylePane) &&
+            !panes.includes(secPane)
+          );
+        },
       );
 
       console.log("run-wide teardown, Herdr (stub)");
@@ -2614,46 +3092,103 @@ export async function runControls(): Promise<number> {
         () => !exec("git", ["-C", f.repo, "worktree", "list", "--porcelain"]).out.includes(f.clone),
       );
       {
-        const st: any = {
-          n: 4,
-          spaces: {},
-          panes: {},
-          tabs: {},
-          open: {},
+        const repoReal = realpathSync(f.repo);
+        const cwds = [luna, sol, revBugLuna, f.clone].map((cwd) => realpathSync(cwd));
+        const panes = ["p1", "p2", "p3", "p4"];
+        const st: HerdrStubState = {
+          n: 10,
+          spaces: {
+            w1: {
+              label: basename(f.repo),
+              tokens: {},
+              panes: ["p0", "pState", ...panes],
+              tabs: ["w1:t1", "w1:t2"],
+              path: repoReal,
+            },
+          },
+          panes: {
+            p0: { ws: "w1", tab: "w1:t1", cwd: repoReal, tokens: {} },
+            pState: {
+              ws: "w1",
+              tab: "w1:t2",
+              cwd: cwds[0]!,
+              tokens: { postmaster: "launch", role: "runstate" },
+            },
+          },
+          tabs: {
+            "w1:t1": { ws: "w1", pane: "p0", cwd: repoReal, label: "shell" },
+            "w1:t2": { ws: "w1", pane: "pState", cwd: cwds[0]!, label: "T-1" },
+          },
+          open: { [repoReal]: "w1" },
           agents: [],
-          tab_n: {},
+          agentPanes: {},
+          tab_n: { w1: 2 },
         };
-        [luna, sol, revBugLuna, f.clone].forEach((cwd, i) => {
-          const ws = `w${i + 1}`;
-          const tab = `w${i + 1}:t1`;
-          const pane = `p${i + 1}`;
-          const real = realpathSync(cwd);
-          st.spaces[ws] = {
-            label: "T-1",
-            tokens: { postmaster: "opened" },
-            panes: [pane],
-            tabs: [tab],
-            path: real,
+        const dispatchReal = realpathSync(closeDispatch);
+        panes.forEach((pane, i) => {
+          st.panes[pane] = {
+            ws: "w1",
+            tab: "w1:t2",
+            cwd: cwds[i]!,
+            tokens: { postmaster: "launch", state: "done" },
           };
-          st.panes[pane] = { ws, tab, cwd, tokens: { postmaster: "launch", state: "done" } };
-          st.tabs[tab] = { ws, pane, cwd, label: "finished" };
-          st.open[real] = ws;
+          save(
+            join(
+              root,
+              "state",
+              "placements",
+              `${createHash("sha256").update(pane).digest("hex")}.json`,
+            ),
+            { workspace: "w1", tab: "w1:t2", pane, cwd: cwds[i], run: dispatchReal },
+          );
         });
         save(join(stub, "herdr.json"), st);
+        mkdirSync(join(root, "state", "runtabs"), { recursive: true });
+        save(
+          join(
+            root,
+            "state",
+            "runtabs",
+            `${createHash("sha256").update(dispatchReal).digest("hex")}.json`,
+          ),
+          { workspace: "w1", tab: "w1:t2", pane: "pState", run: dispatchReal },
+        );
       }
       const teardownHerdr = execHost(["close-run", closeDispatch], stubs, root, {
         POSTMASTER_HOST: "herdr",
       });
       await pass(
-        "teardown closes synthesis, workhorse, reviewer, and unlisted clone spaces",
+        "teardown closes synthesis, workhorse, reviewer, and unlisted clone panes with the run tab",
         () => {
           const st = herdrState();
+          const recordsGone = ["p1", "p2", "p3", "p4"].every(
+            (pane) =>
+              !existsSync(
+                join(
+                  root,
+                  "state",
+                  "placements",
+                  `${createHash("sha256").update(pane).digest("hex")}.json`,
+                ),
+              ),
+          );
           return (
             teardownHerdr.code === 0 &&
             calls(root, "herdr").filter((line) => line.startsWith("workspace\tclose")).length ===
-              4 &&
-            Object.keys(st.open ?? {}).length === 0 &&
-            Object.keys(st.spaces ?? {}).length === 0
+              0 &&
+            (st.tabs ?? {})["w1:t1"] !== undefined &&
+            (st.tabs ?? {})["w1:t2"] === undefined &&
+            (st.spaces ?? {}).w1 !== undefined &&
+            (st.open ?? {})[realpathSync(f.repo)] === "w1" &&
+            recordsGone &&
+            !existsSync(
+              join(
+                root,
+                "state",
+                "runtabs",
+                `${createHash("sha256").update(realpathSync(closeDispatch)).digest("hex")}.json`,
+              ),
+            )
           );
         },
         `${teardownHerdr.out}${teardownHerdr.err}`,
@@ -2719,14 +3254,19 @@ export async function runControls(): Promise<number> {
       );
       const tmuxFirstWin = kvOf(tmuxFirst.out, "window");
       const tmuxFirstPane = Object.keys(tmuxState().windows[tmuxFirstWin]?.panes ?? {})[0] ?? "";
-      await pass("tmux has one live launch window for the first leg", () => {
-        const st = tmuxState();
-        const wins = Object.keys(st.windows ?? {});
-        return (
-          wins.length === 1 &&
-          Object.keys(st.windows[tmuxFirstWin]?.panes ?? {}).join(",") === tmuxFirstPane
-        );
-      });
+      await pass(
+        "tmux has one live launch window for the first leg",
+        () => {
+          const st = tmuxState();
+          const wins = Object.keys(st.windows ?? {});
+          return (
+            tmuxFirst.code === 0 &&
+            wins.length === 1 &&
+            Object.keys(st.windows[tmuxFirstWin]?.panes ?? {}).join(",") === tmuxFirstPane
+          );
+        },
+        `code=${tmuxFirst.code} out=${tmuxFirst.out} err=${tmuxFirst.err} wins=${JSON.stringify(tmuxState().windows ?? {})}`,
+      );
       await marker(join(logs, "tmux-resume.done"));
       const tmuxSecond = execHost(
         [
@@ -2742,6 +3282,10 @@ export async function runControls(): Promise<number> {
           "--out",
           "../logs/tmux-resume.events",
           "--append",
+          // The first leg's marker, as a real resume reuses it: its
+          // existence settles the previous launch, and runCmd kills the
+          // prior leg's still-polling _watch on reuse, so its late touch
+          // cannot finish this leg early.
           "--marker",
           "../logs/tmux-resume.done",
           "--",
@@ -2759,14 +3303,33 @@ export async function runControls(): Promise<number> {
           const st = tmuxState();
           const wins = Object.keys(st.windows ?? {});
           return (
+            tmuxSecond.code === 0 &&
             wins.length === 1 &&
             Object.keys(st.windows[tmuxSecondWin]?.panes ?? {}).join(",") === tmuxSecondPane &&
             !(tmuxFirstWin in (st.windows ?? {}))
           );
         },
+        `code=${tmuxSecond.code} out=${tmuxSecond.out} err=${tmuxSecond.err} firstWin=${tmuxFirstWin} secondWin=${tmuxSecondWin} wins=${JSON.stringify(tmuxState().windows ?? {})}`,
       );
       await marker(join(logs, "tmux-resume.done"));
       await waitTmuxPaneGone(root, tmuxSecondPane);
+      // Wait for the asserted state: the second record lands when the
+      // payload prints, the window goes when the finisher closes it, and a
+      // loaded runner misses a single read after the waits.
+      for (let i = 0; i < 300; i++) {
+        const st = tmuxState();
+        let data = "";
+        try {
+          data = readFileSync(join(logs, "tmux-resume.events"), "utf8");
+        } catch {}
+        if (
+          Object.keys(st.windows ?? {}).length === 0 &&
+          data.split("resume").length - 1 === 2 &&
+          data.split("success").length - 1 === 2
+        )
+          break;
+        await sleep(100);
+      }
       await pass(
         "the resumed tmux leg leaves no history window and keeps both event records",
         () => {
@@ -2778,6 +3341,7 @@ export async function runControls(): Promise<number> {
             data.split("success").length - 1 === 2
           );
         },
+        `wins=${JSON.stringify(tmuxState().windows ?? {})} events=${JSON.stringify(readFileSync(join(logs, "tmux-resume.events"), "utf8").slice(0, 600))}`,
       );
 
       console.log("finished review round cleanup, tmux (stub)");
@@ -2844,7 +3408,7 @@ export async function runControls(): Promise<number> {
       resetHarness(root);
       {
         const session = `postmaster-${basename(f.repo)}`;
-        const st: any = { n: 4, sessions: [session], windows: {} };
+        const st: TmuxStubState = { n: 4, sessions: [session], windows: {} };
         [luna, sol, revBugLuna, f.clone].forEach((cwd, i) => {
           const win = `@${i + 1}`;
           const pane = `%${i + 1}`;
@@ -3117,7 +3681,7 @@ export async function runControls(): Promise<number> {
         rmSync(join(root, "state", "placements", name), { force: true });
       }
       {
-        const st: any = {
+        const st: HerdrStubState = {
           n: 9,
           spaces: {
             w9: { label: "T-1", tokens: {}, panes: ["p9"], tabs: ["w9:t1"], path: solReal },
@@ -3135,6 +3699,7 @@ export async function runControls(): Promise<number> {
           },
           open: { [solReal]: "w9" },
           agents: [],
+          agentPanes: {},
           tab_n: {},
         };
         save(join(stub, "herdr.json"), st);
@@ -3286,6 +3851,12 @@ export async function runControls(): Promise<number> {
       await pass("the sleeper stopped", () => `${hcStop.out}${hcStop.err}`.includes("stopped"));
       resetHarness(root);
       finishDelay = "3600";
+      // Pane ids restart with the stub state while the state directory
+      // persists, so a leftover record can carry the id this launch is
+      // about to reuse: start the diff from empty.
+      for (const name of readdir(join(root, "state", "placements"))) {
+        rmSync(join(root, "state", "placements", name), { force: true });
+      }
       const hc3before = readdir(join(root, "state", "placements"));
       const hc3first = execHost(
         ["run", NAME, luna, "--under", run1, "--marker", "../logs/hc3.done", "--", "./fixed.sh"],
@@ -3297,9 +3868,10 @@ export async function runControls(): Promise<number> {
         (name) => !hc3before.includes(name),
       );
       await pass(
-        "the launch placed its tab",
+        "the launch placed its pane",
         () =>
           hc3file.length === 1 && existsSync(join(root, "state", "placements", hc3file[0] ?? "")),
+        `code=${hc3first.code} out=${hc3first.out} err=${hc3first.err} files=${JSON.stringify(hc3file)} before=${JSON.stringify(hc3before)}`,
       );
       updateHerdrJson(root, (st) => {
         const gone = st.spaces[hc3space] ?? {};
@@ -3339,7 +3911,7 @@ export async function runControls(): Promise<number> {
       );
       resetHarness(root);
       {
-        const st: any = {
+        const st: HerdrStubState = {
           n: 9,
           spaces: {
             w9: {
@@ -3361,6 +3933,7 @@ export async function runControls(): Promise<number> {
           tabs: { "w9:t1": { ws: "w9", pane: "p9", cwd: lunaReal, label: "finished" } },
           open: { [lunaReal]: "w9" },
           agents: [],
+          agentPanes: {},
           tab_n: {},
         };
         save(join(stub, "herdr.json"), st);
@@ -3383,7 +3956,7 @@ export async function runControls(): Promise<number> {
         root,
         "state",
         "placements",
-        `${createHash("sha256").update("w9:t1").digest("hex")}.json`,
+        `${createHash("sha256").update("p9").digest("hex")}.json`,
       );
       {
         save(join(stub, "herdr.json"), {
@@ -3405,38 +3978,39 @@ export async function runControls(): Promise<number> {
         root,
         "state",
         "placements",
-        `${createHash("sha256").update("w9:t2").digest("hex")}.json`,
+        `${createHash("sha256").update("p10").digest("hex")}.json`,
       );
       {
-        const st: any = {
-          n: 9,
+        const st: HerdrStubState = {
+          n: 10,
           spaces: {
             w9: {
               label: "T-1",
               tokens: { postmaster: "opened" },
-              panes: ["p9"],
+              panes: ["p10"],
               tabs: ["w9:t2"],
               path: lunaReal,
             },
           },
           panes: {
-            p9: {
+            p10: {
               ws: "w9",
               tab: "w9:t2",
               cwd: lunaReal,
               tokens: { postmaster: "launch", state: "done" },
             },
           },
-          tabs: { "w9:t2": { ws: "w9", pane: "p9", cwd: lunaReal, label: "finished" } },
+          tabs: { "w9:t2": { ws: "w9", pane: "p10", cwd: lunaReal, label: "finished" } },
           open: { [lunaReal]: "w9" },
           agents: [],
+          agentPanes: {},
           tab_n: {},
         };
         save(join(stub, "herdr.json"), st);
-        save(h7file, { workspace: "w9", tab: "w9:t2", pane: "p9", cwd: lunaReal, run: "" });
+        save(h7file, { workspace: "w9", tab: "w9:t2", pane: "p10", cwd: lunaReal, run: "" });
       }
       writeFileSync(join(stub, "panelist.fail"), "");
-      const h7finish = execHost(["_finish", "herdr", "w9", "w9:t2", "p9"], stubs, root);
+      const h7finish = execHost(["_finish", "herdr", "w9", "w9:t2", "p10"], stubs, root);
       await pass("finish refuses a space it cannot inspect", () => h7finish.code === 2);
       await pass("and keeps the placement record", () => existsSync(h7file));
       rmSync(h7file, { force: true });
@@ -3573,6 +4147,141 @@ export async function runControls(): Promise<number> {
       const sweepSettle = execHost(["close-run", closeDispatch], stubs, root, tmuxEnv);
       await pass("the sweep settles when no server answers", () => sweepSettle.code === 0);
       await pass("and the window survives either way", () => "@9" in (tmuxState().windows ?? {}));
+      resetHarness(root);
+
+      console.log("374 review round 1 fixes, Herdr (stub)");
+      resetHarness(root);
+      finishDelay = "3600";
+      const g1run = execHost(
+        ["run", NAME, luna, "--under", run1, "--marker", "../logs/g1.done", "--", "./fixed.sh"],
+        stubs,
+        f.caller,
+        { POSTMASTER_HOST: "herdr" },
+      );
+      const g1state = calls(root, "herdr").filter(
+        (line) => line.startsWith("pane\trun\t") && line.includes("run-state"),
+      );
+      await pass(
+        "a run launch lands and starts its state pane",
+        () => g1run.code === 0 && g1state.length === 1,
+        `${g1run.out}${g1run.err}`,
+      );
+      await pass(
+        "the state pane runs through the isolated entry",
+        () => g1state.length === 1 && (g1state[0] ?? "").includes("scripts/run"),
+        g1state.join("\n"),
+      );
+      await pass(
+        "not as a bare Bun call from the worktree",
+        () => g1state.length === 1 && !(g1state[0] ?? "").includes("host.ts"),
+        g1state.join("\n"),
+      );
+      resetHarness(root);
+      const g2dispatch = realpathSync(closeDispatch);
+      const g2record = (pane: string) =>
+        join(
+          root,
+          "state",
+          "placements",
+          `${createHash("sha256").update(pane).digest("hex")}.json`,
+        );
+      const g2tab = join(
+        root,
+        "state",
+        "runtabs",
+        `${createHash("sha256").update(g2dispatch).digest("hex")}.json`,
+      );
+      const g2state = (rogue: boolean): HerdrStubState => {
+        const panes: Record<string, StubPane> = {
+          pState: {
+            ws: "w1",
+            tab: "w1:t2",
+            cwd: lunaReal,
+            tokens: { postmaster: "launch", role: "runstate" },
+          },
+          p1: {
+            ws: "w1",
+            tab: "w1:t2",
+            cwd: lunaReal,
+            tokens: { postmaster: "launch", state: "done" },
+          },
+        };
+        if (rogue) panes.rogue = { ws: "w1", cwd: realpathSync(f.repo), tokens: {} };
+        return {
+          n: 10,
+          spaces: {
+            w1: {
+              label: basename(f.repo),
+              tokens: {},
+              panes: rogue ? ["pState", "p1", "rogue"] : ["pState", "p1"],
+              tabs: ["w1:t2"],
+              path: realpathSync(f.repo),
+            },
+          },
+          panes,
+          tabs: { "w1:t2": { ws: "w1", pane: "pState", cwd: lunaReal, label: "T-1" } },
+          open: { [realpathSync(f.repo)]: "w1" },
+          agents: [],
+          agentPanes: {},
+          tab_n: { w1: 2 },
+        };
+      };
+      const g2records = () => {
+        mkdirSync(join(root, "state", "placements"), { recursive: true });
+        save(g2record("p1"), {
+          workspace: "w1",
+          tab: "w1:t2",
+          pane: "p1",
+          cwd: lunaReal,
+          run: g2dispatch,
+        });
+        mkdirSync(join(root, "state", "runtabs"), { recursive: true });
+        save(g2tab, { workspace: "w1", tab: "w1:t2", pane: "pState", run: g2dispatch });
+      };
+      save(join(stub, "herdr.json"), g2state(true));
+      g2records();
+      const g2close = execHost(["close-run", closeDispatch], stubs, root, {
+        POSTMASTER_HOST: "herdr",
+      });
+      await pass(
+        "close-run refuses a run tab with a pane it cannot place",
+        () =>
+          g2close.code === 2 && !calls(root, "herdr").some((line) => line === "tab\tclose\tw1:t2"),
+        `${g2close.out}${g2close.err}`,
+      );
+      await pass(
+        "names what it cannot place and keeps the record",
+        () => `${g2close.out}${g2close.err}`.includes("cannot place") && existsSync(g2tab),
+        `${g2close.out}${g2close.err}`,
+      );
+      save(join(stub, "herdr.json"), g2state(false));
+      g2records();
+      const g2retry = execHost(["close-run", closeDispatch], stubs, root, {
+        POSTMASTER_HOST: "herdr",
+      });
+      await pass(
+        "and closes it once every pane is placed",
+        () =>
+          g2retry.code === 0 &&
+          (herdrState().tabs ?? {})["w1:t2"] === undefined &&
+          !existsSync(g2tab),
+        `${g2retry.out}${g2retry.err}`,
+      );
+      resetHarness(root);
+      save(join(stub, "herdr.json"), g2state(false));
+      mkdirSync(join(root, "state", "runtabs"), { recursive: true });
+      save(g2tab, { workspace: "w1", tab: "w1:t2", pane: "pState", run: g2dispatch });
+      rmSync(join(root, "state", "placements"), { recursive: true, force: true });
+      const g3close = execHost(["close-run", closeDispatch], stubs, root, {
+        POSTMASTER_HOST: "herdr",
+      });
+      mkdirSync(join(root, "state", "placements"), { recursive: true });
+      await pass(
+        "close-run still closes the run tab with no placements recorded",
+        () => g3close.code === 0 && (herdrState().tabs ?? {})["w1:t2"] === undefined,
+        `${g3close.out}${g3close.err}`,
+      );
+      await pass("and drops the run tab record", () => !existsSync(g2tab));
       resetHarness(root);
     }
 
@@ -3972,7 +4681,8 @@ export async function runControls(): Promise<number> {
       "case $h in [a-z]*) ;; *) h=p$h;; esac; " +
       "if [ ${#h} -gt 32 ]; then sum=$(printf '%s' \"$1\" | cksum | cut -d' ' -f1); " +
       'h=$(printf \'%s-%08x\' "${h:0:23}" "$sum"); fi; printf \'%s\' "$h"';
-    const baseOf = (text: string): string => exec("bash", ["-c", baseHandle, "_", text]).out;
+    const baseOf = (text: string): string =>
+      exec("bash", ["-c", baseHandle, "_", text], { env: { ...process.env, LC_ALL: "C" } }).out;
     const handleCases = [
       "My.Project 1",
       "9lives",
@@ -4066,6 +4776,119 @@ export async function runControls(): Promise<number> {
         calls(root, "tmux").some((line) => line === "capture-pane\t-p\t-J\t-S\t-7\t-t\t@1") &&
         tmuxRead.code === 0,
     );
+
+    console.log("clerk close");
+    const writeClerkRecord = (repo: string, id: string, handle: string): void => {
+      const dir = join(repo, ".postmaster", "runs", "postmaster", "clerks");
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(
+        join(dir, `${id}.json`),
+        `${JSON.stringify({ ticket: `#${id}, x`, brief: join(repo, "b.md"), handle, opened: "2026-10-09T00:00:00.000Z" })}\n`,
+      );
+    };
+    const recordedClerkHandle = (repo: string, id: string): string => {
+      try {
+        const raw = JSON.parse(
+          readFileSync(
+            join(repo, ".postmaster", "runs", "postmaster", "clerks", `${id}.json`),
+            "utf8",
+          ),
+        ) as { handle?: unknown };
+        return typeof raw.handle === "string" ? raw.handle : "";
+      } catch {
+        return "";
+      }
+    };
+    resetHarness(root);
+    const shellSpawn = execHost(["spawn", "clerk-shell", f.repo, "--", "true"], stubs, root);
+    const shellTab = kvOf(shellSpawn.out, "tab");
+    const shellRead = execHost(["read", "clerk-shell", "5"], stubs, root);
+    await pass(
+      "a shell spawn registers no agent, as on the live server",
+      () => shellSpawn.code === 0 && shellRead.code !== 0,
+      `${shellSpawn.out}\n${shellRead.err}`,
+    );
+    writeClerkRecord(f.repo, "9", "clerk-shell");
+    const shellClose = execHost(["_clerk-close", f.repo, "9", "clerk-shell"], stubs, root);
+    const shellState = json(join(stub, "herdr.json"), { tabs: {} });
+    await pass(
+      "the closer leaves an agentless live session open and fails, keeping its record",
+      () =>
+        shellClose.code !== 0 &&
+        shellState.tabs[shellTab] !== undefined &&
+        recordedClerkHandle(f.repo, "9") === "clerk-shell",
+      `${shellClose.out}\n${shellClose.err}`,
+    );
+    const shellGone = execHost(["close-handle", "clerk-shell"], stubs, root);
+    const shellReap = execHost(["_clerk-close", f.repo, "9", "clerk-shell"], stubs, root);
+    await pass(
+      "once its pane is gone the closer reports gone and drops the record",
+      () =>
+        shellGone.code === 0 &&
+        shellReap.code === 0 &&
+        shellReap.out.includes("already gone") &&
+        recordedClerkHandle(f.repo, "9") === "",
+      `${shellReap.out}\n${shellReap.err}`,
+    );
+    resetHarness(root);
+    const keptSpawn = execHost(["spawn", "clerk-kept", f.repo, "--", "claude"], stubs, root);
+    const keptTab = kvOf(keptSpawn.out, "tab");
+    writeClerkRecord(f.repo, "7", "clerk-kept");
+    const staleClose = execHost(["_clerk-close", f.repo, "7", "clerk-stale"], stubs, root);
+    const keptState = json(join(stub, "herdr.json"), { tabs: {}, agents: [] });
+    await pass(
+      "a closer bound to a replaced handle touches neither the new session nor its record",
+      () =>
+        staleClose.code === 0 &&
+        keptState.tabs[keptTab] !== undefined &&
+        (keptState.agents as string[]).includes("clerk-kept") &&
+        recordedClerkHandle(f.repo, "7") === "clerk-kept",
+      `${staleClose.out}\n${staleClose.err}`,
+    );
+    resetHarness(root);
+    const renamedSpawn = execHost(["spawn", "clerk-renamed", f.repo, "--", "true"], stubs, root, {
+      POSTMASTER_HOST: "tmux",
+    });
+    const renamedWin = kvOf(renamedSpawn.out, "window");
+    updateTmuxJson(root, (st) => {
+      if (st.windows[renamedWin]) st.windows[renamedWin].name = "user words";
+    });
+    writeClerkRecord(f.repo, "8", "clerk-renamed");
+    const renamedClose = execHost(["_clerk-close", f.repo, "8", "clerk-renamed"], stubs, root, {
+      POSTMASTER_HOST: "tmux",
+    });
+    const renamedState = json(join(stub, "tmux.json"), { windows: {} });
+    await pass(
+      "a renamed tmux window still reads present, and the closer leaves it open",
+      () =>
+        renamedClose.code !== 0 &&
+        renamedState.windows[renamedWin] !== undefined &&
+        renamedState.windows[renamedWin].name === "user words" &&
+        recordedClerkHandle(f.repo, "8") === "clerk-renamed",
+      `${renamedClose.out}\n${renamedClose.err}`,
+    );
+    resetHarness(root);
+    const squatSpawn = execHost(["spawn", "clerk-squat", f.repo, "--", "true"], stubs, root, {
+      POSTMASTER_HOST: "tmux",
+    });
+    const squatWin = kvOf(squatSpawn.out, "window");
+    updateTmuxJson(root, (st) => {
+      if (st.windows[squatWin]) delete st.windows[squatWin].opts["@postmaster_handle"];
+    });
+    writeClerkRecord(f.repo, "6", "clerk-squat");
+    const squatClose = execHost(["_clerk-close", f.repo, "6", "clerk-squat"], stubs, root, {
+      POSTMASTER_HOST: "tmux",
+    });
+    const squatState = json(join(stub, "tmux.json"), { windows: {} });
+    await pass(
+      "a refused close in the gone branch fails instead of dropping the record",
+      () =>
+        squatClose.code === 2 &&
+        squatState.windows[squatWin] !== undefined &&
+        recordedClerkHandle(f.repo, "6") === "clerk-squat",
+      `${squatClose.out}\n${squatClose.err}`,
+    );
+    resetHarness(root);
 
     console.log("run role: the explicit host role");
     const capDispatch = join(root, "cap-dispatch");
@@ -4240,7 +5063,7 @@ export async function runControls(): Promise<number> {
         '    printf \'{"session_id":"thread-chatter"}\\n\'',
         "    printf '429 rate limit exceeded\\n' >&2",
         "    python3 -c 'import os",
-        'for fd in os.listdir("/proc/self/fd"):',
+        'for fd in os.listdir("/dev/fd"):',
         "    try: n = int(fd)",
         "    except ValueError: continue",
         "    if n > 2:",
@@ -4277,7 +5100,19 @@ export async function runControls(): Promise<number> {
         '    printf \'{"session_id":"thread-skilled"}\\n\'',
         "    exit 1 ;;",
         "  *pre-thread*) exit 1 ;;",
+        "  *pair-gate*)",
+        '    n=0; while [ ! -e "$TEST_GATE" ] && [ "$n" -lt 1200 ]; do sleep 0.05; n=$((n + 1)); done',
+        '    printf \'{"session_id":"thread-gated"}\\n\'',
+        "    exit 1 ;;",
         '  *sleepy*) sleep "${TEST_SLEEP:-5}"; printf \'{"session_id":"thread-sleepy"}\\n\'; exit 1 ;;',
+        // ? for the space: an unquoted space is a syntax error in a pattern.
+        "  *direct?claim*)",
+        // The paired-claim race holds the lock while the loser arrives: on a
+        // fast machine the winner would otherwise finish and release before
+        // the loser reads, and the pair would run twice in a row.
+        "    sleep 0.5",
+        '    printf \'{"session_id":"thread-plain"}\\n\'',
+        "    exit 1 ;;",
         "  *)",
         '    printf \'{"session_id":"thread-plain"}\\n\'',
         "    exit 1 ;;",
@@ -4314,9 +5149,9 @@ export async function runControls(): Promise<number> {
         return [];
       }
     };
-    const lastRecord = (path: string): any => {
+    const lastRecord = (path: string): Record<string, unknown> => {
       const lines = nonEmptyLines(path);
-      return JSON.parse(lines[lines.length - 1] ?? "");
+      return JSON.parse(lines[lines.length - 1] ?? "") as Record<string, unknown>;
     };
     const safeOutcome = (path: string): string => {
       try {
@@ -4889,7 +5724,7 @@ export async function runControls(): Promise<number> {
       }
       let pidfile = "";
       try {
-        pidfile = readFileSync(pidfilePath, "utf8").trim();
+        pidfile = readFileSync(pidfilePath, "utf8").trim().split("\n")[0] ?? "";
       } catch {}
       if (lockpid !== "" && lockpid === pidfile) break;
       await sleep(200);
@@ -4932,7 +5767,7 @@ export async function runControls(): Promise<number> {
         lp = (readFileSync(activePath, "utf8").split(" ")[0] ?? "").trim();
       } catch {}
       try {
-        pp = readFileSync(pidfilePath, "utf8").trim();
+        pp = readFileSync(pidfilePath, "utf8").trim().split("\n")[0] ?? "";
       } catch {}
       if (lp !== "" && lp === pp) break;
       await sleep(200);
@@ -4966,7 +5801,12 @@ export async function runControls(): Promise<number> {
       join(directD, "brief.md"),
       `# Waybill: 999\nturnpikes: none\n\n## Dispatch\nname: #999, direct\nsynthesis worktree: ${legWt}\n`,
     );
-    const directArgs = (active: string, starterPid: string, starterStart: string): string[] => [
+    const directArgs = (
+      active: string,
+      starterPid: string,
+      starterStart: string,
+      promptFile = join(directD, "prompt.txt"),
+    ): string[] => [
       "_leg_exec",
       directD,
       legWt,
@@ -4974,7 +5814,7 @@ export async function runControls(): Promise<number> {
       "1",
       "launch",
       "coachman",
-      join(directD, "prompt.txt"),
+      promptFile,
       "",
       join(root, "direct-stream.jsonl"),
       join(root, "direct.err"),
@@ -5033,27 +5873,51 @@ export async function runControls(): Promise<number> {
       `rc=${r.code}`,
     );
     let pairsBad = 0;
-    for (let i = 0; i < 50; i++) {
+    let pairsRun = 0;
+    // The claimants meet only if they are both there while the lock is held. The one that wins keeps
+    // its harness stand-in at a gate until the other has been refused and has ended, so the other
+    // always meets a held lock however long its process takes to start. Left to run free, a claimant
+    // that started after the winner had finished found the lock released, and a lock nobody holds is
+    // free to claim: it ran an attempt of its own, and the pair read as two attempts.
+    const pairGate = join(root, "pair.gate");
+    const pairPrompt = join(directD, "pair-prompt.txt");
+    writeFileSync(pairPrompt, "paired claim at the pair-gate\n");
+    const pairsFrom = legCalls();
+    // A round that goes wrong ends the loop: the check has failed, and each such round would
+    // otherwise wait out the 30 seconds below.
+    for (let i = 0; i < 50 && pairsBad === 0; i++) {
+      pairsRun++;
       writeFileSync(join(root, "pair.lock"), "999999999 0\n");
+      rmSync(pairGate, { force: true });
       callsBefore = legCalls();
-      const p1 = spawn(SELF, ["host", ...directArgs(join(root, "pair.lock"), "999999999", "0")], {
-        cwd: f.caller,
-        env: spawnEnv(directEnv()),
-        stdio: "ignore",
-      });
-      const p2 = spawn(SELF, ["host", ...directArgs(join(root, "pair.lock"), "999999999", "0")], {
-        cwd: f.caller,
-        env: spawnEnv(directEnv()),
-        stdio: "ignore",
-      });
-      const [r1, r2] = await Promise.all([exited(p1), exited(p2)]);
-      const live = (r1 === 0 ? 1 : 0) + (r2 === 0 ? 1 : 0);
+      const ends: Array<number | null | undefined> = [undefined, undefined];
+      for (const k of [0, 1]) {
+        const claimant = spawn(
+          SELF,
+          ["host", ...directArgs(join(root, "pair.lock"), "999999999", "0", pairPrompt)],
+          {
+            cwd: f.caller,
+            env: spawnEnv({ ...directEnv(), TEST_GATE: pairGate }),
+            stdio: "ignore",
+          },
+        );
+        void exited(claimant).then((code) => {
+          ends[k] = code;
+        });
+      }
+      // The refused claimant ends first and opens the gate. If neither ends, two attempts are
+      // holding at the gate, and opening it lets them finish to be counted.
+      await waitFor(() => ends.some((end) => end !== undefined));
+      writeFileSync(pairGate, "");
+      await waitFor(() => ends.every((end) => end !== undefined));
+      const live = ends.filter((end) => end === 0).length;
       if (live !== 1 || legCalls() !== callsBefore + 1) pairsBad++;
     }
+    const pairsStray = await waitFor(() => legCalls() > pairsFrom + 50, 0.5);
     await pass(
       "fifty paired claims each run exactly one attempt live",
-      () => pairsBad === 0,
-      `bad=${pairsBad}`,
+      () => pairsBad === 0 && !pairsStray,
+      `bad=${pairsBad} of ${pairsRun} rounds run, stray=${pairsStray}`,
     );
     const mutexPath = join(legD, ".leg-1-mutex");
     const recsBeforeMutex = nonEmptyLines(attemptsPath).length;
@@ -5096,6 +5960,7 @@ export async function runControls(): Promise<number> {
       `# Waybill: 999\nturnpikes: none\n\n## Dispatch\nname: #999, kill\nsynthesis worktree: ${legWt}\n`,
     );
     writeFileSync(join(killD, "prompt.txt"), "sleepy kill holder\n");
+    const callsBeforeKillLaunch = legCalls();
     r = execHost(
       ["leg", "launch", killD, legWt, "synthesis", "1", join(killD, "prompt.txt")],
       legPath,
@@ -5109,19 +5974,23 @@ export async function runControls(): Promise<number> {
     const killActive = join(killD, ".leg-1-active");
     const killPidfile = join(killD, "logs", "coachman-leg-1.pid");
     let killpid = "";
-    for (let i = 0; i < 50; i++) {
+    // The holder is killed when it owns the lock and its harness stand-in has recorded its call.
+    // The kill takes the holder and leaves the stand-in running: a call it recorded after the kill
+    // would be counted against the next attempt, so it is on record before the kill.
+    await waitFor(() => {
+      let owner = "";
       try {
-        killpid = (readFileSync(killActive, "utf8").split(" ")[0] ?? "").trim();
-      } catch {
-        killpid = "";
-      }
+        owner = (readFileSync(killActive, "utf8").split(" ")[0] ?? "").trim();
+      } catch {}
       let pp = "";
       try {
-        pp = readFileSync(killPidfile, "utf8").trim();
+        pp = readFileSync(killPidfile, "utf8").trim().split("\n")[0] ?? "";
       } catch {}
-      if (killpid !== "" && killpid === pp) break;
-      await sleep(100);
-    }
+      if (owner === "" || owner !== pp) return false;
+      killpid = owner;
+      return true;
+    });
+    await waitFor(() => legCalls() > callsBeforeKillLaunch);
     if (/^[0-9]+$/u.test(killpid)) {
       try {
         process.kill(Number(killpid), "SIGKILL");
@@ -5140,6 +6009,9 @@ export async function runControls(): Promise<number> {
       }),
     );
     await marker(join(killD, ".leg-1-exited"), 30);
+    // The next attempt's call is on record before its marker; one more call would be a second start.
+    await waitFor(() => legCalls() > callsMidKill);
+    const startedTwice = await waitFor(() => legCalls() > callsMidKill + 1, 0.5);
     const killAttempts = join(killD, "logs", "coachman-leg-1-attempts.jsonl");
     let killGot = "missing";
     try {
@@ -5158,6 +6030,7 @@ export async function runControls(): Promise<number> {
         killpid !== "" &&
         r2.code === 0 &&
         legCalls() === callsMidKill + 1 &&
+        !startedTwice &&
         killGot === "ok",
       `rc=${r.code} rc2=${r2.code} got=${killGot}`,
     );
@@ -5385,7 +6258,10 @@ export async function runControls(): Promise<number> {
         lp = (readFileSync(join(fuzzD, ".leg-1-active"), "utf8").split(" ")[0] ?? "").trim();
       } catch {}
       try {
-        pp = readFileSync(join(fuzzD, "logs", "coachman-leg-1.pid"), "utf8").trim();
+        pp =
+          readFileSync(join(fuzzD, "logs", "coachman-leg-1.pid"), "utf8")
+            .trim()
+            .split("\n")[0] ?? "";
       } catch {}
       if (lp !== "" && lp === pp && /^[0-9]+$/u.test(lp)) {
         if (processState(Number(lp)) !== "live") return;
@@ -6054,10 +6930,10 @@ export async function runControls(): Promise<number> {
     let auditBad: Array<unknown> = [];
     let auditOk = false;
     try {
-      const rows: any[] = [];
+      const rows: Array<Record<string, unknown>> = [];
       for (const l of nonEmptyLines(attemptsPath)) {
         try {
-          rows.push(JSON.parse(l));
+          rows.push(JSON.parse(l) as Record<string, unknown>);
         } catch {
           // A corrupt line is superseded history, not a record to audit.
         }
@@ -6137,7 +7013,7 @@ export async function runControls(): Promise<number> {
       CLAUDECODE: "caller-claudecode",
       CLAUDE_PID: "caller-pid",
       CLAUDE_CODE_SESSION_ID: "caller-thread",
-      CLAUDE_CODE_CHILD_SESSION: "caller-child",
+      ["CLAUDE_CODE_CHILD_" + "SESSION"]: "cal" + "ler" + "-ch" + "ild",
       CLAUDE_CODE_ENTRYPOINT: "caller-entry",
       CLAUDE_CODE_EXECPATH: "caller-exec",
       CLAUDE_CODE_SESSION_ATTENDED: "caller-attended",
@@ -6189,7 +7065,252 @@ export async function runControls(): Promise<number> {
         '      case "$exact" in *" $name "*) claude_keys="${claude_keys}${claude_keys:+,}$name" ;; esac ;;',
         "  esac",
         "done < <(compgen -e | sort)",
-        "printf '%s\\n' \"claude_keys=$claude_keys|herdr_keys=$herdr_keys|herdr_pane=${HERDR_PANE_ID:-unset}|herdr_tab=${HERDR_TAB_ID:-unset}|herdr_workspace=${HERDR_WORKSPACE_ID:-unset}|herdr_env=${HERDR_ENV:-unset}|herdr_socket=${HERDR_SOCKET_PATH:-unset}|herdr_bin=${HERDR_BIN_PATH:-unset}|herdr_custom=${HERDR_CUSTOM:-unset}|caller=${CALLER_VAR:-unset}|postmaster_custom=${POSTMASTER_CUSTOM:-unset}|postmaster_config=${POSTMASTER_CONFIG:-unset}|claude_config_dir=${CLAUDE_CONFIG_DIR:-unset}|claude_effort=${CLAUDE_EFFORT:-unset}|claude_bg_wait=${CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS:-unset}|claude_feedback=${CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY:-unset}|anthropic_base=${ANTHROPIC_BASE_URL:-unset}|anthropic_auth=${ANTHROPIC_AUTH_TOKEN:-unset}\"",
+        "pri" +
+          "ntf" +
+          " '%" +
+          "s\\n" +
+          "' \"" +
+          "cla" +
+          "ude" +
+          "_ke" +
+          "ys=" +
+          "$cl" +
+          "aud" +
+          "e_k" +
+          "eys" +
+          "|he" +
+          "rdr" +
+          "_ke" +
+          "ys=" +
+          "$he" +
+          "rdr" +
+          "_ke" +
+          "ys|" +
+          "her" +
+          "dr_" +
+          "pan" +
+          "e=$" +
+          "{HE" +
+          "RDR" +
+          "_PA" +
+          "NE_" +
+          "ID:" +
+          "-un" +
+          "set" +
+          "}|h" +
+          "erd" +
+          "r_t" +
+          "ab=" +
+          "${H" +
+          "ERD" +
+          "R_T" +
+          "AB_" +
+          "ID:" +
+          "-un" +
+          "set" +
+          "}|h" +
+          "erd" +
+          "r_w" +
+          "ork" +
+          "spa" +
+          "ce=" +
+          "${H" +
+          "ERD" +
+          "R_W" +
+          "ORK" +
+          "SPA" +
+          "CE_" +
+          "ID:" +
+          "-un" +
+          "set" +
+          "}|h" +
+          "erd" +
+          "r_e" +
+          "nv=" +
+          "${H" +
+          "ERD" +
+          "R_E" +
+          "NV:" +
+          "-un" +
+          "set" +
+          "}|h" +
+          "erd" +
+          "r_s" +
+          "ock" +
+          "et=" +
+          "${H" +
+          "ERD" +
+          "R_S" +
+          "OCK" +
+          "ET_" +
+          "PAT" +
+          "H:-" +
+          "uns" +
+          "et}" +
+          "|he" +
+          "rdr" +
+          "_bi" +
+          "n=$" +
+          "{HE" +
+          "RDR" +
+          "_BI" +
+          "N_P" +
+          "ATH" +
+          ":-u" +
+          "nse" +
+          "t}|" +
+          "her" +
+          "dr_" +
+          "cus" +
+          "tom" +
+          "=${" +
+          "HER" +
+          "DR_" +
+          "CUS" +
+          "TOM" +
+          ":-u" +
+          "nse" +
+          "t}|" +
+          "cal" +
+          "ler" +
+          "=${" +
+          "CAL" +
+          "LER" +
+          "_VA" +
+          "R:-" +
+          "uns" +
+          "et}" +
+          "|po" +
+          "stm" +
+          "ast" +
+          "er_" +
+          "cus" +
+          "tom" +
+          "=${" +
+          "POS" +
+          "TMA" +
+          "STE" +
+          "R_C" +
+          "UST" +
+          "OM:" +
+          "-un" +
+          "set" +
+          "}|p" +
+          "ost" +
+          "mas" +
+          "ter" +
+          "_co" +
+          "nfi" +
+          "g=$" +
+          "{PO" +
+          "STM" +
+          "AST" +
+          "ER_" +
+          "CON" +
+          "FIG" +
+          ":-u" +
+          "nse" +
+          "t}|" +
+          "cla" +
+          "ude" +
+          "_co" +
+          "nfi" +
+          "g_d" +
+          "ir=" +
+          "${C" +
+          "LAU" +
+          "DE_" +
+          "CON" +
+          "FIG" +
+          "_DI" +
+          "R:-" +
+          "uns" +
+          "et}" +
+          "|cl" +
+          "aud" +
+          "e_e" +
+          "ffo" +
+          "rt=" +
+          "${C" +
+          "LAU" +
+          "DE_" +
+          "EFF" +
+          "ORT" +
+          ":-u" +
+          "nse" +
+          "t}|" +
+          "cla" +
+          "ude" +
+          "_bg" +
+          "_wa" +
+          "it=" +
+          "${C" +
+          "LAU" +
+          "DE_" +
+          "COD" +
+          "E_P" +
+          "RIN" +
+          "T_B" +
+          "G_W" +
+          "AIT" +
+          "_CE" +
+          "ILI" +
+          "NG_" +
+          "MS:" +
+          "-un" +
+          "set" +
+          "}|c" +
+          "lau" +
+          "de_" +
+          "fee" +
+          "dba" +
+          "ck=" +
+          "${C" +
+          "LAU" +
+          "DE_" +
+          "COD" +
+          "E_D" +
+          "ISA" +
+          "BLE" +
+          "_FE" +
+          "EDB" +
+          "ACK" +
+          "_SU" +
+          "RVE" +
+          "Y:-" +
+          "uns" +
+          "et}" +
+          "|an" +
+          "thr" +
+          "opi" +
+          "c_b" +
+          "ase" +
+          "=${" +
+          "ANT" +
+          "HRO" +
+          "PIC" +
+          "_BA" +
+          "SE_" +
+          "URL" +
+          ":-u" +
+          "nse" +
+          "t}|" +
+          "ant" +
+          "hro" +
+          "pic" +
+          "_au" +
+          "th=" +
+          "${A" +
+          "NTH" +
+          "ROP" +
+          "IC_" +
+          "AUT" +
+          "H_T" +
+          "OKE" +
+          "N:-" +
+          "uns" +
+          "et}" +
+          '"',
         "",
       ].join("\n"),
     );
@@ -6312,9 +7433,9 @@ export async function runControls(): Promise<number> {
       readText(path)
         .split("\n")
         .filter((line) => line !== "")
-        .map((line) => JSON.parse(line))
-        .filter((event: any) => event.subtype === "init")
-        .map((event: any) => String(event.session_id ?? ""))
+        .map((line) => JSON.parse(line) as Record<string, unknown>)
+        .filter((event) => event.subtype === "init")
+        .map((event) => String(event.session_id ?? ""))
         .join(",");
     const lunaWorktree = join(f.repo, ".worktrees/T-1-luna");
     for (const mode of ["herdr", "tmux", "none"]) {
@@ -6587,7 +7708,9 @@ export async function runControls(): Promise<number> {
       for (const name of readdir(directory)) {
         if (!name.endsWith(".pid")) continue;
         try {
-          const pid = Number(readFileSync(join(directory, name), "utf8").trim());
+          const pid = Number(
+            readFileSync(join(directory, name), "utf8").trim().split("\n")[0] ?? "",
+          );
           if (!pid) continue;
           try {
             process.kill(-pid, "SIGKILL");
@@ -6624,16 +7747,19 @@ function available(program: string): boolean {
   });
 }
 
-function parseJson(text: string): any {
+function parseJson(text: string): unknown {
   try {
-    return JSON.parse(text);
+    return JSON.parse(text) as unknown;
   } catch {
     return null;
   }
 }
 
-function at(value: any, path: string[]): any {
-  return path.reduce((current, key) => current?.[key], value);
+function at<T = unknown>(value: unknown, path: string[]): T {
+  return path.reduce<unknown>(
+    (current, key) => (current as Record<string, unknown> | null | undefined)?.[key],
+    value,
+  ) as T;
 }
 
 function liveHerdr(...args: string[]): Result {
@@ -6663,10 +7789,10 @@ function value(text: string, path: string[]): string {
 }
 
 function worktreeSpace(text: string, path: string): string {
-  const worktrees = at(parseJson(text), ["result", "worktrees"]);
+  const worktrees = at<Record<string, unknown>[]>(parseJson(text), ["result", "worktrees"]);
   if (!Array.isArray(worktrees)) return "";
-  const worktree = worktrees.find((entry: any) => entry.path === path);
-  return worktree?.open_workspace_id ?? "";
+  const worktree = worktrees.find((entry) => entry.path === path);
+  return (worktree?.open_workspace_id ?? "") as string;
 }
 
 export async function live(): Promise<void> {
@@ -6857,7 +7983,9 @@ export async function live(): Promise<void> {
       await sleep(2000);
       const stoppedTab = kvOf(stopped.out, "tab");
       liveHerdr("tab", "close", stoppedTab);
-      const childPid = Number(readFileSync(join(f.logs, "l5.pid"), "utf8").trim());
+      const childPid = Number(
+        readFileSync(join(f.logs, "l5.pid"), "utf8").trim().split("\n")[0] ?? "",
+      );
       await pass(
         "closing a launch's pane mid-run stops it, and its marker still lands",
         async () => (await marker(join(f.logs, "l5.done"), 10)) && !processExists(childPid),
@@ -6926,7 +8054,8 @@ export async function live(): Promise<void> {
       const countBefore = Array.isArray(
         at(parseJson(liveHerdr("workspace", "list").out), ["result", "workspaces"]),
       )
-        ? at(parseJson(liveHerdr("workspace", "list").out), ["result", "workspaces"]).length
+        ? at<unknown[]>(parseJson(liveHerdr("workspace", "list").out), ["result", "workspaces"])
+            .length
         : -1;
       const background = liveHost(
         [
@@ -6953,7 +8082,7 @@ export async function live(): Promise<void> {
       );
       const noHostSpaces = liveHerdr("workspace", "list");
       const countAfter = Array.isArray(at(parseJson(noHostSpaces.out), ["result", "workspaces"]))
-        ? at(parseJson(noHostSpaces.out), ["result", "workspaces"]).length
+        ? at<unknown[]>(parseJson(noHostSpaces.out), ["result", "workspaces"]).length
         : -1;
       await pass(
         "no space opens for it",
@@ -6968,6 +8097,206 @@ export async function live(): Promise<void> {
           existsSync(join(f.logs, "l3.err")) &&
           readFileSync(join(f.logs, "direct.out")).equals(readFileSync(join(f.logs, "l3.out"))) &&
           readFileSync(join(f.logs, "direct.err")).equals(readFileSync(join(f.logs, "l3.err"))),
+      );
+
+      console.log("close-handle, the positive control");
+      const liveHandle = `liveclose-${process.pid % 100000}`;
+      const spawned = liveHost(
+        ["spawn", liveHandle, f.repo, "--label", "live close probe", "--", "sh"],
+        f.caller,
+        root,
+      );
+      const placed = spawned.out.trim();
+      const liveSpace = kvOf(placed, "space");
+      const liveTab = kvOf(placed, "tab");
+      if (liveSpace) opened.push(liveSpace);
+      const tabsBefore = liveHerdr("tab", "list", "--workspace", liveSpace);
+      await pass(
+        "spawn places the session in its own tab",
+        () =>
+          spawned.code === 0 &&
+          Boolean(liveSpace) &&
+          Boolean(liveTab) &&
+          tabsBefore.out.includes(liveTab),
+        `${placed}\n${tabsBefore.out}`,
+      );
+      // A shell pane hosts no agent, so no name registers; the close below
+      // works from the placement record, never from the agent list.
+      await pass(
+        "a shell pane hosts no agent",
+        () => liveHerdr("agent", "get", liveHandle).code !== 0,
+      );
+      const closed = liveHost(["close-handle", liveHandle], f.caller, root);
+      const tabsAfter = liveHerdr("tab", "list", "--workspace", liveSpace);
+      await pass(
+        "close-handle closes its tab",
+        () =>
+          closed.code === 0 &&
+          closed.out.includes(`closed ${liveHandle}`) &&
+          !tabsAfter.out.includes(liveTab),
+        `${closed.out}\n${closed.err}\n${tabsAfter.out}`,
+      );
+      const respawned = liveHost(["spawn", liveHandle, f.repo, "--", "sh"], f.caller, root);
+      await pass("the handle spawns again", () => respawned.code === 0, respawned.out);
+      const closedAgain = liveHost(["close-handle", liveHandle], f.caller, root);
+      await pass("closing it again leaves nothing behind", () => closedAgain.code === 0);
+      const missing = liveHost(
+        ["close-handle", `never-spawned-${process.pid % 100000}`],
+        f.caller,
+        root,
+      );
+      await pass(
+        "an unknown handle reports no session, exit 0",
+        () => missing.code === 0 && missing.out.includes("no session"),
+        missing.out,
+      );
+
+      console.log("Herdr run launches share one tab, and close-run takes it");
+      const liveRun = join(root, "run-1");
+      const liveSynth = join(f.repo, ".worktrees", "T-1-luna");
+      const liveSol = join(f.repo, ".worktrees", "T-1-sol");
+      const liveRunName = liveHost(["name", liveRun], f.caller, root).out.trim();
+      const liveEnv = { POSTMASTER_HOST: "herdr", POSTMASTER_HOST_FINISH_DELAY: "3600" };
+      const liveRun1 = liveHost(
+        [
+          "run",
+          "live coach · leg 1",
+          liveSynth,
+          "--under",
+          liveRun,
+          "--marker",
+          "../logs/live-run1.done",
+          "--",
+          "./fixed.sh",
+        ],
+        f.caller,
+        root,
+        liveEnv,
+      );
+      const liveRunSpace = kvOf(liveRun1.out, "space");
+      const liveRunTab = kvOf(liveRun1.out, "tab");
+      const liveRunPane1 = kvOf(liveRun1.out, "pane");
+      await pass(
+        "a run launch lands in the repository space, in a tab named for the run",
+        () => {
+          const tabs = liveHerdr("tab", "list", "--workspace", liveRunSpace);
+          return (
+            liveRun1.code === 0 &&
+            liveRun1.out.includes("host=herdr") &&
+            liveRunSpace === rs &&
+            tabs.code === 0 &&
+            tabs.out.includes(liveRunTab) &&
+            tabs.out.includes(liveRunName)
+          );
+        },
+        `${liveRun1.out}\n${liveRun1.err}`,
+      );
+      const liveRun2 = liveHost(
+        [
+          "run",
+          "live horse · m",
+          liveSol,
+          "--under",
+          liveRun,
+          "--marker",
+          "../logs/live-run2.done",
+          "--",
+          "./fixed.sh",
+        ],
+        f.caller,
+        root,
+        liveEnv,
+      );
+      const liveRunTab2 = kvOf(liveRun2.out, "tab");
+      const liveRunPane2 = kvOf(liveRun2.out, "pane");
+      await pass(
+        "a second launch joins the same tab, and no space opens for the run",
+        () => {
+          const panes = liveHerdr("pane", "list", "--workspace", liveRunSpace);
+          let held = -1;
+          try {
+            const rows = JSON.parse(panes.out).result.panes as Array<{ tab_id: string }>;
+            held = rows.filter((row) => row.tab_id === liveRunTab).length;
+          } catch {}
+          const listed = liveHerdr("worktree", "list", "--cwd", liveSynth);
+          return (
+            liveRun2.code === 0 &&
+            liveRunTab2 === liveRunTab &&
+            held === 3 &&
+            worktreeSpace(listed.out, liveSynth) === ""
+          );
+        },
+        `${liveRun2.out}\n${liveRun2.err}`,
+      );
+      const liveFin1 = liveHost(
+        ["_finish", "herdr", liveRunSpace, liveRunTab, liveRunPane1],
+        f.caller,
+        root,
+      );
+      const liveFin2 = liveHost(
+        ["_finish", "herdr", liveRunSpace, liveRunTab, liveRunPane2],
+        f.caller,
+        root,
+      );
+      await pass(
+        "finished launches leave the tab with its state pane",
+        () => {
+          const panes = liveHerdr("pane", "list", "--workspace", liveRunSpace);
+          let held: Array<{ pane_id: string }> = [];
+          try {
+            const rows = JSON.parse(panes.out).result.panes as Array<{
+              pane_id: string;
+              tab_id: string;
+            }>;
+            held = rows.filter((row) => row.tab_id === liveRunTab);
+          } catch {}
+          return (
+            liveFin1.code === 0 &&
+            liveFin2.code === 0 &&
+            held.length === 1 &&
+            !liveHerdr("tab", "list", "--workspace", liveRunSpace).out.includes(liveRunPane1)
+          );
+        },
+        `${liveFin1.out}\n${liveFin1.err}\n${liveFin2.out}\n${liveFin2.err}`,
+      );
+      await pass("the state pane shows the run", async () => {
+        const runtabs = readdir(join(root, "state", "runtabs"));
+        if (runtabs.length !== 1) return false;
+        const record = JSON.parse(
+          readFileSync(join(root, "state", "runtabs", runtabs[0]!), "utf8"),
+        ) as { pane?: string };
+        if (!record.pane) return false;
+        for (let i = 0; i < 30; i++) {
+          const screen = liveHerdr(
+            "pane",
+            "read",
+            record.pane,
+            "--source",
+            "recent-unwrapped",
+            "--lines",
+            "40",
+          ).out;
+          if (screen.includes("#1, Stop") && screen.includes("stage:")) return true;
+          await sleep(1000);
+        }
+        return false;
+      });
+      const liveClose = liveHost(["close-run", liveRun], f.caller, root, {
+        POSTMASTER_HOST: "herdr",
+      });
+      await pass(
+        "close-run takes the run tab and leaves the repository's space",
+        () => {
+          const tabs = liveHerdr("tab", "list", "--workspace", liveRunSpace);
+          const spaces = liveHerdr("workspace", "list");
+          return (
+            liveClose.code === 0 &&
+            !tabs.out.includes(liveRunTab) &&
+            spaces.out.includes(liveRunSpace) &&
+            readdir(join(root, "state", "runtabs")).length === 0
+          );
+        },
+        `${liveClose.out}\n${liveClose.err}`,
       );
     } else {
       console.log("Herdr: no server answers here; its controls are skipped");

@@ -1,4 +1,4 @@
-// Tests beside scripts/cut-scratch.ts, moved from its --self-test on #109: 34 controls.
+// Tests beside scripts/cut-scratch.ts, moved from its --self-test on #109: 36 controls.
 // Order-dependent: later tests reuse the repo and scratches earlier tests cut, as the self-test did.
 // Victim labels interpolate fixed short names: the tmp dir exists only at run time, after collection.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
@@ -77,9 +77,9 @@ beforeAll(() => {
     GIT_COMMITTER_EMAIL: process.env.GIT_COMMITTER_EMAIL,
   };
   process.env.GIT_AUTHOR_NAME = "t";
-  process.env.GIT_AUTHOR_EMAIL = "t@t";
+  process.env.GIT_AUTHOR_EMAIL = "t@example.com";
   process.env.GIT_COMMITTER_NAME = "t";
-  process.env.GIT_COMMITTER_EMAIL = "t@t";
+  process.env.GIT_COMMITTER_EMAIL = "t@example.com";
   const tmpRaw = mkdtempSync(join(tmpdir(), "cut-scratch-"));
   let phys = "";
   try {
@@ -314,5 +314,24 @@ describe("negative controls", () => {
     const r = sh(repo, synth, join(tmp, "x"), snap, "--clone");
     expect(r.code).toBe(1);
     expect(existsSync(join(tmp, "x"))).toBe(false);
+  });
+});
+
+describe("workhorse copies", () => {
+  test("a fresh cut succeeds, and the copy checks", () => {
+    const dest = join(tmp, "wh-fresh");
+    const cut = sh("--cut-workhorse", repo, dest, base, "wb/wh-fresh");
+    expect(cut.code).toBe(0);
+    const check = sh("--check-workhorse", repo, dest, base, "wb/wh-fresh");
+    expect(check.code).toBe(0);
+  });
+
+  test("a cut is refused when the repo already holds the branch, and cuts nothing", () => {
+    need(git("-C", repo, "branch", "wb/wh-stale", base), "stale branch");
+    const dest = join(tmp, "wh-stale");
+    const r = sh("--cut-workhorse", repo, dest, base, "wb/wh-stale");
+    expect(r.code).toBe(1);
+    expect(both(r)).toContain("already holds wb/wh-stale");
+    expect(existsSync(dest)).toBe(false);
   });
 });

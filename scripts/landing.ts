@@ -29,6 +29,11 @@
 //       results` shows the gate passing at that head. Otherwise one fault line each for the
 //       head the worktree is not at, the default branch the ticket lacks, and the gate
 //       that is not passing.
+//   run landing pull-request-checks --repo <repo> --pr <pull-request> --card-head <sha>
+//       whether GitHub's current pull-request head matches the card and every reported check
+//       passes. Prints `pass`, `pending: ...`, `fail: ... <link>`, or `none` when no checks
+//       exist. A head mismatch is a failure, never a pass. A skipped check counts as
+//       passed, as it does for GitHub's own merge readiness.
 //   run landing results <dispatch> <synthesis-wt>
 //       every recorded check's result at the worktree's HEAD, one `name: result` line each,
 //       as the cards carry them. This is the one place the vocabulary mapping lives:
@@ -66,10 +71,24 @@
 //       evidence, not a result to weigh. `judge` when the waybill mentions none, or the
 //       journey check failed with its report written: the postmaster weighs it like any
 //       other non-pass.
+//   run landing switch-offs --repo <repo> --default <branch> --ticket <ref>
+//       [--dispatch <dispatch>]
+//       every switch-off comment the run adds, and every change to the settings of
+//       the project's checks, compared between the ticket head and its merge base
+//       with the default branch. The first line is `clear` when the branch adds
+//       nothing or every entry carries the user's recorded approval, `held` when
+//       entries wait on the user's word, `no reason` when any lacks its reason,
+//       and `refused` when the user refused any. The rest is the `## Switch-offs`
+//       section: one line per comment with its file, line, form, rules, reason
+//       and identity, and one per settings change with its diff; approved entries
+//       are marked. Without --dispatch no approval can match, so any entry holds.
+//       An approval names the run, the identity and the user's words, written
+//       through `run log-action` so it sits in the run's actions and the
+//       project's ledger alike.
 //
-//   exit 0  already-landed, anything-to-land, results, card-block, card-open: the answer,
+//   exit 0  already-landed, anything-to-land, pull-request-checks, results, card-block, card-open: the answer,
 //           printed; card-results, card-findings: `match`; journey: `clear` or `judge`;
-//           fresh: `fresh`
+//           fresh: `fresh`; switch-offs: `clear`
 //   exit 1  usage; a resolving input that does not resolve (--default, --base,
 //           --card-head, --local-ticket, --pr-merge, and --ticket without a
 //           report: --pr-head answers `re-verify` instead); a file that cannot
@@ -79,13 +98,17 @@
 //           be read (a duplicate id, a finding-shaped line that is not a finding, an
 //           unreadable state, a fence marker line, or a quoted line); a card holding an
 //           HTML comment or not holding the rendered block exactly once
-//   exit 2  fresh: the faults, one line each; journey: `blocked`
+//   exit 2  fresh: the faults, one line each; journey: `blocked`; switch-offs: `held`
+//   exit 3  switch-offs: `no reason`
+//   exit 4  switch-offs: `refused`
 import { readFileSync, readdirSync } from "node:fs";
 import { isAbsolute, join, relative, sep } from "node:path";
 import { scriptsDir } from "./lib/paths.ts";
+import { inspectSwitchOffs } from "./lib/switch-offs.ts";
 import { run } from "./lib/proc.ts";
 import { runMode } from "./lib/run-mode.ts";
 import { physical, reachActions } from "./reach.ts";
+import { errorText, isDraftRecord, safePath } from "./scrub-report.ts";
 import {
   D_CLASS,
   END_OF_STRING,
@@ -122,7 +145,7 @@ class LandingFailure extends Error {
 }
 
 function die(msg: string): never {
-  throw new LandingFailure(`landing: ${msg}`, 1);
+  throw new LandingFailure(errorText("landing", msg), 1);
 }
 
 function usage(msg: string): never {
@@ -487,15 +510,157 @@ function checkBlock(dispatch: string, wt: string, checkpoint: string, card: stri
   return 0;
 }
 
+interface PrivateFinding {
+  rule: string;
+  file: string;
+  line: number;
+  commit: string;
+}
+type PrivateResolution = "removed" | "marked" | "scrubbed";
+
+function privateFindingKey(row: PrivateFinding): string {
+  return JSON.stringify([row.rule, row.file, row.line, row.commit]);
+}
+
+function jsonLines(path: string): Record<string, unknown>[] {
+  let source: string;
+  try {
+    source = readFileSync(path, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException)?.code === "ENOENT") return [];
+    die("private-data record could not be read");
+  }
+  const records: Record<string, unknown>[] = [];
+  for (const line of source.split("\n")) {
+    if (!line.trim()) continue;
+    try {
+      const value: unknown = JSON.parse(line);
+      if (typeof value !== "object" || value === null || Array.isArray(value))
+        die("private-data record is invalid");
+      records.push(value as Record<string, unknown>);
+    } catch {
+      die("private-data record is invalid");
+    }
+  }
+  return records;
+}
+
+function privateFinding(record: Record<string, unknown>): PrivateFinding {
+  if (
+    typeof record.rule !== "string" ||
+    typeof record.file !== "string" ||
+    typeof record.line !== "number" ||
+    typeof record.commit !== "string"
+  ) {
+    die("private-data record is invalid");
+  }
+  return {
+    rule: record.rule,
+    file: safePath(record.file),
+    line: record.line,
+    commit: record.commit,
+  };
+}
+
+export function privateDataBlock(dispatch: string): string {
+  const detections = jsonLines(join(dispatch, "detections.jsonl"));
+  const resolutions = jsonLines(join(dispatch, "detections-resolved.jsonl"));
+  const found = new Map<string, PrivateFinding>();
+  for (const record of detections) {
+    // Draft rows log but never resolve: a draft is reworded and scanned
+    // again, so the block skips them instead of dying for no resolution.
+    if (isDraftRecord(record)) continue;
+    const finding = privateFinding(record);
+    found.set(privateFindingKey(finding), finding);
+  }
+  const resolved = new Map<string, PrivateResolution>();
+  for (const record of resolutions) {
+    const finding = privateFinding(record);
+    const key = privateFindingKey(finding);
+    if (!found.has(key)) die("private-data resolution has no finding");
+    const resolution = record.resolution;
+    if (resolution !== "removed" && resolution !== "marked" && resolution !== "scrubbed")
+      die("private-data resolution is invalid");
+    const previous = resolved.get(key);
+    if (previous && previous !== resolution)
+      die("private-data finding has conflicting resolutions");
+    resolved.set(key, resolution);
+  }
+  const lines = [...found.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, finding]) => {
+      const resolution = resolved.get(key);
+      if (!resolution) die("private-data finding has no resolution");
+      const label = resolution === "marked" ? "marked as made-up" : resolution;
+      return `- ${finding.rule} at ${finding.file}:${finding.line} (${finding.commit.slice(0, 12)}) - ${label}`;
+    });
+  const census = jsonLines(join(dispatch, "private-data-census.jsonl"));
+  const censusRules = new Map<string, number>();
+  const censusVerdicts = new Map<string, number>();
+  const censusPlaces = new Set<string>();
+  for (const record of census) {
+    if (
+      typeof record.rule !== "string" ||
+      (record.verdict !== "made-up" && record.verdict !== "real") ||
+      typeof record.file !== "string" ||
+      typeof record.line !== "number" ||
+      typeof record.commit !== "string"
+    ) {
+      die("private-data census is invalid");
+    }
+    const key = JSON.stringify([record.file, record.line, record.commit]);
+    if (censusPlaces.has(key)) die("private-data census repeats a suspect");
+    censusPlaces.add(key);
+    censusRules.set(record.rule, (censusRules.get(record.rule) ?? 0) + 1);
+    censusVerdicts.set(record.verdict, (censusVerdicts.get(record.verdict) ?? 0) + 1);
+  }
+  // No cap: the ticket's 50 is an escalation threshold for the census
+  // count, judged by the postmaster, not a limit on what the block can
+  // carry. An accepted overage must still reach the card, aggregated.
+  const censusBlock = census.length
+    ? `\n## Main history census\n\n- suspects: ${census.length}\n- made-up: ${censusVerdicts.get("made-up") ?? 0}\n- real: ${censusVerdicts.get("real") ?? 0}\n\n${[
+        ...censusRules.entries(),
+      ]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([rule, count]) => `- ${count} suspect(s): ${rule}`)
+        .join("\n")}\n`
+    : "";
+  // The block carries only what the run's own records say: its findings with
+  // their resolutions, and its census counts. Run-specific evidence such as
+  // held-out scores or port decisions goes on that run's card as prose, never
+  // as literals here, or every future card would repeat them.
+  return `## Private data findings\n\n${lines.join("\n") || "none"}\n${censusBlock}`;
+}
+
+function checkPrivateDataCard(dispatch: string, card: string): number {
+  const text = load(card);
+  refuseComments(text, "card");
+  const expected = privateDataBlock(dispatch);
+  const count = text.split(expected).length - 1;
+  if (count !== 1) die("card: private-data findings do not match the run record");
+  const scanned = run(join(SCRIPTS, "run"), ["scrub-check", "--pr-description", card], {
+    env: {
+      POSTMASTER_DETECTIONS_LOG: join(dispatch, "detections.jsonl"),
+      SCRUB_CHECK_DISABLE: undefined,
+    },
+  });
+  if (scanned.code !== 0) die("card: private-data scan is not clean");
+  console.log("match");
+  return 0;
+}
+
 // --- modes --------------------------------------------------------------------------------
 const TOP_USAGE =
   "usage: run landing already-landed --repo <repo> --default <branch> --ticket <ref> --base <sha> " +
   "--card-head <sha> [--local-ticket <branch>] [--pr-merge <sha> --pr-head <sha>] | anything-to-land " +
   "--repo <repo> --default <branch> --ticket <ref> --base <sha> | fresh --repo <repo> --default <branch> " +
-  "--ticket <ref> --dispatch <dispatch> --wt <synthesis-wt> | results <dispatch> <synthesis-wt> | " +
+  "--ticket <ref> --dispatch <dispatch> --wt <synthesis-wt> | pull-request-checks --repo <repo> " +
+  "--pr <pull-request> --card-head <sha> | private-data-block <dispatch> | " +
+  "private-data-card <dispatch> <card> | results <dispatch> <synthesis-wt> | " +
   "card-block <dispatch> <synthesis-wt> <checkpoint> | card-results <dispatch> <synthesis-wt> " +
   "<checkpoint> <card> | card-findings <dispatch> <synthesis-wt> <checkpoint> <card> | " +
-  "card-open <checkpoint> | journey <dispatch> <synthesis-wt> <waybill>";
+  "card-open <checkpoint> | journey <dispatch> <synthesis-wt> <waybill> | switch-offs " +
+  "--repo <repo> --default <branch> --ticket <ref> [--dispatch <dispatch>]";
 const ALREADY_USAGE =
   "usage: run landing already-landed --repo <repo> --default <branch> --ticket <ref> --base <sha> " +
   "--card-head <sha> [--local-ticket <branch>] [--pr-merge <sha> --pr-head <sha>]";
@@ -510,8 +675,125 @@ const CRESULTS_USAGE =
   "usage: run landing card-results <dispatch> <synthesis-wt> <checkpoint> <card>";
 const CFINDINGS_USAGE =
   "usage: run landing card-findings <dispatch> <synthesis-wt> <checkpoint> <card>";
+const PDATA_BLOCK_USAGE = "usage: run landing private-data-block <dispatch>";
+const PDATA_CARD_USAGE = "usage: run landing private-data-card <dispatch> <card>";
 const OPEN_USAGE = "usage: run landing card-open <checkpoint>";
 const JOURNEY_USAGE = "usage: run landing journey <dispatch> <synthesis-wt> <waybill>";
+const PR_CHECKS_USAGE =
+  "usage: run landing pull-request-checks --repo <repo> --pr <pull-request> --card-head <sha>";
+
+type PullRequestCheck = {
+  name?: unknown;
+  state?: unknown;
+  bucket?: unknown;
+  link?: unknown;
+};
+
+function pullRequestChecks(o: string[]): number {
+  if (
+    o.length !== 6 ||
+    o[0] !== "--repo" ||
+    o[2] !== "--pr" ||
+    o[4] !== "--card-head" ||
+    o[1] === "" ||
+    o[3] === "" ||
+    o[5] === ""
+  ) {
+    usage(PR_CHECKS_USAGE);
+  }
+  const repo = o[1]!;
+  const pr = o[3]!;
+  const cardHead = commitOf(repo, o[5]!, "--card-head");
+  const readPullRequestHead = (): string => {
+    const view = run("gh", ["pr", "view", pr, "--json", "headRefOid"], { cwd: repo });
+    if (view.code !== 0) die(`cannot read pull request head: ${pyTrim(view.err || view.out)}`);
+    try {
+      const head = (JSON.parse(view.out) as { headRefOid?: unknown }).headRefOid;
+      if (typeof head === "string" && head !== "") return head;
+    } catch {
+      // Use the same closed failure below for an absent or malformed head.
+    }
+    die("GitHub did not report a pull request head");
+  };
+  const printHeadMismatch = (head: string): void => {
+    console.log(`fail: pull request head ${head} does not match card ${cardHead} ${pr}`);
+  };
+  const initialHead = readPullRequestHead();
+  if (initialHead !== cardHead) {
+    printHeadMismatch(initialHead);
+    return 0;
+  }
+
+  const result = run("gh", ["pr", "checks", pr, "--json", "name,state,bucket,link"], {
+    cwd: repo,
+  });
+  if (![0, 1, 8].includes(result.code)) {
+    die(`cannot read pull request checks: ${pyTrim(result.err || result.out)}`);
+  }
+  // A pull request with no checks is exit 1 with empty stdout and "no checks
+  // reported ..." on stderr (gh 2.101.0): that is none, not a failure. Any
+  // other empty report is a failure, never none: an unknown pull request and
+  // a refused login fail the same way, with their own message.
+  const empty = result.out.trim() === "";
+  if (empty && !/no checks reported/u.test(result.err ?? "")) {
+    die(`cannot read pull request checks: ${pyTrim(result.err || result.out)}`);
+  }
+  let checks: PullRequestCheck[];
+  try {
+    const parsed: unknown = empty ? [] : JSON.parse(result.out);
+    if (!Array.isArray(parsed)) throw new Error("not an array");
+    checks = parsed as PullRequestCheck[];
+  } catch {
+    die(
+      `cannot read pull request checks: ${pyTrim(result.err || "GitHub returned malformed JSON")}`,
+    );
+  }
+  const finalHead = readPullRequestHead();
+  if (finalHead !== cardHead) {
+    printHeadMismatch(finalHead);
+    return 0;
+  }
+  if (checks.length === 0) {
+    console.log("none");
+    return 0;
+  }
+
+  const bucketOf = (check: PullRequestCheck): "pass" | "pending" | "fail" => {
+    if (check.bucket === "pass") return "pass";
+    if (check.bucket === "pending") return "pending";
+    if (check.bucket === "fail") return "fail";
+    // A skipped check satisfies the merge the way it satisfies GitHub: it is not
+    // a failure and there is nothing to wait for.
+    if (check.bucket === "skipping") return "pass";
+    if (check.state === "SUCCESS") return "pass";
+    if (check.state === "SKIPPED" || check.state === "NEUTRAL") return "pass";
+    if (["PENDING", "QUEUED", "IN_PROGRESS", "WAITING", "REQUESTED"].includes(String(check.state)))
+      return "pending";
+    return "fail";
+  };
+  const failing = checks.find((check) => bucketOf(check) === "fail");
+  if (failing !== undefined) {
+    const name =
+      typeof failing.name === "string" && failing.name !== "" ? failing.name : "unnamed check";
+    const state = String(failing.state ?? failing.bucket ?? "did not pass");
+    const link = typeof failing.link === "string" && failing.link !== "" ? failing.link : pr;
+    console.log(`fail: ${name} (${state}) ${link}`);
+    return 0;
+  }
+  const pending = checks.filter((check) => bucketOf(check) === "pending");
+  if (pending.length > 0) {
+    const names = pending.map((check) =>
+      typeof check.name === "string" && check.name !== "" ? check.name : "unnamed check",
+    );
+    console.log(`pending: ${names.join(", ")}`);
+    return 0;
+  }
+  console.log("pass");
+  return 0;
+}
+
+const SWITCH_OFFS_USAGE =
+  "usage: run landing switch-offs --repo <repo> --default <branch> --ticket <ref> [--dispatch <dispatch>]";
 
 function alreadyLanded(o: string[]): number {
   if (
@@ -736,12 +1018,45 @@ function journey(dispatch: string, wt: string, waybill: string): number {
   return 0;
 }
 
+function switchOffs(o: string[]): number {
+  if (
+    (o.length !== 6 && o.length !== 8) ||
+    o[0] !== "--repo" ||
+    o[2] !== "--default" ||
+    o[4] !== "--ticket" ||
+    (o.length === 8 && o[6] !== "--dispatch")
+  ) {
+    usage(SWITCH_OFFS_USAGE);
+  }
+  try {
+    const report = inspectSwitchOffs({
+      repo: o[1]!,
+      defaultRef: o[3]!,
+      ticketRef: o[5]!,
+      ...(o.length === 8 ? { dispatch: o[7]! } : {}),
+    });
+    process.stdout.write(`${report.status}\n${report.output}`);
+    return report.status === "clear"
+      ? 0
+      : report.status === "held"
+        ? 2
+        : report.status === "no reason"
+          ? 3
+          : 4;
+  } catch (e) {
+    throw new LandingFailure(`switch-offs: ${e instanceof Error ? e.message : String(e)}`, 1);
+  }
+}
+
 function main(argv: string[]): number {
+  // A production entrypoint: shed the test hook before the first scan.
+  delete process.env.SCRUB_CHECK_DISABLE;
   try {
     const mode = argv[0];
     if (mode === "already-landed") return alreadyLanded(argv.slice(1));
     if (mode === "anything-to-land") return anythingToLand(argv.slice(1));
     if (mode === "fresh") return fresh(argv.slice(1));
+    if (mode === "pull-request-checks") return pullRequestChecks(argv.slice(1));
     if (mode === "results") {
       if (argv.length !== 3) usage(RESULTS_USAGE);
       for (const [name, result] of recordedResults(argv[1]!, argv[2]!)) {
@@ -758,6 +1073,15 @@ function main(argv: string[]): number {
       if (argv.length !== 5) usage(mode === "card-results" ? CRESULTS_USAGE : CFINDINGS_USAGE);
       return checkBlock(argv[1]!, argv[2]!, argv[3]!, argv[4]!);
     }
+    if (mode === "private-data-block") {
+      if (argv.length !== 2) usage(PDATA_BLOCK_USAGE);
+      process.stdout.write(privateDataBlock(argv[1]!));
+      return 0;
+    }
+    if (mode === "private-data-card") {
+      if (argv.length !== 3) usage(PDATA_CARD_USAGE);
+      return checkPrivateDataCard(argv[1]!, argv[2]!);
+    }
     if (mode === "card-open") {
       if (argv.length !== 2) usage(OPEN_USAGE);
       const out = checkpointStates(argv[1]!)
@@ -770,6 +1094,7 @@ function main(argv: string[]): number {
       if (argv.length !== 4) usage(JOURNEY_USAGE);
       return journey(argv[1]!, argv[2]!, argv[3]!);
     }
+    if (mode === "switch-offs") return switchOffs(argv.slice(1));
     usage(TOP_USAGE);
   } catch (e) {
     if (e instanceof LandingFailure) {

@@ -55,6 +55,9 @@ function expectExit(r: Run, want: number): void {
       `want exit ${want}, got ${r.code}\n--- out ---\n${r.out}\n--- err ---\n${r.err}`,
     );
   }
+  // A counted assertion, not just a throw: a test whose only checks throw
+  // reports zero assertions and reads as vacuous.
+  expect(r.code).toBe(want);
 }
 
 // C10c/D4 pins the degrade lines, not the exit: an unexplained move voids every verdict
@@ -66,6 +69,8 @@ function expectExitIn(r: Run, wants: number[]): void {
       `want exit ${wants.join(" or ")}, got ${r.code}\n--- out ---\n${r.out}\n--- err ---\n${r.err}`,
     );
   }
+  // Counted like expectExit above: the pin is an assertion either way.
+  expect(wants.includes(r.code)).toBe(true);
 }
 
 function locateUnder(dir: string, base: string): string | null {

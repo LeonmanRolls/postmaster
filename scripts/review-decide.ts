@@ -1,30 +1,36 @@
-// Decide whether the review loop runs another round, from the round's finding and apply lines.
-// The runbook calls this rather than counting findings itself.
+// Decide whether the review loop runs another round, from the round's finding, apply,
+// launch and degrade lines. The runbook calls this rather than counting findings itself.
 //
 //   run review-decide <dispatch> <round>
 //
-//   round    the round that just finished, a whole number from 1 to 3
+//   round    the round that just finished, a whole number of 1 or more
 //
 // Reads <dispatch>/actions.jsonl. A finding is a `finding` line whose detail opens with its class,
 // `gating` or `style`, then its severity (P1, P2 or P3), its round (r1, r2, ...) and the rest. An
 // apply is an `apply` line whose detail names the finding targets it fixes, as whitespace-separated
-// bare targets; it counts for round r when any target it names has a finding of round r. A target's
-// latest finding line decides its severity, round and class, so a fix that does not verify closed,
-// logged again in the round that checked it, is that round's. Only `gating` findings keep the loop
-// going; a `style` finding never does.
+// bare targets; it counts for round r when any target it names has a finding line of round r. A
+// round's serious count is the number of its finding lines that open `gating P1 r<n>` or
+// `gating P2 r<n>`, each line in its own round, so a fix that does not verify closed, logged
+// again in the round that checked it, counts there. Only `gating` findings keep the loop
+// going; a `style` finding never does. A launch is a `review-launch` line whose detail is
+// `<lens> round <n>`; a degrade is a `degrade` line whose detail opens `<lens> r<n>:` or
+// `<lens> round <n>:`. A gating lens had no working reviewer in round n when every lane with
+// a launch for it in round n has a degrade for it in round n. Style is never gating; launch
+// and degrade lines in any other spelling are ignored.
 //
-// The rule (ticket #80, the user's of 2026-09-27): round 2 runs whenever round 1 applied a fix;
-// after that, round r+1 runs only when round r logged a verified P1 or P2 finding. The cap of three
-// rounds stays as a backstop: when round 3 logs a verified P1 or P2 finding the loop stops and
-// escalates with the residue.
+// The rule (ticket #316, the user's): round 2 runs whenever round 1 applied a fix; from round
+// 2 on, the loop goes on while no round finds more serious defects than the round before, and
+// stops for a ruling when a round finds more. Two rounds running that each lacked a working
+// reviewer for a gating lens stop the loop whatever the counts, and a round that lacked one
+// is never the last. There is no cap on rounds.
 //
 // Prints one decision line:
 //   RUN <next>: <reason>
 //   STOP <round>: <reason>
-//   CAP 3: <reason>; escalate with residue
+//   RULING <round>: <reason>; escalate with residue
 //
 //   exit 0  the decision is printed
-//   exit 1  usage, a round past 3 or below 1, a missing or unreadable action log, a line that is
+//   exit 1  usage, a round below 1, a missing or unreadable action log, a line that is
 //           not JSON or not an action object, an action object with no action, a finding whose
 //           detail does not open with its class, a finding with no readable severity or round,
 //           two findings sharing one target in one round, or an apply naming no target or a
@@ -147,17 +153,50 @@ function pyTruthy(value: unknown): boolean {
 
 const ROUND_RE = new RegExp(`^r([1-9][0-9]*)${END_OF_STRING}`, "u");
 
+const ROUND_NUM_RE = /^[1-9][0-9]*$/u;
+const DEGRADE_R_RE = new RegExp(`^r([1-9][0-9]*):${END_OF_STRING}`, "u");
+const DEGRADE_N_RE = new RegExp(`^([1-9][0-9]*):${END_OF_STRING}`, "u");
+
+// Add one to a digit string of any length, with no precision ceiling.
+function incStr(d: string): string {
+  let out = "";
+  let carry = 1;
+  for (let i = d.length - 1; i >= 0; i--) {
+    const s = d.charCodeAt(i) - 48 + carry;
+    carry = s > 9 ? 1 : 0;
+    out = String(s > 9 ? 0 : s) + out;
+  }
+  return carry ? `1${out}` : out;
+}
+
+// Subtract one from a digit string of 2 or more.
+function decStr(d: string): string {
+  let out = "";
+  let borrow = 1;
+  for (let i = d.length - 1; i >= 0; i--) {
+    let s = d.charCodeAt(i) - 48 - borrow;
+    borrow = 0;
+    if (s < 0) {
+      s += 10;
+      borrow = 1;
+    }
+    out = String(s) + out;
+  }
+  return out.replace(/^0+/u, "") || "0";
+}
+
 function decide(dispatch: string, roundS: string): void {
   const digits = pyIntDigits(roundS);
-  if (digits === null) die(`round is a whole number from 1 to 3: ${roundS}`);
-  if (digits !== "1" && digits !== "2" && digits !== "3") {
-    die(`the loop has a cap of 3 rounds; round ${digits} is past it`);
+  if (digits === null || !ROUND_NUM_RE.test(digits)) {
+    die(`round is a whole number of 1 or more: ${roundS}`);
   }
   const r = digits;
   const path = `${dispatch}/actions.jsonl`;
   const lines = readActions(path);
 
-  const latest = new Map<string, { sev: string; rnd: string; cls: string }>();
+  const findings: Array<{ sev: string; rnd: string; cls: string }> = [];
+  const launches = new Map<string, Set<string>>();
+  const degrades = new Map<string, Set<string>>();
   const roundsSeen = new Map<string, Set<string>>();
   const seenPairs = new Set<string>();
   const applies: Array<{ n: number; targets: string[] }> = [];
@@ -224,9 +263,37 @@ function decide(dispatch: string, roundS: string): void {
         roundsSeen.set(target, set);
       }
       set.add(rndN);
-      latest.set(target, { sev, rnd: rndN, cls });
+      findings.push({ sev, rnd: rndN, cls });
     } else if (action === "apply") {
       applies.push({ n, targets: pyWords(pyStr(rec.detail, !("detail" in rec))) });
+    } else if (action === "review-launch" || action === "degrade") {
+      // Launch and degrade spellings outside the known forms are ignored, never
+      // faults: older records spell these lines in other ways.
+      const words = pyWords(pyStr(rec.detail, !("detail" in rec)));
+      const lens = words.length > 0 ? words[0]! : "";
+      let rndN: string | null = null;
+      if (action === "review-launch") {
+        if (words.length >= 3 && words[1] === "round" && ROUND_NUM_RE.test(words[2]!)) {
+          rndN = words[2]!;
+        }
+      } else if (words.length >= 2) {
+        if (words[1] === "round" && words.length >= 3) {
+          rndN = DEGRADE_N_RE.exec(words[2]!)?.[1] ?? null;
+        } else {
+          rndN = DEGRADE_R_RE.exec(words[1]!)?.[1] ?? null;
+        }
+      }
+      if (lens !== "" && rndN !== null) {
+        // Lenses and rounds hold no NUL, so the join splits deterministically.
+        const key = `${lens}\0${rndN}`;
+        const pool = action === "review-launch" ? launches : degrades;
+        let lanes = pool.get(key);
+        if (!lanes) {
+          lanes = new Set();
+          pool.set(key, lanes);
+        }
+        lanes.add(pyStr(rec.target, !("target" in rec)));
+      }
     }
   });
 
@@ -244,26 +311,60 @@ function decide(dispatch: string, roundS: string): void {
 
   const appliedIn = (roundNum: string): boolean =>
     applies.some(({ targets }) => targets.some((t) => roundsSeen.get(t)?.has(roundNum) ?? false));
-  const hasP1P2 = (roundNum: string): boolean =>
-    [...latest.values()].some(
+  const countSerious = (roundNum: string): number =>
+    findings.filter(
       ({ sev, rnd, cls }) => rnd === roundNum && (sev === "P1" || sev === "P2") && cls === "gating",
-    );
+    ).length;
+  // The gating lenses with no working reviewer in a round, sorted: every launched
+  // lane degraded. Style is never gating; a lens with no launch had no reviewer
+  // to lose.
+  const lacking = (roundNum: string): string[] => {
+    const out: string[] = [];
+    for (const [key, lanes] of launches) {
+      const [lens = "", rnd = ""] = key.split("\0");
+      if (rnd !== roundNum || lens === "style" || lens === "" || lanes.size === 0) continue;
+      const down = degrades.get(key) ?? new Set<string>();
+      if ([...lanes].every((lane) => down.has(lane)) && !out.includes(lens)) out.push(lens);
+    }
+    return out.sort();
+  };
 
   if (r === "1") {
+    const lacking1 = lacking("1");
+    if (lacking1.length > 0) {
+      console.log(`RUN 2: round 1 had no working reviewer for ${lacking1.join(" and ")}`);
+    } else {
+      console.log(
+        appliedIn("1") ? "RUN 2: round 1 applied a fix" : "STOP 1: round 1 applied no fixes",
+      );
+    }
+    return;
+  }
+  const prev = decStr(r);
+  const lackingPrev = lacking(prev);
+  const lackingR = lacking(r);
+  if (lackingPrev.length > 0 && lackingR.length > 0) {
+    const same =
+      lackingPrev.length === lackingR.length && lackingPrev.every((l, i) => l === lackingR[i]);
     console.log(
-      appliedIn("1") ? "RUN 2: round 1 applied a fix" : "STOP 1: round 1 applied no fixes",
+      same
+        ? `RULING ${r}: no working reviewer for ${lackingR.join(" and ")} in rounds ${prev} and ${r}; escalate with residue`
+        : `RULING ${r}: no working reviewer for ${lackingPrev.join(" and ")} in round ${prev} and ${lackingR.join(" and ")} in round ${r}; escalate with residue`,
     );
-  } else if (r === "2") {
-    console.log(
-      hasP1P2("2")
-        ? "RUN 3: round 2 logged a verified P1 or P2 finding"
-        : "STOP 2: round 2 logged no P1 or P2 finding",
-    );
+    return;
+  }
+  const count = countSerious(r);
+  const before = countSerious(prev);
+  const next = incStr(r);
+  if (count === 0 && lackingR.length > 0) {
+    console.log(`RUN ${next}: round ${r} had no working reviewer for ${lackingR.join(" and ")}`);
+  } else if (count === 0) {
+    console.log(`STOP ${r}: round ${r} logged no P1 or P2 finding`);
+  } else if (count <= before) {
+    console.log(`RUN ${next}: round ${r} logged no more P1 or P2 findings than round ${prev}`);
   } else {
     console.log(
-      hasP1P2("3")
-        ? "CAP 3: round 3 logged a verified P1 or P2 finding; escalate with residue"
-        : "STOP 3: round 3 logged no P1 or P2 finding",
+      `RULING ${r}: round ${r} logged more P1 or P2 findings than round ${prev}; escalate with residue`,
     );
   }
 }

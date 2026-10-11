@@ -1,0 +1,44 @@
+<svg class="dg" viewBox="0 0 360 252" role="img" aria-label="The cases the tests run. Criterion 1: a clerk and a postmaster on a pseudo-terminal, a clerk as a tmux window, and a Herdr pane checked by hand. Criterion 2: the same pseudo-terminal runs, and env files that set FOO, set the level to 9, exit with status 3, or are absent.">
+  <text class="t3" x="16" y="15">case</text>
+  <text class="t3" x="196" y="15">what must be true</text>
+  <g>
+    <rect class="row hl-c1 hl-c2" x="8" y="24" width="344" height="24" rx="6"/>
+    <text class="t2" x="16" y="40">clerk, pseudo-terminal</text>
+    <text class="t2" x="196" y="40">leads; same environment</text>
+  </g>
+  <g>
+    <rect class="row hl-c1 hl-c2" x="8" y="52" width="344" height="24" rx="6"/>
+    <text class="t2" x="16" y="68">postmaster, pseudo-terminal</text>
+    <text class="t2" x="196" y="68">leads; same environment</text>
+  </g>
+  <g class="dim-c2">
+    <rect class="row hl-c1" x="8" y="80" width="344" height="24" rx="6"/>
+    <text class="t2" x="16" y="96">clerk, tmux window</text>
+    <text class="t2" x="196" y="96">the window's own process</text>
+  </g>
+  <g class="dim-c2">
+    <rect class="row hl-c1" x="8" y="108" width="344" height="24" rx="6"/>
+    <text class="t2" x="16" y="124">Herdr pane</text>
+    <text class="t2" x="196" y="124">checked by hand</text>
+  </g>
+  <g class="dim-c1">
+    <rect class="row hl-c2" x="8" y="136" width="344" height="24" rx="6"/>
+    <text class="t2" x="16" y="152">env file sets FOO</text>
+    <text class="t2" x="196" y="152">FOO=bar at level 1</text>
+  </g>
+  <g class="dim-c1">
+    <rect class="row hl-c2" x="8" y="164" width="344" height="24" rx="6"/>
+    <text class="t2" x="16" y="180">env file sets level 9</text>
+    <text class="t2" x="196" y="180">level 9 kept</text>
+  </g>
+  <g class="dim-c1">
+    <rect class="row hl-c2" x="8" y="192" width="344" height="24" rx="6"/>
+    <text class="t2" x="16" y="208">env file exits 3</text>
+    <text class="t2" x="196" y="208">no agent, status 3</text>
+  </g>
+  <g class="dim-c1">
+    <rect class="row hl-c2" x="8" y="220" width="344" height="24" rx="6"/>
+    <text class="t2" x="16" y="236">no env file</text>
+    <text class="t2" x="196" y="236">the bare agent command</text>
+  </g>
+</svg>

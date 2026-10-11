@@ -1,7 +1,7 @@
 // Tests beside scripts/turnpikes.ts, moved from its --self-test on #109: 90 controls.
 // The self-test staged shared waybills and run state between controls; each test below builds
 // its own fixtures so it passes alone as well as in file order. The root-conditional control
-// is gated by test.skipIf with a top notice.
+// is gated by test.skipIf; skips.toml carries the reason.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -44,11 +44,6 @@ let canRestrict = true;
   } finally {
     rmSync(probe, { recursive: true, force: true });
   }
-}
-if (!canRestrict) {
-  console.log(
-    "skip an unreadable brief.md names the read error: this user reads every file, so no denial was compared",
-  );
 }
 
 let tmp = "";

@@ -38,9 +38,9 @@ half, how a run is prepared and what the waybill carries, is `SKILL.md`. You do 
 | `<dispatch>/handoff-<n>.md` | leg `n`'s hand-off, the whole of what the next leg knows |
 | `<dispatch>/.leg-<n>-done`, `.leg-<n>-exited` | leg `n` finished its hand-off; leg `n`'s process exited |
 | `<repo>/.worktrees/<TICKET>` | synthesis worktree, branch `<TICKET>` |
-| `<repo>/.worktrees/<TICKET>-<lane>` | workhorse worktree, branch `wb/<TICKET>-<lane>` (`wb` for workhorse branch) |
+| `<repo>/.worktrees/<TICKET>-<lane>` | workhorse copy, branch `wb/<TICKET>-<lane>` (`wb` for workhorse branch) |
 | `<dispatch>/checkpoint-<n>.md` | checkpoint cards: `1` and `review` |
-| `<repo>/.worktrees/<TICKET>-rev-<lens>-<lane>` | reviewer scratch, one per lens per lane, detached at the synthesis HEAD, fresh every round: a clone under the security lens, a worktree under the others |
+| `<repo>/.worktrees/<TICKET>-rev-<lens>-<lane>` | reviewer scratch, one per lens per lane, detached at the synthesis HEAD, fresh every round: a clone of the repository under every lens |
 | `<repo>/.worktrees/<TICKET>-oracle-<lane>` | blind-test scratch, one per lane, cut at harvest with the oracle commit cherry-picked onto it, removed with the run |
 | `<dispatch>/style-sort.md` | aftercare's sort of the run's style findings, which the postmaster puts to the user |
 
@@ -61,6 +61,7 @@ the script at the moment it happens, never reconstructed afterwards:
 
 The actions, and where they fire: `dispatch` per workhorse launch (target the lane, detail the
 thread id); `resume` per resumed thread; `harvest` per workhorse (detail its exit shape);
+`take-in` per workhorse taken in (detail `on=<branch>@<commit>`);
 `synthesize` once, with the SYNTHESIS line as the detail; `rule` per conventional divergence
 recorded; `review-launch` per lane per lens per round (target the lane, detail the lens and the
 round), and `review-harvest` likewise with the thread id added; `finding` per verified finding
@@ -125,7 +126,7 @@ by files in its own dispatch directory.
 | `checkpoint-<n>.md` + `.checkpoint-<n>-ready` | a checkpoint card is complete; informational in autonomous mode, a stop in consult mode |
 | `handoff-<n>.md` + `.leg-<n>-done` | the leg is finished and the next may start |
 
-**It never waits for an answer in-process.** On an escalation or the three-round cap it writes
+**It never waits for an answer in-process.** On an escalation it writes
 the file and exits. The postmaster answers by resuming the coachman's thread with the ruling as
 the prompt, per the coachman harness's resume form, appending to the same stream.
 
@@ -221,18 +222,18 @@ leg continues.
 
 ## Lane capability: workhorses and reviewers
 
-**A workhorse may run anything it needs in its own worktree, including the project's gate,
+**A workhorse may run anything it needs in its own copy, including the project's gate,
 lint, build, tests and browser suite. A reviewer may run a targeted probe to check a finding,
 but does not run the project's gate, lint, build or tests; the coachman runs the recorded checks
 once per review round on that round's snapshot.** Browser work uses the project's own browser
-library, driven from a shell command inside the lane's worktree. Never route a lane's browser
+library, driven from a shell command inside the lane's folder. Never route a lane's browser
 work through a browser server shared with other sessions: a call into one can be acknowledged
 and never return, with no timeout. If the browser is genuinely unavailable, record QA as
 DEGRADED on the card, name what was not walked, and finish the run. A run that has passed every
 gate is never blocked by a browser.
 
 For every acceptance criterion that touches a user surface, the workhorse checks it in a real
-browser through the project's own library, from a shell command in its worktree, whether or not
+browser through the project's own library, from a shell command in its copy, whether or not
 the ticket has a `User journey`, and takes a screenshot per step. When the ticket has no
 journey, the ticket's steps are the journey. A workhorse whose harness has no browser backend
 marks the browser evidence `not shown` with that reason in its summary; the coachman's render
@@ -245,8 +246,8 @@ output and its exit.
 **No lane runs restricted.** Each harness's permission-bypass form is in `harnesses.md`; it goes
 on every launch and every resume.
 
-**The containment is the WORKTREE, not a permission flag.** No harness has verified mechanical
-write enforcement, so a workhorse is confined by having its own worktree and a reviewer by having its
+**The containment is the folder, not a permission flag.** No harness has verified mechanical
+write enforcement, so a workhorse is confined by having its own copy and a reviewer by having its
 own disposable scratch. **The one prohibition for a reviewer is modifying the code under
 review.** When `confine = "on"`, lanes also run in a process space of their own and cannot
 signal processes they did not start (`harnesses.md`, Confinement).
@@ -303,7 +304,7 @@ criterion's verdict as not met. Running every check with `<tool>/scripts/run ver
 before writing the summary stays the last step.
 
 A workhorse commits incrementally as it goes, never pushes, never reads other branches or
-`.worktrees/`, and never edits files outside its worktree.
+`.worktrees/`, and never edits files outside its copy.
 
 ## The run's mode: synthesis or single-thread
 
@@ -314,7 +315,7 @@ and the setting's value at dispatch). Read it before Stage 0 and act on it here:
 - **`synthesis`** — a waybill with no `mode:` line is a run dispatched before this change and
   reads as synthesis. The steps below harness the workhorse lanes exactly as written.
 - **`single-thread`** — no workhorse lane starts, and you write the change yourself, in the
-  synthesis worktree, in this leg's synthesis stage (D1, D5). Cut no workhorse worktree, add
+  synthesis worktree, in this leg's synthesis stage (D1, D5). Cut no workhorse copy, add
   no `lanes` entry to the manifest, write no `<lane>-prompt.txt`, launch, harvest or audit
   nothing, and run no `synthesis-shares`, `verify summary` or `summary-evidence` measurement:
   there is no lane to measure. The run's stages are `bootstrapped`, `synthesis`,
@@ -336,9 +337,10 @@ implementation divergences with no such explanation.
 **In single-thread mode, leg 1 runs like this:**
 
 1. Stage 0 steps 1–4 as written: read the waybill, base pre-flight, check the ticket's
-   premises and record the `premises` action, exclude `.worktrees/`. A premise that does not
-   hold escalates exactly as Step 3 says, before any branch or worktree exists.
-2. Stage 0 step 5 without the workhorse worktrees: make the run's directories and confirm the
+   premises and record the `premises` action (skipped without the notes, as Step 3 says),
+   exclude `.worktrees/`. A premise that does not hold escalates exactly as Step 3 says,
+   before any branch or copy exists.
+2. Stage 0 step 5 without the workhorse copies: make the run's directories and confirm the
    synthesis worktree the postmaster cut is at BASE and is your cwd. Stage 0 step 6 sets
    `bootstrapped` and adds no `lanes` entry. Stage 0 step 7 writes no workhorse brief.
 3. Set the stage `synthesis` as you start the acceptance tests, and write them under the rules
@@ -431,7 +433,11 @@ second implementer wrote (single-thread).
    (`<tool>/scripts/run check-target <repo>` exits 0). On either failing, stop and escalate rather than
    cut worktrees from a base that is not the one the postmaster dispatched, or that would
    silently drop uncommitted work.
-3. **Check the ticket's premises before implementation starts.** Run
+3. **Check the ticket's premises before implementation starts — unless the run holds the
+   notes back.** `<tool>/scripts/run run-meta ticket-notes <dispatch>` prints the value from
+   the run's record: when it prints `held-back`, the postmaster checked the premises at
+   dispatch, so confirm `actions.jsonl` holds its `premises` line and skip this step, and
+   when it holds none, stop and escalate before making anything. Otherwise run
    `<tool>/scripts/run premises <repo> <dispatch>/brief.md <BASE>` and record its output with
    `<tool>/scripts/run log-action <dispatch> coachman premises <verified-commit> "base=<BASE>"
    "result=<result>"`.
@@ -439,26 +445,23 @@ second implementer wrote (single-thread).
    still there, `moved` means the text still exists elsewhere, `changed` means it no longer says
    the same thing, `missing` means its file is gone, and `unknown` means the verified commit is
    unavailable. Judge whether each premise still holds. If one does not, stop before making a
-   workhorse branch or worktree, write `ESCALATION.md` with the premise, what BASE shows and the
+   workhorse branch or copy, write `ESCALATION.md` with the premise, what BASE shows and the
    choices to go on or send the ticket back, touch `.escalation-ready`, and exit. The postmaster
    carries the user's ruling back. Do not repair or reinterpret the signed-off ticket yourself.
-4. **Exclude worktrees without a commit:**
-   `grep -qxF '.worktrees/' <repo>/.git/info/exclude || echo '.worktrees/' >> <repo>/.git/info/exclude`.
+4. **Exclude worktrees without a commit** with `<tool>/scripts/run project-settings
+   exclude-worktrees <repo>`, so the next pre-flight never reads them as dirt.
 5. **Check the run's directories exist** (`mkdir -p <dispatch>/logs <dispatch>/audit
    <dispatch>/render` is idempotent) and that the synthesis worktree the postmaster cut is at
-   BASE and is your cwd; then, in synthesis mode, cut one workhorse worktree per workhorse
-   from BASE **on that lane's own `wb/` branch**, the archive branch the Where-things-live
-   table names and the harvest keeps:
+   BASE and is your cwd; then, in synthesis mode, cut one workhorse copy per workhorse
+   from BASE **on that lane's own `wb/` branch**, a shared clone the take-in brings in and
+   the harvest keeps, with
+   `<tool>/scripts/run cut-scratch --cut-workhorse <repo> <repo>/.worktrees/<TICKET>-<lane> <BASE> wb/<TICKET>-<lane>`.
 
-   ```sh
-   git -C <repo> worktree add .worktrees/<TICKET>-<lane> -b wb/<TICKET>-<lane> <BASE>
-   ```
-
-   A worktree cut without `-b` leaves the lane on a detached head and the run with no
-   `wb/` branch to keep. Arm each
-   worktree with the run's checks: `<tool>/scripts/run verify arm <workhorse-wt> <dispatch>`.
+   A copy cut without its branch leaves the lane on a detached head and the run with no
+   `wb/` branch to bring in. Arm each
+   copy with the run's checks: `<tool>/scripts/run verify arm <workhorse-wt> <dispatch>`.
    In
-   single-thread mode cut no workhorse worktree (The run's mode, above).
+   single-thread mode cut no workhorse copy (The run's mode, above).
 6. **Update the manifest** the postmaster created: set the stage with `<tool>/scripts/run stage
    <dispatch> bootstrapped`. In synthesis mode, add one `lanes` entry per workhorse, in place;
    in single-thread mode leave `lanes` empty. Never rewrite the file (the postmaster owns `leg`,
@@ -472,7 +475,7 @@ second implementer wrote (single-thread).
    `<tool>/scripts/run run-times <dispatch>`.
    Never delete the manifest. It is the run's history, and
    the postmaster's poll reads it.
-7. **In synthesis mode, write each workhorse's brief** to `<dispatch>/<lane>-prompt.txt`: the ticket verbatim, the
+7. **In synthesis mode, write each workhorse's brief** to `<dispatch>/<lane>-prompt.txt`: the waybill's `## Ticket` part verbatim, the
    project profile, the docs to read first named explicitly, the `WORKHORSE-SUMMARY.md` /
    `WORKHORSE-BLOCKED.md` contract, and the line that the ready ticket is the run's contract,
    the autonomous-defaults rule (decide within-brief questions
@@ -487,7 +490,7 @@ second implementer wrote (single-thread).
    with `<tool>/scripts/run verify run .` just before writing the summary, in the background with a
    wait where the checks together can outlast the longest command its harness allows. Where the
    project has a user surface it says that every criterion touching it is checked in a real
-   browser through the project's own library from a shell command in the worktree, screenshot
+   browser through the project's own library from a shell command in its copy, screenshot
    per step, whether or not the ticket has a `User journey`, and that where the ticket has none
    the ticket's steps are the journey. Where the work is a command-line tool or scripts it says
    each new or changed command is run the way it will be run, on realistic input, and the
@@ -504,25 +507,30 @@ second implementer wrote (single-thread).
 **In single-thread mode none of this stage's workhorse work runs:** you launched nothing, and
 your leg 1 follows The run's mode, above, from its step 3. What follows is synthesis mode.
 
-**Every workhorse starts only after the ticket's premises are checked.** Launch each workhorse
-to implement the ready ticket, in blinkers, through the host script and the launch script so no
-form is ever copied by hand. The launch carries the ticket in its brief and the instruction to
-finish with `WORKHORSE-SUMMARY.md`. The form is
-the same as it always was:
+**Every workhorse starts only after the ticket's premises are checked and its copy is
+checked.** Before launching any workhorse, check each copy is of the repository, at BASE, on
+its workhorse's branch. If one fails, none starts.
 
 ```sh
-<tool>/scripts/run host run "$(<tool>/scripts/run host name <dispatch> workhorse <lane>)" <workhorse-wt> \
-    --under <dispatch> --role lane --run <dispatch> \
-    --out <dispatch>/logs/<lane>-events.jsonl --err <dispatch>/logs/<lane>.err --marker <dispatch>/logs/<lane>.done \
-    -- <tool>/scripts/run launch launch <lane> <workhorse-wt> <dispatch>/<lane>-prompt.txt --last <dispatch>/logs/<lane>-last.md \
-       --run <dispatch>
+<tool>/scripts/run cut-scratch --check-workhorse <repo> <repo>/.worktrees/<TICKET>-<lane> <BASE> wb/<TICKET>-<lane>
 ```
 
-The tab name comes from the lane and its recorded model through `run host name`; the dispatch
-makes its synthesis worktree space carry the ticket name. Neither name is typed into a shell.
-A resume runs the same way with `--append`, and the command
-`<tool>/scripts/run launch resume <lane> <workhorse-wt> <thread-id> <prompt-file>
---last <dispatch>/logs/<lane>-last.md --run <dispatch>`;
+Launch each workhorse to implement the ready ticket, in blinkers, through the host script and
+the launch script so no form is ever copied by hand. The launch carries the ticket in its
+brief and the instruction to finish with `WORKHORSE-SUMMARY.md`. The form is the same as it
+always was:
+
+```sh
+<tool>/scripts/run host workhorse <dispatch> <lane> <workhorse-wt>
+```
+
+`run host` takes the name from `host name`, so neither name is typed into a shell, gives the
+lane its events, error and marker paths under `<dispatch>/logs/`, and runs the launch with the
+prompt at `<dispatch>/<lane>-prompt.txt`, its `--last` file and `--run <dispatch>`; the
+dispatch makes the run tab in the repository's space carry the ticket name.
+A resume is the launch's `host run` composition with `--append` and the resume child:
+`<tool>/scripts/run host run <name> <workhorse-wt> --under <dispatch> --role lane --run <dispatch> --out <dispatch>/logs/<lane>-events.jsonl --err <dispatch>/logs/<lane>.err --append --marker <dispatch>/logs/<lane>.done -- <tool>/scripts/run launch resume <lane> <workhorse-wt> <thread-id> <prompt-file> --last <dispatch>/logs/<lane>-last.md --run <dispatch>`,
+with `<name>` as `host name <dispatch> workhorse <lane>` prints it;
 `run host` clears the old marker itself. Resume a lane only once its marker has landed: until
 then it is still running. No composer, no interactive session, no registration.
 The streaming output format is load-bearing: the thread id and the final message are harvested
@@ -545,8 +553,9 @@ from it.
   commit them on the ticket branch before any synthesis code. They are the run's only oracle no lane
   wrote, and they stay that only if they are finished before you open a diff. At harvest,
   cut a scratch of each lane at `<repo>/.worktrees/<TICKET>-oracle-<lane>` with `<tool>/scripts/run
-  cut-scratch`, cherry-pick that commit onto it and run it: the result ranks
-  the lanes on the ticket's criteria before you have read a line of either. aftercare removes
+  cut-scratch` at BASE, fetch that lane's HEAD from its workhorse copy into the scratch and check
+  it out, cherry-pick that commit onto it and run it: the result ranks the lanes on the ticket's
+  criteria before you have read a line of either. aftercare removes
   those scratches with the run's other folders, which is why they are named for the ticket. Where the ticket's
   design question IS the interface, do not write them, say so on the checkpoint 1 card, and
   compose on reading alone. Your reading of the ticket is a single reading: in a run with a
@@ -555,9 +564,9 @@ from it.
 - **Harvest.** Each lane's final message is the last result line of its events stream
   (`harnesses.md` gives the per-harness location). `run launch` exports each completed thread into
   `<dispatch>/sessions/` beside its event stream. For every workhorse, `WORKHORSE-SUMMARY.md` at
-  the worktree root is the authoritative final act.
+  the copy root is the authoritative final act.
 - **Monitor: three exit shapes.** Each workhorse's final act is writing `WORKHORSE-SUMMARY.md` at its
-  worktree root. On exit, read the lane's harvest plus its worktree root:
+  copy root. On exit, read the lane's harvest plus its copy root:
   (a) **Summary present.** Mark the workhorse harvested; manifest `outcome: harvested`.
   (b) **Blocked.** `WORKHORSE-BLOCKED.md` present, or the last message ends in a question. Bypass
   flags do not stop a model pausing to ask mid-run; headless, the run EXITS there with the
@@ -565,11 +574,15 @@ from it.
   Answer within-brief questions yourself, restating the autonomous-defaults rule, via that
   workhorse's resume form. Only a genuinely destructive or scope-changing decision goes up, as an
   escalation to the postmaster with your recommendation attached. Manifest `outcome: blocked`
-  until resolved.
+  until resolved. A resume moves the branch, so once the resumed thread exits, run its checks
+  again; the take-in step below refuses a branch past its checked commit.
   (c) **Neither** (died mid-flight). Read the lane's log tail and transcript, then remount it
   (resume) or re-dispatch. A lane silent for about 15 minutes with no exit is inspected. Stall cutoff 90
-  minutes: stop waiting and bring partial results to checkpoint 1 rather than blocking;
-  synthesis from the completed workhorses is an option there. Manifest `outcome: stalled`.
+  minutes: stop the workhorse still running with `<tool>/scripts/run host stop <workhorse-wt>`,
+  wait for its marker with `<tool>/scripts/run wait-for-markers <dispatch>/logs '<lane>.done' 1 120`
+  (on exit 3 the launch would not stop: escalate), mark the workhorse stalled with
+  manifest `outcome: stalled`, and bring partial results to checkpoint 1 rather than blocking;
+  synthesis from the completed workhorses is an option there.
 - **Reap = let the thread exit.** Nothing to kill: workhorse threads end themselves and their
   conversations are durable in each harness's own store. Verification runs against the code,
   never by interrogating a workhorse. Keep threads UNARCHIVED while the run lives; that preserves
@@ -579,11 +592,20 @@ from it.
   the workhorse's actual diff and the repo code. A criterion claimed as shown without evidence
   counts against that lane. Workhorses ship false absolutes in docs and commit
   messages.
-- **Run the checks on each workhorse's branch** once its thread has exited, in its worktree:
+- **Run the checks on each workhorse's branch** once its thread has exited, in its copy:
   `<tool>/scripts/run verify run <workhorse-wt> <dispatch>`, which runs the run's checks whatever the
-  worktree's copy says, and logs each result. It refuses a worktree with uncommitted changes: run
-  it on a scratch cut at the branch's HEAD with `<tool>/scripts/run cut-scratch` instead, and put
-  what the workhorse left uncommitted on the card. Where a check's source names `web-journey`,
+  copy's armed checks say, and logs each result. It refuses a copy with uncommitted changes: run it on
+  a scratch cut at BASE with `<tool>/scripts/run cut-scratch`, fetch the branch's HEAD from the
+  copy into the scratch and check it out, instead, and put what the workhorse left uncommitted on
+  the card. If the gate reports a private-data finding, fix it in the branch without asking the
+  user, then run the gate again. Remove real data, rebuild made-up test values from fragments or
+  mark them beside the finding with its rule and reason, and append one `detections-resolved.jsonl`
+  row per finding with its rule, redacted file, line, commit and `resolution` (`removed`, `marked`
+  or `scrubbed`). Whether the gate reports or not, read `<dispatch>/detections.jsonl` for rows logged
+  `via: marker`: a valid marker silences the gate but still logs the finding, and the ship card's
+  check refuses a detection with no resolution. Append a `marked` row for each before the leg ends.
+  If a finding is already in a pushed commit, do not rewrite it; escalate it under Stage E. Where a
+  check's source names `web-journey`,
   first walk the ticket's User journey on that branch, in the format
   `<tool>/scripts/run verify-journey --format` gives, to the path `<tool>/scripts/run verify
   journey-path <workhorse-wt> <dispatch>` prints. A `run verify run` that can outlast your harness's
@@ -615,10 +637,7 @@ from it.
   work:
 
   ```sh
-  REACH_EXIT=0
-  <tool>/scripts/run reach check <dispatch> workhorses \
-    > <dispatch>/logs/reach-workhorses.txt || REACH_EXIT=$?
-  cat <dispatch>/logs/reach-workhorses.txt
+  <tool>/scripts/run reach check <dispatch> workhorses
   ```
 
   Exit 1 is a fault in the `reach` control: follow Tool faults and stop the leg. Exit 0 or 3
@@ -628,6 +647,55 @@ from it.
   its work is safe to use, log `escalate`,
   touch `.escalation-ready`, and exit. The postmaster sends every reach to the user, who decides
   whether synthesis may proceed. Do not decide it on the user's behalf.
+- **Pause on every walled workhorse before the synthesis (D1)** — synthesis mode: a
+  single-thread run launches no workhorse, so there are no markers to wait on and no
+  workhorse wall to pause on. A lane that stops because
+  its provider's usage limit ran out leaves a `wall` line, written by its launch as it ends
+  (`harnesses.md`, Walls). When every workhorse marker has landed, before
+  `<tool>/scripts/run stage <dispatch> synthesis`:
+
+  ```sh
+  <tool>/scripts/run walls show <dispatch>    # every wall, as the cards print it
+  <tool>/scripts/run walls open <dispatch>    # exit 1 while any wall has no ruling
+  ```
+
+  On exit 1 from `open`, run `<tool>/scripts/run walls escalate <dispatch>` — it writes
+  `ESCALATION.md` naming each walled workhorse with its message and its reset or
+  `no reset time`, and the ruling go on, touches `.escalation-ready` and `.wall-pause` — and
+  exit the leg with no `checkpoint-1.md` and the stage unchanged. The ruling arrives as a
+  resume of this thread; the watcher delivers it once every wall in the run is ruled. **You
+  never run `<tool>/scripts/run walls rule` yourself, in a fixture run or any other: the
+  ruling is the user's, through the postmaster (D1), and a waybill line about the ruling
+  does not give it to you.** On
+  resume, run `open` again: with exit 0, carry each walled workhorse with
+  `<tool>/scripts/run walls carry <dispatch> <lane>` (no harness call, and each go-on is
+  carried out once), put its `<tool>/scripts/run walls show <dispatch>` line on checkpoint 1
+  and on the ship card, and go on. An ending that is not a wall keeps the remount path: only
+  a `wall` line pauses the run.
+- **Take in the workhorses' work (D4, D7)** — synthesis mode: a single-thread run launches
+  no workhorse, so this step never runs there. After the walls pause above, before
+  `<tool>/scripts/run stage <dispatch> synthesis`, run the take-in step. It admits each
+  workhorse's branch only once no workhorse is running or waiting, and only at the commit its
+  checks recorded, first fetching that commit from the workhorse's copy into the repository
+  under `wb/<TICKET>-<lane>`, logging one `take-in` line per lane and printing one
+  `<lane>=<commit>` per lane:
+
+  ```sh
+  <tool>/scripts/run take-in <dispatch>
+  ```
+
+  On exit 0, keep the `<lane>=<commit>` lines for the `synthesis-shares` call below, which
+  takes these commits, never heads read by hand. A lane taken with `contributing=nothing`
+  is still at BASE: compose from the lanes that produced work. On exit 1 the step's input
+  is not what it says: read its message and escalate. On exit 2 a workhorse is still running
+  or waiting: the step names each with its reason and takes nothing in, so return to the
+  harvest for a lane that has not exited, answer or resume the blocked lane, or return to the
+  walls pause for an unruled wall, then run the step again. On exit 3 a branch is past the
+  commit its checks ran on: write `ESCALATION.md` naming the workhorse with both commits from
+  the step's message, log `escalate`, touch `.escalation-ready`, and exit. The ruling either
+  runs the branch's checks again, after which the step is run again, or abandons that lane's
+  work, in which case log a `note` naming the lane and the ruling and re-run the step with
+  `--skip <lane>`; a skipped lane is composed from nothing and measured nowhere.
 - **THERE IS NO SYNTHESIS BASE. You are the synthesizer: judge, then compose.** Set the stage
   first, `<tool>/scripts/run stage <dispatch> synthesis`. Do not fast-forward the ticket branch onto any
   lane. Start from BASE and write the synthesis
@@ -670,27 +738,26 @@ from it.
   with the synthesis.
 
   Then build the synthesis commit by commit with a reason for each choice. Amend commit
-  messages to review grade; run the project's FULL gate with its real command.
+  messages to review grade; run the project's FULL gate with its real command. If its
+  private-data check finds anything, fix each finding on the synthesis branch and rerun the
+  full gate before proceeding; ordinary findings do not go to the user.
 
   **Measure the committed synthesis before recording the SYNTHESIS line** (synthesis mode; a
   single-thread run has no lane commits to measure and writes no shares line). From the synthesis
-  worktree, run the pinned script with explicit commit IDs: the base from the manifest, the
-  final synthesis HEAD, and every lane's harvested head, including lanes that stayed at BASE.
-  Pass one `--lane <name>=<commit>` per lane, and `--oracle <commit>` when the run has an
-  oracle commit. Run Bun with target-repository env loading disabled and no config file;
+  worktree, run the pinned script with explicit commit IDs: the base from the manifest, one
+  `--lane <name>=<commit>` per taken lane from the take-in step's `<lane>=<commit>` lines
+  above, including lanes taken as contributing nothing and omitting lanes the step skipped,
+  and `--oracle <commit>` when the run has an oracle commit. It reads the synthesis HEAD
+  itself (`--synthesis <commit>` measures another commit instead). Run Bun with
+  target-repository env loading disabled and no config file;
   the script disables external diff drivers and textconv when it reads Git:
 
   ```sh
-  SYNTHESIS_HEAD=$(git rev-parse HEAD)
-  SHARES_LINE=$(<tool>/scripts/run synthesis-shares \
-    --base <base> --synthesis "$SYNTHESIS_HEAD" \
-    --lane <lane>=<harvested-head> [--lane <lane>=<harvested-head> ...] \
-    [--oracle <oracle-commit>] --record <dispatch>)
-  <tool>/scripts/run run-log <dispatch> "$SHARES_LINE"
+  <tool>/scripts/run synthesis-shares --base <base> --lane <lane>=<taken-commit> [--lane <lane>=<taken-commit> ...] [--oracle <oracle-commit>] --record <dispatch>
   ```
 
-  The command writes `<dispatch>/shares.json` once and prints the greppable `SHARES:` line.
-  Keep that line beside the SYNTHESIS line in `run-log.md` and on checkpoint 1. Use the
+  The command writes `<dispatch>/shares.json` once, appends the greppable `SHARES:` line to
+  the run log and prints it. Keep that line beside the SYNTHESIS line in `run-log.md` and on checkpoint 1. Use the
   measurement as evidence when ranking; it does not set the ranking, and it does not
   replace `took=`: the counts see text, not ideas the coachman rewrote in its own words.
 
@@ -721,32 +788,6 @@ from it.
   failed workhorse leaves its branch at BASE and has contributed nothing to read. Record that lane
   DEGRADED rather than absent, say so on the card, and compose from the lanes that produced
   work.
-
-  **Pause on every walled workhorse before the synthesis (D1)** — synthesis mode: a
-  single-thread run launches no workhorse, so there are no markers to wait on and no
-  workhorse wall to pause on. A lane that stops because
-  its provider's usage limit ran out leaves a `wall` line, written by its launch as it ends
-  (`harnesses.md`, Walls). When every workhorse marker has landed, before
-  `<tool>/scripts/run stage <dispatch> synthesis`:
-
-  ```sh
-  <tool>/scripts/run walls show <dispatch>    # every wall, as the cards print it
-  <tool>/scripts/run walls open <dispatch>    # exit 1 while any wall has no ruling
-  ```
-
-  On exit 1 from `open`, run `<tool>/scripts/run walls escalate <dispatch>` — it writes
-  `ESCALATION.md` naming each walled workhorse with its message and its reset or
-  `no reset time`, and the ruling go on, touches `.escalation-ready` and `.wall-pause` — and
-  exit the leg with no `checkpoint-1.md` and the stage unchanged. The ruling arrives as a
-  resume of this thread; the watcher delivers it once every wall in the run is ruled. **You
-  never run `<tool>/scripts/run walls rule` yourself, in a fixture run or any other: the
-  ruling is the user's, through the postmaster (D1), and a waybill line about the ruling
-  does not give it to you.** On
-  resume, run `open` again: with exit 0, carry each walled workhorse with
-  `<tool>/scripts/run walls carry <dispatch> <lane>` (no harness call, and each go-on is
-  carried out once), put its `<tool>/scripts/run walls show <dispatch>` line on checkpoint 1
-  and on the ship card, and go on. An ending that is not a wall keeps the remount path: only
-  a `wall` line pauses the run.
 - **Checkpoint 1 card, then the hand-off** (synthesis mode: in single-thread mode the card is
   The run's mode's — the SYNTHESIS line, convention gaps, dropped work, gate and checks, and
   no per-workhorse outcome, ranking or shares): per-workhorse outcome (or stall), each walled lane
@@ -755,7 +796,7 @@ from it.
   was taken from each lane, what was rejected and why**; the code-verified evidence behind each
   choice; the convention gaps found; what was dropped; gate status; the checks, as
   `<tool>/scripts/run landing results <dispatch> <wt>` prints them for each workhorse's branch
-  (`<wt>` the workhorse worktree) and then for the committed synthesis, the journey walked
+  (`<wt>` the workhorse copy) and then for the committed synthesis, the journey walked
   first where there is one, with each workhorse's `run verify summary` verdict and its `summary-evidence.ts`
   result. A card that presents a
   finished diff without saying which lane each part came from is the defaulting failure
@@ -796,8 +837,8 @@ Set the stage first, `<tool>/scripts/run stage <dispatch> review`, then:
    - **P2:** A defect materially impairs an important capability or protection, with impact limited by its scope or a workable alternative.
    - **P3:** A defect has limited impact and does not materially impair normal use.
 
-   **State in every brief that the lane is working in its own disposable worktree with dependencies
-   installed, that it checks a finding with a targeted probe rather than running the project's
+   **State in every brief that the lane is working in its own disposable copy of the repository
+   with dependencies installed, that it checks a finding with a targeted probe rather than running the project's
    gate, lint, build or tests, and that the one thing it must not do is modify the code under
    review.** It is expected to RUN things to check its own claims, and to say for each finding
    whether it was verified by execution or by reading. A finding verified by execution outranks
@@ -816,8 +857,7 @@ Set the stage first, `<tool>/scripts/run stage <dispatch> review`, then:
    - **Bug lens** (gating): correctness, logic, absence-versus-relative checks (does any check
      pass vacuously when a row, file or entry is missing?), and defects in the change. Only
      lanes whose harness has a code-review form review for bugs; no brief is written and no
-     fallback is used. Launch: `<tool>/scripts/run launch review "$L" "$DEST" <BASE> --last
-     <dispatch>/logs/review-r<round>-bug-$L-last.md --run <dispatch>`. The form names the
+     fallback is used. Launch: by the review launch (below), which runs `launch review` on the
      base-to-HEAD change at the run-recorded lane effort. Normalize its
      report with `<tool>/scripts/run review-findings`; missing fields such as severity stay
      `not provided`.
@@ -831,138 +871,82 @@ Set the stage first, `<tool>/scripts/run stage <dispatch> review`, then:
      [Why a lane may review through its harness's own skill](../../wiki/concepts/own-review-skills.md)
 
    **A launch from a brief** has two parts. Its preparation, once per round and before any
-   reviewer starts, writes the lens's prompt file verbatim:
-
-   ```sh
-   cat > <dispatch>/review-r<round>-<lens>-prompt.txt <<'EOF'
-   Read <abs>/review-<lens>-brief.md and execute it. Report findings as your final message. Do not modify any file you are reviewing.
-   EOF
-   ```
-
-   Its launch step starts reviewer lane `$L` in its scratch `$DEST`:
-   `<tool>/scripts/run launch launch "$L" "$DEST" <dispatch>/review-r<round>-<lens>-prompt.txt --run <dispatch>`.
+   reviewer starts, writes the lens's prompt file verbatim — `Read <abs>/review-<lens>-brief.md
+   and execute it. Report findings as your final message. Do not modify any file you are
+   reviewing.` — and the review launch (below) starts each reviewer in its own scratch with
+   that file as its prompt.
 
    **The security lens's launch** has the same two parts, with a prompt file for each lane. Its
-   preparation writes the lens's prompt file as above, then each lane's own, and stops the round
-   on any exit but 0 (the lane's harness has the skill) and 3 (it has none):
-
-   ```sh
-   for L in $(<tool>/scripts/run reviewers lanes <dispatch>/brief.md security); do
-     <tool>/scripts/run launch skill "$L" security-review --run <dispatch> > <dispatch>/review-r<round>-security-$L-prompt.txt
-     case $? in
-       0) ;;
-       3) cp <dispatch>/review-r<round>-security-prompt.txt <dispatch>/review-r<round>-security-$L-prompt.txt ;;
-       *) echo "NO SECURITY PROMPT FOR $L; nothing launched"; exit 1 ;;
-     esac
-   done
-   ```
-
-   Its launch step starts lane `$L` in its scratch `$DEST`:
-   `<tool>/scripts/run launch launch "$L" "$DEST" <dispatch>/review-r<round>-security-$L-prompt.txt --run <dispatch>`.
+   preparation writes the lens's prompt file as above, then each lane's own from
+   `launch skill <lane> security-review --run <dispatch>`: exit 0 is the skill's prompt (its
+   output), exit 3 means the harness has none and the lane gets a copy of the lens's file, and
+   any other exit stops the round with `NO SECURITY PROMPT FOR <lane>` and nothing launched.
    A skill reads no brief. Its findings arrive as its final message, and step 3 verifies them
    like any other lane's.
 2. **Run every reviewer under every open lens on the same snapshot, from a fresh scratch each
    round**, pinned to the synthesis HEAD, with the installed dependencies cloned in so every
-   lane is a full lane:
+   lane is a full lane. **Cut:** where a check's source names web-journey, walk the ticket's
+   User journey on the synthesis worktree first, to the path `<tool>/scripts/run verify
+   journey-path <synthesis-wt> <dispatch>` prints; then run the run's checks once, on the
+   snapshot:
 
    ```sh
-   SNAP=$(git -C <synthesis-wt> rev-parse HEAD)
-   # Where a check's source names web-journey, walk the ticket's User journey on the synthesis
-   # worktree first, to the path <tool>/scripts/run verify journey-path <synthesis-wt> <dispatch>
-   # prints; then the run's checks, once, on the snapshot:
-   VERIFY_EXIT=0
-   <tool>/scripts/run verify run <synthesis-wt> <dispatch> > <dispatch>/logs/review-r<round>-checks.txt || VERIFY_EXIT=$?
-   cat <dispatch>/logs/review-r<round>-checks.txt
-   <tool>/scripts/run log-action <dispatch> coachman gate "$SNAP" "review round <round>, run verify exit $VERIFY_EXIT"
-   case "$VERIFY_EXIT" in
-     0|3) ;;
-     *) exit 1 ;;
-   esac   # 0 green and 3 not-run proceed; 2 (a check failed), 1 (verify unrunnable), a signal, or run verify itself unstartable (126/127) stops the round
-   # A 126/127 inside a check is that check's `not run` ("bash could not start it"),
-   # which aggregates to 3 and proceeds; only run verify itself failing to start stops
-   # the round on 126/127
-   if [ "$VERIFY_EXIT" -eq 3 ]; then
-     awk '/: not run, /{print; p=1; next} p==1 && /^  /{print; next} {p=0}' <dispatch>/logs/review-r<round>-checks.txt | while IFS= read -r NOTRUN; do
-       <tool>/scripts/run run-log <dispatch> "review round <round> gate not run: $NOTRUN"
-     done
-   fi
-   # A check not run is never read as passed: each goes on the card as `not run` with
-   # run verify's reason. Example: a ticket with no User journey makes the journey check
-   # `not run` (`journey: not run, exit 3, ...` plus its reason line); the round proceeds,
-   # the run log carries those lines, and the card records `journey: not run`. On a stopping
-   # exit, fix the cause on the synthesis worktree and repeat this step
-   git -C <repo> worktree prune
-   for LENS in <open lenses>; do   # a lens whose lanes do not resolve stops the round here
-     <tool>/scripts/run reviewers lanes <dispatch>/brief.md "$LENS" >/dev/null || exit 1
-   done
-   for LENS in <open lenses>; do
-     for L in $(<tool>/scripts/run reviewers lanes <dispatch>/brief.md "$LENS"); do
-       DEST=<repo>/.worktrees/<TICKET>-rev-$LENS-$L
-       # A scratch an interrupted round left behind is checked like any other, then torn down;
-       # one that cannot be stops the cut, and nothing is launched.
-       if [ -e "$DEST" ]; then
-         git -C "$DEST" diff --name-only "$SNAP" | sed "s|^|LEFT BEHIND AND MODIFIED, $DEST: |"
-         <tool>/scripts/run review-round teardown <dispatch> <round> <repo> "$LENS:$L" || exit 1
-       fi
-       # The security lens reviews from clones, whose origin/HEAD leads back to BASE, which a
-       # harness's own security review skill needs (harnesses.md, Own review skills).
-       CLONE=(); [ "$LENS" = security ] && CLONE=(--clone <BASE>)
-       # ASSERT the scratch is cut at SNAP before launching a lane into it. The coachman runs
-       # the project's recorded checks once on the snapshot; reviewers do not build or run them.
-       <tool>/scripts/run cut-scratch <repo> <synthesis-wt> "$DEST" "$SNAP" "${CLONE[@]}" \
-         || echo "SCRATCH BROKEN: $DEST is not cut at $SNAP; fix before launching $L under $LENS"
-     done
-   done
+   <tool>/scripts/run review-round cut <dispatch> <round> <repo> <synthesis-wt>
    ```
+
+   The call reads the snapshot from the synthesis worktree's HEAD, runs the recorded checks
+   into `<dispatch>/logs/review-r<round>-checks.txt` and prints the file, logs the `gate`
+   action on the snapshot with the exit (`review round <round>, run verify exit <n>`), and
+   prunes the worktrees. Exits 0 (green) and 3 (not-run) go on; any other exit stops the
+   round, and on a stopping exit the cause is fixed on the synthesis worktree before cutting
+   again. On 3, each line run verify marked `not run`, with its indented reason lines, goes to
+   the run log as `review round <round> gate not run: <line>`. A check not run is never read as
+   passed: each goes on the card as `not run` with run verify's reason — a ticket with no User
+   journey makes the journey check `not run`, and the round proceeds with those lines in the
+   log. For a private-data finding, repair the synthesis branch, record its resolution, and
+   repeat this gate step before opening the next review round. Escalate only a finding in
+   pushed history.
+
+   The cut resolves every open lens's lanes — a lens whose lanes do not resolve stops it —
+   then, per scratch: one left behind by an interrupted round has its changed tracked files
+   printed as `LEFT BEHIND AND MODIFIED, <dest>: <file>` and is torn down alone, a teardown
+   that fails stopping the cut, and the scratch is cut at the snapshot, from a clone with
+   `--clone <BASE>` under every lens. Every lens reviews from clones. A scratch that will not
+   cut prints `SCRATCH BROKEN: ...` and the cut goes on. The coachman runs the project's
+   recorded checks once on the snapshot; reviewers do not build or run them.
 
    Never install into a scratch. If the synthesis worktree has no installed dependencies,
    install there first and clone from it. Every reviewer reviews from a scratch, never from the
    synthesis worktree.
 
-   Then do every open lens's preparation, and launch every reviewer under every open lens in the
-   same breath, each through its lens's launch step run by `run host` (`hosts.md`). The command
-   first checks every scratch with `run cut-scratch --check`: at the snapshot, and under the
-   security lens a clone whose `origin/HEAD` leads back to BASE. It launches nothing if one
-   fails; then it starts the round, which clears its markers and fixes its deadline. `run host`
-   lands each marker, naming the round, the lens and the lane, when its process exits, whatever
-   its exit, and the command ends in the wait for the whole round, given every reviewer the loop
-   launched. A wait cut short, as by the harness's cap on background tasks, is run again alone:
-   `<tool>/scripts/run review-round wait <dispatch> <round> <repo>` keeps the round's reviewers
-   and its deadline. A round interrupted before its launches were done is re-run whole, from the
-   cut, which tears down whatever its first attempt left:
+   **Launch:** the call below resolves every open lens's lanes — a lens whose lanes do not
+   resolve stopping it — then does every open lens's preparation: each brief-launched lens's
+   prompt file verbatim, and under the security lens each lane's prompt file from its harness's
+   own security-review skill (`launch skill <lane> security-review --run <dispatch>`: exit 0 is
+   the skill's prompt, exit 3 a copy of the lens's file, and any other exit stopping the round
+   with `NO SECURITY PROMPT FOR <lane>` and nothing launched) — then checks every scratch with
+   `cut-scratch --check`, at the snapshot and a clone whose `origin/HEAD` leads back to BASE,
+   under every lens. It launches nothing if one fails, with
+   `SCRATCH NOT READY: <TICKET>-rev-<lens>-<lane>` and nothing launched; then it starts the
+   round, a round that will not start stopping it, which clears its markers and fixes its
+   deadline, and starts every reviewer under
+   every open lens through `run host` (`hosts.md`), each named as `host name <dispatch> review
+   <lane> <lens> <round>` prints, with `--under`, `--role reviewer`, `--run`, `--out`, `--err`
+   and `--marker` — the bug lens on `launch review`, every other lens on `launch launch`
+   with its prompt file — logging one `review-launch` line per lane it starts.
+   `run host` lands each marker, naming the round, the lens and the lane,
+   when its process exits, whatever its exit, and the call ends in the wait for the whole
+   round, given every reviewer it launched, exiting as the wait does:
 
    ```sh
-   SNAP=$(git -C <synthesis-wt> rev-parse HEAD)
-   for LENS in <open lenses>; do
-     <tool>/scripts/run reviewers lanes <dispatch>/brief.md "$LENS" >/dev/null || exit 1
-     CLONE=(); [ "$LENS" = security ] && CLONE=(--clone <BASE>)
-     for L in $(<tool>/scripts/run reviewers lanes <dispatch>/brief.md "$LENS"); do
-       <tool>/scripts/run cut-scratch --check <repo>/.worktrees/<TICKET>-rev-$LENS-$L "$SNAP" "${CLONE[@]}" \
-         || { echo "SCRATCH NOT READY: <TICKET>-rev-$LENS-$L; nothing launched"; exit 1; }
-     done
-   done
-   <tool>/scripts/run reach before <dispatch> <round> || exit 1
-   <tool>/scripts/run review-round start <dispatch> <round> || exit 1
-   REVIEWERS=()
-   for LENS in <open lenses>; do
-     for L in $(<tool>/scripts/run reviewers lanes <dispatch>/brief.md "$LENS"); do
-       DEST=<repo>/.worktrees/<TICKET>-rev-$LENS-$L
-       if [ "$LENS" = bug ]; then
-         LAUNCH=(<tool>/scripts/run launch review "$L" "$DEST" <BASE> --last <dispatch>/logs/review-r<round>-bug-$L-last.md --run <dispatch>)
-       else
-         LAUNCH=(<the launch step of $LENS, for "$L" in "$DEST">)
-       fi
-       <tool>/scripts/run host run "$(<tool>/scripts/run host name <dispatch> review "$L" "$LENS" <round>)" "$DEST" \
-           --under <dispatch> --role reviewer --run <dispatch> \
-           --out <dispatch>/logs/review-r<round>-$LENS-$L.jsonl --err <dispatch>/logs/review-r<round>-$LENS-$L.err \
-           --marker <dispatch>/logs/review-r<round>-$LENS-$L.done \
-           -- "${LAUNCH[@]}"
-       <tool>/scripts/run log-action <dispatch> coachman review-launch "$L" "$LENS round <round>"
-       REVIEWERS+=("$LENS:$L")
-     done
-   done
-   <tool>/scripts/run review-round wait <dispatch> <round> <repo> "${REVIEWERS[@]}"
+   <tool>/scripts/run reach before <dispatch> <round>
+   <tool>/scripts/run review-round launch <dispatch> <round> <repo> <synthesis-wt>
    ```
+
+   A wait cut short, as by the harness's cap on background tasks, is run again alone:
+   `<tool>/scripts/run review-round wait <dispatch> <round> <repo>` keeps the round's reviewers
+   and its deadline. A round interrupted before its launches were done is re-run whole, from the
+   cut, which tears down whatever its first attempt left.
 
    **Normalize the bug reports before triage.** For each lane under the bug lens, copy any
    forked task record the stream's `task_notification` named and normalize the native report
@@ -977,19 +961,15 @@ Set the stage first, `<tool>/scripts/run stage <dispatch> review`, then:
    the hand-written one where normalization failed.
 
    ```sh
-   NORMALIZE_FAILED=()
-   for L in $(<tool>/scripts/run reviewers lanes <dispatch>/brief.md bug); do
-     DEST=<repo>/.worktrees/<TICKET>-rev-bug-$L
-     EVENTS=<dispatch>/logs/review-r<round>-bug-$L.jsonl
-     HARVEST_ERR=$(<tool>/scripts/run review-findings harvest "$EVENTS" <dispatch>/logs --prefix review-r<round>-bug-$L 2>&1) \
-       || { <tool>/scripts/run log-action <dispatch> coachman degrade "$L" "bug round <round>: $HARVEST_ERR"; <tool>/scripts/run run-log <dispatch> "$L bug: DEGRADED, $HARVEST_ERR"; continue; }
-     <tool>/scripts/run review-findings normalize "$L" "$DEST" "$EVENTS" --last <dispatch>/logs/review-r<round>-bug-$L-last.md --run <dispatch> \
-       > <dispatch>/logs/review-r<round>-bug-$L-findings.json || { NORMALIZE_FAILED+=("$L"); rm -f <dispatch>/logs/review-r<round>-bug-$L-findings.json; }
-   done
-   for L in "${NORMALIZE_FAILED[@]}"; do   # a report the normalizer cannot read is read by hand, with its path; never dropped, never clean
-     <tool>/scripts/run run-log <dispatch> "review round <round> $L: normalize failed; reading the raw report by hand"
-   done
+   <tool>/scripts/run review-round harvest <dispatch> <round> <repo>
    ```
+
+   The call harvests each bug lane's report from its events stream: a harvest that fails logs
+   `degrade` (`bug round <round>: <error>`) and run-log `<lane> bug: DEGRADED, <error>` and
+   skips the normalizer, and each report the normalizer reads goes to
+   `<dispatch>/logs/review-r<round>-bug-<lane>-findings.json` — one it cannot read has its
+   file removed and, after every lane, the run log says `review round <round> <lane>: normalize
+   failed` and that the raw report is read by hand, never dropped and never clean.
 
    For each such lane, read its raw report — the `--last` file for codex, else the final
    event message — and write `<dispatch>/logs/review-r<round>-bug-$L-findings.md` by hand:
@@ -1024,7 +1004,7 @@ Set the stage first, `<tool>/scripts/run stage <dispatch> review`, then:
    be stopped: escalate. Harvest the others, and treat each timed-out lane as a review lane
    killed mid-run (hard rules): DEGRADED on the checkpoint card, with `timeout` as its cause,
    and back in the next round. A round in which no lane actually reviewed under a gating lens
-   is never the last: that lens runs again in the next round, which counts toward the cap.
+   is never the last: that lens runs again in the next round.
    Exit 4 is a timeout whose records could not all be written, a fault in a control: stop the
    leg and escalate (Tool faults). Exit 1 collects nothing, and the output says why; unless the
    round was started again, re-run it whole.
@@ -1052,30 +1032,25 @@ Set the stage first, `<tool>/scripts/run stage <dispatch> review`, then:
    <tool>/scripts/run review-round teardown <dispatch> <round> <repo>
    ```
 
-   For each scratch it stops what still runs there (`run host stop`), closes its space
+   For each scratch it stops what still runs there (`run host stop`), closes its panes
    (`run host close`) and removes it (`run cut-scratch --remove`, which takes away a scratch of
    either kind and refuses anything else), each only once the one before has succeeded, and
    logs `teardown`. A reviewer it names as stopped before it had finished is DEGRADED for the
    round. A scratch it leaves in place is named with its reason, such as the user having its
-   space open, and reported; it is never removed by hand. A scratch never holds work, and its
+   tab open, and reported; it is never removed by hand. A scratch never holds work, and its
    contents were just checked.
    **Check reach and restore before any fix.** Once every reviewer has been harvested and each
    scratch's tracked diff has been checked, but before teardown or triage, run:
 
    ```sh
-   REACH_EXIT=0
-   <tool>/scripts/run reach check <dispatch> r<round> \
-     > <dispatch>/logs/reach-r<round>.txt || REACH_EXIT=$?
-   cat <dispatch>/logs/reach-r<round>.txt
-   if [ "$REACH_EXIT" -eq 1 ]; then exit 1; fi
-   <tool>/scripts/run reach restore <dispatch> r<round> || exit 1
+   <tool>/scripts/run reach round <dispatch> r<round>
    ```
 
    Exit 1 from `check` or `restore` is a fault in the `reach` control: follow Tool faults and
    stop. The check logs a `degrade` line for each reviewer whose verdict it voids. That verdict
    never counts as clean; still inspect that reviewer's findings, and launch the reviewer again
    if another round runs. An unexplained change to a run branch or tracked synthesis file voids
-   every reviewer and requires another round, counting toward the three-round cap. A move of
+   every reviewer, whose degrade lines keep the loop from ending on that round. A move of
    the run branch or synthesis worktree whose commits are exactly the `apply` actions the
    coachman logged, in order, reads as explained rather than unexplained: log every fix
    commit with `log-action apply`. Restore saves
@@ -1111,34 +1086,33 @@ Set the stage first, `<tool>/scripts/run stage <dispatch> review`, then:
    Every style finding is deferred in the hand-off, reaches the ship card's Style residue, and
    is sorted at aftercare (stage 4). The next review round runs the project checks once on the new snapshot.
 5. **Run the review loop by its logged decision.** After applying, call `<tool>/scripts/run review-decide
-   <dispatch> <round>`, which reads the round's `finding` and `apply` lines and prints whether
-   another round runs or the loop ends: round 2 runs whenever round 1 applied a fix; after that,
-   round `r+1` runs only when round `r` logged a verified P1 or P2 finding. Follow its printed
-   `RUN`, `STOP` or `CAP` decision; do not count findings by hand. A style finding never
-   keeps the loop going. Round `r+1` runs the gating lenses alone, on the fixed diff, with its
-   own markers, each brief the lens has updated with the fixes delta and every applied finding
-   as known context, so they closure-check each fix AND hunt new holes the fixes introduced.
+   <dispatch> <round>`, which reads the round's `finding`, `apply`, `review-launch` and `degrade`
+   lines and prints whether another round runs, the loop ends, or the loop stops for a ruling.
+   Follow its printed decision: `RUN` starts the next round, `STOP` ends the loop, and `RULING`
+   stops the loop for a ruling with the residue, as below; do not count findings by hand. The next
+   round runs the gating lenses alone, on the fixed diff, with its own markers, each brief the lens
+   has updated with the fixes delta and every applied finding as known context, so they closure-check
+   each fix AND hunt new holes the fixes introduced.
    The bug lens has no brief to update and its forms take no known context; a skill that
    reports an applied finding again is dropped by the coachman's dedup. A fix of a
    P1 or P2 finding that does not verify closed is logged as a `finding` of its own severity in
    the round that checked it, and a P3 fix that does not verify closed as a P3 `finding` there.
    A round in which no lane actually reviewed under a gating lens is never the last
-   (step 2): that lens runs again in the next round regardless of the decision.
+   (step 2): that lens runs again in the next round, and the decision keeps
+   such a round from ending the loop.
    A loop with no gating lens is round 1 alone, and applies nothing: a verified gating
    finding in it, a bug or security defect the style lens reported, is escalated with the card
    instead of fixed, which stops the leg in either `CHECKPOINT_MODE`, and a ruling that asks for
    the fix has it applied, the checkpoint rewritten with its state `applied on user word, not
-   re-reviewed`, and the gate re-run, with the card listing it under `## Not re-reviewed`. The
-   cap of 3 rounds for the whole loop, round 1 included, stays as a backstop: when round 3 logs
-   a verified P1 or P2 finding, the loop stops and escalates with the residue, including any
-   fixes that have not been re-reviewed, and your read on why it is not converging; this and the
-   escalation above are `CHECKPOINT_MODE`'s only mid-flow stops in autonomous mode. Past the cap,
-   each further round — including one ordered because no lane reviewed — needs its own ruling
-   (step 6); the script decides nothing past 3. Style
+   re-reviewed`, and the gate re-run, with the card listing it under `## Not re-reviewed`. When
+   the decision is `RULING`, the loop stops and escalates with the residue, including any
+   fixes that have not been re-reviewed, the decision's line, and your read on why it is not
+   converging; this and the escalation above are `CHECKPOINT_MODE`'s only mid-flow stops in
+   autonomous mode. After a ruling to go on, the rounds that follow are decided by the same rule. Style
    does not run again: a style lane DEGRADED in round 1 stays DEGRADED, and the card says how
    many lanes the style lens rested on.
 
-   **ESCALATE ON A REPEATED CLASS, not only on the round cap.** If the same class of defect is
+   **ESCALATE ON A REPEATED CLASS, whatever the decision says.** If the same class of defect is
    found in three consecutive rounds, whichever lens found it, each round closing the sites it
    can name while the next finds another of the same kind, stop and escalate at that point,
    whatever the severity. Three instances of one thing is a design signal: the fix is to remove
@@ -1163,8 +1137,8 @@ Set the stage first, `<tool>/scripts/run stage <dispatch> review`, then:
    Autonomous mode: for contract 2 continue to stage 3 below in this leg; for a legacy run
    write the leg's hand-off and end it. Consult mode: escalate on the card and wait for the resume.
    A ruling that asks for a change is applied; in a loop with a gating lens it is followed by
-   another round, counted toward the cap, and the card is written and escalated again, and a
-   round past the cap runs only when the ruling says so. Any other ruling, or a change applied in
+   another round, and the card is written and escalated again, and a round after a stop for a
+   ruling runs only when the ruling says so. Any other ruling, or a change applied in
    a loop with no gating lens, ends the legacy leg with its hand-off or continues contract 2 to
    stage 3 below.
 
@@ -1172,7 +1146,8 @@ Set the stage first, `<tool>/scripts/run stage <dispatch> review`, then:
 
 This section runs at the end of synthesis when there is no review leg, or at the end of review
 after the loop has no P1 or P2 finding left and the gates pass. The postmaster owns the landing
-route and any merge. You do not push, open a pull request, wait for a merge word, or merge.
+route and landing the ticket on main. You do not push, open a pull request, wait for a merge word,
+or land the ticket. Taking main into the ticket branch is this stage's merge step, below.
 
 **No card while a wall has no ruling (D8).** `<tool>/scripts/run walls open <dispatch>` must
 exit 0 before this stage runs. On exit 1, run `<tool>/scripts/run walls escalate <dispatch>`
@@ -1182,9 +1157,50 @@ of this thread, `open` exits 0, and this stage starts from the top. A walled rev
 
 Set the stage first: `<tool>/scripts/run stage <dispatch> shipping`.
 
+List the branch's switch-offs before anything else here: run
+`<tool>/scripts/run landing switch-offs --repo <repo> --default <default-branch>
+--ticket <ticket-branch> --dispatch <dispatch>` before the gate below, and after any code
+change the run makes. Exit 0, the branch is clear. Exit 2, the entries wait on the user's
+word and already carry their reasons: remove what the run should not switch off, keep what
+it should, and paste the list on the card as below. Exit 3 names the entries missing their
+reasons: give each its reason, or remove what it should not switch off and rerun the gate
+and this call. Exit 4 is the user's recorded refusal of a listed entry: remove the entry,
+never argue it into the card. Any other exit is an input fault: stop, fix the inputs and
+re-run. This call is the same check the postmaster runs before it lands the run; its first
+line is the status, and everything after it is the `## Switch-offs` section the card
+carries.
+
+Take main into the ticket branch before the gate, so the gate runs once at the merged head.
+On the pull-request route, `git fetch` the default branch's remote first, as Stage F does,
+and pass the default branch's upstream short ref as `--default`; on the `landing: local`
+route pass the local default branch, with no fetch. Never move the local default branch.
+Then call the merge step:
+
+```sh
+<tool>/scripts/run merge-default --repo <repo> --default <branch> --ticket <ticket-branch> --dispatch <dispatch> --wt <synthesis-wt>
+```
+
+Act on its first line. `CARD` and `CARD-ANYWAY` carry the card's `## Merge` section after
+a blank line: keep the latest one for the card and go on. `MERGED` and `GATE-NEEDED`: run the gate as
+step 1 says and call the step again. `CONFLICT` names the main and each conflicted file:
+the run that merges second resolves them, by merge and never by rebase — resolve by hand,
+commit the merge, never abort it, and call the step again. `GATE-FAILED` names the failed
+check: fix what this ticket's change meeting main's caused on the branch, pass the gate
+again and call the step again, and anything else goes to `ESCALATION.md` naming the check
+with `.escalation-ready` and no `.card-ready`. `HEAD`: move the worktree to the ticket head
+and call the step again. `UNCHANGED`: the merge took in nothing, since the branch already
+held that main; call the step again. Exit 1 is an input fault: fix the inputs and re-run, never proceed
+past it. After each merge the step makes, run the switch-offs call above again. No review
+round runs after a merge: main's code was reviewed in its own run, the gate checks the two
+together, and the card names the files the merge needed by hand.
+
 1. **Verify the final HEAD.** Run `<tool>/scripts/run verify run <synthesis-wt> <dispatch>` after
    the last code change; the gate must
    pass before the card is ready. No P1 or P2 finding may remain open.
+   If the private-data check fails, fix each finding in the synthesis worktree, record its
+   resolution and rerun the gate; do not ask the user to repair an ordinary finding. A finding
+   that survives only in an earlier commit goes to the user, as one in a pushed commit does,
+   until #423 lands.
    If a new P1 or P2 issue appears during final QA, fix it and pass the gate again; when the
    review loop has a gating lens, run another review round and rewrite `checkpoint-review.md`
    with the loop's rounds and outcome before writing the card.
@@ -1208,6 +1224,13 @@ Set the stage first: `<tool>/scripts/run stage <dispatch> shipping`.
    and record its output. Exit 1 is a fault in the `reach` control: follow Tool faults and
    stop. Findings, notes and `not checked` records at this point are shown on the card and do
    not stop the run.
+
+Ask the freshness question again before the card: fetch as the merge step says and call
+it again. On `CARD`, write the card with the step's `## Merge` section. On any other
+verdict, answer it as the merge step says — a merge here is followed by the gate only,
+then the step again — and write the card once the step answers `CARD` or `CARD-ANYWAY`,
+whatever main has done since.
+
 5. **Write `card.md`.** Include the run's mode as a line `Mode: <synthesis | single-thread>`
    from `run.json` (in both modes; the waybill's `mode:` line says the same — a single-thread
    run's card carries `Mode: single-thread`), then the branch, final HEAD, diff
@@ -1219,7 +1242,11 @@ Set the stage first: `<tool>/scripts/run stage <dispatch> shipping`.
    anywhere in the card; a card quoting `<!--`, in a commit subject or finding title,
    escapes it, for example as `&lt;!--` (the leg's checkpoint is
    `<dispatch>/checkpoint-review.md` after a review leg, `<dispatch>/checkpoint-1.md`
-   when this leg is synthesis); browser suite and QA when
+   when this leg is synthesis); then the `## Switch-offs` section from the call above,
+   pasted after the block as its own section, never retyped, so the card shows the
+   branch's list exactly as the check printed it; then the `## Merge` section from the
+   merge step's card verdict, pasted after it as its own section, never retyped;
+   browser suite and QA when
    present; the journey report path where a
    check's source names `web-journey`; every ticket turnpike with its
    rounds and result from its checkpoint record, or `none`; the Style residue
@@ -1230,11 +1257,16 @@ Set the stage first: `<tool>/scripts/run stage <dispatch> shipping`.
    every walled lane carrying its `<tool>/scripts/run walls show
    <dispatch>` line — `lane: DEGRADED, provider wall: "<the provider's message>"` — and the
    review link. **Each of those is its own `##` section** — the card-block's four, then
-   `## Turnpikes`, `## Style residue`, `## Branches`, `## Lane outcomes`, `## QA and browser
-   suite` (`none` where the project has none) and `## Review link` —
+   `## Merge`, `## Turnpikes`, `## Style residue`, `## Branches`, `## Lane outcomes`,
+   `## QA and browser suite` (`none` where the project has none) and `## Review link` —
    the same heading set in both modes. Finding titles and notes, where the reader
    wants them, go in prose outside the pasted block, which carries only ids and severities.
-   The card's branch state is before merge: the
+   Add `<tool>/scripts/run landing private-data-block <dispatch>` verbatim as the card's
+   `## Private data findings` block. It lists every logged finding and its resolution, and any
+   census counts by rule and by made-up or real verdict without the census paths or commits.
+   The postmaster checks it with `run landing private-data-card`; a missing finding or a dirty
+   card is withheld.
+   The card's branch state is before landing: the
    ticket branch is ready, and every other branch is either retained or abandoned. The gate is
    listed as the gate, never as a turnpike.
 6. **Write the final hand-off.** Write
@@ -1273,8 +1305,10 @@ Set the stage first: `<tool>/scripts/run stage <dispatch> shipping`.
    `--run <dispatch>` and `--pidfile <dispatch>/render/preview.pid`, named for its role alone
    (`preview server`), which
    keeps it alive past a harness turn and in the user's view, and put stopping it on the
-   teardown checklist: `kill -- -$(cat <dispatch>/render/preview.pid)`, its whole process group,
-   so no child of a package script survives. The preview link goes on the ship card and the
+   teardown checklist: `<tool>/scripts/run host stop-pidfile <dispatch>/render/preview.pid`,
+   which stops its whole process group, so no child of a package script survives, while the
+   recorded identity matches; otherwise it names the leftover members it cannot prove and
+   exits 2. The preview link goes on the ship card and the
    tracker comment beside the review link. **Then QA that preview build before shipping it:
    click through the new surface like a person**, at phone width, working the actual task
    rather than ticking a checklist.
@@ -1337,13 +1371,13 @@ Set the stage first: `<tool>/scripts/run stage <dispatch> shipping`.
    `<tool>/scripts/run discover-project <repo>` (the `install=` line; empty where the project
    needs no install step). Write each non-empty part (`<install>` from discovery, `<build>`
    and `<gate>` from the profile, a `none` build left out) to its own file under
-   `<dispatch>` with a quoted heredoc, which carries `$`, quotes and newlines literally,
-   and pass them as separate arguments — never joined with `&&` into one shell string, in
-   which a failed preparation would hide behind a later statement:
-   `<tool>/scripts/run clean-checkout <repo> <default-branch> "$(cat
-   <dispatch>/ship-install.txt)" "$(cat <dispatch>/ship-build.txt)" "$(cat
-   <dispatch>/ship-gate.txt)"`, leaving out the empty parts. The helper runs them in turn
-   and stops at the first failure. Where the profile names no gate, there is nothing to
+   `<dispatch>` with your own file tools, and name each file as a `--file` argument —
+   never as one shell string joined with `&&`, in which a failed preparation would hide
+   behind a later statement:
+   `<tool>/scripts/run clean-checkout <repo> <default-branch> --file
+   <dispatch>/ship-install.txt --file <dispatch>/ship-build.txt --file
+   <dispatch>/ship-gate.txt`, leaving out the empty parts. The helper reads each file's
+   command, runs them in turn and stops at the first failure. Where the profile names no gate, there is nothing to
    verify. Log the result when a gate ran
    (`<tool>/scripts/run log-action <dispatch> coachman gate <default-branch> "post-merge,
    clean checkout, exit <n>"`). A red result is investigated under the red-gate rule below;
@@ -1394,12 +1428,12 @@ the run's stage timings to `run-log.md`. Never write timings by hand. A closing 
 on the ticket carries the run summary.
 Never delete the dispatch directory or the manifest, they are the run's history. Archive
 finished threads where the harness has an archive form (`harnesses.md`). After the merge, tear
-down the workhorse worktrees, preserving any stray file first (a workhorse killed mid-run leaves
-real artifacts) and closing each one's space before it is removed (`<tool>/scripts/run host close <wt>`),
+down the workhorse copies, preserving any stray file first (a workhorse killed mid-run leaves
+real artifacts) and closing each one's panes before it is removed (`<tool>/scripts/run host close <wt>`),
 and hand the synthesis worktree to the postmaster for removal from outside it.
 Keep the `wb/<TICKET>-<lane>` branches as a local archive. Durable process learnings go to the
 project's own docs, not this runbook. Residue contract: a clean run leaves only torn-down-able
-worktrees. Then finish `handoff-3.md` (the closing state of every branch and the ticket), close
+folders. Then finish `handoff-3.md` (the closing state of every branch and the ticket), close
 the open section with `<tool>/scripts/run run-log <dispatch> --close`, log `handoff`, touch
 `.leg-3-done`, and exit.
 
@@ -1448,9 +1482,10 @@ ticket that needs another's change waits for it to land.
   re-briefing a fresh one, since the thread carries its own context. Threads stay unarchived
   until stage 4. The rare interactive workhorse (live mid-run steering genuinely needed) runs in its
   own named tmux session, is captured (scrollback to the dispatch dir) and killed as soon as
-  harvested, never left to linger, never your own session (confirm with
-  `tmux display-message -p '#S'`); kill only sessions YOU spawned, and inspect the pane first
-  (`tmux capture-pane -p -t <name> | tail`), since a similarly named session can be a different
+  harvested, never left to linger, never a session you are running in (confirm with
+  `tmux display-message -p '#S'`); kill only sessions YOU
+  spawned, and inspect the pane first with `<tool>/scripts/run host read <handle>`, since a
+  similarly named session can be a different
   live run holding an unsent draft. If so, leave it and report. Composer gotchas: bracketed
   paste, Enter as a separate send-keys, and check the working indicator before trusting a
   dispatch.
@@ -1462,7 +1497,9 @@ ticket that needs another's change waits for it to land.
   including abandoned and rejected approaches. Put the line in every workhorse brief; it costs
   nothing and closes all three paths (`git branch`, a plain recursive grep, and listing the
   directory). Re-runs of a ticket whose `wb/<TICKET>-*` branches still exist are the loud case;
-  concurrent lanes in a normal run are safe, since no lane has commits until it finishes.
+  concurrent lanes in a normal run cannot reach each other's commits through git, since each
+  works in its own copy that cannot reach another copy's commits until the take-in brings them
+  into the repository.
 - Review is a goal-loop, not a single shot: a loop whose fixes were never re-reviewed is
   not done, save a fix the user orders in a loop with no gating lens (Stage 2, step 5), which
   the checkpoint marks `applied on user word, not re-reviewed` and the card lists under
@@ -1471,9 +1508,9 @@ ticket that needs another's change waits for it to land.
   `<tool>/scripts/run landing results` prints for them, never reworded and never left out; a
   check that did not run is `not run`, never passed. An exit 1 from the call is a fault in
   its inputs: fix them and re-run; never proceed past it.
-- Never gate-then-commit through a masking pipe: `<gate> 2>&1 | tail && git commit` reports the
-  tail's exit, not the suite's, and will commit a RED tree. Check `${pipestatus[1]}` (zsh) or
-  `${PIPESTATUS[0]}` (bash), or run the gate unpiped and commit only on its own exit 0.
+- Never gate-then-commit through a masking pipe: the pipe reports the exit of whatever ran last
+  in it — the tail — not the gate's, and will commit a RED tree. Run the gate unpiped and commit
+  only on its own exit 0.
 - Always run project scripts through the package manager's explicit run form (`pnpm run
   <script>`, `npm run <script>`): a builtin can shadow a script name, and a builtin's misfire
   can delete files before erroring. After any misfire, check `git status` for collateral
@@ -1536,6 +1573,6 @@ ticket that needs another's change waits for it to land.
   fails for them while the project's own code is clean. Establish which gate is red and whose
   file it is before touching shared config, and file the hygiene fix as its own ticket
   rather than editing lint config on the default branch mid-flight for another live run.
-- **A coachman cannot remove its own worktree.** Tear down the workhorse worktrees at stage 4,
+- **A coachman cannot remove its own worktree.** Tear down the workhorse copies at stage 4,
   preserving any stray file first, and hand the synthesis worktree to the postmaster for
   removal from an outside process.

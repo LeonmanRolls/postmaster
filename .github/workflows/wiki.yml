@@ -1,0 +1,32 @@
+# The check for a pull request that changes the wiki or its raw records. The full check
+# (check.yml) skips a pull request whose files are all under those two folders, so this
+# runs the checks that read them: the wiki lint, and Oxlint, which lints the records'
+# scripts. A pull request that changes other files too gets this workflow and the full check.
+name: wiki
+on:
+  pull_request:
+    paths:
+      - "wiki/**"
+      - "raw/**"
+permissions:
+  contents: read
+jobs:
+  wiki:
+    name: wiki
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: The minimum Bun the manifest names
+        id: bun
+        run: |
+          min=$(node -e "const m = require('./package.json').engines.bun.match(/[0-9]+(\.[0-9]+)+/); console.log(m[0])")
+          echo "version=$min" >> "$GITHUB_OUTPUT"
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ steps.bun.outputs.version }}
+      - run: bun install --frozen-lockfile
+      - run: bunx oxlint
+      - run: scripts/run wiki-lint

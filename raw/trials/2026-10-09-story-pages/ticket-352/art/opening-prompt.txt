@@ -1,0 +1,7 @@
+Generate one image with your image generation tool and save it in the current directory as story-352.png. Do not write any code to draw it; use the image generation tool.
+
+Use the attached poster as the style reference: a Victorian hand-coloured engraved poster with fine cross-hatching, cream paper, oxblood-red and forest-green ribbon banners with cream lettering, brass posthorns, an ornate floral border and a warm muted palette. Wide landscape, 3:2.
+
+Scene: the same post office counter. On the left, the operator in a top hat leans in to read. In the centre, the postmaster in his navy uniform and POST cap unrolls a long scroll across the counter towards him. The scroll is laid out like a storybook in four framed panels, left to right: a tiny engraved picture of a mail coach; two boxes joined by an arrow; a few lines of code with one line highlighted in coral; a ticked checkbox. On the right, a waybill card on the counter reads "waybill" with three ticked lines: "Ticket: 352", "Scope: ticket stories", "Target: main". A red ribbon across the top reads "Ticket No. 352"; a green ribbon across the bottom reads "Read a ticket as a story". No other text.
+
+When the file is saved, reply with its path and its size in pixels, and nothing else.

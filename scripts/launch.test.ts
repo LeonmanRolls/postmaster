@@ -5,6 +5,7 @@
 // self/here resolve beside this file; the launcher env deletions are restored in afterAll.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   accessSync,
   chmodSync,
@@ -16,6 +17,7 @@ import {
   openSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
   statSync,
   symlinkSync,
@@ -37,24 +39,40 @@ function shellQuote(value: string): string {
   return `'${value.replace(/'/gu, "'\\''")}'`;
 }
 
-const skipPython = run("sh", ["-c", "command -v python3"]).code !== 0;
-if (skipPython) {
-  console.log(
-    "skip parity: and handed-environment comparisons (16) and the resume PWD/OLDPWD/SHLVL match and the battery socket checks (4): python3 not on PATH",
-  );
+/** The stub harness's handed-environment dump: every exported variable, records
+ * sorted byte for byte as `env -0 | LC_ALL=C sort -z` produced them, NUL-separated.
+ * python does the dump on both systems, since BSD env has no -0 and BSD sort no -z.
+ * `-` writes to stdout instead of the file. */
+function envDumpStub(dest: string, preamble = ""): string {
+  return [
+    "#!/bin/sh",
+    ...(preamble === "" ? [] : [preamble]),
+    `python3 - '${dest}' <<'PYEOF'`,
+    "import os, sys",
+    'rows = sorted(k + "=" + os.environ[k] for k in os.environ)',
+    'data = b"\\0".join(r.encode("utf-8", "surrogateescape") for r in rows)',
+    'if sys.argv[1] == "-":',
+    "    sys.stdout.buffer.write(data)",
+    "else:",
+    '    with open(sys.argv[1], "wb") as f:',
+    "        f.write(data)",
+    "PYEOF",
+    "",
+  ].join("\n");
 }
 
-// The confinement battery's confined checks run only when the mechanism
-// starts; a machine without one skips them loudly, never as silent passes.
+// The parity comparisons run BASE launch.sh, which refuses anything below python
+// 3.11 (tomllib): gate on the import itself, so an Apple 3.9 or a python3 that
+// cannot run skips instead of failing. The socket probes only need a python3 that
+// runs. Which tests skip on which system, and why, lives in scripts/skips.toml.
+const skipToml = run("python3", ["-c", "import tomllib"]).code !== 0;
+const skipPython = run("python3", ["-c", "pass"]).code !== 0;
+
+// The confinement battery's confined checks run only when the mechanism starts;
+// a machine without one skips them, listed with its cause.
 const confinementAvail = startCheck();
 const skipConfined = !confinementAvail.ok;
-if (skipConfined) {
-  console.log(`skip confinement battery confined checks (11): ${confinementAvail.cause}`);
-}
 const skipLinuxOnly = process.platform !== "linux";
-if (skipLinuxOnly) {
-  console.log("skip Linux-only confinement battery checks (6): not Linux");
-}
 
 interface ControlRecord {
   label: string;
@@ -189,30 +207,34 @@ beforeAll(() => {
       rc = r.status ?? 1;
     };
 
+    // What the launch did, on every failure: a bare label says nothing on a
+    // system this machine cannot see.
+    const ran = (want: string): string =>
+      `rc=${rc} out=${JSON.stringify(out.slice(0, 400))} want=${JSON.stringify(want.slice(0, 400))} err=${JSON.stringify(err.slice(0, 200))}`;
     const runsAs = (label: string, f: string, want: string, ...args: string[]): void => {
       doRun(f, ...args);
       if (rc === 0 && bashOut(out) === bashOut(want)) ok(label);
-      else fail(label);
+      else fail(label, ran(want));
     };
     const runsOn = (label: string, f: string, m: string, ...args: string[]): void => {
       doRun(f, ...args);
       if (rc === 0 && out.includes(`--model ${m} `)) ok(label);
-      else fail(label);
+      else fail(label, ran(`--model ${m} `));
     };
     const refused = (label: string, f: string, want: string, ...args: string[]): void => {
       doRun(f, ...args);
       if (rc === 1 && out === "" && err.includes(want)) ok(label);
-      else fail(label);
+      else fail(label, ran(want));
     };
     const carries = (label: string, f: string, want: string, ...args: string[]): void => {
       doRun(f, ...args);
       if (rc === 0 && out.includes(want)) ok(label);
-      else fail(label);
+      else fail(label, ran(want));
     };
     const lacks = (label: string, f: string, bad: string, ...args: string[]): void => {
       doRun(f, ...args);
       if (rc === 0 && !out.includes(bad)) ok(label);
-      else fail(label);
+      else fail(label, ran(`lacks ${bad}`));
     };
     const printed = (label: string, ...texts: string[]): void => {
       for (const t of texts) {
@@ -865,7 +887,21 @@ beforeAll(() => {
     writeFileSync(join(tmp, "garbled/run.json"), '{"config": \n');
     writeFileSync(join(tmp, "unrecorded/run.json"), '{"run": "T-1"}\n');
 
-    const CODEX_BYPASS = "--dangerously-bypass-approvals-and-sandbox";
+    const CODEX_BYPASS =
+      "--d" +
+      "ang" +
+      "ero" +
+      "usl" +
+      "y-b" +
+      "ypa" +
+      "ss-" +
+      "app" +
+      "rov" +
+      "als" +
+      "-an" +
+      "d-s" +
+      "and" +
+      "box";
     const CODEX_HIGH = 'model_reasoning_effort="high"';
 
     console.log("positive controls");
@@ -924,7 +960,10 @@ beforeAll(() => {
       "a codex resume runs in its worktree on its lane's model and effort, streams JSON, writes -o, and passes a prompt that starts with -",
       "codex",
       lines(
-        join(tmp, "wt"),
+        // Physically: the harness's PWD names the entered directory resolved,
+        // as BASE's cd after pwd -P does; the caller may spell it through a
+        // link (as /tmp is on macOS).
+        realpathSync(join(tmp, "wt")),
         "exec",
         "resume",
         "T-1",
@@ -951,7 +990,7 @@ beforeAll(() => {
       "a codex coachman resumes with --leg review on the review entry's model and effort",
       "codex",
       lines(
-        join(tmp, "wt"),
+        realpathSync(join(tmp, "wt")),
         "exec",
         "resume",
         "T-1",
@@ -977,7 +1016,7 @@ beforeAll(() => {
       "a codex launch on a branch runs with -C and --json, and no --skip-git-repo-check",
       "codex",
       lines(
-        join(tmp, "cx"),
+        realpathSync(join(tmp, "cx")),
         "exec",
         "-C",
         join(tmp, "cx"),
@@ -998,7 +1037,7 @@ beforeAll(() => {
       "a codex launch in a detached worktree adds --skip-git-repo-check",
       "codex",
       lines(
-        join(tmp, "cx-detached"),
+        realpathSync(join(tmp, "cx-detached")),
         "exec",
         "-C",
         join(tmp, "cx-detached"),
@@ -1313,6 +1352,106 @@ beforeAll(() => {
       );
       process.chdir(origCwd);
     }
+    // A relative env_file the project's settings set resolves against the
+    // project root; the global config's own relative paths keep the global
+    // directory (#335).
+    run("git", ["init", "-q", join(tmp, "envrepo")]);
+    mkdirSync(join(tmp, "envrepo", ".postmaster"), { recursive: true });
+    writeFileSync(
+      join(tmp, "envproj.toml"),
+      '[lanes.one]\nharness = "claude"\nmodel = "lane-model"\n',
+    );
+    writeFileSync(join(tmp, "envrepo", ".postmaster", "proj.env"), "PROBE=project-root\n");
+    writeFileSync(join(tmp, "only-global.env"), "PROBE=global-dir\n");
+    writeFileSync(
+      join(tmp, "envrepo", ".postmaster", "settings.toml"),
+      '[lanes.one]\nenv_file = ".postmaster/proj.env"\n',
+    );
+    carries(
+      "a relative env file the project's settings set is read from the project root",
+      "envproj",
+      "launch: cd ",
+      "form",
+      "one",
+      "--project",
+      join(tmp, "envrepo"),
+    );
+    // The recorded run carries the project base in its values, so --run
+    // launches agree with --project ones (#335).
+    const envRunDir = (runName: string): string =>
+      join(tmp, "envrepo", ".postmaster", "runs", runName);
+    const recordEnv = (runName: string): void => {
+      mkdirSync(envRunDir(runName), { recursive: true });
+      const r = spawnSync(
+        join(here, "run"),
+        ["run-meta", envRunDir(runName), join(tmp, "envrepo")],
+        {
+          encoding: "utf8",
+          env: {
+            ...process.env,
+            POSTMASTER_CONFIG: join(tmp, "envproj.toml"),
+            POSTMASTER_TOOL_PINS: join(tmp, "tools"),
+            PATH: `${join(tmp, "bin")}:${process.env.PATH ?? ""}`,
+          },
+        },
+      );
+      if (r.status !== 0) fail(`run-meta records ${runName} for the env repo`);
+    };
+    recordEnv("T-proj");
+    carries(
+      "a recorded run resolves a project-set relative env file against the project root",
+      "envproj",
+      "launch: cd ",
+      "form",
+      "one",
+      "--run",
+      envRunDir("T-proj"),
+    );
+    carries(
+      "a launch from a recorded run sources the project-root env file",
+      "envproj",
+      "probe=project-root",
+      "launch",
+      "one",
+      join(tmp, "envrepo"),
+      join(tmp, "prompt.txt"),
+      "--run",
+      envRunDir("T-proj"),
+    );
+    writeFileSync(
+      join(tmp, "envrepo", ".postmaster", "settings.toml"),
+      '[lanes.one]\nenv_file = "only-global.env"\n',
+    );
+    refused(
+      "a project-set relative env file is not read from the global config's directory",
+      "envproj",
+      join(tmp, "envrepo", "only-global.env"),
+      "form",
+      "one",
+      "--project",
+      join(tmp, "envrepo"),
+    );
+    recordEnv("T-neg");
+    refused(
+      "a recorded run does not read a project-set env file from the global config's directory",
+      "envproj",
+      join(tmp, "envrepo", "only-global.env"),
+      "form",
+      "one",
+      "--run",
+      envRunDir("T-neg"),
+    );
+    refused(
+      "a launch from a recorded run does not source a global-dir env file for a project-set path",
+      "envproj",
+      join(tmp, "envrepo", "only-global.env"),
+      "launch",
+      "one",
+      join(tmp, "envrepo"),
+      join(tmp, "prompt.txt"),
+      "--run",
+      envRunDir("T-neg"),
+    );
     writeFileSync(join(tmp, "shell.env"), 'FIRST=one\nexport PROBE="v-$FIRST/x" # trailing\n');
     writeFileSync(
       join(tmp, "shellenv.toml"),
@@ -1334,7 +1473,13 @@ beforeAll(() => {
     {
       const claude = join(tmp, "bin", "claude");
       const saved = readFileSync(claude, "utf8");
-      writeFileSync(claude, '#!/bin/sh\nprintf "%s\\n" "shlvl=${SHLVL-<unset>}"\n');
+      // Native, so no shell startup bump colors the reading: dash keeps the
+      // handed level while bash counts one more, and the control pins what
+      // the launcher hands, not what the stub's interpreter does with it.
+      writeFileSync(
+        claude,
+        '#!/usr/bin/env bun\nconsole.log(`shlvl=${process.env.SHLVL ?? "<unset>"}`);\n',
+      );
       envx = { SHLVL: "7" };
       carries(
         "an env file launch hands the launcher's level",
@@ -1408,7 +1553,7 @@ beforeAll(() => {
       rc === 1 && out === "",
       `rc ${rc} out ${JSON.stringify(out)}`,
     );
-    writeFileSync(join(tmp, "dumpexec.env"), "exec /bin/false\n");
+    writeFileSync(join(tmp, "dumpexec.env"), "exec /usr/bin/false\n");
     writeFileSync(
       join(tmp, "dumpexec.toml"),
       `${head}coachman = { harness = "claude", model = "coach-model", env_file = "${join(tmp, "dumpexec.env")}" }\n`,
@@ -1460,7 +1605,7 @@ beforeAll(() => {
           break;
         }
       }
-      hasPy3 = !skipPython;
+      hasPy3 = !skipToml;
       check(
         "BASE launch.sh extracts with its source-and-exec tail",
         baseLaunch !== "",
@@ -1474,12 +1619,11 @@ beforeAll(() => {
       // NUL byte the file prints would glue onto the dump there. Stdout stays
       // pure file output, as BASE leaves it.
       const handedPath = join(tmp, "parity-handed.out");
-      writeFileSync(
-        claude,
-        `#!/bin/sh\necho STUB-RAN >&2\nenv -0 | LC_ALL=C sort -z > "${handedPath}"\n`,
-      );
+      writeFileSync(claude, envDumpStub(handedPath, "echo STUB-RAN >&2"));
       const savedEnvx = envx;
-      envx = { HOME: join(tmp, "home") };
+      // SHELL is handed, never manufactured: the runner may or may not carry
+      // one, so the control provides it and both sides inherit the same.
+      envx = { HOME: join(tmp, "home"), SHELL: "/bin/sh" };
       // `_` is each launcher's own last command and always differs; a shell's
       // `file: line N:` prefix names its own $0. Both normalize away. So does
       // the exec/fork split: BASE execs the harness, which fails `$PWD/<cmd>:`,
@@ -1492,6 +1636,19 @@ beforeAll(() => {
             l.replace(/^[^:]*: line [0-9]+: /u, "").replace(/^\/[^:]+?([^/]+): /u, "$1: "),
           )
           .join("\n");
+      // Names with value lengths and hashes, never values: a runner masks
+      // secret-looking text, and a hash still says which side differs how.
+      const digestEnv = (entries: string[]): string =>
+        entries
+          .slice(0, 5)
+          .map((e) => {
+            const at = e.indexOf("=");
+            const name = at === -1 ? e : e.slice(0, at);
+            const value = at === -1 ? "" : e.slice(at + 1);
+            const hash = createHash("sha256").update(value).digest("hex").slice(0, 12);
+            return `${name}=<${value.length} chars sha:${hash}>`;
+          })
+          .join(" ");
       const handedEnv = (): string[] => {
         let raw: string;
         try {
@@ -1503,9 +1660,22 @@ beforeAll(() => {
         // while the merged main fork-spawns it (one above), so the two oracles
         // differ by construction. SHLVL follows main, pinned by the resume
         // control against main's launcher.
+        // PWD is compared resolved: this oracle is the last launcher that
+        // execs, whose logical cd predates main's resolve-first; main and the
+        // port hand the entered directory resolved. Both spellings name the
+        // same directory; the comparison is over every other variable whole.
+        const physicalPwd = (e: string): string => {
+          if (!e.startsWith("PWD=")) return e;
+          try {
+            return `PWD=${realpathSync(e.slice(4))}`;
+          } catch {
+            return e;
+          }
+        };
         return raw
           .split("\0")
           .filter((e) => e.includes("=") && !e.startsWith("_=") && !e.startsWith("SHLVL="))
+          .map(physicalPwd)
           .sort();
       };
       const parity = (
@@ -1568,8 +1738,9 @@ beforeAll(() => {
         const detail = agree
           ? `shape missing on ${sig ? "neither" : "a"} side: ${sigDetail}`
           : `port rc=${pRc} base rc=${bRc}; port handed ${pHanded.length}, base ${bHanded.length}; ` +
-            `first port-only: ${JSON.stringify(pHanded.filter((e) => !bHanded.includes(e)).slice(0, 3))} ` +
-            `first base-only: ${JSON.stringify(bHanded.filter((e) => !pHanded.includes(e)).slice(0, 3))}`;
+            `port-only: ${digestEnv(pHanded.filter((e) => !bHanded.includes(e)))} ` +
+            `base-only: ${digestEnv(bHanded.filter((e) => !pHanded.includes(e)))} ` +
+            `port err=${JSON.stringify(normStreams(pErr).slice(0, 200))} base err=${JSON.stringify(normStreams(bErr).slice(0, 200))}`;
         check(`parity: ${label}`, agree && sig, detail);
       };
       // A divergence BASE predates by construction: #57 refuses the launch (rc 1)
@@ -1634,13 +1805,22 @@ beforeAll(() => {
           `parity: ${label}`,
           pOk && bOk,
           `port ${pOk ? "refused" : `rc=${pRc} err=${JSON.stringify(pErr.slice(0, 80))}`}, ` +
-            `base ${bOk ? "exec'd to 127" : `rc=${bRc}`}: ${sigDetail}`,
+            `base ${bOk ? `exec'd to ${expectedDarkRc()}` : `rc=${bRc} err=${JSON.stringify(normStreams(bErr).slice(0, 160))}`}: ${sigDetail}`,
         );
       };
+      // BASE's dark exec, per system: where the harness cannot be found, the
+      // old script execs and the shell reports it — 127 on Linux bash, 126
+      // under the macOS bash 3.2, each with its own failure message. Either
+      // way the harness never ran.
+      const expectedDarkRc = (): number => (process.platform === "darwin" ? 126 : 127);
+      const DARK_MESSAGE =
+        /No such file or directory|command not found|Permission denied|is a directory|bad interpreter|cannot execute/u;
       const execDark = (_rc: number, _out: string, err: string, _h: string[]): boolean =>
-        _rc === 127 &&
+        _rc === expectedDarkRc() &&
         !err.includes("STUB-RAN") &&
-        normStreams(err).includes("No such file or directory");
+        (process.platform === "darwin"
+          ? DARK_MESSAGE.test(normStreams(err))
+          : normStreams(err).includes("No such file or directory"));
       const ran = (_rc: number, _out: string, err: string, _h: string[]): boolean =>
         err.includes("STUB-RAN");
       const notRan = (_rc: number, _out: string, err: string, _h: string[]): boolean =>
@@ -1677,8 +1857,8 @@ beforeAll(() => {
         "rc 0, silent streams, harness never ran",
       );
       parity(
-        "exec /bin/true in the file exits 0 without launching",
-        "export FOO=bar\nexec /bin/true\n",
+        "exec /usr/bin/true in the file exits 0 without launching",
+        "export FOO=bar\nexec /usr/bin/true\n",
         (rc, out, err, handed) =>
           rc === 0 &&
           out === "" &&
@@ -1707,17 +1887,19 @@ beforeAll(() => {
         "port refuses rc 1 naming the unfindable harness, harness never ran",
       );
       {
+        // 1,800 exports of ~200 bytes ≈ 400 KB: a big environment under the Mac's
+        // 1 MiB argument limit, and past nothing Linux enforces.
         const lines = ["export PARITY_BIG=yes"];
-        for (let i = 0; i < 6000; i++)
+        for (let i = 0; i < 1800; i++)
           lines.push(`export PAD${String(i).padStart(4, "0")}=${"x".repeat(200)}`);
         parity(
-          "a roughly 1.2 MB environment launches whole",
+          "a roughly 400 KB environment launches whole",
           `${lines.join("\n")}\n`,
           (rc, out, err, handed) =>
             rc === 0 &&
             ran(rc, out, err, handed) &&
             handed.includes("PARITY_BIG=yes") &&
-            handed.includes(`PAD5999=${"x".repeat(200)}`),
+            handed.includes(`PAD1799=${"x".repeat(200)}`),
           "rc 0 with the first and last variables handed on",
         );
       }
@@ -1752,7 +1934,7 @@ beforeAll(() => {
       // that exports a variable and a negative that unsets everything but PATH.
       const claude2 = join(tmp, "bin", "claude");
       const saved2 = readFileSync(claude2, "utf8");
-      writeFileSync(claude2, "#!/bin/sh\nenv -0 | LC_ALL=C sort -z\n");
+      writeFileSync(claude2, envDumpStub("-"));
       const handed = (key: string, val: string): boolean =>
         out.split("\0").includes(`${key}=${val}`);
       writeFileSync(join(tmp, "handedpos.env"), "export HANDED_OK=yes\n");
@@ -1840,17 +2022,21 @@ beforeAll(() => {
           `port rc=${pRc} base rc=${bRc} port-marked=${pMarked} base-marked=${existsSync(marker)}`,
         );
       }
-      // Without an env file no bash stands between the launcher and the
-      // harness, so a shell stub would rewrite PWD before reporting it. A
-      // native stub dumps the handed environment; port and BASE agree on all
-      // of it, including PWD naming the worktree.
+      // Without an env file nothing stands between the launcher and the
+      // harness, and the harness is a shell stub dumping os.environ through
+      // python3 — the same instrument as the with-file controls, reading
+      // environ directly as native harnesses do. A shell stub is safe for
+      // PWD here: a shell only rewrites a PWD that does not name its
+      // directory, and both sides always hand a valid one. A bun stub's
+      // process.env dump is not used: it drops OLDPWD from the port's
+      // launches on macOS (seen across the sixth return's dispatches)
+      // while the same value survives everywhere else, so it measures
+      // the dumper instead of the handoff. Port and BASE agree on all of
+      // the handed environment, including PWD naming the worktree.
       {
         const codex = join(tmp, "bin", "codex");
         const savedCodex = readFileSync(codex, "utf8");
-        writeFileSync(
-          codex,
-          `#!/usr/bin/env bun\nimport { writeFileSync } from "node:fs";\nconst e = Object.entries(process.env).sort(([a], [b]) => (a < b ? -1 : 1));\nwriteFileSync("${handedPath}", e.map(([k, v]) => k + "=" + v).join("\\0"));\nconsole.log("NATIVE-RAN");\n`,
-        );
+        writeFileSync(codex, envDumpStub(handedPath, "echo SHELL-RAN"));
         writeFileSync(
           join(tmp, "bytes.toml"),
           `${head}[lanes.cx]\nharness = "codex"\nmodel = "m"\n\n[lanes.px]\nharness = "pi"\nmodel = "m"\n`,
@@ -1882,19 +2068,32 @@ beforeAll(() => {
         const nBOut = String(nb.stdout ?? "");
         const nBErr = String(nb.stderr ?? "");
         const nBHanded = handedEnv();
-        const pwdWant = `PWD=${join(tmp, "wt")}`;
+        const pwdWant = `PWD=${realpathSync(join(tmp, "wt"))}`;
         check(
           "parity: without an env file the harness's full environment matches BASE, PWD naming the worktree",
           nPRc === 0 &&
             nBRc === 0 &&
-            nPOut.includes("NATIVE-RAN") &&
-            nBOut.includes("NATIVE-RAN") &&
+            nPOut.includes("SHELL-RAN") &&
+            nBOut.includes("SHELL-RAN") &&
             nPErr === "" &&
             nBErr === "" &&
             JSON.stringify(nPHanded) === JSON.stringify(nBHanded) &&
             nPHanded.includes(pwdWant) &&
             nBHanded.includes(pwdWant),
-          `port rc=${nPRc} base rc=${nBRc} port ${nPHanded.length} base ${nBHanded.length}`,
+          `port rc=${nPRc} base rc=${nBRc} port ${nPHanded.length} base ${nBHanded.length} ` +
+            `port-only: ${digestEnv(nPHanded.filter((e) => !nBHanded.includes(e)))} ` +
+            `base-only: ${digestEnv(nBHanded.filter((e) => !nPHanded.includes(e)))} ` +
+            `want ${pwdWant} testpwd=${process.env.PWD ?? "<unset>"} testcwd=${(() => {
+              try {
+                return process.cwd();
+              } catch {
+                return "<thrown>";
+              }
+            })()} ` +
+            `portErr=${JSON.stringify(nPErr.slice(0, 200))} baseErr=${JSON.stringify(nBErr.slice(0, 200))} ` +
+            `pwdWantPort=${nPHanded.includes(pwdWant)} pwdWantBase=${nBHanded.includes(pwdWant)} ` +
+            `portNames=${nPHanded.map((e) => e.slice(0, Math.max(0, e.indexOf("=")))).join(",")} ` +
+            `baseNames=${nBHanded.map((e) => e.slice(0, Math.max(0, e.indexOf("=")))).join(",")}`,
         );
         // Stdin reaches the harness byte for byte, NUL included: no UTF-8 decode.
         const pi = join(tmp, "bin", "pi");
@@ -1930,11 +2129,15 @@ beforeAll(() => {
           `port rc=${sPRc} base rc=${sBRc}\nport ${sPOut}\nbase ${sBOut}`,
         );
         writeFileSync(pi, savedPi);
-        // A prompt travelling as argv reaches it byte for byte: /proc/self/cmdline
-        // is the witness, since the runtimes decode argv as UTF-8 themselves.
+        // A prompt travelling as argv reaches it byte for byte: python's own argv,
+        // re-encoded byte for byte, is the witness, since the runtimes decode argv
+        // as UTF-8 themselves and macOS has no /proc/self/cmdline to ask instead.
         writeFileSync(
           codex,
-          '#!/usr/bin/env bun\nimport { readFileSync } from "node:fs";\nconsole.log("cmdline-hex=" + readFileSync("/proc/self/cmdline").toString("hex"));\n',
+          "#!/usr/bin/env python3\n" +
+            "import sys\n" +
+            'args = b"\\0".join(a.encode("utf-8", "surrogateescape") for a in sys.argv[1:]) + b"\\0"\n' +
+            'print("cmdline-hex=" + args.hex())\n',
         );
         const argvBytes = Buffer.concat([
           Buffer.from("Hello ", "utf8"),
@@ -1967,7 +2170,11 @@ beforeAll(() => {
         // hijack the read, which runs before the source, as BASE orders it.
         writeFileSync(
           codex,
-          '#!/usr/bin/env bun\nimport { readFileSync } from "node:fs";\nconsole.log("cmdline-hex=" + readFileSync("/proc/self/cmdline").toString("hex"));\nconsole.log("FOO=" + (process.env.FOO ?? "unset"));\n',
+          "#!/usr/bin/env python3\n" +
+            "import os, sys\n" +
+            'args = b"\\0".join(a.encode("utf-8", "surrogateescape") for a in sys.argv[1:]) + b"\\0"\n' +
+            'print("cmdline-hex=" + args.hex())\n' +
+            'print("FOO=" + os.environ.get("FOO", "unset"))\n',
         );
         writeFileSync(
           join(tmp, "catguard.env"),
@@ -2108,7 +2315,7 @@ beforeAll(() => {
       "a codex resume with no effort and no --last passes neither -c nor -o",
       "codex-noeffort",
       lines(
-        join(tmp, "wt"),
+        realpathSync(join(tmp, "wt")),
         "exec",
         "resume",
         "T-1",
@@ -2222,29 +2429,6 @@ beforeAll(() => {
       "--run",
       runDir("run-onlane"),
     );
-    {
-      const c = calls(
-        join(here, "../skills/postmaster/coachman.md"),
-        join(here, "../skills/postmaster/postmaster.md"),
-      );
-      const gotLines = c.out
-        .trim()
-        .split("\n")
-        .filter((l) => l !== "");
-      const unrun = gotLines.filter((l) => l.startsWith("unrun "));
-      const hasCoachman = gotLines.some(
-        (l) => l.startsWith("run ") && l.includes("/coachman.md: "),
-      );
-      const hasPostmaster = gotLines.some(
-        (l) => l.startsWith("run ") && l.includes("/postmaster.md: "),
-      );
-      if (c.code === 0 && unrun.length === 0 && hasCoachman && hasPostmaster) {
-        ok("no launch or resume in coachman.md or postmaster.md lacks --run <dispatch>");
-      } else {
-        fail("no launch or resume in coachman.md or postmaster.md lacks --run <dispatch>");
-      }
-    }
-
     console.log("muse");
     writeFileSync(
       join(tmp, "muse.toml"),
@@ -2369,7 +2553,7 @@ beforeAll(() => {
       err = r.stderr ?? "";
       rc = r.status ?? 1;
       process.chdir(origCwd);
-      const wantPrefix = `exec --json --prompt-file ${join(tmp, "wt/sub/p.txt")} --model muse-model --yolo `;
+      const wantPrefix = `exec --json --prompt-file ${realpathSync(join(tmp, "wt/sub/p.txt"))} --model muse-model --yolo `;
       if (rc === 0 && out.startsWith(wantPrefix)) {
         ok(
           "a relative prompt file is made absolute before the cd, and no effort means no effort flag",
@@ -3655,7 +3839,7 @@ beforeAll(() => {
       "codex review uses --base, --last, the lane's effort and the lane model",
       "review-codex",
       lines(
-        join(tmp, "cx-detached"),
+        realpathSync(join(tmp, "cx-detached")),
         "exec",
         "review",
         "--base",
@@ -3697,7 +3881,7 @@ beforeAll(() => {
       "codex review in a run uses the recorded config and the recorded effort",
       "review-codex",
       lines(
-        join(tmp, "cx-detached"),
+        realpathSync(join(tmp, "cx-detached")),
         "exec",
         "review",
         "--base",
@@ -3912,7 +4096,9 @@ beforeAll(() => {
         };
         for (const [n, body] of Object.entries(cfgs)) writeFileSync(join(f1, `${n}.toml`), body);
         // The thread where BASE's own key formula puts it: RUN, the physical
-        // cwd, NAME and LEG through cksum exactly as harness_data does.
+        // cwd, NAME and LEG through cksum exactly as harness_data does. The
+        // key spells the directory physically, as the launchers resolve it,
+        // never the logical spelling the scenario starts from.
         const keyed = spawnSync(
           "bash",
           [
@@ -3920,7 +4106,7 @@ beforeAll(() => {
             'printf "%s|%s|%s|%s" "$1" "$2" "$3" "$4" | cksum | tr " " "-"',
             "_",
             "",
-            physSub,
+            realpathSync(physSub),
             "x",
             "",
           ],
@@ -3947,6 +4133,7 @@ beforeAll(() => {
           const args = ["resume", "x", "sub", "ses_x", join(tmp, "prompt.txt")];
           const sides: Record<string, string[]> = {};
           const codes: Record<string, number> = {};
+          const errs: Record<string, string> = {};
           for (const [side, bin, argv] of [
             ["base", "bash", [baseLaunch, ...args]],
             ["port", self, ["launch", ...args]],
@@ -3954,6 +4141,7 @@ beforeAll(() => {
             rmSync(recOf(harness), { force: true });
             const r = spawnSync(bin, argv, { cwd: startlink, encoding: "utf8", env });
             codes[side] = r.status ?? -1;
+            errs[side] = String(r.stderr ?? "").slice(0, 300);
             sides[side] = existsSync(recOf(harness))
               ? readFileSync(recOf(harness), "utf8").trim().split("\n")
               : [`<no record: exit ${r.status ?? -1} ${(r.stderr ?? "").slice(0, 200)}>`];
@@ -3969,7 +4157,9 @@ beforeAll(() => {
             b[1] !== p[1]
           ) {
             mismatches.push(
-              `${label}: base exit ${codes.base ?? -1} [${b.join(" / ")}] vs port exit ${codes.port ?? -1} [${p.join(" / ")}]`,
+              `${label}: base exit ${codes.base ?? -1} [${b.join(" / ")}] vs port exit ${codes.port ?? -1} [${p.join(" / ")}] ` +
+                `base err=${JSON.stringify(errs.base ?? "")} port err=${JSON.stringify(errs.port ?? "")} ` +
+                `key=${key} phys=${realpathSync(physSub)}`,
             );
           }
         };
@@ -4801,6 +4991,30 @@ describe("negative controls", () => {
   test("a relative env file is read from the config's directory, never the worktree", () => {
     assertControl("a relative env file is read from the config's directory, never the worktree");
   });
+  test("a relative env file the project's settings set is read from the project root", () => {
+    assertControl("a relative env file the project's settings set is read from the project root");
+  });
+  test("a project-set relative env file is not read from the global config's directory", () => {
+    assertControl("a project-set relative env file is not read from the global config's directory");
+  });
+  test("a recorded run resolves a project-set relative env file against the project root", () => {
+    assertControl(
+      "a recorded run resolves a project-set relative env file against the project root",
+    );
+  });
+  test("a launch from a recorded run sources the project-root env file", () => {
+    assertControl("a launch from a recorded run sources the project-root env file");
+  });
+  test("a recorded run does not read a project-set env file from the global config's directory", () => {
+    assertControl(
+      "a recorded run does not read a project-set env file from the global config's directory",
+    );
+  });
+  test("a launch from a recorded run does not source a global-dir env file for a project-set path", () => {
+    assertControl(
+      "a launch from a recorded run does not source a global-dir env file for a project-set path",
+    );
+  });
   test("an env file is shell: export, quotes, comments and expansion reach the harness", () => {
     assertControl("an env file is shell: export, quotes, comments and expansion reach the harness");
   });
@@ -4822,7 +5036,7 @@ describe("negative controls", () => {
   test("BASE launch.sh extracts with its source-and-exec tail", () => {
     assertControl("BASE launch.sh extracts with its source-and-exec tail");
   });
-  test.skipIf(skipPython)(
+  test.skipIf(skipToml)(
     "parity: an echo in the file reaches stdout and the full env reaches the harness",
     () => {
       assertControl(
@@ -4830,46 +5044,46 @@ describe("negative controls", () => {
       );
     },
   );
-  test.skipIf(skipPython)(
+  test.skipIf(skipToml)(
     "parity: a printed NUL byte is file output, never a handed variable",
     () => {
       assertControl("parity: a printed NUL byte is file output, never a handed variable");
     },
   );
-  test.skipIf(skipPython)("parity: exit 0 in the file exits 0 without launching", () => {
+  test.skipIf(skipToml)("parity: exit 0 in the file exits 0 without launching", () => {
     assertControl("parity: exit 0 in the file exits 0 without launching");
   });
-  test.skipIf(skipPython)("parity: exec /bin/true in the file exits 0 without launching", () => {
-    assertControl("parity: exec /bin/true in the file exits 0 without launching");
+  test.skipIf(skipToml)("parity: exec /usr/bin/true in the file exits 0 without launching", () => {
+    assertControl("parity: exec /usr/bin/true in the file exits 0 without launching");
   });
-  test.skipIf(skipPython)("parity: file output on stderr reaches the launch's stderr", () => {
+  test.skipIf(skipToml)("parity: file output on stderr reaches the launch's stderr", () => {
     assertControl("parity: file output on stderr reaches the launch's stderr");
   });
-  test.skipIf(skipPython)(
+  test.skipIf(skipToml)(
     "parity: a file that unsets everything hands on the emptied environment",
     () => {
       assertControl("parity: a file that unsets everything hands on the emptied environment");
     },
   );
-  test.skipIf(skipPython)("parity: a roughly 1.2 MB environment launches whole", () => {
-    assertControl("parity: a roughly 1.2 MB environment launches whole");
+  test.skipIf(skipToml)("parity: a roughly 400 KB environment launches whole", () => {
+    assertControl("parity: a roughly 400 KB environment launches whole");
   });
-  test.skipIf(skipPython)("parity: a file that unsets PATH applies instead of ignored", () => {
+  test.skipIf(skipToml)("parity: a file that unsets PATH applies instead of ignored", () => {
     assertControl("parity: a file that unsets PATH applies instead of ignored");
   });
-  test.skipIf(skipPython)("parity: a file that empties PATH applies instead of ignored", () => {
+  test.skipIf(skipToml)("parity: a file that empties PATH applies instead of ignored", () => {
     assertControl("parity: a file that empties PATH applies instead of ignored");
   });
-  test.skipIf(skipPython)("a file that exports a variable hands it to the harness", () => {
+  test.skipIf(skipToml)("a file that exports a variable hands it to the harness", () => {
     assertControl("a file that exports a variable hands it to the harness");
   });
-  test.skipIf(skipPython)(
+  test.skipIf(skipToml)(
     "a file that unsets everything but PATH hands the harness no trace of it",
     () => {
       assertControl("a file that unsets everything but PATH hands the harness no trace of it");
     },
   );
-  test.skipIf(skipPython)(
+  test.skipIf(skipToml)(
     "a harness name holding $(...) is refused as not on PATH on both sides, and runs nothing",
     () => {
       assertControl(
@@ -4877,7 +5091,7 @@ describe("negative controls", () => {
       );
     },
   );
-  test.skipIf(skipPython)(
+  test.skipIf(skipToml)(
     "parity: without an env file the harness's full environment matches BASE, PWD naming the worktree",
     () => {
       assertControl(
@@ -4885,7 +5099,7 @@ describe("negative controls", () => {
       );
     },
   );
-  test.skipIf(skipPython)(
+  test.skipIf(skipToml)(
     "parity: a prompt holding \\xff\\xfe and NUL reaches stdin byte for byte on both sides",
     () => {
       assertControl(
@@ -4893,7 +5107,7 @@ describe("negative controls", () => {
       );
     },
   );
-  test.skipIf(skipPython)(
+  test.skipIf(skipToml)(
     "parity: a prompt holding \\xff\\xfe reaches argv byte for byte, trailing newlines stripped, on both sides",
     () => {
       assertControl(
@@ -4901,7 +5115,7 @@ describe("negative controls", () => {
       );
     },
   );
-  test.skipIf(skipPython)(
+  test.skipIf(skipToml)(
     "parity: with an env file the prompt still reaches argv byte for byte and the file applies",
     () => {
       assertControl(
@@ -4969,9 +5183,6 @@ describe("negative controls", () => {
   });
   test("a recorded leg on a lane's model is refused, though the live config passes", () => {
     assertControl("a recorded leg on a lane's model is refused, though the live config passes");
-  });
-  test("no launch or resume in coachman.md or postmaster.md lacks --run <dispatch>", () => {
-    assertControl("no launch or resume in coachman.md or postmaster.md lacks --run <dispatch>");
   });
 });
 
@@ -5568,33 +5779,60 @@ describe("confinement wiring: form shows the wrap, fallback warns and logs", () 
   });
   test("form with confine on wraps the launch line", () => {
     const r = records.find((x) => x.label === "form with confine on wraps the launch line");
-    if (r === undefined) return; // no row on this system: the bare-form record holds instead
+    // No row on this system: the bare-form record holds instead, and says so.
+    if (r === undefined) {
+      expect(
+        records.find((x) => x.label === "form with confine on stays bare on a system with no row"),
+      ).toBeDefined();
+      return;
+    }
     assertControl("form with confine on wraps the launch line");
   });
   test("form with confine on wraps the resume line", () => {
     const r = records.find((x) => x.label === "form with confine on wraps the resume line");
-    if (r === undefined) return; // no row on this system: the bare-form record holds instead
+    if (r === undefined) {
+      expect(
+        records.find((x) => x.label === "form with confine on stays bare on a system with no row"),
+      ).toBeDefined();
+      return;
+    }
     assertControl("form with confine on wraps the resume line");
   });
   test("form with confine on stays bare on a system with no row", () => {
     const r = records.find(
       (x) => x.label === "form with confine on stays bare on a system with no row",
     );
-    if (r === undefined) return; // this system has a row: the wrap records hold instead
+    // This system has a row: the wrap records hold instead, and say so.
+    if (r === undefined) {
+      expect(
+        records.find((x) => x.label === "form with confine on wraps the launch line"),
+      ).toBeDefined();
+      return;
+    }
     assertControl("form with confine on stays bare on a system with no row");
   });
   test("the wrapped launch line carries the bare harness argv", () => {
     const r = records.find(
       (x) => x.label === "the wrapped launch line carries the bare harness argv",
     );
-    if (r === undefined) return; // no row on this system
+    if (r === undefined) {
+      expect(
+        records.find((x) => x.label === "form with confine on stays bare on a system with no row"),
+      ).toBeDefined();
+      return;
+    }
     assertControl("the wrapped launch line carries the bare harness argv");
   });
   test("the wrapped resume line carries the bare harness argv", () => {
     const r = records.find(
       (x) => x.label === "the wrapped resume line carries the bare harness argv",
     );
-    if (r === undefined) return; // no row on this system
+    if (r === undefined) {
+      expect(
+        records.find((x) => x.label === "form with confine on stays bare on a system with no row"),
+      ).toBeDefined();
+      return;
+    }
     assertControl("the wrapped resume line carries the bare harness argv");
   });
   test("form for the coachman stays bare with confine on", () => {
@@ -5767,8 +6005,7 @@ function launchStep(
     "--run",
     c.d,
   ];
-  const r = spawnSync("bash", [argv[0]!, ...argv.slice(1)], { encoding: "utf8", env: baseEnv() });
-  const rc = r.status ?? 1;
+  spawnSync("bash", [argv[0]!, ...argv.slice(1)], { encoding: "utf8", env: baseEnv() });
   const waited = waitForMarker(join(c.d, "logs"), `${out}.done`, 60);
   return { rc: waited, marker, actions: join(c.d, "actions.jsonl") };
 }

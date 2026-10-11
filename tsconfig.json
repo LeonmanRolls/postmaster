@@ -12,5 +12,6 @@
     "types": [],
     "rootDir": "."
   },
-  "include": ["scripts/**/*.ts", "types/**/*.ts", "lint/**/*.ts"]
+  "include": ["scripts/**/*.ts", "types/**/*.ts", "lint/**/*.ts"],
+  "exclude": ["scripts/scrub-check.ts", "scripts/raw-promote.ts"]
 }

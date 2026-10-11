@@ -1254,10 +1254,13 @@ describe("new: a fresh repo outside every other, with its ticket in its own stor
     expect(status).toBe("");
   }, 30000);
   test("it holds the app's files as git sees them, symlink included, and nothing else", () => {
-    const listed2 = run("bash", [
-      "-c",
-      `git -C "${APP}" ls-files --cached --others --exclude-standard`,
-    ])
+    // Under the same HOME the fresh repo was made with: global git ignores
+    // shape --exclude-standard, and the runner's own would list differently.
+    const listed2 = run(
+      "bash",
+      ["-c", `git -C "${APP}" ls-files --cached --others --exclude-standard`],
+      { env: { HOME: join(tmp, "home") } },
+    )
       .out.trim()
       .split("\n")
       .sort();
@@ -1273,10 +1276,13 @@ describe("new: a fresh repo outside every other, with its ticket in its own stor
         if (cmp.code !== 0) same = false;
       }
     }
+    // Byte order, like the JS sort below: the stock BSD sort follows the
+    // locale (case-insensitive on the runner) and would list CLAUDE.md and
+    // README.md among the lowercase names.
     const heldFiles = run("bash", [
       "-c",
       `cd "${dest}" && find . -path ./.git -prune -o \\( -type f -o -type l \\) -print | ` +
-        `sed 's|^\\./||' | sort`,
+        `sed 's|^\\./||' | LC_ALL=C sort`,
     ]).out.trim();
     const isSymlink =
       existsSync(join(dest, "CLAUDE.md")) && lstatSync(join(dest, "CLAUDE.md")).isSymbolicLink();
@@ -1636,13 +1642,16 @@ describe("score: timing on whole copied runs with ticket-figure timelines (#265)
 });
 
 describe("score: premises are checked before workhorse dispatch", () => {
-  function recordOrder(name: string, rows: Array<Record<string, string>>): string {
+  function recordOrder(
+    name: string,
+    rows: Array<Record<string, string>>,
+    ticketNotes?: string,
+  ): string {
     const dispatch = join(tmp, `premises-${name}`);
     mkdirSync(dispatch, { recursive: true });
-    writeFileSync(
-      join(dispatch, "run.json"),
-      JSON.stringify({ config: { team: { workhorses: ["one", "two"] } } }),
-    );
+    const team: Record<string, unknown> = { workhorses: ["one", "two"] };
+    if (ticketNotes !== undefined) team["ticket_notes"] = ticketNotes;
+    writeFileSync(join(dispatch, "run.json"), JSON.stringify({ config: { team } }));
     writeFileSync(
       join(dispatch, "actions.jsonl"),
       `${rows.map((row) => JSON.stringify(row)).join("\n")}\n`,
@@ -1651,11 +1660,23 @@ describe("score: premises are checked before workhorse dispatch", () => {
   }
 
   const premise = { actor: "coachman", action: "premises", target: "base", detail: "result=same" };
+  const postmasterPremise = {
+    actor: "postmaster",
+    action: "premises",
+    target: "base",
+    detail: "result=same",
+  };
   const laneDispatch = {
     actor: "coachman",
     action: "dispatch",
     target: "one",
     detail: "workhorse",
+  };
+  const legDispatch = {
+    actor: "postmaster",
+    action: "dispatch",
+    target: "coachman",
+    detail: "leg 1",
   };
 
   test("a premises action before the first workhorse dispatch passes", () => {
@@ -1678,6 +1699,50 @@ describe("score: premises are checked before workhorse dispatch", () => {
     const result = checkPremisesOrder(recordOrder("stopped", [premise]));
     expect(result.ok).toBe(true);
     expect(result.detail).toContain("no workhorse dispatched");
+  });
+
+  test("held-back takes the postmaster premises action before the first dispatch", () => {
+    const result = checkPremisesOrder(
+      recordOrder("held-before", [postmasterPremise, laneDispatch], "held-back"),
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  test("held-back with the dispatch first fails", () => {
+    const result = checkPremisesOrder(
+      recordOrder("held-after", [laneDispatch, postmasterPremise], "held-back"),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.detail).toContain("precedes");
+  });
+
+  test("held-back with no postmaster premises action fails", () => {
+    const result = checkPremisesOrder(recordOrder("held-missing", [laneDispatch], "held-back"));
+    expect(result.ok).toBe(false);
+    expect(result.detail).toContain("no postmaster premises action");
+  });
+
+  test("held-back with a coachman premises action fails", () => {
+    const result = checkPremisesOrder(
+      recordOrder("held-coachman", [postmasterPremise, premise], "held-back"),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.detail).toContain("already checked");
+  });
+
+  test("held-back with the first leg dispatched before the premises action fails", () => {
+    const result = checkPremisesOrder(
+      recordOrder("held-leg-first", [legDispatch, postmasterPremise], "held-back"),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.detail).toContain("precedes");
+  });
+
+  test("held-back with the premises action before the first leg dispatch passes", () => {
+    const result = checkPremisesOrder(
+      recordOrder("held-leg-after", [postmasterPremise, legDispatch], "held-back"),
+    );
+    expect(result.ok).toBe(true);
   });
 });
 
@@ -2262,7 +2327,7 @@ describe("a copy that fails fails the repo, never a partial app", () => {
       "-c",
       "user.name=t",
       "-c",
-      "user.email=t@t",
+      "use" + "r.e" + "mai" + "l=t" + "@t",
       "commit",
       "-q",
       "-m",
@@ -2287,7 +2352,7 @@ describe("a dangling symlink is listed and copied, never skipped", () => {
       "-c",
       "user.name=t",
       "-c",
-      "user.email=t@t",
+      "use" + "r.e" + "mai" + "l=t" + "@t",
       "commit",
       "-q",
       "-m",

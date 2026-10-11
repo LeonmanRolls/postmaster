@@ -6,10 +6,11 @@
 //
 //   run runs-status <project-run-root>        e.g. <project>/.postmaster/runs
 //
-//   next   WALL      a lane stopped on its provider's usage limit and the user has not been
-//                    told yet (a `wall` line with no later `told` line): after `-` and before
-//                    everything else, except USER when `.waiting-on-user` is newer than the
-//                    newest untold wall
+//   next   TELL      an untold finding from the run needs to be told to the user once
+//          WALL      a lane stopped on its provider's usage limit and the user has not been
+//                    told yet (a `wall` line with no later `told` line): after TELL and `-`,
+//                    and before everything else, except USER when `.waiting-on-user` is newer
+//                    than the newest untold wall
 //          USER      the postmaster has put this run's question to the user and waits for the
 //                    answer (.waiting-on-user)
 //          RULE      an escalation is waiting (.escalation-ready)
@@ -37,8 +38,8 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { processStart } from "./lib/processes.ts";
-import { pyWords } from "./lib/text.ts";
 import { readWalls } from "./walls.ts";
+import { isDraftRecord } from "./scrub-report.ts";
 
 interface RunRow {
   run: string;
@@ -47,6 +48,46 @@ interface RunRow {
   markers: string[];
   idleMin: number;
   next: string;
+}
+
+function detectionKeys(path: string): Set<string> {
+  const keys = new Set<string>();
+  let lines: string[];
+  try {
+    lines = readFileSync(path, "utf8").split("\n");
+  } catch {
+    return keys;
+  }
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    try {
+      const record: unknown = JSON.parse(line);
+      if (typeof record !== "object" || record === null || Array.isArray(record)) continue;
+      const row = record as Record<string, unknown>;
+      // Draft rows log but are never told: TELL fires on findings, and a
+      // draft is reworded and scanned again.
+      if (isDraftRecord(row)) continue;
+      if (
+        typeof row.rule !== "string" ||
+        typeof row.file !== "string" ||
+        typeof row.commit !== "string" ||
+        typeof row.line !== "number"
+      )
+        continue;
+      keys.add(JSON.stringify([row.rule, row.file, row.line, row.commit]));
+    } catch {
+      /* an incomplete last append is ignored until the writer finishes */
+    }
+  }
+  return keys;
+}
+
+export function hasUntoldDetections(dispatch: string): boolean {
+  const found = detectionKeys(join(dispatch, "detections.jsonl"));
+  if (!found.size) return false;
+  const told = detectionKeys(join(dispatch, ".detections-told"));
+  for (const key of found) if (!told.has(key)) return true;
+  return false;
 }
 
 // Python's str() for a manifest value, as the table prints it: True, None and
@@ -231,7 +272,8 @@ export function status(root: string): number {
     const phaseMax = tailMax(`coachman-leg-${leg}-phase-`, "");
     const intentMax = tailMax(`coachman-leg-${leg}-intent-`, ".json");
     const gap = phaseMax > lastAttempt || intentMax > lastAttempt;
-    // The walls: an untold wall is the loudest thing a run can hold, after a closed run,
+    // The walls: an untold wall is the loudest thing a run can hold, after an untold
+    // finding and a closed run,
     // and wins over a busy leg and over a question put to the user before it (criterion 8).
     // `.waiting-on-user` newer than the newest untold wall means the user already has this
     // run's question in hand, so it reads USER instead.
@@ -247,7 +289,8 @@ export function status(root: string): number {
       }
     }
     let next: string;
-    if (stage === "done" || stage === "abandoned") next = "-";
+    if (hasUntoldDetections(d)) next = "TELL";
+    else if (stage === "done" || stage === "abandoned") next = "-";
     else if (untold.length > 0)
       next = markers.includes(".waiting-on-user") && waitingMtime > newestUntold ? "USER" : "WALL";
     else if (markers.includes(".waiting-on-user")) next = "USER";
@@ -274,6 +317,8 @@ export function status(root: string): number {
 
     rows.push({ run, stage, leg, markers, idleMin, next });
   }
+  // Untold findings list first: the postmaster's eye lands on TELL.
+  rows.sort((a, b) => Number(b.next === "TELL") - Number(a.next === "TELL"));
 
   const hdr = (a: string, b: string, c: string, d: string, e: string, f: string) =>
     `${a.padEnd(14)} ${b.padEnd(16)} ${c.padEnd(4)} ${d.padEnd(44)} ${e.padStart(6)}  ${f}`;

@@ -21,11 +21,6 @@ import { findOnPath, IMPORT, TEST_CALL } from "./verify-library.ts";
 
 const SELF = join(import.meta.dir, "run");
 const spacedDone = process.env.POSTMASTER_SPACED_DONE === "1";
-if (spacedDone) {
-  console.log(
-    "skip the self-test passes from a path with a space: POSTMASTER_SPACED_DONE is set (nested run)",
-  );
-}
 
 let tmp = "";
 let lib = "";

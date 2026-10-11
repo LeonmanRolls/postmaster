@@ -1,4 +1,4 @@
 {"thread_id":"thread-madeup-2","type":"thread.started"}
-{"item":{"id":"item_0","type":"command_execution"},"type":"item.completed"}
+{"item":{"id":"item_x","type":"command_execution"},"type":"item.completed"}
 {"type":"turn.started"}
 {"type":"turn.completed"}

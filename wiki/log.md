@@ -1,12 +1,22 @@
 ---
 title: Log
 type: schema
-updated: 2026-10-09
+updated: 2026-10-10
 ---
 
 # Log
 
 Append-only. Newest first. One entry per operation, prefixed so it can be parsed.
+
+## [2026-10-10] ingest | story pages: a change and a ticket told as stories that scroll
+
+Issue #321. Built three story pages, two of pull request 336 and one of #352, and recorded them in
+`raw/trials/2026-10-09-story-pages/`: each page, its story file, its drawings, the builder it was made with, and the
+Codex prompt that drew the ticket's picture. The user judged each form in turn and chose the drawn one, with a
+picture and a plain welcome to start and the ticket's words a step at a time. Added
+[A ticket or a change reads better as a story that scrolls](concepts/story-pages.md), standing claimed: one user, one
+change and one ticket, nothing measured. #352 builds the page for tickets, and #434 has the booking clerk make one
+for every ticket it prepares.
 
 ## [2026-10-09] ingest | a purity check on environment, clock and import use
 

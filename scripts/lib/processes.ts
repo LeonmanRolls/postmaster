@@ -188,6 +188,40 @@ export function processCommandLine(pid: number): string {
   }
 }
 
+/** Every process's command line in one listing: the /proc tree when it
+ * lists pids, else a single portable ps. A per-pid caller would pay a
+ * spawn per process on macOS. */
+export function processCommandLines(): Map<number, string> {
+  const table = new Map<number, string>();
+  try {
+    const root = procRoot();
+    for (const entry of readdirSync(root)) {
+      if (!/^[0-9]+$/u.test(entry)) continue;
+      const pid = Number(entry);
+      try {
+        table.set(pid, readFileSync(`${root}/${pid}/cmdline`, "utf8").replace(/\0/gu, " ").trim());
+      } catch {
+        // A process that exits mid-listing simply has no line.
+      }
+    }
+    // A live proc root always lists pids; none means the root is not a procfs.
+    if (table.size > 0) return table;
+  } catch {
+    // A missing or non-proc root forces the portable ps path used on macOS.
+  }
+  const result = run("ps", ["-A", "-o", "pid=,args="], { env: { LC_ALL: "C" } });
+  for (const row of result.out.split(/\r?\n/u)) {
+    const pid = Number(row.trim().split(/[ \t]+/u)[0]);
+    if (!Number.isSafeInteger(pid) || pid <= 0) continue;
+    table.set(pid, row.trim());
+  }
+  return table;
+}
+
+function runC(...args: string[]): string {
+  return run(args[0]!, args.slice(1), { env: { LC_ALL: "C" } }).out.trim();
+}
+
 /** `sysctl -n kern.boottime`'s whole seconds, or null when it cannot be read.
  * The seconds survive a corrected clock, which the microseconds and the local
  * date text do not. */
@@ -202,21 +236,44 @@ function macBootSeconds(): number | null {
   return Number.isInteger(seconds) ? seconds : null;
 }
 
-/** The machine's boot id: the Linux file when the proc root holds it (the
- * test setting sends a run down the portable path), else macOS's
+/** The machine's boot id: the Linux file when the root holds it (the test
+ * setting sends a run down the portable path), else macOS's
  * `kern.bootsessionuuid`, which a corrected clock leaves alone, else the whole
- * seconds of `kern.boottime`. Empty when none can be read. */
-export function bootId(): string {
+ * seconds of `kern.boottime`. Empty when none can be read. The root defaults
+ * to the process root; a test passes another root to force the portable path
+ * on Linux. */
+export function bootId(root = procRoot()): string {
   try {
-    return readFileSync(`${procRoot()}/sys/kernel/random/boot_id`, "utf8").trim();
+    return readFileSync(`${root}/sys/kernel/random/boot_id`, "utf8").trim();
   } catch {
-    // A missing proc root forces the portable path used on macOS.
+    // A missing root forces the portable path used on macOS.
   }
   const session = run("sysctl", ["-n", "kern.bootsessionuuid"], { env: { LC_ALL: "C" } });
   const uuid = session.out.trim();
   if (session.code === 0 && uuid !== "") return uuid;
   const seconds = macBootSeconds();
   return seconds === null ? "" : String(seconds);
+}
+
+/** The boot time in epoch seconds, or null when neither source holds one. Takes
+ * an explicit root where a test forces the sysctl reading on Linux; the default
+ * stays the real /proc, which a forced process root never moves. */
+export function bootTime(procRoot = "/proc"): number | null {
+  try {
+    const text = readFileSync(`${procRoot}/stat`, "utf8");
+    const line = text.split("\n").find((row) => row.startsWith("btime "));
+    // ASCII: /proc/stat btime is kernel-emitted ASCII.
+    if (line) return Number(line.split(/\s+/u)[1]);
+  } catch {
+    // A missing root forces the sysctl reading macOS uses.
+  }
+  // ASCII: sysctl kern.boottime is kernel-emitted ASCII on macOS.
+  const words = runC("sysctl", "-n", "kern.boottime").replace(/,/gu, " ").split(/\s+/u);
+  // `{ sec = <t>, ... }`: the value sits two words past `sec`.
+  const at = words.indexOf("sec");
+  if (at < 0 || at + 2 >= words.length) return null;
+  const seconds = Number(words[at + 2]);
+  return Number.isInteger(seconds) ? seconds : null;
 }
 
 /** A recorded `sysctl kern.boottime` text, as this module's seconds form. */

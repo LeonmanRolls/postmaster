@@ -22,7 +22,7 @@ const AGENTS_CLEAN =
   "Any first message starts the flow: choose a target, set the machine up if it is not, launch the postmaster.\n" +
   "**1. Which project are we working on?**\n" +
   "First ask whether to work on postmaster itself or on another project.\n" +
-  "**2. Is this machine set up?**\n" +
+  "**2. Is this project set up?**\n" +
   "If it is missing, set it up now, in conversation, for the chosen project.\n";
 
 const SKILL_CLEAN =
@@ -41,7 +41,7 @@ const README_CLEAN =
 
 const AGENTS_STALE =
   "Any first message starts the flow: set the machine up if it is not, choose a target, launch the postmaster.\n" +
-  "**1. Is this machine set up?**\n" +
+  "**1. Is this project set up?**\n" +
   "If it is missing, set it up now, in conversation, before anything else.\n" +
   "**2. Which project are we dispatching against?**\n" +
   "Ask the user which project to dispatch against.\n";
@@ -111,7 +111,7 @@ describe("each check fires on its own fault alone", () => {
     const one = withFile(
       "one",
       "AGENTS.md",
-      "**1. Is this machine set up?**\n**2. Which project are we working on?**\nFirst ask whether to work on postmaster itself or on another project.\n",
+      "**1. Is this project set up?**\n**2. Which project are we working on?**\nFirst ask whether to work on postmaster itself or on another project.\n",
     );
     const r = accept(one);
     expect(r.code).toBe(1);
@@ -122,7 +122,7 @@ describe("each check fires on its own fault alone", () => {
     const one = withFile(
       "one",
       "AGENTS.md",
-      "**1. Which project are we working on?**\n**2. Is this machine set up?**\nAsk which project to work on.\n",
+      "**1. Which project are we working on?**\n**2. Is this project set up?**\nAsk which project to work on.\n",
     );
     const r = accept(one);
     expect(r.code).toBe(1);
