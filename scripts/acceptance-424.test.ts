@@ -13,6 +13,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   baseOf,
+  checkout,
   cleanup,
   commitBranch,
   makeClone,
@@ -319,6 +320,7 @@ describe("C4: landing holds every added or changed library for the user's word",
   }
 
   function branchAdd(clone: string, base: string): void {
+    checkout(clone, base);
     const manifestPath = join(clone, "package.json");
     const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as Record<string, unknown>;
     manifest["dependencies"] = { "left-pad": "1.3.0" };
@@ -340,6 +342,7 @@ describe("C4: landing holds every added or changed library for the user's word",
   }
 
   function branchRaise(clone: string, base: string, old: string, next: string): void {
+    checkout(clone, base);
     for (const [file, from, to] of [
       ["package.json", `"@biomejs/biome": "${old}"`, `"@biomejs/biome": "${next}"`],
       ["bun.lock", `"@biomejs/biome@${old}"`, `"@biomejs/biome@${next}"`],
@@ -353,6 +356,7 @@ describe("C4: landing holds every added or changed library for the user's word",
   }
 
   function branchVendor(clone: string, base: string, old: string, next: string): void {
+    checkout(clone, base);
     const path = join(clone, "scripts", "lib", "vendor", "VERSION");
     const text = readFileSync(path, "utf8");
     if (!text.startsWith(`${old}\n`)) throw new Error("probe-424: unexpected VERSION");

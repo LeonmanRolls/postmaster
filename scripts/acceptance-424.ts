@@ -325,6 +325,15 @@ export function makeClone(): string {
   return dir;
 }
 
+/** Move the clone to a ref, so the next probe branch edits from a clean tree. */
+export function checkout(clone: string, ref: string): void {
+  const r = spawnSync("git", ["-C", clone, "checkout", "-q", ref], {
+    env: GIT_ENV,
+    encoding: "utf8",
+  });
+  if (r.status !== 0) throw new Error(`probe-424: git checkout failed: ${r.stderr}`);
+}
+
 /** The clone's head: every probe branch starts from it. */
 export function baseOf(clone: string): string {
   const r = spawnSync("git", ["-C", clone, "rev-parse", "HEAD"], {
