@@ -444,7 +444,8 @@ what it owes them back.
   bullet, the bullet confirmed at the run's BASE, and the index itself when
   the copy has none. The ticket's criteria and checks stay fixed for the whole
   run; a verifier change alters only how they are shown. The coachman also writes
-  the pages of features the ticket adds, changes or removes.
+  the pages of features the ticket adds, changes or removes, where their verifier
+  exists; where none covers the surface, only a criterion's need makes one.
 - **Only the coachman's copy is kept**: a lane's change to its own copy reaches
   the project only when the coachman takes it into the synthesis copy. Both
   legs work in the synthesis worktree, and nothing cleans ignored files from
