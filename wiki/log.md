@@ -1,12 +1,25 @@
 ---
 title: Log
 type: schema
-updated: 2026-10-10
+updated: 2026-10-11
 ---
 
 # Log
 
 Append-only. Newest first. One entry per operation, prefixed so it can be parsed.
+
+## [2026-10-11] query | what a whole flow costs in the cloud
+
+Issue #341. The user asked what a whole flow costs to run in the cloud, not only individual lanes and legs. Added "What the
+whole flow costs" to [running the flow on Cloudflare](concepts/running-the-flow-on-cloudflare.md): one ticket from the booking
+clerk to the merge, a month at the audited pace and at two others, the flat price that month equals, and what the cloud would
+cost if it took only the peaks. The trial `2026-10-08-cloudflare-run-cost` gained the pace of merged pull requests with the
+query that counts it, a snapshot of the open interactive sessions, a module for the month and for admission to the machine,
+and eight controls (45 in all). An independent check of the first version found the month too narrow, since it took the
+coachman at its ceiling only, and the headline silent on the model bill; both are fixed. The user's answers to the decisions
+that followed the report: the four proposed tickets on virtual machines, one store, login or key per role and the security
+review "not yet", the gate-timing ticket dropped, and the question to the vendors after the spike. The criteria for #341 stay
+open for the cost criterion's new wording. No standing changed.
 
 ## [2026-10-10] ingest | story pages: a change and a ticket told as stories that scroll
 
@@ -17,6 +30,28 @@ picture and a plain welcome to start and the ticket's words a step at a time. Ad
 [A ticket or a change reads better as a story that scrolls](concepts/story-pages.md), standing claimed: one user, one
 change and one ticket, nothing measured. #352 builds the page for tickets, and #434 has the booking clerk make one
 for every ticket it prepares.
+
+## [2026-10-09] query | how other on-demand compute compares, and what limits concurrency
+
+Issue #341. The user asked whether other providers sell on-demand machines for less than Cloudflare, what limits how many runs
+can be in flight and what a cloud would lift, and whether a ticket could name where its work runs, beside local runs. Read the
+price, limit and lifecycle pages of twelve container and sandbox platforms (ten of them priced), the price lists, billing rules and quota pages of
+eight virtual machine providers, and the pages on hosted runners, tailnets, phones and owned hardware; captured the passages
+relied on in three more `raw/articles/` folders, each with a page in `sources/`. Priced the same two kinds of hour on each
+provider and counted how many launches ran at once in the 18 audited runs, in the trial `2026-10-08-cloudflare-run-cost`, with
+eleven more controls (34 in all). Two figures given for Fly.io Machines and one for a Hetzner plan by an earlier comparison that
+had not been checked against the pages were wrong. Added the sections "Other on-demand providers", "What limits concurrency,
+and what a cloud would lift" and "Other places to run a ticket" to [running the flow on
+Cloudflare](concepts/running-the-flow-on-cloudflare.md), and put the spike beside a measurement of idle compute. No standing
+changed.
+
+## [2026-10-09] query | what the flow would cost on Cloudflare alone
+
+The user is comparing Cloudflare with a flat-priced server, so the model bill, which is the same on any host, is out of the
+comparison. Recast the cost section of [running the flow on Cloudflare](concepts/running-the-flow-on-cloudflare.md) to lead with
+the Cloudflare bill: what each part charges, the container time of a typical run, the totals for the 18 audited runs
+and the runs a month at which a flat monthly price breaks even, with the model bill as a side note. Added three controls
+to the trial `2026-10-08-cloudflare-run-cost`. No standing changed.
 
 ## [2026-10-09] ingest | what two counts of mutation flag in the project's scripts, and whether they reach the review findings
 
@@ -41,6 +76,7 @@ through a per-file override, give the same 13. Neither failure test of the first
 three sentences that said the linters were not checked now give the result. Nothing was installed beyond the project's own
 development dependencies, and nothing in the gate, the rules or the runbooks changed. No standing changed.
 
+
 ## [2026-10-09] query | would banning mutation make code easier to follow, for a reader and for a model
 
 Issue #300. The user asked whether code without mutation is easier for a model to follow and proposed starting with a ban
@@ -64,6 +100,16 @@ generator, two states that only the findings had named (a submodule and an unbra
 the findings now writes the list. A third independent check of the rewrite found 16 problems (3 overstated, 1
 unsupported, 5 missing a limit, 3 stale, 4 minor), all corrected. Nothing was run or installed. No standing changed.
 
+## [2026-10-08] query | could the flow run on Cloudflare
+
+Issue #341. Read Cloudflare's documentation for Containers, Sandboxes, Workers, Durable Objects, Workflows, the Agents SDK, R2,
+D1, Queues and AI Gateway at commit 6e1b964, the login and terms pages of seven agent harnesses' vendors, and four price pages;
+captured the passages relied on in ten `raw/articles/` folders, each with a page in `sources/`. Recorded one trial,
+`2026-10-08-cloudflare-run-cost`: the container time and the model bill of the 18 audited real runs, the coachman's process time
+bracketed, the scripts' use of one machine's files and processes, and 20 controls. New concept
+[running the flow on Cloudflare](concepts/running-the-flow-on-cloudflare.md), standing claimed. The lane isolation scan was read from its
+branch, pull request 285 being open. No standing changed.
+
 ## [2026-10-05] ingest | how to design tickets and acceptance criteria that a run can finish
 
 Issue [#293](https://github.com/brindlewick/postmaster/issues/293). Captured 69 papers and pages into `raw/papers/` and `raw/articles/`, each with its
@@ -82,6 +128,7 @@ findings reads low for [#124](https://github.com/brindlewick/postmaster/issues/1
 that page was not edited. No standing, template or runbook changed: outside work moves no standing,
 and the proposals are the user's to decide.
 
+
 ## [2026-10-05] ingest | whether the lanes saw each other's work
 
 Issue #277. Read the events streams of 60 workhorse lanes in 30 real runs, and recorded the scan in
@@ -92,6 +139,7 @@ setting turns on isolates processes and not files. Added "Whether its lanes were
 [Mixing models for coding](concepts/mixing-models-for-coding.md) and a line to
 [Lane confinement](concepts/lane-confinement.md). No standing changed: the scan reads the runs' own records
 and promotes no run.
+
 
 ## [2026-10-05] query | how the dashboard looks
 
