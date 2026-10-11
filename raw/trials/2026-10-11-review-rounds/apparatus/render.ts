@@ -239,6 +239,32 @@ export function featuresMarkdown(inputs: readonly RunInput[]): string {
       const first = use.map((r) => r.best[0] ?? 0);
       return [name, num(spearman(x, rounds)), num(partialSpearman(x, rounds, first))];
     });
+    for (const [label, sel] of [
+      ["several workhorses", (r: RunInput) => r.mode === "synthesis"],
+      ["single thread", (r: RunInput) => r.mode === "single-thread"],
+    ] as const) {
+      const use = inputs.filter(sel);
+      for (const [name, pick] of feats.slice(0, 2)) {
+        const have = use.filter((r) => pick(r) !== null);
+        const x = have.map((r) => pick(r) as number);
+        rows.push([
+          `${name}, ${label} (${have.length} runs)`,
+          num(
+            spearman(
+              x,
+              have.map((r) => r.rounds),
+            ),
+          ),
+          num(
+            partialSpearman(
+              x,
+              have.map((r) => r.rounds),
+              have.map((r) => r.best[0] ?? 0),
+            ),
+          ),
+        ]);
+      }
+    }
     const first = inputs.map((r) => r.best[0] ?? 0);
     const rounds = inputs.map((r) => r.rounds);
     const crit = inputs.map((r) => r.criteria ?? 0);
@@ -819,6 +845,35 @@ export function marksMarkdown(
       pickSet((i) => i.group === "made-by-last-fix" || i.group === "made-by-older-fix"),
     ],
   ];
+  {
+    const union = (...sets: Array<Set<LeverFinding>>): Set<LeverFinding> => {
+      const u = new Set<LeverFinding>();
+      for (const x of sets) for (const f of x) u.add(f);
+      return u;
+    };
+    const named = new Map(levers);
+    const openBoth = named.get("The ticket left it open (both readers)") as Set<LeverFinding>;
+    const openEither = named.get("The ticket left it open (either reader)") as Set<LeverFinding>;
+    const site = named.get(
+      "The same defect at one more place (kind site, both readers)",
+    ) as Set<LeverFinding>;
+    const contract = named.get(
+      "Two places that must agree do not (kind contract, both readers)",
+    ) as Set<LeverFinding>;
+    const outside = named.get("In lines outside the change") as Set<LeverFinding>;
+    levers.push(
+      [
+        "The three a ticket could settle, counted once: open (both readers), site, contract",
+        union(openBoth, site, contract),
+      ],
+      ["The same, with open by at least one reader", union(openEither, site, contract)],
+      [
+        "Those three and the findings outside the change, counted once (both readers)",
+        union(openBoth, site, contract, outside),
+      ],
+      ["The same, with open by at least one reader", union(openEither, site, contract, outside)],
+    );
+  }
   const tableRows = levers.map(([name, chosen]) => {
     const e = leverEffect(runs, all, chosen, true);
     return [

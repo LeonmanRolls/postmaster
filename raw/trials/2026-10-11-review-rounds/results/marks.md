@@ -92,3 +92,7 @@ Each row removes the chosen findings and the ones that followed from them: a fin
 | Two places that must agree do not (kind contract, both readers) | 27 | 28 | 11 | 3 | 5 |
 | In lines outside the change | 18 | 19 | 10 | 4 | 3 |
 | Made by an earlier fix, for comparison | 162 | 162 | 31 | 19 | 29 |
+| The three a ticket could settle, counted once: open (both readers), site, contract | 61 | 64 | 22 | 5 | 12 |
+| The same, with open by at least one reader | 93 | 96 | 25 | 8 | 17 |
+| Those three and the findings outside the change, counted once (both readers) | 74 | 77 | 24 | 7 | 14 |
+| The same, with open by at least one reader | 106 | 109 | 26 | 10 | 20 |

@@ -13,9 +13,9 @@ Append-only. Newest first. One entry per operation, prefixed so it can be parsed
 Issue #400. The user asked why runs take so many review rounds and what the planning stage could do
 about it, and on 10 October added one question: which signals of a loop predict that the next
 round finds nothing worth fixing. Read 61 runs' own records (28 September to 9 October) and 18
-that ended their review after, counted rounds and serious findings with controls, traced each of
-the 382 serious findings after round 1 to the commit that wrote its lines by a rule committed
-beforehand, had two helper readers mark 309 of them for what the ticket left open, and tried 12
+that ended their review after, counted rounds and serious findings with controls, traced the 382
+serious findings after round 1 to the commit that wrote their lines by a rule committed
+beforehand (335 placed, 47 not), had two helper readers mark 309 of them for what the ticket left open, and tried 12
 signals and four stopping rules on the 61 runs and then on the 18. Added
 [Why runs take the review rounds they do, and what the planning stage could cut](concepts/review-rounds.md),
 standing mixed, and the trial `2026-10-11-review-rounds`. The new counts agree with the lane audit's

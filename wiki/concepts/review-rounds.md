@@ -20,16 +20,18 @@ so that a loop could stop on its own, and what a loop would have to record to ap
 
 **Claim.** The rounds are a long tail. The median run took 3, 21 of the 61 took two or fewer, and
 the 12 runs of six or more, a fifth of the runs, hold 44% of the 260 rounds. A run's rounds follow
-how many serious findings its first review makes (rank correlation 0.83), and a ticket's criteria
-and the size of its change go with the rounds mostly through that count. Of the later findings that
+how many serious findings its first review makes (rank correlation 0.83), and across the 61 runs a
+ticket's criteria and the size of its change go with the rounds through that count. In the 15
+single-thread runs alone the lines changed keep a correlation of 0.64 with rounds when that count
+is held. Of the later findings that
 could be placed in the history, 44% were in the change when round 1 reviewed it and no round had
 named them, 48% are in lines an earlier round's fix wrote, and 5% are outside the change. By two
 readers' marks the ticket left a point open for 8% to 20% of the 309 marked later findings, most
 often a state or an input case: what a step does when it fails or is edited, or what an option
 means. No one cause a ticket could settle accounts for more than about a twentieth of the rounds,
-and the four of them together for 6% to 8%. The cut that goes with the most rounds is the ticket's
-size: runs with more than five criteria took 76 rounds more than the median of the smaller
-tickets, an upper bound. The booking clerk's two-part tickets carried a median four times the
+and the three of them together, counted once, for 5% to 7%. At the five-criteria cut, the 32 runs
+with more criteria took 76 rounds above the median of the smaller tickets, counting only the runs
+above it (68 net), an upper bound. The booking clerk's two-part tickets carried a median four times the
 change of the one-part tickets before them and had a fifth of the serious findings per changed
 line, with rounds that cannot be told apart from chance. A loop cannot yet tell from what it
 records that its next round would be clean: the best single signal reached about half, and a round
@@ -62,9 +64,10 @@ count and not to choose among them [@trials/2026-10-11-review-rounds/method.md].
   commits the run made between rounds. The rule was written and committed before any finding was
   classified [@trials/2026-10-11-review-rounds/rule.md].
 - **Controls.** The finding lines of one run read the counts its own card states; a run with only
-  style or P3 findings reads zero; 17 of the audit's 18 runs agree on rounds, round 1 and total
-  (the 18th read 32 where it holds 44) and 17 of the 21-run count's 21 do; the inferred phase of a
-  fix commit matches the round its `apply` line follows for 236 of 239 lines; and the commit named
+  style or P3 findings reads zero; 17 of the audit's 18 runs agree on rounds, round 1 and the
+  total of finding lines (the 18th read 32 where it holds 44) and 17 of the 21-run count's 21 do; the inferred phase of a
+  fix commit matches the round its `apply` line follows for 236 of the 239 lines whose commit is
+  among the run's own (12 more name another commit); and the commit named
   as a line's origin added that line for 296 of 316 findings
   [@trials/2026-10-11-review-rounds/results/controls.md].
 
@@ -95,8 +98,9 @@ findings by the Theil–Sen method and 2.1 + 0.18 × findings by least squares, 
 findings add a round. Criteria (rho 0.43 with rounds) and lines changed before review
 (0.23) are associated with rounds, and once round 1's count is held that falls to 0.08 and −0.01.
 Ticket length has none (−0.01), and decisions and checks have none once the first round is held
-(−0.12 and −0.11). Among the 15 single-thread runs alone, lines changed goes with rounds at 0.64.
-Size alone does not explain the rounds: runs of under 400 changed lines took a
+(−0.12 and −0.11). The pattern differs in the 15 single-thread runs, where lines changed goes with
+rounds at 0.64 and keeps 0.64 with round 1 held, against 0.12 and −0.09 in the 46 runs with several
+workhorses. Size alone does not explain the rounds: runs of under 400 changed lines took a
 median 3.5, of 400 to 999 took 2, and of 2,500 or more took 4
 [@trials/2026-10-11-review-rounds/results/features.md].
 
@@ -151,7 +155,7 @@ yes and the other does not: it confirms 22 of the 26 and 1 of the 24, and sides 
 15 of the 24 and reader B in 9. So 8% is the better reading and 20% the ceiling
 [@trials/2026-10-11-review-rounds/results/marks.md].
 
-- **They are mostly about an edge of the flow.** Of the 26, 6 are of kind *state* (a failed
+- **What kind they are.** Of the 26, 6 are of kind *state* (a failed
   cleanup, an edit after sign-off or racing it, a log that cannot be written), 6 *input* (an empty
   option, which of several records, what a relative path is relative to), 3 prose, 2 contract, 1
   site and 1 other, and for 7 the readers give different kinds. Typical: what a sign-off covers
@@ -296,12 +300,15 @@ larger.
 | Keep the loop to the change: a serious finding in lines older than the run is filed and not fixed in the loop | 18 findings, 5%, in 10 runs | 4 and 3 (19 findings) | a list for the user; a rule of the loop more than of planning |
 | Record at sign-off and in the loop what the list above needs | the rows of the previous section | none by itself; it lets a later count tell whether the others worked | a few fields and a script |
 
-**What they add to.** The four rows that rest on findings overlap, and taken together they come to
-about 6% to 8% of the rounds by the fitted figure. No one cause is large, and rounds follow the
-count of serious findings in total. In these records that count is lower per criterion and per
-changed line in the groups with the clerk's two-part ticket and not lower in total, because the
-work was bigger (a median 9.5 serious findings in A and 7.0 in B, p 0.33). Whether the ticket is
-the reason, or the date, the lanes and the mode, the records cannot say.
+**What they add to.** The first, third and fourth rows overlap. Counted once, with the open points
+from both readers they come to 5 rounds strict and 12 fitted of the 260, 5%, and with the open
+points from at least one reader 8 and 17, 7%. With the findings outside the change added, which a
+ticket does not settle, 7 and 14, or 10 and 20 [@trials/2026-10-11-review-rounds/results/marks.md].
+No one cause is large, and rounds follow the count of serious findings in total. That count is
+lower per criterion and per changed line in both groups with the clerk's two-part ticket. In total
+it is lower in C (a median 1.0 serious finding against 9.5 in A, with lines changed alike) and not
+clearly in B (7.0 against 9.5, p 0.33), where the work was bigger. Whether the ticket is the
+reason, or the date, the lanes and the mode, the records cannot say.
 
 ## How sure, and what was not checked
 

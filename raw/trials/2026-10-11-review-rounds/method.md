@@ -6,7 +6,7 @@ date: 2026-10-11
 
 # Method
 
-**Question.** [Issue #400](https://github.com/brindlewick/postmaster/issues/400): a run's review
+**Question.** [Issue #400, Research: why do runs take so many review rounds, and what could the planning stage do to cut them?](https://github.com/brindlewick/postmaster/issues/400): a run's review
 leg goes on in rounds while the last round found a serious problem. The design expected two or
 three. The runs took a median of 3 and some took 13 or 20. What are the rounds after the first
 made of, and which of that begins before the run, in how its ticket was prepared? A second
@@ -186,7 +186,9 @@ not computed: **ticket open**, **disagrees** and **kind**, defined in [rule.md](
   about rulings, and each later finding with its round, severity, lens, lanes, target, text, the code
   at the cited lines, where git says those lines came from, and the earlier findings in the same
   file. A packet holds no group. Each reader marked every finding in 37 packets, in three batches of
-  12 or 13 runs, and the second reader had the runs of a batch in the reverse order.
+  12 or 13 runs, and the second reader had the runs of a batch in the reverse order. The first
+  reader's second batch was marked in four smaller parts, after its helper stopped on an output
+  limit and was stopped in its turn.
 - **Only the marks are judged.** The groups are computed and are not read, so the agreement is on
   the marks. It is in [results/marks.md](results/marks.md): the share of identical marks, the
   Wilson interval of that share, and Cohen's kappa. Where one label is nearly all of them, as with
@@ -229,3 +231,38 @@ not computed: **ticket open**, **disagrees** and **kind**, defined in [rule.md](
   later set was not used to choose a signal, and is two days of runs, 17 of them single thread.
 - **The marks are two models' readings** (see above), on 309 findings, 73 of which have no text and
   are not marked.
+
+## To repeat
+
+From a checkout of this repository, with the run folders and the fixture-free project folder on the
+machine that made them, run the scripts of `apparatus/` in this order. `--cut` is the end of the
+first set and `--after` its start for the later set:
+
+```
+bun --no-env-file --config=/dev/null apparatus/inventory.ts --project <repo> --legacy <dir> \
+    --cut 2026-10-09T22:30:00Z --out results/runs.json
+bun --no-env-file --config=/dev/null apparatus/trace.ts --repo <checkout> --project <repo> \
+    --legacy <dir> --runs results/runs.json --cut 2026-10-09T22:30:00Z --out results/findings.json
+bun --no-env-file --config=/dev/null apparatus/trace.ts --repo <checkout> --project <repo> \
+    --legacy <dir> --runs results/runs.json --after 2026-10-09T22:30:00Z \
+    --cut 2026-10-11T07:30:00Z --out results/findings-later.json
+bun --no-env-file --config=/dev/null apparatus/lanes.ts --project <repo> --legacy <dir> \
+    --runs results/runs.json --findings results/findings.json --cut 2026-10-09T22:30:00Z \
+    --out results/lane-rounds.json
+bun --no-env-file --config=/dev/null apparatus/packets.ts --project <repo> --legacy <dir> \
+    --runs results/runs.json --findings results/findings.json --out <packets dir> \
+    --items results/items.tsv
+bun --no-env-file --config=/dev/null apparatus/adjudicate.ts --readers readers \
+    --items results/items.tsv --n 24 --seed 400 --out <file>
+bun --no-env-file --config=/dev/null apparatus/render.ts --results results \
+    --cut 2026-10-09T22:30:00Z --later findings-later.json
+bun --no-env-file --config=/dev/null apparatus/controls.ts --results results --repo <checkout> \
+    --cut 2026-10-09T22:30:00Z
+bun test apparatus/
+```
+
+The run folders are needed for `inventory.ts`, `trace.ts`, `lanes.ts` and `packets.ts` and for
+nothing else. A reader without them runs `render.ts` and `controls.ts` on the committed data, from
+`results/runs.json`, `findings.json`, `findings-later.json`, `lane-rounds.json` and the readers'
+marks, and gets every table. `inventory.ts`, `trace.ts`, `lanes.ts` and `packets.ts` refuse to
+write anything that names a path, a thread or a session.
