@@ -135,8 +135,9 @@ onto the fragment it supersedes.
   never killed: they are reported as leftover members, each pid with its command, and the
   stop exits 2. `run host run` returns as soon as the launch has started.
   The wait still goes in the same
-  command as the launch, as `<tool>/scripts/run wait-for-markers`, or for a review round
-  `<tool>/scripts/run review-round wait`.
+  command as the launch, as `<tool>/scripts/run wait-for-markers`; a review round is
+  collected one reviewer at a time with `<tool>/scripts/run review-round wait-next`, which
+  resumes from markers and finish rows.
 - **`--role` selects per-role limits; `--run` selects the dispatch's recorded config.** Use
   `lane` for a workhorse, `coachman` for a leg, and `reviewer` for a review launch. Direct host
   launches use the default limits. With `--run <dispatch>`, the limits come from the config in
