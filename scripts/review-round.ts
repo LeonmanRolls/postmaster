@@ -297,8 +297,9 @@ function roundRecords(dispatch: string, round: string): RoundRecords {
       }
     } else if (row.action === "degrade") {
       // `<lens> r<N>: ...` (timeout, wall, reach) or `bug round <N>: ...`
-      // (a harvest that failed): every shape that takes a reviewer out.
-      if (words[1] === `r${round}:` || (words[1] === "round" && words[2] === round)) {
+      // (a harvest that failed): every shape that takes a reviewer out. The
+      // colon rides on the number in both, as review-decide reads them.
+      if (words[1] === `r${round}:` || (words[1] === "round" && words[2] === `${round}:`)) {
         degraded.add(key);
       }
     }

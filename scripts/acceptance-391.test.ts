@@ -857,6 +857,29 @@ describe("R1: round 1 review regressions", () => {
     expect(last.out).toContain("every reviewer reported");
   });
 
+  test("a harvest-failed finisher does not replay", () => {
+    const layout = makeLayout(
+      [
+        { lens: "bug", lane: "a", harness: "codex" },
+        { lens: "bug", lane: "b", harness: "codex" },
+      ],
+      { timeoutSeconds: 3 },
+    );
+    expect(
+      tool(layout, "review-round", "start", layout.dispatch, "1", "bug:a", "bug:b").code,
+    ).toBe(0);
+    writeFileSync(join(layout.dispatch, "logs", "review-r1-bug-a.done"), "");
+    const first = tool(layout, "review-round", "wait-next", layout.dispatch, "1", layout.repo);
+    expect(first.code).toBe(0);
+    expect(first.out).toContain("FINISHED bug a");
+    writeAction(layout, "coachman", "degrade", "a", "bug round 1: no result line");
+    const again = tool(layout, "review-round", "wait-next", layout.dispatch, "1", layout.repo);
+    expect(again.code).toBe(3);
+    expect(out(again)).not.toContain("FINISHED bug a");
+    expect(out(again)).toContain("TIMEOUT bug b: DEGRADED, timeout");
+    expect(degrades(layout)).toEqual(["a", "b"]);
+  });
+
   test("a walled finisher does not replay", () => {
     const layout = makeLayout(
       [
