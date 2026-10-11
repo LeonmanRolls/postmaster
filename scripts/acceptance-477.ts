@@ -114,9 +114,13 @@ export function repoMultiWork(surfaces: LocalSurface[]): string[] {
   return lines;
 }
 
-/** A stub `claude` that plays the given work in its cwd, inside its sandbox only. */
-export function writeLocalStub(bin: string, work: string): void {
-  const path = join(bin, "claude");
+/**
+ * A stub harness that plays the given work in its cwd, inside its sandbox
+ * only. Named for the harness the run's config gives the coachman role, so
+ * the launch finds the stub before any real binary.
+ */
+export function writeLocalStub(bin: string, work: string, name = "claude"): void {
+  const path = join(bin, name);
   writeFileSync(
     path,
     [

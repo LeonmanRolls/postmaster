@@ -108,7 +108,9 @@ describe("C1: making verifiers keeps the proven ones in the .postmaster folder",
   test("setup-verifiers keeps them too, with no land", () => {
     const sandbox = makeSandbox();
     try {
-      writeLocalStub(sandbox.bin, localWork([CLI], []).join("\n"));
+      // The stub takes the config's harness name: setup runs on the
+      // effective config, whose coachman is muse, not the sandbox's claude.
+      writeLocalStub(sandbox.bin, localWork([CLI], []).join("\n"), "muse");
       const config = writeMinimalConfig(sandbox.dir);
       const r = run(RUN, ["setup-verifiers", sandbox.repo, "cli", "--run", sandbox.dispatch], {
         env: makeEnv(sandbox, { POSTMASTER_HOST: "none", POSTMASTER_CONFIG: config }),
@@ -486,7 +488,7 @@ describe("C5: with the word, the repository route works as today", () => {
     try {
       const bin = join(dir, "bin");
       mkdirSync(bin, { recursive: true });
-      writeLocalStub(bin, repoSingleWork(CLI).join("\n"));
+      writeLocalStub(bin, repoSingleWork(CLI).join("\n"), "muse");
       const dispatch = mkdtempSync(join(dir, "dispatch-"));
       const config = writeMinimalConfig(dir);
       const before = headOf(repo, "main");
