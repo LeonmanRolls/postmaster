@@ -48,7 +48,15 @@
 // not read. Segments split on newlines as well as shell separators; (...)
 // groups, cd and command substitutions are followed, and find and xargs
 // scans of the ticket directories read as unknown, since their -exec is not
-// followed.
+// followed. Above every named form sits the unplaced rule: a segment carrying
+// any marker of this run's own ticket — its number, its clerk or store path,
+// the tracker's host, or a read-capable gh or adapter call with a target —
+// and placed as none of a text read, a title read, a known write, or another
+// ticket, repo or tracker, reads unknown, never not read, so a spelling the
+// check has never seen stops being taken for harmless. A substitution's text
+// is its body's, not its outer segment's; the run's own record path, ticket
+// worktree and file:line suffixes are not markers: they name the run and its
+// lines, not the ticket's text.
 //
 //   exit 0  the check ran; stdout holds the outcome line first:
 //           ticket-reads: not read | read by <agent> (<form>) | unknown (<reason>)
@@ -161,6 +169,18 @@ interface Finding {
   detail: string;
 }
 
+/**
+ * One classifier's answer: a finding, a positively placed non-read (a known
+ * write, another ticket, repo or tracker), or nothing unrecognized.
+ */
+type Placed = Finding | "placed" | null;
+
+/** What one segment or command yielded: findings, and whether it placed clean. */
+interface Placement {
+  findings: Finding[];
+  placed: boolean;
+}
+
 interface Agent {
   name: string;
   file: string;
@@ -188,7 +208,7 @@ function hasNumberToken(segment: string, ticket: string): boolean {
 
 /** A shell word that is a bare variable: its value cannot be told. */
 function isVar(word: string): boolean {
-  return /^\$[{(]?[A-Za-z_]/u.test(stripQuotes(word));
+  return /^\$([{(]?[A-Za-z_]|[@*#?$!0-9])/u.test(stripQuotes(word));
 }
 
 function stripQuotes(value: string): string {
@@ -609,21 +629,162 @@ function cdAfter(cwd: string | null, segment: string): string | null {
  * once a cd the check cannot follow runs; relative paths then read as
  * unknown, never clean.
  */
-function classifyCommand(ctx: Ctx, command: string, own: string | null, depth = 0): Finding[] {
+/**
+ * Blank substitutions: a live one's body is classified on its own, so its
+ * text is not its outer segment's, and an escaped one never runs at all.
+ * Paired backquotes go the same way; an unterminated one stays live.
+ */
+function blankSubst(segment: string): string {
+  let out = "";
+  let i = 0;
+  while (i < segment.length) {
+    const at = segment.indexOf("$(", i);
+    const tick = segment.indexOf("`", i);
+    if (at >= 0 && (tick < 0 || at < tick)) {
+      const escaped = at > 0 && segment[at - 1] === "\\";
+      let depth = 1;
+      let j = at + 2;
+      let quote = "";
+      while (j < segment.length && depth > 0) {
+        const ch = segment[j]!;
+        if (ch === "\\") {
+          j += 2;
+          continue;
+        }
+        if (quote) {
+          if (ch === quote) quote = "";
+        } else if (ch === '"' || ch === "'") {
+          quote = ch;
+        } else if (ch === "(") {
+          depth++;
+        } else if (ch === ")") {
+          depth--;
+        }
+        j++;
+      }
+      out += `${segment.slice(i, escaped ? at - 1 : at)} `;
+      i = j;
+      continue;
+    }
+    if (tick < 0) return out + segment.slice(i);
+    const close = segment.indexOf("`", tick + 1);
+    if (close < 0) return out + segment.slice(i);
+    out += `${segment.slice(i, tick)} `;
+    i = close + 1;
+  }
+  return out;
+}
+
+/**
+ * The marker text: the segment without its substitutions and the run's own
+ * machinery. A substitution's body is classified on its own; the run's
+ * record path and ticket worktree name the run, not the ticket's text; a
+ * file:line suffix names a line, not the ticket.
+ */
+function markerText(ctx: Ctx, segment: string): string {
+  const literal = blankSubst(segment);
+  const run = literal.split(`runs/${ctx.ticket}`).join(" ");
+  const tree = run.split(`.worktrees/${ctx.ticket}`).join(" ");
+  return tree.replace(/[A-Za-z0-9_./-]*\.[A-Za-z0-9_~+-]*:\d+/gu, " "); // ASCII: file names and line numbers in commands are ASCII
+}
+
+/** An adapter call naming a repo and a verb: it may read the ticket. */
+function adapterWithTarget(head: Head): boolean {
+  if (head.verb === "run") {
+    const tool = head.words[head.at + 1] ?? "";
+    if (tool !== "github" && tool !== "local") return false;
+    return (head.words[head.at + 2] ?? "") !== "" && (head.words[head.at + 3] ?? "") !== "";
+  }
+  if (
+    head.verb === "github.sh" ||
+    head.verb === "local.sh" ||
+    head.verb === "github.ts" ||
+    head.verb === "local.ts"
+  ) {
+    return (head.words[head.at + 1] ?? "") !== "" && (head.words[head.at + 2] ?? "") !== "";
+  }
+  if (
+    head.verb === "bun" ||
+    head.verb === "node" ||
+    head.verb === "deno" ||
+    head.verb === "bash" ||
+    head.verb === "sh"
+  ) {
+    const script = baseVerb(head.words[head.at + 1] ?? "");
+    if (
+      script !== "github.ts" &&
+      script !== "local.ts" &&
+      script !== "github.sh" &&
+      script !== "local.sh"
+    ) {
+      return false;
+    }
+    return (head.words[head.at + 2] ?? "") !== "" && (head.words[head.at + 3] ?? "") !== "";
+  }
+  return false;
+}
+
+/**
+ * Whether the segment carries a marker of this run's own ticket: its number,
+ * its clerk or store path, the tracker's host, or a read-capable gh or
+ * adapter call with a target. A bare repo name is not one: it collides with
+ * paths, and every real repository address carries the host.
+ */
+function segmentHasMarkers(ctx: Ctx, segment: string): boolean {
+  const live = markerText(ctx, segment);
+  if (hasNumberToken(live, ctx.ticket)) return true;
+  if (live.includes(".postmaster/clerk")) return true;
+  if (live.includes("postmaster/tickets")) return true;
+  if (ctx.kind === "github" && live.includes("github.com")) return true;
+  const head = segmentHead(live);
+  if (head.verb === "gh") {
+    const sub = head.words[skipFlags(head.words, head.at + 1)] ?? "";
+    if (sub !== "issue" && sub !== "api") return false;
+    return (
+      hasNumberToken(live, ctx.ticket) ||
+      head.words.some((word) => isVar(word)) ||
+      /https?:\/\//u.test(live)
+    );
+  }
+  return adapterWithTarget(head);
+}
+
+/** The segment as an unknown detail: one line, truncated, naming the call. */
+function shortSegment(segment: string): string {
+  return segment.replace(/\s+/gu, " ").trim().slice(0, 100); // ASCII: outcome lines stay one ASCII line
+}
+
+function classifyCommand(ctx: Ctx, command: string, own: string | null, depth = 0): Placement {
   const findings: Finding[] = [];
+  let placed = false;
   let cwd = own;
   for (const part of splitParts(command)) {
     if (part.kind === "subshell") {
-      findings.push(...classifyCommand(ctx, part.text, cwd, depth));
+      const inner = classifyCommand(ctx, part.text, cwd, depth);
+      findings.push(...inner.findings);
+      placed = placed || inner.placed;
       continue;
     }
-    findings.push(...classifySegment(ctx, part.text, cwd, depth));
+    const seg = classifySegment(ctx, part.text, cwd, depth);
+    findings.push(...seg.findings);
+    placed = placed || seg.placed;
+    // A marked segment no named form places reads unknown, never not read.
+    if (seg.findings.length === 0 && !seg.placed && segmentHasMarkers(ctx, part.text)) {
+      findings.push({
+        agent: "",
+        finding: "unknown",
+        form: "unplaced",
+        detail: shortSegment(part.text),
+      });
+    }
     for (const body of substitutionBodies(part.text)) {
-      findings.push(...classifyCommand(ctx, body, cwd, depth));
+      const inner = classifyCommand(ctx, body, cwd, depth);
+      findings.push(...inner.findings);
+      placed = placed || inner.placed;
     }
     cwd = cdAfter(cwd, part.text);
   }
-  return findings;
+  return { findings, placed };
 }
 
 function baseVerb(word: string): string {
@@ -862,8 +1023,8 @@ function isGraphqlMutation(segment: string): boolean {
   return false;
 }
 
-/** A graphql issue read against the run's repository: read, ignored, or unknown. */
-function graphqlRepoFinding(ctx: Ctx, segment: string, form: string): Finding | null {
+/** A graphql issue read against the run's repository: read, placed, or unknown. */
+function graphqlRepoFinding(ctx: Ctx, segment: string, form: string): Placed {
   const repos = new Set<string>();
   const ownerFirst = /owner\s*:\s*"([^"]+)"\s*,\s*name\s*:\s*"([^"]+)"/giu; // ASCII: graphql names are ASCII
   const nameFirst = /name\s*:\s*"([^"]+)"\s*,\s*owner\s*:\s*"([^"]+)"/giu; // ASCII: graphql names are ASCII
@@ -873,13 +1034,13 @@ function graphqlRepoFinding(ctx: Ctx, segment: string, form: string): Finding | 
     return { agent: "", finding: "unknown", form, detail: "repo unknown" };
   }
   const [nwo] = [...repos];
-  if (!sameNwo(nwo!, ctx.nwo)) return null;
+  if (!sameNwo(nwo!, ctx.nwo)) return "placed";
   return { agent: "", finding: "read", form, detail: "" };
 }
 
-/** Classify one gh segment; null when it is not this ticket. */
-function classifyGh(ctx: Ctx, segment: string, head: Head): Finding | null {
-  if (ctx.kind !== "github") return null;
+/** Classify one gh segment; placed when it is a known write or another object. */
+function classifyGh(ctx: Ctx, segment: string, head: Head): Placed {
+  if (ctx.kind !== "github") return "placed";
   const words = head.words;
   const i = skipFlags(words, head.at + 1);
   const sub = words[i] ?? "";
@@ -887,7 +1048,7 @@ function classifyGh(ctx: Ctx, segment: string, head: Head): Finding | null {
   if (sub === "issue") {
     const verb = words[skipFlags(words, i + 1)] ?? "";
     // A known write shows no ticket text; any other verb may display it.
-    if (verb === "comment" || verb === "close" || verb === "reopen") return null;
+    if (verb === "comment" || verb === "close" || verb === "reopen") return "placed";
     if (verb !== "view") {
       if (hasNumberToken(segment, ctx.ticket)) {
         return { agent: "", finding: "unknown", form: `gh issue ${verb}`.trim(), detail: "" };
@@ -901,7 +1062,7 @@ function classifyGh(ctx: Ctx, segment: string, head: Head): Finding | null {
           if (!want || ctx.nwo === null) {
             return { agent: "", finding: "unknown", form: "gh issue list", detail: "repo unknown" };
           }
-          if (!sameNwo(want, ctx.nwo)) return null;
+          if (!sameNwo(want, ctx.nwo)) return "placed";
         }
         return { agent: "", finding: "unknown", form: "gh issue list", detail: "" };
       }
@@ -911,18 +1072,21 @@ function classifyGh(ctx: Ctx, segment: string, head: Head): Finding | null {
     const deurl = segment.replace(/https?:\/\/github\.com\/\S+/gu, " "); // ASCII: issue addresses are machine-made ASCII
     const bare = hasNumberToken(deurl, ctx.ticket);
     let sameUrl = false;
+    let otherUrl = false;
     for (const url of issueUrls(segment)) {
       if (url.number !== ctx.ticket) continue;
       if (ctx.nwo === null) {
         return { agent: "", finding: "unknown", form: "gh issue view", detail: "repo unknown" };
       }
       if (sameNwo(url.nwo, ctx.nwo)) sameUrl = true;
+      else otherUrl = true;
     }
     if (!bare && !sameUrl) {
       // A ticket position holding a variable may hold this ticket's number.
       if (words.some((word) => isVar(word))) {
         return { agent: "", finding: "unknown", form: "gh issue view", detail: "variable" };
       }
+      if (otherUrl) return "placed";
       return null;
     }
     const override = ghRepoOverride(segment, flags.repo);
@@ -932,7 +1096,7 @@ function classifyGh(ctx: Ctx, segment: string, head: Head): Finding | null {
         return { agent: "", finding: "unknown", form: "gh issue view", detail: "repo unknown" };
       if (ctx.nwo === null)
         return { agent: "", finding: "unknown", form: "gh issue view", detail: "repo unknown" };
-      if (!sameNwo(want, ctx.nwo)) return null;
+      if (!sameNwo(want, ctx.nwo)) return "placed";
     }
     if (flags.json !== null) {
       const fields = flags.json
@@ -968,6 +1132,11 @@ function classifyGh(ctx: Ctx, segment: string, head: Head): Finding | null {
       return { agent: "", finding: "unknown", form: "gh issue view", detail: "select" };
     return { agent: "", finding: "read", form: "gh issue view", detail: "" };
   }
+  if (sub === "pr") {
+    // Issues and pull requests share one numbering: naming this ticket's
+    // number names another object, never the ticket's text.
+    return hasNumberToken(segment, ctx.ticket) ? "placed" : null;
+  }
   if (sub === "api") {
     if (/graphql/u.test(segment)) {
       return classifyGraphqlSegment(ctx, segment, "gh api graphql");
@@ -983,7 +1152,7 @@ function classifyGh(ctx: Ctx, segment: string, head: Head): Finding | null {
         method === "DELETE" ||
         method === "HEAD"
       ) {
-        return null;
+        return "placed";
       }
       if (hasNumberToken(segment, ctx.ticket)) {
         return { agent: "", finding: "unknown", form: "gh api", detail: method };
@@ -1012,7 +1181,7 @@ function classifyGh(ctx: Ctx, segment: string, head: Head): Finding | null {
     }
     // An endpoint number holding a variable may hold this ticket's number.
     const varNumber =
-      /repos\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+?)(?:\.git)?\/issues\/\$[{(]?[A-Za-z_]/u; // ASCII: API paths are machine-made ASCII
+      /repos\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+?)(?:\.git)?\/issues\/\$(?:[{(]?[A-Za-z_]|[@*#?$!0-9])/u; // ASCII: API paths are machine-made ASCII
     const varMatch = varNumber.exec(segment);
     if (varMatch) {
       const nwo = `${varMatch[1]}/${varMatch[2]}`;
@@ -1022,7 +1191,7 @@ function classifyGh(ctx: Ctx, segment: string, head: Head): Finding | null {
       if (sameNwo(nwo, ctx.nwo)) {
         return { agent: "", finding: "unknown", form: "gh api", detail: "variable" };
       }
-      return null;
+      return "placed";
     }
     const endpoints = [
       ...segment.matchAll(
@@ -1048,7 +1217,7 @@ function classifyGh(ctx: Ctx, segment: string, head: Head): Finding | null {
       return { agent: "", finding: "unknown", form: "gh api", detail: rest };
     }
     // Another repo's issue explains the number; anything else naming it is unknown.
-    if (otherRepo || collectionOther) return null;
+    if (otherRepo || collectionOther) return "placed";
     if (hasNumberToken(segment, ctx.ticket)) {
       return { agent: "", finding: "unknown", form: "gh api", detail: "" };
     }
@@ -1110,7 +1279,7 @@ function sameProject(ctx: Ctx, repoArg: string, own: string | null): boolean | n
   );
 }
 
-/** Classify one adapter (run github/local, legacy .sh/.ts) segment; null when not this ticket. */
+/** Classify one adapter (run github/local, legacy .sh/.ts) segment; placed when it is a known write, titles alone, or another repo or tracker. */
 function classifyAdapter(
   ctx: Ctx,
   tool: "github" | "local",
@@ -1118,13 +1287,13 @@ function classifyAdapter(
   at: number,
   own: string | null,
   segment: string,
-): Finding | null {
-  if ((tool === "github") !== (ctx.kind === "github")) return null;
+): Placed {
+  if ((tool === "github") !== (ctx.kind === "github")) return "placed";
   const repoArg = words[at] ?? "";
   const verb = words[at + 1] ?? "";
   if (!repoArg || !verb) return null;
   const same = sameProject(ctx, repoArg, own);
-  if (same === false) return null;
+  if (same === false) return "placed";
   if (same === null) {
     if (!hasNumberToken(segment, ctx.ticket)) return null;
     return { agent: "", finding: "unknown", form: `run ${tool} ${verb}`, detail: "repo unknown" };
@@ -1134,11 +1303,11 @@ function classifyAdapter(
     if (isVar(target)) {
       return { agent: "", finding: "unknown", form: `run ${tool} read`, detail: "variable" };
     }
-    if (target !== ctx.ticket) return null;
+    if (target !== ctx.ticket) return "placed";
     return { agent: "", finding: "read", form: `run ${tool} read`, detail: "" };
   }
   if (verb === "state") {
-    if (target !== ctx.ticket) return null;
+    if (target !== ctx.ticket) return "placed";
     return { agent: "", finding: "title", form: `run ${tool} state`, detail: "" };
   }
   // Known writes and metadata show no ticket text; verbs without a ticket
@@ -1156,25 +1325,32 @@ function classifyAdapter(
     verb === "access" ||
     verb === "store"
   ) {
-    return null;
+    return "placed";
   }
   if (!hasNumberToken(segment, ctx.ticket)) return null;
   return { agent: "", finding: "unknown", form: `run ${tool} ${verb}`, detail: "" };
 }
 
-/** Classify one fetch segment; null when it fetches no issue of this ticket. */
-function classifyFetch(ctx: Ctx, segment: string): Finding | null {
-  if (ctx.kind !== "github") return null;
+/** Classify one fetch segment; placed when it fetches another ticket or repo. */
+function classifyFetch(ctx: Ctx, segment: string): Placed {
+  if (ctx.kind !== "github") return "placed";
+  let other = false;
   for (const url of issueUrls(segment)) {
-    if (url.number !== ctx.ticket) continue;
+    if (url.number !== ctx.ticket) {
+      other = true;
+      continue;
+    }
     if (ctx.nwo === null) {
       return { agent: "", finding: "unknown", form: "issue fetch", detail: "repo unknown" };
     }
     if (sameNwo(url.nwo, ctx.nwo)) {
       return { agent: "", finding: "read", form: "issue fetch", detail: "" };
     }
+    other = true;
   }
-  return classifyApiFetch(ctx, segment);
+  const api = classifyApiFetch(ctx, segment);
+  if (api) return api;
+  return other ? "placed" : null;
 }
 
 /**
@@ -1210,16 +1386,20 @@ function fetchMethod(segment: string): string | null {
   return "POST";
 }
 
-/** A REST issue URL through the API host: read, ignored, or unknown. */
-function classifyApiRest(ctx: Ctx, text: string): Finding | null {
+/** A REST issue URL through the API host: read, placed, or unknown. */
+function classifyApiRest(ctx: Ctx, text: string): Placed {
   const rest =
     /https?:\/\/api\.github\.com\/repos\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+?)(?:\.git)?\/issues\/(\d+)((?:\/[A-Za-z0-9_.-]+)*)/gu; // ASCII: API addresses are machine-made ASCII
   let otherRepo = false;
+  let other = false;
   for (const match of text.matchAll(rest)) {
     const nwo = `${match[1]}/${match[2]}`;
     const number = match[3]!;
     const restPath = match[4] ?? "";
-    if (number !== ctx.ticket) continue;
+    if (number !== ctx.ticket) {
+      other = true;
+      continue;
+    }
     if (ctx.nwo === null) {
       return { agent: "", finding: "unknown", form: "issue fetch", detail: "repo unknown" };
     }
@@ -1232,19 +1412,18 @@ function classifyApiRest(ctx: Ctx, text: string): Finding | null {
     }
     return { agent: "", finding: "unknown", form: "issue fetch", detail: restPath };
   }
-  if (otherRepo) return null;
-  return null;
+  return other || otherRepo ? "placed" : null;
 }
 
 /** A fetch of the API for this ticket: REST issue URLs and the graphql endpoint. */
-function classifyApiFetch(ctx: Ctx, segment: string): Finding | null {
+function classifyApiFetch(ctx: Ctx, segment: string): Placed {
   if (!/api\.github\.com/u.test(segment)) return null;
   const method = fetchMethod(segment);
   if (method !== null && method !== "GET") {
-    if (method === "HEAD") return null;
+    if (method === "HEAD") return "placed";
     if (method === "POST" || method === "PUT" || method === "PATCH" || method === "DELETE") {
       // A mutating fetch shows no ticket text — except a graphql query POSTed as data.
-      if (!/graphql/u.test(segment)) return null;
+      if (!/graphql/u.test(segment)) return "placed";
     } else if (hasNumberToken(segment, ctx.ticket)) {
       return { agent: "", finding: "unknown", form: "issue fetch", detail: method };
     } else {
@@ -1264,17 +1443,20 @@ function classifyApiFetch(ctx: Ctx, segment: string): Finding | null {
   return null;
 }
 
-/** A graphql call carrying its query as text: read, ignored, or unknown. */
-function classifyGraphqlSegment(ctx: Ctx, segment: string, form: string): Finding | null {
+/** A graphql call carrying its query as text: read, placed, or unknown. */
+function classifyGraphqlSegment(ctx: Ctx, segment: string, form: string): Placed {
   if (!hasNumberToken(segment, ctx.ticket)) {
     // An issue number holding a variable may hold this ticket's number.
     // ASCII: graphql shapes are ASCII
-    if (/number\s*:\s*\$[{(]?[A-Za-z_]/u.test(segment) && /issues?/iu.test(segment)) {
+    if (
+      /number\s*:\s*\$(?:[{(]?[A-Za-z_]|[@*#?$!0-9])/u.test(segment) &&
+      /issues?/iu.test(segment)
+    ) {
       return { agent: "", finding: "unknown", form, detail: "variable" };
     }
     return null;
   }
-  if (isGraphqlMutation(segment)) return null;
+  if (isGraphqlMutation(segment)) return "placed";
   if (!/issues?/iu.test(segment)) {
     return { agent: "", finding: "unknown", form, detail: "" };
   }
@@ -1321,8 +1503,9 @@ function placePath(
 }
 
 /** Classify the store and clerk paths one segment names. */
-function classifyPaths(ctx: Ctx, segment: string, verb: string, own: string | null): Finding[] {
+function classifyPaths(ctx: Ctx, segment: string, verb: string, own: string | null): Placement {
   const findings: Finding[] = [];
+  let placed = false;
   const reading = READ_VERBS.has(verb);
   // A scan can run a reader over the directory unseen; its -exec is not followed.
   const scanning = reading || SCAN_VERBS.has(verb);
@@ -1339,7 +1522,7 @@ function classifyPaths(ctx: Ctx, segment: string, verb: string, own: string | nu
         form: clerk ? "clerk draft" : "ticket file",
         detail: "dynamic path",
       });
-      return findings;
+      return { findings, placed };
     }
     for (const re of [STORE_DIR_RE, CLERK_DIR_RE]) {
       const dir = re.exec(segment)?.[0];
@@ -1350,9 +1533,9 @@ function classifyPaths(ctx: Ctx, segment: string, verb: string, own: string | nu
         form: dir.includes("clerk") ? "clerk draft dir" : "ticket file dir",
         detail: "dynamic path",
       });
-      return findings;
+      return { findings, placed };
     }
-    return findings;
+    return { findings, placed };
   }
   const fileRes = [...segment.matchAll(STORE_FILE_RE), ...segment.matchAll(CLERK_FILE_RE)];
   for (const match of fileRes) {
@@ -1378,6 +1561,10 @@ function classifyPaths(ctx: Ctx, segment: string, verb: string, own: string | nu
         findings.push({ agent: "", finding: "unknown", form: `${form} dir`, detail: "" });
     } else if (place === "unknown") {
       findings.push({ agent: "", finding: "unknown", form, detail: "path unknown" });
+    } else {
+      // A ticket-patterned path resolving elsewhere is placed: another
+      // ticket's file, another tree, or another tracker's store.
+      placed = true;
     }
   }
   if (findings.length === 0) {
@@ -1401,17 +1588,24 @@ function classifyPaths(ctx: Ctx, segment: string, verb: string, own: string | nu
           form: "ticket file dir",
           detail: "path unknown",
         });
+      } else if (place === "elsewhere") {
+        placed = true;
       }
     }
   }
-  return findings;
+  return { findings, placed };
 }
 
 /** Classify one shell segment against every form the check names. */
-function classifySegment(ctx: Ctx, segment: string, own: string | null, depth = 0): Finding[] {
+function classifySegment(ctx: Ctx, segment: string, own: string | null, depth = 0): Placement {
   const findings: Finding[] = [];
+  let placed = false;
+  const take = (result: Placed): void => {
+    if (result === "placed") placed = true;
+    else if (result) findings.push(result);
+  };
   const head = segmentHead(segment);
-  if (!head.verb) return findings;
+  if (!head.verb) return { findings, placed };
   // A -c string runs its own command; classify what it runs instead. The c
   // must be last in its cluster: in -cl the c takes l, not the next word.
   if (SHELL_WRAPPERS.has(head.verb) && depth < 2) {
@@ -1420,23 +1614,25 @@ function classifySegment(ctx: Ctx, segment: string, own: string | null, depth = 
     const attached = /^-([A-Za-z]*c)(['"])(.*)$/u.exec(next); // ASCII: shell flags are ASCII
     if (head.verb === "eval" || next === "-c" || cluster) {
       const inner = head.words.slice(head.at + (head.verb === "eval" ? 1 : 2)).join(" ");
-      findings.push(...classifyCommand(ctx, stripQuotes(inner.trim()), own, depth + 1));
-      return findings;
+      const placement = classifyCommand(ctx, stripQuotes(inner.trim()), own, depth + 1);
+      findings.push(...placement.findings);
+      placed = placed || placement.placed;
+      return { findings, placed };
     }
     if (attached) {
       const inner = [attached[3], ...head.words.slice(head.at + 2)].join(" ");
-      findings.push(...classifyCommand(ctx, stripQuotes(inner.trim()), own, depth + 1));
-      return findings;
+      const placement = classifyCommand(ctx, stripQuotes(inner.trim()), own, depth + 1);
+      findings.push(...placement.findings);
+      placed = placed || placement.placed;
+      return { findings, placed };
     }
   }
   if (head.verb === "gh") {
-    const found = classifyGh(ctx, segment, head);
-    if (found) findings.push(found);
+    take(classifyGh(ctx, segment, head));
   } else if (head.verb === "run") {
     const tool = head.words[head.at + 1] ?? "";
     if (tool === "github" || tool === "local") {
-      const found = classifyAdapter(ctx, tool, head.words, head.at + 2, own, segment);
-      if (found) findings.push(found);
+      take(classifyAdapter(ctx, tool, head.words, head.at + 2, own, segment));
     }
   } else if (
     head.verb === "github.sh" ||
@@ -1445,8 +1641,7 @@ function classifySegment(ctx: Ctx, segment: string, own: string | null, depth = 
     head.verb === "local.ts"
   ) {
     const tool = head.verb.startsWith("github") ? "github" : "local";
-    const found = classifyAdapter(ctx, tool, head.words, head.at + 1, own, segment);
-    if (found) findings.push(found);
+    take(classifyAdapter(ctx, tool, head.words, head.at + 1, own, segment));
   } else if (["bun", "node", "deno", "bash", "sh"].includes(head.verb) && depth < 2) {
     const script = baseVerb(head.words[head.at + 1] ?? "");
     if (
@@ -1456,15 +1651,15 @@ function classifySegment(ctx: Ctx, segment: string, own: string | null, depth = 
       script === "local.sh"
     ) {
       const tool = script.startsWith("github") ? "github" : "local";
-      const found = classifyAdapter(ctx, tool, head.words, head.at + 2, own, segment);
-      if (found) findings.push(found);
+      take(classifyAdapter(ctx, tool, head.words, head.at + 2, own, segment));
     }
   } else if (FETCH_VERBS.has(head.verb)) {
-    const found = classifyFetch(ctx, segment);
-    if (found) findings.push(found);
+    take(classifyFetch(ctx, segment));
   }
-  findings.push(...classifyPaths(ctx, segment, head.verb, own));
-  return findings;
+  const paths = classifyPaths(ctx, segment, head.verb, own);
+  findings.push(...paths.findings);
+  placed = placed || paths.placed;
+  return { findings, placed };
 }
 
 /** A call whose record proves it failed read nothing. */
@@ -1509,7 +1704,7 @@ function classifyCall(ctx: Ctx, call: ToolCall, own: string): Finding[] {
   const command = inputCommand(call.input);
   if (command) {
     if (excusesCall(command, call.exitCode)) return findings;
-    findings.push(...classifyCommand(ctx, command, own));
+    findings.push(...classifyCommand(ctx, command, own).findings);
   } else if (failedExit(call.exitCode)) {
     return findings;
   }
@@ -1531,7 +1726,7 @@ function classifyCall(ctx: Ctx, call: ToolCall, own: string): Finding[] {
     // A fetch tool reads with a GET.
     if (ctx.kind === "github") {
       const api = classifyApiRest(ctx, url);
-      if (api) findings.push(api);
+      if (api && api !== "placed") findings.push(api);
     }
   }
   const paths: Array<{ path: string; write: boolean }> = call.direct.map((item) => ({
