@@ -445,12 +445,14 @@ spec and pauses for no spec review.
 ## Stage E: rulings
 
 1. **Read `<dispatch>/ESCALATION.md`.** It carries the question, the options the coachman
-   sees, its recommendation, and the state of the branches. Where the escalation is a
-   provider wall (`.wall-pause` is present), the wall is the user's to rule: the walls are
-   what Stage D's WALL step tells them about, and step 6 takes their words.
+   sees, its recommendation, and the state of the branches. Where it names a rise survey (a
+   `Survey:` line), read the survey first; a `Survey missing:` line says why there is none.
+   Where the escalation is a provider wall (`.wall-pause` is present), the wall is the user's
+   to rule: the walls are what Stage D's WALL step tells them about, and step 6 takes their words.
 2. **Decide within the user's standing instructions** when the question is about the
    work: a within-brief ambiguity, a scope call the ticket's own criteria answer, a round to
-   stop of the review loop. A reach is never decided here. A walled workhorse is never yours to drop:
+   stop of the review loop. On a review-loop stop, read the survey the escalation names
+   before ruling. A reach is never decided here. A walled workhorse is never yours to drop:
    it goes to the user as Stage D's WALL step says. Log `escalate` with your ruling.
 3. **Send it up** when it is genuinely destructive, changes the ticket's scope, touches
    anything outside the repo, is a fault in a control (Tool faults), asks whether to fix a
@@ -458,8 +460,11 @@ spec and pauses for no spec review.
    (`coachman.md`, the reach check: a workhorse's finding, a main checkout change no lane's
    record explains at `workhorses`, or an observed change tied to a reviewer outside this
    run's own branches and folders), or the user
-   asked to see it: write the question to the run's `.waiting-on-user`, add the run and the
-   question to the waiting list (`<runs>/postmaster/ESCALATION.md`, owned by
+   asked to see it: write the question to the run's `.waiting-on-user` — with
+   `<tool>/scripts/run review-survey question <dispatch>` when the escalation names a rise
+   survey, which carries the survey's plain words before the options, or the reason the
+   survey is missing — add the run and the question to the waiting list
+   (`<runs>/postmaster/ESCALATION.md`, owned by
    `<tool>/scripts/run host leg waiting add <runs> <ticket> <question-file>`), tell the user in
    the session, and wait. Say what happens when they answer:
    for an ASK outcome the attempt record's `on_answer` names it. Never

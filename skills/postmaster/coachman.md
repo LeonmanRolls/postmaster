@@ -1120,10 +1120,20 @@ Set the stage first, `<tool>/scripts/run stage <dispatch> review`, then:
    instead of fixed, which stops the leg in either `CHECKPOINT_MODE`, and a ruling that asks for
    the fix has it applied, the checkpoint rewritten with its state `applied on user word, not
    re-reviewed`, and the gate re-run, with the card listing it under `## Not re-reviewed`. When
-   the decision is `RULING`, the loop stops and escalates with the residue, including any
-   fixes that have not been re-reviewed, the decision's line, and your read on why it is not
-   converging; this and the escalation above are `CHECKPOINT_MODE`'s only mid-flow stops in
-   autonomous mode. After a ruling to go on, the rounds that follow are decided by the same rule. Style
+   the decision is `RULING`, the loop stops: first run `<tool>/scripts/run review-survey survey
+   <dispatch> <repo> <round>`, which surveys the stop when it is a rise and waits for the
+   survey. Exit 2 means the stop is not a rise: escalate with the residue, including any
+   fixes that have not been re-reviewed, the decision's line, and your read on the stop.
+   Otherwise the step printed the survey's record: write your residue, including any fixes
+   that have not been re-reviewed, your options and your advice to one file with `## Residue`,
+   `## Options` and `## Advice` sections, and render the escalation with
+   `<tool>/scripts/run review-survey escalate <dispatch> <round> --decision "<the decision's
+   line>" --coachman <file>`, which writes `ESCALATION.md` naming the survey, or the reason
+   there is none, and touches `.escalation-ready`. When the step prints `no recorded
+   snapshot`, establish the round's snapshot from the synthesis history, pass it with
+   `--snapshot`, and run the step again. This and the escalation above are `CHECKPOINT_MODE`'s
+   only mid-flow stops in autonomous mode. After a ruling to go on, the rounds that follow are
+   decided by the same rule. Style
    does not run again: a style lane DEGRADED in round 1 stays DEGRADED, and the card says how
    many lanes the style lens rested on.
 
