@@ -223,7 +223,7 @@ function rcOf(name: string): number | "none" {
 function wrongPatches(): string[] {
   try {
     return readdirSync(join(TICKETS, "remove", "wrong"))
-      .filter((f) => /^\d+-.+\.patch$/u.test(f))
+      .filter((f) => /^[0-9]+-.+\.patch$/u.test(f))
       .sort();
   } catch {
     return [];
@@ -233,7 +233,7 @@ function wrongPatches(): string[] {
 /** The remove ticket's acceptance criterion numbers, from its ticket file. */
 function removeCriteria(): string[] {
   const section = sectionOf(ticketBody("remove"), "Acceptance criteria");
-  return [...section.matchAll(/^(\d+)\./gmu)].map((m) => m[1]!);
+  return [...section.matchAll(/^([0-9]+)\./gmu)].map((m) => m[1]!);
 }
 
 /** The describe titles of a hidden run's failing tests, from its output. */
@@ -1344,13 +1344,13 @@ const REMOVE_HEAD =
 describe(REMOVE_HEAD, () => {
   test("every acceptance criterion has a wrong version beside the hidden tests", () => {
     const have = wrongPatches()
-      .map((f) => /^(\d+)-/u.exec(f)?.[1])
+      .map((f) => /^([0-9]+)-/u.exec(f)?.[1])
       .filter((n) => n !== undefined)
       .sort();
     expect(have).toEqual(removeCriteria().sort());
   }, 30000);
   for (const f of wrongPatches()) {
-    const n = /^(\d+)-/u.exec(f)?.[1] ?? "";
+    const n = /^([0-9]+)-/u.exec(f)?.[1] ?? "";
     const name = f.replace(/\.patch$/u, "");
     test(`wrong/${f}: the hidden suite fails, in criterion ${n}'s describe`, () => {
       expect(hiddenResults[`applied-wrong-${name}`]).toBe(0);
