@@ -52,12 +52,12 @@ export interface FixtureOptions {
 }
 
 /** A codex command_execution item, completed, in the stream's own shape. */
-export function codexExec(command: string, output = "", code = 0): string {
+export function codexExec(command: string, output = "", code = 0, quote: "'" | '"' = "'"): string {
   return JSON.stringify({
     type: "item.completed",
     item: {
       type: "command_execution",
-      command: `/bin/bash -lc '${command}'`,
+      command: `/bin/bash -lc ${quote}${command}${quote}`,
       aggregated_output: output,
       exit_code: code,
       status: "completed",

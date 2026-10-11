@@ -7,7 +7,7 @@
 // model run and stays hand-verified by the postmaster at landing. Every case
 // drives scripts/run as a subprocess or reads a runbook file.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { readFileSync, rmSync, writeFileSync } from "node:fs";
+import { readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   NOTICE,
@@ -815,6 +815,393 @@ describe("C3: review round 1 fixes", () => {
     const r = ticketReads(dispatch);
     expect(r.code).toBe(0);
     expect(outcomeOf(r.out)).toBe("ticket-reads: not read");
+  });
+});
+
+describe("C3: review round 2 fixes", () => {
+  test("a quoted cd through spaces resolves", () => {
+    const seed = fixtureDispatch(tmp, "c3b-cdseed", { legs: [] });
+    const spaced = `${repoOf(seed)} with spaces`;
+    renameSync(repoOf(seed), spaced);
+    const dispatch = fixtureDispatch(tmp, "c3b-quotedcd", {
+      repo: spaced,
+      legs: [
+        {
+          n: 1,
+          harness: "codex",
+          lines: [codexExec(`cd "${spaced}" && cat .postmaster/clerk/409.md`, "T", 0)],
+        },
+      ],
+    });
+    const r = ticketReads(dispatch);
+    expect(r.code).toBe(0);
+    expect(outcomeOf(r.out)).toBe("ticket-reads: read by coachman leg 1 (clerk draft)");
+  });
+
+  test("a quoted adapter repo with spaces reads", () => {
+    const seed = fixtureDispatch(tmp, "c3b-reposeed", { legs: [] });
+    const spaced = `${repoOf(seed)} with spaces`;
+    renameSync(repoOf(seed), spaced);
+    const dispatch = fixtureDispatch(tmp, "c3b-quotedrepo", {
+      repo: spaced,
+      legs: [
+        {
+          n: 1,
+          harness: "codex",
+          lines: [codexExec(`scripts/run github "${spaced}" read 409`, "T", 0)],
+        },
+      ],
+    });
+    const r = ticketReads(dispatch);
+    expect(r.code).toBe(0);
+    expect(outcomeOf(r.out)).toBe("ticket-reads: read by coachman leg 1 (run github read)");
+  });
+
+  test("a query named for a mutation reads, a mutation does not", () => {
+    const named =
+      'query mutationReport { repository(owner:"example",name:"shop") { issue(number:409) { body } } }';
+    const reading = fixtureDispatch(tmp, "c3b-mutationname", {
+      legs: [
+        {
+          n: 1,
+          harness: "codex",
+          lines: [codexExec(`gh api graphql -f query='${named}'`, "{}", 0)],
+        },
+      ],
+    });
+    const r = ticketReads(reading);
+    expect(r.code).toBe(0);
+    expect(outcomeOf(r.out)).toBe("ticket-reads: read by coachman leg 1 (gh api graphql)");
+    const writing = 'mutation AddNote { addComment(input:{subjectId:"x"}) { clientMutationId } }';
+    const muted = fixtureDispatch(tmp, "c3b-mutationop", {
+      legs: [
+        {
+          n: 1,
+          harness: "codex",
+          lines: [codexExec(`gh api graphql -f query='${writing} 409'`, "{}", 0)],
+        },
+      ],
+    });
+    const r2 = ticketReads(muted);
+    expect(r2.code).toBe(0);
+    expect(outcomeOf(r2.out)).toBe("ticket-reads: not read");
+  });
+
+  test("a stream the inventory never names is unknown", () => {
+    const dispatch = fixtureDispatch(tmp, "c3b-unlisted", {
+      legs: [{ n: 1, harness: "codex", lines: [codexExec("echo hi", "hi", 0)] }],
+    });
+    const manifest = JSON.parse(readFileSync(join(dispatch, "manifest.json"), "utf8")) as Record<
+      string,
+      unknown
+    >;
+    (manifest.coachman as Record<string, unknown>).legs = {};
+    writeFileSync(join(dispatch, "manifest.json"), JSON.stringify(manifest), "utf8");
+    const r = ticketReads(dispatch);
+    expect(r.code).toBe(0);
+    expect(outcomeOf(r.out).startsWith("ticket-reads: unknown")).toBe(true);
+    expect(outcomeOf(r.out)).toContain("unlisted coachman-leg-1-events.jsonl");
+  });
+
+  test("a fallback takeover reads with the fallback harness", () => {
+    const dispatch = fixtureDispatch(tmp, "c3b-fallback", {
+      legs: [
+        {
+          n: 1,
+          harness: "codex",
+          lines: [codexExec("gh issue view 409 --json body", "B", 0)],
+        },
+      ],
+    });
+    const runJson = JSON.parse(readFileSync(join(dispatch, "run.json"), "utf8")) as Record<
+      string,
+      unknown
+    >;
+    const team = (runJson.config as Record<string, unknown>).team as Record<string, unknown>;
+    team.coachman = { harness: "claude", model: "m" };
+    team.coachman_fallback = { harness: "codex", model: "m" };
+    writeFileSync(join(dispatch, "run.json"), JSON.stringify(runJson), "utf8");
+    writeFileSync(
+      join(dispatch, "logs", "coachman-leg-1-attempts.jsonl"),
+      `${JSON.stringify({ attempt: "0", request: "launch", role: "coachman", thread_id: "t0", outcome: "walled" })}\n` +
+        `${JSON.stringify({ attempt: "1", request: "takeover", role: "coachman_fallback", thread_id: "t1", outcome: "done" })}\n`,
+      "utf8",
+    );
+    writeFileSync(
+      join(dispatch, "logs", "coachman-leg-1-walled-events.jsonl"),
+      `${JSON.stringify({ type: "user", message: { content: [{ type: "text", text: "go" }] } })}\n`,
+      "utf8",
+    );
+    const r = ticketReads(dispatch);
+    expect(r.code).toBe(0);
+    expect(outcomeOf(r.out)).toContain("read by coachman leg 1 (gh issue view)");
+    expect(outcomeOf(r.out)).toContain("attempts span roles");
+  });
+
+  test("a quoted << is not a heredoc, and same-line text still runs", () => {
+    const quoted = fixtureDispatch(tmp, "c3b-quotedheredoc", {
+      legs: [
+        {
+          n: 1,
+          harness: "codex",
+          lines: [codexExec('echo "a << b" && gh issue view 409 --json body', "B", 0)],
+        },
+      ],
+    });
+    const r = ticketReads(quoted);
+    expect(r.code).toBe(0);
+    expect(outcomeOf(r.out)).toBe("ticket-reads: read by coachman leg 1 (gh issue view)");
+    const probe = fixtureDispatch(tmp, "c3b-samelineprobe", { legs: [] });
+    const same = fixtureDispatch(tmp, "c3b-sameline", {
+      repo: repoOf(probe),
+      legs: [
+        {
+          n: 1,
+          harness: "codex",
+          lines: [
+            codexExec(`cat <<EOF > out.md; cat ${repoOf(probe)}/.postmaster/clerk/409.md`, "T", 0),
+          ],
+        },
+      ],
+    });
+    const r2 = ticketReads(same);
+    expect(r2.code).toBe(0);
+    expect(outcomeOf(r2.out)).toBe("ticket-reads: read by coachman leg 1 (clerk draft)");
+  });
+
+  test("a body-printing listing is unknown, a title listing is clean", () => {
+    const bodies = fixtureDispatch(tmp, "c3b-listbodies", {
+      legs: [
+        { n: 1, harness: "codex", lines: [codexExec("gh issue list --json number,body", "[]", 0)] },
+      ],
+    });
+    const r = ticketReads(bodies);
+    expect(r.code).toBe(0);
+    expect(outcomeOf(r.out).startsWith("ticket-reads: unknown")).toBe(true);
+    const collection = fixtureDispatch(tmp, "c3b-collection", {
+      legs: [
+        { n: 1, harness: "codex", lines: [codexExec("gh api repos/example/shop/issues", "[]", 0)] },
+      ],
+    });
+    const r2 = ticketReads(collection);
+    expect(r2.code).toBe(0);
+    expect(outcomeOf(r2.out).startsWith("ticket-reads: unknown")).toBe(true);
+    const titles = fixtureDispatch(tmp, "c3b-listtitles", {
+      legs: [{ n: 1, harness: "codex", lines: [codexExec("gh issue list", "[]", 0)] }],
+    });
+    const r3 = ticketReads(titles);
+    expect(r3.code).toBe(0);
+    expect(outcomeOf(r3.out)).toBe("ticket-reads: not read");
+  });
+
+  test("command wrappers and quoted paths reveal the verb", () => {
+    const timed = fixtureDispatch(tmp, "c3b-time", {
+      legs: [
+        {
+          n: 1,
+          harness: "codex",
+          lines: [codexExec("time gh issue view 409 --json body", "B", 0)],
+        },
+      ],
+    });
+    const r = ticketReads(timed);
+    expect(r.code).toBe(0);
+    expect(outcomeOf(r.out)).toBe("ticket-reads: read by coachman leg 1 (gh issue view)");
+    const limited = fixtureDispatch(tmp, "c3b-timeout", {
+      legs: [
+        {
+          n: 1,
+          harness: "codex",
+          lines: [codexExec("timeout -s KILL 30 gh api repos/example/shop/issues/409", "{}", 0)],
+        },
+      ],
+    });
+    const r2 = ticketReads(limited);
+    expect(r2.code).toBe(0);
+    expect(outcomeOf(r2.out)).toBe("ticket-reads: read by coachman leg 1 (gh api)");
+    const probe = fixtureDispatch(tmp, "c3b-exeprobe", { legs: [] });
+    const quoted = fixtureDispatch(tmp, "c3b-quotedexe", {
+      repo: repoOf(probe),
+      legs: [
+        {
+          n: 1,
+          harness: "codex",
+          lines: [
+            codexExec(`"${repoOf(probe)}/scripts/run" github ${repoOf(probe)} read 409`, "T", 0),
+          ],
+        },
+      ],
+    });
+    const r3 = ticketReads(quoted);
+    expect(r3.code).toBe(0);
+    expect(outcomeOf(r3.out)).toBe("ticket-reads: read by coachman leg 1 (run github read)");
+  });
+
+  test("api fetches classify with their method", () => {
+    const fetched = fixtureDispatch(tmp, "c3b-curlget", {
+      legs: [
+        {
+          n: 1,
+          harness: "codex",
+          lines: [codexExec("curl https://api.github.com/repos/example/shop/issues/409", "{}", 0)],
+        },
+      ],
+    });
+    const r = ticketReads(fetched);
+    expect(r.code).toBe(0);
+    expect(outcomeOf(r.out)).toBe("ticket-reads: read by coachman leg 1 (issue fetch)");
+    const posted = fixtureDispatch(tmp, "c3b-curlpost", {
+      legs: [
+        {
+          n: 1,
+          harness: "codex",
+          lines: [
+            codexExec(
+              "curl -X POST https://api.github.com/repos/example/shop/issues/409/comments -d hi",
+              "",
+              0,
+            ),
+          ],
+        },
+      ],
+    });
+    const r2 = ticketReads(posted);
+    expect(r2.code).toBe(0);
+    expect(outcomeOf(r2.out)).toBe("ticket-reads: not read");
+    const query =
+      'query { repository(owner:"example",name:"shop") { issue(number:409) { body } } }';
+    const graphed = fixtureDispatch(tmp, "c3b-curlgraphql", {
+      legs: [
+        {
+          n: 1,
+          harness: "codex",
+          lines: [codexExec(`curl -d '${query}' https://api.github.com/graphql`, "{}", 0)],
+        },
+      ],
+    });
+    const r3 = ticketReads(graphed);
+    expect(r3.code).toBe(0);
+    expect(outcomeOf(r3.out)).toBe("ticket-reads: read by coachman leg 1 (issue fetch)");
+  });
+
+  test("a failure excuses one atomic read, not a chain or a diff", () => {
+    const probe = fixtureDispatch(tmp, "c3b-diffprobe", { legs: [] });
+    const diffed = fixtureDispatch(tmp, "c3b-diff", {
+      repo: repoOf(probe),
+      legs: [
+        {
+          n: 1,
+          harness: "codex",
+          lines: [
+            codexExec(`diff ${repoOf(probe)}/.postmaster/clerk/409.md /tmp/other.md`, "< T", 1),
+          ],
+        },
+      ],
+    });
+    const r = ticketReads(diffed);
+    expect(r.code).toBe(0);
+    expect(outcomeOf(r.out)).toBe("ticket-reads: read by coachman leg 1 (clerk draft)");
+    const chained = fixtureDispatch(tmp, "c3b-chain", {
+      legs: [
+        {
+          n: 1,
+          harness: "codex",
+          lines: [codexExec("gh issue view 409 --json body > /tmp/b && jq .bad /tmp/b", "", 1)],
+        },
+      ],
+    });
+    const r2 = ticketReads(chained);
+    expect(r2.code).toBe(0);
+    expect(outcomeOf(r2.out)).toBe("ticket-reads: read by coachman leg 1 (gh issue view)");
+    const failed = fixtureDispatch(tmp, "c3b-singlefail", {
+      legs: [
+        { n: 1, harness: "codex", lines: [codexExec("gh issue view 409 --json body", "", 1)] },
+      ],
+    });
+    const r3 = ticketReads(failed);
+    expect(r3.code).toBe(0);
+    expect(outcomeOf(r3.out)).toBe("ticket-reads: not read");
+  });
+
+  test("combined -c flags and double-quoted wrappers unwrap", () => {
+    const combined = fixtureDispatch(tmp, "c3b-combined", {
+      legs: [
+        {
+          n: 1,
+          harness: "codex",
+          lines: [codexExec('bash -lc "gh issue view 409 --json body"', "B", 0)],
+        },
+      ],
+    });
+    const r = ticketReads(combined);
+    expect(r.code).toBe(0);
+    expect(outcomeOf(r.out)).toBe("ticket-reads: read by coachman leg 1 (gh issue view)");
+    const dispatch = fixtureDispatch(tmp, "c3b-doublewrap", {
+      legs: [
+        {
+          n: 1,
+          harness: "codex",
+          lines: [codexExec("gh issue view 409 --json body", "B", 0, '"')],
+        },
+      ],
+    });
+    const r2 = ticketReads(dispatch);
+    expect(r2.code).toBe(0);
+    expect(outcomeOf(r2.out)).toBe("ticket-reads: read by coachman leg 1 (gh issue view)");
+  });
+
+  test("a substitution-joined ticket path is unknown", () => {
+    const bare = fixtureDispatch(tmp, "c3b-substpath", {
+      legs: [
+        {
+          n: 1,
+          harness: "codex",
+          lines: [
+            codexExec("cat $(git rev-parse --show-toplevel)/.postmaster/clerk/409.md", "T", 0),
+          ],
+        },
+      ],
+    });
+    const r = ticketReads(bare);
+    expect(r.code).toBe(0);
+    expect(outcomeOf(r.out).startsWith("ticket-reads: unknown")).toBe(true);
+    const quoted = fixtureDispatch(tmp, "c3b-quotedsubstpath", {
+      legs: [
+        {
+          n: 1,
+          harness: "codex",
+          lines: [
+            codexExec('cat "$(git rev-parse --show-toplevel)/.postmaster/clerk/409.md"', "T", 0),
+          ],
+        },
+      ],
+    });
+    const r2 = ticketReads(quoted);
+    expect(r2.code).toBe(0);
+    expect(outcomeOf(r2.out).startsWith("ticket-reads: unknown")).toBe(true);
+  });
+
+  test("a variable ticket number is unknown", () => {
+    const viewed = fixtureDispatch(tmp, "c3b-varview", {
+      legs: [{ n: 1, harness: "codex", lines: [codexExec('N=409; gh issue view "$N"', "B", 0)] }],
+    });
+    const r = ticketReads(viewed);
+    expect(r.code).toBe(0);
+    expect(outcomeOf(r.out).startsWith("ticket-reads: unknown")).toBe(true);
+    const probe = fixtureDispatch(tmp, "c3b-varprobe", { legs: [] });
+    const read = fixtureDispatch(tmp, "c3b-varread", {
+      repo: repoOf(probe),
+      legs: [
+        {
+          n: 1,
+          harness: "codex",
+          lines: [codexExec(`N=409; scripts/run github ${repoOf(probe)} read $N`, "T", 0)],
+        },
+      ],
+    });
+    const r2 = ticketReads(read);
+    expect(r2.code).toBe(0);
+    expect(outcomeOf(r2.out).startsWith("ticket-reads: unknown")).toBe(true);
   });
 });
 
