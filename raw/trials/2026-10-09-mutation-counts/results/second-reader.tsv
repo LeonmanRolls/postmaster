@@ -1,0 +1,13 @@
+item	mark	question	reason
+1	harmless	3	Process environment cleared of inherited GIT_* repository overrides once, at module start-up, under a comment saying why; nothing else in fixture.ts or the modules it imports changes process.env.
+2	harmless	2	launch is the tmux stub's new-session/new-window action inside tmuxStubInner, whose job is the fake tmux state; recording the new window in st and saving it is what launching a window means to its two callers.
+3	hazard	3	Module-level finishDelay, read by host() and spawnEnv into every host call's environment, is reassigned in 16 places across runControls, toggling 3600 and 0.1, with no comment here or at its declaration.
+4	harmless	1	Restore half of a save, set and restore in finally around runCmd: POSTMASTER_ATTEMPT_PHASE goes back to its value on entry, or is deleted if it had none, so neither the caller nor a later call sees a change.
+5	harmless	2	noteStructured returns void and notes signals into st, a StructuredState accumulator that noteRecord passes down and classifyTransient reads afterwards; the name and signature say it records into st.
+6	hazard	1	isDigitChar is a predicate named is… that writes lastIndex on the module-level regex ND_ONE; nothing else can see it (no g or y flag, used only here), but a reader does not look for a change in an is… predicate.
+7	harmless	2	collectLines returns void and pushes into its first parameter, named out; the name, the out parameter and the comment all say it fills that array.
+8	hazard	2	describeOrder is named and commented as a summary returning a string, yet it sets order.status to shipped on the caller's object; confirmationLine passes its own argument through, so its caller's order changes too.
+9	harmless	2	para is a void emitter nested in the tokenizer shape, beside inlineToks and blocks, all appending to shape's own toks list, which shape returns; its void return and role say it appends, and blocks relies on that.
+10	harmless	2	parseString is a no-argument step of a cursor-based parser; advancing rawDecodeJson's shared position i past the string is what consuming it means, parseValue and parseObject read i next, and the comment says the index past the value is returned.
+11	harmless	1	subst reassigns its own string parameter line; the binding is local and the string immutable, so the caller's value is untouched, and it is not a predicate, getter or callback.
+12	harmless	1	view shifts its args array empty, but its only caller is the entry line process.exit(view(argv)), which exits on return; view is not exported and argv, a private slice of process.argv, is read only before the call.

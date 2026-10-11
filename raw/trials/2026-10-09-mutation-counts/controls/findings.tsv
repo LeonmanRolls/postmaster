@@ -1,0 +1,10 @@
+key	run	round	sev	location	snapshot	source	log_detail	description
+control/in-flagged	0	1	P1	scripts/push-onto-argument.ts:3	controls	control	-	a finding on the line that pushes onto an argument
+control/in-clean	0	1	P1	scripts/const-map-filter.ts:4	controls	control	-	a finding in a function with no change at all
+control/local-only	0	1	P1	scripts/local-array.ts:4	controls	control	-	a finding on a push onto a local: only the second count holds it
+control/module-top	0	1	P1	scripts/module-top-level.ts:3	controls	control	-	a finding at the module's top level, where the module changes its own variable
+control/in-callback	0	1	P1	scripts/captured-callback.ts:5	controls	control	-	a finding inside the callback that changes the enclosing function's variable
+control/outer-of-callback	0	1	P1	scripts/captured-callback.ts:7	controls	control	-	a finding in the enclosing function, outside its callback
+control/other-file	0	1	P1	scripts/not-in-controls.ts:3	controls	control	-	a finding in a file the tree does not hold
+control/runbook	0	1	P1	skills/postmaster/coachman.md:943	controls	control	-	a finding that cites a runbook line
+control/no-line	0	1	P1	scripts/reach.ts	controls	control	-	a finding that cites a file and no line
