@@ -53,6 +53,24 @@ generator, two states that only the findings had named (a submodule and an unbra
 the findings now writes the list. A third independent check of the rewrite found 16 problems (3 overstated, 1
 unsupported, 5 missing a limit, 3 stale, 4 minor), all corrected. Nothing was run or installed. No standing changed.
 
+## [2026-10-05] ingest | how to design tickets and acceptance criteria that a run can finish
+
+Issue [#293](https://github.com/brindlewick/postmaster/issues/293). Captured 69 papers and pages into `raw/papers/` and `raw/articles/`, each with its
+address, the day it was read and the passages relied on, and recorded the search in
+`raw/trials/2026-10-04-criteria-search/`: every query, the rule for choosing in each of four groups,
+the controls and what was not read. Recorded a count of 21 runs in
+`raw/trials/2026-10-04-unbounded-criteria-count/`: review rounds and severe findings per round,
+whether each ticket as first received asked for something unbounded (three readers, two given only
+the ticket texts), where 99 late severe findings sat (three readers), and the five runs in which the
+user bounded a criterion mid-run. Added
+[Tickets and acceptance criteria that a run can finish](concepts/ticket-and-criteria-design.md),
+**claimed**, with a map in four groups, the four shapes with what the sources recommend, eleven
+further failures, twelve proposed changes to the template and the clerk's instructions, and what [#291](https://github.com/brindlewick/postmaster/issues/291)
+already did. The count found that [the lane audit](concepts/several-lanes.md)'s table of severe
+findings reads low for [#124](https://github.com/brindlewick/postmaster/issues/124) (28 where the run's own checkpoint lists 94) and [#109](https://github.com/brindlewick/postmaster/issues/109) (about 7 missing);
+that page was not edited. No standing, template or runbook changed: outside work moves no standing,
+and the proposals are the user's to decide.
+
 ## [2026-10-05] ingest | whether the lanes saw each other's work
 
 Issue #277. Read the events streams of 60 workhorse lanes in 30 real runs, and recorded the scan in

@@ -114,6 +114,13 @@ Why the design is shaped as it is.
 - [A ticket's shape is checked before it is accepted](concepts/ticket-shape.md): **claimed**.
   A title, the problem, numbered criteria each answerable yes or no, and the user's direction,
   checked by a script before any ticket is dispatched. What is missing is asked of the user.
+- [Tickets and acceptance criteria that a run can finish](concepts/ticket-and-criteria-design.md):
+  **claimed**. The template's four shapes that cannot be finished restate an old idea, the verifiable
+  requirement, and each bounded form has older names and some support. The reading asks for the
+  reason and the bar to be stated differently, for the direction and cost of "unknown" to be named, and
+  names eleven other ways a criterion fails, the best measured a check that passes while the criterion
+  is false. A count of 21 runs fits the rules and cannot test them. From [#293](https://github.com/brindlewick/postmaster/issues/293) and outside work; no rule
+  was changed, and twelve changes are proposed.
 - [A ticket names the turnpikes its run passes through](concepts/turnpikes.md): **claimed**.
   `default` for the style, bug and security reviews, fewer, or `none`, with no floor. The
   project's gate is not a turnpike and always runs.
