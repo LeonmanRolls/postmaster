@@ -1,8 +1,12 @@
 // A review round's bookkeeping: its time limit, collecting it, recording and stopping the
 // reviewers that do not finish in time, and tearing its scratches down with nothing of the
 // round still running in them. The round itself is three calls: cut prepares the snapshot
-// and the scratches, launch runs the reviewers and waits for them, harvest normalizes the
-// bug reports.
+// and the scratches, launch saves the round's starting state and runs the reviewers, harvest
+// normalizes the bug reports. Launch starts no reviewer while a brief one of its reviewers
+// needs is missing, keeps the first starting state when the round is retried, refuses a
+// round whose check is already recorded, and the wait ends by collecting the round's
+// check for changes by its reviewers, completing an unfinished collection and never
+// repeating a finished one.
 //
 //   run review-round start    <dispatch> <round>
 //   run review-round cut      <dispatch> <round> <repo> <synthesis-wt>
@@ -11,19 +15,27 @@
 //   run review-round wait     <dispatch> <round> <repo> [<lens>:<lane>...]
 //   run review-round teardown <dispatch> <round> <repo> [<lens>:<lane>...]
 //
-//   exit 0  wait: every marker is in · start and teardown: done · cut and harvest: done ·
+//   exit 0  wait: every marker is in, and the round's reach check ran, was already
+//           recorded, or had no starting state · start and
+//           teardown: done · cut and harvest: done ·
 //           launch: the wait's own exit when every reviewer reported
-//   exit 3  wait: the deadline passed; each reviewer with no marker is recorded and stopped;
+//   exit 3  wait: the deadline passed; each reviewer with no marker is recorded and
+//           stopped, and the round's reach check ran, was already recorded, or had no
+//           starting state;
 //           launch: the wait's exit 3, as wait itself records it
-//   exit 4  wait: the deadline passed, but a record could not be written
+//   exit 4  wait: a control faulted: the deadline passed but a record could not be
+//           written, a reviewer is still running and the round's check is not run,
+//           or the round's reach check failed; stop the leg
 //   exit 1  usage; the round was not started, or the machine restarted or the round was started
 //           again since the wait began; a marker no reviewer of the round lands; teardown: a
 //           scratch left in place; cut: run verify exited other than 0 or 3, the run's legs or
 //           a lens's lanes did not resolve, or a left-behind scratch did not tear down;
-//           launch: the same resolution failures, a prompt that could not be written, a scratch
-//           that was not ready, or the round did not start; the round's own teardown, naming
-//           no reviewers, comes before the reach check of a round that took its reach snapshot
-//           (nothing is removed)
+//           launch: the same resolution failures, a round whose reach check is already
+//           recorded, a brief a reviewer needs that is missing, a prompt that could not be
+//           written, the round's starting state that could not be saved, a scratch that was
+//           not ready, or the round did not start; the round's own
+//           teardown, naming no reviewers, comes before the reach check of a round that took
+//           its reach snapshot (nothing is removed)
 import {
   existsSync,
   mkdirSync,
@@ -72,6 +84,22 @@ export function reachCheckMissing(
   round: string,
 ): boolean {
   return waitsForReach && !points.includes(`r${round}`);
+}
+
+/**
+ * Whether the round's reach check is recorded: a reach point named for the
+ * round in the journal. False when the record cannot be read, so a refusal
+ * is never told from a broken journal. The launch and the wait read this one
+ * definition, so they never disagree about whether a round is collected.
+ */
+export function roundPointRecorded(dispatch: string, round: string): boolean {
+  try {
+    return reachActions(dispatch).some(
+      ({ event }) => event.kind === "point" && String(event.point) === `r${round}`,
+    );
+  } catch {
+    return false;
+  }
 }
 
 interface RoundState {
@@ -490,7 +518,7 @@ export function cutRound(a: StepArgs, deps: StepDeps): StepResult {
   return res;
 }
 
-/** launch: prompt files, ready scratches, the round's start, every reviewer, then the wait. */
+/** launch: briefs, prompt files, ready scratches, the starting state, the start, every reviewer, then the wait. */
 export function launchRound(a: StepArgs, deps: StepDeps): StepResult {
   const res: StepResult = { code: 0, out: [], err: [] };
   const snap = snapshotOf(a, deps, res);
@@ -503,9 +531,51 @@ export function launchRound(a: StepArgs, deps: StepDeps): StepResult {
   }
   const lenses = resolveLenses(a, deps, res);
   if (lenses === null) return res;
+  // A collected round is never launched again: its reviewers already ran, and
+  // launching it would run new reviewers the recorded check cannot see.
+  if (roundPointRecorded(a.dispatch, a.round)) {
+    res.err.push(
+      `review-round: round ${a.round} already has its reach check recorded; nothing launched`,
+    );
+    res.code = 1;
+    return res;
+  }
   const ticket = basename(a.dispatch);
   const lensPrompt = (lens: string): string =>
     join(a.dispatch, `review-r${a.round}-${lens}-prompt.txt`);
+  // A round starts no reviewer while a brief one of its reviewers needs is
+  // missing. Every lens but bug is launched from a prompt that points at the
+  // lens's brief, except a security lane whose harness has its own skill.
+  const briefOf = (lens: string): string => join(a.dispatch, `review-${lens}-brief.md`);
+  const securityPrompts = new Map<string, string>();
+  for (const [lens, lanes] of lenses) {
+    if (lens === "bug") continue;
+    let needBrief = [...lanes];
+    if (lens === "security") {
+      needBrief = [];
+      for (const lane of lanes) {
+        const skill = deps.tool("launch", ["skill", lane, "security-review", "--run", a.dispatch]);
+        if (skill.code === 0) {
+          securityPrompts.set(lane, skill.out);
+        } else if (skill.code === 3) {
+          securityPrompts.set(lane, "");
+          needBrief.push(lane);
+        } else {
+          passErr(res, skill);
+          res.out.push(`NO SECURITY PROMPT FOR ${lane}; nothing launched`);
+          res.code = 1;
+          return res;
+        }
+      }
+    }
+    if (needBrief.length > 0 && !existsSync(briefOf(lens))) {
+      res.err.push(
+        `review-round: ${briefOf(lens)} is missing, and ${needBrief.join(", ")} under ${lens} reads it; nothing launched`,
+      );
+      res.code = 1;
+      return res;
+    }
+  }
   for (const [lens, lanes] of lenses) {
     if (lens !== "bug") {
       try {
@@ -523,31 +593,14 @@ export function launchRound(a: StepArgs, deps: StepDeps): StepResult {
     }
     if (lens === "security") {
       for (const lane of lanes) {
-        const skill = deps.tool("launch", ["skill", lane, "security-review", "--run", a.dispatch]);
         const lanePrompt = join(a.dispatch, `review-r${a.round}-security-${lane}-prompt.txt`);
-        if (skill.code === 0) {
-          try {
-            writeFileSync(lanePrompt, skill.out);
-          } catch (e) {
-            res.err.push(
-              `review-round: ${lanePrompt} cannot be written (${e instanceof Error ? e.message : String(e)})`,
-            );
-            res.code = 1;
-            return res;
-          }
-        } else if (skill.code === 3) {
-          try {
-            writeFileSync(lanePrompt, readFileSync(lensPrompt(lens)));
-          } catch (e) {
-            res.err.push(
-              `review-round: ${lanePrompt} cannot be written (${e instanceof Error ? e.message : String(e)})`,
-            );
-            res.code = 1;
-            return res;
-          }
-        } else {
-          passErr(res, skill);
-          res.out.push(`NO SECURITY PROMPT FOR ${lane}; nothing launched`);
+        const skilled = securityPrompts.get(lane) ?? "";
+        try {
+          writeFileSync(lanePrompt, skilled === "" ? readFileSync(lensPrompt(lens)) : skilled);
+        } catch (e) {
+          res.err.push(
+            `review-round: ${lanePrompt} cannot be written (${e instanceof Error ? e.message : String(e)})`,
+          );
           res.code = 1;
           return res;
         }
@@ -565,6 +618,22 @@ export function launchRound(a: StepArgs, deps: StepDeps): StepResult {
         res.code = 1;
         return res;
       }
+    }
+  }
+  // A retried round keeps its first starting state: the first attempt's
+  // reviewers ran under it, so saving again would fold anything they changed
+  // outside their scratches into the new baseline, past the eventual check.
+  const snapPath = join(a.dispatch, "reach", `before-r${a.round}.json`);
+  if (existsSync(snapPath)) {
+    res.out.push(`review-round: round ${a.round} keeps its first starting state`);
+  } else {
+    const before = deps.tool("reach", ["before", a.dispatch, a.round]);
+    passOut(res, before);
+    passErr(res, before);
+    if (before.code !== 0) {
+      res.err.push("review-round: the round's starting state could not be saved; nothing launched");
+      res.code = 1;
+      return res;
     }
   }
   const start = deps.tool("review-round", ["start", a.dispatch, a.round]);
@@ -831,6 +900,81 @@ if (import.meta.main) {
       });
   };
 
+  /**
+   * The bug lanes' forked-task transcripts, copied for the check to tie what
+   * it finds to a lane, as the harvest does later. Best effort: a copy that
+   * fails is reported by the harvest with its degrade, and the check goes on
+   * with the streams alone.
+   */
+  const copyTaskTranscripts = (reviewers: Array<[string, string]>): void => {
+    for (const [lens, lane] of reviewers) {
+      if (lens !== "bug") continue;
+      const events = join(LOGS, `review-r${R}-bug-${lane}.jsonl`);
+      const copied = run(join(HERE, "run"), [
+        "review-findings",
+        "harvest",
+        events,
+        LOGS,
+        "--prefix",
+        `review-r${R}-bug-${lane}`,
+      ]);
+      if (copied.out) process.stdout.write(copied.out);
+      if (copied.err) process.stderr.write(copied.err);
+    }
+  };
+
+  /**
+   * The round's check for changes by its reviewers: null when the round took
+   * no starting state or a past collection finished it, else the step's exit.
+   * The check runs once, at the first collection, so no fix lands before it.
+   * A collection cut short after the point but before the restore finishes is
+   * completed, never skipped: the point means the check voided what it found,
+   * so only the restore is unfinished. A finished collection, marked when its
+   * step exits 0, is never repeated.
+   */
+  const runRoundCheck = (reviewers: Array<[string, string]>): number | null => {
+    if (!existsSync(join(D, "reach", `before-r${R}.json`))) return null;
+    const marker = join(D, "reach", `r${R}.collected`);
+    const finish = (code: number): number => {
+      if (code === 0) {
+        try {
+          writeFileSync(marker, "");
+        } catch (e) {
+          console.log(
+            `review-round: round ${R} is collected but its marker is not written (${e instanceof Error ? e.message : String(e)}); the next collection restores again`,
+          );
+        }
+      }
+      return code;
+    };
+    if (roundPointRecorded(D, R)) {
+      if (existsSync(marker)) {
+        console.log(`review-round: round ${R} already has its reach check recorded`);
+        return null;
+      }
+      console.log(
+        `review-round: round ${R} already has its reach check recorded; completing its restore`,
+      );
+      const restore = run(join(HERE, "run"), ["reach", "restore", D, `r${R}`]);
+      if (restore.out) process.stdout.write(restore.out);
+      if (restore.err) process.stderr.write(restore.err);
+      return finish(restore.code);
+    }
+    copyTaskTranscripts(reviewers);
+    const child = run(join(HERE, "run"), ["reach", "round", D, `r${R}`]);
+    if (child.out) process.stdout.write(child.out);
+    if (child.err) process.stderr.write(child.err);
+    return finish(child.code);
+  };
+
+  const collectRoundCheck = (reviewers: Array<[string, string]>): void => {
+    const code = runRoundCheck(reviewers);
+    if (code !== null && code !== 0) {
+      console.log(`review-round: round ${R} reach check exited ${code}; stop the leg`);
+      process.exit(4);
+    }
+  };
+
   if (cmd === "wait") {
     const check = stateCmd("check", STATE, []);
     if (check.code !== 0) process.exit(1);
@@ -882,6 +1026,7 @@ if (import.meta.main) {
           `${lens} r${R}: provider wall: "${message}"`,
         );
       }
+      collectRoundCheck(reviewers);
       if ((globalThis as Record<string, unknown>).UNRECORDED) process.exit(4);
       process.exit(0);
     }
@@ -936,6 +1081,7 @@ if (import.meta.main) {
         stopPids.push(null);
       }
     }
+    let stillRunning = false;
     for (let j = 0; j < missing.length; j++) {
       const i = missing[j]!;
       const [lens, lane] = reviewers[i]!;
@@ -969,8 +1115,18 @@ if (import.meta.main) {
           s,
           `r${R} ${lens} ${lane}: still running after the time limit, ${out.trimEnd()}`,
         );
+        stillRunning = true;
       }
     }
+    if (stillRunning) {
+      // A reviewer that is still running can still change what the check
+      // restores, so the check waits for the ruling like every other record.
+      console.log(
+        `review-round: round ${R} has a reviewer still running; the round's check is not run: stop the leg`,
+      );
+      process.exit(4);
+    }
+    collectRoundCheck(reviewers);
     if ((globalThis as Record<string, unknown>).UNRECORDED) process.exit(4);
     process.exit(3);
   }
@@ -993,7 +1149,7 @@ if (import.meta.main) {
   }
   if (reachCheckMissing(waitsForReach, points, R)) {
     record(
-      `round ${R} took its reach snapshot and no reach check r${R} is recorded: nothing was removed. Run reach check and reach restore for r${R} (Check reach and restore before any fix), then teardown again`,
+      `round ${R} took its reach snapshot and no reach check r${R} is recorded: nothing was removed. Collect the round with review-round wait, which runs its check, then teardown again`,
       "note",
       D,
       `r${R}: teardown waits for the reach check`,
