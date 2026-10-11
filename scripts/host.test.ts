@@ -1170,6 +1170,9 @@ test("close-run teardown finds reviewer worktrees from rows the launch wrote", (
       join(dispatch, "brief.md"),
       `## Dispatch\nname: T-9\nsynthesis worktree: ${join(repo, ".worktrees", "T-9-synthesis")}\n`,
     );
+    for (const lens of ["style", "security"]) {
+      writeFileSync(join(dispatch, `review-${lens}-brief.md`), `# ${lens} brief\n`);
+    }
     const recorded: string[][] = [];
     const deps: StepDeps = {
       tool: (name, args): StepChild => {
