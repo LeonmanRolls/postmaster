@@ -1385,9 +1385,7 @@ describe("the round's three steps", () => {
       withTempDir((root) => {
         const p = paths(root);
         const { calls, deps } = stand((name, args) =>
-          name === "reach"
-            ? { code: 1, out: "", err: "reach: cannot save\n" }
-            : green(name, args),
+          name === "reach" ? { code: 1, out: "", err: "reach: cannot save\n" } : green(name, args),
         );
         const res = launchRound(
           { dispatch: p.dispatch, round: "1", repo: p.repo, synthesis: p.synthesis },

@@ -60,8 +60,7 @@ export function endLeg(dispatch: string, leg: string, detail: string): number {
   if (logged.out) process.stdout.write(logged.out);
   if (logged.err) process.stderr.write(logged.err);
   if (logged.code !== 0) return fail("the handoff could not be logged");
-  const markers =
-    Number(leg) === last ? [".card-ready", `.leg-${leg}-done`] : [`.leg-${leg}-done`];
+  const markers = Number(leg) === last ? [".card-ready", `.leg-${leg}-done`] : [`.leg-${leg}-done`];
   for (const marker of markers) {
     try {
       writeFileSync(join(dispatch, marker), "");

@@ -34,7 +34,10 @@ const fresh = (root: string, turnpikes: string): string => {
   const d = join(root, "T-1");
   mkdirSync(join(d, "logs"), { recursive: true });
   writeFileSync(join(d, "run.json"), '{"coachman_contract": 2}\n');
-  writeFileSync(join(d, "brief.md"), `# Waybill: T-1\nturnpikes: ${turnpikes}\n\n## Ticket\n\ntest\n`);
+  writeFileSync(
+    join(d, "brief.md"),
+    `# Waybill: T-1\nturnpikes: ${turnpikes}\n\n## Ticket\n\ntest\n`,
+  );
   writeFileSync(join(d, "run-log.md"), "");
   writeFileSync(join(d, "actions.jsonl"), "");
   writeFileSync(join(d, "handoff-1.md"), HANDOFF);
@@ -59,7 +62,9 @@ describe("leg-end", () => {
       expect(existsSync(join(d, ".leg-1-done"))).toBe(true);
       expect(existsSync(join(d, ".card-ready"))).toBe(false);
       expect(handoffs(d)).toBe(1);
-      expect(readFileSync(join(d, "actions.jsonl"), "utf8")).toContain("leg 1 ends: synthesis green");
+      expect(readFileSync(join(d, "actions.jsonl"), "utf8")).toContain(
+        "leg 1 ends: synthesis green",
+      );
     }, "leg-end-");
   });
 
@@ -75,7 +80,10 @@ describe("leg-end", () => {
   test("a hand-off that fails handoff-check writes no marker and logs nothing", () => {
     withTempDir((root) => {
       const d = fresh(root, "none");
-      writeFileSync(join(d, "handoff-1.md"), HANDOFF.replace("## Next leg\nLeg 2 starts here.\n", ""));
+      writeFileSync(
+        join(d, "handoff-1.md"),
+        HANDOFF.replace("## Next leg\nLeg 2 starts here.\n", ""),
+      );
       expect(endLeg(d, "1", "leg 1 ends")).toBe(2);
       expect(existsSync(join(d, ".leg-1-done"))).toBe(false);
       expect(existsSync(join(d, ".card-ready"))).toBe(false);
