@@ -340,7 +340,17 @@ async function runSuite(argv: string[], stuckSecs: number): Promise<number | nul
       if (settled) return;
       settled = true;
       clearInterval(timer);
-      resolve(code ?? 1);
+      // A stray holding the suite's pipes would keep this process alive
+      // past the exit: take the close, bounded, then release the pipes.
+      const codeOr = code ?? 1;
+      const graced = setTimeout(finish, 5000);
+      function finish(): void {
+        clearTimeout(graced);
+        child.stdout?.destroy();
+        child.stderr?.destroy();
+        resolve(codeOr);
+      }
+      child.once("close", finish);
     });
     child.once("error", () => {
       if (settled) return;
