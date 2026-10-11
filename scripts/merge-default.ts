@@ -13,9 +13,12 @@
 // The flags are landing fresh's, and the question is fresh's: the branch holds
 // the current default branch, the worktree is at the ticket's head, and the
 // gate passed at that head. The count of merges is read from the run's action
-// log, never remembered: coachman merge lines since the last postmaster resume,
-// so the count starts again when the postmaster sends a card back. Two merges
-// per attempt at most; then the card goes out whatever main has done since.
+// log, never remembered: coachman merge lines since the last postmaster
+// send-back resume, whose detail carries `send-back:`, so the count starts
+// again when the postmaster sends a card back and on no other resume. Two
+// merges per attempt at most; then the card goes out whatever main has done
+// since. A merge that changes nothing is not a merge: it is reported as
+// UNCHANGED, logged nowhere and counted nowhere.
 //
 //   exit 0  CARD or CARD-ANYWAY with the card's ## Merge section, pasted as its
 //           own section and never retyped: the card may be raised
@@ -23,8 +26,8 @@
 //           merge in progress; uncommitted tracked changes; landing fresh
 //           failing; an action log the merges cannot be counted from; a merge
 //           the log would not take
-//   exit 2  MERGED, CONFLICT, GATE-NEEDED, GATE-FAILED or HEAD: act as the
-//           verdict says, then call this step again
+//   exit 2  MERGED, CONFLICT, GATE-NEEDED, GATE-FAILED, HEAD or UNCHANGED: act
+//           as the verdict says, then call this step again
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { scriptsDir } from "./lib/paths.ts";
@@ -92,9 +95,10 @@ export interface MergeDetail {
   conflict: string[];
 }
 
-/** A merge line this step logged: main=<sha> into <branch>[ conflict=<files>].
+/** A merge line this step logged: main=<sha> into <branch>[ conflict=<json>].
  * Hand-logged prose matches nothing and counts without parsing. The branch is
- * non-space like verify's on= claim; the files split on the space they join. */
+ * non-space like verify's on= claim; the files are a JSON array, so a path
+ * with a space round-trips. */
 const MERGE_DETAIL_RE = new RegExp(
   `^main=([0-9a-f]{40}) into ([^${PY_S_CLASS}]+)(?: conflict=(${PY_DOT}*))?$`,
   "u",
@@ -103,10 +107,22 @@ const MERGE_DETAIL_RE = new RegExp(
 export function parseMergeDetail(detail: string): MergeDetail | null {
   const m = MERGE_DETAIL_RE.exec(detail);
   if (!m) return null;
+  const raw = m[3] ?? "";
+  let conflict: string[] = [];
+  if (raw !== "") {
+    let parsed: unknown = null;
+    try {
+      parsed = JSON.parse(raw) as unknown;
+    } catch {
+      return null;
+    }
+    if (!Array.isArray(parsed) || parsed.some((p) => typeof p !== "string")) return null;
+    conflict = parsed as string[];
+  }
   return {
     main: m[1] ?? "",
     branch: m[2] ?? "",
-    conflict: (m[3] ?? "").split(" ").filter((p) => p !== ""),
+    conflict,
   };
 }
 
@@ -123,12 +139,16 @@ export interface AttemptMerges {
 }
 
 /** The merges this attempt made: every coachman merge line since the last
- * postmaster resume, which is what restarts the count. Prose lines count
- * without parsing; only main= lines say which main and which hand files. */
+ * postmaster send-back, which is what restarts the count. The runbook logs a
+ * send-back resume with `send-back:` in its detail; a remount or a ruling
+ * resume carries no such mark and restarts nothing. Prose lines count without
+ * parsing; only main= lines say which main and which hand files. */
 export function countAttemptMerges(actions: StepAction[]): AttemptMerges {
   let resumeIdx = -1;
   actions.forEach((a, i) => {
-    if (a.action === "resume" && a.actor === "postmaster") resumeIdx = i;
+    if (a.action === "resume" && a.actor === "postmaster" && a.detail.includes("send-back:")) {
+      resumeIdx = i;
+    }
   });
   const merges = actions.filter(
     (a, i) => i > resumeIdx && a.actor === "coachman" && a.action === "merge",
@@ -164,10 +184,10 @@ export function buildReport(o: ReportInput): string {
     o.tip === null
       ? o.count === 0
         ? `Holds main ${o.holds} (${o.ref}); no merge was needed`
-        : `Holds main ${o.holds} (${o.ref}), merged ${times(o.count)} in this step`
+        : `Holds main ${o.holds} (${o.ref}), merged ${times(o.count)} in this attempt`
       : `Holds main ${o.holds} (${o.ref} then); current ${o.ref} is ${o.tip}, ` +
         "not held, and the card was raised anyway";
-  const handLine = o.hand.length > 0 ? o.hand.join(" ") : "none";
+  const handLine = o.hand.length > 0 ? o.hand.join(", ") : "none";
   return `## Merge\n${holdsLine}\nResolved by hand: ${handLine}\n`;
 }
 
@@ -302,6 +322,8 @@ function main(argv: string[]): number {
   const headLine = lines.find((l) => l.startsWith("head:")) ?? null;
   const stale = lines.some((l) => l.startsWith("stale:"));
   const gateLine = lines.find((l) => l.startsWith("gate:")) ?? null;
+  const gm = gateLine !== null ? /^gate: (.+) at ([0-9a-f]+)$/u.exec(gateLine) : null;
+  const gateResult = gm ? (gm[1] ?? "") : "";
   if (fresh.code === 0 && (headLine !== null || stale || gateLine !== null)) {
     die(`landing fresh answered fresh with fault lines: ${lines.join("; ")}`);
   }
@@ -314,6 +336,26 @@ function main(argv: string[]): number {
   }
   if (stale) {
     if (merges.count >= BUDGET) {
+      if (gateLine !== null) {
+        // The second merge's head is ungated or red: the gate runs once more
+        // before the card, as below, and never after it.
+        if (gm && gateResult === "not run") {
+          console.log(
+            `GATE-NEEDED: the gate has not run at ${here12}; run the gate, then call this step again`,
+          );
+          return 2;
+        }
+        if (gm && gateResult === "fail") {
+          console.log(
+            `GATE-FAILED gate: the gate failed at ${here12}; fix what this ticket's change meeting main's caused, else stop for a ruling naming the failure`,
+          );
+          return 2;
+        }
+        console.log(
+          `GATE-FAILED gate: ${gm ? `the gate is ${gateResult} at ${here12}` : gateLine}; fix what this ticket's change meeting main's caused, else stop for a ruling naming the failure`,
+        );
+        return 2;
+      }
       const holds =
         merges.lastMain ??
         mergeBase(repo, head, tip) ??
@@ -340,10 +382,24 @@ function main(argv: string[]): number {
     const msg = `Merge ${def} ${tip12} into ${ticket}`;
     const m = run("git", ["-C", wt, "merge", "--no-ff", "-m", msg, tip], { env: UNSET_GIT });
     if (m.code === 0) {
+      const after = gitOut(wt, ["rev-parse", "HEAD"]);
+      if (after.code !== 0 || after.out === "") {
+        die(`merged ${def} ${tip12} into ${ticket} but cannot read the new HEAD`);
+      }
+      if (after.out === here) {
+        // The default moved between this call's resolution and fresh's: fresh
+        // is stale for the newer tip while this merge took in the older one,
+        // which the branch already held. Nothing changed, so nothing is
+        // logged and the budget is untouched; the next call resolves again.
+        console.log(
+          `UNCHANGED ${tip}: the branch already held ${def} ${tip12}; call this step again`,
+        );
+        return 2;
+      }
       const detail = `main=${tip} into ${ticket}`;
       if (!logMerge(dispatch, ticket, detail)) {
         die(
-          `merged ${def} ${tip12} into ${ticket} but the merge was not logged: log it with run log-action ${dispatch} coachman merge ${ticket} "${detail}", then call this step again`,
+          `merged ${def} ${tip12} into ${ticket} but the merge was not logged: log it with run log-action ${dispatch} coachman merge ${ticket} '${detail}', then call this step again`,
         );
       }
       console.log(
@@ -358,37 +414,35 @@ function main(argv: string[]): number {
     const files = unmergedPaths(wt);
     const detail =
       files.length > 0
-        ? `main=${tip} into ${ticket} conflict=${files.join(" ")}`
+        ? `main=${tip} into ${ticket} conflict=${JSON.stringify(files)}`
         : `main=${tip} into ${ticket}`;
     if (!logMerge(dispatch, ticket, detail)) {
       die(
-        `the merge conflicts but the conflict was not logged: log it with run log-action ${dispatch} coachman merge ${ticket} "${detail}", resolve by hand, commit the merge, then call this step again`,
+        `the merge conflicts but the conflict was not logged: log it with run log-action ${dispatch} coachman merge ${ticket} '${detail}', resolve by hand, commit the merge, then call this step again`,
       );
     }
     console.log(
       `CONFLICT ${tip}: ${
-        files.length > 0 ? files.join(" ") : "no conflicted files listed"
+        files.length > 0 ? files.join(", ") : "no conflicted files listed"
       }; resolve by hand, commit the merge, then call this step again`,
     );
     return 2;
   }
   if (gateLine !== null) {
-    const gm = /^gate: (.+) at ([0-9a-f]+)$/u.exec(gateLine);
-    const result = gm ? (gm[1] ?? "") : "";
-    if (gm && result === "not run") {
+    if (gm && gateResult === "not run") {
       console.log(
         `GATE-NEEDED: the branch holds main ${tip} but the gate has not run at ${here12}; run the gate, then call this step again`,
       );
       return 2;
     }
-    if (gm && result === "fail") {
+    if (gm && gateResult === "fail") {
       console.log(
         `GATE-FAILED gate: the gate failed at ${here12}; fix what this ticket's change meeting main's caused, else stop for a ruling naming the failure`,
       );
       return 2;
     }
     console.log(
-      `GATE-FAILED gate: ${gm ? `the gate is ${result} at ${here12}` : gateLine}; fix what this ticket's change meeting main's caused, else stop for a ruling naming the failure`,
+      `GATE-FAILED gate: ${gm ? `the gate is ${gateResult} at ${here12}` : gateLine}; fix what this ticket's change meeting main's caused, else stop for a ruling naming the failure`,
     );
     return 2;
   }

@@ -3,10 +3,9 @@
 // ticket's checks live in the oracle, scripts/acceptance-379.test.ts, whose
 // scratch builders these tests reuse without changing it.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { chmodSync, writeFileSync } from "node:fs";
+import { chmodSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
-  RUN,
   countMerges,
   drive,
   gitOrThrow,
@@ -15,6 +14,7 @@ import {
   mergeDefault,
   moveAlwaysStub,
   passStub,
+  RUN,
   readActions,
   recordGate,
   removeDir,
@@ -75,10 +75,18 @@ describe("merge detail", () => {
   });
 
   test("a conflict line parses its files", () => {
-    expect(parseMergeDetail(`main=${SHA} into t379 conflict=a b/c`)).toEqual({
+    expect(parseMergeDetail(`main=${SHA} into t379 conflict=["a", "b/c"]`)).toEqual({
       main: SHA,
       branch: "t379",
       conflict: ["a", "b/c"],
+    });
+  });
+
+  test("a path with a space round-trips", () => {
+    expect(parseMergeDetail(`main=${SHA} into t379 conflict=["docs/my notes.md", "b"]`)).toEqual({
+      main: SHA,
+      branch: "t379",
+      conflict: ["docs/my notes.md", "b"],
     });
   });
 
@@ -87,6 +95,8 @@ describe("merge detail", () => {
     expect(parseMergeDetail(`main=${SHA.slice(0, 12)} into t379`)).toBeNull();
     expect(parseMergeDetail(`main=${SHA}`)).toBeNull();
     expect(parseMergeDetail("")).toBeNull();
+    expect(parseMergeDetail(`main=${SHA} into t379 conflict=a b`)).toBeNull();
+    expect(parseMergeDetail(`main=${SHA} into t379 conflict=[oops`)).toBeNull();
   });
 });
 
@@ -96,28 +106,37 @@ describe("attempt count", () => {
       { actor: "coachman", action: "merge", detail: `main=${SHA} into t379` },
       { actor: "coachman", action: "verify", detail: "on=t379@abc result=pass" },
       { actor: "coachman", action: "merge", detail: "origin/main abc into t379, clean" },
-      { actor: "coachman", action: "merge", detail: `main=${OTHER} into t379 conflict=b a` },
+      { actor: "coachman", action: "merge", detail: `main=${OTHER} into t379 conflict=["b", "a"]` },
     ]);
     expect(got.count).toBe(3);
     expect(got.lastMain).toBe(OTHER);
     expect(got.hand).toEqual(["a", "b"]);
   });
 
-  test("a postmaster resume restarts the count", () => {
+  test("a postmaster send-back restarts the count", () => {
     const got = countAttemptMerges([
       { actor: "coachman", action: "merge", detail: `main=${SHA} into t379` },
-      { actor: "postmaster", action: "resume", detail: "leg 1 synthesis, thread t" },
-      { actor: "coachman", action: "merge", detail: `main=${OTHER} into t379 conflict=z` },
+      {
+        actor: "postmaster",
+        action: "resume",
+        detail: "leg 2, thread t, send-back: stale: the ticket branch is behind",
+      },
+      { actor: "coachman", action: "merge", detail: `main=${OTHER} into t379 conflict=["z"]` },
     ]);
     expect(got.count).toBe(1);
     expect(got.lastMain).toBe(OTHER);
     expect(got.hand).toEqual(["z"]);
   });
 
-  test("a lane resume and a landing merge restart nothing", () => {
+  test("a lane resume, a remount and a landing merge restart nothing", () => {
     const got = countAttemptMerges([
       { actor: "coachman", action: "merge", detail: `main=${SHA} into t379` },
       { actor: "coachman", action: "resume", detail: "blocked lane" },
+      {
+        actor: "postmaster",
+        action: "resume",
+        detail: "leg 2, thread t, transient, resume 1 of 3; the watcher took it",
+      },
       { actor: "postmaster", action: "merge", detail: "pull request 1 merged" },
       { actor: "coachman", action: "merge", detail: `main=${OTHER} into t379` },
     ]);
@@ -135,12 +154,12 @@ describe("report", () => {
 
   test("merges name their count and hand files", () => {
     expect(buildReport({ ref: "main", holds: SHA, tip: null, count: 1, hand: [] })).toContain(
-      "merged once in this step",
+      "merged once in this attempt",
     );
     expect(
       buildReport({ ref: "origin/main", holds: SHA, tip: null, count: 2, hand: ["b", "a"] }),
     ).toBe(
-      `## Merge\nHolds main ${SHA} (origin/main), merged twice in this step\nResolved by hand: b a\n`,
+      `## Merge\nHolds main ${SHA} (origin/main), merged twice in this attempt\nResolved by hand: b, a\n`,
     );
   });
 
@@ -232,7 +251,7 @@ describe("guards and restarts", () => {
     expect(r.out).toContain("move the worktree to the ticket head");
   });
 
-  test("a postmaster resume restarts the budget", () => {
+  test("a postmaster send-back restarts the budget", () => {
     const layout = scratchLayout(tmp, "resume");
     recordGate(layout, moveAlwaysStub(layout));
     mainMove(layout.repo, "after dispatch\n", "main moves after dispatch");
@@ -244,7 +263,7 @@ describe("guards and restarts", () => {
       "postmaster",
       "resume",
       "#379",
-      "leg 1 synthesis, thread t",
+      "leg 2, thread t, send-back: stale: the ticket branch does not contain main",
     ]);
     expect(ruled.code).toBe(0);
     const second = drive(layout);
@@ -254,6 +273,68 @@ describe("guards and restarts", () => {
       (a) => a.actor === "coachman" && a.action === "merge",
     );
     expect(merges.length).toBe(4);
+  });
+
+  test("a remount resume restarts nothing", () => {
+    const layout = scratchLayout(tmp, "remount");
+    recordGate(layout, moveAlwaysStub(layout));
+    mainMove(layout.repo, "after dispatch\n", "main moves after dispatch");
+    const first = drive(layout);
+    expect(first.verdicts).toEqual(["MERGED", "MERGED", "CARD-ANYWAY"]);
+    const remount = run(RUN, [
+      "log-action",
+      layout.dispatch,
+      "postmaster",
+      "resume",
+      "coachman",
+      "leg 2, thread t, transient, resume 1 of 3; the watcher took it",
+    ]);
+    expect(remount.code).toBe(0);
+    const again = mergeDefault(layout);
+    expect(again.code).toBe(0);
+    expect(again.out.split("\n")[0]).toContain("CARD-ANYWAY");
+    expect(countMerges(layout.repo, layout.ticket)).toBe(2);
+  });
+
+  test("CARD-ANYWAY waits for the gate at the second head", () => {
+    const layout = scratchLayout(tmp, "gate-before-anyway");
+    recordGate(layout, passStub(layout));
+    mainMove(layout.repo, "one\n", "main moves once");
+    const first = mergeDefault(layout);
+    expect(first.out.split("\n")[0]).toContain("MERGED");
+    expect(verifyRun(layout).code).toBe(0);
+    mainMove(layout.repo, "two\n", "main moves twice");
+    const second = mergeDefault(layout);
+    expect(second.out.split("\n")[0]).toContain("MERGED");
+    mainMove(layout.repo, "three\n", "main moves thrice");
+    const waiting = mergeDefault(layout);
+    expect(waiting.code).toBe(2);
+    expect(waiting.out.split("\n")[0]).toContain("GATE-NEEDED");
+    expect(verifyRun(layout).code).toBe(0);
+    const anyway = mergeDefault(layout);
+    expect(anyway.code).toBe(0);
+    expect(anyway.out.split("\n")[0]).toContain("CARD-ANYWAY");
+  });
+
+  test("a red gate at the second head fails before any card", () => {
+    const layout = scratchLayout(tmp, "fail-before-anyway");
+    const flag = join(layout.dir, "fail");
+    const stub = join(layout.dir, "gate-flag.sh");
+    writeFileSync(stub, `#!/bin/sh\nif [ -f "${flag}" ]; then exit 1; fi\nexit 0\n`, "utf8");
+    chmodSync(stub, 0o755);
+    recordGate(layout, stub);
+    mainMove(layout.repo, "one\n", "main moves once");
+    expect(mergeDefault(layout).out.split("\n")[0]).toContain("MERGED");
+    expect(verifyRun(layout).code).toBe(0);
+    mainMove(layout.repo, "two\n", "main moves twice");
+    expect(mergeDefault(layout).out.split("\n")[0]).toContain("MERGED");
+    writeFileSync(flag, "fail\n", "utf8");
+    expect(verifyRun(layout).code).not.toBe(0);
+    mainMove(layout.repo, "three\n", "main moves thrice");
+    const failed = mergeDefault(layout);
+    expect(failed.code).toBe(2);
+    expect(failed.out.split("\n")[0]).toContain("GATE-FAILED");
+    expect(failed.out).not.toContain("CARD-ANYWAY");
   });
 
   test("an unlogged merge fails closed with its recovery", () => {
@@ -277,6 +358,7 @@ describe("guards and restarts", () => {
   test("prose merges count, with the merge base as the fallback main", () => {
     const layout = scratchLayout(tmp, "prose");
     recordGate(layout, passStub(layout));
+    expect(verifyRun(layout).code).toBe(0);
     const base = headOf(layout.repo, "main");
     for (const n of [1, 2]) {
       const logged = run(RUN, [
@@ -296,5 +378,71 @@ describe("guards and restarts", () => {
     expect(r.out).toContain(base);
     expect(r.out).toContain("raised anyway");
     expect(countMerges(layout.repo, layout.ticket)).toBe(0);
+  });
+
+  test("a raced no-op merge reports UNCHANGED and spends no budget", () => {
+    const layout = scratchLayout(tmp, "unchanged");
+    recordGate(layout, passStub(layout));
+    mainMove(layout.repo, "after dispatch\n", "main moves after dispatch");
+    const settled = drive(layout);
+    expect(settled.verdicts).toEqual(["MERGED", "CARD"]);
+    const held = headOf(layout.repo, "main");
+    // A git that moves main between the step's tip resolution and fresh's, so
+    // the step merges the older tip the branch already holds: the race,
+    // deterministically.
+    const shimDir = scratchDir("git-shim-");
+    const real = Bun.which("git");
+    if (!real) throw new Error("git is not on PATH");
+    const counter = join(shimDir, "count");
+    writeFileSync(counter, "0\n", "utf8");
+    const shim = join(shimDir, "git");
+    writeFileSync(
+      shim,
+      '#!/bin/sh\ncase " $* " in\n  *" main^{commit} "*)\n' +
+        '    n=$(cat "$SHIM_COUNTER")\n    n=$((n + 1))\n    echo "$n" > "$SHIM_COUNTER"\n' +
+        '    if [ "$n" = "2" ]; then\n      echo "main moves mid-call" >> "$SHIM_REPO/main.txt"\n' +
+        '      "$REAL_GIT" -C "$SHIM_REPO" add main.txt\n' +
+        '      "$REAL_GIT" -C "$SHIM_REPO" commit -q -m "main moves mid-call"\n    fi\n' +
+        '    ;;\nesac\nexec "$REAL_GIT" "$@"\n',
+      "utf8",
+    );
+    chmodSync(shim, 0o755);
+    const raced = run(
+      RUN,
+      [
+        "merge-default",
+        "--repo",
+        layout.repo,
+        "--default",
+        "main",
+        "--ticket",
+        layout.ticket,
+        "--dispatch",
+        layout.dispatch,
+        "--wt",
+        layout.wt,
+      ],
+      {
+        env: {
+          PATH: `${shimDir}:${process.env.PATH ?? ""}`,
+          REAL_GIT: real,
+          SHIM_COUNTER: counter,
+          SHIM_REPO: layout.repo,
+        },
+      },
+    );
+    expect(readFileSync(counter, "utf8").trim()).toBe("2");
+    expect(raced.code).toBe(2);
+    expect(raced.out.split("\n")[0]).toContain("UNCHANGED");
+    expect(raced.out).toContain(held);
+    expect(countMerges(layout.repo, layout.ticket)).toBe(1);
+    const merges = readActions(layout.dispatch).filter(
+      (a) => a.actor === "coachman" && a.action === "merge",
+    );
+    expect(merges.length).toBe(1);
+    const next = mergeDefault(layout);
+    expect(next.code).toBe(2);
+    expect(next.out.split("\n")[0]).toContain("MERGED");
+    expect(countMerges(layout.repo, layout.ticket)).toBe(2);
   });
 });

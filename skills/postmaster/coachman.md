@@ -1188,7 +1188,8 @@ commit the merge, never abort it, and call the step again. `GATE-FAILED` names t
 check: fix what this ticket's change meeting main's caused on the branch, pass the gate
 again and call the step again, and anything else goes to `ESCALATION.md` naming the check
 with `.escalation-ready` and no `.card-ready`. `HEAD`: move the worktree to the ticket head
-and call the step again. Exit 1 is an input fault: fix the inputs and re-run, never proceed
+and call the step again. `UNCHANGED`: the merge took in nothing, since the branch already
+held that main; call the step again. Exit 1 is an input fault: fix the inputs and re-run, never proceed
 past it. After each merge the step makes, run the switch-offs call above again. No review
 round runs after a merge: main's code was reviewed in its own run, the gate checks the two
 together, and the card names the files the merge needed by hand.
