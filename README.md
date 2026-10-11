@@ -10,6 +10,8 @@ the adversarial review rounds its ticket names, then leaves a ship card for the
 project's landing route. Pull-request projects are merged by the user; local-merge projects use
 the merge authority in the config.
 
+A design goal of postmaster is not to give you a complete solution. It is to let you run experiments on different flows, so that you can find what works for your project.
+
 ## The four roles
 
 | role | does | never does |
