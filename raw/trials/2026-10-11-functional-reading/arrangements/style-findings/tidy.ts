@@ -1,0 +1,2105 @@
+// A run's style findings. They gate nothing: the review leg logs them and applies none, the ship
+// card counts them, and aftercare sorts each into a rule for a linter the project's gate runs, a
+// convention for the project's own docs, or neither. The postmaster puts the sort to the user
+// after the merge.
+//
+//   run style-findings list <dispatch>    each style finding: its id, where it is, the rest of its line
+//   run style-findings count <dispatch>   how many style findings the run has
+//   run style-findings gate <dispatch>    what the gate runs, as the run's branch has it
+//   run style-findings check <dispatch>   whether <dispatch>/style-sort.md sorts every style finding
+//
+//   exit 0  printed
+//   exit 1  usage; no waybill, action log, or branch named for the run; a file that cannot be read
+//   exit 2  list/count: a finding whose class is neither gating nor style. gate: the waybill
+//           names no gate, or no repo that exists. check: a finding with neither class; no sort,
+//           with style findings to sort; or a sort that is wrong.
+import { existsSync, readFileSync } from "node:fs";
+import { basename, dirname, join, posix, resolve } from "node:path";
+import { run } from "./lib/proc.ts";
+import { thrownCode, thrownMessage } from "./lib/thrown.ts";
+import {
+  BOUND_R,
+  DOT_ALL,
+  digitValue,
+  END_OF_STRING,
+  PY_DOT,
+  PY_S_CLASS,
+  pyLower,
+  pyTrim,
+  pyWords,
+  W_CLASS,
+} from "./lib/text.ts";
+
+// --- constants ------------------------------------------------------------------------------
+
+// `gate` shows at most SHOWN lines read from one place, cut to SHOWN_WIDTH characters, and
+// follows no command out of a line longer than LONG characters.
+const SHOWN = 20;
+const LONG = 4000;
+const SHOWN_WIDTH = 200;
+
+// The longest a git call may take, the largest file read, and how much of a file is looked at for
+// a NUL byte, which marks it as binary.
+const GIT_TIMEOUT_MS = 120000;
+const MAX_FILE_LENGTH = 512 * 1024;
+const BINARY_SNIFF_LENGTH = 8192;
+
+// What `check` adds after its faults when a line of the sort is no sort line.
+const FORMS =
+  'a sort line is one of: "S<n> linter <linter> enable <rule>: <reason>", ' +
+  '"S<n> linter <linter> write <rule>: <reason>", either with "via <file>" after the rule, ' +
+  '"S<n> docs <doc>: <reason>", "S<n> neither: <reason>", and ' +
+  '"N<n> new-linter <linter> S<n>[,S<m>...]: <reason>", with "not-in-gate" after the findings';
+
+// Bold or underscore markup that may wrap a waybill key or value: `**gate:**`, `__repo__:`.
+const MARK = "(?:\\*\\*|__)?";
+
+// Files of a project that may name a linter in their text.
+const MANIFESTS =
+  /(^|\/)(package\.json|pyproject\.toml|setup\.cfg|tox\.ini|requirements[^/]*\.txt|Pipfile|Gemfile|go\.mod|Cargo\.toml|composer\.json|\.pre-commit-config\.ya?ml|\.tool-versions|mise\.toml)$/u;
+
+// The mode git gives a symbolic link.
+const SYMLINK_MODE = "120000";
+
+// Patterns that tell what a file is, and where a section of the waybill starts and ends.
+const JS_SOURCE_FILE = /\.[cm]?[jt]sx?$/u;
+const JS_CONFIG_FILE = /\.[cm]?[jt]s$/u;
+const HAS_SPACE = /[ \t\r\n]/u;
+const BLOCK_COMMENT = new RegExp(`/\\*${DOT_ALL}*?\\*/`, "gu");
+const PROFILE_HEADING = /^ {0,3}##[ \t]+project profile[ \t:#]*\r?$/iu;
+const ANY_HEADING = /^ {0,3}#{1,2}(?:[ \t]|\r?$)/u;
+
+// --- shell vocabulary -----------------------------------------------------------------------
+// The word lists are written in rows by kind, and flattened into one set.
+
+// Characters that end a word and are read as operators of their own.
+const PUNCT = new Set([";", "&", "|", "(", ")", "<", ">"]);
+
+// Words that only introduce a command: the command is what follows them.
+const SHELL_WORDS = new Set(
+  [
+    ["!", "{", "}", "if", "then", "do", "else", "elif", "while", "until"],
+    ["time", "exec", "builtin", "nohup"],
+  ].flat(),
+);
+
+// Commands whose arguments run no linter: output and tests, shell state, small utilities for text
+// and files, and the words that close a block.
+const INERT = new Set(
+  [
+    ["echo", "printf", ":", "true", "false", "exit", "return", "test", "[", "[["],
+    ["export", "set", "unset", "read", "shift", "local", "declare", "typeset", "trap"],
+    ["wait", "sleep", "date", "pwd", "which", "type", "hash"],
+    ["cat", "tee", "head", "tail", "wc", "sort", "uniq"],
+    ["touch", "rm", "cp", "mv", "mkdir", "rmdir", "ln", "chmod", "chown", "ls"],
+    ["fi", "done", "esac", "popd"],
+  ].flat(),
+);
+
+// Commands that run a file named among their arguments.
+const INTERPRETERS = new Set(
+  [
+    ["bash", "sh", "zsh", "dash", "ksh", "source", "."],
+    ["node", "nodejs", "python", "python3", "bun", "deno", "tsx", "ts-node", "ruby", "perl"],
+  ].flat(),
+);
+
+// A package manager's own subcommands. Any other word after pnpm, yarn or bun names a script of
+// the package (`yarn lint`); npm has no such shorthand, so it has no entry.
+const BUILTINS: Record<string, Set<string>> = {
+  pnpm: new Set(
+    [
+      ["add", "install", "i", "update", "up", "upgrade", "remove", "rm", "uninstall"],
+      ["link", "ln", "unlink", "import", "rebuild", "rb", "prune", "fetch", "patch"],
+      ["patch-commit", "exec", "dlx", "create", "run", "publish", "pack", "audit"],
+      ["list", "ls", "outdated", "why", "root", "bin", "config", "c", "env", "setup"],
+      ["store", "init", "deploy", "licenses", "server", "doctor"],
+    ].flat(),
+  ),
+  yarn: new Set(
+    [
+      ["add", "install", "remove", "up", "upgrade", "run", "exec", "dlx", "workspace"],
+      ["workspaces", "info", "why", "pack", "npm", "plugin", "set", "config", "version"],
+      ["node", "bin", "cache", "dedupe", "explain", "init", "link", "unlink", "patch"],
+      ["rebuild", "stage", "unplug", "global", "publish"],
+    ].flat(),
+  ),
+  bun: new Set(
+    [
+      ["run", "test", "x", "repl", "exec", "install", "i", "add", "a", "remove", "rm"],
+      ["update", "outdated", "link", "unlink", "publish", "patch", "patch-commit", "pm"],
+      ["build", "init", "create", "c", "upgrade", "completions", "discord", "help"],
+      ["audit", "why", "info"],
+    ].flat(),
+  ),
+};
+
+// The subcommands with which each package manager runs a binary instead of a script.
+const EXEC_SUBCOMMANDS: Record<string, string[]> = {
+  npm: ["exec", "x"],
+  pnpm: ["exec", "dlx"],
+  yarn: ["exec", "dlx"],
+  bun: ["x"],
+};
+
+// The flags of a package-manager call: where it runs, which workspaces it picks, and what lets
+// it run in all of them. pnpm's -w means the workspace root and takes no value.
+const DIRECTORY_FLAGS = ["-C", "--dir", "--prefix", "--cwd"];
+const FILTER_FLAGS = ["--filter", "-F"];
+const WORKSPACE_FLAGS = ["-w", "--workspace"];
+const ALL_WORKSPACES_FLAGS = ["-r", "--recursive", "-ws", "--workspaces"];
+
+// The subcommands that run a script of the package: any manager's `run`, and npm's shortcuts.
+const RUN_SUBCOMMANDS = ["run", "run-script", "rum", "urn"];
+const NPM_SCRIPT_SHORTCUTS = ["test", "t", "tst", "start", "stop", "restart"];
+
+// The flags of a wrapper command that take the next word as their value, so that word is not
+// the command being wrapped.
+const ENV_VALUED_FLAGS = ["-u", "--unset", "-C", "--chdir", "-S", "--split-string"];
+const NICE_VALUED_FLAGS = ["-n", "--adjustment"];
+const TIMEOUT_VALUED_FLAGS = ["-s", "--signal", "-k", "--kill-after"];
+const NPX_VALUED_FLAGS = ["-p", "--package"];
+const DOTENV_VALUED_FLAGS = ["-e", "-f", "-c", "-v"];
+const ENV_RUNNER_VALUED_FLAGS = ["--with", "--env", "-e", "--python", "-p"];
+const XARGS_VALUED_FLAGS = ["-n", "-I", "-L", "-P", "-d", "-s", "-E", "-a"];
+
+// The flags of a make call that take a value, and those that take a number; and the names under
+// which make and just look for their files.
+const MAKE_VALUED_FLAGS = [
+  ["-C", "--directory", "-f", "--file", "--makefile", "-I", "--include-dir"],
+  ["-o", "--old-file", "--assume-old", "-W", "--what-if"],
+  ["--new-file", "--assume-new", "--eval"],
+].flat();
+const MAKE_NUMBER_FLAGS = ["-j", "--jobs", "-l", "--load-average", "--max-load"];
+const MAKEFILE_NAMES = ["GNUmakefile", "makefile", "Makefile"];
+const JUSTFILE_NAMES = ["justfile", "Justfile", ".justfile", "JUSTFILE"];
+
+// The configuration files, by name, of the hook runners a gate may call.
+const PRE_COMMIT_CONFIGS = [".pre-commit-config.yaml", ".pre-commit-config.yml"];
+const RUNNERS: Record<string, string[]> = {
+  "pre-commit": PRE_COMMIT_CONFIGS,
+  prek: PRE_COMMIT_CONFIGS,
+  lefthook: [
+    "lefthook.yml",
+    "lefthook.yaml",
+    ".lefthook.yml",
+    ".lefthook.yaml",
+    "lefthook.toml",
+    "lefthook.json",
+  ],
+  "lint-staged": [
+    ".lintstagedrc",
+    ".lintstagedrc.json",
+    ".lintstagedrc.yaml",
+    ".lintstagedrc.yml",
+    ".lintstagedrc.js",
+    ".lintstagedrc.cjs",
+    ".lintstagedrc.mjs",
+    "lint-staged.config.js",
+    "lint-staged.config.cjs",
+    "lint-staged.config.mjs",
+  ],
+  tox: ["tox.ini"],
+  nox: ["noxfile.py"],
+};
+
+// What the ledger records of a proposal, as the words that open a ledger note or ticket.
+const PROPOSAL_FILED = "style proposal: ";
+const PROPOSAL_DECLINED = "style proposal declined: ";
+const PROPOSAL_ASKED = "style proposal asked: ";
+
+// The order in which `check` prints the groups of proposals.
+const GROUP_RANK: Record<string, number> = { linter: 0, docs: 1, "new-linter": 2, neither: 3 };
+
+const USAGE = "usage: run style-findings list|count|gate|check <dispatch>";
+const SUBCOMMANDS = ["list", "count", "gate", "check"];
+
+// --- patterns -------------------------------------------------------------------------------
+// Each pattern spells Python's \s, \w and . through text.ts, so a line is cut where BASE cut it.
+// They are exported so that the tests can pin each one to the BASE behaviour.
+
+// One character of Python's \s, an identifier, and the rest of a line, captured.
+const SPACE = `[${PY_S_CLASS}]`;
+const IDENTIFIER = `[A-Za-z_][${W_CLASS}-]*`;
+const REST_OF_LINE = `(${PY_DOT}*)${END_OF_STRING}`;
+
+// Comments of source files, and of shell-like configuration files.
+export const JSTARS = new RegExp(`^${SPACE}*\\*`, "u");
+export const JSCOM = new RegExp(`(^|${SPACE})\\/\\/${REST_OF_LINE}`, "u");
+export const SHCOM = new RegExp(`(^|${SPACE})[#;]${REST_OF_LINE}`, "u");
+
+// A justfile: aliases, variables, recipe headers and their dependencies, and {{substitutions}}.
+export const JALIAS = new RegExp(
+  `^alias${SPACE}+([${W_CLASS}-]+)${SPACE}*:=${SPACE}*([${W_CLASS}-]+)`,
+  "u",
+);
+export const JVAR = new RegExp(
+  `^(?:export${SPACE}+)?(${IDENTIFIER})${SPACE}*:=${SPACE}*${REST_OF_LINE}`,
+  "u",
+);
+export const JRECIPE = new RegExp(`^@?(${IDENTIFIER})${BOUND_R}[^:]*:(?!=)${REST_OF_LINE}`, "u");
+export const JDEPS = new RegExp(IDENTIFIER, "gu");
+export const MUSTACHE = new RegExp(`\\{\\{${SPACE}*(${IDENTIFIER})${SPACE}*\\}\\}`, "gu");
+
+// A makefile: includes, rules, and the lines that open or close a conditional or a define.
+export const MAKEINC = new RegExp(`^(?:-include|sinclude|include)${SPACE}+${REST_OF_LINE}`, "u");
+export const RULE = new RegExp(`^([^:=]+?)${SPACE}*::?(?!=)${REST_OF_LINE}`, "u");
+export const MENDEF = new RegExp(`^${SPACE}*endef${BOUND_R}`, "u");
+export const MIFCOND = new RegExp(`^(?:ifeq|ifneq|ifdef|ifndef|else|endif)${BOUND_R}`, "u");
+export const MDEFINE = new RegExp(`^(?:(?:export|override)${SPACE}+)*define${BOUND_R}`, "u");
+// A number: the value of make's -j and -l.
+export const MVER = /^\p{Nd}+(\.\p{Nd}+)?$/u;
+// What a recipe line starts with before its command: whitespace, then any of `@`, `+` and `-`.
+const RECIPE_PREFIX = new RegExp(`^${SPACE}*[@+-]*`, "u");
+
+// pnpm-workspace.yaml: the `packages:` key, one list item, what is cut from an item, an indent.
+export const YPKGS = new RegExp(`^packages${SPACE}*:`, "u");
+export const YITEM = new RegExp(`^${SPACE}+-${SPACE}*`, "u");
+export const YOUT = new RegExp(`^${SPACE}+-${SPACE}*|${SPACE}+#${REST_OF_LINE}`, "gu");
+export const YIND = new RegExp(`^${SPACE}`, "u");
+// A package.json packageManager of yarn, and its major version.
+export const YARNRE = /^yarn@(\p{Nd}+)/u;
+
+// A sort line: its id (S1 or N1) and the words before its colon, then the reason. The findings a
+// new linter covers are split at commas and spaces.
+const ENTRY = new RegExp(
+  `^(?:[-*+][ \t]+)?(S\\p{Nd}+|N\\p{Nd}+)[ \t]+(${PY_DOT}+?):(?:[ \t]+(${PY_DOT}*))?${END_OF_STRING}`,
+  "u",
+);
+export const COVERSPLIT = new RegExp(`[,${PY_S_CLASS}]+`, "u");
+
+// --- helpers --------------------------------------------------------------------------------
+
+/** Report a fault of the run's own setup, rather than of its findings, and leave with exit 1. */
+function die(msg: string): never {
+  console.error(`style-findings: ${msg}`);
+  process.exit(1);
+  throw new Error("unreachable");
+}
+
+/** The text without a leading byte-order mark, which is no part of the content. */
+function withoutBom(text: string): string {
+  return text.replace(/^\uFEFF/u, "");
+}
+
+/** A file of the run's own directories, or the exit 1 that says why it cannot be read. */
+function read(path: string, what: string): string {
+  try {
+    // BASE opened text with utf-8-sig: a byte-order mark is not part of the content.
+    return withoutBom(readFileSync(path, "utf8"));
+  } catch (error) {
+    if (thrownCode(error) === "ENOENT") die(`no ${what} at ${path}`);
+    die(`cannot read ${path}: ${thrownMessage(error) ?? "error"}`);
+  }
+}
+
+/** A word without the markup a sort line may wrap it in: backticks, asterisks, underscores, quotes. */
+function plain(word: string): string {
+  return word.replace(/^[`*_"]+|[`*_"]+$/gu, "");
+}
+
+/** `text` with every character that a regular expression reads as syntax escaped. */
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+}
+
+/** Whether `text` names `name` as a whole word, ignoring case; a hyphen or underscore is part of one. */
+function named(name: string, text: string): boolean {
+  const word = new RegExp(`(?<![A-Za-z0-9_-])${escapeRegExp(name)}(?![A-Za-z0-9_-])`, "iu");
+  return word.test(text);
+}
+
+/** `1 style finding`, `2 style findings`. */
+function plural(count: number, one: string, many: string): string {
+  return `${count} ${count === 1 ? one : many}`;
+}
+
+function isString(value: unknown): value is string {
+  return typeof value === "string";
+}
+
+/** `--flag=value` as its flag and its inline value, which is null when there is no `=`. */
+function splitFlag(arg: string): { flag: string; inline: string | null } {
+  const equals = arg.indexOf("=");
+  return equals >= 0
+    ? { flag: arg.slice(0, equals), inline: arg.slice(equals + 1) }
+    : { flag: arg, inline: null };
+}
+
+/**
+ * Glob matching (fnmatch.fnmatchcase): whether `pattern`, which knows only `*` and `?`, matches
+ * the whole of `name`. A `*` stops at a slash.
+ */
+function fnmatchCase(name: string, pattern: string): boolean {
+  const matcher = new RegExp(
+    "^" +
+      pattern
+        .replace(/[.+^${}()|[\]\\]/gu, "\\$&")
+        .replace(/\*/gu, "[^/]*")
+        .replace(/\?/gu, ".") +
+      "$",
+    "u",
+  );
+  return matcher.test(name);
+}
+
+/** JavaScript or TypeScript source with its comments taken out, so that a word in one is not read. */
+function stripJs(text: string): string {
+  // text.ts: [\s\S] is every char in both languages; DOT_ALL spells it bare.
+  text = text.replace(BLOCK_COMMENT, " ");
+  return text
+    .split("\n")
+    .filter((line) => !JSTARS.test(line))
+    .map((line) => line.replace(JSCOM, "$1"))
+    .join("\n");
+}
+
+/** The text of a configuration file with its comments taken out, by the kind of file it is. */
+function configText(text: string, path: string): string {
+  if (JS_CONFIG_FILE.test(path)) return stripJs(text);
+  if (path.endsWith(".json")) return text;
+  return text
+    .split("\n")
+    .map((line) => line.replace(SHCOM, "$1"))
+    .join("\n");
+}
+
+// --- the run's findings ---------------------------------------------------------------------
+
+interface Finding {
+  id: string;
+  target: string;
+  rest: string;
+}
+
+/** A finding as last logged for its target: its class word, and the rest of its detail. */
+interface LoggedFinding {
+  cls: string;
+  rest: string;
+}
+
+/** One line of the action log as JSON; a line that is none is the exit 1 of a log gone wrong. */
+function parseLogEntry(line: string, logPath: string, lineNumber: number): unknown {
+  try {
+    return JSON.parse(line);
+  } catch {
+    return die(`${logPath} line ${lineNumber} is not JSON`);
+  }
+}
+
+function isFindingEntry(entry: unknown): entry is Record<string, unknown> {
+  return (
+    !!entry && typeof entry === "object" && (entry as Record<string, unknown>).action === "finding"
+  );
+}
+
+/** The style findings, in the order their targets were last logged, numbered S1, S2, ... */
+function numberStyleFindings(latestByTarget: Map<string, LoggedFinding>): Finding[] {
+  const style: Finding[] = [];
+  let number = 0;
+  for (const [target, { cls, rest }] of latestByTarget) {
+    if (cls === "style") {
+      number++;
+      style.push({ id: `S${number}`, target, rest });
+    }
+  }
+  return style;
+}
+
+/**
+ * The run's style findings, and the faults of the log: a finding is whatever was last logged for
+ * its target, so a finding argued back to gating is no style finding.
+ */
+export function findings(dispatch: string): { style: Finding[]; faults: string[] } {
+  const logPath = join(dispatch, "actions.jsonl");
+  const latestByTarget = new Map<string, LoggedFinding>();
+  const faults: string[] = [];
+  const logLines = read(logPath, "action log").split("\n");
+  for (let index = 0; index < logLines.length; index++) {
+    const lineNumber = index + 1;
+    const logLine = logLines[index];
+    if (!logLine || logLine.trim() === "") continue;
+    const entry = parseLogEntry(logLine, logPath, lineNumber);
+    if (!isFindingEntry(entry)) continue;
+    // text.ts: BASE words = str(detail).split(None, 1); first-word + rest.
+    const words = pyWords(String(entry.detail ?? ""));
+    const cls = words[0] ?? "";
+    if (cls !== "gating" && cls !== "style") {
+      const opening = words.length > 0 ? `"${cls}"` : "nothing";
+      faults.push(
+        `actions.jsonl line ${lineNumber}: a finding whose detail opens with ${opening}, not gating or style`,
+      );
+      continue;
+    }
+    const target = String(entry.target ?? "");
+    // Delete first, so that the finding moves to the end of the order.
+    latestByTarget.delete(target);
+    latestByTarget.set(target, { cls, rest: words.slice(1).join(" ") });
+  }
+  return { style: numberStyleFindings(latestByTarget), faults };
+}
+
+// --- the waybill ----------------------------------------------------------------------------
+
+/**
+ * The value of `key:` on a waybill line, up to the next of the keys in `stops` that follows on
+ * the same line; null when the line has no such key.
+ */
+export function field(line: string, key: string, stops: string[]): string | null {
+  // text.ts: BASE re.match(r"\s*(?:[-*+]\s+)?MARK key MARK\s*:MARK(.*)$", re.I).
+  const keyed = new RegExp(
+    `${SPACE}*(?:[-*+]${SPACE}+)?${MARK}${key}${MARK}${SPACE}*:${MARK}${REST_OF_LINE}`,
+    "iu",
+  ).exec(line);
+  if (!keyed) return null;
+  let value = keyed[1] ?? "";
+  const stopWords = stops.map((stop) => escapeRegExp(stop)).join("|");
+  const nextKey = new RegExp(
+    `${SPACE}+${MARK}(?:${stopWords})${MARK}${SPACE}*:${MARK}(?=${SPACE}|${END_OF_STRING})`,
+    "iu",
+  ).exec(value);
+  if (nextKey) value = value.slice(0, nextKey.index);
+  value = pyTrim(value);
+  // A value in backticks is the text between them.
+  if (value.length > 1 && value[0] === "`" && value[value.length - 1] === "`") {
+    value = pyTrim(value.slice(1, -1));
+  }
+  return value;
+}
+
+/** The line after the last `## Project profile` heading of the waybill, or 0 when it has none. */
+function profileStart(lines: string[]): number {
+  const headings: number[] = [];
+  for (let index = 0; index < lines.length; index++) {
+    if (PROFILE_HEADING.test(lines[index]!)) headings.push(index);
+  }
+  return headings.length > 0 ? headings[headings.length - 1]! + 1 : 0;
+}
+
+/** The repo and the gate the waybill's Project profile names; the gate is null when it is "none". */
+function profile(dispatch: string): { repo: string | null; gate: string | null } {
+  const lines = read(join(dispatch, "brief.md"), "waybill").split("\n");
+  let repo: string | null = null;
+  let gate: string | null = null;
+  for (let index = profileStart(lines); index < lines.length; index++) {
+    const line = lines[index]!;
+    // The profile ends where the next heading of the waybill begins.
+    if (ANY_HEADING.test(line)) break;
+    const repoField = field(line, "repo", ["default branch", "BASE"]);
+    const gateField = field(line, "gate", ["build", "browser suite"]);
+    if (repo === null && repoField !== null) repo = repoField;
+    if (gate === null && gateField !== null) gate = gateField;
+  }
+  return {
+    repo: repo || null,
+    gate: gate && pyLower(gate) !== "none" ? gate : null,
+  };
+}
+
+// --- the repo, as the run's branch has it ---------------------------------------------------
+
+/** What git prints for `args` in `repo`, or null when it exits non-zero. */
+function git(repo: string, ...args: string[]): string | null {
+  const result = run("git", ["-C", repo, ...args], { timeout: GIT_TIMEOUT_MS });
+  return result.code === 0 ? result.out : null;
+}
+
+interface BlobEntry {
+  mode: string;
+  sha: string;
+}
+
+/** One record of `git ls-tree -r -z`, "<mode> <type> <sha>\t<path>", when it names a file. */
+function parseTreeRecord(record: string): { path: string; entry: BlobEntry } | null {
+  const tab = record.indexOf("\t");
+  if (tab < 0) return null;
+  const path = record.slice(tab + 1);
+  // ASCII: git ls-tree --format prints mode, blob-sha and path tab-separated in ASCII.
+  const parts = record.slice(0, tab).split(/\s+/u);
+  if (parts.length !== 3 || parts[1] !== "blob") return null;
+  return { path, entry: { mode: parts[0]!, sha: parts[2]! } };
+}
+
+/**
+ * The files of one branch of a repository, read from git's objects and never from the checkout,
+ * so that the gate is read as the run's branch has it. Every path is relative to the repo's root.
+ */
+class Tree {
+  repo: string;
+  /** every file of the branch, with its mode and the name of its object */
+  blobs: Map<string, BlobEntry> = new Map();
+  /** every directory that holds a file, and "" for the root */
+  dirs: Set<string> = new Set([""]);
+  /** what has been read of each file: null for one that is too large or not text */
+  cache: Map<string, string | null> = new Map();
+
+  constructor(repo: string, branch: string) {
+    this.repo = repo;
+    const tip = git(repo, "rev-parse", "--verify", "--quiet", `refs/heads/${branch}^{commit}`);
+    const commit = tip?.trim() ?? "";
+    if (!commit) die(`no branch ${branch} in ${repo}: the gate is read as the run's branch has it`);
+    const listing = git(repo, "ls-tree", "-r", "-z", "--full-tree", commit) ?? "";
+    for (const record of listing.split("\0")) {
+      const parsed = parseTreeRecord(record);
+      if (!parsed) continue;
+      this.blobs.set(parsed.path, parsed.entry);
+      // Every directory above the file is a directory of the tree.
+      let dir = posix.dirname(parsed.path);
+      while (!this.dirs.has(dir)) {
+        this.dirs.add(dir);
+        dir = posix.dirname(dir);
+      }
+    }
+  }
+
+  /** `relative` as seen from `cwd`, or null when it is absolute, home-relative or leaves the repo. */
+  repoPath(cwd: string, relative: string): string | null {
+    if (!relative || relative.startsWith("/") || relative.startsWith("~")) return null;
+    const joined = posix.normalize(posix.join(cwd, relative));
+    if (joined === ".") return "";
+    if (joined === ".." || joined.startsWith("../")) return null;
+    return joined;
+  }
+
+  /** The file `relative` names from `cwd`, following one level of symbolic link; null if none. */
+  file(cwd: string, relative: string): string | null {
+    let path = this.repoPath(cwd, relative);
+    if (path === null || !this.blobs.has(path)) return null;
+    const entry = this.blobs.get(path)!;
+    if (entry.mode === SYMLINK_MODE) {
+      const linkTarget = (git(this.repo, "cat-file", "blob", entry.sha) ?? "").trim();
+      path = this.repoPath(posix.dirname(path!), linkTarget);
+      if (path === null || !this.blobs.has(path) || this.blobs.get(path)?.mode === SYMLINK_MODE) {
+        return null;
+      }
+    }
+    return path;
+  }
+
+  /** The directory `relative` names from `cwd`, when it holds a file of the branch. */
+  dir(cwd: string, relative: string): string | null {
+    const path = this.repoPath(cwd, relative);
+    return path !== null && this.dirs.has(path) ? path : null;
+  }
+
+  /** The text of a file of the branch, read once; null for a file too large or not text. */
+  read(path: string): string | null {
+    if (!this.cache.has(path)) {
+      const entry = this.blobs.get(path);
+      const data = entry ? git(this.repo, "cat-file", "blob", entry.sha) : null;
+      const isText =
+        data !== null &&
+        data.length <= MAX_FILE_LENGTH &&
+        !data.slice(0, BINARY_SNIFF_LENGTH).includes("\0");
+      // BASE decoded utf-8-sig: a byte-order mark is not part of the content.
+      this.cache.set(path, isText ? withoutBom(data) : null);
+    }
+    return this.cache.get(path) ?? null;
+  }
+
+  /** The files of the branch that the glob `pattern` matches from `cwd`, sorted. */
+  glob(cwd: string, pattern: string): string[] {
+    const path = this.repoPath(cwd, pattern);
+    if (path === null) return [];
+    if (!/[*?[]/u.test(path)) return this.blobs.has(path) ? [path] : [];
+    return [...this.blobs.keys()].filter((blob) => fnmatchCase(blob, path)).sort();
+  }
+
+  /** The nearest file called one of `names`, in `cwd` or in a directory above it. */
+  up(cwd: string, names: string[]): string | null {
+    let dir = cwd;
+    while (true) {
+      for (const name of names) {
+        const candidate = dir ? posix.join(dir, name) : name;
+        if (this.blobs.has(candidate)) return candidate;
+      }
+      if (!dir) return null;
+      dir = posix.dirname(dir);
+    }
+  }
+}
+
+// --- reading shell --------------------------------------------------------------------------
+
+/**
+ * One line with its substitutions reduced to what the words of the command show: `$(MAKE)` is
+ * make, `${VAR:-default}` is its default, `$(cmd)` is cmd, and any other `${...}` is a placeholder.
+ */
+function subst(line: string): string {
+  line = line.replace(/\$\(MAKE\)|\$\{MAKE\}/gu, "make");
+  line = line.replace(/\$\{[A-Za-z_][A-Za-z0-9_]*:?[-=]([^{}]*)\}/gu, "$1");
+  // Innermost first, a layer per pass, with a bound so that nothing can run away.
+  for (let pass = 0; pass < 10; pass++) {
+    const stripped = line.replace(/\$\(([^()]*)\)/gu, "$1");
+    if (stripped === line) break;
+    line = stripped;
+  }
+  return line.replace(/\$\{[^{}]*\}/gu, "_").replace(/`/gu, " ");
+}
+
+/** The line up to a `#` that opens a comment: one outside quotes, at a word's start. */
+function uncomment(line: string): string {
+  let quote: string | null = null;
+  for (let index = 0; index < line.length; index++) {
+    const char = line[index]!;
+    if (char === "\\" && quote !== "'") {
+      // A backslash outside single quotes escapes the next character.
+      index++;
+      continue;
+    }
+    if (quote) {
+      if (char === quote) quote = null;
+    } else if (char === "'" || char === '"') {
+      quote = char;
+    } else if (char === "#" && (index === 0 || " \t;&|()".includes(line[index - 1]!))) {
+      return line.slice(0, index);
+    }
+  }
+  return line;
+}
+
+/** The operator that starts at `start`, and the index after it: `&&`, `||`, `>>`, `<<` or one. */
+function readOperator(line: string, start: number): [string, number] {
+  const char = line[start]!;
+  let operator = char;
+  let next = start;
+  // Group punctuation: && || |& etc.
+  if ((char === "&" || char === "|") && line[start + 1] === char) {
+    operator = char + char;
+    next += 2;
+  } else if (char === ">" && line[start + 1] === ">") {
+    operator = ">>";
+    next += 2;
+  } else if (char === "<" && line[start + 1] === "<") {
+    operator = "<<";
+    next += 2;
+  } else {
+    next++;
+  }
+  return [operator, next];
+}
+
+/** The text of a quoted part of a word, and the index after its closing quote. */
+function readQuoted(line: string, open: number, quote: string): [string, number] {
+  let text = "";
+  let index = open + 1;
+  while (index < line.length && line[index] !== quote) {
+    // Inside double quotes a backslash escapes the next character; inside single quotes it is plain.
+    if (quote === '"' && line[index] === "\\" && index + 1 < line.length) {
+      text += line[index + 1];
+      index += 2;
+    } else {
+      text += line[index];
+      index++;
+    }
+  }
+  index++; // skip closing quote
+  return [text, index];
+}
+
+/** The word that starts at `start`, with its quotes and escapes resolved, and the index after it. */
+function readWord(line: string, start: number): [string, number] {
+  let word = "";
+  let index = start;
+  while (
+    index < line.length &&
+    !PUNCT.has(line[index]!) &&
+    line[index] !== " " &&
+    line[index] !== "\t"
+  ) {
+    const char = line[index]!;
+    if (char === "\\" && index + 1 < line.length) {
+      word += line[index + 1];
+      index += 2;
+    } else if (char === "'" || char === '"') {
+      const [quoted, next] = readQuoted(line, index, char);
+      word += quoted;
+      index = next;
+    } else {
+      word += char;
+      index++;
+    }
+  }
+  return [word, index];
+}
+
+/** Shell tokenizer (approximates shlex with punctuation_chars): words and operators of a line. */
+function shellTokens(line: string): string[] {
+  const tokens: string[] = [];
+  let index = 0;
+  while (index < line.length) {
+    const char = line[index]!;
+    if (char === " " || char === "\t") {
+      index++;
+      continue;
+    }
+    if (PUNCT.has(char)) {
+      const [operator, next] = readOperator(line, index);
+      tokens.push(operator);
+      index = next;
+      continue;
+    }
+    // Word
+    const [word, next] = readWord(line, index);
+    index = next;
+    if (word) tokens.push(word);
+  }
+  return tokens;
+}
+
+/** One piece of a shell line: the words of a command, or the operator between two commands. */
+type ShellPiece = { kind: "cmd"; words: string[] } | { kind: "sep"; operator: string };
+
+/**
+ * The commands of a line and the operators between them, in order. A redirection and the word
+ * after it are no part of a command, and do not end it.
+ */
+function* commands(line: string): Generator<ShellPiece> {
+  const tokens = shellTokens(subst(uncomment(line)));
+  let words: string[] = [];
+  let skipNext = false;
+  for (const token of tokens) {
+    if (skipNext) {
+      skipNext = false;
+    } else if (token && [...token].every((char) => PUNCT.has(char))) {
+      if (token.includes("<") || token.includes(">")) {
+        skipNext = true;
+        continue;
+      }
+      if (words.length > 0) {
+        yield { kind: "cmd", words };
+        words = [];
+      }
+      yield { kind: "sep", operator: token };
+    } else {
+      words.push(token);
+    }
+  }
+  if (words.length > 0) yield { kind: "cmd", words };
+}
+
+/**
+ * The command a list of words runs, with what only wraps it taken off: keywords such as `if`,
+ * `VAR=value` prefixes, and wrappers such as env, timeout, npx, xargs or `uv run`. Empty when
+ * the words run nothing, and for `command -v`, which only looks a command up.
+ */
+function unwrap(words: string[]): string[] {
+  const count = words.length;
+  let index = 0;
+  // The index after the flags that start at `position`, and after a `--` that ends them.
+  const past = (position: number, valued: string[] = []): number => {
+    while (position < count && words[position]?.startsWith("-") && words[position] !== "--") {
+      position += valued.includes(words[position]!) ? 2 : 1;
+    }
+    return position < count && words[position] === "--" ? position + 1 : position;
+  };
+  while (index < count) {
+    const word = words[index]!;
+    const name = posix.basename(word);
+    const following = index + 1 < count ? words[index + 1]! : "";
+    if (SHELL_WORDS.has(word) || /^[A-Za-z_][A-Za-z0-9_]*=/u.test(word)) {
+      index++;
+    } else if (name === "command") {
+      if (following === "-v" || following === "-V") return [];
+      index++;
+    } else if (name === "env") {
+      index = past(index + 1, ENV_VALUED_FLAGS);
+    } else if (
+      name === "cross-env" ||
+      name === "cross-env-shell" ||
+      name === "stdbuf" ||
+      name === "nice"
+    ) {
+      index = past(index + 1, NICE_VALUED_FLAGS);
+    } else if (name === "timeout") {
+      // The duration follows the flags, and is no part of the command.
+      index = past(index + 1, TIMEOUT_VALUED_FLAGS) + 1;
+    } else if (name === "npx" || name === "pnpx" || name === "bunx") {
+      index = past(index + 1, NPX_VALUED_FLAGS);
+    } else if (name === "dotenv" || name === "dotenvx") {
+      const separator = words.indexOf("--", index);
+      index = separator >= 0 ? separator + 1 : past(index + 1, DOTENV_VALUED_FLAGS);
+      if (index < count && words[index] === "run") index++;
+    } else if (
+      (name === "uv" ||
+        name === "poetry" ||
+        name === "pipenv" ||
+        name === "hatch" ||
+        name === "pdm" ||
+        name === "rye") &&
+      following === "run"
+    ) {
+      index = past(index + 2, ENV_RUNNER_VALUED_FLAGS);
+    } else if (name === "bundle" && following === "exec") {
+      index += 2;
+    } else if (name === "xargs") {
+      index = past(index + 1, XARGS_VALUED_FLAGS);
+    } else {
+      break;
+    }
+  }
+  return words.slice(index);
+}
+
+// --- justfile parsing -----------------------------------------------------------------------
+
+interface JustRecipes {
+  recipes: Map<string, { deps: string[]; body: string[] }>;
+  vars: Map<string, string>;
+  /** the recipe `just` runs when none is named: the first one written */
+  first: string | null;
+}
+
+/** The recipes of a justfile with their dependencies and body lines, and its variables. */
+function parseJust(text: string): JustRecipes {
+  const recipes = new Map<string, { deps: string[]; body: string[] }>();
+  const vars = new Map<string, string>();
+  let first: string | null = null;
+  // The recipe whose indented body the lines are in, or null between recipes.
+  let current: string | null = null;
+  for (const line of text.split("\n")) {
+    // text.ts: BASE strips justfile lines with Python whitespace.
+    const indented = line.startsWith(" ") || line.startsWith("\t") || pyTrim(line) === "";
+    if (current !== null && indented) {
+      if (pyTrim(line)) recipes.get(current)?.body.push(pyTrim(line));
+      continue;
+    }
+    current = null;
+    const trimmed = pyTrim(line);
+    if (
+      !trimmed ||
+      trimmed.startsWith("#") ||
+      trimmed.startsWith("[") ||
+      trimmed.startsWith("set ") ||
+      trimmed.startsWith("import ") ||
+      trimmed.startsWith("mod ")
+    ) {
+      continue;
+    }
+    let match = JALIAS.exec(trimmed);
+    if (match) {
+      recipes.set(match[1]!, { deps: [match[2]!], body: [] });
+      continue;
+    }
+    match = JVAR.exec(trimmed);
+    if (match) {
+      vars.set(match[1]!, match[2]?.trim().replace(/^['"]|['"]$/gu, ""));
+      continue;
+    }
+    match = JRECIPE.exec(trimmed);
+    if (match) {
+      current = match[1]!;
+      // Parameters in parentheses are no dependencies.
+      const deps = match[2]?.replace(/\([^)]*\)/gu, "").match(JDEPS) ?? [];
+      recipes.set(current, { deps, body: [] });
+      if (first === null) first = current;
+    }
+  }
+  return { recipes, vars, first };
+}
+
+// --- makefile parsing -----------------------------------------------------------------------
+
+/**
+ * A makefile as the branch has it: its variables, its rules and its default goal. Included
+ * makefiles are read into the same one; a recipe line is expanded when it is asked for.
+ */
+export class Makefile {
+  /** the tree the makefile and its includes are read from */
+  t: Tree;
+  path: string;
+  /** the directory make ran in, where an include's glob is read from */
+  cwd: string;
+  vars: Map<string, string>;
+  rules: Map<string, { prereqs: string[]; recipe: string[] }>;
+  /** the variables set on make's command line, which no assignment in a makefile changes */
+  fixed: Set<string>;
+  first: string | null = null;
+  goal: string;
+
+  // text.ts: BASE ASSIGN splits Python whitespace; values bar only LF.
+  static ASSIGN = new RegExp(
+    `^(?:(?:export|override)${SPACE}+)*([A-Za-z0-9_.-]+)${SPACE}*(:{1,3}=|[?+!]?=)${SPACE}*${REST_OF_LINE}`,
+    "u",
+  );
+
+  constructor(tree: Tree, path: string, cwd: string, sets: Record<string, string>) {
+    this.t = tree;
+    this.path = path;
+    this.cwd = cwd;
+    this.vars = new Map(Object.entries(sets));
+    this.rules = new Map();
+    this.fixed = new Set(Object.keys(sets));
+    this.read(path, 0);
+    this.goal = this.expand(this.vars.get(".DEFAULT_GOAL") ?? "").trim() || this.first || "";
+  }
+
+  /** `text` with its `$(NAME)` and `${NAME}` replaced by the variables, to a depth of ten. */
+  expand(text: string, depth = 0): string {
+    if (depth > 10 || !text.includes("$")) return text;
+    const reference = (whole: string, parenName: string, braceName: string): string => {
+      const name = parenName || braceName;
+      if (this.vars.has(name)) return this.expand(this.vars.get(name)!, depth + 1);
+      return name === "MAKE" ? "make" : whole;
+    };
+    // `$$` is a dollar sign: hide it behind a NUL while the variables expand.
+    return text
+      .replace(/\$\$/gu, "\0")
+      .replace(/\$\(([A-Za-z0-9_.-]+)\)|\$\{([A-Za-z0-9_.-]+)\}/gu, (whole, parenName, braceName) =>
+        reference(whole, parenName ?? "", braceName ?? ""),
+      )
+      .replace(/\0/gu, "$$");
+  }
+
+  /** A recipe line as the shell receives it: no leading `@+-`, variables expanded. */
+  recipe(line: string): string {
+    return this.expand(line.replace(RECIPE_PREFIX, "")).replace(/\$\$/gu, "$");
+  }
+
+  /** The files of an `include` line, which are read into this makefile, to a depth of ten. */
+  private include(spec: string, depth: number): void {
+    for (const pattern of pyWords(this.expand(spec))) {
+      if (depth < 10) {
+        for (const path of this.t.glob(this.cwd, pattern)) this.read(path, depth + 1);
+      }
+    }
+  }
+
+  /** One assignment: `?=` only sets a variable that has no value, `+=` appends, `:=` expands. */
+  private assign(name: string, operator: string | undefined, value: string): void {
+    if (this.fixed.has(name) || operator === "!=") return;
+    if (operator === "?=") {
+      if (!this.vars.has(name)) this.vars.set(name, value);
+    } else if (operator === "+=") {
+      this.vars.set(name, pyTrim(`${this.vars.get(name) ?? ""} ${value}`));
+    } else {
+      this.vars.set(name, operator?.startsWith(":") ? this.expand(value) : value);
+    }
+  }
+
+  /** One rule line: the targets, with their prerequisites and any recipe written after a `;`. */
+  private addRule(targetText: string, rest: string): string[] {
+    const semicolon = rest.indexOf(";");
+    const prerequisites = semicolon >= 0 ? rest.slice(0, semicolon) : rest;
+    const inline = semicolon >= 0 ? pyTrim(rest.slice(semicolon + 1)) : "";
+    const targets = pyWords(this.expand(targetText));
+    for (const target of targets) {
+      if (!this.rules.has(target)) this.rules.set(target, { prereqs: [], recipe: [] });
+      const names = pyWords(this.expand(prerequisites)).filter((name) => name !== "|");
+      this.rules.get(target)?.prereqs.push(...names);
+      if (inline) this.rules.get(target)?.recipe.push(inline);
+      // The default goal is the first target that is no special target and no pattern.
+      if (this.first === null && !target.startsWith(".") && !target.includes("%")) {
+        this.first = target;
+      }
+    }
+    return targets;
+  }
+
+  /** Read one makefile, line by line, into the variables and rules. */
+  read(path: string, depth: number): void {
+    const text = this.t.read(path);
+    // The targets of the rule whose recipe the tab-indented lines belong to.
+    let current: string[] | null = null;
+    let insideDefine = false;
+    for (const line of (text ?? "").replace(/\\\r?\n/gu, " ").split("\n")) {
+      if (insideDefine) {
+        insideDefine = !MENDEF.test(line);
+        continue;
+      }
+      if (line.startsWith("\t")) {
+        for (const target of current ?? []) {
+          this.rules.get(target)?.recipe.push(line.slice(1));
+        }
+        continue;
+      }
+      const statement = line.replace(/(?<!\\)#.*$/u, "").trim();
+      if (!statement || MIFCOND.test(statement)) continue;
+      if (MDEFINE.test(statement)) {
+        insideDefine = true;
+        current = null;
+        continue;
+      }
+      let match = MAKEINC.exec(statement);
+      if (match) {
+        this.include(match[1]!, depth);
+        current = null;
+        continue;
+      }
+      match = Makefile.ASSIGN.exec(statement);
+      if (match) {
+        this.assign(match[1]!, match[2], match[3]!);
+        current = null;
+        continue;
+      }
+      match = RULE.exec(statement);
+      if (!match || Makefile.ASSIGN.test(pyTrim(match[2] ?? ""))) {
+        current = null;
+        continue;
+      }
+      current = this.addRule(match[1]!, match[2]!);
+    }
+  }
+}
+
+// --- Reach: what a gate command reaches ---------------------------------------------------------
+
+/** The workspaces a package-manager call selects: the nearest package (null), all, or selectors. */
+type Selection = string | string[] | null;
+
+/**
+ * Everything a gate reaches: the commands it runs, and through them the package scripts, make
+ * targets, just recipes, hook-runner configurations and script files those run in turn.
+ */
+class Reach {
+  tree: Tree;
+  /** every command that was followed, with the place it was read from */
+  commandsReached: Array<{ where: string; words: string[] }> = [];
+  /** the text of every hook-runner configuration that was read */
+  configTexts: Array<{ where: string; text: string }> = [];
+  /** every line read, in order, for `gate` to print */
+  linesRead: Array<{ where: string; line: string }> = [];
+  /** what has been followed already, so that nothing is read twice and a cycle ends */
+  visited = new Set<string>();
+  warnings: string[] = [];
+  packageJsons = new Map<string, Record<string, unknown>>();
+  makefiles = new Map<string, Makefile>();
+  justfiles = new Map<string, JustRecipes>();
+
+  constructor(tree: Tree, gate: string) {
+    this.tree = tree;
+    this.readShell("gate", gate, "");
+  }
+
+  /**
+   * Read shell text line by line: keep each line, and follow its commands. With `keepCd`, a `cd`
+   * on one line holds for the next, as it does in a script file.
+   */
+  readShell(where: string, text: string, cwd: string, keepCd = false): void {
+    for (const rawLine of text.replace(/\\\r?\n/gu, " ").split("\n")) {
+      const line = uncomment(rawLine).trim();
+      if (!line) continue;
+      this.linesRead.push({ where, line });
+      if (line.length <= LONG) {
+        const cwdAfter = this.scanLine(where, line, cwd);
+        cwd = keepCd ? cwdAfter : cwd;
+      }
+    }
+  }
+
+  /** Follow the commands of one line, and return the directory the line leaves behind. */
+  scanLine(where: string, line: string, cwd: string): string {
+    // The directory to return to at the `)` of each subshell that is open.
+    const subshellDirs: string[] = [];
+    for (const piece of commands(line)) {
+      if (piece.kind === "sep") {
+        if (piece.operator === "(") subshellDirs.push(cwd);
+        else if (piece.operator === ")" && subshellDirs.length > 0) cwd = subshellDirs.pop()!;
+        continue;
+      }
+      const [cwdAfter, nested] = this.followCommand(where, piece.words, cwd);
+      cwd = cwdAfter;
+      // A word with whitespace in it may be a line of shell itself: `sh -c 'a && b'`.
+      for (const word of nested ? piece.words : []) {
+        if (HAS_SPACE.test(word)) this.scanLine(where, word, cwd);
+      }
+    }
+    return cwd;
+  }
+
+  /**
+   * Follow one command. Returns the directory it leaves behind, and whether the words of the
+   * command may hold more shell.
+   */
+  followCommand(where: string, words: string[], cwd: string): [string, boolean] {
+    const command = unwrap(words);
+    if (command.length === 0) return [cwd, words.length === 0];
+    const head = posix.basename(command[0]!);
+    const args = command.slice(1);
+    if (head === "cd" || head === "pushd") {
+      const operands = args.filter((arg) => !arg.startsWith("-"));
+      const dir = operands.length > 0 ? this.tree.dir(cwd, operands[0]!) : null;
+      return [dir === null ? cwd : dir, false];
+    }
+    if (INERT.has(head)) return [cwd, false];
+    this.commandsReached.push({ where, words: command });
+    this.followTool(where, head, args, cwd);
+    for (const arg of args) {
+      if (arg.startsWith("npm:")) this.followScriptsMatching(arg.slice(4), cwd);
+    }
+    this.followScriptFile(command, head, args, cwd);
+    return [cwd, true];
+  }
+
+  /** Follow what a known tool runs: a package manager, make, just, a task or hook runner. */
+  followTool(where: string, head: string, args: string[], cwd: string): void {
+    if (head === "npm" || head === "pnpm" || head === "yarn" || head === "bun") {
+      this.packageManager(where, head, args, cwd);
+    } else if (
+      head === "npm-run-all" ||
+      head === "npm-run-all2" ||
+      head === "run-s" ||
+      head === "run-p"
+    ) {
+      for (const arg of args) {
+        if (!arg.startsWith("-")) this.followScriptsMatching(arg, cwd);
+      }
+    } else if (head === "make" || head === "gmake") {
+      this.make(args, cwd);
+    } else if (head === "just") {
+      this.just(args, cwd);
+    } else if (head === "turbo" || head === "lerna") {
+      this.taskRunner(args, cwd);
+    } else if (head in RUNNERS) {
+      this.followRunnerConfigs(head, cwd);
+    }
+  }
+
+  /** Follow the file a command runs: the first file among an interpreter's arguments, or a path. */
+  followScriptFile(command: string[], head: string, args: string[], cwd: string): void {
+    if (INTERPRETERS.has(head)) {
+      for (const arg of args) {
+        const file = arg.startsWith("-") ? null : this.tree.file(cwd, arg);
+        if (file) {
+          this.followFile(file, cwd);
+          break;
+        }
+      }
+    } else if (command[0]?.includes("/")) {
+      const file = this.tree.file(cwd, command[0]!);
+      if (file) this.followFile(file, cwd);
+    }
+  }
+
+  // --- package.json
+
+  /** The package.json of directory `dir` ("" for the root), or {} when there is none to read. */
+  packageJson(dir: string): Record<string, unknown> {
+    if (!this.packageJsons.has(dir)) {
+      const path = dir ? posix.join(dir, "package.json") : "package.json";
+      let contents: Record<string, unknown> = {};
+      if (this.tree.blobs.has(path)) {
+        try {
+          const parsed = JSON.parse(this.tree.read(path) ?? "");
+          if (parsed && typeof parsed === "object") contents = parsed as Record<string, unknown>;
+        } catch {
+          this.warnings.push(`${path} does not parse, so no script of it was followed`);
+        }
+      }
+      this.packageJsons.set(dir, contents);
+    }
+    return this.packageJsons.get(dir)!;
+  }
+
+  /** The scripts of a package that are strings, by name. */
+  scriptsOf(dir: string): Record<string, string> {
+    const declared = this.packageJson(dir).scripts;
+    if (declared && typeof declared === "object") {
+      const scripts: Record<string, string> = {};
+      for (const [name, command] of Object.entries(declared)) {
+        if (typeof command === "string") scripts[name] = command;
+      }
+      return scripts;
+    }
+    return {};
+  }
+
+  /** Whether the project uses Yarn 2 or later, which runs no pre and post scripts. */
+  isYarnBerry(): boolean {
+    const declared = String(this.packageJson("").packageManager ?? "");
+    const match = YARNRE.exec(declared);
+    return (
+      (match ? Number(digitValue(match[1]!)) >= 2 : false) || this.tree.blobs.has(".yarnrc.yml")
+    );
+  }
+
+  /** The globs the root package.json declares for its workspaces, as a list or as `packages`. */
+  packageJsonWorkspaceGlobs(): string[] {
+    const globs: string[] = [];
+    let declared: unknown = this.packageJson("").workspaces;
+    if (declared && typeof declared === "object" && !Array.isArray(declared)) {
+      declared = (declared as Record<string, unknown>).packages;
+    }
+    if (Array.isArray(declared)) globs.push(...declared.filter(isString));
+    return globs;
+  }
+
+  /** The globs lerna.json declares under `packages`. */
+  lernaWorkspaceGlobs(): string[] {
+    const globs: string[] = [];
+    if (this.tree.blobs.has("lerna.json")) {
+      try {
+        const declared: unknown = (
+          JSON.parse(this.tree.read("lerna.json") ?? "") as Record<string, unknown>
+        ).packages;
+        if (Array.isArray(declared)) globs.push(...declared.filter(isString));
+      } catch {
+        /* ignore */
+      }
+    }
+    return globs;
+  }
+
+  /** The globs pnpm-workspace.yaml lists under `packages:`, read as lines. */
+  pnpmWorkspaceGlobs(): string[] {
+    const globs: string[] = [];
+    if (this.tree.blobs.has("pnpm-workspace.yaml")) {
+      let inside = false;
+      for (const line of (this.tree.read("pnpm-workspace.yaml") ?? "").split("\n")) {
+        if (YPKGS.test(line)) inside = true;
+        else if (inside && YITEM.test(line))
+          globs.push(
+            line
+              .replace(YOUT, "")
+              .trim()
+              .replace(/^['"]|['"]$/gu, ""),
+          );
+        else if (inside && line.trim() && !YIND.test(line)) inside = false;
+      }
+    }
+    return globs;
+  }
+
+  /** The directories of the workspace packages: those the declared globs take in and keep out. */
+  workspaces(): string[] {
+    const globs = [
+      ...this.packageJsonWorkspaceGlobs(),
+      ...this.lernaWorkspaceGlobs(),
+      ...this.pnpmWorkspaceGlobs(),
+    ];
+    // A glob that starts with `!` leaves packages out; a trailing slash is no part of the glob.
+    const included = globs
+      .filter((glob) => !glob.startsWith("!"))
+      .map((glob) => glob.replace(/\/$/u, ""));
+    const excluded = globs
+      .filter((glob) => glob.startsWith("!"))
+      .map((glob) => glob.slice(1).replace(/\/$/u, ""));
+    const packageDirs = [...this.tree.blobs.keys()]
+      .filter((path) => posix.basename(path) === "package.json")
+      .map((path) => posix.dirname(path))
+      .filter((dir) => dir !== "");
+    return packageDirs
+      .filter(
+        (dir) =>
+          included.some((glob) => fnmatchCase(dir, glob)) &&
+          !excluded.some((glob) => fnmatchCase(dir, glob)),
+      )
+      .sort();
+  }
+
+  /** Whether a workspace selector, as a filter flag writes it, picks the package in `dir`. */
+  selects(selector: string, dir: string): boolean {
+    let cleaned = selector
+      .trim()
+      .replace(/^\.\.\.|\.\.\.$/gu, "")
+      .replace(/^\{|\}$/gu, "")
+      .trim();
+    if (cleaned.startsWith("./")) cleaned = cleaned.slice(2);
+    const name = String(this.packageJson(dir).name ?? "");
+    return (
+      cleaned === dir ||
+      cleaned === posix.basename(dir) ||
+      cleaned === name ||
+      fnmatchCase(dir, cleaned) ||
+      (name !== "" && fnmatchCase(name, cleaned))
+    );
+  }
+
+  /**
+   * The package directories a selection runs in: the nearest package from `cwd` for none, every
+   * workspace for "all", else those the selectors pick, and all of them when none is picked.
+   */
+  packages(selection: Selection, cwd: string): string[] {
+    if (selection === null) {
+      const nearest = this.tree.up(cwd, ["package.json"]);
+      return nearest ? [posix.dirname(nearest)] : [];
+    }
+    const dirs = this.workspaces();
+    const chosen =
+      selection === "all"
+        ? dirs
+        : dirs.filter((dir) =>
+            (selection as string[]).some((selector) => this.selects(selector, dir)),
+          );
+    return chosen.length > 0 ? chosen : dirs;
+  }
+
+  // --- package managers
+
+  /** The flags in front of a package manager's subcommand, and where the subcommand starts. */
+  readManagerFlags(
+    pm: string,
+    args: string[],
+    cwd: string,
+  ): { selection: Selection; cwd: string; next: number } {
+    let selection: Selection = null;
+    let index = 0;
+    while (index < args.length && args[index]?.startsWith("-")) {
+      const { flag, inline } = splitFlag(args[index]!);
+      const takesValue =
+        DIRECTORY_FLAGS.includes(flag) ||
+        FILTER_FLAGS.includes(flag) ||
+        (WORKSPACE_FLAGS.includes(flag) && pm !== "pnpm");
+      const value = inline ?? args[index + 1] ?? "";
+      if (ALL_WORKSPACES_FLAGS.includes(flag)) {
+        selection = "all";
+      } else if (DIRECTORY_FLAGS.includes(flag)) {
+        const dir = this.tree.dir(cwd, value);
+        if (dir !== null) cwd = dir;
+      } else if (takesValue) {
+        selection = Array.isArray(selection) ? [...selection, value] : [value];
+      }
+      index += takesValue && inline === null ? 2 : 1;
+    }
+    return { selection, cwd, next: index };
+  }
+
+  /** Follow a call of npm, pnpm, yarn or bun: the script it runs, or the command it executes. */
+  packageManager(where: string, pm: string, args: string[], cwd: string): void {
+    const { selection: flagged, cwd: runCwd, next } = this.readManagerFlags(pm, args, cwd);
+    if (next >= args.length) return;
+    const sub = args[next]!;
+    const after = args.slice(next + 1);
+    let selection = flagged;
+    if (after.includes("-ws") || after.includes("--workspaces")) selection = "all";
+    const names = after.filter((arg) => !arg.startsWith("-"));
+    if (RUN_SUBCOMMANDS.includes(sub)) {
+      if (names.length > 0) this.runScript(pm, names[0]!, selection, runCwd);
+    } else if (pm === "npm" && NPM_SCRIPT_SHORTCUTS.includes(sub)) {
+      // `npm t` and `npm tst` are `npm test`.
+      this.runScript(pm, { t: "test", tst: "test" }[sub] ?? sub, selection, runCwd);
+    } else if (EXEC_SUBCOMMANDS[pm]?.includes(sub)) {
+      let flagEnd = 0;
+      while (flagEnd < after.length && after[flagEnd]?.startsWith("-") && after[flagEnd] !== "--") {
+        flagEnd++;
+      }
+      const executed = after[flagEnd] === "--" ? after.slice(flagEnd + 1) : after.slice(flagEnd);
+      this.followCommand(where, executed, runCwd);
+    } else if (pm === "yarn" && sub === "workspaces" && names[0] === "foreach") {
+      const runAt = after.indexOf("run");
+      const left = after.slice(runAt >= 0 ? runAt + 1 : 1).filter((arg) => !arg.startsWith("-"));
+      if (left.length > 0) this.runScript(pm, left[0]!, "all", runCwd);
+    } else if (pm === "yarn" && sub === "workspace" && names.length > 1) {
+      const left = names[1] === "run" ? names.slice(2) : names.slice(1);
+      if (left.length > 0) this.runScript(pm, left[0]!, [names[0]!], runCwd);
+    } else if (pm !== "npm" && !BUILTINS[pm]?.has(sub)) {
+      // Any word that is no subcommand of pnpm, yarn or bun names a script.
+      this.runScript(pm, sub, selection, runCwd);
+    }
+  }
+
+  /** Follow the script `name` in each package of the selection; bun also runs a file by name. */
+  runScript(pm: string, name: string, selection: Selection, cwd: string): void {
+    const dirs = this.packages(selection, cwd);
+    for (const dir of dirs) {
+      if (name in this.scriptsOf(dir)) this.followScript(dir, name, pm);
+    }
+    if (pm === "bun" && selection === null && !dirs.some((dir) => name in this.scriptsOf(dir))) {
+      const file = this.tree.file(cwd, name);
+      if (file) this.followFile(file, cwd);
+    }
+  }
+
+  /** Follow one script of a package, with the pre and post scripts that run around it. */
+  followScript(dir: string, name: string, pm: string): void {
+    const scripts = this.scriptsOf(dir);
+    const hooks = pm === "yarn" && this.isYarnBerry() ? [] : [`pre${name}`, `post${name}`];
+    const order = [...hooks.slice(0, 1), name, ...hooks.slice(1)];
+    for (const scriptName of order) {
+      const key = `script|${dir}|${scriptName}`;
+      if (scriptName in scripts && !this.visited.has(key)) {
+        this.visited.add(key);
+        const where = `${dir ? `${dir}/` : ""}package.json scripts.${scriptName}`;
+        this.readShell(where, scripts[scriptName]!, dir);
+      }
+    }
+  }
+
+  /** Follow every script whose name a run-s or npm: pattern matches; `*` stops at a colon. */
+  followScriptsMatching(pattern: string, cwd: string): void {
+    const pieces = pattern.match(/\*\*|\*|\?|[^*?]+/gu) ?? [];
+    const source = pieces
+      .map((piece) => {
+        if (piece === "**") return ".*";
+        if (piece === "*") return "[^:]*";
+        if (piece === "?") return "[^:]";
+        return escapeRegExp(piece);
+      })
+      .join("");
+    const matcher = new RegExp(`${source}$`, "u");
+    for (const dir of this.packages(null, cwd)) {
+      for (const name of Object.keys(this.scriptsOf(dir)).sort()) {
+        if (matcher.test(name)) this.followScript(dir, name, "npm");
+      }
+    }
+  }
+
+  // --- task runners
+
+  /** The package selectors and the task names of a turbo or lerna call. */
+  readTaskArgs(args: string[]): { selectors: string[]; names: string[] } {
+    const selectors: string[] = [];
+    const names: string[] = [];
+    let index = 0;
+    while (index < args.length && args[index] !== "--") {
+      const { flag, inline } = splitFlag(args[index]!);
+      const value = inline ?? args[index + 1] ?? "";
+      if (["--filter", "-F", "--scope"].includes(flag)) {
+        selectors.push(value);
+        if (inline === null) index++;
+      } else if (!args[index]?.startsWith("-")) {
+        names.push(args[index]!);
+      }
+      index++;
+    }
+    return { selectors, names };
+  }
+
+  /** Follow the tasks of a turbo or lerna call as the scripts of the packages it selects. */
+  taskRunner(args: string[], cwd: string): void {
+    const { selectors, names } = this.readTaskArgs(args);
+    if (names[0] === "run" || names[0] === "exec") {
+      if (names[0] === "run") names.shift();
+      else names.length = 0;
+    }
+    for (const name of names) {
+      // A task written `//#name` is a script of the root package.
+      if (name.startsWith("//#")) this.runScript("npm", name.slice(3), null, "");
+      else this.runScript("npm", name, selectors.length > 0 ? selectors : "all", cwd);
+    }
+  }
+
+  // --- make
+
+  /** The directory, makefiles, targets and `VAR=value` overrides of a make call. */
+  readMakeArgs(
+    args: string[],
+    cwd: string,
+  ): { dir: string; files: string[]; targets: string[]; sets: Record<string, string> } {
+    let dir = cwd;
+    const files: string[] = [];
+    const targets: string[] = [];
+    const sets: Record<string, string> = {};
+    let index = 0;
+    while (index < args.length) {
+      const arg = args[index]!;
+      const { flag, inline } = splitFlag(arg);
+      const hasValue = inline !== null;
+      const value = inline ?? args[index + 1] ?? "";
+      if (MAKE_VALUED_FLAGS.includes(arg) && index + 1 < args.length) {
+        // The value is the next word: the flag is handled below, and the pair is skipped together.
+        index++;
+      } else if (
+        MAKE_NUMBER_FLAGS.includes(arg) &&
+        index + 1 < args.length &&
+        MVER.test(args[index + 1]!)
+      ) {
+        index += 2;
+        continue;
+      } else if (
+        (arg.startsWith("-C") || arg.startsWith("-f")) &&
+        arg.length > 2 &&
+        !arg.startsWith("--")
+      ) {
+        // The value is joined to a short flag: `-Cdir`, `-fMakefile.ci`.
+        const letter = arg.slice(0, 2);
+        const joined = arg.slice(2);
+        if (letter === "-C") {
+          const joinedDir = this.tree.dir(dir, joined);
+          if (joinedDir !== null) dir = joinedDir;
+        } else if (letter === "-f") {
+          files.push(joined);
+        }
+        index++;
+        continue;
+      } else if (!hasValue && !arg.startsWith("-")) {
+        targets.push(arg);
+        index++;
+        continue;
+      }
+      if (flag === "-C" || flag === "--directory") {
+        const flagDir = this.tree.dir(dir, value);
+        if (flagDir !== null) dir = flagDir;
+      } else if (flag === "-f" || flag === "--file" || flag === "--makefile") {
+        files.push(value);
+      } else if (hasValue && !arg.startsWith("-")) {
+        sets[flag] = value;
+      }
+      index++;
+    }
+    return { dir, files, targets, sets };
+  }
+
+  /** Follow a make call: the targets it names, or the makefile's default goal. */
+  make(args: string[], cwd: string): void {
+    const { dir, files, targets, sets } = this.readMakeArgs(args, cwd);
+    let path: string | null = null;
+    for (const name of files.length > 0 ? files : MAKEFILE_NAMES) {
+      path = this.tree.file(dir, name);
+      if (path) break;
+    }
+    if (!path) return;
+    // One makefile is read once for each directory and set of overrides it is called with.
+    const key = `${path}|${dir}|${JSON.stringify(Object.entries(sets).sort())}`;
+    if (!this.makefiles.has(key)) this.makefiles.set(key, new Makefile(this.tree, path, dir, sets));
+    const makefile = this.makefiles.get(key)!;
+    for (const target of targets.length > 0 ? targets : makefile.goal ? [makefile.goal] : []) {
+      this.followMakeTarget(makefile, target, dir);
+    }
+  }
+
+  /** Follow a make target: its prerequisites first, then each line of its recipe. */
+  followMakeTarget(makefile: Makefile, target: string, dir: string): void {
+    const key = `make|${makefile.path}|${dir}|${target}`;
+    if (this.visited.has(key) || !makefile.rules.has(target)) return;
+    this.visited.add(key);
+    const rule = makefile.rules.get(target)!;
+    for (const prerequisite of rule.prereqs) this.followMakeTarget(makefile, prerequisite, dir);
+    for (const line of rule.recipe) {
+      this.readShell(`${makefile.path} ${target}`, makefile.recipe(line), dir);
+    }
+  }
+
+  // --- just
+
+  /** The justfile, working directory and recipe names of a just call. */
+  readJustArgs(args: string[]): {
+    justfile: string | null;
+    workingDir: string | null;
+    names: string[];
+  } {
+    let justfile: string | null = null;
+    let workingDir: string | null = null;
+    const names: string[] = [];
+    let index = 0;
+    while (index < args.length) {
+      const { flag, inline } = splitFlag(args[index]!);
+      let value = inline ?? "";
+      if (
+        flag === "-f" ||
+        flag === "--justfile" ||
+        flag === "-d" ||
+        flag === "--working-directory"
+      ) {
+        if (inline === null) {
+          value = args[index + 1] ?? "";
+          index++;
+        }
+        if (flag === "-f" || flag === "--justfile") justfile = value;
+        else workingDir = value;
+      } else if (flag === "--set") {
+        // `--set NAME VALUE`: the flag and its name are skipped together.
+        index += 2;
+        continue;
+      } else if (!args[index]?.startsWith("-")) {
+        names.push(args[index]!);
+      }
+      index++;
+    }
+    return { justfile, workingDir, names };
+  }
+
+  /** Follow a just call: the recipes it names, or the justfile's first recipe. */
+  just(args: string[], cwd: string): void {
+    const { justfile, workingDir, names } = this.readJustArgs(args);
+    const path = justfile ? this.tree.file(cwd, justfile) : this.tree.up(cwd, JUSTFILE_NAMES);
+    if (!path) return;
+    if (!this.justfiles.has(path)) this.justfiles.set(path, parseJust(this.tree.read(path) ?? ""));
+    const { recipes, first } = this.justfiles.get(path)!;
+    let dir = workingDir ? this.tree.dir(cwd, workingDir) : null;
+    if (dir === null) dir = posix.dirname(path);
+    const named = names.filter((name) => recipes.has(name));
+    for (const name of named.length > 0 ? named : first ? [first] : []) {
+      this.followRecipe(path, name, dir);
+    }
+  }
+
+  /** Follow a just recipe: its dependencies first, then each line of its body. */
+  followRecipe(path: string, name: string, dir: string): void {
+    const { recipes, vars } = this.justfiles.get(path)!;
+    const key = `just|${path}|${name}`;
+    if (this.visited.has(key) || !recipes.has(name)) return;
+    this.visited.add(key);
+    const { deps, body } = recipes.get(name)!;
+    for (const dep of deps) this.followRecipe(path, dep, dir);
+    for (let line of body) {
+      line = line.replace(MUSTACHE, (_, variable) => vars.get(variable) ?? `{{${variable}}}`);
+      this.readShell(`${path} ${name}`, line.replace(/^[@-]+/u, ""), dir);
+    }
+  }
+
+  // --- configuration and script files
+
+  /** Keep the configuration files of a hook runner that the branch has, and their lines. */
+  followRunnerConfigs(runner: string, cwd: string): void {
+    const found: Array<{ where: string; text: string }> = [];
+    for (const name of RUNNERS[runner] ?? []) {
+      const path = this.tree.up(cwd, [name]);
+      if (path) found.push({ where: path, text: configText(this.tree.read(path) ?? "", path) });
+    }
+    if (runner === "lint-staged") {
+      // lint-staged may also be configured under `lint-staged` in package.json.
+      const packagePath = this.tree.up(cwd, ["package.json"]);
+      if (packagePath) {
+        const config = this.packageJson(posix.dirname(packagePath))["lint-staged"];
+        if (config)
+          found.push({ where: `${packagePath} lint-staged`, text: JSON.stringify(config) });
+      }
+    }
+    for (const { where, text } of found) {
+      const key = `config|${where}`;
+      if (!this.visited.has(key)) {
+        this.visited.add(key);
+        this.configTexts.push({ where, text });
+        for (const line of text.split("\n")) {
+          const trimmed = line.trim();
+          if (trimmed) this.linesRead.push({ where, line: trimmed });
+        }
+      }
+    }
+  }
+
+  /** Read a script file the gate runs, as shell with its comments taken out. */
+  followFile(path: string, cwd: string): void {
+    const key = `file|${path}`;
+    if (this.visited.has(key)) return;
+    this.visited.add(key);
+    const text = this.tree.read(path);
+    if (text !== null) {
+      this.readShell(path, JS_SOURCE_FILE.test(path) ? stripJs(text) : text, cwd, true);
+    }
+  }
+
+  // --- questions put to what was reached
+
+  /** The place that runs `linter`, as a word of a command or of a configuration; null for none. */
+  runsLinter(linter: string): string | null {
+    for (const { where, words } of this.commandsReached) {
+      if (words.some((word) => !HAS_SPACE.test(word) && named(linter, word))) return where;
+    }
+    for (const { where, text } of this.configTexts) {
+      if (named(linter, text)) return where;
+    }
+    return null;
+  }
+}
+
+// --- linter detection -----------------------------------------------------------------------
+
+/** The file of the branch that shows it has `linter`: its own config, or a manifest naming it. */
+function hasLinter(tree: Tree, linter: string): string | null {
+  const ownConfig = new RegExp(`\\.?${escapeRegExp(linter)}(rc)?([._-].*)?$`, "iu");
+  for (const path of [...tree.blobs.keys()].sort()) {
+    if (ownConfig.test(posix.basename(path))) return path;
+  }
+  for (const path of [...tree.blobs.keys()].sort()) {
+    if (MANIFESTS.test(path) && named(linter, configText(tree.read(path) ?? "", path))) return path;
+  }
+  return null;
+}
+
+/**
+ * What the project's ledger last records of each proposal, from any run, by the proposal's key:
+ * filed as a ticket, declined, or asked. A later filing or decline replaces an earlier ask.
+ */
+function states(dispatch: string): Record<string, string> {
+  const ledgerPath = join(dirname(resolve(dispatch)), "ledger.jsonl");
+  const latest: Record<string, string> = {};
+  let rows: string[];
+  try {
+    // BASE opened the ledger with utf-8-sig: a byte-order mark is not part of the content.
+    rows = withoutBom(readFileSync(ledgerPath, "utf8")).split("\n");
+  } catch {
+    return latest;
+  }
+  for (const row of rows) {
+    let entry: Record<string, unknown>;
+    try {
+      entry = JSON.parse(row) as Record<string, unknown>;
+    } catch {
+      continue;
+    }
+    if (!entry || typeof entry !== "object") continue;
+    const action = entry.action;
+    const detail = String(entry.detail ?? "");
+    const runName = entry.run ?? "?";
+    if (action === "ticket-create" && detail.startsWith(PROPOSAL_FILED)) {
+      latest[detail.slice(PROPOSAL_FILED.length).trim()] =
+        `filed ${entry.target ?? "?"} in ${runName}`;
+    } else if (action === "note" && detail.startsWith(PROPOSAL_DECLINED)) {
+      latest[detail.slice(PROPOSAL_DECLINED.length).split(": ", 1)[0]?.trim()] =
+        `declined in ${runName}`;
+    } else if (action === "note" && detail.startsWith(PROPOSAL_ASKED)) {
+      const key = detail.slice(PROPOSAL_ASKED.length).trim();
+      if (!(latest[key] ?? "").startsWith("filed") && !(latest[key] ?? "").startsWith("declined")) {
+        latest[key] = `asked in ${runName}`;
+      }
+    }
+  }
+  return latest;
+}
+
+// --- sort lines -----------------------------------------------------------------------------
+
+/**
+ * A sort line taken apart: its id, the words before its colon, and its reason. Null when it is
+ * no line of the forms `FORMS` gives.
+ */
+export function shape(line: string): { id: string; head: string[]; reason: string } | null {
+  const match = ENTRY.exec(line);
+  if (!match) return null;
+  const id = match[1]!;
+  const head = pyWords(match[2] ?? "");
+  const reason = pyTrim(match[3] ?? "");
+  let wellFormed: boolean;
+  if (id[0] === "S") {
+    // S<n> linter <linter> enable|write <rule> [via <file>], S<n> docs <doc>, or S<n> neither.
+    const isLinter =
+      head[0] === "linter" &&
+      (head.length === 4 || (head.length === 6 && head[4] === "via")) &&
+      (head[2] === "enable" || head[2] === "write");
+    const isDocs = head.length === 2 && head[0] === "docs";
+    const isNeither = head.length === 1 && head[0] === "neither";
+    wellFormed = isLinter || isDocs || isNeither;
+  } else {
+    // N<n> new-linter <linter> S<n>[,S<m>...] [not-in-gate]
+    wellFormed = head.length >= 3 && head[0] === "new-linter";
+  }
+  return wellFormed ? { id, head, reason } : null;
+}
+
+/** What one sort line proposes. Proposals with one key are printed on one line. */
+interface Proposal {
+  id: string;
+  key: string;
+  via: string | null;
+  /** for a new linter: the findings it would enforce, and whether it is marked not-in-gate */
+  newInfo: [string[], boolean] | null;
+}
+
+/** A linter that a sort line names, to be checked against the gate and the branch. */
+type LinterCheck =
+  | { line: number; id: string; kind: "linter"; linter: string; via: string | null }
+  | { line: number; id: string; kind: "new"; linter: string; notInGate: boolean };
+
+/** What the lines of a sort file hold: its faults, and what is left to check and to print. */
+interface ParsedSort {
+  faults: string[];
+  /** a line was no sort line, so the forms are given after the faults */
+  badShape: boolean;
+  proposals: Proposal[];
+  checks: LinterCheck[];
+  /** the lines each finding is sorted on, and each new linter is proposed on */
+  sortedOn: Map<string, number[]>;
+  proposedOn: Map<string, number[]>;
+  /** the line and id of the first proposal of each new linter, by its lowercase name */
+  firstProposal: Map<string, [number, string]>;
+}
+
+/** Read every line of the sort; `ids` are the style findings of the run it must sort. */
+function parseSort(text: string, ids: string[]): ParsedSort {
+  const faults: string[] = [];
+  const proposals: Proposal[] = [];
+  const checks: LinterCheck[] = [];
+  const sortedOn = new Map<string, number[]>();
+  const proposedOn = new Map<string, number[]>();
+  const firstProposal = new Map<string, [number, string]>();
+  let badShape = false;
+
+  const sortLines = text.split("\n");
+  for (let index = 0; index < sortLines.length; index++) {
+    const lineNumber = index + 1;
+    const line = sortLines[index]!.trim();
+    if (!line || line.startsWith("#")) continue;
+    const parsed = shape(line);
+    if (!parsed) {
+      faults.push(`line ${lineNumber} is not a sort line: ${line}`);
+      badShape = true;
+      continue;
+    }
+    const { id, head, reason } = parsed;
+    if (!reason) faults.push(`line ${lineNumber}: ${id} has no reason`);
+    if (id[0] === "S") {
+      if (!sortedOn.has(id)) sortedOn.set(id, []);
+      sortedOn.get(id)?.push(lineNumber);
+      if (!ids.includes(id))
+        faults.push(`line ${lineNumber}: ${id} is not a style finding of this run`);
+      if (head[0] === "linter") {
+        const linter = plain(head[1]!);
+        const via = head.length === 6 ? plain(head[5]!) : null;
+        checks.push({ line: lineNumber, id, kind: "linter", linter, via });
+        proposals.push({
+          id,
+          key: `linter ${pyLower(linter)} ${head[2]} ${plain(head[3]!)}`,
+          via,
+          newInfo: null,
+        });
+      } else {
+        proposals.push({
+          id,
+          key: head[0] === "docs" ? `docs ${plain(head[1]!)}` : "neither",
+          via: null,
+          newInfo: null,
+        });
+      }
+      continue;
+    }
+    if (!proposedOn.has(id)) proposedOn.set(id, []);
+    proposedOn.get(id)?.push(lineNumber);
+    const rest = head.slice(2);
+    const notInGate = rest[rest.length - 1] === "not-in-gate";
+    const covers = (notInGate ? rest.slice(0, -1) : rest)
+      .join(" ")
+      .split(COVERSPLIT)
+      .filter(Boolean);
+    if (covers.length === 0) {
+      faults.push(`line ${lineNumber}: ${id} names no finding the linter would enforce`);
+    }
+    for (const covered of covers) {
+      if (!ids.includes(covered)) {
+        faults.push(
+          `line ${lineNumber}: ${id} names ${covered}, which is not a style finding of this run`,
+        );
+      }
+    }
+    const linter = plain(head[1]!);
+    const earlier = firstProposal.get(pyLower(linter));
+    if (earlier && (earlier[0] !== lineNumber || earlier[1] !== id)) {
+      faults.push(
+        `line ${lineNumber}: ${id} proposes ${linter} again, as ${earlier[1]} on line ${earlier[0]} does: propose it once, for every finding it would enforce`,
+      );
+    }
+    if (!earlier) firstProposal.set(pyLower(linter), [lineNumber, id]);
+    checks.push({ line: lineNumber, id, kind: "new", linter, notInGate });
+    proposals.push({
+      id,
+      key: `new-linter ${pyLower(linter)}`,
+      via: null,
+      newInfo: [covers, notInGate],
+    });
+  }
+  return { faults, badShape, proposals, checks, sortedOn, proposedOn, firstProposal };
+}
+
+/** The faults of a sort that no line can show: a finding left out, and a line sorted twice. */
+function coverageFaults(ids: string[], sort: ParsedSort): string[] {
+  const faults: string[] = [];
+  for (const id of ids) {
+    if (!sort.sortedOn.has(id)) faults.push(`${id} is not sorted`);
+  }
+  for (const [id, lines] of [...sort.sortedOn.entries(), ...sort.proposedOn.entries()]) {
+    if (lines.length > 1) faults.push(`${id} is sorted twice, on lines ${lines.join(", ")}`);
+  }
+  return faults;
+}
+
+/**
+ * The faults of the linters a sort names, checked against the waybill's repo and gate: that a
+ * linter the sort says the gate runs is one the gate reaches, and that a new linter is one the
+ * project does not have yet.
+ */
+function linterFaults(checks: LinterCheck[], dispatch: string, runName: string): string[] {
+  const faults: string[] = [];
+  const { repo, gate } = profile(dispatch);
+  if (!repo || !existsSync(repo)) {
+    for (const { line, id, linter } of checks) {
+      faults.push(
+        `line ${line}: ${id} names ${linter}, and the waybill's Project profile names no repo that exists to check it against`,
+      );
+    }
+    return faults;
+  }
+  const tree = new Tree(repo, runName);
+  const reach = gate ? new Reach(tree, gate) : null;
+  for (const warning of reach?.warnings ?? []) console.error(`style-findings: ${warning}`);
+  for (const check of checks) {
+    const { line, id, linter } = check;
+    if (check.kind === "linter" && check.via) {
+      const viaPath = tree.file("", check.via);
+      if (viaPath === null) {
+        faults.push(
+          `line ${line}: ${id} names ${linter} via ${check.via}, which the run's branch does not have`,
+        );
+      } else if (!named(linter, configText(tree.read(viaPath) ?? "", viaPath))) {
+        faults.push(
+          `line ${line}: ${id} names ${linter} via ${check.via}, which does not name ${linter}`,
+        );
+      }
+    } else if (check.kind === "linter" && reach === null) {
+      faults.push(
+        `line ${line}: ${id} names ${linter}, and the waybill's Project profile has no gate to check it against`,
+      );
+    } else if (check.kind === "linter" && !reach?.runsLinter(linter)) {
+      faults.push(
+        `line ${line}: ${id} names ${linter}, which \`gate\` does not show the gate running: if the gate runs it some way \`gate\` does not follow, add via and the file that runs it after the rule; if it does not, sort the finding docs or neither, and propose ${linter} on a new-linter line`,
+      );
+    } else if (check.kind === "new") {
+      const runBy = reach?.runsLinter(linter) ?? null;
+      const ownedBy = hasLinter(tree, linter);
+      if (runBy) {
+        faults.push(
+          `line ${line}: ${id} proposes ${linter}, which the gate already runs (${runBy}): sort its findings as linter lines`,
+        );
+      } else if (ownedBy && !check.notInGate) {
+        faults.push(
+          `line ${line}: ${id} proposes ${linter}, which the project already has (${ownedBy}): if the gate runs it, sort its findings as linter lines, with via if \`gate\` does not show it; if the gate does not, add not-in-gate after the findings`,
+        );
+      }
+    }
+  }
+  return faults;
+}
+
+/** A group of proposals that print as one line: findings that share a rule, a doc or a linter. */
+interface ProposalGroup {
+  ids: string[];
+  via: string[];
+  newInfo: [string[], boolean] | null;
+}
+
+/** Print what a sort proposes, one line to a group, and then the counts of what it sorted. */
+function printProposals(
+  proposals: Proposal[],
+  findingCount: number,
+  newLinterCount: number,
+  dispatch: string,
+): void {
+  const groups = new Map<string, ProposalGroup>();
+  const ledgerStates = states(dispatch);
+  for (const { id, key, via, newInfo } of proposals) {
+    if (!groups.has(key)) groups.set(key, { ids: [], via: [], newInfo });
+    const group = groups.get(key)!;
+    group.ids.push(id);
+    if (via && !group.via.includes(via)) group.via.push(via);
+    if (newInfo && !group.newInfo) group.newInfo = newInfo;
+  }
+  const kindRank = (key: string): number => GROUP_RANK[key.split(" ")[0]!] ?? 9;
+  const sortedKeys = [...groups.keys()].sort((a, b) => kindRank(a) - kindRank(b));
+  for (const key of sortedKeys) {
+    const group = groups.get(key)!;
+    const notes: string[] = [];
+    if (group.newInfo) notes.push(`for ${group.newInfo[0].join(" ")}`);
+    notes.push(...group.via.map((via) => `via ${via}`));
+    if (group.newInfo?.[1]) notes.push("not in the gate");
+    if (key !== "neither" && key in ledgerStates) notes.push(ledgerStates[key]!);
+    console.log(
+      `${group.ids.join(" ")}: ${key}${notes.length > 0 ? ` [${notes.join("; ")}]` : ""}`,
+    );
+  }
+  const kinds = proposals
+    .filter((proposal) => proposal.id[0] === "S")
+    .map((proposal) => proposal.key.split(" ")[0]!);
+  const countOf = (kind: string): number => kinds.filter((k) => k === kind).length;
+  console.log(
+    `sorted ${plural(findingCount, "style finding", "style findings")}: ${countOf("linter")} to a linter, ${countOf("docs")} to the docs, ${countOf("neither")} to neither; ${plural(newLinterCount, "new linter", "new linters")} proposed`,
+  );
+}
+
+// --- commands -------------------------------------------------------------------------------
+
+/** `forms`: for each line of a file, whether it is a sort line. For the tests, not the CLI. */
+function printForms(path: string): number {
+  for (const line of read(path, "file").split("\n")) {
+    const trimmed = line.trim();
+    if (trimmed) console.log((shape(trimmed) ? "ok  " : "bad ") + trimmed);
+  }
+  return 0;
+}
+
+/** `list` and `count`: the style findings of the run, or how many there are. */
+function printFindings(cmd: "list" | "count", dispatch: string): number {
+  const { style, faults } = findings(dispatch);
+  if (faults.length > 0) {
+    console.log(faults.join("\n"));
+    return 2;
+  }
+  if (cmd === "count") console.log(String(style.length));
+  for (const finding of cmd === "list" ? style : []) {
+    console.log([finding.id, finding.target, finding.rest].filter(Boolean).join(" "));
+  }
+  return 0;
+}
+
+/** `gate`: every line the gate reads, up to SHOWN from each place, as the run's branch has it. */
+function printGate(dispatch: string, runName: string): number {
+  const { repo, gate } = profile(dispatch);
+  if (!gate || !repo || !existsSync(repo)) {
+    console.log(
+      !gate
+        ? "the waybill's Project profile names no gate"
+        : `the waybill's Project profile names no repo that exists${repo ? `: ${repo}` : ""}`,
+    );
+    return 2;
+  }
+  const reach = new Reach(new Tree(repo, runName), gate);
+  for (const warning of reach.warnings) console.error(`style-findings: ${warning}`);
+  const linesPerPlace = new Map<string, number>();
+  for (const { where, line } of reach.linesRead) {
+    const count = (linesPerPlace.get(where) ?? 0) + 1;
+    linesPerPlace.set(where, count);
+    if (count <= SHOWN) {
+      const shown = line.length <= SHOWN_WIDTH ? line : `${line.slice(0, SHOWN_WIDTH - 3)}...`;
+      console.log(`${where}: ${shown}`);
+    }
+  }
+  for (const [where, count] of linesPerPlace) {
+    if (count > SHOWN) console.log(`${where}: ${count - SHOWN} more lines, read and not shown`);
+  }
+  return 0;
+}
+
+/** `check`: whether the run's style-sort.md sorts every style finding, and each line is right. */
+function checkSort(dispatch: string, runName: string): number {
+  const sortPath = join(dispatch, "style-sort.md");
+  const { style, faults } = findings(dispatch);
+  const ids = style.map((finding) => finding.id);
+  if (!existsSync(sortPath)) {
+    if (faults.length > 0 || style.length > 0) {
+      const unsorted = plural(style.length, "style finding", "style findings");
+      console.log(
+        [...faults, `no style-sort.md in ${dispatch}, and ${unsorted} to sort`].join("\n"),
+      );
+      return 2;
+    }
+    console.log("no style findings, so nothing to sort");
+    return 0;
+  }
+
+  const sort = parseSort(read(sortPath, "sort"), ids);
+  faults.push(...sort.faults);
+  faults.push(...coverageFaults(ids, sort));
+  if (sort.checks.length > 0) faults.push(...linterFaults(sort.checks, dispatch, runName));
+
+  if (faults.length > 0) {
+    console.log([...faults, ...(sort.badShape ? [FORMS] : [])].join("\n"));
+    return 2;
+  }
+  // Print proposals
+  printProposals(sort.proposals, ids.length, sort.firstProposal.size, dispatch);
+  return 0;
+}
+
+export function core(cmd: string, dispatch: string): number {
+  const runName = basename(resolve(dispatch));
+  if (cmd === "forms") return printForms(dispatch);
+  if (cmd === "list" || cmd === "count") return printFindings(cmd, dispatch);
+  if (cmd === "gate") return printGate(dispatch, runName);
+  return checkSort(dispatch, runName);
+}
+
+// --- entry ----------------------------------------------------------------------------------
+
+const argv = process.argv.slice(2);
+const sub = argv[0];
+if (import.meta.main) {
+  if (!SUBCOMMANDS.includes(sub ?? "") || argv.length !== 2) {
+    console.error(USAGE);
+    process.exit(1);
+  }
+  const dispatch = argv[1]!;
+  if (!existsSync(dispatch)) {
+    console.error(`style-findings: no dispatch directory at ${dispatch}`);
+    process.exit(1);
+  }
+  process.exit(core(sub!, dispatch));
+}

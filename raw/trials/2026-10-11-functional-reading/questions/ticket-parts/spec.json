@@ -1,0 +1,941 @@
+{
+  "q01": {
+    "type": "trace",
+    "call": "countSentences(text) in the module",
+    "run": "countSentences",
+    "text": "Ask the devs. Then see E.g. Apples, i.e. Pears (approx. 2.5 kg)! Read `a. B` at https://example.com/x.html. Done?`x`Yes. ",
+    "extract": {
+      "of": "value"
+    }
+  },
+  "q02": {
+    "type": "state",
+    "call": "analyze(text, false) in the module; text is the input joined with LF",
+    "run": "analyze",
+    "lines": [
+      "Run reach.sh first.",
+      "```",
+      "Use scripts/x.sh in a block.",
+      "```",
+      "Then run --force twice.",
+      "  ```text",
+      "Example --verbose and a_b.",
+      "",
+      "## Acceptance criteria",
+      "- Run reach.md after.",
+      "## For the agents",
+      "### Checks",
+      "- **C1** Run it.",
+      "### Technical notes",
+      "- A note. (C1)",
+      "### Verified at 0123abc"
+    ],
+    "final": false,
+    "extract": {
+      "of": "findings",
+      "map": "line:kind"
+    }
+  },
+  "q03": {
+    "type": "trace",
+    "call": "analyze(text, false) in the module; text is the input joined with LF",
+    "run": "analyze",
+    "lines": [
+      "`scripts/run.ts`, then see line 12 and Line 4, not online 5 or line7, use --force#L5 or a--b.",
+      "An empty `` span, `y` and run().",
+      "A wide `x   y` span, then more.",
+      "## Acceptance criteria",
+      "1. It works.",
+      "## For the agents",
+      "### Checks",
+      "- **C1** Run it.",
+      "### Technical notes",
+      "- A note. (C1)",
+      "### Verified at 0123abc"
+    ],
+    "final": false,
+    "extract": {
+      "of": "findings",
+      "map": "kind: text"
+    }
+  },
+  "q04": {
+    "type": "change",
+    "call": "analyze(text, false) in the module; text is the input joined with LF",
+    "run": "analyze",
+    "lines": [
+      "## Acceptance criteria",
+      "1. It reads the file.",
+      "2. It prints the findings.",
+      "3. It prints the notes.",
+      "4. A fixture run is dispatched from this branch.",
+      "## For the agents",
+      "### Checks",
+      "- **C1** Run it.",
+      "- **C2** Run it.",
+      "- **C3** Run it.",
+      "- **C4** Run it.",
+      "### Technical notes",
+      "- A note. (C1, C2, C3, C4)",
+      "### Verified at 0123abc"
+    ],
+    "final": false,
+    "change": {
+      "constant": "MAX_CRITERIA",
+      "value": 2,
+      "literal": "2"
+    },
+    "extract": {
+      "of": "notes",
+      "prefix": "more",
+      "as": "list"
+    }
+  },
+  "q05": {
+    "type": "state",
+    "call": "the array of the answers of 3 runs, in order",
+    "run": "tuple",
+    "parts": [
+      {
+        "call": "file t.md holds the input; the module run as a command: ticket-parts --final t.md --final",
+        "run": "cli",
+        "file": "t.md",
+        "lines": [
+          "DRAFT: waiting for the user to sign it off.",
+          "## Acceptance criteria",
+          "1. It works.",
+          "## For the agents",
+          "### Checks",
+          "- **C1** Run it.",
+          "### Technical notes",
+          "- A note. (C1)",
+          "### Verified at 0123abc"
+        ],
+        "args": [
+          "--final",
+          "t.md",
+          "--final"
+        ],
+        "extract": {
+          "of": "status"
+        }
+      },
+      {
+        "call": "file t.md holds the input; the module run as a command: ticket-parts --final t.md --final",
+        "run": "cli",
+        "file": "t.md",
+        "lines": [
+          "DRAFT: waiting for the user to sign it off.",
+          "## Acceptance criteria",
+          "1. It works.",
+          "## For the agents",
+          "### Checks",
+          "- **C1** Run it.",
+          "### Technical notes",
+          "- A note. (C1)",
+          "### Verified at 0123abc"
+        ],
+        "args": [
+          "--final",
+          "t.md",
+          "--final"
+        ],
+        "extract": {
+          "of": "stdout",
+          "as": "count"
+        }
+      },
+      {
+        "call": "file t.md holds the input; the module run as a command: ticket-parts --final t.md --final",
+        "run": "cli",
+        "file": "t.md",
+        "lines": [
+          "DRAFT: waiting for the user to sign it off.",
+          "## Acceptance criteria",
+          "1. It works.",
+          "## For the agents",
+          "### Checks",
+          "- **C1** Run it.",
+          "### Technical notes",
+          "- A note. (C1)",
+          "### Verified at 0123abc"
+        ],
+        "args": [
+          "--final",
+          "t.md",
+          "--final"
+        ],
+        "extract": {
+          "of": "stdout",
+          "as": "first"
+        }
+      }
+    ]
+  },
+  "q06": {
+    "type": "trace",
+    "call": "analyze(text, true) in the module; text is the input joined with LF",
+    "run": "analyze",
+    "lines": [
+      "DRAFT: this ticket is not signed off yet, so nobody should build from it as it is.",
+      "## Problem",
+      "`0123456789abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz` is a long span.",
+      "See https://github.com/o/r/blob/main/0123456789012345678901234567890123456789012345678901234567890123456789 now.",
+      "Open scripts/01234567890123456789012345678901234567890123456789012345678901234567890123456789 now.",
+      "Edit abcdefghijabcdefghijabcdefghijabcdefghijabcdefghijklmnopq.ts now.",
+      "See https://github.com/o/r/pull/12#L4 and https://raw.githubusercontent.com/o/r/m/x, too.",
+      "Also https://github.com/o/r/tree/main/x and https://github.com/o/r/commit/abc1234 and https://github.com/o/r/issues/5.",
+      "## Acceptance criteria",
+      "1. It works.",
+      "## For the agents",
+      "### Checks",
+      "- **C1** Run it.",
+      "### Technical notes",
+      "- A note. (C1)",
+      "### Verified at 0123abc"
+    ],
+    "final": true,
+    "extract": {
+      "of": "findings",
+      "map": "line:kind:len:last3"
+    }
+  },
+  "q07": {
+    "type": "control-trivial",
+    "call": "the module's exported MAX_DECISION_WORDS",
+    "run": "export",
+    "name": "MAX_DECISION_WORDS"
+  },
+  "q08": {
+    "type": "state",
+    "call": "the array of the answers of 3 runs, in order",
+    "run": "tuple",
+    "parts": [
+      {
+        "call": "file t.md holds the input; the module run as a command: ticket-parts t.md",
+        "run": "cli",
+        "file": "t.md",
+        "lines": [
+          "",
+          "   ",
+          "DRAFT: not signed off yet, so do not build from it.",
+          "# Title of the ticket",
+          "#hashtag counts as words",
+          "Mentions issue # 12 here.",
+          "Some\ttabbed words\there.",
+          "```",
+          "ignored words inside a fence",
+          "```",
+          "",
+          "## Acceptance criteria",
+          "1. It works well.",
+          "",
+          "## Decisions",
+          "- **D1 (proposed)** First choice.",
+          "## For the agents",
+          "### Checks",
+          "- **C1** Run it. (D1)",
+          "### Technical notes",
+          "- A note. (C1)",
+          "### Verified at 0123abc"
+        ],
+        "args": [
+          "t.md"
+        ],
+        "extract": {
+          "of": "status"
+        }
+      },
+      {
+        "call": "file t.md holds the input; the module run as a command: ticket-parts t.md",
+        "run": "cli",
+        "file": "t.md",
+        "lines": [
+          "",
+          "   ",
+          "DRAFT: not signed off yet, so do not build from it.",
+          "# Title of the ticket",
+          "#hashtag counts as words",
+          "Mentions issue # 12 here.",
+          "Some\ttabbed words\there.",
+          "```",
+          "ignored words inside a fence",
+          "```",
+          "",
+          "## Acceptance criteria",
+          "1. It works well.",
+          "",
+          "## Decisions",
+          "- **D1 (proposed)** First choice.",
+          "## For the agents",
+          "### Checks",
+          "- **C1** Run it. (D1)",
+          "### Technical notes",
+          "- A note. (C1)",
+          "### Verified at 0123abc"
+        ],
+        "args": [
+          "t.md"
+        ],
+        "extract": {
+          "of": "stdout",
+          "as": "first"
+        }
+      },
+      {
+        "call": "file t.md holds the input; the module run as a command: ticket-parts t.md",
+        "run": "cli",
+        "file": "t.md",
+        "lines": [
+          "",
+          "   ",
+          "DRAFT: not signed off yet, so do not build from it.",
+          "# Title of the ticket",
+          "#hashtag counts as words",
+          "Mentions issue # 12 here.",
+          "Some\ttabbed words\there.",
+          "```",
+          "ignored words inside a fence",
+          "```",
+          "",
+          "## Acceptance criteria",
+          "1. It works well.",
+          "",
+          "## Decisions",
+          "- **D1 (proposed)** First choice.",
+          "## For the agents",
+          "### Checks",
+          "- **C1** Run it. (D1)",
+          "### Technical notes",
+          "- A note. (C1)",
+          "### Verified at 0123abc"
+        ],
+        "args": [
+          "t.md"
+        ],
+        "extract": {
+          "of": "stdout",
+          "capture": "^plain part: ([0-9]+) words$",
+          "int": true,
+          "as": "first"
+        }
+      }
+    ]
+  },
+  "q09": {
+    "type": "trace",
+    "call": "analyze(text, false) in the module; text is the input joined with LF",
+    "run": "analyze",
+    "lines": [
+      "Names: Node.js, README.MD, App.jsx, v1.5, a.b.c.ts, dir/foo.ts, reach_me.ts.",
+      "Calls: run(), 1x(), x.y(), f (), run_all().",
+      "Idents: snake_case, snake_case_, _private_name, a__b, MAX_SAFE, x_1.",
+      "Paths: ./lib/z, my-docs/y, a/tmp/b, lib/ok, ~/n, (src/q), Scripts/x, lib/--dry-run.",
+      "## Acceptance criteria",
+      "1. It works.",
+      "## For the agents",
+      "### Checks",
+      "- **C1** Run it.",
+      "### Technical notes",
+      "- A note. (C1)",
+      "### Verified at 0123abc"
+    ],
+    "final": false,
+    "extract": {
+      "of": "findings",
+      "map": "text"
+    }
+  },
+  "q10": {
+    "type": "change",
+    "call": "analyze(text, false) in the module; text is the input joined with LF",
+    "run": "analyze",
+    "lines": [
+      "## Acceptance criteria",
+      "1. It prints one line per finding.",
+      "2. It prints the notes after the findings.",
+      "3. It exits with status one.",
+      "4. It reads the file",
+      "   from the arguments.",
+      "5. It refuses a file that has no heading.",
+      "## For the agents",
+      "### Checks",
+      "- **C1** Run it.",
+      "- **C2** Run it.",
+      "- **C3** Run it.",
+      "- **C4** Run it.",
+      "- **C5** Run it.",
+      "### Technical notes",
+      "- A note. (C1, C2, C3, C4, C5)",
+      "### Verified at 0123abc"
+    ],
+    "final": false,
+    "change": {
+      "constant": "MAX_CRITERION_WORDS",
+      "value": 6,
+      "literal": "6"
+    },
+    "extract": {
+      "of": "notes",
+      "capture": "^(criterion [0-9]+ \\(line [0-9]+\\): [0-9]+ words, [0-9]+ sentences): may be more than one idea$",
+      "as": "list"
+    }
+  },
+  "q11": {
+    "type": "state",
+    "call": "analyze(text, false) in the module; text is the input joined with LF",
+    "run": "analyze",
+    "lines": [
+      "## Acceptance criteria",
+      "1. One.",
+      "2. Two.",
+      "## Decisions",
+      "- **D1 (proposed)** First.",
+      "- **D2 (proposed)** Second.",
+      "- **D1 (given by the user)** First again.",
+      "```",
+      "- **D3 (proposed)** In a fence.",
+      "```",
+      "## Out of scope",
+      "1. Nothing else.",
+      "## For the agents",
+      "### Checks",
+      "- **C2** Two. (D3)",
+      "- **C1** One. (D2)",
+      "### Technical notes",
+      "- A note. (C1, C2)",
+      "### Verified at 0123abc"
+    ],
+    "final": false,
+    "extract": {
+      "of": "findings",
+      "kind": [
+        "decision",
+        "check"
+      ],
+      "map": "kind: text"
+    }
+  },
+  "q12": {
+    "type": "trace",
+    "call": "the array of the answers of 3 runs, in order",
+    "run": "tuple",
+    "parts": [
+      {
+        "call": "file t.md holds the input; the module run as a command: ticket-parts t.md",
+        "run": "cli",
+        "file": "t.md",
+        "lines": [
+          "##For the agents",
+          "### For the agents",
+          "## For the agents:",
+          "## For the  agents",
+          " ## For the agents",
+          "Some words here.",
+          "",
+          "## Acceptance criteria",
+          "1. It works.",
+          "",
+          "### Checks",
+          "- **C1** Run it."
+        ],
+        "args": [
+          "t.md"
+        ],
+        "extract": {
+          "of": "status"
+        }
+      },
+      {
+        "call": "file t.md holds the input; the module run as a command: ticket-parts t.md",
+        "run": "cli",
+        "file": "t.md",
+        "lines": [
+          "##For the agents",
+          "### For the agents",
+          "## For the agents:",
+          "## For the  agents",
+          " ## For the agents",
+          "Some words here.",
+          "",
+          "## Acceptance criteria",
+          "1. It works.",
+          "",
+          "### Checks",
+          "- **C1** Run it."
+        ],
+        "args": [
+          "t.md"
+        ],
+        "extract": {
+          "of": "stdout",
+          "as": "count"
+        }
+      },
+      {
+        "call": "file t.md holds the input; the module run as a command: ticket-parts t.md",
+        "run": "cli",
+        "file": "t.md",
+        "lines": [
+          "##For the agents",
+          "### For the agents",
+          "## For the agents:",
+          "## For the  agents",
+          " ## For the agents",
+          "Some words here.",
+          "",
+          "## Acceptance criteria",
+          "1. It works.",
+          "",
+          "### Checks",
+          "- **C1** Run it."
+        ],
+        "args": [
+          "t.md"
+        ],
+        "extract": {
+          "of": "stderr",
+          "as": "count"
+        }
+      }
+    ]
+  },
+  "q13": {
+    "type": "trace",
+    "call": "analyze(text, false) in the module; text is the input joined with LF",
+    "run": "analyze",
+    "lines": [
+      "## Acceptance criteria",
+      "1. It works.",
+      "## Decisions",
+      "- **D1 (proposed):** First.",
+      "- **D2 (given by the user)**  Second.",
+      "- **D3 (Proposed)** Third.",
+      "- **D4(proposed)** Fourth.",
+      "* **D5** Fifth.",
+      "-**D6** Sixth, with no space after the dash.",
+      "Compare - **D7** with the other route.",
+      "## For the agents",
+      "### Checks",
+      "- **C1** Run it. (D1, D2, D3, D4, D5)",
+      "### Technical notes",
+      "- A note. (C1)",
+      "### Verified at 0123abc"
+    ],
+    "final": false,
+    "extract": {
+      "of": "findings",
+      "kind": "mark",
+      "map": "text",
+      "capture": "has the mark (.*?); use"
+    }
+  },
+  "q14": {
+    "type": "state",
+    "call": "analyze(text, false) in the module; text is the input joined with LF",
+    "run": "analyze",
+    "lines": [
+      "Refer to ## Acceptance criteria",
+      "##Acceptance criteria",
+      "## Acceptance criteria (draft)",
+      "## Acceptance criteria",
+      "1. One.",
+      "2. Two.",
+      "3. Three.",
+      "## Out of scope",
+      "1. Nothing else.",
+      "## FOR THE AGENTS  ",
+      "### Checks",
+      "- **C1** One.",
+      "```",
+      "- **C2** inside a fence",
+      "```",
+      "- **C2** Two.",
+      "- **C2** Two again.",
+      "- **C3** Three.",
+      "  - **C9** an indented sub-item.",
+      "### Technical notes",
+      "- A note. (C1, C2, C3)",
+      "### Verified at 0123abc"
+    ],
+    "final": false,
+    "extract": {
+      "tuple": [
+        {
+          "of": "findings",
+          "kind": "check",
+          "map": "formatted"
+        },
+        {
+          "of": "notes",
+          "prefix": "criteria ",
+          "as": "first"
+        }
+      ]
+    }
+  },
+  "q15": {
+    "type": "change",
+    "call": "analyze(text, false) in the module; text is the input joined with LF",
+    "run": "analyze",
+    "lines": [
+      "## Problem",
+      "Use `merge_authority` for it.",
+      "Or use ~other_one~ for it.",
+      "## Acceptance criteria",
+      "1. It works.",
+      "## For the agents",
+      "### Checks",
+      "- **C1** Run it.",
+      "- **C0** Zero.",
+      "- An item with no label.",
+      "### Technical notes",
+      "- A note about `(C9)` in code. (C1)",
+      "- A note about ~(C8)~ in tildes. (C1)",
+      "### Verified at 0123abc"
+    ],
+    "final": false,
+    "change": {
+      "constant": "TICK",
+      "value": "~",
+      "literal": "\"~\""
+    },
+    "extract": {
+      "of": "findings",
+      "map": "line:kind"
+    }
+  },
+  "q16": {
+    "type": "trace",
+    "call": "analyze(text, false) in the module; text is the input joined with LF",
+    "run": "analyze",
+    "lines": [
+      "## For the agents",
+      "### Checks",
+      "- **C1** Run it.",
+      "#### Technical notes",
+      "- A note. (C1)",
+      "## Other",
+      "### Verified at 0123abc (main)"
+    ],
+    "final": false,
+    "extract": {
+      "of": "findings",
+      "map": "line:kind"
+    }
+  },
+  "q17": {
+    "type": "state",
+    "call": "analyze(text, false) in the module; text is the input joined with LF",
+    "run": "analyze",
+    "lines": [
+      "## Acceptance criteria",
+      "1. The tool prints the findings first, one on each line,",
+      "*Both* are printed in order, so that a person can read them",
+      "2.5 seconds is the usual time for it, and then the notes follow on the next line.",
+      "   - a detail line with a few more words in it, as in step 7. which is long",
+      "   and one more line, as long as the ## Decisions part below, to make it longer still.",
+      "2. The tool prints each finding on its own line, then prints the notes after them, and finally exits with a status that tells a person whether the ticket is fit.",
+      "3. The tool reads the file named in section 4. of the guide, prints each finding on its own line, then exits with a status that tells a person if it fits.",
+      "5. Two short. One short.",
+      "- Alpha. Beta. Gamma.",
+      "6. Three short. Two short. One short",
+      "## For the agents",
+      "### Checks",
+      "- **C1** Run it.",
+      "- **C2** Run it.",
+      "- **C3** Run it.",
+      "- **C4** Run it.",
+      "- **C5** Run it.",
+      "### Technical notes",
+      "- A note. (C1, C2, C3, C4, C5)",
+      "### Verified at 0123abc"
+    ],
+    "final": false,
+    "extract": {
+      "of": "notes",
+      "capture": "^(criterion [^ ]+|more than five criteria: [0-9]+)",
+      "as": "list"
+    }
+  },
+  "q18": {
+    "type": "trace",
+    "call": "analyze(text, false) in the module; text is the input joined with LF",
+    "run": "analyze",
+    "lines": [
+      "## Acceptance criteria",
+      "1. One.",
+      "2. Two.",
+      "3. Three.",
+      "## For the agents",
+      "### Run the checks",
+      "- **C1** One.",
+      "### Checks (draft)",
+      "- **C3** Three.",
+      "### Checks",
+      "2. **C2** Two.",
+      "### Technical notes",
+      "- A note. (C1, C2, C3)",
+      "### Verified at 0123abc"
+    ],
+    "final": false,
+    "extract": {
+      "of": "findings",
+      "kind": "check",
+      "map": "formatted"
+    }
+  },
+  "q19": {
+    "type": "change",
+    "call": "analyze(text, false) in the module; text is the input joined with LF",
+    "run": "analyze",
+    "lines": [
+      "## Acceptance criteria",
+      "1. It lists E.g. Apples, i.e. Pears, etc. Then ask the devs. Then it stops.",
+      "2. See https://example.com/a.b for more. Done.",
+      "3. Is it done? Yes (really).",
+      "4. It reads `a. B` only",
+      "5. It takes 2.5 s. Then it stops",
+      "## For the agents",
+      "### Checks",
+      "- **C1** Run it.",
+      "- **C2** Run it.",
+      "- **C3** Run it.",
+      "- **C4** Run it.",
+      "- **C5** Run it.",
+      "### Technical notes",
+      "- A note. (C1, C2, C3, C4, C5)",
+      "### Verified at 0123abc"
+    ],
+    "final": false,
+    "change": {
+      "constant": "MAX_CRITERION_SENTENCES",
+      "value": 1,
+      "literal": "1"
+    },
+    "extract": {
+      "of": "notes",
+      "capture": "^(criterion [^ ]+|more than five criteria: [0-9]+)",
+      "as": "list"
+    }
+  },
+  "q20": {
+    "type": "state",
+    "call": "analyze(text, false) in the module; text is the input joined with LF",
+    "run": "analyze",
+    "lines": [
+      "## Acceptance criteria",
+      "1. One.",
+      "## Decisions",
+      "- **D1 (proposed)** First.",
+      "- **D2 (proposed)** Second.",
+      "## For the agents",
+      "### Checks",
+      "- **C1** One.",
+      "- **C3** Three.",
+      "- **C2** Two.",
+      "### Technical notes",
+      "- First note has (c1), (C) and (D 2) but no tag.",
+      "- Second note `` then (C1) and `x`.",
+      "- Third note, written like `(C1)` in code.",
+      "- Fourth note, over two lines",
+      "*and* cited on the second - at last. (D1)",
+      "- Fifth note, with `x`(C1)`y` between spans",
+      "(D2) on a line of its own at column zero.",
+      "* Sixth note cites (D7) and (C0).",
+      "- Seventh note ` (C1) with a lone tick.",
+      "- Eighth note:",
+      "```",
+      "(C1)",
+      "```",
+      "### Verified at 0123abc"
+    ],
+    "final": false,
+    "extract": {
+      "tuple": [
+        {
+          "of": "findings",
+          "map": "line:kind"
+        },
+        {
+          "of": "notes",
+          "prefix": "criteria ",
+          "as": "first"
+        }
+      ]
+    }
+  },
+  "q21": {
+    "type": "trace",
+    "call": "the array of the answers of 2 runs, in order",
+    "run": "tuple",
+    "parts": [
+      {
+        "call": "file t.md holds the input; the module run as a command: ticket-parts t.md --final",
+        "run": "cli",
+        "file": "t.md",
+        "text": "\ufeff DRAFT: not signed off.\r\n## Acceptance criteria\r\n1. It works.\r\n## For the agents\r\n### Checks\r\n- **C1** Run it.\r\n### Technical notes\r\n- A note. (C1)\r\n### Verified at 0123abc",
+        "args": [
+          "t.md",
+          "--final"
+        ],
+        "extract": {
+          "of": "status"
+        }
+      },
+      {
+        "call": "file t.md holds the input; the module run as a command: ticket-parts t.md --final",
+        "run": "cli",
+        "file": "t.md",
+        "text": "\ufeff DRAFT: not signed off.\r\n## Acceptance criteria\r\n1. It works.\r\n## For the agents\r\n### Checks\r\n- **C1** Run it.\r\n### Technical notes\r\n- A note. (C1)\r\n### Verified at 0123abc",
+        "args": [
+          "t.md",
+          "--final"
+        ],
+        "extract": {
+          "of": "stdout",
+          "as": "count"
+        }
+      }
+    ]
+  },
+  "q22": {
+    "type": "state",
+    "call": "analyze(text, false) in the module; text is the input joined with LF",
+    "run": "analyze",
+    "lines": [
+      "- **D1** Use merge_authority from scripts/x.",
+      "- **D1 (proposed)** Again.",
+      "## For the agents",
+      "### Checks",
+      "- **C1** Run it.",
+      "### Technical notes",
+      "- A note. (C1)",
+      "### Verified at 0123abc"
+    ],
+    "final": false,
+    "extract": {
+      "tuple": [
+        {
+          "of": "findings",
+          "line": 1,
+          "map": "kind"
+        },
+        {
+          "of": "notes",
+          "prefix": "criteria ",
+          "as": "first"
+        }
+      ]
+    }
+  },
+  "q23": {
+    "type": "control-undetermined",
+    "call": "a fixed answer: the module and glossary do not determine it",
+    "run": "fixed",
+    "value": "undetermined"
+  },
+  "q24": {
+    "type": "change",
+    "call": "analyze(text, false) in the module; text is the input joined with LF",
+    "run": "analyze",
+    "lines": [
+      "## Acceptance criteria",
+      "1. It works.",
+      "## Decisions",
+      "- **D1 (proposed)** Use the route. Why: it is easy.",
+      "- **D2 (given by the user)** Use the route 2. Why: it is simple.",
+      "- **D3 (proposed)** Keep it short.",
+      "",
+      "  and then add more words here.",
+      "- **D4 (proposed)** Keep it.",
+      "## For the agents",
+      "### Checks",
+      "- **C1** Run it. (D1, D2, D3, D4)",
+      "### Technical notes",
+      "- A note. (C1)",
+      "### Verified at 0123abc"
+    ],
+    "final": false,
+    "change": {
+      "constant": "MAX_DECISION_WORDS",
+      "value": 7,
+      "literal": "7"
+    },
+    "extract": {
+      "of": "notes",
+      "capture": "^(decision D[0-9]+ \\(line [0-9]+\\): [0-9]+ words): may be more than one idea$",
+      "as": "list"
+    }
+  },
+  "q25": {
+    "type": "trace",
+    "call": "analyze(text, false) in the module; text is the input joined with LF",
+    "run": "analyze",
+    "lines": [
+      "## Acceptance criteria",
+      "1. It reads the file.",
+      "2. It prints the findings.",
+      "3. It prints the notes.",
+      "4. It exits with a status.",
+      "5. It refuses a file with no heading.",
+      "6. It sets nothing on the disk.",
+      "7. A Fixture Run of this change's branch",
+      "   scores cleanly against the fixture.",
+      "## For the agents",
+      "### Checks",
+      "- **C1** Run it.",
+      "- **C2** Run it.",
+      "- **C3** Run it.",
+      "- **C4** Run it.",
+      "- **C5** Run it.",
+      "- **C6** Run it.",
+      "- **C7** Run it.",
+      "### Technical notes",
+      "- A note. (C1, C2, C3, C4, C5, C6, C7)",
+      "### Verified at 0123abc"
+    ],
+    "final": false,
+    "extract": {
+      "of": "notes",
+      "prefix": "more",
+      "as": "list"
+    }
+  },
+  "q26": {
+    "type": "change",
+    "call": "the array of the answers of 2 runs, in order",
+    "run": "tuple",
+    "change": {
+      "constant": "USAGE",
+      "value": "use: ticket-parts FILE",
+      "literal": "\"use: ticket-parts FILE\""
+    },
+    "parts": [
+      {
+        "call": "no input file; the module run as a command: ticket-parts --final t.md u.md",
+        "run": "cli",
+        "args": [
+          "--final",
+          "t.md",
+          "u.md"
+        ],
+        "extract": {
+          "of": "status"
+        }
+      },
+      {
+        "call": "no input file; the module run as a command: ticket-parts --final t.md u.md",
+        "run": "cli",
+        "args": [
+          "--final",
+          "t.md",
+          "u.md"
+        ],
+        "extract": {
+          "of": "stderr"
+        }
+      }
+    ]
+  }
+}
