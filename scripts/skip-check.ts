@@ -8,14 +8,16 @@
 //
 //   exit 0  the suite passed and every skip is listed for this system
 //   exit 1  the suite failed, a skip is unlisted or wrongly listed, an entry is broken,
-//           or a test passed without checking anything
+//           a test passed without checking anything, or the suite stopped reporting
+//           test files without ending
 //   exit 2  usage
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseTomlText } from "./lib/data.ts";
 import { scriptsDir } from "./lib/paths.ts";
+import { descendantPids, processCommandLines, processTable } from "./lib/processes.ts";
 
 const HERE = scriptsDir(import.meta);
 const TOOL = join(HERE, "..");
@@ -204,7 +206,150 @@ export function checkReport(xml: string, entries: SkipEntry[], system: string): 
   return { faults, matched, tests: cases.length, skipped, vacuous };
 }
 
-function main(argv: string[]): number {
+/** A console line from the suite as the test file it reports, or null. Bun
+ * prints each file's results under a `<file>:` header and repeats the header
+ * as results stream in, so a header line means progress, not completion.
+ * Lines that merely mention a file never match: only a bare header at the
+ * line's start, unindented and outside a result. */
+export function reportFileOf(line: string): string | null {
+  const m = /^[^\s(].*\.test\.ts:$/u.exec(line);
+  return m === null ? null : m[0].slice(0, -1);
+}
+
+/** Seconds after the last test-file report that a live suite counts as
+ * stuck: the seam's value, or the check's own minute. */
+export function stuckSeconds(raw: string | undefined): number {
+  if (raw === undefined) return 60;
+  const n = Number(raw);
+  return Number.isInteger(n) && n > 0 ? n : 60;
+}
+
+/** The suite invocation: the check's own bun test run, or the stand-in the
+ * seam names, run in its place with no arguments. */
+export function suiteCommand(
+  execPath: string,
+  workers: string,
+  report: string,
+  suite: string | undefined,
+): string[] {
+  if (suite !== undefined && suite !== "") return [suite];
+  return [
+    execPath,
+    "test",
+    `--parallel=${workers}`,
+    "--timings=test-timings.json",
+    "--timeout=60000",
+    // Path prefixes, not substrings: a bare `scripts/` also matches test files that sit
+    // under a record's own `scripts/` folder, such as raw/trials/*/controls/*/scripts/.
+    "./scripts/",
+    "./lint/",
+    "--reporter=junit",
+    `--reporter-outfile=${report}`,
+  ];
+}
+
+/** Stop a suite that reported test files and never ended: snapshot what runs
+ * under it first, so the list names processes while they run, then kill its
+ * whole process group and print the list into this check's own output. */
+async function stopStuck(
+  child: ReturnType<typeof spawn>,
+  lastFile: string,
+  stuckSecs: number,
+): Promise<void> {
+  const table = processTable();
+  const parents = new Map<number, number>();
+  for (const [pid, info] of table) parents.set(pid, info.parent);
+  const under =
+    child.pid === undefined ? [] : descendantPids(parents, child.pid).sort((a, b) => a - b);
+  const commands = processCommandLines();
+  if (child.pid !== undefined) {
+    try {
+      process.kill(-child.pid, "SIGKILL");
+    } catch {
+      // Already gone.
+    }
+  }
+  await new Promise<void>((resolve) => {
+    if (child.exitCode !== null) return resolve();
+    const timer = setTimeout(() => resolve(), 5000);
+    child.once("exit", () => {
+      clearTimeout(timer);
+      resolve();
+    });
+  });
+  console.log(
+    `skip-check: the suite did not end within ${stuckSecs}s after its last test file reported (${lastFile}); stopping it`,
+  );
+  if (under.length === 0) {
+    console.log("skip-check: no processes still running under the suite");
+    return;
+  }
+  console.log("skip-check: processes still running under the suite:");
+  for (const pid of under) {
+    console.log(`skip-check: pid ${pid}: ${commands.get(pid) ?? "(command unavailable)"}`);
+  }
+}
+
+/** Run the suite with piped stdio teed to our own, watching its file-report
+ * lines: a suite still alive a minute after its last report is stopped and
+ * named, and fails. Null exit races resolve to the exit, never the stop. */
+async function runSuite(argv: string[], stuckSecs: number): Promise<number | null> {
+  const child = spawn(argv[0]!, argv.slice(1), {
+    cwd: TOOL,
+    stdio: ["ignore", "pipe", "pipe"],
+    detached: true,
+  });
+  const decoder = new TextDecoder("utf-8");
+  // Raw bytes split on line breaks, each line decoded whole: a multibyte
+  // character never holds a break byte, so no character is ever split.
+  let carry = new Uint8Array(0);
+  let lastReport = 0;
+  let lastFile = "";
+  child.stdout?.on("data", (chunk: Buffer) => {
+    process.stdout.write(chunk);
+    const buf = new Uint8Array(carry.length + chunk.length);
+    buf.set(carry, 0);
+    buf.set(chunk, carry.length);
+    let start = 0;
+    for (let i = 0; i < buf.length; i++) {
+      if (buf[i] === 10) {
+        const file = reportFileOf(decoder.decode(buf.subarray(start, i)).replace(/\r$/u, ""));
+        if (file !== null) {
+          lastReport = Date.now();
+          lastFile = file;
+        }
+        start = i + 1;
+      }
+    }
+    carry = buf.slice(start);
+  });
+  child.stderr?.on("data", (chunk: Buffer) => {
+    process.stderr.write(chunk);
+  });
+  return new Promise<number | null>((resolve) => {
+    let settled = false;
+    const timer = setInterval(() => {
+      if (settled || lastReport === 0 || Date.now() - lastReport <= stuckSecs * 1000) return;
+      settled = true;
+      clearInterval(timer);
+      void stopStuck(child, lastFile, stuckSecs).then(() => resolve(null));
+    }, 1000);
+    child.once("exit", (code) => {
+      if (settled) return;
+      settled = true;
+      clearInterval(timer);
+      resolve(code ?? 1);
+    });
+    child.once("error", () => {
+      if (settled) return;
+      settled = true;
+      clearInterval(timer);
+      resolve(1);
+    });
+  });
+}
+
+async function main(argv: string[]): Promise<number> {
   if (argv.length !== 0) {
     console.error("usage: run skip-check");
     return 2;
@@ -212,27 +357,28 @@ function main(argv: string[]): number {
   const reportDir = mkdtempSync(join(tmpdir(), "postmaster-skip-"));
   const report = join(reportDir, "report.xml");
   try {
-    // Inherited stdio: the suite's own output still streams while it runs. The same
-    // interpreter that runs this check runs the suite, not whatever bun is on PATH.
-    // The suite runs as the check script on main runs it: files in parallel with
-    // per-test timeouts and the shared timings file, plus this check's own report.
-    const suite = spawnSync(
+    // Piped stdio, teed to our own: the suite's output still streams while it
+    // runs, and the parent watches the file-report lines for a run that
+    // reports every file and never ends. The same interpreter that runs this
+    // check runs the suite, not whatever bun is on PATH. The suite runs as
+    // the check script on main runs it: files in parallel with per-test
+    // timeouts and the shared timings file, plus this check's own report.
+    const argv = suiteCommand(
       process.execPath,
-      [
-        "test",
-        `--parallel=${process.env.POSTMASTER_TEST_WORKERS || "4"}`,
-        "--timings=test-timings.json",
-        "--timeout=60000",
-        // Path prefixes, not substrings: a bare `scripts/` also matches test files that sit
-        // under a record's own `scripts/` folder, such as raw/trials/*/controls/*/scripts/.
-        "./scripts/",
-        "./lint/",
-        "--reporter=junit",
-        `--reporter-outfile=${report}`,
-      ],
-      { cwd: TOOL, stdio: "inherit" },
+      process.env.POSTMASTER_TEST_WORKERS || "4",
+      report,
+      process.env.POSTMASTER_SKIP_CHECK_SUITE,
     );
-    const suiteCode = suite.status;
+    const stuckRaw = process.env.POSTMASTER_SKIP_CHECK_STUCK_SECONDS;
+    if (stuckRaw !== undefined) {
+      const n = Number(stuckRaw);
+      if (!Number.isInteger(n) || n <= 0)
+        console.error(
+          `skip-check: ignoring invalid POSTMASTER_SKIP_CHECK_STUCK_SECONDS ${JSON.stringify(stuckRaw)}`,
+        );
+    }
+    const suiteCode = await runSuite(argv, stuckSeconds(stuckRaw));
+    if (suiteCode === null) return 1;
     let xml: string;
     try {
       xml = readFileSync(report, "utf-8");
@@ -269,5 +415,7 @@ function main(argv: string[]): number {
 }
 
 if (import.meta.main) {
-  process.exit(main(process.argv.slice(2)));
+  // By exit code, not process.exit: the stuck stop's list goes through a
+  // pipe on CI, and exiting by code lets it flush.
+  process.exitCode = await main(process.argv.slice(2));
 }
