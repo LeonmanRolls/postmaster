@@ -311,7 +311,7 @@ esac
     limit("3");
     cutScratch("bug", "one");
     cutScratch("bug", "two");
-    runSelf("start", d, "1");
+    runSelf("start", d, "1", "bug:one bug:two");
     check(
       "start clears the round's markers and fixes its limit from run.json",
       rc === 0 &&
@@ -388,7 +388,7 @@ esac
     );
     runSelf("teardown", d, "1", repo);
     check(
-      "teardown takes the reviewers the wait recorded, and removes each scratch",
+      "teardown takes the reviewers the start recorded, and removes each scratch",
       rc === 0 &&
         !existsSync(join(repo, ".worktrees/T-1-rev-bug-one")) &&
         !existsSync(join(repo, ".worktrees/T-1-rev-bug-two")) &&
@@ -399,7 +399,7 @@ esac
     // the wait before it polled, or the second run outlasted its 3s window. Age a real deadline.
     limit("30");
     cutScratch("bug", "three");
-    runSelf("start", d, "2");
+    runSelf("start", d, "2", "bug:three");
     launch(2, "bug", "three", "slow");
     try {
       slow = parseInt(readFileSync(join(tmp, "pids", `launch.${n}`), "utf8").trim(), 10);
@@ -456,7 +456,7 @@ esac
 
     limit("60");
     cutScratch("style", "one");
-    runSelf("start", d, "3");
+    runSelf("start", d, "3", "style:one");
     launch(3, "style", "one", "leaves");
     let childPid = 0;
     try {
@@ -489,7 +489,7 @@ esac
     limit("60");
     cutScratch("bug", "stub");
     cutScratch("security", "sec");
-    runSelf("start", d, "5");
+    runSelf("start", d, "5", "bug:stub security:sec");
     launch(5, "bug", "stub", "fast");
     launch(5, "security", "sec", "fast");
     const codexWall = "You’ve hit your usage limit. try again at 2:29 AM.";
@@ -755,7 +755,7 @@ describe("positive controls", () => {
     "run-log.md records it as <lane> <lens>: DEGRADED, timeout",
     "a degrade line records it, with the lens, the round and the cause",
     "host.sh stop ends it, and its child in a session of its own",
-    "teardown takes the reviewers the wait recorded, and removes each scratch",
+    "teardown takes the reviewers the start recorded, and removes each scratch",
     "a wait run again keeps the round's deadline rather than starting a new one",
     "when every marker is in, wait exits 0 and records nothing",
     "teardown stops what a finished reviewer's launch left running, and says so",
