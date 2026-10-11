@@ -17,7 +17,7 @@ export function oxlintStep(): string[] {
   const segment = pkg.scripts.check
     .split("&&")
     .map((s) => s.trim())
-    .find((s) => s.split(/\s+/u).includes("oxlint")); // ASCII: a shell splits words on ASCII whitespace
+    .find((s) => s.split(/\s+/u).some((w) => w === "oxlint" || w.endsWith("/oxlint"))); // ASCII: a shell splits words on ASCII whitespace
   if (segment === undefined) throw new Error("check script runs no oxlint step");
   if (/["'\\|<>;&$`]/u.test(segment)) throw new Error(`oxlint step is not plain argv: ${segment}`);
   return segment.split(/\s+/u); // ASCII: a shell splits words on ASCII whitespace
@@ -54,7 +54,8 @@ export function readOxConfig(): OxConfig {
 
 /** Effective rule levels as oxlint reports them: allow < warn < deny. */
 export function printConfigRules(): Record<string, string> {
-  const r = run("bunx", ["oxlint", "--print-config"], { cwd: ROOT });
+  const [cmd] = oxlintStep();
+  const r = run(cmd!, ["--print-config"], { cwd: ROOT });
   if (r.code !== 0) throw new Error(`oxlint --print-config: exit ${r.code}: ${r.err.trim()}`);
   const config = JSON.parse(r.out) as { rules: Record<string, string> };
   return config.rules;

@@ -1,0 +1,13 @@
+diff --git a/src/tasks.ts b/src/tasks.ts
+index 6ad76fb..ea108ec 100644
+--- a/src/tasks.ts
++++ b/src/tasks.ts
+@@ -43,7 +43,7 @@ export function removeTasks(
+   list: TodoList,
+   ids: readonly number[],
+ ): { readonly list: TodoList; readonly removed: readonly number[] } | { readonly missing: number } {
+-  const missing = ids.find((id) => !list.tasks.some((task) => task.id === id));
++  const missing = ids.findLast((id) => !list.tasks.some((task) => task.id === id));
+   if (missing !== undefined) {
+     return { missing };
+   }

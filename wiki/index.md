@@ -1,7 +1,7 @@
 ---
 title: postmaster wiki
 type: schema
-updated: 2026-10-10
+updated: 2026-10-11
 ---
 
 # postmaster wiki
@@ -98,6 +98,10 @@ What would find a defect in postmaster's own scripts before a reviewer does, and
   The mutation counts of trial 4 have been run: the first flags 360 places on
   `main`, an estimated 312 of them not hazards, and reaches the function of 8 of the 78 findings that cite a line, about
   as many as random placement would give.
+  A reading trial on three of the project's modules, with a small model as the reader, found the functional
+  rewrite no easier to follow than the original, and about a tenth more effort than a tidy rewrite of the same size.
+  The first trial ran: laws written blind from the ticket found 2 of 8 first-round findings of #202's
+  classifier, 1 of the 5 counted cheap, and the proposal of a law for each reader of text is set aside.
 
 ## Decisions
 

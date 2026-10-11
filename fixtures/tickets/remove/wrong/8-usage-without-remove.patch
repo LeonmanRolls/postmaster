@@ -1,0 +1,13 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index a035d34..f8e3a5a 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -5,7 +5,7 @@
+ import { load, save, storePath } from "./store.ts";
+ import { addTask, completeTask, formatList, removeTasks } from "./tasks.ts";
+ 
+-export const USAGE = "usage: todo add <text> | todo list | todo done <id> | todo remove <id>...";
++export const USAGE = "usage: todo add <text> | todo list | todo done <id>";
+ 
+ export type Output = {
+   readonly out: (line: string) => void;
