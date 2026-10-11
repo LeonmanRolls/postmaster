@@ -19,6 +19,7 @@ import {
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { beside, toolRoot } from "./lib/paths.ts";
+import { PY_S_CLASS, pyWords } from "./lib/text.ts";
 
 export const ROOT = toolRoot(import.meta);
 export const RUN = beside(import.meta, "run");
@@ -159,10 +160,13 @@ const FINDING_ROUND_RE = /^r([1-9][0-9]*)$/u;
 const LAUNCH_ROUND_RE = /^[1-9][0-9]*$/u;
 const DEGRADE_R_RE = /^r([1-9][0-9]*):$/u;
 const DEGRADE_N_RE = /^([1-9][0-9]*):$/u;
-const LENIENT_RE = /^[^\s]+\s+(?:round\s+([1-9][0-9]*)|r([1-9][0-9]*))(?:\s|$)/u;
+const LENIENT_RE = new RegExp(
+  `^[^${PY_S_CLASS}]+[${PY_S_CLASS}]+(?:round[${PY_S_CLASS}]+([1-9][0-9]*)|r([1-9][0-9]*))(?:[${PY_S_CLASS}]|$)`,
+  "u",
+);
 
 export function roundOf(action: string, detail: string): number | null {
-  const w = detail.split(/\s+/u);
+  const w = pyWords(detail);
   if (action === "finding") {
     const m = FINDING_ROUND_RE.exec(w[2] ?? "");
     return m?.[1] === undefined ? null : parseInt(m[1], 10);
