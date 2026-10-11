@@ -309,6 +309,50 @@ before writing the summary stays the last step.
 A workhorse commits incrementally as it goes, never pushes, never reads other branches or
 `.worktrees/`, and never edits files outside its copy.
 
+## Libraries: the ask before any add
+
+A run adds only a library its signed-off ticket lists, and only after the
+ask: its coachman stops and asks the postmaster, who asks the user, and the
+run goes on only once the user answers. The ticket's `## Libraries`
+section is the list. A run asks once for each library, before its first
+install, and the answer holds for the rest of that run. The install
+refuses anything else before it downloads, and the landing checks again.
+
+A workhorse that finds it needs a library reports the name, the exact
+version and what the run wants it for, and stops that line of work. It
+never runs the install or the refresh first. On the report:
+
+1. **Read the list.** `<tool>/scripts/run libraries list --ticket <dispatch>/brief.md`
+   names what the ticket lists. What it does not name is unlisted.
+2. **Take the facts.** `<tool>/scripts/run libraries facts <name> <version>`
+   prints what the escalation carries: the name, version, publish date,
+   source and Socket's verdict.
+3. **Unlisted means surveyed.** For a library the list does not name, start
+   the surveyor before escalating, since the postmaster runs no model lane.
+   Write the question and the materials to files of your own outside the
+   dispatch — the ticket text, the library's name, version and facts and
+   what the run wants it for, and none of your case for it — then:
+
+   ```sh
+   <tool>/scripts/run surveyor call <dispatch> <repo> --name <survey-name> --snapshot <head> --question <question-file> --material <material-file> --timeout 1800
+   ```
+
+   The question asks whether the run needs a library there and whether this
+   one passes the clerk's checks: look-alike names, publisher, age of the
+   package and version, use, that its code matches its source, licence,
+   Linux and macOS, upkeep, install scripts, what it brings and Socket's
+   verdict. The survey name is letters, digits, dot, underscore and dash,
+   one survey per library, built from the library's name with any other
+   character as a dash. The snapshot is the synthesis head, as
+   `git -C <synthesis-wt> rev-parse HEAD` prints it.
+4. **Escalate with the facts**, and the survey's answer where there is one:
+   write `ESCALATION.md`, touch `.escalation-ready` and exit, as any
+   escalation. Never approve a library yourself.
+5. **On the resume with the user's yes**, record it in every copy that
+   installs — `<tool>/scripts/run libraries record <name> <version> --dispatch <dispatch> --wt <copy>`,
+   with `--vendored` for the copied-in bundle, which no install resolves —
+   then resume the lane. On a no, the run does without the library.
+
 ## The run's mode: synthesis or single-thread
 
 The waybill's Team section names the run's mode as its `mode:` line, resolved at dispatch and
@@ -505,7 +549,9 @@ second implementer wrote (single-thread).
    check's source names `web-journey`, it also carries what
    `<tool>/scripts/run verify-journey --format` prints and the command that names the report's path,
    `<tool>/scripts/run verify journey-path .`. Where the workhorse's harness reads no ambient context
-   file, the brief opens by naming the project's context file and index.
+   file, the brief opens by naming the project's context file and index. It carries the library
+   rule: a workhorse that needs a library reports it and stops that line of work, and never
+   adds or refreshes one before the ask resolves.
 
 ## Stage 1 (leg 1): implement, then synthesize
 
