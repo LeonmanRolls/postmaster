@@ -15,6 +15,7 @@
 //            escalate rule ticket-check ticket-create ticket-edit ticket-state ticket-comment
 //            gate verify merge teardown degrade handoff-accept handoff stage premises
 //            tool-fault note wall told carry reach take-in switch-off
+//            library-yes age-waiver script-allow pm-word
 //   target   what the action was done to: a lane, a ticket id, a branch, a path, a round
 //   detail   free text; everything after the target, joined by spaces. A finding's opens with its
 //            class, gating or style, so the style findings can be told apart.
@@ -30,6 +31,13 @@
 // decision, approved or refused, then the entry and the user's words. The run's
 // actions.jsonl and the project's ledger each hold the same line, and
 // `run landing switch-offs` reads approved lines back to clear the branch.
+//
+// library-yes, age-waiver, script-allow and pm-word are the user's word on a run's
+// libraries (#426, shared with #424): the yes to install one exact name@version, the
+// waiver of the seven-day wait for one exact name@version, the allowance for one
+// package's install scripts, and the word to run on despite unsupported package
+// managers. Only the postmaster records them, after asking the user; their targets
+// are enforced shapes and their detail carries the user's words.
 //
 // A tool-fault is postmaster itself misbehaving: a script, a runbook step or a harness adapter.
 // Its target is the postmaster file, relative to the checkout this script is in or absolute,
@@ -50,8 +58,9 @@
 //   exit 0  written to both files
 //   exit 1  usage, an action outside the set, a finding with no class, a premises result with
 //           no verified commit or base, a switch-off with a target or detail out of shape,
-//           a tool-fault missing a field or naming no postmaster file, or a file
-//           could not be appended
+//           an approval verb (library-yes, age-waiver, script-allow, pm-word) from any actor
+//           but the postmaster or with a target or detail out of shape, a tool-fault
+//           missing a field or naming no postmaster file, or a file could not be appended
 import {
   appendFileSync,
   existsSync,
@@ -66,7 +75,7 @@ import { argvDecoded } from "./lib/proc.ts";
 import { pyWords } from "./lib/text.ts";
 
 const VERBS =
-  " dispatch resume refuse harvest synthesize review-launch review-harvest finding apply escalate rule ticket-check ticket-create ticket-edit ticket-state ticket-comment reach gate verify merge teardown degrade handoff-accept handoff stage premises tool-fault note wall told carry take-in switch-off ";
+  " dispatch resume refuse harvest synthesize review-launch review-harvest finding apply escalate rule ticket-check ticket-create ticket-edit ticket-state ticket-comment reach gate verify merge teardown degrade handoff-accept handoff stage premises tool-fault note wall told carry take-in switch-off library-yes age-waiver script-allow pm-word ";
 const CONTROLS = join(toolRoot(import.meta), "skills/postmaster/controls.md");
 
 // JSON string escaping: drop control chars, escape separators. Bytes that
@@ -304,6 +313,37 @@ function logAction(
       console.error(
         "log-action: a switch-off's detail carries the decision, then the entry and the user's words",
       );
+      return 1;
+    }
+  }
+  if (
+    action === "library-yes" ||
+    action === "age-waiver" ||
+    action === "script-allow" ||
+    action === "pm-word"
+  ) {
+    if (actor !== "postmaster") {
+      console.error(`log-action: ${action} takes the actor postmaster, never ${actor}`);
+      return 1;
+    }
+    const nameVersion = /^(?:@[^/ \t]+\/[^@ \t]+|[^@ \t/]+)@[^@ \t^~*|<>=]+$/u;
+    const bareName = /^(?:@[^/ \t]+\/[^@ \t/]+|[^@ \t/]+)$/u;
+    if (action === "library-yes" || action === "age-waiver") {
+      if (!nameVersion.test(target)) {
+        console.error(`log-action: ${action}'s target is the exact name@version it approves`);
+        return 1;
+      }
+    } else if (action === "script-allow") {
+      if (!bareName.test(target)) {
+        console.error("log-action: script-allow's target is the bare package name it allows");
+        return 1;
+      }
+    } else if (!/^[a-z]+(?:,[a-z]+)*$/u.test(target)) {
+      console.error("log-action: pm-word's target is the comma-separated managers the word covers");
+      return 1;
+    }
+    if (!detail.trim()) {
+      console.error(`log-action: ${action}'s detail carries the user's words`);
       return 1;
     }
   }

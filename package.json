@@ -7,8 +7,11 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.14",
+    "npm": "11.19.0",
     "oxlint": "^1.86.0",
-    "typescript": "^7.0.2"
+    "pnpm": "12.11.2",
+    "typescript": "^7.0.2",
+    "yarn": "1.22.22"
   },
   "engines": {
     "bun": ">=1.4.2"
