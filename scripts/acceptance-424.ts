@@ -214,10 +214,7 @@ export function makeRefreshFixture(withTarball: boolean): RefreshFixture {
     const stage = join(dir, "stage");
     const pkg = join(stage, "package");
     mkdirSync(join(pkg, "lib"), { recursive: true });
-    writeFileSync(
-      join(pkg, "package.json"),
-      JSON.stringify({ name: "@babel/parser", version }),
-    );
+    writeFileSync(join(pkg, "package.json"), JSON.stringify({ name: "@babel/parser", version }));
     writeFileSync(
       join(pkg, "lib", "index.js"),
       "// probe-424 parser bundle\nmodule.exports = { parse() { return null; } };\n",
@@ -273,8 +270,7 @@ export function writeFactsFixture(
           [entry.version]: {
             name: entry.name,
             version: entry.version,
-            repository:
-              entry.source === null ? undefined : { type: "git", url: entry.source },
+            repository: entry.source === null ? undefined : { type: "git", url: entry.source },
           },
         },
       }),
@@ -321,12 +317,7 @@ export function baseOf(clone: string): string {
 }
 
 /** Commit the clone's current changes on a new branch from base. */
-export function commitBranch(
-  clone: string,
-  branch: string,
-  message: string,
-  base: string,
-): void {
+export function commitBranch(clone: string, branch: string, message: string, base: string): void {
   const run = (args: string[]): void => {
     const r = spawnSync("git", ["-C", clone, ...args], { env: GIT_ENV, encoding: "utf8" });
     if (r.status !== 0) throw new Error(`probe-424: git ${args.join(" ")} failed: ${r.stderr}`);

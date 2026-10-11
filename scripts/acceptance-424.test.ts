@@ -199,57 +199,50 @@ describe("C3: nothing installs or copies in without the recorded yes", () => {
     }
   });
 
-  test(
-    "record caches an approved library with the packages it brings",
-    async () => {
-      const registry = startStubRegistry();
-      const dispatch = makeDispatch();
+  test("record caches an approved library with the packages it brings", async () => {
+    const registry = startStubRegistry();
+    const dispatch = makeDispatch();
+    try {
+      const dir = makeInstallScratch(registry.url);
       try {
-        const dir = makeInstallScratch(registry.url);
-        try {
-          const scan = writeScanFixture(dir, {});
-          const id = runTool(["libraries", "identity", "is-odd", "3.0.1"]);
-          expect(id.code).toBe(0);
-          const target = id.out.trim();
-          expect(target).toMatch(/^library:[0-9a-f]{16}$/);
-          const approval = runTool([
-            "log-action",
-            dispatch,
-            "postmaster",
-            "library",
-            target,
-            "approved",
-            "library is-odd 3.0.1 added",
-            "yes, take it",
-          ]);
-          expect(approval.code).toBe(0);
-          const r = runTool(
-            ["libraries", "record", "is-odd", "3.0.1", "--dispatch", dispatch, "--wt", dir],
-            { POSTMASTER_SCAN_FIXTURE: scan },
-          );
-          expect(r.code).toBe(0);
-          const cached = readFileSync(
-            join(dir, ".postmaster", "library-approvals.json"),
-            "utf8",
-          );
-          expect(cached).toContain("is-odd@3.0.1");
-          expect(cached).toContain("is-number@7.0.0");
-          const add = await runBun(["add", "is-odd@3.0.1"], dir, {
-            POSTMASTER_SCAN_FIXTURE: scan,
-          });
-          expect(add.code).toBe(0);
-          expect(existsSync(join(dir, "node_modules", "is-odd"))).toBe(true);
-          expect(existsSync(join(dir, "node_modules", "is-number"))).toBe(true);
-        } finally {
-          cleanup(dir);
-        }
+        const scan = writeScanFixture(dir, {});
+        const id = runTool(["libraries", "identity", "is-odd", "3.0.1"]);
+        expect(id.code).toBe(0);
+        const target = id.out.trim();
+        expect(target).toMatch(/^library:[0-9a-f]{16}$/);
+        const approval = runTool([
+          "log-action",
+          dispatch,
+          "postmaster",
+          "library",
+          target,
+          "approved",
+          "library is-odd 3.0.1 added",
+          "yes, take it",
+        ]);
+        expect(approval.code).toBe(0);
+        const r = runTool(
+          ["libraries", "record", "is-odd", "3.0.1", "--dispatch", dispatch, "--wt", dir],
+          { POSTMASTER_SCAN_FIXTURE: scan },
+        );
+        expect(r.code).toBe(0);
+        const cached = readFileSync(join(dir, ".postmaster", "library-approvals.json"), "utf8");
+        expect(cached).toContain("is-odd@3.0.1");
+        expect(cached).toContain("is-number@7.0.0");
+        const add = await runBun(["add", "is-odd@3.0.1"], dir, {
+          POSTMASTER_SCAN_FIXTURE: scan,
+        });
+        expect(add.code).toBe(0);
+        expect(existsSync(join(dir, "node_modules", "is-odd"))).toBe(true);
+        expect(existsSync(join(dir, "node_modules", "is-number"))).toBe(true);
       } finally {
-        registry.stop();
-        cleanup(dispatch, join(dispatch, ".."));
+        cleanup(dir);
       }
-    },
-    180000,
-  );
+    } finally {
+      registry.stop();
+      cleanup(dispatch, join(dispatch, ".."));
+    }
+  }, 180000);
 
   test("refresh-parser refuses a version without approval before it downloads", () => {
     const fx = makeRefreshFixture(false);
@@ -295,19 +288,18 @@ describe("C4: landing holds every added or changed library for the user's word",
   const SOURCE = "https://github.com/probe-424/probe.git";
 
   function biomeBump(): { old: string; next: string } {
-    const manifest = JSON.parse(
-      readFileSync(join(repoRoot(), "package.json"), "utf8"),
-    ) as { devDependencies: Record<string, string> };
+    const manifest = JSON.parse(readFileSync(join(repoRoot(), "package.json"), "utf8")) as {
+      devDependencies: Record<string, string>;
+    };
     const old = manifest.devDependencies["@biomejs/biome"]!;
     const parts = old.split(".");
     return { old, next: `${parts[0]}.${parts[1]}.${Number(parts[2]) + 1}` };
   }
 
   function parserBump(): { old: string; next: string } {
-    const old = readFileSync(
-      join(repoRoot(), "scripts", "lib", "vendor", "VERSION"),
-      "utf8",
-    ).split("\n")[0]!;
+    const old = readFileSync(join(repoRoot(), "scripts", "lib", "vendor", "VERSION"), "utf8").split(
+      "\n",
+    )[0]!;
     const parts = old.split(".");
     return { old, next: `${parts[0]}.${parts[1]}.${Number(parts[2]) + 1}` };
   }
@@ -373,16 +365,7 @@ describe("C4: landing holds every added or changed library for the user's word",
     env: Record<string, string>,
     dispatch?: string,
   ): { code: number | null; out: string; err: string } {
-    const args = [
-      "landing",
-      "libraries",
-      "--repo",
-      clone,
-      "--default",
-      "main",
-      "--ticket",
-      branch,
-    ];
+    const args = ["landing", "libraries", "--repo", clone, "--default", "main", "--ticket", branch];
     if (dispatch !== undefined) args.push("--dispatch", dispatch);
     return runTool(args, env);
   }
@@ -517,7 +500,10 @@ describe("C4: landing holds every added or changed library for the user's word",
       if (!text.includes("minimumReleaseAge = 604800")) {
         throw new Error("probe-424: no minimumReleaseAge anchor in bunfig.toml");
       }
-      writeFileSync(bunfig, text.replace("minimumReleaseAge = 604800", "minimumReleaseAge = 604801"));
+      writeFileSync(
+        bunfig,
+        text.replace("minimumReleaseAge = 604800", "minimumReleaseAge = 604801"),
+      );
       commitBranch(clone, "probe-424-e", "probe-424: touch install settings", base);
       const r = runTool([
         "landing",
