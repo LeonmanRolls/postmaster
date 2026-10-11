@@ -90,6 +90,7 @@ export function scratchLayout(tmp: string, name: string): Layout {
   const wt = join(dir, "wt");
   const dispatch = join(dir, "dispatch");
   mkdirSync(dispatch, { recursive: true });
+  mkdirSync(join(dispatch, "logs"), { recursive: true });
   const ticket = TICKET;
   const init = run("git", ["init", "-q", "-b", DEFAULT, repo]);
   if (init.code !== 0) throw new Error(`git init: ${init.err.trim() || init.out.trim()}`);
@@ -335,10 +336,12 @@ export function paragraph(doc: string, anchor: string): string {
 }
 
 /** Whether the card's heading list orders the notes section after the
- * printed parts and before the coachman's own sections. */
+ * printed parts and before the coachman's own sections. Only the list
+ * sentence counts: the step names the same headings before it. */
 export function headingOrderOk(sentence: string): boolean {
+  const list = sentence.slice(sentence.indexOf("Each of those"));
   const order = ["## Switch-offs", "## Private data findings", "## Notes", "## Merge"].map((h) =>
-    sentence.indexOf(h),
+    list.indexOf(h),
   );
   return (
     order.every((i) => i !== -1) &&
