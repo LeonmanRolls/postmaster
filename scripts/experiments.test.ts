@@ -328,6 +328,38 @@ describe("record symlink guard", () => {
       rmSync(repo, { recursive: true, force: true });
     }
   });
+
+  test("a symlinked .postmaster folder is refused on every form", () => {
+    const repo = tempRepo();
+    const outside = `${repo}-outside`;
+    try {
+      mkdirSync(outside, { recursive: true });
+      symlinkSync(outside, join(repo, ".postmaster"));
+      expect(runExperiments(repo, ["list"]).status).not.toBe(0);
+      expect(runExperiments(repo, ["push-docs"]).status).not.toBe(0);
+      expect(runExperiments(repo, START).status).not.toBe(0);
+      expect(existsSync(join(outside, "experiments.jsonl"))).toBe(false);
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  test("a symlinked runs folder is refused with nothing written outside", () => {
+    const repo = tempRepo();
+    const outside = `${repo}-outside`;
+    try {
+      mkdirSync(join(repo, ".postmaster"), { recursive: true });
+      mkdirSync(outside, { recursive: true });
+      symlinkSync(outside, join(repo, ".postmaster", "runs"));
+      expect(runExperiments(repo, START).status).not.toBe(0);
+      expect(existsSync(join(outside, "ledger.jsonl"))).toBe(false);
+      expect(existsSync(join(repo, ".postmaster", "experiments.jsonl"))).toBe(false);
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("ledger write order", () => {
@@ -400,6 +432,22 @@ describe("record lock", () => {
       expect(readFileSync(join(dir, "owner"), "utf8")).toBe("someone else\n");
     } finally {
       rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("the command takes a stale lock", () => {
+    const repo = tempRepo();
+    try {
+      const dir = join(repo, ".postmaster", "experiments.lock");
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, "owner"), "dead\n");
+      const old = new Date(Date.now() - 60000);
+      utimesSync(dir, old, old);
+      const r = runExperiments(repo, START);
+      expect(r.status).toBe(0);
+      expect(r.stdout.trim()).toBe("e1");
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
     }
   });
 });

@@ -65,6 +65,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import { toolRoot } from "./lib/paths.ts";
 import { argvDecoded } from "./lib/proc.ts";
 import { pyWords } from "./lib/text.ts";
+import { isSymlink } from "./lib/effective-config.ts";
 
 const VERBS =
   " dispatch resume refuse harvest synthesize review-launch review-harvest finding apply escalate rule ticket-check ticket-create ticket-edit ticket-state ticket-comment reach gate verify merge teardown degrade handoff-accept handoff stage premises tool-fault note wall told carry take-in switch-off experiment ";
@@ -385,16 +386,40 @@ export function logProjectEvent(
     const root = resolve(repo);
     if (!statSync(root).isDirectory()) throw new Error("not a directory");
     project = basename(root);
-    const runs = join(root, ".postmaster", "runs");
+    const pm = join(root, ".postmaster");
+    const runs = join(pm, "runs");
+    for (const part of [pm, runs]) {
+      if (isSymlink(part)) {
+        console.error(`log-action: ${part} must be a directory inside the project, not a symlink`);
+        return 1;
+      }
+    }
     mkdirSync(runs, { recursive: true });
     const ledger = join(runs, "ledger.jsonl");
     const ts = new Date().toISOString().replace(/\.[0-9]+Z$/u, "Z");
     const runName = actor === "postmaster" ? "postmaster" : "booking-clerk";
     const line = `{"ts":"${ts}","project":"${jsonStr(project)}","run":"${runName}","actor":"${actor}","action":"${action}","target":"${jsonStr(target)}","detail":"${jsonStr(detailParts.join(" "))}"}`;
+    const logDir = join(runs, "postmaster");
+    const actions = join(logDir, "actions.jsonl");
     if (actor === "postmaster") {
-      const logDir = join(runs, "postmaster");
+      if (isSymlink(logDir)) {
+        console.error(
+          `log-action: ${logDir} must be a directory inside the project, not a symlink`,
+        );
+        return 1;
+      }
       mkdirSync(logDir, { recursive: true });
-      appendFileSync(join(logDir, "actions.jsonl"), `${line}\n`);
+      if (isSymlink(actions)) {
+        console.error(`log-action: ${actions} must be a file inside the project, not a symlink`);
+        return 1;
+      }
+    }
+    if (isSymlink(ledger)) {
+      console.error(`log-action: ${ledger} must be a file inside the project, not a symlink`);
+      return 1;
+    }
+    if (actor === "postmaster") {
+      appendFileSync(actions, `${line}\n`);
     }
     appendFileSync(ledger, `${line}\n`);
   } catch {

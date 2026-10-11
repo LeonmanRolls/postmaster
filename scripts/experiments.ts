@@ -30,7 +30,13 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
-import { ensureIgnore, isDie, isSymlink, projectRoot } from "./lib/effective-config.ts";
+import {
+  ensureIgnore,
+  isDie,
+  isSymlink,
+  projectRoot,
+  settingsDir,
+} from "./lib/effective-config.ts";
 import { argvDecoded, run } from "./lib/proc.ts";
 import { logProjectEvent } from "./log-action.ts";
 
@@ -374,6 +380,18 @@ export function acquireLock(root: string, opts: LockOpts = {}): void {
     }
     const step = lockStep(age, Date.now() - start, staleMs, timeoutMs);
     if (step === "steal") {
+      // A second waiter may be stealing the same lock: back off a random beat,
+      // then steal only what is still stale. A steal landing in the same beat
+      // can still double-take; that needs a crashed holder with two waiters in
+      // one beat, and the record's replay refuses the damage loudly.
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Math.floor(Math.random() * 200));
+      let again = -1;
+      try {
+        again = Date.now() - statSync(dir).mtimeMs;
+      } catch {
+        again = -1;
+      }
+      if (lockStep(again, Date.now() - start, staleMs, timeoutMs) !== "steal") continue;
       try {
         rmSync(dir, { recursive: true, force: true });
       } catch {
@@ -631,6 +649,12 @@ function main(): void {
   let root: string;
   try {
     root = gitToplevel(p.project);
+  } catch (e) {
+    if (isDie(e)) fail(e.message);
+    throw e;
+  }
+  try {
+    settingsDir(root);
   } catch (e) {
     if (isDie(e)) fail(e.message);
     throw e;

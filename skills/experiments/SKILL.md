@@ -29,10 +29,14 @@ resolved.
 
 ## Write the rows after each change
 
-1. Print the rows: `<tool>/scripts/run experiments push-docs --project <repo>`.
-2. Read the collection `experiments` with ArtifactData `list`. Each document's version is what
+1. Read the page's link from `<repo>/.postmaster/experiments-page.url`, where `<repo>` is
+   the repository the experiments belong to, and write to that page's store. When no link
+   is saved, publish the page first, as the previous section says, and never publish a
+   second page for a project that has one.
+2. Print the rows: `<tool>/scripts/run experiments push-docs --project <repo>`.
+3. Read the collection `experiments` with ArtifactData `list`. Each document's version is what
    a write to it needs.
-3. Write each row with ArtifactData `set` in `experiments`, `doc_id` the experiment's id and
+4. Write each row with ArtifactData `set` in `experiments`, `doc_id` the experiment's id and
    data the row as printed, in one batch: the version from the list for a document that
    exists, none for a new one. A row written while the page is open shows at once, and a
    changed row never needs a republish.
