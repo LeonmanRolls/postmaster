@@ -781,6 +781,24 @@ describe("C3: review round 1 fixes", () => {
     expect(outcomeOf(r.out).startsWith("ticket-reads: unknown")).toBe(true);
   });
 
+  test("an escaped substitution runs nothing", () => {
+    const dispatch = fixtureDispatch(tmp, "c3-escaped", {
+      legs: [
+        {
+          n: 1,
+          harness: "codex",
+          lines: [
+            codexExec('echo "\\$(gh issue view 409 --json body)"', "", 0),
+            codexExec("echo \\$(gh issue view 409 --json body)", "", 0),
+          ],
+        },
+      ],
+    });
+    const r = ticketReads(dispatch);
+    expect(r.code).toBe(0);
+    expect(outcomeOf(r.out)).toBe("ticket-reads: not read");
+  });
+
   test("a failed call counts for nothing", () => {
     const dispatch = fixtureDispatch(tmp, "c3-failedcall", {
       agents: [
