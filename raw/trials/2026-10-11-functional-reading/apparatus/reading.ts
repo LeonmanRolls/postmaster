@@ -13,18 +13,38 @@ export type Scored = Readonly<{
   correct: boolean;
 }>;
 
-const INTRO = [
+/** How a reader is asked to work: tracing step by step, or answering straight from the reading. */
+export type Mode = "careful" | "quick";
+
+const COMMON = [
   "Below are the source of one TypeScript module, a glossary of the helpers it imports (their",
   "source is not shown), and a list of questions about the module's behaviour.",
   "",
-  "You cannot run code. Work out each answer by reading the source. Trace it carefully, step by",
-  "step, for each question before you answer. The glossary is exact; rely on it.",
+  "You cannot run code. The glossary is exact; rely on it.",
   "",
   'If the source and the glossary do not determine an answer, answer "undetermined".',
+];
+
+const HOW: Readonly<Record<Mode, readonly string[]>> = {
+  careful: [
+    "",
+    "Work out each answer by reading the source. Trace it carefully, step by step, for each",
+    "question before you answer.",
+  ],
+  quick: [
+    "",
+    "Answer from your reading of the source. Do not write out your reasoning or any working: your",
+    "whole reply is the JSON block below and nothing else.",
+  ],
+};
+
+const CLOSING = [
   "",
   "Finish with one JSON object in a ```json block: its keys are the question ids and its values the",
   "answers, each in the format its question asks for. Put nothing after the block.",
-].join("\n");
+];
+
+const intro = (mode: Mode): string => [...COMMON, ...HOW[mode], ...CLOSING].join("\n");
 
 /** The text a reader is given: the module as it is, the glossary, and the questions. */
 export function buildPrompt(
@@ -33,11 +53,12 @@ export function buildPrompt(
     source: string;
     glossary: string;
     questions: readonly Question[];
+    mode?: Mode;
   }>,
 ): string {
   const questions = args.questions.map((q) => `### ${q.id}\n${q.prompt.trim()}`).join("\n\n");
   return [
-    INTRO,
+    intro(args.mode ?? "careful"),
     "",
     `## Source: ${args.file}`,
     "",
