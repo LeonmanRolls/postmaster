@@ -4874,6 +4874,121 @@ export async function runControls(): Promise<number> {
         calls(root, "herdr").some((line) => line === "agent\tprompt\td2-verifier\tRead the brief."),
       `${vSpawn.out}\n${vSend.err}\n${vRead.err}`,
     );
+    // #412 review round 1: a handle resolves through its placement's pane
+    // only while that pane still belongs to the launch: it carries the
+    // launch token and sits in the recorded tab. A stale record (its tab
+    // closed by hand, its pane id since reused) refuses instead of
+    // renaming another session.
+    const spawnUnnamed = (
+      handle: string,
+    ): { space: string; tab: string; pane: string; code: number; err: string } => {
+      writeFileSync(join(stub, "agent.never"), "");
+      const spawned = execHost(
+        ["spawn", handle, f.repo, "--label", handle, "--", "true"],
+        stubs,
+        root,
+        { POSTMASTER_HOST_SPAWN_WAIT: "1" },
+      );
+      rmSync(join(stub, "agent.never"), { force: true });
+      return {
+        space: kvOf(spawned.out, "space"),
+        tab: kvOf(spawned.out, "tab"),
+        pane: kvOf(spawned.out, "pane"),
+        code: spawned.code,
+        err: `${spawned.out}\n${spawned.err}`,
+      };
+    };
+    const agentDelayMs = (): number => {
+      try {
+        const raw = readFileSync(join(stub, "agent.delay-ms"), "utf8").trim();
+        if (/^[0-9]+$/u.test(raw)) return Number(raw);
+      } catch {}
+      return 2000;
+    };
+    const paneShown = (pane: string): boolean => {
+      try {
+        const st = JSON.parse(readFileSync(join(stub, "herdr.json"), "utf8")) as {
+          paneRuns?: Record<string, number>;
+        };
+        const at = st.paneRuns?.[pane];
+        return typeof at === "number" && Date.now() - at >= agentDelayMs();
+      } catch {
+        return false;
+      }
+    };
+    const rewriteRecordPane = (handle: string, pane: string): void => {
+      for (const name of readdir(join(root, "state", "placements"))) {
+        const file = join(root, "state", "placements", name);
+        const rec = JSON.parse(readFileSync(file, "utf8")) as Record<string, unknown>;
+        if (rec.handle === handle) {
+          rec.pane = pane;
+          save(file, rec);
+        }
+      }
+    };
+    const ownPlaced = spawnUnnamed("own412a");
+    for (let i = 0; i < 100 && !paneShown(ownPlaced.pane); i++) await sleep(100);
+    const ownMessage = join(root, "own-message.txt");
+    writeFileSync(ownMessage, "Read the brief.");
+    const ownSend = execHost(["send", "own412a", ownMessage], stubs, root);
+    await pass(
+      "an owned unnamed session takes a message by its handle and is named from then on",
+      () =>
+        ownPlaced.code === 0 &&
+        paneShown(ownPlaced.pane) &&
+        ownSend.code === 0 &&
+        calls(root, "herdr").some((line) => line === `agent\trename\t${ownPlaced.pane}\town412a`) &&
+        calls(root, "herdr").some((line) => line === "agent\tprompt\town412a\tRead the brief."),
+      `${ownPlaced.err}\n${ownSend.out}\n${ownSend.err}`,
+    );
+    const stalePlaced = spawnUnnamed("stale412a");
+    const otherSpawn = execHost(
+      ["spawn", "other412b", f.repo, "--label", "other412b", "--", "true"],
+      stubs,
+      root,
+    );
+    const otherPane = kvOf(otherSpawn.out, "pane");
+    const otherTab = kvOf(otherSpawn.out, "tab");
+    for (let i = 0; i < 100 && !paneShown(stalePlaced.pane); i++) await sleep(100);
+    rewriteRecordPane("stale412a", otherPane);
+    const staleSend = execHost(["send", "stale412a", ownMessage], stubs, root);
+    const otherRead = execHost(["read", "other412b", "5"], stubs, root);
+    await pass(
+      "a stale record pointing at another launch's pane refuses and renames nothing",
+      () =>
+        stalePlaced.code === 0 &&
+        otherSpawn.code === 0 &&
+        paneShown(stalePlaced.pane) &&
+        otherTab !== "" &&
+        otherTab !== stalePlaced.tab &&
+        staleSend.code !== 0 &&
+        !calls(root, "herdr").some((line) => line === `agent\trename\t${otherPane}\tstale412a`) &&
+        otherRead.code === 0,
+      `${stalePlaced.tab} vs ${otherTab}\n${staleSend.out}\n${staleSend.err}\n${otherRead.err}`,
+    );
+    const barePlaced = spawnUnnamed("bare412a");
+    for (let i = 0; i < 100 && !paneShown(barePlaced.pane); i++) await sleep(100);
+    let barePane = "";
+    if (barePlaced.code === 0 && barePlaced.space !== "") {
+      updateHerdrJson(root, (st) => {
+        st.n++;
+        barePane = `p${st.n}`;
+        st.panes[barePane] = { ws: barePlaced.space, tab: barePlaced.tab, cwd: "/tmp", tokens: {} };
+        st.spaces[barePlaced.space].panes.push(barePane);
+        st.paneRuns[barePane] = Date.now() - 5000;
+      });
+    }
+    rewriteRecordPane("bare412a", barePane);
+    const bareSend = execHost(["send", "bare412a", ownMessage], stubs, root);
+    await pass(
+      "a record pointing at a pane without the launch token refuses and renames nothing",
+      () =>
+        barePlaced.code === 0 &&
+        barePane !== "" &&
+        bareSend.code !== 0 &&
+        !calls(root, "herdr").some((line) => line.startsWith(`agent\trename\t${barePane}\t`)),
+      `${barePlaced.err}\n${bareSend.out}\n${bareSend.err}`,
+    );
 
     console.log("clerk close");
     const writeClerkRecord = (repo: string, id: string, handle: string): void => {

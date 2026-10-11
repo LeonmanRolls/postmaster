@@ -3989,12 +3989,15 @@ function spawnWaitSeconds(): number {
 }
 // Name the agent once Herdr detects it in the spawned pane: the rename right
 // after `pane run` lands before detection and registers nothing, so retry it
-// until `agent get` answers or the budget runs out. Always tries once.
+// until `agent get` answers or the budget runs out. Always tries once. The
+// pane must hold an agent too: a name answered while our pane is empty is
+// another session's, never this spawn's.
 async function awaitHerdrName(handle: string, pane: string): Promise<boolean> {
   const end = Date.now() + spawnWaitSeconds() * 1000;
   for (;;) {
     herdr(["agent", "rename", pane, handle]);
-    if (herdr(["agent", "get", handle]).code === 0) return true;
+    if (herdr(["agent", "get", handle]).code === 0 && herdr(["agent", "get", pane]).code === 0)
+      return true;
     if (Date.now() >= end) return false;
     await Bun.sleep(1000);
   }
@@ -4002,9 +4005,9 @@ async function awaitHerdrName(handle: string, pane: string): Promise<boolean> {
 function isAgentNotFound(result: { code: number; err: string }): boolean {
   return result.code !== 0 && parseJson(result.err)?.error?.code === "agent_not_found";
 }
-// The pane the host recorded opening for the handle, "" when none did: the
-// only pane a handle ever resolves to besides its own agent name.
-function herdrPaneFor(handle: string): string {
+// The placement the host recorded opening for the handle, null when none
+// did: the only pane a handle ever resolves to besides its own agent name.
+function herdrRecord(handle: string): { space: string; tab: string; pane: string } | null {
   for (const file of placementFiles()) {
     let item: Record<string, unknown> | null = null;
     try {
@@ -4014,22 +4017,51 @@ function herdrPaneFor(handle: string): string {
     }
     if (item === null || typeof item !== "object" || Array.isArray(item)) continue;
     if (item.handle !== handle) continue;
-    if (typeof item.pane !== "string" || !item.pane) continue;
-    return item.pane;
+    if (
+      typeof item.workspace !== "string" ||
+      !item.workspace ||
+      typeof item.tab !== "string" ||
+      !item.tab ||
+      typeof item.pane !== "string" ||
+      !item.pane
+    )
+      continue;
+    return { space: item.workspace, tab: item.tab, pane: item.pane };
   }
-  return "";
+  return null;
+}
+// Whether the recorded pane still belongs to the launch: it exists, carries
+// the launch token, and sits in the recorded tab. A stale record (its tab
+// closed by hand, its pane id since reused) refuses, so a rename never
+// takes another session's name and a prompt never lands in it. A pane the
+// list cannot place refuses too: fail closed.
+function herdrPaneOwned(space: string, tab: string, pane: string): boolean {
+  const panes = herdr(["pane", "list", "--workspace", space]);
+  if (panes.code !== 0) return false;
+  const rows = parseJson<{ result?: { panes?: HerdrPane[] } }>(panes.out)?.result?.panes;
+  if (!Array.isArray(rows)) return false;
+  const found = rows.find((entry) => entry?.pane_id === pane);
+  if (!found || typeof found !== "object" || Array.isArray(found)) return false;
+  if (found.tab_id !== tab) return false;
+  try {
+    return tokensOf(found)["postmaster"] === "launch";
+  } catch {
+    return false;
+  }
 }
 // Reach a session Herdr never named under its handle through the pane its
-// placement record names, when that pane holds an agent; nothing is ever
-// sent to a pane with no agent. A rename goes first, so a session found
-// this way is named from then on. "" when the session cannot be reached.
+// placement record names, when that pane still belongs to the launch and
+// holds an agent; nothing is ever sent to a pane with no agent, or to one
+// the host did not open for that handle. A rename goes first, so a session
+// found this way is named from then on. "" when the session cannot be reached.
 function herdrResolve(handle: string): string {
   if (herdr(["agent", "get", handle]).code === 0) return handle;
-  const pane = herdrPaneFor(handle);
-  if (!pane) return "";
-  herdr(["agent", "rename", pane, handle]);
+  const rec = herdrRecord(handle);
+  if (!rec) return "";
+  if (!herdrPaneOwned(rec.space, rec.tab, rec.pane)) return "";
+  herdr(["agent", "rename", rec.pane, handle]);
   if (herdr(["agent", "get", handle]).code === 0) return handle;
-  if (herdr(["agent", "get", pane]).code === 0) return pane;
+  if (herdr(["agent", "get", rec.pane]).code === 0) return rec.pane;
   return "";
 }
 async function spawnCmd(args: string[]): Promise<void> {

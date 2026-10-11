@@ -78,8 +78,9 @@ pane. A booking clerk is spawned the same way (`postmaster.md`, Stage B).
 A shell spawn names its agent once Herdr detects it: `spawn` retries the rename until the
 handle answers, within `POSTMASTER_HOST_SPAWN_WAIT` (default 120 seconds), and succeeds with a
 warning when the budget runs out. `send`, `wait` and `read` reach a session Herdr never named
-through the pane its placement record names, when that pane holds an agent, and name it then;
-nothing is ever sent to a pane with no agent.
+through the pane its placement record names, when that pane still belongs to the launch — it
+carries the launch token and sits in the recorded tab — and holds an agent, and name it then;
+nothing is ever sent to a pane with no agent, or to one the host did not open for that handle.
 `run host close-handle <handle>` closes every session recorded under the handle, and only
 those: on Herdr the tabs the placement records name for the handle, on tmux the windows
 carrying its handle tag. A live session with no record is refused, and an unknown handle reports `no
