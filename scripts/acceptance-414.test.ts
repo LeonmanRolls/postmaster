@@ -56,6 +56,9 @@ suite("C1: the concurrent-starts case holds the first start on a gate", () => {
     const block = raceCaseBlock();
     expect(block).toContain("=== 7");
     expect(block).toMatch(/writeFileSync\(raceGate/u);
+    // Refusals, not exits: a racer whose spawn failed exits without
+    // refusing, and must not open the gate for a slow arrival.
+    expect(block).toContain("end === 1");
   });
 
   test("the case still asserts exactly one harness run", () => {
