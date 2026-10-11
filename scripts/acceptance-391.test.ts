@@ -676,4 +676,38 @@ describe("R1: round 1 review regressions", () => {
     expect(second.code).toBe(0);
     expect(second.out).toContain("FINISHED bug slow");
   });
+
+  test("a subset wait-next waits for its named reviewers instead of counting the round's rows", () => {
+    const layout = makeLayout(
+      [
+        { lens: "bug", lane: "a", harness: "codex" },
+        { lens: "bug", lane: "b", harness: "codex" },
+        { lens: "bug", lane: "c", harness: "codex" },
+      ],
+      { timeoutSeconds: 3 },
+    );
+    expect(
+      tool(layout, "review-round", "start", layout.dispatch, "1", "bug:a", "bug:b", "bug:c").code,
+    ).toBe(0);
+    writeFileSync(join(layout.dispatch, "logs", "review-r1-bug-a.done"), "");
+    writeFileSync(join(layout.dispatch, "logs", "review-r1-bug-c.done"), "");
+    const first = tool(layout, "review-round", "wait-next", layout.dispatch, "1", layout.repo);
+    expect(first.code).toBe(0);
+    expect(first.out).toContain("FINISHED bug a");
+    expect(first.out).toContain("FINISHED bug c");
+    const subset = tool(
+      layout,
+      "review-round",
+      "wait-next",
+      layout.dispatch,
+      "1",
+      layout.repo,
+      "bug:a",
+      "bug:b",
+    );
+    expect(subset.code).toBe(3);
+    expect(out(subset)).toContain("WAIT-TIMEOUT");
+    expect(out(subset)).toContain("TIMEOUT bug b: DEGRADED, timeout");
+    expect(degrades(layout)).toEqual(["b"]);
+  });
 });

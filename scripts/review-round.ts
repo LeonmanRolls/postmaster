@@ -1447,7 +1447,10 @@ if (import.meta.main) {
     const fresh = (): Array<[string, string]> =>
       reviewers.filter(([lens, lane]) => markerIn(lens, lane) && !reported.has(`${lens}\0${lane}`));
     let newly = fresh();
-    if (newly.length === 0 && reported.size >= n) {
+    // Every reviewer of this call, not the row count: a subset call must not
+    // read another reviewer's finish row as its own reviewers reported.
+    const allReported = reviewers.every(([lens, lane]) => reported.has(`${lens}\0${lane}`));
+    if (newly.length === 0 && allReported) {
       console.log(`review-round: round ${R}, every reviewer reported`);
       process.exit(0);
     }
