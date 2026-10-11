@@ -138,6 +138,8 @@ async function snapshot(pm: Pm): Promise<void> {
   const env = (process.env as Record<string, string>).PATH;
   const pathEnv = `${DEV_BIN}:${env}`;
   const add = async (dir: string, spec: string): Promise<void> => {
+    // Snapshots need only the lockfile: install scriptless so pnpm's native
+    // build gate does not fail the fixture setup.
     const r = await runAsync(
       bin,
       [
@@ -145,6 +147,7 @@ async function snapshot(pm: Pm): Promise<void> {
         spec,
         "--registry",
         registry.url,
+        "--ignore-scripts",
         ...(pm === "yarn" ? ["--non-interactive"] : []),
         ...(pm === "npm" ? ["--no-audit", "--no-fund"] : []),
       ],

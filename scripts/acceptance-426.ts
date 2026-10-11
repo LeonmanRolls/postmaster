@@ -9,6 +9,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   realpathSync,
   rmSync,
   symlinkSync,
@@ -55,7 +56,9 @@ export interface BuiltTarball {
 }
 
 /** Pack a fixture package dir into a registry-style tarball with a package/
- * root, rewriting its version. Returns the file name and its integrity. */
+ * root, rewriting its version. Returns the file name and its integrity. The
+ * bytes are deterministic per machine (sorted entries, fixed mtimes, gzip
+ * without name or mtime), so manager caches stay valid across runs. */
 export function buildTarball(pkgDir: string, destDir: string, version: string): BuiltTarball {
   const stage = join(destDir, "stage");
   const root = join(stage, "package");
@@ -70,9 +73,16 @@ export function buildTarball(pkgDir: string, destDir: string, version: string): 
   const short = name.includes("/") ? name.slice(name.indexOf("/") + 1) : name;
   const file = `${short}-${version}.tgz`;
   const out = join(destDir, file);
-  const tar = run("tar", ["-czf", out, "-C", stage, "package"]);
+  const entries = readdirSync(root).sort();
+  const touch = run("touch", ["-t", "202001010000", root, ...entries.map((e) => join(root, e))]);
+  if (touch.code !== 0) throw new Error(`touch: ${touch.err.trim() || touch.out.trim()}`);
+  const tar = run("tar", ["--no-recursion", "-cf", join(destDir, "stage.tar"), "-C", stage, "package", ...entries.map((e) => `package/${e}`)]);
   if (tar.code !== 0) throw new Error(`tar: ${tar.err.trim() || tar.out.trim()}`);
+  const gzip = run("gzip", ["-n", join(destDir, "stage.tar")]);
+  if (gzip.code !== 0) throw new Error(`gzip: ${gzip.err.trim() || gzip.out.trim()}`);
+  cpSync(join(destDir, "stage.tar.gz"), out);
   rmSync(stage, { recursive: true, force: true });
+  rmSync(join(destDir, "stage.tar.gz"), { force: true });
   const bytes = readFileSync(out);
   const integrity = `sha512-${createHash("sha512").update(bytes).digest("base64")}`;
   return { file, integrity };
@@ -289,8 +299,25 @@ export async function runAsync(
       stdout: "pipe",
       stderr: "pipe",
     });
-  } catch {
-    return { code: 127, out: "", err: `command not found: ${cmd}` };
+  } catch (e) {
+    // Shebangless sh wrappers (the pinned pnpm's bin): the kernel answers
+    // ENOEXEC and shells retry under sh, so the spawn does too. Anything
+    // else, including a truly missing command, stays a 127.
+    const code = (e as { code?: unknown }).code;
+    const enoexec = code === "ENOEXEC" || String(e).includes("ENOEXEC");
+    if (!enoexec || !existsSync(cmd))
+      return { code: 127, out: "", err: `command not found: ${cmd}` };
+    try {
+      child = Bun.spawn(["sh", cmd, ...args], {
+        cwd: opts.cwd,
+        env: opts.env,
+        stdin: "ignore",
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+    } catch {
+      return { code: 127, out: "", err: `command not found: ${cmd}` };
+    }
   }
   const [code, out, err] = await Promise.all([
     child.exited,
