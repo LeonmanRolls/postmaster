@@ -1,0 +1,10 @@
+module	from	to	share_diff_points	lo	hi	tokens_ratio	lo	hi	verdict
+style-findings	original	functional	-1.5	-10.8	5.4	1.077	0.979	1.186	no difference
+style-findings	original	tidy	2.3	-4.6	8.5	0.830	0.728	0.946	no difference
+style-findings	tidy	functional	-3.8	-11.5	3.8	1.297	1.155	1.461	no difference
+ticket-parts	original	functional	-0.8	-6.2	3.1	1.034	0.918	1.183	no difference
+ticket-parts	original	tidy	-3.1	-6.9	0.8	0.999	0.881	1.153	no difference
+ticket-parts	tidy	functional	2.3	-2.3	6.9	1.035	0.966	1.111	no difference
+view-stream	original	functional	3.1	0.8	6.2	0.993	0.911	1.091	easier
+view-stream	original	tidy	0.8	-1.5	3.1	0.938	0.850	1.039	no difference
+view-stream	tidy	functional	2.3	0.0	6.2	1.058	0.982	1.139	no difference

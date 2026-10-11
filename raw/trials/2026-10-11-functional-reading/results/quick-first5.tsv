@@ -1,0 +1,77 @@
+model	module	arrangement	type	sessions	right	asked	share	lo	hi
+claude-haiku-5-5	style-findings	functional	all	5	115	130	88.5	81.8	92.9
+claude-haiku-5-5	style-findings	original	all	5	117	130	90.0	83.6	94.1
+claude-haiku-5-5	style-findings	tidy	all	5	120	130	92.3	86.4	95.8
+claude-haiku-5-5	style-findings	functional	change	5	23	30	76.7	59.1	88.2
+claude-haiku-5-5	style-findings	original	change	5	27	30	90.0	74.4	96.5
+claude-haiku-5-5	style-findings	tidy	change	5	27	30	90.0	74.4	96.5
+claude-haiku-5-5	style-findings	functional	control-trivial	5	5	5	100.0	56.6	100.0
+claude-haiku-5-5	style-findings	original	control-trivial	5	5	5	100.0	56.6	100.0
+claude-haiku-5-5	style-findings	tidy	control-trivial	5	5	5	100.0	56.6	100.0
+claude-haiku-5-5	style-findings	functional	control-undetermined	5	5	5	100.0	56.6	100.0
+claude-haiku-5-5	style-findings	original	control-undetermined	5	5	5	100.0	56.6	100.0
+claude-haiku-5-5	style-findings	tidy	control-undetermined	5	5	5	100.0	56.6	100.0
+claude-haiku-5-5	style-findings	functional	state	5	37	40	92.5	80.1	97.4
+claude-haiku-5-5	style-findings	original	state	5	37	40	92.5	80.1	97.4
+claude-haiku-5-5	style-findings	tidy	state	5	38	40	95.0	83.5	98.6
+claude-haiku-5-5	style-findings	functional	trace	5	45	50	90.0	78.6	95.7
+claude-haiku-5-5	style-findings	original	trace	5	43	50	86.0	73.8	93.0
+claude-haiku-5-5	style-findings	tidy	trace	5	45	50	90.0	78.6	95.7
+claude-haiku-5-5	ticket-parts	functional	all	5	127	130	97.7	93.4	99.2
+claude-haiku-5-5	ticket-parts	original	all	5	128	130	98.5	94.6	99.6
+claude-haiku-5-5	ticket-parts	tidy	all	5	124	130	95.4	90.3	97.9
+claude-haiku-5-5	ticket-parts	functional	change	5	30	30	100.0	88.6	100.0
+claude-haiku-5-5	ticket-parts	original	change	5	30	30	100.0	88.6	100.0
+claude-haiku-5-5	ticket-parts	tidy	change	5	30	30	100.0	88.6	100.0
+claude-haiku-5-5	ticket-parts	functional	control-trivial	5	5	5	100.0	56.6	100.0
+claude-haiku-5-5	ticket-parts	original	control-trivial	5	5	5	100.0	56.6	100.0
+claude-haiku-5-5	ticket-parts	tidy	control-trivial	5	5	5	100.0	56.6	100.0
+claude-haiku-5-5	ticket-parts	functional	control-undetermined	5	5	5	100.0	56.6	100.0
+claude-haiku-5-5	ticket-parts	original	control-undetermined	5	5	5	100.0	56.6	100.0
+claude-haiku-5-5	ticket-parts	tidy	control-undetermined	5	5	5	100.0	56.6	100.0
+claude-haiku-5-5	ticket-parts	functional	state	5	37	40	92.5	80.1	97.4
+claude-haiku-5-5	ticket-parts	original	state	5	39	40	97.5	87.1	99.6
+claude-haiku-5-5	ticket-parts	tidy	state	5	37	40	92.5	80.1	97.4
+claude-haiku-5-5	ticket-parts	functional	trace	5	50	50	100.0	92.9	100.0
+claude-haiku-5-5	ticket-parts	original	trace	5	49	50	98.0	89.5	99.6
+claude-haiku-5-5	ticket-parts	tidy	trace	5	47	50	94.0	83.8	97.9
+claude-haiku-5-5	view-stream	functional	all	5	129	130	99.2	95.8	99.9
+claude-haiku-5-5	view-stream	original	all	5	125	130	96.2	91.3	98.3
+claude-haiku-5-5	view-stream	tidy	all	5	126	130	96.9	92.4	98.8
+claude-haiku-5-5	view-stream	functional	change	5	30	30	100.0	88.6	100.0
+claude-haiku-5-5	view-stream	original	change	5	29	30	96.7	83.3	99.4
+claude-haiku-5-5	view-stream	tidy	change	5	29	30	96.7	83.3	99.4
+claude-haiku-5-5	view-stream	functional	control-trivial	5	5	5	100.0	56.6	100.0
+claude-haiku-5-5	view-stream	original	control-trivial	5	5	5	100.0	56.6	100.0
+claude-haiku-5-5	view-stream	tidy	control-trivial	5	5	5	100.0	56.6	100.0
+claude-haiku-5-5	view-stream	functional	control-undetermined	5	5	5	100.0	56.6	100.0
+claude-haiku-5-5	view-stream	original	control-undetermined	5	5	5	100.0	56.6	100.0
+claude-haiku-5-5	view-stream	tidy	control-undetermined	5	5	5	100.0	56.6	100.0
+claude-haiku-5-5	view-stream	functional	state	5	40	40	100.0	91.2	100.0
+claude-haiku-5-5	view-stream	original	state	5	38	40	95.0	83.5	98.6
+claude-haiku-5-5	view-stream	tidy	state	5	40	40	100.0	91.2	100.0
+claude-haiku-5-5	view-stream	functional	trace	5	49	50	98.0	89.5	99.6
+claude-haiku-5-5	view-stream	original	trace	5	48	50	96.0	86.5	98.9
+claude-haiku-5-5	view-stream	tidy	trace	5	47	50	94.0	83.8	97.9
+
+model	module	arrangement	sessions	prompt_tokens	output_tokens	thinking_tokens	seconds	dollars
+claude-haiku-5-5	style-findings	functional	5	54968.00	48785.20	47684.80	200.39	0.03
+claude-haiku-5-5	style-findings	original	5	44692.00	45306.40	44200.80	186.10	0.03
+claude-haiku-5-5	style-findings	tidy	5	53197.00	37610.40	36502.40	154.17	0.02
+claude-haiku-5-5	ticket-parts	functional	5	28536.00	45885.20	44778.40	181.18	0.03
+claude-haiku-5-5	ticket-parts	original	5	24947.00	44370.80	43253.80	174.06	0.02
+claude-haiku-5-5	ticket-parts	tidy	5	28535.80	44336.60	43229.20	173.66	0.02
+claude-haiku-5-5	view-stream	functional	5	36813.00	29975.80	28718.80	121.77	0.02
+claude-haiku-5-5	view-stream	original	5	33902.00	30194.20	28883.20	122.99	0.02
+claude-haiku-5-5	view-stream	tidy	5	36642.00	28321.80	26995.20	114.53	0.02
+
+model	module	from	to	questions	share_difference_points	lo	hi	tokens_ratio	lo	hi
+claude-haiku-5-5	style-findings	original	functional	26	-1.5	-10.8	5.4	1.08	0.98	1.19
+claude-haiku-5-5	style-findings	original	tidy	26	2.3	-4.6	8.5	0.83	0.73	0.95
+claude-haiku-5-5	style-findings	tidy	functional	26	-3.8	-11.5	3.8	1.30	1.16	1.46
+claude-haiku-5-5	ticket-parts	original	functional	26	-0.8	-6.2	3.1	1.03	0.92	1.18
+claude-haiku-5-5	ticket-parts	original	tidy	26	-3.1	-6.9	0.8	1.00	0.88	1.15
+claude-haiku-5-5	ticket-parts	tidy	functional	26	2.3	-2.3	6.9	1.03	0.97	1.11
+claude-haiku-5-5	view-stream	original	functional	26	3.1	0.8	6.2	0.99	0.91	1.09
+claude-haiku-5-5	view-stream	original	tidy	26	0.8	-1.5	3.1	0.94	0.85	1.04
+claude-haiku-5-5	view-stream	tidy	functional	26	2.3	0.0	6.2	1.06	0.98	1.14
