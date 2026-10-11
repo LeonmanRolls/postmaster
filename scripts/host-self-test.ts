@@ -5641,6 +5641,11 @@ export async function runControls(): Promise<number> {
     await waitFor(() => ends.filter((end) => end === 1).length === 7);
     writeFileSync(raceGate, "");
     const allEnded = await waitFor(() => ends.every((end) => end !== undefined));
+    const failedSpawns = ends.filter((end) => end === null).length;
+    if (failedSpawns > 0)
+      throw new Error(
+        `race for the lock: ${failedSpawns} of eight racers failed to spawn: ${ends.map((end) => String(end)).join(",")}`,
+      );
     if (!allEnded)
       throw new Error(
         `race for the lock: only ${ends.filter((end) => end !== undefined).length} of eight racers ended: ${ends.map((end) => String(end)).join(",")}`,
