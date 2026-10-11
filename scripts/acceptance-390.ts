@@ -187,7 +187,11 @@ export function cardWrite(layout: Layout, ...extra: string[]): Call {
 }
 
 /** The exact bytes each printed part renders as, straight from the records. */
-export function rendered(layout: Layout): { block: string; switchOffs: string; privateData: string } {
+export function rendered(layout: Layout): {
+  block: string;
+  switchOffs: string;
+  privateData: string;
+} {
   const block = landing("card-block", layout.dispatch, layout.wt, layout.checkpoint);
   if (block.code !== 0) throw new Error(`card-block failed: ${block.err}${block.out}`);
   const switches = landing(
@@ -294,16 +298,15 @@ export function refuseSwitch(layout: Layout): string {
   );
   const id = /\(id (comment:[0-9a-f]{16})\)/u.exec(switches.out)?.[1];
   if (!id) throw new Error(`no switch-off id in: ${switches.out}`);
-  const line =
-    `${JSON.stringify({
-      ts: "2026-01-01T00:00:00Z",
-      project: "fixture",
-      run: layout.dispatch.slice(layout.dispatch.lastIndexOf("/") + 1),
-      actor: "postmaster",
-      action: "switch-off",
-      target: id,
-      detail: "refused the fixture suppression because the type error needs a fix",
-    })}\n`;
+  const line = `${JSON.stringify({
+    ts: "2026-01-01T00:00:00Z",
+    project: "fixture",
+    run: layout.dispatch.slice(layout.dispatch.lastIndexOf("/") + 1),
+    actor: "postmaster",
+    action: "switch-off",
+    target: id,
+    detail: "refused the fixture suppression because the type error needs a fix",
+  })}\n`;
   appendFileSync(join(layout.dispatch, "actions.jsonl"), line, "utf8");
   appendFileSync(join(layout.dir, "ledger.jsonl"), line, "utf8");
   return id;

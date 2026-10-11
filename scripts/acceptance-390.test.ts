@@ -72,10 +72,7 @@ describe("C1: the command writes the printed parts", () => {
     const layout = scratchLayout(tmp, "c1b");
     const before = readCard(layout);
     const words = "The reach line names the project folder itself.\n";
-    writeCard(
-      layout,
-      before.replace("## Merge", `## Notes\n\n${words}\n## Merge`),
-    );
+    writeCard(layout, before.replace("## Merge", `## Notes\n\n${words}\n## Merge`));
     const written = cardWrite(layout);
     expect(written.code).toBe(0);
     const card = readCard(layout);
@@ -145,7 +142,10 @@ describe("C2: running it again replaces the parts", () => {
     const slip = "\nThe checks all pass because the gate is green.\n";
     writeCard(
       layout,
-      readCard(layout).replace("## Open findings\n\n- [P1] bug-1\n", `## Open findings\n\n- [P1] bug-1\n${slip}`),
+      readCard(layout).replace(
+        "## Open findings\n\n- [P1] bug-1\n",
+        `## Open findings\n\n- [P1] bug-1\n${slip}`,
+      ),
     );
     expect(checkResults(layout).code).toBe(1);
     expect(cardWrite(layout).code).toBe(0);
