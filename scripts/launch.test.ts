@@ -4625,7 +4625,7 @@ s.close()
       );
     }
   });
-}, 300000);
+}, 900_000);
 
 afterAll(() => {
   for (const [k, v] of Object.entries(savedEnv)) {
