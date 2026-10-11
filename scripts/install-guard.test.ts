@@ -628,10 +628,10 @@ test("foreign scopes and foreign tarballs refuse", () => {
       writeFileSync(join(proj, ".npmrc"), "@s:registry=https://evil.example\n");
       expect(() =>
         refuseForeignScopes("yarn", "classic", join(proj, "sub"), proj, "https://r.example"),
-      ).toThrow(/points @s at https:\/\/evil\.example/);
+      ).toThrow(/points @s at https:\/\/evil\.example/u);
       expect(() =>
         refuseForeignScopes("bun", "classic", join(proj, "sub"), proj, "https://r.example"),
-      ).toThrow(/\.npmrc points @s/);
+      ).toThrow(/\.npmrc points @s/u);
       // The same origin as the guard's passes.
       writeFileSync(join(proj, ".npmrc"), "@s:registry=https://r.example/other\n");
       refuseForeignScopes("yarn", "classic", join(proj, "sub"), proj, "https://r.example");
@@ -640,14 +640,14 @@ test("foreign scopes and foreign tarballs refuse", () => {
       refuseForeignScopes("bun", "classic", join(proj, "sub"), proj, "https://r.example");
       expect(() =>
         refuseForeignScopes("yarn", "classic", join(proj, "sub"), proj, "https://r.example"),
-      ).toThrow(/\.yarnrc points @s/);
+      ).toThrow(/\.yarnrc points @s/u);
       rmSync(join(proj, ".yarnrc"));
       writeFileSync(
         join(proj, ".yarnrc.yml"),
         'npmScopes:\n  s:\n    npmRegistryServer: "https://evil.example"\n',
       );
       expect(() => refuseForeignScopes("yarn", "berry", proj, proj, "https://r.example")).toThrow(
-        /points @s/,
+        /points @s/u,
       );
       refuseForeignScopes("yarn", "classic", proj, proj, "https://r.example");
       // Lockfiles pinning foreign tarballs refuse on sync.
@@ -664,7 +664,9 @@ test("foreign scopes and foreign tarballs refuse", () => {
         }),
       );
       expect(lockResolved(lock)).toEqual(["https://evil.example/a.tgz"]);
-      expect(() => refuseForeignResolved(lock, "https://r.example")).toThrow(/outside the guarded/);
+      expect(() => refuseForeignResolved(lock, "https://r.example")).toThrow(
+        /outside the guarded/u,
+      );
       const ylock = join(proj, "yarn.lock");
       writeFileSync(ylock, 'a@^1:\n  version "1.0.0"\n  resolved "https://r.example/a.tgz"\n');
       expect(lockResolved(ylock)).toEqual(["https://r.example/a.tgz"]);

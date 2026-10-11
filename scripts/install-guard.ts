@@ -750,7 +750,7 @@ const NPM_ALIASES: Record<string, string> = {
 export function derefNpm(word: string): string | null {
   if (word === "") return null;
   let c = word;
-  if (/[A-Z]/u.test(c)) c = c.replace(/([A-Z])/gu, (m) => `-${m.toLowerCase()}`);
+  if (/[A-Z]/u.test(c)) c = c.replace(/([A-Z])/gu, (m) => `-${m.toLowerCase()}`); // LOWER: m is one ASCII [A-Z] char
   if (NPM_COMMANDS.has(c)) return c;
   const direct = NPM_ALIASES[c];
   if (direct !== undefined) return direct;
@@ -2676,7 +2676,7 @@ export function execManager(
 export function registryEnvStrips(env: Record<string, string | undefined>): string[] {
   const strips: string[] = [];
   for (const key of Object.keys(env)) {
-    const lower = key.toLowerCase();
+    const lower = key.toLowerCase(); // LOWER: registry env names are ASCII; the fold finds every ASCII spelling
     if (lower === "yarn_registry") {
       strips.push(key);
       continue;
@@ -3028,7 +3028,7 @@ export function npmrcScopes(text: string): Map<string, string> {
   const scopes = new Map<string, string>();
   for (const line of text.split("\n")) {
     const cut = line.split("#")[0] ?? "";
-    const match = /^\s*("?)(@[^=:\s"']+):registry\1\s*[=\s]\s*(.+?)\s*$/u.exec(cut);
+    const match = /^\s*("?)(@[^=:\s"']+):registry\1\s*[=\s]\s*(.+?)\s*$/u.exec(cut); // ASCII: config whitespace here is ASCII; matching more only refuses more
     if (match === null) continue;
     const url = unquote(match[3] ?? "");
     if (url !== "") scopes.set(match[2] ?? "", url);
@@ -3047,9 +3047,9 @@ export function berryScopes(text: string): Map<string, string> {
   let scope: string | null = null;
   let scopeIndent = 0;
   for (const line of lines) {
-    if (/^\s*(#|$)/u.test(line)) continue;
-    const indent = line.match(/^\s*/u)?.[0].length ?? 0;
-    const top = /^\s*npmScopes:\s*(#.*)?$/u.exec(line);
+    if (/^\s*(#|$)/u.test(line)) continue; // ASCII: config whitespace here is ASCII; matching more only refuses more
+    const indent = line.match(/^\s*/u)?.[0].length ?? 0; // ASCII: config whitespace here is ASCII; matching more only refuses more
+    const top = /^\s*npmScopes:\s*(#.*)?$/u.exec(line); // ASCII: config whitespace here is ASCII; matching more only refuses more
     if (top !== null) {
       inBlock = true;
       blockIndent = indent;
@@ -3062,13 +3062,13 @@ export function berryScopes(text: string): Map<string, string> {
       scope = null;
       continue;
     }
-    const server = /^\s*npmRegistryServer:\s*(.+?)\s*(#.*)?$/u.exec(line);
+    const server = /^\s*npmRegistryServer:\s*(.+?)\s*(#.*)?$/u.exec(line); // ASCII: config whitespace here is ASCII; matching more only refuses more
     if (server !== null && scope !== null && indent > scopeIndent) {
       const url = unquote(server[1] ?? "");
       if (url !== "") scopes.set(scope, url);
       continue;
     }
-    const named = /^\s*("?)(@?[^:\s"']+)\1:\s*(#.*)?$/u.exec(line);
+    const named = /^\s*("?)(@?[^:\s"']+)\1:\s*(#.*)?$/u.exec(line); // ASCII: config whitespace here is ASCII; matching more only refuses more
     if (named !== null && indent > blockIndent) {
       const raw = named[2] ?? "";
       scope = raw.startsWith("@") ? raw : `@${raw}`;
@@ -3085,18 +3085,19 @@ export function bunfigScopes(text: string): Map<string, string> {
   let inSection = false;
   for (const line of text.split("\n")) {
     const cut = line.split("#")[0] ?? "";
+    // ASCII: config whitespace here is ASCII; matching more only refuses more
     if (/^\s*\[/u.test(cut)) {
-      inSection = /^\s*\[install\.scopes\]\s*$/u.test(cut);
+      inSection = /^\s*\[install\.scopes\]\s*$/u.test(cut); // ASCII: config whitespace here is ASCII; matching more only refuses more
       continue;
     }
     if (!inSection) continue;
-    const entry = /^\s*("?)(@?[^=:\s"']+)\1\s*=\s*(.+?)\s*$/u.exec(cut);
+    const entry = /^\s*("?)(@?[^=:\s"']+)\1\s*=\s*(.+?)\s*$/u.exec(cut); // ASCII: config whitespace here is ASCII; matching more only refuses more
     if (entry === null) continue;
     const raw = entry[2] ?? "";
     const scope = raw.startsWith("@") ? raw : `@${raw}`;
     const value = entry[3] ?? "";
     const url = value.trim().startsWith("{")
-      ? unquote(/url\s*=\s*("[^"]*"|'[^']*'|\S+)/u.exec(value)?.[1] ?? "")
+      ? unquote(/url\s*=\s*("[^"]*"|'[^']*'|\S+)/u.exec(value)?.[1] ?? "") // ASCII: config whitespace here is ASCII; matching more only refuses more
       : unquote(value);
     if (url !== "") scopes.set(scope, url);
   }
@@ -3196,7 +3197,7 @@ export function lockResolved(lockfile: string): string[] {
   const urls: string[] = [];
   if (/(^|\/)yarn\.lock$/u.test(lockfile)) {
     for (const line of text.split("\n")) {
-      const match = /^\s*resolved\s+"([^"]+)"\s*$/u.exec(line);
+      const match = /^\s*resolved\s+"([^"]+)"\s*$/u.exec(line); // ASCII: config whitespace here is ASCII; matching more only refuses more
       if (match !== null && (match[1] ?? "").startsWith("http")) urls.push(match[1] ?? "");
     }
     return urls;
@@ -3235,12 +3236,12 @@ export function refuseForeignResolved(lockfile: string, registry: string): void 
  * the key's line, then the deeper-indented `k: v` lines beneath it. */
 export function yamlBlockMap(text: string, key: string): Map<string, string> {
   const out = new Map<string, string>();
-  const head = new RegExp(`^\\s*${key}:\\s*(#.*)?$`, "u");
+  const head = new RegExp(`^\\s*${key}:\\s*(#.*)?$`, "u"); // ASCII: config whitespace here is ASCII; matching more only refuses more
   let inBlock = false;
   let blockIndent = 0;
   for (const line of text.split("\n")) {
-    if (/^\s*(#|$)/u.test(line)) continue;
-    const indent = line.match(/^\s*/u)?.[0].length ?? 0;
+    if (/^\s*(#|$)/u.test(line)) continue; // ASCII: config whitespace here is ASCII; matching more only refuses more
+    const indent = line.match(/^\s*/u)?.[0].length ?? 0; // ASCII: config whitespace here is ASCII; matching more only refuses more
     if (head.test(line)) {
       inBlock = true;
       blockIndent = indent;
@@ -3251,7 +3252,7 @@ export function yamlBlockMap(text: string, key: string): Map<string, string> {
       inBlock = false;
       continue;
     }
-    const entry = /^\s*("?)([^:\s"']+)\1:\s*(.+?)\s*(#.*)?$/u.exec(line);
+    const entry = /^\s*("?)([^:\s"']+)\1:\s*(.+?)\s*(#.*)?$/u.exec(line); // ASCII: config whitespace here is ASCII; matching more only refuses more
     if (entry !== null && (entry[3] ?? "") !== "") out.set(entry[2] ?? "", unquote(entry[3] ?? ""));
   }
   return out;
@@ -3300,7 +3301,7 @@ export function overrideName(key: string): string | null {
 
 /** Whether a string is an exact version, with an optional prerelease. */
 export function isExactVersion(value: string): boolean {
-  return /^\d+\.\d+\.\d+(-[0-9a-z.-]+)?(\+[0-9a-z.-]+)?$/iu.test(value);
+  return /^\d+\.\d+\.\d+(-[0-9a-z.-]+)?(\+[0-9a-z.-]+)?$/iu.test(value); // ASCII: versions are ASCII digits
 }
 
 /** The checked target behind one override entry: an exact `name@version`
