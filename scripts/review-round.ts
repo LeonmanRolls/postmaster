@@ -499,8 +499,8 @@ interface GatePass {
   text: string;
 }
 
-const CUT_PASS_RE = /^review round ([1-9][0-9]*), run verify exit ([03])$/u;
-const MIDROUND_PASS_RE = /^review round ([1-9][0-9]*), run verify exit ([03]), mid-round gate$/u;
+const CUT_RUN_RE = /^review round ([1-9][0-9]*), run verify exit ([0-9]+)$/u;
+const MIDROUND_RUN_RE = /^review round ([1-9][0-9]*), run verify exit ([0-9]+), mid-round gate$/u;
 const REUSE_PASS_RE =
   /^review round ([1-9][0-9]*), gate pass reused from round ([1-9][0-9]*) \(run verify exit ([03])\)$/u;
 
@@ -509,6 +509,9 @@ const REUSE_PASS_RE =
  * under logs/gate-<commit>.txt by the cut or mid-round gate that recorded it. The
  * text lives under its commit, never under the round: a later cut of the same round
  * at another commit rewrites the round's checks file, and must not move it.
+ * The latest verify evidence decides: a fail row on the commit after the newest
+ * pass reuses nothing, and the cut runs verify again. A reuse row carries no
+ * fresh evidence, so only cut and mid-round rows move the decision.
  * Anything unreadable yields no pass: the cut runs verify, as today. The log's
  * strict reader stays review-decide.
  */
@@ -520,7 +523,11 @@ export function findGatePass(dispatch: string, snap: string): GatePass | null {
     return null;
   }
   const candidates: Array<{ exit: number; fromRound: string; file: string }> = [];
-  for (const line of contents.split("\n")) {
+  let newestPass = -1;
+  let newestFail = -1;
+  const lines = contents.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i] ?? "";
     if (line.trim() === "") continue;
     let row: Record<string, unknown>;
     try {
@@ -533,23 +540,25 @@ export function findGatePass(dispatch: string, snap: string): GatePass | null {
     if (row.action !== "gate" || row.target !== snap) continue;
     const detail = typeof row.detail === "string" ? row.detail : "";
     const file = join(dispatch, "logs", `gate-${snap}.txt`);
-    let m = CUT_PASS_RE.exec(detail);
-    if (m) {
-      candidates.push({ exit: Number(m[2]), fromRound: m[1] ?? "", file });
+    const run = CUT_RUN_RE.exec(detail) ?? MIDROUND_RUN_RE.exec(detail);
+    if (run) {
+      const exit = Number(run[2]);
+      if (exit === 0 || exit === 3) {
+        candidates.push({ exit, fromRound: run[1] ?? "", file });
+        newestPass = i;
+      } else {
+        newestFail = i;
+      }
       continue;
     }
-    m = MIDROUND_PASS_RE.exec(detail);
-    if (m) {
-      candidates.push({ exit: Number(m[2]), fromRound: m[1] ?? "", file });
-      continue;
-    }
-    m = REUSE_PASS_RE.exec(detail);
+    const m = REUSE_PASS_RE.exec(detail);
     if (m) {
       // The reused row's own round keeps the chain of rows followable round by
       // round; the text sits under the commit either way.
       candidates.push({ exit: Number(m[3]), fromRound: m[1] ?? "", file });
     }
   }
+  if (newestFail > newestPass) return null;
   for (let i = candidates.length - 1; i >= 0; i--) {
     const candidate = candidates[i]!;
     try {
