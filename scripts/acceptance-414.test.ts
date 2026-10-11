@@ -48,13 +48,13 @@ suite("C1: the concurrent-starts case holds the first start on a gate", () => {
   test("the eight racers start spread over seconds, not in one burst", () => {
     const block = raceCaseBlock();
     expect(block).not.toContain("Array.from({ length: 8 }");
-    expect(block).toMatch(/stagger/i);
+    expect(block).toMatch(/stagger/iu);
   });
 
   test("the gate opens only after the other seven have been turned away", () => {
     const block = raceCaseBlock();
-    expect(block).toMatch(/=== 7/);
-    expect(block).toMatch(/writeFileSync\(raceGate/);
+    expect(block).toContain("=== 7");
+    expect(block).toMatch(/writeFileSync\(raceGate/u);
   });
 
   test("the case still asserts exactly one harness run", () => {
@@ -85,8 +85,8 @@ suite("C2/C3: a suite that never ends is stopped and names its strays", () => {
       expect(output).toContain("did not end");
       expect(elapsed).toBeLessThan(60_000);
       // C3: every leftover under the suite, with pid and command.
-      expect(output).toMatch(/pid [0-9]+: .*sleep 60/);
-      expect(output).toMatch(/pid [0-9]+: .*sleep 300/);
+      expect(output).toMatch(/pid [0-9]+: .*sleep 60/u);
+      expect(output).toMatch(/pid [0-9]+: .*sleep 300/u);
     } finally {
       cleanup(dir);
     }
@@ -104,8 +104,8 @@ suite("C4: a test that runs out of time names what it was awaiting", () => {
       expect(r.code).not.toBe(0);
       expect(output).toContain("timed out after 2000ms");
       expect(output).toContain("test-children:");
-      expect(output).toMatch(/pid [0-9]+: .*sleep 30/);
-      expect(output).toMatch(/pid [0-9]+: (running|reaped|zombie)/);
+      expect(output).toMatch(/pid [0-9]+: .*sleep 30/u);
+      expect(output).toMatch(/pid [0-9]+: (running|reaped|zombie)/u);
     } finally {
       cleanup(dir);
     }
