@@ -164,7 +164,10 @@ export function machine(root: string, opts: FixtureOptions = {}): Machine {
   );
   writeFileSync(join(dispatch, "run-log.md"), "");
   for (const lens of opts.briefs ?? []) {
-    writeFileSync(join(dispatch, `review-${lens}-brief.md`), `# ${lens} brief\n\nReview the diff.\n`);
+    writeFileSync(
+      join(dispatch, `review-${lens}-brief.md`),
+      `# ${lens} brief\n\nReview the diff.\n`,
+    );
   }
   const host = join(root, "host");
   mkdirSync(host, { recursive: true });

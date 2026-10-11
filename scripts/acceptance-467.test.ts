@@ -60,62 +60,54 @@ function launchedRound(m: Machine): { code: number; out: string; err: string } {
 }
 
 describe("C1: launch saves the round's starting state", () => {
-  test(
-    "launch writes before-r1.json before the first reviewer starts",
-    () => {
-      withTempDir((root) => {
-        const m = machine(root, { briefs: ["style"] });
-        const launched = launchedRound(m);
-        expect(launched.code).toBe(0);
-        const snapshot = join(m.dispatch, "reach", "before-r1.json");
-        expect(existsSync(snapshot)).toBe(true);
-        const saved = JSON.parse(readFileSync(snapshot, "utf8")) as {
-          round: number;
-          synthesisHead: string;
-        };
-        expect(saved.round).toBe(1);
-        expect(saved.synthesisHead).toBe(m.snap);
-        const marker = join(m.dispatch, "logs", "review-r1-style-ghost.done");
-        expect(existsSync(marker)).toBe(true);
-        expect(statSync(snapshot).mtimeMs).toBeLessThan(statSync(marker).mtimeMs);
-      }, "acceptance-467-c1-");
-    },
-    300_000,
-  );
+  test("launch writes before-r1.json before the first reviewer starts", () => {
+    withTempDir((root) => {
+      const m = machine(root, { briefs: ["style"] });
+      const launched = launchedRound(m);
+      expect(launched.code).toBe(0);
+      const snapshot = join(m.dispatch, "reach", "before-r1.json");
+      expect(existsSync(snapshot)).toBe(true);
+      const saved = JSON.parse(readFileSync(snapshot, "utf8")) as {
+        round: number;
+        synthesisHead: string;
+      };
+      expect(saved.round).toBe(1);
+      expect(saved.synthesisHead).toBe(m.snap);
+      const marker = join(m.dispatch, "logs", "review-r1-style-ghost.done");
+      expect(existsSync(marker)).toBe(true);
+      expect(statSync(snapshot).mtimeMs).toBeLessThan(statSync(marker).mtimeMs);
+    }, "acceptance-467-c1-");
+  }, 300_000);
 });
 
 describe("C2: wait runs the round's reach check", () => {
-  test(
-    "after launch returns, the round's point is logged after the markers",
-    () => {
-      withTempDir((root) => {
-        const m = machine(root, { briefs: ["style"] });
-        const launched = launchedRound(m);
-        expect(launched.code).toBe(0);
-        expect(launched.out).toContain("r1: ");
-        const point = reachPoint(m, "r1");
-        expect(point).not.toBeNull();
-        const lines = actions(m);
-        let lastLaunch = -1;
-        let atPoint = -1;
-        lines.forEach((line, i) => {
-          if (line.action === "review-launch") lastLaunch = i;
-          if (line.action === "reach" && line.target === "r1") atPoint = i;
-        });
-        expect(lastLaunch).toBeGreaterThanOrEqual(0);
-        expect(atPoint).toBeGreaterThan(lastLaunch);
-        const marker = join(m.dispatch, "logs", "review-r1-style-ghost.done");
-        const journal = join(m.dispatch, "actions.jsonl");
-        expect(statSync(marker).mtimeMs).toBeLessThan(statSync(journal).mtimeMs);
-        writeFileSync(join(m.synthesis, "later.txt"), "after\n");
-        gitOrThrow(m.synthesis, "add", "later.txt");
-        gitOrThrow(m.synthesis, "commit", "-q", "-m", "later fix");
-        expect(actions(m).filter((l) => l.action === "degrade").length).toBe(0);
-        expect(voids(m)).toBe(0);
-      }, "acceptance-467-c2-");
-    },
-    300_000,
-  );
+  test("after launch returns, the round's point is logged after the markers", () => {
+    withTempDir((root) => {
+      const m = machine(root, { briefs: ["style"] });
+      const launched = launchedRound(m);
+      expect(launched.code).toBe(0);
+      expect(launched.out).toContain("r1: ");
+      const point = reachPoint(m, "r1");
+      expect(point).not.toBeNull();
+      const lines = actions(m);
+      let lastLaunch = -1;
+      let atPoint = -1;
+      lines.forEach((line, i) => {
+        if (line.action === "review-launch") lastLaunch = i;
+        if (line.action === "reach" && line.target === "r1") atPoint = i;
+      });
+      expect(lastLaunch).toBeGreaterThanOrEqual(0);
+      expect(atPoint).toBeGreaterThan(lastLaunch);
+      const marker = join(m.dispatch, "logs", "review-r1-style-ghost.done");
+      const journal = join(m.dispatch, "actions.jsonl");
+      expect(statSync(marker).mtimeMs).toBeLessThan(statSync(journal).mtimeMs);
+      writeFileSync(join(m.synthesis, "later.txt"), "after\n");
+      gitOrThrow(m.synthesis, "add", "later.txt");
+      gitOrThrow(m.synthesis, "commit", "-q", "-m", "later fix");
+      expect(actions(m).filter((l) => l.action === "degrade").length).toBe(0);
+      expect(voids(m)).toBe(0);
+    }, "acceptance-467-c2-");
+  }, 300_000);
 
   test("wait run alone ends with the round's check", () => {
     withTempDir((root) => {
