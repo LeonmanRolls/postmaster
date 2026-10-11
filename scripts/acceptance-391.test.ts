@@ -662,14 +662,7 @@ describe("R1: round 1 review regressions", () => {
       ],
       { timeoutSeconds: 30 },
     );
-    const startArgs = [
-      "review-round",
-      "start",
-      layout.dispatch,
-      "1",
-      "bug:fast",
-      "bug:slow",
-    ];
+    const startArgs = ["review-round", "start", layout.dispatch, "1", "bug:fast", "bug:slow"];
     expect(tool(layout, ...startArgs).code).toBe(0);
     writeFileSync(join(layout.dispatch, "logs", "review-r1-bug-fast.done"), "");
     const first = tool(layout, "review-round", "wait-next", layout.dispatch, "1", layout.repo);
