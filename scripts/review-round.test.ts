@@ -1118,8 +1118,7 @@ describe("the round's three steps", () => {
           if (answered) return answered;
           if (name === "git" && args.includes("rev-parse"))
             return { code: 0, out: `${SHA}\n`, err: "" };
-          if (name === "git" && args.includes("status"))
-            return { code: 0, out: "", err: "" };
+          if (name === "git" && args.includes("status")) return { code: 0, out: "", err: "" };
           return green(name, args);
         };
 
@@ -1133,7 +1132,7 @@ describe("the round's three steps", () => {
           writeFileSync(join(p.dispatch, "logs", `gate-${SHA}.txt`), "gate: pass\n");
           let verified = false;
           const { calls, deps } = stand(
-            shaHandler((name, args) => {
+            shaHandler((name, _args) => {
               if (name === "verify") {
                 verified = true;
                 return { code: 0, out: "gate: pass\n", err: "" };
@@ -1174,7 +1173,7 @@ describe("the round's three steps", () => {
           writeFileSync(join(p.dispatch, "logs", "review-r1-checks.txt"), "gate: pass\n");
           let verified = false;
           const { calls, deps } = stand(
-            shaHandler((name, args) => {
+            shaHandler((name, _args) => {
               if (name === "verify") {
                 verified = true;
                 return { code: 0, out: "gate: pass\n", err: "" };
@@ -1207,7 +1206,7 @@ describe("the round's three steps", () => {
           writeFileSync(join(p.dispatch, "logs", "review-r2-checks.txt"), "gate: pass\n");
           let verified = false;
           const { calls, deps } = stand(
-            shaHandler((name, args) => {
+            shaHandler((name, _args) => {
               if (name === "verify") {
                 verified = true;
                 return { code: 0, out: "gate: pass\n", err: "" };
@@ -1241,7 +1240,7 @@ describe("the round's three steps", () => {
           writeFileSync(join(p.dispatch, "logs", "review-r1-checks.txt"), "gate: pass\n");
           let verified = false;
           const { deps } = stand(
-            shaHandler((name, args) => {
+            shaHandler((name, _args) => {
               if (name === "verify") {
                 verified = true;
                 return { code: 0, out: "gate: pass\n", err: "" };
@@ -1272,7 +1271,7 @@ describe("the round's three steps", () => {
           );
           let verified = false;
           const { deps } = stand(
-            shaHandler((name, args) => {
+            shaHandler((name, _args) => {
               if (name === "verify") {
                 verified = true;
                 return { code: 0, out: "gate: pass\n", err: "" };
@@ -1301,7 +1300,7 @@ describe("the round's three steps", () => {
           writeFileSync(join(p.dispatch, "logs", "review-r1-checks.txt"), "gate: pass\n");
           let verified = false;
           const { deps } = stand(
-            shaHandler((name, args) => {
+            shaHandler((name, _args) => {
               if (name === "verify") {
                 verified = true;
                 return { code: 0, out: "gate: pass\n", err: "" };
@@ -1538,8 +1537,7 @@ describe("the round's three steps", () => {
       withTempDir((root) => {
         const p = paths(root);
         const { calls, deps } = stand((name, args) => {
-          if (name === "turnpikes")
-            return { code: 0, out: "1 synthesis\n2 review\n", err: "" };
+          if (name === "turnpikes") return { code: 0, out: "1 synthesis\n2 review\n", err: "" };
           return green(name, args);
         });
         const res = launchRound(
@@ -1665,9 +1663,7 @@ describe("the round's three steps", () => {
         expect(
           readFileSync(join(p.dispatch, "logs", "review-r9-bug-two-findings.json"), "utf8"),
         ).toBe('[{"file":"a.ts"}]');
-        expect(existsSync(join(p.dispatch, "logs", "review-r9-bug-one-findings.json"))).toBe(
-          false,
-        );
+        expect(existsSync(join(p.dispatch, "logs", "review-r9-bug-one-findings.json"))).toBe(false);
         expect(
           of(calls, "review-findings")
             .filter((c) => c.args[0] === "normalize")
@@ -1679,7 +1675,7 @@ describe("the round's three steps", () => {
     test("a named reviewer under another lens notes its raw report and harvests nothing", () => {
       withTempDir((root) => {
         const p = paths(root);
-        const { calls, deps } = stand((name, args) => {
+        const { calls, deps } = stand((name, _args) => {
           if (name === "reviewers") return { code: 0, out: "one\n", err: "" };
           return null;
         });
@@ -1706,7 +1702,7 @@ describe("the round's three steps", () => {
     test("a named lane that is no bug reviewer stops it", () => {
       withTempDir((root) => {
         const p = paths(root);
-        const { calls, deps } = stand((name, args) => {
+        const { calls, deps } = stand((name, _args) => {
           if (name === "reviewers") return { code: 0, out: "one\n", err: "" };
           return null;
         });
@@ -1796,7 +1792,9 @@ describe("the round's three steps", () => {
           deps,
         );
         expect(res.code).toBe(1);
-        expect(res.out).toContain(`review-round: fix ${SHA} was not recorded; rolled back to ${PARENT}`);
+        expect(res.out).toContain(
+          `review-round: fix ${SHA} was not recorded; rolled back to ${PARENT}`,
+        );
         expect(one(calls, "git", (c) => c.args.includes("reset"))?.args).toEqual([
           "-C",
           p.synthesis,
@@ -1868,8 +1866,7 @@ describe("the round's three steps", () => {
         const { calls, deps } = stand((name, args) => {
           if (name === "git" && args.includes("rev-parse"))
             return { code: 0, out: `${SHA}\n`, err: "" };
-          if (name === "git" && args.includes("status"))
-            return { code: 0, out: "", err: "" };
+          if (name === "git" && args.includes("status")) return { code: 0, out: "", err: "" };
           if (name === "verify") return { code: 0, out: "gate: pass\n", err: "" };
           return green(name, args);
         });
@@ -1895,8 +1892,7 @@ describe("the round's three steps", () => {
         const { calls, deps } = stand((name, args) => {
           if (name === "git" && args.includes("rev-parse"))
             return { code: 0, out: `${SHA}\n`, err: "" };
-          if (name === "git" && args.includes("status"))
-            return { code: 0, out: "", err: "" };
+          if (name === "git" && args.includes("status")) return { code: 0, out: "", err: "" };
           if (name === "verify") return { code: 2, out: "gate: fail\n", err: "" };
           return green(name, args);
         });

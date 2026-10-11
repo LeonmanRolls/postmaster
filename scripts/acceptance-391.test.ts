@@ -13,12 +13,10 @@ import {
   actionLines,
   addCommit,
   cleanup,
-  codex,
   git,
   landMarkerAfter,
   makeLayout,
   mimo,
-  scratch,
   tool,
   writeAction,
   writeReviewer,
@@ -55,7 +53,15 @@ describe("C1: the wait returns as each reviewer finishes, and the fix lands betw
       { timeoutSeconds: 30 },
     );
     expect(tool(layout, "reach", "before", layout.dispatch, "1").code).toBe(0);
-    const start = tool(layout, "review-round", "start", layout.dispatch, "1", "bug:fast", "bug:slow");
+    const start = tool(
+      layout,
+      "review-round",
+      "start",
+      layout.dispatch,
+      "1",
+      "bug:fast",
+      "bug:slow",
+    );
     expect(start.code).toBe(0);
     landMarkerAfter(join(layout.dispatch, "logs", "review-r1-bug-fast.done"), 1000);
 
@@ -65,7 +71,13 @@ describe("C1: the wait returns as each reviewer finishes, and the fix lands betw
     expect(first.out).not.toContain("FINISHED bug slow");
     expect(existsSync(join(layout.dispatch, "logs", "review-r1-bug-slow.done"))).toBe(false);
 
-    writeAction(layout, "coachman", "finding", "README.md:1", "gating P2 r1 bug fast reading: base text is wrong");
+    writeAction(
+      layout,
+      "coachman",
+      "finding",
+      "README.md:1",
+      "gating P2 r1 bug fast reading: base text is wrong",
+    );
     writeFileSync(join(layout.synth, "README.md"), "fixed text\n");
     const fix = tool(
       layout,
@@ -121,7 +133,15 @@ describe("C1: the wait returns as each reviewer finishes, and the fix lands betw
       ],
       { timeoutSeconds: 3 },
     );
-    const start = tool(layout, "review-round", "start", layout.dispatch, "1", "bug:fast", "bug:slow");
+    const start = tool(
+      layout,
+      "review-round",
+      "start",
+      layout.dispatch,
+      "1",
+      "bug:fast",
+      "bug:slow",
+    );
     expect(start.code).toBe(0);
     landMarkerAfter(join(layout.dispatch, "logs", "review-r1-bug-fast.done"), 500);
     const first = tool(layout, "review-round", "wait-next", layout.dispatch, "1", layout.repo);
@@ -145,7 +165,15 @@ describe("C1: the wait returns as each reviewer finishes, and the fix lands betw
       ],
       { timeoutSeconds: 30 },
     );
-    const start = tool(layout, "review-round", "start", layout.dispatch, "1", "bug:fast", "bug:slow");
+    const start = tool(
+      layout,
+      "review-round",
+      "start",
+      layout.dispatch,
+      "1",
+      "bug:fast",
+      "bug:slow",
+    );
     expect(start.code).toBe(0);
     writeAction(layout, "coachman", "wall", "slow", "reviewer bug 1 none usage limit hit");
     writeFileSync(join(layout.dispatch, "logs", "review-r1-bug-slow.done"), "");
@@ -179,7 +207,15 @@ describe("C2: a recorded pass on the cut's commit is reused without running veri
 
   test("a mid-round pass on X is reused at the round 2 cut: no verify run, round 2's checks from the pass, not-run lines carried", () => {
     const layout = cut2Layout();
-    const cut1 = tool(layout, "review-round", "cut", layout.dispatch, "1", layout.repo, layout.synth);
+    const cut1 = tool(
+      layout,
+      "review-round",
+      "cut",
+      layout.dispatch,
+      "1",
+      layout.repo,
+      layout.synth,
+    );
     expect(cut1.code).toBe(0);
     const snap1 = git(layout.repo, "-C", layout.synth, "rev-parse", "HEAD");
     const fix = addCommit(layout.repo, layout.synth, "src/fix.txt", "a fix\n");
@@ -192,11 +228,21 @@ describe("C2: a recorded pass on the cut's commit is reused without running veri
     expect(rowsBefore).toBeGreaterThan(0);
     poisonGate(layout);
 
-    const cut2 = tool(layout, "review-round", "cut", layout.dispatch, "2", layout.repo, layout.synth);
+    const cut2 = tool(
+      layout,
+      "review-round",
+      "cut",
+      layout.dispatch,
+      "2",
+      layout.repo,
+      layout.synth,
+    );
     expect(cut2.code).toBe(0);
     expect(cut2.out).toContain("reuses the gate pass");
     expect(verifyRows(layout)).toBe(rowsBefore);
-    expect(readFileSync(join(layout.dispatch, "logs", "review-r2-checks.txt"), "utf8")).toBe(passText);
+    expect(readFileSync(join(layout.dispatch, "logs", "review-r2-checks.txt"), "utf8")).toBe(
+      passText,
+    );
     const gate2 = actionLines(layout).find(
       (line) =>
         line.action === "gate" &&
@@ -210,13 +256,29 @@ describe("C2: a recorded pass on the cut's commit is reused without running veri
 
   test("a cut pass on an unchanged snapshot is reused: round 2's checks from round 1's", () => {
     const layout = cut2Layout();
-    const cut1 = tool(layout, "review-round", "cut", layout.dispatch, "1", layout.repo, layout.synth);
+    const cut1 = tool(
+      layout,
+      "review-round",
+      "cut",
+      layout.dispatch,
+      "1",
+      layout.repo,
+      layout.synth,
+    );
     expect(cut1.code).toBe(0);
     const snap = git(layout.repo, "-C", layout.synth, "rev-parse", "HEAD");
     const rowsBefore = verifyRows(layout);
     poisonGate(layout);
 
-    const cut2 = tool(layout, "review-round", "cut", layout.dispatch, "2", layout.repo, layout.synth);
+    const cut2 = tool(
+      layout,
+      "review-round",
+      "cut",
+      layout.dispatch,
+      "2",
+      layout.repo,
+      layout.synth,
+    );
     expect(cut2.code).toBe(0);
     expect(verifyRows(layout)).toBe(rowsBefore);
     expect(readFileSync(join(layout.dispatch, "logs", "review-r2-checks.txt"), "utf8")).toBe(
@@ -230,12 +292,28 @@ describe("C2: a recorded pass on the cut's commit is reused without running veri
 
   test("negative control: a cut at a commit with no passing gate runs verify as today", () => {
     const layout = cut2Layout();
-    const cut1 = tool(layout, "review-round", "cut", layout.dispatch, "1", layout.repo, layout.synth);
+    const cut1 = tool(
+      layout,
+      "review-round",
+      "cut",
+      layout.dispatch,
+      "1",
+      layout.repo,
+      layout.synth,
+    );
     expect(cut1.code).toBe(0);
     addCommit(layout.repo, layout.synth, "src/fix.txt", "an ungated fix\n");
     const rowsBefore = verifyRows(layout);
 
-    const cut2 = tool(layout, "review-round", "cut", layout.dispatch, "2", layout.repo, layout.synth);
+    const cut2 = tool(
+      layout,
+      "review-round",
+      "cut",
+      layout.dispatch,
+      "2",
+      layout.repo,
+      layout.synth,
+    );
     expect(cut2.code).toBe(0);
     expect(cut2.out).not.toContain("reuses the gate pass");
     expect(verifyRows(layout)).toBeGreaterThan(rowsBefore);
@@ -243,10 +321,26 @@ describe("C2: a recorded pass on the cut's commit is reused without running veri
 
   test("a dirty tree never reuses: the cut runs verify, which refuses as today", () => {
     const layout = cut2Layout();
-    const cut1 = tool(layout, "review-round", "cut", layout.dispatch, "1", layout.repo, layout.synth);
+    const cut1 = tool(
+      layout,
+      "review-round",
+      "cut",
+      layout.dispatch,
+      "1",
+      layout.repo,
+      layout.synth,
+    );
     expect(cut1.code).toBe(0);
     writeFileSync(join(layout.synth, "src", "dirty.txt"), "uncommitted\n");
-    const cut2 = tool(layout, "review-round", "cut", layout.dispatch, "2", layout.repo, layout.synth);
+    const cut2 = tool(
+      layout,
+      "review-round",
+      "cut",
+      layout.dispatch,
+      "2",
+      layout.repo,
+      layout.synth,
+    );
     expect(cut2.code).toBe(1);
     expect(out(cut2)).toContain("dirty.txt");
   });
@@ -278,7 +372,13 @@ describe("C3: a fix saved through the fix step never costs the round its reviews
   test("a fix saved through the fix step during the round reads clean and stays on the branch", () => {
     const layout = roundLayout();
     expect(tool(layout, "reach", "before", layout.dispatch, "1").code).toBe(0);
-    writeAction(layout, "coachman", "finding", "README.md:1", "gating P2 r1 bug codex reading: base text is wrong");
+    writeAction(
+      layout,
+      "coachman",
+      "finding",
+      "README.md:1",
+      "gating P2 r1 bug codex reading: base text is wrong",
+    );
     writeFileSync(join(layout.synth, "README.md"), "fixed text\n");
     const fix = tool(
       layout,
@@ -391,7 +491,13 @@ describe("C4: a reviewer's change never outlives the round", () => {
     // The reviewer's edit lands in the synthesis worktree; the coachman's fix
     // holds it together with its own change.
     writeFileSync(named, "reviewer text\ncoachman fix\n");
-    writeAction(layout, "coachman", "finding", "README.md:1", "gating P2 r1 bug codex reading: base text is wrong");
+    writeAction(
+      layout,
+      "coachman",
+      "finding",
+      "README.md:1",
+      "gating P2 r1 bug codex reading: base text is wrong",
+    );
     const fix = tool(
       layout,
       "review-round",
@@ -429,7 +535,13 @@ describe("C4: a reviewer's change never outlives the round", () => {
       mimo("write_file", { path: join(layout.synth, "src", "other.txt") }),
     ]);
     expect(tool(layout, "reach", "before", layout.dispatch, "1").code).toBe(0);
-    writeAction(layout, "coachman", "finding", "README.md:1", "gating P2 r1 bug codex reading: base text is wrong");
+    writeAction(
+      layout,
+      "coachman",
+      "finding",
+      "README.md:1",
+      "gating P2 r1 bug codex reading: base text is wrong",
+    );
     writeFileSync(join(layout.synth, "README.md"), "fixed text\n");
     const fix = tool(
       layout,
@@ -479,7 +591,13 @@ describe("C5: a finding reported again in its round is counted once", () => {
     logged(d, "apply", "abc1234", "src/a.ts:10");
     logged(d, "finding", "src/b.ts:20", "gating P2 r2 bug haiku reading: a defect");
     logged(d, "apply", "def5678", "src/b.ts:20");
-    writeAction(layout, "coachman", "finding-also", "src/b.ts:20", "gating P2 r2 bug luna reading: the same defect, later report");
+    writeAction(
+      layout,
+      "coachman",
+      "finding-also",
+      "src/b.ts:20",
+      "gating P2 r2 bug luna reading: the same defect, later report",
+    );
     const r = decide(d, "2");
     expect(r.code).toBe(0);
     expect(r.out.replace(/\n+$/u, "")).toBe(
@@ -495,7 +613,13 @@ describe("C5: a finding reported again in its round is counted once", () => {
     const d = layout.dispatch;
     logged(d, "finding", "src/a.ts:10", "gating P2 r1 bug haiku reading: a defect");
     logged(d, "apply", "abc1234", "src/a.ts:10");
-    writeAction(layout, "coachman", "finding-also", "src/a.ts:10", "gating P2 r2 bug luna reading: a later report with no round 2 finding");
+    writeAction(
+      layout,
+      "coachman",
+      "finding-also",
+      "src/a.ts:10",
+      "gating P2 r2 bug luna reading: a later report with no round 2 finding",
+    );
     const r = decide(d, "2");
     expect(r.code).toBe(1);
     expect(r.out).toContain("no finding line");
@@ -508,7 +632,13 @@ describe("C5: a finding reported again in its round is counted once", () => {
     logged(d, "apply", "abc1234", "src/a.ts:10");
     logged(d, "finding", "src/b.ts:20", "gating P2 r2 bug haiku reading: a defect");
     logged(d, "apply", "def5678", "src/b.ts:20");
-    writeAction(layout, "coachman", "finding-also", "src/b.ts:20", "gating P1 r2 bug luna reading: the same defect graded higher");
+    writeAction(
+      layout,
+      "coachman",
+      "finding-also",
+      "src/b.ts:20",
+      "gating P1 r2 bug luna reading: the same defect graded higher",
+    );
     const r = decide(d, "2");
     expect(r.code).toBe(1);
     expect(r.out).toContain("not the finding's");

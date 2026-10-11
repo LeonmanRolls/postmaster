@@ -42,7 +42,8 @@ export interface Layout {
 
 export function sh(cmd: string, args: string[], cwd?: string): string {
   const r = run(cmd, args, cwd ? { cwd } : {});
-  if (r.code !== 0) throw new Error(`${cmd} ${args.join(" ")} failed (${r.code}): ${r.err}${r.out}`);
+  if (r.code !== 0)
+    throw new Error(`${cmd} ${args.join(" ")} failed (${r.code}): ${r.err}${r.out}`);
   return r.out.trim();
 }
 
@@ -51,10 +52,7 @@ export function git(repo: string, ...args: string[]): string {
 }
 
 /** A scratch run layout: repo, synthesis worktree, review scratches, run records. */
-export function makeLayout(
-  lanes: LaneSpec[],
-  options: { timeoutSeconds?: number } = {},
-): Layout {
+export function makeLayout(lanes: LaneSpec[], options: { timeoutSeconds?: number } = {}): Layout {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "acceptance-391-")));
   CREATED.push(root);
   const repo = join(root, "repo");
@@ -84,7 +82,15 @@ export function makeLayout(
   git(repo, "-C", synth, "add", "src/work.txt");
   git(repo, "-C", synth, "commit", "-qm", "Synthesis work");
   for (const { lens, lane } of lanes) {
-    git(repo, "worktree", "add", "-q", "--detach", join(worktrees, `${ticket}-rev-${lens}-${lane}`), ticket);
+    git(
+      repo,
+      "worktree",
+      "add",
+      "-q",
+      "--detach",
+      join(worktrees, `${ticket}-rev-${lens}-${lane}`),
+      ticket,
+    );
   }
 
   const dispatch = join(repo, ".postmaster", "runs", ticket);
@@ -134,9 +140,12 @@ export function makeLayout(
   );
   const layout: Layout = { root, repo, dispatch, home, base, synth, lanes };
   for (const { lens, lane, harness } of lanes) {
-    if (harness === "codex") writeReviewer(layout, lens, lane, [codex(`touch ${scratch(layout, lens, lane)}/probe.txt`)]);
+    if (harness === "codex")
+      writeReviewer(layout, lens, lane, [codex(`touch ${scratch(layout, lens, lane)}/probe.txt`)]);
     else if (harness === "mimo")
-      writeReviewer(layout, lens, lane, [mimo("write_file", { path: join(scratch(layout, lens, lane), "probe.txt") })]);
+      writeReviewer(layout, lens, lane, [
+        mimo("write_file", { path: join(scratch(layout, lens, lane), "probe.txt") }),
+      ]);
     else throw new Error(`no clean record builder for harness ${harness}`);
   }
   return layout;
@@ -225,12 +234,7 @@ export function actionLines(layout: Layout): Array<Record<string, unknown>> {
     .map((line) => JSON.parse(line) as Record<string, unknown>);
 }
 
-export function addCommit(
-  repo: string,
-  folder: string,
-  file: string,
-  content: string,
-): string {
+export function addCommit(repo: string, folder: string, file: string, content: string): string {
   const target = join(folder, file);
   mkdirSync(join(target, ".."), { recursive: true });
   writeFileSync(target, content);
