@@ -85,6 +85,12 @@ ticket_notes = "given"                    # what the coachman and the workhorses
 # [team.lens_reviewers]
 # security = ["luna", "deepseek", "sentinel"]   # sentinel: a third lane, defined under [lanes]
 
+# Optional: the surveyor's lane, for the independent judgement a run asks for
+# with one question. A lane defined above, on a harness with a recorded
+# final-message shape (claude, codex, pi, muse or mimo). Unset runs the
+# surveyor on the run's first reviewer lane.
+# surveyor = "luna"
+
 # Per-launch resource limits. On Linux with a working systemd user manager, each run host run
 # gets its own cgroup. Role values override either default; omitted values inherit from [limits].
 [limits]
