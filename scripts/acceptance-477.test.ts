@@ -141,6 +141,20 @@ describe("C1: making verifiers keeps the proven ones in the .postmaster folder",
     }
   });
 
+  test("a held destination refuses before any session starts", () => {
+    const sandbox = makeSandbox();
+    try {
+      plantLocal(sandbox.repo, [CLI]);
+      // No stub session: the refusal must land before the launch.
+      const r = run(RUN, ["verifier", "make", sandbox.repo, "cli", "--run", sandbox.dispatch]);
+      expectCode(r, 2);
+      expect(r.err).toContain("already holds .postmaster/verifier");
+      expect(existsSync(join(sandbox.dir, "app-verify-cli"))).toBe(false);
+    } finally {
+      rmSync(sandbox.dir, { recursive: true, force: true });
+    }
+  });
+
   test("a session proving nothing keeps nothing and fails", () => {
     const sandbox = makeSandbox();
     try {
