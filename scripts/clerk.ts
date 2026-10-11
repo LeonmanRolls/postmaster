@@ -423,6 +423,7 @@ function sleepSync(ms: number): void {
 }
 
 function kvOf(text: string, key: string): string {
+  // ASCII: the spawn line is machine-written k=v words; \s splits ASCII runs.
   for (const word of text.split(/\s+/u)) {
     if (word.startsWith(`${key}=`)) return word.slice(key.length + 1);
   }
