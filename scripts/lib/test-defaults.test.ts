@@ -59,4 +59,10 @@ describe("the default time limit of a test run", () => {
     const skipStated = /"--timeout=([0-9]+)"/u.exec(skipCheck);
     expect(skipStated?.[1]).toBe(String(DEFAULT_TEST_TIMEOUT_MS));
   });
+
+  test("a manual run states the same limit for every file it names", () => {
+    const manual = readFileSync(join(ROOT, "scripts/manual-test-files.ts"), "utf8");
+    const manualStated = /"--timeout=([0-9]+)"/u.exec(manual);
+    expect(manualStated?.[1]).toBe(String(DEFAULT_TEST_TIMEOUT_MS));
+  });
 });
