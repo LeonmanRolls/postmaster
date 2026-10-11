@@ -1,0 +1,16 @@
+run	findings	in a flagged function	flagged or around one	in a function of the second count	expected by chance: first	nested	second
+202	30	1	8	23	1.7	9.4	19.2
+216	17	3	5	11	2.4	5.1	10.5
+252	14	0	4	7	0.5	6.9	8.5
+268	17	4	4	16	1.3	5.6	11.1
+all	78	8	21	57	5.9	27.1	49.2
+apart: 3 cite runbook, 3 cite no-line
+chance of 8 or more in a flagged function if each finding fell on a random line of its file: 23.3%
+
+summary
+findings	78
+in_flagged	8
+flagged_or_around	21
+second_count	57
+apart	6
+test2_none	not met

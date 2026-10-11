@@ -1,0 +1,47 @@
+{
+  "categories": { "correctness": "off" },
+  "overrides": [
+    {
+      "files": ["scripts/lib/**/*.ts", "scripts/**/*-core.ts"],
+      "plugins": ["node"],
+      "rules": {
+        "node/no-process-env": "error",
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              { "name": "node:fs" },
+              { "name": "fs" },
+              { "name": "node:fs/promises" },
+              { "name": "fs/promises" },
+              { "name": "node:child_process" },
+              { "name": "child_process" },
+              { "name": "node:os" },
+              { "name": "os" }
+            ]
+          }
+        ],
+        "no-restricted-properties": [
+          "error",
+          { "object": "Date", "property": "now" },
+          { "object": "performance", "property": "now" },
+          { "object": "Bun", "property": "env" },
+          { "object": "Bun", "property": "file" },
+          { "object": "Bun", "property": "write" },
+          { "object": "Bun", "property": "spawn" },
+          { "object": "Bun", "property": "spawnSync" },
+          { "object": "Bun", "property": "$" }
+        ]
+      }
+    },
+    {
+      "files": ["**/*.test.ts"],
+      "plugins": ["node"],
+      "rules": {
+        "node/no-process-env": "off",
+        "no-restricted-imports": "off",
+        "no-restricted-properties": "off"
+      }
+    }
+  ]
+}

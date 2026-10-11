@@ -1,0 +1,13 @@
+run	findings	in a flagged function	flagged or around one	in a function of the second count	expected by chance: first	nested	second
+0	6	2	3	4	1.2	2.2	3.8
+all	6	2	3	4	1.2	2.2	3.8
+apart: 1 cite a module the tree does not hold, 1 cite runbook, 1 cite no-line
+chance of 2 or more in a flagged function if each finding fell on a random line of its file: 32.0%
+
+summary
+findings	6
+in_flagged	2
+flagged_or_around	3
+second_count	4
+apart	3
+test2_none	not met
