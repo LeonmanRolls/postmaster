@@ -1603,7 +1603,7 @@ describe("C3: review round 3 fixes", () => {
   test("data flags make a gh api call a POST unless the method says otherwise", () => {
     for (const [name, command, clean] of [
       ["c3c-dashf", "gh api repos/example/shop/issues/409 -f body=x", true],
-      ["c3c-dashF", "gh api repos/example/shop/issues/409 -F body=x", true],
+      ["c3c-dashbigf", "gh api repos/example/shop/issues/409 -F body=x", true],
       ["c3c-input", "gh api repos/example/shop/issues/409 --input body.json", true],
       ["c3c-explicit", "gh api --method GET repos/example/shop/issues/409 -f body=x", false],
     ] as Array<[string, string, boolean]>) {
