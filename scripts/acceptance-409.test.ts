@@ -1205,6 +1205,141 @@ describe("C3: review round 2 fixes", () => {
   });
 });
 
+describe("C3: the unplaced rule", () => {
+  test("an unseen spelling of a read is unknown", () => {
+    for (const [name, command] of [
+      ["c3u-wrapper", "chrt -f 99 gh issue view 409"],
+      ["c3u-pattern", 'grep "409" /tmp/notes.txt'],
+    ] as Array<[string, string]>) {
+      const dispatch = fixtureDispatch(tmp, name, {
+        agents: [{ lane: "luna", harness: "codex", lines: [codexExec(command, "", 0)] }],
+      });
+      const r = ticketReads(dispatch);
+      expect(r.code).toBe(0);
+      expect(outcomeOf(r.out).startsWith("ticket-reads: unknown")).toBe(true);
+      expect(outcomeOf(r.out)).toContain("unplaced");
+    }
+  });
+
+  test("an unseen adapter verb without a number is unknown", () => {
+    const dispatch = fixtureDispatch(tmp, "c3u-strangeverb", {
+      agents: [{ lane: "opus", harness: "claude", lines: [] }],
+    });
+    const repo = repoOf(dispatch);
+    appendLine(
+      dispatch,
+      "opus-events.jsonl",
+      claudeUse("Bash", { command: `scripts/run github ${repo} frobnicate` }),
+    );
+    const r = ticketReads(dispatch);
+    expect(r.code).toBe(0);
+    expect(outcomeOf(r.out).startsWith("ticket-reads: unknown")).toBe(true);
+    expect(outcomeOf(r.out)).toContain("unplaced");
+  });
+
+  test("a positional ticket number is unknown", () => {
+    const dispatch = fixtureDispatch(tmp, "c3u-positional", {
+      agents: [{ lane: "luna", harness: "codex", lines: [codexExec("gh issue view $1", "", 0)] }],
+    });
+    const r = ticketReads(dispatch);
+    expect(r.code).toBe(0);
+    expect(outcomeOf(r.out).startsWith("ticket-reads: unknown")).toBe(true);
+    expect(outcomeOf(r.out)).toContain("variable");
+  });
+
+  test("a brace-joined ticket path is unknown", () => {
+    const dispatch = fixtureDispatch(tmp, "c3u-bracepath", {
+      legs: [
+        {
+          n: 1,
+          harness: "codex",
+          lines: [codexExec('cat "${TOP}/.postmaster/clerk/409.md"', "T", 0)],
+        },
+      ],
+    });
+    const r = ticketReads(dispatch);
+    expect(r.code).toBe(0);
+    expect(outcomeOf(r.out).startsWith("ticket-reads: unknown")).toBe(true);
+  });
+
+  test("a listing of the clerk directory is unknown", () => {
+    const dispatch = fixtureDispatch(tmp, "c3u-clerklist", {
+      agents: [{ lane: "luna", harness: "codex", lines: [] }],
+    });
+    const clerk = join(repoOf(dispatch), ".postmaster", "clerk");
+    appendLine(dispatch, "luna-events.jsonl", codexExec(`ls "${clerk}"`, "", 0));
+    const r = ticketReads(dispatch);
+    expect(r.code).toBe(0);
+    expect(outcomeOf(r.out).startsWith("ticket-reads: unknown")).toBe(true);
+    expect(outcomeOf(r.out)).toContain("unplaced");
+  });
+
+  test("a bare number with no read is unknown", () => {
+    for (const [name, command] of [
+      ["c3u-echo", "echo 409"],
+      ["c3u-assign", "N=409"],
+    ] as Array<[string, string]>) {
+      const dispatch = fixtureDispatch(tmp, name, {
+        agents: [{ lane: "luna", harness: "codex", lines: [codexExec(command, "", 0)] }],
+      });
+      const r = ticketReads(dispatch);
+      expect(r.code).toBe(0);
+      expect(outcomeOf(r.out).startsWith("ticket-reads: unknown")).toBe(true);
+      expect(outcomeOf(r.out)).toContain("unplaced");
+    }
+  });
+
+  test("the run's own machinery names no marker", () => {
+    for (const [name, command] of [
+      [
+        "c3u-logaction",
+        "scripts/run log-action /x/.postmaster/runs/409 coachman note scripts/x.ts:409 done",
+      ],
+      ["c3u-worktree", "git -C /repo/.worktrees/409 log --oneline"],
+    ] as Array<[string, string]>) {
+      const dispatch = fixtureDispatch(tmp, name, {
+        agents: [{ lane: "luna", harness: "codex", lines: [codexExec(command, "", 0)] }],
+      });
+      const r = ticketReads(dispatch);
+      expect(r.code).toBe(0);
+      expect(outcomeOf(r.out)).toBe("ticket-reads: not read");
+    }
+  });
+
+  test("a pull request naming the ticket is another object", () => {
+    const dispatch = fixtureDispatch(tmp, "c3u-pr", {
+      agents: [{ lane: "luna", harness: "codex", lines: [codexExec("gh pr view 409", "", 0)] }],
+    });
+    const r = ticketReads(dispatch);
+    expect(r.code).toBe(0);
+    expect(outcomeOf(r.out)).toBe("ticket-reads: not read");
+  });
+
+  test("a read inside backquotes reads", () => {
+    const dispatch = fixtureDispatch(tmp, "c3u-backquote", {
+      agents: [
+        {
+          lane: "luna",
+          harness: "codex",
+          lines: [codexExec("cat `gh issue view 409 --json body`", "T", 0)],
+        },
+      ],
+    });
+    const r = ticketReads(dispatch);
+    expect(r.code).toBe(0);
+    expect(outcomeOf(r.out)).toBe("ticket-reads: read by luna (gh issue view)");
+  });
+
+  test("a command with no marker reads nothing", () => {
+    const dispatch = fixtureDispatch(tmp, "c3u-clean", {
+      agents: [{ lane: "luna", harness: "codex", lines: [codexExec("echo hello", "", 0)] }],
+    });
+    const r = ticketReads(dispatch);
+    expect(r.code).toBe(0);
+    expect(outcomeOf(r.out)).toBe("ticket-reads: not read");
+  });
+});
+
 describe("C4: the run's log records the outcome", () => {
   test("record writes the outcome line and a note with it", () => {
     const dispatch = fixtureDispatch(tmp, "c4-clean", {
