@@ -1105,4 +1105,23 @@ review_link = ""
     expect(alpha["__proto__"]).toBe(1);
     expect(alpha.model).toBe("model-x");
   });
+
+  test("a surveyor on a shaped lane is written", () => {
+    const s = stageProject();
+    const r = runProject(s.repo, s.config, "surveyor=alpha\noverwrite=yes");
+    expect(r.code).toBe(0);
+    expect(tableOf(settingsData(s.repo).team).surveyor).toBe("alpha");
+  });
+
+  test("a surveyor on a harness with no recorded shape is refused", () => {
+    const s = stageProject();
+    writeFileSync(
+      s.config,
+      `${readFileSync(s.config, "utf8")}[lanes.gamma]\nharness = "grok"\nmodel = "m-g"\n`,
+      "utf8",
+    );
+    const r = runProject(s.repo, s.config, "surveyor=gamma", ["--dry-run"]);
+    expect(r.code).toBe(1);
+    expect(r.out).toContain("gamma");
+  });
 });

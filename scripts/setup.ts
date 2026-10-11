@@ -59,6 +59,7 @@ import {
 } from "./lib/effective-config.ts";
 import { scriptsDir } from "./lib/paths.ts";
 import { die, run } from "./lib/proc.ts";
+import { SURVEYOR_HARNESS_HELP, SURVEYOR_HARNESSES } from "./surveyor.ts";
 
 const HERE = scriptsDir(import.meta);
 
@@ -105,6 +106,18 @@ function roleLine(name: string, h: string, m: string, e: string, ef: string): st
 function needHarness(h: string): void {
   const problem = harnessProblem(h);
   if (problem !== null) die(problem, 1);
+}
+
+// A surveyor on a harness the call cannot read is refused here, where the
+// user can pick another lane, rather than at the first survey. An empty
+// harness is malformed input other checks own, so it passes through.
+function needSurveyorHarness(name: string, harness: string): void {
+  if (harness !== "" && !SURVEYOR_HARNESSES.has(harness)) {
+    die(
+      `setup: surveyor '${name}' uses ${harness}, which has no recorded final-message shape; name a lane on ${SURVEYOR_HARNESS_HELP}`,
+      1,
+    );
+  }
 }
 
 interface AskOpts {
@@ -677,6 +690,10 @@ const SURVEYOR = ask("Surveyor lane (blank: the first reviewer lane)", "", "surv
 if (SURVEYOR !== "" && !MERGED_NAMES.includes(SURVEYOR)) {
   die(`setup: surveyor '${SURVEYOR}' is not one of the lanes (${MERGED_TEXT})`, 1);
 }
+if (SURVEYOR !== "") {
+  const found = LANE_HARNESSES.find((lh) => lh.startsWith(`${SURVEYOR}=`));
+  needSurveyorHarness(SURVEYOR, found === undefined ? "" : found.slice(SURVEYOR.length + 1));
+}
 
 if (PROJECT === "") {
   console.log("");
@@ -1152,6 +1169,10 @@ if (PROJECT !== "") {
   }
   if (SURVEYOR !== "" && !mergedNames.includes(SURVEYOR)) {
     die(`setup: surveyor '${SURVEYOR}' is not one of the lanes (${mergedNames.join(", ")})`, 1);
+  }
+  if (SURVEYOR !== "") {
+    const harness = recOf(mergedLanes[SURVEYOR]).harness;
+    needSurveyorHarness(SURVEYOR, typeof harness === "string" ? harness : "");
   }
   for (const [lens, list] of Object.entries(LENS_VALS)) {
     for (const rv of splitList(list)) {
