@@ -542,8 +542,12 @@ every project and does not change that project's gate.
    at the head: withhold under the claim-fail clause below with the gate result as the
    exact discrepancy. On `stale`,
    withhold: remove `.card-ready` and `.leg-<n>-done` for the manifest's current leg `<n>`,
-   then resume that last leg to merge the default branch into the ticket branch, never
-   rebasing, run its gates again and raise the card again, and wait for the corrected card.
+   then resume that last leg with the stale line as the exact discrepancy, asking it to
+   repeat its merge step and raise the card again, and wait for the corrected card. The
+   resume carries no trial merge and no merge instructions of its own: the leg's step
+   merges, resolves and gates. Log it with the leg, the thread id and the stale line
+   as `send-back: <stale line>`: the leg's step restarts its merge count only on a
+   resume carrying `send-back:`, never on a remount or a ruling.
    For a change to the coachman contract, that merge means a new fixture run from the final
    branch only when what the merge brought in changes the coachman contract; otherwise the
    earlier fixture result stands. That is what the contract checker says: run the dispatch
