@@ -1,4 +1,4 @@
-// Tests beside scripts/log-action.ts, moved from its --self-test on #109: 61 controls.
+// Tests beside scripts/log-action.ts, moved from its --self-test on #109: 63 controls.
 // Each test repeats the write it checks, so it passes alone as well as in file order.
 // Repeated tool-fault argument lists are module constants; the mixed bad-byte write is a helper.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
@@ -208,6 +208,20 @@ describe("positive controls", () => {
     const r = logAction(["postmaster", "note", "RUN-1", "a plain", '"detail"']);
     expect(r.code).toBe(0);
     expect(lines()).toBe(before + 1);
+  });
+
+  test("a review finish and a later finding report are written", () => {
+    const before = lines();
+    const finish = logAction(["coachman", "review-finish", "luna", "bug round 1"]);
+    expect(finish.code).toBe(0);
+    const also = logAction([
+      "coachman",
+      "finding-also",
+      "src/a.ts:1",
+      "gating P2 r1 bug luna reading: the same defect",
+    ]);
+    expect(also.code).toBe(0);
+    expect(lines()).toBe(before + 2);
   });
 
   test("as one line in the run's log and the same line in the ledger", () => {
@@ -804,6 +818,19 @@ describe("negative controls: nothing is written", () => {
   test("a finding whose class is another word", () => {
     const before = lines();
     const r = logAction(["coachman", "finding", "src/c.ts:7", "advisory P3 r1 style luna reading"]);
+    expect(r.code).toBe(1);
+    expect(lines()).toBe(before);
+    expect(r.err.includes("opens with its class, gating or style")).toBe(true);
+  });
+
+  test("a later finding report with no class", () => {
+    const before = lines();
+    const r = logAction([
+      "coachman",
+      "finding-also",
+      "src/c.ts:7",
+      "P2 r1 bug luna reading: no class",
+    ]);
     expect(r.code).toBe(1);
     expect(lines()).toBe(before);
     expect(r.err.includes("opens with its class, gating or style")).toBe(true);

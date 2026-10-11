@@ -19,6 +19,8 @@ import { bootId, processState } from "./lib/processes.ts";
 import {
   ARG_SPLIT_RE,
   cutRound,
+  fixRound,
+  gateRound,
   harvestRound,
   launchRound,
   monotonic,
@@ -1104,12 +1106,251 @@ describe("the round's three steps", () => {
         expect(of(calls, "cut-scratch").length).toBe(3);
       }, "review-round-cutbroken-");
     });
+
+    describe("gate reuse", () => {
+      const SHA = "9f2c4a1b7d3e8f0a5b6c9d2e4f7a1b3c5d6e8f0a";
+      const gateRow = (target: string, detail: string): string =>
+        `${JSON.stringify({ ts: "2026-10-11T00:00:00Z", project: "p", run: "r", actor: "coachman", action: "gate", target, detail })}\n`;
+      const shaHandler =
+        (extra?: Handler): Handler =>
+        (name, args) => {
+          const answered = extra?.(name, args);
+          if (answered) return answered;
+          if (name === "git" && args.includes("rev-parse"))
+            return { code: 0, out: `${SHA}\n`, err: "" };
+          if (name === "git" && args.includes("status"))
+            return { code: 0, out: "", err: "" };
+          return green(name, args);
+        };
+
+      test("a recorded mid-round pass on the snapshot is reused: no verify, copied text, reuse row", () => {
+        withTempDir((root) => {
+          const p = paths(root);
+          writeFileSync(
+            join(p.dispatch, "actions.jsonl"),
+            gateRow(SHA, "review round 1, run verify exit 0, mid-round gate"),
+          );
+          writeFileSync(join(p.dispatch, "logs", `gate-${SHA}.txt`), "gate: pass\n");
+          let verified = false;
+          const { calls, deps } = stand(
+            shaHandler((name, args) => {
+              if (name === "verify") {
+                verified = true;
+                return { code: 0, out: "gate: pass\n", err: "" };
+              }
+              return null;
+            }),
+          );
+          const res = cutRound(
+            { dispatch: p.dispatch, round: "2", repo: p.repo, synthesis: p.synthesis },
+            deps,
+          );
+          expect(res.code).toBe(0);
+          expect(verified).toBe(false);
+          expect(readFileSync(join(p.dispatch, "logs", "review-r2-checks.txt"), "utf8")).toBe(
+            "gate: pass\n",
+          );
+          expect(res.out).toContain(
+            `review-round: round 2 reuses the gate pass on ${SHA.slice(0, 12)} from round 1`,
+          );
+          expect(one(calls, "log-action", (c) => c.args[2] === "gate")?.args).toEqual([
+            p.dispatch,
+            "coachman",
+            "gate",
+            SHA,
+            "review round 2, gate pass reused from round 1 (run verify exit 0)",
+          ]);
+          expect(of(calls, "cut-scratch").length).toBe(2);
+        }, "review-round-reuse-mid-");
+      });
+
+      test("a cut pass on an unchanged snapshot reuses the round's checks file", () => {
+        withTempDir((root) => {
+          const p = paths(root);
+          writeFileSync(
+            join(p.dispatch, "actions.jsonl"),
+            gateRow(SHA, "review round 1, run verify exit 0"),
+          );
+          writeFileSync(join(p.dispatch, "logs", "review-r1-checks.txt"), "gate: pass\n");
+          let verified = false;
+          const { calls, deps } = stand(
+            shaHandler((name, args) => {
+              if (name === "verify") {
+                verified = true;
+                return { code: 0, out: "gate: pass\n", err: "" };
+              }
+              return null;
+            }),
+          );
+          const res = cutRound(
+            { dispatch: p.dispatch, round: "2", repo: p.repo, synthesis: p.synthesis },
+            deps,
+          );
+          expect(res.code).toBe(0);
+          expect(verified).toBe(false);
+          expect(readFileSync(join(p.dispatch, "logs", "review-r2-checks.txt"), "utf8")).toBe(
+            "gate: pass\n",
+          );
+          expect(one(calls, "log-action", (c) => c.args[2] === "gate")?.args[4]).toBe(
+            "review round 2, gate pass reused from round 1 (run verify exit 0)",
+          );
+        }, "review-round-reuse-cut-");
+      });
+
+      test("a reuse row reuses the checks file it wrote", () => {
+        withTempDir((root) => {
+          const p = paths(root);
+          writeFileSync(
+            join(p.dispatch, "actions.jsonl"),
+            gateRow(SHA, "review round 2, gate pass reused from round 1 (run verify exit 0)"),
+          );
+          writeFileSync(join(p.dispatch, "logs", "review-r2-checks.txt"), "gate: pass\n");
+          let verified = false;
+          const { calls, deps } = stand(
+            shaHandler((name, args) => {
+              if (name === "verify") {
+                verified = true;
+                return { code: 0, out: "gate: pass\n", err: "" };
+              }
+              return null;
+            }),
+          );
+          const res = cutRound(
+            { dispatch: p.dispatch, round: "3", repo: p.repo, synthesis: p.synthesis },
+            deps,
+          );
+          expect(res.code).toBe(0);
+          expect(verified).toBe(false);
+          expect(readFileSync(join(p.dispatch, "logs", "review-r3-checks.txt"), "utf8")).toBe(
+            "gate: pass\n",
+          );
+          expect(one(calls, "log-action", (c) => c.args[2] === "gate")?.args[4]).toBe(
+            "review round 3, gate pass reused from round 2 (run verify exit 0)",
+          );
+        }, "review-round-reuse-reuse-");
+      });
+
+      test("the newest pass with its text wins; a pass without text falls back to verify", () => {
+        withTempDir((root) => {
+          const p = paths(root);
+          writeFileSync(
+            join(p.dispatch, "actions.jsonl"),
+            gateRow(SHA, "review round 1, run verify exit 0") +
+              gateRow(SHA, "review round 1, run verify exit 0, mid-round gate"),
+          );
+          writeFileSync(join(p.dispatch, "logs", "review-r1-checks.txt"), "gate: pass\n");
+          let verified = false;
+          const { deps } = stand(
+            shaHandler((name, args) => {
+              if (name === "verify") {
+                verified = true;
+                return { code: 0, out: "gate: pass\n", err: "" };
+              }
+              return null;
+            }),
+          );
+          const res = cutRound(
+            { dispatch: p.dispatch, round: "2", repo: p.repo, synthesis: p.synthesis },
+            deps,
+          );
+          expect(res.code).toBe(0);
+          // The newer mid-round pass has no pass file, so the older cut pass reuses.
+          expect(verified).toBe(false);
+          expect(readFileSync(join(p.dispatch, "logs", "review-r2-checks.txt"), "utf8")).toBe(
+            "gate: pass\n",
+          );
+          expect(res.out).toContain(
+            `review-round: round 2 reuses the gate pass on ${SHA.slice(0, 12)} from round 1`,
+          );
+        }, "review-round-reuse-older-");
+
+        withTempDir((root) => {
+          const p = paths(root);
+          writeFileSync(
+            join(p.dispatch, "actions.jsonl"),
+            gateRow(SHA, "review round 1, run verify exit 0, mid-round gate"),
+          );
+          let verified = false;
+          const { deps } = stand(
+            shaHandler((name, args) => {
+              if (name === "verify") {
+                verified = true;
+                return { code: 0, out: "gate: pass\n", err: "" };
+              }
+              return null;
+            }),
+          );
+          const res = cutRound(
+            { dispatch: p.dispatch, round: "2", repo: p.repo, synthesis: p.synthesis },
+            deps,
+          );
+          expect(res.code).toBe(0);
+          expect(verified).toBe(true);
+          expect(res.out.some((l) => l.includes("reuses the gate pass"))).toBe(false);
+        }, "review-round-reuse-lost-");
+      });
+
+      test("a pass on another commit, a failed gate, or a dirty tree runs verify", () => {
+        withTempDir((root) => {
+          const p = paths(root);
+          writeFileSync(
+            join(p.dispatch, "actions.jsonl"),
+            gateRow("0".repeat(40), "review round 1, run verify exit 0") +
+              gateRow(SHA, "review round 1, run verify exit 2"),
+          );
+          writeFileSync(join(p.dispatch, "logs", "review-r1-checks.txt"), "gate: pass\n");
+          let verified = false;
+          const { deps } = stand(
+            shaHandler((name, args) => {
+              if (name === "verify") {
+                verified = true;
+                return { code: 0, out: "gate: pass\n", err: "" };
+              }
+              return null;
+            }),
+          );
+          const res = cutRound(
+            { dispatch: p.dispatch, round: "2", repo: p.repo, synthesis: p.synthesis },
+            deps,
+          );
+          expect(res.code).toBe(0);
+          expect(verified).toBe(true);
+        }, "review-round-reuse-miss-");
+
+        withTempDir((root) => {
+          const p = paths(root);
+          writeFileSync(
+            join(p.dispatch, "actions.jsonl"),
+            gateRow(SHA, "review round 1, run verify exit 0, mid-round gate"),
+          );
+          writeFileSync(join(p.dispatch, "logs", `gate-${SHA}.txt`), "gate: pass\n");
+          let verified = false;
+          const { deps } = stand(
+            shaHandler((name, args) => {
+              if (name === "git" && args.includes("status"))
+                return { code: 0, out: " M src/dirty.ts\n", err: "" };
+              if (name === "verify") {
+                verified = true;
+                return { code: 2, out: "dirty\n", err: "" };
+              }
+              return null;
+            }),
+          );
+          const res = cutRound(
+            { dispatch: p.dispatch, round: "2", repo: p.repo, synthesis: p.synthesis },
+            deps,
+          );
+          expect(verified).toBe(true);
+          expect(res.code).toBe(1);
+        }, "review-round-reuse-dirty-");
+      });
+    });
   });
 
   describe("launch", () => {
     const entry = join(import.meta.dir, "run");
 
-    test("writes every prompt file, launches each reviewer under its lens, and ends in the wait", () => {
+    test("writes every prompt file, records the reviewers at the start, launches each reviewer under its lens, and returns for the wait-next loop", () => {
       withTempDir((root) => {
         const p = paths(root);
         const { calls, deps } = stand((name, args) => {
@@ -1117,8 +1358,6 @@ describe("the round's three steps", () => {
             return { code: 0, out: "SECURITY TEXT\n", err: "" };
           if (name === "host" && args[0] === "name")
             return { code: 0, out: `${args[4]}-name\n`, err: "" };
-          if (name === "review-round" && args[0] === "wait")
-            return { code: 0, out: "round 1: every marker in\n", err: "" };
           return green(name, args);
         });
         const res = launchRound(
@@ -1126,7 +1365,10 @@ describe("the round's three steps", () => {
           deps,
         );
         expect(res.code).toBe(0);
-        expect(res.out).toContain("round 1: every marker in");
+        expect(res.out).toContain(
+          "review-round: round 1 launched, 3 reviewers; collect them with wait-next",
+        );
+        expect(of(calls, "review-round").some((c) => c.args[0] === "wait")).toBe(false);
         expect(readFileSync(join(p.dispatch, "review-r1-style-prompt.txt"), "utf8")).toBe(
           `Read ${p.dispatch}/review-style-brief.md and execute it. Report findings as your final message. Do not modify any file you are reviewing.\n`,
         );
@@ -1182,17 +1424,16 @@ describe("the round's three steps", () => {
           join(p.dispatch, "logs", "review-r1-bug-luna-last.md"),
         );
         expect(bug?.args.join(" ")).toContain("--run");
-        const wait = calls.find((c) => c.name === "review-round" && c.args[0] === "wait");
-        expect(wait?.args).toEqual([
-          "wait",
+        const start = one(calls, "review-round", (c) => c.args[0] === "start");
+        expect(start?.args).toEqual([
+          "start",
           p.dispatch,
           "1",
-          p.repo,
           "style:luna",
           "bug:luna",
           "security:luna",
         ]);
-        expect(calls.indexOf(wait!)).toBeGreaterThan(calls.indexOf(runs[2]!));
+        expect(calls.indexOf(start!)).toBeLessThan(calls.indexOf(runs[0]!));
       }, "review-round-launch-");
     });
 
@@ -1275,7 +1516,7 @@ describe("the round's three steps", () => {
       }, "review-round-launchsec3-");
     });
 
-    test("a round that will not start launches nothing, and the wait's exit is the launch's", () => {
+    test("a round that will not start launches nothing", () => {
       withTempDir((root) => {
         const p = paths(root);
         const failed = stand((name, args) =>
@@ -1288,20 +1529,28 @@ describe("the round's three steps", () => {
           failed.deps,
         );
         expect(res.code).toBe(1);
+        expect(res.err).toContain("round not started");
         expect(of(failed.calls, "host").length).toBe(0);
-
-        const timed = stand((name, args) =>
-          name === "review-round" && args[0] === "wait"
-            ? { code: 3, out: "WAIT-TIMEOUT\n", err: "" }
-            : green(name, args),
-        );
-        const res2 = launchRound(
-          { dispatch: p.dispatch, round: "1", repo: p.repo, synthesis: p.synthesis },
-          timed.deps,
-        );
-        expect(res2.code).toBe(3);
-        expect(res2.out).toContain("WAIT-TIMEOUT");
       }, "review-round-launchstart-");
+    });
+
+    test("a round with no reviewers launches nothing", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        const { calls, deps } = stand((name, args) => {
+          if (name === "turnpikes")
+            return { code: 0, out: "1 synthesis\n2 review\n", err: "" };
+          return green(name, args);
+        });
+        const res = launchRound(
+          { dispatch: p.dispatch, round: "1", repo: p.repo, synthesis: p.synthesis },
+          deps,
+        );
+        expect(res.code).toBe(1);
+        expect(res.err).toContain("review-round: round 1 has no reviewers; nothing launched");
+        expect(of(calls, "review-round").length).toBe(0);
+        expect(of(calls, "host").length).toBe(0);
+      }, "review-round-launchempty-");
     });
 
     test("round 2 runs the gating lenses alone", () => {
@@ -1397,6 +1646,269 @@ describe("the round's three steps", () => {
           p.dispatch,
         ]);
       }, "review-round-harvestok-");
+    });
+
+    test("named bug reviewers harvest alone; the others are untouched", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        const { calls, deps } = stand((name, args) => {
+          if (name === "reviewers") return { code: 0, out: "one\ntwo\n", err: "" };
+          if (name === "review-findings" && args[0] === "normalize")
+            return { code: 0, out: '[{"file":"a.ts"}]', err: "" };
+          return null;
+        });
+        const res = harvestRound(
+          { dispatch: p.dispatch, round: "9", repo: p.repo, only: [["bug", "two"]] },
+          deps,
+        );
+        expect(res.code).toBe(0);
+        expect(
+          readFileSync(join(p.dispatch, "logs", "review-r9-bug-two-findings.json"), "utf8"),
+        ).toBe('[{"file":"a.ts"}]');
+        expect(existsSync(join(p.dispatch, "logs", "review-r9-bug-one-findings.json"))).toBe(
+          false,
+        );
+        expect(
+          of(calls, "review-findings")
+            .filter((c) => c.args[0] === "normalize")
+            .map((c) => c.args[1]),
+        ).toEqual(["two"]);
+      }, "review-round-harvestonly-");
+    });
+
+    test("a named reviewer under another lens notes its raw report and harvests nothing", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        const { calls, deps } = stand((name, args) => {
+          if (name === "reviewers") return { code: 0, out: "one\n", err: "" };
+          return null;
+        });
+        const res = harvestRound(
+          {
+            dispatch: p.dispatch,
+            round: "9",
+            repo: p.repo,
+            only: [
+              ["style", "one"],
+              ["bug", "one"],
+            ],
+          },
+          deps,
+        );
+        expect(res.code).toBe(0);
+        expect(res.out).toContain(
+          "review round 9 one: style has no normalized report; reading the raw report by hand",
+        );
+        expect(of(calls, "review-findings").length).toBe(2);
+      }, "review-round-harvestlens-");
+    });
+
+    test("a named lane that is no bug reviewer stops it", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        const { calls, deps } = stand((name, args) => {
+          if (name === "reviewers") return { code: 0, out: "one\n", err: "" };
+          return null;
+        });
+        const res = harvestRound(
+          { dispatch: p.dispatch, round: "9", repo: p.repo, only: [["bug", "ghost"]] },
+          deps,
+        );
+        expect(res.code).toBe(1);
+        expect(res.err).toContain("review-round: ghost is not a bug reviewer of round 9");
+        expect(of(calls, "review-findings").length).toBe(0);
+      }, "review-round-harvestghost-");
+    });
+  });
+
+  describe("fix", () => {
+    const PARENT = "1".repeat(40);
+    const SHA = "2".repeat(40);
+
+    test("stages the named paths, commits, and records the apply in one step", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        const shas = [PARENT, SHA];
+        const { calls, deps } = stand((name, args) => {
+          if (name === "git" && args.includes("rev-parse"))
+            return { code: 0, out: `${shas.shift() ?? ""}\n`, err: "" };
+          return green(name, args);
+        });
+        const res = fixRound(
+          {
+            dispatch: p.dispatch,
+            synthesis: p.synthesis,
+            message: "Fix the wording",
+            findings: ["a.ts:1", "b.ts:2"],
+            paths: ["a.ts", "b.ts"],
+          },
+          deps,
+        );
+        expect(res.code).toBe(0);
+        expect(res.out).toContain(`review-round: fix ${SHA} recorded (a.ts:1 b.ts:2)`);
+        expect(one(calls, "git", (c) => c.args.includes("add"))?.args).toEqual([
+          "-C",
+          p.synthesis,
+          "add",
+          "--",
+          "a.ts",
+          "b.ts",
+        ]);
+        expect(one(calls, "git", (c) => c.args.includes("commit"))?.args).toEqual([
+          "-C",
+          p.synthesis,
+          "commit",
+          "-m",
+          "Fix the wording",
+          "--",
+          "a.ts",
+          "b.ts",
+        ]);
+        expect(one(calls, "log-action")?.args).toEqual([
+          p.dispatch,
+          "coachman",
+          "apply",
+          SHA,
+          "a.ts:1 b.ts:2",
+        ]);
+        expect(of(calls, "git").some((c) => c.args.includes("reset"))).toBe(false);
+      }, "review-round-fix-");
+    });
+
+    test("an unrecorded apply rolls the commit back to its parent", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        const shas = [PARENT, SHA, SHA];
+        const { calls, deps } = stand((name, args) => {
+          if (name === "git" && args.includes("rev-parse"))
+            return { code: 0, out: `${shas.shift() ?? ""}\n`, err: "" };
+          if (name === "log-action") return { code: 1, out: "", err: "cannot append\n" };
+          return green(name, args);
+        });
+        const res = fixRound(
+          {
+            dispatch: p.dispatch,
+            synthesis: p.synthesis,
+            message: "Fix the wording",
+            findings: ["a.ts:1"],
+            paths: ["a.ts"],
+          },
+          deps,
+        );
+        expect(res.code).toBe(1);
+        expect(res.out).toContain(`review-round: fix ${SHA} was not recorded; rolled back to ${PARENT}`);
+        expect(one(calls, "git", (c) => c.args.includes("reset"))?.args).toEqual([
+          "-C",
+          p.synthesis,
+          "reset",
+          "-q",
+          "--soft",
+          PARENT,
+        ]);
+      }, "review-round-fixback-");
+    });
+
+    test("a moved HEAD is never rolled back; the apply is recorded by hand instead", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        const shas = [PARENT, SHA, "3".repeat(40)];
+        const { calls, deps } = stand((name, args) => {
+          if (name === "git" && args.includes("rev-parse"))
+            return { code: 0, out: `${shas.shift() ?? ""}\n`, err: "" };
+          if (name === "log-action") return { code: 1, out: "", err: "cannot append\n" };
+          return green(name, args);
+        });
+        const res = fixRound(
+          {
+            dispatch: p.dispatch,
+            synthesis: p.synthesis,
+            message: "Fix the wording",
+            findings: ["a.ts:1"],
+            paths: ["a.ts"],
+          },
+          deps,
+        );
+        expect(res.code).toBe(1);
+        expect(res.err.join("\n")).toContain("HEAD moved meanwhile");
+        expect(of(calls, "git").some((c) => c.args.includes("reset"))).toBe(false);
+      }, "review-round-fixmoved-");
+    });
+  });
+
+  describe("gate", () => {
+    const SHA = "4".repeat(40);
+
+    test("a dirty tree is refused before verify runs, with no row and no pass file", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        let verified = false;
+        const { calls, deps } = stand((name, args) => {
+          if (name === "git" && args.includes("rev-parse"))
+            return { code: 0, out: `${SHA}\n`, err: "" };
+          if (name === "git" && args.includes("status"))
+            return { code: 0, out: " M src/dirty.ts\n", err: "" };
+          if (name === "verify") {
+            verified = true;
+            return { code: 0, out: "", err: "" };
+          }
+          return green(name, args);
+        });
+        const res = gateRound({ dispatch: p.dispatch, round: "1", synthesis: p.synthesis }, deps);
+        expect(res.code).toBe(1);
+        expect(verified).toBe(false);
+        expect(res.err.join("\n")).toContain("src/dirty.ts");
+        expect(of(calls, "log-action").length).toBe(0);
+        expect(existsSync(join(p.dispatch, "logs", `gate-${SHA}.txt`))).toBe(false);
+      }, "review-round-gatedirty-");
+    });
+
+    test("a green gate writes the pass file and logs the mid-round row", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        const { calls, deps } = stand((name, args) => {
+          if (name === "git" && args.includes("rev-parse"))
+            return { code: 0, out: `${SHA}\n`, err: "" };
+          if (name === "git" && args.includes("status"))
+            return { code: 0, out: "", err: "" };
+          if (name === "verify") return { code: 0, out: "gate: pass\n", err: "" };
+          return green(name, args);
+        });
+        const res = gateRound({ dispatch: p.dispatch, round: "1", synthesis: p.synthesis }, deps);
+        expect(res.code).toBe(0);
+        expect(readFileSync(join(p.dispatch, "logs", `gate-${SHA}.txt`), "utf8")).toBe(
+          "gate: pass\n",
+        );
+        expect(res.out).toContain("gate: pass");
+        expect(one(calls, "log-action", (c) => c.args[2] === "gate")?.args).toEqual([
+          p.dispatch,
+          "coachman",
+          "gate",
+          SHA,
+          "review round 1, run verify exit 0, mid-round gate",
+        ]);
+      }, "review-round-gateok-");
+    });
+
+    test("a failing gate still records its true row and exits 1", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        const { calls, deps } = stand((name, args) => {
+          if (name === "git" && args.includes("rev-parse"))
+            return { code: 0, out: `${SHA}\n`, err: "" };
+          if (name === "git" && args.includes("status"))
+            return { code: 0, out: "", err: "" };
+          if (name === "verify") return { code: 2, out: "gate: fail\n", err: "" };
+          return green(name, args);
+        });
+        const res = gateRound({ dispatch: p.dispatch, round: "1", synthesis: p.synthesis }, deps);
+        expect(res.code).toBe(1);
+        expect(readFileSync(join(p.dispatch, "logs", `gate-${SHA}.txt`), "utf8")).toBe(
+          "gate: fail\n",
+        );
+        expect(one(calls, "log-action", (c) => c.args[2] === "gate")?.args[4]).toBe(
+          "review round 1, run verify exit 2, mid-round gate",
+        );
+      }, "review-round-gategail-");
     });
   });
 });
