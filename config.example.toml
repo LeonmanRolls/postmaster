@@ -78,6 +78,12 @@ ticket_notes = "given"                    # what the coachman and the workhorses
 # [team.coachman_legs]
 # synthesis = { harness = "codex", model = "gpt-6-astra", effort = "max" }
 
+# Optional: the surveyor's lane, for the independent judgement a run asks for
+# with one question. A lane defined above, on a harness with a recorded
+# final-message shape (claude, codex, pi, muse or mimo). Unset runs the
+# surveyor on the run's first reviewer lane.
+# surveyor = "luna"
+
 # Optional: a lens's own reviewer lanes, where they differ from `reviewers`, such as a lane
 # whose harness has a skill for that lens alone. A lens not named here is reviewed by
 # `reviewers`. The lenses are the review stage's: `scripts/run reviewers lenses` lists them, and
