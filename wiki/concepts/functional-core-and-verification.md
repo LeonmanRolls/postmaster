@@ -2,7 +2,7 @@
 title: What a functional core opens up for checking code, and what it does for coding with AI
 type: concept
 standing: claimed
-sources: [trials/2026-10-04-review-findings-classified, articles/alloy-tools, articles/anthropic-2026-pbt-blog, articles/biome-noprocessenv, articles/dafny-2022, articles/dafny-lang, articles/effect-schema, articles/effect-ts, articles/eslint-plugin-functional, articles/fastcheck-ts, articles/fpts, articles/galois-dodds-2025, articles/hacl-2017, articles/hypothesis-py, articles/isabelle, articles/kiro-2025-pbt, articles/kleppmann-2025, articles/lemmafit-2026, articles/lemmascript-2026, articles/meyer-1992, articles/neverthrow, articles/oxlint-no-process-env, articles/quint, articles/rocq-coq, articles/stryker-js, articles/tlaplus-tla, articles/tokeneer-2013, articles/ts-pattern, articles/zod, papers/agda-2024, papers/agentic-pbt-2025, papers/agentic-proving-2026, papers/algoveri-2026, papers/alphaverus-2024, papers/aria-2026, papers/atlas-2025, papers/autospec-2024, papers/autoverus-2024, papers/aws-2014, papers/axdafny-2026, papers/berger-2019, papers/bicarregui-2009, papers/bisharat-2026-tla-bench, papers/bisharat-2026-tla-write, papers/cardano-2024, papers/cedar-2024, papers/chen-2026-modelbench, papers/cheng-2026-sysmobench, papers/clever-2025, papers/clover-2023, papers/dafny-ir-2025, papers/dafnybench-2024, papers/dafnypro-2026, papers/danso-2026-ltl, papers/erlang-pulse-2009, papers/estler-2014, papers/etna-jfp2026, papers/fakhoury-2024-ticoder-study, papers/fan-2025-verifast, papers/faria-2026, papers/fiatcrypto-2019, papers/fonseca-2017, papers/formalbench-2025, papers/fstar-2016, papers/fstar-neural-2024, papers/fvapps-2025, papers/gleirscher-2020, papers/goedel-code-prover-2026, papers/goldstein-icse2024, papers/he-2025-pgs, papers/hong-2025-alloy, papers/howtospecify-2020, papers/huang-2026, papers/hughes-1989, papers/hughes-2016, papers/ironfleet-2015, papers/jing-2026-pbtbench, papers/kamath-2023-loopy, papers/konstantinou-2024-oracles, papers/lahiri-2024-intent-formalization, papers/lahiri-2026, papers/laurel-2024, papers/lean4-2021, papers/leetproof-2026, papers/leroy-2009, papers/li-2026-probe, papers/liquidhaskell-2025, papers/liu-2023-evalplus, papers/mariposa-2023, papers/matichuk-2015, papers/misu-2024, papers/mongodb-xmodelling-2020, papers/nl2postcond-2024, papers/nl2spec-2023, papers/pei-2023-invariants, papers/prasetya-2026-postconditions, papers/propertygpt-2025, papers/qed-2020, papers/quickcheck-2000, papers/rango-2024, papers/ravi-coblenz-2025, papers/richter-2025-nl2contract, papers/rsc-2016, papers/schneider-2025, papers/sel4-2009, papers/sel4-2014, papers/selene-2024, papers/shefer-2025, papers/specgen-2025, papers/swe-proof-2026, papers/tan-2026, papers/tanaka-2025-pbt-ebt, papers/ticoder-2024, papers/verdi-2015, papers/vericoding-2025, papers/vericontest-2026, papers/verifythisbench-2025, papers/verina-2025, papers/vero-2026, papers/verus-2024, papers/verus-specbench-2026, papers/verusage-2025, papers/vikram-2024-pbt, papers/yang-2011, papers/yuan-2014, papers/zhao-2026-misguidance]
+sources: [trials/2026-10-04-review-findings-classified, trials/2026-10-09-purity-check, trials/2026-10-09-mutation-counts, articles/alloy-tools, articles/anthropic-2026-pbt-blog, articles/biome-noprocessenv, articles/dafny-2022, articles/dafny-lang, articles/effect-schema, articles/effect-ts, articles/eslint-plugin-functional, articles/fastcheck-ts, articles/fpts, articles/galois-dodds-2025, articles/hacl-2017, articles/hypothesis-py, articles/isabelle, articles/kiro-2025-pbt, articles/kleppmann-2025, articles/lemmafit-2026, articles/lemmascript-2026, articles/meyer-1992, articles/neverthrow, articles/oxlint-no-process-env, articles/quint, articles/rocq-coq, articles/stryker-js, articles/tlaplus-tla, articles/tokeneer-2013, articles/ts-pattern, articles/zod, papers/agda-2024, papers/agentic-pbt-2025, papers/agentic-proving-2026, papers/algoveri-2026, papers/alphaverus-2024, papers/aria-2026, papers/atlas-2025, papers/autospec-2024, papers/autoverus-2024, papers/aws-2014, papers/axdafny-2026, papers/berger-2019, papers/bicarregui-2009, papers/bisharat-2026-tla-bench, papers/bisharat-2026-tla-write, papers/cardano-2024, papers/cedar-2024, papers/chen-2026-modelbench, papers/cheng-2026-sysmobench, papers/clever-2025, papers/clover-2023, papers/dafny-ir-2025, papers/dafnybench-2024, papers/dafnypro-2026, papers/danso-2026-ltl, papers/erlang-pulse-2009, papers/estler-2014, papers/etna-jfp2026, papers/fakhoury-2024-ticoder-study, papers/fan-2025-verifast, papers/faria-2026, papers/fiatcrypto-2019, papers/fonseca-2017, papers/formalbench-2025, papers/fstar-2016, papers/fstar-neural-2024, papers/fvapps-2025, papers/gleirscher-2020, papers/goedel-code-prover-2026, papers/goldstein-icse2024, papers/he-2025-pgs, papers/hong-2025-alloy, papers/howtospecify-2020, papers/huang-2026, papers/hughes-1989, papers/hughes-2016, papers/ironfleet-2015, papers/jing-2026-pbtbench, papers/kamath-2023-loopy, papers/konstantinou-2024-oracles, papers/lahiri-2024-intent-formalization, papers/lahiri-2026, papers/laurel-2024, papers/lean4-2021, papers/leetproof-2026, papers/leroy-2009, papers/li-2026-probe, papers/liquidhaskell-2025, papers/liu-2023-evalplus, papers/mariposa-2023, papers/matichuk-2015, papers/misu-2024, papers/mongodb-xmodelling-2020, papers/nl2postcond-2024, papers/nl2spec-2023, papers/pei-2023-invariants, papers/prasetya-2026-postconditions, papers/propertygpt-2025, papers/qed-2020, papers/quickcheck-2000, papers/rango-2024, papers/ravi-coblenz-2025, papers/richter-2025-nl2contract, papers/rsc-2016, papers/schneider-2025, papers/sel4-2009, papers/sel4-2014, papers/selene-2024, papers/shefer-2025, papers/specgen-2025, papers/swe-proof-2026, papers/tan-2026, papers/tanaka-2025-pbt-ebt, papers/ticoder-2024, papers/verdi-2015, papers/vericoding-2025, papers/vericontest-2026, papers/verifythisbench-2025, papers/verina-2025, papers/vero-2026, papers/verus-2024, papers/verus-specbench-2026, papers/verusage-2025, papers/vikram-2024-pbt, papers/yang-2011, papers/yuan-2014, papers/zhao-2026-misguidance]
 updated: 2026-10-09
 ---
 
@@ -473,8 +473,10 @@ Oxlint, the Biome format check, the tests, the runbook reference check and the w
   `node/no-process-env` (off by default) each disallow `process.env`
   [@articles/biome-noprocessenv/passages.md] [@articles/oxlint-no-process-env/passages.md]. The gate runs Oxlint, with one
   custom rule switched on, and runs Biome only as a formatter, so Biome's rule would need `biome lint` or `biome check`
-  added to `bun run check`. Whether either rule can be switched on for one folder, and whether either restricts imports of
-  `node:fs` or `node:child_process` or reads of the clock, was not checked; trial 4 settles it.
+  added to `bun run check`. Trial 4's first part tried both on `scripts/lib/` and `*-core.ts` modules alone: each rule can
+  be switched on for those through a per-file override, each linter has a rule that restricts imports of `node:fs`,
+  `node:child_process` and `node:os` and one that restricts a named property such as `Date.now` (Biome's is a nursery
+  rule), and neither has one for `new Date()` with no argument [@trials/2026-10-09-purity-check/results/linters-scope.tsv].
 - **Contracts are assertions at a function's edge.** The evidence is descriptive: in most of 21 projects that use
   contracts, more than a third of routines and classes carry them, and the study looks at no defects
   [@papers/estler-2014/passages.md]. Nothing read shows that contracts reduce defects.
@@ -513,9 +515,9 @@ Oxlint, the Biome format check, the tests, the runbook reference check and the w
   runtime dependency, against the rule that runtime imports are built-ins. A plain function that returns a union
   of a value and an error, and that receives the calls it makes as arguments, gives the same shape with no dependency;
   that is argued here, not measured, and no study found measures what adopting any of them costs a small tool. A lint
-  rule might back either style: the gate already loads one custom Oxlint rule, whether its linters can scope a rule to a
-  folder or restrict imports was not checked, and trial 4 prices an environment, clock and import check, not a ban on
-  `any` and casts. TypeScript tracks Effect's types, so `any` and casts can bypass them, as they can the parameter types
+  rule might back either style: the gate already loads one custom Oxlint rule, both its linters can scope a rule to a
+  folder and restrict imports [@trials/2026-10-09-purity-check/results/linters-scope.tsv], and trial 4 prices an
+  environment, clock and import check, not a ban on `any` and casts. TypeScript tracks Effect's types, so `any` and casts can bypass them, as they can the parameter types
   of plain functions [@articles/effect-ts/passages.md] (the reading helper's note; the docs pages read do not say), and a
   rule would have to ban those in either style. What the capture credits Effect with is a type that carries a function's
   needs and expected errors. Whether that adds anything over the plain style is what the third step of trial 5
@@ -687,7 +689,7 @@ of them in review when counted, and 34 of the 84 sit in two families.
 
 ## Trials postmaster could run
 
-Five trials, none run here; the fifth is in three steps, and a later step runs only if the one before did not fail. Each gives its cost in hours, what it would show and what would show it
+Five trials, only the fourth run here; the fifth is in three steps, and a later step runs only if the one before did not fail. Each gives its cost in hours, what it would show and what would show it
 failed. The costs are estimates, not measurements. The first measures what the count above cannot: how much of
 it is hindsight.
 
@@ -738,9 +740,61 @@ cannot be trusted without reading the generated Dafny line by line.
 `scripts/lib/`. Biome's `noProcessEnv` and Oxlint's `node/no-process-env` each disallow `process.env` and are off by
 default [@articles/biome-noprocessenv/passages.md] [@articles/oxlint-no-process-env/passages.md]. Oxlint runs in the
 gate, and Biome runs there only as a formatter, so its rule would need `biome lint` or `biome check` added to
-`bun run check`. Whether either can be scoped to one folder, or restricts imports and the clock, was not checked. Run the
+`bun run check`. Both can be scoped to one folder, and both restrict imports and named properties such as `Date.now`
+[@trials/2026-10-09-purity-check/results/linters-scope.tsv]. Run the
 check on `main` and at the review snapshots of the four runs; no module on `main` is named `*-core.ts` today, so on
 `main` it covers `scripts/lib/`.
+
+*Result of the first part.* Run on 2026-10-09, on `main` at `e3bbb3c` and at the 19 review snapshots, by one reader
+[@trials/2026-10-09-purity-check]. Neither failure test of the first part was met.
+
+- **On `main` it flags 13 places, 3 of them defects.** They are in 6 of the 10 non-test modules of `scripts/lib/`: 10
+  imports of `node:fs`, `node:child_process` and `node:os`, and 3 reads of `process.env`. The list above finds all 13; the
+  added names (Bun's own calls, `new Date()`, `import.meta.env`) find none more on `main`, and 2 of the 17 places at
+  #216's snapshots. The user ruled the 3 reads defects: two in `run()` of `scripts/lib/proc.ts`, which hands every child
+  process the whole ambient environment unless the caller passes one, and one in `processes.ts`, a variable that sets
+  where the module reads `/proc`. The 10 imports sit in modules whose job is the effect, so they are not defects. That
+  is 10 places that are not defects, against the failure line of about twenty. Controls: a helper under `lib/` that reads
+  the environment and the clock and imports `node:fs` reads 3, the same helper with the three passed in reads 0, and a
+  script outside the scope that reads the environment reads 0 (1 when the scope is widened to every script)
+  [@trials/2026-10-09-purity-check/results/main-verdicts.tsv] [@trials/2026-10-09-purity-check/results/controls.tsv].
+- **A second implementation agrees.** An Oxlint plugin that reads syntax trees finds the same places as the token scan:
+  the 13, the 367 over every non-test script, the 30 of a control file that holds every rule, and every place at the 19
+  snapshots [@trials/2026-10-09-purity-check/results/main-cross-check.out].
+- **At the snapshots it flags the same places every time.** It flags 10 places at #202's nine snapshots, 17 at #216's
+  four (`scrub-core.ts` is the one `*-core.ts` module), 10 at #252's three and 14 at #268's three. The set is the same at
+  every snapshot of a run, so it flags the same lines before and after each round's fixes and cannot see a fix
+  [@trials/2026-10-09-purity-check/results/constancy.out].
+- **Of the eight findings it reaches 6.** The flagged places include the read or effect behind four of them: the read of
+  `SCRUB_CHECK_DISABLE` in `scrub-core.ts` behind 216/bug-2 and bug-10, and the `process.env` in `scripts/lib/proc.ts`
+  that hands git its `GIT_*` variables behind 202/bug-14 and 252/bug-22. This page expected the two git findings to sit at
+  the edge; the call does, but the environment it inherits is taken in `proc.ts`, which is in scope. For 216/bug-16 and
+  bug-17 it flags the logging function in `scrub-core.ts`; their defects are a call left out and a call that should not
+  run, so the flag is where the effect lives and not where the fault is. It does not reach 202/bug-23 and 252/bug-4,
+  which turn a failed read into an empty list in `reach.ts` and `aftercare.ts`, outside the scope. Where the data allows
+  a check (216/bug-2, bug-10, 202/bug-14, 252/bug-22), the flagged line is unchanged at the run's last snapshot or on
+  `main`: each fix was made in the caller. Counted as only the read itself, or with the two git findings as edge
+  findings, the number is 4, and the test is not met either way
+  [@trials/2026-10-09-purity-check/results/reach.tsv].
+- **The linters can do the check for one folder.** Oxlint's `node/no-process-env`, `no-restricted-imports` and
+  `no-restricted-properties`, and Biome's `style/noProcessEnv`, `style/noRestrictedImports` and the nursery
+  `noJsRestrictedProperties`, switched on for `scripts/lib/` and `*-core.ts` alone through a per-file override, report the
+  same 13 places on `main` and nothing outside the folder; switched on for every file they report 931 places outside it.
+  On a control set of 34 places Oxlint covers 30, Biome 31 and Biome with one GritQL plugin 33. No built-in rule covers
+  `new Date()` with no argument or `import.meta.env`, and Oxlint has none for `require`; Oxlint's plugin interface does
+  all of it. Oxlint is in the gate, so its rules would go into `.oxlintrc.json`; Biome is there only as a formatter, so
+  its rules would need `biome lint` added to `bun run check`. Restricting the global `Date` would reach `new Date()`, and
+  on `main` it reports 12 places in `wall.ts`, none a clock read
+  [@trials/2026-10-09-purity-check/results/linters-scope.tsv] [@trials/2026-10-09-purity-check/results/linters-date-global.out].
+- **How sure.** The counts are firm: two implementations and the controls agree. That a place is a defect, and that it is
+  behind a finding, are one reader's judgement from the code at the snapshot, and the eight findings were chosen by readers
+  who knew each defect. "Reached" means the flagged place is among the flagged ones, one of 10 to 17 that never change,
+  not that the check would have drawn a reviewer to it. Not run: adding the check to the gate, and what it would flag in
+  code written later.
+
+*Failure test 1, the first part flags none of the eight: not met, it reaches 6. Failure test 2, more than about twenty
+places on `main` that are not defects: not met, there are 10.*
+
 The same script also counts two kinds of mutation, so that a rule on mutation would rest on numbers. *Escaping
 mutation* is a change to something the function did not create: assigning to an argument or to a property of one,
 calling `push`, `set`, `delete` or `splice` on one, or changing a module-level variable or an imported object. *Every
@@ -763,6 +817,44 @@ hazards.
 *It failed if* the first part flags none of the eight, or flags more than about twenty places on `main` that are not
 defects. The mutation counts failed if the first count flags more than about twenty places on `main` that are not
 hazards, or flags none of the 84 findings' functions.
+
+*Result of the mutation counts.* Run on 2026-10-09, on `main` at `67d4ae2` and at the 19 review snapshots, by one reader,
+with a second on 10 of the 30 places read [@trials/2026-10-09-mutation-counts]. The first count took every kind of change to
+something the function did not create, as the user chose: an argument, a module-level variable, an imported binding, a
+process-wide object such as `process.env`, the object a method was called on, and a variable of an enclosing function changed
+from a nested one. Nothing was exempt as being at the edge.
+
+- **The counts.** On `main` (79 scripts, 52,522 lines) the first count flags 360 places and the second 3,511. The 360 are 81
+  on arguments, 44 on module-level variables, none on imports, 37 on process-wide objects (29 of them `process.env`, 5 `process.exitCode`, 3 `globalThis`), 32 on
+  the object a method was called on and 166 on a variable of an enclosing function. At the 19 snapshots the first count reads
+  323 to 422 and the second 3,112 to 3,949. Of the 360, 115 lie in a function that reads the environment or the clock,
+  touches files, starts processes or uses the operating system, and 355 in a module that does, so the exemption for edge code would leave 245 places
+  by function and 5 by module [@trials/2026-10-09-mutation-counts/results/counts-by-commit.tsv]
+  [@trials/2026-10-09-mutation-counts/results/edge-tags-main.txt].
+- **Hazards.** Of 30 places drawn at random, the first reader marked 4 hazards and 26 harmless, none unclear. That puts about
+  312 of the 360 places (95% interval 253 to 341) outside the hazards, against the line of about twenty. The second reader
+  gave the same mark on all 10 it read and read both of two made-up places right
+  [@trials/2026-10-09-mutation-counts/results/marks-tally.txt]. The hazards are a delay kept in a module-level variable
+  and set at 16 places in one test, a regex's `lastIndex` reset inside a predicate named `isDigitChar`, a flag kept on
+  `globalThis`, and a `replace` callback that also collects into an outer array. Three of the four are changes to module-level
+  state or a process-wide object (3 of the 7 drawn on those, against 1 of the other 23); none of the 9 drawn on arguments or the
+  3 on a method's receiver was one. That split was made after the fact on small numbers.
+- **The findings.** Of the 78 findings that cite a TypeScript line, 8 sit in a function that holds a place of the first count
+  (1 of 30 in #202, 3 of 17 in #216, 0 of 14 in #252, 4 of 17 in #268) and 21 in such a function or around one; 3 cite a runbook
+  line and 3 no line. If each finding fell on a random line of its own file, 5.9 would sit in a flagged function and 27.1 in or
+  around one, so the count reaches the findings' functions about as often as chance would. In 1 of the 8 the flagged place bears on
+  the defect (216/bug-14, whose cause is the `lastIndex` of global regexes kept in module state), in 1 partly, in 1 it sits beside
+  the defect, and in 5 it has nothing to do with it. The second count reaches 57 of the 78, where 49.2 are expected
+  [@trials/2026-10-09-mutation-counts/results/findings-summary.txt]
+  [@trials/2026-10-09-mutation-counts/results/findings-reading.md].
+- **How sure.** The counts are firm: 105 controls, including the page's four, read as expected, and a spot check of 32 places
+  found none wrong. The share of hazards rests on 30 places, one reader's rubric and a second reader of the same kind with
+  10 places, so its interval is wide; the first failure test holds across it, and on the reading that exempts edge functions
+  (about 206 of the 245 left are not hazards). The reading of the 8 findings is one reader's. Not run: a rule on mutation in the
+  gate, whether it would have found a defect a reviewer found, and whether code without these changes is easier to follow.
+
+*Failure test 1, the first count flags more than about twenty places on `main` that are not hazards: met, about 312. Failure
+test 2, it flags none of the 84 findings' functions: not met, it flags the function of 8 of the 78 that cite a line.*
 
 **5. One program with its git swapped, for the cleanup script's dry run.** Take #252's cleanup at its round-1
 snapshot (`a793251` in the trial's data): 1,624 lines that run ten different git commands (`status`, `diff`,
@@ -832,10 +924,14 @@ ban on every mutation is the stricter version, and trial 4 counts both before ei
 is that a name that never changes is easier to follow, for a reader and for a model, and that a check gives an agent
 something to iterate against. Neither is measured here: no study found compares a reader's or a model's grasp of mutable
 and immutable versions of the same code, and the 84 findings were not classified by mutation. The second part is not tied
-to a finding; trial 4 tests whether it connects to any.
+to a finding; trial 4 tests whether it connects to any. It has tested it: the first count flags 360 places on `main`, an
+estimated 312 of them not hazards, and 8 of the 78 findings that cite a TypeScript line sit in a function it flags, about as many as
+random placement would give [@trials/2026-10-09-mutation-counts/results/marks-tally.txt]
+[@trials/2026-10-09-mutation-counts/results/findings-summary.txt].
 *Tied to (the first part):* the 8 findings of kind E, 4 of them the ambient environment in 3 runs, and to #216's round-1 style
 finding that named the environment read in a core module at the lowest severity while two serious findings
-traced to it.
+traced to it. The first part of trial 4 has measured it: 13 places on `main`, 3 of them defects, and the read or effect
+behind 6 of the 8 findings [@trials/2026-10-09-purity-check/results/reach.tsv].
 
 **2. Add a design rule for tools that run dry or undo: decide once, with git, files and processes passed in.**
 Proposed text: "A tool that can run dry or undo makes each decision once, in code that the dry run, the tests and the

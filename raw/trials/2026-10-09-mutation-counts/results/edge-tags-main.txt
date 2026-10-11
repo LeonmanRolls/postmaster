@@ -1,0 +1,36 @@
+places of the first count: 360
+in an edge function: 115; in no edge function: 245
+in an edge module: 355; in no edge module: 5
+
+root	places	edge function	edge module
+captured	166	33	162
+global	37	35	37
+module	44	31	43
+param	81	16	81
+this	32	0	32
+
+root	name given a value	property assigned	in-place call	delete	Object.assign
+captured	79	8	79	0	0
+global	0	27	0	10	0
+module	34	9	1	0	0
+param	24	25	24	8	0
+this	0	4	28	0	0
+
+tag	places in a function with it	places in a module with it
+env	57	250
+clock	40	184
+files	107	355
+proc	37	125
+os	16	121
+
+summary
+first	360
+edge_function	115
+no_edge_function	245
+edge_module	355
+no_edge_module	5
+op_rebind	137
+op_prop	73
+op_call	132
+op_delete	18
+op_assign	0

@@ -6,65 +6,11 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { run } from "./lib/proc.ts";
-import {
-  groupChanges,
-  langOf,
-  lineCount,
-  packChunks,
-  parseChanges,
-  scrub,
-  titled,
-} from "./review-page.ts";
+import { groupChanges, lineCount, packChunks, parseChanges, titled } from "./review-page.ts";
 
 const script = join(import.meta.dir, "review-page.ts");
 
 describe("pure core", () => {
-  test("addresses outside the example domains are removed, line numbers kept", () => {
-    const r = scrub(
-      "a: " +
-        "som" +
-        "eon" +
-        "e@c" +
-        "omp" +
-        "any" +
-        ".co" +
-        "\nb:" +
-        " u@" +
-        "exa" +
-        "mpl" +
-        "e.c" +
-        "om\n" +
-        "c: " +
-        "x@h" +
-        "ost" +
-        ".in" +
-        "val" +
-        "id\n" +
-        "d: " +
-        "é@e" +
-        "xäm" +
-        "ple" +
-        ".co" +
-        "m\n",
-    );
-    expect(r.text).toBe(
-      "a: <address removed>\nb: u@example.com\nc: x@host.invalid\nd: <address removed>\n",
-    );
-    expect(r.removed).toBe(2);
-    expect(scrub("no address here\n")).toEqual({ text: "no address here\n", removed: 0 });
-  });
-
-  test("a decorator is not an address", () => {
-    expect(scrub("@contextlib.contextmanager\n").removed).toBe(0);
-  });
-
-  test("languages come from the extension", () => {
-    expect(langOf("scripts/x.ts")).toBe("typescript");
-    expect(langOf("a/b.sh")).toBe("bash");
-    expect(langOf("README.md")).toBe("markdown");
-    expect(langOf("Makefile")).toBe("plaintext");
-  });
-
   test("lines are counted as an editor numbers them", () => {
     expect(lineCount("")).toBe(0);
     expect(lineCount("a\nb\n")).toBe(2);

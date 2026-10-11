@@ -140,14 +140,19 @@ waits in the ready queue until the watcher sees room under `team.max_runs`.
    absent, or single-thread, or alternate, which gives this project the mode its latest run did
    not have — **except that a mode the user named for this ticket wins: pass it as
    `<tool>/scripts/run run-meta <dispatch> <repo> --mode <synthesis|single-thread>`**, and a
-   refusal naming the two values goes to the user. The record keeps the machine config's
-   `team.ticket_notes` in its config — given when the key is absent, or held-back — and
-   `run-meta` refuses anything else at dispatch. The pin is a worktree of this repo at the
+   refusal naming the two values goes to the user. The ticket notes come from the machine
+   config's `team.ticket_notes` — given when the key is absent, or held-back — **except that
+   a value the user named for this ticket wins: pass it as
+   `<tool>/scripts/run run-meta <dispatch> <repo> --ticket-notes <given|held-back>`**, and a
+   refusal naming the two values goes to the user. The record keeps the value with its source
+   and the setting's value at dispatch. The pin is a worktree of this repo at the
    dispatch commit, shared by every run
    dispatched at it; the waybill names it as `tool:`, and every leg of this run reads its
    runbooks and runs its scripts from there. Log the `run run-meta` output as a `note`, keeping
-   its `mode=<...>`, `mode_source=<...>` and `mode_setting=<...>` fields in the detail, so the
-   run's log says which mode the run runs in and where it came from.
+   its `mode=<...>`, `mode_source=<...>` and `mode_setting=<...>` fields and its
+   `ticket_notes=<...>`, `ticket_notes_source=<...>` and `ticket_notes_setting=<...>` fields in
+   the detail, so the run's log says which mode the run runs in and which notes it gets, and
+   where each came from.
    `<tool>/scripts/run verify record
    <repo> <dispatch> --gate '<gate>'` writes `checks.json`, the checks the run is held to, and
    prints them for the waybill; a gate the project declares wins over the launch card's, and
@@ -537,8 +542,12 @@ every project and does not change that project's gate.
    at the head: withhold under the claim-fail clause below with the gate result as the
    exact discrepancy. On `stale`,
    withhold: remove `.card-ready` and `.leg-<n>-done` for the manifest's current leg `<n>`,
-   then resume that last leg to merge the default branch into the ticket branch, never
-   rebasing, run its gates again and raise the card again, and wait for the corrected card.
+   then resume that last leg with the stale line as the exact discrepancy, asking it to
+   repeat its merge step and raise the card again, and wait for the corrected card. The
+   resume carries no trial merge and no merge instructions of its own: the leg's step
+   merges, resolves and gates. Log it with the leg, the thread id and the stale line
+   as `send-back: <stale line>`: the leg's step restarts its merge count only on a
+   resume carrying `send-back:`, never on a remount or a ruling.
    For a change to the coachman contract, that merge means a new fixture run from the final
    branch only when what the merge brought in changes the coachman contract; otherwise the
    earlier fixture result stands. That is what the contract checker says: run the dispatch
