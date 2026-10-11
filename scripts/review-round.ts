@@ -53,7 +53,7 @@ import { PY_S_CLASS } from "./lib/text.ts";
 import { reachActions } from "./reach.ts";
 import { uncommittedFiles } from "./verify.ts";
 import { countdown, sleepMs } from "./wait-for-markers.ts";
-import { wallFor } from "./walls.ts";
+import { lostWallFor, wallFor } from "./walls.ts";
 
 const HERE = scriptsDir(import.meta);
 const DEFAULT_LIMIT = 2400;
@@ -305,6 +305,27 @@ function roundRecords(dispatch: string, round: string): RoundRecords {
     }
   }
   return { finished, harvested, degraded };
+}
+
+/**
+ * The run's wall for a reviewer, recorded or lost. The host lands the marker
+ * whatever the exit, so a wall the launch detected but could not record
+ * (logs/<lane>.wall-lost, walls.ts) would otherwise read as a clean finish
+ * and its verdict would count without its wall. A lost wall reads as a wall
+ * whose message says how it arrived; `walls open` still refuses on the file,
+ * so the card still waits on its ruling (D8).
+ */
+function wallOrLostWall(
+  dispatch: string,
+  lane: string,
+  lens: string,
+  round: string,
+): { message: string } | null {
+  const w = wallFor(dispatch, lane, lens, round);
+  if (w !== null) return w;
+  const lost = lostWallFor(dispatch, lane, lens, round);
+  if (lost === null) return null;
+  return { message: `detected but not recorded: ${lost.message}` };
 }
 
 function unswitch(s: string, ticket: string): string {
@@ -1458,7 +1479,7 @@ if (import.meta.main) {
     for (let i = 0; i < n; i++) {
       if (missing.includes(i)) continue;
       const [lens, lane] = reviewers[i]!;
-      const w = wallFor(D, lane, lens, R);
+      const w = wallOrLostWall(D, lane, lens, R);
       if (w !== null) wallLines.push([lane, lens, w.message]);
     }
     if (missing.length === 0) {
@@ -1553,7 +1574,7 @@ if (import.meta.main) {
         // The wall check runs whenever no degrade row exists yet, so an
         // interruption between the two rows cannot lose the wall.
         if (!records.degraded.has(key)) {
-          const w = wallFor(D, lane, lens, R);
+          const w = wallOrLostWall(D, lane, lens, R);
           if (w !== null) {
             console.log(`WALL ${lens} ${lane}: DEGRADED, provider wall: "${w.message}"`);
             record(

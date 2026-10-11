@@ -897,6 +897,42 @@ describe("R1: round 1 review regressions", () => {
     expect(degrades(layout)).toEqual(["a"]);
   });
 
+  test("a finish whose wall was lost still records its wall", () => {
+    const layout = makeLayout([{ lens: "bug", lane: "a", harness: "codex" }], {
+      timeoutSeconds: 30,
+    });
+    expect(tool(layout, "review-round", "start", layout.dispatch, "1", "bug:a").code).toBe(0);
+    writeFileSync(
+      join(layout.dispatch, "logs", "a.wall-lost"),
+      "reviewer bug 1 none usage limit hit\n",
+    );
+    writeFileSync(join(layout.dispatch, "logs", "review-r1-bug-a.done"), "");
+    const first = tool(layout, "review-round", "wait-next", layout.dispatch, "1", layout.repo);
+    expect(first.code).toBe(0);
+    expect(first.out).toContain("FINISHED bug a");
+    expect(first.out).toContain(
+      'WALL bug a: DEGRADED, provider wall: "detected but not recorded: usage limit hit"',
+    );
+    expect(degrades(layout)).toEqual(["a"]);
+  });
+
+  test("a lost wall for another round degrades nothing", () => {
+    const layout = makeLayout([{ lens: "bug", lane: "a", harness: "codex" }], {
+      timeoutSeconds: 30,
+    });
+    expect(tool(layout, "review-round", "start", layout.dispatch, "1", "bug:a").code).toBe(0);
+    writeFileSync(
+      join(layout.dispatch, "logs", "a.wall-lost"),
+      "reviewer bug 9 none usage limit hit\n",
+    );
+    writeFileSync(join(layout.dispatch, "logs", "review-r1-bug-a.done"), "");
+    const first = tool(layout, "review-round", "wait-next", layout.dispatch, "1", layout.repo);
+    expect(first.code).toBe(0);
+    expect(first.out).toContain("FINISHED bug a");
+    expect(first.out).not.toContain("WALL bug a");
+    expect(degrades(layout)).toEqual([]);
+  });
+
   test("a walled finisher does not replay", () => {
     const layout = makeLayout(
       [

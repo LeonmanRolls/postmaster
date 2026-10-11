@@ -518,6 +518,35 @@ esac
         !existsSync(join(d, ".escalation-ready")),
     );
 
+    // A lost wall: the launch detected the provider wall but could not record it,
+    // leaving logs/<lane>.wall-lost with no `wall` line; the marker still lands,
+    // since the host touches it whatever the exit. The wait reads the lost
+    // content and the round closes without the reviewer, as on a recorded wall.
+    limit("60");
+    cutScratch("bug", "lost");
+    runSelf("start", d, "13", "bug:lost");
+    launch(13, "bug", "lost", "fast");
+    writeFileSync(join(d, "logs", "lost.wall-lost"), "reviewer bug 13 none usage limit hit\n");
+    runSelf("wait", d, "13", repo, "bug:lost");
+    let lostRunLog = "";
+    try {
+      lostRunLog = readFileSync(join(d, "run-log.md"), "utf8");
+    } catch {
+      lostRunLog = "";
+    }
+    check(
+      "a reviewer whose wall was lost is DEGRADED with what the launch detected, and the round closes",
+      rc === 0 &&
+        lostRunLog.includes(
+          'lost bug: DEGRADED, provider wall: "detected but not recorded: usage limit hit"',
+        ) &&
+        has(
+          'WALL bug lost: DEGRADED, provider wall: "detected but not recorded: usage limit hit"',
+        ) &&
+        actionsLines('"action":"degrade"') === 5 &&
+        actionsLines('"target":"lost","detail":"bug r13: provider wall:') === 1,
+    );
+
     console.log("negative controls");
     out = waitOut;
     rc = waitRc;
@@ -761,6 +790,7 @@ describe("positive controls", () => {
     "teardown stops what a finished reviewer's launch left running, and says so",
     "a scratch a reviewer switched onto a branch is still removed, and the branch kept",
     "a walled reviewer is DEGRADED with the provider's message and the round closes (C11)",
+    "a reviewer whose wall was lost is DEGRADED with what the launch detected, and the round closes",
   ];
   for (const label of labels) {
     test(label, () => {

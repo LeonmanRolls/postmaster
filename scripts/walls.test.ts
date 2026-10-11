@@ -16,7 +16,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { run } from "./lib/proc.ts";
-import { readWalls } from "./walls.ts";
+import { lostWallFor, readWalls } from "./walls.ts";
 
 const self = join(import.meta.dir, "run");
 const HERE = import.meta.dir;
@@ -219,6 +219,46 @@ describe("the wall lines, read back in file order", () => {
     expect(w.role).toBe("reviewer");
     expect(w.lens).toBe("security");
     expect(w.round).toBe("1");
+  });
+});
+
+describe("lostWallFor: the wall the launch detected but could not record", () => {
+  function lostDispatch(name: string, files: Array<[string, string]>): string {
+    const d = join(tmp, name);
+    mkdirSync(join(d, "logs"), { recursive: true });
+    for (const [lane, detail] of files) {
+      writeFileSync(join(d, "logs", `${lane}.wall-lost`), `${detail}\n`);
+    }
+    return d;
+  }
+
+  test("content naming the reviewer matches, with the provider's message", () => {
+    const d = lostDispatch("lost-match", [["a", "reviewer bug 1 none usage limit hit"]]);
+    const w = lostWallFor(d, "a", "bug", "1");
+    expect(w?.message).toBe("usage limit hit");
+    expect(w?.reset).toBe("none");
+  });
+
+  test("content for another round, lens or lane never matches", () => {
+    const d = lostDispatch("lost-mismatch", [["a", "reviewer bug 9 none usage limit hit"]]);
+    expect(lostWallFor(d, "a", "bug", "1")).toBeNull();
+    expect(lostWallFor(d, "a", "security", "9")).toBeNull();
+    expect(lostWallFor(d, "b", "bug", "9")).toBeNull();
+  });
+
+  test("content that does not parse or names a workhorse never matches", () => {
+    const d = lostDispatch("lost-unparsed", [
+      ["a", "broken"],
+      ["b", "workhorse - - none stuck"],
+    ]);
+    expect(lostWallFor(d, "a", "bug", "1")).toBeNull();
+    expect(lostWallFor(d, "b", "bug", "1")).toBeNull();
+  });
+
+  test("a missing logs directory reads as no lost wall", () => {
+    const d = join(tmp, "lost-nologs");
+    mkdirSync(d, { recursive: true });
+    expect(lostWallFor(d, "a", "bug", "1")).toBeNull();
   });
 });
 
