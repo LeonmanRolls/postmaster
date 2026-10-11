@@ -210,7 +210,8 @@ One paragraph: where the next leg starts, and what it must do first. On the last
 Then end the leg with `<tool>/scripts/run leg-end <dispatch> <n> <detail>`: it checks the
 hand-off, closes the open run-log section, logs `handoff`, and writes every end marker the
 leg is owed, `.leg-<n>-done` with `.card-ready` beside it on the last leg, and it writes no
-marker when the hand-off fails its check. The postmaster launches the next leg;
+marker when the hand-off fails its check and ends nothing for a leg beyond the run's
+schedule. The postmaster launches the next leg;
 you never do. A leg that exits without its hand-off is spent, and the postmaster remounts it.
 
 **Leg completion condition.** A leg ends only after writing all required, nonempty sections
@@ -950,7 +951,9 @@ Set the stage first, `<tool>/scripts/run stage <dispatch> review`, then:
    <tool>/scripts/run review-round launch <dispatch> <round> <repo> <synthesis-wt>
    ```
 
-   A wait cut short, as by the harness's cap on background tasks, is run again alone:
+   The launch refuses a round whose reach check is already recorded, and a retried round
+   keeps the first starting state its first attempt saved. A wait cut short, as by the
+   harness's cap on background tasks, is run again alone:
    `<tool>/scripts/run review-round wait <dispatch> <round> <repo>` keeps the round's reviewers
    and its deadline, and ends with the round's check like any wait. A round interrupted before
    its launches were done is re-run whole, from the
@@ -1009,12 +1012,14 @@ Set the stage first, `<tool>/scripts/run stage <dispatch> review`, then:
    **On `WAIT-TIMEOUT` (exit 3), close the round without the reviewers that had not finished.**
    The script has recorded each one in `run-log.md` as `<lane> <lens>: DEGRADED, timeout` and in
    its `degrade` line, and stopped it with `run host stop`; one it names STILL RUNNING could not
-   be stopped: escalate. Harvest the others, and treat each timed-out lane as a review lane
+   be stopped: the wait exits 4 with the round's check not run, so stop the leg and escalate.
+   Harvest the others, and treat each timed-out lane as a review lane
    killed mid-run (hard rules): DEGRADED on the checkpoint card, with `timeout` as its cause,
    and back in the next round. A round in which no lane actually reviewed under a gating lens
    is never the last: that lens runs again in the next round.
-   Exit 4 is a fault in a control: a timeout whose records could not all be written, or
-   the round's reach check failing. Stop the leg and escalate (Tool faults). Exit 1 collects
+   Exit 4 is a fault in a control: a timeout whose records could not all be written, a reviewer
+   still running with the round's check not run, or the round's reach check failing. Stop the
+   leg and escalate (Tool faults). Exit 1 collects
    nothing, and the output says why; unless the round was started again, re-run it whole.
 
    **A wall closes the round without its reviewer.** When a reviewer's launch ends on its
