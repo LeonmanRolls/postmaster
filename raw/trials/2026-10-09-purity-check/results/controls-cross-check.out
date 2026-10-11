@@ -1,0 +1,14 @@
+effectful # scope=core modules=1 token=3 ast=3 only-token=0 only-ast=0
+effectful # scope=all modules=1 token=3 ast=3 only-token=0 only-ast=0
+injected # scope=core modules=1 token=0 ast=0 only-token=0 only-ast=0
+injected # scope=all modules=1 token=0 ast=0 only-token=0 only-ast=0
+outside # scope=core modules=0 token=0 ast=0 only-token=0 only-ast=0
+outside # scope=all modules=1 token=1 ast=1 only-token=0 only-ast=0
+core-named # scope=core modules=1 token=1 ast=1 only-token=0 only-ast=0
+core-named # scope=all modules=2 token=2 ast=2 only-token=0 only-ast=0
+every-rule # scope=core modules=1 token=30 ast=30 only-token=0 only-ast=0
+every-rule # scope=all modules=1 token=30 ast=30 only-token=0 only-ast=0
+not-flagged # scope=core modules=1 token=0 ast=0 only-token=0 only-ast=0
+not-flagged # scope=all modules=1 token=0 ast=0 only-token=0 only-ast=0
+other-names # scope=core modules=1 token=0 ast=0 only-token=0 only-ast=0
+other-names # scope=all modules=1 token=0 ast=0 only-token=0 only-ast=0

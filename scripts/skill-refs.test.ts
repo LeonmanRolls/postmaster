@@ -317,8 +317,8 @@ function runBlock(source: string, shell: string): RunResult & { root: string } {
 describe("coachman shell blocks", () => {
   const blocks = blocksFrom(readFileSync(DOC, "utf8"));
 
-  test("all thirteen shell blocks have the same arguments and status in bash and zsh", () => {
-    expect(blocks.length).toBe(13);
+  test("all fourteen shell blocks have the same arguments and status in bash and zsh", () => {
+    expect(blocks.length).toBe(14);
     const bash = Bun.which("bash");
     if (!bash) throw new Error("bash is not on PATH");
     const zsh = Bun.which("zsh");
@@ -345,6 +345,7 @@ describe("coachman shell blocks", () => {
     expect(sources.some((s) => s.includes("review-round launch"))).toBe(true);
     expect(sources.some((s) => s.includes("review-round harvest"))).toBe(true);
     expect(sources.some((s) => s.includes("--check-workhorse"))).toBe(true);
+    expect(sources.some((s) => s.includes("merge-default"))).toBe(true);
   });
 
   test("no shell block holds loops, arrays or pipes: the loop runs through review-round", () => {

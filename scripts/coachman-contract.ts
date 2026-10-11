@@ -456,6 +456,11 @@ function exerciseSelfTest(sourceRoot: string): number {
       ),
     "scripts/summary-evidence.ts",
   );
+  scriptCase(
+    "a wording fix in merge-default.ts answers yes",
+    "scripts/merge-default.ts",
+    "the pre-card merge step",
+  );
   runCase("a wiki-only change is not a contract change", (repo) => {
     mkdirSync(join(repo, "wiki", "concepts"), { recursive: true });
     writeFileSync(join(repo, "wiki", "concepts", "probe-note.md"), "notes\n", "utf8");

@@ -1,0 +1,52 @@
+n	round	severity	target	slug	verified_by	in_command_text_reader	boundary_case
+1	1	P1	scripts/reach.ts:693	refusal-demotion-hides-write	execution	yes	yes
+2	1	P1	scripts/reach.ts:374	newline-not-split	execution	yes	
+3	1	P1	scripts/reach.ts:1639	restore-resets-unmoved	execution	no	
+4	1	P2	scripts/reach.ts:727	bare-cd-ignored	execution	yes	
+5	1	P2	scripts/reach.ts:733	git-block-misses-escapes	execution	yes	
+6	1	P2	scripts/reach.ts:886	expected-rewritten-to-note	execution	yes	
+7	1	P2	scripts/reach.ts:309	outside-reads-not-exempt	execution	yes	yes
+8	1	P3	scripts/reach.ts:1643	greedy-lane-regex	execution	no	
+9	1	P3	scripts/reach.ts:1308	roundchange-overattribution	execution	no	
+10	1	P3	scripts/reach.ts:424	pipeamp-separator	execution	yes	
+11	1	P3	scripts/reach.ts:405	substitution-write-invisible	execution	yes	
+12	1	P2	scripts/landing.ts:420	card-markdown-escape	execution	no	
+13	1	P2	scripts/reach.ts:752	git-config-value-not-skipped	execution	yes	
+14	1	P2	scripts/reach.ts:803	refs-in-reads-count-as-writes	execution	yes	
+15	1	P2	scripts/reach.ts:1629	reset-climbs-without-git	execution	no	
+16	1	P3	scripts/reach.ts:190	brief-read-from-wrong-section	execution	no	
+17	1	P3	scripts/reach.ts:1566	second-restore-wipes-save	execution	no	
+18	1	P2	scripts/reach.ts:488	quoted-text-as-redirect	execution	yes	
+19	1	P3	scripts/landing.ts:345	card-root-not-physical	execution	no	
+20	1	P3	scripts/reach.ts:1202	roundchange-place-mislabeled	execution	no	
+21	2	P2	scripts/reach.ts:1819	git-env-inheritance	execution	no	
+22	2	P2	scripts/reach.ts:458	quoted-substitution-skipped	execution	yes	
+23	2	P2	scripts/reach.ts:1484	rider-claims-unrelated	execution	no	
+24	2	P2	scripts/landing.ts:431	reason-not-escaped	execution	no	
+25	2	P3	scripts/reach.ts:532	extended-redirects-missed	execution	yes	
+26	3	P2	scripts/reach.ts:595	fd-dup-invents-write	execution	yes	
+27	3	P2	scripts/reach.ts:1845	restore-detached-faults	execution	no	
+28	3	P2	scripts/reach.ts:804	task-log-loss-checked	execution	no	
+29	3	P3	scripts/landing.ts:396	branch-name-unescaped	reading	no	
+30	4	P1	scripts/reach.ts:430	redirect-substitution-demoted-to-read	execution	yes	
+31	4	P1	scripts/reach.ts:378	glob-unresolved-var-reads-clean	execution	yes	
+32	4	P3	scripts/reach.ts:1048	cp-mv-source-overreported	execution	yes	
+33	4	P3	scripts/reach.ts:1371	workhorse-list-from-manifest	reading	no	
+34	5	P2	scripts/reach.ts:1173	file-tool-unresolved-dropped	execution	yes	yes
+35	5	P3	scripts/reach.ts:658	git-equals-flag-as-read	execution	yes	
+36	5	P2	scripts/reach.ts:415	bare-write-operand-dropped	execution	yes	
+37	5	P2	scripts/landing.ts:418	card-prints-raw-notchecked	execution	no	
+38	5	P2	skills/postmaster/coachman.md:943	restore-ungated-on-fault	reading	no	
+39	5	P3	scripts/reach.ts:1078	sed-script-as-path	execution	yes	
+40	6	P2	scripts/reach.ts:392	nonpath-args-notchecked	execution	yes	
+41	6	P3	scripts/reach.ts:1008	git-refspec-as-path	execution	yes	
+42	6	P3	scripts/reach.ts:335	xdg-host-exemption	execution	yes	yes
+43	6	P3	scripts/reach.ts:924	cd-flags-skipped	execution	yes	
+44	6	P3	scripts/reach.ts:1267	task-list-catch	execution	no	
+45	6	P3	docs/coachman-contract.toml:96	reach-helpers-unlisted	reading	no	
+46	7	P1	scripts/reach.ts:515	subst-split-hides-write	execution	yes	
+47	7	P2	scripts/reach.ts:1083	cp-roles-subst	execution	yes	
+48	7	P3	scripts/reach.ts:1086	ln-install-sources	execution	yes	
+49	7	P2	scripts/reach.ts:1075	sed-long-inplace	execution	yes	
+50	7	P2	scripts/reach.ts:225	spaced-repo-fault	execution	no	
+51	7	P2	scripts/reach.ts:2018	restore-deleted-ref	execution	no	

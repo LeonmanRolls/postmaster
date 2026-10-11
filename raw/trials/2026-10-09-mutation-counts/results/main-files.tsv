@@ -1,0 +1,80 @@
+label	module	lines	nonblank	functions	first	every	lines_in_first	lines_in_every	by_root
+main	scripts/acceptance-340.ts	37	32	4	0	0	0	0	
+main	scripts/aftercare.ts	1935	1838	102	12	158	88	1174	captured=11 global=1 local=139 temp=7
+main	scripts/check-target.ts	168	156	6	0	7	0	80	local=7
+main	scripts/clean-checkout.ts	255	234	16	4	10	78	175	captured=1 global=3 local=6
+main	scripts/clerk.ts	444	410	30	1	19	9	176	global=1 local=17 temp=1
+main	scripts/coachman-contract.ts	723	691	40	12	37	174	464	captured=12 local=24 temp=1
+main	scripts/cut-scratch.ts	310	296	11	0	23	0	170	local=23
+main	scripts/discover-project.ts	183	171	7	1	19	161	161	global=1 local=17 temp=1
+main	scripts/export-session.ts	445	424	19	2	26	18	240	captured=2 local=24
+main	scripts/find-projects.ts	116	107	7	0	5	0	84	local=5
+main	scripts/fixture-lanes.ts	278	250	41	0	8	0	71	local=1 temp=7
+main	scripts/fixture.ts	1286	1226	99	3	50	274	965	global=1 local=42 param=2 temp=5
+main	scripts/front-door-acceptance.ts	154	147	6	2	7	6	92	captured=2 local=5
+main	scripts/front-door.ts	200	188	8	2	10	63	162	captured=1 global=1 local=8
+main	scripts/github.ts	696	661	34	1	17	228	326	local=11 module=1 temp=5
+main	scripts/handoff-check.ts	66	62	1	0	5	0	58	local=4 temp=1
+main	scripts/host-self-test.ts	7070	7009	579	58	283	4320	5152	captured=13 local=222 module=16 param=29 temp=3
+main	scripts/host.ts	5766	5704	287	25	432	977	4192	captured=11 global=6 local=396 module=2 param=6 temp=11
+main	scripts/landing.ts	785	747	43	0	39	0	317	local=37 temp=2
+main	scripts/launch-interactive-oracle.ts	295	277	17	0	0	0	0	
+main	scripts/launch.ts	2006	1942	63	17	203	1052	1638	captured=3 global=7 local=186 module=1 param=6
+main	scripts/lib/confine.ts	147	137	7	1	1	12	12	module=1
+main	scripts/lib/data.ts	37	31	8	0	0	0	0	
+main	scripts/lib/paths.ts	19	15	3	0	0	0	0	
+main	scripts/lib/pinned.ts	47	44	3	0	0	0	0	
+main	scripts/lib/proc.ts	249	238	12	2	27	54	117	global~=2 local=25
+main	scripts/lib/processes.ts	239	217	20	0	2	0	37	local=2
+main	scripts/lib/run-mode.ts	13	12	1	0	0	0	0	
+main	scripts/lib/test-defaults.ts	9	7	0	0	0	0	0	
+main	scripts/lib/text.ts	1228	1181	19	1	85	4	1104	local=84 module=1
+main	scripts/lib/wall.ts	245	229	20	4	9	57	105	captured=4 local=5
+main	scripts/link-skills.ts	320	306	13	0	20	0	137	local=20
+main	scripts/local.ts	556	553	54	0	23	0	349	local=22 temp=1
+main	scripts/log-action.ts	427	404	6	0	25	0	264	local=23 temp=2
+main	scripts/no-tracked-postmaster.ts	83	76	5	0	0	0	0	
+main	scripts/parallel-runs-acceptance.ts	382	363	16	6	37	50	239	local=31 param=6
+main	scripts/plane.ts	1428	1350	114	36	139	276	896	captured=20 global=1 local=98 param=5 temp=5 this=10
+main	scripts/premises.ts	298	279	20	4	13	36	158	captured=2 local=9 module=2
+main	scripts/probe-confine.ts	421	393	21	1	20	3	243	captured=1 local=19
+main	scripts/probe-harnesses.ts	43	41	1	0	6	0	38	local=6
+main	scripts/probe-trackers.ts	108	101	2	0	4	0	97	local=4
+main	scripts/project-settings.ts	895	847	59	0	54	0	431	local=48 temp=6
+main	scripts/reach-oracle.ts	285	267	16	0	2	0	133	local=2
+main	scripts/reach.ts	1576	1491	97	5	92	72	896	captured=2 local=82 param=3 temp=5
+main	scripts/review-decide.ts	284	266	17	11	21	67	200	captured=11 local=10
+main	scripts/review-findings.ts	1417	1359	82	34	128	219	874	captured=31 local=93 module=1 param=2 temp=1
+main	scripts/review-forms.ts	20	18	0	0	0	0	0	
+main	scripts/review-page.ts	320	300	27	4	23	25	153	captured=4 local=17 temp=2
+main	scripts/review-round.ts	536	517	16	6	39	329	467	captured=3 global=3 local=33
+main	scripts/reviewers.ts	314	299	22	6	22	31	179	captured=6 local=16
+main	scripts/run-clash.ts	211	189	14	0	7	0	93	local=7
+main	scripts/run-log.ts	111	104	8	1	2	4	30	captured=1 local=1
+main	scripts/run-meta.ts	1308	1249	62	0	80	0	885	local=78 temp=2
+main	scripts/run-times.ts	206	192	12	0	19	0	96	local=19
+main	scripts/runs-status.ts	340	326	14	1	43	9	275	captured=1 local=41 temp=1
+main	scripts/runs-watch.ts	1678	1614	59	1	105	4	1342	local=103 param=1 temp=1
+main	scripts/setup-order-acceptance.ts	190	183	8	6	7	26	130	captured=6 local=1
+main	scripts/setup.ts	675	643	24	0	42	0	602	local=42
+main	scripts/skill-refs.ts	227	217	8	2	19	118	193	captured=1 local=17 module=1
+main	scripts/stage.ts	279	262	8	0	13	0	188	local=13
+main	scripts/style-findings.ts	1819	1741	96	31	219	419	1141	local=178 param=9 temp=10 this=19 this~=3
+main	scripts/summary-evidence.ts	485	453	31	1	47	55	333	global=1 local=46
+main	scripts/synthesis-shares.ts	528	489	70	0	5	0	59	local=5
+main	scripts/ticket-check.ts	772	744	51	4	88	202	447	captured=1 global=2 local=84 module=1
+main	scripts/ticket-parts.ts	490	462	30	7	55	36	309	captured=3 local=48 param=4
+main	scripts/ticket-ready.ts	610	574	35	4	33	148	353	global=4 local=29
+main	scripts/tool-faults.ts	1621	1547	110	4	125	28	953	captured=1 local=117 module=1 param=2 temp=4
+main	scripts/tracker-kind.ts	65	62	0	0	1	0	62	local=1
+main	scripts/turnpikes.ts	440	424	30	4	29	135	286	global=2 local=25 module=2
+main	scripts/usage.ts	573	532	59	4	26	101	312	captured=3 global=1 local=18 temp=4
+main	scripts/verify-examples.ts	455	434	26	3	46	5	301	captured=3 local=42 temp=1
+main	scripts/verify-journey.ts	366	348	23	0	34	0	197	local=34
+main	scripts/verify-library.ts	257	241	15	3	20	135	135	captured=1 local=15 module=2 temp=2
+main	scripts/verify.ts	1072	1030	46	3	135	112	738	captured=1 local=131 module=2 temp=1
+main	scripts/view-stream.ts	1114	1060	43	18	91	365	551	captured=2 local=72 module=10 param=6 temp=1
+main	scripts/wait-for-markers.ts	135	126	9	0	5	0	67	local=4 temp=1
+main	scripts/walls-oracle.ts	605	547	47	0	22	0	171	local=22
+main	scripts/walls.ts	467	441	33	0	26	0	222	local=26
+main	scripts/wiki-lint.ts	259	240	10	2	17	20	221	captured=2 local=11 temp=4

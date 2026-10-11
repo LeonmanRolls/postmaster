@@ -1,0 +1,231 @@
+snapshot	path	line	col	rule	kind	page	text
+3abedd7	scripts/lib/confine.ts	16	1	import:child_process	process	yes	import { spawnSync } from "node:child_process"
+3abedd7	scripts/lib/confine.ts	17	1	import:fs	file	yes	import { mkdtempSync, writeFileSync } from "node:fs"
+3abedd7	scripts/lib/confine.ts	18	1	import:os	os	yes	import { tmpdir } from "node:os"
+3abedd7	scripts/lib/data.ts	2	1	import:fs	file	yes	import { readFileSync } from "node:fs"
+3abedd7	scripts/lib/paths.ts	3	1	import:fs	file	yes	import { realpathSync } from "node:fs"
+3abedd7	scripts/lib/proc.ts	3	1	import:child_process	process	yes	import { spawnSync } from "node:child_process"
+3abedd7	scripts/lib/proc.ts	5	1	import:fs	file	yes	import { closeSync, mkdtempSync, openSync, readFileSync, rmSync } from "node:fs"
+3abedd7	scripts/lib/proc.ts	6	1	import:os	os	yes	import { tmpdir } from "node:os"
+3abedd7	scripts/lib/proc.ts	76	49	process.env	env	yes	process.env
+3abedd7	scripts/lib/proc.ts	78	16	process.env	env	yes	process.env
+b8056c9	scripts/lib/confine.ts	16	1	import:child_process	process	yes	import { spawnSync } from "node:child_process"
+b8056c9	scripts/lib/confine.ts	17	1	import:fs	file	yes	import { mkdtempSync, writeFileSync } from "node:fs"
+b8056c9	scripts/lib/confine.ts	18	1	import:os	os	yes	import { tmpdir } from "node:os"
+b8056c9	scripts/lib/data.ts	2	1	import:fs	file	yes	import { readFileSync } from "node:fs"
+b8056c9	scripts/lib/paths.ts	3	1	import:fs	file	yes	import { realpathSync } from "node:fs"
+b8056c9	scripts/lib/proc.ts	3	1	import:child_process	process	yes	import { spawnSync } from "node:child_process"
+b8056c9	scripts/lib/proc.ts	5	1	import:fs	file	yes	import { closeSync, mkdtempSync, openSync, readFileSync, rmSync } from "node:fs"
+b8056c9	scripts/lib/proc.ts	6	1	import:os	os	yes	import { tmpdir } from "node:os"
+b8056c9	scripts/lib/proc.ts	76	49	process.env	env	yes	process.env
+b8056c9	scripts/lib/proc.ts	78	16	process.env	env	yes	process.env
+4fcdacf	scripts/lib/confine.ts	16	1	import:child_process	process	yes	import { spawnSync } from "node:child_process"
+4fcdacf	scripts/lib/confine.ts	17	1	import:fs	file	yes	import { mkdtempSync, writeFileSync } from "node:fs"
+4fcdacf	scripts/lib/confine.ts	18	1	import:os	os	yes	import { tmpdir } from "node:os"
+4fcdacf	scripts/lib/data.ts	2	1	import:fs	file	yes	import { readFileSync } from "node:fs"
+4fcdacf	scripts/lib/paths.ts	3	1	import:fs	file	yes	import { realpathSync } from "node:fs"
+4fcdacf	scripts/lib/proc.ts	3	1	import:child_process	process	yes	import { spawnSync } from "node:child_process"
+4fcdacf	scripts/lib/proc.ts	5	1	import:fs	file	yes	import { closeSync, mkdtempSync, openSync, readFileSync, rmSync } from "node:fs"
+4fcdacf	scripts/lib/proc.ts	6	1	import:os	os	yes	import { tmpdir } from "node:os"
+4fcdacf	scripts/lib/proc.ts	76	49	process.env	env	yes	process.env
+4fcdacf	scripts/lib/proc.ts	78	16	process.env	env	yes	process.env
+41f2b00	scripts/lib/confine.ts	16	1	import:child_process	process	yes	import { spawnSync } from "node:child_process"
+41f2b00	scripts/lib/confine.ts	17	1	import:fs	file	yes	import { mkdtempSync, writeFileSync } from "node:fs"
+41f2b00	scripts/lib/confine.ts	18	1	import:os	os	yes	import { tmpdir } from "node:os"
+41f2b00	scripts/lib/data.ts	2	1	import:fs	file	yes	import { readFileSync } from "node:fs"
+41f2b00	scripts/lib/paths.ts	3	1	import:fs	file	yes	import { realpathSync } from "node:fs"
+41f2b00	scripts/lib/proc.ts	3	1	import:child_process	process	yes	import { spawnSync } from "node:child_process"
+41f2b00	scripts/lib/proc.ts	5	1	import:fs	file	yes	import { closeSync, mkdtempSync, openSync, readFileSync, rmSync } from "node:fs"
+41f2b00	scripts/lib/proc.ts	6	1	import:os	os	yes	import { tmpdir } from "node:os"
+41f2b00	scripts/lib/proc.ts	76	49	process.env	env	yes	process.env
+41f2b00	scripts/lib/proc.ts	78	16	process.env	env	yes	process.env
+665a99f	scripts/lib/confine.ts	16	1	import:child_process	process	yes	import { spawnSync } from "node:child_process"
+665a99f	scripts/lib/confine.ts	17	1	import:fs	file	yes	import { mkdtempSync, writeFileSync } from "node:fs"
+665a99f	scripts/lib/confine.ts	18	1	import:os	os	yes	import { tmpdir } from "node:os"
+665a99f	scripts/lib/data.ts	2	1	import:fs	file	yes	import { readFileSync } from "node:fs"
+665a99f	scripts/lib/paths.ts	3	1	import:fs	file	yes	import { realpathSync } from "node:fs"
+665a99f	scripts/lib/proc.ts	3	1	import:child_process	process	yes	import { spawnSync } from "node:child_process"
+665a99f	scripts/lib/proc.ts	5	1	import:fs	file	yes	import { closeSync, mkdtempSync, openSync, readFileSync, rmSync } from "node:fs"
+665a99f	scripts/lib/proc.ts	6	1	import:os	os	yes	import { tmpdir } from "node:os"
+665a99f	scripts/lib/proc.ts	76	49	process.env	env	yes	process.env
+665a99f	scripts/lib/proc.ts	78	16	process.env	env	yes	process.env
+9c76b50	scripts/lib/confine.ts	16	1	import:child_process	process	yes	import { spawnSync } from "node:child_process"
+9c76b50	scripts/lib/confine.ts	17	1	import:fs	file	yes	import { mkdtempSync, writeFileSync } from "node:fs"
+9c76b50	scripts/lib/confine.ts	18	1	import:os	os	yes	import { tmpdir } from "node:os"
+9c76b50	scripts/lib/data.ts	2	1	import:fs	file	yes	import { readFileSync } from "node:fs"
+9c76b50	scripts/lib/paths.ts	3	1	import:fs	file	yes	import { realpathSync } from "node:fs"
+9c76b50	scripts/lib/proc.ts	3	1	import:child_process	process	yes	import { spawnSync } from "node:child_process"
+9c76b50	scripts/lib/proc.ts	5	1	import:fs	file	yes	import { closeSync, mkdtempSync, openSync, readFileSync, rmSync } from "node:fs"
+9c76b50	scripts/lib/proc.ts	6	1	import:os	os	yes	import { tmpdir } from "node:os"
+9c76b50	scripts/lib/proc.ts	76	49	process.env	env	yes	process.env
+9c76b50	scripts/lib/proc.ts	78	16	process.env	env	yes	process.env
+47e43ca	scripts/lib/confine.ts	16	1	import:child_process	process	yes	import { spawnSync } from "node:child_process"
+47e43ca	scripts/lib/confine.ts	17	1	import:fs	file	yes	import { mkdtempSync, writeFileSync } from "node:fs"
+47e43ca	scripts/lib/confine.ts	18	1	import:os	os	yes	import { tmpdir } from "node:os"
+47e43ca	scripts/lib/data.ts	2	1	import:fs	file	yes	import { readFileSync } from "node:fs"
+47e43ca	scripts/lib/paths.ts	3	1	import:fs	file	yes	import { realpathSync } from "node:fs"
+47e43ca	scripts/lib/proc.ts	3	1	import:child_process	process	yes	import { spawnSync } from "node:child_process"
+47e43ca	scripts/lib/proc.ts	5	1	import:fs	file	yes	import { closeSync, mkdtempSync, openSync, readFileSync, rmSync } from "node:fs"
+47e43ca	scripts/lib/proc.ts	6	1	import:os	os	yes	import { tmpdir } from "node:os"
+47e43ca	scripts/lib/proc.ts	76	49	process.env	env	yes	process.env
+47e43ca	scripts/lib/proc.ts	78	16	process.env	env	yes	process.env
+092e163	scripts/lib/confine.ts	16	1	import:child_process	process	yes	import { spawnSync } from "node:child_process"
+092e163	scripts/lib/confine.ts	17	1	import:fs	file	yes	import { mkdtempSync, writeFileSync } from "node:fs"
+092e163	scripts/lib/confine.ts	18	1	import:os	os	yes	import { tmpdir } from "node:os"
+092e163	scripts/lib/data.ts	2	1	import:fs	file	yes	import { readFileSync } from "node:fs"
+092e163	scripts/lib/paths.ts	3	1	import:fs	file	yes	import { realpathSync } from "node:fs"
+092e163	scripts/lib/proc.ts	3	1	import:child_process	process	yes	import { spawnSync } from "node:child_process"
+092e163	scripts/lib/proc.ts	5	1	import:fs	file	yes	import { closeSync, mkdtempSync, openSync, readFileSync, rmSync } from "node:fs"
+092e163	scripts/lib/proc.ts	6	1	import:os	os	yes	import { tmpdir } from "node:os"
+092e163	scripts/lib/proc.ts	76	49	process.env	env	yes	process.env
+092e163	scripts/lib/proc.ts	78	16	process.env	env	yes	process.env
+dec1100	scripts/lib/confine.ts	16	1	import:child_process	process	yes	import { spawnSync } from "node:child_process"
+dec1100	scripts/lib/confine.ts	17	1	import:fs	file	yes	import { mkdtempSync, writeFileSync } from "node:fs"
+dec1100	scripts/lib/confine.ts	18	1	import:os	os	yes	import { tmpdir } from "node:os"
+dec1100	scripts/lib/data.ts	2	1	import:fs	file	yes	import { readFileSync } from "node:fs"
+dec1100	scripts/lib/paths.ts	3	1	import:fs	file	yes	import { realpathSync } from "node:fs"
+dec1100	scripts/lib/proc.ts	3	1	import:child_process	process	yes	import { spawnSync } from "node:child_process"
+dec1100	scripts/lib/proc.ts	5	1	import:fs	file	yes	import { closeSync, mkdtempSync, openSync, readFileSync, rmSync } from "node:fs"
+dec1100	scripts/lib/proc.ts	6	1	import:os	os	yes	import { tmpdir } from "node:os"
+dec1100	scripts/lib/proc.ts	76	49	process.env	env	yes	process.env
+dec1100	scripts/lib/proc.ts	78	16	process.env	env	yes	process.env
+dab3bea	scripts/lib/confine.ts	16	1	import:child_process	process	yes	import { spawnSync } from "node:child_process"
+dab3bea	scripts/lib/confine.ts	17	1	import:fs	file	yes	import { mkdtempSync, writeFileSync } from "node:fs"
+dab3bea	scripts/lib/confine.ts	18	1	import:os	os	yes	import { tmpdir } from "node:os"
+dab3bea	scripts/lib/data.ts	2	1	import:fs	file	yes	import { readFileSync } from "node:fs"
+dab3bea	scripts/lib/paths.ts	3	1	import:fs	file	yes	import { realpathSync } from "node:fs"
+dab3bea	scripts/lib/proc.ts	3	1	import:child_process	process	yes	import { spawnSync } from "node:child_process"
+dab3bea	scripts/lib/proc.ts	5	1	import:fs	file	yes	import { closeSync, mkdtempSync, openSync, readFileSync, rmSync } from "node:fs"
+dab3bea	scripts/lib/proc.ts	6	1	import:os	os	yes	import { tmpdir } from "node:os"
+dab3bea	scripts/lib/proc.ts	76	49	process.env	env	yes	process.env
+dab3bea	scripts/lib/proc.ts	78	16	process.env	env	yes	process.env
+dab3bea	scripts/scrub-core.ts	1	1	import:fs	file	yes	import { closeSync, mkdirSync, openSync, writeFileSync } from "node:fs"
+dab3bea	scripts/scrub-core.ts	2	1	import:child_process	process	yes	import { spawn, spawnSync } from "node:child_process"
+dab3bea	scripts/scrub-core.ts	438	35	process.env	env	yes	process.env
+dab3bea	scripts/scrub-core.ts	1066	25	process.env	env	yes	process.env
+dab3bea	scripts/scrub-core.ts	1185	15	process.env	env	yes	process.env
+dab3bea	scripts/scrub-core.ts	1192	11	new Date()	clock	no	new Date()
+dab3bea	scripts/scrub-core.ts	1345	18	Bun.file	file	no	Bun.file
+16b8ea6	scripts/lib/confine.ts	16	1	import:child_process	process	yes	import { spawnSync } from "node:child_process"
+16b8ea6	scripts/lib/confine.ts	17	1	import:fs	file	yes	import { mkdtempSync, writeFileSync } from "node:fs"
+16b8ea6	scripts/lib/confine.ts	18	1	import:os	os	yes	import { tmpdir } from "node:os"
+16b8ea6	scripts/lib/data.ts	2	1	import:fs	file	yes	import { readFileSync } from "node:fs"
+16b8ea6	scripts/lib/paths.ts	3	1	import:fs	file	yes	import { realpathSync } from "node:fs"
+16b8ea6	scripts/lib/proc.ts	3	1	import:child_process	process	yes	import { spawnSync } from "node:child_process"
+16b8ea6	scripts/lib/proc.ts	5	1	import:fs	file	yes	import { closeSync, mkdtempSync, openSync, readFileSync, rmSync } from "node:fs"
+16b8ea6	scripts/lib/proc.ts	6	1	import:os	os	yes	import { tmpdir } from "node:os"
+16b8ea6	scripts/lib/proc.ts	76	49	process.env	env	yes	process.env
+16b8ea6	scripts/lib/proc.ts	78	16	process.env	env	yes	process.env
+16b8ea6	scripts/scrub-core.ts	1	1	import:fs	file	yes	import { closeSync, mkdirSync, openSync, writeFileSync } from "node:fs"
+16b8ea6	scripts/scrub-core.ts	2	1	import:child_process	process	yes	import { spawn, spawnSync } from "node:child_process"
+16b8ea6	scripts/scrub-core.ts	517	35	process.env	env	yes	process.env
+16b8ea6	scripts/scrub-core.ts	1142	25	process.env	env	yes	process.env
+16b8ea6	scripts/scrub-core.ts	1261	15	process.env	env	yes	process.env
+16b8ea6	scripts/scrub-core.ts	1268	11	new Date()	clock	no	new Date()
+16b8ea6	scripts/scrub-core.ts	1421	18	Bun.file	file	no	Bun.file
+26ba0d0	scripts/lib/confine.ts	16	1	import:child_process	process	yes	import { spawnSync } from "node:child_process"
+26ba0d0	scripts/lib/confine.ts	17	1	import:fs	file	yes	import { mkdtempSync, writeFileSync } from "node:fs"
+26ba0d0	scripts/lib/confine.ts	18	1	import:os	os	yes	import { tmpdir } from "node:os"
+26ba0d0	scripts/lib/data.ts	2	1	import:fs	file	yes	import { readFileSync } from "node:fs"
+26ba0d0	scripts/lib/paths.ts	3	1	import:fs	file	yes	import { realpathSync } from "node:fs"
+26ba0d0	scripts/lib/proc.ts	3	1	import:child_process	process	yes	import { spawnSync } from "node:child_process"
+26ba0d0	scripts/lib/proc.ts	5	1	import:fs	file	yes	import { closeSync, mkdtempSync, openSync, readFileSync, rmSync } from "node:fs"
+26ba0d0	scripts/lib/proc.ts	6	1	import:os	os	yes	import { tmpdir } from "node:os"
+26ba0d0	scripts/lib/proc.ts	76	49	process.env	env	yes	process.env
+26ba0d0	scripts/lib/proc.ts	78	16	process.env	env	yes	process.env
+26ba0d0	scripts/scrub-core.ts	1	1	import:fs	file	yes	import { closeSync, mkdirSync, openSync, writeFileSync } from "node:fs"
+26ba0d0	scripts/scrub-core.ts	2	1	import:child_process	process	yes	import { spawn, spawnSync } from "node:child_process"
+26ba0d0	scripts/scrub-core.ts	517	35	process.env	env	yes	process.env
+26ba0d0	scripts/scrub-core.ts	1142	25	process.env	env	yes	process.env
+26ba0d0	scripts/scrub-core.ts	1261	15	process.env	env	yes	process.env
+26ba0d0	scripts/scrub-core.ts	1268	11	new Date()	clock	no	new Date()
+26ba0d0	scripts/scrub-core.ts	1421	18	Bun.file	file	no	Bun.file
+cbd0384	scripts/lib/confine.ts	16	1	import:child_process	process	yes	import { spawnSync } from "node:child_process"
+cbd0384	scripts/lib/confine.ts	17	1	import:fs	file	yes	import { mkdtempSync, writeFileSync } from "node:fs"
+cbd0384	scripts/lib/confine.ts	18	1	import:os	os	yes	import { tmpdir } from "node:os"
+cbd0384	scripts/lib/data.ts	2	1	import:fs	file	yes	import { readFileSync } from "node:fs"
+cbd0384	scripts/lib/paths.ts	3	1	import:fs	file	yes	import { realpathSync } from "node:fs"
+cbd0384	scripts/lib/proc.ts	3	1	import:child_process	process	yes	import { spawnSync } from "node:child_process"
+cbd0384	scripts/lib/proc.ts	5	1	import:fs	file	yes	import { closeSync, mkdtempSync, openSync, readFileSync, rmSync } from "node:fs"
+cbd0384	scripts/lib/proc.ts	6	1	import:os	os	yes	import { tmpdir } from "node:os"
+cbd0384	scripts/lib/proc.ts	76	49	process.env	env	yes	process.env
+cbd0384	scripts/lib/proc.ts	78	16	process.env	env	yes	process.env
+cbd0384	scripts/scrub-core.ts	1	1	import:fs	file	yes	import { closeSync, mkdirSync, openSync, writeFileSync } from "node:fs"
+cbd0384	scripts/scrub-core.ts	2	1	import:child_process	process	yes	import { spawn, spawnSync } from "node:child_process"
+cbd0384	scripts/scrub-core.ts	521	33	process.env	env	yes	process.env
+cbd0384	scripts/scrub-core.ts	1145	25	process.env	env	yes	process.env
+cbd0384	scripts/scrub-core.ts	1264	15	process.env	env	yes	process.env
+cbd0384	scripts/scrub-core.ts	1271	11	new Date()	clock	no	new Date()
+cbd0384	scripts/scrub-core.ts	1424	18	Bun.file	file	no	Bun.file
+a793251	scripts/lib/confine.ts	16	1	import:child_process	process	yes	import { spawnSync } from "node:child_process"
+a793251	scripts/lib/confine.ts	17	1	import:fs	file	yes	import { mkdtempSync, writeFileSync } from "node:fs"
+a793251	scripts/lib/confine.ts	18	1	import:os	os	yes	import { tmpdir } from "node:os"
+a793251	scripts/lib/data.ts	2	1	import:fs	file	yes	import { readFileSync } from "node:fs"
+a793251	scripts/lib/paths.ts	3	1	import:fs	file	yes	import { realpathSync } from "node:fs"
+a793251	scripts/lib/proc.ts	3	1	import:child_process	process	yes	import { spawnSync } from "node:child_process"
+a793251	scripts/lib/proc.ts	5	1	import:fs	file	yes	import { closeSync, mkdtempSync, openSync, readFileSync, rmSync } from "node:fs"
+a793251	scripts/lib/proc.ts	6	1	import:os	os	yes	import { tmpdir } from "node:os"
+a793251	scripts/lib/proc.ts	76	49	process.env	env	yes	process.env
+a793251	scripts/lib/proc.ts	78	16	process.env	env	yes	process.env
+e6ba844	scripts/lib/confine.ts	16	1	import:child_process	process	yes	import { spawnSync } from "node:child_process"
+e6ba844	scripts/lib/confine.ts	17	1	import:fs	file	yes	import { mkdtempSync, writeFileSync } from "node:fs"
+e6ba844	scripts/lib/confine.ts	18	1	import:os	os	yes	import { tmpdir } from "node:os"
+e6ba844	scripts/lib/data.ts	2	1	import:fs	file	yes	import { readFileSync } from "node:fs"
+e6ba844	scripts/lib/paths.ts	3	1	import:fs	file	yes	import { realpathSync } from "node:fs"
+e6ba844	scripts/lib/proc.ts	3	1	import:child_process	process	yes	import { spawnSync } from "node:child_process"
+e6ba844	scripts/lib/proc.ts	5	1	import:fs	file	yes	import { closeSync, mkdtempSync, openSync, readFileSync, rmSync } from "node:fs"
+e6ba844	scripts/lib/proc.ts	6	1	import:os	os	yes	import { tmpdir } from "node:os"
+e6ba844	scripts/lib/proc.ts	76	49	process.env	env	yes	process.env
+e6ba844	scripts/lib/proc.ts	78	16	process.env	env	yes	process.env
+d2a5e88	scripts/lib/confine.ts	16	1	import:child_process	process	yes	import { spawnSync } from "node:child_process"
+d2a5e88	scripts/lib/confine.ts	17	1	import:fs	file	yes	import { mkdtempSync, writeFileSync } from "node:fs"
+d2a5e88	scripts/lib/confine.ts	18	1	import:os	os	yes	import { tmpdir } from "node:os"
+d2a5e88	scripts/lib/data.ts	2	1	import:fs	file	yes	import { readFileSync } from "node:fs"
+d2a5e88	scripts/lib/paths.ts	3	1	import:fs	file	yes	import { realpathSync } from "node:fs"
+d2a5e88	scripts/lib/proc.ts	3	1	import:child_process	process	yes	import { spawnSync } from "node:child_process"
+d2a5e88	scripts/lib/proc.ts	5	1	import:fs	file	yes	import { closeSync, mkdtempSync, openSync, readFileSync, rmSync } from "node:fs"
+d2a5e88	scripts/lib/proc.ts	6	1	import:os	os	yes	import { tmpdir } from "node:os"
+d2a5e88	scripts/lib/proc.ts	76	49	process.env	env	yes	process.env
+d2a5e88	scripts/lib/proc.ts	78	16	process.env	env	yes	process.env
+8fe7775	scripts/lib/confine.ts	16	1	import:child_process	process	yes	import { spawnSync } from "node:child_process"
+8fe7775	scripts/lib/confine.ts	17	1	import:fs	file	yes	import { mkdtempSync, writeFileSync } from "node:fs"
+8fe7775	scripts/lib/confine.ts	18	1	import:os	os	yes	import { tmpdir } from "node:os"
+8fe7775	scripts/lib/data.ts	2	1	import:fs	file	yes	import { readFileSync } from "node:fs"
+8fe7775	scripts/lib/paths.ts	3	1	import:fs	file	yes	import { realpathSync } from "node:fs"
+8fe7775	scripts/lib/pinned.ts	2	1	import:fs	file	yes	import { accessSync, constants, statSync } from "node:fs"
+8fe7775	scripts/lib/proc.ts	3	1	import:child_process	process	yes	import { spawnSync } from "node:child_process"
+8fe7775	scripts/lib/proc.ts	5	1	import:fs	file	yes	import { closeSync, mkdtempSync, openSync, readFileSync, rmSync } from "node:fs"
+8fe7775	scripts/lib/proc.ts	6	1	import:os	os	yes	import { tmpdir } from "node:os"
+8fe7775	scripts/lib/proc.ts	76	49	process.env	env	yes	process.env
+8fe7775	scripts/lib/proc.ts	78	16	process.env	env	yes	process.env
+8fe7775	scripts/lib/processes.ts	1	1	import:fs	file	yes	import { readFileSync, readdirSync } from "node:fs"
+8fe7775	scripts/lib/processes.ts	19	10	process.env	env	yes	process.env
+8fe7775	scripts/lib/switch-offs.ts	11	1	import:fs	file	yes	import { existsSync, readFileSync } from "node:fs"
+7e07807	scripts/lib/confine.ts	16	1	import:child_process	process	yes	import { spawnSync } from "node:child_process"
+7e07807	scripts/lib/confine.ts	17	1	import:fs	file	yes	import { mkdtempSync, writeFileSync } from "node:fs"
+7e07807	scripts/lib/confine.ts	18	1	import:os	os	yes	import { tmpdir } from "node:os"
+7e07807	scripts/lib/data.ts	2	1	import:fs	file	yes	import { readFileSync } from "node:fs"
+7e07807	scripts/lib/paths.ts	3	1	import:fs	file	yes	import { realpathSync } from "node:fs"
+7e07807	scripts/lib/pinned.ts	2	1	import:fs	file	yes	import { accessSync, constants, statSync } from "node:fs"
+7e07807	scripts/lib/proc.ts	3	1	import:child_process	process	yes	import { spawnSync } from "node:child_process"
+7e07807	scripts/lib/proc.ts	5	1	import:fs	file	yes	import { closeSync, mkdtempSync, openSync, readFileSync, rmSync } from "node:fs"
+7e07807	scripts/lib/proc.ts	6	1	import:os	os	yes	import { tmpdir } from "node:os"
+7e07807	scripts/lib/proc.ts	76	49	process.env	env	yes	process.env
+7e07807	scripts/lib/proc.ts	78	16	process.env	env	yes	process.env
+7e07807	scripts/lib/processes.ts	1	1	import:fs	file	yes	import { readFileSync, readdirSync } from "node:fs"
+7e07807	scripts/lib/processes.ts	19	10	process.env	env	yes	process.env
+7e07807	scripts/lib/switch-offs.ts	11	1	import:fs	file	yes	import { existsSync, readFileSync } from "node:fs"
+b0f7d8a	scripts/lib/confine.ts	16	1	import:child_process	process	yes	import { spawnSync } from "node:child_process"
+b0f7d8a	scripts/lib/confine.ts	17	1	import:fs	file	yes	import { mkdtempSync, writeFileSync } from "node:fs"
+b0f7d8a	scripts/lib/confine.ts	18	1	import:os	os	yes	import { tmpdir } from "node:os"
+b0f7d8a	scripts/lib/data.ts	2	1	import:fs	file	yes	import { readFileSync } from "node:fs"
+b0f7d8a	scripts/lib/paths.ts	3	1	import:fs	file	yes	import { realpathSync } from "node:fs"
+b0f7d8a	scripts/lib/pinned.ts	2	1	import:fs	file	yes	import { accessSync, constants, statSync } from "node:fs"
+b0f7d8a	scripts/lib/proc.ts	3	1	import:child_process	process	yes	import { spawnSync } from "node:child_process"
+b0f7d8a	scripts/lib/proc.ts	5	1	import:fs	file	yes	import { closeSync, mkdtempSync, openSync, readFileSync, rmSync } from "node:fs"
+b0f7d8a	scripts/lib/proc.ts	6	1	import:os	os	yes	import { tmpdir } from "node:os"
+b0f7d8a	scripts/lib/proc.ts	76	49	process.env	env	yes	process.env
+b0f7d8a	scripts/lib/proc.ts	78	16	process.env	env	yes	process.env
+b0f7d8a	scripts/lib/processes.ts	1	1	import:fs	file	yes	import { readFileSync, readdirSync } from "node:fs"
+b0f7d8a	scripts/lib/processes.ts	19	10	process.env	env	yes	process.env
+b0f7d8a	scripts/lib/switch-offs.ts	15	1	import:fs	file	yes	import { existsSync, readFileSync } from "node:fs"

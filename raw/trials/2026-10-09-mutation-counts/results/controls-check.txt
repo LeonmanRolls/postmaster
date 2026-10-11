@@ -1,0 +1,116 @@
+module	expected first every	observed first every	ok	why
+scripts/push-onto-argument.ts	1 1	1 1	yes	the page's positive control for both counts: pushes onto its argument
+scripts/local-array.ts	0 2	0 2	yes	the page's negative control for the first count: builds a local array and returns it (two pushes on the local, which only the second count holds)
+scripts/local-let.ts	0 1	0 1	yes	the page's positive control for the second count: gives a local let a new value
+scripts/const-map-filter.ts	0 0	0 0	yes	the page's negative control for the second count: only const, map and filter
+scripts/property-of-argument.ts	2 2	2 2	yes	assigns a property and an element of an argument
+scripts/rebind-argument.ts	1 1	1 1	yes	assigns to an argument itself
+scripts/inplace-on-argument.ts	13 13	13 13	yes	each of the ticket's thirteen in-place methods, once, on an argument
+scripts/delete-operator.ts	1 1	1 1	yes	delete on a property of an argument
+scripts/object-assign-target.ts	1 1	1 1	yes	Object.assign with an argument as the target
+scripts/object-assign-fresh.ts	0 1	0 1	yes	Object.assign into a new object
+scripts/update-and-compound.ts	2 2	2 2	yes	++ and += on properties of an argument
+scripts/module-state.ts	2 2	2 2	yes	a module-level variable given a new value, a module-level Map changed in place
+scripts/module-top-level.ts	0 2	0 2	yes	changes made by the module's own top-level code to a variable it declared
+scripts/imported-object.ts	2 2	2 2	yes	an imported object changed in place and by assignment
+scripts/alias-of-argument.ts	3 3	3 3	yes	a local that is another name for a property, an element, and a part got with get
+scripts/alias-of-module.ts	1 1	1 1	yes	a local that is another name for a module-level array, sorted in place
+scripts/iteration-aliases.ts	2 3	2 3	yes	a loop over a filtered copy and over Object.entries hands out the original's elements; sorting Object.entries is the function's own
+scripts/global-state.ts	2 2	2 2	yes	process.env and process.exitCode assigned
+scripts/this-receiver.ts	1 2	1 2	yes	a method changing its receiver; the constructor building it
+scripts/captured-callback.ts	1 2	1 2	yes	a callback changing a variable of its enclosing function; the loop form of the same
+scripts/local-object.ts	0 5	0 5	yes	objects, copies and maps the function built, changed in place
+scripts/call-result.ts	0 1	0 1	yes	a local that holds a call's result is not known to be another name for anything
+scripts/rest-parameter.ts	1 2	1 2	yes	a rest parameter's own array is new; an element it holds is the caller's
+scripts/loop-counter.ts	0 2	0 2	yes	a loop counter and an accumulator given new values
+scripts/shadowed-name.ts	0 1	0 1	yes	a local with the name of an argument is not the argument
+scripts/callback-parameter.ts	1 1	1 1	yes	the parameter of a callback is an argument of the callback
+scripts/destructuring.ts	3 3	3 3	yes	destructuring assignment writes to each target; a destructured parameter is an argument
+scripts/chained-and-optional.ts	1 2	1 2	yes	sorting a new array in the same expression is the function's own; an optional call on an argument is not
+scripts/lib/tags.ts	9 9	9 9	yes	nine functions that each push onto an argument once (their tags are checked apart)
+
+function	expected tags	observed tags	ok
+readsEnv	env	env	yes
+readsClock	clock	clock	yes
+readsFile	files	files	yes
+startsProcess	proc	proc	yes
+readsOs	os	os	yes
+readsNothing			yes
+bunFile	files	files	yes
+givenClock			yes
+newDate	clock	clock	yes
+
+finding	expected kind, in scope, first here, first within, every here	observed	ok	why
+control/in-flagged	ts-line yes 1 1 1	ts-line yes 1 1 1	yes	the positive control: the holder is flagged in both counts
+control/in-clean	ts-line yes 0 0 0	ts-line yes 0 0 0	yes	the negative control: the holder is flagged in neither
+control/local-only	ts-line yes 0 0 2	ts-line yes 0 0 2	yes	the holder is flagged only by the second count
+control/module-top	ts-line yes 0 0 2	ts-line yes 0 0 2	yes	module-level line: matches module-level places, and those are local
+control/in-callback	ts-line yes 1 1 1	ts-line yes 1 1 1	yes	the innermost function is the callback
+control/outer-of-callback	ts-line yes 0 1 0	ts-line yes 0 1 0	yes	the callback's change is inside the holder but not directly in it
+control/other-file	ts-line no - - -	ts-line no - - -	yes	a file the tree does not hold is out of scope, not unflagged
+control/runbook	runbook n/a - - -	runbook n/a - - -	yes	reported apart
+control/no-line	no-line n/a - - -	no-line n/a - - -	yes	reported apart
+
+findings in flagged functions	expected	observed	ok	why
+all findings	6	6	yes	six findings cite a module the tree holds
+all in_flagged	2	2	yes	the positive control: the two whose innermost function holds a place of the first count
+all flagged_or_around	3	3	yes	and the one in the function around a callback that holds one
+all second_count	4	4	yes	the second count reaches the two, the local-only one and the module-level one
+all apart	3	3	yes	a missing module, a runbook line and no line, in no share
+all test2_none	not met	not met	yes	some finding is in a flagged function, so the page's second failure test is not met
+clean-only findings	1	1	yes	the negative control: only the finding in a function with no change at all
+clean-only in_flagged	0	0	yes	
+clean-only flagged_or_around	0	0	yes	
+clean-only second_count	0	0	yes	
+clean-only test2_none	met	met	yes	none is in a flagged function, so the page's second failure test is met
+edge-tags first	50	50	yes	the controls' places in the first count
+edge-tags edge_function	8	8	yes	the positive control: seven in the tags module whose function touches something, and the one that assigns process.env
+edge-tags no_edge_function	42	42	yes	the negative control: the rest, in functions that touch nothing tagged
+edge-tags edge_module	11	11	yes	nine in the tags module and the two of the module that assigns process.env
+edge-tags no_edge_module	39	39	yes	
+edge-tags op_call	32	32	yes	worked by hand from the control files: 13 in-place methods, 9 in the tags module, and 10 others
+edge-tags op_prop	14	14	yes	
+edge-tags op_rebind	2	2	yes	an argument given a new value, and a module-level counter
+edge-tags op_delete	1	1	yes	
+edge-tags op_assign	1	1	yes	
+
+marks tally	expected	observed	ok	why
+all-hazard hazard	30	30	yes	the positive control: every place marked a hazard reads 30
+all-hazard harmless	0	0	yes	
+all-hazard not_hazard_harmless	0	0	yes	and no place of the population is estimated a non-hazard
+all-hazard same	10	10	yes	two readers who always say the same agree on all 10
+all-hazard of	10	10	yes	
+all-hazard kappa	1.00	1.00	yes	
+all-hazard self_kappa	1.00	1.00	yes	a mark list against itself
+none-hazard hazard	0	0	yes	the negative control: no place marked a hazard reads 0
+none-hazard harmless	30	30	yes	
+none-hazard not_hazard_harmless	90	90	yes	and every place of the population is estimated a non-hazard
+none-hazard same	10	10	yes	
+none-hazard kappa	1.00	1.00	yes	
+split hazard	10	10	yes	a mixed list: 10 hazard, 15 harmless, 5 unclear
+split harmless	15	15	yes	
+split unclear	5	5	yes	
+split not_hazard_harmless	45	45	yes	15 of 30 of 90
+split not_hazard_all	60	60	yes	20 of 30 of 90
+split same	7	7	yes	seven of ten marks identical
+split of	10	10	yes	
+split kappa	0.49	0.49	yes	worked by hand: observed 0.70, chance 0.41, so (0.70 - 0.41) / (1 - 0.41)
+split self_same	10	10	yes	a mark list against itself
+split self_kappa	1.00	1.00	yes	
+all-hazard edge_n	10	10	yes	a third of the control population sits in an edge function; worked by a second implementation
+all-hazard edge_hazard	10	10	yes	
+all-hazard nonedge_n	20	20	yes	
+all-hazard nonedge_hazard	20	20	yes	
+all-hazard nonedge_population	60	60	yes	
+all-hazard nonedge_not_hazard	0	0	yes	with every place a hazard, nothing remains that is not one
+none-hazard edge_hazard	0	0	yes	
+none-hazard nonedge_hazard	0	0	yes	
+none-hazard nonedge_not_hazard	60	60	yes	with none a hazard, all 60 remaining places are not
+split edge_n	10	10	yes	
+split edge_hazard	3	3	yes	
+split nonedge_n	20	20	yes	
+split nonedge_hazard	7	7	yes	
+split nonedge_population	60	60	yes	
+split nonedge_not_hazard	27	27	yes	9 of 20 harmless, of 60
+
+controls: 105 of 105 read as expected
