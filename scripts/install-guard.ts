@@ -373,7 +373,26 @@ export type Classification =
       positions: number[];
       packages: string[];
       packagePositions: number[];
-    };
+    }
+  | { kind: "create"; specs: string[]; positions: number[] };
+
+/** Refuse a command the guard does not check: failing closed, with the lane's
+ * way back. */
+function unknownRefusal(prog: string, cmd: string): Classification {
+  return {
+    kind: "refuse",
+    message: `${prog} ${cmd} is not a command the guard checks; run what the project needs with its install, sync, run or test forms instead`,
+  };
+}
+
+/** Refuse a workspace selector on an install form: the checks run against
+ * the current directory, so the lane runs from the member directory. */
+function selectorRefusal(pm: Pm, selector: string): Classification {
+  return {
+    kind: "refuse",
+    message: `${selector} moves a ${pm} install off the directory the guard checks; run from the member directory instead`,
+  };
+}
 
 export type YarnKind = "berry" | "classic";
 
@@ -402,7 +421,7 @@ const VALUED: Record<string, Set<string>> = {
     "-p",
     "--package",
   ]),
-  bun: new Set(["--registry", "--cwd", "-p", "--package"]),
+  bun: new Set(["--registry", "--cwd", "-p", "--package", "-e", "--eval", "--print"]),
 };
 
 interface Split {
@@ -444,12 +463,6 @@ export function splitArgs(pm: string, args: string[]): Split {
     positions.push(i);
   }
   return { positionals, positions, flags, flagPositions };
-}
-
-const GLOBAL_FLAGS = new Set(["-g", "--global"]);
-
-function hasGlobal(args: string[]): boolean {
-  return args.some((a) => GLOBAL_FLAGS.has(a));
 }
 
 function flagValue(args: string[], names: string[]): string | null {
@@ -518,6 +531,7 @@ const PUBLISH = new Set([
   "revoke",
   "owner",
   "deprecate",
+  "undeprecate",
   "access",
   "hook",
   "team",
@@ -527,6 +541,228 @@ const PUBLISH = new Set([
   "unstar",
 ]);
 
+// ---------- command names ----------
+//
+// npm accepts aliases and unique abbreviations for its commands, so the guard
+// resolves names the way npm does before classifying: an unmatched name would
+// otherwise pass through as unknown while npm runs the install it abbreviates.
+// The tables below are npm 11.19.0's lib/utils/cmd-list.js, commands and
+// aliases both, so an exact name always resolves exactly as npm resolves it;
+// a newer npm with more commands fails closed through the unknown refusal.
+
+const NPM_COMMANDS = new Set([
+  "access",
+  "adduser",
+  "approve-scripts",
+  "audit",
+  "bugs",
+  "cache",
+  "ci",
+  "completion",
+  "config",
+  "dedupe",
+  "deny-scripts",
+  "deprecate",
+  "diff",
+  "dist-tag",
+  "docs",
+  "doctor",
+  "edit",
+  "exec",
+  "explain",
+  "explore",
+  "find-dupes",
+  "fund",
+  "get",
+  "help",
+  "help-search",
+  "init",
+  "install",
+  "install-ci-test",
+  "install-scripts",
+  "install-test",
+  "link",
+  "ll",
+  "login",
+  "logout",
+  "ls",
+  "org",
+  "outdated",
+  "owner",
+  "pack",
+  "ping",
+  "pkg",
+  "prefix",
+  "profile",
+  "prune",
+  "publish",
+  "query",
+  "rebuild",
+  "repo",
+  "restart",
+  "root",
+  "run",
+  "sbom",
+  "search",
+  "set",
+  "shrinkwrap",
+  "stage",
+  "star",
+  "stars",
+  "start",
+  "stop",
+  "team",
+  "test",
+  "token",
+  "trust",
+  "undeprecate",
+  "uninstall",
+  "unpublish",
+  "unstar",
+  "update",
+  "version",
+  "view",
+  "whoami",
+]);
+
+const NPM_ALIASES: Record<string, string> = {
+  author: "owner",
+  home: "docs",
+  issues: "bugs",
+  info: "view",
+  show: "view",
+  find: "search",
+  add: "install",
+  unlink: "uninstall",
+  remove: "uninstall",
+  rm: "uninstall",
+  r: "uninstall",
+  un: "uninstall",
+  rb: "rebuild",
+  list: "ls",
+  ln: "link",
+  create: "init",
+  i: "install",
+  it: "install-test",
+  cit: "install-ci-test",
+  u: "update",
+  up: "update",
+  c: "config",
+  s: "search",
+  se: "search",
+  tst: "test",
+  t: "test",
+  ddp: "dedupe",
+  v: "view",
+  "run-script": "run",
+  "clean-install": "ci",
+  "clean-install-test": "install-ci-test",
+  x: "exec",
+  why: "explain",
+  la: "ll",
+  verison: "version",
+  ic: "ci",
+  innit: "init",
+  in: "install",
+  ins: "install",
+  inst: "install",
+  insta: "install",
+  instal: "install",
+  isnt: "install",
+  isnta: "install",
+  isntal: "install",
+  isntall: "install",
+  "install-clean": "ci",
+  "isntall-clean": "ci",
+  hlep: "help",
+  "dist-tags": "dist-tag",
+  upgrade: "update",
+  udpate: "update",
+  rum: "run",
+  sit: "install-ci-test",
+  urn: "run",
+  ogr: "org",
+  "add-user": "adduser",
+};
+
+/** Resolve an npm command word the way npm's deref does: camelCase folds to
+ * kebab, an exact command or alias wins, then a unique abbreviation over
+ * commands and aliases alike. Null when npm itself would not resolve it. */
+export function derefNpm(word: string): string | null {
+  if (word === "") return null;
+  let c = word;
+  if (/[A-Z]/u.test(c)) c = c.replace(/([A-Z])/gu, (m) => `-${m.toLowerCase()}`);
+  if (NPM_COMMANDS.has(c)) return c;
+  const direct = NPM_ALIASES[c];
+  if (direct !== undefined) return direct;
+  const pool = [...NPM_COMMANDS, ...Object.keys(NPM_ALIASES)];
+  const hits = pool.filter((k) => k.startsWith(c));
+  if (hits.length !== 1 || hits[0] === undefined) return null;
+  let resolved = hits[0];
+  while (NPM_ALIASES[resolved] !== undefined) resolved = NPM_ALIASES[resolved] as string;
+  return resolved;
+}
+
+// pnpm's aliases, from pnpm 12.11.2's --help. pnpm does no abbreviation.
+const PNPM_ALIASES: Record<string, string> = {
+  i: "install",
+  it: "install-test",
+  up: "update",
+  upgrade: "update",
+  rb: "rebuild",
+  "run-script": "run",
+  t: "test",
+  tst: "test",
+  ls: "list",
+  la: "ll",
+  licences: "licenses",
+  info: "view",
+  show: "view",
+  v: "view",
+  s: "search",
+  se: "search",
+  find: "search",
+  uninstall: "remove",
+  rm: "remove",
+  un: "remove",
+  uni: "remove",
+  ss: "set-script",
+  "clean-install": "ci",
+  ic: "ci",
+  "install-clean": "ci",
+  c: "config",
+  ln: "link",
+  dislink: "unlink",
+  home: "docs",
+  issues: "bugs",
+  adduser: "login",
+  owners: "owner",
+  "dist-tags": "dist-tag",
+  multi: "recursive",
+  m: "recursive",
+  rt: "runtime",
+};
+
+// Bun's single-letter aliases, from bun 1.4.2's --help.
+const BUN_ALIASES: Record<string, string> = {
+  a: "add",
+  i: "install",
+  rm: "remove",
+  c: "create",
+};
+
+/** Resolve one command word to the canonical name the branches match. npm
+ * resolves exactly as npm does; the other managers map their documented
+ * aliases only, and anything else passes through for the branches to refuse.
+ * Yarn takes no aliases on either kind. */
+export function derefCommand(pm: Pm, word: string): string {
+  if (word === "") return "";
+  if (pm === "npm") return derefNpm(word) ?? word;
+  if (pm === "pnpm") return PNPM_ALIASES[word] ?? word;
+  if (pm === "bun") return BUN_ALIASES[word] ?? word;
+  return word;
+}
+
 function publishRefusal(prog: string, cmd: string): Classification {
   return {
     kind: "refuse",
@@ -534,19 +770,293 @@ function publishRefusal(prog: string, cmd: string): Classification {
   };
 }
 
-/** Classify one package-manager invocation. Unknown commands pass through:
- * the install forms below are enumerated and tested, and a future install
- * command the guard does not know is a documented residual risk. */
-export function classify(prog: string, argv: string[], yarnKind: YarnKind): Classification {
+/** Map a scaffolder name to the package it downloads, npm's execCreate rule:
+ * a bare name takes a create- prefix, a scope takes create, and a version or
+ * tag rides along. Git-hosted and local shorthands never map: the guard
+ * cannot check them. Null when nothing maps. */
+export function createTarget(initer: string): string | null {
+  if (initer === "" || initer.startsWith("-")) return null;
+  // Only a scope, possibly with a version: npm's execCreate rule.
+  if (/^@[^/]+$/u.test(initer)) {
+    const parts = initer.split("@");
+    const scope = parts[1] ?? "";
+    const version = parts[2];
+    if (scope === "") return null;
+    return version === undefined ? `@${scope}/create` : `@${scope}/create@${version}`;
+  }
+  if (/^(?:file:|link:|portal:|workspace:|git\+|git:|github:|gist:|bitbucket:|gitlab:|https?:|jsr:)/u.test(initer))
+    return null;
+  if (initer.endsWith(".tgz") || initer.endsWith(".tar.gz")) return null;
+  const at = initer.lastIndexOf("@");
+  if (at <= 0) {
+    if (initer.includes("/") && !initer.startsWith("@")) return null;
+    return initer.replace(/^(@[^/]+\/)?/u, "$1create-");
+  }
+  const name = initer.slice(0, at);
+  const spec = initer.slice(at + 1);
+  if (name === "" || spec === "") return null;
+  if (name.includes("/") && !name.startsWith("@")) return null;
+  return `${name.replace(/^(@[^/]+\/)?/u, "$1create-")}@${spec}`;
+}
+
+/** Whether a mapped scaffolder spec resolves without skew: an exact version
+ * installs what the guard checked, a bare name or tag may move between the
+ * check and the install, and a range is refused outright. */
+export function createSpecKind(range: string): "exact" | "tag" | "range" {
+  if (parseVersion(range) !== null) return "exact";
+  const trimmed = range.trim();
+  if (trimmed === "" || trimmed === "*" || trimmed === "latest") return "tag";
+  const alts = trimmed.split("||");
+  if (alts.every((alt) => parseRangeSet(alt) !== null)) return "range";
+  return "tag";
+}
+
+/** Whether an argument names a local path rather than a registry package. */
+export function isLocalPath(arg: string): boolean {
+  return (
+    arg.startsWith(".") || arg.startsWith("/") || arg.includes("/") || arg.includes("\\")
+  );
+}
+
+// Workspace selectors move an install off the directory the checks run
+// against, so install forms refuse them and the lane runs from the member
+// directory instead.
+const SELECTOR_FLAGS: Record<string, Set<string>> = {
+  npm: new Set(["-w", "--workspace", "--workspaces", "--workspace-root", "--include-workspace-root"]),
+  pnpm: new Set([
+    "-r",
+    "--recursive",
+    "--filter",
+    "-F",
+    "--workspace-root",
+    "--global-dir",
+    "--global-bin-dir",
+  ]),
+  yarn: new Set([]),
+  bun: new Set(["-F", "--filter", "--workspaces"]),
+};
+
+/** The first workspace selector on an install form, or null when none is. */
+export function workspaceSelector(pm: Pm, args: string[]): string | null {
+  const flags = SELECTOR_FLAGS[pm] ?? new Set<string>();
+  for (const arg of args) {
+    if (flags.has(arg)) return arg;
+    if (pm === "pnpm" && (arg.startsWith("--filter=") || arg.startsWith("--global-dir=") || arg.startsWith("--global-bin-dir=")))
+      return arg;
+    if (pm === "bun" && arg.startsWith("--filter=")) return arg;
+  }
+  return null;
+}
+
+/** Whether an install form reaches outside the project: -g and --global
+ * everywhere, npm's --location=global in either form, and pnpm's global
+ * directory flags. */
+function hasGlobal(args: string[]): boolean {
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i] ?? "";
+    if (arg === "-g" || arg === "--global") return true;
+    if (arg === "--location=global") return true;
+    if (arg === "--location" && args[i + 1] === "global") return true;
+    if (
+      arg === "--global-dir" ||
+      arg === "--global-bin-dir" ||
+      arg.startsWith("--global-dir=") ||
+      arg.startsWith("--global-bin-dir=")
+    )
+      return true;
+  }
+  return false;
+}
+
+/** The project's own script names, or null when the manifest does not parse:
+ * Yarn runs a bare word as a script, and only a script it names passes. */
+export function manifestScripts(project: string): Set<string> | null {
+  let manifest: unknown;
+  try {
+    manifest = JSON.parse(readFileSync(join(project, "package.json"), "utf8")) as unknown;
+  } catch {
+    return null;
+  }
+  if (typeof manifest !== "object" || manifest === null) return null;
+  const scripts = (manifest as Record<string, unknown>).scripts;
+  if (typeof scripts !== "object" || scripts === null) return new Set();
+  return new Set(Object.keys(scripts as Record<string, unknown>));
+}
+
+/** Classify a scaffolder invocation: the mapped template package is checked
+ * like a one-shot's, and the lane's args run unchanged once it clears. An
+ * exact version installs what the guard checked; a bare name or tag may move
+ * between the check and the install, which the header records. */
+function classifyCreate(prog: string, initer: string, position: number): Classification {
+  const mapped = createTarget(initer);
+  if (mapped === null) {
+    return {
+      kind: "refuse",
+      message: `${prog} scaffolds ${initer} from outside any registry the guard checks; scaffold from a registry template instead`,
+    };
+  }
+  const parsed = parseSpec(mapped);
+  if (parsed === null || (parsed.kind !== "registry" && parsed.kind !== "alias")) {
+    return {
+      kind: "refuse",
+      message: `${prog} scaffolds ${initer}, which is not a registry template the guard can check`,
+    };
+  }
+  if (createSpecKind(parsed.range) === "range") {
+    return {
+      kind: "refuse",
+      message: `${prog} scaffolds ${initer}, and a ranged template resolves twice; name the exact version instead`,
+    };
+  }
+  return { kind: "create", specs: [mapped], positions: [position] };
+}
+
+// Read-only commands and script runners, by canonical name: these pass
+// without checks. Everything else the branches do not route is refused.
+const NPM_SAFE = new Set([
+  "prune",
+  "uninstall",
+  "shrinkwrap",
+  "version",
+  "run",
+  "test",
+  "start",
+  "stop",
+  "restart",
+  "view",
+  "search",
+  "ping",
+  "outdated",
+  "fund",
+  "query",
+  "diff",
+  "pack",
+  "stars",
+  "find-dupes",
+  "ls",
+  "ll",
+  "explain",
+  "docs",
+  "bugs",
+  "repo",
+  "help",
+  "help-search",
+  "completion",
+  "prefix",
+  "root",
+  "doctor",
+  "explore",
+  "edit",
+  "whoami",
+  "get",
+  "pkg",
+]);
+
+const PNPM_SAFE = new Set([
+  "run",
+  "test",
+  "start",
+  "stop",
+  "restart",
+  "list",
+  "ll",
+  "why",
+  "outdated",
+  "view",
+  "search",
+  "pack",
+  "licenses",
+  "import",
+  "deploy",
+  "patch",
+  "patch-commit",
+  "patch-remove",
+  "clean",
+  "purge",
+  "prune",
+  "bugs",
+  "docs",
+  "set-script",
+  "remove",
+]);
+
+const CLASSIC_SAFE = new Set([
+  "run",
+  "test",
+  "info",
+  "list",
+  "licenses",
+  "outdated",
+  "why",
+  "check",
+  "bin",
+  "init",
+  "unlink",
+  "remove",
+  "version",
+  "help",
+  "commands",
+  "cache",
+]);
+
+const BERRY_SAFE = new Set([
+  "run",
+  "test",
+  "info",
+  "why",
+  "outdated",
+  "bin",
+  "node",
+  "remove",
+  "unlink",
+  "link",
+  "pack",
+  "patch",
+  "patch-commit",
+  "patch-remove",
+  "version",
+  "init",
+  "stage",
+  "console",
+  "help",
+]);
+
+const BUN_SAFE = new Set([
+  "run",
+  "test",
+  "repl",
+  "exec",
+  "build",
+  "remove",
+  "outdated",
+  "info",
+  "why",
+  "init",
+  "prune",
+  "unlink",
+  "patch",
+]);
+
+/** Classify one package-manager invocation. The install forms are enumerated
+ * and tested, read-only commands and script runners pass, and anything else
+ * is refused: a command the guard does not know cannot run unchecked. */
+export function classify(
+  prog: string,
+  argv: string[],
+  yarnKind: YarnKind,
+  project = "",
+): Classification {
   const pm: Pm = prog === "npx" ? "npm" : (prog as Pm);
   if (prog === "npx") return classifyOneshot("npm", argv);
   const key = prog === "yarn" ? "yarn" : pm;
-  const { prefix, cmd, shift, rest } = commandOf(key, argv);
+  const { prefix, cmd: raw, shift, rest } = commandOf(key, argv);
+  const cmd = derefCommand(pm, raw);
   const split = splitArgs(key, rest);
   const first = (n: number): string => split.positionals[n] ?? "";
   const all = [...prefix, ...rest];
   const pos = split.positions.map((p) => p + shift);
   if (PUBLISH.has(cmd)) return publishRefusal(prog, cmd);
+  if (cmd === "" && pm !== "yarn") return { kind: "passthrough" };
   if (pm === "yarn" && cmd === "") {
     // A bare yarn installs; only version and help pass.
     if (all.some((a) => a === "--version" || a === "-V" || a === "--help" || a === "-h")) {
@@ -567,8 +1077,55 @@ export function classify(prog: string, argv: string[], yarnKind: YarnKind): Clas
       if (first(0) === "ls" || first(0) === "list") return { kind: "passthrough" };
       return publishRefusal(prog, cmd);
     }
+    if (cmd === "approve-scripts" || cmd === "deny-scripts") {
+      return {
+        kind: "refuse",
+        message: `npm ${cmd} writes the project's script approvals, which only the run's ask flow grants`,
+      };
+    }
+    if (cmd === "config") {
+      if (first(0) === "set" || first(0) === "delete") {
+        return {
+          kind: "refuse",
+          message:
+            "npm config set and delete write configuration outside the install; configuration is the user's",
+        };
+      }
+      return { kind: "passthrough" };
+    }
+    if (cmd === "set") {
+      return {
+        kind: "refuse",
+        message:
+          "npm set writes configuration outside the install; configuration is the user's",
+      };
+    }
+    if (cmd === "cache") {
+      if (first(0) === "add") {
+        return {
+          kind: "refuse",
+          message: "npm cache add downloads a package outside any install; add the library instead",
+        };
+      }
+      return { kind: "passthrough" };
+    }
     if (cmd === "exec") return classifyOneshot("npm", rest);
-    if (cmd === "install" || cmd === "i" || cmd === "add") {
+    if (cmd === "init") {
+      // A bare init scaffolds the manifest locally; a named one downloads
+      // the mapped template and runs it, like a one-shot.
+      if (split.positionals.length === 0) return { kind: "passthrough" };
+      return classifyCreate("npm", first(0), pos[0] ?? 0);
+    }
+    if (cmd === "link") {
+      return {
+        kind: "refuse",
+        message:
+          "npm link installs from the registry into the global space; lanes install into the project instead",
+      };
+    }
+    if (cmd === "install") {
+      const selector = workspaceSelector(pm, all);
+      if (selector !== null) return selectorRefusal(pm, selector);
       if (hasGlobal(all))
         return {
           kind: "refuse",
@@ -595,7 +1152,9 @@ export function classify(prog: string, argv: string[], yarnKind: YarnKind): Clas
       if (all.includes("--dry-run")) return { kind: "passthrough" };
       return { kind: "sync", cmd };
     }
-    if (cmd === "update" || cmd === "up" || cmd === "upgrade") {
+    if (cmd === "update") {
+      const selector = workspaceSelector(pm, all);
+      if (selector !== null) return selectorRefusal(pm, selector);
       if (split.positionals.length === 0) {
         return {
           kind: "refuse",
@@ -615,14 +1174,31 @@ export function classify(prog: string, argv: string[], yarnKind: YarnKind): Clas
       }
       return { kind: "rebuild", names: split.positionals };
     }
-    if (cmd === "audit" && all.includes("--fix")) {
+    if (cmd === "dedupe") {
       return {
         kind: "refuse",
         message:
-          "npm audit fix floats versions past the lockfile; add what is needed with npm add instead",
+          "npm dedupe rewrites locked versions past the guard; change what is needed with npm add instead",
       };
     }
-    return { kind: "passthrough" };
+    if (cmd === "install-test" || cmd === "install-ci-test") {
+      return {
+        kind: "refuse",
+        message: `npm ${cmd} installs and tests in one step; sync or add first, then test separately`,
+      };
+    }
+    if (cmd === "audit") {
+      if (first(0) === "fix" || all.includes("--fix")) {
+        return {
+          kind: "refuse",
+          message:
+            "npm audit fix floats versions past the lockfile; add what is needed with npm add instead",
+        };
+      }
+      return { kind: "passthrough" };
+    }
+    if (NPM_SAFE.has(cmd)) return { kind: "passthrough" };
+    return unknownRefusal(prog, raw);
   }
 
   if (pm === "pnpm") {
@@ -637,7 +1213,54 @@ export function classify(prog: string, argv: string[], yarnKind: YarnKind): Clas
       if (first(0) === "ls" || first(0) === "list") return { kind: "passthrough" };
       return publishRefusal(prog, cmd);
     }
+    if (cmd === "config") {
+      if (first(0) === "set" || first(0) === "delete") {
+        return {
+          kind: "refuse",
+          message:
+            "pnpm config set and delete write configuration outside the install; configuration is the user's",
+        };
+      }
+      return { kind: "passthrough" };
+    }
+    if (cmd === "store") {
+      if (first(0) === "add") {
+        return {
+          kind: "refuse",
+          message: "pnpm store add downloads a package outside any install; add the library instead",
+        };
+      }
+      return { kind: "passthrough" };
+    }
+    if (cmd === "fetch" || cmd === "env" || cmd === "runtime" || cmd === "self-update" || cmd === "setup") {
+      return {
+        kind: "refuse",
+        message: `pnpm ${cmd} provisions outside the project; lanes install into the project instead`,
+      };
+    }
     if (cmd === "dlx") return classifyOneshot("pnpm", rest);
+    if (cmd === "create") {
+      if (split.positionals.length === 0) return { kind: "passthrough" };
+      return classifyCreate("pnpm", first(0), pos[0] ?? 0);
+    }
+    if (cmd === "recursive") {
+      // pnpm recursive <sub> runs <sub> across the workspace: an install
+      // subcommand is refused like its selector flag, the rest passes.
+      const sub = derefCommand(pm, first(0));
+      if (
+        sub === "add" ||
+        sub === "install" ||
+        sub === "update" ||
+        sub === "rebuild" ||
+        (sub === "audit" && (first(1) === "fix" || all.includes("--fix")))
+      ) {
+        return {
+          kind: "refuse",
+          message: `pnpm recursive ${first(0)} installs across the workspace past the guard; run from the member directory instead`,
+        };
+      }
+      return { kind: "passthrough" };
+    }
     if (cmd === "exec") {
       // pnpm --package=foo exec bar downloads foo: the packages are checked
       // like a one-shot's.
@@ -661,7 +1284,27 @@ export function classify(prog: string, argv: string[], yarnKind: YarnKind): Clas
       }
       return { kind: "passthrough" };
     }
-    if (cmd === "add" || cmd === "install" || cmd === "i") {
+    if (cmd === "link") {
+      // A local path links the lane's own code; a bare name reaches for the
+      // registry or the global store instead.
+      if (split.positionals.length === 0) return { kind: "passthrough" };
+      if (split.positionals.every((p) => isLocalPath(p))) return { kind: "passthrough" };
+      return {
+        kind: "refuse",
+        message:
+          "pnpm link takes only local paths in a lane; add a registry library instead",
+      };
+    }
+    if (cmd === "unlink") {
+      return {
+        kind: "refuse",
+        message:
+          "pnpm unlink reinstalls the package past the guard; remove the link by hand and sync instead",
+      };
+    }
+    if (cmd === "add" || cmd === "install") {
+      const selector = workspaceSelector(pm, all);
+      if (selector !== null) return selectorRefusal(pm, selector);
       if (hasGlobal(all))
         return {
           kind: "refuse",
@@ -679,7 +1322,25 @@ export function classify(prog: string, argv: string[], yarnKind: YarnKind): Clas
       if (split.positionals.length === 0) return { kind: "sync", cmd };
       return { kind: "add", specs: split.positionals, positions: pos, cmd };
     }
-    if (cmd === "update" || cmd === "up" || cmd === "upgrade") {
+    if (cmd === "ci") {
+      if (hasGlobal(all))
+        return {
+          kind: "refuse",
+          message: "global installs land outside the project; install into the project instead",
+        };
+      if (all.includes("--dry-run")) return { kind: "passthrough" };
+      return { kind: "sync", cmd };
+    }
+    if (cmd === "update") {
+      const selector = workspaceSelector(pm, all);
+      if (selector !== null) return selectorRefusal(pm, selector);
+      if (all.includes("--latest") || all.includes("-L")) {
+        return {
+          kind: "refuse",
+          message:
+            "pnpm update --latest ignores the manifest ranges the guard checks; name the exact version with pnpm add instead",
+        };
+      }
       if (split.positionals.length === 0) {
         return {
           kind: "refuse",
@@ -699,14 +1360,31 @@ export function classify(prog: string, argv: string[], yarnKind: YarnKind): Clas
       }
       return { kind: "rebuild", names: split.positionals };
     }
-    if (cmd === "audit" && all.includes("--fix")) {
+    if (cmd === "dedupe") {
       return {
         kind: "refuse",
         message:
-          "pnpm audit --fix floats versions past the lockfile; add what is needed with pnpm add instead",
+          "pnpm dedupe rewrites locked versions past the guard; change what is needed with pnpm add instead",
       };
     }
-    return { kind: "passthrough" };
+    if (cmd === "install-test") {
+      return {
+        kind: "refuse",
+        message: "pnpm install-test installs and tests in one step; sync or add first, then test separately",
+      };
+    }
+    if (cmd === "audit") {
+      if (first(0) === "fix" || all.includes("--fix")) {
+        return {
+          kind: "refuse",
+          message:
+            "pnpm audit --fix floats versions past the lockfile; add what is needed with pnpm add instead",
+        };
+      }
+      return { kind: "passthrough" };
+    }
+    if (PNPM_SAFE.has(cmd)) return { kind: "passthrough" };
+    return unknownRefusal(prog, raw);
   }
 
   if (pm === "yarn" && yarnKind === "classic") {
@@ -726,6 +1404,13 @@ export function classify(prog: string, argv: string[], yarnKind: YarnKind): Clas
       return { kind: "sync", cmd };
     }
     if (cmd === "upgrade") {
+      if (all.includes("--latest") || all.includes("-L")) {
+        return {
+          kind: "refuse",
+          message:
+            "yarn upgrade --latest ignores the manifest ranges the guard checks; name the exact version with yarn add instead",
+        };
+      }
       if (split.positionals.length === 0) {
         return {
           kind: "refuse",
@@ -741,23 +1426,81 @@ export function classify(prog: string, argv: string[], yarnKind: YarnKind): Clas
         message: "global installs land outside the project; install into the project instead",
       };
     }
-    if (cmd === "tag") {
-      return publishRefusal(prog, cmd);
-    }
-    if (cmd === "config" && (first(0) === "set" || first(0) === "delete")) {
+    if (cmd === "create") {
       return {
         kind: "refuse",
         message:
-          "yarn config set and delete write configuration outside the install; configuration is the user's",
+          "yarn create installs its template globally; scaffold with a checked one-shot instead",
       };
     }
-    // Classic has no rebuild: an unknown command falls through to the
-    // project's own scripts, which are the lane's code.
-    return { kind: "passthrough" };
+    if (cmd === "link") {
+      return {
+        kind: "refuse",
+        message:
+          "yarn link writes the global link registry; lanes install into the project instead",
+      };
+    }
+    if (cmd === "upgrade-interactive") {
+      return {
+        kind: "refuse",
+        message:
+          "yarn upgrade-interactive picks versions past the guard; add what is needed with yarn add instead",
+      };
+    }
+    if (cmd === "workspace") {
+      return {
+        kind: "refuse",
+        message:
+          "yarn workspace runs the install off the directory the guard checks; run from the member directory instead",
+      };
+    }
+    if (cmd === "workspaces") {
+      if (first(0) === "info") return { kind: "passthrough" };
+      return unknownRefusal(prog, raw);
+    }
+    if (cmd === "tag") {
+      return publishRefusal(prog, cmd);
+    }
+    if (cmd === "config") {
+      if (first(0) === "set" || first(0) === "delete") {
+        return {
+          kind: "refuse",
+          message:
+            "yarn config set and delete write configuration outside the install; configuration is the user's",
+        };
+      }
+      return { kind: "passthrough" };
+    }
+    if (cmd === "audit") {
+      if (first(0) === "fix" || all.includes("--fix")) {
+        return {
+          kind: "refuse",
+          message:
+            "yarn audit fix floats versions past the lockfile; add what is needed with yarn add instead",
+        };
+      }
+      return { kind: "passthrough" };
+    }
+    if (CLASSIC_SAFE.has(cmd)) return { kind: "passthrough" };
+    // Classic falls through to the project's own scripts: only a word the
+    // manifest names passes, and anything else is refused.
+    const scripts = project === "" ? null : manifestScripts(project);
+    if (scripts !== null && scripts.has(cmd)) return { kind: "passthrough" };
+    return unknownRefusal(prog, raw);
   }
 
   if (pm === "yarn") {
     if (cmd === "npm") {
+      if (first(0) === "info" || first(0) === "audit") {
+        if (all.includes("--fix")) {
+          return {
+            kind: "refuse",
+            message:
+              "yarn npm audit fix floats versions past the lockfile; add what is needed with yarn add instead",
+          };
+        }
+        return { kind: "passthrough" };
+      }
       return publishRefusal(prog, cmd);
     }
     if (cmd === "add" || cmd === "install") {
@@ -777,14 +1520,13 @@ export function classify(prog: string, argv: string[], yarnKind: YarnKind): Clas
       return { kind: "add", specs: split.positionals, positions: pos, cmd };
     }
     if (cmd === "up" || cmd === "upgrade") {
-      if (split.positionals.length === 0) {
-        return {
-          kind: "refuse",
-          message:
-            "a bare yarn up floats every dependency past its locked version; add what is needed with yarn add instead",
-        };
-      }
-      return { kind: "update", specs: split.positionals, positions: pos, cmd };
+      // Berry's up resolves past the manifest ranges the checks run against,
+      // and its exact rule is not verifiable here, so it refuses outright.
+      return {
+        kind: "refuse",
+        message:
+          "yarn up resolves past the manifest ranges the guard checks; name the exact version with yarn add instead",
+      };
     }
     if (cmd === "rebuild") {
       return {
@@ -793,20 +1535,82 @@ export function classify(prog: string, argv: string[], yarnKind: YarnKind): Clas
           "yarn rebuild rebuilds more than the names it is given, so no allowance covers it; sync or add instead",
       };
     }
-    if (cmd === "dlx") return classifyOneshot("yarn", rest);
-    if (cmd === "exec") return { kind: "passthrough" };
-    if (cmd === "config" && first(0) === "set" && (all.includes("-H") || all.includes("--home"))) {
+    if (cmd === "dedupe") {
       return {
         kind: "refuse",
         message:
-          "yarn config set --home writes the user's own configuration; configuration is the user's",
+          "yarn dedupe rewrites locked versions past the guard; change what is needed with yarn add instead",
       };
     }
-    return { kind: "passthrough" };
+    if (cmd === "dlx") return classifyOneshot("yarn", rest);
+    if (cmd === "exec") return { kind: "passthrough" };
+    if (cmd === "config") {
+      if (first(0) === "set" || first(0) === "unset") {
+        return {
+          kind: "refuse",
+          message:
+            "yarn config set and unset write configuration outside the install; configuration is the user's",
+        };
+      }
+      return { kind: "passthrough" };
+    }
+    if (cmd === "plugin") {
+      if (first(0) === "import") {
+        return {
+          kind: "refuse",
+          message: "yarn plugin import downloads code outside any install; lanes add libraries instead",
+        };
+      }
+      if (first(0) === "list" || first(0) === "remove" || split.positionals.length === 0) {
+        return { kind: "passthrough" };
+      }
+      return unknownRefusal(prog, raw);
+    }
+    if (cmd === "workspace") {
+      return {
+        kind: "refuse",
+        message:
+          "yarn workspace runs the install off the directory the guard checks; run from the member directory instead",
+      };
+    }
+    if (cmd === "workspaces") {
+      if (first(0) === "foreach") {
+        return {
+          kind: "refuse",
+          message:
+            "yarn workspaces foreach runs across the workspace past the guard; run from the member directory instead",
+        };
+      }
+      return { kind: "passthrough" };
+    }
+    if (cmd === "set") {
+      return {
+        kind: "refuse",
+        message: "yarn set manages the Yarn release itself; the user manages the toolchain",
+      };
+    }
+    if (cmd === "cache") return { kind: "passthrough" };
+    if (cmd === "audit") {
+      if (first(0) === "fix" || all.includes("--fix")) {
+        return {
+          kind: "refuse",
+          message:
+            "yarn audit fix floats versions past the lockfile; add what is needed with yarn add instead",
+        };
+      }
+      return { kind: "passthrough" };
+    }
+    if (BERRY_SAFE.has(cmd)) return { kind: "passthrough" };
+    // Berry falls through to the project's own scripts like Classic does.
+    const scripts = project === "" ? null : manifestScripts(project);
+    if (scripts !== null && scripts.has(cmd)) return { kind: "passthrough" };
+    return unknownRefusal(prog, raw);
   }
 
   // bun
-  if (cmd === "add" || cmd === "install" || cmd === "i") {
+  if (cmd === "add" || cmd === "install") {
+    const selector = workspaceSelector(pm, all);
+    if (selector !== null) return selectorRefusal(pm, selector);
     if (hasGlobal(all))
       return {
         kind: "refuse",
@@ -824,6 +1628,15 @@ export function classify(prog: string, argv: string[], yarnKind: YarnKind): Clas
     return { kind: "add", specs: split.positionals, positions: pos, cmd };
   }
   if (cmd === "update") {
+    const selector = workspaceSelector(pm, all);
+    if (selector !== null) return selectorRefusal(pm, selector);
+    if (all.includes("--latest") || all.includes("-L")) {
+      return {
+        kind: "refuse",
+        message:
+          "bun update --latest ignores the manifest ranges the guard checks; name the exact version with bun add instead",
+      };
+    }
     if (split.positionals.length === 0) {
       return {
         kind: "refuse",
@@ -838,15 +1651,69 @@ export function classify(prog: string, argv: string[], yarnKind: YarnKind): Clas
     if (all.includes("--no-install")) return { kind: "passthrough" };
     return classifyOneshot("bun", rest);
   }
-  if (cmd === "pm" && first(0) === "trust") {
+  if (cmd === "create") {
     return {
       kind: "refuse",
       message:
-        "bun pm trust writes the project's trusted dependencies, which only the run's ask flow grants",
+        "bun create downloads templates from outside any registry the guard checks; scaffold with a checked one-shot instead",
     };
   }
-  // Bun has no rebuild; an unknown command errors in Bun itself.
-  return { kind: "passthrough" };
+  if (cmd === "dedupe") {
+    return {
+      kind: "refuse",
+      message:
+        "bun dedupe rewrites locked versions past the guard; change what is needed with bun add instead",
+    };
+  }
+  if (cmd === "link") {
+    return {
+      kind: "refuse",
+      message:
+        "bun link registers outside the project; lanes install into the project instead",
+    };
+  }
+  if (cmd === "upgrade") {
+    return {
+      kind: "refuse",
+      message: "bun upgrade manages Bun itself; the user manages the toolchain",
+    };
+  }
+  if (cmd === "pm") {
+    if (first(0) === "trust") {
+      return {
+        kind: "refuse",
+        message:
+          "bun pm trust writes the project's trusted dependencies, which only the run's ask flow grants",
+      };
+    }
+    return {
+      kind: "refuse",
+      message: `bun pm ${first(0)} is not a command the guard checks; manage packages with the install forms instead`,
+    };
+  }
+  if (cmd === "audit") {
+    if (first(0) === "fix" || all.includes("--fix")) {
+      return {
+        kind: "refuse",
+        message:
+          "bun audit fix floats versions past the lockfile; add what is needed with bun add instead",
+      };
+    }
+    return { kind: "passthrough" };
+  }
+  if (BUN_SAFE.has(cmd)) return { kind: "passthrough" };
+  // A file path runs that file: anything shaped like a path, or an existing
+  // file beside the project, passes with auto-install disabled.
+  if (
+    cmd.includes("/") ||
+    cmd.includes("\\") ||
+    cmd.startsWith(".") ||
+    /\.[A-Za-z0-9]{1,8}$/u.test(cmd) ||
+    (project !== "" && existsSync(join(project, cmd)))
+  ) {
+    return { kind: "passthrough" };
+  }
+  return unknownRefusal(prog, raw);
 }
 
 /** One-shot package runs: -p values are always specs to check, while a bare
@@ -2170,8 +3037,24 @@ async function syncScriptful(ctx: GuardContext, locked: Locked[]): Promise<strin
 }
 
 /** Commands that only read the registry still run against the pinned one;
- * everything else passes untouched. */
-const FETCH_CMDS = new Set(["view", "info", "show", "search", "ping", "audit", "outdated", "fund"]);
+ * everything else passes untouched, except Bun's auto-install, which every
+ * passed-through Bun command disables: run, test and file runs would
+ * otherwise fetch imports with no checks. */
+const FETCH_CMDS = new Set([
+  "view",
+  "info",
+  "show",
+  "search",
+  "ping",
+  "audit",
+  "outdated",
+  "fund",
+  "query",
+  "diff",
+  "pack",
+  "stars",
+  "find-dupes",
+]);
 
 function execPassthrough(
   prog: string,
@@ -2190,39 +3073,73 @@ function execPassthrough(
   const { kept, stripped } = sanitize(pm, argv);
   noteStripped(stripped);
   const args = FETCH_CMDS.has(cmd) ? [...kept, "--registry", registry] : kept;
+  if (pm === "bun" && !args.includes("--no-install")) args.push("--no-install");
   return execManager(bin, args, execEnv({}));
 }
 
-export type Prog = "npm" | "npx" | "pnpm" | "yarn" | "bun";
+export type Prog = "npm" | "npx" | "pnpm" | "yarn" | "bun" | "bunx" | "corepack";
 
 function toProg(prog: string): Prog {
-  if (prog === "npm" || prog === "npx" || prog === "pnpm" || prog === "yarn" || prog === "bun")
+  if (
+    prog === "npm" ||
+    prog === "npx" ||
+    prog === "pnpm" ||
+    prog === "yarn" ||
+    prog === "bun" ||
+    prog === "bunx" ||
+    prog === "corepack"
+  )
     return prog;
   throw refusal(
-    `install-guard: refusing to run ${prog}: the guard shims only npm, npx, pnpm, yarn and bun`,
+    `install-guard: refusing to run ${prog}: the guard shims only npm, npx, pnpm, yarn, bun, bunx and corepack`,
   );
 }
 
+/** Binary names that are package managers themselves: a one-shot of one runs
+ * the real manager past the guard, so the local shortcut refuses them. */
+const MANAGER_BINS = new Set([
+  "npm",
+  "npx",
+  "pnpm",
+  "yarn",
+  "bun",
+  "bunx",
+  "corepack",
+  "pn",
+  "pnx",
+  "pnpx",
+  "yarnpkg",
+]);
+
 async function runRun(shimDir: string, rawProg: string, argv: string[]): Promise<number> {
   const prog = toProg(rawProg);
+  if (prog === "corepack") {
+    refuse(
+      "install-guard: refusing to run corepack: it provisions managers outside the guard; run the manager itself instead",
+    );
+  }
   const dispatch = process.env.POSTMASTER_DISPATCH ?? "";
   if (dispatch === "") {
     refuse(
       "install-guard: refusing to run: POSTMASTER_DISPATCH is not set, so the launch did not arm the guard",
     );
   }
-  const pm: Pm = prog === "npx" ? "npm" : prog;
-  const key = prog === "yarn" ? "yarn" : pm;
+  // bunx is bun x under its documented name; everything below sees the
+  // expanded form, and the binary lookup sees bun.
+  const effProg = prog === "bunx" ? "bun" : prog;
+  const effArgv = prog === "bunx" ? ["x", ...argv] : argv;
+  const pm: Pm = effProg === "npx" ? "npm" : (effProg as Pm);
+  const key = effProg === "yarn" ? "yarn" : pm;
   const cwd = process.cwd();
-  const project = projectOf(pm, argv, cwd);
-  const bin = managerBin(prog, shimDir);
+  const project = projectOf(pm, effArgv, cwd);
+  const bin = managerBin(prog === "bunx" ? "bun" : prog, shimDir);
   if (bin === null) {
     throw refusal(
       `install-guard: refusing to run ${prog}: ${prog} is not on the PATH outside the guard's shims`,
     );
   }
   const yarnKind = pm === "yarn" ? detectYarnKind(project, bin) : "classic";
-  const classification = classify(prog, argv, yarnKind);
+  const classification = classify(effProg, effArgv, yarnKind, project);
   if (classification.kind === "refuse") {
     const words = argv.length > 0 ? ` ${argv.join(" ")}` : "";
     throw refusal(`install-guard: refusing to run ${prog}${words}: ${classification.message}`);
@@ -2249,7 +3166,7 @@ async function runRun(shimDir: string, rawProg: string, argv: string[]): Promise
   };
 
   if (classification.kind === "passthrough") {
-    return execPassthrough(prog, pm, yarnKind, bin, argv, registry);
+    return execPassthrough(effProg, pm, yarnKind, bin, effArgv, registry);
   }
   if (classification.kind === "add" || classification.kind === "update") {
     const specs =
@@ -2258,7 +3175,7 @@ async function runRun(shimDir: string, rawProg: string, argv: string[]): Promise
         : expandUpdateSpecs(project, classification.specs);
     const { scriptful } = await checkSpecs(deps, specs);
     if (pm === "bun") writeTrustedDeps(project, scriptful);
-    const { prefix, cmd, rest } = commandOf(key, argv);
+    const { prefix, cmd, rest } = commandOf(key, effArgv);
     const pre = sanitize(pm, prefix);
     const post = sanitize(pm, rest);
     noteStripped([...pre.stripped, ...post.stripped]);
@@ -2300,54 +3217,49 @@ async function runRun(shimDir: string, rawProg: string, argv: string[]): Promise
         );
       }
     }
-    const { prefix, cmd, rest } = commandOf(key, argv);
+    const { prefix, cmd, rest } = commandOf(key, effArgv);
     const pre = sanitize(pm, prefix);
     const post = sanitize(pm, rest);
     noteStripped([...pre.stripped, ...post.stripped]);
     return execManager(bin, [...pre.kept, cmd, ...post.kept], execEnv({}));
+  }
+  if (classification.kind === "create") {
+    // The mapped template is checked like a one-shot's; the lane's args run
+    // unchanged, since the template name is not a spec to pin.
+    const specs = parseAddSpecs(classification.specs);
+    const { scriptful } = await checkSpecs(deps, specs);
+    return execDownloaded(pm, yarnKind, bin, effArgv, scriptful, registry);
   }
   // One-shot: an installed binary runs with downloads disabled, and anything
   // else is guarded like an add and then runs with the pinned registry.
   const bins = classification.specs;
   const pkgs = classification.packages;
   if (bins.length === 0 && pkgs.length === 0) {
-    return execPassthrough(prog, pm, yarnKind, bin, argv, registry);
+    return execPassthrough(effProg, pm, yarnKind, bin, effArgv, registry);
   }
   if (pkgs.length > 0) {
     const specs = parseAddSpecs(pkgs);
     const { scriptful } = await checkSpecs(deps, specs);
-    return execDownloaded(pm, yarnKind, bin, argv, scriptful, registry);
+    return execDownloaded(pm, yarnKind, bin, effArgv, scriptful, registry);
   }
   const wanted = bins[0] ?? "";
-  if ((prog === "npx" || prog === "bun") && localBin(project, wanted)) {
-    if (prog === "npx") {
-      return execManager(bin, ["--offline", ...argv], execEnv({}));
+  if ((effProg === "npx" || effProg === "bun") && localBin(project, wanted)) {
+    // The local shortcut runs the installed binary itself: when that binary
+    // is a package manager, it would run unguarded past the shims.
+    if (MANAGER_BINS.has(wanted)) {
+      refuse(
+        `install-guard: refusing to run ${wanted} from the project's binaries: run the manager through its shim instead`,
+      );
     }
-    const { prefix, cmd, rest } = commandOf(key, argv);
+    if (effProg === "npx") {
+      return execManager(bin, ["--offline", ...effArgv], execEnv({}));
+    }
+    const { prefix, cmd, rest } = commandOf(key, effArgv);
     return execManager(bin, [...prefix, cmd, "--no-install", ...rest], execEnv({}));
-  }
-  if (prog !== "npx" && prog !== "bun") {
-    const providers = binProviders(project, wanted);
-    if (providers.length > 0) {
-      const at = providers
-        .map((name) => ({ name, version: installedVersion(project, name) }))
-        .filter((p): p is { name: string; version: string } => p.version !== null);
-      if (at.length > 0) {
-        const { scriptful } = await checkSpecs(
-          deps,
-          at.map((p) => ({
-            raw: `${p.name}@${p.version}`,
-            parsed: { kind: "registry", name: p.name, range: p.version },
-            name: p.name,
-          })),
-        );
-        return execDownloaded(pm, yarnKind, bin, argv, scriptful, registry);
-      }
-    }
   }
   const specs = parseAddSpecs([wanted]);
   const { scriptful } = await checkSpecs(deps, specs);
-  return execDownloaded(pm, yarnKind, bin, argv, scriptful, registry);
+  return execDownloaded(pm, yarnKind, bin, effArgv, scriptful, registry);
 }
 
 /** A one-shot the checks cleared: the lane's args kept, the pinned registry,

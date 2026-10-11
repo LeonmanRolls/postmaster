@@ -1299,8 +1299,9 @@ function readRegularFile(path: string, missing: string): string {
   }
 }
 
-/** The names the install guard shims on an armed lane's PATH. */
-export const GUARD_SHIM_NAMES = ["npm", "pnpm", "yarn", "bun", "npx"] as const;
+/** The names the install guard shims on an armed lane's PATH: the managers,
+ * npx, bunx under its documented name, and corepack, which always refuses. */
+export const GUARD_SHIM_NAMES = ["npm", "pnpm", "yarn", "bun", "npx", "bunx", "corepack"] as const;
 
 /** Create the run's guard bin dir with its manager shims, idempotently.
  * Returns the bin dir. A dangling or wrong link is repaired; anything in the

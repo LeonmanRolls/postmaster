@@ -723,6 +723,10 @@ declare module "node:readline" {
   };
 }
 
+declare module "node:module" {
+  export function createRequire(filename: string): (id: string) => unknown;
+}
+
 declare module "node:net" {
   export interface Socket {
     destroy(): void;
