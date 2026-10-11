@@ -13,7 +13,10 @@
 // the last leg, and abandons one on the user's word. A run is at most two legs: the last one
 // carries it to `shipping` with the ship card, and the postmaster sets `shipped` after the
 // merge and `done` when it closes. `review` is entered only by a run with a review leg. A
-// run dispatched before this change keeps its three legs and the stages they enter. The actor
+// run dispatched before this change keeps its three legs and the stages they enter. Entering
+// a stage the run has not reached through an earlier one it passes through is refused,
+// naming the skipped stage, so the caller enters it itself; abandoned, and done, are the
+// postmaster's to set from any stage. The actor
 // is the caller's own word, so this holds a coachman to its runbook; it cannot stop a process
 // that names itself the postmaster.
 //
@@ -22,6 +25,7 @@
 //   exit 2  not one of the stages
 //   exit 3  the run is done or abandoned, and only the postmaster moves it on
 //   exit 4  a terminal stage, or shipped on a contract 2 run, set by any actor but the postmaster
+//   exit 5  an earlier stage the run passes through was never entered; it is named
 import {
   appendFileSync,
   existsSync,
@@ -34,11 +38,11 @@ import {
 import { join } from "node:path";
 import { scriptsDir } from "./lib/paths.ts";
 import { mkstempSync, run } from "./lib/proc.ts";
+import { runMode } from "./lib/run-mode.ts";
+import { expectedStages, hasReviewLeg, STAGES, STAGE_LIST } from "./lib/stages.ts";
 import { pyRstrip } from "./lib/text.ts";
 
-export const STAGES =
-  "dispatched bootstrapped workhorses-running synthesis checkpoint-1 review shipping shipped done abandoned";
-const STAGE_LIST = STAGES.split(" ");
+export { STAGES };
 
 // Lines with their endings kept, as str.splitlines(keepends=True) cuts
 // them: every Python boundary ends a line, and the file round-trips.
@@ -132,6 +136,47 @@ export function isCurrent(d: string): boolean {
   return /"coachman_contract"[ \t\n\r]*:[ \t\n\r]*2(?![0-9.eE])/u.test(raw);
 }
 
+/**
+ * The first stage the run passes through before newStage that it never
+ * entered, from its `stage` lines, or null when none was skipped. Null also
+ * when the run's order cannot be read — its legs, its record, or the stage it
+ * sits in — so a run the command cannot reason about is never refused.
+ */
+export function skippedStage(
+  toolDir: string,
+  d: string,
+  newStage: string,
+  old: string | null,
+): string | null {
+  if (old === null) return null;
+  const legs = run(join(toolDir, "run"), ["turnpikes", "legs", d]);
+  if (legs.code !== 0) return null;
+  const order = expectedStages(hasReviewLeg(legs.out), runMode(d));
+  if (!order.includes(newStage) || !order.includes(old)) return null;
+  const entered = new Set<string>(["dispatched"]);
+  let journal: string;
+  try {
+    journal = readFileSync(join(d, "actions.jsonl"), "utf8");
+  } catch {
+    return null;
+  }
+  for (const line of journal.split("\n")) {
+    if (line.trim() === "") continue;
+    try {
+      const e = JSON.parse(line) as { action?: string; target?: string };
+      if (e.action === "stage" && typeof e.target === "string") entered.add(e.target);
+    } catch {
+      return null;
+    }
+  }
+  const until = order.indexOf(newStage);
+  for (let i = 1; i < until; i++) {
+    const earlier = order[i] ?? "";
+    if (earlier !== "" && !entered.has(earlier)) return earlier;
+  }
+  return null;
+}
+
 export function setStage(d: string, newStage: string, actor: string): number {
   const HERE = scriptsDir(import.meta);
 
@@ -172,6 +217,13 @@ export function setStage(d: string, newStage: string, actor: string): number {
   if ((old === "done" || old === "abandoned") && actor !== "postmaster") {
     console.error(`stage: the run is ${old}; only the postmaster moves it on`);
     return 3;
+  }
+  if (newStage !== "done" && newStage !== "abandoned") {
+    const skipped = skippedStage(HERE, d, newStage, old);
+    if (skipped !== null) {
+      console.error(`stage: cannot enter ${newStage}; the run has not entered ${skipped}`);
+      return 5;
+    }
   }
 
   // Find when the stage being left was entered

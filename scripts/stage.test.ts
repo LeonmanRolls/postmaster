@@ -1,4 +1,4 @@
-// Tests beside scripts/stage.ts, moved from its --self-test on #109: 31 controls.
+// Tests beside scripts/stage.ts, moved from its --self-test on #109: 38 controls.
 // The self-test ran its controls in one shared temp run with fresh() resets; each test below
 // repeats its own setup so it passes alone as well as in file order.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
@@ -341,5 +341,71 @@ describe("negative controls", () => {
     expect(statSync(b).mode & 0o777).toBe(0o600);
     expect(readFileSync(a, "utf8")).toBe("a");
     expect(readFileSync(b, "utf8")).toBe("b");
+  });
+});
+
+describe("skipped stages", () => {
+  const withBrief = (turnpikes: string): void => {
+    fresh();
+    rmSync(join(d, "run.json"), { force: true });
+    writeFileSync(
+      join(d, "brief.md"),
+      `# Waybill: RUN-1\nturnpikes: ${turnpikes}\n\n## Ticket\n\ntest\n`,
+    );
+  };
+
+  test("checkpoint-1 from bootstrapped is refused, and the skipped stage is entered first", () => {
+    withBrief("style");
+    writeFileSync(join(d, "run.json"), '{"coachman_contract": 2, "mode": "single-thread"}\n');
+    expect(setStage(d, "bootstrapped", "coachman")).toBe(0);
+    expect(setStage(d, "checkpoint-1", "coachman")).toBe(5);
+    expect(manifestStage()).toBe("bootstrapped");
+    expect(stageTargets()).toBe("bootstrapped");
+    expect(setStage(d, "synthesis", "coachman")).toBe(0);
+    expect(setStage(d, "checkpoint-1", "coachman")).toBe(0);
+  });
+
+  test("a synthesis run is refused on workhorses-running", () => {
+    withBrief("style");
+    expect(setStage(d, "bootstrapped", "coachman")).toBe(0);
+    expect(setStage(d, "checkpoint-1", "coachman")).toBe(5);
+    expect(manifestStage()).toBe("bootstrapped");
+  });
+
+  test("moving back to an entered stage is not refused", () => {
+    withBrief("style");
+    for (const s of ["bootstrapped", "workhorses-running", "synthesis", "checkpoint-1"]) {
+      expect(setStage(d, s, "coachman")).toBe(0);
+    }
+    expect(setStage(d, "synthesis", "coachman")).toBe(0);
+  });
+
+  test("a run whose legs cannot be read is not refused", () => {
+    fresh();
+    rmSync(join(d, "brief.md"), { force: true });
+    expect(setStage(d, "checkpoint-1", "coachman")).toBe(0);
+  });
+
+  test("a run on a stage outside the order is not refused", () => {
+    withBrief("style");
+    writeFileSync(
+      join(d, "manifest.json"),
+      MANIFEST.replace('"stage": "dispatched"', '"stage": "planning"'),
+    );
+    expect(setStage(d, "workhorses-running", "coachman")).toBe(0);
+  });
+
+  test("a stage the run's order holds nowhere is not refused", () => {
+    withBrief("style");
+    writeFileSync(join(d, "run.json"), '{"coachman_contract": 2, "mode": "single-thread"}\n');
+    expect(setStage(d, "bootstrapped", "coachman")).toBe(0);
+    expect(setStage(d, "workhorses-running", "coachman")).toBe(0);
+  });
+
+  test("a terminal stage from the postmaster is not refused", () => {
+    withBrief("style");
+    expect(setStage(d, "bootstrapped", "coachman")).toBe(0);
+    expect(setStage(d, "done", "postmaster")).toBe(0);
+    expect(manifestStage()).toBe("done");
   });
 });
