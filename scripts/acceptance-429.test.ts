@@ -85,10 +85,23 @@ describe("C1: the skill", () => {
       need(git("-C", dir, "add", "."), "add links tree");
       need(git("-C", dir, "commit", "-qm", "tree"), "commit links tree");
       // A clean home: the machine's own links point at its main checkout
-      // and would read as in the way.
+      // and would read as in the way. It holds one harness's skills
+      // folder, codex's .agents/skills as link-skills finds it, and a
+      // stub codex binary on PATH, since a harness reads as installed
+      // by its binary alone: a machine with no harness installed and
+      // no harness variable must still list one tag.
       const home = join(dir, "home");
-      mkdirSync(home, { recursive: true });
-      const env: Record<string, string | undefined> = { ...process.env, HOME: home };
+      mkdirSync(join(home, ".agents", "skills"), { recursive: true });
+      const bin = join(dir, "bin");
+      mkdirSync(bin, { recursive: true });
+      writeFileSync(join(bin, "codex"), "#!/bin/sh\nexit 0\n", "utf8");
+      chmodSync(join(bin, "codex"), 0o755);
+      const inherited = process.env.PATH;
+      const env: Record<string, string | undefined> = {
+        ...process.env,
+        HOME: home,
+        PATH: inherited ? `${bin}:${inherited}` : bin,
+      };
       delete env.CLAUDE_CONFIG_DIR;
       const r = sh(join(dir, "scripts", "run"), ["link-skills", "--dry-run"], env);
       expect(r.code).toBe(0);
