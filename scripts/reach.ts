@@ -1170,12 +1170,7 @@ function roundChanges(
         // Unless the recorded fixes changed a path a reviewer's record names: that
         // reviewer's change rode into the fix, so the move is not explained for them.
         // The finding voids that reviewer alone; restore resets the whole move.
-        for (const { read, paths } of sweptReviewers(
-          info,
-          checked,
-          change.before,
-          change.after,
-        )) {
+        for (const { read, paths } of sweptReviewers(info, checked, change.before, change.after)) {
           for (const path of paths) {
             const key = `${read.lens ?? ""}\0${read.lane}\0${path}`;
             if (sweptDone.has(key)) continue;
@@ -1458,9 +1453,7 @@ function restoreSwept(
     [snapshot.refs[ticketRef] ?? "", nowRefs[ticketRef] ?? ""],
     [snapshot.synthesisHead, current],
   ];
-  return pairs.some(
-    ([before, after]) => sweptReviewers(info, checked, before, after).length > 0,
-  );
+  return pairs.some(([before, after]) => sweptReviewers(info, checked, before, after).length > 0);
 }
 
 function restoreRound(info: RunInfo, round: number): number {
@@ -1488,12 +1481,7 @@ function restoreRound(info: RunInfo, round: number): number {
   }
   const refExplained =
     !swept &&
-    moveExplained(
-      info.repo,
-      applies,
-      snapshot.refs[ticketRef] ?? "",
-      nowRefs[ticketRef] ?? "",
-    );
+    moveExplained(info.repo, applies, snapshot.refs[ticketRef] ?? "", nowRefs[ticketRef] ?? "");
   const changedRefs = new Set([...Object.keys(snapshot.refs), ...Object.keys(nowRefs)]);
   for (const ref of [...changedRefs].sort()) {
     const before = snapshot.refs[ref] ?? "";

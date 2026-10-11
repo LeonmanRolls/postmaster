@@ -269,9 +269,7 @@ function logAction(
   if (action === "finding" || action === "finding-also") {
     const firstWord = detail.split(" ")[0] ?? "";
     if (firstWord !== "gating" && firstWord !== "style") {
-      console.error(
-        `log-action: a ${action}'s detail opens with its class, gating or style`,
-      );
+      console.error(`log-action: a ${action}'s detail opens with its class, gating or style`);
       return 1;
     }
   }

@@ -277,8 +277,7 @@ function reportedFinishers(dispatch: string, round: string): Set<string> {
     const row = parsed as Record<string, unknown>;
     if (row.action !== "review-finish") continue;
     if (typeof row.target !== "string" || row.target === "") continue;
-    const words =
-      typeof row.detail === "string" ? row.detail.trim().split(/[ \t\r\n]+/u) : [];
+    const words = typeof row.detail === "string" ? row.detail.trim().split(/[ \t\r\n]+/u) : [];
     if (words.length >= 3 && words[1] === "round" && words[2] === round && words[0] !== "") {
       out.add(`${words[0]}\0${row.target}`);
     }
@@ -968,13 +967,7 @@ export function fixRound(a: FixArgs, deps: StepDeps): StepResult {
     return res;
   }
   const sha = head.out.trim();
-  const row = deps.tool("log-action", [
-    a.dispatch,
-    "coachman",
-    "apply",
-    sha,
-    a.findings.join(" "),
-  ]);
+  const row = deps.tool("log-action", [a.dispatch, "coachman", "apply", sha, a.findings.join(" ")]);
   passErr(res, row);
   if (row.code !== 0) {
     if (applyLanded(a.dispatch, sha)) {
@@ -1029,7 +1022,8 @@ export function gateRound(a: GateArgs, deps: StepDeps): StepResult {
   }
   const dirt = uncommittedFiles(status.out);
   if (dirt.length > 0) {
-    const listed = dirt.slice(0, 10).join(", ") + (dirt.length > 10 ? ` and ${dirt.length - 10} more` : "");
+    const listed =
+      dirt.slice(0, 10).join(", ") + (dirt.length > 10 ? ` and ${dirt.length - 10} more` : "");
     res.err.push(
       `review-round: ${a.synthesis} has files git sees that its commit does not hold, so no result would belong to a commit: ${listed}`,
     );
@@ -1084,8 +1078,7 @@ if (import.meta.main) {
   )
     die(USAGE);
   if (cmd === "start" && argv.length < 3) die(USAGE);
-  if ((cmd === "wait" || cmd === "wait-next" || cmd === "teardown") && argv.length < 4)
-    die(USAGE);
+  if ((cmd === "wait" || cmd === "wait-next" || cmd === "teardown") && argv.length < 4) die(USAGE);
   if ((cmd === "cut" || cmd === "launch") && argv.length !== 5) die(USAGE);
   if (cmd === "harvest" && argv.length < 4) die(USAGE);
   if (cmd === "gate" && argv.length !== 4) die(USAGE);
@@ -1121,7 +1114,13 @@ if (import.meta.main) {
       }
       i += 2;
     }
-    if (message === null || message === "" || !findings || findings.length === 0 || paths.length === 0)
+    if (
+      message === null ||
+      message === "" ||
+      !findings ||
+      findings.length === 0 ||
+      paths.length === 0
+    )
       die(USAGE);
     const deps: StepDeps = {
       tool: (name, args) => run(join(HERE, "run"), [name, ...args]),
@@ -1444,13 +1443,7 @@ if (import.meta.main) {
     }
     if (newly.length === 0) {
       const left = parseInt(leftStr ?? "0", 10);
-      countdown(
-        () => (fresh().length > 0 ? 1 : 0),
-        1,
-        Number.isNaN(left) ? 0 : left,
-        sleepMs,
-        1,
-      );
+      countdown(() => (fresh().length > 0 ? 1 : 0), 1, Number.isNaN(left) ? 0 : left, sleepMs, 1);
       newly = fresh();
     }
     if (newly.length > 0) {
