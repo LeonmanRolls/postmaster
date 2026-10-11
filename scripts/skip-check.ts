@@ -282,6 +282,10 @@ async function stopStuck(
       resolve();
     });
   });
+  // The pipes release here as on the exit path: a stray that escaped
+  // the suite's group would otherwise hold them past the stop.
+  (child.stdout as unknown as { destroy: () => void } | null)?.destroy();
+  (child.stderr as unknown as { destroy: () => void } | null)?.destroy();
   console.log(
     `skip-check: the suite did not end within ${stuckSecs}s after its last test file reported (${lastFile}); stopping it`,
   );
