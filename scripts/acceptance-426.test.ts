@@ -69,7 +69,10 @@ function seed(): void {
     version: string,
     published: string,
     tb: { file: string; integrity: string },
-    deps: Pick<RegistryVersion, "dependencies" | "optionalDependencies" | "peerDependencies"> = {},
+    deps: Pick<
+      RegistryVersion,
+      "dependencies" | "optionalDependencies" | "peerDependencies" | "scripts" | "bin"
+    > = {},
   ): RegistryVersion => ({
     version,
     published,
@@ -97,7 +100,7 @@ function seed(): void {
   const dep = t("g-dep", "1.0.0");
   add("g-dep", "1.0.0", [v("1.0.0", old, dep, { dependencies: { "g-trans": "^1.0.0" } })]);
   const scripts = t("g-scripts", "1.0.0");
-  add("g-scripts", "1.0.0", [v("1.0.0", old, scripts)]);
+  add("g-scripts", "1.0.0", [v("1.0.0", old, scripts, { scripts: { postinstall: "node mark.js" } })]);
   const ds = t("g-depscripts", "1.0.0");
   add("g-depscripts", "1.0.0", [v("1.0.0", old, ds, { dependencies: { "g-scripts": "^1.0.0" } })]);
   const flag = t("g-flag", "1.0.0");
@@ -120,7 +123,10 @@ function seed(): void {
   ]);
   const bin1 = t("g-binpkg", "1.0.0");
   const bin2 = t("g-binpkg", "2.0.0");
-  add("g-binpkg", "1.0.0", [v("1.0.0", old, bin1), v("2.0.0", young, bin2)]);
+  add("g-binpkg", "1.0.0", [
+    v("1.0.0", old, bin1, { bin: { "g-bin": "./cli.js" } }),
+    v("2.0.0", young, bin2, { bin: { "g-bin": "./cli.js" } }),
+  ]);
   const scoped = t("gscoped", "2.0.0");
   add("@gscope/g-scoped", "2.0.0", [v("2.0.0", old, scoped)]);
   const ghost = t("g-ghost", "9.9.9");

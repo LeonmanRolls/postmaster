@@ -1,1 +1,1 @@
-{"name":"g-scripts","version":"0.0.0-dev","main":"index.js","scripts":{"postinstall":"node -e \"require(fs).writeFileSync(require(path).join(process.env.GUARD_MARKER_DIR || require(os).tmpdir(), g-scripts), x)\""}}
+{"name":"g-scripts","version":"0.0.0-dev","main":"index.js","scripts":{"postinstall":"node mark.js"}}

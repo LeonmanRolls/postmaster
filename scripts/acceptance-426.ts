@@ -94,6 +94,8 @@ export interface RegistryVersion {
   dependencies?: Record<string, string>;
   optionalDependencies?: Record<string, string>;
   peerDependencies?: Record<string, string>;
+  scripts?: Record<string, string>;
+  bin?: Record<string, string>;
   tarball: string;
   integrity: string;
 }
@@ -185,6 +187,8 @@ export function startRegistry(tarballDir: string): Registry {
               ? {}
               : { optionalDependencies: v.optionalDependencies }),
             ...(v.peerDependencies === undefined ? {} : { peerDependencies: v.peerDependencies }),
+            ...(v.scripts === undefined ? {} : { scripts: v.scripts }),
+            ...(v.bin === undefined ? {} : { bin: v.bin }),
             dist: { tarball: `${base}/tarballs/${v.tarball}`, integrity: v.integrity },
           };
         }
