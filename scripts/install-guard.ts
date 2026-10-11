@@ -3073,7 +3073,9 @@ function execPassthrough(
   const { kept, stripped } = sanitize(pm, argv);
   noteStripped(stripped);
   const args = FETCH_CMDS.has(cmd) ? [...kept, "--registry", registry] : kept;
-  if (pm === "bun" && !args.includes("--no-install")) args.push("--no-install");
+  // Before the command, where Bun parses its own flags: after the script
+  // name the flag would land in the script's argv instead.
+  if (pm === "bun" && !args.includes("--no-install")) args.unshift("--no-install");
   return execManager(bin, args, execEnv({}));
 }
 

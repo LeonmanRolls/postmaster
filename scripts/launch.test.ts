@@ -27,7 +27,13 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
-import { GUARD_SHIM_NAMES, ensureGuardBin, harnessData, makeHeldDir } from "./launch.ts";
+import {
+  GUARD_SHIM_NAMES,
+  ensureGuardBin,
+  harnessData,
+  makeHeldDir,
+  verifyGuardResolution,
+} from "./launch.ts";
 import { startCheck, wrapCommand } from "./lib/confine.ts";
 import { toolRoot } from "./lib/paths.ts";
 import { run, withTempDir } from "./lib/proc.ts";
@@ -198,6 +204,10 @@ beforeAll(() => {
       const rest = args.slice(1);
       const env: Record<string, string | undefined> = {
         ...process.env,
+        // Armed launches refuse when a login profile shadows the guard, so
+        // the tests never inherit the machine's own profile; a case that
+        // needs its own home overrides through envx.
+        HOME: join(tmp, "home"),
         ...envx,
         POSTMASTER_CONFIG: join(tmp, `${f}.toml`),
         PATH: `${join(tmp, "bin")}:${process.env.PATH ?? ""}`,
@@ -646,6 +656,9 @@ beforeAll(() => {
         stdio: ["inherit", fd, "pipe"],
         env: {
           ...process.env,
+          // Armed launches refuse when a login profile shadows the guard,
+          // so the tests never inherit the machine's own profile.
+          HOME: join(tmp, "home"),
           POSTMASTER_LAUNCH_ROLE: role,
           POSTMASTER_EVENT_STREAM: streamFile,
           POSTMASTER_CONFIG: join(tmp, `${fixture}.toml`),
@@ -6434,6 +6447,84 @@ describe("the install guard arms lanes", () => {
       const r = launchWithRole(tmp, d, wt, "lane", "one");
       expect(r.rc).not.toBe(0);
       expect(r.err).toContain("cannot arm the install guard");
+    });
+  });
+
+  test.skipIf(skipToml)("an env file that assigns PATH keeps the guard bin first", () => {
+    withTempDir((tmp) => {
+      const { d, wt } = runDir(tmp);
+      const envFile = join(tmp, "lane.env");
+      // A PATH that still resolves the harness but drops the guard bin: the
+      // launch hands the harness a PATH with the bin re-armed first.
+      writeFileSync(envFile, `PATH=/usr/bin:/bin:${join(tmp, "bin")}\nLANE_MARK=yes\n`);
+      writeFileSync(
+        join(d, "run.json"),
+        `${JSON.stringify({
+          config: {
+            lanes: { one: { harness: "claude", model: "m", env_file: envFile } },
+            team: { coachman: { harness: "claude", model: "cm" } },
+          },
+        })}\n`,
+      );
+      const r = launchWithRole(tmp, d, wt, "lane", "one");
+      expect(r.rc).toBe(0);
+      expect(r.handed["PATH"]?.startsWith(`${join(d, "guard", "bin")}:`)).toBe(true);
+      expect(r.handed["LANE_MARK"]).toBe("yes");
+    });
+  });
+
+  test.skipIf(skipToml)("a login profile that shadows the guard refuses the launch", () => {
+    withTempDir((tmp) => {
+      const { d, wt } = runDir(tmp);
+      const home = join(tmp, "home");
+      const shadow = join(tmp, "shadow");
+      mkdirSync(home, { recursive: true });
+      mkdirSync(shadow, { recursive: true });
+      writeFileSync(join(shadow, "npm"), "#!/bin/sh\nexit 0\n");
+      chmodSync(join(shadow, "npm"), 0o755);
+      writeFileSync(join(home, ".profile"), `PATH="${shadow}:$PATH"\n`);
+      const r = launchWithRole(tmp, d, wt, "lane", "one");
+      expect(r.rc).not.toBe(0);
+      expect(r.err).toContain("cannot arm the install guard");
+      expect(r.err).toContain("npm:login");
+    });
+  });
+
+  test("verifyGuardResolution re-arms after an env file that assigns PATH", () => {
+    withTempDir((tmp) => {
+      const d = join(tmp, "run");
+      const bin = ensureGuardBin(d, TOOL);
+      const envFile = join(tmp, "lane.env");
+      writeFileSync(envFile, "PATH=/usr/bin:/bin\n");
+      const home = join(tmp, "home");
+      mkdirSync(home, { recursive: true });
+      const r = verifyGuardResolution({
+        guardBin: bin,
+        envFile,
+        env: { ...process.env, HOME: home },
+      });
+      expect(r.ok).toBe(true);
+    });
+  });
+
+  test("verifyGuardResolution names the shadowed shell", () => {
+    withTempDir((tmp) => {
+      const d = join(tmp, "run");
+      const bin = ensureGuardBin(d, TOOL);
+      const home = join(tmp, "home");
+      const shadow = join(tmp, "shadow");
+      mkdirSync(home, { recursive: true });
+      mkdirSync(shadow, { recursive: true });
+      writeFileSync(join(shadow, "npm"), "#!/bin/sh\nexit 0\n");
+      chmodSync(join(shadow, "npm"), 0o755);
+      writeFileSync(join(home, ".profile"), `PATH="${shadow}:$PATH"\n`);
+      const r = verifyGuardResolution({
+        guardBin: bin,
+        envFile: null,
+        env: { ...process.env, HOME: home },
+      });
+      expect(r.ok).toBe(false);
+      expect(r.detail).toContain("npm:login");
     });
   });
 
