@@ -93,7 +93,9 @@ What would find a defect in postmaster's own scripts before a reviewer does, and
   far more than the code they check, the one tool found that verifies TypeScript is a tech preview, and
   with language models the trust moves to the specification. Four changes to the design rules and the
   ticket template are proposed, and five trials, one of which tests a cleanup script with its git swapped
-  for a mock that is checked against real git. The mutation counts of trial 4 have been run: the first flags 360 places on
+  for a mock that is checked against real git. The first part of trial 4 has been run: a check on environment, clock and
+  import use flags 13 places on `main`, 3 of them defects, and points at the cause of 6 of the 8 findings it was tried on.
+  The mutation counts of trial 4 have been run: the first flags 360 places on
   `main`, an estimated 312 of them not hazards, and reaches the function of 8 of the 78 findings that cite a line, about
   as many as random placement would give.
 
@@ -114,6 +116,13 @@ Why the design is shaped as it is.
 - [A ticket's shape is checked before it is accepted](concepts/ticket-shape.md): **claimed**.
   A title, the problem, numbered criteria each answerable yes or no, and the user's direction,
   checked by a script before any ticket is dispatched. What is missing is asked of the user.
+- [Tickets and acceptance criteria that a run can finish](concepts/ticket-and-criteria-design.md):
+  **claimed**. The template's four shapes that cannot be finished restate an old idea, the verifiable
+  requirement, and each bounded form has older names and some support. The reading asks for the
+  reason and the bar to be stated differently, for the direction and cost of "unknown" to be named, and
+  names eleven other ways a criterion fails, the best measured a check that passes while the criterion
+  is false. A count of 21 runs fits the rules and cannot test them. From [#293](https://github.com/brindlewick/postmaster/issues/293) and outside work; no rule
+  was changed, and twelve changes are proposed.
 - [A ticket names the turnpikes its run passes through](concepts/turnpikes.md): **claimed**.
   `default` for the style, bug and security reviews, fewer, or `none`, with no floor. The
   project's gate is not a turnpike and always runs.

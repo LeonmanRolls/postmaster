@@ -1,0 +1,13 @@
+check	scripts/lib/confine.ts	16	import:child_process	oxlint	eslint(no-restricted-imports)	biome	lint/style/noRestrictedImports	biome+plugin	lint/style/noRestrictedImports
+check	scripts/lib/confine.ts	17	import:fs	oxlint	eslint(no-restricted-imports)	biome	lint/style/noRestrictedImports	biome+plugin	lint/style/noRestrictedImports
+check	scripts/lib/confine.ts	18	import:os	oxlint	eslint(no-restricted-imports)	biome	lint/style/noRestrictedImports	biome+plugin	lint/style/noRestrictedImports
+check	scripts/lib/data.ts	2	import:fs	oxlint	eslint(no-restricted-imports)	biome	lint/style/noRestrictedImports	biome+plugin	lint/style/noRestrictedImports
+check	scripts/lib/paths.ts	3	import:fs	oxlint	eslint(no-restricted-imports)	biome	lint/style/noRestrictedImports	biome+plugin	lint/style/noRestrictedImports
+check	scripts/lib/pinned.ts	2	import:fs	oxlint	eslint(no-restricted-imports)	biome	lint/style/noRestrictedImports	biome+plugin	lint/style/noRestrictedImports
+check	scripts/lib/proc.ts	3	import:child_process	oxlint	eslint(no-restricted-imports)	biome	lint/style/noRestrictedImports	biome+plugin	lint/style/noRestrictedImports
+check	scripts/lib/proc.ts	5	import:fs	oxlint	eslint(no-restricted-imports)	biome	lint/style/noRestrictedImports	biome+plugin	lint/style/noRestrictedImports
+check	scripts/lib/proc.ts	6	import:os	oxlint	eslint(no-restricted-imports)	biome	lint/style/noRestrictedImports	biome+plugin	lint/style/noRestrictedImports
+check	scripts/lib/proc.ts	49	process.env	oxlint	node(no-process-env)	biome	lint/style/noProcessEnv	biome+plugin	lint/style/noProcessEnv
+check	scripts/lib/proc.ts	51	process.env	oxlint	node(no-process-env)	biome	lint/style/noProcessEnv	biome+plugin	lint/style/noProcessEnv
+check	scripts/lib/processes.ts	1	import:fs	oxlint	eslint(no-restricted-imports)	biome	lint/style/noRestrictedImports	biome+plugin	lint/style/noRestrictedImports
+check	scripts/lib/processes.ts	21	process.env	oxlint	node(no-process-env)	biome	lint/style/noProcessEnv	biome+plugin	lint/style/noProcessEnv
