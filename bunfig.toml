@@ -1,6 +1,16 @@
 # Tool-owned: scripts/run runs bun with --config pointing here and --no-env-file, so no
 # bunfig.toml and no .env is ever discovered from a working directory the tool does not own.
-# Only `bun test` reads the table below.
+# `bun install` reads [install]; only `bun test` reads [test].
+
+[install]
+auto = "disable"
+minimumReleaseAge = 604800
+
+[install.security]
+# Socket's module directly, not the wrapper in scripts/lib: Bun bootstraps a
+# package scanner on a fresh clone, while a wrapper importing a package that
+# is not installed yet fails the install before anything is installed.
+scanner = "@socketsecurity/bun-security-scanner"
 
 [test]
 preload = ["./scripts/lib/test-defaults.ts"]

@@ -2,8 +2,8 @@
 title: What a functional core opens up for checking code, and what it does for coding with AI
 type: concept
 standing: claimed
-sources: [trials/2026-10-04-review-findings-classified, trials/2026-10-09-purity-check, trials/2026-10-09-mutation-counts, articles/alloy-tools, articles/anthropic-2026-pbt-blog, articles/biome-noprocessenv, articles/dafny-2022, articles/dafny-lang, articles/effect-schema, articles/effect-ts, articles/eslint-plugin-functional, articles/fastcheck-ts, articles/fpts, articles/galois-dodds-2025, articles/hacl-2017, articles/hypothesis-py, articles/isabelle, articles/kiro-2025-pbt, articles/kleppmann-2025, articles/lemmafit-2026, articles/lemmascript-2026, articles/meyer-1992, articles/neverthrow, articles/oxlint-no-process-env, articles/quint, articles/rocq-coq, articles/stryker-js, articles/tlaplus-tla, articles/tokeneer-2013, articles/ts-pattern, articles/zod, papers/agda-2024, papers/agentic-pbt-2025, papers/agentic-proving-2026, papers/algoveri-2026, papers/alphaverus-2024, papers/aria-2026, papers/atlas-2025, papers/autospec-2024, papers/autoverus-2024, papers/aws-2014, papers/axdafny-2026, papers/berger-2019, papers/bicarregui-2009, papers/bisharat-2026-tla-bench, papers/bisharat-2026-tla-write, papers/cardano-2024, papers/cedar-2024, papers/chen-2026-modelbench, papers/cheng-2026-sysmobench, papers/clever-2025, papers/clover-2023, papers/dafny-ir-2025, papers/dafnybench-2024, papers/dafnypro-2026, papers/danso-2026-ltl, papers/erlang-pulse-2009, papers/estler-2014, papers/etna-jfp2026, papers/fakhoury-2024-ticoder-study, papers/fan-2025-verifast, papers/faria-2026, papers/fiatcrypto-2019, papers/fonseca-2017, papers/formalbench-2025, papers/fstar-2016, papers/fstar-neural-2024, papers/fvapps-2025, papers/gleirscher-2020, papers/goedel-code-prover-2026, papers/goldstein-icse2024, papers/he-2025-pgs, papers/hong-2025-alloy, papers/howtospecify-2020, papers/huang-2026, papers/hughes-1989, papers/hughes-2016, papers/ironfleet-2015, papers/jing-2026-pbtbench, papers/kamath-2023-loopy, papers/konstantinou-2024-oracles, papers/lahiri-2024-intent-formalization, papers/lahiri-2026, papers/laurel-2024, papers/lean4-2021, papers/leetproof-2026, papers/leroy-2009, papers/li-2026-probe, papers/liquidhaskell-2025, papers/liu-2023-evalplus, papers/mariposa-2023, papers/matichuk-2015, papers/misu-2024, papers/mongodb-xmodelling-2020, papers/nl2postcond-2024, papers/nl2spec-2023, papers/pei-2023-invariants, papers/prasetya-2026-postconditions, papers/propertygpt-2025, papers/qed-2020, papers/quickcheck-2000, papers/rango-2024, papers/ravi-coblenz-2025, papers/richter-2025-nl2contract, papers/rsc-2016, papers/schneider-2025, papers/sel4-2009, papers/sel4-2014, papers/selene-2024, papers/shefer-2025, papers/specgen-2025, papers/swe-proof-2026, papers/tan-2026, papers/tanaka-2025-pbt-ebt, papers/ticoder-2024, papers/verdi-2015, papers/vericoding-2025, papers/vericontest-2026, papers/verifythisbench-2025, papers/verina-2025, papers/vero-2026, papers/verus-2024, papers/verus-specbench-2026, papers/verusage-2025, papers/vikram-2024-pbt, papers/yang-2011, papers/yuan-2014, papers/zhao-2026-misguidance]
-updated: 2026-10-09
+sources: [trials/2026-10-04-review-findings-classified, trials/2026-10-09-purity-check, trials/2026-10-09-mutation-counts, trials/2026-10-11-blind-laws-classifier, articles/alloy-tools, articles/anthropic-2026-pbt-blog, articles/biome-noprocessenv, articles/dafny-2022, articles/dafny-lang, articles/effect-schema, articles/effect-ts, articles/eslint-plugin-functional, articles/fastcheck-ts, articles/fpts, articles/galois-dodds-2025, articles/hacl-2017, articles/hypothesis-py, articles/isabelle, articles/kiro-2025-pbt, articles/kleppmann-2025, articles/lemmafit-2026, articles/lemmascript-2026, articles/meyer-1992, articles/neverthrow, articles/oxlint-no-process-env, articles/quint, articles/rocq-coq, articles/stryker-js, articles/tlaplus-tla, articles/tokeneer-2013, articles/ts-pattern, articles/zod, papers/agda-2024, papers/agentic-pbt-2025, papers/agentic-proving-2026, papers/algoveri-2026, papers/alphaverus-2024, papers/aria-2026, papers/atlas-2025, papers/autospec-2024, papers/autoverus-2024, papers/aws-2014, papers/axdafny-2026, papers/berger-2019, papers/bicarregui-2009, papers/bisharat-2026-tla-bench, papers/bisharat-2026-tla-write, papers/cardano-2024, papers/cedar-2024, papers/chen-2026-modelbench, papers/cheng-2026-sysmobench, papers/clever-2025, papers/clover-2023, papers/dafny-ir-2025, papers/dafnybench-2024, papers/dafnypro-2026, papers/danso-2026-ltl, papers/erlang-pulse-2009, papers/estler-2014, papers/etna-jfp2026, papers/fakhoury-2024-ticoder-study, papers/fan-2025-verifast, papers/faria-2026, papers/fiatcrypto-2019, papers/fonseca-2017, papers/formalbench-2025, papers/fstar-2016, papers/fstar-neural-2024, papers/fvapps-2025, papers/gleirscher-2020, papers/goedel-code-prover-2026, papers/goldstein-icse2024, papers/he-2025-pgs, papers/hong-2025-alloy, papers/howtospecify-2020, papers/huang-2026, papers/hughes-1989, papers/hughes-2016, papers/ironfleet-2015, papers/jing-2026-pbtbench, papers/kamath-2023-loopy, papers/konstantinou-2024-oracles, papers/lahiri-2024-intent-formalization, papers/lahiri-2026, papers/laurel-2024, papers/lean4-2021, papers/leetproof-2026, papers/leroy-2009, papers/li-2026-probe, papers/liquidhaskell-2025, papers/liu-2023-evalplus, papers/mariposa-2023, papers/matichuk-2015, papers/misu-2024, papers/mongodb-xmodelling-2020, papers/nl2postcond-2024, papers/nl2spec-2023, papers/pei-2023-invariants, papers/prasetya-2026-postconditions, papers/propertygpt-2025, papers/qed-2020, papers/quickcheck-2000, papers/rango-2024, papers/ravi-coblenz-2025, papers/richter-2025-nl2contract, papers/rsc-2016, papers/schneider-2025, papers/sel4-2009, papers/sel4-2014, papers/selene-2024, papers/shefer-2025, papers/specgen-2025, papers/swe-proof-2026, papers/tan-2026, papers/tanaka-2025-pbt-ebt, papers/ticoder-2024, papers/verdi-2015, papers/vericoding-2025, papers/vericontest-2026, papers/verifythisbench-2025, papers/verina-2025, papers/vero-2026, papers/verus-2024, papers/verus-specbench-2026, papers/verusage-2025, papers/vikram-2024-pbt, papers/yang-2011, papers/yuan-2014, papers/zhao-2026-misguidance]
+updated: 2026-10-11
 ---
 
 # What a functional core opens up for checking code, and what it does for coding with AI
@@ -25,7 +25,9 @@ least six (252/bug-1, bug-14, bug-15 and bug-24, 216/bug-3 and sec-3) the defect
 file system, and a pure core would not have changed that. What was missing was the property. Five findings were runbook
 prose or an inference from free text, with nothing to run. This is an estimate with hindsight in it, not a forecast,
 because both readers knew each defect: counting only the 47 findings the first reader marked clear, 45 remain. The first
-trial below measures the hindsight.
+trial below measured the hindsight on one family, and there it is large: laws written from #202's ticket alone, without
+sight of the findings, found 2 of the classifier's 8 first-round findings and 1 of the 5 labelled cheap
+[@trials/2026-10-11-blind-laws-classifier/results/reading.md].
 
 **What proofs add.** The functional style does open the door for TypeScript, and the evidence on whether it pays is thin.
 The one current toolchain found that verifies TypeScript source, LemmaScript, a tech preview created in March 2026, verifies
@@ -62,7 +64,7 @@ measures any of this in TypeScript, apart from the case studies of LemmaScript's
 
 **What follows.** Four changes are proposed to the design rules and the ticket template (give rule 8 a mechanical
 check, which asks the user to reverse a decision they gave in #298, with a possible second part against mutating what escapes a function; one program for the dry run, the tests and the real run of anything that runs dry or undoes;
-a law over generated inputs for each reader of text; a state table for each undo), and five trials, none run: four of 2 to 12 hours each, and a fifth in three steps of 4 to 12 hours, each later step run
+a law over generated inputs for each reader of text, which the user set aside after the first trial; a state table for each undo), and five trials, of which the first and the fourth have run: four of 2 to 12 hours each, and a fifth in three steps of 4 to 12 hours, each later step run
 only if the one before did not fail. One of the four prices LemmaScript on a single function. The fifth writes a cleanup script's
 decisions once, with git passed in and swapped for a mock that is checked against real git, and compares a plain version
 with an Effect version. A proof tool is not proposed yet, and neither are the Effect and fp-ts libraries as dependencies: nothing
@@ -75,7 +77,8 @@ rewrite of the fifth trial; what they found was corrected, and [what was not rea
 not reach. By
 [the schema](../schema.md) outside work moves no standing, and the count is a trial, not a promoted run, as
 [the lane audit](several-lanes.md) was. What would settle it: runs made under a changed practice that show fewer
-serious findings per round than these four, and the first trial's result.
+serious findings per round than these four. The first trial, since run, bears on the count: for one family, laws
+written blind found 1 of the 5 findings it labels cheap.
 
 ## The map
 
@@ -689,7 +692,7 @@ of them in review when counted, and 34 of the 84 sit in two families.
 
 ## Trials postmaster could run
 
-Five trials, only the fourth run here; the fifth is in three steps, and a later step runs only if the one before did not fail. Each gives its cost in hours, what it would show and what would show it
+Five trials, the first and the fourth run here; the fifth is in three steps, and a later step runs only if the one before did not fail. Each gives its cost in hours, what it would show and what would show it
 failed. The costs are estimates, not measurements. The first measures what the count above cannot: how much of
 it is hindsight.
 
@@ -707,6 +710,21 @@ blind-written laws find, which is the figure for how much of the cheap label is 
 findings among them.
 *It failed if* the laws find fewer than a third of those eight, if they fail on code the review later found
 clean, or if the generators take more than a day.
+*Result.* Run on 2026-10-11 for [#367](https://github.com/brindlewick/postmaster/issues/367). A sub-agent with a fresh context,
+given #202's text, the classifier's signatures and a stand-in that does nothing, wrote ten laws with fast-check generators
+in 65 minutes, and the laws were committed before they ran [@trials/2026-10-11-blind-laws-classifier/method.md]. Seven of
+them fail at the round-1 snapshot. They find 2 of the 8 findings, 202/bug-4 (a branch or tag name read as a listing) and
+style-1 (quoted text read as shell syntax), and 1 of the 5 cheap ones. Five of the other six are stated by a law whose
+generator never made an input that shows them: no `git -c`, no `refs/heads/` name in a git read, no refusal words in the results
+of the law about the lane's own folder, and no refusal beside a successful write; `cd $HOME` before a relative path came
+up only when law 7 ran on ten times its inputs. The sixth, bug-2, is stated by no law: #202 lists the separators and
+leaves out the newline, and the writer kept to the list. No failure was a false alarm, and law 4 found a defect no review
+round found, a `--git-dir` aimed at a worktree reported in the main checkout
+[@trials/2026-10-11-blind-laws-classifier/results/reading.md]. By its tests the trial failed on the first, 2 of 8 against
+a third, and passed the other two: no false alarm, and about an hour for the generators. On this one family, with one
+writer and one seed, most of the cheap label is hindsight. The laws' statements covered seven of the eight; what missed
+was the generators, which never made the inputs where the defects were: forms the ticket's lists do not name, refusals
+the laws never produced, and one combination too rare for their 400 runs.
 
 **2. A small model of #202's restore.** Write about 100 lines in TLA+ or Alloy: refs that a round may move,
 a synthesis worktree that may be attached, detached, a link or missing, files that may be dirty, and the
@@ -955,6 +973,10 @@ compiler, the formatter, git), or the closed list of inputs the criterion covers
 of the 84 findings, which sat between the examples the tests held. The cost is about 50 lines for a seeded
 generator, which the repository already has once, or a development dependency, which would change the list
 that `AGENTS.md` gives as `typescript`, `@biomejs/biome` and `oxlint`. That choice is the user's.
+*Set aside after trial 1, by the user's decision on 2026-10-11:* tickets stay as they are. Laws written blind described
+seven of the eight first-round classifier findings, but their generators reached only two of them, and nothing showed
+that a line in the template would supply the inputs that were missing. A clerk may still add a law where a ticket has a
+reader of text: trial 1's laws raised no false alarm and found one defect no review round found.
 
 **4. In the template's Checks, give an undo or a cleanup its state table.** For a criterion that restores,
 undoes or removes, propose that the checks list the states it must handle and the expected result for each:
