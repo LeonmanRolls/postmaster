@@ -15,9 +15,11 @@ import {
   fetchPackument,
   fetchVerdict,
   findLockfile,
+  npmDriftNames,
   parseAddSpecs,
   parseSpec,
   planPins,
+  projectOf,
   resolveClosure,
   sanitize,
   workspaceSelector,
@@ -136,10 +138,73 @@ test("an unknown scanner answer is never cached", async () => {
 
 test("the npm sync reads the shrinkwrap npm prefers", () => {
   withTempDir((tmp) => {
+    writeFileSync(join(tmp, "package.json"), JSON.stringify({ name: "p" }));
     writeFileSync(join(tmp, "package-lock.json"), JSON.stringify({ packages: {} }));
     writeFileSync(join(tmp, "npm-shrinkwrap.json"), JSON.stringify({ packages: {} }));
     expect(findLockfile("npm", tmp)).toBe(join(tmp, "npm-shrinkwrap.json"));
     expect(findLockfile("pnpm", tmp)).toBeNull();
+  });
+});
+
+test("the guard checks against the enclosing project, not the bare cwd", () => {
+  withTempDir((tmp) => {
+    const proj = join(tmp, "proj");
+    const sub = join(proj, "packages", "sub");
+    mkdirSync(sub, { recursive: true });
+    writeFileSync(
+      join(proj, "package.json"),
+      JSON.stringify({ name: "p", dependencies: { a: "1.0.0" } }),
+    );
+    writeFileSync(
+      join(proj, "package-lock.json"),
+      JSON.stringify({ packages: { "": { dependencies: { a: "1.0.0" } } } }),
+    );
+    expect(projectOf("npm", [], sub)).toBe(proj);
+    expect(findLockfile("npm", proj)).toBe(join(proj, "package-lock.json"));
+    // A stray lockfile above the project never stands in for its own.
+    writeFileSync(join(tmp, "package-lock.json"), JSON.stringify({ packages: {} }));
+    expect(findLockfile("npm", proj)).toBe(join(proj, "package-lock.json"));
+  });
+});
+
+test("drift compares sections, not unions of them", () => {
+  withTempDir((tmp) => {
+    // The same set of names in different sections is drift, not a match.
+    writeFileSync(
+      join(tmp, "package.json"),
+      JSON.stringify({
+        name: "p",
+        dependencies: { a: "1.0.0" },
+        devDependencies: { b: "1.0.0" },
+      }),
+    );
+    const root: { dependencies: Record<string, string>; devDependencies: Record<string, string> } = {
+      dependencies: { b: "1.0.0" },
+      devDependencies: { a: "1.0.0" },
+    };
+    const lock = {
+      packages: {
+        "": root,
+        "node_modules/a": { version: "1.0.0" },
+        "node_modules/b": { version: "1.0.0" },
+      },
+    };
+    writeFileSync(join(tmp, "package-lock.json"), JSON.stringify(lock));
+    expect(npmDriftNames(tmp)).toEqual(["a", "b"]);
+    // Matching sections read clean.
+    root.dependencies = { a: "1.0.0" };
+    root.devDependencies = { b: "1.0.0" };
+    writeFileSync(join(tmp, "package-lock.json"), JSON.stringify(lock));
+    expect(npmDriftNames(tmp)).toEqual([]);
+    // A package absent from the lock still counts as drift.
+    writeFileSync(
+      join(tmp, "package.json"),
+      JSON.stringify({ name: "p", dependencies: { a: "1.0.0", c: "1.0.0" } }),
+    );
+    expect(npmDriftNames(tmp)).toEqual(["c"]);
+    // An unparseable file refuses to answer.
+    writeFileSync(join(tmp, "package-lock.json"), "{oops");
+    expect(npmDriftNames(tmp)).toBeNull();
   });
 });
 

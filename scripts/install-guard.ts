@@ -531,6 +531,19 @@ export function commandOf(
 
 /** The directory an invocation runs against: the process directory, moved by
  * --prefix/--dir/--cwd wherever the flags sit. */
+/** Each directory from one up to the filesystem root, nearest first. */
+function walkUp(from: string): string[] {
+  const dirs: string[] = [];
+  let dir = from;
+  for (;;) {
+    dirs.push(dir);
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return dirs;
+}
+
 export function projectOf(pm: Pm, argv: string[], cwd: string): string {
   const flag =
     pm === "npm"
@@ -538,8 +551,13 @@ export function projectOf(pm: Pm, argv: string[], cwd: string): string {
       : pm === "pnpm"
         ? flagValue(argv, ["-C", "--dir"])
         : flagValue(argv, ["--cwd"]);
-  if (flag === null || flag === "") return cwd;
-  return flag.startsWith("/") ? flag : join(cwd, flag);
+  if (flag !== null && flag !== "") return flag.startsWith("/") ? flag : join(cwd, flag);
+  // The managers run against the enclosing project, so the guard checks
+  // against it too: the nearest directory upward holding a manifest.
+  for (const dir of walkUp(cwd)) {
+    if (existsSync(join(dir, "package.json"))) return dir;
+  }
+  return cwd;
 }
 
 /** Commands that publish or manage registry credentials. Lanes never run
@@ -1919,6 +1937,29 @@ export function detectSupport(project: string): Support {
 /** The dependency names package.json adds past the npm lockfile, or null when
  * there is no lockfile to drift from. Skips the check when either file does
  * not parse, leaving that failure to npm itself. */
+const DEP_SECTIONS = [
+  "dependencies",
+  "devDependencies",
+  "optionalDependencies",
+  "peerDependencies",
+] as const;
+
+/** Every dependency name the manifest wants across all four sections. */
+function manifestWantedNames(manifest: Record<string, unknown>): Set<string> {
+  const wanted = new Set<string>();
+  for (const section of DEP_SECTIONS) {
+    const deps = manifest[section];
+    if (typeof deps === "object" && deps !== null) {
+      for (const name of Object.keys(deps as Record<string, unknown>)) wanted.add(name);
+    }
+  }
+  return wanted;
+}
+
+/** Names the manifest wants that the npm lockfile does not: each section
+ * compared against the lock root's same section, and against every package
+ * entry present, so a package moved between sections shows as drift.
+ * Null when either file fails to parse: drift cannot be checked. */
 export function npmDriftNames(project: string, lockFile?: string): string[] | null {
   const lockPath = lockFile ?? join(project, "package-lock.json");
   const manifestFile = join(project, "package.json");
@@ -1938,40 +1979,72 @@ export function npmDriftNames(project: string, lockFile?: string): string[] | nu
     lock === null
   )
     return null;
-  const wanted = new Set<string>();
-  const m = manifest as Record<string, unknown>;
-  for (const section of [
-    "dependencies",
-    "devDependencies",
-    "optionalDependencies",
-    "peerDependencies",
-  ]) {
-    const deps = m[section];
-    if (typeof deps === "object" && deps !== null) {
-      for (const name of Object.keys(deps as Record<string, unknown>)) wanted.add(name);
-    }
-  }
+  const wanted = manifestWantedNames(manifest as Record<string, unknown>);
   const locked = new Set<string>();
   const l = lock as Record<string, unknown>;
-  const packages = l.packages;
-  if (typeof packages === "object" && packages !== null) {
-    for (const key of Object.keys(packages as Record<string, unknown>)) {
-      const parts = key.split("node_modules/");
-      const last = parts[parts.length - 1] ?? "";
-      if (last !== "")
-        locked.add(
-          last
-            .split("/")
-            .slice(0, last.startsWith("@") ? 2 : 1)
-            .join("/"),
-        );
-    }
+  const packages =
+    typeof l.packages === "object" && l.packages !== null
+      ? (l.packages as Record<string, unknown>)
+      : {};
+  for (const key of Object.keys(packages)) {
+    const parts = key.split("node_modules/");
+    const last = parts[parts.length - 1] ?? "";
+    if (last !== "")
+      locked.add(
+        last
+          .split("/")
+          .slice(0, last.startsWith("@") ? 2 : 1)
+          .join("/"),
+      );
   }
   const deps = l.dependencies;
   if (typeof deps === "object" && deps !== null) {
     for (const name of Object.keys(deps as Record<string, unknown>)) locked.add(name);
   }
-  return [...wanted].filter((w) => !locked.has(w)).sort();
+  // The lock root repeats the installed sections, so per-section sets
+  // catch a name the manifest moved even while its package is present.
+  // Only sections the lock root records take part; peerDependencies, which
+  // it never records, are covered by package presence alone.
+  const root = packages[""];
+  const rootSections: Record<string, unknown> =
+    typeof root === "object" && root !== null ? (root as Record<string, unknown>) : {};
+  const rootSecs = new Map<string, Set<string>>();
+  for (const section of DEP_SECTIONS) {
+    const sec = rootSections[section];
+    if (typeof sec !== "object" || sec === null) continue;
+    for (const name of Object.keys(sec as Record<string, unknown>)) {
+      const got = rootSecs.get(name) ?? new Set<string>();
+      got.add(section);
+      rootSecs.set(name, got);
+    }
+  }
+  const manSecs = new Map<string, Set<string>>();
+  for (const section of DEP_SECTIONS) {
+    const deps = (manifest as Record<string, unknown>)[section];
+    if (typeof deps !== "object" || deps === null) continue;
+    for (const name of Object.keys(deps as Record<string, unknown>)) {
+      const got = manSecs.get(name) ?? new Set<string>();
+      got.add(section);
+      manSecs.set(name, got);
+    }
+  }
+  const recorded = [...DEP_SECTIONS].some((s) => {
+    const sec = rootSections[s];
+    return typeof sec === "object" && sec !== null;
+  });
+  return [...wanted]
+    .filter((w) => {
+      if (!locked.has(w)) return true;
+      if (!recorded) return false;
+      const need = manSecs.get(w) ?? new Set<string>();
+      const have = rootSecs.get(w) ?? new Set<string>();
+      for (const s of need) {
+        if (s === "peerDependencies") continue;
+        if (!have.has(s)) return true;
+      }
+      return false;
+    })
+    .sort();
 }
 
 // ---------- fetching ----------
@@ -2816,19 +2889,7 @@ export function wantedNames(project: string): string[] {
     return [];
   }
   if (typeof manifest !== "object" || manifest === null) return [];
-  const wanted = new Set<string>();
-  for (const section of [
-    "dependencies",
-    "devDependencies",
-    "optionalDependencies",
-    "peerDependencies",
-  ]) {
-    const deps = (manifest as Record<string, unknown>)[section];
-    if (typeof deps === "object" && deps !== null) {
-      for (const name of Object.keys(deps as Record<string, unknown>)) wanted.add(name);
-    }
-  }
-  return [...wanted].sort();
+  return [...manifestWantedNames(manifest as Record<string, unknown>)].sort();
 }
 
 /** The manifest range for a name, or null when the manifest does not depend
@@ -2866,17 +2927,29 @@ export function findLockfile(pm: Pm, project: string): string | null {
         : pm === "yarn"
           ? ["yarn.lock"]
           : ["bun.lock", "bun.lockb"];
-  for (const file of candidates) {
-    if (existsSync(join(project, file))) return join(project, file);
+  // Nearest upward, as the managers resolve it; only a lockfile beside a
+  // manifest counts, so a stray lockfile above the project never stands in.
+  for (const dir of walkUp(project)) {
+    for (const file of candidates) {
+      const lock = join(dir, file);
+      if (!existsSync(lock)) continue;
+      if (!existsSync(join(dir, "package.json"))) continue;
+      return lock;
+    }
   }
   return null;
 }
 
-/** The locked name@version pairs, or null when the lockfile does not parse.
- * bun.lockb, which is binary, reads as no pairs: the sync still runs frozen,
- * with scripts off. */
+/** Whether the lockfile is one the guard cannot read: the binary bun.lockb.
+ * Install forms refuse against it, since its content is unchecked. */
+export function isOpaqueLock(lock: string): boolean {
+  return lock.endsWith("bun.lockb");
+}
+
+/** The locked name@version pairs, or null when the lockfile does not parse
+ * or is opaque to the guard. */
 export function lockedOf(lockfile: string): Locked[] | null {
-  if (lockfile.endsWith("bun.lockb")) return [];
+  if (isOpaqueLock(lockfile)) return null;
   let text: string;
   try {
     text = readFileSync(lockfile, "utf8");
@@ -3302,18 +3375,31 @@ async function runRun(shimDir: string, rawProg: string, argv: string[]): Promise
         `install-guard: refusing to sync: package.json wants ${wanted.join(", ")} but the project has no lockfile. Add them with ${prog} add first`,
       );
     }
+    if (lock !== null && isOpaqueLock(lock)) {
+      refuse(
+        "install-guard: refusing to sync: the lockfile is bun.lockb, which is binary and unreadable, so the guard cannot lawfully check it. Run bun install once outside a lane to write bun.lock, or keep the guard's own commands",
+      );
+    }
     if (pm === "npm" && lock !== null) {
       const drift = npmDriftNames(project, lock);
-      if (drift !== null && drift.length > 0) {
-        refuse(
-          `install-guard: refusing to sync: package.json wants ${drift.join(", ")}, which the lockfile does not lock. Add them with npm add first`,
+      if (drift === null || drift.length > 0) {
+        throw refusal(
+          drift === null
+            ? "install-guard: refusing to sync: the manifest or lockfile fails to parse, so the guard cannot check drift. Repair them first"
+            : `install-guard: refusing to sync: package.json wants ${drift.join(", ")}, which the lockfile does not lock. Add them with npm add first`,
         );
       }
     }
-    // An unparseable lockfile reads as no pairs: the sync still runs frozen
-    // with scripts off, and the manager fails the drift itself.
-    const locked = lock === null ? [] : (lockedOf(lock) ?? []);
-    const scriptful = await syncScriptful(ctx, locked);
+    // An unparseable or opaque lockfile reads as nothing checked: the sync
+    // refuses, and the manager's own failure is no substitute for a refusal.
+    const locked = lock === null ? [] : lockedOf(lock);
+    if (lock !== null && locked === null) {
+      refuse(
+        "install-guard: refusing to sync: the lockfile fails to parse, so the guard cannot check it. Repair it first",
+      );
+    }
+    const pairs = locked ?? [];
+    const scriptful = await syncScriptful(ctx, pairs);
     const scriptsOn = scriptful.filter((name) => deps.approvals.allowances.has(name));
     if (scriptsOn.length !== scriptful.length) scriptsOn.splice(0);
     if (pm === "bun") writeTrustedDeps(project, scriptsOn);
