@@ -30,6 +30,17 @@ function it flags, so its second failure test is not met, and 8 is about what ra
 in the trial 4 section, with one sentence in the second part of proposal 1. Nothing was installed in the project, and
 nothing in the gate, the rules or the runbooks changed. No standing changed.
 
+## [2026-10-09] ingest | a purity check on environment, clock and import use
+
+Issue #366, the first half of trial 4 on [the functional-core page](concepts/functional-core-and-verification.md).
+Wrote the check twice, as a token scan and as an Oxlint plugin, and recorded both with their controls in
+`raw/trials/2026-10-09-purity-check/`. On `main` it flags 13 places in the `scripts/lib/` helpers, 3 of them defects. At the 19
+review snapshots it flags 10 to 17 places, the same ones before and after each round's fixes, and the flagged places
+include the read or effect behind 6 of the 8 findings of kind E. Oxlint's and Biome's own rules, switched on for one folder
+through a per-file override, give the same 13. Neither failure test of the first part was met. The trial section and
+three sentences that said the linters were not checked now give the result. Nothing was installed beyond the project's own
+development dependencies, and nothing in the gate, the rules or the runbooks changed. No standing changed.
+
 ## [2026-10-09] query | would banning mutation make code easier to follow, for a reader and for a model
 
 Issue #300. The user asked whether code without mutation is easier for a model to follow and proposed starting with a ban
