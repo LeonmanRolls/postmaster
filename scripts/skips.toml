@@ -453,3 +453,9 @@ file = "scripts/acceptance-407.test.ts"
 name = "C5: fixture runs > with no key scores clean"
 reason = "needs a model run from this branch; the postmaster dispatches and scores it at landing"
 systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/acceptance-408.test.ts"
+name = "C4: the scorer reads a user-named held-back record > a fixture run on remove with no key and the user naming held-back scores clean"
+reason = "needs a model run from this branch; the postmaster dispatches and scores it at landing"
+systems = ["linux", "darwin"]

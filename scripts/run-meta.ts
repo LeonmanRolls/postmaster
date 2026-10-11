@@ -2,7 +2,7 @@
 // postmaster commit it was dispatched from. Written once and never edited: the manifest is the
 // run's current state, this is what the run started from and the checkout it runs on.
 //
-//   run run-meta <dispatch> <repo> [--mode <synthesis|single-thread>]
+//   run run-meta <dispatch> <repo> [--mode <synthesis|single-thread>] [--ticket-notes <given|held-back>]
 //                                    <repo> is the target project's checkout; also cuts the pin
 //   run run-meta pin <repo> <commit> a shared checkout of <repo> at <commit> under $POSTMASTER_TOOL_PINS
 //   run run-meta path <dispatch>     print the canonical path of the run's tool checkout
@@ -23,10 +23,12 @@
 // naming both, one side missing fails naming the side that has one, and a run with neither
 // is accepted.
 //
-// team.ticket_notes says what the coachman and the workhorses get from the ticket: given
-// (the default) is the whole ticket, held-back holds back its technical notes and verified
-// facts. A config without the key reads as given; anything else is refused at dispatch.
-// `ticket-notes` prints the value, its source and the setting, read from the run's record.
+// The run's ticket notes resolve at dispatch: the user's --ticket-notes first, then the
+// machine config's team.ticket_notes (given, the default; or held-back). The record keeps
+// the value, its source (user or setting) and the setting's value at dispatch as top-level
+// keys beside the mode; a config without team.ticket_notes reads as given. `ticket-notes`
+// prints the three. A record from before the user could name a value prints its config's
+// value with unrecorded sources.
 //
 // Records when it was written; the run and project; the target repo's HEAD and branch; the
 // postmaster commit that dispatched it, and whether that checkout had uncommitted changes,
@@ -110,7 +112,7 @@ import {
 } from "./lib/effective-config.ts";
 import { runPinned } from "./lib/pinned.ts";
 import { toolRoot } from "./lib/paths.ts";
-import { resolveTicketNotes } from "./lib/ticket-notes.ts";
+import { TICKET_NOTES_VALUES, resolveTicketNotes } from "./lib/ticket-notes.ts";
 import { mkstempSync, run, signalExitCode } from "./lib/proc.ts";
 import { processState } from "./lib/processes.ts";
 import { pySplitLines, pyTrim } from "./lib/text.ts";
@@ -119,7 +121,7 @@ const TOOL = toolRoot(import.meta);
 const SCRIPT = import.meta.path;
 
 const USAGE =
-  "usage: run run-meta <dispatch> <repo> [--mode <synthesis|single-thread>] | pin <repo> <commit> | path <dispatch> | mode <dispatch> | run-pinned <dispatch> <name> [args...] | check <dispatch> | release <dispatch> | efforts <dispatch>";
+  "usage: run run-meta <dispatch> <repo> [--mode <synthesis|single-thread>] [--ticket-notes <given|held-back>] | pin <repo> <commit> | path <dispatch> | mode <dispatch> | run-pinned <dispatch> <name> [args...] | check <dispatch> | release <dispatch> | efforts <dispatch>";
 
 // Every command returns its exit code with the bytes for each stream; the CLI boundary writes
 // them, and the tests inspect them. stdout carries results (the pin path, the checkout,
@@ -924,8 +926,8 @@ export function mode(d: string): Outcome {
 }
 
 // ticket-notes <dispatch>: the run's ticket notes, its source and the setting's value at
-// dispatch. A record with no value is a given run from before the setting existed, so its
-// value prints as given and its sources as unrecorded.
+// dispatch, from the record's top-level keys. A record with none is a run from before the
+// user could name a value, so its config's value prints with unrecorded sources.
 export function ticketNotesVerb(d: string): Outcome {
   const runJson = join(d, "run.json");
   if (!isFile(runJson)) return fail(`run-meta: no run.json in ${d}\n`);
@@ -938,7 +940,26 @@ export function ticketNotesVerb(d: string): Outcome {
   if (typeof rec !== "object" || rec === null || Array.isArray(rec)) {
     return fail(`run-meta: ${runJson} is not an object\n`);
   }
-  const config = (rec as Record<string, unknown>).config;
+  const r = rec as Record<string, unknown>;
+  const top = r.ticket_notes;
+  if (top !== undefined) {
+    if (top !== "given" && top !== "held-back") {
+      const shown = typeof top === "string" ? top : JSON.stringify(top);
+      return fail(`run-meta: ${runJson} records ticket_notes ${shown}, not given or held-back\n`);
+    }
+    const source =
+      typeof r.ticket_notes_source === "string" && r.ticket_notes_source !== ""
+        ? r.ticket_notes_source
+        : "unrecorded";
+    const setting =
+      typeof r.ticket_notes_setting === "string" && r.ticket_notes_setting !== ""
+        ? r.ticket_notes_setting
+        : "unrecorded";
+    return ok(
+      `ticket-notes: ${top}\nticket-notes source: ${source}\nticket-notes setting: ${setting}\n`,
+    );
+  }
+  const config = r.config;
   const team =
     typeof config === "object" && config !== null && !Array.isArray(config)
       ? (config as Record<string, unknown>).team
@@ -1035,6 +1056,7 @@ function buildRecord(
   checkout: string,
   pinnedCommit: string,
   requestedMode: string | undefined,
+  requestedNotes: string | undefined,
 ): Built {
   const resolved = effectiveConfigForProject(resolvedRepo, config);
   if (resolved.config === null || resolved.error !== null) {
@@ -1070,7 +1092,7 @@ function buildRecord(
   }
   const mode = resolveRunMode(resolvedConfig, d, requestedMode);
   if ("error" in mode) return { ok: false, messages: [mode.error], notice: resolved.notice };
-  const notes = resolveTicketNotes(resolvedConfig);
+  const notes = resolveTicketNotes(resolvedConfig, requestedNotes);
   if ("error" in notes)
     return { ok: false, messages: [`run-meta: ${notes.error}`], notice: resolved.notice };
   const warnings = existsSync(join(resolvedRepo, ".postmaster", "fixture"))
@@ -1104,6 +1126,9 @@ function buildRecord(
       mode: mode.mode,
       mode_source: mode.source,
       mode_setting: mode.setting,
+      ticket_notes: notes.value,
+      ticket_notes_source: notes.source,
+      ticket_notes_setting: notes.setting,
       harness_versions: harnessVersions,
     },
   };
@@ -1117,10 +1142,21 @@ function readTools(): string {
   return process.env.POSTMASTER_TOOL_PINS ?? join(homedir(), ".postmaster/tool-pins");
 }
 
-// meta <dispatch> <repo> [--mode <mode>]
-export function meta(d: string, repo: string, requestedMode?: string): Outcome {
+// meta <dispatch> <repo> [--mode <mode>] [--ticket-notes <notes>]
+export function meta(
+  d: string,
+  repo: string,
+  requestedMode?: string,
+  requestedNotes?: string,
+): Outcome {
   if (requestedMode !== undefined && !RUN_MODES.includes(requestedMode)) {
     return fail(`run-meta: --mode must be synthesis or single-thread, not ${requestedMode}\n`);
+  }
+  if (
+    requestedNotes !== undefined &&
+    !(TICKET_NOTES_VALUES as readonly string[]).includes(requestedNotes)
+  ) {
+    return fail(`run-meta: --ticket-notes must be given or held-back, not ${requestedNotes}\n`);
   }
   const config = readConfig();
   const tools = readTools();
@@ -1157,7 +1193,7 @@ export function meta(d: string, repo: string, requestedMode?: string): Outcome {
     }
     let built: Built;
     try {
-      built = buildRecord(d, resolvedRepo, config, checkout, commit, requestedMode);
+      built = buildRecord(d, resolvedRepo, config, checkout, commit, requestedMode, requestedNotes);
     } catch {
       built = { ok: false, messages: [], notice: null };
     }
@@ -1189,7 +1225,7 @@ export function meta(d: string, repo: string, requestedMode?: string): Outcome {
     const warnings = built.warnings.map((warning) => `${warning}\n`).join("");
     return {
       code: 0,
-      out: `run-meta: wrote ${runJson} (postmaster ${commit12}, pinned at ${checkout}, mode=${String(built.record.mode)}, mode_source=${String(built.record.mode_source)}, mode_setting=${String(built.record.mode_setting)})\n`,
+      out: `run-meta: wrote ${runJson} (postmaster ${commit12}, pinned at ${checkout}, mode=${String(built.record.mode)}, mode_source=${String(built.record.mode_source)}, mode_setting=${String(built.record.mode_setting)}, ticket_notes=${String(built.record.ticket_notes)}, ticket_notes_source=${String(built.record.ticket_notes_source)}, ticket_notes_setting=${String(built.record.ticket_notes_setting)})\n`,
       err: built.notice !== null ? `${built.notice}\n${warnings}` : warnings,
     };
   });
@@ -1374,10 +1410,21 @@ if (import.meta.main) {
     else if (
       cmd !== undefined &&
       !verbs.includes(cmd) &&
-      (argv.length === 2 || argv.length === 4)
+      (argv.length === 2 || argv.length === 4 || argv.length === 6)
     ) {
-      if (argv.length === 4 && argv[2] !== "--mode") usage();
-      outcome = meta(argv[0] as string, argv[1] as string, argv[3]);
+      let requestedMode: string | undefined;
+      let requestedNotes: string | undefined;
+      const rest = argv.slice(2);
+      let bad = rest.length % 2 !== 0;
+      for (let i = 0; !bad && i < rest.length; i += 2) {
+        const flag = rest[i];
+        const value = rest[i + 1];
+        if (flag === "--mode" && requestedMode === undefined) requestedMode = value;
+        else if (flag === "--ticket-notes" && requestedNotes === undefined) requestedNotes = value;
+        else bad = true;
+      }
+      if (bad) usage();
+      outcome = meta(argv[0] as string, argv[1] as string, requestedMode, requestedNotes);
     } else usage();
     if (outcome.out !== "") process.stdout.write(outcome.out);
     if (outcome.err !== "") process.stderr.write(outcome.err);
