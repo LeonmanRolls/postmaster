@@ -7,7 +7,8 @@
 //   run leg-end <dispatch> <leg> <detail...>
 //
 //   exit 0  the hand-off passed and every marker is written
-//   exit 1  usage, no dispatch, the legs cannot be read, or a step failed
+//   exit 1  usage, no dispatch, the legs cannot be read, a leg beyond the run's
+//           schedule, or a step failed
 //   exit 2  the hand-off is incomplete; handoff-check names what is missing
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -45,6 +46,9 @@ export function endLeg(dispatch: string, leg: string, detail: string): number {
   if (check.code !== 0) return check.code === 2 ? 2 : 1;
   const last = lastLeg(dispatch);
   if (last === null) return fail(`the run's legs cannot be read`);
+  // A leg beyond the run's schedule ends nothing: its markers would sit where
+  // no scheduled leg looks, so refuse before closing or logging the hand-off.
+  if (Number(leg) > last) return fail(`leg ${leg} is beyond the run's last leg ${last}`);
   const close = run(join(HERE, "run"), ["run-log", dispatch, "--close"]);
   if (close.out) process.stdout.write(close.out);
   if (close.err) process.stderr.write(close.err);

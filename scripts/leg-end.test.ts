@@ -100,6 +100,19 @@ describe("leg-end", () => {
     }, "leg-end-");
   });
 
+  test("a leg beyond the run's schedule ends nothing, before closing or logging", () => {
+    withTempDir((root) => {
+      const d = fresh(root, "none");
+      writeFileSync(join(d, "handoff-2.md"), HANDOFF);
+      expect(run(join(HERE, "run"), ["run-log", d, "--section", "work"]).code).toBe(0);
+      expect(endLeg(d, "2", "leg 2 ends")).toBe(1);
+      expect(existsSync(join(d, ".leg-2-done"))).toBe(false);
+      expect(existsSync(join(d, ".card-ready"))).toBe(false);
+      expect(handoffs(d)).toBe(0);
+      expect(readFileSync(join(d, "run-log.md"), "utf8")).not.toContain("took ");
+    }, "leg-end-");
+  });
+
   for (const leg of ["0", "x", "1x"]) {
     test(`leg ${leg} is refused`, () => {
       withTempDir((root) => {
