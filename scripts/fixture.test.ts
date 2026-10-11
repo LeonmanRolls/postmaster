@@ -1348,7 +1348,7 @@ describe(REMOVE_HEAD, () => {
       .filter((n) => n !== undefined)
       .sort();
     expect(have).toEqual(removeCriteria().sort());
-  }, 30000);
+  });
   for (const f of wrongPatches()) {
     const n = /^([0-9]+)-/u.exec(f)?.[1] ?? "";
     const name = f.replace(/\.patch$/u, "");
@@ -1358,7 +1358,7 @@ describe(REMOVE_HEAD, () => {
       expect(r?.passed).toBe(false);
       expect(r?.passes ?? 0).toBeGreaterThan(0);
       expect(r?.failed.some((d) => d.startsWith(`${n}. `))).toBe(true);
-    }, 30000);
+    });
   }
   test("the ticket and its hidden tests say nothing about a repeated id", () => {
     // Tripwire phrases for repeat-pinning language. "Used twice" stays
@@ -1382,13 +1382,13 @@ describe(REMOVE_HEAD, () => {
       }
     }
     expect(hits).toEqual([]);
-  }, 30000);
+  });
   test("a copy whose remove reports a repeated id twice passes the hidden suite", () => {
     expect(hiddenResults["applied-double-remove"]).toBe(0);
     expect(doubleDetail).not.toBe("");
     expect(doubleTwice).toBe(true);
     expect(doubleHidden).toBe(true);
-  }, 30000);
+  });
 });
 
 describe("new: a fresh repo outside every other, with its ticket in its own store", () => {
