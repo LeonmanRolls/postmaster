@@ -10,7 +10,13 @@ import {
   tally,
 } from "./tabulate.ts";
 
-const effort = { outputTokens: 100, thinkingTokens: 80, seconds: 10, dollars: 0.01 };
+const effort = {
+  promptTokens: 1000,
+  outputTokens: 100,
+  thinkingTokens: 80,
+  seconds: 10,
+  dollars: 0.01,
+};
 
 const session = (
   arrangement: string,
