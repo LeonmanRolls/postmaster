@@ -20,10 +20,12 @@
 //
 // From the dispatch it accepts only the ticket (ticket-body.md, or
 // ticket-as-spec.md in older runs) and the reviewers' reports and findings
-// under logs/; any other path inside the dispatch is refused, naming it. A
-// caller that needs another fact from the run writes it to a file of its own
-// first. The prompt names the skill's file in the run's pinned checkout and
-// only the copied paths, so the surveyor reads nothing of the dispatch.
+// under logs/ (review-r<N>-<lens>-<lane>-last.md, -findings.json, and
+// -findings.md, the hand-written bug report where normalize failed); any
+// other path inside the dispatch is refused, naming it. A caller that needs
+// another fact from the run writes it to a file of its own first. The prompt
+// names the skill's file in the run's pinned checkout and only the copied
+// paths, so the surveyor reads nothing of the dispatch.
 //
 // The surveyor is launched, confined and recorded as a lane. Its answer is
 // its last message, read per harness as harnesses.md records it; a harness
@@ -68,7 +70,7 @@ const USAGE =
 const SUPPORTED = new Set(["codex", "claude", "pi", "muse", "mimo"]);
 
 const REPORT_RE = new RegExp(
-  "^logs/review-r[0-9]+-(?:style|bug|security)-[A-Za-z0-9._-]+-(?:last\\.md|findings\\.json)$",
+  "^logs/review-r[0-9]+-(?:style|bug|security)-[A-Za-z0-9._-]+-(?:last\\.md|findings\\.json|findings\\.md)$",
   "u",
 );
 const NAME_RE = new RegExp("^[A-Za-z0-9._-]+$", "u");
@@ -317,8 +319,10 @@ function appendedWall(dispatch: string, lane: string, past: number): WallHit | n
     }
     if (!isTable(e) || e.action !== "wall" || e.target !== lane) continue;
     const detail = typeof e.detail === "string" ? e.detail : "";
-    const m = /^[^\s]+\s+[^\s]+\s+[^\s]+\s+[^\s]+\s+([\s\S]*)$/u.exec(detail);
-    hit = { message: m?.[1] ?? detail };
+    // The line is four space-separated tokens and the message; the tokens
+    // hold no spaces, so the message is everything past the fourth.
+    const parts = detail.split(" ");
+    hit = { message: parts.length > 4 ? parts.slice(4).join(" ") : detail };
   }
   return hit;
 }
