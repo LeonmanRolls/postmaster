@@ -94,7 +94,7 @@ describe("C1: the skill", () => {
       const tags = new Set<string>();
       for (const line of r.out.split("\n")) {
         if (!line.includes("skills/clerk") && !line.includes("skills/postmaster")) continue;
-        const m = /\(([a-z]+)\)\s*$/u.exec(line);
+        const m = /\(([a-z]+)\)[ \t]*$/u.exec(line);
         if (m?.[1]) tags.add(m[1]);
       }
       expect(tags.size).toBeGreaterThan(0);
@@ -321,6 +321,40 @@ describe("C3: the materials gate", () => {
       for (const name of held) {
         expect(prompt).toContain(join(folder, name));
       }
+      expect(callLines(lay).length).toBeGreaterThan(0);
+    },
+    300000,
+  );
+
+  survey(
+    "a hand-written findings.md report passes the gate",
+    (lay) => {
+      forbiddenDispatch(lay);
+      patchRunJson(lay.dispatch, { config: { team: { surveyor: "opus" } } });
+      setStub(lay, "claude", {
+        events: [claudeInit("t-md"), claudeResult("## Conclusion\nJudged.\n")],
+        exit: 0,
+      });
+      writeText(
+        join(lay.dispatch, "logs", "review-r1-bug-mimo-findings.md"),
+        "# Bug findings, round 1, lane mimo (hand-read)\n",
+      );
+      const r = surveyor(lay, [
+        "call",
+        lay.dispatch,
+        lay.repo,
+        "--name",
+        "handread",
+        "--snapshot",
+        lay.sha,
+        "--question",
+        writeQuestion(lay),
+        "--material",
+        join(lay.dispatch, "logs", "review-r1-bug-mimo-findings.md"),
+        "--timeout",
+        "600",
+      ]);
+      expect(r.code).toBe(0);
       expect(callLines(lay).length).toBeGreaterThan(0);
     },
     300000,
