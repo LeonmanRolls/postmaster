@@ -25,7 +25,8 @@ export function ticketOfWaybill(brief: string): string {
   const start = lines.findIndex((l) => /^## Ticket\s*$/u.test(l));
   if (start < 0) return "";
   const stop = lines.findIndex(
-    (l, i) => i > start && /^## (Project profile|Team|Dispatch|Postmaster notes|Standing words)\b/u.test(l),
+    (l, i) =>
+      i > start && /^## (Project profile|Team|Dispatch|Postmaster notes|Standing words)\b/u.test(l),
   );
   return lines
     .slice(start + 1, stop < 0 ? lines.length : stop)
@@ -35,11 +36,11 @@ export function ticketOfWaybill(brief: string): string {
 
 /** The lines under a `## <heading>` up to the next `## ` heading. */
 function section(lines: readonly string[], heading: RegExp): string[] {
-  const start = lines.findIndex((l) => /^## /u.test(l) && heading.test(l.slice(3)));
+  const start = lines.findIndex((l) => l.startsWith("## ") && heading.test(l.slice(3)));
   if (start < 0) return [];
   const out: string[] = [];
   for (const l of lines.slice(start + 1)) {
-    if (/^## /u.test(l)) break;
+    if (l.startsWith("## ")) break;
     out.push(l);
   }
   return out;
@@ -47,7 +48,7 @@ function section(lines: readonly string[], heading: RegExp): string[] {
 
 /** The lines under a `### <heading>` up to the next `##` or `###` heading. */
 function subsection(lines: readonly string[], heading: RegExp): string[] {
-  const start = lines.findIndex((l) => /^### /u.test(l) && heading.test(l.slice(4)));
+  const start = lines.findIndex((l) => l.startsWith("### ") && heading.test(l.slice(4)));
   if (start < 0) return [];
   const out: string[] = [];
   for (const l of lines.slice(start + 1)) {

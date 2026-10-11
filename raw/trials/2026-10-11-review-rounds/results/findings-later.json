@@ -1,0 +1,8795 @@
+{
+ "cut": "2026-10-11T07:30:00Z",
+ "after": "2026-10-09T22:30:00Z",
+ "runIds": [
+  "216",
+  "318",
+  "319",
+  "326",
+  "327",
+  "328",
+  "339",
+  "344",
+  "348",
+  "352",
+  "355",
+  "374",
+  "375",
+  "379",
+  "407",
+  "408",
+  "425",
+  "429"
+ ],
+ "runs": [
+  {
+   "run": "216",
+   "merged": true,
+   "commits": [
+    {
+     "sha": "4254d0ad",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 872,
+     "deleted": 0,
+     "paths": [
+      "oracle-216.sh"
+     ]
+    },
+    {
+     "sha": "10143e22",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 17,
+     "deleted": 12,
+     "paths": [
+      "oracle-216.sh"
+     ]
+    },
+    {
+     "sha": "32259c9b",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 1,
+     "deleted": 1,
+     "paths": [
+      "oracle-216.sh"
+     ]
+    },
+    {
+     "sha": "8de31baa",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 7,
+     "deleted": 5,
+     "paths": [
+      "oracle-216.sh"
+     ]
+    },
+    {
+     "sha": "10dc16f4",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 1,
+     "deleted": 1,
+     "paths": [
+      "oracle-216.sh"
+     ]
+    },
+    {
+     "sha": "a2fac4e5",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 3098,
+     "deleted": 59,
+     "paths": [
+      "oracle-112.sh",
+      "package.json",
+      "raw/trials/pii-patterns/apparatus/patterns.ts",
+      "scripts/fixture.test.ts",
+      "scripts/front-door.test.ts",
+      "scripts/host-self-test.ts",
+      "scripts/landing.test.ts",
+      "scripts/landing.ts",
+      "scripts/launch.test.ts",
+      "scripts/link-skills.test.ts",
+      "scripts/probe-confine.test.ts",
+      "scripts/project-settings.test.ts",
+      "scripts/project-settings.ts",
+      "scripts/raw-promote.sh",
+      "scripts/raw-promote.test.ts",
+      "scripts/raw-promote.ts",
+      "scripts/review-page.test.ts",
+      "scripts/review-round.test.ts",
+      "scripts/run-meta.test.ts",
+      "scripts/runs-status.test.ts",
+      "scripts/runs-status.ts",
+      "scripts/runs-watch.test.ts",
+      "scripts/runs-watch.ts",
+      "scripts/scrub-check.sh",
+      "scripts/scrub-check.test.ts",
+      "scripts/scrub-check.ts",
+      "scripts/scrub-core.test.ts",
+      "scripts/scrub-core.ts",
+      "scripts/scrub-rewrite.sh",
+      "scripts/scrub-rewrite.test.ts",
+      "scripts/scrub-rewrite.ts",
+      "scripts/scrub-streaming.test.ts",
+      "scripts/scrub-test-kit.test.ts",
+      "scripts/scrub-test-kit.ts",
+      "scripts/spec-session.ts",
+      "scripts/ticket-parts.test.ts",
+      "scripts/tool-faults.test.ts",
+      "scripts/tool-faults.ts",
+      "scripts/tree-check.sh",
+      "scripts/tree-check.test.ts",
+      "scripts/tree-check.ts",
+      "scripts/usage.test.ts",
+      "scripts/verify-journey.test.ts",
+      "scripts/verify-merge.sh",
+      "scripts/verify-merge.test.ts",
+      "scripts/verify-merge.ts",
+      "scripts/verify.test.ts",
+      "scripts/verify.ts",
+      "skills/postmaster/coachman.md",
+      "skills/postmaster/postmaster.md",
+      "skills/wiki/SKILL.md"
+     ]
+    },
+    {
+     "sha": "a8e89b66",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 591,
+     "deleted": 64,
+     "paths": [
+      "raw/trials/pii-patterns/apparatus/patterns.ts",
+      "scripts/scrub-core.ts",
+      "scripts/scrub-patterns.ts",
+      "skills/wiki/SKILL.md"
+     ]
+    },
+    {
+     "sha": "0f0280df",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 14,
+     "deleted": 3,
+     "paths": [
+      "scripts/scrub-core.test.ts",
+      "scripts/scrub-core.ts"
+     ]
+    },
+    {
+     "sha": "f6b10b63",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 19,
+     "deleted": 3,
+     "paths": [
+      "scripts/scrub-check.ts"
+     ]
+    },
+    {
+     "sha": "76728259",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 12,
+     "deleted": 0,
+     "paths": [
+      "scripts/scrub-check.test.ts"
+     ]
+    },
+    {
+     "sha": "5a19fab8",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 40,
+     "deleted": 47,
+     "paths": [
+      "scripts/{raw-promote.ts => raw-promote-main.ts}",
+      "scripts/{scrub-check.ts => scrub-check-main.ts}",
+      "scripts/scrub-check.test.ts",
+      "scripts/scrub-streaming.test.ts"
+     ]
+    },
+    {
+     "sha": "8ef3a42e",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 232,
+     "deleted": 45,
+     "paths": [
+      ".oxlintrc.json",
+      "biome.json",
+      "package.json",
+      "scripts/bundle-scrub.sh",
+      "scripts/bundle-scrub.ts",
+      "scripts/lib/text.ts",
+      "scripts/raw-promote.ts",
+      "scripts/scrub-check-main.ts",
+      "scripts/scrub-check.ts",
+      "scripts/scrub-core.ts",
+      "scripts/scrub-patterns.ts",
+      "scripts/tree-check.ts",
+      "tsconfig.json",
+      "types/bun.d.ts"
+     ]
+    },
+    {
+     "sha": "97ff40ee",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 40,
+     "deleted": 11,
+     "paths": [
+      "scripts/raw-promote-main.ts",
+      "scripts/raw-promote.ts",
+      "scripts/scrub-check.ts",
+      "scripts/scrub-core.ts",
+      "scripts/scrub-patterns.ts"
+     ]
+    },
+    {
+     "sha": "0091906a",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 2604,
+     "deleted": 520,
+     "paths": [
+      "scripts/bundle-scrub.ts",
+      "scripts/host-self-test.ts",
+      "scripts/landing.test.ts",
+      "scripts/landing.ts",
+      "scripts/launch.test.ts",
+      "scripts/lib/text.ts",
+      "scripts/project-settings.test.ts",
+      "scripts/raw-promote-main.ts",
+      "scripts/raw-promote.test.ts",
+      "scripts/raw-promote.ts",
+      "scripts/review-page.test.ts",
+      "scripts/runs-status.test.ts",
+      "scripts/runs-status.ts",
+      "scripts/runs-watch.test.ts",
+      "scripts/scrub-check-main.ts",
+      "scripts/scrub-check.test.ts",
+      "scripts/scrub-check.ts",
+      "scripts/scrub-core.test.ts",
+      "scripts/scrub-core.ts",
+      "scripts/scrub-patterns.ts",
+      "scripts/scrub-rewrite.test.ts",
+      "scripts/scrub-rewrite.ts",
+      "scripts/scrub-test-kit.test.ts",
+      "scripts/scrub-test-kit.ts",
+      "scripts/spec-session.ts",
+      "scripts/tool-faults.test.ts",
+      "scripts/tree-check.ts",
+      "scripts/verify-merge.test.ts",
+      "scripts/verify-merge.ts",
+      "scripts/verify.test.ts",
+      "types/bun.d.ts"
+     ]
+    },
+    {
+     "sha": "d3a36243",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 19,
+     "deleted": 12,
+     "paths": [
+      "scripts/bundle-scrub.ts",
+      "scripts/lib/text.test.ts",
+      "scripts/raw-promote.ts",
+      "scripts/scrub-check.test.ts",
+      "scripts/scrub-check.ts",
+      "scripts/scrub-core.test.ts",
+      "scripts/scrub-core.ts"
+     ]
+    },
+    {
+     "sha": "0b4d6a99",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 318,
+     "deleted": 178,
+     "paths": [
+      "scripts/scrub-check-main.ts",
+      "scripts/scrub-check.test.ts",
+      "scripts/scrub-check.ts",
+      "scripts/tree-check.ts"
+     ]
+    },
+    {
+     "sha": "48081413",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 91,
+     "deleted": 30,
+     "paths": [
+      "scripts/raw-promote.ts",
+      "scripts/scrub-check-main.ts",
+      "scripts/scrub-check.ts",
+      "scripts/scrub-core.test.ts",
+      "scripts/scrub-core.ts"
+     ]
+    },
+    {
+     "sha": "6d4c839b",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 15,
+     "deleted": 7,
+     "paths": [
+      "scripts/raw-promote.ts",
+      "scripts/scrub-check.ts",
+      "scripts/scrub-core.ts"
+     ]
+    },
+    {
+     "sha": "c4d6a7af",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 15,
+     "deleted": 1,
+     "paths": [
+      "scripts/fixtures/_note-regen.md",
+      "scripts/fixtures/text-goldens.json"
+     ]
+    },
+    {
+     "sha": "8cff86c9",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 67,
+     "deleted": 5,
+     "paths": [
+      "scripts/raw-promote-main.ts",
+      "scripts/raw-promote.test.ts",
+      "scripts/raw-promote.ts"
+     ]
+    },
+    {
+     "sha": "ab645f6a",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 17,
+     "deleted": 2,
+     "paths": [
+      "scripts/runs-status.test.ts",
+      "scripts/runs-status.ts"
+     ]
+    },
+    {
+     "sha": "092666b5",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 7,
+     "deleted": 7,
+     "paths": [
+      "oracle-112.sh",
+      "scripts/tool-faults.ts"
+     ]
+    },
+    {
+     "sha": "364f739c",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 8,
+     "deleted": 5,
+     "paths": [
+      "skills/postmaster/postmaster.md"
+     ]
+    },
+    {
+     "sha": "f8cea6b1",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 14,
+     "deleted": 2,
+     "paths": [
+      "scripts/tool-faults.ts"
+     ]
+    },
+    {
+     "sha": "b9530a3c",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 6,
+     "deleted": 2,
+     "paths": [
+      "oracle-216.sh"
+     ]
+    },
+    {
+     "sha": "0bf74fda",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 21,
+     "deleted": 9,
+     "paths": [
+      "scripts/raw-promote.ts",
+      "scripts/scrub-check.ts",
+      "scripts/scrub-core.test.ts",
+      "scripts/scrub-core.ts"
+     ]
+    },
+    {
+     "sha": "c1131627",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 22,
+     "deleted": 22,
+     "paths": [
+      "scripts/cut-scratch.test.ts",
+      "scripts/fixtures/usage/codex-no-usage.jsonl",
+      "scripts/fixtures/usage/codex-with-usage.jsonl",
+      "scripts/fixtures/usage/mimo-no-usage.jsonl",
+      "scripts/fixtures/usage/mimo-with-usage.jsonl",
+      "scripts/fixtures/usage/muse-no-usage.jsonl",
+      "scripts/fixtures/usage/muse-with-usage.jsonl",
+      "scripts/fixtures/usage/muse-with-usage.session.json",
+      "scripts/fixtures/view-stream/muse.jsonl",
+      "scripts/usage.test.ts",
+      "scripts/view-stream.test.ts"
+     ]
+    },
+    {
+     "sha": "69b93ade",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 19,
+     "deleted": 21,
+     "paths": [
+      "scripts/raw-promote-main.ts",
+      "scripts/raw-promote.ts"
+     ]
+    },
+    {
+     "sha": "f61ac35c",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 340,
+     "deleted": 17,
+     "paths": [
+      "scripts/raw-promote.ts",
+      "scripts/scrub-check.ts",
+      "scripts/scrub-core.test.ts",
+      "scripts/scrub-core.ts",
+      "scripts/scrub-patterns.ts"
+     ]
+    },
+    {
+     "sha": "6b0d3cac",
+     "phase": "fix:1",
+     "named": 1,
+     "onMain": false,
+     "added": 248,
+     "deleted": 54,
+     "paths": [
+      "scripts/bundle-scrub.test.ts",
+      "scripts/bundle-scrub.ts",
+      "scripts/landing.test.ts",
+      "scripts/landing.ts",
+      "scripts/raw-promote-main.ts",
+      "scripts/raw-promote.test.ts",
+      "scripts/raw-promote.ts",
+      "scripts/scrub-check.ts",
+      "scripts/scrub-core.test.ts",
+      "scripts/scrub-core.ts",
+      "scripts/scrub-rewrite.test.ts",
+      "scripts/scrub-rewrite.ts"
+     ]
+    },
+    {
+     "sha": "d6473fcb",
+     "phase": "fix:1",
+     "named": 1,
+     "onMain": false,
+     "added": 16,
+     "deleted": 4,
+     "paths": [
+      "scripts/landing.test.ts",
+      "scripts/raw-promote.ts",
+      "scripts/scrub-check.ts",
+      "scripts/scrub-core.ts"
+     ]
+    },
+    {
+     "sha": "993e21c3",
+     "phase": "fix:1",
+     "named": 1,
+     "onMain": false,
+     "added": 4,
+     "deleted": 1,
+     "paths": [
+      "scripts/scrub-core.test.ts"
+     ]
+    },
+    {
+     "sha": "85881afc",
+     "phase": "fix:1",
+     "named": 1,
+     "onMain": false,
+     "added": 1,
+     "deleted": 1,
+     "paths": [
+      "scripts/scrub-core.test.ts"
+     ]
+    },
+    {
+     "sha": "ce3f5b7e",
+     "phase": "fix:2",
+     "named": 2,
+     "onMain": false,
+     "added": 109,
+     "deleted": 10,
+     "paths": [
+      "scripts/raw-promote.ts",
+      "scripts/scrub-check-main.ts",
+      "scripts/scrub-check.test.ts",
+      "scripts/scrub-check.ts",
+      "scripts/scrub-core.test.ts",
+      "scripts/scrub-core.ts",
+      "scripts/tree-check.ts"
+     ]
+    },
+    {
+     "sha": "549ecc37",
+     "phase": "fix:2",
+     "named": 2,
+     "onMain": false,
+     "added": 9,
+     "deleted": 5,
+     "paths": [
+      "scripts/scrub-check.test.ts"
+     ]
+    },
+    {
+     "sha": "cda44f95",
+     "phase": "fix:3",
+     "named": 3,
+     "onMain": false,
+     "added": 191,
+     "deleted": 41,
+     "paths": [
+      "package.json",
+      "scripts/landing.test.ts",
+      "scripts/landing.ts",
+      "scripts/raw-promote-main.ts",
+      "scripts/raw-promote.test.ts",
+      "scripts/raw-promote.ts",
+      "scripts/scrub-check.ts",
+      "scripts/scrub-core.ts",
+      "scripts/scrub-rewrite.ts",
+      "scripts/tree-check.test.ts",
+      "scripts/tree-check.ts",
+      "skills/postmaster/postmaster.md"
+     ]
+    },
+    {
+     "sha": "b6455625",
+     "phase": "fix:4",
+     "named": 4,
+     "onMain": false,
+     "added": 533,
+     "deleted": 177,
+     "paths": [
+      "scripts/bundle-scrub.test.ts",
+      "scripts/bundle-scrub.ts",
+      "scripts/landing.ts",
+      "scripts/raw-promote-main.ts",
+      "scripts/raw-promote.test.ts",
+      "scripts/raw-promote.ts",
+      "scripts/scrub-check-main.ts",
+      "scripts/scrub-check.test.ts",
+      "scripts/scrub-check.ts",
+      "scripts/scrub-core.test.ts",
+      "scripts/scrub-core.ts",
+      "scripts/scrub-report.test.ts",
+      "scripts/scrub-report.ts",
+      "scripts/scrub-rewrite.test.ts",
+      "scripts/scrub-rewrite.ts",
+      "scripts/tree-check.test.ts",
+      "scripts/tree-check.ts",
+      "scripts/verify-merge.ts"
+     ]
+    },
+    {
+     "sha": "21a77fb0",
+     "phase": "fix:4",
+     "named": null,
+     "onMain": false,
+     "added": 2,
+     "deleted": 2,
+     "paths": [
+      "scripts/raw-promote.ts",
+      "scripts/scrub-check.ts"
+     ]
+    },
+    {
+     "sha": "2d23a64a",
+     "phase": "fix:5",
+     "named": null,
+     "onMain": false,
+     "added": 368,
+     "deleted": 175,
+     "paths": [
+      "scripts/bundle-scrub.ts",
+      "scripts/raw-promote-main.ts",
+      "scripts/raw-promote.ts",
+      "scripts/scrub-check.ts",
+      "scripts/scrub-reasoning.test.ts",
+      "scripts/scrub-reasoning.ts",
+      "scripts/tree-check.test.ts",
+      "scripts/tree-check.ts",
+      "scripts/verify-merge.test.ts",
+      "scripts/verify-merge.ts",
+      "skills/postmaster/postmaster.md"
+     ]
+    },
+    {
+     "sha": "4e8da141",
+     "phase": "fix:6",
+     "named": 6,
+     "onMain": false,
+     "added": 396,
+     "deleted": 294,
+     "paths": [
+      "oracle-216.sh",
+      "scripts/landing.test.ts",
+      "scripts/landing.ts",
+      "scripts/raw-promote-main.ts",
+      "scripts/raw-promote.ts",
+      "scripts/runs-status.test.ts",
+      "scripts/runs-status.ts",
+      "scripts/scrub-check-main.ts",
+      "scripts/scrub-check.test.ts",
+      "scripts/scrub-check.ts",
+      "scripts/scrub-core.test.ts",
+      "scripts/scrub-core.ts",
+      "scripts/scrub-reasoning.test.ts",
+      "scripts/scrub-reasoning.ts",
+      "scripts/scrub-report.test.ts",
+      "scripts/scrub-report.ts",
+      "scripts/tree-check.ts"
+     ]
+    },
+    {
+     "sha": "0e1fc8c4",
+     "phase": "fix:7",
+     "named": null,
+     "onMain": false,
+     "added": 70,
+     "deleted": 4,
+     "paths": [
+      "scripts/scrub-check-main.ts",
+      "scripts/scrub-check.test.ts",
+      "scripts/scrub-check.ts"
+     ]
+    },
+    {
+     "sha": "81bc2461",
+     "phase": "fix:8",
+     "named": 8,
+     "onMain": false,
+     "added": 216,
+     "deleted": 23,
+     "paths": [
+      "scripts/raw-promote-main.ts",
+      "scripts/raw-promote.test.ts",
+      "scripts/raw-promote.ts",
+      "scripts/scrub-check-main.ts",
+      "scripts/scrub-check.test.ts",
+      "scripts/scrub-check.ts",
+      "scripts/scrub-core.test.ts",
+      "scripts/scrub-core.ts"
+     ]
+    },
+    {
+     "sha": "c60248be",
+     "phase": "fix:8",
+     "named": null,
+     "onMain": false,
+     "added": 2,
+     "deleted": 0,
+     "paths": [
+      "scripts/scrub-check.test.ts",
+      "scripts/scrub-core.test.ts"
+     ]
+    },
+    {
+     "sha": "1b826f1a",
+     "phase": "fix:8",
+     "named": null,
+     "onMain": false,
+     "added": 3,
+     "deleted": 4,
+     "paths": [
+      "scripts/raw-promote.ts",
+      "scripts/scrub-check.ts",
+      "scripts/scrub-core.ts"
+     ]
+    },
+    {
+     "sha": "da76fa3d",
+     "phase": "fix:9",
+     "named": null,
+     "onMain": false,
+     "added": 0,
+     "deleted": 0,
+     "paths": []
+    },
+    {
+     "sha": "72466118",
+     "phase": "fix:9",
+     "named": null,
+     "onMain": false,
+     "added": 199,
+     "deleted": 0,
+     "paths": [
+      "skills/postmaster/postmaster.md"
+     ]
+    },
+    {
+     "sha": "e73386e6",
+     "phase": "fix:9",
+     "named": null,
+     "onMain": false,
+     "added": 43,
+     "deleted": 1,
+     "paths": [
+      "scripts/ticket-check.test.ts",
+      "scripts/ticket-check.ts"
+     ]
+    },
+    {
+     "sha": "a48a4189",
+     "phase": "fix:9",
+     "named": null,
+     "onMain": false,
+     "added": 255,
+     "deleted": 24,
+     "paths": [
+      "scripts/raw-promote-main.ts",
+      "scripts/raw-promote.test.ts",
+      "scripts/raw-promote.ts",
+      "scripts/scrub-check.ts",
+      "scripts/scrub-reasoning.test.ts",
+      "scripts/scrub-reasoning.ts",
+      "scripts/tree-check.test.ts",
+      "scripts/tree-check.ts"
+     ]
+    },
+    {
+     "sha": "fa610459",
+     "phase": "fix:9",
+     "named": null,
+     "onMain": false,
+     "added": 95,
+     "deleted": 4,
+     "paths": [
+      "scripts/scrub-check-main.ts",
+      "scripts/scrub-check.test.ts",
+      "scripts/scrub-check.ts"
+     ]
+    },
+    {
+     "sha": "792181a8",
+     "phase": "fix:9",
+     "named": null,
+     "onMain": false,
+     "added": 63,
+     "deleted": 2,
+     "paths": [
+      "scripts/tree-check.test.ts",
+      "scripts/tree-check.ts"
+     ]
+    },
+    {
+     "sha": "e86be586",
+     "phase": "fix:9",
+     "named": null,
+     "onMain": false,
+     "added": 18,
+     "deleted": 15,
+     "paths": [
+      ".oxlintrc.json",
+      "scripts/bundle-scrub.ts",
+      "scripts/scrub-reasoning.ts",
+      "scripts/tree-check.test.ts",
+      "scripts/tree-check.ts"
+     ]
+    },
+    {
+     "sha": "641670ea",
+     "phase": "fix:9",
+     "named": null,
+     "onMain": false,
+     "added": 2,
+     "deleted": 2,
+     "paths": [
+      "scripts/raw-promote.ts",
+      "scripts/scrub-check.ts"
+     ]
+    },
+    {
+     "sha": "de78a097",
+     "phase": "fix:9",
+     "named": null,
+     "onMain": false,
+     "added": 36,
+     "deleted": 9,
+     "paths": [
+      "scripts/raw-promote-main.ts",
+      "scripts/raw-promote.ts",
+      "scripts/scrub-check.ts",
+      "scripts/scrub-reasoning.test.ts",
+      "scripts/scrub-reasoning.ts",
+      "scripts/tree-check.ts"
+     ]
+    },
+    {
+     "sha": "d5b4d9d4",
+     "phase": "fix:10",
+     "named": null,
+     "onMain": false,
+     "added": 63,
+     "deleted": 5,
+     "paths": [
+      "scripts/raw-promote.test.ts",
+      "scripts/raw-promote.ts",
+      "scripts/scrub-check.ts",
+      "scripts/scrub-reasoning.test.ts",
+      "scripts/scrub-reasoning.ts",
+      "scripts/tree-check.test.ts",
+      "scripts/tree-check.ts"
+     ]
+    },
+    {
+     "sha": "31e7dd58",
+     "phase": "fix:10",
+     "named": null,
+     "onMain": false,
+     "added": 44,
+     "deleted": 8,
+     "paths": [
+      "scripts/raw-promote.ts",
+      "scripts/scrub-check.ts",
+      "scripts/scrub-core.test.ts",
+      "scripts/scrub-core.ts"
+     ]
+    },
+    {
+     "sha": "f896b792",
+     "phase": "fix:10",
+     "named": null,
+     "onMain": false,
+     "added": 103,
+     "deleted": 12,
+     "paths": [
+      "scripts/raw-promote-main.ts",
+      "scripts/raw-promote.test.ts",
+      "scripts/raw-promote.ts",
+      "scripts/scrub-check.ts",
+      "scripts/scrub-core.test.ts",
+      "scripts/scrub-core.ts"
+     ]
+    },
+    {
+     "sha": "7c6815b2",
+     "phase": "fix:10",
+     "named": null,
+     "onMain": false,
+     "added": 1,
+     "deleted": 6,
+     "paths": [
+      "scripts/scrub-core.test.ts"
+     ]
+    },
+    {
+     "sha": "d69a671c",
+     "phase": "fix:10",
+     "named": null,
+     "onMain": false,
+     "added": 5,
+     "deleted": 5,
+     "paths": [
+      "scripts/raw-promote.ts",
+      "scripts/scrub-check.ts",
+      "scripts/scrub-core.ts"
+     ]
+    },
+    {
+     "sha": "e4ff14f8",
+     "phase": "fix:11",
+     "named": null,
+     "onMain": false,
+     "added": 0,
+     "deleted": 0,
+     "paths": []
+    },
+    {
+     "sha": "136dc64a",
+     "phase": "fix:11",
+     "named": null,
+     "onMain": false,
+     "added": 26,
+     "deleted": 1,
+     "paths": [
+      "scripts/verify-merge.test.ts",
+      "skills/postmaster/postmaster.md"
+     ]
+    },
+    {
+     "sha": "f82720ba",
+     "phase": "fix:11",
+     "named": null,
+     "onMain": false,
+     "added": 175,
+     "deleted": 3,
+     "paths": [
+      "scripts/scrub-check.test.ts",
+      "scripts/tree-check.test.ts",
+      "scripts/tree-check.ts"
+     ]
+    },
+    {
+     "sha": "c38f02c9",
+     "phase": "fix:11",
+     "named": null,
+     "onMain": false,
+     "added": 274,
+     "deleted": 42,
+     "paths": [
+      "scripts/scrub-rewrite.test.ts",
+      "scripts/scrub-rewrite.ts",
+      "scripts/tree-check.test.ts",
+      "scripts/tree-check.ts"
+     ]
+    },
+    {
+     "sha": "83f4ba94",
+     "phase": "fix:11",
+     "named": null,
+     "onMain": false,
+     "added": 94,
+     "deleted": 6,
+     "paths": [
+      "scripts/raw-promote.test.ts",
+      "scripts/raw-promote.ts",
+      "scripts/scrub-check.ts",
+      "scripts/scrub-reasoning.test.ts",
+      "scripts/scrub-reasoning.ts",
+      "scripts/tree-check.test.ts"
+     ]
+    },
+    {
+     "sha": "6748339a",
+     "phase": "fix:11",
+     "named": null,
+     "onMain": false,
+     "added": 31,
+     "deleted": 5,
+     "paths": [
+      "scripts/raw-promote.ts",
+      "scripts/scrub-check.ts",
+      "scripts/scrub-core.test.ts",
+      "scripts/scrub-core.ts"
+     ]
+    },
+    {
+     "sha": "f7a4e78a",
+     "phase": "fix:11",
+     "named": null,
+     "onMain": false,
+     "added": 4,
+     "deleted": 7,
+     "paths": [
+      "scripts/tree-check.test.ts",
+      "scripts/tree-check.ts"
+     ]
+    },
+    {
+     "sha": "0b122c66",
+     "phase": "fix:11",
+     "named": null,
+     "onMain": false,
+     "added": 3,
+     "deleted": 1,
+     "paths": [
+      "scripts/scrub-report.test.ts"
+     ]
+    },
+    {
+     "sha": "6fb2e9a0",
+     "phase": "fix:12",
+     "named": null,
+     "onMain": false,
+     "added": 45,
+     "deleted": 2,
+     "paths": [
+      "scripts/landing.test.ts",
+      "skills/postmaster/coachman.md"
+     ]
+    },
+    {
+     "sha": "5b0a0e48",
+     "phase": "fix:12",
+     "named": null,
+     "onMain": false,
+     "added": 25,
+     "deleted": 5,
+     "paths": [
+      "scripts/scrub-check-main.ts",
+      "scripts/scrub-check.test.ts",
+      "scripts/scrub-check.ts"
+     ]
+    },
+    {
+     "sha": "901db36d",
+     "phase": "fix:13",
+     "named": null,
+     "onMain": false,
+     "added": 129,
+     "deleted": 1,
+     "paths": [
+      "scripts/scrub-rewrite.test.ts",
+      "scripts/scrub-rewrite.ts"
+     ]
+    },
+    {
+     "sha": "1979cc0d",
+     "phase": "fix:13",
+     "named": null,
+     "onMain": false,
+     "added": 8,
+     "deleted": 1,
+     "paths": [
+      "scripts/scrub-rewrite.ts"
+     ]
+    },
+    {
+     "sha": "7a1f22c7",
+     "phase": "fix:14",
+     "named": null,
+     "onMain": false,
+     "added": 31,
+     "deleted": 845,
+     "paths": [
+      "oracle-216.sh",
+      "scripts/scrub-check.test.ts",
+      "scripts/scrub-report.test.ts",
+      "scripts/scrub-rewrite.test.ts",
+      "scripts/scrub-rewrite.ts",
+      "scripts/tree-check.test.ts",
+      "scripts/tree-check.ts",
+      "skills/postmaster/coachman.md"
+     ]
+    },
+    {
+     "sha": "e28ef9a2",
+     "phase": "fix:14",
+     "named": null,
+     "onMain": false,
+     "added": 84,
+     "deleted": 3,
+     "paths": [
+      "scripts/scrub-report.test.ts",
+      "scripts/scrub-report.ts"
+     ]
+    },
+    {
+     "sha": "a6771f48",
+     "phase": "fix:14",
+     "named": null,
+     "onMain": false,
+     "added": 28,
+     "deleted": 5,
+     "paths": [
+      "scripts/scrub-core.test.ts",
+      "scripts/scrub-core.ts"
+     ]
+    },
+    {
+     "sha": "fbcd648c",
+     "phase": "fix:14",
+     "named": null,
+     "onMain": false,
+     "added": 6,
+     "deleted": 6,
+     "paths": [
+      "scripts/raw-promote.ts",
+      "scripts/scrub-check.ts"
+     ]
+    },
+    {
+     "sha": "d0a04c71",
+     "phase": "fix:14",
+     "named": null,
+     "onMain": false,
+     "added": 30,
+     "deleted": 13,
+     "paths": [
+      "scripts/scrub-report.test.ts"
+     ]
+    },
+    {
+     "sha": "165a0a42",
+     "phase": "later",
+     "named": null,
+     "onMain": false,
+     "added": 73,
+     "deleted": 6,
+     "paths": [
+      "scripts/raw-promote.test.ts",
+      "scripts/scrub-check.test.ts",
+      "scripts/scrub-core.test.ts",
+      "scripts/scrub-core.ts",
+      "scripts/scrub-patterns.ts"
+     ]
+    },
+    {
+     "sha": "6fac9561",
+     "phase": "later",
+     "named": 15,
+     "onMain": false,
+     "added": 6,
+     "deleted": 6,
+     "paths": [
+      "scripts/raw-promote.ts",
+      "scripts/scrub-check.ts"
+     ]
+    },
+    {
+     "sha": "7a356453",
+     "phase": "later",
+     "named": null,
+     "onMain": false,
+     "added": 0,
+     "deleted": 0,
+     "paths": []
+    },
+    {
+     "sha": "c3c4670e",
+     "phase": "later",
+     "named": null,
+     "onMain": false,
+     "added": 17,
+     "deleted": 19,
+     "paths": [
+      "scripts/raw-promote-main.ts",
+      "scripts/raw-promote.ts",
+      "scripts/scrub-check-main.ts",
+      "scripts/scrub-check.test.ts",
+      "scripts/scrub-check.ts",
+      "scripts/scrub-core.ts",
+      "scripts/scrub-report.test.ts",
+      "scripts/tree-check.ts"
+     ]
+    },
+    {
+     "sha": "9dbe1a82",
+     "phase": "later",
+     "named": null,
+     "onMain": false,
+     "added": 17,
+     "deleted": 13,
+     "paths": [
+      "scripts/raw-promote-main.ts",
+      "scripts/raw-promote.ts",
+      "scripts/scrub-check.ts",
+      "scripts/scrub-core.test.ts",
+      "scripts/scrub-core.ts"
+     ]
+    },
+    {
+     "sha": "287b29b6",
+     "phase": "later",
+     "named": null,
+     "onMain": false,
+     "added": 54,
+     "deleted": 16,
+     "paths": [
+      "scripts/acceptance-232.test.ts",
+      "scripts/acceptance-232.ts",
+      "scripts/no-explicit-any-acceptance.test.ts",
+      "scripts/no-explicit-any-acceptance.ts"
+     ]
+    },
+    {
+     "sha": "8fe73456",
+     "phase": "later",
+     "named": null,
+     "onMain": false,
+     "added": 53,
+     "deleted": 46,
+     "paths": [
+      "scripts/scrub-check.test.ts",
+      "scripts/skips.toml"
+     ]
+    },
+    {
+     "sha": "ea57ff83",
+     "phase": "later",
+     "named": null,
+     "onMain": false,
+     "added": 0,
+     "deleted": 0,
+     "paths": []
+    }
+   ],
+   "launches": {
+    "1": "2026-10-04T08:33:05.814Z",
+    "2": "2026-10-04T10:28:29.784Z",
+    "3": "2026-10-04T12:15:04.483Z",
+    "4": "2026-10-04T22:03:30.378Z",
+    "5": "2026-10-05T22:48:28.496Z",
+    "6": "2026-10-06T00:29:24.117Z",
+    "7": "2026-10-09T02:58:26.730Z",
+    "8": "2026-10-09T06:37:19.042Z",
+    "9": "2026-10-09T10:15:47.989Z",
+    "10": "2026-10-09T13:44:03.890Z",
+    "11": "2026-10-09T15:04:44.235Z",
+    "12": "2026-10-09T20:26:57.260Z",
+    "13": "2026-10-09T21:47:45.033Z",
+    "14": "2026-10-09T22:59:54.144Z",
+    "15": "2026-10-10T05:09:51.941Z"
+   },
+   "launchesMissing": []
+  },
+  {
+   "run": "318",
+   "merged": true,
+   "commits": [
+    {
+     "sha": "371d7b1c",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 830,
+     "deleted": 0,
+     "paths": [
+      "scripts/acceptance-318.test.ts",
+      "scripts/acceptance-318.ts"
+     ]
+    },
+    {
+     "sha": "ccb45d33",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 5,
+     "deleted": 3,
+     "paths": [
+      "scripts/acceptance-318.test.ts"
+     ]
+    },
+    {
+     "sha": "3c3f48ab",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 105,
+     "deleted": 1,
+     "paths": [
+      "scripts/verifier-multi-prompt.md",
+      "scripts/verifier-prompt.md",
+      "scripts/verifier-upkeep-prompt.md"
+     ]
+    },
+    {
+     "sha": "7527f7fd",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 1467,
+     "deleted": 152,
+     "paths": [
+      "scripts/verifier.test.ts",
+      "scripts/verifier.ts"
+     ]
+    },
+    {
+     "sha": "d0108097",
+     "phase": "fix:1",
+     "named": null,
+     "onMain": false,
+     "added": 133,
+     "deleted": 15,
+     "paths": [
+      "scripts/verifier-upkeep-prompt.md",
+      "scripts/verifier.test.ts",
+      "scripts/verifier.ts"
+     ]
+    },
+    {
+     "sha": "630e243e",
+     "phase": "fix:1",
+     "named": null,
+     "onMain": false,
+     "added": 72,
+     "deleted": 27,
+     "paths": [
+      "scripts/verifier.test.ts",
+      "scripts/verifier.ts"
+     ]
+    },
+    {
+     "sha": "4de6b56f",
+     "phase": "fix:1",
+     "named": null,
+     "onMain": false,
+     "added": 39,
+     "deleted": 9,
+     "paths": [
+      "scripts/verifier.test.ts",
+      "scripts/verifier.ts"
+     ]
+    },
+    {
+     "sha": "5ecd9e89",
+     "phase": "fix:1",
+     "named": null,
+     "onMain": false,
+     "added": 90,
+     "deleted": 11,
+     "paths": [
+      "scripts/verifier.test.ts",
+      "scripts/verifier.ts"
+     ]
+    },
+    {
+     "sha": "d0b70c51",
+     "phase": "fix:1",
+     "named": null,
+     "onMain": false,
+     "added": 3,
+     "deleted": 1,
+     "paths": [
+      "scripts/verifier.ts"
+     ]
+    },
+    {
+     "sha": "0220918a",
+     "phase": "fix:1",
+     "named": null,
+     "onMain": false,
+     "added": 7,
+     "deleted": 0,
+     "paths": [
+      "scripts/acceptance-318.test.ts"
+     ]
+    },
+    {
+     "sha": "c4e9ab3e",
+     "phase": "fix:1",
+     "named": null,
+     "onMain": false,
+     "added": 2,
+     "deleted": 1,
+     "paths": [
+      "scripts/verifier.test.ts"
+     ]
+    },
+    {
+     "sha": "9b773491",
+     "phase": "fix:2",
+     "named": null,
+     "onMain": false,
+     "added": 231,
+     "deleted": 72,
+     "paths": [
+      "scripts/verifier-upkeep-prompt.md",
+      "scripts/verifier.test.ts",
+      "scripts/verifier.ts"
+     ]
+    },
+    {
+     "sha": "cc59aec1",
+     "phase": "fix:3",
+     "named": null,
+     "onMain": false,
+     "added": 2,
+     "deleted": 2,
+     "paths": [
+      "scripts/verifier.ts"
+     ]
+    },
+    {
+     "sha": "36eb1498",
+     "phase": "fix:3",
+     "named": null,
+     "onMain": false,
+     "added": 7,
+     "deleted": 1,
+     "paths": [
+      "scripts/acceptance-318.test.ts"
+     ]
+    },
+    {
+     "sha": "df0c75b6",
+     "phase": "later",
+     "named": null,
+     "onMain": false,
+     "added": 0,
+     "deleted": 0,
+     "paths": []
+    }
+   ],
+   "launches": {
+    "1": "2026-10-10T04:00:30.346Z",
+    "2": "2026-10-10T04:44:59.578Z",
+    "3": "2026-10-10T05:24:32.853Z",
+    "4": "2026-10-10T05:57:24.268Z"
+   },
+   "launchesMissing": []
+  },
+  {
+   "run": "319",
+   "merged": true,
+   "commits": [
+    {
+     "sha": "9eb36db9",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 228,
+     "deleted": 0,
+     "paths": [
+      "scripts/acceptance-319.test.ts",
+      "scripts/acceptance-319.ts"
+     ]
+    },
+    {
+     "sha": "0616a6e2",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 94,
+     "deleted": 2,
+     "paths": [
+      "scripts/ticket-parts.test.ts",
+      "scripts/ticket-parts.ts"
+     ]
+    },
+    {
+     "sha": "83148b95",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 11,
+     "deleted": 1,
+     "paths": [
+      "skills/clerk/ticket-template.md"
+     ]
+    },
+    {
+     "sha": "dea4df23",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 19,
+     "deleted": 0,
+     "paths": [
+      "skills/clerk/clerk.md"
+     ]
+    },
+    {
+     "sha": "a00a7bf1",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 12,
+     "deleted": 3,
+     "paths": [
+      "scripts/acceptance-319.test.ts",
+      "scripts/acceptance-319.ts"
+     ]
+    },
+    {
+     "sha": "27e8a425",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 1,
+     "deleted": 0,
+     "paths": [
+      "scripts/ticket-parts.ts"
+     ]
+    },
+    {
+     "sha": "2a9b7d46",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 1,
+     "deleted": 1,
+     "paths": [
+      "skills/clerk/ticket-template.md"
+     ]
+    },
+    {
+     "sha": "99c2ebb6",
+     "phase": "later",
+     "named": null,
+     "onMain": false,
+     "added": 0,
+     "deleted": 0,
+     "paths": []
+    }
+   ],
+   "launches": {
+    "1": "2026-10-10T03:48:32.598Z"
+   },
+   "launchesMissing": []
+  },
+  {
+   "run": "326",
+   "merged": true,
+   "commits": [
+    {
+     "sha": "acd32b25",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 500,
+     "deleted": 0,
+     "paths": [
+      "scripts/acceptance-326.test.ts",
+      "scripts/acceptance-326.ts"
+     ]
+    },
+    {
+     "sha": "7f93cde2",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 56,
+     "deleted": 7,
+     "paths": [
+      "scripts/front-door.ts",
+      "scripts/lib/fixture-mark.test.ts",
+      "scripts/lib/fixture-mark.ts"
+     ]
+    },
+    {
+     "sha": "cc7b67bc",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 253,
+     "deleted": 23,
+     "paths": [
+      "scripts/verifier.test.ts",
+      "scripts/verifier.ts"
+     ]
+    },
+    {
+     "sha": "f0a5778a",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 29,
+     "deleted": 1,
+     "paths": [
+      "scripts/discover-project.ts",
+      "scripts/verify.ts"
+     ]
+    },
+    {
+     "sha": "161f1d0e",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 423,
+     "deleted": 0,
+     "paths": [
+      "scripts/setup-verifiers.test.ts",
+      "scripts/setup-verifiers.ts"
+     ]
+    },
+    {
+     "sha": "b663d964",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 30,
+     "deleted": 8,
+     "paths": [
+      "skills/postmaster/SKILL.md",
+      "skills/postmaster/harnesses.md"
+     ]
+    },
+    {
+     "sha": "04b42c77",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 66,
+     "deleted": 5,
+     "paths": [
+      "scripts/host-self-test.ts",
+      "scripts/host.test.ts",
+      "scripts/host.ts"
+     ]
+    },
+    {
+     "sha": "30c13f55",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 9,
+     "deleted": 1,
+     "paths": [
+      "scripts/acceptance-326.test.ts"
+     ]
+    },
+    {
+     "sha": "5da2d60c",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 21,
+     "deleted": 32,
+     "paths": [
+      "scripts/setup-verifiers.test.ts",
+      "scripts/setup-verifiers.ts",
+      "scripts/verifier.test.ts",
+      "scripts/verifier.ts"
+     ]
+    },
+    {
+     "sha": "0dad2425",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 7,
+     "deleted": 1,
+     "paths": [
+      "scripts/setup-verifiers.test.ts",
+      "scripts/setup-verifiers.ts"
+     ]
+    },
+    {
+     "sha": "669c25ba",
+     "phase": "fix:1",
+     "named": null,
+     "onMain": false,
+     "added": 54,
+     "deleted": 2,
+     "paths": [
+      "scripts/acceptance-326.test.ts"
+     ]
+    },
+    {
+     "sha": "7376b94a",
+     "phase": "fix:1",
+     "named": null,
+     "onMain": false,
+     "added": 37,
+     "deleted": 6,
+     "paths": [
+      "scripts/setup-verifiers.test.ts",
+      "scripts/setup-verifiers.ts"
+     ]
+    },
+    {
+     "sha": "030508a4",
+     "phase": "fix:1",
+     "named": null,
+     "onMain": false,
+     "added": 45,
+     "deleted": 25,
+     "paths": [
+      "scripts/setup-verifiers.test.ts",
+      "scripts/setup-verifiers.ts"
+     ]
+    },
+    {
+     "sha": "f9f1c0f7",
+     "phase": "fix:1",
+     "named": null,
+     "onMain": false,
+     "added": 24,
+     "deleted": 1,
+     "paths": [
+      "scripts/verifier.test.ts",
+      "scripts/verifier.ts"
+     ]
+    },
+    {
+     "sha": "11a9aaec",
+     "phase": "fix:1",
+     "named": null,
+     "onMain": false,
+     "added": 11,
+     "deleted": 2,
+     "paths": [
+      "scripts/run-meta.test.ts",
+      "scripts/run-meta.ts"
+     ]
+    },
+    {
+     "sha": "95f51ab2",
+     "phase": "fix:1",
+     "named": null,
+     "onMain": false,
+     "added": 39,
+     "deleted": 4,
+     "paths": [
+      "scripts/host-self-test.ts",
+      "scripts/host.test.ts",
+      "scripts/host.ts"
+     ]
+    },
+    {
+     "sha": "d85d9a95",
+     "phase": "fix:1",
+     "named": null,
+     "onMain": false,
+     "added": 22,
+     "deleted": 15,
+     "paths": [
+      "scripts/front-door.test.ts",
+      "scripts/front-door.ts",
+      "skills/postmaster/SKILL.md"
+     ]
+    },
+    {
+     "sha": "81b47335",
+     "phase": "fix:2",
+     "named": null,
+     "onMain": false,
+     "added": 11,
+     "deleted": 0,
+     "paths": [
+      "scripts/acceptance-326.test.ts"
+     ]
+    },
+    {
+     "sha": "72dab6ab",
+     "phase": "fix:2",
+     "named": null,
+     "onMain": false,
+     "added": 43,
+     "deleted": 5,
+     "paths": [
+      "scripts/lib/fixture-mark.test.ts",
+      "scripts/lib/fixture-mark.ts"
+     ]
+    },
+    {
+     "sha": "a9c422c0",
+     "phase": "fix:3",
+     "named": null,
+     "onMain": false,
+     "added": 40,
+     "deleted": 0,
+     "paths": [
+      "scripts/acceptance-326.test.ts"
+     ]
+    },
+    {
+     "sha": "3a55687d",
+     "phase": "fix:3",
+     "named": null,
+     "onMain": false,
+     "added": 68,
+     "deleted": 4,
+     "paths": [
+      "scripts/setup-verifiers.test.ts",
+      "scripts/setup-verifiers.ts"
+     ]
+    },
+    {
+     "sha": "7ec4901a",
+     "phase": "fix:3",
+     "named": null,
+     "onMain": false,
+     "added": 42,
+     "deleted": 4,
+     "paths": [
+      "scripts/host-self-test.ts",
+      "scripts/host.test.ts",
+      "scripts/host.ts"
+     ]
+    },
+    {
+     "sha": "0da08197",
+     "phase": "fix:3",
+     "named": null,
+     "onMain": false,
+     "added": 53,
+     "deleted": 3,
+     "paths": [
+      "scripts/setup-verifiers.test.ts",
+      "scripts/setup-verifiers.ts"
+     ]
+    },
+    {
+     "sha": "1b0c7c41",
+     "phase": "fix:4",
+     "named": null,
+     "onMain": false,
+     "added": 16,
+     "deleted": 0,
+     "paths": [
+      "scripts/acceptance-326.test.ts"
+     ]
+    },
+    {
+     "sha": "71261912",
+     "phase": "fix:4",
+     "named": null,
+     "onMain": false,
+     "added": 18,
+     "deleted": 8,
+     "paths": [
+      "scripts/setup-verifiers.ts"
+     ]
+    },
+    {
+     "sha": "339abf6f",
+     "phase": "fix:5",
+     "named": null,
+     "onMain": false,
+     "added": 29,
+     "deleted": 5,
+     "paths": [
+      "scripts/setup-verifiers.test.ts",
+      "scripts/setup-verifiers.ts"
+     ]
+    },
+    {
+     "sha": "029a89e5",
+     "phase": "later",
+     "named": null,
+     "onMain": false,
+     "added": 0,
+     "deleted": 0,
+     "paths": []
+    },
+    {
+     "sha": "b34a0109",
+     "phase": "later",
+     "named": null,
+     "onMain": false,
+     "added": 2,
+     "deleted": 2,
+     "paths": [
+      "scripts/acceptance-326.test.ts"
+     ]
+    },
+    {
+     "sha": "9da5cd01",
+     "phase": "later",
+     "named": null,
+     "onMain": false,
+     "added": 8,
+     "deleted": 1,
+     "paths": [
+      "scripts/acceptance-326.test.ts"
+     ]
+    }
+   ],
+   "launches": {
+    "1": "2026-10-10T04:43:02.749Z",
+    "2": "2026-10-10T06:01:10.833Z",
+    "3": "2026-10-10T06:52:00.149Z",
+    "4": "2026-10-10T15:40:20.928Z",
+    "5": "2026-10-10T16:19:43.743Z",
+    "6": "2026-10-10T17:01:57.567Z"
+   },
+   "launchesMissing": []
+  },
+  {
+   "run": "327",
+   "merged": true,
+   "commits": [
+    {
+     "sha": "d2213907",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 379,
+     "deleted": 0,
+     "paths": [
+      "scripts/acceptance-327.test.ts",
+      "scripts/acceptance-327.ts"
+     ]
+    },
+    {
+     "sha": "25e19754",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 377,
+     "deleted": 4,
+     "paths": [
+      "scripts/verifier.test.ts",
+      "scripts/verifier.ts"
+     ]
+    },
+    {
+     "sha": "84d01bfa",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 36,
+     "deleted": 0,
+     "paths": [
+      "scripts/clerk.ts"
+     ]
+    },
+    {
+     "sha": "2c7e1f51",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 26,
+     "deleted": 8,
+     "paths": [
+      "scripts/discover-project.ts"
+     ]
+    },
+    {
+     "sha": "31c6e489",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 6,
+     "deleted": 0,
+     "paths": [
+      "skills/clerk/clerk.md"
+     ]
+    },
+    {
+     "sha": "642936cb",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 3,
+     "deleted": 2,
+     "paths": [
+      "scripts/acceptance-327.test.ts"
+     ]
+    },
+    {
+     "sha": "a5b18a65",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 4,
+     "deleted": 12,
+     "paths": [
+      "scripts/clerk.ts",
+      "scripts/verifier.test.ts"
+     ]
+    },
+    {
+     "sha": "85c8fb6e",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 1,
+     "deleted": 1,
+     "paths": [
+      "scripts/discover-project.ts"
+     ]
+    },
+    {
+     "sha": "478fd047",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 1,
+     "deleted": 0,
+     "paths": [
+      "scripts/acceptance-327.test.ts"
+     ]
+    },
+    {
+     "sha": "da0f6c04",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 2,
+     "deleted": 2,
+     "paths": [
+      "scripts/verifier.ts"
+     ]
+    },
+    {
+     "sha": "69cfd09d",
+     "phase": "fix:1",
+     "named": null,
+     "onMain": false,
+     "added": 56,
+     "deleted": 7,
+     "paths": [
+      "scripts/clerk.test.ts",
+      "scripts/clerk.ts"
+     ]
+    },
+    {
+     "sha": "9608742a",
+     "phase": "fix:1",
+     "named": null,
+     "onMain": false,
+     "added": 26,
+     "deleted": 2,
+     "paths": [
+      "scripts/acceptance-327.test.ts",
+      "scripts/acceptance-327.ts"
+     ]
+    },
+    {
+     "sha": "aff8ab2b",
+     "phase": "fix:2",
+     "named": null,
+     "onMain": false,
+     "added": 5,
+     "deleted": 2,
+     "paths": [
+      "scripts/clerk.test.ts",
+      "scripts/clerk.ts"
+     ]
+    },
+    {
+     "sha": "d40749c7",
+     "phase": "later",
+     "named": null,
+     "onMain": false,
+     "added": 0,
+     "deleted": 0,
+     "paths": []
+    },
+    {
+     "sha": "3722316c",
+     "phase": "later",
+     "named": null,
+     "onMain": false,
+     "added": 0,
+     "deleted": 0,
+     "paths": []
+    }
+   ],
+   "launches": {
+    "1": "2026-10-10T00:03:58.015Z",
+    "2": "2026-10-10T00:42:59.749Z",
+    "3": "2026-10-10T01:22:54.059Z"
+   },
+   "launchesMissing": []
+  },
+  {
+   "run": "328",
+   "merged": true,
+   "commits": [
+    {
+     "sha": "30febb0b",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 1166,
+     "deleted": 0,
+     "paths": [
+      "scripts/acceptance-328.test.ts",
+      "scripts/acceptance-328.ts"
+     ]
+    },
+    {
+     "sha": "76b7292b",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 556,
+     "deleted": 84,
+     "paths": [
+      "scripts/verifier-upkeep-correct-prompt.md",
+      "scripts/verifier.ts"
+     ]
+    },
+    {
+     "sha": "c22d1ded",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 341,
+     "deleted": 0,
+     "paths": [
+      "scripts/verifier.test.ts"
+     ]
+    },
+    {
+     "sha": "51a78882",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 5,
+     "deleted": 0,
+     "paths": [
+      "scripts/verifier.ts"
+     ]
+    },
+    {
+     "sha": "34e5e22b",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 22,
+     "deleted": 21,
+     "paths": [
+      "scripts/acceptance-328.test.ts",
+      "scripts/verifier.test.ts"
+     ]
+    },
+    {
+     "sha": "2e6b8a5e",
+     "phase": "fix:1",
+     "named": 1,
+     "onMain": false,
+     "added": 192,
+     "deleted": 0,
+     "paths": [
+      "scripts/acceptance-328.test.ts"
+     ]
+    },
+    {
+     "sha": "e3420745",
+     "phase": "fix:1",
+     "named": 1,
+     "onMain": false,
+     "added": 195,
+     "deleted": 25,
+     "paths": [
+      "scripts/verifier.test.ts",
+      "scripts/verifier.ts"
+     ]
+    },
+    {
+     "sha": "27a4fa5d",
+     "phase": "fix:2",
+     "named": 2,
+     "onMain": false,
+     "added": 50,
+     "deleted": 0,
+     "paths": [
+      "scripts/acceptance-328.test.ts"
+     ]
+    },
+    {
+     "sha": "bc4c0766",
+     "phase": "fix:2",
+     "named": 2,
+     "onMain": false,
+     "added": 115,
+     "deleted": 18,
+     "paths": [
+      "scripts/verifier.test.ts",
+      "scripts/verifier.ts"
+     ]
+    },
+    {
+     "sha": "af77815c",
+     "phase": "later",
+     "named": null,
+     "onMain": false,
+     "added": 0,
+     "deleted": 0,
+     "paths": []
+    },
+    {
+     "sha": "86bec9f3",
+     "phase": "later",
+     "named": null,
+     "onMain": false,
+     "added": 70,
+     "deleted": 6,
+     "paths": [
+      "scripts/acceptance-328.test.ts",
+      "scripts/acceptance-328.ts"
+     ]
+    }
+   ],
+   "launches": {
+    "1": "2026-10-10T12:36:23.530Z",
+    "2": "2026-10-10T13:28:51.192Z",
+    "3": "2026-10-10T14:14:02.960Z"
+   },
+   "launchesMissing": []
+  },
+  {
+   "run": "339",
+   "merged": true,
+   "commits": [
+    {
+     "sha": "00d66dfa",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 674,
+     "deleted": 0,
+     "paths": [
+      "scripts/acceptance-339.test.ts",
+      "scripts/acceptance-339.ts"
+     ]
+    },
+    {
+     "sha": "c06827d3",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 836,
+     "deleted": 171,
+     "paths": [
+      "AGENTS.md",
+      "README.md",
+      "scripts/check-setup.ts",
+      "scripts/lib/effective-config.ts",
+      "scripts/project-settings.test.ts",
+      "scripts/setup-next.ts",
+      "scripts/setup.ts",
+      "settings.example.toml",
+      "skills/postmaster/SKILL.md"
+     ]
+    },
+    {
+     "sha": "62be2d4d",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 11,
+     "deleted": 8,
+     "paths": [
+      "scripts/acceptance-339.test.ts"
+     ]
+    },
+    {
+     "sha": "43362e2d",
+     "phase": "fix:1",
+     "named": null,
+     "onMain": false,
+     "added": 3,
+     "deleted": 3,
+     "paths": [
+      "scripts/acceptance-339.test.ts"
+     ]
+    },
+    {
+     "sha": "67cc4751",
+     "phase": "fix:1",
+     "named": 1,
+     "onMain": false,
+     "added": 552,
+     "deleted": 61,
+     "paths": [
+      "AGENTS.md",
+      "scripts/lib/effective-config.ts",
+      "scripts/project-settings.test.ts",
+      "scripts/setup-next.test.ts",
+      "scripts/setup-next.ts",
+      "scripts/setup.test.ts",
+      "scripts/setup.ts",
+      "skills/postmaster/SKILL.md"
+     ]
+    },
+    {
+     "sha": "0cf01836",
+     "phase": "fix:2",
+     "named": 2,
+     "onMain": false,
+     "added": 288,
+     "deleted": 43,
+     "paths": [
+      "AGENTS.md",
+      "scripts/setup.test.ts",
+      "scripts/setup.ts",
+      "skills/postmaster/SKILL.md",
+      "wiki/concepts/project-settings.md",
+      "wiki/index.md"
+     ]
+    },
+    {
+     "sha": "c7e2b737",
+     "phase": "fix:3",
+     "named": null,
+     "onMain": false,
+     "added": 25,
+     "deleted": 1,
+     "paths": [
+      "scripts/setup-next.test.ts",
+      "scripts/setup-next.ts"
+     ]
+    },
+    {
+     "sha": "a0d5645e",
+     "phase": "fix:4",
+     "named": 4,
+     "onMain": false,
+     "added": 156,
+     "deleted": 48,
+     "paths": [
+      "scripts/setup.test.ts",
+      "scripts/setup.ts"
+     ]
+    },
+    {
+     "sha": "4abd9cc0",
+     "phase": "fix:5",
+     "named": null,
+     "onMain": false,
+     "added": 31,
+     "deleted": 3,
+     "paths": [
+      "scripts/setup.test.ts",
+      "scripts/setup.ts"
+     ]
+    },
+    {
+     "sha": "9f603db5",
+     "phase": "fix:5",
+     "named": null,
+     "onMain": false,
+     "added": 173,
+     "deleted": 331,
+     "paths": [
+      "scripts/acceptance-339.test.ts",
+      "scripts/setup.test.ts",
+      "scripts/setup.ts",
+      "types/bun.d.ts"
+     ]
+    },
+    {
+     "sha": "2ef22ce8",
+     "phase": "fix:6",
+     "named": 6,
+     "onMain": false,
+     "added": 120,
+     "deleted": 14,
+     "paths": [
+      "scripts/lib/effective-config.ts",
+      "scripts/project-settings.test.ts",
+      "scripts/setup-next.test.ts",
+      "scripts/setup-next.ts",
+      "scripts/setup.test.ts",
+      "scripts/setup.ts"
+     ]
+    },
+    {
+     "sha": "013982dc",
+     "phase": "later",
+     "named": null,
+     "onMain": false,
+     "added": 0,
+     "deleted": 0,
+     "paths": []
+    },
+    {
+     "sha": "c95e8139",
+     "phase": "later",
+     "named": null,
+     "onMain": false,
+     "added": 0,
+     "deleted": 0,
+     "paths": []
+    },
+    {
+     "sha": "68f45b34",
+     "phase": "later",
+     "named": null,
+     "onMain": false,
+     "added": 83,
+     "deleted": 31,
+     "paths": [
+      "scripts/setup.test.ts"
+     ]
+    }
+   ],
+   "launches": {
+    "1": "2026-10-09T21:52:46.469Z",
+    "2": "2026-10-09T23:18:27.615Z",
+    "3": "2026-10-10T00:25:50.784Z",
+    "4": "2026-10-10T01:33:32.301Z",
+    "5": "2026-10-10T02:25:51.801Z",
+    "6": "2026-10-10T03:51:06.449Z",
+    "7": "2026-10-10T05:06:55.599Z"
+   },
+   "launchesMissing": []
+  },
+  {
+   "run": "344",
+   "merged": true,
+   "commits": [
+    {
+     "sha": "9d09e3ed",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 396,
+     "deleted": 0,
+     "paths": [
+      "scripts/acceptance-344.test.ts",
+      "scripts/acceptance-344.ts"
+     ]
+    },
+    {
+     "sha": "bda9406f",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 9,
+     "deleted": 0,
+     "paths": [
+      "scripts/acceptance-344.ts"
+     ]
+    },
+    {
+     "sha": "47dd2def",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 6,
+     "deleted": 0,
+     "paths": [
+      "HANDOVER.md",
+      "verify-app/README.md",
+      "verify-app/features/f1.md",
+      "verify-app/features/f2.md",
+      "verify-app/features/f3.md"
+     ]
+    },
+    {
+     "sha": "dc55fde9",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 499,
+     "deleted": 54,
+     "paths": [
+      "scripts/verifier-prompt.md",
+      "scripts/verifier.test.ts",
+      "scripts/verifier.ts"
+     ]
+    },
+    {
+     "sha": "437d8a06",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 0,
+     "deleted": 6,
+     "paths": [
+      "HANDOVER.md",
+      "verify-app/README.md",
+      "verify-app/features/f1.md",
+      "verify-app/features/f2.md",
+      "verify-app/features/f3.md"
+     ]
+    },
+    {
+     "sha": "3e2c7d56",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 145,
+     "deleted": 24,
+     "paths": [
+      "scripts/acceptance-344.test.ts",
+      "scripts/acceptance-344.ts"
+     ]
+    },
+    {
+     "sha": "26c9a978",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 82,
+     "deleted": 9,
+     "paths": [
+      "scripts/host-self-test.ts",
+      "scripts/host.test.ts",
+      "scripts/host.ts",
+      "skills/postmaster/hosts.md"
+     ]
+    },
+    {
+     "sha": "0cf683c8",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 9,
+     "deleted": 82,
+     "paths": [
+      "scripts/host-self-test.ts",
+      "scripts/host.test.ts",
+      "scripts/host.ts",
+      "skills/postmaster/hosts.md"
+     ]
+    },
+    {
+     "sha": "d07177fe",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 3,
+     "deleted": 0,
+     "paths": [
+      "scripts/acceptance-344.test.ts"
+     ]
+    },
+    {
+     "sha": "94aeb58c",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 17,
+     "deleted": 4,
+     "paths": [
+      "scripts/acceptance-344.ts"
+     ]
+    },
+    {
+     "sha": "f3c5052b",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 38,
+     "deleted": 1,
+     "paths": [
+      "scripts/verifier.test.ts",
+      "scripts/verifier.ts"
+     ]
+    },
+    {
+     "sha": "b753c767",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 1,
+     "deleted": 1,
+     "paths": [
+      "scripts/verifier.test.ts"
+     ]
+    },
+    {
+     "sha": "488867f9",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 3,
+     "deleted": 1,
+     "paths": [
+      "scripts/verifier.test.ts"
+     ]
+    },
+    {
+     "sha": "959e3743",
+     "phase": "fix:1",
+     "named": null,
+     "onMain": false,
+     "added": 18,
+     "deleted": 6,
+     "paths": [
+      "scripts/verifier.test.ts",
+      "scripts/verifier.ts"
+     ]
+    },
+    {
+     "sha": "3185869a",
+     "phase": "fix:1",
+     "named": null,
+     "onMain": false,
+     "added": 17,
+     "deleted": 4,
+     "paths": [
+      "scripts/verifier.ts"
+     ]
+    },
+    {
+     "sha": "7fa2a3ae",
+     "phase": "fix:1",
+     "named": null,
+     "onMain": false,
+     "added": 46,
+     "deleted": 1,
+     "paths": [
+      "scripts/acceptance-344.test.ts"
+     ]
+    },
+    {
+     "sha": "cc928692",
+     "phase": "fix:1",
+     "named": 1,
+     "onMain": false,
+     "added": 4,
+     "deleted": 3,
+     "paths": [
+      "scripts/verifier.test.ts",
+      "scripts/verifier.ts"
+     ]
+    },
+    {
+     "sha": "db3948e3",
+     "phase": "fix:2",
+     "named": null,
+     "onMain": false,
+     "added": 176,
+     "deleted": 12,
+     "paths": [
+      "scripts/verifier.test.ts",
+      "scripts/verifier.ts"
+     ]
+    },
+    {
+     "sha": "b5effe92",
+     "phase": "fix:3",
+     "named": null,
+     "onMain": false,
+     "added": 11,
+     "deleted": 7,
+     "paths": [
+      "scripts/verifier.test.ts",
+      "scripts/verifier.ts"
+     ]
+    },
+    {
+     "sha": "9b8a0e86",
+     "phase": "later",
+     "named": null,
+     "onMain": false,
+     "added": 0,
+     "deleted": 0,
+     "paths": []
+    },
+    {
+     "sha": "78c9e3b0",
+     "phase": "later",
+     "named": null,
+     "onMain": false,
+     "added": 53,
+     "deleted": 15,
+     "paths": [
+      "scripts/acceptance-344.test.ts",
+      "scripts/acceptance-344.ts"
+     ]
+    }
+   ],
+   "launches": {
+    "1": "2026-10-09T21:19:32.629Z",
+    "2": "2026-10-09T22:24:51.272Z",
+    "3": "2026-10-09T23:14:41.446Z",
+    "4": "2026-10-09T23:55:57.368Z"
+   },
+   "launchesMissing": []
+  },
+  {
+   "run": "348",
+   "merged": true,
+   "commits": [
+    {
+     "sha": "865abe5b",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 417,
+     "deleted": 0,
+     "paths": [
+      "scripts/acceptance-348.test.ts",
+      "scripts/acceptance-348.ts"
+     ]
+    },
+    {
+     "sha": "fb693ba9",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 16,
+     "deleted": 2,
+     "paths": [
+      "scripts/acceptance-348.test.ts",
+      "scripts/acceptance-348.ts"
+     ]
+    },
+    {
+     "sha": "b75b641f",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 261,
+     "deleted": 74,
+     "paths": [
+      "scripts/cut-scratch.ts",
+      "scripts/host.ts",
+      "scripts/take-in.ts",
+      "scripts/verify.ts",
+      "skills/postmaster/coachman.md",
+      "skills/postmaster/hosts.md",
+      "skills/postmaster/postmaster.md"
+     ]
+    },
+    {
+     "sha": "92c6c1ef",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 6,
+     "deleted": 6,
+     "paths": [
+      "scripts/skill-refs.test.ts"
+     ]
+    },
+    {
+     "sha": "af21b4ae",
+     "phase": "fix:1",
+     "named": null,
+     "onMain": false,
+     "added": 147,
+     "deleted": 33,
+     "paths": [
+      "scripts/take-in.test.ts",
+      "scripts/take-in.ts"
+     ]
+    },
+    {
+     "sha": "a2993a64",
+     "phase": "fix:1",
+     "named": null,
+     "onMain": false,
+     "added": 28,
+     "deleted": 3,
+     "paths": [
+      "scripts/cut-scratch.test.ts",
+      "scripts/cut-scratch.ts"
+     ]
+    },
+    {
+     "sha": "b72a2bcc",
+     "phase": "fix:1",
+     "named": null,
+     "onMain": false,
+     "added": 1,
+     "deleted": 1,
+     "paths": [
+      "skills/postmaster/coachman.md"
+     ]
+    },
+    {
+     "sha": "d4e786ec",
+     "phase": "fix:2",
+     "named": null,
+     "onMain": false,
+     "added": 1,
+     "deleted": 1,
+     "paths": [
+      "scripts/take-in.test.ts"
+     ]
+    },
+    {
+     "sha": "ed9b8b8c",
+     "phase": "fix:2",
+     "named": null,
+     "onMain": false,
+     "added": 8,
+     "deleted": 3,
+     "paths": [
+      "skills/postmaster/postmaster.md"
+     ]
+    },
+    {
+     "sha": "70f1a4af",
+     "phase": "later",
+     "named": null,
+     "onMain": false,
+     "added": 0,
+     "deleted": 0,
+     "paths": []
+    }
+   ],
+   "launches": {
+    "1": "2026-10-09T21:06:10.350Z",
+    "2": "2026-10-09T21:56:00.627Z",
+    "3": "2026-10-09T22:38:26.623Z"
+   },
+   "launchesMissing": []
+  },
+  {
+   "run": "352",
+   "merged": true,
+   "commits": [
+    {
+     "sha": "ea680aaf",
+     "phase": "later",
+     "named": null,
+     "onMain": false,
+     "added": 4767,
+     "deleted": 93,
+     "paths": [
+      "AGENTS.md",
+      "scripts/acceptance-352.test.ts",
+      "scripts/acceptance-352.ts",
+      "scripts/lib/page-text.test.ts",
+      "scripts/lib/page-text.ts",
+      "scripts/review-page.test.ts",
+      "scripts/review-page.ts",
+      "scripts/story-page.test.ts",
+      "scripts/story-page.ts",
+      "scripts/story-picture.test.ts",
+      "scripts/story-picture.ts",
+      "skills/review-pages/SKILL.md"
+     ]
+    },
+    {
+     "sha": "ebb727a8",
+     "phase": "later",
+     "named": null,
+     "onMain": false,
+     "added": 8,
+     "deleted": 1,
+     "paths": [
+      "scripts/story-page.test.ts"
+     ]
+    },
+    {
+     "sha": "50e08783",
+     "phase": "later",
+     "named": null,
+     "onMain": false,
+     "added": 0,
+     "deleted": 0,
+     "paths": []
+    }
+   ],
+   "launches": {
+    "1": "2026-10-10T08:23:14.803Z",
+    "2": "2026-10-10T09:44:27.481Z",
+    "3": "2026-10-10T10:34:33.267Z",
+    "4": "2026-10-10T11:16:52.671Z",
+    "5": "2026-10-10T15:35:11.176Z",
+    "6": "2026-10-10T16:31:08.846Z"
+   },
+   "launchesMissing": []
+  },
+  {
+   "run": "355",
+   "merged": true,
+   "commits": [
+    {
+     "sha": "863846c3",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 491,
+     "deleted": 0,
+     "paths": [
+      "scripts/acceptance-355.test.ts",
+      "scripts/acceptance-355.ts"
+     ]
+    },
+    {
+     "sha": "030f3cb8",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 267,
+     "deleted": 6,
+     "paths": [
+      "scripts/verifier-multi-prompt.md",
+      "scripts/verifier-prompt.md",
+      "scripts/verifier.test.ts",
+      "scripts/verifier.ts"
+     ]
+    },
+    {
+     "sha": "839ee3a2",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 40,
+     "deleted": 2,
+     "paths": [
+      "README.md",
+      "scripts/clerk.ts",
+      "skills/clerk/clerk.md",
+      "skills/postmaster/postmaster.md"
+     ]
+    },
+    {
+     "sha": "c15229b8",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 5,
+     "deleted": 8,
+     "paths": [
+      "scripts/acceptance-355.test.ts"
+     ]
+    },
+    {
+     "sha": "5fcff0c1",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 2,
+     "deleted": 0,
+     "paths": [
+      "scripts/verifier.ts"
+     ]
+    },
+    {
+     "sha": "c500296f",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 2,
+     "deleted": 1,
+     "paths": [
+      "scripts/acceptance-355.test.ts"
+     ]
+    },
+    {
+     "sha": "173c0a1e",
+     "phase": "fix:1",
+     "named": null,
+     "onMain": false,
+     "added": 31,
+     "deleted": 11,
+     "paths": [
+      "scripts/verifier.test.ts",
+      "scripts/verifier.ts"
+     ]
+    },
+    {
+     "sha": "c416c2b8",
+     "phase": "fix:1",
+     "named": null,
+     "onMain": false,
+     "added": 4,
+     "deleted": 3,
+     "paths": [
+      "skills/postmaster/postmaster.md"
+     ]
+    },
+    {
+     "sha": "ee3b7dd6",
+     "phase": "fix:1",
+     "named": 1,
+     "onMain": false,
+     "added": 91,
+     "deleted": 6,
+     "paths": [
+      "scripts/acceptance-355.test.ts",
+      "scripts/acceptance-355.ts"
+     ]
+    },
+    {
+     "sha": "37711337",
+     "phase": "fix:2",
+     "named": null,
+     "onMain": false,
+     "added": 8,
+     "deleted": 3,
+     "paths": [
+      "scripts/verifier.test.ts",
+      "scripts/verifier.ts"
+     ]
+    },
+    {
+     "sha": "73d9e1fe",
+     "phase": "fix:2",
+     "named": null,
+     "onMain": false,
+     "added": 3,
+     "deleted": 3,
+     "paths": [
+      "skills/postmaster/postmaster.md"
+     ]
+    },
+    {
+     "sha": "b35e22c1",
+     "phase": "fix:2",
+     "named": 2,
+     "onMain": false,
+     "added": 24,
+     "deleted": 3,
+     "paths": [
+      "scripts/acceptance-355.test.ts",
+      "scripts/acceptance-355.ts"
+     ]
+    },
+    {
+     "sha": "4469ecba",
+     "phase": "fix:3",
+     "named": null,
+     "onMain": false,
+     "added": 30,
+     "deleted": 15,
+     "paths": [
+      "scripts/verifier.test.ts",
+      "scripts/verifier.ts"
+     ]
+    },
+    {
+     "sha": "01ebd904",
+     "phase": "fix:3",
+     "named": null,
+     "onMain": false,
+     "added": 16,
+     "deleted": 0,
+     "paths": [
+      "scripts/acceptance-355.test.ts"
+     ]
+    },
+    {
+     "sha": "05dee0c5",
+     "phase": "fix:4",
+     "named": null,
+     "onMain": false,
+     "added": 3,
+     "deleted": 1,
+     "paths": [
+      "skills/postmaster/postmaster.md"
+     ]
+    },
+    {
+     "sha": "e499125e",
+     "phase": "fix:4",
+     "named": null,
+     "onMain": false,
+     "added": 3,
+     "deleted": 1,
+     "paths": [
+      "scripts/acceptance-355.ts"
+     ]
+    },
+    {
+     "sha": "a8a9e28f",
+     "phase": "later",
+     "named": null,
+     "onMain": false,
+     "added": 0,
+     "deleted": 0,
+     "paths": []
+    },
+    {
+     "sha": "94ea0b53",
+     "phase": "later",
+     "named": null,
+     "onMain": false,
+     "added": 0,
+     "deleted": 0,
+     "paths": []
+    }
+   ],
+   "launches": {
+    "1": "2026-10-10T18:43:04.457Z",
+    "2": "2026-10-10T19:20:07.250Z",
+    "3": "2026-10-10T19:52:15.710Z",
+    "4": "2026-10-10T20:22:44.460Z",
+    "5": "2026-10-10T20:52:30.584Z"
+   },
+   "launchesMissing": []
+  },
+  {
+   "run": "374",
+   "merged": true,
+   "commits": [
+    {
+     "sha": "cc9710c8",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 395,
+     "deleted": 0,
+     "paths": [
+      "scripts/acceptance-374.test.ts"
+     ]
+    },
+    {
+     "sha": "cf35bc20",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 975,
+     "deleted": 315,
+     "paths": [
+      "scripts/acceptance-373.test.ts",
+      "scripts/acceptance-373.ts",
+      "scripts/host-self-test.ts",
+      "scripts/host.test.ts",
+      "scripts/host.ts",
+      "skills/postmaster/hosts.md"
+     ]
+    },
+    {
+     "sha": "0d3947a5",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 147,
+     "deleted": 144,
+     "paths": [
+      "scripts/acceptance-374.test.ts",
+      "scripts/acceptance-374.ts"
+     ]
+    },
+    {
+     "sha": "e36cdf56",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 41,
+     "deleted": 52,
+     "paths": [
+      "scripts/acceptance-374.test.ts",
+      "scripts/host-self-test.ts",
+      "scripts/host.ts"
+     ]
+    },
+    {
+     "sha": "2d275c4b",
+     "phase": "fix:1",
+     "named": 1,
+     "onMain": false,
+     "added": 262,
+     "deleted": 21,
+     "paths": [
+      "scripts/host-self-test.ts",
+      "scripts/host.test.ts",
+      "scripts/host.ts",
+      "skills/postmaster/coachman.md"
+     ]
+    },
+    {
+     "sha": "30e48ecd",
+     "phase": "later",
+     "named": 1,
+     "onMain": false,
+     "added": 5,
+     "deleted": 2,
+     "paths": [
+      "scripts/host.ts"
+     ]
+    },
+    {
+     "sha": "b4db099a",
+     "phase": "later",
+     "named": null,
+     "onMain": false,
+     "added": 0,
+     "deleted": 0,
+     "paths": []
+    },
+    {
+     "sha": "0b3e4266",
+     "phase": "later",
+     "named": null,
+     "onMain": false,
+     "added": 0,
+     "deleted": 0,
+     "paths": []
+    }
+   ],
+   "launches": {
+    "1": "2026-10-10T01:45:40.895Z",
+    "2": "2026-10-10T03:09:03.785Z"
+   },
+   "launchesMissing": []
+  },
+  {
+   "run": "375",
+   "merged": true,
+   "commits": [
+    {
+     "sha": "523176d0",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 581,
+     "deleted": 0,
+     "paths": [
+      "scripts/acceptance-375.test.ts",
+      "scripts/acceptance-375.ts"
+     ]
+    },
+    {
+     "sha": "ae8a374a",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 2,
+     "deleted": 6,
+     "paths": [
+      "scripts/acceptance-375.test.ts"
+     ]
+    },
+    {
+     "sha": "0f38ce7f",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 358,
+     "deleted": 54,
+     "paths": [
+      "scripts/host.ts",
+      "skills/postmaster/SKILL.md",
+      "skills/postmaster/hosts.md"
+     ]
+    },
+    {
+     "sha": "624e866b",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 43,
+     "deleted": 73,
+     "paths": [
+      "scripts/acceptance-373.test.ts"
+     ]
+    },
+    {
+     "sha": "a59f0569",
+     "phase": "fix:1",
+     "named": 1,
+     "onMain": false,
+     "added": 157,
+     "deleted": 5,
+     "paths": [
+      "scripts/host.test.ts",
+      "scripts/host.ts"
+     ]
+    },
+    {
+     "sha": "978f2335",
+     "phase": "later",
+     "named": null,
+     "onMain": false,
+     "added": 0,
+     "deleted": 0,
+     "paths": []
+    },
+    {
+     "sha": "4cee613d",
+     "phase": "later",
+     "named": null,
+     "onMain": false,
+     "added": 0,
+     "deleted": 0,
+     "paths": []
+    }
+   ],
+   "launches": {
+    "1": "2026-10-10T06:58:47.125Z",
+    "2": "2026-10-10T07:48:42.625Z"
+   },
+   "launchesMissing": []
+  },
+  {
+   "run": "379",
+   "merged": true,
+   "commits": [
+    {
+     "sha": "19ab6e58",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 467,
+     "deleted": 0,
+     "paths": [
+      "scripts/acceptance-379.test.ts",
+      "scripts/acceptance-379.ts"
+     ]
+    },
+    {
+     "sha": "fe1282ff",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 691,
+     "deleted": 0,
+     "paths": [
+      "scripts/merge-default.test.ts",
+      "scripts/merge-default.ts"
+     ]
+    },
+    {
+     "sha": "dc756c5f",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 18,
+     "deleted": 0,
+     "paths": [
+      "scripts/skips.toml"
+     ]
+    },
+    {
+     "sha": "e32866cf",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 42,
+     "deleted": 7,
+     "paths": [
+      "skills/postmaster/coachman.md",
+      "skills/postmaster/postmaster.md"
+     ]
+    },
+    {
+     "sha": "772a0323",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 9,
+     "deleted": 0,
+     "paths": [
+      "docs/coachman-contract.toml",
+      "scripts/coachman-contract.ts"
+     ]
+    },
+    {
+     "sha": "bc361b8a",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 1,
+     "deleted": 8,
+     "paths": [
+      "scripts/acceptance-379.ts"
+     ]
+    },
+    {
+     "sha": "3c7b5cd4",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 24,
+     "deleted": 10,
+     "paths": [
+      "scripts/merge-default.ts"
+     ]
+    },
+    {
+     "sha": "ca00a24a",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 15,
+     "deleted": 8,
+     "paths": [
+      "scripts/merge-default.ts"
+     ]
+    },
+    {
+     "sha": "40253be1",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 3,
+     "deleted": 2,
+     "paths": [
+      "scripts/skill-refs.test.ts"
+     ]
+    },
+    {
+     "sha": "89e48ce5",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 1,
+     "deleted": 1,
+     "paths": [
+      "skills/postmaster/coachman.md"
+     ]
+    },
+    {
+     "sha": "0332fb10",
+     "phase": "fix:1",
+     "named": 1,
+     "onMain": false,
+     "added": 241,
+     "deleted": 36,
+     "paths": [
+      "scripts/merge-default.test.ts",
+      "scripts/merge-default.ts",
+      "skills/postmaster/coachman.md",
+      "skills/postmaster/postmaster.md"
+     ]
+    },
+    {
+     "sha": "a43eff09",
+     "phase": "fix:1",
+     "named": null,
+     "onMain": false,
+     "added": 1,
+     "deleted": 1,
+     "paths": [
+      "scripts/acceptance-379.test.ts"
+     ]
+    },
+    {
+     "sha": "ffd08cbd",
+     "phase": "later",
+     "named": null,
+     "onMain": false,
+     "added": 0,
+     "deleted": 0,
+     "paths": []
+    }
+   ],
+   "launches": {
+    "1": "2026-10-11T01:47:16.277Z",
+    "2": "2026-10-11T02:30:32.605Z"
+   },
+   "launchesMissing": []
+  },
+  {
+   "run": "407",
+   "merged": true,
+   "commits": [
+    {
+     "sha": "cce07991",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 968,
+     "deleted": 0,
+     "paths": [
+      "scripts/acceptance-407.test.ts",
+      "scripts/acceptance-407.ts",
+      "scripts/fixtures/acceptance-407/ticket-251.md",
+      "scripts/fixtures/acceptance-407/ticket-266.md",
+      "scripts/fixtures/acceptance-407/ticket-270.md"
+     ]
+    },
+    {
+     "sha": "9042f889",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 2,
+     "deleted": 2,
+     "paths": [
+      "scripts/acceptance-407.test.ts"
+     ]
+    },
+    {
+     "sha": "2c41ec71",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 481,
+     "deleted": 50,
+     "paths": [
+      "config.example.toml",
+      "scripts/fixture.test.ts",
+      "scripts/fixture.ts",
+      "scripts/lib/ticket-notes.ts",
+      "scripts/lib/ticket-sections.test.ts",
+      "scripts/lib/ticket-sections.ts",
+      "scripts/run-meta.test.ts",
+      "scripts/run-meta.ts",
+      "scripts/setup.test.ts",
+      "scripts/setup.ts",
+      "scripts/ticket-cut.test.ts",
+      "scripts/ticket-cut.ts",
+      "scripts/ticket-parts.ts"
+     ]
+    },
+    {
+     "sha": "a470d6ed",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 30,
+     "deleted": 7,
+     "paths": [
+      "skills/postmaster/SKILL.md",
+      "skills/postmaster/coachman.md",
+      "skills/postmaster/postmaster.md"
+     ]
+    },
+    {
+     "sha": "b7634e74",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 42,
+     "deleted": 0,
+     "paths": [
+      "scripts/skips.toml"
+     ]
+    },
+    {
+     "sha": "c4c8d056",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 6,
+     "deleted": 15,
+     "paths": [
+      "scripts/fixture.test.ts",
+      "scripts/lib/ticket-sections.test.ts",
+      "scripts/run-meta.ts",
+      "scripts/ticket-cut.ts"
+     ]
+    },
+    {
+     "sha": "7c9ab345",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 3,
+     "deleted": 3,
+     "paths": [
+      "scripts/acceptance-407.test.ts",
+      "scripts/acceptance-407.ts"
+     ]
+    },
+    {
+     "sha": "90ab7be3",
+     "phase": "fix:1",
+     "named": null,
+     "onMain": false,
+     "added": 49,
+     "deleted": 3,
+     "paths": [
+      "scripts/fixture.test.ts",
+      "scripts/fixture.ts",
+      "scripts/log-action.test.ts",
+      "scripts/log-action.ts"
+     ]
+    },
+    {
+     "sha": "bb0130d2",
+     "phase": "fix:1",
+     "named": null,
+     "onMain": false,
+     "added": 13,
+     "deleted": 10,
+     "paths": [
+      "scripts/acceptance-407.test.ts"
+     ]
+    },
+    {
+     "sha": "3dbe975a",
+     "phase": "fix:2",
+     "named": null,
+     "onMain": false,
+     "added": 8,
+     "deleted": 7,
+     "paths": [
+      "skills/postmaster/postmaster.md"
+     ]
+    },
+    {
+     "sha": "1664c4c5",
+     "phase": "fix:3",
+     "named": null,
+     "onMain": false,
+     "added": 92,
+     "deleted": 16,
+     "paths": [
+      "scripts/lib/ticket-sections.test.ts",
+      "scripts/lib/ticket-sections.ts",
+      "scripts/premises.test.ts",
+      "scripts/premises.ts",
+      "scripts/ticket-cut.test.ts",
+      "scripts/ticket-cut.ts",
+      "scripts/ticket-parts.ts"
+     ]
+    },
+    {
+     "sha": "9500beef",
+     "phase": "fix:3",
+     "named": null,
+     "onMain": false,
+     "added": 146,
+     "deleted": 23,
+     "paths": [
+      "scripts/lib/ticket-sections.test.ts",
+      "scripts/lib/ticket-sections.ts",
+      "scripts/premises.test.ts",
+      "scripts/premises.ts",
+      "scripts/ticket-parts.ts"
+     ]
+    },
+    {
+     "sha": "c02178eb",
+     "phase": "fix:3",
+     "named": null,
+     "onMain": false,
+     "added": 128,
+     "deleted": 2,
+     "paths": [
+      "scripts/acceptance-407.test.ts"
+     ]
+    },
+    {
+     "sha": "8bf80819",
+     "phase": "fix:3",
+     "named": null,
+     "onMain": false,
+     "added": 1,
+     "deleted": 1,
+     "paths": [
+      "scripts/acceptance-407.test.ts"
+     ]
+    },
+    {
+     "sha": "0681e20a",
+     "phase": "later",
+     "named": null,
+     "onMain": false,
+     "added": 0,
+     "deleted": 0,
+     "paths": []
+    }
+   ],
+   "launches": {
+    "1": "2026-10-10T04:11:47.208Z",
+    "2": "2026-10-10T05:06:34.981Z",
+    "3": "2026-10-10T05:53:10.991Z",
+    "4": "2026-10-10T20:39:52.993Z"
+   },
+   "launchesMissing": []
+  },
+  {
+   "run": "408",
+   "merged": true,
+   "commits": [
+    {
+     "sha": "fc81b91a",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 287,
+     "deleted": 0,
+     "paths": [
+      "scripts/acceptance-408.test.ts",
+      "scripts/acceptance-408.ts"
+     ]
+    },
+    {
+     "sha": "1ec04650",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 11,
+     "deleted": 16,
+     "paths": [
+      "scripts/acceptance-408.test.ts"
+     ]
+    },
+    {
+     "sha": "054c9814",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 144,
+     "deleted": 36,
+     "paths": [
+      "scripts/lib/ticket-notes.ts",
+      "scripts/run-meta.test.ts",
+      "scripts/run-meta.ts",
+      "scripts/skips.toml",
+      "skills/postmaster/postmaster.md"
+     ]
+    },
+    {
+     "sha": "ae488a93",
+     "phase": "fix:1",
+     "named": null,
+     "onMain": false,
+     "added": 26,
+     "deleted": 2,
+     "paths": [
+      "scripts/run-meta.test.ts",
+      "scripts/run-meta.ts"
+     ]
+    },
+    {
+     "sha": "c8c2f218",
+     "phase": "later",
+     "named": null,
+     "onMain": false,
+     "added": 0,
+     "deleted": 0,
+     "paths": []
+    },
+    {
+     "sha": "4690f7e9",
+     "phase": "later",
+     "named": null,
+     "onMain": false,
+     "added": 0,
+     "deleted": 0,
+     "paths": []
+    }
+   ],
+   "launches": {
+    "1": "2026-10-10T23:45:28.488Z",
+    "2": "2026-10-11T00:16:19.970Z"
+   },
+   "launchesMissing": []
+  },
+  {
+   "run": "425",
+   "merged": true,
+   "commits": [
+    {
+     "sha": "25a0e9ae",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 498,
+     "deleted": 0,
+     "paths": [
+      "scripts/acceptance-425.test.ts",
+      "scripts/acceptance-425.ts"
+     ]
+    },
+    {
+     "sha": "6c15a80a",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 492,
+     "deleted": 37,
+     "paths": [
+      "bun.lock",
+      "bunfig.toml",
+      "package.json",
+      "scripts/lib/install-scanner.test.ts",
+      "scripts/lib/install-scanner.ts",
+      "scripts/refresh-parser.test.ts",
+      "scripts/refresh-parser.ts"
+     ]
+    },
+    {
+     "sha": "406eaabb",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 6,
+     "deleted": 5,
+     "paths": [
+      "scripts/acceptance-425.test.ts"
+     ]
+    },
+    {
+     "sha": "88c8abc0",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 1,
+     "deleted": 1,
+     "paths": [
+      "scripts/acceptance-232.ts"
+     ]
+    },
+    {
+     "sha": "5193e528",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 1,
+     "deleted": 1,
+     "paths": [
+      "scripts/acceptance-425.test.ts"
+     ]
+    },
+    {
+     "sha": "f3bec070",
+     "phase": "fix:1",
+     "named": null,
+     "onMain": false,
+     "added": 15,
+     "deleted": 6,
+     "paths": [
+      "scripts/acceptance-232.ts",
+      "scripts/no-explicit-any-acceptance.ts"
+     ]
+    },
+    {
+     "sha": "173c15cc",
+     "phase": "fix:1",
+     "named": null,
+     "onMain": false,
+     "added": 1,
+     "deleted": 1,
+     "paths": [
+      "scripts/refresh-parser.ts"
+     ]
+    },
+    {
+     "sha": "caf00bf4",
+     "phase": "fix:1",
+     "named": null,
+     "onMain": false,
+     "added": 30,
+     "deleted": 1,
+     "paths": [
+      "scripts/acceptance-425.test.ts"
+     ]
+    },
+    {
+     "sha": "b0327a5c",
+     "phase": "fix:2",
+     "named": null,
+     "onMain": false,
+     "added": 13,
+     "deleted": 3,
+     "paths": [
+      "scripts/no-explicit-any-acceptance.test.ts",
+      "scripts/no-explicit-any-acceptance.ts"
+     ]
+    },
+    {
+     "sha": "c9a445c7",
+     "phase": "fix:2",
+     "named": null,
+     "onMain": false,
+     "added": 4,
+     "deleted": 1,
+     "paths": [
+      "scripts/lib/install-scanner.ts"
+     ]
+    },
+    {
+     "sha": "337cab56",
+     "phase": "fix:2",
+     "named": null,
+     "onMain": false,
+     "added": 17,
+     "deleted": 0,
+     "paths": [
+      "scripts/acceptance-425.test.ts"
+     ]
+    },
+    {
+     "sha": "8e751378",
+     "phase": "later",
+     "named": null,
+     "onMain": false,
+     "added": 0,
+     "deleted": 0,
+     "paths": []
+    },
+    {
+     "sha": "6a52185b",
+     "phase": "later",
+     "named": null,
+     "onMain": false,
+     "added": 0,
+     "deleted": 0,
+     "paths": []
+    },
+    {
+     "sha": "17af6afc",
+     "phase": "later",
+     "named": null,
+     "onMain": false,
+     "added": 0,
+     "deleted": 0,
+     "paths": []
+    },
+    {
+     "sha": "ee30990b",
+     "phase": "later",
+     "named": null,
+     "onMain": false,
+     "added": 0,
+     "deleted": 0,
+     "paths": []
+    },
+    {
+     "sha": "c73c7146",
+     "phase": "later",
+     "named": null,
+     "onMain": false,
+     "added": 0,
+     "deleted": 0,
+     "paths": []
+    },
+    {
+     "sha": "fbdaad2f",
+     "phase": "later",
+     "named": null,
+     "onMain": false,
+     "added": 0,
+     "deleted": 0,
+     "paths": []
+    }
+   ],
+   "launches": {
+    "1": "2026-10-10T21:38:24.978Z",
+    "2": "2026-10-10T22:29:44.946Z",
+    "3": "2026-10-10T23:22:39.317Z"
+   },
+   "launchesMissing": []
+  },
+  {
+   "run": "429",
+   "merged": false,
+   "commits": [
+    {
+     "sha": "5ec708bc",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 944,
+     "deleted": 0,
+     "paths": [
+      "scripts/acceptance-429.test.ts",
+      "scripts/acceptance-429.ts",
+      "scripts/skips.toml"
+     ]
+    },
+    {
+     "sha": "49663de7",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 6,
+     "deleted": 11,
+     "paths": [
+      "scripts/acceptance-429.test.ts",
+      "scripts/acceptance-429.ts"
+     ]
+    },
+    {
+     "sha": "9dd82d37",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 63,
+     "deleted": 29,
+     "paths": [
+      "scripts/acceptance-429.test.ts",
+      "scripts/acceptance-429.ts"
+     ]
+    },
+    {
+     "sha": "86be9851",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 1139,
+     "deleted": 28,
+     "paths": [
+      "AGENTS.md",
+      "config.example.toml",
+      "scripts/reviewers.ts",
+      "scripts/setup.test.ts",
+      "scripts/setup.ts",
+      "scripts/surveyor.test.ts",
+      "scripts/surveyor.ts",
+      "skills/surveyor/SKILL.md"
+     ]
+    },
+    {
+     "sha": "d74014a6",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 35,
+     "deleted": 1,
+     "paths": [
+      "scripts/acceptance-429.test.ts"
+     ]
+    },
+    {
+     "sha": "a61096db",
+     "phase": "change",
+     "named": null,
+     "onMain": false,
+     "added": 12,
+     "deleted": 7,
+     "paths": [
+      "scripts/surveyor.test.ts",
+      "scripts/surveyor.ts"
+     ]
+    },
+    {
+     "sha": "67415c77",
+     "phase": "fix:1",
+     "named": null,
+     "onMain": false,
+     "added": 40,
+     "deleted": 4,
+     "paths": [
+      "scripts/surveyor.test.ts",
+      "scripts/surveyor.ts"
+     ]
+    },
+    {
+     "sha": "93bd9ac9",
+     "phase": "fix:1",
+     "named": null,
+     "onMain": false,
+     "added": 33,
+     "deleted": 2,
+     "paths": [
+      "scripts/acceptance-429.test.ts",
+      "scripts/acceptance-429.ts"
+     ]
+    },
+    {
+     "sha": "87e59a67",
+     "phase": "fix:1",
+     "named": null,
+     "onMain": false,
+     "added": 40,
+     "deleted": 0,
+     "paths": [
+      "scripts/setup.test.ts",
+      "scripts/setup.ts"
+     ]
+    },
+    {
+     "sha": "fa6cb06c",
+     "phase": "fix:1",
+     "named": null,
+     "onMain": false,
+     "added": 33,
+     "deleted": 6,
+     "paths": [
+      "config.example.toml",
+      "scripts/surveyor.test.ts"
+     ]
+    },
+    {
+     "sha": "4aa542e9",
+     "phase": "fix:1",
+     "named": null,
+     "onMain": false,
+     "added": 4,
+     "deleted": 0,
+     "paths": [
+      "scripts/acceptance-429.test.ts"
+     ]
+    },
+    {
+     "sha": "186de6f6",
+     "phase": "fix:1",
+     "named": null,
+     "onMain": false,
+     "added": 64,
+     "deleted": 5,
+     "paths": [
+      "scripts/walls.test.ts",
+      "scripts/walls.ts"
+     ]
+    },
+    {
+     "sha": "a455ba2f",
+     "phase": "fix:1",
+     "named": null,
+     "onMain": false,
+     "added": 1,
+     "deleted": 4,
+     "paths": [
+      "scripts/surveyor.test.ts"
+     ]
+    },
+    {
+     "sha": "5426d6cd",
+     "phase": "later",
+     "named": null,
+     "onMain": false,
+     "added": 0,
+     "deleted": 0,
+     "paths": []
+    },
+    {
+     "sha": "75ead964",
+     "phase": "later",
+     "named": null,
+     "onMain": false,
+     "added": 16,
+     "deleted": 3,
+     "paths": [
+      "scripts/acceptance-429.test.ts"
+     ]
+    },
+    {
+     "sha": "d62c952c",
+     "phase": "later",
+     "named": null,
+     "onMain": false,
+     "added": 0,
+     "deleted": 0,
+     "paths": []
+    },
+    {
+     "sha": "512e7f79",
+     "phase": "later",
+     "named": null,
+     "onMain": false,
+     "added": 0,
+     "deleted": 0,
+     "paths": []
+    },
+    {
+     "sha": "3abbe259",
+     "phase": "later",
+     "named": null,
+     "onMain": false,
+     "added": 0,
+     "deleted": 0,
+     "paths": []
+    },
+    {
+     "sha": "347ecc8a",
+     "phase": "later",
+     "named": null,
+     "onMain": false,
+     "added": 9,
+     "deleted": 2,
+     "paths": [
+      "scripts/acceptance-429.test.ts"
+     ]
+    },
+    {
+     "sha": "3f57f596",
+     "phase": "later",
+     "named": null,
+     "onMain": false,
+     "added": 7,
+     "deleted": 7,
+     "paths": [
+      "scripts/acceptance-429.test.ts"
+     ]
+    }
+   ],
+   "launches": {
+    "1": "2026-10-11T01:33:35.319Z",
+    "2": "2026-10-11T02:26:32.259Z"
+   },
+   "launchesMissing": []
+  }
+ ],
+ "findings": [
+  {
+   "run": "216",
+   "round": 1,
+   "severity": "P1",
+   "target": "scripts/scrub-core.ts:826",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna"
+   ],
+   "text": "PATTERN_CODE skips whole line, const-EMAIL-plus-address passes gate",
+   "textSource": "line",
+   "file": "scripts/scrub-core.ts",
+   "first": 826,
+   "last": 826,
+   "snapshot": "f61ac35c",
+   "code": [
+    "if (!codePattern && (!plainLower || plainPersonalCue)) {"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "a2fac4e5"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": null
+  },
+  {
+   "run": "216",
+   "round": 1,
+   "severity": "P2",
+   "target": "scripts/landing.ts:497",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna"
+   ],
+   "text": "card scan inherits SCRUB_CHECK_DISABLE via run env merge; same hole in scrub-rewrite.ts parseFindings",
+   "textSource": "line",
+   "file": "scripts/landing.ts",
+   "first": 497,
+   "last": 497,
+   "snapshot": "f61ac35c",
+   "code": [
+    "const scanned = run(join(SCRIPTS, \"scrub-check.sh\"), [\"--pr-description\", card], {"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "a2fac4e5"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": null
+  },
+  {
+   "run": "216",
+   "round": 1,
+   "severity": "P2",
+   "target": "scripts/raw-promote-main.ts:345",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna"
+   ],
+   "text": "symlinked dest ancestor escapes repo on mkdir+rename",
+   "textSource": "line",
+   "file": "scripts/raw-promote-main.ts",
+   "first": 345,
+   "last": 345,
+   "snapshot": "f61ac35c",
+   "code": [
+    "mkdirSync(dirname(dest), { recursive: true });"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "a2fac4e5"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": null
+  },
+  {
+   "run": "216",
+   "round": 1,
+   "severity": "P2",
+   "target": "scripts/bundle-scrub.ts:92",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna"
+   ],
+   "text": "--check passes edited bundle body on matching header hash",
+   "textSource": "line",
+   "file": "scripts/bundle-scrub.ts",
+   "first": 92,
+   "last": 92,
+   "snapshot": "f61ac35c",
+   "code": [
+    "if (!force && embeddedHash(out) === hash) continue;"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "8ef3a42e"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": null
+  },
+  {
+   "run": "216",
+   "round": 1,
+   "severity": "P2",
+   "target": "scripts/landing.ts:484",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "mimo"
+   ],
+   "text": "privateDataBlock freezes heldout scores + D1/D8/D9/D19 into every future card, check requires verbatim match",
+   "textSource": "line",
+   "file": "scripts/landing.ts",
+   "first": 484,
+   "last": 484,
+   "snapshot": "f61ac35c",
+   "code": [
+    "const benchmark ="
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "0091906a"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": null
+  },
+  {
+   "run": "216",
+   "round": 2,
+   "severity": "P2",
+   "target": "scripts/scrub-core.ts:1514",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna"
+   ],
+   "text": "range scan misses UTF-16 content that --files finds",
+   "textSource": "line",
+   "file": "scripts/scrub-core.ts",
+   "first": 1514,
+   "last": 1514,
+   "snapshot": "85881afc",
+   "code": [
+    "const emit = (bytes: Uint8Array): string => {"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "8ef3a42e"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "missed-lens-reviewed"
+  },
+  {
+   "run": "216",
+   "round": 3,
+   "severity": "P2",
+   "target": "scripts/landing.ts:475",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna"
+   ],
+   "text": "block generator dies over 50 census suspects, accepted 236-line census unrepresentable, card step blocked",
+   "textSource": "line",
+   "file": "scripts/landing.ts",
+   "first": 475,
+   "last": 475,
+   "snapshot": "549ecc37",
+   "code": [
+    "if (census.length > 50) die(\"private-data census exceeds 50 suspects\");"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "a2fac4e5"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "missed-lens-reviewed"
+  },
+  {
+   "run": "216",
+   "round": 3,
+   "severity": "P2",
+   "target": "scripts/raw-promote-main.ts:53",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna",
+    "mimo"
+   ],
+   "text": "ambient DISABLE turns promote scrub into straight copy; same hole in tree-check entry, gate chain, runbook scan commands",
+   "textSource": "line",
+   "file": "scripts/raw-promote-main.ts",
+   "first": 53,
+   "last": 53,
+   "snapshot": "549ecc37",
+   "code": [
+    "/(?:<!--|#|\\/\\/)?[ \\t]*private-data:allow(?:-next-line)?[ \\t]+[^ \\t]+[ \\t]+--[ \\t]+[^\\r\\n]*(?:-->)?$/gu;"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "0091906a"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "missed-lens-reviewed"
+  },
+  {
+   "run": "216",
+   "round": 3,
+   "severity": "P2",
+   "target": "scripts/tree-check.ts:28",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna"
+   ],
+   "text": "hasReasoning depth-64 fail-open, 66-deep encrypted_content passes tree gate",
+   "textSource": "line",
+   "file": "scripts/tree-check.ts",
+   "first": 28,
+   "last": 28,
+   "snapshot": "549ecc37",
+   "code": [
+    "if (depth > 64) return false;"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "a2fac4e5"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "missed-lens-reviewed"
+  },
+  {
+   "run": "216",
+   "round": 3,
+   "severity": "P2",
+   "target": "scripts/raw-promote-main.ts:276",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna"
+   ],
+   "text": "marker strip eats closing JSON syntax, malformed record promoted exit 0",
+   "textSource": "line",
+   "file": "scripts/raw-promote-main.ts",
+   "first": 276,
+   "last": 276,
+   "snapshot": "549ecc37",
+   "code": [
+    "text = replaced.text.replace(ALLOW_MARKER, \"\");"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "a2fac4e5"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "missed-lens-reviewed"
+  },
+  {
+   "run": "216",
+   "round": 4,
+   "severity": "P2",
+   "target": "scripts/scrub-core.ts:700",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "mimo"
+   ],
+   "text": "MAIL.test on /g/ regex without reset, successive bare key fields miss key intermittently",
+   "textSource": "line",
+   "file": "scripts/scrub-core.ts",
+   "first": 700,
+   "last": 700,
+   "snapshot": "cda44f95",
+   "code": [
+    "if (kind === \"key\" && !quoted && !/[0-9]/u.test(value) && !MAIL.test(value)) continue;"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "a2fac4e5"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "missed-lens-reviewed"
+  },
+  {
+   "run": "216",
+   "round": 4,
+   "severity": "P2",
+   "target": "scripts/raw-promote-main.ts:169",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna"
+   ],
+   "text": "placeholder keeps encrypted_content field, tree-check flags presence, success promotion fails gate",
+   "textSource": "line",
+   "file": "scripts/raw-promote-main.ts",
+   "first": 169,
+   "last": 169,
+   "snapshot": "cda44f95",
+   "code": [
+    "result[key] = item === PLACEHOLDER ? item : PLACEHOLDER;"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "a2fac4e5"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "missed-lens-reviewed"
+  },
+  {
+   "run": "216",
+   "round": 4,
+   "severity": "P2",
+   "target": "scripts/tree-check.ts:89",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna"
+   ],
+   "text": "reasoning findings never call logFinding in tree-check or promote, TELL and card blind to the class",
+   "textSource": "line",
+   "file": "scripts/tree-check.ts",
+   "first": 89,
+   "last": 89,
+   "snapshot": "cda44f95",
+   "code": [
+    "if (hasReasoning(parsed)) failures.push(`${safePath(path)}:${line}: encrypted-reasoning`);"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "a2fac4e5"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "missed-lens-reviewed"
+  },
+  {
+   "run": "216",
+   "round": 4,
+   "severity": "P2",
+   "target": "scripts/scrub-check-main.ts:654",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "mimo"
+   ],
+   "text": "pr-description/card scans log draft rows, TELL fires, block dies without resolution, landing stuck",
+   "textSource": "line",
+   "file": "scripts/scrub-check-main.ts",
+   "first": 654,
+   "last": 654,
+   "snapshot": "cda44f95",
+   "code": [
+    "logFinding(f.rule, \"(pr-description)\", line.number, \"\");"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "a2fac4e5"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "missed-lens-reviewed"
+  },
+  {
+   "run": "216",
+   "round": 4,
+   "severity": "P2",
+   "target": "scripts/scrub-rewrite.ts:319",
+   "lenses": [
+    "security"
+   ],
+   "lanes": [
+    "opus"
+   ],
+   "text": "raw path in manual-reword refusal prints finding value, violates rule 10 and C10",
+   "textSource": "line",
+   "file": "scripts/scrub-rewrite.ts",
+   "first": 319,
+   "last": 319,
+   "snapshot": "cda44f95",
+   "code": [
+    "if (item.path.startsWith(\"(\")) fail(`a finding in ${item.path} needs a manual reword`);"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "a2fac4e5"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "missed-lens-reviewed"
+  },
+  {
+   "run": "216",
+   "round": 4,
+   "severity": "P2",
+   "target": "scripts/scrub-rewrite.ts:201",
+   "lenses": [
+    "security"
+   ],
+   "lanes": [
+    "opus"
+   ],
+   "text": "show %B appends newline, every recreated commit gets a new id, pushed untouched commits rewritten, C18 broken",
+   "textSource": "line",
+   "file": "scripts/scrub-rewrite.ts",
+   "first": 201,
+   "last": 201,
+   "snapshot": "cda44f95",
+   "code": [
+    "message: git([\"show\", \"-s\", \"--format=%B\", commit], root).toString(\"utf8\"),"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "a2fac4e5"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "missed-lens-reviewed"
+  },
+  {
+   "run": "216",
+   "round": 4,
+   "severity": "P2",
+   "target": "scripts/bundle-scrub.ts:52",
+   "lenses": [
+    "security"
+   ],
+   "lanes": [
+    "opus"
+   ],
+   "text": "header line 2 and unanchored pattern outside body digest, injected code passes --check and runs",
+   "textSource": "line",
+   "file": "scripts/bundle-scrub.ts",
+   "first": 52,
+   "last": 52,
+   "snapshot": "cda44f95",
+   "code": [
+    "return { sources: found[1], body: found[2], rest: lines.slice(at + 2).join(\"\\n\") };"
+   ],
+   "origin": {
+    "kind": "fix",
+    "round": 1,
+    "sha": "6b0d3cac"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "made-by-older-fix"
+  },
+  {
+   "run": "216",
+   "round": 5,
+   "severity": "P2",
+   "target": "scripts/tree-check.ts:31",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "mimo"
+   ],
+   "text": "hasReasoning compares type exact-case, promote lowercases, Thinking/signature passes the tree gate",
+   "textSource": "line",
+   "file": "scripts/tree-check.ts",
+   "first": 31,
+   "last": 31,
+   "snapshot": "21a77fb0",
+   "code": [
+    "if (typeof current === \"string\") {"
+   ],
+   "origin": {
+    "kind": "fix",
+    "round": 3,
+    "sha": "cda44f95"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "made-by-older-fix"
+  },
+  {
+   "run": "216",
+   "round": 5,
+   "severity": "P2",
+   "target": "scripts/tree-check.ts:31",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna"
+   ],
+   "text": "tree-check misses prose-embedded JSON reasoning that promote scrubs",
+   "textSource": "line",
+   "file": "scripts/tree-check.ts",
+   "first": 31,
+   "last": 31,
+   "snapshot": "21a77fb0",
+   "code": [
+    "if (typeof current === \"string\") {"
+   ],
+   "origin": {
+    "kind": "fix",
+    "round": 3,
+    "sha": "cda44f95"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "made-by-older-fix"
+  },
+  {
+   "run": "216",
+   "round": 5,
+   "severity": "P2",
+   "target": "scripts/tree-check.ts:160",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna"
+   ],
+   "text": "modified raw blobs skipped (additions only), reasoning in an edited record passes; text still caught by range scan",
+   "textSource": "line",
+   "file": "scripts/tree-check.ts",
+   "first": 160,
+   "last": 160,
+   "snapshot": "21a77fb0",
+   "code": [
+    "if (item.status === \"A\" && item.path.startsWith(\"raw/\"))"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "0091906a"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "missed-lens-reviewed"
+  },
+  {
+   "run": "216",
+   "round": 5,
+   "severity": "P2",
+   "target": "scripts/verify-merge.ts:26",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna"
+   ],
+   "text": "merge scans run with no detections log in the documented flow, TELL and card omit merge findings",
+   "textSource": "line",
+   "file": "scripts/verify-merge.ts",
+   "first": 26,
+   "last": 26,
+   "snapshot": "21a77fb0",
+   "code": [
+    "const env = { SCRUB_CHECK_DISABLE: undefined };"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "a2fac4e5"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "missed-lens-reviewed"
+  },
+  {
+   "run": "216",
+   "round": 6,
+   "severity": "P2",
+   "target": "scripts/scrub-core.ts:1243",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "mimo"
+   ],
+   "text": "OSC-hidden next-line marker suppresses the finding; ticket Markers says marker text in an escape sequence is ignored",
+   "textSource": "line",
+   "file": "scripts/scrub-core.ts",
+   "first": 1243,
+   "last": 1243,
+   "snapshot": "2d23a64a",
+   "code": [
+    "export class StreamScanner {"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "a2fac4e5"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "missed-lens-reviewed"
+  },
+  {
+   "run": "216",
+   "round": 6,
+   "severity": "P2",
+   "target": "scripts/scrub-core.ts:787",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "mimo"
+   ],
+   "text": "ANSI-prefixed guard text defeats the redaction/colon guard, both tokens suppressed",
+   "textSource": "line",
+   "file": "scripts/scrub-core.ts",
+   "first": 787,
+   "last": 787,
+   "snapshot": "2d23a64a",
+   "code": [
+    "const before = line.slice(0, m.index ?? 0);"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "a2fac4e5"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "missed-lens-reviewed"
+  },
+  {
+   "run": "216",
+   "round": 6,
+   "severity": "P2",
+   "target": "scripts/scrub-reasoning.ts:25",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "mimo"
+   ],
+   "text": "hasReasoning/transformReasoning split on prose-embedded unbalanced-brace JSON, reasoning passes the tree gate",
+   "textSource": "line",
+   "file": "scripts/scrub-reasoning.ts",
+   "first": 25,
+   "last": 25,
+   "snapshot": "2d23a64a",
+   "code": [
+    "export function balancedEnd(text: string, start: number): number {"
+   ],
+   "origin": {
+    "kind": "fix",
+    "round": 5,
+    "sha": "2d23a64a"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "made-by-last-fix"
+  },
+  {
+   "run": "216",
+   "round": 6,
+   "severity": "P2",
+   "target": "scripts/scrub-check-main.ts:643",
+   "lenses": [
+    "security"
+   ],
+   "lanes": [
+    "opus"
+   ],
+   "text": "--pr-description scans stateless per line, misses key bodies that --files flags via keyBlock",
+   "textSource": "line",
+   "file": "scripts/scrub-check-main.ts",
+   "first": 643,
+   "last": 643,
+   "snapshot": "2d23a64a",
+   "code": [
+    "async function prDescription(path: string): Promise<number> {"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "a2fac4e5"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "missed-lens-reviewed"
+  },
+  {
+   "run": "216",
+   "round": 6,
+   "severity": "P2",
+   "target": "scripts/scrub-core.ts:743",
+   "lenses": [
+    "security"
+   ],
+   "lanes": [
+    "opus"
+   ],
+   "text": "dotenv assignment inside a multiline JSON string missed, plain dotenv flagged",
+   "textSource": "line",
+   "file": "scripts/scrub-core.ts",
+   "first": 743,
+   "last": 743,
+   "snapshot": "2d23a64a",
+   "code": [
+    "if ((quote === \"'\" || quote === '\"') && value.length >= 2) {"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "a2fac4e5"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "missed-lens-reviewed"
+  },
+  {
+   "run": "216",
+   "round": 6,
+   "severity": "P2",
+   "target": "scripts/scrub-core.ts:1520",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "mimo"
+   ],
+   "text": "UTF-16 decode is Latin-1-only, non-Latin-1 stays NUL-interleaved and unscanned; ticket reads full UTF-16 by BOM",
+   "textSource": "line",
+   "file": "scripts/scrub-core.ts",
+   "first": 1520,
+   "last": 1520,
+   "snapshot": "2d23a64a",
+   "code": [
+    "return decodeBytes(Buffer.from(bytes.slice(0, end)));"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "8ef3a42e"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "missed-lens-reviewed"
+  },
+  {
+   "run": "216",
+   "round": 6,
+   "severity": "P2",
+   "target": "scripts/scrub-report.ts:32",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "mimo"
+   ],
+   "text": "bug-17 fix drops draft rows, contradicting ticket --pr-description logs too and C29 one line per finding; needs log-plus-filter rework",
+   "textSource": "line",
+   "file": "scripts/scrub-report.ts",
+   "first": 32,
+   "last": 32,
+   "snapshot": "2d23a64a",
+   "code": [
+    "if (isDraftPlace(file)) return;"
+   ],
+   "origin": {
+    "kind": "fix",
+    "round": 4,
+    "sha": "b6455625"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "made-by-older-fix"
+  },
+  {
+   "run": "216",
+   "round": 7,
+   "severity": "P2",
+   "target": "scripts/scrub-check-main.ts:383",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "mimo"
+   ],
+   "text": "+++ slice keeps git's trailing tab on spaced names, key lookup exits 2 and rows carry the tabbed path",
+   "textSource": "line",
+   "file": "scripts/scrub-check-main.ts",
+   "first": 383,
+   "last": 383,
+   "snapshot": "4e8da141",
+   "code": [
+    "path = line.slice(4);"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "a2fac4e5"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "missed-lens-reviewed"
+  },
+  {
+   "run": "216",
+   "round": 8,
+   "severity": "P1",
+   "target": "scripts/scrub-core.ts:736",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "mimo"
+   ],
+   "text": "dotenv value span mis-hits the name when the value repeats it, promote emits the secret and every rescan passes",
+   "textSource": "line",
+   "file": "scripts/scrub-core.ts",
+   "first": 736,
+   "last": 736,
+   "snapshot": "0e1fc8c4",
+   "code": [
+    "let value = env[2] ?? \"\";"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "a2fac4e5"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "missed-lens-reviewed"
+  },
+  {
+   "run": "216",
+   "round": 8,
+   "severity": "P2",
+   "target": "scripts/scrub-check-main.ts:275",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna"
+   ],
+   "text": "invalid bytes in commit metadata silently break matches with no refusal; 0x80 in a domain exits 0",
+   "textSource": "line",
+   "file": "scripts/scrub-check-main.ts",
+   "first": 275,
+   "last": 275,
+   "snapshot": "0e1fc8c4",
+   "code": [
+    "message += `${line}\\n`;"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "0b4d6a99"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "missed-lens-reviewed"
+  },
+  {
+   "run": "216",
+   "round": 8,
+   "severity": "P2",
+   "target": "scripts/scrub-core.ts:1093",
+   "lenses": [
+    "security"
+   ],
+   "lanes": [
+    "opus"
+   ],
+   "text": "JSON strings without backslash escapes never become units, dotenv inside a single-line string missed",
+   "textSource": "line",
+   "file": "scripts/scrub-core.ts",
+   "first": 1093,
+   "last": 1093,
+   "snapshot": "0e1fc8c4",
+   "code": [
+    "for (const match of jsonStringTokens(text)) {"
+   ],
+   "origin": {
+    "kind": "fix",
+    "round": 1,
+    "sha": "6b0d3cac"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "made-by-older-fix"
+  },
+  {
+   "run": "216",
+   "round": 9,
+   "severity": "P2",
+   "target": "scripts/scrub-core.ts:904",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "haiku"
+   ],
+   "text": "all-lowercase lines run personal rules only for first-word cue set missing i/you; <sample> exits 0",
+   "textSource": "line",
+   "file": "scripts/scrub-core.ts",
+   "first": 904,
+   "last": 904,
+   "snapshot": "1b826f1a",
+   "code": [
+    "const plainPersonalCue = plainLower && PLAIN_CUE_WORDS.has(firstWord);"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "a2fac4e5"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "missed-lens-reviewed"
+  },
+  {
+   "run": "216",
+   "round": 9,
+   "severity": "P2",
+   "target": "skills/postmaster/postmaster.md:488",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna"
+   ],
+   "text": "pre-post procedure scans descriptions and comments, never PR titles, which travel separately",
+   "textSource": "line",
+   "file": "skills/postmaster/postmaster.md",
+   "first": 488,
+   "last": 488,
+   "snapshot": "1b826f1a",
+   "code": [
+    "Before every pull-request description written for this run, save the exact draft in a"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "364f739c"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "missed-lens-reviewed"
+  },
+  {
+   "run": "216",
+   "round": 9,
+   "severity": "P2",
+   "target": "scripts/scrub-reasoning.ts:134",
+   "lenses": [
+    "security"
+   ],
+   "lanes": [
+    "opus"
+   ],
+   "text": "pretty-printed reasoning exits promote 0 silent and tree-check 0; live blob publishable end to end",
+   "textSource": "line",
+   "file": "scripts/scrub-reasoning.ts",
+   "first": 134,
+   "last": 134,
+   "snapshot": "1b826f1a",
+   "code": [
+    "export function redactReasoning(line: string): { text: string; count: number } {"
+   ],
+   "origin": {
+    "kind": "fix",
+    "round": 5,
+    "sha": "2d23a64a"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "made-by-older-fix"
+  },
+  {
+   "run": "216",
+   "round": 9,
+   "severity": "P2",
+   "target": "scripts/scrub-core.ts:337",
+   "lenses": [
+    "security"
+   ],
+   "lanes": [
+    "opus"
+   ],
+   "text": "prefilter drops lines its rules match (<sample> exits 0, flags with a digit); lossless claim false",
+   "textSource": "line",
+   "file": "scripts/scrub-core.ts",
+   "first": 337,
+   "last": 337,
+   "snapshot": "1b826f1a",
+   "code": [
+    "export function needsFullScan(line: string): boolean {"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "f61ac35c"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "missed-lens-reviewed"
+  },
+  {
+   "run": "216",
+   "round": 10,
+   "severity": "P2",
+   "target": "scripts/raw-promote-main.ts:137",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna"
+   ],
+   "text": "promote strip deletes marker-to-EOL unconditionally, silent trailing loss exit 0; non-JSON sibling of round-4 marker-strip fix",
+   "textSource": "line",
+   "file": "scripts/raw-promote-main.ts",
+   "first": 137,
+   "last": 137,
+   "snapshot": "de78a097",
+   "code": [
+    "const stripped = replaceReset(ALLOW_MARKER, line.text, \"\");"
+   ],
+   "origin": {
+    "kind": "fix",
+    "round": 4,
+    "sha": "b6455625"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "made-by-older-fix"
+  },
+  {
+   "run": "216",
+   "round": 10,
+   "severity": "P2",
+   "target": "scripts/scrub-core.ts:1091",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "haiku"
+   ],
+   "text": "pattern-code exemption blanks real addresses in regex shape in any file; const EMAIL = /<email>/ passes",
+   "textSource": "line",
+   "file": "scripts/scrub-core.ts",
+   "first": 1091,
+   "last": 1091,
+   "snapshot": "de78a097",
+   "code": [
+    "const text = blankSpan(cleaned.text, patternSpan(cleaned.text));"
+   ],
+   "origin": {
+    "kind": "fix",
+    "round": 1,
+    "sha": "6b0d3cac"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "made-by-older-fix"
+  },
+  {
+   "run": "216",
+   "round": 10,
+   "severity": "P2",
+   "target": "scripts/scrub-reasoning.ts:173",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "haiku"
+   ],
+   "text": "prose line with embedded reasoning JSON missed both sides; redactReasoning count 0, tree-check parse-gated",
+   "textSource": "line",
+   "file": "scripts/scrub-reasoning.ts",
+   "first": 173,
+   "last": 173,
+   "snapshot": "de78a097",
+   "code": [
+    "try {"
+   ],
+   "origin": {
+    "kind": "fix",
+    "round": 5,
+    "sha": "2d23a64a"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "made-by-older-fix"
+  },
+  {
+   "run": "216",
+   "round": 11,
+   "severity": "P2",
+   "target": "scripts/verify-merge.ts:40",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna"
+   ],
+   "text": "ticket-added merge scan has zero runbook callers; local-route git merge --no-ff resolutions land unscanned",
+   "textSource": "line",
+   "file": "scripts/verify-merge.ts",
+   "first": 40,
+   "last": 40,
+   "snapshot": "d69a671c",
+   "code": [
+    "const scan = run(runner, [\"scrub-check\", base, merge], { cwd: root, env });"
+   ],
+   "origin": {
+    "kind": "fix",
+    "round": 9,
+    "sha": "da76fa3d"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "made-by-older-fix"
+  },
+  {
+   "run": "216",
+   "round": 11,
+   "severity": "P2",
+   "target": "scripts/tree-check.ts:184",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna"
+   ],
+   "text": "typechange status T missed by tree-check and scrub-check (both exit 0), same blob as added flagged exit 1; staged path same filter",
+   "textSource": "line",
+   "file": "scripts/tree-check.ts",
+   "first": 184,
+   "last": 184,
+   "snapshot": "d69a671c",
+   "code": [
+    "if ((item.status === \"A\" || item.status === \"M\") && item.path.startsWith(\"raw/\")) {"
+   ],
+   "origin": {
+    "kind": "fix",
+    "round": 9,
+    "sha": "792181a8"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "made-by-older-fix"
+  },
+  {
+   "run": "216",
+   "round": 11,
+   "severity": "P2",
+   "target": "scripts/scrub-rewrite.ts:78",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna"
+   ],
+   "text": "parseFindings runs scrub-check only; add-then-delete reasoning gets silent exit 0 with the exposed commit surviving",
+   "textSource": "line",
+   "file": "scripts/scrub-rewrite.ts",
+   "first": 78,
+   "last": 78,
+   "snapshot": "d69a671c",
+   "code": [
+    "\"--findings\","
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "0091906a"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "missed-lens-reviewed"
+  },
+  {
+   "run": "216",
+   "round": 11,
+   "severity": "P2",
+   "target": "scripts/tree-check.ts:64",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "haiku"
+   ],
+   "text": "BOM-prefixed pretty reasoning missed (firstNonWsChar returns U+FEFF); one-line BOM and plain pretty flagged; promote scrubs it",
+   "textSource": "line",
+   "file": "scripts/tree-check.ts",
+   "first": 64,
+   "last": 64,
+   "snapshot": "d69a671c",
+   "code": [
+    "const found = firstNonWsChar(text);"
+   ],
+   "origin": {
+    "kind": "fix",
+    "round": 9,
+    "sha": "de78a097"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "made-by-older-fix"
+  },
+  {
+   "run": "216",
+   "round": 11,
+   "severity": "P2",
+   "target": "scripts/scrub-core.ts:814",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "haiku"
+   ],
+   "text": "markdown code span plus any later ${} skips private-path; appending ${x} suppresses the finding, realistic in shell docs",
+   "textSource": "line",
+   "file": "scripts/scrub-core.ts",
+   "first": 814,
+   "last": 814,
+   "snapshot": "d69a671c",
+   "code": [
+    "if ((before.match(/`/gu)?.length ?? 0) % 2 === 1 && line.includes(\"${\")) continue;"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "a2fac4e5"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "missed-lens-reviewed"
+  },
+  {
+   "run": "216",
+   "round": 12,
+   "severity": "P2",
+   "target": "skills/postmaster/coachman.md:591",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna"
+   ],
+   "text": "valid marker gives silent gate exit 0 plus a via:marker detections row, no procedure resolves it, private-data-block dies on it at card time",
+   "textSource": "line",
+   "file": "skills/postmaster/coachman.md",
+   "first": 591,
+   "last": 591,
+   "snapshot": "0b122c66",
+   "code": [
+    "what the workhorse left uncommitted on the card. If the gate reports a private-data finding,"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "a2fac4e5"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "missed-lens-reviewed"
+  },
+  {
+   "run": "216",
+   "round": 12,
+   "severity": "P2",
+   "target": "scripts/scrub-check-main.ts:335",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "haiku"
+   ],
+   "text": "newline path in range spins the batch reader (killed past 3 min, silent), same fixture clean flags z.md exit 1",
+   "textSource": "line",
+   "file": "scripts/scrub-check-main.ts",
+   "first": 335,
+   "last": 335,
+   "snapshot": "0b122c66",
+   "code": [
+    "child.stdin.write(`${rev}:${path}\\n`);"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "0b4d6a99"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "missed-lens-reviewed"
+  },
+  {
+   "run": "216",
+   "round": 13,
+   "severity": "P1",
+   "target": "scripts/scrub-rewrite.ts:323",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna",
+    "haiku"
+   ],
+   "text": "rewrite deletes untracked files at snapshot paths (victim.txt GONE) and destroys ignored ones even on failure; rollback cannot restore",
+   "textSource": "line",
+   "file": "scripts/scrub-rewrite.ts",
+   "first": 323,
+   "last": 323,
+   "snapshot": "5b0a0e48",
+   "code": [
+    "if (git([\"status\", \"--porcelain\", \"--untracked-files=no\"], root).toString(\"utf8\").trim())"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "0091906a"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "missed-lens-reviewed"
+  },
+  {
+   "run": "216",
+   "round": 14,
+   "severity": "P1",
+   "target": "scripts/scrub-rewrite.ts:390",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna",
+    "haiku"
+   ],
+   "text": "porcelain C-quotes quotable names, guard never matches, colliding untracked file deleted with exit 0 (space-name probe)",
+   "textSource": "line",
+   "file": "scripts/scrub-rewrite.ts",
+   "first": 390,
+   "last": 390,
+   "snapshot": "1979cc0d",
+   "code": [
+    ".split(\"\\n\");"
+   ],
+   "origin": {
+    "kind": "fix",
+    "round": 13,
+    "sha": "901db36d"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "made-by-last-fix"
+  },
+  {
+   "run": "216",
+   "round": 14,
+   "severity": "P1",
+   "target": "scripts/scrub-rewrite.ts:299",
+   "lenses": [
+    "security"
+   ],
+   "lanes": [
+    "opus"
+   ],
+   "text": "file names pass as git patterns, star-named finding stages and deletes an unrelated untracked file",
+   "textSource": "line",
+   "file": "scripts/scrub-rewrite.ts",
+   "first": 299,
+   "last": 299,
+   "snapshot": "1979cc0d",
+   "code": [
+    "const staged = runCommand(\"git\", [\"add\", \"-A\", \"--\", ...changedPaths], root, {"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "0091906a"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "missed-lens-reviewed"
+  },
+  {
+   "run": "216",
+   "round": 15,
+   "severity": "P2",
+   "target": "scripts/scrub-core.ts:944",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna"
+   ],
+   "text": "private-domain email drops the email span, promote leaves the mailbox local part in raw and rescans clean",
+   "textSource": "line",
+   "file": "scripts/scrub-core.ts",
+   "first": 944,
+   "last": 944,
+   "snapshot": "d0a04c71",
+   "code": [
+    "if (f.rule === \"email\" && isPrivateName(domain)) continue;"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "a2fac4e5"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "missed-lens-reviewed"
+  },
+  {
+   "run": "216",
+   "round": 15,
+   "severity": "P1",
+   "target": "scripts/scrub-core.ts:708",
+   "lenses": [
+    "security"
+   ],
+   "lanes": [
+    "opus"
+   ],
+   "text": "quoted token values with plus fail the expression test and pass the gate",
+   "textSource": "line",
+   "file": "scripts/scrub-core.ts",
+   "first": 708,
+   "last": 708,
+   "snapshot": "d0a04c71",
+   "code": [
+    "const callOrExpression = /[(){}]|(?:\\?\\.|\\+\\+|--|\\+|\\||&&?|\\?|=>)/u.test(value);"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "a2fac4e5"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "missed-lens-reviewed"
+  },
+  {
+   "run": "318",
+   "round": 1,
+   "severity": "P2",
+   "target": "scripts/verifier.ts:1318",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna",
+    "haiku"
+   ],
+   "text": "no valid outcome for a page with stale and unchecked claims",
+   "textSource": "line",
+   "file": "scripts/verifier.ts",
+   "first": 1318,
+   "last": 1318,
+   "snapshot": "7527f7fd",
+   "code": [
+    "const want = claim.verdict === \"stale\" ? \"changed\" : \"blocked\";"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "7527f7fd"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": null
+  },
+  {
+   "run": "318",
+   "round": 1,
+   "severity": "P2",
+   "target": "scripts/verifier.ts:740",
+   "lenses": [
+    "bug",
+    "style"
+   ],
+   "lanes": [
+    "haiku"
+   ],
+   "text": "nested feature pages silently skipped",
+   "textSource": "line",
+   "file": "scripts/verifier.ts",
+   "first": 740,
+   "last": 740,
+   "snapshot": "7527f7fd",
+   "code": [
+    "export function isFeaturePage(folder: string, path: string): boolean {"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "7527f7fd"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": null
+  },
+  {
+   "run": "318",
+   "round": 1,
+   "severity": "P2",
+   "target": "scripts/verifier.ts:2221",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "haiku"
+   ],
+   "text": "wait ends on first UPKEEP.md sighting, can read a partial report",
+   "textSource": "line",
+   "file": "scripts/verifier.ts",
+   "first": 2221,
+   "last": 2221,
+   "snapshot": "7527f7fd",
+   "code": [
+    "if (!waitForFile(o.wt, o.waitFile, o.cutAt, o.timeout)) {"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "7527f7fd"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": null
+  },
+  {
+   "run": "318",
+   "round": 1,
+   "severity": "P2",
+   "target": "scripts/verifier.ts:502",
+   "lenses": [
+    "style"
+   ],
+   "lanes": [
+    "haiku"
+   ],
+   "text": "upkeep prompts name HANDOVER.md for unasked and secrets",
+   "textSource": "line",
+   "file": "scripts/verifier.ts",
+   "first": 502,
+   "last": 502,
+   "snapshot": "7527f7fd",
+   "code": [
+    "export const HEADLESS_ASK_RULE ="
+   ],
+   "origin": {
+    "kind": "base",
+    "sha": "dc55fde9"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": null
+  },
+  {
+   "run": "318",
+   "round": 2,
+   "severity": "P2",
+   "target": "scripts/verifier.ts:740",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "haiku"
+   ],
+   "text": "round-1 nested fix incomplete, subdir features scope wider than make; repair with vdir discovery",
+   "textSource": "line",
+   "file": "scripts/verifier.ts",
+   "first": 740,
+   "last": 740,
+   "snapshot": "c4e9ab3e",
+   "code": [
+    "const r = git(repo, [\"rev-list\", \"--count\", `${base}..${branch}`]);"
+   ],
+   "origin": {
+    "kind": "base",
+    "sha": "4c9e4924"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": true,
+   "group": "outside"
+  },
+  {
+   "run": "318",
+   "round": 2,
+   "severity": "P2",
+   "target": "scripts/verifier.ts:757",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "haiku"
+   ],
+   "text": "dual-shape repos silently drop the single folder; span all shapes",
+   "textSource": "line",
+   "file": "scripts/verifier.ts",
+   "first": 757,
+   "last": 757,
+   "snapshot": "c4e9ab3e",
+   "code": [
+    "export function detectFolder(repo: string, explicit: string | null): string | null {"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "7527f7fd"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "missed-lens-reviewed"
+  },
+  {
+   "run": "318",
+   "round": 3,
+   "severity": "P2",
+   "target": "scripts/verifier.ts:2846",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna"
+   ],
+   "text": "only the summary reaches the audit trail, findings printed but not logged",
+   "textSource": "line",
+   "file": "scripts/verifier.ts",
+   "first": 2846,
+   "last": 2846,
+   "snapshot": "9b773491",
+   "code": [
+    "for (const line of verdict.lines) console.log(line);"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "7527f7fd"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "missed-lens-reviewed"
+  },
+  {
+   "run": "326",
+   "round": 1,
+   "severity": "P2",
+   "target": "scripts/verifier.ts:2065",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna"
+   ],
+   "text": "--word merges without consulting merge authority for any caller; scope the override to the approved setup flow",
+   "textSource": "line",
+   "file": "scripts/verifier.ts",
+   "first": 2065,
+   "last": 2065,
+   "snapshot": "0dad2425",
+   "code": [
+    "if (!o.wordGiven && mergeAuthorityOf(fileText(join(o.dispatch, \"run.json\"))) !== \"postmaster\") {"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "cc7b67bc"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": null
+  },
+  {
+   "run": "326",
+   "round": 1,
+   "severity": "P2",
+   "target": "scripts/setup-verifiers.ts:192",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna"
+   ],
+   "text": "setup run.json (no mode) is read as the latest run by previousRunMode and breaks alternate-mode selection",
+   "textSource": "line",
+   "file": "scripts/setup-verifiers.ts",
+   "first": 192,
+   "last": 192,
+   "snapshot": "0dad2425",
+   "code": [
+    "join(dispatch, \"run.json\"),"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "161f1d0e"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": null
+  },
+  {
+   "run": "326",
+   "round": 1,
+   "severity": "P2",
+   "target": "scripts/setup-verifiers.ts:290",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna"
+   ],
+   "text": "verdict log-action failure warns and returns 0; the codebase fails loud on unlogged verdicts",
+   "textSource": "line",
+   "file": "scripts/setup-verifiers.ts",
+   "first": 290,
+   "last": 290,
+   "snapshot": "0dad2425",
+   "code": [
+    "if (logged.code !== 0) {"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "161f1d0e"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": null
+  },
+  {
+   "run": "326",
+   "round": 1,
+   "severity": "P2",
+   "target": "scripts/setup-verifiers.ts:90",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "haiku"
+   ],
+   "text": "comma-joined surfaces= value rejected as unknown surface, exit 2 stops setup",
+   "textSource": "line",
+   "file": "scripts/setup-verifiers.ts",
+   "first": 90,
+   "last": 90,
+   "snapshot": "0dad2425",
+   "code": [
+    "const kind = surfaceKind(name);"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "161f1d0e"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": null
+  },
+  {
+   "run": "326",
+   "round": 1,
+   "severity": "P2",
+   "target": "scripts/host.ts:1401",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "haiku"
+   ],
+   "text": "brief-less setup dispatch never placed on Herdr, runs unwatchable with the unlimited watched wait",
+   "textSource": "line",
+   "file": "scripts/host.ts",
+   "first": 1401,
+   "last": 1401,
+   "snapshot": "0dad2425",
+   "code": [
+    "const info = dispatchInfo(dispatch);"
+   ],
+   "origin": {
+    "kind": "base",
+    "sha": "a3e5fb8d"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": null
+  },
+  {
+   "run": "326",
+   "round": 2,
+   "severity": "P2",
+   "target": "scripts/lib/fixture-mark.ts:8",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna"
+   ],
+   "text": "clone without local git config keeps the committed marker but reads as a normal project and is offered verifiers",
+   "textSource": "line",
+   "file": "scripts/lib/fixture-mark.ts",
+   "first": 8,
+   "last": 8,
+   "snapshot": "d85d9a95",
+   "code": [
+    "const r = run(\"git\", [\"-C\", path, \"config\", \"--local\", \"--get\", \"postmaster.fixture\"]);"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "7f93cde2"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "missed-lens-reviewed"
+  },
+  {
+   "run": "326",
+   "round": 3,
+   "severity": "P2",
+   "target": "scripts/setup-verifiers.ts:288",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna"
+   ],
+   "text": "off-branch or dirty target runs the whole session then land rejects and setup reports given up despite approval",
+   "textSource": "line",
+   "file": "scripts/setup-verifiers.ts",
+   "first": 288,
+   "last": 288,
+   "snapshot": "72dab6ab",
+   "code": [
+    "\"local\","
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "161f1d0e"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "missed-lens-reviewed"
+  },
+  {
+   "run": "326",
+   "round": 3,
+   "severity": "P2",
+   "target": "scripts/host.ts:2655",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "haiku"
+   ],
+   "text": "run.json gate lets launches under pruned-worktree runs through to background instead of refusing",
+   "textSource": "line",
+   "file": "scripts/host.ts",
+   "first": 2655,
+   "last": 2655,
+   "snapshot": "72dab6ab",
+   "code": [
+    "if (!underPathIsDir && !underHasRun)"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "04b42c77"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "missed-lens-reviewed"
+  },
+  {
+   "run": "326",
+   "round": 3,
+   "severity": "P2",
+   "target": "scripts/setup-verifiers.ts:214",
+   "lenses": [
+    "security"
+   ],
+   "lanes": [
+    "opus"
+   ],
+   "text": "setup record keeps project-relative env_file relative so the session resolves it against the global dir",
+   "textSource": "line",
+   "file": "scripts/setup-verifiers.ts",
+   "first": 214,
+   "last": 214,
+   "snapshot": "72dab6ab",
+   "code": [
+    "join(dispatch, \"run.json\"),"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "161f1d0e"
+   },
+   "placedBefore": "scripts/setup-verifiers.ts:192",
+   "fixOf": [],
+   "relog": false,
+   "group": "held-open"
+  },
+  {
+   "run": "326",
+   "round": 4,
+   "severity": "P2",
+   "target": "scripts/setup-verifiers.ts:301",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna"
+   ],
+   "text": "make blocks with nothing logged, so an interrupted setup leaves the dispatched session out of actions.jsonl",
+   "textSource": "line",
+   "file": "scripts/setup-verifiers.ts",
+   "first": 301,
+   "last": 301,
+   "snapshot": "0da08197",
+   "code": [
+    "const make = run(RUN, makeArgs);"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "161f1d0e"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "missed-lens-reviewed"
+  },
+  {
+   "run": "326",
+   "round": 5,
+   "severity": "P2",
+   "target": "scripts/setup-verifiers.ts:191",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna"
+   ],
+   "text": "committed repo on exotic branch skips preflight, wastes session, land has no target",
+   "textSource": "line",
+   "file": "scripts/setup-verifiers.ts",
+   "first": 191,
+   "last": 191,
+   "snapshot": "71261912",
+   "code": [
+    "if (target === null) return null;"
+   ],
+   "origin": {
+    "kind": "fix",
+    "round": 3,
+    "sha": "3a55687d"
+   },
+   "placedBefore": null,
+   "fixOf": [
+    "scripts/setup-verifiers.ts:288"
+   ],
+   "relog": false,
+   "group": "made-by-older-fix"
+  },
+  {
+   "run": "327",
+   "round": 1,
+   "severity": "P2",
+   "target": "scripts/clerk.ts:246",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "haiku"
+   ],
+   "text": "brief calls verify checks without --gate, so the gate command is empty for repos with no declared gate (cargo probe)",
+   "textSource": "line",
+   "file": "scripts/clerk.ts",
+   "first": 246,
+   "last": 246,
+   "snapshot": "da0f6c04",
+   "code": [
+    "const checksOut = requireScript("
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "84d01bfa"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": null
+  },
+  {
+   "run": "327",
+   "round": 1,
+   "severity": "P2",
+   "target": "scripts/clerk.ts:252",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "haiku"
+   ],
+   "text": "verifier list runs on the raw repo path, so clerk brief <subdir> exits 1 where BASE exited 0 with a full brief",
+   "textSource": "line",
+   "file": "scripts/clerk.ts",
+   "first": 252,
+   "last": 252,
+   "snapshot": "da0f6c04",
+   "code": [
+    "const verifiersOut = requireScript("
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "84d01bfa"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": null
+  },
+  {
+   "run": "327",
+   "round": 2,
+   "severity": "P2",
+   "target": "scripts/clerk.ts:105",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna"
+   ],
+   "text": "cite emits relative scripts/run, unrunnable from the clerk cwd and able to hit the target's own script; round-1 style disposition revised on challenge",
+   "textSource": "line",
+   "file": "scripts/clerk.ts",
+   "first": 105,
+   "last": 105,
+   "snapshot": "9608742a",
+   "code": [
+    "return [\"scripts/run\", ...args].map((a) => shlexQuote(a)).join(\" \");"
+   ],
+   "origin": {
+    "kind": "fix",
+    "round": 1,
+    "sha": "69cfd09d"
+   },
+   "placedBefore": null,
+   "fixOf": [
+    "scripts/clerk.ts:246",
+    "scripts/clerk.ts:252"
+   ],
+   "relog": false,
+   "group": "made-by-last-fix"
+  },
+  {
+   "run": "327",
+   "round": 2,
+   "severity": "P2",
+   "target": "scripts/clerk.ts:261",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna"
+   ],
+   "text": "bare citations hit the wrong tool from the clerk cwd; fixed by aff8ab2b with scripts/clerk.ts:105",
+   "textSource": "line",
+   "file": "scripts/clerk.ts",
+   "first": 261,
+   "last": 261,
+   "snapshot": "9608742a",
+   "code": [
+    "mkdirSync(dir, { recursive: true });"
+   ],
+   "origin": {
+    "kind": "base",
+    "sha": "50a61690"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "outside"
+  },
+  {
+   "run": "328",
+   "round": 1,
+   "severity": "P2",
+   "target": "scripts/verifier.ts:1553",
+   "lenses": [
+    "bug",
+    "style"
+   ],
+   "lanes": [
+    "haiku",
+    "luna"
+   ],
+   "text": "1. target: scripts/verifier.ts:1553 · severity: not provided summary: An empty `Corrected:` line counts as a proven correction.",
+   "textSource": "report",
+   "file": "scripts/verifier.ts",
+   "first": 1553,
+   "last": 1553,
+   "snapshot": "34e5e22b",
+   "code": [
+    "current.kind === \"claim\" &&"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "76b7292b"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": null
+  },
+  {
+   "run": "328",
+   "round": 1,
+   "severity": "P2",
+   "target": "scripts/verifier.ts:3288",
+   "lenses": [
+    "bug",
+    "style"
+   ],
+   "lanes": [
+    "luna",
+    "haiku"
+   ],
+   "text": "Allow report branches to change every detected verifier folder: When a repo contains both `verify-<slug>/` and the shared `verifier/` layout, `upkeep --correct` covers both, but `decideReportBranch` checks changes against only one `folder`. The default selects `verify-<slug>/`; passing `--folder verifier` merely makes changes to the other layout fail instead. Consequently, a valid pass that confirms both layouts can…",
+   "textSource": "report",
+   "file": "scripts/verifier.ts",
+   "first": 3288,
+   "last": 3288,
+   "snapshot": "34e5e22b",
+   "code": [
+    "const reason = outsideReason(outsidePaths(diff, o.folder));"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "76b7292b"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": null
+  },
+  {
+   "run": "328",
+   "round": 1,
+   "severity": "P2",
+   "target": "scripts/verifier.ts:2517",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna"
+   ],
+   "text": "Verify claimed corrections before counting them as held: A pass can report a stale claim as corrected and commit only the index confirmation; `decideUpkeep` counts the report's `Corrected:` label, while `validateCorrectingBranch` does not check that the branch contains a corresponding verifier change. The final tally can therefore say every claim holds and exit successfully while the feature remains stale. Require m…",
+   "textSource": "report",
+   "file": "scripts/verifier.ts",
+   "first": 2517,
+   "last": 2517,
+   "snapshot": "34e5e22b",
+   "code": [
+    "const judged = decideUpkeep(scope.pages, scope.folders, validateUpkeepFresh(wt, cutAt));"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "76b7292b"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": null
+  },
+  {
+   "run": "328",
+   "round": 1,
+   "severity": "P2",
+   "target": "scripts/verifier.ts:1766",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "haiku"
+   ],
+   "text": "4. target: scripts/verifier.ts:1766 · severity: not provided summary: bulletConfirm attributes a confirmation to the wrong",
+   "textSource": "report",
+   "file": "scripts/verifier.ts",
+   "first": 1766,
+   "last": 1766,
+   "snapshot": "34e5e22b",
+   "code": [
+    "export function bulletConfirm(text: string, vdir: string): string | null {"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "76b7292b"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": null
+  },
+  {
+   "run": "328",
+   "round": 2,
+   "severity": "P2",
+   "target": "scripts/verifier.ts:2445",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna"
+   ],
+   "text": "Reject uncommitted correction edits: During `upkeep --correct`, `UPKEEP.md` is intentionally uncommitted, but other corrections can also remain only in the worktree. Since this compares only committed branch paths, the pass succeeds if the feature page and index are committed but a helper fix is not; that helper is then omitted when the branch lands. Check for uncommitted changes and allow only `UPKEEP.md`.",
+   "textSource": "report",
+   "file": "scripts/verifier.ts",
+   "first": 2445,
+   "last": 2445,
+   "snapshot": "e3420745",
+   "code": [
+    "const diff = branchDiffPaths(repo, head, branch);"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "76b7292b"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "missed-lens-reviewed"
+  },
+  {
+   "run": "328",
+   "round": 2,
+   "severity": "P2",
+   "target": "scripts/verifier.ts:3285",
+   "lenses": [
+    "bug",
+    "security"
+   ],
+   "lanes": [
+    "luna",
+    "opus"
+   ],
+   "text": "Restrict report landings to detected verifier folders: When a repo holds only one verifier shape, the default `--report` path still allows changes under both `verify-<slug>/` and `verifier/`. A gate-green branch can therefore add files under the absent shape and pass the folder check, although that verifier was not in the upkeep pass's scope. Derive the allowed folders from the shapes present, unless `--folder` expl…",
+   "textSource": "report",
+   "file": "scripts/verifier.ts",
+   "first": 3285,
+   "last": 3285,
+   "snapshot": "e3420745",
+   "code": [
+    "folders: req.folder !== null ? [req.folder] : [verifyDirName(repo), \"verifier\"],"
+   ],
+   "origin": {
+    "kind": "fix",
+    "round": 1,
+    "sha": "e3420745"
+   },
+   "placedBefore": null,
+   "fixOf": [
+    "scripts/verifier.ts:1553",
+    "scripts/verifier.ts:3288",
+    "scripts/verifier.ts:2517",
+    "scripts/verifier.ts:1766"
+   ],
+   "relog": false,
+   "group": "made-by-last-fix"
+  },
+  {
+   "run": "328",
+   "round": 2,
+   "severity": "P2",
+   "target": "scripts/verifier.ts:1742",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "haiku"
+   ],
+   "text": "8. target: scripts/verifier.ts:1742 · severity: not provided summary: indexBullets attaches trailing paragraphs to the last open",
+   "textSource": "report",
+   "file": "scripts/verifier.ts",
+   "first": 1742,
+   "last": 1742,
+   "snapshot": "e3420745",
+   "code": [
+    "export function indexBullets(text: string): string[][] {"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "76b7292b"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "missed-lens-reviewed"
+  },
+  {
+   "run": "339",
+   "round": 1,
+   "severity": "P1",
+   "target": "scripts/setup.ts:1041",
+   "lenses": [
+    "bug",
+    "security"
+   ],
+   "lanes": [
+    "luna",
+    "haiku",
+    "sonnet"
+   ],
+   "text": "Refuse symlinked settings before writing: If `.postmaster/settings.toml` is a symlink, `writeFileSync` follows it and overwrites its target; a dangling symlink is also followed because `existsSync` misses it. With `overwrite=yes`, setup can clobber a file outside the project. Check for symlinks before reading or writing, as `project-settings write` already does.",
+   "textSource": "report",
+   "file": "scripts/setup.ts",
+   "first": 1041,
+   "last": 1041,
+   "snapshot": "62be2d4d",
+   "code": [
+    "writeFileSync(PROJECT_SETTINGS, `${OUT.replace(/\\n+$/u, \"\")}\\n`, \"utf8\");"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "c06827d3"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": null
+  },
+  {
+   "run": "339",
+   "round": 1,
+   "severity": "P1",
+   "target": "scripts/setup.ts:1052",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "haiku"
+   ],
+   "text": "",
+   "textSource": "none",
+   "file": "scripts/setup.ts",
+   "first": 1052,
+   "last": 1052,
+   "snapshot": "62be2d4d",
+   "code": [
+    "const notice = pendingNoticeFor(PROJECT_ROOT);"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "c06827d3"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": null
+  },
+  {
+   "run": "339",
+   "round": 1,
+   "severity": "P2",
+   "target": "scripts/setup.ts:498",
+   "lenses": [
+    "style"
+   ],
+   "lanes": [
+    "haiku"
+   ],
+   "text": "",
+   "textSource": "none",
+   "file": "scripts/setup.ts",
+   "first": 498,
+   "last": 498,
+   "snapshot": "62be2d4d",
+   "code": [
+    "if (PROJECT === \"\" || h !== \"\") needHarness(h);"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "c06827d3"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": null
+  },
+  {
+   "run": "339",
+   "round": 1,
+   "severity": "P2",
+   "target": "scripts/setup.ts:209",
+   "lenses": [
+    "bug",
+    "style"
+   ],
+   "lanes": [
+    "haiku"
+   ],
+   "text": "",
+   "textSource": "none",
+   "file": "scripts/setup.ts",
+   "first": 209,
+   "last": 209,
+   "snapshot": "62be2d4d",
+   "code": [
+    "die(`setup: no answer for ${k} in ${opts.answers} (${prompt})`, 1);"
+   ],
+   "origin": {
+    "kind": "base",
+    "sha": "d8fd2108"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": null
+  },
+  {
+   "run": "339",
+   "round": 1,
+   "severity": "P2",
+   "target": "scripts/setup.ts:1031",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "haiku"
+   ],
+   "text": "",
+   "textSource": "none",
+   "file": "scripts/setup.ts",
+   "first": 1031,
+   "last": 1031,
+   "snapshot": "62be2d4d",
+   "code": [
+    "const backup = existsSync(PROJECT_SETTINGS) ? readFileSync(PROJECT_SETTINGS, \"utf8\") : null;"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "c06827d3"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": null
+  },
+  {
+   "run": "339",
+   "round": 1,
+   "severity": "P2",
+   "target": "scripts/setup-next.ts:43",
+   "lenses": [
+    "bug",
+    "style"
+   ],
+   "lanes": [
+    "luna",
+    "haiku"
+   ],
+   "text": "Advance after the global step is skipped: When no global config exists and the user skips that step, rerunning `setup-next` still reports `next=global`: this calculation has no state for the skip. Since the runbook requires rerunning the command after each step, the documented flow cannot route to project settings. Represent the skip or otherwise advance to the project step after the user declines the global step ([…",
+   "textSource": "report",
+   "file": "scripts/setup-next.ts",
+   "first": 43,
+   "last": 43,
+   "snapshot": "62be2d4d",
+   "code": [
+    "const next = setUp ? \"done\" : globalUsable ? \"project\" : \"global\";"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "c06827d3"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": null
+  },
+  {
+   "run": "339",
+   "round": 1,
+   "severity": "P2",
+   "target": "scripts/setup.ts:1079",
+   "lenses": [
+    "style",
+    "bug"
+   ],
+   "lanes": [
+    "haiku",
+    "luna"
+   ],
+   "text": "",
+   "textSource": "none",
+   "file": "scripts/setup.ts",
+   "first": 1079,
+   "last": 1079,
+   "snapshot": "62be2d4d",
+   "code": [
+    "console.log(`settings ignored: ${IGNORE}`);"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "c06827d3"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": null
+  },
+  {
+   "run": "339",
+   "round": 1,
+   "severity": "P2",
+   "target": "scripts/lib/effective-config.ts:1366",
+   "lenses": [
+    "style"
+   ],
+   "lanes": [
+    "luna"
+   ],
+   "text": "",
+   "textSource": "none",
+   "file": "scripts/lib/effective-config.ts",
+   "first": 1366,
+   "last": 1366,
+   "snapshot": "62be2d4d",
+   "code": [
+    "if (ignoredBy(effective, \"settings.toml\")) return;"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "c06827d3"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": null
+  },
+  {
+   "run": "339",
+   "round": 2,
+   "severity": "P2",
+   "target": "scripts/setup.ts:359",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna",
+    "haiku"
+   ],
+   "text": "1. target scripts/setup.ts:359, severity not provided: mergeSettings drops the top-level confine line on a second run. Summary: a confine answer never",
+   "textSource": "report",
+   "file": "scripts/setup.ts",
+   "first": 359,
+   "last": 359,
+   "snapshot": "67cc4751",
+   "code": [
+    "for (const section of newFile.sections) {"
+   ],
+   "origin": {
+    "kind": "fix",
+    "round": 1,
+    "sha": "67cc4751"
+   },
+   "placedBefore": null,
+   "fixOf": [
+    "scripts/lib/effective-config.ts:1318"
+   ],
+   "relog": false,
+   "group": "made-by-last-fix"
+  },
+  {
+   "run": "339",
+   "round": 2,
+   "severity": "P2",
+   "target": "scripts/setup.ts:638",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna"
+   ],
+   "text": "Include the local overlay in project-mode validation: When lanes exist only in an existing `.postmaster/settings.toml`, `MERGED_NAMES` omits them; answering `workhorses` or `reviewers` for those lanes is rejected before final merged-config validation. The Plane workspace check similarly consults only `MACHINE_TRACKER_WS`, so re-answering `tracker=plane` fails if its workspace is already saved locally. Include existi…",
+   "textSource": "report",
+   "file": "scripts/setup.ts",
+   "first": 638,
+   "last": 638,
+   "snapshot": "67cc4751",
+   "code": [
+    "const MERGED_NAMES ="
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "c06827d3"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "missed-lens-reviewed"
+  },
+  {
+   "run": "339",
+   "round": 2,
+   "severity": "P2",
+   "target": "scripts/setup.ts:1108",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna"
+   ],
+   "text": "Keep dry runs from writing ignore rules: When a project already has settings and `ignore_settings=yes` is the only answer, this branch calls `ignoreSettings` and exits before the normal `DRY` check. Thus `setup --project ... --dry-run` changes `.postmaster/.gitignore` instead of only previewing; defer the mutation until after the dry-run guard.",
+   "textSource": "report",
+   "file": "scripts/setup.ts",
+   "first": 1108,
+   "last": 1108,
+   "snapshot": "67cc4751",
+   "code": [
+    "if (sections.length === 0) {"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "c06827d3"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "missed-lens-reviewed"
+  },
+  {
+   "run": "339",
+   "round": 2,
+   "severity": "P2",
+   "target": "scripts/setup.ts:1277",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna",
+    "haiku"
+   ],
+   "text": "Roll back settings when ignore setup fails: If `.postmaster/.gitignore` is a symlink or cannot be updated, `ensureIgnore` throws here after `settings.toml` has already been written. The command reports failure but leaves the new settings active because this path never calls the rollback closure. Update the ignore rules before writing settings or roll back on this failure.",
+   "textSource": "report",
+   "file": "scripts/setup.ts",
+   "first": 1277,
+   "last": 1277,
+   "snapshot": "67cc4751",
+   "code": [
+    "ensureIgnore(PROJECT_ROOT, true);"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "c06827d3"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "missed-lens-reviewed"
+  },
+  {
+   "run": "339",
+   "round": 2,
+   "severity": "P2",
+   "target": "scripts/setup.ts:378",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna"
+   ],
+   "text": "Replace the complete multiline TOML value: When the changed key is a valid multiline TOML value, such as a `reviewers` array spread across lines, this branch replaces only the assignment line and leaves the continuation lines behind. The subsequent parse then rejects the project update. Replace the full value span when merging multiline values.",
+   "textSource": "report",
+   "file": "scripts/setup.ts",
+   "first": 378,
+   "last": 378,
+   "snapshot": "67cc4751",
+   "code": [
+    "target.body[at] = mergeInlineLine(oldLine, line);"
+   ],
+   "origin": {
+    "kind": "fix",
+    "round": 1,
+    "sha": "67cc4751"
+   },
+   "placedBefore": null,
+   "fixOf": [
+    "scripts/lib/effective-config.ts:1318"
+   ],
+   "relog": false,
+   "group": "made-by-last-fix"
+  },
+  {
+   "run": "339",
+   "round": 2,
+   "severity": "P2",
+   "target": "scripts/setup.ts:1169",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "haiku"
+   ],
+   "text": "2. target scripts/setup.ts:1169, severity not provided: partially answered roles are written with exit 0 while partial lanes are refused. Summary:",
+   "textSource": "report",
+   "file": "scripts/setup.ts",
+   "first": 1169,
+   "last": 1169,
+   "snapshot": "67cc4751",
+   "code": [
+    "const mergedCoachman = roleModel(mergedTeam.coachman);"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "c06827d3"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "missed-lens-reviewed"
+  },
+  {
+   "run": "339",
+   "round": 2,
+   "severity": "P2",
+   "target": "AGENTS.md:292",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "haiku"
+   ],
+   "text": "4. target AGENTS.md:292, severity not provided: AGENTS.md still says nothing in .postmaster/ is committed by default; wiki/concepts/project-settings.md:29",
+   "textSource": "report",
+   "file": "AGENTS.md",
+   "first": 292,
+   "last": 292,
+   "snapshot": "67cc4751",
+   "code": [
+    "path (`scripts/run project-settings`). Nothing in `.postmaster/` is committed by default;"
+   ],
+   "origin": {
+    "kind": "base",
+    "sha": "84cb887b"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "outside"
+  },
+  {
+   "run": "339",
+   "round": 2,
+   "severity": "P2",
+   "target": "AGENTS.md:105",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "haiku"
+   ],
+   "text": "5. target AGENTS.md:105, severity not provided: \"goes straight to the project's settings\" disagrees with setup-next reporting next=global.",
+   "textSource": "report",
+   "file": "AGENTS.md",
+   "first": 105,
+   "last": 105,
+   "snapshot": "67cc4751",
+   "code": [
+    "With no global config, setup goes straight to the project's own settings. Choosing the"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "c06827d3"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "missed-lens-reviewed"
+  },
+  {
+   "run": "339",
+   "round": 3,
+   "severity": "P2",
+   "target": "scripts/setup-next.ts:68",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna"
+   ],
+   "text": "Preserve setup routing when the project settings path is invalid: For a target whose `.postmaster` is a symlink or a regular file, `check(target)` returns a not-set-up verdict, but `settingsIgnored(root)` calls `settingsDir(root)` and throws. `setup-next` then exits without printing the `next` value the runbook needs; handle this probe failure while still reporting the verdict and route (AGENTS.md#L91-L95).",
+   "textSource": "report",
+   "file": "scripts/setup-next.ts",
+   "first": 68,
+   "last": 68,
+   "snapshot": "0cf01836",
+   "code": [
+    "`settings_ignored=${settingsIgnored(root) ? \"yes\" : \"no\"}`,"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "c06827d3"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "missed-lens-reviewed"
+  },
+  {
+   "run": "339",
+   "round": 4,
+   "severity": "P1",
+   "target": "scripts/setup.ts:399",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "haiku"
+   ],
+   "text": "1. target scripts/setup.ts:399, severity not provided: valueSpan counts brackets inside comments in multiline values, so the span swallows",
+   "textSource": "report",
+   "file": "scripts/setup.ts",
+   "first": 399,
+   "last": 399,
+   "snapshot": "c7e2b737",
+   "code": [
+    "} else if (ch === \"#\" && depth === 0) {"
+   ],
+   "origin": {
+    "kind": "fix",
+    "round": 2,
+    "sha": "0cf01836"
+   },
+   "placedBefore": null,
+   "fixOf": [
+    "AGENTS.md:105"
+   ],
+   "relog": false,
+   "group": "made-by-older-fix"
+  },
+  {
+   "run": "339",
+   "round": 4,
+   "severity": "P2",
+   "target": "scripts/setup.ts:415",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna"
+   ],
+   "text": "Merge child role tables before emitting inline values: When an existing valid settings file expresses a role as a child table such as `[team.coachman]` and a later `setup --project` answer changes `coachman.model`, this exact section lookup misses the existing child and appends `coachman = {...}` under `[team]`. That redeclares `team.coachman`, so TOML parsing rejects the update; support this valid table form when m…",
+   "textSource": "report",
+   "file": "scripts/setup.ts",
+   "first": 415,
+   "last": 415,
+   "snapshot": "c7e2b737",
+   "code": [
+    "let target = merged.find((s) => s.key === section.key);"
+   ],
+   "origin": {
+    "kind": "fix",
+    "round": 1,
+    "sha": "67cc4751"
+   },
+   "placedBefore": null,
+   "fixOf": [
+    "scripts/lib/effective-config.ts:1318"
+   ],
+   "relog": false,
+   "group": "made-by-older-fix"
+  },
+  {
+   "run": "339",
+   "round": 4,
+   "severity": "P2",
+   "target": "scripts/setup.ts:227",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "haiku"
+   ],
+   "text": "5. target scripts/setup.ts:227, severity not provided: interactive blank link answers leave the key unset instead of clearing it, unlike the",
+   "textSource": "report",
+   "file": "scripts/setup.ts",
+   "first": 227,
+   "last": 227,
+   "snapshot": "c7e2b737",
+   "code": [
+    "if (line === \"\") return \"\";"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "c06827d3"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "missed-lens-reviewed"
+  },
+  {
+   "run": "339",
+   "round": 5,
+   "severity": "P2",
+   "target": "scripts/setup.ts:469",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna"
+   ],
+   "text": "Skip multiline string contents when locating existing keys: When an existing valid TOML section has a multiline string whose body contains a line that looks like a setting being added, this search mistakes the string contents for an assignment. The merge then replaces text inside the string instead of adding the setting; TOML parsing can still succeed, so setup may report success while the user's override has no eff…",
+   "textSource": "report",
+   "file": "scripts/setup.ts",
+   "first": 469,
+   "last": 469,
+   "snapshot": "a0d5645e",
+   "code": [
+    "const at = target.body.findIndex((l) => keyOf(l) === key);"
+   ],
+   "origin": {
+    "kind": "fix",
+    "round": 1,
+    "sha": "67cc4751"
+   },
+   "placedBefore": null,
+   "fixOf": [
+    "scripts/lib/effective-config.ts:1318"
+   ],
+   "relog": false,
+   "group": "made-by-older-fix"
+  },
+  {
+   "run": "339",
+   "round": 6,
+   "severity": "P2",
+   "target": "scripts/setup.ts:847",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna"
+   ],
+   "text": "Preserve local tracker-kind precedence in project setup: When the global config says `tracker.kind = \"plane\"` but this project's existing settings override it to `local`, any nonempty answers file still makes `MERGED_KIND` use the machine value; with no global Plane workspace, the check aborts an unrelated project update even though the effective tracker is local. Resolve the kind using the project's settings over t…",
+   "textSource": "report",
+   "file": "scripts/setup.ts",
+   "first": 847,
+   "last": 847,
+   "snapshot": "9f603db5",
+   "code": [
+    "const MERGED_KIND = TK !== \"\" ? TK : MACHINE_TRACKER_KIND;"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "c06827d3"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "missed-lens-reviewed"
+  },
+  {
+   "run": "339",
+   "round": 6,
+   "severity": "P2",
+   "target": "scripts/setup-next.ts:40",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna"
+   ],
+   "text": "Read the global config with strict UTF-8 decoding: If the global config contains invalid UTF-8, even only in a comment, `readFileSync(..., \"utf8\")` substitutes U+FFFD and the TOML parser accepts it, while `check(target)` rejects it through `strictRead`; `globalUsable` remains true and reports `next=project`, but `setup --project` then fails loading the same config. Use strict decoding here so a broken global config …",
+   "textSource": "report",
+   "file": "scripts/setup-next.ts",
+   "first": 40,
+   "last": 40,
+   "snapshot": "9f603db5",
+   "code": [
+    "parseTomlStrict(readFileSync(path, \"utf8\"), \"global config\");"
+   ],
+   "origin": {
+    "kind": "fix",
+    "round": 1,
+    "sha": "67cc4751"
+   },
+   "placedBefore": null,
+   "fixOf": [
+    "scripts/lib/effective-config.ts:1318"
+   ],
+   "relog": false,
+   "group": "made-by-older-fix"
+  },
+  {
+   "run": "339",
+   "round": 6,
+   "severity": "P2",
+   "target": "scripts/lib/effective-config.ts:1308",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna"
+   ],
+   "text": "",
+   "textSource": "none",
+   "file": "scripts/lib/effective-config.ts",
+   "first": 1308,
+   "last": 1308,
+   "snapshot": "9f603db5",
+   "code": [
+    "const coveringRule = (rule: string, target: string): boolean => {"
+   ],
+   "origin": {
+    "kind": "fix",
+    "round": 1,
+    "sha": "67cc4751"
+   },
+   "placedBefore": null,
+   "fixOf": [
+    "scripts/lib/effective-config.ts:1318"
+   ],
+   "relog": false,
+   "group": "made-by-older-fix"
+  },
+  {
+   "run": "339",
+   "round": 7,
+   "severity": "P2",
+   "target": "scripts/setup.ts:869",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna"
+   ],
+   "text": "Require a Plane API origin when setting the project tracker: When `--project` sets `tracker=plane` and neither the global nor existing settings supplies `tracker.url`, `plane.url` is blank by default, but this validation requires only a workspace and lets the file be written without an API origin. The first Plane operation then fails in `scripts/plane.ts` because both `url` and `workspace` are required; require the …",
+   "textSource": "report",
+   "file": "scripts/setup.ts",
+   "first": 869,
+   "last": 869,
+   "snapshot": "2ef22ce8",
+   "code": [
+    "if (MERGED_KIND === \"plane\" && mergedWs === \"\")"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "c06827d3"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "missed-lens-reviewed"
+  },
+  {
+   "run": "344",
+   "round": 2,
+   "severity": "P2",
+   "target": "scripts/verifier.ts:809",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna"
+   ],
+   "text": "send-once prompt can drop during startup with no receipt check, idling to timeout",
+   "textSource": "line",
+   "file": "scripts/verifier.ts",
+   "first": 809,
+   "last": 809,
+   "snapshot": "cc928692",
+   "code": [
+    "const sent = run(RUN, [\"host\", \"send\", handle, sendFile]);"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "dc55fde9"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "missed-lens-reviewed"
+  },
+  {
+   "run": "344",
+   "round": 3,
+   "severity": "P2",
+   "target": "scripts/verifier.ts:761",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna"
+   ],
+   "text": "pre-send Herdr block treated as delivered though the prompt was never accepted",
+   "textSource": "line",
+   "file": "scripts/verifier.ts",
+   "first": 761,
+   "last": 761,
+   "snapshot": "db3948e3",
+   "code": [
+    "if (code === 3 && output.includes(\"approval or a question\")) return \"sent\";"
+   ],
+   "origin": {
+    "kind": "fix",
+    "round": 2,
+    "sha": "db3948e3"
+   },
+   "placedBefore": null,
+   "fixOf": [
+    "scripts/verifier.ts:809"
+   ],
+   "relog": false,
+   "group": "made-by-last-fix"
+  },
+  {
+   "run": "348",
+   "round": 1,
+   "severity": "P2",
+   "target": "scripts/cut-scratch.ts:330",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "haiku",
+    "luna"
+   ],
+   "text": "cut succeeds despite a stale wb/ branch in the repo, so a re-run dies at take-in after all work",
+   "textSource": "line",
+   "file": "scripts/cut-scratch.ts",
+   "first": 330,
+   "last": 330,
+   "snapshot": "92c6c1ef",
+   "code": [
+    "const repo = mainOf(repoCommon);"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "b75b641f"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": null
+  },
+  {
+   "run": "348",
+   "round": 1,
+   "severity": "P2",
+   "target": "scripts/take-in.ts:245",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "haiku"
+   ],
+   "text": "copy-HEAD fallback resolves through the enclosing checkout when the copy is no repository, silently taking the lane as nothing",
+   "textSource": "line",
+   "file": "scripts/take-in.ts",
+   "first": 245,
+   "last": 245,
+   "snapshot": "92c6c1ef",
+   "code": [
+    "const copyHead = gitCommit(h.worktree, h.branch) ?? gitCommit(h.worktree, \"HEAD\");"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "b75b641f"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": null
+  },
+  {
+   "run": "348",
+   "round": 1,
+   "severity": "P2",
+   "target": "scripts/take-in.ts:309",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna"
+   ],
+   "text": "take-in logs only after the whole fetch loop, a partial import mutates the repo with no audit record",
+   "textSource": "line",
+   "file": "scripts/take-in.ts",
+   "first": 309,
+   "last": 309,
+   "snapshot": "92c6c1ef",
+   "code": [
+    "for (const t of taken) {"
+   ],
+   "origin": {
+    "kind": "base",
+    "sha": "12e0fae3"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": null
+  },
+  {
+   "run": "348",
+   "round": 2,
+   "severity": "P2",
+   "target": "skills/postmaster/postmaster.md:767",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "haiku"
+   ],
+   "text": "teardown removes survivors with --remove, which refuses a branch worktree, so pre-change runs folders survive",
+   "textSource": "line",
+   "file": "skills/postmaster/postmaster.md",
+   "first": 767,
+   "last": 767,
+   "snapshot": "b72a2bcc",
+   "code": [
+    "the coachman's; if any survive, remove each with `<tool>/scripts/run cut-scratch --remove"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "b75b641f"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "missed-lens-reviewed"
+  },
+  {
+   "run": "352",
+   "round": 1,
+   "severity": "P2",
+   "target": "scripts/lib/page-text.ts:26",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna",
+    "haiku"
+   ],
+   "text": "scrub TLD {2,6} leaves longer-TLD addresses on the page",
+   "textSource": "line",
+   "file": "scripts/lib/page-text.ts",
+   "first": 26,
+   "last": 26,
+   "snapshot": "6ce9f749",
+   "code": [],
+   "origin": {
+    "kind": "unplaced",
+    "why": "file or line not in the snapshot"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": null
+  },
+  {
+   "run": "352",
+   "round": 1,
+   "severity": "P2",
+   "target": "scripts/story-page.ts:611",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna",
+    "haiku"
+   ],
+   "text": "md range ending inside a fence drops the fenced lines yet counts them shown",
+   "textSource": "line",
+   "file": "scripts/story-page.ts",
+   "first": 611,
+   "last": 611,
+   "snapshot": "6ce9f749",
+   "code": [],
+   "origin": {
+    "kind": "unplaced",
+    "why": "file or line not in the snapshot"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": null
+  },
+  {
+   "run": "352",
+   "round": 1,
+   "severity": "P2",
+   "target": "scripts/story-page.ts:1432",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "haiku"
+   ],
+   "text": "sheet SVG ids never match the #dg state CSS, so the sheet shows every state at once",
+   "textSource": "line",
+   "file": "scripts/story-page.ts",
+   "first": 1432,
+   "last": 1432,
+   "snapshot": "6ce9f749",
+   "code": [],
+   "origin": {
+    "kind": "unplaced",
+    "why": "file or line not in the snapshot"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": null
+  },
+  {
+   "run": "352",
+   "round": 1,
+   "severity": "P2",
+   "target": "scripts/story-page.ts:1726",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "haiku"
+   ],
+   "text": "{shown} counts every scene row, not the cited lines on steps, contradicting the closing paragraph",
+   "textSource": "line",
+   "file": "scripts/story-page.ts",
+   "first": 1726,
+   "last": 1726,
+   "snapshot": "6ce9f749",
+   "code": [],
+   "origin": {
+    "kind": "unplaced",
+    "why": "file or line not in the snapshot"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": null
+  },
+  {
+   "run": "352",
+   "round": 1,
+   "severity": "P2",
+   "target": "scripts/story-page.ts:538",
+   "lenses": [
+    "bug",
+    "style"
+   ],
+   "lanes": [
+    "haiku"
+   ],
+   "text": "wrapped ticket list item rebuilt from plain text, losing link and bold",
+   "textSource": "line",
+   "file": "scripts/story-page.ts",
+   "first": 538,
+   "last": 538,
+   "snapshot": "6ce9f749",
+   "code": [],
+   "origin": {
+    "kind": "unplaced",
+    "why": "file or line not in the snapshot"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": null
+  },
+  {
+   "run": "352",
+   "round": 1,
+   "severity": "P2",
+   "target": "scripts/story-page.ts:341",
+   "lenses": [
+    "style"
+   ],
+   "lanes": [
+    "haiku"
+   ],
+   "text": "empty mark text accepted by the builder, hanging the page in markCell",
+   "textSource": "line",
+   "file": "scripts/story-page.ts",
+   "first": 341,
+   "last": 341,
+   "snapshot": "6ce9f749",
+   "code": [],
+   "origin": {
+    "kind": "unplaced",
+    "why": "file or line not in the snapshot"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": null
+  },
+  {
+   "run": "352",
+   "round": 2,
+   "severity": "P2",
+   "target": "scripts/story-page.ts:486",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna"
+   ],
+   "text": "#L0 cites a blank line 0, reversed ranges cite nothing silently, unbounded ranges hang the builder",
+   "textSource": "line",
+   "file": "scripts/story-page.ts",
+   "first": 486,
+   "last": 486,
+   "snapshot": "6ce9f749",
+   "code": [],
+   "origin": {
+    "kind": "unplaced",
+    "why": "file or line not in the snapshot"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "unplaced"
+  },
+  {
+   "run": "352",
+   "round": 2,
+   "severity": "P2",
+   "target": "scripts/story-page.ts:659",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "haiku"
+   ],
+   "text": "renderMd sniffs rendered HTML for list items, dropping indented lines after matching blocks yet counting them shown",
+   "textSource": "line",
+   "file": "scripts/story-page.ts",
+   "first": 659,
+   "last": 659,
+   "snapshot": "6ce9f749",
+   "code": [],
+   "origin": {
+    "kind": "unplaced",
+    "why": "file or line not in the snapshot"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "unplaced"
+  },
+  {
+   "run": "352",
+   "round": 3,
+   "severity": "P2",
+   "target": "scripts/story-page.ts:469",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "haiku"
+   ],
+   "text": "LINK skips branch links silently and truncates column anchors, dropping cited lines",
+   "textSource": "line",
+   "file": "scripts/story-page.ts",
+   "first": 469,
+   "last": 469,
+   "snapshot": "6ce9f749",
+   "code": [],
+   "origin": {
+    "kind": "unplaced",
+    "why": "file or line not in the snapshot"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "unplaced"
+  },
+  {
+   "run": "352",
+   "round": 4,
+   "severity": "P2",
+   "target": "scripts/story-page.ts:505",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna"
+   ],
+   "text": "endpoint past MAX_SAFE_INTEGER loops forever, passing the span check",
+   "textSource": "line",
+   "file": "scripts/story-page.ts",
+   "first": 505,
+   "last": 505,
+   "snapshot": "6ce9f749",
+   "code": [],
+   "origin": {
+    "kind": "unplaced",
+    "why": "file or line not in the snapshot"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "unplaced"
+  },
+  {
+   "run": "352",
+   "round": 4,
+   "severity": "P2",
+   "target": "scripts/story-page.ts:472",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "haiku"
+   ],
+   "text": "bare #L10-20 cites line 10 alone, dropping 11-20 silently",
+   "textSource": "line",
+   "file": "scripts/story-page.ts",
+   "first": 472,
+   "last": 472,
+   "snapshot": "6ce9f749",
+   "code": [],
+   "origin": {
+    "kind": "unplaced",
+    "why": "file or line not in the snapshot"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "unplaced"
+  },
+  {
+   "run": "352",
+   "round": 5,
+   "severity": "P2",
+   "target": "scripts/story-page.ts:473",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna"
+   ],
+   "text": "foreign-repo blob links abort valid builds, owner and repo unchecked",
+   "textSource": "line",
+   "file": "scripts/story-page.ts",
+   "first": 473,
+   "last": 473,
+   "snapshot": "6ce9f749",
+   "code": [],
+   "origin": {
+    "kind": "unplaced",
+    "why": "file or line not in the snapshot"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "unplaced"
+  },
+  {
+   "run": "355",
+   "round": 1,
+   "severity": "P2",
+   "target": "scripts/verifier.ts:2280",
+   "lenses": [
+    "bug",
+    "style"
+   ],
+   "lanes": [
+    "luna",
+    "haiku"
+   ],
+   "text": "rename detection reports only the new path, so a renamed dependency is never marked",
+   "textSource": "line",
+   "file": "scripts/verifier.ts",
+   "first": 2280,
+   "last": 2280,
+   "snapshot": "c500296f",
+   "code": [
+    "const diff = git(repo, [\"diff\", \"--name-only\", sha, at]);"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "030f3cb8"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": null
+  },
+  {
+   "run": "355",
+   "round": 1,
+   "severity": "P2",
+   "target": "skills/postmaster/postmaster.md:745",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna"
+   ],
+   "text": "Stage G runs stale at the merge against a checkout still pre-merge, misreading the landing's own index",
+   "textSource": "line",
+   "file": "skills/postmaster/postmaster.md",
+   "first": 745,
+   "last": 745,
+   "snapshot": "c500296f",
+   "code": [
+    "commit; for each verifier it marks, offer the upkeep pass"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "839ee3a2"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": null
+  },
+  {
+   "run": "355",
+   "round": 1,
+   "severity": "P2",
+   "target": "scripts/verifier.ts:2279",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "haiku"
+   ],
+   "text": "a Confirmed sha naming a non-commit aborts the whole stale run instead of marking one verifier",
+   "textSource": "line",
+   "file": "scripts/verifier.ts",
+   "first": 2279,
+   "last": 2279,
+   "snapshot": "c500296f",
+   "code": [
+    "if (git(repo, [\"cat-file\", \"-e\", sha]).code !== 0) return `unconfirmed (unknown commit ${sha})`;"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "030f3cb8"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": null
+  },
+  {
+   "run": "355",
+   "round": 1,
+   "severity": "P2",
+   "target": "scripts/verifier.ts:1866",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "haiku"
+   ],
+   "text": "slashes stripped before the sentence dot, so a folder last keeps its slash and never matches",
+   "textSource": "line",
+   "file": "scripts/verifier.ts",
+   "first": 1866,
+   "last": 1866,
+   "snapshot": "c500296f",
+   "code": [
+    "let entry = raw.trim().replace(/\\/+$/u, \"\");"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "030f3cb8"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": null
+  },
+  {
+   "run": "355",
+   "round": 1,
+   "severity": "P2",
+   "target": "README.md:93",
+   "lenses": [
+    "style"
+   ],
+   "lanes": [
+    "haiku"
+   ],
+   "text": "setup wires no verifier make, so the mandated sentence has no mechanism; cannot fix in run, carried",
+   "textSource": "line",
+   "file": "README.md",
+   "first": 93,
+   "last": 93,
+   "snapshot": "c500296f",
+   "code": [
+    "Setting up a project makes its verifiers, based on"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "839ee3a2"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": null
+  },
+  {
+   "run": "355",
+   "round": 2,
+   "severity": "P2",
+   "target": "skills/postmaster/postmaster.md:747",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna"
+   ],
+   "text": "the offered pass lacks --correct, so it reports only and never clears the mark",
+   "textSource": "line",
+   "file": "skills/postmaster/postmaster.md",
+   "first": 747,
+   "last": 747,
+   "snapshot": "ee3b7dd6",
+   "code": [
+    "(`run verifier upkeep <repo> --run <dispatch>`), naming the changed files, and a yes"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "839ee3a2"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "missed-lens-reviewed"
+  },
+  {
+   "run": "355",
+   "round": 2,
+   "severity": "P2",
+   "target": "skills/postmaster/postmaster.md:746",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "haiku"
+   ],
+   "text": "per-verifier offers each run a full pass, and --folder cannot scope one (the shared index sits outside it)",
+   "textSource": "line",
+   "file": "skills/postmaster/postmaster.md",
+   "first": 746,
+   "last": 746,
+   "snapshot": "ee3b7dd6",
+   "code": [
+    "<repo> --at <merge>` once; for each verifier it marks, offer the upkeep pass"
+   ],
+   "origin": {
+    "kind": "fix",
+    "round": 1,
+    "sha": "c416c2b8"
+   },
+   "placedBefore": null,
+   "fixOf": [
+    "skills/postmaster/postmaster.md:745"
+   ],
+   "relog": false,
+   "group": "made-by-last-fix"
+  },
+  {
+   "run": "355",
+   "round": 2,
+   "severity": "P2",
+   "target": "scripts/verifier.ts:2283",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "haiku"
+   ],
+   "text": "an empty Files list parses to [] and never marks",
+   "textSource": "line",
+   "file": "scripts/verifier.ts",
+   "first": 2283,
+   "last": 2283,
+   "snapshot": "ee3b7dd6",
+   "code": [
+    "if (files === null) return \"unconfirmed (no Files: list)\";"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "030f3cb8"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "missed-lens-reviewed"
+  },
+  {
+   "run": "355",
+   "round": 3,
+   "severity": "P2",
+   "target": "scripts/verifier.ts:1870",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "haiku"
+   ],
+   "text": "a backticked entry before the sentence dot keeps its backtick, my round 1 ordering",
+   "textSource": "line",
+   "file": "scripts/verifier.ts",
+   "first": 1870,
+   "last": 1870,
+   "snapshot": "b35e22c1",
+   "code": [
+    "let entry = raw.trim().replace(/^`+|`+$/gu, \"\");"
+   ],
+   "origin": {
+    "kind": "fix",
+    "round": 1,
+    "sha": "173c0a1e"
+   },
+   "placedBefore": null,
+   "fixOf": [
+    "scripts/verifier.ts:2280",
+    "scripts/verifier.ts:1866",
+    "scripts/verifier.ts:1867",
+    "scripts/verifier.ts:2279",
+    "scripts/verifier.ts:2266"
+   ],
+   "relog": false,
+   "group": "made-by-older-fix"
+  },
+  {
+   "run": "355",
+   "round": 3,
+   "severity": "P2",
+   "target": "scripts/verifier.ts:2289",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "haiku"
+   ],
+   "text": "the stale diff without -z quotes non-ASCII paths, which then never match",
+   "textSource": "line",
+   "file": "scripts/verifier.ts",
+   "first": 2289,
+   "last": 2289,
+   "snapshot": "b35e22c1",
+   "code": [
+    "const diff = git(repo, [\"diff\", \"--name-only\", \"--no-renames\", sha, at]);"
+   ],
+   "origin": {
+    "kind": "fix",
+    "round": 1,
+    "sha": "173c0a1e"
+   },
+   "placedBefore": null,
+   "fixOf": [
+    "scripts/verifier.ts:2280",
+    "scripts/verifier.ts:1866",
+    "scripts/verifier.ts:1867",
+    "scripts/verifier.ts:2279",
+    "scripts/verifier.ts:2266"
+   ],
+   "relog": false,
+   "group": "made-by-older-fix"
+  },
+  {
+   "run": "355",
+   "round": 4,
+   "severity": "P2",
+   "target": "skills/postmaster/postmaster.md:746",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna"
+   ],
+   "text": "upkeep leaves its correcting branch unlanded and no runbook step lands it, so the mark never clears",
+   "textSource": "line",
+   "file": "skills/postmaster/postmaster.md",
+   "first": 746,
+   "last": 746,
+   "snapshot": "01ebd904",
+   "code": [
+    "<repo> --at <merge>` once; for the verifiers it marks, offer one correcting upkeep pass"
+   ],
+   "origin": {
+    "kind": "fix",
+    "round": 2,
+    "sha": "73d9e1fe"
+   },
+   "placedBefore": null,
+   "fixOf": [
+    "skills/postmaster/postmaster.md:747",
+    "skills/postmaster/postmaster.md:746"
+   ],
+   "relog": true,
+   "group": "made-by-older-fix"
+  },
+  {
+   "run": "374",
+   "round": 1,
+   "severity": "P1",
+   "target": "scripts/host.ts:1746",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna"
+   ],
+   "text": "state pane runs Bun from the synthesis worktree without --no-env-file or the tool config, so target preload and .env execute in the flow-owned persistent pane; verified by execution (probe: target preload ran and read target .env; control via scripts/run: no execution)",
+   "textSource": "line",
+   "file": "scripts/host.ts",
+   "first": 1746,
+   "last": 1746,
+   "snapshot": "e36cdf56",
+   "code": [
+    "const loop = `cd -- ${quote(runPath)} && ${quote(process.execPath)} ${quote(join(HERE, \"host.ts\"))} run-state --watch ${quote(dispatch)}`;"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "cf35bc20"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": null
+  },
+  {
+   "run": "374",
+   "round": 1,
+   "severity": "P2",
+   "target": "scripts/host.ts:6580",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna"
+   ],
+   "text": "herdrCloseRunTab exact-matches tab_id so an unplaceable row is omitted and tab close can destroy a user pane, against placementOwnership, finishOwnership and hosts.md; verified by reading",
+   "textSource": "line",
+   "file": "scripts/host.ts",
+   "first": 6580,
+   "last": 6580,
+   "snapshot": "e36cdf56",
+   "code": [
+    "const held = rows.filter((row) => row.tab_id === tab);"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "cf35bc20"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": null
+  },
+  {
+   "run": "374",
+   "round": 1,
+   "severity": "P2",
+   "target": "scripts/host.ts:6613",
+   "lenses": [
+    "bug",
+    "style"
+   ],
+   "lanes": [
+    "luna"
+   ],
+   "text": "close-run returns 0 at the missing-placements guard before the run-tab cleanup, leaking the tab and its record with a success report; verified by execution (probe: exit 0, record remains; style lane reproduced via split failure)",
+   "textSource": "line",
+   "file": "scripts/host.ts",
+   "first": 6613,
+   "last": 6613,
+   "snapshot": "e36cdf56",
+   "code": [
+    "if (!statSync(join(STATE, \"placements\")).isDirectory()) return 0;"
+   ],
+   "origin": {
+    "kind": "base",
+    "sha": "4ed9fa3d"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": null
+  },
+  {
+   "run": "375",
+   "round": 1,
+   "severity": "P2",
+   "target": "scripts/host.ts:2148",
+   "lenses": [
+    "bug",
+    "security",
+    "style"
+   ],
+   "lanes": [
+    "luna",
+    "opus",
+    "haiku"
+   ],
+   "text": "spawn at a fixture copy loses the caller POSTMASTER_* env (no PLACE_ENV on the fixture split)",
+   "textSource": "line",
+   "file": "scripts/host.ts",
+   "first": 2148,
+   "last": 2148,
+   "snapshot": "624e866b",
+   "code": [
+    "let pane = splitRunPane(anchor, cwd);"
+   ],
+   "origin": {
+    "kind": "base",
+    "sha": "cf35bc20"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": null
+  },
+  {
+   "run": "375",
+   "round": 1,
+   "severity": "P2",
+   "target": "scripts/host.ts:7004",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "haiku"
+   ],
+   "text": "stale run record at a dead tab deletes the live fixture tab record on close-run",
+   "textSource": "line",
+   "file": "scripts/host.ts",
+   "first": 7004,
+   "last": 7004,
+   "snapshot": "624e866b",
+   "code": [
+    "if (rc === 0 && fixture) removeFixTab(repo);"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "0f38ce7f"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": null
+  },
+  {
+   "run": "379",
+   "round": 1,
+   "severity": "P2",
+   "target": "scripts/merge-default.ts:341",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna"
+   ],
+   "text": "a raced no-op merge is logged and consumes budget",
+   "textSource": "line",
+   "file": "scripts/merge-default.ts",
+   "first": 341,
+   "last": 341,
+   "snapshot": "89e48ce5",
+   "code": [
+    "const m = run(\"git\", [\"-C\", wt, \"merge\", \"--no-ff\", \"-m\", msg, tip], { env: UNSET_GIT });"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "fe1282ff"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": null
+  },
+  {
+   "run": "379",
+   "round": 1,
+   "severity": "P2",
+   "target": "scripts/merge-default.ts:315",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "haiku"
+   ],
+   "text": "CARD-ANYWAY skips the gate check at the current head",
+   "textSource": "line",
+   "file": "scripts/merge-default.ts",
+   "first": 315,
+   "last": 315,
+   "snapshot": "89e48ce5",
+   "code": [
+    "if (stale) {"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "fe1282ff"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": null
+  },
+  {
+   "run": "407",
+   "round": 1,
+   "severity": "P1",
+   "target": "scripts/log-action.ts:278",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "haiku"
+   ],
+   "text": "premises validation requires actor coachman, so the postmaster cannot log the premises line the held-back flow requires (postmaster.md step 8, C4, fixture held-back path); verified by execution (probe: postmaster premises exits 1 refused, coachman exits 0)",
+   "textSource": "line",
+   "file": "scripts/log-action.ts",
+   "first": 278,
+   "last": 278,
+   "snapshot": "7c9ab345",
+   "code": [
+    "actor !== \"coachman\" ||"
+   ],
+   "origin": {
+    "kind": "base",
+    "sha": "768705f6"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": null
+  },
+  {
+   "run": "407",
+   "round": 1,
+   "severity": "P2",
+   "target": "scripts/fixture.ts:786",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna"
+   ],
+   "text": "held-back premises check compares only with workhorse dispatches, so with none dispatched (single-thread, or leg started) it passes without enforcing C4 before the first leg starts; verified by reading",
+   "textSource": "line",
+   "file": "scripts/fixture.ts",
+   "first": 786,
+   "last": 786,
+   "snapshot": "7c9ab345",
+   "code": [
+    "if (dispatchIndex >= 0 && postmasterPremises >= dispatchIndex)"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "2c41ec71"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": null
+  },
+  {
+   "run": "407",
+   "round": 2,
+   "severity": "P2",
+   "target": "skills/postmaster/postmaster.md:165",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna"
+   ],
+   "text": "held-back step removes the temp file and pastes the waybill ticket before the premises check that needs the file and must precede the write; verified by reading",
+   "textSource": "line",
+   "file": "skills/postmaster/postmaster.md",
+   "first": 165,
+   "last": 165,
+   "snapshot": "bb0130d2",
+   "code": [
+    "file outside the run directory, run `<tool>/scripts/run ticket-cut` on it, paste the cut"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "a470d6ed"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "missed-lens-reviewed"
+  },
+  {
+   "run": "407",
+   "round": 3,
+   "severity": "P2",
+   "target": "scripts/premises.ts:79",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna"
+   ],
+   "text": "agentsPart matches the agents heading case-sensitively while readiness accepts any case, so a variant-case ticket reports premises same with zero citations; verified by execution (probe: FOR THE AGENTS gives same count=0 exit 0, parts exit 0)",
+   "textSource": "line",
+   "file": "scripts/premises.ts",
+   "first": 79,
+   "last": 79,
+   "snapshot": "3dbe975a",
+   "code": [
+    "const start = lines.findIndex((line) => /^## For the agents[ \\t]*$/u.test(line.trim()));"
+   ],
+   "origin": {
+    "kind": "base",
+    "sha": "768705f6"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "outside"
+  },
+  {
+   "run": "407",
+   "round": 3,
+   "severity": "P2",
+   "target": "scripts/ticket-cut.ts:48",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "haiku"
+   ],
+   "text": "process.exit right after stdout.write truncates piped output at 64 KiB with exit 0; verified by execution (probe: 143663-byte ticket piped to 65536 bytes exit 0, full to a file)",
+   "textSource": "line",
+   "file": "scripts/ticket-cut.ts",
+   "first": 48,
+   "last": 48,
+   "snapshot": "3dbe975a",
+   "code": [
+    "process.exit(main(process.argv.slice(2)));"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "2c41ec71"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "missed-lens-reviewed"
+  },
+  {
+   "run": "407",
+   "round": 3,
+   "severity": "P2",
+   "target": "scripts/ticket-cut.ts:18",
+   "lenses": [
+    "security"
+   ],
+   "lanes": [
+    "opus"
+   ],
+   "text": "the cut matches headings on raw text while readiness strips BOM and CRLF, so a CRLF ready ticket keeps its notes; verified by execution (probe: CRLF ticket cut keeps Technical notes, parts exit 0)",
+   "textSource": "line",
+   "file": "scripts/ticket-cut.ts",
+   "first": 18,
+   "last": 18,
+   "snapshot": "3dbe975a",
+   "code": [
+    "const lines = text.split(\"\\n\");"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "2c41ec71"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "missed-lens-reviewed"
+  },
+  {
+   "run": "425",
+   "round": 1,
+   "severity": "P2",
+   "target": "scripts/acceptance-232.ts:57",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "haiku"
+   ],
+   "text": "2. Target `scripts/acceptance-232.ts:57`. Helpers still call `bunx` for oxlint (`printConfigRules`, plus `scripts/no-explicit-any-acceptance.ts`",
+   "textSource": "report",
+   "file": "scripts/acceptance-232.ts",
+   "first": 57,
+   "last": 57,
+   "snapshot": "5193e528",
+   "code": [
+    "const r = run(\"bunx\", [\"oxlint\", \"--print-config\"], { cwd: ROOT });"
+   ],
+   "origin": {
+    "kind": "base",
+    "sha": "8d047a92"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": null
+  },
+  {
+   "run": "425",
+   "round": 1,
+   "severity": "P2",
+   "target": "scripts/no-explicit-any-acceptance.ts:50",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "haiku"
+   ],
+   "text": "",
+   "textSource": "none",
+   "file": "scripts/no-explicit-any-acceptance.ts",
+   "first": 50,
+   "last": 50,
+   "snapshot": "5193e528",
+   "code": [
+    "const COUNT_ARGS = [\"bunx\", \"oxlint\", \"-A\", \"all\", \"-D\", RULE, \"-f\", \"unix\"];"
+   ],
+   "origin": {
+    "kind": "base",
+    "sha": "0afd79a6"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": null
+  },
+  {
+   "run": "425",
+   "round": 1,
+   "severity": "P2",
+   "target": "scripts/no-explicit-any-acceptance.ts:318",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "haiku"
+   ],
+   "text": "",
+   "textSource": "none",
+   "file": "scripts/no-explicit-any-acceptance.ts",
+   "first": 318,
+   "last": 318,
+   "snapshot": "5193e528",
+   "code": [
+    "const flagged = run([\"bunx\", \"oxlint\"], root);"
+   ],
+   "origin": {
+    "kind": "base",
+    "sha": "d51ab9a1"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": null
+  },
+  {
+   "run": "425",
+   "round": 1,
+   "severity": "P2",
+   "target": "scripts/no-explicit-any-acceptance.ts:355",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "haiku"
+   ],
+   "text": "",
+   "textSource": "none",
+   "file": "scripts/no-explicit-any-acceptance.ts",
+   "first": 355,
+   "last": 355,
+   "snapshot": "5193e528",
+   "code": [
+    "const calm = run([\"bunx\", \"oxlint\"], root);"
+   ],
+   "origin": {
+    "kind": "base",
+    "sha": "d51ab9a1"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": null
+  },
+  {
+   "run": "425",
+   "round": 2,
+   "severity": "P2",
+   "target": "scripts/no-explicit-any-acceptance.ts:51",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna"
+   ],
+   "text": "Resolve Oxlint before running from a relative root: When the CLI receives a relative repository root other than `.`, this returns a relative executable path, then `spawnRunner` uses that same root as `cwd`; the OS therefore looks for `<root>/<root>/node_modules/.bin/oxlint`, and the acceptance check exits 2 before running its controls. Resolve the binary path to an absolute path or make it relative to the child work…",
+   "textSource": "report",
+   "file": "scripts/no-explicit-any-acceptance.ts",
+   "first": 51,
+   "last": 51,
+   "snapshot": "caf00bf4",
+   "code": [
+    "return join(root, \"node_modules\", \".bin\", \"oxlint\");"
+   ],
+   "origin": {
+    "kind": "fix",
+    "round": 1,
+    "sha": "f3bec070"
+   },
+   "placedBefore": null,
+   "fixOf": [
+    "scripts/acceptance-232.ts:57",
+    "scripts/no-explicit-any-acceptance.ts:50",
+    "scripts/no-explicit-any-acceptance.ts:318",
+    "scripts/no-explicit-any-acceptance.ts:355"
+   ],
+   "relog": false,
+   "group": "made-by-last-fix"
+  },
+  {
+   "run": "425",
+   "round": 2,
+   "severity": "P2",
+   "target": "scripts/lib/install-scanner.ts:97",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna",
+    "haiku"
+   ],
+   "text": "Keep recorded scanner verdicts out of real refreshes: If a real `refresh-parser` invocation inherits `POSTMASTER_SCAN_FIXTURE`, this branch skips Socket and treats a fixture such as `{}` as a clean scan, allowing the parser to be written without the scanner check. Restrict fixture injection to tests or otherwise prevent a production invocation from silently selecting a recorded pass.",
+   "textSource": "report",
+   "file": "scripts/lib/install-scanner.ts",
+   "first": 97,
+   "last": 97,
+   "snapshot": "caf00bf4",
+   "code": [
+    "if (fixture !== undefined) return recordedScan(fixture, packages);"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "6c15a80a"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": "missed-lens-reviewed"
+  },
+  {
+   "run": "429",
+   "round": 1,
+   "severity": "P2",
+   "target": "scripts/surveyor.ts:168",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "haiku"
+   ],
+   "text": "claude finalMessage ignores is_error, so a failed claude result is harvested as the surveyor's answer",
+   "textSource": "line",
+   "file": "scripts/surveyor.ts",
+   "first": 168,
+   "last": 168,
+   "snapshot": "a61096db",
+   "code": [
+    "if (field(last, \"subtype\") !== \"success\") {"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "86be9851"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": null
+  },
+  {
+   "run": "429",
+   "round": 1,
+   "severity": "P2",
+   "target": "scripts/surveyor.ts:213",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "luna",
+    "haiku"
+   ],
+   "text": "mimo finalMessage takes the last text without checking error events, so a failed run's partial text is harvested",
+   "textSource": "line",
+   "file": "scripts/surveyor.ts",
+   "first": 213,
+   "last": 213,
+   "snapshot": "a61096db",
+   "code": [
+    "if (harness === \"mimo\") {"
+   ],
+   "origin": {
+    "kind": "change",
+    "sha": "86be9851"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": null
+  },
+  {
+   "run": "429",
+   "round": 1,
+   "severity": "P2",
+   "target": "scripts/walls.ts:315",
+   "lenses": [
+    "bug"
+   ],
+   "lanes": [
+    "haiku"
+   ],
+   "text": "a survey wall reads as an unruled reviewer wall and blocks the card for a ruling that changes nothing",
+   "textSource": "line",
+   "file": "scripts/walls.ts",
+   "first": 315,
+   "last": 315,
+   "snapshot": "a61096db",
+   "code": [
+    "const open = walls.filter((w) => !w.ruled);"
+   ],
+   "origin": {
+    "kind": "base",
+    "sha": "d64984a1"
+   },
+   "placedBefore": null,
+   "fixOf": [],
+   "relog": false,
+   "group": null
+  }
+ ]
+}

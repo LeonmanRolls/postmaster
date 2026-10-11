@@ -20,7 +20,22 @@ export const SUPPLEMENT: Record<string, Supplement> = {
       "the review checkpoint, as read for the criteria-design count: rounds 7 and 11 have no finding lines",
   },
   "124": {
-    rounds: { 5: 6, 6: 9, 7: 8, 8: 4, 9: 4, 10: 5, 11: 5, 12: 2, 13: 5, 14: 4, 15: 3, 16: 3, 17: 4, 18: 5 },
+    rounds: {
+      5: 6,
+      6: 9,
+      7: 8,
+      8: 4,
+      9: 4,
+      10: 5,
+      11: 5,
+      12: 2,
+      13: 5,
+      14: 4,
+      15: 3,
+      16: 3,
+      17: 4,
+      18: 5,
+    },
     source:
       "the review checkpoint's table of verified findings per round; the finding lines name no round from 5 to 18",
   },

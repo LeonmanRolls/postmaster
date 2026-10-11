@@ -1,0 +1,57 @@
+# Stop signals
+
+A *transition* is a point at which a loop went on: round r ended with its fixes in, and round r+1 ran. *Clean* means round r+1 held no serious finding. The signals and rules were fixed in `apparatus/signals.ts` before the later set was read.
+
+## The 61 runs
+
+61 runs, 199 transitions, of which 45 (23%) went to a clean round. A transition after round 1 is 141, of which 27 went to a clean round.
+
+| Signal at the end of round r | Transitions where it holds | Next round clean there (95% interval) | Where it does not | Next round clean there |
+| --- | --- | --- | --- | --- |
+| the round has one serious finding | 42 | 50% (36–64%) | 157 | 15% |
+| fewer serious findings than the round before | 84 | 21% (14–31%) | 115 | 23% |
+| as many or more serious findings than the round before | 57 | 16% (9–27%) | 142 | 25% |
+| the round's fixes changed 30 lines or fewer | 19 | 37% (19–59%) | 180 | 21% |
+| the round's fixes changed no code, only words and tests | 6 | 0% (0–39%) | 193 | 23% |
+| no serious finding of the round is a P1 | 131 | 31% (23–39%) | 47 | 11% |
+| one lane alone named the round's findings, none was corroborated | 42 | 40% (27–56%) | 136 | 21% |
+| at least half the round's findings are in lines an earlier fix wrote | 69 | 20% (12–31%) | 109 | 28% |
+| a finding of the round is in a file an earlier round's serious finding was in | 109 | 21% (14–30%) | 69 | 32% |
+| the two lanes' overlap estimates fewer than one more serious finding present | 98 | 32% (23–41%) | 80 | 18% |
+| every finding of the round was in the change and not named before | 18 | 50% (29–71%) | 160 | 23% |
+
+### Stopping rules, applied after each round to each run
+
+| Rule | Runs where it fires early | Rounds it would save | Serious findings in the rounds it would skip | Runs it skips only clean rounds in | Rounds after a run's last serious finding |
+| --- | --- | --- | --- | --- | --- |
+| stop when the round has at most one serious finding and its fixes changed 30 lines or fewer | 11 of 61 | 18 | 14 | 5 of 11 | 49 |
+| stop when the round has at most one serious finding and fewer than the round before | 21 of 61 | 47 | 59 | 9 of 21 | 49 |
+| stop when the round's fixes changed no code, only words and tests | 4 of 61 | 26 | 85 | 0 of 4 | 49 |
+| stop after round 2 when it had at most two serious findings | 15 of 61 | 24 | 21 | 9 of 15 | 49 |
+
+## The later set (runs whose review ended after the first set was fixed)
+
+18 runs, 56 transitions, of which 15 (27%) went to a clean round. A transition after round 1 is 39, of which 10 went to a clean round.
+
+| Signal at the end of round r | Transitions where it holds | Next round clean there (95% interval) | Where it does not | Next round clean there |
+| --- | --- | --- | --- | --- |
+| the round has one serious finding | 16 | 38% (18–61%) | 40 | 23% |
+| fewer serious findings than the round before | 22 | 27% (13–48%) | 34 | 26% |
+| as many or more serious findings than the round before | 17 | 24% (10–47%) | 39 | 28% |
+| the round's fixes changed 30 lines or fewer | 13 | 54% (29–77%) | 43 | 19% |
+| the round's fixes changed no code, only words and tests | 2 | 50% (9–91%) | 54 | 26% |
+| no serious finding of the round is a P1 | 48 | 29% (18–43%) | 8 | 13% |
+| one lane alone named the round's findings, none was corroborated | 22 | 36% (20–57%) | 34 | 21% |
+| at least half the round's findings are in lines an earlier fix wrote | 13 | 38% (18–64%) | 43 | 23% |
+| a finding of the round is in a file an earlier round's serious finding was in | 34 | 24% (12–40%) | 22 | 32% |
+| the two lanes' overlap estimates fewer than one more serious finding present | 35 | 31% (19–48%) | 21 | 19% |
+| every finding of the round was in the change and not named before | 12 | 17% (5–45%) | 44 | 30% |
+
+### Stopping rules, applied after each round to each run
+
+| Rule | Runs where it fires early | Rounds it would save | Serious findings in the rounds it would skip | Runs it skips only clean rounds in | Rounds after a run's last serious finding |
+| --- | --- | --- | --- | --- | --- |
+| stop when the round has at most one serious finding and its fixes changed 30 lines or fewer | 8 of 18 | 14 | 14 | 5 of 8 | 17 |
+| stop when the round has at most one serious finding and fewer than the round before | 8 of 18 | 29 | 64 | 3 of 8 | 17 |
+| stop when the round's fixes changed no code, only words and tests | 2 of 18 | 3 | 3 | 1 of 2 | 17 |
+| stop after round 2 when it had at most two serious findings | 9 of 18 | 30 | 59 | 3 of 9 | 17 |

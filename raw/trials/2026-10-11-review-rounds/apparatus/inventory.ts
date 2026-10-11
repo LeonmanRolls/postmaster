@@ -6,8 +6,7 @@
 // `--project` is the repository whose `.postmaster/runs` holds the runs, `--legacy` the older shared
 // folder where the first week's runs live. A run's folder is only read. The output holds counts,
 // times and names of lanes: no path, no thread, no session and no text of a finding.
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { parseActions } from "../../2026-10-03-lane-audit/apparatus/parse.ts";
 import { privacyFaults, readTeam } from "../../2026-10-03-lane-audit/apparatus/records.ts";
@@ -92,7 +91,9 @@ export function readRunRow(dir: string, run: string, layout: RunRow["layout"]): 
   const manifest = readJson(join(dir, "manifest.json"));
   const team = readTeam(dir);
   const pinFull =
-    isRecord(runJson) && isRecord(runJson.postmaster) && typeof runJson.postmaster.commit === "string"
+    isRecord(runJson) &&
+    isRecord(runJson.postmaster) &&
+    typeof runJson.postmaster.commit === "string"
       ? runJson.postmaster.commit
       : null;
   const body = readText(join(dir, "ticket-body.md"));
@@ -111,8 +112,7 @@ export function readRunRow(dir: string, run: string, layout: RunRow["layout"]): 
     workhorses: team?.workhorses ?? [],
     reviewers: team?.reviewers ?? [],
     security: team?.lensReviewers.security ?? [],
-    manifestStage:
-      isRecord(manifest) && typeof manifest.stage === "string" ? manifest.stage : null,
+    manifestStage: isRecord(manifest) && typeof manifest.stage === "string" ? manifest.stage : null,
     rounds,
     roundsInActions: inActions,
     roundsInFiles: inFiles,
@@ -139,7 +139,9 @@ const main = (args: string[]): void => {
   const cut = arg(args, "--cut");
   const out = arg(args, "--out");
   if (!project || !cut || !out) {
-    throw new Error("usage: inventory.ts --project <repo> [--legacy <dir>] --cut <iso> --out <file>");
+    throw new Error(
+      "usage: inventory.ts --project <repo> [--legacy <dir>] --cut <iso> --out <file>",
+    );
   }
   const rows: RunRow[] = [];
   for (const [root, layout] of [
@@ -158,7 +160,8 @@ const main = (args: string[]): void => {
   };
   const text = `${JSON.stringify(result, null, 1)}\n`;
   const faults = privacyFaults(text);
-  if (faults.length > 0) throw new Error(`the output holds ${faults.join(" and ")}; nothing written`);
+  if (faults.length > 0)
+    throw new Error(`the output holds ${faults.join(" and ")}; nothing written`);
   mkdirSync(dirname(resolve(out)), { recursive: true });
   writeFileSync(out, text);
   console.error(`${result.runs.length} runs read`);

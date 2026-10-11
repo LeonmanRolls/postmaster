@@ -11,7 +11,16 @@ import {
  * The lanes a finding line may name as a source: the audit's six, and the two a run's config named
  * from 9 October.
  */
-export const LANES = ["luna", "mimo", "sol", "astra", "opus", "coachman", "haiku", "sonnet"] as const;
+export const LANES = [
+  "luna",
+  "mimo",
+  "sol",
+  "astra",
+  "opus",
+  "coachman",
+  "haiku",
+  "sonnet",
+] as const;
 
 export type Finding = {
   ts: string;
@@ -37,8 +46,27 @@ export type Finding = {
 export function findingText(detail: string): string {
   const colon = /: +(.+)$/u.exec(detail);
   if (colon) return (colon[1] as string).trim();
-  const slug = /verified-by-(?:execution|reading)(?:-and-(?:execution|reading))? +(\S+)$/u.exec(detail);
+  const slug = /verified-by-(?:execution|reading)(?:-and-(?:execution|reading))? +(\S+)$/u.exec(
+    detail,
+  );
   return slug ? (slug[1] as string).replace(/-/gu, " ") : "";
+}
+
+const HEALTH_WORDS =
+  "cancer|diagnos\\w*|pregnan\\w*|tumou?r|chemotherapy|hiv|diabet\\w*|depress\\w*|medication|surgery|illness";
+
+/**
+ * Example personal data that a finding quotes, an address or a sentence about someone's health,
+ * is replaced. The record is public and the project's own scrub reads every added line, and these
+ * are the test inputs of the private-data check's own findings.
+ */
+export function redactSamples(text: string): string {
+  return text
+    .replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/gu, "<email>")
+    .replace(
+      new RegExp(`(['"\`])[^'"\`\\n]{0,120}\\b(?:${HEALTH_WORDS})\\b[^'"\`\\n]{0,120}\\1`, "giu"),
+      "<sample>",
+    );
 }
 
 /**
@@ -54,7 +82,8 @@ export function findingsOf(actions: readonly Action[]): Finding[] {
     .map((a) => {
       const f = parseFinding(a.detail, LANES);
       const targetSeverity = /\b(P[123])\b/u.exec(a.target);
-      const severity = f.severity ?? (targetSeverity ? (targetSeverity[1] as "P1" | "P2" | "P3") : null);
+      const severity =
+        f.severity ?? (targetSeverity ? (targetSeverity[1] as "P1" | "P2" | "P3") : null);
       const legacyGating = f.class === null && /^P[123]\b/u.test(a.detail);
       const cls = legacyGating ? "gating" : f.class;
       return {

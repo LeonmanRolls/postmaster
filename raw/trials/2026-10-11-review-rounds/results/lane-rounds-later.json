@@ -1,0 +1,2484 @@
+{
+ "cut": "2026-10-11T07:30:00Z",
+ "after": "2026-10-09T22:30:00Z",
+ "rows": [
+  {
+   "run": "216",
+   "round": 1,
+   "lane": "luna",
+   "lenses": [
+    "bug",
+    "style"
+   ],
+   "minutes": 32.4,
+   "named": 4,
+   "alone": 4
+  },
+  {
+   "run": "216",
+   "round": 1,
+   "lane": "mimo",
+   "lenses": [
+    "bug",
+    "style"
+   ],
+   "minutes": 55.5,
+   "named": 1,
+   "alone": 1
+  },
+  {
+   "run": "216",
+   "round": 1,
+   "lane": "opus",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 30.3,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "216",
+   "round": 2,
+   "lane": "luna",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 11.8,
+   "named": 1,
+   "alone": 1
+  },
+  {
+   "run": "216",
+   "round": 2,
+   "lane": "mimo",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 16.7,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "216",
+   "round": 2,
+   "lane": "opus",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 32.5,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "216",
+   "round": 3,
+   "lane": "luna",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 44.4,
+   "named": 4,
+   "alone": 3
+  },
+  {
+   "run": "216",
+   "round": 3,
+   "lane": "mimo",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 13,
+   "named": 1,
+   "alone": 0
+  },
+  {
+   "run": "216",
+   "round": 3,
+   "lane": "opus",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 0.1,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "216",
+   "round": 4,
+   "lane": "luna",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 24,
+   "named": 2,
+   "alone": 2
+  },
+  {
+   "run": "216",
+   "round": 4,
+   "lane": "mimo",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 11.2,
+   "named": 2,
+   "alone": 2
+  },
+  {
+   "run": "216",
+   "round": 4,
+   "lane": "opus",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 32.5,
+   "named": 3,
+   "alone": 3
+  },
+  {
+   "run": "216",
+   "round": 5,
+   "lane": "luna",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 20.1,
+   "named": 3,
+   "alone": 3
+  },
+  {
+   "run": "216",
+   "round": 5,
+   "lane": "mimo",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 17.8,
+   "named": 1,
+   "alone": 1
+  },
+  {
+   "run": "216",
+   "round": 5,
+   "lane": "opus",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 20.9,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "216",
+   "round": 6,
+   "lane": "luna",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 20.1,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "216",
+   "round": 6,
+   "lane": "mimo",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 58.5,
+   "named": 5,
+   "alone": 5
+  },
+  {
+   "run": "216",
+   "round": 6,
+   "lane": "opus",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 34.8,
+   "named": 2,
+   "alone": 2
+  },
+  {
+   "run": "216",
+   "round": 7,
+   "lane": "luna",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 23.9,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "216",
+   "round": 7,
+   "lane": "mimo",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 20.3,
+   "named": 1,
+   "alone": 1
+  },
+  {
+   "run": "216",
+   "round": 7,
+   "lane": "opus",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 66.6,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "216",
+   "round": 8,
+   "lane": "luna",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 13,
+   "named": 1,
+   "alone": 1
+  },
+  {
+   "run": "216",
+   "round": 8,
+   "lane": "mimo",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 13.6,
+   "named": 1,
+   "alone": 1
+  },
+  {
+   "run": "216",
+   "round": 8,
+   "lane": "opus",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 41,
+   "named": 1,
+   "alone": 1
+  },
+  {
+   "run": "216",
+   "round": 9,
+   "lane": "luna",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 10.2,
+   "named": 1,
+   "alone": 1
+  },
+  {
+   "run": "216",
+   "round": 9,
+   "lane": "haiku",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 6.1,
+   "named": 1,
+   "alone": 1
+  },
+  {
+   "run": "216",
+   "round": 9,
+   "lane": "opus",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 46.6,
+   "named": 2,
+   "alone": 2
+  },
+  {
+   "run": "216",
+   "round": 10,
+   "lane": "luna",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 6.1,
+   "named": 1,
+   "alone": 1
+  },
+  {
+   "run": "216",
+   "round": 10,
+   "lane": "haiku",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 6.5,
+   "named": 2,
+   "alone": 2
+  },
+  {
+   "run": "216",
+   "round": 10,
+   "lane": "opus",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 27.5,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "216",
+   "round": 11,
+   "lane": "luna",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 12.3,
+   "named": 3,
+   "alone": 3
+  },
+  {
+   "run": "216",
+   "round": 11,
+   "lane": "haiku",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 6,
+   "named": 2,
+   "alone": 2
+  },
+  {
+   "run": "216",
+   "round": 11,
+   "lane": "opus",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 27.1,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "216",
+   "round": 12,
+   "lane": "luna",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 18.5,
+   "named": 1,
+   "alone": 1
+  },
+  {
+   "run": "216",
+   "round": 12,
+   "lane": "haiku",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 19.5,
+   "named": 1,
+   "alone": 1
+  },
+  {
+   "run": "216",
+   "round": 12,
+   "lane": "opus",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 36.6,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "216",
+   "round": 13,
+   "lane": "luna",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 8.6,
+   "named": 1,
+   "alone": 0
+  },
+  {
+   "run": "216",
+   "round": 13,
+   "lane": "haiku",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 5.2,
+   "named": 1,
+   "alone": 0
+  },
+  {
+   "run": "216",
+   "round": 13,
+   "lane": "opus",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 32.3,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "216",
+   "round": 14,
+   "lane": "luna",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 7.9,
+   "named": 1,
+   "alone": 0
+  },
+  {
+   "run": "216",
+   "round": 14,
+   "lane": "haiku",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 1.9,
+   "named": 1,
+   "alone": 0
+  },
+  {
+   "run": "216",
+   "round": 14,
+   "lane": "opus",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 32,
+   "named": 1,
+   "alone": 1
+  },
+  {
+   "run": "216",
+   "round": 15,
+   "lane": "luna",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 13.1,
+   "named": 1,
+   "alone": 1
+  },
+  {
+   "run": "216",
+   "round": 15,
+   "lane": "haiku",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 9.2,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "216",
+   "round": 15,
+   "lane": "opus",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 47.3,
+   "named": 1,
+   "alone": 1
+  },
+  {
+   "run": "318",
+   "round": 1,
+   "lane": "luna",
+   "lenses": [
+    "bug",
+    "style"
+   ],
+   "minutes": 7.2,
+   "named": 1,
+   "alone": 0
+  },
+  {
+   "run": "318",
+   "round": 1,
+   "lane": "haiku",
+   "lenses": [
+    "bug",
+    "style"
+   ],
+   "minutes": 4.7,
+   "named": 4,
+   "alone": 3
+  },
+  {
+   "run": "318",
+   "round": 1,
+   "lane": "opus",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 7.7,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "318",
+   "round": 2,
+   "lane": "luna",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 2.9,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "318",
+   "round": 2,
+   "lane": "haiku",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 3.5,
+   "named": 2,
+   "alone": 2
+  },
+  {
+   "run": "318",
+   "round": 2,
+   "lane": "opus",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 6.9,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "318",
+   "round": 3,
+   "lane": "luna",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 9.5,
+   "named": 1,
+   "alone": 1
+  },
+  {
+   "run": "318",
+   "round": 3,
+   "lane": "haiku",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 4.1,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "318",
+   "round": 3,
+   "lane": "opus",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 10.1,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "318",
+   "round": 4,
+   "lane": "luna",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 5.4,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "318",
+   "round": 4,
+   "lane": "haiku",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 2.3,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "318",
+   "round": 4,
+   "lane": "opus",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 9.3,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "319",
+   "round": 1,
+   "lane": "luna",
+   "lenses": [
+    "bug",
+    "style"
+   ],
+   "minutes": 19.5,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "319",
+   "round": 1,
+   "lane": "haiku",
+   "lenses": [
+    "bug",
+    "style"
+   ],
+   "minutes": 7.5,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "319",
+   "round": 1,
+   "lane": "opus",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 6.5,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "326",
+   "round": 1,
+   "lane": "luna",
+   "lenses": [
+    "bug",
+    "style"
+   ],
+   "minutes": 13.4,
+   "named": 3,
+   "alone": 3
+  },
+  {
+   "run": "326",
+   "round": 1,
+   "lane": "haiku",
+   "lenses": [
+    "bug",
+    "style"
+   ],
+   "minutes": 5.7,
+   "named": 2,
+   "alone": 2
+  },
+  {
+   "run": "326",
+   "round": 1,
+   "lane": "opus",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 19.8,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "326",
+   "round": 2,
+   "lane": "luna",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 6.1,
+   "named": 1,
+   "alone": 1
+  },
+  {
+   "run": "326",
+   "round": 2,
+   "lane": "haiku",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 5,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "326",
+   "round": 2,
+   "lane": "opus",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 23.6,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "326",
+   "round": 3,
+   "lane": "luna",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 6.2,
+   "named": 1,
+   "alone": 1
+  },
+  {
+   "run": "326",
+   "round": 3,
+   "lane": "haiku",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 3.2,
+   "named": 1,
+   "alone": 1
+  },
+  {
+   "run": "326",
+   "round": 3,
+   "lane": "opus",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 18.1,
+   "named": 1,
+   "alone": 1
+  },
+  {
+   "run": "326",
+   "round": 4,
+   "lane": "luna",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 11.4,
+   "named": 1,
+   "alone": 1
+  },
+  {
+   "run": "326",
+   "round": 4,
+   "lane": "haiku",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 4.2,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "326",
+   "round": 4,
+   "lane": "opus",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 14.3,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "326",
+   "round": 5,
+   "lane": "luna",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 11.6,
+   "named": 1,
+   "alone": 1
+  },
+  {
+   "run": "326",
+   "round": 5,
+   "lane": "haiku",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 4.3,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "326",
+   "round": 5,
+   "lane": "opus",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 16.4,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "326",
+   "round": 6,
+   "lane": "luna",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 8.9,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "326",
+   "round": 6,
+   "lane": "haiku",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 5.2,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "326",
+   "round": 6,
+   "lane": "opus",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 21.1,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "327",
+   "round": 1,
+   "lane": "luna",
+   "lenses": [
+    "bug",
+    "style"
+   ],
+   "minutes": 4.9,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "327",
+   "round": 1,
+   "lane": "haiku",
+   "lenses": [
+    "bug",
+    "style"
+   ],
+   "minutes": 5.4,
+   "named": 2,
+   "alone": 2
+  },
+  {
+   "run": "327",
+   "round": 1,
+   "lane": "sonnet",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 11.9,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "327",
+   "round": 2,
+   "lane": "luna",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 4.4,
+   "named": 2,
+   "alone": 2
+  },
+  {
+   "run": "327",
+   "round": 2,
+   "lane": "haiku",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 2.5,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "327",
+   "round": 2,
+   "lane": "sonnet",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 17.7,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "327",
+   "round": 3,
+   "lane": "luna",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 3.3,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "327",
+   "round": 3,
+   "lane": "haiku",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 3.3,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "327",
+   "round": 3,
+   "lane": "sonnet",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 18.5,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "328",
+   "round": 1,
+   "lane": "luna",
+   "lenses": [
+    "bug",
+    "style"
+   ],
+   "minutes": 8.7,
+   "named": 3,
+   "alone": 1
+  },
+  {
+   "run": "328",
+   "round": 1,
+   "lane": "haiku",
+   "lenses": [
+    "bug",
+    "style"
+   ],
+   "minutes": 4.1,
+   "named": 3,
+   "alone": 1
+  },
+  {
+   "run": "328",
+   "round": 1,
+   "lane": "opus",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 10.4,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "328",
+   "round": 2,
+   "lane": "luna",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 8.8,
+   "named": 2,
+   "alone": 1
+  },
+  {
+   "run": "328",
+   "round": 2,
+   "lane": "haiku",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 3,
+   "named": 1,
+   "alone": 1
+  },
+  {
+   "run": "328",
+   "round": 2,
+   "lane": "opus",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 15.3,
+   "named": 1,
+   "alone": 0
+  },
+  {
+   "run": "328",
+   "round": 3,
+   "lane": "luna",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 9.4,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "328",
+   "round": 3,
+   "lane": "haiku",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 10.2,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "328",
+   "round": 3,
+   "lane": "opus",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 9.2,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "339",
+   "round": 1,
+   "lane": "luna",
+   "lenses": [
+    "bug",
+    "style"
+   ],
+   "minutes": 17.1,
+   "named": 4,
+   "alone": 1
+  },
+  {
+   "run": "339",
+   "round": 1,
+   "lane": "haiku",
+   "lenses": [
+    "bug",
+    "style"
+   ],
+   "minutes": 7.3,
+   "named": 7,
+   "alone": 4
+  },
+  {
+   "run": "339",
+   "round": 1,
+   "lane": "sonnet",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 35.8,
+   "named": 1,
+   "alone": 0
+  },
+  {
+   "run": "339",
+   "round": 2,
+   "lane": "luna",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 4.3,
+   "named": 5,
+   "alone": 3
+  },
+  {
+   "run": "339",
+   "round": 2,
+   "lane": "haiku",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 4.1,
+   "named": 5,
+   "alone": 3
+  },
+  {
+   "run": "339",
+   "round": 2,
+   "lane": "sonnet",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 39.2,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "339",
+   "round": 3,
+   "lane": "luna",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 6.5,
+   "named": 1,
+   "alone": 1
+  },
+  {
+   "run": "339",
+   "round": 3,
+   "lane": "haiku",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 15.7,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "339",
+   "round": 3,
+   "lane": "sonnet",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 45.3,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "339",
+   "round": 4,
+   "lane": "luna",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 12,
+   "named": 1,
+   "alone": 1
+  },
+  {
+   "run": "339",
+   "round": 4,
+   "lane": "haiku",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 7.4,
+   "named": 2,
+   "alone": 2
+  },
+  {
+   "run": "339",
+   "round": 4,
+   "lane": "sonnet",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 25.9,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "339",
+   "round": 5,
+   "lane": "luna",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 6.4,
+   "named": 1,
+   "alone": 1
+  },
+  {
+   "run": "339",
+   "round": 5,
+   "lane": "haiku",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 6.6,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "339",
+   "round": 5,
+   "lane": "sonnet",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 18,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "339",
+   "round": 6,
+   "lane": "luna",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 11.3,
+   "named": 3,
+   "alone": 3
+  },
+  {
+   "run": "339",
+   "round": 6,
+   "lane": "haiku",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 4.7,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "339",
+   "round": 6,
+   "lane": "opus",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 20.1,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "339",
+   "round": 7,
+   "lane": "luna",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 8.9,
+   "named": 1,
+   "alone": 1
+  },
+  {
+   "run": "339",
+   "round": 7,
+   "lane": "haiku",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 5.2,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "339",
+   "round": 7,
+   "lane": "opus",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 14.5,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "344",
+   "round": 1,
+   "lane": "luna",
+   "lenses": [
+    "bug",
+    "style"
+   ],
+   "minutes": 7.4,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "344",
+   "round": 1,
+   "lane": "haiku",
+   "lenses": [
+    "bug",
+    "style"
+   ],
+   "minutes": 4.9,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "344",
+   "round": 1,
+   "lane": "sonnet",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 34,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "344",
+   "round": 2,
+   "lane": "luna",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 2.9,
+   "named": 1,
+   "alone": 1
+  },
+  {
+   "run": "344",
+   "round": 2,
+   "lane": "haiku",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 3,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "344",
+   "round": 2,
+   "lane": "sonnet",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 18.1,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "344",
+   "round": 3,
+   "lane": "luna",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 6.8,
+   "named": 1,
+   "alone": 1
+  },
+  {
+   "run": "344",
+   "round": 3,
+   "lane": "haiku",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 3.2,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "344",
+   "round": 3,
+   "lane": "sonnet",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 20,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "344",
+   "round": 4,
+   "lane": "luna",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 6.1,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "344",
+   "round": 4,
+   "lane": "haiku",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 4,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "344",
+   "round": 4,
+   "lane": "sonnet",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 17.2,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "348",
+   "round": 1,
+   "lane": "luna",
+   "lenses": [
+    "bug",
+    "style"
+   ],
+   "minutes": 7,
+   "named": 2,
+   "alone": 1
+  },
+  {
+   "run": "348",
+   "round": 1,
+   "lane": "haiku",
+   "lenses": [
+    "bug",
+    "style"
+   ],
+   "minutes": 6.3,
+   "named": 2,
+   "alone": 1
+  },
+  {
+   "run": "348",
+   "round": 1,
+   "lane": "sonnet",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 22.8,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "348",
+   "round": 2,
+   "lane": "luna",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 2.4,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "348",
+   "round": 2,
+   "lane": "haiku",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 3.2,
+   "named": 1,
+   "alone": 1
+  },
+  {
+   "run": "348",
+   "round": 2,
+   "lane": "sonnet",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 20,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "348",
+   "round": 3,
+   "lane": "luna",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 6.4,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "348",
+   "round": 3,
+   "lane": "haiku",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 3,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "348",
+   "round": 3,
+   "lane": "sonnet",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 23.6,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "352",
+   "round": 1,
+   "lane": "luna",
+   "lenses": [
+    "bug",
+    "style"
+   ],
+   "minutes": 7.7,
+   "named": 2,
+   "alone": 0
+  },
+  {
+   "run": "352",
+   "round": 1,
+   "lane": "haiku",
+   "lenses": [
+    "bug",
+    "style"
+   ],
+   "minutes": 8.8,
+   "named": 6,
+   "alone": 4
+  },
+  {
+   "run": "352",
+   "round": 1,
+   "lane": "opus",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 18.6,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "352",
+   "round": 2,
+   "lane": "luna",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 7.6,
+   "named": 1,
+   "alone": 1
+  },
+  {
+   "run": "352",
+   "round": 2,
+   "lane": "haiku",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 3.7,
+   "named": 1,
+   "alone": 1
+  },
+  {
+   "run": "352",
+   "round": 2,
+   "lane": "opus",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 14.3,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "352",
+   "round": 3,
+   "lane": "luna",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 9.5,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "352",
+   "round": 3,
+   "lane": "haiku",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 4.7,
+   "named": 1,
+   "alone": 1
+  },
+  {
+   "run": "352",
+   "round": 3,
+   "lane": "opus",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 17.6,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "352",
+   "round": 4,
+   "lane": "luna",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 8.6,
+   "named": 1,
+   "alone": 1
+  },
+  {
+   "run": "352",
+   "round": 4,
+   "lane": "haiku",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 5.2,
+   "named": 1,
+   "alone": 1
+  },
+  {
+   "run": "352",
+   "round": 4,
+   "lane": "opus",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 13,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "352",
+   "round": 5,
+   "lane": "luna",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 12.6,
+   "named": 1,
+   "alone": 1
+  },
+  {
+   "run": "352",
+   "round": 5,
+   "lane": "haiku",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 4,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "352",
+   "round": 5,
+   "lane": "opus",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 15.2,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "352",
+   "round": 6,
+   "lane": "luna",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 10.8,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "352",
+   "round": 6,
+   "lane": "haiku",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 4.5,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "352",
+   "round": 6,
+   "lane": "opus",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 12.6,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "355",
+   "round": 1,
+   "lane": "luna",
+   "lenses": [
+    "bug",
+    "style"
+   ],
+   "minutes": 9.2,
+   "named": 2,
+   "alone": 1
+  },
+  {
+   "run": "355",
+   "round": 1,
+   "lane": "haiku",
+   "lenses": [
+    "bug",
+    "style"
+   ],
+   "minutes": 5.6,
+   "named": 4,
+   "alone": 3
+  },
+  {
+   "run": "355",
+   "round": 1,
+   "lane": "opus",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 8.2,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "355",
+   "round": 2,
+   "lane": "luna",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 7.9,
+   "named": 1,
+   "alone": 1
+  },
+  {
+   "run": "355",
+   "round": 2,
+   "lane": "haiku",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 2.7,
+   "named": 2,
+   "alone": 2
+  },
+  {
+   "run": "355",
+   "round": 2,
+   "lane": "opus",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 7.1,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "355",
+   "round": 3,
+   "lane": "luna",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 8.3,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "355",
+   "round": 3,
+   "lane": "haiku",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 3.4,
+   "named": 2,
+   "alone": 2
+  },
+  {
+   "run": "355",
+   "round": 3,
+   "lane": "opus",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 7.4,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "355",
+   "round": 4,
+   "lane": "luna",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 2.8,
+   "named": 1,
+   "alone": 1
+  },
+  {
+   "run": "355",
+   "round": 4,
+   "lane": "haiku",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 3.5,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "355",
+   "round": 4,
+   "lane": "opus",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 8.5,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "355",
+   "round": 5,
+   "lane": "luna",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 3.6,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "355",
+   "round": 5,
+   "lane": "haiku",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 2.6,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "355",
+   "round": 5,
+   "lane": "opus",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 15.9,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "374",
+   "round": 1,
+   "lane": "luna",
+   "lenses": [
+    "bug",
+    "style"
+   ],
+   "minutes": 14.6,
+   "named": 3,
+   "alone": 3
+  },
+  {
+   "run": "374",
+   "round": 1,
+   "lane": "haiku",
+   "lenses": [
+    "bug",
+    "style"
+   ],
+   "minutes": 9.3,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "374",
+   "round": 1,
+   "lane": "sonnet",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 27.1,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "374",
+   "round": 2,
+   "lane": "luna",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 12.8,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "374",
+   "round": 2,
+   "lane": "haiku",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 9.8,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "374",
+   "round": 2,
+   "lane": "opus",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 13.3,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "375",
+   "round": 1,
+   "lane": "luna",
+   "lenses": [
+    "bug",
+    "style"
+   ],
+   "minutes": 14,
+   "named": 1,
+   "alone": 0
+  },
+  {
+   "run": "375",
+   "round": 1,
+   "lane": "haiku",
+   "lenses": [
+    "bug",
+    "style"
+   ],
+   "minutes": 8.3,
+   "named": 2,
+   "alone": 1
+  },
+  {
+   "run": "375",
+   "round": 1,
+   "lane": "opus",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 14,
+   "named": 1,
+   "alone": 0
+  },
+  {
+   "run": "375",
+   "round": 2,
+   "lane": "luna",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 6.4,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "375",
+   "round": 2,
+   "lane": "haiku",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 5,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "375",
+   "round": 2,
+   "lane": "opus",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 9.1,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "379",
+   "round": 1,
+   "lane": "luna",
+   "lenses": [
+    "bug",
+    "style"
+   ],
+   "minutes": 3.5,
+   "named": 1,
+   "alone": 1
+  },
+  {
+   "run": "379",
+   "round": 1,
+   "lane": "haiku",
+   "lenses": [
+    "bug",
+    "style"
+   ],
+   "minutes": 5.7,
+   "named": 1,
+   "alone": 1
+  },
+  {
+   "run": "379",
+   "round": 1,
+   "lane": "opus",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 10,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "379",
+   "round": 2,
+   "lane": "luna",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 9.9,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "379",
+   "round": 2,
+   "lane": "haiku",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 5.2,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "379",
+   "round": 2,
+   "lane": "opus",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 7.8,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "407",
+   "round": 1,
+   "lane": "luna",
+   "lenses": [
+    "bug",
+    "style"
+   ],
+   "minutes": 5.9,
+   "named": 1,
+   "alone": 1
+  },
+  {
+   "run": "407",
+   "round": 1,
+   "lane": "haiku",
+   "lenses": [
+    "bug",
+    "style"
+   ],
+   "minutes": 6.2,
+   "named": 1,
+   "alone": 1
+  },
+  {
+   "run": "407",
+   "round": 1,
+   "lane": "opus",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 4.6,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "407",
+   "round": 2,
+   "lane": "luna",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 10.9,
+   "named": 1,
+   "alone": 1
+  },
+  {
+   "run": "407",
+   "round": 2,
+   "lane": "haiku",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 7.9,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "407",
+   "round": 2,
+   "lane": "opus",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 6.6,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "407",
+   "round": 3,
+   "lane": "luna",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 11.6,
+   "named": 1,
+   "alone": 1
+  },
+  {
+   "run": "407",
+   "round": 3,
+   "lane": "haiku",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 15.4,
+   "named": 1,
+   "alone": 1
+  },
+  {
+   "run": "407",
+   "round": 3,
+   "lane": "opus",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 10.3,
+   "named": 1,
+   "alone": 1
+  },
+  {
+   "run": "407",
+   "round": 4,
+   "lane": "luna",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 9.7,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "407",
+   "round": 4,
+   "lane": "haiku",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 18.7,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "407",
+   "round": 4,
+   "lane": "opus",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 6,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "408",
+   "round": 1,
+   "lane": "luna",
+   "lenses": [
+    "bug",
+    "style"
+   ],
+   "minutes": 7.6,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "408",
+   "round": 1,
+   "lane": "haiku",
+   "lenses": [
+    "bug",
+    "style"
+   ],
+   "minutes": 4.9,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "408",
+   "round": 1,
+   "lane": "opus",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 4.6,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "408",
+   "round": 2,
+   "lane": "luna",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 7.2,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "408",
+   "round": 2,
+   "lane": "haiku",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 1.6,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "408",
+   "round": 2,
+   "lane": "opus",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 6.6,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "425",
+   "round": 1,
+   "lane": "luna",
+   "lenses": [
+    "bug",
+    "style"
+   ],
+   "minutes": 5.7,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "425",
+   "round": 1,
+   "lane": "haiku",
+   "lenses": [
+    "bug",
+    "style"
+   ],
+   "minutes": 3.6,
+   "named": 4,
+   "alone": 4
+  },
+  {
+   "run": "425",
+   "round": 1,
+   "lane": "opus",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 11.8,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "425",
+   "round": 2,
+   "lane": "luna",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 2.8,
+   "named": 2,
+   "alone": 1
+  },
+  {
+   "run": "425",
+   "round": 2,
+   "lane": "haiku",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 2.9,
+   "named": 1,
+   "alone": 0
+  },
+  {
+   "run": "425",
+   "round": 2,
+   "lane": "opus",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 12.8,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "425",
+   "round": 3,
+   "lane": "luna",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 3.9,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "425",
+   "round": 3,
+   "lane": "haiku",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 1.7,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "425",
+   "round": 3,
+   "lane": "opus",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 11.5,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "429",
+   "round": 1,
+   "lane": "luna",
+   "lenses": [
+    "bug",
+    "style"
+   ],
+   "minutes": 6.6,
+   "named": 1,
+   "alone": 0
+  },
+  {
+   "run": "429",
+   "round": 1,
+   "lane": "haiku",
+   "lenses": [
+    "bug",
+    "style"
+   ],
+   "minutes": 6.2,
+   "named": 3,
+   "alone": 2
+  },
+  {
+   "run": "429",
+   "round": 1,
+   "lane": "opus",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 12.8,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "429",
+   "round": 2,
+   "lane": "luna",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 11.4,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "429",
+   "round": 2,
+   "lane": "haiku",
+   "lenses": [
+    "bug"
+   ],
+   "minutes": 4,
+   "named": 0,
+   "alone": 0
+  },
+  {
+   "run": "429",
+   "round": 2,
+   "lane": "opus",
+   "lenses": [
+    "security"
+   ],
+   "minutes": 8.7,
+   "named": 0,
+   "alone": 0
+  }
+ ]
+}

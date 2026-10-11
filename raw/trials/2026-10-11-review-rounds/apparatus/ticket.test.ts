@@ -41,7 +41,18 @@ describe("ticket features", () => {
 
   test("an old one-part ticket has no agents' part, checks or decisions (negative control)", () => {
     const f = ticketFeatures(
-      ["## Problem / feature", "x", "## Acceptance criteria", "1. a", "2. b", "3. c", "## Direction", "d", "## Turnpikes", "default"].join("\n"),
+      [
+        "## Problem / feature",
+        "x",
+        "## Acceptance criteria",
+        "1. a",
+        "2. b",
+        "3. c",
+        "## Direction",
+        "d",
+        "## Turnpikes",
+        "default",
+      ].join("\n"),
     );
     expect(f.shape).toBe("one-part");
     expect(f.criteria).toBe(3);
@@ -51,7 +62,15 @@ describe("ticket features", () => {
   });
 
   test("the ticket of a waybill stops before the project profile", () => {
-    const brief = ["# Waybill: 1", "", "## Ticket", "## Problem / feature", "x", "## Project profile", "gate: y"].join("\n");
+    const brief = [
+      "# Waybill: 1",
+      "",
+      "## Ticket",
+      "## Problem / feature",
+      "x",
+      "## Project profile",
+      "gate: y",
+    ].join("\n");
     expect(ticketOfWaybill(brief)).toBe("## Problem / feature\nx");
     expect(ticketOfWaybill("# Waybill: 1\n")).toBe("");
   });

@@ -89,3 +89,47 @@ bun --no-env-file --config=/dev/null apparatus/inventory.ts --project <repo> \
 A reader without the run folders has `results/runs.json`, which is every row of that command.
 `inventory.ts` refuses to write anything that names a path, a thread or a session. The tests are
 beside the scripts, run with `bun test`.
+
+## Tracing a later finding to its cause
+
+The rule is [rule.md](rule.md). `apparatus/trace.ts` applies it to every serious finding that names
+a round, 647 in the 61 runs, 382 of them in round 2 or later.
+
+- **Where a run's commits are.** The run's own commits are those of its pull request's second
+  parent that are not in its first, found by the merge's subject naming the ticket and the merge
+  that holds most of the run's applied fix commits, or the branch tip against `origin/main` where
+  it was never merged ([#135](https://github.com/brindlewick/postmaster/issues/135)). A commit
+  with an equivalent by patch on main, a pick of main's work, is not the run's own.
+- **When a commit was made** is its author time, which a rebase or a pick keeps. The committer
+  time read #38's rounds as made after their own fixes.
+- **Which phase a commit is in** follows from when each round's first reviewer was launched, the
+  earliest of its `review-launch` lines and its prompt files' times. A commit made after round k
+  was launched and at or before round k+1 was is a fix of round k.
+- **What the lines are.** `git blame --porcelain -M -L` at the snapshot of the finding's round,
+  on the file and lines of the finding's target. A reviewer's own report, where the finding line
+  holds no text, gives the text and not the place.
+- **Findings that cannot be placed** are 47 of the 382 and are left in the table as such: 18 of
+  [#109](https://github.com/brindlewick/postmaster/issues/109) whose targets name a file and no
+  line, 28 of [#135](https://github.com/brindlewick/postmaster/issues/135), whose run's early
+  commits are not on any ref of the repository, and 1 of [#251](https://github.com/brindlewick/postmaster/issues/251).
+  They are not read as caused by anything.
+- **Serious findings the lines do not hold** are 94 in five runs (see the supplement). They are
+  counted in each round and cannot be traced one by one, and no table of groups includes them.
+
+## Controls
+
+Every count has a control in [results/controls.md](results/controls.md), made by
+`apparatus/controls.ts` and the tests beside the scripts:
+
+- the finding lines of [#335](https://github.com/brindlewick/postmaster/issues/335) read the
+  counts its own card states, 7, 3, 2, 1, 1, 2, 2, 1, 0, and a run with 11 finding lines that are
+  all style or P3 reads 0 through the same command;
+- rounds, round 1 and the total agree with the lane audit's table for 17 of its 18 runs, and the
+  18th, #135, reads 44 where the audit read 32 for the reason given above;
+- the inferred phase of a commit named by an `apply` line is the fix phase of the last round
+  launched before the line for 230 of 233 such lines, the three that differ within a minute of a
+  launch;
+- the inferred snapshot of a round is the commit its reviewers' permalinks name, for all 8 rounds
+  whose reports carry one;
+- the commit named as the origin of a cited line added that line, read with `git show` and not
+  with `git blame`, for 296 of 316 later findings placed in a fix or in the change.
