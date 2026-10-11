@@ -70,7 +70,7 @@ import {
 } from "./lib/effective-config.ts";
 import { startCheck, wrapCommand } from "./lib/confine.ts";
 import { scriptsDir, toolRoot } from "./lib/paths.ts";
-import { GUARD_SHIM_NAMES, ensureGuardBin } from "./install-guard.ts";
+import { GUARD_SHIM_NAMES, ensureGuardBin } from "./lib/guardbin.ts";
 
 export { GUARD_SHIM_NAMES, ensureGuardBin };
 import { mkstempSync, run, signalExitCode } from "./lib/proc.ts";
@@ -1299,12 +1299,11 @@ function readRegularFile(path: string, missing: string): string {
   }
 }
 
-/** Verify every shim name resolves inside the guard bin through the shells a
- * lane runs: directly, and through a login shell the way the harness wraps
- * commands. The probe sources the lane's env file and re-arms the PATH the
- * way the launch wrapper does, so a profile that prepends the real managers
- * or a file that drops the bin fails here, and the launch refuses instead of
- * running a lane that reads as guarded but is not. */
+/** Verify every shim name resolves inside the guard bin through the shells
+ * the launch wrappers create: the probe sources the lane's env file and
+ * re-arms the PATH the way the wrapper does, so a file that drops the bin
+ * or a missing shim fails here, and the launch refuses instead of running a
+ * lane that reads as guarded but is not. */
 export function verifyGuardResolution(opts: {
   guardBin: string;
   envFile: string | null;
@@ -1317,9 +1316,7 @@ export function verifyGuardResolution(opts: {
     "fail=''",
     'for n in "$@"; do',
     '  d=$(command -v "$n" 2>/dev/null || true)',
-    "  l=$(bash -lc 'command -v $0' \"$n\" 2>/dev/null || true)",
-    '  [ "$d" = "$b/$n" ] || fail="$fail $n:direct:${d:-missing}"',
-    '  [ "$l" = "$b/$n" ] || fail="$fail $n:login:${l:-missing}"',
+    '  [ "$d" = "$b/$n" ] || fail="$fail $n:${d:-missing}"',
     "done",
     'if [ -z "$fail" ]; then exit 0; fi',
     'echo "shadowed:$fail"; exit 1',
@@ -1332,7 +1329,7 @@ export function verifyGuardResolution(opts: {
   };
   const r = run("bash", ["-c", script, "_", ...GUARD_SHIM_NAMES], { env, timeout: 30000 });
   if (r.timedOut) {
-    return { ok: false, detail: "the resolution probe timed out; a login profile may hang" };
+    return { ok: false, detail: "the resolution probe timed out" };
   }
   if (r.code !== 0) {
     const shadowed = r.out
@@ -1343,11 +1340,41 @@ export function verifyGuardResolution(opts: {
       ok: false,
       detail:
         shadowed === ""
-          ? "the shells resolve outside the guard bin"
-          : `a shell resolves outside the guard bin:${shadowed}`,
+          ? "the shell resolves outside the guard bin"
+          : `the shell resolves outside the guard bin:${shadowed}`,
     };
   }
   return { ok: true, detail: "" };
+}
+
+/** Name the shim names a login shell resolves outside the guard bin, or the
+ * empty string when none escapes. A login shell reads the user's profile,
+ * which launch does not control, so an escape warns instead of refusing: a
+ * lane that deliberately invokes a login shell whose profile prepends the
+ * real managers installs outside the guard. */
+export function probeLoginEscape(opts: {
+  guardBin: string;
+  env: Record<string, string | undefined>;
+}): string {
+  const script = [
+    "b=$GUARD_PROBE_BIN",
+    "fail=''",
+    'for n in "$@"; do',
+    '  d=$(command -v "$n" 2>/dev/null || true)',
+    '  [ "$d" = "$b/$n" ] || fail="$fail $n:${d:-missing}"',
+    "done",
+    'printf "escaped:%s" "$fail"',
+  ].join("\n");
+  const env: Record<string, string | undefined> = {
+    ...opts.env,
+    GUARD_PROBE_BIN: opts.guardBin,
+    PATH: `${opts.guardBin}:${opts.env.PATH ?? ""}`,
+  };
+  const r = run("bash", ["-lc", script, "_", ...GUARD_SHIM_NAMES], { env, timeout: 30000 });
+  if (r.timedOut) return GUARD_SHIM_NAMES.map((n) => `${n}:timeout`).join(" ");
+  // A chatty profile may print before the marker; only what follows it counts.
+  const at = r.out.lastIndexOf("escaped:");
+  return (at < 0 ? r.out : r.out.slice(at + "escaped:".length)).trim();
 }
 
 // --- entry ------------------------------------------------------------------------------
@@ -1963,6 +1990,14 @@ exit "$rc"
     if (!probe.ok) {
       die(
         `cannot arm the install guard for ${NAME}: ${probe.detail}; the lane would run unguarded`,
+      );
+    }
+    // A login shell reads the user's profile, which launch does not control:
+    // an escape warns, since a lane reaching one installs outside the guard.
+    const escaped = probeLoginEscape({ guardBin, env: process.env });
+    if (escaped !== "") {
+      console.error(
+        `launch: warning: a login shell on this machine resolves outside the guard bin (${escaped}); a lane that invokes one installs unguarded`,
       );
     }
   }

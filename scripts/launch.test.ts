@@ -32,6 +32,7 @@ import {
   ensureGuardBin,
   harnessData,
   makeHeldDir,
+  probeLoginEscape,
   verifyGuardResolution,
 } from "./launch.ts";
 import { startCheck, wrapCommand } from "./lib/confine.ts";
@@ -6473,7 +6474,7 @@ describe("the install guard arms lanes", () => {
     });
   });
 
-  test.skipIf(skipToml)("a login profile that shadows the guard refuses the launch", () => {
+  test.skipIf(skipToml)("a login profile that shadows the guard warns and proceeds", () => {
     withTempDir((tmp) => {
       const { d, wt } = runDir(tmp);
       const home = join(tmp, "home");
@@ -6484,9 +6485,12 @@ describe("the install guard arms lanes", () => {
       chmodSync(join(shadow, "npm"), 0o755);
       writeFileSync(join(home, ".profile"), `PATH="${shadow}:$PATH"\n`);
       const r = launchWithRole(tmp, d, wt, "lane", "one");
-      expect(r.rc).not.toBe(0);
-      expect(r.err).toContain("cannot arm the install guard");
-      expect(r.err).toContain("npm:login");
+      // The profile is the operator's, not the lane's: refusing on it would
+      // deny ordinary machines their launches, so the launch warns instead.
+      expect(r.rc).toBe(0);
+      expect(r.err).toContain("a login shell on this machine resolves outside the guard bin");
+      expect(r.err).toContain(`npm:${join(shadow, "npm")}`);
+      expect(r.handed["PATH"]?.startsWith(`${join(d, "guard", "bin")}:`)).toBe(true);
     });
   });
 
@@ -6507,7 +6511,18 @@ describe("the install guard arms lanes", () => {
     });
   });
 
-  test("verifyGuardResolution names the shadowed shell", () => {
+  test("verifyGuardResolution refuses when a shim is missing", () => {
+    withTempDir((tmp) => {
+      const d = join(tmp, "run");
+      const bin = ensureGuardBin(d, TOOL);
+      rmSync(join(bin, "npm"), { force: true });
+      const r = verifyGuardResolution({ guardBin: bin, envFile: null, env: { ...process.env } });
+      expect(r.ok).toBe(false);
+      expect(r.detail).toContain("npm:");
+    });
+  });
+
+  test("probeLoginEscape names the escape and stays silent when clean", () => {
     withTempDir((tmp) => {
       const d = join(tmp, "run");
       const bin = ensureGuardBin(d, TOOL);
@@ -6518,13 +6533,10 @@ describe("the install guard arms lanes", () => {
       writeFileSync(join(shadow, "npm"), "#!/bin/sh\nexit 0\n");
       chmodSync(join(shadow, "npm"), 0o755);
       writeFileSync(join(home, ".profile"), `PATH="${shadow}:$PATH"\n`);
-      const r = verifyGuardResolution({
-        guardBin: bin,
-        envFile: null,
-        env: { ...process.env, HOME: home },
-      });
-      expect(r.ok).toBe(false);
-      expect(r.detail).toContain("npm:login");
+      const escaped = probeLoginEscape({ guardBin: bin, env: { ...process.env, HOME: home } });
+      expect(escaped).toContain(`npm:${join(shadow, "npm")}`);
+      rmSync(join(home, ".profile"));
+      expect(probeLoginEscape({ guardBin: bin, env: { ...process.env, HOME: home } })).toBe("");
     });
   });
 
