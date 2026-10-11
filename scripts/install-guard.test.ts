@@ -2,12 +2,14 @@
 // the guard's pure decisions. End-to-end behavior stays in the oracle.
 import { expect, test } from "bun:test";
 import { createRequire } from "node:module";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { toolRoot } from "./lib/paths.ts";
 import { withTempDir } from "./lib/proc.ts";
 import {
   applyPins,
+  berryScopes,
+  bunfigScopes,
   classify,
   createSpecKind,
   createTarget,
@@ -15,13 +17,25 @@ import {
   fetchPackument,
   fetchVerdict,
   findLockfile,
+  installArgs,
+  lockResolved,
   npmDriftNames,
+  npmrcScopes,
   parseAddSpecs,
   parseSpec,
   planPins,
   projectOf,
+  refuseForeignResolved,
+  refuseForeignScopes,
+  registryEnvStrips,
   resolveClosure,
+  sameOrigin,
   sanitize,
+  scopeFlags,
+  scopeOfName,
+  scopePins,
+  scopesOfWords,
+  syncArgs,
   workspaceSelector,
   type GuardContext,
 } from "./install-guard.ts";
@@ -494,5 +508,175 @@ test("sanitize strips the new neuter flags and nothing past --", () => {
     "test",
     "--",
     "--ignore-scripts",
+  ]);
+});
+
+test("scope flags pin each scope to the guarded registry", () => {
+  expect(scopeOfName("@s/p")).toBe("@s");
+  expect(scopeOfName("p")).toBeNull();
+  expect(scopeOfName("@lonely")).toBeNull();
+  expect(scopePins(["a", "@s/p", "@s/q", "@t/r"], "https://r.example")).toEqual([
+    "--@s:registry=https://r.example",
+    "--@t:registry=https://r.example",
+  ]);
+  expect(scopeFlags(new Set(["@t", "@s"]), "https://r.example")).toEqual([
+    "--@s:registry=https://r.example",
+    "--@t:registry=https://r.example",
+  ]);
+  expect([
+    ...scopesOfWords(["view", "@s/p", "@t/q@1.2.3", "npm:@u/r@^1", "plain", "@nope@1"]),
+  ]).toEqual(["@s", "@t", "@u"]);
+  expect([...scopesOfWords(["npm:plain@^1"])]).toEqual([]);
+});
+
+test("sanitize strips the agent's own scope registries", () => {
+  expect(
+    sanitize("npm", ["install", "--@s:registry=https://evil.example", "foo"]).stripped,
+  ).toEqual(["--@s:registry=https://evil.example"]);
+  expect(sanitize("pnpm", ["add", "--@s:registry", "https://evil.example", "foo"]).stripped).toEqual(
+    ["--@s:registry", "https://evil.example"],
+  );
+  expect(sanitize("npm", ["view", "@s/p"]).kept).toEqual(["view", "@s/p"]);
+});
+
+test("the guard strips every registry the environment smuggles", () => {
+  expect(
+    registryEnvStrips({
+      npm_config_registry: "x",
+      NPM_CONFIG_REGISTRY: "x",
+      "npm_config_@s:registry": "x",
+      YARN_REGISTRY: "x",
+      yarn_registry: "x",
+      PATH: "x",
+      npm_config_proxy: "x",
+      YARN_ENABLE_SCRIPTS: "0",
+    }),
+  ).toEqual([
+    "NPM_CONFIG_REGISTRY",
+    "YARN_REGISTRY",
+    "npm_config_@s:registry",
+    "npm_config_registry",
+    "yarn_registry",
+  ]);
+});
+
+test("rc scope parsers read each manager's own file", () => {
+  expect([
+    ...npmrcScopes(
+      'registry=https://r.example\n@s:registry=https://a.example\n@t:registry = "https://b.example" # c\n',
+    ),
+  ]).toEqual([
+    ["@s", "https://a.example"],
+    ["@t", "https://b.example"],
+  ]);
+  expect([
+    ...npmrcScopes('"@u:registry" "https://c.example"\n@v:registry https://d.example\n'),
+  ]).toEqual([
+    ["@u", "https://c.example"],
+    ["@v", "https://d.example"],
+  ]);
+  expect([
+    ...berryScopes(
+      'npmRegistryServer: "https://r.example"\nnpmScopes:\n  tscope:\n    npmRegistryServer: "https://a.example"\n  "@u":\n    npmRegistryServer: https://b.example # c\nnodeLinker: node-modules\n',
+    ),
+  ]).toEqual([
+    ["@tscope", "https://a.example"],
+    ["@u", "https://b.example"],
+  ]);
+  expect([
+    ...bunfigScopes(
+      '[install]\nregistry = "https://r.example"\n[install.scopes]\n"tscope" = { url = "https://a.example/" }\n@u = "https://b.example"\n[other]\nx = 1\n',
+    ),
+  ]).toEqual([
+    ["@tscope", "https://a.example/"],
+    ["@u", "https://b.example"],
+  ]);
+  expect(sameOrigin("https://r.example/a", "https://r.example:443/b")).toBe(true);
+  expect(sameOrigin("https://r.example/", "http://r.example/")).toBe(false);
+  expect(sameOrigin("::oops", "https://r.example/")).toBe(false);
+});
+
+test("foreign scopes and foreign tarballs refuse", () => {
+  withTempDir((tmp) => {
+    const home = process.env.HOME;
+    process.env.HOME = join(tmp, "home");
+    try {
+      const proj = join(tmp, "proj");
+      mkdirSync(join(proj, "sub"), { recursive: true });
+      mkdirSync(join(tmp, "home"), { recursive: true });
+      writeFileSync(join(proj, ".npmrc"), "@s:registry=https://evil.example\n");
+      expect(() =>
+        refuseForeignScopes("yarn", "classic", join(proj, "sub"), proj, "https://r.example"),
+      ).toThrow(/points @s at https:\/\/evil\.example/);
+      expect(() =>
+        refuseForeignScopes("bun", "classic", join(proj, "sub"), proj, "https://r.example"),
+      ).toThrow(/\.npmrc points @s/);
+      // The same origin as the guard's passes.
+      writeFileSync(join(proj, ".npmrc"), "@s:registry=https://r.example/other\n");
+      refuseForeignScopes("yarn", "classic", join(proj, "sub"), proj, "https://r.example");
+      // Berry reads only its own rc; Yarn Classic's does not touch Bun.
+      writeFileSync(join(proj, ".yarnrc"), "@s:registry=https://evil.example\n");
+      refuseForeignScopes("bun", "classic", join(proj, "sub"), proj, "https://r.example");
+      expect(() =>
+        refuseForeignScopes("yarn", "classic", join(proj, "sub"), proj, "https://r.example"),
+      ).toThrow(/\.yarnrc points @s/);
+      rmSync(join(proj, ".yarnrc"));
+      writeFileSync(
+        join(proj, ".yarnrc.yml"),
+        'npmScopes:\n  s:\n    npmRegistryServer: "https://evil.example"\n',
+      );
+      expect(() =>
+        refuseForeignScopes("yarn", "berry", proj, proj, "https://r.example"),
+      ).toThrow(/points @s/);
+      refuseForeignScopes("yarn", "classic", proj, proj, "https://r.example");
+      // Lockfiles pinning foreign tarballs refuse on sync.
+      const lock = join(proj, "package-lock.json");
+      writeFileSync(
+        lock,
+        JSON.stringify({
+          packages: {
+            "node_modules/a": {
+              version: "1.0.0",
+              resolved: "https://evil.example/a.tgz",
+            },
+          },
+        }),
+      );
+      expect(lockResolved(lock)).toEqual(["https://evil.example/a.tgz"]);
+      expect(() => refuseForeignResolved(lock, "https://r.example")).toThrow(/outside the guarded/);
+      const ylock = join(proj, "yarn.lock");
+      writeFileSync(ylock, 'a@^1:\n  version "1.0.0"\n  resolved "https://r.example/a.tgz"\n');
+      expect(lockResolved(ylock)).toEqual(["https://r.example/a.tgz"]);
+      refuseForeignResolved(ylock, "https://r.example");
+    } finally {
+      if (home === undefined) delete process.env.HOME;
+      else process.env.HOME = home;
+    }
+  });
+});
+
+test("install and sync plans pin the scopes they checked", () => {
+  const reg = "https://r.example";
+  const add = installArgs("npm", "classic", ["install", "@s/p"], [], reg, [], ["@s/p", "a"]);
+  expect(add.args).toEqual([
+    "install",
+    "@s/p",
+    "--registry",
+    reg,
+    "--@s:registry=https://r.example",
+    "--no-audit",
+    "--no-fund",
+    "--ignore-scripts",
+  ]);
+  const sync = syncArgs("pnpm", "classic", [], reg, ["@s/p"]);
+  expect(sync.args).toContain("--@s:registry=https://r.example");
+  // Yarn and Bun pin no scopes: their scopes refuse instead.
+  expect(installArgs("yarn", "classic", ["add", "@s/p"], [], reg, [], ["@s/p"]).args).not.toContain(
+    "--@s:registry=https://r.example",
+  );
+  expect(syncArgs("yarn", "berry", [], reg, ["@s/p"]).args).toEqual([
+    "install",
+    "--immutable",
+    "--non-interactive",
   ]);
 });

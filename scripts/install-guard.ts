@@ -1808,6 +1808,53 @@ const STRIP_BARE = new Set([
 
 const STRIP_NPM = new Set(["--audit", "--fund", "--no-audit", "--no-fund"]);
 
+/** The scope a package name belongs to, or null when it has none. */
+export function scopeOfName(name: string): string | null {
+  if (!name.startsWith("@")) return null;
+  const slash = name.indexOf("/");
+  if (slash <= 1) return null;
+  return name.slice(0, slash);
+}
+
+/** The CLI flags pinning scopes to the guard's registry, sorted, one
+ * `--@scope:registry=url` word each. npm and pnpm honor them over every
+ * config file and variable (verified by execution); the other managers
+ * have no such flag, so their scopes refuse instead. */
+export function scopeFlags(scopes: Iterable<string>, registry: string): string[] {
+  return [...new Set(scopes)].sort().map((scope) => `--${scope}:registry=${registry}`);
+}
+
+/** The checked names behind parsed add specs: alias targets, not aliases. */
+export function specNamesOf(specs: ParsedAddSpec[]): string[] {
+  return specs.map((s) => (s.parsed.kind === "alias" ? s.parsed.target : s.parsed.name));
+}
+
+/** The scope flags for the scopes package names belong to. */
+export function scopePins(names: Iterable<string>, registry: string): string[] {
+  const scopes = new Set<string>();
+  for (const name of names) {
+    const scope = scopeOfName(name);
+    if (scope !== null) scopes.add(scope);
+  }
+  return scopeFlags(scopes, registry);
+}
+
+/** The scopes named by bare words: `@scope/pkg`, `@scope/pkg@1.2.3`, and the
+ * `npm:@scope/pkg@^1` aliases one-shot flags carry. */
+export function scopesOfWords(words: string[]): Set<string> {
+  const scopes = new Set<string>();
+  for (const word of words) {
+    const at = word.startsWith("npm:") ? word.indexOf("@", 4) : word.startsWith("@") ? 0 : -1;
+    if (at < 0) continue;
+    const rest = word.slice(at + 1);
+    const end = rest.search(/[/@]/u);
+    const scope = end < 0 ? rest : rest.slice(0, end);
+    if (!/^[a-z0-9-~][a-z0-9-._~]*$/iu.test(scope)) continue;
+    if (end < 0 || rest[end] === "/") scopes.add(`@${scope}`);
+  }
+  return scopes;
+}
+
 /** Strip the flags that would neuter the guard, and the agent's registry,
  * which the pinned registry replaces on install forms. Returns the stripped
  * flags for the note the guard prints. Nothing past -- strips: those words
@@ -1856,6 +1903,20 @@ export function sanitize(pm: Pm, args: string[]): { kept: string[]; stripped: st
     }
     if (arg.startsWith("--registry=") || (arg.startsWith("--allow-build=") && pm === "pnpm")) {
       stripped.push(arg);
+      continue;
+    }
+    // A scope registry of the agent's own, in either the = form or the
+    // space-separated one; the guard pins the scopes it checked instead.
+    if (arg.startsWith("--@") && /(^|:)registry($|=)/u.test(arg)) {
+      stripped.push(arg);
+      if (
+        !arg.includes("=") &&
+        i + 1 < args.length &&
+        !(args[i + 1] ?? "").startsWith("-")
+      ) {
+        i += 1;
+        stripped.push(args[i] ?? "");
+      }
       continue;
     }
     kept.push(arg);
@@ -2612,10 +2673,31 @@ export function execManager(
 /** The environment a manager runs in: the lane's, minus a smuggled registry,
  * plus the manager's own seams. The PATH keeps the shims, so code an allowed
  * install script runs still cannot invoke an unguarded manager. */
+/** The environment keys carrying a registry the manager would honor:
+ * every `npm_config_` registry or `@scope:registry`, in either case (npm,
+ * pnpm and Bun read both; Yarn Classic reads at least the lower one), and
+ * Yarn Classic's own `YARN_REGISTRY`. Pure in the keys for the beside tests. */
+export function registryEnvStrips(env: Record<string, string | undefined>): string[] {
+  const strips: string[] = [];
+  for (const key of Object.keys(env)) {
+    const lower = key.toLowerCase();
+    if (lower === "yarn_registry") {
+      strips.push(key);
+      continue;
+    }
+    if (!lower.startsWith("npm_config_")) continue;
+    const rest = lower.slice("npm_config_".length);
+    if (rest === "registry" || rest.endsWith(":registry")) strips.push(key);
+  }
+  return strips.sort();
+}
+
 export function execEnv(
   extra: Record<string, string | undefined>,
 ): Record<string, string | undefined> {
-  return { npm_config_registry: undefined, ...extra };
+  const env: Record<string, string | undefined> = {};
+  for (const key of registryEnvStrips(process.env)) env[key] = undefined;
+  return { ...env, ...extra };
 }
 
 /** Classic or Berry: the rc file says Berry before any binary runs, and the
@@ -2946,6 +3028,227 @@ export function isOpaqueLock(lock: string): boolean {
   return lock.endsWith("bun.lockb");
 }
 
+/** Strip one layer of matching single or double quotes. */
+function unquote(value: string): string {
+  const trimmed = value.trim();
+  if (trimmed.length >= 2) {
+    const first = trimmed[0];
+    const last = trimmed[trimmed.length - 1];
+    if ((first === '"' || first === "'") && last === first) return trimmed.slice(1, -1);
+  }
+  return trimmed;
+}
+
+/** The scope registries an .npmrc or .yarnrc declares, scope to URL. Both
+ * files take `@scope:registry=url` with `=` or whitespace between, quotes
+ * optional; anything else in them is not the guard's business. */
+export function npmrcScopes(text: string): Map<string, string> {
+  const scopes = new Map<string, string>();
+  for (const line of text.split("\n")) {
+    const cut = line.split("#")[0] ?? "";
+    const match = /^\s*("?)(@[^=:\s"']+):registry\1\s*[=\s]\s*(.+?)\s*$/u.exec(cut);
+    if (match === null) continue;
+    const url = unquote(match[3] ?? "");
+    if (url !== "") scopes.set(match[2] ?? "", url);
+  }
+  return scopes;
+}
+
+/** The scope registries a .yarnrc.yml declares under `npmScopes:`, scope
+ * to URL. A lenient read of that one block: the scope line, then the
+ * `npmRegistryServer` line beneath it. */
+export function berryScopes(text: string): Map<string, string> {
+  const scopes = new Map<string, string>();
+  const lines = text.split("\n");
+  let inBlock = false;
+  let blockIndent = 0;
+  let scope: string | null = null;
+  let scopeIndent = 0;
+  for (const line of lines) {
+    if (/^\s*(#|$)/u.test(line)) continue;
+    const indent = line.match(/^\s*/u)?.[0].length ?? 0;
+    const top = /^\s*npmScopes:\s*(#.*)?$/u.exec(line);
+    if (top !== null) {
+      inBlock = true;
+      blockIndent = indent;
+      scope = null;
+      continue;
+    }
+    if (!inBlock) continue;
+    if (indent <= blockIndent) {
+      inBlock = false;
+      scope = null;
+      continue;
+    }
+    const server = /^\s*npmRegistryServer:\s*(.+?)\s*(#.*)?$/u.exec(line);
+    if (server !== null && scope !== null && indent > scopeIndent) {
+      const url = unquote(server[1] ?? "");
+      if (url !== "") scopes.set(scope, url);
+      continue;
+    }
+    const named = /^\s*("?)(@?[^:\s"']+)\1:\s*(#.*)?$/u.exec(line);
+    if (named !== null && indent > blockIndent) {
+      const raw = named[2] ?? "";
+      scope = raw.startsWith("@") ? raw : `@${raw}`;
+      scopeIndent = indent;
+    }
+  }
+  return scopes;
+}
+
+/** The scope registries a bunfig.toml declares under `[install.scopes]`,
+ * scope to URL. Both the bare-URL form and the `{ url = ... }` table. */
+export function bunfigScopes(text: string): Map<string, string> {
+  const scopes = new Map<string, string>();
+  let inSection = false;
+  for (const line of text.split("\n")) {
+    const cut = line.split("#")[0] ?? "";
+    if (/^\s*\[/u.test(cut)) {
+      inSection = /^\s*\[install\.scopes\]\s*$/u.test(cut);
+      continue;
+    }
+    if (!inSection) continue;
+    const entry = /^\s*("?)(@?[^=:\s"']+)\1\s*=\s*(.+?)\s*$/u.exec(cut);
+    if (entry === null) continue;
+    const raw = entry[2] ?? "";
+    const scope = raw.startsWith("@") ? raw : `@${raw}`;
+    const value = entry[3] ?? "";
+    const url = value.trim().startsWith("{")
+      ? unquote(/url\s*=\s*("[^"]*"|'[^']*'|\S+)/u.exec(value)?.[1] ?? "")
+      : unquote(value);
+    if (url !== "") scopes.set(scope, url);
+  }
+  return scopes;
+}
+
+/** Whether two registry URLs name the same origin; an unparseable URL
+ * never matches, so it refuses rather than passes. */
+export function sameOrigin(a: string, b: string): boolean {
+  try {
+    return new URL(a).origin === new URL(b).origin;
+  } catch {
+    return false;
+  }
+}
+
+/** The rc files a lane run would read, nearest first: the chain from the
+ * lane's directory up to the project, or just those two directories when
+ * a flag pointed the project elsewhere, then the user's own npm and Yarn
+ * Classic files, which those managers read as global config. */
+export function rcChain(cwd: string, project: string): string[] {
+  const files: string[] = [];
+  const names = [".npmrc", ".yarnrc", ".yarnrc.yml", "bunfig.toml"];
+  const readDir = (dir: string) => {
+    for (const name of names) {
+      const path = join(dir, name);
+      if (existsSync(path) && !files.includes(path)) files.push(path);
+    }
+  };
+  if (!walkUp(cwd).includes(project)) {
+    readDir(cwd);
+    readDir(project);
+  } else {
+    let dir = cwd;
+    for (;;) {
+      readDir(dir);
+      if (dir === project) break;
+      dir = dirname(dir);
+    }
+  }
+  const home = process.env.HOME ?? "";
+  if (home !== "") {
+    for (const name of [".npmrc", ".yarnrc"]) {
+      const path = join(home, name);
+      if (existsSync(path) && !files.includes(path)) files.push(path);
+    }
+  }
+  return files;
+}
+
+/** Refuse when any rc file the run would read points a scope at a registry
+ * other than the guard's. npm and pnpm never reach here: their scopes pin
+ * on the command line instead. */
+export function refuseForeignScopes(
+  pm: Pm,
+  yarnKind: YarnKind,
+  cwd: string,
+  project: string,
+  registry: string,
+): void {
+  for (const file of rcChain(cwd, project)) {
+    let text: string;
+    try {
+      text = readFileSync(file, "utf8");
+    } catch {
+      continue;
+    }
+    const base = file.split("/").pop() ?? "";
+    const scopes =
+      base === ".yarnrc.yml"
+        ? berryScopes(text)
+        : base === "bunfig.toml"
+          ? bunfigScopes(text)
+          : npmrcScopes(text);
+    if (base === ".yarnrc" && pm !== "yarn") continue;
+    if (base === ".yarnrc.yml" && (pm !== "yarn" || yarnKind !== "berry")) continue;
+    if (base === "bunfig.toml" && pm !== "bun") continue;
+    for (const [scope, url] of scopes) {
+      if (!sameOrigin(url, registry)) {
+        throw refusal(
+          `install-guard: refusing to run: ${file} points ${scope} at ${url}, outside the guarded registry. Point it at the guarded registry or remove it first`,
+        );
+      }
+    }
+  }
+}
+
+/** Every tarball URL a lockfile pins: npm's `resolved` entries and Yarn
+ * Classic's `resolved` lines. pnpm, Berry and Bun locks carry no URLs. */
+export function lockResolved(lockfile: string): string[] {
+  let text: string;
+  try {
+    text = readFileSync(lockfile, "utf8");
+  } catch {
+    return [];
+  }
+  const urls: string[] = [];
+  if (/(^|\/)yarn\.lock$/u.test(lockfile)) {
+    for (const line of text.split("\n")) {
+      const match = /^\s*resolved\s+"([^"]+)"\s*$/u.exec(line);
+      if (match !== null && (match[1] ?? "").startsWith("http")) urls.push(match[1] ?? "");
+    }
+    return urls;
+  }
+  let lock: unknown;
+  try {
+    lock = JSON.parse(text) as unknown;
+  } catch {
+    return [];
+  }
+  if (typeof lock !== "object" || lock === null) return [];
+  const packages = (lock as Record<string, unknown>).packages;
+  if (typeof packages !== "object" || packages === null) return [];
+  for (const entry of Object.values(packages as Record<string, unknown>)) {
+    if (typeof entry !== "object" || entry === null) continue;
+    const resolved = (entry as Record<string, unknown>).resolved;
+    if (typeof resolved === "string" && resolved.startsWith("http")) urls.push(resolved);
+  }
+  return urls;
+}
+
+/** Refuse when the lockfile pins a tarball outside the guarded registry:
+ * npm ci and Yarn Classic fetch `resolved` as written, ignoring the
+ * `--registry` flag (verified by execution). */
+export function refuseForeignResolved(lockfile: string, registry: string): void {
+  for (const url of lockResolved(lockfile)) {
+    if (!sameOrigin(url, registry)) {
+      throw refusal(
+        `install-guard: refusing to sync: the lockfile pins a tarball at ${url}, outside the guarded registry. Re-resolve the lockfile against the guarded registry first`,
+      );
+    }
+  }
+}
+
 /** The locked name@version pairs, or null when the lockfile does not parse
  * or is opaque to the guard. */
 export function lockedOf(lockfile: string): Locked[] | null {
@@ -3007,6 +3310,7 @@ export function installArgs(
   scriptsOn: string[],
   registry: string,
   pins: SpecPin[],
+  scopeNames: string[] = [],
 ): ExecPlan {
   const pinned = applyPins(kept, pm, pins);
   if (pm === "yarn" && yarnKind === "berry") {
@@ -3019,6 +3323,7 @@ export function installArgs(
     };
   }
   const args = [...pinned, "--registry", registry];
+  if (pm === "npm" || pm === "pnpm") args.push(...scopePins(scopeNames, registry));
   if (pm === "npm") args.push("--no-audit", "--no-fund");
   if (pm === "yarn") args.push("--non-interactive");
   if (scriptsOn.length > 0) {
@@ -3038,6 +3343,7 @@ export function syncArgs(
   yarnKind: YarnKind,
   scriptsOn: string[],
   registry: string,
+  scopeNames: string[] = [],
 ): ExecPlan {
   if (pm === "yarn" && yarnKind === "berry") {
     return {
@@ -3050,11 +3356,18 @@ export function syncArgs(
   }
   if (pm === "npm") {
     const args = ["ci", "--registry", registry, "--no-audit", "--no-fund"];
+    args.push(...scopePins(scopeNames, registry));
     if (scriptsOn.length === 0) args.push("--ignore-scripts");
     return { args, env: {} };
   }
   if (pm === "pnpm") {
-    const args = ["install", "--frozen-lockfile", "--registry", registry];
+    const args = [
+      "install",
+      "--frozen-lockfile",
+      "--registry",
+      registry,
+      ...scopePins(scopeNames, registry),
+    ];
     if (scriptsOn.length > 0) {
       for (const name of scriptsOn) args.push(`--allow-build=${name}`);
     } else {
@@ -3239,16 +3552,35 @@ function execPassthrough(
   bin: string,
   argv: string[],
   registry: string,
+  project: string,
+  cwd: string,
 ): number {
+  const { cmd } = commandOf(prog === "yarn" ? "yarn" : pm, argv);
+  const fetches = FETCH_CMDS.has(cmd);
+  if (fetches && (pm === "yarn" || pm === "bun")) {
+    refuseForeignScopes(pm, yarnKind, cwd, project, registry);
+  }
   if (pm === "yarn" && yarnKind === "berry") {
     const { kept, stripped } = sanitize(pm, argv);
     noteStripped(stripped);
     return execManager(bin, kept, execEnv({ YARN_NPM_REGISTRY_SERVER: registry }));
   }
-  const { cmd } = commandOf(prog === "yarn" ? "yarn" : pm, argv);
   const { kept, stripped } = sanitize(pm, argv);
   noteStripped(stripped);
-  const args = FETCH_CMDS.has(cmd) ? [...kept, "--registry", registry] : kept;
+  const args = [...kept];
+  if (fetches) {
+    args.push("--registry", registry);
+    // A fetch names its packages, or the manifest's when it names none:
+    // either way the scopes it can touch pin with it.
+    if (pm === "npm" || pm === "pnpm") {
+      const scopes = scopesOfWords(kept);
+      for (const name of wantedNames(project)) {
+        const scope = scopeOfName(name);
+        if (scope !== null) scopes.add(scope);
+      }
+      args.push(...scopeFlags(scopes, registry));
+    }
+  }
   // Before the command, where Bun parses its own flags: after the script
   // name the flag would land in the script's argv instead.
   if (pm === "bun" && !args.includes("--no-install")) args.unshift("--no-install");
@@ -3344,7 +3676,7 @@ async function runRun(shimDir: string, rawProg: string, argv: string[]): Promise
   };
 
   if (classification.kind === "passthrough") {
-    return execPassthrough(effProg, pm, yarnKind, bin, effArgv, registry);
+    return execPassthrough(effProg, pm, yarnKind, bin, effArgv, registry, project, cwd);
   }
   if (classification.kind === "add" || classification.kind === "update") {
     const specs =
@@ -3353,10 +3685,12 @@ async function runRun(shimDir: string, rawProg: string, argv: string[]): Promise
         : expandUpdateSpecs(project, classification.specs);
     const { scriptful, closure } = await checkSpecs(deps, specs);
     if (pm === "bun") writeTrustedDeps(project, scriptful);
+    if (pm === "yarn" || pm === "bun") refuseForeignScopes(pm, yarnKind, cwd, project, registry);
     const { prefix, cmd, rest } = commandOf(key, effArgv);
     const pre = sanitize(pm, prefix);
     const post = sanitize(pm, rest);
     noteStripped([...pre.stripped, ...post.stripped]);
+    const scopeNames = [...specNamesOf(specs), ...closure.keys()];
     const plan = installArgs(
       pm,
       yarnKind,
@@ -3364,6 +3698,7 @@ async function runRun(shimDir: string, rawProg: string, argv: string[]): Promise
       scriptful,
       registry,
       planPins(specs, closure),
+      scopeNames,
     );
     return execManager(bin, plan.args, execEnv(plan.env));
   }
@@ -3399,11 +3734,21 @@ async function runRun(shimDir: string, rawProg: string, argv: string[]): Promise
       );
     }
     const pairs = locked ?? [];
+    if (lock !== null && (pm === "npm" || (pm === "yarn" && yarnKind === "classic"))) {
+      refuseForeignResolved(lock, registry);
+    }
+    if (pm === "yarn" || pm === "bun") refuseForeignScopes(pm, yarnKind, cwd, project, registry);
     const scriptful = await syncScriptful(ctx, pairs);
     const scriptsOn = scriptful.filter((name) => deps.approvals.allowances.has(name));
     if (scriptsOn.length !== scriptful.length) scriptsOn.splice(0);
     if (pm === "bun") writeTrustedDeps(project, scriptsOn);
-    const plan = syncArgs(pm, yarnKind, scriptsOn, registry);
+    const plan = syncArgs(
+      pm,
+      yarnKind,
+      scriptsOn,
+      registry,
+      pairs.map((p) => p.name),
+    );
     return execManager(bin, plan.args, execEnv(plan.env));
   }
   if (classification.kind === "rebuild") {
@@ -3425,20 +3770,42 @@ async function runRun(shimDir: string, rawProg: string, argv: string[]): Promise
     // The mapped template is checked like a one-shot's; the lane's args run
     // unchanged, since the template name is not a spec to pin.
     const specs = parseAddSpecs(classification.specs);
-    const { scriptful } = await checkSpecs(deps, specs);
-    return execDownloaded(pm, yarnKind, bin, effArgv, scriptful, registry, []);
+    const { scriptful, closure } = await checkSpecs(deps, specs);
+    return execDownloaded(
+      pm,
+      yarnKind,
+      bin,
+      effArgv,
+      scriptful,
+      registry,
+      [],
+      [...specNamesOf(specs), ...closure.keys()],
+      cwd,
+      project,
+    );
   }
   // One-shot: an installed binary runs with downloads disabled, and anything
   // else is guarded like an add and then runs with the pinned registry.
   const bins = classification.specs;
   const pkgs = classification.packages;
   if (bins.length === 0 && pkgs.length === 0) {
-    return execPassthrough(effProg, pm, yarnKind, bin, effArgv, registry);
+    return execPassthrough(effProg, pm, yarnKind, bin, effArgv, registry, project, cwd);
   }
   if (pkgs.length > 0) {
     const specs = parseAddSpecs(pkgs);
     const { scriptful, closure } = await checkSpecs(deps, specs);
-    return execDownloaded(pm, yarnKind, bin, effArgv, scriptful, registry, planPins(specs, closure));
+    return execDownloaded(
+      pm,
+      yarnKind,
+      bin,
+      effArgv,
+      scriptful,
+      registry,
+      planPins(specs, closure),
+      [...specNamesOf(specs), ...closure.keys()],
+      cwd,
+      project,
+    );
   }
   const wanted = bins[0] ?? "";
   if ((effProg === "npx" || effProg === "bun") && localBin(project, wanted)) {
@@ -3457,11 +3824,23 @@ async function runRun(shimDir: string, rawProg: string, argv: string[]): Promise
   }
   const specs = parseAddSpecs([wanted]);
   const { scriptful, closure } = await checkSpecs(deps, specs);
-  return execDownloaded(pm, yarnKind, bin, effArgv, scriptful, registry, planPins(specs, closure));
+  return execDownloaded(
+    pm,
+    yarnKind,
+    bin,
+    effArgv,
+    scriptful,
+    registry,
+    planPins(specs, closure),
+    [...specNamesOf(specs), ...closure.keys()],
+    cwd,
+    project,
+  );
 }
 
 /** A one-shot the checks cleared: the lane's args kept, the pinned registry,
- * and scripts on per the covered set. */
+ * and scripts on per the covered set. Every caller downloads, so the scope
+ * check lives here rather than at each of them. */
 function execDownloaded(
   pm: Pm,
   yarnKind: YarnKind,
@@ -3470,7 +3849,11 @@ function execDownloaded(
   scriptful: string[],
   registry: string,
   pins: SpecPin[],
+  scopeNames: string[],
+  cwd: string,
+  project: string,
 ): number {
+  if (pm === "yarn" || pm === "bun") refuseForeignScopes(pm, yarnKind, cwd, project, registry);
   if (pm === "yarn" && yarnKind === "berry") {
     const { kept, stripped } = sanitize(pm, argv);
     noteStripped(stripped);
@@ -3486,6 +3869,7 @@ function execDownloaded(
   const { kept, stripped } = sanitize(pm, argv);
   noteStripped(stripped);
   const args = [...applyPins(kept, pm, pins), "--registry", registry];
+  if (pm === "npm" || pm === "pnpm") args.push(...scopePins(scopeNames, registry));
   if (pm === "npm") args.push("--no-audit", "--no-fund");
   if (scriptful.length > 0) {
     if (pm === "pnpm") {
