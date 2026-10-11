@@ -2,7 +2,7 @@
 // the guard's pure decisions. End-to-end behavior stays in the oracle.
 import { expect, test } from "bun:test";
 import { createRequire } from "node:module";
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseApprovals } from "./lib/libraries.ts";
 import { toolRoot } from "./lib/paths.ts";
@@ -10,6 +10,7 @@ import { run, withTempDir } from "./lib/proc.ts";
 import {
   appendRunChecked,
   applyPins,
+  armTrustedDeps,
   baseFile,
   berryScopes,
   bunfigScopes,
@@ -811,6 +812,41 @@ test("the delta cores name unapproved pairs and stowaways", () => {
       new Set(["locked@1.2.3", "moved@1.2.3"]),
     ),
   ).toEqual(["loose", "moved"]);
+});
+
+test("arming trust restores the committed list byte for byte", () => {
+  withTempDir((tmp) => {
+    const project = join(tmp, "proj");
+    mkdirSync(project, { recursive: true });
+    const before = '{\n  "name": "p",\n  "trustedDependencies": [\n    "esbuild"\n  ]\n}\n';
+    writeFileSync(join(project, "package.json"), before);
+    const restore = armTrustedDeps(project, []);
+    expect(JSON.parse(readFileSync(join(project, "package.json"), "utf8"))).toEqual({
+      name: "p",
+      trustedDependencies: [],
+    });
+    restore();
+    expect(readFileSync(join(project, "package.json"), "utf8")).toBe(before);
+  });
+});
+
+test("arming trust keeps the install's own edits on restore", () => {
+  withTempDir((tmp) => {
+    const project = join(tmp, "proj");
+    mkdirSync(project, { recursive: true });
+    writeFileSync(join(project, "package.json"), '{"name":"p"}\n');
+    const restore = armTrustedDeps(project, ["a"]);
+    // The install adds a dependency while trust is armed.
+    writeFileSync(
+      join(project, "package.json"),
+      JSON.stringify({ name: "p", dependencies: { foo: "^1.0.0" }, trustedDependencies: ["a"] }),
+    );
+    restore();
+    expect(JSON.parse(readFileSync(join(project, "package.json"), "utf8"))).toEqual({
+      name: "p",
+      dependencies: { foo: "^1.0.0" },
+    });
+  });
 });
 
 test("prereleases satisfy only beside a same-release comparator", () => {

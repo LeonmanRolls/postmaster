@@ -3539,6 +3539,64 @@ export function writeTrustedDeps(project: string, names: string[]): boolean {
   return true;
 }
 
+/** Point the manifest's trustedDependencies at exactly the allowed
+ * scriptful set for one guarded install, returning a restorer for the
+ * committed list: the write is the mechanism bun gates scripts by, and
+ * the committed list must survive the run. The restorer puts the exact
+ * previous bytes back when the install left the file alone, and
+ * otherwise restores only the field, keeping the install's edits. */
+export function armTrustedDeps(project: string, names: string[]): () => void {
+  const file = join(project, "package.json");
+  let prev: string | null = null;
+  try {
+    prev = readFileSync(file, "utf8");
+  } catch {
+    prev = null;
+  }
+  const changed = writeTrustedDeps(project, names);
+  let written: string | null = null;
+  if (changed && prev !== null) {
+    try {
+      written = readFileSync(file, "utf8");
+    } catch {
+      written = null;
+    }
+  }
+  return () => {
+    if (prev === null || !changed) return;
+    let cur: string | null = null;
+    try {
+      cur = readFileSync(file, "utf8");
+    } catch {
+      return;
+    }
+    if (cur === written) {
+      try {
+        writeFileSync(file, prev);
+      } catch {
+        // Left as written: fewer trusted scripts is the fail-closed side.
+      }
+      return;
+    }
+    let prevManifest: Record<string, unknown> | null = null;
+    let curManifest: Record<string, unknown> | null = null;
+    try {
+      prevManifest = JSON.parse(prev) as Record<string, unknown>;
+      curManifest = JSON.parse(cur) as Record<string, unknown>;
+    } catch {
+      return;
+    }
+    if (typeof prevManifest !== "object" || typeof curManifest !== "object") return;
+    if (!("trustedDependencies" in prevManifest)) delete curManifest.trustedDependencies;
+    else curManifest.trustedDependencies = prevManifest.trustedDependencies;
+    try {
+      writeFileSync(file, `${JSON.stringify(curManifest, null, 2)}\n`);
+    } catch {
+      // Left as written: fewer trusted scripts is the fail-closed side.
+    }
+  };
+}
+
 // ---------- argv builders ----------
 
 export interface ExecPlan {
@@ -4343,24 +4401,28 @@ async function runRun(shimDir: string, rawProg: string, argv: string[]): Promise
         addScriptsOn = [];
       }
     }
-    if (pm === "bun") writeTrustedDeps(project, scriptful);
-    if (pm === "yarn" || pm === "bun") refuseForeignScopes(pm, yarnKind, cwd, project, registry);
-    const { prefix, cmd, rest } = commandOf(key, effArgv);
-    const pre = sanitize(pm, prefix);
-    const post = sanitize(pm, rest);
-    noteStripped([...pre.stripped, ...post.stripped]);
-    const scopeNames = [...specNamesOf(specs), ...closure.keys()];
-    const installScriptsOn = pm === "yarn" && yarnKind === "classic" ? addScriptsOn : scriptful;
-    const plan = installArgs(
-      pm,
-      yarnKind,
-      [...pre.kept, cmd, ...post.kept],
-      installScriptsOn,
-      registry,
-      planPins(specs, closure),
-      scopeNames,
-    );
-    return execInstallPlan(bin, plan, rebuildArgs(pm, yarnKind, installScriptsOn, registry));
+    const restoreTrust = pm === "bun" ? armTrustedDeps(project, scriptful) : null;
+    try {
+      if (pm === "yarn" || pm === "bun") refuseForeignScopes(pm, yarnKind, cwd, project, registry);
+      const { prefix, cmd, rest } = commandOf(key, effArgv);
+      const pre = sanitize(pm, prefix);
+      const post = sanitize(pm, rest);
+      noteStripped([...pre.stripped, ...post.stripped]);
+      const scopeNames = [...specNamesOf(specs), ...closure.keys()];
+      const installScriptsOn = pm === "yarn" && yarnKind === "classic" ? addScriptsOn : scriptful;
+      const plan = installArgs(
+        pm,
+        yarnKind,
+        [...pre.kept, cmd, ...post.kept],
+        installScriptsOn,
+        registry,
+        planPins(specs, closure),
+        scopeNames,
+      );
+      return execInstallPlan(bin, plan, rebuildArgs(pm, yarnKind, installScriptsOn, registry));
+    } finally {
+      restoreTrust?.();
+    }
   }
   if (classification.kind === "sync") {
     const lock = findLockfile(pm, project);
@@ -4403,23 +4465,27 @@ async function runRun(shimDir: string, rawProg: string, argv: string[]): Promise
     const scriptsOn = scriptful.every((name) => deps.approvals.allowances.has(name))
       ? scriptful
       : [];
-    if (pm === "bun") writeTrustedDeps(project, scriptsOn);
-    // Classic cannot rebuild the covered set alone, so a partial cover
-    // installs with every script off, and says which cover is missing.
-    if (pm === "yarn" && yarnKind === "classic" && scriptsOn.length !== scriptful.length) {
-      const missing = scriptful.filter((name) => !deps.approvals.allowances.has(name));
-      process.stderr.write(
-        `install-guard: scripts off for this sync: no allowance covers ${missing.join(", ")}\n`,
+    const restoreTrust = pm === "bun" ? armTrustedDeps(project, scriptsOn) : null;
+    try {
+      // Classic cannot rebuild the covered set alone, so a partial cover
+      // installs with every script off, and says which cover is missing.
+      if (pm === "yarn" && yarnKind === "classic" && scriptsOn.length !== scriptful.length) {
+        const missing = scriptful.filter((name) => !deps.approvals.allowances.has(name));
+        process.stderr.write(
+          `install-guard: scripts off for this sync: no allowance covers ${missing.join(", ")}\n`,
+        );
+      }
+      const plan = syncArgs(
+        pm,
+        yarnKind,
+        scriptsOn,
+        registry,
+        pairs.map((p) => p.name),
       );
+      return execInstallPlan(bin, plan, rebuildArgs(pm, yarnKind, scriptsOn, registry));
+    } finally {
+      restoreTrust?.();
     }
-    const plan = syncArgs(
-      pm,
-      yarnKind,
-      scriptsOn,
-      registry,
-      pairs.map((p) => p.name),
-    );
-    return execInstallPlan(bin, plan, rebuildArgs(pm, yarnKind, scriptsOn, registry));
   }
   if (classification.kind === "rebuild") {
     // npm and pnpm only; the other managers never classify here.
