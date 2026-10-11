@@ -24,6 +24,10 @@
 //     [--folder <dir>] [--correct]
 //   run verifier upkeep-prompt <repo> [--headless] [--folder <dir>] [--correct]
 //   run verifier upkeep-report <repo> --run <dispatch> --report <file> [--folder <dir>]
+//   run verifier record <repo> <dispatch>
+//   run verifier arm <worktree> <dispatch>
+//   run verifier changes <worktree> <dispatch> [--freeze]
+//   run verifier keep <repo> --run <dispatch> --at <commit>
 //
 //   surface    one or more of cli, web, library, backend, cli-examples,
 //              browser-suite, web-journey, library-tests, each a kind or
@@ -97,6 +101,36 @@
 //   upkeep-report  read a finished UPKEEP.md, refuse it unless it drives every
 //              feature page, and print the same stale, unchecked and summary lines
 //              upkeep prints, logged as printed; a corrected claim counts as held
+//   record     copy the repo's .postmaster/verifier/ into the run's record as
+//              verifier-at-dispatch/, the folder as the run was dispatched on.
+//              Prints recorded .postmaster/verifier (<n> files), no local
+//              verifiers when the repo holds none, or already recorded; left
+//              alone on a second call. The postmaster runs this at dispatch (#478)
+//   arm        place the run's recorded copy at .postmaster/verifier/ in the
+//              worktree, and ignore that directory in the repository's common
+//              exclude, so the copy reads inside the worktree and git shows
+//              nothing. Prints armed <top>: <n> files in <dir>, or no verifiers
+//              recorded when the record holds none, the exclude still added.
+//              The coachman arms every workhorse copy and the synthesis
+//              worktree (#478)
+//   changes    compare the worktree's copy with the record's copy and print the
+//              run's verifier changes as the ## Verifier changes card section:
+//              each changed page with its diff, each added and removed file.
+//              Prints verifiers unchanged on one line when nothing differs.
+//              With --freeze also snapshot the worktree's copy as
+//              verifier-final/, the copy keep reads once the worktree is gone.
+//              The coachman freezes at the ship card and pastes the section (#478)
+//   keep       keep the run's frozen changes in the project's folder: save the
+//              folder as it was as verifier-before-keep/, then merge each file
+//              the run changed, added or removed three ways against the
+//              project's file, and confirm each changed or added verifier at
+//              the merge commit in the index. Prints kept .postmaster/verifier
+//              with one added:/changed:/removed: line per applied file and one
+//              confirmed <seg> at <sha> per touched verifier, or nothing to
+//              keep when the run changed nothing. A change that clashes with
+//              one kept since the run started stays as the project has it and
+//              prints as not kept: <file> (<reason>). The postmaster runs this
+//              after the landing, before the stale query (#478)
 //   --handover the session's HANDOVER.md, with one ## Verifier: section per verifier
 //              carrying a Folder: line and a Proof: line (the proof file's absolute
 //              path alone, or none with the reason). Proven means the file exists
@@ -114,14 +148,19 @@
 //              land need a whole number of seconds past zero
 //   --word      the user gave the merge word for this landing, so a local landing
 //              merges without consulting merge authority (setup's launch-card yes)
-//   --at       the commit stale compares each confirmation against (default HEAD)
+//   --at       the commit stale compares each confirmation against (default HEAD),
+//              or the merge commit keep confirms each changed verifier at
+//   --freeze   changes also snapshots the worktree's copy as verifier-final/
+//   --run      the run's dispatch directory (make, check, land, upkeep, keep)
 //
 //   --repository  make commits the verifiers on a branch for check and land, as
 //           before; without it they are kept under .postmaster/verifier/ instead
-//   exit 0  prompt, list or stale printed; make: HANDOVER.md validated, the interactive session
-//           left open in its tab, the headless one ended with no wall;
+//   exit 0  prompt, list, stale, record, arm or changes printed; make: HANDOVER.md
+//           validated, the interactive session left open in its tab, the headless
+//           one ended with no wall;
 //           check: the branch lands; land: merged, or the pull request waits for the word;
-//           upkeep, upkeep-report: every claim holds or is corrected
+//           upkeep, upkeep-report: every claim holds or is corrected;
+//           keep: every change applied, or nothing to keep
 //   exit 1  make failed: the launch would not start, the session was still running at the
 //           limit, both roles walled, the handover, commit, verifier, upkeep line or
 //           index entry is missing, a verifier was made for an unlisted surface,
@@ -132,20 +171,25 @@
 //           upkeep, upkeep-report: a claim is left uncorrected or unchecked, the report
 //           is missing or malformed, or the pass failed as make fails;
 //           upkeep --correct: as above, or the branch reaches past the folders,
-//           or a verifier is left unconfirmed
+//           or a verifier is left unconfirmed;
+//           keep: a change clashes with one kept since the run started, or the
+//           keep was not logged
 //   exit 2  usage: an unknown command or surface, a missing argument, a bad flag or
 //           timeout, a path that is not a git repository or not its top, a repo holding
-//           no commit or no verifiers, no run at the dispatch, or a branch that is not
-//           a verifier branch
+//           no commit or no verifiers, no run at the dispatch, an unknown --at
+//           commit, or a branch that is not a verifier branch
 import { createHash } from "node:crypto";
 import {
   cpSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
+  readlinkSync,
   realpathSync,
+  renameSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -157,7 +201,7 @@ import { endingWallMessage, isWallMessage } from "./launch.ts";
 import { ensureIgnore, isSymlink } from "./lib/effective-config.ts";
 import { beside, scriptsDir } from "./lib/paths.ts";
 import { run, type RunResult } from "./lib/proc.ts";
-import { RESULT_RE } from "./verify.ts";
+import { ensureCommonExclude, RESULT_RE } from "./verify.ts";
 
 const USAGE = `usage: run verifier prompt <repo> <surface>... [--headless]
        run verifier list <repo>
@@ -171,6 +215,10 @@ const USAGE = `usage: run verifier prompt <repo> <surface>... [--headless]
          [--folder <dir>] [--correct]
        run verifier upkeep-prompt <repo> [--headless] [--folder <dir>] [--correct]
        run verifier upkeep-report <repo> --run <dispatch> --report <file> [--folder <dir>]
+       run verifier record <repo> <dispatch>
+       run verifier arm <worktree> <dispatch>
+       run verifier changes <worktree> <dispatch> [--freeze]
+       run verifier keep <repo> --run <dispatch> --at <commit>
 
        each surface is a kind or kind:name: cli, web, library, backend, cli-examples,
        browser-suite, web-journey or library-tests; backend takes a name, as backend:api;
@@ -414,6 +462,34 @@ export interface ParsedUpkeepReport {
   folder: string | null;
 }
 
+export interface ParsedRecord {
+  cmd: "record";
+  repo: string;
+  dispatch: string;
+}
+
+export interface ParsedArm {
+  cmd: "arm";
+  wt: string;
+  dispatch: string;
+}
+
+export interface ParsedChanges {
+  cmd: "changes";
+  wt: string;
+  dispatch: string;
+  /** Set only with --freeze: snapshot the worktree's copy as verifier-final/. */
+  freeze?: boolean;
+}
+
+export interface ParsedKeep {
+  cmd: "keep";
+  repo: string;
+  dispatch: string;
+  /** The merge commit to confirm each changed verifier at. */
+  at: string;
+}
+
 export type Parsed =
   | {
       ok: true;
@@ -426,7 +502,11 @@ export type Parsed =
         | ParsedLand
         | ParsedUpkeep
         | ParsedUpkeepPrompt
-        | ParsedUpkeepReport;
+        | ParsedUpkeepReport
+        | ParsedRecord
+        | ParsedArm
+        | ParsedChanges
+        | ParsedKeep;
     }
   | { ok: false; error: string };
 
@@ -518,7 +598,11 @@ export function parseArgs(argv: string[]): Parsed {
     cmd !== "land" &&
     cmd !== "upkeep" &&
     cmd !== "upkeep-prompt" &&
-    cmd !== "upkeep-report"
+    cmd !== "upkeep-report" &&
+    cmd !== "record" &&
+    cmd !== "arm" &&
+    cmd !== "changes" &&
+    cmd !== "keep"
   ) {
     return { ok: false, error: `unknown command: ${cmd}` };
   }
@@ -545,6 +629,59 @@ export function parseArgs(argv: string[]): Parsed {
       }
     }
     return { ok: true, req: { cmd, repo, at } };
+  }
+  if (cmd === "record") {
+    const dispatch = argv[2];
+    if (repo === undefined || dispatch === undefined || argv.length !== 3) {
+      return { ok: false, error: "record takes a repo and a dispatch" };
+    }
+    return { ok: true, req: { cmd, repo, dispatch } };
+  }
+  if (cmd === "arm") {
+    const dispatch = argv[2];
+    if (repo === undefined || dispatch === undefined || argv.length !== 3) {
+      return { ok: false, error: "arm takes a worktree and a dispatch" };
+    }
+    return { ok: true, req: { cmd, wt: repo, dispatch } };
+  }
+  if (cmd === "changes") {
+    const dispatch = argv[2];
+    if (repo === undefined || dispatch === undefined) {
+      return { ok: false, error: "changes takes a worktree and a dispatch" };
+    }
+    const rest = argv.slice(3);
+    if (rest.length > 1) return { ok: false, error: "changes takes a worktree and a dispatch" };
+    if (rest.length === 1 && rest[0] !== "--freeze") {
+      return { ok: false, error: `unknown flag for changes: ${rest[0]}` };
+    }
+    const req: ParsedChanges = { cmd, wt: repo, dispatch };
+    if (rest.length === 1) req.freeze = true;
+    return { ok: true, req };
+  }
+  if (cmd === "keep") {
+    if (repo === undefined) return { ok: false, error: "keep takes a repo" };
+    let dispatch: string | null = null;
+    let at: string | null = null;
+    const rest = argv.slice(2);
+    for (let j = 0; j < rest.length; j++) {
+      const flag = rest[j] as string;
+      if (flag === "--run") {
+        const value = rest[j + 1];
+        if (value === undefined) return { ok: false, error: "keep needs --run <dispatch>" };
+        dispatch = value;
+        j++;
+      } else if (flag === "--at") {
+        const value = rest[j + 1];
+        if (value === undefined) return { ok: false, error: "keep needs --at <commit>" };
+        at = value;
+        j++;
+      } else {
+        return { ok: false, error: `unknown flag for keep: ${flag}` };
+      }
+    }
+    if (dispatch === null) return { ok: false, error: "keep needs --run <dispatch>" };
+    if (at === null) return { ok: false, error: "keep needs --at <commit>" };
+    return { ok: true, req: { cmd, repo, dispatch, at } };
   }
   if (cmd === "upkeep" || cmd === "upkeep-prompt" || cmd === "upkeep-report") {
     return parseUpkeepArgs(cmd, repo, argv.slice(2));
@@ -4653,6 +4790,621 @@ function runLandCmd(req: ParsedLand): number {
   return outcome.code;
 }
 
+/**
+ * A run's own copies of the local verifiers (#478). At dispatch the postmaster
+ * records the project's folder in the run's record; the coachman arms each
+ * workhorse copy and the synthesis worktree with it, adds to the synthesis
+ * copy whatever a criterion needs, freezes it at the ship card, and the
+ * postmaster keeps the frozen changes after the landing.
+ */
+
+/** The run record's snapshot of the project's folder at dispatch. */
+const AT_DISPATCH = "verifier-at-dispatch";
+/** The run record's snapshot of the synthesis copy at the ship card. */
+const FINAL = "verifier-final";
+/** The run record's snapshot of the project's folder before a keep. */
+const BEFORE_KEEP = "verifier-before-keep";
+
+/** One entry of a verifier tree: a file's bytes, or a label for anything else. */
+export type TreeValue = { kind: "file"; bytes: Buffer } | { kind: "other"; label: string };
+
+/** A verifier tree's entries by path relative to its root. */
+export type VerifierTree = Map<string, TreeValue>;
+
+/**
+ * Read a verifier tree into memory. An absent root reads as empty; a root
+ * that is not a directory reads as empty too, and the commands refuse that
+ * separately. Symlinks and special files read as labels, never followed.
+ */
+export function readVerifierTree(root: string): VerifierTree {
+  const out: VerifierTree = new Map();
+  try {
+    if (!statSync(root).isDirectory()) return out;
+  } catch {
+    return out;
+  }
+  const walk = (dir: string, prefix: string): void => {
+    let names: string[];
+    try {
+      names = readdirSync(dir);
+    } catch {
+      return;
+    }
+    for (const name of names.sort()) {
+      if (name === "" || name === "." || name === "..") continue;
+      const full = join(dir, name);
+      const rel = prefix === "" ? name : `${prefix}/${name}`;
+      let st;
+      try {
+        st = lstatSync(full);
+      } catch {
+        continue;
+      }
+      if (st.isDirectory() && !st.isSymbolicLink()) {
+        walk(full, rel);
+      } else if (st.isFile() && !st.isSymbolicLink()) {
+        try {
+          out.set(rel, { kind: "file", bytes: readFileSync(full) });
+        } catch {
+          // Raced away between the listing and the read; the next read sees it.
+        }
+      } else {
+        let label = "special";
+        if (st.isSymbolicLink()) {
+          try {
+            label = `symlink -> ${readlinkSync(full)}`;
+          } catch {
+            label = "symlink";
+          }
+        }
+        out.set(rel, { kind: "other", label });
+      }
+    }
+  };
+  walk(root, "");
+  return out;
+}
+
+/** Whether two tree entries hold the same thing. */
+function treeValueEquals(a: TreeValue, b: TreeValue): boolean {
+  if (a.kind !== b.kind) return false;
+  if (a.kind === "file" && b.kind === "file") return a.bytes.equals(b.bytes);
+  if (a.kind === "other" && b.kind === "other") return a.label === b.label;
+  return false;
+}
+
+/** The paths two trees differ on, each sorted. */
+export interface TreeDiff {
+  added: string[];
+  removed: string[];
+  changed: string[];
+}
+
+function sortedRels(tree: VerifierTree): string[] {
+  return [...tree.keys()].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+}
+
+/** Compare two verifier trees: what the second adds, removes and changes. */
+export function compareTrees(base: VerifierTree, next: VerifierTree): TreeDiff {
+  const added: string[] = [];
+  const removed: string[] = [];
+  const changed: string[] = [];
+  for (const rel of sortedRels(base)) {
+    const b = base.get(rel) as TreeValue;
+    const n = next.get(rel);
+    if (n === undefined) removed.push(rel);
+    else if (!treeValueEquals(b, n)) changed.push(rel);
+  }
+  for (const rel of sortedRels(next)) {
+    if (!base.has(rel)) added.push(rel);
+  }
+  return { added, removed, changed };
+}
+
+/** How many regular files a tree holds. */
+function countFiles(tree: VerifierTree): number {
+  let n = 0;
+  for (const v of tree.values()) {
+    if (v.kind === "file") n++;
+  }
+  return n;
+}
+
+/** The verifier segment a tree-relative path belongs to, or null at the root. */
+export function segOfRel(rel: string): string | null {
+  const slash = rel.indexOf("/");
+  return slash === -1 ? null : rel.slice(0, slash);
+}
+
+/**
+ * Replace a tree with a copy of another: copy aside, remove the destination,
+ * rename into place, so a failed copy leaves the destination as it was.
+ */
+function replaceTree(src: string, dest: string): void {
+  const tmp = `${dest}.new-${process.pid}`;
+  rmSync(tmp, { recursive: true, force: true });
+  try {
+    cpSync(src, tmp, { recursive: true });
+  } catch (e) {
+    rmSync(tmp, { recursive: true, force: true });
+    throw new RunError(`cannot copy ${src}: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  rmSync(dest, { recursive: true, force: true });
+  try {
+    renameSync(tmp, dest);
+  } catch (e) {
+    rmSync(tmp, { recursive: true, force: true });
+    throw new RunError(`cannot place ${dest}: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+
+/** The dispatch holds a run, or the usage error saying it does not. */
+function runDispatch(dispatch: string, given: string): string {
+  const resolved = resolve(dispatch);
+  if (!existsSync(join(resolved, "run.json"))) {
+    throw new UsageError(`no run at the dispatch: ${given}`);
+  }
+  return resolved;
+}
+
+function runRecordCmd(req: ParsedRecord): number {
+  const repo = resolve(req.repo);
+  if (!isRepo(repo)) throw new UsageError(`not a git repository: ${req.repo}`);
+  if (!isRepoTop(repo)) throw new UsageError(`not the top of its repository: ${req.repo}`);
+  const dispatch = runDispatch(req.dispatch, req.dispatch);
+  const dest = join(dispatch, AT_DISPATCH);
+  if (existsSync(dest)) {
+    console.log("already recorded; left alone");
+    return 0;
+  }
+  const src = join(repo, LOCAL_VERIFIER_ROOT);
+  if (!existsSync(src)) {
+    console.log("no local verifiers");
+    return 0;
+  }
+  if (!isDirPath(src)) {
+    throw new UsageError(`${LOCAL_VERIFIER_ROOT} is not a directory: ${req.repo}`);
+  }
+  replaceTree(src, dest);
+  console.log(`recorded ${LOCAL_VERIFIER_ROOT} (${countFiles(readVerifierTree(dest))} files)`);
+  return 0;
+}
+
+function runArmCmd(req: ParsedArm): number {
+  const top = repoTop(resolve(req.wt));
+  if (top === null) throw new UsageError(`not a git worktree: ${req.wt}`);
+  if (git(top, ["rev-parse", "HEAD"]).code !== 0) {
+    throw new UsageError(`${req.wt} holds no commit`);
+  }
+  const dispatch = runDispatch(req.dispatch, req.dispatch);
+  ensureCommonExclude(top, LOCAL_VERIFIER_ROOT);
+  const src = join(dispatch, AT_DISPATCH);
+  const dest = join(top, LOCAL_VERIFIER_ROOT);
+  if (!existsSync(src)) {
+    console.log(`armed ${top}: no verifiers recorded`);
+    return 0;
+  }
+  if (!isDirPath(src)) throw new UsageError(`not a directory: ${src}`);
+  replaceTree(src, dest);
+  console.log(`armed ${top}: ${countFiles(readVerifierTree(dest))} files in ${dest}`);
+  return 0;
+}
+
+/** One changed file with the diff lines the section prints under it. */
+export interface ChangedFile {
+  rel: string;
+  diff: string[];
+}
+
+/**
+ * Render the run's verifier changes as the card's section: each changed page
+ * with its diff, each added and removed file. Empty groups are left out, and
+ * no change at all renders as the one line saying so.
+ */
+export function renderChangesSection(
+  changed: ChangedFile[],
+  added: string[],
+  removed: string[],
+): string {
+  if (changed.length + added.length + removed.length === 0) return "verifiers unchanged";
+  const out = ["## Verifier changes", ""];
+  if (changed.length > 0) {
+    out.push("Changed:", "");
+    for (const c of changed) {
+      out.push(`- ${c.rel}`);
+      out.push(...c.diff);
+    }
+    out.push("");
+  }
+  if (added.length > 0) {
+    out.push("Added:", "");
+    for (const rel of added) out.push(`- ${rel}`);
+    out.push("");
+  }
+  if (removed.length > 0) {
+    out.push("Removed:", "");
+    for (const rel of removed) out.push(`- ${rel}`);
+    out.push("");
+  }
+  out.pop();
+  return out.join("\n");
+}
+
+/**
+ * The hunk lines of a unified diff between two files, headers dropped. Binary
+ * files read as the one line saying so.
+ */
+function diffTreeFile(top: string, oldPath: string, newPath: string, rel: string): string[] {
+  const env: Record<string, string | undefined> = {};
+  for (const k of GIT_REDIRECT_ENV) env[k] = undefined;
+  const r = run(
+    "git",
+    [
+      "-C",
+      top,
+      "diff",
+      "--no-index",
+      "--no-color",
+      "--no-ext-diff",
+      "--unified=3",
+      "--",
+      oldPath,
+      newPath,
+    ],
+    { env },
+  );
+  if (r.code !== 0 && r.code !== 1) {
+    throw new RunError(`cannot diff ${rel}: ${r.err.trim() || r.out.trim() || `exit ${r.code}`}`);
+  }
+  const lines = r.out.split("\n");
+  const firstHunk = lines.findIndex((l) => l.startsWith("@@"));
+  if (firstHunk === -1) {
+    if (/Binary files /u.test(r.out)) return ["(binary files differ)"];
+    return [];
+  }
+  // From the first hunk on: the diff --git, index, --- and +++ headers stay
+  // behind, so a removed line starting with dashes cannot read as one.
+  return lines
+    .slice(firstHunk)
+    .filter(
+      (l) =>
+        l.startsWith("@@") ||
+        l.startsWith(" ") ||
+        l.startsWith("+") ||
+        l.startsWith("-") ||
+        l.startsWith("\\"),
+    );
+}
+
+function runChangesCmd(req: ParsedChanges): number {
+  const top = repoTop(resolve(req.wt));
+  if (top === null) throw new UsageError(`not a git worktree: ${req.wt}`);
+  const dispatch = runDispatch(req.dispatch, req.dispatch);
+  const baseRoot = join(dispatch, AT_DISPATCH);
+  const currentRoot = join(top, LOCAL_VERIFIER_ROOT);
+  if (existsSync(baseRoot) && !isDirPath(baseRoot)) {
+    throw new RunError(`not a directory: ${baseRoot}`);
+  }
+  if (existsSync(currentRoot) && !isDirPath(currentRoot)) {
+    throw new RunError(`not a directory: ${currentRoot}`);
+  }
+  if (req.freeze === true) {
+    const final = join(dispatch, FINAL);
+    if (!existsSync(currentRoot)) {
+      rmSync(final, { recursive: true, force: true });
+      console.error("no copy to freeze");
+    } else {
+      replaceTree(currentRoot, final);
+      console.error(`frozen ${final} (${countFiles(readVerifierTree(final))} files)`);
+    }
+  }
+  const base = readVerifierTree(baseRoot);
+  const next = readVerifierTree(currentRoot);
+  const diff = compareTrees(base, next);
+  const changed: ChangedFile[] = diff.changed.map((rel) => {
+    const b = base.get(rel) as TreeValue;
+    const n = next.get(rel) as TreeValue;
+    if (b.kind !== "file" || n.kind !== "file") return { rel, diff: ["(not a regular file)"] };
+    return {
+      rel,
+      diff: diffTreeFile(top, join(baseRoot, rel), join(currentRoot, rel), rel),
+    };
+  });
+  console.log(renderChangesSection(changed, diff.added, diff.removed));
+  return 0;
+}
+
+/** What keep does with one tree-relative path. */
+export type KeepDecision =
+  | { kind: "untouched" }
+  | { kind: "take-add" }
+  | { kind: "take-change" }
+  | { kind: "take-remove" }
+  | { kind: "merge" }
+  | { kind: "clash"; reason: string };
+
+/**
+ * Decide one path from the folder at dispatch, the run's frozen copy and the
+ * project's file: a path the run left alone is untouched whatever the project
+ * did; a path the run changed takes the run's version when the project left
+ * it alone, merges when both changed it, and clashes when the project added
+ * or removed it too. Anything but a regular file on a changed path clashes,
+ * and keep never creates a symlink in the project.
+ */
+export function classifyKeepFile(
+  b: TreeValue | undefined,
+  f: TreeValue | undefined,
+  c: TreeValue | undefined,
+): KeepDecision {
+  const same = (x: TreeValue | undefined, y: TreeValue | undefined): boolean =>
+    x !== undefined && y !== undefined && treeValueEquals(x, y);
+  if (f === undefined && b === undefined) return { kind: "untouched" };
+  if (f === undefined) {
+    if (c === undefined) return { kind: "untouched" };
+    if (same(c, b)) return { kind: "take-remove" };
+    return { kind: "clash", reason: "changed in the project" };
+  }
+  if (b === undefined) {
+    if (c === undefined) {
+      return f.kind === "file"
+        ? { kind: "take-add" }
+        : { kind: "clash", reason: "not a regular file" };
+    }
+    if (same(c, f)) return { kind: "untouched" };
+    return { kind: "clash", reason: "added on both sides" };
+  }
+  if (treeValueEquals(f, b)) return { kind: "untouched" };
+  if (f.kind !== "file" || b.kind !== "file" || (c !== undefined && c.kind !== "file")) {
+    return { kind: "clash", reason: "not a regular file" };
+  }
+  if (c === undefined) return { kind: "clash", reason: "removed in the project" };
+  if (treeValueEquals(c, b)) return { kind: "take-change" };
+  if (treeValueEquals(c, f)) return { kind: "untouched" };
+  return { kind: "merge" };
+}
+
+/**
+ * Merge three file versions with git merge-file: the project's, the one at
+ * dispatch, the run's. Clean merges come back as bytes; anything else is a
+ * clash, binary files included. The merge runs on copies, never on the
+ * project's file.
+ */
+export function mergeFileThreeWay(
+  cur: Buffer,
+  base: Buffer,
+  other: Buffer,
+): { ok: true; merged: Buffer } | { ok: false } {
+  const tmp = mkdtempSync(join(tmpdir(), "verifier-keep-"));
+  try {
+    const curP = join(tmp, "current");
+    const baseP = join(tmp, "base");
+    const otherP = join(tmp, "other");
+    writeFileSync(curP, cur);
+    writeFileSync(baseP, base);
+    writeFileSync(otherP, other);
+    const env: Record<string, string | undefined> = {};
+    for (const k of GIT_REDIRECT_ENV) env[k] = undefined;
+    const r = run(
+      "git",
+      ["merge-file", "-L", "project", "-L", "at dispatch", "-L", "run", curP, baseP, otherP],
+      { env },
+    );
+    if (r.code !== 0) return { ok: false };
+    return { ok: true, merged: readFileSync(curP) };
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Confirm one verifier's index bullet at a commit: the bullet's Confirmed sha
+ * becomes the commit, or the label is added when the bullet names none. Null
+ * when no single bullet names the verifier, or the edit does not read back.
+ */
+export function stampConfirmed(indexText: string, seg: string, sha: string): string | null {
+  const vdir = `${LOCAL_VERIFIER_ROOT}/${seg}`;
+  const lines = indexText.split("\n");
+  const starts: number[] = [];
+  lines.forEach((line, i) => {
+    if (BULLET_START_RE.test(line) && spanNamesDir([line], vdir)) starts.push(i);
+  });
+  if (starts.length !== 1) return null;
+  const start = starts[0] as number;
+  let end = start + 1;
+  while (end < lines.length) {
+    const line = lines[end] as string;
+    if (HEADING_RE.test(line)) break;
+    if (line !== "" && !line.startsWith(" ") && !line.startsWith("\t")) break;
+    end++;
+  }
+  const span = lines.slice(start, end).join("\n");
+  let edited: string;
+  if (CONFIRMED_RE.test(span)) {
+    edited = span.replace(CONFIRMED_RE, (m) => m.replace(/[0-9a-fA-F]{40}/u, sha));
+  } else {
+    edited = `${lines[start] as string}, Confirmed: ${sha}\n${lines.slice(start + 1, end).join("\n")}`;
+  }
+  const next = [...lines.slice(0, start), ...edited.split("\n"), ...lines.slice(end)].join("\n");
+  return bulletConfirm(next, vdir) === sha ? next : null;
+}
+
+/** Remove the directories a keep's removals left empty, deepest first. */
+function pruneEmptyDirs(root: string, rels: string[]): void {
+  const dirs = new Set<string>();
+  for (const rel of rels) {
+    let d = dirname(rel);
+    while (d !== "." && d !== "") {
+      dirs.add(d);
+      d = dirname(d);
+    }
+  }
+  const ordered = [...dirs].sort((a, b) => b.length - a.length || (a < b ? -1 : 1));
+  for (const d of ordered) {
+    try {
+      if (readdirSync(join(root, d)).length === 0) rmSync(join(root, d));
+    } catch {
+      // Gone or busy: a leftover empty directory harms nothing.
+    }
+  }
+}
+
+function logRunKeep(dispatch: string, summary: string): void {
+  const r = run(RUN, ["log-action", dispatch, "postmaster", "note", LOCAL_VERIFIER_ROOT, summary]);
+  if (r.code !== 0) throw new RunError(`the keep was not logged: ${r.err.trim() || r.out.trim()}`);
+}
+
+function runKeepCmd(req: ParsedKeep): number {
+  const repo = resolve(req.repo);
+  if (!isRepo(repo)) throw new UsageError(`not a git repository: ${req.repo}`);
+  if (!isRepoTop(repo)) throw new UsageError(`not the top of its repository: ${req.repo}`);
+  const dispatch = runDispatch(req.dispatch, req.dispatch);
+  const resolved = git(repo, ["rev-parse", "--verify", "--quiet", `${req.at}^{commit}`]);
+  if (resolved.code !== 0 || resolved.out.trim() === "") {
+    throw new UsageError(`unknown commit: ${req.at}`);
+  }
+  const merge = resolved.out.trim();
+  const baseRoot = join(dispatch, AT_DISPATCH);
+  const finalRoot = join(dispatch, FINAL);
+  if (!existsSync(finalRoot)) {
+    console.log("nothing to keep");
+    return 0;
+  }
+  if (!isDirPath(finalRoot)) throw new RunError(`not a directory: ${finalRoot}`);
+  if (existsSync(baseRoot) && !isDirPath(baseRoot)) {
+    throw new RunError(`not a directory: ${baseRoot}`);
+  }
+  const base = readVerifierTree(baseRoot);
+  const final = readVerifierTree(finalRoot);
+  const runDiff = compareTrees(base, final);
+  if (runDiff.added.length + runDiff.removed.length + runDiff.changed.length === 0) {
+    console.log("nothing to keep");
+    return 0;
+  }
+  const dest = join(repo, LOCAL_VERIFIER_ROOT);
+  if (existsSync(dest) && !isDirPath(dest)) {
+    throw new UsageError(`${LOCAL_VERIFIER_ROOT} is not a directory: ${req.repo}`);
+  }
+  ensureIgnore(repo, true);
+  const before = join(dispatch, BEFORE_KEEP);
+  if (existsSync(dest)) {
+    replaceTree(dest, before);
+  } else {
+    rmSync(before, { recursive: true, force: true });
+  }
+  try {
+    return applyKeep(dispatch, dest, before, base, final, merge);
+  } catch (e) {
+    if (e instanceof UsageError || e instanceof RunError) throw e;
+    throw new RunError(
+      `the keep failed partway: ${e instanceof Error ? e.message : String(e)}; the folder as it was is at ${before}`,
+    );
+  }
+}
+
+/** Apply the frozen changes to the project's folder and print what landed. */
+function applyKeep(
+  dispatch: string,
+  dest: string,
+  before: string,
+  base: VerifierTree,
+  final: VerifierTree,
+  merge: string,
+): number {
+  const current = readVerifierTree(dest);
+  const rels = new Set<string>([...base.keys(), ...final.keys(), ...current.keys()]);
+  const ordered = [...rels].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  const added: string[] = [];
+  const changed: string[] = [];
+  const removed: string[] = [];
+  const clashes: { rel: string; reason: string }[] = [];
+  const touched = new Set<string>();
+  const removedRels: string[] = [];
+  for (const rel of ordered) {
+    const decision = classifyKeepFile(base.get(rel), final.get(rel), current.get(rel));
+    const target = join(dest, rel);
+    if (decision.kind === "untouched") continue;
+    if (decision.kind === "clash") {
+      clashes.push({ rel, reason: decision.reason });
+      continue;
+    }
+    if (decision.kind === "take-remove") {
+      rmSync(target, { force: true });
+      removed.push(rel);
+      removedRels.push(rel);
+    } else if (decision.kind === "take-add" || decision.kind === "take-change") {
+      const f = final.get(rel) as TreeValue;
+      if (f.kind !== "file") {
+        clashes.push({ rel, reason: "not a regular file" });
+        continue;
+      }
+      mkdirSync(dirname(target), { recursive: true });
+      writeFileSync(target, f.bytes);
+      (decision.kind === "take-add" ? added : changed).push(rel);
+    } else {
+      const c = current.get(rel) as TreeValue;
+      const b = base.get(rel) as TreeValue;
+      const f = final.get(rel) as TreeValue;
+      if (c.kind !== "file" || b.kind !== "file" || f.kind !== "file") {
+        clashes.push({ rel, reason: "not a regular file" });
+        continue;
+      }
+      const merged = mergeFileThreeWay(c.bytes, b.bytes, f.bytes);
+      if (!merged.ok) {
+        clashes.push({ rel, reason: "changed on both sides" });
+        continue;
+      }
+      mkdirSync(dirname(target), { recursive: true });
+      writeFileSync(target, merged.merged);
+      changed.push(rel);
+    }
+    const seg = segOfRel(rel);
+    if (seg !== null) touched.add(seg);
+  }
+  pruneEmptyDirs(dest, removedRels);
+  const confirmed: string[] = [];
+  const segs = [...touched].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  if (segs.length > 0) {
+    const indexPath = join(dest, "README.md");
+    let indexText: string | null = null;
+    try {
+      indexText = readFileSync(indexPath, "utf8");
+    } catch {
+      indexText = null;
+    }
+    for (const seg of segs) {
+      if (indexText === null) {
+        clashes.push({ rel: `${seg}/`, reason: "no bullet in the index" });
+        continue;
+      }
+      const stamped = stampConfirmed(indexText, seg, merge);
+      if (stamped === null) {
+        clashes.push({ rel: `${seg}/`, reason: "no bullet in the index" });
+        continue;
+      }
+      indexText = stamped;
+      confirmed.push(seg);
+    }
+    if (indexText !== null && confirmed.length > 0) writeFileSync(indexPath, indexText);
+  }
+  // The confirmation is part of the keep: a clash on it fails the keep,
+  // but the applied files stay applied.
+  const lines = [`kept ${LOCAL_VERIFIER_ROOT}`];
+  if (existsSync(before)) lines.push(`before ${before}`);
+  for (const rel of added) lines.push(`added ${rel}`);
+  for (const rel of changed) lines.push(`changed ${rel}`);
+  for (const rel of removed) lines.push(`removed ${rel}`);
+  for (const seg of confirmed) lines.push(`confirmed ${seg} at ${merge}`);
+  for (const clash of clashes) lines.push(`not kept: ${clash.rel} (${clash.reason})`);
+  for (const line of lines) console.log(line);
+  const kept = added.length + changed.length + removed.length;
+  logRunKeep(
+    dispatch,
+    `kept ${kept} files, confirmed ${confirmed.length === 0 ? "none" : confirmed.join(", ")} at ${merge}` +
+      (clashes.length === 0 ? "" : `; not kept: ${clashes.map((c) => c.rel).join(", ")}`),
+  );
+  return clashes.length === 0 ? 0 : 1;
+}
+
 function main(argv: string[]): number {
   // The verifier names every repo explicitly, so inherited git redirectors
   // can only corrupt: drop them for this process and every session it starts.
@@ -4668,6 +5420,10 @@ function main(argv: string[]): number {
     if (parsed.req.cmd === "upkeep") return runUpkeep(parsed.req);
     if (parsed.req.cmd === "upkeep-prompt") return runUpkeepPrompt(parsed.req);
     if (parsed.req.cmd === "upkeep-report") return runUpkeepReportCmd(parsed.req);
+    if (parsed.req.cmd === "record") return runRecordCmd(parsed.req);
+    if (parsed.req.cmd === "arm") return runArmCmd(parsed.req);
+    if (parsed.req.cmd === "changes") return runChangesCmd(parsed.req);
+    if (parsed.req.cmd === "keep") return runKeepCmd(parsed.req);
     return runMake(parsed.req);
   } catch (e) {
     if (e instanceof UsageError) {

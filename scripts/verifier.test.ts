@@ -32,8 +32,10 @@ import {
   type ClassifiedEntry,
   checkMultiVerifiers,
   classifyEntries,
+  classifyKeepFile,
   commitsPastBase,
   committedFeaturePages,
+  compareTrees,
   confirmedSha,
   copyKeptIntoProject,
   correctedClaims,
@@ -71,6 +73,7 @@ import {
   localTag,
   matchDependedFiles,
   mergeAuthorityOf,
+  mergeFileThreeWay,
   modeBlocks,
   type NamedSurface,
   normalizeFolder,
@@ -92,10 +95,12 @@ import {
   pickWorktree,
   presentVerifierFolders,
   pruneWorktrees,
+  readVerifierTree,
   refuseLine,
   remoteFromSymbolicRef,
   removeKeptPaths,
   removeProvisioning,
+  renderChangesSection,
   renderListing,
   renderPrompt,
   renderTemplate,
@@ -103,6 +108,7 @@ import {
   roleHarness,
   scopeVdirs,
   scrubGitEnv,
+  segOfRel,
   sendText,
   sendVerdict,
   sessionFolder,
@@ -110,6 +116,7 @@ import {
   spanNamesDir,
   spanSegs,
   spawnCommand,
+  stampConfirmed,
   strayUncommitted,
   strayVerifierPaths,
   surfaceFolder,
@@ -121,6 +128,7 @@ import {
   surfaceProse,
   surfaceRule,
   timeoutMs,
+  type TreeValue,
   UPKEEP_LINE,
   unlistedSentence,
   unrunProject,
@@ -4599,5 +4607,213 @@ describe("upkeepCorrectSendText", () => {
     expect(text).toContain("/d/logs/verifier-upkeep-prompt.txt");
     expect(text).toMatch(/correcting upkeep pass/u);
     expect(text.endsWith("\n")).toBe(true);
+  });
+});
+
+describe("run-copy parseArgs", () => {
+  test("record takes a repo and a dispatch", () => {
+    expect(parseArgs(["record", "r", "d"])).toEqual({
+      ok: true,
+      req: { cmd: "record", repo: "r", dispatch: "d" },
+    });
+    for (const argv of [["record"], ["record", "r"], ["record", "r", "d", "x"]]) {
+      expect(parseArgs(argv)).toEqual({ ok: false, error: "record takes a repo and a dispatch" });
+    }
+  });
+
+  test("arm takes a worktree and a dispatch", () => {
+    expect(parseArgs(["arm", "w", "d"])).toEqual({
+      ok: true,
+      req: { cmd: "arm", wt: "w", dispatch: "d" },
+    });
+    for (const argv of [["arm"], ["arm", "w"], ["arm", "w", "d", "x"]]) {
+      expect(parseArgs(argv)).toEqual({ ok: false, error: "arm takes a worktree and a dispatch" });
+    }
+  });
+
+  test("changes takes a worktree, a dispatch and an optional freeze", () => {
+    expect(parseArgs(["changes", "w", "d"])).toEqual({
+      ok: true,
+      req: { cmd: "changes", wt: "w", dispatch: "d" },
+    });
+    expect(parseArgs(["changes", "w", "d", "--freeze"])).toEqual({
+      ok: true,
+      req: { cmd: "changes", wt: "w", dispatch: "d", freeze: true },
+    });
+    expect(parseArgs(["changes", "w"])).toEqual({
+      ok: false,
+      error: "changes takes a worktree and a dispatch",
+    });
+    expect(parseArgs(["changes", "w", "d", "--at"])).toEqual({
+      ok: false,
+      error: "unknown flag for changes: --at",
+    });
+  });
+
+  test("keep takes a repo with a run and a commit", () => {
+    expect(parseArgs(["keep", "r", "--run", "d", "--at", "m"])).toEqual({
+      ok: true,
+      req: { cmd: "keep", repo: "r", dispatch: "d", at: "m" },
+    });
+    expect(parseArgs(["keep"])).toEqual({ ok: false, error: "keep takes a repo" });
+    expect(parseArgs(["keep", "r", "--at", "m"])).toEqual({
+      ok: false,
+      error: "keep needs --run <dispatch>",
+    });
+    expect(parseArgs(["keep", "r", "--run", "d"])).toEqual({
+      ok: false,
+      error: "keep needs --at <commit>",
+    });
+    expect(parseArgs(["keep", "r", "--run", "d", "--at", "m", "--freeze"])).toEqual({
+      ok: false,
+      error: "unknown flag for keep: --freeze",
+    });
+  });
+});
+
+describe("readVerifierTree and compareTrees", () => {
+  test("reads files and labels symlinks without following them", () => {
+    const dir = tempDir();
+    try {
+      writeRepoFile(dir, "t/a.md", "# a\n");
+      writeRepoFile(dir, "t/sub/b.md", "# b\n");
+      symlinkSync("a.md", join(dir, "t/link.md"));
+      const tree = readVerifierTree(join(dir, "t"));
+      expect([...tree.keys()].sort()).toEqual(["a.md", "link.md", "sub/b.md"]);
+      expect(tree.get("a.md")).toEqual({ kind: "file", bytes: Buffer.from("# a\n") });
+      expect(tree.get("link.md")).toEqual({ kind: "other", label: "symlink -> a.md" });
+      expect(readVerifierTree(join(dir, "missing")).size).toBe(0);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("compareTrees sorts added, removed and changed", () => {
+    const file = (s: string): TreeValue => ({ kind: "file", bytes: Buffer.from(s) });
+    const base = new Map([
+      ["b.md", file("b")],
+      ["c.md", file("c1")],
+      ["d.md", file("d")],
+    ]);
+    const next = new Map([
+      ["a.md", file("a")],
+      ["c.md", file("c2")],
+      ["d.md", file("d")],
+    ]);
+    expect(compareTrees(base, next)).toEqual({
+      added: ["a.md"],
+      removed: ["b.md"],
+      changed: ["c.md"],
+    });
+    expect(compareTrees(base, base)).toEqual({ added: [], removed: [], changed: [] });
+  });
+});
+
+describe("renderChangesSection", () => {
+  test("renders each group and skips the empty ones", () => {
+    const section = renderChangesSection(
+      [{ rel: "c.md", diff: ["@@ -1 +1 @@", "-a", "+b"] }],
+      ["n.md"],
+      [],
+    );
+    expect(section).toBe(
+      "## Verifier changes\n\nChanged:\n\n- c.md\n@@ -1 +1 @@\n-a\n+b\n\nAdded:\n\n- n.md",
+    );
+    expect(section).not.toContain("Removed:");
+  });
+
+  test("no change renders as the one line", () => {
+    expect(renderChangesSection([], [], [])).toBe("verifiers unchanged");
+  });
+});
+
+describe("classifyKeepFile", () => {
+  const file = (s: string): TreeValue => ({ kind: "file", bytes: Buffer.from(s) });
+  const other: TreeValue = { kind: "other", label: "symlink -> x" };
+
+  test("a path the run never had is untouched", () => {
+    expect(classifyKeepFile(undefined, undefined, undefined)).toEqual({ kind: "untouched" });
+    expect(classifyKeepFile(undefined, undefined, file("c"))).toEqual({ kind: "untouched" });
+  });
+
+  test("a removal lands when the project left the file alone", () => {
+    expect(classifyKeepFile(file("b"), undefined, undefined)).toEqual({ kind: "untouched" });
+    expect(classifyKeepFile(file("b"), undefined, file("b"))).toEqual({ kind: "take-remove" });
+    expect(classifyKeepFile(file("b"), undefined, file("c"))).toEqual({
+      kind: "clash",
+      reason: "changed in the project",
+    });
+  });
+
+  test("an addition lands when the project lacks it", () => {
+    expect(classifyKeepFile(undefined, file("f"), undefined)).toEqual({ kind: "take-add" });
+    expect(classifyKeepFile(undefined, file("f"), file("f"))).toEqual({ kind: "untouched" });
+    expect(classifyKeepFile(undefined, file("f"), file("g"))).toEqual({
+      kind: "clash",
+      reason: "added on both sides",
+    });
+    expect(classifyKeepFile(undefined, other, undefined)).toEqual({
+      kind: "clash",
+      reason: "not a regular file",
+    });
+  });
+
+  test("a change takes, merges or clashes", () => {
+    expect(classifyKeepFile(file("b"), file("b"), file("c"))).toEqual({ kind: "untouched" });
+    expect(classifyKeepFile(file("b"), file("f"), undefined)).toEqual({
+      kind: "clash",
+      reason: "removed in the project",
+    });
+    expect(classifyKeepFile(file("b"), file("f"), file("b"))).toEqual({ kind: "take-change" });
+    expect(classifyKeepFile(file("b"), file("f"), file("f"))).toEqual({ kind: "untouched" });
+    expect(classifyKeepFile(file("b"), file("f"), file("c"))).toEqual({ kind: "merge" });
+    expect(classifyKeepFile(file("b"), other, file("b"))).toEqual({
+      kind: "clash",
+      reason: "not a regular file",
+    });
+  });
+});
+
+describe("mergeFileThreeWay", () => {
+  test("merges disjoint changes and reports a clash", () => {
+    const clean = mergeFileThreeWay(
+      Buffer.from("one\nTWO\nthree\nfour\nfive\n"),
+      Buffer.from("one\ntwo\nthree\nfour\nfive\n"),
+      Buffer.from("one\ntwo\nthree\nFOUR\nfive\n"),
+    );
+    expect(clean.ok).toBe(true);
+    if (clean.ok) expect(clean.merged.toString()).toBe("one\nTWO\nthree\nFOUR\nfive\n");
+    expect(mergeFileThreeWay(Buffer.from("x\n"), Buffer.from("a\n"), Buffer.from("y\n"))).toEqual({
+      ok: false,
+    });
+  });
+});
+
+describe("stampConfirmed", () => {
+  const SHA = "a".repeat(40);
+  const NEW = "b".repeat(40);
+  const INDEX = `# Verifiers\n\n- The command line verifier in .postmaster/verifier/cli/: drives it. Files: README.md, Confirmed: ${SHA}\n`;
+
+  test("replaces the bullet's sha", () => {
+    const stamped = stampConfirmed(INDEX, "cli", NEW) ?? "";
+    expect(stamped).toContain(`Confirmed: ${NEW}`);
+    expect(stamped).not.toContain(SHA);
+  });
+
+  test("adds the label when the bullet names none", () => {
+    const bare = `# Verifiers\n\n- The command line verifier in .postmaster/verifier/cli/: drives it. Files: README.md\n`;
+    expect(stampConfirmed(bare, "cli", NEW) ?? "").toContain(`Confirmed: ${NEW}`);
+  });
+
+  test("refuses zero or several bullets", () => {
+    expect(stampConfirmed("# Verifiers\n", "cli", NEW)).toBeNull();
+    expect(stampConfirmed(`${INDEX}${INDEX}`, "cli", NEW)).toBeNull();
+  });
+});
+
+describe("segOfRel", () => {
+  test("takes the first segment", () => {
+    expect(segOfRel("cli/features/f1.md")).toBe("cli");
+    expect(segOfRel("README.md")).toBeNull();
   });
 });
