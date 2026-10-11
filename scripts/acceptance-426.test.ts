@@ -14,9 +14,11 @@
 // name the package and tell the agent to stop and report it; the dispatch
 // hold exits 2. Berry's decisions run against a stub yarn here and for real
 // in the hand-run transcript on the run's card: no deterministic Berry binary
-// exists for CI, so the oracle never downloads one.
+// exists for CI, so the oracle never downloads one. One case pins that the
+// shim never recurses: bun through the shim, under timeout, with the process
+// group watched and a trip-wire that kills the tree within seconds.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   DEV_BIN,
@@ -24,6 +26,7 @@ import {
   PMS,
   ROOT,
   RUN,
+  SHIM,
   buildTarball,
   expectRefused,
   guarded,
@@ -43,6 +46,7 @@ import {
   type RegistryVersion,
 } from "./acceptance-426.ts";
 import { run } from "./lib/proc.ts";
+import { processTable } from "./lib/processes.ts";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const isoAgo = (ms: number): string => new Date(Date.now() - ms).toISOString();
@@ -100,7 +104,9 @@ function seed(): void {
   const dep = t("g-dep", "1.0.0");
   add("g-dep", "1.0.0", [v("1.0.0", old, dep, { dependencies: { "g-trans": "^1.0.0" } })]);
   const scripts = t("g-scripts", "1.0.0");
-  add("g-scripts", "1.0.0", [v("1.0.0", old, scripts, { scripts: { postinstall: "node mark.js" } })]);
+  add("g-scripts", "1.0.0", [
+    v("1.0.0", old, scripts, { scripts: { postinstall: "node mark.js" } }),
+  ]);
   const ds = t("g-depscripts", "1.0.0");
   add("g-depscripts", "1.0.0", [v("1.0.0", old, ds, { dependencies: { "g-scripts": "^1.0.0" } })]);
   const flag = t("g-flag", "1.0.0");
@@ -575,7 +581,7 @@ describe("bare syncs install the locked tree and nothing else", () => {
       expect(r.code).not.toBe(0);
       expect(installedVersion(project, "g-trans")).toBeNull();
       expect(`${r.out}\n${r.err}`).toMatch(
-        pm === "npm" ? /g-trans/ : /frozen|immutable|lockfile|sync/iu,
+        pm === "npm" ? /g-trans/u : /frozen|immutable|lockfile|sync/iu,
       );
     });
     test.skipIf(skip())(`${pm}: a first sync with an unlisted dependency is refused`, async () => {
@@ -636,6 +642,7 @@ describe("one-shot runs, globals and the trust commands", () => {
     const dispatch = mkDispatch(tmp, "oneshot-npx-miss", [], []);
     const project = mkProject(tmp, "oneshot-npx-miss-p");
     const r = await guarded(registry, dispatch, project, "npx", ["g-flag"]);
+    expect(r.code).toBe(1);
     expectRefused(r, "g-flag");
   });
   test.skipIf(!avail.bun)("bunx --no-install runs an installed binary", async () => {
@@ -656,12 +663,14 @@ describe("one-shot runs, globals and the trust commands", () => {
     const dispatch = mkDispatch(tmp, "oneshot-bunx-miss", [], []);
     const project = mkProject(tmp, "oneshot-bunx-miss-p");
     const r = await guarded(registry, dispatch, project, "bun", ["x", "g-flag"]);
+    expect(r.code).toBe(1);
     expectRefused(r, "g-flag");
   });
   test.skipIf(!avail.pnpm)("pnpm dlx of an unlisted package is refused", async () => {
     const dispatch = mkDispatch(tmp, "oneshot-dlx", [], []);
     const project = mkProject(tmp, "oneshot-dlx-p");
     const r = await guarded(registry, dispatch, project, "pnpm", ["dlx", "g-flag@1.0.0"]);
+    expect(r.code).toBe(1);
     expectRefused(r, "g-flag");
   });
   for (const pm of PMS) {
@@ -695,18 +704,21 @@ describe("one-shot runs, globals and the trust commands", () => {
       "approve",
       "g-scripts",
     ]);
+    expect(r.code).toBe(1);
     expectRefused(r, "g-scripts");
   });
   test.skipIf(!avail.pnpm)("pnpm approve-builds is refused", async () => {
     const dispatch = mkDispatch(tmp, "trust-pnpm", [], []);
     const project = mkProject(tmp, "trust-pnpm-p");
     const r = await guarded(registry, dispatch, project, "pnpm", ["approve-builds", "g-scripts"]);
+    expect(r.code).toBe(1);
     expectRefused(r, "g-scripts");
   });
   test.skipIf(!avail.bun)("bun pm trust is refused", async () => {
     const dispatch = mkDispatch(tmp, "trust-bun", [], []);
     const project = mkProject(tmp, "trust-bun-p");
     const r = await guarded(registry, dispatch, project, "bun", ["pm", "trust", "g-scripts"]);
+    expect(r.code).toBe(1);
     expectRefused(r, "g-scripts");
   });
 });
@@ -822,6 +834,105 @@ describe("non-install commands pass through", () => {
   }
 });
 
+describe("the shim never recurses", () => {
+  /** Descendant pids of root (plus root itself) from the shared process table. */
+  function treeOf(root: number): number[] {
+    const children = new Map<number, number[]>();
+    for (const [pid, info] of processTable()) {
+      const list = children.get(info.parent) ?? [];
+      list.push(pid);
+      children.set(info.parent, list);
+    }
+    const out = [root];
+    const queue = [root];
+    while (queue.length > 0) {
+      const pid = queue.pop() as number;
+      for (const kid of children.get(pid) ?? []) {
+        out.push(kid);
+        queue.push(kid);
+      }
+    }
+    return out;
+  }
+
+  function killTree(root: number): void {
+    // Leaf-first, so a parent cannot fork replacements while we kill.
+    for (const pid of treeOf(root).reverse()) {
+      try {
+        process.kill(pid, "SIGKILL");
+      } catch {
+        // Already gone.
+      }
+    }
+  }
+
+  const sleep = (ms: number): Promise<void> =>
+    new Promise((resolve) => setTimeout(() => resolve(), ms));
+
+  test.skipIf(!avail.bun)(
+    "bun through the shim answers with a small group",
+    async () => {
+      const dispatch = mkDispatch(tmp, "shim-bun", [], []);
+      const project = mkProject(tmp, "shim-bun-p");
+      const bin = join(dispatch, "guard", "bin");
+      mkdirSync(bin, { recursive: true });
+      for (const name of ["npm", "pnpm", "yarn", "bun", "npx"]) {
+        const link = join(bin, name);
+        if (!existsSync(link)) symlinkSync(SHIM, link);
+      }
+      const env = {
+        ...(process.env as Record<string, string>),
+        PATH: `${bin}:${DEV_BIN}:${process.env.PATH ?? ""}`,
+        POSTMASTER_DISPATCH: dispatch,
+        POSTMASTER_TOOL: ROOT,
+        POSTMASTER_GUARD_LANE: "testlane",
+        POSTMASTER_GUARD_REGISTRY: registry.url,
+        POSTMASTER_GUARD_SOCKET_API: registry.socketUrl,
+      };
+      // A recursing shim forks without end, so this run carries two bounds:
+      // `timeout 60`, and a group-size trip that kills the tree and fails the
+      // test within seconds instead of filling the machine.
+      const TRIP = 60;
+      const started = Date.now();
+      const child = Bun.spawn(["timeout", "60", join(bin, "bun"), "--version"], {
+        cwd: project,
+        env,
+        stdin: "ignore",
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      let peak = 0;
+      let code = -1;
+      for (;;) {
+        const tree = treeOf(child.pid);
+        peak = Math.max(peak, tree.length);
+        if (tree.length > TRIP) {
+          killTree(child.pid);
+          throw new Error(`the shimmed bun grew past ${TRIP} processes: the shim is recursing`);
+        }
+        const done = await Promise.race([
+          child.exited.then((c) => ({ done: true, code: c })),
+          sleep(25).then(() => ({ done: false, code: -1 })),
+        ]);
+        if (done.done) {
+          code = done.code;
+          break;
+        }
+      }
+      const elapsed = Date.now() - started;
+      const out = child.stdout === null ? "" : await new Response(child.stdout).text();
+      const err = child.stderr === null ? "" : await new Response(child.stderr).text();
+      killTree(child.pid); // No-op when healthy; reaps strays otherwise.
+      expect(code).toBe(0);
+      expect(`${out}\n${err}`).toMatch(/[0-9]+\.[0-9]+\.[0-9]+/u);
+      expect(elapsed).toBeLessThan(30000);
+      expect(peak).toBeGreaterThanOrEqual(2);
+      expect(peak).toBeLessThanOrEqual(TRIP);
+    },
+    120000,
+  );
+});
+
 describe("facts prints one package's ask facts", () => {
   test("name, version, publish date, source and verdict as key=value lines", async () => {
     const published = registry.packages.get("g-clean")?.versions[0]?.published ?? "";
@@ -889,7 +1000,7 @@ describe("the approval records", () => {
         "the user said yes",
       ]);
       expect(r.code).toBe(1);
-      expect(r.err).toMatch(/actor/);
+      expect(r.err).toMatch(/actor/u);
     });
     test(`${shape.action} refuses a misshapen target`, async () => {
       const dispatch = mkDispatch(tmp, `verb-target-${shape.action}`, [], []);
@@ -902,7 +1013,7 @@ describe("the approval records", () => {
         "the user said yes",
       ]);
       expect(r.code).toBe(1);
-      expect(r.err).toMatch(/target/);
+      expect(r.err).toMatch(/target/u);
     });
   }
 });
