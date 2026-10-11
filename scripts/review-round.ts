@@ -3,7 +3,9 @@
 // round still running in them. The round itself is three calls: cut prepares the snapshot
 // and the scratches, launch saves the round's starting state and runs the reviewers, harvest
 // normalizes the bug reports. Launch starts no reviewer while a brief one of its reviewers
-// needs is missing, and the wait ends with the round's check for changes by its reviewers.
+// needs is missing, keeps the first starting state when the round is retried, refuses a
+// round whose check is already recorded, and the wait ends with the round's check for
+// changes by its reviewers.
 //
 //   run review-round start    <dispatch> <round>
 //   run review-round cut      <dispatch> <round> <repo> <synthesis-wt>
@@ -25,9 +27,10 @@
 //           again since the wait began; a marker no reviewer of the round lands; teardown: a
 //           scratch left in place; cut: run verify exited other than 0 or 3, the run's legs or
 //           a lens's lanes did not resolve, or a left-behind scratch did not tear down;
-//           launch: the same resolution failures, a brief a reviewer needs that is missing,
-//           a prompt that could not be written, the round's starting state that could not be
-//           saved, a scratch that was not ready, or the round did not start; the round's own
+//           launch: the same resolution failures, a round whose reach check is already
+//           recorded, a brief a reviewer needs that is missing, a prompt that could not be
+//           written, the round's starting state that could not be saved, a scratch that was
+//           not ready, or the round did not start; the round's own
 //           teardown, naming no reviewers, comes before the reach check of a round that took
 //           its reach snapshot (nothing is removed)
 import {
@@ -509,6 +512,24 @@ export function launchRound(a: StepArgs, deps: StepDeps): StepResult {
   }
   const lenses = resolveLenses(a, deps, res);
   if (lenses === null) return res;
+  // A collected round is never launched again: its reviewers already ran, and
+  // launching it would run new reviewers the recorded check cannot see. When
+  // the record cannot be read the launch goes on, as a refusal cannot be told
+  // from a broken journal.
+  try {
+    const collected = reachActions(a.dispatch).some(
+      ({ event }) => event.kind === "point" && String(event.point) === `r${a.round}`,
+    );
+    if (collected) {
+      res.err.push(
+        `review-round: round ${a.round} already has its reach check recorded; nothing launched`,
+      );
+      res.code = 1;
+      return res;
+    }
+  } catch {
+    // Fall through: the launch goes on without the refusal.
+  }
   const ticket = basename(a.dispatch);
   const lensPrompt = (lens: string): string =>
     join(a.dispatch, `review-r${a.round}-${lens}-prompt.txt`);
@@ -589,13 +610,21 @@ export function launchRound(a: StepArgs, deps: StepDeps): StepResult {
       }
     }
   }
-  const before = deps.tool("reach", ["before", a.dispatch, a.round]);
-  passOut(res, before);
-  passErr(res, before);
-  if (before.code !== 0) {
-    res.err.push("review-round: the round's starting state could not be saved; nothing launched");
-    res.code = 1;
-    return res;
+  // A retried round keeps its first starting state: the first attempt's
+  // reviewers ran under it, so saving again would fold anything they changed
+  // outside their scratches into the new baseline, past the eventual check.
+  const snapPath = join(a.dispatch, "reach", `before-r${a.round}.json`);
+  if (existsSync(snapPath)) {
+    res.out.push(`review-round: round ${a.round} keeps its first starting state`);
+  } else {
+    const before = deps.tool("reach", ["before", a.dispatch, a.round]);
+    passOut(res, before);
+    passErr(res, before);
+    if (before.code !== 0) {
+      res.err.push("review-round: the round's starting state could not be saved; nothing launched");
+      res.code = 1;
+      return res;
+    }
   }
   const start = deps.tool("review-round", ["start", a.dispatch, a.round]);
   passOut(res, start);

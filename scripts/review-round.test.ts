@@ -1397,6 +1397,59 @@ describe("the round's three steps", () => {
         expect(of(calls, "host").length).toBe(0);
       }, "review-round-launchbefore-");
     });
+
+    test("a round whose reach check is already recorded is not launched again", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        writeFileSync(join(p.dispatch, "actions.jsonl"), `${pointLine("r1")}\n`);
+        const { calls, deps } = stand(green);
+        const res = launchRound(
+          { dispatch: p.dispatch, round: "1", repo: p.repo, synthesis: p.synthesis },
+          deps,
+        );
+        expect(res.code).toBe(1);
+        expect(res.err.join("\n")).toContain("already has its reach check recorded");
+        expect(res.err.join("\n")).toContain("nothing launched");
+        expect(readdirSync(p.dispatch).filter((f) => f.startsWith("review-r1-")).length).toBe(0);
+        expect(of(calls, "review-round").length).toBe(0);
+        expect(of(calls, "host").length).toBe(0);
+        expect(of(calls, "reach").length).toBe(0);
+        expect(of(calls, "log-action").length).toBe(0);
+      }, "review-round-launchcollected-");
+    });
+
+    test("a retried round keeps its first starting state", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        mkdirSync(join(p.dispatch, "reach"), { recursive: true });
+        writeFileSync(join(p.dispatch, "reach", "before-r1.json"), '{"round":1}\n');
+        const { calls, deps } = stand(green);
+        const res = launchRound(
+          { dispatch: p.dispatch, round: "1", repo: p.repo, synthesis: p.synthesis },
+          deps,
+        );
+        expect(res.code).toBe(0);
+        expect(res.out.join("\n")).toContain("keeps its first starting state");
+        expect(of(calls, "reach").length).toBe(0);
+        expect(readFileSync(join(p.dispatch, "reach", "before-r1.json"), "utf8")).toBe(
+          '{"round":1}\n',
+        );
+      }, "review-round-launchretry-");
+    });
+
+    test("an unreadable journal does not stop the launch", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        writeFileSync(join(p.dispatch, "actions.jsonl"), "not json\n");
+        const { calls, deps } = stand(green);
+        const res = launchRound(
+          { dispatch: p.dispatch, round: "1", repo: p.repo, synthesis: p.synthesis },
+          deps,
+        );
+        expect(res.code).toBe(0);
+        expect(of(calls, "reach").length).toBe(1);
+      }, "review-round-launchbadjournal-");
+    });
   });
 
   describe("harvest", () => {
