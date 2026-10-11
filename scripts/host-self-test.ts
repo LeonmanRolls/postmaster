@@ -4829,10 +4829,18 @@ export async function runControls(): Promise<number> {
     );
     const { splitCommand } = await import("./clerk.ts");
     const { spawnCommand } = await import("./verifier.ts");
+    // The launch refuses when its harness is not on PATH, and CI has no
+    // claude: give the form call a stub claude of its own, first on its
+    // PATH, instead of the ambient one. The form embeds the bare harness
+    // name, so the shim satisfies the PATH proof without leaking into the
+    // spawn the control then drives.
+    const d2bin = join(root, "d2bin");
+    mkdirSync(d2bin);
+    writeFileSync(join(d2bin, "claude"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
     const pmForm = exec(
       SELF,
       ["launch", "interactive", "postmaster", "--project", f.repo, "--name", "postmaster"],
-      { env: { ...process.env, POSTMASTER_CONFIG: d2cfg } },
+      { env: { ...process.env, POSTMASTER_CONFIG: d2cfg, PATH: `${d2bin}:${stubs}` } },
     );
     const pmWords = pmForm.code === 0 ? splitCommand(pmForm.out) : [];
     const pmSpawn = execHost(
