@@ -20,6 +20,12 @@ export function startedDuringTest(started: number | null, t0: number): boolean {
   return started === null || started >= t0 - 1500;
 }
 
+/** Whether a sighting counts toward the report: started with the test, and
+ * not a zombie, which has already finished and is only awaiting reaping. */
+export function countsTowardReport(entry: ProcessSnapshot, t0: number): boolean {
+  return !entry.stat.startsWith("Z") && startedDuringTest(entry.started, t0);
+}
+
 const POLL_MS = 250;
 const GRACE_MS = 100;
 
@@ -59,13 +65,11 @@ afterEach(async () => {
   last = null;
   if (seen === null) return;
   const t0 = testStart;
-  if ([...seen.values()].some((entry) => startedDuringTest(entry.started, t0)))
-    await Bun.sleep(GRACE_MS);
+  if ([...seen.values()].some((entry) => countsTowardReport(entry, t0))) await Bun.sleep(GRACE_MS);
   const end = await snapshotDescendants(process.pid);
   const candidates = new Map<number, ProcessSnapshot>();
   for (const entry of [...seen.values(), ...end.values()]) {
-    if (startedDuringTest(entry.started, t0))
-      candidates.set(entry.pid, end.get(entry.pid) ?? entry);
+    if (countsTowardReport(entry, t0)) candidates.set(entry.pid, end.get(entry.pid) ?? entry);
   }
   if (candidates.size === 0) return;
   const noun = candidates.size === 1 ? "1 child process" : `${candidates.size} child processes`;
