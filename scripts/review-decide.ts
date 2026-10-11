@@ -6,7 +6,10 @@
 //   round    the round that just finished, a whole number of 1 or more
 //
 // Reads <dispatch>/actions.jsonl. A finding is a `finding` line whose detail opens with its class,
-// `gating` or `style`, then its severity (P1, P2 or P3), its round (r1, r2, ...) and the rest. An
+// `gating` or `style`, then its severity (P1, P2 or P3), its round (r1, r2, ...) and the rest. A
+// `finding-also` line is a later report of that finding in its round, opening the same way; it
+// names the later reviewer without a second counted line, and faults unless its target has a
+// finding line of its round opening with the same class and severity. An
 // apply is an `apply` line whose detail names the finding targets it fixes, as whitespace-separated
 // bare targets; it counts for round r when any target it names has a finding line of round r. A
 // round's serious count is the number of its finding lines that open `gating P1 r<n>` or
@@ -33,7 +36,8 @@
 //   exit 1  usage, a round below 1, a missing or unreadable action log, a line that is
 //           not JSON or not an action object, an action object with no action, a finding whose
 //           detail does not open with its class, a finding with no readable severity or round,
-//           two findings sharing one target in one round, or an apply naming no target or a
+//           two findings sharing one target in one round, a finding-also line with no finding
+//           line of its round or one opening otherwise, or an apply naming no target or a
 //           target with no finding line
 import { readFileSync, statSync } from "node:fs";
 import { D_CLASS, digitValue, END_OF_STRING, pySplitLines, pyTrim, pyWords } from "./lib/text.ts";
@@ -199,7 +203,9 @@ function decide(dispatch: string, roundS: string): void {
   const degrades = new Map<string, Set<string>>();
   const roundsSeen = new Map<string, Set<string>>();
   const seenPairs = new Set<string>();
+  const findingsAt = new Map<string, { cls: string; sev: string }>();
   const applies: Array<{ n: number; targets: string[] }> = [];
+  const alsos: Array<{ n: number; target: string; cls: string; sev: string; rnd: string }> = [];
   const faults: string[] = [];
   lines.forEach((line, idx) => {
     const n = idx + 1;
@@ -263,7 +269,33 @@ function decide(dispatch: string, roundS: string): void {
         roundsSeen.set(target, set);
       }
       set.add(rndN);
+      findingsAt.set(pair, { cls, sev });
       findings.push({ sev, rnd: rndN, cls });
+    } else if (action === "finding-also") {
+      const words = pyWords(pyStr(rec.detail, !("detail" in rec)));
+      if (words.length === 0 || (words[0] !== "gating" && words[0] !== "style")) {
+        faults.push(
+          `actions.jsonl line ${n}: a finding-also line whose detail opens with ${words.length > 0 ? `"${words[0]}"` : "nothing"}, not gating or style`,
+        );
+        return;
+      }
+      const cls = words[0]!;
+      const sev = words.length > 1 ? words[1]! : "";
+      const rnd = words.length > 2 ? words[2]! : "";
+      if (sev !== "P1" && sev !== "P2" && sev !== "P3") {
+        faults.push(
+          `actions.jsonl line ${n}: a finding-also line with severity ${sev || "none"}, not P1, P2 or P3`,
+        );
+        return;
+      }
+      const m = ROUND_RE.exec(rnd);
+      if (!m) {
+        faults.push(
+          `actions.jsonl line ${n}: a finding-also line with round ${rnd || "none"}, not rN`,
+        );
+        return;
+      }
+      alsos.push({ n, target: pyStr(rec.target, !("target" in rec)), cls, sev, rnd: m[1]! });
     } else if (action === "apply") {
       applies.push({ n, targets: pyWords(pyStr(rec.detail, !("detail" in rec))) });
     } else if (action === "review-launch" || action === "degrade") {
@@ -305,6 +337,18 @@ function decide(dispatch: string, roundS: string): void {
       if (!roundsSeen.has(t)) {
         faults.push(`actions.jsonl line ${n}: an apply naming ${t}, which has no finding line`);
       }
+    }
+  }
+  for (const { n, target, cls, sev, rnd } of alsos) {
+    const found = findingsAt.get(`${target}\0${rnd}`);
+    if (!found) {
+      faults.push(
+        `actions.jsonl line ${n}: a finding-also line for ${target} in round r${rnd}, which has no finding line there`,
+      );
+    } else if (found.cls !== cls || found.sev !== sev) {
+      faults.push(
+        `actions.jsonl line ${n}: a finding-also line for ${target} in round r${rnd} opening ${cls} ${sev}, not the finding's ${found.cls} ${found.sev}`,
+      );
     }
   }
   if (faults.length > 0) die(faults.join("; "));
