@@ -1,12 +1,23 @@
 ---
 title: Log
 type: schema
-updated: 2026-10-10
+updated: 2026-10-11
 ---
 
 # Log
 
 Append-only. Newest first. One entry per operation, prefixed so it can be parsed.
+
+## [2026-10-11] query | what a whole flow costs in the cloud
+
+Issue #341. The user asked what a whole flow costs to run in the cloud, not only individual lanes and legs. Added "What the
+whole flow costs" to [running the flow on Cloudflare](concepts/running-the-flow-on-cloudflare.md): one ticket from the booking
+clerk to the merge, a month at the audited pace and at two others, the flat price that month equals, and what the cloud would
+cost if it took only the peaks. The trial `2026-10-08-cloudflare-run-cost` gained the pace of merged pull requests, a snapshot
+of the open interactive sessions, a module for the month and five controls (42 in all). The user's answers to the decisions
+that followed the report: the four proposed tickets on virtual machines, one store, login or key per role and the security
+review "not yet", the gate-timing ticket dropped, and the question to the vendors after the spike. The criteria for #341 stay
+open for the cost criterion's new wording. No standing changed.
 
 ## [2026-10-10] ingest | story pages: a change and a ticket told as stories that scroll
 

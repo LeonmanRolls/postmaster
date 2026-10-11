@@ -17,10 +17,11 @@ import { cost, INSTANCE_TYPES, type InstanceType, perHour } from "./cost.ts";
 import { covered, runTime, seconds, summarizeRole } from "./instance-time.ts";
 import type { Launch } from "./measure.ts";
 import { CONTRIBUTOR_TIER, type Prices, roleDollars, STANDARD_TIER, withRatesOf } from "./model-bill.ts";
-import { auditTotals, totalsCost } from "./tables.ts";
-import { AGENT, breakEvenRuns, fits, GATE, hourly, type Machine, profileHours, type Rate } from "./providers.ts";
+import { auditTotals, breakEven, isoSpan, totalsCost } from "./tables.ts";
+import { AGENT, breakEvenRuns, fits, GATE, hourly, type Machine, profileHours, type Rate, runCost } from "./providers.ts";
 import { totalInput } from "./tokens.ts";
 import type { RunUptime } from "./uptime.ts";
+import { breakEvenTickets, monthCost, monthlyPace, overflowSeconds, sessionRates, sessionsMonth } from "./whole-flow.ts";
 
 export type Control = {
   id: string;
@@ -525,6 +526,64 @@ export function runControls(inp: Inputs): Control[] {
     got: `${onePeak} against ${allPeak}`,
     pass: onePeak >= 1 && onePeak <= allPeak,
   });
+  // 13. what a whole flow costs
+  const realCount = covered(inp.audit.runs, "real").length;
+  if (cloudflareRow && realCount > 0) {
+    const sizedAverage = runCost(cloudflareRow, split.agent, split.gate) / realCount;
+    const older = breakEven([50], sizedAverage, 5)[0] as number;
+    const newer = breakEvenTickets(50, sizedAverage, 0, 5) as number;
+    add({
+      id: "C38",
+      kind: "positive",
+      what: "the whole-flow break-even against $50 with no sessions, through the new code, against the earlier break-even for the same average run and the $5 plan",
+      expected: "the same number of runs a month",
+      got: `${newer.toFixed(3)} against ${older.toFixed(3)}`,
+      pass: within(newer, older, 1e-9),
+    });
+  }
+  const launchHist = loadOf([...kinds.lanes, ...kinds.reviewers, ...kinds.gates]);
+  const launchLengths = secondsOf([...kinds.lanes, ...kinds.reviewers, ...kinds.gates]);
+  add({
+    id: "C39",
+    kind: "positive",
+    what: "the launch-seconds above zero at once, from the histogram of the load, against the sum of the lengths of the lanes, reviewers and gate runs",
+    expected: "equal to a second: the area under the load curve is the sum of the intervals",
+    got: `${fmt(overflowSeconds(launchHist.hist, 0) / 3600, 2)} and ${fmt(launchLengths / 3600, 2)} hours`,
+    pass: within(overflowSeconds(launchHist.hist, 0), launchLengths, 1),
+  });
+  add({
+    id: "C40",
+    kind: "negative",
+    what: "the launch-seconds above the most that ran at once, through the same code",
+    expected: "zero",
+    got: `${overflowSeconds(launchHist.hist, launchHist.peak)} seconds above ${launchHist.peak}`,
+    pass: overflowSeconds(launchHist.hist, launchHist.peak) === 0,
+  });
+  if (cloudflareRow) {
+    const rates = sessionRates(cloudflareRow);
+    const monthKept = sessionsMonth(rates, 9, 2, "kept-up");
+    add({
+      id: "C41",
+      kind: "negative",
+      what: "a month of no tickets, and a flat price below what the sessions and the plan fee cost, through the month and break-even code",
+      expected: "the month is the sessions and the plan alone, and there is no break-even",
+      got: `${monthCost(0, 2.97, monthKept, 5).toFixed(2)} against ${(monthKept + 5).toFixed(2)}, break-even ${String(breakEvenTickets(100, 2.97, monthKept, 5))}`,
+      pass: within(monthCost(0, 2.97, monthKept, 5), monthKept + 5, 1e-9) && breakEvenTickets(100, 2.97, monthKept, 5) === null,
+    });
+  }
+  const spanAll = isoSpan(covered(inp.audit.runs, "real"));
+  if (spanAll) {
+    const days = (Date.parse(spanAll.last) - Date.parse(spanAll.first)) / 86_400_000;
+    const byHand = (realCount / days) * 30;
+    add({
+      id: "C42",
+      kind: "positive",
+      what: "the audited pace in runs a month, from the count of runs over the span of their timestamps, against the same arithmetic written out",
+      expected: "the same number",
+      got: `${fmt(monthlyPace(realCount, days), 2)} against ${fmt(byHand, 2)} (${realCount} runs in ${fmt(days, 2)} days)`,
+      pass: within(monthlyPace(realCount, days), byHand, 1e-9) && monthlyPace(realCount, 0) === 0,
+    });
+  }
   return out;
 }
 

@@ -178,7 +178,9 @@ What it would take to run the flow on someone else's machines, and what the harn
   platforms and hourly virtual machines cheaper for a typical run by under a dollar, and the platforms built for agent
   sandboxes dearer. A container per lane would stop every reach the isolation scan found inside the machine, by the
   documented design, and lifts the machine's cores as the limit on runs in flight, not the usage windows or the user's
-  rulings. It would be an option a ticket chooses beside local runs.
+  rulings. It would be an option a ticket chooses beside local runs. The whole flow, every role from the booking clerk to
+  the merge, costs about $1.6 to $2.5 a typical ticket and about $350 a month at the audited pace, with the interactive
+  sessions asleep when idle; kept up between turns about $580, against $50 to $200 for a flat machine.
 
 ## Sources
 

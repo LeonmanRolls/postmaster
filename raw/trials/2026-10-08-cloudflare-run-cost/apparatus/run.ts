@@ -8,10 +8,10 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import type { Extract } from "../../2026-10-03-lane-audit/apparatus/extract.ts";
 import { median } from "../../2026-10-03-lane-audit/apparatus/analyze.ts";
-import { intervalsOfRuns, loadTable, longerThan, peakInOneRun, runHours } from "./concurrency.ts";
+import { type Interval, intervalsOfRuns, load, loadTable, longerThan, peakInOneRun, runHours } from "./concurrency.ts";
 import { covered, runTime, type RunTime, summarizeRole } from "./instance-time.ts";
 import { PLAN_FEE_PER_MONTH } from "./cost.ts";
-import { type Machine, machinesTable, profileHours, type Rate, ratesTable, runCost } from "./providers.ts";
+import { GATE, hourly, type Machine, machinesTable, profileHours, type Rate, ratesTable, runCost } from "./providers.ts";
 import {
   auditTotals,
   breakEven,
@@ -27,6 +27,16 @@ import {
   totalsTable,
 } from "./tables.ts";
 import type { RunUptime } from "./uptime.ts";
+import {
+  controlPlane,
+  flatTable,
+  monthlyPace,
+  monthTable,
+  peaksTable,
+  sessionRates,
+  sessionsMonth,
+  ticketCost,
+} from "./whole-flow.ts";
 
 const here = dirname(new URL(import.meta.url).pathname);
 const arg = (name: string, fallback: string): string => {
@@ -242,6 +252,124 @@ $${averageAt("standard-4").toFixed(2)} when every launch is a standard-4. The ru
 ${sizedRows}
 `;
 writeFileSync(join(outDir, "providers.md"), providersText);
+
+// what the whole flow costs: the launches, the interactive roles around them and the control plane
+type PaceFile = { days: Record<string, { merged: number; ticketTitled: number }> };
+type SessionsFile = { open: number; kinds: Record<string, number> };
+const readJson = <T>(name: string): T | null =>
+  existsSync(join(outDir, name)) ? (JSON.parse(readFileSync(join(outDir, name), "utf8")) as T) : null;
+const paceData = readJson<PaceFile>("pace.json");
+const sessionsData = readJson<SessionsFile>("sessions.json");
+const spanDays = span ? (Date.parse(span.last) - Date.parse(span.first)) / 86_400_000 : 0;
+const auditedPace = monthlyPace(totals.runs, spanDays);
+const dayKeys = paceData ? Object.keys(paceData.days).sort() : [];
+const countDays = (from: string, to: string, key: "merged" | "ticketTitled"): number =>
+  dayKeys.filter((d) => d >= from && d <= to).reduce((a, d) => a + ((paceData as PaceFile).days[d]?.[key] ?? 0), 0);
+const dayCount = (from: string, to: string): number =>
+  Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000) + 1;
+const ticketedFrom = "2026-09-26";
+const ticketedTo = dayKeys[dayKeys.length - 1] ?? ticketedFrom;
+const ticketedMerged = countDays(ticketedFrom, ticketedTo, "ticketTitled");
+const ticketedPace = monthlyPace(ticketedMerged, dayCount(ticketedFrom, ticketedTo));
+const auditFrom = span?.first.slice(0, 10) ?? ticketedFrom;
+const auditTo = span?.last.slice(0, 10) ?? ticketedTo;
+const ticketedInAudit = countDays(auditFrom, auditTo, "ticketTitled");
+const flowSessions = sessionsData ? (sessionsData.kinds.postmaster ?? 0) + (sessionsData.kinds.ticketClerks ?? 0) : 0;
+const openSessions = sessionsData?.open ?? 0;
+const AWAKE_HOURS_PER_DAY = 2;
+const CONTROL_PLANE_ASSUMED = 0.05;
+const planePriced = controlPlane({ requests: 10_000, workflowSteps: 1_000 });
+const sessionRate = cloudflareRate ? sessionRates(cloudflareRate) : { awake: 0, idle: 0 };
+const flowAsleep = sessionsMonth(sessionRate, flowSessions, AWAKE_HOURS_PER_DAY, "asleep");
+const flowKeptUp = sessionsMonth(sessionRate, flowSessions, AWAKE_HOURS_PER_DAY, "kept-up");
+const allAsleep = sessionsMonth(sessionRate, openSessions, AWAKE_HOURS_PER_DAY, "asleep");
+const allKeptUp = sessionsMonth(sessionRate, openSessions, AWAKE_HOURS_PER_DAY, "kept-up");
+const typicalLow = cloudflareRate ? runCost(cloudflareRate, medianRunHours.agentLow, medianRunHours.gate) : 0;
+const typicalHigh = cloudflareRate ? runCost(cloudflareRate, medianRunHours.agentHigh, medianRunHours.gate) : 0;
+const perTicket = ticketCost(sizedAverage, CONTROL_PLANE_ASSUMED);
+const shareAsleep = auditedPace > 0 ? flowAsleep / auditedPace : 0;
+const shareKeptUp = auditedPace > 0 ? flowKeptUp / auditedPace : 0;
+// the 24 fixture runs, with the coachman at its ceiling (no session uptime is held for them)
+const fixtureTotals = auditTotals(fixture, new Map());
+const fixtureGates = fixture.reduce((a, t) => a + t.gatesOnLanes.each.concat(t.gatesOnSynthesis.each).reduce((x, y) => x + y, 0), 0);
+const fixtureHours = profileHours({ lanesAndReviewers: fixtureTotals.lanesAndReviewers, coachman: fixtureTotals.coachmanCeiling, gates: fixtureGates });
+const fixtureTotal = cloudflareRate ? runCost(cloudflareRate, fixtureHours.agent, fixtureHours.gate) : 0;
+const fixtureEach = fixture.length > 0 ? fixtureTotal / fixture.length : 0;
+// the peaks: what the cloud would do if the machine holds k launches at once and the cloud takes the rest
+const kinds = intervalsOfRuns(covered(data.runs, "real"));
+const secondsIn = (xs: readonly Interval[]): number => xs.reduce((a, [b, e]) => a + (e - b), 0);
+const laneReviewerSeconds = secondsIn(kinds.lanes) + secondsIn(kinds.reviewers);
+const gateSeconds = secondsIn(kinds.gates);
+const launchSeconds = laneReviewerSeconds + gateSeconds;
+const launchLoad = load([...kinds.lanes, ...kinds.reviewers, ...kinds.gates]);
+const mixedRate =
+  cloudflareRate && launchSeconds > 0
+    ? ((laneReviewerSeconds / 3600) * sessionRate.awake + (gateSeconds / 3600) * hourly(cloudflareRate, GATE)) /
+      (launchSeconds / 3600)
+    : 0;
+const money = (d: number): string => (d < 10 ? d.toFixed(2) : d < 100 ? d.toFixed(1) : d.toFixed(0));
+const wholeFlowText = `# What a whole flow costs in the cloud
+
+One ticket from the booking clerk to the merge, and a month of them, on Cloudflare's list rates, with agents sized to what
+they use (a waiting agent is 1 vCPU and 4 GiB with a fifth of the CPU busy; a gate is 4 vCPU and 12 GiB with every vCPU
+busy; see providers.md). The model bill is the same on any host and is left out. Nothing here was run on Cloudflare.
+
+## What is measured and what is assumed
+
+| Part | Where it comes from | Kind |
+| --- | --- | --- |
+| Launches of a run: lanes, reviewers, coachman legs, gate runs | The ${totals.runs} audited real runs, from their records | Measured; the coachman's time is bracketed |
+| The pace of tickets | The audited runs: ${totals.runs} in ${spanDays.toFixed(1)} days of records is ${auditedPace.toFixed(0)} a month. The merged pull requests whose title starts with a ticket number: ${ticketedMerged} from ${ticketedFrom} to ${ticketedTo}, ${ticketedPace.toFixed(0)} a month, of which ${ticketedInAudit} fall in the audited runs' days, against ${totals.runs} audited runs; it also counts hand-made, research and documentation pull requests, so it is an upper bound | Measured; two bounds |
+| Open interactive sessions | ${openSessions} at one moment: ${flowSessions} of the flow's own roles (the postmaster and the clerks) and ${openSessions - flowSessions} research and design sessions | A snapshot, not a time series |
+| Hours each session is awake in a day | ${AWAKE_HOURS_PER_DAY}, with 1 and 4 shown in the sensitivity table | Assumed |
+| The control plane | The priced parts, ${money(planePriced)} dollars for 10,000 requests and 1,000 workflow steps; the stores are unpriced; $${CONTROL_PLANE_ASSUMED.toFixed(2)} is assumed | Argued |
+
+## One ticket
+
+| Part | Typical ticket | Average ticket |
+| --- | --- | --- |
+| Launches | $${money(typicalLow)} to $${money(typicalHigh)} | $${money(sizedAverage)} |
+| Control plane (assumed) | $${CONTROL_PLANE_ASSUMED.toFixed(2)} | $${CONTROL_PLANE_ASSUMED.toFixed(2)} |
+| The postmaster and the clerks, a share at ${auditedPace.toFixed(0)} tickets a month, asleep when idle | $${money(shareAsleep)} | $${money(shareAsleep)} |
+| The same, kept up between turns | $${money(shareKeptUp)} | $${money(shareKeptUp)} |
+| **A ticket, sessions asleep when idle** | **$${money(typicalLow + CONTROL_PLANE_ASSUMED + shareAsleep)} to $${money(typicalHigh + CONTROL_PLANE_ASSUMED + shareAsleep)}** | **$${money(perTicket + shareAsleep)}** |
+| **A ticket, sessions kept up** | **$${money(typicalLow + CONTROL_PLANE_ASSUMED + shareKeptUp)} to $${money(typicalHigh + CONTROL_PLANE_ASSUMED + shareKeptUp)}** | **$${money(perTicket + shareKeptUp)}** |
+
+A session awake costs $${sessionRate.awake.toFixed(4)} an hour and kept up and idle $${sessionRate.idle.toFixed(4)} an hour (memory and disk). The
+${fixture.length} fixture runs in the same records cost about $${money(fixtureEach)} each with the coachman at its ceiling, $${money(fixtureTotal)} in all.
+
+## A month
+
+The ${flowSessions} sessions of the flow's own roles, each awake ${AWAKE_HOURS_PER_DAY} hours a day: $${money(flowAsleep)} a month asleep when idle,
+$${money(flowKeptUp)} kept up. All ${openSessions} open sessions, research and design too: $${money(allAsleep)} and $${money(allKeptUp)}. The plan fee is $${PLAN_FEE_PER_MONTH} a month. A ticket's own
+compute is $${money(perTicket)} (the average run and the assumed control plane).
+
+${monthTable([20, auditedPace, ticketedPace], perTicket, { asleep: flowAsleep, keptUp: flowKeptUp }, PLAN_FEE_PER_MONTH)}
+
+Tickets a month at which a flat monthly price costs the same:
+
+${flatTable(FLAT_PRICES, perTicket, { asleep: flowAsleep, keptUp: flowKeptUp }, PLAN_FEE_PER_MONTH)}
+
+Awake hours a day, for the ${flowSessions} sessions, with the sessions' month in dollars:
+
+| Awake hours a day | Asleep when idle | Kept up |
+| --- | --- | --- |
+${[1, 2, 4]
+  .map(
+    (h) =>
+      `| ${h} | ${money(sessionsMonth(sessionRate, flowSessions, h, "asleep"))} | ${money(sessionsMonth(sessionRate, flowSessions, h, "kept-up"))} |`,
+  )
+  .join("\n")}
+
+## Only the peaks
+
+If the machine holds k launches at once (lanes, reviewers and gate runs) and the cloud takes the rest. The records' ${spanDays.toFixed(1)} days
+held ${(launchSeconds / 3600).toFixed(0)} launch-hours; a launch-hour is priced at $${mixedRate.toFixed(3)}, the mix of waiting-agent and gate hours in the records.
+The coachman, one for each run in flight, is not counted.
+
+${peaksTable([2, 4, 6, 8], launchLoad.hist, launchSeconds, mixedRate, spanDays)}
+`;
+writeFileSync(join(outDir, "whole-flow.md"), wholeFlowText);
 writeFileSync(join(outDir, "instance-time.md"), instanceTime);
 writeFileSync(join(outDir, "cost.md"), cost);
 process.stdout.write(`wrote ${outDir}\n`);

@@ -20,7 +20,10 @@ bill is container time, with the control plane at cents: about $1 to $4.50 for a
 the average run. Cloudflare is not the cheapest place to buy that compute. Priced on the same two kinds of hour, five other
 container platforms come to less for a typical run, by $0.25 to $0.59, and the platforms built for agent sandboxes come to
 more. Virtual machines billed by the hour land inside Cloudflare's range, except spot, on a size that holds neither the gate nor
-a 16 GiB coachman ([Other on-demand providers](#other-on-demand-providers)). The model bill is the same on any host,
+a 16 GiB coachman ([Other on-demand providers](#other-on-demand-providers)). The whole flow, every role from the booking
+clerk to the merge and not only the launches, costs about $1.6 to $2.5 a typical ticket in the cloud when the interactive
+sessions sleep when idle, and about $350 a month at the audited pace of 107 tickets a month, which is the price of a flat
+machine of that size ([What the whole flow costs](#what-the-whole-flow-costs)). The model bill is the same on any host,
 so it is a side note at the end of [Cost](#cost).
 [Issue #341](https://github.com/brindlewick/postmaster/issues/341), "Research: could postmaster's
 flow run on Cloudflare, with Workers as the control plane and Containers for the lanes?", asks the question.
@@ -66,7 +69,13 @@ standing.
    would have cost $26 to $123 with a quarter of the CPU busy. The widest uncertainty is the coachman's process time, which the records bracket at
    3.6 to 18.8 hours. The control plane is cents, and the plan is $5 a month
    [@trials/2026-10-08-cloudflare-run-cost/results/cost.md]. The model bill is the same on any host and is a side note.
-6. **Cloudflare is in the middle on price, not the cheapest.** The same two kinds of hour, a gate hour (4 vCPU and 12 GiB, every
+6. **The whole flow costs about $3 a ticket and about $350 a month at the audited pace, if the interactive sessions sleep
+   when idle.** One ticket from the booking clerk to the merge is $1.64 to $2.45 for a typical ticket and $3.24 for the
+   average one; kept up between turns the sessions raise that to $3.78 to $5.38. A month at the audited 107 tickets is $351
+   asleep and $580 kept up, against $50 to $200 for a flat machine, which is two to seven times cheaper. The cloud is cheaper
+   than a $100 machine below about 22 tickets a month. Taking only the peaks, four launches held on the machine, costs about $31
+   a month. The hours a session is awake were not measured ([What the whole flow costs](#what-the-whole-flow-costs)).
+7. **Cloudflare is in the middle on price, not the cheapest.** The same two kinds of hour, a gate hour (4 vCPU and 12 GiB, every
    vCPU busy) and a waiting-agent hour (1 vCPU and 4 GiB, a fifth busy), were priced from each provider's own page. For a typical
    run Northflank, Modal Functions, AWS Fargate, Azure Container Instances and Fly.io Machines come to $0.75 to $1.88 and
    Cloudflare to $1.32 to $2.13; Google Cloud Run comes to $1.44 to $2.87 and the agent-sandbox products, Modal Sandboxes and
@@ -76,19 +85,19 @@ standing.
    $1.04 (Azure Spot) to $2.02 (Linode) at the median run life of 28 hours, and $3.77 on AWS on demand, but that size holds neither
    the 12 GiB gate nor a 16 GiB coachman. E2B and Daytona cap a sandbox below the gate's 12 GiB. The figures rest on two profiles
    that were not measured ([Other on-demand providers](#other-on-demand-providers)).
-7. **The machine's cores are the limit a cloud lifts. The model providers' usage windows and the user's rulings are not.**
+8. **The machine's cores are the limit a cloud lifts. The model providers' usage windows and the user's rulings are not.**
    [#362](https://github.com/brindlewick/postmaster/issues/362) reports a load of 30 to 40 on 18 cores with ten runs in flight,
    and the shared machine's memory cap and one launch's signal to every process each stopped launches. A container has its own
    CPU, memory and process space. A usage limit on a model account, an overloaded model host and the wait for a spec review
    travel with the run to any host ([Concurrency](#what-limits-concurrency-and-what-a-cloud-would-lift)).
-8. **A container per lane would stop every reach the isolation scan found inside the machine**, by the documented design
+9. **A container per lane would stop every reach the isolation scan found inside the machine**, by the documented design
    (argued, not tried), and leaves open the destinations the network handler allows, the git remote, the hand-back of work and
    where the blind tests live ([Isolation](#isolation)).
-9. **What breaks is mostly the single-machine assumptions.** Code in a container is not "activity" to the platform, the
+10. **What breaks is mostly the single-machine assumptions.** Code in a container is not "activity" to the platform, the
    control plane must keep it alive and poll it, the disk is ephemeral, the scheduling policy the documentation lists as
    best for sandboxes, which Sandbox SDK 1.0 uses, is in public beta, and the scripts lean on one machine's files and
    processes ([What breaks](#what-breaks-or-must-be-ported)).
-10. **The first step is a spike of one fixture lane in a Cloudflare Sandbox and in a Vercel Sandbox, with a measurement beside it.**
+11. **The first step is a spike of one fixture lane in a Cloudflare Sandbox and in a Vercel Sandbox, with a measurement beside it.**
     It needs the $5 Cloudflare plan, Vercel's Pro plan at $20 a month, which carries a $20 credit, and a few dollars of model
     credit. The measurement prices the idle compute ([The spike](#the-spike-and-the-measurement-beside-it)).
 
@@ -442,6 +451,97 @@ or Northflank. List prices leave out tax, egress and plan fees, and the machine 
 change. The virtual machine rows are one shape for a whole run, not a design. Nothing was ordered or run, and no account was
 opened.
 
+### What the whole flow costs
+
+The tables above price a run's launches: lanes, reviewers, the coachman's legs and the gate. A flow is more. The booking clerk
+and the postmaster are sessions that wait for a person for most of their life, and a month of tickets has a pace. This part
+prices the whole: one ticket from the clerk to the merge, then a month of tickets, then what the cloud would cost if it took
+only the peaks. The model bill is left out, as everywhere in this section
+[@trials/2026-10-08-cloudflare-run-cost/results/whole-flow.md].
+
+What is measured and what is assumed:
+
+| Part | Where it comes from | Kind |
+| --- | --- | --- |
+| Launches of a run: lanes, reviewers, coachman legs, gate runs | The 18 audited real runs, from their records | Measured; the coachman's time is bracketed |
+| The pace of tickets | The audited runs: 18 in 5.1 days of records, 107 a month. The merged pull requests whose title starts with a ticket number: 132 from 2026-09-26 to 2026-10-11, 248 a month, of which 55 fall in the audited runs' days, against 18 audited runs. It also counts hand-made, research and documentation pull requests, so it is an upper bound | Measured; two bounds |
+| Open interactive sessions | 18 at one moment: 9 of the flow's own roles (the postmaster and eight clerks) and 9 research and design sessions | A snapshot, not a time series |
+| Hours each session is awake in a day | 2, with 1 and 4 in the table below | Assumed |
+| The control plane | The priced parts come to $0.01 for 10,000 requests and 1,000 workflow steps; the stores are unpriced; $0.05 a ticket is assumed | Argued |
+
+One ticket. A session awake costs $0.0529 an hour and kept up and idle $0.0385 an hour (its memory and disk):
+
+| Part | Typical ticket | Average ticket |
+| --- | --- | --- |
+| Launches, agents sized to what they use | $1.32 to $2.13 | $2.92 |
+| Control plane (assumed) | $0.05 | $0.05 |
+| The postmaster and the clerks, a share at 107 tickets a month, asleep when idle | $0.27 | $0.27 |
+| The same, kept up between turns | $2.41 | $2.41 |
+| **A ticket, sessions asleep when idle** | **$1.64 to $2.45** | **$3.24** |
+| **A ticket, sessions kept up** | **$3.78 to $4.59** | **$5.38** |
+
+The 24 fixture runs in the same records cost about $0.18 each with the coachman at its ceiling, $4.31 in all.
+
+A month. The nine sessions of the flow's own roles, each awake two hours a day, cost $28.6 a month asleep when idle and $257
+kept up. All 18 open sessions, research and design too, would cost $57.2 and $515. At 1 awake hour a day the nine cost
+$14.3 asleep and $253 kept up; at 4 hours, $57.2 and $265. With the $5 plan fee and $2.97 for a ticket's own compute:
+
+| Tickets a month | Launches only | With the sessions asleep when idle | With the sessions kept up |
+| --- | --- | --- | --- |
+| 20 | 64.4 | 93.0 | 322 |
+| 107 | 322 | 351 | 580 |
+| 248 | 740 | 769 | 998 |
+
+Tickets a month at which a flat monthly price costs the same:
+
+| Flat price a month | Launches only | Sessions asleep when idle | Sessions kept up |
+| --- | --- | --- | --- |
+| $25 | 6 | never | never |
+| $50 | 15 | 5 | never |
+| $100 | 31 | 22 | never |
+| $200 | 65 | 56 | never |
+
+Only the peaks. If the machine holds k launches at once (lanes, reviewers and gate runs) and the cloud takes the rest. The
+records' 5.1 days held 238 launch-hours, priced at $0.126 an hour, the mix of waiting-agent and gate hours in the records. The
+coachman, one for each run in flight, stays on the machine:
+
+| Launches the machine holds at once | Launch-hours in the cloud | Share of all launch-hours | Dollars in the records' span | Dollars a month at that pace |
+| --- | --- | --- | --- | --- |
+| 2 | 99.3 | 42% | 12.5 | 74.3 |
+| 4 | 41.7 | 18% | 5.26 | 31.2 |
+| 6 | 16.7 | 7% | 2.10 | 12.5 |
+| 8 | 6.0 | 3% | 0.76 | 4.51 |
+
+What it says:
+
+- **At the audited pace the whole flow costs about $350 a month in the cloud with sleeping sessions, and about $580 with
+  sessions kept up.** That is the price of a flat machine of about $350 to $580 a month. The flat prices in the earlier
+  tables, $50 to $200, are below it, so a flat machine is about two to seven times cheaper for the whole flow (three to twelve
+  times if the sessions were kept up). A machine that holds ten runs in flight comfortably may cost more than $200: on the
+  shared machine ten runs in flight put a load of 30 to 40 on its 18 cores.
+- **The idle sessions are the swing.** Kept up, nine sessions cost $257 a month, as much as 87 tickets' launches, and a flat
+  machine hosts them for nothing. Asleep when idle they cost cents a ticket, but a container that stops must come back with
+  the harness's session, and the disk is ephemeral and snapshots are in beta ([What breaks](#what-breaks-or-must-be-ported)).
+- **The cloud is cheapest where the flow is idle or peaky, and dearest where it is steady.** Four launches held on the
+  machine, the cloud takes 18% of the launch-hours for about $31 a month at that pace, on top of the machine's own price. That
+  is the shape of an option that a ticket chooses beside local runs, and the cheapest way to lift the cores as the limit on
+  runs in flight.
+- **Fewer than about 22 tickets a month favours the cloud against a $100 machine** with the sessions asleep, and fewer than
+  about 31 with launches only; at the audited pace of 107 it does not.
+
+Controls: with no sessions the new break-even equals the earlier one for the same average run to a thousandth (15.402 runs
+against $50); the launch-seconds above zero at once from the load's histogram equal the sum of the launches' lengths (238.14
+hours both ways); nothing is above the most that ran at once; a month of no tickets costs the sessions and the plan alone and a
+flat price below that has no break-even; and the audited pace reads the same from the count of runs over the span of their
+timestamps and written out (106.75 a month)
+([controls](../../raw/trials/2026-10-08-cloudflare-run-cost/results/controls.md), C38 to C42).
+
+Limits. The hours a session is awake were not measured; the session list is one moment, and the research and design sessions
+are the user's own work around the flow, not roles of it. A ticket's number of awake hours for the clerk and the postmaster is
+inside that assumption. The control plane's request counts and the stores' prices were not measured. The coachman's time is
+bracketed as before, and for the fixture runs it is at its ceiling. A merged pull request is not a run, so the pace has two
+bounds. Nothing was run on Cloudflare.
+
 ### The model bill, a side note
 
 The same tokens cost the same on any host, so this does not bear on a comparison of Cloudflare with a flat-priced machine.
@@ -747,6 +847,10 @@ next 20 or so real runs at on-demand rates and reports how much of the provision
   was not tried.
 - The two profiles behind the provider comparison, a gate hour of 4 vCPU and 12 GiB with every vCPU busy and a
   waiting-agent hour of 1 vCPU and 4 GiB with a fifth busy, are assumptions until #363 measures them.
+- The whole-flow cost: how many hours a day each interactive session is awake (two is assumed; the session list is one
+  moment, 18 sessions open), whether such a session can stop when idle and come back with its conversation, the control plane's
+  request counts and the stores' prices (a bound of $0.05 a ticket is assumed), and the clerks' and the postmaster's own
+  container sizes. A merged pull request is not a run, so the pace of tickets has two bounds, 107 and 248 a month.
 
 ## What would change the answer
 
@@ -766,6 +870,9 @@ next 20 or so real runs at on-demand rates and reports how much of the provision
   more than any other fact here.
 - The `durable_object` policy and snapshots leaving beta, or Cloudflare adding an SSH egress proxy or placement
   constraints for that policy.
+- A week of measured session hours. If the postmaster and the clerks are awake for 8 hours a day, not 2, the nine sessions
+  cost $114 a month asleep, not $29, and a month at 107 tickets is $437; if they can stop for most of the day the whole flow
+  is near its launches. The pace matters as much: below about 22 tickets a month the cloud is cheaper than a $100 machine.
 
 ## Proposed tickets
 
@@ -795,7 +902,12 @@ command, streaming its output and reading its exit code, as Cloudflare's `exec()
    contributor tier, 63% on its standard tier.
 5. **The gate is timed on a machine with 4 vCPU and nothing else running.** Any cloud machine will do. It separates the
    gate's own time from the machine's load. #362 times a lane, not the gate.
-6. **Not new: finish #203 and #221.** They give most of the isolation locally and are filed and open; #342 has landed.
+6. **The interactive sessions' awake hours are recorded beside each launch's use.** An addition to
+   [#363, A run records what each launch used, so the run can be priced on demand](https://github.com/brindlewick/postmaster/issues/363),
+   not a ticket of its own: when each session of the postmaster and the clerks is working and when it waits for a person, from
+   a sample every minute for a week. It is the one number the whole-flow cost lacks, and it settles whether the sessions are
+   worth putting to sleep.
+7. **Not new: finish #203 and #221.** They give most of the isolation locally and are filed and open; #342 has landed.
 
 Not a ticket: ask Anthropic and OpenAI, in writing, whether a person's own subscription login may be held by their
 own Worker and used from their own containers. Only the user can ask.
