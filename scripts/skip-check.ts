@@ -330,6 +330,8 @@ async function runSuite(argv: string[], stuckSecs: number): Promise<number | nul
     let settled = false;
     const timer = setInterval(() => {
       if (settled || lastReport === 0 || Date.now() - lastReport <= stuckSecs * 1000) return;
+      // Exited between ticks: the exit handler below resolves, never the stop.
+      if (child.exitCode !== null) return;
       settled = true;
       clearInterval(timer);
       void stopStuck(child, lastFile, stuckSecs).then(() => resolve(null));
