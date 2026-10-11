@@ -108,6 +108,9 @@ describe("round 1 runs round 2 when it applied a fix or lacked a working reviewe
     mkdirSync(join(d, "logs"), { recursive: true });
     writeFileSync(join(d, "manifest.json"), `${JSON.stringify({ base: "BASESHA" })}\n`);
     writeFileSync(join(d, "brief.md"), "waybill\n");
+    for (const lens of ["style", "security"]) {
+      writeFileSync(join(d, `review-${lens}-brief.md`), `# ${lens} brief\n`);
+    }
     const recorded: string[][] = [];
     const answer = (name: string, args: string[]): StepChild => {
       if (name === "turnpikes")

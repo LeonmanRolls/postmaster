@@ -1,7 +1,16 @@
 // Tests beside scripts/skip-check.ts: the report's shape read back, the list held against
 // it, and each way a skip can be wrongly listed or unlisted.
 import { expect, test } from "bun:test";
-import { checkReport, fullName, parseReport, parseSkipList, type SkipEntry } from "./skip-check.ts";
+import {
+  checkReport,
+  fullName,
+  parseReport,
+  parseSkipList,
+  reportFileOf,
+  stuckSeconds,
+  suiteCommand,
+  type SkipEntry,
+} from "./skip-check.ts";
 
 const CASE = (attrs: string, body = ""): string =>
   body === "" ? `<testcase ${attrs} />` : `<testcase ${attrs}>${body}</testcase>`;
@@ -149,4 +158,28 @@ test("an apostrophe in a test name survives the report's escaping", () => {
     "linux",
   );
   expect(res.faults).toEqual([]);
+});
+
+test("a bare file header reports its file, and nothing else does", () => {
+  expect(reportFileOf("scripts/demo.test.ts:")).toBe("scripts/demo.test.ts");
+  expect(reportFileOf("standin-a.test.ts:")).toBe("standin-a.test.ts");
+  expect(reportFileOf("(pass) demo works [1ms]")).toBeNull();
+  expect(reportFileOf("  scripts/demo.test.ts:")).toBeNull();
+  expect(reportFileOf("(fail) names scripts/demo.test.ts: 1")).toBeNull();
+  expect(reportFileOf("scripts/demo.test.ts")).toBeNull();
+});
+
+test("the stuck wait defaults to a minute and takes a positive integer", () => {
+  expect(stuckSeconds(undefined)).toBe(60);
+  expect(stuckSeconds("3")).toBe(3);
+  expect(stuckSeconds("0")).toBe(60);
+  expect(stuckSeconds("soon")).toBe(60);
+});
+
+test("the suite seam replaces the bun invocation whole", () => {
+  expect(suiteCommand("/bun", "4", "/r.xml", "/standin.sh")).toEqual(["/standin.sh"]);
+  const full = suiteCommand("/bun", "2", "/r.xml", undefined);
+  expect(full.slice(0, 3)).toEqual(["/bun", "test", "--parallel=2"]);
+  expect(full).toContain("--timeout=60000");
+  expect(full).toContain("--reporter-outfile=/r.xml");
 });
