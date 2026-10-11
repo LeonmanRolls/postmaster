@@ -1,6 +1,6 @@
 // Per-test child-process tracking for the test preload: when a test ends
 // with processes it started still running, its failure names them with pid,
-// command and start state. A preload cannot wrap test or
+// command and state. A preload cannot wrap test or
 // node:child_process.spawn (ESM live bindings bypass require-patching), and
 // Bun reaps a timed-out test's children before afterEach runs, so this
 // snapshots the test process's descendants instead: every 250 ms from each
