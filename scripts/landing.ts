@@ -68,8 +68,8 @@
 //       once and matches the records as they stand; everything else, the notes
 //       included, is left byte-identical. Refuses a card whose printed parts
 //       are not one block from `## Checks`, a card holding `## Notes` twice,
-//       and switch-offs with no reason or refused, without writing. Prints
-//       nothing.
+//       a card holding an HTML comment, and switch-offs with no reason or
+//       refused, without writing. Prints nothing.
 //   run landing card-open <checkpoint>
 //       the checkpoint's open P1 and P2 findings, one `- [<severity>] <id>` bullet
 //       each, or `none`. Open P3 residue prints `none`: it lands.
@@ -109,8 +109,8 @@
 //           be read (a duplicate id, a finding-shaped line that is not a finding, an
 //           unreadable state, a fence marker line, or a quoted line); a card holding an
 //           HTML comment or not holding the rendered block exactly once; card-write: a
-//           card whose printed parts are not one block from `## Checks`, or that
-//           holds the notes section twice
+//           card whose printed parts are not one block from `## Checks`, that
+//           holds the notes section twice, or that holds an HTML comment
 //   exit 2  fresh: the faults, one line each; journey: `blocked`; switch-offs: `held`
 //   exit 3  switch-offs, card-write: `no reason`
 //   exit 4  switch-offs, card-write: `refused`
@@ -1166,6 +1166,9 @@ function cardWrite(o: string[]): number {
   ]) {
     if (next.split(part).length - 1 !== 1) die(`card-write: rendered ${name} does not land once`);
   }
+  // A comment the validators refuse must stop the write, not land on a card
+  // that exits 0 here and is withheld at landing.
+  refuseComments(next, "card");
   writeFileSync(o[3]!, next);
   return 0;
 }
