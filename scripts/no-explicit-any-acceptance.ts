@@ -21,7 +21,7 @@
 import { spawnSync } from "node:child_process";
 import type { SpawnSyncReturns } from "node:child_process";
 import { existsSync, lstatSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join, relative } from "node:path";
+import { join, relative, resolve } from "node:path";
 import { toolRoot } from "./lib/paths.ts";
 
 export interface AcceptResult {
@@ -45,9 +45,19 @@ const RULE = "typescript/no-explicit-any";
 const RULE_RENDERED = `${RULE.replace("/", "(")})`;
 const PROBE_REL = "scripts/zz-probe.ts";
 const PROBE_SRC = "export const z = (x: any): number => x;\n";
+/** The installed oxlint under the repo root: the pinned binary, never bunx,
+ * which would fetch an unpinned oxlint where none is installed. Absolute,
+ * since the runner spawns it with the root as its working directory and a
+ * relative binary would resolve under the root twice. */
+function oxlintBin(root: string): string {
+  return resolve(root, "node_modules", ".bin", "oxlint");
+}
+
 // The count invocation, shared by the clean count and its planted control so
 // the two are provably the same command.
-const COUNT_ARGS = ["bunx", "oxlint", "-A", "all", "-D", RULE, "-f", "unix"];
+function countArgs(root: string): string[] {
+  return [oxlintBin(root), "-A", "all", "-D", RULE, "-f", "unix"];
+}
 const MAX_SUPPRESS = 5;
 // Generated bundles, byte-pinned by `bundle-scrub --check`, the same reason as vendored code.
 const WANT_IGNORE =
@@ -293,7 +303,7 @@ export function accept(root: string, run: Runner = spawnRunner, base?: string): 
   for (const dir of ["scripts", "lint", "types"]) walk(join(root, dir), root, hits);
   hits.sort((a, b) => (a.loc < b.loc ? -1 : a.loc > b.loc ? 1 : 0));
   findings.push(...suppressionFindings(hits));
-  const counted = run([...COUNT_ARGS], root);
+  const counted = run(countArgs(root), root);
   if (!counted.ran) {
     return { code: 2, out: "", err: `${me}: the count run never started: ${counted.err}` };
   }
@@ -315,8 +325,8 @@ export function accept(root: string, run: Runner = spawnRunner, base?: string): 
   } catch (e) {
     return { code: 2, out: "", err: `${me}: cannot plant the probe: ${String(e)}\n` };
   }
-  const flagged = run(["bunx", "oxlint"], root);
-  const control = run([...COUNT_ARGS], root);
+  const flagged = run([oxlintBin(root)], root);
+  const control = run(countArgs(root), root);
   let leftover = false;
   try {
     rmSync(probe);
@@ -352,7 +362,7 @@ export function accept(root: string, run: Runner = spawnRunner, base?: string): 
       "count: the planted probe reads 0 problems through the count command, want nonzero",
     );
   }
-  const calm = run(["bunx", "oxlint"], root);
+  const calm = run([oxlintBin(root)], root);
   if (!calm.ran) {
     return { code: 2, out: "", err: `${me}: the calm run never started: ${calm.err}` };
   }

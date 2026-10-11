@@ -19,7 +19,7 @@
 //
 //   exit 0  config written (or printed), or keys listed
 //   exit 1  a harness was named that is not on PATH, the coachman shares a lane's model, fewer
-//           than two lanes were given, a reviewer is not a lane, an answer was missing, a round
+//           than two lanes were given, a reviewer or the surveyor is not a lane, an answer was missing, a round
 //           time limit was not a whole number of seconds from 1 to 86400, a planning review link
 //           omitted {path}, a mode other than synthesis, single-thread or alternate, a
 //           ticket_notes other than given or held-back, or an existing config was not overwritten
@@ -59,6 +59,7 @@ import {
 } from "./lib/effective-config.ts";
 import { scriptsDir } from "./lib/paths.ts";
 import { die, run } from "./lib/proc.ts";
+import { SURVEYOR_HARNESS_HELP, SURVEYOR_HARNESSES } from "./surveyor.ts";
 
 const HERE = scriptsDir(import.meta);
 
@@ -105,6 +106,18 @@ function roleLine(name: string, h: string, m: string, e: string, ef: string): st
 function needHarness(h: string): void {
   const problem = harnessProblem(h);
   if (problem !== null) die(problem, 1);
+}
+
+// A surveyor on a harness the call cannot read is refused here, where the
+// user can pick another lane, rather than at the first survey. An empty
+// harness is malformed input other checks own, so it passes through.
+function needSurveyorHarness(name: string, harness: string): void {
+  if (harness !== "" && !SURVEYOR_HARNESSES.has(harness)) {
+    die(
+      `setup: surveyor '${name}' uses ${harness}, which has no recorded final-message shape; name a lane on ${SURVEYOR_HARNESS_HELP}`,
+      1,
+    );
+  }
 }
 
 interface AskOpts {
@@ -348,6 +361,7 @@ lane.<name>.env_file?      (none)             env file for an alternate backend
 workhorses                 <lanes>            workhorse lanes, comma separated
 reviewers                  <workhorses>       reviewer lanes, comma separated
 reviewers.<lens>?          (reviewers)        reviewer lanes for one lens only; bug reviewers need a code-review form
+surveyor?                (first reviewer)   the surveyor's lane; blank runs it on the first reviewer lane
 coachman.harness                              never a lane's model
 coachman.model
 coachman.effort?           (none)
@@ -672,6 +686,14 @@ for (const lens of lenses) {
   LENS_VALS[lens] = LR;
 }
 if (LENS_TABLE) LENS_TABLE = `\n[team.lens_reviewers]\n${LENS_TABLE}`;
+const SURVEYOR = ask("Surveyor lane (blank: the first reviewer lane)", "", "surveyor?", opts);
+if (SURVEYOR !== "" && !MERGED_NAMES.includes(SURVEYOR)) {
+  die(`setup: surveyor '${SURVEYOR}' is not one of the lanes (${MERGED_TEXT})`, 1);
+}
+if (SURVEYOR !== "") {
+  const found = LANE_HARNESSES.find((lh) => lh.startsWith(`${SURVEYOR}=`));
+  needSurveyorHarness(SURVEYOR, found === undefined ? "" : found.slice(SURVEYOR.length + 1));
+}
 
 if (PROJECT === "") {
   console.log("");
@@ -1010,6 +1032,7 @@ if (PROJECT !== "") {
   const teamParts: string[] = [];
   if (WORKHORSES !== "") teamParts.push(`workhorses = ${tomlList(WORKHORSES)}`);
   if (REVIEWERS !== "") teamParts.push(`reviewers = ${tomlList(REVIEWERS)}`);
+  if (SURVEYOR !== "") teamParts.push(`surveyor = "${SURVEYOR}"`);
   for (const entry of [
     roleLine("coachman", CH, CM, CE, CEF),
     roleLine("coachman_fallback", FH, FM, FE, FEF),
@@ -1144,6 +1167,13 @@ if (PROJECT !== "") {
     const p = reviewerProblem(rv, mergedNames, mergedNames.join(", "));
     if (p !== null) die(p, 1);
   }
+  if (SURVEYOR !== "" && !mergedNames.includes(SURVEYOR)) {
+    die(`setup: surveyor '${SURVEYOR}' is not one of the lanes (${mergedNames.join(", ")})`, 1);
+  }
+  if (SURVEYOR !== "") {
+    const harness = recOf(mergedLanes[SURVEYOR]).harness;
+    needSurveyorHarness(SURVEYOR, typeof harness === "string" ? harness : "");
+  }
   for (const [lens, list] of Object.entries(LENS_VALS)) {
     for (const rv of splitList(list)) {
       const p = reviewerProblem(rv, mergedNames, mergedNames.join(", "), lens);
@@ -1261,7 +1291,7 @@ ${LANE_BLOCKS}
 [team]
 workhorses = ${tomlList(WORKHORSES)}
 reviewers = ${tomlList(REVIEWERS)}
-coachman = { harness = "${CH}", model = "${CM}"${roleExtra(CE, CEF)} }
+${SURVEYOR !== "" ? `surveyor = "${SURVEYOR}"\n` : ""}coachman = { harness = "${CH}", model = "${CM}"${roleExtra(CE, CEF)} }
 coachman_fallback = { harness = "${FH}", model = "${FM}"${roleExtra(FE, FEF)} }
 postmaster = { harness = "${PH}", model = "${PM}"${roleExtra(PE, PEF)} }
 clerk = { harness = "${CLH}", model = "${CLM}"${roleExtra(CLE, CLEF)} }

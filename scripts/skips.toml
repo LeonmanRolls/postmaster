@@ -455,6 +455,12 @@ reason = "needs a model run from this branch; the postmaster dispatches and scor
 systems = ["linux", "darwin"]
 
 [[skip]]
+file = "scripts/acceptance-429.test.ts"
+name = "C4: the live survey > the synthesis call answers in form and is kept and quoted"
+reason = "needs a model lane on the run's surveyor pick over run 202 at 665a99f; the coachman makes the call once during synthesis and keeps it in the run's record"
+systems = ["linux", "darwin"]
+
+[[skip]]
 file = "scripts/acceptance-379.test.ts"
 name = "C1: the fixture run takes in a moved main > the card is fresh on a main that moved after dispatch"
 reason = "needs the C5 fixture run with a commit on its main; the postmaster checks the card at landing"
