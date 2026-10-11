@@ -90,6 +90,7 @@ interface HerdrStubState {
   agents: Array<string | undefined>;
   agentPanes: Record<string, string>;
   prompt?: string[][];
+  paneRuns: Record<string, number>;
 }
 // The stub tmux server's state file.
 interface TmuxWindow {
@@ -288,14 +289,38 @@ function herdrStubInner(args: string[], stateDir: string): void {
     agents: [],
     agentPanes: {},
     prompt: [],
+    paneRuns: {},
   });
   if (!Array.isArray(st.agents)) st.agents = [];
   // The file's content is untrusted, so the shape check reads through unknown.
   const panes: unknown = st.agentPanes;
   if (panes === null || typeof panes !== "object" || Array.isArray(panes)) st.agentPanes = {};
+  const runs: unknown = st.paneRuns;
+  if (runs === null || typeof runs !== "object" || Array.isArray(runs)) st.paneRuns = {};
+  // An agent shows in a pane some seconds after `pane run` starts its
+  // command there, unnamed until something names it, as on the live
+  // server. The delay is `agent.delay-ms`, in milliseconds, default 2000;
+  // `agent.never` holds a pane with no harness at all, where no agent
+  // ever shows.
+  const agentDelayMs = (): number => {
+    try {
+      const raw = readFileSync(join(stateDir, "agent.delay-ms"), "utf8").trim();
+      if (/^[0-9]+$/u.test(raw)) return Number(raw);
+    } catch {}
+    return 2000;
+  };
+  const paneHasAgent = (pane: string): boolean => {
+    if (!st.panes[pane]) return false;
+    for (const at of Object.values(st.agentPanes)) if (at === pane) return true;
+    if (flag(join(stateDir, "agent.never"))) return false;
+    const at = st.paneRuns[pane];
+    return typeof at === "number" && Date.now() - at >= agentDelayMs();
+  };
+  const agentStatus = (): string => (flag(join(stateDir, "agent.blocked")) ? "blocked" : "idle");
   // An agent name follows its pane's occupant and clears when that pane goes,
   // as the server does; a spawn under the freed handle starts a new session.
   const dropAgents = (): void => {
+    for (const pane of Object.keys(st.paneRuns)) if (!st.panes[pane]) delete st.paneRuns[pane];
     st.agents = st.agents.filter((name: string | undefined) => {
       if (typeof name !== "string") return false;
       const pane = st.agentPanes[name];
@@ -474,6 +499,8 @@ function herdrStubInner(args: string[], stateDir: string): void {
       ws = st.panes[pane].ws;
     save(path, st);
     if (flag(join(stateDir, "pane.dead"))) return;
+    st.paneRuns[pane] = Date.now();
+    save(path, st);
     const late = flag(join(stateDir, "pane.late"));
     const prefix = late ? "sleep 5; " : "";
     // The late pane leaves a note once its command has run, so a test can wait for that and not for a timer.
@@ -501,13 +528,17 @@ function herdrStubInner(args: string[], stateDir: string): void {
     return;
   }
   if (command === "agent get") {
-    if (!st.agents.includes(args[2])) fail("agent_not_found");
-    out({
-      agent: {
-        name: args[2],
-        agent_status: flag(join(stateDir, "agent.blocked")) ? "blocked" : "idle",
-      },
-    });
+    const target = args[2] ?? "";
+    // The agent commands take a pane id as their target, as on the live
+    // server, and answer for the agent showing there, named or not.
+    if (st.agents.includes(target)) {
+      out({ agent: { name: target, agent_status: agentStatus() } });
+      return;
+    }
+    if (!paneHasAgent(target)) fail("agent_not_found");
+    let name: string | null = null;
+    for (const [known, at] of Object.entries(st.agentPanes)) if (at === target) name = known;
+    out({ agent: { name, agent_status: agentStatus() } });
     return;
   }
   if (command === "agent start") {
@@ -524,10 +555,9 @@ function herdrStubInner(args: string[], stateDir: string): void {
     // The name follows the pane's occupant: whatever it was called before is freed.
     // A pane with no agent takes no name: the server registers nothing there, so a
     // shell spawn stays unregistered, as on the live server.
-    let hosted = false;
+    const hosted = paneHasAgent(pane);
     for (const [known, at] of Object.entries(st.agentPanes)) {
       if (at === pane) {
-        hosted = true;
         st.agents = st.agents.filter((entry: string | undefined) => entry !== known);
         delete st.agentPanes[known];
       }
@@ -538,21 +568,27 @@ function herdrStubInner(args: string[], stateDir: string): void {
     return;
   }
   if (command === "agent prompt") {
+    const target = args[2] ?? "";
+    // A prompt to a name no agent has fails, as on the live server; only a
+    // prompt the server accepts is received.
+    if (!st.agents.includes(target) && !paneHasAgent(target)) fail("agent_not_found");
+    if (flag(join(stateDir, "agent.blocked"))) fail("agent_blocked");
     st.prompt!.push(args.slice(2));
     save(path, st);
-    if (flag(join(stateDir, "agent.blocked"))) fail("agent_blocked");
     out({ accepted: true });
     return;
   }
   if (command === "agent wait") {
-    if (!st.agents.includes(args[2])) fail("agent_not_found");
+    const target = args[2] ?? "";
+    if (!st.agents.includes(target) && !paneHasAgent(target)) fail("agent_not_found");
     if (flag(join(stateDir, "agent.blocked"))) fail("agent_blocked");
     out({ settled: true });
     return;
   }
   if (command === "agent read") {
-    if (!st.agents.includes(args[2])) fail("agent_not_found");
-    console.log(`stub screen of ${args[2]}`);
+    const target = args[2] ?? "";
+    if (!st.agents.includes(target) && !paneHasAgent(target)) fail("agent_not_found");
+    console.log(`stub screen of ${target}`);
     return;
   }
   return;
@@ -3097,6 +3133,7 @@ export async function runControls(): Promise<number> {
         const panes = ["p1", "p2", "p3", "p4"];
         const st: HerdrStubState = {
           n: 10,
+          paneRuns: {},
           spaces: {
             w1: {
               label: basename(f.repo),
@@ -3683,6 +3720,7 @@ export async function runControls(): Promise<number> {
       {
         const st: HerdrStubState = {
           n: 9,
+          paneRuns: {},
           spaces: {
             w9: { label: "T-1", tokens: {}, panes: ["p9"], tabs: ["w9:t1"], path: solReal },
           },
@@ -3913,6 +3951,7 @@ export async function runControls(): Promise<number> {
       {
         const st: HerdrStubState = {
           n: 9,
+          paneRuns: {},
           spaces: {
             w9: {
               label: "T-1",
@@ -3983,6 +4022,7 @@ export async function runControls(): Promise<number> {
       {
         const st: HerdrStubState = {
           n: 10,
+          paneRuns: {},
           spaces: {
             w9: {
               label: "T-1",
@@ -4209,6 +4249,7 @@ export async function runControls(): Promise<number> {
         if (rogue) panes.rogue = { ws: "w1", cwd: realpathSync(f.repo), tokens: {} };
         return {
           n: 10,
+          paneRuns: {},
           spaces: {
             w1: {
               label: basename(f.repo),
@@ -4800,7 +4841,12 @@ export async function runControls(): Promise<number> {
       }
     };
     resetHarness(root);
-    const shellSpawn = execHost(["spawn", "clerk-shell", f.repo, "--", "true"], stubs, root);
+    // This pane holds no harness at all, so no agent ever shows in it; the
+    // spawn's naming budget is short, since there is nothing to name.
+    writeFileSync(join(stub, "agent.never"), "");
+    const shellSpawn = execHost(["spawn", "clerk-shell", f.repo, "--", "true"], stubs, root, {
+      POSTMASTER_HOST_SPAWN_WAIT: "2",
+    });
     const shellTab = kvOf(shellSpawn.out, "tab");
     const shellRead = execHost(["read", "clerk-shell", "5"], stubs, root);
     await pass(
@@ -8105,6 +8151,8 @@ export async function live(): Promise<void> {
         ["spawn", liveHandle, f.repo, "--label", "live close probe", "--", "sh"],
         f.caller,
         root,
+        // A shell hosts no agent, so the spawn's naming budget is short.
+        { POSTMASTER_HOST_SPAWN_WAIT: "5" },
       );
       const placed = spawned.out.trim();
       const liveSpace = kvOf(placed, "space");
@@ -8136,7 +8184,9 @@ export async function live(): Promise<void> {
           !tabsAfter.out.includes(liveTab),
         `${closed.out}\n${closed.err}\n${tabsAfter.out}`,
       );
-      const respawned = liveHost(["spawn", liveHandle, f.repo, "--", "sh"], f.caller, root);
+      const respawned = liveHost(["spawn", liveHandle, f.repo, "--", "sh"], f.caller, root, {
+        POSTMASTER_HOST_SPAWN_WAIT: "5",
+      });
       await pass("the handle spawns again", () => respawned.code === 0, respawned.out);
       const closedAgain = liveHost(["close-handle", liveHandle], f.caller, root);
       await pass("closing it again leaves nothing behind", () => closedAgain.code === 0);

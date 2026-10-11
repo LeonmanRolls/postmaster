@@ -3977,7 +3977,62 @@ function herdrReport(pid: number, name: string): Promise<void> {
     ]);
   })();
 }
-function spawnCmd(args: string[]): void {
+function spawnWaitSeconds(): number {
+  try {
+    return count(process.env.POSTMASTER_HOST_SPAWN_WAIT ?? "120", "POSTMASTER_HOST_SPAWN_WAIT");
+  } catch (error) {
+    warn(
+      `POSTMASTER_HOST_SPAWN_WAIT is not a number; waiting 120s: ${String((error as Error).message)}`,
+    );
+    return 120;
+  }
+}
+// Name the agent once Herdr detects it in the spawned pane: the rename right
+// after `pane run` lands before detection and registers nothing, so retry it
+// until `agent get` answers or the budget runs out. Always tries once.
+async function awaitHerdrName(handle: string, pane: string): Promise<boolean> {
+  const end = Date.now() + spawnWaitSeconds() * 1000;
+  for (;;) {
+    herdr(["agent", "rename", pane, handle]);
+    if (herdr(["agent", "get", handle]).code === 0) return true;
+    if (Date.now() >= end) return false;
+    await Bun.sleep(1000);
+  }
+}
+function isAgentNotFound(result: { code: number; err: string }): boolean {
+  return result.code !== 0 && parseJson(result.err)?.error?.code === "agent_not_found";
+}
+// The pane the host recorded opening for the handle, "" when none did: the
+// only pane a handle ever resolves to besides its own agent name.
+function herdrPaneFor(handle: string): string {
+  for (const file of placementFiles()) {
+    let item: Record<string, unknown> | null = null;
+    try {
+      item = JSON.parse(readFileSync(file, "utf8")) as Record<string, unknown>;
+    } catch {
+      continue;
+    }
+    if (item === null || typeof item !== "object" || Array.isArray(item)) continue;
+    if (item.handle !== handle) continue;
+    if (typeof item.pane !== "string" || !item.pane) continue;
+    return item.pane;
+  }
+  return "";
+}
+// Reach a session Herdr never named under its handle through the pane its
+// placement record names, when that pane holds an agent; nothing is ever
+// sent to a pane with no agent. A rename goes first, so a session found
+// this way is named from then on. "" when the session cannot be reached.
+function herdrResolve(handle: string): string {
+  if (herdr(["agent", "get", handle]).code === 0) return handle;
+  const pane = herdrPaneFor(handle);
+  if (!pane) return "";
+  herdr(["agent", "rename", pane, handle]);
+  if (herdr(["agent", "get", handle]).code === 0) return handle;
+  if (herdr(["agent", "get", pane]).code === 0) return pane;
+  return "";
+}
+async function spawnCmd(args: string[]): Promise<void> {
   const originalHandle = args[0] ?? "";
   const givenCwd = args[1] ?? "";
   if (!originalHandle || !givenCwd)
@@ -4039,7 +4094,11 @@ function spawnCmd(args: string[]): void {
       const shellCommand = commandArgs.map(quote).join(" ");
       if (herdr(["pane", "run", placed.pane, shellCommand]).code !== 0)
         die(`herdr could not start ${handle}`);
-      herdr(["agent", "rename", placed.pane, handle]);
+      if (!(await awaitHerdrName(handle, placed.pane)))
+        warn(
+          `${handle} is running in pane ${placed.pane} but Herdr has not named it yet; ` +
+            `send, wait and read reach it through its tab until it registers`,
+        );
     }
     console.log(
       `host=herdr space=${placed.space} tab=${placed.tab} pane=${placed.pane} handle=${handle}`,
@@ -4110,18 +4169,31 @@ async function sendCmd(args: string[]): Promise<void> {
   if (host === "herdr") {
     const text = readFileSync(file, "utf8");
     if (waitFor === null) {
-      if (herdr(["agent", "prompt", handle, text]).code !== 0)
-        die(`herdr could not prompt ${handle}`);
+      let result = herdr(["agent", "prompt", handle, text]);
+      if (isAgentNotFound(result)) {
+        const resolved = herdrResolve(handle);
+        result = resolved ? herdr(["agent", "prompt", resolved, text]) : result;
+      }
+      if (result.code !== 0) die(`herdr could not prompt ${handle}`);
     } else {
-      const result = herdr([
+      const argsFor = (target: string): string[] => [
         "agent",
         "prompt",
-        handle,
+        target,
         text,
         "--wait",
         "--timeout",
         String(waitFor * 1000),
-      ]);
+      ];
+      let target = handle;
+      let result = herdr(argsFor(target));
+      if (isAgentNotFound(result)) {
+        const resolved = herdrResolve(handle);
+        if (resolved) {
+          target = resolved;
+          result = herdr(argsFor(target));
+        }
+      }
       if (result.code !== 0) {
         const code = parseJson(result.err)?.error?.code;
         if (code === "agent_prompt_stalled")
@@ -4137,7 +4209,7 @@ async function sendCmd(args: string[]): Promise<void> {
         }
         die(`herdr could not prompt ${handle}: ${code || result.err.trim()}`);
       }
-      const status = herdrData(["agent", "get", handle])?.agent?.agent_status;
+      const status = herdrData(["agent", "get", target])?.agent?.agent_status;
       if (status === "blocked") {
         console.log(
           `sent; ${handle} stopped at an approval or a question: the user answers it in Herdr`,
@@ -4173,12 +4245,20 @@ async function waitCmd(args: string[]): Promise<void> {
   const handle = handleOf(rawHandle);
   const host = detect();
   if (host === "herdr") {
-    const result = herdr(["agent", "wait", handle, "--timeout", String(seconds * 1000)]);
+    let target = handle;
+    let result = herdr(["agent", "wait", target, "--timeout", String(seconds * 1000)]);
+    if (isAgentNotFound(result)) {
+      const resolved = herdrResolve(handle);
+      if (resolved) {
+        target = resolved;
+        result = herdr(["agent", "wait", target, "--timeout", String(seconds * 1000)]);
+      }
+    }
     if (result.code !== 0) {
       console.log(`${handle} did not settle within ${seconds}s`);
       throw hostError("", 3);
     }
-    if (herdrData(["agent", "get", handle])?.agent?.agent_status === "blocked") {
+    if (herdrData(["agent", "get", target])?.agent?.agent_status === "blocked") {
       console.log(`${handle} stopped at an approval or a question: the user answers it in Herdr`);
       throw hostError("", 3);
     }
@@ -4217,15 +4297,20 @@ function readCmd(args: string[]): void {
   const handle = handleOf(rawHandle);
   const host = detect();
   if (host === "herdr") {
-    const result = herdr([
+    const argsFor = (target: string): string[] => [
       "agent",
       "read",
-      handle,
+      target,
       "--source",
       "recent-unwrapped",
       "--lines",
       String(lines),
-    ]);
+    ];
+    let result = herdr(argsFor(handle));
+    if (isAgentNotFound(result)) {
+      const resolved = herdrResolve(handle);
+      result = resolved ? herdr(argsFor(resolved)) : result;
+    }
     if (result.out) process.stdout.write(result.out);
     if (result.err) process.stderr.write(result.err);
     if (result.code) throw hostError("", result.code);
@@ -6098,7 +6183,7 @@ async function main(): Promise<void> {
       await closeRunCmd(args);
       return;
     case "spawn":
-      spawnCmd(args);
+      await spawnCmd(args);
       return;
     case "send":
       await sendCmd(args);
