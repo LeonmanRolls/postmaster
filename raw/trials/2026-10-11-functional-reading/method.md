@@ -62,7 +62,9 @@ A reader is a fresh headless model session with no tools, no repository and no m
 session, given the module's source as text, a glossary of the helpers it imports (verified by
 running them) and the questions, and asked for its answers as one JSON object. It is not told which
 arrangement it has or that there is more than one. Each module and arrangement is read by several
-independent sessions with the same prompt.
+independent sessions with the same prompt, in two modes: **careful** (it is told to trace each
+answer step by step) and **quick** (it is told to write nothing but the answers). The sessions run
+`claude -p` with no tools, a short system prompt, no session record and an empty working folder.
 
 The questions are written by a helper that sees only the original, with the answers computed by
 running it. 24 per module and two controls: 10 *trace* (one call on an input), 8 *state* (the answer
@@ -71,21 +73,53 @@ running the edited original), one *trivial* control (a line's content) and one *
 (the code does not say; the right answer is "undetermined"). An answer is right when it equals the
 ground truth after the normalisation in `apparatus/reading.ts`; a missing answer is wrong.
 
-## What would count, fixed before any reader runs
+## Calibration, and what it changed
 
-For the user's claim, "functional is easier to follow, and more so as the code grows and its state
-is more shared":
+Before any rewrite existed, the original of `style-findings.ts` was read by 3 sessions of the small
+model (`claude-haiku-5-5`) at medium reasoning effort, then 3 at low effort, then 2 with the reader told
+to write no reasoning and its thinking capped at 0, and 2 capped at 3,000 tokens. Only the original
+was read, so nothing about how the arrangements compare had been seen. [calibration/](calibration/)
+holds every session.
 
-1. **A difference.** The functional arrangement answers more of a module's questions right than the
-   original, and the paired bootstrap interval of the difference, over the questions, excludes zero.
-2. **More than cleaning up.** The functional arrangement also beats the tidy one, by the same test.
-3. **Growing with scale.** The difference is larger for the 1,827-line module than for the 485-line
-   one. Three modules cannot separate size from the kind of state, and the record says so.
+| setting | valid sessions | answers right | mean output tokens | mean seconds |
+|---|---|---|---|---|
+| careful, medium effort | 3 | 74 of 78 (95%) | 67,500 | 269 |
+| careful, low effort | 3 | 73 of 78 (94%) | 56,200 | 226 |
+| quick, thinking capped at 0 | 2 | 43 of 52 (83%) | 39,100 | 162 |
+| quick, thinking capped at 3,000 | 1 of 2 | 24 of 26 | 51,600 | 211 |
 
-It counts against the claim if the functional arrangement answers no more right than the original on
-the largest module, or no more than the tidy one. It says nothing if readers get nearly everything
-right in every arrangement (above 95%) or very little (below 20%): the reader or the questions are
-then the wrong strength, and the record says that instead.
+The model reads this 1,827-line module almost perfectly given the time, so accuracy at the careful
+setting is at the ceiling, and neither the effort flag nor the cap bounds its thinking (a cap of 0
+still spent 38,000 thinking tokens). One session in the last row answered "undetermined" to every
+question after two seconds. So, fixed here and before any arrangement was read:
+
+1. **The primary measure is the effort a reader spends to answer**: the output tokens of a
+   careful-mode session, at equal accuracy. Accuracy is the primary measure only in quick mode,
+   where the original reads 83%.
+2. **A session is invalid** when its answers cannot be read out of its reply, or when at least half
+   of them are "undetermined". It is kept, listed and left out of every figure.
+3. **Five valid sessions** per arrangement in each mode, the first five in the order they ran. The
+   readers are `claude-haiku-5-5` at medium effort in careful mode and at low effort in quick mode.
+
+## What would count, fixed before any arrangement was read
+
+Per module, functional against original, in careful mode:
+
+- **Easier**: the ratio of mean output tokens (functional over original) has its bootstrap 95%
+  interval below 1, and the share of answers right is not lower by more than 5 points.
+- **Harder**: the interval is above 1, or the share right is lower by more than 5 points.
+- **No difference**: otherwise.
+
+In quick mode, **easier** is a higher share right with the paired bootstrap interval above zero,
+**harder** a lower one with the interval below zero. The same reading is made for functional against
+tidy: "more than cleaning up". The length of each arrangement and the tokens of its source are
+reported beside the effort, since a longer module is not read for free.
+
+For the user's claim, "and more so as the code grows and its state is more shared": it holds if the
+modules read easier in the order of their size, the ratio smallest on the largest module. It counts
+against the claim if the functional arrangement reads harder on the largest module, or no easier than
+the tidy one. Three modules cannot separate size from the kind of state, and the record says so. It
+says nothing if every arrangement of a module costs about the same and is answered equally well.
 
 ## What it cannot show
 

@@ -28,6 +28,16 @@ describe("the prompt", () => {
     expect(prompt).toContain("### Q01\nWhat is 1 + 1?");
     expect(prompt).toContain("### Q02\nWhich words?");
   });
+
+  test("a careful reader is told to trace, a quick one to write nothing but the answers", () => {
+    const args = { file: "scripts/x.ts", source: "x", glossary: "g", questions };
+    const careful = buildPrompt({ ...args, mode: "careful" });
+    const quick = buildPrompt({ ...args, mode: "quick" });
+    expect(careful).toContain("Trace it carefully, step by step");
+    expect(quick).not.toContain("Trace it carefully");
+    expect(quick).toContain("Do not write out your reasoning");
+    expect(buildPrompt(args)).toBe(careful);
+  });
 });
 
 describe("reading the answers back", () => {

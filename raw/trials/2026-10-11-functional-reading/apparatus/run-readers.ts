@@ -5,16 +5,17 @@
 //   bun --no-env-file --config=/dev/null run-readers.ts --module <name> --arrangement <name>
 //     --source <file> --questions <questions.json> --glossary <glossary.md> --model <id>
 //     --effort <low|medium|high|xhigh|max> --samples <n> --out <folder> --cwd <empty folder>
-//     [--concurrency <k>] [--budget <usd per session>]
+//     [--concurrency <k>] [--budget <usd per session>] [--mode careful|quick] [--thinking <tokens>]
 //
 // For sample i it writes <out>/<model>/<module>/<arrangement>/s<i>.json (the session's whole JSON
 // result: reply, usage and cost) and s<i>.answers.json (the answers read out of the reply, or
 // null). A sample that already has its file is skipped, so a run can be repeated or resumed and
-// nothing recorded is overwritten. The prompt goes in on standard input, because a module is longer
+// nothing recorded is overwritten. --mode says how the reader is asked to work (careful: trace
+// step by step; quick: write nothing but the answers) and --thinking caps its thinking tokens. The prompt goes in on standard input, because a module is longer
 // than an argument may be.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { buildPrompt, extractAnswers, type Question } from "./reading.ts";
+import { buildPrompt, extractAnswers, type Mode, type Question } from "./reading.ts";
 
 const SYSTEM = "You are a careful reader of source code. You cannot run code.";
 
@@ -29,7 +30,7 @@ const arg = (name: string, required = true): string => {
 };
 
 const READER_SCRIPT =
-  'cd "$1" && exec claude -p --model "$2" --tools "" --system-prompt "$3" --output-format json ' +
+  'cd "$1" && exec env ${8:+MAX_THINKING_TOKENS="$8"} claude -p --model "$2" --tools "" --system-prompt "$3" --output-format json ' +
   '--no-session-persistence --effort "$4" --max-budget-usd "$5" < "$6" > "$7"';
 
 async function runOne(
@@ -52,6 +53,7 @@ async function runOne(
       config.budget,
       promptPath,
       outPath,
+      config.thinking,
     ],
     { stdout: "ignore", stderr: "pipe" },
   );
@@ -66,7 +68,13 @@ async function runOne(
   writeFileSync(`${job.stem}.answers.json`, `${JSON.stringify(answers)}\n`);
 }
 
-type Config = Readonly<{ cwd: string; model: string; effort: string; budget: string }>;
+type Config = Readonly<{
+  cwd: string;
+  model: string;
+  effort: string;
+  budget: string;
+  thinking: string;
+}>;
 
 async function main(): Promise<void> {
   const module = arg("--module");
@@ -76,7 +84,9 @@ async function main(): Promise<void> {
     model: arg("--model"),
     effort: arg("--effort"),
     budget: arg("--budget", false) || "2",
+    thinking: arg("--thinking", false),
   };
+  const mode = (arg("--mode", false) || "careful") as Mode;
   const samples = Number(arg("--samples"));
   const concurrency = Number(arg("--concurrency", false) || "4");
   const questions = JSON.parse(readFileSync(arg("--questions"), "utf8")) as Question[];
@@ -85,6 +95,7 @@ async function main(): Promise<void> {
     source: readFileSync(arg("--source"), "utf8"),
     glossary: readFileSync(arg("--glossary"), "utf8"),
     questions,
+    mode,
   });
   const dir = join(arg("--out"), config.model, module, arrangement);
   mkdirSync(dir, { recursive: true });
