@@ -410,3 +410,49 @@ export function fixYield(
     rows.has(l) ? [rows.get(l) as FixYieldRow] : [],
   );
 }
+
+export type OverlapCheck = {
+  /** runs with a pair of reviewer lanes that named a serious finding in round 1 */
+  runs: number;
+  /** of those, runs where the two lanes named no finding in common */
+  noOverlap: number;
+  /** findings either lane named in round 1 */
+  found: number;
+  /** what the Chapman estimate says the pair left unseen after round 1, summed over runs */
+  estimatedUnseen: number;
+  /** findings in the change that no round named before and a later round did */
+  laterMissed: number;
+};
+
+/**
+ * What the two reviewer lanes' overlap in round 1 says was left, against what later rounds found
+ * in the change that round 1 had not named. The estimate is the Chapman form of the
+ * capture-recapture estimate, per run.
+ */
+export function overlapCheck(
+  runs: ReadonlyArray<{
+    pair: [string, string] | null;
+    findings: ReadonlyArray<{ round: number; lanes: string[]; group: string | null }>;
+  }>,
+): OverlapCheck {
+  let n = 0;
+  let noOverlap = 0;
+  let found = 0;
+  let unseen = 0;
+  let later = 0;
+  for (const r of runs) {
+    if (!r.pair) continue;
+    const [a, b] = r.pair;
+    const first = r.findings.filter((f) => f.round === 1);
+    const na = first.filter((f) => f.lanes.includes(a)).length;
+    const nb = first.filter((f) => f.lanes.includes(b)).length;
+    if (na + nb === 0) continue;
+    const m = first.filter((f) => f.lanes.includes(a) && f.lanes.includes(b)).length;
+    n += 1;
+    if (m === 0) noOverlap += 1;
+    found += na + nb - m;
+    unseen += unseenEstimate({ first: na, second: nb, both: m });
+    later += r.findings.filter((f) => f.round >= 2 && (f.group ?? "").startsWith("missed")).length;
+  }
+  return { runs: n, noOverlap, found, estimatedUnseen: unseen, laterMissed: later };
+}

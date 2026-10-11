@@ -34,3 +34,20 @@ A lane's serious findings, its time and its share named by it alone, per lane-ro
 | opus | rounds 2 and after | 45 | 13 | 12 | 92% | 14.5 | 0.9 |
 | sonnet | round 1 | 5 | 1 | 0 | 0% | 27.1 | 0.5 |
 | sonnet | rounds 2 and after | 11 | 0 | 0 | – | 20.0 | 0.0 |
+
+## Who named the findings, the 61 runs
+
+| Rounds | Serious findings | One reviewer lane alone | Both reviewer lanes | Security alone | One reviewer lane and security | No lane named |
+| --- | --- | --- | --- | --- | --- | --- |
+| round 1 | 265 | 184 (69%) | 57 (22%) | 15 (6%) | 7 (3%) | 2 (1%) |
+| rounds 2 and 3 | 221 | 161 (73%) | 31 (14%) | 20 (9%) | 7 (3%) | 2 (1%) |
+| round 4 and after | 161 | 116 (72%) | 23 (14%) | 18 (11%) | 2 (1%) | 2 (1%) |
+
+## Who named the findings, the later set
+
+| Rounds | Serious findings | One reviewer lane alone | Both reviewer lanes | Security alone | One reviewer lane and security | No lane named |
+| --- | --- | --- | --- | --- | --- | --- |
+| round 1 | 58 | 46 (79%) | 12 (21%) | 0 (0%) | 0 (0%) | 0 (0%) |
+| rounds 2 and 3 | 43 | 36 (84%) | 4 (9%) | 2 (5%) | 1 (2%) | 0 (0%) |
+| round 4 and after | 55 | 43 (78%) | 2 (4%) | 10 (18%) | 0 (0%) | 0 (0%) |
+

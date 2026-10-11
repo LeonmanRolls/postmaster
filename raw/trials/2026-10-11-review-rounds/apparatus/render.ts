@@ -28,6 +28,8 @@ import {
   type FindingFact,
   type FixYieldRow,
   fixYield,
+  type OverlapCheck,
+  overlapCheck,
   RULES,
   type RunFacts,
   signalRows,
@@ -398,6 +400,7 @@ export function groupsMarkdown(
   findings: readonly TracedFinding[],
   eraOfRun: ReadonlyMap<string, string>,
   filled: number,
+  roundsOfRun: ReadonlyMap<string, number>,
 ): string {
   const later = findings.filter((f) => f.round >= 2);
   const out: string[] = [];
@@ -444,6 +447,27 @@ export function groupsMarkdown(
     `Of the ${placed} that could be placed, ${made} (${pct(made, placed)}) are in lines an earlier round's fix wrote, ${later.filter((f) => f.group?.startsWith("missed")).length} (${pct(later.filter((f) => f.group?.startsWith("missed")).length, placed)}) were in the change when round 1 reviewed it and no round had named them, and ${later.filter((f) => f.group === "outside").length} (${pct(later.filter((f) => f.group === "outside").length, placed)}) are outside the change.`,
     "",
   );
+  {
+    const isLong = (f: TracedFinding): boolean => (roundsOfRun.get(f.run) ?? 0) >= 6;
+    const longN = later.filter(isLong).length;
+    const shortN = later.length - longN;
+    out.push("## In the long runs and the short ones", "");
+    out.push(
+      table(
+        ["Group", "Runs of six rounds or more", "Runs of fewer"],
+        GROUP_ORDER.filter((g) => g !== "missed-not-asked").map((g) => {
+          const l = later.filter((f) => f.group === g && isLong(f)).length;
+          const sh = later.filter((f) => f.group === g && !isLong(f)).length;
+          return [
+            GROUP_LABEL[g] as string,
+            `${l} (${pct(l, longN)})`,
+            `${sh} (${pct(sh, shortN)})`,
+          ];
+        }),
+      ),
+      "",
+    );
+  }
   const one = later.filter((f) => f.relog).length;
   out.push(
     `${one} of the later findings are a re-log: their target text was already a serious finding in an earlier round of the same run.`,
@@ -704,10 +728,64 @@ export function marksMarkdown(
   return out.join("\n");
 }
 
+/** Who named the serious findings, by round band: the two reviewer lanes, each alone or both, and security alone. */
+export function laneSharesMarkdown(findings: readonly TracedFinding[], label: string): string {
+  const security = new Set(["opus", "sonnet"]);
+  const bands: Array<[string, (r: number) => boolean]> = [
+    ["round 1", (r) => r === 1],
+    ["rounds 2 and 3", (r) => r === 2 || r === 3],
+    ["round 4 and after", (r) => r >= 4],
+  ];
+  const rows = bands.map(([name, inBand]) => {
+    const f = findings.filter((x) => inBand(x.round));
+    const kind = (x: TracedFinding): string => {
+      const review = [
+        ...new Set(x.lanes.filter((l) => !security.has(l) && l !== "coachman")),
+      ].sort();
+      const sec = x.lanes.some((l) => security.has(l));
+      if (review.length >= 2) return "both reviewer lanes";
+      if (review.length === 1)
+        return sec ? "one reviewer lane and security" : "one reviewer lane alone";
+      return sec ? "security alone" : "no lane named";
+    };
+    const count = (k: string): string => {
+      const n = f.filter((x) => kind(x) === k).length;
+      return `${n} (${pct(n, f.length)})`;
+    };
+    return [
+      name,
+      String(f.length),
+      count("one reviewer lane alone"),
+      count("both reviewer lanes"),
+      count("security alone"),
+      count("one reviewer lane and security"),
+      count("no lane named"),
+    ];
+  });
+  return [
+    `## ${label}`,
+    "",
+    table(
+      [
+        "Rounds",
+        "Serious findings",
+        "One reviewer lane alone",
+        "Both reviewer lanes",
+        "Security alone",
+        "One reviewer lane and security",
+        "No lane named",
+      ],
+      rows,
+    ),
+    "",
+  ].join("\n");
+}
+
 export function signalsMarkdown(
   first: readonly RunFacts[],
   later: readonly RunFacts[],
   yields: { first: FixYieldRow[]; later: FixYieldRow[] },
+  overlaps: { first: OverlapCheck; later: OverlapCheck },
 ): string {
   const out: string[] = [];
   out.push("# Stop signals", "");
@@ -778,6 +856,42 @@ export function signalsMarkdown(
       "",
     );
   }
+  out.push("## What the two lanes' overlap leaves unseen", "");
+  out.push(
+    "For each run with two reviewer lanes that named a serious finding in round 1, the Chapman estimate of how many serious findings were present and unseen by both, summed, against the findings in the change that later rounds named and round 1 had not.",
+    "",
+  );
+  out.push(
+    table(
+      [
+        "Runs",
+        "With a pair and a round-1 finding",
+        "Of those, the lanes named nothing in common",
+        "Round-1 findings the pair named",
+        "Estimated left unseen",
+        "Findings in the change named in rounds 2 and after",
+      ],
+      [
+        ["The 61 runs", overlaps.first],
+        ["The later set", overlaps.later],
+      ].flatMap(([name, o]) => {
+        const c = o as OverlapCheck;
+        return c.runs === 0
+          ? []
+          : [
+              [
+                name as string,
+                String(c.runs),
+                String(c.noOverlap),
+                String(c.found),
+                num(c.estimatedUnseen, 0),
+                String(c.laterMissed),
+              ],
+            ];
+      }),
+    ),
+    "",
+  );
   out.push("## What a round's fix commits bring", "");
   out.push(
     "A fix commit is an own commit made after a round was launched and before the next. The columns count the commits that changed at least one line, and those with a serious finding in lines they wrote in the next round or in any later round.",
@@ -834,7 +948,12 @@ const main = (args: string[]): void => {
   const filledSerious = sum(first.map((r) => sum(r.seriousBest) - sum(r.seriousByRound)));
   writeFileSync(
     join(dir, "later-findings.md"),
-    groupsMarkdown(traced.findings, eraOfRun, filledSerious),
+    groupsMarkdown(
+      traced.findings,
+      eraOfRun,
+      filledSerious,
+      new Map(first.map((r) => [r.run, r.rounds])),
+    ),
   );
   const laterFile = arg(args, "--later");
   const laterFacts: RunFacts[] = [];
@@ -845,6 +964,10 @@ const main = (args: string[]): void => {
     const laterRows = runs.filter((r) => later.runIds.includes(r.run));
     laterFacts.push(...factsOf(laterRows, later));
   }
+  const laterTracedForLanes =
+    laterFile && existsSync(join(dir, laterFile))
+      ? (JSON.parse(readFileSync(join(dir, laterFile), "utf8")) as Traced)
+      : null;
   const lanesFile = join(dir, "lane-rounds.json");
   const lanesLater = join(dir, "lane-rounds-later.json");
   let lanesText =
@@ -856,6 +979,10 @@ const main = (args: string[]): void => {
   if (existsSync(lanesLater)) {
     const rows = (JSON.parse(readFileSync(lanesLater, "utf8")) as { rows: LaneRoundRow[] }).rows;
     lanesText += lanesMarkdown(rows, "The later set");
+  }
+  lanesText += `\n${laneSharesMarkdown(traced.findings, "Who named the findings, the 61 runs")}\n`;
+  if (laterTracedForLanes) {
+    lanesText += `${laneSharesMarkdown(laterTracedForLanes.findings, "Who named the findings, the later set")}\n`;
   }
   writeFileSync(join(dir, "lanes.md"), lanesText);
   const yieldOf = (t: Traced, ids: ReadonlySet<string>): FixYieldRow[] =>
@@ -880,10 +1007,23 @@ const main = (args: string[]): void => {
       : null;
   writeFileSync(
     join(dir, "signals.md"),
-    signalsMarkdown(factsOf(first, traced), laterFacts, {
-      first: yieldOf(traced, firstIds),
-      later: laterTraced ? yieldOf(laterTraced, laterIds) : [],
-    }),
+    signalsMarkdown(
+      factsOf(first, traced),
+      laterFacts,
+      {
+        first: yieldOf(traced, firstIds),
+        later: laterTraced ? yieldOf(laterTraced, laterIds) : [],
+      },
+      {
+        first: overlapCheck(
+          factsOf(first, traced).map((r) => ({
+            pair: r.pair,
+            findings: r.findings,
+          })),
+        ),
+        later: overlapCheck(laterFacts.map((r) => ({ pair: r.pair, findings: r.findings }))),
+      },
+    ),
   );
   const readersDir = join(dir, "..", "readers");
   const readMarks = (prefix: string): Mark[] =>

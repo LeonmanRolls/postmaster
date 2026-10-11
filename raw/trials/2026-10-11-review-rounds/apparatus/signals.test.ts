@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   fixYield,
+  overlapCheck,
   pathKind,
   RULES,
   type RunFacts,
@@ -123,5 +124,40 @@ describe("what a round's fix commits bring", () => {
   test("a commit that changed no line is left out and a later round is counted apart", () => {
     const rows = fixYield(commits, findings);
     expect(rows[1]).toEqual({ round: "2", commits: 1, nextRound: 0, anyLater: 1 });
+  });
+});
+
+describe("what the overlap says was left", () => {
+  test("two lanes that named the same findings leave nothing unseen, and disjoint ones leave some", () => {
+    const same = overlapCheck([
+      {
+        pair: ["luna", "mimo"],
+        findings: [
+          { round: 1, lanes: ["luna", "mimo"], group: null },
+          { round: 1, lanes: ["luna", "mimo"], group: null },
+        ],
+      },
+    ]);
+    expect(same.estimatedUnseen).toBeCloseTo(0, 5);
+    expect(same.noOverlap).toBe(0);
+    const apart = overlapCheck([
+      {
+        pair: ["luna", "mimo"],
+        findings: [
+          { round: 1, lanes: ["luna"], group: null },
+          { round: 1, lanes: ["mimo"], group: null },
+          { round: 2, lanes: ["luna"], group: "missed-lens-reviewed" },
+        ],
+      },
+    ]);
+    expect(apart.noOverlap).toBe(1);
+    expect(apart.estimatedUnseen).toBeGreaterThan(0);
+    expect(apart.laterMissed).toBe(1);
+  });
+  test("a run with no pair, or no finding in round 1, is not counted (negative control)", () => {
+    expect(
+      overlapCheck([{ pair: null, findings: [{ round: 1, lanes: ["luna"], group: null }] }]).runs,
+    ).toBe(0);
+    expect(overlapCheck([{ pair: ["luna", "mimo"], findings: [] }]).runs).toBe(0);
   });
 });

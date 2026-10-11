@@ -58,6 +58,15 @@ A *transition* is a point at which a loop went on: round r ended with its fixes 
 | stop when the round's fixes changed no code, only words and tests | 2 of 18 | 3 | 3 | 1 of 2 | 17 |
 | stop after round 2 when it had at most two serious findings | 9 of 18 | 30 | 59 | 3 of 9 | 17 |
 
+## What the two lanes' overlap leaves unseen
+
+For each run with two reviewer lanes that named a serious finding in round 1, the Chapman estimate of how many serious findings were present and unseen by both, summed, against the findings in the change that later rounds named and round 1 had not.
+
+| Runs | With a pair and a round-1 finding | Of those, the lanes named nothing in common | Round-1 findings the pair named | Estimated left unseen | Findings in the change named in rounds 2 and after |
+| --- | --- | --- | --- | --- | --- |
+| The 61 runs | 53 | 23 | 244 | 102 | 147 |
+| The later set | 15 | 7 | 57 | 11 | 56 |
+
 ## What a round's fix commits bring
 
 A fix commit is an own commit made after a round was launched and before the next. The columns count the commits that changed at least one line, and those with a serious finding in lines they wrote in the next round or in any later round.
