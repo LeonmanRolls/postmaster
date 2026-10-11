@@ -71,9 +71,9 @@ export function removeDir(dir: string): void {
 
 const BASE_ANSWERS = [
   "lanes=opus, luna",
-  "lane.opus.harness=bash",
+  "lane.opus.harness=claude",
   "lane.opus.model=opus-model",
-  "lane.luna.harness=bash",
+  "lane.luna.harness=codex",
   "lane.luna.model=luna-model",
   "workhorses=opus, luna",
   "coachman.harness=bash",
@@ -102,6 +102,20 @@ export function setupBin(tmp: string): string {
 
 export function writeAnswers(tmp: string, name: string, extra?: string): string {
   const lines = [...BASE_ANSWERS];
+  if (extra) lines.push(extra);
+  const path = join(tmp, `${name}.answers`);
+  writeFileSync(path, `${lines.join("\n")}\n`, "utf8");
+  return path;
+}
+
+/** Answers with leading lines: setup reads the first key= match, so these win. */
+export function writeAnswersLeading(
+  tmp: string,
+  name: string,
+  leading: string[],
+  extra?: string,
+): string {
+  const lines = [...leading, ...BASE_ANSWERS];
   if (extra) lines.push(extra);
   const path = join(tmp, `${name}.answers`);
   writeFileSync(path, `${lines.join("\n")}\n`, "utf8");

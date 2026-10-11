@@ -36,6 +36,7 @@ import {
   sh,
   surveyor,
   writeAnswers,
+  writeAnswersLeading,
   writeText,
   type SurveyLayout,
 } from "./acceptance-429.ts";
@@ -151,6 +152,22 @@ describe("C2: the setting and the lane", () => {
       const r = setupDryRun(lay.tmp, answers);
       expect(r.code).toBe(1);
       expect(r.out).toContain("sting");
+    },
+    120000,
+  );
+
+  survey(
+    "a surveyor on a harness with no recorded shape is refused",
+    (lay) => {
+      const answers = writeAnswersLeading(
+        lay.tmp,
+        "surveyor-grok",
+        ["lanes=opus, luna, grok", "lane.grok.harness=grok", "lane.grok.model=grok-model"],
+        "surveyor=grok",
+      );
+      const r = setupDryRun(lay.tmp, answers);
+      expect(r.code).toBe(1);
+      expect(both(r)).toContain("grok");
     },
     120000,
   );
