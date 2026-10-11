@@ -4960,7 +4960,7 @@ describe("run-copy keep confirmation", () => {
     }
   });
 
-  test("a segment with clashed files is applied but not confirmed", () => {
+  test("a segment with clashed files is kept in part and still confirmed", () => {
     const app = scratchApp();
     try {
       expectCode(run(RUN, ["verifier", "record", app.repo, app.dispatch]), 0);
@@ -4977,9 +4977,13 @@ describe("run-copy keep confirmation", () => {
       expect(r.code).toBe(1);
       expect(r.out).toContain("changed cli/features/f2.md");
       expect(r.out).toContain("not kept: cli/features/f1.md (changed on both sides)");
-      expect(r.out).toContain("not kept: cli/ (confirmation skipped, some files clashed)");
-      expect(r.out).not.toContain(`confirmed cli at ${merge}`);
-      expect(readFileSync(join(app.repo, ".postmaster/verifier/README.md"), "utf8")).not.toContain(
+      // The kept change confirms the segment at the merge: the stale check
+      // diffs depended files from the confirmed commit, so skipping would
+      // flag the run's own feature changes as staleness. A fully clashed
+      // segment never reaches the stamp, since untouched segments confirm
+      // nothing.
+      expect(r.out).toContain(`confirmed cli at ${merge}`);
+      expect(readFileSync(join(app.repo, ".postmaster/verifier/README.md"), "utf8")).toContain(
         `Confirmed: ${merge}`,
       );
       expect(readFileSync(join(app.repo, ".postmaster/verifier/cli/features/f2.md"), "utf8")).toBe(
