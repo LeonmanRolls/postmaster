@@ -3,11 +3,13 @@
 // command boundary as a subprocess.
 import { describe, expect, test } from "bun:test";
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
   realpathSync,
   rmSync,
+  symlinkSync,
   utimesSync,
   writeFileSync,
 } from "node:fs";
@@ -33,6 +35,7 @@ import {
   commitsPastBase,
   committedFeaturePages,
   confirmedSha,
+  copyKeptIntoProject,
   correctedClaims,
   countNoun,
   decideCheap,
@@ -62,7 +65,9 @@ import {
   lastLine,
   listVerifiers,
   localDestCollisions,
+  localDestLink,
   localScopeStrays,
+  localTag,
   matchDependedFiles,
   mergeAuthorityOf,
   modeBlocks,
@@ -106,6 +111,7 @@ import {
   strayUncommitted,
   strayVerifierPaths,
   surfaceFolder,
+  surfaceFromIndex,
   surfaceFromReadme,
   surfaceKind,
   surfaceLabel,
@@ -1635,6 +1641,20 @@ describe("spanSegs", () => {
     expect(spanSegs(["- See also the index."])).toEqual([]);
     expect(spanSegs([])).toEqual([]);
   });
+
+  test("project paths and page links name no folder", () => {
+    expect(
+      spanSegs([
+        "- `.postmaster/verifier/cli/` (command line). Files: src/verifier/run.ts, lib/x.ts",
+      ]),
+    ).toEqual(["cli"]);
+    expect(
+      spanSegs([
+        "- `.postmaster/verifier/cli/` (command line), see [docs](docs/x.md). Files: README.md",
+      ]),
+    ).toEqual(["cli"]);
+    expect(spanSegs(["- [api](api/ 'title') verifies the backend service."])).toEqual(["api"]);
+  });
 });
 
 describe("indexStrays", () => {
@@ -1659,6 +1679,16 @@ describe("indexStrays", () => {
       dangling: [],
       unlisted: [],
     });
+  });
+
+  test("a Files path under a verifier/ directory strays nothing", () => {
+    const text = [
+      "# Verifiers",
+      "",
+      "- `.postmaster/verifier/cli/` (command line). Files: src/verifier/run.ts, lib/x.ts",
+      "",
+    ].join("\n");
+    expect(indexStrays(text, ["cli"], ["cli"])).toEqual({ dangling: [], unlisted: [] });
   });
 });
 
@@ -1706,6 +1736,118 @@ describe("localDestCollisions", () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe("localDestLink", () => {
+  const folders = [".postmaster/verifier/cli"];
+
+  test("no link anywhere reports null", () => {
+    const dir = tempDir();
+    try {
+      const repo = join(dir, "app");
+      mkdirSync(repo, { recursive: true });
+      expect(localDestLink(repo, folders)).toBeNull();
+      writeRepoFile(repo, ".postmaster/verifier/cli/README.md", "# cli\n");
+      expect(localDestLink(repo, folders)).toBeNull();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("a link at the root, a folder, the index or the settings dir reports it", () => {
+    const dir = tempDir();
+    try {
+      const outside = join(dir, "outside");
+      mkdirSync(outside, { recursive: true });
+      const repo = join(dir, "app");
+      mkdirSync(join(repo, ".postmaster"), { recursive: true });
+      symlinkSync(outside, join(repo, ".postmaster", "verifier"));
+      expect(localDestLink(repo, folders)).toBe(".postmaster/verifier");
+      rmSync(join(repo, ".postmaster", "verifier"));
+      mkdirSync(join(repo, ".postmaster", "verifier"), { recursive: true });
+      symlinkSync(outside, join(repo, ".postmaster", "verifier", "cli"));
+      expect(localDestLink(repo, folders)).toBe(".postmaster/verifier/cli");
+      rmSync(join(repo, ".postmaster", "verifier", "cli"));
+      writeFileSync(join(outside, "README.md"), "# Verifiers\n");
+      symlinkSync(join(outside, "README.md"), join(repo, ".postmaster", "verifier", "README.md"));
+      expect(localDestLink(repo, folders)).toBe(".postmaster/verifier/README.md");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("a dangling folder link reports it", () => {
+    const dir = tempDir();
+    try {
+      const repo = join(dir, "app");
+      mkdirSync(join(repo, ".postmaster", "verifier"), { recursive: true });
+      symlinkSync(join(dir, "nowhere"), join(repo, ".postmaster", "verifier", "cli"));
+      expect(localDestLink(repo, folders)).toBe(".postmaster/verifier/cli");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("copyKeptIntoProject", () => {
+  const folders = [".postmaster/verifier/cli", ".postmaster/verifier/web"];
+  const index = ".postmaster/verifier/README.md";
+
+  function seedWt(wt: string): void {
+    for (const folder of folders) {
+      writeRepoFile(wt, `${folder}/README.md`, `# ${folder}\n`);
+      writeRepoFile(wt, `${folder}/features/README.md`, "Files: README.md\n");
+      writeRepoFile(wt, `${folder}/features/f1.md`, "# f1\n");
+    }
+    writeRepoFile(wt, index, "# Verifiers\n");
+  }
+
+  test("copies the folders and the index", () => {
+    const dir = tempDir();
+    try {
+      const wt = join(dir, "wt");
+      const repo = join(dir, "app");
+      mkdirSync(wt, { recursive: true });
+      mkdirSync(repo, { recursive: true });
+      seedWt(wt);
+      copyKeptIntoProject(wt, repo, folders, index);
+      for (const folder of folders) {
+        expect(existsSync(join(repo, folder, "features", "f1.md"))).toBe(true);
+      }
+      expect(existsSync(join(repo, index))).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("a failed copy leaves nothing behind", () => {
+    const dir = tempDir();
+    try {
+      const wt = join(dir, "wt");
+      const repo = join(dir, "app");
+      mkdirSync(wt, { recursive: true });
+      mkdirSync(repo, { recursive: true });
+      seedWt(wt);
+      chmodSync(join(wt, folders[1], "features", "f1.md"), 0o000);
+      expect(() => copyKeptIntoProject(wt, repo, folders, index)).toThrow(
+        /could not be kept.*partial keep was removed/,
+      );
+      expect(existsSync(join(repo, ".postmaster", "verifier"))).toBe(false);
+    } finally {
+      chmodSync(join(dir, "wt", folders[1], "features", "f1.md"), 0o644);
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("localTag", () => {
+  test("the label alone, or with the worktree's number", () => {
+    expect(localTag("/x/app", "cli", "/x/app-verify-cli")).toBe("cli");
+    expect(localTag("/x/app", "cli", "/x/app-verify-cli-2")).toBe("cli-2");
+    expect(localTag("/x/app", "cli-web", "/x/app-verify-cli-web-3")).toBe("cli-web-3");
+    expect(localTag("/x/app", "cli", "/x/app-verify-web")).toBe("cli");
+    expect(localTag("/x/app", "cli", "/elsewhere/wt")).toBe("cli");
   });
 });
 
@@ -2727,6 +2869,26 @@ describe("surfaceFromReadme", () => {
     const buried = `${"filler\n".repeat(30)}on the command line\n`;
     expect(surfaceFromReadme(buried)).toBeNull();
     expect(surfaceFromReadme("")).toBeNull();
+  });
+});
+
+describe("surfaceFromIndex", () => {
+  test("the bullet naming the folder states its surface", () => {
+    const index = [
+      "# Verifiers",
+      "",
+      "- The backend service verifier in .postmaster/verifier/api/: drives it. Files: README.md",
+      "- The command line verifier in .postmaster/verifier/cli/: drives it. Files: README.md",
+      "",
+    ].join("\n");
+    expect(surfaceFromIndex(index, "api")).toBe("backend service");
+    expect(surfaceFromIndex(index, "cli")).toBe("command line");
+    expect(surfaceFromIndex(index, "shop")).toBeNull();
+  });
+
+  test("a bullet without prose states nothing", () => {
+    const index = ["# Verifiers", "", "- [api](api/) verifies it.", ""].join("\n");
+    expect(surfaceFromIndex(index, "api")).toBeNull();
   });
 });
 

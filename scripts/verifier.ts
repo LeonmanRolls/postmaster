@@ -154,7 +154,7 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { splitCommand } from "./clerk.ts";
 import { endingWallMessage, isWallMessage } from "./launch.ts";
-import { ensureIgnore } from "./lib/effective-config.ts";
+import { ensureIgnore, isSymlink } from "./lib/effective-config.ts";
 import { beside, scriptsDir } from "./lib/paths.ts";
 import { run, type RunResult } from "./lib/proc.ts";
 import { RESULT_RE } from "./verify.ts";
@@ -781,6 +781,14 @@ export function kindProse(kind: string): string | null {
   return surface === null ? null : PROSE[surface];
 }
 
+/** Surface prose phrases, earliest match winning, for READMEs and indexes. */
+const PROSE_PHRASES: Array<[string, Surface]> = [
+  ["command line", "cli"],
+  ["web pages", "web"],
+  ["library interface", "library"],
+  ["backend service", "backend"],
+];
+
 /** The surface a verifier README's head states, or null when it states none. */
 export function surfaceFromReadme(text: string): string | null {
   // The head is the first 30 lines, as hasUpkeepLine reads it: the H1 subject
@@ -788,14 +796,8 @@ export function surfaceFromReadme(text: string): string | null {
   const head = text.split("\n").slice(0, 30).join("\n");
   // LOWER: lowered for ASCII phrase matches
   const lower = head.toLowerCase();
-  const phrases: Array<[string, Surface]> = [
-    ["command line", "cli"],
-    ["web pages", "web"],
-    ["library interface", "library"],
-    ["backend service", "backend"],
-  ];
   let best: { at: number; surface: Surface } | null = null;
-  for (const [phrase, surface] of phrases) {
+  for (const [phrase, surface] of PROSE_PHRASES) {
     const at = lower.indexOf(phrase);
     if (at !== -1 && (best === null || at < best.at)) best = { at, surface };
   }
@@ -815,6 +817,28 @@ export function surfaceFromReadme(text: string): string | null {
     }
   }
   return tokenBest === null ? null : PROSE[tokenBest.surface];
+}
+
+/**
+ * The surface an index states for a folder segment: the earliest prose
+ * phrase in a bullet naming the segment, or null when none does. A named
+ * folder's kind is lost when the listing is read back, so the index, which
+ * make validated, recovers it where the folder name cannot.
+ */
+export function surfaceFromIndex(indexText: string, seg: string): string | null {
+  const want = seg.toLowerCase();
+  for (const span of indexBullets(indexText)) {
+    if (!spanSegs(span).includes(want)) continue;
+    // LOWER: lowered for ASCII phrase matches
+    const lower = span.join("\n").toLowerCase();
+    let best: { at: number; surface: Surface } | null = null;
+    for (const [phrase, surface] of PROSE_PHRASES) {
+      const at = lower.indexOf(phrase);
+      if (at !== -1 && (best === null || at < best.at)) best = { at, surface };
+    }
+    if (best !== null) return PROSE[best.surface];
+  }
+  return null;
 }
 
 /** Feature pages from a features/ listing: markdown besides its index, sorted. */
@@ -868,14 +892,22 @@ function readmeText(path: string): string {
 }
 
 /** One verifier's entry from its folder, or null when the folder holds no verifier. */
-function readVerifier(repo: string, folder: string, kind: string | null): VerifierEntry | null {
+function readVerifier(
+  repo: string,
+  folder: string,
+  kind: string | null,
+  indexSurface: string | null = null,
+): VerifierEntry | null {
   if (!isFilePath(join(repo, folder, "README.md"))) return null;
   const pages = featurePageNames(childNames(join(repo, folder, "features"))).map(
     (n) => `${folder}/features/${n}`,
   );
   const fromKind = kind === null ? null : kindProse(kind);
   const surface =
-    fromKind ?? surfaceFromReadme(readmeText(join(repo, folder, "README.md"))) ?? "unstated";
+    fromKind ??
+    indexSurface ??
+    surfaceFromReadme(readmeText(join(repo, folder, "README.md"))) ??
+    "unstated";
   return { folder, surface, pages };
 }
 
@@ -892,10 +924,16 @@ export function listVerifiers(repo: string): VerifierListing {
   for (const root of ["verifier", LOCAL_VERIFIER_ROOT]) {
     const multiIndex = isFilePath(join(repo, root, "README.md"));
     if (multiIndex) indexes.push(`${root}/README.md`);
+    const indexText = multiIndex ? readmeText(join(repo, root, "README.md")) : null;
     if (isDirPath(join(repo, root))) {
       for (const kind of childNames(join(repo, root)).sort()) {
         if (!isDirPath(join(repo, root, kind))) continue;
-        const entry = readVerifier(repo, `${root}/${kind}`, kind);
+        const entry = readVerifier(
+          repo,
+          `${root}/${kind}`,
+          kind,
+          indexText === null ? null : surfaceFromIndex(indexText, kind),
+        );
         if (entry !== null) {
           verifiers.push(entry);
           // No shared index: each verifier's README is the read-first entry.
@@ -2875,6 +2913,13 @@ function runMake(req: ParsedMake): number {
     if (collisions.length > 0) {
       throw new UsageError(`${repo} already holds ${collisions.join(", ")}`);
     }
+    const link = localDestLink(
+      repo,
+      req.surfaces.map((s) => `${LOCAL_VERIFIER_ROOT}/${surfaceFolder(s)}`),
+    );
+    if (link !== null) {
+      throw new UsageError(`${join(repo, link)} must not be a symlink`);
+    }
   }
   pruneWorktrees(repo);
   const label = sessionLabel(req.surfaces);
@@ -3438,6 +3483,21 @@ export function sessionLabel(surfaces: NamedSurface[]): string {
   return surfaces.map(surfaceFolder).join("-");
 }
 
+/**
+ * The local run's tag: the surfaces' label, plus the worktree's number when
+ * numbered, so overlapping runs for the same repo and surfaces take distinct
+ * host handles. The label itself when the worktree is not the label's.
+ */
+export function localTag(repo: string, label: string, wt: string): string {
+  const prefix = `${basename(repo)}-verify-`;
+  const base = basename(wt);
+  if (base.startsWith(prefix)) {
+    const rest = base.slice(prefix.length);
+    if (rest === label || rest.startsWith(`${label}-`)) return rest;
+  }
+  return label;
+}
+
 /** Make's repository briefing: the making instructions, the handover wait, the summary. */
 function runMakeLaunches(
   req: ParsedMake,
@@ -3496,11 +3556,12 @@ function runMakeLocalLaunches(
   cutAt: number,
 ): number {
   let kept: { folders: string[]; leftOut: ClassifiedEntry[]; handover: string } | null = null;
+  const tag = localTag(repo, label, wt);
   return runSessionLaunches({
     repo,
     dispatch,
     branch: null,
-    tag: label,
+    tag,
     wt,
     timeout: req.timeout,
     cutAt,
@@ -3512,7 +3573,7 @@ function runMakeLocalLaunches(
     sendFileText: (promptFile) => sendText(promptFile),
     waitFile: "HANDOVER.md",
     validate: () => {
-      kept = keepLocalSession(repo, dispatch, wt, label, cutAt, req.surfaces);
+      kept = keepLocalSession(repo, dispatch, wt, tag, cutAt, req.surfaces);
     },
     print: ({ final, handle, promptFile }) => {
       const done = kept as { folders: string[]; leftOut: ClassifiedEntry[]; handover: string };
@@ -3661,12 +3722,18 @@ function validateSession(
 export function spanSegs(span: string[]): string[] {
   const first = span[0] ?? "";
   const segs: string[] = [];
-  for (const m of first.matchAll(/verifier\/([A-Za-z0-9_-]+)/giu)) {
+  // A verifier root starts at a boundary, never mid-path: src/verifier/run.ts
+  // is a project file, while .postmaster/verifier/cli/ is the cli verifier.
+  // ASCII: boundaries, roots and segments are ASCII alone
+  for (const m of first.matchAll(
+    /(?:^|[^A-Za-z0-9_./-])(?:\.postmaster\/)?verifier\/([A-Za-z0-9_-]+)/giu,
+  )) {
     // LOWER: lowered for an ASCII folder-segment match
     segs.push((m[1] as string).toLowerCase());
   }
-  // ASCII: link gaps are ASCII spaces
-  for (const m of first.matchAll(/\]\(\s*([A-Za-z0-9_-]+)\//giu)) {
+  // A relative folder link ends at its slash: [cli](cli/) names cli, while
+  // [docs](docs/x.md) is a page link. ASCII: link gaps are ASCII spaces
+  for (const m of first.matchAll(/\]\(\s*([A-Za-z0-9_-]+)\/(?:\s*["']|\))/giu)) {
     // LOWER: lowered for an ASCII folder-segment match
     segs.push((m[1] as string).toLowerCase());
   }
@@ -3734,6 +3801,24 @@ export function localDestCollisions(repo: string, surfaces: NamedSurface[]): str
     if (existsSync(join(repo, folder))) collisions.push(folder);
   }
   return collisions;
+}
+
+/**
+ * The first local destination that is a symlink: the .postmaster folder,
+ * the local root, the shared index or one of the given repo-relative
+ * folders, or null when none is. A link would carry the keep's writes
+ * outside the project, past the collision checks.
+ */
+export function localDestLink(repo: string, folders: string[]): string | null {
+  for (const rel of [
+    ".postmaster",
+    LOCAL_VERIFIER_ROOT,
+    `${LOCAL_VERIFIER_ROOT}/README.md`,
+    ...folders,
+  ]) {
+    if (isSymlink(join(repo, rel))) return rel;
+  }
+  return null;
 }
 
 export interface LocalJudged {
@@ -3828,10 +3913,70 @@ export function validateLocalSession(
 }
 
 /**
+ * Copy the judged folders and index from the working copy into the project,
+ * removing whatever was copied when a copy fails, so a failed keep leaves
+ * nothing behind: neither a partial keep nor a root the keep created. The
+ * destinations were verified absent before the copies, so the rollback only
+ * ever removes what this keep wrote.
+ */
+export function copyKeptIntoProject(
+  wt: string,
+  repo: string,
+  folders: string[],
+  index: string,
+): void {
+  const root = join(repo, LOCAL_VERIFIER_ROOT);
+  const rootExisted = existsSync(root);
+  const copied: string[] = [];
+  try {
+    mkdirSync(root, { recursive: true });
+    for (const folder of folders) {
+      cpSync(join(wt, folder), join(repo, folder), { recursive: true });
+      copied.push(join(repo, folder));
+    }
+    cpSync(join(wt, index), join(repo, index));
+    copied.push(join(repo, index));
+  } catch (e) {
+    const problems: string[] = [];
+    for (const p of [...copied].reverse()) {
+      try {
+        rmSync(p, { recursive: true, force: true });
+      } catch (e2) {
+        problems.push(e2 instanceof Error ? e2.message : String(e2));
+      }
+    }
+    if (!rootExisted) {
+      try {
+        rmSync(root, { recursive: true, force: true });
+      } catch (e2) {
+        problems.push(e2 instanceof Error ? e2.message : String(e2));
+      }
+    }
+    const kept = e instanceof Error ? e.message : String(e);
+    const cleanup = problems.length === 0 ? "" : `; the cleanup failed too: ${problems.join("; ")}`;
+    throw new RunError(`the verifiers could not be kept: ${kept}; the partial keep was removed${cleanup}`);
+  }
+}
+
+/** The keep's own action line: the folders kept and where the hand-over sits. */
+function logKeep(dispatch: string, folders: string[], handover: string): void {
+  const r = run(RUN, [
+    "log-action",
+    dispatch,
+    "coachman",
+    "note",
+    LOCAL_VERIFIER_ROOT,
+    `kept ${folders.join(", ")}; handover ${handover}`,
+  ]);
+  if (r.code !== 0)
+    throw new RunError(`the keep was not logged: ${r.err.trim() || r.out.trim()}`);
+}
+
+/**
  * Keep a judged local session: refuse a destination that already holds a
  * kept folder or the index, ensure the folder's ignore rules, copy the kept
- * folders and the index, save HANDOVER.md into the run's logs, and remove
- * the working copy, so the repository shows nothing new.
+ * folders and the index, save HANDOVER.md into the run's logs, log the keep,
+ * and remove the working copy, so the repository shows nothing new.
  */
 function keepLocalSession(
   repo: string,
@@ -3851,16 +3996,21 @@ function keepLocalSession(
   if (existsSync(join(repo, index))) {
     throw new RunError(`${repo} already holds ${index}`);
   }
-  ensureIgnore(repo, true);
-  mkdirSync(join(repo, LOCAL_VERIFIER_ROOT), { recursive: true });
-  for (const e of judged.kept) {
-    cpSync(join(wt, e.folder), join(repo, e.folder), { recursive: true });
+  const link = localDestLink(
+    repo,
+    judged.kept.map((e) => e.folder),
+  );
+  if (link !== null) {
+    throw new RunError(`${join(repo, link)} must not be a symlink`);
   }
-  cpSync(join(wt, index), join(repo, index));
+  ensureIgnore(repo, true);
+  const folders = judged.kept.map((e) => e.folder);
+  copyKeptIntoProject(wt, repo, folders, index);
   const logs = join(dispatch, "logs");
   mkdirSync(logs, { recursive: true });
   const saved = join(logs, `verifier-${label}-handover.md`);
   cpSync(join(wt, "HANDOVER.md"), saved);
+  logKeep(dispatch, folders, saved);
   const rm = git(repo, ["worktree", "remove", "--force", wt]);
   if (rm.code !== 0) {
     throw new RunError(
@@ -3868,7 +4018,7 @@ function keepLocalSession(
     );
   }
   pruneWorktrees(repo);
-  return { folders: judged.kept.map((e) => e.folder), leftOut: judged.leftOut, handover: saved };
+  return { folders, leftOut: judged.leftOut, handover: saved };
 }
 
 /** The ticket the project's checks read: none, so ticket checks report not run. */
