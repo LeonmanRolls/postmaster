@@ -24,6 +24,7 @@ import {
   launchRound,
   monotonic,
   reachCheckMissing,
+  roundPointRecorded,
   type StepChild,
   type StepDeps,
 } from "./review-round.ts";
@@ -1546,6 +1547,20 @@ const pointLine = (point: string): string =>
     detail: JSON.stringify({ kind: "point", point, result: "clean" }),
   });
 
+/** How many reach points named `point` the journal holds. */
+const pointCount = (journal: string, point: string): number =>
+  journal.split("\n").filter((line) => {
+    if (line.trim() === "") return false;
+    try {
+      const row = JSON.parse(line) as { action?: unknown; detail?: unknown };
+      if (row.action !== "reach" || typeof row.detail !== "string") return false;
+      const detail = JSON.parse(row.detail) as { kind?: unknown; point?: unknown };
+      return detail.kind === "point" && detail.point === point;
+    } catch {
+      return false;
+    }
+  }).length;
+
 interface Torn {
   code: number;
   out: string;
@@ -1593,6 +1608,21 @@ function teardown(snapshot: boolean, actions: string[], named: boolean): Torn {
     };
   });
 }
+
+describe("roundPointRecorded", () => {
+  test("it reads the round's own point, and never refuses on an unreadable journal", () => {
+    withTempDir((root) => {
+      const d = join(root, "T-1");
+      mkdirSync(d, { recursive: true });
+      expect(roundPointRecorded(d, "1")).toBe(false);
+      writeFileSync(join(d, "actions.jsonl"), `${pointLine("r1")}\n${pointLine("card")}\n`);
+      expect(roundPointRecorded(d, "1")).toBe(true);
+      expect(roundPointRecorded(d, "2")).toBe(false);
+      writeFileSync(join(d, "actions.jsonl"), "not json\n");
+      expect(roundPointRecorded(d, "1")).toBe(false);
+    }, "review-round-pointrecorded-");
+  });
+});
 
 describe("reachCheckMissing", () => {
   test("it waits only for the round's own teardown of a round with no point of its own", () => {
@@ -1756,5 +1786,174 @@ describe("wait and the round's reach check", () => {
       expect(journal).not.toContain('"point":"r1"');
       expect(existsSync(join(d, "reach", "r1"))).toBe(false);
     }, "review-round-waitstill-");
+  });
+
+  test("a recorded point without a finished collection completes its restore", () => {
+    withTempDir((root) => {
+      const repo = join(root, "repo");
+      const ticket = "T-9";
+      mkdirSync(repo, { recursive: true });
+      const git = (...args: string[]): void => {
+        const r = run("git", ["-C", repo, ...args]);
+        if (r.code !== 0) throw new Error(`git ${args.join(" ")}: ${r.err.trim()}`);
+      };
+      git("init", "-q", "-b", "main");
+      git("config", "user.name", "t");
+      git("config", "user.email", "t@t");
+      git("config", "commit.gpgsign", "false");
+      writeFileSync(join(repo, "file.txt"), "base\n");
+      git("add", "file.txt");
+      git("commit", "-q", "-m", "base");
+      const base = run("git", ["-C", repo, "rev-parse", "HEAD"]).out.trim();
+      git("checkout", "-q", "-b", ticket);
+      git("checkout", "-q", "main");
+      const synthesis = join(repo, ".worktrees", ticket);
+      git("worktree", "add", "-q", synthesis, ticket);
+      const d = join(repo, ".postmaster", "runs", ticket);
+      mkdirSync(join(d, "logs"), { recursive: true });
+      mkdirSync(join(d, "reach"), { recursive: true });
+      writeFileSync(
+        join(d, "manifest.json"),
+        `${JSON.stringify({ stage: "review", leg: 2, base, lanes: {}, coachman: { legs: {} } })}\n`,
+      );
+      writeFileSync(
+        join(d, "run.json"),
+        `${JSON.stringify({ coachman_contract: 2, config: { review: { round_timeout_seconds: 2 } } })}\n`,
+      );
+      writeFileSync(
+        join(d, "brief.md"),
+        `# Waybill: ${ticket}\nturnpikes: style\n\n## Project profile\nrepo: ${repo}          default branch: main       BASE: ${base}\n`,
+      );
+      // A collection cut short after its point: the check is recorded, the
+      // restore never finished, and reviewer dirt is still in the worktree.
+      writeFileSync(join(d, "actions.jsonl"), `${pointLine("r1")}\n`);
+      writeFileSync(join(d, "run-log.md"), "");
+      expect(run(self, ["reach", "before", d, "1"]).code).toBe(0);
+      expect(run(self, ["review-round", "start", d, "1"]).code).toBe(0);
+      writeFileSync(join(synthesis, "file.txt"), "reviewer dirt\n");
+      const r = run(self, ["review-round", "wait", d, "1", repo, "style:ghost"]);
+      expect(r.code).toBe(3);
+      expect(r.out).toContain("completing its restore");
+      expect(readFileSync(join(synthesis, "file.txt"), "utf8")).toBe("base\n");
+      const journal = readFileSync(join(d, "actions.jsonl"), "utf8");
+      expect(pointCount(journal, "r1")).toBe(1);
+      expect(existsSync(join(d, "reach", "r1.collected"))).toBe(true);
+    }, "review-round-waitresume-");
+  });
+
+  test("a finished collection is never repeated", () => {
+    withTempDir((root) => {
+      const repo = join(root, "repo");
+      const ticket = "T-9";
+      mkdirSync(repo, { recursive: true });
+      const git = (...args: string[]): void => {
+        const r = run("git", ["-C", repo, ...args]);
+        if (r.code !== 0) throw new Error(`git ${args.join(" ")}: ${r.err.trim()}`);
+      };
+      git("init", "-q", "-b", "main");
+      git("config", "user.name", "t");
+      git("config", "user.email", "t@t");
+      git("config", "commit.gpgsign", "false");
+      writeFileSync(join(repo, "file.txt"), "base\n");
+      git("add", "file.txt");
+      git("commit", "-q", "-m", "base");
+      const base = run("git", ["-C", repo, "rev-parse", "HEAD"]).out.trim();
+      git("checkout", "-q", "-b", ticket);
+      git("checkout", "-q", "main");
+      const synthesis = join(repo, ".worktrees", ticket);
+      git("worktree", "add", "-q", synthesis, ticket);
+      const d = join(repo, ".postmaster", "runs", ticket);
+      mkdirSync(join(d, "logs"), { recursive: true });
+      mkdirSync(join(d, "reach"), { recursive: true });
+      writeFileSync(
+        join(d, "manifest.json"),
+        `${JSON.stringify({ stage: "review", leg: 2, base, lanes: {}, coachman: { legs: {} } })}\n`,
+      );
+      writeFileSync(
+        join(d, "run.json"),
+        `${JSON.stringify({ coachman_contract: 2, config: { review: { round_timeout_seconds: 2 } } })}\n`,
+      );
+      writeFileSync(
+        join(d, "brief.md"),
+        `# Waybill: ${ticket}\nturnpikes: style\n\n## Project profile\nrepo: ${repo}          default branch: main       BASE: ${base}\n`,
+      );
+      writeFileSync(join(d, "actions.jsonl"), `${pointLine("r1")}\n`);
+      writeFileSync(join(d, "reach", "r1.collected"), "");
+      writeFileSync(join(d, "run-log.md"), "");
+      expect(run(self, ["reach", "before", d, "1"]).code).toBe(0);
+      expect(run(self, ["review-round", "start", d, "1"]).code).toBe(0);
+      writeFileSync(join(synthesis, "file.txt"), "later dirt\n");
+      const r = run(self, ["review-round", "wait", d, "1", repo, "style:ghost"]);
+      expect(r.code).toBe(3);
+      expect(r.out).toContain("already has its reach check recorded");
+      expect(r.out).not.toContain("completing its restore");
+      expect(readFileSync(join(synthesis, "file.txt"), "utf8")).toBe("later dirt\n");
+      const journal = readFileSync(join(d, "actions.jsonl"), "utf8");
+      expect(pointCount(journal, "r1")).toBe(1);
+      expect(existsSync(join(d, "reach", "r1"))).toBe(false);
+    }, "review-round-waitskip-");
+  });
+
+  test("the wait copies bug lanes' task transcripts before the round's check", () => {
+    withTempDir((root) => {
+      const repo = join(root, "repo");
+      const ticket = "T-9";
+      mkdirSync(repo, { recursive: true });
+      const git = (...args: string[]): void => {
+        const r = run("git", ["-C", repo, ...args]);
+        if (r.code !== 0) throw new Error(`git ${args.join(" ")}: ${r.err.trim()}`);
+      };
+      git("init", "-q", "-b", "main");
+      git("config", "user.name", "t");
+      git("config", "user.email", "t@t");
+      git("config", "commit.gpgsign", "false");
+      writeFileSync(join(repo, "file.txt"), "base\n");
+      git("add", "file.txt");
+      git("commit", "-q", "-m", "base");
+      const base = run("git", ["-C", repo, "rev-parse", "HEAD"]).out.trim();
+      git("checkout", "-q", "-b", ticket);
+      git("checkout", "-q", "main");
+      const synthesis = join(repo, ".worktrees", ticket);
+      git("worktree", "add", "-q", synthesis, ticket);
+      const d = join(repo, ".postmaster", "runs", ticket);
+      mkdirSync(join(d, "logs"), { recursive: true });
+      mkdirSync(join(d, "reach"), { recursive: true });
+      writeFileSync(
+        join(d, "manifest.json"),
+        `${JSON.stringify({ stage: "review", leg: 2, base, lanes: {}, coachman: { legs: {} } })}\n`,
+      );
+      writeFileSync(
+        join(d, "run.json"),
+        `${JSON.stringify({ coachman_contract: 2, config: { review: { round_timeout_seconds: 30 } } })}\n`,
+      );
+      writeFileSync(
+        join(d, "brief.md"),
+        `# Waybill: ${ticket}\nturnpikes: bug\n\n## Project profile\nrepo: ${repo}          default branch: main       BASE: ${base}\n`,
+      );
+      writeFileSync(join(d, "actions.jsonl"), "");
+      writeFileSync(join(d, "run-log.md"), "");
+      expect(run(self, ["reach", "before", d, "1"]).code).toBe(0);
+      expect(run(self, ["review-round", "start", d, "1"]).code).toBe(0);
+      const uid = process.getuid?.() ?? 0;
+      const taskHome = join(`/tmp/claude-${uid}`, `postmaster-rr2-${process.pid}`);
+      try {
+        mkdirSync(taskHome, { recursive: true });
+        const taskFile = join(taskHome, "task-output.txt");
+        writeFileSync(taskFile, '{"type":"result","result":"done"}\n');
+        writeFileSync(
+          join(d, "logs", "review-r1-bug-ghost.jsonl"),
+          `${JSON.stringify({ type: "system", subtype: "task_notification", output_file: taskFile })}\n`,
+        );
+        writeFileSync(join(d, "logs", "review-r1-bug-ghost.done"), "");
+        const r = run(self, ["review-round", "wait", d, "1", repo, "bug:ghost"]);
+        expect(r.code).toBe(0);
+        const copied = join(d, "logs", "review-r1-bug-ghost-claude-task-01-task-output.txt");
+        expect(existsSync(copied)).toBe(true);
+        expect(r.out).toContain("claude-task-01-task-output.txt");
+        expect(r.out).toContain("r1: ");
+      } finally {
+        rmSync(taskHome, { recursive: true, force: true });
+      }
+    }, "review-round-waittasks-");
   });
 });

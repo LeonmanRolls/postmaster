@@ -4,8 +4,9 @@
 // and the scratches, launch saves the round's starting state and runs the reviewers, harvest
 // normalizes the bug reports. Launch starts no reviewer while a brief one of its reviewers
 // needs is missing, keeps the first starting state when the round is retried, refuses a
-// round whose check is already recorded, and the wait ends with the round's check for
-// changes by its reviewers.
+// round whose check is already recorded, and the wait ends by collecting the round's
+// check for changes by its reviewers, completing an unfinished collection and never
+// repeating a finished one.
 //
 //   run review-round start    <dispatch> <round>
 //   run review-round cut      <dispatch> <round> <repo> <synthesis-wt>
@@ -14,11 +15,13 @@
 //   run review-round wait     <dispatch> <round> <repo> [<lens>:<lane>...]
 //   run review-round teardown <dispatch> <round> <repo> [<lens>:<lane>...]
 //
-//   exit 0  wait: every marker is in, and the round's reach check ran · start and
+//   exit 0  wait: every marker is in, and the round's reach check ran, was already
+//           recorded, or had no starting state · start and
 //           teardown: done · cut and harvest: done ·
 //           launch: the wait's own exit when every reviewer reported
 //   exit 3  wait: the deadline passed; each reviewer with no marker is recorded and
-//           stopped, and the round's reach check ran;
+//           stopped, and the round's reach check ran, was already recorded, or had no
+//           starting state;
 //           launch: the wait's exit 3, as wait itself records it
 //   exit 4  wait: a control faulted: the deadline passed but a record could not be
 //           written, a reviewer is still running and the round's check is not run,
@@ -81,6 +84,22 @@ export function reachCheckMissing(
   round: string,
 ): boolean {
   return waitsForReach && !points.includes(`r${round}`);
+}
+
+/**
+ * Whether the round's reach check is recorded: a reach point named for the
+ * round in the journal. False when the record cannot be read, so a refusal
+ * is never told from a broken journal. The launch and the wait read this one
+ * definition, so they never disagree about whether a round is collected.
+ */
+export function roundPointRecorded(dispatch: string, round: string): boolean {
+  try {
+    return reachActions(dispatch).some(
+      ({ event }) => event.kind === "point" && String(event.point) === `r${round}`,
+    );
+  } catch {
+    return false;
+  }
 }
 
 interface RoundState {
@@ -513,22 +532,13 @@ export function launchRound(a: StepArgs, deps: StepDeps): StepResult {
   const lenses = resolveLenses(a, deps, res);
   if (lenses === null) return res;
   // A collected round is never launched again: its reviewers already ran, and
-  // launching it would run new reviewers the recorded check cannot see. When
-  // the record cannot be read the launch goes on, as a refusal cannot be told
-  // from a broken journal.
-  try {
-    const collected = reachActions(a.dispatch).some(
-      ({ event }) => event.kind === "point" && String(event.point) === `r${a.round}`,
+  // launching it would run new reviewers the recorded check cannot see.
+  if (roundPointRecorded(a.dispatch, a.round)) {
+    res.err.push(
+      `review-round: round ${a.round} already has its reach check recorded; nothing launched`,
     );
-    if (collected) {
-      res.err.push(
-        `review-round: round ${a.round} already has its reach check recorded; nothing launched`,
-      );
-      res.code = 1;
-      return res;
-    }
-  } catch {
-    // Fall through: the launch goes on without the refusal.
+    res.code = 1;
+    return res;
   }
   const ticket = basename(a.dispatch);
   const lensPrompt = (lens: string): string =>
@@ -891,32 +901,74 @@ if (import.meta.main) {
   };
 
   /**
-   * The round's check for changes by its reviewers: null when the round took
-   * no starting state or its point is already recorded, else the check's exit.
-   * The check runs once, at the first collection, so no fix lands before it.
+   * The bug lanes' forked-task transcripts, copied for the check to tie what
+   * it finds to a lane, as the harvest does later. Best effort: a copy that
+   * fails is reported by the harvest with its degrade, and the check goes on
+   * with the streams alone.
    */
-  const runRoundCheck = (): number | null => {
+  const copyTaskTranscripts = (reviewers: Array<[string, string]>): void => {
+    for (const [lens, lane] of reviewers) {
+      if (lens !== "bug") continue;
+      const events = join(LOGS, `review-r${R}-bug-${lane}.jsonl`);
+      const copied = run(join(HERE, "run"), [
+        "review-findings",
+        "harvest",
+        events,
+        LOGS,
+        "--prefix",
+        `review-r${R}-bug-${lane}`,
+      ]);
+      if (copied.out) process.stdout.write(copied.out);
+      if (copied.err) process.stderr.write(copied.err);
+    }
+  };
+
+  /**
+   * The round's check for changes by its reviewers: null when the round took
+   * no starting state or a past collection finished it, else the step's exit.
+   * The check runs once, at the first collection, so no fix lands before it.
+   * A collection cut short after the point but before the restore finishes is
+   * completed, never skipped: the point means the check voided what it found,
+   * so only the restore is unfinished. A finished collection, marked when its
+   * step exits 0, is never repeated.
+   */
+  const runRoundCheck = (reviewers: Array<[string, string]>): number | null => {
     if (!existsSync(join(D, "reach", `before-r${R}.json`))) return null;
-    let recorded = false;
-    try {
-      recorded = reachActions(D).some(
-        ({ event }) => event.kind === "point" && String(event.point) === `r${R}`,
+    const marker = join(D, "reach", `r${R}.collected`);
+    const finish = (code: number): number => {
+      if (code === 0) {
+        try {
+          writeFileSync(marker, "");
+        } catch (e) {
+          console.log(
+            `review-round: round ${R} is collected but its marker is not written (${e instanceof Error ? e.message : String(e)}); the next collection restores again`,
+          );
+        }
+      }
+      return code;
+    };
+    if (roundPointRecorded(D, R)) {
+      if (existsSync(marker)) {
+        console.log(`review-round: round ${R} already has its reach check recorded`);
+        return null;
+      }
+      console.log(
+        `review-round: round ${R} already has its reach check recorded; completing its restore`,
       );
-    } catch {
-      recorded = false;
+      const restore = run(join(HERE, "run"), ["reach", "restore", D, `r${R}`]);
+      if (restore.out) process.stdout.write(restore.out);
+      if (restore.err) process.stderr.write(restore.err);
+      return finish(restore.code);
     }
-    if (recorded) {
-      console.log(`review-round: round ${R} already has its reach check recorded`);
-      return null;
-    }
+    copyTaskTranscripts(reviewers);
     const child = run(join(HERE, "run"), ["reach", "round", D, `r${R}`]);
     if (child.out) process.stdout.write(child.out);
     if (child.err) process.stderr.write(child.err);
-    return child.code;
+    return finish(child.code);
   };
 
-  const collectRoundCheck = (): void => {
-    const code = runRoundCheck();
+  const collectRoundCheck = (reviewers: Array<[string, string]>): void => {
+    const code = runRoundCheck(reviewers);
     if (code !== null && code !== 0) {
       console.log(`review-round: round ${R} reach check exited ${code}; stop the leg`);
       process.exit(4);
@@ -974,7 +1026,7 @@ if (import.meta.main) {
           `${lens} r${R}: provider wall: "${message}"`,
         );
       }
-      collectRoundCheck();
+      collectRoundCheck(reviewers);
       if ((globalThis as Record<string, unknown>).UNRECORDED) process.exit(4);
       process.exit(0);
     }
@@ -1074,7 +1126,7 @@ if (import.meta.main) {
       );
       process.exit(4);
     }
-    collectRoundCheck();
+    collectRoundCheck(reviewers);
     if ((globalThis as Record<string, unknown>).UNRECORDED) process.exit(4);
     process.exit(3);
   }
