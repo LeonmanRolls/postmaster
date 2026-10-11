@@ -865,9 +865,9 @@ describe("R1: round 1 review regressions", () => {
       ],
       { timeoutSeconds: 3 },
     );
-    expect(
-      tool(layout, "review-round", "start", layout.dispatch, "1", "bug:a", "bug:b").code,
-    ).toBe(0);
+    expect(tool(layout, "review-round", "start", layout.dispatch, "1", "bug:a", "bug:b").code).toBe(
+      0,
+    );
     writeFileSync(join(layout.dispatch, "logs", "review-r1-bug-a.done"), "");
     const first = tool(layout, "review-round", "wait-next", layout.dispatch, "1", layout.repo);
     expect(first.code).toBe(0);
