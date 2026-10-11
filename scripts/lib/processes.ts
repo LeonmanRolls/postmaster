@@ -367,27 +367,44 @@ function snapshotStarted(ticks: number | null): number | null {
   return ticksToEpochMs(ticks, snapshotBootMs, snapshotHz);
 }
 
-function snapshotLinux(): ProcessSnapshot[] | null {
+function snapshotLinux(rootPid: number): ProcessSnapshot[] | null {
   let names: string[];
   try {
     names = readdirSync(procRoot());
   } catch {
     return null;
   }
-  const entries: ProcessSnapshot[] = [];
+  // The stat lines alone first: the walk needs every parent, but only
+  // the descendants' command lines are ever read.
+  const stats = new Map<number, { state: string; ppid: number; startTicks: number | null }>();
+  const parents = new Map<number, number>();
   for (const name of names) {
     if (!/^[0-9]+$/u.test(name)) continue;
     const pid = Number(name);
     let parsed: { state: string; ppid: number; startTicks: number | null } | null;
-    let command: string;
     try {
       parsed = parseProcStat(readFileSync(`${procRoot()}/${pid}/stat`, "utf8"));
-      command = readFileSync(`${procRoot()}/${pid}/cmdline`, "utf8").replace(/\0/gu, " ").trim();
     } catch {
       // A process that exits mid-scan simply has no entry.
       continue;
     }
     if (parsed === null) continue;
+    stats.set(pid, parsed);
+    parents.set(pid, parsed.ppid);
+  }
+  // A live proc root always lists pids; none means the root is not a procfs.
+  if (stats.size === 0) return null;
+  const entries: ProcessSnapshot[] = [];
+  for (const pid of descendantPids(parents, rootPid)) {
+    const parsed = stats.get(pid);
+    if (parsed === undefined) continue;
+    let command: string;
+    try {
+      command = readFileSync(`${procRoot()}/${pid}/cmdline`, "utf8").replace(/\0/gu, " ").trim();
+    } catch {
+      // Exited between the scan and the read.
+      continue;
+    }
     entries.push({
       pid,
       ppid: parsed.ppid,
@@ -396,8 +413,7 @@ function snapshotLinux(): ProcessSnapshot[] | null {
       started: snapshotStarted(parsed.startTicks),
     });
   }
-  // A live proc root always lists pids; none means the root is not a procfs.
-  return entries.length > 0 ? entries : null;
+  return entries;
 }
 
 async function snapshotPs(): Promise<ProcessSnapshot[]> {
@@ -418,11 +434,12 @@ async function snapshotPs(): Promise<ProcessSnapshot[]> {
   }
 }
 
-/** The living descendants of rootPid in one pass: /proc where it lists pids,
- * else a single ps. Async so a preload polling several times a second never
- * blocks the loop on the listing. */
+/** The living descendants of rootPid: /proc where it lists pids (stat
+ * lines for the walk, command lines for the descendants alone), else a
+ * single ps. Async for the ps listing; the /proc scan is synchronous,
+ * so the poll reads the least it can at a preload's cadence. */
 export async function snapshotDescendants(rootPid: number): Promise<Map<number, ProcessSnapshot>> {
-  const linux = snapshotLinux();
+  const linux = snapshotLinux(rootPid);
   const entries = linux ?? (await snapshotPs());
   const byPid = new Map<number, ProcessSnapshot>();
   const parents = new Map<number, number>();

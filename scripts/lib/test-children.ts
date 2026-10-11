@@ -3,12 +3,12 @@
 // command and state. A preload cannot wrap test or
 // node:child_process.spawn (ESM live bindings bypass require-patching), and
 // Bun reaps a timed-out test's children before afterEach runs, so this
-// snapshots the test process's descendants instead: every 250 ms from each
+// snapshots the test process's descendants instead: every 500 ms from each
 // test's start, and the report lists what was alive at the last check and
 // started after the test did. Attribution is by start time against the
 // test's start with a 1.5 s slop for the one-second granularity of boot and
 // listing clocks; a start that cannot be read counts as the test's. Tests
-// under 250 ms are never snapshotted, so stated timeouts under 250 ms get
+// under 500 ms are never snapshotted, so stated timeouts under 500 ms get
 // no list, and a test blocked in spawnSync cannot report in-process.
 import { afterEach, beforeEach } from "bun:test";
 import { snapshotDescendants, type ProcessSnapshot } from "./processes.ts";
@@ -26,7 +26,7 @@ export function countsTowardReport(entry: ProcessSnapshot, t0: number): boolean 
   return !entry.stat.startsWith("Z") && startedDuringTest(entry.started, t0);
 }
 
-const POLL_MS = 250;
+const POLL_MS = 500;
 const GRACE_MS = 100;
 
 let generation = 0;
