@@ -461,8 +461,11 @@ function sendBrief(
     );
   const signature = `booking clerk for ${session}`;
   let accepted = false;
+  // Always tries once, as the spawn's naming loop does: a start whose
+  // naming consumed the budget still attempts the delivery.
+  let tried = false;
   for (;;) {
-    if (Date.now() >= deadline) return fail();
+    if (tried && Date.now() >= deadline) return fail();
     if (accepted) {
       // A send already went in: resend only when a read shows it did not arrive.
       const read = runScript("host", ["read", handle, "20"]);
@@ -484,6 +487,7 @@ function sendBrief(
       "--wait",
       String(SEND_SETTLE_SECONDS),
     ]);
+    tried = true;
     const text = `${sent.out}\n${sent.err}`;
     if (
       sent.code === 0 ||
