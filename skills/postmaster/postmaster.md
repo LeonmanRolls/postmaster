@@ -160,6 +160,10 @@ waits in the ready queue until the watcher sees room under `team.max_runs`.
    prints them for the waybill; a gate the project declares wins over the launch card's, and
    `record` says so. On refusal, log a `note` with the config error, tell the user what to fix,
    set the undispatched run to `abandoned`, and do not cut worktrees or move the ticket in progress.
+   Then record the run's starting verifiers: `<tool>/scripts/run verifier record <repo>
+   <dispatch>` copies `.postmaster/verifier/` into the run's record, the folder as the run
+   reads it; without local verifiers it records none. On refusal, log a `note`, tell the user
+   what to fix, and abandon as on a `verify record` refusal.
 7. **Cut the synthesis worktree** at BASE, the sha you recorded from `git -C <repo> rev-parse
    HEAD` on the default branch: `git -C <repo> worktree add .worktrees/<TICKET> -b <TICKET>
    <sha>`. The coachman's cwd is that worktree from its first leg, so the project's ambient
@@ -780,7 +784,13 @@ every project and does not change that project's gate.
    it names — then tool faults and style-sort proposals as Legacy Stage G steps 4 and 5
    describe. Then check whether any verifier may have gone stale on the landing: advance
    `<repo>`'s checkout of the default branch to the landed merge commit first, so the stale
-   query reads the landing's own index, then run `<tool>/scripts/run verifier stale
+   query reads the landing's own index; then keep the run's verifier changes with
+   `<tool>/scripts/run verifier keep <repo> --run <dispatch> --at <merge>`, which saves the
+   folder as it was in the run's record, merges each file the run changed, added or removed
+   three ways against the project's file, and confirms each changed or added verifier at the
+   merge — each change that clashes with one kept since the run started prints as `not kept:`
+   and stays as the project has it, and each named file goes to the user; then run
+   `<tool>/scripts/run verifier stale
    <repo> --at <merge>` once; for the verifiers it marks, offer one correcting upkeep pass
    (`run verifier upkeep <repo> --run <dispatch> --correct`), naming the changed files,
    and a yes starts it; when the pass completes, land its branch (`run verifier land <repo>
