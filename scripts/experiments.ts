@@ -11,16 +11,26 @@
 //
 //   exit 0  started, moved, concluded, listed or printed; start, move and
 //           conclude print the experiment's id
-//   exit 1  usage; a refusal, with nothing written; a corrupt record
+//   exit 1  usage; a refusal, with the record untouched; a corrupt record;
+//           the lock held past its wait
 //
 // The record is the project's .postmaster/experiments.jsonl, append-only, one
 // event per change, found from the repository's top level as the run root is.
+// One change runs at a time, through a lock beside the record.
 // Each change is logged through the project's ledger. Dates are UTC calendar
 // days; an experiment is due when it is running and its date to look has come.
 // A level is one side of what the experiment compares.
-import { appendFileSync, existsSync, lstatSync, readFileSync } from "node:fs";
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
-import { ensureIgnore, isDie, projectRoot } from "./lib/effective-config.ts";
+import { ensureIgnore, isDie, isSymlink, projectRoot } from "./lib/effective-config.ts";
 import { argvDecoded, run } from "./lib/proc.ts";
 import { logProjectEvent } from "./log-action.ts";
 
@@ -268,6 +278,116 @@ function fail(message: string): never {
   process.exit(1);
 }
 
+const LOCK_TIMEOUT_MS = 30000;
+const LOCK_STALE_MS = 10000;
+const LOCK_POLL_MS = 50;
+
+let heldDir: string | null = null;
+let heldToken: string | null = null;
+let lockHookSet = false;
+
+/** releaseLock: give the record lock back when it is still ours. */
+export function releaseLock(): void {
+  if (heldDir === null) return;
+  try {
+    const owner = readFileSync(join(heldDir, "owner"), "utf8").trim();
+    if (owner === heldToken) rmSync(heldDir, { recursive: true, force: true });
+  } catch {
+    // best effort: a stale lock is stolen, never fatal
+  }
+  heldDir = null;
+  heldToken = null;
+}
+
+function releaseOnExit(): void {
+  if (lockHookSet) return;
+  lockHookSet = true;
+  process.on("exit", () => {
+    releaseLock();
+  });
+}
+
+export interface LockOpts {
+  timeoutMs?: number;
+  staleMs?: number;
+  pollMs?: number;
+}
+
+/**
+ * lockStep <age> <elapsed> <staleMs> <timeoutMs>: what a waiter does about a
+ * held lock: steal it when stale, refuse past the timeout, else wait. An age
+ * of -1 is a lock that vanished mid-check.
+ */
+export function lockStep(
+  age: number,
+  elapsed: number,
+  staleMs: number,
+  timeoutMs: number,
+): "steal" | "wait" | "refuse" {
+  if (age >= 0 && age > staleMs) return "steal";
+  if (elapsed > timeoutMs) return "refuse";
+  return "wait";
+}
+
+/**
+ * acquireLock <root>: hold the experiments record lock across processes, so a
+ * read, its validation and its append run as one mutation. The lock is not
+ * reentrant: a second acquire in one process waits like any other. A lock
+ * older than the stale age is a crashed holder's and is stolen; a live one is
+ * waited on to the timeout, then refused. Fail paths exit through the process
+ * exit hook, which releases what they hold.
+ */
+export function acquireLock(root: string, opts: LockOpts = {}): void {
+  const timeoutMs = opts.timeoutMs ?? LOCK_TIMEOUT_MS;
+  const staleMs = opts.staleMs ?? LOCK_STALE_MS;
+  const pollMs = opts.pollMs ?? LOCK_POLL_MS;
+  try {
+    mkdirSync(join(root, ".postmaster"), { recursive: true });
+  } catch {
+    fail(`cannot lock the experiments record under ${root}`);
+  }
+  const dir = join(root, ".postmaster", "experiments.lock");
+  releaseOnExit();
+  const start = Date.now();
+  for (;;) {
+    try {
+      mkdirSync(dir);
+      const token = `${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}`;
+      try {
+        writeFileSync(join(dir, "owner"), `${token}\n`);
+      } catch {
+        // held without a token; the release skips it and it goes stale
+      }
+      heldDir = dir;
+      heldToken = token;
+      return;
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== "EEXIST") {
+        fail(`cannot lock the experiments record under ${root}`);
+      }
+    }
+    let age = -1;
+    try {
+      age = Date.now() - statSync(dir).mtimeMs;
+    } catch {
+      age = -1;
+    }
+    const step = lockStep(age, Date.now() - start, staleMs, timeoutMs);
+    if (step === "steal") {
+      try {
+        rmSync(dir, { recursive: true, force: true });
+      } catch {
+        // lost the steal race; loop and queue again
+      }
+      continue;
+    }
+    if (step === "refuse") {
+      fail("the experiments record is locked by another change; try again");
+    }
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, pollMs);
+  }
+}
+
 function usage(): never {
   console.error(USAGE);
   process.exit(1);
@@ -490,9 +610,8 @@ function parseEvent(
 }
 
 function readRecord(path: string): ExperimentEvent[] {
+  if (isSymlink(path)) fail(`${path} must be a file inside the project, not a symlink`);
   if (!existsSync(path)) return [];
-  if (lstatSync(path).isSymbolicLink())
-    fail(`${path} must be a file inside the project, not a symlink`);
   const text = readFileSync(path, "utf8");
   const events: ExperimentEvent[] = [];
   let n = 0;
@@ -516,6 +635,7 @@ function main(): void {
     if (isDie(e)) fail(e.message);
     throw e;
   }
+  acquireLock(root);
   const record = join(root, ".postmaster", "experiments.jsonl");
   const replayed = replay(readRecord(record));
   if (replayed.error !== null) fail(replayed.error);
@@ -526,10 +646,12 @@ function main(): void {
     const at = p.today ?? today;
     if (parseDate(at) === null) fail(`bad date: ${p.today}`);
     process.stdout.write(formatList(rows, at));
+    releaseLock();
     return;
   }
   if (p.form === "push-docs") {
     process.stdout.write(pushDocs(rows));
+    releaseLock();
     return;
   }
 
@@ -556,13 +678,17 @@ function main(): void {
     if (isDie(e)) fail(e.message);
     throw e;
   }
-  if (existsSync(record) && lstatSync(record).isSymbolicLink()) {
+  if (isSymlink(record)) {
     fail(`${record} must be a file inside the project, not a symlink`);
   }
-  appendFileSync(record, `${JSON.stringify(applied.event)}\n`);
+  // The ledger first: a logging failure then leaves the record untouched, so a
+  // retry repeats the change instead of duplicating it. A record failure after
+  // the log leaves a spare ledger line, which a retry doubles harmlessly.
   if (logProjectEvent(root, "postmaster", "experiment", applied.event.id, detail) !== 0) {
     process.exit(1);
   }
+  appendFileSync(record, `${JSON.stringify(applied.event)}\n`);
+  releaseLock();
   console.log(applied.event.id);
 }
 

@@ -1,17 +1,34 @@
 // Unit tests for the experiments command's core: dates, the replay, the
 // due rule and its order, the list shape, the page rows, and the three
-// transitions with their refusals.
+// transitions with their refusals; then the record's edges through the
+// command itself: the symlink guard, the ledger order and the lock.
 import { describe, expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
 import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+  acquireLock,
   applyConclude,
   applyMove,
   applyStart,
   formatList,
   isDue,
+  lockStep,
   nextId,
   orderRows,
   parseDate,
   pushDocs,
+  releaseLock,
   replay,
   type Experiment,
   type ExperimentEvent,
@@ -241,5 +258,191 @@ describe("applyMove and applyConclude", () => {
     );
     expect(applyConclude(rows, "e2", "r", null, "2026-10-10").error).toContain("already concluded");
     expect(applyConclude(rows, "e1", " ", null, "2026-10-10").error).toContain("result");
+  });
+});
+
+const RUN = join(import.meta.dir, "run");
+
+function tempRepo(): string {
+  const dir = mkdtempSync(join(tmpdir(), "experiments-test-"));
+  const init = spawnSync("git", ["init", "-q"], { cwd: dir, encoding: "utf8" });
+  if (init.status !== 0) throw new Error(`git init failed: ${init.stderr}`);
+  return dir;
+}
+
+function runExperiments(repo: string, args: string[]) {
+  return spawnSync(RUN, ["experiments", args[0] ?? "", "--project", repo, ...args.slice(1)], {
+    encoding: "utf8",
+  });
+}
+
+const START = [
+  "start",
+  "--question",
+  "q",
+  "--level",
+  "a",
+  "--level",
+  "b",
+  "--measure",
+  "m",
+  "--look",
+  "2026-10-20",
+];
+
+function recordLines(repo: string): string[] {
+  return readFileSync(join(repo, ".postmaster", "experiments.jsonl"), "utf8")
+    .trim()
+    .split("\n");
+}
+
+describe("record symlink guard", () => {
+  test("a dangling symlink at the record is refused with nothing written", () => {
+    const repo = tempRepo();
+    const escaped = `${repo}-escaped.jsonl`;
+    try {
+      const pm = join(repo, ".postmaster");
+      mkdirSync(pm, { recursive: true });
+      symlinkSync(escaped, join(pm, "experiments.jsonl"));
+      const r = runExperiments(repo, START);
+      expect(r.status).not.toBe(0);
+      expect(existsSync(escaped)).toBe(false);
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+      rmSync(escaped, { force: true });
+    }
+  });
+
+  test("a symlink to a live file is refused and the file is untouched", () => {
+    const repo = tempRepo();
+    try {
+      const pm = join(repo, ".postmaster");
+      mkdirSync(pm, { recursive: true });
+      const live = join(repo, "live.jsonl");
+      writeFileSync(live, "held\n");
+      symlinkSync(live, join(pm, "experiments.jsonl"));
+      const r = runExperiments(repo, START);
+      expect(r.status).not.toBe(0);
+      expect(readFileSync(live, "utf8")).toBe("held\n");
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("ledger write order", () => {
+  test("a logging failure leaves the record untouched", () => {
+    const repo = tempRepo();
+    try {
+      expect(runExperiments(repo, START).status).toBe(0);
+      expect(recordLines(repo).length).toBe(1);
+      const ledger = join(repo, ".postmaster", "runs", "ledger.jsonl");
+      rmSync(ledger);
+      mkdirSync(ledger);
+      expect(runExperiments(repo, START).status).not.toBe(0);
+      expect(recordLines(repo).length).toBe(1);
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("lockStep", () => {
+  test("stale steals, fresh waits, a long wait refuses", () => {
+    expect(lockStep(11000, 100, 10000, 30000)).toBe("steal");
+    expect(lockStep(100, 100, 10000, 30000)).toBe("wait");
+    expect(lockStep(100, 31000, 10000, 30000)).toBe("refuse");
+    expect(lockStep(-1, 100, 10000, 30000)).toBe("wait");
+    expect(lockStep(-1, 31000, 10000, 30000)).toBe("refuse");
+    expect(lockStep(10000, 100, 10000, 30000)).toBe("wait");
+  });
+});
+
+describe("record lock", () => {
+  test("acquire and release round-trips; release is idempotent", () => {
+    const root = mkdtempSync(join(tmpdir(), "experiments-lock-"));
+    try {
+      acquireLock(root);
+      expect(existsSync(join(root, ".postmaster", "experiments.lock"))).toBe(true);
+      releaseLock();
+      expect(existsSync(join(root, ".postmaster", "experiments.lock"))).toBe(false);
+      releaseLock();
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("a stale lock is stolen", () => {
+    const root = mkdtempSync(join(tmpdir(), "experiments-lock-"));
+    try {
+      const dir = join(root, ".postmaster", "experiments.lock");
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, "owner"), "dead\n");
+      const old = new Date(Date.now() - 60000);
+      utimesSync(dir, old, old);
+      acquireLock(root, { staleMs: 1000, timeoutMs: 5000, pollMs: 5 });
+      releaseLock();
+      expect(existsSync(dir)).toBe(false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("release skips a lock another holder took", () => {
+    const root = mkdtempSync(join(tmpdir(), "experiments-lock-"));
+    try {
+      acquireLock(root);
+      const dir = join(root, ".postmaster", "experiments.lock");
+      rmSync(dir, { recursive: true, force: true });
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, "owner"), "someone else\n");
+      releaseLock();
+      expect(readFileSync(join(dir, "owner"), "utf8")).toBe("someone else\n");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("concurrent starts", () => {
+  test("parallel starts serialize: every id lands once", async () => {
+    const repo = tempRepo();
+    try {
+      const N = 12;
+      const procs = [];
+      for (let i = 0; i < N; i++) {
+        procs.push(
+          Bun.spawn(
+            [
+              RUN,
+              "experiments",
+              "start",
+              "--project",
+              repo,
+              "--question",
+              `race ${i}`,
+              "--level",
+              "a",
+              "--level",
+              "b",
+              "--measure",
+              "m",
+              "--look",
+              "2026-10-20",
+            ],
+            { stdout: "ignore", stderr: "ignore" },
+          ),
+        );
+      }
+      const codes = await Promise.all(procs.map((p) => p.exited));
+      expect(codes.every((c) => c === 0)).toBe(true);
+      const lines = recordLines(repo);
+      expect(lines.length).toBe(N);
+      const ids = lines.map((l) => (JSON.parse(l) as { id: string }).id);
+      expect(new Set(ids).size).toBe(N);
+      expect(runExperiments(repo, ["list"]).status).toBe(0);
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
   });
 });
