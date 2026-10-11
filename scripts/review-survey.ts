@@ -41,6 +41,7 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { scriptsDir } from "./lib/paths.ts";
 import { run } from "./lib/proc.ts";
+import { PY_S_CLASS, pyLower, pyTrim, pyWords } from "./lib/text.ts";
 import { gateMaterial } from "./surveyor.ts";
 
 const HERE = scriptsDir(import.meta);
@@ -61,15 +62,16 @@ const FINDING_ROUND_RE = /^r([1-9][0-9]*)$/u;
 const LAUNCH_ROUND_RE = /^[1-9][0-9]*$/u;
 const DEGRADE_R_RE = /^r([1-9][0-9]*):$/u;
 const DEGRADE_N_RE = /^([1-9][0-9]*):$/u;
-const LENIENT_RE = /^[^\s]+\s+(?:round\s+([1-9][0-9]*)|r([1-9][0-9]*))(?:\s|$)/u;
+const LENIENT_RE = new RegExp(
+  `^[^${PY_S_CLASS}]+[${PY_S_CLASS}]+(?:round[${PY_S_CLASS}]+([1-9][0-9]*)|r([1-9][0-9]*))(?:[${PY_S_CLASS}]|$)`,
+  "u",
+);
 const REPORT_ROUND_RE = /^review-r([0-9]+)-/u;
-const HEADING_RE = /^#{1,6}\s+/u;
+const HEADING_RE = new RegExp(`^#{1,6}[${PY_S_CLASS}]+`, "u");
+const SECTION_RE = new RegExp(`^##[${PY_S_CLASS}]+(.*)$`, "u");
+const PARA_RE = new RegExp(`\\n[${PY_S_CLASS}]*\\n`, "u");
+const CAUSE_RE = new RegExp(`^(RUN|STOP|RULING) [^${PY_S_CLASS}]+$`, "u");
 const NO_ANSWER = "No answer:";
-
-function words(detail: string): string[] {
-  const trimmed = detail.trim();
-  return trimmed === "" ? [] : trimmed.split(/\s+/u);
-}
 
 /** parseRound <raw>: the round, or null when out of shape. */
 export function parseRound(raw: string): number | null {
@@ -79,7 +81,7 @@ export function parseRound(raw: string): number | null {
 
 /** findingRound <detail>: the round, strictly as review-decide reads it. */
 export function findingRound(detail: string): number | null {
-  const w = words(detail);
+  const w = pyWords(detail);
   if (w[0] !== "gating" && w[0] !== "style") return null;
   if (w[1] !== "P1" && w[1] !== "P2" && w[1] !== "P3") return null;
   const m = FINDING_ROUND_RE.exec(w[2] ?? "");
@@ -88,7 +90,7 @@ export function findingRound(detail: string): number | null {
 
 /** findingCounts <detail>: 1 when the line counts serious, else 0. Faults on a malformed line. */
 export function findingCounts(detail: string): number {
-  const w = words(detail);
+  const w = pyWords(detail);
   if (w[0] !== "gating" && w[0] !== "style") {
     throw new Error(
       `a finding whose detail opens with ${w.length > 0 ? `"${w[0]}"` : "nothing"}, not gating or style`,
@@ -110,14 +112,14 @@ function lenientRound(detail: string): number | null {
 
 /** launchRound <detail>: the round, strictly, else a lenient lens-and-round read. */
 export function launchRound(detail: string): number | null {
-  const w = words(detail);
+  const w = pyWords(detail);
   if (w[1] === "round" && LAUNCH_ROUND_RE.test(w[2] ?? "")) return parseInt(w[2] ?? "0", 10);
   return lenientRound(detail);
 }
 
 /** degradeRound <detail>: the round, strictly, else a lenient lens-and-round read. */
 export function degradeRound(detail: string): number | null {
-  const w = words(detail);
+  const w = pyWords(detail);
   if (w[1] === "round" && w.length >= 3) {
     const m = DEGRADE_N_RE.exec(w[2] ?? "");
     if (m?.[1] !== undefined) return parseInt(m[1], 10);
@@ -136,10 +138,7 @@ export function gateRound(detail: string, k: number): boolean {
 }
 
 function normalize(text: string): string {
-  return text
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/gu, " ")
-    .trim();
+  return pyTrim(pyLower(text).replace(/[^a-z0-9]+/gu, " "));
 }
 
 /** missingParts <answer>: the four parts with no heading carrying their name, in order. */
@@ -157,8 +156,8 @@ export function missingParts(answer: string): string[] {
 /** plainWords <answer>: the closing paragraph the user reads before the options. */
 export function plainWords(answer: string): string {
   const paras = answer
-    .split(/\n\s*\n/u)
-    .map((p) => p.trim())
+    .split(PARA_RE)
+    .map((p) => pyTrim(p))
     .filter((p) => p !== "");
   return paras.length === 0 ? "" : (paras[paras.length - 1] ?? "");
 }
@@ -181,7 +180,7 @@ export function readSections(
     body.length = 0;
   };
   for (const line of text.split("\n")) {
-    const heading = /^##\s+(.*)$/u.exec(line);
+    const heading = SECTION_RE.exec(line);
     if (heading) {
       close();
       const key = normalize(heading[1] ?? "");
@@ -477,7 +476,7 @@ function surveyCmd(argv: string[]): never {
     );
   }
   const cause = decided.out.trim();
-  if (!/^(RUN|STOP|RULING) \S+$/u.test(cause)) {
+  if (!CAUSE_RE.test(cause)) {
     fail(`review-decide printed no cause: ${cause === "" ? "(nothing)" : cause}`);
   }
   if (cause !== "RULING rise") {
