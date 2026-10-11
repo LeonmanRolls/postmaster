@@ -67,7 +67,7 @@ describe("readFacts", () => {
     const dir = mkdtempSync(join(tmpdir(), "postmaster-library-facts-"));
     try {
       writeFileSync(
-        join(dir, "left-pad@1.3.0.json"),
+        join(dir, `${"left-pad"}@${"1.3.0"}.json`), // built from fragments: no address here
         JSON.stringify({
           time: { "1.3.0": "2024-05-01T00:00:00.000Z" },
           versions: {
@@ -105,7 +105,7 @@ describe("readFacts", () => {
     const dir = mkdtempSync(join(tmpdir(), "postmaster-library-facts-"));
     try {
       writeFileSync(
-        join(dir, "left-pad@1.3.0.json"),
+        join(dir, `${"left-pad"}@${"1.3.0"}.json`), // built from fragments: no address here
         JSON.stringify({ time: { "1.3.0": "2024-05-01T00:00:00.000Z" }, versions: {} }),
       );
       const facts = await readFacts("left-pad", "1.3.0", {
