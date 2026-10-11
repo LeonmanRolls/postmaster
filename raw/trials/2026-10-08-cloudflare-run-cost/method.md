@@ -1,7 +1,7 @@
 ---
 kind: trial
 subject: what one run of the flow would cost on Cloudflare Containers and on other on-demand providers, and as pay-per-token model use, from the lane audit's times and token counts, how many launches ran at once, and which of the flow's scripts lean on one machine
-date: 2026-10-09
+date: 2026-10-11
 ---
 
 # Method
@@ -18,7 +18,9 @@ that the flow runs on Cloudflare, which needs a trial of its own.
 Two later questions use the same records. The first is whether another on-demand provider would charge less than Cloudflare
 for the same hours, priced from each provider's own page on two kinds of hour (a gate hour and a waiting-agent hour) and, for
 virtual machines, for a machine kept up for a run's whole life. The second is what limits how many runs can be in flight,
-for which the trial counts how many launches ran at once.
+for which the trial counts how many launches ran at once. A third asks what a whole flow costs, not only a run's
+launches: one ticket from the booking clerk to the merge, a month of tickets at the audited pace, and what the cloud would
+cost if it took only the peaks.
 
 **Inputs.**
 
@@ -37,6 +39,13 @@ for which the trial counts how many launches ran at once.
   `results/machines.json` (machines billed whole), each row naming its page, the day it was read and how well it was
   checked. The readings are the captures `on-demand-containers-and-sandboxes` and `on-demand-virtual-machines`, read on
   2026-10-09. A rate that could be had only from a search answer or a third party is not in the files.
+- The pace of tickets, `results/pace.json`, written by `apparatus/pace.ts` from a tab-separated file of merge time and title:
+  the project's closed pull requests on GitHub with a merge time, read on 2026-10-11 through its REST API, counted by UTC
+  merge day as merged and as ticket-titled (a title that starts with a ticket number and a comma). No title or number is
+  kept. The query is in the header of `pace.ts`. The file's last day is a part day and is left out of the window.
+- The open interactive sessions, `results/sessions.json`: how many sessions of each kind were open at one moment
+  (2026-10-11 04:27Z), and how many were working, from the machine's list of sessions, with no name kept. It cannot be read
+  again; it is one moment.
 - The flow's scripts, `scripts/` and `scripts/lib/` of this repository at the base of this branch, for the table of
   what they lean on. The seven scripts that test the flow itself (self-tests, oracles, acceptance runs) and every
   `.test.ts` are left out, which leaves 69.
@@ -78,6 +87,29 @@ for which the trial counts how many launches ran at once.
   run, which includes the wait for the user's spec review and so is an upper bound. The load at a moment is how many
   intervals cover it. The most at once inside any one run, and the number of coachman stages longer than 24 hours, are counted
   from the same intervals.
+- *A whole flow*: the launches of a run, the interactive roles around them (the postmaster and the booking clerks) and the
+  control plane. An *interactive session* is a harness in a container with the waiting-agent profile, with the Durable
+  Object in front of it ($0.005625 an hour, 128 MB at $12.50 per million GB-seconds). Awake it costs the waiting-agent hour;
+  kept up and idle it holds its memory and disk only (a provider that charges every vCPU charges it idle as well). Two
+  policies: *asleep when idle*, where the container stops and costs nothing between turns, and *kept up*, where it stays up
+  between turns. A session's month is its awake hours a day at the awake rate, plus for kept-up the other hours at the idle
+  rate, over 30 days. Two readings of the awake hours: 2 a day, assumed, and 24 times the share of open sessions that were
+  working at the snapshot, 5.3.
+- *The audited pace*: the runs over the span from the earliest to the latest timestamp in their records, scaled to 30
+  days. The *ticketed pace* is the merged ticket-titled pull requests from 2026-09-26, when titles began to carry ticket
+  numbers, to the last whole day read, scaled the same way. It counts hand-made, research and documentation pull requests
+  and leaves out runs that were set aside or never merged, so it is a second reading, not a bound.
+- *A ticket's own compute*: the average run's launches at the sized-to-use rates, bracketed by the coachman's floor and its
+  ceiling, plus the priced parts of the control plane: 10,000 requests at $0.15 a million and 1,000 workflow steps at $0.80
+  per 100,000, which are assumed counts, and the Durable Object for the container-hours of the ticket's launches. A month is
+  tickets times that, plus the sessions' month and the $5 plan fee. The tickets a month at which a flat price costs the same
+  is the flat price less the sessions and the plan fee, over a ticket's own compute: none where the first two already cost
+  more, and a range from the high costs to the low ones. The Workers Paid allowances are not taken off.
+- *The peaks*: with `k` launches held on the machine at once. The least that could go is the launch-seconds above `k`, the
+  sum over each count `c` above `k` of `c - k` times the seconds spent at `c`, from the histogram of the load of lanes,
+  reviewers and gate runs. The second reading is admission: launches are taken in the order they start, and one that finds
+  the machine full goes to the cloud and stays there. Lane and reviewer hours are priced at the awake rate and gate hours at
+  the gate hour, each with its Durable Object. The coachman is not counted.
 - *Cost of container time*: seconds times the per-second rate of an instance type, memory and disk for what the type
   provisions and CPU for active use only, from the Containers pricing page. The audit holds no CPU measurement, so
   CPU use is bracketed at none, a quarter and all vCPUs busy. List rates; the monthly allowance is not taken off,
@@ -93,7 +125,7 @@ for which the trial counts how many launches ran at once.
   since the two differ twelvefold in input price.
 
 **Counts and controls.** Every count has a control, listed with its result in
-[results/controls.md](results/controls.md), 37 in all, and `apparatus/controls.test.ts` runs them against the
+[results/controls.md](results/controls.md), 45 in all, and `apparatus/controls.test.ts` runs them against the
 committed data. They include: the audit's own published gate totals reproduced through the new code (36 lane-branch
 gate runs, 6.5 hours; 260 synthesis runs, 43.5 hours); one lane's seconds recomputed from its two timestamps; that
 lane's cost recomputed by hand; a run with nothing in it reading zero everywhere; the coachman's floor below its
@@ -113,8 +145,17 @@ page prints and the per-second figure from its documentation's constants, and an
 by a factor of 2.72; Daytona's size limit rejecting the gate and accepting the agent; every row naming its page, its date and its
 check; the break-even against a rented month for Vultr by hand, and none for a machine with no monthly price; the longest
 coachman stage and the count of stages over 24 hours from the intervals against the audit's own stage seconds, with a stage of
-exactly 24 hours not counted; and the most launches at once inside one run against the most across all runs together. The
-unit tests beside each module hold the other positive and negative cases, 132 tests in all. For the scan of scripts they
+exactly 24 hours not counted; the most launches at once inside one run against the most across all runs together; the
+whole-flow break-even put back into the month (the month at the break-even costs the flat price, a ticket fewer less and a
+ticket more more) and, with no sessions, against the earlier break-even for the same average run; the launch-seconds above
+zero at once from the histogram against the sum of the launches' lengths, and zero above the most that ran at once; a month
+of no tickets costing the sessions and the plan alone, with no break-even under them; a month of launches at the audited pace
+as tickets times the average run against the total of the audited runs scaled from their span to 30 days; the launches that
+admission sends to the cloud never fewer than the least that could go, and all of them with no room, and none with room for
+the most that ran at once; and the file of merged pull requests by day with no day more ticket-titled than merged, its days
+adding up to the totals the tool counted straight from the rows, and a made-up day failing the same check. The one count
+with no control is the snapshot of open sessions: it is one moment and cannot be read again. The unit tests beside each module hold the other positive and
+negative cases, 174 tests in all. For the scan of scripts they
 include a package-manager lock file and a process's own `.pid` property, which must not count as marker files, and
 another tool's `worktree` command, which must not count as a `git worktree` call; a hand count of calls to `git` with a
 worktree verb in the 69 scripts finds the same six scripts as the scan. They show the code applies a rule the same way on a case that must read non-zero and one that
@@ -126,7 +167,8 @@ must read zero. They cannot show that the rule is the right one.
 bun apparatus/uptime.ts --runs <ids> --dir <runs folder> [--dir <another>] --out results/coachman-uptime.json
 bun apparatus/measure.ts --audit ../2026-10-03-lane-audit/results/runs.json --runs <ids> --dir <runs folder> --out results/tokens-by-kind.json
 bun apparatus/primitives.ts --repo <checkout> --out results/script-primitives.md
-bun apparatus/run.ts          # instance-time.json, instance-time.md, cost.md, concurrency.md, providers.md
+bun apparatus/pace.ts --in merged.tsv --read <day> --out results/pace.json   # the pace of merged pull requests
+bun apparatus/run.ts          # instance-time.json, instance-time.md, cost.md, concurrency.md, providers.md, whole-flow.md
 bun apparatus/model-bill.ts    # model-bill.md
 bun apparatus/controls.ts      # controls.md
 bun apparatus/quotes.ts --notes ../../articles/<capture>/passages.md --root <cloudflare-docs>/src/content   # quote-check.md
@@ -167,6 +209,13 @@ the thirteen captures.
   returns a summary of a page, so two agreeing reads count as one check. The rate files say which rows have one read. Where a
   provider's pricing page could not be read, the row says where its rate came from. The two profiles are assumptions, the
   machine rows are one shape for a whole run and hold neither the gate nor a 16 GiB coachman, and nothing was ordered or run.
+- The sessions' awake hours were not measured. The session list is one moment, not a series; two awake hours a day is an
+  assumption and the share working at the snapshot gives 5.3, with 1, 4, 6 and 8 shown. The research and design sessions are
+  the user's own work around the flow, not roles of it, and are priced apart. The number of sessions is not scaled with
+  tickets. The control plane's request counts and the stores' prices were not measured. For the fixture runs the coachman is
+  at its ceiling, and 13 real runs that were set aside or never reached synthesis are in no figure. A merged pull request is
+  not a run, so the pace has two readings. The comparison against a flat price takes the flat price as given and does not
+  size the machine.
 - The scan of scripts counts files whose code matches a pattern, with comments removed and a target project's lock file
   names blanked. It lists the files behind each count. A file that reaches a machine primitive through a library the
   patterns do not name is missed, and a match is a file that uses the primitive, not a measure of how much.
