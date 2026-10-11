@@ -3977,6 +3977,75 @@ const FETCH_CMDS = new Set([
   "find-dupes",
 ]);
 
+/** Commands that run the project's scripts: `run` names its script, the
+ * rest name their own. Bun's `test` runs the test runner, not a script. */
+const SCRIPT_RUNNERS = new Set(["run", "test", "start", "stop", "restart"]);
+
+/** Manager entry points invoked in command position in a script's text,
+ * full first words, basename-matched so absolute and .bin-relative paths
+ * count too. Direct uses only; prefix verbs and scripts calling scripts
+ * are not followed. */
+export function scriptNestedManagers(text: string): string[] {
+  const found = new Set<string>();
+  for (const segment of text.split(/[;&|()\n]+/u)) {
+    const words = segment
+      .trim()
+      .split(/[ \t]+/u)
+      .filter((w) => w !== "");
+    let i = 0;
+    while (i < words.length && /^[A-Za-z_][A-Za-z0-9_]*=.*/u.test(words[i] ?? "")) i += 1;
+    const first = (words[i] ?? "").replace(/^["']|["']$/gu, "");
+    if (first === "") continue;
+    const base = first.split("/").pop() ?? "";
+    if (MANAGER_BINS.has(base)) found.add(first);
+  }
+  return [...found].sort();
+}
+
+/** Refuse a script run that would invoke a manager past the shims: every
+ * manager prepends node_modules/.bin for scripts, so a nested call that
+ * resolves there — or a pathed call that names its own binary — runs
+ * unguarded. Corepack always refuses: it provisions managers outside
+ * the guard, wherever it resolves. */
+export function refuseNestedShadowed(project: string, cmd: string, rest: string[]): void {
+  // `run` names its script after its own flags; a workspace selector's
+  // value is not the name. Anything unresolvable runs unscanned: the
+  // manager fails it naturally, or a later guarded call meets it.
+  let name = cmd === "run" ? "" : cmd;
+  if (cmd === "run") {
+    const words = [...rest];
+    while (words.length > 0 && (words[0] ?? "").startsWith("-") && words[0] !== "--") {
+      const flag = words.shift() ?? "";
+      if (flag === "-w" || flag === "--workspace" || flag === "--filter") words.shift();
+    }
+    if ((words[0] ?? "") !== "--") name = words[0] ?? "";
+  }
+  if (name === "") return;
+  let scripts: unknown;
+  try {
+    scripts = (
+      JSON.parse(readFileSync(join(project, "package.json"), "utf8")) as Record<string, unknown>
+    ).scripts;
+  } catch {
+    return;
+  }
+  if (typeof scripts !== "object" || scripts === null) return;
+  const text = (scripts as Record<string, unknown>)[name];
+  if (typeof text !== "string") return;
+  for (const token of scriptNestedManagers(text)) {
+    const base = token.split("/").pop() ?? "";
+    const escapes =
+      base === "corepack" ||
+      (!token.includes("/") && localBin(project, base)) ||
+      (token.includes("/") && existsSync(token.startsWith("/") ? token : join(project, token)));
+    if (escapes) {
+      throw refusal(
+        `install-guard: refusing to run ${name}: it invokes ${token}, which would run past the guard's shims. Run the manager through its shim instead of from inside the script`,
+      );
+    }
+  }
+}
+
 function execPassthrough(
   prog: string,
   pm: Pm,
@@ -3987,7 +4056,10 @@ function execPassthrough(
   project: string,
   cwd: string,
 ): number {
-  const { cmd } = commandOf(prog === "yarn" ? "yarn" : pm, argv);
+  const { cmd, rest } = commandOf(prog === "yarn" ? "yarn" : pm, argv);
+  if (SCRIPT_RUNNERS.has(cmd) && (pm !== "bun" || cmd === "run")) {
+    refuseNestedShadowed(project, cmd, rest);
+  }
   const fetches = FETCH_CMDS.has(cmd);
   if (fetches && (pm === "yarn" || pm === "bun")) {
     refuseForeignScopes(pm, yarnKind, cwd, project, registry);

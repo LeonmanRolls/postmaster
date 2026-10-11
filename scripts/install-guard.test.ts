@@ -40,6 +40,7 @@ import {
   rebuildArgs,
   refuseForeignResolved,
   refuseForeignScopes,
+  refuseNestedShadowed,
   registryEnvStrips,
   resolveClosure,
   runBaseHead,
@@ -49,6 +50,7 @@ import {
   scopeOfName,
   scopePins,
   scopesOfWords,
+  scriptNestedManagers,
   stowaways,
   syncArgs,
   unapprovedPairs,
@@ -930,6 +932,54 @@ test("packuments and verdicts parse without touching the network", () => {
   expect(
     verdictOf("", 200, JSON.stringify({ alerts: [{ action: "error", type: "malware" }] })),
   ).toEqual({ status: "flagged", types: ["malware"] });
+});
+
+test("nested manager uses surface in command position only", () => {
+  expect(scriptNestedManagers("npm install x")).toEqual(["npm"]);
+  expect(scriptNestedManagers("NODE_ENV=p tsc && npx jest")).toEqual(["npx"]);
+  expect(scriptNestedManagers("echo use npm run build")).toEqual([]);
+  expect(scriptNestedManagers("/usr/bin/npm install x")).toEqual(["/usr/bin/npm"]);
+  expect(scriptNestedManagers("./node_modules/.bin/pnpm add x")).toEqual([
+    "./node_modules/.bin/pnpm",
+  ]);
+  expect(scriptNestedManagers('"yarn" build')).toEqual(["yarn"]);
+  expect(scriptNestedManagers("make; corepack pnpm build")).toEqual(["corepack"]);
+  expect(scriptNestedManagers("bun run test.ts")).toEqual(["bun"]);
+  expect(scriptNestedManagers("")).toEqual([]);
+});
+
+test("a script nesting a shadowed manager refuses, and a clean one runs", () => {
+  withTempDir((tmp) => {
+    const project = join(tmp, "proj");
+    mkdirSync(join(project, "node_modules", ".bin"), { recursive: true });
+    writeFileSync(join(project, "node_modules", ".bin", "npm"), "#!/bin/sh\n");
+    writeFileSync(
+      join(project, "package.json"),
+      JSON.stringify({
+        scripts: {
+          setup: "npm install extra",
+          check: "tsc && bunx oxlint",
+          pathed: "./node_modules/.bin/npm install extra",
+          packed: "corepack pnpm build",
+        },
+      }),
+    );
+    expect(() => refuseNestedShadowed(project, "run", ["setup"])).toThrow(
+      /would run past the guard's shims/u,
+    );
+    expect(() => refuseNestedShadowed(project, "run", ["check"])).not.toThrow();
+    expect(() => refuseNestedShadowed(project, "run", ["--silent", "setup"])).toThrow(
+      /would run past the guard's shims/u,
+    );
+    expect(() => refuseNestedShadowed(project, "run", ["missing"])).not.toThrow();
+    expect(() => refuseNestedShadowed(project, "run", [])).not.toThrow();
+    expect(() => refuseNestedShadowed(project, "run", ["pathed"])).toThrow(
+      /would run past the guard's shims/u,
+    );
+    expect(() => refuseNestedShadowed(project, "run", ["packed"])).toThrow(
+      /would run past the guard's shims/u,
+    );
+  });
 });
 
 test("alias entry points run as their canonical manager", () => {
