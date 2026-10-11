@@ -1,0 +1,10 @@
+{
+  "categories": { "correctness": "off" },
+  "overrides": [
+    {
+      "files": ["scripts/lib/**/*.ts", "scripts/**/*-core.ts"],
+      "rules": { "no-restricted-globals": ["error", { "name": "Date" }, { "name": "performance" }] }
+    },
+    { "files": ["**/*.test.ts"], "rules": { "no-restricted-globals": "off" } }
+  ]
+}

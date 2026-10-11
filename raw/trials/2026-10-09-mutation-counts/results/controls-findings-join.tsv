@@ -1,0 +1,10 @@
+key	run	round	sev	location	snapshot	kind	in_scope	holder	holder_lines	tied	first_here	first_within	every_here	every_within	places_here	holder_tags	file_share_first	file_share_within_first	file_share_every	description
+control/in-flagged	0	1	P1	scripts/push-onto-argument.ts:3	controls	ts-line	yes	addItem	2-4	1	1	1	1	1	3:param:push		0.7500	1.0000	0.7500	a finding on the line that pushes onto an argument
+control/in-clean	0	1	P1	scripts/const-map-filter.ts:4	controls	ts-line	yes	bigDoubles > callback of doubled.filter	4-4	1	0	0	0	0			0.0000	0.0000	0.0000	a finding in a function with no change at all
+control/local-only	0	1	P1	scripts/local-array.ts:4	controls	ts-line	yes	pair	2-7	1	0	0	2	2	4:local:push(second only) 5:local:push(second only)		0.0000	0.0000	0.8571	a finding on a push onto a local: only the second count holds it
+control/module-top	0	1	P1	scripts/module-top-level.ts:3	controls	ts-line	yes	(module)	(module)	1	0	0	2	2	3:local:push(second only) 4:local:push(second only)		0.0000	0.0000	1.0000	a finding at the module's top level, where the module changes its own variable
+control/in-callback	0	1	P1	scripts/captured-callback.ts:5	controls	ts-line	yes	viaCallback > callback of xs.forEach	4-6	1	1	1	1	1	5:captured:push		0.2308	0.6154	0.6154	a finding inside the callback that changes the enclosing function's variable
+control/outer-of-callback	0	1	P1	scripts/captured-callback.ts:7	controls	ts-line	yes	viaCallback	2-8	1	0	1	0	1			0.2308	0.6154	0.6154	a finding in the enclosing function, outside its callback
+control/other-file	0	1	P1	scripts/not-in-controls.ts:3	controls	ts-line	no													a finding in a file the tree does not hold
+control/runbook	0	1	P1	skills/postmaster/coachman.md:943	controls	runbook	n/a													a finding that cites a runbook line
+control/no-line	0	1	P1	scripts/reach.ts	controls	no-line	n/a													a finding that cites a file and no line

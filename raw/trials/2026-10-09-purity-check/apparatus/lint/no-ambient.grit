@@ -1,0 +1,8 @@
+language js
+
+or {
+  `new Date()`,
+  `import.meta.env`
+} as $place where {
+  register_diagnostic(span=$place, message="ambient clock or environment", severity="error")
+}

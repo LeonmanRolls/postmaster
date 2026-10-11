@@ -1,0 +1,38 @@
+case	key	value	why
+all-hazard	hazard	30	the positive control: every place marked a hazard reads 30
+all-hazard	harmless	0	
+all-hazard	not_hazard_harmless	0	and no place of the population is estimated a non-hazard
+all-hazard	same	10	two readers who always say the same agree on all 10
+all-hazard	of	10	
+all-hazard	kappa	1.00	
+all-hazard	self_kappa	1.00	a mark list against itself
+none-hazard	hazard	0	the negative control: no place marked a hazard reads 0
+none-hazard	harmless	30	
+none-hazard	not_hazard_harmless	90	and every place of the population is estimated a non-hazard
+none-hazard	same	10	
+none-hazard	kappa	1.00	
+split	hazard	10	a mixed list: 10 hazard, 15 harmless, 5 unclear
+split	harmless	15	
+split	unclear	5	
+split	not_hazard_harmless	45	15 of 30 of 90
+split	not_hazard_all	60	20 of 30 of 90
+split	same	7	seven of ten marks identical
+split	of	10	
+split	kappa	0.49	worked by hand: observed 0.70, chance 0.41, so (0.70 - 0.41) / (1 - 0.41)
+split	self_same	10	a mark list against itself
+split	self_kappa	1.00	
+all-hazard	edge_n	10	a third of the control population sits in an edge function; worked by a second implementation
+all-hazard	edge_hazard	10	
+all-hazard	nonedge_n	20	
+all-hazard	nonedge_hazard	20	
+all-hazard	nonedge_population	60	
+all-hazard	nonedge_not_hazard	0	with every place a hazard, nothing remains that is not one
+none-hazard	edge_hazard	0	
+none-hazard	nonedge_hazard	0	
+none-hazard	nonedge_not_hazard	60	with none a hazard, all 60 remaining places are not
+split	edge_n	10	
+split	edge_hazard	3	
+split	nonedge_n	20	
+split	nonedge_hazard	7	
+split	nonedge_population	60	
+split	nonedge_not_hazard	27	9 of 20 harmless, of 60

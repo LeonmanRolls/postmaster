@@ -1,0 +1,87 @@
+{
+  "root": true,
+  "files": {
+    "includes": ["scripts/**", "!scripts/fixtures/**"]
+  },
+  "formatter": {
+    "enabled": false
+  },
+  "assist": {
+    "enabled": false
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": false
+    }
+  },
+  "overrides": [
+    {
+      "includes": ["scripts/lib/**", "scripts/**/*-core.ts", "!**/*.test.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noProcessEnv": "error",
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "node:fs": "an effect module",
+                  "fs": "an effect module",
+                  "node:fs/promises": "an effect module",
+                  "fs/promises": "an effect module",
+                  "node:child_process": "an effect module",
+                  "child_process": "an effect module",
+                  "node:os": "an effect module",
+                  "os": "an effect module"
+                }
+              }
+            }
+          },
+          "nursery": {
+            "noJsRestrictedProperties": {
+              "level": "error",
+              "options": {
+                "entries": [
+                  {
+                    "object": "Date",
+                    "property": "now"
+                  },
+                  {
+                    "object": "performance",
+                    "property": "now"
+                  },
+                  {
+                    "object": "Bun",
+                    "property": "env"
+                  },
+                  {
+                    "object": "Bun",
+                    "property": "file"
+                  },
+                  {
+                    "object": "Bun",
+                    "property": "write"
+                  },
+                  {
+                    "object": "Bun",
+                    "property": "spawn"
+                  },
+                  {
+                    "object": "Bun",
+                    "property": "spawnSync"
+                  },
+                  {
+                    "object": "Bun",
+                    "property": "$"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      "plugins": ["./no-ambient.grit"]
+    }
+  ]
+}

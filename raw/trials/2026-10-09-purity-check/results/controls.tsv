@@ -1,0 +1,15 @@
+control	scope	count
+effectful	core	3
+effectful	all	3
+injected	core	0
+injected	all	0
+outside	core	0
+outside	all	1
+core-named	core	1
+core-named	all	2
+every-rule	core	30
+every-rule	all	30
+not-flagged	core	0
+not-flagged	all	0
+other-names	core	0
+other-names	all	0
