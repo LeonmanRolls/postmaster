@@ -213,6 +213,18 @@ describe("C2: running it again replaces the parts", () => {
     expect(readCard(layout)).toBe(card);
   });
 
+  test("an HTML comment in a coachman section stops the command with the card untouched", () => {
+    const layout = scratchLayout(tmp, "c2k");
+    const before = readCard(layout);
+    const commented = before.replace("taken in cleanly", "taken in cleanly <!-- stale note -->");
+    expect(commented).not.toBe(before);
+    writeCard(layout, commented);
+    const refused = cardWrite(layout);
+    expect(refused.code).toBe(1);
+    expect(`${refused.out}${refused.err}`).toContain("contains an HTML comment");
+    expect(readCard(layout)).toBe(commented);
+  });
+
   test("a block without reach records ends at Not re-reviewed and gains Reach when notes land", () => {
     const layout = scratchLayout(tmp, "c2i", { reach: false });
     expect(cardWrite(layout).code).toBe(0);
