@@ -2083,7 +2083,8 @@ describe("score: waybill effort controls", () => {
     const result = runScore(dispatch, repo);
     expect(result.code).toBe(2);
     expect(result.out).toContain("FAIL efforts");
-  }, 30000);
+    // Ten times its 30s alone budget: the score run outlasts 30s under a full gate.
+  }, 300000);
 
   test("a model containing a slash leaves the Team effort as its last field", () => {
     const dispatch = join(scratch, "dispatch");
