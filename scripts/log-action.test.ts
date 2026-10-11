@@ -284,6 +284,31 @@ describe("positive controls", () => {
     expect(entry.detail).toBe("ready");
   });
 
+  test("a project postmaster experiment is written to the postmaster log and ledger", () => {
+    const project = join(tmp, "project-experiment");
+    mkdirSync(project, { recursive: true });
+    const r = projectAction(project, [
+      "postmaster",
+      "experiment",
+      "e1",
+      "start",
+      "look=2026-10-18",
+    ]);
+    expect(r.code).toBe(0);
+    const log = readFileSync(
+      join(project, ".postmaster", "runs", "postmaster", "actions.jsonl"),
+      "utf8",
+    );
+    const ledger = readFileSync(join(project, ".postmaster", "runs", "ledger.jsonl"), "utf8");
+    const entry = JSON.parse(log.trim());
+    expect(log).toBe(ledger);
+    expect(entry.run).toBe("postmaster");
+    expect(entry.actor).toBe("postmaster");
+    expect(entry.action).toBe("experiment");
+    expect(entry.target).toBe("e1");
+    expect(entry.detail).toBe("start look=2026-10-18");
+  });
+
   test("a project clerk note is written to the ledger only", () => {
     const project = join(tmp, "project-note");
     mkdirSync(project, { recursive: true });
