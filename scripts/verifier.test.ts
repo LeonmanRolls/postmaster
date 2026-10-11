@@ -4858,7 +4858,10 @@ describe("run-copy symlink refusal", () => {
       writeRepoFile(syn, ".postmaster/verifier/cli/features/f1.md", "# run edit\n");
       expectCode(run(RUN, ["verifier", "changes", syn, app.dispatch, "--freeze"]), 0);
       symlinkSync("cli/features/f1.md", join(app.repo, ".postmaster/verifier", "link.md"));
-      const before = readFileSync(join(app.repo, ".postmaster/verifier/cli/features/f1.md"), "utf8");
+      const before = readFileSync(
+        join(app.repo, ".postmaster/verifier/cli/features/f1.md"),
+        "utf8",
+      );
       const r = run(RUN, ["verifier", "keep", app.repo, "--run", app.dispatch, "--at", app.sha]);
       expect(r.code).toBe(1);
       expect(r.err).toContain("must not hold symlinks");
@@ -4939,16 +4942,19 @@ describe("run-copy keep confirmation", () => {
       const idx = join(syn, ".postmaster/verifier/README.md");
       writeFileSync(
         idx,
-        readFileSync(idx, "utf8").split("\n").filter((l) => !l.includes("verifier/cli")).join("\n"),
+        readFileSync(idx, "utf8")
+          .split("\n")
+          .filter((l) => !l.includes("verifier/cli"))
+          .join("\n"),
       );
       expectCode(run(RUN, ["verifier", "changes", syn, app.dispatch, "--freeze"]), 0);
       const r = run(RUN, ["verifier", "keep", app.repo, "--run", app.dispatch, "--at", app.sha]);
       expectCode(r, 0);
       expect(r.out).not.toContain("not kept");
       expect(existsSync(join(app.repo, ".postmaster/verifier/cli/features/f1.md"))).toBe(false);
-      expect(
-        readFileSync(join(app.repo, ".postmaster/verifier/README.md"), "utf8"),
-      ).not.toContain("verifier/cli");
+      expect(readFileSync(join(app.repo, ".postmaster/verifier/README.md"), "utf8")).not.toContain(
+        "verifier/cli",
+      );
     } finally {
       rmSync(app.dir, { recursive: true, force: true });
     }
@@ -4973,12 +4979,12 @@ describe("run-copy keep confirmation", () => {
       expect(r.out).toContain("not kept: cli/features/f1.md (changed on both sides)");
       expect(r.out).toContain("not kept: cli/ (confirmation skipped, some files clashed)");
       expect(r.out).not.toContain(`confirmed cli at ${merge}`);
-      expect(
-        readFileSync(join(app.repo, ".postmaster/verifier/README.md"), "utf8"),
-      ).not.toContain(`Confirmed: ${merge}`);
-      expect(
-        readFileSync(join(app.repo, ".postmaster/verifier/cli/features/f2.md"), "utf8"),
-      ).toBe("run version of f2\n");
+      expect(readFileSync(join(app.repo, ".postmaster/verifier/README.md"), "utf8")).not.toContain(
+        `Confirmed: ${merge}`,
+      );
+      expect(readFileSync(join(app.repo, ".postmaster/verifier/cli/features/f2.md"), "utf8")).toBe(
+        "run version of f2\n",
+      );
     } finally {
       rmSync(app.dir, { recursive: true, force: true });
     }
@@ -4996,10 +5002,16 @@ describe("run-copy keep pruning", () => {
       const idx = join(syn, ".postmaster/verifier/README.md");
       writeFileSync(
         idx,
-        readFileSync(idx, "utf8").split("\n").filter((l) => !l.includes("verifier/cli")).join("\n"),
+        readFileSync(idx, "utf8")
+          .split("\n")
+          .filter((l) => !l.includes("verifier/cli"))
+          .join("\n"),
       );
       expectCode(run(RUN, ["verifier", "changes", syn, app.dispatch, "--freeze"]), 0);
-      expectCode(run(RUN, ["verifier", "keep", app.repo, "--run", app.dispatch, "--at", app.sha]), 0);
+      expectCode(
+        run(RUN, ["verifier", "keep", app.repo, "--run", app.dispatch, "--at", app.sha]),
+        0,
+      );
       expect(existsSync(join(app.repo, ".postmaster/verifier/cli"))).toBe(false);
     } finally {
       rmSync(app.dir, { recursive: true, force: true });
