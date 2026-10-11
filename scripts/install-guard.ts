@@ -34,10 +34,15 @@
 // crash in Bun 1.4.2. Every install runs against the pinned registry.
 // One-shot runs of installed binaries pass with downloads disabled, while
 // one-shot runs of anything else are guarded like an add. Global installs,
-// trust commands, rebuilds of unallowed packages, lockfile-only resolves and
-// the publish and credential commands are refused outright. A future install
-// command the classifier does not know is a documented residual risk, as is
-// Bun's default-trusted list, which trustedDependencies may not override.
+// trust commands, rebuilds of unallowed packages, lockfile-only resolves,
+// scaffolds from outside the registry, workspace selectors and the publish
+// and credential commands are refused outright, as is any command the
+// classifier does not know: nothing runs unchecked. Bun's default-trusted
+// list, which trustedDependencies may not override, is a documented residual
+// risk, as are the seconds between a check and its install, in which a tag
+// may move or the manager may pick a transitive the guard resolved
+// differently; both need adversarial registry timing, outside the threat
+// model of a mistaken or misled agent.
 import {
   existsSync,
   mkdirSync,
@@ -329,23 +334,29 @@ export function parseSpec(spec: string): Spec | null {
   if (REMOTE_PREFIX.test(text) || text.endsWith(".tgz") || text.endsWith(".tar.gz")) {
     return { kind: "remote", raw: text };
   }
+  // An alias names its target after npm:, with an optional range after that;
+  // it is matched on the whole word, so a ranged alias parses as one.
+  const fullAlias = /^(.+)@npm:(.+)$/u.exec(text);
+  if (fullAlias?.[1] !== undefined && fullAlias[2] !== undefined) {
+    const aliasName = fullAlias[1];
+    if (aliasName.includes("/") && !aliasName.startsWith("@")) return null;
+    const targetAt = fullAlias[2].lastIndexOf("@");
+    if (targetAt <= 0) {
+      if (fullAlias[2].includes("/") && !fullAlias[2].startsWith("@")) return null;
+      return { kind: "alias", name: aliasName, target: fullAlias[2], range: "*" };
+    }
+    const target = fullAlias[2].slice(0, targetAt);
+    const range = fullAlias[2].slice(targetAt + 1);
+    if (target === "" || range === "") return null;
+    if (target.includes("/") && !target.startsWith("@")) return null;
+    return { kind: "alias", name: aliasName, target, range };
+  }
   const at = text.lastIndexOf("@");
   if (at <= 0) return { kind: "registry", name: text, range: "*" };
   const name = text.slice(0, at);
   const range = text.slice(at + 1);
   if (name === "" || range === "") return null;
   if (name.includes("/") && !name.startsWith("@")) return null;
-  const npmAlias = /^npm:(.+)$/u.exec(range);
-  if (npmAlias?.[1] !== undefined) {
-    const targetAt = npmAlias[1].lastIndexOf("@");
-    if (targetAt <= 0) return { kind: "alias", name, target: npmAlias[1], range: "*" };
-    return {
-      kind: "alias",
-      name,
-      target: npmAlias[1].slice(0, targetAt),
-      range: npmAlias[1].slice(targetAt + 1),
-    };
-  }
   return { kind: "registry", name, range };
 }
 
@@ -397,7 +408,18 @@ function selectorRefusal(pm: Pm, selector: string): Classification {
 export type YarnKind = "berry" | "classic";
 
 const VALUED: Record<string, Set<string>> = {
-  npm: new Set(["--registry", "--prefix", "-p", "--package", "-c", "--call", "-w", "--workspace"]),
+  npm: new Set([
+    "--registry",
+    "--prefix",
+    "-p",
+    "--package",
+    "-c",
+    "--call",
+    "-w",
+    "--workspace",
+    "--tag",
+    "--location",
+  ]),
   npx: new Set(["--registry", "--prefix", "-p", "--package", "-c", "--call", "-w", "--workspace"]),
   pnpm: new Set([
     "--registry",
@@ -410,6 +432,7 @@ const VALUED: Record<string, Set<string>> = {
     "--package",
     "-c",
     "--call",
+    "--resolution-mode",
   ]),
   yarn: new Set([
     "--registry",
@@ -1769,14 +1792,39 @@ const STRIP_NPM = new Set(["--audit", "--fund", "--no-audit", "--no-fund"]);
 
 /** Strip the flags that would neuter the guard, and the agent's registry,
  * which the pinned registry replaces on install forms. Returns the stripped
- * flags for the note the guard prints. */
+ * flags for the note the guard prints. Nothing past -- strips: those words
+ * belong to the script or binary being run, not the manager. */
 export function sanitize(pm: Pm, args: string[]): { kept: string[]; stripped: string[] } {
   const kept: string[] = [];
   const stripped: string[] = [];
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i] ?? "";
+    if (arg === "--") {
+      kept.push(...args.slice(i));
+      break;
+    }
     if (STRIP_BARE.has(arg) || (pm === "npm" && STRIP_NPM.has(arg))) {
       stripped.push(arg);
+      continue;
+    }
+    // Bun's auto-install switch would undo the --no-install the passed
+    // commands carry, and pnpm's resolution mode would resolve transitives
+    // the guard checked under another rule.
+    if (
+      (pm === "bun" && (arg === "-i" || arg === "--install" || arg.startsWith("--install="))) ||
+      (pm === "pnpm" && (arg === "--resolution-mode" || arg.startsWith("--resolution-mode=")))
+    ) {
+      stripped.push(arg);
+      // --resolution-mode takes a space-separated value; --install only its
+      // = form, so a word after it stays a positional.
+      if (
+        arg === "--resolution-mode" &&
+        i + 1 < args.length &&
+        !(args[i + 1] ?? "").startsWith("-")
+      ) {
+        i += 1;
+        stripped.push(args[i] ?? "");
+      }
       continue;
     }
     const valuedAllowBuild = arg === "--allow-build" && pm === "pnpm";
@@ -1986,11 +2034,12 @@ async function fetchText(url: string, agent: string): Promise<{ status: number; 
   return { status: res.status, text: await res.text() };
 }
 
-/** One package's registry document, cached for the run. Anything unreadable
- * throws a refusal: a package the guard cannot check is not installed. */
+/** One package's registry document, fetched fresh on every check: versions
+ * and tags move, so a cached document could check a version the manager no
+ * longer installs, or miss one it now does. Anything unreadable throws a
+ * refusal: a package the guard cannot check is not installed. */
 export async function fetchPackument(ctx: GuardContext, name: string): Promise<Packument> {
   const agent = "postmaster-install-guard";
-  const cached = readCache(cacheFile(ctx.cacheDir, "packuments", name));
   const parse = (text: string): Packument | null => {
     let json: unknown;
     try {
@@ -2037,10 +2086,6 @@ export async function fetchPackument(ctx: GuardContext, name: string): Promise<P
     }
     return { name: doc.name, tags, versions, time, repository: doc.repository };
   };
-  if (cached !== null) {
-    const parsed = parse(cached);
-    if (parsed !== null) return parsed;
-  }
   const path = name
     .split("/")
     .map((p) => encodeURIComponent(p))
@@ -2063,7 +2108,6 @@ export async function fetchPackument(ctx: GuardContext, name: string): Promise<P
       `install-guard: refusing to install ${name}: its registry document does not parse`,
     );
   }
-  writeCache(cacheFile(ctx.cacheDir, "packuments", name), text);
   return parsed;
 }
 
@@ -2889,17 +2933,19 @@ export function installArgs(
   kept: string[],
   scriptsOn: string[],
   registry: string,
+  pins: SpecPin[],
 ): ExecPlan {
+  const pinned = applyPins(kept, pm, pins);
   if (pm === "yarn" && yarnKind === "berry") {
     return {
-      args: [...kept, "--non-interactive"],
+      args: [...pinned, "--non-interactive"],
       env: {
         YARN_ENABLE_SCRIPTS: scriptsOn.length > 0 ? "1" : "0",
         YARN_NPM_REGISTRY_SERVER: registry,
       },
     };
   }
-  const args = [...kept, "--registry", registry];
+  const args = [...pinned, "--registry", registry];
   if (pm === "npm") args.push("--no-audit", "--no-fund");
   if (pm === "yarn") args.push("--non-interactive");
   if (scriptsOn.length > 0) {
@@ -2979,18 +3025,75 @@ function noteStripped(stripped: string[]): void {
 }
 
 /** The add pipeline: parse, list precheck, resolve, check. Returns the
- * covered scriptful names. */
-async function checkSpecs(deps: RunDeps, specs: ParsedAddSpec[]): Promise<{ scriptful: string[] }> {
+ * covered scriptful names, and the closure so the install pins each spec to
+ * its checked version. */
+async function checkSpecs(
+  deps: RunDeps,
+  specs: ParsedAddSpec[],
+): Promise<{ scriptful: string[]; closure: Map<string, Resolved> }> {
   listPrecheck(deps.libs, specs);
   const closure = await resolveClosure(deps.ctx, deps.project, specs);
   const docs = new Map<string, Packument>();
-  return checkAdd(deps.ctx, deps.libs, deps.approvals, closure, async (name) => {
-    let doc = docs.get(name);
-    if (doc === undefined) {
-      doc = await fetchPackument(deps.ctx, name);
-      docs.set(name, doc);
+  const { scriptful } = await checkAdd(
+    deps.ctx,
+    deps.libs,
+    deps.approvals,
+    closure,
+    async (name) => {
+      let doc = docs.get(name);
+      if (doc === undefined) {
+        doc = await fetchPackument(deps.ctx, name);
+        docs.set(name, doc);
+      }
+      return doc;
+    },
+  );
+  return { scriptful, closure };
+}
+
+/** One spec pinned to its checked version. */
+export interface SpecPin {
+  raw: string;
+  parsed: ParsedAddSpec["parsed"];
+  version: string;
+}
+
+/** Pin each direct spec to the exact version the closure checked: a tag or
+ * range would otherwise resolve a second time inside the manager, which may
+ * install a version the guard never saw. */
+export function planPins(specs: ParsedAddSpec[], closure: Map<string, Resolved>): SpecPin[] {
+  const pins: SpecPin[] = [];
+  for (const spec of specs) {
+    const member = [...closure.values()].find((m) => m.direct && m.name === spec.name);
+    if (member === undefined) continue;
+    pins.push({ raw: spec.raw, parsed: spec.parsed, version: member.version });
+  }
+  return pins;
+}
+
+/** Rewrite each pinned spec in place to its checked version. Only bare words
+ * pin: flag values are the manager's own options, not specs, except a
+ * one-shot's --package values, which are specs too. Nothing past -- pins. */
+export function applyPins(kept: string[], pm: Pm, pins: SpecPin[]): string[] {
+  if (pins.length === 0) return kept;
+  const valued = VALUED[pm] ?? new Set<string>();
+  const skip = new Set<number>();
+  for (let i = 0; i < kept.length; i += 1) {
+    const arg = kept[i] ?? "";
+    if (arg === "--") {
+      for (let j = i; j < kept.length; j += 1) skip.add(j);
+      break;
     }
-    return doc;
+    if (arg === "-c" || arg === "--call") {
+      skip.add(i + 1);
+    } else if (valued.has(arg) && arg !== "-p" && arg !== "--package") {
+      skip.add(i + 1);
+    }
+  }
+  return kept.map((arg, i) => {
+    if (skip.has(i)) return arg;
+    const pin = pins.find((p) => p.raw === arg);
+    return pin === undefined ? arg : pinSpec(pin.parsed, pin.version);
   });
 }
 
@@ -3175,13 +3278,20 @@ async function runRun(shimDir: string, rawProg: string, argv: string[]): Promise
       classification.kind === "add"
         ? parseAddSpecs(classification.specs)
         : expandUpdateSpecs(project, classification.specs);
-    const { scriptful } = await checkSpecs(deps, specs);
+    const { scriptful, closure } = await checkSpecs(deps, specs);
     if (pm === "bun") writeTrustedDeps(project, scriptful);
     const { prefix, cmd, rest } = commandOf(key, effArgv);
     const pre = sanitize(pm, prefix);
     const post = sanitize(pm, rest);
     noteStripped([...pre.stripped, ...post.stripped]);
-    const plan = installArgs(pm, yarnKind, [...pre.kept, cmd, ...post.kept], scriptful, registry);
+    const plan = installArgs(
+      pm,
+      yarnKind,
+      [...pre.kept, cmd, ...post.kept],
+      scriptful,
+      registry,
+      planPins(specs, closure),
+    );
     return execManager(bin, plan.args, execEnv(plan.env));
   }
   if (classification.kind === "sync") {
@@ -3230,7 +3340,7 @@ async function runRun(shimDir: string, rawProg: string, argv: string[]): Promise
     // unchanged, since the template name is not a spec to pin.
     const specs = parseAddSpecs(classification.specs);
     const { scriptful } = await checkSpecs(deps, specs);
-    return execDownloaded(pm, yarnKind, bin, effArgv, scriptful, registry);
+    return execDownloaded(pm, yarnKind, bin, effArgv, scriptful, registry, []);
   }
   // One-shot: an installed binary runs with downloads disabled, and anything
   // else is guarded like an add and then runs with the pinned registry.
@@ -3241,8 +3351,8 @@ async function runRun(shimDir: string, rawProg: string, argv: string[]): Promise
   }
   if (pkgs.length > 0) {
     const specs = parseAddSpecs(pkgs);
-    const { scriptful } = await checkSpecs(deps, specs);
-    return execDownloaded(pm, yarnKind, bin, effArgv, scriptful, registry);
+    const { scriptful, closure } = await checkSpecs(deps, specs);
+    return execDownloaded(pm, yarnKind, bin, effArgv, scriptful, registry, planPins(specs, closure));
   }
   const wanted = bins[0] ?? "";
   if ((effProg === "npx" || effProg === "bun") && localBin(project, wanted)) {
@@ -3260,8 +3370,8 @@ async function runRun(shimDir: string, rawProg: string, argv: string[]): Promise
     return execManager(bin, [...prefix, cmd, "--no-install", ...rest], execEnv({}));
   }
   const specs = parseAddSpecs([wanted]);
-  const { scriptful } = await checkSpecs(deps, specs);
-  return execDownloaded(pm, yarnKind, bin, effArgv, scriptful, registry);
+  const { scriptful, closure } = await checkSpecs(deps, specs);
+  return execDownloaded(pm, yarnKind, bin, effArgv, scriptful, registry, planPins(specs, closure));
 }
 
 /** A one-shot the checks cleared: the lane's args kept, the pinned registry,
@@ -3273,13 +3383,14 @@ function execDownloaded(
   argv: string[],
   scriptful: string[],
   registry: string,
+  pins: SpecPin[],
 ): number {
   if (pm === "yarn" && yarnKind === "berry") {
     const { kept, stripped } = sanitize(pm, argv);
     noteStripped(stripped);
     return execManager(
       bin,
-      kept,
+      applyPins(kept, pm, pins),
       execEnv({
         YARN_ENABLE_SCRIPTS: scriptful.length > 0 ? "1" : "0",
         YARN_NPM_REGISTRY_SERVER: registry,
@@ -3288,7 +3399,7 @@ function execDownloaded(
   }
   const { kept, stripped } = sanitize(pm, argv);
   noteStripped(stripped);
-  const args = [...kept, "--registry", registry];
+  const args = [...applyPins(kept, pm, pins), "--registry", registry];
   if (pm === "npm") args.push("--no-audit", "--no-fund");
   if (scriptful.length > 0) {
     if (pm === "pnpm") {

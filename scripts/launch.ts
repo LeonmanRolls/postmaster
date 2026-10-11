@@ -1340,7 +1340,7 @@ export function ensureGuardBin(dispatch: string, tool: string): string {
 export function verifyGuardResolution(opts: {
   guardBin: string;
   envFile: string | null;
-  env: NodeJS.ProcessEnv;
+  env: Record<string, string | undefined>;
 }): { ok: boolean; detail: string } {
   const script = [
     "b=$GUARD_PROBE_BIN",

@@ -7,14 +7,19 @@ import { join } from "node:path";
 import { toolRoot } from "./lib/paths.ts";
 import { withTempDir } from "./lib/proc.ts";
 import {
+  applyPins,
   classify,
   createSpecKind,
   createTarget,
   derefNpm,
+  fetchPackument,
   fetchVerdict,
   findLockfile,
   parseAddSpecs,
+  parseSpec,
+  planPins,
   resolveClosure,
+  sanitize,
   workspaceSelector,
   type GuardContext,
 } from "./install-guard.ts";
@@ -39,23 +44,60 @@ function packument(
 
 test("a transitive resolution never clears a direct spec's flag", async () => {
   await withTempDir(async (tmp) => {
-    const cache = join(tmp, "cache", "packuments");
-    mkdirSync(cache, { recursive: true });
-    writeFileSync(
-      join(cache, "foo.json"),
-      packument("foo", { "1.0.0": { dependencies: { bar: "^1.0.0" } } }),
-    );
-    writeFileSync(join(cache, "bar.json"), packument("bar", { "1.0.0": {} }));
-    const ctx: GuardContext = {
-      dispatch: tmp,
-      lane: "test",
-      cacheDir: join(tmp, "cache"),
-      registry: "http://127.0.0.1:1",
-      socketApi: "http://127.0.0.1:1",
+    const docs: Record<string, string> = {
+      foo: packument("foo", { "1.0.0": { dependencies: { bar: "^1.0.0" } } }),
+      bar: packument("bar", { "1.0.0": {} }),
     };
-    const closure = await resolveClosure(ctx, tmp, parseAddSpecs(["foo", "bar@1.0.0"]));
-    expect(closure.get("bar@1.0.0")?.direct).toBe(true);
-    expect(closure.get("foo@1.0.0")?.direct).toBe(true);
+    const server = Bun.serve({
+      port: 0,
+      fetch(req) {
+        const name = new URL(req.url).pathname.slice(1);
+        const doc = docs[name];
+        return doc === undefined ? new Response("no", { status: 404 }) : new Response(doc);
+      },
+    });
+    try {
+      const ctx: GuardContext = {
+        dispatch: tmp,
+        lane: "test",
+        cacheDir: join(tmp, "cache"),
+        registry: `http://127.0.0.1:${server.port}`,
+        socketApi: "http://127.0.0.1:1",
+      };
+      const closure = await resolveClosure(ctx, tmp, parseAddSpecs(["foo", "bar@1.0.0"]));
+      expect(closure.get("bar@1.0.0")?.direct).toBe(true);
+      expect(closure.get("foo@1.0.0")?.direct).toBe(true);
+    } finally {
+      server.stop();
+    }
+  });
+});
+
+test("a registry document is fetched fresh on every check", async () => {
+  await withTempDir(async (tmp) => {
+    let versions: Record<string, { dependencies?: Record<string, string> }> = { "1.0.0": {} };
+    const server = Bun.serve({
+      port: 0,
+      fetch() {
+        return new Response(packument("a", versions));
+      },
+    });
+    try {
+      const ctx: GuardContext = {
+        dispatch: tmp,
+        lane: "test",
+        cacheDir: join(tmp, "cache"),
+        registry: `http://127.0.0.1:${server.port}`,
+        socketApi: "http://127.0.0.1:1",
+      };
+      const first = await fetchPackument(ctx, "a");
+      expect(Object.keys(first.versions)).toEqual(["1.0.0"]);
+      versions = { "1.0.0": {}, "1.0.1": {} };
+      const second = await fetchPackument(ctx, "a");
+      expect(Object.keys(second.versions).sort()).toEqual(["1.0.0", "1.0.1"]);
+    } finally {
+      server.stop();
+    }
   });
 });
 
@@ -300,4 +342,92 @@ test("scaffolder names map to their template package", () => {
   expect(createSpecKind("*")).toBe("tag");
   expect(createSpecKind("latest")).toBe("tag");
   expect(createSpecKind("^1.0.0")).toBe("range");
+});
+
+test("each spec pins to the closure's direct version for its name", () => {
+  const specs = parseAddSpecs(["foo@^1.0.0", "mybar@npm:bar@^2.0.0"]);
+  const closure = new Map([
+    ["foo@1.2.3", { name: "foo", version: "1.2.3", scripts: null, direct: true }],
+    ["bar@2.0.0", { name: "bar", version: "2.0.0", scripts: null, direct: true }],
+    ["dep@1.0.0", { name: "dep", version: "1.0.0", scripts: null, direct: false }],
+  ]);
+  const pins = planPins(specs, closure);
+  expect(pins.map((p) => `${p.raw} -> ${p.version}`).sort()).toEqual([
+    "foo@^1.0.0 -> 1.2.3",
+    "mybar@npm:bar@^2.0.0 -> 2.0.0",
+  ]);
+  expect(applyPins(["add", "foo@^1.0.0", "mybar@npm:bar@^2.0.0"], "npm", pins)).toEqual([
+    "add",
+    "foo@1.2.3",
+    "mybar@npm:bar@2.0.0",
+  ]);
+});
+
+test("pins skip flag values, call strings and everything past --", () => {
+  const specs = parseAddSpecs(["foo"]);
+  const closure = new Map([
+    ["foo@1.2.3", { name: "foo", version: "1.2.3", scripts: null, direct: true }],
+  ]);
+  const pins = planPins(specs, closure);
+  expect(applyPins(["add", "foo", "--tag", "foo"], "npm", pins)).toEqual([
+    "add",
+    "foo@1.2.3",
+    "--tag",
+    "foo",
+  ]);
+  expect(applyPins(["-p", "foo", "-c", "foo"], "npm", pins)).toEqual([
+    "-p",
+    "foo@1.2.3",
+    "-c",
+    "foo",
+  ]);
+  expect(applyPins(["exec", "foo", "--", "foo"], "npm", pins)).toEqual([
+    "exec",
+    "foo@1.2.3",
+    "--",
+    "foo",
+  ]);
+});
+
+test("ranged aliases parse as one spec", () => {
+  expect(parseSpec("mybar@npm:bar@^2.0.0")).toEqual({
+    kind: "alias",
+    name: "mybar",
+    target: "bar",
+    range: "^2.0.0",
+  });
+  expect(parseSpec("mybar@npm:bar")).toEqual({
+    kind: "alias",
+    name: "mybar",
+    target: "bar",
+    range: "*",
+  });
+  expect(parseSpec("a@npm:@scope/b@1.0.0")).toEqual({
+    kind: "alias",
+    name: "a",
+    target: "@scope/b",
+    range: "1.0.0",
+  });
+  expect(parseSpec("a@npm:@scope/b")).toEqual({
+    kind: "alias",
+    name: "a",
+    target: "@scope/b",
+    range: "*",
+  });
+});
+
+test("sanitize strips the new neuter flags and nothing past --", () => {
+  expect(sanitize("bun", ["run", "-i", "test"]).stripped).toEqual(["-i"]);
+  expect(sanitize("bun", ["run", "--install=force", "test"]).stripped).toEqual(["--install=force"]);
+  expect(sanitize("bun", ["run", "test", "--", "-i"]).kept).toEqual(["run", "test", "--", "-i"]);
+  expect(sanitize("pnpm", ["add", "--resolution-mode", "highest", "foo"]).stripped).toEqual([
+    "--resolution-mode",
+    "highest",
+  ]);
+  expect(sanitize("npm", ["run", "test", "--", "--ignore-scripts"]).kept).toEqual([
+    "run",
+    "test",
+    "--",
+    "--ignore-scripts",
+  ]);
 });
