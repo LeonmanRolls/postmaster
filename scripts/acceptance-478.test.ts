@@ -291,7 +291,7 @@ describe("C4: the project's verifiers take the run's changes only at the merge",
         "README.md",
       ]);
       const index = readFileSync(join(app.repo, ".postmaster/verifier/README.md"), "utf8");
-      expect(index.match(new RegExp(`Confirmed: ${merge}`, "g"))?.length).toBe(2);
+      expect(index.match(new RegExp(`Confirmed: ${merge}`, "gu"))?.length).toBe(2);
       expectTreesEqual(join(app.dispatch, "verifier-before-keep"), join(app.dir, "before"));
       expect(gitOrThrow(app.repo, "for-each-ref")).toBe(refsBefore);
       expect(gitOrThrow(app.repo, "log", "--all", "--oneline")).toBe(logBefore);
