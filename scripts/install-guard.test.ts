@@ -13,6 +13,7 @@ import {
   baseFile,
   berryScopes,
   bunfigScopes,
+  canonicalRun,
   classify,
   createSpecKind,
   createTarget,
@@ -929,4 +930,13 @@ test("packuments and verdicts parse without touching the network", () => {
   expect(
     verdictOf("", 200, JSON.stringify({ alerts: [{ action: "error", type: "malware" }] })),
   ).toEqual({ status: "flagged", types: ["malware"] });
+});
+
+test("alias entry points run as their canonical manager", () => {
+  expect(canonicalRun("pn", ["add", "x"])).toEqual({ prog: "pnpm", argv: ["add", "x"] });
+  expect(canonicalRun("pnx", ["foo"])).toEqual({ prog: "pnpm", argv: ["dlx", "foo"] });
+  expect(canonicalRun("pnpx", ["foo"])).toEqual({ prog: "pnpm", argv: ["dlx", "foo"] });
+  expect(canonicalRun("yarnpkg", ["add", "x"])).toEqual({ prog: "yarn", argv: ["add", "x"] });
+  expect(canonicalRun("bunx", ["foo"])).toEqual({ prog: "bun", argv: ["x", "foo"] });
+  expect(canonicalRun("npm", ["install"])).toEqual({ prog: "npm", argv: ["install"] });
 });

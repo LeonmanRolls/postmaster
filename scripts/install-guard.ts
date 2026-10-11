@@ -4044,21 +4044,30 @@ export function guardEndpoints(): { registry: string; socketApi: string } {
   return { registry, socketApi };
 }
 
+/** Alias entry points to their canonical manager and prepended argv, as
+ * the real ones behave: pn is pnpm, pnx and pnpx are pnpm dlx, yarnpkg
+ * is yarn, and bunx is bun x. */
+const CANONICAL_RUN: Record<string, { prog: string; prepend: string[] }> = {
+  bunx: { prog: "bun", prepend: ["x"] },
+  pn: { prog: "pnpm", prepend: [] },
+  pnx: { prog: "pnpm", prepend: ["dlx"] },
+  pnpx: { prog: "pnpm", prepend: ["dlx"] },
+  yarnpkg: { prog: "yarn", prepend: [] },
+};
+
+/** The manager and argv an invoked entry point runs as: aliases expand to
+ * their canonical manager the way the real ones behave, and anything else
+ * runs unchanged. */
+export function canonicalRun(prog: string, argv: string[]): { prog: string; argv: string[] } {
+  const aliased = CANONICAL_RUN[prog];
+  if (aliased === undefined) return { prog, argv };
+  return { prog: aliased.prog, argv: [...aliased.prepend, ...argv] };
+}
+
 /** Binary names that are package managers themselves: a one-shot of one runs
- * the real manager past the guard, so the local shortcut refuses them. */
-const MANAGER_BINS = new Set([
-  "npm",
-  "npx",
-  "pnpm",
-  "yarn",
-  "bun",
-  "bunx",
-  "corepack",
-  "pn",
-  "pnx",
-  "pnpx",
-  "yarnpkg",
-]);
+ * the real manager past the guard, so the local shortcut refuses them.
+ * Built from the shim names, so the two lists cannot drift. */
+const MANAGER_BINS = new Set<string>(GUARD_SHIM_NAMES);
 
 async function runRun(shimDir: string, rawProg: string, argv: string[]): Promise<number> {
   const prog = toProg(rawProg);
@@ -4073,18 +4082,18 @@ async function runRun(shimDir: string, rawProg: string, argv: string[]): Promise
       "install-guard: refusing to run: POSTMASTER_DISPATCH is not set, so the launch did not arm the guard",
     );
   }
-  // bunx is bun x under its documented name; everything below sees the
-  // expanded form, and the binary lookup sees bun.
-  const effProg = prog === "bunx" ? "bun" : prog;
-  const effArgv = prog === "bunx" ? ["x", ...argv] : argv;
+  // Alias entry points run their canonical manager the way the real
+  // ones do. Everything below sees the expanded form, and the binary
+  // lookup sees the canonical name.
+  const { prog: effProg, argv: effArgv } = canonicalRun(prog, argv);
   const pm: Pm = effProg === "npx" ? "npm" : (effProg as Pm);
   const key = effProg === "yarn" ? "yarn" : pm;
   const cwd = process.cwd();
   const project = projectOf(pm, effArgv, cwd);
-  const bin = managerBin(prog === "bunx" ? "bun" : prog, shimDir);
+  const bin = managerBin(effProg, shimDir);
   if (bin === null) {
     throw refusal(
-      `install-guard: refusing to run ${prog}: ${prog} is not on the PATH outside the guard's shims`,
+      `install-guard: refusing to run ${prog}: ${effProg} is not on the PATH outside the guard's shims`,
     );
   }
   const yarnKind = pm === "yarn" ? detectYarnKind(project, bin) : "classic";

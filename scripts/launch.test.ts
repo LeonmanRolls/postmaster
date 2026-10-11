@@ -36,6 +36,7 @@ import {
   verifyGuardResolution,
 } from "./launch.ts";
 import { startCheck, wrapCommand } from "./lib/confine.ts";
+import { claimShimLink } from "./lib/guardbin.ts";
 import { toolRoot } from "./lib/paths.ts";
 import { run, withTempDir } from "./lib/proc.ts";
 import { BOUND_R, DOT_ALL, PY_M_START, PY_S_CLASS, pySplitLines, pyWords } from "./lib/text.ts";
@@ -6600,6 +6601,57 @@ describe("the install guard arms lanes", () => {
       symlinkSync(join(tmp, "tool-gone", "scripts", "install-guard-shim"), victim);
       expect(() => ensureGuardBin(d, TOOL)).not.toThrow();
       expect(readlinkSync(victim)).toBe(join(TOOL, "scripts", "install-guard-shim"));
+    });
+  });
+
+  test("claimShimLink lands, keeps a concurrent correct link, and repairs a wrong one", () => {
+    withTempDir((tmp) => {
+      const shim = join(TOOL, "scripts", "install-guard-shim");
+      const fresh = join(tmp, "fresh");
+      claimShimLink(fresh, shim);
+      expect(readlinkSync(fresh)).toBe(shim);
+      // Another lane landed the same link first: the EEXIST stands.
+      claimShimLink(fresh, shim);
+      expect(readlinkSync(fresh)).toBe(shim);
+      // Another lane left a wrong link: it repairs instead of throwing.
+      const wrong = join(tmp, "wrong");
+      symlinkSync(join(tmp, "elsewhere"), wrong);
+      claimShimLink(wrong, shim);
+      expect(readlinkSync(wrong)).toBe(shim);
+    });
+  });
+
+  test("claimShimLink throws when a file is in the way", () => {
+    withTempDir((tmp) => {
+      const shim = join(TOOL, "scripts", "install-guard-shim");
+      const blocked = join(tmp, "blocked");
+      writeFileSync(blocked, "in the way");
+      expect(() => claimShimLink(blocked, shim)).toThrow("is in the way");
+    });
+  });
+
+  test("ensureGuardBin arms every shim name the guard knows", () => {
+    withTempDir((tmp) => {
+      const d = join(tmp, "run");
+      const bin = ensureGuardBin(d, TOOL);
+      expect([...GUARD_SHIM_NAMES].sort()).toEqual(
+        [
+          "bun",
+          "bunx",
+          "corepack",
+          "npm",
+          "npx",
+          "pn",
+          "pnpm",
+          "pnx",
+          "pnpx",
+          "yarn",
+          "yarnpkg",
+        ].sort(),
+      );
+      for (const name of GUARD_SHIM_NAMES) {
+        expect(readlinkSync(join(bin, name))).toBe(join(TOOL, "scripts", "install-guard-shim"));
+      }
     });
   });
 });

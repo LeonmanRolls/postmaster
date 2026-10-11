@@ -1,8 +1,8 @@
 #!/bin/sh
-# The guard's shim: one file behind the npm, pnpm, yarn, bun, npx, bunx and
-# corepack names on a lane's PATH. Hands the invocation to the guard with
-# the shim dir, so the guard's own manager lookup skips the shims instead of
-# recursing into them.
+# The guard's shim: one file behind the npm, pnpm, yarn, bun, npx, bunx,
+# corepack, pn, pnx, pnpx and yarnpkg names on a lane's PATH. Hands the
+# invocation to the guard with the shim dir, so the guard's own manager
+# lookup skips the shims instead of recursing into them.
 #
 # The shim starts Bun by absolute path, found by walking PATH without the shim
 # directory: this dir shadows the bun name, so starting Bun by name here (or
