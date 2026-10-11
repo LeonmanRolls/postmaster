@@ -126,7 +126,7 @@ of it; the project step settles only what the user changes, or all of it when th
 global config:
 
 - **Which harness, model and effort fills each role:** the horses, the reviewers, the coachman and
-  its fallback, the booking clerk and the postmaster. Offer only what the probe found, and do not assume: a
+  its fallback, the booking clerk, the surveyor and the postmaster. Offer only what the probe found, and do not assume: a
   harness on PATH can still be walled, out of credit, or reading no ambient context. The
   shape of the answer is `config.example.toml` at the repo root.
 - **How tickets are created.** GitHub Issues on a GitHub Projects board is the default: a
@@ -235,6 +235,7 @@ metaphor expresses them.
 as against a reviewer · **lead horse / wheeler** the ranked lanes ·
 **turnpike** a check a run must pass through before it ships, named by its ticket: `default` is
 the style, bug and security reviews, and the project's gate always runs besides them ·
+**surveyor** one question put to a lane that took no part in the work, for an independent judgement ·
 **remount** resuming a stalled run ·
 **spent** a run whose process is gone with no marker · **lame** a lane that is present but not pulling · **fleet** the
 whole system.
