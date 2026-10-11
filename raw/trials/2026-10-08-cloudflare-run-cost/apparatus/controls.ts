@@ -50,7 +50,7 @@ export type Inputs = {
   prices: Prices;
   providers: Rate[];
   machines: Machine[];
-  pace: { days: Record<string, DayCounts> } | null;
+  pace: { total?: number; ticketTitledTotal?: number; days: Record<string, DayCounts> } | null;
 };
 
 const within = (got: number, want: number, tolerance: number): boolean => Math.abs(got - want) <= tolerance;
@@ -635,15 +635,22 @@ export function runControls(inp: Inputs): Control[] {
     const dayKeys = Object.keys(inp.pace.days).sort();
     const first = dayKeys[0] as string;
     const last = dayKeys[dayKeys.length - 1] as string;
-    const total = Object.values(inp.pace.days).reduce((a, c) => a + c.merged, 0);
+    const merged = windowCount(inp.pace.days, first, last, "merged");
+    const titled = windowCount(inp.pace.days, first, last, "ticketTitled");
     const bad = { ...inp.pace.days, "9999-01-01": { merged: 1, ticketTitled: 2 } };
     add({
       id: "C45",
       kind: "positive",
-      what: "the file of merged pull requests by day: on no day more ticket-titled than merged, the days from the first to the last adding up to the file's total, and the same check on a made-up day with more ticket-titled than merged",
-      expected: "the file passes and the made-up day fails",
-      got: `${dayKeys.length} days, ${windowCount(inp.pace.days, first, last, "merged")} against ${total}; made-up day passes: ${String(consistent(bad))}`,
-      pass: consistent(inp.pace.days) && windowCount(inp.pace.days, first, last, "merged") === total && !consistent(bad),
+      what: "the file of merged pull requests by day: the days added up against the totals the tool counted straight from the rows (merged and ticket-titled), on no day more ticket-titled than merged, and the same check on a made-up day with more ticket-titled than merged",
+      expected: "the days agree with the totals, the file passes and the made-up day fails",
+      got: `${dayKeys.length} days, ${merged} against ${String(inp.pace.total)} merged and ${titled} against ${String(inp.pace.ticketTitledTotal)} ticket-titled; made-up day passes: ${String(consistent(bad))}`,
+      pass:
+        inp.pace.total !== undefined &&
+        inp.pace.ticketTitledTotal !== undefined &&
+        merged === inp.pace.total &&
+        titled === inp.pace.ticketTitledTotal &&
+        consistent(inp.pace.days) &&
+        !consistent(bad),
     });
   }
   return out;
@@ -674,7 +681,9 @@ export function load(results: string, audit: string): Inputs {
     prices: read<Prices>(join(results, "prices.json")),
     providers: read<{ rates: Rate[] }>(join(results, "providers.json")).rates,
     machines: read<{ machines: Machine[] }>(join(results, "machines.json")).machines,
-    pace: existsSync(join(results, "pace.json")) ? read<{ days: Record<string, DayCounts> }>(join(results, "pace.json")) : null,
+    pace: existsSync(join(results, "pace.json"))
+      ? read<{ total?: number; ticketTitledTotal?: number; days: Record<string, DayCounts> }>(join(results, "pace.json"))
+      : null,
   };
 }
 

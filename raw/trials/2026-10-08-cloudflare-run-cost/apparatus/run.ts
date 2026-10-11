@@ -361,8 +361,8 @@ ${AWAKE_ASSUMED} hours a day; the high end counts the coachman at its ceiling an
 | Launches of a run: lanes, reviewers, coachman legs, gate runs | The ${totals.runs} audited real runs, from their records | Measured; the coachman's time is bracketed by its floor and its ceiling |
 | The pace of tickets | The audited runs: ${totals.runs} in ${spanDays.toFixed(1)} days of records is ${auditedPace.toFixed(0)} a month. The merged pull requests whose title starts with a ticket number: ${ticketedMerged} from ${ticketedFrom} to ${lastFullDay}, ${ticketedPace.toFixed(0)} a month, of which ${ticketedInAudit} fall in the audited runs' days, against ${totals.runs} audited runs. It also counts hand-made, research and documentation pull requests, and leaves out runs that were set aside or never merged | Measured; two readings, neither exact |
 | Open interactive sessions | ${openSessions} at one moment: ${flowSessions} of the flow's own roles (the postmaster and the clerks) and ${openSessions - flowSessions} research and design sessions; ${workingNow} were working at that moment | A snapshot, not a time series |
-| Hours each session is awake in a day | ${AWAKE_ASSUMED} is assumed; ${workingNow} of ${openSessions} working at the snapshot reads as ${AWAKE_SNAPSHOT.toFixed(1)}. Neither is a measurement of a day | Assumed, and one reading |
-| The control plane | The priced parts: 10,000 requests and 1,000 workflow steps, which are assumed counts, and the Durable Object in front of each container for the hours it is up. The stores are unpriced | Argued |
+| Hours each session is awake in a day | ${AWAKE_ASSUMED} is assumed; ${workingNow} of ${openSessions} working at the snapshot reads as ${AWAKE_SNAPSHOT.toFixed(1)}. The ${workingNow} are not split by kind, and the snapshot was taken a week after the audited runs. Neither is a measurement of a day | Assumed, and one reading |
+| The control plane | 10,000 requests and 1,000 workflow steps a ticket, which are assumed counts, at list rates, and the Durable Object in front of each container for the hours it is up. The stores are unpriced | Assumed counts, list rates |
 
 ## One ticket
 
@@ -377,8 +377,8 @@ ${AWAKE_ASSUMED} hours a day; the high end counts the coachman at its ceiling an
 
 A session awake costs $${sessionRate.awake.toFixed(4)} an hour and kept up and idle $${sessionRate.idle.toFixed(4)} an hour (memory and disk, and the
 Durable Object in front of the container). The ${fixture.length} fixture runs in the same records cost about $${money(fixtureEach)} each with the coachman at its
-ceiling, $${money(fixtureTotal)} in all. ${others.length} further real runs, set aside or never reaching synthesis, would add $${money(othersTotal)} with the coachman at its
-ceiling, ${Math.round((100 * othersTotal) / Math.max(launchesAvg.high * totals.runs, 1))}% of the audited runs' launches at their ceiling, and are in no figure here.
+ceiling, $${money(fixtureTotal)} in all. ${others.length} further real runs, set aside or never reaching synthesis, would add at least $${money(othersTotal)} with the coachman at its
+ceiling (the set-aside runs have no lane or reviewer time in the audit), ${Math.round((100 * othersTotal) / Math.max(launchesAvg.high * totals.runs, 1))}% of the audited runs' launches at their ceiling, and are in no figure here.
 
 ## A month
 
@@ -404,7 +404,8 @@ ${[1, 2, 4, 6, 8]
 
 If the machine holds k launches at once (lanes, reviewers and gate runs) and the cloud takes the rest. The records' ${spanDays.toFixed(1)} days
 held ${(launchSeconds / 3600).toFixed(0)} launch-hours. The first column is the least that could go, if launches could move as the count rises and
-falls. The second is a launch that starts while the machine is full going to the cloud and staying there. Lane and reviewer
+falls. The second is a launch that starts while the machine is full going to the cloud and staying there, from the longer first to
+the shorter first of launches that start in the same second. Lane and reviewer
 hours are priced at $${sessionRate.awake.toFixed(3)} and gate hours at $${(gateHourRate + DURABLE_OBJECT_PER_HOUR).toFixed(3)}, each with its Durable Object. The coachman, one for each run in flight, is
 not counted, nor is the plan fee.
 

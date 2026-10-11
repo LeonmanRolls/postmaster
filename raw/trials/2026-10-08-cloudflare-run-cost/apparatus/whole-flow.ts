@@ -82,14 +82,23 @@ export function overflowSeconds(hist: Readonly<Record<number, number>>, k: numbe
 
 export type Launch = { start: number; end: number; kind: "lanes" | "reviewers" | "gates" };
 
+/** How launches that start in the same second are taken: the shorter first or the longer first. */
+export type Tie = "shorter-first" | "longer-first";
+
 /**
  * The launch-seconds the cloud takes when the machine holds `k` launches at once and a launch that finds it full goes
- * to the cloud and stays there until it ends. Launches are taken in the order they start. No launch moves.
+ * to the cloud and stays there until it ends. Launches are taken in the order they start, and those that start in the
+ * same second in the order `tie` gives. Neither order is foresight a scheduler has, so both are reported. No launch moves.
  */
-export function admitted(launches: readonly Launch[], k: number): Record<"lanes" | "reviewers" | "gates", number> {
+export function admitted(
+  launches: readonly Launch[],
+  k: number,
+  tie: Tie = "shorter-first",
+): Record<"lanes" | "reviewers" | "gates", number> {
   const cloud = { lanes: 0, reviewers: 0, gates: 0 };
   let machine: number[] = [];
-  for (const l of [...launches].sort((a, b) => a.start - b.start || a.end - b.end)) {
+  const order = tie === "shorter-first" ? 1 : -1;
+  for (const l of [...launches].sort((a, b) => a.start - b.start || order * (a.end - b.end))) {
     machine = machine.filter((end) => end > l.start);
     if (machine.length < k) machine.push(l.end);
     else cloud[l.kind] += l.end - l.start;
@@ -163,7 +172,8 @@ export function flatTable(
 /**
  * The peaks table: what the cloud takes if a machine holds `k` launches at once. The first column of hours is the
  * least that could go (launches could move as the count rises and falls); the second is a launch that starts while the
- * machine is full going to the cloud and staying there.
+ * machine is full going to the cloud and staying there, from the longer-first to the shorter-first order of launches
+ * that start in the same second.
  */
 export function peaksTable(
   ks: readonly number[],
@@ -172,7 +182,10 @@ export function peaksTable(
   rates: { agentHour: number; gateHour: number },
   spanDays: number,
 ): string {
-  const totalSeconds = launches.reduce((a, l) => a + (l.end - l.start), 0);
+  const totalSeconds = Math.max(
+    launches.reduce((a, l) => a + (l.end - l.start), 0),
+    1,
+  );
   const lines = [
     row([
       "Launches the machine holds at once",
@@ -184,19 +197,34 @@ export function peaksTable(
     ]),
     row(["---", "---", "---", "---", "---", "---"]),
   ];
+  const per30 = (dollars: number): number => (spanDays > 0 ? (dollars / spanDays) * 30 : 0);
   for (const k of ks) {
-    const least = overflowSeconds(hist, k) / 3600;
-    const cloud = admitted(launches, k);
-    const secs = cloud.lanes + cloud.reviewers + cloud.gates;
-    const dollars = ((cloud.lanes + cloud.reviewers) / 3600) * rates.agentHour + (cloud.gates / 3600) * rates.gateHour;
+    const least = overflowSeconds(hist, k);
+    const both = (["longer-first", "shorter-first"] as const).map((tie) => {
+      const c = admitted(launches, k, tie);
+      const secs = c.lanes + c.reviewers + c.gates;
+      const dollars = ((c.lanes + c.reviewers) / 3600) * rates.agentHour + (c.gates / 3600) * rates.gateHour;
+      return { secs, gates: c.gates, dollars };
+    });
+    const [a, b] = both as [(typeof both)[number], (typeof both)[number]];
+    // the two orders give two figures; print them from the smaller to the larger, once if they print alike
+    const span = (x: number, y: number, fmt: (n: number) => string): string => {
+      const lo = Math.min(x, y);
+      const hi = Math.max(x, y);
+      return fmt(lo) === fmt(hi) ? fmt(lo) : `${fmt(lo)} to ${fmt(hi)}`;
+    };
+    const whole = (n: number): string => `${Math.round(n)}%`;
+    const hours = (n: number): string => n.toFixed(1);
+    const share = (secs: number): number => (100 * secs) / totalSeconds;
+    const gateShare = (x: { secs: number; gates: number }): number => (x.secs > 0 ? (100 * x.gates) / x.secs : 0);
     lines.push(
       row([
         String(k),
-        least.toFixed(1),
-        (secs / 3600).toFixed(1),
-        `${Math.round((100 * secs) / Math.max(totalSeconds, 1))}%`,
-        `${(cloud.gates / 3600).toFixed(1)} h`,
-        usd(spanDays > 0 ? (dollars / spanDays) * 30 : 0),
+        `${(least / 3600).toFixed(1)} (${share(least).toFixed(1)}%)`,
+        span(a.secs / 3600, b.secs / 3600, hours),
+        span(share(a.secs), share(b.secs), whole),
+        span(gateShare(a), gateShare(b), whole),
+        span(per30(a.dollars), per30(b.dollars), usd),
       ]),
     );
   }

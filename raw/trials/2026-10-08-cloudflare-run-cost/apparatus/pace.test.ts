@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { consistent, countByDay, isTicketTitled, parseTsv, windowCount } from "./pace.ts";
+import { consistent, countByDay, isTicketTitled, parseTsv, totalsOf, windowCount } from "./pace.ts";
 
 describe("isTicketTitled", () => {
   test("positive control: a number and a comma at the start", () => {
@@ -61,5 +61,21 @@ describe("windowCount and consistent", () => {
   test("a day with more ticket-titled than merged is inconsistent", () => {
     expect(consistent(days)).toBe(true);
     expect(consistent({ ...days, "2026-10-12": { merged: 1, ticketTitled: 2 } })).toBe(false);
+  });
+});
+
+describe("totalsOf", () => {
+  test("counts the rows and the ticket-titled rows without going through the days", () => {
+    const rows = [
+      { mergedAt: "2026-10-10T01:00:00Z", title: "#1, a" },
+      { mergedAt: "2026-10-11T01:00:00Z", title: "plain" },
+    ];
+    expect(totalsOf(rows)).toEqual({ total: 2, ticketTitledTotal: 1 });
+    const days = countByDay(rows);
+    expect(Object.values(days).reduce((a, c) => a + c.merged, 0)).toBe(totalsOf(rows).total);
+  });
+
+  test("negative control: no rows are no totals", () => {
+    expect(totalsOf([])).toEqual({ total: 0, ticketTitledTotal: 0 });
   });
 });

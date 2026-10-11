@@ -26,6 +26,11 @@ export function countByDay(rows: readonly Merged[]): Record<string, DayCounts> {
   return Object.fromEntries([...days.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
 }
 
+/** The totals counted straight from the rows, not from the days, so the days can be checked against them. */
+export function totalsOf(rows: readonly Merged[]): { total: number; ticketTitledTotal: number } {
+  return { total: rows.length, ticketTitledTotal: rows.filter((r) => isTicketTitled(r.title)).length };
+}
+
 /** Lines of `<merge time><TAB><title>`; a line without a tab or a time is left out. */
 export function parseTsv(text: string): Merged[] {
   return text.split("\n").flatMap((line): Merged[] => {
@@ -59,13 +64,15 @@ if (import.meta.main) {
     process.stderr.write("usage: bun pace.ts --in <merged.tsv> --read <YYYY-MM-DD> --out <pace.json>\n");
     process.exit(2);
   }
-  const days = countByDay(parseTsv(readFileSync(input, "utf8")));
+  const rows = parseTsv(readFileSync(input, "utf8"));
+  const days = countByDay(rows);
   const file = {
     read,
     source:
       "the project's closed pull requests on GitHub, read through its REST API: those with a merge time, counted by UTC merge day",
     how: "a pull request is ticket-titled when its title starts with a ticket number and a comma; no title or number is kept here",
     note: "A count of merged pull requests is not a count of runs. It includes hand-made hotfixes, research and documentation pull requests, and it leaves out runs that were set aside or never merged. It is a second reading of the pace beside the audited runs, not a bound on it.",
+    ...totalsOf(rows),
     days,
   };
   writeFileSync(out, `${JSON.stringify(file, null, 2)}\n`);

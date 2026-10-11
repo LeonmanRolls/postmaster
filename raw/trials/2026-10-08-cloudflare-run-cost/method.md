@@ -153,8 +153,9 @@ of no tickets costing the sessions and the plan alone, with no break-even under 
 as tickets times the average run against the total of the audited runs scaled from their span to 30 days; the launches that
 admission sends to the cloud never fewer than the least that could go, and all of them with no room, and none with room for
 the most that ran at once; and the file of merged pull requests by day with no day more ticket-titled than merged, its days
-adding up to its total, and a made-up day failing the same check. The unit tests beside each module hold the other positive and
-negative cases, 170 tests in all. For the scan of scripts they
+adding up to the totals the tool counted straight from the rows, and a made-up day failing the same check. The one count
+with no control is the snapshot of open sessions: it is one moment and cannot be read again. The unit tests beside each module hold the other positive and
+negative cases, 174 tests in all. For the scan of scripts they
 include a package-manager lock file and a process's own `.pid` property, which must not count as marker files, and
 another tool's `worktree` command, which must not count as a `git worktree` call; a hand count of calls to `git` with a
 worktree verb in the 69 scripts finds the same six scripts as the scan. They show the code applies a rule the same way on a case that must read non-zero and one that

@@ -75,10 +75,10 @@ standing.
    sleep when idle, before the model bill.** One ticket from the booking clerk to the merge is $1.68 to $3.06 for a typical
    ticket and $2.04 to $3.93 for the average one; kept up between turns the sessions raise that to $4.13 to $6.01. A month at
    the audited 107 tickets is $223 to $424 asleep and $485 to $647 kept up, which is what a flat machine would have to cost to
-   match it; the example flat prices of $50 to $200 are below that, one to eight times cheaper. The ends are the coachman's
+   match it; the example flat prices of $50 to $200 are below that, from about 10% to about eight times cheaper. The ends are the coachman's
    floor and ceiling and a session awake 2 to 5.3 hours a day; neither the hours nor the control plane was measured. The cloud
    is cheaper than a $100 machine below 30 to 54 tickets a month for launches only. Taking only the peaks, four launches held
-   on the machine, costs about $38 a month ([What the whole flow costs](#what-the-whole-flow-costs)).
+   on the machine, costs $36 to $38 a month ([What the whole flow costs](#what-the-whole-flow-costs)).
 7. **Cloudflare is in the middle on price, not the cheapest.** The same two kinds of hour, a gate hour (4 vCPU and 12 GiB, every
    vCPU busy) and a waiting-agent hour (1 vCPU and 4 GiB, a fifth busy), were priced from each provider's own page. For a typical
    run Northflank, Modal Functions, AWS Fargate, Azure Container Instances and Fly.io Machines come to $0.75 to $1.88 and
@@ -473,8 +473,8 @@ assumed:
 | Launches of a run: lanes, reviewers, coachman legs, gate runs | The 18 audited real runs, from their records | Measured; the coachman's time is bracketed by its floor and its ceiling |
 | The pace of tickets | The audited runs: 18 in 5.1 days of records, 107 a month. The merged pull requests whose title starts with a ticket number: 129 from 2026-09-26 to 2026-10-10, 258 a month, of which 55 fall in the audited runs' days, against 18 audited runs. It also counts hand-made, research and documentation pull requests, and leaves out runs that were set aside or never merged | Measured; two readings, neither exact |
 | Open interactive sessions | 18 at one moment: 9 of the flow's own roles (the postmaster and eight clerks) and 9 research and design sessions; 4 were working at that moment | A snapshot, not a time series |
-| Hours each session is awake in a day | 2 is assumed; 4 of 18 working at the snapshot reads as 5.3. Neither is a measurement of a day | Assumed, and one reading |
-| The control plane | The priced parts: 10,000 requests and 1,000 workflow steps, which are assumed counts, and the Durable Object in front of each container for the hours it is up. The stores are unpriced | Argued |
+| Hours each session is awake in a day | 2 is assumed; 4 of 18 working at the snapshot reads as 5.3. The four are not split by kind, and the snapshot was taken a week after the audited runs. Neither is a measurement of a day | Assumed, and one reading |
+| The control plane | 10,000 requests and 1,000 workflow steps a ticket, which are assumed counts, at list rates, and the Durable Object in front of each container for the hours it is up. The stores are unpriced | Assumed counts, list rates |
 
 One ticket. A session awake costs $0.0585 an hour and kept up and idle $0.0441 an hour (its memory and disk, and the Durable
 Object in front of the container):
@@ -489,8 +489,9 @@ Object in front of the container):
 | **A ticket, sessions kept up** | **$4.13 to $5.15** | **$4.50 to $6.01** |
 
 The 24 fixture runs in the same records cost about $0.18 each with the coachman at its ceiling, $4.31 in all. Thirteen further
-real runs, set aside or never reaching synthesis, would add $5.82 at the ceiling, 11% of the audited runs' launches, and are in
-no figure here.
+real runs, set aside or never reaching synthesis, would add at least $5.82 at the ceiling, 11% of the audited runs'
+launches, and are in no figure here; the six set aside have no lane or reviewer time in the audit, so that figure is stage
+seconds only.
 
 A month. The nine sessions of the flow's own roles cost $31.6 to $84.3 a month asleep when idle and $294 to $307 kept up. All 18
 open sessions, research and design too, would cost $63.2 to $169 and $588 to $614. The plan fee is $5. The number of sessions
@@ -502,7 +503,9 @@ is not scaled with the number of tickets:
 | 107 | 191 to 340 | 223 to 424 | 485 to 647 |
 | 258 | 455 to 815 | 487 to 899 | 749 to 1122 |
 
-Tickets a month at which a flat monthly price costs the same, for the example prices of the earlier tables:
+Tickets a month at which a flat monthly price costs the same, for the example prices of the earlier tables. A range runs
+from the high costs to the low ones; "up to" means there is none at the high costs; "never" means the sessions and the plan
+fee alone cost more:
 
 | Flat price a month | Launches only | Sessions asleep when idle | Sessions kept up |
 | --- | --- | --- | --- |
@@ -523,23 +526,24 @@ The nine sessions' month for other hours awake in a day:
 
 Only the peaks. If the machine holds k launches at once (lanes, reviewers and gate runs) and the cloud takes the rest. The
 records' 5.1 days held 238 launch-hours. The first column is the least that could go, if launches could move as the count rises
-and falls. The second is a launch that starts while the machine is full going to the cloud and staying there. Lane and reviewer
-hours are priced at $0.059 and gate hours at $0.407, each with its Durable Object. The coachman, one for each run in flight, stays
-on the machine, and the plan fee is not counted:
+and falls. The second is a launch that starts while the machine is full going to the cloud and staying there, from the longer
+first to the shorter first of launches that start in the same second. Lane and reviewer hours are priced at $0.059 and gate
+hours at $0.407, each with its Durable Object. The coachman, one for each run in flight, stays on the machine, and the plan fee
+is not counted:
 
 | Launches the machine holds at once | Launch-hours above that, at least | Launch-hours sent to the cloud | Share of all launch-hours | Of them gate runs | Dollars a month at that pace |
 | --- | --- | --- | --- | --- | --- |
-| 2 | 99.3 | 123.3 | 52% | 18.3 h | 80.5 |
-| 4 | 41.7 | 63.8 | 27% | 7.6 h | 37.9 |
-| 6 | 16.7 | 27.9 | 12% | 2.6 h | 15.0 |
-| 8 | 6.0 | 10.7 | 4% | 0.9 h | 5.60 |
+| 2 | 99.3 (41.7%) | 118.5 to 123.3 | 50% to 52% | 15% to 18% | 80.5 to 84.0 |
+| 4 | 41.7 (17.5%) | 55.4 to 63.8 | 23% to 27% | 12% to 14% | 35.7 to 37.9 |
+| 6 | 16.7 (7.0%) | 22.8 to 27.9 | 10% to 12% | 9% to 13% | 13.8 to 15.0 |
+| 8 | 6.0 (2.5%) | 8.7 to 10.7 | 4% | 9% to 10% | 4.91 to 5.60 |
 
 What it says:
 
 - **At the audited pace the whole flow costs $223 to $424 a month in the cloud with the sessions asleep when idle, and $485 to
   $647 with them kept up, before the model bill.** That is what a flat machine would have to cost to match it. Launches alone,
   with the sessions staying where they are, are $191 to $340. The example flat prices of the earlier tables, $50 to $200, are
-  below the whole of the first range, so a flat machine is cheaper by about one to eight times. A machine that holds ten runs
+  below the whole of the first range, so a flat machine is cheaper, from about 10% at $200 to about eight times at $50. A machine that holds ten runs
   in flight comfortably may cost more than $200: on the shared machine ten runs in flight put a load of 30 to 40 on its 18
   cores.
 - **The idle sessions are the swing, and "asleep" is not what the documented pattern gives.** Kept up, nine sessions cost $294
@@ -549,18 +553,20 @@ What it says:
   [@articles/cloudflare-containers-sandboxes/passages.md] (A5.12, A1.15). So the hours "awake" are hours with a
   terminal or an alarm holding the container, not hours the model works, and each wake leaves a tail billed at the idle rate:
   the Durable Object idles 70 to 140 seconds before it is evicted and the inactivity timeout runs after that (A1.14, A1.28). A
-  container that stops comes back as a new instance with its saved files and its processes not continuing, and snapshots are
-  in beta (A1.16, A2.3).
+  container that stops comes back as a new instance with its saved files and its processes not continuing (A1.16, A2.3),
+  and snapshots are in beta (A2.2, A9.1).
 - **The awake hours were not measured, and the one reading is above the assumption.** Four of 18 sessions were working at the
-  snapshot, which reads as 5.3 hours a day. At 8 hours a day the nine sessions cost $126 asleep. Because the sessions are not
-  scaled with tickets, at 20 tickets a month they are most of the bill.
+  snapshot, which reads as 5.3 hours a day; the four are not split between the flow's own roles and the research and design
+  sessions, and the snapshot was taken a week after the audited runs. At 8 hours a day the nine sessions cost $126 asleep.
+  Because the sessions are not scaled with tickets, at 20 tickets a month they are 44% to 55% of the bill asleep and most of
+  it kept up.
 - **The cloud is dearest where the flow is steady and cheapest where it is idle or peaky.** Against a $100 machine the cloud
   month is cheaper below 30 to 54 tickets a month for launches only, and below 3 to 36 with the nine sessions asleep; at the
   audited 107 it is not, either way.
 - **Taking only the peaks costs less, and is not what the spike builds.** With room for four launches at once on the machine,
-  the cloud takes 27% of the launch-hours, at least 18%, for about $38 a month at the audited pace, on top of the machine's own
-  price and the plan fee. At that count 12% of those hours are gate runs and the rest reviewers and lanes, so the routing is
-  per launch, under a rule about load. The ticket for the spike names a place for one lane of a ticket and puts the reviewers,
+  the cloud takes 23% to 27% of the launch-hours, at least 17.5%, for $36 to $38 a month at the audited pace, on top of the
+  machine's own price and the plan fee. At that count 12% to 14% of those hours are gate runs and the rest reviewers and
+  lanes, so the routing is per launch, under a rule about load. The ticket for the spike names a place for one lane of a ticket and puts the reviewers,
   the gate and the control plane out of its scope.
 
 Controls: the break-even against $100 with nine sessions asleep, put back into the month, costs $100 at 21.69 tickets,
@@ -570,13 +576,15 @@ above the most that ran at once; a month of no tickets costs the sessions and th
 break-even; a month of launches at the audited pace as tickets times the average run equals the audited runs' total scaled from
 their span to 30 days ($311.90 both ways); the launches a full machine sends to the cloud are never fewer than the least that
 could go and are all of them with no room, and none with room for the most that ran at once; and the file of merged pull
-requests by day is consistent, its days add up to its total and a made-up inconsistent day fails the same check
+requests by day is consistent, its days add up to the totals the tool counted straight from the rows (159 and 132) and a
+made-up inconsistent day fails the same check
 ([controls](../../raw/trials/2026-10-08-cloudflare-run-cost/results/controls.md), C38 to C45).
 
 Limits. The hours a session is awake were not measured; the session list is one moment, and the research and design sessions
 are the user's own work around the flow, not roles of it. The control plane's request counts and the stores' prices were not
 measured, the Workers Paid allowances are not taken off, and the Durable Object is priced as up for as long as its container
-is. The coachman's time is bracketed as before and for the fixture runs it is at its ceiling. A merged pull request is not a
+is. The coachman's time is bracketed as before, with the four runs that have no session export at zero hours at the low end
+(about $4 a month at the median floor), and for the fixture runs it is at its ceiling. A merged pull request is not a
 run, so the pace has two readings and the truth is not between them for certain. The flat prices are examples, and the
 machine that would hold the pace was not sized. Nothing was run on Cloudflare.
 
@@ -946,8 +954,8 @@ command, streaming its output and reading its exit code, as Cloudflare's `exec()
 6. **The interactive sessions' awake hours are recorded beside each launch's use.** An addition to
    [#363, A run records what each launch used, so the run can be priced on demand](https://github.com/brindlewick/postmaster/issues/363),
    not a ticket of its own: when each session of the postmaster and the clerks is working and when it waits for a person, from
-   a sample every minute for a week. It is the largest unmeasured input to the whole-flow cost, and it settles the money half
-   of whether the sessions are worth putting to sleep. Whether a session can stop and come back is a separate unknown.
+   a sample every minute for a week. It is an unmeasured input that moves the asleep month by about $50, and it settles the money half of whether the sessions
+   are worth putting to sleep. Whether a session can stop and come back is a separate unknown.
 7. **Not new: finish #203 and #221.** They give most of the isolation locally and are filed and open; #342 has landed.
 
 Not a ticket: ask Anthropic and OpenAI, in writing, whether a person's own subscription login may be held by their

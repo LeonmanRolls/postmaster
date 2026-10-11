@@ -150,6 +150,15 @@ describe("admitted", () => {
     expect(admitted(launches, 0)).toEqual({ lanes: 100, reviewers: 70, gates: 20 });
   });
 
+  test("launches that start in the same second: the order changes who goes, not how many places are taken", () => {
+    const together: Launch[] = [
+      { start: 0, end: 10, kind: "reviewers" },
+      { start: 0, end: 30, kind: "gates" },
+    ];
+    expect(admitted(together, 1, "shorter-first")).toEqual({ lanes: 0, reviewers: 0, gates: 30 });
+    expect(admitted(together, 1, "longer-first")).toEqual({ lanes: 0, reviewers: 10, gates: 0 });
+  });
+
   test("a launch that ends exactly when another starts does not hold its place", () => {
     const touching: Launch[] = [
       { start: 0, end: 10, kind: "lanes" },
@@ -214,14 +223,22 @@ describe("tables", () => {
     expect(rows[3]).toBe("| $25 | 6 to 13 | up to 6 | never |");
   });
 
-  test("the peaks table prices the launch-hours sent to the cloud by kind", () => {
+  test("the peaks table prices the launch-hours sent to the cloud by kind, and gives both orders of launches that start together", () => {
     const launches: Launch[] = [
       { start: 0, end: 3600, kind: "reviewers" },
-      { start: 0, end: 3600, kind: "gates" },
+      { start: 0, end: 7200, kind: "gates" },
     ];
-    const text = peaksTable([1], { 0: 0, 1: 0, 2: 3600 }, launches, { agentHour: 0.05, gateHour: 0.4 }, 1);
+    const text = peaksTable([1], { 0: 0, 1: 3600, 2: 3600 }, launches, { agentHour: 0.05, gateHour: 0.4 }, 1);
     const rows = text.split("\n");
-    // room for 1: the reviewer takes it (it sorts first by end), the gate goes to the cloud: 1 launch-hour, 50% of 2
-    expect(rows[2]).toBe("| 1 | 1.0 | 1.0 | 50% | 1.0 h | 12.0 |");
+    // room for 1, over 3 launch-hours. Shorter first: the reviewer takes the place and the gate goes, 2 launch-hours,
+    // 67%, all gate, 2 x 0.4 = 0.8 over 1 day x 30 = 24.0. Longer first: the gate takes it and the reviewer goes, 1 launch-hour,
+    // 33%, no gate, 0.05 x 30 = 1.50. The least that could go is 1 launch-hour above one at once (33.3%).
+    expect(rows[2]).toBe("| 1 | 1.0 (33.3%) | 1.0 to 2.0 | 33% to 67% | 0% to 100% | 1.50 to 24.0 |");
+  });
+
+  test("a tie order is reported as the same cell when it changes nothing", () => {
+    const launches: Launch[] = [{ start: 0, end: 3600, kind: "lanes" }];
+    const rows = peaksTable([0], { 0: 0, 1: 3600 }, launches, { agentHour: 0.1, gateHour: 0.4 }, 1).split("\n");
+    expect(rows[2]).toBe("| 0 | 1.0 (100.0%) | 1.0 | 100% | 0% | 3.00 |");
   });
 });
