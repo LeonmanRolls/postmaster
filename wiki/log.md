@@ -1,12 +1,22 @@
 ---
 title: Log
 type: schema
-updated: 2026-10-10
+updated: 2026-10-11
 ---
 
 # Log
 
 Append-only. Newest first. One entry per operation, prefixed so it can be parsed.
+
+## [2026-10-11] ingest | trial 1: laws written blind against #202's shell-command classifier
+
+Issue #367. Recorded `raw/trials/2026-10-11-blind-laws-classifier/`: a sub-agent that saw only #202's text, the
+classifier's signatures and a stand-in wrote ten laws with fast-check, and they were committed before they ran against
+`3abedd7`, the code #202's first review read. They found 2 of the 8 first-round classifier findings, bug-4 and style-1,
+and 1 of the 5 the earlier count labels cheap; five more are stated by a law whose generator never reached them, and
+bug-2 by none. No failure was a false alarm, and law 4 found a defect no review round found. Updated
+[the functional-core page](concepts/functional-core-and-verification.md): trial 1's result, the hindsight sentence in its
+answer and its index line. No standing changed.
 
 ## [2026-10-10] ingest | story pages: a change and a ticket told as stories that scroll
 
