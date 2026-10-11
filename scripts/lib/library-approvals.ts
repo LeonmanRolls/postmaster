@@ -155,6 +155,11 @@ export interface ListedLibrary {
 const LIBRARIES_RE = /^##[ \t]+libraries[ \t]*$/iu;
 const HEADING2_RE = /^##[ \t]+(.*?)[ \t]*$/u;
 const EXACT = /^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$/u;
+
+/** An approval covers one exact version, never a range. */
+export function isExactVersion(version: string): boolean {
+  return EXACT.test(version);
+}
 const BULLET_RE = /^[ \t]*[-*][ \t]+(\S+)[ \t]+(\S+)(?:[ \t]+(.*))?$/u;
 
 /** The ticket's ## Libraries list: one line per library with its name, its
