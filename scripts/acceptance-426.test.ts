@@ -858,6 +858,32 @@ describe("Berry decisions against a stub yarn", () => {
   });
 });
 
+describe("the coachman's guarded exec", () => {
+  test("exec arms the dispatch bin and refuses what the run never approved", async () => {
+    const dispatch = mkDispatch(tmp, "exec", [], []);
+    const project = mkProject(tmp, "exec-p");
+    const runExec = (args: string[]) =>
+      run(RUN, ["install-guard", "exec", dispatch, ...args], {
+        cwd: project,
+        env: {
+          POSTMASTER_TOOL: ROOT,
+          POSTMASTER_GUARD_REGISTRY: registry.url,
+          POSTMASTER_GUARD_SOCKET_API: registry.url,
+          PATH: `${DEV_BIN}:${process.env.PATH ?? ""}`,
+        },
+      });
+    const version = runExec(["npm", "--version"]);
+    expect(version.code).toBe(0);
+    expect(version.out).toMatch(/[0-9]+\.[0-9]+\.[0-9]+/u);
+    expect(existsSync(join(dispatch, "guard", "bin", "npm"))).toBe(true);
+    const before = packumentHits(registry.log).filter((p) => p.includes("g-clean")).length;
+    const add = runExec(["npm", "add", "g-clean@1.0.0"]);
+    expect(add.code).toBe(1);
+    expect(`${add.out}\n${add.err}`).toMatch(/refusing to install g-clean@1\.0\.0/u);
+    expect(packumentHits(registry.log).filter((p) => p.includes("g-clean")).length).toBe(before);
+  });
+});
+
 describe("non-install commands pass through", () => {
   for (const pm of PMS) {
     test.skipIf(!avail[pm])(`${pm}: --version answers untouched`, async () => {

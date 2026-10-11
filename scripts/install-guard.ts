@@ -59,12 +59,15 @@
 // of a mistaken or misled agent.
 import {
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
+  readlinkSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -77,6 +80,7 @@ import {
   type Approvals as LibApprovals,
   type ListedLibrary,
 } from "./lib/libraries.ts";
+import { toolRoot } from "./lib/paths.ts";
 import { argvDecoded, run as runCmd } from "./lib/proc.ts";
 
 export type Pm = "npm" | "pnpm" | "yarn" | "bun";
@@ -4060,6 +4064,38 @@ function execPassthrough(
   return execManager(bin, args, execEnv({}));
 }
 
+/** The names the install guard shims on an armed PATH: the managers,
+ * npx, bunx under its documented name, and corepack, which always refuses. */
+export const GUARD_SHIM_NAMES = ["npm", "pnpm", "yarn", "bun", "npx", "bunx", "corepack"] as const;
+
+/** Create the run's guard bin dir with its manager shims, idempotently.
+ * Returns the bin dir. A dangling or wrong link is repaired; anything in the
+ * way that is not a link throws, and the caller dies, since a lane that
+ * reads as guarded but is not would install unguarded. */
+export function ensureGuardBin(dispatch: string, tool: string): string {
+  const bin = join(dispatch, "guard", "bin");
+  mkdirSync(bin, { recursive: true });
+  const shim = join(tool, "scripts", "install-guard-shim");
+  for (const name of GUARD_SHIM_NAMES) {
+    const link = join(bin, name);
+    // Missing reads null, a non-link reads false, and a link reads its
+    // target without touching it, so a dangling link repairs instead of
+    // throwing EEXIST.
+    const current = ((): string | false | null => {
+      try {
+        return lstatSync(link).isSymbolicLink() ? readlinkSync(link) : false;
+      } catch {
+        return null;
+      }
+    })();
+    if (current === false) throw new Error(`cannot arm the install guard: ${link} is in the way`);
+    if (current === shim) continue;
+    if (current !== null) rmSync(link, { force: true });
+    symlinkSync(shim, link);
+  }
+  return bin;
+}
+
 export type Prog = "npm" | "npx" | "pnpm" | "yarn" | "bun" | "bunx" | "corepack";
 
 function toProg(prog: string): Prog {
@@ -4499,11 +4535,32 @@ function runDispatchCheck(project: string, dispatch: string | null): number {
   return 2;
 }
 
+/** Run one manager invocation under the guard for a caller the launch never
+ * arms: the coachman installing the combined tree. Arms the dispatch's own
+ * bin, points the guard at the dispatch, and execs the shim by absolute
+ * path, so no PATH resolution stands between the caller and the guard. */
+export function runExec(dispatch: string, prog: string, args: string[]): number {
+  const tool = process.env.POSTMASTER_TOOL ?? toolRoot(import.meta);
+  const bin = ensureGuardBin(dispatch, tool);
+  const r = runCmd(join(bin, prog), args, {
+    env: {
+      POSTMASTER_DISPATCH: dispatch,
+      POSTMASTER_TOOL: tool,
+      POSTMASTER_GUARD_LANE: "coachman",
+      PATH: `${bin}:${process.env.PATH ?? ""}`,
+    },
+  });
+  process.stdout.write(r.out);
+  process.stderr.write(r.err);
+  return r.code;
+}
+
 const HELP = `install-guard: decide one lane package-manager invocation, then exec or refuse.
 
 usage: run install-guard run --shim-dir <dir> <prog> <args...>
        run install-guard facts <spec>
        run install-guard dispatch-check <project> [--dispatch <dir>]
+       run install-guard exec <dispatch> <prog> <args...>
 
 run reads POSTMASTER_DISPATCH, POSTMASTER_GUARD_LANE, POSTMASTER_GUARD_REGISTRY
 and POSTMASTER_GUARD_SOCKET_API from the environment the launch sets.
@@ -4546,6 +4603,18 @@ async function main(argv: string[]): Promise<number> {
     }
     if (project === null || project === "" || dispatch === "") usage();
     return runDispatchCheck(project ?? "", dispatch);
+  }
+  if (cmd === "exec") {
+    const [dispatch, prog, ...args] = rest;
+    if (
+      dispatch === undefined ||
+      dispatch === "" ||
+      prog === undefined ||
+      !(GUARD_SHIM_NAMES as readonly string[]).includes(prog)
+    ) {
+      usage();
+    }
+    return runExec(dispatch as string, prog, args);
   }
   if (cmd === "--help" || cmd === "-h" || cmd === "help") {
     process.stdout.write(`${HELP}\n`);
