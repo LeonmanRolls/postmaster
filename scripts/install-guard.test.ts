@@ -34,12 +34,14 @@ import {
   parsePackument,
   parseSpec,
   planPins,
+  policyArgs,
   projectOf,
   readBaseState,
   readRunChecked,
   rebuildArgs,
   refuseForeignResolved,
   refuseForeignScopes,
+  refuseNestedManager,
   refuseNestedShadowed,
   registryEnvStrips,
   resolveClosure,
@@ -980,6 +982,34 @@ test("a script nesting a shadowed manager refuses, and a clean one runs", () => 
       /would run past the guard's shims/u,
     );
   });
+});
+
+test("policy words land before the delimiter, or append", () => {
+  expect(policyArgs(["exec", "foo"], ["--registry", "r"])).toEqual([
+    "exec",
+    "foo",
+    "--registry",
+    "r",
+  ]);
+  expect(policyArgs(["exec", "foo", "--", "foo"], ["--registry", "r"])).toEqual([
+    "exec",
+    "foo",
+    "--registry",
+    "r",
+    "--",
+    "foo",
+  ]);
+  expect(policyArgs(["--", "foo"], ["--registry", "r"])).toEqual(["--registry", "r", "--", "foo"]);
+  expect(policyArgs([], ["--registry", "r"])).toEqual(["--registry", "r"]);
+});
+
+test("a one-shot binary that is a manager refuses", () => {
+  expect(() => refuseNestedManager(["npm", "install", "x"])).toThrow(/would run past the guard/u);
+  expect(() => refuseNestedManager(["./node_modules/.bin/pnpm"])).toThrow(
+    /would run past the guard/u,
+  );
+  expect(() => refuseNestedManager(["tsc", "--noEmit"])).not.toThrow();
+  expect(() => refuseNestedManager([])).not.toThrow();
 });
 
 test("alias entry points run as their canonical manager", () => {

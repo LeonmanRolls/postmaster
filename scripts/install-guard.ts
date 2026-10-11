@@ -3468,27 +3468,36 @@ export function installArgs(
   if (pm === "yarn" && yarnKind === "berry") {
     // Scripts stay off here; the rebuild step runs exactly the covered set.
     return {
-      args: [...pinned, "--non-interactive"],
+      args: policyArgs(pinned, ["--non-interactive"]),
       env: { YARN_ENABLE_SCRIPTS: "0", YARN_NPM_REGISTRY_SERVER: registry },
     };
   }
-  const args = [...pinned, "--registry", registry];
-  if (pm === "npm" || pm === "pnpm") args.push(...scopePins(scopeNames, registry));
-  if (pm === "npm") args.push("--no-audit", "--no-fund");
-  if (pm === "yarn") args.push("--non-interactive");
+  const policy = ["--registry", registry];
+  if (pm === "npm" || pm === "pnpm") policy.push(...scopePins(scopeNames, registry));
+  if (pm === "npm") policy.push("--no-audit", "--no-fund");
+  if (pm === "yarn") policy.push("--non-interactive");
   if (pm === "pnpm" && scriptsOn.length > 0) {
-    for (const name of scriptsOn) args.push(`--allow-build=${name}`);
-    return { args, env: {} };
+    for (const name of scriptsOn) policy.push(`--allow-build=${name}`);
+    return { args: policyArgs(pinned, policy), env: {} };
   }
   // npm's covered scripts run in the rebuild step, not here: without it the
   // install would also run the scripts of every neighbor the checks never
   // covered. Yarn Classic has no rebuild, so it runs scripts only when the
   // caller verified the whole installed tree is covered.
   if (pm === "yarn" && yarnKind === "classic" && scriptsOn.length > 0) {
-    return { args, env: {} };
+    return { args: policyArgs(pinned, policy), env: {} };
   }
-  if (pm !== "bun") args.push("--ignore-scripts");
-  return { args, env: {} };
+  if (pm !== "bun") policy.push("--ignore-scripts");
+  return { args: policyArgs(pinned, policy), env: {} };
+}
+
+/** Policy words joined to the manager's own argv: before a `--` delimiter
+ * when one is present, since words past it belong to the script or binary
+ * being run, not the manager. Without a delimiter this appends. */
+export function policyArgs(kept: string[], policy: string[]): string[] {
+  const at = kept.indexOf("--");
+  if (at < 0) return [...kept, ...policy];
+  return [...kept.slice(0, at), ...policy, ...kept.slice(at)];
 }
 
 /** The second step for an install with covered scripts: run exactly those
@@ -4344,6 +4353,7 @@ async function runRun(shimDir: string, rawProg: string, argv: string[]): Promise
     return execPassthrough(effProg, pm, yarnKind, bin, effArgv, registry, project, cwd);
   }
   if (pkgs.length > 0) {
+    refuseNestedManager(bins);
     const specs = parseAddSpecs(pkgs);
     const { scriptful, closure } = await checkSpecs(deps, specs);
     return execDownloaded(
@@ -4374,6 +4384,7 @@ async function runRun(shimDir: string, rawProg: string, argv: string[]): Promise
     const { prefix, cmd, rest } = commandOf(key, effArgv);
     return execManager(bin, [...prefix, cmd, "--no-install", ...rest], execEnv({}));
   }
+  refuseNestedManager([wanted]);
   const specs = parseAddSpecs([wanted]);
   const { scriptful, closure } = await checkSpecs(deps, specs);
   return execDownloaded(
@@ -4428,17 +4439,30 @@ function execDownloaded(
   }
   const { kept, stripped } = sanitize(pm, argv);
   noteStripped(stripped);
-  const args = [...applyPins(kept, pm, pins), "--registry", registry];
-  if (pm === "npm" || pm === "pnpm") args.push(...scopePins(scopeNames, registry));
-  if (pm === "npm") args.push("--no-audit", "--no-fund");
+  const policy = ["--registry", registry];
+  if (pm === "npm" || pm === "pnpm") policy.push(...scopePins(scopeNames, registry));
+  if (pm === "npm") policy.push("--no-audit", "--no-fund");
   if (scriptful.length > 0) {
     if (pm === "pnpm") {
-      for (const name of scriptful) args.push(`--allow-build=${name}`);
+      for (const name of scriptful) policy.push(`--allow-build=${name}`);
     }
   } else if (pm === "npm" || pm === "pnpm") {
-    args.push("--ignore-scripts");
+    policy.push("--ignore-scripts");
   }
-  return execManager(bin, args, execEnv({}));
+  return execManager(bin, policyArgs(applyPins(kept, pm, pins), policy), execEnv({}));
+}
+
+/** Refuse a one-shot whose executed binary is a package manager: the
+ * download is checked, but the nested manager would then install past
+ * the guard. The local shortcut refuses the same names the same way. */
+export function refuseNestedManager(bins: string[]): void {
+  const first = bins[0] ?? "";
+  const base = first.split("/").pop() ?? "";
+  if (base !== "" && MANAGER_BINS.has(base)) {
+    throw refusal(
+      `install-guard: refusing to run ${first} as a one-shot binary: it is a package manager, which would run past the guard. Run it through its shim instead`,
+    );
+  }
 }
 
 /** The installed version of a package, or null when it is not installed. */
