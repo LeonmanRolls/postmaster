@@ -133,3 +133,38 @@ Every count has a control in [results/controls.md](results/controls.md), made by
   whose reports carry one;
 - the commit named as the origin of a cited line added that line, read with `git show` and not
   with `git blame`, for 296 of 316 later findings placed in a fix or in the change.
+
+## Stop signals
+
+The question added on 2026-10-10: which signals a review loop can see at the end of a round predict
+that the next round finds nothing worth fixing, and what a loop would have to record to apply a
+rule built on them. The halting problem is only the framing: no method decides this for an
+arbitrary program, so the question is which observable signs do in these runs.
+
+- **A transition** is a point at which a loop went on: round r ended with its fixes in, and round
+  r+1 ran. The 61 runs hold 199 and the later set 56. **Clean** means round r+1 held no serious
+  finding, by the best column. A round that ended a run has no next round and is not a
+  transition.
+- **The signals** are in `apparatus/signals.ts` and were written before the later set was read:
+  the count of serious findings in the round and against the round before; the lines the round's
+  fix commits changed, in all files and in code; whether a P1 is among them; whether one lane alone
+  named them; whether they are in lines an earlier fix wrote, in a file an earlier round's
+  finding was in, or in the change and not named before; and what the two reviewer lanes' overlap
+  leaves unseen by the Chapman form of the capture-recapture estimate. One more, five or more
+  serious findings, was added after the first look at the 61 runs, and the later set is its only
+  fair test.
+- **The stopping rules** are four, fixed beforehand: at most one serious finding and fixes of 30
+  lines or fewer; at most one and fewer than the round before; fixes that changed no code; and
+  round 2 with at most two. Each is applied after each round of each run, and the first round at
+  which it fires, before the run's own last round, is where the run would have stopped. It saves
+  the rounds after it, and the serious findings those rounds held are the ones it would have left
+  in the change.
+- **The later set** is the 18 runs whose review ended after 2026-10-09T22:30:00Z and by
+  2026-10-11T07:30:00Z, read the same way. It was not used to choose a signal or a rule.
+  It is two days of runs under a flow that had moved on (verifiers, the five-criteria rule, a
+  different security reviewer), and a run in it is one of 17 single-thread runs and one
+  several-workhorse run, [#216](https://github.com/brindlewick/postmaster/issues/216), which took
+  15 rounds.
+- **The cost of a round** is read from launch lines: the time from one round's first launch to the
+  next, which holds the reviewers, the coachman's judging and fixing, the gate and any wait for the
+  user, and a reviewer lane's own time from its launch line to its `.done` marker.

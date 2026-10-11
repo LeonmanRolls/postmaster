@@ -19,6 +19,7 @@ A *transition* is a point at which a loop went on: round r ended with its fixes 
 | a finding of the round is in a file an earlier round's serious finding was in | 109 | 21% (14–30%) | 69 | 32% |
 | the two lanes' overlap estimates fewer than one more serious finding present | 98 | 32% (23–41%) | 80 | 18% |
 | every finding of the round was in the change and not named before | 18 | 50% (29–71%) | 160 | 23% |
+| five or more serious findings in the round (added after the first look) | 51 | 2% (0–10%) | 148 | 30% |
 
 ### Stopping rules, applied after each round to each run
 
@@ -46,6 +47,7 @@ A *transition* is a point at which a loop went on: round r ended with its fixes 
 | a finding of the round is in a file an earlier round's serious finding was in | 34 | 24% (12–40%) | 22 | 32% |
 | the two lanes' overlap estimates fewer than one more serious finding present | 35 | 31% (19–48%) | 21 | 19% |
 | every finding of the round was in the change and not named before | 12 | 17% (5–45%) | 44 | 30% |
+| five or more serious findings in the round (added after the first look) | 9 | 0% (0–30%) | 47 | 32% |
 
 ### Stopping rules, applied after each round to each run
 

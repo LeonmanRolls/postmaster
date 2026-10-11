@@ -20,6 +20,9 @@ import {
   structure,
 } from "./analysis.ts";
 import type { RunRow } from "./inventory.ts";
+import { type LeverFinding, type LeverRun, leverEffect } from "./levers.ts";
+import { agreement, type Combined, combine, KINDS, type Mark, parseMarks } from "./marks.ts";
+import { type Item, itemsOf } from "./packets.ts";
 import {
   type CommitFact,
   type FindingFact,
@@ -456,6 +459,167 @@ export function lanesMarkdown(rows: readonly LaneRoundRow[], label: string): str
   return out.join("\n");
 }
 
+const ROUNDS_PER_SERIOUS = 0.18;
+
+/** The readers' marks, their agreement, and what the marked findings would have removed. */
+export function marksMarkdown(
+  items: readonly Item[],
+  a: readonly Mark[],
+  b: readonly Mark[],
+  runs: readonly LeverRun[],
+): string {
+  const out: string[] = ["# The readers' marks of the later findings", ""];
+  const withText = items.filter((i) => i.text !== "");
+  const ag = agreement(a, b);
+  out.push(
+    `${items.length} later findings, ${withText.length} with text. Reader A marked ${a.length}, reader B ${b.length}, both ${ag.n}.`,
+    "",
+  );
+  const row = (name: string, x: { same: number; kappa: number }): string[] => {
+    const [lo, hi] = wilson(x.same, ag.n);
+    return [
+      name,
+      `${x.same} of ${ag.n} (${pct(x.same, ag.n)})`,
+      `${Math.round(100 * lo)}–${Math.round(100 * hi)}%`,
+      num(x.kappa),
+    ];
+  };
+  out.push(
+    table(
+      ["Mark", "Same mark from both readers", "Wilson 95% interval", "Cohen's kappa"],
+      [row("ticket open", ag.ticketOpen), row("disagrees", ag.disagrees), row("kind", ag.kind)],
+    ),
+    "",
+  );
+  const rows = combine(a, b);
+  const byId = new Map(items.map((i) => [i.id, i]));
+  const countOf = (pick: (c: Combined) => boolean): number => rows.filter(pick).length;
+  out.push("## Ticket open", "");
+  out.push(
+    table(
+      ["Reading", "Findings", "Share of the marked"],
+      [
+        [
+          "both readers say yes",
+          String(countOf((c) => c.openBoth)),
+          pct(
+            countOf((c) => c.openBoth),
+            rows.length,
+          ),
+        ],
+        [
+          "at least one says yes",
+          String(countOf((c) => c.openEither)),
+          pct(
+            countOf((c) => c.openEither),
+            rows.length,
+          ),
+        ],
+      ],
+    ),
+    "",
+  );
+  out.push("## Kind", "");
+  out.push(
+    table(
+      ["Kind", "Reader A", "Reader B", "Both the same"],
+      KINDS.map((k) => [
+        k,
+        String(a.filter((m) => m.kind === k).length),
+        String(b.filter((m) => m.kind === k).length),
+        String(countOf((c) => c.kind === k)),
+      ]),
+    ),
+    "",
+  );
+  out.push("## By how the finding came to be found", "");
+  const groups = [...new Set(items.map((i) => i.group))].filter(
+    (g): g is NonNullable<typeof g> => g !== null,
+  );
+  out.push(
+    table(
+      ["Group", "Marked", "Ticket open, both", "Ticket open, either", "Disagrees, either"],
+      groups.map((g) => {
+        const ids = new Set(withText.filter((i) => i.group === g).map((i) => i.id));
+        const mine = rows.filter((c) => ids.has(c.id));
+        return [
+          GROUP_LABEL[g] ?? g,
+          String(mine.length),
+          String(mine.filter((c) => c.openBoth).length),
+          String(mine.filter((c) => c.openEither).length),
+          String(mine.filter((c) => c.disagreesEither).length),
+        ];
+      }),
+    ),
+    "",
+  );
+  out.push("## Rounds a change would have removed", "");
+  out.push(
+    `Each row removes the chosen findings and the ones that followed from them: a finding in lines a fix of a removed finding wrote, or in lines a removed finding named. *Strict* counts a round only where every serious finding of the run's last rounds is removed. *By the fitted relation* takes ${ROUNDS_PER_SERIOUS} rounds for each serious finding, from the 61 runs (rounds = 2.1 + 0.18 × serious findings, Theil–Sen slope 0.19).`,
+    "",
+  );
+  const lf = (i: Item): LeverFinding => ({
+    run: i.run,
+    round: i.round,
+    target: i.target,
+    fixOf: i.fixOf,
+    placedBefore: i.placedBefore,
+  });
+  const all = items.map(lf);
+  const pickSet = (pick: (i: Item, c: Combined | undefined) => boolean): Set<LeverFinding> => {
+    const byIdRow = new Map(rows.map((c) => [c.id, c]));
+    const chosen = new Set<LeverFinding>();
+    items.forEach((i, ix) => {
+      if (pick(i, byIdRow.get(i.id))) chosen.add(all[ix] as LeverFinding);
+    });
+    return chosen;
+  };
+  const levers: Array<[string, Set<LeverFinding>]> = [
+    ["The ticket left it open (both readers)", pickSet((_, c) => c?.openBoth === true)],
+    ["The ticket left it open (either reader)", pickSet((_, c) => c?.openEither === true)],
+    [
+      "The same defect at one more place (kind site, both readers)",
+      pickSet((_, c) => c?.kind === "site"),
+    ],
+    [
+      "Two places that must agree do not (kind contract, both readers)",
+      pickSet((_, c) => c?.kind === "contract"),
+    ],
+    ["In lines outside the change", pickSet((i) => i.group === "outside")],
+    [
+      "Made by an earlier fix, for comparison",
+      pickSet((i) => i.group === "made-by-last-fix" || i.group === "made-by-older-fix"),
+    ],
+  ];
+  const tableRows = levers.map(([name, chosen]) => {
+    const e = leverEffect(runs, all, chosen, true);
+    return [
+      name,
+      String(chosen.size),
+      String(e.findings),
+      String(e.runs),
+      String(e.roundsRemoved),
+      num(ROUNDS_PER_SERIOUS * e.findings, 0),
+    ];
+  });
+  out.push(
+    table(
+      [
+        "Change",
+        "Findings chosen",
+        "With what followed from them",
+        "Runs touched",
+        "Rounds removed, strict",
+        "Rounds removed, by the fitted relation",
+      ],
+      tableRows,
+    ),
+    "",
+  );
+  const _ = byId;
+  return out.join("\n");
+}
+
 export function signalsMarkdown(first: readonly RunFacts[], later: readonly RunFacts[]): string {
   const out: string[] = [];
   out.push("# Stop signals", "");
@@ -577,6 +741,19 @@ const main = (args: string[]): void => {
   }
   writeFileSync(join(dir, "lanes.md"), lanesText);
   writeFileSync(join(dir, "signals.md"), signalsMarkdown(factsOf(first, traced), laterFacts));
+  const aFile = join(dir, "..", "readers", "reader-a.tsv");
+  const bFile = join(dir, "..", "readers", "reader-b.tsv");
+  if (existsSync(aFile) && existsSync(bFile)) {
+    const a = parseMarks(readFileSync(aFile, "utf8")).marks;
+    const b = parseMarks(readFileSync(bFile, "utf8")).marks;
+    const items = itemsOf(traced.findings);
+    const runsInput: LeverRun[] = first.map((r) => ({
+      run: r.run,
+      rounds: r.rounds,
+      best: r.seriousBest,
+    }));
+    writeFileSync(join(dir, "marks.md"), marksMarkdown(items, a, b, runsInput));
+  }
 };
 
 if (import.meta.main) main(process.argv.slice(2));

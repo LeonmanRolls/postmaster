@@ -239,6 +239,13 @@ export const SIGNALS: Signal[] = [
     holds: (t) => t.facts.traced > 0 && t.facts.missed === t.facts.traced,
     needsTrace: true,
   },
+  // Added after the first look at the 61 runs' counts, and so tried on the later set alone:
+  {
+    id: "five-plus",
+    says: "five or more serious findings in the round (added after the first look)",
+    holds: (t) => t.facts.n >= 5,
+    needsTrace: false,
+  },
 ];
 
 export type SignalRow = {
