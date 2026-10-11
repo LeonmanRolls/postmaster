@@ -2,6 +2,9 @@
 // gate, the config pick, the final-message adapter and the prompt. The call
 // flow itself is pinned blind by acceptance-429.test.ts.
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { toolRoot } from "./lib/paths.ts";
 import {
   buildPrompt,
   configuredSurveyor,
@@ -204,6 +207,30 @@ describe("finalMessage", () => {
       const r = finalMessage(h, "{}\n", null);
       expect("error" in r && r.error).toContain(h);
     }
+  });
+});
+
+describe("config example placement", () => {
+  test("the surveyor key stays in [team] when the lens table is uncommented too", () => {
+    const example = readFileSync(join(toolRoot(import.meta), "config.example.toml"), "utf8");
+    const uncommented = example
+      .split("\n")
+      .map((l) =>
+        l === '# surveyor = "luna"' ||
+        l === "# [team.lens_reviewers]" ||
+        l.startsWith("# security = ")
+          ? l.slice("# ".length)
+          : l,
+      )
+      .join("\n");
+    const data = Bun.TOML.parse(uncommented) as unknown as Record<
+      string,
+      Record<string, unknown>
+    >;
+    const team = data.team ?? {};
+    expect(team.surveyor).toBe("luna");
+    const lenses = (team.lens_reviewers ?? {}) as Record<string, unknown>;
+    expect(Object.hasOwn(lenses, "surveyor")).toBe(false);
   });
 });
 
