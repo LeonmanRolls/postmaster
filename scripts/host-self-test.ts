@@ -4817,6 +4817,65 @@ export async function runControls(): Promise<number> {
         calls(root, "tmux").some((line) => line === "capture-pane\t-p\t-J\t-S\t-7\t-t\t@1") &&
         tmuxRead.code === 0,
     );
+    // #412: the sessions the flow opens in a tab behind a shell wrapper take
+    // a message by their handle: the postmaster's env-wrapped form and the
+    // verifier's cd-and-exec wrapper alike.
+    const d2env = join(root, "d2-lane.env");
+    writeFileSync(d2env, "D2_PROBE=1\n");
+    const d2cfg = join(root, "d2-config.toml");
+    writeFileSync(
+      d2cfg,
+      `[lanes.one]\nharness = "claude"\nmodel = "lane-model"\n\n[team]\npostmaster = { harness = "claude", model = "pm-model", env_file = "${d2env}" }\n`,
+    );
+    const { splitCommand } = await import("./clerk.ts");
+    const { spawnCommand } = await import("./verifier.ts");
+    const pmForm = exec(
+      SELF,
+      ["launch", "interactive", "postmaster", "--project", f.repo, "--name", "postmaster"],
+      { env: { ...process.env, POSTMASTER_CONFIG: d2cfg } },
+    );
+    const pmWords = pmForm.code === 0 ? splitCommand(pmForm.out) : [];
+    const pmSpawn = execHost(
+      ["spawn", "d2-postmaster", f.repo, "--label", "postmaster", "--", ...pmWords],
+      stubs,
+      root,
+    );
+    const d2message = join(root, "d2-message.txt");
+    writeFileSync(d2message, "Read the brief.");
+    const pmSend = execHost(["send", "d2-postmaster", d2message], stubs, root);
+    const pmRead = execHost(["read", "d2-postmaster", "5"], stubs, root);
+    await pass(
+      "a postmaster session behind its env wrapper takes a message by its handle",
+      () =>
+        pmWords[0] === "bash" &&
+        pmSpawn.code === 0 &&
+        pmSend.code === 0 &&
+        pmRead.code === 0 &&
+        calls(root, "herdr").some(
+          (line) => line === "agent\tprompt\td2-postmaster\tRead the brief.",
+        ),
+      `${pmForm.out}\n${pmSpawn.out}\n${pmSend.err}\n${pmRead.err}`,
+    );
+    const vWords = spawnCommand(f.repo, ["sh", "-c", "exit 0"]);
+    const vSpawn = execHost(
+      ["spawn", "d2-verifier", f.repo, "--label", "verifier", "--", ...vWords],
+      stubs,
+      root,
+    );
+    const vSend = execHost(["send", "d2-verifier", d2message], stubs, root);
+    const vRead = execHost(["read", "d2-verifier", "5"], stubs, root);
+    await pass(
+      "a verifier session behind its cd-and-exec wrapper takes a message by its handle",
+      () =>
+        vWords[0] === "bash" &&
+        vSpawn.code === 0 &&
+        vSend.code === 0 &&
+        vRead.code === 0 &&
+        calls(root, "herdr").some(
+          (line) => line === "agent\tprompt\td2-verifier\tRead the brief.",
+        ),
+      `${vSpawn.out}\n${vSend.err}\n${vRead.err}`,
+    );
 
     console.log("clerk close");
     const writeClerkRecord = (repo: string, id: string, handle: string): void => {
@@ -8200,6 +8259,94 @@ export async function live(): Promise<void> {
         () => missing.code === 0 && missing.out.includes("no session"),
         missing.out,
       );
+
+      console.log("wrapped harness spawn, the positive control");
+      // #412: a session whose harness starts behind a shell wrapper takes a
+      // message by its handle. The probe runs the machine's own clerk form in
+      // a checkout the harness trusts: the checkout under test by default, or
+      // POSTMASTER_LIVE_PROBE_CWD. It starts one short turn, killed with the
+      // tab once the message shows on the screen.
+      const probeCwd = process.env.POSTMASTER_LIVE_PROBE_CWD ?? dirname(HERE);
+      const probeHandle = `liveprobe-${process.pid % 100000}`;
+      const probeForm = exec(SELF, [
+        "launch",
+        "interactive",
+        "clerk",
+        "--project",
+        probeCwd,
+        "--name",
+        `live probe ${probeHandle}`,
+      ]);
+      if (probeForm.code !== 0) {
+        console.log("no clerk role on this machine; skipping the wrapped-harness probe");
+      } else {
+        const { splitCommand } = await import("./clerk.ts");
+        const { spawnCommand } = await import("./verifier.ts");
+        let probeWords = splitCommand(probeForm.out);
+        if (probeWords[0] !== "bash") probeWords = spawnCommand(probeCwd, probeWords);
+        const spacesBefore = liveHerdr("workspace", "list").out;
+        const probeSpawn = liveHost(
+          ["spawn", probeHandle, probeCwd, "--label", "live probe", "--", ...probeWords],
+          f.caller,
+          root,
+        );
+        const probePlaced = probeSpawn.out.trim();
+        const probeSpace = kvOf(probePlaced, "space");
+        const probeTab = kvOf(probePlaced, "tab");
+        const probeGot = liveHerdr("agent", "get", probeHandle);
+        await pass(
+          "spawn names the wrapped harness session",
+          () => probeSpawn.code === 0 && probeGot.code === 0,
+          `${probePlaced}\n${probeSpawn.err}\n${probeGot.err}`,
+        );
+        const probeRead = liveHost(["read", probeHandle, "30"], f.caller, root);
+        await pass(
+          "the session reads by its handle",
+          () => probeRead.code === 0,
+          `${probeRead.out}\n${probeRead.err}`,
+        );
+        const probeStatus = value(probeGot.out, ["result", "agent", "agent_status"]);
+        if (probeStatus === "blocked" || /trust/iu.test(probeRead.out)) {
+          console.log(
+            "the probe harness asks something; answer it once in its tab and re-run (skipping send)",
+          );
+        } else {
+          const marker = `live-probe-${probeHandle}`;
+          const probeFile = join(root, "probe-message.txt");
+          writeFileSync(probeFile, `Reply with exactly the word ${marker} and nothing else.\n`);
+          const probeSend = liveHost(["send", probeHandle, probeFile], f.caller, root);
+          await pass(
+            "the session takes a message by its handle",
+            () => probeSend.code === 0,
+            `${probeSend.out}\n${probeSend.err}`,
+          );
+          let shown = "";
+          for (let i = 0; i < 24 && !shown.includes(marker); i++) {
+            await sleep(2500);
+            shown = liveHost(["read", probeHandle, "30"], f.caller, root).out;
+          }
+          await pass(
+            "the message shows on its screen",
+            () => shown.includes(marker),
+            shown.slice(-2000),
+          );
+        }
+        const probeClosed = liveHost(["close-handle", probeHandle], f.caller, root);
+        const probeTabsAfter =
+          probeSpace && probeTab
+            ? liveHerdr("tab", "list", "--workspace", probeSpace).out
+            : "";
+        await pass(
+          "close-handle closes the probe tab",
+          () =>
+            probeClosed.code === 0 &&
+            (!probeTab || (probeTabsAfter !== "" && !probeTabsAfter.includes(probeTab))),
+          `${probeClosed.out}\n${probeClosed.err}\n${probeTabsAfter}`,
+        );
+        // A space this probe created goes with it; a space it joined stays.
+        if (probeSpace && !spacesBefore.includes(probeSpace))
+          liveHerdr("workspace", "close", probeSpace);
+      }
 
       console.log("Herdr run launches share one tab, and close-run takes it");
       const liveRun = join(root, "run-1");

@@ -88,7 +88,9 @@ waits in the ready queue until the watcher sees room under `team.max_runs`.
    afford, write the answers as `clerk.*` keys to an answers file, and run
    `<tool>/scripts/run setup --add-clerk --answers <file>`; start no clerk until they answer.
    If there is no session host (`run clerk start` exits 3), put the ticket id and a
-   request to start `/clerk <id>` in `ESCALATION.md` and ask the user to do so. Do not start a
+   request to start `/clerk <id>` in `ESCALATION.md` and ask the user to do so. If the start
+   reports the brief could not be sent (exit 1), the session is open and named in the failure;
+   run the command it prints once the user has answered whatever holds the session. Do not start a
    clerk for a ticket the user did not ask you to implement.
    When every requested ticket ended at a clerk and no run is active, go to Stage D all the
    same and keep the watcher running: the sign-off marker wakes you through `READY`, and
