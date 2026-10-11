@@ -33,24 +33,41 @@ export function covering(
   );
 }
 
-type Json = Record<string, any>;
+/** The parts of the two linters' configurations that the templates in lint/ use. */
+type Override = {
+  plugins?: string[];
+  rules?: Record<string, unknown>;
+  linter?: { rules?: Record<string, unknown> };
+};
+type OxlintConfig = {
+  categories?: Record<string, string>;
+  overrides: Override[];
+  plugins?: string[];
+  rules?: Record<string, unknown>;
+};
+type BiomeConfig = {
+  linter: { enabled?: boolean; rules: Record<string, unknown> };
+  overrides: Override[];
+  plugins?: string[];
+};
 
-const template = (name: string): Json => JSON.parse(readFileSync(join(TEMPLATES, name), "utf8"));
+const template = <T>(name: string): T =>
+  JSON.parse(readFileSync(join(TEMPLATES, name), "utf8")) as T;
 
 /** The same configuration with the first override's settings made global. */
-export function unscopedOxlint(cfg: Json): Json {
-  const [first] = cfg.overrides as Json[];
+export function unscopedOxlint(cfg: OxlintConfig): Omit<OxlintConfig, "overrides"> {
+  const [first] = cfg.overrides;
   return { categories: cfg.categories, plugins: first?.plugins, rules: first?.rules };
 }
 
-export function unscopedBiome(cfg: Json): Json {
-  const [first] = cfg.overrides as Json[];
-  const rules = { ...cfg.linter.rules, ...first?.linter.rules };
+export function unscopedBiome(cfg: BiomeConfig): BiomeConfig {
+  const [first] = cfg.overrides;
+  const rules = { ...cfg.linter.rules, ...first?.linter?.rules };
   return { ...cfg, overrides: [], plugins: first?.plugins, linter: { ...cfg.linter, rules } };
 }
 
 function oxlintReports(root: string, unscoped: boolean): Report[] {
-  const cfg = template("oxlintrc.json");
+  const cfg = template<OxlintConfig>("oxlintrc.json");
   writeFileSync(join(root, ".oxlintrc.json"), JSON.stringify(unscoped ? unscopedOxlint(cfg) : cfg));
   const run = spawnSync(
     join(BIN, "oxlint"),
@@ -69,7 +86,7 @@ function oxlintReports(root: string, unscoped: boolean): Report[] {
 }
 
 function biomeReports(root: string, config: string, tool: string, unscoped: boolean): Report[] {
-  const cfg = template(config);
+  const cfg = template<BiomeConfig>(config);
   writeFileSync(join(root, "biome.json"), JSON.stringify(unscoped ? unscopedBiome(cfg) : cfg));
   copyFileSync(join(TEMPLATES, "no-ambient.grit"), join(root, "no-ambient.grit"));
   const run = spawnSync(
