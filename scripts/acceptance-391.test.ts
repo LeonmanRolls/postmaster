@@ -880,6 +880,23 @@ describe("R1: round 1 review regressions", () => {
     expect(degrades(layout)).toEqual(["a", "b"]);
   });
 
+  test("a replayed finish still records its wall", () => {
+    const layout = makeLayout([{ lens: "bug", lane: "a", harness: "codex" }], {
+      timeoutSeconds: 30,
+    });
+    expect(tool(layout, "review-round", "start", layout.dispatch, "1", "bug:a").code).toBe(0);
+    writeAction(layout, "coachman", "wall", "a", "reviewer bug 1 none usage limit hit");
+    writeFileSync(join(layout.dispatch, "logs", "review-r1-bug-a.done"), "");
+    // A first call killed after the finish row: the row exists, the wall row
+    // and the harvest row do not.
+    writeAction(layout, "coachman", "review-finish", "a", "bug round 1");
+    const replay = tool(layout, "review-round", "wait-next", layout.dispatch, "1", layout.repo);
+    expect(replay.code).toBe(0);
+    expect(replay.out).toContain("FINISHED bug a");
+    expect(replay.out).toContain('WALL bug a: DEGRADED, provider wall: "usage limit hit"');
+    expect(degrades(layout)).toEqual(["a"]);
+  });
+
   test("a walled finisher does not replay", () => {
     const layout = makeLayout(
       [

@@ -1539,15 +1539,20 @@ if (import.meta.main) {
         );
       }
       for (const [lens, lane] of newly) {
+        const key = `${lens}\0${lane}`;
         console.log(`FINISHED ${lens} ${lane}`);
         // A replayed finisher keeps its first row: the row times the finish.
-        if (!records.finished.has(`${lens}\0${lane}`)) {
+        if (!records.finished.has(key)) {
           record(
             `${lane} ${lens}: finished round ${R}`,
             "review-finish",
             lane,
             `${lens} round ${R}`,
           );
+        }
+        // The wall check runs whenever no degrade row exists yet, so an
+        // interruption between the two rows cannot lose the wall.
+        if (!records.degraded.has(key)) {
           const w = wallFor(D, lane, lens, R);
           if (w !== null) {
             console.log(`WALL ${lens} ${lane}: DEGRADED, provider wall: "${w.message}"`);
