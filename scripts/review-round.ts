@@ -509,9 +509,11 @@ export function findGatePass(dispatch: string, snap: string): GatePass | null {
     }
     m = REUSE_PASS_RE.exec(detail);
     if (m) {
+      // The reused row's own round: its checks file holds this pass's text, and the
+      // chain of rows stays followable round by round.
       candidates.push({
         exit: Number(m[3]),
-        fromRound: m[2] ?? "",
+        fromRound: m[1] ?? "",
         file: join(logs, `review-r${m[1]}-checks.txt`),
       });
     }
