@@ -1,0 +1,12 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index a035d34..27d224d 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -71,7 +71,6 @@ async function run(args: readonly string[], path: string, { out, err }: Output):
+         err(`no task ${result.missing}`);
+         return 1;
+       }
+-      await save(path, result.list);
+       for (const id of result.removed) {
+         out(`removed ${id}`);
+       }

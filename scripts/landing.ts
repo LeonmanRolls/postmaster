@@ -116,11 +116,11 @@
 //   exit 4  switch-offs, card-write: `refused`
 import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { isAbsolute, join, relative, sep } from "node:path";
-import { scriptsDir } from "./lib/paths.ts";
+import { physical, scriptsDir } from "./lib/paths.ts";
 import { inspectSwitchOffs } from "./lib/switch-offs.ts";
 import { run } from "./lib/proc.ts";
 import { runMode } from "./lib/run-mode.ts";
-import { physical, reachActions } from "./reach.ts";
+import { reachActions } from "./reach.ts";
 import { errorText, isDraftRecord, safePath } from "./scrub-report.ts";
 import {
   D_CLASS,
