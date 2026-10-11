@@ -568,7 +568,7 @@ describe("C4: a concluded card shows its result and where its evidence is", () =
         utcDate(-2),
         "concluded",
         "delta tied",
-        "/home/o/records/delta",
+        "/home/user/records/delta",
         utcDate(-1),
       ),
     };
@@ -577,7 +577,7 @@ describe("C4: a concluded card shows its result and where its evidence is", () =
     expect(linked).toContain("gamma new won by a mile");
     expect(linked).toContain('<a href="https://example.invalid/pull/377">');
     const plain = cardFor(html, "delta flow question");
-    expect(plain).toContain("/home/o/records/delta");
+    expect(plain).toContain("/home/user/records/delta");
     expect(plain).not.toContain("<a ");
   });
 });
