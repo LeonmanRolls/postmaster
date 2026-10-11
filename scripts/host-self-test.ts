@@ -5573,7 +5573,9 @@ export async function runControls(): Promise<number> {
     mkdirSync(activePath);
     writeFileSync(join(legD, ".leg-1-exited"), "");
     prompt = join(legD, "race.txt");
-    writeFileSync(prompt, "race for the lock\n");
+    writeFileSync(prompt, "race for the lock at the pair-gate\n");
+    const raceGate = join(legD, "race.gate");
+    rmSync(raceGate, { force: true });
     const spawnEnv = (extra: Record<string, string> = {}): Record<string, string | undefined> => {
       const procRoot = process.env.POSTMASTER_PROC_ROOT;
       return {
@@ -5600,10 +5602,29 @@ export async function runControls(): Promise<number> {
         child.once("error", () => resolve(null));
       });
     const callsBeforeRace = legCalls();
-    const racers = Array.from({ length: 8 }, () =>
-      spawnLeg(["leg", "launch", legD, legWt, "synthesis", "1", prompt]),
-    );
-    await Promise.all(racers.map(exited));
+    // Staggered over several seconds, so that some racers arrive after an
+    // ungated first start would have finished: the winner holds its harness
+    // stand-in at the gate until the other seven have been turned away, so
+    // every loser meets a held lock however late it arrives.
+    const racers: Array<ReturnType<typeof spawn>> = [];
+    for (let i = 0; i < 8; i++) {
+      if (i > 0) await sleep(500);
+      racers.push(
+        spawnLeg(["leg", "launch", legD, legWt, "synthesis", "1", prompt], {
+          TEST_GATE: raceGate,
+        }),
+      );
+    }
+    const ends = new Array<number | null | undefined>(8).fill(undefined);
+    racers.forEach((racer, k) => {
+      void exited(racer).then((code) => {
+        ends[k] = code;
+      });
+    });
+    // The seven losers are refused and end; the winner waits at the gate.
+    await waitFor(() => ends.filter((end) => end !== undefined).length === 7);
+    writeFileSync(raceGate, "");
+    await waitFor(() => ends.every((end) => end !== undefined));
     await marker(join(legD, ".leg-1-exited"), 30);
     const callsAfterRace = legCalls();
     await pass(
