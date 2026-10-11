@@ -1649,4 +1649,59 @@ describe("wait and the round's reach check", () => {
       expect(journal).toContain("TIMEOUT");
     }, "review-round-waitcheck-");
   });
+
+  test("a reviewer still running at the time limit stops the leg with no check", () => {
+    withTempDir((root) => {
+      const repo = join(root, "repo");
+      const ticket = "T-9";
+      mkdirSync(repo, { recursive: true });
+      const git = (...args: string[]): void => {
+        const r = run("git", ["-C", repo, ...args]);
+        if (r.code !== 0) throw new Error(`git ${args.join(" ")}: ${r.err.trim()}`);
+      };
+      git("init", "-q", "-b", "main");
+      git("config", "user.name", "t");
+      git("config", "user.email", "t@t");
+      git("config", "commit.gpgsign", "false");
+      writeFileSync(join(repo, "file.txt"), "base\n");
+      git("add", "file.txt");
+      git("commit", "-q", "-m", "base");
+      const base = run("git", ["-C", repo, "rev-parse", "HEAD"]).out.trim();
+      git("checkout", "-q", "-b", ticket);
+      git("checkout", "-q", "main");
+      const synthesis = join(repo, ".worktrees", ticket);
+      git("worktree", "add", "-q", synthesis, ticket);
+      const d = join(repo, ".postmaster", "runs", ticket);
+      mkdirSync(join(d, "logs"), { recursive: true });
+      mkdirSync(join(d, "reach"), { recursive: true });
+      writeFileSync(
+        join(d, "manifest.json"),
+        `${JSON.stringify({ stage: "review", leg: 2, base, lanes: {}, coachman: { legs: {} } })}\n`,
+      );
+      writeFileSync(
+        join(d, "run.json"),
+        `${JSON.stringify({ coachman_contract: 2, config: { review: { round_timeout_seconds: 2 } } })}\n`,
+      );
+      writeFileSync(
+        join(d, "brief.md"),
+        `# Waybill: ${ticket}\nturnpikes: style\n\n## Project profile\nrepo: ${repo}          default branch: main       BASE: ${base}\n`,
+      );
+      writeFileSync(join(d, "actions.jsonl"), "");
+      writeFileSync(join(d, "run-log.md"), "");
+      expect(run(self, ["reach", "before", d, "1"]).code).toBe(0);
+      expect(run(self, ["review-round", "start", d, "1"]).code).toBe(0);
+      // A path the stop cannot stop: host stop exits nonzero, as for a launch
+      // it cannot prove stopped, so the wait takes the STILL RUNNING branch.
+      mkdirSync(join(repo, ".worktrees"), { recursive: true });
+      writeFileSync(join(repo, ".worktrees", `${ticket}-rev-style-ghost`), "not a scratch\n");
+      const r = run(self, ["review-round", "wait", d, "1", repo, "style:ghost"]);
+      expect(r.code).toBe(4);
+      expect(r.out).toContain("STILL RUNNING");
+      expect(r.out).toContain("the round's check is not run");
+      const journal = readFileSync(join(d, "actions.jsonl"), "utf8");
+      expect(journal).toContain("still running after the time limit");
+      expect(journal).not.toContain('"point":"r1"');
+      expect(existsSync(join(d, "reach", "r1"))).toBe(false);
+    }, "review-round-waitstill-");
+  });
 });

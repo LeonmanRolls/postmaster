@@ -19,7 +19,8 @@
 //           stopped, and the round's reach check ran;
 //           launch: the wait's exit 3, as wait itself records it
 //   exit 4  wait: a control faulted: the deadline passed but a record could not be
-//           written, or the round's reach check failed; stop the leg
+//           written, a reviewer is still running and the round's check is not run,
+//           or the round's reach check failed; stop the leg
 //   exit 1  usage; the round was not started, or the machine restarted or the round was started
 //           again since the wait began; a marker no reviewer of the round lands; teardown: a
 //           scratch left in place; cut: run verify exited other than 0 or 3, the run's legs or
@@ -999,6 +1000,7 @@ if (import.meta.main) {
         stopPids.push(null);
       }
     }
+    let stillRunning = false;
     for (let j = 0; j < missing.length; j++) {
       const i = missing[j]!;
       const [lens, lane] = reviewers[i]!;
@@ -1032,7 +1034,16 @@ if (import.meta.main) {
           s,
           `r${R} ${lens} ${lane}: still running after the time limit, ${out.trimEnd()}`,
         );
+        stillRunning = true;
       }
+    }
+    if (stillRunning) {
+      // A reviewer that is still running can still change what the check
+      // restores, so the check waits for the ruling like every other record.
+      console.log(
+        `review-round: round ${R} has a reviewer still running; the round's check is not run: stop the leg`,
+      );
+      process.exit(4);
     }
     collectRoundCheck();
     if ((globalThis as Record<string, unknown>).UNRECORDED) process.exit(4);
