@@ -80,13 +80,12 @@ function emptyApprovals(): Approvals {
   return { yes: new Set(), waivers: new Set(), allowances: new Set(), pmWords: [] };
 }
 
-/** The run's recorded words. Only the postmaster's lines count; a malformed
- * line is skipped, which fails closed (a skipped yes refuses the install). */
-export function readApprovals(dispatch: string): Approvals {
+/** The run's recorded words in one actions file's text. Only the
+ * postmaster's lines count; a malformed line is skipped, which fails closed
+ * (a skipped yes refuses the install). */
+export function parseApprovals(text: string): Approvals {
   const out = emptyApprovals();
-  const file = join(dispatch, "actions.jsonl");
-  if (!existsSync(file)) return out;
-  for (const line of readFileSync(file, "utf8").split("\n")) {
+  for (const line of text.split("\n")) {
     if (line.trim() === "") continue;
     let parsed: unknown;
     try {
@@ -109,6 +108,13 @@ export function readApprovals(dispatch: string): Approvals {
     }
   }
   return out;
+}
+
+/** The run's recorded words, read from the dispatch dir. */
+export function readApprovals(dispatch: string): Approvals {
+  const file = join(dispatch, "actions.jsonl");
+  if (!existsSync(file)) return emptyApprovals();
+  return parseApprovals(readFileSync(file, "utf8"));
 }
 
 /** Whether the ticket lists this exact resolved version. */

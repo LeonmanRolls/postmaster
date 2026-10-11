@@ -205,9 +205,10 @@ waits in the ready queue until the watcher sees room under `team.max_runs`.
    managers unguarded; on their yes, record it with `<tool>/scripts/run log-action <dispatch>
    postmaster pm-word <managers> '<the user's words>'`, the held managers comma-separated,
    and run the check again. A word already recorded clears its managers with nothing to
-   ask, as does a project whose managers are all covered. On no, abandon the run as Stage E
-   step 4 says; in a fixture run, with no user to ask, abandon the run rather than dispatch
-   past the hold.
+   ask, as does a project whose managers are all covered. On no, abandon the run with
+   `<tool>/scripts/run stage <dispatch> abandoned postmaster` and leave the ticket ready:
+   the ticket is fine, the run just cannot proceed guarded, so no clerk restarts. In a
+   fixture run, with no user to ask, abandon the run rather than dispatch past the hold.
 10. **Move the ticket to in-progress** through the tracker adapter and log `ticket-state`. Under
    contract 2 the coachman never touches the ticket's state and the postmaster marks it done
    after the merge; under the legacy contract the coachman touches it only at stage 3's merge.

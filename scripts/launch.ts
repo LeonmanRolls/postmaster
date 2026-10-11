@@ -51,16 +51,13 @@ import {
   appendFileSync,
   existsSync,
   constants as fsConstants,
-  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
-  readlinkSync,
   realpathSync,
   renameSync,
   rmSync,
   statSync,
-  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
@@ -72,7 +69,7 @@ import {
   specPairFor,
 } from "./lib/effective-config.ts";
 import { startCheck, wrapCommand } from "./lib/confine.ts";
-import { scriptsDir } from "./lib/paths.ts";
+import { scriptsDir, toolRoot } from "./lib/paths.ts";
 import { GUARD_SHIM_NAMES, ensureGuardBin } from "./install-guard.ts";
 
 export { GUARD_SHIM_NAMES, ensureGuardBin };
@@ -1338,7 +1335,10 @@ export function verifyGuardResolution(opts: {
     return { ok: false, detail: "the resolution probe timed out; a login profile may hang" };
   }
   if (r.code !== 0) {
-    const shadowed = r.out.trim().replace(/^shadowed:/u, "").trim();
+    const shadowed = r.out
+      .trim()
+      .replace(/^shadowed:/u, "")
+      .trim();
     return {
       ok: false,
       detail:
@@ -1943,7 +1943,7 @@ exit "$rc"
   // refuses the launch: a lane that reads as guarded but is not would
   // install unguarded.
   if (RUN && (launchRole === "lane" || launchRole === "reviewer")) {
-    const tool = dirname(scriptsDir(import.meta));
+    const tool = toolRoot(import.meta);
     let guardBin = "";
     try {
       guardBin = ensureGuardBin(RUN, tool);
@@ -1961,7 +1961,9 @@ exit "$rc"
     process.env.POSTMASTER_GUARD_BIN = guardBin;
     const probe = verifyGuardResolution({ guardBin, envFile: ENV_FILE || null, env: process.env });
     if (!probe.ok) {
-      die(`cannot arm the install guard for ${NAME}: ${probe.detail}; the lane would run unguarded`);
+      die(
+        `cannot arm the install guard for ${NAME}: ${probe.detail}; the lane would run unguarded`,
+      );
     }
   }
   // Re-hand the cd pair after the deletes: PWD and OLDPWD are the last

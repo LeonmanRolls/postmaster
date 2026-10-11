@@ -4,6 +4,7 @@ import { expect, test } from "bun:test";
 import { createRequire } from "node:module";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { parseApprovals } from "./lib/libraries.ts";
 import { toolRoot } from "./lib/paths.ts";
 import { run, withTempDir } from "./lib/proc.ts";
 import {
@@ -29,6 +30,7 @@ import {
   overrideTarget,
   overridesDelta,
   parseAddSpecs,
+  parsePackument,
   parseSpec,
   planPins,
   projectOf,
@@ -49,6 +51,7 @@ import {
   stowaways,
   syncArgs,
   unapprovedPairs,
+  verdictOf,
   workspaceSelector,
   yamlBlockMap,
   type GuardContext,
@@ -138,10 +141,9 @@ test("an unknown scanner answer is never cached", async () => {
       port: 0,
       fetch() {
         if (mode === "garbage") return new Response("not json{{{\n");
-        return new Response(
-          `${JSON.stringify({ inputPurl: "pkg:npm/a@1.0.0", alerts: [] })}\n`,
-          { headers: { "content-type": "application/x-ndjson" } },
-        );
+        return new Response(`${JSON.stringify({ inputPurl: "pkg:npm/a@1.0.0", alerts: [] })}\n`, {
+          headers: { "content-type": "application/x-ndjson" },
+        });
       },
     });
     try {
@@ -206,10 +208,11 @@ test("drift compares sections, not unions of them", () => {
         devDependencies: { b: "1.0.0" },
       }),
     );
-    const root: { dependencies: Record<string, string>; devDependencies: Record<string, string> } = {
-      dependencies: { b: "1.0.0" },
-      devDependencies: { a: "1.0.0" },
-    };
+    const root: { dependencies: Record<string, string>; devDependencies: Record<string, string> } =
+      {
+        dependencies: { b: "1.0.0" },
+        devDependencies: { a: "1.0.0" },
+      };
     const lock = {
       packages: {
         "": root,
@@ -238,7 +241,9 @@ test("drift compares sections, not unions of them", () => {
 
 test("npm names resolve exactly as npm resolves them", () => {
   const require = createRequire(import.meta.path);
-  const cmdList = require(join(toolRoot(import.meta), "node_modules/npm/lib/utils/cmd-list.js")) as {
+  const cmdList = require(
+    join(toolRoot(import.meta), "node_modules/npm/lib/utils/cmd-list.js"),
+  ) as {
     commands: string[];
     aliases: Record<string, string>;
     deref: (word: string) => string | undefined;
@@ -356,7 +361,9 @@ test("latest flags refuse on updates", () => {
 test("global reaches refuse in every form", () => {
   expect(classify("npm", ["install", "-g", "foo"], "classic").kind).toBe("refuse");
   expect(classify("npm", ["install", "--location=global", "foo"], "classic").kind).toBe("refuse");
-  expect(classify("npm", ["install", "--location", "global", "foo"], "classic").kind).toBe("refuse");
+  expect(classify("npm", ["install", "--location", "global", "foo"], "classic").kind).toBe(
+    "refuse",
+  );
   expect(classify("pnpm", ["add", "--global-dir", "/tmp/g", "foo"], "classic").kind).toBe("refuse");
 });
 
@@ -547,9 +554,9 @@ test("sanitize strips the agent's own scope registries", () => {
   expect(
     sanitize("npm", ["install", "--@s:registry=https://evil.example", "foo"]).stripped,
   ).toEqual(["--@s:registry=https://evil.example"]);
-  expect(sanitize("pnpm", ["add", "--@s:registry", "https://evil.example", "foo"]).stripped).toEqual(
-    ["--@s:registry", "https://evil.example"],
-  );
+  expect(
+    sanitize("pnpm", ["add", "--@s:registry", "https://evil.example", "foo"]).stripped,
+  ).toEqual(["--@s:registry", "https://evil.example"]);
   expect(sanitize("npm", ["view", "@s/p"]).kept).toEqual(["view", "@s/p"]);
 });
 
@@ -639,9 +646,9 @@ test("foreign scopes and foreign tarballs refuse", () => {
         join(proj, ".yarnrc.yml"),
         'npmScopes:\n  s:\n    npmRegistryServer: "https://evil.example"\n',
       );
-      expect(() =>
-        refuseForeignScopes("yarn", "berry", proj, proj, "https://r.example"),
-      ).toThrow(/points @s/);
+      expect(() => refuseForeignScopes("yarn", "berry", proj, proj, "https://r.example")).toThrow(
+        /points @s/,
+      );
       refuseForeignScopes("yarn", "classic", proj, proj, "https://r.example");
       // Lockfiles pinning foreign tarballs refuse on sync.
       const lock = join(proj, "package-lock.json");
@@ -749,7 +756,15 @@ test("overrides reduce to exact checked targets", () => {
   expect(errOf("foo", "$bar")).toContain("cannot check");
   expect(errOf("a>", "1.2.3")).toContain("names no package");
   expect(overridesDelta(new Map([["a", "1"]]), new Map([["a", "1"]]))).toEqual([]);
-  expect(overridesDelta(new Map([["a", "1"]]), new Map([["a", "2"], ["b", "1"]]))).toEqual([
+  expect(
+    overridesDelta(
+      new Map([["a", "1"]]),
+      new Map([
+        ["a", "2"],
+        ["b", "1"],
+      ]),
+    ),
+  ).toEqual([
     ["a", "2"],
     ["b", "1"],
   ]);
@@ -846,4 +861,70 @@ test("the checked record round-trips and the base reads from git", () => {
     expect(baseFile(proj, join(tmp, "elsewhere.json"), head)).toBeNull();
     expect(readBaseState(proj, join(tmp, "nodispatch"), lock)).toBeNull();
   });
+});
+
+test("approvals parse from text with only the postmaster's lines", () => {
+  const approvals = parseApprovals(
+    [
+      JSON.stringify({
+        actor: "postmaster",
+        action: "library-yes",
+        target: "a@1.0.0",
+        detail: "y",
+      }),
+      JSON.stringify({ actor: "coachman", action: "library-yes", target: "b@1.0.0", detail: "n" }),
+      JSON.stringify({ actor: "postmaster", action: "age-waiver", target: "a@1.0.0", detail: "w" }),
+      JSON.stringify({ actor: "postmaster", action: "script-allow", target: "a", detail: "s" }),
+      "{oops",
+      "",
+    ].join("\n"),
+  );
+  expect([...approvals.yes]).toEqual(["a@1.0.0"]);
+  expect([...approvals.waivers]).toEqual(["a@1.0.0"]);
+  expect([...approvals.allowances]).toEqual(["a"]);
+  expect(approvals.pmWords).toEqual([]);
+});
+
+test("packuments and verdicts parse without touching the network", () => {
+  expect(parsePackument("{oops")).toBeNull();
+  expect(parsePackument(JSON.stringify({ name: 42 }))).toBeNull();
+  const doc = parsePackument(
+    JSON.stringify({
+      name: "a",
+      "dist-tags": { latest: "1.0.0", bad: 7 },
+      versions: {
+        "1.0.0": {
+          dependencies: { b: "^1.0.0", c: 9 },
+          scripts: { postinstall: "x" },
+        },
+      },
+      time: { "1.0.0": "2026-01-01T00:00:00Z" },
+    }),
+  );
+  if (doc === null) throw new Error("the document did not parse");
+  expect(doc.tags).toEqual({ latest: "1.0.0" });
+  expect(doc.versions["1.0.0"]?.dependencies).toEqual({ b: "^1.0.0" });
+  expect(doc.time).toEqual({ "1.0.0": "2026-01-01T00:00:00Z" });
+  expect(verdictOf("boom", 0, "")).toEqual({
+    status: "unknown",
+    why: "the Socket scanner is unreachable (boom)",
+  });
+  expect(verdictOf("", 500, "")).toEqual({
+    status: "unknown",
+    why: "the Socket scanner answers HTTP 500",
+  });
+  expect(verdictOf("", 200, "")).toEqual({
+    status: "unknown",
+    why: "the Socket scanner answers with no verdict",
+  });
+  expect(verdictOf("", 200, JSON.stringify({ id: "synthetic:x" }))).toEqual({
+    status: "unknown",
+    why: "the Socket scanner has no verdict for it",
+  });
+  expect(
+    verdictOf("", 200, JSON.stringify({ alerts: [{ action: "monitor", type: "m" }] })),
+  ).toEqual({ status: "clean" });
+  expect(
+    verdictOf("", 200, JSON.stringify({ alerts: [{ action: "error", type: "malware" }] })),
+  ).toEqual({ status: "flagged", types: ["malware"] });
 });

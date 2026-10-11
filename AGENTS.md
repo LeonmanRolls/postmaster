@@ -275,8 +275,9 @@ tool script; it execs Bun with `--no-env-file` and the tool's own `bunfig.toml`,
 inside a target project never loads that project's `.env` or Bun config. Runtime imports are
 Bun's built-ins and Node's standard modules only, except the vendored parser
 (`scripts/lib/vendor/babel-parser.js`, @babel/parser 7.x, the one dependency #268 added with
-the user's word); `typescript`, `@biomejs/biome` and `oxlint`
-are the development dependencies, and `bun run check` is the type check, Oxlint, the Biome
+the user's word); `typescript`, `@biomejs/biome`, `oxlint` and the pinned `npm`, `pnpm`
+and `yarn` binaries the install-guard oracle drives are the development dependencies, and
+`bun run check` is the type check, Oxlint, the Biome
 format check, the tests beside every script, the runbook reference check and the wiki lint.
 
 ### Where a setting comes from

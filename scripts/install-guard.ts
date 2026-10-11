@@ -13,10 +13,13 @@
 // to stop and report it; anything the guard cannot check is refused the
 // same way.
 //
-//   run install-guard run <prog> <args...>   decide one invocation, then exec or refuse
+//   run install-guard run --shim-dir <dir> <prog> <args...>
+//                                            decide one invocation, then exec or refuse
 //   run install-guard facts <spec>           one package's ask facts as key=value lines
 //   run install-guard dispatch-check <project> [--dispatch <dir>]
 //                                            the Stage B gate for uncovered managers
+//   run install-guard exec <dispatch> <prog> <args...>
+//                                            one guarded invocation for the coachman
 //
 // run reads its context from the environment the launch sets:
 // POSTMASTER_DISPATCH, POSTMASTER_TOOL and POSTMASTER_GUARD_LANE, plus the
@@ -72,6 +75,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
+import { tryJsonFile } from "./lib/data.ts";
 import {
   listsVersion,
   parseLibraries,
@@ -87,11 +91,7 @@ export type Pm = "npm" | "pnpm" | "yarn" | "bun";
 
 /** A refusal: the message the agent sees, naming the package and routing the
  * report. Thrown, so every check path fails closed through one handler. */
-export class Refusal extends Error {
-  constructor(message: string) {
-    super(message);
-  }
-}
+export class Refusal extends Error {}
 
 export const refuse = (text: string): never => {
   throw new Refusal(`${text} Stop and report it.`);
@@ -314,16 +314,18 @@ export function maxSatisfying(versions: string[], range: string): string | null 
     );
     return finals[0]?.s ?? null;
   }
-  const sets = trimmed.split("||").map((alt) => parseRangeSet(alt));
-  if (sets.some((s) => s === null)) return null;
+  const sets: Array<{ cmps: Cmp[]; prerelease: boolean }> = [];
+  for (const alt of trimmed.split("||")) {
+    const set = parseRangeSet(alt);
+    if (set === null) return null;
+    sets.push(set);
+  }
   let best: string | null = null;
   let bestParsed: ParsedVersion | null = null;
   for (const s of versions) {
     const v = parseVersion(s);
     if (v === null) continue;
-    const ok = (sets as Array<{ cmps: Cmp[]; prerelease: boolean }>).some((set) =>
-      satisfiesSet(v, set),
-    );
+    const ok = sets.some((set) => satisfiesSet(v, set));
     if (!ok) continue;
     if (bestParsed === null || compareVersions(v, bestParsed) > 0) {
       best = s;
@@ -843,7 +845,11 @@ export function createTarget(initer: string): string | null {
     if (scope === "") return null;
     return version === undefined ? `@${scope}/create` : `@${scope}/create@${version}`;
   }
-  if (/^(?:file:|link:|portal:|workspace:|git\+|git:|github:|gist:|bitbucket:|gitlab:|https?:|jsr:)/u.test(initer))
+  if (
+    /^(?:file:|link:|portal:|workspace:|git\+|git:|github:|gist:|bitbucket:|gitlab:|https?:|jsr:)/u.test(
+      initer,
+    )
+  )
     return null;
   if (initer.endsWith(".tgz") || initer.endsWith(".tar.gz")) return null;
   const at = initer.lastIndexOf("@");
@@ -872,16 +878,20 @@ export function createSpecKind(range: string): "exact" | "tag" | "range" {
 
 /** Whether an argument names a local path rather than a registry package. */
 export function isLocalPath(arg: string): boolean {
-  return (
-    arg.startsWith(".") || arg.startsWith("/") || arg.includes("/") || arg.includes("\\")
-  );
+  return arg.startsWith(".") || arg.startsWith("/") || arg.includes("/") || arg.includes("\\");
 }
 
 // Workspace selectors move an install off the directory the checks run
 // against, so install forms refuse them and the lane runs from the member
 // directory instead.
 const SELECTOR_FLAGS: Record<string, Set<string>> = {
-  npm: new Set(["-w", "--workspace", "--workspaces", "--workspace-root", "--include-workspace-root"]),
+  npm: new Set([
+    "-w",
+    "--workspace",
+    "--workspaces",
+    "--workspace-root",
+    "--include-workspace-root",
+  ]),
   pnpm: new Set([
     "-r",
     "--recursive",
@@ -900,7 +910,12 @@ export function workspaceSelector(pm: Pm, args: string[]): string | null {
   const flags = SELECTOR_FLAGS[pm] ?? new Set<string>();
   for (const arg of args) {
     if (flags.has(arg)) return arg;
-    if (pm === "pnpm" && (arg.startsWith("--filter=") || arg.startsWith("--global-dir=") || arg.startsWith("--global-bin-dir=")))
+    if (
+      pm === "pnpm" &&
+      (arg.startsWith("--filter=") ||
+        arg.startsWith("--global-dir=") ||
+        arg.startsWith("--global-bin-dir="))
+    )
       return arg;
     if (pm === "bun" && arg.startsWith("--filter=")) return arg;
   }
@@ -930,12 +945,7 @@ function hasGlobal(args: string[]): boolean {
 /** The project's own script names, or null when the manifest does not parse:
  * Yarn runs a bare word as a script, and only a script it names passes. */
 export function manifestScripts(project: string): Set<string> | null {
-  let manifest: unknown;
-  try {
-    manifest = JSON.parse(readFileSync(join(project, "package.json"), "utf8")) as unknown;
-  } catch {
-    return null;
-  }
+  const manifest = tryJsonFile(join(project, "package.json"));
   if (typeof manifest !== "object" || manifest === null) return null;
   const scripts = (manifest as Record<string, unknown>).scripts;
   if (typeof scripts !== "object" || scripts === null) return new Set();
@@ -1107,10 +1117,9 @@ export function classify(
 ): Classification {
   const pm: Pm = prog === "npx" ? "npm" : (prog as Pm);
   if (prog === "npx") return classifyOneshot("npm", argv);
-  const key = prog === "yarn" ? "yarn" : pm;
-  const { prefix, cmd: raw, shift, rest } = commandOf(key, argv);
+  const { prefix, cmd: raw, shift, rest } = commandOf(pm, argv);
   const cmd = derefCommand(pm, raw);
-  const split = splitArgs(key, rest);
+  const split = splitArgs(pm, rest);
   const first = (n: number): string => split.positionals[n] ?? "";
   const all = [...prefix, ...rest];
   const pos = split.positions.map((p) => p + shift);
@@ -1155,8 +1164,7 @@ export function classify(
     if (cmd === "set") {
       return {
         kind: "refuse",
-        message:
-          "npm set writes configuration outside the install; configuration is the user's",
+        message: "npm set writes configuration outside the install; configuration is the user's",
       };
     }
     if (cmd === "cache") {
@@ -1185,11 +1193,7 @@ export function classify(
     if (cmd === "install") {
       const selector = workspaceSelector(pm, all);
       if (selector !== null) return selectorRefusal(pm, selector);
-      if (hasGlobal(all))
-        return {
-          kind: "refuse",
-          message: "global installs land outside the project; install into the project instead",
-        };
+      if (hasGlobal(all)) return globalRefusal();
       if (all.includes("--package-lock-only")) {
         return {
           kind: "refuse",
@@ -1203,24 +1207,14 @@ export function classify(
       return { kind: "add", specs: split.positionals, positions: pos, cmd };
     }
     if (cmd === "ci") {
-      if (hasGlobal(all))
-        return {
-          kind: "refuse",
-          message: "global installs land outside the project; install into the project instead",
-        };
+      if (hasGlobal(all)) return globalRefusal();
       if (all.includes("--dry-run")) return { kind: "passthrough" };
       return { kind: "sync", cmd };
     }
     if (cmd === "update") {
       const selector = workspaceSelector(pm, all);
       if (selector !== null) return selectorRefusal(pm, selector);
-      if (split.positionals.length === 0) {
-        return {
-          kind: "refuse",
-          message:
-            "a bare npm update floats every dependency past its locked version; add what is needed with npm add instead",
-        };
-      }
+      if (split.positionals.length === 0) return bareFloatRefusal("npm", "update");
       return { kind: "update", specs: split.positionals, positions: pos, cmd };
     }
     if (cmd === "rebuild") {
@@ -1286,12 +1280,19 @@ export function classify(
       if (first(0) === "add") {
         return {
           kind: "refuse",
-          message: "pnpm store add downloads a package outside any install; add the library instead",
+          message:
+            "pnpm store add downloads a package outside any install; add the library instead",
         };
       }
       return { kind: "passthrough" };
     }
-    if (cmd === "fetch" || cmd === "env" || cmd === "runtime" || cmd === "self-update" || cmd === "setup") {
+    if (
+      cmd === "fetch" ||
+      cmd === "env" ||
+      cmd === "runtime" ||
+      cmd === "self-update" ||
+      cmd === "setup"
+    ) {
       return {
         kind: "refuse",
         message: `pnpm ${cmd} provisions outside the project; lanes install into the project instead`,
@@ -1322,22 +1323,10 @@ export function classify(
     }
     if (cmd === "exec") {
       // pnpm --package=foo exec bar downloads foo: the packages are checked
-      // like a one-shot's.
-      const at: string[] = [];
-      const atPos: number[] = [];
-      const both = [...prefix, ...rest];
-      const abs = (i: number): number => (i < prefix.length ? i : i + 1);
-      for (let i = 0; i < both.length; i += 1) {
-        const arg = both[i] ?? "";
-        if ((arg === "--package" || arg === "-p") && i + 1 < both.length) {
-          at.push(both[i + 1] ?? "");
-          atPos.push(abs(i + 1));
-          i += 1;
-        } else if (arg.startsWith("--package=")) {
-          at.push(arg.slice("--package=".length));
-          atPos.push(abs(i));
-        }
-      }
+      // like a one-shot's. Positions map back past the skipped command word.
+      const { values: at, positions: atPos } = packageFlags(all, (i) =>
+        i < prefix.length ? i : i + 1,
+      );
       if (at.length > 0) {
         return { kind: "oneshot", specs: [], positions: [], packages: at, packagePositions: atPos };
       }
@@ -1350,8 +1339,7 @@ export function classify(
       if (split.positionals.every((p) => isLocalPath(p))) return { kind: "passthrough" };
       return {
         kind: "refuse",
-        message:
-          "pnpm link takes only local paths in a lane; add a registry library instead",
+        message: "pnpm link takes only local paths in a lane; add a registry library instead",
       };
     }
     if (cmd === "unlink") {
@@ -1364,11 +1352,7 @@ export function classify(
     if (cmd === "add" || cmd === "install") {
       const selector = workspaceSelector(pm, all);
       if (selector !== null) return selectorRefusal(pm, selector);
-      if (hasGlobal(all))
-        return {
-          kind: "refuse",
-          message: "global installs land outside the project; install into the project instead",
-        };
+      if (hasGlobal(all)) return globalRefusal();
       if (all.includes("--lockfile-only")) {
         return {
           kind: "refuse",
@@ -1382,11 +1366,7 @@ export function classify(
       return { kind: "add", specs: split.positionals, positions: pos, cmd };
     }
     if (cmd === "ci") {
-      if (hasGlobal(all))
-        return {
-          kind: "refuse",
-          message: "global installs land outside the project; install into the project instead",
-        };
+      if (hasGlobal(all)) return globalRefusal();
       if (all.includes("--dry-run")) return { kind: "passthrough" };
       return { kind: "sync", cmd };
     }
@@ -1400,13 +1380,7 @@ export function classify(
             "pnpm update --latest ignores the manifest ranges the guard checks; name the exact version with pnpm add instead",
         };
       }
-      if (split.positionals.length === 0) {
-        return {
-          kind: "refuse",
-          message:
-            "a bare pnpm update floats every dependency past its locked version; add what is needed with pnpm add instead",
-        };
-      }
+      if (split.positionals.length === 0) return bareFloatRefusal("pnpm", "update");
       return { kind: "update", specs: split.positionals, positions: pos, cmd };
     }
     if (cmd === "rebuild") {
@@ -1429,7 +1403,8 @@ export function classify(
     if (cmd === "install-test") {
       return {
         kind: "refuse",
-        message: "pnpm install-test installs and tests in one step; sync or add first, then test separately",
+        message:
+          "pnpm install-test installs and tests in one step; sync or add first, then test separately",
       };
     }
     if (cmd === "audit") {
@@ -1448,11 +1423,7 @@ export function classify(
 
   if (pm === "yarn" && yarnKind === "classic") {
     if (cmd === "add") {
-      if (hasGlobal(all))
-        return {
-          kind: "refuse",
-          message: "global installs land outside the project; install into the project instead",
-        };
+      if (hasGlobal(all)) return globalRefusal();
       if (split.positionals.length === 0) return { kind: "sync", cmd };
       return { kind: "add", specs: split.positionals, positions: pos, cmd };
     }
@@ -1470,20 +1441,11 @@ export function classify(
             "yarn upgrade --latest ignores the manifest ranges the guard checks; name the exact version with yarn add instead",
         };
       }
-      if (split.positionals.length === 0) {
-        return {
-          kind: "refuse",
-          message:
-            "a bare yarn upgrade floats every dependency past its locked version; add what is needed with yarn add instead",
-        };
-      }
+      if (split.positionals.length === 0) return bareFloatRefusal("yarn", "upgrade");
       return { kind: "update", specs: split.positionals, positions: pos, cmd };
     }
     if (cmd === "global") {
-      return {
-        kind: "refuse",
-        message: "global installs land outside the project; install into the project instead",
-      };
+      return globalRefusal();
     }
     if (cmd === "create") {
       return {
@@ -1617,7 +1579,8 @@ export function classify(
       if (first(0) === "import") {
         return {
           kind: "refuse",
-          message: "yarn plugin import downloads code outside any install; lanes add libraries instead",
+          message:
+            "yarn plugin import downloads code outside any install; lanes add libraries instead",
         };
       }
       if (first(0) === "list" || first(0) === "remove" || split.positionals.length === 0) {
@@ -1670,11 +1633,7 @@ export function classify(
   if (cmd === "add" || cmd === "install") {
     const selector = workspaceSelector(pm, all);
     if (selector !== null) return selectorRefusal(pm, selector);
-    if (hasGlobal(all))
-      return {
-        kind: "refuse",
-        message: "global installs land outside the project; install into the project instead",
-      };
+    if (hasGlobal(all)) return globalRefusal();
     if (all.includes("--lockfile-only")) {
       return {
         kind: "refuse",
@@ -1696,13 +1655,7 @@ export function classify(
           "bun update --latest ignores the manifest ranges the guard checks; name the exact version with bun add instead",
       };
     }
-    if (split.positionals.length === 0) {
-      return {
-        kind: "refuse",
-        message:
-          "a bare bun update floats every dependency past its locked version; add what is needed with bun add instead",
-      };
-    }
+    if (split.positionals.length === 0) return bareFloatRefusal("bun", "update");
     return { kind: "update", specs: split.positionals, positions: pos, cmd };
   }
   if (cmd === "x") {
@@ -1727,8 +1680,7 @@ export function classify(
   if (cmd === "link") {
     return {
       kind: "refuse",
-      message:
-        "bun link registers outside the project; lanes install into the project instead",
+      message: "bun link registers outside the project; lanes install into the project instead",
     };
   }
   if (cmd === "upgrade") {
@@ -1775,27 +1727,53 @@ export function classify(
   return unknownRefusal(prog, raw);
 }
 
+const GLOBAL_INSTALL_REFUSAL =
+  "global installs land outside the project; install into the project instead";
+
+/** A global reach, refused the same way on every manager. */
+function globalRefusal(): Classification {
+  return { kind: "refuse", message: GLOBAL_INSTALL_REFUSAL };
+}
+
+/** A bare update, which floats every dependency past its locked version. */
+function bareFloatRefusal(pm: string, word: string): Classification {
+  return {
+    kind: "refuse",
+    message: `a bare ${pm} ${word} floats every dependency past its locked version; add what is needed with ${pm} add instead`,
+  };
+}
+
+/** The -p/--package values in flag words, with positions mapped back to the
+ * caller's argv by `at`. */
+export function packageFlags(
+  args: string[],
+  at: (i: number) => number = (i) => i,
+): { values: string[]; positions: number[] } {
+  const values: string[] = [];
+  const positions: number[] = [];
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i] ?? "";
+    if (arg === "-p" || arg === "--package") {
+      if (i + 1 < args.length) {
+        values.push(args[i + 1] ?? "");
+        positions.push(at(i + 1));
+        i += 1;
+      }
+    } else if (arg.startsWith("--package=")) {
+      values.push(arg.slice("--package=".length));
+      positions.push(at(i));
+    }
+  }
+  return { values, positions };
+}
+
 /** One-shot package runs: -p values are always specs to check, while a bare
  * positional names a spec only when no -p is present (with -p it names a bin
  * from those packages). A -c call string cannot be verified, so a call with
  * no other specs is refused. */
 export function classifyOneshot(pm: string, args: string[]): Classification {
   const split = splitArgs(pm, args);
-  const packages: string[] = [];
-  const packagePositions: number[] = [];
-  for (let i = 0; i < args.length; i += 1) {
-    const arg = args[i] ?? "";
-    if (arg === "-p" || arg === "--package") {
-      if (i + 1 < args.length) {
-        packages.push(args[i + 1] ?? "");
-        packagePositions.push(i + 1);
-        i += 1;
-      }
-    } else if (arg.startsWith("--package=")) {
-      packages.push(arg.slice("--package=".length));
-      packagePositions.push(i);
-    }
-  }
+  const { values: packages, positions: packagePositions } = packageFlags(args);
   const hasCall = args.some((a) => a === "-c" || a === "--call" || a.startsWith("--call="));
   if (packages.length > 0) {
     return { kind: "oneshot", specs: [], positions: [], packages, packagePositions };
@@ -1862,9 +1840,16 @@ export function scopePins(names: Iterable<string>, registry: string): string[] {
 export function scopesOfWords(words: string[]): Set<string> {
   const scopes = new Set<string>();
   for (const word of words) {
-    const at = word.startsWith("npm:") ? word.indexOf("@", 4) : word.startsWith("@") ? 0 : -1;
-    if (at < 0) continue;
-    const rest = word.slice(at + 1);
+    let rest: string;
+    if (word.startsWith("npm:")) {
+      const at = word.indexOf("@", 4);
+      if (at < 0) continue;
+      rest = word.slice(at + 1);
+    } else if (word.startsWith("@")) {
+      rest = word.slice(1);
+    } else {
+      continue;
+    }
     const end = rest.search(/[/@]/u);
     const scope = end < 0 ? rest : rest.slice(0, end);
     if (!/^[a-z0-9-~][a-z0-9-._~]*$/iu.test(scope)) continue;
@@ -1927,11 +1912,7 @@ export function sanitize(pm: Pm, args: string[]): { kept: string[]; stripped: st
     // space-separated one; the guard pins the scopes it checked instead.
     if (arg.startsWith("--@") && /(^|:)registry($|=)/u.test(arg)) {
       stripped.push(arg);
-      if (
-        !arg.includes("=") &&
-        i + 1 < args.length &&
-        !(args[i + 1] ?? "").startsWith("-")
-      ) {
+      if (!arg.includes("=") && i + 1 < args.length && !(args[i + 1] ?? "").startsWith("-")) {
         i += 1;
         stripped.push(args[i] ?? "");
       }
@@ -2043,14 +2024,8 @@ export function npmDriftNames(project: string, lockFile?: string): string[] | nu
   const lockPath = lockFile ?? join(project, "package-lock.json");
   const manifestFile = join(project, "package.json");
   if (!existsSync(lockPath) || !existsSync(manifestFile)) return null;
-  let manifest: unknown;
-  let lock: unknown;
-  try {
-    manifest = JSON.parse(readFileSync(manifestFile, "utf8")) as unknown;
-    lock = JSON.parse(readFileSync(lockPath, "utf8")) as unknown;
-  } catch {
-    return null;
-  }
+  const manifest = tryJsonFile(manifestFile);
+  const lock = tryJsonFile(lockPath);
   if (
     typeof manifest !== "object" ||
     manifest === null ||
@@ -2186,58 +2161,65 @@ async function fetchText(url: string, agent: string): Promise<{ status: number; 
   return { status: res.status, text: await res.text() };
 }
 
+/** The user agent every guard fetch identifies with. */
+const GUARD_AGENT = "postmaster-install-guard";
+
+/** A string map in a registry document: string values kept, the rest
+ * dropped. */
+function packumentStrMap(v: unknown): Record<string, string> | undefined {
+  if (typeof v !== "object" || v === null) return undefined;
+  const out: Record<string, string> = {};
+  for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
+    if (typeof val === "string") out[k] = val;
+  }
+  return out;
+}
+
+/** A registry document's text parsed, or null when it is not one. */
+export function parsePackument(text: string): Packument | null {
+  let json: unknown;
+  try {
+    json = JSON.parse(text) as unknown;
+  } catch {
+    return null;
+  }
+  if (typeof json !== "object" || json === null) return null;
+  const doc = json as Record<string, unknown>;
+  if (typeof doc.name !== "string") return null;
+  const versions: Record<string, PackumentVersion> = {};
+  if (typeof doc.versions === "object" && doc.versions !== null) {
+    for (const [ver, entry] of Object.entries(doc.versions as Record<string, unknown>)) {
+      if (typeof entry !== "object" || entry === null) continue;
+      const e = entry as Record<string, unknown>;
+      versions[ver] = {
+        version: typeof e.version === "string" ? e.version : ver,
+        dependencies: packumentStrMap(e.dependencies),
+        optionalDependencies: packumentStrMap(e.optionalDependencies),
+        peerDependencies: packumentStrMap(e.peerDependencies),
+        scripts: e.scripts === undefined ? undefined : (packumentStrMap(e.scripts) ?? {}),
+      };
+    }
+  }
+  const tags: Record<string, string> = {};
+  if (typeof doc["dist-tags"] === "object" && doc["dist-tags"] !== null) {
+    for (const [k, val] of Object.entries(doc["dist-tags"] as Record<string, unknown>)) {
+      if (typeof val === "string") tags[k] = val;
+    }
+  }
+  const time: Record<string, string> = {};
+  if (typeof doc.time === "object" && doc.time !== null) {
+    for (const [k, val] of Object.entries(doc.time as Record<string, unknown>)) {
+      if (typeof val === "string") time[k] = val;
+    }
+  }
+  return { name: doc.name, tags, versions, time, repository: doc.repository };
+}
+
 /** One package's registry document, fetched fresh on every check: versions
  * and tags move, so a cached document could check a version the manager no
  * longer installs, or miss one it now does. Anything unreadable throws a
  * refusal: a package the guard cannot check is not installed. */
 export async function fetchPackument(ctx: GuardContext, name: string): Promise<Packument> {
-  const agent = "postmaster-install-guard";
-  const parse = (text: string): Packument | null => {
-    let json: unknown;
-    try {
-      json = JSON.parse(text) as unknown;
-    } catch {
-      return null;
-    }
-    if (typeof json !== "object" || json === null) return null;
-    const doc = json as Record<string, unknown>;
-    if (typeof doc.name !== "string") return null;
-    const versions: Record<string, PackumentVersion> = {};
-    if (typeof doc.versions === "object" && doc.versions !== null) {
-      for (const [ver, entry] of Object.entries(doc.versions as Record<string, unknown>)) {
-        if (typeof entry !== "object" || entry === null) continue;
-        const e = entry as Record<string, unknown>;
-        const strMap = (v: unknown): Record<string, string> | undefined => {
-          if (typeof v !== "object" || v === null) return undefined;
-          const out: Record<string, string> = {};
-          for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
-            if (typeof val === "string") out[k] = val;
-          }
-          return out;
-        };
-        versions[ver] = {
-          version: typeof e.version === "string" ? e.version : ver,
-          dependencies: strMap(e.dependencies),
-          optionalDependencies: strMap(e.optionalDependencies),
-          peerDependencies: strMap(e.peerDependencies),
-          scripts: e.scripts === undefined ? undefined : (strMap(e.scripts) ?? {}),
-        };
-      }
-    }
-    const tags: Record<string, string> = {};
-    if (typeof doc["dist-tags"] === "object" && doc["dist-tags"] !== null) {
-      for (const [k, val] of Object.entries(doc["dist-tags"] as Record<string, unknown>)) {
-        if (typeof val === "string") tags[k] = val;
-      }
-    }
-    const time: Record<string, string> = {};
-    if (typeof doc.time === "object" && doc.time !== null) {
-      for (const [k, val] of Object.entries(doc.time as Record<string, unknown>)) {
-        if (typeof val === "string") time[k] = val;
-      }
-    }
-    return { name: doc.name, tags, versions, time, repository: doc.repository };
-  };
   const path = name
     .split("/")
     .map((p) => encodeURIComponent(p))
@@ -2245,7 +2227,7 @@ export async function fetchPackument(ctx: GuardContext, name: string): Promise<P
   let status = 0;
   let text = "";
   try {
-    const r = await fetchText(`${ctx.registry.replace(/\/$/u, "")}/${path}`, agent);
+    const r = await fetchText(`${ctx.registry.replace(/\/$/u, "")}/${path}`, GUARD_AGENT);
     status = r.status;
     text = r.text;
   } catch {
@@ -2254,7 +2236,7 @@ export async function fetchPackument(ctx: GuardContext, name: string): Promise<P
   if (status < 200 || status >= 300) {
     refuse(`install-guard: refusing to install ${name}: the registry answers ${status} for it`);
   }
-  const parsed = parse(text);
+  const parsed = parsePackument(text);
   if (parsed === null) {
     throw refusal(
       `install-guard: refusing to install ${name}: its registry document does not parse`,
@@ -2296,7 +2278,7 @@ export async function fetchVerdict(
   for (let attempt = 0; attempt < 5; attempt += 1) {
     if (attempt > 0) await sleep(1000 * attempt);
     try {
-      const r = await fetchText(url, "postmaster-install-guard");
+      const r = await fetchText(url, GUARD_AGENT);
       status = r.status;
       text = r.text;
     } catch (e) {
@@ -2310,51 +2292,53 @@ export async function fetchVerdict(
     failed = "";
     break;
   }
-  let verdict: Verdict;
-  if (failed !== "") {
-    verdict = { status: "unknown", why: `the Socket scanner is unreachable (${failed})` };
-  } else if (status < 200 || status >= 300) {
-    verdict = { status: "unknown", why: `the Socket scanner answers HTTP ${status}` };
-  } else {
-    const first = text
-      .split(/\r?\n/u)
-      .map((l) => l.trim())
-      .find((l) => l !== "");
-    if (first === undefined) {
-      verdict = { status: "unknown", why: "the Socket scanner answers with no verdict" };
-    } else {
-      let artifact: Record<string, unknown> | null = null;
-      try {
-        const parsed = JSON.parse(first) as unknown;
-        if (typeof parsed === "object" && parsed !== null)
-          artifact = parsed as Record<string, unknown>;
-      } catch {
-        artifact = null;
-      }
-      if (artifact === null) {
-        verdict = { status: "unknown", why: "the Socket scanner's answer does not parse" };
-      } else if (typeof artifact.id === "string" && artifact.id.startsWith("synthetic:")) {
-        verdict = { status: "unknown", why: "the Socket scanner has no verdict for it" };
-      } else {
-        const alerts = Array.isArray(artifact.alerts) ? artifact.alerts : [];
-        const types = alerts
-          .filter(
-            (a): a is Record<string, unknown> =>
-              typeof a === "object" &&
-              a !== null &&
-              (a as Record<string, unknown>).action !== "monitor",
-          )
-          .map((a) => (typeof a.type === "string" ? a.type : "alert"));
-        verdict = types.length > 0 ? { status: "flagged", types } : { status: "clean" };
-      }
-    }
-  }
+  const verdict = verdictOf(failed, status, text);
   // Only a verdict is cached: an unknown scanner answer is retried on the
   // next invocation, so one network blip never refuses a package for the run.
   if (verdict.status !== "unknown") {
     writeCache(cacheFile(ctx.cacheDir, "verdicts", key), JSON.stringify(verdict));
   }
   return verdict;
+}
+
+/** A scanner answer read as a verdict: unreachable, a bad status, an empty
+ * or unparseable body, and a synthetic placeholder all read unknown, while
+ * any non-monitor alert flags. */
+export function verdictOf(failed: string, status: number, text: string): Verdict {
+  if (failed !== "") {
+    return { status: "unknown", why: `the Socket scanner is unreachable (${failed})` };
+  }
+  if (status < 200 || status >= 300) {
+    return { status: "unknown", why: `the Socket scanner answers HTTP ${status}` };
+  }
+  const first = text
+    .split(/\r?\n/u)
+    .map((l) => l.trim())
+    .find((l) => l !== "");
+  if (first === undefined) {
+    return { status: "unknown", why: "the Socket scanner answers with no verdict" };
+  }
+  let artifact: Record<string, unknown> | null = null;
+  try {
+    const parsed = JSON.parse(first) as unknown;
+    if (typeof parsed === "object" && parsed !== null) artifact = parsed as Record<string, unknown>;
+  } catch {
+    artifact = null;
+  }
+  if (artifact === null) {
+    return { status: "unknown", why: "the Socket scanner's answer does not parse" };
+  }
+  if (typeof artifact.id === "string" && artifact.id.startsWith("synthetic:")) {
+    return { status: "unknown", why: "the Socket scanner has no verdict for it" };
+  }
+  const alerts = Array.isArray(artifact.alerts) ? artifact.alerts : [];
+  const types = alerts
+    .filter(
+      (a): a is Record<string, unknown> =>
+        typeof a === "object" && a !== null && (a as Record<string, unknown>).action !== "monitor",
+    )
+    .map((a) => (typeof a.type === "string" ? a.type : "alert"));
+  return types.length > 0 ? { status: "flagged", types } : { status: "clean" };
 }
 
 // ---------- resolving ----------
@@ -2402,13 +2386,9 @@ export async function resolveSpec(
  * not satisfy it and the manager will fetch. */
 export function treePeerVersion(project: string, name: string, range: string): string | null {
   const manifest = join(project, "node_modules", ...name.split("/"), "package.json");
-  try {
-    const parsed = JSON.parse(readFileSync(manifest, "utf8")) as { version?: unknown };
-    if (typeof parsed.version !== "string") return null;
-    return satisfiesRange(parsed.version, range) ? parsed.version : null;
-  } catch {
-    return null;
-  }
+  const parsed = tryJsonFile<{ version?: unknown }>(manifest);
+  if (parsed === null || typeof parsed.version !== "string") return null;
+  return satisfiesRange(parsed.version, range) ? parsed.version : null;
 }
 
 interface QueueItem {
@@ -2427,6 +2407,7 @@ export async function resolveClosure(
   ctx: GuardContext,
   project: string,
   specs: Array<{ raw: string; parsed: Extract<Spec, { kind: "registry" | "alias" }> }>,
+  docCache: Map<string, Packument> = new Map(),
 ): Promise<Map<string, Resolved>> {
   const resolved = new Map<string, Resolved>();
   const seen = new Set<string>();
@@ -2445,7 +2426,6 @@ export async function resolveClosure(
     ]),
   );
   let guard = 0;
-  const docCache = new Map<string, Packument>();
   const docFor = async (name: string): Promise<Packument> => {
     const hit = docCache.get(name);
     if (hit !== undefined) return hit;
@@ -2585,16 +2565,16 @@ export function listPrecheck(libs: ListedLibrary[], specs: ParsedAddSpec[]): voi
  * Returns the covered scriptful names, which the executor runs scripts for.
  * Concentrates the messages the ask flow sends. */
 export async function checkAdd(
-  ctx: GuardContext,
   libs: ListedLibrary[],
   approvals: LibApprovals,
   closure: Map<string, Resolved>,
   docFor: (name: string) => Promise<Packument>,
+  verdictFor: (name: string, version: string) => Promise<Verdict>,
+  now: number,
 ): Promise<{ scriptful: string[] }> {
   const members = [...closure.values()].sort(
     (a, b) => a.name.localeCompare(b.name) || a.version.localeCompare(b.version),
   );
-  const now = Date.now();
   for (const r of members) {
     const at = `${r.name}@${r.version}`;
     if (r.direct) {
@@ -2623,7 +2603,7 @@ export async function checkAdd(
   }
   const verdicts = await mapPool(members, CONCURRENCY, async (r) => ({
     r,
-    verdict: await fetchVerdict(ctx, r.name, r.version),
+    verdict: await verdictFor(r.name, r.version),
   }));
   for (const { r, verdict } of verdicts) {
     const at = `${r.name}@${r.version}`;
@@ -2749,12 +2729,7 @@ export function binProviders(project: string, bin: string): string[] {
   }
   const found: string[] = [];
   const scan = (manifestPath: string): void => {
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(readFileSync(manifestPath, "utf8")) as unknown;
-    } catch {
-      return;
-    }
+    const parsed = tryJsonFile(manifestPath);
     if (typeof parsed !== "object" || parsed === null) return;
     const row = parsed as Record<string, unknown>;
     if (typeof row.name !== "string") return;
@@ -2982,12 +2957,7 @@ export function parseBunLock(text: string): Locked[] | null {
 
 /** The names package.json wants, across every dependency section. */
 export function wantedNames(project: string): string[] {
-  let manifest: unknown;
-  try {
-    manifest = JSON.parse(readFileSync(join(project, "package.json"), "utf8")) as unknown;
-  } catch {
-    return [];
-  }
+  const manifest = tryJsonFile(join(project, "package.json"));
   if (typeof manifest !== "object" || manifest === null) return [];
   return [...manifestWantedNames(manifest as Record<string, unknown>)].sort();
 }
@@ -2995,12 +2965,7 @@ export function wantedNames(project: string): string[] {
 /** Every manifest want as name and range, across all four sections. */
 export function manifestRanges(project: string): Map<string, string> {
   const ranges = new Map<string, string>();
-  let manifest: unknown;
-  try {
-    manifest = JSON.parse(readFileSync(join(project, "package.json"), "utf8")) as unknown;
-  } catch {
-    return ranges;
-  }
+  const manifest = tryJsonFile(join(project, "package.json"));
   if (typeof manifest !== "object" || manifest === null) return ranges;
   for (const section of DEP_SECTIONS) {
     const deps = (manifest as Record<string, unknown>)[section];
@@ -3015,26 +2980,7 @@ export function manifestRanges(project: string): Map<string, string> {
 /** The manifest range for a name, or null when the manifest does not depend
  * on it. */
 export function manifestRange(project: string, name: string): string | null {
-  let manifest: unknown;
-  try {
-    manifest = JSON.parse(readFileSync(join(project, "package.json"), "utf8")) as unknown;
-  } catch {
-    return null;
-  }
-  if (typeof manifest !== "object" || manifest === null) return null;
-  for (const section of [
-    "dependencies",
-    "devDependencies",
-    "optionalDependencies",
-    "peerDependencies",
-  ]) {
-    const deps = (manifest as Record<string, unknown>)[section];
-    if (typeof deps === "object" && deps !== null) {
-      const range = (deps as Record<string, unknown>)[name];
-      if (typeof range === "string" && range !== "") return range;
-    }
-  }
-  return null;
+  return manifestRanges(project).get(name) ?? null;
 }
 
 /** The lockfile a sync drifts from, or null when the project keeps none. */
@@ -3368,26 +3314,36 @@ export function overrideTarget(
 ): { name: string; version: string } | { error: string } {
   const name = overrideName(key);
   if (name === null) {
-    return { error: `the override ${key} names no package the guard can check; spell it as name: version` };
+    return {
+      error: `the override ${key} names no package the guard can check; spell it as name: version`,
+    };
   }
   if (value.startsWith("$")) {
-    return { error: `the override ${key} refers to ${value}, which the guard cannot check; pin it to an exact version` };
+    return {
+      error: `the override ${key} refers to ${value}, which the guard cannot check; pin it to an exact version`,
+    };
   }
   if (value.startsWith("npm:")) {
     const rest = value.slice("npm:".length);
     const at = rest[0] === "@" ? rest.lastIndexOf("@") : rest.indexOf("@");
     if (at <= 0) {
-      return { error: `the override ${key} aliases ${value}, which the guard cannot check; pin it to an exact version` };
+      return {
+        error: `the override ${key} aliases ${value}, which the guard cannot check; pin it to an exact version`,
+      };
     }
     const target = rest.slice(0, at);
     const version = rest.slice(at + 1);
     if (!isExactVersion(version)) {
-      return { error: `the override ${key} aliases ${value}; pin it to an exact version the run checked` };
+      return {
+        error: `the override ${key} aliases ${value}; pin it to an exact version the run checked`,
+      };
     }
     return { name: target, version };
   }
   if (!isExactVersion(value)) {
-    return { error: `the override ${key} points at ${value}; pin it to an exact version the run checked` };
+    return {
+      error: `the override ${key} points at ${value}; pin it to an exact version the run checked`,
+    };
   }
   return { name, version: value };
 }
@@ -3401,7 +3357,11 @@ export function overridesDelta(
   for (const [key, value] of current) {
     if (base.get(key) !== value) delta.push([key, value]);
   }
-  return delta.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+  return delta.sort((a, b) => {
+    if (a[0] < b[0]) return -1;
+    if (a[0] > b[0]) return 1;
+    return 0;
+  });
 }
 
 /** The locked pairs neither the base nor a checked add accounts for. */
@@ -3470,14 +3430,9 @@ export function lockedOfText(lockfile: string, text: string): Locked[] | null {
  * the file changed. */
 export function writeTrustedDeps(project: string, names: string[]): boolean {
   const file = join(project, "package.json");
-  let manifest: Record<string, unknown>;
-  try {
-    const parsed = JSON.parse(readFileSync(file, "utf8")) as unknown;
-    if (typeof parsed !== "object" || parsed === null) return false;
-    manifest = parsed as Record<string, unknown>;
-  } catch {
-    return false;
-  }
+  const parsed = tryJsonFile(file);
+  if (typeof parsed !== "object" || parsed === null) return false;
+  const manifest = parsed as Record<string, unknown>;
   const want = [...names].sort();
   const have = Array.isArray(manifest.trustedDependencies)
     ? (manifest.trustedDependencies as unknown[])
@@ -3653,14 +3608,9 @@ export function appendRunChecked(dispatch: string, pairs: Iterable<string>): voi
 
 /** The run's base commit, or null when the dispatch records none. */
 export function runBaseHead(dispatch: string): string | null {
-  try {
-    const run = JSON.parse(readFileSync(join(dispatch, "run.json"), "utf8")) as {
-      target?: { head?: unknown };
-    };
-    return typeof run.target?.head === "string" && run.target.head !== "" ? run.target.head : null;
-  } catch {
-    return null;
-  }
+  const run = tryJsonFile<{ target?: { head?: unknown } }>(join(dispatch, "run.json"));
+  if (run === null) return null;
+  return typeof run.target?.head === "string" && run.target.head !== "" ? run.target.head : null;
 }
 
 /** One file as the base commit holds it, or null when git, the base or the
@@ -3750,7 +3700,15 @@ export async function verifyTreeDelta(
     return name !== undefined && !specNames.has(name);
   });
   const ranges = manifestRanges(project);
-  await verifyDeltaPairs(deps, delta, new Set(ranges.keys()));
+  await verifyDeltaPairs(
+    deps.libs,
+    deps.approvals,
+    delta,
+    new Set(ranges.keys()),
+    async (name) => fetchPackument(deps.ctx, name),
+    async (name, version) => fetchVerdict(deps.ctx, name, version),
+    Date.now(),
+  );
   if (checkStowaways) {
     const lockedVersions = new Map(pairs.map((p) => [p.name, p.version]));
     const approved = new Set([...base.pairs, ...checked]);
@@ -3780,10 +3738,9 @@ async function checkSpecs(
   specs: ParsedAddSpec[],
 ): Promise<{ scriptful: string[]; closure: Map<string, Resolved> }> {
   listPrecheck(deps.libs, specs);
-  const closure = await resolveClosure(deps.ctx, deps.project, specs);
   const docs = new Map<string, Packument>();
+  const closure = await resolveClosure(deps.ctx, deps.project, specs, docs);
   const { scriptful } = await checkAdd(
-    deps.ctx,
     deps.libs,
     deps.approvals,
     closure,
@@ -3795,6 +3752,8 @@ async function checkSpecs(
       }
       return doc;
     },
+    async (name, version) => fetchVerdict(deps.ctx, name, version),
+    Date.now(),
   );
   appendRunChecked(
     deps.ctx.dispatch,
@@ -3806,13 +3765,9 @@ async function checkSpecs(
 /** The overrides the project declares now: the manifest's and the pnpm
  * workspace file's. */
 export function currentOverrides(project: string): Map<string, string> {
-  let manifest: Record<string, unknown> = {};
-  try {
-    const parsed = JSON.parse(readFileSync(join(project, "package.json"), "utf8")) as unknown;
-    if (typeof parsed === "object" && parsed !== null) manifest = parsed as Record<string, unknown>;
-  } catch {
-    manifest = {};
-  }
+  const parsed = tryJsonFile(join(project, "package.json"));
+  const manifest: Record<string, unknown> =
+    typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : {};
   let workspace: string | null = null;
   try {
     workspace = readFileSync(join(project, "pnpm-workspace.yaml"), "utf8");
@@ -3853,32 +3808,35 @@ export async function verifyOverridesDelta(
  * direct install would. Pairs the registry never published skip: the
  * manager re-resolves those on an add, and the sync refuses them itself. */
 export async function verifyDeltaPairs(
-  deps: RunDeps,
+  libs: ListedLibrary[],
+  approvals: LibApprovals,
   delta: string[],
   manifestWanted: Set<string>,
+  docFor: (name: string) => Promise<Packument>,
+  verdictFor: (name: string, version: string) => Promise<Verdict>,
+  now: number,
 ): Promise<void> {
-  const now = Date.now();
   const present: string[] = [];
   for (const at of delta) {
     const pair = splitNameVersion(at);
     if (pair === null) continue;
-    const doc = await fetchPackument(deps.ctx, pair.name);
+    const doc = await docFor(pair.name);
     if (doc.versions[pair.version] === undefined) continue;
     present.push(at);
     if (manifestWanted.has(pair.name)) {
-      if (!listsVersion(deps.libs, pair.name, pair.version)) {
+      if (!listsVersion(libs, pair.name, pair.version)) {
         refuse(
           `install-guard: refusing to install ${at}: the lockfile pins it past the base and the ticket's ## Libraries list names no ${at}`,
         );
       }
-      if (!deps.approvals.yes.has(at)) {
+      if (!approvals.yes.has(at)) {
         refuse(
           `install-guard: refusing to install ${at}: the lockfile pins it past the base and the run records no yes for it`,
         );
       }
     }
     const age = versionAgeMs(doc, pair.version, now);
-    if ((age === null || age < WEEK_MS) && !deps.approvals.waivers.has(at)) {
+    if ((age === null || age < WEEK_MS) && !approvals.waivers.has(at)) {
       if (age === null) {
         throw refusal(
           `install-guard: refusing to install ${at}: it has no published date, so the seven days wait cannot be checked. Ask for an age waiver first`,
@@ -3895,9 +3853,7 @@ export async function verifyDeltaPairs(
     return {
       at,
       verdict:
-        pair === null
-          ? { status: "clean" as const }
-          : await fetchVerdict(deps.ctx, pair.name, pair.version),
+        pair === null ? { status: "clean" as const } : await verdictFor(pair.name, pair.version),
     };
   });
   for (const { at, verdict } of verdicts) {
@@ -4096,22 +4052,27 @@ export function ensureGuardBin(dispatch: string, tool: string): string {
   return bin;
 }
 
-export type Prog = "npm" | "npx" | "pnpm" | "yarn" | "bun" | "bunx" | "corepack";
+export type Prog = (typeof GUARD_SHIM_NAMES)[number];
 
 function toProg(prog: string): Prog {
-  if (
-    prog === "npm" ||
-    prog === "npx" ||
-    prog === "pnpm" ||
-    prog === "yarn" ||
-    prog === "bun" ||
-    prog === "bunx" ||
-    prog === "corepack"
-  )
-    return prog;
+  if ((GUARD_SHIM_NAMES as readonly string[]).includes(prog)) return prog as Prog;
   throw refusal(
-    `install-guard: refusing to run ${prog}: the guard shims only npm, npx, pnpm, yarn, bun, bunx and corepack`,
+    `install-guard: refusing to run ${prog}: the guard shims only ${GUARD_SHIM_NAMES.join(", ")}`,
   );
+}
+
+/** The registry and scanner the guard checks against: the stand-ins the
+ * environment names, or the live services. Trailing slashes go, so joins
+ * never double them. */
+export function guardEndpoints(): { registry: string; socketApi: string } {
+  const registry = (process.env.POSTMASTER_GUARD_REGISTRY ?? "https://registry.npmjs.org").replace(
+    /\/$/u,
+    "",
+  );
+  const socketApi = (
+    process.env.POSTMASTER_GUARD_SOCKET_API ?? "https://firewall-api.socket.dev"
+  ).replace(/\/$/u, "");
+  return { registry, socketApi };
 }
 
 /** Binary names that are package managers themselves: a one-shot of one runs
@@ -4163,13 +4124,7 @@ async function runRun(shimDir: string, rawProg: string, argv: string[]): Promise
     const words = argv.length > 0 ? ` ${argv.join(" ")}` : "";
     throw refusal(`install-guard: refusing to run ${prog}${words}: ${classification.message}`);
   }
-  const registry = (process.env.POSTMASTER_GUARD_REGISTRY ?? "https://registry.npmjs.org").replace(
-    /\/$/u,
-    "",
-  );
-  const socketApi = (
-    process.env.POSTMASTER_GUARD_SOCKET_API ?? "https://firewall-api.socket.dev"
-  ).replace(/\/$/u, "");
+  const { registry, socketApi } = guardEndpoints();
   const ctx: GuardContext = {
     dispatch,
     lane: process.env.POSTMASTER_GUARD_LANE ?? "",
@@ -4277,8 +4232,9 @@ async function runRun(shimDir: string, rawProg: string, argv: string[]): Promise
     }
     if (pm === "yarn" || pm === "bun") refuseForeignScopes(pm, yarnKind, cwd, project, registry);
     const scriptful = await syncScriptful(ctx, pairs);
-    const scriptsOn = scriptful.filter((name) => deps.approvals.allowances.has(name));
-    if (scriptsOn.length !== scriptful.length) scriptsOn.splice(0);
+    const scriptsOn = scriptful.every((name) => deps.approvals.allowances.has(name))
+      ? scriptful
+      : [];
     if (pm === "bun") writeTrustedDeps(project, scriptsOn);
     // Classic cannot rebuild the covered set alone, so a partial cover
     // installs with every script off, and says which cover is missing.
@@ -4452,13 +4408,7 @@ async function runFacts(spec: string): Promise<number> {
   if (parsed === null || (parsed.kind !== "registry" && parsed.kind !== "alias")) {
     throw refusal(`install-guard: refusing facts for ${spec}: it is not a registry library`);
   }
-  const registry = (process.env.POSTMASTER_GUARD_REGISTRY ?? "https://registry.npmjs.org").replace(
-    /\/$/u,
-    "",
-  );
-  const socketApi = (
-    process.env.POSTMASTER_GUARD_SOCKET_API ?? "https://firewall-api.socket.dev"
-  ).replace(/\/$/u, "");
+  const { registry, socketApi } = guardEndpoints();
   const dispatch = process.env.POSTMASTER_DISPATCH ?? "";
   // With no run to scope a cache to, facts takes a fresh dir per invocation
   // and removes it afterwards: a shared dir would serve one stand-in
@@ -4569,7 +4519,6 @@ Refusals exit 1; a held dispatch-check exits 2.`;
 function usage(): never {
   process.stderr.write(`${HELP}\n`);
   process.exit(2);
-  throw new Error("unreachable");
 }
 
 async function main(argv: string[]): Promise<number> {
