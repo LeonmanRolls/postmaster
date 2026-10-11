@@ -198,7 +198,10 @@ describe("C2: a recorded pass on the cut's commit is reused without running veri
     expect(verifyRows(layout)).toBe(rowsBefore);
     expect(readFileSync(join(layout.dispatch, "logs", "review-r2-checks.txt"), "utf8")).toBe(passText);
     const gate2 = actionLines(layout).find(
-      (line) => line.action === "gate" && String(line.target) === fix,
+      (line) =>
+        line.action === "gate" &&
+        String(line.target) === fix &&
+        String(line.detail ?? "").includes("reused from round"),
     );
     expect(String(gate2?.detail ?? "")).toContain("reused from round 1");
     const logged = readFileSync(join(layout.dispatch, "run-log.md"), "utf8");
