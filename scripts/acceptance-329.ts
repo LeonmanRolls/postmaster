@@ -132,6 +132,7 @@ export interface Control {
   run: string;
   round: number;
   decision: string;
+  cause: string;
 }
 
 export const CONTROLS: Control[] = [
@@ -139,11 +140,13 @@ export const CONTROLS: Control[] = [
     run: "202",
     round: 4,
     decision: "RUN 5: round 4 logged no more P1 or P2 findings than round 3",
+    cause: "RUN converging",
   },
   {
     run: "218",
     round: 3,
     decision: "STOP 3: round 3 logged no P1 or P2 finding",
+    cause: "STOP clean",
   },
 ];
 
@@ -230,14 +233,14 @@ const DECOYS = [
   "review-r2-bug-luna-prompt.txt",
 ];
 
-const STANDIN = String.raw`#!/bin/sh
+const STANDIN = `#!/bin/sh
 # Stand-in for 'run surveyor call': records argv, then answers per STANDIN_MODE.
 {
   echo "--- call ---"
-  printf '%s\n' "$@"
+  printf '%s\\n' "$@"
   echo "--- env ---"
-  echo "mode=${STANDIN_MODE:?}"
-} >> "${STANDIN_RECORD:?}"
+  echo "mode=\${STANDIN_MODE:?}"
+} >> "\${STANDIN_RECORD:?}"
 dispatch="$3"
 name=""
 prev=""
@@ -249,25 +252,25 @@ record="$dispatch/surveys/$name.md"
 case "$STANDIN_MODE" in
   answer)
     mkdir -p "$dispatch/surveys"
-    cat "${STANDIN_ANSWER:?}" > "$record"
+    cat "\${STANDIN_ANSWER:?}" > "$record"
     echo "$record"
     echo "exit=0" >> "$STANDIN_RECORD"
     exit 0
     ;;
   noanswer)
     mkdir -p "$dispatch/surveys"
-    printf 'No answer: %s\n' "${STANDIN_REASON:?}" > "$record"
+    printf 'No answer: %s\\n' "\${STANDIN_REASON:?}" > "$record"
     echo "$record"
     echo "exit=3" >> "$STANDIN_RECORD"
     exit 3
     ;;
   refuse)
-    echo "surveyor: ${STANDIN_REASON:?}" >&2
+    echo "surveyor: \${STANDIN_REASON:?}" >&2
     echo "exit=2" >> "$STANDIN_RECORD"
     exit 2
     ;;
   fault)
-    echo "surveyor: ${STANDIN_REASON:?}" >&2
+    echo "surveyor: \${STANDIN_REASON:?}" >&2
     echo "exit=1" >> "$STANDIN_RECORD"
     exit 1
     ;;
