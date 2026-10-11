@@ -1041,6 +1041,25 @@ describe("the round's three steps", () => {
       }, "review-round-cutwrite2-");
     });
 
+    test("a pass text that cannot be kept stops it, on a true gate record", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        mkdirSync(join(p.dispatch, "logs", "gate-SNAP.txt"));
+        const { calls, deps } = stand(green);
+        const res = cutRound(
+          { dispatch: p.dispatch, round: "1", repo: p.repo, synthesis: p.synthesis },
+          deps,
+        );
+        expect(res.code).toBe(1);
+        expect(one(calls, "log-action", (c) => c.args[2] === "gate")?.args[4]).toBe(
+          "review round 1, run verify exit 0",
+        );
+        expect(res.err.join("\n")).toContain("gate-SNAP.txt cannot be written");
+        expect(of(calls, "git").some((c) => c.args.includes("prune"))).toBe(false);
+        expect(of(calls, "cut-scratch").length).toBe(0);
+      }, "review-round-cutkeep-");
+    });
+
     test("a lens whose lanes do not resolve stops it after the prune", () => {
       withTempDir((root) => {
         const p = paths(root);
@@ -1163,14 +1182,14 @@ describe("the round's three steps", () => {
         }, "review-round-reuse-mid-");
       });
 
-      test("a cut pass on an unchanged snapshot reuses the round's checks file", () => {
+      test("a cut pass on an unchanged snapshot reuses the commit's kept text", () => {
         withTempDir((root) => {
           const p = paths(root);
           writeFileSync(
             join(p.dispatch, "actions.jsonl"),
             gateRow(SHA, "review round 1, run verify exit 0"),
           );
-          writeFileSync(join(p.dispatch, "logs", "review-r1-checks.txt"), "gate: pass\n");
+          writeFileSync(join(p.dispatch, "logs", `gate-${SHA}.txt`), "gate: pass\n");
           let verified = false;
           const { calls, deps } = stand(
             shaHandler((name, _args) => {
@@ -1196,14 +1215,73 @@ describe("the round's three steps", () => {
         }, "review-round-reuse-cut-");
       });
 
-      test("a reuse row reuses the checks file it wrote", () => {
+      test("a cut pass reads its commit's kept text, not the round's rewritten checks file", () => {
+        withTempDir((root) => {
+          const p = paths(root);
+          writeFileSync(
+            join(p.dispatch, "actions.jsonl"),
+            gateRow(SHA, "review round 1, run verify exit 0"),
+          );
+          writeFileSync(join(p.dispatch, "logs", "review-r1-checks.txt"), "STALE TEXT\n");
+          writeFileSync(join(p.dispatch, "logs", `gate-${SHA}.txt`), "gate: pass\n");
+          let verified = false;
+          const { deps } = stand(
+            shaHandler((name, _args) => {
+              if (name === "verify") {
+                verified = true;
+                return { code: 0, out: "gate: pass\n", err: "" };
+              }
+              return null;
+            }),
+          );
+          const res = cutRound(
+            { dispatch: p.dispatch, round: "2", repo: p.repo, synthesis: p.synthesis },
+            deps,
+          );
+          expect(res.code).toBe(0);
+          expect(verified).toBe(false);
+          expect(readFileSync(join(p.dispatch, "logs", "review-r2-checks.txt"), "utf8")).toBe(
+            "gate: pass\n",
+          );
+        }, "review-round-reuse-kept-");
+      });
+
+      test("a cut pass with no kept text runs verify instead of reading the round's file", () => {
+        withTempDir((root) => {
+          const p = paths(root);
+          writeFileSync(
+            join(p.dispatch, "actions.jsonl"),
+            gateRow(SHA, "review round 1, run verify exit 0"),
+          );
+          writeFileSync(join(p.dispatch, "logs", "review-r1-checks.txt"), "gate: pass\n");
+          let verified = false;
+          const { deps } = stand(
+            shaHandler((name, _args) => {
+              if (name === "verify") {
+                verified = true;
+                return { code: 0, out: "gate: pass\n", err: "" };
+              }
+              return null;
+            }),
+          );
+          const res = cutRound(
+            { dispatch: p.dispatch, round: "2", repo: p.repo, synthesis: p.synthesis },
+            deps,
+          );
+          expect(res.code).toBe(0);
+          expect(verified).toBe(true);
+          expect(res.out.some((l) => l.includes("reuses the gate pass"))).toBe(false);
+        }, "review-round-reuse-unkept-");
+      });
+
+      test("a reuse row reuses the commit's kept text", () => {
         withTempDir((root) => {
           const p = paths(root);
           writeFileSync(
             join(p.dispatch, "actions.jsonl"),
             gateRow(SHA, "review round 2, gate pass reused from round 1 (run verify exit 0)"),
           );
-          writeFileSync(join(p.dispatch, "logs", "review-r2-checks.txt"), "gate: pass\n");
+          writeFileSync(join(p.dispatch, "logs", `gate-${SHA}.txt`), "gate: pass\n");
           let verified = false;
           const { calls, deps } = stand(
             shaHandler((name, _args) => {
@@ -1235,9 +1313,9 @@ describe("the round's three steps", () => {
           writeFileSync(
             join(p.dispatch, "actions.jsonl"),
             gateRow(SHA, "review round 1, run verify exit 0") +
-              gateRow(SHA, "review round 1, run verify exit 0, mid-round gate"),
+              gateRow(SHA, "review round 2, gate pass reused from round 1 (run verify exit 0)"),
           );
-          writeFileSync(join(p.dispatch, "logs", "review-r1-checks.txt"), "gate: pass\n");
+          writeFileSync(join(p.dispatch, "logs", `gate-${SHA}.txt`), "gate: pass\n");
           let verified = false;
           const { deps } = stand(
             shaHandler((name, _args) => {
@@ -1249,17 +1327,17 @@ describe("the round's three steps", () => {
             }),
           );
           const res = cutRound(
-            { dispatch: p.dispatch, round: "2", repo: p.repo, synthesis: p.synthesis },
+            { dispatch: p.dispatch, round: "3", repo: p.repo, synthesis: p.synthesis },
             deps,
           );
           expect(res.code).toBe(0);
-          // The newer mid-round pass has no pass file, so the older cut pass reuses.
+          // Both rows share the commit's kept text; the newest row names the pass.
           expect(verified).toBe(false);
-          expect(readFileSync(join(p.dispatch, "logs", "review-r2-checks.txt"), "utf8")).toBe(
+          expect(readFileSync(join(p.dispatch, "logs", "review-r3-checks.txt"), "utf8")).toBe(
             "gate: pass\n",
           );
           expect(res.out).toContain(
-            `review-round: round 2 reuses the gate pass on ${SHA.slice(0, 12)} from round 1`,
+            `review-round: round 3 reuses the gate pass on ${SHA.slice(0, 12)} from round 2`,
           );
         }, "review-round-reuse-older-");
 

@@ -464,10 +464,12 @@ const REUSE_PASS_RE =
   /^review round ([1-9][0-9]*), gate pass reused from round ([1-9][0-9]*) \(run verify exit ([03])\)$/u;
 
 /**
- * The newest recorded gate pass on a commit that still has its checks text: a cut's
- * pass with its round's checks file, a mid-round gate's with its pass file, or a cut's
- * reuse with the checks file it wrote. Anything unreadable yields no pass: the cut
- * runs verify, as today. The log's strict reader stays review-decide.
+ * The newest recorded gate pass on a commit that still has its checks text, kept
+ * under logs/gate-<commit>.txt by the cut or mid-round gate that recorded it. The
+ * text lives under its commit, never under the round: a later cut of the same round
+ * at another commit rewrites the round's checks file, and must not move it.
+ * Anything unreadable yields no pass: the cut runs verify, as today. The log's
+ * strict reader stays review-decide.
  */
 export function findGatePass(dispatch: string, snap: string): GatePass | null {
   let contents: string;
@@ -489,34 +491,22 @@ export function findGatePass(dispatch: string, snap: string): GatePass | null {
     }
     if (row.action !== "gate" || row.target !== snap) continue;
     const detail = typeof row.detail === "string" ? row.detail : "";
-    const logs = join(dispatch, "logs");
+    const file = join(dispatch, "logs", `gate-${snap}.txt`);
     let m = CUT_PASS_RE.exec(detail);
     if (m) {
-      candidates.push({
-        exit: Number(m[2]),
-        fromRound: m[1] ?? "",
-        file: join(logs, `review-r${m[1]}-checks.txt`),
-      });
+      candidates.push({ exit: Number(m[2]), fromRound: m[1] ?? "", file });
       continue;
     }
     m = MIDROUND_PASS_RE.exec(detail);
     if (m) {
-      candidates.push({
-        exit: Number(m[2]),
-        fromRound: m[1] ?? "",
-        file: join(logs, `gate-${snap}.txt`),
-      });
+      candidates.push({ exit: Number(m[2]), fromRound: m[1] ?? "", file });
       continue;
     }
     m = REUSE_PASS_RE.exec(detail);
     if (m) {
-      // The reused row's own round: its checks file holds this pass's text, and the
-      // chain of rows stays followable round by round.
-      candidates.push({
-        exit: Number(m[3]),
-        fromRound: m[1] ?? "",
-        file: join(logs, `review-r${m[1]}-checks.txt`),
-      });
+      // The reused row's own round keeps the chain of rows followable round by
+      // round; the text sits under the commit either way.
+      candidates.push({ exit: Number(m[3]), fromRound: m[1] ?? "", file });
     }
   }
   for (let i = candidates.length - 1; i >= 0; i--) {
@@ -583,6 +573,18 @@ export function cutRound(a: StepArgs, deps: StepDeps): StepResult {
     );
     wroteChecks = false;
   }
+  // Keep the pass text under its commit, beside the round's view of it, so a
+  // later cut finds it whatever round file was rewritten since. A reuse writes
+  // the same text it read.
+  let wrotePass = true;
+  try {
+    writeFileSync(join(a.dispatch, "logs", `gate-${snap}.txt`), verifyOut);
+  } catch (e) {
+    res.err.push(
+      `review-round: gate-${snap}.txt cannot be written (${e instanceof Error ? e.message : String(e)})`,
+    );
+    wrotePass = false;
+  }
   res.out.push(...lineList(verifyOut));
   if (reusedFrom !== null) {
     res.out.push(
@@ -598,7 +600,7 @@ export function cutRound(a: StepArgs, deps: StepDeps): StepResult {
       ? `review round ${a.round}, gate pass reused from round ${reusedFrom} (run verify exit ${verifyCode})`
       : `review round ${a.round}, run verify exit ${verifyCode}`,
   ]);
-  if (!wroteChecks || (verifyCode !== 0 && verifyCode !== 3)) {
+  if (!wroteChecks || !wrotePass || (verifyCode !== 0 && verifyCode !== 3)) {
     res.code = 1;
     return res;
   }

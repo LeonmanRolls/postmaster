@@ -647,6 +647,13 @@ describe("C5: a finding reported again in its round is counted once", () => {
 });
 
 describe("R1: round 1 review regressions", () => {
+  function checksWith(layout: Layout, command: string): void {
+    writeFileSync(
+      join(layout.dispatch, "checks.json"),
+      `${JSON.stringify({ checks: [{ name: "gate", source: "declared", kind: "project", command, shows: "x" }] })}\n`,
+    );
+  }
+
   test("starting a round that already reported finishers is refused, and the resume path still collects", () => {
     const layout = makeLayout(
       [
@@ -735,5 +742,34 @@ describe("R1: round 1 review regressions", () => {
     expect(git(layout.repo, "-C", layout.synth, "rev-parse", "HEAD")).toBe(parent);
     expect(git(layout.repo, "-C", layout.synth, "diff", "--cached", "--name-only")).toBe("");
     expect(readFileSync(join(layout.synth, "README.md"), "utf8")).toBe("fixed text\n");
+  });
+
+  test("a re-cut round keeps each commit's text: cuts at A reuse A's words, never B's or empty", () => {
+    const layout = makeLayout([{ lens: "bug", lane: "luna", harness: "codex" }]);
+    const cut = (round: string) =>
+      tool(layout, "review-round", "cut", layout.dispatch, round, layout.repo, layout.synth);
+    const checks = (round: string) =>
+      readFileSync(join(layout.dispatch, "logs", `review-r${round}-checks.txt`), "utf8");
+
+    checksWith(layout, "echo FIRST-PASS");
+    expect(cut("1").code).toBe(0);
+    const a = git(layout.repo, "-C", layout.synth, "rev-parse", "HEAD");
+    expect(checks("1")).toContain("FIRST-PASS");
+    addCommit(layout.repo, layout.synth, "src/fix.txt", "a fix\n");
+    checksWith(layout, "echo SECOND-PASS");
+    expect(cut("1").code).toBe(0);
+    expect(checks("1")).toContain("SECOND-PASS");
+    git(layout.repo, "-C", layout.synth, "reset", "--hard", a);
+    checksWith(layout, "false");
+
+    const cut2 = cut("2");
+    expect(cut2.code).toBe(0);
+    expect(cut2.out).toContain("reuses the gate pass");
+    expect(checks("2")).toContain("FIRST-PASS");
+    expect(checks("2")).not.toContain("SECOND-PASS");
+    const recut1 = cut("1");
+    expect(recut1.code).toBe(0);
+    expect(recut1.out).toContain("reuses the gate pass");
+    expect(checks("1")).toContain("FIRST-PASS");
   });
 });
