@@ -3954,7 +3954,9 @@ export function copyKeptIntoProject(
     }
     const kept = e instanceof Error ? e.message : String(e);
     const cleanup = problems.length === 0 ? "" : `; the cleanup failed too: ${problems.join("; ")}`;
-    throw new RunError(`the verifiers could not be kept: ${kept}; the partial keep was removed${cleanup}`);
+    throw new RunError(
+      `the verifiers could not be kept: ${kept}; the partial keep was removed${cleanup}`,
+    );
   }
 }
 
@@ -3968,8 +3970,7 @@ function logKeep(dispatch: string, folders: string[], handover: string): void {
     LOCAL_VERIFIER_ROOT,
     `kept ${folders.join(", ")}; handover ${handover}`,
   ]);
-  if (r.code !== 0)
-    throw new RunError(`the keep was not logged: ${r.err.trim() || r.out.trim()}`);
+  if (r.code !== 0) throw new RunError(`the keep was not logged: ${r.err.trim() || r.out.trim()}`);
 }
 
 /**
