@@ -172,8 +172,8 @@
 //           is missing or malformed, or the pass failed as make fails;
 //           upkeep --correct: as above, or the branch reaches past the folders,
 //           or a verifier is left unconfirmed;
-//           keep: a change clashes with one kept since the run started, or the
-//           keep was not logged
+//           keep: a change clashes with one kept since the run started, the run
+//           never froze its copy, or the keep was not logged
 //   exit 2  usage: an unknown command or surface, a missing argument, a bad flag or
 //           timeout, a path that is not a git repository or not its top, a repo holding
 //           no commit or no verifiers, no run at the dispatch, an unknown --at
@@ -5104,7 +5104,8 @@ function runChangesCmd(req: ParsedChanges): number {
     const final = join(dispatch, FINAL);
     if (!existsSync(currentRoot)) {
       rmSync(final, { recursive: true, force: true });
-      console.error("no copy to freeze");
+      mkdirSync(final, { recursive: true });
+      console.error("no copy to freeze; froze an empty tree");
     } else {
       replaceTree(currentRoot, final);
       console.error(`frozen ${final} (${countFiles(readVerifierTree(final))} files)`);
@@ -5277,13 +5278,20 @@ function runKeepCmd(req: ParsedKeep): number {
   const merge = resolved.out.trim();
   const baseRoot = join(dispatch, AT_DISPATCH);
   const finalRoot = join(dispatch, FINAL);
-  if (!existsSync(finalRoot)) {
-    console.log("nothing to keep");
-    return 0;
+  if (existsSync(finalRoot) && !isDirPath(finalRoot)) {
+    throw new RunError(`not a directory: ${finalRoot}`);
   }
-  if (!isDirPath(finalRoot)) throw new RunError(`not a directory: ${finalRoot}`);
   if (existsSync(baseRoot) && !isDirPath(baseRoot)) {
     throw new RunError(`not a directory: ${baseRoot}`);
+  }
+  if (!existsSync(finalRoot)) {
+    if (existsSync(baseRoot)) {
+      throw new RunError(
+        `no frozen copy at ${finalRoot}: the run never froze its verifiers with verifier changes --freeze, so its verifier changes cannot be kept`,
+      );
+    }
+    console.log("nothing to keep");
+    return 0;
   }
   const base = readVerifierTree(baseRoot);
   const final = readVerifierTree(finalRoot);

@@ -4870,3 +4870,60 @@ describe("run-copy symlink refusal", () => {
     }
   });
 });
+
+describe("run-copy frozen snapshot presence", () => {
+  test("freeze on an absent copy leaves an empty tree the keep applies", () => {
+    const app = scratchApp();
+    try {
+      expectCode(run(RUN, ["verifier", "record", app.repo, app.dispatch]), 0);
+      const syn = cutWorktree(app.repo, app.dir, "syn", "wsyn");
+      expectCode(run(RUN, ["verifier", "arm", syn, app.dispatch]), 0);
+      rmSync(join(syn, ".postmaster/verifier"), { recursive: true, force: true });
+      const c = run(RUN, ["verifier", "changes", syn, app.dispatch, "--freeze"]);
+      expectCode(c, 0);
+      expect(c.out).toContain("Removed:");
+      const final = join(app.dispatch, "verifier-final");
+      expect(existsSync(final)).toBe(true);
+      expect(readVerifierTree(final).size).toBe(0);
+      const k = run(RUN, ["verifier", "keep", app.repo, "--run", app.dispatch, "--at", app.sha]);
+      expect(k.out).toContain("removed cli/features/f1.md");
+      expect(existsSync(join(app.repo, ".postmaster/verifier/cli/features/f1.md"))).toBe(false);
+    } finally {
+      rmSync(app.dir, { recursive: true, force: true });
+    }
+  });
+
+  test("keep fails when the run never froze its copy", () => {
+    const app = scratchApp();
+    try {
+      expectCode(run(RUN, ["verifier", "record", app.repo, app.dispatch]), 0);
+      const syn = cutWorktree(app.repo, app.dir, "syn", "wsyn");
+      expectCode(run(RUN, ["verifier", "arm", syn, app.dispatch]), 0);
+      writeRepoFile(syn, ".postmaster/verifier/cli/features/f1.md", "# run edit\n");
+      const r = run(RUN, ["verifier", "keep", app.repo, "--run", app.dispatch, "--at", app.sha]);
+      expect(r.code).toBe(1);
+      expect(r.err).toContain("never froze");
+    } finally {
+      rmSync(app.dir, { recursive: true, force: true });
+    }
+  });
+
+  test("keep with no verifiers recorded and no freeze keeps nothing", () => {
+    const dir = tempDir();
+    try {
+      const repo = join(dir, "app");
+      initRepo(repo);
+      writeRepoFile(repo, "README.md", "# app\n");
+      commitAll(repo, "start");
+      const sha = gitOrThrow(repo, "rev-parse", "HEAD").trim();
+      const dispatch = join(dir, "dispatch");
+      mkdirSync(dispatch, { recursive: true });
+      writeFileSync(join(dispatch, "run.json"), JSON.stringify({ config: {} }));
+      const r = run(RUN, ["verifier", "keep", repo, "--run", dispatch, "--at", sha]);
+      expectCode(r, 0);
+      expect(r.out).toContain("nothing to keep");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
