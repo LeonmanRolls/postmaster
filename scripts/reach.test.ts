@@ -1659,4 +1659,32 @@ describe("Fixture: a fix logged as apply before the check reads explained", () =
       true,
     );
   });
+
+  test("a reviewer record that cannot be read voids its verdict and resets the explained move", () => {
+    const layout = makeLayout();
+    expect(before(layout).code).toBe(0);
+    const fix = addCommit(layout.repo, layout.synth, "fix.txt", "fixed\n");
+    writeAction(layout, "coachman", "apply", fix, "fix.txt:1");
+    writeReviewer(layout, "mimo", []);
+    const result = check(layout, "r1");
+    expect(result.code).toBe(2);
+    expect(degrades(layout)).toEqual(["mimo"]);
+    const restore = call(layout, ["restore", layout.dispatch, "r1"]);
+    expect(restore.code).toBe(0);
+    expect(restore.out).toContain("could not be checked");
+    expect(git(layout.repo, "rev-parse", "refs/heads/T")).toBe(layout.base);
+    expect(git(layout.repo, "-C", layout.synth, "rev-parse", "HEAD")).toBe(layout.base);
+  });
+
+  test("a reviewer record that cannot be read voids its verdict even with no move", () => {
+    const layout = makeLayout();
+    expect(before(layout).code).toBe(0);
+    writeReviewer(layout, "mimo", []);
+    const result = check(layout, "r1");
+    expect(result.code).toBe(2);
+    expect(degrades(layout)).toEqual(["mimo"]);
+    const restore = call(layout, ["restore", layout.dispatch, "r1"]);
+    expect(restore.code).toBe(0);
+    expect(git(layout.repo, "rev-parse", "refs/heads/T")).toBe(layout.base);
+  });
 });

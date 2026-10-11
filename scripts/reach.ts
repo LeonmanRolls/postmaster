@@ -1344,6 +1344,22 @@ function checkRound(info: RunInfo, round: number): number {
   const snapshot = loadSnapshot(info, round);
   const changes = roundChanges(info, round, snapshot, reads);
   touches.push(...changes.touches);
+  // A reviewer the check could not read is a finding, not only a note: its
+  // change may ride in the round's fixes unseen, so its verdict is voided
+  // and restore resets the move it cannot verify.
+  for (const read of reads) {
+    if (read.status === "checked") continue;
+    touches.push({
+      lane: read.lane,
+      ...(read.lens ? { lens: read.lens } : {}),
+      path: read.ownFolder,
+      access: "names",
+      place: placeOf(info, read.ownFolder, read.ownFolder),
+      kind: "finding",
+      source: "round",
+      detail: `not checked: ${read.reason ?? "the lane record could not be read"}`,
+    });
+  }
   const { result } = addMainChanges(info, `r${round}`, touches, false);
 
   const voided = new Set<string>();
@@ -1422,38 +1438,46 @@ function pathExists(path: string): boolean {
 }
 
 /** Whether the ticket move swept a reviewer's change into the round's recorded fixes:
- * the same rule as check, so restore resets what check voided for. Unreadable lane
- * records detect no sweep; the check faults on those before restore ever runs. */
+ * the same rule as check, so restore resets what check voided for. A reviewer
+ * record that cannot be read blocks preservation too: the move may hold that
+ * reviewer's change unseen, so it resets with the rest. Returns the reason to
+ * reset, or null when the move stands. */
 function restoreSwept(
   info: RunInfo,
   round: number,
   snapshot: Snapshot,
   nowRefs: Record<string, string>,
   current: string,
-): boolean {
+): string | null {
   let reviewers: Array<[string, string]>;
   try {
     reviewers = reviewersFor(info, round);
   } catch {
-    return false;
+    return null;
   }
-  const checked = reviewers
-    .map(([lens, lane]) =>
-      readLane(
-        info,
-        lane,
-        reviewerEvents(info, round, lens, lane),
-        roundOwnFolder(info, lens, lane),
-        lens,
-      ),
-    )
-    .filter((read) => read.status === "checked");
+  const reads = reviewers.map(([lens, lane]) =>
+    readLane(
+      info,
+      lane,
+      reviewerEvents(info, round, lens, lane),
+      roundOwnFolder(info, lens, lane),
+      lens,
+    ),
+  );
+  const unchecked = reads.filter((read) => read.status !== "checked");
+  if (unchecked.length > 0) {
+    const lanes = unchecked.map((read) => read.lane).join(", ");
+    return `a reviewer record could not be checked (${lanes})`;
+  }
+  const checked = reads.filter((read) => read.status === "checked");
   const ticketRef = `refs/heads/${info.ticket}`;
   const pairs: Array<[string, string]> = [
     [snapshot.refs[ticketRef] ?? "", nowRefs[ticketRef] ?? ""],
     [snapshot.synthesisHead, current],
   ];
-  return pairs.some(([before, after]) => sweptReviewers(info, checked, before, after).length > 0);
+  return pairs.some(([before, after]) => sweptReviewers(info, checked, before, after).length > 0)
+    ? "the round's recorded fixes changed a reviewer-named path"
+    : null;
 }
 
 function restoreRound(info: RunInfo, round: number): number {
@@ -1473,12 +1497,11 @@ function restoreRound(info: RunInfo, round: number): number {
   const nowRefs = refsMap(info.repo, info.ticket);
   const synth = synthesisPath(info);
   const currentHead = currentHeadForRestore(info.repo, synth);
-  const swept = restoreSwept(info, round, snapshot, nowRefs, currentHead);
-  if (swept) {
-    console.log(
-      `swept move reset for r${round}: the round's recorded fixes changed a reviewer-named path`,
-    );
+  const sweptReason = restoreSwept(info, round, snapshot, nowRefs, currentHead);
+  if (sweptReason !== null) {
+    console.log(`swept move reset for r${round}: ${sweptReason}`);
   }
+  const swept = sweptReason !== null;
   const refExplained =
     !swept &&
     moveExplained(info.repo, applies, snapshot.refs[ticketRef] ?? "", nowRefs[ticketRef] ?? "");
