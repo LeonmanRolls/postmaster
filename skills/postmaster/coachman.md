@@ -1181,7 +1181,7 @@ Then call the merge step:
 ```
 
 Act on its first line. `CARD` and `CARD-ANYWAY` carry the card's `## Merge` section after
-a blank line: keep it for the card and go on. `MERGED` and `GATE-NEEDED`: run the gate as
+a blank line: keep the latest one for the card and go on. `MERGED` and `GATE-NEEDED`: run the gate as
 step 1 says and call the step again. `CONFLICT` names the main and each conflicted file:
 the run that merges second resolves them, by merge and never by rebase — resolve by hand,
 commit the merge, never abort it, and call the step again. `GATE-FAILED` names the failed
