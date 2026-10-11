@@ -6445,9 +6445,7 @@ describe("the install guard arms lanes", () => {
       const second = ensureGuardBin(d, TOOL);
       expect(second).toBe(first);
       for (const name of GUARD_SHIM_NAMES) {
-        expect(readlinkSync(join(first, name))).toBe(
-          join(TOOL, "scripts", "install-guard-shim"),
-        );
+        expect(readlinkSync(join(first, name))).toBe(join(TOOL, "scripts", "install-guard-shim"));
       }
     });
   });
