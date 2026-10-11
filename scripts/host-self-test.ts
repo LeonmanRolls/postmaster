@@ -5615,7 +5615,16 @@ export async function runControls(): Promise<number> {
         }),
       );
     }
-    const ends = new Array<number | null | undefined>(8).fill(undefined);
+    const ends: Array<number | null | undefined> = [
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    ];
     racers.forEach((racer, k) => {
       void exited(racer).then((code) => {
         ends[k] = code;
