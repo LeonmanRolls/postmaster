@@ -42,7 +42,14 @@ function stage(prefix: string): string {
 export function fixtureRepo(ticket = "remove"): string {
   const dir = stage("accept-434-");
   const dest = join(dir, "app");
-  const r = sh(["fixture", "new", dest, ticket]);
+  // fixture new commits the fresh repo; the checkout it runs from may carry
+  // no identity of its own, so the test provides it outright.
+  const r = sh(["fixture", "new", dest, ticket], {
+    GIT_AUTHOR_NAME: "fixture",
+    GIT_AUTHOR_EMAIL: "fixture@example.invalid",
+    GIT_COMMITTER_NAME: "fixture",
+    GIT_COMMITTER_EMAIL: "fixture@example.invalid",
+  });
   if (r.code !== 0) throw new Error(`fixture new failed: ${r.err}`);
   return dest;
 }
