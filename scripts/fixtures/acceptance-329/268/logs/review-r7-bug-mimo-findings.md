@@ -1,7 +1,7 @@
 # Round 7 bug report: mimo (hand-read)
 
 Raw report: final `text` event in `logs/review-r7-bug-mimo.jsonl`
-(thread ses_ffe5ee0754220ffezEaKYDgeho).
+(thread ses_0001).
 
 The normalizer kept the three items but dropped every severity
 (`logs/review-r7-bug-mimo-findings.json`); triage reads this file for

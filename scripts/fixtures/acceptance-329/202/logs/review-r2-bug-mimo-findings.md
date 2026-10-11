@@ -1,7 +1,7 @@
 # Bug findings, round 2, lane mimo (hand-read)
 
 Raw report: the final text part of
-`/home/brindlewick/postmaster/.postmaster/runs/202/logs/review-r2-bug-mimo.jsonl`
+`/home/user/postmaster/.postmaster/runs/202/logs/review-r2-bug-mimo.jsonl`
 (`normalize` refuses it: the report cites `reach.ts:1537` outside its filed
 findings; read by hand per the runbook). The lane ran the suite (50/50 in
 `reach.test.ts` at the time) and checked five non-bugs by reading; severities

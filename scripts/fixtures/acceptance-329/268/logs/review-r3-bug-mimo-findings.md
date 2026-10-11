@@ -1,7 +1,7 @@
 # Round 3 bug report: mimo (hand-written, normalizer could not parse)
 
 Raw report: `logs/review-r3-bug-mimo.jsonl`, final event message
-(session `ses_ffe5ef7997f26ffecvh4Ll0i6A`). Severity mapping: the lane
+(session `ses_0005`). Severity mapping: the lane
 filed high/low; mapped to P1/P3 below.
 
 ## Finding 1

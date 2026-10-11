@@ -1,7 +1,7 @@
 # Round 6 bug report: mimo (hand-read)
 
 Raw report: final `text` event in `logs/review-r6-bug-mimo.jsonl`
-(thread ses_ffe5ee0e3dab1ffeaKmIrW0CQp).
+(thread ses_0002).
 
 The normalizer merged this report's five items into one JSON finding
 with severity `not provided`

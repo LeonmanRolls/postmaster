@@ -6,7 +6,7 @@
     "target": "scripts/scrub-core.ts:826",
     "severity": "P1",
     "summary": "Scan personal data on regex-declaration lines",
-    "body": "When a scanned line starts with a pattern such as `const EMAIL = /.../` and contains personal data later on that line, `PATTERN_CODE` sets `codePattern` and this branch skips `scanPersonal` for the entire line; for example, `const EMAIL = /.+/; // alice@company.co` produces no finding. This lets personal data pass the privacy gate; restrict the exemption to the regex text instead of suppressing the whole line.",
+    "body": "When a scanned line starts with a pattern such as `const EMAIL = /.../` and contains personal data later on that line, `PATTERN_CODE` sets `codePattern` and this branch skips `scanPersonal` for the entire line; for example, `const EMAIL = /.+/; // user@example.invalid` produces no finding. This lets personal data pass the privacy gate; restrict the exemption to the regex text instead of suppressing the whole line.",
     "evidence": "not provided",
     "confidence": "not provided",
     "category": "not provided",

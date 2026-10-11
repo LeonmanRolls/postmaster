@@ -84,7 +84,7 @@
     "target": "scripts/lib/effective-config.ts:1135",
     "severity": "not provided",
     "summary": "applyRoles mutates a team table that can alias the caller's local settings, because mergeTables shares untouched subtrees when the global config has no [team] table.",
-    "body": "With no [team] in the global config and [roles] workhorses in settings.toml, merged.team is the same object as profiles.local.team (stripped.team). applyRoles then writes team.workhorses (and coachman, lens_reviewers) into it, so the EffectiveResult.local returned to runs-watch and others contains entries the file never set. effectiveConfig's comment says 'pure function', and the explicit-team checks depend on the same object. Fix: deep-copy the local team before applyRoles.",
+    "body": "With no [team] in the global config and [roles] workhorses in settings.toml, merged.team is the same object as profiles.local.team (stripped.team). applyRoles then writes team.workhorses (and coachman, lens_reviewers) into it, so the EffectiveResult.value returned to runs-watch and others contains entries the file never set. effectiveConfig's comment says 'pure function', and the explicit-team checks depend on the same object. Fix: deep-copy the local team before applyRoles.",
     "evidence": "not provided",
     "confidence": "not provided",
     "category": "not provided",

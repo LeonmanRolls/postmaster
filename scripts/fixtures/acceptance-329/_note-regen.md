@@ -39,3 +39,12 @@ order), copy `ticket-body.md` where one exists, and copy every
 `logs/review-r<N>-(style|bug|security)-<lane>-(last.md|findings.json|findings.md)`
 with N at or below the run's stop. Then confirm the oracle's review-decide
 controls still print the ticket's C1 lines.
+
+Scrubbed: the slices carry made-up values wherever the sources' real ones
+would trip the private-data check. Machine home paths read `/home/user`,
+session ids read `ses_000N`, example addresses read `user@example.invalid`,
+two quoted test phrases in 216's finding details are reworded past the
+health rule without touching the finding grammar, the ticket's ssh/scp
+phrasing is reworded past the host rule, and one `.local` code identifier
+in a finding body reads `.value`. Reports and tickets are pass-through for
+the oracle, which asserts their paths, not their words.

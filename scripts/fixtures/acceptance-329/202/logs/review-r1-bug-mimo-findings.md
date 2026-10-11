@@ -1,7 +1,7 @@
 # Bug findings, round 1, lane mimo (hand-read)
 
 Raw report: the final text part of
-`/home/brindlewick/postmaster/.postmaster/runs/202/logs/review-r1-bug-mimo.jsonl`
+`/home/user/postmaster/.postmaster/runs/202/logs/review-r1-bug-mimo.jsonl`
 (`normalize` cannot parse mimo's review output; read by hand per the runbook).
 The lane verified each numbered bug by execution with a targeted probe against
 `reach.ts`; `reach.test.ts` passes 27/27 beside them.

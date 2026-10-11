@@ -1,8 +1,8 @@
 # Round 1 bug findings, lane mimo (hand-normalized)
 
 Raw report: the final `text` part of
-`/home/brindlewick/postmaster/.postmaster/runs/335/logs/review-r1-bug-mimo.jsonl`
-(session `ses_ffe5ee33a02b0ffetzrmASJp14`). The normalizer refused it
+`/home/user/postmaster/.postmaster/runs/335/logs/review-r1-bug-mimo.jsonl`
+(session `ses_0003`). The normalizer refused it
 ("review output cites scripts/reviewers.ts:74 outside its filed findings"),
 so this file transcribes the report's 5 findings by hand. Severities are the
 lane's own words (Medium/Low); the coachman assigns verified severity at
