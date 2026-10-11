@@ -990,10 +990,14 @@ export function fixRound(a: FixArgs, deps: StepDeps): StepResult {
     }
     const now = deps.git(["-C", a.synthesis, "rev-parse", "HEAD"]);
     if (now.code === 0 && now.out.trim() === sha) {
-      const back = deps.git(["-C", a.synthesis, "reset", "-q", "--soft", before]);
+      // Mixed, not soft: staged content would ride into the next plain commit
+      // with no apply row, while unstaged content fails the dirt checks aloud.
+      const back = deps.git(["-C", a.synthesis, "reset", "-q", "--mixed", before]);
       passErr(res, back);
       if (back.code === 0) {
-        res.out.push(`review-round: fix ${sha} was not recorded; rolled back to ${before}`);
+        res.out.push(
+          `review-round: fix ${sha} was not recorded; rolled back to ${before} and unstaged`,
+        );
       } else {
         res.err.push(
           `review-round: fix ${sha} was not recorded and the rollback failed; record the apply by hand and escalate`,

@@ -1817,14 +1817,14 @@ describe("the round's three steps", () => {
         );
         expect(res.code).toBe(1);
         expect(res.out).toContain(
-          `review-round: fix ${SHA} was not recorded; rolled back to ${PARENT}`,
+          `review-round: fix ${SHA} was not recorded; rolled back to ${PARENT} and unstaged`,
         );
         expect(one(calls, "git", (c) => c.args.includes("reset"))?.args).toEqual([
           "-C",
           p.synthesis,
           "reset",
           "-q",
-          "--soft",
+          "--mixed",
           PARENT,
         ]);
       }, "review-round-fixback-");

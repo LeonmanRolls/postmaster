@@ -710,4 +710,30 @@ describe("R1: round 1 review regressions", () => {
     expect(out(subset)).toContain("TIMEOUT bug b: DEGRADED, timeout");
     expect(degrades(layout)).toEqual(["b"]);
   });
+
+  test("an unrecorded fix rolls back unstaged: the index is clean and the work stays in the tree", () => {
+    const layout = makeLayout([{ lens: "bug", lane: "codex", harness: "codex" }]);
+    const parent = git(layout.repo, "-C", layout.synth, "rev-parse", "HEAD");
+    mkdirSync(join(layout.dispatch, "actions.jsonl"));
+    writeFileSync(join(layout.synth, "README.md"), "fixed text\n");
+    const fix = tool(
+      layout,
+      "review-round",
+      "fix",
+      layout.dispatch,
+      layout.synth,
+      "--message",
+      "Fix the README wording",
+      "--findings",
+      "README.md:1",
+      "--",
+      "README.md",
+    );
+    expect(fix.code).toBe(1);
+    expect(out(fix)).toContain("rolled back");
+    expect(out(fix)).toContain("unstaged");
+    expect(git(layout.repo, "-C", layout.synth, "rev-parse", "HEAD")).toBe(parent);
+    expect(git(layout.repo, "-C", layout.synth, "diff", "--cached", "--name-only")).toBe("");
+    expect(readFileSync(join(layout.synth, "README.md"), "utf8")).toBe("fixed text\n");
+  });
 });
