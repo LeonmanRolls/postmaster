@@ -166,6 +166,18 @@ describe("C1: making verifiers keeps the proven ones in the .postmaster folder",
       rmSync(sandbox.dir, { recursive: true, force: true });
     }
   });
+
+  test("a direct make logs the keep as its own action line", () => {
+    const sandbox = makeSandbox();
+    try {
+      const r = localMake(sandbox, ["cli"], localWork([CLI], []));
+      expectCode(r, 0);
+      const actions = readFileSync(join(sandbox.dispatch, "actions.jsonl"), "utf8");
+      expect(actions).toContain("kept .postmaster/verifier/cli");
+    } finally {
+      rmSync(sandbox.dir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("C2: the repository shows nothing new", () => {
