@@ -90,40 +90,35 @@ export const RISES: Rise[] = [
     run: "202",
     round: 5,
     sha: "665a99f9d9c08e69c101d7fbfa927afc79b4f231",
-    decision:
-      "RULING 5: round 5 logged more P1 or P2 findings than round 4; escalate with residue",
+    decision: "RULING 5: round 5 logged more P1 or P2 findings than round 4; escalate with residue",
     counts: [12, 4, 3, 2, 4],
   },
   {
     run: "216",
     round: 3,
     sha: "26ba0d01b12af281b118322f42634d6b55b69d2c",
-    decision:
-      "RULING 3: round 3 logged more P1 or P2 findings than round 2; escalate with residue",
+    decision: "RULING 3: round 3 logged more P1 or P2 findings than round 2; escalate with residue",
     counts: [5, 1, 4],
   },
   {
     run: "268",
     round: 8,
     sha: "a0a2e66cb0635443f20e51a145bf017b69c23fa6",
-    decision:
-      "RULING 8: round 8 logged more P1 or P2 findings than round 7; escalate with residue",
+    decision: "RULING 8: round 8 logged more P1 or P2 findings than round 7; escalate with residue",
     counts: [4, 11, 4, 4, 0, 0, 0, 2],
   },
   {
     run: "335",
     round: 6,
     sha: "ad29bc3cb9765ed7dc1887cab67b5da4c5526bae",
-    decision:
-      "RULING 6: round 6 logged more P1 or P2 findings than round 5; escalate with residue",
+    decision: "RULING 6: round 6 logged more P1 or P2 findings than round 5; escalate with residue",
     counts: [7, 3, 2, 1, 1, 2],
   },
   {
     run: "342",
     round: 2,
     sha: "f15ebea26c508ff3a601e8f7802c54404efc59dd",
-    decision:
-      "RULING 2: round 2 logged more P1 or P2 findings than round 1; escalate with residue",
+    decision: "RULING 2: round 2 logged more P1 or P2 findings than round 1; escalate with residue",
     counts: [0, 1],
   },
 ];
@@ -429,11 +424,7 @@ export function reviewSurvey(lay: CopyLayout, args: string[]): Run {
 }
 
 export function reviewDecide(dispatch: string, round: number): Run {
-  return sh(
-    RUN,
-    ["review-decide", dispatch, String(round)],
-    process.env as Record<string, string>,
-  );
+  return sh(RUN, ["review-decide", dispatch, String(round)], process.env as Record<string, string>);
 }
 
 // --- canned survey answers --------------------------------------------------
@@ -530,7 +521,9 @@ export function coachmanFile(
 ): string {
   const path = join(dir, name);
   const residue = body.residue ?? "Two fixes from round 5 are not yet re-reviewed.";
-  const options = body.options ?? "1. Fix everything.\n2. Accept two findings as known limits.\n3. Run another round.";
+  const options =
+    body.options ??
+    "1. Fix everything.\n2. Accept two findings as known limits.\n3. Run another round.";
   const advice = body.advice ?? "Fix everything: the sites are small and the fix is local.";
   writeFileSync(
     path,
