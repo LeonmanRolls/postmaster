@@ -1,0 +1,10 @@
+5481 calls, 5187 distinct commands
+    0  bug-2  a newline inside a command
+    0  bug-3  a bare cd
+    4  bug-3  cd $HOME, ${HOME} or "$HOME"  e.g. cd "$HOME" && echo x > "$HOME/zz-law-13yuymv3eo3v7/notes/x.md"
+   32  bug-4  git branch or tag with a name  e.g. grep -n 'foo bar' <P>/.worktrees/1234-rev-style-claude/in.txt | git -C <P>/.worktrees/1234-rev-bug-codex cherry-pick abc
+    0  sec-2  git -c key=value
+    0  sec-3  a git read naming refs/heads/
+   14  bug-1  refusal words in the result of several commands  e.g. echo x | tee '<P>/my dir/notes.txt'
+  187  bug-5  refusal words and an exit status other than 0  e.g. install -m 644 in.txt ~/.local/share/zz-law-other-13zaamv3eo4hr/d.txt
+  360  style-1  a > inside quotes  e.g. echo $(git -C <P>/.worktrees/4507-rev-style-claude2 commit -am 'wip: x'); echo $(git -C <P>/.worktrees/4507-rev-security
