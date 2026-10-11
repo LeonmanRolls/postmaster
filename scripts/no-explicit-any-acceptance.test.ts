@@ -493,6 +493,14 @@ describe("the live tree", () => {
     expect(r.code).toBe(0);
     expect(r.out).toBe("");
   });
+
+  test("passes from a relative root", () => {
+    const r = spawnSync(wrapper, ["no-explicit-any-acceptance", ".."], {
+      cwd: join(ROOT, "scripts"),
+      encoding: "utf8",
+    });
+    expect(r.status).toBe(0);
+  });
 });
 
 describe("usage", () => {
