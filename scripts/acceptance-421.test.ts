@@ -56,7 +56,7 @@ function ledgerBytes(s: Staged): string {
 
 /** The list form's one header line per experiment, in display order. */
 function headers(out: string): string[] {
-  return out.split("\n").filter((l) => /^e\d+ /.test(l));
+  return out.split("\n").filter((l) => /^e[0-9]+ /u.test(l));
 }
 
 /** Start one experiment; the id it prints is the handle every form takes. */
@@ -586,9 +586,9 @@ describe("levels are never arms or workhorses, on the page or in the code", () =
   test("the new files name them levels", () => {
     for (const file of [EXPERIMENTS, PAGE, SKILL]) {
       const text = readFileSync(file, "utf8");
-      expect(text).not.toMatch(/workhorse/i);
-      expect(text).not.toMatch(/\barm\b/i);
-      expect(text).not.toMatch(/condition/i);
+      expect(text).not.toMatch(/workhorse/iu);
+      expect(text).not.toMatch(/(?:^|[^A-Za-z0-9_])[Aa][Rr][Mm](?:[^A-Za-z0-9_]|$)/u);
+      expect(text).not.toMatch(/condition/iu);
     }
   });
 });
@@ -611,6 +611,7 @@ describe("C5: the postmaster keeps the record and the page current", () => {
   test("every script path the runbooks name still resolves", () => {
     const r = run(RUN, ["skill-refs"], { cwd: TOOL });
     expectOk(r, "skill-refs");
+    expect(r.code).toBe(0);
   });
 
   test("the experiments skill says how to publish once, write rows and keep the link", () => {
