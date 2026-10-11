@@ -4,9 +4,14 @@
 // and the user's recorded yes; every package it brings waits seven days and
 // passes Socket's free firewall scan, and any install script in the closure
 // refuses the install unless the user allowed that package's scripts. Bare
-// syncs run drift-free against the lockfile with scripts blocked. Refusals
-// exit 1, name the package and tell the agent to stop and report it; anything
-// the guard cannot check is refused the same way.
+// syncs run drift-free against the lockfile with scripts blocked. Where the
+// dispatch records the run's base commit, the tree is also diffed against
+// it: locked pairs past the base get their age and scanner checks (and the
+// list and yes when the manifest wants them), manifest wants outside the
+// install refuse as stowaways, and override entries past the base get
+// checked like an add. Refusals exit 1, name the package and tell the agent
+// to stop and report it; anything the guard cannot check is refused the
+// same way.
 //
 //   run install-guard run <prog> <args...>   decide one invocation, then exec or refuse
 //   run install-guard facts <spec>           one package's ask facts as key=value lines
@@ -37,12 +42,19 @@
 // trust commands, rebuilds of unallowed packages, lockfile-only resolves,
 // scaffolds from outside the registry, workspace selectors and the publish
 // and credential commands are refused outright, as is any command the
-// classifier does not know: nothing runs unchecked. Bun's default-trusted
-// list, which trustedDependencies may not override, is a documented residual
-// risk, as are the seconds between a check and its install, in which a tag
-// may move or the manager may pick a transitive the guard resolved
-// differently; both need adversarial registry timing, outside the threat
-// model of a mistaken or misled agent.
+// classifier does not know: nothing runs unchecked. Scoped fetches pin to
+// the guarded registry on npm and pnpm, whose `--@scope:registry` flag wins
+// over every config file and variable; Yarn and Bun have no such flag, so
+// their fetching forms refuse a scope any rc file points elsewhere, and npm
+// and Classic syncs refuse lockfiles pinning foreign tarballs, which those
+// two fetch as written. Bun's default-trusted list, which
+// trustedDependencies may not override, is a documented residual risk, as
+// are the binary bun.lockb, whose content no check can read, the seconds
+// between a check and its install, in which a tag may move or the manager
+// may pick a transitive the guard resolved differently, and projects with
+// no readable base, where the tree diff falls back to consistency checks;
+// all but the lockb need adversarial conditions, outside the threat model
+// of a mistaken or misled agent.
 import {
   existsSync,
   mkdirSync,
@@ -54,7 +66,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, relative } from "node:path";
 import {
   listsVersion,
   parseLibraries,
@@ -2974,6 +2986,26 @@ export function wantedNames(project: string): string[] {
   return [...manifestWantedNames(manifest as Record<string, unknown>)].sort();
 }
 
+/** Every manifest want as name and range, across all four sections. */
+export function manifestRanges(project: string): Map<string, string> {
+  const ranges = new Map<string, string>();
+  let manifest: unknown;
+  try {
+    manifest = JSON.parse(readFileSync(join(project, "package.json"), "utf8")) as unknown;
+  } catch {
+    return ranges;
+  }
+  if (typeof manifest !== "object" || manifest === null) return ranges;
+  for (const section of DEP_SECTIONS) {
+    const deps = (manifest as Record<string, unknown>)[section];
+    if (typeof deps !== "object" || deps === null) continue;
+    for (const [name, range] of Object.entries(deps as Record<string, unknown>)) {
+      if (typeof range === "string" && range !== "" && !ranges.has(name)) ranges.set(name, range);
+    }
+  }
+  return ranges;
+}
+
 /** The manifest range for a name, or null when the manifest does not depend
  * on it. */
 export function manifestRange(project: string, name: string): string | null {
@@ -3249,6 +3281,159 @@ export function refuseForeignResolved(lockfile: string, registry: string): void 
   }
 }
 
+/** A flat `key: value` mapping under one top-level YAML key, read leniently:
+ * the key's line, then the deeper-indented `k: v` lines beneath it. */
+export function yamlBlockMap(text: string, key: string): Map<string, string> {
+  const out = new Map<string, string>();
+  const head = new RegExp(`^\\s*${key}:\\s*(#.*)?$`, "u");
+  let inBlock = false;
+  let blockIndent = 0;
+  for (const line of text.split("\n")) {
+    if (/^\s*(#|$)/u.test(line)) continue;
+    const indent = line.match(/^\s*/u)?.[0].length ?? 0;
+    if (head.test(line)) {
+      inBlock = true;
+      blockIndent = indent;
+      continue;
+    }
+    if (!inBlock) continue;
+    if (indent <= blockIndent) {
+      inBlock = false;
+      continue;
+    }
+    const entry = /^\s*("?)([^:\s"']+)\1:\s*(.+?)\s*(#.*)?$/u.exec(line);
+    if (entry !== null && (entry[3] ?? "") !== "") out.set(entry[2] ?? "", unquote(entry[3] ?? ""));
+  }
+  return out;
+}
+
+/** Every override the manifest and the pnpm workspace file declare, keyed
+ * `source:key` so each source diffs against its own base. Sources: the
+ * manifest's `overrides`, `resolutions` and `pnpm.overrides`, and the
+ * workspace file's `overrides`. */
+export function manifestOverrides(
+  manifest: Record<string, unknown>,
+  workspaceText: string | null,
+): Map<string, string> {
+  const out = new Map<string, string>();
+  const take = (source: string, value: unknown) => {
+    if (typeof value !== "object" || value === null || Array.isArray(value)) return;
+    for (const [key, target] of Object.entries(value as Record<string, unknown>)) {
+      if (typeof target === "string" && target !== "") out.set(`${source}:${key}`, target);
+    }
+  };
+  take("overrides", manifest.overrides);
+  take("resolutions", manifest.resolutions);
+  const pnpm = manifest.pnpm;
+  if (typeof pnpm === "object" && pnpm !== null && !Array.isArray(pnpm)) {
+    take("pnpm.overrides", (pnpm as Record<string, unknown>).overrides);
+  }
+  if (workspaceText !== null) {
+    for (const [key, target] of yamlBlockMap(workspaceText, "overrides")) {
+      out.set(`workspace:${key}`, target);
+    }
+  }
+  return out;
+}
+
+/** The package name an override key redirects: the last `>` segment with
+ * its `@range` selector stripped. Null when the key names nothing. */
+export function overrideName(key: string): string | null {
+  const segments = key.split(">");
+  const last = (segments[segments.length - 1] ?? "").trim();
+  if (last === "") return null;
+  const at = last[0] === "@" ? last.indexOf("@", 1) : last.indexOf("@");
+  const name = (at < 0 ? last : last.slice(0, at)).trim();
+  if (!/^(@[a-z0-9-~][a-z0-9-._~]*\/)?[a-z0-9-~][a-z0-9-._~]*$/iu.test(name)) return null;
+  return name;
+}
+
+/** Whether a string is an exact version, with an optional prerelease. */
+export function isExactVersion(value: string): boolean {
+  return /^\d+\.\d+\.\d+(-[0-9a-z.-]+)?(\+[0-9a-z.-]+)?$/iu.test(value);
+}
+
+/** The checked target behind one override entry: an exact `name@version`
+ * the run's checks can cover. Anything else refuses with its reason:
+ * unnameable keys, references, ranges, tags and non-registry targets. */
+export function overrideTarget(
+  key: string,
+  value: string,
+): { name: string; version: string } | { error: string } {
+  const name = overrideName(key);
+  if (name === null) {
+    return { error: `the override ${key} names no package the guard can check; spell it as name: version` };
+  }
+  if (value.startsWith("$")) {
+    return { error: `the override ${key} refers to ${value}, which the guard cannot check; pin it to an exact version` };
+  }
+  if (value.startsWith("npm:")) {
+    const rest = value.slice("npm:".length);
+    const at = rest[0] === "@" ? rest.lastIndexOf("@") : rest.indexOf("@");
+    if (at <= 0) {
+      return { error: `the override ${key} aliases ${value}, which the guard cannot check; pin it to an exact version` };
+    }
+    const target = rest.slice(0, at);
+    const version = rest.slice(at + 1);
+    if (!isExactVersion(version)) {
+      return { error: `the override ${key} aliases ${value}; pin it to an exact version the run checked` };
+    }
+    return { name: target, version };
+  }
+  if (!isExactVersion(value)) {
+    return { error: `the override ${key} points at ${value}; pin it to an exact version the run checked` };
+  }
+  return { name, version: value };
+}
+
+/** The override entries added or changed since the base, as key and value. */
+export function overridesDelta(
+  base: Map<string, string>,
+  current: Map<string, string>,
+): Array<[string, string]> {
+  const delta: Array<[string, string]> = [];
+  for (const [key, value] of current) {
+    if (base.get(key) !== value) delta.push([key, value]);
+  }
+  return delta.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+}
+
+/** The locked pairs neither the base nor a checked add accounts for. */
+export function unapprovedPairs(
+  current: Locked[],
+  base: Set<string>,
+  checked: Set<string>,
+): string[] {
+  return current
+    .map((p) => `${p.name}@${p.version}`)
+    .filter((at) => !base.has(at) && !checked.has(at))
+    .sort();
+}
+
+/** Manifest wants the install would resolve unchecked: every wanted name
+ * outside the checked specs and closure needs a locked version the base
+ * or a checked add accounts for, satisfying its range. */
+export function stowaways(
+  wanted: Map<string, string>,
+  lockedVersions: Map<string, string>,
+  specNames: Set<string>,
+  approvedPairs: Set<string>,
+): string[] {
+  const found: string[] = [];
+  for (const [name, range] of wanted) {
+    if (specNames.has(name)) continue;
+    const version = lockedVersions.get(name);
+    if (
+      version === undefined ||
+      !approvedPairs.has(`${name}@${version}`) ||
+      !satisfiesRange(version, range)
+    ) {
+      found.push(name);
+    }
+  }
+  return found.sort();
+}
+
 /** The locked name@version pairs, or null when the lockfile does not parse
  * or is opaque to the guard. */
 export function lockedOf(lockfile: string): Locked[] | null {
@@ -3259,6 +3444,13 @@ export function lockedOf(lockfile: string): Locked[] | null {
   } catch {
     return null;
   }
+  return lockedOfText(lockfile, text);
+}
+
+/** The locked pairs in lock text fetched elsewhere, or null when it does
+ * not parse. The name picks the parser; opaque names read as null. */
+export function lockedOfText(lockfile: string, text: string): Locked[] | null {
+  if (isOpaqueLock(lockfile)) return null;
   if (lockfile.endsWith("package-lock.json") || lockfile.endsWith("npm-shrinkwrap.json")) {
     return parsePackageLock(text);
   }
@@ -3402,6 +3594,141 @@ export function readBriefLibs(dispatch: string): ListedLibrary[] {
   }
 }
 
+/** The name@version pairs the run's checks cleared, one per line. */
+export function readRunChecked(dispatch: string): Set<string> {
+  try {
+    return new Set(
+      readFileSync(join(dispatch, "guard", "checked.txt"), "utf8")
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line !== ""),
+    );
+  } catch {
+    return new Set();
+  }
+}
+
+/** Record cleared pairs for the sync and later adds to stand on. */
+export function appendRunChecked(dispatch: string, pairs: Iterable<string>): void {
+  const lines = [...pairs].map((p) => `${p}\n`).join("");
+  if (lines === "") return;
+  mkdirSync(join(dispatch, "guard"), { recursive: true });
+  writeFileSync(join(dispatch, "guard", "checked.txt"), lines, { flag: "a" });
+}
+
+/** The run's base commit, or null when the dispatch records none. */
+export function runBaseHead(dispatch: string): string | null {
+  try {
+    const run = JSON.parse(readFileSync(join(dispatch, "run.json"), "utf8")) as {
+      target?: { head?: unknown };
+    };
+    return typeof run.target?.head === "string" && run.target.head !== "" ? run.target.head : null;
+  } catch {
+    return null;
+  }
+}
+
+/** One file as the base commit holds it, or null when git, the base or the
+ * file is missing. The path is absolute; anything outside the repo refuses
+ * to resolve. */
+export function baseFile(project: string, absPath: string, head: string): string | null {
+  const top = runCmd("git", ["-C", project, "rev-parse", "--show-toplevel"]);
+  if (top.code !== 0) return null;
+  const root = top.out.trim();
+  const rel = relative(root, absPath);
+  if (rel === "" || rel.startsWith("..")) return null;
+  const shown = runCmd("git", ["-C", project, "show", `${head}:${rel}`]);
+  return shown.code === 0 ? shown.out : null;
+}
+
+/** The base's wanted names, locked pairs and overrides, or null when the
+ * run records no base the guard can read: without one the guard checks
+ * consistency only, as it always has. */
+export interface BaseState {
+  wanted: Set<string>;
+  pairs: Set<string>;
+  overrides: Map<string, string>;
+}
+
+export function readBaseState(
+  project: string,
+  dispatch: string,
+  lock: string | null,
+): BaseState | null {
+  const head = runBaseHead(dispatch);
+  if (head === null) return null;
+  const top = runCmd("git", ["-C", project, "rev-parse", "--show-toplevel"]);
+  if (top.code !== 0) return null;
+  const state: BaseState = { wanted: new Set(), pairs: new Set(), overrides: new Map() };
+  const manifestText = baseFile(project, join(project, "package.json"), head);
+  let manifest: Record<string, unknown> = {};
+  if (manifestText !== null) {
+    try {
+      const parsed = JSON.parse(manifestText) as unknown;
+      if (typeof parsed === "object" && parsed !== null) {
+        manifest = parsed as Record<string, unknown>;
+        state.wanted = manifestWantedNames(manifest);
+      }
+    } catch {
+      manifest = {};
+    }
+  }
+  const workspaceText = baseFile(project, join(project, "pnpm-workspace.yaml"), head);
+  state.overrides = manifestOverrides(manifest, workspaceText);
+  if (lock !== null && !isOpaqueLock(lock)) {
+    const lockText = baseFile(project, lock, head);
+    if (lockText !== null) {
+      for (const p of lockedOfText(lock, lockText) ?? []) {
+        state.pairs.add(`${p.name}@${p.version}`);
+      }
+    }
+  }
+  return state;
+}
+
+/** The tree against the base: locked pairs past the base get their checks,
+ * manifest wants outside the install get refused as stowaways on an add,
+ * and override entries past the base get checked like an add. Without a
+ * readable base, or against an opaque lock, the guard checks consistency
+ * only, as it always has. */
+export async function verifyTreeDelta(
+  deps: RunDeps,
+  dispatch: string,
+  project: string,
+  lock: string | null,
+  specNames: Set<string>,
+  checkStowaways: boolean,
+): Promise<void> {
+  if (lock !== null && isOpaqueLock(lock)) return;
+  const base = readBaseState(project, dispatch, lock);
+  if (base === null) return;
+  const checked = readRunChecked(dispatch);
+  const current = lock === null ? [] : lockedOf(lock);
+  if (lock !== null && current === null) {
+    throw refusal(
+      "install-guard: refusing to run: the lockfile fails to parse, so the guard cannot check it against the base. Repair it first",
+    );
+  }
+  const pairs = current ?? [];
+  const delta = unapprovedPairs(pairs, base.pairs, checked).filter((at) => {
+    const name = splitNameVersion(at)?.name;
+    return name !== undefined && !specNames.has(name);
+  });
+  const ranges = manifestRanges(project);
+  await verifyDeltaPairs(deps, delta, new Set(ranges.keys()));
+  if (checkStowaways) {
+    const lockedVersions = new Map(pairs.map((p) => [p.name, p.version]));
+    const approved = new Set([...base.pairs, ...checked]);
+    const strays = stowaways(ranges, lockedVersions, specNames, approved);
+    if (strays.length > 0) {
+      throw refusal(
+        `install-guard: refusing to install: package.json wants ${strays.join(", ")}, which no checked add covers and the lockfile does not pin. Add each through a checked add first, or remove it`,
+      );
+    }
+  }
+  await verifyOverridesDelta(deps, base.overrides, currentOverrides(project), checked);
+}
+
 function noteStripped(stripped: string[]): void {
   if (stripped.length > 0) {
     process.stderr.write(
@@ -3434,7 +3761,122 @@ async function checkSpecs(
       return doc;
     },
   );
+  appendRunChecked(
+    deps.ctx.dispatch,
+    [...closure.values()].map((r) => `${r.name}@${r.version}`),
+  );
   return { scriptful, closure };
+}
+
+/** The overrides the project declares now: the manifest's and the pnpm
+ * workspace file's. */
+export function currentOverrides(project: string): Map<string, string> {
+  let manifest: Record<string, unknown> = {};
+  try {
+    const parsed = JSON.parse(readFileSync(join(project, "package.json"), "utf8")) as unknown;
+    if (typeof parsed === "object" && parsed !== null) manifest = parsed as Record<string, unknown>;
+  } catch {
+    manifest = {};
+  }
+  let workspace: string | null = null;
+  try {
+    workspace = readFileSync(join(project, "pnpm-workspace.yaml"), "utf8");
+  } catch {
+    workspace = null;
+  }
+  return manifestOverrides(manifest, workspace);
+}
+
+/** Check the override entries added or changed since the base like an
+ * add: the ticket lists each target, the run said yes, and the target's
+ * closure waits its seven days and clears the scanner. Entries the run
+ * already checked pass without a second check. */
+export async function verifyOverridesDelta(
+  deps: RunDeps,
+  base: Map<string, string>,
+  current: Map<string, string>,
+  checked: Set<string>,
+): Promise<void> {
+  const raws: string[] = [];
+  for (const [key, value] of overridesDelta(base, current)) {
+    const target = overrideTarget(key, value);
+    if ("error" in target) {
+      throw refusal(`install-guard: refusing to run: ${target.error}`);
+    }
+    if (!checked.has(`${target.name}@${target.version}`)) {
+      raws.push(`${target.name}@${target.version}`);
+    }
+  }
+  if (raws.length > 0) {
+    await checkSpecs(deps, parseAddSpecs(raws));
+  }
+}
+
+/** Check the locked pairs neither the base nor a checked add accounts for:
+ * every one waits its seven days and clears the scanner, and a manifest
+ * want among them needs the ticket's list and the recorded yes too, as a
+ * direct install would. Pairs the registry never published skip: the
+ * manager re-resolves those on an add, and the sync refuses them itself. */
+export async function verifyDeltaPairs(
+  deps: RunDeps,
+  delta: string[],
+  manifestWanted: Set<string>,
+): Promise<void> {
+  const now = Date.now();
+  const present: string[] = [];
+  for (const at of delta) {
+    const pair = splitNameVersion(at);
+    if (pair === null) continue;
+    const doc = await fetchPackument(deps.ctx, pair.name);
+    if (doc.versions[pair.version] === undefined) continue;
+    present.push(at);
+    if (manifestWanted.has(pair.name)) {
+      if (!listsVersion(deps.libs, pair.name, pair.version)) {
+        refuse(
+          `install-guard: refusing to install ${at}: the lockfile pins it past the base and the ticket's ## Libraries list names no ${at}`,
+        );
+      }
+      if (!deps.approvals.yes.has(at)) {
+        refuse(
+          `install-guard: refusing to install ${at}: the lockfile pins it past the base and the run records no yes for it`,
+        );
+      }
+    }
+    const age = versionAgeMs(doc, pair.version, now);
+    if ((age === null || age < WEEK_MS) && !deps.approvals.waivers.has(at)) {
+      if (age === null) {
+        throw refusal(
+          `install-guard: refusing to install ${at}: it has no published date, so the seven days wait cannot be checked. Ask for an age waiver first`,
+        );
+      }
+      const days = Math.floor(age / (24 * 60 * 60 * 1000));
+      refuse(
+        `install-guard: refusing to install ${at}: it is ${days} ${days === 1 ? "day" : "days"} old, and every version waits seven days. Ask for an age waiver first`,
+      );
+    }
+  }
+  const verdicts = await mapPool(present, CONCURRENCY, async (at) => {
+    const pair = splitNameVersion(at);
+    return {
+      at,
+      verdict:
+        pair === null
+          ? { status: "clean" as const }
+          : await fetchVerdict(deps.ctx, pair.name, pair.version),
+    };
+  });
+  for (const { at, verdict } of verdicts) {
+    if (verdict.status === "flagged") {
+      refuse(
+        `install-guard: refusing to install ${at}: the Socket scanner flags it (${verdict.types.join(", ")})`,
+      );
+    }
+    if (verdict.status === "unknown") {
+      refuse(
+        `install-guard: refusing to install ${at}: ${verdict.why}; a lane installs only what the scanner clears`,
+      );
+    }
+  }
 }
 
 /** One spec pinned to its checked version. */
@@ -3684,6 +4126,14 @@ async function runRun(shimDir: string, rawProg: string, argv: string[]): Promise
         ? parseAddSpecs(classification.specs)
         : expandUpdateSpecs(project, classification.specs);
     const { scriptful, closure } = await checkSpecs(deps, specs);
+    await verifyTreeDelta(
+      deps,
+      dispatch,
+      project,
+      findLockfile(pm, project),
+      new Set([...specNamesOf(specs), ...closure.keys()]),
+      true,
+    );
     if (pm === "bun") writeTrustedDeps(project, scriptful);
     if (pm === "yarn" || pm === "bun") refuseForeignScopes(pm, yarnKind, cwd, project, registry);
     const { prefix, cmd, rest } = commandOf(key, effArgv);
@@ -3734,6 +4184,7 @@ async function runRun(shimDir: string, rawProg: string, argv: string[]): Promise
       );
     }
     const pairs = locked ?? [];
+    await verifyTreeDelta(deps, dispatch, project, lock, new Set(), false);
     if (lock !== null && (pm === "npm" || (pm === "yarn" && yarnKind === "classic"))) {
       refuseForeignResolved(lock, registry);
     }

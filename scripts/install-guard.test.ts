@@ -5,9 +5,11 @@ import { createRequire } from "node:module";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { toolRoot } from "./lib/paths.ts";
-import { withTempDir } from "./lib/proc.ts";
+import { run, withTempDir } from "./lib/proc.ts";
 import {
+  appendRunChecked,
   applyPins,
+  baseFile,
   berryScopes,
   bunfigScopes,
   classify,
@@ -18,25 +20,36 @@ import {
   fetchVerdict,
   findLockfile,
   installArgs,
+  isExactVersion,
   lockResolved,
+  manifestOverrides,
   npmDriftNames,
   npmrcScopes,
+  overrideName,
+  overrideTarget,
+  overridesDelta,
   parseAddSpecs,
   parseSpec,
   planPins,
   projectOf,
+  readBaseState,
+  readRunChecked,
   refuseForeignResolved,
   refuseForeignScopes,
   registryEnvStrips,
   resolveClosure,
+  runBaseHead,
   sameOrigin,
   sanitize,
   scopeFlags,
   scopeOfName,
   scopePins,
   scopesOfWords,
+  stowaways,
   syncArgs,
+  unapprovedPairs,
   workspaceSelector,
+  yamlBlockMap,
   type GuardContext,
 } from "./install-guard.ts";
 
@@ -679,4 +692,125 @@ test("install and sync plans pin the scopes they checked", () => {
     "--immutable",
     "--non-interactive",
   ]);
+});
+
+test("overrides reduce to exact checked targets", () => {
+  expect(overrideName("foo")).toBe("foo");
+  expect(overrideName("foo@^1")).toBe("foo");
+  expect(overrideName("@s/foo@^1")).toBe("@s/foo");
+  expect(overrideName("a@1>b@2")).toBe("b");
+  expect(overrideName("a>")).toBeNull();
+  expect(overrideName("@s")).toBeNull();
+  expect(isExactVersion("1.2.3")).toBe(true);
+  expect(isExactVersion("1.2.3-rc.1")).toBe(true);
+  expect(isExactVersion("^1.2.3")).toBe(false);
+  expect(isExactVersion("latest")).toBe(false);
+  expect(overrideTarget("foo", "1.2.3")).toEqual({ name: "foo", version: "1.2.3" });
+  expect(overrideTarget("foo@^1", "npm:bar@1.2.3")).toEqual({ name: "bar", version: "1.2.3" });
+  const errOf = (key: string, value: string): string => {
+    const target = overrideTarget(key, value);
+    if (!("error" in target)) throw new Error(`expected ${key}=${value} to refuse`);
+    return target.error;
+  };
+  expect(errOf("foo", "^1.2.3")).toContain("pin it to an exact version");
+  expect(errOf("foo", "$bar")).toContain("cannot check");
+  expect(errOf("a>", "1.2.3")).toContain("names no package");
+  expect(overridesDelta(new Map([["a", "1"]]), new Map([["a", "1"]]))).toEqual([]);
+  expect(overridesDelta(new Map([["a", "1"]]), new Map([["a", "2"], ["b", "1"]]))).toEqual([
+    ["a", "2"],
+    ["b", "1"],
+  ]);
+});
+
+test("the delta cores name unapproved pairs and stowaways", () => {
+  expect(
+    unapprovedPairs(
+      [
+        { name: "a", version: "1.0.0" },
+        { name: "b", version: "1.0.0" },
+        { name: "c", version: "1.0.0" },
+      ],
+      new Set(["a@1.0.0"]),
+      new Set(["b@1.0.0"]),
+    ),
+  ).toEqual(["c@1.0.0"]);
+  expect(
+    stowaways(
+      new Map([
+        ["spec", "^1.0.0"],
+        ["locked", "^1.0.0"],
+        ["loose", "*"],
+        ["moved", "^2.0.0"],
+      ]),
+      new Map([
+        ["locked", "1.2.3"],
+        ["moved", "1.2.3"],
+      ]),
+      new Set(["spec"]),
+      new Set(["locked@1.2.3", "moved@1.2.3"]),
+    ),
+  ).toEqual(["loose", "moved"]);
+});
+
+test("override sources merge under their own keys", () => {
+  const merged = manifestOverrides(
+    {
+      overrides: { a: "1.0.0" },
+      resolutions: { b: "2.0.0" },
+      pnpm: { overrides: { c: "3.0.0" } },
+    },
+    "packages:\n  - .\noverrides:\n  d: 4.0.0\n",
+  );
+  expect([...merged]).toEqual([
+    ["overrides:a", "1.0.0"],
+    ["resolutions:b", "2.0.0"],
+    ["pnpm.overrides:c", "3.0.0"],
+    ["workspace:d", "4.0.0"],
+  ]);
+  expect(yamlBlockMap("overrides:\n  a: 1\nnext: 2\n", "overrides")).toEqual(new Map([["a", "1"]]));
+});
+
+test("the checked record round-trips and the base reads from git", () => {
+  withTempDir((tmp) => {
+    const dispatch = join(tmp, "dispatch");
+    expect([...readRunChecked(dispatch)]).toEqual([]);
+    appendRunChecked(dispatch, ["a@1.0.0", "b@2.0.0"]);
+    appendRunChecked(dispatch, ["a@1.0.0"]);
+    expect([...readRunChecked(dispatch)].sort()).toEqual(["a@1.0.0", "b@2.0.0"]);
+    expect(runBaseHead(dispatch)).toBeNull();
+    // A git project with a committed base.
+    const repo = join(tmp, "repo");
+    const proj = join(repo, "proj");
+    mkdirSync(proj, { recursive: true });
+    const manifest = { dependencies: { a: "^1.0.0" }, overrides: { b: "2.0.0" } };
+    writeFileSync(join(proj, "package.json"), JSON.stringify(manifest));
+    writeFileSync(
+      join(proj, "package-lock.json"),
+      JSON.stringify({ packages: { "node_modules/a": { version: "1.0.0" } } }),
+    );
+    for (const args of [
+      ["init"],
+      ["config", "user.email", "t@t"],
+      ["config", "user.name", "t"],
+      ["add", "-A"],
+      ["commit", "-m", "base"],
+    ]) {
+      const r = run("git", ["-C", repo, ...args]);
+      expect(r.code).toBe(0);
+    }
+    const head = run("git", ["-C", repo, "rev-parse", "HEAD"]).out.trim();
+    writeFileSync(join(dispatch, "run.json"), JSON.stringify({ target: { head } }));
+    expect(runBaseHead(dispatch)).toBe(head);
+    const lock = join(proj, "package-lock.json");
+    expect(baseFile(proj, join(proj, "package.json"), head)).toContain('"a":"^1.0.0"');
+    expect(baseFile(proj, join(proj, "missing.json"), head)).toBeNull();
+    const base = readBaseState(proj, dispatch, lock);
+    if (base === null) throw new Error("the base did not read");
+    expect([...base.wanted]).toEqual(["a"]);
+    expect([...base.pairs]).toEqual(["a@1.0.0"]);
+    expect([...base.overrides]).toEqual([["overrides:b", "2.0.0"]]);
+    // Outside the repo, and without a base, nothing resolves.
+    expect(baseFile(proj, join(tmp, "elsewhere.json"), head)).toBeNull();
+    expect(readBaseState(proj, join(tmp, "nodispatch"), lock)).toBeNull();
+  });
 });
