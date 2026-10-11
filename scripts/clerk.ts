@@ -16,7 +16,11 @@
 import { randomBytes } from "node:crypto";
 import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
-import { effectiveConfigForProject, globalConfigPath } from "./lib/effective-config.ts";
+import {
+  effectiveConfigForProject,
+  ensureIgnore,
+  globalConfigPath,
+} from "./lib/effective-config.ts";
 import { scriptsDir, toolRoot } from "./lib/paths.ts";
 import { run } from "./lib/proc.ts";
 import { shlexQuote } from "./verify.ts";
@@ -264,6 +268,9 @@ function writeBrief(repo: string, id: string): Brief {
   const base = defaultBase(repo);
   const dir = clerkDir(repo);
   mkdirSync(dir, { recursive: true });
+  // The brief, the draft and the story link stay out of the repository: the
+  // clerk may run before any dispatch has written the ignore rules.
+  ensureIgnore(repo, true);
   const draft = clerkFile(repo, id, ".md");
   const storyDir = clerkFile(repo, id, ".story");
   const storyLine = makeStory

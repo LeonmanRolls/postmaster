@@ -240,6 +240,17 @@ describe("brief", () => {
     expect(brief).toContain("Make a story with the draft");
   });
 
+  test("brief keeps the clerk folder out of the repository", () => {
+    const repo = localRepo();
+    const id = localTicket(repo, "Fix the list");
+    const cfgDir = mkdtempSync(join(tmpdir(), "clerk-cfg-"));
+    const cfg = stubConfig(cfgDir);
+    const r = sh(SELF, ["clerk", "brief", repo, id], { POSTMASTER_CONFIG: cfg });
+    expect(r.code).toBe(0);
+    const ignored = sh("git", ["-C", repo, "check-ignore", "-q", join(repo, ".postmaster", "clerk", `${id}.story`, "link.txt")]);
+    expect(ignored.code).toBe(0);
+  });
+
   test("brief leaves one label holding a comma alone: it is not the ready mark", () => {
     const repo = localRepo();
     const id = localTicket(repo, "Fix the list");
