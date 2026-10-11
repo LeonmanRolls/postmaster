@@ -1,0 +1,30 @@
+module	first	every	why
+scripts/push-onto-argument.ts	1	1	the page's positive control for both counts: pushes onto its argument
+scripts/local-array.ts	0	2	the page's negative control for the first count: builds a local array and returns it (two pushes on the local, which only the second count holds)
+scripts/local-let.ts	0	1	the page's positive control for the second count: gives a local let a new value
+scripts/const-map-filter.ts	0	0	the page's negative control for the second count: only const, map and filter
+scripts/property-of-argument.ts	2	2	assigns a property and an element of an argument
+scripts/rebind-argument.ts	1	1	assigns to an argument itself
+scripts/inplace-on-argument.ts	13	13	each of the ticket's thirteen in-place methods, once, on an argument
+scripts/delete-operator.ts	1	1	delete on a property of an argument
+scripts/object-assign-target.ts	1	1	Object.assign with an argument as the target
+scripts/object-assign-fresh.ts	0	1	Object.assign into a new object
+scripts/update-and-compound.ts	2	2	++ and += on properties of an argument
+scripts/module-state.ts	2	2	a module-level variable given a new value, a module-level Map changed in place
+scripts/module-top-level.ts	0	2	changes made by the module's own top-level code to a variable it declared
+scripts/imported-object.ts	2	2	an imported object changed in place and by assignment
+scripts/alias-of-argument.ts	3	3	a local that is another name for a property, an element, and a part got with get
+scripts/alias-of-module.ts	1	1	a local that is another name for a module-level array, sorted in place
+scripts/iteration-aliases.ts	2	3	a loop over a filtered copy and over Object.entries hands out the original's elements; sorting Object.entries is the function's own
+scripts/global-state.ts	2	2	process.env and process.exitCode assigned
+scripts/this-receiver.ts	1	2	a method changing its receiver; the constructor building it
+scripts/captured-callback.ts	1	2	a callback changing a variable of its enclosing function; the loop form of the same
+scripts/local-object.ts	0	5	objects, copies and maps the function built, changed in place
+scripts/call-result.ts	0	1	a local that holds a call's result is not known to be another name for anything
+scripts/rest-parameter.ts	1	2	a rest parameter's own array is new; an element it holds is the caller's
+scripts/loop-counter.ts	0	2	a loop counter and an accumulator given new values
+scripts/shadowed-name.ts	0	1	a local with the name of an argument is not the argument
+scripts/callback-parameter.ts	1	1	the parameter of a callback is an argument of the callback
+scripts/destructuring.ts	3	3	destructuring assignment writes to each target; a destructured parameter is an argument
+scripts/chained-and-optional.ts	1	2	sorting a new array in the same expression is the function's own; an optional call on an argument is not
+scripts/lib/tags.ts	9	9	nine functions that each push onto an argument once (their tags are checked apart)

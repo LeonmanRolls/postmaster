@@ -18,6 +18,18 @@ picture and a plain welcome to start and the ticket's words a step at a time. Ad
 change and one ticket, nothing measured. #352 builds the page for tickets, and #434 has the booking clerk make one
 for every ticket it prepares.
 
+## [2026-10-09] ingest | what two counts of mutation flag in the project's scripts, and whether they reach the review findings
+
+Issue #372, the second half of trial 4 on [the functional-core page](concepts/functional-core-and-verification.md).
+Counted mutation twice in the 79 non-test scripts on `main` (at `67d4ae2`) and in the code of the 19 review rounds of
+#202, #216, #252 and #268, and recorded the run in `raw/trials/2026-10-09-mutation-counts/`: the rule (an Oxlint plugin),
+its 105 controls, both counts at every commit, the findings joined to the functions that hold their lines, and a draw of
+30 flagged places read by one reader and 10 of them by a second. The first count flags 360 places on `main`, an estimated
+312 of them not hazards, so its first failure test is met; 8 of the 78 findings that cite a TypeScript line sit in a
+function it flags, so its second failure test is not met, and 8 is about what random placement would give. The result is
+in the trial 4 section, with one sentence in the second part of proposal 1. Nothing was installed in the project, and
+nothing in the gate, the rules or the runbooks changed. No standing changed.
+
 ## [2026-10-09] ingest | a purity check on environment, clock and import use
 
 Issue #366, the first half of trial 4 on [the functional-core page](concepts/functional-core-and-verification.md).
@@ -51,6 +63,24 @@ before did not fail. Proposal 2, the Effect sentences and the answer say the sam
 generator, two states that only the findings had named (a submodule and an unbranched merge); a model that has not seen
 the findings now writes the list. A third independent check of the rewrite found 16 problems (3 overstated, 1
 unsupported, 5 missing a limit, 3 stale, 4 minor), all corrected. Nothing was run or installed. No standing changed.
+
+## [2026-10-05] ingest | how to design tickets and acceptance criteria that a run can finish
+
+Issue [#293](https://github.com/brindlewick/postmaster/issues/293). Captured 69 papers and pages into `raw/papers/` and `raw/articles/`, each with its
+address, the day it was read and the passages relied on, and recorded the search in
+`raw/trials/2026-10-04-criteria-search/`: every query, the rule for choosing in each of four groups,
+the controls and what was not read. Recorded a count of 21 runs in
+`raw/trials/2026-10-04-unbounded-criteria-count/`: review rounds and severe findings per round,
+whether each ticket as first received asked for something unbounded (three readers, two given only
+the ticket texts), where 99 late severe findings sat (three readers), and the five runs in which the
+user bounded a criterion mid-run. Added
+[Tickets and acceptance criteria that a run can finish](concepts/ticket-and-criteria-design.md),
+**claimed**, with a map in four groups, the four shapes with what the sources recommend, eleven
+further failures, twelve proposed changes to the template and the clerk's instructions, and what [#291](https://github.com/brindlewick/postmaster/issues/291)
+already did. The count found that [the lane audit](concepts/several-lanes.md)'s table of severe
+findings reads low for [#124](https://github.com/brindlewick/postmaster/issues/124) (28 where the run's own checkpoint lists 94) and [#109](https://github.com/brindlewick/postmaster/issues/109) (about 7 missing);
+that page was not edited. No standing, template or runbook changed: outside work moves no standing,
+and the proposals are the user's to decide.
 
 ## [2026-10-05] ingest | whether the lanes saw each other's work
 

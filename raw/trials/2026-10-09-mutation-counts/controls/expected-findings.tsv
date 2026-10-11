@@ -1,0 +1,10 @@
+key	kind	in_scope	first_here	first_within	every_here	why
+control/in-flagged	ts-line	yes	1	1	1	the positive control: the holder is flagged in both counts
+control/in-clean	ts-line	yes	0	0	0	the negative control: the holder is flagged in neither
+control/local-only	ts-line	yes	0	0	2	the holder is flagged only by the second count
+control/module-top	ts-line	yes	0	0	2	module-level line: matches module-level places, and those are local
+control/in-callback	ts-line	yes	1	1	1	the innermost function is the callback
+control/outer-of-callback	ts-line	yes	0	1	0	the callback's change is inside the holder but not directly in it
+control/other-file	ts-line	no	-	-	-	a file the tree does not hold is out of scope, not unflagged
+control/runbook	runbook	n/a	-	-	-	reported apart
+control/no-line	no-line	n/a	-	-	-	reported apart
