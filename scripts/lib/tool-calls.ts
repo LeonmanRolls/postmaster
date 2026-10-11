@@ -85,6 +85,7 @@ export function toolCallsFromEvents(harness: Harness, events: unknown[]): ToolCa
                 ? block.content
                 : JSON.stringify(block.content ?? "");
             calls[index]!.output += `\n${body}`;
+            if (block.is_error === true) calls[index]!.exitCode = 1;
           }
         }
       }
@@ -102,7 +103,10 @@ export function toolCallsFromEvents(harness: Harness, events: unknown[]): ToolCa
       } else if (event.type === "tool_execution_end") {
         const id = text(event.toolCallId || event.callId || event.id);
         const index = linked.get(id) ?? pending.get(text(event.toolName));
-        if (index !== undefined) calls[index]!.output = text(event.result ?? event.output);
+        if (index !== undefined) {
+          calls[index]!.output = text(event.result ?? event.output);
+          if (event.isError === true) calls[index]!.exitCode = 1;
+        }
       }
     } else if (harness === "muse") {
       if (event.payload_type !== "tool.result") continue;

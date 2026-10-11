@@ -4,35 +4,42 @@
 //   run ticket-reads <dispatch> [--record]
 //
 // The agents are the manifest's coachman legs and workhorse lanes, and the
-// reviewers its review-launch lines name. Each agent's record is its event
-// stream in <dispatch>/logs/, read with the per-harness tool-call reader the
-// reach control shares, plus a claude lane's fork transcripts beside it. The
-// check classifies executed tool calls, never prose: brief and prompt text
-// sits in the same records and names the same read forms.
+// reviewers its review-launch lines name. Each leg reads with its own harness
+// where team.coachman_legs names one, and a walled leg's renamed streams read
+// beside its fresh one. Each agent's record is its event stream in
+// <dispatch>/logs/, read with the per-harness tool-call reader the reach
+// control shares, plus a claude lane's fork transcripts beside it. The check
+// classifies executed tool calls, never prose: brief and prompt text sits in
+// the same records and names the same read forms.
 //
 // What counts as a read of the text, by tracker kind. GitHub: gh issue view
-// printing the body or comments, gh api on repos/<owner>/<repo>/issues/<n>
-// or its comments, gh api graphql naming the issue, scripts/run github
-// <repo> read <n>, and a fetch of the issue's web address. Local:
-// scripts/run local <repo> read <n>, and a read of the ticket's file in the
-// store under <git-common-dir>/postmaster/tickets/. Any kind: a read of
+// printing the body or comments; gh api on repos/<owner>/<repo>/issues/<n>
+// or its comments with a reading method; gh api graphql naming the issue in
+// the run's repository; scripts/run github <repo> read <n>; and a fetch of
+// the issue's web address. Local: scripts/run local <repo> read <n>, and a
+// read of the ticket's file in the store under
+// <git-common-dir>/postmaster/tickets/. Any kind: a read of
 // .postmaster/clerk/<n>.md in the project. A read of the title or state
 // alone is named and is not a read of the text.
 //
 // What counts as unknown, never clean. A record that is missing or cannot be
-// read, a harness with no reader, a tracker of a kind beyond github and
-// local, and a command that names the ticket in a form the check does not
-// know: another gh issue verb beyond comment, close and reopen, an adapter
-// search or a verb the adapters do not have, another issues subpath, a
-// --json field beyond title and state, a listing of the ticket file, a
-// search across the ticket store. Known writes show no ticket text and count
-// for nothing. A failed command read nothing and counts
+// read, a run whose run.json cannot be read, a harness with no reader, a
+// tracker of a kind beyond github and local, and a command that names the
+// ticket in a form the check does not know: another gh issue verb beyond
+// comment, close and reopen, an adapter search or a verb the adapters do not
+// have, another issues subpath, a --json field beyond title and state, a
+// listing of the ticket file, a search across the ticket store, a graphql
+// query whose repository cannot be told, and a relative path after a cd the
+// check cannot follow. Known writes and mutating api calls show no ticket
+// text and count for nothing. A failed command read nothing and counts
 // for nothing; where the record carries no exit, the invocation counts.
 // Only the run's own ticket in its own tracker counts: another number,
 // another repo and the wrong tracker are ignored, and so is a number in a
 // command that reads nothing. The thread exports in <dispatch>/sessions/
-// are the same threads in harness-native form and are not read. Piped
-// executors (xargs, find -exec) are not followed.
+// are the same threads in harness-native form and are not read. Segments
+// split on newlines as well as shell separators; (...) groups, cd and
+// command substitutions are followed, and find and xargs scans of the ticket
+// directories read as unknown, since their -exec is not followed.
 //
 //   exit 0  the check ran; stdout holds the outcome line first:
 //           ticket-reads: not read | read by <agent> (<form>) | unknown (<reason>)
@@ -119,6 +126,8 @@ const FETCH_VERBS = new Set([
   "xdg-open",
 ]);
 const SHELL_WRAPPERS = new Set(["bash", "sh", "dash", "zsh", "eval"]);
+/** Verbs that can walk a directory and run a reader over it, unseen. */
+const SCAN_VERBS = new Set(["find", "fd", "fdfind", "xargs"]);
 
 type Kind = "github" | "local";
 
@@ -194,11 +203,10 @@ function unwrapCodex(command: string): string {
 }
 
 /**
- * A command's pipeline segments, split outside quotes and backquotes, with
- * heredoc bodies dropped: a <<EOF body is text being written, not commands
- * being run.
+ * The command with heredoc bodies dropped: a <<EOF body is text being
+ * written, not commands being run.
  */
-function splitSegments(command: string): string[] {
+function dropHeredocs(command: string): string {
   const lines = unwrapCodex(command).split("\n");
   const kept: string[] = [];
   let terminator: string | null = null;
@@ -216,10 +224,19 @@ function splitSegments(command: string): string[] {
     }
     kept.push(line);
   }
+  return kept.join("\n");
+}
+
+/**
+ * A command's pipeline segments, split outside quotes and backquotes, with
+ * heredoc bodies dropped. Newlines split like any other separator: a read on
+ * a later line of a multi-line command is still a read.
+ */
+function splitSegments(command: string): string[] {
   const segments: string[] = [];
   let current = "";
   let quote: string | null = null;
-  const flat = kept.join("\n");
+  const flat = dropHeredocs(command);
   for (const char of flat) {
     if (quote !== null) {
       current += char;
@@ -227,7 +244,14 @@ function splitSegments(command: string): string[] {
     } else if (char === '"' || char === "'" || char === "`") {
       quote = char;
       current += char;
-    } else if (char === ";" || char === "|" || char === "&" || char === "(" || char === ")") {
+    } else if (
+      char === ";" ||
+      char === "|" ||
+      char === "&" ||
+      char === "(" ||
+      char === ")" ||
+      char === "\n"
+    ) {
       if (current.trim()) segments.push(current);
       current = "";
     } else {
@@ -236,6 +260,215 @@ function splitSegments(command: string): string[] {
   }
   if (current.trim()) segments.push(current);
   return segments;
+}
+
+interface CommandPart {
+  /** A plain segment, or the inner text of a top-level (...) group. */
+  kind: "segment" | "subshell";
+  text: string;
+}
+
+/**
+ * A command's parts in order: plain segments split as splitSegments splits
+ * them, with each top-level (...) group as its own subshell part, so a cd
+ * inside one never leaks out. A $( group is a substitution, not a subshell,
+ * but its inner text is shell code either way and reads the same.
+ */
+function splitParts(command: string): CommandPart[] {
+  const parts: CommandPart[] = [];
+  let current = "";
+  let quote: string | null = null;
+  let depth = 0;
+  let group = "";
+  let groupQuote: string | null = null;
+  const pushCurrent = (): void => {
+    if (current.trim()) parts.push({ kind: "segment", text: current });
+    current = "";
+  };
+  const flat = dropHeredocs(command);
+  for (const char of flat) {
+    if (depth > 0) {
+      if (groupQuote !== null) {
+        group += char;
+        if (char === groupQuote) groupQuote = null;
+      } else if (char === '"' || char === "'" || char === "`") {
+        groupQuote = char;
+        group += char;
+      } else if (char === "(") {
+        depth++;
+        group += char;
+      } else if (char === ")") {
+        depth--;
+        if (depth === 0) {
+          parts.push({ kind: "subshell", text: group });
+          group = "";
+        } else {
+          group += char;
+        }
+      } else {
+        group += char;
+      }
+      continue;
+    }
+    if (quote !== null) {
+      current += char;
+      if (char === quote) quote = null;
+    } else if (char === '"' || char === "'" || char === "`") {
+      quote = char;
+      current += char;
+    } else if (char === "(") {
+      if (current.endsWith("$")) current = current.slice(0, -1);
+      pushCurrent();
+      depth = 1;
+    } else if (char === ")") {
+      pushCurrent();
+    } else if (char === ";" || char === "|" || char === "&" || char === "\n") {
+      pushCurrent();
+    } else {
+      current += char;
+    }
+  }
+  if (depth > 0) {
+    // Unbalanced: the group never closed, so read it as plain segments.
+    pushCurrent();
+    for (const segment of splitSegments(group)) parts.push({ kind: "segment", text: segment });
+  } else {
+    pushCurrent();
+  }
+  return parts;
+}
+
+/** The body of a $( group starting after its paren, and where it ends. */
+function balancedBody(text: string, start: number): [string, number] {
+  let quote: string | null = null;
+  let depth = 1;
+  let i = start;
+  while (i < text.length && depth > 0) {
+    const char = text[i]!;
+    if (quote !== null) {
+      if (char === quote) quote = null;
+    } else if (char === '"' || char === "'") {
+      quote = char;
+    } else if (char === "(") {
+      depth++;
+    } else if (char === ")") {
+      depth--;
+    }
+    i++;
+  }
+  return [text.slice(start, depth === 0 ? i - 1 : i), i];
+}
+
+/**
+ * The bodies of command substitutions the segment runs: $(...) outside single
+ * quotes, and `...` spans. A quoted body still runs, so it is classified
+ * beside the segment that carries it.
+ */
+function substitutionBodies(segment: string): string[] {
+  const bodies: string[] = [];
+  let quote: string | null = null;
+  let i = 0;
+  while (i < segment.length) {
+    const char = segment[i]!;
+    if (quote === "'") {
+      if (char === "'") quote = null;
+      i++;
+    } else if (quote === "`") {
+      if (char === "`") quote = null;
+      else if (char === "$" && segment[i + 1] === "(") {
+        const [body, end] = balancedBody(segment, i + 2);
+        bodies.push(body);
+        i = end;
+        continue;
+      }
+      i++;
+    } else if (quote === '"') {
+      if (char === '"') quote = null;
+      else if (char === "$" && segment[i + 1] === "(") {
+        const [body, end] = balancedBody(segment, i + 2);
+        bodies.push(body);
+        i = end;
+        continue;
+      } else if (char === "`") {
+        const end = segment.indexOf("`", i + 1);
+        bodies.push(end < 0 ? segment.slice(i + 1) : segment.slice(i + 1, end));
+        i = end < 0 ? segment.length : end + 1;
+        continue;
+      }
+      i++;
+    } else if (char === "'" || char === '"' || char === "`") {
+      quote = char;
+      i++;
+    } else if (char === "$" && segment[i + 1] === "(") {
+      const [body, end] = balancedBody(segment, i + 2);
+      bodies.push(body);
+      i = end;
+    } else {
+      i++;
+    }
+  }
+  // A backquote span outside single quotes runs its body.
+  quote = null;
+  i = 0;
+  while (i < segment.length) {
+    const char = segment[i]!;
+    if (quote === "'") {
+      if (char === "'") quote = null;
+      i++;
+    } else if (char === "'") {
+      quote = char;
+      i++;
+    } else if (char === "`") {
+      const end = segment.indexOf("`", i + 1);
+      bodies.push(end < 0 ? segment.slice(i + 1) : segment.slice(i + 1, end));
+      i = end < 0 ? segment.length : end + 1;
+    } else {
+      i++;
+    }
+  }
+  return bodies;
+}
+
+/** The cwd after a segment runs: cd moves it, anything else leaves it. */
+function cdAfter(cwd: string | null, segment: string): string | null {
+  const head = segmentHead(segment);
+  if (head.verb !== "cd") return cwd;
+  let at = head.at + 1;
+  while (at < head.words.length) {
+    const flag = head.words[at]!;
+    if (flag === "--" || /^-[A-Za-z]+$/u.test(flag)) at++;
+    else break;
+  }
+  const arg = head.words[at] ?? "";
+  if (arg === "" || arg === "~") return expandHome("~");
+  if (arg === "-") return null;
+  const clean = stripQuotes(arg);
+  if (!clean || clean.includes("$") || /[*?[\]]/u.test(clean)) return null;
+  if (isAbsolute(clean)) return physical(clean);
+  return cwd === null ? null : physical(resolve(cwd, clean));
+}
+
+/**
+ * Classify a shell command: its parts in order with cd tracked, each (...)
+ * group and command substitution classified where it stands. cwd is null
+ * once a cd the check cannot follow runs; relative paths then read as
+ * unknown, never clean.
+ */
+function classifyCommand(ctx: Ctx, command: string, own: string | null, depth = 0): Finding[] {
+  const findings: Finding[] = [];
+  let cwd = own;
+  for (const part of splitParts(command)) {
+    if (part.kind === "subshell") {
+      findings.push(...classifyCommand(ctx, part.text, cwd, depth));
+      continue;
+    }
+    findings.push(...classifySegment(ctx, part.text, cwd, depth));
+    for (const body of substitutionBodies(part.text)) {
+      findings.push(...classifyCommand(ctx, body, cwd, depth));
+    }
+    cwd = cdAfter(cwd, part.text);
+  }
+  return findings;
 }
 
 function baseVerb(word: string): string {
@@ -359,6 +592,45 @@ function ghRepoOverride(segment: string, flagRepo: string | null): string | null
   return env ? stripQuotes(env[1]!) : null;
 }
 
+/**
+ * The gh api HTTP method, uppercase, read outside quoted flag values so a
+ * -f body naming a flag cannot spoof it; null when none is named, "?" when
+ * the flag carries none.
+ */
+function ghApiMethod(segment: string): string | null {
+  const bare = segment.replace(/"[^"]*"/gu, " ").replace(/'[^']*'/gu, " ");
+  const words = bare.trim().split(/\s+/u).filter(Boolean); // ASCII: shell words split on ASCII whitespace
+  for (let i = 0; i < words.length; i++) {
+    const word = words[i]!;
+    if (word === "-X" || word === "--method") {
+      const value = words[i + 1] ?? "";
+      return value ? value.toUpperCase() : "?";
+    }
+    const stuck = /^-X([A-Za-z]+)$/u.exec(word); // ASCII: HTTP methods are ASCII
+    if (stuck) return stuck[1]!.toUpperCase();
+    if (word.startsWith("--method=")) {
+      const value = word.slice("--method=".length);
+      return value ? value.toUpperCase() : "?";
+    }
+  }
+  return null;
+}
+
+/** A graphql issue read against the run's repository: read, ignored, or unknown. */
+function graphqlRepoFinding(ctx: Ctx, segment: string): Finding | null {
+  const repos = new Set<string>();
+  const ownerFirst = /owner\s*:\s*"([^"]+)"\s*,\s*name\s*:\s*"([^"]+)"/giu; // ASCII: graphql names are ASCII
+  const nameFirst = /name\s*:\s*"([^"]+)"\s*,\s*owner\s*:\s*"([^"]+)"/giu;
+  for (const match of segment.matchAll(ownerFirst)) repos.add(`${match[1]}/${match[2]}`);
+  for (const match of segment.matchAll(nameFirst)) repos.add(`${match[2]}/${match[1]}`);
+  if (repos.size !== 1 || ctx.nwo === null) {
+    return { agent: "", finding: "unknown", form: "gh api graphql", detail: "repo unknown" };
+  }
+  const [nwo] = [...repos];
+  if (!sameNwo(nwo!, ctx.nwo)) return null;
+  return { agent: "", finding: "read", form: "gh api graphql", detail: "" };
+}
+
 /** Classify one gh segment; null when it is not this ticket. */
 function classifyGh(ctx: Ctx, segment: string, head: Head): Finding | null {
   if (ctx.kind !== "github") return null;
@@ -432,10 +704,30 @@ function classifyGh(ctx: Ctx, segment: string, head: Head): Finding | null {
   if (sub === "api") {
     if (/graphql/u.test(segment)) {
       if (!hasNumberToken(segment, ctx.ticket)) return null;
+      // A mutation writes; its payload carries no issue text back.
+      if (/\bmutation\s*(\{|\(|[A-Za-z_])/iu.test(segment)) return null;
       if (!/issues?/iu.test(segment)) {
         return { agent: "", finding: "unknown", form: "gh api graphql", detail: "" };
       }
-      return { agent: "", finding: "read", form: "gh api graphql", detail: "" };
+      return graphqlRepoFinding(ctx, segment);
+    }
+    const method = ghApiMethod(segment);
+    if (method !== null && method !== "GET") {
+      // A mutating call shows no ticket text; HEAD returns headers alone.
+      // An unreadable method naming the ticket cannot be told.
+      if (
+        method === "POST" ||
+        method === "PUT" ||
+        method === "PATCH" ||
+        method === "DELETE" ||
+        method === "HEAD"
+      ) {
+        return null;
+      }
+      if (hasNumberToken(segment, ctx.ticket)) {
+        return { agent: "", finding: "unknown", form: "gh api", detail: method };
+      }
+      return null;
     }
     const endpoints = [
       ...segment.matchAll(
@@ -481,19 +773,23 @@ function expandHome(value: string): string {
 }
 
 /** A touched path, physical; null when it cannot be told (a variable, a pattern). */
-function touchPath(token: string, own: string): string | null {
+function touchPath(token: string, own: string | null): string | null {
   if (!token || /[*?[\]]/u.test(token)) return null;
   let value = expandHome(token);
   if (value.includes("$")) return null;
-  if (!isAbsolute(value)) value = resolve(own, value);
+  if (!isAbsolute(value)) {
+    if (own === null) return null;
+    value = resolve(own, value);
+  }
   return physical(value);
 }
 
 /** An adapter repo argument in this run's project: the repo or its ticket worktrees. */
-function sameProject(ctx: Ctx, repoArg: string, own: string): boolean | null {
+function sameProject(ctx: Ctx, repoArg: string, own: string | null): boolean | null {
   const expanded = expandHome(stripQuotes(repoArg.trim()));
   if (!expanded || expanded.includes("$")) return null;
-  const absolute = isAbsolute(expanded) ? expanded : resolve(own, expanded);
+  if (!isAbsolute(expanded) && own === null) return null;
+  const absolute = isAbsolute(expanded) ? expanded : resolve(own ?? "", expanded);
   const norm = physical(absolute);
   return (
     norm === ctx.repo ||
@@ -509,7 +805,7 @@ function classifyAdapter(
   tool: "github" | "local",
   words: string[],
   at: number,
-  own: string,
+  own: string | null,
   segment: string,
 ): Finding | null {
   if ((tool === "github") !== (ctx.kind === "github")) return null;
@@ -574,30 +870,44 @@ const CLERK_FILE_RE =
 const STORE_DIR_RE = /[~$A-Za-z0-9_@./-]*postmaster\/tickets(?=[/\s"'`;&|()]|$)/u; // ASCII: store paths match ASCII
 const CLERK_DIR_RE = /[~$A-Za-z0-9_@./-]*\.postmaster\/clerk(?=[/\s"'`;&|()]|$)/u; // ASCII: clerk paths match ASCII
 
+/** Another ticket's file under a ticket directory: numbered, and not this run's. */
+function isSiblingTicketFile(absolute: string, ticket: string): boolean {
+  const sibling = /^(\d+)\.(md|json)$/u.exec(basename(absolute));
+  return sibling !== null && sibling[1] !== ticket;
+}
+
 /** Where a store or clerk path points: the ticket's file, its meta, the dir, or elsewhere. */
 function placePath(
   ctx: Ctx,
   candidate: string,
-  own: string,
+  own: string | null,
 ): "file" | "meta" | "dir" | "elsewhere" | "unknown" {
   const absolute = touchPath(candidate, own);
   if (absolute === null) return "unknown";
   if (absolute === join(ctx.clerkDir, `${ctx.ticket}.md`)) return "file";
-  if (absolute === ctx.clerkDir || absolute.startsWith(`${ctx.clerkDir}${sep}`)) return "dir";
+  if (absolute === ctx.clerkDir) return "dir";
+  if (absolute.startsWith(`${ctx.clerkDir}${sep}`)) {
+    return isSiblingTicketFile(absolute, ctx.ticket) ? "elsewhere" : "dir";
+  }
   if (ctx.kind !== "local") return "elsewhere";
   if (ctx.storeDir === null) {
     return /postmaster\/tickets/u.test(candidate) ? "unknown" : "elsewhere";
   }
   if (absolute === join(ctx.storeDir, `${ctx.ticket}.md`)) return "file";
   if (absolute === join(ctx.storeDir, `${ctx.ticket}.json`)) return "meta";
-  if (absolute === ctx.storeDir || absolute.startsWith(`${ctx.storeDir}${sep}`)) return "dir";
+  if (absolute === ctx.storeDir) return "dir";
+  if (absolute.startsWith(`${ctx.storeDir}${sep}`)) {
+    return isSiblingTicketFile(absolute, ctx.ticket) ? "elsewhere" : "dir";
+  }
   return "elsewhere";
 }
 
 /** Classify the store and clerk paths one segment names. */
-function classifyPaths(ctx: Ctx, segment: string, verb: string, own: string): Finding[] {
+function classifyPaths(ctx: Ctx, segment: string, verb: string, own: string | null): Finding[] {
   const findings: Finding[] = [];
   const reading = READ_VERBS.has(verb);
+  // A scan can run a reader over the directory unseen; its -exec is not followed.
+  const scanning = reading || SCAN_VERBS.has(verb);
   const seen = new Set<string>();
   const fileRes = [...segment.matchAll(STORE_FILE_RE), ...segment.matchAll(CLERK_FILE_RE)];
   for (const match of fileRes) {
@@ -619,7 +929,7 @@ function classifyPaths(ctx: Ctx, segment: string, verb: string, own: string): Fi
           : { agent: "", finding: "unknown", form, detail: verb || "bare" },
       );
     } else if (place === "dir") {
-      if (reading)
+      if (scanning)
         findings.push({ agent: "", finding: "unknown", form: `${form} dir`, detail: "" });
     } else if (place === "unknown") {
       findings.push({ agent: "", finding: "unknown", form, detail: "path unknown" });
@@ -629,15 +939,17 @@ function classifyPaths(ctx: Ctx, segment: string, verb: string, own: string): Fi
     for (const re of [STORE_DIR_RE, CLERK_DIR_RE]) {
       const dir = re.exec(segment)?.[0];
       if (!dir) continue;
+      // A directory already read as part of a file path is not read again.
+      if ([...seen].some((file) => file.startsWith(dir))) continue;
       const place = placePath(ctx, dir, own);
-      if (place === "dir" && reading) {
+      if (place === "dir" && scanning) {
         findings.push({
           agent: "",
           finding: "unknown",
           form: dir.includes("clerk") ? "clerk draft dir" : "ticket file dir",
           detail: "",
         });
-      } else if (place === "unknown" && reading) {
+      } else if (place === "unknown" && scanning) {
         findings.push({
           agent: "",
           finding: "unknown",
@@ -651,7 +963,7 @@ function classifyPaths(ctx: Ctx, segment: string, verb: string, own: string): Fi
 }
 
 /** Classify one shell segment against every form the check names. */
-function classifySegment(ctx: Ctx, segment: string, own: string, depth = 0): Finding[] {
+function classifySegment(ctx: Ctx, segment: string, own: string | null, depth = 0): Finding[] {
   const findings: Finding[] = [];
   const head = segmentHead(segment);
   if (!head.verb) return findings;
@@ -660,9 +972,7 @@ function classifySegment(ctx: Ctx, segment: string, own: string, depth = 0): Fin
     const next = head.words[head.at + 1] ?? "";
     if (head.verb === "eval" || next === "-c") {
       const inner = head.words.slice(head.at + (head.verb === "eval" ? 1 : 2)).join(" ");
-      for (const part of splitSegments(stripQuotes(inner.trim()))) {
-        findings.push(...classifySegment(ctx, part, own, depth + 1));
-      }
+      findings.push(...classifyCommand(ctx, stripQuotes(inner.trim()), own, depth + 1));
       return findings;
     }
   }
@@ -729,9 +1039,7 @@ function classifyCall(ctx: Ctx, call: ToolCall, own: string): Finding[] {
   const findings: Finding[] = [];
   const command = inputCommand(call.input);
   if (command) {
-    for (const segment of splitSegments(command)) {
-      findings.push(...classifySegment(ctx, segment, own));
-    }
+    findings.push(...classifyCommand(ctx, command, own));
   }
   const url = inputUrl(call.input);
   if (url) {
@@ -805,14 +1113,46 @@ function readAgents(
   const legNumbers = Object.keys(legs)
     .filter((key) => /^\d+$/u.test(key)) // ASCII: manifest leg keys are ASCII digits
     .sort((a, b) => Number(a) - Number(b));
+  const legNames = ["synthesis", "review", "ship"];
+  const perLeg = rec(team.coachman_legs);
+  let logNames: string[] = [];
+  try {
+    logNames = readdirSync(join(dispatch, "logs"));
+  } catch {
+    logNames = [];
+  }
+  const walledOrder = (file: string): number => {
+    const attempt = /-walled-attempt-(\d+)-events\.jsonl$/u.exec(file)?.[1];
+    return attempt === undefined ? 0 : Number(attempt);
+  };
   for (const n of legNumbers) {
+    // A leg on its own harness reads with it; the base is the fallback.
+    const legName = legNames[Number(n) - 1] ?? "";
+    const harness = text(rec(perLeg[legName]).harness) || text(coachman.harness);
     agents.push({
       name: `coachman leg ${n}`,
       file: `coachman-leg-${n}-events.jsonl`,
-      harness: text(coachman.harness),
+      harness,
       lane: "coachman",
       own: "",
     });
+    // A walled leg's renamed streams read beside its fresh one; their absence
+    // is normal, so only present files join.
+    const walled = logNames
+      .filter(
+        (name) => name.startsWith(`coachman-leg-${n}-walled`) && name.endsWith("-events.jsonl"),
+      )
+      .sort((a, b) => walledOrder(a) - walledOrder(b));
+    for (const file of walled) {
+      const attempt = /-walled-attempt-(\d+)-events\.jsonl$/u.exec(file)?.[1];
+      agents.push({
+        name: attempt ? `coachman leg ${n} walled attempt ${attempt}` : `coachman leg ${n} walled`,
+        file,
+        harness,
+        lane: "coachman",
+        own: "",
+      });
+    }
   }
   const laneNames = Object.keys(rec(manifest.lanes)).sort();
   for (const lane of laneNames) {
@@ -974,12 +1314,14 @@ function main(argv: string[]): number {
     if (!record) return 0;
     return recordOutcome(dispatch, line);
   };
+  // The record reads before the notes gate: without it the run cannot be told
+  // held-back from given, so it reads as unknown, never as not checked.
+  const runJson = readJson(join(dispatch, "run.json"));
+  if (runJson === null) return failed("run.json cannot be read");
   if (ticketNotes(dispatch) !== "held-back") {
     console.log("ticket-reads: not checked (notes given)");
     return 0;
   }
-  const runJson = readJson(join(dispatch, "run.json"));
-  if (runJson === null) return failed("run.json cannot be read");
   const manifest = readJson(join(dispatch, "manifest.json"));
   if (manifest === null) return failed("manifest.json cannot be read");
   let brief = "";
