@@ -2,7 +2,7 @@
 title: What a functional core opens up for checking code, and what it does for coding with AI
 type: concept
 standing: claimed
-sources: [trials/2026-10-04-review-findings-classified, trials/2026-10-09-purity-check, trials/2026-10-09-mutation-counts, trials/2026-10-11-blind-laws-classifier, articles/alloy-tools, articles/anthropic-2026-pbt-blog, articles/biome-noprocessenv, articles/dafny-2022, articles/dafny-lang, articles/effect-schema, articles/effect-ts, articles/eslint-plugin-functional, articles/fastcheck-ts, articles/fpts, articles/galois-dodds-2025, articles/hacl-2017, articles/hypothesis-py, articles/isabelle, articles/kiro-2025-pbt, articles/kleppmann-2025, articles/lemmafit-2026, articles/lemmascript-2026, articles/meyer-1992, articles/neverthrow, articles/oxlint-no-process-env, articles/quint, articles/rocq-coq, articles/stryker-js, articles/tlaplus-tla, articles/tokeneer-2013, articles/ts-pattern, articles/zod, papers/agda-2024, papers/agentic-pbt-2025, papers/agentic-proving-2026, papers/algoveri-2026, papers/alphaverus-2024, papers/aria-2026, papers/atlas-2025, papers/autospec-2024, papers/autoverus-2024, papers/aws-2014, papers/axdafny-2026, papers/berger-2019, papers/bicarregui-2009, papers/bisharat-2026-tla-bench, papers/bisharat-2026-tla-write, papers/cardano-2024, papers/cedar-2024, papers/chen-2026-modelbench, papers/cheng-2026-sysmobench, papers/clever-2025, papers/clover-2023, papers/dafny-ir-2025, papers/dafnybench-2024, papers/dafnypro-2026, papers/danso-2026-ltl, papers/erlang-pulse-2009, papers/estler-2014, papers/etna-jfp2026, papers/fakhoury-2024-ticoder-study, papers/fan-2025-verifast, papers/faria-2026, papers/fiatcrypto-2019, papers/fonseca-2017, papers/formalbench-2025, papers/fstar-2016, papers/fstar-neural-2024, papers/fvapps-2025, papers/gleirscher-2020, papers/goedel-code-prover-2026, papers/goldstein-icse2024, papers/he-2025-pgs, papers/hong-2025-alloy, papers/howtospecify-2020, papers/huang-2026, papers/hughes-1989, papers/hughes-2016, papers/ironfleet-2015, papers/jing-2026-pbtbench, papers/kamath-2023-loopy, papers/konstantinou-2024-oracles, papers/lahiri-2024-intent-formalization, papers/lahiri-2026, papers/laurel-2024, papers/lean4-2021, papers/leetproof-2026, papers/leroy-2009, papers/li-2026-probe, papers/liquidhaskell-2025, papers/liu-2023-evalplus, papers/mariposa-2023, papers/matichuk-2015, papers/misu-2024, papers/mongodb-xmodelling-2020, papers/nl2postcond-2024, papers/nl2spec-2023, papers/pei-2023-invariants, papers/prasetya-2026-postconditions, papers/propertygpt-2025, papers/qed-2020, papers/quickcheck-2000, papers/rango-2024, papers/ravi-coblenz-2025, papers/richter-2025-nl2contract, papers/rsc-2016, papers/schneider-2025, papers/sel4-2009, papers/sel4-2014, papers/selene-2024, papers/shefer-2025, papers/specgen-2025, papers/swe-proof-2026, papers/tan-2026, papers/tanaka-2025-pbt-ebt, papers/ticoder-2024, papers/verdi-2015, papers/vericoding-2025, papers/vericontest-2026, papers/verifythisbench-2025, papers/verina-2025, papers/vero-2026, papers/verus-2024, papers/verus-specbench-2026, papers/verusage-2025, papers/vikram-2024-pbt, papers/yang-2011, papers/yuan-2014, papers/zhao-2026-misguidance]
+sources: [trials/2026-10-04-review-findings-classified, trials/2026-10-09-purity-check, trials/2026-10-09-mutation-counts, trials/2026-10-11-functional-reading, trials/2026-10-11-blind-laws-classifier, articles/alloy-tools, articles/anthropic-2026-pbt-blog, articles/biome-noprocessenv, articles/dafny-2022, articles/dafny-lang, articles/effect-schema, articles/effect-ts, articles/eslint-plugin-functional, articles/fastcheck-ts, articles/fpts, articles/galois-dodds-2025, articles/hacl-2017, articles/hypothesis-py, articles/isabelle, articles/kiro-2025-pbt, articles/kleppmann-2025, articles/lemmafit-2026, articles/lemmascript-2026, articles/meyer-1992, articles/neverthrow, articles/oxlint-no-process-env, articles/quint, articles/rocq-coq, articles/stryker-js, articles/tlaplus-tla, articles/tokeneer-2013, articles/ts-pattern, articles/zod, papers/agda-2024, papers/agentic-pbt-2025, papers/agentic-proving-2026, papers/algoveri-2026, papers/alphaverus-2024, papers/aria-2026, papers/atlas-2025, papers/autospec-2024, papers/autoverus-2024, papers/aws-2014, papers/axdafny-2026, papers/berger-2019, papers/bicarregui-2009, papers/bisharat-2026-tla-bench, papers/bisharat-2026-tla-write, papers/cardano-2024, papers/cedar-2024, papers/chen-2026-modelbench, papers/cheng-2026-sysmobench, papers/clever-2025, papers/clover-2023, papers/dafny-ir-2025, papers/dafnybench-2024, papers/dafnypro-2026, papers/danso-2026-ltl, papers/erlang-pulse-2009, papers/estler-2014, papers/etna-jfp2026, papers/fakhoury-2024-ticoder-study, papers/fan-2025-verifast, papers/faria-2026, papers/fiatcrypto-2019, papers/fonseca-2017, papers/formalbench-2025, papers/fstar-2016, papers/fstar-neural-2024, papers/fvapps-2025, papers/gleirscher-2020, papers/goedel-code-prover-2026, papers/goldstein-icse2024, papers/he-2025-pgs, papers/hong-2025-alloy, papers/howtospecify-2020, papers/huang-2026, papers/hughes-1989, papers/hughes-2016, papers/ironfleet-2015, papers/jing-2026-pbtbench, papers/kamath-2023-loopy, papers/konstantinou-2024-oracles, papers/lahiri-2024-intent-formalization, papers/lahiri-2026, papers/laurel-2024, papers/lean4-2021, papers/leetproof-2026, papers/leroy-2009, papers/li-2026-probe, papers/liquidhaskell-2025, papers/liu-2023-evalplus, papers/mariposa-2023, papers/matichuk-2015, papers/misu-2024, papers/mongodb-xmodelling-2020, papers/nl2postcond-2024, papers/nl2spec-2023, papers/pei-2023-invariants, papers/prasetya-2026-postconditions, papers/propertygpt-2025, papers/qed-2020, papers/quickcheck-2000, papers/rango-2024, papers/ravi-coblenz-2025, papers/richter-2025-nl2contract, papers/rsc-2016, papers/schneider-2025, papers/sel4-2009, papers/sel4-2014, papers/selene-2024, papers/shefer-2025, papers/specgen-2025, papers/swe-proof-2026, papers/tan-2026, papers/tanaka-2025-pbt-ebt, papers/ticoder-2024, papers/verdi-2015, papers/vericoding-2025, papers/vericontest-2026, papers/verifythisbench-2025, papers/verina-2025, papers/vero-2026, papers/verus-2024, papers/verus-specbench-2026, papers/verusage-2025, papers/vikram-2024-pbt, papers/yang-2011, papers/yuan-2014, papers/zhao-2026-misguidance]
 updated: 2026-10-11
 ---
 
@@ -696,6 +696,9 @@ Five trials, the first and the fourth run here; the fifth is in three steps, and
 failed. The costs are estimates, not measurements. The first measures what the count above cannot: how much of
 it is hindsight.
 
+A sixth, not on the list, was run at the user's request after these: it reads versions of the same code with
+and without mutation, and is described after the fifth.
+
 **1. Properties written blind for a text classifier.** Take #202's shell-command classifier at its round-1
 snapshot, before any review finding was fixed. A model that has not seen the findings gets the ticket and
 the function signatures and writes at most ten laws with generators (separators and quoting leave the answer
@@ -922,6 +925,39 @@ serious findings per round than these four. The measure is close to the one
 [when a review loop should stop](review-convergence.md) uses: serious findings reaching zero outside escalated
 mechanisms within the cap, across at least three runs.
 
+**A reading trial of the same code with and without mutation (not one of the five).** Run on 2026-10-11, at
+the user's request, to see whether functional code is easier to follow. They expected a benefit only at larger
+scales and asked for fairly complex code, so it uses three of the project's own modules of 485, 1,134 and
+1,827 lines, each in three arrangements with the same behaviour: the original; a functional one, with
+nothing changed after it is made and decisions kept apart from reads and writes; and a tidy one, of the same
+amount of rewriting, that keeps the original's mutation. Every rewrite passes the module's own tests and a
+differential check, and the functional ones read 0 and 0 on [#372](https://github.com/brindlewick/postmaster/issues/372)'s
+counts. Fresh sessions of a small model, with no tools and no repository, answered 26 questions about each,
+whose answers come from running the original, in a careful mode and a quick one, five valid sessions each
+[@trials/2026-10-11-functional-reading/method.md].
+
+- **The reader was at the ceiling.** It answered 88% to 100% right in every arrangement, so what is right could
+  hardly differ, and the primary measure became the effort a reader spends, in output tokens
+  [@trials/2026-10-11-functional-reading/calibration/careful-medium/style-findings-original/s1.json].
+- **17 of the 18 comparisons read no difference by the rules fixed beforehand, one reads easier and none
+  harder.** The one is `view-stream.ts` in quick mode, functional against original: 4 more answers right of 130,
+  3.1 points, interval 0.8 to 6.2. The functional arrangement was never easier than the tidy one of the same size
+  [@trials/2026-10-11-functional-reading/results/verdicts-careful.tsv]
+  [@trials/2026-10-11-functional-reading/results/verdicts-quick.tsv].
+- **No benefit growing with size.** In careful mode the share right, functional minus original, is -1.5, 0.0 and
+  +4.6 points for the three modules, and its ratio of effort 1.10, 1.04 and 1.02; no interval says easier, and the
+  largest difference's interval starts at 0.0. In quick mode the three differences are -0.8, +3.1 and -1.5.
+- **A cost, if anything.** Pooled over the modules, after the results, the functional arrangement took 1.05 times
+  the original's reading effort (0.99 to 1.11) and 1.09 times the tidy one's (1.03 to 1.14) at the same share right,
+  and it is 13% to 45% longer [@trials/2026-10-11-functional-reading/results/pooled-careful-first5.tsv].
+- **How sure.** One kind of reader, three modules that differ in size, in state and in domain at once, and
+  questions that a strong reader almost always answers right. It does not show whether a person finds either
+  easier, or whether a change or a defect is easier to make or to see in one of them. Not run: a harder task for
+  the reader, or the change task.
+
+*The rule fixed beforehand counted a functional arrangement that is no easier than the tidy one as evidence
+against the claim that it is easier to follow; that is what was found in all three modules.*
+
 ## Changes proposed to the design rules and the ticket template
 
 Nothing here is made. Each follows from a finding above, and the first two wait for the trials named. The text
@@ -940,8 +976,10 @@ user to reverse the "no check" half of D2. No module on `main` is named `*-core.
 function (arguments, module state, imported objects), with locals built inside the function and edge modules exempt. A
 ban on every mutation is the stricter version, and trial 4 counts both before either is switched on. The argument for it
 is that a name that never changes is easier to follow, for a reader and for a model, and that a check gives an agent
-something to iterate against. Neither is measured here: no study found compares a reader's or a model's grasp of mutable
-and immutable versions of the same code, and the 84 findings were not classified by mutation. The second part is not tied
+something to iterate against. Neither was measured by the studies read: none found compares a reader's or a model's grasp
+of mutable and immutable versions of the same code, and the 84 findings were not classified by mutation. A reading trial
+has since compared a model's grasp on three of the project's own modules, and found the functional version no easier
+and about a tenth more effort than a tidy rewrite of the same size [@trials/2026-10-11-functional-reading/results/pooled-careful-first5.tsv]. The second part is not tied
 to a finding; trial 4 tests whether it connects to any. It has tested it: the first count flags 360 places on `main`, an
 estimated 312 of them not hazards, and 8 of the 78 findings that cite a TypeScript line sit in a function it flags, about as many as
 random placement would give [@trials/2026-10-09-mutation-counts/results/marks-tally.txt]

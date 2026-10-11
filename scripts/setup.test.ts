@@ -508,6 +508,7 @@ describe("positive controls", () => {
       "",
       "",
       "",
+      "",
       "bash",
       "coachman",
       "",
@@ -866,7 +867,7 @@ review_link = ""
     mkdirSync(dir, { recursive: true });
     writeFileSync(
       join(dir, "settings.toml"),
-      '[tracker]\nkind = "plane"\nworkspace = "ws"\n',
+      '[tracker]\nkind = "plane"\nurl = "https://saved.example"\nworkspace = "ws"\n',
       "utf8",
     );
     const r = runProject(s.repo, lanesOnly, "tracker=plane\noverwrite=yes");
@@ -874,6 +875,7 @@ review_link = ""
     const tracker = tableOf(settingsData(s.repo).tracker);
     expect(tracker.kind).toBe("plane");
     expect(tracker.workspace).toBe("ws");
+    expect(tracker.url).toBe("https://saved.example");
   });
 
   test("an unrelated update succeeds when the project overrides a plane global with local", () => {
@@ -911,6 +913,53 @@ review_link = ""
     expect(r.out).toContain("workspace slug is needed");
     expect(settingsOf(s.repo)).toBe(before);
     expect(existsSync(join(dir, ".gitignore"))).toBe(false);
+  });
+
+  test("a merged plane kind with no origin anywhere still dies", () => {
+    const planeNoUrl = join(tmp, `proj-${projCounter}.planenourl.toml`);
+    writeFileSync(
+      planeNoUrl,
+      'projects_roots = ["~/Code"]\nconfine = "off"\n[lanes.alpha]\nharness = "claude"\nmodel = "m-a"\n[lanes.beta]\nharness = "codex"\nmodel = "m-b"\n[tracker]\nkind = "plane"\nworkspace = "wsg"\n',
+      "utf8",
+    );
+    const s = stageProject();
+    const dir = join(s.repo, ".postmaster");
+    mkdirSync(dir, { recursive: true });
+    const before = "[team]\nmax_runs = 5\n";
+    writeFileSync(join(dir, "settings.toml"), before, "utf8");
+    const r = runProject(s.repo, planeNoUrl, "confine=on\noverwrite=yes");
+    expect(r.code).toBe(1);
+    expect(r.out).toContain("API origin");
+    expect(r.out).toContain("plane.url");
+    expect(settingsOf(s.repo)).toBe(before);
+    expect(existsSync(join(dir, ".gitignore"))).toBe(false);
+  });
+
+  test("answers naming plane with a workspace but no origin are refused", () => {
+    const s = stageProject();
+    const r = runProject(s.repo, s.config, "tracker=plane\nplane.workspace=ws1");
+    expect(r.code).toBe(1);
+    expect(r.out).toContain("API origin");
+    expect(r.out).toContain("plane.url");
+    expect(existsSync(join(s.repo, ".postmaster", "settings.toml"))).toBe(false);
+  });
+
+  test("a whitespace-only plane origin is refused as no origin", () => {
+    const s = stageProject();
+    const r = runProject(s.repo, s.config, "tracker=plane\nplane.workspace=ws1\nplane.url=   ");
+    expect(r.code).toBe(1);
+    expect(r.out).toContain("API origin");
+    expect(r.out).toContain("plane.url");
+    expect(existsSync(join(s.repo, ".postmaster", "settings.toml"))).toBe(false);
+  });
+
+  test("a slashes-only plane origin is refused as no origin", () => {
+    const s = stageProject();
+    const r = runProject(s.repo, s.config, "tracker=plane\nplane.workspace=ws1\nplane.url=///");
+    expect(r.code).toBe(1);
+    expect(r.out).toContain("API origin");
+    expect(r.out).toContain("plane.url");
+    expect(existsSync(join(s.repo, ".postmaster", "settings.toml"))).toBe(false);
   });
 
   test("a dry run with only ignore_settings=yes writes nothing", () => {
@@ -1103,5 +1152,24 @@ review_link = ""
     expect(Object.hasOwn(alpha, "__proto__")).toBe(true);
     expect(alpha["__proto__"]).toBe(1);
     expect(alpha.model).toBe("model-x");
+  });
+
+  test("a surveyor on a shaped lane is written", () => {
+    const s = stageProject();
+    const r = runProject(s.repo, s.config, "surveyor=alpha\noverwrite=yes");
+    expect(r.code).toBe(0);
+    expect(tableOf(settingsData(s.repo).team).surveyor).toBe("alpha");
+  });
+
+  test("a surveyor on a harness with no recorded shape is refused", () => {
+    const s = stageProject();
+    writeFileSync(
+      s.config,
+      `${readFileSync(s.config, "utf8")}[lanes.gamma]\nharness = "grok"\nmodel = "m-g"\n`,
+      "utf8",
+    );
+    const r = runProject(s.repo, s.config, "surveyor=gamma", ["--dry-run"]);
+    expect(r.code).toBe(1);
+    expect(r.out).toContain("gamma");
   });
 });
