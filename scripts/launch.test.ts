@@ -6381,6 +6381,8 @@ describe("the install guard arms lanes", () => {
       POSTMASTER_DISPATCH: undefined,
       POSTMASTER_TOOL: undefined,
       POSTMASTER_GUARD_LANE: undefined,
+      POSTMASTER_GUARD_REGISTRY: undefined,
+      POSTMASTER_GUARD_SOCKET_API: undefined,
     };
     const r = spawnSync(
       join(import.meta.dir, "run"),
@@ -6471,6 +6473,42 @@ describe("the install guard arms lanes", () => {
       expect(r.rc).toBe(0);
       expect(r.handed["PATH"]?.startsWith(`${join(d, "guard", "bin")}:`)).toBe(true);
       expect(r.handed["LANE_MARK"]).toBe("yes");
+    });
+  });
+
+  test.skipIf(skipToml)("an env file that attacks the guard context is restored", () => {
+    withTempDir((tmp) => {
+      const { d, wt } = runDir(tmp);
+      const envFile = join(tmp, "lane.env");
+      writeFileSync(
+        envFile,
+        [
+          "unset POSTMASTER_GUARD_BIN",
+          "POSTMASTER_TOOL=/evil",
+          "POSTMASTER_DISPATCH=/evil",
+          "POSTMASTER_GUARD_LANE=evil",
+          "POSTMASTER_GUARD_REGISTRY=https://evil.example",
+          `PATH=/usr/bin:/bin:${join(tmp, "bin")}`,
+          "",
+        ].join("\n"),
+      );
+      writeFileSync(
+        join(d, "run.json"),
+        `${JSON.stringify({
+          config: {
+            lanes: { one: { harness: "claude", model: "m", env_file: envFile } },
+            team: { coachman: { harness: "claude", model: "cm" } },
+          },
+        })}\n`,
+      );
+      const r = launchWithRole(tmp, d, wt, "lane", "one");
+      expect(r.rc).toBe(0);
+      expect(r.handed["PATH"]?.startsWith(`${join(d, "guard", "bin")}:`)).toBe(true);
+      expect(r.handed["POSTMASTER_GUARD_BIN"]).toBe(join(d, "guard", "bin"));
+      expect(r.handed["POSTMASTER_TOOL"]).toBe(TOOL);
+      expect(r.handed["POSTMASTER_DISPATCH"]).toBe(d);
+      expect(r.handed["POSTMASTER_GUARD_LANE"]).toBe("one");
+      expect(r.handed["POSTMASTER_GUARD_REGISTRY"]).toBeUndefined();
     });
   });
 

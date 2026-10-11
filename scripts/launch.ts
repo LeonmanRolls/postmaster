@@ -572,6 +572,23 @@ function nextShlvl(seen: string | undefined): string {
   }
   return String(v);
 }
+/** The guard context a lane env file must not change: the bin the
+ * wrappers re-arm from and the variables the shims and the guard read.
+ * Saved before the source, restored after, unset-ness preserved, so a
+ * file that unsets or redirects any of them cannot launch the lane
+ * unguarded or pointed at another tool or registry. Held once; the
+ * three sourcing wrappers below interpolate both fragments. */
+const SAVE_GUARD_CTX =
+  "__pg_bin=${POSTMASTER_GUARD_BIN:-}; __pg_dispatch=${POSTMASTER_DISPATCH:-}; __pg_tool=${POSTMASTER_TOOL:-}; __pg_lane=${POSTMASTER_GUARD_LANE:-}; __pg_registry=${POSTMASTER_GUARD_REGISTRY:-}; __pg_socket=${POSTMASTER_GUARD_SOCKET_API:-};";
+const RESTORE_GUARD_CTX = [
+  'if [ -n "$__pg_bin" ]; then export POSTMASTER_GUARD_BIN="$__pg_bin"; else unset POSTMASTER_GUARD_BIN; fi;',
+  'if [ -n "$__pg_dispatch" ]; then export POSTMASTER_DISPATCH="$__pg_dispatch"; else unset POSTMASTER_DISPATCH; fi;',
+  'if [ -n "$__pg_tool" ]; then export POSTMASTER_TOOL="$__pg_tool"; else unset POSTMASTER_TOOL; fi;',
+  'if [ -n "$__pg_lane" ]; then export POSTMASTER_GUARD_LANE="$__pg_lane"; else unset POSTMASTER_GUARD_LANE; fi;',
+  'if [ -n "$__pg_registry" ]; then export POSTMASTER_GUARD_REGISTRY="$__pg_registry"; else unset POSTMASTER_GUARD_REGISTRY; fi;',
+  'if [ -n "$__pg_socket" ]; then export POSTMASTER_GUARD_SOCKET_API="$__pg_socket"; else unset POSTMASTER_GUARD_SOCKET_API; fi;',
+].join(" ");
+
 /** argv for `bash` to source an env_file and run cmd, as main's launcher
  * does: `set -a; . file; set +a` in the shell, then the fixed assignment main
  * makes after the source, then the harness as a child. File output reaches
@@ -585,7 +602,7 @@ function nextShlvl(seen: string | undefined): string {
 function sourcedLaunch(file: string, cmd: string[], level: string): string[] {
   return [
     "-c",
-    'SHLVL=$1; export SHLVL; f=$2; shift 2; s=${POSTMASTER_EVENT_STREAM:-}; set -a; . "$f"; set +a; if [ -n "${POSTMASTER_GUARD_BIN:-}" ]; then PATH="$POSTMASTER_GUARD_BIN:$PATH"; export PATH; fi; POSTMASTER_EVENT_STREAM=$s; unset POSTMASTER_LAUNCH_NAME POSTMASTER_LAUNCH_ROLE; "$@"; s=$?; exit $s',
+    `SHLVL=$1; export SHLVL; f=$2; shift 2; s=\${POSTMASTER_EVENT_STREAM:-}; ${SAVE_GUARD_CTX} set -a; . "$f"; set +a; ${RESTORE_GUARD_CTX} if [ -n "\${POSTMASTER_GUARD_BIN:-}" ]; then PATH="$POSTMASTER_GUARD_BIN:$PATH"; export PATH; fi; POSTMASTER_EVENT_STREAM=$s; unset POSTMASTER_LAUNCH_NAME POSTMASTER_LAUNCH_ROLE; "$@"; s=$?; exit $s`,
     "_",
     level,
     file,
@@ -622,7 +639,7 @@ function sourcedLaunch(file: string, cmd: string[], level: string): string[] {
 function sourcedExec(file: string, cmd: string[], level: string): string[] {
   return [
     "-c",
-    'SHLVL=$1; export SHLVL; f=$2; shift 2; __postmaster_exec_env=$(command -v env); s=${POSTMASTER_EVENT_STREAM:-}; set -a; . "$f"; set +a; if [ -n "${POSTMASTER_GUARD_BIN:-}" ]; then PATH="$POSTMASTER_GUARD_BIN:$PATH"; export PATH; fi; POSTMASTER_EVENT_STREAM=$s; unset POSTMASTER_LAUNCH_NAME POSTMASTER_LAUNCH_ROLE; if [ -n "${SHLVL+set}" ]; then exec "${__postmaster_exec_env:-/usr/bin/env}" "SHLVL=$SHLVL" "$@"; else exec "${__postmaster_exec_env:-/usr/bin/env}" -u SHLVL "$@"; fi',
+    `SHLVL=$1; export SHLVL; f=$2; shift 2; __postmaster_exec_env=$(command -v env); s=\${POSTMASTER_EVENT_STREAM:-}; ${SAVE_GUARD_CTX} set -a; . "$f"; set +a; ${RESTORE_GUARD_CTX} if [ -n "\${POSTMASTER_GUARD_BIN:-}" ]; then PATH="$POSTMASTER_GUARD_BIN:$PATH"; export PATH; fi; POSTMASTER_EVENT_STREAM=$s; unset POSTMASTER_LAUNCH_NAME POSTMASTER_LAUNCH_ROLE; if [ -n "\${SHLVL+set}" ]; then exec "\${__postmaster_exec_env:-/usr/bin/env}" "SHLVL=$SHLVL" "$@"; else exec "\${__postmaster_exec_env:-/usr/bin/env}" -u SHLVL "$@"; fi`,
     "_",
     level,
     file,
@@ -673,7 +690,7 @@ function sourcedPrompted(
 ): string[] {
   return [
     "-c",
-    'SHLVL=$1; export SHLVL; t=$(cat "$2") || exit 1; f=$3; i=$4; shift 4; s=${POSTMASTER_EVENT_STREAM:-}; set -a; . "$f"; set +a; if [ -n "${POSTMASTER_GUARD_BIN:-}" ]; then PATH="$POSTMASTER_GUARD_BIN:$PATH"; export PATH; fi; POSTMASTER_EVENT_STREAM=$s; unset POSTMASTER_LAUNCH_NAME POSTMASTER_LAUNCH_ROLE; set -- "${@:1:$i}" "$t" "${@:$((i + 2))}"; "$@"; s=$?; exit $s',
+    `SHLVL=$1; export SHLVL; t=$(cat "$2") || exit 1; f=$3; i=$4; shift 4; s=\${POSTMASTER_EVENT_STREAM:-}; ${SAVE_GUARD_CTX} set -a; . "$f"; set +a; ${RESTORE_GUARD_CTX} if [ -n "\${POSTMASTER_GUARD_BIN:-}" ]; then PATH="$POSTMASTER_GUARD_BIN:$PATH"; export PATH; fi; POSTMASTER_EVENT_STREAM=$s; unset POSTMASTER_LAUNCH_NAME POSTMASTER_LAUNCH_ROLE; set -- "\${@:1:$i}" "$t" "\${@:$((i + 2))}"; "$@"; s=$?; exit $s`,
     "_",
     level,
     promptFile,
