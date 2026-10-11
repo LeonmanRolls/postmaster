@@ -13,8 +13,8 @@
 // Prints tab-separated tables:
 //   1. one row per model, module, arrangement and question type ("all" is every question): the
 //      sessions, the answers right out of those asked, the share and its Wilson 95% interval;
-//   2. one row per model, module and arrangement: the mean reading effort of a session (output
-//      tokens, thinking tokens, seconds, dollars);
+//   2. one row per model, module and arrangement: the mean reading effort of a session (prompt
+//      tokens, output tokens, thinking tokens, seconds, dollars);
 //   3. one row per model and module for each pair of arrangements: the difference in the share
 //      right, in percentage points, over the questions, and the ratio of the mean output tokens,
 //      each with its bootstrap 95% interval.
@@ -23,6 +23,7 @@ import { join } from "node:path";
 import { type Answers, type Question, scoreRun, type Scored, wilson } from "./reading.ts";
 
 export type Effort = Readonly<{
+  promptTokens: number;
   outputTokens: number;
   thinkingTokens: number;
   seconds: number;
@@ -215,6 +216,10 @@ function load(trial: string, readers: string): Loaded {
             valid: isValid(answers, questions.length),
             scored: scoreRun(answers, truth, questions),
             effort: {
+              promptTokens:
+                (raw.usage?.input_tokens ?? 0) +
+                (raw.usage?.cache_creation_input_tokens ?? 0) +
+                (raw.usage?.cache_read_input_tokens ?? 0),
               outputTokens: raw.usage?.output_tokens ?? 0,
               thinkingTokens: raw.usage?.output_tokens_details?.thinking_tokens ?? 0,
               seconds: (raw.duration_ms ?? 0) / 1000,
@@ -249,7 +254,7 @@ function main(): void {
     console.log([...cols, pct(r.right / r.asked), pct(lo), pct(hi)].join("\t"));
   }
   console.log(
-    "\nmodel\tmodule\tarrangement\tsessions\toutput_tokens\tthinking_tokens\tseconds\tdollars",
+    "\nmodel\tmodule\tarrangement\tsessions\tprompt_tokens\toutput_tokens\tthinking_tokens\tseconds\tdollars",
   );
   const groups = new Map<string, Session[]>();
   for (const s of sessions) {
@@ -258,7 +263,13 @@ function main(): void {
   }
   for (const [key, group] of [...groups].sort()) {
     const m = (pick: (e: Effort) => number): string => num(mean(group.map((s) => pick(s.effort))));
-    const cols = [key, group.length, m((e) => e.outputTokens), m((e) => e.thinkingTokens)];
+    const cols = [
+      key,
+      group.length,
+      m((e) => e.promptTokens),
+      m((e) => e.outputTokens),
+      m((e) => e.thinkingTokens),
+    ];
     console.log([...cols, m((e) => e.seconds), m((e) => e.dollars)].join("\t"));
   }
   console.log(
