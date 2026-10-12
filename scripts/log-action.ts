@@ -353,6 +353,11 @@ function logAction(
     console.error(`log-action: ${actionsPath} must be a file inside the run, not a symlink`);
     return 1;
   }
+  const runsLedger = join(dirname(dispatchReal), "ledger.jsonl");
+  if (isSymlink(runsLedger)) {
+    console.error(`log-action: ${runsLedger} must be a file inside the project, not a symlink`);
+    return 1;
+  }
   try {
     appendFileSync(actionsPath, `${line}\n`);
   } catch {
@@ -360,7 +365,7 @@ function logAction(
     return 1;
   }
   try {
-    appendFileSync(join(dirname(dispatchReal), "ledger.jsonl"), `${line}\n`);
+    appendFileSync(runsLedger, `${line}\n`);
   } catch {
     console.error("log-action: cannot append to the project ledger");
     return 1;

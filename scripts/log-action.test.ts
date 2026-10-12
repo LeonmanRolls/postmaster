@@ -13,7 +13,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, relative } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { toolRoot } from "./lib/paths.ts";
 import { decodeDropInvalid } from "./lib/proc.ts";
 import { controlOf, kindsOf } from "./log-action";
@@ -931,6 +931,20 @@ describe("negative controls: nothing is written", () => {
     mkdirSync(outside, { recursive: true });
     writeFileSync(join(outside, "victim.txt"), "held\n");
     symlinkSync(join(outside, "victim.txt"), join(dispatch, "actions.jsonl"));
+    const r = spawnSync(SELF, ["log-action", dispatch, "coachman", "note", "T9", "hello"], {
+      encoding: "utf8",
+    });
+    expect(r.status).not.toBe(0);
+    expect(readFileSync(join(outside, "victim.txt"), "utf8")).toBe("held\n");
+  });
+
+  test("a run log through a symlinked runs ledger is refused", () => {
+    const dispatch = join(tmp, "project-symlink-runsledger", ".postmaster", "runs", "T9");
+    const outside = join(tmp, "project-symlink-runsledger-outside");
+    mkdirSync(dispatch, { recursive: true });
+    mkdirSync(outside, { recursive: true });
+    writeFileSync(join(outside, "victim.txt"), "held\n");
+    symlinkSync(join(outside, "victim.txt"), join(dirname(dispatch), "ledger.jsonl"));
     const r = spawnSync(SELF, ["log-action", dispatch, "coachman", "note", "T9", "hello"], {
       encoding: "utf8",
     });
