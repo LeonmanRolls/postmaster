@@ -1,0 +1,54 @@
+[
+  {
+    "file": "scripts/front-door.ts",
+    "line": 141,
+    "line_end": 141,
+    "target": "scripts/front-door.ts:141",
+    "severity": "P2",
+    "summary": "Resolve project settings from the Git root",
+    "body": "When `target` is a subdirectory of a repository, `repoOf(target)` later treats it as the same project, but this call uses the subdirectory as the config root. It misses the repository-root `.postmaster/settings.toml` (or errors when there is no global config), so front-door can select the global postmaster instead of the project override. Resolve the Git top-level before loading settings.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "codex"
+  },
+  {
+    "file": "scripts/host.ts",
+    "line": 1634,
+    "line_end": 1635,
+    "target": "scripts/host.ts:1634",
+    "severity": "P2",
+    "summary": "Pass the project to standalone host launches",
+    "body": "Project-specific limits are loaded only when `--project` is supplied. The postmaster command in [skills/postmaster/SKILL.md#L259-L261] passes it only to the child `launch`, and the watcher command in [skills/postmaster/harnesses.md#L629-L632] omits it, so those host processes use global/default limits. Pass `--project` to the outer `host run` calls.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "codex"
+  },
+  {
+    "file": "scripts/lib/effective-config.ts",
+    "line": 982,
+    "line_end": 983,
+    "target": "scripts/lib/effective-config.ts:982",
+    "severity": "P2",
+    "summary": "Keep projects_roots out of local overrides",
+    "body": "If `settings.toml` contains `projects_roots`, this function retains it and the merge replaces the global value. `project-settings effective` and the recorded run config then report project roots even though they must come from the global config, as documented in [AGENTS.md#L244-L249]. Exclude this key from the local overlay.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "codex"
+  },
+  {
+    "file": "scripts/lib/effective-config.ts",
+    "line": 1193,
+    "line_end": 1194,
+    "target": "scripts/lib/effective-config.ts:1193",
+    "severity": "P2",
+    "summary": "Reject credentials in local settings",
+    "body": "Local settings are never scanned for credentials (the read path also passes `false`), and validation accepts nested config fields such as `tracker.api_key`. Such a value enters the effective config and `run.json`, and can be committed with a tracked settings file, despite [settings.example.toml#L6-L7] requiring keys to stay in env files. Preserve local path allowances while rejecting credential fields and values.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "codex"
+  }
+]

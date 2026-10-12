@@ -1,0 +1,15 @@
+[
+  {
+    "file": "scripts/lib/effective-config.ts",
+    "line": 685,
+    "line_end": 733,
+    "target": "scripts/lib/effective-config.ts:685",
+    "severity": "not provided",
+    "summary": "A way round the acceptance check using look-alike Unicode names:** [ ](https://github.com/brindlewick/postmaster/blob/ad29bc3cb9765ed7dc1887cab67b5da4c5526bae/scripts/lib/effective-config.ts#L685-L733). Final confidence 3/10.",
+    "body": "not provided",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "claude"
+  }
+]

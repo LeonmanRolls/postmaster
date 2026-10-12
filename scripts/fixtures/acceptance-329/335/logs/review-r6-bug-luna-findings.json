@@ -1,0 +1,67 @@
+[
+  {
+    "file": "scripts/lib/effective-config.ts",
+    "line": 1202,
+    "line_end": 1203,
+    "target": "scripts/lib/effective-config.ts:1202",
+    "severity": "P2",
+    "summary": "Preserve credential checks for tracked settings",
+    "body": "When local settings contain a credential-like value, this path skips the scanner, and `write local` also scans only the shared file. Since local settings may be force-tracked and shared, a token in a valid field such as `tracker.binding` can enter the repository; keep credential detection enabled while allowing legitimate local paths, as required by [skills/postmaster/SKILL.md#L180-L181](skills/postmaster/SKILL.md#L180-L181).",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "codex"
+  },
+  {
+    "file": "scripts/lib/effective-config.ts",
+    "line": 1117,
+    "line_end": 1120,
+    "target": "scripts/lib/effective-config.ts:1117",
+    "severity": "P2",
+    "summary": "Require machine settings for a standalone config",
+    "body": "If the global config is absent and `settings.toml` contains only legacy metadata such as `[tracker] binding = \"board\"` or `[project]` facts, this treats it as usable even though `stripLegacy` removes those values from the effective config. The loader then succeeds with no machine settings, and `tracker-kind` can default to GitHub instead of reporting the missing config; determine usability from the remaining effective machine settings.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "codex"
+  },
+  {
+    "file": "scripts/lib/effective-config.ts",
+    "line": 1128,
+    "line_end": 1129,
+    "target": "scripts/lib/effective-config.ts:1128",
+    "severity": "P2",
+    "summary": "Keep project roots out of per-project overrides",
+    "body": "When `.postmaster/settings.toml` sets `projects_roots`, this merge overrides the global value, contrary to [AGENTS.md#L246-L248](AGENTS.md#L246-L248). `project-settings effective` exposes the wrong roots and `run-meta` persists them; exclude this key from the local override merge.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "codex"
+  },
+  {
+    "file": "scripts/lib/effective-config.ts",
+    "line": 821,
+    "line_end": 822,
+    "target": "scripts/lib/effective-config.ts:821",
+    "severity": "P3",
+    "summary": "Serialize acceptance-store updates",
+    "body": "If two sessions accept settings for different repositories at the same time using the same config directory, both can read the same store here and the last atomic rename drops the other session's entry. That file will then wait for acceptance again; lock the read-merge-write sequence, since atomic replacement alone does not prevent lost updates.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "codex"
+  },
+  {
+    "file": "package.json",
+    "line": 6,
+    "line_end": 6,
+    "target": "package.json:6",
+    "severity": "P2",
+    "summary": "Make the host self-test safe under parallel runs",
+    "body": "With the new default of four test workers, `bun run check` failed the tmux host self-test because it observed pane output before the `_run` child recorded `@postmaster_state=running`; running `scripts/host.test.ts` serially passed. This makes the default check flaky under parallel load; have the test wait for the state or keep it out of parallel execution.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "codex"
+  }
+]

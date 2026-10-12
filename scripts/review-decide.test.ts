@@ -618,3 +618,62 @@ describe("negative controls: malformed lines fail loudly, each fault named", () 
     expect(r.err.includes("usage:")).toBe(true);
   });
 });
+
+describe("--cause prints the decision and its cause", () => {
+  const cause = (d: string, round: string): { code: number; out: string } => {
+    const r = run(SELF, ["review-decide", d, round, "--cause"]);
+    return { code: r.code, out: r.out + r.err };
+  };
+
+  test("a rise prints RULING rise", () => {
+    const d = newRun("cause-rise");
+    loggedCounts(d, [1, 3], "cr");
+    launched(d, "luna", "bug", 1);
+    launched(d, "luna", "bug", 2);
+    checkWhole(cause(d, "2"), 0, "RULING rise");
+  });
+
+  test("two rounds without a working reviewer print RULING no-working-reviewer", () => {
+    const d = newRun("cause-wall");
+    loggedCounts(d, [1, 0], "cw");
+    launched(d, "opus", "security", 1);
+    degraded(d, "opus", "security", 1, "r");
+    launched(d, "opus", "security", 2);
+    degraded(d, "opus", "security", 2, "r");
+    checkWhole(cause(d, "2"), 0, "RULING no-working-reviewer");
+  });
+
+  test("a falling count prints RUN converging", () => {
+    const d = newRun("cause-run");
+    loggedCounts(d, [3, 1], "cn");
+    launched(d, "luna", "bug", 1);
+    launched(d, "luna", "bug", 2);
+    checkWhole(cause(d, "2"), 0, "RUN converging");
+  });
+
+  test("a clean round prints STOP clean", () => {
+    const d = newRun("cause-stop");
+    loggedCounts(d, [2, 0], "cs");
+    launched(d, "luna", "bug", 1);
+    launched(d, "luna", "bug", 2);
+    checkWhole(cause(d, "2"), 0, "STOP clean");
+  });
+
+  test("round 1 prints its own causes", () => {
+    const applied = newRun("cause-r1-applied");
+    logged(applied, "finding", "src/a.ts:1", "gating P2 r1 bug luna reading: a defect");
+    logged(applied, "apply", "abc123", "src/a.ts:1");
+    checkWhole(cause(applied, "1"), 0, "RUN applied");
+    const quiet = newRun("cause-r1-quiet");
+    logged(quiet, "finding", "src/f.ts:6", "style P3 r1 style luna reading: a style note");
+    checkWhole(cause(quiet, "1"), 0, "STOP no-fixes");
+  });
+
+  test("a third argument that is not --cause is refused", () => {
+    const d = newRun("cause-badflag");
+    loggedCounts(d, [1, 1], "cb");
+    const r = run(SELF, ["review-decide", d, "2", "--verbose"]);
+    expect(r.code).toBe(1);
+    expect(r.err.includes("usage:")).toBe(true);
+  });
+});

@@ -1,0 +1,80 @@
+[
+  {
+    "file": "skills/postmaster/hosts.md",
+    "line": 205,
+    "line_end": "not provided",
+    "target": "skills/postmaster/hosts.md:205",
+    "severity": "not provided",
+    "summary": "The hosts doc now says every reviewer scratch is never a separate workspace, but herdrPlace in scripts/host.ts opens a clone in its own workspace, and this diff moves style and bug reviewers from worktrees to clones.",
+    "body": "A run's style or bug reviewer is launched in a clone cut by cut-scratch --clone. herdrPlace (scripts/host.ts ~line 761) finds no worktree entry for the clone, or finds one with no open space, so it calls `herdr workspace create --cwd <clone>`, and scripts/host-self-test.ts ~line 6964 asserts that a scratch clone 'opens as a space of its own'. Before this diff those reviewers were worktrees placed as tabs in the run space. Now every reviewer under every lens gets its own Herdr space, which contradicts the doc the coachman follows and the presence pin in reviewer-copy-acceptance.ts that enshrines it.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "claude"
+  },
+  {
+    "file": "scripts/host-self-test.ts",
+    "line": 2489,
+    "line_end": "not provided",
+    "target": "scripts/host-self-test.ts:2489",
+    "severity": "not provided",
+    "summary": "The host self-test still cuts the bug-lens scratch as a plain worktree (`git worktree add ... T-1-rev-bug-luna`), so the bug-lens clone shape this diff makes the production default is not exercised by the teardown controls.",
+    "body": "The coachman now cuts .worktrees/<TICKET>-rev-bug-<lane> with `cut-scratch ... --clone <BASE>`. The teardown and placement controls at lines ~2489-2491, ~2656 and ~2878 still build that scratch as a worktree and assert on it, so a regression that only affects bug-lens clones (for example in `review-round teardown` removal or herdr placement) passes the self-test. The error text at line ~2641 ('could not cut the reviewer worktree') is also stale.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "claude"
+  },
+  {
+    "file": "scripts/reviewer-copy-acceptance.test.ts",
+    "line": 384,
+    "line_end": "not provided",
+    "target": "scripts/reviewer-copy-acceptance.test.ts:384",
+    "severity": "not provided",
+    "summary": "The 'an unreadable file exits 2' test relies on chmod 000 blocking reads, which does not hold for root, so the test fails when the gate runs as root in a container.",
+    "body": "Run `bun run check` as root (common in CI containers): readFileSync on the chmod 0o000 coachman.md still succeeds, accept() returns 0 instead of 2, and the test fails with a non-deterministic result that depends on the user, not the code.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "claude"
+  },
+  {
+    "file": "scripts/reviewer-copy-acceptance.ts",
+    "line": 605,
+    "line_end": "not provided",
+    "target": "scripts/reviewer-copy-acceptance.ts:605",
+    "severity": "not provided",
+    "summary": "accept() reads every scope file twice: a readability loop whose result is thrown away, followed by a second loop that calls flat() inside a try/catch which already returns code 2 on failure.",
+    "body": "Each call reads four files twice, and the same unreadable-file path is handled by two separate blocks. A later edit to one block can leave the other's error text or exit code out of step. Merging the two loops into one flat() pass removes the duplication with no change in behavior.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "claude"
+  },
+  {
+    "file": "wiki/concepts/own-review-skills.md",
+    "line": 145,
+    "line_end": "not provided",
+    "target": "wiki/concepts/own-review-skills.md:145",
+    "severity": "not provided",
+    "summary": "The rewritten sentence 'cuts every lens's scratches as clones, the security lens's since this page and the rest since #342' is garbled and self-referencing, and the paragraph at line 111 still presents clone scratches as a security-lens-only rule.",
+    "body": "A reader of the wiki page cannot tell which lenses cut clones now. The security-only rationale at lines 111-113 ('So the security lens reviews from clones...every lane of it') is not checked by the acceptance oracle, which scans only the four pinned files, so it can drift from the coachman contract without any gate noticing.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "claude"
+  },
+  {
+    "file": "skills/postmaster/coachman.md",
+    "line": 796,
+    "line_end": "not provided",
+    "target": "skills/postmaster/coachman.md:796",
+    "severity": "not provided",
+    "summary": "This diff changes the coachman contract (coachman.md is listed in docs/coachman-contract.toml), and the CLAUDE.md rule that such a change merges only after a clean fixture run is not evidenced in the diff.",
+    "body": "CLAUDE.md states: 'A change to the coachman contract merges only after a fixture run scores clean: a run dispatched from the change's branch against a repository made by scripts/run fixture new, and scored by scripts/run fixture score on the same branch.' The diff rewrites the reviewer cut and check commands (coachman.md ~lines 904-940) and the brief wording (line 796), and nothing in the range records a fixture run. Merging on the oracle alone would ship an untested contract change. PLAUSIBLE: the fixture result may exist outside this range.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "claude"
+  }
+]
