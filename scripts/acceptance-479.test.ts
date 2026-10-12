@@ -249,6 +249,11 @@ describe("C5: after a landing the step lands only a printed branch", () => {
       const r = runUpkeep(app.repo, app.dispatch, env, ["--correct"]);
       expectCode(r, 0);
       expect(summaryLine(r.out, "branch")).toBe("");
+      const promptFile = summaryLine(r.out, "prompt");
+      expect(promptFile).not.toBe("");
+      const prompt = readFileSync(promptFile, "utf8");
+      expect(prompt).toContain("Commit nothing");
+      expect(prompt).not.toContain("branch");
     } finally {
       rmSync(app.dir, { recursive: true, force: true });
     }
