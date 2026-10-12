@@ -16,7 +16,11 @@
 import { randomBytes } from "node:crypto";
 import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
-import { effectiveConfigForProject, globalConfigPath } from "./lib/effective-config.ts";
+import {
+  effectiveConfigForProject,
+  ensureIgnore,
+  globalConfigPath,
+} from "./lib/effective-config.ts";
 import { scriptsDir, toolRoot } from "./lib/paths.ts";
 import { run } from "./lib/proc.ts";
 import { shlexQuote } from "./verify.ts";
@@ -256,6 +260,7 @@ function writeBrief(repo: string, id: string): Brief {
   }
   const { path: cfgPath, doc } = readConfig(repo);
   const template = findString(doc, ["planning", "review_link"]);
+  const makeStory = findString(doc, ["planning", "stories"]) !== "off";
   const prefsPath = join(dirname(cfgPath), "preferences.md");
   const preferences = isFile(prefsPath)
     ? readStrict(prefsPath).replace(/\n+$/u, "")
@@ -263,7 +268,14 @@ function writeBrief(repo: string, id: string): Brief {
   const base = defaultBase(repo);
   const dir = clerkDir(repo);
   mkdirSync(dir, { recursive: true });
+  // The brief, the draft and the story link stay out of the repository: the
+  // clerk may run before any dispatch has written the ignore rules.
+  ensureIgnore(repo, true);
   const draft = clerkFile(repo, id, ".md");
+  const storyDir = clerkFile(repo, id, ".story");
+  const storyLine = makeStory
+    ? `Stories: on. Make a story with the draft, keeping the story's files, its picture and its link in ${storyDir}. Give the story's link with the document's link in one message, as the runbook says.`
+    : "Stories: off. Make no story with the draft: show the draft as the runbook says for a draft with no story.";
   const link = editorLink(template, draft);
   const skill = join(TOOL, "skills", "clerk", "SKILL.md");
   const runbook = join(TOOL, "skills", "clerk", "clerk.md");
@@ -334,6 +346,10 @@ function writeBrief(repo: string, id: string): Brief {
     "## Standing preferences",
     "",
     preferences,
+    "",
+    "## Story",
+    "",
+    storyLine,
     "",
     "## Read first",
     "",

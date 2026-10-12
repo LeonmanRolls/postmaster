@@ -84,9 +84,7 @@ for a verifier under a shared index, on that verifier's own bullet. The
 confirmation says this pass drove the verifier at that commit, with
 corrections or without: move it even where every claim held.
 
-Commit the corrections and the confirmation on this branch, never UPKEEP.md:
-the branch carries what the pass proposes, and the report is read from this
-working copy. The branch must touch nothing outside the verifiers' folders.
+{{COMMIT_RULE}}
 
 Write UPKEEP.md at the top of this working copy: one `## Verifier:` section
 per verifier, one `## Feature:` section per page you drove, and one
@@ -119,6 +117,5 @@ page names none; and no unchecked claim sits on a changed page. The tool reads
 only these headers and labeled lines; every other line is prose you may use
 to explain.{{UNASKED_RULE}}
 
-Leave UPKEEP.md uncommitted: the report is read from this working copy, and
-only the verifiers' folders land from this pass. Send the same text as your
+{{REPORT_RULE}} Send the same text as your
 final message.

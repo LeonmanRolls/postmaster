@@ -141,6 +141,11 @@ round_timeout_seconds = 2400
 # here and never in a ticket.
 review_link = ""
 
+# Whether the booking clerk makes a story with every ticket draft it shows
+# the user: "on" or "off", "on" when absent. A project's own settings may
+# turn stories off for that project alone (scripts/run setup --project).
+stories = "on"
+
 [ship]
 # Who authorizes a local merge: "user" (a person, live) or "postmaster" (the supervising
 # session merges after it verifies the ship card). Pull-request projects are merged

@@ -1,4 +1,4 @@
-// Tests beside scripts/log-action.ts, moved from its --self-test on #109: 61 controls.
+// Tests beside scripts/log-action.ts, moved from its --self-test on #109: 65 controls.
 // Each test repeats the write it checks, so it passes alone as well as in file order.
 // Repeated tool-fault argument lists are module constants; the mixed bad-byte write is a helper.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
@@ -984,6 +984,53 @@ describe("negative controls: nothing is written", () => {
       "comment:0123456789abcdef",
       "approved bunfig.toml",
     ]);
+    expect(r.code).toBe(1);
+    expect(lines()).toBe(before);
+    expect(r.err.includes("carries the decision")).toBe(true);
+  }, 30000);
+
+  test("an approved library is written", () => {
+    const before = lines();
+    const r = logAction([
+      "postmaster",
+      "library",
+      "library:0123456789abcdef",
+      "approved",
+      "library left-pad 1.3.0 added",
+      "yes,",
+      "take",
+      "it",
+    ]);
+    expect(r.code).toBe(0);
+    expect(lines()).toBe(before + 1);
+    const last = lastLine();
+    expect(
+      last !== null &&
+        last.action === "library" &&
+        last.target === "library:0123456789abcdef" &&
+        last.detail === "approved library left-pad 1.3.0 added yes, take it",
+    ).toBe(true);
+  }, 30000);
+
+  test("a library with a target out of shape", () => {
+    const before = lines();
+    const r = logAction(["coachman", "library", "left-pad@1.3.0", "approved yes take it"]);
+    expect(r.code).toBe(1);
+    expect(lines()).toBe(before);
+    expect(r.err.includes("library:<16 hex>")).toBe(true);
+  }, 30000);
+
+  test("a library whose decision is another word", () => {
+    const before = lines();
+    const r = logAction(["coachman", "library", "library:0123456789abcdef", "maybe yes"]);
+    expect(r.code).toBe(1);
+    expect(lines()).toBe(before);
+    expect(r.err.includes("opens with its decision, approved or refused")).toBe(true);
+  }, 30000);
+
+  test("a library with the decision and nothing after it", () => {
+    const before = lines();
+    const r = logAction(["coachman", "library", "library:0123456789abcdef", "approved"]);
     expect(r.code).toBe(1);
     expect(lines()).toBe(before);
     expect(r.err.includes("carries the decision")).toBe(true);

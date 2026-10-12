@@ -38,11 +38,19 @@ holds = "the turnpike table and leg derivation with its dispatch"
 
 [[files]]
 path = "scripts/stage.ts"
-holds = "the stage list and the transition and terminal-stage rules"
+holds = "the stage transitions with the terminal-stage and skip-refusal rules"
+
+[[files]]
+path = "scripts/lib/stages.ts"
+holds = "the stage list and the run's expected stage order"
 
 [[files]]
 path = "scripts/handoff-check.ts"
 holds = "the required handoff sections"
+
+[[files]]
+path = "scripts/leg-end.ts"
+holds = "the leg's end: the hand-off check, the handoff log line and every end marker"
 
 [[files]]
 path = "scripts/coachman-contract.ts"

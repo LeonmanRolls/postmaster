@@ -21,7 +21,8 @@
 //   exit 1  a harness was named that is not on PATH, the coachman shares a lane's model, fewer
 //           than two lanes were given, a reviewer or the surveyor is not a lane, an answer was missing, a round
 //           time limit was not a whole number of seconds from 1 to 86400, a planning review link
-//           omitted {path}, a mode other than synthesis, single-thread or alternate, a
+//           omitted {path}, a planning stories value other than on or off, a mode other than
+//           synthesis, single-thread or alternate, a
 //           ticket_notes other than given or held-back, or an existing config was not overwritten
 //
 // Control: the written file is parsed back as TOML where a parser is available, and its reviewer
@@ -251,6 +252,32 @@ function blankLinkClear(k: string, optional: boolean): boolean {
   return optional && (k === "review_link" || k === "planning.review_link");
 }
 
+// answersOnly <prompt> <k> <opts>: an answers-file key that is never asked,
+// so it stays out of the setup conversation. Missing or blank reads unset;
+// a found value is validated by the caller.
+function answersOnly(prompt: string, k: string, opts: AskOpts): string {
+  if (opts.answers === "") return "";
+  let found: string | undefined;
+  try {
+    const text = readFileSync(opts.answers, "utf8");
+    for (const line of text.split("\n")) {
+      if (line.startsWith(`${k}=`)) {
+        found = line.slice(k.length + 1);
+        break;
+      }
+    }
+  } catch {
+    /* fall through */
+  }
+  if (found === undefined || found === "") {
+    console.log(`${prompt}: ${PROJECT !== "" ? "(not set)" : "on (default)"}`);
+    return "";
+  }
+  if (PROJECT !== "") GIVEN.add(k);
+  console.log(`${prompt}: ${found}`);
+  return found;
+}
+
 // Lane names implied by lane.* answers, for the scaffolding when `lanes` is
 // not answered: unioned with the named set, never replacing it.
 function impliedLanes(answersFile: string): string[] {
@@ -406,6 +433,7 @@ merge_authority            user               user or postmaster
 checkpoint_mode            autonomous         autonomous or consult
 review_link?               (none)             template with {path}
 planning.review_link?      (none)             code-server template with {path} for ticket drafts
+planning.stories           on                 clerk stories with ticket drafts: on or off (answers file only)
 overwrite                  no                 yes replaces an existing config
 ignore_settings            no                 project only: yes has git ignore the settings file
 project mode (--project <repo>): writes only answered keys; projects_roots is refused there`);
@@ -1001,6 +1029,12 @@ const PRL = ask(
   opts,
 );
 if (PRL && !PRL.includes("{path}")) die("setup: planning.review_link must contain {path}", 1);
+// Stories start on and stay out of the setup conversation: the key is
+// answered by file or hand-edited, never asked.
+const STORIES = answersOnly("Stories with ticket drafts (on, off)", "planning.stories", opts);
+if (STORIES !== "" && STORIES !== "on" && STORIES !== "off") {
+  die("setup: planning.stories must be on or off", 1);
+}
 
 let TRACKER_EXTRA = "";
 if (PWS) TRACKER_EXTRA = `url = "${PURL}"\nworkspace = "${PWS}"\nenv_file = "${PENV}"`;
@@ -1064,7 +1098,10 @@ if (PROJECT !== "") {
   if (trackerParts.length > 0) sections.push(`[tracker]\n${trackerParts.join("\n")}\n`);
   if (PS !== "") sections.push(`[postmaster]\npoll_seconds = ${PS}\n`);
   if (RT !== "") sections.push(`[review]\nround_timeout_seconds = ${RT}\n`);
-  if (GIVEN.has("planning.review_link")) sections.push(`[planning]\nreview_link = "${PRL}"\n`);
+  const planningParts: string[] = [];
+  if (GIVEN.has("planning.review_link")) planningParts.push(`review_link = "${PRL}"`);
+  if (GIVEN.has("planning.stories")) planningParts.push(`stories = "${STORIES}"`);
+  if (planningParts.length > 0) sections.push(`[planning]\n${planningParts.join("\n")}\n`);
   const shipParts: string[] = [];
   if (MA !== "") shipParts.push(`merge_authority = "${MA}"`);
   if (CPM !== "") shipParts.push(`checkpoint_mode = "${CPM}"`);
@@ -1325,7 +1362,7 @@ round_timeout_seconds = ${RT}
 
 [planning]
 review_link = "${PRL}"
-
+${STORIES !== "" ? `stories = "${STORIES}"\n` : ""}
 [ship]
 merge_authority = "${MA}"
 checkpoint_mode = "${CPM}"

@@ -160,6 +160,10 @@ waits in the ready queue until the watcher sees room under `team.max_runs`.
    prints them for the waybill; a gate the project declares wins over the launch card's, and
    `record` says so. On refusal, log a `note` with the config error, tell the user what to fix,
    set the undispatched run to `abandoned`, and do not cut worktrees or move the ticket in progress.
+   Then record the run's starting verifiers: `<tool>/scripts/run verifier record <repo>
+   <dispatch>` copies `.postmaster/verifier/` into the run's record, the folder as the run
+   reads it; without local verifiers it records none. On refusal, log a `note`, tell the user
+   what to fix, and abandon as on a `verify record` refusal.
 7. **Cut the synthesis worktree** at BASE, the sha you recorded from `git -C <repo> rev-parse
    HEAD` on the default branch: `git -C <repo> worktree add .worktrees/<TICKET> -b <TICKET>
    <sha>`. The coachman's cwd is that worktree from its first leg, so the project's ambient
@@ -474,12 +478,14 @@ spec and pauses for no spec review.
 ## Stage E: rulings
 
 1. **Read `<dispatch>/ESCALATION.md`.** It carries the question, the options the coachman
-   sees, its recommendation, and the state of the branches. Where the escalation is a
-   provider wall (`.wall-pause` is present), the wall is the user's to rule: the walls are
-   what Stage D's WALL step tells them about, and step 6 takes their words.
+   sees, its recommendation, and the state of the branches. Where it names a rise survey (a
+   `Survey:` line), read the survey first; a `Survey missing:` line says why there is none.
+   Where the escalation is a provider wall (`.wall-pause` is present), the wall is the user's
+   to rule: the walls are what Stage D's WALL step tells them about, and step 6 takes their words.
 2. **Decide within the user's standing instructions** when the question is about the
    work: a within-brief ambiguity, a scope call the ticket's own criteria answer, a round to
-   stop of the review loop. A reach is never decided here. A walled workhorse is never yours to drop:
+   stop of the review loop. On a review-loop stop, read the survey the escalation names
+   before ruling. A reach is never decided here. A walled workhorse is never yours to drop:
    it goes to the user as Stage D's WALL step says. Log `escalate` with your ruling.
 3. **Send it up** when it is genuinely destructive, changes the ticket's scope, touches
    anything outside the repo, is a fault in a control (Tool faults), asks whether to fix a
@@ -487,8 +493,12 @@ spec and pauses for no spec review.
    (`coachman.md`, the reach check: a workhorse's finding, a main checkout change no lane's
    record explains at `workhorses`, or an observed change tied to a reviewer outside this
    run's own branches and folders), or the user
-   asked to see it: write the question to the run's `.waiting-on-user`, add the run and the
-   question to the waiting list (`<runs>/postmaster/ESCALATION.md`, owned by
+   asked to see it: write the question to the run's `.waiting-on-user` — with
+   `<tool>/scripts/run review-survey question <dispatch>` when the escalation names a rise
+   survey (a `Survey:` or `Survey missing:` line), which carries the survey's plain
+   words before the options, or the reason the survey is missing — add the run and the
+   question to the waiting list
+   (`<runs>/postmaster/ESCALATION.md`, owned by
    `<tool>/scripts/run host leg waiting add <runs> <ticket> <question-file>`), tell the user in
    the session, and wait. Say what happens when they answer:
    for an ASK outcome the attempt record's `on_answer` names it. Never
@@ -523,6 +533,16 @@ spec and pauses for no spec review.
    and the run stays paused; on exit 0 the run is ruled, and the watcher delivers the pause
    (step 5). A ruling on a reviewer's wall is the same command; the lane is keyed by its
    lens where the run has one.
+7. **For a library ask, the user always answers.** An escalation asking to add
+   a library is never decided here, whatever `ship.merge_authority` says: put
+   the library, its version, its facts and the survey answer where the
+   escalation carries one to the user, through step 3's wait. On their answer,
+   remove the wait markers as step 3 says and record the word with
+   `<tool>/scripts/run log-action <dispatch> postmaster library <identity> <approved|refused> <entry> <words>`,
+   the identity being what `<tool>/scripts/run libraries identity <name> <version>`
+   prints, shaped `library:<16 hex>`. On a yes, deliver the resume (step 5) so
+   the leg records the approval and goes on, and on a no the run does without.
+   Never say yes yourself.
 
 ## Stage F (contract 2): verify and land the ship card
 
@@ -686,6 +706,25 @@ every project and does not change that project's gate.
    mismatch as the exact discrepancy; a card from a run pinned before this check has
    no such section, and those runs are judged by the live list alone. Any other exit
    is an input fault: stop the stage, fix the inputs and re-run.
+
+   Check libraries after the switch-offs and before step 2's landing route, on both routes:
+   `<tool>/scripts/run landing libraries --repo <repo> --default <branch>
+   --ticket <the ticket ref> --dispatch <dispatch>`. Exit 0, the branch is clear. Exit 2,
+   put each listed entry to the user with the ship card: its name, kind, old and new
+   version, publish date, source, Socket's verdict and the packages it brings. For each
+   entry they approve, record the word with
+   `<tool>/scripts/run log-action <dispatch> postmaster library <its identity> approved
+   <the entry> <the user's words>`; for each entry they refuse, record it the same way with
+   `refused`, then withhold at once under the claim-fail clause above, with the refused
+   entry as the exact discrepancy. Run the check again after recording: a held remainder
+   repeats the ask, and anything still unapproved after the user's word withholds the same
+   way. While an ask is outstanding, the question sits in the run's `.waiting-on-user`;
+   remove it when the user's word arrives. Exit 4 is a recorded refusal: withhold the
+   same way. Runs dispatched before this check existed are held the same way at landing.
+   The merge authority never approves these entries and never unholds them: where
+   it is the postmaster itself, it still asks and records the word before it opens a
+   pull request or merges. Any other exit is an input fault: stop the stage, fix the
+   inputs and re-run.
 2. **Follow the landing route in the waybill.** First ask whether the ticket already landed:
    `<tool>/scripts/run landing already-landed --repo <repo> --default <branch> --ticket
    <the ticket ref> --base <the manifest's base> --card-head <the card's final HEAD>`, adding
@@ -807,15 +846,26 @@ every project and does not change that project's gate.
 3. **Put what needs the user to the user once aftercare ends:** each flagged folder — the
    ones aftercare's summary flags as holding work no branch's commits have, with the files
    it names — then tool faults and style-sort proposals as Legacy Stage G steps 4 and 5
-   describe. Then check whether any verifier may have gone stale on the landing: advance
+   describe. Then keep the run's verifier changes with
+   `<tool>/scripts/run verifier keep <repo> --run <dispatch> --at <merge>`, which saves the
+   folder as it was in the run's record, merges each file the run changed, added or removed
+   three ways against the project's file, and confirms each changed or added verifier at the
+   merge — each change that clashes with one kept since the run started prints as `not kept:`
+   and stays as the project has it, and each named file goes to the user. Then check whether
+   any verifier may have gone stale on the landing: advance
    `<repo>`'s checkout of the default branch to the landed merge commit first, so the stale
    query reads the landing's own index, then run `<tool>/scripts/run verifier stale
    <repo> --at <merge>` once; for the verifiers it marks, offer one correcting upkeep pass
    (`run verifier upkeep <repo> --run <dispatch> --correct`), naming the changed files,
-   and a yes starts it; when the pass completes, land its branch (`run verifier land <repo>
-   <branch> --run <dispatch> --report <report>`), so the new confirmation reaches the default
-   branch; a landing it clears offers nothing. Archive finished threads where the
-   harness has an archive form (`harnesses.md`).
+   and a yes starts it; when the pass completes, land the pass's branch
+   only where the pass printed one (`run verifier land <repo> <branch> --run
+   <dispatch> --report <report>`), so the new confirmation reaches the default
+   branch; a pass that printed a branch and a `kept` line carries both, so
+   land the branch and report the kept corrections as kept; for local
+   verifiers the pass prints no branch and the corrections are already kept,
+   so report them as kept. A landing it clears offers
+   nothing. Archive finished threads where the harness has an archive form
+   (`harnesses.md`).
 4. Dispatch the next ticket.
 
 ## Legacy Stage F: the gate (run.json has no coachman_contract 2)
@@ -841,7 +891,10 @@ On `.card-ready`, read `<dispatch>/card.md` and `<dispatch>/handoff-3.md`:
    exit 0 the branch is clear; otherwise put each listed entry to the user with the card,
    record each word through `<tool>/scripts/run log-action`, and withhold under step 2
    until the check clears — the merge authority never approves these entries itself.
-   While the ask is outstanding the question sits in the run's `.waiting-on-user`.
+   Check libraries as current Stage F does: `<tool>/scripts/run landing libraries
+   --repo <repo> --default <branch> --ticket <the ticket ref> --dispatch <dispatch>`, and
+   put each held entry to the user the same way, recording each word as a `library`
+   approval. While the ask is outstanding the question sits in the run's `.waiting-on-user`.
 2. **Grant or withhold.** Every word is delivered by resuming leg 3 (Stage C, step 5), and
    `.card-ready` is removed before it is; the coachman touches it afresh when the card changes.
    `MERGE_AUTHORITY: postmaster` and every check above holds: deliver "MERGE GRANTED" and log

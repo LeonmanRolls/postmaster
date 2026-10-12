@@ -15,6 +15,7 @@ restated here in this tool's own words. Where the two disagree, these instructio
 
 Do all of your work inside this working copy and edit nothing outside it.
 {{ASK_RULE}}
+{{SURFACE_RULE}}
 
 ## 1. Learn the surface from the working copy
 
@@ -111,4 +112,4 @@ Once the proof holds, carry `Confirmed: {{PROVED}}` in features/README.md beside
 the `Files:` line: the confirmation says this verifier was proved at that
 commit, and a verifier without one reads as possibly stale.
 
-Commit the verifier on this branch. {{HANDOVER_RULE}}{{HANDOVER_UNASKED}}
+{{COMMIT_LINE}}{{HANDOVER_RULE}}{{HANDOVER_UNASKED}}

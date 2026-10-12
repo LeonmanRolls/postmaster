@@ -1266,13 +1266,15 @@ export const inspect = (repo: string, opts?: { storePath?: string }): Rec => {
 };
 
 // --- writes ----------------------------------------------------------------------------------------
-// The folder's own ignore rules: run records and drafts stay ignored whatever the
-// user answers. The person's settings file is never ignored here: setup offers to
-// have git ignore it, and only the user's yes adds that rule (ignoreSettings).
+// The folder's own ignore rules: run records, drafts, local verifiers and the
+// experiments record stay ignored whatever the user answers. The person's
+// settings file is never ignored here: setup offers to have git ignore it,
+// and only the user's yes adds that rule (ignoreSettings).
 const IGNORE_RECORDS = [
   "runs/",
   "clerk/",
   "project.toml",
+  "verifier/",
   "experiments.jsonl",
   "experiments-page.url",
   ".gitignore",
@@ -1280,8 +1282,8 @@ const IGNORE_RECORDS = [
 
 const IGNORE_HEADER =
   "# .postmaster/ holds this instance's settings and every run's full record.\n" +
-  "# Run records and drafts stay ignored. settings.toml is ignored only on the\n" +
-  "# user's yes, during setup. To share what a run requires of everyone,\n" +
+  "# Run records, drafts and local verifiers stay ignored. settings.toml is ignored\n" +
+  "# only on the user's yes, during setup. To share what a run requires of everyone,\n" +
   "# commit project.toml with: git add -f .postmaster/project.toml\n";
 
 /** ruleMatches <rule> <path>: whether one ignore rule matches a path under

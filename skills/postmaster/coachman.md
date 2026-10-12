@@ -148,11 +148,11 @@ harness-specific and the flow does not rely on it.
 | `logs/<lane>.done` | `run host` | A workhorse process exited; the coachman collects its result. |
 | `logs/review-r<round>-$LENS-<lane>.done` | `run host` | A reviewer process exited; the coachman collects that round. |
 | `.leg-<n>-exited` | `run host` | The launch ended: its process exited or startup failed after recording the reason. Cleared before a relaunch or resume. |
-| `.leg-<n>-done` | Coachman, after `run handoff-check` exits 0 | The hand-off is complete; the postmaster may dispatch the next leg. |
+| `.leg-<n>-done` | `run leg-end`, after `run handoff-check` exits 0 | The hand-off is complete; the postmaster may dispatch the next leg. |
 | `.checkpoint-<n>-ready` | Coachman | `checkpoint-<n>.md` is ready for the postmaster to read. |
 | `.checkpoint-review-ready` | Coachman | `checkpoint-review.md` is ready for the postmaster to read. |
 | `.escalation-ready` | Coachman | `ESCALATION.md` asks for a ruling; the postmaster resumes the same leg. |
-| `.card-ready` | Coachman | `card.md` and the leg's hand-off are ready for the postmaster's gate. |
+| `.card-ready` | `run leg-end` on the last leg; the legacy ship leg touches it by hand while waiting for the merge word | `card.md` and the leg's hand-off are ready for the postmaster's gate. |
 | `.waiting-on-user` | Postmaster | A question is waiting; the postmaster removes it when the answer arrives. |
 
 Markers report the state of their paired artifact or process. They never replace it.
@@ -207,13 +207,16 @@ Anything the next leg must decide or the postmaster must rule on.
 One paragraph: where the next leg starts, and what it must do first. On the last leg of a run this is for the postmaster: what Stage F must verify, and what aftercare it picks up.
 ```
 
-Then close the open section with `<tool>/scripts/run run-log <dispatch> --close`, log `handoff`, touch
-`.leg-<n>-done`, and exit. The postmaster launches the next leg;
+Then end the leg with `<tool>/scripts/run leg-end <dispatch> <n> <detail>`: it checks the
+hand-off, closes the open run-log section, logs `handoff`, and writes every end marker the
+leg is owed, `.leg-<n>-done` with `.card-ready` beside it on the last leg, and it writes no
+marker when the hand-off fails its check and ends nothing for a leg beyond the run's
+schedule. The postmaster launches the next leg;
 you never do. A leg that exits without its hand-off is spent, and the postmaster remounts it.
 
 **Leg completion condition.** A leg ends only after writing all required, nonempty sections
-to `handoff-<n>.md`, passing `<tool>/scripts/run handoff-check`, closing its open run-log
-section, logging `handoff`, and touching `.leg-<n>-done`. A process exit marker alone never
+to `handoff-<n>.md` and ending through `<tool>/scripts/run leg-end`, which passes
+`<tool>/scripts/run handoff-check` before it writes any marker. A process exit marker alone never
 finishes a leg. If the process exited and there is no done marker, the postmaster remounts it.
 
 **Escalations stay inside the leg.** An escalation writes `ESCALATION.md`, touches
@@ -306,6 +309,50 @@ before writing the summary stays the last step.
 A workhorse commits incrementally as it goes, never pushes, never reads other branches or
 `.worktrees/`, and never edits files outside its copy.
 
+## Libraries: the ask before any add
+
+A run adds only a library its signed-off ticket lists, and only after the
+ask: its coachman stops and asks the postmaster, who asks the user, and the
+run goes on only once the user answers. The ticket's `## Libraries`
+section is the list. A run asks once for each library, before its first
+install, and the answer holds for the rest of that run. The install
+refuses anything else before it downloads, and the landing checks again.
+
+A workhorse that finds it needs a library reports the name, the exact
+version and what the run wants it for, and stops that line of work. It
+never runs the install or the refresh first. On the report:
+
+1. **Read the list.** `<tool>/scripts/run libraries list --ticket <dispatch>/brief.md`
+   names what the ticket lists. What it does not name is unlisted.
+2. **Take the facts.** `<tool>/scripts/run libraries facts <name> <version>`
+   prints what the escalation carries: the name, version, publish date,
+   source and Socket's verdict.
+3. **Unlisted means surveyed.** For a library the list does not name, start
+   the surveyor before escalating, since the postmaster runs no model lane.
+   Write the question and the materials to files of your own outside the
+   dispatch — the ticket text, the library's name, version and facts and
+   what the run wants it for, and none of your case for it — then:
+
+   ```sh
+   <tool>/scripts/run surveyor call <dispatch> <repo> --name <survey-name> --snapshot <head> --question <question-file> --material <material-file> --timeout 1800
+   ```
+
+   The question asks whether the run needs a library there and whether this
+   one passes the clerk's checks: look-alike names, publisher, age of the
+   package and version, use, that its code matches its source, licence,
+   Linux and macOS, upkeep, install scripts, what it brings and Socket's
+   verdict. The survey name is letters, digits, dot, underscore and dash,
+   one survey per library, built from the library's name with any other
+   character as a dash. The snapshot is the synthesis head, as
+   `git -C <synthesis-wt> rev-parse HEAD` prints it.
+4. **Escalate with the facts**, and the survey's answer where there is one:
+   write `ESCALATION.md`, touch `.escalation-ready` and exit, as any
+   escalation. Never approve a library yourself.
+5. **On the resume with the user's yes**, record it in every copy that
+   installs — `<tool>/scripts/run libraries record <name> <version> --dispatch <dispatch> --wt <copy>`,
+   with `--vendored` for the copied-in bundle, which no install resolves —
+   then resume the lane. On a no, the run does without the library.
+
 ## The run's mode: synthesis or single-thread
 
 The waybill's Team section names the run's mode as its `mode:` line, resolved at dispatch and
@@ -360,7 +407,8 @@ implementation divergences with no such explanation.
    commit after the first ever touches them. Run the run's own checks
    on the worktree each pass with `<tool>/scripts/run verify run <synthesis-wt> <dispatch>`,
    which logs each result; the last pass before checkpoint 1 must be all green, or its
-   failures stopped on as a workhorse would stop them (the escalation rule below). What you
+   failures stopped on as a workhorse would stop them (the escalation rule below). Keep the
+   run's verifier copy as The run's verifier copy says. What you
    would otherwise ask a lane, you decide within the ticket yourself and record in the
    hand-off's Decisions.
 5. Record leg 1 in one `synthesize` action whose detail is a SYNTHESIS line that says the mode
@@ -422,6 +470,31 @@ second implementer wrote (single-thread).
   says; a coachman that cannot follow a check finishes stopped on it, not with the check
   edited.
 
+## The run's verifier copy, in every run
+
+These rules bind both modes; they are how a run reads the local verifiers and
+what it owes them back.
+
+- **Every working copy holds its own copy of the local verifiers**, armed at
+  bootstrap (Stage 0): each workhorse copy and the synthesis worktree hold
+  `.postmaster/verifier/` as the run's record holds it at dispatch, git
+  ignoring it. A lane opens the verifier pages the waybill names inside its
+  own copy, with confinement on or off. A run reads the local verifiers as
+  they stood when it was dispatched, plus its own changes; what others keep
+  in the project's folder meanwhile reaches only later runs.
+- **The coachman adds what a criterion needs to the synthesis worktree's copy**,
+  up to a whole verifier for a surface with none, written in the layout make
+  writes: its folder, README with the upkeep line, feature pages and index
+  bullet, the bullet confirmed at the run's BASE, and the index itself when
+  the copy has none. The ticket's criteria and checks stay fixed for the whole
+  run; a verifier change alters only how they are shown. The coachman also writes
+  the pages of features the ticket adds, changes or removes, where their verifier
+  exists; where none covers the surface, only a criterion's need makes one.
+- **Only the coachman's copy is kept**: a lane's change to its own copy reaches
+  the project only when the coachman takes it into the synthesis copy. Both
+  legs work in the synthesis worktree, and nothing cleans ignored files from
+  it, so what the coachman writes there reaches the review leg and the card.
+
 ## Stage 0 (leg 1): bootstrap
 
 1. **Read the waybill.** It names the ticket, the project profile (gate command, docs to read
@@ -459,8 +532,11 @@ second implementer wrote (single-thread).
 
    A copy cut without its branch leaves the lane on a detached head and the run with no
    `wb/` branch to bring in. Arm each
-   copy with the run's checks: `<tool>/scripts/run verify arm <workhorse-wt> <dispatch>`.
-   In
+   copy with the run's checks: `<tool>/scripts/run verify arm <workhorse-wt> <dispatch>`,
+   and with the run's verifiers: `<tool>/scripts/run verifier arm <workhorse-wt> <dispatch>`.
+   In both modes, arm the synthesis worktree with the run's verifiers too:
+   `<tool>/scripts/run verifier arm <repo>/.worktrees/<TICKET> <dispatch>`, so the waybill's
+   repo-relative docs path resolves there. In
    single-thread mode cut no workhorse copy (The run's mode, above).
 6. **Update the manifest** the postmaster created: set the stage with `<tool>/scripts/run stage
    <dispatch> bootstrapped`. In synthesis mode, add one `lanes` entry per workhorse, in place;
@@ -502,7 +578,9 @@ second implementer wrote (single-thread).
    check's source names `web-journey`, it also carries what
    `<tool>/scripts/run verify-journey --format` prints and the command that names the report's path,
    `<tool>/scripts/run verify journey-path .`. Where the workhorse's harness reads no ambient context
-   file, the brief opens by naming the project's context file and index.
+   file, the brief opens by naming the project's context file and index. It carries the library
+   rule: a workhorse that needs a library reports it and stops that line of work, and never
+   adds or refreshes one before the ask resolves.
 
 ## Stage 1 (leg 1): implement, then synthesize
 
@@ -742,7 +820,8 @@ from it.
   Then build the synthesis commit by commit with a reason for each choice. Amend commit
   messages to review grade; run the project's FULL gate with its real command. If its
   private-data check finds anything, fix each finding on the synthesis branch and rerun the
-  full gate before proceeding; ordinary findings do not go to the user.
+  full gate before proceeding; ordinary findings do not go to the user. While composing, keep
+  the run's verifier copy as The run's verifier copy says.
 
   **Measure the committed synthesis before recording the SYNTHESIS line** (synthesis mode; a
   single-thread run has no lane commits to measure and writes no shares line). From the synthesis
@@ -922,14 +1001,18 @@ Set the stage first, `<tool>/scripts/run stage <dispatch> review`, then:
    synthesis worktree.
 
    **Launch:** the call below resolves every open lens's lanes — a lens whose lanes do not
-   resolve stopping it — then does every open lens's preparation: each brief-launched lens's
+   resolve stopping it — then refuses a brief one of its reviewers needs that is missing,
+   naming it, with nothing launched: every lens but bug reads its brief, except a security
+   lane whose harness has its own security-review skill. Then it does every open lens's
+   preparation: each brief-launched lens's
    prompt file verbatim, and under the security lens each lane's prompt file from its harness's
    own security-review skill (`launch skill <lane> security-review --run <dispatch>`: exit 0 is
    the skill's prompt, exit 3 a copy of the lens's file, and any other exit stopping the round
    with `NO SECURITY PROMPT FOR <lane>` and nothing launched) — then checks every scratch with
    `cut-scratch --check`, at the snapshot and a clone whose `origin/HEAD` leads back to BASE,
    under every lens. It launches nothing if one fails, with
-   `SCRATCH NOT READY: <TICKET>-rev-<lens>-<lane>` and nothing launched; then it starts the
+   `SCRATCH NOT READY: <TICKET>-rev-<lens>-<lane>` and nothing launched; then it saves the
+   round's starting state, a save that fails stopping it, then it starts the
    round, a round that will not start stopping it, which clears its markers and fixes its
    deadline, and starts every reviewer under
    every open lens through `run host` (`hosts.md`), each named as `host name <dispatch> review
@@ -938,19 +1021,27 @@ Set the stage first, `<tool>/scripts/run stage <dispatch> review`, then:
    with its prompt file — logging one `review-launch` line per lane it starts.
    `run host` lands each marker, naming the round, the lens and the lane,
    when its process exits, whatever its exit, and the call ends in the wait for the whole
-   round, given every reviewer it launched, exiting as the wait does:
+   round, given every reviewer it launched, exiting as the wait does. The wait ends with the
+   round's check for changes by its reviewers, once every reviewer has finished or been
+   stopped, before it returns:
 
    ```sh
-   <tool>/scripts/run reach before <dispatch> <round>
    <tool>/scripts/run review-round launch <dispatch> <round> <repo> <synthesis-wt>
    ```
 
-   A wait cut short, as by the harness's cap on background tasks, is run again alone:
+   The launch refuses a round whose reach check is already recorded, and a retried round
+   keeps the first starting state its first attempt saved. A wait cut short, as by the
+   harness's cap on background tasks, is run again alone:
    `<tool>/scripts/run review-round wait <dispatch> <round> <repo>` keeps the round's reviewers
-   and its deadline. A round interrupted before its launches were done is re-run whole, from the
+   and its deadline, and ends with the round's check like any wait: a collection cut short
+   after its point completes its restore instead of repeating its check, and a finished
+   collection is never repeated. A round interrupted before
+   its launches were done is re-run whole, from the
    cut, which tears down whatever its first attempt left.
 
-   **Normalize the bug reports before triage.** For each lane under the bug lens, copy any
+   **Normalize the bug reports before triage.** The wait already copied each bug lane's
+   forked task records best-effort before its check, so the check ties what it finds.
+   For each lane under the bug lens, copy any
    forked task record the stream's `task_notification` named and normalize the native report
    from the same events stream.
    Codex reads the `--last` file; the other forms read their final event message. A verdict
@@ -1003,13 +1094,15 @@ Set the stage first, `<tool>/scripts/run stage <dispatch> review`, then:
    **On `WAIT-TIMEOUT` (exit 3), close the round without the reviewers that had not finished.**
    The script has recorded each one in `run-log.md` as `<lane> <lens>: DEGRADED, timeout` and in
    its `degrade` line, and stopped it with `run host stop`; one it names STILL RUNNING could not
-   be stopped: escalate. Harvest the others, and treat each timed-out lane as a review lane
+   be stopped: the wait exits 4 with the round's check not run, so stop the leg and escalate.
+   Harvest the others, and treat each timed-out lane as a review lane
    killed mid-run (hard rules): DEGRADED on the checkpoint card, with `timeout` as its cause,
    and back in the next round. A round in which no lane actually reviewed under a gating lens
    is never the last: that lens runs again in the next round.
-   Exit 4 is a timeout whose records could not all be written, a fault in a control: stop the
-   leg and escalate (Tool faults). Exit 1 collects nothing, and the output says why; unless the
-   round was started again, re-run it whole.
+   Exit 4 is a fault in a control: a timeout whose records could not all be written, a reviewer
+   still running with the round's check not run, or the round's reach check failing. Stop the
+   leg and escalate (Tool faults). Exit 1 collects
+   nothing, and the output says why; unless the round was started again, re-run it whole.
 
    **A wall closes the round without its reviewer.** When a reviewer's launch ends on its
    provider's usage limit, `<tool>/scripts/run review-round wait` records it as
@@ -1041,15 +1134,11 @@ Set the stage first, `<tool>/scripts/run stage <dispatch> review`, then:
    round. A scratch it leaves in place is named with its reason, such as the user having its
    tab open, and reported; it is never removed by hand. A scratch never holds work, and its
    contents were just checked.
-   **Check reach and restore before any fix.** Once every reviewer has been harvested and each
-   scratch's tracked diff has been checked, but before teardown or triage, run:
-
-   ```sh
-   <tool>/scripts/run reach round <dispatch> r<round>
-   ```
-
-   Exit 1 from `check` or `restore` is a fault in the `reach` control: follow Tool faults and
-   stop. The check logs a `degrade` line for each reviewer whose verdict it voids. That verdict
+   **Read the round's reach check before any fix.** The wait ran the round's check for
+   changes by its reviewers, and restored what it found, before it returned. Once every
+   reviewer has been harvested and each scratch's tracked diff has been checked, but before
+   teardown or triage, read its output in the wait's output and its point in `actions.jsonl`.
+   The check logs a `degrade` line for each reviewer whose verdict it voids. That verdict
    never counts as clean; still inspect that reviewer's findings, and launch the reviewer again
    if another round runs. An unexplained change to a run branch or tracked synthesis file voids
    every reviewer, whose degrade lines keep the loop from ending on that round. A move of
@@ -1058,8 +1147,8 @@ Set the stage first, `<tool>/scripts/run stage <dispatch> review`, then:
    commit with `log-action apply`. Restore saves
    the undone diff under `<dispatch>/reach/` and moves new synthesis files there before resetting
    the branch and worktree. An `escalate:` line in the check's output means an observed change
-   tied to a reviewer lies outside this run's branches and worktree folders: after restore,
-   write `ESCALATION.md` with the finding and
+   tied to a reviewer lies outside this run's branches and worktree folders: write
+   `ESCALATION.md` with the finding and
    your advice, log `escalate`, touch `.escalation-ready`, and exit before applying a fix or
    launching another review round. The postmaster sends it to the user and waits for their answer.
    Other findings and notes are recorded for the card and do not stop the run. Then tear the round
@@ -1107,10 +1196,21 @@ Set the stage first, `<tool>/scripts/run stage <dispatch> review`, then:
    instead of fixed, which stops the leg in either `CHECKPOINT_MODE`, and a ruling that asks for
    the fix has it applied, the checkpoint rewritten with its state `applied on user word, not
    re-reviewed`, and the gate re-run, with the card listing it under `## Not re-reviewed`. When
-   the decision is `RULING`, the loop stops and escalates with the residue, including any
-   fixes that have not been re-reviewed, the decision's line, and your read on why it is not
-   converging; this and the escalation above are `CHECKPOINT_MODE`'s only mid-flow stops in
-   autonomous mode. After a ruling to go on, the rounds that follow are decided by the same rule. Style
+   the decision is `RULING`, the loop stops: first run `<tool>/scripts/run review-survey survey
+   <dispatch> <repo> <round>`, which surveys the stop when it is a rise and waits for the
+   survey. Exit 2 means the stop is not a rise: escalate with the residue, including any
+   fixes that have not been re-reviewed, the decision's line, and your read on the stop.
+   Otherwise, on exit 0 or 3, the step printed the survey's record: write your residue, including any fixes
+   that have not been re-reviewed, your options and your advice to one file with `## Residue`,
+   `## Options` and `## Advice` sections, and render the escalation with
+   `<tool>/scripts/run review-survey escalate <dispatch> <round> --decision "<the decision's
+   line>" --coachman <file>`, which writes `ESCALATION.md` naming the survey, or the reason
+   there is none, and touches `.escalation-ready`. When the step prints `no recorded
+   snapshot`, establish the round's snapshot from the synthesis history, pass it with
+   `--snapshot`, and run the step again. Exit 1 means the step itself failed: read its
+   error, fix what it names, and run it again. This and the escalation above are
+   `CHECKPOINT_MODE`'s only mid-flow stops in autonomous mode. After a ruling to go on,
+   the rounds that follow are decided by the same rule. Style
    does not run again: a style lane DEGRADED in round 1 stays DEGRADED, and the card says how
    many lanes the style lens rested on.
 
@@ -1238,7 +1338,11 @@ whatever main has done since.
    `Mode: <synthesis | single-thread>` from `run.json` (in both modes; the waybill's `mode:` line
    says the same — a single-thread run's card carries `Mode: single-thread`), then the branch,
    final HEAD, diff stat and commit list; then the `## Merge` section from the merge step's card
-   verdict, pasted after it as its own section, never retyped; browser suite and QA when
+   verdict, pasted after it as its own section, never retyped; then the `## Verifier changes`
+   section from `<tool>/scripts/run verifier changes <synthesis-wt> <dispatch> --freeze`,
+   pasted after it as its own section, never retyped — the freeze snapshots the synthesis
+   copy into the run's record for the postmaster's keep, so after any verifier change re-run
+   it and re-paste; browser suite and QA when
    present; the journey report path where a check's source names `web-journey`; every ticket
    turnpike with its rounds and result from its checkpoint record, or `none`; the Style residue
    count as `<tool>/scripts/run style-findings count <dispatch>` prints it, then every Style
@@ -1249,7 +1353,8 @@ whatever main has done since.
    coachman's own words about the printed parts in `## Notes`.
    **Each of those is its own `##` section** — the card-block's four, `## Switch-offs`,
    `## Private data findings`, `## Notes`,
-   then `## Merge`, `## Turnpikes`, `## Style residue`, `## Branches`, `## Lane outcomes`,
+   then `## Merge`, `## Verifier changes`, `## Turnpikes`, `## Style residue`, `## Branches`,
+   `## Lane outcomes`,
    `## QA and browser suite` (`none` where the project has none) and `## Review link` —
    the same heading set in both modes. Finding titles and notes, where the reader wants them, go
    in `## Notes`: it is the one place for the coachman's own words about the printed parts, which
@@ -1281,8 +1386,8 @@ whatever main has done since.
 6. **Write the final hand-off.** Write
    `<dispatch>/handoff-<n>.md` with the verified results, all decisions and open findings, and
    state that no coachman leg follows and the postmaster must verify the card and handle
-   landing. `<tool>/scripts/run handoff-check` must exit 0. Close the open run-log section, log
-   `handoff`, then touch `.card-ready` and `.leg-<n>-done` and exit. The host writes
+   landing. Then end the leg with `<tool>/scripts/run leg-end <dispatch> <n> <detail>`, which
+   writes `.card-ready` beside `.leg-<n>-done`, and exit. The host writes
    `.leg-<n>-exited` when the process exits. Do not change code after recording final-HEAD
    results without repeating the checks.
 
@@ -1442,9 +1547,8 @@ real artifacts) and closing each one's panes before it is removed (`<tool>/scrip
 and hand the synthesis worktree to the postmaster for removal from outside it.
 Keep the `wb/<TICKET>-<lane>` branches as a local archive. Durable process learnings go to the
 project's own docs, not this runbook. Residue contract: a clean run leaves only torn-down-able
-folders. Then finish `handoff-3.md` (the closing state of every branch and the ticket), close
-the open section with `<tool>/scripts/run run-log <dispatch> --close`, log `handoff`, touch
-`.leg-3-done`, and exit.
+folders. Then finish `handoff-3.md` (the closing state of every branch and the ticket), end
+through `<tool>/scripts/run leg-end <dispatch> 3 <detail>`, and exit.
 
 ## Concurrency note (several runs on one project)
 
@@ -1460,9 +1564,9 @@ ticket that needs another's change waits for it to land.
 - **Never modify postmaster itself during a run, whatever the target.** Its runbooks, scripts
   and adapters change only through a ticket of their own; a fault in them is a tool fault
   (above). When the target is postmaster, the run changes only what its own ticket asks for.
-- Never start a leg without logging `handoff-accept`; never end one without a hand-off that
-  passes `<tool>/scripts/run handoff-check`. What is not in the hand-off did not happen for the next
-  leg.
+- Never start a leg without logging `handoff-accept`; never end one except through
+  `<tool>/scripts/run leg-end`, which passes `<tool>/scripts/run handoff-check` before it writes
+  any marker. What is not in the hand-off did not happen for the next leg.
 - Commit as you go in the synthesis worktree, with review-grade messages. A leg's uncommitted
   work is invisible to a fallback coachman that takes the leg over, and unverified to it.
 - One identity everywhere: do not switch a harness onto a different profile or account part-way
@@ -1527,7 +1631,7 @@ ticket that needs another's change waits for it to land.
 - Update the manifest at bootstrap and keep thread ids and `outcome`s current, in place; never
   rewrite it and never delete it. Change `stage` only with `<tool>/scripts/run stage`. When it refuses
   with exit 3, the postmaster has closed or abandoned the run: log a `note` quoting the refusal,
-  change nothing more, and exit.
+  change nothing more, and exit. When it refuses naming a skipped stage, enter that stage first.
 - **A lone dissenter in a gating lens is the finding, not the outlier.** Clean verdicts are not
   independent: they can rest on one shared unexamined premise, so a split means one reviewer
   looked somewhere the others assumed. Verify it in the code yourself before dismissing it,
