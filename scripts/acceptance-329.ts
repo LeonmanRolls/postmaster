@@ -332,10 +332,13 @@ export function makeCopy(run: string, stop: number, opts: CopyOpts = {}): CopyLa
   writeFileSync(join(dispatch, "actions.jsonl"), `${kept.join("\n")}\n`, "utf8");
 
   if (opts.reports !== false) {
-    for (const f of readdirSync(join(FIX, run, "logs"))) {
-      const rd = reportRound(f);
-      if (rd === null || rd > stop) continue;
-      copyFileSync(join(FIX, run, "logs", f), join(logs, f));
+    const fixtureLogs = join(FIX, run, "logs");
+    if (existsSync(fixtureLogs)) {
+      for (const f of readdirSync(fixtureLogs)) {
+        const rd = reportRound(f);
+        if (rd === null || rd > stop) continue;
+        copyFileSync(join(fixtureLogs, f), join(logs, f));
+      }
     }
   }
   if (opts.ticket !== false) {
