@@ -18,7 +18,10 @@
 // run's branches and synthesis worktree around a round. What a lane's record
 // names outside its own folder is a note listing the lane and the path; it
 // never says read or write, and never voids a verdict. A change is tied to a
-// lane when that lane's record names the path or the branch.
+// lane when that lane's record names the path or the branch. A recorded fix
+// that changed a path a reviewer's record names voids that reviewer alone,
+// and restore resets the branch and the worktree to the snapshot: the fix may
+// hold the reviewer's change, and the two cannot be told apart.
 
 import {
   existsSync,
@@ -730,6 +733,14 @@ function addMainChanges(
 /** Coachman apply targets, oldest first, expanded to full commits.
  * An unreadable log or an unresolvable target excuses nothing: the
  * caller treats a null return as no exemption. */
+/**
+ * The commits the coachman's apply rows name, oldest first. A line that is
+ * not an action object, or an apply row that does not name a commit, is
+ * skipped, never fatal: one malformed row must not brick every later
+ * explained move. Null only when the log itself cannot be read, which no
+ * row can repair; a skipped row that was a real apply still fails its own
+ * move closed, and the next apply repairs it.
+ */
 function loggedApplies(repo: string, dispatch: string): string[] | null {
   let contents: string;
   try {
@@ -741,20 +752,24 @@ function loggedApplies(repo: string, dispatch: string): string[] | null {
   const targets: string[] = [];
   for (const line of contents.split(/\r?\n/u)) {
     if (!line.trim()) continue;
-    let row: Record<string, unknown>;
+    let row: unknown;
     try {
-      row = JSON.parse(line) as Record<string, unknown>;
+      row = JSON.parse(line) as unknown;
     } catch {
-      return null;
+      continue;
     }
-    if (row.action !== "apply" || row.actor !== "coachman") continue;
-    if (typeof row.target !== "string" || !/^[0-9a-f]{4,40}$/iu.test(row.target)) return null;
-    targets.push(row.target);
+    if (row === null || typeof row !== "object" || Array.isArray(row)) continue;
+    const action = (row as Record<string, unknown>).action;
+    const actor = (row as Record<string, unknown>).actor;
+    const target = (row as Record<string, unknown>).target;
+    if (action !== "apply" || actor !== "coachman") continue;
+    if (typeof target !== "string" || !/^[0-9a-f]{4,40}$/iu.test(target)) continue;
+    targets.push(target);
   }
   const expanded: string[] = [];
   for (const target of targets) {
     const sha = runGit(repo, ["rev-parse", "--verify", "--quiet", `${target}^{commit}`]);
-    if (sha.code !== 0 || !/^[0-9a-f]{40}$/u.test(sha.out.trim())) return null;
+    if (sha.code !== 0 || !/^[0-9a-f]{40}$/u.test(sha.out.trim())) continue;
     expanded.push(sha.out.trim());
   }
   return expanded;
@@ -788,6 +803,40 @@ function moveExplained(
   const inChain = new Set(commits);
   const logged = applies.filter((sha) => inChain.has(sha));
   return logged.length === commits.length && logged.every((sha, i) => sha === commits[i]);
+}
+
+/**
+ * Reviewers whose record names a file the move changed: a fix the coachman saved
+ * during the round swept a reviewer's change into itself. Only checked records count;
+ * the move's files live in the synthesis worktree, so only paths there can match.
+ */
+function sweptReviewers(
+  info: RunInfo,
+  reads: LaneRead[],
+  before: string,
+  after: string,
+): Array<{ read: LaneRead; paths: string[] }> {
+  if (!/^[0-9a-f]{40}$/u.test(before) || !/^[0-9a-f]{40}$/u.test(after)) return [];
+  if (before === after) return [];
+  const moved = runGit(info.repo, ["diff", "--no-renames", "--name-only", before, after]);
+  if (moved.code !== 0) throw new Error(`cannot diff the ticket move: ${moved.err.trim()}`);
+  const synth = physical(synthesisPath(info));
+  const changed = new Set(
+    moved.out
+      .split("\n")
+      .filter(Boolean)
+      .map((name) => physical(join(synth, name))),
+  );
+  if (changed.size === 0) return [];
+  const out: Array<{ read: LaneRead; paths: string[] }> = [];
+  for (const read of reads) {
+    if (read.status !== "checked") continue;
+    const paths = [
+      ...new Set(read.touches.map((touch) => touch.path).filter((path) => changed.has(path))),
+    ].sort();
+    if (paths.length > 0) out.push({ read, paths });
+  }
+  return out;
 }
 
 function roundChanges(
@@ -897,6 +946,9 @@ function roundChanges(
   };
   const ticketRefOwner = checked.find((read) => named(read, ticketRef));
   const applies = loggedApplies(info.repo, info.dispatch);
+  // The ticket move is seen twice, as its ref and as its worktree: each swept
+  // reviewer and path is reported once.
+  const sweptDone = new Set<string>();
   for (const change of changes) {
     const refName = change.path.startsWith("refs/heads/") ? change.path : "";
     const exactPath = change.path;
@@ -936,7 +988,28 @@ function roundChanges(
       // order, is the coachman's own fix, not an unexplained change. Tied
       // lanes keep their findings; anything unlogged reads as before.
       const isTicket = refName === ticketRef || exactPath === ticketWorktree;
-      if (isTicket && moveExplained(info.repo, applies, change.before, change.after)) continue;
+      if (isTicket && moveExplained(info.repo, applies, change.before, change.after)) {
+        // Unless the recorded fixes changed a path a reviewer's record names: that
+        // reviewer's change rode into the fix, so the move is not explained for them.
+        // The finding voids that reviewer alone; restore resets the whole move.
+        for (const { read, paths } of sweptReviewers(info, checked, change.before, change.after)) {
+          for (const path of paths) {
+            const key = `${read.lens ?? ""}\0${read.lane}\0${path}`;
+            if (sweptDone.has(key)) continue;
+            sweptDone.add(key);
+            const touch = pathChangeTouch(
+              info,
+              path,
+              "write",
+              read.lane,
+              "reviewer-named path changed by recorded fixes",
+            );
+            touch.lens = read.lens;
+            touches.push(touch);
+          }
+        }
+        continue;
+      }
       const humanPath = displayPath(info, change.path);
       const detail = `${change.before} -> ${change.after}`;
       const touch = pathChangeTouch(info, change.path, "read", "", `unexplained change ${detail}`);
@@ -1093,6 +1166,22 @@ function checkRound(info: RunInfo, round: number): number {
   const snapshot = loadSnapshot(info, round);
   const changes = roundChanges(info, round, snapshot, reads);
   touches.push(...changes.touches);
+  // A reviewer the check could not read is a finding, not only a note: its
+  // change may ride in the round's fixes unseen, so its verdict is voided
+  // and restore resets the move it cannot verify.
+  for (const read of reads) {
+    if (read.status === "checked") continue;
+    touches.push({
+      lane: read.lane,
+      ...(read.lens ? { lens: read.lens } : {}),
+      path: read.ownFolder,
+      access: "names",
+      place: placeOf(info, read.ownFolder, read.ownFolder),
+      kind: "finding",
+      source: "round",
+      detail: `not checked: ${read.reason ?? "the lane record could not be read"}`,
+    });
+  }
   const { result } = addMainChanges(info, `r${round}`, touches, false);
 
   const voided = new Set<string>();
@@ -1170,6 +1259,49 @@ function pathExists(path: string): boolean {
   }
 }
 
+/** Whether the ticket move swept a reviewer's change into the round's recorded fixes:
+ * the same rule as check, so restore resets what check voided for. A reviewer
+ * record that cannot be read blocks preservation too: the move may hold that
+ * reviewer's change unseen, so it resets with the rest. Returns the reason to
+ * reset, or null when the move stands. */
+function restoreSwept(
+  info: RunInfo,
+  round: number,
+  snapshot: Snapshot,
+  nowRefs: Record<string, string>,
+  current: string,
+): string | null {
+  let reviewers: Array<[string, string]>;
+  try {
+    reviewers = reviewersFor(info, round);
+  } catch {
+    return null;
+  }
+  const reads = reviewers.map(([lens, lane]) =>
+    readLane(
+      info,
+      lane,
+      reviewerEvents(info, round, lens, lane),
+      roundOwnFolder(info, lens, lane),
+      lens,
+    ),
+  );
+  const unchecked = reads.filter((read) => read.status !== "checked");
+  if (unchecked.length > 0) {
+    const lanes = unchecked.map((read) => read.lane).join(", ");
+    return `a reviewer record could not be checked (${lanes})`;
+  }
+  const checked = reads.filter((read) => read.status === "checked");
+  const ticketRef = `refs/heads/${info.ticket}`;
+  const pairs: Array<[string, string]> = [
+    [snapshot.refs[ticketRef] ?? "", nowRefs[ticketRef] ?? ""],
+    [snapshot.synthesisHead, current],
+  ];
+  return pairs.some(([before, after]) => sweptReviewers(info, checked, before, after).length > 0)
+    ? "the round's recorded fixes changed a reviewer-named path"
+    : null;
+}
+
 function restoreRound(info: RunInfo, round: number): number {
   // The worktree must be verifiable, but it may be detached or switched: the
   // reattach below puts the recorded branch back.
@@ -1179,16 +1311,22 @@ function restoreRound(info: RunInfo, round: number): number {
   mkdirSync(saved, { recursive: true });
   // The same rule as check: a move that is exactly the logged applies, in
   // order, is the coachman's own fix and is left as it is, never archived
-  // as undone work. Everything else restores exactly as before.
+  // as undone work. Everything else restores exactly as before. A move the
+  // recorded fixes swept a reviewer-named path into resets with the rest:
+  // the fix may hold the reviewer's change, and the two cannot be told apart.
   const applies = loggedApplies(info.repo, info.dispatch);
   const ticketRef = `refs/heads/${info.ticket}`;
   const nowRefs = refsMap(info.repo, info.ticket);
-  const refExplained = moveExplained(
-    info.repo,
-    applies,
-    snapshot.refs[ticketRef] ?? "",
-    nowRefs[ticketRef] ?? "",
-  );
+  const synth = synthesisPath(info);
+  const currentHead = currentHeadForRestore(info.repo, synth);
+  const sweptReason = restoreSwept(info, round, snapshot, nowRefs, currentHead);
+  if (sweptReason !== null) {
+    console.log(`swept move reset for r${round}: ${sweptReason}`);
+  }
+  const swept = sweptReason !== null;
+  const refExplained =
+    !swept &&
+    moveExplained(info.repo, applies, snapshot.refs[ticketRef] ?? "", nowRefs[ticketRef] ?? "");
   const changedRefs = new Set([...Object.keys(snapshot.refs), ...Object.keys(nowRefs)]);
   for (const ref of [...changedRefs].sort()) {
     const before = snapshot.refs[ref] ?? "";
@@ -1213,9 +1351,8 @@ function restoreRound(info: RunInfo, round: number): number {
     );
   }
 
-  const synth = synthesisPath(info);
-  const currentHead = currentHeadForRestore(info.repo, synth);
-  const synthExplained = moveExplained(info.repo, applies, snapshot.synthesisHead, currentHead);
+  const synthExplained =
+    !swept && moveExplained(info.repo, applies, snapshot.synthesisHead, currentHead);
   if (synthExplained) {
     console.log(
       `left an explained move in place: ${displayPath(info, synth)}: ${snapshot.synthesisHead} -> ${currentHead}`,

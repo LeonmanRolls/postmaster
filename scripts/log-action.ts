@@ -11,13 +11,16 @@
 //
 //   actor    postmaster | coachman | lane:<name>
 //   action   a verb from a fixed set, enforced, so the log is computable:
-//            dispatch resume refuse harvest synthesize review-launch review-harvest finding apply
+//            dispatch resume refuse harvest synthesize review-launch review-harvest review-finish
+//            finding finding-also apply
 //            escalate rule ticket-check ticket-create ticket-edit ticket-state ticket-comment
 //            gate verify merge teardown degrade handoff-accept handoff stage premises
 //            tool-fault note wall told carry reach take-in switch-off library
 //   target   what the action was done to: a lane, a ticket id, a branch, a path, a round
 //   detail   free text; everything after the target, joined by spaces. A finding's opens with its
-//            class, gating or style, so the style findings can be told apart.
+//            class, gating or style, so the style findings can be told apart, and a
+//            finding-also's opens the same way, naming a later report of that finding.
+//            A review-finish names its lens and round, `<lens> round <n>`.
 //            A wall's opens with `<role> <lens> <round> <reset> <the provider's first line>`,
 //            a told's with the same role/lens/round of the wall it marks, a wall ruling with
 //            `wall go-on`, and a carry's with `wall go-on` too, so the wall lines of a run
@@ -56,10 +59,10 @@
 // to learn from it; it reads these lines.
 //
 //   exit 0  written to both files
-//   exit 1  usage, an action outside the set, a finding with no class, a premises result with
-//           no verified commit or base, a switch-off or library with a target or detail out
-//           of shape, a tool-fault missing a field or naming no postmaster file, or a file
-//           could not be appended
+//   exit 1  usage, an action outside the set, a finding or finding-also with no class,
+//           a premises result with no verified commit or base, a switch-off or library
+//           with a target or detail out of shape, a tool-fault missing a field or naming
+//           no postmaster file, or a file could not be appended
 import {
   appendFileSync,
   existsSync,
@@ -74,7 +77,7 @@ import { argvDecoded } from "./lib/proc.ts";
 import { pyWords } from "./lib/text.ts";
 
 const VERBS =
-  " dispatch resume refuse harvest synthesize review-launch review-harvest finding apply escalate rule ticket-check ticket-create ticket-edit ticket-state ticket-comment reach gate verify merge teardown degrade handoff-accept handoff stage premises tool-fault note wall told carry take-in switch-off library ";
+  " dispatch resume refuse harvest synthesize review-launch review-harvest review-finish finding finding-also apply escalate rule ticket-check ticket-create ticket-edit ticket-state ticket-comment reach gate verify merge teardown degrade handoff-accept handoff stage premises tool-fault note wall told carry take-in switch-off library ";
 const CONTROLS = join(toolRoot(import.meta), "skills/postmaster/controls.md");
 
 // JSON string escaping: drop control chars, escape separators. Bytes that
@@ -271,10 +274,10 @@ function logAction(
     console.error(`log-action: '${action}' is not an action in the set:${VERBS}`);
     return 1;
   }
-  if (action === "finding") {
+  if (action === "finding" || action === "finding-also") {
     const firstWord = detail.split(" ")[0] ?? "";
     if (firstWord !== "gating" && firstWord !== "style") {
-      console.error("log-action: a finding's detail opens with its class, gating or style");
+      console.error(`log-action: a ${action}'s detail opens with its class, gating or style`);
       return 1;
     }
   }

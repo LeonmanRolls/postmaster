@@ -521,12 +521,22 @@ function armWt(wt: string, dispatch: string): { top: string; spec: string; check
   return { top, spec, checks };
 }
 
-function uncommitted(top: string): string[] {
-  const r = run("git", ["-C", top, "status", "--porcelain", "--untracked-files=all"]);
-  return r.out
+/**
+ * The files a `status --porcelain` run sees that its commit does not hold,
+ * outside the armed spec dir. Pure: the dirt check `verify run`, the round's
+ * cut and its mid-round gate share, so a reused pass and a fresh run test
+ * the same clean tree.
+ */
+export function uncommittedFiles(porcelain: string): string[] {
+  return porcelain
     .split("\n")
     .filter((l) => l.slice(3) && !l.slice(3).replace(/^"|"$/gu, "").startsWith(`${SPEC}/`))
     .map((l) => l.slice(3));
+}
+
+function uncommitted(top: string): string[] {
+  const r = run("git", ["-C", top, "status", "--porcelain", "--untracked-files=all"]);
+  return uncommittedFiles(r.out);
 }
 
 function listedFiles(files: string[]): string {
