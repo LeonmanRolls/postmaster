@@ -504,6 +504,16 @@ spec and pauses for no spec review.
    and the run stays paused; on exit 0 the run is ruled, and the watcher delivers the pause
    (step 5). A ruling on a reviewer's wall is the same command; the lane is keyed by its
    lens where the run has one.
+7. **For a library ask, the user always answers.** An escalation asking to add
+   a library is never decided here, whatever `ship.merge_authority` says: put
+   the library, its version, its facts and the survey answer where the
+   escalation carries one to the user, through step 3's wait. On their answer,
+   remove the wait markers as step 3 says and record the word with
+   `<tool>/scripts/run log-action <dispatch> postmaster library <identity> <approved|refused> <entry> <words>`,
+   the identity being what `<tool>/scripts/run libraries identity <name> <version>`
+   prints, shaped `library:<16 hex>`. On a yes, deliver the resume (step 5) so
+   the leg records the approval and goes on, and on a no the run does without.
+   Never say yes yourself.
 
 ## Stage F (contract 2): verify and land the ship card
 
@@ -667,6 +677,25 @@ every project and does not change that project's gate.
    mismatch as the exact discrepancy; a card from a run pinned before this check has
    no such section, and those runs are judged by the live list alone. Any other exit
    is an input fault: stop the stage, fix the inputs and re-run.
+
+   Check libraries after the switch-offs and before step 2's landing route, on both routes:
+   `<tool>/scripts/run landing libraries --repo <repo> --default <branch>
+   --ticket <the ticket ref> --dispatch <dispatch>`. Exit 0, the branch is clear. Exit 2,
+   put each listed entry to the user with the ship card: its name, kind, old and new
+   version, publish date, source, Socket's verdict and the packages it brings. For each
+   entry they approve, record the word with
+   `<tool>/scripts/run log-action <dispatch> postmaster library <its identity> approved
+   <the entry> <the user's words>`; for each entry they refuse, record it the same way with
+   `refused`, then withhold at once under the claim-fail clause above, with the refused
+   entry as the exact discrepancy. Run the check again after recording: a held remainder
+   repeats the ask, and anything still unapproved after the user's word withholds the same
+   way. While an ask is outstanding, the question sits in the run's `.waiting-on-user`;
+   remove it when the user's word arrives. Exit 4 is a recorded refusal: withhold the
+   same way. Runs dispatched before this check existed are held the same way at landing.
+   The merge authority never approves these entries and never unholds them: where
+   it is the postmaster itself, it still asks and records the word before it opens a
+   pull request or merges. Any other exit is an input fault: stop the stage, fix the
+   inputs and re-run.
 2. **Follow the landing route in the waybill.** First ask whether the ticket already landed:
    `<tool>/scripts/run landing already-landed --repo <repo> --default <branch> --ticket
    <the ticket ref> --base <the manifest's base> --card-head <the card's final HEAD>`, adding
@@ -833,7 +862,10 @@ On `.card-ready`, read `<dispatch>/card.md` and `<dispatch>/handoff-3.md`:
    exit 0 the branch is clear; otherwise put each listed entry to the user with the card,
    record each word through `<tool>/scripts/run log-action`, and withhold under step 2
    until the check clears — the merge authority never approves these entries itself.
-   While the ask is outstanding the question sits in the run's `.waiting-on-user`.
+   Check libraries as current Stage F does: `<tool>/scripts/run landing libraries
+   --repo <repo> --default <branch> --ticket <the ticket ref> --dispatch <dispatch>`, and
+   put each held entry to the user the same way, recording each word as a `library`
+   approval. While the ask is outstanding the question sits in the run's `.waiting-on-user`.
 2. **Grant or withhold.** Every word is delivered by resuming leg 3 (Stage C, step 5), and
    `.card-ready` is removed before it is; the coachman touches it afresh when the card changes.
    `MERGE_AUTHORITY: postmaster` and every check above holds: deliver "MERGE GRANTED" and log
