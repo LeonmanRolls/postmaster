@@ -61,6 +61,7 @@ import {
   indexNamesFolder,
   indexStrays,
   isFeaturePage,
+  isLocalFolder,
   isSetupDispatch,
   isSurface,
   joinBodies,
@@ -71,8 +72,11 @@ import {
   listVerifiers,
   localDestCollisions,
   localDestLink,
+  localDrivenVdirs,
+  localFeaturePages,
   localScopeStrays,
   localTag,
+  localUpkeepTag,
   matchDependedFiles,
   mergeAuthorityOf,
   mergeFileThreeWay,
@@ -109,6 +113,7 @@ import {
   repoTop,
   roleHarness,
   scopeVdirs,
+  scopeVdirsLocal,
   scrubGitEnv,
   segOfRel,
   sendText,
@@ -119,6 +124,7 @@ import {
   spanSegs,
   spawnCommand,
   stampConfirmed,
+  strayOutsideLocal,
   strayUncommitted,
   strayVerifierPaths,
   surfaceFolder,
@@ -130,12 +136,14 @@ import {
   surfaceProse,
   surfaceRule,
   timeoutMs,
+  toolPlacedIgnore,
   type TreeValue,
   UPKEEP_LINE,
   unlistedSentence,
   unrunProject,
   untouchedCorrected,
   type UpkeepReport,
+  upkeepCommitVariant,
   upkeepCorrectSendText,
   upkeepScope,
   upkeepSendText,
@@ -4445,6 +4453,10 @@ describe("strayUncommitted", () => {
   test("either side of a rename strays", () => {
     expect(strayUncommitted("R  new.md\0old.md\0", ["UPKEEP.md"])).toEqual(["new.md", "old.md"]);
   });
+
+  test("a rename's old path reads whole with a space inside it", () => {
+    expect(strayUncommitted("R  new.md\0ab cdef\0", ["UPKEEP.md"])).toEqual(["new.md", "ab cdef"]);
+  });
 });
 
 describe("index confirmation", () => {
@@ -5055,6 +5067,183 @@ describe("run-copy keep pruning", () => {
       expect(existsSync(join(app.repo, ".postmaster/verifier/cli"))).toBe(false);
     } finally {
       rmSync(app.dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("local verifier upkeep", () => {
+  test("isLocalFolder matches the root and its folders only", () => {
+    expect(isLocalFolder(".postmaster/verifier")).toBe(true);
+    expect(isLocalFolder(".postmaster/verifier/cli")).toBe(true);
+    expect(isLocalFolder(".postmaster/verifier/cli/features/f1.md")).toBe(true);
+    expect(isLocalFolder("verifier")).toBe(false);
+    expect(isLocalFolder("verifier/cli")).toBe(false);
+    expect(isLocalFolder(".postmaster/verifier-other")).toBe(false);
+    expect(isLocalFolder(".postmaster")).toBe(false);
+  });
+
+  test("indexFileFor covers the local shared index", () => {
+    expect(indexFileFor(".postmaster/verifier/cli", false, true)).toBe(
+      ".postmaster/verifier/README.md",
+    );
+    expect(indexFileFor(".postmaster/verifier/cli", false, false)).toBe(
+      ".postmaster/verifier/cli/features/README.md",
+    );
+    expect(indexFileFor(".postmaster/verifier", false, true)).toBe(
+      ".postmaster/verifier/features/README.md",
+    );
+    expect(indexFileFor("verifier/cli", true, true)).toBe("verifier/README.md");
+  });
+
+  test("spanNamesDir matches the local index's bullets", () => {
+    const span = [
+      "- The command line verifier in .postmaster/verifier/cli/: drives it. Files: src/cli.txt, Confirmed: abc",
+    ];
+    expect(spanNamesDir(span, ".postmaster/verifier/cli")).toBe(true);
+    expect(spanNamesDir(span, ".postmaster/verifier/web")).toBe(false);
+  });
+
+  test("upkeepCommitVariant reads the folders", () => {
+    expect(upkeepCommitVariant(["verify-app"])).toBe("repo");
+    expect(upkeepCommitVariant([".postmaster/verifier"])).toBe("local");
+    expect(upkeepCommitVariant(["verify-app", ".postmaster/verifier"])).toBe("mixed");
+  });
+
+  test("localUpkeepTag numbers past worktrees taken", () => {
+    expect(localUpkeepTag("/x/app", "/x/app-upkeep")).toBe("local-upkeep");
+    expect(localUpkeepTag("/x/app", "/x/app-upkeep-2")).toBe("local-upkeep-2");
+    expect(localUpkeepTag("/x/app", "/elsewhere/wt")).toBe("local-upkeep");
+  });
+
+  test("localDrivenVdirs reads the pages' dirs", () => {
+    expect(
+      localDrivenVdirs(
+        [
+          ".postmaster/verifier/cli/features/f1.md",
+          ".postmaster/verifier/cli/features/nested/f2.md",
+          ".postmaster/verifier/web/features/h.md",
+          "verify-app/features/a.md",
+        ],
+        [".postmaster/verifier/cli", ".postmaster/verifier/web"],
+      ),
+    ).toEqual([".postmaster/verifier/cli", ".postmaster/verifier/web"]);
+    expect(localDrivenVdirs([], [".postmaster/verifier/cli"])).toEqual([]);
+  });
+
+  test("localDrivenVdirs settles a kind named features on the frozen dirs", () => {
+    const pages = [".postmaster/verifier/features/features/login.md"];
+    expect(
+      localDrivenVdirs(pages, [".postmaster/verifier", ".postmaster/verifier/features"]),
+    ).toEqual([".postmaster/verifier/features"]);
+    expect(localDrivenVdirs(pages, [".postmaster/verifier"])).toEqual([".postmaster/verifier"]);
+    expect(localDrivenVdirs(pages, [])).toEqual([]);
+  });
+
+  test("strayOutsideLocal allows the report and the local folders", () => {
+    expect(strayOutsideLocal("?? UPKEEP.md\0", [".postmaster/verifier"])).toEqual([]);
+    expect(
+      strayOutsideLocal(
+        " M .postmaster/verifier/cli/features/f1.md\0?? .postmaster/verifier/README.md\0?? UPKEEP.md\0",
+        [".postmaster/verifier"],
+      ),
+    ).toEqual([]);
+    expect(strayOutsideLocal(" M src/cli.txt\0?? UPKEEP.md\0", [".postmaster/verifier"])).toEqual([
+      "src/cli.txt",
+    ]);
+    expect(strayOutsideLocal("R  new.md\0old.md\0", [".postmaster/verifier"])).toEqual([
+      "new.md",
+      "old.md",
+    ]);
+    expect(
+      strayOutsideLocal(
+        "R  .postmaster/verifier/cli/features/new.md\0.postmaster/verifier/cli/features/ab cdef\0",
+        [".postmaster/verifier"],
+      ),
+    ).toEqual([]);
+  });
+
+  test("toolPlacedIgnore allows the copied ignore file unchanged", () => {
+    const dir = tempDir();
+    try {
+      const repo = join(dir, "app");
+      const wt = join(dir, "wt");
+      writeRepoFile(repo, ".postmaster/.gitignore", "verifier/\n");
+      writeRepoFile(wt, ".postmaster/.gitignore", "verifier/\n");
+      expect(toolPlacedIgnore(repo, wt, ".postmaster/.gitignore")).toBe(true);
+      expect(toolPlacedIgnore(repo, wt, "src/cli.txt")).toBe(false);
+      writeRepoFile(wt, ".postmaster/.gitignore", "verifier/\n*.log\n");
+      expect(toolPlacedIgnore(repo, wt, ".postmaster/.gitignore")).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("scopeVdirsLocal reads verifier dirs from disk", () => {
+    const dir = tempDir();
+    try {
+      const root = join(dir, "app");
+      writeRepoFile(root, ".postmaster/verifier/README.md", "# Verifiers\n");
+      writeRepoFile(root, ".postmaster/verifier/cli/README.md", "# cli\n");
+      writeRepoFile(root, ".postmaster/verifier/cli/features/f1.md", "# f1\n");
+      writeRepoFile(root, ".postmaster/verifier/empty/README.md", "# empty\n");
+      writeRepoFile(root, ".postmaster/verifier/nofront/features/f1.md", "# f1\n");
+      expect(scopeVdirsLocal(root, ".postmaster/verifier")).toEqual([".postmaster/verifier/cli"]);
+      expect(scopeVdirsLocal(root, ".postmaster/verifier/cli")).toEqual([
+        ".postmaster/verifier/cli",
+      ]);
+      expect(scopeVdirsLocal(root, ".postmaster/verifier/missing")).toEqual([]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("localFeaturePages counts nested pages and skips the index", () => {
+    const dir = tempDir();
+    try {
+      const root = join(dir, "app");
+      writeRepoFile(root, ".postmaster/verifier/cli/features/README.md", "Files: x\n");
+      writeRepoFile(root, ".postmaster/verifier/cli/features/f1.md", "# f1\n");
+      writeRepoFile(root, ".postmaster/verifier/cli/features/nested/f2.md", "# f2\n");
+      writeRepoFile(root, ".postmaster/verifier/cli/features/notes.txt", "no\n");
+      expect(localFeaturePages(root, ".postmaster/verifier/cli")).toEqual([
+        ".postmaster/verifier/cli/features/f1.md",
+        ".postmaster/verifier/cli/features/nested/f2.md",
+      ]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("detectFolders with local reads the disk root beside the revision", () => {
+    const dir = tempDir();
+    try {
+      const repo = join(dir, "app");
+      initRepo(repo);
+      writeRepoFile(repo, "README.md", "# app\n");
+      commitAll(repo, "first");
+      writeRepoFile(repo, ".postmaster/verifier/cli/README.md", "# cli\n");
+      writeRepoFile(repo, ".postmaster/verifier/cli/features/f1.md", "# f1\n");
+      expect(detectFolders(repo, null)).toEqual([]);
+      expect(detectFolders(repo, null, "HEAD", true)).toEqual([".postmaster/verifier"]);
+      expect(detectFolders(repo, ".postmaster/verifier")).toEqual([".postmaster/verifier"]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("detectFolders skips a stray empty local root", () => {
+    const dir = tempDir();
+    try {
+      const repo = join(dir, "app");
+      initRepo(repo);
+      writeRepoFile(repo, "README.md", "# app\n");
+      writeRepoFile(repo, "verify-app/README.md", "# v\n");
+      writeRepoFile(repo, "verify-app/features/a.md", "# a\n");
+      commitAll(repo, "first");
+      mkdirSync(join(repo, ".postmaster", "verifier"), { recursive: true });
+      expect(detectFolders(repo, null, "HEAD", true)).toEqual(["verify-app"]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
     }
   });
 });
