@@ -3,16 +3,18 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "scripts/run bundle-scrub --check && env -u SCRUB_CHECK_DISABLE scripts/run scrub-check origin/main HEAD && scripts/run tree-check origin/main HEAD && tsc --noEmit && bunx oxlint --deny-warnings && bunx biome format scripts types lint package.json tsconfig.json biome.json .oxlintrc.json && scripts/run skip-check && scripts/run skill-refs && scripts/run runbook-lint && scripts/run wiki-lint"
+    "check": "scripts/run bundle-scrub --check && env -u SCRUB_CHECK_DISABLE scripts/run scrub-check origin/main HEAD && scripts/run tree-check origin/main HEAD && ./node_modules/.bin/tsc --noEmit && ./node_modules/.bin/oxlint --deny-warnings && ./node_modules/.bin/biome format scripts types lint package.json tsconfig.json biome.json .oxlintrc.json && scripts/run skip-check && scripts/run skill-refs && scripts/run runbook-lint && scripts/run wiki-lint"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.14",
+    "@socketsecurity/bun-security-scanner": "1.1.3",
     "npm": "11.19.0",
-    "oxlint": "^1.86.0",
-    "pnpm": "12.11.2",
-    "typescript": "^7.0.2",
+    "oxlint": "1.86.0",
+    "pnpm": "12.9.0",
+    "typescript": "7.0.2",
     "yarn": "1.22.22"
   },
+  "trustedDependencies": [],
   "engines": {
     "bun": ">=1.4.2"
   }

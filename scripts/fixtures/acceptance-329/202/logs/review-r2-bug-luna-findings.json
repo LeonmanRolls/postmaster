@@ -1,0 +1,41 @@
+[
+  {
+    "file": "scripts/reach.ts",
+    "line": 1819,
+    "line_end": 1824,
+    "target": "scripts/reach.ts:1819",
+    "severity": "P1",
+    "summary": "Clear inherited Git overrides before restoring",
+    "body": "If the coachman inherits `GIT_DIR` or `GIT_WORK_TREE`, Git honors those variables despite `-C`, so this `reset --hard` can target the caller’s worktree instead of this run’s synthesis worktree; earlier snapshots can also inspect the wrong repository. Unset these overrides for every Git subprocess in this control.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "codex"
+  },
+  {
+    "file": "scripts/reach.ts",
+    "line": 478,
+    "line_end": 481,
+    "target": "scripts/reach.ts:478",
+    "severity": "P1",
+    "summary": "Split conditional-OR chains before classifying commands",
+    "body": "For a recorded command such as `false || touch ~/outside.txt`, `splitShell` leaves `||` in the same segment and `commandTouches` treats `false` as the command; the `touch` target is classified only as a read, so the write does not become a finding or escalation. Split `||` at the command boundary just as `&&` is split.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "codex"
+  },
+  {
+    "file": "scripts/reach.ts",
+    "line": 458,
+    "line_end": 460,
+    "target": "scripts/reach.ts:458",
+    "severity": "P2",
+    "summary": "Parse command substitutions inside double quotes",
+    "body": "With a command such as `echo \"$(touch ~/outside.txt)\"`, this condition skips the substitution because `quote` is `\"`; the inner `touch` is treated as part of `echo`’s argument, and `expandPath` cannot resolve that token, so the write is missed. Recognize `$()` substitutions inside double quotes too.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "codex"
+  }
+]

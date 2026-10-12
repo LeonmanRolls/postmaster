@@ -8,11 +8,14 @@
 // reports each claim that no longer holds and each it could not check (#318);
 // in its correcting mode it corrects the stale claims inside the verifiers'
 // folders only, confirms every verifier at the commit it drove, and proposes the
-// branch for the same landing (#328).
+// branch for the same landing (#328). A verifier reads as possibly stale once a
+// file its index lists changed since the commit it was proved or confirmed at,
+// until a pass confirms it again (#355).
 //
 //   run verifier prompt <repo> <surface>... [--headless]
 //   run verifier list <repo>
-//   run verifier make <repo> <surface>... --run <dispatch> [--timeout <seconds>]
+//   run verifier stale <repo> [--at <commit>]
+//   run verifier make <repo> <surface>... --run <dispatch> [--timeout <seconds>] [--repository]
 //   run verifier check <repo> <branch> --run <dispatch> (--handover <file>|--report <file>)
 //     [--folder <dir>] [--timeout <seconds>]
 //   run verifier land <repo> <branch> --run <dispatch> (--handover <file>|--report <file>)
@@ -21,24 +24,48 @@
 //     [--folder <dir>] [--correct]
 //   run verifier upkeep-prompt <repo> [--headless] [--folder <dir>] [--correct]
 //   run verifier upkeep-report <repo> --run <dispatch> --report <file> [--folder <dir>]
+//   run verifier record <repo> <dispatch>
+//   run verifier arm <worktree> <dispatch>
+//   run verifier changes <worktree> <dispatch> [--freeze]
+//   run verifier keep <repo> --run <dispatch> --at <commit>
 //
-//   surface    one or more of cli, web, library, cli-examples, browser-suite,
-//              web-journey, library-tests. cli-examples is the command line,
-//              browser-suite and web-journey are web pages, library-tests is
-//              the library interface; names of one surface make one verifier.
-//   prompt     print the session's instructions for the repo and surfaces, the
-//              interactive form, or with --headless the no-host form, which lists
-//              each question it could not ask in HANDOVER.md instead of asking
-//   list       print the verifiers the repo holds: one index: line per read-first
-//              entry, then one verifier:/surface:/features: block per verifier, or
-//              verifiers: none. The clerk's brief and discovery read this (#327)
-//   make       cut a worktree on a branch of its own beside the repo, removed again
-//              when make fails before any session starts, render the prompt, and open
-//              the coachman role's interactive form through run launch in a fresh tab
-//              through run host spawn, the way the booking clerk opens; send it the
-//              instructions and wait for HANDOVER.md, leaving the tab open when done.
-//              With no session host (spawn exits 3) run headless instead: launch the
-//              coachman role through run launch under run host, wait, fall back to
+//   surface    one or more of cli, web, library, backend, cli-examples,
+//              browser-suite, web-journey, library-tests, each a kind or
+//              kind:name. cli-examples is the command line, browser-suite and
+//              web-journey are web pages, library-tests is the library
+//              interface; backend takes a name, as backend:api, and names the
+//              service's requests. Exact duplicates make one verifier; two
+//              surfaces sharing one folder are refused.
+//   prompt     print the session's repository instructions for the repo and
+//              surfaces, the interactive form, or with --headless the no-host
+//              form, which lists each question it could not ask in HANDOVER.md
+//              instead of asking
+//   list       print the verifiers the repo holds, committed and local: one
+//              index: line per read-first entry, then one
+//              verifier:/surface:/features: block per verifier, or verifiers:
+//              none. The clerk's brief and discovery read this (#327)
+//   stale      print the verifiers that may have gone stale: each verifier with a
+//              file its index lists (#318) changed between the commit it was made
+//              or confirmed at (#328) and --at, HEAD when --at is absent, naming
+//              the files, or unconfirmed with the cause when its entry lacks its
+//              Files list, its Confirmed commit, or names a commit the repo does
+//              not hold. Prints stale: none when no verifier is marked. Local
+//              verifiers are skipped: their staleness is #479's slice. The
+//              clerk's brief and the postmaster's after-merge offer read this (#355)
+//   make       by default, cut a detached working copy beside the repo, run the
+//              session in it, and keep the verifiers it proved under the repo's
+//              .postmaster/verifier/, one folder per surface with an index,
+//              saving HANDOVER.md into the run's logs and removing the working
+//              copy, so the repository shows nothing new. With --repository,
+//              cut a worktree on a branch of its own beside the repo instead,
+//              removed again when make fails before any session starts, and
+//              leave the branch for check and land. Either way, render the
+//              prompt, and open the coachman role's interactive form through
+//              run launch in a fresh tab through run host spawn, the way the
+//              booking clerk opens; send it the instructions and wait for
+//              HANDOVER.md, leaving the tab open when done. With no session
+//              host (spawn exits 3) run headless instead: launch the coachman
+//              role through run launch under run host, wait, fall back to
 //              coachman_fallback on a provider wall read from the session stream,
 //              stop the session at the limit by the pid host recorded, and log one
 //              dispatch action per launch either way
@@ -74,6 +101,36 @@
 //   upkeep-report  read a finished UPKEEP.md, refuse it unless it drives every
 //              feature page, and print the same stale, unchecked and summary lines
 //              upkeep prints, logged as printed; a corrected claim counts as held
+//   record     copy the repo's .postmaster/verifier/ into the run's record as
+//              verifier-at-dispatch/, the folder as the run was dispatched on.
+//              Prints recorded .postmaster/verifier (<n> files), no local
+//              verifiers when the repo holds none, or already recorded; left
+//              alone on a second call. The postmaster runs this at dispatch (#478)
+//   arm        place the run's recorded copy at .postmaster/verifier/ in the
+//              worktree, and ignore that directory in the repository's common
+//              exclude, so the copy reads inside the worktree and git shows
+//              nothing. Prints armed <top>: <n> files in <dir>, or no verifiers
+//              recorded when the record holds none, the exclude still added.
+//              The coachman arms every workhorse copy and the synthesis
+//              worktree (#478)
+//   changes    compare the worktree's copy with the record's copy and print the
+//              run's verifier changes as the ## Verifier changes card section:
+//              each changed page with its diff, each added and removed file.
+//              Prints verifiers unchanged on one line when nothing differs.
+//              With --freeze also snapshot the worktree's copy as
+//              verifier-final/, the copy keep reads once the worktree is gone.
+//              The coachman freezes at the ship card and pastes the section (#478)
+//   keep       keep the run's frozen changes in the project's folder: save the
+//              folder as it was as verifier-before-keep/, then merge each file
+//              the run changed, added or removed three ways against the
+//              project's file, and confirm each changed or added verifier at
+//              the merge commit in the index. Prints kept .postmaster/verifier
+//              with one added:/changed:/removed: line per applied file and one
+//              confirmed <seg> at <sha> per touched verifier, or nothing to
+//              keep when the run changed nothing. A change that clashes with
+//              one kept since the run started stays as the project has it and
+//              prints as not kept: <file> (<reason>). The postmaster runs this
+//              after the landing, before the stale query (#478)
 //   --handover the session's HANDOVER.md, with one ## Verifier: section per verifier
 //              carrying a Folder: line and a Proof: line (the proof file's absolute
 //              path alone, or none with the reason). Proven means the file exists
@@ -82,7 +139,8 @@
 //              unchecked claim, a Corrected: line on each claim a correcting pass
 //              mended, and the unasked questions where the pass ran headless
 //   --folder   the verifiers' folder, relative to the repo top (default verify-<slug>;
-//              the pass takes every shape the repo holds: verify-<slug>/, verifier/, or both)
+//              the pass takes every shape the repo holds: verify-<slug>/, verifier/,
+//              .postmaster/verifier/, or all of them)
 //   --landing  local or pull-request (default pull-request with an origin remote)
 //   --timeout  seconds to wait for the session (make, upkeep), or to run the project's
 //              checks for (check, land); past it the branch lands nothing and the
@@ -91,34 +149,50 @@
 //              land need a whole number of seconds past zero
 //   --word      the user gave the merge word for this landing, so a local landing
 //              merges without consulting merge authority (setup's launch-card yes)
+//   --at       the commit stale compares each confirmation against (default HEAD),
+//              or the merge commit keep confirms each changed verifier at
+//   --freeze   changes also snapshots the worktree's copy as verifier-final/
+//   --run      the run's dispatch directory (make, check, land, upkeep, keep)
 //
-//   exit 0  prompt or list printed; make: HANDOVER.md validated, the interactive session
-//           left open in its tab, the headless one ended with no wall;
+//   --repository  make commits the verifiers on a branch for check and land, as
+//           before; without it they are kept under .postmaster/verifier/ instead
+//   exit 0  prompt, list, stale, record, arm or changes printed; make: HANDOVER.md
+//           validated, the interactive session left open in its tab, the headless
+//           one ended with no wall;
 //           check: the branch lands; land: merged, or the pull request waits for the word;
-//           upkeep, upkeep-report: every claim holds or is corrected
+//           upkeep, upkeep-report: every claim holds or is corrected;
+//           keep: every change applied, or nothing to keep
 //   exit 1  make failed: the launch would not start, the session was still running at the
 //           limit, both roles walled, the handover, commit, verifier, upkeep line or
 //           index entry is missing, a verifier was made for an unlisted surface,
-//           verifier files landed outside the folder, or the action was not logged;
+//           verifier files landed outside the folder, no verifier was proved, or the
+//           action was not logged;
 //           check, land: the branch lands nothing, or the landing failed after it
 //           was accepted;
 //           upkeep, upkeep-report: a claim is left uncorrected or unchecked, the report
 //           is missing or malformed, or the pass failed as make fails;
 //           upkeep --correct: as above, or the branch reaches past the folders,
-//           or a verifier is left unconfirmed
+//           or a verifier is left unconfirmed;
+//           keep: a change clashes with one kept since the run started, the run
+//           never froze its copy, or the keep was not logged
 //   exit 2  usage: an unknown command or surface, a missing argument, a bad flag or
 //           timeout, a path that is not a git repository or not its top, a repo holding
-//           no commit or no verifiers, no run at the dispatch, or a branch that is not
-//           a verifier branch
+//           no commit or no verifiers, no run at the dispatch, an unknown --at
+//           commit, or a branch that is not a verifier branch
 import { createHash } from "node:crypto";
 import {
+  cpSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
+  readlinkSync,
   realpathSync,
+  renameSync,
   rmSync,
+  rmdirSync,
   statSync,
   writeFileSync,
 } from "node:fs";
@@ -126,13 +200,15 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { splitCommand } from "./clerk.ts";
 import { endingWallMessage, isWallMessage } from "./launch.ts";
+import { ensureIgnore, isSymlink } from "./lib/effective-config.ts";
 import { beside, scriptsDir } from "./lib/paths.ts";
 import { run, type RunResult } from "./lib/proc.ts";
-import { RESULT_RE } from "./verify.ts";
+import { ensureCommonExclude, RESULT_RE } from "./verify.ts";
 
 const USAGE = `usage: run verifier prompt <repo> <surface>... [--headless]
        run verifier list <repo>
-       run verifier make <repo> <surface>... --run <dispatch> [--timeout <seconds>]
+       run verifier stale <repo> [--at <commit>]
+       run verifier make <repo> <surface>... --run <dispatch> [--timeout <seconds>] [--repository]
        run verifier check <repo> <branch> --run <dispatch> (--handover <file>|--report <file>)
          [--folder <dir>] [--timeout <seconds>]
        run verifier land <repo> <branch> --run <dispatch> (--handover <file>|--report <file>)
@@ -141,24 +217,44 @@ const USAGE = `usage: run verifier prompt <repo> <surface>... [--headless]
          [--folder <dir>] [--correct]
        run verifier upkeep-prompt <repo> [--headless] [--folder <dir>] [--correct]
        run verifier upkeep-report <repo> --run <dispatch> --report <file> [--folder <dir>]
+       run verifier record <repo> <dispatch>
+       run verifier arm <worktree> <dispatch>
+       run verifier changes <worktree> <dispatch> [--freeze]
+       run verifier keep <repo> --run <dispatch> --at <commit>
 
-       each surface is cli, web, library, cli-examples, browser-suite, web-journey or library-tests;
+       each surface is a kind or kind:name: cli, web, library, backend, cli-examples,
+       browser-suite, web-journey or library-tests; backend takes a name, as backend:api;
        landing is local or pull-request; make's timeout 0 waits without a limit`;
 
 /** The accepted surface names as the unknown-surface error lists them. */
 const KNOWN_SURFACES =
-  "cli, web, library, cli-examples, browser-suite, web-journey or library-tests";
+  "cli, web, library, backend, cli-examples, browser-suite, web-journey or library-tests";
 
 const RUN = beside(import.meta, "run");
 const DEFAULT_TIMEOUT = 3600;
 
-export const SURFACES = ["cli", "web", "library"] as const;
+/** The local verifiers' root inside a project: every local verifier lives under it. */
+export const LOCAL_VERIFIER_ROOT = ".postmaster/verifier";
+
+/** The local shared index, beside the local verifiers' folders. */
+export const LOCAL_VERIFIER_INDEX = `${LOCAL_VERIFIER_ROOT}/README.md`;
+
+/** A folder under the local verifiers' root, read from disk rather than git. */
+export function isLocalFolder(folder: string): boolean {
+  return folder === LOCAL_VERIFIER_ROOT || folder.startsWith(`${LOCAL_VERIFIER_ROOT}/`);
+}
+
+export const SURFACES = ["cli", "web", "library", "backend"] as const;
 export type Surface = (typeof SURFACES)[number];
+
+/** The trio the no-verifier sentence guards; named backends are never wandered onto. */
+const TRIO: readonly Surface[] = ["cli", "web", "library"];
 
 const PROSE: Record<Surface, string> = {
   cli: "command line",
   web: "web pages",
   library: "library interface",
+  backend: "backend service",
 };
 
 export function isSurface(s: string): s is Surface {
@@ -188,15 +284,116 @@ export function surfaceKind(name: string): Surface | null {
   return DISCOVERY_SURFACES[name] ?? null;
 }
 
-/** Distinct kinds in canonical cli, web, library order. */
+/** Distinct kinds in canonical cli, web, library, backend order. */
 export function orderKinds(kinds: Surface[]): Surface[] {
   return SURFACES.filter((k) => kinds.includes(k));
+}
+
+/** One surface to make: a kind with an optional name, as kind or kind:name. */
+export interface NamedSurface {
+  kind: Surface;
+  /** The user-given name, or "" for a bare kind. */
+  name: string;
+}
+
+/** The label a surface is named by: the kind, or kind:name when named. */
+export function surfaceLabel(surface: NamedSurface): string {
+  return surface.name === "" ? surface.kind : `${surface.kind}:${surface.name}`;
+}
+
+/** The surface's folder segment: the name when named, else the kind. */
+export function surfaceFolder(surface: NamedSurface): string {
+  return surface.name === "" ? surface.kind : surface.name;
+}
+
+/** A name is one path segment, lowercase, starting alphanumerically. */
+const SURFACE_NAME_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/u;
+
+/** Whether a token is a kind or discovery name, hence reserved as a surface name. */
+function isReservedName(name: string): boolean {
+  return surfaceKind(name) !== null;
+}
+
+export type SurfaceParse = { ok: true; surface: NamedSurface } | { ok: false; error: string };
+
+/**
+ * One surface token: a kind, a discovery name, or kind:name. A backend takes
+ * a name, since a bare one says which service of several; the trio's bare
+ * forms keep working as they do today.
+ */
+export function parseSurfaceName(token: string): SurfaceParse {
+  const at = token.indexOf(":");
+  const kindToken = at === -1 ? token : token.slice(0, at);
+  const kind = surfaceKind(kindToken);
+  if (kind === null) return { ok: false, error: `unknown surface: ${token} (${KNOWN_SURFACES})` };
+  if (at === -1) {
+    if (kind === "backend") {
+      return { ok: false, error: "backend takes a name, as backend:api" };
+    }
+    return { ok: true, surface: { kind, name: "" } };
+  }
+  const name = token.slice(at + 1);
+  if (name === "") {
+    return {
+      ok: false,
+      error: `bad surface name: ${token} (a name follows the colon, as web:admin)`,
+    };
+  }
+  if (!SURFACE_NAME_RE.test(name)) {
+    return {
+      ok: false,
+      error: `bad surface name: ${name} in ${token} (letters, digits, - and _, as web:admin)`,
+    };
+  }
+  if (isReservedName(name)) {
+    return { ok: false, error: `bad surface name: ${name} is a surface kind` };
+  }
+  return { ok: true, surface: { kind, name } };
+}
+
+export type SurfacesParse = { ok: true; surfaces: NamedSurface[] } | { ok: false; error: string };
+
+/**
+ * The session's surfaces: parsed, exact duplicates dropped, two surfaces
+ * sharing one folder refused, in canonical kind order with names sorted, so
+ * one set of names always renders one prompt.
+ */
+export function parseSurfaces(tokens: string[]): SurfacesParse {
+  const seen = new Set<string>();
+  const surfaces: NamedSurface[] = [];
+  for (const token of tokens) {
+    const parsed = parseSurfaceName(token);
+    if (!parsed.ok) return parsed;
+    const key = `${parsed.surface.kind}:${parsed.surface.name}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    surfaces.push(parsed.surface);
+  }
+  const folders = new Map<string, string>();
+  for (const s of surfaces) {
+    const folder = surfaceFolder(s);
+    const other = folders.get(folder);
+    if (other !== undefined) {
+      return {
+        ok: false,
+        error: `surfaces ${other} and ${surfaceLabel(s)} share a folder: verifier/${folder}/`,
+      };
+    }
+    folders.set(folder, surfaceLabel(s));
+  }
+  const order = new Map<Surface, number>(SURFACES.map((k, n) => [k, n]));
+  surfaces.sort(
+    (a, b) =>
+      (order.get(a.kind) ?? 0) - (order.get(b.kind) ?? 0) ||
+      (a.name < b.name ? -1 : a.name > b.name ? 1 : 0),
+  );
+  return { ok: true, surfaces };
 }
 
 export interface ParsedPrompt {
   cmd: "prompt";
   repo: string;
-  surfaces: Surface[];
+  surfaces: NamedSurface[];
   headless: boolean;
 }
 
@@ -205,12 +402,21 @@ export interface ParsedList {
   repo: string;
 }
 
+export interface ParsedStale {
+  cmd: "stale";
+  repo: string;
+  /** The comparison commit, or null for the repo's HEAD. */
+  at: string | null;
+}
+
 export interface ParsedMake {
   cmd: "make";
   repo: string;
-  surfaces: Surface[];
+  surfaces: NamedSurface[];
   dispatch: string;
   timeout: number;
+  /** Set only with --repository: commit on a branch for landing, as before. */
+  repository?: boolean;
 }
 
 export interface ParsedCheck {
@@ -266,18 +472,51 @@ export interface ParsedUpkeepReport {
   folder: string | null;
 }
 
+export interface ParsedRecord {
+  cmd: "record";
+  repo: string;
+  dispatch: string;
+}
+
+export interface ParsedArm {
+  cmd: "arm";
+  wt: string;
+  dispatch: string;
+}
+
+export interface ParsedChanges {
+  cmd: "changes";
+  wt: string;
+  dispatch: string;
+  /** Set only with --freeze: snapshot the worktree's copy as verifier-final/. */
+  freeze?: boolean;
+}
+
+export interface ParsedKeep {
+  cmd: "keep";
+  repo: string;
+  dispatch: string;
+  /** The merge commit to confirm each changed verifier at. */
+  at: string;
+}
+
 export type Parsed =
   | {
       ok: true;
       req:
         | ParsedPrompt
         | ParsedList
+        | ParsedStale
         | ParsedMake
         | ParsedCheck
         | ParsedLand
         | ParsedUpkeep
         | ParsedUpkeepPrompt
-        | ParsedUpkeepReport;
+        | ParsedUpkeepReport
+        | ParsedRecord
+        | ParsedArm
+        | ParsedChanges
+        | ParsedKeep;
     }
   | { ok: false; error: string };
 
@@ -363,12 +602,17 @@ export function parseArgs(argv: string[]): Parsed {
   if (
     cmd !== "prompt" &&
     cmd !== "list" &&
+    cmd !== "stale" &&
     cmd !== "make" &&
     cmd !== "check" &&
     cmd !== "land" &&
     cmd !== "upkeep" &&
     cmd !== "upkeep-prompt" &&
-    cmd !== "upkeep-report"
+    cmd !== "upkeep-report" &&
+    cmd !== "record" &&
+    cmd !== "arm" &&
+    cmd !== "changes" &&
+    cmd !== "keep"
   ) {
     return { ok: false, error: `unknown command: ${cmd}` };
   }
@@ -378,6 +622,76 @@ export function parseArgs(argv: string[]): Parsed {
       return { ok: false, error: "list takes a repo" };
     }
     return { ok: true, req: { cmd, repo } };
+  }
+  if (cmd === "stale") {
+    if (repo === undefined) return { ok: false, error: "stale takes a repo" };
+    let at: string | null = null;
+    const rest = argv.slice(2);
+    for (let j = 0; j < rest.length; j++) {
+      const flag = rest[j] as string;
+      if (flag === "--at") {
+        const value = rest[j + 1];
+        if (value === undefined) return { ok: false, error: "stale needs --at <commit>" };
+        at = value;
+        j++;
+      } else {
+        return { ok: false, error: `unknown flag for stale: ${flag}` };
+      }
+    }
+    return { ok: true, req: { cmd, repo, at } };
+  }
+  if (cmd === "record") {
+    const dispatch = argv[2];
+    if (repo === undefined || dispatch === undefined || argv.length !== 3) {
+      return { ok: false, error: "record takes a repo and a dispatch" };
+    }
+    return { ok: true, req: { cmd, repo, dispatch } };
+  }
+  if (cmd === "arm") {
+    const dispatch = argv[2];
+    if (repo === undefined || dispatch === undefined || argv.length !== 3) {
+      return { ok: false, error: "arm takes a worktree and a dispatch" };
+    }
+    return { ok: true, req: { cmd, wt: repo, dispatch } };
+  }
+  if (cmd === "changes") {
+    const dispatch = argv[2];
+    if (repo === undefined || dispatch === undefined) {
+      return { ok: false, error: "changes takes a worktree and a dispatch" };
+    }
+    const rest = argv.slice(3);
+    if (rest.length > 1) return { ok: false, error: "changes takes a worktree and a dispatch" };
+    if (rest.length === 1 && rest[0] !== "--freeze") {
+      return { ok: false, error: `unknown flag for changes: ${rest[0]}` };
+    }
+    const req: ParsedChanges = { cmd, wt: repo, dispatch };
+    if (rest.length === 1) req.freeze = true;
+    return { ok: true, req };
+  }
+  if (cmd === "keep") {
+    if (repo === undefined) return { ok: false, error: "keep takes a repo" };
+    let dispatch: string | null = null;
+    let at: string | null = null;
+    const rest = argv.slice(2);
+    for (let j = 0; j < rest.length; j++) {
+      const flag = rest[j] as string;
+      if (flag === "--run") {
+        const value = rest[j + 1];
+        if (value === undefined) return { ok: false, error: "keep needs --run <dispatch>" };
+        dispatch = value;
+        j++;
+      } else if (flag === "--at") {
+        const value = rest[j + 1];
+        if (value === undefined) return { ok: false, error: "keep needs --at <commit>" };
+        at = value;
+        j++;
+      } else {
+        return { ok: false, error: `unknown flag for keep: ${flag}` };
+      }
+    }
+    if (dispatch === null) return { ok: false, error: "keep needs --run <dispatch>" };
+    if (at === null) return { ok: false, error: "keep needs --at <commit>" };
+    return { ok: true, req: { cmd, repo, dispatch, at } };
   }
   if (cmd === "upkeep" || cmd === "upkeep-prompt" || cmd === "upkeep-report") {
     return parseUpkeepArgs(cmd, repo, argv.slice(2));
@@ -392,15 +706,9 @@ export function parseArgs(argv: string[]): Parsed {
       names.push(token);
     }
     if (names.length === 0) return { ok: false, error: `${cmd} takes a repo and a surface` };
-    const kinds: Surface[] = [];
-    for (const name of names) {
-      const kind = surfaceKind(name);
-      if (kind === null) {
-        return { ok: false, error: `unknown surface: ${name} (${KNOWN_SURFACES})` };
-      }
-      kinds.push(kind);
-    }
-    const surfaces = orderKinds(kinds);
+    const parsedSurfaces = parseSurfaces(names);
+    if (!parsedSurfaces.ok) return parsedSurfaces;
+    const surfaces = parsedSurfaces.surfaces;
     if (cmd === "prompt") {
       const rest = argv.slice(i);
       if (rest.length > 1) return { ok: false, error: "prompt takes a repo and a surface" };
@@ -411,6 +719,7 @@ export function parseArgs(argv: string[]): Parsed {
     }
     let dispatch: string | null = null;
     let timeout = DEFAULT_TIMEOUT;
+    let repository = false;
     const rest = argv.slice(i);
     for (let j = 0; j < rest.length; j++) {
       const flag = rest[j] as string;
@@ -424,12 +733,16 @@ export function parseArgs(argv: string[]): Parsed {
         if (!parsed.ok) return parsed;
         timeout = parsed.timeout;
         j++;
+      } else if (flag === "--repository") {
+        repository = true;
       } else {
         return { ok: false, error: `unknown flag for make: ${flag}` };
       }
     }
     if (dispatch === null) return { ok: false, error: "make needs --run <dispatch>" };
-    return { ok: true, req: { cmd, repo, surfaces, dispatch, timeout } };
+    const req: ParsedMake = { cmd, repo, surfaces, dispatch, timeout };
+    if (repository) req.repository = true;
+    return { ok: true, req };
   }
   const second = argv[2];
   if (repo === undefined || second === undefined) {
@@ -517,6 +830,12 @@ export interface PromptVars {
   secretsRule: string;
   handoverUnasked: string;
   handoverRule?: string;
+  /** The commit line: commit the branch, or commit nothing in a local session. */
+  commitLine?: string;
+  /** The kind's own rule: how a backend is driven; empty for the trio. */
+  surfaceRule?: string;
+  /** The commit the session proves against, for the index's Confirmed line. */
+  proved?: string;
 }
 
 /** Fill a template from explicit names and values. A leftover placeholder throws. */
@@ -544,6 +863,9 @@ export function renderPrompt(template: string, vars: PromptVars): string {
     HANDOVER_UNASKED: vars.handoverUnasked,
   };
   if (vars.handoverRule !== undefined) known.HANDOVER_RULE = vars.handoverRule;
+  if (vars.commitLine !== undefined) known.COMMIT_LINE = vars.commitLine;
+  if (vars.surfaceRule !== undefined) known.SURFACE_RULE = vars.surfaceRule;
+  if (vars.proved !== undefined) known.PROVED = vars.proved;
   return renderTemplate(template, known);
 }
 
@@ -563,15 +885,30 @@ export function hasUpkeepLine(text: string): boolean {
 
 /** One index entry names the kind's folder and its surface prose together. */
 export function indexNames(text: string, kind: Surface): boolean {
-  const prose = PROSE[kind];
-  return text.split("\n").some((line) => {
+  return indexNamesFolder(text, PROSE[kind], `verifier/${kind}`);
+}
+
+/**
+ * One index entry names a verifier folder and its surface prose together:
+ * a full folder path bounded past its end, so verifier/cli-extra/ never
+ * reads as the cli verifier, or a relative folder link [cli](cli/).
+ */
+export function indexNamesFolder(text: string, prose: string, folder: string): boolean {
+  const seg = folder.split("/").pop() ?? folder;
+  const escFolder = folder.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  const escSeg = seg.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  const re = new RegExp(`${escFolder}(?![A-Za-z0-9_-])|\\]\\( *${escSeg}/`, "u");
+  // LOWER: lowered for an ASCII keyword match
+  const want = prose.toLowerCase();
+  const hits = (chunk: string): boolean => {
     // LOWER: lowered for an ASCII keyword match
-    const lower = line.toLowerCase();
-    if (!lower.includes(prose)) return false;
-    // A full verifier/<kind>/ path bounded past the kind, so verifier/cli-extra/
-    // never reads as the cli verifier, or a relative folder link [cli](cli/).
-    return new RegExp(`verifier/${kind}(?![A-Za-z0-9_-])|\\]\\( *${kind}/`, "u").test(lower);
-  });
+    const lower = chunk.toLowerCase();
+    // ASCII: the prose and folders matched are ASCII alone
+    return lower.includes(want) && re.test(lower);
+  };
+  if (text.split("\n").some(hits)) return true;
+  // A bullet wrapped past its first line still names its folder.
+  return indexBullets(text).some((span) => span.length > 1 && hits(span.join("\n")));
 }
 
 export interface VerifierEntry {
@@ -596,6 +933,14 @@ export function kindProse(kind: string): string | null {
   return surface === null ? null : PROSE[surface];
 }
 
+/** Surface prose phrases, earliest match winning, for READMEs and indexes. */
+const PROSE_PHRASES: Array<[string, Surface]> = [
+  ["command line", "cli"],
+  ["web pages", "web"],
+  ["library interface", "library"],
+  ["backend service", "backend"],
+];
+
 /** The surface a verifier README's head states, or null when it states none. */
 export function surfaceFromReadme(text: string): string | null {
   // The head is the first 30 lines, as hasUpkeepLine reads it: the H1 subject
@@ -603,19 +948,15 @@ export function surfaceFromReadme(text: string): string | null {
   const head = text.split("\n").slice(0, 30).join("\n");
   // LOWER: lowered for ASCII phrase matches
   const lower = head.toLowerCase();
-  const phrases: Array<[string, Surface]> = [
-    ["command line", "cli"],
-    ["web pages", "web"],
-    ["library interface", "library"],
-  ];
   let best: { at: number; surface: Surface } | null = null;
-  for (const [phrase, surface] of phrases) {
+  for (const [phrase, surface] of PROSE_PHRASES) {
     const at = lower.indexOf(phrase);
     if (at !== -1 && (best === null || at < best.at)) best = { at, surface };
   }
   if (best !== null) return PROSE[best.surface];
   // A minimal README may name only the short token, as src/cli.ts does. No
-  // library token: a bare "library" is usually the project's own code.
+  // library or backend token: a bare "library" or "backend" is usually the
+  // project's own code.
   const tokens: Array<[RegExp, Surface]> = [
     [/\bcli\b/u, "cli"], // ASCII: ASCII literals; an adjacent ASCII word char joins them
     [/\bweb\b/u, "web"], // ASCII: ASCII literals; an adjacent ASCII word char joins them
@@ -628,6 +969,29 @@ export function surfaceFromReadme(text: string): string | null {
     }
   }
   return tokenBest === null ? null : PROSE[tokenBest.surface];
+}
+
+/**
+ * The surface an index states for a folder segment: the earliest prose
+ * phrase in a bullet naming the segment, or null when none does. A named
+ * folder's kind is lost when the listing is read back, so the index, which
+ * make validated, recovers it where the folder name cannot.
+ */
+export function surfaceFromIndex(indexText: string, seg: string): string | null {
+  // LOWER: lowered for an ASCII folder-segment match
+  const want = seg.toLowerCase();
+  for (const span of indexBullets(indexText)) {
+    if (!spanSegs(span).includes(want)) continue;
+    // LOWER: lowered for ASCII phrase matches
+    const lower = span.join("\n").toLowerCase();
+    let best: { at: number; surface: Surface } | null = null;
+    for (const [phrase, surface] of PROSE_PHRASES) {
+      const at = lower.indexOf(phrase);
+      if (at !== -1 && (best === null || at < best.at)) best = { at, surface };
+    }
+    if (best !== null) return PROSE[best.surface];
+  }
+  return null;
 }
 
 /** Feature pages from a features/ listing: markdown besides its index, sorted. */
@@ -681,14 +1045,22 @@ function readmeText(path: string): string {
 }
 
 /** One verifier's entry from its folder, or null when the folder holds no verifier. */
-function readVerifier(repo: string, folder: string, kind: string | null): VerifierEntry | null {
+function readVerifier(
+  repo: string,
+  folder: string,
+  kind: string | null,
+  indexSurface: string | null = null,
+): VerifierEntry | null {
   if (!isFilePath(join(repo, folder, "README.md"))) return null;
   const pages = featurePageNames(childNames(join(repo, folder, "features"))).map(
     (n) => `${folder}/features/${n}`,
   );
   const fromKind = kind === null ? null : kindProse(kind);
   const surface =
-    fromKind ?? surfaceFromReadme(readmeText(join(repo, folder, "README.md"))) ?? "unstated";
+    fromKind ??
+    indexSurface ??
+    surfaceFromReadme(readmeText(join(repo, folder, "README.md"))) ??
+    "unstated";
   return { folder, surface, pages };
 }
 
@@ -696,21 +1068,30 @@ function readVerifier(repo: string, folder: string, kind: string | null): Verifi
  * The repo's verifiers from its working tree, in both shapes: the multi
  * verifier/ folder with its index, and any top-level folder starting with
  * verify- that holds a README.md. A renamed repo keeps its old slug, so the
- * single shape matches the prefix, never the slug of today.
+ * single shape matches the prefix, never the slug of today. Local verifiers
+ * under .postmaster/verifier/ read the same way, with repo-relative paths.
  */
 export function listVerifiers(repo: string): VerifierListing {
   const verifiers: VerifierEntry[] = [];
   const indexes: string[] = [];
-  const multiIndex = isFilePath(join(repo, "verifier", "README.md"));
-  if (multiIndex) indexes.push("verifier/README.md");
-  if (isDirPath(join(repo, "verifier"))) {
-    for (const kind of childNames(join(repo, "verifier")).sort()) {
-      if (!isDirPath(join(repo, "verifier", kind))) continue;
-      const entry = readVerifier(repo, `verifier/${kind}`, kind);
-      if (entry !== null) {
-        verifiers.push(entry);
-        // No shared index: each verifier's README is the read-first entry.
-        if (!multiIndex) indexes.push(`verifier/${kind}/README.md`);
+  for (const root of ["verifier", LOCAL_VERIFIER_ROOT]) {
+    const multiIndex = isFilePath(join(repo, root, "README.md"));
+    if (multiIndex) indexes.push(`${root}/README.md`);
+    const indexText = multiIndex ? readmeText(join(repo, root, "README.md")) : null;
+    if (isDirPath(join(repo, root))) {
+      for (const kind of childNames(join(repo, root)).sort()) {
+        if (!isDirPath(join(repo, root, kind))) continue;
+        const entry = readVerifier(
+          repo,
+          `${root}/${kind}`,
+          kind,
+          indexText === null ? null : surfaceFromIndex(indexText, kind),
+        );
+        if (entry !== null) {
+          verifiers.push(entry);
+          // No shared index: each verifier's README is the read-first entry.
+          if (!multiIndex) indexes.push(`${root}/${kind}/README.md`);
+        }
       }
     }
   }
@@ -815,19 +1196,30 @@ export function modeBlocks(
   };
 }
 
-/** The kinds as prose for the multi header: "command line, web pages". */
-export function proseList(kinds: Surface[]): string {
-  return kinds.map((k) => PROSE[k]).join(", ");
+/** The surfaces as prose with labels for the multi header: "web pages (web:admin), ...". */
+export function surfaceList(surfaces: NamedSurface[]): string {
+  return surfaces.map((s) => `${PROSE[s.kind]} (${surfaceLabel(s)})`).join(", ");
 }
 
-/** One mapping line per kind for the multi header. */
-export function dirLines(kinds: Surface[]): string {
-  return kinds.map((k) => `- the ${PROSE[k]} (${k}) verifier goes in verifier/${k}/`).join("\n");
+/** One mapping line per surface for the multi header, under a verifiers root. */
+export function dirLines(surfaces: NamedSurface[], root = "verifier"): string {
+  return surfaces
+    .map(
+      (s) =>
+        `- the ${PROSE[s.kind]} (${surfaceLabel(s)}) verifier goes in ${root}/${surfaceFolder(s)}/`,
+    )
+    .join("\n");
 }
 
-/** The no-verifier sentence for the kinds left out, or "" when none are. */
-export function unlistedSentence(kinds: Surface[]): string {
-  const left = SURFACES.filter((k) => !kinds.includes(k)).map((k) => `the ${PROSE[k]}`);
+/**
+ * The no-verifier sentence for the trio's kinds left out, or "" when none
+ * are. Named backends are never listed: a session told to make only named
+ * surfaces cannot wander onto an unnamed service, and the ONLY line above it
+ * covers the named ones.
+ */
+export function unlistedSentence(surfaces: NamedSurface[]): string {
+  const kinds = surfaces.map((s) => s.kind);
+  const left = TRIO.filter((k) => !kinds.includes(k)).map((k) => `the ${PROSE[k]}`);
   if (left.length === 0) return "";
   const last = left.slice(-1).join("");
   const names = left.length === 1 ? last : `${left.slice(0, -1).join(", ")} and ${last}`;
@@ -836,12 +1228,12 @@ export function unlistedSentence(kinds: Surface[]): string {
 }
 
 /** The per-surface sections, numbered, separated by rules. */
-export function joinBodies(bodies: { kind: Surface; text: string }[]): string {
+export function joinBodies(bodies: { surface: NamedSurface; text: string }[]): string {
   const total = bodies.length;
   return bodies
     .map(
       (b, n) =>
-        `---\n\n**Verifier ${n + 1} of ${total}: ${PROSE[b.kind]} (${b.kind}).**\n\n${b.text}`,
+        `---\n\n**Verifier ${n + 1} of ${total}: ${PROSE[b.surface.kind]} (${surfaceLabel(b.surface)}).**\n\n${b.text}`,
     )
     .join("\n\n");
 }
@@ -855,17 +1247,22 @@ export function verifyDirName(repoPath: string): string {
   return slug === "" ? "verify-app" : `verify-${slug}`;
 }
 
-/** The session's verifiers folder: one surface keeps #323's folder, several share one. */
-export function sessionFolder(repo: string, surfaces: Surface[]): string {
+/** The session's repository folder: one surface keeps #323's folder, several share one. */
+export function sessionFolder(repo: string, surfaces: NamedSurface[]): string {
   return surfaces.length === 1 ? verifyDirName(repo) : "verifier";
 }
 
-/** The verifier folders present at the repo top: the shared one, the single one, or both. */
+/**
+ * The verifier folders present: the shared one, the single one, the local
+ * one. The local folder joins the list whatever shape it holds, so setup's
+ * refusal and discovery's verifiers= line read it like a committed one.
+ */
 export function presentVerifierFolders(repo: string): string[] {
   const out: string[] = [];
   if (existsSync(join(repo, "verifier"))) out.push("verifier");
   const single = verifyDirName(repo);
   if (existsSync(join(repo, single))) out.push(single);
+  if (existsSync(join(repo, LOCAL_VERIFIER_ROOT))) out.push(LOCAL_VERIFIER_ROOT);
   return out;
 }
 
@@ -1018,14 +1415,24 @@ export function branchHasPath(repo: string, branch: string, path: string): boole
  * revision holds, the single front page first. A repo that holds both
  * shapes gets both: preferring one would silently drop the other's suite.
  * The pass reads the current commit; the report landing reads the compared
- * base, never the branch being judged.
+ * base, never the branch being judged. With includeLocal the local root
+ * joins when it holds a verifier dir on disk; a stray empty dir never
+ * refuses a pass over the repository's own verifiers.
  */
-export function detectFolders(repo: string, explicit: string | null, at = "HEAD"): string[] {
+export function detectFolders(
+  repo: string,
+  explicit: string | null,
+  at = "HEAD",
+  includeLocal = false,
+): string[] {
   if (explicit !== null) return [explicit];
   const folders: string[] = [];
   const single = verifyDirName(repo);
   if (branchHasPath(repo, at, `${single}/README.md`)) folders.push(single);
   if (branchHasPath(repo, at, "verifier/README.md")) folders.push("verifier");
+  if (includeLocal && scopeVdirsLocal(repo, LOCAL_VERIFIER_ROOT).length > 0) {
+    folders.push(LOCAL_VERIFIER_ROOT);
+  }
   return folders;
 }
 
@@ -1047,6 +1454,7 @@ export function isFeaturePage(vdir: string, path: string): boolean {
  * the correcting validation reads the driven one, which no later merge moves.
  */
 export function scopeVdirs(repo: string, folder: string, at = "HEAD"): string[] | null {
+  if (isLocalFolder(folder)) return scopeVdirsLocal(repo, folder);
   // -z: NUL-separated and never quoted, so non-ASCII names list as written;
   // -d lists the immediate subdirs, and a missing folder lists nothing.
   const subs = git(repo, ["ls-tree", "-z", "-d", "--name-only", at, "--", `${folder}/`]);
@@ -1061,13 +1469,60 @@ export function scopeVdirs(repo: string, folder: string, at = "HEAD"): string[] 
   return vdirs;
 }
 
+/**
+ * The folder's verifier dirs on disk: itself when it carries a front page
+ * and a non-empty features/ folder, and each subdir that does. The local
+ * twin of scopeVdirs, under the same rules; local verifiers never reach a
+ * revision, so no revision is read.
+ */
+export function scopeVdirsLocal(root: string, folder: string): string[] {
+  const vdirs: string[] = [];
+  const cands = [folder];
+  for (const name of childNames(join(root, folder))) {
+    if (isDirPath(join(root, folder, name))) cands.push(`${folder}/${name}`);
+  }
+  for (const cand of cands) {
+    if (!isFilePath(join(root, cand, "README.md"))) continue;
+    if (childNames(join(root, cand, "features")).length === 0) continue;
+    vdirs.push(cand);
+  }
+  return vdirs;
+}
+
+/**
+ * A local verifier dir's feature pages on disk, sorted: markdown under its
+ * features/ folder besides its index, nested pages counted, as
+ * committedFeaturePages counts them. Symlinks are skipped, never followed,
+ * as the verifier-tree reader skips them.
+ */
+export function localFeaturePages(root: string, vdir: string): string[] {
+  const pages: string[] = [];
+  const walk = (dir: string, prefix: string): void => {
+    for (const name of childNames(dir)) {
+      if (name === "" || name === "." || name === "..") continue;
+      const full = join(dir, name);
+      if (isSymlink(full)) continue;
+      const rel = `${vdir}/features/${prefix === "" ? name : `${prefix}/${name}`}`;
+      if (isDirPath(full)) {
+        walk(full, prefix === "" ? name : `${prefix}/${name}`);
+      } else if (isFeaturePage(vdir, rel)) {
+        pages.push(rel);
+      }
+    }
+  };
+  walk(join(root, vdir, "features"), "");
+  return pages.sort();
+}
+
 /** The folder's feature pages at the current commit, across its verifier dirs, sorted, or null when unreadable. */
 export function featurePages(repo: string, folder: string): string[] | null {
   const vdirs = scopeVdirs(repo, folder);
   if (vdirs === null) return null;
   const pages: string[] = [];
   for (const vdir of vdirs) {
-    const listed = committedFeaturePages(repo, "HEAD", vdir);
+    const listed = isLocalFolder(vdir)
+      ? localFeaturePages(repo, vdir)
+      : committedFeaturePages(repo, "HEAD", vdir);
     if (listed === null) return null;
     pages.push(...listed);
   }
@@ -1193,11 +1648,12 @@ export function outsideAdded(added: string[]): string[] {
 }
 
 /** Added verifier/ paths outside the listed verifiers and the index. */
-export function strayVerifierPaths(added: string[], surfaces: Surface[]): string[] {
+export function strayVerifierPaths(added: string[], surfaces: NamedSurface[]): string[] {
+  const segs = new Set(surfaces.map(surfaceFolder));
   return addedUnder(added, "verifier").filter((p) => {
     if (p === "verifier/README.md") return false;
     const seg = p.slice("verifier/".length).split("/")[0] ?? "";
-    return !(surfaces as string[]).includes(seg);
+    return !segs.has(seg);
   });
 }
 
@@ -1824,13 +2280,67 @@ export function bulletConfirm(text: string, vdir: string): string | null {
 
 /**
  * A verifier dir's index file: the shared index where one covers it, else its
- * own features index. The shared index covers verifier/<kind> dirs only; the
+ * own features index. The shared index covers verifier/<kind> dirs only, and
+ * the local shared index covers .postmaster/verifier/<kind> dirs only; the
  * folder itself keeps its features index like a single verifier.
  */
-export function indexFileFor(vdir: string, shared: boolean): string {
+export function indexFileFor(vdir: string, shared: boolean, localShared = false): string {
   const seg = vdir.split("/");
   if (shared && seg.length === 2 && seg[0] === "verifier") return "verifier/README.md";
+  if (localShared && seg.length === 3 && seg[0] === ".postmaster" && seg[1] === "verifier") {
+    return LOCAL_VERIFIER_INDEX;
+  }
   return `${vdir}/features/README.md`;
+}
+
+/**
+ * The project paths a verifier's index scope lists after its `Files:` label,
+ * comma-separated, each relative to the repo top, or null when the scope names
+ * none. The scope is one features-index line or one shared-index bullet span.
+ * The value ends at a `Confirmed:` label or the scope's end; each entry drops
+ * markdown framing from the outside in — wrapping backticks and one trailing
+ * full stop (the sentence's, as the shared bullets read), nesting in either
+ * order — then a leading `./` and trailing slashes, so a folder last in the
+ * list matches. A bare `.` names no path and is dropped. The label is
+ * case-sensitive, as the instructions write it.
+ */
+export function parseFilesList(scope: string): string[] | null {
+  const at = scope.indexOf("Files:");
+  if (at === -1) return null;
+  let value = scope.slice(at + "Files:".length);
+  const confirmed = value.indexOf("Confirmed:");
+  if (confirmed !== -1) value = value.slice(0, confirmed);
+  const entries: string[] = [];
+  // ASCII: widening to Unicode whitespace only folds more runs, never splits an entry
+  for (const raw of value.replace(/\s+/gu, " ").split(",")) {
+    // Framing the sentences and markdown add is not the path: wrapping
+    // backticks and one sentence dot, nesting in either order, so both strip
+    // twice from the outside, then a leading ./ and trailing slashes.
+    let entry = raw.trim();
+    for (let pass = 0; pass < 2; pass++) {
+      entry = entry.replace(/^`+|`+$/gu, "");
+      if (entry.endsWith(".") && entry.length > 1) entry = entry.slice(0, -1);
+    }
+    if (entry.startsWith("./")) entry = entry.slice("./".length);
+    entry = entry.replace(/\/+$/u, "");
+    if (entry !== "" && entry !== ".") entries.push(entry);
+  }
+  return entries;
+}
+
+/**
+ * The changed files that fall under the verifier's listed paths, sorted: a
+ * listed file matches itself, a listed folder matches every changed file
+ * beneath it. Both sides are repo-relative paths, as git names them.
+ */
+export function matchDependedFiles(changed: string[], entries: string[]): string[] {
+  const matched = new Set<string>();
+  for (const file of changed) {
+    for (const entry of entries) {
+      if (entry !== "" && (file === entry || file.startsWith(`${entry}/`))) matched.add(file);
+    }
+  }
+  return [...matched].sort();
 }
 
 export interface VerifySummary {
@@ -2045,49 +2555,123 @@ const SINGLE_HANDOVER_RULE =
 const MULTI_HANDOVER_RULE =
   "Commit only verifiers with proof: a verifier whose drive left no proof file stays out\nof the branch — remove its folder rather than committing it. Prove this verifier as\nabove before going on to the next; write the single HANDOVER.md only after every\nverifier in this session is proven, covering each verifier: what you proved and under\nwhich drive name, where each proof file sits as an absolute path (or why there is none),\nand what you left undone. Give each verifier its own `## Verifier: <name>` section\ncarrying a `Folder:` line with the verifier's folder relative to the top of the working\ncopy and a `Proof:` line with the proof file's absolute path alone, or `none` and the\nreason when there is no proof file. Send the same text as your final message.";
 
+/** The handover paragraph for one local verifier: keep, never commit. */
+const LOCAL_SINGLE_HANDOVER_RULE =
+  "Keep only verifiers with proof: a verifier whose drive left no proof file stays out\n— remove its folder rather than keeping it. Then write HANDOVER.md at\nthe top of this working copy: what you proved and under which drive name, where the\nproof file sits as an absolute path (or why there is none), and what you left undone.\nGive each verifier its own `## Verifier: <name>` section carrying a `Folder:` line with\nthe verifier's folder relative to the top of the working copy and a `Proof:` line with\nthe proof file's absolute path alone, or `none` and the reason when there is no proof\nfile. Send the same text as your final message.";
+
+/** The handover paragraph per verifier when one local session makes several. */
+const LOCAL_MULTI_HANDOVER_RULE =
+  "Keep only verifiers with proof: a verifier whose drive left no proof file stays out\n— remove its folder rather than keeping it. Prove this verifier as\nabove before going on to the next; write the single HANDOVER.md only after every\nverifier in this session is proven, covering each verifier: what you proved and under\nwhich drive name, where each proof file sits as an absolute path (or why there is none),\nand what you left undone. Give each verifier its own `## Verifier: <name>` section\ncarrying a `Folder:` line with the verifier's folder relative to the top of the working\ncopy and a `Proof:` line with the proof file's absolute path alone, or `none` and the\nreason when there is no proof file. Send the same text as your final message.";
+
+/** The commit line a repository session reads: byte for byte as before. */
+const REPO_COMMIT_LINE = "Commit the verifier on this branch. ";
+
+/** The commit line a local session reads: nothing is committed. */
+const LOCAL_COMMIT_LINE = "Commit nothing in this working copy. ";
+
+/** The multi commit bullet a repository session reads: byte for byte as before. */
+const REPO_COMMIT_BULLET = "- Commit the verifiers on this branch as you go.";
+
+/** The multi commit bullet a local session reads. */
+const LOCAL_COMMIT_BULLET =
+  "- Commit nothing: leave every verifier uncommitted in this working copy.";
+
+/**
+ * The rule a kind carries of its own: how a backend is driven. The trio's
+ * sessions drive pages, commands or library calls, which the body already
+ * covers; a backend has none of those, so its section says what it has.
+ */
+export function surfaceRule(kind: Surface): string {
+  if (kind !== "backend") return "";
+  return (
+    "This surface is a backend: it has no pages, command line or library interface of its " +
+    "own. Drive it through the requests it answers — its API calls, jobs or messages — with " +
+    "the real routes and payloads from this project, and check the state each request leaves " +
+    "(rows stored, files written, messages sent) beside the reply it returns."
+  );
+}
+
 function readMultiTemplate(): string {
   return readFileSync(join(scriptsDir(import.meta), "verifier-multi-prompt.md"), "utf8");
 }
 
-/** The session prompt: one body for one surface, a header plus one body per kind. */
+/** The count noun for the multi header: "1 verifier", "3 verifiers". */
+export function countNoun(count: number): string {
+  return count === 1 ? "1 verifier" : `${count} verifiers`;
+}
+
+/**
+ * The session prompt: one body for one repository surface, a header plus one
+ * body per surface otherwise. A local session always takes the shared shape,
+ * even for one surface, writing under .postmaster/verifier/ and committing
+ * nothing; a repository session keeps #323's folder for one surface.
+ */
 function renderSessionPrompt(
   repo: string,
-  surfaces: Surface[],
+  surfaces: NamedSurface[],
   base: string,
+  proved: string,
   headless: boolean,
+  local: boolean,
 ): string {
   const body = readTemplate();
-  if (surfaces.length === 1) {
-    const kind = surfaces[0] as Surface;
+  const commitLine = local ? LOCAL_COMMIT_LINE : REPO_COMMIT_LINE;
+  if (!local && surfaces.length === 1) {
+    const surface = surfaces[0] as NamedSurface;
     return renderPrompt(body, {
       repo,
-      surface: kind,
-      surfaceProse: surfaceProse(kind),
+      surface: surfaceLabel(surface),
+      surfaceProse: surfaceProse(surface.kind),
       verifyDir: verifyDirName(repo),
       base,
+      proved,
+      commitLine,
+      surfaceRule: surfaceRule(surface.kind),
       handoverRule: SINGLE_HANDOVER_RULE,
       ...modeBlocks(headless),
     });
   }
-  const bodies = surfaces.map((kind) => ({
-    kind,
+  const root = local ? LOCAL_VERIFIER_ROOT : "verifier";
+  const handoverRule = local
+    ? surfaces.length === 1
+      ? LOCAL_SINGLE_HANDOVER_RULE
+      : LOCAL_MULTI_HANDOVER_RULE
+    : MULTI_HANDOVER_RULE;
+  const bodies = surfaces.map((surface) => ({
+    surface,
     text: renderPrompt(body, {
       repo,
-      surface: kind,
-      surfaceProse: surfaceProse(kind),
-      verifyDir: `verifier/${kind}`,
+      surface: surfaceLabel(surface),
+      surfaceProse: surfaceProse(surface.kind),
+      verifyDir: `${root}/${surfaceFolder(surface)}`,
       base,
-      handoverRule: MULTI_HANDOVER_RULE,
+      proved,
+      commitLine,
+      surfaceRule: surfaceRule(surface.kind),
+      handoverRule,
       ...modeBlocks(headless),
     }),
   }));
   return renderTemplate(readMultiTemplate(), {
-    SURFACE_LIST: proseList(surfaces),
-    COUNT: String(surfaces.length),
-    DIR_LINES: dirLines(surfaces),
+    SURFACE_LIST: surfaceList(surfaces),
+    COUNT_NOUN: countNoun(surfaces.length),
+    DIR_LINES: dirLines(surfaces, root),
     UNLISTED_SENTENCE: unlistedSentence(surfaces),
     PER_SURFACE: joinBodies(bodies),
+    VERIFIER_ROOT: root,
+    COMMIT_LINE_MULTI: local ? LOCAL_COMMIT_BULLET : REPO_COMMIT_BULLET,
+    BASE: base,
+    PROVED: proved,
   });
+}
+
+/** The commit the base names: the sha a session proves against. */
+function provedCommit(repo: string, base: string): string {
+  const sha = git(repo, ["rev-parse", base]);
+  if (sha.code !== 0 || sha.out.trim() === "") {
+    throw new RunError(`the commit of ${base} could not be read`);
+  }
+  return sha.out.trim();
 }
 
 function runPrompt(req: ParsedPrompt): number {
@@ -2096,7 +2680,11 @@ function runPrompt(req: ParsedPrompt): number {
   if (!isRepoTop(repo)) throw new UsageError(`not the top of its repository: ${req.repo}`);
   const base = defaultBase(repo);
   if (base === null) throw new UsageError(`no commit to cut from in ${req.repo}`);
-  process.stdout.write(renderSessionPrompt(repo, req.surfaces, base, req.headless));
+  // The repository instructions: prompt takes no word, so it shows the
+  // committed shape, while make's local session reads its own rendering.
+  process.stdout.write(
+    renderSessionPrompt(repo, req.surfaces, base, provedCommit(repo, base), req.headless, false),
+  );
   return 0;
 }
 
@@ -2128,6 +2716,48 @@ function readUpkeepCorrectTemplate(): string {
   return readFileSync(join(scriptsDir(import.meta), "verifier-upkeep-correct-prompt.md"), "utf8");
 }
 
+/** The commit rule a pass over repository verifiers reads: byte for byte as before. */
+const REPO_UPKEEP_COMMIT_RULE =
+  "Commit the corrections and the confirmation on this branch, never UPKEEP.md:\n" +
+  "the branch carries what the pass proposes, and the report is read from this\n" +
+  "working copy. The branch must touch nothing outside the verifiers' folders.";
+
+/** The commit rule a pass over local verifiers reads: nothing is committed. */
+const LOCAL_UPKEEP_COMMIT_RULE =
+  "Commit nothing in this working copy: leave the corrections, the confirmation\n" +
+  "and UPKEEP.md uncommitted. The tool keeps the corrected verifiers from here,\n" +
+  "and reads the report from here too.";
+
+/** The commit rule a pass over both reads: the branch carries the repository half. */
+const MIXED_UPKEEP_COMMIT_RULE =
+  "Commit the corrections and the confirmation for the repository verifiers on this\n" +
+  "branch, never UPKEEP.md and never anything under .postmaster/verifier/: the branch\n" +
+  "carries what the pass proposes for them, the tool keeps the local corrections from\n" +
+  "this working copy, and the report is read from here too. The branch must touch\n" +
+  "nothing outside the repository verifiers' folders.";
+
+/** The report rule a pass over repository verifiers reads: byte for byte as before. */
+const REPO_UPKEEP_REPORT_RULE =
+  "Leave UPKEEP.md uncommitted: the report is read from this working copy, and\n" +
+  "only the verifiers' folders land from this pass.";
+
+/** The report rule a pass over local verifiers reads: the tool keeps from here. */
+const LOCAL_UPKEEP_REPORT_RULE =
+  "Leave UPKEEP.md uncommitted: the report is read from this working copy, and\n" +
+  "the tool keeps the corrected verifiers from here.";
+
+/** The report rule a pass over both reads: the branch lands, the tool keeps. */
+const MIXED_UPKEEP_REPORT_RULE =
+  "Leave UPKEEP.md uncommitted: the report is read from this working copy; the\n" +
+  "repository verifiers land from this pass and the tool keeps the local ones from here.";
+
+/** Which verifiers a correcting pass covers: repository, local, or both. */
+export function upkeepCommitVariant(folders: string[]): "repo" | "local" | "mixed" {
+  const local = folders.filter(isLocalFolder).length;
+  if (local === 0) return "repo";
+  return local === folders.length ? "local" : "mixed";
+}
+
 /** The correcting instructions: correct, prove, confirm and commit. */
 function renderUpkeepCorrectPrompt(
   repo: string,
@@ -2137,6 +2767,7 @@ function renderUpkeepCorrectPrompt(
   headless: boolean,
 ): string {
   const modes = modeBlocks(headless, "UPKEEP.md");
+  const variant = upkeepCommitVariant(folders);
   return renderTemplate(readUpkeepCorrectTemplate(), {
     REPO: repo,
     VERIFY_DIR: folders.map((f) => `${f}/`).join(" and "),
@@ -2145,6 +2776,18 @@ function renderUpkeepCorrectPrompt(
     ASK_RULE: modes.askRule,
     SECRETS_RULE: modes.secretsRule,
     UNASKED_RULE: headless ? UPKEEP_HEADLESS_UNASKED : "",
+    COMMIT_RULE:
+      variant === "local"
+        ? LOCAL_UPKEEP_COMMIT_RULE
+        : variant === "mixed"
+          ? MIXED_UPKEEP_COMMIT_RULE
+          : REPO_UPKEEP_COMMIT_RULE,
+    REPORT_RULE:
+      variant === "local"
+        ? LOCAL_UPKEEP_REPORT_RULE
+        : variant === "mixed"
+          ? MIXED_UPKEEP_REPORT_RULE
+          : REPO_UPKEEP_REPORT_RULE,
   });
 }
 
@@ -2153,7 +2796,7 @@ export function upkeepScope(
   repo: string,
   folder: string | null,
 ): { folders: string[]; pages: string[] } {
-  const found = detectFolders(repo, folder);
+  const found = detectFolders(repo, folder, "HEAD", true);
   if (found.length === 0) throw new UsageError(`no verifiers in ${repo}`);
   const pages: string[] = [];
   for (const f of found) {
@@ -2191,6 +2834,91 @@ function runListCmd(req: ParsedList): number {
   return 0;
 }
 
+/**
+ * Why the verifier reads as possibly stale, or null when it does not: the
+ * changed depended files, comma-separated, or the unconfirmed cause. The index
+ * is read from the working tree; the comparison is history, the confirmed
+ * commit against `at`. An entry that lacks its Files list or its Confirmed
+ * commit, or that names a commit the repo does not hold, counts as marked,
+ * since nothing shows it was confirmed.
+ */
+function staleDetail(
+  repo: string,
+  vdir: string,
+  shared: boolean,
+  at: string,
+  localShared = false,
+): string | null {
+  const indexFile = indexFileFor(vdir, shared, localShared);
+  const text = readmeText(join(repo, indexFile));
+  let scope: string | null = null;
+  let sha: string | null = null;
+  if (indexFile === "verifier/README.md" || indexFile === LOCAL_VERIFIER_INDEX) {
+    const spans = indexBullets(text).filter((span) => spanNamesDir(span, vdir));
+    if (spans.length === 0) return "unconfirmed (not in the shared index)";
+    if (spans.length > 1) return "unconfirmed (ambiguous shared index entry)";
+    scope = (spans[0] ?? []).join("\n");
+    sha = confirmedSha(scope);
+  } else {
+    // ASCII: indentation before the label is plain spaces
+    scope = text.split("\n").find((l) => /^\s*Files:/u.test(l)) ?? null;
+    sha = featuresConfirm(text);
+  }
+  const files = scope === null ? null : parseFilesList(scope);
+  if (files === null || files.length === 0) return "unconfirmed (no Files: list)";
+  if (sha === null) return "unconfirmed (no Confirmed: commit)";
+  if (git(repo, ["rev-parse", "--verify", "--quiet", `${sha}^{commit}`]).code !== 0)
+    return `unconfirmed (unknown commit ${sha})`;
+  // Rename detection would report only the destination, hiding the listed
+  // source path the verifier depends on; -z lists every name as written,
+  // NUL-separated and never quoted.
+  const diff = git(repo, ["diff", "--name-only", "--no-renames", "-z", sha, at]);
+  if (diff.code !== 0) throw new RunError(`the commits ${sha} and ${at} could not be compared`);
+  const changed = diff.out.split("\0").filter((l) => l !== "");
+  const matched = matchDependedFiles(changed, files);
+  return matched.length === 0 ? null : matched.join(", ");
+}
+
+function runStaleCmd(req: ParsedStale): number {
+  const repo = resolve(req.repo);
+  if (!isRepo(repo)) throw new UsageError(`not a git repository: ${req.repo}`);
+  if (!isRepoTop(repo)) throw new UsageError(`not the top of its repository: ${req.repo}`);
+  // An explicit comparison commit is always validated, even where the repo
+  // holds no verifier to compare.
+  if (req.at !== null) {
+    const resolved = git(repo, ["rev-parse", "--verify", "--quiet", `${req.at}^{commit}`]);
+    if (resolved.code !== 0 || resolved.out.trim() === "") {
+      throw new UsageError(`unknown commit: ${req.at}`);
+    }
+  }
+  const listing = listVerifiers(repo);
+  if (listing.verifiers.length === 0) {
+    console.log("stale: none");
+    return 0;
+  }
+  let at = req.at;
+  if (at === null) {
+    const head = git(repo, ["rev-parse", "HEAD"]);
+    if (head.code !== 0 || head.out.trim() === "") {
+      throw new UsageError(`stale needs a commit to compare against: ${req.repo} holds no commit`);
+    }
+    at = head.out.trim();
+  }
+  const shared = isFilePath(join(repo, "verifier", "README.md"));
+  const localShared = isFilePath(join(repo, LOCAL_VERIFIER_INDEX));
+  const marks: string[] = [];
+  for (const v of listing.verifiers) {
+    const detail = staleDetail(repo, v.folder, shared, at, localShared);
+    if (detail !== null) marks.push(`stale: ${v.folder}: ${detail}`);
+  }
+  if (marks.length === 0) {
+    console.log("stale: none");
+    return 0;
+  }
+  for (const mark of marks) console.log(mark);
+  return 0;
+}
+
 function fileText(path: string): string {
   try {
     return readFileSync(path, "utf8").trim();
@@ -2223,7 +2951,10 @@ interface LaunchOpts {
   wt: string;
   name: string;
   logs: string;
-  branch: string;
+  /** The branch, or null for a detached local working copy. */
+  branch: string | null;
+  /** The file and handle tag: the branch, or the surfaces' label when local. */
+  tag: string;
   surface: string;
   promptFile: string;
   dispatch: string;
@@ -2275,7 +3006,7 @@ export function waitForMarker(
 }
 
 function launchAndWait(o: LaunchOpts, sessionStarted: { started: boolean }): Attempt {
-  const base = join(o.logs, `verifier-${o.branch}-${o.role}`);
+  const base = join(o.logs, `verifier-${o.tag}-${o.role}`);
   const stream = `${base}-events.jsonl`;
   const errFile = `${base}.err`;
   const marker = `${base}.done`;
@@ -2363,9 +3094,10 @@ function launchAndWait(o: LaunchOpts, sessionStarted: { started: boolean }): Att
   };
 }
 
-function logLaunch(dispatch: string, surface: string, branch: string, a: Attempt): void {
+function logLaunch(dispatch: string, surface: string, branch: string | null, a: Attempt): void {
   const outcome = a.failed !== "" ? ` failed: ${a.failed}` : a.walled ? " walled" : "";
-  const detail = `thread ${a.thread} role ${a.role} branch ${branch}${outcome}`;
+  const where = branch === null ? "local" : `branch ${branch}`;
+  const detail = `thread ${a.thread} role ${a.role} ${where}${outcome}`;
   const r = run(RUN, [
     "log-action",
     dispatch,
@@ -2392,14 +3124,17 @@ function attempt(o: LaunchOpts, sessionStarted: { started: boolean }): Attempt {
 
 /**
  * Best-effort removal of a failed make's worktree and branch: "" when clean,
- * otherwise the failure to append to the error that caused the cleanup.
+ * otherwise the failure to append to the error that caused the cleanup. A
+ * null branch is a detached working copy: only the worktree goes.
  */
-export function removeProvisioning(repo: string, wt: string, branch: string): string {
+export function removeProvisioning(repo: string, wt: string, branch: string | null): string {
   const problems: string[] = [];
   const rm = git(repo, ["worktree", "remove", "--force", wt]);
   if (rm.code !== 0) problems.push(rm.err.trim() || rm.out.trim() || `exit ${rm.code}`);
-  const del = git(repo, ["branch", "-D", branch]);
-  if (del.code !== 0) problems.push(del.err.trim() || del.out.trim() || `exit ${del.code}`);
+  if (branch !== null) {
+    const del = git(repo, ["branch", "-D", branch]);
+    if (del.code !== 0) problems.push(del.err.trim() || del.out.trim() || `exit ${del.code}`);
+  }
   return problems.length === 0 ? "" : `; the cleanup failed too: ${problems.join("; ")}`;
 }
 
@@ -2412,17 +3147,21 @@ export interface FailureOutcome {
 /**
  * A failure before any session started cleans up pure scaffolding; once a
  * session ran, its work may hold the diagnosis, so the worktree and branch
- * stay, named in the error for the operator.
+ * stay, named in the error for the operator. A null branch names the
+ * detached working copy alone.
  */
 export function failureOutcome(
   sessionStarted: boolean,
   wt: string,
-  branch: string,
+  branch: string | null,
 ): FailureOutcome {
   if (sessionStarted) {
     return {
       cleanup: false,
-      suffix: `; the worktree ${wt} and branch ${branch} were left behind`,
+      suffix:
+        branch === null
+          ? `; the worktree ${wt} was left behind`
+          : `; the worktree ${wt} and branch ${branch} were left behind`,
     };
   }
   return { cleanup: true, suffix: "" };
@@ -2438,22 +3177,77 @@ function runMake(req: ParsedMake): number {
   }
   const base = defaultBase(repo);
   if (base === null) throw new UsageError(`no commit to cut from in ${req.repo}`);
+  const proved = provedCommit(repo, base);
+  // Before any session starts: a destination that already holds a kept
+  // folder or the index refuses now, not after the session proved it again.
+  if (req.repository !== true) {
+    const collisions = localDestCollisions(repo, req.surfaces);
+    if (collisions.length > 0) {
+      throw new UsageError(`${repo} already holds ${collisions.join(", ")}`);
+    }
+    const link = localDestLink(
+      repo,
+      req.surfaces.map((s) => `${LOCAL_VERIFIER_ROOT}/${surfaceFolder(s)}`),
+    );
+    if (link !== null) {
+      throw new UsageError(`${join(repo, link)} must not be a symlink`);
+    }
+  }
   pruneWorktrees(repo);
-  const label = req.surfaces.join("-");
-  const branch = pickBranch((name) => branchTaken(repo, name), label);
+  const label = sessionLabel(req.surfaces);
   const wt = pickWorktree(repo, label, existsSync);
-  const vdir = sessionFolder(repo, req.surfaces);
-  const added = git(repo, ["worktree", "add", wt, "-b", branch, base]);
+  if (req.repository === true) {
+    const branch = pickBranch((name) => branchTaken(repo, name), label);
+    const vdir = sessionFolder(repo, req.surfaces);
+    const added = git(repo, ["worktree", "add", wt, "-b", branch, base]);
+    if (added.code !== 0) {
+      throw new RunError(`the worktree would not cut: ${added.err.trim() || added.out.trim()}`);
+    }
+    const sessionStarted = { started: false };
+    const cutAt = Date.now();
+    try {
+      return runMakeLaunches(
+        req,
+        repo,
+        dispatch,
+        base,
+        proved,
+        branch,
+        wt,
+        vdir,
+        sessionStarted,
+        cutAt,
+      );
+    } catch (e) {
+      const outcome = failureOutcome(sessionStarted.started, wt, branch);
+      const extra = outcome.cleanup ? removeProvisioning(repo, wt, branch) : outcome.suffix;
+      if (e instanceof RunError && extra !== "") throw new RunError(`${e.message}${extra}`);
+      throw e;
+    }
+  }
+  // Detached, so no branch is made: the session writes under the local root
+  // and commits nothing, and the keep removes the working copy again.
+  const added = git(repo, ["worktree", "add", "--detach", wt, base]);
   if (added.code !== 0) {
     throw new RunError(`the worktree would not cut: ${added.err.trim() || added.out.trim()}`);
   }
   const sessionStarted = { started: false };
   const cutAt = Date.now();
   try {
-    return runMakeLaunches(req, repo, dispatch, base, branch, wt, vdir, sessionStarted, cutAt);
+    return runMakeLocalLaunches(
+      req,
+      repo,
+      dispatch,
+      base,
+      proved,
+      label,
+      wt,
+      sessionStarted,
+      cutAt,
+    );
   } catch (e) {
-    const outcome = failureOutcome(sessionStarted.started, wt, branch);
-    const extra = outcome.cleanup ? removeProvisioning(repo, wt, branch) : outcome.suffix;
+    const outcome = failureOutcome(sessionStarted.started, wt, null);
+    const extra = outcome.cleanup ? removeProvisioning(repo, wt, null) : outcome.suffix;
     if (e instanceof RunError && extra !== "") throw new RunError(`${e.message}${extra}`);
     throw e;
   }
@@ -2498,17 +3292,225 @@ export function untouchedCorrected(diff: string[], mended: UpkeepClaim[]): Upkee
 /**
  * The worktree paths a `git status --porcelain -z` output names outside the
  * allowed list: every other entry is a change the branch does not carry.
- * Rename entries name both sides; either side outside the list strays.
+ * Rename entries name the new path with its status and the old path as a
+ * bare token after it; the old path reads whole, so a space inside it never
+ * slices it the way the status prefix does. Either side outside the list
+ * strays.
  */
 export function strayUncommitted(out: string, allowed: string[]): string[] {
   const keep = new Set(allowed);
   const strays: string[] = [];
-  for (const part of out.split("\0")) {
+  const parts = out.split("\0");
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i];
     if (part === "") continue;
-    const path = part.length > 3 && part[2] === " " ? part.slice(3) : part;
-    if (!keep.has(path)) strays.push(path);
+    if (part.length > 3 && part[2] === " ") {
+      const path = part.slice(3);
+      if (!keep.has(path)) strays.push(path);
+      if (part[0] === "R" || part[0] === "C") {
+        const old = parts[i + 1];
+        if (old !== undefined && old !== "") {
+          if (!keep.has(old)) strays.push(old);
+          i++;
+        }
+      }
+    } else if (!keep.has(part)) {
+      strays.push(part);
+    }
   }
   return strays;
+}
+
+/**
+ * The worktree paths a `git status --porcelain -z` output names outside the
+ * local verifiers' folders, besides UPKEEP.md: the local twin of
+ * strayUncommitted, whose exact list fits a branch that commits. Rename
+ * entries name the new path with its status and the old path as a bare
+ * token after it, which reads whole; either side outside the folders
+ * strays.
+ */
+export function strayOutsideLocal(out: string, folders: string[]): string[] {
+  const paths: string[] = [];
+  const parts = out.split("\0");
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i];
+    if (part === "") continue;
+    if (part.length > 3 && part[2] === " ") {
+      const path = part.slice(3);
+      if (path !== "UPKEEP.md") paths.push(path);
+      if (part[0] === "R" || part[0] === "C") {
+        const old = parts[i + 1];
+        if (old !== undefined && old !== "") {
+          if (old !== "UPKEEP.md") paths.push(old);
+          i++;
+        }
+      }
+    } else if (part !== "UPKEEP.md") {
+      paths.push(part);
+    }
+  }
+  return outsideFolders(paths, folders);
+}
+
+/**
+ * Whether the path is the ignore file the tool copied into the working
+ * copy, byte for byte: the copy reads ignored as the project's folder
+ * does, so its presence is the tool's work, not the session's. A session
+ * edit to it reads as a stray like any other change outside the folders.
+ */
+export function toolPlacedIgnore(repo: string, wt: string, path: string): boolean {
+  if (path !== ".postmaster/.gitignore") return false;
+  let want: Buffer;
+  let got: Buffer;
+  try {
+    want = readFileSync(join(repo, ".postmaster", ".gitignore"));
+    got = readFileSync(join(wt, ".postmaster", ".gitignore"));
+  } catch {
+    return false;
+  }
+  return want.equals(got);
+}
+
+/**
+ * The verifier dirs under the local root with at least one driven page, from
+ * the scope's pages against the verifier dirs the cut froze: the disk may
+ * have moved since the scope was read, but the pages the pass drove are
+ * fixed, and the frozen dirs settle what a page string alone cannot, such as
+ * a kind named `features`. The longest match wins, so nested pages settle on
+ * their own dir.
+ */
+export function localDrivenVdirs(pages: string[], vdirs: string[]): string[] {
+  const driven = new Set<string>();
+  for (const page of pages) {
+    if (!isLocalFolder(page)) continue;
+    let best: string | null = null;
+    for (const vdir of vdirs) {
+      if (page !== vdir && !page.startsWith(`${vdir}/`)) continue;
+      if (best === null || vdir.length > best.length) best = vdir;
+    }
+    if (best !== null) driven.add(best);
+  }
+  return [...driven].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+}
+
+/**
+ * The correcting pass's local verifiers: every mended claim's page changed in
+ * the working copy, nothing changed outside the pass's folders besides the
+ * shared index a driven verifier confirms in, no driven verifier's front
+ * page removed, and every verifier the pass drove confirmed there at the
+ * driven commit. The on-disk twin of the branch validation below: the branch
+ * rules, held where the session left its work. The before tree is the cut's,
+ * not the live disk's: the disk may have moved under the pass, and a
+ * concurrent edit is neither the pass's work nor a refusal here — the keep
+ * refuses only true conflicts.
+ */
+function validateCorrectingLocalTree(
+  head: string,
+  wt: string,
+  pages: string[],
+  mended: UpkeepClaim[],
+  local: LocalCut,
+): void {
+  const wtRoot = join(wt, LOCAL_VERIFIER_ROOT);
+  const wtLink = isSymlink(join(wt, ".postmaster"))
+    ? ".postmaster"
+    : isSymlink(wtRoot)
+      ? LOCAL_VERIFIER_ROOT
+      : null;
+  if (wtLink !== null) {
+    throw new RunError(`${join(wt, wtLink)} must not be a symlink`);
+  }
+  const after = readVerifierTree(wtRoot);
+  const bad = sortedRels(after).filter((rel) => (after.get(rel) as TreeValue).kind !== "file");
+  if (bad.length > 0) {
+    throw new RunError(
+      `the pass left ${bad.join(", ")} under ${LOCAL_VERIFIER_ROOT}/: must not hold symlinks or special files`,
+    );
+  }
+  const diff = compareTrees(local.base, after);
+  const touched = new Set(
+    [...diff.added, ...diff.removed, ...diff.changed].map((rel) => `${LOCAL_VERIFIER_ROOT}/${rel}`),
+  );
+  // A scoped pass confirms its driven verifiers where their scheme says,
+  // which may be the shared index outside its folder; anything else outside
+  // the folders is work the pass was not asked for, as on a branch.
+  const driven = localDrivenVdirs(pages, local.vdirs);
+  const localShared = isFilePath(join(wt, LOCAL_VERIFIER_INDEX));
+  const indexAllowed =
+    localShared && driven.some((v) => indexFileFor(v, false, true) === LOCAL_VERIFIER_INDEX);
+  const outside = outsideFolders(
+    [...touched].filter((p) => !(indexAllowed && p === LOCAL_VERIFIER_INDEX)),
+    local.folders,
+  );
+  const reason = outsideReason(outside);
+  if (reason !== null) {
+    throw new RunError(`the pass changed files ${reason} under ${LOCAL_VERIFIER_ROOT}/`);
+  }
+  const untouched = mended.filter((c) => !touched.has(c.page));
+  if (untouched.length > 0) {
+    const first = untouched[0] as UpkeepClaim;
+    throw new RunError(
+      `the working copy leaves ${first.page} unchanged for its corrected claim ${first.name}`,
+    );
+  }
+  for (const vdir of driven) {
+    // A branch leaves a removed verifier dir to the user's review of the
+    // diff; a local keep has no diff, so removing a driven verifier's front
+    // page refuses here instead of silently unlisting it.
+    if (!isFilePath(join(wt, vdir, "README.md"))) {
+      throw new RunError(`the pass removed ${vdir}/README.md for a verifier it drove`);
+    }
+    const indexFile = indexFileFor(vdir, false, localShared);
+    const text = readmeText(join(wt, indexFile));
+    const sha =
+      indexFile === LOCAL_VERIFIER_INDEX ? bulletConfirm(text, vdir) : featuresConfirm(text);
+    if (sha === null) {
+      throw new RunError(
+        `the index for ${vdir} names no confirmed commit (expected Confirmed: ${head} in ${indexFile})`,
+      );
+    }
+    // ASCII: the driven head is a hex sha
+    if (sha !== head.toLowerCase()) {
+      throw new RunError(
+        `the index for ${vdir} records ${sha}, not the driven commit ${head} (in ${indexFile})`,
+      );
+    }
+  }
+}
+
+/**
+ * The correcting pass's deliverables: the branch carries the repository
+ * verifiers' corrections under today's rules, and the working copy carries
+ * the local ones on disk under the same rules.
+ */
+function validateCorrectingBranch(
+  repo: string,
+  head: string,
+  branch: string | null,
+  wt: string,
+  folders: string[],
+  pages: string[],
+  mended: UpkeepClaim[],
+  local: LocalCut | null,
+): void {
+  if (branch !== null) {
+    validateCorrectingRepoBranch(
+      repo,
+      head,
+      branch,
+      folders.filter((f) => !isLocalFolder(f)),
+      mended.filter((c) => !isLocalFolder(c.page)),
+    );
+  }
+  if (local !== null) {
+    validateCorrectingLocalTree(
+      head,
+      wt,
+      pages.filter(isLocalFolder),
+      mended.filter((c) => isLocalFolder(c.page)),
+      local,
+    );
+  }
 }
 
 /**
@@ -2518,7 +3520,7 @@ export function strayUncommitted(out: string, allowed: string[]): string[] {
  * driven commit, with corrections or without. A verifier dir the branch no
  * longer holds is left to the user's review of the diff.
  */
-function validateCorrectingBranch(
+function validateCorrectingRepoBranch(
   repo: string,
   head: string,
   branch: string,
@@ -2583,6 +3585,9 @@ function runUpkeep(req: ParsedUpkeep): number {
   // hold where the project stands, whatever its branches have done since.
   const head = currentHead(repo);
   pruneWorktrees(repo);
+  if (scope.folders.every(isLocalFolder)) {
+    return runLocalUpkeep(req, repo, dispatch, head, scope);
+  }
   const branch = pickUpkeepBranch((name) => branchTaken(repo, name));
   const wt = pickUpkeepWorktree(repo, existsSync);
   const added = git(repo, ["worktree", "add", wt, "-b", branch, head]);
@@ -2592,12 +3597,189 @@ function runUpkeep(req: ParsedUpkeep): number {
   const sessionStarted = { started: false };
   const cutAt = Date.now();
   try {
-    return runUpkeepLaunches(req, repo, dispatch, head, branch, wt, scope, sessionStarted, cutAt);
+    const localFolders = scope.folders.filter(isLocalFolder);
+    const local: LocalCut | null =
+      localFolders.length === 0
+        ? null
+        : {
+            base: copyLocalForPass(repo, wt),
+            folders: localFolders,
+            vdirs: localFolders.flatMap((f) => scopeVdirsLocal(repo, f)),
+          };
+    return runUpkeepLaunches(
+      req,
+      repo,
+      dispatch,
+      head,
+      branch,
+      wt,
+      scope,
+      sessionStarted,
+      cutAt,
+      local,
+    );
   } catch (e) {
     const outcome = failureOutcome(sessionStarted.started, wt, branch);
     const extra = outcome.cleanup ? removeProvisioning(repo, wt, branch) : outcome.suffix;
     if (e instanceof RunError && extra !== "") throw new RunError(`${e.message}${extra}`);
     throw e;
+  }
+}
+
+/**
+ * The local verifiers frozen when the pass was cut: the tree the working
+ * copy was copied from, the scope's local folders, and the verifier dirs
+ * those folders held. Frozen because the disk may move under a minutes-long
+ * pass while the driven scope stays fixed.
+ */
+interface LocalCut {
+  base: VerifierTree;
+  folders: string[];
+  vdirs: string[];
+}
+
+/**
+ * The local verifiers copied into the pass's working copy, so the session
+ * drives them where the prompts point: a fresh worktree at the driven commit
+ * holds no local verifiers of its own. Symlinks and special files refuse,
+ * as the keep's snapshot refuses them, and a symlinked folder on either side
+ * refuses before anything is copied. Returns the frozen tree the validation
+ * and the keep compare against.
+ */
+function copyLocalForPass(repo: string, wt: string): VerifierTree {
+  const link = localDestLink(repo, []);
+  if (link !== null) {
+    throw new RunError(`${join(repo, link)} must not be a symlink`);
+  }
+  const src = join(repo, LOCAL_VERIFIER_ROOT);
+  if (!isDirPath(src)) {
+    throw new RunError(`no local verifiers to drive in ${repo}`);
+  }
+  const tree = readVerifierTree(src);
+  const bad = sortedRels(tree).filter((rel) => (tree.get(rel) as TreeValue).kind !== "file");
+  if (bad.length > 0) {
+    throw new RunError(
+      `cannot drive ${src}: must not hold symlinks or special files: ${bad.join(", ")}`,
+    );
+  }
+  if (isSymlink(join(wt, ".postmaster"))) {
+    throw new RunError(`${join(wt, ".postmaster")} must not be a symlink`);
+  }
+  try {
+    mkdirSync(join(wt, ".postmaster"), { recursive: true });
+    cpSync(src, join(wt, LOCAL_VERIFIER_ROOT), { recursive: true });
+    // The copy reads ignored as the project's folder does, so a session's
+    // `git add -A` stages no local verifier; a tracked ignore file stays as
+    // the driven commit holds it, and a symlink is never copied.
+    const wtIgnore = join(wt, ".postmaster", ".gitignore");
+    const srcIgnore = join(repo, ".postmaster", ".gitignore");
+    if (!existsSync(wtIgnore) && !isSymlink(srcIgnore) && isFilePath(srcIgnore)) {
+      cpSync(srcIgnore, wtIgnore);
+    }
+  } catch (e) {
+    throw new RunError(
+      `the local verifiers could not be copied: ${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
+  return tree;
+}
+
+/**
+ * The local upkeep pass: a detached working copy at the driven commit, since
+ * no branch will carry the corrections, with the local verifiers copied in.
+ * A failure past the cut leaves the copy for diagnosis, with no branch.
+ */
+function runLocalUpkeep(
+  req: ParsedUpkeep,
+  repo: string,
+  dispatch: string,
+  head: string,
+  scope: { folders: string[]; pages: string[] },
+): number {
+  const wt = pickUpkeepWorktree(repo, existsSync);
+  const added = git(repo, ["worktree", "add", "--detach", wt, head]);
+  if (added.code !== 0) {
+    throw new RunError(`the worktree would not cut: ${added.err.trim() || added.out.trim()}`);
+  }
+  const sessionStarted = { started: false };
+  const cutAt = Date.now();
+  try {
+    const base = copyLocalForPass(repo, wt);
+    const folders = scope.folders.filter(isLocalFolder);
+    const local: LocalCut = {
+      base,
+      folders,
+      vdirs: folders.flatMap((f) => scopeVdirsLocal(repo, f)),
+    };
+    return runUpkeepLaunches(
+      req,
+      repo,
+      dispatch,
+      head,
+      null,
+      wt,
+      scope,
+      sessionStarted,
+      cutAt,
+      local,
+    );
+  } catch (e) {
+    const outcome = failureOutcome(sessionStarted.started, wt, null);
+    const extra = outcome.cleanup ? removeProvisioning(repo, wt, null) : outcome.suffix;
+    if (e instanceof RunError && extra !== "") throw new RunError(`${e.message}${extra}`);
+    throw e;
+  }
+}
+
+/**
+ * The local upkeep pass's tag: local- plus the worktree's stem, so
+ * overlapping passes take distinct host handles and log names, and no local
+ * tag ever collides with a branch name a committed pass prints.
+ */
+export function localUpkeepTag(repo: string, wt: string): string {
+  const prefix = `${basename(repo)}-`;
+  const base = basename(wt);
+  const stem = base.startsWith(prefix) ? base.slice(prefix.length) : "upkeep";
+  return `local-${stem}`;
+}
+
+/**
+ * The correcting pass's uncommitted strays: on a branch, nothing besides
+ * UPKEEP.md, as before; where local verifiers are in scope, nothing outside
+ * their folders, since the session leaves the local corrections uncommitted
+ * for the keep.
+ */
+function validateUpkeepStrays(
+  wt: string,
+  branch: string | null,
+  folders: string[],
+  repo: string,
+): void {
+  const localFolders = folders.filter(isLocalFolder);
+  // Untracked files expand one by one where local verifiers are in scope, so
+  // an unignored folder reads by its files rather than refusing whole.
+  const status = git(
+    wt,
+    localFolders.length === 0
+      ? ["status", "--porcelain", "-z"]
+      : ["status", "--porcelain", "-z", "--untracked-files=all"],
+  );
+  if (status.code !== 0) throw new RunError("the pass worktree could not be read");
+  if (localFolders.length === 0 && branch !== null) {
+    const strays = strayUncommitted(status.out, ["UPKEEP.md"]);
+    if (strays.length > 0) {
+      const shown = strays.slice(0, 10).join(", ");
+      const more = strays.length > 10 ? ` and ${strays.length - 10} more` : "";
+      throw new RunError(
+        `the pass leaves uncommitted changes besides UPKEEP.md on ${branch}: ${shown}${more}`,
+      );
+    }
+    return;
+  }
+  const strays = strayOutsideLocal(status.out, localFolders);
+  const reason = outsideReason(strays.filter((p) => !toolPlacedIgnore(repo, wt, p)));
+  if (reason !== null) {
+    throw new RunError(`the pass changed files ${reason}`);
   }
 }
 
@@ -2607,22 +3789,27 @@ function runUpkeepLaunches(
   repo: string,
   dispatch: string,
   head: string,
-  branch: string,
+  branch: string | null,
   wt: string,
   scope: { folders: string[]; pages: string[] },
   sessionStarted: { started: boolean },
   cutAt: number,
+  local: LocalCut | null,
 ): number {
   // Decided by validate on either path, printed after it: the interactive path
   // logs a malformed report as the session's failure before it throws.
   let decided: UpkeepVerdict | null = null;
   let corrected = 0;
+  let keptReport: string | null = null;
   const correcting = req.correct === true;
+  const localOnly = branch === null;
+  const tag = branch ?? localUpkeepTag(repo, wt);
   const render = correcting ? renderUpkeepCorrectPrompt : renderUpkeepPrompt;
   return runSessionLaunches({
     repo,
     dispatch,
     branch,
+    tag,
     wt,
     timeout: req.timeout,
     cutAt,
@@ -2638,22 +3825,32 @@ function runUpkeepLaunches(
       decided = judged.verdict;
       corrected = judged.mended.length;
       if (correcting) {
-        validateCorrectingBranch(repo, head, branch, scope.folders, judged.mended);
-        const status = git(wt, ["status", "--porcelain", "-z"]);
-        if (status.code !== 0) throw new RunError("the pass worktree could not be read");
-        const strays = strayUncommitted(status.out, ["UPKEEP.md"]);
-        if (strays.length > 0) {
-          const shown = strays.slice(0, 10).join(", ");
-          const more = strays.length > 10 ? ` and ${strays.length - 10} more` : "";
-          throw new RunError(
-            `the pass leaves uncommitted changes besides UPKEEP.md on ${branch}: ${shown}${more}`,
-          );
+        validateCorrectingBranch(
+          repo,
+          head,
+          branch,
+          wt,
+          scope.folders,
+          scope.pages,
+          judged.mended,
+          local,
+        );
+        validateUpkeepStrays(wt, branch, scope.folders, repo);
+        if (local !== null && !localOnly) {
+          keepLocalCorrections(repo, dispatch, wt, join(wt, "UPKEEP.md"), local);
         }
+      }
+      if (localOnly) {
+        keptReport = keepLocalUpkeep(repo, dispatch, wt, tag, correcting, local);
       }
     },
     print: ({ final, handle, promptFile }) => {
       const verdict = decided as UpkeepVerdict;
-      const lines = [`branch ${branch}`, `base ${head}`, `worktree ${wt}`];
+      const lines =
+        branch === null ? [`base ${head}`] : [`branch ${branch}`, `base ${head}`, `worktree ${wt}`];
+      if (correcting && (branch === null || local !== null)) {
+        lines.unshift(`kept ${LOCAL_VERIFIER_ROOT}`);
+      }
       if (final === null) {
         lines.push("role coachman", `handle ${handle}`);
       } else {
@@ -2661,10 +3858,11 @@ function runUpkeepLaunches(
       }
       lines.push(`prompt ${promptFile}`);
       if (final !== null) lines.push(`stream ${final.stream}`);
-      lines.push(`report ${join(wt, "UPKEEP.md")}`);
+      lines.push(`report ${branch === null ? (keptReport as string) : join(wt, "UPKEEP.md")}`);
+      const target = branch ?? tag;
       if (!correcting) {
         for (const line of [...lines, ...verdict.lines]) console.log(line);
-        for (const line of verdict.lines) logVerdict(dispatch, branch, "note", line);
+        for (const line of verdict.lines) logVerdict(dispatch, target, "note", line);
         return verdict.stale + verdict.unchecked > 0 ? 1 : 0;
       }
       const tally = `corrections: ${corrected} of ${verdict.stale} stale corrected`;
@@ -2672,11 +3870,182 @@ function runUpkeepLaunches(
       const extra = holds ? [tally, "every claim holds"] : [tally];
       for (const line of [...lines, ...verdict.lines, ...extra]) console.log(line);
       for (const line of [...verdict.lines, ...extra]) {
-        logVerdict(dispatch, branch, "note", line);
+        logVerdict(dispatch, target, "note", line);
       }
       return holds ? 0 : 1;
     },
   });
+}
+
+/** The local upkeep keep's own action line: the folders kept and where the report sits. */
+function logUpkeepKeep(dispatch: string, folders: string[], report: string): void {
+  const r = run(RUN, [
+    "log-action",
+    dispatch,
+    "coachman",
+    "note",
+    LOCAL_VERIFIER_ROOT,
+    `upkeep kept ${folders.join(", ")}; report ${report}`,
+  ]);
+  if (r.code !== 0) throw new RunError(`the keep was not logged: ${r.err.trim() || r.out.trim()}`);
+}
+
+/**
+ * Restore the snapshotted folder over the destination: remove, then copy
+ * back. "" when clean, otherwise the failures to append to the error.
+ */
+function restoreTree(src: string, dest: string): string {
+  try {
+    rmSync(dest, { recursive: true, force: true });
+    cpSync(src, dest, { recursive: true });
+    return "";
+  } catch (e) {
+    return e instanceof Error ? e.message : String(e);
+  }
+}
+
+/** One path the keep takes from the pass: a removal, or new bytes to write. */
+type LocalTake =
+  | { rel: string; kind: "take-remove" }
+  | { rel: string; kind: "take-add" | "take-change"; bytes: Buffer };
+
+/**
+ * Keep a correcting pass's local corrections: snapshot the project's folder
+ * as the keep found it, apply the pass's changes onto it — added, changed
+ * and removed files alike — and log the keep. A file the project changed
+ * while the pass ran keeps the project's version where the pass left it
+ * alone, and refuses the keep where the pass changed it too, so a concurrent
+ * edit is never silently reverted. A failure past the snapshot restores it,
+ * so a failed keep leaves the folder as the keep found it.
+ */
+function keepLocalCorrections(
+  repo: string,
+  dispatch: string,
+  wt: string,
+  report: string,
+  local: LocalCut,
+): void {
+  const dest = join(repo, LOCAL_VERIFIER_ROOT);
+  if (!isDirPath(dest)) {
+    throw new RunError(`${LOCAL_VERIFIER_ROOT} is not a directory: ${repo}`);
+  }
+  const link = localDestLink(repo, []);
+  if (link !== null) {
+    throw new RunError(`${join(repo, link)} must not be a symlink`);
+  }
+  const wtRoot = join(wt, LOCAL_VERIFIER_ROOT);
+  if (!isDirPath(wtRoot)) {
+    throw new RunError(`the pass left no ${LOCAL_VERIFIER_ROOT}/ in its working copy`);
+  }
+  const final = readVerifierTree(wtRoot);
+  const current = readVerifierTree(dest);
+  const takes: LocalTake[] = [];
+  const clashes: { rel: string; reason: string }[] = [];
+  const rels = new Set<string>([...local.base.keys(), ...final.keys(), ...current.keys()]);
+  const ordered = [...rels].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  for (const rel of ordered) {
+    const decision = classifyKeepFile(local.base.get(rel), final.get(rel), current.get(rel));
+    if (decision.kind === "untouched") continue;
+    if (decision.kind === "merge") {
+      clashes.push({ rel, reason: "changed on both sides" });
+      continue;
+    }
+    if (decision.kind === "clash") {
+      clashes.push({ rel, reason: decision.reason });
+      continue;
+    }
+    if (decision.kind === "take-remove") {
+      takes.push({ rel, kind: decision.kind });
+      continue;
+    }
+    const f = final.get(rel);
+    if (f === undefined || f.kind !== "file") {
+      clashes.push({ rel, reason: "not a regular file" });
+      continue;
+    }
+    takes.push({ rel, kind: decision.kind, bytes: f.bytes });
+  }
+  // A link the project grew under the pass would carry a write outside it.
+  const live = sortedRels(current).filter((rel) => (current.get(rel) as TreeValue).kind !== "file");
+  for (const take of takes) {
+    if (take.kind === "take-remove") continue;
+    const carrier = live.find((l) => take.rel === l || take.rel.startsWith(`${l}/`));
+    if (carrier !== undefined) {
+      clashes.push({ rel: take.rel, reason: `not a regular file in the project: ${carrier}` });
+    }
+  }
+  if (clashes.length > 0) {
+    const shown = clashes
+      .slice(0, 10)
+      .map((c) => `${c.rel} (${c.reason})`)
+      .join(", ");
+    const more = clashes.length > 10 ? ` and ${clashes.length - 10} more` : "";
+    throw new RunError(
+      `the keep was refused: ${shown}${more} changed while the pass ran; the folder was left alone`,
+    );
+  }
+  const before = join(dispatch, BEFORE_UPKEEP);
+  replaceTree(dest, before);
+  try {
+    const removedRels: string[] = [];
+    for (const take of takes) {
+      const target = join(dest, take.rel);
+      if (take.kind === "take-remove") {
+        rmSync(target, { force: true });
+        removedRels.push(take.rel);
+        continue;
+      }
+      mkdirSync(dirname(target), { recursive: true });
+      writeFileSync(target, take.bytes);
+    }
+    pruneEmptyDirs(dest, removedRels);
+    logUpkeepKeep(dispatch, local.folders, report);
+  } catch (e) {
+    const problems = restoreTree(before, dest);
+    const cleanup = problems === "" ? "" : `; the restore failed too: ${problems}`;
+    throw new RunError(
+      `the keep was rolled back: ${e instanceof Error ? e.message : String(e)}${cleanup}`,
+    );
+  }
+}
+
+/**
+ * Finish a local-only pass: save UPKEEP.md into the run's logs, keep the
+ * corrections where the pass corrected, and remove the working copy, so the
+ * repository shows nothing new. Returns the saved report's path.
+ */
+function keepLocalUpkeep(
+  repo: string,
+  dispatch: string,
+  wt: string,
+  tag: string,
+  correcting: boolean,
+  local: LocalCut | null,
+): string {
+  const saved = join(dispatch, "logs", `verifier-${tag}-upkeep.md`);
+  try {
+    mkdirSync(join(dispatch, "logs"), { recursive: true });
+    cpSync(join(wt, "UPKEEP.md"), saved);
+  } catch (e) {
+    throw new RunError(
+      `the report could not be saved: ${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
+  if (correcting) {
+    if (local === null) {
+      throw new RunError(`no local verifiers were driven to keep in ${repo}`);
+    }
+    keepLocalCorrections(repo, dispatch, wt, saved, local);
+  }
+  const rm = git(repo, ["worktree", "remove", "--force", wt]);
+  if (rm.code !== 0) {
+    const done = correcting ? "the verifiers were kept" : "the report was saved";
+    throw new RunError(
+      `${done} but the worktree ${wt} could not be removed: ${rm.err.trim() || rm.out.trim() || `exit ${rm.code}`}`,
+    );
+  }
+  pruneWorktrees(repo);
+  return saved;
 }
 
 /** Seconds one send waits for the session's turn, and how many sends before make gives up. */
@@ -2742,7 +4111,7 @@ export function checkMultiVerifiers(
   repo: string,
   branch: string,
   base: string,
-  surfaces: Surface[],
+  surfaces: NamedSurface[],
 ): void {
   // Added past the base, never the branch tree: content the base already
   // carries is not this session's work, and must neither satisfy nor fail it.
@@ -2755,24 +4124,26 @@ export function checkMultiVerifiers(
     throw new RunError(`the session added no verifier/README.md on ${branch}`);
   }
   const index = branchFileText(repo, branch, "verifier/README.md") ?? "";
-  for (const kind of surfaces) {
-    if (!has(`verifier/${kind}/README.md`)) {
-      throw new RunError(`the session added no verifier/${kind}/README.md on ${branch}`);
+  for (const surface of surfaces) {
+    const seg = surfaceFolder(surface);
+    const label = surfaceLabel(surface);
+    if (!has(`verifier/${seg}/README.md`)) {
+      throw new RunError(`the session added no verifier/${seg}/README.md on ${branch}`);
     }
-    if (!has(`verifier/${kind}/features/README.md`)) {
-      throw new RunError(`the session added no verifier/${kind}/features/README.md on ${branch}`);
+    if (!has(`verifier/${seg}/features/README.md`)) {
+      throw new RunError(`the session added no verifier/${seg}/features/README.md on ${branch}`);
     }
-    const pages = addedFeaturePages(added, `verifier/${kind}`);
+    const pages = addedFeaturePages(added, `verifier/${seg}`);
     if (pages.length < 3) {
-      throw new RunError(`the session added fewer than 3 feature pages for ${kind} on ${branch}`);
+      throw new RunError(`the session added fewer than 3 feature pages for ${label} on ${branch}`);
     }
-    const main = branchFileText(repo, branch, `verifier/${kind}/README.md`) ?? "";
+    const main = branchFileText(repo, branch, `verifier/${seg}/README.md`) ?? "";
     if (!hasUpkeepLine(main)) {
-      throw new RunError(`the verifier/${kind}/README.md on ${branch} carries no upkeep line`);
+      throw new RunError(`the verifier/${seg}/README.md on ${branch} carries no upkeep line`);
     }
-    if (!indexNames(index, kind)) {
+    if (!indexNamesFolder(index, surfaceProse(surface.kind), `verifier/${seg}`)) {
       throw new RunError(
-        `the verifier/README.md on ${branch} names no ${surfaceProse(kind)} (${kind}) verifier`,
+        `the verifier/README.md on ${branch} names no ${surfaceProse(surface.kind)} (${label}) verifier`,
       );
     }
   }
@@ -2795,7 +4166,8 @@ function runRoles(
     wt: string;
     name: string;
     logs: string;
-    branch: string;
+    branch: string | null;
+    tag: string;
     surface: string;
     promptFile: string;
     dispatch: string;
@@ -2828,7 +4200,10 @@ interface PrintCtx {
 interface SessionOpts {
   repo: string;
   dispatch: string;
-  branch: string;
+  /** The branch, or null for a detached local working copy. */
+  branch: string | null;
+  /** The file and handle tag: the branch, or the surfaces' label when local. */
+  tag: string;
   wt: string;
   timeout: number;
   cutAt: number;
@@ -2851,7 +4226,7 @@ interface SessionOpts {
 function runSessionLaunches(o: SessionOpts): number {
   const logs = join(o.dispatch, "logs");
   mkdirSync(logs, { recursive: true });
-  const promptFile = join(logs, `verifier-${o.branch}-prompt.txt`);
+  const promptFile = join(logs, `verifier-${o.tag}-prompt.txt`);
   writeFileSync(promptFile, o.renderPrompt(false));
   const named = run(RUN, ["host", "name", o.dispatch, "role", `verifier-${o.logLabel}`]);
   if (named.code !== 0) {
@@ -2859,7 +4234,7 @@ function runSessionLaunches(o: SessionOpts): number {
   }
   const name = named.out.trim();
   const form = formOrNull(o.wt, name);
-  const handle = verifierHandle(o.repo, o.branch);
+  const handle = verifierHandle(o.repo, o.tag);
   const spawned =
     form === null
       ? null
@@ -2891,7 +4266,7 @@ function runSessionLaunches(o: SessionOpts): number {
     );
   }
   o.sessionStarted.started = true;
-  const sendFile = join(logs, `verifier-${o.branch}-send.txt`);
+  const sendFile = join(logs, `verifier-${o.tag}-send.txt`);
   writeFileSync(sendFile, o.sendFileText(promptFile));
   const delivery = deliverInstructions((args) => run(RUN, args), handle, sendFile);
   if (!delivery.delivered) {
@@ -2937,6 +4312,7 @@ function runSessionHeadless(
       name,
       logs,
       branch: o.branch,
+      tag: o.tag,
       surface: o.logLabel,
       promptFile,
       dispatch: o.dispatch,
@@ -2948,12 +4324,33 @@ function runSessionHeadless(
   return o.print({ final, handle: "", promptFile });
 }
 
-/** Make's briefing: the making instructions, the handover wait, the handover summary. */
+/** The session's label: its surfaces' folder segments joined, for branches and files. */
+export function sessionLabel(surfaces: NamedSurface[]): string {
+  return surfaces.map(surfaceFolder).join("-");
+}
+
+/**
+ * The local run's tag: the surfaces' label, plus the worktree's number when
+ * numbered, so overlapping runs for the same repo and surfaces take distinct
+ * host handles. The label itself when the worktree is not the label's.
+ */
+export function localTag(repo: string, label: string, wt: string): string {
+  const prefix = `${basename(repo)}-verify-`;
+  const base = basename(wt);
+  if (base.startsWith(prefix)) {
+    const rest = base.slice(prefix.length);
+    if (rest === label || rest.startsWith(`${label}-`)) return rest;
+  }
+  return label;
+}
+
+/** Make's repository briefing: the making instructions, the handover wait, the summary. */
 function runMakeLaunches(
   req: ParsedMake,
   repo: string,
   dispatch: string,
   base: string,
+  proved: string,
   branch: string,
   wt: string,
   vdir: string,
@@ -2964,13 +4361,15 @@ function runMakeLaunches(
     repo,
     dispatch,
     branch,
+    tag: branch,
     wt,
     timeout: req.timeout,
     cutAt,
     sessionStarted,
-    logLabel: req.surfaces.join("-"),
+    logLabel: sessionLabel(req.surfaces),
     sessionNoun: "verifier",
-    renderPrompt: (headless) => renderSessionPrompt(repo, req.surfaces, base, headless),
+    renderPrompt: (headless) =>
+      renderSessionPrompt(repo, req.surfaces, base, proved, headless, false),
     sendFileText: (promptFile) => sendText(promptFile),
     waitFile: "HANDOVER.md",
     validate: () => validateSession(wt, base, branch, vdir, cutAt, req.surfaces),
@@ -2984,6 +4383,60 @@ function runMakeLaunches(
       lines.push(`prompt ${promptFile}`);
       if (final !== null) lines.push(`stream ${final.stream}`);
       lines.push(`handover ${join(wt, "HANDOVER.md")}`);
+      for (const line of lines) console.log(line);
+      return 0;
+    },
+  });
+}
+
+/** Make's local briefing: the local instructions, the keep, the kept summary. */
+function runMakeLocalLaunches(
+  req: ParsedMake,
+  repo: string,
+  dispatch: string,
+  base: string,
+  proved: string,
+  label: string,
+  wt: string,
+  sessionStarted: { started: boolean },
+  cutAt: number,
+): number {
+  let kept: { folders: string[]; leftOut: ClassifiedEntry[]; handover: string } | null = null;
+  const tag = localTag(repo, label, wt);
+  return runSessionLaunches({
+    repo,
+    dispatch,
+    branch: null,
+    tag,
+    wt,
+    timeout: req.timeout,
+    cutAt,
+    sessionStarted,
+    logLabel: label,
+    sessionNoun: "verifier",
+    renderPrompt: (headless) =>
+      renderSessionPrompt(repo, req.surfaces, base, proved, headless, true),
+    sendFileText: (promptFile) => sendText(promptFile),
+    waitFile: "HANDOVER.md",
+    validate: () => {
+      kept = keepLocalSession(repo, dispatch, wt, tag, cutAt, req.surfaces);
+    },
+    print: ({ final, handle, promptFile }) => {
+      const done = kept as { folders: string[]; leftOut: ClassifiedEntry[]; handover: string };
+      const lines = [`kept ${LOCAL_VERIFIER_ROOT}`, `base ${base}`];
+      if (final === null) {
+        lines.push("role coachman", `handle ${handle}`);
+      } else {
+        lines.push(`role ${final.role}`, `thread ${final.thread}`);
+      }
+      lines.push(`prompt ${promptFile}`);
+      if (final !== null) lines.push(`stream ${final.stream}`);
+      lines.push(`handover ${done.handover}`);
+      lines.push(
+        done.leftOut.length === 0
+          ? "left out: none"
+          : `left out: ${done.leftOut.map((e) => `${e.name} (${e.failReason})`).join(", ")}`,
+      );
       for (const line of lines) console.log(line);
       return 0;
     },
@@ -3052,12 +4505,13 @@ function formOrNull(wt: string, name: string): string[] | null {
 function logInteractive(
   dispatch: string,
   surface: string,
-  branch: string,
+  branch: string | null,
   handle: string,
   failed: string,
 ): void {
+  const where = branch === null ? "local" : `branch ${branch}`;
   const detail =
-    `interactive handle ${handle} branch ${branch}` + (failed === "" ? "" : ` failed: ${failed}`);
+    `interactive handle ${handle} ${where}` + (failed === "" ? "" : ` failed: ${failed}`);
   const r = run(RUN, [
     "log-action",
     dispatch,
@@ -3080,7 +4534,7 @@ function validateSession(
   branch: string,
   vdir: string,
   cutAt: number,
-  surfaces: Surface[],
+  surfaces: NamedSurface[],
 ): void {
   const handover = join(wt, "HANDOVER.md");
   const written = handoverMtimeMs(handover);
@@ -3108,6 +4562,373 @@ function validateSession(
   } else {
     checkMultiVerifiers(wt, branch, base, surfaces);
   }
+}
+
+/** Folder segments an index bullet names, lowercased, wrapped lines included. */
+export function spanSegs(span: string[]): string[] {
+  const text = span.join("\n");
+  const segs: string[] = [];
+  // A verifier root starts at a boundary, never mid-path: src/verifier/run.ts
+  // is a project file, while .postmaster/verifier/cli/ is the cli verifier.
+  // ASCII: boundaries, roots and segments are ASCII alone
+  for (const m of text.matchAll(
+    /(?:^|[^A-Za-z0-9_./-])(?:\.postmaster\/)?verifier\/([A-Za-z0-9_-]+)/giu,
+  )) {
+    // LOWER: lowered for an ASCII folder-segment match
+    segs.push((m[1] as string).toLowerCase());
+  }
+  // A relative folder link ends at its slash: [cli](cli/) names cli, while
+  // [docs](docs/x.md) is a page link. ASCII: link gaps are ASCII spaces
+  for (const m of text.matchAll(/\]\(\s*([A-Za-z0-9_-]+)\/(?:\s*["']|\))/giu)) {
+    // LOWER: lowered for an ASCII folder-segment match
+    segs.push((m[1] as string).toLowerCase());
+  }
+  return segs;
+}
+
+export interface IndexStrays {
+  /** Session segments the index names without proof. */
+  dangling: string[];
+  /** Segments the index names that no surface lists. */
+  unlisted: string[];
+}
+
+/**
+ * The index's bullets against the session's folders: a bullet naming a
+ * dropped folder dangles, and one naming a folder no surface lists is
+ * unlisted, like a stray file. Prose bullets naming no folder pass.
+ */
+export function indexStrays(text: string, sessionSegs: string[], keptSegs: string[]): IndexStrays {
+  const session = new Set(sessionSegs);
+  const kept = new Set(keptSegs);
+  const dangling = new Set<string>();
+  const unlisted = new Set<string>();
+  for (const span of indexBullets(text)) {
+    for (const seg of spanSegs(span)) {
+      if (!session.has(seg)) unlisted.add(seg);
+      else if (!kept.has(seg)) dangling.add(seg);
+    }
+  }
+  return { dangling: [...dangling].sort(), unlisted: [...unlisted].sort() };
+}
+
+/**
+ * The working copy's changed paths outside the local root and HANDOVER.md,
+ * in the order git listed them. The copy is cut clean, so every entry is
+ * this session's: untracked, modified, deleted or renamed, either side.
+ */
+export function localScopeStrays(wt: string): string[] {
+  // --untracked-files=all: a new directory would otherwise list as one
+  // collapsed dir/ entry instead of the files the session wrote in it.
+  const status = git(wt, ["status", "--porcelain", "-z", "--untracked-files=all"]);
+  if (status.code !== 0) throw new RunError("the session worktree could not be read");
+  const strays: string[] = [];
+  for (const part of status.out.split("\0")) {
+    if (part === "") continue;
+    const path = part.length > 3 && part[2] === " " ? part.slice(3) : part;
+    if (path === "HANDOVER.md") continue;
+    if (path.startsWith(`${LOCAL_VERIFIER_ROOT}/`)) continue;
+    strays.push(path);
+  }
+  return strays;
+}
+
+/**
+ * The local destinations a make would collide with: the shared index and
+ * each session surface's folder, whichever already exist.
+ */
+export function localDestCollisions(repo: string, surfaces: NamedSurface[]): string[] {
+  const collisions: string[] = [];
+  if (existsSync(join(repo, LOCAL_VERIFIER_ROOT, "README.md"))) {
+    collisions.push(`${LOCAL_VERIFIER_ROOT}/README.md`);
+  }
+  for (const s of surfaces) {
+    const folder = `${LOCAL_VERIFIER_ROOT}/${surfaceFolder(s)}`;
+    if (existsSync(join(repo, folder))) collisions.push(folder);
+  }
+  return collisions;
+}
+
+/**
+ * The first local destination that is a symlink: the .postmaster folder,
+ * the local root, the shared index or one of the given repo-relative
+ * folders, or null when none is. A link would carry the keep's writes
+ * outside the project, past the collision checks.
+ */
+export function localDestLink(repo: string, folders: string[]): string | null {
+  for (const rel of [
+    ".postmaster",
+    LOCAL_VERIFIER_ROOT,
+    `${LOCAL_VERIFIER_ROOT}/README.md`,
+    ...folders,
+  ]) {
+    if (isSymlink(join(repo, rel))) return rel;
+  }
+  return null;
+}
+
+/**
+ * The first symlink under the kept folders or at the index in the working
+ * copy, repo-relative, or null when the tree holds none. The file checks
+ * follow links and the copy preserves them, so a link would keep content
+ * the validation never saw, or a link the copy's removal leaves dangling.
+ */
+export function keptTreeLink(wt: string, folders: string[], index: string): string | null {
+  for (const rel of [...folders, index]) {
+    if (isSymlink(join(wt, rel))) return rel;
+  }
+  const stack: string[] = [...folders];
+  while (stack.length > 0) {
+    const rel = stack.pop()!;
+    let entries;
+    try {
+      entries = readdirSync(join(wt, rel), { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      const child = `${rel}/${entry.name}`;
+      if (entry.isSymbolicLink()) return child;
+      if (entry.isDirectory()) stack.push(child);
+    }
+  }
+  return null;
+}
+
+export interface LocalJudged {
+  kept: ClassifiedEntry[];
+  leftOut: ClassifiedEntry[];
+}
+
+/**
+ * The local session's deliverables on disk: a fresh hand-over naming at
+ * least one proven verifier, each proven folder complete under the local
+ * root with its upkeep line, the index naming each kept surface and no
+ * other, and nothing changed outside the root besides HANDOVER.md. Unproven
+ * folders are dropped, with the reason the hand-over gives.
+ */
+export function validateLocalSession(
+  wt: string,
+  cutAt: number,
+  surfaces: NamedSurface[],
+): LocalJudged {
+  const handover = join(wt, "HANDOVER.md");
+  const written = handoverMtimeMs(handover);
+  if (written === null) {
+    throw new RunError(`the session ended with no HANDOVER.md in ${wt}`);
+  }
+  if (!handoverFresh(written, cutAt)) {
+    throw new RunError(`the HANDOVER.md in ${wt} predates this session`);
+  }
+  const parsed = parseHandover(readFileSync(handover, "utf8"));
+  if (!parsed.ok) throw new RunError(parsed.error);
+  if (parsed.entries.length === 0) {
+    throw new RunError("the hand-over names no verifier");
+  }
+  const classified = classifyEntries(parsed.entries, proofIsFile);
+  const kept = classified.filter((e) => e.proven);
+  const leftOut = classified.filter((e) => !e.proven);
+  if (kept.length === 0) {
+    throw new RunError("the session proved no verifier");
+  }
+  const byFolder = new Map(surfaces.map((s) => [`${LOCAL_VERIFIER_ROOT}/${surfaceFolder(s)}`, s]));
+  for (const e of kept) {
+    const surface = byFolder.get(e.folder);
+    if (surface === undefined) {
+      throw new RunError(`the hand-over names an unlisted folder for ${e.name}: ${e.folder}`);
+    }
+    if (!isFilePath(join(wt, e.folder, "README.md"))) {
+      throw new RunError(`the session left no ${e.folder}/README.md`);
+    }
+    if (!isFilePath(join(wt, e.folder, "features", "README.md"))) {
+      throw new RunError(`the session left no ${e.folder}/features/README.md`);
+    }
+    const pages = featurePageNames(childNames(join(wt, e.folder, "features")));
+    if (pages.length < 3) {
+      throw new RunError(
+        `the session left fewer than 3 feature pages for ${surfaceLabel(surface)}`,
+      );
+    }
+    if (!hasUpkeepLine(readmeText(join(wt, e.folder, "README.md")))) {
+      throw new RunError(`the ${e.folder}/README.md carries no upkeep line`);
+    }
+  }
+  const treeLink = keptTreeLink(
+    wt,
+    kept.map((e) => e.folder),
+    `${LOCAL_VERIFIER_ROOT}/README.md`,
+  );
+  if (treeLink !== null) {
+    throw new RunError(`the session left a symlink in the kept tree: ${treeLink}`);
+  }
+  const indexPath = join(wt, LOCAL_VERIFIER_ROOT, "README.md");
+  if (!isFilePath(indexPath)) {
+    throw new RunError(`the session left no ${LOCAL_VERIFIER_ROOT}/README.md`);
+  }
+  const index = readmeText(indexPath);
+  for (const e of kept) {
+    const surface = byFolder.get(e.folder) as NamedSurface;
+    if (!indexNamesFolder(index, surfaceProse(surface.kind), e.folder)) {
+      throw new RunError(
+        `the ${LOCAL_VERIFIER_ROOT}/README.md names no ${surfaceProse(surface.kind)} (${surfaceLabel(surface)}) verifier`,
+      );
+    }
+  }
+  const sessionSegs = surfaces.map(surfaceFolder);
+  const keptSegs = kept.map((e) => e.folder.split("/").pop() ?? e.folder);
+  const strays = indexStrays(index, sessionSegs, keptSegs);
+  if (strays.dangling.length > 0) {
+    throw new RunError(
+      `the index names ${strays.dangling.join(", ")} with no proof; prove or drop ${strays.dangling.length === 1 ? "it" : "them"}`,
+    );
+  }
+  if (strays.unlisted.length > 0) {
+    throw new RunError(`the index names an unlisted verifier: ${strays.unlisted.join(", ")}`);
+  }
+  const outside = localScopeStrays(wt);
+  if (outside.length > 0) {
+    const shown = outside.slice(0, 10).join(", ");
+    const more = outside.length > 10 ? ` and ${outside.length - 10} more` : "";
+    throw new RunError(`the session left files outside ${LOCAL_VERIFIER_ROOT}/: ${shown}${more}`);
+  }
+  return { kept, leftOut };
+}
+
+/**
+ * Copy the judged folders and index from the working copy into the project,
+ * removing whatever was copied, the in-progress path included, when a copy
+ * fails, so a failed keep leaves nothing behind: neither a partial keep nor
+ * a root the keep created.
+ */
+export function copyKeptIntoProject(
+  wt: string,
+  repo: string,
+  folders: string[],
+  index: string,
+): void {
+  const rootExisted = existsSync(join(repo, LOCAL_VERIFIER_ROOT));
+  const copied: string[] = [];
+  let current: string | null = null;
+  try {
+    mkdirSync(join(repo, LOCAL_VERIFIER_ROOT), { recursive: true });
+    for (const folder of folders) {
+      current = folder;
+      cpSync(join(wt, folder), join(repo, folder), { recursive: true });
+      copied.push(folder);
+      current = null;
+    }
+    current = index;
+    cpSync(join(wt, index), join(repo, index));
+    copied.push(index);
+    current = null;
+  } catch (e) {
+    const doomed = current === null ? copied : [...copied, current];
+    const problems = removeKeptPaths(repo, doomed, rootExisted);
+    const kept = e instanceof Error ? e.message : String(e);
+    const cleanup = problems === "" ? "" : `; the cleanup failed too: ${problems}`;
+    throw new RunError(
+      `the verifiers could not be kept: ${kept}; the partial keep was removed${cleanup}`,
+    );
+  }
+}
+
+/**
+ * Remove repo-relative kept paths and the root when the keep created it: the
+ * rollback half of the keep, shared by the copy failures and the post-copy
+ * failures. "" when clean, otherwise the failures to append to the error.
+ * Every path was verified absent before the copies, so the rollback only
+ * ever removes what this keep wrote.
+ */
+export function removeKeptPaths(repo: string, rels: string[], rootExisted: boolean): string {
+  const problems: string[] = [];
+  for (const rel of [...rels].reverse()) {
+    try {
+      rmSync(join(repo, rel), { recursive: true, force: true });
+    } catch (e) {
+      problems.push(e instanceof Error ? e.message : String(e));
+    }
+  }
+  if (!rootExisted) {
+    try {
+      rmSync(join(repo, LOCAL_VERIFIER_ROOT), { recursive: true, force: true });
+    } catch (e) {
+      problems.push(e instanceof Error ? e.message : String(e));
+    }
+  }
+  return problems.join("; ");
+}
+
+/** The keep's own action line: the folders kept and where the hand-over sits. */
+function logKeep(dispatch: string, folders: string[], handover: string): void {
+  const r = run(RUN, [
+    "log-action",
+    dispatch,
+    "coachman",
+    "note",
+    LOCAL_VERIFIER_ROOT,
+    `kept ${folders.join(", ")}; handover ${handover}`,
+  ]);
+  if (r.code !== 0) throw new RunError(`the keep was not logged: ${r.err.trim() || r.out.trim()}`);
+}
+
+/**
+ * Keep a judged local session: refuse a destination that already holds a
+ * kept folder or the index, ensure the folder's ignore rules, copy the kept
+ * folders and the index, save HANDOVER.md into the run's logs, log the keep,
+ * and remove the working copy, so the repository shows nothing new. A
+ * failure past the copies rolls the keep back, so a failed keep leaves
+ * nothing a retry would refuse on.
+ */
+function keepLocalSession(
+  repo: string,
+  dispatch: string,
+  wt: string,
+  label: string,
+  cutAt: number,
+  surfaces: NamedSurface[],
+): { folders: string[]; leftOut: ClassifiedEntry[]; handover: string } {
+  const judged = validateLocalSession(wt, cutAt, surfaces);
+  for (const e of judged.kept) {
+    if (existsSync(join(repo, e.folder))) {
+      throw new RunError(`${repo} already holds ${e.folder}`);
+    }
+  }
+  const index = `${LOCAL_VERIFIER_ROOT}/README.md`;
+  if (existsSync(join(repo, index))) {
+    throw new RunError(`${repo} already holds ${index}`);
+  }
+  const link = localDestLink(
+    repo,
+    judged.kept.map((e) => e.folder),
+  );
+  if (link !== null) {
+    throw new RunError(`${join(repo, link)} must not be a symlink`);
+  }
+  ensureIgnore(repo, true);
+  const folders = judged.kept.map((e) => e.folder);
+  const rootExisted = existsSync(join(repo, LOCAL_VERIFIER_ROOT));
+  copyKeptIntoProject(wt, repo, folders, index);
+  const logs = join(dispatch, "logs");
+  const saved = join(logs, `verifier-${label}-handover.md`);
+  try {
+    mkdirSync(logs, { recursive: true });
+    cpSync(join(wt, "HANDOVER.md"), saved);
+    logKeep(dispatch, folders, saved);
+  } catch (e) {
+    const problems = removeKeptPaths(repo, [...folders, index], rootExisted);
+    const cleanup = problems === "" ? "" : `; the cleanup failed too: ${problems}`;
+    throw new RunError(
+      `the keep was rolled back: ${e instanceof Error ? e.message : String(e)}${cleanup}`,
+    );
+  }
+  const rm = git(repo, ["worktree", "remove", "--force", wt]);
+  if (rm.code !== 0) {
+    throw new RunError(
+      `the verifiers were kept but the worktree ${wt} could not be removed: ${rm.err.trim() || rm.out.trim() || `exit ${rm.code}`}`,
+    );
+  }
+  pruneWorktrees(repo);
+  return { folders, leftOut: judged.leftOut, handover: saved };
 }
 
 /** The ticket the project's checks read: none, so ticket checks report not run. */
@@ -3672,6 +5493,655 @@ function runLandCmd(req: ParsedLand): number {
   return outcome.code;
 }
 
+/**
+ * A run's own copies of the local verifiers (#478). At dispatch the postmaster
+ * records the project's folder in the run's record; the coachman arms each
+ * workhorse copy and the synthesis worktree with it, adds to the synthesis
+ * copy whatever a criterion needs, freezes it at the ship card, and the
+ * postmaster keeps the frozen changes after the landing.
+ */
+
+/** The run record's snapshot of the project's folder at dispatch. */
+const AT_DISPATCH = "verifier-at-dispatch";
+/** The run record's snapshot of the synthesis copy at the ship card. */
+const FINAL = "verifier-final";
+/** The run record's snapshot of the project's folder before a keep. */
+const BEFORE_KEEP = "verifier-before-keep";
+/** The run record's snapshot of the project's folder before an upkeep pass keeps. */
+const BEFORE_UPKEEP = "verifier-before-upkeep";
+
+/** One entry of a verifier tree: a file's bytes, or a label for anything else. */
+export type TreeValue = { kind: "file"; bytes: Buffer } | { kind: "other"; label: string };
+
+/** A verifier tree's entries by path relative to its root. */
+export type VerifierTree = Map<string, TreeValue>;
+
+/**
+ * Read a verifier tree into memory. An absent root reads as empty; a root
+ * that is not a directory reads as empty too, and the commands refuse that
+ * separately. Symlinks and special files read as labels, never followed.
+ */
+export function readVerifierTree(root: string): VerifierTree {
+  const out: VerifierTree = new Map();
+  try {
+    if (!statSync(root).isDirectory()) return out;
+  } catch {
+    return out;
+  }
+  const walk = (dir: string, prefix: string): void => {
+    let names: string[];
+    try {
+      names = readdirSync(dir);
+    } catch {
+      return;
+    }
+    for (const name of names.sort()) {
+      if (name === "" || name === "." || name === "..") continue;
+      const full = join(dir, name);
+      const rel = prefix === "" ? name : `${prefix}/${name}`;
+      let st;
+      try {
+        st = lstatSync(full);
+      } catch {
+        continue;
+      }
+      if (st.isDirectory() && !st.isSymbolicLink()) {
+        walk(full, rel);
+      } else if (st.isFile() && !st.isSymbolicLink()) {
+        try {
+          out.set(rel, { kind: "file", bytes: readFileSync(full) });
+        } catch {
+          // Raced away between the listing and the read; the next read sees it.
+        }
+      } else {
+        let label = "special";
+        if (st.isSymbolicLink()) {
+          try {
+            label = `symlink -> ${readlinkSync(full)}`;
+          } catch {
+            label = "symlink";
+          }
+        }
+        out.set(rel, { kind: "other", label });
+      }
+    }
+  };
+  walk(root, "");
+  return out;
+}
+
+/** Whether two tree entries hold the same thing. */
+function treeValueEquals(a: TreeValue, b: TreeValue): boolean {
+  if (a.kind !== b.kind) return false;
+  if (a.kind === "file" && b.kind === "file") return a.bytes.equals(b.bytes);
+  if (a.kind === "other" && b.kind === "other") return a.label === b.label;
+  return false;
+}
+
+/** The paths two trees differ on, each sorted. */
+export interface TreeDiff {
+  added: string[];
+  removed: string[];
+  changed: string[];
+}
+
+function sortedRels(tree: VerifierTree): string[] {
+  return [...tree.keys()].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+}
+
+/** Compare two verifier trees: what the second adds, removes and changes. */
+export function compareTrees(base: VerifierTree, next: VerifierTree): TreeDiff {
+  const added: string[] = [];
+  const removed: string[] = [];
+  const changed: string[] = [];
+  for (const rel of sortedRels(base)) {
+    const b = base.get(rel) as TreeValue;
+    const n = next.get(rel);
+    if (n === undefined) removed.push(rel);
+    else if (!treeValueEquals(b, n)) changed.push(rel);
+  }
+  for (const rel of sortedRels(next)) {
+    if (!base.has(rel)) added.push(rel);
+  }
+  return { added, removed, changed };
+}
+
+/** How many regular files a tree holds. */
+function countFiles(tree: VerifierTree): number {
+  let n = 0;
+  for (const v of tree.values()) {
+    if (v.kind === "file") n++;
+  }
+  return n;
+}
+
+/** The verifier segment a tree-relative path belongs to, or null at the root. */
+export function segOfRel(rel: string): string | null {
+  const slash = rel.indexOf("/");
+  return slash === -1 ? null : rel.slice(0, slash);
+}
+
+/**
+ * Replace a tree with a copy of another: copy aside, remove the destination,
+ * rename into place, so a failed copy leaves the destination as it was.
+ * Refuses symlinks and special files: a copied link would read live bytes
+ * instead of the frozen tree, in the record and in every lane's copy.
+ */
+function replaceTree(src: string, dest: string): void {
+  if (isSymlink(src)) {
+    throw new RunError(`cannot copy ${src}: the root must not be a symlink`);
+  }
+  const tree = readVerifierTree(src);
+  const bad = sortedRels(tree).filter((rel) => (tree.get(rel) as TreeValue).kind !== "file");
+  if (bad.length > 0) {
+    throw new RunError(
+      `cannot copy ${src}: must not hold symlinks or special files: ${bad.join(", ")}`,
+    );
+  }
+  const tmp = `${dest}.new-${process.pid}`;
+  rmSync(tmp, { recursive: true, force: true });
+  try {
+    cpSync(src, tmp, { recursive: true });
+  } catch (e) {
+    rmSync(tmp, { recursive: true, force: true });
+    throw new RunError(`cannot copy ${src}: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  rmSync(dest, { recursive: true, force: true });
+  try {
+    renameSync(tmp, dest);
+  } catch (e) {
+    rmSync(tmp, { recursive: true, force: true });
+    throw new RunError(`cannot place ${dest}: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+
+/** The dispatch holds a run, or the usage error saying it does not. */
+function runDispatch(dispatch: string, given: string): string {
+  const resolved = resolve(dispatch);
+  if (!existsSync(join(resolved, "run.json"))) {
+    throw new UsageError(`no run at the dispatch: ${given}`);
+  }
+  return resolved;
+}
+
+function runRecordCmd(req: ParsedRecord): number {
+  const repo = resolve(req.repo);
+  if (!isRepo(repo)) throw new UsageError(`not a git repository: ${req.repo}`);
+  if (!isRepoTop(repo)) throw new UsageError(`not the top of its repository: ${req.repo}`);
+  const dispatch = runDispatch(req.dispatch, req.dispatch);
+  const dest = join(dispatch, AT_DISPATCH);
+  if (existsSync(dest)) {
+    console.log("already recorded; left alone");
+    return 0;
+  }
+  const src = join(repo, LOCAL_VERIFIER_ROOT);
+  if (!existsSync(src)) {
+    console.log("no local verifiers");
+    return 0;
+  }
+  if (!isDirPath(src)) {
+    throw new UsageError(`${LOCAL_VERIFIER_ROOT} is not a directory: ${req.repo}`);
+  }
+  replaceTree(src, dest);
+  console.log(`recorded ${LOCAL_VERIFIER_ROOT} (${countFiles(readVerifierTree(dest))} files)`);
+  return 0;
+}
+
+function runArmCmd(req: ParsedArm): number {
+  const top = repoTop(resolve(req.wt));
+  if (top === null) throw new UsageError(`not a git worktree: ${req.wt}`);
+  if (git(top, ["rev-parse", "HEAD"]).code !== 0) {
+    throw new UsageError(`${req.wt} holds no commit`);
+  }
+  const dispatch = runDispatch(req.dispatch, req.dispatch);
+  ensureCommonExclude(top, LOCAL_VERIFIER_ROOT);
+  const src = join(dispatch, AT_DISPATCH);
+  const dest = join(top, LOCAL_VERIFIER_ROOT);
+  if (!existsSync(src)) {
+    console.log(`armed ${top}: no verifiers recorded`);
+    return 0;
+  }
+  if (!isDirPath(src)) throw new UsageError(`not a directory: ${src}`);
+  replaceTree(src, dest);
+  console.log(`armed ${top}: ${countFiles(readVerifierTree(dest))} files in ${dest}`);
+  return 0;
+}
+
+/** One changed file with the diff lines the section prints under it. */
+export interface ChangedFile {
+  rel: string;
+  diff: string[];
+}
+
+/**
+ * Render the run's verifier changes as the card's section: each changed page
+ * with its diff, each added and removed file. Empty groups are left out, and
+ * no change at all renders as the one line saying so.
+ */
+export function renderChangesSection(
+  changed: ChangedFile[],
+  added: string[],
+  removed: string[],
+): string {
+  if (changed.length + added.length + removed.length === 0) return "verifiers unchanged";
+  const out = ["## Verifier changes", ""];
+  if (changed.length > 0) {
+    out.push("Changed:", "");
+    for (const c of changed) {
+      out.push(`- ${c.rel}`);
+      out.push("```diff");
+      out.push(...c.diff);
+      out.push("```");
+    }
+    out.push("");
+  }
+  if (added.length > 0) {
+    out.push("Added:", "");
+    for (const rel of added) out.push(`- ${rel}`);
+    out.push("");
+  }
+  if (removed.length > 0) {
+    out.push("Removed:", "");
+    for (const rel of removed) out.push(`- ${rel}`);
+    out.push("");
+  }
+  out.pop();
+  return out.join("\n");
+}
+
+/**
+ * The hunk lines of a unified diff between two files, headers dropped. Binary
+ * files read as the one line saying so.
+ */
+function diffTreeFile(top: string, oldPath: string, newPath: string, rel: string): string[] {
+  const env: Record<string, string | undefined> = {};
+  for (const k of GIT_REDIRECT_ENV) env[k] = undefined;
+  const r = run(
+    "git",
+    [
+      "-C",
+      top,
+      "diff",
+      "--no-index",
+      "--no-color",
+      "--no-ext-diff",
+      "--unified=3",
+      "--",
+      oldPath,
+      newPath,
+    ],
+    { env },
+  );
+  if (r.code !== 0 && r.code !== 1) {
+    throw new RunError(`cannot diff ${rel}: ${r.err.trim() || r.out.trim() || `exit ${r.code}`}`);
+  }
+  const lines = r.out.split("\n");
+  const firstHunk = lines.findIndex((l) => l.startsWith("@@"));
+  if (firstHunk === -1) {
+    if (/Binary files /u.test(r.out)) return ["(binary files differ)"];
+    return [];
+  }
+  // From the first hunk on: the diff --git, index, --- and +++ headers stay
+  // behind, so a removed line starting with dashes cannot read as one.
+  return lines
+    .slice(firstHunk)
+    .filter(
+      (l) =>
+        l.startsWith("@@") ||
+        l.startsWith(" ") ||
+        l.startsWith("+") ||
+        l.startsWith("-") ||
+        l.startsWith("\\"),
+    );
+}
+
+function runChangesCmd(req: ParsedChanges): number {
+  const top = repoTop(resolve(req.wt));
+  if (top === null) throw new UsageError(`not a git worktree: ${req.wt}`);
+  const dispatch = runDispatch(req.dispatch, req.dispatch);
+  const baseRoot = join(dispatch, AT_DISPATCH);
+  const currentRoot = join(top, LOCAL_VERIFIER_ROOT);
+  if (existsSync(baseRoot) && !isDirPath(baseRoot)) {
+    throw new RunError(`not a directory: ${baseRoot}`);
+  }
+  if (existsSync(currentRoot) && !isDirPath(currentRoot)) {
+    throw new RunError(`not a directory: ${currentRoot}`);
+  }
+  if (req.freeze === true) {
+    const final = join(dispatch, FINAL);
+    if (!existsSync(currentRoot)) {
+      if (existsSync(baseRoot)) {
+        throw new RunError(
+          `no copy to freeze at ${currentRoot}: the run recorded verifiers, so re-arm the copy or empty the folder to remove them`,
+        );
+      }
+      rmSync(final, { recursive: true, force: true });
+      console.error("no copy to freeze");
+    } else {
+      replaceTree(currentRoot, final);
+      console.error(`frozen ${final} (${countFiles(readVerifierTree(final))} files)`);
+    }
+  }
+  const base = readVerifierTree(baseRoot);
+  const next = readVerifierTree(currentRoot);
+  const diff = compareTrees(base, next);
+  const changed: ChangedFile[] = diff.changed.map((rel) => {
+    const b = base.get(rel) as TreeValue;
+    const n = next.get(rel) as TreeValue;
+    if (b.kind !== "file" || n.kind !== "file") return { rel, diff: ["(not a regular file)"] };
+    return {
+      rel,
+      diff: diffTreeFile(top, join(baseRoot, rel), join(currentRoot, rel), rel),
+    };
+  });
+  console.log(renderChangesSection(changed, diff.added, diff.removed));
+  return 0;
+}
+
+/** What keep does with one tree-relative path. */
+export type KeepDecision =
+  | { kind: "untouched" }
+  | { kind: "take-add" }
+  | { kind: "take-change" }
+  | { kind: "take-remove" }
+  | { kind: "merge" }
+  | { kind: "clash"; reason: string };
+
+/**
+ * Decide one path from the folder at dispatch, the run's frozen copy and the
+ * project's file: a path the run left alone is untouched whatever the project
+ * did; a path the run changed takes the run's version when the project left
+ * it alone, merges when both changed it, and clashes when the project added
+ * or removed it too. Anything but a regular file on a changed path clashes,
+ * and keep never creates a symlink in the project.
+ */
+export function classifyKeepFile(
+  b: TreeValue | undefined,
+  f: TreeValue | undefined,
+  c: TreeValue | undefined,
+): KeepDecision {
+  const same = (x: TreeValue | undefined, y: TreeValue | undefined): boolean =>
+    x !== undefined && y !== undefined && treeValueEquals(x, y);
+  if (f === undefined && b === undefined) return { kind: "untouched" };
+  if (f === undefined) {
+    if (c === undefined) return { kind: "untouched" };
+    if (same(c, b)) return { kind: "take-remove" };
+    return { kind: "clash", reason: "changed in the project" };
+  }
+  if (b === undefined) {
+    if (c === undefined) {
+      return f.kind === "file"
+        ? { kind: "take-add" }
+        : { kind: "clash", reason: "not a regular file" };
+    }
+    if (same(c, f)) return { kind: "untouched" };
+    return { kind: "clash", reason: "added on both sides" };
+  }
+  if (treeValueEquals(f, b)) return { kind: "untouched" };
+  if (f.kind !== "file" || b.kind !== "file" || (c !== undefined && c.kind !== "file")) {
+    return { kind: "clash", reason: "not a regular file" };
+  }
+  if (c === undefined) return { kind: "clash", reason: "removed in the project" };
+  if (treeValueEquals(c, b)) return { kind: "take-change" };
+  if (treeValueEquals(c, f)) return { kind: "untouched" };
+  return { kind: "merge" };
+}
+
+/**
+ * Merge three file versions with git merge-file: the project's, the one at
+ * dispatch, the run's. Clean merges come back as bytes; anything else is a
+ * clash, binary files included. The merge runs on copies, never on the
+ * project's file.
+ */
+export function mergeFileThreeWay(
+  cur: Buffer,
+  base: Buffer,
+  other: Buffer,
+): { ok: true; merged: Buffer } | { ok: false } {
+  const tmp = mkdtempSync(join(tmpdir(), "verifier-keep-"));
+  try {
+    const curP = join(tmp, "current");
+    const baseP = join(tmp, "base");
+    const otherP = join(tmp, "other");
+    writeFileSync(curP, cur);
+    writeFileSync(baseP, base);
+    writeFileSync(otherP, other);
+    const env: Record<string, string | undefined> = {};
+    for (const k of GIT_REDIRECT_ENV) env[k] = undefined;
+    const r = run(
+      "git",
+      ["merge-file", "-L", "project", "-L", "at dispatch", "-L", "run", curP, baseP, otherP],
+      { env },
+    );
+    if (r.code !== 0) return { ok: false };
+    return { ok: true, merged: readFileSync(curP) };
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Confirm one verifier's index bullet at a commit: the bullet's Confirmed sha
+ * becomes the commit, or the label is added when the bullet names none. Null
+ * when no single bullet names the verifier, or the edit does not read back.
+ */
+export function stampConfirmed(indexText: string, seg: string, sha: string): string | null {
+  const vdir = `${LOCAL_VERIFIER_ROOT}/${seg}`;
+  const lines = indexText.split("\n");
+  const starts: number[] = [];
+  lines.forEach((line, i) => {
+    if (BULLET_START_RE.test(line) && spanNamesDir([line], vdir)) starts.push(i);
+  });
+  if (starts.length !== 1) return null;
+  const start = starts[0] as number;
+  let end = start + 1;
+  while (end < lines.length) {
+    const line = lines[end] as string;
+    if (HEADING_RE.test(line)) break;
+    if (line !== "" && !line.startsWith(" ") && !line.startsWith("\t")) break;
+    end++;
+  }
+  const span = lines.slice(start, end).join("\n");
+  let edited: string;
+  if (CONFIRMED_RE.test(span)) {
+    edited = span.replace(CONFIRMED_RE, (m) => m.replace(/[0-9a-fA-F]{40}/u, sha));
+  } else {
+    edited = `${lines[start] as string}, Confirmed: ${sha}\n${lines.slice(start + 1, end).join("\n")}`;
+  }
+  const next = [...lines.slice(0, start), ...edited.split("\n"), ...lines.slice(end)].join("\n");
+  return bulletConfirm(next, vdir) === sha ? next : null;
+}
+
+/** Remove the directories a keep's removals left empty, deepest first. */
+function pruneEmptyDirs(root: string, rels: string[]): void {
+  const dirs = new Set<string>();
+  for (const rel of rels) {
+    let d = dirname(rel);
+    while (d !== "." && d !== "") {
+      dirs.add(d);
+      d = dirname(d);
+    }
+  }
+  const ordered = [...dirs].sort((a, b) => b.length - a.length || (a < b ? -1 : 1));
+  for (const d of ordered) {
+    try {
+      if (readdirSync(join(root, d)).length === 0) rmdirSync(join(root, d));
+    } catch {
+      // Gone or busy: a leftover empty directory harms nothing.
+    }
+  }
+}
+
+function logRunKeep(dispatch: string, summary: string): void {
+  const r = run(RUN, ["log-action", dispatch, "postmaster", "note", LOCAL_VERIFIER_ROOT, summary]);
+  if (r.code !== 0) throw new RunError(`the keep was not logged: ${r.err.trim() || r.out.trim()}`);
+}
+
+function runKeepCmd(req: ParsedKeep): number {
+  const repo = resolve(req.repo);
+  if (!isRepo(repo)) throw new UsageError(`not a git repository: ${req.repo}`);
+  if (!isRepoTop(repo)) throw new UsageError(`not the top of its repository: ${req.repo}`);
+  const dispatch = runDispatch(req.dispatch, req.dispatch);
+  const resolved = git(repo, ["rev-parse", "--verify", "--quiet", `${req.at}^{commit}`]);
+  if (resolved.code !== 0 || resolved.out.trim() === "") {
+    throw new UsageError(`unknown commit: ${req.at}`);
+  }
+  const merge = resolved.out.trim();
+  const baseRoot = join(dispatch, AT_DISPATCH);
+  const finalRoot = join(dispatch, FINAL);
+  if (existsSync(finalRoot) && !isDirPath(finalRoot)) {
+    throw new RunError(`not a directory: ${finalRoot}`);
+  }
+  if (existsSync(baseRoot) && !isDirPath(baseRoot)) {
+    throw new RunError(`not a directory: ${baseRoot}`);
+  }
+  if (!existsSync(finalRoot)) {
+    if (existsSync(baseRoot)) {
+      throw new RunError(
+        `no frozen copy at ${finalRoot}: the run never froze its verifiers with verifier changes --freeze, so its verifier changes cannot be kept`,
+      );
+    }
+    console.log("nothing to keep");
+    return 0;
+  }
+  const base = readVerifierTree(baseRoot);
+  const final = readVerifierTree(finalRoot);
+  const runDiff = compareTrees(base, final);
+  if (runDiff.added.length + runDiff.removed.length + runDiff.changed.length === 0) {
+    console.log("nothing to keep");
+    return 0;
+  }
+  const dest = join(repo, LOCAL_VERIFIER_ROOT);
+  if (existsSync(dest) && !isDirPath(dest)) {
+    throw new UsageError(`${LOCAL_VERIFIER_ROOT} is not a directory: ${req.repo}`);
+  }
+  ensureIgnore(repo, true);
+  const before = join(dispatch, BEFORE_KEEP);
+  if (existsSync(dest)) {
+    replaceTree(dest, before);
+  } else {
+    rmSync(before, { recursive: true, force: true });
+  }
+  try {
+    return applyKeep(dispatch, dest, before, base, final, merge);
+  } catch (e) {
+    if (e instanceof UsageError || e instanceof RunError) throw e;
+    throw new RunError(
+      `the keep failed partway: ${e instanceof Error ? e.message : String(e)}; the folder as it was is at ${before}`,
+    );
+  }
+}
+
+/** Apply the frozen changes to the project's folder and print what landed. */
+function applyKeep(
+  dispatch: string,
+  dest: string,
+  before: string,
+  base: VerifierTree,
+  final: VerifierTree,
+  merge: string,
+): number {
+  const current = readVerifierTree(dest);
+  const rels = new Set<string>([...base.keys(), ...final.keys(), ...current.keys()]);
+  const ordered = [...rels].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  const added: string[] = [];
+  const changed: string[] = [];
+  const removed: string[] = [];
+  const clashes: { rel: string; reason: string }[] = [];
+  const touched = new Set<string>();
+  const removedRels: string[] = [];
+  for (const rel of ordered) {
+    const decision = classifyKeepFile(base.get(rel), final.get(rel), current.get(rel));
+    const target = join(dest, rel);
+    if (decision.kind === "untouched") continue;
+    if (decision.kind === "clash") {
+      clashes.push({ rel, reason: decision.reason });
+      continue;
+    }
+    if (decision.kind === "take-remove") {
+      rmSync(target, { force: true });
+      removed.push(rel);
+      removedRels.push(rel);
+    } else if (decision.kind === "take-add" || decision.kind === "take-change") {
+      const f = final.get(rel) as TreeValue;
+      if (f.kind !== "file") {
+        clashes.push({ rel, reason: "not a regular file" });
+        continue;
+      }
+      mkdirSync(dirname(target), { recursive: true });
+      writeFileSync(target, f.bytes);
+      (decision.kind === "take-add" ? added : changed).push(rel);
+    } else {
+      const c = current.get(rel) as TreeValue;
+      const b = base.get(rel) as TreeValue;
+      const f = final.get(rel) as TreeValue;
+      if (c.kind !== "file" || b.kind !== "file" || f.kind !== "file") {
+        clashes.push({ rel, reason: "not a regular file" });
+        continue;
+      }
+      const merged = mergeFileThreeWay(c.bytes, b.bytes, f.bytes);
+      if (!merged.ok) {
+        clashes.push({ rel, reason: "changed on both sides" });
+        continue;
+      }
+      mkdirSync(dirname(target), { recursive: true });
+      writeFileSync(target, merged.merged);
+      changed.push(rel);
+    }
+    const seg = segOfRel(rel);
+    if (seg !== null) touched.add(seg);
+  }
+  pruneEmptyDirs(dest, removedRels);
+  const finalSegs = new Set<string>();
+  for (const rel of final.keys()) {
+    const seg = segOfRel(rel);
+    if (seg !== null) finalSegs.add(seg);
+  }
+  const confirmed: string[] = [];
+  const segs = [...touched].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  if (segs.length > 0) {
+    const indexPath = join(dest, "README.md");
+    let indexText: string | null = null;
+    try {
+      indexText = readFileSync(indexPath, "utf8");
+    } catch {
+      indexText = null;
+    }
+    for (const seg of segs) {
+      if (!finalSegs.has(seg)) continue;
+      if (indexText === null) {
+        clashes.push({ rel: `${seg}/`, reason: "no bullet in the index" });
+        continue;
+      }
+      const stamped = stampConfirmed(indexText, seg, merge);
+      if (stamped === null) {
+        clashes.push({ rel: `${seg}/`, reason: "no bullet in the index" });
+        continue;
+      }
+      indexText = stamped;
+      confirmed.push(seg);
+    }
+    if (indexText !== null && confirmed.length > 0) writeFileSync(indexPath, indexText);
+  }
+  // The confirmation is part of the keep: a clash on it fails the keep,
+  // but the applied files stay applied.
+  const lines = [`kept ${LOCAL_VERIFIER_ROOT}`];
+  if (existsSync(before)) lines.push(`before ${before}`);
+  for (const rel of added) lines.push(`added ${rel}`);
+  for (const rel of changed) lines.push(`changed ${rel}`);
+  for (const rel of removed) lines.push(`removed ${rel}`);
+  for (const seg of confirmed) lines.push(`confirmed ${seg} at ${merge}`);
+  for (const clash of clashes) lines.push(`not kept: ${clash.rel} (${clash.reason})`);
+  for (const line of lines) console.log(line);
+  const kept = added.length + changed.length + removed.length;
+  logRunKeep(
+    dispatch,
+    `kept ${kept} files, confirmed ${confirmed.length === 0 ? "none" : confirmed.join(", ")} at ${merge}` +
+      (clashes.length === 0 ? "" : `; not kept: ${clashes.map((c) => c.rel).join(", ")}`),
+  );
+  return clashes.length === 0 ? 0 : 1;
+}
+
 function main(argv: string[]): number {
   // The verifier names every repo explicitly, so inherited git redirectors
   // can only corrupt: drop them for this process and every session it starts.
@@ -3681,11 +6151,16 @@ function main(argv: string[]): number {
     if (!parsed.ok) throw new UsageError(parsed.error);
     if (parsed.req.cmd === "prompt") return runPrompt(parsed.req);
     if (parsed.req.cmd === "list") return runListCmd(parsed.req);
+    if (parsed.req.cmd === "stale") return runStaleCmd(parsed.req);
     if (parsed.req.cmd === "check") return runCheckCmd(parsed.req);
     if (parsed.req.cmd === "land") return runLandCmd(parsed.req);
     if (parsed.req.cmd === "upkeep") return runUpkeep(parsed.req);
     if (parsed.req.cmd === "upkeep-prompt") return runUpkeepPrompt(parsed.req);
     if (parsed.req.cmd === "upkeep-report") return runUpkeepReportCmd(parsed.req);
+    if (parsed.req.cmd === "record") return runRecordCmd(parsed.req);
+    if (parsed.req.cmd === "arm") return runArmCmd(parsed.req);
+    if (parsed.req.cmd === "changes") return runChangesCmd(parsed.req);
+    if (parsed.req.cmd === "keep") return runKeepCmd(parsed.req);
     return runMake(parsed.req);
   } catch (e) {
     if (e instanceof UsageError) {

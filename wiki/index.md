@@ -1,7 +1,7 @@
 ---
 title: postmaster wiki
 type: schema
-updated: 2026-10-10
+updated: 2026-10-11
 ---
 
 # postmaster wiki
@@ -93,7 +93,16 @@ What would find a defect in postmaster's own scripts before a reviewer does, and
   far more than the code they check, the one tool found that verifies TypeScript is a tech preview, and
   with language models the trust moves to the specification. Four changes to the design rules and the
   ticket template are proposed, and five trials, one of which tests a cleanup script with its git swapped
-  for a mock that is checked against real git.
+  for a mock that is checked against real git. The first part of trial 4 has been run: a check on environment, clock and
+  import use flags 13 places on `main`, 3 of them defects, and points at the cause of 6 of the 8 findings it was tried on.
+  The mutation counts of trial 4 have been run: the first flags 360 places on
+  `main`, an estimated 312 of them not hazards, and reaches the function of 8 of the 78 findings that cite a line, about
+  as many as random placement would give.
+  A reading trial on three of the project's modules, with a small model as the reader, found the functional
+  rewrite no easier to follow than the original, and about a tenth more effort than a tidy rewrite of the same size. One person shown one function in both
+  versions preferred the functional one.
+  The first trial ran: laws written blind from the ticket found 2 of 8 first-round findings of #202's
+  classifier, 1 of the 5 counted cheap, and the proposal of a law for each reader of text is set aside.
 
 ## Decisions
 
@@ -112,6 +121,13 @@ Why the design is shaped as it is.
 - [A ticket's shape is checked before it is accepted](concepts/ticket-shape.md): **claimed**.
   A title, the problem, numbered criteria each answerable yes or no, and the user's direction,
   checked by a script before any ticket is dispatched. What is missing is asked of the user.
+- [Tickets and acceptance criteria that a run can finish](concepts/ticket-and-criteria-design.md):
+  **claimed**. The template's four shapes that cannot be finished restate an old idea, the verifiable
+  requirement, and each bounded form has older names and some support. The reading asks for the
+  reason and the bar to be stated differently, for the direction and cost of "unknown" to be named, and
+  names eleven other ways a criterion fails, the best measured a check that passes while the criterion
+  is false. A count of 21 runs fits the rules and cannot test them. From [#293](https://github.com/brindlewick/postmaster/issues/293) and outside work; no rule
+  was changed, and twelve changes are proposed.
 - [A ticket names the turnpikes its run passes through](concepts/turnpikes.md): **claimed**.
   `default` for the style, bug and security reviews, fewer, or `none`, with no floor. The
   project's gate is not a turnpike and always runs.
@@ -164,10 +180,30 @@ Why the design is shaped as it is.
   patterns alone (#216). The gap is the reason to publish; the library is a later change of its
   own.
 
+## Running the flow elsewhere
+
+What it would take to run the flow on someone else's machines, and what the harness vendors say about it.
+
+- [The flow could run on Cloudflare as a control plane and one container per launch, but not on a Worker, and not yet on
+  subscription logins](concepts/running-the-flow-on-cloudflare.md): **claimed**. A Worker cannot run a lane; a container can, and
+  Cloudflare's tutorials show Claude Code, Codex and Pi in one with the model key held outside it, for API credentials; an
+  earlier example in its sandbox repository did the same for a Claude subscription token. No vendor's terms settle a
+  subscription login held by a Worker for a cloud container. On Cloudflare alone a typical run costs about $1 to $4.50 in
+  container time and the average run up to about $4 to $7, with the control plane at cents; the model bill, the same on any
+  host, is a side note. Other on-demand providers charge about the same: Cloudflare is mid-pack, with several container
+  platforms and hourly virtual machines cheaper for a typical run by under a dollar, and the platforms built for agent
+  sandboxes dearer. A container per lane would stop every reach the isolation scan found inside the machine, by the
+  documented design, and lifts the machine's cores as the limit on runs in flight, not the usage windows or the user's
+  rulings. It would be an option a ticket chooses beside local runs. The whole flow, every role from the booking clerk to
+  the merge, costs about $1.7 to $3.1 a typical ticket and $223 to $424 a month at the audited pace, with the interactive
+  sessions asleep when idle and before the model bill; kept up between turns $485 to $647. The example flat prices of $50 to
+  $200 are below that.
+
 ## Sources
 
 [Recorded runs and captured reading](sources/index.md): one run, the review rounds of #36,
-fourteen papers on review, fixes and severity, an article on review before implementation, and
+fourteen papers on review, fixes and severity, an article on review before implementation,
 [pstack](sources/pstack.md), a plugin of skills for verified agent work, read twice and set beside
-what postmaster holds, and the reading on functional programming and verification (97 papers and
-28 articles).
+what postmaster holds, the reading on functional programming and verification (97 papers and
+28 articles), and the Cloudflare documentation, the harness vendors' pages and their price pages, and the
+pricing pages of other on-demand compute, read for running the flow on Cloudflare and elsewhere.

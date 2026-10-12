@@ -75,6 +75,12 @@ takes input and drop what it is sent, so read the session before sending the mes
 first start to ask something, such as whether to trust the folder: the user answers it in the
 pane. A booking clerk is spawned the same way (`postmaster.md`, Stage B).
 `spawn`, `send`, `wait` and `read` exit 3 on `none`.
+A shell spawn names its agent once Herdr detects it: `spawn` retries the rename until the
+handle answers, within `POSTMASTER_HOST_SPAWN_WAIT` (default 120 seconds), and succeeds with a
+warning when the budget runs out. `send`, `wait` and `read` reach a session Herdr never named
+through the pane its placement record names, when that pane still belongs to the launch — it
+carries the launch token and sits in the recorded tab — and holds an agent, and name it then;
+nothing is ever sent to a pane with no agent, or to one the host did not open for that handle.
 `run host close-handle <handle>` closes every session recorded under the handle, and only
 those: on Herdr the tabs the placement records name for the handle, on tmux the windows
 carrying its handle tag. A live session with no record is refused, and an unknown handle reports `no
@@ -135,8 +141,9 @@ onto the fragment it supersedes.
   never killed: they are reported as leftover members, each pid with its command, and the
   stop exits 2. `run host run` returns as soon as the launch has started.
   The wait still goes in the same
-  command as the launch, as `<tool>/scripts/run wait-for-markers`, or for a review round
-  `<tool>/scripts/run review-round wait`.
+  command as the launch, as `<tool>/scripts/run wait-for-markers`; a review round is
+  collected one reviewer at a time with `<tool>/scripts/run review-round wait-next`, which
+  resumes from markers and finish rows.
 - **`--role` selects per-role limits; `--run` selects the dispatch's recorded config.** Use
   `lane` for a workhorse, `coachman` for a leg, and `reviewer` for a review launch. Direct host
   launches use the default limits. With `--run <dispatch>`, the limits come from the config in

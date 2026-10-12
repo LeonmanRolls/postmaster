@@ -1,0 +1,14 @@
+# scope=core modules=10 flagged=13
+scripts/lib/confine.ts	16	1	import:child_process	process	yes	import { spawnSync } from "node:child_process"
+scripts/lib/confine.ts	17	1	import:fs	file	yes	import { mkdtempSync, writeFileSync } from "node:fs"
+scripts/lib/confine.ts	18	1	import:os	os	yes	import { tmpdir } from "node:os"
+scripts/lib/data.ts	2	1	import:fs	file	yes	import { readFileSync } from "node:fs"
+scripts/lib/paths.ts	3	1	import:fs	file	yes	import { realpathSync } from "node:fs"
+scripts/lib/pinned.ts	2	1	import:fs	file	yes	import { accessSync, constants, statSync } from "node:fs"
+scripts/lib/proc.ts	3	1	import:child_process	process	yes	import { spawnSync } from "node:child_process"
+scripts/lib/proc.ts	5	1	import:fs	file	yes	import { closeSync, mkdtempSync, openSync, readFileSync, rmSync } from "node:fs"
+scripts/lib/proc.ts	6	1	import:os	os	yes	import { constants as osConstants, tmpdir } from "node:os"
+scripts/lib/proc.ts	49	49	process.env	env	yes	process.env
+scripts/lib/proc.ts	51	16	process.env	env	yes	process.env
+scripts/lib/processes.ts	1	1	import:fs	file	yes	import { readFileSync, readdirSync } from "node:fs"
+scripts/lib/processes.ts	21	10	process.env	env	yes	process.env

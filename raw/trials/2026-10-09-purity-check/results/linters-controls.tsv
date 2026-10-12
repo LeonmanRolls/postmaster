@@ -1,0 +1,34 @@
+check	scripts/lib/effectful.ts	4	import:fs	oxlint	eslint(no-restricted-imports)	biome	lint/style/noRestrictedImports	biome+plugin	lint/style/noRestrictedImports
+check	scripts/lib/effectful.ts	7	process.env	oxlint	node(no-process-env)	biome	lint/style/noProcessEnv	biome+plugin	lint/style/noProcessEnv
+check	scripts/lib/effectful.ts	8	Date.now	oxlint	eslint(no-restricted-properties)	biome	lint/nursery/noJsRestrictedProperties	biome+plugin	lint/nursery/noJsRestrictedProperties
+check	scripts/lib/every-rule.ts	4	import:fs	oxlint	eslint(no-restricted-imports)	biome	lint/style/noRestrictedImports	biome+plugin	lint/style/noRestrictedImports
+check	scripts/lib/every-rule.ts	5	import:fs/promises	oxlint	eslint(no-restricted-imports)	biome	lint/style/noRestrictedImports	biome+plugin	lint/style/noRestrictedImports
+check	scripts/lib/every-rule.ts	6	import:child_process	oxlint	eslint(no-restricted-imports)	biome	lint/style/noRestrictedImports	biome+plugin	lint/style/noRestrictedImports
+check	scripts/lib/every-rule.ts	7	import:os	oxlint	eslint(no-restricted-imports)	biome	lint/style/noRestrictedImports	biome+plugin	lint/style/noRestrictedImports
+check	scripts/lib/every-rule.ts	8	import:fs	oxlint	eslint(no-restricted-imports)	biome	lint/style/noRestrictedImports	biome+plugin	lint/style/noRestrictedImports
+check	scripts/lib/every-rule.ts	9	import:fs	oxlint	eslint(no-restricted-imports)	biome	lint/style/noRestrictedImports	biome+plugin	lint/style/noRestrictedImports
+check	scripts/lib/every-rule.ts	13	import:fs (type only)	oxlint	eslint(no-restricted-imports)	biome	lint/style/noRestrictedImports	biome+plugin	lint/style/noRestrictedImports
+check	scripts/lib/every-rule.ts	14	import:os	oxlint	eslint(no-restricted-imports)	biome	lint/style/noRestrictedImports	biome+plugin	lint/style/noRestrictedImports
+check	scripts/lib/every-rule.ts	15	import:os	oxlint	eslint(no-restricted-imports)	biome	lint/style/noRestrictedImports	biome+plugin	lint/style/noRestrictedImports
+check	scripts/lib/every-rule.ts	16	import:fs	oxlint	eslint(no-restricted-imports)	biome	lint/style/noRestrictedImports	biome+plugin	lint/style/noRestrictedImports
+check	scripts/lib/every-rule.ts	17	import:child_process	oxlint	-	biome	lint/style/noRestrictedImports	biome+plugin	lint/style/noRestrictedImports
+check	scripts/lib/every-rule.ts	22	process.env	oxlint	node(no-process-env)	biome	lint/style/noProcessEnv	biome+plugin	lint/style/noProcessEnv
+check	scripts/lib/every-rule.ts	23	import.meta.env	oxlint	-	biome	-	biome+plugin	plugin
+check	scripts/lib/every-rule.ts	24	Bun.env	oxlint	eslint(no-restricted-properties)	biome	lint/nursery/noJsRestrictedProperties	biome+plugin	lint/nursery/noJsRestrictedProperties
+check	scripts/lib/every-rule.ts	25	Date.now	oxlint	eslint(no-restricted-properties)	biome	lint/nursery/noJsRestrictedProperties	biome+plugin	lint/nursery/noJsRestrictedProperties
+check	scripts/lib/every-rule.ts	26	performance.now	oxlint	eslint(no-restricted-properties)	biome	lint/nursery/noJsRestrictedProperties	biome+plugin	lint/nursery/noJsRestrictedProperties
+check	scripts/lib/every-rule.ts	27	new Date()	oxlint	-	biome	-	biome+plugin	plugin
+check	scripts/lib/every-rule.ts	28	Bun.file	oxlint	eslint(no-restricted-properties)	biome	lint/nursery/noJsRestrictedProperties	biome+plugin	lint/nursery/noJsRestrictedProperties
+check	scripts/lib/every-rule.ts	29	Bun.write	oxlint	eslint(no-restricted-properties)	biome	lint/nursery/noJsRestrictedProperties	biome+plugin	lint/nursery/noJsRestrictedProperties
+check	scripts/lib/every-rule.ts	30	Bun.spawn	oxlint	eslint(no-restricted-properties)	biome	lint/nursery/noJsRestrictedProperties	biome+plugin	lint/nursery/noJsRestrictedProperties
+check	scripts/lib/every-rule.ts	31	Bun.spawnSync	oxlint	eslint(no-restricted-properties)	biome	lint/nursery/noJsRestrictedProperties	biome+plugin	lint/nursery/noJsRestrictedProperties
+check	scripts/lib/every-rule.ts	32	Bun.$	oxlint	eslint(no-restricted-properties)	biome	lint/nursery/noJsRestrictedProperties	biome+plugin	lint/nursery/noJsRestrictedProperties
+check	scripts/lib/every-rule.ts	33	process.env	oxlint	node(no-process-env)	biome	lint/style/noProcessEnv	biome+plugin	lint/style/noProcessEnv
+check	scripts/lib/every-rule.ts	34	Date.now	oxlint	eslint(no-restricted-properties)	biome	lint/nursery/noJsRestrictedProperties	biome+plugin	lint/nursery/noJsRestrictedProperties
+check	scripts/lib/every-rule.ts	35	process.env	oxlint	node(no-process-env)	biome	lint/style/noProcessEnv	biome+plugin	lint/style/noProcessEnv
+check	scripts/lib/every-rule.ts	36	process.env	oxlint	node(no-process-env)	biome	lint/style/noProcessEnv	biome+plugin	lint/style/noProcessEnv
+check	scripts/lib/every-rule.ts	37	new Date()	oxlint	-	biome	-	biome+plugin	-
+check	scripts/lib/every-rule.ts	38	process.env	oxlint	node(no-process-env)	biome	lint/style/noProcessEnv	biome+plugin	lint/style/noProcessEnv
+check	scripts/lib/every-rule.ts	39	Date.now	oxlint	eslint(no-restricted-properties)	biome	lint/nursery/noJsRestrictedProperties	biome+plugin	lint/nursery/noJsRestrictedProperties
+check	scripts/lib/every-rule.ts	40	process.env	oxlint	node(no-process-env)	biome	lint/style/noProcessEnv	biome+plugin	lint/style/noProcessEnv
+check	scripts/thing-core.ts	4	process.env	oxlint	node(no-process-env)	biome	lint/style/noProcessEnv	biome+plugin	lint/style/noProcessEnv

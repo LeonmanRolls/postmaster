@@ -1,0 +1,14 @@
+path	line	rule	defect	reason
+scripts/lib/confine.ts	16	import:child_process	no	The module runs the sandbox's start check, a program, so loading the process tool is its job.
+scripts/lib/confine.ts	17	import:fs	no	It writes the Seatbelt profile file (mkdtempSync, writeFileSync); the file system is its job.
+scripts/lib/confine.ts	18	import:os	no	tmpdir, for that profile file.
+scripts/lib/data.ts	2	import:fs	no	The shared JSON, TOML and JSONL file readers; reading files is the module's purpose.
+scripts/lib/paths.ts	3	import:fs	no	realpathSync resolves the calling script's own path; that is the module's one job.
+scripts/lib/pinned.ts	2	import:fs	no	accessSync and statSync look for an executable in a checkout to choose the command to run; looking at the file system is the module's purpose.
+scripts/lib/proc.ts	3	import:child_process	no	The module is the process wrapper (run); its header calls it the process and file-system edge.
+scripts/lib/proc.ts	5	import:fs	no	Temp directories and the raw argv bytes, per the module's header.
+scripts/lib/proc.ts	6	import:os	no	tmpdir and the table of signal numbers.
+scripts/lib/proc.ts	49	process.env	yes	run() gives the child the ambient process.env unless the caller passes env, so every caller that names none hands the child the whole environment. That is the read behind 202/bug-14 and 252/bug-22, and the env merge in 216/bug-2 (see reach.tsv).
+scripts/lib/proc.ts	51	process.env	yes	The same default when a caller passes some env: the ambient environment is copied in and the caller's keys are laid over it (the merge named in 216/bug-2).
+scripts/lib/processes.ts	1	import:fs	no	readFileSync and readdirSync read /proc; the module is the process-table reader.
+scripts/lib/processes.ts	21	process.env	yes	procRoot() reads POSTMASTER_PROC_ROOT inside the function every /proc read goes through, so where the module reads from depends on a variable its callers do not see. The variable exists so tests can point the module at a fake /proc, an input that should be passed in. No review finding in the trial data names it. Marked a defect on the user's ruling.

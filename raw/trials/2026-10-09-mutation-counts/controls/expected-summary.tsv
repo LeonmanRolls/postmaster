@@ -1,0 +1,22 @@
+case	key	value	why
+all	findings	6	six findings cite a module the tree holds
+all	in_flagged	2	the positive control: the two whose innermost function holds a place of the first count
+all	flagged_or_around	3	and the one in the function around a callback that holds one
+all	second_count	4	the second count reaches the two, the local-only one and the module-level one
+all	apart	3	a missing module, a runbook line and no line, in no share
+all	test2_none	not met	some finding is in a flagged function, so the page's second failure test is not met
+clean-only	findings	1	the negative control: only the finding in a function with no change at all
+clean-only	in_flagged	0	
+clean-only	flagged_or_around	0	
+clean-only	second_count	0	
+clean-only	test2_none	met	none is in a flagged function, so the page's second failure test is met
+edge-tags	first	50	the controls' places in the first count
+edge-tags	edge_function	8	the positive control: seven in the tags module whose function touches something, and the one that assigns process.env
+edge-tags	no_edge_function	42	the negative control: the rest, in functions that touch nothing tagged
+edge-tags	edge_module	11	nine in the tags module and the two of the module that assigns process.env
+edge-tags	no_edge_module	39	
+edge-tags	op_call	32	worked by hand from the control files: 13 in-place methods, 9 in the tags module, and 10 others
+edge-tags	op_prop	14	
+edge-tags	op_rebind	2	an argument given a new value, and a module-level counter
+edge-tags	op_delete	1	
+edge-tags	op_assign	1	

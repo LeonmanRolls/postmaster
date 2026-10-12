@@ -1,0 +1,13 @@
+item	module	line	function	the change	it lands on
+1	scripts/fixture.ts	73	(the module's top level, outside any function)	the `delete` operator on a property	a process-wide object (process, globalThis)
+2	scripts/host-self-test.ts	424	tmuxStubInner > launch	a property or element is assigned (`=`)	a variable of an enclosing function, changed from a nested function
+3	scripts/host-self-test.ts	2959	runControls	a name is given a new value (`=`)	a module-level variable
+4	scripts/host.ts	4344	legStart	a property or element is assigned (`=`)	a process-wide object (process, globalThis)
+5	scripts/launch.ts	916	noteStructured	a property or element is assigned (`=`)	an argument of the function (or of an enclosing one)
+6	scripts/lib/text.ts	504	isDigitChar	a property or element is assigned (`=`)	a module-level variable
+7	scripts/line-collect.ts	5	collectLines	`.push()` is called on it	an argument of the function (or of an enclosing one)
+8	scripts/order-summary.ts	5	describeOrder	a property or element is assigned (`=`)	an argument of the function (or of an enclosing one)
+9	scripts/plane.ts	847	shape > para	`.push()` is called on it	a variable of an enclosing function, changed from a nested function
+10	scripts/review-findings.ts	283	rawDecodeJson > parseString	a name is given a new value (`+=`)	a variable of an enclosing function, changed from a nested function
+11	scripts/style-findings.ts	610	subst	a name is given a new value (`=`)	an argument of the function (or of an enclosing one)
+12	scripts/view-stream.ts	989	view	`.shift()` is called on it	an argument of the function (or of an enclosing one)

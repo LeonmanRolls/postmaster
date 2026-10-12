@@ -15,6 +15,7 @@ restated here in this tool's own words. Where the two disagree, these instructio
 
 Do all of your work inside this working copy and edit nothing outside it.
 {{ASK_RULE}}
+{{SURFACE_RULE}}
 
 ## 1. Learn the surface from the working copy
 
@@ -107,4 +108,8 @@ proof gone after cleanup fails this step. Mend what fails, and run your own clea
 after every failed round too, so broken rounds strand no processes and no ports. A
 verifier nobody has run is a draft, not a handover.
 
-Commit the verifier on this branch. {{HANDOVER_RULE}}{{HANDOVER_UNASKED}}
+Once the proof holds, carry `Confirmed: {{PROVED}}` in features/README.md beside
+the `Files:` line: the confirmation says this verifier was proved at that
+commit, and a verifier without one reads as possibly stale.
+
+{{COMMIT_LINE}}{{HANDOVER_RULE}}{{HANDOVER_UNASKED}}

@@ -1,0 +1,10 @@
+run 202	snapshots 9	identical to the first 9	places 10
+run 216	snapshots 4	identical to the first 4	places 17
+run 252	snapshots 3	identical to the first 3	places 10
+run 268	snapshots 3	identical to the first 3	places 14
+control: first snapshot of run 202 against run 216	differ
+control: first snapshot of run 202 against run 252	identical
+control: first snapshot of run 202 against run 268	differ
+control: first snapshot of run 216 against run 252	differ
+control: first snapshot of run 216 against run 268	differ
+control: first snapshot of run 252 against run 268	differ

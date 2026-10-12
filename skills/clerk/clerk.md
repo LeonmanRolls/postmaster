@@ -26,8 +26,9 @@ present, so a changed ticket cannot run until the user signs it off again. Read 
 ticket, `AGENTS.md`, [the ticket template](ticket-template.md), and the relevant code and project
 documentation.
 
-The brief names the one draft file, the editor link, the target, its base, and the standing
-preferences. Keep that same draft for the entire session. The brief created by the postmaster and
+The brief names the one draft file, the editor link, the target, its base, the standing
+preferences, and whether to make a story with the draft and where its files go. Keep that same
+draft for the entire session. The brief created by the postmaster and
 the brief created by your own `/clerk` entry use the same command and instructions.
 
 ## Prepare the ticket
@@ -73,6 +74,8 @@ lists has landed. Each slice keeps its own criteria and the decisions only it fo
 slices it needs in its direction, and restates in its technical notes the umbrella decisions that
 bind it. A decision that only one slice follows stays in that slice. The umbrella's text reaches
 the tracker through the adapter's edit, never `ticket-ready mark`, so it gets no ready label.
+In a split, each slice's draft gets its own story, built and kept beside its draft like any
+other, and the umbrella's draft gets none.
 
 When the user keeps more than five criteria in one ticket, record it as their word: a decision
 marked `(given by the user)` that says how many criteria it keeps and why, cited by a technical
@@ -97,6 +100,11 @@ project's verifiers and their feature pages. Run the check at the base through t
 put what it showed after **At the base** with the proof file named. A feature with no page yet is
 driven through the verifier's start and drive steps all the same, and the run adds its page.
 
+When you drive a verifier at the base and a step the ticket does not change fails, tell the user
+which verifier and which step failed: the project may have changed under the verifier from outside
+it, through a new tool, browser or service version, or a file the verifier does not list. Do not
+rewrite the check around the failure.
+
 ### Show the draft and work through the user's feedback
 
 Tell the user in two or three plain sentences what the ticket asks for. List each decision you
@@ -110,6 +118,42 @@ you publish or watch a document, stop watching it immediately after publishing s
 auto-replies stay off. The user tells you when they have finished commenting. Then read each
 comment, reply in its thread, and make the requested change in the draft. Do not treat silence as
 approval.
+
+When the brief says to make a story, make it now that the draft is verified, before the user
+is shown anything: write the story beside the draft in the story folder the brief names, set
+the story's base to the brief's base, and follow "A story page for a ticket" in the
+review-pages skill. Build the story from the draft file, not the tracker's copy, which holds
+the raw request until the mark: write the ticket file with the ticket's title from the brief
+and the draft's body, and build with:
+
+```sh
+<tool>/scripts/run story-page build <repo> <story-dir> <story-dir> --ticket-body <ticket.json> --keep-picture
+```
+
+Keep the story's files, its picture and its link in that folder, beside the draft; record the
+published link in `link.txt` beside the page, and never put it in the ticket's text, which
+becomes public. Give the story's link with the document's link or path in one message. The
+document stays where the user comments and edits; the story is for reading. When the brief
+says no story, skip the story and show the draft as above.
+
+Before any message that says the draft changed, bring the story up to date and republish it
+to the same link, so the story at that link already shows the change when the user reads it:
+rewrite the ticket file from the draft, add or reword the story's sections for the changed
+criteria, and check whether the built story still matches:
+
+```sh
+<tool>/scripts/run story-page check <story-dir> --ticket-body <ticket.json>
+```
+
+When it says the story is out of date, rebuild with the same build command: `--keep-picture`
+keeps the opening picture unless the title changed, and a new title draws a new picture. Look
+at a newly drawn picture, its lettering included, before publishing; a kept picture was
+already looked at.
+
+When no story can be made — your harness cannot publish a page, or the build stops because
+the picture adapter is missing or fails — show the draft as above and say in one line why
+there is no story. A story the builder refuses for its content is yours to fix, not a reason
+to skip it.
 
 Keep the ticket short. Change it for a defect or a decision the user makes, and carry every plain
 part change into the technical part. The user can choose to continue editing a ticket that already
@@ -143,9 +187,10 @@ then list the ticket's labels through the tracker's tooling and run
 which records the sign-off and queues the ticket the same way. Pass `--labels` once per
 label, each flag one whole name; a lone flag with a comma is refused as ambiguous.
 
-Tell the user the ticket is ready and the postmaster will pick it up when a run slot is free. They
-do not need to ask the postmaster again. The mark closes this session once your turn ends, so say
-goodbye briefly and start nothing new: the tab closes itself.
+Leave the story as it stands: nothing rebuilds it after the ticket is marked ready, since
+the review is over. Tell the user the ticket is ready and the postmaster will pick it up when
+a run slot is free. They do not need to ask the postmaster again. The mark closes this session
+once your turn ends, so say goodbye briefly and start nothing new: the tab closes itself.
 
 ## Safety
 

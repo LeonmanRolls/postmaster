@@ -149,7 +149,9 @@ test("escape-free JSON units stay proportional to the longest line", () => {
   const elapsed = Date.now() - started;
   const total = units.reduce((n, unit) => n + unit.text.length, 0);
   expect(rules(line)).toEqual([]);
-  expect(elapsed).toBeLessThan(1000);
+  // Ten seconds, not one: a scan that grows with the square of the line takes minutes, and the
+  // machine runs many flows at once, so a bound near the quiet time fails the gate on load alone.
+  expect(elapsed).toBeLessThan(10_000);
   expect(total).toBeLessThan(line.length * 3);
 });
 

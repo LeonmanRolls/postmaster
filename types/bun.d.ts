@@ -145,6 +145,9 @@ declare const Bun: {
     parse(text: string): Record<string, unknown>;
     stringify(data: Record<string, unknown>): string;
   };
+  JSONC: {
+    parse(text: string): unknown;
+  };
   file(path: string | URL): {
     exists(): Promise<boolean>;
     text(): Promise<string>;

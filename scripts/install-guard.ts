@@ -763,7 +763,7 @@ export function derefNpm(word: string): string | null {
   return resolved;
 }
 
-// pnpm's aliases, from pnpm 12.11.2's --help. pnpm does no abbreviation.
+// pnpm's aliases, from pnpm 12.9.0's --help. pnpm does no abbreviation.
 const PNPM_ALIASES: Record<string, string> = {
   i: "install",
   it: "install-test",

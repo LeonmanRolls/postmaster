@@ -8,7 +8,7 @@ by their ids and keep the remaining list unchanged.
 ## Acceptance criteria
 
 1. A user can remove one task by its id. The task disappears from the list and its removal is reported.
-2. A user can remove several tasks at once. Each removed task is reported once in the order given.
+2. A user can remove several tasks at once. Each removed task is reported in the order given.
 3. If any id is missing, nothing is removed and the first missing id is reported.
 4. With no id or any invalid id, nothing changes and the correct usage is shown.
 5. Remaining tasks keep their ids, text, completion state and order.
@@ -29,7 +29,7 @@ default
 ### Checks
 
 - **C1** Run the command-line test for removing one task → it prints one removed line and exits 0.
-- **C2** Run the command-line test for removing several tasks, including a repeated id → each id is printed once in the requested order.
+- **C2** Run the command-line test for removing several tasks → each id is printed in the requested order.
 - **C3** Run the command-line test with a missing id → nothing is removed and the first missing id is reported.
 - **C4** Run the command-line tests with no id and an invalid id → the usage is printed and the list is unchanged.
 - **C5** Run the list test after a removal → remaining rows preserve their ids, text, completion state and order.

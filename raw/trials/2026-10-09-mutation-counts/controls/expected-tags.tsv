@@ -1,0 +1,10 @@
+function	tags
+readsEnv	env
+readsClock	clock
+readsFile	files
+startsProcess	proc
+readsOs	os
+readsNothing	
+bunFile	files
+givenClock	
+newDate	clock

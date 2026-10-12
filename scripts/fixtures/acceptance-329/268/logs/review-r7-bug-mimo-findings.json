@@ -1,0 +1,41 @@
+[
+  {
+    "file": "scripts/lib/switch-offs.ts",
+    "line": 984,
+    "line_end": 1001,
+    "target": "scripts/lib/switch-offs.ts:984",
+    "severity": "not provided",
+    "summary": "1. **Symlinked settings entries show no diff (low–moderate)** — `settingsChanges` diffs the listed path ( ), but for an unchanged symlink whose target changed, that path is byte-identical between revisions, so the user sees `(no textual diff)` and approves with no evidence. Reproduced in a scratch repo. Fix: diff the resolved target blobs (`git diff base:<oldAt> head:<newAt>`).",
+    "body": "2. **One edit can be listed twice under two ids (low)** — when a file is reachable under two scannable names (e.g. `b.ts` symlinked as `a.ts`), one edit produces two approval gates (`switch-offs.ts:828-831`). Safe direction (over-asks, never under-asks), but possibly unintentional — the spec doesn't say the target should also be listed.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "mimo"
+  },
+  {
+    "file": "switch-offs.ts",
+    "line": 828,
+    "line_end": 831,
+    "target": "switch-offs.ts:828",
+    "severity": "not provided",
+    "summary": "2. **One edit can be listed twice under two ids (low)** — when a file is reachable under two scannable names (e.g. `b.ts` symlinked as `a.ts`), one edit produces two approval gates ( ). Safe direction (over-asks, never under-asks), but possibly unintentional — the spec doesn't say the target should also be listed.",
+    "body": "3. **`assertSelfContained` misses ESM-form bundles (low, hypothetical)** — `refresh-parser` only rejects `require(` (`scripts/refresh-parser.ts:44-46`); a future ESM-format @babel/parser bundle would land half-vendored. Current bundle verified fine.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "mimo"
+  },
+  {
+    "file": "scripts/refresh-parser.ts",
+    "line": 44,
+    "line_end": 46,
+    "target": "scripts/refresh-parser.ts:44",
+    "severity": "not provided",
+    "summary": "3. **`assertSelfContained` misses ESM-form bundles (low, hypothetical)** — `refresh-parser` only rejects `require(` ( ); a future ESM-format @babel/parser bundle would land half-vendored. Current bundle verified fine.",
+    "body": "4. **Merge-gate note** — `scripts/run coachman-contract` reports **yes** (touches `scripts/landing.ts`, both runbooks), so a fixture run dispatched from the branch must score clean before merge; no such evidence is in the diff.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "mimo"
+  }
+]

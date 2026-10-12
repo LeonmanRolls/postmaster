@@ -1780,14 +1780,12 @@ describe("switch-off landing instructions", () => {
     "utf8",
   );
 
-  test("the coachman lists switch-offs before the gate and pastes the section after the block", () => {
+  test("the coachman lists switch-offs before the gate and the card command carries the list", () => {
     expect(coachman).toContain("List the branch's switch-offs before anything else here");
     expect(
       coachman.indexOf("List the branch's switch-offs before anything else here"),
     ).toBeLessThan(coachman.indexOf("1. **Verify the final HEAD.**"));
-    expect(coachman).toContain(
-      "pasted after the block as its own section, never retyped, so the card shows the",
-    );
+    expect(coachman).toContain("the step-5 command carries the list onto the card");
   });
 
   test("Stage F holds both landing routes on the check and never approves itself", () => {

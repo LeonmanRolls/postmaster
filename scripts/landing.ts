@@ -59,6 +59,17 @@
 //       it never or more than once, is an input fault, never `match`. A card quoting
 //       `<!--` escapes it, for example as `&lt;!--`. A copy inside a
 //       code fence is text a reader sees, so it counts like any other copy.
+//   run landing card-write <dispatch> <synthesis-wt> <checkpoint> <card>
+//       --repo <repo> --default <branch> --ticket <ref>
+//       write the card's printed parts into the card from the run's records: the
+//       `card-block`, the switch-offs section and the private-data block, as one
+//       region after the card's intro, with the coachman's `## Notes` section
+//       directly after it. A part already there is replaced, so each appears
+//       once and matches the records as they stand; everything else, the notes
+//       included, is left byte-identical. Refuses a card whose printed parts
+//       are not one block from `## Checks`, a card holding `## Notes` twice,
+//       a card holding an HTML comment, and switch-offs with no reason or
+//       refused, without writing. Prints nothing.
 //   run landing card-open <checkpoint>
 //       the checkpoint's open P1 and P2 findings, one `- [<severity>] <id>` bullet
 //       each, or `none`. Open P3 residue prints `none`: it lands.
@@ -85,10 +96,25 @@
 //       An approval names the run, the identity and the user's words, written
 //       through `run log-action` so it sits in the run's actions and the
 //       project's ledger alike.
+//   run landing libraries --repo <repo> --default <branch> --ticket <ref>
+//       [--dispatch <dispatch>]
+//       every library the run adds or changes, compared between the ticket
+//       head and its merge base with the default branch: new and changed
+//       entries in package.json's dependency blocks, resolved packages the
+//       lockfile adds outside them, and the copied-in bundle's VERSION. The
+//       first line is `clear` when the branch adds nothing or every entry
+//       carries the user's recorded approval, `held` when entries wait on
+//       the user's word, and `refused` when the user refused any. The rest
+//       is the `## Libraries` section: one line per library with its kind,
+//       old and new version, facts and identity; approved entries are
+//       marked. Without --dispatch no approval can match, so any entry
+//       holds. An approval names the run, the identity and the user's
+//       words, written through `run log-action` so it sits in the run's
+//       actions and the project's ledger alike.
 //
 //   exit 0  already-landed, anything-to-land, pull-request-checks, results, card-block, card-open: the answer,
 //           printed; card-results, card-findings: `match`; journey: `clear` or `judge`;
-//           fresh: `fresh`; switch-offs: `clear`
+//           fresh: `fresh`; switch-offs, libraries: `clear`; card-write: the card is written, silently
 //   exit 1  usage; a resolving input that does not resolve (--default, --base,
 //           --card-head, --local-ticket, --pr-merge, and --ticket without a
 //           report: --pr-head answers `re-verify` instead); a file that cannot
@@ -97,17 +123,20 @@
 //           `run ticket-check --has-journey` failing; a checkpoint whose structure cannot
 //           be read (a duplicate id, a finding-shaped line that is not a finding, an
 //           unreadable state, a fence marker line, or a quoted line); a card holding an
-//           HTML comment or not holding the rendered block exactly once
-//   exit 2  fresh: the faults, one line each; journey: `blocked`; switch-offs: `held`
-//   exit 3  switch-offs: `no reason`
-//   exit 4  switch-offs: `refused`
-import { readFileSync, readdirSync } from "node:fs";
+//           HTML comment or not holding the rendered block exactly once; card-write: a
+//           card whose printed parts are not one block from `## Checks`, that
+//           holds the notes section twice, or that holds an HTML comment
+//   exit 2  fresh: the faults, one line each; journey: `blocked`; switch-offs, libraries: `held`
+//   exit 3  switch-offs, card-write: `no reason`
+//   exit 4  switch-offs, libraries, card-write: `refused`
+import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { isAbsolute, join, relative, sep } from "node:path";
-import { scriptsDir } from "./lib/paths.ts";
+import { physical, scriptsDir } from "./lib/paths.ts";
+import { inspectLibraries } from "./lib/library-landing.ts";
 import { inspectSwitchOffs } from "./lib/switch-offs.ts";
 import { run } from "./lib/proc.ts";
 import { runMode } from "./lib/run-mode.ts";
-import { physical, reachActions } from "./reach.ts";
+import { reachActions } from "./reach.ts";
 import { errorText, isDraftRecord, safePath } from "./scrub-report.ts";
 import {
   D_CLASS,
@@ -178,6 +207,16 @@ export const DISMISSED_RE = new RegExp(
   "u",
 );
 export const USER_APPLIED = "applied on user word, not re-reviewed";
+const PRINTED_HEADINGS = new Set([
+  "## Checks",
+  "## Open findings",
+  "## Not re-reviewed",
+  "## Reach",
+  "## Switch-offs",
+  "## Private data findings",
+  "## Main history census",
+]);
+const NOTES_HEADING = "## Notes";
 export const FINDING_BULLET = new RegExp(`^[${PY_S_CLASS}]*[-*+][${PY_S_CLASS}]*\\[`, "u");
 export const FINDING_SHAPE_HEAD = new RegExp(
   `^[${PY_S_CLASS}]*(?:[${D_CLASS}]{1,9}[.)][${PY_S_CLASS}]*)?\\[`,
@@ -499,6 +538,31 @@ function renderBlock(dispatch: string, wt: string, checkpoint: string): string {
   return reach ? `${base}\n${reach}` : base;
 }
 
+interface CardSection {
+  heading: string;
+  text: string;
+}
+
+/** The card split at its `## ` headings: the intro before the first one and
+ * each section's trimmed heading with its bytes, trailing blank lines
+ * included, through the next heading or the end. Detection trims trailing
+ * whitespace; the bytes are kept whole. */
+function cardSections(text: string): { intro: string; sections: CardSection[] } {
+  const starts: number[] = [];
+  let offset = 0;
+  for (const line of text.split("\n")) {
+    if (line.trimEnd().startsWith("## ")) starts.push(offset);
+    offset += line.length + 1;
+  }
+  const sections = starts.map((start, i) => {
+    const end = i + 1 < starts.length ? starts[i + 1]! : text.length;
+    const lineEnd = text.indexOf("\n", start);
+    const heading = (lineEnd === -1 ? text.slice(start) : text.slice(start, lineEnd)).trimEnd();
+    return { heading, text: text.slice(start, end) };
+  });
+  return { intro: starts.length > 0 ? text.slice(0, starts[0]) : text, sections };
+}
+
 /** match iff the card holds the block once. */
 function checkBlock(dispatch: string, wt: string, checkpoint: string, card: string): number {
   const text = load(card);
@@ -659,8 +723,10 @@ const TOP_USAGE =
   "private-data-card <dispatch> <card> | results <dispatch> <synthesis-wt> | " +
   "card-block <dispatch> <synthesis-wt> <checkpoint> | card-results <dispatch> <synthesis-wt> " +
   "<checkpoint> <card> | card-findings <dispatch> <synthesis-wt> <checkpoint> <card> | " +
-  "card-open <checkpoint> | journey <dispatch> <synthesis-wt> <waybill> | switch-offs " +
-  "--repo <repo> --default <branch> --ticket <ref> [--dispatch <dispatch>]";
+  "card-write <dispatch> <synthesis-wt> <checkpoint> <card> --repo <repo> --default <branch> " +
+  "--ticket <ref> | card-open <checkpoint> | journey <dispatch> <synthesis-wt> <waybill> | " +
+  "switch-offs --repo <repo> --default <branch> --ticket <ref> [--dispatch <dispatch>] | " +
+  "libraries --repo <repo> --default <branch> --ticket <ref> [--dispatch <dispatch>]";
 const ALREADY_USAGE =
   "usage: run landing already-landed --repo <repo> --default <branch> --ticket <ref> --base <sha> " +
   "--card-head <sha> [--local-ticket <branch>] [--pr-merge <sha> --pr-head <sha>]";
@@ -675,6 +741,9 @@ const CRESULTS_USAGE =
   "usage: run landing card-results <dispatch> <synthesis-wt> <checkpoint> <card>";
 const CFINDINGS_USAGE =
   "usage: run landing card-findings <dispatch> <synthesis-wt> <checkpoint> <card>";
+const CARDWRITE_USAGE =
+  "usage: run landing card-write <dispatch> <synthesis-wt> <checkpoint> <card> " +
+  "--repo <repo> --default <branch> --ticket <ref>";
 const PDATA_BLOCK_USAGE = "usage: run landing private-data-block <dispatch>";
 const PDATA_CARD_USAGE = "usage: run landing private-data-card <dispatch> <card>";
 const OPEN_USAGE = "usage: run landing card-open <checkpoint>";
@@ -1048,7 +1117,107 @@ function switchOffs(o: string[]): number {
   }
 }
 
-function main(argv: string[]): number {
+const LIBRARIES_USAGE =
+  "usage: run landing libraries --repo <repo> --default <branch> --ticket <ref> [--dispatch <dispatch>]";
+
+async function libraries(o: string[]): Promise<number> {
+  if (
+    (o.length !== 6 && o.length !== 8) ||
+    o[0] !== "--repo" ||
+    o[2] !== "--default" ||
+    o[4] !== "--ticket" ||
+    (o.length === 8 && o[6] !== "--dispatch")
+  ) {
+    usage(LIBRARIES_USAGE);
+  }
+  try {
+    const report = await inspectLibraries({
+      repo: o[1]!,
+      defaultRef: o[3]!,
+      ticketRef: o[5]!,
+      ...(o.length === 8 ? { dispatch: o[7]! } : {}),
+    });
+    process.stdout.write(`${report.status}\n${report.output}`);
+    return report.status === "clear" ? 0 : report.status === "held" ? 2 : 4;
+  } catch (e) {
+    throw new LandingFailure(`libraries: ${e instanceof Error ? e.message : String(e)}`, 1);
+  }
+}
+
+function cardWrite(o: string[]): number {
+  if (o.length !== 10 || o[4] !== "--repo" || o[6] !== "--default" || o[8] !== "--ticket") {
+    usage(CARDWRITE_USAGE);
+  }
+  const dispatch = o[0]!;
+  // Every part renders before the card is touched: any fault dies with the
+  // card unwritten.
+  const block = renderBlock(dispatch, o[1]!, o[2]!);
+  const privateData = privateDataBlock(dispatch);
+  let switches: string;
+  try {
+    const report = inspectSwitchOffs({
+      repo: o[5]!,
+      defaultRef: o[7]!,
+      ticketRef: o[9]!,
+      dispatch,
+    });
+    if (report.status === "no reason" || report.status === "refused") {
+      throw new LandingFailure(
+        errorText("landing", `card-write: switch-offs: ${report.status}`),
+        report.status === "no reason" ? 3 : 4,
+      );
+    }
+    switches = report.output;
+  } catch (e) {
+    if (e instanceof LandingFailure) throw e;
+    throw new LandingFailure(`switch-offs: ${e instanceof Error ? e.message : String(e)}`, 1);
+  }
+  const { intro, sections } = cardSections(load(o[3]!));
+  const printed: number[] = [];
+  const notes: number[] = [];
+  sections.forEach((s, i) => {
+    if (PRINTED_HEADINGS.has(s.heading)) printed.push(i);
+    else if (s.heading === NOTES_HEADING) notes.push(i);
+  });
+  if (notes.length > 1) die("card-write: card holds the notes section twice");
+  if (printed.length > 0) {
+    const contiguous = printed.every((idx, k) => k === 0 || idx === printed[k - 1]! + 1);
+    if (sections[printed[0]!]!.heading !== "## Checks" || !contiguous) {
+      die(
+        "card-write: the card's printed parts are not one block starting at ## Checks; " +
+          "remove the extra printed section and run again",
+      );
+    }
+  }
+  const kept = notes.length === 1 ? sections[notes[0]!]!.text : `${NOTES_HEADING}\n\nnone\n`;
+  const rest = sections
+    .filter((_, i) => !printed.includes(i) && !notes.includes(i))
+    .map((s) => s.text)
+    .join("");
+  const region = `${block}\n${switches}\n${privateData}`;
+  const head =
+    intro === "" || intro.endsWith("\n\n")
+      ? intro
+      : intro.endsWith("\n")
+        ? `${intro}\n`
+        : `${intro}\n\n`;
+  const tail = rest === "" || kept.endsWith("\n\n") ? rest : `\n${rest}`;
+  const next = `${head}${region}\n${kept}${tail}`;
+  for (const [name, part] of [
+    ["block", block],
+    ["switch-offs", switches],
+    ["private-data", privateData],
+  ]) {
+    if (next.split(part).length - 1 !== 1) die(`card-write: rendered ${name} does not land once`);
+  }
+  // A comment the validators refuse must stop the write, not land on a card
+  // that exits 0 here and is withheld at landing.
+  refuseComments(next, "card");
+  writeFileSync(o[3]!, next);
+  return 0;
+}
+
+async function main(argv: string[]): Promise<number> {
   // A production entrypoint: shed the test hook before the first scan.
   delete process.env.SCRUB_CHECK_DISABLE;
   try {
@@ -1073,6 +1242,7 @@ function main(argv: string[]): number {
       if (argv.length !== 5) usage(mode === "card-results" ? CRESULTS_USAGE : CFINDINGS_USAGE);
       return checkBlock(argv[1]!, argv[2]!, argv[3]!, argv[4]!);
     }
+    if (mode === "card-write") return cardWrite(argv.slice(1));
     if (mode === "private-data-block") {
       if (argv.length !== 2) usage(PDATA_BLOCK_USAGE);
       process.stdout.write(privateDataBlock(argv[1]!));
@@ -1095,6 +1265,7 @@ function main(argv: string[]): number {
       return journey(argv[1]!, argv[2]!, argv[3]!);
     }
     if (mode === "switch-offs") return switchOffs(argv.slice(1));
+    if (mode === "libraries") return libraries(argv.slice(1));
     usage(TOP_USAGE);
   } catch (e) {
     if (e instanceof LandingFailure) {
@@ -1106,5 +1277,5 @@ function main(argv: string[]): number {
 }
 
 if (import.meta.main) {
-  process.exit(main(process.argv.slice(2)));
+  process.exit(await main(process.argv.slice(2)));
 }

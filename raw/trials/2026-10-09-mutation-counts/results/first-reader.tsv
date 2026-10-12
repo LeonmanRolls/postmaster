@@ -1,0 +1,31 @@
+item	module	line	col	mark	question	reason
+1	scripts/host.ts	4344	10	harmless	3	saves the variable, sets it for one call and restores it in finally; the pair is in one function and the purpose is plain from the call it surrounds
+2	scripts/host-self-test.ts	2959	7	hazard	3	a module-level knob set at 17 places in one 5,650-line function and read by the helper that builds the stub's environment; nothing at an execHost call shows it, and a step that forgets to reset it leaks into the next
+3	scripts/style-findings.ts	1366	15	harmless	2	the walker's own visited set, tested on the line above
+4	scripts/launch.ts	1016	40	harmless	2	a collector with an output parameter named into, returning nothing
+5	scripts/review-findings.ts	303	11	harmless	1	the cursor of a hand-written JSON decoder, shared by its nested steps and invisible outside the one function
+6	scripts/fixture.ts	73	3	harmless	3	clears inherited git variables once at start-up, and the comment above says why; it also runs when a test imports the module
+7	scripts/view-stream.ts	988	41	harmless	2	the loop visibly consumes its argument list; the only caller passes a throwaway slice of argv
+8	scripts/parallel-runs-acceptance.ts	193	18	harmless	2	undoes the add above, so the set is as it was on return; the tracking set is passed in explicitly
+9	scripts/plane.ts	199	49	harmless	2	a parser event handler building the tree the parser holds
+10	scripts/plane.ts	887	14	harmless	1	a local emitter appending to the token buffer of its enclosing function; nothing outside sees the buffer before it is returned
+11	scripts/view-stream.ts	987	20	harmless	2	same loop as item 7
+12	scripts/setup-order-acceptance.ts	70	11	harmless	1	a local recorder in an acceptance script, confined to the function around it
+13	scripts/launch.ts	1867	3	harmless	3	removes the variable after reading it and before starting the harness, and the comment above says why
+14	scripts/plane.ts	847	12	harmless	1	a local emitter appending to the token buffer, as item 10
+15	scripts/review-round.ts	94	11	harmless	1	falls back to the default and records why; its three variables belong to the function around it
+16	scripts/fixture.ts	220	5	harmless	1	gives its own parameter a new value; a string is a value, so the caller sees nothing
+17	scripts/view-stream.ts	960	5	harmless	2	the carry-over bytes of a streaming decoder, private to the closure that utf8Stream returns, with a final flag in its signature
+18	scripts/host-self-test.ts	424	5	harmless	2	a stub of tmux recording the window it was asked to open, and saving its state on the next lines
+19	scripts/setup-order-acceptance.ts	71	7	harmless	1	same recorder as item 12
+20	scripts/view-stream.ts	989	49	harmless	2	same loop as item 7
+21	scripts/lib/text.ts	504	3	hazard	1	resets a module-level regex's lastIndex inside a predicate named isDigitChar; a reader does not look for a write to shared state in an is-function
+22	scripts/host-self-test.ts	5423	9	harmless	2	an event handler setting the flag its function polls; recording the event is what a handler is for
+23	scripts/ticket-parts.ts	166	11	harmless	2	an output parameter named out, in a function named for the findings it appends, returning nothing
+24	scripts/launch.ts	916	5	harmless	2	a note function recording into the state object it is handed
+25	scripts/style-findings.ts	610	3	harmless	1	gives its own parameter a new value; a string is a value, so the caller sees nothing
+26	scripts/style-findings.ts	952	44	harmless	2	Makefile.read fills the object's own rule table, which is what reading into it means
+27	scripts/lib/wall.ts	206	35	hazard	1	a replace callback whose return value is its job also collects into an outer array; a reader looks at the replacement, not for a push (arguable: replace is used as a scanner here)
+28	scripts/host.ts	4343	35	harmless	3	the restore of item 1, in the same finally
+29	scripts/review-round.ts	279	7	hazard	3	a flag kept on globalThis through a cast, set in the recording closure, reset elsewhere and read at two exits; nothing at a record() call says that a failed write changes the exit status
+30	scripts/review-findings.ts	283	11	harmless	1	same cursor as item 5

@@ -1,0 +1,15 @@
+[
+  {
+    "file": "scripts/refresh-parser.ts",
+    "line": 46,
+    "line_end": 48,
+    "target": "scripts/refresh-parser.ts:46",
+    "severity": "not provided",
+    "summary": "2. ** — `assertSelfContained` only matches the literal `require(`. A future bundle using `import(...)` or `require (` would slip past the guard (fails loudly at import time, not at refresh). Low risk today: the pinned 7.29.9 bundle contains no `require(`.",
+    "body": "3. **Spec-accepted scope gaps** — switch-offs in non-JS/TS files (`# shellcheck disable`, `# noqa`) and dependency-only `package.json` edits are invisible to the check. The spec defers these (D5, C2); a project gating on shellcheck could still land a silent switch-off through them.\n4. **Merge prerequisite** — `scripts/run coachman-contract af47492 HEAD` says **yes** for all three contract files (`scripts/landing.ts`, `coachman.md`, `postmaster.md`), so per AGENTS.md a **fixture run dispatched from this branch must score clean before merge**. No fixture-run record was visible here.\n5. **Expected held state on this branch** — `scripts/run landing switch-offs --repo . --default main --ticket HEAD` exits 2 (`held`) on `.oxlintrc.json` and `biome.json` (the branch's own vendor-exclusion changes). Your approval will be required at this branch's own landing — design working as intended.\n6. **Conservative-by-design behaviors confirmed** — file renames re-list inherited switch-offs, edits inside `@ts-nocheck` files re-ask, refusal always wins over approval. All err toward `held`, never toward a silent clear; the reviewer probed the false-clear direction specifically (merge-base semantics, occurrence-indexed ids, twin matching, ledger double-record) and every edge fails toward `held`.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "mimo"
+  }
+]

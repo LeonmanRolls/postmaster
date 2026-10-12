@@ -16,7 +16,11 @@
 import { randomBytes } from "node:crypto";
 import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
-import { effectiveConfigForProject, globalConfigPath } from "./lib/effective-config.ts";
+import {
+  effectiveConfigForProject,
+  ensureIgnore,
+  globalConfigPath,
+} from "./lib/effective-config.ts";
 import { scriptsDir, toolRoot } from "./lib/paths.ts";
 import { run } from "./lib/proc.ts";
 import { shlexQuote } from "./verify.ts";
@@ -256,6 +260,7 @@ function writeBrief(repo: string, id: string): Brief {
   }
   const { path: cfgPath, doc } = readConfig(repo);
   const template = findString(doc, ["planning", "review_link"]);
+  const makeStory = findString(doc, ["planning", "stories"]) !== "off";
   const prefsPath = join(dirname(cfgPath), "preferences.md");
   const preferences = isFile(prefsPath)
     ? readStrict(prefsPath).replace(/\n+$/u, "")
@@ -263,7 +268,14 @@ function writeBrief(repo: string, id: string): Brief {
   const base = defaultBase(repo);
   const dir = clerkDir(repo);
   mkdirSync(dir, { recursive: true });
+  // The brief, the draft and the story link stay out of the repository: the
+  // clerk may run before any dispatch has written the ignore rules.
+  ensureIgnore(repo, true);
   const draft = clerkFile(repo, id, ".md");
+  const storyDir = clerkFile(repo, id, ".story");
+  const storyLine = makeStory
+    ? `Stories: on. Make a story with the draft, keeping the story's files, its picture and its link in ${storyDir}. Give the story's link with the document's link in one message, as the runbook says.`
+    : "Stories: off. Make no story with the draft: show the draft as the runbook says for a draft with no story.";
   const link = editorLink(template, draft);
   const skill = join(TOOL, "skills", "clerk", "SKILL.md");
   const runbook = join(TOOL, "skills", "clerk", "clerk.md");
@@ -298,6 +310,28 @@ function writeBrief(repo: string, id: string): Brief {
           ...verifiersOut.split("\n"),
           "```",
         ];
+  // The verifiers that may have gone stale since they were confirmed, from one
+  // stale call at the brief's base. Silent when nothing is marked, so the entry
+  // says nothing of the kind; the clerk's runbook says what a marked verifier
+  // means for the checks.
+  const staleArgs = ["stale", top, "--at", base];
+  const staleOut =
+    verifiersOut === "verifiers: none"
+      ? "stale: none"
+      : requireScript("verifier", staleArgs, `run verifier ${staleArgs.join(" ")} failed`).replace(
+          /\n+$/u,
+          "",
+        );
+  const staleBlock =
+    staleOut === "stale: none"
+      ? []
+      : [
+          `The following verifiers may be stale, as \`${cite(["verifier", ...staleArgs])}\` prints them:`,
+          "",
+          "```text",
+          ...staleOut.split("\n"),
+          "```",
+        ];
   const lines = [
     `# Brief: booking clerk for ${session}`,
     "",
@@ -313,6 +347,10 @@ function writeBrief(repo: string, id: string): Brief {
     "",
     preferences,
     "",
+    "## Story",
+    "",
+    storyLine,
+    "",
     "## Read first",
     "",
     `Skill: ${skill}`,
@@ -327,6 +365,7 @@ function writeBrief(repo: string, id: string): Brief {
     "```",
     "",
     ...verifiersBlock,
+    ...(staleBlock.length > 0 ? ["", ...staleBlock] : []),
     "",
   ];
   if (ticket.title) lines.push(`## The ticket as read`, "", `Title: ${ticket.title}`, "");
@@ -388,6 +427,99 @@ function sessionAlive(handle: string): boolean {
   if (!handle) return false;
   const r = runScript("host", ["read", handle]);
   return r.code === 0;
+}
+
+// Seconds one send waits for the session's turn to settle: long enough for
+// a just-started harness to begin its turn, short enough that resends stay
+// rare.
+const SEND_SETTLE_SECONDS = 15;
+
+function sleepSync(ms: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+function kvOf(text: string, key: string): string {
+  // ASCII: the spawn line is machine-written k=v words; \s splits ASCII runs.
+  for (const word of text.split(/\s+/u)) {
+    if (word.startsWith(`${key}=`)) return word.slice(key.length + 1);
+  }
+  return "";
+}
+
+// Seconds the start waits for the session to take the brief, whole.
+function clerkSendWait(): number {
+  const raw = process.env.POSTMASTER_CLERK_SEND_WAIT ?? "120";
+  if (!/^[0-9]+$/u.test(raw) || !Number.isSafeInteger(Number(raw))) {
+    console.error(`clerk: POSTMASTER_CLERK_SEND_WAIT is not a number; waiting 120s: '${raw}'`);
+    return 120;
+  }
+  return Number(raw);
+}
+
+// Deliver the brief, waiting until the session can take it: an agent shows
+// in its pane and is not blocked. The brief goes once; it goes again only
+// when the send reports no turn started and a read shows it did not arrive.
+// Exit 1, never 3: the session exists, so this is not the postmaster's
+// no-host escalation, and the failure carries the recovery command.
+function sendBrief(
+  session: string,
+  handle: string,
+  promptFile: string,
+  pane: string,
+  deadline: number,
+  wait: number,
+): number {
+  const fail = (): number =>
+    die(
+      `the clerk session started but the brief could not be sent within ${wait}s ` +
+        `(session ${handle}, tab "${session}"${pane ? `, pane ${pane}` : ""}); deliver it with:\n` +
+        cite(["host", "send", handle, promptFile]),
+    );
+  const signature = `booking clerk for ${session}`;
+  let accepted = false;
+  // Always tries once, as the spawn's naming loop does: a start whose
+  // naming consumed the budget still attempts the delivery.
+  let tried = false;
+  for (;;) {
+    if (tried && Date.now() >= deadline) return fail();
+    if (accepted) {
+      // A send already went in: resend only when a read shows it did not arrive.
+      const read = runScript("host", ["read", handle, "20"]);
+      const shown = `${read.out}\n${read.err}`;
+      if (read.code !== 0) {
+        sleepSync(1000);
+        continue;
+      }
+      if (shown.includes(signature)) {
+        console.log(`clerk: ${session} opened (session ${handle})`);
+        return 0;
+      }
+      sleepSync(1000);
+    }
+    const sent = runScript("host", [
+      "send",
+      handle,
+      promptFile,
+      "--wait",
+      String(SEND_SETTLE_SECONDS),
+    ]);
+    tried = true;
+    const text = `${sent.out}\n${sent.err}`;
+    if (
+      sent.code === 0 ||
+      (sent.code === 3 &&
+        (text.includes("did not settle") || text.includes("stopped at an approval or a question")))
+    ) {
+      if (sent.code === 3 && text.includes("stopped at an approval or a question"))
+        console.error(
+          `clerk: ${handle} stopped at an approval or a question; the user answers it in Herdr`,
+        );
+      console.log(`clerk: ${session} opened (session ${handle})`);
+      return 0;
+    }
+    if (sent.code === 3 && text.includes("no turn start")) accepted = true;
+    else sleepSync(1000);
+  }
 }
 
 // Split a printed `launch: ...` form into argv words: single and double quotes
@@ -462,6 +594,13 @@ function cmdStart(repo: string, id: string): number {
   const stem = clerkHandle(repo, id);
   const nonce = randomBytes(2).toString("hex");
   const handle = stem.length + 5 <= 32 ? `${stem}-${nonce}` : `${stem.slice(0, 27)}-${nonce}`;
+  // One deadline for the whole start: the spawn names the session within the
+  // remaining budget, and the delivery below spends the rest.
+  const wait = clerkSendWait();
+  const deadline = Date.now() + wait * 1000;
+  process.env.POSTMASTER_HOST_SPAWN_WAIT = String(
+    Math.max(1, Math.ceil((deadline - Date.now()) / 1000)),
+  );
   const started = runScript("host", [
     "spawn",
     handle,
@@ -490,13 +629,20 @@ function cmdStart(repo: string, id: string): number {
     promptFile,
     `You are the booking clerk for ${brief.session}. Read the skill at ${brief.skill}, then the runbook, then the brief at ${briefPath}. The draft is at ${brief.draft}; greet the user from there.\n`,
   );
-  const sent = runScript("host", ["send", handle, promptFile]);
-  if (sent.code !== 0)
-    die(
-      `the clerk session started but the brief could not be sent (${(sent.out + sent.err).trim()})`,
-    );
-  console.log(`clerk: ${brief.session} opened (session ${handle})`);
-  return 0;
+  if (kvOf(started.out, "host") !== "herdr") {
+    // Tmux panes exec the harness directly, so the paste waits in the pty
+    // buffer until the harness reads it; one send is enough there.
+    const sent = runScript("host", ["send", handle, promptFile]);
+    if (sent.code !== 0)
+      die(
+        `the clerk session started but the brief could not be sent ` +
+          `(session ${handle}, tab "${brief.session}"); deliver it with:\n` +
+          cite(["host", "send", handle, promptFile]),
+      );
+    console.log(`clerk: ${brief.session} opened (session ${handle})`);
+    return 0;
+  }
+  return sendBrief(brief.session, handle, promptFile, kvOf(started.out, "pane"), deadline, wait);
 }
 
 function main(argv: string[]): number {

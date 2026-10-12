@@ -1,0 +1,18 @@
+{"ts":"2026-10-09T00:44:21Z","project":"postmaster","run":"342","actor":"coachman","action":"review-launch","target":"luna","detail":"style round 1"}
+{"ts":"2026-10-09T00:44:23Z","project":"postmaster","run":"342","actor":"coachman","action":"review-launch","target":"mimo","detail":"style round 1"}
+{"ts":"2026-10-09T00:44:24Z","project":"postmaster","run":"342","actor":"coachman","action":"review-launch","target":"luna","detail":"bug round 1"}
+{"ts":"2026-10-09T00:44:26Z","project":"postmaster","run":"342","actor":"coachman","action":"review-launch","target":"mimo","detail":"bug round 1"}
+{"ts":"2026-10-09T00:44:28Z","project":"postmaster","run":"342","actor":"coachman","action":"review-launch","target":"opus","detail":"security round 1"}
+{"ts":"2026-10-09T02:44:21Z","project":"postmaster","run":"342","actor":"coachman","action":"degrade","target":"mimo","detail":"bug r1: timeout"}
+{"ts":"2026-10-09T02:47:55Z","project":"postmaster","run":"342","actor":"coachman","action":"finding","target":"wiki/concepts/own-review-skills.md:116","detail":"gating P3 r1 style mimo, verified by reading, downgraded P2: docs-only stale sentence"}
+{"ts":"2026-10-09T02:47:55Z","project":"postmaster","run":"342","actor":"coachman","action":"finding","target":"wiki/concepts/own-review-skills.md:144","detail":"gating P3 r1 style mimo, verified by reading"}
+{"ts":"2026-10-09T02:47:55Z","project":"postmaster","run":"342","actor":"coachman","action":"finding","target":"skills/postmaster/coachman.md:907","detail":"style P3 r1 style mimo, verified by reading"}
+{"ts":"2026-10-09T02:47:56Z","project":"postmaster","run":"342","actor":"coachman","action":"finding","target":"skills/postmaster/coachman.md:800","detail":"style P3 r1 style mimo, verified by execution"}
+{"ts":"2026-10-09T02:47:56Z","project":"postmaster","run":"342","actor":"coachman","action":"finding","target":"skills/postmaster/hosts.md:205","detail":"style P3 r1 style mimo, verified by execution, same pattern coachman.md:926"}
+{"ts":"2026-10-09T02:47:56Z","project":"postmaster","run":"342","actor":"coachman","action":"finding","target":"scripts/reviewer-copy-acceptance.test.ts:22","detail":"style P3 r1 style mimo, verified by execution"}
+{"ts":"2026-10-09T02:47:56Z","project":"postmaster","run":"342","actor":"coachman","action":"finding","target":"skills/postmaster/coachman.md:908","detail":"style P3 r1 security opus, verified by reading"}
+{"ts":"2026-10-09T10:25:51Z","project":"postmaster","run":"342","actor":"coachman","action":"review-launch","target":"luna","detail":"bug round 2"}
+{"ts":"2026-10-09T10:25:53Z","project":"postmaster","run":"342","actor":"coachman","action":"review-launch","target":"haiku","detail":"bug round 2"}
+{"ts":"2026-10-09T10:25:55Z","project":"postmaster","run":"342","actor":"coachman","action":"review-launch","target":"opus","detail":"security round 2"}
+{"ts":"2026-10-09T10:40:25Z","project":"postmaster","run":"342","actor":"coachman","action":"finding","target":"scripts/reviewer-copy-acceptance.test.ts:150","detail":"gating P2 r2 bug luna, verified by reading"}
+{"ts":"2026-10-09T10:40:25Z","project":"postmaster","run":"342","actor":"coachman","action":"finding","target":"wiki/concepts/own-review-skills.md:145","detail":"style P3 r2 bug haiku, verified by reading"}

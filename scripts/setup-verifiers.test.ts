@@ -8,6 +8,7 @@ import {
   lastLine,
   logVerdict,
   parseArgs,
+  parseLocalMakeOutput,
   parseMakeOutput,
   runJsonDoc,
   setupConfig,
@@ -19,7 +20,43 @@ describe("parseArgs", () => {
   test("a repo, surfaces and a run parse, kinds ordered", () => {
     expect(parseArgs(["/r", "web", "cli-examples", "--run", "/d"])).toEqual({
       ok: true,
-      req: { repo: "/r", names: ["web", "cli-examples"], kinds: ["cli", "web"], dispatch: "/d" },
+      req: {
+        repo: "/r",
+        names: ["web", "cli-examples"],
+        surfaces: [
+          { kind: "cli", name: "" },
+          { kind: "web", name: "" },
+        ],
+        kinds: ["cli", "web"],
+        dispatch: "/d",
+      },
+    });
+  });
+
+  test("named surfaces parse with their kinds, and --repository sets the route", () => {
+    expect(parseArgs(["/r", "web:admin", "backend:api", "--run", "/d"])).toEqual({
+      ok: true,
+      req: {
+        repo: "/r",
+        names: ["web:admin", "backend:api"],
+        surfaces: [
+          { kind: "web", name: "admin" },
+          { kind: "backend", name: "api" },
+        ],
+        kinds: ["web", "backend"],
+        dispatch: "/d",
+      },
+    });
+    expect(parseArgs(["/r", "cli", "--run", "/d", "--repository"])).toEqual({
+      ok: true,
+      req: {
+        repo: "/r",
+        names: ["cli"],
+        surfaces: [{ kind: "cli", name: "" }],
+        kinds: ["cli"],
+        dispatch: "/d",
+        repository: true,
+      },
     });
   });
 
@@ -30,6 +67,7 @@ describe("parseArgs", () => {
       req: {
         repo: "/r",
         names: ["browser-suite", "web-journey"],
+        surfaces: [{ kind: "web", name: "" }],
         kinds: ["web"],
         dispatch: "/d",
       },
@@ -58,7 +96,8 @@ describe("parseArgs", () => {
   test("an unknown surface names itself, an unknown flag fails", () => {
     expect(parseArgs(["/r", "cli", "telegraph", "--run", "/d"])).toEqual({
       ok: false,
-      error: "unknown surface: telegraph",
+      error:
+        "unknown surface: telegraph (cli, web, library, backend, cli-examples, browser-suite, web-journey or library-tests)",
     });
     expect(parseArgs(["/r", "__proto__", "--run", "/d"]).ok).toBe(false);
     expect(parseArgs(["/r", "cli", "--run", "/d", "--fresh"]).ok).toBe(false);
@@ -67,25 +106,33 @@ describe("parseArgs", () => {
   test("a comma-joined surfaces value splits, a bad segment names itself", () => {
     expect(parseArgs(["/r", "cli,web", "--run", "/d"])).toEqual({
       ok: true,
-      req: { repo: "/r", names: ["cli", "web"], kinds: ["cli", "web"], dispatch: "/d" },
+      req: {
+        repo: "/r",
+        names: ["cli", "web"],
+        surfaces: [
+          { kind: "cli", name: "" },
+          { kind: "web", name: "" },
+        ],
+        kinds: ["cli", "web"],
+        dispatch: "/d",
+      },
     });
     expect(parseArgs(["/r", "cli", "web,library", "--run", "/d"])).toEqual({
       ok: true,
       req: {
         repo: "/r",
         names: ["cli", "web", "library"],
+        surfaces: [
+          { kind: "cli", name: "" },
+          { kind: "web", name: "" },
+          { kind: "library", name: "" },
+        ],
         kinds: ["cli", "web", "library"],
         dispatch: "/d",
       },
     });
-    expect(parseArgs(["/r", "cli,bogus", "--run", "/d"])).toEqual({
-      ok: false,
-      error: "unknown surface: bogus",
-    });
-    expect(parseArgs(["/r", "cli,", "--run", "/d"])).toEqual({
-      ok: false,
-      error: "unknown surface: ",
-    });
+    expect(parseArgs(["/r", "cli,bogus", "--run", "/d"]).ok).toBe(false);
+    expect(parseArgs(["/r", "cli,", "--run", "/d"]).ok).toBe(false);
   });
 });
 
@@ -122,6 +169,28 @@ describe("parseMakeOutput", () => {
     expect(parseMakeOutput("branch verify-cli\n")).toBe(null);
     expect(parseMakeOutput("handover /x/HANDOVER.md\n")).toBe(null);
     expect(parseMakeOutput("")).toBe(null);
+  });
+});
+
+describe("parseLocalMakeOutput", () => {
+  test("the kept and hand-over lines parse", () => {
+    expect(
+      parseLocalMakeOutput(
+        "kept .postmaster/verifier\nbase main\nrole coachman\nhandle h\nprompt /p\nhandover /x/HANDOVER.md\nleft out: none\n",
+      ),
+    ).toEqual({ kept: ".postmaster/verifier", handover: "/x/HANDOVER.md" });
+  });
+
+  test("a hand-over path with spaces parses whole", () => {
+    expect(
+      parseLocalMakeOutput("kept .postmaster/verifier\nhandover /my dir/HANDOVER.md\n"),
+    ).toEqual({ kept: ".postmaster/verifier", handover: "/my dir/HANDOVER.md" });
+  });
+
+  test("a missing line reads as no session", () => {
+    expect(parseLocalMakeOutput("kept .postmaster/verifier\n")).toBe(null);
+    expect(parseLocalMakeOutput("handover /x/HANDOVER.md\n")).toBe(null);
+    expect(parseLocalMakeOutput("")).toBe(null);
   });
 });
 

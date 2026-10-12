@@ -455,6 +455,78 @@ reason = "needs a model run from this branch; the postmaster dispatches and scor
 systems = ["linux", "darwin"]
 
 [[skip]]
+file = "scripts/acceptance-429.test.ts"
+name = "C4: the live survey > the synthesis call answers in form and is kept and quoted"
+reason = "needs a model lane on the run's surveyor pick over run 202 at 665a99f; the coachman makes the call once during synthesis and keeps it in the run's record"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/acceptance-379.test.ts"
+name = "C1: the fixture run takes in a moved main > the card is fresh on a main that moved after dispatch"
+reason = "needs the C5 fixture run with a commit on its main; the postmaster checks the card at landing"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/acceptance-379.test.ts"
+name = "C4: the card carries the step's report > the fixture run's card names the main it holds"
+reason = "needs the C5 fixture run; the postmaster checks the card at landing"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/acceptance-379.test.ts"
+name = "C5: the fixture run scores clean > a run from this branch scores clean"
+reason = "needs a model run from this branch; the postmaster dispatches and scores it at landing"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/acceptance-408.test.ts"
+name = "C4: the scorer reads a user-named held-back record > a fixture run on remove with no key and the user naming held-back scores clean"
+reason = "needs a model run from this branch; the postmaster dispatches and scores it at landing"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/acceptance-390.test.ts"
+name = "C4: the coachman runs the command each time it raises the card > the fixture run's events show the command last"
+reason = "needs the C5 fixture run; the postmaster checks the leg's events at landing"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/acceptance-390.test.ts"
+name = "C5: the fixture run scores clean > a run from the t390 branch scores clean"
+reason = "needs a model run from this branch; the postmaster dispatches and scores it at landing"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/acceptance-409.test.ts"
+name = "C1: the held-back notice > C5's briefs carry the notice and a given run's do not"
+reason = "needs a dispatched held-back run; the postmaster reads C5's run at landing"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/acceptance-409.test.ts"
+name = "C2: nothing sent quotes the notes > C5's prompt and ruling files hold no section line"
+reason = "needs a dispatched held-back run; the postmaster reads C5's run at landing"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/acceptance-409.test.ts"
+name = "C3: the check's edges > copies of C5's run folder read as the ticket says"
+reason = "needs C5's dispatched run; the postmaster runs the check on copies at landing"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/acceptance-409.test.ts"
+name = "C4: the run's log records the outcome > C5's run log holds the check's outcome"
+reason = "needs C5's dispatched run; the postmaster reads C5's run at landing"
+systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/acceptance-409.test.ts"
+name = "C5: fixture runs > without the notes scores clean and the log holds the outcome"
+reason = "needs a model run from this branch; the postmaster dispatches and scores it at landing"
+systems = ["linux", "darwin"]
+
+[[skip]]
 file = "scripts/acceptance-426.test.ts"
 name = "C6: the fixture mechanics > a run dispatched from this branch against it scores clean"
 reason = "needs a model run from this branch; the postmaster dispatches and scores it at landing"

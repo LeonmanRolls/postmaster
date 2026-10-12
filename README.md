@@ -10,6 +10,8 @@ the adversarial review rounds its ticket names, then leaves a ship card for the
 project's landing route. Pull-request projects are merged by the user; local-merge projects use
 the merge authority in the config.
 
+A design goal of postmaster is not to give you a complete solution. It is to let you run experiments on different flows, so that you can find what works for your project.
+
 ## The four roles
 
 | role | does | never does |
@@ -71,6 +73,13 @@ The record of what they did is how the work gets checked, and how the flow itsel
   comes with a control that could have come out the other way, so a passing check means
   something.
 
+## Adding a library takes the user's word
+
+postmaster does not let agents add packages as they see fit. A run adds
+only a library its ticket lists, and its coachman asks the postmaster, who
+asks the user, before adding it. Anything else is refused before it
+downloads, and the landing checks again before it merges.
+
 ## Wiki
 
 What the project has learned is in [`wiki/`](wiki/index.md), published with GitHub Pages, on
@@ -89,6 +98,12 @@ is not made.
 
 The claims above about combining models start there marked as claims, and the wiki grows one
 record at a time. `skills/wiki` carries the three operations: ingest, query, lint.
+
+Setting up a project makes its verifiers, based on
+[pstack](https://github.com/cursor/plugins/tree/23e4138daa01c42d4969f7a5465f82704e64f798/pstack)'s
+create- and maintain-verification skills: each verifier is a small folder that tells an agent
+arriving cold how to start one surface of the project, drive it the way a user does, and keep
+proof. See [#273](https://github.com/brindlewick/postmaster/issues/273).
 
 ## Getting started
 

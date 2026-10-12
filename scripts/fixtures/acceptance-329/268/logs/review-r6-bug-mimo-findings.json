@@ -1,0 +1,15 @@
+[
+  {
+    "file": "scripts/lib/switch-offs.ts",
+    "line": 668,
+    "line_end": "not provided",
+    "target": "scripts/lib/switch-offs.ts:668",
+    "severity": "not provided",
+    "summary": "1. **Low severity bug for `scope === \"open\"`, `covered = code.slice(d.line, stop)` starts on the line *after* the comment, while `line`/`next` scopes start *at* the comment's line. Oxlint suppresses same-line trailing code after an inline block directive, but the approval-identity window excludes it — the one placement where the window errs narrow instead of wide. Scenario: run adds an inline block disable, user approves, later commit edits same-line code after the comment → check doesn't re-ask. Full-line disables unaffected. Fix: start the open window at `d.line`.",
+    "body": "2. **Not a bug in this range** — `scripts/probe-confine.test.ts` fails here because `/bin/sh → dash` is owned by `nobody:nogroup` mode 777; pre-existing at base commit, so `bun run check` can't go green on this machine.\n3. **Before merge** — range touches three coachman-contract files, so a clean fixture run is required per AGENTS.md; no fixture records found in this checkout — needs confirmation.\n4. **Suggestion** — consider adding `scripts/lib/switch-offs.ts` to `docs/coachman-contract.toml`; `landing.ts` now delegates to it, so detector-only edits wouldn't trigger the fixture requirement.\n5. **Very edge, fails closed** — ledger path uses `resolve` vs `realpath` mismatch; would stay `held`, never `clear`.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "mimo"
+  }
+]

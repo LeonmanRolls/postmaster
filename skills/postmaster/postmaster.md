@@ -88,7 +88,9 @@ waits in the ready queue until the watcher sees room under `team.max_runs`.
    afford, write the answers as `clerk.*` keys to an answers file, and run
    `<tool>/scripts/run setup --add-clerk --answers <file>`; start no clerk until they answer.
    If there is no session host (`run clerk start` exits 3), put the ticket id and a
-   request to start `/clerk <id>` in `ESCALATION.md` and ask the user to do so. Do not start a
+   request to start `/clerk <id>` in `ESCALATION.md` and ask the user to do so. If the start
+   reports the brief could not be sent (exit 1), the session is open and named in the failure;
+   run the command it prints once the user has answered whatever holds the session. Do not start a
    clerk for a ticket the user did not ask you to implement.
    When every requested ticket ended at a clerk and no run is active, go to Stage D all the
    same and keep the watcher running: the sign-off marker wakes you through `READY`, and
@@ -140,19 +142,28 @@ waits in the ready queue until the watcher sees room under `team.max_runs`.
    absent, or single-thread, or alternate, which gives this project the mode its latest run did
    not have — **except that a mode the user named for this ticket wins: pass it as
    `<tool>/scripts/run run-meta <dispatch> <repo> --mode <synthesis|single-thread>`**, and a
-   refusal naming the two values goes to the user. The record keeps the machine config's
-   `team.ticket_notes` in its config — given when the key is absent, or held-back — and
-   `run-meta` refuses anything else at dispatch. The pin is a worktree of this repo at the
+   refusal naming the two values goes to the user. The ticket notes come from the machine
+   config's `team.ticket_notes` — given when the key is absent, or held-back — **except that
+   a value the user named for this ticket wins: pass it as
+   `<tool>/scripts/run run-meta <dispatch> <repo> --ticket-notes <given|held-back>`**, and a
+   refusal naming the two values goes to the user. The record keeps the value with its source
+   and the setting's value at dispatch. The pin is a worktree of this repo at the
    dispatch commit, shared by every run
    dispatched at it; the waybill names it as `tool:`, and every leg of this run reads its
    runbooks and runs its scripts from there. Log the `run run-meta` output as a `note`, keeping
-   its `mode=<...>`, `mode_source=<...>` and `mode_setting=<...>` fields in the detail, so the
-   run's log says which mode the run runs in and where it came from.
+   its `mode=<...>`, `mode_source=<...>` and `mode_setting=<...>` fields and its
+   `ticket_notes=<...>`, `ticket_notes_source=<...>` and `ticket_notes_setting=<...>` fields in
+   the detail, so the run's log says which mode the run runs in and which notes it gets, and
+   where each came from.
    `<tool>/scripts/run verify record
    <repo> <dispatch> --gate '<gate>'` writes `checks.json`, the checks the run is held to, and
    prints them for the waybill; a gate the project declares wins over the launch card's, and
    `record` says so. On refusal, log a `note` with the config error, tell the user what to fix,
    set the undispatched run to `abandoned`, and do not cut worktrees or move the ticket in progress.
+   Then record the run's starting verifiers: `<tool>/scripts/run verifier record <repo>
+   <dispatch>` copies `.postmaster/verifier/` into the run's record, the folder as the run
+   reads it; without local verifiers it records none. On refusal, log a `note`, tell the user
+   what to fix, and abandon as on a `verify record` refusal.
 7. **Cut the synthesis worktree** at BASE, the sha you recorded from `git -C <repo> rev-parse
    HEAD` on the default branch: `git -C <repo> worktree add .worktrees/<TICKET> -b <TICKET>
    <sha>`. The coachman's cwd is that worktree from its first leg, so the project's ambient
@@ -239,7 +250,10 @@ ones it names.
 1. **Write the leg prompt** to `<runs>/<TICKET>/leg-<n>-prompt.txt`: "You are the coachman
    for leg <n> of <TICKET>. Read `<dispatch>/brief.md`, then `<rt>/skills/postmaster/coachman.md`,
    then `<dispatch>/handoff-<p>.md`" (omit the hand-off for leg 1), plus the one line naming
-   the leg's job from the legs table. Nothing else: the runbook and the files carry the rest.
+   the leg's job from the legs table. When the run's ticket notes are held back — `<tool>/scripts/run run-meta ticket-notes <dispatch>`
+   prints held-back — the prompt carries this line too:
+   The ticket's technical notes are held back on purpose and are not to be looked up, in the tracker or anywhere else.
+   When the run's ticket notes are held back, nothing sent to the coachman quotes the technical notes: not a leg's prompt, a ruling, or a resume. Nothing else: the runbook and the files carry the rest.
 2. **From leg 2 on, verify the hand-off before dispatching on it:** `<tool>/scripts/run handoff-check
    <dispatch>/handoff-<p>.md` exits 0. If it exits 2, leg `p` is not finished: resume leg `p`
    (step 5, with `p` in place of `n`), the prompt naming the missing sections
@@ -320,6 +334,13 @@ no longer passes readiness, remove its mark and tell the user; never dispatch it
 queue entry. The watcher keeps waiting when the run ceiling is full, then wakes you as soon as a
 run closes and frees a slot. A clerk started in the user's own session writes the same ready
 marker and follows this path.
+
+**Check the project's experiments while you supervise.** Each look, run
+`<tool>/scripts/run experiments list --project <repo>` for the project. When an experiment is
+due, tell the user once: its question, its levels, what was measured. The user decides whether
+it concludes or gets a new date, and only on their word run `experiments conclude` or
+`experiments move`, then write the change to the page at once, as the Experiments section
+says.
 
 The list of runs waiting on the user is `<runs>/postmaster/ESCALATION.md`, kept by
 `<tool>/scripts/run host leg waiting`, never by hand. Read it with
@@ -433,6 +454,28 @@ the exited marker lands. `run runs-status` reads this record and never classifie
 `.err`. Every transition is one `log-action` line; the narrative in your own notes is for the
 user, never the record.
 
+## Experiments
+
+A project learns what works by trying flows, not by being handed one. An experiment is a
+change to the flow, or a trial of one, made to see its effect, with levels to compare and a
+date to look. Decisions made once and studies of past runs stay off the page: it is for what
+waits on a result. One command keeps them, in every harness:
+
+- `<tool>/scripts/run experiments start --project <repo> --question <q> --level <a> --level <b>
+  --measure <m> --look <date>`
+- `<tool>/scripts/run experiments move --project <repo> <id> --look <date>`
+- `<tool>/scripts/run experiments conclude --project <repo> <id> --result <r> --evidence <addr>`
+
+**Start one when the user asks to try a flow change as an experiment.** Settle what it
+compares and when to look, run `experiments start`, and write the change to the page at once,
+as below. **Conclude one on the user's verdict.** Run `experiments conclude` with the result
+and where its evidence is, and write the change to the page at once.
+
+Each project has its own page (`skills/experiments/SKILL.md`): private, read on the phone,
+what is due first. Publish it once; after each change print the rows with `experiments
+push-docs` and write them to the page's store with ArtifactData at once, so the page is
+current whenever it is opened. When an experiment falls due, Stage D says what happens.
+
 ## Spec review: older runs only
 
 A run dispatched before the booking clerk change pauses for a spec review. Handle it from that
@@ -445,12 +488,14 @@ spec and pauses for no spec review.
 ## Stage E: rulings
 
 1. **Read `<dispatch>/ESCALATION.md`.** It carries the question, the options the coachman
-   sees, its recommendation, and the state of the branches. Where the escalation is a
-   provider wall (`.wall-pause` is present), the wall is the user's to rule: the walls are
-   what Stage D's WALL step tells them about, and step 6 takes their words.
+   sees, its recommendation, and the state of the branches. Where it names a rise survey (a
+   `Survey:` line), read the survey first; a `Survey missing:` line says why there is none.
+   Where the escalation is a provider wall (`.wall-pause` is present), the wall is the user's
+   to rule: the walls are what Stage D's WALL step tells them about, and step 6 takes their words.
 2. **Decide within the user's standing instructions** when the question is about the
    work: a within-brief ambiguity, a scope call the ticket's own criteria answer, a round to
-   stop of the review loop. A reach is never decided here. A walled workhorse is never yours to drop:
+   stop of the review loop. On a review-loop stop, read the survey the escalation names
+   before ruling. A reach is never decided here. A walled workhorse is never yours to drop:
    it goes to the user as Stage D's WALL step says. Log `escalate` with your ruling.
 3. **Send it up** when it is genuinely destructive, changes the ticket's scope, touches
    anything outside the repo, is a fault in a control (Tool faults), asks whether to fix a
@@ -458,8 +503,12 @@ spec and pauses for no spec review.
    (`coachman.md`, the reach check: a workhorse's finding, a main checkout change no lane's
    record explains at `workhorses`, or an observed change tied to a reviewer outside this
    run's own branches and folders), or the user
-   asked to see it: write the question to the run's `.waiting-on-user`, add the run and the
-   question to the waiting list (`<runs>/postmaster/ESCALATION.md`, owned by
+   asked to see it: write the question to the run's `.waiting-on-user` — with
+   `<tool>/scripts/run review-survey question <dispatch>` when the escalation names a rise
+   survey (a `Survey:` or `Survey missing:` line), which carries the survey's plain
+   words before the options, or the reason the survey is missing — add the run and the
+   question to the waiting list
+   (`<runs>/postmaster/ESCALATION.md`, owned by
    `<tool>/scripts/run host leg waiting add <runs> <ticket> <question-file>`), tell the user in
    the session, and wait. Say what happens when they answer:
    for an ASK outcome the attempt record's `on_answer` names it. Never
@@ -481,7 +530,8 @@ spec and pauses for no spec review.
    any workhorse branch or worktree existed; do not resume it.
 5. **Deliver the ruling:** remove `.escalation-ready`. On `go on`, resume the current leg
    (Stage C, step 5) with the ruling as the prompt. The ruling is a prompt to a resumed thread,
-   never text typed into anything. On `send it back`, leave the leg stopped and let the clerk
+   never text typed into anything.
+   When the run's ticket notes are held back, nothing sent to the coachman quotes the technical notes: not a leg's prompt, a ruling, or a resume. On `send it back`, leave the leg stopped and let the clerk
    prepare the ticket again. A pause for a wall (`.wall-pause`) is delivered by the watcher
    instead, once every wall in the run is ruled (Stage D's mechanical steps): rule it, remove
    `.waiting-on-user` and the run from the waiting list, and leave the resume to the watcher.
@@ -493,6 +543,16 @@ spec and pauses for no spec review.
    and the run stays paused; on exit 0 the run is ruled, and the watcher delivers the pause
    (step 5). A ruling on a reviewer's wall is the same command; the lane is keyed by its
    lens where the run has one.
+7. **For a library ask, the user always answers.** An escalation asking to add
+   a library is never decided here, whatever `ship.merge_authority` says: put
+   the library, its version, its facts and the survey answer where the
+   escalation carries one to the user, through step 3's wait. On their answer,
+   remove the wait markers as step 3 says and record the word with
+   `<tool>/scripts/run log-action <dispatch> postmaster library <identity> <approved|refused> <entry> <words>`,
+   the identity being what `<tool>/scripts/run libraries identity <name> <version>`
+   prints, shaped `library:<16 hex>`. On a yes, deliver the resume (step 5) so
+   the leg records the approval and goes on, and on a no the run does without.
+   Never say yes yourself.
 
 ## Stage F (contract 2): verify and land the ship card
 
@@ -547,8 +607,14 @@ every project and does not change that project's gate.
    at the head: withhold under the claim-fail clause below with the gate result as the
    exact discrepancy. On `stale`,
    withhold: remove `.card-ready` and `.leg-<n>-done` for the manifest's current leg `<n>`,
-   then resume that last leg to merge the default branch into the ticket branch, never
-   rebasing, run its gates again and raise the card again, and wait for the corrected card.
+   then resume that last leg with the stale line as the exact discrepancy, asking it to
+   repeat its merge step and raise the card again, and wait for the corrected card; the
+   re-raise runs the card step's `card-write` over the stale card, so the printed parts
+   match the merged head. The
+   resume carries no trial merge and no merge instructions of its own: the leg's step
+   merges, resolves and gates. Log it with the leg, the thread id and the stale line
+   as `send-back: <stale line>`: the leg's step restarts its merge count only on a
+   resume carrying `send-back:`, never on a remount or a ruling.
    For a change to the coachman contract, that merge means a new fixture run from the final
    branch only when what the merge brought in changes the coachman contract; otherwise the
    earlier fixture result stands. That is what the contract checker says: run the dispatch
@@ -650,6 +716,25 @@ every project and does not change that project's gate.
    mismatch as the exact discrepancy; a card from a run pinned before this check has
    no such section, and those runs are judged by the live list alone. Any other exit
    is an input fault: stop the stage, fix the inputs and re-run.
+
+   Check libraries after the switch-offs and before step 2's landing route, on both routes:
+   `<tool>/scripts/run landing libraries --repo <repo> --default <branch>
+   --ticket <the ticket ref> --dispatch <dispatch>`. Exit 0, the branch is clear. Exit 2,
+   put each listed entry to the user with the ship card: its name, kind, old and new
+   version, publish date, source, Socket's verdict and the packages it brings. For each
+   entry they approve, record the word with
+   `<tool>/scripts/run log-action <dispatch> postmaster library <its identity> approved
+   <the entry> <the user's words>`; for each entry they refuse, record it the same way with
+   `refused`, then withhold at once under the claim-fail clause above, with the refused
+   entry as the exact discrepancy. Run the check again after recording: a held remainder
+   repeats the ask, and anything still unapproved after the user's word withholds the same
+   way. While an ask is outstanding, the question sits in the run's `.waiting-on-user`;
+   remove it when the user's word arrives. Exit 4 is a recorded refusal: withhold the
+   same way. Runs dispatched before this check existed are held the same way at landing.
+   The merge authority never approves these entries and never unholds them: where
+   it is the postmaster itself, it still asks and records the word before it opens a
+   pull request or merges. Any other exit is an input fault: stop the stage, fix the
+   inputs and re-run.
 2. **Follow the landing route in the waybill.** First ask whether the ticket already landed:
    `<tool>/scripts/run landing already-landed --repo <repo> --default <branch> --ticket
    <the ticket ref> --base <the manifest's base> --card-head <the card's final HEAD>`, adding
@@ -751,7 +836,9 @@ every project and does not change that project's gate.
    comment for the ticket, scanned with the pre-post procedure above with every
    finding fixed before aftercare posts it. The shipped mark is the proof of the landing;
    confirm nothing
-   by hand again.
+   by hand again. When the run's ticket notes are held back, check whether the notes stayed away before the cleanup:
+   `<tool>/scripts/run ticket-reads <dispatch> --record` looks through every agent's record for a read of the ticket and writes its
+   outcome to the run log and a note action.
 2. **Run the cleanup command, first as a dry run.**
    `<tool>/scripts/run aftercare <dispatch> --dry-run --comment "<text>" --run-log
    "<text>"` prints its plan and changes nothing; read it, then run the same command
@@ -769,7 +856,25 @@ every project and does not change that project's gate.
 3. **Put what needs the user to the user once aftercare ends:** each flagged folder — the
    ones aftercare's summary flags as holding work no branch's commits have, with the files
    it names — then tool faults and style-sort proposals as Legacy Stage G steps 4 and 5
-   describe. Archive finished threads where the harness has an archive form
+   describe. Then keep the run's verifier changes with
+   `<tool>/scripts/run verifier keep <repo> --run <dispatch> --at <merge>`, which saves the
+   folder as it was in the run's record, merges each file the run changed, added or removed
+   three ways against the project's file, and confirms each changed or added verifier at the
+   merge — each change that clashes with one kept since the run started prints as `not kept:`
+   and stays as the project has it, and each named file goes to the user. Then check whether
+   any verifier may have gone stale on the landing: advance
+   `<repo>`'s checkout of the default branch to the landed merge commit first, so the stale
+   query reads the landing's own index, then run `<tool>/scripts/run verifier stale
+   <repo> --at <merge>` once; for the verifiers it marks, offer one correcting upkeep pass
+   (`run verifier upkeep <repo> --run <dispatch> --correct`), naming the changed files,
+   and a yes starts it; when the pass completes, land the pass's branch
+   only where the pass printed one (`run verifier land <repo> <branch> --run
+   <dispatch> --report <report>`), so the new confirmation reaches the default
+   branch; a pass that printed a branch and a `kept` line carries both, so
+   land the branch and report the kept corrections as kept; for local
+   verifiers the pass prints no branch and the corrections are already kept,
+   so report them as kept. A landing it clears offers
+   nothing. Archive finished threads where the harness has an archive form
    (`harnesses.md`).
 4. Dispatch the next ticket.
 
@@ -796,7 +901,10 @@ On `.card-ready`, read `<dispatch>/card.md` and `<dispatch>/handoff-3.md`:
    exit 0 the branch is clear; otherwise put each listed entry to the user with the card,
    record each word through `<tool>/scripts/run log-action`, and withhold under step 2
    until the check clears — the merge authority never approves these entries itself.
-   While the ask is outstanding the question sits in the run's `.waiting-on-user`.
+   Check libraries as current Stage F does: `<tool>/scripts/run landing libraries
+   --repo <repo> --default <branch> --ticket <the ticket ref> --dispatch <dispatch>`, and
+   put each held entry to the user the same way, recording each word as a `library`
+   approval. While the ask is outstanding the question sits in the run's `.waiting-on-user`.
 2. **Grant or withhold.** Every word is delivered by resuming leg 3 (Stage C, step 5), and
    `.card-ready` is removed before it is; the coachman touches it afresh when the card changes.
    `MERGE_AUTHORITY: postmaster` and every check above holds: deliver "MERGE GRANTED" and log

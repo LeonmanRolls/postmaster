@@ -695,7 +695,7 @@ The record holds the lane, its role (a reviewer's with its lens and round), the 
 first line byte for byte, and the reset as an ISO time or `none` — `run walls show` prints
 each one, and the user is told the reset with its date in the machine's time zone. A lane
 that never launched is lame for that round: DEGRADED, with the provider's own error string
-quoted in `run-log.md` where there is one (`run review-round wait` records a walled reviewer
+quoted in `run-log.md` where there is one (the round's wait records a walled reviewer
 as `provider wall: "<message>"`). A `402 Payment Required`, a usage-limit message, a quota
 wall, a spawn misfire or a stale session lock are all DEGRADED causes; the fix is the user's
 ruling and restoring the lane on the next round, never suppressing the label.
