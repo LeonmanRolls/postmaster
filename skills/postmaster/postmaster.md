@@ -462,8 +462,9 @@ spec and pauses for no spec review.
    run's own branches and folders), or the user
    asked to see it: write the question to the run's `.waiting-on-user` — with
    `<tool>/scripts/run review-survey question <dispatch>` when the escalation names a rise
-   survey, which carries the survey's plain words before the options, or the reason the
-   survey is missing — add the run and the question to the waiting list
+   survey (a `Survey:` or `Survey missing:` line), which carries the survey's plain
+   words before the options, or the reason the survey is missing — add the run and the
+   question to the waiting list
    (`<runs>/postmaster/ESCALATION.md`, owned by
    `<tool>/scripts/run host leg waiting add <runs> <ticket> <question-file>`), tell the user in
    the session, and wait. Say what happens when they answer:
