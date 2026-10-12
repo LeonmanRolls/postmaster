@@ -9,6 +9,7 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  readdirSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -25,6 +26,7 @@ import {
   launchRound,
   monotonic,
   reachCheckMissing,
+  roundPointRecorded,
   type StepChild,
   type StepDeps,
 } from "./review-round.ts";
@@ -901,6 +903,9 @@ describe("the round's three steps", () => {
     const dispatch = join(root, "repo", ".postmaster", "runs", "T-1");
     mkdirSync(join(dispatch, "logs"), { recursive: true });
     writeFileSync(join(dispatch, "manifest.json"), `${JSON.stringify({ base: "BASESHA" })}\n`);
+    for (const lens of ["style", "security"]) {
+      writeFileSync(join(dispatch, `review-${lens}-brief.md`), `# ${lens} brief\n`);
+    }
     return {
       dispatch,
       repo: join(root, "repo"),
@@ -1651,6 +1656,9 @@ describe("the round's three steps", () => {
           join(p.dispatch, "logs", "review-r1-bug-luna-last.md"),
         );
         expect(bug?.args.join(" ")).toContain("--run");
+        const before = one(calls, "reach");
+        expect(before?.args).toEqual(["before", p.dispatch, "1"]);
+        expect(calls.indexOf(before!)).toBeLessThan(startAt);
         const start = one(calls, "review-round", (c) => c.args[0] === "start");
         expect(start?.args).toEqual([
           "start",
@@ -1815,6 +1823,132 @@ describe("the round's three steps", () => {
         expect(of(calls, "reviewers").map((c) => c.args[2])).toEqual(["bug", "security"]);
         expect(existsSync(join(p.dispatch, "review-r2-style-prompt.txt"))).toBe(false);
       }, "review-round-launchr2-");
+    });
+
+    test("a missing brief stops it before anything is written or started", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        rmSync(join(p.dispatch, "review-style-brief.md"));
+        const { calls, deps } = stand(green);
+        const res = launchRound(
+          { dispatch: p.dispatch, round: "1", repo: p.repo, synthesis: p.synthesis },
+          deps,
+        );
+        expect(res.code).toBe(1);
+        expect(res.err.join("\n")).toContain("review-style-brief.md");
+        expect(res.err.join("\n")).toContain("nothing launched");
+        expect(readdirSync(p.dispatch).filter((f) => f.startsWith("review-r1-")).length).toBe(0);
+        expect(of(calls, "review-round").length).toBe(0);
+        expect(of(calls, "host").length).toBe(0);
+        expect(of(calls, "reach").length).toBe(0);
+        expect(of(calls, "log-action").length).toBe(0);
+      }, "review-round-launchbrief-");
+    });
+
+    test("a security lane with its own skill needs no brief", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        rmSync(join(p.dispatch, "review-security-brief.md"));
+        const { deps } = stand((name, args) => {
+          if (name === "launch" && args[0] === "skill")
+            return { code: 0, out: "SECURITY TEXT\n", err: "" };
+          return green(name, args);
+        });
+        const res = launchRound(
+          { dispatch: p.dispatch, round: "1", repo: p.repo, synthesis: p.synthesis },
+          deps,
+        );
+        expect(res.code).toBe(0);
+      }, "review-round-launchskill-");
+    });
+
+    test("a security lane without a skill is refused on the missing brief", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        rmSync(join(p.dispatch, "review-security-brief.md"));
+        const { calls, deps } = stand((name, args) => {
+          if (name === "launch" && args[0] === "skill") return { code: 3, out: "", err: "" };
+          return green(name, args);
+        });
+        const res = launchRound(
+          { dispatch: p.dispatch, round: "1", repo: p.repo, synthesis: p.synthesis },
+          deps,
+        );
+        expect(res.code).toBe(1);
+        expect(res.err.join("\n")).toContain("review-security-brief.md");
+        expect(of(calls, "review-round").length).toBe(0);
+        expect(of(calls, "host").length).toBe(0);
+      }, "review-round-launchsecbrief-");
+    });
+
+    test("a starting state that cannot be saved launches nothing", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        const { calls, deps } = stand((name, args) =>
+          name === "reach" ? { code: 1, out: "", err: "reach: cannot save\n" } : green(name, args),
+        );
+        const res = launchRound(
+          { dispatch: p.dispatch, round: "1", repo: p.repo, synthesis: p.synthesis },
+          deps,
+        );
+        expect(res.code).toBe(1);
+        expect(res.err.join("\n")).toContain("starting state could not be saved");
+        expect(of(calls, "review-round").length).toBe(0);
+        expect(of(calls, "host").length).toBe(0);
+      }, "review-round-launchbefore-");
+    });
+
+    test("a round whose reach check is already recorded is not launched again", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        writeFileSync(join(p.dispatch, "actions.jsonl"), `${pointLine("r1")}\n`);
+        const { calls, deps } = stand(green);
+        const res = launchRound(
+          { dispatch: p.dispatch, round: "1", repo: p.repo, synthesis: p.synthesis },
+          deps,
+        );
+        expect(res.code).toBe(1);
+        expect(res.err.join("\n")).toContain("already has its reach check recorded");
+        expect(res.err.join("\n")).toContain("nothing launched");
+        expect(readdirSync(p.dispatch).filter((f) => f.startsWith("review-r1-")).length).toBe(0);
+        expect(of(calls, "review-round").length).toBe(0);
+        expect(of(calls, "host").length).toBe(0);
+        expect(of(calls, "reach").length).toBe(0);
+        expect(of(calls, "log-action").length).toBe(0);
+      }, "review-round-launchcollected-");
+    });
+
+    test("a retried round keeps its first starting state", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        mkdirSync(join(p.dispatch, "reach"), { recursive: true });
+        writeFileSync(join(p.dispatch, "reach", "before-r1.json"), '{"round":1}\n');
+        const { calls, deps } = stand(green);
+        const res = launchRound(
+          { dispatch: p.dispatch, round: "1", repo: p.repo, synthesis: p.synthesis },
+          deps,
+        );
+        expect(res.code).toBe(0);
+        expect(res.out.join("\n")).toContain("keeps its first starting state");
+        expect(of(calls, "reach").length).toBe(0);
+        expect(readFileSync(join(p.dispatch, "reach", "before-r1.json"), "utf8")).toBe(
+          '{"round":1}\n',
+        );
+      }, "review-round-launchretry-");
+    });
+
+    test("an unreadable journal does not stop the launch", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        writeFileSync(join(p.dispatch, "actions.jsonl"), "not json\n");
+        const { calls, deps } = stand(green);
+        const res = launchRound(
+          { dispatch: p.dispatch, round: "1", repo: p.repo, synthesis: p.synthesis },
+          deps,
+        );
+        expect(res.code).toBe(0);
+        expect(of(calls, "reach").length).toBe(1);
+      }, "review-round-launchbadjournal-");
     });
   });
 
@@ -2258,6 +2392,20 @@ const pointLine = (point: string): string =>
     detail: JSON.stringify({ kind: "point", point, result: "clean" }),
   });
 
+/** How many reach points named `point` the journal holds. */
+const pointCount = (journal: string, point: string): number =>
+  journal.split("\n").filter((line) => {
+    if (line.trim() === "") return false;
+    try {
+      const row = JSON.parse(line) as { action?: unknown; detail?: unknown };
+      if (row.action !== "reach" || typeof row.detail !== "string") return false;
+      const detail = JSON.parse(row.detail) as { kind?: unknown; point?: unknown };
+      return detail.kind === "point" && detail.point === point;
+    } catch {
+      return false;
+    }
+  }).length;
+
 interface Torn {
   code: number;
   out: string;
@@ -2305,6 +2453,21 @@ function teardown(snapshot: boolean, actions: string[], named: boolean): Torn {
     };
   });
 }
+
+describe("roundPointRecorded", () => {
+  test("it reads the round's own point, and never refuses on an unreadable journal", () => {
+    withTempDir((root) => {
+      const d = join(root, "T-1");
+      mkdirSync(d, { recursive: true });
+      expect(roundPointRecorded(d, "1")).toBe(false);
+      writeFileSync(join(d, "actions.jsonl"), `${pointLine("r1")}\n${pointLine("card")}\n`);
+      expect(roundPointRecorded(d, "1")).toBe(true);
+      expect(roundPointRecorded(d, "2")).toBe(false);
+      writeFileSync(join(d, "actions.jsonl"), "not json\n");
+      expect(roundPointRecorded(d, "1")).toBe(false);
+    }, "review-round-pointrecorded-");
+  });
+});
 
 describe("reachCheckMissing", () => {
   test("it waits only for the round's own teardown of a round with no point of its own", () => {
@@ -2361,5 +2524,364 @@ describe("teardown and the round's reach check", () => {
     expect(t.code).toBe(1);
     expect(t.out).toContain("cannot read the reach record to teardown round 1");
     expect(t.runLog).not.toContain("round 1: removed");
+  });
+});
+
+describe("wait and the round's reach check", () => {
+  test("a timed-out round still ends with the round's check", () => {
+    withTempDir((root) => {
+      const repo = join(root, "repo");
+      const ticket = "T-9";
+      mkdirSync(repo, { recursive: true });
+      const git = (...args: string[]): void => {
+        const r = run("git", ["-C", repo, ...args]);
+        if (r.code !== 0) throw new Error(`git ${args.join(" ")}: ${r.err.trim()}`);
+      };
+      git("init", "-q", "-b", "main");
+      git("config", "user.name", "t");
+      git("config", "user.email", "t@t");
+      git("config", "commit.gpgsign", "false");
+      writeFileSync(join(repo, "file.txt"), "base\n");
+      git("add", "file.txt");
+      git("commit", "-q", "-m", "base");
+      const base = run("git", ["-C", repo, "rev-parse", "HEAD"]).out.trim();
+      git("checkout", "-q", "-b", ticket);
+      git("checkout", "-q", "main");
+      const synthesis = join(repo, ".worktrees", ticket);
+      git("worktree", "add", "-q", synthesis, ticket);
+      const d = join(repo, ".postmaster", "runs", ticket);
+      mkdirSync(join(d, "logs"), { recursive: true });
+      mkdirSync(join(d, "reach"), { recursive: true });
+      writeFileSync(
+        join(d, "manifest.json"),
+        `${JSON.stringify({ stage: "review", leg: 2, base, lanes: {}, coachman: { legs: {} } })}\n`,
+      );
+      writeFileSync(
+        join(d, "run.json"),
+        `${JSON.stringify({ coachman_contract: 2, config: { review: { round_timeout_seconds: 2 } } })}\n`,
+      );
+      writeFileSync(
+        join(d, "brief.md"),
+        `# Waybill: ${ticket}\nturnpikes: style\n\n## Project profile\nrepo: ${repo}          default branch: main       BASE: ${base}\n`,
+      );
+      writeFileSync(join(d, "actions.jsonl"), "");
+      writeFileSync(join(d, "run-log.md"), "");
+      expect(run(self, ["reach", "before", d, "1"]).code).toBe(0);
+      expect(run(self, ["review-round", "start", d, "1", "style:ghost", "bug:ghost"]).code).toBe(0);
+      writeFileSync(join(d, "logs", "review-r1-style-ghost.done"), "");
+      const r = run(self, ["review-round", "wait", d, "1", repo, "style:ghost", "bug:ghost"]);
+      expect(r.code).toBe(3);
+      expect(r.out).toContain("r1: ");
+      const journal = readFileSync(join(d, "actions.jsonl"), "utf8");
+      expect(journal).toContain('"target":"r1"');
+      expect(journal).toContain("TIMEOUT");
+    }, "review-round-waitcheck-");
+  });
+
+  test("a reviewer still running at the time limit stops the leg with no check", () => {
+    withTempDir((root) => {
+      const repo = join(root, "repo");
+      const ticket = "T-9";
+      mkdirSync(repo, { recursive: true });
+      const git = (...args: string[]): void => {
+        const r = run("git", ["-C", repo, ...args]);
+        if (r.code !== 0) throw new Error(`git ${args.join(" ")}: ${r.err.trim()}`);
+      };
+      git("init", "-q", "-b", "main");
+      git("config", "user.name", "t");
+      git("config", "user.email", "t@t");
+      git("config", "commit.gpgsign", "false");
+      writeFileSync(join(repo, "file.txt"), "base\n");
+      git("add", "file.txt");
+      git("commit", "-q", "-m", "base");
+      const base = run("git", ["-C", repo, "rev-parse", "HEAD"]).out.trim();
+      git("checkout", "-q", "-b", ticket);
+      git("checkout", "-q", "main");
+      const synthesis = join(repo, ".worktrees", ticket);
+      git("worktree", "add", "-q", synthesis, ticket);
+      const d = join(repo, ".postmaster", "runs", ticket);
+      mkdirSync(join(d, "logs"), { recursive: true });
+      mkdirSync(join(d, "reach"), { recursive: true });
+      writeFileSync(
+        join(d, "manifest.json"),
+        `${JSON.stringify({ stage: "review", leg: 2, base, lanes: {}, coachman: { legs: {} } })}\n`,
+      );
+      writeFileSync(
+        join(d, "run.json"),
+        `${JSON.stringify({ coachman_contract: 2, config: { review: { round_timeout_seconds: 2 } } })}\n`,
+      );
+      writeFileSync(
+        join(d, "brief.md"),
+        `# Waybill: ${ticket}\nturnpikes: style\n\n## Project profile\nrepo: ${repo}          default branch: main       BASE: ${base}\n`,
+      );
+      writeFileSync(join(d, "actions.jsonl"), "");
+      writeFileSync(join(d, "run-log.md"), "");
+      expect(run(self, ["reach", "before", d, "1"]).code).toBe(0);
+      expect(run(self, ["review-round", "start", d, "1", "style:ghost"]).code).toBe(0);
+      // A path the stop cannot stop: host stop exits nonzero, as for a launch
+      // it cannot prove stopped, so the wait takes the STILL RUNNING branch.
+      mkdirSync(join(repo, ".worktrees"), { recursive: true });
+      writeFileSync(join(repo, ".worktrees", `${ticket}-rev-style-ghost`), "not a scratch\n");
+      const r = run(self, ["review-round", "wait", d, "1", repo, "style:ghost"]);
+      expect(r.code).toBe(4);
+      expect(r.out).toContain("STILL RUNNING");
+      expect(r.out).toContain("the round's check is not run");
+      const journal = readFileSync(join(d, "actions.jsonl"), "utf8");
+      expect(journal).toContain("still running after the time limit");
+      expect(journal).not.toContain('"point":"r1"');
+      expect(existsSync(join(d, "reach", "r1"))).toBe(false);
+    }, "review-round-waitstill-");
+  });
+
+  test("a recorded point without a finished collection completes its restore", () => {
+    withTempDir((root) => {
+      const repo = join(root, "repo");
+      const ticket = "T-9";
+      mkdirSync(repo, { recursive: true });
+      const git = (...args: string[]): void => {
+        const r = run("git", ["-C", repo, ...args]);
+        if (r.code !== 0) throw new Error(`git ${args.join(" ")}: ${r.err.trim()}`);
+      };
+      git("init", "-q", "-b", "main");
+      git("config", "user.name", "t");
+      git("config", "user.email", "t@t");
+      git("config", "commit.gpgsign", "false");
+      writeFileSync(join(repo, "file.txt"), "base\n");
+      git("add", "file.txt");
+      git("commit", "-q", "-m", "base");
+      const base = run("git", ["-C", repo, "rev-parse", "HEAD"]).out.trim();
+      git("checkout", "-q", "-b", ticket);
+      git("checkout", "-q", "main");
+      const synthesis = join(repo, ".worktrees", ticket);
+      git("worktree", "add", "-q", synthesis, ticket);
+      const d = join(repo, ".postmaster", "runs", ticket);
+      mkdirSync(join(d, "logs"), { recursive: true });
+      mkdirSync(join(d, "reach"), { recursive: true });
+      writeFileSync(
+        join(d, "manifest.json"),
+        `${JSON.stringify({ stage: "review", leg: 2, base, lanes: {}, coachman: { legs: {} } })}\n`,
+      );
+      writeFileSync(
+        join(d, "run.json"),
+        `${JSON.stringify({ coachman_contract: 2, config: { review: { round_timeout_seconds: 2 } } })}\n`,
+      );
+      writeFileSync(
+        join(d, "brief.md"),
+        `# Waybill: ${ticket}\nturnpikes: style\n\n## Project profile\nrepo: ${repo}          default branch: main       BASE: ${base}\n`,
+      );
+      // A collection cut short after its point: the check is recorded, the
+      // restore never finished, and reviewer dirt is still in the worktree.
+      writeFileSync(join(d, "actions.jsonl"), `${pointLine("r1")}\n`);
+      writeFileSync(join(d, "run-log.md"), "");
+      expect(run(self, ["reach", "before", d, "1"]).code).toBe(0);
+      expect(run(self, ["review-round", "start", d, "1", "style:ghost"]).code).toBe(0);
+      writeFileSync(join(synthesis, "file.txt"), "reviewer dirt\n");
+      const r = run(self, ["review-round", "wait", d, "1", repo, "style:ghost"]);
+      expect(r.code).toBe(3);
+      expect(r.out).toContain("completing its restore");
+      expect(readFileSync(join(synthesis, "file.txt"), "utf8")).toBe("base\n");
+      const journal = readFileSync(join(d, "actions.jsonl"), "utf8");
+      expect(pointCount(journal, "r1")).toBe(1);
+      expect(existsSync(join(d, "reach", "r1.collected"))).toBe(true);
+    }, "review-round-waitresume-");
+  });
+
+  test("a finished collection is never repeated", () => {
+    withTempDir((root) => {
+      const repo = join(root, "repo");
+      const ticket = "T-9";
+      mkdirSync(repo, { recursive: true });
+      const git = (...args: string[]): void => {
+        const r = run("git", ["-C", repo, ...args]);
+        if (r.code !== 0) throw new Error(`git ${args.join(" ")}: ${r.err.trim()}`);
+      };
+      git("init", "-q", "-b", "main");
+      git("config", "user.name", "t");
+      git("config", "user.email", "t@t");
+      git("config", "commit.gpgsign", "false");
+      writeFileSync(join(repo, "file.txt"), "base\n");
+      git("add", "file.txt");
+      git("commit", "-q", "-m", "base");
+      const base = run("git", ["-C", repo, "rev-parse", "HEAD"]).out.trim();
+      git("checkout", "-q", "-b", ticket);
+      git("checkout", "-q", "main");
+      const synthesis = join(repo, ".worktrees", ticket);
+      git("worktree", "add", "-q", synthesis, ticket);
+      const d = join(repo, ".postmaster", "runs", ticket);
+      mkdirSync(join(d, "logs"), { recursive: true });
+      mkdirSync(join(d, "reach"), { recursive: true });
+      writeFileSync(
+        join(d, "manifest.json"),
+        `${JSON.stringify({ stage: "review", leg: 2, base, lanes: {}, coachman: { legs: {} } })}\n`,
+      );
+      writeFileSync(
+        join(d, "run.json"),
+        `${JSON.stringify({ coachman_contract: 2, config: { review: { round_timeout_seconds: 2 } } })}\n`,
+      );
+      writeFileSync(
+        join(d, "brief.md"),
+        `# Waybill: ${ticket}\nturnpikes: style\n\n## Project profile\nrepo: ${repo}          default branch: main       BASE: ${base}\n`,
+      );
+      writeFileSync(join(d, "actions.jsonl"), `${pointLine("r1")}\n`);
+      writeFileSync(join(d, "reach", "r1.collected"), "");
+      writeFileSync(join(d, "run-log.md"), "");
+      expect(run(self, ["reach", "before", d, "1"]).code).toBe(0);
+      expect(run(self, ["review-round", "start", d, "1", "style:ghost"]).code).toBe(0);
+      writeFileSync(join(synthesis, "file.txt"), "later dirt\n");
+      const r = run(self, ["review-round", "wait", d, "1", repo, "style:ghost"]);
+      expect(r.code).toBe(3);
+      expect(r.out).toContain("already has its reach check recorded");
+      expect(r.out).not.toContain("completing its restore");
+      expect(readFileSync(join(synthesis, "file.txt"), "utf8")).toBe("later dirt\n");
+      const journal = readFileSync(join(d, "actions.jsonl"), "utf8");
+      expect(pointCount(journal, "r1")).toBe(1);
+      expect(existsSync(join(d, "reach", "r1"))).toBe(false);
+    }, "review-round-waitskip-");
+  });
+
+  test("the wait copies bug lanes' task transcripts before the round's check", () => {
+    withTempDir((root) => {
+      const repo = join(root, "repo");
+      const ticket = "T-9";
+      mkdirSync(repo, { recursive: true });
+      const git = (...args: string[]): void => {
+        const r = run("git", ["-C", repo, ...args]);
+        if (r.code !== 0) throw new Error(`git ${args.join(" ")}: ${r.err.trim()}`);
+      };
+      git("init", "-q", "-b", "main");
+      git("config", "user.name", "t");
+      git("config", "user.email", "t@t");
+      git("config", "commit.gpgsign", "false");
+      writeFileSync(join(repo, "file.txt"), "base\n");
+      git("add", "file.txt");
+      git("commit", "-q", "-m", "base");
+      const base = run("git", ["-C", repo, "rev-parse", "HEAD"]).out.trim();
+      git("checkout", "-q", "-b", ticket);
+      git("checkout", "-q", "main");
+      const synthesis = join(repo, ".worktrees", ticket);
+      git("worktree", "add", "-q", synthesis, ticket);
+      const d = join(repo, ".postmaster", "runs", ticket);
+      mkdirSync(join(d, "logs"), { recursive: true });
+      mkdirSync(join(d, "reach"), { recursive: true });
+      writeFileSync(
+        join(d, "manifest.json"),
+        `${JSON.stringify({ stage: "review", leg: 2, base, lanes: {}, coachman: { legs: {} } })}\n`,
+      );
+      writeFileSync(
+        join(d, "run.json"),
+        `${JSON.stringify({ coachman_contract: 2, config: { review: { round_timeout_seconds: 30 } } })}\n`,
+      );
+      writeFileSync(
+        join(d, "brief.md"),
+        `# Waybill: ${ticket}\nturnpikes: bug\n\n## Project profile\nrepo: ${repo}          default branch: main       BASE: ${base}\n`,
+      );
+      writeFileSync(join(d, "actions.jsonl"), "");
+      writeFileSync(join(d, "run-log.md"), "");
+      expect(run(self, ["reach", "before", d, "1"]).code).toBe(0);
+      expect(run(self, ["review-round", "start", d, "1", "bug:ghost"]).code).toBe(0);
+      const uid = process.getuid?.() ?? 0;
+      const taskHome = join(`/tmp/claude-${uid}`, `postmaster-rr2-${process.pid}`);
+      try {
+        mkdirSync(taskHome, { recursive: true });
+        const taskFile = join(taskHome, "task-output.txt");
+        writeFileSync(taskFile, '{"type":"result","result":"done"}\n');
+        writeFileSync(
+          join(d, "logs", "review-r1-bug-ghost.jsonl"),
+          `${JSON.stringify({ type: "system", subtype: "task_notification", output_file: taskFile })}\n`,
+        );
+        writeFileSync(join(d, "logs", "review-r1-bug-ghost.done"), "");
+        const r = run(self, ["review-round", "wait", d, "1", repo, "bug:ghost"]);
+        expect(r.code).toBe(0);
+        const copied = join(d, "logs", "review-r1-bug-ghost-claude-task-01-task-output.txt");
+        expect(existsSync(copied)).toBe(true);
+        expect(r.out).toContain("claude-task-01-task-output.txt");
+        expect(r.out).toContain("r1: ");
+      } finally {
+        rmSync(taskHome, { recursive: true, force: true });
+      }
+    }, "review-round-waittasks-");
+  });
+});
+
+describe("a pairs collection and the round's reach check", () => {
+  test("a pairs wait with no recorded roster and a starting state refuses before collecting, and starting again stays open", () => {
+    withTempDir((root) => {
+      const repo = join(root, "repo");
+      const ticket = "T-9";
+      mkdirSync(repo, { recursive: true });
+      expect(run("git", ["-C", repo, "init", "-q", "-b", "main"]).code).toBe(0);
+      const d = join(repo, ".postmaster", "runs", ticket);
+      mkdirSync(join(d, "logs"), { recursive: true });
+      mkdirSync(join(d, "reach"), { recursive: true });
+      writeFileSync(join(d, "actions.jsonl"), "");
+      writeFileSync(join(d, "run-log.md"), "");
+      writeFileSync(join(d, "reach", "before-r1.json"), "{}\n");
+      expect(run(self, ["review-round", "start", d, "1"]).code).toBe(0);
+      const r = run(self, ["review-round", "wait", d, "1", repo, "style:ghost"]);
+      expect(r.code).toBe(1);
+      expect(r.out + r.err).toContain(
+        "round 1 has no reviewers recorded; start it again with its <lens>:<lane> pairs",
+      );
+      expect(readFileSync(join(d, "actions.jsonl"), "utf8")).toBe("");
+      expect(readFileSync(join(d, "run-log.md"), "utf8")).toBe("");
+      expect(run(self, ["review-round", "start", d, "1", "style:ghost"]).code).toBe(0);
+      const st = JSON.parse(readFileSync(join(d, "logs", "review-r1.json"), "utf8")) as {
+        reviewers?: unknown;
+      };
+      expect(st.reviewers).toEqual([["style", "ghost"]]);
+    }, "review-round-noroster-");
+  });
+
+  test("a subset collection records no check, and the whole round's collection after it does", () => {
+    withTempDir((root) => {
+      const repo = join(root, "repo");
+      const ticket = "T-9";
+      mkdirSync(repo, { recursive: true });
+      const git = (...args: string[]): void => {
+        const r = run("git", ["-C", repo, ...args]);
+        if (r.code !== 0) throw new Error(`git ${args.join(" ")}: ${r.err.trim()}`);
+      };
+      git("init", "-q", "-b", "main");
+      git("config", "user.name", "t");
+      git("config", "user.email", "t@t");
+      git("config", "commit.gpgsign", "false");
+      writeFileSync(join(repo, "file.txt"), "base\n");
+      git("add", "file.txt");
+      git("commit", "-q", "-m", "base");
+      const base = run("git", ["-C", repo, "rev-parse", "HEAD"]).out.trim();
+      git("checkout", "-q", "-b", ticket);
+      git("checkout", "-q", "main");
+      const synthesis = join(repo, ".worktrees", ticket);
+      git("worktree", "add", "-q", synthesis, ticket);
+      const d = join(repo, ".postmaster", "runs", ticket);
+      mkdirSync(join(d, "logs"), { recursive: true });
+      mkdirSync(join(d, "reach"), { recursive: true });
+      writeFileSync(
+        join(d, "manifest.json"),
+        `${JSON.stringify({ stage: "review", leg: 2, base, lanes: {}, coachman: { legs: {} } })}\n`,
+      );
+      writeFileSync(
+        join(d, "run.json"),
+        `${JSON.stringify({ coachman_contract: 2, config: { review: { round_timeout_seconds: 2 } } })}\n`,
+      );
+      writeFileSync(
+        join(d, "brief.md"),
+        `# Waybill: ${ticket}\nturnpikes: style\n\n## Project profile\nrepo: ${repo}          default branch: main       BASE: ${base}\n`,
+      );
+      writeFileSync(join(d, "actions.jsonl"), "");
+      writeFileSync(join(d, "run-log.md"), "");
+      expect(run(self, ["reach", "before", d, "1"]).code).toBe(0);
+      expect(run(self, ["review-round", "start", d, "1", "style:ghost", "bug:ghost"]).code).toBe(0);
+      writeFileSync(join(d, "logs", "review-r1-style-ghost.done"), "");
+      const sub = run(self, ["review-round", "wait", d, "1", repo, "style:ghost"]);
+      expect(sub.code).toBe(0);
+      expect(sub.out).toContain("the round's reach check waits for the whole round");
+      expect(readFileSync(join(d, "actions.jsonl"), "utf8")).not.toContain('"target":"r1"');
+      const whole = run(self, ["review-round", "wait", d, "1", repo]);
+      expect(whole.code).toBe(3);
+      const journal = readFileSync(join(d, "actions.jsonl"), "utf8");
+      expect(journal).toContain('"target":"r1"');
+      expect(journal).toContain("TIMEOUT");
+    }, "review-round-subsetcheck-");
   });
 });

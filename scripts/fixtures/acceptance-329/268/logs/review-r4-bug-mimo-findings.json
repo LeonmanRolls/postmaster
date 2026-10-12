@@ -1,0 +1,15 @@
+[
+  {
+    "file": "scripts/lib/switch-offs.ts",
+    "line": 739,
+    "line_end": 763,
+    "target": "scripts/lib/switch-offs.ts:739",
+    "severity": "not provided",
+    "summary": "1. **Block close pairing is Oxlint-only (conditional severity).** `fileSwitches` ( ) pairs bare opens with bare closes and named with named. Probed: Oxlint 1.86 behaves this way, but ESLint 9 cross-pairs (a bare `eslint-enable` *does* end a named disable). On an ESLint-gated project, deleting a comment-only `/* eslint-enable */` line widens suppression to EOF yet the check prints `clear`, exit 0 — the exact bypass the ticket exists to close. Oxlint projects are correct. Fix: document the pairing is judged under Oxlint semantics, or handle both.",
+    "body": "2. **Block-form covered windows exclude the directive's own lines (low).** The `open` scope window (`switch-offs.ts:793-794`) sits strictly between open and close lines, but both tools suppress code sharing a line with the directive (`/* disable */ debugger;`). Editing such trailing code after approval keeps the identity unchanged, so the edit lands without a fresh ask. Looks like an off-by-one vs. the other scopes, which all include the comment's own line.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "mimo"
+  }
+]

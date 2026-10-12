@@ -1,0 +1,54 @@
+[
+  {
+    "file": "scripts/lib/effective-config.ts",
+    "line": 399,
+    "line_end": 400,
+    "target": "scripts/lib/effective-config.ts:399",
+    "severity": "P1",
+    "summary": "Keep credential checks on local settings",
+    "body": "If `.postmaster/settings.toml` contains a credential such as `[tracker] api_key = \"...\"`, this path skips scanning it, and local validation permits arbitrary tracker keys. The merged config is then recorded in `run.json`, and the file can be force-added for sharing; the [settings format](https://github.com/brindlewick/postmaster/blob/45ddbf8a086ab8bdb7320353302cf2ae78506710/settings.example.toml#L3-L8) says keys belong in env files. Retain credential checks for local settings while allowing their intended machine-specific paths.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "codex"
+  },
+  {
+    "file": "scripts/lib/effective-config.ts",
+    "line": 663,
+    "line_end": 665,
+    "target": "scripts/lib/effective-config.ts:663",
+    "severity": "P2",
+    "summary": "Reject invalid local confinement values",
+    "body": "When a project setting contains a typo such as `confine = \"onn\"`, this check accepts it because it only verifies the type; launch enables confinement only for the exact value `\"on\"`, so the typo silently runs lanes unconfined. Require the value to be exactly `\"on\"` or `\"off\"`.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "codex"
+  },
+  {
+    "file": "scripts/lib/effective-config.ts",
+    "line": 972,
+    "line_end": 978,
+    "target": "scripts/lib/effective-config.ts:972",
+    "severity": "P2",
+    "summary": "Keep project roots from the global config",
+    "body": "If local settings include `projects_roots`, this copy leaves the key in the override and the later merge replaces the global value; `project-settings effective` and `run.json` then report project-specific roots. The project contract says this setting always comes from the global config ([AGENTS.md#L246-L249](https://github.com/brindlewick/postmaster/blob/45ddbf8a086ab8bdb7320353302cf2ae78506710/AGENTS.md#L246-L249)); exclude it from the local merge.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "codex"
+  },
+  {
+    "file": "scripts/lib/effective-config.ts",
+    "line": 1077,
+    "line_end": 1081,
+    "target": "scripts/lib/effective-config.ts:1077",
+    "severity": "P2",
+    "summary": "Preserve stdin machine configs in effective",
+    "body": "When `project-settings effective <repo> -` receives the machine config as JSON on stdin, this check treats `-` as a missing file instead of using the existing `loadMachine(\"-\")` behavior. With no local settings it errors; with local settings it silently omits the piped config. Preserve stdin handling for this argument.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "codex"
+  }
+]

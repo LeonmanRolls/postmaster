@@ -631,7 +631,10 @@ describe("C8-C9: escalation boundary", () => {
       ),
     ).toBe(false);
     const coachman = readFileSync(join(TOOL, "skills/postmaster/coachman.md"), "utf8");
-    const roundCheck = coachman.indexOf("run reach round <dispatch> r<round>");
+    expect(coachman).toContain("round's check for changes by its reviewers");
+    // #391 collects and fixes per finished reviewer, so the close reads the check
+    // after the last fix; the escalate still exits before further fixes or launches.
+    const roundCheck = coachman.indexOf("Close the round once every reviewer is in");
     const userFinding = coachman.indexOf("escalate:", roundCheck);
     expect(roundCheck).toBeGreaterThanOrEqual(0);
     expect(userFinding).toBeGreaterThanOrEqual(0);

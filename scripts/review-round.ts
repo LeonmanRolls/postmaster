@@ -4,7 +4,11 @@
 // wait-next returns as each reviewer finishes so its findings are fixed while the others
 // still work, harvest normalizes one bug report at a time, fix saves each fix with its
 // record in one step, and gate runs the gate on the fixed tree while the round is open.
-// A cut at a commit with a recorded pass reuses it instead of running verify again.
+// Launch starts no reviewer while a brief one of its reviewers needs is missing, keeps
+// the first starting state when the round is retried, and refuses a round whose check is
+// already recorded. The round's reach check is collected when the whole round is in,
+// completing an unfinished collection and never repeating a finished one. A cut at a
+// commit with a recorded pass reuses it instead of running verify again.
 //
 //   run review-round start    <dispatch> <round> [<lens>:<lane>...]
 //   run review-round cut      <dispatch> <round> <repo> <synthesis-wt>
@@ -16,20 +20,27 @@
 //   run review-round gate     <dispatch> <round> <synthesis-wt>
 //   run review-round fix      <dispatch> <synthesis-wt> --message <m> --findings <csv> -- <path>...
 //
-//   exit 0  wait: every marker is in · wait-next: new finishes reported, or every reviewer
-//           reported · start, teardown, fix and gate: done · cut and harvest: done ·
-//           launch: every reviewer started
+//   exit 0  wait: every marker is in · wait-next: new finishes reported, or every
+//           reviewer reported · start, teardown, fix and gate: done · cut and harvest:
+//           done · launch: every reviewer started · a whole-round collection also ran
+//           the round's reach check, found it already recorded, or had no starting state
 //   exit 3  wait and wait-next: the deadline passed; each reviewer with no marker is
-//           recorded and stopped
-//   exit 4  wait and wait-next: a record could not be written
+//           recorded and stopped; a whole-round close also ran the round's reach
+//           check, found it already recorded, or had no starting state
+//   exit 4  wait and wait-next: a record could not be written, a reviewer is still
+//           running and the round's check is not run, or the round's reach check
+//           failed; stop the leg
 //   exit 1  usage; the round was not started, or the machine restarted or the round was started
-//           again since the wait began; a marker no reviewer of the round lands; start: the
+//           again since the wait began; a marker no reviewer of the round lands; a pairs wait
+//           or wait-next with no reviewers recorded and a starting state saved; start: the
 //           round already reported finishers, resume it with wait-next;
 //           wait-next: the action log cannot be read; teardown: a
 //           scratch left in place; cut: run verify exited other than 0 or 3, the run's legs or
 //           a lens's lanes did not resolve, or a left-behind scratch did not tear down;
-//           launch: the same resolution failures, a prompt that could not be written, a scratch
-//           that was not ready, a reviewer that did not start, or the round did not start;
+//           launch: the same resolution failures, a round whose reach check is already
+//           recorded, a brief a reviewer needs that is missing, a prompt that could not be
+//           written, the round's starting state that could not be saved, a scratch that was
+//           not ready, a reviewer that did not start, or the round did not start;
 //           harvest: a named reviewer that is
 //           not a bug reviewer of the round; gate: a dirty tree, an unwritable pass file, or a
 //           failing gate; fix: unstageable paths, an uncommittable fix, or an unrecorded apply;
@@ -87,6 +98,22 @@ export function reachCheckMissing(
   round: string,
 ): boolean {
   return waitsForReach && !points.includes(`r${round}`);
+}
+
+/**
+ * Whether the round's reach check is recorded: a reach point named for the
+ * round in the journal. False when the record cannot be read, so a refusal
+ * is never told from a broken journal. The launch and the wait read this one
+ * definition, so they never disagree about whether a round is collected.
+ */
+export function roundPointRecorded(dispatch: string, round: string): boolean {
+  try {
+    return reachActions(dispatch).some(
+      ({ event }) => event.kind === "point" && String(event.point) === `r${round}`,
+    );
+  } catch {
+    return false;
+  }
 }
 
 interface RoundState {
@@ -707,9 +734,9 @@ export function cutRound(a: StepArgs, deps: StepDeps): StepResult {
   return res;
 }
 
-/** launch: prompt files, ready scratches, the round's start with its reviewers, then
- * every reviewer through the host. The runbook collects them with wait-next, fixing each
- * report while the others still work; the launch itself no longer waits. */
+/** launch: briefs, prompt files, ready scratches, the starting state, the round's start
+ * with its reviewers, then every reviewer through the host. The runbook collects them with
+ * wait-next, fixing each report while the others still work; the launch itself no longer waits. */
 export function launchRound(a: StepArgs, deps: StepDeps): StepResult {
   const res: StepResult = { code: 0, out: [], err: [] };
   const snap = snapshotOf(a, deps, res);
@@ -722,9 +749,51 @@ export function launchRound(a: StepArgs, deps: StepDeps): StepResult {
   }
   const lenses = resolveLenses(a, deps, res);
   if (lenses === null) return res;
+  // A collected round is never launched again: its reviewers already ran, and
+  // launching it would run new reviewers the recorded check cannot see.
+  if (roundPointRecorded(a.dispatch, a.round)) {
+    res.err.push(
+      `review-round: round ${a.round} already has its reach check recorded; nothing launched`,
+    );
+    res.code = 1;
+    return res;
+  }
   const ticket = basename(a.dispatch);
   const lensPrompt = (lens: string): string =>
     join(a.dispatch, `review-r${a.round}-${lens}-prompt.txt`);
+  // A round starts no reviewer while a brief one of its reviewers needs is
+  // missing. Every lens but bug is launched from a prompt that points at the
+  // lens's brief, except a security lane whose harness has its own skill.
+  const briefOf = (lens: string): string => join(a.dispatch, `review-${lens}-brief.md`);
+  const securityPrompts = new Map<string, string>();
+  for (const [lens, lanes] of lenses) {
+    if (lens === "bug") continue;
+    let needBrief = [...lanes];
+    if (lens === "security") {
+      needBrief = [];
+      for (const lane of lanes) {
+        const skill = deps.tool("launch", ["skill", lane, "security-review", "--run", a.dispatch]);
+        if (skill.code === 0) {
+          securityPrompts.set(lane, skill.out);
+        } else if (skill.code === 3) {
+          securityPrompts.set(lane, "");
+          needBrief.push(lane);
+        } else {
+          passErr(res, skill);
+          res.out.push(`NO SECURITY PROMPT FOR ${lane}; nothing launched`);
+          res.code = 1;
+          return res;
+        }
+      }
+    }
+    if (needBrief.length > 0 && !existsSync(briefOf(lens))) {
+      res.err.push(
+        `review-round: ${briefOf(lens)} is missing, and ${needBrief.join(", ")} under ${lens} reads it; nothing launched`,
+      );
+      res.code = 1;
+      return res;
+    }
+  }
   for (const [lens, lanes] of lenses) {
     if (lens !== "bug") {
       try {
@@ -742,31 +811,14 @@ export function launchRound(a: StepArgs, deps: StepDeps): StepResult {
     }
     if (lens === "security") {
       for (const lane of lanes) {
-        const skill = deps.tool("launch", ["skill", lane, "security-review", "--run", a.dispatch]);
         const lanePrompt = join(a.dispatch, `review-r${a.round}-security-${lane}-prompt.txt`);
-        if (skill.code === 0) {
-          try {
-            writeFileSync(lanePrompt, skill.out);
-          } catch (e) {
-            res.err.push(
-              `review-round: ${lanePrompt} cannot be written (${e instanceof Error ? e.message : String(e)})`,
-            );
-            res.code = 1;
-            return res;
-          }
-        } else if (skill.code === 3) {
-          try {
-            writeFileSync(lanePrompt, readFileSync(lensPrompt(lens)));
-          } catch (e) {
-            res.err.push(
-              `review-round: ${lanePrompt} cannot be written (${e instanceof Error ? e.message : String(e)})`,
-            );
-            res.code = 1;
-            return res;
-          }
-        } else {
-          passErr(res, skill);
-          res.out.push(`NO SECURITY PROMPT FOR ${lane}; nothing launched`);
+        const skilled = securityPrompts.get(lane) ?? "";
+        try {
+          writeFileSync(lanePrompt, skilled === "" ? readFileSync(lensPrompt(lens)) : skilled);
+        } catch (e) {
+          res.err.push(
+            `review-round: ${lanePrompt} cannot be written (${e instanceof Error ? e.message : String(e)})`,
+          );
           res.code = 1;
           return res;
         }
@@ -794,6 +846,22 @@ export function launchRound(a: StepArgs, deps: StepDeps): StepResult {
     res.err.push(`review-round: round ${a.round} has no reviewers; nothing launched`);
     res.code = 1;
     return res;
+  }
+  // A retried round keeps its first starting state: the first attempt's
+  // reviewers ran under it, so saving again would fold anything they changed
+  // outside their scratches into the new baseline, past the eventual check.
+  const snapPath = join(a.dispatch, "reach", `before-r${a.round}.json`);
+  if (existsSync(snapPath)) {
+    res.out.push(`review-round: round ${a.round} keeps its first starting state`);
+  } else {
+    const before = deps.tool("reach", ["before", a.dispatch, a.round]);
+    passOut(res, before);
+    passErr(res, before);
+    if (before.code !== 0) {
+      res.err.push("review-round: the round's starting state could not be saved; nothing launched");
+      res.code = 1;
+      return res;
+    }
   }
   const start = deps.tool("review-round", ["start", a.dispatch, a.round, ...pairs]);
   passOut(res, start);
@@ -1361,11 +1429,102 @@ if (import.meta.main) {
         return [lens ?? "", lane ?? ""] as [string, string];
       });
   };
+  /**
+   * The bug lanes' forked-task transcripts, copied for the check to tie what
+   * it finds to a lane, as the harvest does later. Best effort: a copy that
+   * fails is reported by the harvest with its degrade, and the check goes on
+   * with the streams alone.
+   */
+  const copyTaskTranscripts = (reviewers: Array<[string, string]>): void => {
+    for (const [lens, lane] of reviewers) {
+      if (lens !== "bug") continue;
+      const events = join(LOGS, `review-r${R}-bug-${lane}.jsonl`);
+      const copied = run(join(HERE, "run"), [
+        "review-findings",
+        "harvest",
+        events,
+        LOGS,
+        "--prefix",
+        `review-r${R}-bug-${lane}`,
+      ]);
+      if (copied.out) process.stdout.write(copied.out);
+      if (copied.err) process.stderr.write(copied.err);
+    }
+  };
+
+  /**
+   * The round's check for changes by its reviewers: null when the round took
+   * no starting state or a past collection finished it, else the step's exit.
+   * The check runs once, at the first whole-round collection; fixes the fix
+   * step saved read as explained through their `apply` rows.
+   * A collection cut short after the point but before the restore finishes is
+   * completed, never skipped: the point means the check voided what it found,
+   * so only the restore is unfinished. A finished collection, marked when its
+   * step exits 0, is never repeated.
+   */
+  const runRoundCheck = (reviewers: Array<[string, string]>): number | null => {
+    if (!existsSync(join(D, "reach", `before-r${R}.json`))) return null;
+    const marker = join(D, "reach", `r${R}.collected`);
+    const finish = (code: number): number => {
+      if (code === 0) {
+        try {
+          writeFileSync(marker, "");
+        } catch (e) {
+          console.log(
+            `review-round: round ${R} is collected but its marker is not written (${e instanceof Error ? e.message : String(e)}); the next collection restores again`,
+          );
+        }
+      }
+      return code;
+    };
+    if (roundPointRecorded(D, R)) {
+      if (existsSync(marker)) {
+        console.log(`review-round: round ${R} already has its reach check recorded`);
+        return null;
+      }
+      console.log(
+        `review-round: round ${R} already has its reach check recorded; completing its restore`,
+      );
+      const restore = run(join(HERE, "run"), ["reach", "restore", D, `r${R}`]);
+      if (restore.out) process.stdout.write(restore.out);
+      if (restore.err) process.stderr.write(restore.err);
+      return finish(restore.code);
+    }
+    copyTaskTranscripts(reviewers);
+    const child = run(join(HERE, "run"), ["reach", "round", D, `r${R}`]);
+    if (child.out) process.stdout.write(child.out);
+    if (child.err) process.stderr.write(child.err);
+    return finish(child.code);
+  };
+
+  const collectRoundCheck = (reviewers: Array<[string, string]>): void => {
+    // No starting state, no check to run: return quietly, as the check itself
+    // would. The roster comparison below only matters when a check is at stake.
+    if (!existsSync(join(D, "reach", `before-r${R}.json`))) return;
+    // The check needs the whole round's finished streams: a subset collection
+    // records nothing, so a partial picture is never kept as the round's check.
+    // The whole-round collection that follows runs it instead.
+    const recorded = stateLoad(STATE).reviewers ?? [];
+    const want = new Set(recorded.map(([lens, lane]) => `${lens}\0${lane}`));
+    const have = reviewers.map(([lens, lane]) => `${lens}\0${lane}`);
+    if (have.length !== want.size || !have.every((k) => want.has(k))) {
+      console.log(
+        "review-round: the round's reach check waits for the whole round; this collection covers only part of it",
+      );
+      return;
+    }
+    const code = runRoundCheck(reviewers);
+    if (code !== null && code !== 0) {
+      console.log(`review-round: round ${R} reach check exited ${code}; stop the leg`);
+      process.exit(4);
+    }
+  };
 
   // The deadline close wait and wait-next share: whoever had not finished is recorded and
-  // stopped, and the round ends with exit 3. A round started again meanwhile stands down
-  // and records nothing. The walled reviewers among the finished are recorded with it;
-  // wait-next passes none, having recorded each wall as its reviewer finished.
+  // stopped. A round started again meanwhile stands down and records nothing. The walled
+  // reviewers among the finished are recorded with it; wait-next passes none, having
+  // recorded each wall as its reviewer finished. A reviewer still running stops the leg
+  // with no check, and a whole-round close otherwise collects the round's reach check.
   const closeTimedOut = (
     attempt: string | undefined,
     reviewers: Array<[string, string]>,
@@ -1416,6 +1575,7 @@ if (import.meta.main) {
         stopPids.push(null);
       }
     }
+    let stillRunning = false;
     for (let j = 0; j < missing.length; j++) {
       const i = missing[j]!;
       const [lens, lane] = reviewers[i]!;
@@ -1449,8 +1609,18 @@ if (import.meta.main) {
           s,
           `r${R} ${lens} ${lane}: still running after the time limit, ${out.trimEnd()}`,
         );
+        stillRunning = true;
       }
     }
+    if (stillRunning) {
+      // A reviewer that is still running can still change what the check
+      // restores, so the check waits for the ruling like every other record.
+      console.log(
+        `review-round: round ${R} has a reviewer still running; the round's check is not run: stop the leg`,
+      );
+      process.exit(4);
+    }
+    collectRoundCheck(reviewers);
     if ((globalThis as Record<string, unknown>).UNRECORDED) process.exit(4);
     process.exit(3);
   };
@@ -1462,6 +1632,17 @@ if (import.meta.main) {
     // Pairs stay call-local: only start records the round's reviewers, so a
     // subset wait must not narrow what later bare calls see.
     const reviewers = readReviewers("pairs", ...reviewerArgs);
+    // A pairs wait with no recorded roster cannot tell a whole round from a
+    // subset, and with a starting state collecting it could record a partial
+    // check as the round's. Refuse before anything is collected, while
+    // starting again is still open.
+    if (
+      reviewerArgs.length > 0 &&
+      (stateLoad(STATE).reviewers ?? []).length === 0 &&
+      existsSync(join(D, "reach", `before-r${R}.json`))
+    ) {
+      die(`round ${R} has no reviewers recorded; start it again with its <lens>:<lane> pairs`);
+    }
     const n = reviewers.length;
     console.log(
       `review-round: round ${R}, ${n} reviewers, ${leftStr}s left of its ${lim}s limit (${src})`,
@@ -1508,6 +1689,7 @@ if (import.meta.main) {
           `${lens} r${R}: provider wall: "${message}"`,
         );
       }
+      collectRoundCheck(reviewers);
       if ((globalThis as Record<string, unknown>).UNRECORDED) process.exit(4);
       process.exit(0);
     }
@@ -1530,6 +1712,17 @@ if (import.meta.main) {
     // Pairs stay call-local: only start records the round's reviewers, so a
     // subset wait must not narrow what later bare calls see.
     const reviewers = readReviewers("pairs", ...reviewerArgs);
+    // A pairs wait with no recorded roster cannot tell a whole round from a
+    // subset, and with a starting state collecting it could record a partial
+    // check as the round's. Refuse before anything is collected, while
+    // starting again is still open.
+    if (
+      reviewerArgs.length > 0 &&
+      (stateLoad(STATE).reviewers ?? []).length === 0 &&
+      existsSync(join(D, "reach", `before-r${R}.json`))
+    ) {
+      die(`round ${R} has no reviewers recorded; start it again with its <lens>:<lane> pairs`);
+    }
     const n = reviewers.length;
     console.log(
       `review-round: round ${R}, ${n} reviewers, ${leftStr}s left of its ${lim}s limit (${src})`,
@@ -1554,6 +1747,7 @@ if (import.meta.main) {
     const allReported = reviewers.every(([lens, lane]) => records.finished.has(`${lens}\0${lane}`));
     if (newly.length === 0 && allReported) {
       console.log(`review-round: round ${R}, every reviewer reported`);
+      collectRoundCheck(reviewers);
       process.exit(0);
     }
     if (newly.length === 0) {
@@ -1625,7 +1819,7 @@ if (import.meta.main) {
   }
   if (reachCheckMissing(waitsForReach, points, R)) {
     record(
-      `round ${R} took its reach snapshot and no reach check r${R} is recorded: nothing was removed. Run reach check and reach restore for r${R} (Check reach and restore before any fix), then teardown again`,
+      `round ${R} took its reach snapshot and no reach check r${R} is recorded: nothing was removed. Collect the round with review-round wait, which runs its check, then teardown again`,
       "note",
       D,
       `r${R}: teardown waits for the reach check`,

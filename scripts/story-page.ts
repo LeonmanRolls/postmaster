@@ -6,21 +6,27 @@
 // the steps. The page matches the trials' in structure, look and behaviour.
 //
 //   scripts/run story-page build <repo> <story-dir> <out-dir>
-//     [--ticket-body <file>] [--picture-adapter <exe>]
+//     [--ticket-body <file>] [--picture-adapter <exe>] [--keep-picture]
 //   scripts/run story-page pick-step --viewport <WxH> --boxes <json>
+//   scripts/run story-page check <out-dir> --ticket-body <file>
 //
 // build reads <story-dir>/story.json and the files it names, draws the
 // opening picture through the picture adapter with the postmaster poster as
 // its style, and writes <out-dir>/index.html (the page),
-// <out-dir>/sheet.html (every drawing in every state) and the picture file.
+// <out-dir>/sheet.html (every drawing in every state), the picture file and
+// <out-dir>/build.json (the title, the draft's digest and the picture files).
 // --ticket-body is a {title, body} JSON file; without it the ticket comes
 // from gh. --picture-adapter replaces the default story-picture call.
-// Nothing is written unless every check passes. pick-step prints the active
-// step for the boxes it is given, the same choice the page makes as it
-// scrolls.
+// --keep-picture reuses the previous build's picture for a scene when its
+// title still matches, and draws anew otherwise. Nothing is written unless
+// every check passes. pick-step prints the active step for the boxes it is
+// given, the same choice the page makes as it scrolls. check says whether
+// the built story was made from the draft as it stands.
 //
-//   exit 0  written, or the step printed; one summary line is printed
+//   exit 0  written, current, or the step printed; one summary line is printed
 //   exit 1  usage, or anything the story, the ticket or the code refuses
+//   exit 2  check: the story is out of date
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -28,8 +34,9 @@ import { langOf, scrub } from "./lib/page-text.ts";
 import { run } from "./lib/proc.ts";
 
 export const USAGE = [
-  "usage: story-page.ts build <repo> <story-dir> <out-dir> [--ticket-body <file>] [--picture-adapter <exe>]",
+  "usage: story-page.ts build <repo> <story-dir> <out-dir> [--ticket-body <file>] [--picture-adapter <exe>] [--keep-picture]",
   "       story-page.ts pick-step --viewport <WxH> --boxes <json>",
+  "       story-page.ts check <out-dir> --ticket-body <file>",
 ].join("\n");
 
 // ---------- pure core: the reading line ----------
@@ -1704,12 +1711,93 @@ function drawPicture(
   if (!existsSync(outFile)) throw new Error("picture adapter failed: it wrote no picture");
 }
 
+// ---------- pure core: the build record ----------
+
+/** The record of a build, beside the page it describes. */
+export const BUILD_RECORD = "build.json";
+
+export interface BuildRecord {
+  version: 1;
+  /** The title the story was built from; the picture was drawn for it. */
+  title: string;
+  /** The draft's digest, as draftDigest computed it at the build. */
+  draft: string;
+  /** The picture file each image scene wrote, by scene id. */
+  pictures: Record<string, string>;
+}
+
+/** The draft as one digest: the title and body in a fixed shape. */
+export function draftDigest(title: string, body: string): string {
+  return createHash("sha256").update(JSON.stringify({ title, body })).digest("hex");
+}
+
+/** Read a build record, or null when it is missing, broken or from another shape. */
+export function parseBuildRecord(text: string): BuildRecord | null {
+  let value: unknown;
+  try {
+    value = JSON.parse(text) as unknown;
+  } catch {
+    return null;
+  }
+  if (!isRecord(value)) return null;
+  if (value.version !== 1) return null;
+  if (typeof value.title !== "string" || typeof value.draft !== "string") return null;
+  if (!isRecord(value.pictures)) return null;
+  for (const v of Object.values(value.pictures)) {
+    if (typeof v !== "string" || v === "") return null;
+  }
+  return {
+    version: 1,
+    title: value.title,
+    draft: value.draft,
+    pictures: { ...(value.pictures as Record<string, string>) },
+  };
+}
+
+/**
+ * Why the built story is out of date, or null when it was made from the
+ * draft as it stands: a missing or unreadable record, a missing page, a
+ * changed title, or a changed draft, in that order.
+ */
+export function staleReason(args: {
+  record: BuildRecord | null;
+  recordPresent: boolean;
+  pagePresent: boolean;
+  title: string;
+  digest: string;
+  outDir: string;
+}): string | null {
+  if (!args.recordPresent) return `no build recorded in ${args.outDir}`;
+  if (!args.record) return "the build record cannot be read";
+  if (!args.pagePresent) return `no page built in ${args.outDir}`;
+  if (args.title !== args.record.title) return "the title changed";
+  if (args.digest !== args.record.draft) return "the draft changed";
+  return null;
+}
+
+/**
+ * The kept picture file to reuse for a scene, or null when there is none:
+ * no record, another title, or no file for the scene. Reading the bytes
+ * stays at the edge; a kept file that will not read is drawn anew.
+ */
+export function keptPicture(
+  record: BuildRecord | null,
+  title: string,
+  sceneId: string,
+): string | null {
+  if (!record || record.title !== title) return null;
+  const file = record.pictures[sceneId];
+  if (file === undefined || file.includes("/") || file.includes("\\")) return null;
+  return file;
+}
+
 export interface BuildOptions {
   repo: string;
   storyDir: string;
   outDir: string;
   ticketBodyFile?: string;
   pictureAdapter?: string;
+  keepPicture?: boolean;
 }
 
 /**
@@ -1843,16 +1931,37 @@ export function build(o: BuildOptions): string {
   if (imageScenes.length > 0 && !existsSync(styleFile)) {
     throw new Error(`no style file ${styleFile}`);
   }
+  let previous: BuildRecord | null = null;
+  if (o.keepPicture === true) {
+    try {
+      previous = parseBuildRecord(readFileSync(join(o.outDir, BUILD_RECORD), "utf8"));
+    } catch {
+      previous = null;
+    }
+  }
   const scratch = mkdtempSync(join(tmpdir(), "story-page-"));
   try {
     for (const sc of imageScenes) {
       const promptFile = join(o.storyDir, sc.prompt);
       if (!existsSync(promptFile)) throw new Error(`scene ${sc.id}: no prompt file ${sc.prompt}`);
-      const outFile = join(scratch, `${sc.id}.picture`);
-      drawPicture(adapter, promptFile, resolve(styleFile), outFile);
-      const bytes = readFileSync(outFile);
-      const mime = mimeOf(bytes);
-      pictures.set(sc.id, { mime, b64: bytes.toString("base64") });
+      const kept = o.keepPicture === true ? keptPicture(previous, ownBody.title, sc.id) : null;
+      let reused = false;
+      if (kept !== null) {
+        try {
+          const bytes = readFileSync(join(o.outDir, kept));
+          pictures.set(sc.id, { mime: mimeOf(bytes), b64: bytes.toString("base64") });
+          reused = true;
+        } catch {
+          reused = false;
+        }
+      }
+      if (!reused) {
+        const outFile = join(scratch, `${sc.id}.picture`);
+        drawPicture(adapter, promptFile, resolve(styleFile), outFile);
+        const bytes = readFileSync(outFile);
+        const mime = mimeOf(bytes);
+        pictures.set(sc.id, { mime, b64: bytes.toString("base64") });
+      }
       if (sc.overlay) {
         try {
           overlays.set(sc.id, readFileSync(join(o.storyDir, sc.overlay), "utf8").trim());
@@ -1890,13 +1999,22 @@ export function build(o: BuildOptions): string {
   writeFileSync(join(o.outDir, "index.html"), page);
   writeFileSync(join(o.outDir, "sheet.html"), sheet);
   let pictureBytes = 0;
+  const pictureFiles: Record<string, string> = {};
   for (const [id, pic] of pictures) {
     const ext = pic.mime === "image/png" ? "png" : pic.mime === "image/jpeg" ? "jpg" : "webp";
-    const file = join(o.outDir, id === "hero" ? `picture.${ext}` : `picture-${id}.${ext}`);
+    const name = id === "hero" ? `picture.${ext}` : `picture-${id}.${ext}`;
     const bytes = Buffer.from(pic.b64, "base64");
-    writeFileSync(file, bytes);
+    writeFileSync(join(o.outDir, name), bytes);
+    pictureFiles[id] = name;
     pictureBytes += bytes.length;
   }
+  const record: BuildRecord = {
+    version: 1,
+    title: ownBody.title,
+    draft: draftDigest(ownBody.title, ownBody.body),
+    pictures: pictureFiles,
+  };
+  writeFileSync(join(o.outDir, BUILD_RECORD), `${JSON.stringify(record)}\n`);
   const bySection = story.sections
     .map((s) => `${s.label} ${story.steps.filter((x) => x.section === s.id).length}`)
     .join(", ");
@@ -1908,12 +2026,42 @@ function flag(args: string[], name: string): string | undefined {
   return i >= 0 ? args[i + 1] : undefined;
 }
 
+/** Whether the built story was made from the draft as it stands. */
+export function checkCommand(outDir: string, ticketBodyFile: string): number {
+  const meta = ticketFileBody(ticketBodyFile);
+  const recordFile = join(outDir, BUILD_RECORD);
+  const recordPresent = existsSync(recordFile);
+  let record: BuildRecord | null = null;
+  if (recordPresent) {
+    try {
+      record = parseBuildRecord(readFileSync(recordFile, "utf8"));
+    } catch {
+      record = null;
+    }
+  }
+  const reason = staleReason({
+    record,
+    recordPresent,
+    pagePresent: existsSync(join(outDir, "index.html")),
+    title: meta.title,
+    digest: draftDigest(meta.title, meta.body),
+    outDir,
+  });
+  if (reason === null) {
+    console.log("current: the story was built from this draft");
+    return 0;
+  }
+  console.log(`out of date: ${reason}`);
+  return 2;
+}
+
 export function main(args: string[]): number {
   const [cmd, ...rest] = args;
   try {
     if (cmd === "build") {
       let ticketBodyFile: string | undefined;
       let pictureAdapter: string | undefined;
+      let keepPicture = false;
       const positional: string[] = [];
       for (let i = 0; i < rest.length; i++) {
         const a = rest[i] ?? "";
@@ -1923,6 +2071,8 @@ export function main(args: string[]): number {
           if (a === "--ticket-body") ticketBodyFile = v;
           else pictureAdapter = v;
           i++;
+        } else if (a === "--keep-picture") {
+          keepPicture = true;
         } else if (a.startsWith("--")) {
           throw new Error(USAGE);
         } else {
@@ -1931,8 +2081,28 @@ export function main(args: string[]): number {
       }
       const [repo, storyDir, outDir] = positional;
       if (!repo || !storyDir || !outDir || positional.length !== 3) throw new Error(USAGE);
-      console.log(build({ repo, storyDir, outDir, ticketBodyFile, pictureAdapter }));
+      console.log(build({ repo, storyDir, outDir, ticketBodyFile, pictureAdapter, keepPicture }));
       return 0;
+    }
+    if (cmd === "check") {
+      let ticketBodyFile: string | undefined;
+      const positional: string[] = [];
+      for (let i = 0; i < rest.length; i++) {
+        const a = rest[i] ?? "";
+        if (a === "--ticket-body") {
+          const v = rest[i + 1];
+          if (!v) throw new Error(USAGE);
+          ticketBodyFile = v;
+          i++;
+        } else if (a.startsWith("--")) {
+          throw new Error(USAGE);
+        } else {
+          positional.push(a);
+        }
+      }
+      const [outDir] = positional;
+      if (!outDir || !ticketBodyFile || positional.length !== 1) throw new Error(USAGE);
+      return checkCommand(outDir, ticketBodyFile);
     }
     if (cmd === "pick-step") {
       const viewport = flag(rest, "--viewport");

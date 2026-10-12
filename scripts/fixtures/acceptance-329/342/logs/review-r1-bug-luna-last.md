@@ -1,0 +1,1 @@
+The reviewer-copy changes are consistent with the existing clone-cut and teardown behavior. The new focused acceptance tests pass, and no actionable defects were found in the diff.

@@ -246,9 +246,12 @@ its env file, never in settings.
    (`<tool>/scripts/run host detect`), and the project facts above. Where the discovery's
    `verifiers=` line is empty and step 3 printed neither a `headless` line nor a `fixture`
    line, the card also offers to make the project's verifiers before anything starts: one
-   for each surface the
-   discovery's `surfaces=` line names, or one for the project's main surface when that
-   line names none, the surface named from the project or asked on the card. The user
+   for each surface the user names. The card proposes the discovery's surfaces= names
+   as the starting list, or the project's main surface when that line names none, and
+   the user names each surface, adding or dropping names: a kind alone (`cli`), or
+   kind:name (`web:admin`) where the project holds several of one kind. The
+   verifiers are kept in the project's .postmaster folder unless the user asks for the
+   repository, in which case they are committed on a branch and landed instead. The user
    answers the offer with the rest of the card. A fixture copy, and a project whose
    `verifiers=` line names its folders, are offered nothing. Launch nothing before the user
    picks.
@@ -265,17 +268,19 @@ its env file, never in settings.
    action there. A postmaster that is this session keeps the same records as one you spawn. The
    call never creates settings. A run already in flight under the old
    `~/.postmaster/runs/<basename>/` layout is not migrated.
-6. **Where the card said yes to verifiers, make and land them before anything else.** The
+6. **Where the card said yes to verifiers, make them before anything else.** The
    step runs once the run root exists and before the postmaster takes the stream, the same
    whether the front door goes on as the postmaster or spawns one. It is one call, and it
-   returns only when the verifiers have landed or been given up:
+   returns only when the verifiers have been kept or been given up:
 
    ```sh
    <tool>/scripts/run setup-verifiers <target> <surface>... --run <runs>/postmaster
    ```
 
-   Surfaces are the discovery's `surfaces=` names, or the main surface the card named when
-   that line was empty. Exit 0 lands them; exit 1 gives them up, and setup goes on without
+   Surfaces are the names the card settled, each a kind or kind:name. The verifiers are
+   kept in the project's .postmaster folder; when the card asked for the repository,
+   add `--repository` to the call and they are committed on a branch and landed instead.
+   Exit 0 keeps or lands them; exit 1 gives them up, and setup goes on without
    verifiers; exit 2 stops setup. After a no, on a fixture copy, or where the project
    already holds verifiers, this step does not run: no session starts and setup goes on as
    it does. If the user stops the verifier session instead of answering it, stop this
@@ -283,7 +288,7 @@ its env file, never in settings.
 7. **Write the brief** to `<runs>/postmaster/brief.md`: "You are the postmaster for <project>.
    Read `<tool>/skills/postmaster/postmaster.md` first", then the stream paragraph, the project
    profile, the configured team, who says the merge word, the session host, `<tool>` and the
-   config path, the verifiers' outcome (landed, given up, declined, or not offered and why),
+   config path, the verifiers' outcome (kept, landed, given up, declined, or not offered and why),
    plus this session's report and the route result, and, when the route says
    `headless` or the host is none, that it runs headless and writes
    `<runs>/postmaster/ESCALATION.md` when it needs the user.
@@ -348,6 +353,7 @@ everything the coachman needs and nothing it must go and find:
 
 ## Ticket
 <the ticket whole when the run's ticket notes are given, and without its technical notes and verified facts when they are held back, as <tool>/scripts/run ticket-cut prints it: problem, acceptance criteria, direction, turnpikes, notes where kept, User journey if it has one>
+<when the run's ticket notes are held back, this line follows the cut ticket: The ticket's technical notes are held back on purpose and are not to be looked up, in the tracker or anywhere else.>
 
 ## Project profile
 repo: <abs path>          default branch: <name>       BASE: <sha>

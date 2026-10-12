@@ -78,7 +78,7 @@ const SECTIONS: Array<{ name: string; count: number }> = [
   { name: "review round 4 fixes, tmux (stub)", count: 11 },
   { name: "374 review round 1 fixes, Herdr (stub)", count: 8 },
   { name: "teardown reads only the round records", count: 16 },
-  { name: "interactive sessions", count: 15 },
+  { name: "interactive sessions", count: 20 },
   { name: "clerk close", count: 6 },
   { name: "run role: the explicit host role", count: 2 },
   { name: "leg attempt controls", count: 89 },
@@ -1170,6 +1170,9 @@ test("close-run teardown finds reviewer worktrees from rows the launch wrote", (
       join(dispatch, "brief.md"),
       `## Dispatch\nname: T-9\nsynthesis worktree: ${join(repo, ".worktrees", "T-9-synthesis")}\n`,
     );
+    for (const lens of ["style", "security"]) {
+      writeFileSync(join(dispatch, `review-${lens}-brief.md`), `# ${lens} brief\n`);
+    }
     const recorded: string[][] = [];
     const deps: StepDeps = {
       tool: (name, args): StepChild => {
