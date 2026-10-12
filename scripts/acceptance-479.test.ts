@@ -4,7 +4,15 @@
 // Every case drives git or scripts/run as a subprocess. C6, a fixture run
 // from this branch scoring clean, needs a dispatched run and stays out.
 import { describe, expect, test } from "bun:test";
-import { existsSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { commitAll, gitOrThrow, ROOT, writeRepoFile } from "./acceptance-323.ts";
 import { makeEnv, summaryLine } from "./acceptance-344.ts";
@@ -471,3 +479,135 @@ describe("R1: the pass refuses what it must not drive", () => {
     }
   });
 });
+
+describe("R2: a driven verifier keeps its front page, and a mixed pass reports its keep", () => {
+  test("a pass that removes a driven verifier's README is refused", () => {
+    const app = scratchLocalApp();
+    try {
+      writeRepoFile(app.repo, "src/cli.txt", "v2\n");
+      commitAll(app.repo, "cli v2");
+      const head = gitOrThrow(app.repo, "rev-parse", "HEAD").trim();
+      extendStub(app.bin, [`rm -f ${VDIR}/README.md`]);
+      const report = writeReport(app.dir, REPORT_CORRECTED);
+      const overlay = correctingOverlay(app.dir, app.repo, app.first, head);
+      const env = makeEnv(app, {
+        POSTMASTER_HOST: "none",
+        ORACLE_REPORT: report,
+        ORACLE_OVERLAY: overlay,
+      });
+      const r = runUpkeep(app.repo, app.dispatch, env, ["--correct"]);
+      expectCode(r, 1);
+      expect(r.err).toContain(`the pass removed ${VDIR}/README.md for a verifier it drove`);
+      expect(readFileSync(join(app.repo, VDIR, "README.md"), "utf8")).toContain("# cli verifier");
+      expect(gitOrThrow(app.repo, "worktree", "list")).toContain("upkeep");
+    } finally {
+      rmSync(app.dir, { recursive: true, force: true });
+    }
+  });
+
+  test("a mixed correcting pass prints its branch and its keep", () => {
+    const app = scratchLocalApp();
+    try {
+      writeRepoFile(app.repo, "verify-app/README.md", "# v\n");
+      writeRepoFile(app.repo, "verify-app/features/README.md", "Files: src/cli.txt\n");
+      writeRepoFile(app.repo, "verify-app/features/a.md", "# a\n\nstdout is added 1.\n");
+      writeRepoFile(app.repo, "src/cli.txt", "v2\n");
+      commitAll(app.repo, "cli v2");
+      const head = gitOrThrow(app.repo, "rev-parse", "HEAD").trim();
+      writeStubMixedUpkeep(app.bin);
+      const report = writeReport(app.dir, REPORT_MIXED_CORRECTED);
+      const overlay = correctingOverlay(app.dir, app.repo, app.first, head, {
+        "verify-app/features/a.md": "# a\n\nstdout is added 1.\n\nCorrected.\n",
+        "verify-app/features/README.md": `Files: src/cli.txt\nConfirmed: ${head}\n`,
+      });
+      const env = makeEnv(app, {
+        POSTMASTER_HOST: "none",
+        ORACLE_REPORT: report,
+        ORACLE_OVERLAY: overlay,
+      });
+      const r = runUpkeep(app.repo, app.dispatch, env, ["--correct"]);
+      expectCode(r, 0);
+      expect(r.out).toContain("every claim holds");
+      expect(summaryLine(r.out, "branch")).toBe("upkeep");
+      expect(summaryLine(r.out, "kept")).toBe(LOCAL);
+      expect(readFileSync(join(app.repo, PAGE1), "utf8")).toContain(
+        "Corrected to what the app does.",
+      );
+      expect(
+        gitOrThrow(app.repo, "diff", "--name-only", "main...upkeep").trim().split("\n"),
+      ).toEqual(["verify-app/features/README.md", "verify-app/features/a.md"]);
+    } finally {
+      rmSync(app.dir, { recursive: true, force: true });
+    }
+  });
+});
+
+/**
+ * A stub `claude` that plays a finished mixed upkeep pass: it lays down the
+ * report and overlay, then commits the repository verifiers' corrections on
+ * the pass's branch, leaving the local ones uncommitted for the keep.
+ */
+function writeStubMixedUpkeep(bin: string): void {
+  const path = join(bin, "claude");
+  writeFileSync(
+    path,
+    [
+      "#!/bin/sh",
+      "set -eu",
+      'if [ -z "${ORACLE_ROOT:-}" ]; then echo "stub refuses: ORACLE_ROOT is unset" >&2; exit 1; fi',
+      'if [ -z "${ORACLE_REPORT:-}" ]; then echo "stub refuses: ORACLE_REPORT is unset" >&2; exit 1; fi',
+      'TARGET="$PWD"',
+      'TARGET=$(CDPATH= cd "$TARGET" && pwd -P) || { echo "stub refuses: cannot resolve $TARGET" >&2; exit 1; }',
+      'case "$TARGET" in',
+      '  "${ORACLE_ROOT}"/*) ;;',
+      '  *) echo "stub refuses: $TARGET is outside $ORACLE_ROOT" >&2; exit 1 ;;',
+      "esac",
+      'cp "$ORACLE_REPORT" ./UPKEEP.md',
+      'if [ -n "${ORACLE_OVERLAY:-}" ]; then',
+      '  cp -R "$ORACLE_OVERLAY/." .',
+      "fi",
+      "git add -A verify-app",
+      'git commit -qm "upkeep corrections" || true',
+      "",
+    ].join("\n"),
+  );
+  chmodSync(path, 0o755);
+}
+
+/** A mixed pass with one stale claim on each side, both corrected and proved. */
+const REPORT_MIXED_CORRECTED = [
+  "# Upkeep pass",
+  "",
+  "## Verifier: app",
+  "Folder: verify-app",
+  "",
+  "## Verifier: cli",
+  `Folder: ${VDIR}`,
+  "",
+  "## Feature: verify-app/features/a.md",
+  "Outcome: changed",
+  "",
+  "## Claim: add: one task",
+  "Page: verify-app/features/a.md",
+  "Verdict: stale",
+  "Stated: stdout is added 1",
+  "Found: stdout is added 2",
+  "Corrected: reworded the id on the page and drove the recipe again: holds",
+  "",
+  `## Feature: ${PAGE1}`,
+  "Outcome: changed",
+  "",
+  `## Claim: ${CLAIM_NAME}`,
+  `Page: ${PAGE1}`,
+  "Verdict: stale",
+  "Stated: stdout is usage: cli",
+  "Found: stdout is usage: cli [--json]",
+  "Corrected: reworded the usage line on the page and drove the recipe again: holds",
+  "",
+  `## Feature: ${PAGE2}`,
+  "Outcome: clean",
+  "",
+  `## Feature: ${PAGE3}`,
+  "Outcome: clean",
+  "",
+].join("\n");
