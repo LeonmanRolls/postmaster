@@ -34,9 +34,13 @@ resolved.
    is saved, publish the page first, as the previous section says, and never publish a
    second page for a project that has one.
 2. Print the rows: `<tool>/scripts/run experiments push-docs --project <repo>`.
-3. Read the collection `experiments` with ArtifactData `list`. Each document's version is what
+3. Screen the printed rows for anything the Never section forbids on a page: a credential,
+   a key-shaped token, a home path, a host name, an email address, or a link to this
+   machine. On any hit, stop and ask the user instead of writing; never upload first and
+   check later.
+4. Read the collection `experiments` with ArtifactData `list`. Each document's version is what
    a write to it needs.
-4. Write each row with ArtifactData `set` in `experiments`, `doc_id` the experiment's id and
+5. Write each row with ArtifactData `set` in `experiments`, `doc_id` the experiment's id and
    data the row as printed, in one batch: the version from the list for a document that
    exists, none for a new one. A row written while the page is open shows at once, and a
    changed row never needs a republish.
