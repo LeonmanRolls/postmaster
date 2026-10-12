@@ -984,7 +984,7 @@ describe("idempotency", () => {
     });
   });
 
-  check("a recorded no-answer is returned without another call", () => {
+  check("a recorded no-answer is retried, and each call stages its own rounds file", () => {
     const r342 = RISES[4]!;
     withCopy(r342.run, r342.round, {}, (lay) => {
       setStandin(lay, "noanswer", { reason: "the surveyor lane exited 1." });
@@ -997,6 +997,7 @@ describe("idempotency", () => {
         r342.sha,
       ]);
       expect(first.code).toBe(3);
+      expect(first.err).toContain("the surveyor lane exited 1.");
       setStandin(lay, "answer", { answer: FULL_ANSWER });
       const second = reviewSurvey(lay, [
         "survey",
@@ -1006,7 +1007,33 @@ describe("idempotency", () => {
         "--snapshot",
         r342.sha,
       ]);
-      expect(second.code).toBe(3);
+      expect(second.code).toBe(0);
+      expect(second.out.trim()).toBe(first.out.trim());
+      const calls = standinCalls(lay.record);
+      expect(calls.length).toBe(2);
+      const staged = calls.map((c) => materialsOf(c.argv).pop() ?? "");
+      expect(staged[0]).not.toBe(staged[1]);
+      expect(readFileSync(first.out.trim(), "utf8")).toContain("What the findings share");
+    });
+  });
+
+  check("a missing snapshot retries with --snapshot, as the runbook prescribes", () => {
+    const r342 = RISES[4]!;
+    withCopy(r342.run, r342.round, {}, (lay) => {
+      setStandin(lay, "answer", { answer: FULL_ANSWER });
+      const first = reviewSurvey(lay, ["survey", lay.dispatch, lay.repo, String(r342.round)]);
+      expect(first.code).toBe(3);
+      expect(first.err).toContain("no recorded snapshot for round 2");
+      expect(standinCalls(lay.record).length).toBe(0);
+      const second = reviewSurvey(lay, [
+        "survey",
+        lay.dispatch,
+        lay.repo,
+        String(r342.round),
+        "--snapshot",
+        r342.sha,
+      ]);
+      expect(second.code).toBe(0);
       expect(second.out.trim()).toBe(first.out.trim());
       expect(standinCalls(lay.record).length).toBe(1);
     });
