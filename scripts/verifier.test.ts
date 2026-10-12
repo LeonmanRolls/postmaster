@@ -4875,7 +4875,7 @@ describe("run-copy symlink refusal", () => {
 });
 
 describe("run-copy frozen snapshot presence", () => {
-  test("freeze on an absent copy leaves an empty tree the keep applies", () => {
+  test("freeze refuses an absent copy while the record holds verifiers", () => {
     const app = scratchApp();
     try {
       expectCode(run(RUN, ["verifier", "record", app.repo, app.dispatch]), 0);
@@ -4883,12 +4883,48 @@ describe("run-copy frozen snapshot presence", () => {
       expectCode(run(RUN, ["verifier", "arm", syn, app.dispatch]), 0);
       rmSync(join(syn, ".postmaster/verifier"), { recursive: true, force: true });
       const c = run(RUN, ["verifier", "changes", syn, app.dispatch, "--freeze"]);
+      expect(c.code).toBe(1);
+      expect(c.err).toContain("no copy to freeze");
+      expect(c.err).toContain("re-arm");
+      expect(existsSync(join(app.dispatch, "verifier-final"))).toBe(false);
+    } finally {
+      rmSync(app.dir, { recursive: true, force: true });
+    }
+  });
+
+  test("freeze with no copy and no record freezes nothing", () => {
+    const dir = tempDir();
+    try {
+      const repo = join(dir, "app");
+      initRepo(repo);
+      writeRepoFile(repo, "README.md", "# app\n");
+      commitAll(repo, "start");
+      const dispatch = join(dir, "dispatch");
+      mkdirSync(dispatch, { recursive: true });
+      writeFileSync(join(dispatch, "run.json"), JSON.stringify({ config: {} }));
+      const c = run(RUN, ["verifier", "changes", repo, dispatch, "--freeze"]);
+      expectCode(c, 0);
+      expect(c.out).toContain("verifiers unchanged");
+      expect(existsSync(join(dispatch, "verifier-final"))).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("emptying the copy removes every verifier at keep", () => {
+    const app = scratchApp();
+    try {
+      expectCode(run(RUN, ["verifier", "record", app.repo, app.dispatch]), 0);
+      const syn = cutWorktree(app.repo, app.dir, "syn", "wsyn");
+      expectCode(run(RUN, ["verifier", "arm", syn, app.dispatch]), 0);
+      const copy = join(syn, ".postmaster/verifier");
+      rmSync(copy, { recursive: true, force: true });
+      mkdirSync(copy, { recursive: true });
+      const c = run(RUN, ["verifier", "changes", syn, app.dispatch, "--freeze"]);
       expectCode(c, 0);
       expect(c.out).toContain("Removed:");
-      const final = join(app.dispatch, "verifier-final");
-      expect(existsSync(final)).toBe(true);
-      expect(readVerifierTree(final).size).toBe(0);
       const k = run(RUN, ["verifier", "keep", app.repo, "--run", app.dispatch, "--at", app.sha]);
+      expectCode(k, 0);
       expect(k.out).toContain("removed cli/features/f1.md");
       expect(existsSync(join(app.repo, ".postmaster/verifier/cli/features/f1.md"))).toBe(false);
     } finally {

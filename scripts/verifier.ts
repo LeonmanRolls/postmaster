@@ -5106,9 +5106,13 @@ function runChangesCmd(req: ParsedChanges): number {
   if (req.freeze === true) {
     const final = join(dispatch, FINAL);
     if (!existsSync(currentRoot)) {
+      if (existsSync(baseRoot)) {
+        throw new RunError(
+          `no copy to freeze at ${currentRoot}: the run recorded verifiers, so re-arm the copy or empty the folder to remove them`,
+        );
+      }
       rmSync(final, { recursive: true, force: true });
-      mkdirSync(final, { recursive: true });
-      console.error("no copy to freeze; froze an empty tree");
+      console.error("no copy to freeze");
     } else {
       replaceTree(currentRoot, final);
       console.error(`frozen ${final} (${countFiles(readVerifierTree(final))} files)`);
