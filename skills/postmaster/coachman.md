@@ -1124,7 +1124,7 @@ Set the stage first, `<tool>/scripts/run stage <dispatch> review`, then:
    <dispatch> <repo> <round>`, which surveys the stop when it is a rise and waits for the
    survey. Exit 2 means the stop is not a rise: escalate with the residue, including any
    fixes that have not been re-reviewed, the decision's line, and your read on the stop.
-   Otherwise the step printed the survey's record: write your residue, including any fixes
+   Otherwise, on exit 0 or 3, the step printed the survey's record: write your residue, including any fixes
    that have not been re-reviewed, your options and your advice to one file with `## Residue`,
    `## Options` and `## Advice` sections, and render the escalation with
    `<tool>/scripts/run review-survey escalate <dispatch> <round> --decision "<the decision's

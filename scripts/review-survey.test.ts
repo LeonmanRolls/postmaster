@@ -129,6 +129,12 @@ describe("parts and plain words", () => {
     expect(plainWords("## Only\n\nFirst.\n\nSecond.\n\n\n")).toBe("Second.");
     expect(plainWords("   \n\n  ")).toBe("");
   });
+
+  test("a trailing lone heading is not the plain words", () => {
+    expect(plainWords("## A\n\nBody.\n\n## What I could not tell")).toBe("Body.");
+    expect(plainWords("## A\n\nBody.\n\n## What I could not tell\n")).toBe("Body.");
+    expect(plainWords("## Only a heading")).toBe("");
+  });
 });
 
 describe("sections", () => {

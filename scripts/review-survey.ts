@@ -36,6 +36,7 @@ import {
   readdirSync,
   readFileSync,
   realpathSync,
+  rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
@@ -161,7 +162,11 @@ export function plainWords(answer: string): string {
     .split(PARA_RE)
     .map((p) => pyTrim(p))
     .filter((p) => p !== "");
-  return paras.length === 0 ? "" : (paras[paras.length - 1] ?? "");
+  const words = paras.filter((p) => {
+    const lines = p.split("\n").filter((l) => pyTrim(l) !== "");
+    return !(lines.length === 1 && HEADING_RE.test(lines[0] ?? ""));
+  });
+  return words.length === 0 ? "" : (words[words.length - 1] ?? "");
 }
 
 /** readSections <text> <names>: the first ## section per name, or the names missing or empty. */
@@ -496,6 +501,7 @@ function surveyCmd(argv: string[]): never {
   }
 
   const record = recordPath(dispatch, round);
+  let retry = false;
   if (existsSync(record)) {
     let content: string;
     try {
@@ -509,8 +515,10 @@ function surveyCmd(argv: string[]): never {
       console.log(record);
       process.exit(0);
     }
-    // A no-answer record is retried, never terminal: the next run re-surveys
-    // and overwrites it, so a missing snapshot or a failed call can recover.
+    // A no-answer record is retried, never terminal: the record goes away
+    // before the surveyor runs, since it refuses a name already recorded,
+    // and the call below writes a fresh one.
+    retry = true;
   }
 
   if (!existsSync(QUESTION_FILE)) fail(`no question file at ${QUESTION_FILE}`);
@@ -557,6 +565,13 @@ function surveyCmd(argv: string[]): never {
   const reports = collectReports(dispatch, round);
   const timeout = resolveTimeout(dispatch);
 
+  if (retry) {
+    try {
+      rmSync(record, { force: true });
+    } catch (e) {
+      fail(`cannot remove ${record}: ${String(e)}`);
+    }
+  }
   const entry = process.env.POSTMASTER_SURVEYOR_RUN ?? join(HERE, "run");
   const call = run(entry, [
     "surveyor",
@@ -593,6 +608,8 @@ function surveyCmd(argv: string[]): never {
       noAnswer(dispatch, name, "the surveyor ended without an answer or a record", kept);
     }
     if (call.code === 0) {
+      const refused = noAnswerReason(content ?? "");
+      if (refused !== null) noAnswer(dispatch, name, refused, record);
       surveyNote(dispatch, name, `surveyed at ${snapshot.slice(0, 12)}`);
       runLog(dispatch, `rise survey ${name}: answered`);
       console.log(record);
