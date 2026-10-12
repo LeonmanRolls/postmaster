@@ -58,6 +58,10 @@ coachman's steps and so needs a fixture run, anything that must stay as it is, a
 a guard whether it protects against accident or against a hostile lane. "None: any approach that
 meets the criteria" when there are none.>
 
+## Libraries
+
+- <name> <exact version> <what the vetting found, in plain words.>
+
 ## Turnpikes
 
 default
@@ -140,6 +144,10 @@ default
   defect that needs hostile behaviour is not a defect of a check that guards against accident. The
   technical detail behind them goes in the technical notes.
 - **Out of scope** keeps the lanes from drifting.
+- **Libraries** is the list of libraries the run may add, in the plain part the user signs
+  off: one line per library with its name, its exact version and the clerk's vetting in plain
+  words. Only a library from this list may be added, and only after the user has said yes to
+  it. A ticket that needs no library carries no section.
 - **Verified at** is the base commit the ticket was checked against. Every file, function, flag,
   line range and number the technical notes rely on exists there and says what they say, and each
   check was run there and gave its **At the base** result. A ticket that waits is checked again at
