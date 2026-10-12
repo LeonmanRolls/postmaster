@@ -317,8 +317,8 @@ function runBlock(source: string, shell: string): RunResult & { root: string } {
 describe("coachman shell blocks", () => {
   const blocks = blocksFrom(readFileSync(DOC, "utf8"));
 
-  test("all sixteen shell blocks have the same arguments and status in bash and zsh", () => {
-    expect(blocks.length).toBe(16);
+  test("all seventeen shell blocks have the same arguments and status in bash and zsh", () => {
+    expect(blocks.length).toBe(17);
     const bash = Bun.which("bash");
     if (!bash) throw new Error("bash is not on PATH");
     const zsh = Bun.which("zsh");
