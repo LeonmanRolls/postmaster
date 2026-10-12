@@ -82,11 +82,12 @@ export interface DirectChange {
 }
 
 /** The direct changes between two manifests: added, changed, or resolved to
- * new versions under an unchanged spec. A removal is safe and lists nothing,
- * as is a change that resolves identically. One entry per name, covering its
- * first new resolved version; the rest land through extraDirectVersions.
- * The version is what lands: the resolved one where the lockfile names it,
- * else the spec itself. */
+ * new versions under an unchanged spec. Only a pure removal lists nothing:
+ * any spec change lists, even one that resolves identically, since the
+ * lockfile may be stale. One entry per name, covering its first new resolved
+ * version; the rest land through extraDirectVersions. The version is what
+ * lands: the resolved one where the lockfile names it, else the spec
+ * itself. */
 export function diffDirect(
   baseSpecs: Map<string, string>,
   headSpecs: Map<string, string>,
@@ -102,8 +103,9 @@ export function diffDirect(
     if (base === head && sameSet(baseResolved.get(name), headResolved.get(name))) continue;
     const headVersions = headResolved.get(name) ?? new Set<string>();
     const fresh = newVersions(baseResolved.get(name), headResolved.get(name));
-    if (headVersions.size > 0 && fresh.length === 0) continue;
-    const version = fresh.length > 0 ? fresh[0]! : head;
+    if (base === head && headVersions.size > 0 && fresh.length === 0) continue;
+    const version =
+      fresh.length > 0 ? fresh[0]! : headVersions.size > 0 ? [...headVersions].sort()[0]! : head;
     if (base === undefined) {
       out.push({ name, kind: "added", old: null, next: version, version });
     } else if (base !== head) {

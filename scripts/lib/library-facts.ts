@@ -20,6 +20,13 @@ export interface LibraryFacts {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
+/** One display line: registry and scanner strings can carry newlines, and
+ * the facts print one entry per line, so a raw value could forge an entry.
+ * Fold every run of line breaks to one space. */
+export function oneLine(value: string): string {
+  return value.replace(/[\r\n]+/gu, " ");
+}
+
 /** One version's publish time and source from a registry packument. */
 export function packumentFacts(
   doc: unknown,
@@ -28,15 +35,15 @@ export function packumentFacts(
   if (!isRecord(doc)) return { published: null, source: null };
   const time = doc["time"];
   const published =
-    isRecord(time) && typeof time[version] === "string" ? (time[version] as string) : null;
+    isRecord(time) && typeof time[version] === "string" ? oneLine(time[version] as string) : null;
   const versions = doc["versions"];
   const entry = isRecord(versions) ? versions[version] : undefined;
   const repository = isRecord(entry) ? entry["repository"] : undefined;
   const source =
     typeof repository === "string"
-      ? repository
+      ? oneLine(repository)
       : isRecord(repository) && typeof repository["url"] === "string"
-        ? (repository["url"] as string)
+        ? oneLine(repository["url"] as string)
         : null;
   return { published, source };
 }
@@ -44,11 +51,11 @@ export function packumentFacts(
 /** Socket's verdict in one line: clean, the first flag, or unchecked with
  * the reason the scan did not answer. */
 export function verdictText(advisories: ScanAdvisory[] | { unreachable: string }): string {
-  if (!Array.isArray(advisories)) return `unchecked (${advisories.unreachable})`;
+  if (!Array.isArray(advisories)) return oneLine(`unchecked (${advisories.unreachable})`);
   if (advisories.length === 0) return "clean";
   const first = advisories[0]!;
   const what = first.description ?? first.package;
-  return `flagged: ${what} (${first.url ?? "no advisory url"})`;
+  return oneLine(`flagged: ${what} (${first.url ?? "no advisory url"})`);
 }
 
 export type ScanFn = (packages: ScanPackage[]) => Promise<ScanAdvisory[]>;
@@ -77,7 +84,7 @@ export async function readFacts(
   if (options.fixtureDir !== undefined) {
     const path = join(options.fixtureDir, `${encodeURIComponent(name)}@${version}.json`);
     if (!existsSync(path)) {
-      note = `no registry record for ${name}`;
+      note = oneLine(`no registry record for ${name}`);
     } else {
       try {
         doc = JSON.parse(readFileSync(path, "utf8")) as unknown;
@@ -91,15 +98,15 @@ export async function readFacts(
         signal: AbortSignal.timeout(options.timeoutMs ?? REGISTRY_TIMEOUT_MS),
       });
       if (response.status === 404) {
-        note = `no registry record for ${name}`;
+        note = oneLine(`no registry record for ${name}`);
       } else if (!response.ok) {
-        note = `cannot reach the registry: ${registry} answered ${response.status}`;
+        note = oneLine(`cannot reach the registry: ${registry} answered ${response.status}`);
       } else {
         doc = (await response.json()) as unknown;
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      note = `cannot reach the registry: ${message}`;
+      note = oneLine(`cannot reach the registry: ${message}`);
     }
   }
   const { published, source } = packumentFacts(doc, version);

@@ -6,7 +6,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { packumentFacts, readFacts, verdictText } from "./library-facts.ts";
+import { oneLine, packumentFacts, readFacts, verdictText } from "./library-facts.ts";
 
 const CLEAN = async () => [];
 
@@ -40,6 +40,24 @@ describe("packumentFacts", () => {
     });
     expect(packumentFacts(null, "1.3.0")).toEqual({ published: null, source: null });
   });
+
+  test("a registry string with newlines reads on one line", () => {
+    expect(
+      packumentFacts(
+        {
+          time: { "1.3.0": "2024-05-01T00:00:00.000Z\n- library evil" },
+          versions: {
+            "1.3.0": { repository: "https://example.invalid/pad\n- library evil" },
+          },
+        },
+        "1.3.0",
+      ),
+    ).toEqual({
+      published: "2024-05-01T00:00:00.000Z - library evil",
+      source: "https://example.invalid/pad - library evil",
+    });
+    expect(oneLine("a\r\nb\rc")).toBe("a b c");
+  });
 });
 
 describe("verdictText", () => {
@@ -59,6 +77,22 @@ describe("verdictText", () => {
       verdictText([{ level: "warn", package: "left-pad", url: null, description: null }]),
     ).toBe("flagged: left-pad (no advisory url)");
     expect(verdictText({ unreachable: "socket down" })).toBe("unchecked (socket down)");
+  });
+
+  test("a verdict with newlines reads on one line", () => {
+    expect(
+      verdictText([
+        {
+          level: "fatal",
+          package: "left-pad",
+          url: "https://example.invalid/x\n- library evil",
+          description: "flagged\n- library evil",
+        },
+      ]),
+    ).toBe("flagged: flagged - library evil (https://example.invalid/x - library evil)");
+    expect(verdictText({ unreachable: "down\n- library evil" })).toBe(
+      "unchecked (down - library evil)",
+    );
   });
 });
 
@@ -96,6 +130,16 @@ describe("readFacts", () => {
       expect(facts.published).toBe(null);
       expect(facts.source).toBe(null);
       expect(facts.note).toContain("no registry record");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("a note with a newline-bearing name reads on one line", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "postmaster-library-facts-"));
+    try {
+      const facts = await readFacts("left\npad", "1.3.0", { fixtureDir: dir, scan: CLEAN });
+      expect(facts.note).toBe("no registry record for left pad");
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

@@ -74,7 +74,7 @@ describe("diffDirect", () => {
     ]);
   });
 
-  test("an entry's version is new when several resolve; same-resolution changes list nothing", () => {
+  test("an entry's version is new when several resolve; only pure removals skip", () => {
     const changes = diffDirect(
       new Map([
         ["multi", "1.10.0"],
@@ -99,6 +99,31 @@ describe("diffDirect", () => {
     );
     expect(changes).toEqual([
       { name: "multi", kind: "changed", old: "1.10.0", next: "1.10.0, 1.9.0", version: "1.9.0" },
+      { name: "respec", kind: "changed", old: "1.0.0", next: "1.0.0", version: "1.0.0" },
+    ]);
+  });
+
+  test("an added name lists even when its version already resolved", () => {
+    const changes = diffDirect(
+      new Map(),
+      new Map([["left-pad", "1.3.0"]]),
+      resolved([["left-pad", ["1.3.0"]]]),
+      resolved([["left-pad", ["1.3.0"]]]),
+    );
+    expect(changes).toEqual([
+      { name: "left-pad", kind: "added", old: null, next: "1.3.0", version: "1.3.0" },
+    ]);
+  });
+
+  test("a spec change lists even when the lockfile did not move", () => {
+    const changes = diffDirect(
+      new Map([["left-pad", "1.0.0"]]),
+      new Map([["left-pad", "2.0.0"]]),
+      resolved([["left-pad", ["1.0.0"]]]),
+      resolved([["left-pad", ["1.0.0"]]]),
+    );
+    expect(changes).toEqual([
+      { name: "left-pad", kind: "changed", old: "1.0.0", next: "1.0.0", version: "1.0.0" },
     ]);
   });
 });
