@@ -68,7 +68,7 @@
 {"ts":"2026-10-09T04:37:11Z","project":"postmaster","run":"335","actor":"coachman","action":"review-launch","target":"luna","detail":"bug round 5 on 52654d7"}
 {"ts":"2026-10-09T04:37:12Z","project":"postmaster","run":"335","actor":"coachman","action":"review-launch","target":"mimo","detail":"bug round 5 on 52654d7"}
 {"ts":"2026-10-09T04:37:14Z","project":"postmaster","run":"335","actor":"coachman","action":"review-launch","target":"opus","detail":"security round 5 on 52654d7"}
-{"ts":"2026-10-09T05:11:22Z","project":"postmaster","run":"335","actor":"coachman","action":"degrade","target":"opus","detail":"security round 5: review-findings: Claude task output is outside /tmp/claude-1001: /tmp/claude-1001/-home-brindlewick-postmaster--worktrees-335-rev-security-opus/76f955f0-6301-473b-8131-9a632ebc2185/tasks/aa67e562265fa6cd8.output"}
+{"ts":"2026-10-09T05:11:22Z","project":"postmaster","run":"335","actor":"coachman","action":"degrade","target":"opus","detail":"security round 5: review-findings: Claude task output is outside /tmp/claude-user: /tmp/claude-user/-home-user--worktrees-335-rev-security-opus/ses_0001/tasks/aa67e562265fa6cd8.output"}
 {"ts":"2026-10-09T05:52:51Z","project":"postmaster","run":"335","actor":"coachman","action":"degrade","target":"mimo","detail":"bug r5: timeout"}
 {"ts":"2026-10-09T05:55:02Z","project":"postmaster","run":"335","actor":"coachman","action":"finding","target":"skills/postmaster/SKILL.md:261","detail":"gating P2 r5 bug luna, verified by reading"}
 {"ts":"2026-10-09T06:34:33Z","project":"postmaster","run":"335","actor":"coachman","action":"review-launch","target":"luna","detail":"bug round 6 on ad29bc3c"}

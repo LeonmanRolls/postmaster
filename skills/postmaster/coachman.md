@@ -1131,9 +1131,10 @@ Set the stage first, `<tool>/scripts/run stage <dispatch> review`, then:
    line>" --coachman <file>`, which writes `ESCALATION.md` naming the survey, or the reason
    there is none, and touches `.escalation-ready`. When the step prints `no recorded
    snapshot`, establish the round's snapshot from the synthesis history, pass it with
-   `--snapshot`, and run the step again. This and the escalation above are `CHECKPOINT_MODE`'s
-   only mid-flow stops in autonomous mode. After a ruling to go on, the rounds that follow are
-   decided by the same rule. Style
+   `--snapshot`, and run the step again. Exit 1 means the step itself failed: read its
+   error, fix what it names, and run it again. This and the escalation above are
+   `CHECKPOINT_MODE`'s only mid-flow stops in autonomous mode. After a ruling to go on,
+   the rounds that follow are decided by the same rule. Style
    does not run again: a style lane DEGRADED in round 1 stays DEGRADED, and the card says how
    many lanes the style lens rested on.
 

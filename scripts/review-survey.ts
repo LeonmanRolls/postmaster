@@ -26,7 +26,9 @@
 //
 //   exit 0  surveyed and answered; the escalation or question rendered, its path printed
 //   exit 2  no survey (survey) or no rise escalation (question); the reason printed, nothing written
-//   exit 3  a rise without an answer (survey); the record says why, its path printed
+//   exit 3  a rise without an answer (survey); the record says why, its path printed,
+//           the reason printed beside it. A no-answer record is retried, never
+//           terminal: only an answered record is reused.
 //   exit 1  usage, unreadable records, a malformed survey input, or an unwritten file
 import {
   existsSync,
@@ -40,7 +42,7 @@ import {
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { scriptsDir } from "./lib/paths.ts";
-import { run } from "./lib/proc.ts";
+import { mkstempSync, run } from "./lib/proc.ts";
 import { PY_S_CLASS, pyLower, pyTrim, pyWords } from "./lib/text.ts";
 import { gateMaterial } from "./surveyor.ts";
 
@@ -448,6 +450,15 @@ function surveyNote(dispatch: string, name: string, detail: string): void {
   }
 }
 
+/** noAnswer <dispatch> <name> <reason> <record>: every exit-3 end, in one place. */
+function noAnswer(dispatch: string, name: string, reason: string, record: string): never {
+  surveyNote(dispatch, name, `no answer (${reason})`);
+  runLog(dispatch, `rise survey ${name}: no answer (${reason})`);
+  console.error(`review-survey: ${reason}`);
+  console.log(record);
+  process.exit(3);
+}
+
 function surveyCmd(argv: string[]): never {
   if (argv.length !== 3 && argv.length !== 5) usage();
   const dispatch = argv[0] ?? "";
@@ -492,11 +503,14 @@ function surveyCmd(argv: string[]): never {
     } catch (e) {
       fail(`cannot read ${record}: ${(e as Error)?.message ?? String(e)}`);
     }
-    const reason = noAnswerReason(content);
-    surveyNote(dispatch, name, "already recorded");
-    runLog(dispatch, `rise survey ${name}: already recorded`);
-    console.log(record);
-    process.exit(reason === null ? 0 : 3);
+    if (noAnswerReason(content) === null) {
+      surveyNote(dispatch, name, "already recorded");
+      runLog(dispatch, `rise survey ${name}: already recorded`);
+      console.log(record);
+      process.exit(0);
+    }
+    // A no-answer record is retried, never terminal: the next run re-surveys
+    // and overwrites it, so a missing snapshot or a failed call can recover.
   }
 
   if (!existsSync(QUESTION_FILE)) fail(`no question file at ${QUESTION_FILE}`);
@@ -504,10 +518,7 @@ function surveyCmd(argv: string[]): never {
   if (!existsSync(ticket)) ticket = join(dispatch, "ticket-as-spec.md");
   if (!existsSync(ticket)) {
     const kept = writeRecord(dispatch, round, "No answer: no ticket file in the dispatch\n");
-    surveyNote(dispatch, name, "no answer (no ticket file in the dispatch)");
-    runLog(dispatch, `rise survey ${name}: no answer (no ticket file in the dispatch)`);
-    console.log(kept);
-    process.exit(3);
+    noAnswer(dispatch, name, "no ticket file in the dispatch", kept);
   }
 
   const lines = readActions(dispatch);
@@ -523,10 +534,7 @@ function surveyCmd(argv: string[]): never {
       round,
       `No answer: no recorded snapshot for round ${round}\n`,
     );
-    surveyNote(dispatch, name, `no answer (no recorded snapshot for round ${round})`);
-    runLog(dispatch, `rise survey ${name}: no answer (no recorded snapshot for round ${round})`);
-    console.log(kept);
-    process.exit(3);
+    noAnswer(dispatch, name, `no recorded snapshot for round ${round}`, kept);
   }
 
   let rounds: string;
@@ -537,10 +545,11 @@ function surveyCmd(argv: string[]): never {
   }
   const keptRounds = join(dispatch, "surveys", `${name}-rounds.md`);
   const safe = basename(dispatch).replace(/[^A-Za-z0-9._-]+/gu, "_");
-  const staged = join(tmpdir(), `postmaster-rise-${safe}-r${round}-rounds.md`);
+  let staged: string;
   try {
     mkdirSync(join(dispatch, "surveys"), { recursive: true });
     writeFileSync(keptRounds, rounds);
+    staged = mkstempSync(tmpdir(), `postmaster-rise-${safe}-r${round}-`);
     writeFileSync(staged, rounds);
   } catch (e) {
     fail(`cannot write the rounds file: ${String(e)}`);
@@ -581,13 +590,7 @@ function surveyCmd(argv: string[]): never {
         round,
         "No answer: the surveyor ended without an answer or a record\n",
       );
-      surveyNote(dispatch, name, "no answer (the surveyor ended without an answer or a record)");
-      runLog(
-        dispatch,
-        `rise survey ${name}: no answer (the surveyor ended without an answer or a record)`,
-      );
-      console.log(kept);
-      process.exit(3);
+      noAnswer(dispatch, name, "the surveyor ended without an answer or a record", kept);
     }
     if (call.code === 0) {
       surveyNote(dispatch, name, `surveyed at ${snapshot.slice(0, 12)}`);
@@ -597,10 +600,7 @@ function surveyCmd(argv: string[]): never {
     }
     const reason =
       noAnswerReason(content ?? "") ?? "the surveyor ended without an answer or a record";
-    surveyNote(dispatch, name, `no answer (${reason})`);
-    runLog(dispatch, `rise survey ${name}: no answer (${reason})`);
-    console.log(record);
-    process.exit(3);
+    noAnswer(dispatch, name, reason, record);
   }
   const last = call.err
     .split("\n")
@@ -611,10 +611,7 @@ function surveyCmd(argv: string[]): never {
   if (reason.startsWith("surveyor: ")) reason = reason.slice("surveyor: ".length).trim();
   if (reason === "") reason = `the surveyor call failed with exit ${call.code}`;
   const kept = writeRecord(dispatch, round, `No answer: ${reason}\n`);
-  surveyNote(dispatch, name, `no answer (${reason})`);
-  runLog(dispatch, `rise survey ${name}: no answer (${reason})`);
-  console.log(kept);
-  process.exit(3);
+  noAnswer(dispatch, name, reason, kept);
 }
 
 // --- escalate -------------------------------------------------------------------------------
