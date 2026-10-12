@@ -2,6 +2,7 @@
 // the run's synthesis and lane worktrees, review scratches, records and a private HOME.
 import { afterEach, describe, expect, test } from "bun:test";
 import {
+  appendFileSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -1686,5 +1687,50 @@ describe("Fixture: a fix logged as apply before the check reads explained", () =
     const restore = call(layout, ["restore", layout.dispatch, "r1"]);
     expect(restore.code).toBe(0);
     expect(git(layout.repo, "rev-parse", "refs/heads/T")).toBe(layout.base);
+  });
+
+  test("a malformed coachman apply row does not void an explained move", () => {
+    const layout = makeLayout();
+    expect(before(layout).code).toBe(0);
+    const fix = addCommit(layout.repo, layout.synth, "fix.txt");
+    writeAction(layout, "coachman", "apply", fix, "fix.txt:1");
+    writeAction(layout, "coachman", "apply", "scripts/review-round.ts:553", "backwards row");
+    const result = check(layout, "r1");
+    expect(result.code).toBe(0);
+    expect(result.out).not.toContain("unexplained");
+    expect(degrades(layout)).toEqual([]);
+  });
+
+  test("an apply naming no commit does not void an explained move", () => {
+    const layout = makeLayout();
+    expect(before(layout).code).toBe(0);
+    const fix = addCommit(layout.repo, layout.synth, "fix.txt");
+    writeAction(layout, "coachman", "apply", fix, "fix.txt:1");
+    writeAction(layout, "coachman", "apply", "deadbee", "typo sha");
+    const result = check(layout, "r1");
+    expect(result.code).toBe(0);
+    expect(result.out).not.toContain("unexplained");
+    expect(degrades(layout)).toEqual([]);
+  });
+
+  test("malformed lines in the log do not void an explained move", () => {
+    const layout = makeLayout();
+    expect(before(layout).code).toBe(0);
+    const fix = addCommit(layout.repo, layout.synth, "fix.txt");
+    writeAction(layout, "coachman", "apply", fix, "fix.txt:1");
+    appendFileSync(join(layout.dispatch, "actions.jsonl"), "{oops\nnull\n");
+    const result = check(layout, "r1");
+    expect(result.code).toBe(0);
+    expect(result.out).not.toContain("unexplained");
+    let degraded = 0;
+    for (const line of readFileSync(join(layout.dispatch, "actions.jsonl"), "utf8").split("\n")) {
+      if (!line.trim()) continue;
+      try {
+        if ((JSON.parse(line) as Record<string, unknown>).action === "degrade") degraded++;
+      } catch {
+        // The planted garbage parses nowhere, including here.
+      }
+    }
+    expect(degraded).toBe(0);
   });
 });

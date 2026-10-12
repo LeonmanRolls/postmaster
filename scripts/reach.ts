@@ -923,6 +923,14 @@ function addMainChanges(
 /** Coachman apply targets, oldest first, expanded to full commits.
  * An unreadable log or an unresolvable target excuses nothing: the
  * caller treats a null return as no exemption. */
+/**
+ * The commits the coachman's apply rows name, oldest first. A line that is
+ * not an action object, or an apply row that does not name a commit, is
+ * skipped, never fatal: one malformed row must not brick every later
+ * explained move. Null only when the log itself cannot be read, which no
+ * row can repair; a skipped row that was a real apply still fails its own
+ * move closed, and the next apply repairs it.
+ */
 function loggedApplies(repo: string, dispatch: string): string[] | null {
   let contents: string;
   try {
@@ -934,20 +942,24 @@ function loggedApplies(repo: string, dispatch: string): string[] | null {
   const targets: string[] = [];
   for (const line of contents.split(/\r?\n/u)) {
     if (!line.trim()) continue;
-    let row: Record<string, unknown>;
+    let row: unknown;
     try {
-      row = JSON.parse(line) as Record<string, unknown>;
+      row = JSON.parse(line) as unknown;
     } catch {
-      return null;
+      continue;
     }
-    if (row.action !== "apply" || row.actor !== "coachman") continue;
-    if (typeof row.target !== "string" || !/^[0-9a-f]{4,40}$/iu.test(row.target)) return null;
-    targets.push(row.target);
+    if (row === null || typeof row !== "object" || Array.isArray(row)) continue;
+    const action = (row as Record<string, unknown>).action;
+    const actor = (row as Record<string, unknown>).actor;
+    const target = (row as Record<string, unknown>).target;
+    if (action !== "apply" || actor !== "coachman") continue;
+    if (typeof target !== "string" || !/^[0-9a-f]{4,40}$/iu.test(target)) continue;
+    targets.push(target);
   }
   const expanded: string[] = [];
   for (const target of targets) {
     const sha = runGit(repo, ["rev-parse", "--verify", "--quiet", `${target}^{commit}`]);
-    if (sha.code !== 0 || !/^[0-9a-f]{40}$/u.test(sha.out.trim())) return null;
+    if (sha.code !== 0 || !/^[0-9a-f]{40}$/u.test(sha.out.trim())) continue;
     expanded.push(sha.out.trim());
   }
   return expanded;
