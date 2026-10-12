@@ -1,0 +1,41 @@
+[
+  {
+    "file": "scripts/lib/switch-offs.ts",
+    "line": 785,
+    "line_end": 785,
+    "target": "scripts/lib/switch-offs.ts:785",
+    "severity": "P2",
+    "summary": "Include changed targets of symlinked inputs",
+    "body": "If `src/example.ts` is a tracked symlink to a non-source filename such as `shared.txt`, a change that adds a directive only in `shared.txt` is dropped by this filter before the unchanged `.ts` link can be resolved, so the check can report `clear` and let the suppression land without approval. `settingsChanges` has the same issue when a symlinked config points to a generically named target. Include unchanged aliases whose resolved targets changed.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "codex"
+  },
+  {
+    "file": "scripts/refresh-parser.ts",
+    "line": 105,
+    "line_end": 107,
+    "target": "scripts/refresh-parser.ts:105",
+    "severity": "P3",
+    "summary": "Resolve the latest supported 7.x release",
+    "body": "If npm's `latest` tag moves to 8.x, the no-argument path reads only that tag and rejects it instead of finding the latest available 7.x release, contrary to the command's documented behavior. Select the latest version matching major 7 from registry metadata.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "codex"
+  },
+  {
+    "file": "scripts/refresh-parser.ts",
+    "line": 47,
+    "line_end": 47,
+    "target": "scripts/refresh-parser.ts:47",
+    "severity": "P3",
+    "summary": "Detect `require` calls beyond the exact substring",
+    "body": "If a future parser bundle adds an external dependency using valid syntax such as `require (\"./chunk\")`, this check misses the call and writes a bundle that cannot load because the dependency was not vendored. Detect calls with optional whitespace rather than checking only the exact `require(` spelling.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "codex"
+  }
+]

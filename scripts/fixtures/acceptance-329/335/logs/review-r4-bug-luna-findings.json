@@ -1,0 +1,41 @@
+[
+  {
+    "file": "scripts/lib/effective-config.ts",
+    "line": 891,
+    "line_end": 892,
+    "target": "scripts/lib/effective-config.ts:891",
+    "severity": "P1",
+    "summary": "Reject credentials in tracked local settings",
+    "body": "When a tracked `.postmaster/settings.toml` contains a credential, such as a token field under `[tracker]`, this read disables scanning and local validation does not inspect nested credential values. `project-settings accept` can therefore approve a file that may then be committed, contrary to the rule that keys stay in env files ([skills/postmaster/SKILL.md:181](skills/postmaster/SKILL.md#L181)). Keep allowing local paths, but reject credential fields and token-shaped values.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "codex"
+  },
+  {
+    "file": "skills/postmaster/SKILL.md",
+    "line": 261,
+    "line_end": 261,
+    "target": "skills/postmaster/SKILL.md:261",
+    "severity": "P2",
+    "summary": "Pass the project to the host limits lookup",
+    "body": "When the project overrides `[limits]` and per-launch limits are available, `--project` here reaches only the child `launch` command because it appears after the host command's `--`. `host run` consequently uses global or default caps while the child uses the target settings; pass `--project \"$TARGET_ROOT\"` to `host run` before `--`.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "codex"
+  },
+  {
+    "file": "scripts/lib/effective-config.ts",
+    "line": 981,
+    "line_end": 983,
+    "target": "scripts/lib/effective-config.ts:981",
+    "severity": "P2",
+    "summary": "Keep projects_roots global",
+    "body": "`stripLegacy()` leaves `projects_roots` in the local override, so this merge replaces the global roots with any value from `.postmaster/settings.toml`; `project-settings effective` and `run-meta` then report/store a project-specific value despite the global-only exception ([AGENTS.md:248](AGENTS.md#L248)). Exclude this key from local overrides.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "codex"
+  }
+]
