@@ -4723,8 +4723,9 @@ function runDispatchCheck(project: string, dispatch: string | null): number {
     return 0;
   }
   if (js.length > 0) {
-    process.stdout.write(
-      `install-guard: covered: ${js.join(", ")}; unguarded managers present: ${uncovered.join(", ")}\n`,
+    process.stdout.write(`install-guard: covered: ${js.join(", ")}\n`);
+    process.stderr.write(
+      `install-guard: warning: the guard's checks do not cover ${uncovered.join(", ")}; installs through them run unchecked\n`,
     );
     return 0;
   }

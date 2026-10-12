@@ -1262,7 +1262,25 @@ describe("C5: projects the checks do not cover wait for the user's word", () => 
     const r = check(dir);
     expect(r.code).toBe(0);
     expect(`${r.out}\n${r.err}`).toMatch(/covered/iu);
-    expect(`${r.out}\n${r.err}`).toContain("cargo");
+    expect(r.err).toMatch(/warning/iu);
+    expect(r.err).toContain("cargo");
+    expect(r.out).not.toContain("cargo");
+  });
+  test("a lockfile project with another manifest warns and goes ahead", async () => {
+    const dir = jsProject("c5-mixed-lock", ["package-lock.json"]);
+    writeFileSync(join(dir, "Cargo.toml"), '[package]\nname = "x"\n');
+    const r = check(dir);
+    expect(r.code).toBe(0);
+    expect(r.out).toMatch(/covered: npm/iu);
+    expect(r.err).toMatch(/warning/iu);
+    expect(r.err).toContain("cargo");
+  });
+  test("a plain JavaScript project prints no warning", async () => {
+    const dir = jsProject("c5-plain", ["package-lock.json"]);
+    const r = check(dir);
+    expect(r.code).toBe(0);
+    expect(r.out).toMatch(/covered: npm/iu);
+    expect(r.err).not.toMatch(/warning/iu);
   });
   test("an empty project is covered", async () => {
     const dir = join(tmp, "c5-empty");
