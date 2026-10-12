@@ -1,0 +1,28 @@
+[
+  {
+    "file": "postmaster.md",
+    "line": 566,
+    "line_end": 583,
+    "target": "postmaster.md:566",
+    "severity": "not provided",
+    "summary": "1. **Moderate** — Stage F's switch-off ask never writes `<dispatch>/.waiting-on-user`, which the spec's C6 requires. While the ask is outstanding, `runs-status` reports GATE instead of USER, and a restarted postmaster has no record of the question — the exact gap prior rounds fixed for the other Stage F asks ( ).",
+    "body": "2. **Moderate** — The coachman's exit-2 instruction (`coachman.md:1011-1015`) reads as unactionable: exit 2 means held for the user's approval, and every comment already has a reason at exit 2, so \"give each comment its reason\" can't change the result. A literal agent could loop instead of proceeding to paste the section. Needs rewording: exit 2 = proceed and paste; the fix instruction applies to exits 3/4.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "mimo"
+  },
+  {
+    "file": "coachman.md",
+    "line": 1011,
+    "line_end": 1015,
+    "target": "coachman.md:1011",
+    "severity": "not provided",
+    "summary": "2. **Moderate** — The coachman's exit-2 instruction ( ) reads as unactionable: exit 2 means held for the user's approval, and every comment already has a reason at exit 2, so \"give each comment its reason\" can't change the result. A literal agent could loop instead of proceeding to paste the section. Needs rewording: exit 2 = proceed and paste; the fix instruction applies to exits 3/4.",
+    "body": "3. **Low** — A pre-existing file/block-scope switch-off (e.g. `@ts-nocheck` on main) gets listed as added when the branch edits covered code or renames the file — contradicts acceptance criterion 4's plain wording, though it errs safe (asks approval rather than letting a suppression slip). Needs an intent confirmation.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "mimo"
+  }
+]

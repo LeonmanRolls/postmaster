@@ -1,0 +1,41 @@
+[
+  {
+    "file": "scripts/lib/switch-offs.ts",
+    "line": 106,
+    "line_end": 111,
+    "target": "scripts/lib/switch-offs.ts:106",
+    "severity": "not provided",
+    "summary": "1. Bug (medium-low, proven) vs `:414`: covered-line identity hashes the wrong line when a source file contains a Python-only line separator (`\\x0b`, `\\x0c`, `\\x85`, `\\x1c`–`\\x1e`). The scanner counts breaks tsc-aligned (LF/CR/CRLF/U+2028/U+2029) but `maskedLines` splits with `pySplitLines`, which breaks on six extra characters. Repro'd end-to-end: an approved switch-off survives an edit to the line it suppresses (check stays `clear`), breaking D8. Fix: make the split set and `breakLen` set identical, keeping the reported line on the tsc-aligned set.",
+    "body": "**2. Behavior (low, fail-safe)** — `settingsChanges` (`:768-772`) keys identity on whole-file blob SHA, so a dependency-only `package.json` edit invalidates an approval and re-holds — contradicting `packageSettingsDiffer` in the same module. Direction is safe (never a false clear) but can re-loop the ask.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "mimo"
+  },
+  {
+    "file": "switch-offs.ts",
+    "line": 791,
+    "line_end": 792,
+    "target": "switch-offs.ts:791",
+    "severity": "not provided",
+    "summary": "4. Minor doc mismatches** — warning-behavior comment at ; `landing.ts:69-71` `clear`/`no reason` precedence description (state unreachable via runbook flow).",
+    "body": "**Verified not broken**: refusal-wins ordering, exit-code plumbing, directivity subtraction, lexer false-negative direction, runbook command shapes.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "mimo"
+  },
+  {
+    "file": "probe-confine.test.ts",
+    "line": 227,
+    "line_end": "not provided",
+    "target": "probe-confine.test.ts:227",
+    "severity": "not provided",
+    "summary": "Checks**: switch-off/landing/log-action tests 217 pass; full suite 2773 pass / 1 fail ( , environmental — fails identically at base commit); `tsc`, oxlint, biome, `skill-refs`, `wiki-lint` all clean.",
+    "body": "**Merge prerequisite**: `scripts/run coachman-contract` reports `yes` — this change touches the coachman contract, so a fixture run (`fixture new` / `fixture score`) from the branch is required before merge.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "mimo"
+  }
+]

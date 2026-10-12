@@ -1,0 +1,28 @@
+[
+  {
+    "file": "scripts/refresh-parser.ts",
+    "line": 319,
+    "line_end": "not provided",
+    "target": "scripts/refresh-parser.ts:319",
+    "severity": "not provided",
+    "summary": "2. **`refresh-parser ) relies on tar's own traversal defenses** rather than validating member paths. GNU tar 1.35 on this machine refuses `..` members and the script checks the exit status, so it's safe here — severity depends on the platform's tar. Cheap hardening: extract only the two named members instead of the whole archive. Only relevant if the `@babel/parser` npm account were compromised.",
+    "body": "3. **Pre-existing environmental test failure**: `scripts/probe-confine.test.ts:226` fails here because `/` and `/bin` are owned by `nobody:nogroup` in this container. Untouched by this diff; fails at base too — not a regression. Expect one failure in any full `bun run check` on this machine.\n4. **Merge precondition**: the branch changes all three files in `docs/coachman-contract.toml`, so a clean fixture run dispatched from this branch is required before merge — confirm one exists.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "mimo"
+  },
+  {
+    "file": "scripts/probe-confine.test.ts",
+    "line": 226,
+    "line_end": "not provided",
+    "target": "scripts/probe-confine.test.ts:226",
+    "severity": "not provided",
+    "summary": "3. **Pre-existing environmental test failure fails here because `/` and `/bin` are owned by `nobody:nogroup` in this container. Untouched by this diff; fails at base too — not a regression. Expect one failure in any full `bun run check` on this machine.",
+    "body": "4. **Merge precondition**: the branch changes all three files in `docs/coachman-contract.toml`, so a clean fixture run dispatched from this branch is required before merge — confirm one exists.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "mimo"
+  }
+]

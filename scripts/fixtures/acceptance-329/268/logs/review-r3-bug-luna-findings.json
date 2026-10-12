@@ -1,0 +1,28 @@
+[
+  {
+    "file": "scripts/lib/switch-offs.ts",
+    "line": 687,
+    "line_end": 689,
+    "target": "scripts/lib/switch-offs.ts:687",
+    "severity": "P1",
+    "summary": "Hash the full Biome-suppressed node",
+    "body": "For a Biome ignore before an implicitly continued expression, such as `const x = foo +` followed by `bar;`, `depth` stays zero on the first code line and this loop stops before hashing `bar`. If that continuation changes after approval, the identity remains unchanged and the checker reuses the approval for a different suppressed node. Include implicit continuations in the identity or conservatively invalidate approval when the node boundary is uncertain.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "codex"
+  },
+  {
+    "file": "scripts/log-action.ts",
+    "line": 281,
+    "line_end": 283,
+    "target": "scripts/log-action.ts:281",
+    "severity": "P2",
+    "summary": "Require user words after the entry",
+    "body": "When the entry is a one-token settings path, `approved bunfig.toml` passes this check and `approvals()` accepts the resulting record, even though no user words were recorded. Require a separate nonempty user-words portion so the ledger preserves the evidence the runbook says to capture.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "codex"
+  }
+]

@@ -1,0 +1,80 @@
+[
+  {
+    "file": "scripts/scrub-core.ts",
+    "line": 517,
+    "line_end": 517,
+    "target": "scripts/scrub-core.ts:517",
+    "severity": "P1",
+    "summary": "Clear the test override before production scans",
+    "body": "When `SCRUB_CHECK_DISABLE=email` is inherited, the shared scanner suppresses email findings. `raw-promote` does not clear it before either scan, so it exits 0 and copies an unredacted email into `raw/` (reproduced); the `bun run check` chain also honors the variable outside `verify.ts`. Keep this control for tests, but clear it in production entrypoints before scanning.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "codex"
+  },
+  {
+    "file": "scripts/tree-check.ts",
+    "line": 28,
+    "line_end": 28,
+    "target": "scripts/tree-check.ts:28",
+    "severity": "P1",
+    "summary": "Fail closed when reasoning traversal hits its depth limit",
+    "body": "For a new raw JSONL record with more than 64 nested objects or arrays before `encrypted_content`, this returns false before visiting the payload. The subsequent text scan does not classify that field, so the tree gate exits 0; I reproduced this with 66 wrappers. Use iterative traversal or fail closed when the limit is reached.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "codex"
+  },
+  {
+    "file": "scripts/raw-promote-main.ts",
+    "line": 53,
+    "line_end": 53,
+    "target": "scripts/raw-promote-main.ts:53",
+    "severity": "P2",
+    "summary": "Preserve JSON delimiters when removing markers",
+    "body": "When a valid marker appears at the end of a JSON string in a JSONL row, the trailing remainder match consumes the closing quote and brace too. The verification pass checks privacy findings but not JSON syntax, so `raw-promote` exits 0 with a malformed record. Strip only the marker span while preserving the enclosing syntax, or reject this placement.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "codex"
+  },
+  {
+    "file": "scripts/scrub-core.ts",
+    "line": 540,
+    "line_end": 543,
+    "target": "scripts/scrub-core.ts:540",
+    "severity": "P2",
+    "summary": "Restrict generic `id` fields to account identifiers",
+    "body": "A JSON event such as `{\"id\":\"item_0\"}` is classified as `account-id`: only `thread` IDs are exempt, and this value passes the length-and-digit check. The existing Codex trial transcripts contain this shape, causing the committed C24 whole-tree scan to fail. Require stronger account/session context or exclude generic event IDs.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "codex"
+  },
+  {
+    "file": "scripts/landing.ts",
+    "line": 475,
+    "line_end": 475,
+    "target": "scripts/landing.ts:475",
+    "severity": "P2",
+    "summary": "Make the census limit compatible with full history",
+    "body": "The committed oracle's C8 scan currently returns 236 rows for the full history, but this rejects any census over 50. If the census records that scan's findings, the required block cannot be generated; reduce the candidate set or let the census aggregate counts beyond this cap.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "codex"
+  },
+  {
+    "file": "scripts/runs-status.ts",
+    "line": 48,
+    "line_end": 51,
+    "target": "scripts/runs-status.ts:48",
+    "severity": "P2",
+    "summary": "Surface unreadable detection logs instead of suppressing TELL",
+    "body": "If `detections.jsonl` exists but cannot be read, this catch returns an empty set just as if no findings were logged. `hasUntoldDetections` then emits no `TELL`, so the postmaster can miss the required notification. Treat only `ENOENT` as an empty log and surface other read failures.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "codex"
+  }
+]
