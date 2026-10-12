@@ -65,11 +65,14 @@ such as reading a programming language, a file format or a protocol. Vet each on
 listing it: check the name against look-alikes, the publisher, the age of the package and the
 version, how widely it is used, that its code matches its published source, its licence, that
 it runs on Linux and macOS alike, its upkeep, its install scripts, what it brings with it,
-and Socket's verdict, taking the facts from `<tool>/scripts/run libraries facts <name>
-<version>`. List only those that pass, each as one line of the ticket's `## Libraries` section
-with its name, its exact version and what each check found; a library that fails any check is
-left off the list, with the reason given to the user. A library that ships a native build for
-one system only fails. Where a project's own instructions bar libraries, still list what fits
+and Socket's verdict, taking the name, the version, the publish date, the source and the
+verdict from `<tool>/scripts/run libraries facts <name> <version>` and checking the rest against
+the registry entry and the published source. List only those that pass, each as one line of the
+ticket's `## Libraries` section with its name, its exact version and what each check found; a
+library that fails any check is left off the list, with the reason given to the user. A check
+that cannot be read, such as a verdict the scan did not answer, fails the library. A library
+that ships a native build for one system only fails. Where a project's own instructions bar
+libraries, still list what fits
 and say the project's rule stands unless the user lifts it. A ticket that needs no library
 carries no section and asks the user nothing.
 
