@@ -8,6 +8,15 @@ updated: 2026-10-11
 
 Append-only. Newest first. One entry per operation, prefixed so it can be parsed.
 
+## [2026-10-11] ingest | one person's reading of a function with and without mutation
+
+Followed the reading trial of the same day. The user was shown `textWrap` of `view-stream.ts` in its original and
+its functional version on a page made for a phone, labelled A and B in an order fixed by a seeded coin, with three
+questions, and answered "I think B is much better"; B was the functional version. Recorded in
+`raw/trials/2026-10-11-functional-reading-one-reader/` and added to the trial's section in
+[the functional-core page](concepts/functional-core-and-verification.md) as one datum that points the other way
+from the model readers. No standing changed.
+
 ## [2026-10-11] ingest | whether functional code is easier for a model to follow
 
 At the user's request, with no ticket. Wrote a functional and a tidy arrangement of three of the project's modules

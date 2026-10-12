@@ -407,7 +407,8 @@ implementation divergences with no such explanation.
    commit after the first ever touches them. Run the run's own checks
    on the worktree each pass with `<tool>/scripts/run verify run <synthesis-wt> <dispatch>`,
    which logs each result; the last pass before checkpoint 1 must be all green, or its
-   failures stopped on as a workhorse would stop them (the escalation rule below). What you
+   failures stopped on as a workhorse would stop them (the escalation rule below). Keep the
+   run's verifier copy as The run's verifier copy says. What you
    would otherwise ask a lane, you decide within the ticket yourself and record in the
    hand-off's Decisions.
 5. Record leg 1 in one `synthesize` action whose detail is a SYNTHESIS line that says the mode
@@ -469,6 +470,31 @@ second implementer wrote (single-thread).
   says; a coachman that cannot follow a check finishes stopped on it, not with the check
   edited.
 
+## The run's verifier copy, in every run
+
+These rules bind both modes; they are how a run reads the local verifiers and
+what it owes them back.
+
+- **Every working copy holds its own copy of the local verifiers**, armed at
+  bootstrap (Stage 0): each workhorse copy and the synthesis worktree hold
+  `.postmaster/verifier/` as the run's record holds it at dispatch, git
+  ignoring it. A lane opens the verifier pages the waybill names inside its
+  own copy, with confinement on or off. A run reads the local verifiers as
+  they stood when it was dispatched, plus its own changes; what others keep
+  in the project's folder meanwhile reaches only later runs.
+- **The coachman adds what a criterion needs to the synthesis worktree's copy**,
+  up to a whole verifier for a surface with none, written in the layout make
+  writes: its folder, README with the upkeep line, feature pages and index
+  bullet, the bullet confirmed at the run's BASE, and the index itself when
+  the copy has none. The ticket's criteria and checks stay fixed for the whole
+  run; a verifier change alters only how they are shown. The coachman also writes
+  the pages of features the ticket adds, changes or removes, where their verifier
+  exists; where none covers the surface, only a criterion's need makes one.
+- **Only the coachman's copy is kept**: a lane's change to its own copy reaches
+  the project only when the coachman takes it into the synthesis copy. Both
+  legs work in the synthesis worktree, and nothing cleans ignored files from
+  it, so what the coachman writes there reaches the review leg and the card.
+
 ## Stage 0 (leg 1): bootstrap
 
 1. **Read the waybill.** It names the ticket, the project profile (gate command, docs to read
@@ -506,8 +532,11 @@ second implementer wrote (single-thread).
 
    A copy cut without its branch leaves the lane on a detached head and the run with no
    `wb/` branch to bring in. Arm each
-   copy with the run's checks: `<tool>/scripts/run verify arm <workhorse-wt> <dispatch>`.
-   In
+   copy with the run's checks: `<tool>/scripts/run verify arm <workhorse-wt> <dispatch>`,
+   and with the run's verifiers: `<tool>/scripts/run verifier arm <workhorse-wt> <dispatch>`.
+   In both modes, arm the synthesis worktree with the run's verifiers too:
+   `<tool>/scripts/run verifier arm <repo>/.worktrees/<TICKET> <dispatch>`, so the waybill's
+   repo-relative docs path resolves there. In
    single-thread mode cut no workhorse copy (The run's mode, above).
 6. **Update the manifest** the postmaster created: set the stage with `<tool>/scripts/run stage
    <dispatch> bootstrapped`. In synthesis mode, add one `lanes` entry per workhorse, in place;
@@ -791,7 +820,8 @@ from it.
   Then build the synthesis commit by commit with a reason for each choice. Amend commit
   messages to review grade; run the project's FULL gate with its real command. If its
   private-data check finds anything, fix each finding on the synthesis branch and rerun the
-  full gate before proceeding; ordinary findings do not go to the user.
+  full gate before proceeding; ordinary findings do not go to the user. While composing, keep
+  the run's verifier copy as The run's verifier copy says.
 
   **Measure the committed synthesis before recording the SYNTHESIS line** (synthesis mode; a
   single-thread run has no lane commits to measure and writes no shares line). From the synthesis
@@ -1297,7 +1327,11 @@ whatever main has done since.
    `Mode: <synthesis | single-thread>` from `run.json` (in both modes; the waybill's `mode:` line
    says the same — a single-thread run's card carries `Mode: single-thread`), then the branch,
    final HEAD, diff stat and commit list; then the `## Merge` section from the merge step's card
-   verdict, pasted after it as its own section, never retyped; browser suite and QA when
+   verdict, pasted after it as its own section, never retyped; then the `## Verifier changes`
+   section from `<tool>/scripts/run verifier changes <synthesis-wt> <dispatch> --freeze`,
+   pasted after it as its own section, never retyped — the freeze snapshots the synthesis
+   copy into the run's record for the postmaster's keep, so after any verifier change re-run
+   it and re-paste; browser suite and QA when
    present; the journey report path where a check's source names `web-journey`; every ticket
    turnpike with its rounds and result from its checkpoint record, or `none`; the Style residue
    count as `<tool>/scripts/run style-findings count <dispatch>` prints it, then every Style
@@ -1308,7 +1342,8 @@ whatever main has done since.
    coachman's own words about the printed parts in `## Notes`.
    **Each of those is its own `##` section** — the card-block's four, `## Switch-offs`,
    `## Private data findings`, `## Notes`,
-   then `## Merge`, `## Turnpikes`, `## Style residue`, `## Branches`, `## Lane outcomes`,
+   then `## Merge`, `## Verifier changes`, `## Turnpikes`, `## Style residue`, `## Branches`,
+   `## Lane outcomes`,
    `## QA and browser suite` (`none` where the project has none) and `## Review link` —
    the same heading set in both modes. Finding titles and notes, where the reader wants them, go
    in `## Notes`: it is the one place for the coachman's own words about the printed parts, which
