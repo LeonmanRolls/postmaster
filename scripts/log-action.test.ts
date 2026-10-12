@@ -924,6 +924,20 @@ describe("negative controls: nothing is written", () => {
     expect(r.err.includes("coachman or postmaster")).toBe(true);
   });
 
+  test("a run log through a symlinked actions file is refused", () => {
+    const dispatch = join(tmp, "project-symlink-actions", ".postmaster", "runs", "T9");
+    const outside = join(tmp, "project-symlink-actions-outside");
+    mkdirSync(dispatch, { recursive: true });
+    mkdirSync(outside, { recursive: true });
+    writeFileSync(join(outside, "victim.txt"), "held\n");
+    symlinkSync(join(outside, "victim.txt"), join(dispatch, "actions.jsonl"));
+    const r = spawnSync(SELF, ["log-action", dispatch, "coachman", "note", "T9", "hello"], {
+      encoding: "utf8",
+    });
+    expect(r.status).not.toBe(0);
+    expect(readFileSync(join(outside, "victim.txt"), "utf8")).toBe("held\n");
+  });
+
   test("a switch-off with a target out of shape", () => {
     const before = lines();
     const r = logAction(["coachman", "switch-off", "scripts/a.ts:1", "approved fine by me"]);

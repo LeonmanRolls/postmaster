@@ -348,8 +348,13 @@ function logAction(
 
   const line = `{"ts":"${ts}","project":"${jsonStr(project)}","run":"${jsonStr(runName)}","actor":"${jsonStr(actor)}","action":"${jsonStr(action)}","target":"${jsonStr(finalTarget)}","detail":"${jsonStr(finalDetail)}"${faultJson}}`;
 
+  const actionsPath = join(dispatchReal, "actions.jsonl");
+  if (isSymlink(actionsPath)) {
+    console.error(`log-action: ${actionsPath} must be a file inside the run, not a symlink`);
+    return 1;
+  }
   try {
-    appendFileSync(join(dispatchReal, "actions.jsonl"), `${line}\n`);
+    appendFileSync(actionsPath, `${line}\n`);
   } catch {
     console.error(`log-action: cannot append to ${dispatchReal}/actions.jsonl`);
     return 1;
