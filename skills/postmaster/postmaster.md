@@ -796,8 +796,10 @@ every project and does not change that project's gate.
    and a yes starts it; when the pass completes, land the pass's branch
    only where the pass printed one (`run verifier land <repo> <branch> --run
    <dispatch> --report <report>`), so the new confirmation reaches the default
-   branch; for local verifiers the pass prints no branch and the corrections
-   are already kept, so report them as kept. A landing it clears offers
+   branch; a pass that printed a branch and a `kept` line carries both, so
+   land the branch and report the kept corrections as kept; for local
+   verifiers the pass prints no branch and the corrections are already kept,
+   so report them as kept. A landing it clears offers
    nothing. Archive finished threads where the harness has an archive form
    (`harnesses.md`).
 4. Dispatch the next ticket.

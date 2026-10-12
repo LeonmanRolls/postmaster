@@ -3396,12 +3396,13 @@ export function localDrivenVdirs(pages: string[], vdirs: string[]): string[] {
 /**
  * The correcting pass's local verifiers: every mended claim's page changed in
  * the working copy, nothing changed outside the pass's folders besides the
- * shared index a driven verifier confirms in, and every verifier the pass
- * drove is confirmed there at the driven commit. The on-disk twin of the
- * branch validation below: the branch rules, held where the session left its
- * work. The before tree is the cut's, not the live disk's: the disk may have
- * moved under the pass, and a concurrent edit is neither the pass's work nor
- * a refusal here — the keep refuses only true conflicts.
+ * shared index a driven verifier confirms in, no driven verifier's front
+ * page removed, and every verifier the pass drove confirmed there at the
+ * driven commit. The on-disk twin of the branch validation below: the branch
+ * rules, held where the session left its work. The before tree is the cut's,
+ * not the live disk's: the disk may have moved under the pass, and a
+ * concurrent edit is neither the pass's work nor a refusal here — the keep
+ * refuses only true conflicts.
  */
 function validateCorrectingLocalTree(
   head: string,
@@ -3453,7 +3454,12 @@ function validateCorrectingLocalTree(
     );
   }
   for (const vdir of driven) {
-    if (!isFilePath(join(wt, vdir, "README.md"))) continue;
+    // A branch leaves a removed verifier dir to the user's review of the
+    // diff; a local keep has no diff, so removing a driven verifier's front
+    // page refuses here instead of silently unlisting it.
+    if (!isFilePath(join(wt, vdir, "README.md"))) {
+      throw new RunError(`the pass removed ${vdir}/README.md for a verifier it drove`);
+    }
     const indexFile = indexFileFor(vdir, false, localShared);
     const text = readmeText(join(wt, indexFile));
     const sha =
@@ -3842,7 +3848,9 @@ function runUpkeepLaunches(
       const verdict = decided as UpkeepVerdict;
       const lines =
         branch === null ? [`base ${head}`] : [`branch ${branch}`, `base ${head}`, `worktree ${wt}`];
-      if (correcting && branch === null) lines.unshift(`kept ${LOCAL_VERIFIER_ROOT}`);
+      if (correcting && (branch === null || local !== null)) {
+        lines.unshift(`kept ${LOCAL_VERIFIER_ROOT}`);
+      }
       if (final === null) {
         lines.push("role coachman", `handle ${handle}`);
       } else {
