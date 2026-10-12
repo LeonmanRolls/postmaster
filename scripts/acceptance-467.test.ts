@@ -60,8 +60,8 @@ function launchedRound(m: Machine): { code: number; out: string; err: string } {
 }
 
 describe("C1: launch saves the round's starting state", () => {
-  test("launch writes before-r1.json before the first reviewer starts", () => {
-    withTempDir((root) => {
+  test("launch writes before-r1.json before the first reviewer starts", async () => {
+    await withTempDir(async (root) => {
       const m = machine(root, { briefs: ["style"] });
       const launched = launchedRound(m);
       expect(launched.code).toBe(0);
@@ -74,6 +74,10 @@ describe("C1: launch saves the round's starting state", () => {
       expect(saved.round).toBe(1);
       expect(saved.synthesisHead).toBe(m.snap);
       const marker = join(m.dispatch, "logs", "review-r1-style-ghost.done");
+      // The marker lands after launch returns, whenever the ghost finishes;
+      // wait for what the ordering assertion below needs.
+      const deadline = Date.now() + 20000;
+      while (!existsSync(marker) && Date.now() < deadline) await Bun.sleep(50);
       expect(existsSync(marker)).toBe(true);
       expect(statSync(snapshot).mtimeMs).toBeLessThan(statSync(marker).mtimeMs);
     }, "acceptance-467-c1-");
